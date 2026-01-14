@@ -2727,5 +2727,17 @@
   "failedToSaveCheckConnection": "Kunde inte spara. Kontrollera din anslutning.",
   "createMemory": "Skapa minne",
   "deleteMemoryConfirmation": "Är du säker på att du vill ta bort detta minne? Denna åtgärd kan inte ångras.",
-  "makePrivate": "Gör privat"
+  "makePrivate": "Gör privat",
+  "organizeAndControlMemories": "Organisera och kontrollera dina minnen",
+  "total": "Totalt",
+  "makeAllMemoriesPrivate": "Gör alla minnen privata",
+  "setAllMemoriesToPrivate": "Ställ in alla minnen till privat synlighet",
+  "makeAllMemoriesPublic": "Gör alla minnen offentliga",
+  "setAllMemoriesToPublic": "Ställ in alla minnen till offentlig synlighet",
+  "permanentlyRemoveAllMemories": "Ta bort alla minnen permanent från Omi",
+  "allMemoriesAreNowPrivate": "Alla minnen är nu privata",
+  "allMemoriesAreNowPublic": "Alla minnen är nu offentliga",
+  "clearOmisMemory": "Rensa Omis minne",
+  "clearMemoryConfirmation": "Är du säker på att du vill rensa Omis minne? Denna åtgärd kan inte ångras och kommer permanent ta bort alla {count} minnen.",
+  "omisMemoryCleared": "Omis minne om dig har rensats"
 }

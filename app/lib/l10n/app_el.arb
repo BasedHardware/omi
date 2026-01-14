@@ -2121,7 +2121,7 @@
   "@clearMemoryMessage": {
     "description": "Dialog content for clearing memory"
   },
-  "clearMemoryButton": "Εκκαθάριση Μνήμης",
+  "clearMemoryButton": "Εκκαθάριση μνήμης",
   "@clearMemoryButton": {
     "description": "Button text to confirm clear"
   },
@@ -2129,7 +2129,7 @@
   "@memoryClearedSuccess": {
     "description": "Snackbar success message"
   },
-  "noMemoriesToDelete": "Δεν υπάρχουν αναμνήσεις προς διαγραφή",
+  "noMemoriesToDelete": "Δεν υπάρχουν μνήμες για διαγραφή",
   "@noMemoriesToDelete": {
     "description": "Snackbar message"
   },
@@ -2141,7 +2141,7 @@
   "@createActionItemTooltip": {
     "description": "Tooltip for create action item FAB"
   },
-  "memoryManagement": "Διαχείριση Μνήμης",
+  "memoryManagement": "Διαχείριση μνήμης",
   "@memoryManagement": {
     "description": "Title for memory management sheet"
   },
@@ -2174,7 +2174,7 @@
   "@makeAllPublic": {
     "description": "Button label"
   },
-  "deleteAllMemories": "Διαγραφή Όλων των Αναμνήσεων",
+  "deleteAllMemories": "Διαγραφή όλων των μνημών",
   "@deleteAllMemories": {
     "description": "Button label"
   },
@@ -2727,5 +2727,17 @@
   "failedToSaveCheckConnection": "Αποτυχία αποθήκευσης. Ελέγξτε τη σύνδεσή σας.",
   "createMemory": "Δημιουργία μνήμης",
   "deleteMemoryConfirmation": "Είστε σίγουροι ότι θέλετε να διαγράψετε αυτήν τη μνήμη; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.",
-  "makePrivate": "Κάντε ιδιωτική"
+  "makePrivate": "Κάντε ιδιωτική",
+  "organizeAndControlMemories": "Οργανώστε και ελέγξτε τις μνήμες σας",
+  "total": "Σύνολο",
+  "makeAllMemoriesPrivate": "Κάντε όλες τις μνήμες ιδιωτικές",
+  "setAllMemoriesToPrivate": "Ορίστε όλες τις μνήμες σε ιδιωτική ορατότητα",
+  "makeAllMemoriesPublic": "Κάντε όλες τις μνήμες δημόσιες",
+  "setAllMemoriesToPublic": "Ορίστε όλες τις μνήμες σε δημόσια ορατότητα",
+  "permanentlyRemoveAllMemories": "Μόνιμη αφαίρεση όλων των μνημών από το Omi",
+  "allMemoriesAreNowPrivate": "Όλες οι μνήμες είναι πλέον ιδιωτικές",
+  "allMemoriesAreNowPublic": "Όλες οι μνήμες είναι πλέον δημόσιες",
+  "clearOmisMemory": "Εκκαθάριση μνήμης του Omi",
+  "clearMemoryConfirmation": "Είστε σίγουροι ότι θέλετε να διαγράψετε τη μνήμη του Omi; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί και θα διαγράψει μόνιμα όλες τις {count} μνήμες.",
+  "omisMemoryCleared": "Η μνήμη του Omi για εσάς έχει διαγραφεί"
 }

@@ -1545,5 +1545,17 @@
   "failedToSaveCheckConnection": "Opslaan mislukt. Controleer je verbinding.",
   "createMemory": "Geheugen maken",
   "deleteMemoryConfirmation": "Weet je zeker dat je dit geheugen wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.",
-  "makePrivate": "Privé maken"
+  "makePrivate": "Privé maken",
+  "organizeAndControlMemories": "Organiseer en beheer je herinneringen",
+  "total": "Totaal",
+  "makeAllMemoriesPrivate": "Alle herinneringen privé maken",
+  "setAllMemoriesToPrivate": "Alle herinneringen op privé zetten",
+  "makeAllMemoriesPublic": "Alle herinneringen openbaar maken",
+  "setAllMemoriesToPublic": "Alle herinneringen op openbaar zetten",
+  "permanentlyRemoveAllMemories": "Alle herinneringen permanent verwijderen uit Omi",
+  "allMemoriesAreNowPrivate": "Alle herinneringen zijn nu privé",
+  "allMemoriesAreNowPublic": "Alle herinneringen zijn nu openbaar",
+  "clearOmisMemory": "Omi's geheugen wissen",
+  "clearMemoryConfirmation": "Weet je zeker dat je Omi's geheugen wilt wissen? Deze actie kan niet ongedaan worden gemaakt en zal alle {count} herinneringen permanent verwijderen.",
+  "omisMemoryCleared": "Omi's geheugen over jou is gewist"
 }

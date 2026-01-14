@@ -2121,7 +2121,7 @@
   "@clearMemoryMessage": {
     "description": "Dialog content for clearing memory"
   },
-  "clearMemoryButton": "Emlék törlése",
+  "clearMemoryButton": "Memória törlése",
   "@clearMemoryButton": {
     "description": "Button text to confirm clear"
   },
@@ -2129,7 +2129,7 @@
   "@memoryClearedSuccess": {
     "description": "Snackbar success message"
   },
-  "noMemoriesToDelete": "Nincsenek törlendő emlékek",
+  "noMemoriesToDelete": "Nincs törlendő emlékezet",
   "@noMemoriesToDelete": {
     "description": "Snackbar message"
   },
@@ -2141,7 +2141,7 @@
   "@createActionItemTooltip": {
     "description": "Tooltip for create action item FAB"
   },
-  "memoryManagement": "Emlékkezelés",
+  "memoryManagement": "Memória kezelés",
   "@memoryManagement": {
     "description": "Title for memory management sheet"
   },
@@ -2174,7 +2174,7 @@
   "@makeAllPublic": {
     "description": "Button label"
   },
-  "deleteAllMemories": "Minden emlék törlése",
+  "deleteAllMemories": "Minden emlékezet törlése",
   "@deleteAllMemories": {
     "description": "Button label"
   },
@@ -2727,5 +2727,17 @@
   "failedToSaveCheckConnection": "Sikertelen mentés. Ellenőrizd a kapcsolatot.",
   "createMemory": "Emlékezet létrehozása",
   "deleteMemoryConfirmation": "Biztosan törölni szeretnéd ezt az emlékezetet? Ez a művelet nem vonható vissza.",
-  "makePrivate": "Priváttá tétel"
+  "makePrivate": "Priváttá tétel",
+  "organizeAndControlMemories": "Szervezd és irányítsd az emlékezetedet",
+  "total": "Összesen",
+  "makeAllMemoriesPrivate": "Minden emlékezet priváttá tétele",
+  "setAllMemoriesToPrivate": "Minden emlékezet beállítása privát láthatóságra",
+  "makeAllMemoriesPublic": "Minden emlékezet nyilvánossá tétele",
+  "setAllMemoriesToPublic": "Minden emlékezet beállítása nyilvános láthatóságra",
+  "permanentlyRemoveAllMemories": "Minden emlékezet végleges eltávolítása az Omiból",
+  "allMemoriesAreNowPrivate": "Minden emlékezet most privát",
+  "allMemoriesAreNowPublic": "Minden emlékezet most nyilvános",
+  "clearOmisMemory": "Omi memóriájának törlése",
+  "clearMemoryConfirmation": "Biztosan törölni szeretnéd az Omi memóriáját? Ez a művelet nem vonható vissza és véglegesen törli mind a(z) {count} emlékezetet.",
+  "omisMemoryCleared": "Az Omi rólad szóló memóriája törölve lett"
 }

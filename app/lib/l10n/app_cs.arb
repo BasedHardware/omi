@@ -2745,5 +2745,17 @@
   "failedToSaveCheckConnection": "Uložení se nezdařilo. Zkontrolujte připojení.",
   "createMemory": "Vytvořit vzpomínku",
   "deleteMemoryConfirmation": "Opravdu chcete smazat tuto vzpomínku? Tuto akci nelze vrátit zpět.",
-  "makePrivate": "Nastavit jako soukromé"
+  "makePrivate": "Nastavit jako soukromé",
+  "organizeAndControlMemories": "Organizujte a ovládejte své vzpomínky",
+  "total": "Celkem",
+  "makeAllMemoriesPrivate": "Nastavit všechny vzpomínky jako soukromé",
+  "setAllMemoriesToPrivate": "Nastavit všechny vzpomínky na soukromou viditelnost",
+  "makeAllMemoriesPublic": "Nastavit všechny vzpomínky jako veřejné",
+  "setAllMemoriesToPublic": "Nastavit všechny vzpomínky na veřejnou viditelnost",
+  "permanentlyRemoveAllMemories": "Trvale odstranit všechny vzpomínky z Omi",
+  "allMemoriesAreNowPrivate": "Všechny vzpomínky jsou nyní soukromé",
+  "allMemoriesAreNowPublic": "Všechny vzpomínky jsou nyní veřejné",
+  "clearOmisMemory": "Vymazat paměť Omi",
+  "clearMemoryConfirmation": "Opravdu chcete vymazat paměť Omi? Tuto akci nelze vrátit zpět a trvale odstraní všech {count} vzpomínek.",
+  "omisMemoryCleared": "Paměť Omi o vás byla vymazána"
 }

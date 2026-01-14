@@ -2129,7 +2129,7 @@
   "@memoryClearedSuccess": {
     "description": "Snackbar success message"
   },
-  "noMemoriesToDelete": "لا توجد ذكريات لحذفها",
+  "noMemoriesToDelete": "لا توجد ذكريات للحذف",
   "@noMemoriesToDelete": {
     "description": "Snackbar message"
   },
@@ -2174,7 +2174,7 @@
   "@makeAllPublic": {
     "description": "Button label"
   },
-  "deleteAllMemories": "حذف جميع الذكريات",
+  "deleteAllMemories": "حذف كل الذكريات",
   "@deleteAllMemories": {
     "description": "Button label"
   },
@@ -2759,5 +2759,17 @@
   "failedToSaveCheckConnection": "فشل الحفظ. يرجى التحقق من الاتصال.",
   "createMemory": "إنشاء ذاكرة",
   "deleteMemoryConfirmation": "هل أنت متأكد من حذف هذه الذاكرة؟ لا يمكن التراجع عن هذا الإجراء.",
-  "makePrivate": "جعلها خاصة"
+  "makePrivate": "جعلها خاصة",
+  "organizeAndControlMemories": "تنظيم والتحكم في ذكرياتك",
+  "total": "الإجمالي",
+  "makeAllMemoriesPrivate": "جعل كل الذكريات خاصة",
+  "setAllMemoriesToPrivate": "تعيين جميع الذكريات إلى خاصة",
+  "makeAllMemoriesPublic": "جعل كل الذكريات عامة",
+  "setAllMemoriesToPublic": "تعيين جميع الذكريات إلى عامة",
+  "permanentlyRemoveAllMemories": "إزالة جميع الذكريات من Omi نهائياً",
+  "allMemoriesAreNowPrivate": "كل الذكريات الآن خاصة",
+  "allMemoriesAreNowPublic": "كل الذكريات الآن عامة",
+  "clearOmisMemory": "مسح ذاكرة Omi",
+  "clearMemoryConfirmation": "هل أنت متأكد من مسح ذاكرة Omi؟ لا يمكن التراجع عن هذا الإجراء وسيتم حذف جميع الذكريات الـ {count} نهائياً.",
+  "omisMemoryCleared": "تم مسح ذاكرة Omi عنك"
 }

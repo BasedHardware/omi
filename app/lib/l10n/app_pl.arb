@@ -2141,7 +2141,7 @@
   "@createActionItemTooltip": {
     "description": "Tooltip for create action item FAB"
   },
-  "memoryManagement": "Zarządzanie wspomnieniami",
+  "memoryManagement": "Zarządzanie pamięcią",
   "@memoryManagement": {
     "description": "Title for memory management sheet"
   },
@@ -2727,5 +2727,17 @@
   "failedToSaveCheckConnection": "Nie udało się zapisać. Sprawdź połączenie.",
   "createMemory": "Utwórz wspomnienie",
   "deleteMemoryConfirmation": "Czy na pewno chcesz usunąć to wspomnienie? Tej czynności nie można cofnąć.",
-  "makePrivate": "Ustaw jako prywatne"
+  "makePrivate": "Ustaw jako prywatne",
+  "organizeAndControlMemories": "Organizuj i kontroluj swoje wspomnienia",
+  "total": "Razem",
+  "makeAllMemoriesPrivate": "Ustaw wszystkie wspomnienia jako prywatne",
+  "setAllMemoriesToPrivate": "Ustaw wszystkie wspomnienia na widoczność prywatną",
+  "makeAllMemoriesPublic": "Ustaw wszystkie wspomnienia jako publiczne",
+  "setAllMemoriesToPublic": "Ustaw wszystkie wspomnienia na widoczność publiczną",
+  "permanentlyRemoveAllMemories": "Trwale usuń wszystkie wspomnienia z Omi",
+  "allMemoriesAreNowPrivate": "Wszystkie wspomnienia są teraz prywatne",
+  "allMemoriesAreNowPublic": "Wszystkie wspomnienia są teraz publiczne",
+  "clearOmisMemory": "Wyczyść pamięć Omi",
+  "clearMemoryConfirmation": "Czy na pewno chcesz wyczyścić pamięć Omi? Tej czynności nie można cofnąć i trwale usunie wszystkie {count} wspomnienia.",
+  "omisMemoryCleared": "Pamięć Omi o tobie została wyczyszczona"
 }

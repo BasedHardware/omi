@@ -2141,7 +2141,7 @@
   "@createActionItemTooltip": {
     "description": "Tooltip for create action item FAB"
   },
-  "memoryManagement": "Minneadministrasjon",
+  "memoryManagement": "Minnehåndtering",
   "@memoryManagement": {
     "description": "Title for memory management sheet"
   },
@@ -2727,5 +2727,17 @@
   "failedToSaveCheckConnection": "Kunne ikke lagre. Sjekk tilkoblingen din.",
   "createMemory": "Opprett minne",
   "deleteMemoryConfirmation": "Er du sikker på at du vil slette dette minnet? Denne handlingen kan ikke angres.",
-  "makePrivate": "Gjør privat"
+  "makePrivate": "Gjør privat",
+  "organizeAndControlMemories": "Organiser og kontroller minnene dine",
+  "total": "Totalt",
+  "makeAllMemoriesPrivate": "Gjør alle minner private",
+  "setAllMemoriesToPrivate": "Sett alle minner til privat synlighet",
+  "makeAllMemoriesPublic": "Gjør alle minner offentlige",
+  "setAllMemoriesToPublic": "Sett alle minner til offentlig synlighet",
+  "permanentlyRemoveAllMemories": "Fjern permanent alle minner fra Omi",
+  "allMemoriesAreNowPrivate": "Alle minner er nå private",
+  "allMemoriesAreNowPublic": "Alle minner er nå offentlige",
+  "clearOmisMemory": "Tøm Omis minne",
+  "clearMemoryConfirmation": "Er du sikker på at du vil tømme Omis minne? Denne handlingen kan ikke angres og vil permanent slette alle {count} minner.",
+  "omisMemoryCleared": "Omis minne om deg er tømt"
 }

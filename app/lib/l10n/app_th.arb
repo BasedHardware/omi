@@ -2727,5 +2727,17 @@
   "failedToSaveCheckConnection": "บันทึกไม่สำเร็จ กรุณาตรวจสอบการเชื่อมต่อของคุณ",
   "createMemory": "สร้างความทรงจำ",
   "deleteMemoryConfirmation": "คุณแน่ใจหรือไม่ว่าต้องการลบความทรงจำนี้? การกระทำนี้ไม่สามารถยกเลิกได้",
-  "makePrivate": "เปลี่ยนเป็นส่วนตัว"
+  "makePrivate": "เปลี่ยนเป็นส่วนตัว",
+  "organizeAndControlMemories": "จัดระเบียบและควบคุมความทรงจำของคุณ",
+  "total": "ทั้งหมด",
+  "makeAllMemoriesPrivate": "ทำให้ความทรงจำทั้งหมดเป็นส่วนตัว",
+  "setAllMemoriesToPrivate": "ตั้งค่าความทรงจำทั้งหมดเป็นส่วนตัว",
+  "makeAllMemoriesPublic": "ทำให้ความทรงจำทั้งหมดเป็นสาธารณะ",
+  "setAllMemoriesToPublic": "ตั้งค่าความทรงจำทั้งหมดเป็นสาธารณะ",
+  "permanentlyRemoveAllMemories": "ลบความทรงจำทั้งหมดจาก Omi อย่างถาวร",
+  "allMemoriesAreNowPrivate": "ความทรงจำทั้งหมดเป็นส่วนตัวแล้ว",
+  "allMemoriesAreNowPublic": "ความทรงจำทั้งหมดเป็นสาธารณะแล้ว",
+  "clearOmisMemory": "ล้างความทรงจำของ Omi",
+  "clearMemoryConfirmation": "คุณแน่ใจหรือไม่ว่าต้องการล้างความทรงจำของ Omi? การดำเนินการนี้ไม่สามารถยกเลิกได้และจะลบความทรงจำทั้งหมด {count} รายการอย่างถาวร",
+  "omisMemoryCleared": "ความทรงจำของ Omi เกี่ยวกับคุณถูกล้างแล้ว"
 }

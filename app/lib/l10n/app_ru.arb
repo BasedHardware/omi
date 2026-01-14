@@ -2727,5 +2727,17 @@
   "failedToSaveCheckConnection": "Не удалось сохранить. Проверьте подключение.",
   "createMemory": "Создать память",
   "deleteMemoryConfirmation": "Вы уверены, что хотите удалить эту память? Это действие нельзя отменить.",
-  "makePrivate": "Сделать приватной"
+  "makePrivate": "Сделать приватной",
+  "organizeAndControlMemories": "Организуйте и управляйте своими воспоминаниями",
+  "total": "Всего",
+  "makeAllMemoriesPrivate": "Сделать все воспоминания приватными",
+  "setAllMemoriesToPrivate": "Установить все воспоминания как приватные",
+  "makeAllMemoriesPublic": "Сделать все воспоминания публичными",
+  "setAllMemoriesToPublic": "Установить все воспоминания как публичные",
+  "permanentlyRemoveAllMemories": "Навсегда удалить все воспоминания из Omi",
+  "allMemoriesAreNowPrivate": "Все воспоминания теперь приватные",
+  "allMemoriesAreNowPublic": "Все воспоминания теперь публичные",
+  "clearOmisMemory": "Очистить память Omi",
+  "clearMemoryConfirmation": "Вы уверены, что хотите очистить память Omi? Это действие нельзя отменить, и оно навсегда удалит все {count} воспоминаний.",
+  "omisMemoryCleared": "Память Omi о вас была очищена"
 }

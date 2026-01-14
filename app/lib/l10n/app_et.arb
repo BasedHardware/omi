@@ -2129,7 +2129,7 @@
   "@memoryClearedSuccess": {
     "description": "Snackbar success message"
   },
-  "noMemoriesToDelete": "Kustutatavaid mälestusi pole",
+  "noMemoriesToDelete": "Pole mälestusi kustutamiseks",
   "@noMemoriesToDelete": {
     "description": "Snackbar message"
   },
@@ -2141,7 +2141,7 @@
   "@createActionItemTooltip": {
     "description": "Tooltip for create action item FAB"
   },
-  "memoryManagement": "Mälu haldamine",
+  "memoryManagement": "Mäluhaldus",
   "@memoryManagement": {
     "description": "Title for memory management sheet"
   },
@@ -2727,5 +2727,17 @@
   "failedToSaveCheckConnection": "Salvestamine ebaõnnestus. Kontrolli ühendust.",
   "createMemory": "Loo mälestus",
   "deleteMemoryConfirmation": "Kas oled kindel, et soovid selle mälestuse kustutada? Seda toimingut ei saa tagasi võtta.",
-  "makePrivate": "Tee privaatseks"
+  "makePrivate": "Tee privaatseks",
+  "organizeAndControlMemories": "Korraldage ja kontrollige oma mälestusi",
+  "total": "Kokku",
+  "makeAllMemoriesPrivate": "Tee kõik mälestused privaatseks",
+  "setAllMemoriesToPrivate": "Määra kõik mälestused privaatseks",
+  "makeAllMemoriesPublic": "Tee kõik mälestused avalikuks",
+  "setAllMemoriesToPublic": "Määra kõik mälestused avalikuks",
+  "permanentlyRemoveAllMemories": "Eemalda püsivalt kõik mälestused Omist",
+  "allMemoriesAreNowPrivate": "Kõik mälestused on nüüd privaatsed",
+  "allMemoriesAreNowPublic": "Kõik mälestused on nüüd avalikud",
+  "clearOmisMemory": "Tühjenda Omi mälu",
+  "clearMemoryConfirmation": "Kas oled kindel, et soovid tühjendada Omi mälu? Seda toimingut ei saa tagasi võtta ja see kustutab püsivalt kõik {count} mälestust.",
+  "omisMemoryCleared": "Omi mälu sinu kohta on tühjendatud"
 }

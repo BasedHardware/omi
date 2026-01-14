@@ -2121,7 +2121,7 @@
   "@clearMemoryMessage": {
     "description": "Dialog content for clearing memory"
   },
-  "clearMemoryButton": "Kosongkan Ingatan",
+  "clearMemoryButton": "Kosongkan Memori",
   "@clearMemoryButton": {
     "description": "Button text to confirm clear"
   },
@@ -2129,7 +2129,7 @@
   "@memoryClearedSuccess": {
     "description": "Snackbar success message"
   },
-  "noMemoriesToDelete": "Tiada ingatan untuk dipadam",
+  "noMemoriesToDelete": "Tiada memori untuk dipadam",
   "@noMemoriesToDelete": {
     "description": "Snackbar message"
   },
@@ -2141,7 +2141,7 @@
   "@createActionItemTooltip": {
     "description": "Tooltip for create action item FAB"
   },
-  "memoryManagement": "Pengurusan Ingatan",
+  "memoryManagement": "Pengurusan Memori",
   "@memoryManagement": {
     "description": "Title for memory management sheet"
   },
@@ -2174,7 +2174,7 @@
   "@makeAllPublic": {
     "description": "Button label"
   },
-  "deleteAllMemories": "Padam Semua Ingatan",
+  "deleteAllMemories": "Padam Semua Memori",
   "@deleteAllMemories": {
     "description": "Button label"
   },
@@ -2727,5 +2727,17 @@
   "failedToSaveCheckConnection": "Gagal menyimpan. Sila periksa sambungan anda.",
   "createMemory": "Cipta Memori",
   "deleteMemoryConfirmation": "Adakah anda pasti mahu memadam memori ini? Tindakan ini tidak boleh dibatalkan.",
-  "makePrivate": "Jadikan Peribadi"
+  "makePrivate": "Jadikan Peribadi",
+  "organizeAndControlMemories": "Atur dan kawal memori anda",
+  "total": "Jumlah",
+  "makeAllMemoriesPrivate": "Jadikan Semua Memori Peribadi",
+  "setAllMemoriesToPrivate": "Tetapkan semua memori kepada keterlihatan peribadi",
+  "makeAllMemoriesPublic": "Jadikan Semua Memori Awam",
+  "setAllMemoriesToPublic": "Tetapkan semua memori kepada keterlihatan awam",
+  "permanentlyRemoveAllMemories": "Buang semua memori dari Omi secara kekal",
+  "allMemoriesAreNowPrivate": "Semua memori kini peribadi",
+  "allMemoriesAreNowPublic": "Semua memori kini awam",
+  "clearOmisMemory": "Kosongkan Memori Omi",
+  "clearMemoryConfirmation": "Adakah anda pasti mahu mengosongkan memori Omi? Tindakan ini tidak boleh dibatalkan dan akan memadam semua {count} memori secara kekal.",
+  "omisMemoryCleared": "Memori Omi tentang anda telah dikosongkan"
 }

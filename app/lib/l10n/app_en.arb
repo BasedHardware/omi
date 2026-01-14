@@ -2123,7 +2123,7 @@
   },
   "clearMemoryButton": "Clear Memory",
   "@clearMemoryButton": {
-    "description": "Button text to confirm clear"
+    "description": "Button text to confirm clearing all memories"
   },
   "memoryClearedSuccess": "Omi's memory about you has been cleared",
   "@memoryClearedSuccess": {
@@ -2131,7 +2131,7 @@
   },
   "noMemoriesToDelete": "No memories to delete",
   "@noMemoriesToDelete": {
-    "description": "Snackbar message"
+    "description": "Info message when there are no memories to delete"
   },
   "createMemoryTooltip": "Create new memory",
   "@createMemoryTooltip": {
@@ -2143,7 +2143,7 @@
   },
   "memoryManagement": "Memory Management",
   "@memoryManagement": {
-    "description": "Title for memory management sheet"
+    "description": "Title for memory management dialog"
   },
   "filterMemories": "Filter Memories",
   "@filterMemories": {
@@ -2176,7 +2176,7 @@
   },
   "deleteAllMemories": "Delete All Memories",
   "@deleteAllMemories": {
-    "description": "Button label"
+    "description": "Action to delete all memories"
   },
   "allMemoriesPrivateResult": "All memories are now private",
   "@allMemoriesPrivateResult": {
@@ -3899,5 +3899,58 @@
   "makePrivate": "Make Private",
   "@makePrivate": {
     "description": "Menu option to change memory visibility to private"
+  },
+  "organizeAndControlMemories": "Organize and control your memories",
+  "@organizeAndControlMemories": {
+    "description": "Subtitle for memory management dialog"
+  },
+  "total": "Total",
+  "@total": {
+    "description": "Label for total memory count statistic"
+  },
+  "makeAllMemoriesPrivate": "Make All Memories Private",
+  "@makeAllMemoriesPrivate": {
+    "description": "Action to make all memories private"
+  },
+  "setAllMemoriesToPrivate": "Set all memories to private visibility",
+  "@setAllMemoriesToPrivate": {
+    "description": "Description for making all memories private"
+  },
+  "makeAllMemoriesPublic": "Make All Memories Public",
+  "@makeAllMemoriesPublic": {
+    "description": "Action to make all memories public"
+  },
+  "setAllMemoriesToPublic": "Set all memories to public visibility",
+  "@setAllMemoriesToPublic": {
+    "description": "Description for making all memories public"
+  },
+  "permanentlyRemoveAllMemories": "Permanently remove all memories from Omi",
+  "@permanentlyRemoveAllMemories": {
+    "description": "Description for deleting all memories"
+  },
+  "allMemoriesAreNowPrivate": "All memories are now private",
+  "@allMemoriesAreNowPrivate": {
+    "description": "Success message after making all memories private"
+  },
+  "allMemoriesAreNowPublic": "All memories are now public",
+  "@allMemoriesAreNowPublic": {
+    "description": "Success message after making all memories public"
+  },
+  "clearOmisMemory": "Clear Omi's Memory",
+  "@clearOmisMemory": {
+    "description": "Confirmation dialog title for clearing all memories"
+  },
+  "clearMemoryConfirmation": "Are you sure you want to clear Omi's memory? This action cannot be undone and will permanently delete all {count} memories.",
+  "@clearMemoryConfirmation": {
+    "description": "Confirmation message for clearing all memories",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "omisMemoryCleared": "Omi's memory about you has been cleared",
+  "@omisMemoryCleared": {
+    "description": "Success message after clearing all memories"
   }
 }

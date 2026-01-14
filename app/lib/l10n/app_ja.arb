@@ -668,7 +668,7 @@
   "addFirstMemory": "最初のメモリを追加",
   "clearMemoryTitle": "Omiのメモリを消去",
   "clearMemoryMessage": "Omiのメモリを消去してもよろしいですか？この操作は取り消せません。",
-  "clearMemoryButton": "メモリを消去",
+  "clearMemoryButton": "メモリをクリア",
   "memoryClearedSuccess": "Omiのあなたに関するメモリが消去されました",
   "noMemoriesToDelete": "削除するメモリがありません",
   "createMemoryTooltip": "新しいメモリを作成",
@@ -1153,5 +1153,17 @@
   "failedToSaveCheckConnection": "保存に失敗しました。接続を確認してください。",
   "createMemory": "メモリを作成",
   "deleteMemoryConfirmation": "このメモリを削除してもよろしいですか？この操作は元に戻せません。",
-  "makePrivate": "非公開にする"
+  "makePrivate": "非公開にする",
+  "organizeAndControlMemories": "メモリを整理・管理する",
+  "total": "合計",
+  "makeAllMemoriesPrivate": "すべてのメモリを非公開にする",
+  "setAllMemoriesToPrivate": "すべてのメモリを非公開に設定",
+  "makeAllMemoriesPublic": "すべてのメモリを公開にする",
+  "setAllMemoriesToPublic": "すべてのメモリを公開に設定",
+  "permanentlyRemoveAllMemories": "Omiからすべてのメモリを完全に削除",
+  "allMemoriesAreNowPrivate": "すべてのメモリが非公開になりました",
+  "allMemoriesAreNowPublic": "すべてのメモリが公開になりました",
+  "clearOmisMemory": "Omiのメモリをクリア",
+  "clearMemoryConfirmation": "Omiのメモリをクリアしてもよろしいですか？この操作は元に戻せず、すべての{count}個のメモリが完全に削除されます。",
+  "omisMemoryCleared": "あなたに関するOmiのメモリがクリアされました"
 }

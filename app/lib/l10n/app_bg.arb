@@ -2141,7 +2141,7 @@
   "@createActionItemTooltip": {
     "description": "Tooltip for create action item FAB"
   },
-  "memoryManagement": "Управление на паметта",
+  "memoryManagement": "Управление на спомените",
   "@memoryManagement": {
     "description": "Title for memory management sheet"
   },
@@ -2745,5 +2745,17 @@
   "failedToSaveCheckConnection": "Неуспешно запазване. Проверете връзката си.",
   "createMemory": "Създай спомен",
   "deleteMemoryConfirmation": "Сигурни ли сте, че искате да изтриете този спомен? Това действие не може да бъде отменено.",
-  "makePrivate": "Направи частна"
+  "makePrivate": "Направи частна",
+  "organizeAndControlMemories": "Организирайте и контролирайте спомените си",
+  "total": "Общо",
+  "makeAllMemoriesPrivate": "Направи всички спомени частни",
+  "setAllMemoriesToPrivate": "Задай всички спомени като частни",
+  "makeAllMemoriesPublic": "Направи всички спомени публични",
+  "setAllMemoriesToPublic": "Задай всички спомени като публични",
+  "permanentlyRemoveAllMemories": "Премахни трайно всички спомени от Omi",
+  "allMemoriesAreNowPrivate": "Всички спомени са вече частни",
+  "allMemoriesAreNowPublic": "Всички спомени са вече публични",
+  "clearOmisMemory": "Изчисти паметта на Omi",
+  "clearMemoryConfirmation": "Сигурни ли сте, че искате да изчистите паметта на Omi? Това действие не може да бъде отменено и ще изтрие трайно всички {count} спомена.",
+  "omisMemoryCleared": "Паметта на Omi за вас е изчистена"
 }

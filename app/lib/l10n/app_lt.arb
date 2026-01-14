@@ -2111,7 +2111,7 @@
   "@memoryClearedSuccess": {
     "description": "Snackbar success message"
   },
-  "noMemoriesToDelete": "Nėra prisiminimų trinimui",
+  "noMemoriesToDelete": "Nėra atminimų trynimui",
   "@noMemoriesToDelete": {
     "description": "Snackbar message"
   },
@@ -2123,7 +2123,7 @@
   "@createActionItemTooltip": {
     "description": "Tooltip for create action item FAB"
   },
-  "memoryManagement": "Prisiminimų valdymas",
+  "memoryManagement": "Atminties valdymas",
   "@memoryManagement": {
     "description": "Title for memory management sheet"
   },
@@ -2156,7 +2156,7 @@
   "@makeAllPublic": {
     "description": "Button label"
   },
-  "deleteAllMemories": "Ištrinti visus prisiminimus",
+  "deleteAllMemories": "Ištrinti visus atminimus",
   "@deleteAllMemories": {
     "description": "Button label"
   },
@@ -2709,5 +2709,17 @@
   "failedToSaveCheckConnection": "Nepavyko išsaugoti. Patikrinkite savo ryšį.",
   "createMemory": "Sukurti atminimą",
   "deleteMemoryConfirmation": "Ar tikrai norite ištrinti šį atminimą? Šio veiksmo negalima atšaukti.",
-  "makePrivate": "Padaryti privačią"
+  "makePrivate": "Padaryti privačią",
+  "organizeAndControlMemories": "Organizuokite ir valdykite savo atmintis",
+  "total": "Iš viso",
+  "makeAllMemoriesPrivate": "Padaryti visus atminimus privačius",
+  "setAllMemoriesToPrivate": "Nustatyti visus atminimus kaip privačius",
+  "makeAllMemoriesPublic": "Padaryti visus atminimus viešus",
+  "setAllMemoriesToPublic": "Nustatyti visus atminimus kaip viešus",
+  "permanentlyRemoveAllMemories": "Visam laikui pašalinti visus atminimus iš Omi",
+  "allMemoriesAreNowPrivate": "Visi atminimai dabar privatūs",
+  "allMemoriesAreNowPublic": "Visi atminimai dabar vieši",
+  "clearOmisMemory": "Išvalyti Omi atmintį",
+  "clearMemoryConfirmation": "Ar tikrai norite išvalyti Omi atmintį? Šio veiksmo negalima atšaukti ir bus visam laikui ištrinti visi {count} atminimai.",
+  "omisMemoryCleared": "Omi atmintis apie jus buvo išvalyta"
 }

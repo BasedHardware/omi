@@ -2103,7 +2103,7 @@
   "@clearMemoryMessage": {
     "description": "Dialog content for clearing memory"
   },
-  "clearMemoryButton": "Cancella Memoria",
+  "clearMemoryButton": "Cancella memoria",
   "@clearMemoryButton": {
     "description": "Button text to confirm clear"
   },
@@ -2123,7 +2123,7 @@
   "@createActionItemTooltip": {
     "description": "Tooltip for create action item FAB"
   },
-  "memoryManagement": "Gestione Ricordi",
+  "memoryManagement": "Gestione memoria",
   "@memoryManagement": {
     "description": "Title for memory management sheet"
   },
@@ -2156,7 +2156,7 @@
   "@makeAllPublic": {
     "description": "Button label"
   },
-  "deleteAllMemories": "Elimina Tutti i Ricordi",
+  "deleteAllMemories": "Elimina tutti i ricordi",
   "@deleteAllMemories": {
     "description": "Button label"
   },
@@ -2709,5 +2709,17 @@
   "failedToSaveCheckConnection": "Salvataggio fallito. Controlla la tua connessione.",
   "createMemory": "Crea memoria",
   "deleteMemoryConfirmation": "Sei sicuro di voler eliminare questa memoria? Questa azione non può essere annullata.",
-  "makePrivate": "Rendi privato"
+  "makePrivate": "Rendi privato",
+  "organizeAndControlMemories": "Organizza e controlla i tuoi ricordi",
+  "total": "Totale",
+  "makeAllMemoriesPrivate": "Rendi tutti i ricordi privati",
+  "setAllMemoriesToPrivate": "Imposta tutti i ricordi come privati",
+  "makeAllMemoriesPublic": "Rendi tutti i ricordi pubblici",
+  "setAllMemoriesToPublic": "Imposta tutti i ricordi come pubblici",
+  "permanentlyRemoveAllMemories": "Rimuovi permanentemente tutti i ricordi da Omi",
+  "allMemoriesAreNowPrivate": "Tutti i ricordi sono ora privati",
+  "allMemoriesAreNowPublic": "Tutti i ricordi sono ora pubblici",
+  "clearOmisMemory": "Cancella la memoria di Omi",
+  "clearMemoryConfirmation": "Sei sicuro di voler cancellare la memoria di Omi? Questa azione non può essere annullata e eliminerà permanentemente tutti i {count} ricordi.",
+  "omisMemoryCleared": "La memoria di Omi su di te è stata cancellata"
 }

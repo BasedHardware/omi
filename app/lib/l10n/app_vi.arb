@@ -2129,7 +2129,7 @@
   "@memoryClearedSuccess": {
     "description": "Snackbar success message"
   },
-  "noMemoriesToDelete": "Không có ký ức để xóa",
+  "noMemoriesToDelete": "Không có ký ức nào để xóa",
   "@noMemoriesToDelete": {
     "description": "Snackbar message"
   },
@@ -2141,7 +2141,7 @@
   "@createActionItemTooltip": {
     "description": "Tooltip for create action item FAB"
   },
-  "memoryManagement": "Quản lý ký ức",
+  "memoryManagement": "Quản lý bộ nhớ",
   "@memoryManagement": {
     "description": "Title for memory management sheet"
   },
@@ -2727,5 +2727,17 @@
   "failedToSaveCheckConnection": "Lưu thất bại. Vui lòng kiểm tra kết nối của bạn.",
   "createMemory": "Tạo bộ nhớ",
   "deleteMemoryConfirmation": "Bạn có chắc chắn muốn xóa bộ nhớ này không? Hành động này không thể hoàn tác.",
-  "makePrivate": "Riêng tư"
+  "makePrivate": "Riêng tư",
+  "organizeAndControlMemories": "Tổ chức và kiểm soát ký ức của bạn",
+  "total": "Tổng cộng",
+  "makeAllMemoriesPrivate": "Đặt tất cả ký ức thành riêng tư",
+  "setAllMemoriesToPrivate": "Đặt tất cả ký ức thành riêng tư",
+  "makeAllMemoriesPublic": "Đặt tất cả ký ức thành công khai",
+  "setAllMemoriesToPublic": "Đặt tất cả ký ức thành công khai",
+  "permanentlyRemoveAllMemories": "Xóa vĩnh viễn tất cả ký ức khỏi Omi",
+  "allMemoriesAreNowPrivate": "Tất cả ký ức hiện đã ở chế độ riêng tư",
+  "allMemoriesAreNowPublic": "Tất cả ký ức hiện đã ở chế độ công khai",
+  "clearOmisMemory": "Xóa bộ nhớ của Omi",
+  "clearMemoryConfirmation": "Bạn có chắc chắn muốn xóa bộ nhớ của Omi không? Hành động này không thể hoàn tác và sẽ xóa vĩnh viễn tất cả {count} ký ức.",
+  "omisMemoryCleared": "Bộ nhớ của Omi về bạn đã được xóa"
 }

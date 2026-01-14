@@ -2141,7 +2141,7 @@
   "@createActionItemTooltip": {
     "description": "Tooltip for create action item FAB"
   },
-  "memoryManagement": "Управління спогадами",
+  "memoryManagement": "Керування пам'яттю",
   "@memoryManagement": {
     "description": "Title for memory management sheet"
   },
@@ -2727,5 +2727,17 @@
   "failedToSaveCheckConnection": "Не вдалося зберегти. Перевірте підключення.",
   "createMemory": "Створити пам'ять",
   "deleteMemoryConfirmation": "Ви впевнені, що хочете видалити цю пам'ять? Цю дію не можна скасувати.",
-  "makePrivate": "Зробити приватною"
+  "makePrivate": "Зробити приватною",
+  "organizeAndControlMemories": "Організуйте та керуйте своїми спогадами",
+  "total": "Всього",
+  "makeAllMemoriesPrivate": "Зробити всі спогади приватними",
+  "setAllMemoriesToPrivate": "Встановити всі спогади як приватні",
+  "makeAllMemoriesPublic": "Зробити всі спогади публічними",
+  "setAllMemoriesToPublic": "Встановити всі спогади як публічні",
+  "permanentlyRemoveAllMemories": "Назавжди видалити всі спогади з Omi",
+  "allMemoriesAreNowPrivate": "Всі спогади тепер приватні",
+  "allMemoriesAreNowPublic": "Всі спогади тепер публічні",
+  "clearOmisMemory": "Очистити пам'ять Omi",
+  "clearMemoryConfirmation": "Ви впевнені, що хочете очистити пам'ять Omi? Цю дію не можна скасувати, і вона назавжди видалить всі {count} спогадів.",
+  "omisMemoryCleared": "Пам'ять Omi про вас очищено"
 }

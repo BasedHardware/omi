@@ -2727,5 +2727,17 @@
   "failedToSaveCheckConnection": "Tallennus epäonnistui. Tarkista yhteytesi.",
   "createMemory": "Luo muisti",
   "deleteMemoryConfirmation": "Haluatko varmasti poistaa tämän muistin? Tätä toimintoa ei voi perua.",
-  "makePrivate": "Tee yksityiseksi"
+  "makePrivate": "Tee yksityiseksi",
+  "organizeAndControlMemories": "Järjestä ja hallitse muistojasi",
+  "total": "Yhteensä",
+  "makeAllMemoriesPrivate": "Tee kaikki muistot yksityisiksi",
+  "setAllMemoriesToPrivate": "Aseta kaikki muistot yksityisiksi",
+  "makeAllMemoriesPublic": "Tee kaikki muistot julkisiksi",
+  "setAllMemoriesToPublic": "Aseta kaikki muistot julkisiksi",
+  "permanentlyRemoveAllMemories": "Poista pysyvästi kaikki muistot Omista",
+  "allMemoriesAreNowPrivate": "Kaikki muistot ovat nyt yksityisiä",
+  "allMemoriesAreNowPublic": "Kaikki muistot ovat nyt julkisia",
+  "clearOmisMemory": "Tyhjennä Omin muisti",
+  "clearMemoryConfirmation": "Haluatko varmasti tyhjentää Omin muistin? Tätä toimintoa ei voi perua ja se poistaa pysyvästi kaikki {count} muistoa.",
+  "omisMemoryCleared": "Omin muisti sinusta on tyhjennetty"
 }

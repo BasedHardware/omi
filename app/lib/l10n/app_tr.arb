@@ -2103,7 +2103,7 @@
   "@clearMemoryMessage": {
     "description": "Dialog content for clearing memory"
   },
-  "clearMemoryButton": "Hafızayı Temizle",
+  "clearMemoryButton": "Belleği Temizle",
   "@clearMemoryButton": {
     "description": "Button text to confirm clear"
   },
@@ -2123,7 +2123,7 @@
   "@createActionItemTooltip": {
     "description": "Tooltip for create action item FAB"
   },
-  "memoryManagement": "Anı Yönetimi",
+  "memoryManagement": "Bellek Yönetimi",
   "@memoryManagement": {
     "description": "Title for memory management sheet"
   },
@@ -2709,5 +2709,17 @@
   "failedToSaveCheckConnection": "Kaydetme başarısız. Lütfen bağlantınızı kontrol edin.",
   "createMemory": "Hafıza oluştur",
   "deleteMemoryConfirmation": "Bu hafızayı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.",
-  "makePrivate": "Özel yap"
+  "makePrivate": "Özel yap",
+  "organizeAndControlMemories": "Anılarınızı düzenleyin ve kontrol edin",
+  "total": "Toplam",
+  "makeAllMemoriesPrivate": "Tüm Anıları Özel Yap",
+  "setAllMemoriesToPrivate": "Tüm anıları özel görünürlüğe ayarla",
+  "makeAllMemoriesPublic": "Tüm Anıları Herkese Açık Yap",
+  "setAllMemoriesToPublic": "Tüm anıları herkese açık görünürlüğe ayarla",
+  "permanentlyRemoveAllMemories": "Omi'den tüm anıları kalıcı olarak kaldır",
+  "allMemoriesAreNowPrivate": "Tüm anılar artık özel",
+  "allMemoriesAreNowPublic": "Tüm anılar artık herkese açık",
+  "clearOmisMemory": "Omi'nin Belleğini Temizle",
+  "clearMemoryConfirmation": "Omi'nin belleğini temizlemek istediğinizden emin misiniz? Bu işlem geri alınamaz ve tüm {count} anıyı kalıcı olarak siler.",
+  "omisMemoryCleared": "Omi'nin senin hakkındaki belleği temizlendi"
 }

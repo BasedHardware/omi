@@ -2141,7 +2141,7 @@
   "@createActionItemTooltip": {
     "description": "Tooltip for create action item FAB"
   },
-  "memoryManagement": "Gestió de records",
+  "memoryManagement": "Gestió de memòria",
   "@memoryManagement": {
     "description": "Title for memory management sheet"
   },
@@ -2745,5 +2745,17 @@
   "failedToSaveCheckConnection": "Error en desar. Comprova la connexió.",
   "createMemory": "Crear memòria",
   "deleteMemoryConfirmation": "Estàs segur que vols eliminar aquesta memòria? Aquesta acció no es pot desfer.",
-  "makePrivate": "Fer privat"
+  "makePrivate": "Fer privat",
+  "organizeAndControlMemories": "Organitza i controla els teus records",
+  "total": "Total",
+  "makeAllMemoriesPrivate": "Fer privats tots els records",
+  "setAllMemoriesToPrivate": "Establir tots els records com a privats",
+  "makeAllMemoriesPublic": "Fer públics tots els records",
+  "setAllMemoriesToPublic": "Establir tots els records com a públics",
+  "permanentlyRemoveAllMemories": "Eliminar permanentment tots els records d'Omi",
+  "allMemoriesAreNowPrivate": "Tots els records són ara privats",
+  "allMemoriesAreNowPublic": "Tots els records són ara públics",
+  "clearOmisMemory": "Esborrar la memòria d'Omi",
+  "clearMemoryConfirmation": "Estàs segur que vols esborrar la memòria d'Omi? Aquesta acció no es pot desfer i eliminarà permanentment tots els {count} records.",
+  "omisMemoryCleared": "S'ha esborrat la memòria d'Omi sobre tu"
 }

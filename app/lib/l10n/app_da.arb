@@ -2121,7 +2121,7 @@
   "@clearMemoryMessage": {
     "description": "Dialog content for clearing memory"
   },
-  "clearMemoryButton": "Clear Memory",
+  "clearMemoryButton": "Ryd hukommelse",
   "@clearMemoryButton": {
     "description": "Button text to confirm clear"
   },
@@ -2129,7 +2129,7 @@
   "@memoryClearedSuccess": {
     "description": "Snackbar success message"
   },
-  "noMemoriesToDelete": "No memories to delete",
+  "noMemoriesToDelete": "Ingen minder at slette",
   "@noMemoriesToDelete": {
     "description": "Snackbar message"
   },
@@ -2141,7 +2141,7 @@
   "@createActionItemTooltip": {
     "description": "Tooltip for create action item FAB"
   },
-  "memoryManagement": "Memory Management",
+  "memoryManagement": "Hukommelsesstyring",
   "@memoryManagement": {
     "description": "Title for memory management sheet"
   },
@@ -2174,7 +2174,7 @@
   "@makeAllPublic": {
     "description": "Button label"
   },
-  "deleteAllMemories": "Delete All Memories",
+  "deleteAllMemories": "Slet alle minder",
   "@deleteAllMemories": {
     "description": "Button label"
   },
@@ -2727,5 +2727,17 @@
   "failedToSaveCheckConnection": "Kunne ikke gemme. Tjek din forbindelse.",
   "createMemory": "Opret hukommelse",
   "deleteMemoryConfirmation": "Er du sikker på, at du vil slette denne hukommelse? Denne handling kan ikke fortrydes.",
-  "makePrivate": "Gør privat"
+  "makePrivate": "Gør privat",
+  "organizeAndControlMemories": "Organiser og kontroller dine minder",
+  "total": "Total",
+  "makeAllMemoriesPrivate": "Gør alle minder private",
+  "setAllMemoriesToPrivate": "Indstil alle minder til privat synlighed",
+  "makeAllMemoriesPublic": "Gør alle minder offentlige",
+  "setAllMemoriesToPublic": "Indstil alle minder til offentlig synlighed",
+  "permanentlyRemoveAllMemories": "Fjern permanent alle minder fra Omi",
+  "allMemoriesAreNowPrivate": "Alle minder er nu private",
+  "allMemoriesAreNowPublic": "Alle minder er nu offentlige",
+  "clearOmisMemory": "Ryd Omis hukommelse",
+  "clearMemoryConfirmation": "Er du sikker på, at du vil rydde Omis hukommelse? Denne handling kan ikke fortrydes og vil permanent slette alle {count} minder.",
+  "omisMemoryCleared": "Omis hukommelse om dig er blevet ryddet"
 }

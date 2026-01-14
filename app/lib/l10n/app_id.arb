@@ -2727,5 +2727,17 @@
   "failedToSaveCheckConnection": "Gagal menyimpan. Silakan periksa koneksi Anda.",
   "createMemory": "Buat Memori",
   "deleteMemoryConfirmation": "Apakah Anda yakin ingin menghapus memori ini? Tindakan ini tidak dapat dibatalkan.",
-  "makePrivate": "Jadikan Privat"
+  "makePrivate": "Jadikan Privat",
+  "organizeAndControlMemories": "Atur dan kontrol memori Anda",
+  "total": "Total",
+  "makeAllMemoriesPrivate": "Jadikan Semua Memori Privat",
+  "setAllMemoriesToPrivate": "Atur semua memori ke visibilitas privat",
+  "makeAllMemoriesPublic": "Jadikan Semua Memori Publik",
+  "setAllMemoriesToPublic": "Atur semua memori ke visibilitas publik",
+  "permanentlyRemoveAllMemories": "Hapus permanen semua memori dari Omi",
+  "allMemoriesAreNowPrivate": "Semua memori sekarang privat",
+  "allMemoriesAreNowPublic": "Semua memori sekarang publik",
+  "clearOmisMemory": "Hapus Memori Omi",
+  "clearMemoryConfirmation": "Apakah Anda yakin ingin menghapus memori Omi? Tindakan ini tidak dapat dibatalkan dan akan menghapus permanen semua {count} memori.",
+  "omisMemoryCleared": "Memori Omi tentang Anda telah dihapus"
 }

@@ -2727,5 +2727,17 @@
   "failedToSaveCheckConnection": "Uloženie zlyhalo. Skontrolujte pripojenie.",
   "createMemory": "Vytvoriť pamäť",
   "deleteMemoryConfirmation": "Naozaj chcete odstrániť túto pamäť? Túto akciu nie je možné vrátiť späť.",
-  "makePrivate": "Nastaviť ako súkromné"
+  "makePrivate": "Nastaviť ako súkromné",
+  "organizeAndControlMemories": "Organizujte a ovládajte svoje spomienky",
+  "total": "Celkom",
+  "makeAllMemoriesPrivate": "Nastaviť všetky spomienky ako súkromné",
+  "setAllMemoriesToPrivate": "Nastaviť všetky spomienky na súkromnú viditeľnosť",
+  "makeAllMemoriesPublic": "Nastaviť všetky spomienky ako verejné",
+  "setAllMemoriesToPublic": "Nastaviť všetky spomienky na verejnú viditeľnosť",
+  "permanentlyRemoveAllMemories": "Trvalo odstrániť všetky spomienky z Omi",
+  "allMemoriesAreNowPrivate": "Všetky spomienky sú teraz súkromné",
+  "allMemoriesAreNowPublic": "Všetky spomienky sú teraz verejné",
+  "clearOmisMemory": "Vymazať pamäť Omi",
+  "clearMemoryConfirmation": "Naozaj chcete vymazať pamäť Omi? Túto akciu nie je možné vrátiť späť a trvalo odstráni všetkých {count} spomienok.",
+  "omisMemoryCleared": "Pamäť Omi o vás bola vymazaná"
 }

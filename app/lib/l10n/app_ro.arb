@@ -2121,7 +2121,7 @@
   "@clearMemoryMessage": {
     "description": "Dialog content for clearing memory"
   },
-  "clearMemoryButton": "Clear Memory",
+  "clearMemoryButton": "Șterge memoria",
   "@clearMemoryButton": {
     "description": "Button text to confirm clear"
   },
@@ -2129,7 +2129,7 @@
   "@memoryClearedSuccess": {
     "description": "Snackbar success message"
   },
-  "noMemoriesToDelete": "No memories to delete",
+  "noMemoriesToDelete": "Nu există amintiri de șters",
   "@noMemoriesToDelete": {
     "description": "Snackbar message"
   },
@@ -2141,7 +2141,7 @@
   "@createActionItemTooltip": {
     "description": "Tooltip for create action item FAB"
   },
-  "memoryManagement": "Memory Management",
+  "memoryManagement": "Gestionare memorie",
   "@memoryManagement": {
     "description": "Title for memory management sheet"
   },
@@ -2174,7 +2174,7 @@
   "@makeAllPublic": {
     "description": "Button label"
   },
-  "deleteAllMemories": "Delete All Memories",
+  "deleteAllMemories": "Șterge toate amintirile",
   "@deleteAllMemories": {
     "description": "Button label"
   },
@@ -2727,5 +2727,17 @@
   "failedToSaveCheckConnection": "Salvare eșuată. Verifică conexiunea.",
   "createMemory": "Creează amintire",
   "deleteMemoryConfirmation": "Ești sigur că vrei să ștergi această amintire? Această acțiune nu poate fi anulată.",
-  "makePrivate": "Fă privat"
+  "makePrivate": "Fă privat",
+  "organizeAndControlMemories": "Organizează și controlează-ți amintirile",
+  "total": "Total",
+  "makeAllMemoriesPrivate": "Fă toate amintirile private",
+  "setAllMemoriesToPrivate": "Setează toate amintirile ca private",
+  "makeAllMemoriesPublic": "Fă toate amintirile publice",
+  "setAllMemoriesToPublic": "Setează toate amintirile ca publice",
+  "permanentlyRemoveAllMemories": "Elimină permanent toate amintirile din Omi",
+  "allMemoriesAreNowPrivate": "Toate amintirile sunt acum private",
+  "allMemoriesAreNowPublic": "Toate amintirile sunt acum publice",
+  "clearOmisMemory": "Șterge memoria lui Omi",
+  "clearMemoryConfirmation": "Sigur vrei să ștergi memoria lui Omi? Această acțiune nu poate fi anulată și va șterge permanent toate cele {count} amintiri.",
+  "omisMemoryCleared": "Memoria lui Omi despre tine a fost ștearsă"
 }
