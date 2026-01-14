@@ -2,10 +2,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+
+import 'package:path_provider/path_provider.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/wals.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:omi/utils/logger.dart';
 
 class WalFileManager {
   static const String _walFileName = 'wals.json';
@@ -29,19 +32,19 @@ class WalFileManager {
     }
 
     if (_walFile == null || !_walFile!.existsSync()) {
-      debugPrint('WAL file does not exist, returning empty list');
+      Logger.debug('WAL file does not exist, returning empty list');
       return [];
     }
 
     final content = await _walFile!.readAsString();
     if (content.isEmpty) {
-      debugPrint('WAL file is empty, returning empty list');
+      Logger.debug('WAL file is empty, returning empty list');
       return [];
     }
 
     final jsonData = jsonDecode(content);
     if (jsonData is! Map<String, dynamic> || jsonData['wals'] is! List) {
-      debugPrint('Invalid WAL file format, returning empty list');
+      Logger.debug('Invalid WAL file format, returning empty list');
       return [];
     }
 
@@ -55,7 +58,7 @@ class WalFileManager {
     }
 
     if (_walFile == null) {
-      debugPrint('WAL file is null, cannot save');
+      Logger.debug('WAL file is null, cannot save');
       return false;
     }
 
@@ -70,7 +73,7 @@ class WalFileManager {
     final jsonString = jsonEncode(jsonData);
     await _walFile!.writeAsString(jsonString);
 
-    debugPrint('Successfully saved ${wals.length} WALs to file');
+    Logger.debug('Successfully saved ${wals.length} WALs to file');
     return true;
   }
 
@@ -102,13 +105,13 @@ class WalFileManager {
 
   static Future<bool> migrateFromPreferences(List<Wal> prefsWals) async {
     if (prefsWals.isEmpty) {
-      debugPrint('No WALs to migrate from preferences');
+      Logger.debug('No WALs to migrate from preferences');
       return true;
     }
 
     final success = await saveWals(prefsWals);
     if (success) {
-      debugPrint('Successfully migrated ${prefsWals.length} WALs from preferences to file');
+      Logger.debug('Successfully migrated ${prefsWals.length} WALs from preferences to file');
     }
     return success;
   }
@@ -120,7 +123,7 @@ class WalFileManager {
     if (_walBackupFile != null && _walBackupFile!.existsSync()) {
       await _walBackupFile!.delete();
     }
-    debugPrint('Cleared all WAL files');
+    Logger.debug('Cleared all WAL files');
   }
 
   static Future<Map<String, int>> getFileInfo() async {
@@ -150,19 +153,19 @@ class WalFileManager {
 
     // Check if migration was already done
     if (prefs.getBool(_migrationCompletedKey)) {
-      debugPrint('WalFileManager: Legacy Limitless migration already completed');
+      Logger.debug('WalFileManager: Legacy Limitless migration already completed');
       return 0;
     }
 
     // Get legacy pending files from SharedPreferences (stored as full absolute paths)
     final legacyFiles = prefs.getStringList(_legacyPendingFilesKey);
     if (legacyFiles.isEmpty) {
-      debugPrint('WalFileManager: No legacy Limitless files to migrate');
+      Logger.debug('WalFileManager: No legacy Limitless files to migrate');
       prefs.saveBool(_migrationCompletedKey, true);
       return 0;
     }
 
-    debugPrint('WalFileManager: Found ${legacyFiles.length} legacy Limitless files to migrate');
+    Logger.debug('WalFileManager: Found ${legacyFiles.length} legacy Limitless files to migrate');
 
     int migratedCount = 0;
     final newWals = <Wal>[];
@@ -172,7 +175,7 @@ class WalFileManager {
         // Old implementation stored full absolute paths
         final file = File(fullPath);
         if (!file.existsSync()) {
-          debugPrint('WalFileManager: Legacy file not found, skipping: $fullPath');
+          Logger.debug('WalFileManager: Legacy file not found, skipping: $fullPath');
           continue;
         }
 
@@ -186,7 +189,7 @@ class WalFileManager {
             (wal.filePath != null && wal.filePath!.endsWith(fileName)));
 
         if (alreadyTracked) {
-          debugPrint('WalFileManager: File already tracked, skipping: $fileName');
+          Logger.debug('WalFileManager: File already tracked, skipping: $fileName');
           continue;
         }
 
@@ -224,9 +227,9 @@ class WalFileManager {
 
         newWals.add(wal);
         migratedCount++;
-        debugPrint('WalFileManager: Migrated legacy file: $fileName (${seconds}s)');
+        Logger.debug('WalFileManager: Migrated legacy file: $fileName (${seconds}s)');
       } catch (e) {
-        debugPrint('WalFileManager: Error migrating file $fullPath: $e');
+        Logger.debug('WalFileManager: Error migrating file $fullPath: $e');
       }
     }
 
@@ -234,14 +237,14 @@ class WalFileManager {
     if (newWals.isNotEmpty) {
       final allWals = List<Wal>.from(existingWals)..addAll(newWals);
       await saveWals(allWals);
-      debugPrint('WalFileManager: Saved ${newWals.length} migrated WALs');
+      Logger.debug('WalFileManager: Saved ${newWals.length} migrated WALs');
     }
 
     // Clear legacy SharedPreferences and mark migration complete
     prefs.saveStringList(_legacyPendingFilesKey, []);
     prefs.saveBool(_migrationCompletedKey, true);
 
-    debugPrint('WalFileManager: Legacy Limitless migration complete. Migrated $migratedCount files.');
+    Logger.debug('WalFileManager: Legacy Limitless migration complete. Migrated $migratedCount files.');
     return migratedCount;
   }
 
@@ -253,7 +256,7 @@ class WalFileManager {
     for (var wal in wals) {
       // Case 1: FlashPage WAL that has a file locally - was downloaded but not transitioned
       if (wal.storage == WalStorage.flashPage && wal.filePath != null && wal.filePath!.isNotEmpty) {
-        debugPrint('WalFileManager: Fixing inconsistent WAL ${wal.id} - has file but storage=flashPage');
+        Logger.debug('WalFileManager: Fixing inconsistent WAL ${wal.id} - has file but storage=flashPage');
         wal.storage = WalStorage.disk;
         wal.originalStorage = WalStorage.flashPage;
         needsSave = true;
@@ -264,7 +267,7 @@ class WalFileManager {
           wal.originalStorage == null &&
           (wal.deviceModel?.toLowerCase().contains('limitless') == true ||
               wal.filePath?.contains('limitless') == true)) {
-        debugPrint('WalFileManager: Setting originalStorage=flashPage for Limitless WAL ${wal.id}');
+        Logger.debug('WalFileManager: Setting originalStorage=flashPage for Limitless WAL ${wal.id}');
         wal.originalStorage = WalStorage.flashPage;
         needsSave = true;
       }
@@ -272,7 +275,7 @@ class WalFileManager {
 
     if (needsSave) {
       await saveWals(wals);
-      debugPrint('WalFileManager: Saved WALs after inconsistency fixes');
+      Logger.debug('WalFileManager: Saved WALs after inconsistency fixes');
     }
 
     return needsSave;

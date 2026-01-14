@@ -4,13 +4,16 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'package:shimmer/shimmer.dart';
+
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/file.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:shimmer/shimmer.dart';
-import 'package:omi/ui/atoms/omi_icon_button.dart';
 
 enum RecordingState {
   notRecording,
@@ -155,10 +158,10 @@ class _DesktopVoiceRecorderWidgetState extends State<DesktopVoiceRecorderWidget>
         }
       },
       onFormatReceived: (format) {
-        debugPrint('Audio format received: $format');
+        Logger.debug('Audio format received: $format');
       },
       onRecording: () {
-        debugPrint('Recording started');
+        Logger.debug('Recording started');
         setState(() {
           _state = RecordingState.recording;
           _audioChunks = [];
@@ -168,10 +171,10 @@ class _DesktopVoiceRecorderWidgetState extends State<DesktopVoiceRecorderWidget>
         });
       },
       onStop: () {
-        debugPrint('Recording stopped');
+        Logger.debug('Recording stopped');
       },
       onError: (error) {
-        debugPrint('Recording error: $error');
+        Logger.debug('Recording error: $error');
         setState(() {
           _state = RecordingState.transcribeFailed;
         });
@@ -228,7 +231,7 @@ class _DesktopVoiceRecorderWidgetState extends State<DesktopVoiceRecorderWidget>
         }
       }
     } catch (e) {
-      debugPrint('Error processing recording: $e');
+      Logger.debug('Error processing recording: $e');
       if (mounted) {
         setState(() {
           _state = RecordingState.transcribeFailed;

@@ -1,9 +1,0 @@
-dspy-ai>=2.0.0
-streamlit>=1.24.0
-langfuse>=2.0.0
-openai>=1.1.0
-numpy>=1.22.0
-pandas>=1.4.0
-python-dotenv>=0.21.0
-tqdm>=4.65.0
-anyio>=3.5.0

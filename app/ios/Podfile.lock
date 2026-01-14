@@ -147,10 +147,10 @@ PODS:
     - Flutter
   - flutter_native_splash (2.4.3):
     - Flutter
-  - flutter_sound (9.30.0):
+  - flutter_sound (9.25.1):
     - Flutter
-    - flutter_sound_core (= 9.30.0)
-  - flutter_sound_core (9.30.0)
+    - flutter_sound_core (= 9.25.1)
+  - flutter_sound_core (9.25.1)
   - flutter_timezone (0.0.1):
     - Flutter
   - frame_sdk (0.0.2):
@@ -488,8 +488,8 @@ SPEC CHECKSUMS:
   flutter_contacts: 5383945387e7ca37cf963d4be57c21f2fc15ca9f
   flutter_foreground_task: a159d2c2173b33699ddb3e6c2a067045d7cebb89
   flutter_native_splash: c32d145d68aeda5502d5f543ee38c192065986cf
-  flutter_sound: d95194f6476c9ad211d22b3a414d852c12c7ca44
-  flutter_sound_core: 7f2626d249d3a57bfa6da892ef7e22d234482c1a
+  flutter_sound: 69343c1dd74d2cc5a7fe6693f20369b63ea2e249
+  flutter_sound_core: 065aca7698f13a934d8cb8156a2865efd282b1e8
   flutter_timezone: ee50ce7786b5fde27e2fe5375bbc8c9661ffc13f
   frame_sdk: 4d4df786d828557bf57e05f6f1856613896cc9db
   geolocator_apple: ab36aa0e8b7d7a2d7639b3b4e48308394e8cef5e

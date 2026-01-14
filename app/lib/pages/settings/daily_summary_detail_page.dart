@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
+
 import 'package:flutter_map/flutter_map.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:latlong2/latlong.dart';
+
+import 'package:omi/backend/http/api/conversations.dart' as conversations_api;
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
-import 'package:omi/backend/http/api/conversations.dart' as conversations_api;
-import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversation_detail/maps_util.dart';
+import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 
 class DailySummaryDetailPage extends StatefulWidget {

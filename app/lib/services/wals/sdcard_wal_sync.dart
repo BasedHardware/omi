@@ -3,6 +3,10 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+import 'package:omi/utils/logger.dart';
+
+import 'package:path_provider/path_provider.dart';
+
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/devices/device_connection.dart';
@@ -12,7 +16,6 @@ import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/services/wifi/wifi_network_service.dart';
-import 'package:path_provider/path_provider.dart';
 
 class SDCardWalSyncImpl implements SDCardWalSync {
   List<Wal> _wals = const [];
@@ -45,7 +48,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   void cancelSync() {
     if (_isSyncing) {
       _isCancelled = true;
-      debugPrint("SDCardWalSync: Cancel requested");
+      Logger.debug("SDCardWalSync: Cancel requested");
     }
   }
 
@@ -153,7 +156,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     }
     var storageOffset = storageFiles.length < 2 ? 0 : storageFiles[1];
     if (storageOffset > totalBytes) {
-      debugPrint("SDCard bad state, offset > total");
+      Logger.debug("SDCard bad state, offset > total");
       storageOffset = 0;
     }
 
@@ -230,7 +233,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     if (chunk.isNotEmpty) {
       final firstFrame = chunk[0];
       final frameHex = firstFrame.take(8).map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
-      debugPrint(
+      Logger.debug(
           "SDCardWalSync _flushToDisk: ${chunk.length} frames, first frame size=${firstFrame.length}, hex: $frameHex");
     }
 
@@ -247,7 +250,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     final file = File(filePath);
     await file.writeAsBytes(data);
 
-    debugPrint("SDCardWalSync _flushToDisk: Wrote ${data.length} bytes to $filePath");
+    Logger.debug("SDCardWalSync _flushToDisk: Wrote ${data.length} bytes to $filePath");
 
     return file;
   }
@@ -258,7 +261,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     int offset = wal.storageOffset;
     int timerStart = wal.timerStart;
 
-    debugPrint("_readStorageBytesToFile ${offset}");
+    Logger.debug("_readStorageBytesToFile ${offset}");
 
     List<List<int>> bytesData = [];
     var bytesLeft = 0;
@@ -275,27 +278,27 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       if (!firstDataReceived) {
         firstDataReceived = true;
         timeoutTimer?.cancel();
-        debugPrint('First data received, timeout cancelled');
+        Logger.debug('First data received, timeout cancelled');
       }
 
       if (value.length == 1) {
-        debugPrint('returned $value');
+        Logger.debug('returned $value');
         if (value[0] == 0) {
-          debugPrint('good to go');
+          Logger.debug('good to go');
         } else if (value[0] == 3) {
-          debugPrint('bad file size. finishing...');
+          Logger.debug('bad file size. finishing...');
         } else if (value[0] == 4) {
-          debugPrint('file size is zero. going to next one....');
+          Logger.debug('file size is zero. going to next one....');
           if (!completer.isCompleted) {
             completer.complete(true);
           }
         } else if (value[0] == 100) {
-          debugPrint('end');
+          Logger.debug('end');
           if (!completer.isCompleted) {
             completer.complete(true);
           }
         } else {
-          debugPrint('Error bit returned');
+          Logger.debug('Error bit returned');
           if (!completer.isCompleted) {
             completer.complete(true);
           }
@@ -333,7 +336,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
           var file = await _flushToDisk(wal, chunk, timerStart);
           await callback(file, offset, timerStart);
         } catch (e) {
-          debugPrint('Error in callback during chunking: $e');
+          Logger.debug('Error in callback during chunking: $e');
           hasError = true;
           if (!completer.isCompleted) {
             completer.completeError(e);
@@ -348,7 +351,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       if (!firstDataReceived && !completer.isCompleted) {
         hasError = true;
         final error = TimeoutException('No data received from SD card within 5 seconds');
-        debugPrint('SD card read timeout: ${error.message}');
+        Logger.debug('SD card read timeout: ${error.message}');
         completer.completeError(error);
       }
     });
@@ -373,10 +376,10 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   }
 
   Future<SyncLocalFilesResponse> _syncWal(final Wal wal, Function(int offset, double speedKBps)? updates) async {
-    debugPrint("SDCard sync (two-phase): ${wal.id} byte offset: ${wal.storageOffset} ts ${wal.timerStart}");
+    Logger.debug("SDCard sync (two-phase): ${wal.id} byte offset: ${wal.storageOffset} ts ${wal.timerStart}");
 
     if (_localSync == null) {
-      debugPrint("SDCard: ERROR - LocalWalSync not available, aborting to preserve data safety");
+      Logger.debug("SDCard: ERROR - LocalWalSync not available, aborting to preserve data safety");
       throw Exception('Local sync service not available. Cannot safely download SD card data.');
     }
 
@@ -384,7 +387,8 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     int lastOffset = wal.storageOffset;
     int totalBytesToDownload = wal.storageTotalBytes - wal.storageOffset;
 
-    debugPrint("SDCard Phase 1: Downloading ~${(totalBytesToDownload / 1024).toStringAsFixed(1)} KB to phone storage");
+    Logger.debug(
+        "SDCard Phase 1: Downloading ~${(totalBytesToDownload / 1024).toStringAsFixed(1)} KB to phone storage");
 
     _downloadStartTime = DateTime.now();
     _totalBytesDownloaded = 0;
@@ -406,26 +410,26 @@ class SDCardWalSyncImpl implements SDCardWalSync {
           updates(offset, _currentSpeedKBps);
         }
 
-        debugPrint(
+        Logger.debug(
             "SDCard: Chunk $chunksDownloaded downloaded (ts: $timerStart, speed: ${_currentSpeedKBps.toStringAsFixed(1)} KB/s)");
       });
     } catch (e) {
       await _storageStream?.cancel();
-      debugPrint('SDCard download failed: $e');
+      Logger.debug('SDCard download failed: $e');
       if (chunksDownloaded > 0) {
-        debugPrint("SDCard: $chunksDownloaded chunks saved before failure");
+        Logger.debug("SDCard: $chunksDownloaded chunks saved before failure");
       }
       rethrow;
     }
 
     if (chunksDownloaded == 0) {
-      debugPrint("SDCard: No chunks downloaded");
+      Logger.debug("SDCard: No chunks downloaded");
       return SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
     }
 
-    debugPrint("SDCard Phase 1 complete: $chunksDownloaded chunks downloaded");
+    Logger.debug("SDCard Phase 1 complete: $chunksDownloaded chunks downloaded");
 
-    debugPrint("SDCard Phase 3: Clearing SD card storage");
+    Logger.debug("SDCard Phase 3: Clearing SD card storage");
     await _writeToStorage(wal.device, wal.fileNum, 1, 0);
 
     return SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
@@ -433,7 +437,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
   Future<void> _registerSingleChunk(Wal wal, File file, int timerStart) async {
     if (_localSync == null) {
-      debugPrint("SDCard: WARNING - Cannot register chunk, LocalWalSync not available");
+      Logger.debug("SDCard: WARNING - Cannot register chunk, LocalWalSync not available");
       return;
     }
 
@@ -456,7 +460,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     );
 
     await _localSync!.addExternalWal(localWal);
-    debugPrint(
+    Logger.debug(
         "SDCard: Registered chunk (ts: $timerStart) with LocalWalSync - codec=${localWal.codec}, sampleRate=${localWal.sampleRate}, channel=${localWal.channel}");
   }
 
@@ -464,7 +468,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
     var wals = _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.sdcard).toList();
     if (wals.isEmpty) {
-      debugPrint("SDCardWalSync: All synced!");
+      Logger.debug("SDCardWalSync: All synced!");
       return null;
     }
 
@@ -475,7 +479,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
     for (var i = wals.length - 1; i >= 0; i--) {
       if (_isCancelled) {
-        debugPrint("SDCardWalSync: Sync cancelled before processing WAL ${wals[i].id}");
+        Logger.debug("SDCardWalSync: Sync cancelled before processing WAL ${wals[i].id}");
         break;
       }
 
@@ -512,7 +516,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
         wal.status = WalStatus.synced;
       } catch (e) {
-        debugPrint("SDCardWalSync: Error syncing WAL ${wal.id}: $e");
+        Logger.debug("SDCardWalSync: Error syncing WAL ${wal.id}: $e");
         wal.isSyncing = false;
         wal.syncStartedAt = null;
         wal.syncEtaSeconds = null;
@@ -572,7 +576,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
       wal.status = WalStatus.synced;
     } catch (e) {
-      debugPrint("SDCardWalSync: Error syncing WAL ${wal.id}: $e");
+      Logger.debug("SDCardWalSync: Error syncing WAL ${wal.id}: $e");
       walToSync.isSyncing = false;
       walToSync.syncStartedAt = null;
       walToSync.syncEtaSeconds = null;
@@ -609,12 +613,12 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   @override
   Future<bool> isWifiSyncSupported() async {
     if (_device == null) {
-      debugPrint("SDCardWalSync WiFi: No device connected");
+      Logger.debug("SDCardWalSync WiFi: No device connected");
       return false;
     }
     var connection = await ServiceManager.instance().device.ensureConnection(_device!.id);
     if (connection == null) {
-      debugPrint("SDCardWalSync WiFi: Could not get device connection");
+      Logger.debug("SDCardWalSync WiFi: Could not get device connection");
       return false;
     }
     return await connection.isWifiSyncSupported();
@@ -685,12 +689,12 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   Future<SyncLocalFilesResponse?> syncWithWifi({IWalSyncProgressListener? progress}) async {
     var wals = _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.sdcard).toList();
     if (wals.isEmpty) {
-      debugPrint("SDCardWalSync WiFi: All synced!");
+      Logger.debug("SDCardWalSync WiFi: All synced!");
       return null;
     }
 
     if (_device == null) {
-      debugPrint("SDCardWalSync WiFi: No device connected");
+      Logger.debug("SDCardWalSync WiFi: No device connected");
       return null;
     }
 
@@ -704,7 +708,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
     var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) {
-      debugPrint("SDCardWalSync WiFi: Failed to get device connection");
+      Logger.debug("SDCardWalSync WiFi: Failed to get device connection");
       _resetSyncState();
       return null;
     }
@@ -791,7 +795,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
           },
         );
       } catch (e) {
-        debugPrint("SDCardWalSync WiFi: Failed to setup WiFi status listener: $e");
+        Logger.debug("SDCardWalSync WiFi: Failed to setup WiFi status listener: $e");
       }
 
       _downloadStartTime = DateTime.now();
@@ -981,11 +985,11 @@ class SDCardWalSyncImpl implements SDCardWalSync {
         await completer.future.timeout(
           const Duration(minutes: 5),
           onTimeout: () {
-            debugPrint("SDCardWalSync WiFi: Transfer timeout");
+            Logger.debug("SDCardWalSync WiFi: Transfer timeout");
           },
         );
       } catch (e) {
-        debugPrint("SDCardWalSync WiFi: Transfer error: $e");
+        Logger.debug("SDCardWalSync WiFi: Transfer error: $e");
       }
 
       // Flush all collected data in chunks
@@ -997,7 +1001,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
           var file = await _flushToDisk(wal, chunk, timerStart);
           await _registerSingleChunk(wal, file, timerStart);
         } catch (e) {
-          debugPrint('SDCardWalSync WiFi: Error flushing chunk: $e');
+          Logger.debug('SDCardWalSync WiFi: Error flushing chunk: $e');
         }
       }
 
@@ -1009,7 +1013,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
           var file = await _flushToDisk(wal, chunk, timerStart);
           await _registerSingleChunk(wal, file, timerStart);
         } catch (e) {
-          debugPrint('SDCardWalSync WiFi: Error flushing final chunk: $e');
+          Logger.debug('SDCardWalSync WiFi: Error flushing final chunk: $e');
         }
       }
 
@@ -1037,7 +1041,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       debugPrint("SDCardWalSync WiFi: Sync completed successfully");
       return resp;
     } catch (e) {
-      debugPrint("SDCardWalSync WiFi: Error during sync: $e");
+      Logger.debug("SDCardWalSync WiFi: Error during sync: $e");
 
       await _cleanupWifiSync(tcpTransport, wifiNetwork, ssid, connection, deviceId: deviceId);
 

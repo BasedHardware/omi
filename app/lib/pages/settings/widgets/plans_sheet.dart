@@ -1,20 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
-import 'package:omi/gen/assets.gen.dart';
-
-import 'package:omi/models/subscription.dart';
-import 'package:omi/providers/usage_provider.dart';
-import 'package:omi/providers/user_provider.dart';
-import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/pages/settings/transcription_settings_page.dart';
-import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/models/subscription.dart';
+import 'package:omi/pages/settings/transcription_settings_page.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/providers/user_provider.dart';
+import 'package:omi/services/freemium_transcription_service.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/logger.dart';
+import 'package:omi/widgets/confirmation_dialog.dart';
 import '../payment_webview_page.dart';
 
 class PlansSheet extends StatefulWidget {
@@ -38,10 +42,12 @@ class PlansSheet extends StatefulWidget {
 }
 
 class _PlansSheetState extends State<PlansSheet> {
-  String selectedPlan = 'yearly'; // 'yearly' or 'monthly'
+  String selectedPlan = 'yearly'; // 'yearly', 'monthly', or 'free'
   bool _isCancelling = false;
   bool _isUpgrading = false;
   bool _showTrainingDataOptIn = false; // Control visibility of training data opt-in
+  bool _isFreePlanExpanded = false;
+  bool _isSwitchingToFree = false;
 
   Future<void> _loadAvailablePlans() async {
     final provider = context.read<UsageProvider>();
@@ -278,7 +284,7 @@ class _PlansSheetState extends State<PlansSheet> {
 
       return currentPlan;
     } catch (e) {
-      debugPrint('Error getting current plan details: $e');
+      Logger.debug('Error getting current plan details: $e');
       return null;
     }
   }
@@ -300,7 +306,7 @@ class _PlansSheetState extends State<PlansSheet> {
 
       return false;
     } catch (e) {
-      debugPrint('Error checking scheduled upgrade: $e');
+      Logger.debug('Error checking scheduled upgrade: $e');
       return false;
     }
   }
@@ -320,8 +326,49 @@ class _PlansSheetState extends State<PlansSheet> {
 
       return annualPlan;
     } catch (e) {
-      debugPrint('Error getting scheduled plan details: $e');
+      Logger.debug('Error getting scheduled plan details: $e');
       return null;
+    }
+  }
+
+  Future<void> _handleSwitchToFreePlan() async {
+    setState(() => _isSwitchingToFree = true);
+
+    try {
+      MixpanelManager().track('Free Plan Selected', properties: {
+        'source': 'plans_sheet',
+      });
+
+      final freemiumService = FreemiumTranscriptionService();
+      final readiness = await freemiumService.checkReadiness();
+
+      if (readiness == FreemiumReadiness.ready) {
+        final config = freemiumService.getFreemiumConfig();
+        if (config != null) {
+          await SharedPreferencesUtil().saveCustomSttConfig(config);
+          if (!mounted) return;
+
+          final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
+          await captureProvider.onRecordProfileSettingChanged();
+
+          if (!mounted) return;
+          AppSnackbar.showSnackbar('Switched to on-device transcription');
+          Navigator.of(context).pop(false); // false = switched to free
+        }
+      } else {
+        // Need to set up on-device first
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const TranscriptionSettingsPage()),
+        );
+      }
+    } catch (e) {
+      Logger.debug('Error switching to free plan: $e');
+      AppSnackbar.showSnackbarError('Could not switch to free plan. Please try again.');
+    } finally {
+      if (mounted) setState(() => _isSwitchingToFree = false);
     }
   }
 
@@ -1351,19 +1398,26 @@ class _PlansSheetState extends State<PlansSheet> {
                           return const SizedBox.shrink();
                         }
 
+                        final isLoading = _isUpgrading || _isSwitchingToFree;
+                        final buttonText = selectedPlan == 'free' ? 'Use Free Plan' : 'Continue';
+
                         return SizedBox(
                           width: double.infinity,
                           height: 56,
                           child: ElevatedButton(
-                            onPressed: _isUpgrading
+                            onPressed: isLoading
                                 ? null
                                 : () {
                                     HapticFeedback.mediumImpact();
-                                    _handleUpgradeWithSelectedPlan();
+                                    if (selectedPlan == 'free') {
+                                      _handleSwitchToFreePlan();
+                                    } else {
+                                      _handleUpgradeWithSelectedPlan();
+                                    }
                                   },
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: _isUpgrading ? Colors.grey : Colors.white,
-                              foregroundColor: _isUpgrading ? Colors.white : Colors.black,
+                              backgroundColor: isLoading ? Colors.grey : Colors.white,
+                              foregroundColor: isLoading ? Colors.white : Colors.black,
                               elevation: 0,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16),
@@ -1372,16 +1426,16 @@ class _PlansSheetState extends State<PlansSheet> {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                if (_isUpgrading) ...[
+                                if (isLoading) ...[
                                   const SizedBox(
                                     height: 20,
                                     width: 20,
                                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                                   ),
                                 ] else ...[
-                                  const Text(
-                                    'Continue',
-                                    style: TextStyle(
+                                  Text(
+                                    buttonText,
+                                    style: const TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -1836,102 +1890,190 @@ class _PlansSheetState extends State<PlansSheet> {
   }
 
   Widget _buildFreemiumPlanOption({required bool isCurrentPlan}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isCurrentPlan ? Colors.white.withOpacity(0.3) : Colors.transparent,
-          width: 2,
+    final isSelected = selectedPlan == 'free';
+
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.lightImpact();
+        setState(() {
+          selectedPlan = 'free';
+          _isFreePlanExpanded = !_isFreePlanExpanded;
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1F1F25),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? Colors.white : (isCurrentPlan ? Colors.white.withOpacity(0.3) : Colors.transparent),
+            width: 2,
+          ),
         ),
-      ),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Free Plan',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const TranscriptionSettingsPage()),
-                        );
-                      },
-                      child: Text.rich(
-                        TextSpan(
-                          children: [
-                            TextSpan(
-                              text: '1,200 premium mins + unlimited ',
-                              style: TextStyle(
-                                color: Colors.grey[400],
-                                fontSize: 14,
-                              ),
-                            ),
-                            TextSpan(
-                              text: 'on-device',
-                              style: TextStyle(
-                                color: Colors.grey[300],
-                                fontSize: 14,
-                                decoration: TextDecoration.underline,
-                              ),
-                            ),
-                          ],
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Free Plan',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
                         ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '1,200 premium mins + unlimited on-device',
+                        style: TextStyle(
+                          color: Colors.grey[400],
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Row(
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        const Text(
+                          '\$0',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        if (isCurrentPlan && !isSelected) ...[
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Text(
+                              'Current',
+                              style: TextStyle(
+                                color: Colors.black,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(width: 8),
+                    AnimatedRotation(
+                      turns: _isFreePlanExpanded ? 0.5 : 0,
+                      duration: const Duration(milliseconds: 200),
+                      child: Icon(
+                        Icons.keyboard_arrow_down,
+                        color: Colors.grey[400],
+                        size: 24,
                       ),
                     ),
                   ],
                 ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  const Text(
-                    '\$0',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                    ),
+              ],
+            ),
+            // Expandable comparison section
+            AnimatedCrossFade(
+              firstChild: const SizedBox.shrink(),
+              secondChild: _buildOnDeviceDownsides(),
+              crossFadeState: _isFreePlanExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+              duration: const Duration(milliseconds: 200),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOnDeviceDownsides() {
+    return Container(
+      margin: const EdgeInsets.only(top: 16),
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'On-device limitations:',
+            style: TextStyle(
+              color: Colors.grey[400],
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildDownsideRow('Speed', '5-7 sec delay (Premium: real-time)'),
+          const SizedBox(height: 8),
+          _buildDownsideRow('Accuracy', '~60% words correct (Premium: 99%+)'),
+          const SizedBox(height: 8),
+          _buildDownsideRow('Speakers', 'Cannot identify who is speaking'),
+          const SizedBox(height: 8),
+          _buildDownsideRow('Battery', 'Drains ~30%/hr (Premium: ~1-3%/hr)'),
+          const SizedBox(height: 12),
+          const SizedBox(height: 8),
+          GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const TranscriptionSettingsPage()),
+              );
+            },
+            child: Row(
+              children: [
+                Icon(Icons.settings, color: Colors.grey[500], size: 14),
+                const SizedBox(width: 6),
+                Text(
+                  'Configure',
+                  style: TextStyle(
+                    color: Colors.grey[400],
+                    fontSize: 12,
                   ),
-                  if (isCurrentPlan) ...[
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Text(
-                        'Current',
-                        style: TextStyle(
-                          color: Colors.black,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.3,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildDownsideRow(String label, String value) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 70,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: Colors.grey[500],
+              fontSize: 12,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(
+              color: Colors.grey[400],
+              fontSize: 12,
+            ),
+          ),
+        ),
+      ],
     );
   }
 

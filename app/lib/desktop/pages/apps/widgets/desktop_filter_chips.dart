@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:omi/providers/app_provider.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+
 import 'package:provider/provider.dart';
+
+import 'package:omi/providers/app_provider.dart';
 import 'package:omi/ui/atoms/omi_choice_chip.dart';
 import 'package:omi/ui/molecules/omi_popup_menu.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class DesktopFilterChips extends StatelessWidget {
   final VoidCallback onFilterChanged;

@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:provider/provider.dart';
 import 'package:omi/ui/atoms/omi_checkbox.dart';
 import 'package:omi/ui/atoms/omi_icon_badge.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
+import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class DesktopActionGroup extends StatefulWidget {
   final String conversationTitle;
@@ -117,7 +120,7 @@ class _DesktopActionGroupState extends State<DesktopActionGroup> {
       });
       _showSavedMessage();
     } catch (e) {
-      debugPrint('Error updating action item description: $e');
+      Logger.debug('Error updating action item description: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Failed to update action item'),

@@ -1,8 +1,11 @@
 import 'dart:async';
 
-import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/material.dart';
+
+import 'package:awesome_notifications/awesome_notifications.dart';
+
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/logger.dart';
 
 /// Event data for important conversation completion
 class ImportantConversationEvent {
@@ -41,12 +44,12 @@ class ImportantConversationNotificationHandler {
     final navigateTo = data['navigate_to'] as String?;
 
     if (conversationId == null) {
-      debugPrint('[ImportantConversationNotification] Invalid data: missing conversation_id');
+      Logger.debug('[ImportantConversationNotification] Invalid data: missing conversation_id');
       return;
     }
 
-    debugPrint('[ImportantConversationNotification] Important conversation completed: $conversationId');
-    debugPrint('[ImportantConversationNotification] Navigate to: $navigateTo');
+    Logger.debug('[ImportantConversationNotification] Important conversation completed: $conversationId');
+    Logger.debug('[ImportantConversationNotification] Navigate to: $navigateTo');
 
     // Track notification received
     MixpanelManager().importantConversationNotificationReceived(conversationId);
@@ -89,9 +92,9 @@ class ImportantConversationNotificationHandler {
         ),
       );
 
-      debugPrint('[ImportantConversationNotification] Showed notification for conversation: $conversationId');
+      Logger.debug('[ImportantConversationNotification] Showed notification for conversation: $conversationId');
     } catch (e) {
-      debugPrint('[ImportantConversationNotification] Error showing notification: $e');
+      Logger.debug('[ImportantConversationNotification] Error showing notification: $e');
     }
   }
 }

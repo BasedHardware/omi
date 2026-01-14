@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+
 import 'package:omi/utils/platform/platform_service.dart';
 
 class AppleRemindersService {

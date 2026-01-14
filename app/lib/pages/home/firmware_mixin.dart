@@ -3,19 +3,22 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
+
+import 'package:flutter_archive/flutter_archive.dart';
+import 'package:http/http.dart' as http;
+import 'package:mcumgr_flutter/mcumgr_flutter.dart' as mcumgr;
 import 'package:nordic_dfu/nordic_dfu.dart';
-import 'package:omi/backend/http/shared.dart';
-import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/backend/http/api/device.dart';
-import 'package:omi/providers/device_provider.dart';
-import 'package:omi/utils/device.dart';
-import 'package:omi/utils/manifest/manifest.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
-import 'package:http/http.dart' as http;
-import 'package:mcumgr_flutter/mcumgr_flutter.dart' as mcumgr;
-import 'package:flutter_archive/flutter_archive.dart';
+
+import 'package:omi/backend/http/api/device.dart';
+import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/providers/device_provider.dart';
+import 'package:omi/utils/device.dart';
+import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/manifest/manifest.dart';
 
 mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   Map latestFirmwareDetails = {};
@@ -107,18 +110,18 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
 
     updateStream.listen((state) {
       if (state == mcumgr.FirmwareUpgradeState.success) {
-        debugPrint('update success');
+        Logger.debug('update success');
         setState(() {
           isInstalling = false;
           isInstalled = true;
         });
       } else {
-        debugPrint('update state: $state');
+        Logger.debug('update state: $state');
       }
     });
 
     updateManager.progressStream.listen((progress) {
-      debugPrint('progress: $progress');
+      Logger.debug('progress: $progress');
       setState(() {
         installProgress = (progress.bytesSent / progress.imageSize * 100).round();
       });
@@ -127,7 +130,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     updateManager.logger.logMessageStream
         .where((log) => log.level.rawValue > 1) // Filter debug messages
         .listen((log) {
-      debugPrint('dfu log: ${log.message}');
+      Logger.debug('dfu log: ${log.message}');
     });
 
     await updateManager.update(
@@ -160,13 +163,13 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
         rebootTime: 1000,
       ),
       onProgressChanged: (deviceAddress, percent, speed, avgSpeed, currentPart, partsTotal) {
-        debugPrint('deviceAddress: $deviceAddress, percent: $percent');
+        Logger.debug('deviceAddress: $deviceAddress, percent: $percent');
         setState(() {
           installProgress = percent.toInt();
         });
       },
       onError: (deviceAddress, error, errorType, message) {
-        debugPrint('deviceAddress: $deviceAddress, error: $error, errorType: $errorType, message: $message');
+        Logger.debug('deviceAddress: $deviceAddress, error: $error, errorType: $errorType, message: $message');
         setState(() {
           isInstalling = false;
         });
@@ -174,14 +177,14 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
         final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
         deviceProvider.resetFirmwareUpdateState();
       },
-      onDeviceConnecting: (deviceAddress) => debugPrint('deviceAddress: $deviceAddress, onDeviceConnecting'),
-      onDeviceConnected: (deviceAddress) => debugPrint('deviceAddress: $deviceAddress, onDeviceConnected'),
-      onDfuProcessStarting: (deviceAddress) => debugPrint('deviceAddress: $deviceAddress, onDfuProcessStarting'),
-      onDfuProcessStarted: (deviceAddress) => debugPrint('deviceAddress: $deviceAddress, onDfuProcessStarted'),
-      onEnablingDfuMode: (deviceAddress) => debugPrint('deviceAddress: $deviceAddress, onEnablingDfuMode'),
-      onFirmwareValidating: (deviceAddress) => debugPrint('address: $deviceAddress, onFirmwareValidating'),
+      onDeviceConnecting: (deviceAddress) => Logger.debug('deviceAddress: $deviceAddress, onDeviceConnecting'),
+      onDeviceConnected: (deviceAddress) => Logger.debug('deviceAddress: $deviceAddress, onDeviceConnected'),
+      onDfuProcessStarting: (deviceAddress) => Logger.debug('deviceAddress: $deviceAddress, onDfuProcessStarting'),
+      onDfuProcessStarted: (deviceAddress) => Logger.debug('deviceAddress: $deviceAddress, onDfuProcessStarted'),
+      onEnablingDfuMode: (deviceAddress) => Logger.debug('deviceAddress: $deviceAddress, onEnablingDfuMode'),
+      onFirmwareValidating: (deviceAddress) => Logger.debug('address: $deviceAddress, onFirmwareValidating'),
       onDfuCompleted: (deviceAddress) {
-        debugPrint('deviceAddress: $deviceAddress, onDfuCompleted');
+        Logger.debug('deviceAddress: $deviceAddress, onDfuCompleted');
         setState(() {
           isInstalling = false;
           isInstalled = true;
@@ -217,7 +220,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   Future downloadFirmware() async {
     final zipUrl = latestFirmwareDetails['zip_url'];
     if (zipUrl == null) {
-      debugPrint('Error: zip_url is null in latestFirmwareDetails');
+      Logger.debug('Error: zip_url is null in latestFirmwareDetails');
       setState(() {
         isDownloading = false;
       });
@@ -239,7 +242,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     response.asStream().listen((http.StreamedResponse r) {
       r.stream.listen((List<int> chunk) {
         // Display percentage of completion
-        debugPrint('downloadPercentage: ${downloaded / r.contentLength! * 100}');
+        Logger.debug('downloadPercentage: ${downloaded / r.contentLength! * 100}');
         setState(() {
           downloadProgress = (downloaded / r.contentLength! * 100).toInt();
         });
@@ -247,7 +250,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
         downloaded += chunk.length;
       }, onDone: () async {
         // Display percentage of completion
-        debugPrint('downloadPercentage: ${downloaded / r.contentLength! * 100}');
+        Logger.debug('downloadPercentage: ${downloaded / r.contentLength! * 100}');
 
         // Save the file
         File file = File('$dir/firmware.zip');
@@ -264,7 +267,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
         });
         return;
       }, onError: (error) {
-        debugPrint('Download error: $error');
+        Logger.debug('Download error: $error');
         setState(() {
           isDownloading = false;
         });
@@ -273,7 +276,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
         deviceProvider.resetFirmwareUpdateState();
       });
     }, onError: (error) {
-      debugPrint('Download error: $error');
+      Logger.debug('Download error: $error');
       setState(() {
         isDownloading = false;
       });

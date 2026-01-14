@@ -90,7 +90,9 @@
   "selectedCount": "{count} selecionados",
   "@selectedCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "merge": "Mesclar",
@@ -98,7 +100,9 @@
   "mergeConversationsMessage": "Isso combinará {count} conversas em uma. Todo o conteúdo será mesclado e regenerado.",
   "@mergeConversationsMessage": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "mergingInBackground": "Mesclando em segundo plano. Isso pode levar um momento.",
@@ -408,7 +412,6 @@
   "defaultProjectOptional": "Projeto padrão (Opcional)",
   "leaveUnselectedTasks": "Deixe desmarcado para tarefas sem projeto",
   "noProjectsInWorkspace": "Nenhum projeto encontrado neste workspace",
-  "conversationTimeout": "Tempo limite de conversa",
   "conversationTimeoutDesc": "Escolha quanto tempo esperar em silêncio antes de terminar:",
   "timeout2Minutes": "2 minutos",
   "timeout2MinutesDesc": "Terminar após 2 minutos de silêncio",
@@ -653,8 +656,8 @@
   "memoryDeleted": "Memória apagada.",
   "undo": "Desfazer",
   "noMemoriesYet": "Nenhuma memória ainda",
-  "noInterestingMemories": "Nenhuma memória interessante",
-  "noSystemMemories": "Nenhuma memória do sistema",
+  "noAutoMemories": "Nenhuma memória automática",
+  "noManualMemories": "Nenhuma memória manual",
   "noMemoriesInCategories": "Nenhuma memória nestas categorias",
   "noMemoriesFound": "Nenhuma memória encontrada",
   "addFirstMemory": "Adicione sua primeira memória",
@@ -695,9 +698,10 @@
   "pressDoneToSave": "Pressione Concluído para salvar",
   "pressDoneToCreate": "Pressione Concluído para criar",
   "filterAll": "Todos",
-  "filterInteresting": "Interessante",
+  "filterAuto": "Auto",
+  "filterInteresting": "Insights",
+  "filterSystem": "Sobre você",
   "filterManual": "Manual",
-  "filterSystem": "Sistema",
   "completed": "Concluído",
   "markComplete": "Marcar como concluído",
   "actionItemDeleted": "Tarefa apagada",
@@ -730,5 +734,8 @@
       }
     }
   },
-  "continueButton": "Continuar"
+  "continueButton": "Continuar",
+  "appInterfaceSectionTitle": "INTERFACE DO APLICATIVO",
+  "speechTranscriptionSectionTitle": "FALA E TRANSCRIÇÃO",
+  "languageSettingsHelperText": "O idioma do aplicativo altera menus e botões. O idioma de fala afeta como suas gravações são transcritas."
 }

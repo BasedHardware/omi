@@ -234,7 +234,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchConversations => 'Search Conversations';
 
   @override
-  String selectedCount(int count) {
+  String selectedCount(int count, Object s) {
     return '$count selected';
   }
 
@@ -2059,10 +2059,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noMemoriesYet => 'No memories yet';
 
   @override
-  String get noInterestingMemories => 'No interesting memories yet';
+  String get noAutoMemories => 'No auto-extracted memories yet';
 
   @override
-  String get noSystemMemories => 'No system memories yet';
+  String get noManualMemories => 'No manual memories yet';
 
   @override
   String get noMemoriesInCategories => 'No memories in these categories';
@@ -2187,13 +2187,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get filterAll => 'All';
 
   @override
-  String get filterInteresting => 'Interesting';
+  String get filterSystem => 'About You';
+
+  @override
+  String get filterInteresting => 'Insights';
 
   @override
   String get filterManual => 'Manual';
-
-  @override
-  String get filterSystem => 'System';
 
   @override
   String get completed => 'Completed';
@@ -2215,4 +2215,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get appLanguage => 'App Language';
+
+  @override
+  String get appInterfaceSectionTitle => 'APP INTERFACE';
+
+  @override
+  String get speechTranscriptionSectionTitle => 'SPEECH & TRANSCRIPTION';
+
+  @override
+  String get languageSettingsHelperText =>
+      'App Language changes menus and buttons. Speech Language affects how your recordings are transcribed.';
 }

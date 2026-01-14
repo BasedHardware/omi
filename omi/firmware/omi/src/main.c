@@ -19,20 +19,22 @@
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 #include "lib/core/storage.h"
 #endif
+#include <hal/nrf_reset.h>
+
 #include "lib/core/sd_card.h"
 #include "spi_flash.h"
 #include "wdog_facade.h"
-#include <hal/nrf_reset.h>
 
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
 
 #ifdef CONFIG_OMI_ENABLE_BATTERY
-#define BATTERY_FULL_THRESHOLD_PERCENT        98 // 98%
+#define BATTERY_FULL_THRESHOLD_PERCENT 98 // 98%
 extern uint8_t battery_percentage;
 #endif
 bool is_connected = false;
 bool is_charging = false;
 bool is_off = false;
+bool blink_toggle = false;
 
 static void print_reset_reason(void)
 {
@@ -40,7 +42,7 @@ static void print_reset_reason(void)
 
     reas = nrf_reset_resetreas_get(NRF_RESET);
     nrf_reset_resetreas_clear(NRF_RESET, reas);
-    
+
     if (reas & NRF_RESET_RESETREAS_DOG0_MASK) {
         printk("Reset by WATCHDOG\n");
     } else if (reas & NRF_RESET_RESETREAS_NFC_MASK) {
@@ -131,32 +133,31 @@ void set_led_state()
         return;
     }
 
-    // Set LED state based on connection and charging status
+    bool green = false;
+    bool blue = false;
+    bool red = false;
+
     if (is_charging) {
-        set_led_green(true);
-        #ifdef CONFIG_OMI_ENABLE_BATTERY
+#ifdef CONFIG_OMI_ENABLE_BATTERY
         // Solid green if battery is full (>= BATTERY_FULL_THRESHOLD_PERCENT)
         if (battery_percentage >= BATTERY_FULL_THRESHOLD_PERCENT) {
-            set_led_red(false);
-            set_led_blue(false);
-            return;
+            green = true;
+        } else
+#endif
+        {
+            green = blink_toggle;
+            blue = !blink_toggle && is_connected;
+            red = !blink_toggle && !is_connected;
+            blink_toggle = !blink_toggle;
         }
-        #endif
     } else {
-        set_led_green(false);
+        blue = is_connected;
+        red = !is_connected;
     }
 
-    if (is_connected) {
-        set_led_blue(true);
-        set_led_red(false);
-        return;
-    }
-
-    if (!is_connected) {
-        set_led_red(true);
-        set_led_blue(false);
-        return;
-    }
+    set_led_green(green);
+    set_led_blue(blue);
+    set_led_red(red);
 }
 
 static int suspend_unused_modules(void)
@@ -334,7 +335,6 @@ int main(void)
 #endif
 
         set_led_state();
-
         k_msleep(1000);
     }
 

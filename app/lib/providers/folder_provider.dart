@@ -1,7 +1,10 @@
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+
+import 'package:collection/collection.dart';
+
 import 'package:omi/backend/http/api/folders.dart';
 import 'package:omi/backend/schema/folder.dart';
+import 'package:omi/utils/logger.dart';
 
 class FolderProvider extends ChangeNotifier {
   List<Folder> _folders = [];
@@ -34,7 +37,7 @@ class FolderProvider extends ChangeNotifier {
       _folders = await getFolders();
       _folders.sort((a, b) => a.order.compareTo(b.order));
     } catch (e) {
-      debugPrint('Error loading folders: $e');
+      Logger.debug('Error loading folders: $e');
       _error = 'Failed to load folders';
     }
 
@@ -72,7 +75,7 @@ class FolderProvider extends ChangeNotifier {
         return folder;
       }
     } catch (e) {
-      debugPrint('Error creating folder: $e');
+      Logger.debug('Error creating folder: $e');
       _error = 'Failed to create folder';
       notifyListeners();
     }
@@ -103,7 +106,7 @@ class FolderProvider extends ChangeNotifier {
         return updatedFolder;
       }
     } catch (e) {
-      debugPrint('Error updating folder: $e');
+      Logger.debug('Error updating folder: $e');
       _error = 'Failed to update folder';
       notifyListeners();
     }
@@ -127,7 +130,7 @@ class FolderProvider extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      debugPrint('Error deleting folder: $e');
+      Logger.debug('Error deleting folder: $e');
       await loadFolders();
       _error = 'Failed to delete folder';
       notifyListeners();
@@ -143,7 +146,7 @@ class FolderProvider extends ChangeNotifier {
         return true;
       }
     } catch (e) {
-      debugPrint('Error moving conversation: $e');
+      Logger.debug('Error moving conversation: $e');
       _error = 'Failed to move conversation';
       notifyListeners();
     }
@@ -164,7 +167,7 @@ class FolderProvider extends ChangeNotifier {
       }
       return movedCount;
     } catch (e) {
-      debugPrint('Error bulk moving conversations: $e');
+      Logger.debug('Error bulk moving conversations: $e');
       _error = 'Failed to move conversations';
       notifyListeners();
     }
@@ -187,7 +190,7 @@ class FolderProvider extends ChangeNotifier {
         return true;
       }
     } catch (e) {
-      debugPrint('Error reordering folders: $e');
+      Logger.debug('Error reordering folders: $e');
       _error = 'Failed to reorder folders';
       notifyListeners();
     }

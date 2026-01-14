@@ -2,23 +2,25 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/devices.dart';
-import 'package:omi/services/devices/companion_device_manager.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/dialog.dart';
-import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class DeviceSettings extends StatefulWidget {
   const DeviceSettings({super.key});
@@ -57,17 +59,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       return Future.value(null);
     }
     await connection.unpair();
-
-    if (PlatformService.isAndroid) {
-      try {
-        final companionService = CompanionDeviceManagerService.instance;
-        await companionService.stopObservingDevicePresence(btDevice.id);
-        await companionService.disassociate(btDevice.id);
-        debugPrint('CompanionDevice: Disassociated ${btDevice.id}');
-      } catch (e) {
-        debugPrint('CompanionDevice: Error disassociating: $e');
-      }
-    }
 
     return await connection.disconnect();
   }

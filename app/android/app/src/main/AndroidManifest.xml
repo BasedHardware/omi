@@ -11,12 +11,6 @@
         android:name="android.hardware.bluetooth_le"
         android:required="true" />
 
-    <uses-feature
-        android:name="android.software.companion_device_setup"
-        android:required="false" />
-
-    <uses-permission android:name="android.permission.REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE" />
-
     <!-- New Bluetooth permissions in Android 12
     https://developer.android.com/about/versions/12/features/bluetooth-permissions -->
     <uses-permission
@@ -95,27 +89,6 @@
             android:name=".NotificationOnKillService"
             android:enabled="true"
             android:exported="false"/>
-
-        <!-- Receiver for CompanionDeviceManager presence events (Android 13+) -->
-        <receiver
-            android:name=".CompanionDevicePresenceReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.companion.CompanionDeviceManager.ACTION_DEVICE_APPEARED" />
-                <action android:name="android.companion.CompanionDeviceManager.ACTION_DEVICE_DISAPPEARED" />
-            </intent-filter>
-        </receiver>
-
-        <!-- Background service for CompanionDeviceManager (Android 12+) -->
-        <!-- This service is bound by the system when companion device appears/disappears -->
-        <service
-            android:name=".CompanionDeviceBackgroundService"
-            android:exported="true"
-            android:permission="android.permission.BIND_COMPANION_DEVICE_SERVICE">
-            <intent-filter>
-                <action android:name="android.companion.CompanionDeviceService" />
-            </intent-filter>
-        </service>
 
         <activity
             android:name=".MainActivity"

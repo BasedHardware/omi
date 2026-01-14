@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:omi/backend/http/api/users.dart';
+
 import 'package:omi/backend/http/api/payment.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
+import 'package:omi/utils/logger.dart';
 
 class UsageProvider with ChangeNotifier {
   UserSubscriptionResponse? _subscription;
@@ -78,7 +80,7 @@ class UsageProvider with ChangeNotifier {
       _subscription = await getUserSubscription();
     } catch (e) {
       _error = 'Failed to load subscription data. Please try again later.';
-      debugPrint('Failed to fetch subscription: $e');
+      Logger.debug('Failed to fetch subscription: $e');
     } finally {
       _isSubscriptionLoading = false;
       _forceOutOfCredits = false; // Reset optimistic flag
@@ -122,7 +124,7 @@ class UsageProvider with ChangeNotifier {
       }
     } catch (e) {
       _error = 'Failed to load usage data. Please try again later.';
-      debugPrint('Failed to fetch usage stats: $e');
+      Logger.debug('Failed to fetch usage stats: $e');
     } finally {
       _isUsageLoading = false;
       notifyListeners();
@@ -146,7 +148,7 @@ class UsageProvider with ChangeNotifier {
       }
     } catch (e) {
       _error = 'Failed to load available plans. Please try again later.';
-      debugPrint('Error loading available plans: $e');
+      Logger.debug('Error loading available plans: $e');
     } finally {
       _isLoadingPlans = false;
       notifyListeners();
@@ -169,7 +171,7 @@ class UsageProvider with ChangeNotifier {
       return success;
     } catch (e) {
       _error = 'Failed to cancel subscription. Please try again later.';
-      debugPrint('Error canceling subscription: $e');
+      Logger.debug('Error canceling subscription: $e');
       return false;
     } finally {
       _isPaymentLoading = false;
@@ -193,7 +195,7 @@ class UsageProvider with ChangeNotifier {
       return result;
     } catch (e) {
       _error = 'Failed to upgrade subscription. Please try again later.';
-      debugPrint('Error upgrading subscription: $e');
+      Logger.debug('Error upgrading subscription: $e');
       return null;
     } finally {
       _isPaymentLoading = false;
@@ -213,7 +215,7 @@ class UsageProvider with ChangeNotifier {
       return sessionData;
     } catch (e) {
       _error = 'Failed to create checkout session. Please try again later.';
-      debugPrint('Error creating checkout session: $e');
+      Logger.debug('Error creating checkout session: $e');
       return null;
     } finally {
       _isPaymentLoading = false;
@@ -233,7 +235,7 @@ class UsageProvider with ChangeNotifier {
       return sessionData;
     } catch (e) {
       _error = 'Failed to open customer portal. Please try again.';
-      debugPrint('Error opening customer portal: $e');
+      Logger.debug('Error opening customer portal: $e');
       return null;
     } finally {
       _isPaymentLoading = false;
