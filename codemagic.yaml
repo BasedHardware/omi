@@ -109,16 +109,17 @@ workflows:
         script: |
           dart run build_runner build --delete-conflicting-outputs
 
+      - name: Enable watchOS companion app
+        script: |
+          chmod +x ios/scripts/enable_watchos.sh
+          ios/scripts/enable_watchos.sh
+
       - name: Installs pod
         script: |
           cd ios && pod install --repo-update
 
       - name: Flutter build ipa
         script: |
-          # Enable watchOS companion app BEFORE xcode-project use-profiles
-          chmod +x ios/scripts/enable_watchos.sh
-          ios/scripts/enable_watchos.sh
-
           xcode-project use-profiles
 
           # Extract version name from pubspec.yaml (source of truth)
@@ -450,16 +451,17 @@ workflows:
         script: |
           dart run build_runner build --delete-conflicting-outputs
 
+      - name: Enable watchOS companion app
+        script: |
+          chmod +x ios/scripts/enable_watchos.sh
+          ios/scripts/enable_watchos.sh
+
       - name: Installs pod
         script: |
           cd ios && pod install --repo-update
 
       - name: Flutter build ipa
         script: |
-          # Enable watchOS companion app BEFORE xcode-project use-profiles
-          chmod +x ios/scripts/enable_watchos.sh
-          ios/scripts/enable_watchos.sh
-
           # Set up code signing settings on Xcode project
           # -> $HOME/export_options.plist
           xcode-project use-profiles
@@ -1002,16 +1004,17 @@ workflows:
         script: |
           dart run build_runner build --delete-conflicting-outputs
 
+      - name: Enable watchOS companion app
+        script: |
+          chmod +x ios/scripts/enable_watchos.sh
+          ios/scripts/enable_watchos.sh
+
       - name: Installs pod
         script: |
           cd ios && pod install --repo-update
 
       - name: Patch iOS app with Shorebird
         script: |
-          # Enable watchOS companion app BEFORE xcode-project use-profiles
-          chmod +x ios/scripts/enable_watchos.sh
-          ios/scripts/enable_watchos.sh
-
           # Set up code signing settings on Xcode project
           # -> $HOME/export_options.plist
           xcode-project use-profiles
