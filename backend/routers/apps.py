@@ -51,11 +51,11 @@ from database.redis_db import (
     get_apps_installs_count,
     get_apps_reviews,
 )
-from database.cache import get_memory_cache, get_pubsub_manager
 from utils.apps import (
     get_available_apps,
     get_available_app_by_id,
     get_approved_available_apps,
+    invalidate_approved_apps_cache,
     get_available_app_by_id_with_reviews,
     set_app_review,
     get_app_reviews,
@@ -100,36 +100,6 @@ from utils.social import (
 )
 
 router = APIRouter()
-
-
-def invalidate_approved_apps_cache():
-    """
-    Invalidate the approved apps cache across all backend instances.
-
-    This function:
-    1. Invalidates memory cache on local instance
-    2. Invalidates Redis cache
-    3. Publishes invalidation message to all other instances via pub/sub
-    """
-    # Get cache instances
-    memory_cache = get_memory_cache()
-    pubsub_manager = get_pubsub_manager()
-
-    # Invalidate both cache key variants (with and without reviews)
-    cache_keys = [
-        'get_public_approved_apps_data:reviews=0',
-        'get_public_approved_apps_data:reviews=1'
-    ]
-
-    # Clear local memory cache
-    for key in cache_keys:
-        memory_cache.delete(key)
-
-    # Clear Redis cache (existing behavior)
-    delete_generic_cache('get_public_approved_apps_data')
-
-    # Notify all other instances to clear their memory cache
-    pubsub_manager.publish_invalidation(cache_keys)
 
 
 def _get_categories():
