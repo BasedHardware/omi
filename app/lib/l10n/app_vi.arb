@@ -2581,5 +2581,20 @@
   "failedToCheckMicrophonePermission": "Không thể kiểm tra quyền microphone: {error}",
   "failedToTranscribeAudio": "Không thể phiên âm audio",
   "transcribing": "Đang phiên âm...",
-  "transcriptionFailed": "Phiên âm thất bại"
+  "transcriptionFailed": "Phiên âm thất bại",
+  "discardedConversation": "Cuộc trò chuyện bị loại bỏ",
+  "at": "lúc",
+  "from": "từ",
+  "copied": "Đã sao chép!",
+  "copyLink": "Sao chép Liên kết",
+  "hideTranscript": "Ẩn Bản ghi",
+  "viewTranscript": "Xem Bản ghi",
+  "conversationDetails": "Chi tiết Cuộc trò chuyện",
+  "transcript": "Bản ghi",
+  "segmentsCount": "{count} đoạn",
+  "noTranscriptAvailable": "Không có Bản ghi",
+  "noTranscriptMessage": "Cuộc trò chuyện này không có bản ghi.",
+  "conversationUrlCouldNotBeGenerated": "Không thể tạo URL cuộc trò chuyện.",
+  "failedToGenerateConversationLink": "Không thể tạo liên kết cuộc trò chuyện",
+  "failedToGenerateShareLink": "Không thể tạo liên kết chia sẻ"
 }

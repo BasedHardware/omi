@@ -1383,5 +1383,20 @@
   "failedToCheckMicrophonePermission": "Controleren microfoontoegang mislukt: {error}",
   "failedToTranscribeAudio": "Audio transcriberen mislukt",
   "transcribing": "Transcriberen...",
-  "transcriptionFailed": "Transcriptie mislukt"
+  "transcriptionFailed": "Transcriptie mislukt",
+  "discardedConversation": "Verworpen gesprek",
+  "at": "om",
+  "from": "van",
+  "copied": "Gekopieerd!",
+  "copyLink": "Link kopiëren",
+  "hideTranscript": "Transcript verbergen",
+  "viewTranscript": "Transcript bekijken",
+  "conversationDetails": "Gespreksdetails",
+  "transcript": "Transcript",
+  "segmentsCount": "{count} segmenten",
+  "noTranscriptAvailable": "Geen transcript beschikbaar",
+  "noTranscriptMessage": "Dit gesprek heeft geen transcript.",
+  "conversationUrlCouldNotBeGenerated": "Gesprek-URL kon niet worden gegenereerd.",
+  "failedToGenerateConversationLink": "Kan gesprekslink niet genereren",
+  "failedToGenerateShareLink": "Kan deellink niet genereren"
 }

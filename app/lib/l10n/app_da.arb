@@ -2581,5 +2581,20 @@
   "failedToCheckMicrophonePermission": "Kunne ikke kontrollere mikrofontilladelse: {error}",
   "failedToTranscribeAudio": "Kunne ikke transkribere lyd",
   "transcribing": "Transskriberer...",
-  "transcriptionFailed": "Transskription mislykkedes"
+  "transcriptionFailed": "Transskription mislykkedes",
+  "discardedConversation": "Kasseret samtale",
+  "at": "kl.",
+  "from": "fra",
+  "copied": "Kopieret!",
+  "copyLink": "Kopiér link",
+  "hideTranscript": "Skjul transskription",
+  "viewTranscript": "Vis transskription",
+  "conversationDetails": "Samtaledetaljer",
+  "transcript": "Transskription",
+  "segmentsCount": "{count} segmenter",
+  "noTranscriptAvailable": "Ingen transskription tilgængelig",
+  "noTranscriptMessage": "Denne samtale har ingen transskription.",
+  "conversationUrlCouldNotBeGenerated": "Samtale-URL kunne ikke genereres.",
+  "failedToGenerateConversationLink": "Kunne ikke generere samtalelink",
+  "failedToGenerateShareLink": "Kunne ikke generere delingslink"
 }

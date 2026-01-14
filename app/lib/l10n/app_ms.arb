@@ -2581,5 +2581,20 @@
   "failedToCheckMicrophonePermission": "Gagal menyemak kebenaran mikrofon: {error}",
   "failedToTranscribeAudio": "Gagal menyalin audio",
   "transcribing": "Menyalin...",
-  "transcriptionFailed": "Penyalinan gagal"
+  "transcriptionFailed": "Penyalinan gagal",
+  "discardedConversation": "Perbualan dibuang",
+  "at": "pada",
+  "from": "dari",
+  "copied": "Disalin!",
+  "copyLink": "Salin Pautan",
+  "hideTranscript": "Sembunyikan Transkrip",
+  "viewTranscript": "Lihat Transkrip",
+  "conversationDetails": "Butiran Perbualan",
+  "transcript": "Transkrip",
+  "segmentsCount": "{count} segmen",
+  "noTranscriptAvailable": "Tiada Transkrip Tersedia",
+  "noTranscriptMessage": "Perbualan ini tidak mempunyai transkrip.",
+  "conversationUrlCouldNotBeGenerated": "URL perbualan tidak dapat dijana.",
+  "failedToGenerateConversationLink": "Gagal menjana pautan perbualan",
+  "failedToGenerateShareLink": "Gagal menjana pautan perkongsian"
 }

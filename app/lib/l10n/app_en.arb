@@ -2946,7 +2946,7 @@
   },
   "untitledConversation": "Untitled Conversation",
   "@untitledConversation": {
-    "description": "Default title for conversations without a name"
+    "description": "Title for a conversation without a title"
   },
   "countRemaining": "{count} remaining",
   "@countRemaining": {
@@ -3679,5 +3679,70 @@
   "transcriptionFailed": "Transcription failed",
   "@transcriptionFailed": {
     "description": "Error message when transcription fails"
+  },
+  "discardedConversation": "Discarded Conversation",
+  "@discardedConversation": {
+    "description": "Title for a discarded conversation"
+  },
+  "at": "at",
+  "@at": {
+    "description": "Preposition for time when conversation has no start time"
+  },
+  "from": "from",
+  "@from": {
+    "description": "Preposition for time range in conversation"
+  },
+  "copied": "Copied!",
+  "@copied": {
+    "description": "Button label after copying link"
+  },
+  "copyLink": "Copy Link",
+  "@copyLink": {
+    "description": "Button label to copy conversation link"
+  },
+  "hideTranscript": "Hide Transcript",
+  "@hideTranscript": {
+    "description": "Button label to hide transcript"
+  },
+  "viewTranscript": "View Transcript",
+  "@viewTranscript": {
+    "description": "Button label to view transcript"
+  },
+  "conversationDetails": "Conversation Details",
+  "@conversationDetails": {
+    "description": "Section header for conversation details"
+  },
+  "transcript": "Transcript",
+  "@transcript": {
+    "description": "Transcript panel title"
+  },
+  "segmentsCount": "{count} segments",
+  "@segmentsCount": {
+    "description": "Badge showing number of transcript segments",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "noTranscriptAvailable": "No Transcript Available",
+  "@noTranscriptAvailable": {
+    "description": "Empty state title when no transcript"
+  },
+  "noTranscriptMessage": "This conversation doesn't have a transcript.",
+  "@noTranscriptMessage": {
+    "description": "Empty state message when no transcript"
+  },
+  "conversationUrlCouldNotBeGenerated": "Conversation URL could not be generated.",
+  "@conversationUrlCouldNotBeGenerated": {
+    "description": "Error when URL generation fails"
+  },
+  "failedToGenerateConversationLink": "Failed to generate conversation link",
+  "@failedToGenerateConversationLink": {
+    "description": "Error when link generation fails"
+  },
+  "failedToGenerateShareLink": "Failed to generate share link",
+  "@failedToGenerateShareLink": {
+    "description": "Error when share link generation fails"
   }
 }

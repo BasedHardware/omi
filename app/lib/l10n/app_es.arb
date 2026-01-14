@@ -1005,5 +1005,20 @@
   "failedToCheckMicrophonePermission": "Error al verificar permiso de micrófono: {error}",
   "failedToTranscribeAudio": "Error al transcribir audio",
   "transcribing": "Transcribiendo...",
-  "transcriptionFailed": "Transcripción fallida"
+  "transcriptionFailed": "Transcripción fallida",
+  "discardedConversation": "Conversación descartada",
+  "at": "a las",
+  "from": "desde",
+  "copied": "¡Copiado!",
+  "copyLink": "Copiar enlace",
+  "hideTranscript": "Ocultar transcripción",
+  "viewTranscript": "Ver transcripción",
+  "conversationDetails": "Detalles de la conversación",
+  "transcript": "Transcripción",
+  "segmentsCount": "{count} segmentos",
+  "noTranscriptAvailable": "No hay transcripción disponible",
+  "noTranscriptMessage": "Esta conversación no tiene transcripción.",
+  "conversationUrlCouldNotBeGenerated": "No se pudo generar la URL de la conversación.",
+  "failedToGenerateConversationLink": "Error al generar enlace de conversación",
+  "failedToGenerateShareLink": "Error al generar enlace para compartir"
 }

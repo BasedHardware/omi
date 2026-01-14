@@ -2599,5 +2599,20 @@
   "failedToCheckMicrophonePermission": "Error en comprovar el permís del micròfon: {error}",
   "failedToTranscribeAudio": "Error en transcriure l'àudio",
   "transcribing": "Transcrivint...",
-  "transcriptionFailed": "Transcripció fallida"
+  "transcriptionFailed": "Transcripció fallida",
+  "discardedConversation": "Conversa descartada",
+  "at": "a",
+  "from": "des de",
+  "copied": "Copiat!",
+  "copyLink": "Copiar enllaç",
+  "hideTranscript": "Amagar transcripció",
+  "viewTranscript": "Veure transcripció",
+  "conversationDetails": "Detalls de la conversa",
+  "transcript": "Transcripció",
+  "segmentsCount": "{count} segments",
+  "noTranscriptAvailable": "No hi ha transcripció disponible",
+  "noTranscriptMessage": "Aquesta conversa no té transcripció.",
+  "conversationUrlCouldNotBeGenerated": "No s'ha pogut generar l'URL de la conversa.",
+  "failedToGenerateConversationLink": "Error en generar l'enllaç de la conversa",
+  "failedToGenerateShareLink": "Error en generar l'enllaç per compartir"
 }

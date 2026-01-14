@@ -2581,5 +2581,20 @@
   "failedToCheckMicrophonePermission": "마이크 권한 확인 실패: {error}",
   "failedToTranscribeAudio": "오디오 텍스트 변환 실패",
   "transcribing": "텍스트 변환 중...",
-  "transcriptionFailed": "텍스트 변환 실패"
+  "transcriptionFailed": "텍스트 변환 실패",
+  "discardedConversation": "폐기된 대화",
+  "at": "시각",
+  "from": "부터",
+  "copied": "복사됨!",
+  "copyLink": "링크 복사",
+  "hideTranscript": "텍스트 숨기기",
+  "viewTranscript": "텍스트 보기",
+  "conversationDetails": "대화 세부정보",
+  "transcript": "텍스트",
+  "segmentsCount": "{count}개 세그먼트",
+  "noTranscriptAvailable": "사용 가능한 텍스트가 없습니다",
+  "noTranscriptMessage": "이 대화에는 텍스트가 없습니다.",
+  "conversationUrlCouldNotBeGenerated": "대화 URL을 생성할 수 없습니다.",
+  "failedToGenerateConversationLink": "대화 링크 생성 실패",
+  "failedToGenerateShareLink": "공유 링크 생성 실패"
 }

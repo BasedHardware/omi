@@ -2581,5 +2581,20 @@
   "failedToCheckMicrophonePermission": "Verificarea permisiunii microfonului a eșuat: {error}",
   "failedToTranscribeAudio": "Transcrierea audio a eșuat",
   "transcribing": "Transcriere...",
-  "transcriptionFailed": "Transcrierea a eșuat"
+  "transcriptionFailed": "Transcrierea a eșuat",
+  "discardedConversation": "Conversație eliminată",
+  "at": "la",
+  "from": "de la",
+  "copied": "Copiat!",
+  "copyLink": "Copiază link",
+  "hideTranscript": "Ascunde transcrierea",
+  "viewTranscript": "Vizualizează transcrierea",
+  "conversationDetails": "Detalii conversație",
+  "transcript": "Transcriere",
+  "segmentsCount": "{count} segmente",
+  "noTranscriptAvailable": "Nicio transcriere disponibilă",
+  "noTranscriptMessage": "Această conversație nu are transcriere.",
+  "conversationUrlCouldNotBeGenerated": "URL-ul conversației nu a putut fi generat.",
+  "failedToGenerateConversationLink": "Eroare la generarea link-ului conversației",
+  "failedToGenerateShareLink": "Eroare la generarea link-ului de partajare"
 }
