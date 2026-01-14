@@ -56,6 +56,7 @@ from utils.apps import (
     get_available_app_by_id,
     get_approved_available_apps,
     invalidate_approved_apps_cache,
+    invalidate_popular_apps_cache,
     get_available_app_by_id_with_reviews,
     set_app_review,
     get_app_reviews,
@@ -1390,7 +1391,7 @@ def set_app_popular(app_id: str, value: bool = Query(...), secret_key: str = Hea
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     set_app_popular_db(app_id, value)
     delete_app_cache_by_id(app_id)
-    delete_generic_cache('get_popular_apps_data')
+    invalidate_popular_apps_cache()
     return {'status': 'ok'}
 
 

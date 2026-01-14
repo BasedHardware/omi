@@ -60,9 +60,13 @@ def init_cache(max_memory_mb: int = 100):
     memory_cache = InMemoryCacheManager(max_memory_mb=max_memory_mb)
     pubsub_manager = RedisPubSubManager(r)
 
-    # Register callback: when invalidation message received, clear memory cache
+    # Register callbacks: when invalidation message received, clear memory cache
     pubsub_manager.register_callback(
         'get_public_approved_apps_data*',
+        lambda keys: [memory_cache.delete(k) for k in keys]
+    )
+    pubsub_manager.register_callback(
+        'get_popular_apps_data',
         lambda keys: [memory_cache.delete(k) for k in keys]
     )
 

@@ -138,16 +138,46 @@ def compute_app_score(app: App) -> float:
     return round(score, 4)
 
 
+def invalidate_popular_apps_cache():
+    """Invalidate the popular apps cache across all backend instances."""
+    memory_cache = get_memory_cache()
+    pubsub_manager = get_pubsub_manager()
+
+    cache_key = 'get_popular_apps_data'
+
+    # Clear local memory cache
+    memory_cache.delete(cache_key)
+
+    # Clear Redis cache
+    delete_generic_cache(cache_key)
+
+    # Notify all other instances
+    pubsub_manager.publish_invalidation([cache_key])
+
+
 def get_popular_apps() -> List[App]:
+    cache_key = 'get_popular_apps_data'
+
+    # Get memory cache instance
+    memory_cache = get_memory_cache()
+
+    # 1. Check memory cache first (fastest, <1ms, NO Redis egress)
+    if cached := memory_cache.get(cache_key):
+        print('get_popular_apps from memory cache')
+        return cached
+
+    # 2. Check Redis cache
     popular_apps = []
-    if cached_apps := get_generic_cache('get_popular_apps_data'):
-        print('get_popular_apps from cache')
+    if cached_apps := get_generic_cache(cache_key):
+        print('get_popular_apps from Redis cache')
         popular_apps = cached_apps
     else:
+        # 3. Database query
         print('get_popular_apps from db')
         popular_apps = get_popular_apps_db()
-        set_generic_cache('get_popular_apps_data', popular_apps, 60 * 30)  # 30 minutes cached
+        set_generic_cache(cache_key, popular_apps, 60 * 30)  # 30 minutes cached
 
+    # Process apps (add installs, reviews, ratings)
     app_ids = [app['id'] for app in popular_apps]
     apps_install = get_apps_installs_count(app_ids)
     apps_reviews = get_apps_reviews(app_ids)
@@ -163,6 +193,10 @@ def get_popular_apps() -> List[App]:
         app_dict['rating_count'] = len(sorted_reviews)
         apps.append(App(**app_dict))
     apps = sorted(apps, key=lambda x: x.installs, reverse=True)
+
+    # 4. Store in memory cache for next time
+    memory_cache.set(cache_key, apps, ttl=30)
+
     return apps
 
 
