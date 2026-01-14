@@ -115,11 +115,11 @@ workflows:
 
       - name: Flutter build ipa
         script: |
-          xcode-project use-profiles
-
-          # Enable watchOS companion app after xcode-project use-profiles
+          # Enable watchOS companion app BEFORE xcode-project use-profiles
           chmod +x ios/scripts/enable_watchos.sh
           ios/scripts/enable_watchos.sh
+
+          xcode-project use-profiles
 
           # Extract version name from pubspec.yaml (source of truth)
           PUBSPEC_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d ' ')
@@ -456,13 +456,13 @@ workflows:
 
       - name: Flutter build ipa
         script: |
+          # Enable watchOS companion app BEFORE xcode-project use-profiles
+          chmod +x ios/scripts/enable_watchos.sh
+          ios/scripts/enable_watchos.sh
+
           # Set up code signing settings on Xcode project
           # -> $HOME/export_options.plist
           xcode-project use-profiles
-
-          # Enable watchOS companion app after xcode-project use-profiles
-          chmod +x ios/scripts/enable_watchos.sh
-          ios/scripts/enable_watchos.sh
 
           # Build
           BUILD_NAME=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\1/')
@@ -1008,13 +1008,13 @@ workflows:
 
       - name: Patch iOS app with Shorebird
         script: |
+          # Enable watchOS companion app BEFORE xcode-project use-profiles
+          chmod +x ios/scripts/enable_watchos.sh
+          ios/scripts/enable_watchos.sh
+
           # Set up code signing settings on Xcode project
           # -> $HOME/export_options.plist
           xcode-project use-profiles
-
-          # Enable watchOS companion app after xcode-project use-profiles
-          chmod +x ios/scripts/enable_watchos.sh
-          ios/scripts/enable_watchos.sh
 
           # Build
           shorebird patch ios \
