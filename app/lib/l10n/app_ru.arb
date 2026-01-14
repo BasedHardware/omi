@@ -1127,7 +1127,7 @@
   "configCopied": "Конфигурация скопирована в буфер обмена",
   "listeningMins": "Прослушивание (мин)",
   "understandingWords": "Понимание (слов)",
-  "insights": "Инсайты",
+  "insights": "Идеи",
   "memories": "Воспоминания",
   "minsUsedThisMonth": "Использовано {used} из {limit} минут в этом месяце",
   "@minsUsedThisMonth": {
@@ -2077,14 +2077,9 @@
   "@deleteSelected": {
     "description": "Tooltip for delete selected"
   },
-  "searchMemories": "Поиск среди {count} воспоминаний",
+  "searchMemories": "Поиск воспоминаний...",
   "@searchMemories": {
-    "description": "Hint text for memories search bar",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
+    "description": "Search input hint text"
   },
   "memoryDeleted": "Воспоминание удалено.",
   "@memoryDeleted": {
@@ -2094,9 +2089,9 @@
   "@undo": {
     "description": "Undo button text"
   },
-  "noMemoriesYet": "Воспоминаний пока нет",
+  "noMemoriesYet": "🧠 Пока нет воспоминаний",
   "@noMemoriesYet": {
-    "description": "Empty state text"
+    "description": "Empty state title when no memories"
   },
   "noAutoMemories": "Автоматически извлечённых воспоминаний пока нет",
   "@noAutoMemories": {
@@ -2110,9 +2105,9 @@
   "@noMemoriesInCategories": {
     "description": "Empty state text for filtered categories"
   },
-  "noMemoriesFound": "Воспоминания не найдены",
+  "noMemoriesFound": "🔍 Воспоминания не найдены",
   "@noMemoriesFound": {
-    "description": "Empty state text for search results"
+    "description": "Empty state title when search/filter has no results"
   },
   "addFirstMemory": "Добавьте ваше первое воспоминание",
   "@addFirstMemory": {
@@ -2345,7 +2340,7 @@
   "thisActionCannotBeUndone": "Это действие нельзя отменить.",
   "memoriesCount": "{count} воспоминаний",
   "noMemoriesInCategory": "В этой категории пока нет воспоминаний",
-  "addYourFirstMemory": "Добавьте свое первое воспоминание",
+  "addYourFirstMemory": "Добавьте первое воспоминание",
   "firmwareDisconnectUsb": "Отключите USB",
   "firmwareUsbWarning": "USB-соединение во время обновлений может повредить ваше устройство.",
   "firmwareBatteryAbove15": "Батарея выше 15%",
@@ -2688,5 +2683,42 @@
   "wearableAiCompanion": "Носимый AI-компаньон",
   "@wearableAiCompanion": {
     "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "Загрузка воспоминаний...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "allMemories": "Все воспоминания",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "О вас",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "Ручные",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "Загрузка ваших воспоминаний...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "createYourFirstMemory": "Создайте первое воспоминание, чтобы начать",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "Попробуйте изменить параметры поиска или фильтр",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
   }
 }

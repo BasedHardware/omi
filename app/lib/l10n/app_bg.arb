@@ -2077,14 +2077,9 @@
   "@deleteSelected": {
     "description": "Tooltip for delete selected"
   },
-  "searchMemories": "Търсене в {count} спомени",
+  "searchMemories": "Търсене на спомени...",
   "@searchMemories": {
-    "description": "Hint text for memories search bar",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
+    "description": "Search input hint text"
   },
   "memoryDeleted": "Споменът е изтрит.",
   "@memoryDeleted": {
@@ -2094,9 +2089,9 @@
   "@undo": {
     "description": "Undo button text"
   },
-  "noMemoriesYet": "Все още няма спомени",
+  "noMemoriesYet": "🧠 Все още няма спомени",
   "@noMemoriesYet": {
-    "description": "Empty state text"
+    "description": "Empty state title when no memories"
   },
   "noAutoMemories": "Все още няма автоматично извлечени спомени",
   "@noAutoMemories": {
@@ -2110,9 +2105,9 @@
   "@noMemoriesInCategories": {
     "description": "Empty state text for filtered categories"
   },
-  "noMemoriesFound": "Не са намерени спомени",
+  "noMemoriesFound": "🔍 Не са намерени спомени",
   "@noMemoriesFound": {
-    "description": "Empty state text for search results"
+    "description": "Empty state title when search/filter has no results"
   },
   "addFirstMemory": "Добавете вашия първи спомен",
   "@addFirstMemory": {
@@ -2706,5 +2701,42 @@
   "wearableAiCompanion": "Носим AI спътник",
   "@wearableAiCompanion": {
     "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "Зареждане на спомени...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "allMemories": "Всички спомени",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "За теб",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "Ръчни",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "Зареждане на вашите спомени...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "createYourFirstMemory": "Създайте първия си спомен, за да започнете",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "Опитайте да промените търсенето или филтъра",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
   }
 }

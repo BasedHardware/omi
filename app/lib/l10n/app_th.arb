@@ -2077,14 +2077,9 @@
   "@deleteSelected": {
     "description": "Tooltip for delete selected"
   },
-  "searchMemories": "ค้นหา {count} ความทรงจำ",
+  "searchMemories": "ค้นหาความทรงจำ...",
   "@searchMemories": {
-    "description": "Hint text for memories search bar",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
+    "description": "Search input hint text"
   },
   "memoryDeleted": "ลบความทรงจำแล้ว",
   "@memoryDeleted": {
@@ -2094,9 +2089,9 @@
   "@undo": {
     "description": "Undo button text"
   },
-  "noMemoriesYet": "ยังไม่มีความทรงจำ",
+  "noMemoriesYet": "🧠 ยังไม่มีความทรงจำ",
   "@noMemoriesYet": {
-    "description": "Empty state text"
+    "description": "Empty state title when no memories"
   },
   "noAutoMemories": "ยังไม่มีความทรงจำที่ดึงอัตโนมัติ",
   "@noAutoMemories": {
@@ -2110,9 +2105,9 @@
   "@noMemoriesInCategories": {
     "description": "Empty state text for filtered categories"
   },
-  "noMemoriesFound": "ไม่พบความทรงจำ",
+  "noMemoriesFound": "🔍 ไม่พบความทรงจำ",
   "@noMemoriesFound": {
-    "description": "Empty state text for search results"
+    "description": "Empty state title when search/filter has no results"
   },
   "addFirstMemory": "เพิ่มความทรงจำแรกของคุณ",
   "@addFirstMemory": {
@@ -2688,5 +2683,42 @@
   "wearableAiCompanion": "เพื่อน AI สวมใส่ได้",
   "@wearableAiCompanion": {
     "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "กำลังโหลดความทรงจำ...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "allMemories": "ความทรงจำทั้งหมด",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "เกี่ยวกับคุณ",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "แมนนวล",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "กำลังโหลดความทรงจำของคุณ...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "createYourFirstMemory": "สร้างความทรงจำแรกของคุณเพื่อเริ่มต้น",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "ลองปรับการค้นหาหรือตัวกรอง",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
   }
 }

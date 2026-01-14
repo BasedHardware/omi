@@ -2077,14 +2077,9 @@
   "@deleteSelected": {
     "description": "Tooltip for delete selected"
   },
-  "searchMemories": "{count}개의 기억 검색",
+  "searchMemories": "추억 검색...",
   "@searchMemories": {
-    "description": "Hint text for memories search bar",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
+    "description": "Search input hint text"
   },
   "memoryDeleted": "기억이 삭제되었습니다.",
   "@memoryDeleted": {
@@ -2094,9 +2089,9 @@
   "@undo": {
     "description": "Undo button text"
   },
-  "noMemoriesYet": "아직 기억이 없습니다",
+  "noMemoriesYet": "🧠 아직 추억이 없습니다",
   "@noMemoriesYet": {
-    "description": "Empty state text"
+    "description": "Empty state title when no memories"
   },
   "noAutoMemories": "아직 자동 추출된 기억이 없습니다",
   "@noAutoMemories": {
@@ -2110,9 +2105,9 @@
   "@noMemoriesInCategories": {
     "description": "Empty state text for filtered categories"
   },
-  "noMemoriesFound": "기억을 찾을 수 없습니다",
+  "noMemoriesFound": "🔍 추억을 찾을 수 없습니다",
   "@noMemoriesFound": {
-    "description": "Empty state text for search results"
+    "description": "Empty state title when search/filter has no results"
   },
   "addFirstMemory": "첫 번째 기억 추가",
   "@addFirstMemory": {
@@ -2345,7 +2340,7 @@
   "thisActionCannotBeUndone": "이 작업은 취소할 수 없습니다.",
   "memoriesCount": "{count}개의 추억",
   "noMemoriesInCategory": "이 카테고리에는 아직 메모리가 없습니다",
-  "addYourFirstMemory": "첫 번째 메모리 추가",
+  "addYourFirstMemory": "첫 추억 추가",
   "firmwareDisconnectUsb": "USB 연결 해제",
   "firmwareUsbWarning": "업데이트 중 USB 연결은 기기를 손상시킬 수 있습니다.",
   "firmwareBatteryAbove15": "배터리 15% 이상",
@@ -2688,5 +2683,42 @@
   "wearableAiCompanion": "웨어러블 AI 컴패니언",
   "@wearableAiCompanion": {
     "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "추억 로드 중...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "allMemories": "모든 추억",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "당신에 대해",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "수동",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "추억을 로드하는 중...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "createYourFirstMemory": "첫 추억을 만들어 시작하세요",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "검색어나 필터를 조정해 보세요",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
   }
 }

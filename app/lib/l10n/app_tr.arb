@@ -2059,14 +2059,9 @@
   "@deleteSelected": {
     "description": "Tooltip for delete selected"
   },
-  "searchMemories": "{count} Anıda Ara",
+  "searchMemories": "Anı ara...",
   "@searchMemories": {
-    "description": "Hint text for memories search bar",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
+    "description": "Search input hint text"
   },
   "memoryDeleted": "Anı Silindi.",
   "@memoryDeleted": {
@@ -2076,9 +2071,9 @@
   "@undo": {
     "description": "Undo button text"
   },
-  "noMemoriesYet": "Henüz anı yok",
+  "noMemoriesYet": "🧠 Henüz anı yok",
   "@noMemoriesYet": {
-    "description": "Empty state text"
+    "description": "Empty state title when no memories"
   },
   "noAutoMemories": "Henüz otomatik çıkarılan anı yok",
   "@noAutoMemories": {
@@ -2092,9 +2087,9 @@
   "@noMemoriesInCategories": {
     "description": "Empty state text for filtered categories"
   },
-  "noMemoriesFound": "Anı bulunamadı",
+  "noMemoriesFound": "🔍 Anı bulunamadı",
   "@noMemoriesFound": {
-    "description": "Empty state text for search results"
+    "description": "Empty state title when search/filter has no results"
   },
   "addFirstMemory": "İlk anınızı ekleyin",
   "@addFirstMemory": {
@@ -2670,5 +2665,42 @@
   "wearableAiCompanion": "Giyilebilir AI arkadaşı",
   "@wearableAiCompanion": {
     "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "Anılar yükleniyor...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "allMemories": "Tüm anılar",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "Hakkınızda",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "Manuel",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "Anılarınız yükleniyor...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "createYourFirstMemory": "Başlamak için ilk anınızı oluşturun",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "Aramanızı veya filtrenizi ayarlamayı deneyin",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
   }
 }

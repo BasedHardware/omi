@@ -1127,7 +1127,7 @@
   "configCopied": "Konfiguration kopieret til udklipsholder",
   "listeningMins": "Lytning (min)",
   "understandingWords": "Forståelse (ord)",
-  "insights": "Indsigter",
+  "insights": "Indsigt",
   "memories": "Minder",
   "minsUsedThisMonth": "{used} af {limit} min brugt denne måned",
   "@minsUsedThisMonth": {
@@ -2077,14 +2077,9 @@
   "@deleteSelected": {
     "description": "Tooltip for delete selected"
   },
-  "searchMemories": "Search {count} Memories",
+  "searchMemories": "Søg minder...",
   "@searchMemories": {
-    "description": "Hint text for memories search bar",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
+    "description": "Search input hint text"
   },
   "memoryDeleted": "Memory Deleted.",
   "@memoryDeleted": {
@@ -2094,9 +2089,9 @@
   "@undo": {
     "description": "Undo button text"
   },
-  "noMemoriesYet": "No memories yet",
+  "noMemoriesYet": "🧠 Ingen minder endnu",
   "@noMemoriesYet": {
-    "description": "Empty state text"
+    "description": "Empty state title when no memories"
   },
   "noAutoMemories": "No auto-extracted memories yet",
   "@noAutoMemories": {
@@ -2110,9 +2105,9 @@
   "@noMemoriesInCategories": {
     "description": "Empty state text for filtered categories"
   },
-  "noMemoriesFound": "No memories found",
+  "noMemoriesFound": "🔍 Ingen minder fundet",
   "@noMemoriesFound": {
-    "description": "Empty state text for search results"
+    "description": "Empty state title when search/filter has no results"
   },
   "addFirstMemory": "Add your first memory",
   "@addFirstMemory": {
@@ -2345,7 +2340,7 @@
   "thisActionCannotBeUndone": "Denne handling kan ikke fortrydes.",
   "memoriesCount": "{count} erindringer",
   "noMemoriesInCategory": "Ingen erindringer i denne kategori endnu",
-  "addYourFirstMemory": "Tilføj din første erindring",
+  "addYourFirstMemory": "Tilføj dit første minde",
   "firmwareDisconnectUsb": "Afbryd USB",
   "firmwareUsbWarning": "USB-forbindelse under opdateringer kan beskadige din enhed.",
   "firmwareBatteryAbove15": "Batteri over 15%",
@@ -2688,5 +2683,42 @@
   "wearableAiCompanion": "Bærbar AI-ledsager",
   "@wearableAiCompanion": {
     "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "Indlæser minder...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "allMemories": "Alle minder",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "Om dig",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "Manuel",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "Indlæser dine minder...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "createYourFirstMemory": "Opret dit første minde for at komme i gang",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "Prøv at justere din søgning eller filter",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
   }
 }

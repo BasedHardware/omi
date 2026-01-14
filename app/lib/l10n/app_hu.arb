@@ -2077,14 +2077,9 @@
   "@deleteSelected": {
     "description": "Tooltip for delete selected"
   },
-  "searchMemories": "{count} emlék keresése",
+  "searchMemories": "Emlékek keresése...",
   "@searchMemories": {
-    "description": "Hint text for memories search bar",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
+    "description": "Search input hint text"
   },
   "memoryDeleted": "Emlék törölve.",
   "@memoryDeleted": {
@@ -2094,9 +2089,9 @@
   "@undo": {
     "description": "Undo button text"
   },
-  "noMemoriesYet": "Még nincsenek emlékek",
+  "noMemoriesYet": "🧠 Még nincsenek emlékek",
   "@noMemoriesYet": {
-    "description": "Empty state text"
+    "description": "Empty state title when no memories"
   },
   "noAutoMemories": "Még nincsenek automatikusan kinyert emlékek",
   "@noAutoMemories": {
@@ -2110,9 +2105,9 @@
   "@noMemoriesInCategories": {
     "description": "Empty state text for filtered categories"
   },
-  "noMemoriesFound": "Nem találhatók emlékek",
+  "noMemoriesFound": "🔍 Nem találhatók emlékek",
   "@noMemoriesFound": {
-    "description": "Empty state text for search results"
+    "description": "Empty state title when search/filter has no results"
   },
   "addFirstMemory": "Add hozzá az első emlékedet",
   "@addFirstMemory": {
@@ -2345,7 +2340,7 @@
   "thisActionCannotBeUndone": "Ez a művelet nem vonható vissza.",
   "memoriesCount": "{count} emlék",
   "noMemoriesInCategory": "Ebben a kategóriában még nincsenek emlékek",
-  "addYourFirstMemory": "Adja hozzá első emlékét",
+  "addYourFirstMemory": "Add hozzá az első emlékedet",
   "firmwareDisconnectUsb": "USB leválasztása",
   "firmwareUsbWarning": "Az USB-kapcsolat a frissítések során károsíthatja az eszközt.",
   "firmwareBatteryAbove15": "Akkumulátor 15% felett",
@@ -2688,5 +2683,42 @@
   "wearableAiCompanion": "Hordható AI társ",
   "@wearableAiCompanion": {
     "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "Emlékek betöltése...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "allMemories": "Összes emlék",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "Rólad",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "Kézi",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "Emlékeid betöltése...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "createYourFirstMemory": "Hozd létre az első emlékedet a kezdéshez",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "Próbáld meg módosítani a keresést vagy a szűrőt",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
   }
 }

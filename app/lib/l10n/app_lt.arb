@@ -2059,14 +2059,9 @@
   "@deleteSelected": {
     "description": "Tooltip for delete selected"
   },
-  "searchMemories": "Ieškoti {count} prisiminimų",
+  "searchMemories": "Ieškoti prisiminimų...",
   "@searchMemories": {
-    "description": "Hint text for memories search bar",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
+    "description": "Search input hint text"
   },
   "memoryDeleted": "Prisiminimas ištrintas.",
   "@memoryDeleted": {
@@ -2076,9 +2071,9 @@
   "@undo": {
     "description": "Undo button text"
   },
-  "noMemoriesYet": "Kol kas nėra prisiminimų",
+  "noMemoriesYet": "🧠 Dar nėra prisiminimų",
   "@noMemoriesYet": {
-    "description": "Empty state text"
+    "description": "Empty state title when no memories"
   },
   "noAutoMemories": "Kol kas nėra automatiškai išgautų prisiminimų",
   "@noAutoMemories": {
@@ -2092,9 +2087,9 @@
   "@noMemoriesInCategories": {
     "description": "Empty state text for filtered categories"
   },
-  "noMemoriesFound": "Prisiminimų nerasta",
+  "noMemoriesFound": "🔍 Prisiminimų nerasta",
   "@noMemoriesFound": {
-    "description": "Empty state text for search results"
+    "description": "Empty state title when search/filter has no results"
   },
   "addFirstMemory": "Pridėti pirmąjį prisiminimą",
   "@addFirstMemory": {
@@ -2327,7 +2322,7 @@
   "thisActionCannotBeUndone": "Šio veiksmo negalima atšaukti.",
   "memoriesCount": "{count} atminčių",
   "noMemoriesInCategory": "Šioje kategorijoje dar nėra atsiminimų",
-  "addYourFirstMemory": "Pridėkite savo pirmąjį atsiminimą",
+  "addYourFirstMemory": "Pridėkite pirmąjį prisiminimą",
   "firmwareDisconnectUsb": "Atjunkite USB",
   "firmwareUsbWarning": "USB ryšys atnaujinimo metu gali sugadinti jūsų įrenginį.",
   "firmwareBatteryAbove15": "Baterija virš 15%",
@@ -2446,7 +2441,7 @@
   "reloadingApps": "Programų perkrovimas...",
   "loadingApps": "Programų įkėlimas...",
   "browseInstallCreateApps": "Naršykite, įdiekite ir kurkite programas",
-  "all": "Visos",
+  "all": "Visi",
   "open": "Atidaryti",
   "install": "Įdiegti",
   "noAppsAvailable": "Nėra prieinamų programų",
@@ -2670,5 +2665,42 @@
   "wearableAiCompanion": "Nešiojamas AI palydovas",
   "@wearableAiCompanion": {
     "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "Įkeliami prisiminimai...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "allMemories": "Visi prisiminimai",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "Apie jus",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "Rankinis",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "Įkeliami jūsų prisiminimai...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "createYourFirstMemory": "Sukurkite pirmąjį prisiminimą, kad pradėtumėte",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "Pabandykite koreguoti paiešką arba filtrą",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
   }
 }

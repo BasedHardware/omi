@@ -652,14 +652,14 @@
   "itemsSelected": "已选择 {count} 项",
   "selectAll": "全选",
   "deleteSelected": "删除选中",
-  "searchMemories": "搜索 {count} 条记忆",
+  "searchMemories": "搜索回忆...",
   "memoryDeleted": "记忆已删除。",
   "undo": "撤销",
-  "noMemoriesYet": "暂无记忆",
+  "noMemoriesYet": "🧠 还没有回忆",
   "noAutoMemories": "暂无自动记忆",
   "noManualMemories": "暂无手动记忆",
   "noMemoriesInCategories": "此类目无记忆",
-  "noMemoriesFound": "未找到记忆",
+  "noMemoriesFound": "🔍 未找到回忆",
   "addFirstMemory": "添加您的第一条记忆",
   "clearMemoryTitle": "清除 Omi 记忆？",
   "clearMemoryMessage": "您确定要清除 Omi 的记忆吗？此操作无法撤消。",
@@ -1121,5 +1121,51 @@
   "wearableAiCompanion": "可穿戴AI伴侣",
   "@wearableAiCompanion": {
     "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "加载回忆中...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "@searchMemories": {
+    "description": "Search input hint text"
+  },
+  "allMemories": "所有回忆",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "关于你",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "手动",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "正在加载您的回忆...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "@noMemoriesYet": {
+    "description": "Empty state title when no memories"
+  },
+  "@noMemoriesFound": {
+    "description": "Empty state title when search/filter has no results"
+  },
+  "createYourFirstMemory": "创建您的第一个回忆以开始",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "尝试调整您的搜索或筛选条件",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
   }
 }

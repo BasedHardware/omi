@@ -1127,7 +1127,7 @@
   "configCopied": "Η διαμόρφωση αντιγράφηκε στο πρόχειρο",
   "listeningMins": "Ακρόαση (λεπτά)",
   "understandingWords": "Κατανόηση (λέξεις)",
-  "insights": "Πληροφορίες",
+  "insights": "Ιδέες",
   "memories": "Αναμνήσεις",
   "minsUsedThisMonth": "{used} από {limit} λεπτά χρησιμοποιήθηκαν αυτόν τον μήνα",
   "@minsUsedThisMonth": {
@@ -2077,14 +2077,9 @@
   "@deleteSelected": {
     "description": "Tooltip for delete selected"
   },
-  "searchMemories": "Αναζήτηση {count} Αναμνήσεων",
+  "searchMemories": "Αναζήτηση αναμνήσεων...",
   "@searchMemories": {
-    "description": "Hint text for memories search bar",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
+    "description": "Search input hint text"
   },
   "memoryDeleted": "Η ανάμνηση διαγράφηκε.",
   "@memoryDeleted": {
@@ -2094,9 +2089,9 @@
   "@undo": {
     "description": "Undo button text"
   },
-  "noMemoriesYet": "Δεν υπάρχουν αναμνήσεις ακόμα",
+  "noMemoriesYet": "🧠 Δεν υπάρχουν αναμνήσεις ακόμα",
   "@noMemoriesYet": {
-    "description": "Empty state text"
+    "description": "Empty state title when no memories"
   },
   "noAutoMemories": "Δεν υπάρχουν αυτόματα εξαγόμενες αναμνήσεις ακόμα",
   "@noAutoMemories": {
@@ -2110,9 +2105,9 @@
   "@noMemoriesInCategories": {
     "description": "Empty state text for filtered categories"
   },
-  "noMemoriesFound": "Δεν βρέθηκαν αναμνήσεις",
+  "noMemoriesFound": "🔍 Δεν βρέθηκαν αναμνήσεις",
   "@noMemoriesFound": {
-    "description": "Empty state text for search results"
+    "description": "Empty state title when search/filter has no results"
   },
   "addFirstMemory": "Προσθέστε την πρώτη σας ανάμνηση",
   "@addFirstMemory": {
@@ -2345,7 +2340,7 @@
   "thisActionCannotBeUndone": "Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.",
   "memoriesCount": "{count} μνήμες",
   "noMemoriesInCategory": "Δεν υπάρχουν ακόμη μνήμες σε αυτήν την κατηγορία",
-  "addYourFirstMemory": "Προσθέστε την πρώτη σας μνήμη",
+  "addYourFirstMemory": "Προσθέστε την πρώτη σας ανάμνηση",
   "firmwareDisconnectUsb": "Αποσυνδέστε το USB",
   "firmwareUsbWarning": "Η σύνδεση USB κατά τη διάρκεια ενημερώσεων μπορεί να βλάψει τη συσκευή σας.",
   "firmwareBatteryAbove15": "Μπαταρία πάνω από 15%",
@@ -2688,5 +2683,42 @@
   "wearableAiCompanion": "Φορετός σύντροφος AI",
   "@wearableAiCompanion": {
     "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "Φόρτωση αναμνήσεων...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "allMemories": "Όλες οι αναμνήσεις",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "Σχετικά με εσάς",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "Χειροκίνητο",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "Φόρτωση των αναμνήσεών σας...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "createYourFirstMemory": "Δημιουργήστε την πρώτη σας ανάμνηση για να ξεκινήσετε",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "Δοκιμάστε να προσαρμόσετε την αναζήτηση ή το φίλτρο σας",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
   }
 }

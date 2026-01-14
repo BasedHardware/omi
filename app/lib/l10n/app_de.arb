@@ -657,14 +657,14 @@
   "itemsSelected": "{count} ausgewählt",
   "selectAll": "Alle auswählen",
   "deleteSelected": "Ausgewählte löschen",
-  "searchMemories": "{count} Erinnerungen durchsuchen",
+  "searchMemories": "Erinnerungen durchsuchen...",
   "memoryDeleted": "Erinnerung gelöscht.",
   "undo": "Rückgängig",
-  "noMemoriesYet": "Noch keine Erinnerungen",
+  "noMemoriesYet": "🧠 Noch keine Erinnerungen",
   "noAutoMemories": "Noch keine automatischen Erinnerungen",
   "noManualMemories": "Noch keine manuellen Erinnerungen",
   "noMemoriesInCategories": "Keine Erinnerungen in diesen Kategorien",
-  "noMemoriesFound": "Keine Erinnerungen gefunden",
+  "noMemoriesFound": "🔍 Keine Erinnerungen gefunden",
   "addFirstMemory": "Fügen Sie Ihre erste Erinnerung hinzu",
   "clearMemoryTitle": "Omis Gedächtnis löschen",
   "clearMemoryMessage": "Sind Sie sicher, dass Sie Omis Gedächtnis löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.",
@@ -769,7 +769,7 @@
   "thisActionCannotBeUndone": "Diese Aktion kann nicht rückgängig gemacht werden.",
   "memoriesCount": "{count} Erinnerungen",
   "noMemoriesInCategory": "Noch keine Erinnerungen in dieser Kategorie",
-  "addYourFirstMemory": "Fügen Sie Ihre erste Erinnerung hinzu",
+  "addYourFirstMemory": "Füge deine erste Erinnerung hinzu",
   "firmwareDisconnectUsb": "USB trennen",
   "firmwareUsbWarning": "USB-Verbindung während Updates kann Ihr Gerät beschädigen.",
   "firmwareBatteryAbove15": "Batterie über 15%",
@@ -1121,5 +1121,51 @@
   "wearableAiCompanion": "Tragbarer KI-Begleiter",
   "@wearableAiCompanion": {
     "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "Erinnerungen werden geladen...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "@searchMemories": {
+    "description": "Search input hint text"
+  },
+  "allMemories": "Alle Erinnerungen",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "Über dich",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "Manuell",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "Deine Erinnerungen werden geladen...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "@noMemoriesYet": {
+    "description": "Empty state title when no memories"
+  },
+  "@noMemoriesFound": {
+    "description": "Empty state title when search/filter has no results"
+  },
+  "createYourFirstMemory": "Erstelle deine erste Erinnerung, um zu beginnen",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "Versuche, deine Suche oder den Filter anzupassen",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
   }
 }

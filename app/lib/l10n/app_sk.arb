@@ -1127,7 +1127,7 @@
   "configCopied": "Konfigurácia bola skopírovaná do schránky",
   "listeningMins": "Počúvanie (min)",
   "understandingWords": "Porozumenie (slová)",
-  "insights": "Postrehy",
+  "insights": "Poznatky",
   "memories": "Spomienky",
   "minsUsedThisMonth": "{used} z {limit} min použitých tento mesiac",
   "@minsUsedThisMonth": {
@@ -2077,14 +2077,9 @@
   "@deleteSelected": {
     "description": "Tooltip for delete selected"
   },
-  "searchMemories": "Hľadať v {count} spomienkach",
+  "searchMemories": "Hľadať spomienky...",
   "@searchMemories": {
-    "description": "Hint text for memories search bar",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
+    "description": "Search input hint text"
   },
   "memoryDeleted": "Spomienka bola odstránená.",
   "@memoryDeleted": {
@@ -2094,9 +2089,9 @@
   "@undo": {
     "description": "Undo button text"
   },
-  "noMemoriesYet": "Zatiaľ žiadne spomienky",
+  "noMemoriesYet": "🧠 Zatiaľ žiadne spomienky",
   "@noMemoriesYet": {
-    "description": "Empty state text"
+    "description": "Empty state title when no memories"
   },
   "noAutoMemories": "Zatiaľ žiadne automaticky extrahované spomienky",
   "@noAutoMemories": {
@@ -2110,9 +2105,9 @@
   "@noMemoriesInCategories": {
     "description": "Empty state text for filtered categories"
   },
-  "noMemoriesFound": "Neboli nájdené žiadne spomienky",
+  "noMemoriesFound": "🔍 Nenašli sa žiadne spomienky",
   "@noMemoriesFound": {
-    "description": "Empty state text for search results"
+    "description": "Empty state title when search/filter has no results"
   },
   "addFirstMemory": "Pridajte svoju prvú spomienku",
   "@addFirstMemory": {
@@ -2688,5 +2683,42 @@
   "wearableAiCompanion": "Nositeľný AI spoločník",
   "@wearableAiCompanion": {
     "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "Načítavanie spomienok...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "allMemories": "Všetky spomienky",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "O vás",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "Manuálne",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "Načítavanie vašich spomienok...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "createYourFirstMemory": "Vytvorte svoju prvú spomienku a začnite",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "Skúste upraviť vyhľadávanie alebo filter",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
   }
 }

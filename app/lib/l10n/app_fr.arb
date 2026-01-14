@@ -403,7 +403,7 @@
   "configCopied": "Configuration copiée dans le presse-papiers",
   "listeningMins": "Écoute (min)",
   "understandingWords": "Compréhension (mots)",
-  "insights": "Aperçus",
+  "insights": "Informations",
   "memories": "Souvenirs",
   "minsUsedThisMonth": "{used} sur {limit} min utilisées ce mois-ci",
   "@minsUsedThisMonth": {
@@ -1043,21 +1043,17 @@
   },
   "selectAll": "Tout sélectionner",
   "deleteSelected": "Supprimer la sélection",
-  "searchMemories": "Rechercher {count} mémoires",
+  "searchMemories": "Rechercher des souvenirs...",
   "@searchMemories": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
+    "description": "Search input hint text"
   },
   "memoryDeleted": "Mémoire supprimée.",
   "undo": "Annuler",
-  "noMemoriesYet": "Pas encore de mémoires",
+  "noMemoriesYet": "🧠 Pas encore de souvenirs",
   "noAutoMemories": "Pas encore de mémoires extraites automatiquement",
   "noManualMemories": "Pas encore de mémoires manuelles",
   "noMemoriesInCategories": "Aucune mémoire dans ces catégories",
-  "noMemoriesFound": "Aucune mémoire trouvée",
+  "noMemoriesFound": "🔍 Aucun souvenir trouvé",
   "addFirstMemory": "Ajoutez votre première mémoire",
   "clearMemoryTitle": "Effacer la mémoire d'Omi",
   "clearMemoryMessage": "Êtes-vous sûr de vouloir effacer la mémoire d'Omi ? Cette action est irréversible.",
@@ -1266,7 +1262,7 @@
   "reloadingApps": "Rechargement des applications...",
   "loadingApps": "Chargement des applications...",
   "browseInstallCreateApps": "Parcourir, installer et créer des applications",
-  "all": "Tout",
+  "all": "Tous",
   "open": "Ouvrir",
   "install": "Installer",
   "noAppsAvailable": "Aucune application disponible",
@@ -1499,5 +1495,48 @@
   "wearableAiCompanion": "Compagnon IA portable",
   "@wearableAiCompanion": {
     "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "Chargement des souvenirs...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "allMemories": "Tous les souvenirs",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "À propos de vous",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "Manuel",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "Chargement de vos souvenirs...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "@noMemoriesYet": {
+    "description": "Empty state title when no memories"
+  },
+  "@noMemoriesFound": {
+    "description": "Empty state title when search/filter has no results"
+  },
+  "createYourFirstMemory": "Créez votre premier souvenir pour commencer",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "Essayez d'ajuster votre recherche ou votre filtre",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
   }
 }

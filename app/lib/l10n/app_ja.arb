@@ -327,7 +327,7 @@
   "configCopied": "設定をクリップボードにコピーしました",
   "listeningMins": "リスニング（分）",
   "understandingWords": "理解（語数）",
-  "insights": "インサイト",
+  "insights": "洞察",
   "memories": "思い出",
   "minsUsedThisMonth": "今月 {limit}分中{used}分使用済み",
   "wordsUsedThisMonth": "今月 {limit}語中{used}語使用済み",
@@ -657,14 +657,14 @@
   "itemsSelected": "{count} 件選択中",
   "selectAll": "すべて選択",
   "deleteSelected": "選択項目を削除",
-  "searchMemories": "{count} 件のメモリを検索",
+  "searchMemories": "思い出を検索...",
   "memoryDeleted": "メモリを削除しました",
   "undo": "元に戻す",
-  "noMemoriesYet": "メモリはまだありません",
+  "noMemoriesYet": "🧠 まだ思い出がありません",
   "noAutoMemories": "自動メモリはまだありません",
   "noManualMemories": "手動メモリはまだありません",
   "noMemoriesInCategories": "このカテゴリのメモリはありません",
-  "noMemoriesFound": "メモリが見つかりません",
+  "noMemoriesFound": "🔍 思い出が見つかりませんでした",
   "addFirstMemory": "最初のメモリを追加",
   "clearMemoryTitle": "Omiのメモリを消去",
   "clearMemoryMessage": "Omiのメモリを消去してもよろしいですか？この操作は取り消せません。",
@@ -748,7 +748,7 @@
   "thisActionCannotBeUndone": "この操作は元に戻せません。",
   "memoriesCount": "{count}個の思い出",
   "noMemoriesInCategory": "このカテゴリにはまだメモリがありません",
-  "addYourFirstMemory": "最初のメモリを追加",
+  "addYourFirstMemory": "最初の思い出を追加",
   "firmwareDisconnectUsb": "USBを切断",
   "firmwareUsbWarning": "更新中のUSB接続はデバイスを損傷する可能性があります。",
   "firmwareBatteryAbove15": "バッテリー15%以上",
@@ -1100,5 +1100,51 @@
   "wearableAiCompanion": "ウェアラブルAIコンパニオン",
   "@wearableAiCompanion": {
     "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "思い出を読み込んでいます...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "@searchMemories": {
+    "description": "Search input hint text"
+  },
+  "allMemories": "すべての思い出",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "あなたについて",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "手動",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "思い出を読み込んでいます...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "@noMemoriesYet": {
+    "description": "Empty state title when no memories"
+  },
+  "@noMemoriesFound": {
+    "description": "Empty state title when search/filter has no results"
+  },
+  "createYourFirstMemory": "最初の思い出を作成して始めましょう",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "検索またはフィルターを調整してみてください",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
   }
 }

@@ -1043,21 +1043,17 @@
   },
   "selectAll": "Alles selecteren",
   "deleteSelected": "Geselecteerde verwijderen",
-  "searchMemories": "Zoek in {count} herinneringen",
+  "searchMemories": "Herinneringen zoeken...",
   "@searchMemories": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
+    "description": "Search input hint text"
   },
   "memoryDeleted": "Herinnering verwijderd.",
   "undo": "Ongedaan maken",
-  "noMemoriesYet": "Nog geen herinneringen",
+  "noMemoriesYet": "🧠 Nog geen herinneringen",
   "noAutoMemories": "Nog geen automatisch geëxtraheerde herinneringen",
   "noManualMemories": "Nog geen handmatige herinneringen",
   "noMemoriesInCategories": "Geen herinneringen in deze categorieën",
-  "noMemoriesFound": "Geen herinneringen gevonden",
+  "noMemoriesFound": "🔍 Geen herinneringen gevonden",
   "addFirstMemory": "Voeg je eerste herinnering toe",
   "clearMemoryTitle": "Omi's geheugen wissen",
   "clearMemoryMessage": "Weet je zeker dat je Omi's geheugen wilt wissen? Deze actie kan niet ongedaan worden gemaakt.",
@@ -1147,7 +1143,7 @@
   "thisActionCannotBeUndone": "Deze actie kan niet ongedaan worden gemaakt.",
   "memoriesCount": "{count} herinneringen",
   "noMemoriesInCategory": "Nog geen herinneringen in deze categorie",
-  "addYourFirstMemory": "Voeg uw eerste herinnering toe",
+  "addYourFirstMemory": "Voeg je eerste herinnering toe",
   "firmwareDisconnectUsb": "USB ontkoppelen",
   "firmwareUsbWarning": "USB-verbinding tijdens updates kan uw apparaat beschadigen.",
   "firmwareBatteryAbove15": "Batterij boven 15%",
@@ -1266,7 +1262,7 @@
   "reloadingApps": "Apps opnieuw laden...",
   "loadingApps": "Apps laden...",
   "browseInstallCreateApps": "Blader, installeer en maak apps",
-  "all": "Alle",
+  "all": "Alles",
   "open": "Openen",
   "install": "Installeren",
   "noAppsAvailable": "Geen apps beschikbaar",
@@ -1499,5 +1495,48 @@
   "wearableAiCompanion": "Draagbare AI-metgezel",
   "@wearableAiCompanion": {
     "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "Herinneringen laden...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "allMemories": "Alle herinneringen",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "Over jou",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "Handmatig",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "Je herinneringen laden...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "@noMemoriesYet": {
+    "description": "Empty state title when no memories"
+  },
+  "@noMemoriesFound": {
+    "description": "Empty state title when search/filter has no results"
+  },
+  "createYourFirstMemory": "Maak je eerste herinnering om te beginnen",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "Probeer je zoekopdracht of filter aan te passen",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
   }
 }

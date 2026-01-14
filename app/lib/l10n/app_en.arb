@@ -2077,14 +2077,9 @@
   "@deleteSelected": {
     "description": "Tooltip for delete selected"
   },
-  "searchMemories": "Search {count} Memories",
+  "searchMemories": "Search memories...",
   "@searchMemories": {
-    "description": "Hint text for memories search bar",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
+    "description": "Search input hint text"
   },
   "memoryDeleted": "Memory Deleted.",
   "@memoryDeleted": {
@@ -2094,9 +2089,9 @@
   "@undo": {
     "description": "Undo button text"
   },
-  "noMemoriesYet": "No memories yet",
+  "noMemoriesYet": "🧠 No memories yet",
   "@noMemoriesYet": {
-    "description": "Empty state text"
+    "description": "Empty state title when no memories"
   },
   "noAutoMemories": "No auto-extracted memories yet",
   "@noAutoMemories": {
@@ -2110,9 +2105,9 @@
   "@noMemoriesInCategories": {
     "description": "Empty state text for filtered categories"
   },
-  "noMemoriesFound": "No memories found",
+  "noMemoriesFound": "🔍 No memories found",
   "@noMemoriesFound": {
-    "description": "Empty state text for search results"
+    "description": "Empty state title when search/filter has no results"
   },
   "addFirstMemory": "Add your first memory",
   "@addFirstMemory": {
@@ -2459,7 +2454,7 @@
   },
   "addYourFirstMemory": "Add your first memory",
   "@addYourFirstMemory": {
-    "description": "Button text to create first memory in category"
+    "description": "Button text in empty state"
   },
   "firmwareDisconnectUsb": "Disconnect USB",
   "@firmwareDisconnectUsb": {
@@ -3195,7 +3190,7 @@
   },
   "all": "All",
   "@all": {
-    "description": "Button label to view all items in a category"
+    "description": "Short filter label for all memories"
   },
   "open": "Open",
   "@open": {
@@ -3833,5 +3828,36 @@
   "wearableAiCompanion": "Wearable AI companion",
   "@wearableAiCompanion": {
     "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "Loading memories...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "allMemories": "All Memories",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "About You",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "Manual",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "loadingYourMemories": "Loading your memories...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "createYourFirstMemory": "Create your first memory to get started",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "Try adjusting your search or filter",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
   }
 }

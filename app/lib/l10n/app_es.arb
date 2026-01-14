@@ -327,7 +327,7 @@
   "configCopied": "Configuración copiada al portapapeles",
   "listeningMins": "Escuchando (Mins)",
   "understandingWords": "Entendiendo (Palabras)",
-  "insights": "Insights",
+  "insights": "Información",
   "memories": "Recuerdos",
   "minsUsedThisMonth": "{used} de {limit} mins usados este mes",
   "wordsUsedThisMonth": "{used} de {limit} palabras usadas este mes",
@@ -652,14 +652,14 @@
   "itemsSelected": "{count} seleccionados",
   "selectAll": "Seleccionar todo",
   "deleteSelected": "Borrar seleccionados",
-  "searchMemories": "Buscar {count} recuerdos",
+  "searchMemories": "Buscar recuerdos...",
   "memoryDeleted": "Recuerdo borrado.",
   "undo": "Deshacer",
-  "noMemoriesYet": "No hay recuerdos aún",
+  "noMemoriesYet": "🧠 Aún no hay recuerdos",
   "noAutoMemories": "No hay recuerdos automáticos",
   "noManualMemories": "No hay recuerdos manuales",
   "noMemoriesInCategories": "No hay recuerdos en estas categorías",
-  "noMemoriesFound": "No se encontraron recuerdos",
+  "noMemoriesFound": "🔍 No se encontraron recuerdos",
   "addFirstMemory": "Añade tu primer recuerdo",
   "clearMemoryTitle": "¿Borrar memoria de Omi?",
   "clearMemoryMessage": "¿Seguro que quieres borrar la memoria de Omi? No se puede deshacer.",
@@ -769,7 +769,7 @@
   "thisActionCannotBeUndone": "Esta acción no se puede deshacer.",
   "memoriesCount": "{count} memorias",
   "noMemoriesInCategory": "Aún no hay memorias en esta categoría",
-  "addYourFirstMemory": "Añade tu primera memoria",
+  "addYourFirstMemory": "Añade tu primer recuerdo",
   "firmwareDisconnectUsb": "Desconectar USB",
   "firmwareUsbWarning": "La conexión USB durante las actualizaciones puede dañar tu dispositivo.",
   "firmwareBatteryAbove15": "Batería superior al 15%",
@@ -888,7 +888,7 @@
   "reloadingApps": "Recargando aplicaciones...",
   "loadingApps": "Cargando aplicaciones...",
   "browseInstallCreateApps": "Explora, instala y crea aplicaciones",
-  "all": "Todas",
+  "all": "Todos",
   "open": "Abrir",
   "install": "Instalar",
   "noAppsAvailable": "No hay aplicaciones disponibles",
@@ -1121,5 +1121,51 @@
   "wearableAiCompanion": "Compañero de IA portátil",
   "@wearableAiCompanion": {
     "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "Cargando recuerdos...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "@searchMemories": {
+    "description": "Search input hint text"
+  },
+  "allMemories": "Todos los recuerdos",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "Sobre ti",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "Manual",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "Cargando tus recuerdos...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "@noMemoriesYet": {
+    "description": "Empty state title when no memories"
+  },
+  "@noMemoriesFound": {
+    "description": "Empty state title when search/filter has no results"
+  },
+  "createYourFirstMemory": "Crea tu primer recuerdo para comenzar",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "Intenta ajustar tu búsqueda o filtro",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
   }
 }

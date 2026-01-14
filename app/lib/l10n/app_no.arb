@@ -1127,7 +1127,7 @@
   "configCopied": "Konfigurasjon kopiert til utklippstavlen",
   "listeningMins": "Lytting (min)",
   "understandingWords": "Forståelse (ord)",
-  "insights": "Innsikter",
+  "insights": "Innsikt",
   "memories": "Minner",
   "minsUsedThisMonth": "{used} av {limit} min brukt denne måneden",
   "@minsUsedThisMonth": {
@@ -2077,14 +2077,9 @@
   "@deleteSelected": {
     "description": "Tooltip for delete selected"
   },
-  "searchMemories": "Søk i {count} minner",
+  "searchMemories": "Søk i minner...",
   "@searchMemories": {
-    "description": "Hint text for memories search bar",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
+    "description": "Search input hint text"
   },
   "memoryDeleted": "Minne slettet.",
   "@memoryDeleted": {
@@ -2094,9 +2089,9 @@
   "@undo": {
     "description": "Undo button text"
   },
-  "noMemoriesYet": "Ingen minner ennå",
+  "noMemoriesYet": "🧠 Ingen minner ennå",
   "@noMemoriesYet": {
-    "description": "Empty state text"
+    "description": "Empty state title when no memories"
   },
   "noAutoMemories": "Ingen automatisk uttrukne minner ennå",
   "@noAutoMemories": {
@@ -2110,9 +2105,9 @@
   "@noMemoriesInCategories": {
     "description": "Empty state text for filtered categories"
   },
-  "noMemoriesFound": "Ingen minner funnet",
+  "noMemoriesFound": "🔍 Ingen minner funnet",
   "@noMemoriesFound": {
-    "description": "Empty state text for search results"
+    "description": "Empty state title when search/filter has no results"
   },
   "addFirstMemory": "Legg til ditt første minne",
   "@addFirstMemory": {
@@ -2688,5 +2683,42 @@
   "wearableAiCompanion": "Bærbar AI-følgesvenn",
   "@wearableAiCompanion": {
     "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "Laster minner...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "allMemories": "Alle minner",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "Om deg",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "Manuell",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "Laster minnene dine...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "createYourFirstMemory": "Opprett ditt første minne for å komme i gang",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "Prøv å justere søket eller filteret ditt",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
   }
 }

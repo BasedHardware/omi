@@ -652,14 +652,14 @@
   "itemsSelected": "{count} चयनित",
   "selectAll": "सभी चुनें",
   "deleteSelected": "चयनित हटाएं",
-  "searchMemories": "{count} यादें खोजें",
+  "searchMemories": "यादें खोजें...",
   "memoryDeleted": "याद हटा दी गई।",
   "undo": "पूर्ववत करें",
-  "noMemoriesYet": "अभी तक कोई यादें नहीं",
+  "noMemoriesYet": "🧠 अभी कोई यादें नहीं",
   "noAutoMemories": "कोई स्वतः यादें नहीं",
   "noManualMemories": "कोई मैनुअल यादें नहीं",
   "noMemoriesInCategories": "इन श्रेणियों में कोई यादें नहीं",
-  "noMemoriesFound": "कोई यादें नहीं मिलीं",
+  "noMemoriesFound": "🔍 कोई यादें नहीं मिलीं",
   "addFirstMemory": "अपनी पहली याद जोड़ें",
   "clearMemoryTitle": "Omi मेमोरी साफ़ करें?",
   "clearMemoryMessage": "क्या आप वाकई Omi मेमोरी साफ़ करना चाहते हैं? यह पूर्ववत नहीं किया जा सकता।",
@@ -1121,5 +1121,51 @@
   "wearableAiCompanion": "पहनने योग्य AI साथी",
   "@wearableAiCompanion": {
     "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "यादें लोड हो रही हैं...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "@searchMemories": {
+    "description": "Search input hint text"
+  },
+  "allMemories": "सभी यादें",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "आपके बारे में",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "मैनुअल",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "आपकी यादें लोड हो रही हैं...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "@noMemoriesYet": {
+    "description": "Empty state title when no memories"
+  },
+  "@noMemoriesFound": {
+    "description": "Empty state title when search/filter has no results"
+  },
+  "createYourFirstMemory": "शुरू करने के लिए अपनी पहली याद बनाएं",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "अपनी खोज या फ़िल्टर समायोजित करने का प्रयास करें",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
   }
 }

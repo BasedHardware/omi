@@ -652,14 +652,14 @@
   "itemsSelected": "{count} selecionados",
   "selectAll": "Selecionar tudo",
   "deleteSelected": "Apagar selecionados",
-  "searchMemories": "Buscar {count} memórias",
+  "searchMemories": "Buscar memórias...",
   "memoryDeleted": "Memória apagada.",
   "undo": "Desfazer",
-  "noMemoriesYet": "Nenhuma memória ainda",
+  "noMemoriesYet": "🧠 Ainda não há memórias",
   "noAutoMemories": "Nenhuma memória automática",
   "noManualMemories": "Nenhuma memória manual",
   "noMemoriesInCategories": "Nenhuma memória nestas categorias",
-  "noMemoriesFound": "Nenhuma memória encontrada",
+  "noMemoriesFound": "🔍 Nenhuma memória encontrada",
   "addFirstMemory": "Adicione sua primeira memória",
   "clearMemoryTitle": "Limpar memória do Omi?",
   "clearMemoryMessage": "Tem certeza de que deseja limpar a memória do Omi? Isso não pode ser desfeito.",
@@ -888,7 +888,7 @@
   "reloadingApps": "Recarregando aplicativos...",
   "loadingApps": "Carregando aplicativos...",
   "browseInstallCreateApps": "Navegue, instale e crie aplicativos",
-  "all": "Todos",
+  "all": "Todas",
   "open": "Abrir",
   "install": "Instalar",
   "noAppsAvailable": "Nenhum aplicativo disponível",
@@ -1121,5 +1121,51 @@
   "wearableAiCompanion": "Companheiro de IA vestível",
   "@wearableAiCompanion": {
     "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "Carregando memórias...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "@searchMemories": {
+    "description": "Search input hint text"
+  },
+  "allMemories": "Todas as memórias",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "Sobre você",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "Manual",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "Carregando suas memórias...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "@noMemoriesYet": {
+    "description": "Empty state title when no memories"
+  },
+  "@noMemoriesFound": {
+    "description": "Empty state title when search/filter has no results"
+  },
+  "createYourFirstMemory": "Crie sua primeira memória para começar",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "Tente ajustar sua pesquisa ou filtro",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
   }
 }

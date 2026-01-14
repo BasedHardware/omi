@@ -2077,14 +2077,9 @@
   "@deleteSelected": {
     "description": "Tooltip for delete selected"
   },
-  "searchMemories": "Cari {count} Memori",
+  "searchMemories": "Cari kenangan...",
   "@searchMemories": {
-    "description": "Hint text for memories search bar",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
+    "description": "Search input hint text"
   },
   "memoryDeleted": "Memori Dihapus.",
   "@memoryDeleted": {
@@ -2094,9 +2089,9 @@
   "@undo": {
     "description": "Undo button text"
   },
-  "noMemoriesYet": "Belum ada memori",
+  "noMemoriesYet": "🧠 Belum ada kenangan",
   "@noMemoriesYet": {
-    "description": "Empty state text"
+    "description": "Empty state title when no memories"
   },
   "noAutoMemories": "Belum ada memori yang diekstrak otomatis",
   "@noAutoMemories": {
@@ -2110,9 +2105,9 @@
   "@noMemoriesInCategories": {
     "description": "Empty state text for filtered categories"
   },
-  "noMemoriesFound": "Tidak ada memori ditemukan",
+  "noMemoriesFound": "🔍 Tidak ditemukan kenangan",
   "@noMemoriesFound": {
-    "description": "Empty state text for search results"
+    "description": "Empty state title when search/filter has no results"
   },
   "addFirstMemory": "Tambahkan memori pertama Anda",
   "@addFirstMemory": {
@@ -2345,7 +2340,7 @@
   "thisActionCannotBeUndone": "Tindakan ini tidak dapat dibatalkan.",
   "memoriesCount": "{count} memori",
   "noMemoriesInCategory": "Belum ada memori dalam kategori ini",
-  "addYourFirstMemory": "Tambahkan memori pertama Anda",
+  "addYourFirstMemory": "Tambahkan kenangan pertama Anda",
   "firmwareDisconnectUsb": "Putuskan USB",
   "firmwareUsbWarning": "Koneksi USB selama pembaruan dapat merusak perangkat Anda.",
   "firmwareBatteryAbove15": "Baterai di atas 15%",
@@ -2688,5 +2683,42 @@
   "wearableAiCompanion": "Pendamping AI yang dapat dikenakan",
   "@wearableAiCompanion": {
     "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "Memuat kenangan...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "allMemories": "Semua kenangan",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "Tentang Anda",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "Manual",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "Memuat kenangan Anda...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "createYourFirstMemory": "Buat kenangan pertama Anda untuk memulai",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "Coba sesuaikan pencarian atau filter Anda",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
   }
 }

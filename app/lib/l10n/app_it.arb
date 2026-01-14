@@ -1127,7 +1127,7 @@
   "configCopied": "Configurazione copiata negli appunti",
   "listeningMins": "Ascolto (min)",
   "understandingWords": "Comprensione (parole)",
-  "insights": "Insight",
+  "insights": "Approfondimenti",
   "memories": "Ricordi",
   "minsUsedThisMonth": "{used} di {limit} min utilizzati questo mese",
   "@minsUsedThisMonth": {
@@ -2059,14 +2059,9 @@
   "@deleteSelected": {
     "description": "Tooltip for delete selected"
   },
-  "searchMemories": "Cerca {count} Ricordi",
+  "searchMemories": "Cerca ricordi...",
   "@searchMemories": {
-    "description": "Hint text for memories search bar",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
+    "description": "Search input hint text"
   },
   "memoryDeleted": "Ricordo Eliminato.",
   "@memoryDeleted": {
@@ -2076,9 +2071,9 @@
   "@undo": {
     "description": "Undo button text"
   },
-  "noMemoriesYet": "Nessun ricordo ancora",
+  "noMemoriesYet": "🧠 Nessun ricordo ancora",
   "@noMemoriesYet": {
-    "description": "Empty state text"
+    "description": "Empty state title when no memories"
   },
   "noAutoMemories": "Nessun ricordo auto-estratto ancora",
   "@noAutoMemories": {
@@ -2092,9 +2087,9 @@
   "@noMemoriesInCategories": {
     "description": "Empty state text for filtered categories"
   },
-  "noMemoriesFound": "Nessun ricordo trovato",
+  "noMemoriesFound": "🔍 Nessun ricordo trovato",
   "@noMemoriesFound": {
-    "description": "Empty state text for search results"
+    "description": "Empty state title when search/filter has no results"
   },
   "addFirstMemory": "Aggiungi il tuo primo ricordo",
   "@addFirstMemory": {
@@ -2327,7 +2322,7 @@
   "thisActionCannotBeUndone": "Questa azione non può essere annullata.",
   "memoriesCount": "{count} memorie",
   "noMemoriesInCategory": "Nessuna memoria in questa categoria ancora",
-  "addYourFirstMemory": "Aggiungi la tua prima memoria",
+  "addYourFirstMemory": "Aggiungi il tuo primo ricordo",
   "firmwareDisconnectUsb": "Disconnetti USB",
   "firmwareUsbWarning": "La connessione USB durante gli aggiornamenti può danneggiare il dispositivo.",
   "firmwareBatteryAbove15": "Batteria sopra il 15%",
@@ -2446,7 +2441,7 @@
   "reloadingApps": "Ricaricamento app...",
   "loadingApps": "Caricamento app...",
   "browseInstallCreateApps": "Sfoglia, installa e crea app",
-  "all": "Tutte",
+  "all": "Tutti",
   "open": "Apri",
   "install": "Installa",
   "noAppsAvailable": "Nessuna app disponibile",
@@ -2670,5 +2665,42 @@
   "wearableAiCompanion": "Compagno AI indossabile",
   "@wearableAiCompanion": {
     "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "Caricamento ricordi...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "allMemories": "Tutti i ricordi",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "Su di te",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "Manuale",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "Caricamento dei tuoi ricordi...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "createYourFirstMemory": "Crea il tuo primo ricordo per iniziare",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "Prova a modificare la ricerca o il filtro",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
   }
 }

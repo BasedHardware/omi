@@ -2077,14 +2077,9 @@
   "@deleteSelected": {
     "description": "Tooltip for delete selected"
   },
-  "searchMemories": "Meklēt {count} atmiņas",
+  "searchMemories": "Meklēt atmiņas...",
   "@searchMemories": {
-    "description": "Hint text for memories search bar",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
+    "description": "Search input hint text"
   },
   "memoryDeleted": "Atmiņa izdzēsta.",
   "@memoryDeleted": {
@@ -2094,9 +2089,9 @@
   "@undo": {
     "description": "Undo button text"
   },
-  "noMemoriesYet": "Vēl nav atmiņu",
+  "noMemoriesYet": "🧠 Vēl nav atmiņu",
   "@noMemoriesYet": {
-    "description": "Empty state text"
+    "description": "Empty state title when no memories"
   },
   "noAutoMemories": "Vēl nav automātiski izvilktu atmiņu",
   "@noAutoMemories": {
@@ -2110,9 +2105,9 @@
   "@noMemoriesInCategories": {
     "description": "Empty state text for filtered categories"
   },
-  "noMemoriesFound": "Atmiņas nav atrastas",
+  "noMemoriesFound": "🔍 Atmiņas nav atrastas",
   "@noMemoriesFound": {
-    "description": "Empty state text for search results"
+    "description": "Empty state title when search/filter has no results"
   },
   "addFirstMemory": "Pievienot savu pirmo atmiņu",
   "@addFirstMemory": {
@@ -2464,7 +2459,7 @@
   "reloadingApps": "Lietotņu pārlāde...",
   "loadingApps": "Lietotņu ielāde...",
   "browseInstallCreateApps": "Pārlūkojiet, instalējiet un izveidojiet lietotnes",
-  "all": "Visi",
+  "all": "Viss",
   "open": "Atvērt",
   "install": "Instalēt",
   "noAppsAvailable": "Nav pieejamu lietotņu",
@@ -2688,5 +2683,42 @@
   "wearableAiCompanion": "Valkājams AI palīgs",
   "@wearableAiCompanion": {
     "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "Ielādē atmiņas...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "allMemories": "Visas atmiņas",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "Par jums",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "Manuāls",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "Ielādē jūsu atmiņas...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "createYourFirstMemory": "Izveidojiet savu pirmo atmiņu, lai sāktu",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "Mēģiniet pielāgot meklēšanu vai filtru",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
   }
 }

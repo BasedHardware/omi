@@ -1127,7 +1127,7 @@
   "configCopied": "Конфігурацію скопійовано до буфера обміну",
   "listeningMins": "Прослуховування (хв)",
   "understandingWords": "Розуміння (слів)",
-  "insights": "Insights",
+  "insights": "Ідеї",
   "memories": "Спогади",
   "minsUsedThisMonth": "{used} з {limit} хв використано цього місяця",
   "@minsUsedThisMonth": {
@@ -2077,14 +2077,9 @@
   "@deleteSelected": {
     "description": "Tooltip for delete selected"
   },
-  "searchMemories": "Пошук серед {count} спогадів",
+  "searchMemories": "Пошук спогадів...",
   "@searchMemories": {
-    "description": "Hint text for memories search bar",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
+    "description": "Search input hint text"
   },
   "memoryDeleted": "Спогад видалено.",
   "@memoryDeleted": {
@@ -2094,9 +2089,9 @@
   "@undo": {
     "description": "Undo button text"
   },
-  "noMemoriesYet": "Спогадів поки немає",
+  "noMemoriesYet": "🧠 Поки що немає спогадів",
   "@noMemoriesYet": {
-    "description": "Empty state text"
+    "description": "Empty state title when no memories"
   },
   "noAutoMemories": "Автоматично витягнутих спогадів поки немає",
   "@noAutoMemories": {
@@ -2110,9 +2105,9 @@
   "@noMemoriesInCategories": {
     "description": "Empty state text for filtered categories"
   },
-  "noMemoriesFound": "Спогадів не знайдено",
+  "noMemoriesFound": "🔍 Спогади не знайдено",
   "@noMemoriesFound": {
-    "description": "Empty state text for search results"
+    "description": "Empty state title when search/filter has no results"
   },
   "addFirstMemory": "Додати перший спогад",
   "@addFirstMemory": {
@@ -2345,7 +2340,7 @@
   "thisActionCannotBeUndone": "Цю дію не можна скасувати.",
   "memoriesCount": "{count} спогадів",
   "noMemoriesInCategory": "У цій категорії поки немає спогадів",
-  "addYourFirstMemory": "Додайте свій перший спогад",
+  "addYourFirstMemory": "Додайте перший спогад",
   "firmwareDisconnectUsb": "Від'єднайте USB",
   "firmwareUsbWarning": "USB-з'єднання під час оновлень може пошкодити ваш пристрій.",
   "firmwareBatteryAbove15": "Батарея вище 15%",
@@ -2464,7 +2459,7 @@
   "reloadingApps": "Перезавантаження додатків...",
   "loadingApps": "Завантаження додатків...",
   "browseInstallCreateApps": "Переглядайте, встановлюйте та створюйте додатки",
-  "all": "Усі",
+  "all": "Всі",
   "open": "Відкрити",
   "install": "Встановити",
   "noAppsAvailable": "Немає доступних додатків",
@@ -2688,5 +2683,42 @@
   "wearableAiCompanion": "Носимий AI-компаньйон",
   "@wearableAiCompanion": {
     "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "Завантаження спогадів...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "allMemories": "Всі спогади",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "Про вас",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "Ручні",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "Завантаження ваших спогадів...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "createYourFirstMemory": "Створіть перший спогад, щоб почати",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "Спробуйте змінити параметри пошуку або фільтр",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
   }
 }
