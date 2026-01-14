@@ -2186,11 +2186,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "Ký ức mới",
+  "newMemory": "✨ Bộ nhớ mới",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "Chỉnh sửa ký ức",
+  "editMemory": "✏️ Chỉnh sửa bộ nhớ",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2336,7 +2336,7 @@
   "summarize": "Tóm tắt",
   "generateSummary": "Tạo bản tóm tắt",
   "conversationNotFoundOrDeleted": "Không tìm thấy cuộc trò chuyện hoặc đã bị xóa",
-  "deleteMemory": "Xóa bộ nhớ?",
+  "deleteMemory": "Xóa bộ nhớ",
   "thisActionCannotBeUndone": "Hành động này không thể hoàn tác.",
   "memoriesCount": "{count} kỷ niệm",
   "noMemoriesInCategory": "Chưa có kỷ niệm nào trong danh mục này",
@@ -2720,5 +2720,11 @@
   },
   "@addYourFirstMemory": {
     "description": "Button text in empty state"
-  }
+  },
+  "whatWouldYouLikeToRemember": "Bạn muốn nhớ điều gì?",
+  "category": "Danh mục",
+  "public": "Công khai",
+  "failedToSaveCheckConnection": "Lưu thất bại. Vui lòng kiểm tra kết nối của bạn.",
+  "createMemory": "Tạo bộ nhớ",
+  "deleteMemoryConfirmation": "Bạn có chắc chắn muốn xóa bộ nhớ này không? Hành động này không thể hoàn tác."
 }

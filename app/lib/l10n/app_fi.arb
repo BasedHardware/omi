@@ -2186,11 +2186,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "Uusi muisto",
+  "newMemory": "✨ Uusi muisti",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "Muokkaa muistoa",
+  "editMemory": "✏️ Muokkaa muistia",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2336,7 +2336,7 @@
   "summarize": "Tiivistä",
   "generateSummary": "Luo yhteenveto",
   "conversationNotFoundOrDeleted": "Keskustelua ei löytynyt tai se on poistettu",
-  "deleteMemory": "Poista muisto?",
+  "deleteMemory": "Poista muisti",
   "thisActionCannotBeUndone": "Tätä toimintoa ei voi peruuttaa.",
   "memoriesCount": "{count} muistoa",
   "noMemoriesInCategory": "Tässä kategoriassa ei ole vielä muistoja",
@@ -2720,5 +2720,11 @@
   },
   "@addYourFirstMemory": {
     "description": "Button text in empty state"
-  }
+  },
+  "whatWouldYouLikeToRemember": "Mitä haluaisit muistaa?",
+  "category": "Kategoria",
+  "public": "Julkinen",
+  "failedToSaveCheckConnection": "Tallennus epäonnistui. Tarkista yhteytesi.",
+  "createMemory": "Luo muisti",
+  "deleteMemoryConfirmation": "Haluatko varmasti poistaa tämän muistin? Tätä toimintoa ei voi perua."
 }

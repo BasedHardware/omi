@@ -1405,7 +1405,7 @@
   "defaultRepository": "Repositori Default",
   "selectDefaultRepoDesc": "Pilih repositori default untuk membuat issue. Anda masih dapat menentukan repositori yang berbeda saat membuat issue.",
   "noReposFound": "Tidak ada repositori ditemukan",
-  "private": "Pribadi",
+  "private": "Privat",
   "updatedDate": "Diperbarui {date}",
   "@updatedDate": {
     "placeholders": {
@@ -2186,11 +2186,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "Memori Baru",
+  "newMemory": "✨ Memori Baru",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "Edit Memori",
+  "editMemory": "✏️ Edit Memori",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2336,7 +2336,7 @@
   "summarize": "Ringkas",
   "generateSummary": "Buat ringkasan",
   "conversationNotFoundOrDeleted": "Percakapan tidak ditemukan atau telah dihapus",
-  "deleteMemory": "Hapus memori?",
+  "deleteMemory": "Hapus Memori",
   "thisActionCannotBeUndone": "Tindakan ini tidak dapat dibatalkan.",
   "memoriesCount": "{count} memori",
   "noMemoriesInCategory": "Belum ada memori dalam kategori ini",
@@ -2720,5 +2720,11 @@
   },
   "@addYourFirstMemory": {
     "description": "Button text in empty state"
-  }
+  },
+  "whatWouldYouLikeToRemember": "Apa yang ingin Anda ingat?",
+  "category": "Kategori",
+  "public": "Publik",
+  "failedToSaveCheckConnection": "Gagal menyimpan. Silakan periksa koneksi Anda.",
+  "createMemory": "Buat Memori",
+  "deleteMemoryConfirmation": "Apakah Anda yakin ingin menghapus memori ini? Tindakan ini tidak dapat dibatalkan."
 }

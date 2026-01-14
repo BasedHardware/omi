@@ -683,8 +683,8 @@
   "deleteAllMemories": "すべてのメモリを削除",
   "allMemoriesPrivateResult": "すべてのメモリが非公開になりました",
   "allMemoriesPublicResult": "すべてのメモリが公開されました",
-  "newMemory": "新しいメモリ",
-  "editMemory": "メモリを編集",
+  "newMemory": "✨ 新しいメモリ",
+  "editMemory": "✏️ メモリを編集",
   "memoryContentHint": "アイスクリームが好き...",
   "failedToSaveMemory": "保存に失敗しました。接続を確認してください。",
   "saveMemory": "メモリを保存",
@@ -744,7 +744,7 @@
   "summarize": "要約",
   "generateSummary": "要約を生成",
   "conversationNotFoundOrDeleted": "会話が見つからないか、削除されました",
-  "deleteMemory": "メモリを削除しますか？",
+  "deleteMemory": "メモリを削除",
   "thisActionCannotBeUndone": "この操作は元に戻せません。",
   "memoriesCount": "{count}個の思い出",
   "noMemoriesInCategory": "このカテゴリにはまだメモリがありません",
@@ -1146,5 +1146,11 @@
   },
   "@addYourFirstMemory": {
     "description": "Button text in empty state"
-  }
+  },
+  "whatWouldYouLikeToRemember": "何を覚えておきたいですか？",
+  "category": "カテゴリ",
+  "public": "公開",
+  "failedToSaveCheckConnection": "保存に失敗しました。接続を確認してください。",
+  "createMemory": "メモリを作成",
+  "deleteMemoryConfirmation": "このメモリを削除してもよろしいですか？この操作は元に戻せません。"
 }

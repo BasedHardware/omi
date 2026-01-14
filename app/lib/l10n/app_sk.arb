@@ -827,7 +827,7 @@
   "@developerSettingsTitle": {
     "description": "Developer settings page title"
   },
-  "saving": "Ukladá sa...",
+  "saving": "Ukladanie...",
   "@saving": {
     "description": "Saving state text"
   },
@@ -1405,7 +1405,7 @@
   "defaultRepository": "Predvolený repozitár",
   "selectDefaultRepoDesc": "Vyberte predvolený repozitár pre vytváranie problémov. Pri vytváraní problémov môžete stále zadať iný repozitár.",
   "noReposFound": "Neboli nájdené žiadne repozitáre",
-  "private": "Súkromný",
+  "private": "Súkromná",
   "updatedDate": "Aktualizované {date}",
   "@updatedDate": {
     "placeholders": {
@@ -2186,11 +2186,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "Nová spomienka",
+  "newMemory": "✨ Nová pamäť",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "Upraviť spomienku",
+  "editMemory": "✏️ Upraviť pamäť",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2336,7 +2336,7 @@
   "summarize": "Zhrnúť",
   "generateSummary": "Vygenerovať zhrnutie",
   "conversationNotFoundOrDeleted": "Konverzácia nebola nájdená alebo bola odstránená",
-  "deleteMemory": "Vymazať pamäť?",
+  "deleteMemory": "Odstrániť pamäť",
   "thisActionCannotBeUndone": "Túto akciu nie je možné vrátiť späť.",
   "memoriesCount": "{count} spomienok",
   "noMemoriesInCategory": "V tejto kategórii zatiaľ nie sú žiadne spomienky",
@@ -2720,5 +2720,11 @@
   },
   "@addYourFirstMemory": {
     "description": "Button text in empty state"
-  }
+  },
+  "whatWouldYouLikeToRemember": "Čo by ste si chceli zapamätať?",
+  "category": "Kategória",
+  "public": "Verejná",
+  "failedToSaveCheckConnection": "Uloženie zlyhalo. Skontrolujte pripojenie.",
+  "createMemory": "Vytvoriť pamäť",
+  "deleteMemoryConfirmation": "Naozaj chcete odstrániť túto pamäť? Túto akciu nie je možné vrátiť späť."
 }

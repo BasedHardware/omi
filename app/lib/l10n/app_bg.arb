@@ -29,7 +29,7 @@
   "@confirm": {
     "description": "Confirm button label"
   },
-  "cancel": "Отмени",
+  "cancel": "Отказ",
   "@cancel": {
     "description": "Button label"
   },
@@ -37,7 +37,7 @@
   "@ok": {
     "description": "Generic OK button text"
   },
-  "delete": "Изтрий",
+  "delete": "Изтриване",
   "@delete": {
     "description": "Button label"
   },
@@ -1405,7 +1405,7 @@
   "defaultRepository": "Хранилище по подразбиране",
   "selectDefaultRepoDesc": "Изберете хранилище по подразбиране за създаване на проблеми. Все още можете да посочите различно хранилище при създаване на проблеми.",
   "noReposFound": "Не са намерени хранилища",
-  "private": "Частно",
+  "private": "Частен",
   "updatedDate": "Актуализиран {date}",
   "@updatedDate": {
     "placeholders": {
@@ -1571,7 +1571,7 @@
   "autoLanguageDetection": "Автоматично разпознаване на език",
   "highAccuracy": "Висока точност",
   "privacyFirst": "Поверителност на първо място",
-  "saveChanges": "Запази промени",
+  "saveChanges": "Запази промените",
   "resetToDefault": "Нулиране до стандартно",
   "viewTemplate": "Виж шаблон",
   "trySomethingLike": "Опитайте нещо като...",
@@ -2186,11 +2186,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "Нов спомен",
+  "newMemory": "✨ Нов спомен",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "Редактирай спомен",
+  "editMemory": "✏️ Редактирай спомен",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2336,7 +2336,7 @@
   "summarize": "Резюмиране",
   "generateSummary": "Генериране на резюме",
   "conversationNotFoundOrDeleted": "Разговорът не е намерен или е изтрит",
-  "deleteMemory": "Изтриване на спомен?",
+  "deleteMemory": "Изтрий спомен",
   "thisActionCannotBeUndone": "Това действие не може да бъде отменено.",
   "memoriesCount": "{count} спомени",
   "noMemoriesInCategory": "Все още няма спомени в тази категория",
@@ -2738,5 +2738,11 @@
   },
   "@addYourFirstMemory": {
     "description": "Button text in empty state"
-  }
+  },
+  "whatWouldYouLikeToRemember": "Какво искате да запомните?",
+  "category": "Категория",
+  "public": "Публичен",
+  "failedToSaveCheckConnection": "Неуспешно запазване. Проверете връзката си.",
+  "createMemory": "Създай спомен",
+  "deleteMemoryConfirmation": "Сигурни ли сте, че искате да изтриете този спомен? Това действие не може да бъде отменено."
 }

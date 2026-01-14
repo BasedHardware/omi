@@ -1173,7 +1173,7 @@
       }
     }
   },
-  "visibility": "الرؤية",
+  "visibility": "الظهور",
   "visibilitySubtitle": "تحكم في المحادثات التي تظهر في قائمتك",
   "showShortConversations": "إظهار المحادثات القصيرة",
   "showShortConversationsDesc": "عرض المحادثات الأقصر من الحد الأدنى",
@@ -2186,11 +2186,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "ذكرى جديدة",
+  "newMemory": "✨ ذاكرة جديدة",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "تعديل الذكرى",
+  "editMemory": "✏️ تعديل الذاكرة",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2336,7 +2336,7 @@
   "summarize": "تلخيص",
   "generateSummary": "إنشاء ملخص",
   "conversationNotFoundOrDeleted": "المحادثة غير موجودة أو تم حذفها",
-  "deleteMemory": "حذف الذكرى؟",
+  "deleteMemory": "حذف الذاكرة",
   "thisActionCannotBeUndone": "لا يمكن التراجع عن هذا الإجراء.",
   "memoriesCount": "{count} ذكريات",
   "noMemoriesInCategory": "لا توجد ذكريات في هذه الفئة بعد",
@@ -2752,5 +2752,11 @@
   },
   "@addYourFirstMemory": {
     "description": "Button text in empty state"
-  }
+  },
+  "whatWouldYouLikeToRemember": "ما الذي تريد تذكره؟",
+  "category": "الفئة",
+  "public": "عام",
+  "failedToSaveCheckConnection": "فشل الحفظ. يرجى التحقق من الاتصال.",
+  "createMemory": "إنشاء ذاكرة",
+  "deleteMemoryConfirmation": "هل أنت متأكد من حذف هذه الذاكرة؟ لا يمكن التراجع عن هذا الإجراء."
 }

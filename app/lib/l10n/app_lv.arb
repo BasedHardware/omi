@@ -1405,7 +1405,7 @@
   "defaultRepository": "Noklusējuma repozitorijs",
   "selectDefaultRepoDesc": "Izvēlieties noklusējuma repozitoriju problēmu izveidošanai. Jūs joprojām varat norādīt citu repozitoriju, veidojot problēmas.",
   "noReposFound": "Repozitoriji nav atrasti",
-  "private": "Privāts",
+  "private": "Privāta",
   "updatedDate": "Atjaunināts {date}",
   "@updatedDate": {
     "placeholders": {
@@ -2186,11 +2186,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "Jauna atmiņa",
+  "newMemory": "✨ Jauna atmiņa",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "Rediģēt atmiņu",
+  "editMemory": "✏️ Rediģēt atmiņu",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2336,7 +2336,7 @@
   "summarize": "Apkopot",
   "generateSummary": "Ģenerēt kopsavilkumu",
   "conversationNotFoundOrDeleted": "Saruna nav atrasta vai ir dzēsta",
-  "deleteMemory": "Dzēst atmiņu?",
+  "deleteMemory": "Dzēst atmiņu",
   "thisActionCannotBeUndone": "Šo darbību nevar atsaukt.",
   "memoriesCount": "{count} atmiņas",
   "noMemoriesInCategory": "Šajā kategorijā vēl nav atmiņu",
@@ -2720,5 +2720,11 @@
   },
   "@addYourFirstMemory": {
     "description": "Button text in empty state"
-  }
+  },
+  "whatWouldYouLikeToRemember": "Ko jūs vēlētos atcerēties?",
+  "category": "Kategorija",
+  "public": "Publiska",
+  "failedToSaveCheckConnection": "Neizdevās saglabāt. Lūdzu, pārbaudiet savienojumu.",
+  "createMemory": "Izveidot atmiņu",
+  "deleteMemoryConfirmation": "Vai tiešām vēlaties dzēst šo atmiņu? Šo darbību nevar atsaukt."
 }

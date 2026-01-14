@@ -678,8 +678,8 @@
   "deleteAllMemories": "सभी हटाएं",
   "allMemoriesPrivateResult": "सभी यादें अब निजी हैं",
   "allMemoriesPublicResult": "सभी यादें अब सार्वजनिक हैं",
-  "newMemory": "नई याद",
-  "editMemory": "याद संपादित करें",
+  "newMemory": "✨ नई स्मृति",
+  "editMemory": "✏️ स्मृति संपादित करें",
   "memoryContentHint": "मुझे आइसक्रीम पसंद है...",
   "failedToSaveMemory": "सहेजने में विफल।",
   "saveMemory": "याद सहेजें",
@@ -765,7 +765,7 @@
   "summarize": "सारांश",
   "generateSummary": "सारांश उत्पन्न करें",
   "conversationNotFoundOrDeleted": "बातचीत नहीं मिली या हटा दी गई है",
-  "deleteMemory": "मेमोरी हटाएं?",
+  "deleteMemory": "स्मृति हटाएं",
   "thisActionCannotBeUndone": "इस क्रिया को पूर्ववत नहीं किया जा सकता।",
   "memoriesCount": "{count} यादें",
   "noMemoriesInCategory": "इस श्रेणी में अभी तक कोई यादें नहीं हैं",
@@ -1167,5 +1167,11 @@
   },
   "@addYourFirstMemory": {
     "description": "Button text in empty state"
-  }
+  },
+  "whatWouldYouLikeToRemember": "आप क्या याद रखना चाहेंगे?",
+  "category": "श्रेणी",
+  "public": "सार्वजनिक",
+  "failedToSaveCheckConnection": "सहेजने में विफल। कृपया अपना कनेक्शन जांचें।",
+  "createMemory": "स्मृति बनाएं",
+  "deleteMemoryConfirmation": "क्या आप वाकई इस स्मृति को हटाना चाहते हैं? यह क्रिया पूर्ववत नहीं की जा सकती।"
 }

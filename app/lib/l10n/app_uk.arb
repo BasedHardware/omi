@@ -1405,7 +1405,7 @@
   "defaultRepository": "Репозиторій за замовчуванням",
   "selectDefaultRepoDesc": "Виберіть репозиторій за замовчуванням для створення issues. Ви все ще можете вказати інший репозиторій під час створення issues.",
   "noReposFound": "Репозиторіїв не знайдено",
-  "private": "Приватний",
+  "private": "Приватна",
   "updatedDate": "Оновлено {date}",
   "@updatedDate": {
     "placeholders": {
@@ -2186,11 +2186,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "Новий спогад",
+  "newMemory": "✨ Нова пам'ять",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "Редагувати спогад",
+  "editMemory": "✏️ Редагувати пам'ять",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2206,7 +2206,7 @@
   "@saveMemory": {
     "description": "Button label"
   },
-  "retry": "Спробувати ще раз",
+  "retry": "Повторити",
   "@retry": {
     "description": "Button label"
   },
@@ -2336,7 +2336,7 @@
   "summarize": "Резюмувати",
   "generateSummary": "Створити резюме",
   "conversationNotFoundOrDeleted": "Розмову не знайдено або вона була видалена",
-  "deleteMemory": "Видалити пам'ять?",
+  "deleteMemory": "Видалити пам'ять",
   "thisActionCannotBeUndone": "Цю дію не можна скасувати.",
   "memoriesCount": "{count} спогадів",
   "noMemoriesInCategory": "У цій категорії поки немає спогадів",
@@ -2720,5 +2720,11 @@
   },
   "@addYourFirstMemory": {
     "description": "Button text in empty state"
-  }
+  },
+  "whatWouldYouLikeToRemember": "Що ви хочете запам'ятати?",
+  "category": "Категорія",
+  "public": "Публічна",
+  "failedToSaveCheckConnection": "Не вдалося зберегти. Перевірте підключення.",
+  "createMemory": "Створити пам'ять",
+  "deleteMemoryConfirmation": "Ви впевнені, що хочете видалити цю пам'ять? Цю дію не можна скасувати."
 }

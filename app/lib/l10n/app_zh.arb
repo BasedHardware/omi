@@ -231,7 +231,7 @@
   "micGainDescVeryHigh": "极高 - 适用于极微弱声源",
   "micGainDescMax": "最大 - 谨慎使用",
   "developerSettingsTitle": "开发者设置",
-  "saving": "保存中...",
+  "saving": "正在保存...",
   "personaConfig": "配置您的 AI 人格",
   "beta": "测试版",
   "transcription": "转录",
@@ -451,7 +451,7 @@
   "defaultRepository": "默认仓库",
   "selectDefaultRepoDesc": "选择创建 Issue 的默认仓库。",
   "noReposFound": "未找到仓库",
-  "private": "私有",
+  "private": "私密",
   "updatedDate": "更新于 {date}",
   "yesterday": "昨天",
   "daysAgo": "{count} 天前",
@@ -678,8 +678,8 @@
   "deleteAllMemories": "全部删除",
   "allMemoriesPrivateResult": "所有记忆现已私有",
   "allMemoriesPublicResult": "所有记忆现已公开",
-  "newMemory": "新记忆",
-  "editMemory": "编辑记忆",
+  "newMemory": "✨ 新记忆",
+  "editMemory": "✏️ 编辑记忆",
   "memoryContentHint": "我喜欢冰淇淋...",
   "failedToSaveMemory": "保存失败。",
   "saveMemory": "保存记忆",
@@ -765,7 +765,7 @@
   "summarize": "总结",
   "generateSummary": "生成摘要",
   "conversationNotFoundOrDeleted": "未找到对话或已被删除",
-  "deleteMemory": "删除记忆？",
+  "deleteMemory": "删除记忆",
   "thisActionCannotBeUndone": "此操作无法撤消。",
   "memoriesCount": "{count}个回忆",
   "noMemoriesInCategory": "此类别中还没有回忆",
@@ -1167,5 +1167,11 @@
   },
   "@addYourFirstMemory": {
     "description": "Button text in empty state"
-  }
+  },
+  "whatWouldYouLikeToRemember": "您想记住什么？",
+  "category": "类别",
+  "public": "公开",
+  "failedToSaveCheckConnection": "保存失败。请检查您的连接。",
+  "createMemory": "创建记忆",
+  "deleteMemoryConfirmation": "您确定要删除此记忆吗？此操作无法撤消。"
 }

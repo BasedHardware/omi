@@ -1405,7 +1405,7 @@
   "defaultRepository": "Репозиторий по умолчанию",
   "selectDefaultRepoDesc": "Выберите репозиторий по умолчанию для создания задач. Вы все еще можете указать другой репозиторий при создании задач.",
   "noReposFound": "Репозитории не найдены",
-  "private": "Приватный",
+  "private": "Приватная",
   "updatedDate": "Обновлено {date}",
   "@updatedDate": {
     "placeholders": {
@@ -2186,11 +2186,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "Новое воспоминание",
+  "newMemory": "✨ Новая память",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "Редактировать воспоминание",
+  "editMemory": "✏️ Редактировать память",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2336,7 +2336,7 @@
   "summarize": "Резюмировать",
   "generateSummary": "Создать резюме",
   "conversationNotFoundOrDeleted": "Разговор не найден или был удален",
-  "deleteMemory": "Удалить память?",
+  "deleteMemory": "Удалить память",
   "thisActionCannotBeUndone": "Это действие нельзя отменить.",
   "memoriesCount": "{count} воспоминаний",
   "noMemoriesInCategory": "В этой категории пока нет воспоминаний",
@@ -2720,5 +2720,11 @@
   },
   "@addYourFirstMemory": {
     "description": "Button text in empty state"
-  }
+  },
+  "whatWouldYouLikeToRemember": "Что вы хотите запомнить?",
+  "category": "Категория",
+  "public": "Публичная",
+  "failedToSaveCheckConnection": "Не удалось сохранить. Проверьте подключение.",
+  "createMemory": "Создать память",
+  "deleteMemoryConfirmation": "Вы уверены, что хотите удалить эту память? Это действие нельзя отменить."
 }

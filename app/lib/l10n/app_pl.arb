@@ -2186,11 +2186,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "Nowe wspomnienie",
+  "newMemory": "✨ Nowe wspomnienie",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "Edytuj wspomnienie",
+  "editMemory": "✏️ Edytuj wspomnienie",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2336,7 +2336,7 @@
   "summarize": "Podsumuj",
   "generateSummary": "Wygeneruj podsumowanie",
   "conversationNotFoundOrDeleted": "Rozmowa nie została znaleziona lub została usunięta",
-  "deleteMemory": "Usunąć pamięć?",
+  "deleteMemory": "Usuń wspomnienie",
   "thisActionCannotBeUndone": "Ta czynność nie może być cofnięta.",
   "memoriesCount": "{count} wspomnień",
   "noMemoriesInCategory": "Brak wspomnień w tej kategorii",
@@ -2720,5 +2720,11 @@
   },
   "@addYourFirstMemory": {
     "description": "Button text in empty state"
-  }
+  },
+  "whatWouldYouLikeToRemember": "Co chcesz zapamiętać?",
+  "category": "Kategoria",
+  "public": "Publiczne",
+  "failedToSaveCheckConnection": "Nie udało się zapisać. Sprawdź połączenie.",
+  "createMemory": "Utwórz wspomnienie",
+  "deleteMemoryConfirmation": "Czy na pewno chcesz usunąć to wspomnienie? Tej czynności nie można cofnąć."
 }

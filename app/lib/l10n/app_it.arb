@@ -1571,7 +1571,7 @@
   "autoLanguageDetection": "Rilevamento automatico della lingua",
   "highAccuracy": "Alta precisione",
   "privacyFirst": "Privacy al primo posto",
-  "saveChanges": "Salva Modifiche",
+  "saveChanges": "Salva modifiche",
   "resetToDefault": "Ripristina predefinito",
   "viewTemplate": "Visualizza Template",
   "trySomethingLike": "Prova qualcosa come...",
@@ -2168,11 +2168,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "Nuovo Ricordo",
+  "newMemory": "✨ Nuova memoria",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "Modifica Ricordo",
+  "editMemory": "✏️ Modifica memoria",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2318,7 +2318,7 @@
   "summarize": "Riassumi",
   "generateSummary": "Genera riepilogo",
   "conversationNotFoundOrDeleted": "Conversazione non trovata o è stata eliminata",
-  "deleteMemory": "Eliminare memoria?",
+  "deleteMemory": "Elimina memoria",
   "thisActionCannotBeUndone": "Questa azione non può essere annullata.",
   "memoriesCount": "{count} memorie",
   "noMemoriesInCategory": "Nessuna memoria in questa categoria ancora",
@@ -2702,5 +2702,11 @@
   },
   "@addYourFirstMemory": {
     "description": "Button text in empty state"
-  }
+  },
+  "whatWouldYouLikeToRemember": "Cosa vorresti ricordare?",
+  "category": "Categoria",
+  "public": "Pubblico",
+  "failedToSaveCheckConnection": "Salvataggio fallito. Controlla la tua connessione.",
+  "createMemory": "Crea memoria",
+  "deleteMemoryConfirmation": "Sei sicuro di voler eliminare questa memoria? Questa azione non può essere annullata."
 }

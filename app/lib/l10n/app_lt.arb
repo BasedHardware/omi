@@ -2168,11 +2168,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "Naujas prisiminimas",
+  "newMemory": "✨ Naujas atminimas",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "Redaguoti prisiminimą",
+  "editMemory": "✏️ Redaguoti atminimą",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2318,7 +2318,7 @@
   "summarize": "Apibendrinti",
   "generateSummary": "Generuoti santrauką",
   "conversationNotFoundOrDeleted": "Pokalbis nerastas arba buvo ištrintas",
-  "deleteMemory": "Ištrinti atmintį?",
+  "deleteMemory": "Ištrinti atminimą",
   "thisActionCannotBeUndone": "Šio veiksmo negalima atšaukti.",
   "memoriesCount": "{count} atminčių",
   "noMemoriesInCategory": "Šioje kategorijoje dar nėra atsiminimų",
@@ -2702,5 +2702,11 @@
   },
   "@addYourFirstMemory": {
     "description": "Button text in empty state"
-  }
+  },
+  "whatWouldYouLikeToRemember": "Ką norėtumėte prisiminti?",
+  "category": "Kategorija",
+  "public": "Vieša",
+  "failedToSaveCheckConnection": "Nepavyko išsaugoti. Patikrinkite savo ryšį.",
+  "createMemory": "Sukurti atminimą",
+  "deleteMemoryConfirmation": "Ar tikrai norite ištrinti šį atminimą? Šio veiksmo negalima atšaukti."
 }

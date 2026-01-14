@@ -29,7 +29,7 @@
   "@confirm": {
     "description": "Confirm button label"
   },
-  "cancel": "Cancel·la",
+  "cancel": "Cancel·lar",
   "@cancel": {
     "description": "Button label"
   },
@@ -37,7 +37,7 @@
   "@ok": {
     "description": "Generic OK button text"
   },
-  "delete": "Elimina",
+  "delete": "Eliminar",
   "@delete": {
     "description": "Button label"
   },
@@ -1571,7 +1571,7 @@
   "autoLanguageDetection": "Detecció automàtica d'idioma",
   "highAccuracy": "Alta precisió",
   "privacyFirst": "Privadesa primer",
-  "saveChanges": "Desar canvis",
+  "saveChanges": "Desa els canvis",
   "resetToDefault": "Restableix per defecte",
   "viewTemplate": "Veure plantilla",
   "trySomethingLike": "Proveu quelcom com...",
@@ -2186,11 +2186,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "Nou record",
+  "newMemory": "✨ Nova memòria",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "Editar record",
+  "editMemory": "✏️ Edita memòria",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2206,7 +2206,7 @@
   "@saveMemory": {
     "description": "Button label"
   },
-  "retry": "Tornar a provar",
+  "retry": "Tornar a intentar",
   "@retry": {
     "description": "Button label"
   },
@@ -2336,7 +2336,7 @@
   "summarize": "Resumir",
   "generateSummary": "Generar resum",
   "conversationNotFoundOrDeleted": "Conversa no trobada o ha estat eliminada",
-  "deleteMemory": "Eliminar memòria?",
+  "deleteMemory": "Eliminar memòria",
   "thisActionCannotBeUndone": "Aquesta acció no es pot desfer.",
   "memoriesCount": "{count} memòries",
   "noMemoriesInCategory": "Encara no hi ha memòries en aquesta categoria",
@@ -2738,5 +2738,11 @@
   },
   "@addYourFirstMemory": {
     "description": "Button text in empty state"
-  }
+  },
+  "whatWouldYouLikeToRemember": "Què vols recordar?",
+  "category": "Categoria",
+  "public": "Públic",
+  "failedToSaveCheckConnection": "Error en desar. Comprova la connexió.",
+  "createMemory": "Crear memòria",
+  "deleteMemoryConfirmation": "Estàs segur que vols eliminar aquesta memòria? Aquesta acció no es pot desfer."
 }

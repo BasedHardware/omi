@@ -231,7 +231,7 @@
   "micGainDescVeryHigh": "Sehr hoch - für sehr leise Quellen",
   "micGainDescMax": "Maximum - mit Vorsicht verwenden",
   "developerSettingsTitle": "Entwicklereinstellungen",
-  "saving": "Speichern...",
+  "saving": "Wird gespeichert...",
   "personaConfig": "Konfigurieren Sie Ihre KI-Persona",
   "beta": "BETA",
   "transcription": "Transkription",
@@ -683,8 +683,8 @@
   "deleteAllMemories": "Alle Erinnerungen löschen",
   "allMemoriesPrivateResult": "Alle Erinnerungen sind jetzt privat",
   "allMemoriesPublicResult": "Alle Erinnerungen sind jetzt öffentlich",
-  "newMemory": "Neue Erinnerung",
-  "editMemory": "Erinnerung bearbeiten",
+  "newMemory": "✨ Neue Erinnerung",
+  "editMemory": "✏️ Erinnerung bearbeiten",
   "memoryContentHint": "Ich esse gerne Eis...",
   "failedToSaveMemory": "Speichern fehlgeschlagen. Bitte überprüfen Sie Ihre Verbindung.",
   "saveMemory": "Erinnerung speichern",
@@ -765,7 +765,7 @@
   "summarize": "Zusammenfassen",
   "generateSummary": "Zusammenfassung generieren",
   "conversationNotFoundOrDeleted": "Unterhaltung nicht gefunden oder wurde gelöscht",
-  "deleteMemory": "Erinnerung löschen?",
+  "deleteMemory": "Erinnerung löschen",
   "thisActionCannotBeUndone": "Diese Aktion kann nicht rückgängig gemacht werden.",
   "memoriesCount": "{count} Erinnerungen",
   "noMemoriesInCategory": "Noch keine Erinnerungen in dieser Kategorie",
@@ -1167,5 +1167,11 @@
   },
   "@addYourFirstMemory": {
     "description": "Button text in empty state"
-  }
+  },
+  "whatWouldYouLikeToRemember": "Woran möchten Sie sich erinnern?",
+  "category": "Kategorie",
+  "public": "Öffentlich",
+  "failedToSaveCheckConnection": "Speichern fehlgeschlagen. Bitte Verbindung überprüfen.",
+  "createMemory": "Erinnerung erstellen",
+  "deleteMemoryConfirmation": "Möchten Sie diese Erinnerung wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden."
 }

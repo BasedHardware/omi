@@ -1079,8 +1079,8 @@
   "deleteAllMemories": "Supprimer toutes les mémoires",
   "allMemoriesPrivateResult": "Toutes les mémoires sont maintenant privées",
   "allMemoriesPublicResult": "Toutes les mémoires sont maintenant publiques",
-  "newMemory": "Nouvelle mémoire",
-  "editMemory": "Modifier la mémoire",
+  "newMemory": "✨ Nouveau souvenir",
+  "editMemory": "✏️ Modifier le souvenir",
   "memoryContentHint": "J'aime manger des glaces...",
   "failedToSaveMemory": "Échec de l'enregistrement. Veuillez vérifier votre connexion.",
   "saveMemory": "Enregistrer la mémoire",
@@ -1139,7 +1139,7 @@
   "summarize": "Résumer",
   "generateSummary": "Générer un résumé",
   "conversationNotFoundOrDeleted": "Conversation introuvable ou supprimée",
-  "deleteMemory": "Supprimer le souvenir ?",
+  "deleteMemory": "Supprimer le souvenir",
   "thisActionCannotBeUndone": "Cette action ne peut pas être annulée.",
   "memoriesCount": "{count} souvenirs",
   "noMemoriesInCategory": "Aucun souvenir dans cette catégorie pour le moment",
@@ -1538,5 +1538,11 @@
   },
   "@addYourFirstMemory": {
     "description": "Button text in empty state"
-  }
+  },
+  "whatWouldYouLikeToRemember": "Que voulez-vous retenir?",
+  "category": "Catégorie",
+  "public": "Public",
+  "failedToSaveCheckConnection": "Échec de l'enregistrement. Vérifiez votre connexion.",
+  "createMemory": "Créer un souvenir",
+  "deleteMemoryConfirmation": "Êtes-vous sûr de vouloir supprimer ce souvenir? Cette action ne peut pas être annulée."
 }

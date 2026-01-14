@@ -2186,11 +2186,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "ความทรงจำใหม่",
+  "newMemory": "✨ ความทรงจำใหม่",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "แก้ไขความทรงจำ",
+  "editMemory": "✏️ แก้ไขความทรงจำ",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2206,7 +2206,7 @@
   "@saveMemory": {
     "description": "Button label"
   },
-  "retry": "ลองใหม่",
+  "retry": "ลองอีกครั้ง",
   "@retry": {
     "description": "Button label"
   },
@@ -2336,7 +2336,7 @@
   "summarize": "สรุป",
   "generateSummary": "สร้างสรุป",
   "conversationNotFoundOrDeleted": "ไม่พบการสนทนาหรือถูกลบแล้ว",
-  "deleteMemory": "ลบความทรงจำหรือไม่?",
+  "deleteMemory": "ลบความทรงจำ",
   "thisActionCannotBeUndone": "การดำเนินการนี้ไม่สามารถยกเลิกได้",
   "memoriesCount": "{count} ความทรงจำ",
   "noMemoriesInCategory": "ยังไม่มีความทรงจำในหมวดหมู่นี้",
@@ -2720,5 +2720,11 @@
   },
   "@addYourFirstMemory": {
     "description": "Button text in empty state"
-  }
+  },
+  "whatWouldYouLikeToRemember": "คุณต้องการจดจำอะไร?",
+  "category": "หมวดหมู่",
+  "public": "สาธารณะ",
+  "failedToSaveCheckConnection": "บันทึกไม่สำเร็จ กรุณาตรวจสอบการเชื่อมต่อของคุณ",
+  "createMemory": "สร้างความทรงจำ",
+  "deleteMemoryConfirmation": "คุณแน่ใจหรือไม่ว่าต้องการลบความทรงจำนี้? การกระทำนี้ไม่สามารถยกเลิกได้"
 }

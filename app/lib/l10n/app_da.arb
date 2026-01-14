@@ -827,7 +827,7 @@
   "@developerSettingsTitle": {
     "description": "Developer settings page title"
   },
-  "saving": "Saving...",
+  "saving": "Gemmer...",
   "@saving": {
     "description": "Saving state text"
   },
@@ -1405,7 +1405,7 @@
   "defaultRepository": "Default Repository",
   "selectDefaultRepoDesc": "Select a default repository for creating issues. You can still specify a different repository when creating issues.",
   "noReposFound": "No repositories found",
-  "private": "Private",
+  "private": "Privat",
   "updatedDate": "Updated {date}",
   "@updatedDate": {
     "placeholders": {
@@ -1571,7 +1571,7 @@
   "autoLanguageDetection": "Auto language detection",
   "highAccuracy": "High accuracy",
   "privacyFirst": "Privacy first",
-  "saveChanges": "Save Changes",
+  "saveChanges": "Gem ændringer",
   "resetToDefault": "Nulstil til standard",
   "viewTemplate": "View Template",
   "trySomethingLike": "Try something like...",
@@ -2186,11 +2186,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "New Memory",
+  "newMemory": "✨ Ny hukommelse",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "Edit Memory",
+  "editMemory": "✏️ Rediger hukommelse",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2206,7 +2206,7 @@
   "@saveMemory": {
     "description": "Button label"
   },
-  "retry": "Retry",
+  "retry": "Prøv igen",
   "@retry": {
     "description": "Button label"
   },
@@ -2336,7 +2336,7 @@
   "summarize": "Opsummer",
   "generateSummary": "Generer resumé",
   "conversationNotFoundOrDeleted": "Samtale ikke fundet eller er blevet slettet",
-  "deleteMemory": "Slet erindring?",
+  "deleteMemory": "Slet hukommelse",
   "thisActionCannotBeUndone": "Denne handling kan ikke fortrydes.",
   "memoriesCount": "{count} erindringer",
   "noMemoriesInCategory": "Ingen erindringer i denne kategori endnu",
@@ -2720,5 +2720,11 @@
   },
   "@addYourFirstMemory": {
     "description": "Button text in empty state"
-  }
+  },
+  "whatWouldYouLikeToRemember": "Hvad vil du huske?",
+  "category": "Kategori",
+  "public": "Offentlig",
+  "failedToSaveCheckConnection": "Kunne ikke gemme. Tjek din forbindelse.",
+  "createMemory": "Opret hukommelse",
+  "deleteMemoryConfirmation": "Er du sikker på, at du vil slette denne hukommelse? Denne handling kan ikke fortrydes."
 }

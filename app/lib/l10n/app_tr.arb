@@ -1571,7 +1571,7 @@
   "autoLanguageDetection": "Otomatik dil algılama",
   "highAccuracy": "Yüksek doğruluk",
   "privacyFirst": "Önce gizlilik",
-  "saveChanges": "Değişiklikleri Kaydet",
+  "saveChanges": "Değişiklikleri kaydet",
   "resetToDefault": "Varsayılana sıfırla",
   "viewTemplate": "Şablonu Görüntüle",
   "trySomethingLike": "Şöyle bir şey deneyin...",
@@ -2168,11 +2168,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "Yeni Anı",
+  "newMemory": "✨ Yeni hafıza",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "Anıyı Düzenle",
+  "editMemory": "✏️ Hafızayı düzenle",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2188,7 +2188,7 @@
   "@saveMemory": {
     "description": "Button label"
   },
-  "retry": "Tekrar Dene",
+  "retry": "Tekrar dene",
   "@retry": {
     "description": "Button label"
   },
@@ -2318,7 +2318,7 @@
   "summarize": "Özetle",
   "generateSummary": "Özet oluştur",
   "conversationNotFoundOrDeleted": "Konuşma bulunamadı veya silindi",
-  "deleteMemory": "Bellek silinsin mi?",
+  "deleteMemory": "Hafızayı sil",
   "thisActionCannotBeUndone": "Bu işlem geri alınamaz.",
   "memoriesCount": "{count} anı",
   "noMemoriesInCategory": "Bu kategoride henüz anı yok",
@@ -2702,5 +2702,11 @@
   },
   "@addYourFirstMemory": {
     "description": "Button text in empty state"
-  }
+  },
+  "whatWouldYouLikeToRemember": "Ne hatırlamak istersiniz?",
+  "category": "Kategori",
+  "public": "Herkese açık",
+  "failedToSaveCheckConnection": "Kaydetme başarısız. Lütfen bağlantınızı kontrol edin.",
+  "createMemory": "Hafıza oluştur",
+  "deleteMemoryConfirmation": "Bu hafızayı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz."
 }

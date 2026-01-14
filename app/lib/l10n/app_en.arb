@@ -31,7 +31,7 @@
   },
   "cancel": "Cancel",
   "@cancel": {
-    "description": "Cancel button text"
+    "description": "Cancel button label"
   },
   "ok": "Ok",
   "@ok": {
@@ -39,7 +39,7 @@
   },
   "delete": "Delete",
   "@delete": {
-    "description": "Delete button text"
+    "description": "Delete button label"
   },
   "add": "Add",
   "@add": {
@@ -829,7 +829,7 @@
   },
   "saving": "Saving...",
   "@saving": {
-    "description": "Button text when saving settings"
+    "description": "Button text while saving is in progress"
   },
   "personaConfig": "Configure your AI persona",
   "@personaConfig": {
@@ -2186,13 +2186,13 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "New Memory",
+  "newMemory": "✨ New Memory",
   "@newMemory": {
-    "description": "Dialog title"
+    "description": "Dialog title when creating a new memory"
   },
-  "editMemory": "Edit Memory",
+  "editMemory": "✏️ Edit Memory",
   "@editMemory": {
-    "description": "Dialog title"
+    "description": "Dialog title when editing a memory"
   },
   "memoryContentHint": "I like to eat ice cream...",
   "@memoryContentHint": {
@@ -2208,7 +2208,7 @@
   },
   "retry": "Retry",
   "@retry": {
-    "description": "Button label"
+    "description": "Button text to retry after failed save"
   },
   "createActionItem": "Create Action Item",
   "@createActionItem": {
@@ -2431,9 +2431,9 @@
   "@conversationNotFoundOrDeleted": {
     "description": "Error message when conversation cannot be found"
   },
-  "deleteMemory": "Delete memory?",
+  "deleteMemory": "Delete Memory",
   "@deleteMemory": {
-    "description": "Title for delete confirmation dialog"
+    "description": "Confirmation dialog title for deleting memory"
   },
   "thisActionCannotBeUndone": "This action cannot be undone.",
   "@thisActionCannotBeUndone": {
@@ -3859,5 +3859,38 @@
   "tryAdjustingFilter": "Try adjusting your search or filter",
   "@tryAdjustingFilter": {
     "description": "Empty state message when filter has no results"
+  },
+  "whatWouldYouLikeToRemember": "What would you like to remember?",
+  "@whatWouldYouLikeToRemember": {
+    "description": "Hint text for memory content input field"
+  },
+  "category": "Category",
+  "@category": {
+    "description": "Label for memory category selection section"
+  },
+  "@visibility": {
+    "description": "Label for memory visibility selection section"
+  },
+  "public": "Public",
+  "@public": {
+    "description": "Option for public memory visibility"
+  },
+  "@private": {
+    "description": "Option for private memory visibility"
+  },
+  "failedToSaveCheckConnection": "Failed to save. Please check your connection.",
+  "@failedToSaveCheckConnection": {
+    "description": "Error message when saving memory fails"
+  },
+  "@saveChanges": {
+    "description": "Button text to save edited memory"
+  },
+  "createMemory": "Create Memory",
+  "@createMemory": {
+    "description": "Button text to create new memory"
+  },
+  "deleteMemoryConfirmation": "Are you sure you want to delete this memory? This action cannot be undone.",
+  "@deleteMemoryConfirmation": {
+    "description": "Confirmation message for deleting memory"
   }
 }

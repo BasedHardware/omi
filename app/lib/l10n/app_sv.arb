@@ -37,7 +37,7 @@
   "@ok": {
     "description": "Generic OK button text"
   },
-  "delete": "Radera",
+  "delete": "Ta bort",
   "@delete": {
     "description": "Button label"
   },
@@ -2186,11 +2186,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "Nytt minne",
+  "newMemory": "✨ Nytt minne",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "Redigera minne",
+  "editMemory": "✏️ Redigera minne",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2336,7 +2336,7 @@
   "summarize": "Sammanfatta",
   "generateSummary": "Generera sammanfattning",
   "conversationNotFoundOrDeleted": "Konversation hittades inte eller har raderats",
-  "deleteMemory": "Ta bort minne?",
+  "deleteMemory": "Ta bort minne",
   "thisActionCannotBeUndone": "Denna åtgärd kan inte ångras.",
   "memoriesCount": "{count} minnen",
   "noMemoriesInCategory": "Inga minnen i denna kategori ännu",
@@ -2720,5 +2720,11 @@
   },
   "@addYourFirstMemory": {
     "description": "Button text in empty state"
-  }
+  },
+  "whatWouldYouLikeToRemember": "Vad vill du komma ihåg?",
+  "category": "Kategori",
+  "public": "Offentlig",
+  "failedToSaveCheckConnection": "Kunde inte spara. Kontrollera din anslutning.",
+  "createMemory": "Skapa minne",
+  "deleteMemoryConfirmation": "Är du säker på att du vill ta bort detta minne? Denna åtgärd kan inte ångras."
 }

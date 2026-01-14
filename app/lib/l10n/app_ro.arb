@@ -2186,11 +2186,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "New Memory",
+  "newMemory": "✨ Amintire nouă",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "Edit Memory",
+  "editMemory": "✏️ Editează amintirea",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2206,7 +2206,7 @@
   "@saveMemory": {
     "description": "Button label"
   },
-  "retry": "Retry",
+  "retry": "Reîncearcă",
   "@retry": {
     "description": "Button label"
   },
@@ -2336,7 +2336,7 @@
   "summarize": "Rezumă",
   "generateSummary": "Generează rezumat",
   "conversationNotFoundOrDeleted": "Conversația nu a fost găsită sau a fost ștearsă",
-  "deleteMemory": "Șterge memoria?",
+  "deleteMemory": "Șterge amintirea",
   "thisActionCannotBeUndone": "Această acțiune nu poate fi anulată.",
   "memoriesCount": "{count} amintiri",
   "noMemoriesInCategory": "Nu există încă amintiri în această categorie",
@@ -2720,5 +2720,11 @@
   },
   "@addYourFirstMemory": {
     "description": "Button text in empty state"
-  }
+  },
+  "whatWouldYouLikeToRemember": "Ce ai vrea să ții minte?",
+  "category": "Categorie",
+  "public": "Public",
+  "failedToSaveCheckConnection": "Salvare eșuată. Verifică conexiunea.",
+  "createMemory": "Creează amintire",
+  "deleteMemoryConfirmation": "Ești sigur că vrei să ștergi această amintire? Această acțiune nu poate fi anulată."
 }

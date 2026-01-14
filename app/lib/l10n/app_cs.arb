@@ -2186,11 +2186,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "Nová vzpomínka",
+  "newMemory": "✨ Nová vzpomínka",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "Upravit vzpomínku",
+  "editMemory": "✏️ Upravit vzpomínku",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2336,7 +2336,7 @@
   "summarize": "Shrnout",
   "generateSummary": "Generovat shrnutí",
   "conversationNotFoundOrDeleted": "Konverzace nenalezena nebo byla smazána",
-  "deleteMemory": "Smazat vzpomínku?",
+  "deleteMemory": "Smazat vzpomínku",
   "thisActionCannotBeUndone": "Tuto akci nelze vrátit zpět.",
   "memoriesCount": "{count} vzpomínek",
   "noMemoriesInCategory": "V této kategorii ještě nejsou žádné vzpomínky",
@@ -2738,5 +2738,11 @@
   },
   "@addYourFirstMemory": {
     "description": "Button text in empty state"
-  }
+  },
+  "whatWouldYouLikeToRemember": "Co si chcete zapamatovat?",
+  "category": "Kategorie",
+  "public": "Veřejné",
+  "failedToSaveCheckConnection": "Uložení se nezdařilo. Zkontrolujte připojení.",
+  "createMemory": "Vytvořit vzpomínku",
+  "deleteMemoryConfirmation": "Opravdu chcete smazat tuto vzpomínku? Tuto akci nelze vrátit zpět."
 }

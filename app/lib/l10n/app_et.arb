@@ -2186,11 +2186,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "Uus mälestus",
+  "newMemory": "✨ Uus mälestus",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "Muuda mälestust",
+  "editMemory": "✏️ Muuda mälestust",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2336,7 +2336,7 @@
   "summarize": "Kokkuvõte",
   "generateSummary": "Loo kokkuvõte",
   "conversationNotFoundOrDeleted": "Vestlust ei leitud või see on kustutatud",
-  "deleteMemory": "Kustuta mälu?",
+  "deleteMemory": "Kustuta mälestus",
   "thisActionCannotBeUndone": "Seda toimingut ei saa tagasi võtta.",
   "memoriesCount": "{count} mälu",
   "noMemoriesInCategory": "Selles kategoorias pole veel mälestusi",
@@ -2720,5 +2720,11 @@
   },
   "@addYourFirstMemory": {
     "description": "Button text in empty state"
-  }
+  },
+  "whatWouldYouLikeToRemember": "Mida soovid meeles pidada?",
+  "category": "Kategooria",
+  "public": "Avalik",
+  "failedToSaveCheckConnection": "Salvestamine ebaõnnestus. Kontrolli ühendust.",
+  "createMemory": "Loo mälestus",
+  "deleteMemoryConfirmation": "Kas oled kindel, et soovid selle mälestuse kustutada? Seda toimingut ei saa tagasi võtta."
 }

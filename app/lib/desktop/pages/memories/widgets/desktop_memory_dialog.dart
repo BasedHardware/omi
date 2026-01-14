@@ -7,6 +7,7 @@ import 'package:omi/ui/atoms/omi_choice_chip.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
@@ -75,7 +76,7 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
             Row(
               children: [
                 Text(
-                  widget.memory != null ? '✏️ Edit Memory' : '✨ New Memory',
+                  widget.memory != null ? context.l10n.editMemory : context.l10n.newMemory,
                   style: const TextStyle(
                     color: ResponsiveHelper.textPrimary,
                     fontSize: 20,
@@ -113,14 +114,14 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
                   fontSize: 15,
                   height: 1.4,
                 ),
-                decoration: const InputDecoration(
-                  hintText: 'What would you like to remember?',
-                  hintStyle: TextStyle(
+                decoration: InputDecoration(
+                  hintText: context.l10n.whatWouldYouLikeToRemember,
+                  hintStyle: const TextStyle(
                     color: ResponsiveHelper.textTertiary,
                     fontSize: 15,
                   ),
                   border: InputBorder.none,
-                  contentPadding: EdgeInsets.all(16),
+                  contentPadding: const EdgeInsets.all(16),
                 ),
               ),
             ),
@@ -128,9 +129,9 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
             const SizedBox(height: 20),
 
             // Category selection
-            const Text(
-              'Category',
-              style: TextStyle(
+            Text(
+              context.l10n.category,
+              style: const TextStyle(
                 color: ResponsiveHelper.textPrimary,
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
@@ -141,21 +142,21 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
               children: [
                 OmiChoiceChip(
                   selected: _selectedCategory == MemoryCategory.system,
-                  label: 'About You',
+                  label: context.l10n.aboutYou,
                   icon: Icons.person_outlined,
                   onTap: () => setState(() => _selectedCategory = MemoryCategory.system),
                 ),
                 const SizedBox(width: 8),
                 OmiChoiceChip(
                   selected: _selectedCategory == MemoryCategory.interesting,
-                  label: 'Insights',
+                  label: context.l10n.insights,
                   icon: Icons.lightbulb_outlined,
                   onTap: () => setState(() => _selectedCategory = MemoryCategory.interesting),
                 ),
                 const SizedBox(width: 8),
                 OmiChoiceChip(
                   selected: _selectedCategory == MemoryCategory.manual,
-                  label: 'Manual',
+                  label: context.l10n.manual,
                   icon: Icons.edit_outlined,
                   onTap: () => setState(() => _selectedCategory = MemoryCategory.manual),
                 ),
@@ -165,9 +166,9 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
             const SizedBox(height: 20),
 
             // Visibility selection
-            const Text(
-              'Visibility',
-              style: TextStyle(
+            Text(
+              context.l10n.visibility,
+              style: const TextStyle(
                 color: ResponsiveHelper.textPrimary,
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
@@ -179,7 +180,7 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
                 Expanded(
                   child: OmiChoiceChip(
                     selected: _selectedVisibility == MemoryVisibility.public,
-                    label: 'Public',
+                    label: context.l10n.public,
                     icon: Icons.public,
                     expand: true,
                     onTap: () => setState(() => _selectedVisibility = MemoryVisibility.public),
@@ -189,7 +190,7 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
                 Expanded(
                   child: OmiChoiceChip(
                     selected: _selectedVisibility == MemoryVisibility.private,
-                    label: 'Private',
+                    label: context.l10n.private,
                     icon: Icons.lock_outline,
                     expand: true,
                     onTap: () => setState(() => _selectedVisibility = MemoryVisibility.private),
@@ -220,10 +221,10 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
                       size: 18,
                     ),
                     const SizedBox(width: 8),
-                    const Expanded(
+                    Expanded(
                       child: Text(
-                        'Failed to save. Please check your connection.',
-                        style: TextStyle(
+                        context.l10n.failedToSaveCheckConnection,
+                        style: const TextStyle(
                           color: ResponsiveHelper.textSecondary,
                           fontSize: 13,
                         ),
@@ -247,7 +248,7 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
                       size: 18,
                     ),
                     label: Text(
-                      'Delete',
+                      context.l10n.delete,
                       style: TextStyle(
                         color: Colors.red.shade400,
                         fontSize: 14,
@@ -257,17 +258,17 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
                 ],
                 const Spacer(),
                 OmiButton(
-                  label: 'Cancel',
+                  label: context.l10n.cancel,
                   onPressed: () => Navigator.pop(context),
                   type: OmiButtonType.text,
                 ),
                 const SizedBox(width: 12),
                 OmiButton(
                   label: _isSaving
-                      ? 'Saving...'
+                      ? context.l10n.saving
                       : _saveFailed
-                          ? 'Retry'
-                          : (widget.memory != null ? 'Save Changes' : 'Create Memory'),
+                          ? context.l10n.retry
+                          : (widget.memory != null ? context.l10n.saveChanges : context.l10n.createMemory),
                   onPressed: _isSaving ? null : _saveMemory,
                 ),
               ],
@@ -328,8 +329,8 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
 
     OmiConfirmDialog.show(
       context,
-      title: 'Delete Memory',
-      message: 'Are you sure you want to delete this memory? This action cannot be undone.',
+      title: context.l10n.deleteMemory,
+      message: context.l10n.deleteMemoryConfirmation,
     ).then((confirmed) {
       if (confirmed == true) {
         widget.provider.deleteMemory(widget.memory!);

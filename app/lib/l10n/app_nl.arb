@@ -1079,8 +1079,8 @@
   "deleteAllMemories": "Alle herinneringen verwijderen",
   "allMemoriesPrivateResult": "Alle herinneringen zijn nu privé",
   "allMemoriesPublicResult": "Alle herinneringen zijn nu openbaar",
-  "newMemory": "Nieuwe herinnering",
-  "editMemory": "Herinnering bewerken",
+  "newMemory": "✨ Nieuw geheugen",
+  "editMemory": "✏️ Geheugen bewerken",
   "memoryContentHint": "Ik hou van ijs eten...",
   "failedToSaveMemory": "Opslaan mislukt. Controleer je verbinding.",
   "saveMemory": "Herinnering opslaan",
@@ -1139,7 +1139,7 @@
   "summarize": "Samenvatten",
   "generateSummary": "Samenvatting genereren",
   "conversationNotFoundOrDeleted": "Gesprek niet gevonden of is verwijderd",
-  "deleteMemory": "Herinnering verwijderen?",
+  "deleteMemory": "Geheugen verwijderen",
   "thisActionCannotBeUndone": "Deze actie kan niet ongedaan worden gemaakt.",
   "memoriesCount": "{count} herinneringen",
   "noMemoriesInCategory": "Nog geen herinneringen in deze categorie",
@@ -1538,5 +1538,11 @@
   },
   "@addYourFirstMemory": {
     "description": "Button text in empty state"
-  }
+  },
+  "whatWouldYouLikeToRemember": "Wat wil je onthouden?",
+  "category": "Categorie",
+  "public": "Openbaar",
+  "failedToSaveCheckConnection": "Opslaan mislukt. Controleer je verbinding.",
+  "createMemory": "Geheugen maken",
+  "deleteMemoryConfirmation": "Weet je zeker dat je dit geheugen wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt."
 }

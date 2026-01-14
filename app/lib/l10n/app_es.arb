@@ -678,8 +678,8 @@
   "deleteAllMemories": "Borrar todo",
   "allMemoriesPrivateResult": "Todos los recuerdos son ahora privados",
   "allMemoriesPublicResult": "Todos los recuerdos son ahora públicos",
-  "newMemory": "Nuevo recuerdo",
-  "editMemory": "Editar recuerdo",
+  "newMemory": "✨ Nueva memoria",
+  "editMemory": "✏️ Editar memoria",
   "memoryContentHint": "Me gusta el helado...",
   "failedToSaveMemory": "Error al guardar.",
   "saveMemory": "Guardar recuerdo",
@@ -765,7 +765,7 @@
   "summarize": "Resumir",
   "generateSummary": "Generar resumen",
   "conversationNotFoundOrDeleted": "Conversación no encontrada o ha sido eliminada",
-  "deleteMemory": "¿Eliminar memoria?",
+  "deleteMemory": "Eliminar memoria",
   "thisActionCannotBeUndone": "Esta acción no se puede deshacer.",
   "memoriesCount": "{count} memorias",
   "noMemoriesInCategory": "Aún no hay memorias en esta categoría",
@@ -1167,5 +1167,11 @@
   },
   "@addYourFirstMemory": {
     "description": "Button text in empty state"
-  }
+  },
+  "whatWouldYouLikeToRemember": "¿Qué te gustaría recordar?",
+  "category": "Categoría",
+  "public": "Público",
+  "failedToSaveCheckConnection": "Error al guardar. Por favor, verifica tu conexión.",
+  "createMemory": "Crear memoria",
+  "deleteMemoryConfirmation": "¿Estás seguro de que deseas eliminar esta memoria? Esta acción no se puede deshacer."
 }

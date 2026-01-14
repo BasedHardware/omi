@@ -678,8 +678,8 @@
   "deleteAllMemories": "Apagar tudo",
   "allMemoriesPrivateResult": "Todas as memórias são agora privadas",
   "allMemoriesPublicResult": "Todas as memórias são agora públicas",
-  "newMemory": "Nova memória",
-  "editMemory": "Editar memória",
+  "newMemory": "✨ Nova memória",
+  "editMemory": "✏️ Editar memória",
   "memoryContentHint": "Eu gosto de sorvete...",
   "failedToSaveMemory": "Falha ao salvar.",
   "saveMemory": "Salvar memória",
@@ -765,7 +765,7 @@
   "summarize": "Resumir",
   "generateSummary": "Gerar resumo",
   "conversationNotFoundOrDeleted": "Conversa não encontrada ou foi excluída",
-  "deleteMemory": "Excluir memória?",
+  "deleteMemory": "Excluir memória",
   "thisActionCannotBeUndone": "Esta ação não pode ser desfeita.",
   "memoriesCount": "{count} memórias",
   "noMemoriesInCategory": "Ainda não há memórias nesta categoria",
@@ -1167,5 +1167,11 @@
   },
   "@addYourFirstMemory": {
     "description": "Button text in empty state"
-  }
+  },
+  "whatWouldYouLikeToRemember": "O que você gostaria de lembrar?",
+  "category": "Categoria",
+  "public": "Público",
+  "failedToSaveCheckConnection": "Falha ao salvar. Verifique sua conexão.",
+  "createMemory": "Criar memória",
+  "deleteMemoryConfirmation": "Tem certeza de que deseja excluir esta memória? Esta ação não pode ser desfeita."
 }

@@ -2186,11 +2186,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "Új emlék",
+  "newMemory": "✨ Új emlékezet",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "Emlék szerkesztése",
+  "editMemory": "✏️ Emlékezet szerkesztése",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2206,7 +2206,7 @@
   "@saveMemory": {
     "description": "Button label"
   },
-  "retry": "Újrapróbálkozás",
+  "retry": "Újrapróbálás",
   "@retry": {
     "description": "Button label"
   },
@@ -2336,7 +2336,7 @@
   "summarize": "Összefoglalás",
   "generateSummary": "Összefoglalás generálása",
   "conversationNotFoundOrDeleted": "A beszélgetés nem található vagy törölve lett",
-  "deleteMemory": "Emléket törölni?",
+  "deleteMemory": "Emlékezet törlése",
   "thisActionCannotBeUndone": "Ez a művelet nem vonható vissza.",
   "memoriesCount": "{count} emlék",
   "noMemoriesInCategory": "Ebben a kategóriában még nincsenek emlékek",
@@ -2720,5 +2720,11 @@
   },
   "@addYourFirstMemory": {
     "description": "Button text in empty state"
-  }
+  },
+  "whatWouldYouLikeToRemember": "Mire szeretnél emlékezni?",
+  "category": "Kategória",
+  "public": "Nyilvános",
+  "failedToSaveCheckConnection": "Sikertelen mentés. Ellenőrizd a kapcsolatot.",
+  "createMemory": "Emlékezet létrehozása",
+  "deleteMemoryConfirmation": "Biztosan törölni szeretnéd ezt az emlékezetet? Ez a művelet nem vonható vissza."
 }

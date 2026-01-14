@@ -1571,7 +1571,7 @@
   "autoLanguageDetection": "Αυτόματη ανίχνευση γλώσσας",
   "highAccuracy": "Υψηλή ακρίβεια",
   "privacyFirst": "Πρώτα το απόρρητο",
-  "saveChanges": "Αποθήκευση Αλλαγών",
+  "saveChanges": "Αποθήκευση αλλαγών",
   "resetToDefault": "Επαναφορά στην προεπιλογή",
   "viewTemplate": "Προβολή Προτύπου",
   "trySomethingLike": "Δοκιμάστε κάτι σαν...",
@@ -2186,11 +2186,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "Νέα Ανάμνηση",
+  "newMemory": "✨ Νέα μνήμη",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "Επεξεργασία Ανάμνησης",
+  "editMemory": "✏️ Επεξεργασία μνήμης",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2336,7 +2336,7 @@
   "summarize": "Περίληψη",
   "generateSummary": "Δημιουργία περίληψης",
   "conversationNotFoundOrDeleted": "Η συνομιλία δεν βρέθηκε ή έχει διαγραφεί",
-  "deleteMemory": "Διαγραφή μνήμης;",
+  "deleteMemory": "Διαγραφή μνήμης",
   "thisActionCannotBeUndone": "Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.",
   "memoriesCount": "{count} μνήμες",
   "noMemoriesInCategory": "Δεν υπάρχουν ακόμη μνήμες σε αυτήν την κατηγορία",
@@ -2720,5 +2720,11 @@
   },
   "@addYourFirstMemory": {
     "description": "Button text in empty state"
-  }
+  },
+  "whatWouldYouLikeToRemember": "Τι θα θέλατε να θυμάστε;",
+  "category": "Κατηγορία",
+  "public": "Δημόσιο",
+  "failedToSaveCheckConnection": "Αποτυχία αποθήκευσης. Ελέγξτε τη σύνδεσή σας.",
+  "createMemory": "Δημιουργία μνήμης",
+  "deleteMemoryConfirmation": "Είστε σίγουροι ότι θέλετε να διαγράψετε αυτήν τη μνήμη; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί."
 }

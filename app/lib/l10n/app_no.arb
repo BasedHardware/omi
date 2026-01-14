@@ -2186,11 +2186,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "Nytt minne",
+  "newMemory": "✨ Nytt minne",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "Rediger minne",
+  "editMemory": "✏️ Rediger minne",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2336,7 +2336,7 @@
   "summarize": "Oppsummer",
   "generateSummary": "Generer sammendrag",
   "conversationNotFoundOrDeleted": "Samtale ikke funnet eller har blitt slettet",
-  "deleteMemory": "Slette minne?",
+  "deleteMemory": "Slett minne",
   "thisActionCannotBeUndone": "Denne handlingen kan ikke angres.",
   "memoriesCount": "{count} minner",
   "noMemoriesInCategory": "Ingen minner i denne kategorien ennå",
@@ -2720,5 +2720,11 @@
   },
   "@addYourFirstMemory": {
     "description": "Button text in empty state"
-  }
+  },
+  "whatWouldYouLikeToRemember": "Hva vil du huske?",
+  "category": "Kategori",
+  "public": "Offentlig",
+  "failedToSaveCheckConnection": "Kunne ikke lagre. Sjekk tilkoblingen din.",
+  "createMemory": "Opprett minne",
+  "deleteMemoryConfirmation": "Er du sikker på at du vil slette dette minnet? Denne handlingen kan ikke angres."
 }
