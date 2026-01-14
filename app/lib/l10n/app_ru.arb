@@ -2545,5 +2545,6 @@
   "rating2PlusStars": "2+ звезды",
   "rating1PlusStars": "1+ звезда",
   "filterRating": "Рейтинг",
-  "filterCapabilities": "Возможности"
+  "filterCapabilities": "Возможности",
+  "noNotificationScopesAvailable": "Нет доступных областей уведомлений"
 }

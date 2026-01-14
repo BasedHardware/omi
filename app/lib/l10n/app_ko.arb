@@ -2545,5 +2545,6 @@
   "rating2PlusStars": "2+별",
   "rating1PlusStars": "1+별",
   "filterRating": "평점",
-  "filterCapabilities": "기능"
+  "filterCapabilities": "기능",
+  "noNotificationScopesAvailable": "사용 가능한 알림 범위 없음"
 }

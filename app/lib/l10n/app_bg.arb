@@ -2563,5 +2563,6 @@
   "rating2PlusStars": "2+ звезди",
   "rating1PlusStars": "1+ звезди",
   "filterRating": "Оценка",
-  "filterCapabilities": "Възможности"
+  "filterCapabilities": "Възможности",
+  "noNotificationScopesAvailable": "Няма налични области за уведомления"
 }

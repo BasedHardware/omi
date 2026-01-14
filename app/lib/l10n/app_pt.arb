@@ -969,5 +969,6 @@
   "rating2PlusStars": "2+ estrelas",
   "rating1PlusStars": "1+ estrela",
   "filterRating": "Avaliação",
-  "filterCapabilities": "Recursos"
+  "filterCapabilities": "Recursos",
+  "noNotificationScopesAvailable": "Nenhum escopo de notificação disponível"
 }

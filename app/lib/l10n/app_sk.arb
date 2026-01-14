@@ -2545,5 +2545,6 @@
   "rating2PlusStars": "2+ hviezdičiek",
   "rating1PlusStars": "1+ hviezdička",
   "filterRating": "Hodnotenie",
-  "filterCapabilities": "Funkcie"
+  "filterCapabilities": "Funkcie",
+  "noNotificationScopesAvailable": "Nie sú k dispozícii žiadne rozsahy oznámení"
 }

@@ -2545,5 +2545,6 @@
   "rating2PlusStars": "2+ tärni",
   "rating1PlusStars": "1+ täht",
   "filterRating": "Hinnang",
-  "filterCapabilities": "Võimed"
+  "filterCapabilities": "Võimed",
+  "noNotificationScopesAvailable": "Teatiste ulatusi pole saadaval"
 }

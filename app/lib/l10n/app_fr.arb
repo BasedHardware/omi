@@ -1347,5 +1347,6 @@
   "rating2PlusStars": "2+ étoiles",
   "rating1PlusStars": "1+ étoile",
   "filterRating": "Évaluation",
-  "filterCapabilities": "Fonctionnalités"
+  "filterCapabilities": "Fonctionnalités",
+  "noNotificationScopesAvailable": "Aucun périmètre de notification disponible"
 }

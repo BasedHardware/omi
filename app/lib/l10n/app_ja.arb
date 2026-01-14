@@ -948,5 +948,6 @@
   "rating2PlusStars": "2+つ星",
   "rating1PlusStars": "1+つ星",
   "filterRating": "評価",
-  "filterCapabilities": "機能"
+  "filterCapabilities": "機能",
+  "noNotificationScopesAvailable": "通知スコープが利用できません"
 }

@@ -2527,5 +2527,6 @@
   "rating2PlusStars": "2+ yıldız",
   "rating1PlusStars": "1+ yıldız",
   "filterRating": "Değerlendirme",
-  "filterCapabilities": "Yetenekler"
+  "filterCapabilities": "Yetenekler",
+  "noNotificationScopesAvailable": "Kullanılabilir bildirim kapsamı yok"
 }

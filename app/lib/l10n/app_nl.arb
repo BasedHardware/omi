@@ -1347,5 +1347,6 @@
   "rating2PlusStars": "2+ sterren",
   "rating1PlusStars": "1+ ster",
   "filterRating": "Beoordeling",
-  "filterCapabilities": "Functies"
+  "filterCapabilities": "Functies",
+  "noNotificationScopesAvailable": "Geen meldingsbereiken beschikbaar"
 }

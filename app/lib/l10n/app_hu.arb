@@ -2545,5 +2545,6 @@
   "rating2PlusStars": "2+ csillag",
   "rating1PlusStars": "1+ csillag",
   "filterRating": "Értékelés",
-  "filterCapabilities": "Képességek"
+  "filterCapabilities": "Képességek",
+  "noNotificationScopesAvailable": "Nincsenek elérhető értesítési hatókörök"
 }

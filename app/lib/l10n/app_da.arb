@@ -2545,5 +2545,6 @@
   "rating2PlusStars": "2+ stjerner",
   "rating1PlusStars": "1+ stjerner",
   "filterRating": "Bedømmelse",
-  "filterCapabilities": "Funktioner"
+  "filterCapabilities": "Funktioner",
+  "noNotificationScopesAvailable": "Ingen notifikationsområder tilgængelige"
 }

@@ -2545,5 +2545,6 @@
   "rating2PlusStars": "2+ зірки",
   "rating1PlusStars": "1+ зірка",
   "filterRating": "Рейтинг",
-  "filterCapabilities": "Можливості"
+  "filterCapabilities": "Можливості",
+  "noNotificationScopesAvailable": "Немає доступних областей сповіщень"
 }

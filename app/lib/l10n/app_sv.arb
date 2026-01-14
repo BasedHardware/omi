@@ -2545,5 +2545,6 @@
   "rating2PlusStars": "2+ stjärnor",
   "rating1PlusStars": "1+ stjärna",
   "filterRating": "Betyg",
-  "filterCapabilities": "Funktioner"
+  "filterCapabilities": "Funktioner",
+  "noNotificationScopesAvailable": "Inga aviseringsområden tillgängliga"
 }

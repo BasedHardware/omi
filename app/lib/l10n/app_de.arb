@@ -969,5 +969,6 @@
   "rating2PlusStars": "2+ Sterne",
   "rating1PlusStars": "1+ Sterne",
   "filterRating": "Bewertung",
-  "filterCapabilities": "Funktionen"
+  "filterCapabilities": "Funktionen",
+  "noNotificationScopesAvailable": "Keine Benachrichtigungsbereiche verfügbar"
 }

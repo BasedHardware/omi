@@ -2545,5 +2545,6 @@
   "rating2PlusStars": "2+ sao",
   "rating1PlusStars": "1+ sao",
   "filterRating": "Đánh giá",
-  "filterCapabilities": "Khả năng"
+  "filterCapabilities": "Khả năng",
+  "noNotificationScopesAvailable": "Không có phạm vi thông báo nào"
 }

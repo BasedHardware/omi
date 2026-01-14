@@ -969,5 +969,6 @@
   "rating2PlusStars": "2+星",
   "rating1PlusStars": "1+星",
   "filterRating": "评分",
-  "filterCapabilities": "功能"
+  "filterCapabilities": "功能",
+  "noNotificationScopesAvailable": "没有可用的通知范围"
 }

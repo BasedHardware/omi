@@ -2545,5 +2545,6 @@
   "rating2PlusStars": "2+ tähteä",
   "rating1PlusStars": "1+ tähti",
   "filterRating": "Arvostelu",
-  "filterCapabilities": "Ominaisuudet"
+  "filterCapabilities": "Ominaisuudet",
+  "noNotificationScopesAvailable": "Ilmoitusalueita ei ole saatavilla"
 }

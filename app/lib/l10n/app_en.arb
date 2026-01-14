@@ -3525,5 +3525,9 @@
   "filterCapabilities": "Capabilities",
   "@filterCapabilities": {
     "description": "Capabilities filter dropdown label"
+  },
+  "noNotificationScopesAvailable": "No notification scopes available",
+  "@noNotificationScopesAvailable": {
+    "description": "Message shown when no notification scopes are available"
   }
 }

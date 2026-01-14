@@ -2527,5 +2527,6 @@
   "rating2PlusStars": "2+ stelle",
   "rating1PlusStars": "1+ stella",
   "filterRating": "Valutazione",
-  "filterCapabilities": "Funzionalità"
+  "filterCapabilities": "Funzionalità",
+  "noNotificationScopesAvailable": "Nessun ambito di notifica disponibile"
 }

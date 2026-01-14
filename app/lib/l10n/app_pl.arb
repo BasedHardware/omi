@@ -2545,5 +2545,6 @@
   "rating2PlusStars": "2+ gwiazdki",
   "rating1PlusStars": "1+ gwiazdka",
   "filterRating": "Ocena",
-  "filterCapabilities": "Funkcje"
+  "filterCapabilities": "Funkcje",
+  "noNotificationScopesAvailable": "Brak dostępnych zakresów powiadomień"
 }

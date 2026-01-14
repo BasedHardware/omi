@@ -2545,5 +2545,6 @@
   "rating2PlusStars": "2+ Bintang",
   "rating1PlusStars": "1+ Bintang",
   "filterRating": "Penilaian",
-  "filterCapabilities": "Kemampuan"
+  "filterCapabilities": "Kemampuan",
+  "noNotificationScopesAvailable": "Tidak ada cakupan notifikasi yang tersedia"
 }

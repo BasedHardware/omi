@@ -2545,5 +2545,6 @@
   "rating2PlusStars": "2+ αστέρια",
   "rating1PlusStars": "1+ αστέρι",
   "filterRating": "Αξιολόγηση",
-  "filterCapabilities": "Δυνατότητες"
+  "filterCapabilities": "Δυνατότητες",
+  "noNotificationScopesAvailable": "Δεν υπάρχουν διαθέσιμα πεδία ειδοποιήσεων"
 }

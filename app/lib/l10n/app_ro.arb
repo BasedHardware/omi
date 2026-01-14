@@ -2545,5 +2545,6 @@
   "rating2PlusStars": "2+ stele",
   "rating1PlusStars": "1+ stea",
   "filterRating": "Evaluare",
-  "filterCapabilities": "Capacități"
+  "filterCapabilities": "Capacități",
+  "noNotificationScopesAvailable": "Nu există domenii de notificare disponibile"
 }

@@ -2545,5 +2545,6 @@
   "rating2PlusStars": "2+ stjerner",
   "rating1PlusStars": "1+ stjerne",
   "filterRating": "Vurdering",
-  "filterCapabilities": "Funksjoner"
+  "filterCapabilities": "Funksjoner",
+  "noNotificationScopesAvailable": "Ingen varslingsområder tilgjengelig"
 }

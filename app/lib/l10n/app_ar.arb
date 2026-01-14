@@ -2577,5 +2577,6 @@
   "rating2PlusStars": "2+ نجوم",
   "rating1PlusStars": "1+ نجوم",
   "filterRating": "التقييم",
-  "filterCapabilities": "الإمكانيات"
+  "filterCapabilities": "الإمكانيات",
+  "noNotificationScopesAvailable": "لا توجد نطاقات إشعارات متاحة"
 }

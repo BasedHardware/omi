@@ -2545,5 +2545,6 @@
   "rating2PlusStars": "2+ zvaigznes",
   "rating1PlusStars": "1+ zvaigzne",
   "filterRating": "Vērtējums",
-  "filterCapabilities": "Iespējas"
+  "filterCapabilities": "Iespējas",
+  "noNotificationScopesAvailable": "Paziņojumu tvērumi nav pieejami"
 }

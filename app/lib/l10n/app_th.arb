@@ -2545,5 +2545,6 @@
   "rating2PlusStars": "2+ ดาว",
   "rating1PlusStars": "1+ ดาว",
   "filterRating": "คะแนน",
-  "filterCapabilities": "ความสามารถ"
+  "filterCapabilities": "ความสามารถ",
+  "noNotificationScopesAvailable": "ไม่มีขอบเขตการแจ้งเตือนที่พร้อมใช้งาน"
 }

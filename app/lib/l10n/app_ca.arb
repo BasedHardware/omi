@@ -2563,5 +2563,6 @@
   "rating2PlusStars": "2+ estrelles",
   "rating1PlusStars": "1+ estrelles",
   "filterRating": "Valoració",
-  "filterCapabilities": "Capacitats"
+  "filterCapabilities": "Capacitats",
+  "noNotificationScopesAvailable": "No hi ha àmbits de notificació disponibles"
 }
