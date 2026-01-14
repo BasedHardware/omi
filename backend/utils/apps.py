@@ -157,80 +157,64 @@ def invalidate_popular_apps_cache():
 
 def get_popular_apps() -> List[App]:
     cache_key = 'get_popular_apps_data'
-
-    # Get memory cache instance
     memory_cache = get_memory_cache()
 
-    # 1. Check memory cache first (fastest, <1ms, NO Redis egress)
-    if cached := memory_cache.get(cache_key):
-        print('get_popular_apps from memory cache')
-        return cached
+    def fetch_and_process():
+        """Fetch from Redis/DB and process apps (called only once with singleflight)."""
+        # Check Redis cache
+        if cached_apps := get_generic_cache(cache_key):
+            print('get_popular_apps from Redis cache')
+            popular_apps = cached_apps
+        else:
+            # Database query
+            print('get_popular_apps from db')
+            popular_apps = get_popular_apps_db()
+            set_generic_cache(cache_key, popular_apps, 60 * 30)  # 30 minutes cached
 
-    # 2. Check Redis cache
-    popular_apps = []
-    if cached_apps := get_generic_cache(cache_key):
-        print('get_popular_apps from Redis cache')
-        popular_apps = cached_apps
-    else:
-        # 3. Database query
-        print('get_popular_apps from db')
-        popular_apps = get_popular_apps_db()
-        set_generic_cache(cache_key, popular_apps, 60 * 30)  # 30 minutes cached
+        # Process apps (add installs, reviews, ratings)
+        app_ids = [app['id'] for app in popular_apps]
+        apps_install = get_apps_installs_count(app_ids)
+        apps_reviews = get_apps_reviews(app_ids)
 
-    # Process apps (add installs, reviews, ratings)
-    app_ids = [app['id'] for app in popular_apps]
-    apps_install = get_apps_installs_count(app_ids)
-    apps_reviews = get_apps_reviews(app_ids)
+        apps = []
+        for app in popular_apps:
+            app_dict = app
+            app_dict['installs'] = apps_install.get(app['id'], 0)
+            reviews = apps_reviews.get(app['id'], {})
+            sorted_reviews = reviews.values()
+            rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
+            app_dict['rating_avg'] = rating_avg
+            app_dict['rating_count'] = len(sorted_reviews)
+            apps.append(App(**app_dict))
+        apps = sorted(apps, key=lambda x: x.installs, reverse=True)
+        return apps
 
-    apps = []
-    for app in popular_apps:
-        app_dict = app
-        app_dict['installs'] = apps_install.get(app['id'], 0)
-        reviews = apps_reviews.get(app['id'], {})
-        sorted_reviews = reviews.values()
-        rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
-        app_dict['rating_avg'] = rating_avg
-        app_dict['rating_count'] = len(sorted_reviews)
-        apps.append(App(**app_dict))
-    apps = sorted(apps, key=lambda x: x.installs, reverse=True)
-
-    # 4. Store in memory cache for next time
-    memory_cache.set(cache_key, apps, ttl=30)
-
-    return apps
+    # Singleflight: only ONE request fetches, others wait
+    return memory_cache.get_or_fetch(cache_key, fetch_and_process, ttl=30) or []
 
 
 def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
     cache_key = 'get_public_approved_apps_data'
     memory_cache = get_memory_cache()
 
-    private_data = []
-    public_approved_data = []
-    public_unapproved_data = []
-    tester_apps = []
-    all_apps = []
     tester = is_tester(uid)
 
-    # 1. Check memory cache first (fastest, NO Redis egress)
-    if cached := memory_cache.get(cache_key):
-        print('get_public_approved_apps_data from memory cache')
-        public_approved_data = cached
-    # 2. Check Redis cache
-    elif cachedApps := get_generic_cache(cache_key):
-        print('get_public_approved_apps_data from Redis cache')
-        public_approved_data = cachedApps
-        memory_cache.set(cache_key, public_approved_data, ttl=30)
-    else:
-        # 3. Database query
+    def fetch_public_approved():
+        """Fetch from Redis or DB (called only once with singleflight)."""
+        if data := get_generic_cache(cache_key):
+            print('get_public_approved_apps_data from Redis cache')
+            return data
         print('get_public_approved_apps_data from db')
-        public_approved_data = get_public_approved_apps_db()
-        set_generic_cache(cache_key, public_approved_data, 60 * 10)  # 10 minutes cached
-        memory_cache.set(cache_key, public_approved_data, ttl=30)
+        data = get_public_approved_apps_db()
+        set_generic_cache(cache_key, data, 60 * 10)  # 10 minutes cached
+        return data
+
+    # Singleflight: only ONE request fetches, others wait
+    public_approved_data = memory_cache.get_or_fetch(cache_key, fetch_public_approved, ttl=30) or []
 
     private_data = get_private_apps(uid)
     public_unapproved_data = get_public_unapproved_apps(uid)
-    if tester:
-        tester_apps = get_apps_for_tester_db(uid)
+    tester_apps = get_apps_for_tester_db(uid) if tester else []
     user_enabled = set(get_enabled_apps(uid))
     all_apps = private_data + public_approved_data + public_unapproved_data + tester_apps
     apps = []
@@ -343,49 +327,44 @@ def invalidate_approved_apps_cache():
 def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
     # Use separate cache keys for with/without reviews
     cache_key = f'get_public_approved_apps_data:reviews={int(include_reviews)}'
-
-    # Get memory cache instance
+    redis_cache_key = 'get_public_approved_apps_data'
     memory_cache = get_memory_cache()
 
-    # 1. Check in-memory cache first (fastest, <1ms, NO Redis egress)
-    if cached := memory_cache.get(cache_key):
-        print(f'{cache_key} from memory cache')
-        return cached
+    def fetch_and_process():
+        """Fetch from Redis/DB and process apps (called only once with singleflight)."""
+        # Check Redis cache
+        if cached_apps := get_generic_cache(redis_cache_key):
+            print('get_public_approved_apps_data from Redis cache')
+            all_apps = cached_apps
+        else:
+            # Database query
+            print('get_public_approved_apps_data from db')
+            all_apps = get_public_approved_apps_db()
+            set_generic_cache(redis_cache_key, all_apps, 60 * 10)  # 10 minutes cached
 
-    # 2. Check Redis cache (existing logic, ~5ms, Redis egress)
-    all_apps = []
-    if cached_apps := get_generic_cache('get_public_approved_apps_data'):
-        print('get_public_approved_apps_data from Redis cache')
-        all_apps = cached_apps
-    else:
-        # 3. Database query (slow, ~50-100ms)
-        all_apps = get_public_approved_apps_db()
-        set_generic_cache('get_public_approved_apps_data', all_apps, 60 * 10)  # 10 minutes cached
+        # Process apps (add installs, reviews, etc.)
+        app_ids = [app['id'] for app in all_apps]
+        apps_installs = get_apps_installs_count(app_ids)
+        apps_reviews = get_apps_reviews(app_ids) if include_reviews else {}
 
-    # Process apps (add installs, reviews, etc.)
-    app_ids = [app['id'] for app in all_apps]
-    apps_installs = get_apps_installs_count(app_ids)
-    apps_reviews = get_apps_reviews(app_ids) if include_reviews else {}
-
-    apps = []
-    for app in all_apps:
-        app_dict = app
-        app_dict['installs'] = apps_installs.get(app['id'], 0)
+        apps = []
+        for app in all_apps:
+            app_dict = app
+            app_dict['installs'] = apps_installs.get(app['id'], 0)
+            if include_reviews:
+                reviews = apps_reviews.get(app['id'], {})
+                sorted_reviews = reviews.values()
+                rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
+                app_dict['reviews'] = []
+                app_dict['rating_avg'] = rating_avg
+                app_dict['rating_count'] = len(sorted_reviews)
+            apps.append(App(**app_dict))
         if include_reviews:
-            reviews = apps_reviews.get(app['id'], {})
-            sorted_reviews = reviews.values()
-            rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
-            app_dict['reviews'] = []
-            app_dict['rating_avg'] = rating_avg
-            app_dict['rating_count'] = len(sorted_reviews)
-        apps.append(App(**app_dict))
-    if include_reviews:
-        apps = sorted(apps, key=weighted_rating, reverse=True)
+            apps = sorted(apps, key=weighted_rating, reverse=True)
+        return apps
 
-    # 4. Store in memory cache for next time
-    memory_cache.set(cache_key, apps, ttl=30)
-
-    return apps
+    # Singleflight: only ONE request fetches, others wait
+    return memory_cache.get_or_fetch(cache_key, fetch_and_process, ttl=30) or []
 
 
 def set_app_review(app_id: str, uid: str, review: dict):

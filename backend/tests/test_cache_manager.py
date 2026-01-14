@@ -148,6 +148,66 @@ class TestInMemoryCacheManager(unittest.TestCase):
         stats = self.cache.get_stats()
         self.assertGreater(stats['entries'], 0)
 
+    def test_singleflight_prevents_thundering_herd(self):
+        """Test that get_or_fetch prevents multiple concurrent fetches."""
+        import threading
+        import time
+
+        fetch_count = 0
+        fetch_lock = threading.Lock()
+
+        def slow_fetch():
+            """Simulate a slow fetch that takes 100ms."""
+            nonlocal fetch_count
+            with fetch_lock:
+                fetch_count += 1
+            time.sleep(0.1)  # Simulate slow operation
+            return {'data': 'fetched'}
+
+        results = []
+        errors = []
+
+        def worker():
+            try:
+                result = self.cache.get_or_fetch('test_key', slow_fetch, ttl=30)
+                results.append(result)
+            except Exception as e:
+                errors.append(e)
+
+        # Launch 10 concurrent threads
+        threads = [threading.Thread(target=worker) for _ in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # All threads should get the same result
+        self.assertEqual(len(results), 10)
+        self.assertEqual(len(errors), 0)
+        for result in results:
+            self.assertEqual(result, {'data': 'fetched'})
+
+        # Only ONE fetch should have been called (singleflight)
+        self.assertEqual(fetch_count, 1)
+
+    def test_get_or_fetch_cache_hit(self):
+        """Test that get_or_fetch returns cached data without calling fetch_fn."""
+        fetch_called = False
+
+        def fetch_fn():
+            nonlocal fetch_called
+            fetch_called = True
+            return {'data': 'new'}
+
+        # Pre-populate cache
+        self.cache.set('existing_key', {'data': 'cached'}, ttl=30)
+
+        # get_or_fetch should return cached data
+        result = self.cache.get_or_fetch('existing_key', fetch_fn, ttl=30)
+
+        self.assertEqual(result, {'data': 'cached'})
+        self.assertFalse(fetch_called)
+
 
 if __name__ == '__main__':
     unittest.main()

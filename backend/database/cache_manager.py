@@ -14,7 +14,7 @@ import threading
 import time
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Callable, Dict, Optional
 
 
 @dataclass
@@ -59,6 +59,10 @@ class InMemoryCacheManager:
         self.misses = 0
         self.evictions = 0
 
+        # Singleflight: per-key locks to prevent thundering herd
+        self._fetch_locks: Dict[str, threading.Lock] = {}
+        self._fetch_lock_manager = threading.Lock()
+
     def get(self, key: str) -> Optional[Any]:
         """
         Get cache entry if exists and not expired.
@@ -86,6 +90,43 @@ class InMemoryCacheManager:
             self.cache.move_to_end(key)
             self.hits += 1
             return entry.data
+
+    def get_or_fetch(self, key: str, fetch_fn: Callable[[], Any], ttl: int = 30) -> Any:
+        """
+        Get from cache or fetch with singleflight pattern.
+
+        Only ONE concurrent request will call fetch_fn, others wait.
+        This prevents the thundering herd problem.
+
+        Args:
+            key: Cache key
+            fetch_fn: Function to call if cache miss (should return data)
+            ttl: Time to live in seconds (default: 30)
+
+        Returns:
+            Cached or fetched data
+        """
+        # Fast path: cache hit
+        if (value := self.get(key)) is not None:
+            return value
+
+        # Get or create lock for this key
+        with self._fetch_lock_manager:
+            if key not in self._fetch_locks:
+                self._fetch_locks[key] = threading.Lock()
+            fetch_lock = self._fetch_locks[key]
+
+        # Only one request fetches, others wait
+        with fetch_lock:
+            # Double-check after acquiring lock (another thread may have fetched)
+            if (value := self.get(key)) is not None:
+                return value
+
+            # Fetch and cache
+            value = fetch_fn()
+            if value is not None:
+                self.set(key, value, ttl=ttl)
+            return value
 
     def set(self, key: str, data: Any, ttl: int = 30):
         """
