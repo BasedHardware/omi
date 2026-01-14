@@ -2575,5 +2575,11 @@
   "confirmClearChat": "Er du sikker på, at du vil rydde chatten? Denne handling kan ikke fortrydes.",
   "copy": "Kopiér",
   "share": "Del",
-  "report": "Rapportér"
+  "report": "Rapportér",
+  "microphonePermissionRequired": "Mikrofontilladelse er påkrævet til stemmeoptagelse.",
+  "microphonePermissionDenied": "Mikrofontilladelse nægtet. Giv venligst tilladelse i Systemindstillinger > Privatliv og sikkerhed > Mikrofon.",
+  "failedToCheckMicrophonePermission": "Kunne ikke kontrollere mikrofontilladelse: {error}",
+  "failedToTranscribeAudio": "Kunne ikke transkribere lyd",
+  "transcribing": "Transskriberer...",
+  "transcriptionFailed": "Transskription mislykkedes"
 }

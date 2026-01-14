@@ -2575,5 +2575,11 @@
   "confirmClearChat": "Apakah Anda yakin ingin menghapus obrolan? Tindakan ini tidak dapat dibatalkan.",
   "copy": "Salin",
   "share": "Bagikan",
-  "report": "Laporkan"
+  "report": "Laporkan",
+  "microphonePermissionRequired": "Izin mikrofon diperlukan untuk perekaman suara.",
+  "microphonePermissionDenied": "Izin mikrofon ditolak. Harap berikan izin di Preferensi Sistem > Privasi & Keamanan > Mikrofon.",
+  "failedToCheckMicrophonePermission": "Gagal memeriksa izin mikrofon: {error}",
+  "failedToTranscribeAudio": "Gagal menyalin audio",
+  "transcribing": "Menyalin...",
+  "transcriptionFailed": "Transkripsi gagal"
 }

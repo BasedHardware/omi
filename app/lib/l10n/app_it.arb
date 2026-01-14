@@ -2557,5 +2557,11 @@
   "confirmClearChat": "Sei sicuro di voler cancellare la chat? Questa azione non può essere annullata.",
   "copy": "Copia",
   "share": "Condividi",
-  "report": "Segnala"
+  "report": "Segnala",
+  "microphonePermissionRequired": "È richiesta l'autorizzazione del microfono per la registrazione vocale.",
+  "microphonePermissionDenied": "Autorizzazione microfono negata. Concedi l'autorizzazione in Preferenze di Sistema > Privacy e sicurezza > Microfono.",
+  "failedToCheckMicrophonePermission": "Verifica autorizzazione microfono fallita: {error}",
+  "failedToTranscribeAudio": "Trascrizione audio fallita",
+  "transcribing": "Trascrizione...",
+  "transcriptionFailed": "Trascrizione fallita"
 }

@@ -999,5 +999,11 @@
   "confirmClearChat": "Tem certeza de que deseja limpar o chat? Esta ação não pode ser desfeita.",
   "copy": "Copiar",
   "share": "Compartilhar",
-  "report": "Denunciar"
+  "report": "Denunciar",
+  "microphonePermissionRequired": "Permissão de microfone é necessária para gravação de voz.",
+  "microphonePermissionDenied": "Permissão de microfone negada. Por favor, conceda permissão em Preferências do Sistema > Privacidade e Segurança > Microfone.",
+  "failedToCheckMicrophonePermission": "Falha ao verificar permissão do microfone: {error}",
+  "failedToTranscribeAudio": "Falha ao transcrever áudio",
+  "transcribing": "Transcrevendo...",
+  "transcriptionFailed": "Transcrição falhou"
 }

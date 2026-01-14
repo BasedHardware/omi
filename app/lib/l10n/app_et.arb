@@ -2575,5 +2575,11 @@
   "confirmClearChat": "Kas olete kindel, et soovite vestlust kustutada? Seda tegevust ei saa tagasi võtta.",
   "copy": "Kopeeri",
   "share": "Jaga",
-  "report": "Teata"
+  "report": "Teata",
+  "microphonePermissionRequired": "Helisalvestuse jaoks on vajalik mikrofoni luba.",
+  "microphonePermissionDenied": "Mikrofoni luba keelatud. Palun andke luba Süsteemieelistused > Privaatsus ja turvalisus > Mikrofon.",
+  "failedToCheckMicrophonePermission": "Mikrofoni loa kontrollimine ebaõnnestus: {error}",
+  "failedToTranscribeAudio": "Heli transkribeerimine ebaõnnestus",
+  "transcribing": "Transkribeerimine...",
+  "transcriptionFailed": "Transkribeerimine ebaõnnestus"
 }

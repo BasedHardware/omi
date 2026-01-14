@@ -2575,5 +2575,11 @@
   "confirmClearChat": "Er du sikker på at du vil tømme chatten? Denne handlingen kan ikke angres.",
   "copy": "Kopiér",
   "share": "Del",
-  "report": "Rapporter"
+  "report": "Rapporter",
+  "microphonePermissionRequired": "Mikrofontillatelse kreves for stemmeoptak.",
+  "microphonePermissionDenied": "Mikrofontillatelse nektet. Vennligst gi tillatelse i Systeminnstillinger > Personvern og sikkerhet > Mikrofon.",
+  "failedToCheckMicrophonePermission": "Kunne ikke sjekke mikrofontillatelse: {error}",
+  "failedToTranscribeAudio": "Kunne ikke transkribere lyd",
+  "transcribing": "Transkriberer...",
+  "transcriptionFailed": "Transkripsjon mislyktes"
 }

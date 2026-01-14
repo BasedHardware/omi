@@ -1377,5 +1377,11 @@
   "confirmClearChat": "Weet u zeker dat u de chat wilt wissen? Deze actie kan niet ongedaan worden gemaakt.",
   "copy": "Kopiëren",
   "share": "Delen",
-  "report": "Melden"
+  "report": "Melden",
+  "microphonePermissionRequired": "Microfoontoegang is vereist voor spraakopname.",
+  "microphonePermissionDenied": "Microfoontoegang geweigerd. Verleen toestemming in Systeemvoorkeuren > Privacy & beveiliging > Microfoon.",
+  "failedToCheckMicrophonePermission": "Controleren microfoontoegang mislukt: {error}",
+  "failedToTranscribeAudio": "Audio transcriberen mislukt",
+  "transcribing": "Transcriberen...",
+  "transcriptionFailed": "Transcriptie mislukt"
 }

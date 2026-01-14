@@ -2575,5 +2575,11 @@
   "confirmClearChat": "Är du säker på att du vill rensa chatten? Denna åtgärd kan inte ångras.",
   "copy": "Kopiera",
   "share": "Dela",
-  "report": "Rapportera"
+  "report": "Rapportera",
+  "microphonePermissionRequired": "Mikrofontillstånd krävs för röstinspelning.",
+  "microphonePermissionDenied": "Mikrofontillstånd nekat. Ge tillstånd i Systeminställningar > Integritet och säkerhet > Mikrofon.",
+  "failedToCheckMicrophonePermission": "Kunde inte kontrollera mikrofontillstånd: {error}",
+  "failedToTranscribeAudio": "Kunde inte transkribera ljud",
+  "transcribing": "Transkriberar...",
+  "transcriptionFailed": "Transkription misslyckades"
 }

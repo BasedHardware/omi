@@ -978,5 +978,11 @@
   "confirmClearChat": "チャットをクリアしてもよろしいですか？この操作は元に戻せません。",
   "copy": "コピー",
   "share": "共有",
-  "report": "報告"
+  "report": "報告",
+  "microphonePermissionRequired": "音声録音にはマイクの許可が必要です。",
+  "microphonePermissionDenied": "マイクの許可が拒否されました。システム環境設定 > プライバシーとセキュリティ > マイク で許可を付与してください。",
+  "failedToCheckMicrophonePermission": "マイクの許可確認に失敗しました: {error}",
+  "failedToTranscribeAudio": "音声の文字起こしに失敗しました",
+  "transcribing": "文字起こし中...",
+  "transcriptionFailed": "文字起こし失敗"
 }

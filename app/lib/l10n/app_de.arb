@@ -999,5 +999,11 @@
   "confirmClearChat": "Möchten Sie den Chat wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
   "copy": "Kopieren",
   "share": "Teilen",
-  "report": "Melden"
+  "report": "Melden",
+  "microphonePermissionRequired": "Mikrofonberechtigung ist für Sprachaufnahmen erforderlich.",
+  "microphonePermissionDenied": "Mikrofonberechtigung verweigert. Bitte erteilen Sie die Berechtigung in Systemeinstellungen > Datenschutz & Sicherheit > Mikrofon.",
+  "failedToCheckMicrophonePermission": "Mikrofonberechtigung konnte nicht überprüft werden: {error}",
+  "failedToTranscribeAudio": "Audio konnte nicht transkribiert werden",
+  "transcribing": "Transkribieren...",
+  "transcriptionFailed": "Transkription fehlgeschlagen"
 }

@@ -999,5 +999,11 @@
   "confirmClearChat": "¿Estás seguro de que quieres borrar el chat? Esta acción no se puede deshacer.",
   "copy": "Copiar",
   "share": "Compartir",
-  "report": "Reportar"
+  "report": "Reportar",
+  "microphonePermissionRequired": "Se requiere permiso de micrófono para la grabación de voz.",
+  "microphonePermissionDenied": "Permiso de micrófono denegado. Por favor, conceda permiso en Preferencias del Sistema > Privacidad y Seguridad > Micrófono.",
+  "failedToCheckMicrophonePermission": "Error al verificar permiso de micrófono: {error}",
+  "failedToTranscribeAudio": "Error al transcribir audio",
+  "transcribing": "Transcribiendo...",
+  "transcriptionFailed": "Transcripción fallida"
 }

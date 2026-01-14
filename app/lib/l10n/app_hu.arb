@@ -2575,5 +2575,11 @@
   "confirmClearChat": "Biztosan törölni szeretné a chatet? Ez a művelet nem vonható vissza.",
   "copy": "Másolás",
   "share": "Megosztás",
-  "report": "Jelentés"
+  "report": "Jelentés",
+  "microphonePermissionRequired": "Mikrofon engedély szükséges a hangfelvételhez.",
+  "microphonePermissionDenied": "Mikrofon engedély megtagadva. Kérjük, adjon engedélyt a Rendszerbeállítások > Adatvédelem és biztonság > Mikrofon alatt.",
+  "failedToCheckMicrophonePermission": "Nem sikerült ellenőrizni a mikrofon engedélyt: {error}",
+  "failedToTranscribeAudio": "Nem sikerült átírni a hangot",
+  "transcribing": "Átírás...",
+  "transcriptionFailed": "Átírás sikertelen"
 }

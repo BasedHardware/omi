@@ -2557,5 +2557,11 @@
   "confirmClearChat": "Ar tikrai norite išvalyti pokalbį? Šio veiksmo negalima atšaukti.",
   "copy": "Kopijuoti",
   "share": "Dalintis",
-  "report": "Pranešti"
+  "report": "Pranešti",
+  "microphonePermissionRequired": "Norint įrašyti balsą, reikalingas mikrofono leidimas.",
+  "microphonePermissionDenied": "Mikrofono leidimas atmestas. Suteikite leidimą Sistemos nustatymai > Privatumas ir sauga > Mikrofonas.",
+  "failedToCheckMicrophonePermission": "Nepavyko patikrinti mikrofono leidimo: {error}",
+  "failedToTranscribeAudio": "Nepavyko transkribuoti garso",
+  "transcribing": "Transkribuojama...",
+  "transcriptionFailed": "Transkripcija nepavyko"
 }

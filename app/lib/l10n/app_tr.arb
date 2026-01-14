@@ -2557,5 +2557,11 @@
   "confirmClearChat": "Sohbeti temizlemek istediğinizden emin misiniz? Bu işlem geri alınamaz.",
   "copy": "Kopyala",
   "share": "Paylaş",
-  "report": "Bildir"
+  "report": "Bildir",
+  "microphonePermissionRequired": "Ses kaydı için mikrofon izni gereklidir.",
+  "microphonePermissionDenied": "Mikrofon izni reddedildi. Lütfen Sistem Tercihleri > Gizlilik ve Güvenlik > Mikrofon'da izin verin.",
+  "failedToCheckMicrophonePermission": "Mikrofon izni kontrol edilemedi: {error}",
+  "failedToTranscribeAudio": "Ses transkribe edilemedi",
+  "transcribing": "Transkribe ediliyor...",
+  "transcriptionFailed": "Transkripsiyon başarısız"
 }

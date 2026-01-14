@@ -2575,5 +2575,11 @@
   "confirmClearChat": "Haluatko varmasti tyhjentää chatin? Tätä toimintoa ei voi peruuttaa.",
   "copy": "Kopioi",
   "share": "Jaa",
-  "report": "Raportoi"
+  "report": "Raportoi",
+  "microphonePermissionRequired": "Mikrofonin lupa vaaditaan äänen tallennukseen.",
+  "microphonePermissionDenied": "Mikrofonin lupa evätty. Anna lupa kohdassa Järjestelmäasetukset > Tietosuoja ja turvallisuus > Mikrofoni.",
+  "failedToCheckMicrophonePermission": "Mikrofonin luvan tarkistus epäonnistui: {error}",
+  "failedToTranscribeAudio": "Äänen litterointi epäonnistui",
+  "transcribing": "Litteroidaan...",
+  "transcriptionFailed": "Litterointi epäonnistui"
 }

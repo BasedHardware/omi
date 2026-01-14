@@ -2575,5 +2575,11 @@
   "confirmClearChat": "Bạn có chắc chắn muốn xóa cuộc trò chuyện không? Hành động này không thể hoàn tác.",
   "copy": "Sao chép",
   "share": "Chia sẻ",
-  "report": "Báo cáo"
+  "report": "Báo cáo",
+  "microphonePermissionRequired": "Cần quyền microphone để ghi âm giọng nói.",
+  "microphonePermissionDenied": "Quyền microphone bị từ chối. Vui lòng cấp quyền trong Tùy chọn Hệ thống > Quyền riêng tư & Bảo mật > Microphone.",
+  "failedToCheckMicrophonePermission": "Không thể kiểm tra quyền microphone: {error}",
+  "failedToTranscribeAudio": "Không thể phiên âm audio",
+  "transcribing": "Đang phiên âm...",
+  "transcriptionFailed": "Phiên âm thất bại"
 }

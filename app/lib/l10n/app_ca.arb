@@ -2593,5 +2593,11 @@
   "confirmClearChat": "Estàs segur que vols esborrar el xat? Aquesta acció no es pot desfer.",
   "copy": "Copiar",
   "share": "Compartir",
-  "report": "Informar"
+  "report": "Informar",
+  "microphonePermissionRequired": "Es requereix permís de micròfon per a l'enregistrament de veu.",
+  "microphonePermissionDenied": "Permís de micròfon denegat. Si us plau, concediu permís a Preferències del Sistema > Privacitat i Seguretat > Micròfon.",
+  "failedToCheckMicrophonePermission": "Error en comprovar el permís del micròfon: {error}",
+  "failedToTranscribeAudio": "Error en transcriure l'àudio",
+  "transcribing": "Transcrivint...",
+  "transcriptionFailed": "Transcripció fallida"
 }

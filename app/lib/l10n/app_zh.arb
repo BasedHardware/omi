@@ -999,5 +999,11 @@
   "confirmClearChat": "您确定要清除聊天吗？此操作无法撤销。",
   "copy": "复制",
   "share": "分享",
-  "report": "举报"
+  "report": "举报",
+  "microphonePermissionRequired": "录音需要麦克风权限。",
+  "microphonePermissionDenied": "麦克风权限被拒绝。请在系统偏好设置 > 隐私与安全 > 麦克风 中授予权限。",
+  "failedToCheckMicrophonePermission": "检查麦克风权限失败：{error}",
+  "failedToTranscribeAudio": "音频转录失败",
+  "transcribing": "正在转录...",
+  "transcriptionFailed": "转录失败"
 }

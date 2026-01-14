@@ -2575,5 +2575,11 @@
   "confirmClearChat": "Vai tiešām vēlaties notīrīt tērzēšanu? Šo darbību nevar atsaukt.",
   "copy": "Kopēt",
   "share": "Dalīties",
-  "report": "Ziņot"
+  "report": "Ziņot",
+  "microphonePermissionRequired": "Balss ierakstam nepieciešama mikrofona atļauja.",
+  "microphonePermissionDenied": "Mikrofona atļauja liegta. Lūdzu, dodiet atļauju Sistēmas iestatījumi > Privātums un drošība > Mikrofons.",
+  "failedToCheckMicrophonePermission": "Neizdevās pārbaudīt mikrofona atļauju: {error}",
+  "failedToTranscribeAudio": "Neizdevās transkribēt audio",
+  "transcribing": "Transkribē...",
+  "transcriptionFailed": "Transkripcija neizdevās"
 }

@@ -2575,5 +2575,11 @@
   "confirmClearChat": "Czy na pewno chcesz wyczyścić czat? Tej akcji nie można cofnąć.",
   "copy": "Kopiuj",
   "share": "Udostępnij",
-  "report": "Zgłoś"
+  "report": "Zgłoś",
+  "microphonePermissionRequired": "Wymagane jest uprawnienie mikrofonu do nagrywania głosu.",
+  "microphonePermissionDenied": "Uprawnienie mikrofonu odrzucone. Przyznaj uprawnienie w Preferencje systemowe > Prywatność i bezpieczeństwo > Mikrofon.",
+  "failedToCheckMicrophonePermission": "Nie udało się sprawdzić uprawnienia mikrofonu: {error}",
+  "failedToTranscribeAudio": "Nie udało się przepisać dźwięku",
+  "transcribing": "Przepisywanie...",
+  "transcriptionFailed": "Przepisywanie nie powiodło się"
 }

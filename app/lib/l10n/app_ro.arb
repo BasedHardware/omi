@@ -2575,5 +2575,11 @@
   "confirmClearChat": "Sigur doriți să ștergeți chatul? Această acțiune nu poate fi anulată.",
   "copy": "Copiază",
   "share": "Partajează",
-  "report": "Raportează"
+  "report": "Raportează",
+  "microphonePermissionRequired": "Permisiunea microfonului este necesară pentru înregistrarea vocală.",
+  "microphonePermissionDenied": "Permisiunea microfonului refuzată. Vă rugăm să acordați permisiunea în Preferințe sistem > Confidențialitate și securitate > Microfon.",
+  "failedToCheckMicrophonePermission": "Verificarea permisiunii microfonului a eșuat: {error}",
+  "failedToTranscribeAudio": "Transcrierea audio a eșuat",
+  "transcribing": "Transcriere...",
+  "transcriptionFailed": "Transcrierea a eșuat"
 }

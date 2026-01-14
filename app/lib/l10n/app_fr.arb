@@ -1377,5 +1377,11 @@
   "confirmClearChat": "Êtes-vous sûr de vouloir effacer le chat ? Cette action ne peut pas être annulée.",
   "copy": "Copier",
   "share": "Partager",
-  "report": "Signaler"
+  "report": "Signaler",
+  "microphonePermissionRequired": "L'autorisation du microphone est requise pour l'enregistrement vocal.",
+  "microphonePermissionDenied": "Autorisation du microphone refusée. Veuillez accorder l'autorisation dans Préférences Système > Confidentialité et sécurité > Microphone.",
+  "failedToCheckMicrophonePermission": "Échec de la vérification de l'autorisation du microphone : {error}",
+  "failedToTranscribeAudio": "Échec de la transcription audio",
+  "transcribing": "Transcription...",
+  "transcriptionFailed": "Transcription échouée"
 }

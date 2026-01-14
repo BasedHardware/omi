@@ -2607,5 +2607,11 @@
   "confirmClearChat": "هل أنت متأكد من أنك تريد مسح الدردشة؟ هذا الإجراء لا يمكن التراجع عنه.",
   "copy": "نسخ",
   "share": "مشاركة",
-  "report": "إبلاغ"
+  "report": "إبلاغ",
+  "microphonePermissionRequired": "مطلوب إذن الميكروفون للتسجيل الصوتي.",
+  "microphonePermissionDenied": "تم رفض إذن الميكروفون. يرجى منح الإذن في تفضيلات النظام > الخصوصية والأمان > الميكروفون.",
+  "failedToCheckMicrophonePermission": "فشل التحقق من إذن الميكروفون: {error}",
+  "failedToTranscribeAudio": "فشل تحويل الصوت إلى نص",
+  "transcribing": "جاري التحويل...",
+  "transcriptionFailed": "فشل التحويل"
 }

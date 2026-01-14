@@ -3650,5 +3650,34 @@
   "report": "Report",
   "@report": {
     "description": "Button to report message"
+  },
+  "microphonePermissionRequired": "Microphone permission is required for voice recording.",
+  "@microphonePermissionRequired": {
+    "description": "Error message when microphone permission is not granted"
+  },
+  "microphonePermissionDenied": "Microphone permission denied. Please grant permission in System Preferences > Privacy & Security > Microphone.",
+  "@microphonePermissionDenied": {
+    "description": "Error message when microphone permission is denied"
+  },
+  "failedToCheckMicrophonePermission": "Failed to check Microphone permission: {error}",
+  "@failedToCheckMicrophonePermission": {
+    "description": "Error message when permission check fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToTranscribeAudio": "Failed to transcribe audio",
+  "@failedToTranscribeAudio": {
+    "description": "Error message when audio transcription fails"
+  },
+  "transcribing": "Transcribing...",
+  "@transcribing": {
+    "description": "Loading message while transcribing audio"
+  },
+  "transcriptionFailed": "Transcription failed",
+  "@transcriptionFailed": {
+    "description": "Error message when transcription fails"
   }
 }

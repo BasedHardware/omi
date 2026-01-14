@@ -2575,5 +2575,11 @@
   "confirmClearChat": "Adakah anda pasti mahu mengosongkan sembang? Tindakan ini tidak boleh dibatalkan.",
   "copy": "Salin",
   "share": "Kongsi",
-  "report": "Laporkan"
+  "report": "Laporkan",
+  "microphonePermissionRequired": "Kebenaran mikrofon diperlukan untuk rakaman suara.",
+  "microphonePermissionDenied": "Kebenaran mikrofon ditolak. Sila berikan kebenaran dalam Keutamaan Sistem > Privasi & Keselamatan > Mikrofon.",
+  "failedToCheckMicrophonePermission": "Gagal menyemak kebenaran mikrofon: {error}",
+  "failedToTranscribeAudio": "Gagal menyalin audio",
+  "transcribing": "Menyalin...",
+  "transcriptionFailed": "Penyalinan gagal"
 }

@@ -2593,5 +2593,11 @@
   "confirmClearChat": "Opravdu chcete vymazat chat? Tuto akci nelze vrátit zpět.",
   "copy": "Kopírovat",
   "share": "Sdílet",
-  "report": "Nahlásit"
+  "report": "Nahlásit",
+  "microphonePermissionRequired": "Pro hlasový záznam je vyžadováno oprávnění k mikrofonu.",
+  "microphonePermissionDenied": "Oprávnění k mikrofonu bylo zamítnuto. Udělte prosím oprávnění v Předvolby systému > Soukromí a zabezpečení > Mikrofon.",
+  "failedToCheckMicrophonePermission": "Nepodařilo se zkontrolovat oprávnění k mikrofonu: {error}",
+  "failedToTranscribeAudio": "Nepodařilo se přepsat zvuk",
+  "transcribing": "Přepisování...",
+  "transcriptionFailed": "Přepis se nezdařil"
 }

@@ -2575,5 +2575,11 @@
   "confirmClearChat": "คุณแน่ใจหรือไม่ว่าต้องการล้างแชท? การกระทำนี้ไม่สามารถยกเลิกได้",
   "copy": "คัดลอก",
   "share": "แชร์",
-  "report": "รายงาน"
+  "report": "รายงาน",
+  "microphonePermissionRequired": "ต้องการสิทธิ์การใช้ไมโครโฟนสำหรับการบันทึกเสียง",
+  "microphonePermissionDenied": "สิทธิ์การใช้ไมโครโฟนถูกปฏิเสธ กรุณาอนุญาตสิทธิ์ใน การตั้งค่าระบบ > ความเป็นส่วนตัวและความปลอดภัย > ไมโครโฟน",
+  "failedToCheckMicrophonePermission": "ตรวจสอบสิทธิ์การใช้ไมโครโฟนไม่สำเร็จ: {error}",
+  "failedToTranscribeAudio": "แปลงเสียงเป็นข้อความไม่สำเร็จ",
+  "transcribing": "กำลังแปลง...",
+  "transcriptionFailed": "การแปลงล้มเหลว"
 }
