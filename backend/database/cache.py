@@ -8,6 +8,7 @@ Instances are initialized during application startup in main.py.
 from typing import Optional
 from utils.cache_manager import InMemoryCacheManager
 from utils.redis_pubsub import RedisPubSubManager
+from database.redis_db import r
 
 # Global cache instances (initialized in main.py via init_cache())
 memory_cache: Optional[InMemoryCacheManager] = None
@@ -54,8 +55,6 @@ def init_cache(max_memory_mb: int = 100):
         max_memory_mb: Maximum memory in MB for in-memory cache (default: 100MB)
     """
     global memory_cache, pubsub_manager
-
-    from database.redis_db import r
 
     memory_cache = InMemoryCacheManager(max_memory_mb=max_memory_mb)
     pubsub_manager = RedisPubSubManager(r)
