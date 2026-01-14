@@ -2529,5 +2529,6 @@
   "filterRating": "Valutazione",
   "filterCapabilities": "Funzionalità",
   "noNotificationScopesAvailable": "Nessun ambito di notifica disponibile",
-  "popularApps": "App popolari"
+  "popularApps": "App popolari",
+  "pleaseProvidePrompt": "Si prega di fornire un prompt"
 }

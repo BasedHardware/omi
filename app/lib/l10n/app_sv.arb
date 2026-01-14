@@ -2547,5 +2547,6 @@
   "filterRating": "Betyg",
   "filterCapabilities": "Funktioner",
   "noNotificationScopesAvailable": "Inga aviseringsområden tillgängliga",
-  "popularApps": "Populära appar"
+  "popularApps": "Populära appar",
+  "pleaseProvidePrompt": "Ange en prompt"
 }

@@ -1349,5 +1349,6 @@
   "filterRating": "Évaluation",
   "filterCapabilities": "Fonctionnalités",
   "noNotificationScopesAvailable": "Aucun périmètre de notification disponible",
-  "popularApps": "Applications populaires"
+  "popularApps": "Applications populaires",
+  "pleaseProvidePrompt": "Veuillez fournir une invite"
 }

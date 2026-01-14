@@ -2565,5 +2565,6 @@
   "filterRating": "Оценка",
   "filterCapabilities": "Възможности",
   "noNotificationScopesAvailable": "Няма налични области за уведомления",
-  "popularApps": "Популярни приложения"
+  "popularApps": "Популярни приложения",
+  "pleaseProvidePrompt": "Моля, предоставете подсказка"
 }

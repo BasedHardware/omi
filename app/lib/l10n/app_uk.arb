@@ -2547,5 +2547,6 @@
   "filterRating": "Рейтинг",
   "filterCapabilities": "Можливості",
   "noNotificationScopesAvailable": "Немає доступних областей сповіщень",
-  "popularApps": "Популярні додатки"
+  "popularApps": "Популярні додатки",
+  "pleaseProvidePrompt": "Будь ласка, надайте запит"
 }

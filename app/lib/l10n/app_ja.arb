@@ -950,5 +950,6 @@
   "filterRating": "評価",
   "filterCapabilities": "機能",
   "noNotificationScopesAvailable": "通知スコープが利用できません",
-  "popularApps": "人気アプリ"
+  "popularApps": "人気アプリ",
+  "pleaseProvidePrompt": "プロンプトを入力してください"
 }

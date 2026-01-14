@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/ui/atoms/omi_multiline_input.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class DesktopPromptTextField extends StatelessWidget {
@@ -34,7 +35,7 @@ class DesktopPromptTextField extends StatelessWidget {
           hint: hint,
           minLines: 4,
           maxLines: 12,
-          validator: (value) => (value == null || value.isEmpty) ? 'Please provide a prompt' : null,
+          validator: (value) => (value == null || value.isEmpty) ? context.l10n.pleaseProvidePrompt : null,
         ),
       ],
     );

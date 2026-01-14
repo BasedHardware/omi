@@ -2547,5 +2547,6 @@
   "filterRating": "Vurdering",
   "filterCapabilities": "Funksjoner",
   "noNotificationScopesAvailable": "Ingen varslingsområder tilgjengelig",
-  "popularApps": "Populære apper"
+  "popularApps": "Populære apper",
+  "pleaseProvidePrompt": "Vennligst oppgi en ledetekst"
 }

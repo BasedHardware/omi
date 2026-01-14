@@ -2547,5 +2547,6 @@
   "filterRating": "Vērtējums",
   "filterCapabilities": "Iespējas",
   "noNotificationScopesAvailable": "Paziņojumu tvērumi nav pieejami",
-  "popularApps": "Populārākās lietotnes"
+  "popularApps": "Populārākās lietotnes",
+  "pleaseProvidePrompt": "Lūdzu, norādiet uzvedni"
 }

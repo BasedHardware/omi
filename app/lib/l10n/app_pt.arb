@@ -971,5 +971,6 @@
   "filterRating": "Avaliação",
   "filterCapabilities": "Recursos",
   "noNotificationScopesAvailable": "Nenhum escopo de notificação disponível",
-  "popularApps": "Aplicativos populares"
+  "popularApps": "Aplicativos populares",
+  "pleaseProvidePrompt": "Por favor, forneça um prompt"
 }

@@ -2547,5 +2547,6 @@
   "filterRating": "Penilaian",
   "filterCapabilities": "Kemampuan",
   "noNotificationScopesAvailable": "Tidak ada cakupan notifikasi yang tersedia",
-  "popularApps": "Aplikasi Populer"
+  "popularApps": "Aplikasi Populer",
+  "pleaseProvidePrompt": "Harap berikan prompt"
 }

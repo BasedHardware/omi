@@ -2547,5 +2547,6 @@
   "filterRating": "คะแนน",
   "filterCapabilities": "ความสามารถ",
   "noNotificationScopesAvailable": "ไม่มีขอบเขตการแจ้งเตือนที่พร้อมใช้งาน",
-  "popularApps": "แอปยอดนิยม"
+  "popularApps": "แอปยอดนิยม",
+  "pleaseProvidePrompt": "กรุณาระบุพรอมต์"
 }

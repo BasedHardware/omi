@@ -971,5 +971,6 @@
   "filterRating": "Bewertung",
   "filterCapabilities": "Funktionen",
   "noNotificationScopesAvailable": "Keine Benachrichtigungsbereiche verfügbar",
-  "popularApps": "Beliebte Apps"
+  "popularApps": "Beliebte Apps",
+  "pleaseProvidePrompt": "Bitte geben Sie eine Eingabeaufforderung an"
 }

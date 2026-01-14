@@ -2547,5 +2547,6 @@
   "filterRating": "Hodnotenie",
   "filterCapabilities": "Funkcie",
   "noNotificationScopesAvailable": "Nie sú k dispozícii žiadne rozsahy oznámení",
-  "popularApps": "Obľúbené aplikácie"
+  "popularApps": "Obľúbené aplikácie",
+  "pleaseProvidePrompt": "Zadajte prosím výzvu"
 }

@@ -2547,5 +2547,6 @@
   "filterRating": "Hinnang",
   "filterCapabilities": "Võimed",
   "noNotificationScopesAvailable": "Teatiste ulatusi pole saadaval",
-  "popularApps": "Populaarsed rakendused"
+  "popularApps": "Populaarsed rakendused",
+  "pleaseProvidePrompt": "Palun esitage viip"
 }

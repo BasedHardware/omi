@@ -2547,5 +2547,6 @@
   "filterRating": "Đánh giá",
   "filterCapabilities": "Khả năng",
   "noNotificationScopesAvailable": "Không có phạm vi thông báo nào",
-  "popularApps": "Ứng dụng phổ biến"
+  "popularApps": "Ứng dụng phổ biến",
+  "pleaseProvidePrompt": "Vui lòng cung cấp lời nhắc"
 }

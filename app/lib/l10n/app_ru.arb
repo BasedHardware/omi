@@ -2547,5 +2547,6 @@
   "filterRating": "Рейтинг",
   "filterCapabilities": "Возможности",
   "noNotificationScopesAvailable": "Нет доступных областей уведомлений",
-  "popularApps": "Популярные приложения"
+  "popularApps": "Популярные приложения",
+  "pleaseProvidePrompt": "Пожалуйста, укажите запрос"
 }

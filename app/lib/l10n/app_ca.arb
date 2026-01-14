@@ -2565,5 +2565,6 @@
   "filterRating": "Valoració",
   "filterCapabilities": "Capacitats",
   "noNotificationScopesAvailable": "No hi ha àmbits de notificació disponibles",
-  "popularApps": "Aplicacions populars"
+  "popularApps": "Aplicacions populars",
+  "pleaseProvidePrompt": "Si us plau, proporcioneu una indicació"
 }

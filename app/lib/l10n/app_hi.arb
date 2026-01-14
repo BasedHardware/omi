@@ -971,5 +971,6 @@
   "filterRating": "रेटिंग",
   "filterCapabilities": "क्षमताएं",
   "noNotificationScopesAvailable": "कोई सूचना स्कोप उपलब्ध नहीं हैं",
-  "popularApps": "लोकप्रिय ऐप्स"
+  "popularApps": "लोकप्रिय ऐप्स",
+  "pleaseProvidePrompt": "कृपया एक प्रॉम्प्ट प्रदान करें"
 }

@@ -2547,5 +2547,6 @@
   "filterRating": "Értékelés",
   "filterCapabilities": "Képességek",
   "noNotificationScopesAvailable": "Nincsenek elérhető értesítési hatókörök",
-  "popularApps": "Népszerű alkalmazások"
+  "popularApps": "Népszerű alkalmazások",
+  "pleaseProvidePrompt": "Kérjük, adjon meg egy promptot"
 }

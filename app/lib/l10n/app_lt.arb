@@ -2529,5 +2529,6 @@
   "filterRating": "Įvertinimas",
   "filterCapabilities": "Galimybės",
   "noNotificationScopesAvailable": "Pranešimų sritys nepasiekiamos",
-  "popularApps": "Populiarios programos"
+  "popularApps": "Populiarios programos",
+  "pleaseProvidePrompt": "Pateikite raginimą"
 }

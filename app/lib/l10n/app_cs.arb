@@ -2565,5 +2565,6 @@
   "filterRating": "Hodnocení",
   "filterCapabilities": "Funkce",
   "noNotificationScopesAvailable": "Nejsou k dispozici žádné rozsahy oznámení",
-  "popularApps": "Oblíbené aplikace"
+  "popularApps": "Oblíbené aplikace",
+  "pleaseProvidePrompt": "Zadejte prosím výzvu"
 }

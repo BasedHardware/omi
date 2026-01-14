@@ -2547,5 +2547,6 @@
   "filterRating": "Evaluare",
   "filterCapabilities": "Capacități",
   "noNotificationScopesAvailable": "Nu există domenii de notificare disponibile",
-  "popularApps": "Aplicații populare"
+  "popularApps": "Aplicații populare",
+  "pleaseProvidePrompt": "Vă rugăm să furnizați o solicitare"
 }

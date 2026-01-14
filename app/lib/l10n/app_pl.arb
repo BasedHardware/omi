@@ -2547,5 +2547,6 @@
   "filterRating": "Ocena",
   "filterCapabilities": "Funkcje",
   "noNotificationScopesAvailable": "Brak dostępnych zakresów powiadomień",
-  "popularApps": "Popularne aplikacje"
+  "popularApps": "Popularne aplikacje",
+  "pleaseProvidePrompt": "Proszę podać monit"
 }

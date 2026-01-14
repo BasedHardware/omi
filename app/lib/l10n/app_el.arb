@@ -2547,5 +2547,6 @@
   "filterRating": "Αξιολόγηση",
   "filterCapabilities": "Δυνατότητες",
   "noNotificationScopesAvailable": "Δεν υπάρχουν διαθέσιμα πεδία ειδοποιήσεων",
-  "popularApps": "Δημοφιλείς εφαρμογές"
+  "popularApps": "Δημοφιλείς εφαρμογές",
+  "pleaseProvidePrompt": "Παρακαλώ δώστε μια προτροπή"
 }

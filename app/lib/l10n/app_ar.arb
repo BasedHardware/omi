@@ -2579,5 +2579,6 @@
   "filterRating": "التقييم",
   "filterCapabilities": "الإمكانيات",
   "noNotificationScopesAvailable": "لا توجد نطاقات إشعارات متاحة",
-  "popularApps": "التطبيقات الشائعة"
+  "popularApps": "التطبيقات الشائعة",
+  "pleaseProvidePrompt": "يرجى تقديم موجه"
 }

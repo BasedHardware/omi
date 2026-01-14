@@ -1349,5 +1349,6 @@
   "filterRating": "Beoordeling",
   "filterCapabilities": "Functies",
   "noNotificationScopesAvailable": "Geen meldingsbereiken beschikbaar",
-  "popularApps": "Populaire apps"
+  "popularApps": "Populaire apps",
+  "pleaseProvidePrompt": "Geef een prompt op"
 }

@@ -3533,5 +3533,9 @@
   "popularApps": "Popular Apps",
   "@popularApps": {
     "description": "Section title for popular apps"
+  },
+  "pleaseProvidePrompt": "Please provide a prompt",
+  "@pleaseProvidePrompt": {
+    "description": "Validation error when prompt text field is empty"
   }
 }

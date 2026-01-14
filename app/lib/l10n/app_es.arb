@@ -971,5 +971,6 @@
   "filterRating": "Valoración",
   "filterCapabilities": "Capacidades",
   "noNotificationScopesAvailable": "No hay ámbitos de notificación disponibles",
-  "popularApps": "Aplicaciones populares"
+  "popularApps": "Aplicaciones populares",
+  "pleaseProvidePrompt": "Por favor, proporciona una indicación"
 }

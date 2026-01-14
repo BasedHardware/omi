@@ -2529,5 +2529,6 @@
   "filterRating": "Değerlendirme",
   "filterCapabilities": "Yetenekler",
   "noNotificationScopesAvailable": "Kullanılabilir bildirim kapsamı yok",
-  "popularApps": "Popüler Uygulamalar"
+  "popularApps": "Popüler Uygulamalar",
+  "pleaseProvidePrompt": "Lütfen bir istem sağlayın"
 }

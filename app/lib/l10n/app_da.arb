@@ -2547,5 +2547,6 @@
   "filterRating": "Bedømmelse",
   "filterCapabilities": "Funktioner",
   "noNotificationScopesAvailable": "Ingen notifikationsområder tilgængelige",
-  "popularApps": "Populære apps"
+  "popularApps": "Populære apps",
+  "pleaseProvidePrompt": "Angiv venligst en prompt"
 }
