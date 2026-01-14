@@ -10,10 +10,10 @@ Strategy: Prioritize small/medium files, defer large files
 
 OVERALL STATISTICS
 ------------------
-Files Completed: 24
+Files Completed: 25
 Files Skipped (Large): 3
-Total Keys Added: 212
-Total Translations: 7,208 (212 keys × 34 languages)
+Total Keys Added: 229
+Total Translations: 7,786 (229 keys × 34 languages)
 
 ================================================================================
 COMPLETED FILES
@@ -304,6 +304,24 @@ Notes: Localized voice recorder widget including microphone permission errors,
        dynamic l10n values.
 Commit: a1c6c5e53
 
+FILE 53: desktop_conversation_detail_page.dart
+-----------------------------------------------
+Location: app/lib/desktop/pages/conversations/
+Keys Added: 17
+Keys: discardedConversation, untitledConversation, at, from, copied, copyLink,
+      hideTranscript, viewTranscript, conversationDetails, transcript,
+      segmentsCount (parameterized), noTranscriptAvailable, noTranscriptMessage,
+      conversationUrlCouldNotBeGenerated, failedToGenerateConversationLink,
+      conversationUrlCouldNotBeShared, failedToGenerateShareLink
+Script: /tmp/translate_conversation_detail_page_keys.py
+Status: ✅ COMPLETED
+Notes: Localized conversation detail page including conversation titles, time
+       prepositions, action buttons, section headers, transcript info, empty
+       states, and error messages. Removed const from Row widget in section
+       header to support dynamic l10n. Removed const from OmiEmptyState widget
+       to support dynamic l10n values.
+Commit: bf93b5608
+
 ================================================================================
 SKIPPED FILES (LARGE - TO BE COMPLETED LATER)
 ================================================================================
@@ -382,7 +400,7 @@ Priority 1 (Small Files - Next Batch)
 [✓] desktop_chat_page.dart
 [✓] desktop_message_action_menu.dart
 [✓] desktop_voice_recorder_widget.dart
-[ ] desktop_conversation_detail_page.dart
+[✓] desktop_conversation_detail_page.dart
 [ ] desktop_conversation_detail_wrapper.dart
 [ ] desktop_conversations_page.dart
 [ ] desktop_home_page.dart
