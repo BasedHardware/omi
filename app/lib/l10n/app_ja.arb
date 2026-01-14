@@ -83,7 +83,7 @@
   "recordingsNotSynced": "まだ同期されていない録音があります。",
   "syncingBackground": "バックグラウンドで録音を同期し続けます。",
   "noConversationsYet": "まだ会話がありません",
-  "noStarredConversations": "スター付きの会話はまだありません。",
+  "noStarredConversations": "スター付きの会話がありません",
   "starConversationHint": "会話をスターするには、会話を開いてヘッダーのスターアイコンをタップしてください。",
   "searchConversations": "会話を検索...",
   "selectedCount": "{count}件選択中",
@@ -819,7 +819,7 @@
   "saveGoal": "保存",
   "goals": "目標",
   "tapToAddGoal": "タップして目標を追加",
-  "welcomeBack": "お帰りなさい",
+  "welcomeBack": "おかえりなさい、{name}",
   "yourConversations": "会話履歴",
   "reviewAndManageConversations": "記録された会話を確認および管理します",
   "startCapturingConversations": "Omiデバイスで会話のキャプチャを開始して、ここに表示します。",
@@ -999,5 +999,57 @@
   "noTranscriptMessage": "この会話には文字起こしがありません。",
   "conversationUrlCouldNotBeGenerated": "会話のURLを生成できませんでした。",
   "failedToGenerateConversationLink": "会話リンクの生成に失敗しました",
-  "failedToGenerateShareLink": "共有リンクの生成に失敗しました"
+  "failedToGenerateShareLink": "共有リンクの生成に失敗しました",
+  "reloadingConversations": "会話を再読み込み中...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "@welcomeBack": {
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "user": "ユーザー",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "スター付き",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "日付",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "結果が見つかりませんでした",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "検索語を調整してみてください",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "@noStarredConversations": {
+    "description": "Empty state title when no starred conversations"
+  },
+  "starConversationsToFindQuickly": "会話にスターを付けると、ここですばやく見つけることができます",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "{date}の会話はありません",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "別の日付を選択してみてください",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  }
 }

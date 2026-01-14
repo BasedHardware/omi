@@ -293,9 +293,9 @@
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
-  "noStarredConversations": "Kol kas nėra pažymėtų pokalbių.",
+  "noStarredConversations": "Nėra pokalbių su žvaigždute",
   "@noStarredConversations": {
-    "description": "Empty state for starred filter"
+    "description": "Empty state title when no starred conversations"
   },
   "starConversationHint": "Norėdami pažymėti pokalbį, atidarykite jį ir paspauskite žvaigždutės piktogramą antraštėje.",
   "@starConversationHint": {
@@ -2398,7 +2398,7 @@
   "saveGoal": "Išsaugoti",
   "goals": "Tikslai",
   "tapToAddGoal": "Bakstelėkite, kad pridėtumėte tikslą",
-  "welcomeBack": "Sveiki sugrįžę",
+  "welcomeBack": "Sveiki sugrįžę, {name}",
   "yourConversations": "Jūsų pokalbiai",
   "reviewAndManageConversations": "Peržiūrėkite ir tvarkykite įrašytus pokalbius",
   "startCapturingConversations": "Pradėkite fiksuoti pokalbius su Omi įrenginiu, kad juos matytumėte čia.",
@@ -2578,5 +2578,54 @@
   "noTranscriptMessage": "Šis pokalbis neturi transkripcijos.",
   "conversationUrlCouldNotBeGenerated": "Nepavyko sugeneruoti pokalbio URL.",
   "failedToGenerateConversationLink": "Nepavyko sugeneruoti pokalbio nuorodos",
-  "failedToGenerateShareLink": "Nepavyko sugeneruoti bendrinimo nuorodos"
+  "failedToGenerateShareLink": "Nepavyko sugeneruoti bendrinimo nuorodos",
+  "reloadingConversations": "Pokalbių perkrovimas...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "@welcomeBack": {
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "user": "Vartotojas",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "Su žvaigždute",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "Data",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "Rezultatų nerasta",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "Pabandykite koreguoti paieškos terminus",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "starConversationsToFindQuickly": "Pažymėkite pokalbius žvaigždute, kad greitai rastumėte juos čia",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "Nėra pokalbių {date}",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "Pabandykite pasirinkti kitą datą",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  }
 }

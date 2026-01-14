@@ -293,9 +293,9 @@
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
-  "noStarredConversations": "Encara no hi ha converses destacades.",
+  "noStarredConversations": "No hi ha converses destacades",
   "@noStarredConversations": {
-    "description": "Empty state for starred filter"
+    "description": "Empty state title when no starred conversations"
   },
   "starConversationHint": "Per destacar una conversa, obriu-la i toqueu la icona d'estrella a la capçalera.",
   "@starConversationHint": {
@@ -2434,7 +2434,7 @@
   "saveGoal": "Desa",
   "goals": "Objectius",
   "tapToAddGoal": "Toca per afegir un objectiu",
-  "welcomeBack": "Benvingut de nou",
+  "welcomeBack": "Benvingut de nou, {name}",
   "yourConversations": "Les teves converses",
   "reviewAndManageConversations": "Revisa i gestiona les teves converses capturades",
   "startCapturingConversations": "Comença a capturar converses amb el teu dispositiu Omi per veure-les aquí.",
@@ -2614,5 +2614,54 @@
   "noTranscriptMessage": "Aquesta conversa no té transcripció.",
   "conversationUrlCouldNotBeGenerated": "No s'ha pogut generar l'URL de la conversa.",
   "failedToGenerateConversationLink": "Error en generar l'enllaç de la conversa",
-  "failedToGenerateShareLink": "Error en generar l'enllaç per compartir"
+  "failedToGenerateShareLink": "Error en generar l'enllaç per compartir",
+  "reloadingConversations": "Recarregant converses...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "@welcomeBack": {
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "user": "Usuari",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "Destacades",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "Data",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "No s'han trobat resultats",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "Prova d'ajustar els termes de cerca",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "starConversationsToFindQuickly": "Destaca converses per trobar-les ràpidament aquí",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "No hi ha converses el {date}",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "Prova de seleccionar una altra data",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  }
 }

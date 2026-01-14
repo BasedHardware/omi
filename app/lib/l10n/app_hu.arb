@@ -293,9 +293,9 @@
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
-  "noStarredConversations": "Még nincsenek csillagozott beszélgetések.",
+  "noStarredConversations": "Nincsenek csillagozott beszélgetések",
   "@noStarredConversations": {
-    "description": "Empty state for starred filter"
+    "description": "Empty state title when no starred conversations"
   },
   "starConversationHint": "Beszélgetés csillagozásához nyisd meg, és érintsd meg a csillag ikont a fejlécben.",
   "@starConversationHint": {
@@ -2416,7 +2416,7 @@
   "saveGoal": "Mentés",
   "goals": "Célok",
   "tapToAddGoal": "Érintse meg cél hozzáadásához",
-  "welcomeBack": "Üdvözöljük újra",
+  "welcomeBack": "Üdvözöljük vissza, {name}",
   "yourConversations": "A beszélgetéseid",
   "reviewAndManageConversations": "Tekintse át és kezelje rögzített beszélgetéseit",
   "startCapturingConversations": "Kezdje el rögzíteni a beszélgetéseket Omi eszközével, hogy itt láthassa őket.",
@@ -2596,5 +2596,54 @@
   "noTranscriptMessage": "Ehhez a beszélgetéshez nincs átirat.",
   "conversationUrlCouldNotBeGenerated": "A beszélgetés URL-jét nem sikerült generálni.",
   "failedToGenerateConversationLink": "A beszélgetés linkjének generálása sikertelen",
-  "failedToGenerateShareLink": "A megosztási link generálása sikertelen"
+  "failedToGenerateShareLink": "A megosztási link generálása sikertelen",
+  "reloadingConversations": "Beszélgetések újratöltése...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "@welcomeBack": {
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "user": "Felhasználó",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "Csillagozott",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "Dátum",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "Nem található eredmény",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "Próbálja meg módosítani a keresési kifejezéseket",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "starConversationsToFindQuickly": "Csillagozza meg a beszélgetéseket, hogy gyorsan megtalálja őket itt",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "Nincsenek beszélgetések {date}-kor",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "Próbáljon meg egy másik dátumot kiválasztani",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  }
 }

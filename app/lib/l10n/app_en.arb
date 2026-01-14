@@ -293,9 +293,9 @@
   "@noConversationsYet": {
     "description": "Title shown when user has no conversations"
   },
-  "noStarredConversations": "No starred conversations yet.",
+  "noStarredConversations": "No starred conversations",
   "@noStarredConversations": {
-    "description": "Empty state for starred filter"
+    "description": "Empty state title when no starred conversations"
   },
   "starConversationHint": "To star a conversation, open it and tap the star icon in the header.",
   "@starConversationHint": {
@@ -2993,9 +2993,14 @@
   "@tapToAddGoal": {
     "description": "Instruction to add goal"
   },
-  "welcomeBack": "Welcome back",
+  "welcomeBack": "Welcome back, {name}",
   "@welcomeBack": {
-    "description": "Greeting message shown at the top of conversations page"
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   },
   "yourConversations": "Your Conversations",
   "@yourConversations": {
@@ -3744,5 +3749,46 @@
   "failedToGenerateShareLink": "Failed to generate share link",
   "@failedToGenerateShareLink": {
     "description": "Error when share link generation fails"
+  },
+  "reloadingConversations": "Reloading conversations...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "user": "User",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "Starred",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "Date",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "No results found",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "Try adjusting your search terms",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "starConversationsToFindQuickly": "Star conversations to find them quickly here",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "No conversations on {date}",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "Try selecting a different date",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
   }
 }

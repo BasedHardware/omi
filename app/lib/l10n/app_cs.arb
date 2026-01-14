@@ -293,9 +293,9 @@
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
-  "noStarredConversations": "Zatím žádné oblíbené konverzace.",
+  "noStarredConversations": "Žádné konverzace s hvězdičkou",
   "@noStarredConversations": {
-    "description": "Empty state for starred filter"
+    "description": "Empty state title when no starred conversations"
   },
   "starConversationHint": "Chcete-li konverzaci označit hvězdičkou, otevřete ji a klepněte na ikonu hvězdičky v záhlaví.",
   "@starConversationHint": {
@@ -2434,7 +2434,7 @@
   "saveGoal": "Uložit",
   "goals": "Cíle",
   "tapToAddGoal": "Klepnutím přidejte cíl",
-  "welcomeBack": "Vítejte zpět",
+  "welcomeBack": "Vítejte zpět, {name}",
   "yourConversations": "Vaše konverzace",
   "reviewAndManageConversations": "Prohlížejte a spravujte své zachycené konverzace",
   "startCapturingConversations": "Začněte zachytávat konverzace pomocí zařízení Omi a zobrazí se zde.",
@@ -2614,5 +2614,54 @@
   "noTranscriptMessage": "Tato konverzace nemá přepis.",
   "conversationUrlCouldNotBeGenerated": "URL konverzace nelze vygenerovat.",
   "failedToGenerateConversationLink": "Nepodařilo se vygenerovat odkaz na konverzaci",
-  "failedToGenerateShareLink": "Nepodařilo se vygenerovat odkaz ke sdílení"
+  "failedToGenerateShareLink": "Nepodařilo se vygenerovat odkaz ke sdílení",
+  "reloadingConversations": "Načítání konverzací...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "@welcomeBack": {
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "user": "Uživatel",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "S hvězdičkou",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "Datum",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "Nenalezeny žádné výsledky",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "Zkuste upravit vyhledávací výrazy",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "starConversationsToFindQuickly": "Označte konverzace hvězdičkou, abyste je zde rychle našli",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "Žádné konverzace dne {date}",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "Zkuste vybrat jiné datum",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  }
 }

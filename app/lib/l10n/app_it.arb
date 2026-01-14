@@ -293,9 +293,9 @@
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
-  "noStarredConversations": "Nessuna conversazione preferita ancora.",
+  "noStarredConversations": "Nessuna conversazione con stella",
   "@noStarredConversations": {
-    "description": "Empty state for starred filter"
+    "description": "Empty state title when no starred conversations"
   },
   "starConversationHint": "Per aggiungere una conversazione ai preferiti, aprila e tocca l'icona stella nell'intestazione.",
   "@starConversationHint": {
@@ -2398,7 +2398,7 @@
   "saveGoal": "Salva",
   "goals": "Obiettivi",
   "tapToAddGoal": "Tocca per aggiungere un obiettivo",
-  "welcomeBack": "Bentornato",
+  "welcomeBack": "Bentornato, {name}",
   "yourConversations": "Le tue conversazioni",
   "reviewAndManageConversations": "Rivedi e gestisci le tue conversazioni registrate",
   "startCapturingConversations": "Inizia a catturare conversazioni con il tuo dispositivo Omi per vederle qui.",
@@ -2578,5 +2578,54 @@
   "noTranscriptMessage": "Questa conversazione non ha una trascrizione.",
   "conversationUrlCouldNotBeGenerated": "Impossibile generare l'URL della conversazione.",
   "failedToGenerateConversationLink": "Impossibile generare il link alla conversazione",
-  "failedToGenerateShareLink": "Impossibile generare il link di condivisione"
+  "failedToGenerateShareLink": "Impossibile generare il link di condivisione",
+  "reloadingConversations": "Ricaricamento conversazioni...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "@welcomeBack": {
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "user": "Utente",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "Con stella",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "Data",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "Nessun risultato trovato",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "Prova a modificare i termini di ricerca",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "starConversationsToFindQuickly": "Aggiungi la stella alle conversazioni per trovarle rapidamente qui",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "Nessuna conversazione il {date}",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "Prova a selezionare una data diversa",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  }
 }

@@ -293,9 +293,9 @@
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
-  "noStarredConversations": "Избранных разговоров пока нет.",
+  "noStarredConversations": "Нет избранных бесед",
   "@noStarredConversations": {
-    "description": "Empty state for starred filter"
+    "description": "Empty state title when no starred conversations"
   },
   "starConversationHint": "Чтобы добавить разговор в избранное, откройте его и нажмите на значок звезды в заголовке.",
   "@starConversationHint": {
@@ -2416,7 +2416,7 @@
   "saveGoal": "Сохранить",
   "goals": "Цели",
   "tapToAddGoal": "Нажмите, чтобы добавить цель",
-  "welcomeBack": "С возвращением",
+  "welcomeBack": "С возвращением, {name}",
   "yourConversations": "Ваши разговоры",
   "reviewAndManageConversations": "Просматривайте и управляйте записанными разговорами",
   "startCapturingConversations": "Начните записывать разговоры с помощью устройства Omi, чтобы увидеть их здесь.",
@@ -2596,5 +2596,54 @@
   "noTranscriptMessage": "У этого разговора нет расшифровки.",
   "conversationUrlCouldNotBeGenerated": "Не удалось создать URL разговора.",
   "failedToGenerateConversationLink": "Не удалось создать ссылку на разговор",
-  "failedToGenerateShareLink": "Не удалось создать ссылку для обмена"
+  "failedToGenerateShareLink": "Не удалось создать ссылку для обмена",
+  "reloadingConversations": "Перезагрузка бесед...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "@welcomeBack": {
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "user": "Пользователь",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "Избранное",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "Дата",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "Результаты не найдены",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "Попробуйте изменить условия поиска",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "starConversationsToFindQuickly": "Отметьте беседы звездой, чтобы быстро находить их здесь",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "Нет бесед {date}",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "Попробуйте выбрать другую дату",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  }
 }

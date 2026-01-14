@@ -87,7 +87,7 @@
   "recordingsNotSynced": "Je hebt opnames die nog niet zijn gesynchroniseerd.",
   "syncingBackground": "We blijven je opnames op de achtergrond synchroniseren.",
   "noConversationsYet": "Nog geen gesprekken",
-  "noStarredConversations": "Nog geen favoriete gesprekken.",
+  "noStarredConversations": "Geen gesprekken met ster",
   "starConversationHint": "Om een gesprek als favoriet te markeren, open het en tik op het stericoon in de header.",
   "searchConversations": "Zoek gesprekken...",
   "selectedCount": "{count} geselecteerd",
@@ -1218,7 +1218,7 @@
   "saveGoal": "Opslaan",
   "goals": "Doelen",
   "tapToAddGoal": "Tik om een doel toe te voegen",
-  "welcomeBack": "Welkom terug",
+  "welcomeBack": "Welkom terug, {name}",
   "yourConversations": "Je gesprekken",
   "reviewAndManageConversations": "Bekijk en beheer je opgenomen gesprekken",
   "startCapturingConversations": "Begin gesprekken vast te leggen met je Omi-apparaat om ze hier te zien.",
@@ -1398,5 +1398,57 @@
   "noTranscriptMessage": "Dit gesprek heeft geen transcript.",
   "conversationUrlCouldNotBeGenerated": "Gesprek-URL kon niet worden gegenereerd.",
   "failedToGenerateConversationLink": "Kan gesprekslink niet genereren",
-  "failedToGenerateShareLink": "Kan deellink niet genereren"
+  "failedToGenerateShareLink": "Kan deellink niet genereren",
+  "reloadingConversations": "Gesprekken opnieuw laden...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "@welcomeBack": {
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "user": "Gebruiker",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "Met ster",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "Datum",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "Geen resultaten gevonden",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "Probeer je zoektermen aan te passen",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "@noStarredConversations": {
+    "description": "Empty state title when no starred conversations"
+  },
+  "starConversationsToFindQuickly": "Geef gesprekken een ster om ze hier snel te vinden",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "Geen gesprekken op {date}",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "Probeer een andere datum te selecteren",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  }
 }

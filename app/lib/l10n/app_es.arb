@@ -84,7 +84,7 @@
   "recordingsNotSynced": "Tienes grabaciones sin sincronizar.",
   "syncingBackground": "Seguiremos sincronizando en segundo plano.",
   "noConversationsYet": "Aún no hay conversaciones",
-  "noStarredConversations": "No hay conversaciones favoritas.",
+  "noStarredConversations": "No hay conversaciones destacadas",
   "starConversationHint": "Para marcar una conversación como favorita, ábrela y toca la estrella en la cabecera.",
   "searchConversations": "Buscar conversaciones...",
   "selectedCount": "{count} seleccionados",
@@ -840,7 +840,7 @@
   "saveGoal": "Guardar",
   "goals": "Objetivos",
   "tapToAddGoal": "Toca para agregar un objetivo",
-  "welcomeBack": "Bienvenido de nuevo",
+  "welcomeBack": "Bienvenido de nuevo, {name}",
   "yourConversations": "Tus conversaciones",
   "reviewAndManageConversations": "Revisa y gestiona tus conversaciones capturadas",
   "startCapturingConversations": "Comienza a capturar conversaciones con tu dispositivo Omi para verlas aquí.",
@@ -1020,5 +1020,57 @@
   "noTranscriptMessage": "Esta conversación no tiene transcripción.",
   "conversationUrlCouldNotBeGenerated": "No se pudo generar la URL de la conversación.",
   "failedToGenerateConversationLink": "Error al generar enlace de conversación",
-  "failedToGenerateShareLink": "Error al generar enlace para compartir"
+  "failedToGenerateShareLink": "Error al generar enlace para compartir",
+  "reloadingConversations": "Recargando conversaciones...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "@welcomeBack": {
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "user": "Usuario",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "Destacados",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "Fecha",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "No se encontraron resultados",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "Intenta ajustar tus términos de búsqueda",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "@noStarredConversations": {
+    "description": "Empty state title when no starred conversations"
+  },
+  "starConversationsToFindQuickly": "Marca conversaciones con estrella para encontrarlas rápidamente aquí",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "No hay conversaciones el {date}",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "Intenta seleccionar una fecha diferente",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  }
 }

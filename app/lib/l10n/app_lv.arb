@@ -293,9 +293,9 @@
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
-  "noStarredConversations": "Vēl nav atzīmētu sarunu.",
+  "noStarredConversations": "Nav sarunu ar zvaigzni",
   "@noStarredConversations": {
-    "description": "Empty state for starred filter"
+    "description": "Empty state title when no starred conversations"
   },
   "starConversationHint": "Lai atzīmētu sarunu ar zvaigznīti, atveriet to un piespiediet zvaigznītes ikonu galvenē.",
   "@starConversationHint": {
@@ -2416,7 +2416,7 @@
   "saveGoal": "Saglabāt",
   "goals": "Mērķi",
   "tapToAddGoal": "Pieskarieties, lai pievienotu mērķi",
-  "welcomeBack": "Laipni lūdzam atpakaļ",
+  "welcomeBack": "Laipni lūdzam atpakaļ, {name}",
   "yourConversations": "Jūsu sarunas",
   "reviewAndManageConversations": "Pārskatiet un pārvaldiet ierakstītās sarunas",
   "startCapturingConversations": "Sāciet iegūt sarunas ar savu Omi ierīci, lai tās redzētu šeit.",
@@ -2596,5 +2596,54 @@
   "noTranscriptMessage": "Šai sarunai nav transkripcijas.",
   "conversationUrlCouldNotBeGenerated": "Neizdevās ģenerēt sarunas URL.",
   "failedToGenerateConversationLink": "Neizdevās ģenerēt sarunas saiti",
-  "failedToGenerateShareLink": "Neizdevās ģenerēt kopīgošanas saiti"
+  "failedToGenerateShareLink": "Neizdevās ģenerēt kopīgošanas saiti",
+  "reloadingConversations": "Sarunu atkārtota ielāde...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "@welcomeBack": {
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "user": "Lietotājs",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "Ar zvaigzni",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "Datums",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "Rezultāti nav atrasti",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "Mēģiniet pielāgot meklēšanas nosacījumus",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "starConversationsToFindQuickly": "Atzīmējiet sarunas ar zvaigzni, lai tās ātri atrastu šeit",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "Nav sarunu datumā {date}",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "Mēģiniet izvēlēties citu datumu",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  }
 }

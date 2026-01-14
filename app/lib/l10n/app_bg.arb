@@ -293,9 +293,9 @@
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
-  "noStarredConversations": "Все още няма отбелязани разговори.",
+  "noStarredConversations": "Няма отбелязани разговори",
   "@noStarredConversations": {
-    "description": "Empty state for starred filter"
+    "description": "Empty state title when no starred conversations"
   },
   "starConversationHint": "За да отбележите разговор, отворете го и натиснете иконката със звезда в заглавието.",
   "@starConversationHint": {
@@ -2434,7 +2434,7 @@
   "saveGoal": "Запази",
   "goals": "Цели",
   "tapToAddGoal": "Докоснете, за да добавите цел",
-  "welcomeBack": "Добре дошли отново",
+  "welcomeBack": "Добре дошъл обратно, {name}",
   "yourConversations": "Вашите разговори",
   "reviewAndManageConversations": "Прегледайте и управлявайте записаните си разговори",
   "startCapturingConversations": "Започнете да записвате разговори с вашето устройство Omi, за да ги видите тук.",
@@ -2614,5 +2614,54 @@
   "noTranscriptMessage": "Този разговор няма транскрипт.",
   "conversationUrlCouldNotBeGenerated": "URL адресът на разговора не може да бъде генериран.",
   "failedToGenerateConversationLink": "Неуспешно генериране на връзка към разговор",
-  "failedToGenerateShareLink": "Неуспешно генериране на връзка за споделяне"
+  "failedToGenerateShareLink": "Неуспешно генериране на връзка за споделяне",
+  "reloadingConversations": "Презареждане на разговори...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "@welcomeBack": {
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "user": "Потребител",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "Звездичка",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "Дата",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "Не са намерени резултати",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "Опитайте да промените условията за търсене",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "starConversationsToFindQuickly": "Отбележете разговори, за да ги намирате бързо тук",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "Няма разговори на {date}",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "Опитайте да изберете друга дата",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  }
 }

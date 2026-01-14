@@ -84,7 +84,7 @@
   "recordingsNotSynced": "Sie haben Aufnahmen, die noch nicht synchronisiert sind.",
   "syncingBackground": "Wir synchronisieren Ihre Aufnahmen im Hintergrund weiter.",
   "noConversationsYet": "Noch keine Unterhaltungen",
-  "noStarredConversations": "Noch keine favorisierten Unterhaltungen.",
+  "noStarredConversations": "Keine markierten Gespräche",
   "starConversationHint": "Um eine Unterhaltung zu favorisieren, öffnen Sie sie und tippen Sie auf das Sternsymbol im Kopfbereich.",
   "searchConversations": "Konversationen durchsuchen...",
   "selectedCount": "{count} ausgewählt",
@@ -840,7 +840,7 @@
   "saveGoal": "Speichern",
   "goals": "Ziele",
   "tapToAddGoal": "Tippen, um ein Ziel hinzuzufügen",
-  "welcomeBack": "Willkommen zurück",
+  "welcomeBack": "Willkommen zurück, {name}",
   "yourConversations": "Deine Unterhaltungen",
   "reviewAndManageConversations": "Überprüfe und verwalte deine aufgenommenen Unterhaltungen",
   "startCapturingConversations": "Beginne Unterhaltungen mit deinem Omi-Gerät aufzunehmen, um sie hier zu sehen.",
@@ -1020,5 +1020,57 @@
   "noTranscriptMessage": "Dieses Gespräch hat kein Transkript.",
   "conversationUrlCouldNotBeGenerated": "Gesprächs-URL konnte nicht generiert werden.",
   "failedToGenerateConversationLink": "Gesprächslink konnte nicht generiert werden",
-  "failedToGenerateShareLink": "Freigabelink konnte nicht generiert werden"
+  "failedToGenerateShareLink": "Freigabelink konnte nicht generiert werden",
+  "reloadingConversations": "Gespräche werden neu geladen...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "@welcomeBack": {
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "user": "Benutzer",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "Mit Stern",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "Datum",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "Keine Ergebnisse gefunden",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "Versuchen Sie, Ihre Suchbegriffe anzupassen",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "@noStarredConversations": {
+    "description": "Empty state title when no starred conversations"
+  },
+  "starConversationsToFindQuickly": "Markieren Sie Gespräche, um sie hier schnell zu finden",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "Keine Gespräche am {date}",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "Versuchen Sie, ein anderes Datum auszuwählen",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  }
 }

@@ -293,9 +293,9 @@
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
-  "noStarredConversations": "Обраних розмов поки немає.",
+  "noStarredConversations": "Немає обраних бесід",
   "@noStarredConversations": {
-    "description": "Empty state for starred filter"
+    "description": "Empty state title when no starred conversations"
   },
   "starConversationHint": "Щоб позначити розмову зірочкою, відкрийте її та натисніть іконку зірки в заголовку.",
   "@starConversationHint": {
@@ -2416,7 +2416,7 @@
   "saveGoal": "Зберегти",
   "goals": "Цілі",
   "tapToAddGoal": "Натисніть, щоб додати ціль",
-  "welcomeBack": "Ласкаво просимо назад",
+  "welcomeBack": "З поверненням, {name}",
   "yourConversations": "Ваші розмови",
   "reviewAndManageConversations": "Переглядайте та керуйте записаними розмовами",
   "startCapturingConversations": "Почніть записувати розмови за допомогою пристрою Omi, щоб побачити їх тут.",
@@ -2596,5 +2596,54 @@
   "noTranscriptMessage": "Ця розмова не має розшифровки.",
   "conversationUrlCouldNotBeGenerated": "Не вдалося створити URL розмови.",
   "failedToGenerateConversationLink": "Не вдалося створити посилання на розмову",
-  "failedToGenerateShareLink": "Не вдалося створити посилання для обміну"
+  "failedToGenerateShareLink": "Не вдалося створити посилання для обміну",
+  "reloadingConversations": "Перезавантаження бесід...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "@welcomeBack": {
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "user": "Користувач",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "Обране",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "Дата",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "Результатів не знайдено",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "Спробуйте змінити умови пошуку",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "starConversationsToFindQuickly": "Позначте бесіди зіркою, щоб швидко знаходити їх тут",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "Немає бесід {date}",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "Спробуйте вибрати іншу дату",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  }
 }

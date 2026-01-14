@@ -293,9 +293,9 @@
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
-  "noStarredConversations": "Henüz favorilere eklenmiş konuşma yok.",
+  "noStarredConversations": "Yıldızlı konuşma yok",
   "@noStarredConversations": {
-    "description": "Empty state for starred filter"
+    "description": "Empty state title when no starred conversations"
   },
   "starConversationHint": "Bir konuşmayı favorilere eklemek için açın ve üst kısımdaki yıldız simgesine dokunun.",
   "@starConversationHint": {
@@ -2398,7 +2398,7 @@
   "saveGoal": "Kaydet",
   "goals": "Hedefler",
   "tapToAddGoal": "Hedef eklemek için dokunun",
-  "welcomeBack": "Tekrar hoş geldiniz",
+  "welcomeBack": "Tekrar hoş geldiniz, {name}",
   "yourConversations": "Görüşmeleriniz",
   "reviewAndManageConversations": "Kaydedilen görüşmelerinizi inceleyin ve yönetin",
   "startCapturingConversations": "Görüşmeleri burada görmek için Omi cihazınızla yakalamaya başlayın.",
@@ -2578,5 +2578,54 @@
   "noTranscriptMessage": "Bu sohbetin transkripti yok.",
   "conversationUrlCouldNotBeGenerated": "Sohbet URL'si oluşturulamadı.",
   "failedToGenerateConversationLink": "Sohbet bağlantısı oluşturulamadı",
-  "failedToGenerateShareLink": "Paylaşım bağlantısı oluşturulamadı"
+  "failedToGenerateShareLink": "Paylaşım bağlantısı oluşturulamadı",
+  "reloadingConversations": "Konuşmalar yeniden yükleniyor...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "@welcomeBack": {
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "user": "Kullanıcı",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "Yıldızlı",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "Tarih",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "Sonuç bulunamadı",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "Arama terimlerinizi ayarlamayı deneyin",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "starConversationsToFindQuickly": "Konuşmaları burada hızlıca bulmak için yıldızlayın",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "{date} tarihinde konuşma yok",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "Farklı bir tarih seçmeyi deneyin",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  }
 }

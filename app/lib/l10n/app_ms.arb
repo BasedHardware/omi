@@ -293,9 +293,9 @@
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
-  "noStarredConversations": "Tiada perbualan berbintang lagi.",
+  "noStarredConversations": "Tiada perbualan berbintang",
   "@noStarredConversations": {
-    "description": "Empty state for starred filter"
+    "description": "Empty state title when no starred conversations"
   },
   "starConversationHint": "Untuk membintangkan perbualan, buka dan ketik ikon bintang di pengepala.",
   "@starConversationHint": {
@@ -2416,7 +2416,7 @@
   "saveGoal": "Simpan",
   "goals": "Matlamat",
   "tapToAddGoal": "Ketik untuk menambah matlamat",
-  "welcomeBack": "Selamat kembali",
+  "welcomeBack": "Selamat kembali, {name}",
   "yourConversations": "Perbualan Anda",
   "reviewAndManageConversations": "Semak dan urus perbualan yang dirakam",
   "startCapturingConversations": "Mula tangkap perbualan dengan peranti Omi anda untuk melihatnya di sini.",
@@ -2596,5 +2596,54 @@
   "noTranscriptMessage": "Perbualan ini tidak mempunyai transkrip.",
   "conversationUrlCouldNotBeGenerated": "URL perbualan tidak dapat dijana.",
   "failedToGenerateConversationLink": "Gagal menjana pautan perbualan",
-  "failedToGenerateShareLink": "Gagal menjana pautan perkongsian"
+  "failedToGenerateShareLink": "Gagal menjana pautan perkongsian",
+  "reloadingConversations": "Memuatkan semula perbualan...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "@welcomeBack": {
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "user": "Pengguna",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "Berbintang",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "Tarikh",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "Tiada hasil ditemui",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "Cuba laraskan istilah carian anda",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "starConversationsToFindQuickly": "Beri bintang pada perbualan untuk mencarinya dengan cepat di sini",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "Tiada perbualan pada {date}",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "Cuba pilih tarikh yang berbeza",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  }
 }

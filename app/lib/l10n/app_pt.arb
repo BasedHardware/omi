@@ -84,7 +84,7 @@
   "recordingsNotSynced": "Você tem gravações não sincronizadas.",
   "syncingBackground": "Continuaremos sincronizando em segundo plano.",
   "noConversationsYet": "Ainda não há conversas",
-  "noStarredConversations": "Nenhuma conversa favorita.",
+  "noStarredConversations": "Nenhuma conversa favorita",
   "starConversationHint": "Para favoritar uma conversa, abra-a e toque na estrela no topo.",
   "searchConversations": "Pesquisar conversas...",
   "selectedCount": "{count} selecionados",
@@ -840,7 +840,7 @@
   "saveGoal": "Salvar",
   "goals": "Objetivos",
   "tapToAddGoal": "Toque para adicionar um objetivo",
-  "welcomeBack": "Bem-vindo de volta",
+  "welcomeBack": "Bem-vindo de volta, {name}",
   "yourConversations": "Suas conversas",
   "reviewAndManageConversations": "Revise e gerencie suas conversas gravadas",
   "startCapturingConversations": "Comece a capturar conversas com seu dispositivo Omi para vê-las aqui.",
@@ -1020,5 +1020,57 @@
   "noTranscriptMessage": "Esta conversa não tem transcrição.",
   "conversationUrlCouldNotBeGenerated": "A URL da conversa não pôde ser gerada.",
   "failedToGenerateConversationLink": "Falha ao gerar link da conversa",
-  "failedToGenerateShareLink": "Falha ao gerar link de compartilhamento"
+  "failedToGenerateShareLink": "Falha ao gerar link de compartilhamento",
+  "reloadingConversations": "Recarregando conversas...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "@welcomeBack": {
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "user": "Usuário",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "Favoritos",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "Data",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "Nenhum resultado encontrado",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "Tente ajustar seus termos de pesquisa",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "@noStarredConversations": {
+    "description": "Empty state title when no starred conversations"
+  },
+  "starConversationsToFindQuickly": "Marque conversas como favoritas para encontrá-las rapidamente aqui",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "Nenhuma conversa em {date}",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "Tente selecionar uma data diferente",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  }
 }

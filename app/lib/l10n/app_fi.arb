@@ -293,9 +293,9 @@
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
-  "noStarredConversations": "Ei vielä tähdellä merkittyjä keskusteluja.",
+  "noStarredConversations": "Ei tähdellä merkittyjä keskusteluja",
   "@noStarredConversations": {
-    "description": "Empty state for starred filter"
+    "description": "Empty state title when no starred conversations"
   },
   "starConversationHint": "Merkitäksesi keskustelun tähdellä, avaa se ja napauta tähti-kuvaketta otsikossa.",
   "@starConversationHint": {
@@ -2416,7 +2416,7 @@
   "saveGoal": "Tallenna",
   "goals": "Tavoitteet",
   "tapToAddGoal": "Napauta lisätäksesi tavoitteen",
-  "welcomeBack": "Tervetuloa takaisin",
+  "welcomeBack": "Tervetuloa takaisin, {name}",
   "yourConversations": "Keskustelusi",
   "reviewAndManageConversations": "Tarkista ja hallitse tallennettuja keskustelujasi",
   "startCapturingConversations": "Aloita keskustelujen tallentaminen Omi-laitteellasi nähdäksesi ne täällä.",
@@ -2596,5 +2596,54 @@
   "noTranscriptMessage": "Tällä keskustelulla ei ole litterointia.",
   "conversationUrlCouldNotBeGenerated": "Keskustelun URL-osoitetta ei voitu luoda.",
   "failedToGenerateConversationLink": "Keskustelulinkin luominen epäonnistui",
-  "failedToGenerateShareLink": "Jakamislinkin luominen epäonnistui"
+  "failedToGenerateShareLink": "Jakamislinkin luominen epäonnistui",
+  "reloadingConversations": "Ladataan keskusteluja uudelleen...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "@welcomeBack": {
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "user": "Käyttäjä",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "Tähdellä merkitty",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "Päivämäärä",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "Tuloksia ei löytynyt",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "Yritä muokata hakuehtojasi",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "starConversationsToFindQuickly": "Merkitse keskustelut tähdellä löytääksesi ne nopeasti täältä",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "Ei keskusteluja päivämäärällä {date}",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "Yritä valita eri päivämäärä",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  }
 }

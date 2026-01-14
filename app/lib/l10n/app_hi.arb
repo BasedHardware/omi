@@ -84,7 +84,7 @@
   "recordingsNotSynced": "आपकी कुछ रिकॉर्डिंग अभी सिंक नहीं हुई हैं।",
   "syncingBackground": "हम बैकग्राउंड में आपकी रिकॉर्डिंग सिंक करते रहेंगे।",
   "noConversationsYet": "अभी तक कोई बातचीत नहीं",
-  "noStarredConversations": "कोई तारांकित बातचीत नहीं।",
+  "noStarredConversations": "कोई तारांकित बातचीत नहीं",
   "starConversationHint": "बातचीत को तारांकित करने के लिए, उसे खोलें और शीर्ष पर तारे के आइकन को टैप करें।",
   "searchConversations": "बातचीत खोजें...",
   "selectedCount": "{count} चयनित",
@@ -840,7 +840,7 @@
   "saveGoal": "सहेजें",
   "goals": "लक्ष्य",
   "tapToAddGoal": "लक्ष्य जोड़ने के लिए टैप करें",
-  "welcomeBack": "वापसी पर स्वागत है",
+  "welcomeBack": "वापसी पर स्वागत है, {name}",
   "yourConversations": "आपकी बातचीत",
   "reviewAndManageConversations": "अपनी रिकॉर्ड की गई बातचीत की समीक्षा करें और प्रबंधित करें",
   "startCapturingConversations": "उन्हें यहां देखने के लिए अपने Omi डिवाइस से बातचीत कैप्चर करना शुरू करें।",
@@ -1020,5 +1020,57 @@
   "noTranscriptMessage": "इस बातचीत में ट्रांसक्रिप्ट नहीं है।",
   "conversationUrlCouldNotBeGenerated": "बातचीत URL जनरेट नहीं किया जा सका।",
   "failedToGenerateConversationLink": "बातचीत लिंक जनरेट करने में विफल",
-  "failedToGenerateShareLink": "शेयर लिंक जनरेट करने में विफल"
+  "failedToGenerateShareLink": "शेयर लिंक जनरेट करने में विफल",
+  "reloadingConversations": "बातचीत को फिर से लोड किया जा रहा है...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "@welcomeBack": {
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "user": "उपयोगकर्ता",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "तारांकित",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "तारीख",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "कोई परिणाम नहीं मिला",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "अपने खोज शब्दों को समायोजित करने का प्रयास करें",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "@noStarredConversations": {
+    "description": "Empty state title when no starred conversations"
+  },
+  "starConversationsToFindQuickly": "बातचीत को तारांकित करें ताकि उन्हें यहां जल्दी से खोज सकें",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "{date} को कोई बातचीत नहीं",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "एक अलग तारीख चुनने का प्रयास करें",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  }
 }

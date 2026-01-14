@@ -84,7 +84,7 @@
   "recordingsNotSynced": "您有尚未同步的录音。",
   "syncingBackground": "我们将继续在后台同步您的录音。",
   "noConversationsYet": "还没有对话",
-  "noStarredConversations": "暂无星标对话。",
+  "noStarredConversations": "没有加星标的对话",
   "starConversationHint": "要加星标，请打开对话并点击顶部的星星图标。",
   "searchConversations": "搜索对话...",
   "selectedCount": "已选择 {count} 项",
@@ -840,7 +840,7 @@
   "saveGoal": "保存",
   "goals": "目标",
   "tapToAddGoal": "点击添加目标",
-  "welcomeBack": "欢迎回来",
+  "welcomeBack": "欢迎回来，{name}",
   "yourConversations": "你的对话",
   "reviewAndManageConversations": "查看和管理已录制的对话",
   "startCapturingConversations": "开始使用您的Omi设备捕获对话以在此处查看。",
@@ -1020,5 +1020,57 @@
   "noTranscriptMessage": "此对话没有文字记录。",
   "conversationUrlCouldNotBeGenerated": "无法生成对话URL。",
   "failedToGenerateConversationLink": "生成对话链接失败",
-  "failedToGenerateShareLink": "生成分享链接失败"
+  "failedToGenerateShareLink": "生成分享链接失败",
+  "reloadingConversations": "重新加载对话...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "@welcomeBack": {
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "user": "用户",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "已加星标",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "日期",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "未找到结果",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "尝试调整您的搜索词",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "@noStarredConversations": {
+    "description": "Empty state title when no starred conversations"
+  },
+  "starConversationsToFindQuickly": "为对话加星标以便在此快速找到它们",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "{date}没有对话",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "尝试选择其他日期",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  }
 }

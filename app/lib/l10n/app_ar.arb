@@ -293,9 +293,9 @@
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
-  "noStarredConversations": "لا توجد محادثات مميزة بنجمة بعد.",
+  "noStarredConversations": "لا توجد محادثات مميزة",
   "@noStarredConversations": {
-    "description": "Empty state for starred filter"
+    "description": "Empty state title when no starred conversations"
   },
   "starConversationHint": "لتمييز محادثة بنجمة، افتحها واضغط على أيقونة النجمة في الرأس.",
   "@starConversationHint": {
@@ -2448,7 +2448,7 @@
   "saveGoal": "حفظ",
   "goals": "الأهداف",
   "tapToAddGoal": "اضغط لإضافة هدف",
-  "welcomeBack": "مرحبا بعودتك",
+  "welcomeBack": "مرحبًا بعودتك، {name}",
   "yourConversations": "محادثاتك",
   "reviewAndManageConversations": "راجع وأدر محادثاتك المسجلة",
   "startCapturingConversations": "ابدأ في التقاط المحادثات باستخدام جهاز Omi الخاص بك لرؤيتها هنا.",
@@ -2628,5 +2628,54 @@
   "noTranscriptMessage": "هذه المحادثة ليس لديها نسخ.",
   "conversationUrlCouldNotBeGenerated": "تعذر إنشاء عنوان URL للمحادثة.",
   "failedToGenerateConversationLink": "فشل إنشاء رابط المحادثة",
-  "failedToGenerateShareLink": "فشل إنشاء رابط المشاركة"
+  "failedToGenerateShareLink": "فشل إنشاء رابط المشاركة",
+  "reloadingConversations": "إعادة تحميل المحادثات...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "@welcomeBack": {
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "user": "مستخدم",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "المميزة",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "التاريخ",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "لم يتم العثور على نتائج",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "حاول تعديل مصطلحات البحث",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "starConversationsToFindQuickly": "ضع نجمة على المحادثات للعثور عليها بسرعة هنا",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "لا توجد محادثات في {date}",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "حاول اختيار تاريخ مختلف",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  }
 }
