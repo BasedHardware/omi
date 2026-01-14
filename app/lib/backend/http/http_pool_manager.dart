@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 import 'package:http/io_client.dart';
 import 'package:pool/pool.dart';
 
@@ -71,11 +72,12 @@ class HttpPoolManager {
         lastError = TimeoutException('Request timeout');
       } on SocketException catch (e) {
         lastError = e;
+      } on HandshakeException catch (e) {
+        lastError = e;
       } on http.ClientException catch (e) {
         lastError = e;
       } catch (e) {
         lastError = e;
-        rethrow;
       }
 
       if (i < retries) {
@@ -84,7 +86,10 @@ class HttpPoolManager {
     }
 
     if (lastResponse != null) return lastResponse;
-    throw lastError ?? Exception('Request failed with unknown error');
+    if(lastError != null) {
+      debugPrint('HTTP retry failed: $lastError');
+    }
+    return http.Response('', 503);
   }
 
   Future<http.StreamedResponse> sendStreaming(http.BaseRequest request) {
