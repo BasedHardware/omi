@@ -1938,7 +1938,7 @@
   "@selectYourLanguage": {
     "description": "Placeholder for selected language name"
   },
-  "personalGrowthJourney": "Your personal growth journey with AI that listens to your every word.",
+  "personalGrowthJourney": "Călătoria ta de creștere personală cu AI care ascultă fiecare cuvânt al tău.",
   "@personalGrowthJourney": {
     "description": "Tagline on onboarding wrapper"
   },
@@ -2739,5 +2739,18 @@
   "allMemoriesAreNowPublic": "Toate amintirile sunt acum publice",
   "clearOmisMemory": "Șterge memoria lui Omi",
   "clearMemoryConfirmation": "Sigur vrei să ștergi memoria lui Omi? Această acțiune nu poate fi anulată și va șterge permanent toate cele {count} amintiri.",
-  "omisMemoryCleared": "Memoria lui Omi despre tine a fost ștearsă"
+  "omisMemoryCleared": "Memoria lui Omi despre tine a fost ștearsă",
+  "welcomeToOmi": "Bun venit la Omi",
+  "continueWithApple": "Continuă cu Apple",
+  "continueWithGoogle": "Continuă cu Google",
+  "byContinuingYouAgree": "Continuând, ești de acord cu ",
+  "termsOfService": "Termenii de serviciu",
+  "and": " și ",
+  "dataAndPrivacy": "Date și confidențialitate",
+  "secureAuthViaAppleId": "Autentificare securizată prin Apple ID",
+  "secureAuthViaGoogleAccount": "Autentificare securizată prin cont Google",
+  "whatWeCollect": "Ce colectăm",
+  "dataCollectionMessage": "Continuând, conversațiile, înregistrările și informațiile personale vor fi stocate în siguranță pe serverele noastre pentru a oferi informații alimentate de AI și a activa toate funcțiile aplicației.",
+  "dataProtection": "Protecția datelor",
+  "yourDataIsProtected": "Datele tale sunt protejate și guvernate de "
 }

@@ -2739,5 +2739,18 @@
   "allMemoriesAreNowPublic": "Všetky spomienky sú teraz verejné",
   "clearOmisMemory": "Vymazať pamäť Omi",
   "clearMemoryConfirmation": "Naozaj chcete vymazať pamäť Omi? Túto akciu nie je možné vrátiť späť a trvalo odstráni všetkých {count} spomienok.",
-  "omisMemoryCleared": "Pamäť Omi o vás bola vymazaná"
+  "omisMemoryCleared": "Pamäť Omi o vás bola vymazaná",
+  "welcomeToOmi": "Vitajte v Omi",
+  "continueWithApple": "Pokračovať s Apple",
+  "continueWithGoogle": "Pokračovať s Google",
+  "byContinuingYouAgree": "Pokračovaním súhlasíte s našimi ",
+  "termsOfService": "Podmienkami služby",
+  "and": " a ",
+  "dataAndPrivacy": "Dáta a súkromie",
+  "secureAuthViaAppleId": "Bezpečné overenie cez Apple ID",
+  "secureAuthViaGoogleAccount": "Bezpečné overenie cez účet Google",
+  "whatWeCollect": "Čo zbierame",
+  "dataCollectionMessage": "Pokračovaním budú vaše konverzácie, nahrávky a osobné údaje bezpečne uložené na našich serveroch, aby poskytli prehľady založené na AI a umožnili všetky funkcie aplikácie.",
+  "dataProtection": "Ochrana dát",
+  "yourDataIsProtected": "Vaše dáta sú chránené a riadia sa našimi "
 }

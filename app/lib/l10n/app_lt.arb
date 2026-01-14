@@ -1920,7 +1920,7 @@
   "@selectYourLanguage": {
     "description": "Placeholder for selected language name"
   },
-  "personalGrowthJourney": "Jūsų asmeninio augimo kelionė su DI, kuris klauso kiekvieno jūsų žodžio.",
+  "personalGrowthJourney": "Jūsų asmeninio augimo kelionė su AI, kuris klauso kiekvieno jūsų žodžio.",
   "@personalGrowthJourney": {
     "description": "Tagline on onboarding wrapper"
   },
@@ -2721,5 +2721,18 @@
   "allMemoriesAreNowPublic": "Visi atminimai dabar vieši",
   "clearOmisMemory": "Išvalyti Omi atmintį",
   "clearMemoryConfirmation": "Ar tikrai norite išvalyti Omi atmintį? Šio veiksmo negalima atšaukti ir bus visam laikui ištrinti visi {count} atminimai.",
-  "omisMemoryCleared": "Omi atmintis apie jus buvo išvalyta"
+  "omisMemoryCleared": "Omi atmintis apie jus buvo išvalyta",
+  "welcomeToOmi": "Sveiki atvykę į Omi",
+  "continueWithApple": "Tęsti su Apple",
+  "continueWithGoogle": "Tęsti su Google",
+  "byContinuingYouAgree": "Tęsdami sutinkate su mūsų ",
+  "termsOfService": "Paslaugų sąlygomis",
+  "and": " ir ",
+  "dataAndPrivacy": "Duomenys ir privatumas",
+  "secureAuthViaAppleId": "Saugus autentifikavimas per Apple ID",
+  "secureAuthViaGoogleAccount": "Saugus autentifikavimas per Google paskyrą",
+  "whatWeCollect": "Ką renkame",
+  "dataCollectionMessage": "Tęsdami, jūsų pokalbiai, įrašai ir asmeninė informacija bus saugiai saugomi mūsų serveriuose, kad galėtume teikti AI valdomą įžvalgą ir įgalinti visas programos funkcijas.",
+  "dataProtection": "Duomenų apsauga",
+  "yourDataIsProtected": "Jūsų duomenys yra saugomi ir valdomi pagal mūsų "
 }

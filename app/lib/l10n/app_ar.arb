@@ -1938,7 +1938,7 @@
   "@selectYourLanguage": {
     "description": "Placeholder for selected language name"
   },
-  "personalGrowthJourney": "رحلة نموك الشخصية مع الذكاء الاصطناعي الذي يستمع إلى كل كلمة تقولها.",
+  "personalGrowthJourney": "رحلة نموك الشخصية مع الذكاء الاصطناعي الذي يستمع لكل كلمة تقولها.",
   "@personalGrowthJourney": {
     "description": "Tagline on onboarding wrapper"
   },
@@ -2771,5 +2771,18 @@
   "allMemoriesAreNowPublic": "كل الذكريات الآن عامة",
   "clearOmisMemory": "مسح ذاكرة Omi",
   "clearMemoryConfirmation": "هل أنت متأكد من مسح ذاكرة Omi؟ لا يمكن التراجع عن هذا الإجراء وسيتم حذف جميع الذكريات الـ {count} نهائياً.",
-  "omisMemoryCleared": "تم مسح ذاكرة Omi عنك"
+  "omisMemoryCleared": "تم مسح ذاكرة Omi عنك",
+  "welcomeToOmi": "مرحباً بك في Omi",
+  "continueWithApple": "متابعة مع Apple",
+  "continueWithGoogle": "متابعة مع Google",
+  "byContinuingYouAgree": "بالمتابعة، فإنك توافق على ",
+  "termsOfService": "شروط الخدمة",
+  "and": " و",
+  "dataAndPrivacy": "البيانات والخصوصية",
+  "secureAuthViaAppleId": "المصادقة الآمنة عبر Apple ID",
+  "secureAuthViaGoogleAccount": "المصادقة الآمنة عبر حساب Google",
+  "whatWeCollect": "ما نجمعه",
+  "dataCollectionMessage": "بالمتابعة، سيتم تخزين محادثاتك وتسجيلاتك ومعلوماتك الشخصية بشكل آمن على خوادمنا لتوفير رؤى مدعومة بالذكاء الاصطناعي وتمكين جميع ميزات التطبيق.",
+  "dataProtection": "حماية البيانات",
+  "yourDataIsProtected": "بياناتك محمية وتخضع لـ "
 }

@@ -629,7 +629,7 @@
   "languageBenefits": "Stellen Sie Ihre Sprache für schärfere Transkriptionen und ein personalisiertes Erlebnis ein",
   "whatsYourPrimaryLanguage": "Was ist Ihre primäre Sprache?",
   "selectYourLanguage": "Wählen Sie Ihre Sprache",
-  "personalGrowthJourney": "Ihre persönliche Wachstumsreise mit KI, die jedem Ihrer Worte zuhört.",
+  "personalGrowthJourney": "Ihre persönliche Wachstumsreise mit KI, die auf jedes Ihrer Worte hört.",
   "actionItemsTitle": "Aufgaben",
   "actionItemsDescription": "Tippen zum Bearbeiten • Lang drücken zum Auswählen • Wischen für Aktionen",
   "tabToDo": "Zu erledigen",
@@ -1186,5 +1186,18 @@
   "allMemoriesAreNowPublic": "Alle Erinnerungen sind jetzt öffentlich",
   "clearOmisMemory": "Omis Erinnerung löschen",
   "clearMemoryConfirmation": "Möchten Sie Omis Erinnerung wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden und wird alle {count} Erinnerungen dauerhaft löschen.",
-  "omisMemoryCleared": "Omis Erinnerung an Sie wurde gelöscht"
+  "omisMemoryCleared": "Omis Erinnerung an Sie wurde gelöscht",
+  "welcomeToOmi": "Willkommen bei Omi",
+  "continueWithApple": "Mit Apple fortfahren",
+  "continueWithGoogle": "Mit Google fortfahren",
+  "byContinuingYouAgree": "Indem Sie fortfahren, stimmen Sie unseren ",
+  "termsOfService": "Nutzungsbedingungen",
+  "and": " und ",
+  "dataAndPrivacy": "Daten & Datenschutz",
+  "secureAuthViaAppleId": "Sichere Authentifizierung über Apple ID",
+  "secureAuthViaGoogleAccount": "Sichere Authentifizierung über Google-Konto",
+  "whatWeCollect": "Was wir sammeln",
+  "dataCollectionMessage": "Durch Fortfahren werden Ihre Gespräche, Aufnahmen und persönlichen Informationen sicher auf unseren Servern gespeichert, um KI-gestützte Einblicke zu bieten und alle App-Funktionen zu ermöglichen.",
+  "dataProtection": "Datenschutz",
+  "yourDataIsProtected": "Ihre Daten sind geschützt und unterliegen unserer "
 }

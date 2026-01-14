@@ -2721,5 +2721,18 @@
   "allMemoriesAreNowPublic": "Tüm anılar artık herkese açık",
   "clearOmisMemory": "Omi'nin Belleğini Temizle",
   "clearMemoryConfirmation": "Omi'nin belleğini temizlemek istediğinizden emin misiniz? Bu işlem geri alınamaz ve tüm {count} anıyı kalıcı olarak siler.",
-  "omisMemoryCleared": "Omi'nin senin hakkındaki belleği temizlendi"
+  "omisMemoryCleared": "Omi'nin senin hakkındaki belleği temizlendi",
+  "welcomeToOmi": "Omi'ye hoş geldiniz",
+  "continueWithApple": "Apple ile devam et",
+  "continueWithGoogle": "Google ile devam et",
+  "byContinuingYouAgree": "Devam ederek ",
+  "termsOfService": "Hizmet Koşullarını",
+  "and": " ve ",
+  "dataAndPrivacy": "Veri ve Gizlilik",
+  "secureAuthViaAppleId": "Apple ID üzerinden güvenli kimlik doğrulama",
+  "secureAuthViaGoogleAccount": "Google Hesabı üzerinden güvenli kimlik doğrulama",
+  "whatWeCollect": "Topladıklarımız",
+  "dataCollectionMessage": "Devam ederek, konuşmalarınız, kayıtlarınız ve kişisel bilgileriniz AI destekli içgörüler sağlamak ve tüm uygulama özelliklerini etkinleştirmek için sunucularımızda güvenli bir şekilde saklanacaktır.",
+  "dataProtection": "Veri Koruması",
+  "yourDataIsProtected": "Verileriniz korunmaktadır ve "
 }

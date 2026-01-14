@@ -1938,7 +1938,7 @@
   "@selectYourLanguage": {
     "description": "Placeholder for selected language name"
   },
-  "personalGrowthJourney": "Hành trình phát triển cá nhân của bạn với AI lắng nghe mọi lời nói của bạn.",
+  "personalGrowthJourney": "Hành trình phát triển cá nhân của bạn với AI lắng nghe từng lời nói.",
   "@personalGrowthJourney": {
     "description": "Tagline on onboarding wrapper"
   },
@@ -2739,5 +2739,18 @@
   "allMemoriesAreNowPublic": "Tất cả ký ức hiện đã ở chế độ công khai",
   "clearOmisMemory": "Xóa bộ nhớ của Omi",
   "clearMemoryConfirmation": "Bạn có chắc chắn muốn xóa bộ nhớ của Omi không? Hành động này không thể hoàn tác và sẽ xóa vĩnh viễn tất cả {count} ký ức.",
-  "omisMemoryCleared": "Bộ nhớ của Omi về bạn đã được xóa"
+  "omisMemoryCleared": "Bộ nhớ của Omi về bạn đã được xóa",
+  "welcomeToOmi": "Chào mừng đến với Omi",
+  "continueWithApple": "Tiếp tục với Apple",
+  "continueWithGoogle": "Tiếp tục với Google",
+  "byContinuingYouAgree": "Bằng cách tiếp tục, bạn đồng ý với ",
+  "termsOfService": "Điều khoản dịch vụ",
+  "and": " và ",
+  "dataAndPrivacy": "Dữ liệu & Quyền riêng tư",
+  "secureAuthViaAppleId": "Xác thực an toàn qua Apple ID",
+  "secureAuthViaGoogleAccount": "Xác thực an toàn qua tài khoản Google",
+  "whatWeCollect": "Những gì chúng tôi thu thập",
+  "dataCollectionMessage": "Bằng cách tiếp tục, các cuộc trò chuyện, bản ghi và thông tin cá nhân của bạn sẽ được lưu trữ an toàn trên máy chủ của chúng tôi để cung cấp thông tin chi tiết được hỗ trợ bởi AI và kích hoạt tất cả các tính năng ứng dụng.",
+  "dataProtection": "Bảo vệ dữ liệu",
+  "yourDataIsProtected": "Dữ liệu của bạn được bảo vệ và quản lý bởi "
 }

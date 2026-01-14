@@ -1557,5 +1557,18 @@
   "allMemoriesAreNowPublic": "Tous les souvenirs sont maintenant publics",
   "clearOmisMemory": "Effacer la mémoire d'Omi",
   "clearMemoryConfirmation": "Êtes-vous sûr de vouloir effacer la mémoire d'Omi? Cette action ne peut pas être annulée et supprimera définitivement tous les {count} souvenirs.",
-  "omisMemoryCleared": "La mémoire d'Omi à votre sujet a été effacée"
+  "omisMemoryCleared": "La mémoire d'Omi à votre sujet a été effacée",
+  "welcomeToOmi": "Bienvenue sur Omi",
+  "continueWithApple": "Continuer avec Apple",
+  "continueWithGoogle": "Continuer avec Google",
+  "byContinuingYouAgree": "En continuant, vous acceptez nos ",
+  "termsOfService": "Conditions de service",
+  "and": " et ",
+  "dataAndPrivacy": "Données et confidentialité",
+  "secureAuthViaAppleId": "Authentification sécurisée via Apple ID",
+  "secureAuthViaGoogleAccount": "Authentification sécurisée via compte Google",
+  "whatWeCollect": "Ce que nous collectons",
+  "dataCollectionMessage": "En continuant, vos conversations, enregistrements et informations personnelles seront stockés en toute sécurité sur nos serveurs pour fournir des informations alimentées par l'IA et activer toutes les fonctionnalités de l'application.",
+  "dataProtection": "Protection des données",
+  "yourDataIsProtected": "Vos données sont protégées et régies par notre "
 }

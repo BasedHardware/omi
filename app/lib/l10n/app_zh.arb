@@ -624,7 +624,7 @@
   "languageBenefits": "设置语言以获得更清晰的转录",
   "whatsYourPrimaryLanguage": "您的主要语言是什么？",
   "selectYourLanguage": "选择您的语言",
-  "personalGrowthJourney": "在 AI 聆听下开启个人成长之旅。",
+  "personalGrowthJourney": "您的个人成长之旅，AI 倾听您的每一句话。",
   "actionItemsTitle": "行动项",
   "actionItemsDescription": "点击编辑 • 长按选择 •以此滑动",
   "tabToDo": "待办",
@@ -1186,5 +1186,18 @@
   "allMemoriesAreNowPublic": "所有记忆现已公开",
   "clearOmisMemory": "清除 Omi 的记忆",
   "clearMemoryConfirmation": "您确定要清除 Omi 的记忆吗？此操作无法撤消，将永久删除所有 {count} 条记忆。",
-  "omisMemoryCleared": "Omi 关于您的记忆已被清除"
+  "omisMemoryCleared": "Omi 关于您的记忆已被清除",
+  "welcomeToOmi": "欢迎来到 Omi",
+  "continueWithApple": "使用 Apple 继续",
+  "continueWithGoogle": "使用 Google 继续",
+  "byContinuingYouAgree": "继续即表示您同意我们的",
+  "termsOfService": "服务条款",
+  "and": "和",
+  "dataAndPrivacy": "数据与隐私",
+  "secureAuthViaAppleId": "通过 Apple ID 安全认证",
+  "secureAuthViaGoogleAccount": "通过 Google 账户安全认证",
+  "whatWeCollect": "我们收集的信息",
+  "dataCollectionMessage": "继续即表示您的对话、录音和个人信息将安全地存储在我们的服务器上，以提供 AI 驱动的见解并启用所有应用功能。",
+  "dataProtection": "数据保护",
+  "yourDataIsProtected": "您的数据受保护并受我们的"
 }

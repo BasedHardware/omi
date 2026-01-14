@@ -2739,5 +2739,18 @@
   "allMemoriesAreNowPublic": "Kaikki muistot ovat nyt julkisia",
   "clearOmisMemory": "Tyhjennä Omin muisti",
   "clearMemoryConfirmation": "Haluatko varmasti tyhjentää Omin muistin? Tätä toimintoa ei voi perua ja se poistaa pysyvästi kaikki {count} muistoa.",
-  "omisMemoryCleared": "Omin muisti sinusta on tyhjennetty"
+  "omisMemoryCleared": "Omin muisti sinusta on tyhjennetty",
+  "welcomeToOmi": "Tervetuloa Omi",
+  "continueWithApple": "Jatka Applella",
+  "continueWithGoogle": "Jatka Googlella",
+  "byContinuingYouAgree": "Jatkamalla hyväksyt ",
+  "termsOfService": "Käyttöehdot",
+  "and": " ja ",
+  "dataAndPrivacy": "Tiedot ja tietosuoja",
+  "secureAuthViaAppleId": "Turvallinen todennus Apple ID:n kautta",
+  "secureAuthViaGoogleAccount": "Turvallinen todennus Google-tilin kautta",
+  "whatWeCollect": "Mitä keräämme",
+  "dataCollectionMessage": "Jatkamalla keskustelusi, tallenteet ja henkilötiedot tallennetaan turvallisesti palvelimillemme tarjotaksemme tekoälyavusteisia näkemyksiä ja mahdollistaaksemme kaikki sovelluksen ominaisuudet.",
+  "dataProtection": "Tietosuoja",
+  "yourDataIsProtected": "Tietosi ovat suojattuja ja niitä säätelee "
 }

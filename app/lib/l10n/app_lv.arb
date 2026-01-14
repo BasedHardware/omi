@@ -2739,5 +2739,18 @@
   "allMemoriesAreNowPublic": "Visas atmiņas tagad ir publiskas",
   "clearOmisMemory": "Notīrīt Omi atmiņu",
   "clearMemoryConfirmation": "Vai tiešām vēlaties notīrīt Omi atmiņu? Šo darbību nevar atsaukt un tā neatgriezeniski dzēsīs visas {count} atmiņas.",
-  "omisMemoryCleared": "Omi atmiņa par jums ir notīrīta"
+  "omisMemoryCleared": "Omi atmiņa par jums ir notīrīta",
+  "welcomeToOmi": "Laipni lūdzam Omi",
+  "continueWithApple": "Turpināt ar Apple",
+  "continueWithGoogle": "Turpināt ar Google",
+  "byContinuingYouAgree": "Turpinot, jūs piekrītat mūsu ",
+  "termsOfService": "Pakalpojuma noteikumiem",
+  "and": " un ",
+  "dataAndPrivacy": "Dati un privātums",
+  "secureAuthViaAppleId": "Droša autentifikācija caur Apple ID",
+  "secureAuthViaGoogleAccount": "Droša autentifikācija caur Google kontu",
+  "whatWeCollect": "Ko mēs vācam",
+  "dataCollectionMessage": "Turpinot, jūsu sarunas, ieraksti un personiskā informācija tiks droši glabāta mūsu serveros, lai sniegtu AI vadītu ieskatu un iespējotu visas lietotnes funkcijas.",
+  "dataProtection": "Datu aizsardzība",
+  "yourDataIsProtected": "Jūsu dati ir aizsargāti un regulēti ar mūsu "
 }

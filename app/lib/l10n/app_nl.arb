@@ -981,7 +981,7 @@
   "languageBenefits": "Stel je taal in voor scherpere transcripties en een gepersonaliseerde ervaring",
   "whatsYourPrimaryLanguage": "Wat is je primaire taal?",
   "selectYourLanguage": "Selecteer je taal",
-  "personalGrowthJourney": "Je persoonlijke groeireis met AI die naar elk woord luistert.",
+  "personalGrowthJourney": "Jouw persoonlijke groeireis met AI die naar elk woord luistert.",
   "actionItemsTitle": "Taken",
   "actionItemsDescription": "Tik om te bewerken • Lang indrukken om te selecteren • Veeg voor acties",
   "tabToDo": "Te doen",
@@ -1557,5 +1557,18 @@
   "allMemoriesAreNowPublic": "Alle herinneringen zijn nu openbaar",
   "clearOmisMemory": "Omi's geheugen wissen",
   "clearMemoryConfirmation": "Weet je zeker dat je Omi's geheugen wilt wissen? Deze actie kan niet ongedaan worden gemaakt en zal alle {count} herinneringen permanent verwijderen.",
-  "omisMemoryCleared": "Omi's geheugen over jou is gewist"
+  "omisMemoryCleared": "Omi's geheugen over jou is gewist",
+  "welcomeToOmi": "Welkom bij Omi",
+  "continueWithApple": "Doorgaan met Apple",
+  "continueWithGoogle": "Doorgaan met Google",
+  "byContinuingYouAgree": "Door door te gaan, ga je akkoord met onze ",
+  "termsOfService": "Servicevoorwaarden",
+  "and": " en ",
+  "dataAndPrivacy": "Data en privacy",
+  "secureAuthViaAppleId": "Veilige authenticatie via Apple ID",
+  "secureAuthViaGoogleAccount": "Veilige authenticatie via Google-account",
+  "whatWeCollect": "Wat we verzamelen",
+  "dataCollectionMessage": "Door door te gaan, worden je gesprekken, opnames en persoonlijke informatie veilig opgeslagen op onze servers om AI-gedreven inzichten te bieden en alle app-functies mogelijk te maken.",
+  "dataProtection": "Gegevensbescherming",
+  "yourDataIsProtected": "Je gegevens zijn beschermd en worden beheerst door ons "
 }

@@ -1938,7 +1938,7 @@
   "@selectYourLanguage": {
     "description": "Placeholder for selected language name"
   },
-  "personalGrowthJourney": "Ваша подорож особистого зростання з AI, який слухає кожне ваше слово.",
+  "personalGrowthJourney": "Ваша подорож особистісного зростання зі штучним інтелектом, який слухає кожне ваше слово.",
   "@personalGrowthJourney": {
     "description": "Tagline on onboarding wrapper"
   },
@@ -2739,5 +2739,18 @@
   "allMemoriesAreNowPublic": "Всі спогади тепер публічні",
   "clearOmisMemory": "Очистити пам'ять Omi",
   "clearMemoryConfirmation": "Ви впевнені, що хочете очистити пам'ять Omi? Цю дію не можна скасувати, і вона назавжди видалить всі {count} спогадів.",
-  "omisMemoryCleared": "Пам'ять Omi про вас очищено"
+  "omisMemoryCleared": "Пам'ять Omi про вас очищено",
+  "welcomeToOmi": "Ласкаво просимо до Omi",
+  "continueWithApple": "Продовжити з Apple",
+  "continueWithGoogle": "Продовжити з Google",
+  "byContinuingYouAgree": "Продовжуючи, ви погоджуєтесь з нашими ",
+  "termsOfService": "Умовами надання послуг",
+  "and": " та ",
+  "dataAndPrivacy": "Дані та конфіденційність",
+  "secureAuthViaAppleId": "Безпечна автентифікація через Apple ID",
+  "secureAuthViaGoogleAccount": "Безпечна автентифікація через обліковий запис Google",
+  "whatWeCollect": "Що ми збираємо",
+  "dataCollectionMessage": "Продовжуючи, ваші розмови, записи та особиста інформація будуть безпечно зберігатися на наших серверах для надання аналітики на основі ШІ та увімкнення всіх функцій додатку.",
+  "dataProtection": "Захист даних",
+  "yourDataIsProtected": "Ваші дані захищені та регулюються нашою "
 }

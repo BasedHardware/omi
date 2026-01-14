@@ -2739,5 +2739,18 @@
   "allMemoriesAreNowPublic": "Semua memori kini awam",
   "clearOmisMemory": "Kosongkan Memori Omi",
   "clearMemoryConfirmation": "Adakah anda pasti mahu mengosongkan memori Omi? Tindakan ini tidak boleh dibatalkan dan akan memadam semua {count} memori secara kekal.",
-  "omisMemoryCleared": "Memori Omi tentang anda telah dikosongkan"
+  "omisMemoryCleared": "Memori Omi tentang anda telah dikosongkan",
+  "welcomeToOmi": "Selamat datang ke Omi",
+  "continueWithApple": "Teruskan dengan Apple",
+  "continueWithGoogle": "Teruskan dengan Google",
+  "byContinuingYouAgree": "Dengan meneruskan, anda bersetuju dengan ",
+  "termsOfService": "Terma Perkhidmatan",
+  "and": " dan ",
+  "dataAndPrivacy": "Data & Privasi",
+  "secureAuthViaAppleId": "Pengesahan selamat melalui Apple ID",
+  "secureAuthViaGoogleAccount": "Pengesahan selamat melalui Akaun Google",
+  "whatWeCollect": "Apa yang kami kumpulkan",
+  "dataCollectionMessage": "Dengan meneruskan, perbualan, rakaman dan maklumat peribadi anda akan disimpan dengan selamat di pelayan kami untuk memberikan wawasan dikuasakan AI dan membolehkan semua ciri aplikasi.",
+  "dataProtection": "Perlindungan Data",
+  "yourDataIsProtected": "Data anda dilindungi dan dikawal oleh "
 }

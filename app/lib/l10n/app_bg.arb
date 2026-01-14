@@ -2757,5 +2757,18 @@
   "allMemoriesAreNowPublic": "Всички спомени са вече публични",
   "clearOmisMemory": "Изчисти паметта на Omi",
   "clearMemoryConfirmation": "Сигурни ли сте, че искате да изчистите паметта на Omi? Това действие не може да бъде отменено и ще изтрие трайно всички {count} спомена.",
-  "omisMemoryCleared": "Паметта на Omi за вас е изчистена"
+  "omisMemoryCleared": "Паметта на Omi за вас е изчистена",
+  "welcomeToOmi": "Добре дошли в Omi",
+  "continueWithApple": "Продължи с Apple",
+  "continueWithGoogle": "Продължи с Google",
+  "byContinuingYouAgree": "Продължавайки, вие се съгласявате с нашите ",
+  "termsOfService": "Общи условия",
+  "and": " и ",
+  "dataAndPrivacy": "Данни и поверителност",
+  "secureAuthViaAppleId": "Сигурна автентикация чрез Apple ID",
+  "secureAuthViaGoogleAccount": "Сигурна автентикация чрез Google акаунт",
+  "whatWeCollect": "Какво събираме",
+  "dataCollectionMessage": "Продължавайки, вашите разговори, записи и лична информация ще бъдат съхранявани сигурно на нашите сървъри, за да предоставим прозрения, задвижвани от AI, и да активираме всички функции на приложението.",
+  "dataProtection": "Защита на данните",
+  "yourDataIsProtected": "Вашите данни са защитени и регулирани от нашата "
 }

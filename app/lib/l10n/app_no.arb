@@ -2739,5 +2739,18 @@
   "allMemoriesAreNowPublic": "Alle minner er nå offentlige",
   "clearOmisMemory": "Tøm Omis minne",
   "clearMemoryConfirmation": "Er du sikker på at du vil tømme Omis minne? Denne handlingen kan ikke angres og vil permanent slette alle {count} minner.",
-  "omisMemoryCleared": "Omis minne om deg er tømt"
+  "omisMemoryCleared": "Omis minne om deg er tømt",
+  "welcomeToOmi": "Velkommen til Omi",
+  "continueWithApple": "Fortsett med Apple",
+  "continueWithGoogle": "Fortsett med Google",
+  "byContinuingYouAgree": "Ved å fortsette godtar du våre ",
+  "termsOfService": "Tjenestevilkår",
+  "and": " og ",
+  "dataAndPrivacy": "Data og personvern",
+  "secureAuthViaAppleId": "Sikker autentisering via Apple ID",
+  "secureAuthViaGoogleAccount": "Sikker autentisering via Google-konto",
+  "whatWeCollect": "Hva vi samler inn",
+  "dataCollectionMessage": "Ved å fortsette vil samtalene, opptakene og personlige informasjon bli sikkert lagret på våre servere for å gi AI-drevne innsikter og aktivere alle appfunksjoner.",
+  "dataProtection": "Databeskyttelse",
+  "yourDataIsProtected": "Dataene dine er beskyttet og styres av vår "
 }

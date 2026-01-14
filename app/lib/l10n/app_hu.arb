@@ -1938,7 +1938,7 @@
   "@selectYourLanguage": {
     "description": "Placeholder for selected language name"
   },
-  "personalGrowthJourney": "Személyes fejlődési utad egy AI-val, amely minden szavadat figyeli.",
+  "personalGrowthJourney": "Személyes növekedési utazásod AI-val, amely minden szavadra figyel.",
   "@personalGrowthJourney": {
     "description": "Tagline on onboarding wrapper"
   },
@@ -2739,5 +2739,18 @@
   "allMemoriesAreNowPublic": "Minden emlékezet most nyilvános",
   "clearOmisMemory": "Omi memóriájának törlése",
   "clearMemoryConfirmation": "Biztosan törölni szeretnéd az Omi memóriáját? Ez a művelet nem vonható vissza és véglegesen törli mind a(z) {count} emlékezetet.",
-  "omisMemoryCleared": "Az Omi rólad szóló memóriája törölve lett"
+  "omisMemoryCleared": "Az Omi rólad szóló memóriája törölve lett",
+  "welcomeToOmi": "Üdvözöljük az Omiban",
+  "continueWithApple": "Folytatás Apple-lel",
+  "continueWithGoogle": "Folytatás Google-lel",
+  "byContinuingYouAgree": "A folytatással elfogadod ",
+  "termsOfService": "Szolgáltatási feltételeinket",
+  "and": " és ",
+  "dataAndPrivacy": "Adatok és adatvédelem",
+  "secureAuthViaAppleId": "Biztonságos hitelesítés Apple ID-n keresztül",
+  "secureAuthViaGoogleAccount": "Biztonságos hitelesítés Google fiókon keresztül",
+  "whatWeCollect": "Mit gyűjtünk",
+  "dataCollectionMessage": "A folytatással beszélgetéseid, felvételeid és személyes adataid biztonságosan tárolódnak szervereiken, hogy AI-alapú betekintéseket nyújtsunk és engedélyezzük az összes app funkciót.",
+  "dataProtection": "Adatvédelem",
+  "yourDataIsProtected": "Adataid védettek és "
 }

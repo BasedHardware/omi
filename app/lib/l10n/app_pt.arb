@@ -624,7 +624,7 @@
   "languageBenefits": "Configure seu idioma para melhores resultados",
   "whatsYourPrimaryLanguage": "Qual é o seu idioma principal?",
   "selectYourLanguage": "Selecione seu idioma",
-  "personalGrowthJourney": "Sua jornada de crescimento pessoal com IA.",
+  "personalGrowthJourney": "Sua jornada de crescimento pessoal com IA que ouve cada palavra sua.",
   "actionItemsTitle": "Ações",
   "actionItemsDescription": "Toque para editar • Segure para selecionar • Deslize para ações",
   "tabToDo": "A fazer",
@@ -1186,5 +1186,18 @@
   "allMemoriesAreNowPublic": "Todas as memórias agora são públicas",
   "clearOmisMemory": "Limpar memória do Omi",
   "clearMemoryConfirmation": "Tem certeza de que deseja limpar a memória do Omi? Esta ação não pode ser desfeita e excluirá permanentemente todas as {count} memórias.",
-  "omisMemoryCleared": "A memória do Omi sobre você foi limpa"
+  "omisMemoryCleared": "A memória do Omi sobre você foi limpa",
+  "welcomeToOmi": "Bem-vindo ao Omi",
+  "continueWithApple": "Continuar com Apple",
+  "continueWithGoogle": "Continuar com Google",
+  "byContinuingYouAgree": "Ao continuar, você concorda com nossos ",
+  "termsOfService": "Termos de serviço",
+  "and": " e ",
+  "dataAndPrivacy": "Dados e privacidade",
+  "secureAuthViaAppleId": "Autenticação segura via Apple ID",
+  "secureAuthViaGoogleAccount": "Autenticação segura via conta Google",
+  "whatWeCollect": "O que coletamos",
+  "dataCollectionMessage": "Ao continuar, suas conversas, gravações e informações pessoais serão armazenadas com segurança em nossos servidores para fornecer insights alimentados por IA e habilitar todos os recursos do aplicativo.",
+  "dataProtection": "Proteção de dados",
+  "yourDataIsProtected": "Seus dados são protegidos e regidos por nossa "
 }

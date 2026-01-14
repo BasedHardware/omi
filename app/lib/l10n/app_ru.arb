@@ -1938,7 +1938,7 @@
   "@selectYourLanguage": {
     "description": "Placeholder for selected language name"
   },
-  "personalGrowthJourney": "Ваше личностное развитие с AI, который слушает каждое ваше слово.",
+  "personalGrowthJourney": "Ваше путешествие личностного роста с ИИ, который слушает каждое ваше слово.",
   "@personalGrowthJourney": {
     "description": "Tagline on onboarding wrapper"
   },
@@ -2739,5 +2739,18 @@
   "allMemoriesAreNowPublic": "Все воспоминания теперь публичные",
   "clearOmisMemory": "Очистить память Omi",
   "clearMemoryConfirmation": "Вы уверены, что хотите очистить память Omi? Это действие нельзя отменить, и оно навсегда удалит все {count} воспоминаний.",
-  "omisMemoryCleared": "Память Omi о вас была очищена"
+  "omisMemoryCleared": "Память Omi о вас была очищена",
+  "welcomeToOmi": "Добро пожаловать в Omi",
+  "continueWithApple": "Продолжить с Apple",
+  "continueWithGoogle": "Продолжить с Google",
+  "byContinuingYouAgree": "Продолжая, вы соглашаетесь с нашими ",
+  "termsOfService": "Условиями обслуживания",
+  "and": " и ",
+  "dataAndPrivacy": "Данные и конфиденциальность",
+  "secureAuthViaAppleId": "Безопасная аутентификация через Apple ID",
+  "secureAuthViaGoogleAccount": "Безопасная аутентификация через аккаунт Google",
+  "whatWeCollect": "Что мы собираем",
+  "dataCollectionMessage": "Продолжая, ваши разговоры, записи и личная информация будут надежно храниться на наших серверах для предоставления аналитики на основе ИИ и включения всех функций приложения.",
+  "dataProtection": "Защита данных",
+  "yourDataIsProtected": "Ваши данные защищены и регулируются нашей "
 }

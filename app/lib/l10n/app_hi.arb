@@ -624,7 +624,7 @@
   "languageBenefits": "स्पष्ट प्रतिलेखन के लिए अपनी भाषा निर्धारित करें",
   "whatsYourPrimaryLanguage": "आपकी प्राथमिक भाषा क्या है?",
   "selectYourLanguage": "अपनी भाषा चुनें",
-  "personalGrowthJourney": "AI सुनने के साथ आपकी व्यक्तिगत विकास यात्रा।",
+  "personalGrowthJourney": "आपकी व्यक्तिगत विकास यात्रा AI के साथ जो आपके हर शब्द को सुनता है।",
   "actionItemsTitle": "कार्य",
   "actionItemsDescription": "संपादित करने के लिए टैप करें • चुनने के लिए होल्ड करें • कार्रवाई के लिए स्वाइप करें",
   "tabToDo": "करने के लिए",
@@ -1186,5 +1186,18 @@
   "allMemoriesAreNowPublic": "सभी यादें अब सार्वजनिक हैं",
   "clearOmisMemory": "Omi की स्मृति साफ़ करें",
   "clearMemoryConfirmation": "क्या आप वाकई Omi की स्मृति साफ़ करना चाहते हैं? यह क्रिया पूर्ववत नहीं की जा सकती और सभी {count} यादों को स्थायी रूप से हटा देगी।",
-  "omisMemoryCleared": "आपके बारे में Omi की स्मृति साफ़ कर दी गई है"
+  "omisMemoryCleared": "आपके बारे में Omi की स्मृति साफ़ कर दी गई है",
+  "welcomeToOmi": "Omi में आपका स्वागत है",
+  "continueWithApple": "Apple के साथ जारी रखें",
+  "continueWithGoogle": "Google के साथ जारी रखें",
+  "byContinuingYouAgree": "जारी रखने से, आप हमारी ",
+  "termsOfService": "सेवा की शर्तों",
+  "and": " और ",
+  "dataAndPrivacy": "डेटा और गोपनीयता",
+  "secureAuthViaAppleId": "Apple ID के माध्यम से सुरक्षित प्रमाणीकरण",
+  "secureAuthViaGoogleAccount": "Google खाते के माध्यम से सुरक्षित प्रमाणीकरण",
+  "whatWeCollect": "हम क्या एकत्र करते हैं",
+  "dataCollectionMessage": "जारी रखने से, आपकी बातचीत, रिकॉर्डिंग और व्यक्तिगत जानकारी AI-संचालित अंतर्दृष्टि प्रदान करने और सभी ऐप सुविधाओं को सक्षम करने के लिए हमारे सर्वर पर सुरक्षित रूप से संग्रहीत की जाएगी।",
+  "dataProtection": "डेटा सुरक्षा",
+  "yourDataIsProtected": "आपका डेटा सुरक्षित है और हमारी "
 }

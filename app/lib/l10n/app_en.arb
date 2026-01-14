@@ -1940,7 +1940,7 @@
   },
   "personalGrowthJourney": "Your personal growth journey with AI that listens to your every word.",
   "@personalGrowthJourney": {
-    "description": "Tagline on onboarding wrapper"
+    "description": "Subtitle describing Omi on auth screen"
   },
   "actionItemsTitle": "To-Do's",
   "@actionItemsTitle": {
@@ -3952,5 +3952,57 @@
   "omisMemoryCleared": "Omi's memory about you has been cleared",
   "@omisMemoryCleared": {
     "description": "Success message after clearing all memories"
+  },
+  "welcomeToOmi": "Welcome to Omi",
+  "@welcomeToOmi": {
+    "description": "Welcome message on auth screen"
+  },
+  "continueWithApple": "Continue with Apple",
+  "@continueWithApple": {
+    "description": "Button to sign in with Apple"
+  },
+  "continueWithGoogle": "Continue with Google",
+  "@continueWithGoogle": {
+    "description": "Button to sign in with Google"
+  },
+  "byContinuingYouAgree": "By continuing, you agree to our ",
+  "@byContinuingYouAgree": {
+    "description": "First part of terms agreement text"
+  },
+  "termsOfService": "Terms of Service",
+  "@termsOfService": {
+    "description": "Terms of Service link text"
+  },
+  "and": " and ",
+  "@and": {
+    "description": "Conjunction between terms and privacy"
+  },
+  "dataAndPrivacy": "Data & Privacy",
+  "@dataAndPrivacy": {
+    "description": "Consent dialog title"
+  },
+  "secureAuthViaAppleId": "Secure authentication via Apple ID",
+  "@secureAuthViaAppleId": {
+    "description": "Description for Apple authentication"
+  },
+  "secureAuthViaGoogleAccount": "Secure authentication via Google Account",
+  "@secureAuthViaGoogleAccount": {
+    "description": "Description for Google authentication"
+  },
+  "whatWeCollect": "What we collect",
+  "@whatWeCollect": {
+    "description": "Section title in consent dialog"
+  },
+  "dataCollectionMessage": "By continuing, your conversations, recordings, and personal information will be securely stored on our servers to provide AI-powered insights and enable all app features.",
+  "@dataCollectionMessage": {
+    "description": "Explanation of data collection in consent dialog"
+  },
+  "dataProtection": "Data Protection",
+  "@dataProtection": {
+    "description": "Section title for data protection info"
+  },
+  "yourDataIsProtected": "Your data is protected and governed by our ",
+  "@yourDataIsProtected": {
+    "description": "First part of data protection text"
   }
 }

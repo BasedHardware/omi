@@ -1938,7 +1938,7 @@
   "@selectYourLanguage": {
     "description": "Placeholder for selected language name"
   },
-  "personalGrowthJourney": "Το προσωπικό σας ταξίδι ανάπτυξης με AI που ακούει κάθε σας λέξη.",
+  "personalGrowthJourney": "Το ταξίδι προσωπικής σας ανάπτυξης με AI που ακούει κάθε σας λέξη.",
   "@personalGrowthJourney": {
     "description": "Tagline on onboarding wrapper"
   },
@@ -2739,5 +2739,18 @@
   "allMemoriesAreNowPublic": "Όλες οι μνήμες είναι πλέον δημόσιες",
   "clearOmisMemory": "Εκκαθάριση μνήμης του Omi",
   "clearMemoryConfirmation": "Είστε σίγουροι ότι θέλετε να διαγράψετε τη μνήμη του Omi; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί και θα διαγράψει μόνιμα όλες τις {count} μνήμες.",
-  "omisMemoryCleared": "Η μνήμη του Omi για εσάς έχει διαγραφεί"
+  "omisMemoryCleared": "Η μνήμη του Omi για εσάς έχει διαγραφεί",
+  "welcomeToOmi": "Καλώς ήρθατε στο Omi",
+  "continueWithApple": "Συνέχεια με Apple",
+  "continueWithGoogle": "Συνέχεια με Google",
+  "byContinuingYouAgree": "Συνεχίζοντας, συμφωνείτε με τους ",
+  "termsOfService": "Όρους Υπηρεσίας",
+  "and": " και ",
+  "dataAndPrivacy": "Δεδομένα & Απόρρητο",
+  "secureAuthViaAppleId": "Ασφαλής ταυτοποίηση μέσω Apple ID",
+  "secureAuthViaGoogleAccount": "Ασφαλής ταυτοποίηση μέσω λογαριασμού Google",
+  "whatWeCollect": "Τι συλλέγουμε",
+  "dataCollectionMessage": "Συνεχίζοντας, οι συνομιλίες, οι ηχογραφήσεις και οι προσωπικές σας πληροφορίες θα αποθηκευτούν με ασφάλεια στους διακομιστές μας για να παρέχουμε πληροφορίες που υποστηρίζονται από AI και να ενεργοποιήσουμε όλες τις λειτουργίες της εφαρμογής.",
+  "dataProtection": "Προστασία Δεδομένων",
+  "yourDataIsProtected": "Τα δεδομένα σας προστατεύονται και διέπονται από την "
 }

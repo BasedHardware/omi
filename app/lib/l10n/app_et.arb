@@ -1938,7 +1938,7 @@
   "@selectYourLanguage": {
     "description": "Placeholder for selected language name"
   },
-  "personalGrowthJourney": "Teie isiklik kasvuteekond AI-ga, mis kuulab iga teie sõna.",
+  "personalGrowthJourney": "Teie isikliku arengu teekond AI-ga, mis kuulab iga teie sõna.",
   "@personalGrowthJourney": {
     "description": "Tagline on onboarding wrapper"
   },
@@ -2739,5 +2739,18 @@
   "allMemoriesAreNowPublic": "Kõik mälestused on nüüd avalikud",
   "clearOmisMemory": "Tühjenda Omi mälu",
   "clearMemoryConfirmation": "Kas oled kindel, et soovid tühjendada Omi mälu? Seda toimingut ei saa tagasi võtta ja see kustutab püsivalt kõik {count} mälestust.",
-  "omisMemoryCleared": "Omi mälu sinu kohta on tühjendatud"
+  "omisMemoryCleared": "Omi mälu sinu kohta on tühjendatud",
+  "welcomeToOmi": "Tere tulemast Omi",
+  "continueWithApple": "Jätka Apple'iga",
+  "continueWithGoogle": "Jätka Google'iga",
+  "byContinuingYouAgree": "Jätkates nõustute meie ",
+  "termsOfService": "Teenusetingimustega",
+  "and": " ja ",
+  "dataAndPrivacy": "Andmed ja privaatsus",
+  "secureAuthViaAppleId": "Turvaline autentimine Apple ID kaudu",
+  "secureAuthViaGoogleAccount": "Turvaline autentimine Google'i konto kaudu",
+  "whatWeCollect": "Mida me kogume",
+  "dataCollectionMessage": "Jätkates salvestatakse teie vestlused, salvestused ja isikuandmed turvaliselt meie serveritesse, et pakkuda AI-põhiseid ülevaateid ja võimaldada kõiki rakenduse funktsioone.",
+  "dataProtection": "Andmekaitse",
+  "yourDataIsProtected": "Teie andmed on kaitstud ja neid reguleerib meie "
 }

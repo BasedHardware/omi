@@ -1938,7 +1938,7 @@
   "@selectYourLanguage": {
     "description": "Placeholder for selected language name"
   },
-  "personalGrowthJourney": "Din personliga utvecklingsresa med AI som lyssnar på varje ord.",
+  "personalGrowthJourney": "Din personliga tillväxtresa med AI som lyssnar på varje ord.",
   "@personalGrowthJourney": {
     "description": "Tagline on onboarding wrapper"
   },
@@ -2739,5 +2739,18 @@
   "allMemoriesAreNowPublic": "Alla minnen är nu offentliga",
   "clearOmisMemory": "Rensa Omis minne",
   "clearMemoryConfirmation": "Är du säker på att du vill rensa Omis minne? Denna åtgärd kan inte ångras och kommer permanent ta bort alla {count} minnen.",
-  "omisMemoryCleared": "Omis minne om dig har rensats"
+  "omisMemoryCleared": "Omis minne om dig har rensats",
+  "welcomeToOmi": "Välkommen till Omi",
+  "continueWithApple": "Fortsätt med Apple",
+  "continueWithGoogle": "Fortsätt med Google",
+  "byContinuingYouAgree": "Genom att fortsätta godkänner du våra ",
+  "termsOfService": "Användarvillkor",
+  "and": " och ",
+  "dataAndPrivacy": "Data och integritet",
+  "secureAuthViaAppleId": "Säker autentisering via Apple ID",
+  "secureAuthViaGoogleAccount": "Säker autentisering via Google-konto",
+  "whatWeCollect": "Vad vi samlar in",
+  "dataCollectionMessage": "Genom att fortsätta kommer dina konversationer, inspelningar och personlig information att lagras säkert på våra servrar för att tillhandahålla AI-drivna insikter och aktivera alla appfunktioner.",
+  "dataProtection": "Dataskydd",
+  "yourDataIsProtected": "Din data är skyddad och styrs av vår "
 }

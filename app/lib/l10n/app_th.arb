@@ -1938,7 +1938,7 @@
   "@selectYourLanguage": {
     "description": "Placeholder for selected language name"
   },
-  "personalGrowthJourney": "เส้นทางการเติบโตส่วนบุคคลของคุณกับ AI ที่ฟังทุกคำพูดของคุณ",
+  "personalGrowthJourney": "การเดินทางพัฒนาตนเองของคุณกับ AI ที่ฟังทุกคำพูดของคุณ",
   "@personalGrowthJourney": {
     "description": "Tagline on onboarding wrapper"
   },
@@ -2739,5 +2739,18 @@
   "allMemoriesAreNowPublic": "ความทรงจำทั้งหมดเป็นสาธารณะแล้ว",
   "clearOmisMemory": "ล้างความทรงจำของ Omi",
   "clearMemoryConfirmation": "คุณแน่ใจหรือไม่ว่าต้องการล้างความทรงจำของ Omi? การดำเนินการนี้ไม่สามารถยกเลิกได้และจะลบความทรงจำทั้งหมด {count} รายการอย่างถาวร",
-  "omisMemoryCleared": "ความทรงจำของ Omi เกี่ยวกับคุณถูกล้างแล้ว"
+  "omisMemoryCleared": "ความทรงจำของ Omi เกี่ยวกับคุณถูกล้างแล้ว",
+  "welcomeToOmi": "ยินดีต้อนรับสู่ Omi",
+  "continueWithApple": "ดำเนินการต่อด้วย Apple",
+  "continueWithGoogle": "ดำเนินการต่อด้วย Google",
+  "byContinuingYouAgree": "การดำเนินการต่อหมายความว่าคุณยอมรับ",
+  "termsOfService": "ข้อกำหนดการใช้บริการ",
+  "and": "และ",
+  "dataAndPrivacy": "ข้อมูลและความเป็นส่วนตัว",
+  "secureAuthViaAppleId": "การยืนยันตัวตนที่ปลอดภัยผ่าน Apple ID",
+  "secureAuthViaGoogleAccount": "การยืนยันตัวตนที่ปลอดภัยผ่านบัญชี Google",
+  "whatWeCollect": "สิ่งที่เราเก็บรวบรวม",
+  "dataCollectionMessage": "การดำเนินการต่อจะทำให้การสนทนา การบันทึก และข้อมูลส่วนบุคคลของคุณถูกเก็บไว้อย่างปลอดภัยบนเซิร์ฟเวอร์ของเราเพื่อมอบข้อมูลเชิงลึกที่ขับเคลื่อนด้วย AI และเปิดใช้งานคุณสมบัติทั้งหมดของแอป",
+  "dataProtection": "การป้องกันข้อมูล",
+  "yourDataIsProtected": "ข้อมูลของคุณได้รับการปกป้องและควบคุมโดย"
 }

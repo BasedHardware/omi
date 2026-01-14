@@ -1938,7 +1938,7 @@
   "@selectYourLanguage": {
     "description": "Placeholder for selected language name"
   },
-  "personalGrowthJourney": "당신의 모든 말을 듣는 AI와 함께하는 개인 성장 여정.",
+  "personalGrowthJourney": "모든 말을 듣는 AI와 함께하는 개인 성장 여정.",
   "@personalGrowthJourney": {
     "description": "Tagline on onboarding wrapper"
   },
@@ -2739,5 +2739,18 @@
   "allMemoriesAreNowPublic": "모든 메모리가 공개로 설정되었습니다",
   "clearOmisMemory": "Omi의 메모리 지우기",
   "clearMemoryConfirmation": "Omi의 메모리를 지우시겠습니까? 이 작업은 취소할 수 없으며 모든 {count}개의 메모리를 영구적으로 삭제합니다.",
-  "omisMemoryCleared": "당신에 대한 Omi의 메모리가 지워졌습니다"
+  "omisMemoryCleared": "당신에 대한 Omi의 메모리가 지워졌습니다",
+  "welcomeToOmi": "Omi에 오신 것을 환영합니다",
+  "continueWithApple": "Apple로 계속하기",
+  "continueWithGoogle": "Google로 계속하기",
+  "byContinuingYouAgree": "계속하면 ",
+  "termsOfService": "서비스 약관",
+  "and": " 및 ",
+  "dataAndPrivacy": "데이터 및 개인정보",
+  "secureAuthViaAppleId": "Apple ID를 통한 안전한 인증",
+  "secureAuthViaGoogleAccount": "Google 계정을 통한 안전한 인증",
+  "whatWeCollect": "수집하는 정보",
+  "dataCollectionMessage": "계속하면 대화, 녹음 및 개인 정보가 AI 기반 인사이트를 제공하고 모든 앱 기능을 활성화하기 위해 서버에 안전하게 저장됩니다.",
+  "dataProtection": "데이터 보호",
+  "yourDataIsProtected": "귀하의 데이터는 보호되며 "
 }

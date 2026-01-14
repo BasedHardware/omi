@@ -1938,7 +1938,7 @@
   "@selectYourLanguage": {
     "description": "Placeholder for selected language name"
   },
-  "personalGrowthJourney": "El vostre viatge de creixement personal amb IA que escolta cada paraula vostra.",
+  "personalGrowthJourney": "El teu viatge de creixement personal amb IA que escolta cada paraula teva.",
   "@personalGrowthJourney": {
     "description": "Tagline on onboarding wrapper"
   },
@@ -2757,5 +2757,18 @@
   "allMemoriesAreNowPublic": "Tots els records són ara públics",
   "clearOmisMemory": "Esborrar la memòria d'Omi",
   "clearMemoryConfirmation": "Estàs segur que vols esborrar la memòria d'Omi? Aquesta acció no es pot desfer i eliminarà permanentment tots els {count} records.",
-  "omisMemoryCleared": "S'ha esborrat la memòria d'Omi sobre tu"
+  "omisMemoryCleared": "S'ha esborrat la memòria d'Omi sobre tu",
+  "welcomeToOmi": "Benvingut a Omi",
+  "continueWithApple": "Continua amb Apple",
+  "continueWithGoogle": "Continua amb Google",
+  "byContinuingYouAgree": "En continuar, acceptes els nostres ",
+  "termsOfService": "Termes del servei",
+  "and": " i ",
+  "dataAndPrivacy": "Dades i privadesa",
+  "secureAuthViaAppleId": "Autenticació segura via Apple ID",
+  "secureAuthViaGoogleAccount": "Autenticació segura via compte de Google",
+  "whatWeCollect": "Què recopilem",
+  "dataCollectionMessage": "En continuar, les teves converses, enregistraments i informació personal s'emmagatzemaran de manera segura als nostres servidors per proporcionar informació impulsada per IA i habilitar totes les funcions de l'aplicació.",
+  "dataProtection": "Protecció de dades",
+  "yourDataIsProtected": "Les teves dades estan protegides i regides per la nostra "
 }
