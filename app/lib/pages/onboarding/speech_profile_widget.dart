@@ -41,7 +41,8 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
       CurvedAnimation(parent: _questionAnimationController, curve: Curves.easeInOut),
     );
 
-    WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
       // Check if user has set primary language
       if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
         await LanguageSelectionDialog.show(context);
