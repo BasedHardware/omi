@@ -10,10 +10,10 @@ Strategy: Prioritize small/medium files, defer large files
 
 OVERALL STATISTICS
 ------------------
-Files Completed: 25
+Files Completed: 26
 Files Skipped (Large): 3
-Total Keys Added: 229
-Total Translations: 7,786 (229 keys × 34 languages)
+Total Keys Added: 240
+Total Translations: 8,160 (240 keys × 34 languages)
 
 ================================================================================
 COMPLETED FILES
@@ -322,6 +322,22 @@ Notes: Localized conversation detail page including conversation titles, time
        to support dynamic l10n values.
 Commit: bf93b5608
 
+FILE 54: desktop_conversations_page.dart
+-----------------------------------------
+Location: app/lib/desktop/pages/conversations/
+Keys Added: 11
+Keys: reloadingConversations, welcomeBack (parameterized), user, starred, date,
+      noResultsFound, tryAdjustingSearchTerms, noStarredConversations,
+      starConversationsToFindQuickly, noConversationsOnDate (parameterized),
+      trySelectingDifferentDate
+Script: /tmp/translate_conversations_page_keys.py
+Status: ✅ COMPLETED
+Notes: Localized main conversations page including loading states, welcome
+       message with user name parameter, filter buttons, and multiple empty
+       states (search, starred filter, date filter). Removed const from Column
+       widgets in empty states to support dynamic l10n values.
+Commit: 69bdb65db
+
 ================================================================================
 SKIPPED FILES (LARGE - TO BE COMPLETED LATER)
 ================================================================================
@@ -401,8 +417,8 @@ Priority 1 (Small Files - Next Batch)
 [✓] desktop_message_action_menu.dart
 [✓] desktop_voice_recorder_widget.dart
 [✓] desktop_conversation_detail_page.dart
-[ ] desktop_conversation_detail_wrapper.dart
-[ ] desktop_conversations_page.dart
+[✓] desktop_conversation_detail_wrapper.dart (no strings to localize - wrapper only)
+[✓] desktop_conversations_page.dart
 [ ] desktop_home_page.dart
 [ ] desktop_home_wrapper.dart
 [ ] desktop_memories_page.dart
