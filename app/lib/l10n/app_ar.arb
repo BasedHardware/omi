@@ -1594,7 +1594,7 @@
   "perMonth": "/ شهرياً",
   "tailoredConversationSummaries": "ملخصات محادثة مخصصة",
   "customChatbotPersonality": "شخصية chatbot مخصصة",
-  "makePublic": "جعله عاماً",
+  "makePublic": "جعلها عامة",
   "anyoneCanDiscover": "يمكن لأي شخص اكتشاف تطبيقك",
   "onlyYouCanUse": "أنت فقط يمكنك استخدام هذا التطبيق",
   "paidApp": "تطبيق مدفوع",
@@ -2758,5 +2758,6 @@
   "public": "عام",
   "failedToSaveCheckConnection": "فشل الحفظ. يرجى التحقق من الاتصال.",
   "createMemory": "إنشاء ذاكرة",
-  "deleteMemoryConfirmation": "هل أنت متأكد من حذف هذه الذاكرة؟ لا يمكن التراجع عن هذا الإجراء."
+  "deleteMemoryConfirmation": "هل أنت متأكد من حذف هذه الذاكرة؟ لا يمكن التراجع عن هذا الإجراء.",
+  "makePrivate": "جعلها خاصة"
 }

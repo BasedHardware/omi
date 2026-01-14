@@ -1594,7 +1594,7 @@
   "perMonth": "/ Month",
   "tailoredConversationSummaries": "Tailored Conversation Summaries",
   "customChatbotPersonality": "Custom Chatbot Personality",
-  "makePublic": "Make public",
+  "makePublic": "Gør offentlig",
   "anyoneCanDiscover": "Anyone can discover your app",
   "onlyYouCanUse": "Only you can use this app",
   "paidApp": "Paid app",
@@ -2726,5 +2726,6 @@
   "public": "Offentlig",
   "failedToSaveCheckConnection": "Kunne ikke gemme. Tjek din forbindelse.",
   "createMemory": "Opret hukommelse",
-  "deleteMemoryConfirmation": "Er du sikker på, at du vil slette denne hukommelse? Denne handling kan ikke fortrydes."
+  "deleteMemoryConfirmation": "Er du sikker på, at du vil slette denne hukommelse? Denne handling kan ikke fortrydes.",
+  "makePrivate": "Gør privat"
 }

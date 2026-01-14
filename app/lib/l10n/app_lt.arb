@@ -2708,5 +2708,6 @@
   "public": "Vieša",
   "failedToSaveCheckConnection": "Nepavyko išsaugoti. Patikrinkite savo ryšį.",
   "createMemory": "Sukurti atminimą",
-  "deleteMemoryConfirmation": "Ar tikrai norite ištrinti šį atminimą? Šio veiksmo negalima atšaukti."
+  "deleteMemoryConfirmation": "Ar tikrai norite ištrinti šį atminimą? Šio veiksmo negalima atšaukti.",
+  "makePrivate": "Padaryti privačią"
 }

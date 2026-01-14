@@ -53,7 +53,7 @@
   "@save": {
     "description": "Save button label"
   },
-  "edit": "Изменить",
+  "edit": "Редактировать",
   "@edit": {
     "description": "Edit button/action label"
   },
@@ -997,7 +997,7 @@
   "@upgrade": {
     "description": "Upgrade button"
   },
-  "upgradeToUnlimited": "Перейти на неограниченный",
+  "upgradeToUnlimited": "Обновить до безлимитного",
   "@upgradeToUnlimited": {
     "description": "Upgrade to unlimited button"
   },
@@ -1594,7 +1594,7 @@
   "perMonth": "/ Месяц",
   "tailoredConversationSummaries": "Персонализированные резюме разговоров",
   "customChatbotPersonality": "Пользовательская личность чат-бота",
-  "makePublic": "Сделать публичным",
+  "makePublic": "Сделать публичной",
   "anyoneCanDiscover": "Любой может найти ваше приложение",
   "onlyYouCanUse": "Только вы можете использовать это приложение",
   "paidApp": "Платное приложение",
@@ -2726,5 +2726,6 @@
   "public": "Публичная",
   "failedToSaveCheckConnection": "Не удалось сохранить. Проверьте подключение.",
   "createMemory": "Создать память",
-  "deleteMemoryConfirmation": "Вы уверены, что хотите удалить эту память? Это действие нельзя отменить."
+  "deleteMemoryConfirmation": "Вы уверены, что хотите удалить эту память? Это действие нельзя отменить.",
+  "makePrivate": "Сделать приватной"
 }

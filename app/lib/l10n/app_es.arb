@@ -1173,5 +1173,6 @@
   "public": "Público",
   "failedToSaveCheckConnection": "Error al guardar. Por favor, verifica tu conexión.",
   "createMemory": "Crear memoria",
-  "deleteMemoryConfirmation": "¿Estás seguro de que deseas eliminar esta memoria? Esta acción no se puede deshacer."
+  "deleteMemoryConfirmation": "¿Estás seguro de que deseas eliminar esta memoria? Esta acción no se puede deshacer.",
+  "makePrivate": "Hacer privado"
 }

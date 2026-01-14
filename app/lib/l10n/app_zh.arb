@@ -1173,5 +1173,6 @@
   "public": "公开",
   "failedToSaveCheckConnection": "保存失败。请检查您的连接。",
   "createMemory": "创建记忆",
-  "deleteMemoryConfirmation": "您确定要删除此记忆吗？此操作无法撤消。"
+  "deleteMemoryConfirmation": "您确定要删除此记忆吗？此操作无法撤消。",
+  "makePrivate": "私密"
 }

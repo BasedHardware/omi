@@ -2726,5 +2726,6 @@
   "public": "Công khai",
   "failedToSaveCheckConnection": "Lưu thất bại. Vui lòng kiểm tra kết nối của bạn.",
   "createMemory": "Tạo bộ nhớ",
-  "deleteMemoryConfirmation": "Bạn có chắc chắn muốn xóa bộ nhớ này không? Hành động này không thể hoàn tác."
+  "deleteMemoryConfirmation": "Bạn có chắc chắn muốn xóa bộ nhớ này không? Hành động này không thể hoàn tác.",
+  "makePrivate": "Riêng tư"
 }

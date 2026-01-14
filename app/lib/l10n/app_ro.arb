@@ -997,7 +997,7 @@
   "@upgrade": {
     "description": "Upgrade button"
   },
-  "upgradeToUnlimited": "Actualizați la nelimitat",
+  "upgradeToUnlimited": "Actualizează la nelimitat",
   "@upgradeToUnlimited": {
     "description": "Upgrade to unlimited button"
   },
@@ -1594,7 +1594,7 @@
   "perMonth": "/ Lună",
   "tailoredConversationSummaries": "Rezumate de conversație personalizate",
   "customChatbotPersonality": "Personalitate chatbot personalizată",
-  "makePublic": "Fă publică",
+  "makePublic": "Fă public",
   "anyoneCanDiscover": "Oricine poate descoperi aplicația ta",
   "onlyYouCanUse": "Doar tu poți folosi această aplicație",
   "paidApp": "Aplicație plătită",
@@ -2726,5 +2726,6 @@
   "public": "Public",
   "failedToSaveCheckConnection": "Salvare eșuată. Verifică conexiunea.",
   "createMemory": "Creează amintire",
-  "deleteMemoryConfirmation": "Ești sigur că vrei să ștergi această amintire? Această acțiune nu poate fi anulată."
+  "deleteMemoryConfirmation": "Ești sigur că vrei să ștergi această amintire? Această acțiune nu poate fi anulată.",
+  "makePrivate": "Fă privat"
 }

@@ -2726,5 +2726,6 @@
   "public": "Verejná",
   "failedToSaveCheckConnection": "Uloženie zlyhalo. Skontrolujte pripojenie.",
   "createMemory": "Vytvoriť pamäť",
-  "deleteMemoryConfirmation": "Naozaj chcete odstrániť túto pamäť? Túto akciu nie je možné vrátiť späť."
+  "deleteMemoryConfirmation": "Naozaj chcete odstrániť túto pamäť? Túto akciu nie je možné vrátiť späť.",
+  "makePrivate": "Nastaviť ako súkromné"
 }

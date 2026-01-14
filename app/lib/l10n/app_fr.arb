@@ -1544,5 +1544,6 @@
   "public": "Public",
   "failedToSaveCheckConnection": "Échec de l'enregistrement. Vérifiez votre connexion.",
   "createMemory": "Créer un souvenir",
-  "deleteMemoryConfirmation": "Êtes-vous sûr de vouloir supprimer ce souvenir? Cette action ne peut pas être annulée."
+  "deleteMemoryConfirmation": "Êtes-vous sûr de vouloir supprimer ce souvenir? Cette action ne peut pas être annulée.",
+  "makePrivate": "Rendre privé"
 }

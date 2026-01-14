@@ -2726,5 +2726,6 @@
   "public": "Avalik",
   "failedToSaveCheckConnection": "Salvestamine ebaõnnestus. Kontrolli ühendust.",
   "createMemory": "Loo mälestus",
-  "deleteMemoryConfirmation": "Kas oled kindel, et soovid selle mälestuse kustutada? Seda toimingut ei saa tagasi võtta."
+  "deleteMemoryConfirmation": "Kas oled kindel, et soovid selle mälestuse kustutada? Seda toimingut ei saa tagasi võtta.",
+  "makePrivate": "Tee privaatseks"
 }

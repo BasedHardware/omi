@@ -1594,7 +1594,7 @@
   "perMonth": "/ เดือน",
   "tailoredConversationSummaries": "สรุปบทสนทนาที่ปรับแต่งได้",
   "customChatbotPersonality": "บุคลิกแชทบอทที่กำหนดเอง",
-  "makePublic": "ทำให้เป็นสาธารณะ",
+  "makePublic": "เปลี่ยนเป็นสาธารณะ",
   "anyoneCanDiscover": "ทุกคนสามารถค้นพบแอปของคุณได้",
   "onlyYouCanUse": "เฉพาะคุณเท่านั้นที่สามารถใช้แอปนี้ได้",
   "paidApp": "แอปแบบชำระเงิน",
@@ -2726,5 +2726,6 @@
   "public": "สาธารณะ",
   "failedToSaveCheckConnection": "บันทึกไม่สำเร็จ กรุณาตรวจสอบการเชื่อมต่อของคุณ",
   "createMemory": "สร้างความทรงจำ",
-  "deleteMemoryConfirmation": "คุณแน่ใจหรือไม่ว่าต้องการลบความทรงจำนี้? การกระทำนี้ไม่สามารถยกเลิกได้"
+  "deleteMemoryConfirmation": "คุณแน่ใจหรือไม่ว่าต้องการลบความทรงจำนี้? การกระทำนี้ไม่สามารถยกเลิกได้",
+  "makePrivate": "เปลี่ยนเป็นส่วนตัว"
 }

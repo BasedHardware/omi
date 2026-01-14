@@ -1594,7 +1594,7 @@
   "perMonth": "/ 월",
   "tailoredConversationSummaries": "맞춤형 대화 요약",
   "customChatbotPersonality": "사용자 지정 챗봇 성격",
-  "makePublic": "공개하기",
+  "makePublic": "공개로 변경",
   "anyoneCanDiscover": "누구나 앱을 찾을 수 있습니다",
   "onlyYouCanUse": "본인만 이 앱을 사용할 수 있습니다",
   "paidApp": "유료 앱",
@@ -2726,5 +2726,6 @@
   "public": "공개",
   "failedToSaveCheckConnection": "저장 실패. 연결을 확인하세요.",
   "createMemory": "메모리 만들기",
-  "deleteMemoryConfirmation": "이 메모리를 삭제하시겠습니까? 이 작업은 취소할 수 없습니다."
+  "deleteMemoryConfirmation": "이 메모리를 삭제하시겠습니까? 이 작업은 취소할 수 없습니다.",
+  "makePrivate": "비공개로 변경"
 }

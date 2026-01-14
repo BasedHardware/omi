@@ -55,7 +55,7 @@
   },
   "edit": "Edit",
   "@edit": {
-    "description": "Menu item to edit action item"
+    "description": "Edit menu item label"
   },
   "close": "Close",
   "@close": {
@@ -999,7 +999,7 @@
   },
   "upgradeToUnlimited": "Upgrade to unlimited",
   "@upgradeToUnlimited": {
-    "description": "Message for locked premium features"
+    "description": "Message shown on locked memory items"
   },
   "basicPlanDesc": "Your plan includes {limit} free minutes per month. Upgrade to go unlimited.",
   "@basicPlanDesc": {
@@ -1594,7 +1594,7 @@
   "perMonth": "/ Month",
   "tailoredConversationSummaries": "Tailored Conversation Summaries",
   "customChatbotPersonality": "Custom Chatbot Personality",
-  "makePublic": "Make public",
+  "makePublic": "Make Public",
   "anyoneCanDiscover": "Anyone can discover your app",
   "onlyYouCanUse": "Only you can use this app",
   "paidApp": "Paid app",
@@ -3892,5 +3892,12 @@
   "deleteMemoryConfirmation": "Are you sure you want to delete this memory? This action cannot be undone.",
   "@deleteMemoryConfirmation": {
     "description": "Confirmation message for deleting memory"
+  },
+  "@makePublic": {
+    "description": "Menu option to change memory visibility to public"
+  },
+  "makePrivate": "Make Private",
+  "@makePrivate": {
+    "description": "Menu option to change memory visibility to private"
   }
 }

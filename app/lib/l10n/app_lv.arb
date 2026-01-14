@@ -2726,5 +2726,6 @@
   "public": "Publiska",
   "failedToSaveCheckConnection": "Neizdevās saglabāt. Lūdzu, pārbaudiet savienojumu.",
   "createMemory": "Izveidot atmiņu",
-  "deleteMemoryConfirmation": "Vai tiešām vēlaties dzēst šo atmiņu? Šo darbību nevar atsaukt."
+  "deleteMemoryConfirmation": "Vai tiešām vēlaties dzēst šo atmiņu? Šo darbību nevar atsaukt.",
+  "makePrivate": "Padarīt privātu"
 }

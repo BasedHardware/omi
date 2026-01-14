@@ -997,7 +997,7 @@
   "@upgrade": {
     "description": "Upgrade button"
   },
-  "upgradeToUnlimited": "Naik taraf ke tanpa had",
+  "upgradeToUnlimited": "Naik taraf kepada tanpa had",
   "@upgradeToUnlimited": {
     "description": "Upgrade to unlimited button"
   },
@@ -1594,7 +1594,7 @@
   "perMonth": "/ Bulan",
   "tailoredConversationSummaries": "Ringkasan Perbualan Tersuai",
   "customChatbotPersonality": "Personaliti Chatbot Tersuai",
-  "makePublic": "Jadikan awam",
+  "makePublic": "Jadikan Awam",
   "anyoneCanDiscover": "Sesiapa sahaja boleh menemui aplikasi anda",
   "onlyYouCanUse": "Hanya anda boleh menggunakan aplikasi ini",
   "paidApp": "Aplikasi berbayar",
@@ -2726,5 +2726,6 @@
   "public": "Awam",
   "failedToSaveCheckConnection": "Gagal menyimpan. Sila periksa sambungan anda.",
   "createMemory": "Cipta Memori",
-  "deleteMemoryConfirmation": "Adakah anda pasti mahu memadam memori ini? Tindakan ini tidak boleh dibatalkan."
+  "deleteMemoryConfirmation": "Adakah anda pasti mahu memadam memori ini? Tindakan ini tidak boleh dibatalkan.",
+  "makePrivate": "Jadikan Peribadi"
 }

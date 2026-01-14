@@ -997,7 +997,7 @@
   "@upgrade": {
     "description": "Upgrade button"
   },
-  "upgradeToUnlimited": "Оновити до необмеженого",
+  "upgradeToUnlimited": "Оновити до безлімітного",
   "@upgradeToUnlimited": {
     "description": "Upgrade to unlimited button"
   },
@@ -1594,7 +1594,7 @@
   "perMonth": "/ Місяць",
   "tailoredConversationSummaries": "Персоналізовані підсумки розмов",
   "customChatbotPersonality": "Налаштована особистість чат-бота",
-  "makePublic": "Зробити публічним",
+  "makePublic": "Зробити публічною",
   "anyoneCanDiscover": "Будь-хто може знайти ваш додаток",
   "onlyYouCanUse": "Лише ви можете використовувати цей додаток",
   "paidApp": "Платний додаток",
@@ -2726,5 +2726,6 @@
   "public": "Публічна",
   "failedToSaveCheckConnection": "Не вдалося зберегти. Перевірте підключення.",
   "createMemory": "Створити пам'ять",
-  "deleteMemoryConfirmation": "Ви впевнені, що хочете видалити цю пам'ять? Цю дію не можна скасувати."
+  "deleteMemoryConfirmation": "Ви впевнені, що хочете видалити цю пам'ять? Цю дію не можна скасувати.",
+  "makePrivate": "Зробити приватною"
 }

@@ -541,7 +541,7 @@
   "perMonth": "/ माह",
   "tailoredConversationSummaries": "अनुकूलित वार्तालाप सारांश",
   "customChatbotPersonality": "कस्टम चैटबॉट व्यक्तित्व",
-  "makePublic": "सार्वजनिक करें",
+  "makePublic": "सार्वजनिक बनाएं",
   "anyoneCanDiscover": "कोई भी आपका ऐप खोज सकता है",
   "onlyYouCanUse": "केवल आप इस ऐप का उपयोग कर सकते हैं",
   "paidApp": "सशुल्क ऐप",
@@ -1173,5 +1173,6 @@
   "public": "सार्वजनिक",
   "failedToSaveCheckConnection": "सहेजने में विफल। कृपया अपना कनेक्शन जांचें।",
   "createMemory": "स्मृति बनाएं",
-  "deleteMemoryConfirmation": "क्या आप वाकई इस स्मृति को हटाना चाहते हैं? यह क्रिया पूर्ववत नहीं की जा सकती।"
+  "deleteMemoryConfirmation": "क्या आप वाकई इस स्मृति को हटाना चाहते हैं? यह क्रिया पूर्ववत नहीं की जा सकती।",
+  "makePrivate": "निजी बनाएं"
 }

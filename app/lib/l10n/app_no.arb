@@ -2726,5 +2726,6 @@
   "public": "Offentlig",
   "failedToSaveCheckConnection": "Kunne ikke lagre. Sjekk tilkoblingen din.",
   "createMemory": "Opprett minne",
-  "deleteMemoryConfirmation": "Er du sikker på at du vil slette dette minnet? Denne handlingen kan ikke angres."
+  "deleteMemoryConfirmation": "Er du sikker på at du vil slette dette minnet? Denne handlingen kan ikke angres.",
+  "makePrivate": "Gjør privat"
 }

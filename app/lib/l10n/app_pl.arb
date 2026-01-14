@@ -997,7 +997,7 @@
   "@upgrade": {
     "description": "Upgrade button"
   },
-  "upgradeToUnlimited": "Uaktualnij do nielimitowanego",
+  "upgradeToUnlimited": "Uaktualnij do nieograniczonego",
   "@upgradeToUnlimited": {
     "description": "Upgrade to unlimited button"
   },
@@ -2726,5 +2726,6 @@
   "public": "Publiczne",
   "failedToSaveCheckConnection": "Nie udało się zapisać. Sprawdź połączenie.",
   "createMemory": "Utwórz wspomnienie",
-  "deleteMemoryConfirmation": "Czy na pewno chcesz usunąć to wspomnienie? Tej czynności nie można cofnąć."
+  "deleteMemoryConfirmation": "Czy na pewno chcesz usunąć to wspomnienie? Tej czynności nie można cofnąć.",
+  "makePrivate": "Ustaw jako prywatne"
 }

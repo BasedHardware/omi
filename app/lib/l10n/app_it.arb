@@ -997,7 +997,7 @@
   "@upgrade": {
     "description": "Upgrade button"
   },
-  "upgradeToUnlimited": "Passa a illimitato",
+  "upgradeToUnlimited": "Aggiorna a illimitato",
   "@upgradeToUnlimited": {
     "description": "Upgrade to unlimited button"
   },
@@ -2708,5 +2708,6 @@
   "public": "Pubblico",
   "failedToSaveCheckConnection": "Salvataggio fallito. Controlla la tua connessione.",
   "createMemory": "Crea memoria",
-  "deleteMemoryConfirmation": "Sei sicuro di voler eliminare questa memoria? Questa azione non può essere annullata."
+  "deleteMemoryConfirmation": "Sei sicuro di voler eliminare questa memoria? Questa azione non può essere annullata.",
+  "makePrivate": "Rendi privato"
 }

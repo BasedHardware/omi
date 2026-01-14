@@ -546,7 +546,7 @@
   "perMonth": "/ Monat",
   "tailoredConversationSummaries": "Maßgeschneiderte Gesprächszusammenfassungen",
   "customChatbotPersonality": "Benutzerdefinierte Chatbot-Persönlichkeit",
-  "makePublic": "Veröffentlichen",
+  "makePublic": "Öffentlich machen",
   "anyoneCanDiscover": "Jeder kann Ihre App entdecken",
   "onlyYouCanUse": "Nur Sie können diese App verwenden",
   "paidApp": "Kostenpflichtige App",
@@ -1173,5 +1173,6 @@
   "public": "Öffentlich",
   "failedToSaveCheckConnection": "Speichern fehlgeschlagen. Bitte Verbindung überprüfen.",
   "createMemory": "Erinnerung erstellen",
-  "deleteMemoryConfirmation": "Möchten Sie diese Erinnerung wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden."
+  "deleteMemoryConfirmation": "Möchten Sie diese Erinnerung wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
+  "makePrivate": "Privat machen"
 }

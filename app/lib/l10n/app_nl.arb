@@ -1544,5 +1544,6 @@
   "public": "Openbaar",
   "failedToSaveCheckConnection": "Opslaan mislukt. Controleer je verbinding.",
   "createMemory": "Geheugen maken",
-  "deleteMemoryConfirmation": "Weet je zeker dat je dit geheugen wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt."
+  "deleteMemoryConfirmation": "Weet je zeker dat je dit geheugen wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.",
+  "makePrivate": "Privé maken"
 }

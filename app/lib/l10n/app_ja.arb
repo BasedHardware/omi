@@ -1152,5 +1152,6 @@
   "public": "公開",
   "failedToSaveCheckConnection": "保存に失敗しました。接続を確認してください。",
   "createMemory": "メモリを作成",
-  "deleteMemoryConfirmation": "このメモリを削除してもよろしいですか？この操作は元に戻せません。"
+  "deleteMemoryConfirmation": "このメモリを削除してもよろしいですか？この操作は元に戻せません。",
+  "makePrivate": "非公開にする"
 }

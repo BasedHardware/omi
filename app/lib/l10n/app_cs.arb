@@ -2744,5 +2744,6 @@
   "public": "Veřejné",
   "failedToSaveCheckConnection": "Uložení se nezdařilo. Zkontrolujte připojení.",
   "createMemory": "Vytvořit vzpomínku",
-  "deleteMemoryConfirmation": "Opravdu chcete smazat tuto vzpomínku? Tuto akci nelze vrátit zpět."
+  "deleteMemoryConfirmation": "Opravdu chcete smazat tuto vzpomínku? Tuto akci nelze vrátit zpět.",
+  "makePrivate": "Nastavit jako soukromé"
 }

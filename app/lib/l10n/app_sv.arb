@@ -2726,5 +2726,6 @@
   "public": "Offentlig",
   "failedToSaveCheckConnection": "Kunde inte spara. Kontrollera din anslutning.",
   "createMemory": "Skapa minne",
-  "deleteMemoryConfirmation": "Är du säker på att du vill ta bort detta minne? Denna åtgärd kan inte ångras."
+  "deleteMemoryConfirmation": "Är du säker på att du vill ta bort detta minne? Denna åtgärd kan inte ångras.",
+  "makePrivate": "Gör privat"
 }

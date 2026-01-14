@@ -2708,5 +2708,6 @@
   "public": "Herkese açık",
   "failedToSaveCheckConnection": "Kaydetme başarısız. Lütfen bağlantınızı kontrol edin.",
   "createMemory": "Hafıza oluştur",
-  "deleteMemoryConfirmation": "Bu hafızayı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz."
+  "deleteMemoryConfirmation": "Bu hafızayı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.",
+  "makePrivate": "Özel yap"
 }

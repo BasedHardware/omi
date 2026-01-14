@@ -1594,7 +1594,7 @@
   "perMonth": "/ Mes",
   "tailoredConversationSummaries": "Resums de converses personalitzats",
   "customChatbotPersonality": "Personalitat de xatbot personalitzada",
-  "makePublic": "Fer pública",
+  "makePublic": "Fer públic",
   "anyoneCanDiscover": "Qualsevol pot descobrir la vostra aplicació",
   "onlyYouCanUse": "Només vós podeu utilitzar aquesta aplicació",
   "paidApp": "Aplicació de pagament",
@@ -2744,5 +2744,6 @@
   "public": "Públic",
   "failedToSaveCheckConnection": "Error en desar. Comprova la connexió.",
   "createMemory": "Crear memòria",
-  "deleteMemoryConfirmation": "Estàs segur que vols eliminar aquesta memòria? Aquesta acció no es pot desfer."
+  "deleteMemoryConfirmation": "Estàs segur que vols eliminar aquesta memòria? Aquesta acció no es pot desfer.",
+  "makePrivate": "Fer privat"
 }

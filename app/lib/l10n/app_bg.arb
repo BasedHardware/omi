@@ -53,7 +53,7 @@
   "@save": {
     "description": "Save button label"
   },
-  "edit": "Редактирай",
+  "edit": "Редактиране",
   "@edit": {
     "description": "Edit button/action label"
   },
@@ -997,7 +997,7 @@
   "@upgrade": {
     "description": "Upgrade button"
   },
-  "upgradeToUnlimited": "Надстрой до неограничено",
+  "upgradeToUnlimited": "Надградете до неограничено",
   "@upgradeToUnlimited": {
     "description": "Upgrade to unlimited button"
   },
@@ -1594,7 +1594,7 @@
   "perMonth": "/ Месец",
   "tailoredConversationSummaries": "Персонализирани резюмета на разговори",
   "customChatbotPersonality": "Персонализирана личност на чатбот",
-  "makePublic": "Направи публично",
+  "makePublic": "Направи публична",
   "anyoneCanDiscover": "Всеки може да открие вашето приложение",
   "onlyYouCanUse": "Само вие можете да използвате това приложение",
   "paidApp": "Платено приложение",
@@ -2744,5 +2744,6 @@
   "public": "Публичен",
   "failedToSaveCheckConnection": "Неуспешно запазване. Проверете връзката си.",
   "createMemory": "Създай спомен",
-  "deleteMemoryConfirmation": "Сигурни ли сте, че искате да изтриете този спомен? Това действие не може да бъде отменено."
+  "deleteMemoryConfirmation": "Сигурни ли сте, че искате да изтриете този спомен? Това действие не може да бъде отменено.",
+  "makePrivate": "Направи частна"
 }

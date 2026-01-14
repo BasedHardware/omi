@@ -1594,7 +1594,7 @@
   "perMonth": "/ kuukausi",
   "tailoredConversationSummaries": "Räätälöidyt keskusteluyhteenvedot",
   "customChatbotPersonality": "Mukautettu chatbot-persoonallisuus",
-  "makePublic": "Tee julkiseksi",
+  "makePublic": "Julkaise",
   "anyoneCanDiscover": "Kuka tahansa voi löytää sovelluksesi",
   "onlyYouCanUse": "Vain sinä voit käyttää tätä sovellusta",
   "paidApp": "Maksullinen sovellus",
@@ -2726,5 +2726,6 @@
   "public": "Julkinen",
   "failedToSaveCheckConnection": "Tallennus epäonnistui. Tarkista yhteytesi.",
   "createMemory": "Luo muisti",
-  "deleteMemoryConfirmation": "Haluatko varmasti poistaa tämän muistin? Tätä toimintoa ei voi perua."
+  "deleteMemoryConfirmation": "Haluatko varmasti poistaa tämän muistin? Tätä toimintoa ei voi perua.",
+  "makePrivate": "Tee yksityiseksi"
 }

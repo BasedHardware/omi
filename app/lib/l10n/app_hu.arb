@@ -2726,5 +2726,6 @@
   "public": "Nyilvános",
   "failedToSaveCheckConnection": "Sikertelen mentés. Ellenőrizd a kapcsolatot.",
   "createMemory": "Emlékezet létrehozása",
-  "deleteMemoryConfirmation": "Biztosan törölni szeretnéd ezt az emlékezetet? Ez a művelet nem vonható vissza."
+  "deleteMemoryConfirmation": "Biztosan törölni szeretnéd ezt az emlékezetet? Ez a művelet nem vonható vissza.",
+  "makePrivate": "Priváttá tétel"
 }
