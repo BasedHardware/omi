@@ -1336,5 +1336,6 @@
   "appIdCopiedToClipboard": "App-ID gekopieerd naar klembord",
   "appCategoryModalTitle": "App-categorie",
   "pricingFree": "Gratis",
-  "pricingPaid": "Betaald"
+  "pricingPaid": "Betaald",
+  "loadingCapabilities": "Functies laden..."
 }

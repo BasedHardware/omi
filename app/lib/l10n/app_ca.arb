@@ -2552,5 +2552,6 @@
   "appIdCopiedToClipboard": "ID de l'aplicació copiat al porta-retalls",
   "appCategoryModalTitle": "Categoria de l'aplicació",
   "pricingFree": "Gratuït",
-  "pricingPaid": "De pagament"
+  "pricingPaid": "De pagament",
+  "loadingCapabilities": "Carregant capacitats..."
 }

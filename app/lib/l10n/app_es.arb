@@ -958,5 +958,6 @@
   "appIdCopiedToClipboard": "ID de la aplicación copiado al portapapeles",
   "appCategoryModalTitle": "Categoría de la aplicación",
   "pricingFree": "Gratis",
-  "pricingPaid": "De pago"
+  "pricingPaid": "De pago",
+  "loadingCapabilities": "Cargando capacidades..."
 }

@@ -958,5 +958,6 @@
   "appIdCopiedToClipboard": "ID do aplicativo copiado para a área de transferência",
   "appCategoryModalTitle": "Categoria do aplicativo",
   "pricingFree": "Grátis",
-  "pricingPaid": "Pago"
+  "pricingPaid": "Pago",
+  "loadingCapabilities": "Carregando recursos..."
 }

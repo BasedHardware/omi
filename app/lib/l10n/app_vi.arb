@@ -2534,5 +2534,6 @@
   "appIdCopiedToClipboard": "Đã sao chép ID ứng dụng vào clipboard",
   "appCategoryModalTitle": "Danh mục ứng dụng",
   "pricingFree": "Miễn phí",
-  "pricingPaid": "Trả phí"
+  "pricingPaid": "Trả phí",
+  "loadingCapabilities": "Đang tải khả năng..."
 }

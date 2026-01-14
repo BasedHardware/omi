@@ -958,5 +958,6 @@
   "appIdCopiedToClipboard": "应用ID已复制到剪贴板",
   "appCategoryModalTitle": "应用类别",
   "pricingFree": "免费",
-  "pricingPaid": "付费"
+  "pricingPaid": "付费",
+  "loadingCapabilities": "正在加载功能..."
 }

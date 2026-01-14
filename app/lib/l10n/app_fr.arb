@@ -1336,5 +1336,6 @@
   "appIdCopiedToClipboard": "ID de l'application copié dans le presse-papiers",
   "appCategoryModalTitle": "Catégorie de l'application",
   "pricingFree": "Gratuit",
-  "pricingPaid": "Payant"
+  "pricingPaid": "Payant",
+  "loadingCapabilities": "Chargement des fonctionnalités..."
 }

@@ -2534,5 +2534,6 @@
   "appIdCopiedToClipboard": "ID aplikacji skopiowane do schowka",
   "appCategoryModalTitle": "Kategoria aplikacji",
   "pricingFree": "Bezpłatna",
-  "pricingPaid": "Płatna"
+  "pricingPaid": "Płatna",
+  "loadingCapabilities": "Ładowanie funkcji..."
 }

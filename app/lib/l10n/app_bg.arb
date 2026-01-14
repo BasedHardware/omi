@@ -2552,5 +2552,6 @@
   "appIdCopiedToClipboard": "ID на приложението е копирано в клипборда",
   "appCategoryModalTitle": "Категория на приложението",
   "pricingFree": "Безплатно",
-  "pricingPaid": "Платено"
+  "pricingPaid": "Платено",
+  "loadingCapabilities": "Зареждане на възможностите..."
 }

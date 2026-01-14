@@ -2534,5 +2534,6 @@
   "appIdCopiedToClipboard": "Το αναγνωριστικό εφαρμογής αντιγράφηκε στο πρόχειρο",
   "appCategoryModalTitle": "Κατηγορία εφαρμογής",
   "pricingFree": "Δωρεάν",
-  "pricingPaid": "Επί πληρωμή"
+  "pricingPaid": "Επί πληρωμή",
+  "loadingCapabilities": "Φόρτωση δυνατοτήτων..."
 }

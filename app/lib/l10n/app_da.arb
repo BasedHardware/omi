@@ -2534,5 +2534,6 @@
   "appIdCopiedToClipboard": "App-ID kopieret til udklipsholder",
   "appCategoryModalTitle": "App-kategori",
   "pricingFree": "Gratis",
-  "pricingPaid": "Betalt"
+  "pricingPaid": "Betalt",
+  "loadingCapabilities": "Indlæser funktioner..."
 }

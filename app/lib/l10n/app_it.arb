@@ -2516,5 +2516,6 @@
   "appIdCopiedToClipboard": "ID dell'app copiato negli appunti",
   "appCategoryModalTitle": "Categoria dell'app",
   "pricingFree": "Gratuita",
-  "pricingPaid": "A pagamento"
+  "pricingPaid": "A pagamento",
+  "loadingCapabilities": "Caricamento delle funzionalità..."
 }

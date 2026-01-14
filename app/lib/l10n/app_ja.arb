@@ -937,5 +937,6 @@
   "appIdCopiedToClipboard": "アプリIDをクリップボードにコピーしました",
   "appCategoryModalTitle": "アプリカテゴリ",
   "pricingFree": "無料",
-  "pricingPaid": "有料"
+  "pricingPaid": "有料",
+  "loadingCapabilities": "機能を読み込み中..."
 }

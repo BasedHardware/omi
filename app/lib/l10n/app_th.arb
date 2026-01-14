@@ -2534,5 +2534,6 @@
   "appIdCopiedToClipboard": "คัดลอก ID แอปไปยังคลิปบอร์ดแล้ว",
   "appCategoryModalTitle": "หมวดหมู่แอป",
   "pricingFree": "ฟรี",
-  "pricingPaid": "เสียค่าใช้จ่าย"
+  "pricingPaid": "เสียค่าใช้จ่าย",
+  "loadingCapabilities": "กำลังโหลดความสามารถ..."
 }

@@ -2566,5 +2566,6 @@
   "appIdCopiedToClipboard": "تم نسخ معرّف التطبيق إلى الحافظة",
   "appCategoryModalTitle": "فئة التطبيق",
   "pricingFree": "مجاني",
-  "pricingPaid": "مدفوع"
+  "pricingPaid": "مدفوع",
+  "loadingCapabilities": "جارٍ تحميل الإمكانيات..."
 }

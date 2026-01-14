@@ -958,5 +958,6 @@
   "appIdCopiedToClipboard": "App-ID in Zwischenablage kopiert",
   "appCategoryModalTitle": "App-Kategorie",
   "pricingFree": "Kostenlos",
-  "pricingPaid": "Kostenpflichtig"
+  "pricingPaid": "Kostenpflichtig",
+  "loadingCapabilities": "Funktionen werden geladen..."
 }

@@ -2534,5 +2534,6 @@
   "appIdCopiedToClipboard": "App-ID kopierat till urklipp",
   "appCategoryModalTitle": "Appkategori",
   "pricingFree": "Gratis",
-  "pricingPaid": "Betald"
+  "pricingPaid": "Betald",
+  "loadingCapabilities": "Laddar funktioner..."
 }

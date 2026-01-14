@@ -2534,5 +2534,6 @@
   "appIdCopiedToClipboard": "ID Aplikasi disalin ke clipboard",
   "appCategoryModalTitle": "Kategori Aplikasi",
   "pricingFree": "Gratis",
-  "pricingPaid": "Berbayar"
+  "pricingPaid": "Berbayar",
+  "loadingCapabilities": "Memuat kemampuan..."
 }

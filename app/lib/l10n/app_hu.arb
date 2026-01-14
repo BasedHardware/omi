@@ -2534,5 +2534,6 @@
   "appIdCopiedToClipboard": "Alkalmazás azonosító vágólapra másolva",
   "appCategoryModalTitle": "Alkalmazás kategória",
   "pricingFree": "Ingyenes",
-  "pricingPaid": "Fizetős"
+  "pricingPaid": "Fizetős",
+  "loadingCapabilities": "Képességek betöltése..."
 }

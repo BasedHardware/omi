@@ -2534,5 +2534,6 @@
   "appIdCopiedToClipboard": "앱 ID가 클립보드에 복사되었습니다",
   "appCategoryModalTitle": "앱 카테고리",
   "pricingFree": "무료",
-  "pricingPaid": "유료"
+  "pricingPaid": "유료",
+  "loadingCapabilities": "기능 로드 중..."
 }

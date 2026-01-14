@@ -3481,5 +3481,9 @@
   "pricingPaid": "Paid",
   "@pricingPaid": {
     "description": "Paid pricing option"
+  },
+  "loadingCapabilities": "Loading capabilities...",
+  "@loadingCapabilities": {
+    "description": "Loading state message while fetching app capabilities"
   }
 }

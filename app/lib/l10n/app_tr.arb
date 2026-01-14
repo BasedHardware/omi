@@ -2516,5 +2516,6 @@
   "appIdCopiedToClipboard": "Uygulama Kimliği panoya kopyalandı",
   "appCategoryModalTitle": "Uygulama Kategorisi",
   "pricingFree": "Ücretsiz",
-  "pricingPaid": "Ücretli"
+  "pricingPaid": "Ücretli",
+  "loadingCapabilities": "Yetenekler yükleniyor..."
 }

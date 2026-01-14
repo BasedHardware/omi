@@ -958,5 +958,6 @@
   "appIdCopiedToClipboard": "ऐप ID क्लिपबोर्ड पर कॉपी की गई",
   "appCategoryModalTitle": "ऐप श्रेणी",
   "pricingFree": "मुफ़्त",
-  "pricingPaid": "सशुल्क"
+  "pricingPaid": "सशुल्क",
+  "loadingCapabilities": "क्षमताएं लोड हो रही हैं..."
 }

@@ -2516,5 +2516,6 @@
   "appIdCopiedToClipboard": "Programos ID nukopijuotas į iškarpinę",
   "appCategoryModalTitle": "Programos kategorija",
   "pricingFree": "Nemokama",
-  "pricingPaid": "Mokama"
+  "pricingPaid": "Mokama",
+  "loadingCapabilities": "Įkeliamos galimybės..."
 }

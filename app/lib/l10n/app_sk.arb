@@ -2534,5 +2534,6 @@
   "appIdCopiedToClipboard": "ID aplikácie skopírované do schránky",
   "appCategoryModalTitle": "Kategória aplikácie",
   "pricingFree": "Zadarmo",
-  "pricingPaid": "Platené"
+  "pricingPaid": "Platené",
+  "loadingCapabilities": "Načítavajú sa funkcie..."
 }

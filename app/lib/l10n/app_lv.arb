@@ -2534,5 +2534,6 @@
   "appIdCopiedToClipboard": "Lietotnes ID nokopēts starpliktuvē",
   "appCategoryModalTitle": "Lietotnes kategorija",
   "pricingFree": "Bezmaksas",
-  "pricingPaid": "Maksas"
+  "pricingPaid": "Maksas",
+  "loadingCapabilities": "Ielādē iespējas..."
 }

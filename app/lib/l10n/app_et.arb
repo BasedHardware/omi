@@ -2534,5 +2534,6 @@
   "appIdCopiedToClipboard": "Rakenduse ID kopeeritud lõikelauale",
   "appCategoryModalTitle": "Rakenduse kategooria",
   "pricingFree": "Tasuta",
-  "pricingPaid": "Tasuline"
+  "pricingPaid": "Tasuline",
+  "loadingCapabilities": "Võimete laadimine..."
 }

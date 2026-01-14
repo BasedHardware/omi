@@ -2534,5 +2534,6 @@
   "appIdCopiedToClipboard": "ID-ul aplicației copiat în clipboard",
   "appCategoryModalTitle": "Categoria aplicației",
   "pricingFree": "Gratuit",
-  "pricingPaid": "Cu plată"
+  "pricingPaid": "Cu plată",
+  "loadingCapabilities": "Se încarcă capacitățile..."
 }
