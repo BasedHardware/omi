@@ -10,10 +10,10 @@ Strategy: Prioritize small/medium files, defer large files
 
 OVERALL STATISTICS
 ------------------
-Files Completed: 22
+Files Completed: 23
 Files Skipped (Large): 3
-Total Keys Added: 202
-Total Translations: 6,868 (202 keys × 34 languages)
+Total Keys Added: 206
+Total Translations: 7,004 (206 keys × 34 languages)
 
 ================================================================================
 COMPLETED FILES
@@ -277,6 +277,17 @@ Notes: Localized desktop chat page including header, empty states, loading state
        _buildPopupFileOption to accept BuildContext parameter.
 Commit: 3ebc343a3
 
+FILE 51: desktop_message_action_menu.dart
+------------------------------------------
+Location: app/lib/desktop/pages/chat/widgets/
+Keys Added: 4
+Keys: copy, selectText, share, report
+Script: /tmp/translate_message_action_menu_keys.py
+Status: ✅ COMPLETED
+Notes: Localized message action menu button labels. Simple widget with 4 action
+       buttons for copying, selecting text, sharing, and reporting messages.
+Commit: fd154de93
+
 ================================================================================
 SKIPPED FILES (LARGE - TO BE COMPLETED LATER)
 ================================================================================
@@ -353,7 +364,7 @@ Priority 1 (Small Files - Next Batch)
 [✓] desktop_popular_apps_section.dart
 [✓] desktop_prompt_text_field.dart
 [✓] desktop_chat_page.dart
-[ ] desktop_message_action_menu.dart
+[✓] desktop_message_action_menu.dart
 [ ] desktop_voice_recorder_widget.dart
 [ ] desktop_conversation_detail_page.dart
 [ ] desktop_conversation_detail_wrapper.dart
@@ -478,6 +489,6 @@ echo "✅ Translated <feature> keys for all 34 languages!"
 END OF PROGRESS TRACKER
 ================================================================================
 Last Updated: 2026-01-14
-Last Completed: FILE 50 - desktop_chat_page.dart (27 keys, 918 translations)
-Previous Completed: FILE 49 - desktop_prompt_text_field.dart (1 key, 34 translations)
+Last Completed: FILE 51 - desktop_message_action_menu.dart (4 keys, 136 translations)
+Previous Completed: FILE 50 - desktop_chat_page.dart (27 keys, 918 translations)
 Current Session: [active]
