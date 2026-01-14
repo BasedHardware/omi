@@ -43,7 +43,6 @@ from routers import (
 
 from utils.other.timeout import TimeoutMiddleware
 from utils.observability import log_langsmith_status
-from database.cache import init_cache, shutdown_cache
 
 # Log LangSmith tracing status at startup
 log_langsmith_status()
@@ -107,24 +106,6 @@ methods_timeout = {
 
 app.add_middleware(TimeoutMiddleware, methods_timeout=methods_timeout)
 
-
-# Startup and shutdown event handlers for cache management
-@app.on_event("startup")
-async def startup_event():
-    """Initialize cache managers on startup."""
-    try:
-        init_cache(max_memory_mb=100)
-        print("Cache managers initialized successfully")
-    except Exception as e:
-        print(f"Failed to initialize cache managers: {e}")
-        # Continue startup even if cache managers fail
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Stop cache managers on shutdown."""
-    shutdown_cache()
-    print("Cache managers stopped")
 
 modal_app = App(
     name='backend',

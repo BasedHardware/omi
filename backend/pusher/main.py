@@ -5,7 +5,6 @@ import firebase_admin
 from fastapi import FastAPI
 
 from routers import pusher
-from database.cache import init_cache, shutdown_cache
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
@@ -26,21 +25,3 @@ for path in paths:
 @app.get('/health')
 def health_check():
     return {"status": "healthy"}
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize cache managers on startup."""
-    try:
-        init_cache(max_memory_mb=100)
-        print("Cache managers initialized successfully")
-    except Exception as e:
-        print(f"Failed to initialize cache managers: {e}")
-        # Continue startup even if cache managers fail
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Stop cache managers on shutdown."""
-    shutdown_cache()
-    print("Cache managers stopped")
