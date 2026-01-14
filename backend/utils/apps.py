@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from typing import List, Tuple, Dict, Any
 import hashlib
 import secrets
+from database.cache import get_memory_cache, get_pubsub_manager
+from database.redis_db import delete_generic_cache
 from database.apps import (
     get_private_apps_db,
     get_public_unapproved_apps_db,
@@ -136,16 +138,46 @@ def compute_app_score(app: App) -> float:
     return round(score, 4)
 
 
+def invalidate_popular_apps_cache():
+    """Invalidate the popular apps cache across all backend instances."""
+    memory_cache = get_memory_cache()
+    pubsub_manager = get_pubsub_manager()
+
+    cache_key = 'get_popular_apps_data'
+
+    # Clear local memory cache
+    memory_cache.delete(cache_key)
+
+    # Clear Redis cache
+    delete_generic_cache(cache_key)
+
+    # Notify all other instances
+    pubsub_manager.publish_invalidation([cache_key])
+
+
 def get_popular_apps() -> List[App]:
+    cache_key = 'get_popular_apps_data'
+
+    # Get memory cache instance
+    memory_cache = get_memory_cache()
+
+    # 1. Check memory cache first (fastest, <1ms, NO Redis egress)
+    if cached := memory_cache.get(cache_key):
+        print('get_popular_apps from memory cache')
+        return cached
+
+    # 2. Check Redis cache
     popular_apps = []
-    if cached_apps := get_generic_cache('get_popular_apps_data'):
-        print('get_popular_apps from cache')
+    if cached_apps := get_generic_cache(cache_key):
+        print('get_popular_apps from Redis cache')
         popular_apps = cached_apps
     else:
+        # 3. Database query
         print('get_popular_apps from db')
         popular_apps = get_popular_apps_db()
-        set_generic_cache('get_popular_apps_data', popular_apps, 60 * 30)  # 30 minutes cached
+        set_generic_cache(cache_key, popular_apps, 60 * 30)  # 30 minutes cached
 
+    # Process apps (add installs, reviews, ratings)
     app_ids = [app['id'] for app in popular_apps]
     apps_install = get_apps_installs_count(app_ids)
     apps_reviews = get_apps_reviews(app_ids)
@@ -161,6 +193,10 @@ def get_popular_apps() -> List[App]:
         app_dict['rating_count'] = len(sorted_reviews)
         apps.append(App(**app_dict))
     apps = sorted(apps, key=lambda x: x.installs, reverse=True)
+
+    # 4. Store in memory cache for next time
+    memory_cache.set(cache_key, apps, ttl=30)
+
     return apps
 
 
@@ -264,16 +300,59 @@ def get_private_apps(uid: str) -> List:
     return data
 
 
+def invalidate_approved_apps_cache():
+    """
+    Invalidate the approved apps cache across all backend instances.
+
+    This function:
+    1. Invalidates memory cache on local instance
+    2. Invalidates Redis cache
+    3. Publishes invalidation message to all other instances via pub/sub
+    """
+    # Get cache instances
+    memory_cache = get_memory_cache()
+    pubsub_manager = get_pubsub_manager()
+
+    # Invalidate both cache key variants (with and without reviews)
+    cache_keys = [
+        'get_public_approved_apps_data:reviews=0',
+        'get_public_approved_apps_data:reviews=1'
+    ]
+
+    # Clear local memory cache
+    for key in cache_keys:
+        memory_cache.delete(key)
+
+    # Clear Redis cache
+    delete_generic_cache('get_public_approved_apps_data')
+
+    # Notify all other instances to clear their memory cache
+    pubsub_manager.publish_invalidation(cache_keys)
+
+
 def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
+    # Use separate cache keys for with/without reviews
+    cache_key = f'get_public_approved_apps_data:reviews={int(include_reviews)}'
+
+    # Get memory cache instance
+    memory_cache = get_memory_cache()
+
+    # 1. Check in-memory cache first (fastest, <1ms, NO Redis egress)
+    if cached := memory_cache.get(cache_key):
+        print(f'{cache_key} from memory cache')
+        return cached
+
+    # 2. Check Redis cache (existing logic, ~5ms, Redis egress)
     all_apps = []
     if cached_apps := get_generic_cache('get_public_approved_apps_data'):
-        print('get_public_approved_apps_data from cache')
+        print('get_public_approved_apps_data from Redis cache')
         all_apps = cached_apps
-        pass
     else:
+        # 3. Database query (slow, ~50-100ms)
         all_apps = get_public_approved_apps_db()
         set_generic_cache('get_public_approved_apps_data', all_apps, 60 * 10)  # 10 minutes cached
 
+    # Process apps (add installs, reviews, etc.)
     app_ids = [app['id'] for app in all_apps]
     apps_installs = get_apps_installs_count(app_ids)
     apps_reviews = get_apps_reviews(app_ids) if include_reviews else {}
@@ -292,6 +371,10 @@ def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
         apps.append(App(**app_dict))
     if include_reviews:
         apps = sorted(apps, key=weighted_rating, reverse=True)
+
+    # 4. Store in memory cache for next time
+    memory_cache.set(cache_key, apps, ttl=30)
+
     return apps
 
 

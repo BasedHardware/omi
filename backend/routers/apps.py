@@ -55,6 +55,8 @@ from utils.apps import (
     get_available_apps,
     get_available_app_by_id,
     get_approved_available_apps,
+    invalidate_approved_apps_cache,
+    invalidate_popular_apps_cache,
     get_available_app_by_id_with_reviews,
     set_app_review,
     get_app_reviews,
@@ -550,7 +552,7 @@ async def update_persona(
     update_app_in_db(update_app.model_dump(exclude_unset=True))
 
     if persona['approved'] and (persona['private'] is None or persona['private'] is False):
-        delete_generic_cache('get_public_approved_apps_data')
+        invalidate_approved_apps_cache()
     delete_app_cache_by_id(persona_id)
     return {'status': 'ok', 'app_id': persona_id, 'username': data['username']}
 
@@ -702,7 +704,7 @@ def update_app(
     )
 
     if app['approved'] and (app['private'] is None or app['private'] is False):
-        delete_generic_cache('get_public_approved_apps_data')
+        invalidate_approved_apps_cache()
     delete_app_cache_by_id(app_id)
     return {'status': 'ok'}
 
@@ -716,7 +718,7 @@ def delete_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     delete_app_from_db(app_id)
     if app['approved']:
-        delete_generic_cache('get_public_approved_apps_data')
+        invalidate_approved_apps_cache()
     delete_app_cache_by_id(app_id)
     return {'status': 'ok'}
 
@@ -1389,7 +1391,7 @@ def set_app_popular(app_id: str, value: bool = Query(...), secret_key: str = Hea
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     set_app_popular_db(app_id, value)
     delete_app_cache_by_id(app_id)
-    delete_generic_cache('get_popular_apps_data')
+    invalidate_popular_apps_cache()
     return {'status': 'ok'}
 
 
@@ -1398,6 +1400,7 @@ def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     change_app_approval_status(app_id, True)
+    invalidate_approved_apps_cache()  # App is now public, invalidate cache
     delete_app_cache_by_id(app_id)
     app = get_available_app_by_id(app_id, uid)
     send_notification(
@@ -1413,6 +1416,7 @@ def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     change_app_approval_status(app_id, False)
+    invalidate_approved_apps_cache()  # App removed from public list, invalidate cache
     delete_app_cache_by_id(app_id)
     app = get_available_app_by_id(app_id, uid)
     # TODO: Add reason for rejection in payload and also redirect to the app page
