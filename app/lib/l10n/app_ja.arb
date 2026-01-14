@@ -328,7 +328,7 @@
   "listeningMins": "リスニング（分）",
   "understandingWords": "理解（語数）",
   "insights": "インサイト",
-  "memories": "記憶",
+  "memories": "思い出",
   "minsUsedThisMonth": "今月 {limit}分中{used}分使用済み",
   "wordsUsedThisMonth": "今月 {limit}語中{used}語使用済み",
   "insightsUsedThisMonth": "今月 {limit}個中{used}個のインサイト取得済み",
@@ -1051,5 +1051,54 @@
   "trySelectingDifferentDate": "別の日付を選択してみてください",
   "@trySelectingDifferentDate": {
     "description": "Empty state message for date filter"
+  },
+  "conversations": "会話",
+  "@conversations": {
+    "description": "Navigation label for conversations page"
+  },
+  "chat": "チャット",
+  "@chat": {
+    "description": "Navigation label for chat page"
+  },
+  "@memories": {
+    "description": "Navigation label for memories page"
+  },
+  "actions": "アクション",
+  "@actions": {
+    "description": "Navigation label for actions page"
+  },
+  "@apps": {
+    "description": "Navigation label for apps page"
+  },
+  "syncAvailable": "同期が利用可能",
+  "@syncAvailable": {
+    "description": "Label for sync notification"
+  },
+  "@settings": {
+    "description": "Bottom navigation label for settings"
+  },
+  "referAFriend": "友達を紹介",
+  "@referAFriend": {
+    "description": "Bottom navigation label for referral program"
+  },
+  "help": "ヘルプ",
+  "@help": {
+    "description": "Bottom navigation label for help"
+  },
+  "pro": "Pro",
+  "@pro": {
+    "description": "Badge label for pro/unlimited users"
+  },
+  "upgradeToPro": "Proにアップグレード",
+  "@upgradeToPro": {
+    "description": "Subscription banner button text"
+  },
+  "getOmiDevice": "Omiデバイスを入手",
+  "@getOmiDevice": {
+    "description": "Widget title for device promotion"
+  },
+  "wearableAiCompanion": "ウェアラブルAIコンパニオン",
+  "@wearableAiCompanion": {
+    "description": "Widget subtitle for device promotion"
   }
 }

@@ -54,7 +54,7 @@
       }
     }
   },
-  "settings": "Ajustes",
+  "settings": "Configuración",
   "language": "Idioma",
   "selectLanguage": "Seleccionar idioma",
   "deleting": "Borrando...",
@@ -120,7 +120,7 @@
   "clearChatConfirm": "¿Seguro que quieres limpiar el chat? Esta acción no se puede deshacer.",
   "maxFilesLimit": "Solo puedes subir 4 archivos a la vez",
   "chatWithOmi": "Chatea con Omi",
-  "apps": "Aplicaciones",
+  "apps": "Apps",
   "noAppsFound": "No se encontraron aplicaciones",
   "tryAdjustingSearch": "Intenta ajustar tu búsqueda o filtros",
   "createYourOwnApp": "Crea tu propia App",
@@ -1072,5 +1072,54 @@
   "trySelectingDifferentDate": "Intenta seleccionar una fecha diferente",
   "@trySelectingDifferentDate": {
     "description": "Empty state message for date filter"
+  },
+  "conversations": "Conversaciones",
+  "@conversations": {
+    "description": "Navigation label for conversations page"
+  },
+  "chat": "Chat",
+  "@chat": {
+    "description": "Navigation label for chat page"
+  },
+  "@memories": {
+    "description": "Navigation label for memories page"
+  },
+  "actions": "Acciones",
+  "@actions": {
+    "description": "Navigation label for actions page"
+  },
+  "@apps": {
+    "description": "Navigation label for apps page"
+  },
+  "syncAvailable": "Sincronización disponible",
+  "@syncAvailable": {
+    "description": "Label for sync notification"
+  },
+  "@settings": {
+    "description": "Bottom navigation label for settings"
+  },
+  "referAFriend": "Recomendar a un amigo",
+  "@referAFriend": {
+    "description": "Bottom navigation label for referral program"
+  },
+  "help": "Ayuda",
+  "@help": {
+    "description": "Bottom navigation label for help"
+  },
+  "pro": "Pro",
+  "@pro": {
+    "description": "Badge label for pro/unlimited users"
+  },
+  "upgradeToPro": "Actualizar a Pro",
+  "@upgradeToPro": {
+    "description": "Subscription banner button text"
+  },
+  "getOmiDevice": "Obtener dispositivo Omi",
+  "@getOmiDevice": {
+    "description": "Widget title for device promotion"
+  },
+  "wearableAiCompanion": "Compañero de IA portátil",
+  "@wearableAiCompanion": {
+    "description": "Widget subtitle for device promotion"
   }
 }

@@ -175,7 +175,7 @@
   },
   "settings": "설정",
   "@settings": {
-    "description": "Settings page title"
+    "description": "Bottom navigation label for settings"
   },
   "language": "언어",
   "@language": {
@@ -393,7 +393,7 @@
   },
   "apps": "앱",
   "@apps": {
-    "description": "Apps page title"
+    "description": "Navigation label for apps page"
   },
   "noAppsFound": "앱을 찾을 수 없습니다",
   "@noAppsFound": {
@@ -1128,7 +1128,7 @@
   "listeningMins": "청취(분)",
   "understandingWords": "이해(단어)",
   "insights": "인사이트",
-  "memories": "기억",
+  "memories": "추억",
   "minsUsedThisMonth": "이번 달 {limit}분 중 {used}분 사용",
   "@minsUsedThisMonth": {
     "placeholders": {
@@ -2645,5 +2645,48 @@
   "trySelectingDifferentDate": "다른 날짜를 선택해 보세요",
   "@trySelectingDifferentDate": {
     "description": "Empty state message for date filter"
+  },
+  "conversations": "대화",
+  "@conversations": {
+    "description": "Navigation label for conversations page"
+  },
+  "chat": "채팅",
+  "@chat": {
+    "description": "Navigation label for chat page"
+  },
+  "@memories": {
+    "description": "Navigation label for memories page"
+  },
+  "actions": "액션",
+  "@actions": {
+    "description": "Navigation label for actions page"
+  },
+  "syncAvailable": "동기화 가능",
+  "@syncAvailable": {
+    "description": "Label for sync notification"
+  },
+  "referAFriend": "친구 추천",
+  "@referAFriend": {
+    "description": "Bottom navigation label for referral program"
+  },
+  "help": "도움말",
+  "@help": {
+    "description": "Bottom navigation label for help"
+  },
+  "pro": "Pro",
+  "@pro": {
+    "description": "Badge label for pro/unlimited users"
+  },
+  "upgradeToPro": "Pro로 업그레이드",
+  "@upgradeToPro": {
+    "description": "Subscription banner button text"
+  },
+  "getOmiDevice": "Omi 기기 받기",
+  "@getOmiDevice": {
+    "description": "Widget title for device promotion"
+  },
+  "wearableAiCompanion": "웨어러블 AI 컴패니언",
+  "@wearableAiCompanion": {
+    "description": "Widget subtitle for device promotion"
   }
 }

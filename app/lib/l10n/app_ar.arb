@@ -175,7 +175,7 @@
   },
   "settings": "الإعدادات",
   "@settings": {
-    "description": "Settings page title"
+    "description": "Bottom navigation label for settings"
   },
   "language": "اللغة",
   "@language": {
@@ -393,7 +393,7 @@
   },
   "apps": "التطبيقات",
   "@apps": {
-    "description": "Apps page title"
+    "description": "Navigation label for apps page"
   },
   "noAppsFound": "لم يتم العثور على تطبيقات",
   "@noAppsFound": {
@@ -1128,7 +1128,7 @@
   "listeningMins": "الاستماع (دقائق)",
   "understandingWords": "الفهم (كلمات)",
   "insights": "رؤى",
-  "memories": "ذكريات",
+  "memories": "الذكريات",
   "minsUsedThisMonth": "{used} من {limit} دقيقة مستخدمة هذا الشهر",
   "@minsUsedThisMonth": {
     "placeholders": {
@@ -2677,5 +2677,48 @@
   "trySelectingDifferentDate": "حاول اختيار تاريخ مختلف",
   "@trySelectingDifferentDate": {
     "description": "Empty state message for date filter"
+  },
+  "conversations": "المحادثات",
+  "@conversations": {
+    "description": "Navigation label for conversations page"
+  },
+  "chat": "الدردشة",
+  "@chat": {
+    "description": "Navigation label for chat page"
+  },
+  "@memories": {
+    "description": "Navigation label for memories page"
+  },
+  "actions": "الإجراءات",
+  "@actions": {
+    "description": "Navigation label for actions page"
+  },
+  "syncAvailable": "المزامنة متاحة",
+  "@syncAvailable": {
+    "description": "Label for sync notification"
+  },
+  "referAFriend": "أوصِ بصديق",
+  "@referAFriend": {
+    "description": "Bottom navigation label for referral program"
+  },
+  "help": "المساعدة",
+  "@help": {
+    "description": "Bottom navigation label for help"
+  },
+  "pro": "Pro",
+  "@pro": {
+    "description": "Badge label for pro/unlimited users"
+  },
+  "upgradeToPro": "الترقية إلى Pro",
+  "@upgradeToPro": {
+    "description": "Subscription banner button text"
+  },
+  "getOmiDevice": "احصل على جهاز Omi",
+  "@getOmiDevice": {
+    "description": "Widget title for device promotion"
+  },
+  "wearableAiCompanion": "رفيق ذكاء اصطناعي يمكن ارتداؤه",
+  "@wearableAiCompanion": {
+    "description": "Widget subtitle for device promotion"
   }
 }

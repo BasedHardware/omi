@@ -175,7 +175,7 @@
   },
   "settings": "Налаштування",
   "@settings": {
-    "description": "Settings page title"
+    "description": "Bottom navigation label for settings"
   },
   "language": "Мова",
   "@language": {
@@ -393,7 +393,7 @@
   },
   "apps": "Додатки",
   "@apps": {
-    "description": "Apps page title"
+    "description": "Navigation label for apps page"
   },
   "noAppsFound": "Додатків не знайдено",
   "@noAppsFound": {
@@ -2645,5 +2645,48 @@
   "trySelectingDifferentDate": "Спробуйте вибрати іншу дату",
   "@trySelectingDifferentDate": {
     "description": "Empty state message for date filter"
+  },
+  "conversations": "Бесіди",
+  "@conversations": {
+    "description": "Navigation label for conversations page"
+  },
+  "chat": "Чат",
+  "@chat": {
+    "description": "Navigation label for chat page"
+  },
+  "@memories": {
+    "description": "Navigation label for memories page"
+  },
+  "actions": "Дії",
+  "@actions": {
+    "description": "Navigation label for actions page"
+  },
+  "syncAvailable": "Синхронізація доступна",
+  "@syncAvailable": {
+    "description": "Label for sync notification"
+  },
+  "referAFriend": "Порекомендувати друга",
+  "@referAFriend": {
+    "description": "Bottom navigation label for referral program"
+  },
+  "help": "Допомога",
+  "@help": {
+    "description": "Bottom navigation label for help"
+  },
+  "pro": "Pro",
+  "@pro": {
+    "description": "Badge label for pro/unlimited users"
+  },
+  "upgradeToPro": "Оновити до Pro",
+  "@upgradeToPro": {
+    "description": "Subscription banner button text"
+  },
+  "getOmiDevice": "Отримати пристрій Omi",
+  "@getOmiDevice": {
+    "description": "Widget title for device promotion"
+  },
+  "wearableAiCompanion": "Носимий AI-компаньйон",
+  "@wearableAiCompanion": {
+    "description": "Widget subtitle for device promotion"
   }
 }

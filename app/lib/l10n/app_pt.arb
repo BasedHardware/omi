@@ -120,7 +120,7 @@
   "clearChatConfirm": "Tem certeza de que deseja limpar o chat? Esta ação não pode ser desfeita.",
   "maxFilesLimit": "Você só pode enviar 4 arquivos por vez",
   "chatWithOmi": "Converse com Omi",
-  "apps": "Aplicativos",
+  "apps": "Apps",
   "noAppsFound": "Nenhum aplicativo encontrado",
   "tryAdjustingSearch": "Tente ajustar sua busca ou filtros",
   "createYourOwnApp": "Crie seu próprio App",
@@ -1072,5 +1072,54 @@
   "trySelectingDifferentDate": "Tente selecionar uma data diferente",
   "@trySelectingDifferentDate": {
     "description": "Empty state message for date filter"
+  },
+  "conversations": "Conversas",
+  "@conversations": {
+    "description": "Navigation label for conversations page"
+  },
+  "chat": "Chat",
+  "@chat": {
+    "description": "Navigation label for chat page"
+  },
+  "@memories": {
+    "description": "Navigation label for memories page"
+  },
+  "actions": "Ações",
+  "@actions": {
+    "description": "Navigation label for actions page"
+  },
+  "@apps": {
+    "description": "Navigation label for apps page"
+  },
+  "syncAvailable": "Sincronização disponível",
+  "@syncAvailable": {
+    "description": "Label for sync notification"
+  },
+  "@settings": {
+    "description": "Bottom navigation label for settings"
+  },
+  "referAFriend": "Indicar um amigo",
+  "@referAFriend": {
+    "description": "Bottom navigation label for referral program"
+  },
+  "help": "Ajuda",
+  "@help": {
+    "description": "Bottom navigation label for help"
+  },
+  "pro": "Pro",
+  "@pro": {
+    "description": "Badge label for pro/unlimited users"
+  },
+  "upgradeToPro": "Atualizar para Pro",
+  "@upgradeToPro": {
+    "description": "Subscription banner button text"
+  },
+  "getOmiDevice": "Obter dispositivo Omi",
+  "@getOmiDevice": {
+    "description": "Widget title for device promotion"
+  },
+  "wearableAiCompanion": "Companheiro de IA vestível",
+  "@wearableAiCompanion": {
+    "description": "Widget subtitle for device promotion"
   }
 }

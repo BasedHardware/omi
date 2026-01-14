@@ -1072,5 +1072,54 @@
   "trySelectingDifferentDate": "Versuchen Sie, ein anderes Datum auszuwählen",
   "@trySelectingDifferentDate": {
     "description": "Empty state message for date filter"
+  },
+  "conversations": "Gespräche",
+  "@conversations": {
+    "description": "Navigation label for conversations page"
+  },
+  "chat": "Chat",
+  "@chat": {
+    "description": "Navigation label for chat page"
+  },
+  "@memories": {
+    "description": "Navigation label for memories page"
+  },
+  "actions": "Aktionen",
+  "@actions": {
+    "description": "Navigation label for actions page"
+  },
+  "@apps": {
+    "description": "Navigation label for apps page"
+  },
+  "syncAvailable": "Synchronisierung verfügbar",
+  "@syncAvailable": {
+    "description": "Label for sync notification"
+  },
+  "@settings": {
+    "description": "Bottom navigation label for settings"
+  },
+  "referAFriend": "Einen Freund empfehlen",
+  "@referAFriend": {
+    "description": "Bottom navigation label for referral program"
+  },
+  "help": "Hilfe",
+  "@help": {
+    "description": "Bottom navigation label for help"
+  },
+  "pro": "Pro",
+  "@pro": {
+    "description": "Badge label for pro/unlimited users"
+  },
+  "upgradeToPro": "Auf Pro upgraden",
+  "@upgradeToPro": {
+    "description": "Subscription banner button text"
+  },
+  "getOmiDevice": "Omi-Gerät erhalten",
+  "@getOmiDevice": {
+    "description": "Widget title for device promotion"
+  },
+  "wearableAiCompanion": "Tragbarer KI-Begleiter",
+  "@wearableAiCompanion": {
+    "description": "Widget subtitle for device promotion"
   }
 }

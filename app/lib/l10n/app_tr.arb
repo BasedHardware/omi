@@ -175,7 +175,7 @@
   },
   "settings": "Ayarlar",
   "@settings": {
-    "description": "Settings page title"
+    "description": "Bottom navigation label for settings"
   },
   "language": "Dil",
   "@language": {
@@ -393,7 +393,7 @@
   },
   "apps": "Uygulamalar",
   "@apps": {
-    "description": "Apps page title"
+    "description": "Navigation label for apps page"
   },
   "noAppsFound": "Uygulama bulunamadı",
   "@noAppsFound": {
@@ -2627,5 +2627,48 @@
   "trySelectingDifferentDate": "Farklı bir tarih seçmeyi deneyin",
   "@trySelectingDifferentDate": {
     "description": "Empty state message for date filter"
+  },
+  "conversations": "Konuşmalar",
+  "@conversations": {
+    "description": "Navigation label for conversations page"
+  },
+  "chat": "Sohbet",
+  "@chat": {
+    "description": "Navigation label for chat page"
+  },
+  "@memories": {
+    "description": "Navigation label for memories page"
+  },
+  "actions": "Eylemler",
+  "@actions": {
+    "description": "Navigation label for actions page"
+  },
+  "syncAvailable": "Senkronizasyon Mevcut",
+  "@syncAvailable": {
+    "description": "Label for sync notification"
+  },
+  "referAFriend": "Arkadaş Öner",
+  "@referAFriend": {
+    "description": "Bottom navigation label for referral program"
+  },
+  "help": "Yardım",
+  "@help": {
+    "description": "Bottom navigation label for help"
+  },
+  "pro": "Pro",
+  "@pro": {
+    "description": "Badge label for pro/unlimited users"
+  },
+  "upgradeToPro": "Pro'ya Yükselt",
+  "@upgradeToPro": {
+    "description": "Subscription banner button text"
+  },
+  "getOmiDevice": "Omi Cihazı Al",
+  "@getOmiDevice": {
+    "description": "Widget title for device promotion"
+  },
+  "wearableAiCompanion": "Giyilebilir AI arkadaşı",
+  "@wearableAiCompanion": {
+    "description": "Widget subtitle for device promotion"
   }
 }

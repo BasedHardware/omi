@@ -328,7 +328,7 @@
   "listeningMins": "聆听（分钟）",
   "understandingWords": "理解（单词）",
   "insights": "见解",
-  "memories": "记忆",
+  "memories": "回忆",
   "minsUsedThisMonth": "本月已用 {used}/{limit} 分钟",
   "wordsUsedThisMonth": "本月已用 {used}/{limit} 单词",
   "insightsUsedThisMonth": "本月获得 {used}/{limit} 条见解",
@@ -1072,5 +1072,54 @@
   "trySelectingDifferentDate": "尝试选择其他日期",
   "@trySelectingDifferentDate": {
     "description": "Empty state message for date filter"
+  },
+  "conversations": "对话",
+  "@conversations": {
+    "description": "Navigation label for conversations page"
+  },
+  "chat": "聊天",
+  "@chat": {
+    "description": "Navigation label for chat page"
+  },
+  "@memories": {
+    "description": "Navigation label for memories page"
+  },
+  "actions": "操作",
+  "@actions": {
+    "description": "Navigation label for actions page"
+  },
+  "@apps": {
+    "description": "Navigation label for apps page"
+  },
+  "syncAvailable": "可同步",
+  "@syncAvailable": {
+    "description": "Label for sync notification"
+  },
+  "@settings": {
+    "description": "Bottom navigation label for settings"
+  },
+  "referAFriend": "推荐好友",
+  "@referAFriend": {
+    "description": "Bottom navigation label for referral program"
+  },
+  "help": "帮助",
+  "@help": {
+    "description": "Bottom navigation label for help"
+  },
+  "pro": "Pro",
+  "@pro": {
+    "description": "Badge label for pro/unlimited users"
+  },
+  "upgradeToPro": "升级至Pro",
+  "@upgradeToPro": {
+    "description": "Subscription banner button text"
+  },
+  "getOmiDevice": "获取Omi设备",
+  "@getOmiDevice": {
+    "description": "Widget title for device promotion"
+  },
+  "wearableAiCompanion": "可穿戴AI伴侣",
+  "@wearableAiCompanion": {
+    "description": "Widget subtitle for device promotion"
   }
 }

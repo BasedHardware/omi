@@ -123,7 +123,7 @@
   "clearChatConfirm": "Êtes-vous sûr de vouloir effacer la discussion ? Cette action est irréversible.",
   "maxFilesLimit": "Vous ne pouvez télécharger que 4 fichiers à la fois",
   "chatWithOmi": "Discuter avec Omi",
-  "apps": "Applications",
+  "apps": "Apps",
   "noAppsFound": "Aucune application trouvée",
   "tryAdjustingSearch": "Essayez d'ajuster votre recherche ou vos filtres",
   "createYourOwnApp": "Créez votre propre application",
@@ -404,7 +404,7 @@
   "listeningMins": "Écoute (min)",
   "understandingWords": "Compréhension (mots)",
   "insights": "Aperçus",
-  "memories": "Mémoires",
+  "memories": "Souvenirs",
   "minsUsedThisMonth": "{used} sur {limit} min utilisées ce mois-ci",
   "@minsUsedThisMonth": {
     "placeholders": {
@@ -1450,5 +1450,54 @@
   "trySelectingDifferentDate": "Essayez de sélectionner une autre date",
   "@trySelectingDifferentDate": {
     "description": "Empty state message for date filter"
+  },
+  "conversations": "Conversations",
+  "@conversations": {
+    "description": "Navigation label for conversations page"
+  },
+  "chat": "Chat",
+  "@chat": {
+    "description": "Navigation label for chat page"
+  },
+  "@memories": {
+    "description": "Navigation label for memories page"
+  },
+  "actions": "Actions",
+  "@actions": {
+    "description": "Navigation label for actions page"
+  },
+  "@apps": {
+    "description": "Navigation label for apps page"
+  },
+  "syncAvailable": "Synchronisation disponible",
+  "@syncAvailable": {
+    "description": "Label for sync notification"
+  },
+  "@settings": {
+    "description": "Bottom navigation label for settings"
+  },
+  "referAFriend": "Recommander un ami",
+  "@referAFriend": {
+    "description": "Bottom navigation label for referral program"
+  },
+  "help": "Aide",
+  "@help": {
+    "description": "Bottom navigation label for help"
+  },
+  "pro": "Pro",
+  "@pro": {
+    "description": "Badge label for pro/unlimited users"
+  },
+  "upgradeToPro": "Passer à Pro",
+  "@upgradeToPro": {
+    "description": "Subscription banner button text"
+  },
+  "getOmiDevice": "Obtenir un appareil Omi",
+  "@getOmiDevice": {
+    "description": "Widget title for device promotion"
+  },
+  "wearableAiCompanion": "Compagnon IA portable",
+  "@wearableAiCompanion": {
+    "description": "Widget subtitle for device promotion"
   }
 }

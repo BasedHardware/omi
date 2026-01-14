@@ -175,7 +175,7 @@
   },
   "settings": "Seaded",
   "@settings": {
-    "description": "Settings page title"
+    "description": "Bottom navigation label for settings"
   },
   "language": "Keel",
   "@language": {
@@ -393,7 +393,7 @@
   },
   "apps": "Rakendused",
   "@apps": {
-    "description": "Apps page title"
+    "description": "Navigation label for apps page"
   },
   "noAppsFound": "Rakendusi ei leitud",
   "@noAppsFound": {
@@ -2645,5 +2645,48 @@
   "trySelectingDifferentDate": "Proovige valida teine kuupäev",
   "@trySelectingDifferentDate": {
     "description": "Empty state message for date filter"
+  },
+  "conversations": "Vestlused",
+  "@conversations": {
+    "description": "Navigation label for conversations page"
+  },
+  "chat": "Vestlus",
+  "@chat": {
+    "description": "Navigation label for chat page"
+  },
+  "@memories": {
+    "description": "Navigation label for memories page"
+  },
+  "actions": "Toimingud",
+  "@actions": {
+    "description": "Navigation label for actions page"
+  },
+  "syncAvailable": "Sünkroonimine saadaval",
+  "@syncAvailable": {
+    "description": "Label for sync notification"
+  },
+  "referAFriend": "Soovita sõbrale",
+  "@referAFriend": {
+    "description": "Bottom navigation label for referral program"
+  },
+  "help": "Abi",
+  "@help": {
+    "description": "Bottom navigation label for help"
+  },
+  "pro": "Pro",
+  "@pro": {
+    "description": "Badge label for pro/unlimited users"
+  },
+  "upgradeToPro": "Uuenda Pro-le",
+  "@upgradeToPro": {
+    "description": "Subscription banner button text"
+  },
+  "getOmiDevice": "Hangi Omi seade",
+  "@getOmiDevice": {
+    "description": "Widget title for device promotion"
+  },
+  "wearableAiCompanion": "Kantav AI kaaslane",
+  "@wearableAiCompanion": {
+    "description": "Widget subtitle for device promotion"
   }
 }

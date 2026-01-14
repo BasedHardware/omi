@@ -175,7 +175,7 @@
   },
   "settings": "Beállítások",
   "@settings": {
-    "description": "Settings page title"
+    "description": "Bottom navigation label for settings"
   },
   "language": "Nyelv",
   "@language": {
@@ -393,7 +393,7 @@
   },
   "apps": "Alkalmazások",
   "@apps": {
-    "description": "Apps page title"
+    "description": "Navigation label for apps page"
   },
   "noAppsFound": "Nem található alkalmazás",
   "@noAppsFound": {
@@ -2645,5 +2645,48 @@
   "trySelectingDifferentDate": "Próbáljon meg egy másik dátumot kiválasztani",
   "@trySelectingDifferentDate": {
     "description": "Empty state message for date filter"
+  },
+  "conversations": "Beszélgetések",
+  "@conversations": {
+    "description": "Navigation label for conversations page"
+  },
+  "chat": "Csevegés",
+  "@chat": {
+    "description": "Navigation label for chat page"
+  },
+  "@memories": {
+    "description": "Navigation label for memories page"
+  },
+  "actions": "Műveletek",
+  "@actions": {
+    "description": "Navigation label for actions page"
+  },
+  "syncAvailable": "Szinkronizálás elérhető",
+  "@syncAvailable": {
+    "description": "Label for sync notification"
+  },
+  "referAFriend": "Ajánljon egy barátnak",
+  "@referAFriend": {
+    "description": "Bottom navigation label for referral program"
+  },
+  "help": "Súgó",
+  "@help": {
+    "description": "Bottom navigation label for help"
+  },
+  "pro": "Pro",
+  "@pro": {
+    "description": "Badge label for pro/unlimited users"
+  },
+  "upgradeToPro": "Frissítés Pro-ra",
+  "@upgradeToPro": {
+    "description": "Subscription banner button text"
+  },
+  "getOmiDevice": "Szerezzen be Omi eszközt",
+  "@getOmiDevice": {
+    "description": "Widget title for device promotion"
+  },
+  "wearableAiCompanion": "Hordható AI társ",
+  "@wearableAiCompanion": {
+    "description": "Widget subtitle for device promotion"
   }
 }

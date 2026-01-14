@@ -175,7 +175,7 @@
   },
   "settings": "Nustatymai",
   "@settings": {
-    "description": "Settings page title"
+    "description": "Bottom navigation label for settings"
   },
   "language": "Kalba",
   "@language": {
@@ -393,7 +393,7 @@
   },
   "apps": "Programos",
   "@apps": {
-    "description": "Apps page title"
+    "description": "Navigation label for apps page"
   },
   "noAppsFound": "Programų nerasta",
   "@noAppsFound": {
@@ -2627,5 +2627,48 @@
   "trySelectingDifferentDate": "Pabandykite pasirinkti kitą datą",
   "@trySelectingDifferentDate": {
     "description": "Empty state message for date filter"
+  },
+  "conversations": "Pokalbiai",
+  "@conversations": {
+    "description": "Navigation label for conversations page"
+  },
+  "chat": "Pokalbis",
+  "@chat": {
+    "description": "Navigation label for chat page"
+  },
+  "@memories": {
+    "description": "Navigation label for memories page"
+  },
+  "actions": "Veiksmai",
+  "@actions": {
+    "description": "Navigation label for actions page"
+  },
+  "syncAvailable": "Sinchronizacija prieinama",
+  "@syncAvailable": {
+    "description": "Label for sync notification"
+  },
+  "referAFriend": "Rekomenduoti draugui",
+  "@referAFriend": {
+    "description": "Bottom navigation label for referral program"
+  },
+  "help": "Pagalba",
+  "@help": {
+    "description": "Bottom navigation label for help"
+  },
+  "pro": "Pro",
+  "@pro": {
+    "description": "Badge label for pro/unlimited users"
+  },
+  "upgradeToPro": "Atnaujinti į Pro",
+  "@upgradeToPro": {
+    "description": "Subscription banner button text"
+  },
+  "getOmiDevice": "Įsigyti Omi įrenginį",
+  "@getOmiDevice": {
+    "description": "Widget title for device promotion"
+  },
+  "wearableAiCompanion": "Nešiojamas AI palydovas",
+  "@wearableAiCompanion": {
+    "description": "Widget subtitle for device promotion"
   }
 }

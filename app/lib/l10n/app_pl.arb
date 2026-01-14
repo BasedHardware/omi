@@ -175,7 +175,7 @@
   },
   "settings": "Ustawienia",
   "@settings": {
-    "description": "Settings page title"
+    "description": "Bottom navigation label for settings"
   },
   "language": "Język",
   "@language": {
@@ -393,7 +393,7 @@
   },
   "apps": "Aplikacje",
   "@apps": {
-    "description": "Apps page title"
+    "description": "Navigation label for apps page"
   },
   "noAppsFound": "Nie znaleziono aplikacji",
   "@noAppsFound": {
@@ -2645,5 +2645,48 @@
   "trySelectingDifferentDate": "Spróbuj wybrać inną datę",
   "@trySelectingDifferentDate": {
     "description": "Empty state message for date filter"
+  },
+  "conversations": "Rozmowy",
+  "@conversations": {
+    "description": "Navigation label for conversations page"
+  },
+  "chat": "Czat",
+  "@chat": {
+    "description": "Navigation label for chat page"
+  },
+  "@memories": {
+    "description": "Navigation label for memories page"
+  },
+  "actions": "Akcje",
+  "@actions": {
+    "description": "Navigation label for actions page"
+  },
+  "syncAvailable": "Synchronizacja dostępna",
+  "@syncAvailable": {
+    "description": "Label for sync notification"
+  },
+  "referAFriend": "Poleć znajomemu",
+  "@referAFriend": {
+    "description": "Bottom navigation label for referral program"
+  },
+  "help": "Pomoc",
+  "@help": {
+    "description": "Bottom navigation label for help"
+  },
+  "pro": "Pro",
+  "@pro": {
+    "description": "Badge label for pro/unlimited users"
+  },
+  "upgradeToPro": "Przejdź na Pro",
+  "@upgradeToPro": {
+    "description": "Subscription banner button text"
+  },
+  "getOmiDevice": "Uzyskaj urządzenie Omi",
+  "@getOmiDevice": {
+    "description": "Widget title for device promotion"
+  },
+  "wearableAiCompanion": "Noszony towarzysz AI",
+  "@wearableAiCompanion": {
+    "description": "Widget subtitle for device promotion"
   }
 }

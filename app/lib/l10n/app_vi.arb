@@ -175,7 +175,7 @@
   },
   "settings": "Cài đặt",
   "@settings": {
-    "description": "Settings page title"
+    "description": "Bottom navigation label for settings"
   },
   "language": "Ngôn ngữ",
   "@language": {
@@ -393,7 +393,7 @@
   },
   "apps": "Ứng dụng",
   "@apps": {
-    "description": "Apps page title"
+    "description": "Navigation label for apps page"
   },
   "noAppsFound": "Không tìm thấy ứng dụng",
   "@noAppsFound": {
@@ -1128,7 +1128,7 @@
   "listeningMins": "Lắng nghe (phút)",
   "understandingWords": "Hiểu biết (từ)",
   "insights": "Thông tin chi tiết",
-  "memories": "Ký ức",
+  "memories": "Kỷ niệm",
   "minsUsedThisMonth": "Đã sử dụng {used} trong số {limit} phút trong tháng này",
   "@minsUsedThisMonth": {
     "placeholders": {
@@ -2645,5 +2645,48 @@
   "trySelectingDifferentDate": "Thử chọn ngày khác",
   "@trySelectingDifferentDate": {
     "description": "Empty state message for date filter"
+  },
+  "conversations": "Cuộc trò chuyện",
+  "@conversations": {
+    "description": "Navigation label for conversations page"
+  },
+  "chat": "Trò chuyện",
+  "@chat": {
+    "description": "Navigation label for chat page"
+  },
+  "@memories": {
+    "description": "Navigation label for memories page"
+  },
+  "actions": "Hành động",
+  "@actions": {
+    "description": "Navigation label for actions page"
+  },
+  "syncAvailable": "Đồng bộ có sẵn",
+  "@syncAvailable": {
+    "description": "Label for sync notification"
+  },
+  "referAFriend": "Giới thiệu bạn bè",
+  "@referAFriend": {
+    "description": "Bottom navigation label for referral program"
+  },
+  "help": "Trợ giúp",
+  "@help": {
+    "description": "Bottom navigation label for help"
+  },
+  "pro": "Pro",
+  "@pro": {
+    "description": "Badge label for pro/unlimited users"
+  },
+  "upgradeToPro": "Nâng cấp lên Pro",
+  "@upgradeToPro": {
+    "description": "Subscription banner button text"
+  },
+  "getOmiDevice": "Nhận thiết bị Omi",
+  "@getOmiDevice": {
+    "description": "Widget title for device promotion"
+  },
+  "wearableAiCompanion": "Trợ lý AI đeo được",
+  "@wearableAiCompanion": {
+    "description": "Widget subtitle for device promotion"
   }
 }
