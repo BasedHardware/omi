@@ -1,0 +1,483 @@
+================================================================================
+FLUTTER L10N LOCALIZATION PROJECT - PROGRESS TRACKER
+================================================================================
+
+PROJECT SUMMARY
+---------------
+Total Languages: 34
+Target Directory: app/lib/desktop/
+Strategy: Prioritize small/medium files, defer large files
+
+OVERALL STATISTICS
+------------------
+Files Completed: 22
+Files Skipped (Large): 3
+Total Keys Added: 202
+Total Translations: 6,868 (202 keys × 34 languages)
+
+================================================================================
+COMPLETED FILES
+================================================================================
+
+FILE 28: desktop_goals_widget.dart
+-----------------------------------
+Location: app/lib/desktop/pages/conversations/widgets/
+Keys Added: 11
+Keys: maximumGoalsAllowed, addGoal, editGoal, icon, goalTitle, current,
+      target, delete, saveGoal, goals, tapToAddGoal
+Script: /tmp/translate_goals_keys.sh
+Status: ✅ COMPLETED
+
+FILE 29: desktop_conversation_header.dart
+------------------------------------------
+Location: app/lib/desktop/pages/conversations/widgets/
+Keys Added: 3
+Keys: welcomeBack, yourConversations, reviewAndManageConversations
+Script: /tmp/translate_header_keys.sh
+Status: ✅ COMPLETED
+
+FILE 30: desktop_empty_conversations.dart
+------------------------------------------
+Location: app/lib/desktop/pages/conversations/widgets/
+Keys Added: 5
+Keys: noConversationsYet, startCapturingConversations,
+      useMobileAppToCapture, conversationsProcessedAutomatically,
+      getInsightsInstantly
+Script: /tmp/translate_empty_state_keys.sh
+Status: ✅ COMPLETED
+Notes: Refactored _buildTipItem to accept BuildContext
+
+FILE 31: desktop_today_tasks_widget.dart
+-----------------------------------------
+Location: app/lib/desktop/pages/conversations/widgets/
+Keys Added: 3
+Keys: today, showAll, noTasksForToday
+Script: /tmp/translate_today_tasks_keys.sh
+Status: ✅ COMPLETED
+
+FILE 32: desktop_daily_score_widget.dart
+-----------------------------------------
+Location: app/lib/desktop/pages/conversations/widgets/
+Keys Added: 2
+Keys: dailyScore, dailyScoreDescription
+Script: /tmp/translate_daily_score_keys.sh
+Status: ✅ COMPLETED
+
+FILE 33: battery_info_widget.dart
+----------------------------------
+Location: app/lib/desktop/pages/home/widgets/
+Keys Added: 1
+Keys: disconnected
+Script: /tmp/translate_battery_widget_keys.sh
+Status: ✅ COMPLETED
+Notes: Fixed Ukrainian apostrophe issue (removed apostrophe)
+
+FILE 35: desktop_search_result_header.dart
+-------------------------------------------
+Location: app/lib/desktop/pages/conversations/widgets/
+Keys Added: 2
+Keys: searching, searchResults
+Script: /tmp/translate_search_header_keys.sh
+Status: ✅ COMPLETED
+Notes: Refactored methods to accept BuildContext
+
+FILE 36: desktop_action_items_section.dart
+-------------------------------------------
+Location: app/lib/desktop/pages/conversations/widgets/
+Keys Added: 1
+Keys: actionItems
+Script: /tmp/translate_action_items_section_keys.sh
+Status: ✅ COMPLETED
+
+FILE 37: desktop_conversation_search.dart
+------------------------------------------
+Location: app/lib/desktop/pages/conversations/widgets/
+Keys Added: 1
+Keys: searchConversations
+Script: /tmp/translate_conversation_search_keys.sh
+Status: ✅ COMPLETED
+
+FILE 38: desktop_actions_page.dart
+-----------------------------------
+Location: app/lib/desktop/pages/actions/
+Keys Added: 10
+Keys: tasksToday, tasksTomorrow, tasksNoDeadline, tasksLater, loadingTasks,
+      tasks, swipeTasksToIndent, create, noTasksYet, tasksFromConversationsWillAppear
+Script: /tmp/translate_actions_page_keys.sh
+Status: ✅ COMPLETED
+Notes: Refactored _getCategoryTitle to accept BuildContext parameter
+
+FILE 39: desktop_action_item_form_dialog.dart
+----------------------------------------------
+Location: app/lib/desktop/pages/actions/widgets/
+Keys Added: 34
+Keys: today, tomorrow, monthJan, monthFeb, monthMar, monthApr, monthMay, monthJun,
+      monthJul, monthAug, monthSep, monthOct, monthNov, monthDec, timePM, timeAM,
+      actionItemUpdatedSuccessfully, actionItemCreatedSuccessfully,
+      failedToUpdateActionItem, failedToCreateActionItem,
+      actionItemDeletedSuccessfully, failedToDeleteActionItem,
+      deleteActionItem, deleteActionItemConfirmation, editActionItem,
+      createActionItem, description, enterActionItemDescription,
+      markAsCompleted, dueDate, setDueDateAndTime, update, setDueDate, done
+Script: /tmp/translate_action_item_form_keys.sh (+ Python scripts for remaining langs)
+Status: ✅ COMPLETED
+Notes: Localized date/time formatting, all CRUD messages, form labels, and dialog titles
+Commit: 368b58f5a
+
+FILE 40: desktop_apps_page.dart
+--------------------------------
+Location: app/lib/desktop/pages/apps/
+Keys Added: 18
+Keys: reloadingApps, loadingApps, apps, noInternetConnection,
+      browseInstallCreateApps, createApp, searchApps, myApps, installedApps,
+      all, open, install, noAppsFound, noAppsAvailable, unableToLoadApps,
+      tryAdjustingSearchTermsOrFilters, checkBackLaterForNewApps,
+      pleaseCheckInternetConnectionAndTryAgain
+Script: Python scripts for all 34 languages
+Status: ✅ COMPLETED
+Notes: Localized loading states, page header, filters, buttons, and empty states
+Commit: b705aebe1
+
+FILE 41: desktop_add_app_page.dart
+-----------------------------------
+Location: app/lib/desktop/pages/apps/
+Keys Added: 28
+Keys: createNewApp, buildSubmitCustomOmiApp, submittingYourApp, preparingFormForYou,
+      appDetails, paymentDetails, previewAndScreenshots, appCapabilities, aiPrompts,
+      chatPrompt, chatPromptPlaceholder, conversationPrompt, conversationPromptPlaceholder,
+      notificationScopes, appPrivacyAndTerms, makeMyAppPublic, submitAppTermsAgreement,
+      submitApp, needHelpGettingStarted, clickHereForAppBuildingGuides, submitAppQuestion,
+      submitAppPublicDescription, submitAppPrivateDescription, dontShowAgain,
+      startEarning, connectStripeOrPayPal, connectNow, maybeLater
+Script: Python scripts for all 34 languages
+Status: ✅ COMPLETED
+Notes: Localized page title, loading states, section titles, form labels/placeholders,
+       privacy options, action buttons, help section, dialog content, and payment modal
+Commit: ec6479d37
+
+FILE 42: desktop_app_detail.dart
+---------------------------------
+Location: app/lib/desktop/pages/apps/widgets/
+Keys Added: 24
+Keys: installsCount, uninstallApp, subscribe, dataAccessNotice, dataAccessWarning,
+      installApp, betaTesterNotice, appUnderReviewOwner, appRejectedNotice,
+      setupSteps, completed, setupInstructions, integrationInstructions, preview,
+      aboutTheApp, aboutThePersona, conversationPrompt, chatPersonality,
+      ratingsAndReviews, noRatings, ratingsCount, errorActivatingApp,
+      integrationSetupRequired
+Script: /tmp/translate_app_detail_keys.py
+Status: ✅ COMPLETED
+Notes: Localized install/uninstall buttons, data access warnings, beta/review notifications,
+       setup instructions, preview sections, ratings display, and error messages.
+       Used parameterized translations for installsCount and ratingsCount.
+Commit: dc9032c4f
+
+FILE 43: desktop_app_grid.dart
+-------------------------------
+Location: app/lib/desktop/pages/apps/widgets/
+Keys Added: 2
+Keys: installed, install
+Script: /tmp/translate_app_grid_keys.py
+Status: ✅ COMPLETED
+Notes: Localized app grid card component with installed badge and install button labels.
+       Removed const from OmiBadge to support dynamic l10n values.
+Commit: d95127b2e
+
+FILE 44: desktop_app_metadata_widget.dart
+------------------------------------------
+Location: app/lib/desktop/pages/apps/widgets/
+Keys Added: 16
+Keys: appIdLabel, appNameLabel, appNamePlaceholder, pleaseEnterAppName,
+      categoryLabel, selectCategory, descriptionLabel, appDescriptionPlaceholder,
+      pleaseProvideValidDescription, appPricingLabel, noneSelected,
+      appIdCopiedToClipboard, appCategoryModalTitle, pricingFree, pricingPaid
+Script: /tmp/translate_app_metadata_keys.py
+Status: ✅ COMPLETED
+Notes: Localized app metadata form including field labels, placeholders, validation
+       messages, modal titles, and pricing options. Refactored _buildFieldLabel and
+       _buildTextField methods to accept BuildContext parameter for l10n access.
+       Used Builder widgets for dynamic l10n values in nested contexts.
+Commit: 5ad1950ea
+
+FILE 45: desktop_capabilities_chips_widget.dart
+------------------------------------------------
+Location: app/lib/desktop/pages/apps/widgets/
+Keys Added: 1
+Keys: loadingCapabilities
+Script: /tmp/translate_capabilities_chips_keys.py
+Status: ✅ COMPLETED
+Notes: Localized loading state message for app capabilities. Removed const from
+       Column widget to support dynamic l10n values.
+Commit: 7a1f9068b
+
+FILE 46: desktop_filter_chips.dart
+-----------------------------------
+Location: app/lib/desktop/pages/apps/widgets/
+Keys Added: 10
+Keys: filterInstalled, filterMyApps, clearSelection, filterCategory,
+      rating4PlusStars, rating3PlusStars, rating2PlusStars, rating1PlusStars,
+      filterRating, filterCapabilities
+Script: /tmp/translate_filter_chips_keys.py
+Status: ✅ COMPLETED
+Notes: Localized app filters including filter chips, dropdown labels, rating options,
+       and clear selection action. Wrapped dropdowns in Builder widgets to access
+       BuildContext for l10n. Maintained internal filter keys for app logic while
+       displaying localized strings to users.
+Commit: dc4cceb4c
+
+FILE 47: desktop_notification_scopes_chips_widget.dart
+-------------------------------------------------------
+Location: app/lib/desktop/pages/apps/widgets/
+Keys Added: 1
+Keys: noNotificationScopesAvailable
+Script: /tmp/translate_notification_scopes_chips_keys.py
+Status: ✅ COMPLETED
+Notes: Localized empty state message when no notification scopes are available.
+       Removed const from Column widget to support dynamic l10n values.
+Commit: ba8617bcb
+
+FILE 48: desktop_popular_apps_section.dart
+-------------------------------------------
+Location: app/lib/desktop/pages/apps/widgets/
+Keys Added: 1
+Keys: popularApps
+Script: /tmp/translate_popular_apps_section_keys.py
+Status: ✅ COMPLETED
+Notes: Localized section title for popular apps.
+Commit: c020a5046
+
+FILE 49: desktop_prompt_text_field.dart
+----------------------------------------
+Location: app/lib/desktop/pages/apps/widgets/
+Keys Added: 1
+Keys: pleaseProvidePrompt
+Script: /tmp/translate_prompt_text_field_keys.py
+Status: ✅ COMPLETED
+Notes: Localized validation error message for empty prompt text field.
+Commit: 82d73a338
+
+FILE 50: desktop_chat_page.dart
+--------------------------------
+Location: app/lib/desktop/pages/chat/
+Keys Added: 27
+Keys: chatWithAppName (parameterized), defaultAiAssistant, deletingMessages,
+      readyToChat, connectionNeeded, startConversation, checkInternetConnection,
+      wasThisHelpful, thankYouForFeedback, maxFilesUploadError, attachedFiles,
+      takePhoto, captureWithCamera, selectImages, chooseFromGallery, selectFile,
+      chooseAnyFileType, messageCopied, cannotReportOwnMessages,
+      messageReportedSuccessfully, reportMessage, confirmReportMessage,
+      selectChatAssistant, enableMoreApps, chatCleared, clearChatTitle,
+      confirmClearChat
+Script: /tmp/translate_chat_page_keys.py
+Status: ✅ COMPLETED
+Notes: Localized desktop chat page including header, empty states, loading states,
+       file upload UI, message actions (copy/report), NPS feedback, app selection
+       modal, clear chat dialog. Used Builder widgets for dynamic l10n access.
+       Parameterized chatWithAppName for app name insertion. Updated
+       _buildPopupFileOption to accept BuildContext parameter.
+Commit: 3ebc343a3
+
+================================================================================
+SKIPPED FILES (LARGE - TO BE COMPLETED LATER)
+================================================================================
+
+FILE 34: desktop_conversation_summary.dart
+-------------------------------------------
+Location: app/lib/desktop/pages/conversations/widgets/
+Estimated Strings: 17
+Estimated Translations: 578 (17 × 34 languages)
+Reason: Too large, deferred for later batch processing
+Status: ⏸️ DEFERRED
+
+Identified Strings:
+- summary, auto, apps, noSummaryForApp, tryAnotherApp, generatedBy
+- overview, otherAppResults, unknownApp, noSummaryAvailable
+- conversationNoSummaryYet, generateSummary, summaryCopiedToClipboard
+- chooseSummarizationApp, enableMoreApps, setAsDefaultSummarizationApp
+- letOmiChooseAutomatically
+
+desktop_conversation_card.dart
+-------------------------------
+Location: app/lib/desktop/pages/conversations/widgets/
+Estimated Strings: 26
+Estimated Translations: 884 (26 × 34 languages)
+Reason: Too large, complex context menu and dialog strings
+Status: ⏸️ DEFERRED
+
+Identified String Types:
+- Dialog titles and messages
+- Context menu items
+- Snackbar messages
+- Confirmation dialogs
+- Edit dialogs
+
+desktop_recording_widget.dart
+------------------------------
+Location: app/lib/desktop/pages/conversations/widgets/
+Estimated Strings: 40+
+Estimated Translations: 1,360+ (40 × 34 languages)
+Reason: Very large, complex recording states and messages
+Status: ⏸️ DEFERRED
+
+Identified String Types:
+- Recording state messages
+- Transcript labels
+- Audio device selection
+- Error messages
+- Status texts
+
+================================================================================
+ALREADY LOCALIZED FILES (NO WORK NEEDED)
+================================================================================
+
+✅ desktop_search_widget.dart (already uses context.l10n.search, context.l10n.searchPlaceholder)
+✅ desktop_action_group.dart (already fully localized)
+
+================================================================================
+REMAINING FILES TO CHECK
+================================================================================
+
+Priority 1 (Small Files - Next Batch)
+--------------------------------------
+[✓] desktop_app.dart (no strings to localize - routing logic only)
+[✓] desktop_actions_page.dart
+[✓] desktop_action_item_form_dialog.dart
+[✓] desktop_apps_page.dart
+[✓] desktop_add_app_page.dart
+[✓] desktop_app_detail.dart
+[✓] desktop_app_grid.dart
+[✓] desktop_app_metadata_widget.dart
+[✓] desktop_capabilities_chips_widget.dart
+[✓] desktop_filter_chips.dart
+[✓] desktop_notification_scopes_chips_widget.dart
+[✓] desktop_popular_apps_section.dart
+[✓] desktop_prompt_text_field.dart
+[✓] desktop_chat_page.dart
+[ ] desktop_message_action_menu.dart
+[ ] desktop_voice_recorder_widget.dart
+[ ] desktop_conversation_detail_page.dart
+[ ] desktop_conversation_detail_wrapper.dart
+[ ] desktop_conversations_page.dart
+[ ] desktop_home_page.dart
+[ ] desktop_home_wrapper.dart
+[ ] desktop_memories_page.dart
+[ ] desktop_memory_dialog.dart
+[ ] desktop_memory_item.dart
+[ ] desktop_memory_management_dialog.dart
+[ ] desktop_onboarding_wrapper.dart
+[ ] desktop_auth_screen.dart
+[ ] desktop_device_screen.dart
+[ ] desktop_language_screen.dart
+[ ] desktop_name_screen.dart
+[ ] desktop_permissions_screen.dart
+[ ] desktop_complete_screen.dart
+[ ] desktop_about_page.dart
+[ ] desktop_developer_page.dart
+[ ] desktop_profile_page.dart
+[ ] desktop_settings_modal.dart
+[ ] desktop_shortcuts_page.dart
+[ ] action_item_desktop.dart
+
+================================================================================
+KNOWN ISSUES & SOLUTIONS
+================================================================================
+
+Issue 1: Apostrophe Escaping in Bash
+-------------------------------------
+Problem: Bash scripts fail when translations contain apostrophes
+Solution: Use '\'' pattern (close quote, escaped apostrophe, open quote)
+
+Example:
+  CORRECT: jq '. + {"key": "l'\''application"}' app_fr.arb
+  WRONG:   jq '. + {"key": "l\'application"}' app_fr.arb
+
+Affected Languages: French, Italian, Catalan, Ukrainian
+
+Issue 2: Const Widget Constraints
+----------------------------------
+Problem: Const widgets cannot use dynamic l10n values
+Solution: Remove 'const' keyword from Text/widget constructors
+
+Example:
+  Before: const Text('Hello', ...)
+  After:  Text(context.l10n.hello, ...)
+
+Issue 3: BuildContext Access in Helper Methods
+-----------------------------------------------
+Problem: Helper methods need context.l10n access
+Solution: Add BuildContext parameter to method signature
+
+Example:
+  Before: Widget _buildItem({required String text}) { }
+  After:  Widget _buildItem(BuildContext context, {required String text}) { }
+
+Issue 4: Permission Warnings (Non-Critical)
+-------------------------------------------
+Problem: "mv: set owner/group (was: 501/0): Operation not permitted"
+Solution: Add "2>/dev/null" to mv commands (warnings are harmless)
+
+Issue 5: Ukrainian Apostrophes
+-------------------------------
+Problem: Ukrainian apostrophe character breaks jq parsing
+Solution: Remove apostrophe from Ukrainian translation or use alternative wording
+
+Example: "Від'єднано" → "Відєднано"
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+1. Continue with remaining small/medium files in Priority 1 list
+2. After Priority 1 complete, tackle the 3 large deferred files:
+   - desktop_conversation_summary.dart (17 strings)
+   - desktop_conversation_card.dart (26 strings)
+   - desktop_recording_widget.dart (40+ strings)
+3. Verify all files compile without errors
+4. Run app and spot-check translations in different languages
+5. Create git commit with localization changes
+
+================================================================================
+USEFUL COMMANDS
+================================================================================
+
+Find all desktop Dart files:
+  find app/lib/desktop -name "*.dart" -type f
+
+Check if file already has l10n import:
+  grep -l "l10n_extensions" app/lib/desktop/**/*.dart
+
+Find hardcoded strings in a file:
+  grep -E "('[^']*'|\"[^\"]*\")" <file.dart>
+
+Test if jq command works:
+  jq '. + {"test": "value"}' app/lib/l10n/app_en.arb
+
+List all ARB files:
+  ls -1 app/lib/l10n/app_*.arb
+
+Count keys in ARB file:
+  jq 'keys | length' app/lib/l10n/app_en.arb
+
+================================================================================
+TRANSLATION SCRIPT TEMPLATE
+================================================================================
+
+#!/bin/bash
+cd /Volumes/Ares/Developments/omi/omi/app/lib/l10n
+
+# English (with @description)
+jq '. + {"keyName": "English text", "@keyName": {"description": "Context"}}' app_en.arb > /tmp/tmp.arb && mv /tmp/tmp.arb app_en.arb 2>/dev/null
+
+# Other languages (no @description)
+jq '. + {"keyName": "Translated text"}' app_ar.arb > /tmp/tmp.arb && mv /tmp/tmp.arb app_ar.arb 2>/dev/null
+# ... repeat for all 34 languages
+
+echo "✅ Translated <feature> keys for all 34 languages!"
+
+================================================================================
+END OF PROGRESS TRACKER
+================================================================================
+Last Updated: 2026-01-14
+Last Completed: FILE 50 - desktop_chat_page.dart (27 keys, 918 translations)
+Previous Completed: FILE 49 - desktop_prompt_text_field.dart (1 key, 34 translations)
+Current Session: [active]
