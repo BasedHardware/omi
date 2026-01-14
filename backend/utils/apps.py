@@ -201,24 +201,34 @@ def get_popular_apps() -> List[App]:
 
 
 def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
+    cache_key = 'get_public_approved_apps_data'
+    memory_cache = get_memory_cache()
+
     private_data = []
     public_approved_data = []
     public_unapproved_data = []
     tester_apps = []
     all_apps = []
     tester = is_tester(uid)
-    if cachedApps := get_generic_cache('get_public_approved_apps_data'):
-        print('get_public_approved_plugins_data from cache')
+
+    # 1. Check memory cache first (fastest, NO Redis egress)
+    if cached := memory_cache.get(cache_key):
+        print('get_public_approved_apps_data from memory cache')
+        public_approved_data = cached
+    # 2. Check Redis cache
+    elif cachedApps := get_generic_cache(cache_key):
+        print('get_public_approved_apps_data from Redis cache')
         public_approved_data = cachedApps
-        public_unapproved_data = get_public_unapproved_apps(uid)
-        private_data = get_private_apps(uid)
-        pass
+        memory_cache.set(cache_key, public_approved_data, ttl=30)
     else:
-        print('get_public_approved_plugins_data from db')
-        private_data = get_private_apps(uid)
+        # 3. Database query
+        print('get_public_approved_apps_data from db')
         public_approved_data = get_public_approved_apps_db()
-        public_unapproved_data = get_public_unapproved_apps(uid)
-        set_generic_cache('get_public_approved_apps_data', public_approved_data, 60 * 10)  # 10 minutes cached
+        set_generic_cache(cache_key, public_approved_data, 60 * 10)  # 10 minutes cached
+        memory_cache.set(cache_key, public_approved_data, ttl=30)
+
+    private_data = get_private_apps(uid)
+    public_unapproved_data = get_public_unapproved_apps(uid)
     if tester:
         tester_apps = get_apps_for_tester_db(uid)
     user_enabled = set(get_enabled_apps(uid))
