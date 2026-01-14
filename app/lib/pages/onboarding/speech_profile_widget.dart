@@ -52,10 +52,15 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
 
   @override
   void dispose() {
+    final speechProvider = context.read<SpeechProfileProvider>();
+
+    speechProvider.forceCompletionTimer?.cancel();
+    speechProvider.forceCompletionTimer = null;
+    speechProvider.close();
+
+    _scrollController.dispose();
     _questionAnimationController.dispose();
-    // if (mounted) {
-    //   context.read<SpeechProfileProvider>().close();
-    // }
+
     super.dispose();
   }
 
@@ -110,9 +115,11 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
               if (info == 'SCROLL_DOWN') {
                 scrollDown();
               } else if (info == 'NEXT_QUESTION') {
-                // Animate question change
-                _questionAnimationController.reset();
-                _questionAnimationController.forward();
+                if (!mounted) return;
+
+                _questionAnimationController
+                  ..reset()
+                  ..forward();
               }
             },
             showError: (error) {
@@ -336,7 +343,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                         provider.finalize();
                                       });
 
-                                      // Start question animation
+                                      if (!mounted) return;
                                       _questionAnimationController.forward();
                                     },
                                     child: Text(
