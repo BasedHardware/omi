@@ -1,63 +1,71 @@
 # watchOS Companion App
 
-The Omi watchOS companion app has been **disabled by default** to allow developers to build and run the iOS app without requiring watchOS code signing configuration.
+The Omi watchOS companion app is **disabled by default** for local development but is **automatically enabled for CI/CD builds** via Codemagic.
+
+## How It Works
+
+The watchOS target (`omiWatchApp`) exists in the Xcode project but is **not linked** to the main Runner target by default. This allows developers to build and run the iOS app without requiring watchOS code signing configuration.
+
+During CI builds on Codemagic, the `enable_watchos.sh` script is run automatically to:
+1. Add `omiWatchApp` to the "Embed Watch Content" build phase
+2. Add a target dependency from Runner to omiWatchApp
+3. Add `WKCompanionAppBundleIdentifier` to Info.plist
 
 ## watchOS Source Files
 
-The watchOS source code is preserved in `app/ios/omiWatchApp/` directory for developers who want to enable it.
+The watchOS source code is in `app/ios/omiWatchApp/`:
+- `omiwatchApp.swift` - SwiftUI entry point
+- `ContentView.swift` - Main UI with recording button
+- `BatteryManager.swift` - Battery monitoring
+- `WatchAudioRecorderViewModel.swift` - Audio recording logic
+- `Assets.xcassets/` - App icons and assets
 
-## How to Enable watchOS Support
+## For Local Development
 
-If you want to build the watchOS companion app, you'll need to:
+### Option 1: Build iOS Only (Default)
 
-### 1. Add the watchOS Target Back to Xcode
+Simply build and run the iOS app normally. The watchOS app will not be built, and no signing configuration is required for it.
 
-1. Open `app/ios/Runner.xcworkspace` in Xcode
-2. Go to **File > New > Target**
-3. Select **watchOS > App** and click Next
-4. Name it `omiWatchApp`
-5. Set the bundle identifier to match your app (e.g., `$(PRODUCT_BUNDLE_IDENTIFIER).watchapp`)
-6. Ensure "Watch App for Existing iOS App" is selected
+### Option 2: Enable watchOS Locally
 
-### 2. Configure Code Signing
+If you want to test the watchOS app locally:
 
-1. Select the `omiWatchApp` target in Xcode
-2. Go to **Signing & Capabilities**
-3. Select your development team
-4. Ensure automatic signing is enabled
+1. Run the enable script:
+   ```bash
+   cd app/ios
+   ./scripts/enable_watchos.sh
+   ```
 
-### 3. Link Existing Source Files
+2. Open `Runner.xcworkspace` in Xcode
 
-1. Delete the auto-generated Swift files in the new target
-2. Add the existing files from `omiWatchApp/` directory:
-   - `omiwatchApp.swift`
-   - `ContentView.swift`
-   - `BatteryManager.swift`
-   - `WatchAudioRecorderViewModel.swift`
-   - `Assets.xcassets`
+3. Select the `omiWatchApp` target and configure signing:
+   - Go to **Signing & Capabilities**
+   - Select your development team
+   - Ensure automatic signing is enabled
 
-### 4. Update Info.plist
+4. Build the Runner scheme (it will now include the watch app)
 
-Add the following to `app/ios/Runner/Info.plist`:
+### Option 3: Manual Configuration
 
-```xml
-<key>WKCompanionAppBundleIdentifier</key>
-<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-```
+If you prefer to configure manually in Xcode:
 
-### 5. Add Target Dependency
+1. Open `Runner.xcworkspace` in Xcode
+2. Select the `Runner` target > **Build Phases**
+3. In **Embed Watch Content**, click `+` and add `omiWatchApp.app`
+4. Go to **Dependencies** and add `omiWatchApp`
+5. Select `Runner/Info.plist` and add:
+   ```xml
+   <key>WKCompanionAppBundleIdentifier</key>
+   <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+   ```
 
-1. Select the `Runner` target
-2. Go to **Build Phases > Dependencies**
-3. Add `omiWatchApp` as a dependency
-4. Add an "Embed Watch Content" build phase if not present
-
-## Why Is watchOS Disabled?
+## Why Is watchOS Disabled by Default?
 
 1. **Signing Requirements**: watchOS apps require a valid development team and signing certificate, which blocks new developers from building the iOS app
 2. **Optional Feature**: The watchOS companion is optional and not required for core Omi functionality
 3. **Faster Development**: Most developers only need the iOS app for development and testing
+4. **CI/CD Handles It**: Production builds via Codemagic automatically enable and build the watch app
 
 ## Questions?
 
-If you need help enabling watchOS support, please open an issue on GitHub.
+If you need help with watchOS development, please open an issue on GitHub.

@@ -109,6 +109,11 @@ workflows:
         script: |
           dart run build_runner build --delete-conflicting-outputs
 
+      - name: Enable watchOS companion app
+        script: |
+          chmod +x ios/scripts/enable_watchos.sh
+          ios/scripts/enable_watchos.sh
+
       - name: Installs pod
         script: |
           cd ios && pod install --repo-update
@@ -445,6 +450,11 @@ workflows:
       - name: Run build runner
         script: |
           dart run build_runner build --delete-conflicting-outputs
+
+      - name: Enable watchOS companion app
+        script: |
+          chmod +x ios/scripts/enable_watchos.sh
+          ios/scripts/enable_watchos.sh
 
       - name: Installs pod
         script: |
@@ -993,6 +1003,11 @@ workflows:
       - name: Run build runner
         script: |
           dart run build_runner build --delete-conflicting-outputs
+
+      - name: Enable watchOS companion app
+        script: |
+          chmod +x ios/scripts/enable_watchos.sh
+          ios/scripts/enable_watchos.sh
 
       - name: Installs pod
         script: |
