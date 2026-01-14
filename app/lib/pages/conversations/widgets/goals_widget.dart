@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/http/api/goals.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
 /// Multi-goal widget supporting up to 3 goals with minimalistic UI
@@ -238,7 +239,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
     if (_goals.length >= _maxGoals) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Maximum $_maxGoals goals allowed'),
+          content: Text(context.l10n.maximumGoalsAllowed(_maxGoals)),
           backgroundColor: Colors.orange,
         ),
       );
@@ -466,7 +467,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                             foregroundColor: Colors.red,
                             padding: const EdgeInsets.symmetric(vertical: 14),
                           ),
-                          child: const Text('Delete'),
+                          child: Text(context.l10n.delete),
                         ),
                       ),
                       const SizedBox(width: 12),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'widgets/markdown_message_widget.dart';
 
 class SelectTextScreen extends StatelessWidget {
@@ -14,7 +15,7 @@ class SelectTextScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.primary,
         automaticallyImplyLeading: true,
-        title: const Text('Select Text'),
+        title: Text(context.l10n.selectText),
         centerTitle: false,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new),

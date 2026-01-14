@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/http/api/goals.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
@@ -211,7 +212,7 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
     if (_goals.length >= _maxGoals) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Maximum $_maxGoals goals allowed'),
+          content: Text(context.l10n.maximumGoalsAllowed(_maxGoals)),
           backgroundColor: Colors.orange,
         ),
       );
@@ -245,7 +246,7 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
           backgroundColor: ResponsiveHelper.backgroundSecondary,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Text(
-            isNew ? 'Add Goal' : 'Edit Goal',
+            isNew ? context.l10n.addGoal : context.l10n.editGoal,
             style: const TextStyle(
               color: ResponsiveHelper.textPrimary,
               fontSize: 18,
@@ -261,8 +262,8 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
                 // Emoji selector (only for editing)
                 if (!isNew) ...[
                   Text(
-                    'Icon',
-                    style: TextStyle(
+                    context.l10n.icon,
+                    style: const TextStyle(
                       color: ResponsiveHelper.textTertiary,
                       fontSize: 12,
                     ),
@@ -306,8 +307,8 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
                 ],
                 // Title field
                 Text(
-                  'Goal title',
-                  style: TextStyle(
+                  context.l10n.goalTitle,
+                  style: const TextStyle(
                     color: ResponsiveHelper.textTertiary,
                     fontSize: 12,
                   ),
@@ -335,8 +336,8 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Current',
-                            style: TextStyle(
+                            context.l10n.current,
+                            style: const TextStyle(
                               color: ResponsiveHelper.textTertiary,
                               fontSize: 12,
                             ),
@@ -365,8 +366,8 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Target',
-                            style: TextStyle(
+                            context.l10n.target,
+                            style: const TextStyle(
                               color: ResponsiveHelper.textTertiary,
                               fontSize: 12,
                             ),
@@ -404,13 +405,13 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
                 style: TextButton.styleFrom(
                   foregroundColor: ResponsiveHelper.errorColor,
                 ),
-                child: const Text('Delete'),
+                child: Text(context.l10n.delete),
               ),
             TextButton(
               onPressed: () => Navigator.pop(context),
               child: Text(
-                'Cancel',
-                style: TextStyle(color: ResponsiveHelper.textTertiary),
+                context.l10n.cancel,
+                style: const TextStyle(color: ResponsiveHelper.textTertiary),
               ),
             ),
             ElevatedButton(
@@ -425,7 +426,7 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              child: Text(isNew ? 'Add Goal' : 'Save'),
+              child: Text(isNew ? context.l10n.addGoal : context.l10n.saveGoal),
             ),
           ],
         ),
@@ -561,9 +562,9 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Goals',
-                style: TextStyle(
+              Text(
+                context.l10n.goals,
+                style: const TextStyle(
                   color: ResponsiveHelper.textPrimary,
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
@@ -598,8 +599,8 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
                             Icon(Icons.add_rounded, size: 16, color: ResponsiveHelper.textTertiary),
                             const SizedBox(width: 8),
                             Text(
-                              'Tap to add a goal',
-                              style: TextStyle(
+                              context.l10n.tapToAddGoal,
+                              style: const TextStyle(
                                 fontSize: 13,
                                 color: ResponsiveHelper.textTertiary,
                               ),

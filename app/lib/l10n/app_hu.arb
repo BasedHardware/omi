@@ -101,7 +101,7 @@
   "@errorProcessingConversation": {
     "description": "Error message for conversation processing failure"
   },
-  "noInternetConnection": "Kérlek, ellenőrizd az internetkapcsolatot, és próbáld újra.",
+  "noInternetConnection": "Nincs internetkapcsolat",
   "@noInternetConnection": {
     "description": "Message shown when there's no internet"
   },
@@ -121,7 +121,7 @@
   "@errorCopied": {
     "description": "Snackbar message after copying error"
   },
-  "remaining": "Hátralévő",
+  "remaining": "Hátralevő",
   "@remaining": {
     "description": "Label for remaining time/items"
   },
@@ -209,7 +209,7 @@
   "@couldNotAccessFile": {
     "description": "Error when file access fails"
   },
-  "askOmi": "Kérdezd Omi-t",
+  "askOmi": "Kérdezd meg Omit",
   "@askOmi": {
     "description": "Chat button label"
   },
@@ -217,11 +217,11 @@
   "@done": {
     "description": "Button label"
   },
-  "disconnected": "Leválasztva",
+  "disconnected": "Megszakítva",
   "@disconnected": {
     "description": "Device disconnected status"
   },
-  "searching": "Keresés",
+  "searching": "Keresés...",
   "@searching": {
     "description": "Searching for device status"
   },
@@ -289,7 +289,7 @@
   "@syncingBackground": {
     "description": "Message during background sync"
   },
-  "noConversationsYet": "Még nincsenek beszélgetések.",
+  "noConversationsYet": "Még nincsenek beszélgetések",
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
@@ -301,7 +301,7 @@
   "@starConversationHint": {
     "description": "Hint explaining how to star conversations"
   },
-  "searchConversations": "Beszélgetések keresése",
+  "searchConversations": "Beszélgetések keresése...",
   "@searchConversations": {
     "description": "Search field placeholder"
   },
@@ -395,7 +395,7 @@
   "@apps": {
     "description": "Apps page title"
   },
-  "noAppsFound": "Nem találhatók alkalmazások",
+  "noAppsFound": "Nem található alkalmazás",
   "@noAppsFound": {
     "description": "Empty state when no apps match"
   },
@@ -411,11 +411,11 @@
   "@buildAndShareApp": {
     "description": "Create app button subtitle"
   },
-  "searchApps": "Keresés 1500+ alkalmazás között",
+  "searchApps": "Alkalmazások keresése...",
   "@searchApps": {
     "description": "Apps search placeholder"
   },
-  "myApps": "Saját alkalmazások",
+  "myApps": "Alkalmazásaim",
   "@myApps": {
     "description": "My Apps filter button"
   },
@@ -683,7 +683,7 @@
   "@disconnectDevice": {
     "description": "Disconnect device button"
   },
-  "unpairDevice": "Eszköz párosításának megszüntetése",
+  "unpairDevice": "Eszköz párosítás megszüntetése",
   "@unpairDevice": {
     "description": "Unpair device button"
   },
@@ -695,7 +695,7 @@
   "@deviceDisconnectedMessage": {
     "description": "Message shown when device is disconnected"
   },
-  "deviceUnpairedMessage": "Eszköz párosítása megszüntetve. Menj a Beállítások > Bluetooth menübe, és felejtsd el az eszközt a folyamat befejezéséhez.",
+  "deviceUnpairedMessage": "Eszköz párosítása megszüntetve. Menjen a Beállítások > Bluetooth menüpontba, és felejtse el az eszközt a párosítás megszüntetésének befejezéséhez.",
   "@deviceUnpairedMessage": {
     "description": "Message shown when device is unpaired"
   },
@@ -1414,7 +1414,7 @@
       }
     }
   },
-  "yesterday": "tegnap",
+  "yesterday": "Tegnap",
   "daysAgo": "{count} napja",
   "@daysAgo": {
     "placeholders": {
@@ -1572,7 +1572,7 @@
   "highAccuracy": "Nagy pontosság",
   "privacyFirst": "Adatvédelem az első",
   "saveChanges": "Változtatások mentése",
-  "resetToDefault": "Alaphelyzetbe állítás",
+  "resetToDefault": "Visszaállítás alapértelmezettre",
   "viewTemplate": "Sablon megtekintése",
   "trySomethingLike": "Próbálj valami ilyesmit...",
   "tryIt": "Próbáld ki",
@@ -1633,7 +1633,7 @@
       }
     }
   },
-  "dontShowAgain": "Ne mutasd újra",
+  "dontShowAgain": "Ne jelenjen meg újra",
   "@dontShowAgain": {
     "description": "Checkbox text to suppress future connection confirmations"
   },
@@ -1986,11 +1986,11 @@
   "@actionItemCompleted": {
     "description": "Snackbar message when item completed"
   },
-  "deleteActionItemTitle": "Teendő törlése",
+  "deleteActionItemTitle": "Műveleti elem törlése",
   "@deleteActionItemTitle": {
     "description": "Title for delete item dialog"
   },
-  "deleteActionItemMessage": "Biztosan törölni szeretnéd ezt a teendőt?",
+  "deleteActionItemMessage": "Biztosan törölni szeretné ezt a műveleti elemet?",
   "@deleteActionItemMessage": {
     "description": "Confirmation message for deleting single item"
   },
@@ -2215,11 +2215,11 @@
   "@retry": {
     "description": "Button label"
   },
-  "createActionItem": "Teendő létrehozása",
+  "createActionItem": "Feladat létrehozása",
   "@createActionItem": {
     "description": "Sheet title"
   },
-  "editActionItem": "Teendő szerkesztése",
+  "editActionItem": "Feladat szerkesztése",
   "@editActionItem": {
     "description": "Sheet title"
   },
@@ -2235,7 +2235,7 @@
   "@actionItemUpdated": {
     "description": "Snackbar"
   },
-  "failedToUpdateActionItem": "Teendő frissítése sikertelen",
+  "failedToUpdateActionItem": "A feladat frissítése sikertelen",
   "@failedToUpdateActionItem": {
     "description": "Snackbar"
   },
@@ -2243,7 +2243,7 @@
   "@actionItemCreated": {
     "description": "Snackbar"
   },
-  "failedToCreateActionItem": "Teendő létrehozása sikertelen",
+  "failedToCreateActionItem": "A feladat létrehozása sikertelen",
   "@failedToCreateActionItem": {
     "description": "Snackbar"
   },
@@ -2287,15 +2287,15 @@
   "@completed": {
     "description": "Status label"
   },
-  "markComplete": "Befejezettként megjelölés",
+  "markComplete": "Megjelölés befejezettként",
   "@markComplete": {
     "description": "Action label"
   },
-  "actionItemDeleted": "Teendő törölve",
+  "actionItemDeleted": "Műveleti elem törölve",
   "@actionItemDeleted": {
     "description": "Snackbar"
   },
-  "failedToDeleteActionItem": "Teendő törlése sikertelen",
+  "failedToDeleteActionItem": "A feladat törlése sikertelen",
   "@failedToDeleteActionItem": {
     "description": "Snackbar"
   },
@@ -2313,5 +2313,211 @@
   },
   "appInterfaceSectionTitle": "ALKALMAZÁS FELÜLET",
   "speechTranscriptionSectionTitle": "BESZÉD ÉS ÁTÍRÁS",
-  "languageSettingsHelperText": "Az alkalmazás nyelve megváltoztatja a menüket és gombokat. A beszéd nyelve befolyásolja, hogyan íródnak át a felvételei."
+  "languageSettingsHelperText": "Az alkalmazás nyelve megváltoztatja a menüket és gombokat. A beszéd nyelve befolyásolja, hogyan íródnak át a felvételei.",
+  "translationNotice": "Fordítási értesítés",
+  "translationNoticeMessage": "Az Omi az elsődleges nyelvedre fordítja a beszélgetéseket. Bármikor frissítheted a Beállítások → Profilok menüpontban.",
+  "pleaseCheckInternetConnection": "Kérjük, ellenőrizd az internetkapcsolatot, és próbáld újra",
+  "pleaseSelectReason": "Kérjük, válassz egy okot",
+  "tellUsMoreWhatWentWrong": "Mondj el többet arról, mi ment rosszul...",
+  "selectText": "Szöveg kijelölése",
+  "maximumGoalsAllowed": "Maximum {count} cél engedélyezett",
+  "conversationCannotBeMerged": "Ez a beszélgetés nem egyesíthető (zárolva vagy már egyesítés alatt)",
+  "pleaseEnterFolderName": "Kérjük, adj meg egy mappanevet",
+  "failedToCreateFolder": "A mappa létrehozása sikertelen",
+  "failedToUpdateFolder": "A mappa frissítése sikertelen",
+  "folderName": "Mappa neve",
+  "descriptionOptional": "Leírás (opcionális)",
+  "failedToDeleteFolder": "A mappa törlése sikertelen",
+  "editFolder": "Mappa szerkesztése",
+  "deleteFolder": "Mappa törlése",
+  "transcriptCopiedToClipboard": "Átirat vágólapra másolva",
+  "summaryCopiedToClipboard": "Összefoglaló vágólapra másolva",
+  "conversationUrlCouldNotBeShared": "A beszélgetés URL-je nem osztható meg.",
+  "urlCopiedToClipboard": "URL vágólapra másolva",
+  "exportTranscript": "Átirat exportálása",
+  "exportSummary": "Összefoglaló exportálása",
+  "exportButton": "Exportálás",
+  "actionItemsCopiedToClipboard": "Műveletpontok vágólapra másolva",
+  "summarize": "Összefoglalás",
+  "generateSummary": "Összefoglalás generálása",
+  "conversationNotFoundOrDeleted": "A beszélgetés nem található vagy törölve lett",
+  "deleteMemory": "Emléket törölni?",
+  "thisActionCannotBeUndone": "Ez a művelet nem vonható vissza.",
+  "memoriesCount": "{count} emlék",
+  "noMemoriesInCategory": "Ebben a kategóriában még nincsenek emlékek",
+  "addYourFirstMemory": "Adja hozzá első emlékét",
+  "firmwareDisconnectUsb": "USB leválasztása",
+  "firmwareUsbWarning": "Az USB-kapcsolat a frissítések során károsíthatja az eszközt.",
+  "firmwareBatteryAbove15": "Akkumulátor 15% felett",
+  "firmwareEnsureBattery": "Győződjön meg róla, hogy az eszköz akkumulátora 15%.",
+  "firmwareStableConnection": "Stabil kapcsolat",
+  "firmwareConnectWifi": "Csatlakozzon WiFi-hez vagy mobilhálózathoz.",
+  "failedToStartUpdate": "Nem sikerült elindítani a frissítést: {error}",
+  "beforeUpdateMakeSure": "Frissítés előtt győződjön meg:",
+  "confirmed": "Megerősítve!",
+  "release": "Elenged",
+  "slideToUpdate": "Csúsztassa a frissítéshez",
+  "copiedToClipboard": "{title} a vágólapra másolva",
+  "batteryLevel": "Akkumulátor szint",
+  "productUpdate": "Termékfrissítés",
+  "offline": "Offline",
+  "available": "Elérhető",
+  "unpairDeviceDialogTitle": "Eszköz párosítás megszüntetése",
+  "unpairDeviceDialogMessage": "Ez megszünteti az eszköz párosítását, hogy egy másik telefonhoz csatlakozhasson. A Beállítások > Bluetooth menüpontba kell mennie, és el kell felejtenie az eszközt a folyamat befejezéséhez.",
+  "unpair": "Párosítás megszüntetése",
+  "unpairAndForgetDevice": "Párosítás megszüntetése és eszköz elfelejtése",
+  "unknownDevice": "Ismeretlen eszköz",
+  "unknown": "Ismeretlen",
+  "productName": "Termék neve",
+  "serialNumber": "Sorozatszám",
+  "connected": "Csatlakoztatva",
+  "privacyPolicyTitle": "Adatvédelmi irányelvek",
+  "actionItemDescriptionCannotBeEmpty": "A műveleti elem leírása nem lehet üres",
+  "saved": "Mentve",
+  "overdue": "Lejárt határidejű",
+  "markIncomplete": "Megjelölés befejezetlen ként",
+  "editDueDate": "Határidő szerkesztése",
+  "setDueDate": "Határidő beállítása",
+  "clearDueDate": "Határidő törlése",
+  "mondayAbbr": "H",
+  "tuesdayAbbr": "K",
+  "wednesdayAbbr": "Sze",
+  "thursdayAbbr": "Cs",
+  "fridayAbbr": "P",
+  "saturdayAbbr": "Szo",
+  "sundayAbbr": "V",
+  "failedToUpdateDueDate": "Nem sikerült frissíteni a határidőt",
+  "failedToClearDueDate": "Nem sikerült törölni a határidőt",
+  "howDoesItWork": "Hogyan működik?",
+  "sdCardSyncDescription": "Az SD kártya szinkronizálás importálja az emlékeidet az SD kártyáról az alkalmazásba",
+  "checksForAudioFiles": "Ellenőrzi a hangfájlokat az SD kártyán",
+  "omiSyncsAudioFiles": "Az Omi ezután szinkronizálja a hangfájlokat a szerverrel",
+  "serverProcessesAudio": "A szerver feldolgozza a hangfájlokat és emlékeket hoz létre",
+  "youreAllSet": "Készen állsz!",
+  "welcomeToOmiDescription": "Üdvözöljük az Omi-ban! Az AI társad készen áll, hogy segítsen a beszélgetésekben, feladatokban és még sok másban.",
+  "startUsingOmi": "Omi használatának megkezdése",
+  "back": "Vissza",
+  "keyboardShortcuts": "Billentyűparancsok",
+  "toggleControlBar": "Vezérlősáv váltása",
+  "pressKeys": "Nyomj meg billentyűket...",
+  "cmdRequired": "⌘ szükséges",
+  "invalidKey": "Érvénytelen billentyű",
+  "space": "Szóköz",
+  "search": "Keresés",
+  "searchPlaceholder": "Keresés...",
+  "untitledConversation": "Névtelen beszélgetés",
+  "countRemaining": "{count} hátra",
+  "addGoal": "Cél hozzáadása",
+  "editGoal": "Cél szerkesztése",
+  "icon": "Ikon",
+  "goalTitle": "Cél címe",
+  "current": "Jelenlegi",
+  "target": "Cél",
+  "saveGoal": "Mentés",
+  "goals": "Célok",
+  "tapToAddGoal": "Érintse meg cél hozzáadásához",
+  "welcomeBack": "Üdvözöljük újra",
+  "yourConversations": "A beszélgetéseid",
+  "reviewAndManageConversations": "Tekintse át és kezelje rögzített beszélgetéseit",
+  "startCapturingConversations": "Kezdje el rögzíteni a beszélgetéseket Omi eszközével, hogy itt láthassa őket.",
+  "useMobileAppToCapture": "Használja mobilalkalmazását hang rögzítéséhez",
+  "conversationsProcessedAutomatically": "A beszélgetések automatikusan feldolgozásra kerülnek",
+  "getInsightsInstantly": "Szerezzen betekintéseket és összefoglalókat azonnal",
+  "showAll": "Összes megjelenítése →",
+  "noTasksForToday": "Nincs feladat mára.\\nKérdezzen Omit több feladatért, vagy hozzon létre manuálisan.",
+  "dailyScore": "NAPI PONTSZÁM",
+  "dailyScoreDescription": "Egy pontszám, amely segít jobban összpontosítani a végrehajtásra.",
+  "searchResults": "Keresési eredmények",
+  "actionItems": "Teendők",
+  "tasksToday": "Ma",
+  "tasksTomorrow": "Holnap",
+  "tasksNoDeadline": "Nincs határidő",
+  "tasksLater": "Később",
+  "loadingTasks": "Feladatok betöltése...",
+  "tasks": "Feladatok",
+  "swipeTasksToIndent": "Húzza el a feladatokat a behúzáshoz, húzza a kategóriák között",
+  "create": "Létrehozás",
+  "noTasksYet": "Még nincsenek feladatok",
+  "tasksFromConversationsWillAppear": "A beszélgetésekből származó feladatok itt jelennek meg.\nKattintson a Létrehozás gombra egy manuális hozzáadásához.",
+  "monthJan": "Jan",
+  "monthFeb": "Feb",
+  "monthMar": "Már",
+  "monthApr": "Ápr",
+  "monthMay": "Máj",
+  "monthJun": "Jún",
+  "monthJul": "Júl",
+  "monthAug": "Aug",
+  "monthSep": "Szep",
+  "monthOct": "Okt",
+  "monthNov": "Nov",
+  "monthDec": "Dec",
+  "timePM": "DU",
+  "timeAM": "DE",
+  "actionItemUpdatedSuccessfully": "Feladat sikeresen frissítve",
+  "actionItemCreatedSuccessfully": "Feladat sikeresen létrehozva",
+  "actionItemDeletedSuccessfully": "Feladat sikeresen törölve",
+  "deleteActionItem": "Feladat törlése",
+  "deleteActionItemConfirmation": "Biztosan törölni szeretné ezt a feladatot? Ez a művelet nem vonható vissza.",
+  "enterActionItemDescription": "Adja meg a feladat leírását...",
+  "markAsCompleted": "Megjelölés befejezettként",
+  "setDueDateAndTime": "Határidő és időpont beállítása",
+  "reloadingApps": "Alkalmazások újratöltése...",
+  "loadingApps": "Alkalmazások betöltése...",
+  "browseInstallCreateApps": "Böngésszen, telepítsen és hozzon létre alkalmazásokat",
+  "all": "Összes",
+  "open": "Megnyitás",
+  "install": "Telepítés",
+  "noAppsAvailable": "Nincsenek elérhető alkalmazások",
+  "unableToLoadApps": "Nem sikerült betölteni az alkalmazásokat",
+  "tryAdjustingSearchTermsOrFilters": "Próbálja meg módosítani a keresési kifejezéseket vagy szűrőket",
+  "checkBackLaterForNewApps": "Nézzen vissza később új alkalmazásokért",
+  "pleaseCheckInternetConnectionAndTryAgain": "Kérjük, ellenőrizze az internetkapcsolatát és próbálja újra",
+  "createNewApp": "Új alkalmazás létrehozása",
+  "buildSubmitCustomOmiApp": "Készítsd el és nyújtsd be egyedi Omi alkalmazásodat",
+  "submittingYourApp": "Alkalmazásod beküldése...",
+  "preparingFormForYou": "Az űrlap előkészítése számodra...",
+  "appDetails": "Alkalmazás részletei",
+  "paymentDetails": "Fizetési részletek",
+  "previewAndScreenshots": "Előnézet és képernyőképek",
+  "appCapabilities": "Alkalmazás képességei",
+  "aiPrompts": "MI utasítások",
+  "chatPrompt": "Chat utasítás",
+  "chatPromptPlaceholder": "Egy fantasztikus alkalmazás vagy, a feladatod, hogy válaszolj a felhasználói kérdésekre és jól éreztess velük...",
+  "conversationPrompt": "Beszélgetési felszólítás",
+  "conversationPromptPlaceholder": "Egy fantasztikus alkalmazás vagy, kapsz egy beszélgetés átírását és összefoglalóját...",
+  "notificationScopes": "Értesítési körök",
+  "appPrivacyAndTerms": "Alkalmazás adatvédelem és feltételek",
+  "makeMyAppPublic": "Tedd nyilvánossá az alkalmazásomat",
+  "submitAppTermsAgreement": "Az alkalmazás beküldésével elfogadom az Omi AI Szolgáltatási Feltételeit és Adatvédelmi Irányelveit",
+  "submitApp": "Alkalmazás beküldése",
+  "needHelpGettingStarted": "Segítségre van szükséged az induláshoz?",
+  "clickHereForAppBuildingGuides": "Kattints ide az alkalmazáskészítési útmutatókért és dokumentációért",
+  "submitAppQuestion": "Alkalmazás beküldése?",
+  "submitAppPublicDescription": "Alkalmazásod felülvizsgálásra kerül és nyilvánossá válik. Azonnal elkezdheted használni, még a felülvizsgálat alatt is!",
+  "submitAppPrivateDescription": "Alkalmazásod felülvizsgálásra kerül és privát módon elérhetővé válik számodra. Azonnal elkezdheted használni, még a felülvizsgálat alatt is!",
+  "startEarning": "Kezdj el keresni! 💰",
+  "connectStripeOrPayPal": "Csatlakoztasd a Stripe-ot vagy PayPalt, hogy fizetéseket fogadhass az alkalmazásodért.",
+  "connectNow": "Csatlakoztatás most",
+  "installsCount": "{count}+ telepítés",
+  "uninstallApp": "Alkalmazás eltávolítása",
+  "subscribe": "Feliratkozás",
+  "dataAccessNotice": "Adathozzáférési értesítés",
+  "dataAccessWarning": "Ez az alkalmazás hozzáfér az adataihoz. Az Omi AI nem felelős azért, hogy ez az alkalmazás hogyan használja, módosítja vagy törli az adatait",
+  "installApp": "Alkalmazás telepítése",
+  "betaTesterNotice": "Ön ennek az alkalmazásnak a béta tesztelője. Még nem nyilvános. Jóváhagyás után nyilvános lesz.",
+  "appUnderReviewOwner": "Az alkalmazása felülvizsgálat alatt áll, és csak Ön számára látható. Jóváhagyás után nyilvános lesz.",
+  "appRejectedNotice": "Az alkalmazását elutasították. Kérjük, frissítse az alkalmazás adatait, és küldje be újra felülvizsgálatra.",
+  "setupSteps": "Beállítási lépések",
+  "setupInstructions": "Beállítási utasítások",
+  "integrationInstructions": "Integrációs utasítások",
+  "preview": "Előnézet",
+  "aboutTheApp": "Az alkalmazásról",
+  "aboutThePersona": "A személyről",
+  "chatPersonality": "Chat személyiség",
+  "ratingsAndReviews": "Értékelések és vélemények",
+  "noRatings": "nincs értékelés",
+  "ratingsCount": "{count}+ értékelés",
+  "errorActivatingApp": "Hiba az alkalmazás aktiválása során",
+  "integrationSetupRequired": "Ha ez egy integrációs alkalmazás, győződjön meg róla, hogy a beállítás befejeződött.",
+  "installed": "Telepítve"
 }

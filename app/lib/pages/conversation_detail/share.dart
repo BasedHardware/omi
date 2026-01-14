@@ -9,6 +9,7 @@ import 'package:share_plus/share_plus.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
 enum BottomSheetView { share, exportTranscript, exportSummary }
@@ -18,7 +19,7 @@ enum ExportType { txt, pdf, markdown }
 void _copyTranscript(BuildContext context, ServerConversation conversation) {
   Clipboard.setData(ClipboardData(text: conversation.getTranscript(generate: true)));
   ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(content: Text('Transcript copied to clipboard')),
+    SnackBar(content: Text(context.l10n.transcriptCopiedToClipboard)),
   );
   HapticFeedback.lightImpact();
 }
@@ -32,7 +33,7 @@ void _copySummary(BuildContext context, ServerConversation conversation) {
   HapticFeedback.lightImpact();
 
   ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(content: Text('Summary copied to clipboard')),
+    SnackBar(content: Text(context.l10n.summaryCopiedToClipboard)),
   );
 }
 
@@ -194,13 +195,13 @@ void showShareBottomSheet(
                             bool shared = await setConversationVisibility(conversation.id);
                             if (!shared) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Conversation URL could not be shared.')),
+                                SnackBar(content: Text(context.l10n.conversationUrlCouldNotBeShared)),
                               );
                               return;
                             }
                             Clipboard.setData(ClipboardData(text: 'https://h.omi.me/conversations/${conversation.id}'));
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('URL Copied to Clipboard')),
+                              SnackBar(content: Text(context.l10n.urlCopiedToClipboard)),
                             );
                             Navigator.pop(ctx);
                             HapticFeedback.lightImpact();
@@ -264,7 +265,7 @@ void showShareBottomSheet(
                     children: [
                       Padding(
                         padding: const EdgeInsets.only(left: 8.0),
-                        child: Text('Export Transcript', style: Theme.of(context).textTheme.labelLarge),
+                        child: Text(context.l10n.exportTranscript, style: Theme.of(context).textTheme.labelLarge),
                       ),
                       IconButton(
                         icon: const Icon(Icons.cancel_outlined),
@@ -314,7 +315,7 @@ void showShareBottomSheet(
                             break;
                         }
                       },
-                      child: Text('Export', style: Theme.of(context).textTheme.bodyLarge),
+                      child: Text(context.l10n.exportButton, style: Theme.of(context).textTheme.bodyLarge),
                     ),
                   ),
                 ] else if (currentView == BottomSheetView.exportSummary) ...[
@@ -323,7 +324,7 @@ void showShareBottomSheet(
                     children: [
                       Padding(
                         padding: const EdgeInsets.only(left: 8.0),
-                        child: Text('Export Summary', style: Theme.of(context).textTheme.labelLarge),
+                        child: Text(context.l10n.exportSummary, style: Theme.of(context).textTheme.labelLarge),
                       ),
                       IconButton(
                         icon: const Icon(Icons.cancel_outlined),
@@ -393,7 +394,7 @@ void showShareBottomSheet(
                             break;
                         }
                       },
-                      child: Text('Export', style: Theme.of(context).textTheme.bodyLarge),
+                      child: Text(context.l10n.exportButton, style: Theme.of(context).textTheme.bodyLarge),
                     ),
                   ),
                 ]

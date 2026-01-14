@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/main.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class AppDialog {
   static _getDialog({
@@ -13,24 +14,25 @@ class AppDialog {
     Function? onConfirm,
     Function? onCancel,
     bool singleButton = false,
-    String okButtonText = 'Ok',
+    String? okButtonText,
   }) {
+    final localizedOkText = okButtonText ?? context.l10n.ok;
     var actions = singleButton
         ? [
             TextButton(
               onPressed: () => onCancel?.call() ?? Navigator.pop(context),
-              child: Text(okButtonText, style: const TextStyle(color: Colors.white)),
+              child: Text(localizedOkText, style: const TextStyle(color: Colors.white)),
             )
           ]
         : [
             TextButton(
               onPressed: () => onCancel?.call() ?? Navigator.pop(context),
-              child: const Text('Cancel', style: TextStyle(color: Colors.white)),
+              child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.white)),
             ),
             TextButton(
               onPressed: () => onConfirm?.call() ?? Navigator.pop(context),
               child: Text(
-                okButtonText,
+                localizedOkText,
                 style: const TextStyle(
                   color: Colors.white,
                 ),
@@ -57,7 +59,7 @@ class AppDialog {
     Function? onConfirm,
     Function? onCancel,
     bool singleButton = false,
-    String okButtonText = 'Ok',
+    String? okButtonText,
   }) {
     showDialog(
       context: MyApp.navigatorKey.currentState!.overlay!.context,

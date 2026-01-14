@@ -6,6 +6,7 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/ui/atoms/omi_badge.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/ui/atoms/omi_loading_badge.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class DesktopSearchResultHeader extends StatelessWidget {
@@ -25,25 +26,25 @@ class DesktopSearchResultHeader extends StatelessWidget {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
           child: isSearching
-              ? _buildSearchLoadingIndicator()
+              ? _buildSearchLoadingIndicator(context)
               : provider.totalSearchPages > 0
-                  ? _buildSearchResults(provider)
+                  ? _buildSearchResults(context, provider)
                   : const SizedBox.shrink(),
         );
       },
     );
   }
 
-  Widget _buildSearchLoadingIndicator() {
-    return const OmiLoadingBadge(label: 'Searching...');
+  Widget _buildSearchLoadingIndicator(BuildContext context) {
+    return OmiLoadingBadge(label: context.l10n.searching);
   }
 
-  Widget _buildSearchResults(ConversationProvider provider) {
+  Widget _buildSearchResults(BuildContext context, ConversationProvider provider) {
     return Row(
       children: [
-        const Row(
+        Row(
           children: [
-            OmiIconButton(
+            const OmiIconButton(
               icon: Icons.search_rounded,
               style: OmiIconButtonStyle.neutral,
               size: 24,
@@ -51,9 +52,9 @@ class DesktopSearchResultHeader extends StatelessWidget {
               borderRadius: 6,
               onPressed: null,
             ),
-            SizedBox(width: 6),
+            const SizedBox(width: 6),
             OmiBadge(
-              label: 'Search results',
+              label: context.l10n.searchResults,
               fontSize: 12,
               color: ResponsiveHelper.textTertiary,
               borderRadius: 6,

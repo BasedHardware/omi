@@ -18,6 +18,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
@@ -319,9 +320,9 @@ class ActionItemsListWidget extends StatelessWidget {
                           text:
                               '- ${provider.conversation.structured.actionItems.map((e) => e.description.decodeString).join('\n- ')}',
                         ));
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                          content: Text('Action items copied to clipboard'),
-                          duration: Duration(seconds: 2),
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text(context.l10n.actionItemsCopiedToClipboard),
+                          duration: const Duration(seconds: 2),
                         ));
                         MixpanelManager().copiedConversationDetails(provider.conversation, source: 'Action Items');
                       },
@@ -518,9 +519,9 @@ class ReprocessDiscardedWidget extends StatelessWidget {
                     await provider.reprocessConversation();
                   },
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                      child: Text('Summarize', style: TextStyle(color: Colors.white, fontSize: 16))),
+                  child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+                      child: Text(context.l10n.summarize, style: const TextStyle(color: Colors.white, fontSize: 16))),
                 ),
               ),
             ],
@@ -767,9 +768,10 @@ class GetAppsWidgets extends StatelessWidget {
                     );
                   },
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                      child: Text('Generate Summary', style: TextStyle(color: Colors.white, fontSize: 16))),
+                  child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+                      child: Text(context.l10n.generateSummary,
+                          style: const TextStyle(color: Colors.white, fontSize: 16))),
                 ),
               ),
             ],
@@ -1060,7 +1062,7 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
 _copyContent(BuildContext context, String content) {
   Clipboard.setData(ClipboardData(text: content));
   ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(content: Text('Transcript copied to clipboard')),
+    SnackBar(content: Text(context.l10n.transcriptCopiedToClipboard)),
   );
   HapticFeedback.lightImpact();
   Navigator.pop(context);

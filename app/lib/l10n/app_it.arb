@@ -101,7 +101,7 @@
   "@errorProcessingConversation": {
     "description": "Error message for conversation processing failure"
   },
-  "noInternetConnection": "Controlla la tua connessione internet e riprova.",
+  "noInternetConnection": "Nessuna connessione Internet",
   "@noInternetConnection": {
     "description": "Message shown when there's no internet"
   },
@@ -221,7 +221,7 @@
   "@disconnected": {
     "description": "Device disconnected status"
   },
-  "searching": "Ricerca",
+  "searching": "Ricerca in corso...",
   "@searching": {
     "description": "Searching for device status"
   },
@@ -289,7 +289,7 @@
   "@syncingBackground": {
     "description": "Message during background sync"
   },
-  "noConversationsYet": "Nessuna conversazione ancora.",
+  "noConversationsYet": "Ancora nessuna conversazione",
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
@@ -301,7 +301,7 @@
   "@starConversationHint": {
     "description": "Hint explaining how to star conversations"
   },
-  "searchConversations": "Cerca Conversazioni",
+  "searchConversations": "Cerca conversazioni...",
   "@searchConversations": {
     "description": "Search field placeholder"
   },
@@ -411,7 +411,7 @@
   "@buildAndShareApp": {
     "description": "Create app button subtitle"
   },
-  "searchApps": "Cerca tra 1500+ App",
+  "searchApps": "Cerca app...",
   "@searchApps": {
     "description": "Apps search placeholder"
   },
@@ -631,7 +631,7 @@
   "@deviceName": {
     "description": "Device name label"
   },
-  "deviceId": "ID Dispositivo",
+  "deviceId": "ID dispositivo",
   "@deviceId": {
     "description": "Device ID label"
   },
@@ -639,7 +639,7 @@
   "@firmware": {
     "description": "Firmware label"
   },
-  "sdCardSync": "Sincronizzazione Scheda SD",
+  "sdCardSync": "Sincronizzazione scheda SD",
   "@sdCardSync": {
     "description": "SD Card sync label"
   },
@@ -647,7 +647,7 @@
   "@hardwareRevision": {
     "description": "Hardware revision label"
   },
-  "modelNumber": "Numero Modello",
+  "modelNumber": "Numero modello",
   "@modelNumber": {
     "description": "Model number label"
   },
@@ -675,15 +675,15 @@
   "@forgetDevice": {
     "description": "Forget device button"
   },
-  "chargingIssues": "Problemi di Ricarica",
+  "chargingIssues": "Problemi di ricarica",
   "@chargingIssues": {
     "description": "Charging issues help item"
   },
-  "disconnectDevice": "Disconnetti Dispositivo",
+  "disconnectDevice": "Disconnetti dispositivo",
   "@disconnectDevice": {
     "description": "Disconnect device button"
   },
-  "unpairDevice": "Disaccoppia Dispositivo",
+  "unpairDevice": "Disaccoppia dispositivo",
   "@unpairDevice": {
     "description": "Unpair device button"
   },
@@ -695,7 +695,7 @@
   "@deviceDisconnectedMessage": {
     "description": "Message shown when device is disconnected"
   },
-  "deviceUnpairedMessage": "Dispositivo disaccoppiato. Vai su Impostazioni > Bluetooth e dimentica il dispositivo per completare il disaccoppiamento.",
+  "deviceUnpairedMessage": "Dispositivo disaccoppiato. Vai in Impostazioni > Bluetooth e dimentica il dispositivo per completare il disaccoppiamento.",
   "@deviceUnpairedMessage": {
     "description": "Message shown when device is unpaired"
   },
@@ -997,7 +997,7 @@
   "@upgrade": {
     "description": "Upgrade button"
   },
-  "upgradeToUnlimited": "Passa a Illimitato",
+  "upgradeToUnlimited": "Passa a illimitato",
   "@upgradeToUnlimited": {
     "description": "Upgrade to unlimited button"
   },
@@ -1414,7 +1414,7 @@
       }
     }
   },
-  "yesterday": "ieri",
+  "yesterday": "Ieri",
   "daysAgo": "{count} giorni fa",
   "@daysAgo": {
     "placeholders": {
@@ -1572,7 +1572,7 @@
   "highAccuracy": "Alta precisione",
   "privacyFirst": "Privacy al primo posto",
   "saveChanges": "Salva Modifiche",
-  "resetToDefault": "Ripristina Predefinito",
+  "resetToDefault": "Ripristina predefinito",
   "viewTemplate": "Visualizza Template",
   "trySomethingLike": "Prova qualcosa come...",
   "tryIt": "Provalo",
@@ -1718,7 +1718,7 @@
   "@rateOnGooglePlay": {
     "description": "Button text to rate on Google Play Store"
   },
-  "maybeLater": "Forse più tardi",
+  "maybeLater": "Forse Più Tardi",
   "@maybeLater": {
     "description": "Button text to dismiss the review prompt"
   },
@@ -1968,11 +1968,11 @@
   "@actionItemCompleted": {
     "description": "Snackbar message when item completed"
   },
-  "deleteActionItemTitle": "Elimina Azione",
+  "deleteActionItemTitle": "Elimina elemento di azione",
   "@deleteActionItemTitle": {
     "description": "Title for delete item dialog"
   },
-  "deleteActionItemMessage": "Sei sicuro di voler eliminare questa azione?",
+  "deleteActionItemMessage": "Sei sicuro di voler eliminare questo elemento di azione?",
   "@deleteActionItemMessage": {
     "description": "Confirmation message for deleting single item"
   },
@@ -2197,11 +2197,11 @@
   "@retry": {
     "description": "Button label"
   },
-  "createActionItem": "Crea Azione",
+  "createActionItem": "Crea attività",
   "@createActionItem": {
     "description": "Sheet title"
   },
-  "editActionItem": "Modifica Azione",
+  "editActionItem": "Modifica attività",
   "@editActionItem": {
     "description": "Sheet title"
   },
@@ -2217,7 +2217,7 @@
   "@actionItemUpdated": {
     "description": "Snackbar"
   },
-  "failedToUpdateActionItem": "Impossibile aggiornare l'azione",
+  "failedToUpdateActionItem": "Aggiornamento attività non riuscito",
   "@failedToUpdateActionItem": {
     "description": "Snackbar"
   },
@@ -2225,11 +2225,11 @@
   "@actionItemCreated": {
     "description": "Snackbar"
   },
-  "failedToCreateActionItem": "Impossibile creare l'azione",
+  "failedToCreateActionItem": "Creazione attività non riuscita",
   "@failedToCreateActionItem": {
     "description": "Snackbar"
   },
-  "dueDate": "Data di Scadenza",
+  "dueDate": "Data di scadenza",
   "@dueDate": {
     "description": "Label"
   },
@@ -2273,11 +2273,11 @@
   "@markComplete": {
     "description": "Action label"
   },
-  "actionItemDeleted": "Azione eliminata",
+  "actionItemDeleted": "Elemento di azione eliminato",
   "@actionItemDeleted": {
     "description": "Snackbar"
   },
-  "failedToDeleteActionItem": "Impossibile eliminare l'azione",
+  "failedToDeleteActionItem": "Eliminazione attività non riuscita",
   "@failedToDeleteActionItem": {
     "description": "Snackbar"
   },
@@ -2295,5 +2295,211 @@
   },
   "appInterfaceSectionTitle": "INTERFACCIA APP",
   "speechTranscriptionSectionTitle": "VOCE E TRASCRIZIONE",
-  "languageSettingsHelperText": "La lingua dell'app modifica menu e pulsanti. La lingua vocale influisce su come vengono trascritte le tue registrazioni."
+  "languageSettingsHelperText": "La lingua dell'app modifica menu e pulsanti. La lingua vocale influisce su come vengono trascritte le tue registrazioni.",
+  "translationNotice": "Avviso di traduzione",
+  "translationNoticeMessage": "Omi traduce le conversazioni nella tua lingua principale. Aggiornala in qualsiasi momento in Impostazioni → Profili.",
+  "pleaseCheckInternetConnection": "Controlla la tua connessione Internet e riprova",
+  "pleaseSelectReason": "Seleziona un motivo",
+  "tellUsMoreWhatWentWrong": "Raccontaci di più su cosa è andato storto...",
+  "selectText": "Seleziona testo",
+  "maximumGoalsAllowed": "Massimo {count} obiettivi consentiti",
+  "conversationCannotBeMerged": "Questa conversazione non può essere unita (bloccata o già in fase di unione)",
+  "pleaseEnterFolderName": "Inserisci un nome per la cartella",
+  "failedToCreateFolder": "Impossibile creare la cartella",
+  "failedToUpdateFolder": "Impossibile aggiornare la cartella",
+  "folderName": "Nome cartella",
+  "descriptionOptional": "Descrizione (facoltativo)",
+  "failedToDeleteFolder": "Impossibile eliminare la cartella",
+  "editFolder": "Modifica cartella",
+  "deleteFolder": "Elimina cartella",
+  "transcriptCopiedToClipboard": "Trascrizione copiata negli appunti",
+  "summaryCopiedToClipboard": "Riepilogo copiato negli appunti",
+  "conversationUrlCouldNotBeShared": "L'URL della conversazione non può essere condiviso.",
+  "urlCopiedToClipboard": "URL copiato negli appunti",
+  "exportTranscript": "Esporta trascrizione",
+  "exportSummary": "Esporta riepilogo",
+  "exportButton": "Esporta",
+  "actionItemsCopiedToClipboard": "Elementi d'azione copiati negli appunti",
+  "summarize": "Riassumi",
+  "generateSummary": "Genera riepilogo",
+  "conversationNotFoundOrDeleted": "Conversazione non trovata o è stata eliminata",
+  "deleteMemory": "Eliminare memoria?",
+  "thisActionCannotBeUndone": "Questa azione non può essere annullata.",
+  "memoriesCount": "{count} memorie",
+  "noMemoriesInCategory": "Nessuna memoria in questa categoria ancora",
+  "addYourFirstMemory": "Aggiungi la tua prima memoria",
+  "firmwareDisconnectUsb": "Disconnetti USB",
+  "firmwareUsbWarning": "La connessione USB durante gli aggiornamenti può danneggiare il dispositivo.",
+  "firmwareBatteryAbove15": "Batteria sopra il 15%",
+  "firmwareEnsureBattery": "Assicurati che il tuo dispositivo abbia il 15% di batteria.",
+  "firmwareStableConnection": "Connessione stabile",
+  "firmwareConnectWifi": "Connettiti a WiFi o rete cellulare.",
+  "failedToStartUpdate": "Impossibile avviare l'aggiornamento: {error}",
+  "beforeUpdateMakeSure": "Prima dell'aggiornamento, assicurati:",
+  "confirmed": "Confermato!",
+  "release": "Rilascia",
+  "slideToUpdate": "Scorri per aggiornare",
+  "copiedToClipboard": "{title} copiato negli appunti",
+  "batteryLevel": "Livello batteria",
+  "productUpdate": "Aggiornamento prodotto",
+  "offline": "Offline",
+  "available": "Disponibile",
+  "unpairDeviceDialogTitle": "Disaccoppia dispositivo",
+  "unpairDeviceDialogMessage": "Questo disaccoppierà il dispositivo in modo che possa essere connesso a un altro telefono. Dovrai andare in Impostazioni > Bluetooth e dimenticare il dispositivo per completare il processo.",
+  "unpair": "Disaccoppia",
+  "unpairAndForgetDevice": "Disaccoppia e dimentica dispositivo",
+  "unknownDevice": "Dispositivo sconosciuto",
+  "unknown": "Sconosciuto",
+  "productName": "Nome prodotto",
+  "serialNumber": "Numero di serie",
+  "connected": "Connesso",
+  "privacyPolicyTitle": "Informativa sulla privacy",
+  "actionItemDescriptionCannotBeEmpty": "La descrizione dell'elemento di azione non può essere vuota",
+  "saved": "Salvato",
+  "overdue": "In ritardo",
+  "markIncomplete": "Segna come incompleto",
+  "editDueDate": "Modifica data di scadenza",
+  "setDueDate": "Imposta data di scadenza",
+  "clearDueDate": "Cancella data di scadenza",
+  "mondayAbbr": "Lun",
+  "tuesdayAbbr": "Mar",
+  "wednesdayAbbr": "Mer",
+  "thursdayAbbr": "Gio",
+  "fridayAbbr": "Ven",
+  "saturdayAbbr": "Sab",
+  "sundayAbbr": "Dom",
+  "failedToUpdateDueDate": "Impossibile aggiornare la data di scadenza",
+  "failedToClearDueDate": "Impossibile cancellare la data di scadenza",
+  "howDoesItWork": "Come funziona?",
+  "sdCardSyncDescription": "La sincronizzazione della scheda SD importerà i tuoi ricordi dalla scheda SD all'app",
+  "checksForAudioFiles": "Controlla i file audio sulla scheda SD",
+  "omiSyncsAudioFiles": "Omi sincronizza quindi i file audio con il server",
+  "serverProcessesAudio": "Il server elabora i file audio e crea ricordi",
+  "youreAllSet": "Sei pronto!",
+  "welcomeToOmiDescription": "Benvenuto in Omi! Il tuo compagno AI è pronto ad aiutarti con conversazioni, attività e molto altro.",
+  "startUsingOmi": "Inizia a usare Omi",
+  "back": "Indietro",
+  "keyboardShortcuts": "Scorciatoie da tastiera",
+  "toggleControlBar": "Attiva/Disattiva barra di controllo",
+  "pressKeys": "Premi i tasti...",
+  "cmdRequired": "⌘ richiesto",
+  "invalidKey": "Tasto non valido",
+  "space": "Spazio",
+  "search": "Cerca",
+  "searchPlaceholder": "Cerca...",
+  "untitledConversation": "Conversazione senza titolo",
+  "countRemaining": "{count} rimanenti",
+  "addGoal": "Aggiungi obiettivo",
+  "editGoal": "Modifica obiettivo",
+  "icon": "Icona",
+  "goalTitle": "Titolo obiettivo",
+  "current": "Attuale",
+  "target": "Obiettivo",
+  "saveGoal": "Salva",
+  "goals": "Obiettivi",
+  "tapToAddGoal": "Tocca per aggiungere un obiettivo",
+  "welcomeBack": "Bentornato",
+  "yourConversations": "Le tue conversazioni",
+  "reviewAndManageConversations": "Rivedi e gestisci le tue conversazioni registrate",
+  "startCapturingConversations": "Inizia a catturare conversazioni con il tuo dispositivo Omi per vederle qui.",
+  "useMobileAppToCapture": "Usa la tua app mobile per catturare l'audio",
+  "conversationsProcessedAutomatically": "Le conversazioni vengono elaborate automaticamente",
+  "getInsightsInstantly": "Ottieni approfondimenti e riassunti all'istante",
+  "showAll": "Mostra tutto →",
+  "noTasksForToday": "Nessuna attività per oggi.\\nChiedi a Omi più attività o creale manualmente.",
+  "dailyScore": "PUNTEGGIO GIORNALIERO",
+  "dailyScoreDescription": "Un punteggio per aiutarti a concentrarti meglio sull'esecuzione.",
+  "searchResults": "Risultati di ricerca",
+  "actionItems": "Elementi d'azione",
+  "tasksToday": "Oggi",
+  "tasksTomorrow": "Domani",
+  "tasksNoDeadline": "Nessuna scadenza",
+  "tasksLater": "Più tardi",
+  "loadingTasks": "Caricamento attività...",
+  "tasks": "Attività",
+  "swipeTasksToIndent": "Scorri le attività per rientrare, trascina tra le categorie",
+  "create": "Crea",
+  "noTasksYet": "Nessuna attività ancora",
+  "tasksFromConversationsWillAppear": "Le attività dalle tue conversazioni appariranno qui.\nFai clic su Crea per aggiungerne una manualmente.",
+  "monthJan": "Gen",
+  "monthFeb": "Feb",
+  "monthMar": "Mar",
+  "monthApr": "Apr",
+  "monthMay": "Mag",
+  "monthJun": "Giu",
+  "monthJul": "Lug",
+  "monthAug": "Ago",
+  "monthSep": "Set",
+  "monthOct": "Ott",
+  "monthNov": "Nov",
+  "monthDec": "Dic",
+  "timePM": "PM",
+  "timeAM": "AM",
+  "actionItemUpdatedSuccessfully": "Attività aggiornata con successo",
+  "actionItemCreatedSuccessfully": "Attività creata con successo",
+  "actionItemDeletedSuccessfully": "Attività eliminata con successo",
+  "deleteActionItem": "Elimina attività",
+  "deleteActionItemConfirmation": "Sei sicuro di voler eliminare questa attività? Questa azione non può essere annullata.",
+  "enterActionItemDescription": "Inserisci la descrizione dell'attività...",
+  "markAsCompleted": "Segna come completata",
+  "setDueDateAndTime": "Imposta data e ora di scadenza",
+  "reloadingApps": "Ricaricamento app...",
+  "loadingApps": "Caricamento app...",
+  "browseInstallCreateApps": "Sfoglia, installa e crea app",
+  "all": "Tutte",
+  "open": "Apri",
+  "install": "Installa",
+  "noAppsAvailable": "Nessuna app disponibile",
+  "unableToLoadApps": "Impossibile caricare le app",
+  "tryAdjustingSearchTermsOrFilters": "Prova a modificare i termini di ricerca o i filtri",
+  "checkBackLaterForNewApps": "Ricontrolla più tardi per nuove app",
+  "pleaseCheckInternetConnectionAndTryAgain": "Controlla la tua connessione Internet e riprova",
+  "createNewApp": "Crea Nuova App",
+  "buildSubmitCustomOmiApp": "Crea e invia la tua app Omi personalizzata",
+  "submittingYourApp": "Invio della tua app in corso...",
+  "preparingFormForYou": "Preparazione del modulo per te...",
+  "appDetails": "Dettagli App",
+  "paymentDetails": "Dettagli Pagamento",
+  "previewAndScreenshots": "Anteprima e Screenshot",
+  "appCapabilities": "Capacità dell'App",
+  "aiPrompts": "Prompt IA",
+  "chatPrompt": "Prompt Chat",
+  "chatPromptPlaceholder": "Sei un'app fantastica, il tuo compito è rispondere alle domande degli utenti e farli sentire bene...",
+  "conversationPrompt": "Prompt di conversazione",
+  "conversationPromptPlaceholder": "Sei un'app fantastica, ti verrà fornita una trascrizione e un riepilogo di una conversazione...",
+  "notificationScopes": "Ambiti di Notifica",
+  "appPrivacyAndTerms": "Privacy e Termini dell'App",
+  "makeMyAppPublic": "Rendi pubblica la mia app",
+  "submitAppTermsAgreement": "Inviando questa app, accetto i Termini di Servizio e l'Informativa sulla Privacy di Omi AI",
+  "submitApp": "Invia App",
+  "needHelpGettingStarted": "Hai bisogno di aiuto per iniziare?",
+  "clickHereForAppBuildingGuides": "Clicca qui per le guide alla creazione di app e la documentazione",
+  "submitAppQuestion": "Inviare l'App?",
+  "submitAppPublicDescription": "La tua app sarà revisionata e resa pubblica. Puoi iniziare a usarla immediatamente, anche durante la revisione!",
+  "submitAppPrivateDescription": "La tua app sarà revisionata e resa disponibile per te privatamente. Puoi iniziare a usarla immediatamente, anche durante la revisione!",
+  "startEarning": "Inizia a Guadagnare! 💰",
+  "connectStripeOrPayPal": "Collega Stripe o PayPal per ricevere pagamenti per la tua app.",
+  "connectNow": "Collega Ora",
+  "installsCount": "{count}+ installazioni",
+  "uninstallApp": "Disinstalla app",
+  "subscribe": "Abbonati",
+  "dataAccessNotice": "Avviso di accesso ai dati",
+  "dataAccessWarning": "Questa app accederà ai tuoi dati. Omi AI non è responsabile di come i tuoi dati vengono utilizzati, modificati o eliminati da questa app",
+  "installApp": "Installa app",
+  "betaTesterNotice": "Sei un beta tester per questa app. Non è ancora pubblica. Diventerà pubblica una volta approvata.",
+  "appUnderReviewOwner": "La tua app è in revisione e visibile solo a te. Diventerà pubblica una volta approvata.",
+  "appRejectedNotice": "La tua app è stata rifiutata. Aggiorna i dettagli dell'app e inviala nuovamente per la revisione.",
+  "setupSteps": "Passaggi di configurazione",
+  "setupInstructions": "Istruzioni di configurazione",
+  "integrationInstructions": "Istruzioni di integrazione",
+  "preview": "Anteprima",
+  "aboutTheApp": "Informazioni sull'app",
+  "aboutThePersona": "Informazioni sulla persona",
+  "chatPersonality": "Personalità della chat",
+  "ratingsAndReviews": "Valutazioni e recensioni",
+  "noRatings": "nessuna valutazione",
+  "ratingsCount": "{count}+ valutazioni",
+  "errorActivatingApp": "Errore nell'attivazione dell'app",
+  "integrationSetupRequired": "Se questa è un'app di integrazione, assicurati che la configurazione sia completata.",
+  "installed": "Installato"
 }

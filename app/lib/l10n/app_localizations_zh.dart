@@ -84,7 +84,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get errorProcessingConversation => '处理对话时出错。请稍后再试。';
 
   @override
-  String get noInternetConnection => '请检查您的互联网连接并重试。';
+  String get noInternetConnection => '无网络连接';
 
   @override
   String get unableToDeleteConversation => '无法删除对话';
@@ -160,16 +160,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get couldNotAccessFile => '无法打开所选文件';
 
   @override
-  String get askOmi => '问 Omi';
+  String get askOmi => '询问Omi';
 
   @override
   String get done => '完成';
 
   @override
-  String get disconnected => '已断开';
+  String get disconnected => '已断开连接';
 
   @override
-  String get searching => '搜索中';
+  String get searching => '搜索中...';
 
   @override
   String get connectDevice => '连接设备';
@@ -220,7 +220,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncingBackground => '我们将继续在后台同步您的录音。';
 
   @override
-  String get noConversationsYet => '暂无对话。';
+  String get noConversationsYet => '还没有对话';
 
   @override
   String get noStarredConversations => '暂无星标对话。';
@@ -229,7 +229,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get starConversationHint => '要加星标，请打开对话并点击顶部的星星图标。';
 
   @override
-  String get searchConversations => '搜索对话';
+  String get searchConversations => '搜索对话...';
 
   @override
   String selectedCount(int count, Object s) {
@@ -308,7 +308,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get buildAndShareApp => '构建并分享您自己的应用';
 
   @override
-  String get searchApps => '搜索 1500+ 应用';
+  String get searchApps => '搜索应用...';
 
   @override
   String get myApps => '我的应用';
@@ -473,13 +473,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deviceName => '设备名称';
 
   @override
-  String get deviceId => '设备 ID';
+  String get deviceId => '设备ID';
 
   @override
   String get firmware => '固件';
 
   @override
-  String get sdCardSync => 'SD 卡同步';
+  String get sdCardSync => 'SD卡同步';
 
   @override
   String get hardwareRevision => '硬件版本';
@@ -509,7 +509,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chargingIssues => '充电问题';
 
   @override
-  String get disconnectDevice => '断开设备';
+  String get disconnectDevice => '断开设备连接';
 
   @override
   String get unpairDevice => '取消配对设备';
@@ -521,7 +521,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deviceDisconnectedMessage => '您的 Omi 已断开连接 😔';
 
   @override
-  String get deviceUnpairedMessage => '设备已取消配对。请前往 设置 > 蓝牙 并遗忘该设备以完成取消配对。';
+  String get deviceUnpairedMessage => '设备已取消配对。转到设置 > 蓝牙并忘记设备以完成取消配对。';
 
   @override
   String get unpairDialogTitle => '取消配对设备';
@@ -737,7 +737,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get upgrade => '升级';
 
   @override
-  String get upgradeToUnlimited => '升级到无限版';
+  String get upgradeToUnlimited => '升级至无限制';
 
   @override
   String basicPlanDesc(int limit) {
@@ -1764,7 +1764,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get rateOnGooglePlay => '在 Google Play 评价';
 
   @override
-  String get maybeLater => '以后再说';
+  String get maybeLater => '稍后再说';
 
   @override
   String get speechProfileIntro => 'Omi 需要了解您的目标和声音。';
@@ -1948,10 +1948,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get actionItemCompleted => '任务已完成';
 
   @override
-  String get deleteActionItemTitle => '删除任务';
+  String get deleteActionItemTitle => '删除操作项';
 
   @override
-  String get deleteActionItemMessage => '您确定要删除此任务吗？';
+  String get deleteActionItemMessage => '您确定要删除此操作项吗？';
 
   @override
   String get deleteSelectedItemsTitle => '删除选中项';
@@ -2104,10 +2104,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get retry => '重试';
 
   @override
-  String get createActionItem => '创建任务';
+  String get createActionItem => '创建操作项';
 
   @override
-  String get editActionItem => '编辑任务';
+  String get editActionItem => '编辑操作项';
 
   @override
   String get actionItemDescriptionHint => '有什么需要做的？';
@@ -2119,13 +2119,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get actionItemUpdated => '任务已更新';
 
   @override
-  String get failedToUpdateActionItem => '更新失败';
+  String get failedToUpdateActionItem => '更新操作项失败';
 
   @override
   String get actionItemCreated => '任务已创建';
 
   @override
-  String get failedToCreateActionItem => '创建失败';
+  String get failedToCreateActionItem => '创建操作项失败';
 
   @override
   String get dueDate => '截止日期';
@@ -2158,13 +2158,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get completed => '已完成';
 
   @override
-  String get markComplete => '标记为完成';
+  String get markComplete => '标记为已完成';
 
   @override
-  String get actionItemDeleted => '任务已删除';
+  String get actionItemDeleted => '操作项已删除';
 
   @override
-  String get failedToDeleteActionItem => '删除失败';
+  String get failedToDeleteActionItem => '删除操作项失败';
 
   @override
   String get deleteActionItemConfirmTitle => '删除任务';
@@ -2183,4 +2183,666 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get languageSettingsHelperText => '应用语言更改菜单和按钮。语音语言影响录音的转录方式。';
+
+  @override
+  String get translationNotice => '翻译通知';
+
+  @override
+  String get translationNoticeMessage => 'Omi 将对话翻译成您的主要语言。您可以随时在设置→个人资料中更新。';
+
+  @override
+  String get pleaseCheckInternetConnection => '请检查您的互联网连接并重试';
+
+  @override
+  String get pleaseSelectReason => '请选择原因';
+
+  @override
+  String get tellUsMoreWhatWentWrong => '告诉我们更多出了什么问题...';
+
+  @override
+  String get selectText => '选择文本';
+
+  @override
+  String maximumGoalsAllowed(int count) {
+    return '最多允许$count个目标';
+  }
+
+  @override
+  String get conversationCannotBeMerged => '无法合并此对话（已锁定或正在合并）';
+
+  @override
+  String get pleaseEnterFolderName => '请输入文件夹名称';
+
+  @override
+  String get failedToCreateFolder => '创建文件夹失败';
+
+  @override
+  String get failedToUpdateFolder => '更新文件夹失败';
+
+  @override
+  String get folderName => '文件夹名称';
+
+  @override
+  String get descriptionOptional => '描述（可选）';
+
+  @override
+  String get failedToDeleteFolder => '删除文件夹失败';
+
+  @override
+  String get editFolder => '编辑文件夹';
+
+  @override
+  String get deleteFolder => '删除文件夹';
+
+  @override
+  String get transcriptCopiedToClipboard => '转录已复制到剪贴板';
+
+  @override
+  String get summaryCopiedToClipboard => '摘要已复制到剪贴板';
+
+  @override
+  String get conversationUrlCouldNotBeShared => '无法分享对话网址。';
+
+  @override
+  String get urlCopiedToClipboard => '网址已复制到剪贴板';
+
+  @override
+  String get exportTranscript => '导出转录';
+
+  @override
+  String get exportSummary => '导出摘要';
+
+  @override
+  String get exportButton => '导出';
+
+  @override
+  String get actionItemsCopiedToClipboard => '行动项已复制到剪贴板';
+
+  @override
+  String get summarize => '总结';
+
+  @override
+  String get generateSummary => '生成摘要';
+
+  @override
+  String get conversationNotFoundOrDeleted => '未找到对话或已被删除';
+
+  @override
+  String get deleteMemory => '删除记忆？';
+
+  @override
+  String get thisActionCannotBeUndone => '此操作无法撤消。';
+
+  @override
+  String memoriesCount(int count) {
+    return '$count个回忆';
+  }
+
+  @override
+  String get noMemoriesInCategory => '此类别中还没有回忆';
+
+  @override
+  String get addYourFirstMemory => '添加您的第一个回忆';
+
+  @override
+  String get firmwareDisconnectUsb => '断开USB';
+
+  @override
+  String get firmwareUsbWarning => '更新期间的USB连接可能会损坏您的设备。';
+
+  @override
+  String get firmwareBatteryAbove15 => '电量高于15%';
+
+  @override
+  String get firmwareEnsureBattery => '确保您的设备有15%的电量。';
+
+  @override
+  String get firmwareStableConnection => '稳定连接';
+
+  @override
+  String get firmwareConnectWifi => '连接到WiFi或移动数据。';
+
+  @override
+  String failedToStartUpdate(String error) {
+    return '启动更新失败: $error';
+  }
+
+  @override
+  String get beforeUpdateMakeSure => '更新前，请确保:';
+
+  @override
+  String get confirmed => '已确认！';
+
+  @override
+  String get release => '释放';
+
+  @override
+  String get slideToUpdate => '滑动以更新';
+
+  @override
+  String copiedToClipboard(String title) {
+    return '$title已复制到剪贴板';
+  }
+
+  @override
+  String get batteryLevel => '电池电量';
+
+  @override
+  String get productUpdate => '产品更新';
+
+  @override
+  String get offline => '离线';
+
+  @override
+  String get available => '可用';
+
+  @override
+  String get unpairDeviceDialogTitle => '取消配对设备';
+
+  @override
+  String get unpairDeviceDialogMessage => '这将取消设备配对，以便可以连接到另一部手机。您需要转到设置 > 蓝牙并忘记设备以完成该过程。';
+
+  @override
+  String get unpair => '取消配对';
+
+  @override
+  String get unpairAndForgetDevice => '取消配对并忘记设备';
+
+  @override
+  String get unknownDevice => '未知设备';
+
+  @override
+  String get unknown => '未知';
+
+  @override
+  String get productName => '产品名称';
+
+  @override
+  String get serialNumber => '序列号';
+
+  @override
+  String get connected => '已连接';
+
+  @override
+  String get privacyPolicyTitle => '隐私政策';
+
+  @override
+  String get omiSttProvider => 'Omi';
+
+  @override
+  String labelCopied(String label) {
+    return '$label copied';
+  }
+
+  @override
+  String get noApiKeysYet => 'No API keys yet';
+
+  @override
+  String get createKeyToGetStarted => 'Create a key to get started';
+
+  @override
+  String get persona => 'Persona';
+
+  @override
+  String get configureYourAiPersona => 'Configure your AI persona';
+
+  @override
+  String get configureSttProvider => 'Configure STT provider';
+
+  @override
+  String get setWhenConversationsAutoEnd => 'Set when conversations auto-end';
+
+  @override
+  String get importDataFromOtherSources => 'Import data from other sources';
+
+  @override
+  String get debugAndDiagnostics => 'Debug & Diagnostics';
+
+  @override
+  String get autoDeletesAfter3Days => 'Auto-deletes after 3 days.';
+
+  @override
+  String get helpsDiagnoseIssues => 'Helps diagnose issues';
+
+  @override
+  String get exportStartedMessage => 'Export started. This may take a few seconds...';
+
+  @override
+  String get exportConversationsToJson => 'Export conversations to a JSON file';
+
+  @override
+  String get knowledgeGraphDeletedSuccess => 'Knowledge Graph deleted successfully';
+
+  @override
+  String failedToDeleteGraph(String error) {
+    return 'Failed to delete graph: $error';
+  }
+
+  @override
+  String get clearAllNodesAndConnections => 'Clear all nodes and connections';
+
+  @override
+  String get addToClaudeDesktopConfig => 'Add to claude_desktop_config.json';
+
+  @override
+  String get connectAiAssistantsToData => 'Connect AI assistants to your data';
+
+  @override
+  String get useYourMcpApiKey => 'Use your MCP API key';
+
+  @override
+  String get realTimeTranscript => 'Real-time Transcript';
+
+  @override
+  String get experimental => 'Experimental';
+
+  @override
+  String get transcriptionDiagnostics => 'Transcription Diagnostics';
+
+  @override
+  String get detailedDiagnosticMessages => 'Detailed diagnostic messages';
+
+  @override
+  String get autoCreateSpeakers => 'Auto-create Speakers';
+
+  @override
+  String get autoCreateWhenNameDetected => 'Auto-create when name detected';
+
+  @override
+  String get followUpQuestions => 'Follow-up Questions';
+
+  @override
+  String get suggestQuestionsAfterConversations => 'Suggest questions after conversations';
+
+  @override
+  String get goalTracker => 'Goal Tracker';
+
+  @override
+  String get trackPersonalGoalsOnHomepage => 'Track your personal goals on homepage';
+
+  @override
+  String get dailyReflection => 'Daily Reflection';
+
+  @override
+  String get get9PmReminderToReflect => 'Get a 9 PM reminder to reflect on your day';
+
+  @override
+  String get actionItemDescriptionCannotBeEmpty => '操作项描述不能为空';
+
+  @override
+  String get saved => '已保存';
+
+  @override
+  String get overdue => '已逾期';
+
+  @override
+  String get failedToUpdateDueDate => '更新截止日期失败';
+
+  @override
+  String get markIncomplete => '标记为未完成';
+
+  @override
+  String get editDueDate => '编辑截止日期';
+
+  @override
+  String get setDueDate => '设置截止日期';
+
+  @override
+  String get clearDueDate => '清除截止日期';
+
+  @override
+  String get failedToClearDueDate => '清除截止日期失败';
+
+  @override
+  String get mondayAbbr => '周一';
+
+  @override
+  String get tuesdayAbbr => '周二';
+
+  @override
+  String get wednesdayAbbr => '周三';
+
+  @override
+  String get thursdayAbbr => '周四';
+
+  @override
+  String get fridayAbbr => '周五';
+
+  @override
+  String get saturdayAbbr => '周六';
+
+  @override
+  String get sundayAbbr => '周日';
+
+  @override
+  String get howDoesItWork => '它是如何工作的？';
+
+  @override
+  String get sdCardSyncDescription => 'SD卡同步将从SD卡导入您的回忆到应用程序';
+
+  @override
+  String get checksForAudioFiles => '检查SD卡上的音频文件';
+
+  @override
+  String get omiSyncsAudioFiles => 'Omi然后将音频文件与服务器同步';
+
+  @override
+  String get serverProcessesAudio => '服务器处理音频文件并创建回忆';
+
+  @override
+  String get youreAllSet => '一切就绪！';
+
+  @override
+  String get welcomeToOmiDescription => '欢迎来到Omi！您的AI伴侣已准备好帮助您进行对话、任务等。';
+
+  @override
+  String get startUsingOmi => '开始使用Omi';
+
+  @override
+  String get back => '返回';
+
+  @override
+  String get keyboardShortcuts => '键盘快捷键';
+
+  @override
+  String get toggleControlBar => '切换控制栏';
+
+  @override
+  String get pressKeys => '按下键...';
+
+  @override
+  String get cmdRequired => '⌘ 必需';
+
+  @override
+  String get invalidKey => '无效的键';
+
+  @override
+  String get space => '空格';
+
+  @override
+  String get search => '搜索';
+
+  @override
+  String get searchPlaceholder => '搜索...';
+
+  @override
+  String get untitledConversation => '无标题对话';
+
+  @override
+  String countRemaining(String count) {
+    return '$count 剩余';
+  }
+
+  @override
+  String get addGoal => '添加目标';
+
+  @override
+  String get editGoal => '编辑目标';
+
+  @override
+  String get icon => '图标';
+
+  @override
+  String get goalTitle => '目标标题';
+
+  @override
+  String get current => '当前';
+
+  @override
+  String get target => '目标';
+
+  @override
+  String get saveGoal => '保存';
+
+  @override
+  String get goals => '目标';
+
+  @override
+  String get tapToAddGoal => '点击添加目标';
+
+  @override
+  String get welcomeBack => '欢迎回来';
+
+  @override
+  String get yourConversations => '你的对话';
+
+  @override
+  String get reviewAndManageConversations => '查看和管理已录制的对话';
+
+  @override
+  String get startCapturingConversations => '开始使用您的Omi设备捕获对话以在此处查看。';
+
+  @override
+  String get useMobileAppToCapture => '使用您的移动应用程序捕获音频';
+
+  @override
+  String get conversationsProcessedAutomatically => '对话会自动处理';
+
+  @override
+  String get getInsightsInstantly => '立即获取见解和摘要';
+
+  @override
+  String get showAll => '显示全部 →';
+
+  @override
+  String get noTasksForToday => '今天没有任务。\\n向Omi询问更多任务或手动创建。';
+
+  @override
+  String get dailyScore => '每日得分';
+
+  @override
+  String get dailyScoreDescription => '一个帮助您更好地专注于执行的分数。';
+
+  @override
+  String get searchResults => '搜索结果';
+
+  @override
+  String get actionItems => '行动项目';
+
+  @override
+  String get tasksToday => '今天';
+
+  @override
+  String get tasksTomorrow => '明天';
+
+  @override
+  String get tasksNoDeadline => '无截止日期';
+
+  @override
+  String get tasksLater => '稍后';
+
+  @override
+  String get loadingTasks => '正在加载任务...';
+
+  @override
+  String get tasks => '任务';
+
+  @override
+  String get swipeTasksToIndent => '滑动任务以缩进，在类别之间拖动';
+
+  @override
+  String get create => '创建';
+
+  @override
+  String get noTasksYet => '暂无任务';
+
+  @override
+  String get tasksFromConversationsWillAppear => '您的对话中的任务将显示在此处。\n单击创建以手动添加一个。';
+
+  @override
+  String get monthJan => '1月';
+
+  @override
+  String get monthFeb => '2月';
+
+  @override
+  String get monthMar => '3月';
+
+  @override
+  String get monthApr => '4月';
+
+  @override
+  String get monthMay => '5月';
+
+  @override
+  String get monthJun => '6月';
+
+  @override
+  String get monthJul => '7月';
+
+  @override
+  String get monthAug => '8月';
+
+  @override
+  String get monthSep => '9月';
+
+  @override
+  String get monthOct => '10月';
+
+  @override
+  String get monthNov => '11月';
+
+  @override
+  String get monthDec => '12月';
+
+  @override
+  String get timePM => '下午';
+
+  @override
+  String get timeAM => '上午';
+
+  @override
+  String get actionItemUpdatedSuccessfully => '操作项已成功更新';
+
+  @override
+  String get actionItemCreatedSuccessfully => '操作项已成功创建';
+
+  @override
+  String get actionItemDeletedSuccessfully => '操作项已成功删除';
+
+  @override
+  String get deleteActionItem => '删除操作项';
+
+  @override
+  String get deleteActionItemConfirmation => '您确定要删除此操作项吗？此操作无法撤消。';
+
+  @override
+  String get enterActionItemDescription => '输入操作项描述...';
+
+  @override
+  String get markAsCompleted => '标记为已完成';
+
+  @override
+  String get setDueDateAndTime => '设置截止日期和时间';
+
+  @override
+  String get reloadingApps => '正在重新加载应用...';
+
+  @override
+  String get loadingApps => '正在加载应用...';
+
+  @override
+  String get browseInstallCreateApps => '浏览、安装和创建应用';
+
+  @override
+  String get all => '全部';
+
+  @override
+  String get open => '打开';
+
+  @override
+  String get install => '安装';
+
+  @override
+  String get noAppsAvailable => '无可用应用';
+
+  @override
+  String get unableToLoadApps => '无法加载应用';
+
+  @override
+  String get tryAdjustingSearchTermsOrFilters => '尝试调整您的搜索词或筛选条件';
+
+  @override
+  String get checkBackLaterForNewApps => '稍后查看新应用';
+
+  @override
+  String get pleaseCheckInternetConnectionAndTryAgain => '请检查您的网络连接并重试';
+
+  @override
+  String get createNewApp => '创建新应用';
+
+  @override
+  String get buildSubmitCustomOmiApp => '构建并提交您的自定义 Omi 应用';
+
+  @override
+  String get submittingYourApp => '正在提交您的应用...';
+
+  @override
+  String get preparingFormForYou => '正在为您准备表单...';
+
+  @override
+  String get appDetails => '应用详情';
+
+  @override
+  String get paymentDetails => '支付详情';
+
+  @override
+  String get previewAndScreenshots => '预览和截图';
+
+  @override
+  String get appCapabilities => '应用功能';
+
+  @override
+  String get aiPrompts => 'AI 提示';
+
+  @override
+  String get chatPrompt => '聊天提示';
+
+  @override
+  String get chatPromptPlaceholder => '您是一个很棒的应用程序，您的工作是回答用户查询并让他们感觉良好...';
+
+  @override
+  String get conversationPrompt => '对话提示';
+
+  @override
+  String get conversationPromptPlaceholder => '您是一个很棒的应用程序，您将获得对话的文字记录和摘要...';
+
+  @override
+  String get notificationScopes => '通知范围';
+
+  @override
+  String get appPrivacyAndTerms => '应用隐私与条款';
+
+  @override
+  String get makeMyAppPublic => '公开我的应用';
+
+  @override
+  String get submitAppTermsAgreement => '提交此应用即表示我同意 Omi AI 的服务条款和隐私政策';
+
+  @override
+  String get submitApp => '提交应用';
+
+  @override
+  String get needHelpGettingStarted => '需要入门帮助吗？';
+
+  @override
+  String get clickHereForAppBuildingGuides => '点击此处查看应用构建指南和文档';
+
+  @override
+  String get submitAppQuestion => '提交应用？';
+
+  @override
+  String get submitAppPublicDescription => '您的应用将被审核并公开。即使在审核期间，您也可以立即开始使用它！';
+
+  @override
+  String get submitAppPrivateDescription => '您的应用将被审核并私下提供给您。即使在审核期间，您也可以立即开始使用它！';
+
+  @override
+  String get startEarning => '开始赚钱！💰';
+
+  @override
+  String get connectStripeOrPayPal => '连接 Stripe 或 PayPal 以接收您的应用付款。';
+
+  @override
+  String get connectNow => '立即连接';
 }

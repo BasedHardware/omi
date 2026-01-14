@@ -866,9 +866,9 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                   }
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Please check your internet connection and try again'),
-                      duration: Duration(seconds: 2),
+                    SnackBar(
+                      content: Text(context.l10n.pleaseCheckInternetConnection),
+                      duration: const Duration(seconds: 2),
                     ),
                   );
                 }
@@ -961,10 +961,10 @@ class _FeedbackBottomSheetState extends State<FeedbackBottomSheet> {
   void _handleSubmit() {
     if (_selectedReason == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select a reason'),
+        SnackBar(
+          content: Text(context.l10n.pleaseSelectReason),
           backgroundColor: Colors.red,
-          duration: Duration(seconds: 2),
+          duration: const Duration(seconds: 2),
         ),
       );
       return;
@@ -1101,11 +1101,11 @@ class _FeedbackBottomSheetState extends State<FeedbackBottomSheet> {
                   fontSize: 15,
                   height: 1.4,
                 ),
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(vertical: 10),
-                  hintText: 'Tell us more about what went wrong...',
-                  hintStyle: TextStyle(
+                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                  hintText: context.l10n.tellUsMoreWhatWentWrong,
+                  hintStyle: const TextStyle(
                     color: Colors.grey,
                     fontSize: 15,
                   ),

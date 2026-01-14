@@ -101,7 +101,7 @@
   "@errorProcessingConversation": {
     "description": "Error message for conversation processing failure"
   },
-  "noInternetConnection": "Palun kontrollige oma internetiühendust ja proovige uuesti.",
+  "noInternetConnection": "Internetiühendus puudub",
   "@noInternetConnection": {
     "description": "Message shown when there's no internet"
   },
@@ -121,7 +121,7 @@
   "@errorCopied": {
     "description": "Snackbar message after copying error"
   },
-  "remaining": "Järelejäänud",
+  "remaining": "Jäänud",
   "@remaining": {
     "description": "Label for remaining time/items"
   },
@@ -209,7 +209,7 @@
   "@couldNotAccessFile": {
     "description": "Error when file access fails"
   },
-  "askOmi": "Küsi Omi-lt",
+  "askOmi": "Küsi Omilt",
   "@askOmi": {
     "description": "Chat button label"
   },
@@ -217,11 +217,11 @@
   "@done": {
     "description": "Button label"
   },
-  "disconnected": "Ühendus katkestatud",
+  "disconnected": "Ühendus puudub",
   "@disconnected": {
     "description": "Device disconnected status"
   },
-  "searching": "Otsimine",
+  "searching": "Otsimine...",
   "@searching": {
     "description": "Searching for device status"
   },
@@ -289,7 +289,7 @@
   "@syncingBackground": {
     "description": "Message during background sync"
   },
-  "noConversationsYet": "Vestlusi pole veel.",
+  "noConversationsYet": "Vestlusi pole veel",
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
@@ -301,7 +301,7 @@
   "@starConversationHint": {
     "description": "Hint explaining how to star conversations"
   },
-  "searchConversations": "Otsi vestlusi",
+  "searchConversations": "Otsi vestluseid...",
   "@searchConversations": {
     "description": "Search field placeholder"
   },
@@ -411,7 +411,7 @@
   "@buildAndShareApp": {
     "description": "Create app button subtitle"
   },
-  "searchApps": "Otsi 1500+ rakendust",
+  "searchApps": "Otsi rakendusi...",
   "@searchApps": {
     "description": "Apps search placeholder"
   },
@@ -419,7 +419,7 @@
   "@myApps": {
     "description": "My Apps filter button"
   },
-  "installedApps": "Paigaldatud rakendused",
+  "installedApps": "Installitud rakendused",
   "@installedApps": {
     "description": "Installed Apps filter button"
   },
@@ -695,7 +695,7 @@
   "@deviceDisconnectedMessage": {
     "description": "Message shown when device is disconnected"
   },
-  "deviceUnpairedMessage": "Seadme sidumine tühistatud. Minege Seaded > Bluetooth ja unustage seade sidumise lõpetamiseks.",
+  "deviceUnpairedMessage": "Seadme sidumine tühistatud. Minge Seaded > Bluetooth ja unustage seade sidumise tühistamise lõpetamiseks.",
   "@deviceUnpairedMessage": {
     "description": "Message shown when device is unpaired"
   },
@@ -1414,7 +1414,7 @@
       }
     }
   },
-  "yesterday": "eile",
+  "yesterday": "Eile",
   "daysAgo": "{count} päeva tagasi",
   "@daysAgo": {
     "placeholders": {
@@ -1572,7 +1572,7 @@
   "highAccuracy": "Kõrge täpsus",
   "privacyFirst": "Privaatsus esmalt",
   "saveChanges": "Salvesta muudatused",
-  "resetToDefault": "Lähtesta vaikimisi",
+  "resetToDefault": "Lähtesta vaikeväärtusele",
   "viewTemplate": "Vaata malli",
   "trySomethingLike": "Proovige midagi sellist nagu...",
   "tryIt": "Proovi seda",
@@ -1633,7 +1633,7 @@
       }
     }
   },
-  "dontShowAgain": "Ära näita seda enam",
+  "dontShowAgain": "Ära näita uuesti",
   "@dontShowAgain": {
     "description": "Checkbox text to suppress future connection confirmations"
   },
@@ -1986,11 +1986,11 @@
   "@actionItemCompleted": {
     "description": "Snackbar message when item completed"
   },
-  "deleteActionItemTitle": "Kustuta tegevuspunkt",
+  "deleteActionItemTitle": "Kustuta toiming",
   "@deleteActionItemTitle": {
     "description": "Title for delete item dialog"
   },
-  "deleteActionItemMessage": "Kas olete kindel, et soovite selle tegevuspunkti kustutada?",
+  "deleteActionItemMessage": "Kas olete kindel, et soovite selle toimingu kustutada?",
   "@deleteActionItemMessage": {
     "description": "Confirmation message for deleting single item"
   },
@@ -2215,11 +2215,11 @@
   "@retry": {
     "description": "Button label"
   },
-  "createActionItem": "Loo tegevuspunkt",
+  "createActionItem": "Loo ülesanne",
   "@createActionItem": {
     "description": "Sheet title"
   },
-  "editActionItem": "Muuda tegevuspunkti",
+  "editActionItem": "Muuda ülesannet",
   "@editActionItem": {
     "description": "Sheet title"
   },
@@ -2235,7 +2235,7 @@
   "@actionItemUpdated": {
     "description": "Snackbar"
   },
-  "failedToUpdateActionItem": "Tegevuspunkti uuendamine ebaõnnestus",
+  "failedToUpdateActionItem": "Ülesande uuendamine ebaõnnestus",
   "@failedToUpdateActionItem": {
     "description": "Snackbar"
   },
@@ -2243,7 +2243,7 @@
   "@actionItemCreated": {
     "description": "Snackbar"
   },
-  "failedToCreateActionItem": "Tegevuspunkti loomine ebaõnnestus",
+  "failedToCreateActionItem": "Ülesande loomine ebaõnnestus",
   "@failedToCreateActionItem": {
     "description": "Snackbar"
   },
@@ -2291,11 +2291,11 @@
   "@markComplete": {
     "description": "Action label"
   },
-  "actionItemDeleted": "Tegevuspunkt kustutatud",
+  "actionItemDeleted": "Toiming kustutatud",
   "@actionItemDeleted": {
     "description": "Snackbar"
   },
-  "failedToDeleteActionItem": "Tegevuspunkti kustutamine ebaõnnestus",
+  "failedToDeleteActionItem": "Ülesande kustutamine ebaõnnestus",
   "@failedToDeleteActionItem": {
     "description": "Snackbar"
   },
@@ -2313,5 +2313,211 @@
   },
   "appInterfaceSectionTitle": "RAKENDUSE LIIDES",
   "speechTranscriptionSectionTitle": "KÕNE JA TRANSKRIPTSIOON",
-  "languageSettingsHelperText": "Rakenduse keel muudab menüüsid ja nuppe. Kõne keel mõjutab, kuidas teie salvestisi transkribeeritakse."
+  "languageSettingsHelperText": "Rakenduse keel muudab menüüsid ja nuppe. Kõne keel mõjutab, kuidas teie salvestisi transkribeeritakse.",
+  "translationNotice": "Tõlke teatis",
+  "translationNoticeMessage": "Omi tõlgib vestlused teie põhikeelde. Värskendage seda igal ajal jaotises Seaded → Profiilid.",
+  "pleaseCheckInternetConnection": "Palun kontrollige oma internetiühendust ja proovige uuesti",
+  "pleaseSelectReason": "Palun valige põhjus",
+  "tellUsMoreWhatWentWrong": "Rääkige meile rohkem sellest, mis valesti läks...",
+  "selectText": "Vali tekst",
+  "maximumGoalsAllowed": "Maksimaalselt {count} eesmärki lubatud",
+  "conversationCannotBeMerged": "Seda vestlust ei saa ühendada (lukustatud või juba ühendamisel)",
+  "pleaseEnterFolderName": "Palun sisestage kausta nimi",
+  "failedToCreateFolder": "Kausta loomine ebaõnnestus",
+  "failedToUpdateFolder": "Kausta värskendamine ebaõnnestus",
+  "folderName": "Kausta nimi",
+  "descriptionOptional": "Kirjeldus (valikuline)",
+  "failedToDeleteFolder": "Kausta kustutamine ebaõnnestus",
+  "editFolder": "Muuda kausta",
+  "deleteFolder": "Kustuta kaust",
+  "transcriptCopiedToClipboard": "Transkriptsioon kopeeritud lõikelauale",
+  "summaryCopiedToClipboard": "Kokkuvõte kopeeritud lõikelauale",
+  "conversationUrlCouldNotBeShared": "Vestluse URL-i ei saanud jagada.",
+  "urlCopiedToClipboard": "URL kopeeritud lõikelauale",
+  "exportTranscript": "Ekspordi transkriptsioon",
+  "exportSummary": "Ekspordi kokkuvõte",
+  "exportButton": "Ekspordi",
+  "actionItemsCopiedToClipboard": "Tegevusüksused kopeeritud lõikelauale",
+  "summarize": "Kokkuvõte",
+  "generateSummary": "Loo kokkuvõte",
+  "conversationNotFoundOrDeleted": "Vestlust ei leitud või see on kustutatud",
+  "deleteMemory": "Kustuta mälu?",
+  "thisActionCannotBeUndone": "Seda toimingut ei saa tagasi võtta.",
+  "memoriesCount": "{count} mälu",
+  "noMemoriesInCategory": "Selles kategoorias pole veel mälestusi",
+  "addYourFirstMemory": "Lisa oma esimene mälu",
+  "firmwareDisconnectUsb": "Eemaldage USB",
+  "firmwareUsbWarning": "USB-ühendus värskenduste ajal võib teie seadet kahjustada.",
+  "firmwareBatteryAbove15": "Aku üle 15%",
+  "firmwareEnsureBattery": "Veenduge, et teie seadmel on 15% akut.",
+  "firmwareStableConnection": "Stabiilne ühendus",
+  "firmwareConnectWifi": "Ühendage WiFi-ga või mobiilsidevõrguga.",
+  "failedToStartUpdate": "Värskenduse alustamine ebaõnnestus: {error}",
+  "beforeUpdateMakeSure": "Enne värskendamist veenduge:",
+  "confirmed": "Kinnitatud!",
+  "release": "Vabastage",
+  "slideToUpdate": "Värskendamiseks libistage",
+  "copiedToClipboard": "{title} kopeeritud lõikelauale",
+  "batteryLevel": "Aku tase",
+  "productUpdate": "Toote värskendus",
+  "offline": "Ühenduseta",
+  "available": "Saadaval",
+  "unpairDeviceDialogTitle": "Tühista seadme sidumine",
+  "unpairDeviceDialogMessage": "See tühistab seadme sidumise, et seda saaks ühendada teise telefoniga. Peate minema Seaded > Bluetooth ja unustama seadme protsessi lõpetamiseks.",
+  "unpair": "Tühista sidumine",
+  "unpairAndForgetDevice": "Tühista sidumine ja unusta seade",
+  "unknownDevice": "Tundmatu seade",
+  "unknown": "Tundmatu",
+  "productName": "Toote nimi",
+  "serialNumber": "Seerianumber",
+  "connected": "Ühendatud",
+  "privacyPolicyTitle": "Privaatsuspoliitika",
+  "actionItemDescriptionCannotBeEmpty": "Toimingu kirjeldus ei tohi olla tühi",
+  "saved": "Salvestatud",
+  "overdue": "Tähtaja ületanud",
+  "markIncomplete": "Märgi lõpetamatuks",
+  "editDueDate": "Muuda tähtaega",
+  "setDueDate": "Määra tähtaeg",
+  "clearDueDate": "Kustuta tähtaeg",
+  "mondayAbbr": "E",
+  "tuesdayAbbr": "T",
+  "wednesdayAbbr": "K",
+  "thursdayAbbr": "N",
+  "fridayAbbr": "R",
+  "saturdayAbbr": "L",
+  "sundayAbbr": "P",
+  "failedToUpdateDueDate": "Tähtaja värskendamine ebaõnnestus",
+  "failedToClearDueDate": "Tähtaja kustutamine ebaõnnestus",
+  "howDoesItWork": "Kuidas see töötab?",
+  "sdCardSyncDescription": "SD-kaardi sünkroonimine impordib teie mälestused SD-kaardilt rakendusse",
+  "checksForAudioFiles": "Kontrollib helifaile SD-kaardil",
+  "omiSyncsAudioFiles": "Omi sünkroonib seejärel helifailid serveriga",
+  "serverProcessesAudio": "Server töötleb helifaile ja loob mälestusi",
+  "youreAllSet": "Oled valmis!",
+  "welcomeToOmiDescription": "Tere tulemast Omi juurde! Teie AI kaaslane on valmis aitama vestluste, ülesannete ja muuga.",
+  "startUsingOmi": "Alusta Omi kasutamist",
+  "back": "Tagasi",
+  "keyboardShortcuts": "Klaviatuuri otseteed",
+  "toggleControlBar": "Lülita juhtpaneeli",
+  "pressKeys": "Vajuta klahve...",
+  "cmdRequired": "⌘ on nõutud",
+  "invalidKey": "Kehtetu klahv",
+  "space": "Tühik",
+  "search": "Otsi",
+  "searchPlaceholder": "Otsi...",
+  "untitledConversation": "Pealkirjata vestlus",
+  "countRemaining": "{count} järel",
+  "addGoal": "Lisa eesmärk",
+  "editGoal": "Muuda eesmärki",
+  "icon": "Ikoon",
+  "goalTitle": "Eesmärgi pealkiri",
+  "current": "Praegune",
+  "target": "Eesmärk",
+  "saveGoal": "Salvesta",
+  "goals": "Eesmärgid",
+  "tapToAddGoal": "Puuduta eesmärgi lisamiseks",
+  "welcomeBack": "Tere tulemast tagasi",
+  "yourConversations": "Teie vestlused",
+  "reviewAndManageConversations": "Vaadake üle ja hallake oma salvestatud vestlusi",
+  "startCapturingConversations": "Alustage vestluste salvestamist oma Omi seadmega, et neid siin näha.",
+  "useMobileAppToCapture": "Kasutage heeli salvestamiseks mobiilirakendust",
+  "conversationsProcessedAutomatically": "Vestlusi töödeldakse automaatselt",
+  "getInsightsInstantly": "Saate kohe ülevaateid ja kokkuvõtteid",
+  "showAll": "Kuva kõik →",
+  "noTasksForToday": "Täna pole ülesandeid.\\nKüsi Omi käest rohkem ülesandeid või loo need käsitsi.",
+  "dailyScore": "PÄEVASKOOR",
+  "dailyScoreDescription": "Skoor, mis aitab teil täitmisele paremini keskenduda.",
+  "searchResults": "Otsingutulemused",
+  "actionItems": "Tegevuspunktid",
+  "tasksToday": "Täna",
+  "tasksTomorrow": "Homme",
+  "tasksNoDeadline": "Tähtajata",
+  "tasksLater": "Hiljem",
+  "loadingTasks": "Ülesannete laadimine...",
+  "tasks": "Ülesanded",
+  "swipeTasksToIndent": "Libista ülesandeid taande jaoks, lohista kategooriate vahel",
+  "create": "Loo",
+  "noTasksYet": "Ülesandeid pole veel",
+  "tasksFromConversationsWillAppear": "Teie vestlustest pärit ülesanded ilmuvad siia.\nKlõpsake ülesande käsitsi lisamiseks nuppu Loo.",
+  "monthJan": "Jaan",
+  "monthFeb": "Veebr",
+  "monthMar": "Märts",
+  "monthApr": "Apr",
+  "monthMay": "Mai",
+  "monthJun": "Juuni",
+  "monthJul": "Juuli",
+  "monthAug": "Aug",
+  "monthSep": "Sept",
+  "monthOct": "Okt",
+  "monthNov": "Nov",
+  "monthDec": "Dets",
+  "timePM": "PM",
+  "timeAM": "AM",
+  "actionItemUpdatedSuccessfully": "Ülesanne edukalt uuendatud",
+  "actionItemCreatedSuccessfully": "Ülesanne edukalt loodud",
+  "actionItemDeletedSuccessfully": "Ülesanne edukalt kustutatud",
+  "deleteActionItem": "Kustuta ülesanne",
+  "deleteActionItemConfirmation": "Kas olete kindel, et soovite selle ülesande kustutada? Seda tegevust ei saa tagasi võtta.",
+  "enterActionItemDescription": "Sisesta ülesande kirjeldus...",
+  "markAsCompleted": "Märgi lõpetatuks",
+  "setDueDateAndTime": "Määra tähtaeg ja kellaaeg",
+  "reloadingApps": "Rakenduste uuesti laadimine...",
+  "loadingApps": "Rakenduste laadimine...",
+  "browseInstallCreateApps": "Sirvi, installi ja loo rakendusi",
+  "all": "Kõik",
+  "open": "Ava",
+  "install": "Paigalda",
+  "noAppsAvailable": "Rakendusi pole saadaval",
+  "unableToLoadApps": "Rakenduste laadimine ebaõnnestus",
+  "tryAdjustingSearchTermsOrFilters": "Proovi otsingumõisteid või filtreid kohandada",
+  "checkBackLaterForNewApps": "Kontrolli hiljem uusi rakendusi",
+  "pleaseCheckInternetConnectionAndTryAgain": "Palun kontrolli oma internetiühendust ja proovi uuesti",
+  "createNewApp": "Loo uus rakendus",
+  "buildSubmitCustomOmiApp": "Ehita ja esita oma kohandatud Omi rakendus",
+  "submittingYourApp": "Sinu rakenduse esitamine...",
+  "preparingFormForYou": "Vormi ettevalmistamine sinu jaoks...",
+  "appDetails": "Rakenduse üksikasjad",
+  "paymentDetails": "Makse üksikasjad",
+  "previewAndScreenshots": "Eelvaade ja ekraanipildid",
+  "appCapabilities": "Rakenduse võimalused",
+  "aiPrompts": "AI vihjed",
+  "chatPrompt": "Vestluse viip",
+  "chatPromptPlaceholder": "Sa oled suurepärane rakendus, sinu töö on vastata kasutajate küsimustele ja panna nad end hästi tundma...",
+  "conversationPrompt": "Vestluse viip",
+  "conversationPromptPlaceholder": "Sa oled suurepärane rakendus, sulle antakse vestluse transkriptsioon ja kokkuvõte...",
+  "notificationScopes": "Teavituste ulatused",
+  "appPrivacyAndTerms": "Rakenduse privaatsus ja tingimused",
+  "makeMyAppPublic": "Tee minu rakendus avalikuks",
+  "submitAppTermsAgreement": "Selle rakenduse esitamisega nõustun Omi AI teenuse tingimuste ja privaatsuspoliitikaga",
+  "submitApp": "Esita rakendus",
+  "needHelpGettingStarted": "Vajad abi alustamiseks?",
+  "clickHereForAppBuildingGuides": "Klõpsa siia rakenduste loomise juhiste ja dokumentatsiooni jaoks",
+  "submitAppQuestion": "Esita rakendus?",
+  "submitAppPublicDescription": "Sinu rakendust vaadatakse üle ja tehakse avalikuks. Võid seda kohe kasutada, isegi ülevaatuse ajal!",
+  "submitAppPrivateDescription": "Sinu rakendust vaadatakse üle ja tehakse sulle privaatselt kättesaadavaks. Võid seda kohe kasutada, isegi ülevaatuse ajal!",
+  "startEarning": "Alusta teenimist! 💰",
+  "connectStripeOrPayPal": "Ühenda Stripe või PayPal, et saada rakenduse eest makseid.",
+  "connectNow": "Ühenda kohe",
+  "installsCount": "{count}+ paigaldust",
+  "uninstallApp": "Desinstalli rakendus",
+  "subscribe": "Telli",
+  "dataAccessNotice": "Andmetele juurdepääsu teatis",
+  "dataAccessWarning": "See rakendus pääseb ligi teie andmetele. Omi AI ei vastuta selle eest, kuidas see rakendus teie andmeid kasutab, muudab või kustutab",
+  "installApp": "Installi rakendus",
+  "betaTesterNotice": "Olete selle rakenduse beeta-testija. See ei ole veel avalik. See muutub avalikuks pärast kinnitamist.",
+  "appUnderReviewOwner": "Teie rakendus on ülevaatamisel ja nähtav ainult teile. See muutub avalikuks pärast kinnitamist.",
+  "appRejectedNotice": "Teie rakendus on tagasi lükatud. Palun värskendage rakenduse üksikasju ja esitage see uuesti ülevaatamiseks.",
+  "setupSteps": "Seadistamise sammud",
+  "setupInstructions": "Seadistamise juhised",
+  "integrationInstructions": "Integratsiooni juhised",
+  "preview": "Eelvaade",
+  "aboutTheApp": "Rakenduse kohta",
+  "aboutThePersona": "Isiku kohta",
+  "chatPersonality": "Vestluse isiksus",
+  "ratingsAndReviews": "Hinnangud ja arvustused",
+  "noRatings": "hinnanguid pole",
+  "ratingsCount": "{count}+ hinnangut",
+  "errorActivatingApp": "Viga rakenduse aktiveerimisel",
+  "integrationSetupRequired": "Kui see on integratsioonirakendus, veenduge, et seadistamine on lõpetatud.",
+  "installed": "Paigaldatud"
 }

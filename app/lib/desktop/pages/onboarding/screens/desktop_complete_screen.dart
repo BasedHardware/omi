@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class DesktopCompleteScreen extends StatefulWidget {
@@ -113,9 +114,9 @@ class _DesktopCompleteScreenState extends State<DesktopCompleteScreen> with Tick
                         ),
                       ),
                       const SizedBox(height: 32),
-                      const Text(
-                        'You\'re all set!',
-                        style: TextStyle(
+                      Text(
+                        context.l10n.youreAllSet,
+                        style: const TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w600,
                           color: Colors.white,
@@ -127,9 +128,9 @@ class _DesktopCompleteScreenState extends State<DesktopCompleteScreen> with Tick
                       Container(
                         constraints: const BoxConstraints(maxWidth: 480),
                         padding: const EdgeInsets.symmetric(horizontal: 40),
-                        child: const Text(
-                          'Welcome to Omi! Your AI companion is ready to assist you with conversations, tasks, and more.',
-                          style: TextStyle(
+                        child: Text(
+                          context.l10n.welcomeToOmiDescription,
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w400,
                             color: Color(0xFF9CA3AF),
@@ -143,7 +144,7 @@ class _DesktopCompleteScreenState extends State<DesktopCompleteScreen> with Tick
                         constraints: const BoxConstraints(maxWidth: 400),
                         margin: const EdgeInsets.symmetric(horizontal: 40),
                         child: OmiButton(
-                          label: 'Start Using Omi',
+                          label: context.l10n.startUsingOmi,
                           icon: Icons.arrow_forward_rounded,
                           onPressed: () {
                             MixpanelManager().onboardingCompleted();
@@ -154,7 +155,7 @@ class _DesktopCompleteScreenState extends State<DesktopCompleteScreen> with Tick
                       const SizedBox(height: 16),
                       if (widget.onBack != null)
                         OmiButton(
-                          label: 'Back',
+                          label: context.l10n.back,
                           type: OmiButtonType.text,
                           onPressed: widget.onBack,
                         ),

@@ -101,7 +101,7 @@
   "@errorProcessingConversation": {
     "description": "Error message for conversation processing failure"
   },
-  "noInternetConnection": "Παρακαλώ ελέγξτε τη σύνδεσή σας στο διαδίκτυο και δοκιμάστε ξανά.",
+  "noInternetConnection": "Χωρίς σύνδεση στο διαδίκτυο",
   "@noInternetConnection": {
     "description": "Message shown when there's no internet"
   },
@@ -121,7 +121,7 @@
   "@errorCopied": {
     "description": "Snackbar message after copying error"
   },
-  "remaining": "Υπολειπόμενα",
+  "remaining": "Απομένει",
   "@remaining": {
     "description": "Label for remaining time/items"
   },
@@ -209,7 +209,7 @@
   "@couldNotAccessFile": {
     "description": "Error when file access fails"
   },
-  "askOmi": "Ρωτήστε το Omi",
+  "askOmi": "Ρώτησε το Omi",
   "@askOmi": {
     "description": "Chat button label"
   },
@@ -217,11 +217,11 @@
   "@done": {
     "description": "Button label"
   },
-  "disconnected": "Αποσυνδέθηκε",
+  "disconnected": "Αποσυνδεδεμένο",
   "@disconnected": {
     "description": "Device disconnected status"
   },
-  "searching": "Αναζήτηση",
+  "searching": "Αναζήτηση...",
   "@searching": {
     "description": "Searching for device status"
   },
@@ -289,7 +289,7 @@
   "@syncingBackground": {
     "description": "Message during background sync"
   },
-  "noConversationsYet": "Δεν υπάρχουν συνομιλίες ακόμα.",
+  "noConversationsYet": "Δεν υπάρχουν συνομιλίες ακόμα",
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
@@ -301,7 +301,7 @@
   "@starConversationHint": {
     "description": "Hint explaining how to star conversations"
   },
-  "searchConversations": "Αναζήτηση Συνομιλιών",
+  "searchConversations": "Αναζήτηση συνομιλιών...",
   "@searchConversations": {
     "description": "Search field placeholder"
   },
@@ -411,15 +411,15 @@
   "@buildAndShareApp": {
     "description": "Create app button subtitle"
   },
-  "searchApps": "Αναζήτηση 1500+ Εφαρμογών",
+  "searchApps": "Αναζήτηση εφαρμογών...",
   "@searchApps": {
     "description": "Apps search placeholder"
   },
-  "myApps": "Οι Εφαρμογές μου",
+  "myApps": "Οι εφαρμογές μου",
   "@myApps": {
     "description": "My Apps filter button"
   },
-  "installedApps": "Εγκατεστημένες Εφαρμογές",
+  "installedApps": "Εγκατεστημένες εφαρμογές",
   "@installedApps": {
     "description": "Installed Apps filter button"
   },
@@ -631,15 +631,15 @@
   "@deviceName": {
     "description": "Device name label"
   },
-  "deviceId": "Αναγνωριστικό Συσκευής",
+  "deviceId": "Αναγνωριστικό συσκευής",
   "@deviceId": {
     "description": "Device ID label"
   },
-  "firmware": "Λογισμικό",
+  "firmware": "Υλικολογισμικό",
   "@firmware": {
     "description": "Firmware label"
   },
-  "sdCardSync": "Συγχρονισμός Κάρτας SD",
+  "sdCardSync": "Συγχρονισμός κάρτας SD",
   "@sdCardSync": {
     "description": "SD Card sync label"
   },
@@ -647,7 +647,7 @@
   "@hardwareRevision": {
     "description": "Hardware revision label"
   },
-  "modelNumber": "Αριθμός Μοντέλου",
+  "modelNumber": "Αριθμός μοντέλου",
   "@modelNumber": {
     "description": "Model number label"
   },
@@ -675,15 +675,15 @@
   "@forgetDevice": {
     "description": "Forget device button"
   },
-  "chargingIssues": "Προβλήματα Φόρτισης",
+  "chargingIssues": "Προβλήματα φόρτισης",
   "@chargingIssues": {
     "description": "Charging issues help item"
   },
-  "disconnectDevice": "Αποσύνδεση Συσκευής",
+  "disconnectDevice": "Αποσύνδεση συσκευής",
   "@disconnectDevice": {
     "description": "Disconnect device button"
   },
-  "unpairDevice": "Κατάργηση Σύζευξης Συσκευής",
+  "unpairDevice": "Αποσύζευξη συσκευής",
   "@unpairDevice": {
     "description": "Unpair device button"
   },
@@ -695,7 +695,7 @@
   "@deviceDisconnectedMessage": {
     "description": "Message shown when device is disconnected"
   },
-  "deviceUnpairedMessage": "Η σύζευξη της συσκευής καταργήθηκε. Μεταβείτε στις Ρυθμίσεις > Bluetooth και διαγράψτε τη συσκευή για να ολοκληρώσετε την κατάργηση της σύζευξης.",
+  "deviceUnpairedMessage": "Η συσκευή αποσυζεύχθηκε. Μεταβείτε στις Ρυθμίσεις > Bluetooth και ξεχάστε τη συσκευή για να ολοκληρώσετε την αποσύζευξη.",
   "@deviceUnpairedMessage": {
     "description": "Message shown when device is unpaired"
   },
@@ -997,7 +997,7 @@
   "@upgrade": {
     "description": "Upgrade button"
   },
-  "upgradeToUnlimited": "Αναβάθμιση σε Απεριόριστο",
+  "upgradeToUnlimited": "Αναβάθμιση σε απεριόριστο",
   "@upgradeToUnlimited": {
     "description": "Upgrade to unlimited button"
   },
@@ -1414,7 +1414,7 @@
       }
     }
   },
-  "yesterday": "χθες",
+  "yesterday": "Χθες",
   "daysAgo": "πριν από {count} ημέρες",
   "@daysAgo": {
     "placeholders": {
@@ -1572,7 +1572,7 @@
   "highAccuracy": "Υψηλή ακρίβεια",
   "privacyFirst": "Πρώτα το απόρρητο",
   "saveChanges": "Αποθήκευση Αλλαγών",
-  "resetToDefault": "Επαναφορά στην Προεπιλογή",
+  "resetToDefault": "Επαναφορά στην προεπιλογή",
   "viewTemplate": "Προβολή Προτύπου",
   "trySomethingLike": "Δοκιμάστε κάτι σαν...",
   "tryIt": "Δοκιμάστε το",
@@ -1605,7 +1605,7 @@
   "@creating": {
     "description": "Loading state text when app generation is in progress"
   },
-  "createApp": "Δημιουργία Εφαρμογής",
+  "createApp": "Δημιουργία εφαρμογής",
   "@createApp": {
     "description": "Button text to initiate app creation"
   },
@@ -1986,11 +1986,11 @@
   "@actionItemCompleted": {
     "description": "Snackbar message when item completed"
   },
-  "deleteActionItemTitle": "Διαγραφή Ενέργειας",
+  "deleteActionItemTitle": "Διαγραφή στοιχείου ενέργειας",
   "@deleteActionItemTitle": {
     "description": "Title for delete item dialog"
   },
-  "deleteActionItemMessage": "Είστε βέβαιοι ότι θέλετε να διαγράψετε αυτή την ενέργεια;",
+  "deleteActionItemMessage": "Είστε βέβαιοι ότι θέλετε να διαγράψετε αυτό το στοιχείο ενέργειας;",
   "@deleteActionItemMessage": {
     "description": "Confirmation message for deleting single item"
   },
@@ -2215,11 +2215,11 @@
   "@retry": {
     "description": "Button label"
   },
-  "createActionItem": "Δημιουργία Ενέργειας",
+  "createActionItem": "Δημιουργία εργασίας",
   "@createActionItem": {
     "description": "Sheet title"
   },
-  "editActionItem": "Επεξεργασία Ενέργειας",
+  "editActionItem": "Επεξεργασία εργασίας",
   "@editActionItem": {
     "description": "Sheet title"
   },
@@ -2235,7 +2235,7 @@
   "@actionItemUpdated": {
     "description": "Snackbar"
   },
-  "failedToUpdateActionItem": "Αποτυχία ενημέρωσης ενέργειας",
+  "failedToUpdateActionItem": "Αποτυχία ενημέρωσης εργασίας",
   "@failedToUpdateActionItem": {
     "description": "Snackbar"
   },
@@ -2243,11 +2243,11 @@
   "@actionItemCreated": {
     "description": "Snackbar"
   },
-  "failedToCreateActionItem": "Αποτυχία δημιουργίας ενέργειας",
+  "failedToCreateActionItem": "Αποτυχία δημιουργίας εργασίας",
   "@failedToCreateActionItem": {
     "description": "Snackbar"
   },
-  "dueDate": "Ημερομηνία Λήξης",
+  "dueDate": "Καταληκτική ημερομηνία",
   "@dueDate": {
     "description": "Label"
   },
@@ -2291,11 +2291,11 @@
   "@markComplete": {
     "description": "Action label"
   },
-  "actionItemDeleted": "Η ενέργεια διαγράφηκε",
+  "actionItemDeleted": "Το στοιχείο ενέργειας διαγράφηκε",
   "@actionItemDeleted": {
     "description": "Snackbar"
   },
-  "failedToDeleteActionItem": "Αποτυχία διαγραφής ενέργειας",
+  "failedToDeleteActionItem": "Αποτυχία διαγραφής εργασίας",
   "@failedToDeleteActionItem": {
     "description": "Snackbar"
   },
@@ -2313,5 +2313,211 @@
   },
   "appInterfaceSectionTitle": "ΔΙΕΠΑΦΉ ΕΦΑΡΜΟΓΉΣ",
   "speechTranscriptionSectionTitle": "ΟΜΙΛΊΑ ΚΑΙ ΜΕΤΑΓΡΑΦΉ",
-  "languageSettingsHelperText": "Η γλώσσα της εφαρμογής αλλάζει τα μενού και τα κουμπιά. Η γλώσσα ομιλίας επηρεάζει τον τρόπο μεταγραφής των ηχογραφήσεών σας."
+  "languageSettingsHelperText": "Η γλώσσα της εφαρμογής αλλάζει τα μενού και τα κουμπιά. Η γλώσσα ομιλίας επηρεάζει τον τρόπο μεταγραφής των ηχογραφήσεών σας.",
+  "translationNotice": "Ειδοποίηση μετάφρασης",
+  "translationNoticeMessage": "Το Omi μεταφράζει συνομιλίες στην κύρια γλώσσα σας. Ενημερώστε το ανά πάσα στιγμή στις Ρυθμίσεις → Προφίλ.",
+  "pleaseCheckInternetConnection": "Ελέγξτε τη σύνδεσή σας στο διαδίκτυο και δοκιμάστε ξανά",
+  "pleaseSelectReason": "Επιλέξτε έναν λόγο",
+  "tellUsMoreWhatWentWrong": "Πείτε μας περισσότερα για το τι πήγε στραβά...",
+  "selectText": "Επιλογή κειμένου",
+  "maximumGoalsAllowed": "Μέγιστος {count} στόχοι επιτρέπονται",
+  "conversationCannotBeMerged": "Αυτή η συνομιλία δεν μπορεί να συγχωνευτεί (κλειδωμένη ή ήδη σε συγχώνευση)",
+  "pleaseEnterFolderName": "Εισαγάγετε ένα όνομα φακέλου",
+  "failedToCreateFolder": "Αποτυχία δημιουργίας φακέλου",
+  "failedToUpdateFolder": "Αποτυχία ενημέρωσης φακέλου",
+  "folderName": "Όνομα φακέλου",
+  "descriptionOptional": "Περιγραφή (προαιρετικό)",
+  "failedToDeleteFolder": "Αποτυχία διαγραφής φακέλου",
+  "editFolder": "Επεξεργασία φακέλου",
+  "deleteFolder": "Διαγραφή φακέλου",
+  "transcriptCopiedToClipboard": "Το αντίγραφο αντιγράφηκε στο πρόχειρο",
+  "summaryCopiedToClipboard": "Η περίληψη αντιγράφηκε στο πρόχειρο",
+  "conversationUrlCouldNotBeShared": "Δεν ήταν δυνατή η κοινή χρήση της διεύθυνσης URL της συνομιλίας.",
+  "urlCopiedToClipboard": "Η διεύθυνση URL αντιγράφηκε στο πρόχειρο",
+  "exportTranscript": "Εξαγωγή αντιγράφου",
+  "exportSummary": "Εξαγωγή περίληψης",
+  "exportButton": "Εξαγωγή",
+  "actionItemsCopiedToClipboard": "Τα στοιχεία ενεργειών αντιγράφηκαν στο πρόχειρο",
+  "summarize": "Περίληψη",
+  "generateSummary": "Δημιουργία περίληψης",
+  "conversationNotFoundOrDeleted": "Η συνομιλία δεν βρέθηκε ή έχει διαγραφεί",
+  "deleteMemory": "Διαγραφή μνήμης;",
+  "thisActionCannotBeUndone": "Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.",
+  "memoriesCount": "{count} μνήμες",
+  "noMemoriesInCategory": "Δεν υπάρχουν ακόμη μνήμες σε αυτήν την κατηγορία",
+  "addYourFirstMemory": "Προσθέστε την πρώτη σας μνήμη",
+  "firmwareDisconnectUsb": "Αποσυνδέστε το USB",
+  "firmwareUsbWarning": "Η σύνδεση USB κατά τη διάρκεια ενημερώσεων μπορεί να βλάψει τη συσκευή σας.",
+  "firmwareBatteryAbove15": "Μπαταρία πάνω από 15%",
+  "firmwareEnsureBattery": "Βεβαιωθείτε ότι η συσκευή σας έχει 15% μπαταρία.",
+  "firmwareStableConnection": "Σταθερή σύνδεση",
+  "firmwareConnectWifi": "Συνδεθείτε σε WiFi ή δίκτυο κινητής τηλεφωνίας.",
+  "failedToStartUpdate": "Αποτυχία έναρξης ενημέρωσης: {error}",
+  "beforeUpdateMakeSure": "Πριν από την ενημέρωση, βεβαιωθείτε:",
+  "confirmed": "Επιβεβαιώθηκε!",
+  "release": "Αφήστε",
+  "slideToUpdate": "Σύρετε για ενημέρωση",
+  "copiedToClipboard": "{title} αντιγράφηκε στο πρόχειρο",
+  "batteryLevel": "Επίπεδο μπαταρίας",
+  "productUpdate": "Ενημέρωση προϊόντος",
+  "offline": "Εκτός σύνδεσης",
+  "available": "Διαθέσιμο",
+  "unpairDeviceDialogTitle": "Αποσύζευξη συσκευής",
+  "unpairDeviceDialogMessage": "Αυτό θα αποσυζεύξει τη συσκευή ώστε να μπορεί να συνδεθεί σε άλλο τηλέφωνο. Θα πρέπει να μεταβείτε στις Ρυθμίσεις > Bluetooth και να ξεχάσετε τη συσκευή για να ολοκληρώσετε τη διαδικασία.",
+  "unpair": "Αποσύζευξη",
+  "unpairAndForgetDevice": "Αποσύζευξη και λήθη συσκευής",
+  "unknownDevice": "Άγνωστη συσκευή",
+  "unknown": "Άγνωστο",
+  "productName": "Όνομα προϊόντος",
+  "serialNumber": "Σειριακός αριθμός",
+  "connected": "Συνδεδεμένο",
+  "privacyPolicyTitle": "Πολιτική Απορρήτου",
+  "actionItemDescriptionCannotBeEmpty": "Η περιγραφή του στοιχείου ενέργειας δεν μπορεί να είναι κενή",
+  "saved": "Αποθηκεύτηκε",
+  "overdue": "Εκπρόθεσμο",
+  "markIncomplete": "Σήμανση ως ημιτελές",
+  "editDueDate": "Επεξεργασία ημερομηνίας λήξης",
+  "setDueDate": "Ορισμός καταληκτικής ημερομηνίας",
+  "clearDueDate": "Εκκαθάριση ημερομηνίας λήξης",
+  "mondayAbbr": "Δευ",
+  "tuesdayAbbr": "Τρί",
+  "wednesdayAbbr": "Τετ",
+  "thursdayAbbr": "Πέμ",
+  "fridayAbbr": "Παρ",
+  "saturdayAbbr": "Σάβ",
+  "sundayAbbr": "Κυρ",
+  "failedToUpdateDueDate": "Αποτυχία ενημέρωσης ημερομηνίας λήξης",
+  "failedToClearDueDate": "Αποτυχία εκκαθάρισης ημερομηνίας λήξης",
+  "howDoesItWork": "Πώς λειτουργεί;",
+  "sdCardSyncDescription": "Ο συγχρονισμός κάρτας SD θα εισαγάγει τις αναμνήσεις σας από την κάρτα SD στην εφαρμογή",
+  "checksForAudioFiles": "Ελέγχει για αρχεία ήχου στην κάρτα SD",
+  "omiSyncsAudioFiles": "Το Omi στη συνέχεια συγχρονίζει τα αρχεία ήχου με τον διακομιστή",
+  "serverProcessesAudio": "Ο διακομιστής επεξεργάζεται τα αρχεία ήχου και δημιουργεί αναμνήσεις",
+  "youreAllSet": "Είστε έτοιμοι!",
+  "welcomeToOmiDescription": "Καλώς ήρθατε στο Omi! Ο AI σύντροφός σας είναι έτοιμος να σας βοηθήσει με συνομιλίες, εργασίες και πολλά άλλα.",
+  "startUsingOmi": "Ξεκινήστε να χρησιμοποιείτε το Omi",
+  "back": "Πίσω",
+  "keyboardShortcuts": "Συντομεύσεις πληκτρολογίου",
+  "toggleControlBar": "Εναλλαγή γραμμής ελέγχου",
+  "pressKeys": "Πατήστε πλήκτρα...",
+  "cmdRequired": "⌘ απαιτείται",
+  "invalidKey": "Μη έγκυρο πλήκτρο",
+  "space": "Διάστημα",
+  "search": "Αναζήτηση",
+  "searchPlaceholder": "Αναζήτηση...",
+  "untitledConversation": "Ανώνυμη συνομιλία",
+  "countRemaining": "{count} απομένουν",
+  "addGoal": "Προσθήκη στόχου",
+  "editGoal": "Επεξεργασία στόχου",
+  "icon": "Εικονίδιο",
+  "goalTitle": "Τίτλος στόχου",
+  "current": "Τρέχων",
+  "target": "Στόχος",
+  "saveGoal": "Αποθήκευση",
+  "goals": "Στόχοι",
+  "tapToAddGoal": "Πατήστε για να προσθέσετε στόχο",
+  "welcomeBack": "Καλώς ήρθες πίσω",
+  "yourConversations": "Οι συνομιλίες σου",
+  "reviewAndManageConversations": "Ελέγξτε και διαχειριστείτε τις καταγεγραμμένες συνομιλίες σας",
+  "startCapturingConversations": "Ξεκινήστε να καταγράφετε συνομιλίες με τη συσκευή Omi για να τις δείτε εδώ.",
+  "useMobileAppToCapture": "Χρησιμοποιήστε την εφαρμογή κινητού για να καταγράψετε ήχο",
+  "conversationsProcessedAutomatically": "Οι συνομιλίες επεξεργάζονται αυτόματα",
+  "getInsightsInstantly": "Λάβετε πληροφορίες και περιλήψεις αμέσως",
+  "showAll": "Εμφάνιση όλων →",
+  "noTasksForToday": "Δεν υπάρχουν εργασίες για σήμερα.\\nΡωτήστε το Omi για περισσότερες εργασίες ή δημιουργήστε χειροκίνητα.",
+  "dailyScore": "ΗΜΕΡΗΣΙΑ ΒΑΘΜΟΛΟΓΙΑ",
+  "dailyScoreDescription": "Μια βαθμολογία που σας βοηθά να εστιάσετε καλύτερα στην εκτέλεση.",
+  "searchResults": "Αποτελέσματα αναζήτησης",
+  "actionItems": "Στοιχεία δράσης",
+  "tasksToday": "Σήμερα",
+  "tasksTomorrow": "Αύριο",
+  "tasksNoDeadline": "Χωρίς προθεσμία",
+  "tasksLater": "Αργότερα",
+  "loadingTasks": "Φόρτωση εργασιών...",
+  "tasks": "Εργασίες",
+  "swipeTasksToIndent": "Σύρετε εργασίες για εσοχή, σύρετε μεταξύ κατηγοριών",
+  "create": "Δημιουργία",
+  "noTasksYet": "Δεν υπάρχουν εργασίες ακόμα",
+  "tasksFromConversationsWillAppear": "Οι εργασίες από τις συνομιλίες σας θα εμφανιστούν εδώ.\nΚάντε κλικ στο Δημιουργία για να προσθέσετε μία μη αυτόματα.",
+  "monthJan": "Ιαν",
+  "monthFeb": "Φεβ",
+  "monthMar": "Μάρ",
+  "monthApr": "Απρ",
+  "monthMay": "Μάι",
+  "monthJun": "Ιούν",
+  "monthJul": "Ιούλ",
+  "monthAug": "Αύγ",
+  "monthSep": "Σεπ",
+  "monthOct": "Οκτ",
+  "monthNov": "Νοέ",
+  "monthDec": "Δεκ",
+  "timePM": "ΜΜ",
+  "timeAM": "ΠΜ",
+  "actionItemUpdatedSuccessfully": "Η εργασία ενημερώθηκε με επιτυχία",
+  "actionItemCreatedSuccessfully": "Η εργασία δημιουργήθηκε με επιτυχία",
+  "actionItemDeletedSuccessfully": "Η εργασία διαγράφηκε με επιτυχία",
+  "deleteActionItem": "Διαγραφή εργασίας",
+  "deleteActionItemConfirmation": "Είστε βέβαιοι ότι θέλετε να διαγράψετε αυτήν την εργασία; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.",
+  "enterActionItemDescription": "Εισαγάγετε περιγραφή εργασίας...",
+  "markAsCompleted": "Επισήμανση ως ολοκληρωμένη",
+  "setDueDateAndTime": "Ορισμός καταληκτικής ημερομηνίας και ώρας",
+  "reloadingApps": "Επαναφόρτωση εφαρμογών...",
+  "loadingApps": "Φόρτωση εφαρμογών...",
+  "browseInstallCreateApps": "Περιήγηση, εγκατάσταση και δημιουργία εφαρμογών",
+  "all": "Όλα",
+  "open": "Άνοιγμα",
+  "install": "Εγκατάσταση",
+  "noAppsAvailable": "Δεν υπάρχουν διαθέσιμες εφαρμογές",
+  "unableToLoadApps": "Αδυναμία φόρτωσης εφαρμογών",
+  "tryAdjustingSearchTermsOrFilters": "Δοκιμάστε να προσαρμόσετε τους όρους αναζήτησης ή τα φίλτρα",
+  "checkBackLaterForNewApps": "Ελέγξτε ξανά αργότερα για νέες εφαρμογές",
+  "pleaseCheckInternetConnectionAndTryAgain": "Ελέγξτε τη σύνδεσή σας στο διαδίκτυο και δοκιμάστε ξανά",
+  "createNewApp": "Δημιουργία νέας εφαρμογής",
+  "buildSubmitCustomOmiApp": "Κατασκευάστε και υποβάλετε την προσαρμοσμένη εφαρμογή Omi σας",
+  "submittingYourApp": "Υποβολή της εφαρμογής σας...",
+  "preparingFormForYou": "Προετοιμασία της φόρμας για εσάς...",
+  "appDetails": "Λεπτομέρειες εφαρμογής",
+  "paymentDetails": "Στοιχεία πληρωμής",
+  "previewAndScreenshots": "Προεπισκόπηση και στιγμιότυπα οθόνης",
+  "appCapabilities": "Δυνατότητες εφαρμογής",
+  "aiPrompts": "Προτροπές τεχνητής νοημοσύνης",
+  "chatPrompt": "Προτροπή συνομιλίας",
+  "chatPromptPlaceholder": "Είστε μια υπέροχη εφαρμογή, η δουλειά σας είναι να απαντάτε στα ερωτήματα των χρηστών και να τους κάνετε να αισθάνονται καλά...",
+  "conversationPrompt": "Προτροπή συνομιλίας",
+  "conversationPromptPlaceholder": "Είστε μια υπέροχη εφαρμογή, θα σας δοθεί απομαγνητοφώνηση και περίληψη μιας συζήτησης...",
+  "notificationScopes": "Πεδία ειδοποιήσεων",
+  "appPrivacyAndTerms": "Απόρρητο και όροι εφαρμογής",
+  "makeMyAppPublic": "Κάντε την εφαρμογή μου δημόσια",
+  "submitAppTermsAgreement": "Υποβάλλοντας αυτήν την εφαρμογή, συμφωνώ με τους Όρους Υπηρεσίας και την Πολιτική Απορρήτου του Omi AI",
+  "submitApp": "Υποβολή εφαρμογής",
+  "needHelpGettingStarted": "Χρειάζεστε βοήθεια για να ξεκινήσετε;",
+  "clickHereForAppBuildingGuides": "Κάντε κλικ εδώ για οδηγούς δημιουργίας εφαρμογών και τεκμηρίωση",
+  "submitAppQuestion": "Υποβολή εφαρμογής;",
+  "submitAppPublicDescription": "Η εφαρμογή σας θα αξιολογηθεί και θα γίνει δημόσια. Μπορείτε να αρχίσετε να τη χρησιμοποιείτε αμέσως, ακόμη και κατά τη διάρκεια της αξιολόγησης!",
+  "submitAppPrivateDescription": "Η εφαρμογή σας θα αξιολογηθεί και θα διατεθεί σε εσάς ιδιωτικά. Μπορείτε να αρχίσετε να τη χρησιμοποιείτε αμέσως, ακόμη και κατά τη διάρκεια της αξιολόγησης!",
+  "startEarning": "Ξεκινήστε να κερδίζετε! 💰",
+  "connectStripeOrPayPal": "Συνδέστε το Stripe ή το PayPal για να λαμβάνετε πληρωμές για την εφαρμογή σας.",
+  "connectNow": "Σύνδεση τώρα",
+  "installsCount": "{count}+ εγκαταστάσεις",
+  "uninstallApp": "Απεγκατάσταση εφαρμογής",
+  "subscribe": "Εγγραφή",
+  "dataAccessNotice": "Ειδοποίηση πρόσβασης δεδομένων",
+  "dataAccessWarning": "Αυτή η εφαρμογή θα έχει πρόσβαση στα δεδομένα σας. Η Omi AI δεν είναι υπεύθυνη για τον τρόπο χρήσης, τροποποίησης ή διαγραφής των δεδομένων σας από αυτήν την εφαρμογή",
+  "installApp": "Εγκατάσταση εφαρμογής",
+  "betaTesterNotice": "Είστε δοκιμαστής beta για αυτήν την εφαρμογή. Δεν είναι ακόμα δημόσια. Θα γίνει δημόσια μόλις εγκριθεί.",
+  "appUnderReviewOwner": "Η εφαρμογή σας βρίσκεται υπό αναθεώρηση και είναι ορατή μόνο σε εσάς. Θα γίνει δημόσια μόλις εγκριθεί.",
+  "appRejectedNotice": "Η εφαρμογή σας απορρίφθηκε. Παρακαλούμε ενημερώστε τις λεπτομέρειες της εφαρμογής και υποβάλετε ξανά για αναθεώρηση.",
+  "setupSteps": "Βήματα εγκατάστασης",
+  "setupInstructions": "Οδηγίες εγκατάστασης",
+  "integrationInstructions": "Οδηγίες ενσωμάτωσης",
+  "preview": "Προεπισκόπηση",
+  "aboutTheApp": "Σχετικά με την εφαρμογή",
+  "aboutThePersona": "Σχετικά με το πρόσωπο",
+  "chatPersonality": "Προσωπικότητα συνομιλίας",
+  "ratingsAndReviews": "Αξιολογήσεις και κριτικές",
+  "noRatings": "χωρίς αξιολογήσεις",
+  "ratingsCount": "{count}+ αξιολογήσεις",
+  "errorActivatingApp": "Σφάλμα ενεργοποίησης εφαρμογής",
+  "integrationSetupRequired": "Εάν αυτή είναι μια εφαρμογή ενσωμάτωσης, βεβαιωθείτε ότι η εγκατάσταση έχει ολοκληρωθεί.",
+  "installed": "Εγκατεστημένο"
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:omi/services/shortcut_service.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class DesktopShortcutsPage extends StatefulWidget {
@@ -45,9 +46,9 @@ class _DesktopShortcutsPageState extends State<DesktopShortcutsPage> {
       appBar: AppBar(
         backgroundColor: ResponsiveHelper.backgroundPrimary,
         elevation: 0,
-        title: const Text(
-          'Keyboard Shortcuts',
-          style: TextStyle(
+        title: Text(
+          context.l10n.keyboardShortcuts,
+          style: const TextStyle(
             color: ResponsiveHelper.textPrimary,
             fontSize: 18,
             fontWeight: FontWeight.w600,
@@ -80,7 +81,7 @@ class _DesktopShortcutsPageState extends State<DesktopShortcutsPage> {
                     child: Column(
                       children: [
                         _buildShortcutRow(
-                          title: 'Toggle Control Bar',
+                          title: context.l10n.toggleControlBar,
                           shortcut: _toggleControlBarShortcut?.displayString ?? '⌘\\',
                           isEditable: false,
                         ),
@@ -89,7 +90,7 @@ class _DesktopShortcutsPageState extends State<DesktopShortcutsPage> {
                           color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
                         ),
                         _buildShortcutRow(
-                          title: 'Ask Omi',
+                          title: context.l10n.askOmi,
                           shortcut: _askAIShortcut?.displayString ?? '⌘↩︎',
                           isEditable: true,
                           isRecording: _recordingFor == 'askAI',
@@ -129,7 +130,7 @@ class _DesktopShortcutsPageState extends State<DesktopShortcutsPage> {
           ),
           if (isEditable && !isRecording)
             PopupMenuButton<String>(
-              icon: Icon(Icons.more_horiz, color: ResponsiveHelper.textTertiary, size: 20),
+              icon: const Icon(Icons.more_horiz, color: ResponsiveHelper.textTertiary, size: 20),
               color: ResponsiveHelper.backgroundSecondary,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               onSelected: (value) {
@@ -138,7 +139,8 @@ class _DesktopShortcutsPageState extends State<DesktopShortcutsPage> {
               itemBuilder: (context) => [
                 PopupMenuItem(
                   value: 'reset',
-                  child: Text('Reset to default', style: TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 13)),
+                  child: Text(context.l10n.resetToDefault,
+                      style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 13)),
                 ),
               ],
             ),
@@ -209,7 +211,7 @@ class _ShortcutRecorderBadge extends StatefulWidget {
 
 class _ShortcutRecorderBadgeState extends State<_ShortcutRecorderBadge> {
   final FocusNode _focusNode = FocusNode();
-  String _displayText = 'Press keys...';
+  String? _displayText;
   int? _keyCode;
   int? _modifiers;
   bool _isValid = false;
@@ -288,7 +290,7 @@ class _ShortcutRecorderBadgeState extends State<_ShortcutRecorderBadge> {
     final isCommand = HardwareKeyboard.instance.isMetaPressed;
     if (!isCommand) {
       setState(() {
-        _displayText = '⌘ required';
+        _displayText = context.l10n.cmdRequired;
         _isValid = false;
       });
       return;
@@ -308,7 +310,7 @@ class _ShortcutRecorderBadgeState extends State<_ShortcutRecorderBadge> {
 
     if (carbonKeyCode == null) {
       setState(() {
-        _displayText = 'Invalid key';
+        _displayText = context.l10n.invalidKey;
         _isValid = false;
       });
       return;
@@ -353,7 +355,7 @@ class _ShortcutRecorderBadgeState extends State<_ShortcutRecorderBadge> {
 
   String _getKeyName(LogicalKeyboardKey key) {
     if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.numpadEnter) return '↩︎';
-    if (key == LogicalKeyboardKey.space) return 'Space';
+    if (key == LogicalKeyboardKey.space) return context.l10n.space;
     if (key == LogicalKeyboardKey.backslash) return '\\';
     final label = key.keyLabel;
     return label.length == 1 ? label.toUpperCase() : label;
@@ -372,7 +374,7 @@ class _ShortcutRecorderBadgeState extends State<_ShortcutRecorderBadge> {
           border: Border.all(color: ResponsiveHelper.purplePrimary, width: 1.5),
         ),
         child: Text(
-          _displayText,
+          _displayText ?? context.l10n.pressKeys,
           style: TextStyle(
             color: _isValid ? ResponsiveHelper.textPrimary : ResponsiveHelper.purplePrimary,
             fontSize: 13,

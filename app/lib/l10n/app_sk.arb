@@ -101,7 +101,7 @@
   "@errorProcessingConversation": {
     "description": "Error message for conversation processing failure"
   },
-  "noInternetConnection": "Skontrolujte prosím svoje internetové pripojenie a skúste to znova.",
+  "noInternetConnection": "Žiadne internetové pripojenie",
   "@noInternetConnection": {
     "description": "Message shown when there's no internet"
   },
@@ -209,7 +209,7 @@
   "@couldNotAccessFile": {
     "description": "Error when file access fails"
   },
-  "askOmi": "Spýtať sa Omi",
+  "askOmi": "Opýtať sa Omi",
   "@askOmi": {
     "description": "Chat button label"
   },
@@ -221,7 +221,7 @@
   "@disconnected": {
     "description": "Device disconnected status"
   },
-  "searching": "Vyhľadáva sa",
+  "searching": "Vyhľadávanie...",
   "@searching": {
     "description": "Searching for device status"
   },
@@ -289,7 +289,7 @@
   "@syncingBackground": {
     "description": "Message during background sync"
   },
-  "noConversationsYet": "Zatiaľ žiadne konverzácie.",
+  "noConversationsYet": "Zatiaľ žiadne konverzácie",
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
@@ -301,7 +301,7 @@
   "@starConversationHint": {
     "description": "Hint explaining how to star conversations"
   },
-  "searchConversations": "Hľadať konverzácie",
+  "searchConversations": "Hľadať konverzácie...",
   "@searchConversations": {
     "description": "Search field placeholder"
   },
@@ -395,7 +395,7 @@
   "@apps": {
     "description": "Apps page title"
   },
-  "noAppsFound": "Neboli nájdené žiadne aplikácie",
+  "noAppsFound": "Nenašli sa žiadne aplikácie",
   "@noAppsFound": {
     "description": "Empty state when no apps match"
   },
@@ -411,15 +411,15 @@
   "@buildAndShareApp": {
     "description": "Create app button subtitle"
   },
-  "searchApps": "Hľadať v 1500+ aplikáciách",
+  "searchApps": "Hľadať aplikácie...",
   "@searchApps": {
     "description": "Apps search placeholder"
   },
-  "myApps": "Moje aplikácie",
+  "myApps": "Moje Aplikácie",
   "@myApps": {
     "description": "My Apps filter button"
   },
-  "installedApps": "Nainštalované aplikácie",
+  "installedApps": "Nainštalované Aplikácie",
   "@installedApps": {
     "description": "Installed Apps filter button"
   },
@@ -695,7 +695,7 @@
   "@deviceDisconnectedMessage": {
     "description": "Message shown when device is disconnected"
   },
-  "deviceUnpairedMessage": "Párovanie zariadenia bolo zrušené. Prejdite do Nastavenia > Bluetooth a zabudnite zariadenie pre dokončenie.",
+  "deviceUnpairedMessage": "Zariadenie odpárované. Prejdite do Nastavenia > Bluetooth a zabudnite zariadenie na dokončenie odpárovania.",
   "@deviceUnpairedMessage": {
     "description": "Message shown when device is unpaired"
   },
@@ -997,7 +997,7 @@
   "@upgrade": {
     "description": "Upgrade button"
   },
-  "upgradeToUnlimited": "Upgradovať na neobmedzený",
+  "upgradeToUnlimited": "Upgradovať na neobmedzené",
   "@upgradeToUnlimited": {
     "description": "Upgrade to unlimited button"
   },
@@ -1414,7 +1414,7 @@
       }
     }
   },
-  "yesterday": "včera",
+  "yesterday": "Včera",
   "daysAgo": "pred {count} dňami",
   "@daysAgo": {
     "placeholders": {
@@ -1572,7 +1572,7 @@
   "highAccuracy": "Vysoká presnosť",
   "privacyFirst": "Súkromie na prvom mieste",
   "saveChanges": "Uložiť zmeny",
-  "resetToDefault": "Obnoviť na predvolené",
+  "resetToDefault": "Obnoviť predvolené",
   "viewTemplate": "Zobraziť šablónu",
   "trySomethingLike": "Skúste niečo ako...",
   "tryIt": "Vyskúšajte to",
@@ -1633,7 +1633,7 @@
       }
     }
   },
-  "dontShowAgain": "Znovu to neukazovať",
+  "dontShowAgain": "Nezobrazovať znova",
   "@dontShowAgain": {
     "description": "Checkbox text to suppress future connection confirmations"
   },
@@ -1986,11 +1986,11 @@
   "@actionItemCompleted": {
     "description": "Snackbar message when item completed"
   },
-  "deleteActionItemTitle": "Odstrániť úlohu",
+  "deleteActionItemTitle": "Odstrániť akčnú položku",
   "@deleteActionItemTitle": {
     "description": "Title for delete item dialog"
   },
-  "deleteActionItemMessage": "Naozaj chcete odstrániť túto úlohu?",
+  "deleteActionItemMessage": "Naozaj chcete odstrániť túto akčnú položku?",
   "@deleteActionItemMessage": {
     "description": "Confirmation message for deleting single item"
   },
@@ -2215,11 +2215,11 @@
   "@retry": {
     "description": "Button label"
   },
-  "createActionItem": "Vytvoriť úlohu",
+  "createActionItem": "Vytvoriť položku úlohy",
   "@createActionItem": {
     "description": "Sheet title"
   },
-  "editActionItem": "Upraviť úlohu",
+  "editActionItem": "Upraviť položku úlohy",
   "@editActionItem": {
     "description": "Sheet title"
   },
@@ -2235,7 +2235,7 @@
   "@actionItemUpdated": {
     "description": "Snackbar"
   },
-  "failedToUpdateActionItem": "Nepodarilo sa aktualizovať úlohu",
+  "failedToUpdateActionItem": "Nepodarilo sa aktualizovať položku úlohy",
   "@failedToUpdateActionItem": {
     "description": "Snackbar"
   },
@@ -2243,11 +2243,11 @@
   "@actionItemCreated": {
     "description": "Snackbar"
   },
-  "failedToCreateActionItem": "Nepodarilo sa vytvoriť úlohu",
+  "failedToCreateActionItem": "Nepodarilo sa vytvoriť položku úlohy",
   "@failedToCreateActionItem": {
     "description": "Snackbar"
   },
-  "dueDate": "Termín dokončenia",
+  "dueDate": "Termín",
   "@dueDate": {
     "description": "Label"
   },
@@ -2291,11 +2291,11 @@
   "@markComplete": {
     "description": "Action label"
   },
-  "actionItemDeleted": "Úloha bola odstránená",
+  "actionItemDeleted": "Akčná položka odstránená",
   "@actionItemDeleted": {
     "description": "Snackbar"
   },
-  "failedToDeleteActionItem": "Nepodarilo sa odstrániť úlohu",
+  "failedToDeleteActionItem": "Nepodarilo sa odstrániť položku úlohy",
   "@failedToDeleteActionItem": {
     "description": "Snackbar"
   },
@@ -2313,5 +2313,211 @@
   },
   "appInterfaceSectionTitle": "ROZHRANIE APLIKÁCIE",
   "speechTranscriptionSectionTitle": "REČ A PREPIS",
-  "languageSettingsHelperText": "Jazyk aplikácie mení ponuky a tlačidlá. Jazyk reči ovplyvňuje spôsob prepisu vašich nahrávok."
+  "languageSettingsHelperText": "Jazyk aplikácie mení ponuky a tlačidlá. Jazyk reči ovplyvňuje spôsob prepisu vašich nahrávok.",
+  "translationNotice": "Oznámenie o preklade",
+  "translationNoticeMessage": "Omi prekladá konverzácie do vášho hlavného jazyka. Aktualizujte to kedykoľvek v Nastavenia → Profily.",
+  "pleaseCheckInternetConnection": "Skontrolujte prosím pripojenie k internetu a skúste to znova",
+  "pleaseSelectReason": "Vyberte prosím dôvod",
+  "tellUsMoreWhatWentWrong": "Povedzte nám viac o tom, čo sa pokazilo...",
+  "selectText": "Vybrať text",
+  "maximumGoalsAllowed": "Maximum {count} cieľov povolených",
+  "conversationCannotBeMerged": "Túto konverzáciu nie je možné zlúčiť (zamknutá alebo sa už zlučuje)",
+  "pleaseEnterFolderName": "Zadajte prosím názov priečinka",
+  "failedToCreateFolder": "Vytvorenie priečinka zlyhalo",
+  "failedToUpdateFolder": "Aktualizácia priečinka zlyhala",
+  "folderName": "Názov priečinka",
+  "descriptionOptional": "Popis (voliteľné)",
+  "failedToDeleteFolder": "Odstránenie priečinka zlyhalo",
+  "editFolder": "Upraviť priečinok",
+  "deleteFolder": "Odstrániť priečinok",
+  "transcriptCopiedToClipboard": "Prepis skopírovaný do schránky",
+  "summaryCopiedToClipboard": "Zhrnutie skopírované do schránky",
+  "conversationUrlCouldNotBeShared": "URL konverzácie sa nepodarilo zdieľať.",
+  "urlCopiedToClipboard": "URL skopírovaná do schránky",
+  "exportTranscript": "Exportovať prepis",
+  "exportSummary": "Exportovať zhrnutie",
+  "exportButton": "Exportovať",
+  "actionItemsCopiedToClipboard": "Položky akcií skopírované do schránky",
+  "summarize": "Zhrnúť",
+  "generateSummary": "Vygenerovať zhrnutie",
+  "conversationNotFoundOrDeleted": "Konverzácia nebola nájdená alebo bola odstránená",
+  "deleteMemory": "Vymazať pamäť?",
+  "thisActionCannotBeUndone": "Túto akciu nie je možné vrátiť späť.",
+  "memoriesCount": "{count} spomienok",
+  "noMemoriesInCategory": "V tejto kategórii zatiaľ nie sú žiadne spomienky",
+  "addYourFirstMemory": "Pridajte svoju prvú spomienku",
+  "firmwareDisconnectUsb": "Odpojte USB",
+  "firmwareUsbWarning": "Pripojenie USB počas aktualizácií môže poškodiť vaše zariadenie.",
+  "firmwareBatteryAbove15": "Batéria nad 15%",
+  "firmwareEnsureBattery": "Uistite sa, že vaše zariadenie má 15% batérie.",
+  "firmwareStableConnection": "Stabilné pripojenie",
+  "firmwareConnectWifi": "Pripojte sa k WiFi alebo mobilným dátam.",
+  "failedToStartUpdate": "Nepodarilo sa spustiť aktualizáciu: {error}",
+  "beforeUpdateMakeSure": "Pred aktualizáciou sa uistite:",
+  "confirmed": "Potvrdené!",
+  "release": "Uvoľniť",
+  "slideToUpdate": "Posuňte pre aktualizáciu",
+  "copiedToClipboard": "{title} skopírované do schránky",
+  "batteryLevel": "Úroveň batérie",
+  "productUpdate": "Aktualizácia produktu",
+  "offline": "Offline",
+  "available": "Dostupné",
+  "unpairDeviceDialogTitle": "Zrušiť párovanie zariadenia",
+  "unpairDeviceDialogMessage": "Tým sa zruší párovanie zariadenia, aby sa mohlo pripojiť k inému telefónu. Budete musieť prejsť do Nastavenia > Bluetooth a zabudnúť zariadenie na dokončenie procesu.",
+  "unpair": "Zrušiť párovanie",
+  "unpairAndForgetDevice": "Zrušiť párovanie a zabudnúť zariadenie",
+  "unknownDevice": "Neznáme zariadenie",
+  "unknown": "Neznáme",
+  "productName": "Názov produktu",
+  "serialNumber": "Sériové číslo",
+  "connected": "Pripojené",
+  "privacyPolicyTitle": "Zásady ochrany osobných údajov",
+  "actionItemDescriptionCannotBeEmpty": "Popis akčnej položky nesmie byť prázdny",
+  "saved": "Uložené",
+  "overdue": "Po termíne",
+  "markIncomplete": "Označiť ako nedokončené",
+  "editDueDate": "Upraviť termín",
+  "setDueDate": "Nastaviť termín",
+  "clearDueDate": "Vymazať termín",
+  "mondayAbbr": "Po",
+  "tuesdayAbbr": "Ut",
+  "wednesdayAbbr": "St",
+  "thursdayAbbr": "Št",
+  "fridayAbbr": "Pi",
+  "saturdayAbbr": "So",
+  "sundayAbbr": "Ne",
+  "failedToUpdateDueDate": "Nepodarilo sa aktualizovať termín",
+  "failedToClearDueDate": "Nepodarilo sa vymazať termín",
+  "howDoesItWork": "Ako to funguje?",
+  "sdCardSyncDescription": "Synchronizácia SD karty importuje vaše spomienky z SD karty do aplikácie",
+  "checksForAudioFiles": "Kontroluje zvukové súbory na SD karte",
+  "omiSyncsAudioFiles": "Omi potom synchronizuje zvukové súbory so serverom",
+  "serverProcessesAudio": "Server spracováva zvukové súbory a vytvára spomienky",
+  "youreAllSet": "Všetko je pripravené!",
+  "welcomeToOmiDescription": "Vitajte v Omi! Váš AI spoločník je pripravený pomôcť vám s rozhovormi, úlohami a oveľa viac.",
+  "startUsingOmi": "Začať používať Omi",
+  "back": "Späť",
+  "keyboardShortcuts": "Klávesové skratky",
+  "toggleControlBar": "Prepnúť ovládací panel",
+  "pressKeys": "Stlačte klávesy...",
+  "cmdRequired": "⌘ vyžadované",
+  "invalidKey": "Neplatný kláves",
+  "space": "Medzerník",
+  "search": "Hľadať",
+  "searchPlaceholder": "Hľadať...",
+  "untitledConversation": "Nepomenovaná konverzácia",
+  "countRemaining": "{count} zostáva",
+  "addGoal": "Pridať cieľ",
+  "editGoal": "Upraviť cieľ",
+  "icon": "Ikona",
+  "goalTitle": "Názov cieľa",
+  "current": "Aktuálny",
+  "target": "Cieľ",
+  "saveGoal": "Uložiť",
+  "goals": "Ciele",
+  "tapToAddGoal": "Ťuknite na pridanie cieľa",
+  "welcomeBack": "Vitajte späť",
+  "yourConversations": "Vaše konverzácie",
+  "reviewAndManageConversations": "Prezrite si a spravujte svoje zaznamenané konverzácie",
+  "startCapturingConversations": "Začnite zachytávať konverzácie pomocou zariadenia Omi a uvidíte ich tu.",
+  "useMobileAppToCapture": "Použite mobilnú aplikáciu na zachytenie zvuku",
+  "conversationsProcessedAutomatically": "Konverzácie sa spracovávajú automaticky",
+  "getInsightsInstantly": "Získajte poznatky a zhrnutia okamžite",
+  "showAll": "Zobraziť všetko →",
+  "noTasksForToday": "Žiadne úlohy na dnes.\\nSpýtajte sa Omi na ďalšie úlohy alebo ich vytvorte manuálne.",
+  "dailyScore": "DENNÉ SKÓRE",
+  "dailyScoreDescription": "Skóre, ktoré vám pomôže lepšie sa sústrediť na plnenie.",
+  "searchResults": "Výsledky vyhľadávania",
+  "actionItems": "Úlohy",
+  "tasksToday": "Dnes",
+  "tasksTomorrow": "Zajtra",
+  "tasksNoDeadline": "Bez termínu",
+  "tasksLater": "Neskôr",
+  "loadingTasks": "Načítanie úloh...",
+  "tasks": "Úlohy",
+  "swipeTasksToIndent": "Potiahnutím úloh odsaďte, presuňte medzi kategóriami",
+  "create": "Vytvoriť",
+  "noTasksYet": "Zatiaľ žiadne úlohy",
+  "tasksFromConversationsWillAppear": "Úlohy z vašich konverzácií sa tu zobrazia.\nKliknite na Vytvoriť a pridajte jednu ručne.",
+  "monthJan": "Jan",
+  "monthFeb": "Feb",
+  "monthMar": "Mar",
+  "monthApr": "Apr",
+  "monthMay": "Máj",
+  "monthJun": "Jún",
+  "monthJul": "Júl",
+  "monthAug": "Aug",
+  "monthSep": "Sep",
+  "monthOct": "Okt",
+  "monthNov": "Nov",
+  "monthDec": "Dec",
+  "timePM": "PM",
+  "timeAM": "AM",
+  "actionItemUpdatedSuccessfully": "Položka úlohy úspešne aktualizovaná",
+  "actionItemCreatedSuccessfully": "Položka úlohy úspešne vytvorená",
+  "actionItemDeletedSuccessfully": "Položka úlohy úspešne odstránená",
+  "deleteActionItem": "Odstrániť položku úlohy",
+  "deleteActionItemConfirmation": "Naozaj chcete odstrániť túto položku úlohy? Túto akciu nemožno vrátiť späť.",
+  "enterActionItemDescription": "Zadajte popis položky úlohy...",
+  "markAsCompleted": "Označiť ako dokončené",
+  "setDueDateAndTime": "Nastaviť termín a čas",
+  "reloadingApps": "Opätovné načítanie aplikácií...",
+  "loadingApps": "Načítanie aplikácií...",
+  "browseInstallCreateApps": "Prechádzajte, inštalujte a vytvárajte aplikácie",
+  "all": "Všetky",
+  "open": "Otvoriť",
+  "install": "Inštalovať",
+  "noAppsAvailable": "Nie sú k dispozícii žiadne aplikácie",
+  "unableToLoadApps": "Nepodarilo sa načítať aplikácie",
+  "tryAdjustingSearchTermsOrFilters": "Skúste upraviť vyhľadávacie výrazy alebo filtre",
+  "checkBackLaterForNewApps": "Vráťte sa neskôr pre nové aplikácie",
+  "pleaseCheckInternetConnectionAndTryAgain": "Skontrolujte prosím internetové pripojenie a skúste to znova",
+  "createNewApp": "Vytvoriť novú aplikáciu",
+  "buildSubmitCustomOmiApp": "Vytvorte a odošlite svoju vlastnú Omi aplikáciu",
+  "submittingYourApp": "Odosielanie vašej aplikácie...",
+  "preparingFormForYou": "Príprava formulára pre vás...",
+  "appDetails": "Podrobnosti aplikácie",
+  "paymentDetails": "Platobné údaje",
+  "previewAndScreenshots": "Náhľad a snímky obrazovky",
+  "appCapabilities": "Možnosti aplikácie",
+  "aiPrompts": "AI výzvy",
+  "chatPrompt": "Výzva chatu",
+  "chatPromptPlaceholder": "Ste skvelá aplikácia, vašou úlohou je reagovať na otázky používateľov a dať im dobrý pocit...",
+  "conversationPrompt": "Výzva konverzácie",
+  "conversationPromptPlaceholder": "Ste skvelá aplikácia, dostanete prepis a zhrnutie konverzácie...",
+  "notificationScopes": "Rozsahy oznámení",
+  "appPrivacyAndTerms": "Ochrana súkromia a podmienky aplikácie",
+  "makeMyAppPublic": "Zverejniť moju aplikáciu",
+  "submitAppTermsAgreement": "Odoslaním tejto aplikácie súhlasím so Zmluvnými podmienkami a Zásadami ochrany osobných údajov Omi AI",
+  "submitApp": "Odoslať aplikáciu",
+  "needHelpGettingStarted": "Potrebujete pomoc so začatím?",
+  "clickHereForAppBuildingGuides": "Kliknite sem pre návody na vytváranie aplikácií a dokumentáciu",
+  "submitAppQuestion": "Odoslať aplikáciu?",
+  "submitAppPublicDescription": "Vaša aplikácia bude skontrolovaná a zverejnená. Môžete ju začať používať okamžite, aj počas kontroly!",
+  "submitAppPrivateDescription": "Vaša aplikácia bude skontrolovaná a sprístupnená vám súkromne. Môžete ju začať používať okamžite, aj počas kontroly!",
+  "startEarning": "Začnite zarábať! 💰",
+  "connectStripeOrPayPal": "Pripojte Stripe alebo PayPal, aby ste mohli prijímať platby za svoju aplikáciu.",
+  "connectNow": "Pripojiť teraz",
+  "installsCount": "{count}+ inštalácií",
+  "uninstallApp": "Odinštalovať aplikáciu",
+  "subscribe": "Prihlásiť sa na odber",
+  "dataAccessNotice": "Upozornenie na prístup k údajom",
+  "dataAccessWarning": "Táto aplikácia bude mať prístup k vašim údajom. Omi AI nie je zodpovedný za to, ako táto aplikácia používa, upravuje alebo maže vaše údaje",
+  "installApp": "Inštalovať aplikáciu",
+  "betaTesterNotice": "Ste beta tester tejto aplikácie. Ešte nie je verejná. Bude verejná po schválení.",
+  "appUnderReviewOwner": "Vaša aplikácia je v recenzii a viditeľná len pre vás. Bude verejná po schválení.",
+  "appRejectedNotice": "Vaša aplikácia bola zamietnutá. Aktualizujte prosím podrobnosti aplikácie a odošlite ju znova na recenziu.",
+  "setupSteps": "Kroky nastavenia",
+  "setupInstructions": "Pokyny na nastavenie",
+  "integrationInstructions": "Pokyny na integráciu",
+  "preview": "Náhľad",
+  "aboutTheApp": "O aplikácii",
+  "aboutThePersona": "O persóne",
+  "chatPersonality": "Osobnosť chatu",
+  "ratingsAndReviews": "Hodnotenia a recenzie",
+  "noRatings": "žiadne hodnotenia",
+  "ratingsCount": "{count}+ hodnotení",
+  "errorActivatingApp": "Chyba pri aktivácii aplikácie",
+  "integrationSetupRequired": "Ak sa jedná o integračnú aplikáciu, uistite sa, že je nastavenie dokončené.",
+  "installed": "Nainštalované"
 }

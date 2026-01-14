@@ -101,7 +101,7 @@
   "@errorProcessingConversation": {
     "description": "Error message for conversation processing failure"
   },
-  "noInternetConnection": "Patikrinkite interneto ryšį ir bandykite dar kartą.",
+  "noInternetConnection": "Nėra interneto ryšio",
   "@noInternetConnection": {
     "description": "Message shown when there's no internet"
   },
@@ -121,7 +121,7 @@
   "@errorCopied": {
     "description": "Snackbar message after copying error"
   },
-  "remaining": "Likę",
+  "remaining": "Liko",
   "@remaining": {
     "description": "Label for remaining time/items"
   },
@@ -209,7 +209,7 @@
   "@couldNotAccessFile": {
     "description": "Error when file access fails"
   },
-  "askOmi": "Klauskite Omi",
+  "askOmi": "Paklausti Omi",
   "@askOmi": {
     "description": "Chat button label"
   },
@@ -221,7 +221,7 @@
   "@disconnected": {
     "description": "Device disconnected status"
   },
-  "searching": "Ieškoma",
+  "searching": "Ieškoma...",
   "@searching": {
     "description": "Searching for device status"
   },
@@ -289,7 +289,7 @@
   "@syncingBackground": {
     "description": "Message during background sync"
   },
-  "noConversationsYet": "Kol kas nėra pokalbių.",
+  "noConversationsYet": "Dar nėra pokalbių",
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
@@ -301,7 +301,7 @@
   "@starConversationHint": {
     "description": "Hint explaining how to star conversations"
   },
-  "searchConversations": "Ieškoti pokalbių",
+  "searchConversations": "Ieškoti pokalbių...",
   "@searchConversations": {
     "description": "Search field placeholder"
   },
@@ -391,11 +391,11 @@
   "@chatWithOmi": {
     "description": "Chat share subject"
   },
-  "apps": "Programėlės",
+  "apps": "Programos",
   "@apps": {
     "description": "Apps page title"
   },
-  "noAppsFound": "Programėlių nerasta",
+  "noAppsFound": "Programų nerasta",
   "@noAppsFound": {
     "description": "Empty state when no apps match"
   },
@@ -411,15 +411,15 @@
   "@buildAndShareApp": {
     "description": "Create app button subtitle"
   },
-  "searchApps": "Ieškoti 1500+ programėlių",
+  "searchApps": "Ieškoti programų...",
   "@searchApps": {
     "description": "Apps search placeholder"
   },
-  "myApps": "Mano programėlės",
+  "myApps": "Mano programos",
   "@myApps": {
     "description": "My Apps filter button"
   },
-  "installedApps": "Įdiegtos programėlės",
+  "installedApps": "Įdiegtos programos",
   "@installedApps": {
     "description": "Installed Apps filter button"
   },
@@ -639,7 +639,7 @@
   "@firmware": {
     "description": "Firmware label"
   },
-  "sdCardSync": "SD kortelės sinchronizacija",
+  "sdCardSync": "SD kortelės sinchronizavimas",
   "@sdCardSync": {
     "description": "SD Card sync label"
   },
@@ -675,7 +675,7 @@
   "@forgetDevice": {
     "description": "Forget device button"
   },
-  "chargingIssues": "Krovimo problemos",
+  "chargingIssues": "Įkrovimo problemos",
   "@chargingIssues": {
     "description": "Charging issues help item"
   },
@@ -683,7 +683,7 @@
   "@disconnectDevice": {
     "description": "Disconnect device button"
   },
-  "unpairDevice": "Atjungti įrenginį",
+  "unpairDevice": "Atjungti įrenginio susiejimą",
   "@unpairDevice": {
     "description": "Unpair device button"
   },
@@ -695,7 +695,7 @@
   "@deviceDisconnectedMessage": {
     "description": "Message shown when device is disconnected"
   },
-  "deviceUnpairedMessage": "Įrenginys atjungtas. Eikite į Nustatymus > „Bluetooth\" ir pamiršti įrenginį, kad užbaigtumėte atjungimą.",
+  "deviceUnpairedMessage": "Įrenginys atjungtas. Eikite į Nustatymai > Bluetooth ir pamiršite įrenginį, kad užbaigtumėte atsiejimą.",
   "@deviceUnpairedMessage": {
     "description": "Message shown when device is unpaired"
   },
@@ -1414,7 +1414,7 @@
       }
     }
   },
-  "yesterday": "vakar",
+  "yesterday": "Vakar",
   "daysAgo": "prieš {count} d.",
   "@daysAgo": {
     "placeholders": {
@@ -1572,7 +1572,7 @@
   "highAccuracy": "Aukštas tikslumas",
   "privacyFirst": "Pirmiausiai privatumas",
   "saveChanges": "Išsaugoti pakeitimus",
-  "resetToDefault": "Atkurti į numatytuosius",
+  "resetToDefault": "Atstatyti į numatytąją",
   "viewTemplate": "Peržiūrėti šabloną",
   "trySomethingLike": "Pabandykite kažką panašaus...",
   "tryIt": "Išbandykite",
@@ -1605,7 +1605,7 @@
   "@creating": {
     "description": "Loading state text when app generation is in progress"
   },
-  "createApp": "Sukurti programėlę",
+  "createApp": "Sukurti programą",
   "@createApp": {
     "description": "Button text to initiate app creation"
   },
@@ -1718,7 +1718,7 @@
   "@rateOnGooglePlay": {
     "description": "Button text to rate on Google Play Store"
   },
-  "maybeLater": "Galbūt vėliau",
+  "maybeLater": "Gal vėliau",
   "@maybeLater": {
     "description": "Button text to dismiss the review prompt"
   },
@@ -1968,11 +1968,11 @@
   "@actionItemCompleted": {
     "description": "Snackbar message when item completed"
   },
-  "deleteActionItemTitle": "Ištrinti užduotį",
+  "deleteActionItemTitle": "Ištrinti veiksmo elementą",
   "@deleteActionItemTitle": {
     "description": "Title for delete item dialog"
   },
-  "deleteActionItemMessage": "Ar tikrai norite ištrinti šią užduotį?",
+  "deleteActionItemMessage": "Ar tikrai norite ištrinti šį veiksmo elementą?",
   "@deleteActionItemMessage": {
     "description": "Confirmation message for deleting single item"
   },
@@ -2197,11 +2197,11 @@
   "@retry": {
     "description": "Button label"
   },
-  "createActionItem": "Sukurti užduotį",
+  "createActionItem": "Sukurti veiksmo elementą",
   "@createActionItem": {
     "description": "Sheet title"
   },
-  "editActionItem": "Redaguoti užduotį",
+  "editActionItem": "Redaguoti veiksmo elementą",
   "@editActionItem": {
     "description": "Sheet title"
   },
@@ -2217,7 +2217,7 @@
   "@actionItemUpdated": {
     "description": "Snackbar"
   },
-  "failedToUpdateActionItem": "Nepavyko atnaujinti užduoties",
+  "failedToUpdateActionItem": "Nepavyko atnaujinti veiksmo elemento",
   "@failedToUpdateActionItem": {
     "description": "Snackbar"
   },
@@ -2225,7 +2225,7 @@
   "@actionItemCreated": {
     "description": "Snackbar"
   },
-  "failedToCreateActionItem": "Nepavyko sukurti užduoties",
+  "failedToCreateActionItem": "Nepavyko sukurti veiksmo elemento",
   "@failedToCreateActionItem": {
     "description": "Snackbar"
   },
@@ -2265,19 +2265,19 @@
   "@filterManual": {
     "description": "Filter option"
   },
-  "completed": "Baigta",
+  "completed": "Užbaigta",
   "@completed": {
     "description": "Status label"
   },
-  "markComplete": "Pažymėti kaip baigtą",
+  "markComplete": "Pažymėti kaip užbaigtą",
   "@markComplete": {
     "description": "Action label"
   },
-  "actionItemDeleted": "Užduotis ištrinta",
+  "actionItemDeleted": "Veiksmo elementas ištrintas",
   "@actionItemDeleted": {
     "description": "Snackbar"
   },
-  "failedToDeleteActionItem": "Nepavyko ištrinti užduoties",
+  "failedToDeleteActionItem": "Nepavyko ištrinti veiksmo elemento",
   "@failedToDeleteActionItem": {
     "description": "Snackbar"
   },
@@ -2295,5 +2295,211 @@
   },
   "appInterfaceSectionTitle": "PROGRAMOS SĄSAJA",
   "speechTranscriptionSectionTitle": "KALBA IR TRANSKRIBAVIMAS",
-  "languageSettingsHelperText": "Programos kalba keičia meniu ir mygtukus. Kalbos kalba įtakoja, kaip transkribuojami jūsų įrašai."
+  "languageSettingsHelperText": "Programos kalba keičia meniu ir mygtukus. Kalbos kalba įtakoja, kaip transkribuojami jūsų įrašai.",
+  "translationNotice": "Vertimo pranešimas",
+  "translationNoticeMessage": "Omi verčia pokalbius į jūsų pagrindinę kalbą. Atnaujinkite bet kada skiltyje Nustatymai → Profiliai.",
+  "pleaseCheckInternetConnection": "Patikrinkite interneto ryšį ir bandykite dar kartą",
+  "pleaseSelectReason": "Pasirinkite priežastį",
+  "tellUsMoreWhatWentWrong": "Pasakykite mums daugiau apie tai, kas nutiko ne taip...",
+  "selectText": "Pasirinkti tekstą",
+  "maximumGoalsAllowed": "Maksimaliai {count} tikslų leidžiama",
+  "conversationCannotBeMerged": "Šis pokalbis negali būti sujungtas (užrakintas arba jau sujungiamas)",
+  "pleaseEnterFolderName": "Įveskite aplanko pavadinimą",
+  "failedToCreateFolder": "Nepavyko sukurti aplanko",
+  "failedToUpdateFolder": "Nepavyko atnaujinti aplanko",
+  "folderName": "Aplanko pavadinimas",
+  "descriptionOptional": "Aprašymas (neprivaloma)",
+  "failedToDeleteFolder": "Nepavyko ištrinti aplanko",
+  "editFolder": "Redaguoti aplanką",
+  "deleteFolder": "Ištrinti aplanką",
+  "transcriptCopiedToClipboard": "Transkriptai nukopijuoti į iškarpinę",
+  "summaryCopiedToClipboard": "Santrauka nukopijuota į iškarpinę",
+  "conversationUrlCouldNotBeShared": "Pokalbio URL negalima bendrinti.",
+  "urlCopiedToClipboard": "URL nukopijuotas į iškarpinę",
+  "exportTranscript": "Eksportuoti transkriptą",
+  "exportSummary": "Eksportuoti santrauką",
+  "exportButton": "Eksportuoti",
+  "actionItemsCopiedToClipboard": "Veiksmų elementai nukopijuoti į iškarpinę",
+  "summarize": "Apibendrinti",
+  "generateSummary": "Generuoti santrauką",
+  "conversationNotFoundOrDeleted": "Pokalbis nerastas arba buvo ištrintas",
+  "deleteMemory": "Ištrinti atmintį?",
+  "thisActionCannotBeUndone": "Šio veiksmo negalima atšaukti.",
+  "memoriesCount": "{count} atminčių",
+  "noMemoriesInCategory": "Šioje kategorijoje dar nėra atsiminimų",
+  "addYourFirstMemory": "Pridėkite savo pirmąjį atsiminimą",
+  "firmwareDisconnectUsb": "Atjunkite USB",
+  "firmwareUsbWarning": "USB ryšys atnaujinimo metu gali sugadinti jūsų įrenginį.",
+  "firmwareBatteryAbove15": "Baterija virš 15%",
+  "firmwareEnsureBattery": "Įsitikinkite, kad jūsų įrenginyje yra 15% baterijos.",
+  "firmwareStableConnection": "Stabilus ryšys",
+  "firmwareConnectWifi": "Prisijunkite prie WiFi arba mobiliojo ryšio.",
+  "failedToStartUpdate": "Nepavyko pradėti atnaujinimo: {error}",
+  "beforeUpdateMakeSure": "Prieš atnaujinant įsitikinkite:",
+  "confirmed": "Patvirtinta!",
+  "release": "Paleisti",
+  "slideToUpdate": "Slinkite norėdami atnaujinti",
+  "copiedToClipboard": "{title} nukopijuota į iškarpinę",
+  "batteryLevel": "Baterijos lygis",
+  "productUpdate": "Produkto atnaujinimas",
+  "offline": "Neprisijungęs",
+  "available": "Prieinamas",
+  "unpairDeviceDialogTitle": "Atjungti įrenginio susiejimą",
+  "unpairDeviceDialogMessage": "Tai atjungs įrenginio susiejimą, kad jį būtų galima prijungti prie kito telefono. Turėsite eiti į Nustatymai > Bluetooth ir pamiršti įrenginį, kad užbaigtumėte procesą.",
+  "unpair": "Atjungti susiejimą",
+  "unpairAndForgetDevice": "Atjungti susiejimą ir pamiršti įrenginį",
+  "unknownDevice": "Nežinomas įrenginys",
+  "unknown": "Nežinomas",
+  "productName": "Produkto pavadinimas",
+  "serialNumber": "Serijos numeris",
+  "connected": "Prijungtas",
+  "privacyPolicyTitle": "Privatumo politika",
+  "actionItemDescriptionCannotBeEmpty": "Veiksmo elemento aprašymas negali būti tuščias",
+  "saved": "Išsaugota",
+  "overdue": "Pavėluota",
+  "markIncomplete": "Pažymėti kaip neužbaigtą",
+  "editDueDate": "Redaguoti terminą",
+  "setDueDate": "Nustatyti terminą",
+  "clearDueDate": "Išvalyti terminą",
+  "mondayAbbr": "Pr",
+  "tuesdayAbbr": "An",
+  "wednesdayAbbr": "Tr",
+  "thursdayAbbr": "Kt",
+  "fridayAbbr": "Pn",
+  "saturdayAbbr": "Št",
+  "sundayAbbr": "Sk",
+  "failedToUpdateDueDate": "Nepavyko atnaujinti termino",
+  "failedToClearDueDate": "Nepavyko išvalyti termino",
+  "howDoesItWork": "Kaip tai veikia?",
+  "sdCardSyncDescription": "SD kortelės sinchronizavimas importuos jūsų atsiminimus iš SD kortelės į programą",
+  "checksForAudioFiles": "Patikrina garso failus SD kortelėje",
+  "omiSyncsAudioFiles": "Omi tada sinchronizuoja garso failus su serveriu",
+  "serverProcessesAudio": "Serveris apdoroja garso failus ir sukuria atsiminimus",
+  "youreAllSet": "Viskas paruošta!",
+  "welcomeToOmiDescription": "Sveiki atvykę į Omi! Jūsų AI palydovas pasirengęs padėti jums pokalbių, užduočių ir daugiau.",
+  "startUsingOmi": "Pradėti naudoti Omi",
+  "back": "Atgal",
+  "keyboardShortcuts": "Klaviatūros spartieji klavišai",
+  "toggleControlBar": "Perjungti valdymo juostą",
+  "pressKeys": "Paspauskite klavišus...",
+  "cmdRequired": "⌘ būtinas",
+  "invalidKey": "Netinkamas klavišas",
+  "space": "Tarpas",
+  "search": "Ieškoti",
+  "searchPlaceholder": "Ieškoti...",
+  "untitledConversation": "Nepavadinta pokalbis",
+  "countRemaining": "{count} liko",
+  "addGoal": "Pridėti tikslą",
+  "editGoal": "Redaguoti tikslą",
+  "icon": "Piktograma",
+  "goalTitle": "Tikslo pavadinimas",
+  "current": "Dabartinis",
+  "target": "Tikslas",
+  "saveGoal": "Išsaugoti",
+  "goals": "Tikslai",
+  "tapToAddGoal": "Bakstelėkite, kad pridėtumėte tikslą",
+  "welcomeBack": "Sveiki sugrįžę",
+  "yourConversations": "Jūsų pokalbiai",
+  "reviewAndManageConversations": "Peržiūrėkite ir tvarkykite įrašytus pokalbius",
+  "startCapturingConversations": "Pradėkite fiksuoti pokalbius su Omi įrenginiu, kad juos matytumėte čia.",
+  "useMobileAppToCapture": "Naudokite mobilią programą garso įrašymui",
+  "conversationsProcessedAutomatically": "Pokalbiai apdorojami automatiškai",
+  "getInsightsInstantly": "Gaukite įžvalgas ir santraukas akimirksniu",
+  "showAll": "Rodyti viską →",
+  "noTasksForToday": "Šiandien nėra užduočių.\\nPaprašykite Omi daugiau užduočių arba sukurkite rankiniu būdu.",
+  "dailyScore": "DIENOS ĮVERTINIMAS",
+  "dailyScoreDescription": "Įvertinimas, padedantis geriau sutelkti dėmesį į vykdymą.",
+  "searchResults": "Paieškos rezultatai",
+  "actionItems": "Veiksmų punktai",
+  "tasksToday": "Šiandien",
+  "tasksTomorrow": "Rytoj",
+  "tasksNoDeadline": "Be termino",
+  "tasksLater": "Vėliau",
+  "loadingTasks": "Įkeliamos užduotys...",
+  "tasks": "Užduotys",
+  "swipeTasksToIndent": "Braukite užduotis, kad įtrauktumėte, vilkite tarp kategorijų",
+  "create": "Kurti",
+  "noTasksYet": "Dar nėra užduočių",
+  "tasksFromConversationsWillAppear": "Užduotys iš jūsų pokalbių bus rodomos čia.\nSpustelėkite Kurti, kad pridėtumėte vieną rankiniu būdu.",
+  "monthJan": "Saus",
+  "monthFeb": "Vas",
+  "monthMar": "Kov",
+  "monthApr": "Bal",
+  "monthMay": "Geg",
+  "monthJun": "Birž",
+  "monthJul": "Liep",
+  "monthAug": "Rugp",
+  "monthSep": "Rugs",
+  "monthOct": "Spal",
+  "monthNov": "Lapkr",
+  "monthDec": "Gruod",
+  "timePM": "PM",
+  "timeAM": "AM",
+  "actionItemUpdatedSuccessfully": "Veiksmo elementas sėkmingai atnaujintas",
+  "actionItemCreatedSuccessfully": "Veiksmo elementas sėkmingai sukurtas",
+  "actionItemDeletedSuccessfully": "Veiksmo elementas sėkmingai ištrintas",
+  "deleteActionItem": "Ištrinti veiksmo elementą",
+  "deleteActionItemConfirmation": "Ar tikrai norite ištrinti šį veiksmo elementą? Šio veiksmo negalima atšaukti.",
+  "enterActionItemDescription": "Įveskite veiksmo elemento aprašymą...",
+  "markAsCompleted": "Pažymėti kaip atliktą",
+  "setDueDateAndTime": "Nustatyti terminą ir laiką",
+  "reloadingApps": "Programų perkrovimas...",
+  "loadingApps": "Programų įkėlimas...",
+  "browseInstallCreateApps": "Naršykite, įdiekite ir kurkite programas",
+  "all": "Visos",
+  "open": "Atidaryti",
+  "install": "Įdiegti",
+  "noAppsAvailable": "Nėra prieinamų programų",
+  "unableToLoadApps": "Nepavyko įkelti programų",
+  "tryAdjustingSearchTermsOrFilters": "Pabandykite pakoreguoti paieškos terminus arba filtrus",
+  "checkBackLaterForNewApps": "Užsukite vėliau dėl naujų programų",
+  "pleaseCheckInternetConnectionAndTryAgain": "Patikrinkite interneto ryšį ir bandykite dar kartą",
+  "createNewApp": "Sukurti naują programėlę",
+  "buildSubmitCustomOmiApp": "Sukurkite ir pateikite savo tinkintą Omi programėlę",
+  "submittingYourApp": "Jūsų programėlė pateikiama...",
+  "preparingFormForYou": "Ruošiama forma jums...",
+  "appDetails": "Programėlės informacija",
+  "paymentDetails": "Mokėjimo informacija",
+  "previewAndScreenshots": "Peržiūra ir ekrano kopijos",
+  "appCapabilities": "Programėlės galimybės",
+  "aiPrompts": "DI nurodymai",
+  "chatPrompt": "Pokalbio nurodymas",
+  "chatPromptPlaceholder": "Jūs esate puiki programėlė, jūsų darbas – atsakyti į vartotojų užklausas ir padaryti, kad jie jaustųsi gerai...",
+  "conversationPrompt": "Pokalbio raginimas",
+  "conversationPromptPlaceholder": "Jūs esate puiki programėlė, gausite pokalbio transkripcą ir santrauką...",
+  "notificationScopes": "Pranešimų sritys",
+  "appPrivacyAndTerms": "Programėlės privatumas ir sąlygos",
+  "makeMyAppPublic": "Padaryti mano programėlę viešą",
+  "submitAppTermsAgreement": "Pateikdamas šią programėlę, sutinku su Omi AI paslaugų teikimo sąlygomis ir privatumo politika",
+  "submitApp": "Pateikti programėlę",
+  "needHelpGettingStarted": "Reikia pagalbos pradedant?",
+  "clickHereForAppBuildingGuides": "Spustelėkite čia programėlių kūrimo vadovams ir dokumentacijai",
+  "submitAppQuestion": "Pateikti programėlę?",
+  "submitAppPublicDescription": "Jūsų programėlė bus peržiūrėta ir padaryta vieša. Galite pradėti ją naudoti iš karto, net peržiūros metu!",
+  "submitAppPrivateDescription": "Jūsų programėlė bus peržiūrėta ir padaryta prieinama jums privačiai. Galite pradėti ją naudoti iš karto, net peržiūros metu!",
+  "startEarning": "Pradėkite uždirbti! 💰",
+  "connectStripeOrPayPal": "Prijunkite Stripe arba PayPal, kad gautumėte mokėjimus už savo programėlę.",
+  "connectNow": "Prijungti dabar",
+  "installsCount": "{count}+ diegimų",
+  "uninstallApp": "Pašalinti programą",
+  "subscribe": "Prenumeruoti",
+  "dataAccessNotice": "Duomenų prieigos pranešimas",
+  "dataAccessWarning": "Ši programa turės prieigą prie jūsų duomenų. Omi AI neatsako už tai, kaip ši programa naudoja, modifikuoja ar ištrina jūsų duomenis",
+  "installApp": "Įdiegti programą",
+  "betaTesterNotice": "Esate šios programos beta testuotojas. Ji dar nėra vieša. Ji taps vieša patvirtinus.",
+  "appUnderReviewOwner": "Jūsų programa peržiūrima ir matoma tik jums. Ji taps vieša patvirtinus.",
+  "appRejectedNotice": "Jūsų programa buvo atmesta. Atnaujinkite programos informaciją ir pateikite ją iš naujo peržiūrai.",
+  "setupSteps": "Sąrankos veiksmai",
+  "setupInstructions": "Sąrankos instrukcijos",
+  "integrationInstructions": "Integracijos instrukcijos",
+  "preview": "Peržiūra",
+  "aboutTheApp": "Apie programą",
+  "aboutThePersona": "Apie asmenybę",
+  "chatPersonality": "Pokalbio asmenybė",
+  "ratingsAndReviews": "Įvertinimai ir atsiliepimai",
+  "noRatings": "nėra įvertinimų",
+  "ratingsCount": "{count}+ įvertinimų",
+  "errorActivatingApp": "Klaida aktyvinant programą",
+  "integrationSetupRequired": "Jei tai integracijos programa, įsitikinkite, kad sąranka užbaigta.",
+  "installed": "Įdiegta"
 }

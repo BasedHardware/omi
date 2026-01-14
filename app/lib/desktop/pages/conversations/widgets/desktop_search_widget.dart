@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
@@ -100,18 +101,18 @@ class _DesktopSearchWidgetState extends State<DesktopSearchWidget> {
               width: 1,
             ),
           ),
-          child: const Row(
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
+              const Icon(
                 Icons.search_rounded,
                 size: 14,
                 color: ResponsiveHelper.textTertiary,
               ),
-              SizedBox(width: 8),
+              const SizedBox(width: 8),
               Text(
-                'Search',
-                style: TextStyle(
+                context.l10n.search,
+                style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
                   color: ResponsiveHelper.textSecondary,
@@ -154,15 +155,15 @@ class _DesktopSearchWidgetState extends State<DesktopSearchWidget> {
                 fontSize: 13,
                 color: ResponsiveHelper.textPrimary,
               ),
-              decoration: const InputDecoration(
-                hintText: 'Search...',
-                hintStyle: TextStyle(
+              decoration: InputDecoration(
+                hintText: context.l10n.searchPlaceholder,
+                hintStyle: const TextStyle(
                   fontSize: 13,
                   color: ResponsiveHelper.textTertiary,
                 ),
                 border: InputBorder.none,
                 isDense: true,
-                contentPadding: EdgeInsets.symmetric(vertical: 10),
+                contentPadding: const EdgeInsets.symmetric(vertical: 10),
               ),
               onChanged: (value) {
                 setState(() {});

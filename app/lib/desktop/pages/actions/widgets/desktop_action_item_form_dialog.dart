@@ -12,6 +12,7 @@ import 'package:omi/ui/atoms/omi_checkbox.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
@@ -110,17 +111,30 @@ class _DesktopActionItemFormDialogState extends State<DesktopActionItemFormDialo
 
     String dateStr;
     if (isToday) {
-      dateStr = 'Today';
+      dateStr = context.l10n.today;
     } else if (isTomorrow) {
-      dateStr = 'Tomorrow';
+      dateStr = context.l10n.tomorrow;
     } else {
-      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      final months = [
+        context.l10n.monthJan,
+        context.l10n.monthFeb,
+        context.l10n.monthMar,
+        context.l10n.monthApr,
+        context.l10n.monthMay,
+        context.l10n.monthJun,
+        context.l10n.monthJul,
+        context.l10n.monthAug,
+        context.l10n.monthSep,
+        context.l10n.monthOct,
+        context.l10n.monthNov,
+        context.l10n.monthDec
+      ];
       dateStr = '${months[date.month - 1]} ${date.day}';
     }
 
     final hour = date.hour > 12 ? date.hour - 12 : (date.hour == 0 ? 12 : date.hour);
     final minute = date.minute.toString().padLeft(2, '0');
-    final period = date.hour >= 12 ? 'PM' : 'AM';
+    final period = date.hour >= 12 ? context.l10n.timePM : context.l10n.timeAM;
 
     return '$dateStr at $hour:$minute $period';
   }
@@ -166,7 +180,7 @@ class _DesktopActionItemFormDialogState extends State<DesktopActionItemFormDialo
           );
         }
 
-        _showSnackBar('Action item updated successfully', Colors.green);
+        _showSnackBar(context.l10n.actionItemUpdatedSuccessfully, Colors.green);
       } else {
         // Create new action item
         final createdItem = await provider.createActionItem(
@@ -184,7 +198,7 @@ class _DesktopActionItemFormDialogState extends State<DesktopActionItemFormDialo
           );
         }
 
-        _showSnackBar('Action item created successfully', Colors.green);
+        _showSnackBar(context.l10n.actionItemCreatedSuccessfully, Colors.green);
       }
 
       if (mounted) {
@@ -193,7 +207,7 @@ class _DesktopActionItemFormDialogState extends State<DesktopActionItemFormDialo
     } catch (e) {
       Logger.debug('Error saving action item: $e');
       _showSnackBar(
-        _isEditing ? 'Failed to update action item' : 'Failed to create action item',
+        _isEditing ? context.l10n.failedToUpdateActionItem : context.l10n.failedToCreateActionItem,
         Colors.red,
       );
     } finally {
@@ -220,14 +234,14 @@ class _DesktopActionItemFormDialogState extends State<DesktopActionItemFormDialo
       try {
         final provider = Provider.of<ActionItemsProvider>(context, listen: false);
         await provider.deleteActionItem(widget.actionItem!);
-        _showSnackBar('Action item deleted successfully', Colors.green);
+        _showSnackBar(context.l10n.actionItemDeletedSuccessfully, Colors.green);
 
         if (mounted) {
           Navigator.of(context).pop(true);
         }
       } catch (e) {
         Logger.debug('Error deleting action item: $e');
-        _showSnackBar('Failed to delete action item', Colors.red);
+        _showSnackBar(context.l10n.failedToDeleteActionItem, Colors.red);
         setState(() {
           _isLoading = false;
         });
@@ -237,8 +251,8 @@ class _DesktopActionItemFormDialogState extends State<DesktopActionItemFormDialo
 
     final result = await OmiConfirmDialog.showWithSkipOption(
       context,
-      title: 'Delete Action Item',
-      message: 'Are you sure you want to delete this action item? This action cannot be undone.',
+      title: context.l10n.deleteActionItem,
+      message: context.l10n.deleteActionItemConfirmation,
     );
 
     if (result?.confirmed != true) return;
@@ -255,14 +269,14 @@ class _DesktopActionItemFormDialogState extends State<DesktopActionItemFormDialo
     try {
       final provider = Provider.of<ActionItemsProvider>(context, listen: false);
       await provider.deleteActionItem(widget.actionItem!);
-      _showSnackBar('Action item deleted successfully', Colors.green);
+      _showSnackBar(context.l10n.actionItemDeletedSuccessfully, Colors.green);
 
       if (mounted) {
         Navigator.of(context).pop(true);
       }
     } catch (e) {
       Logger.debug('Error deleting action item: $e');
-      _showSnackBar('Failed to delete action item', Colors.red);
+      _showSnackBar(context.l10n.failedToDeleteActionItem, Colors.red);
     } finally {
       if (mounted) {
         setState(() {
@@ -341,7 +355,7 @@ class _DesktopActionItemFormDialogState extends State<DesktopActionItemFormDialo
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              _isEditing ? 'Edit Action Item' : 'Create Action Item',
+              _isEditing ? context.l10n.editActionItem : context.l10n.createActionItem,
               style: const TextStyle(
                 color: ResponsiveHelper.textPrimary,
                 fontSize: 18,
@@ -364,9 +378,9 @@ class _DesktopActionItemFormDialogState extends State<DesktopActionItemFormDialo
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Description',
-          style: TextStyle(
+        Text(
+          context.l10n.description,
+          style: const TextStyle(
             color: ResponsiveHelper.textPrimary,
             fontSize: 14,
             fontWeight: FontWeight.w500,
@@ -383,7 +397,7 @@ class _DesktopActionItemFormDialogState extends State<DesktopActionItemFormDialo
             fontSize: 16,
           ),
           decoration: InputDecoration(
-            hintText: 'Enter action item description...',
+            hintText: context.l10n.enterActionItemDescription,
             hintStyle: TextStyle(
               color: ResponsiveHelper.textTertiary,
               fontSize: 16,
@@ -422,9 +436,9 @@ class _DesktopActionItemFormDialogState extends State<DesktopActionItemFormDialo
           size: 20,
         ),
         const SizedBox(width: 12),
-        const Text(
-          'Mark as completed',
-          style: TextStyle(
+        Text(
+          context.l10n.markAsCompleted,
+          style: const TextStyle(
             color: ResponsiveHelper.textPrimary,
             fontSize: 16,
           ),
@@ -437,9 +451,9 @@ class _DesktopActionItemFormDialogState extends State<DesktopActionItemFormDialo
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Due Date',
-          style: TextStyle(
+        Text(
+          context.l10n.dueDate,
+          style: const TextStyle(
             color: ResponsiveHelper.textPrimary,
             fontSize: 14,
             fontWeight: FontWeight.w500,
@@ -469,7 +483,7 @@ class _DesktopActionItemFormDialogState extends State<DesktopActionItemFormDialo
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    _dueDate != null ? _formatDueDateWithTime(_dueDate!) : 'Set due date and time',
+                    _dueDate != null ? _formatDueDateWithTime(_dueDate!) : context.l10n.setDueDateAndTime,
                     style: TextStyle(
                       color: _dueDate != null ? ResponsiveHelper.textPrimary : ResponsiveHelper.textTertiary,
                       fontSize: 16,
@@ -512,7 +526,7 @@ class _DesktopActionItemFormDialogState extends State<DesktopActionItemFormDialo
           if (_isEditing)
             Expanded(
               child: OmiButton(
-                label: 'Delete',
+                label: context.l10n.delete,
                 onPressed: _isLoading ? null : _deleteActionItem,
                 type: OmiButtonType.text,
                 color: Colors.red,
@@ -522,7 +536,7 @@ class _DesktopActionItemFormDialogState extends State<DesktopActionItemFormDialo
           if (_isEditing) const SizedBox(width: 12),
           Expanded(
             child: OmiButton(
-              label: 'Cancel',
+              label: context.l10n.cancel,
               onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
               type: OmiButtonType.text,
             ),
@@ -530,7 +544,7 @@ class _DesktopActionItemFormDialogState extends State<DesktopActionItemFormDialo
           const SizedBox(width: 12),
           Expanded(
             child: OmiButton(
-              label: _isEditing ? 'Update' : 'Create',
+              label: _isEditing ? context.l10n.update : context.l10n.create,
               onPressed: _canSave && !_isLoading ? _saveActionItem : null,
               icon: _isEditing ? FontAwesomeIcons.check : FontAwesomeIcons.plus,
             ),
@@ -572,7 +586,20 @@ class _DateTimePickerSheetState extends State<_DateTimePickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final months = [
+      context.l10n.monthJan,
+      context.l10n.monthFeb,
+      context.l10n.monthMar,
+      context.l10n.monthApr,
+      context.l10n.monthMay,
+      context.l10n.monthJun,
+      context.l10n.monthJul,
+      context.l10n.monthAug,
+      context.l10n.monthSep,
+      context.l10n.monthOct,
+      context.l10n.monthNov,
+      context.l10n.monthDec
+    ];
 
     return Material(
       child: Container(
@@ -600,17 +627,17 @@ class _DateTimePickerSheetState extends State<_DateTimePickerSheet> {
                   CupertinoButton(
                     padding: EdgeInsets.zero,
                     onPressed: () => Navigator.pop(context),
-                    child: const Text(
-                      'Cancel',
-                      style: TextStyle(
+                    child: Text(
+                      context.l10n.cancel,
+                      style: const TextStyle(
                         color: ResponsiveHelper.textSecondary,
                         fontSize: 17,
                       ),
                     ),
                   ),
-                  const Text(
-                    'Set Due Date',
-                    style: TextStyle(
+                  Text(
+                    context.l10n.setDueDate,
+                    style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
                       color: ResponsiveHelper.textPrimary,
@@ -619,9 +646,9 @@ class _DateTimePickerSheetState extends State<_DateTimePickerSheet> {
                   CupertinoButton(
                     padding: EdgeInsets.zero,
                     onPressed: () => Navigator.pop(context, _selectedDateTime),
-                    child: const Text(
-                      'Done',
-                      style: TextStyle(
+                    child: Text(
+                      context.l10n.done,
+                      style: const TextStyle(
                         color: ResponsiveHelper.purplePrimary,
                         fontSize: 17,
                         fontWeight: FontWeight.w600,
@@ -671,7 +698,7 @@ class _DateTimePickerSheetState extends State<_DateTimePickerSheet> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    '${_selectedDateTime.hour > 12 ? _selectedDateTime.hour - 12 : (_selectedDateTime.hour == 0 ? 12 : _selectedDateTime.hour)}:${_selectedDateTime.minute.toString().padLeft(2, '0')} ${_selectedDateTime.hour >= 12 ? 'PM' : 'AM'}',
+                    '${_selectedDateTime.hour > 12 ? _selectedDateTime.hour - 12 : (_selectedDateTime.hour == 0 ? 12 : _selectedDateTime.hour)}:${_selectedDateTime.minute.toString().padLeft(2, '0')} ${_selectedDateTime.hour >= 12 ? context.l10n.timePM : context.l10n.timeAM}',
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w500,

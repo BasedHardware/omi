@@ -84,7 +84,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get errorProcessingConversation => 'Помилка під час обробки розмови. Будь ласка, спробуйте пізніше.';
 
   @override
-  String get noInternetConnection => 'Будь ласка, перевірте підключення до інтернету та спробуйте ще раз.';
+  String get noInternetConnection => 'Немає підключення до Інтернету';
 
   @override
   String get unableToDeleteConversation => 'Не вдалося видалити розмову';
@@ -99,7 +99,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get errorCopied => 'Повідомлення про помилку скопійовано до буфера обміну';
 
   @override
-  String get remaining => 'Залишилось';
+  String get remaining => 'Залишилося';
 
   @override
   String get loading => 'Завантаження...';
@@ -167,10 +167,10 @@ class AppLocalizationsUk extends AppLocalizations {
   String get done => 'Готово';
 
   @override
-  String get disconnected => 'Відключено';
+  String get disconnected => 'Відєднано';
 
   @override
-  String get searching => 'Пошук';
+  String get searching => 'Пошук...';
 
   @override
   String get connectDevice => 'Підключити пристрій';
@@ -221,7 +221,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get syncingBackground => 'Ми продовжимо синхронізацію ваших записів у фоновому режимі.';
 
   @override
-  String get noConversationsYet => 'Розмов поки немає.';
+  String get noConversationsYet => 'Ще немає розмов';
 
   @override
   String get noStarredConversations => 'Обраних розмов поки немає.';
@@ -231,7 +231,7 @@ class AppLocalizationsUk extends AppLocalizations {
       'Щоб позначити розмову зірочкою, відкрийте її та натисніть іконку зірки в заголовку.';
 
   @override
-  String get searchConversations => 'Пошук розмов';
+  String get searchConversations => 'Пошук розмов...';
 
   @override
   String selectedCount(int count, Object s) {
@@ -298,7 +298,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get apps => 'Додатки';
 
   @override
-  String get noAppsFound => 'Додатки не знайдено';
+  String get noAppsFound => 'Додатків не знайдено';
 
   @override
   String get tryAdjustingSearch => 'Спробуйте змінити пошуковий запит або фільтри';
@@ -310,7 +310,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get buildAndShareApp => 'Створюйте та діліться своїм власним додатком';
 
   @override
-  String get searchApps => 'Пошук серед 1500+ додатків';
+  String get searchApps => 'Шукати додатки...';
 
   @override
   String get myApps => 'Мої додатки';
@@ -519,10 +519,10 @@ class AppLocalizationsUk extends AppLocalizations {
   String get chargingIssues => 'Проблеми із зарядкою';
 
   @override
-  String get disconnectDevice => 'Відключити пристрій';
+  String get disconnectDevice => 'Від\'єднати пристрій';
 
   @override
-  String get unpairDevice => 'Роз\'єднати пристрій';
+  String get unpairDevice => 'Скасувати з\'єднання пристрою';
 
   @override
   String get unpairAndForget => 'Роз\'єднати та забути пристрій';
@@ -532,7 +532,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get deviceUnpairedMessage =>
-      'Пристрій роз\'єднано. Перейдіть до Налаштування > Bluetooth і забудьте пристрій, щоб завершити роз\'єднання.';
+      'З\'єднання пристрою скасовано. Перейдіть до Налаштування > Bluetooth і забудьте пристрій, щоб завершити скасування з\'єднання.';
 
   @override
   String get unpairDialogTitle => 'Роз\'єднати пристрій';
@@ -751,7 +751,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get upgrade => 'Оновити';
 
   @override
-  String get upgradeToUnlimited => 'Оновити до Необмеженого';
+  String get upgradeToUnlimited => 'Оновити до необмеженого';
 
   @override
   String basicPlanDesc(int limit) {
@@ -1375,7 +1375,7 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String get yesterday => 'вчора';
+  String get yesterday => 'Вчора';
 
   @override
   String daysAgo(int count) {
@@ -1613,7 +1613,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get saveChanges => 'Зберегти зміни';
 
   @override
-  String get resetToDefault => 'Скинути до значень за замовчуванням';
+  String get resetToDefault => 'Скинути до типового';
 
   @override
   String get viewTemplate => 'Переглянути шаблон';
@@ -1728,7 +1728,7 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String get dontShowAgain => 'Не показувати знову';
+  String get dontShowAgain => 'Більше не показувати';
 
   @override
   String get iUnderstand => 'Я розумію';
@@ -1799,7 +1799,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get rateOnGooglePlay => 'Оцінити в Google Play';
 
   @override
-  String get maybeLater => 'Можливо пізніше';
+  String get maybeLater => 'Можливо, пізніше';
 
   @override
   String get speechProfileIntro => 'Omi потрібно дізнатися про ваші цілі та ваш голос. Ви зможете змінити це пізніше.';
@@ -1993,10 +1993,10 @@ class AppLocalizationsUk extends AppLocalizations {
   String get actionItemCompleted => 'Завдання виконано';
 
   @override
-  String get deleteActionItemTitle => 'Видалити завдання';
+  String get deleteActionItemTitle => 'Видалити елемент дії';
 
   @override
-  String get deleteActionItemMessage => 'Ви впевнені, що хочете видалити це завдання?';
+  String get deleteActionItemMessage => 'Ви впевнені, що хочете видалити цей елемент дії?';
 
   @override
   String get deleteSelectedItemsTitle => 'Видалити вибрані елементи';
@@ -2150,10 +2150,10 @@ class AppLocalizationsUk extends AppLocalizations {
   String get retry => 'Спробувати ще раз';
 
   @override
-  String get createActionItem => 'Створити завдання';
+  String get createActionItem => 'Створити елемент дії';
 
   @override
-  String get editActionItem => 'Редагувати завдання';
+  String get editActionItem => 'Редагувати елемент дії';
 
   @override
   String get actionItemDescriptionHint => 'Що потрібно зробити?';
@@ -2165,13 +2165,13 @@ class AppLocalizationsUk extends AppLocalizations {
   String get actionItemUpdated => 'Завдання оновлено';
 
   @override
-  String get failedToUpdateActionItem => 'Не вдалося оновити завдання';
+  String get failedToUpdateActionItem => 'Не вдалося оновити елемент дії';
 
   @override
   String get actionItemCreated => 'Завдання створено';
 
   @override
-  String get failedToCreateActionItem => 'Не вдалося створити завдання';
+  String get failedToCreateActionItem => 'Не вдалося створити елемент дії';
 
   @override
   String get dueDate => 'Термін виконання';
@@ -2204,13 +2204,13 @@ class AppLocalizationsUk extends AppLocalizations {
   String get completed => 'Виконано';
 
   @override
-  String get markComplete => 'Позначити виконаним';
+  String get markComplete => 'Позначити як виконане';
 
   @override
-  String get actionItemDeleted => 'Завдання видалено';
+  String get actionItemDeleted => 'Елемент дії видалено';
 
   @override
-  String get failedToDeleteActionItem => 'Не вдалося видалити завдання';
+  String get failedToDeleteActionItem => 'Не вдалося видалити елемент дії';
 
   @override
   String get deleteActionItemConfirmTitle => 'Видалити завдання';
@@ -2230,4 +2230,678 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String get languageSettingsHelperText =>
       'Мова додатку змінює меню та кнопки. Мова мовлення впливає на те, як транскрибуються ваші записи.';
+
+  @override
+  String get translationNotice => 'Повідомлення про переклад';
+
+  @override
+  String get translationNoticeMessage =>
+      'Omi перекладає розмови на вашу основну мову. Оновіть її в будь-який час у Налаштування → Профілі.';
+
+  @override
+  String get pleaseCheckInternetConnection => 'Будь ласка, перевірте підключення до Інтернету та спробуйте ще раз';
+
+  @override
+  String get pleaseSelectReason => 'Будь ласка, виберіть причину';
+
+  @override
+  String get tellUsMoreWhatWentWrong => 'Розкажіть нам більше про те, що пішло не так...';
+
+  @override
+  String get selectText => 'Вибрати текст';
+
+  @override
+  String maximumGoalsAllowed(int count) {
+    return 'Максимум $count цілей дозволено';
+  }
+
+  @override
+  String get conversationCannotBeMerged => 'Цю розмову не можна об\'єднати (заблокована або вже об\'єднується)';
+
+  @override
+  String get pleaseEnterFolderName => 'Будь ласка, введіть ім\'я папки';
+
+  @override
+  String get failedToCreateFolder => 'Не вдалося створити папку';
+
+  @override
+  String get failedToUpdateFolder => 'Не вдалося оновити папку';
+
+  @override
+  String get folderName => 'Назва папки';
+
+  @override
+  String get descriptionOptional => 'Опис (необов\'язково)';
+
+  @override
+  String get failedToDeleteFolder => 'Не вдалося видалити папку';
+
+  @override
+  String get editFolder => 'Редагувати папку';
+
+  @override
+  String get deleteFolder => 'Видалити папку';
+
+  @override
+  String get transcriptCopiedToClipboard => 'Транскрипт скопійовано в буфер обміну';
+
+  @override
+  String get summaryCopiedToClipboard => 'Резюме скопійовано в буфер обміну';
+
+  @override
+  String get conversationUrlCouldNotBeShared => 'URL-адресу розмови не вдалося поділитися.';
+
+  @override
+  String get urlCopiedToClipboard => 'URL скопійовано в буфер обміну';
+
+  @override
+  String get exportTranscript => 'Експортувати транскрипт';
+
+  @override
+  String get exportSummary => 'Експортувати резюме';
+
+  @override
+  String get exportButton => 'Експортувати';
+
+  @override
+  String get actionItemsCopiedToClipboard => 'Елементи дій скопійовано в буфер обміну';
+
+  @override
+  String get summarize => 'Резюмувати';
+
+  @override
+  String get generateSummary => 'Створити резюме';
+
+  @override
+  String get conversationNotFoundOrDeleted => 'Розмову не знайдено або вона була видалена';
+
+  @override
+  String get deleteMemory => 'Видалити пам\'ять?';
+
+  @override
+  String get thisActionCannotBeUndone => 'Цю дію не можна скасувати.';
+
+  @override
+  String memoriesCount(int count) {
+    return '$count спогадів';
+  }
+
+  @override
+  String get noMemoriesInCategory => 'У цій категорії поки немає спогадів';
+
+  @override
+  String get addYourFirstMemory => 'Додайте свій перший спогад';
+
+  @override
+  String get firmwareDisconnectUsb => 'Від\'єднайте USB';
+
+  @override
+  String get firmwareUsbWarning => 'USB-з\'єднання під час оновлень може пошкодити ваш пристрій.';
+
+  @override
+  String get firmwareBatteryAbove15 => 'Батарея вище 15%';
+
+  @override
+  String get firmwareEnsureBattery => 'Переконайтеся, що ваш пристрій має 15% заряду батареї.';
+
+  @override
+  String get firmwareStableConnection => 'Стабільне з\'єднання';
+
+  @override
+  String get firmwareConnectWifi => 'Підключіться до WiFi або мобільної мережі.';
+
+  @override
+  String failedToStartUpdate(String error) {
+    return 'Не вдалося почати оновлення: $error';
+  }
+
+  @override
+  String get beforeUpdateMakeSure => 'Перед оновленням переконайтеся:';
+
+  @override
+  String get confirmed => 'Підтверджено!';
+
+  @override
+  String get release => 'Відпустіть';
+
+  @override
+  String get slideToUpdate => 'Проведіть для оновлення';
+
+  @override
+  String copiedToClipboard(String title) {
+    return '$title скопійовано в буфер обміну';
+  }
+
+  @override
+  String get batteryLevel => 'Рівень заряду';
+
+  @override
+  String get productUpdate => 'Оновлення продукту';
+
+  @override
+  String get offline => 'Не в мережі';
+
+  @override
+  String get available => 'Доступно';
+
+  @override
+  String get unpairDeviceDialogTitle => 'Скасувати з\'єднання пристрою';
+
+  @override
+  String get unpairDeviceDialogMessage =>
+      'Це скасує з\'єднання пристрою, щоб його можна було підключити до іншого телефону. Вам потрібно буде перейти до Налаштування > Bluetooth і забути пристрій, щоб завершити процес.';
+
+  @override
+  String get unpair => 'Скасувати з\'єднання';
+
+  @override
+  String get unpairAndForgetDevice => 'Скасувати з\'єднання та забути пристрій';
+
+  @override
+  String get unknownDevice => 'Невідомий пристрій';
+
+  @override
+  String get unknown => 'Невідомо';
+
+  @override
+  String get productName => 'Назва продукту';
+
+  @override
+  String get serialNumber => 'Серійний номер';
+
+  @override
+  String get connected => 'Підключено';
+
+  @override
+  String get privacyPolicyTitle => 'Політика конфіденційності';
+
+  @override
+  String get omiSttProvider => 'Omi';
+
+  @override
+  String labelCopied(String label) {
+    return '$label copied';
+  }
+
+  @override
+  String get noApiKeysYet => 'No API keys yet';
+
+  @override
+  String get createKeyToGetStarted => 'Create a key to get started';
+
+  @override
+  String get persona => 'Persona';
+
+  @override
+  String get configureYourAiPersona => 'Configure your AI persona';
+
+  @override
+  String get configureSttProvider => 'Configure STT provider';
+
+  @override
+  String get setWhenConversationsAutoEnd => 'Set when conversations auto-end';
+
+  @override
+  String get importDataFromOtherSources => 'Import data from other sources';
+
+  @override
+  String get debugAndDiagnostics => 'Debug & Diagnostics';
+
+  @override
+  String get autoDeletesAfter3Days => 'Auto-deletes after 3 days.';
+
+  @override
+  String get helpsDiagnoseIssues => 'Helps diagnose issues';
+
+  @override
+  String get exportStartedMessage => 'Export started. This may take a few seconds...';
+
+  @override
+  String get exportConversationsToJson => 'Export conversations to a JSON file';
+
+  @override
+  String get knowledgeGraphDeletedSuccess => 'Knowledge Graph deleted successfully';
+
+  @override
+  String failedToDeleteGraph(String error) {
+    return 'Failed to delete graph: $error';
+  }
+
+  @override
+  String get clearAllNodesAndConnections => 'Clear all nodes and connections';
+
+  @override
+  String get addToClaudeDesktopConfig => 'Add to claude_desktop_config.json';
+
+  @override
+  String get connectAiAssistantsToData => 'Connect AI assistants to your data';
+
+  @override
+  String get useYourMcpApiKey => 'Use your MCP API key';
+
+  @override
+  String get realTimeTranscript => 'Real-time Transcript';
+
+  @override
+  String get experimental => 'Experimental';
+
+  @override
+  String get transcriptionDiagnostics => 'Transcription Diagnostics';
+
+  @override
+  String get detailedDiagnosticMessages => 'Detailed diagnostic messages';
+
+  @override
+  String get autoCreateSpeakers => 'Auto-create Speakers';
+
+  @override
+  String get autoCreateWhenNameDetected => 'Auto-create when name detected';
+
+  @override
+  String get followUpQuestions => 'Follow-up Questions';
+
+  @override
+  String get suggestQuestionsAfterConversations => 'Suggest questions after conversations';
+
+  @override
+  String get goalTracker => 'Goal Tracker';
+
+  @override
+  String get trackPersonalGoalsOnHomepage => 'Track your personal goals on homepage';
+
+  @override
+  String get dailyReflection => 'Daily Reflection';
+
+  @override
+  String get get9PmReminderToReflect => 'Get a 9 PM reminder to reflect on your day';
+
+  @override
+  String get actionItemDescriptionCannotBeEmpty => 'Опис елемента дії не може бути порожнім';
+
+  @override
+  String get saved => 'Збережено';
+
+  @override
+  String get overdue => 'Прострочено';
+
+  @override
+  String get failedToUpdateDueDate => 'Не вдалося оновити термін';
+
+  @override
+  String get markIncomplete => 'Позначити як невиконане';
+
+  @override
+  String get editDueDate => 'Редагувати термін';
+
+  @override
+  String get setDueDate => 'Встановити термін';
+
+  @override
+  String get clearDueDate => 'Очистити термін';
+
+  @override
+  String get failedToClearDueDate => 'Не вдалося очистити термін';
+
+  @override
+  String get mondayAbbr => 'Пн';
+
+  @override
+  String get tuesdayAbbr => 'Вт';
+
+  @override
+  String get wednesdayAbbr => 'Ср';
+
+  @override
+  String get thursdayAbbr => 'Чт';
+
+  @override
+  String get fridayAbbr => 'Пт';
+
+  @override
+  String get saturdayAbbr => 'Сб';
+
+  @override
+  String get sundayAbbr => 'Нд';
+
+  @override
+  String get howDoesItWork => 'Як це працює?';
+
+  @override
+  String get sdCardSyncDescription => 'Синхронізація SD-карти імпортує ваші спогади з SD-карти в додаток';
+
+  @override
+  String get checksForAudioFiles => 'Перевіряє аудіофайли на SD-карті';
+
+  @override
+  String get omiSyncsAudioFiles => 'Omi потім синхронізує аудіофайли з сервером';
+
+  @override
+  String get serverProcessesAudio => 'Сервер обробляє аудіофайли та створює спогади';
+
+  @override
+  String get youreAllSet => 'Все готово!';
+
+  @override
+  String get welcomeToOmiDescription =>
+      'Ласкаво просимо до Omi! Ваш AI-компаньйон готовий допомогти вам із розмовами, завданнями та багато іншим.';
+
+  @override
+  String get startUsingOmi => 'Почати використання Omi';
+
+  @override
+  String get back => 'Назад';
+
+  @override
+  String get keyboardShortcuts => 'Гарячі клавіші';
+
+  @override
+  String get toggleControlBar => 'Перемкнути панель керування';
+
+  @override
+  String get pressKeys => 'Натисніть клавіші...';
+
+  @override
+  String get cmdRequired => '⌘ потрібно';
+
+  @override
+  String get invalidKey => 'Недійсна клавіша';
+
+  @override
+  String get space => 'Пробіл';
+
+  @override
+  String get search => 'Пошук';
+
+  @override
+  String get searchPlaceholder => 'Пошук...';
+
+  @override
+  String get untitledConversation => 'Бесіда без назви';
+
+  @override
+  String countRemaining(String count) {
+    return '$count залишилось';
+  }
+
+  @override
+  String get addGoal => 'Додати ціль';
+
+  @override
+  String get editGoal => 'Редагувати ціль';
+
+  @override
+  String get icon => 'Значок';
+
+  @override
+  String get goalTitle => 'Назва цілі';
+
+  @override
+  String get current => 'Поточний';
+
+  @override
+  String get target => 'Ціль';
+
+  @override
+  String get saveGoal => 'Зберегти';
+
+  @override
+  String get goals => 'Цілі';
+
+  @override
+  String get tapToAddGoal => 'Натисніть, щоб додати ціль';
+
+  @override
+  String get welcomeBack => 'Ласкаво просимо назад';
+
+  @override
+  String get yourConversations => 'Ваші розмови';
+
+  @override
+  String get reviewAndManageConversations => 'Переглядайте та керуйте записаними розмовами';
+
+  @override
+  String get startCapturingConversations =>
+      'Почніть записувати розмови за допомогою пристрою Omi, щоб побачити їх тут.';
+
+  @override
+  String get useMobileAppToCapture => 'Використовуйте мобільний додаток для запису аудіо';
+
+  @override
+  String get conversationsProcessedAutomatically => 'Розмови обробляються автоматично';
+
+  @override
+  String get getInsightsInstantly => 'Отримуйте інформацію та резюме миттєво';
+
+  @override
+  String get showAll => 'Показати все →';
+
+  @override
+  String get noTasksForToday => 'Немає завдань на сьогодні.\\nЗапитайте Omi про більше завдань або створіть вручну.';
+
+  @override
+  String get dailyScore => 'ЩОДЕННИЙ БАЛ';
+
+  @override
+  String get dailyScoreDescription => 'Бал, який допомагає краще зосередитися на виконанні.';
+
+  @override
+  String get searchResults => 'Результати пошуку';
+
+  @override
+  String get actionItems => 'Елементи дій';
+
+  @override
+  String get tasksToday => 'Сьогодні';
+
+  @override
+  String get tasksTomorrow => 'Завтра';
+
+  @override
+  String get tasksNoDeadline => 'Без терміну';
+
+  @override
+  String get tasksLater => 'Пізніше';
+
+  @override
+  String get loadingTasks => 'Завантаження завдань...';
+
+  @override
+  String get tasks => 'Завдання';
+
+  @override
+  String get swipeTasksToIndent => 'Проведіть пальцем по завданнях для відступу, перетягніть між категоріями';
+
+  @override
+  String get create => 'Створити';
+
+  @override
+  String get noTasksYet => 'Поки що немає завдань';
+
+  @override
+  String get tasksFromConversationsWillAppear =>
+      'Завдання з ваших розмов з\'являться тут.\nНатисніть Створити, щоб додати завдання вручну.';
+
+  @override
+  String get monthJan => 'Січ';
+
+  @override
+  String get monthFeb => 'Лют';
+
+  @override
+  String get monthMar => 'Бер';
+
+  @override
+  String get monthApr => 'Кві';
+
+  @override
+  String get monthMay => 'Тра';
+
+  @override
+  String get monthJun => 'Чер';
+
+  @override
+  String get monthJul => 'Лип';
+
+  @override
+  String get monthAug => 'Сер';
+
+  @override
+  String get monthSep => 'Вер';
+
+  @override
+  String get monthOct => 'Жов';
+
+  @override
+  String get monthNov => 'Лис';
+
+  @override
+  String get monthDec => 'Гру';
+
+  @override
+  String get timePM => 'PM';
+
+  @override
+  String get timeAM => 'AM';
+
+  @override
+  String get actionItemUpdatedSuccessfully => 'Елемент дії успішно оновлено';
+
+  @override
+  String get actionItemCreatedSuccessfully => 'Елемент дії успішно створено';
+
+  @override
+  String get actionItemDeletedSuccessfully => 'Елемент дії успішно видалено';
+
+  @override
+  String get deleteActionItem => 'Видалити елемент дії';
+
+  @override
+  String get deleteActionItemConfirmation =>
+      'Ви впевнені, що хочете видалити цей елемент дії? Цю дію не можна скасувати.';
+
+  @override
+  String get enterActionItemDescription => 'Введіть опис елемента дії...';
+
+  @override
+  String get markAsCompleted => 'Позначити як виконане';
+
+  @override
+  String get setDueDateAndTime => 'Встановити термін і час';
+
+  @override
+  String get reloadingApps => 'Перезавантаження додатків...';
+
+  @override
+  String get loadingApps => 'Завантаження додатків...';
+
+  @override
+  String get browseInstallCreateApps => 'Переглядайте, встановлюйте та створюйте додатки';
+
+  @override
+  String get all => 'Усі';
+
+  @override
+  String get open => 'Відкрити';
+
+  @override
+  String get install => 'Встановити';
+
+  @override
+  String get noAppsAvailable => 'Немає доступних додатків';
+
+  @override
+  String get unableToLoadApps => 'Не вдалося завантажити додатки';
+
+  @override
+  String get tryAdjustingSearchTermsOrFilters => 'Спробуйте змінити умови пошуку або фільтри';
+
+  @override
+  String get checkBackLaterForNewApps => 'Повертайтеся пізніше за новими додатками';
+
+  @override
+  String get pleaseCheckInternetConnectionAndTryAgain =>
+      'Будь ласка, перевірте підключення до Інтернету та спробуйте ще раз';
+
+  @override
+  String get createNewApp => 'Створити новий додаток';
+
+  @override
+  String get buildSubmitCustomOmiApp => 'Створіть і надішліть свій власний додаток Omi';
+
+  @override
+  String get submittingYourApp => 'Надсилання вашого додатка...';
+
+  @override
+  String get preparingFormForYou => 'Підготовка форми для вас...';
+
+  @override
+  String get appDetails => 'Деталі додатка';
+
+  @override
+  String get paymentDetails => 'Платіжні дані';
+
+  @override
+  String get previewAndScreenshots => 'Попередній перегляд і знімки екрана';
+
+  @override
+  String get appCapabilities => 'Можливості додатка';
+
+  @override
+  String get aiPrompts => 'Підказки ШІ';
+
+  @override
+  String get chatPrompt => 'Підказка чату';
+
+  @override
+  String get chatPromptPlaceholder =>
+      'Ви чудовий додаток, ваше завдання - відповідати на запити користувачів і змушувати їх почуватися добре...';
+
+  @override
+  String get conversationPrompt => 'Підказка розмови';
+
+  @override
+  String get conversationPromptPlaceholder =>
+      'Ви чудовий додаток, вам будуть надані транскрипція та короткий зміст розмови...';
+
+  @override
+  String get notificationScopes => 'Області сповіщень';
+
+  @override
+  String get appPrivacyAndTerms => 'Конфіденційність і умови додатка';
+
+  @override
+  String get makeMyAppPublic => 'Зробити мій додаток публічним';
+
+  @override
+  String get submitAppTermsAgreement =>
+      'Надсилаючи цей додаток, я приймаю Умови використання та Політику конфіденційності Omi AI';
+
+  @override
+  String get submitApp => 'Надіслати додаток';
+
+  @override
+  String get needHelpGettingStarted => 'Потрібна допомога для початку роботи?';
+
+  @override
+  String get clickHereForAppBuildingGuides => 'Натисніть тут для посібників зі створення додатків та документації';
+
+  @override
+  String get submitAppQuestion => 'Надіслати додаток?';
+
+  @override
+  String get submitAppPublicDescription =>
+      'Ваш додаток буде розглянуто і опубліковано. Ви можете почати використовувати його негайно, навіть під час розгляду!';
+
+  @override
+  String get submitAppPrivateDescription =>
+      'Ваш додаток буде розглянуто і стане доступним для вас приватно. Ви можете почати використовувати його негайно, навіть під час розгляду!';
+
+  @override
+  String get startEarning => 'Почніть заробляти! 💰';
+
+  @override
+  String get connectStripeOrPayPal => 'Підключіть Stripe або PayPal, щоб отримувати платежі за ваш додаток.';
+
+  @override
+  String get connectNow => 'Підключити зараз';
 }

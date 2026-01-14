@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class DesktopConversationSearch extends StatefulWidget {
@@ -93,7 +94,7 @@ class _DesktopConversationSearchState extends State<DesktopConversationSearch> w
             height: 1.4,
           ),
           decoration: InputDecoration(
-            hintText: 'Search conversations...',
+            hintText: context.l10n.searchConversations,
             hintStyle: TextStyle(
               fontSize: responsive.responsiveFontSize(baseFontSize: 16),
               color: ResponsiveHelper.textQuaternary,

@@ -101,7 +101,7 @@
   "@errorProcessingConversation": {
     "description": "Error message for conversation processing failure"
   },
-  "noInternetConnection": "يرجى التحقق من اتصالك بالإنترنت والمحاولة مرة أخرى.",
+  "noInternetConnection": "لا يوجد اتصال بالإنترنت",
   "@noInternetConnection": {
     "description": "Message shown when there's no internet"
   },
@@ -121,7 +121,7 @@
   "@errorCopied": {
     "description": "Snackbar message after copying error"
   },
-  "remaining": "المتبقي",
+  "remaining": "متبقي",
   "@remaining": {
     "description": "Label for remaining time/items"
   },
@@ -221,7 +221,7 @@
   "@disconnected": {
     "description": "Device disconnected status"
   },
-  "searching": "جاري البحث",
+  "searching": "جارٍ البحث...",
   "@searching": {
     "description": "Searching for device status"
   },
@@ -289,7 +289,7 @@
   "@syncingBackground": {
     "description": "Message during background sync"
   },
-  "noConversationsYet": "لا توجد محادثات بعد.",
+  "noConversationsYet": "لا توجد محادثات بعد",
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
@@ -301,7 +301,7 @@
   "@starConversationHint": {
     "description": "Hint explaining how to star conversations"
   },
-  "searchConversations": "بحث في المحادثات",
+  "searchConversations": "البحث في المحادثات...",
   "@searchConversations": {
     "description": "Search field placeholder"
   },
@@ -411,7 +411,7 @@
   "@buildAndShareApp": {
     "description": "Create app button subtitle"
   },
-  "searchApps": "بحث في أكثر من 1500 تطبيق",
+  "searchApps": "البحث عن التطبيقات...",
   "@searchApps": {
     "description": "Apps search placeholder"
   },
@@ -827,7 +827,7 @@
   "@developerSettingsTitle": {
     "description": "Developer settings page title"
   },
-  "saving": "جاري الحفظ...",
+  "saving": "جارٍ الحفظ...",
   "@saving": {
     "description": "Saving state text"
   },
@@ -839,7 +839,7 @@
   "@beta": {
     "description": "Beta tag"
   },
-  "transcription": "النسخ الصوتي",
+  "transcription": "النسخ",
   "@transcription": {
     "description": "Transcription settings title"
   },
@@ -847,7 +847,7 @@
   "@transcriptionConfig": {
     "description": "Transcription configuration subtitle"
   },
-  "conversationTimeout": "انتهاء مهلة المحادثة",
+  "conversationTimeout": "مهلة المحادثة",
   "@conversationTimeout": {
     "description": "Conversation timeout settings title"
   },
@@ -867,7 +867,7 @@
   "@debugDiagnostics": {
     "description": "Debug & Diagnostics section header"
   },
-  "endpointUrl": "رابط نقطة النهاية",
+  "endpointUrl": "عنوان URL للنقطة النهائية",
   "@endpointUrl": {
     "description": "Endpoint URL label"
   },
@@ -1085,8 +1085,8 @@
   "exportDataDesc": "تصدير المحادثات إلى ملف JSON",
   "exportedConversations": "المحادثات المصدرة من Omi",
   "exportShared": "تمت مشاركة التصدير",
-  "deleteKnowledgeGraphTitle": "حذف رسم المعرفة؟",
-  "deleteKnowledgeGraphMessage": "سيؤدي هذا إلى حذف جميع بيانات رسم المعرفة المشتقة (العقد والاتصالات). ستبقى ذكرياتك الأصلية آمنة. سيتم إعادة بناء الرسم بمرور الوقت أو عند الطلب التالي.",
+  "deleteKnowledgeGraphTitle": "حذف الرسم البياني للمعرفة؟",
+  "deleteKnowledgeGraphMessage": "سيؤدي هذا إلى حذف جميع بيانات الرسم البياني للمعرفة المشتقة (العقد والاتصالات). ستبقى ذكرياتك الأصلية آمنة. سيتم إعادة بناء الرسم البياني بمرور الوقت أو عند الطلب التالي.",
   "knowledgeGraphDeleted": "تم حذف رسم المعرفة بنجاح",
   "deleteGraphFailed": "فشل حذف الرسم: {error}",
   "@deleteGraphFailed": {
@@ -1097,28 +1097,28 @@
       }
     }
   },
-  "deleteKnowledgeGraph": "حذف رسم المعرفة",
+  "deleteKnowledgeGraph": "حذف الرسم البياني للمعرفة",
   "deleteKnowledgeGraphDesc": "مسح جميع العقد والاتصالات",
   "mcp": "MCP",
   "mcpServer": "خادم MCP",
   "mcpServerDesc": "ربط مساعدي الذكاء الاصطناعي ببياناتك",
-  "serverUrl": "رابط الخادم",
-  "urlCopied": "تم نسخ الرابط",
+  "serverUrl": "عنوان URL للخادم",
+  "urlCopied": "تم نسخ عنوان URL",
   "apiKeyAuth": "مصادقة مفتاح API",
-  "header": "الترويسة",
+  "header": "الرأس",
   "authorizationBearer": "Authorization: Bearer <key>",
   "oauth": "OAuth",
   "clientId": "معرف العميل",
   "clientSecret": "سر العميل",
   "useMcpApiKey": "استخدم مفتاح MCP API الخاص بك",
-  "webhooks": "Webhooks",
+  "webhooks": "خطافات الويب",
   "conversationEvents": "أحداث المحادثة",
   "newConversationCreated": "تم إنشاء محادثة جديدة",
   "realtimeTranscript": "نص مباشر",
-  "transcriptReceived": "تم استلام النص",
+  "transcriptReceived": "تم استلام النسخ",
   "audioBytes": "بايتات الصوت",
   "audioDataReceived": "تم استلام بيانات الصوت",
-  "intervalSeconds": "الفاصل الزمني (بالثواني)",
+  "intervalSeconds": "الفاصل الزمني (ثوان)",
   "daySummary": "ملخص اليوم",
   "summaryGenerated": "تم إنشاء الملخص",
   "claudeDesktop": "Claude Desktop",
@@ -1572,7 +1572,7 @@
   "highAccuracy": "دقة عالية",
   "privacyFirst": "الخصوصية أولاً",
   "saveChanges": "حفظ التغييرات",
-  "resetToDefault": "إعادة التعيين إلى الافتراضي",
+  "resetToDefault": "إعادة تعيين إلى الافتراضي",
   "viewTemplate": "عرض النموذج",
   "trySomethingLike": "جرب شيئاً مثل...",
   "tryIt": "جربه",
@@ -1633,7 +1633,7 @@
       }
     }
   },
-  "dontShowAgain": "لا تظهر مرة أخرى",
+  "dontShowAgain": "لا تظهر هذا مرة أخرى",
   "@dontShowAgain": {
     "description": "Checkbox text to suppress future connection confirmations"
   },
@@ -1724,7 +1724,7 @@
   "@rateOnGooglePlay": {
     "description": "Button text to rate on Google Play Store"
   },
-  "maybeLater": "ربما لاحقاً",
+  "maybeLater": "ربما لاحقًا",
   "@maybeLater": {
     "description": "Button text to dismiss the review prompt"
   },
@@ -1986,11 +1986,11 @@
   "@actionItemCompleted": {
     "description": "Snackbar message when item completed"
   },
-  "deleteActionItemTitle": "حذف المهمة",
+  "deleteActionItemTitle": "حذف عنصر الإجراء",
   "@deleteActionItemTitle": {
     "description": "Title for delete item dialog"
   },
-  "deleteActionItemMessage": "هل أنت متأكد من رغبتك في حذف هذه المهمة؟",
+  "deleteActionItemMessage": "هل أنت متأكد أنك تريد حذف عنصر الإجراء هذا؟",
   "@deleteActionItemMessage": {
     "description": "Confirmation message for deleting single item"
   },
@@ -2215,11 +2215,11 @@
   "@retry": {
     "description": "Button label"
   },
-  "createActionItem": "إنشاء مهمة",
+  "createActionItem": "إنشاء عنصر إجراء",
   "@createActionItem": {
     "description": "Sheet title"
   },
-  "editActionItem": "تعديل المهمة",
+  "editActionItem": "تعديل عنصر الإجراء",
   "@editActionItem": {
     "description": "Sheet title"
   },
@@ -2235,7 +2235,7 @@
   "@actionItemUpdated": {
     "description": "Snackbar"
   },
-  "failedToUpdateActionItem": "فشل تحديث المهمة",
+  "failedToUpdateActionItem": "فشل تحديث عنصر الإجراء",
   "@failedToUpdateActionItem": {
     "description": "Snackbar"
   },
@@ -2243,7 +2243,7 @@
   "@actionItemCreated": {
     "description": "Snackbar"
   },
-  "failedToCreateActionItem": "فشل إنشاء المهمة",
+  "failedToCreateActionItem": "فشل إنشاء عنصر الإجراء",
   "@failedToCreateActionItem": {
     "description": "Snackbar"
   },
@@ -2287,15 +2287,15 @@
   "@completed": {
     "description": "Status label"
   },
-  "markComplete": "وضع علامة كمكتمل",
+  "markComplete": "تعيين كمكتمل",
   "@markComplete": {
     "description": "Action label"
   },
-  "actionItemDeleted": "تم حذف المهمة",
+  "actionItemDeleted": "تم حذف عنصر الإجراء",
   "@actionItemDeleted": {
     "description": "Snackbar"
   },
-  "failedToDeleteActionItem": "فشل حذف المهمة",
+  "failedToDeleteActionItem": "فشل حذف عنصر الإجراء",
   "@failedToDeleteActionItem": {
     "description": "Snackbar"
   },
@@ -2313,5 +2313,243 @@
   },
   "appInterfaceSectionTitle": "واجهة التطبيق",
   "speechTranscriptionSectionTitle": "الكلام والنسخ",
-  "languageSettingsHelperText": "لغة التطبيق تغير القوائم والأزرار. لغة الكلام تؤثر على كيفية نسخ تسجيلاتك."
+  "languageSettingsHelperText": "لغة التطبيق تغير القوائم والأزرار. لغة الكلام تؤثر على كيفية نسخ تسجيلاتك.",
+  "translationNotice": "إشعار الترجمة",
+  "translationNoticeMessage": "يترجم Omi المحادثات إلى لغتك الأساسية. يمكنك تحديثها في أي وقت في الإعدادات → الملفات الشخصية.",
+  "pleaseCheckInternetConnection": "يرجى التحقق من اتصالك بالإنترنت والمحاولة مرة أخرى",
+  "pleaseSelectReason": "يرجى اختيار سبب",
+  "tellUsMoreWhatWentWrong": "أخبرنا المزيد عما حدث خطأ...",
+  "selectText": "اختر النص",
+  "maximumGoalsAllowed": "الحد الأقصى {count} أهداف مسموح به",
+  "conversationCannotBeMerged": "لا يمكن دمج هذه المحادثة (مقفلة أو قيد الدمج بالفعل)",
+  "pleaseEnterFolderName": "يرجى إدخال اسم المجلد",
+  "failedToCreateFolder": "فشل إنشاء المجلد",
+  "failedToUpdateFolder": "فشل تحديث المجلد",
+  "folderName": "اسم المجلد",
+  "descriptionOptional": "الوصف (اختياري)",
+  "failedToDeleteFolder": "فشل حذف المجلد",
+  "editFolder": "تحرير المجلد",
+  "deleteFolder": "حذف المجلد",
+  "transcriptCopiedToClipboard": "تم نسخ النص إلى الحافظة",
+  "summaryCopiedToClipboard": "تم نسخ الملخص إلى الحافظة",
+  "conversationUrlCouldNotBeShared": "تعذرت مشاركة رابط المحادثة.",
+  "urlCopiedToClipboard": "تم نسخ الرابط إلى الحافظة",
+  "exportTranscript": "تصدير النص",
+  "exportSummary": "تصدير الملخص",
+  "exportButton": "تصدير",
+  "actionItemsCopiedToClipboard": "تم نسخ عناصر الإجراء إلى الحافظة",
+  "summarize": "تلخيص",
+  "generateSummary": "إنشاء ملخص",
+  "conversationNotFoundOrDeleted": "المحادثة غير موجودة أو تم حذفها",
+  "deleteMemory": "حذف الذكرى؟",
+  "thisActionCannotBeUndone": "لا يمكن التراجع عن هذا الإجراء.",
+  "memoriesCount": "{count} ذكريات",
+  "noMemoriesInCategory": "لا توجد ذكريات في هذه الفئة بعد",
+  "addYourFirstMemory": "أضف ذكرتك الأولى",
+  "firmwareDisconnectUsb": "افصل USB",
+  "firmwareUsbWarning": "قد يؤدي توصيل USB أثناء التحديثات إلى إتلاف جهازك.",
+  "firmwareBatteryAbove15": "البطارية أعلى من 15%",
+  "firmwareEnsureBattery": "تأكد من أن جهازك لديه 15% من البطارية.",
+  "firmwareStableConnection": "اتصال مستقر",
+  "firmwareConnectWifi": "اتصل بشبكة WiFi أو شبكة خلوية.",
+  "failedToStartUpdate": "فشل بدء التحديث: {error}",
+  "beforeUpdateMakeSure": "قبل التحديث، تأكد من:",
+  "confirmed": "تم التأكيد!",
+  "release": "حرر",
+  "slideToUpdate": "اسحب للتحديث",
+  "copiedToClipboard": "تم نسخ {title} إلى الحافظة",
+  "batteryLevel": "مستوى البطارية",
+  "productUpdate": "تحديث المنتج",
+  "offline": "غير متصل",
+  "available": "متاح",
+  "unpairDeviceDialogTitle": "إلغاء إقران الجهاز",
+  "unpairDeviceDialogMessage": "سيؤدي هذا إلى إلغاء إقران الجهاز حتى يمكن توصيله بهاتف آخر. ستحتاج إلى الانتقال إلى الإعدادات > البلوتوث ونسيان الجهاز لإكمال العملية.",
+  "unpair": "إلغاء الإقران",
+  "unpairAndForgetDevice": "إلغاء الإقران ونسيان الجهاز",
+  "unknownDevice": "جهاز غير معروف",
+  "unknown": "غير معروف",
+  "productName": "اسم المنتج",
+  "serialNumber": "الرقم التسلسلي",
+  "connected": "متصل",
+  "privacyPolicyTitle": "سياسة الخصوصية",
+  "omiSttProvider": "Omi",
+  "labelCopied": "تم نسخ {label}",
+  "noApiKeysYet": "لا توجد مفاتيح API بعد",
+  "createKeyToGetStarted": "أنشئ مفتاحًا للبدء",
+  "persona": "الشخصية",
+  "configureYourAiPersona": "قم بتكوين شخصيتك الذكية",
+  "configureSttProvider": "تكوين موفر STT",
+  "setWhenConversationsAutoEnd": "حدد متى تنتهي المحادثات تلقائيًا",
+  "importDataFromOtherSources": "استيراد البيانات من مصادر أخرى",
+  "debugAndDiagnostics": "التصحيح والتشخيص",
+  "autoDeletesAfter3Days": "يتم الحذف التلقائي بعد 3 أيام.",
+  "helpsDiagnoseIssues": "يساعد في تشخيص المشكلات",
+  "exportStartedMessage": "بدأ التصدير. قد يستغرق هذا بضع ثوانٍ...",
+  "exportConversationsToJson": "تصدير المحادثات إلى ملف JSON",
+  "knowledgeGraphDeletedSuccess": "تم حذف الرسم البياني للمعرفة بنجاح",
+  "failedToDeleteGraph": "فشل حذف الرسم البياني: {error}",
+  "clearAllNodesAndConnections": "مسح جميع العقد والاتصالات",
+  "addToClaudeDesktopConfig": "إضافة إلى claude_desktop_config.json",
+  "connectAiAssistantsToData": "ربط مساعدي الذكاء الاصطناعي ببياناتك",
+  "useYourMcpApiKey": "استخدم مفتاح MCP API الخاص بك",
+  "realTimeTranscript": "نسخ في الوقت الفعلي",
+  "experimental": "تجريبي",
+  "transcriptionDiagnostics": "تشخيصات النسخ",
+  "detailedDiagnosticMessages": "رسائل تشخيصية مفصلة",
+  "autoCreateSpeakers": "إنشاء المتحدثين تلقائيًا",
+  "autoCreateWhenNameDetected": "إنشاء تلقائي عند اكتشاف الاسم",
+  "followUpQuestions": "أسئلة المتابعة",
+  "suggestQuestionsAfterConversations": "اقتراح الأسئلة بعد المحادثات",
+  "goalTracker": "متتبع الأهداف",
+  "trackPersonalGoalsOnHomepage": "تتبع أهدافك الشخصية على الصفحة الرئيسية",
+  "dailyReflection": "التفكير اليومي",
+  "get9PmReminderToReflect": "احصل على تذكير في الساعة 9 مساءً للتفكير في يومك",
+  "actionItemDescriptionCannotBeEmpty": "لا يمكن أن يكون وصف عنصر الإجراء فارغًا",
+  "saved": "تم الحفظ",
+  "overdue": "متأخر",
+  "markIncomplete": "تعيين كغير مكتمل",
+  "editDueDate": "تعديل تاريخ الاستحقاق",
+  "setDueDate": "تعيين تاريخ الاستحقاق",
+  "clearDueDate": "مسح تاريخ الاستحقاق",
+  "mondayAbbr": "الإثنين",
+  "tuesdayAbbr": "الثلاثاء",
+  "wednesdayAbbr": "الأربعاء",
+  "thursdayAbbr": "الخميس",
+  "fridayAbbr": "الجمعة",
+  "saturdayAbbr": "السبت",
+  "sundayAbbr": "الأحد",
+  "failedToUpdateDueDate": "فشل تحديث تاريخ الاستحقاق",
+  "failedToClearDueDate": "فشل مسح تاريخ الاستحقاق",
+  "howDoesItWork": "كيف يعمل؟",
+  "sdCardSyncDescription": "ستقوم مزامنة بطاقة SD باستيراد ذكرياتك من بطاقة SD إلى التطبيق",
+  "checksForAudioFiles": "يتحقق من ملفات الصوت على بطاقة SD",
+  "omiSyncsAudioFiles": "يقوم Omi بعد ذلك بمزامنة ملفات الصوت مع الخادم",
+  "serverProcessesAudio": "يقوم الخادم بمعالجة ملفات الصوت وإنشاء الذكريات",
+  "youreAllSet": "أنت جاهز تمامًا!",
+  "welcomeToOmiDescription": "مرحبًا بك في Omi! رفيقك الذكي جاهز لمساعدتك في المحادثات والمهام والمزيد.",
+  "startUsingOmi": "ابدأ استخدام Omi",
+  "back": "رجوع",
+  "keyboardShortcuts": "اختصارات لوحة المفاتيح",
+  "toggleControlBar": "تبديل شريط التحكم",
+  "pressKeys": "اضغط على المفاتيح...",
+  "cmdRequired": "⌘ مطلوب",
+  "invalidKey": "مفتاح غير صالح",
+  "space": "مسافة",
+  "search": "بحث",
+  "searchPlaceholder": "بحث...",
+  "untitledConversation": "محادثة بدون عنوان",
+  "countRemaining": "{count} متبقي",
+  "addGoal": "إضافة هدف",
+  "editGoal": "تعديل الهدف",
+  "icon": "أيقونة",
+  "goalTitle": "عنوان الهدف",
+  "current": "الحالي",
+  "target": "الهدف",
+  "saveGoal": "حفظ",
+  "goals": "الأهداف",
+  "tapToAddGoal": "اضغط لإضافة هدف",
+  "welcomeBack": "مرحبا بعودتك",
+  "yourConversations": "محادثاتك",
+  "reviewAndManageConversations": "راجع وأدر محادثاتك المسجلة",
+  "startCapturingConversations": "ابدأ في التقاط المحادثات باستخدام جهاز Omi الخاص بك لرؤيتها هنا.",
+  "useMobileAppToCapture": "استخدم تطبيق الهاتف المحمول لالتقاط الصوت",
+  "conversationsProcessedAutomatically": "تتم معالجة المحادثات تلقائيًا",
+  "getInsightsInstantly": "احصل على الرؤى والملخصات على الفور",
+  "showAll": "عرض الكل ←",
+  "noTasksForToday": "لا توجد مهام لليوم.\\nاسأل Omi عن المزيد من المهام أو أنشئها يدويًا.",
+  "dailyScore": "الدرجة اليومية",
+  "dailyScoreDescription": "درجة لمساعدتك على التركيز بشكل أفضل على التنفيذ.",
+  "searchResults": "نتائج البحث",
+  "actionItems": "عناصر العمل",
+  "tasksToday": "اليوم",
+  "tasksTomorrow": "غداً",
+  "tasksNoDeadline": "بدون موعد نهائي",
+  "tasksLater": "لاحقاً",
+  "loadingTasks": "جاري تحميل المهام...",
+  "tasks": "المهام",
+  "swipeTasksToIndent": "اسحب المهام للمسافة البادئة، اسحب بين الفئات",
+  "create": "إنشاء",
+  "noTasksYet": "لا توجد مهام بعد",
+  "tasksFromConversationsWillAppear": "ستظهر المهام من محادثاتك هنا.\nانقر على إنشاء لإضافة واحدة يدوياً.",
+  "monthJan": "يناير",
+  "monthFeb": "فبراير",
+  "monthMar": "مارس",
+  "monthApr": "أبريل",
+  "monthMay": "مايو",
+  "monthJun": "يونيو",
+  "monthJul": "يوليو",
+  "monthAug": "أغسطس",
+  "monthSep": "سبتمبر",
+  "monthOct": "أكتوبر",
+  "monthNov": "نوفمبر",
+  "monthDec": "ديسمبر",
+  "timePM": "م",
+  "timeAM": "ص",
+  "actionItemUpdatedSuccessfully": "تم تحديث عنصر الإجراء بنجاح",
+  "actionItemCreatedSuccessfully": "تم إنشاء عنصر الإجراء بنجاح",
+  "actionItemDeletedSuccessfully": "تم حذف عنصر الإجراء بنجاح",
+  "deleteActionItem": "حذف عنصر الإجراء",
+  "deleteActionItemConfirmation": "هل أنت متأكد من حذف عنصر الإجراء هذا؟ لا يمكن التراجع عن هذا الإجراء.",
+  "enterActionItemDescription": "أدخل وصف عنصر الإجراء...",
+  "markAsCompleted": "تحديد كمكتمل",
+  "setDueDateAndTime": "تعيين تاريخ ووقت الاستحقاق",
+  "reloadingApps": "إعادة تحميل التطبيقات...",
+  "loadingApps": "تحميل التطبيقات...",
+  "browseInstallCreateApps": "تصفح وتثبيت وإنشاء التطبيقات",
+  "all": "الكل",
+  "open": "فتح",
+  "install": "تثبيت",
+  "noAppsAvailable": "لا توجد تطبيقات متاحة",
+  "unableToLoadApps": "تعذر تحميل التطبيقات",
+  "tryAdjustingSearchTermsOrFilters": "حاول تعديل مصطلحات البحث أو الفلاتر",
+  "checkBackLaterForNewApps": "تحقق لاحقاً من التطبيقات الجديدة",
+  "pleaseCheckInternetConnectionAndTryAgain": "يرجى التحقق من اتصالك بالإنترنت والمحاولة مرة أخرى",
+  "createNewApp": "إنشاء تطبيق جديد",
+  "buildSubmitCustomOmiApp": "قم ببناء وإرسال تطبيق Omi المخصص الخاص بك",
+  "submittingYourApp": "جارٍ إرسال تطبيقك...",
+  "preparingFormForYou": "جارٍ تحضير النموذج لك...",
+  "appDetails": "تفاصيل التطبيق",
+  "paymentDetails": "تفاصيل الدفع",
+  "previewAndScreenshots": "المعاينة ولقطات الشاشة",
+  "appCapabilities": "قدرات التطبيق",
+  "aiPrompts": "مطالبات الذكاء الاصطناعي",
+  "chatPrompt": "مطالبة الدردشة",
+  "chatPromptPlaceholder": "أنت تطبيق رائع، مهمتك هي الرد على استفسارات المستخدم وجعلهم يشعرون بالرضا...",
+  "conversationPrompt": "مطالبة المحادثة",
+  "conversationPromptPlaceholder": "أنت تطبيق رائع، سيتم إعطاؤك نص ملخص المحادثة...",
+  "notificationScopes": "نطاقات الإشعارات",
+  "appPrivacyAndTerms": "خصوصية التطبيق والشروط",
+  "makeMyAppPublic": "اجعل تطبيقي عامًا",
+  "submitAppTermsAgreement": "بإرسال هذا التطبيق، أوافق على شروط الخدمة وسياسة الخصوصية لـ Omi AI",
+  "submitApp": "إرسال التطبيق",
+  "needHelpGettingStarted": "هل تحتاج إلى مساعدة للبدء؟",
+  "clickHereForAppBuildingGuides": "انقر هنا للحصول على أدلة بناء التطبيقات والتوثيق",
+  "submitAppQuestion": "إرسال التطبيق؟",
+  "submitAppPublicDescription": "سيتم مراجعة تطبيقك ونشره للعامة. يمكنك البدء في استخدامه فورًا، حتى أثناء المراجعة!",
+  "submitAppPrivateDescription": "سيتم مراجعة تطبيقك وإتاحته لك بشكل خاص. يمكنك البدء في استخدامه فورًا، حتى أثناء المراجعة!",
+  "startEarning": "ابدأ الكسب! 💰",
+  "connectStripeOrPayPal": "اربط Stripe أو PayPal لاستلام المدفوعات لتطبيقك.",
+  "connectNow": "الاتصال الآن",
+  "installsCount": "{count}+ عملية تثبيت",
+  "uninstallApp": "إلغاء تثبيت التطبيق",
+  "subscribe": "اشترك",
+  "dataAccessNotice": "إشعار الوصول إلى البيانات",
+  "dataAccessWarning": "سيصل هذا التطبيق إلى بياناتك. Omi AI غير مسؤول عن كيفية استخدام بياناتك أو تعديلها أو حذفها بواسطة هذا التطبيق",
+  "installApp": "تثبيت التطبيق",
+  "betaTesterNotice": "أنت مختبر تجريبي لهذا التطبيق. إنه غير عام حتى الآن. سيكون عامًا بمجرد الموافقة عليه.",
+  "appUnderReviewOwner": "تطبيقك قيد المراجعة ومرئي لك فقط. سيكون عامًا بمجرد الموافقة عليه.",
+  "appRejectedNotice": "تم رفض تطبيقك. يرجى تحديث تفاصيل التطبيق وإعادة تقديمه للمراجعة.",
+  "setupSteps": "خطوات الإعداد",
+  "setupInstructions": "تعليمات الإعداد",
+  "integrationInstructions": "تعليمات التكامل",
+  "preview": "معاينة",
+  "aboutTheApp": "حول التطبيق",
+  "aboutThePersona": "حول الشخصية",
+  "chatPersonality": "شخصية الدردشة",
+  "ratingsAndReviews": "التقييمات والمراجعات",
+  "noRatings": "لا توجد تقييمات",
+  "ratingsCount": "{count}+ تقييم",
+  "errorActivatingApp": "خطأ في تفعيل التطبيق",
+  "integrationSetupRequired": "إذا كان هذا تطبيق تكامل، تأكد من اكتمال الإعداد.",
+  "installed": "مثبّت"
 }

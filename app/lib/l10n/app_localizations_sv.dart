@@ -37,7 +37,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get ok => 'Ok';
 
   @override
-  String get delete => 'Ta bort';
+  String get delete => 'Radera';
 
   @override
   String get add => 'Lägg till';
@@ -85,7 +85,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get errorProcessingConversation => 'Fel vid bearbetning av konversation. Försök igen senare.';
 
   @override
-  String get noInternetConnection => 'Kontrollera din internetanslutning och försök igen.';
+  String get noInternetConnection => 'Ingen internetanslutning';
 
   @override
   String get unableToDeleteConversation => 'Kan inte ta bort konversation';
@@ -100,7 +100,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get errorCopied => 'Felmeddelande kopierat till urklipp';
 
   @override
-  String get remaining => 'Återstående';
+  String get remaining => 'Återstår';
 
   @override
   String get loading => 'Läser in...';
@@ -171,7 +171,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get disconnected => 'Frånkopplad';
 
   @override
-  String get searching => 'Söker';
+  String get searching => 'Söker...';
 
   @override
   String get connectDevice => 'Anslut enhet';
@@ -222,7 +222,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get syncingBackground => 'Vi fortsätter synkronisera dina inspelningar i bakgrunden.';
 
   @override
-  String get noConversationsYet => 'Inga konversationer ännu.';
+  String get noConversationsYet => 'Inga konversationer än';
 
   @override
   String get noStarredConversations => 'Inga stjärnmärkta konversationer ännu.';
@@ -232,7 +232,7 @@ class AppLocalizationsSv extends AppLocalizations {
       'För att stjärnmärka en konversation, öppna den och tryck på stjärnikonen i sidhuvudet.';
 
   @override
-  String get searchConversations => 'Sök konversationer';
+  String get searchConversations => 'Sök konversationer...';
 
   @override
   String selectedCount(int count, Object s) {
@@ -311,13 +311,13 @@ class AppLocalizationsSv extends AppLocalizations {
   String get buildAndShareApp => 'Bygg och dela din anpassade app';
 
   @override
-  String get searchApps => 'Sök bland 1500+ appar';
+  String get searchApps => 'Sök appar...';
 
   @override
-  String get myApps => 'Mina appar';
+  String get myApps => 'Mina Appar';
 
   @override
-  String get installedApps => 'Installerade appar';
+  String get installedApps => 'Installerade Appar';
 
   @override
   String get unableToFetchApps => 'Kunde inte hämta appar :(\n\nKontrollera din internetanslutning och försök igen.';
@@ -489,7 +489,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get firmware => 'Firmware';
 
   @override
-  String get sdCardSync => 'SD-kortssynkronisering';
+  String get sdCardSync => 'SD-kort synkronisering';
 
   @override
   String get hardwareRevision => 'Hårdvarurevision';
@@ -532,7 +532,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get deviceUnpairedMessage =>
-      'Enhet bortkopplad. Gå till Inställningar > Bluetooth och glöm enheten för att slutföra.';
+      'Enhet bortkopplad. Gå till Inställningar > Bluetooth och glöm enheten för att slutföra bortkopplingen.';
 
   @override
   String get unpairDialogTitle => 'Koppla bort enhet';
@@ -1377,7 +1377,7 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get yesterday => 'igår';
+  String get yesterday => 'Igår';
 
   @override
   String daysAgo(int count) {
@@ -1704,7 +1704,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get creating => 'Skapar...';
 
   @override
-  String get createApp => 'Skapa app';
+  String get createApp => 'Skapa App';
 
   @override
   String get searchingForDevices => 'Söker efter enheter...';
@@ -1993,10 +1993,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get actionItemCompleted => 'Åtgärd slutförd';
 
   @override
-  String get deleteActionItemTitle => 'Ta bort åtgärd';
+  String get deleteActionItemTitle => 'Ta bort åtgärdspost';
 
   @override
-  String get deleteActionItemMessage => 'Är du säker på att du vill ta bort denna åtgärd?';
+  String get deleteActionItemMessage => 'Är du säker på att du vill ta bort denna åtgärdspost?';
 
   @override
   String get deleteSelectedItemsTitle => 'Ta bort valda objekt';
@@ -2165,13 +2165,13 @@ class AppLocalizationsSv extends AppLocalizations {
   String get actionItemUpdated => 'Åtgärd uppdaterad';
 
   @override
-  String get failedToUpdateActionItem => 'Det gick inte att uppdatera åtgärd';
+  String get failedToUpdateActionItem => 'Misslyckades med att uppdatera åtgärd';
 
   @override
   String get actionItemCreated => 'Åtgärd skapad';
 
   @override
-  String get failedToCreateActionItem => 'Det gick inte att skapa åtgärd';
+  String get failedToCreateActionItem => 'Misslyckades med att skapa åtgärd';
 
   @override
   String get dueDate => 'Förfallodatum';
@@ -2207,10 +2207,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get markComplete => 'Markera som slutförd';
 
   @override
-  String get actionItemDeleted => 'Åtgärd borttagen';
+  String get actionItemDeleted => 'Åtgärdspost borttagen';
 
   @override
-  String get failedToDeleteActionItem => 'Det gick inte att ta bort åtgärd';
+  String get failedToDeleteActionItem => 'Misslyckades med att radera åtgärd';
 
   @override
   String get deleteActionItemConfirmTitle => 'Ta bort åtgärd';
@@ -2230,4 +2230,677 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String get languageSettingsHelperText =>
       'Appspråk ändrar menyer och knappar. Talspråk påverkar hur dina inspelningar transkriberas.';
+
+  @override
+  String get translationNotice => 'Översättningsmeddelande';
+
+  @override
+  String get translationNoticeMessage =>
+      'Omi översätter konversationer till ditt primära språk. Uppdatera det när som helst i Inställningar → Profiler.';
+
+  @override
+  String get pleaseCheckInternetConnection => 'Kontrollera din internetanslutning och försök igen';
+
+  @override
+  String get pleaseSelectReason => 'Vänligen välj en anledning';
+
+  @override
+  String get tellUsMoreWhatWentWrong => 'Berätta mer om vad som gick fel...';
+
+  @override
+  String get selectText => 'Välj text';
+
+  @override
+  String maximumGoalsAllowed(int count) {
+    return 'Maximalt $count mål tillåtna';
+  }
+
+  @override
+  String get conversationCannotBeMerged => 'Denna konversation kan inte slås samman (låst eller redan sammanfogas)';
+
+  @override
+  String get pleaseEnterFolderName => 'Ange ett mappnamn';
+
+  @override
+  String get failedToCreateFolder => 'Det gick inte att skapa mappen';
+
+  @override
+  String get failedToUpdateFolder => 'Det gick inte att uppdatera mappen';
+
+  @override
+  String get folderName => 'Mappnamn';
+
+  @override
+  String get descriptionOptional => 'Beskrivning (valfritt)';
+
+  @override
+  String get failedToDeleteFolder => 'Det gick inte att ta bort mappen';
+
+  @override
+  String get editFolder => 'Redigera mapp';
+
+  @override
+  String get deleteFolder => 'Ta bort mapp';
+
+  @override
+  String get transcriptCopiedToClipboard => 'Transkription kopierad till urklipp';
+
+  @override
+  String get summaryCopiedToClipboard => 'Sammanfattning kopierad till urklipp';
+
+  @override
+  String get conversationUrlCouldNotBeShared => 'Konversations-URL kunde inte delas.';
+
+  @override
+  String get urlCopiedToClipboard => 'URL kopierad till urklipp';
+
+  @override
+  String get exportTranscript => 'Exportera transkription';
+
+  @override
+  String get exportSummary => 'Exportera sammanfattning';
+
+  @override
+  String get exportButton => 'Exportera';
+
+  @override
+  String get actionItemsCopiedToClipboard => 'Åtgärdspunkter kopierade till urklipp';
+
+  @override
+  String get summarize => 'Sammanfatta';
+
+  @override
+  String get generateSummary => 'Generera sammanfattning';
+
+  @override
+  String get conversationNotFoundOrDeleted => 'Konversation hittades inte eller har raderats';
+
+  @override
+  String get deleteMemory => 'Ta bort minne?';
+
+  @override
+  String get thisActionCannotBeUndone => 'Denna åtgärd kan inte ångras.';
+
+  @override
+  String memoriesCount(int count) {
+    return '$count minnen';
+  }
+
+  @override
+  String get noMemoriesInCategory => 'Inga minnen i denna kategori ännu';
+
+  @override
+  String get addYourFirstMemory => 'Lägg till ditt första minne';
+
+  @override
+  String get firmwareDisconnectUsb => 'Koppla från USB';
+
+  @override
+  String get firmwareUsbWarning => 'USB-anslutning under uppdateringar kan skada din enhet.';
+
+  @override
+  String get firmwareBatteryAbove15 => 'Batteri över 15%';
+
+  @override
+  String get firmwareEnsureBattery => 'Se till att din enhet har 15% batteri.';
+
+  @override
+  String get firmwareStableConnection => 'Stabil anslutning';
+
+  @override
+  String get firmwareConnectWifi => 'Anslut till WiFi eller mobildata.';
+
+  @override
+  String failedToStartUpdate(String error) {
+    return 'Misslyckades med att starta uppdatering: $error';
+  }
+
+  @override
+  String get beforeUpdateMakeSure => 'Innan uppdatering, se till att:';
+
+  @override
+  String get confirmed => 'Bekräftad!';
+
+  @override
+  String get release => 'Släpp';
+
+  @override
+  String get slideToUpdate => 'Dra för att uppdatera';
+
+  @override
+  String copiedToClipboard(String title) {
+    return '$title kopierat till urklipp';
+  }
+
+  @override
+  String get batteryLevel => 'Batterinivå';
+
+  @override
+  String get productUpdate => 'Produktuppdatering';
+
+  @override
+  String get offline => 'Offline';
+
+  @override
+  String get available => 'Tillgänglig';
+
+  @override
+  String get unpairDeviceDialogTitle => 'Koppla bort enhet';
+
+  @override
+  String get unpairDeviceDialogMessage =>
+      'Detta kommer att koppla bort enheten så att den kan anslutas till en annan telefon. Du måste gå till Inställningar > Bluetooth och glömma enheten för att slutföra processen.';
+
+  @override
+  String get unpair => 'Koppla bort';
+
+  @override
+  String get unpairAndForgetDevice => 'Koppla bort och glöm enhet';
+
+  @override
+  String get unknownDevice => 'Okänd enhet';
+
+  @override
+  String get unknown => 'Okänd';
+
+  @override
+  String get productName => 'Produktnamn';
+
+  @override
+  String get serialNumber => 'Serienummer';
+
+  @override
+  String get connected => 'Ansluten';
+
+  @override
+  String get privacyPolicyTitle => 'Sekretesspolicy';
+
+  @override
+  String get omiSttProvider => 'Omi';
+
+  @override
+  String labelCopied(String label) {
+    return '$label copied';
+  }
+
+  @override
+  String get noApiKeysYet => 'No API keys yet';
+
+  @override
+  String get createKeyToGetStarted => 'Create a key to get started';
+
+  @override
+  String get persona => 'Persona';
+
+  @override
+  String get configureYourAiPersona => 'Configure your AI persona';
+
+  @override
+  String get configureSttProvider => 'Configure STT provider';
+
+  @override
+  String get setWhenConversationsAutoEnd => 'Set when conversations auto-end';
+
+  @override
+  String get importDataFromOtherSources => 'Import data from other sources';
+
+  @override
+  String get debugAndDiagnostics => 'Debug & Diagnostics';
+
+  @override
+  String get autoDeletesAfter3Days => 'Auto-deletes after 3 days.';
+
+  @override
+  String get helpsDiagnoseIssues => 'Helps diagnose issues';
+
+  @override
+  String get exportStartedMessage => 'Export started. This may take a few seconds...';
+
+  @override
+  String get exportConversationsToJson => 'Export conversations to a JSON file';
+
+  @override
+  String get knowledgeGraphDeletedSuccess => 'Knowledge Graph deleted successfully';
+
+  @override
+  String failedToDeleteGraph(String error) {
+    return 'Failed to delete graph: $error';
+  }
+
+  @override
+  String get clearAllNodesAndConnections => 'Clear all nodes and connections';
+
+  @override
+  String get addToClaudeDesktopConfig => 'Add to claude_desktop_config.json';
+
+  @override
+  String get connectAiAssistantsToData => 'Connect AI assistants to your data';
+
+  @override
+  String get useYourMcpApiKey => 'Use your MCP API key';
+
+  @override
+  String get realTimeTranscript => 'Real-time Transcript';
+
+  @override
+  String get experimental => 'Experimental';
+
+  @override
+  String get transcriptionDiagnostics => 'Transcription Diagnostics';
+
+  @override
+  String get detailedDiagnosticMessages => 'Detailed diagnostic messages';
+
+  @override
+  String get autoCreateSpeakers => 'Auto-create Speakers';
+
+  @override
+  String get autoCreateWhenNameDetected => 'Auto-create when name detected';
+
+  @override
+  String get followUpQuestions => 'Follow-up Questions';
+
+  @override
+  String get suggestQuestionsAfterConversations => 'Suggest questions after conversations';
+
+  @override
+  String get goalTracker => 'Goal Tracker';
+
+  @override
+  String get trackPersonalGoalsOnHomepage => 'Track your personal goals on homepage';
+
+  @override
+  String get dailyReflection => 'Daily Reflection';
+
+  @override
+  String get get9PmReminderToReflect => 'Get a 9 PM reminder to reflect on your day';
+
+  @override
+  String get actionItemDescriptionCannotBeEmpty => 'Åtgärdspostbeskrivning kan inte vara tom';
+
+  @override
+  String get saved => 'Sparad';
+
+  @override
+  String get overdue => 'Försenad';
+
+  @override
+  String get failedToUpdateDueDate => 'Det gick inte att uppdatera förfallodatumet';
+
+  @override
+  String get markIncomplete => 'Markera som ofullständig';
+
+  @override
+  String get editDueDate => 'Redigera förfallodatum';
+
+  @override
+  String get setDueDate => 'Ange förfallodatum';
+
+  @override
+  String get clearDueDate => 'Rensa förfallodatum';
+
+  @override
+  String get failedToClearDueDate => 'Det gick inte att rensa förfallodatumet';
+
+  @override
+  String get mondayAbbr => 'Mån';
+
+  @override
+  String get tuesdayAbbr => 'Tis';
+
+  @override
+  String get wednesdayAbbr => 'Ons';
+
+  @override
+  String get thursdayAbbr => 'Tor';
+
+  @override
+  String get fridayAbbr => 'Fre';
+
+  @override
+  String get saturdayAbbr => 'Lör';
+
+  @override
+  String get sundayAbbr => 'Sön';
+
+  @override
+  String get howDoesItWork => 'Hur fungerar det?';
+
+  @override
+  String get sdCardSyncDescription =>
+      'SD-kortssynkronisering kommer att importera dina minnen från SD-kortet till appen';
+
+  @override
+  String get checksForAudioFiles => 'Kontrollerar ljudfiler på SD-kortet';
+
+  @override
+  String get omiSyncsAudioFiles => 'Omi synkroniserar sedan ljudfilerna med servern';
+
+  @override
+  String get serverProcessesAudio => 'Servern bearbetar ljudfilerna och skapar minnen';
+
+  @override
+  String get youreAllSet => 'Du är redo!';
+
+  @override
+  String get welcomeToOmiDescription =>
+      'Välkommen till Omi! Din AI-följeslagare är redo att hjälpa dig med samtal, uppgifter och mer.';
+
+  @override
+  String get startUsingOmi => 'Börja använda Omi';
+
+  @override
+  String get back => 'Tillbaka';
+
+  @override
+  String get keyboardShortcuts => 'Tangentbordsgenvägar';
+
+  @override
+  String get toggleControlBar => 'Växla kontrollfält';
+
+  @override
+  String get pressKeys => 'Tryck på tangenter...';
+
+  @override
+  String get cmdRequired => '⌘ krävs';
+
+  @override
+  String get invalidKey => 'Ogiltig tangent';
+
+  @override
+  String get space => 'Mellanslag';
+
+  @override
+  String get search => 'Sök';
+
+  @override
+  String get searchPlaceholder => 'Sök...';
+
+  @override
+  String get untitledConversation => 'Namnlös konversation';
+
+  @override
+  String countRemaining(String count) {
+    return '$count återstår';
+  }
+
+  @override
+  String get addGoal => 'Lägg till mål';
+
+  @override
+  String get editGoal => 'Redigera mål';
+
+  @override
+  String get icon => 'Ikon';
+
+  @override
+  String get goalTitle => 'Måltitel';
+
+  @override
+  String get current => 'Nuvarande';
+
+  @override
+  String get target => 'Mål';
+
+  @override
+  String get saveGoal => 'Spara';
+
+  @override
+  String get goals => 'Mål';
+
+  @override
+  String get tapToAddGoal => 'Tryck för att lägga till ett mål';
+
+  @override
+  String get welcomeBack => 'Välkommen tillbaka';
+
+  @override
+  String get yourConversations => 'Dina konversationer';
+
+  @override
+  String get reviewAndManageConversations => 'Granska och hantera dina inspelade konversationer';
+
+  @override
+  String get startCapturingConversations => 'Börja fånga konversationer med din Omi-enhet för att se dem här.';
+
+  @override
+  String get useMobileAppToCapture => 'Använd din mobilapp för att spela in ljud';
+
+  @override
+  String get conversationsProcessedAutomatically => 'Konversationer bearbetas automatiskt';
+
+  @override
+  String get getInsightsInstantly => 'Få insikter och sammanfattningar omedelbart';
+
+  @override
+  String get showAll => 'Visa alla →';
+
+  @override
+  String get noTasksForToday => 'Inga uppgifter för idag.\\nFråga Omi om fler uppgifter eller skapa manuellt.';
+
+  @override
+  String get dailyScore => 'DAGLIG POÄNG';
+
+  @override
+  String get dailyScoreDescription => 'Ett poäng som hjälper dig att fokusera bättre på genomförande.';
+
+  @override
+  String get searchResults => 'Sökresultat';
+
+  @override
+  String get actionItems => 'Åtgärdspunkter';
+
+  @override
+  String get tasksToday => 'Idag';
+
+  @override
+  String get tasksTomorrow => 'Imorgon';
+
+  @override
+  String get tasksNoDeadline => 'Ingen deadline';
+
+  @override
+  String get tasksLater => 'Senare';
+
+  @override
+  String get loadingTasks => 'Laddar uppgifter...';
+
+  @override
+  String get tasks => 'Uppgifter';
+
+  @override
+  String get swipeTasksToIndent => 'Svep uppgifter för indentering, dra mellan kategorier';
+
+  @override
+  String get create => 'Skapa';
+
+  @override
+  String get noTasksYet => 'Inga uppgifter ännu';
+
+  @override
+  String get tasksFromConversationsWillAppear =>
+      'Uppgifter från dina konversationer visas här.\nKlicka på Skapa för att lägga till en manuellt.';
+
+  @override
+  String get monthJan => 'Jan';
+
+  @override
+  String get monthFeb => 'Feb';
+
+  @override
+  String get monthMar => 'Mar';
+
+  @override
+  String get monthApr => 'Apr';
+
+  @override
+  String get monthMay => 'Maj';
+
+  @override
+  String get monthJun => 'Jun';
+
+  @override
+  String get monthJul => 'Jul';
+
+  @override
+  String get monthAug => 'Aug';
+
+  @override
+  String get monthSep => 'Sep';
+
+  @override
+  String get monthOct => 'Okt';
+
+  @override
+  String get monthNov => 'Nov';
+
+  @override
+  String get monthDec => 'Dec';
+
+  @override
+  String get timePM => 'PM';
+
+  @override
+  String get timeAM => 'FM';
+
+  @override
+  String get actionItemUpdatedSuccessfully => 'Åtgärd uppdaterades framgångsrikt';
+
+  @override
+  String get actionItemCreatedSuccessfully => 'Åtgärd skapades framgångsrikt';
+
+  @override
+  String get actionItemDeletedSuccessfully => 'Åtgärd raderades framgångsrikt';
+
+  @override
+  String get deleteActionItem => 'Radera åtgärd';
+
+  @override
+  String get deleteActionItemConfirmation =>
+      'Är du säker på att du vill radera denna åtgärd? Denna handling kan inte ångras.';
+
+  @override
+  String get enterActionItemDescription => 'Ange beskrivning av åtgärd...';
+
+  @override
+  String get markAsCompleted => 'Markera som slutförd';
+
+  @override
+  String get setDueDateAndTime => 'Ange förfallodatum och tid';
+
+  @override
+  String get reloadingApps => 'Laddar om appar...';
+
+  @override
+  String get loadingApps => 'Laddar appar...';
+
+  @override
+  String get browseInstallCreateApps => 'Bläddra, installera och skapa appar';
+
+  @override
+  String get all => 'Alla';
+
+  @override
+  String get open => 'Öppna';
+
+  @override
+  String get install => 'Installera';
+
+  @override
+  String get noAppsAvailable => 'Inga appar tillgängliga';
+
+  @override
+  String get unableToLoadApps => 'Kunde inte ladda appar';
+
+  @override
+  String get tryAdjustingSearchTermsOrFilters => 'Försök justera dina söktermer eller filter';
+
+  @override
+  String get checkBackLaterForNewApps => 'Kom tillbaka senare för nya appar';
+
+  @override
+  String get pleaseCheckInternetConnectionAndTryAgain => 'Kontrollera din internetanslutning och försök igen';
+
+  @override
+  String get createNewApp => 'Skapa ny app';
+
+  @override
+  String get buildSubmitCustomOmiApp => 'Bygg och skicka in din anpassade Omi-app';
+
+  @override
+  String get submittingYourApp => 'Skickar in din app...';
+
+  @override
+  String get preparingFormForYou => 'Förbereder formuläret för dig...';
+
+  @override
+  String get appDetails => 'Appdetaljer';
+
+  @override
+  String get paymentDetails => 'Betalningsdetaljer';
+
+  @override
+  String get previewAndScreenshots => 'Förhandsvisning och skärmdumpar';
+
+  @override
+  String get appCapabilities => 'App-funktioner';
+
+  @override
+  String get aiPrompts => 'AI-uppmaningar';
+
+  @override
+  String get chatPrompt => 'Chattuppmaning';
+
+  @override
+  String get chatPromptPlaceholder =>
+      'Du är en fantastisk app, ditt jobb är att svara på användarfrågor och få dem att må bra...';
+
+  @override
+  String get conversationPrompt => 'Samtalsuppmaning';
+
+  @override
+  String get conversationPromptPlaceholder =>
+      'Du är en fantastisk app, du kommer att få en transkription och sammanfattning av ett samtal...';
+
+  @override
+  String get notificationScopes => 'Aviseringsomfång';
+
+  @override
+  String get appPrivacyAndTerms => 'App-integritet och -villkor';
+
+  @override
+  String get makeMyAppPublic => 'Gör min app offentlig';
+
+  @override
+  String get submitAppTermsAgreement =>
+      'Genom att skicka in denna app godkänner jag Omi AI:s användarvillkor och sekretesspolicy';
+
+  @override
+  String get submitApp => 'Skicka in app';
+
+  @override
+  String get needHelpGettingStarted => 'Behöver du hjälp att komma igång?';
+
+  @override
+  String get clickHereForAppBuildingGuides => 'Klicka här för appbyggguider och dokumentation';
+
+  @override
+  String get submitAppQuestion => 'Skicka in app?';
+
+  @override
+  String get submitAppPublicDescription =>
+      'Din app kommer att granskas och göras offentlig. Du kan börja använda den omedelbart, även under granskningen!';
+
+  @override
+  String get submitAppPrivateDescription =>
+      'Din app kommer att granskas och göras tillgänglig för dig privat. Du kan börja använda den omedelbart, även under granskningen!';
+
+  @override
+  String get startEarning => 'Börja tjäna! 💰';
+
+  @override
+  String get connectStripeOrPayPal => 'Anslut Stripe eller PayPal för att ta emot betalningar för din app.';
+
+  @override
+  String get connectNow => 'Anslut nu';
 }

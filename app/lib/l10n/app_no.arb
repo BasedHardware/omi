@@ -101,7 +101,7 @@
   "@errorProcessingConversation": {
     "description": "Error message for conversation processing failure"
   },
-  "noInternetConnection": "Sjekk internettforbindelsen din og prøv igjen.",
+  "noInternetConnection": "Ingen internettilkobling",
   "@noInternetConnection": {
     "description": "Message shown when there's no internet"
   },
@@ -221,7 +221,7 @@
   "@disconnected": {
     "description": "Device disconnected status"
   },
-  "searching": "Søker",
+  "searching": "Søker...",
   "@searching": {
     "description": "Searching for device status"
   },
@@ -289,7 +289,7 @@
   "@syncingBackground": {
     "description": "Message during background sync"
   },
-  "noConversationsYet": "Ingen samtaler ennå.",
+  "noConversationsYet": "Ingen samtaler ennå",
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
@@ -301,7 +301,7 @@
   "@starConversationHint": {
     "description": "Hint explaining how to star conversations"
   },
-  "searchConversations": "Søk i samtaler",
+  "searchConversations": "Søk i samtaler...",
   "@searchConversations": {
     "description": "Search field placeholder"
   },
@@ -411,15 +411,15 @@
   "@buildAndShareApp": {
     "description": "Create app button subtitle"
   },
-  "searchApps": "Søk i 1500+ apper",
+  "searchApps": "Søk apper...",
   "@searchApps": {
     "description": "Apps search placeholder"
   },
-  "myApps": "Mine apper",
+  "myApps": "Mine Apper",
   "@myApps": {
     "description": "My Apps filter button"
   },
-  "installedApps": "Installerte apper",
+  "installedApps": "Installerte Apper",
   "@installedApps": {
     "description": "Installed Apps filter button"
   },
@@ -639,7 +639,7 @@
   "@firmware": {
     "description": "Firmware label"
   },
-  "sdCardSync": "SD-kortsynkronisering",
+  "sdCardSync": "SD-kort synkronisering",
   "@sdCardSync": {
     "description": "SD Card sync label"
   },
@@ -679,11 +679,11 @@
   "@chargingIssues": {
     "description": "Charging issues help item"
   },
-  "disconnectDevice": "Koble fra enhet",
+  "disconnectDevice": "Koble fra enheten",
   "@disconnectDevice": {
     "description": "Disconnect device button"
   },
-  "unpairDevice": "Fjern paring av enhet",
+  "unpairDevice": "Opphev sammenkoblingen av enheten",
   "@unpairDevice": {
     "description": "Unpair device button"
   },
@@ -695,7 +695,7 @@
   "@deviceDisconnectedMessage": {
     "description": "Message shown when device is disconnected"
   },
-  "deviceUnpairedMessage": "Enhet fjernet fra paring. Gå til Innstillinger > Bluetooth og glem enheten for å fullføre fjerningen.",
+  "deviceUnpairedMessage": "Enhet frakoblet. Gå til Innstillinger > Bluetooth og glem enheten for å fullføre frakoblingen.",
   "@deviceUnpairedMessage": {
     "description": "Message shown when device is unpaired"
   },
@@ -1414,7 +1414,7 @@
       }
     }
   },
-  "yesterday": "i går",
+  "yesterday": "I går",
   "daysAgo": "{count} dager siden",
   "@daysAgo": {
     "placeholders": {
@@ -1605,7 +1605,7 @@
   "@creating": {
     "description": "Loading state text when app generation is in progress"
   },
-  "createApp": "Opprett app",
+  "createApp": "Opprett App",
   "@createApp": {
     "description": "Button text to initiate app creation"
   },
@@ -1986,11 +1986,11 @@
   "@actionItemCompleted": {
     "description": "Snackbar message when item completed"
   },
-  "deleteActionItemTitle": "Slette handlingspunkt",
+  "deleteActionItemTitle": "Slett handlingselement",
   "@deleteActionItemTitle": {
     "description": "Title for delete item dialog"
   },
-  "deleteActionItemMessage": "Er du sikker på at du vil slette dette handlingspunktet?",
+  "deleteActionItemMessage": "Er du sikker på at du vil slette dette handlingselementet?",
   "@deleteActionItemMessage": {
     "description": "Confirmation message for deleting single item"
   },
@@ -2215,11 +2215,11 @@
   "@retry": {
     "description": "Button label"
   },
-  "createActionItem": "Opprett handlingspunkt",
+  "createActionItem": "Opprett handlingselement",
   "@createActionItem": {
     "description": "Sheet title"
   },
-  "editActionItem": "Rediger handlingspunkt",
+  "editActionItem": "Rediger handlingselement",
   "@editActionItem": {
     "description": "Sheet title"
   },
@@ -2235,7 +2235,7 @@
   "@actionItemUpdated": {
     "description": "Snackbar"
   },
-  "failedToUpdateActionItem": "Kunne ikke oppdatere handlingspunkt",
+  "failedToUpdateActionItem": "Kunne ikke oppdatere handlingselement",
   "@failedToUpdateActionItem": {
     "description": "Snackbar"
   },
@@ -2243,7 +2243,7 @@
   "@actionItemCreated": {
     "description": "Snackbar"
   },
-  "failedToCreateActionItem": "Kunne ikke opprette handlingspunkt",
+  "failedToCreateActionItem": "Kunne ikke opprette handlingselement",
   "@failedToCreateActionItem": {
     "description": "Snackbar"
   },
@@ -2287,15 +2287,15 @@
   "@completed": {
     "description": "Status label"
   },
-  "markComplete": "Merk som fullført",
+  "markComplete": "Marker som fullført",
   "@markComplete": {
     "description": "Action label"
   },
-  "actionItemDeleted": "Handlingspunkt slettet",
+  "actionItemDeleted": "Handlingselement slettet",
   "@actionItemDeleted": {
     "description": "Snackbar"
   },
-  "failedToDeleteActionItem": "Kunne ikke slette handlingspunkt",
+  "failedToDeleteActionItem": "Kunne ikke slette handlingselement",
   "@failedToDeleteActionItem": {
     "description": "Snackbar"
   },
@@ -2313,5 +2313,211 @@
   },
   "appInterfaceSectionTitle": "APP-GRENSESNITT",
   "speechTranscriptionSectionTitle": "TALE OG TRANSKRIPSJON",
-  "languageSettingsHelperText": "App-språk endrer menyer og knapper. Talespråk påvirker hvordan opptakene dine transkriberes."
+  "languageSettingsHelperText": "App-språk endrer menyer og knapper. Talespråk påvirker hvordan opptakene dine transkriberes.",
+  "translationNotice": "Oversettelsesvarsel",
+  "translationNoticeMessage": "Omi oversetter samtaler til hovedspråket ditt. Oppdater det når som helst i Innstillinger → Profiler.",
+  "pleaseCheckInternetConnection": "Vennligst sjekk internettforbindelsen din og prøv igjen",
+  "pleaseSelectReason": "Vennligst velg en grunn",
+  "tellUsMoreWhatWentWrong": "Fortell oss mer om hva som gikk galt...",
+  "selectText": "Velg tekst",
+  "maximumGoalsAllowed": "Maksimum {count} mål tillatt",
+  "conversationCannotBeMerged": "Denne samtalen kan ikke slås sammen (låst eller allerede slås sammen)",
+  "pleaseEnterFolderName": "Vennligst skriv inn et mappenavn",
+  "failedToCreateFolder": "Kunne ikke opprette mappe",
+  "failedToUpdateFolder": "Kunne ikke oppdatere mappe",
+  "folderName": "Mappenavn",
+  "descriptionOptional": "Beskrivelse (valgfritt)",
+  "failedToDeleteFolder": "Kunne ikke slette mappe",
+  "editFolder": "Rediger mappe",
+  "deleteFolder": "Slett mappe",
+  "transcriptCopiedToClipboard": "Transkript kopiert til utklippstavlen",
+  "summaryCopiedToClipboard": "Sammendrag kopiert til utklippstavlen",
+  "conversationUrlCouldNotBeShared": "Samtale-URL kunne ikke deles.",
+  "urlCopiedToClipboard": "URL kopiert til utklippstavlen",
+  "exportTranscript": "Eksporter transkript",
+  "exportSummary": "Eksporter sammendrag",
+  "exportButton": "Eksporter",
+  "actionItemsCopiedToClipboard": "Handlingspunkter kopiert til utklippstavlen",
+  "summarize": "Oppsummer",
+  "generateSummary": "Generer sammendrag",
+  "conversationNotFoundOrDeleted": "Samtale ikke funnet eller har blitt slettet",
+  "deleteMemory": "Slette minne?",
+  "thisActionCannotBeUndone": "Denne handlingen kan ikke angres.",
+  "memoriesCount": "{count} minner",
+  "noMemoriesInCategory": "Ingen minner i denne kategorien ennå",
+  "addYourFirstMemory": "Legg til ditt første minne",
+  "firmwareDisconnectUsb": "Koble fra USB",
+  "firmwareUsbWarning": "USB-tilkobling under oppdateringer kan skade enheten din.",
+  "firmwareBatteryAbove15": "Batteri over 15%",
+  "firmwareEnsureBattery": "Sørg for at enheten din har 15% batteri.",
+  "firmwareStableConnection": "Stabil tilkobling",
+  "firmwareConnectWifi": "Koble til WiFi eller mobildata.",
+  "failedToStartUpdate": "Kunne ikke starte oppdatering: {error}",
+  "beforeUpdateMakeSure": "Før oppdatering, sørg for:",
+  "confirmed": "Bekreftet!",
+  "release": "Slipp",
+  "slideToUpdate": "Gli for å oppdatere",
+  "copiedToClipboard": "{title} kopiert til utklippstavlen",
+  "batteryLevel": "Batterinivå",
+  "productUpdate": "Produktoppdatering",
+  "offline": "Frakoblet",
+  "available": "Tilgjengelig",
+  "unpairDeviceDialogTitle": "Opphev sammenkoblingen av enheten",
+  "unpairDeviceDialogMessage": "Dette vil oppheve sammenkoblingen av enheten slik at den kan kobles til en annen telefon. Du må gå til Innstillinger > Bluetooth og glemme enheten for å fullføre prosessen.",
+  "unpair": "Opphev sammenkobling",
+  "unpairAndForgetDevice": "Opphev sammenkobling og glem enheten",
+  "unknownDevice": "Ukjent enhet",
+  "unknown": "Ukjent",
+  "productName": "Produktnavn",
+  "serialNumber": "Serienummer",
+  "connected": "Tilkoblet",
+  "privacyPolicyTitle": "Personvernregler",
+  "actionItemDescriptionCannotBeEmpty": "Handlingselementbeskrivelse kan ikke være tom",
+  "saved": "Lagret",
+  "overdue": "Forsinket",
+  "markIncomplete": "Marker som ufullstendig",
+  "editDueDate": "Rediger forfallsdato",
+  "setDueDate": "Angi forfallsdato",
+  "clearDueDate": "Fjern forfallsdato",
+  "mondayAbbr": "Man",
+  "tuesdayAbbr": "Tir",
+  "wednesdayAbbr": "Ons",
+  "thursdayAbbr": "Tor",
+  "fridayAbbr": "Fre",
+  "saturdayAbbr": "Lør",
+  "sundayAbbr": "Søn",
+  "failedToUpdateDueDate": "Kunne ikke oppdatere forfallsdato",
+  "failedToClearDueDate": "Kunne ikke fjerne forfallsdato",
+  "howDoesItWork": "Hvordan fungerer det?",
+  "sdCardSyncDescription": "SD-kortsynkronisering vil importere minnene dine fra SD-kortet til appen",
+  "checksForAudioFiles": "Sjekker for lydfiler på SD-kortet",
+  "omiSyncsAudioFiles": "Omi synkroniserer deretter lydfilene med serveren",
+  "serverProcessesAudio": "Serveren behandler lydfilene og oppretter minner",
+  "youreAllSet": "Du er klar!",
+  "welcomeToOmiDescription": "Velkommen til Omi! Din AI-følgesvenn er klar til å hjelpe deg med samtaler, oppgaver og mer.",
+  "startUsingOmi": "Begynn å bruke Omi",
+  "back": "Tilbake",
+  "keyboardShortcuts": "Tastatursnarveier",
+  "toggleControlBar": "Veksle kontrollinje",
+  "pressKeys": "Trykk taster...",
+  "cmdRequired": "⌘ påkrevd",
+  "invalidKey": "Ugyldig tast",
+  "space": "Mellomrom",
+  "search": "Søk",
+  "searchPlaceholder": "Søk...",
+  "untitledConversation": "Unavngitt samtale",
+  "countRemaining": "{count} gjenstående",
+  "addGoal": "Legg til mål",
+  "editGoal": "Rediger mål",
+  "icon": "Ikon",
+  "goalTitle": "Måltittel",
+  "current": "Nåværende",
+  "target": "Mål",
+  "saveGoal": "Lagre",
+  "goals": "Mål",
+  "tapToAddGoal": "Trykk for å legge til et mål",
+  "welcomeBack": "Velkommen tilbake",
+  "yourConversations": "Dine samtaler",
+  "reviewAndManageConversations": "Gjennomgå og administrer dine registrerte samtaler",
+  "startCapturingConversations": "Begynn å fange opp samtaler med Omi-enheten din for å se dem her.",
+  "useMobileAppToCapture": "Bruk mobilappen din til å ta opp lyd",
+  "conversationsProcessedAutomatically": "Samtaler behandles automatisk",
+  "getInsightsInstantly": "Få innsikt og sammendrag øyeblikkelig",
+  "showAll": "Vis alle →",
+  "noTasksForToday": "Ingen oppgaver for i dag.\\nSpør Omi om flere oppgaver eller opprett manuelt.",
+  "dailyScore": "DAGLIG POENGSUM",
+  "dailyScoreDescription": "En poengsum som hjelper deg med å fokusere bedre på gjennomføring.",
+  "searchResults": "Søkeresultater",
+  "actionItems": "Handlingspunkter",
+  "tasksToday": "I dag",
+  "tasksTomorrow": "I morgen",
+  "tasksNoDeadline": "Ingen frist",
+  "tasksLater": "Senere",
+  "loadingTasks": "Laster oppgaver...",
+  "tasks": "Oppgaver",
+  "swipeTasksToIndent": "Sveip oppgaver for innrykk, dra mellom kategorier",
+  "create": "Opprett",
+  "noTasksYet": "Ingen oppgaver ennå",
+  "tasksFromConversationsWillAppear": "Oppgaver fra samtalene dine vises her.\nKlikk på Opprett for å legge til en manuelt.",
+  "monthJan": "Jan",
+  "monthFeb": "Feb",
+  "monthMar": "Mar",
+  "monthApr": "Apr",
+  "monthMay": "Mai",
+  "monthJun": "Jun",
+  "monthJul": "Jul",
+  "monthAug": "Aug",
+  "monthSep": "Sep",
+  "monthOct": "Okt",
+  "monthNov": "Nov",
+  "monthDec": "Des",
+  "timePM": "PM",
+  "timeAM": "AM",
+  "actionItemUpdatedSuccessfully": "Handlingselement oppdatert",
+  "actionItemCreatedSuccessfully": "Handlingselement opprettet",
+  "actionItemDeletedSuccessfully": "Handlingselement slettet",
+  "deleteActionItem": "Slett handlingselement",
+  "deleteActionItemConfirmation": "Er du sikker på at du vil slette dette handlingselementet? Denne handlingen kan ikke angres.",
+  "enterActionItemDescription": "Skriv inn beskrivelse av handlingselement...",
+  "markAsCompleted": "Merk som fullført",
+  "setDueDateAndTime": "Angi forfallsdato og klokkeslett",
+  "reloadingApps": "Laster inn apper på nytt...",
+  "loadingApps": "Laster inn apper...",
+  "browseInstallCreateApps": "Bla gjennom, installer og opprett apper",
+  "all": "Alle",
+  "open": "Åpne",
+  "install": "Installer",
+  "noAppsAvailable": "Ingen apper tilgjengelige",
+  "unableToLoadApps": "Kan ikke laste inn apper",
+  "tryAdjustingSearchTermsOrFilters": "Prøv å justere søkeordene eller filtrene dine",
+  "checkBackLaterForNewApps": "Sjekk tilbake senere for nye apper",
+  "pleaseCheckInternetConnectionAndTryAgain": "Vennligst sjekk internettilkoblingen din og prøv igjen",
+  "createNewApp": "Opprett ny app",
+  "buildSubmitCustomOmiApp": "Bygg og send inn din tilpassede Omi-app",
+  "submittingYourApp": "Sender inn appen din...",
+  "preparingFormForYou": "Forbereder skjemaet for deg...",
+  "appDetails": "App-detaljer",
+  "paymentDetails": "Betalingsdetaljer",
+  "previewAndScreenshots": "Forhåndsvisning og skjermbilder",
+  "appCapabilities": "App-funksjoner",
+  "aiPrompts": "AI-instrukser",
+  "chatPrompt": "Chat-instruksjon",
+  "chatPromptPlaceholder": "Du er en fantastisk app, jobben din er å svare på brukerforespørsler og få dem til å føle seg bra...",
+  "conversationPrompt": "Samtaleprompt",
+  "conversationPromptPlaceholder": "Du er en fantastisk app, du vil få en transkripsjon og sammendrag av en samtale...",
+  "notificationScopes": "Varslingsområder",
+  "appPrivacyAndTerms": "App-personvern og -vilkår",
+  "makeMyAppPublic": "Gjør appen min offentlig",
+  "submitAppTermsAgreement": "Ved å sende inn denne appen godtar jeg Omi AI sine tjenestevilkår og personvernerklæring",
+  "submitApp": "Send inn app",
+  "needHelpGettingStarted": "Trenger du hjelp til å komme i gang?",
+  "clickHereForAppBuildingGuides": "Klikk her for app-byggingsveiledninger og dokumentasjon",
+  "submitAppQuestion": "Send inn app?",
+  "submitAppPublicDescription": "Appen din vil bli gjennomgått og gjort offentlig. Du kan begynne å bruke den umiddelbart, selv under gjennomgangen!",
+  "submitAppPrivateDescription": "Appen din vil bli gjennomgått og gjort tilgjengelig for deg privat. Du kan begynne å bruke den umiddelbart, selv under gjennomgangen!",
+  "startEarning": "Begynn å tjene! 💰",
+  "connectStripeOrPayPal": "Koble til Stripe eller PayPal for å motta betalinger for appen din.",
+  "connectNow": "Koble til nå",
+  "installsCount": "{count}+ installasjoner",
+  "uninstallApp": "Avinstaller app",
+  "subscribe": "Abonner",
+  "dataAccessNotice": "Datatilgangsvarsel",
+  "dataAccessWarning": "Denne appen vil få tilgang til dataene dine. Omi AI er ikke ansvarlig for hvordan dataene dine brukes, endres eller slettes av denne appen",
+  "installApp": "Installer app",
+  "betaTesterNotice": "Du er betatester for denne appen. Den er ikke offentlig ennå. Den vil bli offentlig når den er godkjent.",
+  "appUnderReviewOwner": "Appen din er under vurdering og bare synlig for deg. Den vil bli offentlig når den er godkjent.",
+  "appRejectedNotice": "Appen din har blitt avvist. Vennligst oppdater appdetaljene og send inn på nytt for vurdering.",
+  "setupSteps": "Oppsettstrinn",
+  "setupInstructions": "Oppsettsanvisninger",
+  "integrationInstructions": "Integrasjonsanvisninger",
+  "preview": "Forhåndsvisning",
+  "aboutTheApp": "Om appen",
+  "aboutThePersona": "Om personaen",
+  "chatPersonality": "Chatpersonlighet",
+  "ratingsAndReviews": "Vurderinger og anmeldelser",
+  "noRatings": "ingen vurderinger",
+  "ratingsCount": "{count}+ vurderinger",
+  "errorActivatingApp": "Feil ved aktivering av app",
+  "integrationSetupRequired": "Hvis dette er en integrasjonsapp, sørg for at oppsettet er fullført.",
+  "installed": "Installert"
 }

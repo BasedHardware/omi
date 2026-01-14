@@ -53,7 +53,7 @@
   "@save": {
     "description": "Save button label"
   },
-  "edit": "Sửa",
+  "edit": "Chỉnh sửa",
   "@edit": {
     "description": "Edit button/action label"
   },
@@ -101,7 +101,7 @@
   "@errorProcessingConversation": {
     "description": "Error message for conversation processing failure"
   },
-  "noInternetConnection": "Vui lòng kiểm tra kết nối internet và thử lại.",
+  "noInternetConnection": "Không có kết nối internet",
   "@noInternetConnection": {
     "description": "Message shown when there's no internet"
   },
@@ -221,7 +221,7 @@
   "@disconnected": {
     "description": "Device disconnected status"
   },
-  "searching": "Đang tìm kiếm",
+  "searching": "Đang tìm kiếm...",
   "@searching": {
     "description": "Searching for device status"
   },
@@ -289,7 +289,7 @@
   "@syncingBackground": {
     "description": "Message during background sync"
   },
-  "noConversationsYet": "Chưa có cuộc trò chuyện nào.",
+  "noConversationsYet": "Chưa có cuộc trò chuyện nào",
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
@@ -301,7 +301,7 @@
   "@starConversationHint": {
     "description": "Hint explaining how to star conversations"
   },
-  "searchConversations": "Tìm kiếm cuộc trò chuyện",
+  "searchConversations": "Tìm kiếm cuộc trò chuyện...",
   "@searchConversations": {
     "description": "Search field placeholder"
   },
@@ -411,15 +411,15 @@
   "@buildAndShareApp": {
     "description": "Create app button subtitle"
   },
-  "searchApps": "Tìm kiếm hơn 1500 ứng dụng",
+  "searchApps": "Tìm kiếm ứng dụng...",
   "@searchApps": {
     "description": "Apps search placeholder"
   },
-  "myApps": "Ứng dụng của tôi",
+  "myApps": "Ứng Dụng Của Tôi",
   "@myApps": {
     "description": "My Apps filter button"
   },
-  "installedApps": "Ứng dụng đã cài đặt",
+  "installedApps": "Ứng Dụng Đã Cài",
   "@installedApps": {
     "description": "Installed Apps filter button"
   },
@@ -631,11 +631,11 @@
   "@deviceName": {
     "description": "Device name label"
   },
-  "deviceId": "ID thiết bị",
+  "deviceId": "ID Thiết Bị",
   "@deviceId": {
     "description": "Device ID label"
   },
-  "firmware": "Phần mềm",
+  "firmware": "Phần Mềm",
   "@firmware": {
     "description": "Firmware label"
   },
@@ -647,11 +647,11 @@
   "@hardwareRevision": {
     "description": "Hardware revision label"
   },
-  "modelNumber": "Số model",
+  "modelNumber": "Số Mô Hình",
   "@modelNumber": {
     "description": "Model number label"
   },
-  "manufacturer": "Nhà sản xuất",
+  "manufacturer": "Nhà Sản Xuất",
   "@manufacturer": {
     "description": "Manufacturer label"
   },
@@ -675,7 +675,7 @@
   "@forgetDevice": {
     "description": "Forget device button"
   },
-  "chargingIssues": "Vấn đề sạc pin",
+  "chargingIssues": "Sự cố sạc",
   "@chargingIssues": {
     "description": "Charging issues help item"
   },
@@ -695,7 +695,7 @@
   "@deviceDisconnectedMessage": {
     "description": "Message shown when device is disconnected"
   },
-  "deviceUnpairedMessage": "Đã hủy ghép nối thiết bị. Vào Cài đặt > Bluetooth và xóa thiết bị để hoàn tất việc hủy ghép nối.",
+  "deviceUnpairedMessage": "Đã hủy ghép nối thiết bị. Đi tới Cài đặt > Bluetooth và quên thiết bị để hoàn tất việc hủy ghép nối.",
   "@deviceUnpairedMessage": {
     "description": "Message shown when device is unpaired"
   },
@@ -1414,7 +1414,7 @@
       }
     }
   },
-  "yesterday": "hôm qua",
+  "yesterday": "Hôm qua",
   "daysAgo": "{count} ngày trước",
   "@daysAgo": {
     "placeholders": {
@@ -1605,7 +1605,7 @@
   "@creating": {
     "description": "Loading state text when app generation is in progress"
   },
-  "createApp": "Tạo ứng dụng",
+  "createApp": "Tạo Ứng Dụng",
   "@createApp": {
     "description": "Button text to initiate app creation"
   },
@@ -1724,7 +1724,7 @@
   "@rateOnGooglePlay": {
     "description": "Button text to rate on Google Play Store"
   },
-  "maybeLater": "Có thể sau",
+  "maybeLater": "Có thể Sau",
   "@maybeLater": {
     "description": "Button text to dismiss the review prompt"
   },
@@ -1986,11 +1986,11 @@
   "@actionItemCompleted": {
     "description": "Snackbar message when item completed"
   },
-  "deleteActionItemTitle": "Xóa việc cần làm",
+  "deleteActionItemTitle": "Xóa mục hành động",
   "@deleteActionItemTitle": {
     "description": "Title for delete item dialog"
   },
-  "deleteActionItemMessage": "Bạn có chắc chắn muốn xóa việc cần làm này?",
+  "deleteActionItemMessage": "Bạn có chắc chắn muốn xóa mục hành động này không?",
   "@deleteActionItemMessage": {
     "description": "Confirmation message for deleting single item"
   },
@@ -2215,11 +2215,11 @@
   "@retry": {
     "description": "Button label"
   },
-  "createActionItem": "Tạo việc cần làm",
+  "createActionItem": "Tạo mục hành động",
   "@createActionItem": {
     "description": "Sheet title"
   },
-  "editActionItem": "Chỉnh sửa việc cần làm",
+  "editActionItem": "Chỉnh sửa mục hành động",
   "@editActionItem": {
     "description": "Sheet title"
   },
@@ -2235,7 +2235,7 @@
   "@actionItemUpdated": {
     "description": "Snackbar"
   },
-  "failedToUpdateActionItem": "Không thể cập nhật việc cần làm",
+  "failedToUpdateActionItem": "Không thể cập nhật mục hành động",
   "@failedToUpdateActionItem": {
     "description": "Snackbar"
   },
@@ -2243,7 +2243,7 @@
   "@actionItemCreated": {
     "description": "Snackbar"
   },
-  "failedToCreateActionItem": "Không thể tạo việc cần làm",
+  "failedToCreateActionItem": "Không thể tạo mục hành động",
   "@failedToCreateActionItem": {
     "description": "Snackbar"
   },
@@ -2291,11 +2291,11 @@
   "@markComplete": {
     "description": "Action label"
   },
-  "actionItemDeleted": "Đã xóa việc cần làm",
+  "actionItemDeleted": "Đã xóa mục hành động",
   "@actionItemDeleted": {
     "description": "Snackbar"
   },
-  "failedToDeleteActionItem": "Không thể xóa việc cần làm",
+  "failedToDeleteActionItem": "Không thể xóa mục hành động",
   "@failedToDeleteActionItem": {
     "description": "Snackbar"
   },
@@ -2313,5 +2313,211 @@
   },
   "appInterfaceSectionTitle": "GIAO DIỆN ỨNG DỤNG",
   "speechTranscriptionSectionTitle": "GIỌNG NÓI & PHIÊN ÂM",
-  "languageSettingsHelperText": "Ngôn ngữ Ứng dụng thay đổi menu và nút. Ngôn ngữ Giọng nói ảnh hưởng đến cách bản ghi âm của bạn được phiên âm."
+  "languageSettingsHelperText": "Ngôn ngữ Ứng dụng thay đổi menu và nút. Ngôn ngữ Giọng nói ảnh hưởng đến cách bản ghi âm của bạn được phiên âm.",
+  "translationNotice": "Thông báo dịch",
+  "translationNoticeMessage": "Omi dịch các cuộc trò chuyện sang ngôn ngữ chính của bạn. Cập nhật bất cứ lúc nào trong Cài đặt → Hồ sơ.",
+  "pleaseCheckInternetConnection": "Vui lòng kiểm tra kết nối internet và thử lại",
+  "pleaseSelectReason": "Vui lòng chọn lý do",
+  "tellUsMoreWhatWentWrong": "Cho chúng tôi biết thêm về điều gì đã xảy ra sai...",
+  "selectText": "Chọn văn bản",
+  "maximumGoalsAllowed": "Tối đa {count} mục tiêu được phép",
+  "conversationCannotBeMerged": "Cuộc trò chuyện này không thể hợp nhất (đã khóa hoặc đang hợp nhất)",
+  "pleaseEnterFolderName": "Vui lòng nhập tên thư mục",
+  "failedToCreateFolder": "Tạo thư mục thất bại",
+  "failedToUpdateFolder": "Cập nhật thư mục thất bại",
+  "folderName": "Tên thư mục",
+  "descriptionOptional": "Mô tả (tùy chọn)",
+  "failedToDeleteFolder": "Xóa thư mục thất bại",
+  "editFolder": "Chỉnh sửa thư mục",
+  "deleteFolder": "Xóa thư mục",
+  "transcriptCopiedToClipboard": "Đã sao chép bản ghi vào clipboard",
+  "summaryCopiedToClipboard": "Đã sao chép tóm tắt vào clipboard",
+  "conversationUrlCouldNotBeShared": "Không thể chia sẻ URL cuộc trò chuyện.",
+  "urlCopiedToClipboard": "Đã sao chép URL vào clipboard",
+  "exportTranscript": "Xuất bản ghi",
+  "exportSummary": "Xuất tóm tắt",
+  "exportButton": "Xuất",
+  "actionItemsCopiedToClipboard": "Đã sao chép các mục hành động vào clipboard",
+  "summarize": "Tóm tắt",
+  "generateSummary": "Tạo bản tóm tắt",
+  "conversationNotFoundOrDeleted": "Không tìm thấy cuộc trò chuyện hoặc đã bị xóa",
+  "deleteMemory": "Xóa bộ nhớ?",
+  "thisActionCannotBeUndone": "Hành động này không thể hoàn tác.",
+  "memoriesCount": "{count} kỷ niệm",
+  "noMemoriesInCategory": "Chưa có kỷ niệm nào trong danh mục này",
+  "addYourFirstMemory": "Thêm kỷ niệm đầu tiên của bạn",
+  "firmwareDisconnectUsb": "Ngắt kết nối USB",
+  "firmwareUsbWarning": "Kết nối USB trong khi cập nhật có thể làm hỏng thiết bị của bạn.",
+  "firmwareBatteryAbove15": "Pin trên 15%",
+  "firmwareEnsureBattery": "Đảm bảo thiết bị của bạn có 15% pin.",
+  "firmwareStableConnection": "Kết nối ổn định",
+  "firmwareConnectWifi": "Kết nối với WiFi hoặc dữ liệu di động.",
+  "failedToStartUpdate": "Không thể bắt đầu cập nhật: {error}",
+  "beforeUpdateMakeSure": "Trước khi cập nhật, đảm bảo:",
+  "confirmed": "Đã xác nhận!",
+  "release": "Thả ra",
+  "slideToUpdate": "Vuốt để cập nhật",
+  "copiedToClipboard": "Đã sao chép {title} vào khay nhớ tạm",
+  "batteryLevel": "Mức Pin",
+  "productUpdate": "Cập Nhật Sản Phẩm",
+  "offline": "Ngoại tuyến",
+  "available": "Có sẵn",
+  "unpairDeviceDialogTitle": "Hủy ghép nối thiết bị",
+  "unpairDeviceDialogMessage": "Điều này sẽ hủy ghép nối thiết bị để có thể kết nối với điện thoại khác. Bạn sẽ cần đi tới Cài đặt > Bluetooth và quên thiết bị để hoàn tất quy trình.",
+  "unpair": "Hủy ghép nối",
+  "unpairAndForgetDevice": "Hủy ghép nối và quên thiết bị",
+  "unknownDevice": "Thiết bị không xác định",
+  "unknown": "Không xác định",
+  "productName": "Tên Sản Phẩm",
+  "serialNumber": "Số Seri",
+  "connected": "Đã kết nối",
+  "privacyPolicyTitle": "Chính sách bảo mật",
+  "actionItemDescriptionCannotBeEmpty": "Mô tả mục hành động không được để trống",
+  "saved": "Đã lưu",
+  "overdue": "Quá hạn",
+  "markIncomplete": "Đánh dấu chưa hoàn thành",
+  "editDueDate": "Chỉnh sửa ngày đến hạn",
+  "setDueDate": "Đặt ngày đến hạn",
+  "clearDueDate": "Xóa ngày đến hạn",
+  "mondayAbbr": "T2",
+  "tuesdayAbbr": "T3",
+  "wednesdayAbbr": "T4",
+  "thursdayAbbr": "T5",
+  "fridayAbbr": "T6",
+  "saturdayAbbr": "T7",
+  "sundayAbbr": "CN",
+  "failedToUpdateDueDate": "Không thể cập nhật ngày đến hạn",
+  "failedToClearDueDate": "Không thể xóa ngày đến hạn",
+  "howDoesItWork": "Nó hoạt động như thế nào?",
+  "sdCardSyncDescription": "Đồng bộ hóa thẻ SD sẽ nhập ký ức của bạn từ thẻ SD vào ứng dụng",
+  "checksForAudioFiles": "Kiểm tra các tệp âm thanh trên thẻ SD",
+  "omiSyncsAudioFiles": "Omi sau đó đồng bộ hóa các tệp âm thanh với máy chủ",
+  "serverProcessesAudio": "Máy chủ xử lý các tệp âm thanh và tạo ký ức",
+  "youreAllSet": "Bạn đã sẵn sàng!",
+  "welcomeToOmiDescription": "Chào mừng đến với Omi! Người bạn đồng hành AI của bạn đã sẵn sàng hỗ trợ bạn với các cuộc trò chuyện, nhiệm vụ và hơn thế nữa.",
+  "startUsingOmi": "Bắt đầu sử dụng Omi",
+  "back": "Quay lại",
+  "keyboardShortcuts": "Phím tắt",
+  "toggleControlBar": "Chuyển đổi thanh điều khiển",
+  "pressKeys": "Nhấn phím...",
+  "cmdRequired": "⌘ bắt buộc",
+  "invalidKey": "Phím không hợp lệ",
+  "space": "Khoảng trắng",
+  "search": "Tìm kiếm",
+  "searchPlaceholder": "Tìm kiếm...",
+  "untitledConversation": "Cuộc trò chuyện không có tiêu đề",
+  "countRemaining": "{count} còn lại",
+  "addGoal": "Thêm mục tiêu",
+  "editGoal": "Chỉnh sửa mục tiêu",
+  "icon": "Biểu tượng",
+  "goalTitle": "Tiêu đề mục tiêu",
+  "current": "Hiện tại",
+  "target": "Mục tiêu",
+  "saveGoal": "Lưu",
+  "goals": "Mục tiêu",
+  "tapToAddGoal": "Nhấn để thêm mục tiêu",
+  "welcomeBack": "Chào mừng trở lại",
+  "yourConversations": "Cuộc trò chuyện của bạn",
+  "reviewAndManageConversations": "Xem xét và quản lý các cuộc trò chuyện đã ghi âm",
+  "startCapturingConversations": "Bắt đầu ghi lại các cuộc trò chuyện bằng thiết bị Omi của bạn để xem chúng ở đây.",
+  "useMobileAppToCapture": "Sử dụng ứng dụng di động của bạn để ghi âm",
+  "conversationsProcessedAutomatically": "Các cuộc trò chuyện được xử lý tự động",
+  "getInsightsInstantly": "Nhận thông tin chi tiết và tóm tắt ngay lập tức",
+  "showAll": "Hiển thị tất cả →",
+  "noTasksForToday": "Không có nhiệm vụ cho hôm nay.\\nHỏi Omi để có thêm nhiệm vụ hoặc tạo thủ công.",
+  "dailyScore": "ĐIỂM HÀNG NGÀY",
+  "dailyScoreDescription": "Điểm giúp bạn tập trung tốt hơn vào việc thực hiện.",
+  "searchResults": "Kết quả tìm kiếm",
+  "actionItems": "Mục hành động",
+  "tasksToday": "Hôm nay",
+  "tasksTomorrow": "Ngày mai",
+  "tasksNoDeadline": "Không có thời hạn",
+  "tasksLater": "Sau này",
+  "loadingTasks": "Đang tải nhiệm vụ...",
+  "tasks": "Nhiệm vụ",
+  "swipeTasksToIndent": "Vuốt nhiệm vụ để thụt lề, kéo giữa các danh mục",
+  "create": "Tạo",
+  "noTasksYet": "Chưa có nhiệm vụ nào",
+  "tasksFromConversationsWillAppear": "Nhiệm vụ từ các cuộc trò chuyện của bạn sẽ xuất hiện ở đây.\nNhấp vào Tạo để thêm một cách thủ công.",
+  "monthJan": "Thg 1",
+  "monthFeb": "Thg 2",
+  "monthMar": "Thg 3",
+  "monthApr": "Thg 4",
+  "monthMay": "Thg 5",
+  "monthJun": "Thg 6",
+  "monthJul": "Thg 7",
+  "monthAug": "Thg 8",
+  "monthSep": "Thg 9",
+  "monthOct": "Thg 10",
+  "monthNov": "Thg 11",
+  "monthDec": "Thg 12",
+  "timePM": "CH",
+  "timeAM": "SA",
+  "actionItemUpdatedSuccessfully": "Mục hành động đã được cập nhật thành công",
+  "actionItemCreatedSuccessfully": "Mục hành động đã được tạo thành công",
+  "actionItemDeletedSuccessfully": "Mục hành động đã được xóa thành công",
+  "deleteActionItem": "Xóa mục hành động",
+  "deleteActionItemConfirmation": "Bạn có chắc chắn muốn xóa mục hành động này không? Hành động này không thể hoàn tác.",
+  "enterActionItemDescription": "Nhập mô tả mục hành động...",
+  "markAsCompleted": "Đánh dấu là đã hoàn thành",
+  "setDueDateAndTime": "Đặt ngày và giờ đến hạn",
+  "reloadingApps": "Đang tải lại ứng dụng...",
+  "loadingApps": "Đang tải ứng dụng...",
+  "browseInstallCreateApps": "Duyệt, cài đặt và tạo ứng dụng",
+  "all": "Tất cả",
+  "open": "Mở",
+  "install": "Cài đặt",
+  "noAppsAvailable": "Không có ứng dụng nào",
+  "unableToLoadApps": "Không thể tải ứng dụng",
+  "tryAdjustingSearchTermsOrFilters": "Thử điều chỉnh từ khóa tìm kiếm hoặc bộ lọc của bạn",
+  "checkBackLaterForNewApps": "Quay lại sau để xem ứng dụng mới",
+  "pleaseCheckInternetConnectionAndTryAgain": "Vui lòng kiểm tra kết nối internet của bạn và thử lại",
+  "createNewApp": "Tạo Ứng dụng Mới",
+  "buildSubmitCustomOmiApp": "Xây dựng và gửi ứng dụng Omi tùy chỉnh của bạn",
+  "submittingYourApp": "Đang gửi ứng dụng của bạn...",
+  "preparingFormForYou": "Đang chuẩn bị biểu mẫu cho bạn...",
+  "appDetails": "Chi tiết Ứng dụng",
+  "paymentDetails": "Chi tiết Thanh toán",
+  "previewAndScreenshots": "Xem trước và Ảnh chụp màn hình",
+  "appCapabilities": "Khả năng Ứng dụng",
+  "aiPrompts": "Lời nhắc AI",
+  "chatPrompt": "Lời nhắc Trò chuyện",
+  "chatPromptPlaceholder": "Bạn là một ứng dụng tuyệt vời, công việc của bạn là trả lời các truy vấn của người dùng và làm cho họ cảm thấy tốt...",
+  "conversationPrompt": "Lời nhắc hội thoại",
+  "conversationPromptPlaceholder": "Bạn là một ứng dụng tuyệt vời, bạn sẽ được cung cấp bản ghi và tóm tắt cuộc trò chuyện...",
+  "notificationScopes": "Phạm vi Thông báo",
+  "appPrivacyAndTerms": "Quyền riêng tư và Điều khoản Ứng dụng",
+  "makeMyAppPublic": "Công khai ứng dụng của tôi",
+  "submitAppTermsAgreement": "Bằng việc gửi ứng dụng này, tôi đồng ý với Điều khoản Dịch vụ và Chính sách Bảo mật của Omi AI",
+  "submitApp": "Gửi Ứng dụng",
+  "needHelpGettingStarted": "Cần trợ giúp để bắt đầu?",
+  "clickHereForAppBuildingGuides": "Nhấp vào đây để xem hướng dẫn xây dựng ứng dụng và tài liệu",
+  "submitAppQuestion": "Gửi Ứng dụng?",
+  "submitAppPublicDescription": "Ứng dụng của bạn sẽ được xem xét và công khai. Bạn có thể bắt đầu sử dụng ngay lập tức, ngay cả trong quá trình xem xét!",
+  "submitAppPrivateDescription": "Ứng dụng của bạn sẽ được xem xét và có sẵn cho bạn một cách riêng tư. Bạn có thể bắt đầu sử dụng ngay lập tức, ngay cả trong quá trình xem xét!",
+  "startEarning": "Bắt đầu Kiếm tiền! 💰",
+  "connectStripeOrPayPal": "Kết nối Stripe hoặc PayPal để nhận thanh toán cho ứng dụng của bạn.",
+  "connectNow": "Kết nối Ngay",
+  "installsCount": "{count}+ lượt cài đặt",
+  "uninstallApp": "Gỡ cài đặt ứng dụng",
+  "subscribe": "Đăng ký",
+  "dataAccessNotice": "Thông báo truy cập dữ liệu",
+  "dataAccessWarning": "Ứng dụng này sẽ truy cập dữ liệu của bạn. Omi AI không chịu trách nhiệm về cách dữ liệu của bạn được sử dụng, sửa đổi hoặc xóa bởi ứng dụng này",
+  "installApp": "Cài đặt ứng dụng",
+  "betaTesterNotice": "Bạn là người kiểm tra beta cho ứng dụng này. Nó chưa được công khai. Nó sẽ được công khai sau khi được phê duyệt.",
+  "appUnderReviewOwner": "Ứng dụng của bạn đang được xem xét và chỉ hiển thị cho bạn. Nó sẽ được công khai sau khi được phê duyệt.",
+  "appRejectedNotice": "Ứng dụng của bạn đã bị từ chối. Vui lòng cập nhật chi tiết ứng dụng và gửi lại để xem xét.",
+  "setupSteps": "Các bước thiết lập",
+  "setupInstructions": "Hướng dẫn thiết lập",
+  "integrationInstructions": "Hướng dẫn tích hợp",
+  "preview": "Xem trước",
+  "aboutTheApp": "Về ứng dụng",
+  "aboutThePersona": "Về nhân vật",
+  "chatPersonality": "Cá tính trò chuyện",
+  "ratingsAndReviews": "Đánh giá & Nhận xét",
+  "noRatings": "không có đánh giá",
+  "ratingsCount": "{count}+ đánh giá",
+  "errorActivatingApp": "Lỗi kích hoạt ứng dụng",
+  "integrationSetupRequired": "Nếu đây là ứng dụng tích hợp, hãy đảm bảo thiết lập đã hoàn tất.",
+  "installed": "Đã cài đặt"
 }

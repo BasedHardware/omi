@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
 /// Desktop widget showing top 3 today's tasks with "Show all ->" button
@@ -54,9 +55,9 @@ class DesktopTodayTasksWidget extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    'Today',
-                    style: TextStyle(
+                  Text(
+                    context.l10n.today,
+                    style: const TextStyle(
                       color: ResponsiveHelper.textPrimary,
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
@@ -70,8 +71,8 @@ class DesktopTodayTasksWidget extends StatelessWidget {
                         context.read<HomeProvider>().setIndex(3);
                       },
                       child: Text(
-                        'Show all →',
-                        style: TextStyle(
+                        context.l10n.showAll,
+                        style: const TextStyle(
                           color: ResponsiveHelper.textTertiary,
                           fontSize: 12,
                           fontWeight: FontWeight.w400,
@@ -87,9 +88,9 @@ class DesktopTodayTasksWidget extends StatelessWidget {
                 child: displayTasks.isEmpty
                     ? Center(
                         child: Text(
-                          'No tasks for today.\nAsk Omi for more tasks or create manually.',
+                          context.l10n.noTasksForToday,
                           textAlign: TextAlign.center,
-                          style: TextStyle(
+                          style: const TextStyle(
                             color: ResponsiveHelper.textTertiary,
                             fontSize: 13,
                           ),

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'widgets/memory_dialog.dart';
 import 'widgets/memory_edit_sheet.dart';
 import 'widgets/memory_item.dart';
@@ -31,7 +32,7 @@ class CategoryMemoriesPage extends StatelessWidget {
                 category.toString().split('.').last[0].toUpperCase() + category.toString().split('.').last.substring(1),
               ),
               Text(
-                '${provider.filteredMemories.length} memories',
+                context.l10n.memoriesCount(provider.filteredMemories.length),
                 style: TextStyle(
                   fontSize: 14,
                   color: Colors.grey.shade400,
@@ -58,7 +59,7 @@ class CategoryMemoriesPage extends StatelessWidget {
                     Icon(Icons.note_add, size: 48, color: Colors.grey.shade600),
                     const SizedBox(height: 16),
                     Text(
-                      'No memories in this category yet',
+                      context.l10n.noMemoriesInCategory,
                       style: TextStyle(
                         color: Colors.grey.shade400,
                         fontSize: 18,
@@ -67,7 +68,7 @@ class CategoryMemoriesPage extends StatelessWidget {
                     const SizedBox(height: 8),
                     TextButton(
                       onPressed: () => showMemoryDialog(context, provider),
-                      child: const Text('Add your first memory'),
+                      child: Text(context.l10n.addYourFirstMemory),
                     ),
                   ],
                 ),
