@@ -11,19 +11,25 @@ import asyncio
 import json
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Union, List, Any
 
 from fastapi import APIRouter, HTTPException, Header, Request, Response
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 
+import database.action_items as action_items_db
 import database.memories as memories_db
 import database.conversations as conversations_db
 import database.mcp_api_key as mcp_api_key_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.conversation import CategoryEnum
 from utils.llm.memories import identify_category_for_memory
+from utils.notifications import (
+    send_action_item_data_message,
+    send_action_item_deletion_message,
+    send_action_item_update_message,
+)
 
 router = APIRouter()
 
@@ -143,6 +149,60 @@ MCP_TOOLS = [
             "required": ["conversation_id"],
         },
     },
+    {
+        "name": "get_action_items",
+        "description": "Retrieve a list of action items (tasks/to-dos) with optional filtering.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "description": "Number of action items to retrieve", "default": 50},
+                "offset": {"type": "integer", "description": "Offset for pagination", "default": 0},
+                "completed": {"type": "boolean", "description": "Filter by completion status"},
+                "conversation_id": {"type": "string", "description": "Filter by conversation ID"},
+                "start_date": {"type": "string", "description": "Created after this date (ISO 8601)"},
+                "end_date": {"type": "string", "description": "Created before this date (ISO 8601)"},
+                "due_start_date": {"type": "string", "description": "Due after this date (ISO 8601)"},
+                "due_end_date": {"type": "string", "description": "Due before this date (ISO 8601)"},
+            },
+        },
+    },
+    {
+        "name": "create_action_item",
+        "description": "Create a new action item (task/to-do).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "description": {"type": "string", "description": "The action item description"},
+                "completed": {"type": "boolean", "description": "Whether the item is completed", "default": False},
+                "due_at": {"type": "string", "description": "Due date (ISO 8601)"},
+                "conversation_id": {"type": "string", "description": "Associated conversation ID"},
+            },
+            "required": ["description"],
+        },
+    },
+    {
+        "name": "update_action_item",
+        "description": "Update an existing action item.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "action_item_id": {"type": "string", "description": "The ID of the action item to update"},
+                "description": {"type": "string", "description": "Updated description"},
+                "completed": {"type": "boolean", "description": "Updated completion status"},
+                "due_at": {"type": "string", "description": "Updated due date (ISO 8601, set null to clear)"},
+            },
+            "required": ["action_item_id"],
+        },
+    },
+    {
+        "name": "delete_action_item",
+        "description": "Delete an action item by ID.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"action_item_id": {"type": "string", "description": "The ID of the action item to delete"}},
+            "required": ["action_item_id"],
+        },
+    },
 ]
 
 
@@ -153,6 +213,24 @@ class ToolExecutionError(Exception):
         self.message = message
         self.code = code
         super().__init__(self.message)
+
+
+def _parse_iso_datetime(value: Optional[str], field_name: str) -> Optional[datetime]:
+    if value is None:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        raise ToolExecutionError(f"Invalid {field_name} format: '{value}'. Expected ISO 8601.", code=-32602)
+
+
+def _get_valid_action_item(user_id: str, action_item_id: str) -> dict:
+    action_item = action_items_db.get_action_item(user_id, action_item_id)
+    if not action_item:
+        raise ToolExecutionError("Action item not found", code=-32001)
+    if action_item.get('is_locked', False):
+        raise ToolExecutionError("Unlimited Plan Required to access this action item.", code=-32002)
+    return action_item
 
 
 def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
@@ -280,6 +358,114 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
             raise ToolExecutionError("Unlimited Plan Required to access this conversation.", code=-32002)
 
         return {"conversation": conversation}
+
+    elif tool_name == "get_action_items":
+        limit = arguments.get("limit", 50)
+        offset = arguments.get("offset", 0)
+        completed = arguments.get("completed")
+        conversation_id = arguments.get("conversation_id")
+        start_date = _parse_iso_datetime(arguments.get("start_date"), "start_date")
+        end_date = _parse_iso_datetime(arguments.get("end_date"), "end_date")
+        due_start_date = _parse_iso_datetime(arguments.get("due_start_date"), "due_start_date")
+        due_end_date = _parse_iso_datetime(arguments.get("due_end_date"), "due_end_date")
+
+        action_items = action_items_db.get_action_items(
+            uid=user_id,
+            conversation_id=conversation_id,
+            completed=completed,
+            start_date=start_date,
+            end_date=end_date,
+            due_start_date=due_start_date,
+            due_end_date=due_end_date,
+            limit=limit,
+            offset=offset,
+        )
+
+        for item in action_items:
+            if item.get('is_locked', False):
+                description = item.get('description', '')
+                item['description'] = (description[:70] + '...') if len(description) > 70 else description
+
+        return {"action_items": action_items}
+
+    elif tool_name == "create_action_item":
+        description = arguments.get("description")
+        if not description:
+            raise ToolExecutionError("description is required")
+
+        due_at = None
+        if "due_at" in arguments:
+            due_at = _parse_iso_datetime(arguments.get("due_at"), "due_at")
+
+        action_item_data = {
+            "description": description,
+            "completed": bool(arguments.get("completed", False)),
+            "conversation_id": arguments.get("conversation_id"),
+        }
+        if "due_at" in arguments:
+            action_item_data["due_at"] = due_at
+
+        action_item_id = action_items_db.create_action_item(user_id, action_item_data)
+        action_item = action_items_db.get_action_item(user_id, action_item_id)
+        if not action_item:
+            raise ToolExecutionError("Failed to create action item")
+
+        if due_at:
+            send_action_item_data_message(
+                user_id=user_id,
+                action_item_id=action_item_id,
+                description=description,
+                due_at=due_at.isoformat(),
+            )
+
+        return {"success": True, "action_item": action_item}
+
+    elif tool_name == "update_action_item":
+        action_item_id = arguments.get("action_item_id")
+        if not action_item_id:
+            raise ToolExecutionError("action_item_id is required")
+
+        _get_valid_action_item(user_id, action_item_id)
+
+        update_data = {}
+        if "description" in arguments and arguments.get("description") is not None:
+            update_data["description"] = arguments.get("description")
+        if "completed" in arguments and arguments.get("completed") is not None:
+            completed = arguments.get("completed")
+            update_data["completed"] = completed
+            update_data["completed_at"] = datetime.now(timezone.utc) if completed else None
+        if "due_at" in arguments:
+            update_data["due_at"] = _parse_iso_datetime(arguments.get("due_at"), "due_at")
+
+        if not action_items_db.update_action_item(user_id, action_item_id, update_data):
+            raise ToolExecutionError("Failed to update action item")
+
+        updated_item = action_items_db.get_action_item(user_id, action_item_id)
+        if not updated_item:
+            raise ToolExecutionError("Action item not found", code=-32001)
+
+        if "due_at" in update_data and update_data["due_at"]:
+            send_action_item_update_message(
+                user_id=user_id,
+                action_item_id=action_item_id,
+                description=updated_item.get("description", ""),
+                due_at=update_data["due_at"].isoformat(),
+            )
+
+        return {"success": True, "action_item": updated_item}
+
+    elif tool_name == "delete_action_item":
+        action_item_id = arguments.get("action_item_id")
+        if not action_item_id:
+            raise ToolExecutionError("action_item_id is required")
+
+        _get_valid_action_item(user_id, action_item_id)
+
+        if not action_items_db.delete_action_item(user_id, action_item_id):
+            raise ToolExecutionError("Action item not found", code=-32001)
+
+        send_action_item_deletion_message(user_id=user_id, action_item_id=action_item_id)
+        return {"success": True}
 
     else:
         raise ToolExecutionError(f"Unknown tool: {tool_name}", code=-32601)

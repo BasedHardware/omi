@@ -9,6 +9,7 @@ A Model Context Protocol server for Omi interaction and automation. This server 
    - Retrieve a list of user memories
    - Inputs:
      - `limit` (number, optional): Maximum number of memories to retrieve (default: 100)
+     - `offset` (number, optional): Offset for pagination (default: 0)
      - `categories` (array of MemoryFilterOptions, optional): Categories of memories to retrieve (default: [])
    - Returns: JSON object containing list of memories
 
@@ -35,9 +36,55 @@ A Model Context Protocol server for Omi interaction and automation. This server 
 5. `get_conversations`
    - Retrieve a list of user conversations
    - Inputs:
-     - `include_discarded` (boolean, optional): Whether to include discarded conversations (default: false)
-     - `limit` (number, optional): Maximum number of conversations to retrieve (default: 25)
+     - `start_date` (string, optional): Filter conversations after this date (yyyy-mm-dd)
+     - `end_date` (string, optional): Filter conversations before this date (yyyy-mm-dd)
+     - `categories` (array of ConversationCategory, optional): Categories of conversations to retrieve
+     - `limit` (number, optional): Maximum number of conversations to retrieve (default: 20)
+     - `offset` (number, optional): Offset for pagination (default: 0)
    - Returns: List of conversation objects containing transcripts, timestamps, geolocation and structured summaries
+
+6. `get_conversation_by_id`
+   - Retrieve a single conversation by ID, including transcript segments
+   - Inputs:
+     - `conversation_id` (string): ID of the conversation to retrieve
+   - Returns: Conversation object including transcript segments
+
+7. `get_action_items`
+   - Retrieve a list of action items (tasks/to-dos)
+   - Inputs:
+     - `limit` (number, optional): Maximum number of action items to retrieve (default: 50)
+     - `offset` (number, optional): Offset for pagination (default: 0)
+     - `completed` (boolean, optional): Filter by completion status
+     - `conversation_id` (string, optional): Filter by conversation ID
+     - `start_date` (string, optional): Filter by creation start date (ISO 8601)
+     - `end_date` (string, optional): Filter by creation end date (ISO 8601)
+     - `due_start_date` (string, optional): Filter by due start date (ISO 8601)
+     - `due_end_date` (string, optional): Filter by due end date (ISO 8601)
+   - Returns: JSON object containing list of action items
+
+8. `create_action_item`
+   - Create a new action item (task/to-do)
+   - Inputs:
+     - `description` (string): Action item description
+     - `completed` (boolean, optional): Whether the item is completed (default: false)
+     - `due_at` (string, optional): Due date (ISO 8601)
+     - `conversation_id` (string, optional): Associated conversation ID
+   - Returns: Created action item object
+
+9. `update_action_item`
+   - Update an existing action item
+   - Inputs:
+     - `action_item_id` (string): ID of the action item to update
+     - `description` (string, optional): Updated description
+     - `completed` (boolean, optional): Updated completion status
+     - `due_at` (string, optional): Updated due date (ISO 8601, set to null to clear)
+   - Returns: Updated action item object
+
+10. `delete_action_item`
+    - Delete an action item by ID
+    - Inputs:
+      - `action_item_id` (string): ID of the action item to delete
+    - Returns: Status of the operation
 
 ## Configuration
 
