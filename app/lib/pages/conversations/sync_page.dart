@@ -6,7 +6,6 @@ import 'package:provider/provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/pages/settings/wifi_sync_settings_page.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
