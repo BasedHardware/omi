@@ -1278,7 +1278,7 @@
   "yes": "Evet",
   "editName": "İsmi Düzenle",
   "howShouldOmiCallYou": "Omi size nasıl hitap etmeli?",
-  "enterYourName": "İsminizi girin",
+  "enterYourName": "Adınızı girin",
   "nameCannotBeEmpty": "İsim boş olamaz",
   "nameUpdatedSuccessfully": "İsim başarıyla güncellendi!",
   "calendarSettings": "Takvim ayarları",
@@ -1814,7 +1814,7 @@
   "@wantDifferentName": {
     "description": "Question asking if user wants to change their display name"
   },
-  "whatsYourName": "Adınız nedir?",
+  "whatsYourName": "Adın ne?",
   "@whatsYourName": {
     "description": "Question asking for user's name"
   },
@@ -2741,5 +2741,16 @@
   "searchLanguages": "Dil ara...",
   "continue": "Devam et",
   "selectALanguage": "Bir dil seçin",
-  "tryDifferentSearchTerm": "Farklı bir arama terimi deneyin"
+  "tryDifferentSearchTerm": "Farklı bir arama terimi deneyin",
+  "pleaseEnterYourName": "Lütfen adınızı girin",
+  "nameMustBeAtLeast2Characters": "İsim en az 2 karakter olmalıdır",
+  "tellUsHowYouWouldLikeToBeAddressed": "Nasıl hitap edilmesini istediğinizi bize söyleyin. Bu, Omi deneyiminizi kişiselleştirmeye yardımcı olur.",
+  "charactersCount": "{count} karakter",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

@@ -4011,5 +4011,16 @@
   "searchLanguages": "Search languages...",
   "continue": "Continue",
   "selectALanguage": "Select a language",
-  "tryDifferentSearchTerm": "Try a different search term"
+  "tryDifferentSearchTerm": "Try a different search term",
+  "pleaseEnterYourName": "Please enter your name",
+  "nameMustBeAtLeast2Characters": "Name must be at least 2 characters",
+  "tellUsHowYouWouldLikeToBeAddressed": "Tell us how you'd like to be addressed. This helps personalize your Omi experience.",
+  "charactersCount": "{count} characters",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

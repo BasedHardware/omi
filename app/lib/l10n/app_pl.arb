@@ -2759,5 +2759,16 @@
   "searchLanguages": "Szukaj języków...",
   "continue": "Kontynuuj",
   "selectALanguage": "Wybierz język",
-  "tryDifferentSearchTerm": "Spróbuj innego terminu wyszukiwania"
+  "tryDifferentSearchTerm": "Spróbuj innego terminu wyszukiwania",
+  "pleaseEnterYourName": "Wprowadź swoje imię",
+  "nameMustBeAtLeast2Characters": "Imię musi mieć co najmniej 2 znaki",
+  "tellUsHowYouWouldLikeToBeAddressed": "Powiedz nam, jak chciałbyś być zwracany. To pomaga spersonalizować Twoje doświadczenie Omi.",
+  "charactersCount": "{count} znaków",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

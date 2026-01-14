@@ -1820,7 +1820,7 @@
   "@wantDifferentName": {
     "description": "Question asking if user wants to change their display name"
   },
-  "whatsYourName": "Bạn tên gì?",
+  "whatsYourName": "Tên bạn là gì?",
   "@whatsYourName": {
     "description": "Question asking for user's name"
   },
@@ -2759,5 +2759,16 @@
   "searchLanguages": "Tìm kiếm ngôn ngữ...",
   "continue": "Tiếp tục",
   "selectALanguage": "Chọn một ngôn ngữ",
-  "tryDifferentSearchTerm": "Thử một từ khóa tìm kiếm khác"
+  "tryDifferentSearchTerm": "Thử một từ khóa tìm kiếm khác",
+  "pleaseEnterYourName": "Vui lòng nhập tên của bạn",
+  "nameMustBeAtLeast2Characters": "Tên phải có ít nhất 2 ký tự",
+  "tellUsHowYouWouldLikeToBeAddressed": "Cho chúng tôi biết bạn muốn được gọi như thế nào. Điều này giúp cá nhân hóa trải nghiệm Omi của bạn.",
+  "charactersCount": "{count} ký tự",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

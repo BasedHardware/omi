@@ -2759,5 +2759,16 @@
   "searchLanguages": "언어 검색...",
   "continue": "계속",
   "selectALanguage": "언어 선택",
-  "tryDifferentSearchTerm": "다른 검색어를 시도해보세요"
+  "tryDifferentSearchTerm": "다른 검색어를 시도해보세요",
+  "pleaseEnterYourName": "이름을 입력하세요",
+  "nameMustBeAtLeast2Characters": "이름은 최소 2자 이상이어야 합니다",
+  "tellUsHowYouWouldLikeToBeAddressed": "어떻게 불리기를 원하시는지 알려주세요. 이는 Omi 경험을 개인화하는 데 도움이 됩니다.",
+  "charactersCount": "{count}자",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

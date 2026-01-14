@@ -2759,5 +2759,16 @@
   "searchLanguages": "Søk språk...",
   "continue": "Fortsett",
   "selectALanguage": "Velg et språk",
-  "tryDifferentSearchTerm": "Prøv et annet søkeord"
+  "tryDifferentSearchTerm": "Prøv et annet søkeord",
+  "pleaseEnterYourName": "Vennligst skriv inn navnet ditt",
+  "nameMustBeAtLeast2Characters": "Navnet må være minst 2 tegn",
+  "tellUsHowYouWouldLikeToBeAddressed": "Fortell oss hvordan du vil bli tiltalt. Dette hjelper til med å personalisere Omi-opplevelsen din.",
+  "charactersCount": "{count} tegn",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

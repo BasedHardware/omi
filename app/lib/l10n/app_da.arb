@@ -1278,7 +1278,7 @@
   "yes": "Ja",
   "editName": "Rediger navn",
   "howShouldOmiCallYou": "Hvad skal Omi kalde dig?",
-  "enterYourName": "Enter your name",
+  "enterYourName": "Indtast dit navn",
   "nameCannotBeEmpty": "Navn kan ikke være tomt",
   "nameUpdatedSuccessfully": "Navn opdateret!",
   "calendarSettings": "Kalenderindstillinger",
@@ -1820,7 +1820,7 @@
   "@wantDifferentName": {
     "description": "Question asking if user wants to change their display name"
   },
-  "whatsYourName": "What's your name?",
+  "whatsYourName": "Hvad hedder du?",
   "@whatsYourName": {
     "description": "Question asking for user's name"
   },
@@ -2759,5 +2759,16 @@
   "searchLanguages": "Søg sprog...",
   "continue": "Fortsæt",
   "selectALanguage": "Vælg et sprog",
-  "tryDifferentSearchTerm": "Prøv et andet søgeord"
+  "tryDifferentSearchTerm": "Prøv et andet søgeord",
+  "pleaseEnterYourName": "Indtast venligst dit navn",
+  "nameMustBeAtLeast2Characters": "Navnet skal være mindst 2 tegn",
+  "tellUsHowYouWouldLikeToBeAddressed": "Fortæl os, hvordan du gerne vil tiltales. Dette hjælper med at personalisere din Omi-oplevelse.",
+  "charactersCount": "{count} tegn",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

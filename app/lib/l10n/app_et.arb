@@ -2759,5 +2759,16 @@
   "searchLanguages": "Otsi keeli...",
   "continue": "Jätka",
   "selectALanguage": "Valige keel",
-  "tryDifferentSearchTerm": "Proovige teist otsingusõna"
+  "tryDifferentSearchTerm": "Proovige teist otsingusõna",
+  "pleaseEnterYourName": "Palun sisestage oma nimi",
+  "nameMustBeAtLeast2Characters": "Nimi peab olema vähemalt 2 tähemärki",
+  "tellUsHowYouWouldLikeToBeAddressed": "Öelge meile, kuidas te soovite, et teid pöördutaks. See aitab isikupärastada teie Omi kogemust.",
+  "charactersCount": "{count} tähemärki",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

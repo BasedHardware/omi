@@ -1820,7 +1820,7 @@
   "@wantDifferentName": {
     "description": "Question asking if user wants to change their display name"
   },
-  "whatsYourName": "Ποιο είναι το όνομά σας;",
+  "whatsYourName": "Πώς σε λένε;",
   "@whatsYourName": {
     "description": "Question asking for user's name"
   },
@@ -2759,5 +2759,16 @@
   "searchLanguages": "Αναζήτηση γλωσσών...",
   "continue": "Συνέχεια",
   "selectALanguage": "Επιλέξτε μια γλώσσα",
-  "tryDifferentSearchTerm": "Δοκιμάστε έναν διαφορετικό όρο αναζήτησης"
+  "tryDifferentSearchTerm": "Δοκιμάστε έναν διαφορετικό όρο αναζήτησης",
+  "pleaseEnterYourName": "Παρακαλώ εισάγετε το όνομά σας",
+  "nameMustBeAtLeast2Characters": "Το όνομα πρέπει να έχει τουλάχιστον 2 χαρακτήρες",
+  "tellUsHowYouWouldLikeToBeAddressed": "Πείτε μας πώς θα θέλατε να σας αποκαλούμε. Αυτό βοηθά στην εξατομίκευση της εμπειρίας Omi.",
+  "charactersCount": "{count} χαρακτήρες",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

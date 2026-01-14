@@ -2777,5 +2777,16 @@
   "searchLanguages": "Търсене на езици...",
   "continue": "Продължи",
   "selectALanguage": "Изберете език",
-  "tryDifferentSearchTerm": "Опитайте с различен термин за търсене"
+  "tryDifferentSearchTerm": "Опитайте с различен термин за търсене",
+  "pleaseEnterYourName": "Моля, въведете вашето име",
+  "nameMustBeAtLeast2Characters": "Името трябва да съдържа поне 2 знака",
+  "tellUsHowYouWouldLikeToBeAddressed": "Кажете ни как бихте искали да се обръщаме към вас. Това помага за персонализиране на вашето Omi изживяване.",
+  "charactersCount": "{count} знака",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

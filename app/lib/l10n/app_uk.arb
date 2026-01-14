@@ -1278,7 +1278,7 @@
   "yes": "Так",
   "editName": "Редагувати ім'я",
   "howShouldOmiCallYou": "Як Omi має до вас звертатися?",
-  "enterYourName": "Введіть своє ім'я",
+  "enterYourName": "Введіть ваше ім'я",
   "nameCannotBeEmpty": "Ім'я не може бути порожнім",
   "nameUpdatedSuccessfully": "Ім'я успішно оновлено!",
   "calendarSettings": "Налаштування календаря",
@@ -2759,5 +2759,16 @@
   "searchLanguages": "Пошук мов...",
   "continue": "Продовжити",
   "selectALanguage": "Оберіть мову",
-  "tryDifferentSearchTerm": "Спробуйте інший пошуковий запит"
+  "tryDifferentSearchTerm": "Спробуйте інший пошуковий запит",
+  "pleaseEnterYourName": "Будь ласка, введіть ваше ім'я",
+  "nameMustBeAtLeast2Characters": "Ім'я повинно містити принаймні 2 символи",
+  "tellUsHowYouWouldLikeToBeAddressed": "Розкажіть нам, як ви хотіли б, щоб до вас зверталися. Це допомагає персоналізувати ваш досвід Omi.",
+  "charactersCount": "{count} символів",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

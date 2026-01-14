@@ -1820,7 +1820,7 @@
   "@wantDifferentName": {
     "description": "Question asking if user wants to change their display name"
   },
-  "whatsYourName": "Kāds ir jūsu vārds?",
+  "whatsYourName": "Kā tevi sauc?",
   "@whatsYourName": {
     "description": "Question asking for user's name"
   },
@@ -2759,5 +2759,16 @@
   "searchLanguages": "Meklēt valodas...",
   "continue": "Turpināt",
   "selectALanguage": "Izvēlieties valodu",
-  "tryDifferentSearchTerm": "Mēģiniet citu meklēšanas terminu"
+  "tryDifferentSearchTerm": "Mēģiniet citu meklēšanas terminu",
+  "pleaseEnterYourName": "Lūdzu, ievadiet savu vārdu",
+  "nameMustBeAtLeast2Characters": "Vārdam jābūt vismaz 2 rakstzīmes garam",
+  "tellUsHowYouWouldLikeToBeAddressed": "Pastāstiet mums, kā jūs vēlētos, lai jūs uzrunātu. Tas palīdz personalizēt jūsu Omi pieredzi.",
+  "charactersCount": "{count} rakstzīmes",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

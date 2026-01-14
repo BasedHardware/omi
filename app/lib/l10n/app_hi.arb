@@ -1206,5 +1206,16 @@
   "searchLanguages": "भाषाएं खोजें...",
   "continue": "जारी रखें",
   "selectALanguage": "एक भाषा चुनें",
-  "tryDifferentSearchTerm": "एक अलग खोज शब्द आज़माएं"
+  "tryDifferentSearchTerm": "एक अलग खोज शब्द आज़माएं",
+  "pleaseEnterYourName": "कृपया अपना नाम दर्ज करें",
+  "nameMustBeAtLeast2Characters": "नाम कम से कम 2 वर्णों का होना चाहिए",
+  "tellUsHowYouWouldLikeToBeAddressed": "हमें बताएं कि आप कैसे संबोधित होना पसंद करेंगे। यह आपके Omi अनुभव को वैयक्तिकृत करने में मदद करता है।",
+  "charactersCount": "{count} वर्ण",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

@@ -2777,5 +2777,16 @@
   "searchLanguages": "Hledat jazyky...",
   "continue": "Pokračovat",
   "selectALanguage": "Vyberte jazyk",
-  "tryDifferentSearchTerm": "Zkuste jiný výraz pro vyhledávání"
+  "tryDifferentSearchTerm": "Zkuste jiný výraz pro vyhledávání",
+  "pleaseEnterYourName": "Prosím zadejte své jméno",
+  "nameMustBeAtLeast2Characters": "Jméno musí mít alespoň 2 znaky",
+  "tellUsHowYouWouldLikeToBeAddressed": "Řekněte nám, jak byste chtěli být oslovováni. To pomáhá personalizovat váš Omi zážitek.",
+  "charactersCount": "{count} znaků",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

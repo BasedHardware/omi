@@ -387,7 +387,7 @@
   "yes": "Sim",
   "editName": "Editar nome",
   "howShouldOmiCallYou": "Como o Omi deve te chamar?",
-  "enterYourName": "Digite seu nome",
+  "enterYourName": "Insira o seu nome",
   "nameCannotBeEmpty": "Nome não pode ser vazio",
   "nameUpdatedSuccessfully": "Nome atualizado com sucesso!",
   "calendarSettings": "Configurações de calendário",
@@ -1206,5 +1206,16 @@
   "searchLanguages": "Pesquisar idiomas...",
   "continue": "Continuar",
   "selectALanguage": "Selecione um idioma",
-  "tryDifferentSearchTerm": "Tente um termo de pesquisa diferente"
+  "tryDifferentSearchTerm": "Tente um termo de pesquisa diferente",
+  "pleaseEnterYourName": "Por favor, insira o seu nome",
+  "nameMustBeAtLeast2Characters": "O nome deve ter pelo menos 2 caracteres",
+  "tellUsHowYouWouldLikeToBeAddressed": "Diga-nos como gostaria de ser chamado. Isso ajuda a personalizar sua experiência Omi.",
+  "charactersCount": "{count} caracteres",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

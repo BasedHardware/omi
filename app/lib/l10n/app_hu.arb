@@ -1278,7 +1278,7 @@
   "yes": "Igen",
   "editName": "Név szerkesztése",
   "howShouldOmiCallYou": "Hogyan szólítson az Omi?",
-  "enterYourName": "Add meg a neved",
+  "enterYourName": "Adja meg a nevét",
   "nameCannotBeEmpty": "A név nem lehet üres",
   "nameUpdatedSuccessfully": "Név sikeresen frissítve!",
   "calendarSettings": "Naptár beállítások",
@@ -2759,5 +2759,16 @@
   "searchLanguages": "Nyelvek keresése...",
   "continue": "Folytatás",
   "selectALanguage": "Válasszon egy nyelvet",
-  "tryDifferentSearchTerm": "Próbáljon ki egy másik keresési kifejezést"
+  "tryDifferentSearchTerm": "Próbáljon ki egy másik keresési kifejezést",
+  "pleaseEnterYourName": "Kérjük, adja meg a nevét",
+  "nameMustBeAtLeast2Characters": "A névnek legalább 2 karakterből kell állnia",
+  "tellUsHowYouWouldLikeToBeAddressed": "Mondja el nekünk, hogyan szeretné, ha megszólítanánk. Ez segít személyre szabni az Omi élményt.",
+  "charactersCount": "{count} karakter",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

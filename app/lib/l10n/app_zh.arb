@@ -387,7 +387,7 @@
   "yes": "是",
   "editName": "编辑姓名",
   "howShouldOmiCallYou": "Omi 应该怎么称呼您？",
-  "enterYourName": "输入您的名字",
+  "enterYourName": "输入您的姓名",
   "nameCannotBeEmpty": "姓名不能为空",
   "nameUpdatedSuccessfully": "姓名更新成功！",
   "calendarSettings": "日历设置",
@@ -1206,5 +1206,16 @@
   "searchLanguages": "搜索语言...",
   "continue": "继续",
   "selectALanguage": "选择语言",
-  "tryDifferentSearchTerm": "尝试不同的搜索词"
+  "tryDifferentSearchTerm": "尝试不同的搜索词",
+  "pleaseEnterYourName": "请输入您的姓名",
+  "nameMustBeAtLeast2Characters": "姓名必须至少包含2个字符",
+  "tellUsHowYouWouldLikeToBeAddressed": "告诉我们您希望如何称呼您。这有助于个性化您的 Omi 体验。",
+  "charactersCount": "{count}个字符",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

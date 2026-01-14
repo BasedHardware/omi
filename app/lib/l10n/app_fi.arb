@@ -1278,7 +1278,7 @@
   "yes": "Kyllä",
   "editName": "Muokkaa nimeä",
   "howShouldOmiCallYou": "Miten Omin pitäisi kutsua sinua?",
-  "enterYourName": "Kirjoita nimesi",
+  "enterYourName": "Syötä nimesi",
   "nameCannotBeEmpty": "Nimi ei voi olla tyhjä",
   "nameUpdatedSuccessfully": "Nimi päivitetty onnistuneesti!",
   "calendarSettings": "Kalenteriasetukset",
@@ -1820,7 +1820,7 @@
   "@wantDifferentName": {
     "description": "Question asking if user wants to change their display name"
   },
-  "whatsYourName": "Mikä nimesi on?",
+  "whatsYourName": "Mikä on nimesi?",
   "@whatsYourName": {
     "description": "Question asking for user's name"
   },
@@ -2759,5 +2759,16 @@
   "searchLanguages": "Hae kieliä...",
   "continue": "Jatka",
   "selectALanguage": "Valitse kieli",
-  "tryDifferentSearchTerm": "Kokeile eri hakusanaa"
+  "tryDifferentSearchTerm": "Kokeile eri hakusanaa",
+  "pleaseEnterYourName": "Syötä nimesi",
+  "nameMustBeAtLeast2Characters": "Nimen on oltava vähintään 2 merkkiä",
+  "tellUsHowYouWouldLikeToBeAddressed": "Kerro meille, miten haluaisit, että sinut puhutellaan. Tämä auttaa personoimaan Omi-kokemuksesi.",
+  "charactersCount": "{count} merkkiä",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

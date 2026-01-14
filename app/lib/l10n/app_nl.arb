@@ -554,7 +554,7 @@
   "yes": "Ja",
   "editName": "Naam bewerken",
   "howShouldOmiCallYou": "Hoe moet Omi je noemen?",
-  "enterYourName": "Voer je naam in",
+  "enterYourName": "Voer uw naam in",
   "nameCannotBeEmpty": "Naam mag niet leeg zijn",
   "nameUpdatedSuccessfully": "Naam succesvol bijgewerkt!",
   "calendarSettings": "Agenda-instellingen",
@@ -943,7 +943,7 @@
   "permissionsRequiredDesc": "Deze app heeft Bluetooth- en locatiemachtigingen nodig om correct te functioneren. Schakel deze in via de instellingen.",
   "openSettings": "Instellingen openen",
   "wantDifferentName": "Wil je een andere naam gebruiken?",
-  "whatsYourName": "Hoe heet je?",
+  "whatsYourName": "Wat is je naam?",
   "speakTranscribeSummarize": "Spreek. Transcribeer. Vat samen.",
   "signInWithApple": "Inloggen met Apple",
   "signInWithGoogle": "Inloggen met Google",
@@ -1577,5 +1577,16 @@
   "searchLanguages": "Zoek talen...",
   "continue": "Doorgaan",
   "selectALanguage": "Selecteer een taal",
-  "tryDifferentSearchTerm": "Probeer een andere zoekterm"
+  "tryDifferentSearchTerm": "Probeer een andere zoekterm",
+  "pleaseEnterYourName": "Voer uw naam in",
+  "nameMustBeAtLeast2Characters": "Naam moet minstens 2 tekens bevatten",
+  "tellUsHowYouWouldLikeToBeAddressed": "Vertel ons hoe u aangesproken wilt worden. Dit helpt uw Omi-ervaring te personaliseren.",
+  "charactersCount": "{count} tekens",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

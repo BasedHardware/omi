@@ -1814,7 +1814,7 @@
   "@wantDifferentName": {
     "description": "Question asking if user wants to change their display name"
   },
-  "whatsYourName": "Koks jūsų vardas?",
+  "whatsYourName": "Koks tavo vardas?",
   "@whatsYourName": {
     "description": "Question asking for user's name"
   },
@@ -2741,5 +2741,16 @@
   "searchLanguages": "Ieškoti kalbų...",
   "continue": "Tęsti",
   "selectALanguage": "Pasirinkite kalbą",
-  "tryDifferentSearchTerm": "Pabandykite kitą paieškos terminą"
+  "tryDifferentSearchTerm": "Pabandykite kitą paieškos terminą",
+  "pleaseEnterYourName": "Įveskite savo vardą",
+  "nameMustBeAtLeast2Characters": "Vardas turi būti bent 2 simbolių",
+  "tellUsHowYouWouldLikeToBeAddressed": "Pasakykite mums, kaip norėtumėte būti kreipiamasi. Tai padeda personalizuoti jūsų Omi patirtį.",
+  "charactersCount": "{count} simboliai",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

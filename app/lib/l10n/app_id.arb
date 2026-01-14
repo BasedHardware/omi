@@ -2759,5 +2759,16 @@
   "searchLanguages": "Cari bahasa...",
   "continue": "Lanjutkan",
   "selectALanguage": "Pilih bahasa",
-  "tryDifferentSearchTerm": "Coba istilah pencarian yang berbeda"
+  "tryDifferentSearchTerm": "Coba istilah pencarian yang berbeda",
+  "pleaseEnterYourName": "Silakan masukkan nama Anda",
+  "nameMustBeAtLeast2Characters": "Nama harus minimal 2 karakter",
+  "tellUsHowYouWouldLikeToBeAddressed": "Beri tahu kami bagaimana Anda ingin disapa. Ini membantu mempersonalisasi pengalaman Omi Anda.",
+  "charactersCount": "{count} karakter",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

@@ -2791,5 +2791,16 @@
   "searchLanguages": "بحث عن اللغات...",
   "continue": "متابعة",
   "selectALanguage": "اختر لغة",
-  "tryDifferentSearchTerm": "جرب مصطلح بحث مختلف"
+  "tryDifferentSearchTerm": "جرب مصطلح بحث مختلف",
+  "pleaseEnterYourName": "يرجى إدخال اسمك",
+  "nameMustBeAtLeast2Characters": "يجب أن يكون الاسم على الأقل حرفين",
+  "tellUsHowYouWouldLikeToBeAddressed": "أخبرنا كيف تريد أن نخاطبك. هذا يساعد في تخصيص تجربة Omi الخاصة بك.",
+  "charactersCount": "{count} حرف",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

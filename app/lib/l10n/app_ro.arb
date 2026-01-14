@@ -1278,7 +1278,7 @@
   "yes": "Da",
   "editName": "Editează numele",
   "howShouldOmiCallYou": "Cum ar trebui Omi să te numească?",
-  "enterYourName": "Enter your name",
+  "enterYourName": "Introduceți numele dvs.",
   "nameCannotBeEmpty": "Numele nu poate fi gol",
   "nameUpdatedSuccessfully": "Nume actualizat cu succes!",
   "calendarSettings": "Setări calendar",
@@ -1820,7 +1820,7 @@
   "@wantDifferentName": {
     "description": "Question asking if user wants to change their display name"
   },
-  "whatsYourName": "What's your name?",
+  "whatsYourName": "Cum te cheamă?",
   "@whatsYourName": {
     "description": "Question asking for user's name"
   },
@@ -2759,5 +2759,16 @@
   "searchLanguages": "Căutați limbi...",
   "continue": "Continuați",
   "selectALanguage": "Selectați o limbă",
-  "tryDifferentSearchTerm": "Încercați un alt termen de căutare"
+  "tryDifferentSearchTerm": "Încercați un alt termen de căutare",
+  "pleaseEnterYourName": "Vă rugăm să introduceți numele dvs.",
+  "nameMustBeAtLeast2Characters": "Numele trebuie să aibă cel puțin 2 caractere",
+  "tellUsHowYouWouldLikeToBeAddressed": "Spuneți-ne cum doriți să fiți adresat. Acest lucru ajută la personalizarea experienței Omi.",
+  "charactersCount": "{count} caractere",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

@@ -605,7 +605,7 @@
   "permissionsRequiredDesc": "Diese App benötigt Bluetooth- und Standortberechtigungen, um ordnungsgemäß zu funktionieren. Bitte aktivieren Sie diese in den Einstellungen.",
   "openSettings": "Einstellungen öffnen",
   "wantDifferentName": "Möchten Sie einen anderen Namen verwenden?",
-  "whatsYourName": "Wie lautet Ihr Name?",
+  "whatsYourName": "Wie heißen Sie?",
   "speakTranscribeSummarize": "Sprechen. Transkribieren. Zusammenfassen.",
   "signInWithApple": "Mit Apple anmelden",
   "signInWithGoogle": "Mit Google anmelden",
@@ -1206,5 +1206,16 @@
   "searchLanguages": "Sprachen suchen...",
   "continue": "Weiter",
   "selectALanguage": "Wählen Sie eine Sprache",
-  "tryDifferentSearchTerm": "Versuchen Sie einen anderen Suchbegriff"
+  "tryDifferentSearchTerm": "Versuchen Sie einen anderen Suchbegriff",
+  "pleaseEnterYourName": "Bitte geben Sie Ihren Namen ein",
+  "nameMustBeAtLeast2Characters": "Der Name muss mindestens 2 Zeichen lang sein",
+  "tellUsHowYouWouldLikeToBeAddressed": "Sagen Sie uns, wie Sie angesprochen werden möchten. Dies hilft, Ihr Omi-Erlebnis zu personalisieren.",
+  "charactersCount": "{count} Zeichen",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

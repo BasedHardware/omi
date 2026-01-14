@@ -10,11 +10,11 @@ Strategy: Prioritize small/medium files, defer large files
 
 OVERALL STATISTICS
 ------------------
-Files Completed: 32
+Files Completed: 33
 Files Skipped (Internal): 2
 Files Skipped (Large): 3
-Total Keys Added: 320
-Total Translations: 10,880 (320 keys × 34 languages)
+Total Keys Added: 328
+Total Translations: 11,152 (328 keys × 34 languages)
 
 ================================================================================
 COMPLETED FILES
@@ -447,6 +447,21 @@ Status: ⏭️ SKIPPED - Entire file commented out
 Notes: All code is commented out (480 lines). Not in active use. No localization
        required.
 
+FILE 61: desktop_language_screen.dart
+--------------------------------------
+Location: app/lib/desktop/pages/onboarding/screens/
+Keys Added: 8
+Keys: pleaseSelectYourPrimaryLanguage, chooseYourLanguage,
+      selectPreferredLanguageForBestExperience, searchLanguages, continue,
+      selectALanguage, noLanguagesFound, tryDifferentSearchTerm
+Script: /tmp/translate_language_screen_keys.py
+Status: ✅ COMPLETED
+Notes: Localized language selection screen including error message, screen title
+       and subtitle, search field, action buttons, and empty state. Reused existing
+       key (back). Removed const from widgets to support dynamic l10n values.
+       Note: "continue" key accessed as continue_ in Dart due to reserved keyword.
+Commit: d947e16b1
+
 ================================================================================
 SKIPPED FILES (LARGE - TO BE COMPLETED LATER)
 ================================================================================
@@ -648,6 +663,6 @@ echo "✅ Translated <feature> keys for all 34 languages!"
 END OF PROGRESS TRACKER
 ================================================================================
 Last Updated: 2026-01-14
-Last Completed: FILE 60 - desktop_auth_screen.dart (16 keys, 544 translations)
-Previous Completed: FILE 59 - desktop_memory_management_dialog.dart (16 keys, 544 translations)
+Last Completed: FILE 61 - desktop_language_screen.dart (8 keys, 272 translations)
+Previous Completed: FILE 60 - desktop_auth_screen.dart (16 keys, 544 translations)
 Current Session: [active]

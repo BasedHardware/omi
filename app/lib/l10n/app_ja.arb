@@ -387,7 +387,7 @@
   "yes": "はい",
   "editName": "名前を編集",
   "howShouldOmiCallYou": "Omiはあなたをどう呼べばいいですか？",
-  "enterYourName": "名前を入力",
+  "enterYourName": "お名前を入力",
   "nameCannotBeEmpty": "名前を空にすることはできません",
   "nameUpdatedSuccessfully": "名前が正常に更新されました！",
   "calendarSettings": "カレンダー設定",
@@ -605,7 +605,7 @@
   "permissionsRequiredDesc": "このアプリが正しく機能するにはBluetoothと位置情報の権限が必要です。設定で有効にしてください。",
   "openSettings": "設定を開く",
   "wantDifferentName": "別の名前を使いますか？",
-  "whatsYourName": "お名前は？",
+  "whatsYourName": "お名前は何ですか？",
   "speakTranscribeSummarize": "話す。文字起こし。要約。",
   "signInWithApple": "Appleでサインイン",
   "signInWithGoogle": "Googleでサインイン",
@@ -1185,5 +1185,16 @@
   "searchLanguages": "言語を検索...",
   "continue": "続ける",
   "selectALanguage": "言語を選択",
-  "tryDifferentSearchTerm": "別の検索語を試してください"
+  "tryDifferentSearchTerm": "別の検索語を試してください",
+  "pleaseEnterYourName": "お名前を入力してください",
+  "nameMustBeAtLeast2Characters": "名前は2文字以上である必要があります",
+  "tellUsHowYouWouldLikeToBeAddressed": "どのように呼ばれたいか教えてください。これにより、Omi体験をパーソナライズできます。",
+  "charactersCount": "{count}文字",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

@@ -1820,7 +1820,7 @@
   "@wantDifferentName": {
     "description": "Question asking if user wants to change their display name"
   },
-  "whatsYourName": "Com us dieu?",
+  "whatsYourName": "Com et dius?",
   "@whatsYourName": {
     "description": "Question asking for user's name"
   },
@@ -2777,5 +2777,16 @@
   "searchLanguages": "Cerca idiomes...",
   "continue": "Continuar",
   "selectALanguage": "Seleccioneu un idioma",
-  "tryDifferentSearchTerm": "Proveu un terme de cerca diferent"
+  "tryDifferentSearchTerm": "Proveu un terme de cerca diferent",
+  "pleaseEnterYourName": "Si us plau, introduïu el vostre nom",
+  "nameMustBeAtLeast2Characters": "El nom ha de tenir almenys 2 caràcters",
+  "tellUsHowYouWouldLikeToBeAddressed": "Digueu-nos com us agradaria que us adrecem. Això ajuda a personalitzar la vostra experiència Omi.",
+  "charactersCount": "{count} caràcters",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

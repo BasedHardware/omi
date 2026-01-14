@@ -2759,5 +2759,16 @@
   "searchLanguages": "Поиск языков...",
   "continue": "Продолжить",
   "selectALanguage": "Выберите язык",
-  "tryDifferentSearchTerm": "Попробуйте другой поисковый запрос"
+  "tryDifferentSearchTerm": "Попробуйте другой поисковый запрос",
+  "pleaseEnterYourName": "Пожалуйста, введите ваше имя",
+  "nameMustBeAtLeast2Characters": "Имя должно содержать не менее 2 символов",
+  "tellUsHowYouWouldLikeToBeAddressed": "Скажите нам, как вы хотели бы, чтобы к вам обращались. Это помогает персонализировать ваш опыт Omi.",
+  "charactersCount": "{count} символов",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

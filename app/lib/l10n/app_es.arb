@@ -387,7 +387,7 @@
   "yes": "Sí",
   "editName": "Editar nombre",
   "howShouldOmiCallYou": "¿Cómo debería llamarte Omi?",
-  "enterYourName": "Ingresa tu nombre",
+  "enterYourName": "Introduce tu nombre",
   "nameCannotBeEmpty": "El nombre no puede estar vacío",
   "nameUpdatedSuccessfully": "¡Nombre actualizado con éxito!",
   "calendarSettings": "Ajustes de calendario",
@@ -600,7 +600,7 @@
   "permissionsRequiredDesc": "Esta app requiere permisos de Bluetooth y Ubicación.",
   "openSettings": "Abrir ajustes",
   "wantDifferentName": "¿Quieres usar un nombre diferente?",
-  "whatsYourName": "¿Cuál es tu nombre?",
+  "whatsYourName": "¿Cómo te llamas?",
   "speakTranscribeSummarize": "Habla. Transcribe. Resume.",
   "signInWithApple": "Iniciar sesión con Apple",
   "signInWithGoogle": "Iniciar sesión con Google",
@@ -1206,5 +1206,16 @@
   "searchLanguages": "Buscar idiomas...",
   "continue": "Continuar",
   "selectALanguage": "Seleccione un idioma",
-  "tryDifferentSearchTerm": "Pruebe con un término de búsqueda diferente"
+  "tryDifferentSearchTerm": "Pruebe con un término de búsqueda diferente",
+  "pleaseEnterYourName": "Por favor, introduce tu nombre",
+  "nameMustBeAtLeast2Characters": "El nombre debe tener al menos 2 caracteres",
+  "tellUsHowYouWouldLikeToBeAddressed": "Díganos cómo le gustaría que nos dirigiéramos a usted. Esto ayuda a personalizar su experiencia Omi.",
+  "charactersCount": "{count} caracteres",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

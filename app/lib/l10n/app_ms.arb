@@ -2759,5 +2759,16 @@
   "searchLanguages": "Cari bahasa...",
   "continue": "Teruskan",
   "selectALanguage": "Pilih bahasa",
-  "tryDifferentSearchTerm": "Cuba istilah carian yang berbeza"
+  "tryDifferentSearchTerm": "Cuba istilah carian yang berbeza",
+  "pleaseEnterYourName": "Sila masukkan nama anda",
+  "nameMustBeAtLeast2Characters": "Nama mesti sekurang-kurangnya 2 aksara",
+  "tellUsHowYouWouldLikeToBeAddressed": "Beritahu kami bagaimana anda ingin dipanggil. Ini membantu memperibadikan pengalaman Omi anda.",
+  "charactersCount": "{count} aksara",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

@@ -1820,7 +1820,7 @@
   "@wantDifferentName": {
     "description": "Question asking if user wants to change their display name"
   },
-  "whatsYourName": "Ako sa voláte?",
+  "whatsYourName": "Ako sa voláš?",
   "@whatsYourName": {
     "description": "Question asking for user's name"
   },
@@ -2759,5 +2759,16 @@
   "searchLanguages": "Hľadať jazyky...",
   "continue": "Pokračovať",
   "selectALanguage": "Vyberte jazyk",
-  "tryDifferentSearchTerm": "Skúste iný vyhľadávací výraz"
+  "tryDifferentSearchTerm": "Skúste iný vyhľadávací výraz",
+  "pleaseEnterYourName": "Prosím zadajte svoje meno",
+  "nameMustBeAtLeast2Characters": "Meno musí mať aspoň 2 znaky",
+  "tellUsHowYouWouldLikeToBeAddressed": "Povedzte nám, ako by ste chceli byť oslovovaní. To pomáha prispôsobiť váš Omi zážitok.",
+  "charactersCount": "{count} znakov",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

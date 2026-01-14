@@ -2741,5 +2741,16 @@
   "searchLanguages": "Cerca lingue...",
   "continue": "Continua",
   "selectALanguage": "Seleziona una lingua",
-  "tryDifferentSearchTerm": "Prova un termine di ricerca diverso"
+  "tryDifferentSearchTerm": "Prova un termine di ricerca diverso",
+  "pleaseEnterYourName": "Inserisci il tuo nome",
+  "nameMustBeAtLeast2Characters": "Il nome deve contenere almeno 2 caratteri",
+  "tellUsHowYouWouldLikeToBeAddressed": "Dicci come vorresti essere chiamato. Questo aiuta a personalizzare la tua esperienza Omi.",
+  "charactersCount": "{count} caratteri",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }
