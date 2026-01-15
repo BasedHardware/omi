@@ -10,14 +10,14 @@ Strategy: Prioritize small/medium files, defer large files
 
 OVERALL STATISTICS
 ------------------
-Files Completed: 38
+Files Completed: 39
 Files Skipped (Internal): 2
-Files Skipped (Large): 4
-Total Keys Added: 413
-Total Translations: 14,042 (413 keys × 34 languages)
+Files Skipped (Large): 3
+Total Keys Added: 430
+Total Translations: 14,620 (430 keys × 34 languages)
 
 MILESTONE: All small and medium desktop files completed! ✅
-Only large/complex files remain (17-80+ strings each)
+Only large/complex files remain (26-80+ strings each)
 
 ================================================================================
 COMPLETED FILES
@@ -556,6 +556,23 @@ Notes: Localized desktop developer settings page including debug logs, export co
        errorLabel. Removed const from widgets to support dynamic l10n values.
 Commit: 9e592cb86
 
+FILE 67 (FILE 34): desktop_conversation_summary.dart
+-----------------------------------------------------
+Location: app/lib/desktop/pages/conversations/widgets/
+Keys Added: 17
+Keys: summary, auto, apps, noSummaryForApp, tryAnotherApp, generatedBy (parameterized),
+      overview, otherAppResults, unknownApp, noSummaryAvailable, conversationNoSummaryYet,
+      generateSummary, summaryCopiedToClipboard, chooseSummarizationApp, enableMoreApps,
+      setAsDefaultSummarizationApp (parameterized), letOmiChooseAutomatically
+Script: /tmp/translate_conversation_summary_keys.py
+Status: ✅ COMPLETED
+Notes: Localized conversation summary page including summary header with app selection,
+       app summary cards, section headers, app selection sheet, and success messages.
+       Used parameterized translations for generatedBy and setAsDefaultSummarizationApp.
+       Used Builder widgets for dynamic l10n access in nested contexts. Removed const from
+       widgets to support dynamic l10n values.
+Commit: 563dd96e5
+
 ================================================================================
 SKIPPED FILES (LARGE - TO BE COMPLETED LATER)
 ================================================================================
@@ -577,21 +594,6 @@ Identified String Types:
 - Developer settings
 - About section
 - Multiple dialog boxes and confirmations
-
-FILE 34: desktop_conversation_summary.dart
--------------------------------------------
-Location: app/lib/desktop/pages/conversations/widgets/
-Estimated Strings: 17
-Estimated Translations: 578 (17 × 34 languages)
-Reason: Too large, deferred for later batch processing
-Status: ⏸️ DEFERRED
-
-Identified Strings:
-- summary, auto, apps, noSummaryForApp, tryAnotherApp, generatedBy
-- overview, otherAppResults, unknownApp, noSummaryAvailable
-- conversationNoSummaryYet, generateSummary, summaryCopiedToClipboard
-- chooseSummarizationApp, enableMoreApps, setAsDefaultSummarizationApp
-- letOmiChooseAutomatically
 
 desktop_conversation_card.dart
 -------------------------------
@@ -775,6 +777,6 @@ echo "✅ Translated <feature> keys for all 34 languages!"
 END OF PROGRESS TRACKER
 ================================================================================
 Last Updated: 2026-01-15
-Last Completed: FILE 66 - desktop_developer_page.dart (35 keys, 1,190 translations)
-Previous Completed: FILE 65 - desktop_profile_page.dart (26 keys, 884 translations)
+Last Completed: FILE 67 - desktop_conversation_summary.dart (17 keys, 578 translations)
+Previous Completed: FILE 66 - desktop_developer_page.dart (35 keys, 1,190 translations)
 Current Session: [active]
