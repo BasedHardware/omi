@@ -117,8 +117,8 @@ workflows:
         script: |
           cd ios
           xcode-project use-profiles
-          xcodebuild -workspace Runner.xcworkspace \
-            -scheme omiWatchApp \
+          xcodebuild -project Runner.xcodeproj \
+            -target omiWatchApp \
             -configuration Release-prod \
             -sdk watchos \
             -destination 'generic/platform=watchOS' \
@@ -465,8 +465,8 @@ workflows:
         script: |
           cd ios
           xcode-project use-profiles
-          xcodebuild -workspace Runner.xcworkspace \
-            -scheme omiWatchApp \
+          xcodebuild -project Runner.xcodeproj \
+            -target omiWatchApp \
             -configuration Release-prod \
             -sdk watchos \
             -destination 'generic/platform=watchOS' \
@@ -1024,8 +1024,8 @@ workflows:
         script: |
           cd ios
           xcode-project use-profiles
-          xcodebuild -workspace Runner.xcworkspace \
-            -scheme omiWatchApp \
+          xcodebuild -project Runner.xcodeproj \
+            -target omiWatchApp \
             -configuration Release-prod \
             -sdk watchos \
             -destination 'generic/platform=watchOS' \
