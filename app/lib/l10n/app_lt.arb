@@ -3035,5 +3035,7 @@
   "updatePersonaDetails": "Atnaujinti personas informaciją",
   "deleteItemTitle": "Ištrinti {item}",
   "deleteItemQuestion": "Ištrinti {item}?",
-  "deleteItemConfirmation": "Ar tikrai norite ištrinti šią {item}? Šio veiksmo negalima atšaukti."
+  "deleteItemConfirmation": "Ar tikrai norite ištrinti šią {item}? Šio veiksmo negalima atšaukti.",
+  "revokeKeyQuestion": "Atšaukti raktą?",
+  "revokeKeyConfirmation": "Ar tikrai norite atšaukti raktą \"{keyName}\"? Šio veiksmo negalima atšaukti."
 }

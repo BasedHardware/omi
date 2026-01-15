@@ -3035,5 +3035,7 @@
   "updatePersonaDetails": "Persona Ayrıntılarını Güncelle",
   "deleteItemTitle": "{item} Sil",
   "deleteItemQuestion": "{item} Silinsin mi?",
-  "deleteItemConfirmation": "Bu {item} silmek istediğinizden emin misiniz? Bu işlem geri alınamaz."
+  "deleteItemConfirmation": "Bu {item} silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.",
+  "revokeKeyQuestion": "Anahtar İptal Edilsin mi?",
+  "revokeKeyConfirmation": "\"{keyName}\" anahtarını iptal etmek istediğinizden emin misiniz? Bu işlem geri alınamaz."
 }

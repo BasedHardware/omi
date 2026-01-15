@@ -1500,5 +1500,7 @@
   "updatePersonaDetails": "更新角色详情",
   "deleteItemTitle": "删除{item}",
   "deleteItemQuestion": "删除{item}？",
-  "deleteItemConfirmation": "您确定要删除此{item}吗？此操作无法撤消。"
+  "deleteItemConfirmation": "您确定要删除此{item}吗？此操作无法撤消。",
+  "revokeKeyQuestion": "撤销密钥？",
+  "revokeKeyConfirmation": "您确定要撤销密钥\"{keyName}\"吗？此操作无法撤消。"
 }

@@ -3055,5 +3055,7 @@
   "updatePersonaDetails": "Актуализиране на детайлите на персоната",
   "deleteItemTitle": "Изтриване на {item}",
   "deleteItemQuestion": "Изтриване на {item}?",
-  "deleteItemConfirmation": "Сигурни ли сте, че искате да изтриете това {item}? Това действие не може да бъде отменено."
+  "deleteItemConfirmation": "Сигурни ли сте, че искате да изтриете това {item}? Това действие не може да бъде отменено.",
+  "revokeKeyQuestion": "Отмяна на ключа?",
+  "revokeKeyConfirmation": "Сигурни ли сте, че искате да отмените ключа \"{keyName}\"? Това действие не може да бъде отменено."
 }

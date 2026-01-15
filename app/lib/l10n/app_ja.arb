@@ -1479,5 +1479,7 @@
   "updatePersonaDetails": "ペルソナの詳細を更新",
   "deleteItemTitle": "{item}を削除",
   "deleteItemQuestion": "{item}を削除しますか？",
-  "deleteItemConfirmation": "この{item}を削除してもよろしいですか？この操作は元に戻せません。"
+  "deleteItemConfirmation": "この{item}を削除してもよろしいですか？この操作は元に戻せません。",
+  "revokeKeyQuestion": "キーを取り消しますか？",
+  "revokeKeyConfirmation": "キー「{keyName}」を取り消してもよろしいですか？この操作は元に戻せません。"
 }

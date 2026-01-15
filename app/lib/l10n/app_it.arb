@@ -3035,5 +3035,7 @@
   "updatePersonaDetails": "Aggiorna dettagli persona",
   "deleteItemTitle": "Elimina {item}",
   "deleteItemQuestion": "Eliminare {item}?",
-  "deleteItemConfirmation": "Sei sicuro di voler eliminare questo {item}? Questa azione non può essere annullata."
+  "deleteItemConfirmation": "Sei sicuro di voler eliminare questo {item}? Questa azione non può essere annullata.",
+  "revokeKeyQuestion": "Revocare la chiave?",
+  "revokeKeyConfirmation": "Sei sicuro di voler revocare la chiave \"{keyName}\"? Questa azione non può essere annullata."
 }

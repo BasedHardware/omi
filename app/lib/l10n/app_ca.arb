@@ -3055,5 +3055,7 @@
   "updatePersonaDetails": "Actualitzar detalls de la persona",
   "deleteItemTitle": "Eliminar {item}",
   "deleteItemQuestion": "Eliminar {item}?",
-  "deleteItemConfirmation": "Estàs segur que vols eliminar aquest {item}? Aquesta acció no es pot desfer."
+  "deleteItemConfirmation": "Estàs segur que vols eliminar aquest {item}? Aquesta acció no es pot desfer.",
+  "revokeKeyQuestion": "Revocar la clau?",
+  "revokeKeyConfirmation": "Estàs segur que vols revocar la clau \"{keyName}\"? Aquesta acció no es pot desfer."
 }

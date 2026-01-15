@@ -1500,5 +1500,7 @@
   "updatePersonaDetails": "Actualizar detalles de persona",
   "deleteItemTitle": "Eliminar {item}",
   "deleteItemQuestion": "¿Eliminar {item}?",
-  "deleteItemConfirmation": "¿Estás seguro de que quieres eliminar este {item}? Esta acción no se puede deshacer."
+  "deleteItemConfirmation": "¿Estás seguro de que quieres eliminar este {item}? Esta acción no se puede deshacer.",
+  "revokeKeyQuestion": "¿Revocar clave?",
+  "revokeKeyConfirmation": "¿Estás seguro de que quieres revocar la clave \"{keyName}\"? Esta acción no se puede deshacer."
 }

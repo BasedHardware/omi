@@ -3053,5 +3053,7 @@
   "updatePersonaDetails": "Ενημέρωση στοιχείων περσόνας",
   "deleteItemTitle": "Διαγραφή {item}",
   "deleteItemQuestion": "Διαγραφή {item};",
-  "deleteItemConfirmation": "Είστε βέβαιοι ότι θέλετε να διαγράψετε αυτό το {item}; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί."
+  "deleteItemConfirmation": "Είστε βέβαιοι ότι θέλετε να διαγράψετε αυτό το {item}; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.",
+  "revokeKeyQuestion": "Ανάκληση κλειδιού;",
+  "revokeKeyConfirmation": "Είστε βέβαιοι ότι θέλετε να ανακαλέσετε το κλειδί \"{keyName}\"; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί."
 }

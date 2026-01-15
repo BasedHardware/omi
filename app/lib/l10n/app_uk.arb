@@ -3053,5 +3053,7 @@
   "updatePersonaDetails": "Оновити деталі персони",
   "deleteItemTitle": "Видалити {item}",
   "deleteItemQuestion": "Видалити {item}?",
-  "deleteItemConfirmation": "Ви впевнені, що хочете видалити цей {item}? Цю дію неможливо скасувати."
+  "deleteItemConfirmation": "Ви впевнені, що хочете видалити цей {item}? Цю дію неможливо скасувати.",
+  "revokeKeyQuestion": "Відкликати ключ?",
+  "revokeKeyConfirmation": "Ви впевнені, що хочете відкликати ключ \"{keyName}\"? Цю дію неможливо скасувати."
 }

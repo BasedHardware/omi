@@ -3053,5 +3053,7 @@
   "updatePersonaDetails": "Uuenda persona üksikasju",
   "deleteItemTitle": "Kustuta {item}",
   "deleteItemQuestion": "Kustuta {item}?",
-  "deleteItemConfirmation": "Kas olete kindel, et soovite seda {item} kustutada? Seda toimingut ei saa tagasi võtta."
+  "deleteItemConfirmation": "Kas olete kindel, et soovite seda {item} kustutada? Seda toimingut ei saa tagasi võtta.",
+  "revokeKeyQuestion": "Tühista võti?",
+  "revokeKeyConfirmation": "Kas olete kindel, et soovite võtme \"{keyName}\" tühistada? Seda toimingut ei saa tagasi võtta."
 }

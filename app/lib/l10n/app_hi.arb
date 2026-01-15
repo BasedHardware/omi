@@ -1500,5 +1500,7 @@
   "updatePersonaDetails": "पर्सोना विवरण अपडेट करें",
   "deleteItemTitle": "{item} हटाएं",
   "deleteItemQuestion": "{item} हटाएं?",
-  "deleteItemConfirmation": "क्या आप वाकई इस {item} को हटाना चाहते हैं? इस क्रिया को पूर्ववत नहीं किया जा सकता।"
+  "deleteItemConfirmation": "क्या आप वाकई इस {item} को हटाना चाहते हैं? इस क्रिया को पूर्ववत नहीं किया जा सकता।",
+  "revokeKeyQuestion": "कुंजी रद्द करें?",
+  "revokeKeyConfirmation": "क्या आप वाकई कुंजी \"{keyName}\" को रद्द करना चाहते हैं? इस क्रिया को पूर्ववत नहीं किया जा सकता।"
 }

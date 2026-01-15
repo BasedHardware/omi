@@ -1871,5 +1871,7 @@
   "updatePersonaDetails": "Mettre à jour les détails du persona",
   "deleteItemTitle": "Supprimer {item}",
   "deleteItemQuestion": "Supprimer {item} ?",
-  "deleteItemConfirmation": "Êtes-vous sûr de vouloir supprimer ce {item} ? Cette action est irréversible."
+  "deleteItemConfirmation": "Êtes-vous sûr de vouloir supprimer ce {item} ? Cette action est irréversible.",
+  "revokeKeyQuestion": "Révoquer la clé ?",
+  "revokeKeyConfirmation": "Êtes-vous sûr de vouloir révoquer la clé \"{keyName}\" ? Cette action est irréversible."
 }

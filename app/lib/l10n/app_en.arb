@@ -4955,5 +4955,18 @@
         "type": "String"
       }
     }
+  },
+  "revokeKeyQuestion": "Revoke Key?",
+  "@revokeKeyQuestion": {
+    "description": "Dialog title asking to confirm key revocation"
+  },
+  "revokeKeyConfirmation": "Are you sure you want to revoke the key \"{keyName}\"? This action cannot be undone.",
+  "@revokeKeyConfirmation": {
+    "description": "Dialog message explaining key revocation is permanent",
+    "placeholders": {
+      "keyName": {
+        "type": "String"
+      }
+    }
   }
 }

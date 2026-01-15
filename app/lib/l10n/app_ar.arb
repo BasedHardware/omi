@@ -3071,5 +3071,7 @@
   "updatePersonaDetails": "تحديث تفاصيل الشخصية",
   "deleteItemTitle": "حذف {item}",
   "deleteItemQuestion": "حذف {item}؟",
-  "deleteItemConfirmation": "هل أنت متأكد أنك تريد حذف هذا {item}؟ لا يمكن التراجع عن هذا الإجراء."
+  "deleteItemConfirmation": "هل أنت متأكد أنك تريد حذف هذا {item}؟ لا يمكن التراجع عن هذا الإجراء.",
+  "revokeKeyQuestion": "إلغاء المفتاح؟",
+  "revokeKeyConfirmation": "هل أنت متأكد أنك تريد إلغاء المفتاح \"{keyName}\"؟ لا يمكن التراجع عن هذا الإجراء."
 }

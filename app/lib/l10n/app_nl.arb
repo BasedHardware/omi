@@ -1871,5 +1871,7 @@
   "updatePersonaDetails": "Persona-details bijwerken",
   "deleteItemTitle": "{item} verwijderen",
   "deleteItemQuestion": "{item} verwijderen?",
-  "deleteItemConfirmation": "Weet u zeker dat u deze {item} wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt."
+  "deleteItemConfirmation": "Weet u zeker dat u deze {item} wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.",
+  "revokeKeyQuestion": "Sleutel intrekken?",
+  "revokeKeyConfirmation": "Weet u zeker dat u de sleutel \"{keyName}\" wilt intrekken? Deze actie kan niet ongedaan worden gemaakt."
 }

@@ -3053,5 +3053,7 @@
   "updatePersonaDetails": "Oppdater persona-detaljer",
   "deleteItemTitle": "Slett {item}",
   "deleteItemQuestion": "Slette {item}?",
-  "deleteItemConfirmation": "Er du sikker på at du vil slette denne {item}? Denne handlingen kan ikke angres."
+  "deleteItemConfirmation": "Er du sikker på at du vil slette denne {item}? Denne handlingen kan ikke angres.",
+  "revokeKeyQuestion": "Tilbakekall nøkkel?",
+  "revokeKeyConfirmation": "Er du sikker på at du vil tilbakekalle nøkkelen \"{keyName}\"? Denne handlingen kan ikke angres."
 }

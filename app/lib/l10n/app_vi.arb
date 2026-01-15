@@ -3053,5 +3053,7 @@
   "updatePersonaDetails": "Cập nhật chi tiết persona",
   "deleteItemTitle": "Xóa {item}",
   "deleteItemQuestion": "Xóa {item}?",
-  "deleteItemConfirmation": "Bạn có chắc chắn muốn xóa {item} này? Hành động này không thể hoàn tác."
+  "deleteItemConfirmation": "Bạn có chắc chắn muốn xóa {item} này? Hành động này không thể hoàn tác.",
+  "revokeKeyQuestion": "Thu hồi khóa?",
+  "revokeKeyConfirmation": "Bạn có chắc chắn muốn thu hồi khóa \"{keyName}\"? Hành động này không thể hoàn tác."
 }

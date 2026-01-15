@@ -3053,5 +3053,7 @@
   "updatePersonaDetails": "Persona részleteinek frissítése",
   "deleteItemTitle": "{item} törlése",
   "deleteItemQuestion": "{item} törlése?",
-  "deleteItemConfirmation": "Biztosan törölni szeretné ezt a(z) {item}-t? Ez a művelet nem vonható vissza."
+  "deleteItemConfirmation": "Biztosan törölni szeretné ezt a(z) {item}-t? Ez a művelet nem vonható vissza.",
+  "revokeKeyQuestion": "Kulcs visszavonása?",
+  "revokeKeyConfirmation": "Biztosan vissza szeretné vonni a(z) \"{keyName}\" kulcsot? Ez a művelet nem vonható vissza."
 }

@@ -3055,5 +3055,7 @@
   "updatePersonaDetails": "Aktualizovat detaily persony",
   "deleteItemTitle": "Smazat {item}",
   "deleteItemQuestion": "Smazat {item}?",
-  "deleteItemConfirmation": "Opravdu chcete smazat tuto {item}? Tuto akci nelze vrátit zpět."
+  "deleteItemConfirmation": "Opravdu chcete smazat tuto {item}? Tuto akci nelze vrátit zpět.",
+  "revokeKeyQuestion": "Odvolat klíč?",
+  "revokeKeyConfirmation": "Opravdu chcete odvolat klíč \"{keyName}\"? Tuto akci nelze vrátit zpět."
 }

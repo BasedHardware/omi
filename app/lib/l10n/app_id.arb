@@ -3053,5 +3053,7 @@
   "updatePersonaDetails": "Perbarui Detail Persona",
   "deleteItemTitle": "Hapus {item}",
   "deleteItemQuestion": "Hapus {item}?",
-  "deleteItemConfirmation": "Apakah Anda yakin ingin menghapus {item} ini? Tindakan ini tidak dapat dibatalkan."
+  "deleteItemConfirmation": "Apakah Anda yakin ingin menghapus {item} ini? Tindakan ini tidak dapat dibatalkan.",
+  "revokeKeyQuestion": "Cabut Kunci?",
+  "revokeKeyConfirmation": "Apakah Anda yakin ingin mencabut kunci \"{keyName}\"? Tindakan ini tidak dapat dibatalkan."
 }

@@ -3053,5 +3053,7 @@
   "updatePersonaDetails": "Kemas Kini Butiran Persona",
   "deleteItemTitle": "Padam {item}",
   "deleteItemQuestion": "Padam {item}?",
-  "deleteItemConfirmation": "Adakah anda pasti mahu memadamkan {item} ini? Tindakan ini tidak boleh dibuat asal."
+  "deleteItemConfirmation": "Adakah anda pasti mahu memadamkan {item} ini? Tindakan ini tidak boleh dibuat asal.",
+  "revokeKeyQuestion": "Batalkan Kunci?",
+  "revokeKeyConfirmation": "Adakah anda pasti mahu membatalkan kunci \"{keyName}\"? Tindakan ini tidak boleh dibuat asal."
 }

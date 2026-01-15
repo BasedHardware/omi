@@ -3053,5 +3053,7 @@
   "updatePersonaDetails": "Aktualizovať detaily persony",
   "deleteItemTitle": "Odstrániť {item}",
   "deleteItemQuestion": "Odstrániť {item}?",
-  "deleteItemConfirmation": "Ste si istí, že chcete odstrániť túto {item}? Túto akciu nie je možné vrátiť späť."
+  "deleteItemConfirmation": "Ste si istí, že chcete odstrániť túto {item}? Túto akciu nie je možné vrátiť späť.",
+  "revokeKeyQuestion": "Odvolať kľúč?",
+  "revokeKeyConfirmation": "Ste si istí, že chcete odvolať kľúč \"{keyName}\"? Túto akciu nie je možné vrátiť späť."
 }

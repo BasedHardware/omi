@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/mcp_api_key.dart';
 import 'package:omi/providers/mcp_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class McpApiKeyListItem extends StatelessWidget {
   final McpApiKey apiKey;
@@ -60,9 +61,9 @@ class McpApiKeyListItem extends StatelessWidget {
                 color: Colors.red.withOpacity(0.15),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Text(
-                'Revoke',
-                style: TextStyle(
+              child: Text(
+                context.l10n.revoke,
+                style: const TextStyle(
                   color: Colors.redAccent,
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
@@ -82,21 +83,21 @@ class McpApiKeyListItem extends StatelessWidget {
         return AlertDialog(
           backgroundColor: const Color(0xFF1C1C1E),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text(
-            'Revoke Key?',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+          title: Text(
+            context.l10n.revokeKeyQuestion,
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
           ),
           content: Text(
-            'Are you sure you want to revoke the key "${apiKey.name}"? This action cannot be undone.',
+            context.l10n.revokeKeyConfirmation(apiKey.name),
             style: TextStyle(color: Colors.grey.shade400),
           ),
           actions: <Widget>[
             TextButton(
-              child: Text('Cancel', style: TextStyle(color: Colors.grey.shade400)),
+              child: Text(context.l10n.cancel, style: TextStyle(color: Colors.grey.shade400)),
               onPressed: () => Navigator.of(dialogContext).pop(),
             ),
             TextButton(
-              child: const Text('Revoke', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600)),
+              child: Text(context.l10n.revoke, style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600)),
               onPressed: () {
                 Provider.of<McpProvider>(context, listen: false).deleteKey(apiKey.id);
                 Navigator.of(dialogContext).pop();

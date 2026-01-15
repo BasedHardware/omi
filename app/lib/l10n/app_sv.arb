@@ -3053,5 +3053,7 @@
   "updatePersonaDetails": "Uppdatera persona-detaljer",
   "deleteItemTitle": "Radera {item}",
   "deleteItemQuestion": "Radera {item}?",
-  "deleteItemConfirmation": "Är du säker på att du vill radera denna {item}? Denna åtgärd kan inte ångras."
+  "deleteItemConfirmation": "Är du säker på att du vill radera denna {item}? Denna åtgärd kan inte ångras.",
+  "revokeKeyQuestion": "Återkalla nyckel?",
+  "revokeKeyConfirmation": "Är du säker på att du vill återkalla nyckeln \"{keyName}\"? Denna åtgärd kan inte ångras."
 }
