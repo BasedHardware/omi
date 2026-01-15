@@ -56,7 +56,7 @@ MEDIUM PRIORITY - Widgets and Components
 [✓] app/lib/pages/conversation_detail/share.dart
     Strings: Sharing-related strings
 
-[ ] app/lib/pages/action_items/widgets/action_item_tile_widget.dart
+[✓] app/lib/pages/action_items/widgets/action_item_tile_widget.dart
     Strings: Action item strings
 
 [ ] app/lib/pages/apps/widgets/api_keys_widget.dart
@@ -971,12 +971,34 @@ Notes: Localized share bottom sheet including copy buttons, export format labels
        localized as they use pw.Context instead of BuildContext.
 Commit: 387727651
 
+FILE 77 (Phase 2 FILE 7): action_item_tile_widget.dart
+-------------------------------------------------------
+Location: app/lib/pages/action_items/widgets/
+Keys Added: 15 (new) + 18 (reused) = 33 total
+New Keys: weekdayMon, weekdayTue, weekdayWed, weekdayThu, weekdayFri,
+         weekdaySat, weekdaySun (7 weekday abbreviations),
+         serviceIntegrationComingSoon (parameterized),
+         alreadyExportedTo (parameterized), anotherPlatform,
+         pleaseAuthenticateWithService (parameterized),
+         addingToService (parameterized), addedToService (parameterized),
+         failedToAddToService (parameterized), permissionDeniedForAppleReminders
+Reused Keys: today, tomorrow, yesterday, monthJan-monthDec (12),
+            timeAM, timePM, upgradeToUnlimited
+Script: /tmp/translate_action_item_tile_keys.py
+Status: ✅ COMPLETED
+Notes: Localized action item tile component with date/time formatting, task
+       integration export messages (Todoist, Asana, Google Tasks, ClickUp,
+       Apple Reminders), and upgrade prompt. Refactored _formatDueDate to
+       accept BuildContext for l10n access. Used parameterized translations
+       for task service names to reduce key count.
+Commit: 420b924ce
+
 ================================================================================
 END OF PROGRESS TRACKER
 ================================================================================
 Last Updated: 2026-01-15
-Last Completed: FILE 76 - share.dart (6 new keys + 7 reused, 204 new translations)
-Previous Completed: FILE 75 - app_detail.dart (41 new keys + 9 reused, 1394 new translations)
+Last Completed: FILE 77 - action_item_tile_widget.dart (15 new keys + 18 reused, 510 new translations)
+Previous Completed: FILE 76 - share.dart (6 new keys + 7 reused, 204 new translations)
 Current Session: Phase 2 - Mobile/Pages localization in progress
 
 🎉 PHASE 1 (DESKTOP) COMPLETE! 🎉
@@ -986,5 +1008,5 @@ Current Session: Phase 2 - Mobile/Pages localization in progress
 
 📋 PHASE 2 (MOBILE/PAGES) IN PROGRESS
 59 files identified with hardcoded strings
-Files Completed: 6
+Files Completed: 7
 Estimated 200-300 new keys needed
