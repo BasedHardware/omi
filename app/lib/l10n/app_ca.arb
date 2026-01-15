@@ -435,7 +435,7 @@
   "@privacyPolicy": {
     "description": "Link text for Privacy Policy"
   },
-  "visitWebsite": "Visitar lloc web",
+  "visitWebsite": "Visitar el lloc web",
   "@visitWebsite": {
     "description": "Visit website link"
   },
@@ -447,7 +447,7 @@
   "@joinCommunity": {
     "description": "Discord community link"
   },
-  "membersAndCounting": "Més de 8000 membres i sumant.",
+  "membersAndCounting": "8000+ membres i sumant.",
   "@membersAndCounting": {
     "description": "Discord member count"
   },
@@ -2799,5 +2799,6 @@
   "accessibility": "Accessibilitat",
   "detectBrowserBasedMeetings": "Detectar reunions basades en el navegador",
   "accessibilityDescription": "Omi necessita permís d'accessibilitat per detectar quan us uniu a reunions de Zoom, Meet o Teams al vostre navegador.",
-  "pleaseWait": "Si us plau, espereu..."
+  "pleaseWait": "Si us plau, espereu...",
+  "joinTheCommunity": "Uneix-te a la comunitat!"
 }

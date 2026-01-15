@@ -137,7 +137,7 @@
   "visitWebsite": "Visiter le site web",
   "helpOrInquiries": "Aide ou questions ?",
   "joinCommunity": "Rejoignez la communauté !",
-  "membersAndCounting": "Plus de 8000 membres et ça continue.",
+  "membersAndCounting": "8000+ membres et ça continue.",
   "deleteAccountTitle": "Supprimer le compte",
   "deleteAccountConfirm": "Êtes-vous sûr de vouloir supprimer votre compte ?",
   "cannotBeUndone": "Cette action est irréversible.",
@@ -1599,5 +1599,6 @@
   "accessibility": "Accessibilité",
   "detectBrowserBasedMeetings": "Détecter les réunions basées sur le navigateur",
   "accessibilityDescription": "Omi a besoin de l'autorisation d'accessibilité pour détecter quand vous rejoignez des réunions Zoom, Meet ou Teams dans votre navigateur.",
-  "pleaseWait": "Veuillez patienter..."
+  "pleaseWait": "Veuillez patienter...",
+  "joinTheCommunity": "Rejoignez la communauté !"
 }

@@ -129,9 +129,9 @@
   "myApps": "Mis aplicaciones",
   "installedApps": "Aplicaciones instaladas",
   "unableToFetchApps": "No se pudieron cargar las apps :(\n\nRevisa tu conexión a internet.",
-  "aboutOmi": "Sobre Omi",
+  "aboutOmi": "Acerca de Omi",
   "privacyPolicy": "Política de Privacidad",
-  "visitWebsite": "Visitar sitio web",
+  "visitWebsite": "Visitar el sitio web",
   "helpOrInquiries": "¿Ayuda o consultas?",
   "joinCommunity": "¡Únete a la comunidad!",
   "membersAndCounting": "8000+ miembros y contando.",
@@ -1228,5 +1228,6 @@
   "accessibility": "Accesibilidad",
   "detectBrowserBasedMeetings": "Detectar reuniones basadas en navegador",
   "accessibilityDescription": "Omi necesita permiso de accesibilidad para detectar cuándo se une a reuniones de Zoom, Meet o Teams en su navegador.",
-  "pleaseWait": "Por favor, espere..."
+  "pleaseWait": "Por favor, espere...",
+  "joinTheCommunity": "¡Únete a la comunidad!"
 }

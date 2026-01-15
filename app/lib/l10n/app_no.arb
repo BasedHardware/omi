@@ -435,7 +435,7 @@
   "@privacyPolicy": {
     "description": "Link text for Privacy Policy"
   },
-  "visitWebsite": "Besøk nettside",
+  "visitWebsite": "Besøk nettstedet",
   "@visitWebsite": {
     "description": "Visit website link"
   },
@@ -447,7 +447,7 @@
   "@joinCommunity": {
     "description": "Discord community link"
   },
-  "membersAndCounting": "8000+ medlemmer og flere.",
+  "membersAndCounting": "8000+ medlemmer og tallet øker.",
   "@membersAndCounting": {
     "description": "Discord member count"
   },
@@ -2781,5 +2781,6 @@
   "accessibility": "Tilgjengelighet",
   "detectBrowserBasedMeetings": "Oppdag nettleserbaserte møter",
   "accessibilityDescription": "Omi trenger tilgjengelighetstillatelse for å oppdage når du deltar i Zoom-, Meet- eller Teams-møter i nettleseren din.",
-  "pleaseWait": "Vennligst vent..."
+  "pleaseWait": "Vennligst vent...",
+  "joinTheCommunity": "Bli med i fellesskapet!"
 }

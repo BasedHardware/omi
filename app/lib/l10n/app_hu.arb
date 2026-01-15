@@ -435,7 +435,7 @@
   "@privacyPolicy": {
     "description": "Link text for Privacy Policy"
   },
-  "visitWebsite": "Weboldal meglátogatása",
+  "visitWebsite": "Weboldal megtekintése",
   "@visitWebsite": {
     "description": "Visit website link"
   },
@@ -447,7 +447,7 @@
   "@joinCommunity": {
     "description": "Discord community link"
   },
-  "membersAndCounting": "8000+ tag és még mindig nő.",
+  "membersAndCounting": "8000+ tag és számuk folyamatosan nő.",
   "@membersAndCounting": {
     "description": "Discord member count"
   },
@@ -2781,5 +2781,6 @@
   "accessibility": "Akadálymentesség",
   "detectBrowserBasedMeetings": "Böngésző alapú találkozók észlelése",
   "accessibilityDescription": "Az Omi-nak akadálymentesítési engedélyre van szüksége annak észleléséhez, amikor csatlakozik Zoom, Meet vagy Teams találkozókhoz a böngészőjében.",
-  "pleaseWait": "Kérem várjon..."
+  "pleaseWait": "Kérem várjon...",
+  "joinTheCommunity": "Csatlakozz a közösséghez!"
 }

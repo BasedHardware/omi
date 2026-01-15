@@ -134,7 +134,7 @@
   "visitWebsite": "访问网站",
   "helpOrInquiries": "帮助或咨询？",
   "joinCommunity": "加入社区！",
-  "membersAndCounting": "8000+ 成员，持续增加中。",
+  "membersAndCounting": "8000+名成员并且还在增加。",
   "deleteAccountTitle": "删除账户",
   "deleteAccountConfirm": "您确定要删除您的账户吗？",
   "cannotBeUndone": "此操作无法撤消。",
@@ -1228,5 +1228,6 @@
   "accessibility": "辅助功能",
   "detectBrowserBasedMeetings": "检测基于浏览器的会议",
   "accessibilityDescription": "Omi 需要辅助功能权限来检测您何时在浏览器中加入 Zoom、Meet 或 Teams 会议。",
-  "pleaseWait": "请稍候..."
+  "pleaseWait": "请稍候...",
+  "joinTheCommunity": "加入社区！"
 }

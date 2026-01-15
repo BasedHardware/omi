@@ -447,7 +447,7 @@
   "@joinCommunity": {
     "description": "Discord community link"
   },
-  "membersAndCounting": "Более 8000 участников.",
+  "membersAndCounting": "8000+ участников и их число растет.",
   "@membersAndCounting": {
     "description": "Discord member count"
   },
@@ -2781,5 +2781,6 @@
   "accessibility": "Доступность",
   "detectBrowserBasedMeetings": "Обнаружение встреч на базе браузера",
   "accessibilityDescription": "Omi нужно разрешение доступности для обнаружения, когда вы присоединяетесь к встречам Zoom, Meet или Teams в вашем браузере.",
-  "pleaseWait": "Пожалуйста, подождите..."
+  "pleaseWait": "Пожалуйста, подождите...",
+  "joinTheCommunity": "Присоединяйтесь к сообществу!"
 }

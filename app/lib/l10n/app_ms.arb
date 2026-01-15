@@ -447,7 +447,7 @@
   "@joinCommunity": {
     "description": "Discord community link"
   },
-  "membersAndCounting": "8000+ ahli dan semakin bertambah.",
+  "membersAndCounting": "8000+ ahli dan terus bertambah.",
   "@membersAndCounting": {
     "description": "Discord member count"
   },
@@ -2781,5 +2781,6 @@
   "accessibility": "Kebolehcapaian",
   "detectBrowserBasedMeetings": "Kesan mesyuarat berasaskan pelayar",
   "accessibilityDescription": "Omi memerlukan kebenaran kebolehcapaian untuk mengesan apabila anda menyertai mesyuarat Zoom, Meet, atau Teams dalam pelayar anda.",
-  "pleaseWait": "Sila tunggu..."
+  "pleaseWait": "Sila tunggu...",
+  "joinTheCommunity": "Sertai komuniti!"
 }

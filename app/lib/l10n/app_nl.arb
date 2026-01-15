@@ -134,10 +134,10 @@
   "unableToFetchApps": "Kan apps niet ophalen :(\n\nControleer je internetverbinding en probeer het opnieuw.",
   "aboutOmi": "Over Omi",
   "privacyPolicy": "Privacybeleid",
-  "visitWebsite": "Website bezoeken",
+  "visitWebsite": "Bezoek website",
   "helpOrInquiries": "Hulp of vragen?",
   "joinCommunity": "Word lid van de community!",
-  "membersAndCounting": "8000+ leden en groeiende.",
+  "membersAndCounting": "8000+ leden en groeiend.",
   "deleteAccountTitle": "Account verwijderen",
   "deleteAccountConfirm": "Weet je zeker dat je je account wilt verwijderen?",
   "cannotBeUndone": "Dit kan niet ongedaan worden gemaakt.",
@@ -1599,5 +1599,6 @@
   "accessibility": "Toegankelijkheid",
   "detectBrowserBasedMeetings": "Browsergebaseerde vergaderingen detecteren",
   "accessibilityDescription": "Omi heeft toegankelijkheidstoestemming nodig om te detecteren wanneer u deelneemt aan Zoom-, Meet- of Teams-vergaderingen in uw browser.",
-  "pleaseWait": "Even geduld..."
+  "pleaseWait": "Even geduld...",
+  "joinTheCommunity": "Word lid van de community!"
 }

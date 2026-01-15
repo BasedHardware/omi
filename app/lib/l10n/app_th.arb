@@ -439,7 +439,7 @@
   "@visitWebsite": {
     "description": "Visit website link"
   },
-  "helpOrInquiries": "ต้องการความช่วยเหลือหรือสอบถามข้อมูล?",
+  "helpOrInquiries": "ช่วยเหลือหรือสอบถาม?",
   "@helpOrInquiries": {
     "description": "Help link title"
   },
@@ -447,7 +447,7 @@
   "@joinCommunity": {
     "description": "Discord community link"
   },
-  "membersAndCounting": "สมาชิก 8,000+ คนและกำลังเพิ่มขึ้น",
+  "membersAndCounting": "8000+ สมาชิกและนับเพิ่มขึ้นเรื่อยๆ",
   "@membersAndCounting": {
     "description": "Discord member count"
   },
@@ -2781,5 +2781,6 @@
   "accessibility": "การเข้าถึง",
   "detectBrowserBasedMeetings": "ตรวจจับการประชุมที่ใช้เบราว์เซอร์",
   "accessibilityDescription": "Omi ต้องการสิทธิ์การเข้าถึงเพื่อตรวจจับเมื่อคุณเข้าร่วมการประชุม Zoom, Meet หรือ Teams ในเบราว์เซอร์ของคุณ",
-  "pleaseWait": "กรุณารอสักครู่..."
+  "pleaseWait": "กรุณารอสักครู่...",
+  "joinTheCommunity": "เข้าร่วมชุมชน!"
 }

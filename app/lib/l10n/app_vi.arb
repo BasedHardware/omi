@@ -427,7 +427,7 @@
   "@unableToFetchApps": {
     "description": "Error when apps fail to load"
   },
-  "aboutOmi": "Về Omi",
+  "aboutOmi": "Giới thiệu về Omi",
   "@aboutOmi": {
     "description": "About page title"
   },
@@ -435,7 +435,7 @@
   "@privacyPolicy": {
     "description": "Link text for Privacy Policy"
   },
-  "visitWebsite": "Truy cập website",
+  "visitWebsite": "Truy cập trang web",
   "@visitWebsite": {
     "description": "Visit website link"
   },
@@ -447,7 +447,7 @@
   "@joinCommunity": {
     "description": "Discord community link"
   },
-  "membersAndCounting": "Hơn 8000 thành viên và đang tăng.",
+  "membersAndCounting": "8000+ thành viên và tiếp tục tăng.",
   "@membersAndCounting": {
     "description": "Discord member count"
   },
@@ -2781,5 +2781,6 @@
   "accessibility": "Khả năng truy cập",
   "detectBrowserBasedMeetings": "Phát hiện các cuộc họp dựa trên trình duyệt",
   "accessibilityDescription": "Omi cần quyền truy cập để phát hiện khi bạn tham gia các cuộc họp Zoom, Meet hoặc Teams trong trình duyệt của bạn.",
-  "pleaseWait": "Vui lòng đợi..."
+  "pleaseWait": "Vui lòng đợi...",
+  "joinTheCommunity": "Tham gia cộng đồng!"
 }

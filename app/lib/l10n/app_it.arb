@@ -435,11 +435,11 @@
   "@privacyPolicy": {
     "description": "Privacy policy link"
   },
-  "visitWebsite": "Visita il Sito Web",
+  "visitWebsite": "Visita il sito web",
   "@visitWebsite": {
     "description": "Visit website link"
   },
-  "helpOrInquiries": "Aiuto o Richieste?",
+  "helpOrInquiries": "Aiuto o domande?",
   "@helpOrInquiries": {
     "description": "Help link title"
   },
@@ -2763,5 +2763,6 @@
   "accessibility": "Accessibilità",
   "detectBrowserBasedMeetings": "Rileva riunioni basate sul browser",
   "accessibilityDescription": "Omi ha bisogno dell'autorizzazione di accessibilità per rilevare quando partecipi a riunioni Zoom, Meet o Teams nel tuo browser.",
-  "pleaseWait": "Attendere prego..."
+  "pleaseWait": "Attendere prego...",
+  "joinTheCommunity": "Unisciti alla comunità!"
 }

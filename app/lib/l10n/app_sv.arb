@@ -447,7 +447,7 @@
   "@joinCommunity": {
     "description": "Discord community link"
   },
-  "membersAndCounting": "8000+ medlemmar och fler tillkommer.",
+  "membersAndCounting": "8000+ medlemmar och ökar.",
   "@membersAndCounting": {
     "description": "Discord member count"
   },
@@ -2781,5 +2781,6 @@
   "accessibility": "Tillgänglighet",
   "detectBrowserBasedMeetings": "Upptäck webbläsarbaserade möten",
   "accessibilityDescription": "Omi behöver tillgänglighetstillstånd för att upptäcka när du ansluter till Zoom-, Meet- eller Teams-möten i din webbläsare.",
-  "pleaseWait": "Vänta..."
+  "pleaseWait": "Vänta...",
+  "joinTheCommunity": "Gå med i communityn!"
 }

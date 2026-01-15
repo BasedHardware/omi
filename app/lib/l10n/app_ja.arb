@@ -131,9 +131,9 @@
   "aboutOmi": "Omiについて",
   "privacyPolicy": "プライバシーポリシー",
   "visitWebsite": "ウェブサイトを訪問",
-  "helpOrInquiries": "ヘルプまたはお問い合わせ",
+  "helpOrInquiries": "ヘルプまたはお問い合わせ？",
   "joinCommunity": "コミュニティに参加！",
-  "membersAndCounting": "8000人以上のメンバーが参加中。",
+  "membersAndCounting": "8000+人のメンバーがいて増え続けています。",
   "deleteAccountTitle": "アカウントを削除",
   "deleteAccountConfirm": "本当にアカウントを削除しますか？",
   "cannotBeUndone": "この操作は元に戻せません。",
@@ -1207,5 +1207,6 @@
   "accessibility": "アクセシビリティ",
   "detectBrowserBasedMeetings": "ブラウザベースの会議を検出",
   "accessibilityDescription": "Omiは、ブラウザでZoom、Meet、またはTeamsの会議に参加したことを検出するためにアクセシビリティ権限が必要です。",
-  "pleaseWait": "お待ちください..."
+  "pleaseWait": "お待ちください...",
+  "joinTheCommunity": "コミュニティに参加！"
 }

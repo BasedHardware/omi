@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/pages/settings/webview.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
@@ -53,7 +54,7 @@ class _DesktopAboutOmiPageState extends State<DesktopAboutOmiPage> {
         ),
         const SizedBox(width: 16),
         Text(
-          'About Omi',
+          context.l10n.aboutOmi,
           style: responsive.headlineLarge.copyWith(
             fontWeight: FontWeight.w400,
           ),
@@ -82,7 +83,7 @@ class _DesktopAboutOmiPageState extends State<DesktopAboutOmiPage> {
                 vertical: responsive.spacing(baseSpacing: 4),
               ),
               title: Text(
-                'Privacy Policy',
+                context.l10n.privacyPolicy,
                 style: responsive.bodyLarge.copyWith(
                   color: ResponsiveHelper.textPrimary,
                   fontWeight: FontWeight.w500,
@@ -115,7 +116,7 @@ class _DesktopAboutOmiPageState extends State<DesktopAboutOmiPage> {
                 vertical: responsive.spacing(baseSpacing: 4),
               ),
               title: Text(
-                'Visit Website',
+                context.l10n.visitWebsite,
                 style: responsive.bodyLarge.copyWith(
                   color: ResponsiveHelper.textPrimary,
                   fontWeight: FontWeight.w500,
@@ -154,7 +155,7 @@ class _DesktopAboutOmiPageState extends State<DesktopAboutOmiPage> {
                 vertical: responsive.spacing(baseSpacing: 4),
               ),
               title: Text(
-                'Help or Inquiries?',
+                context.l10n.helpOrInquiries,
                 style: responsive.bodyLarge.copyWith(
                   color: ResponsiveHelper.textPrimary,
                   fontWeight: FontWeight.w500,
@@ -199,14 +200,14 @@ class _DesktopAboutOmiPageState extends State<DesktopAboutOmiPage> {
                 vertical: responsive.spacing(baseSpacing: 4),
               ),
               title: Text(
-                'Join the community!',
+                context.l10n.joinTheCommunity,
                 style: responsive.bodyLarge.copyWith(
                   color: ResponsiveHelper.textPrimary,
                   fontWeight: FontWeight.w500,
                 ),
               ),
               subtitle: Text(
-                '8000+ members and counting.',
+                context.l10n.membersAndCounting,
                 style: responsive.bodyMedium.copyWith(
                   color: ResponsiveHelper.textSecondary,
                 ),

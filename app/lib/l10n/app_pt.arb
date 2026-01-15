@@ -131,8 +131,8 @@
   "unableToFetchApps": "Não foi possível carregar os apps :(\n\nVerifique sua conexão.",
   "aboutOmi": "Sobre o Omi",
   "privacyPolicy": "Política de Privacidade",
-  "visitWebsite": "Visitar site",
-  "helpOrInquiries": "Ajuda ou dúvidas?",
+  "visitWebsite": "Visitar o site",
+  "helpOrInquiries": "Ajuda ou perguntas?",
   "joinCommunity": "Junte-se à comunidade!",
   "membersAndCounting": "8000+ membros e contando.",
   "deleteAccountTitle": "Apagar conta",
@@ -1228,5 +1228,6 @@
   "accessibility": "Acessibilidade",
   "detectBrowserBasedMeetings": "Detectar reuniões baseadas no navegador",
   "accessibilityDescription": "Omi precisa de permissão de acessibilidade para detectar quando você participa de reuniões do Zoom, Meet ou Teams no seu navegador.",
-  "pleaseWait": "Por favor, aguarde..."
+  "pleaseWait": "Por favor, aguarde...",
+  "joinTheCommunity": "Junte-se à comunidade!"
 }

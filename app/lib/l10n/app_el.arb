@@ -435,11 +435,11 @@
   "@privacyPolicy": {
     "description": "Link text for Privacy Policy"
   },
-  "visitWebsite": "Επισκεφτείτε τον Ιστότοπο",
+  "visitWebsite": "Επισκεφθείτε τον ιστότοπο",
   "@visitWebsite": {
     "description": "Visit website link"
   },
-  "helpOrInquiries": "Βοήθεια ή Ερωτήσεις;",
+  "helpOrInquiries": "Βοήθεια ή ερωτήσεις;",
   "@helpOrInquiries": {
     "description": "Help link title"
   },
@@ -447,7 +447,7 @@
   "@joinCommunity": {
     "description": "Discord community link"
   },
-  "membersAndCounting": "8000+ μέλη και συνεχίζουν.",
+  "membersAndCounting": "8000+ μέλη και συνεχίζουν να αυξάνονται.",
   "@membersAndCounting": {
     "description": "Discord member count"
   },
@@ -2781,5 +2781,6 @@
   "accessibility": "Προσβασιμότητα",
   "detectBrowserBasedMeetings": "Ανίχνευση συναντήσεων που βασίζονται στον περιηγητή",
   "accessibilityDescription": "Το Omi χρειάζεται άδεια προσβασιμότητας για να ανιχνεύει πότε συμμετέχετε σε συναντήσεις Zoom, Meet ή Teams στον περιηγητή σας.",
-  "pleaseWait": "Παρακαλώ περιμένετε..."
+  "pleaseWait": "Παρακαλώ περιμένετε...",
+  "joinTheCommunity": "Γίνετε μέλος της κοινότητας!"
 }

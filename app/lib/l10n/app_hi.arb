@@ -132,9 +132,9 @@
   "aboutOmi": "Omi के बारे में",
   "privacyPolicy": "गोपनीयता नीति",
   "visitWebsite": "वेबसाइट पर जाएं",
-  "helpOrInquiries": "सहायता या पूछताछ?",
+  "helpOrInquiries": "मदद या पूछताछ?",
   "joinCommunity": "समुदाय में शामिल हों!",
-  "membersAndCounting": "8000+ सदस्य और बढ़ रहे हैं।",
+  "membersAndCounting": "8000+ सदस्य और गिनती जारी है।",
   "deleteAccountTitle": "खाता हटाएं",
   "deleteAccountConfirm": "क्या आप वाकई अपना खाता हटाना चाहते हैं?",
   "cannotBeUndone": "यह पूर्ववत नहीं किया जा सकता।",
@@ -1228,5 +1228,6 @@
   "accessibility": "पहुंच-योग्यता",
   "detectBrowserBasedMeetings": "ब्राउज़र-आधारित मीटिंग का पता लगाएं",
   "accessibilityDescription": "Omi को यह पता लगाने के लिए पहुंच-योग्यता अनुमति की आवश्यकता है कि आप अपने ब्राउज़र में Zoom, Meet, या Teams मीटिंग में कब शामिल होते हैं।",
-  "pleaseWait": "कृपया प्रतीक्षा करें..."
+  "pleaseWait": "कृपया प्रतीक्षा करें...",
+  "joinTheCommunity": "समुदाय में शामिल हों!"
 }

@@ -435,7 +435,7 @@
   "@privacyPolicy": {
     "description": "Link text for Privacy Policy"
   },
-  "visitWebsite": "Kunjungi Website",
+  "visitWebsite": "Kunjungi Situs Web",
   "@visitWebsite": {
     "description": "Visit website link"
   },
@@ -2781,5 +2781,6 @@
   "accessibility": "Aksesibilitas",
   "detectBrowserBasedMeetings": "Deteksi rapat berbasis browser",
   "accessibilityDescription": "Omi memerlukan izin aksesibilitas untuk mendeteksi saat Anda bergabung dengan rapat Zoom, Meet, atau Teams di browser Anda.",
-  "pleaseWait": "Harap tunggu..."
+  "pleaseWait": "Harap tunggu...",
+  "joinTheCommunity": "Bergabunglah dengan komunitas!"
 }

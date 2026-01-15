@@ -427,7 +427,7 @@
   "@unableToFetchApps": {
     "description": "Error when apps fail to load"
   },
-  "aboutOmi": "Относно Omi",
+  "aboutOmi": "За Omi",
   "@aboutOmi": {
     "description": "About page title"
   },
@@ -447,7 +447,7 @@
   "@joinCommunity": {
     "description": "Discord community link"
   },
-  "membersAndCounting": "8000+ членове и продължават да се увеличават.",
+  "membersAndCounting": "8000+ членове и броят продължава да расте.",
   "@membersAndCounting": {
     "description": "Discord member count"
   },
@@ -2799,5 +2799,6 @@
   "accessibility": "Достъпност",
   "detectBrowserBasedMeetings": "Откриване на срещи в браузъра",
   "accessibilityDescription": "Omi се нуждае от разрешение за достъпност, за да открива кога се присъединявате към срещи в Zoom, Meet или Teams във вашия браузър.",
-  "pleaseWait": "Моля, изчакайте..."
+  "pleaseWait": "Моля, изчакайте...",
+  "joinTheCommunity": "Присъединете се към общността!"
 }

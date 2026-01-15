@@ -427,7 +427,7 @@
   "@unableToFetchApps": {
     "description": "Error when apps fail to load"
   },
-  "aboutOmi": "Omi teave",
+  "aboutOmi": "Omi kohta",
   "@aboutOmi": {
     "description": "About page title"
   },
@@ -435,7 +435,7 @@
   "@privacyPolicy": {
     "description": "Link text for Privacy Policy"
   },
-  "visitWebsite": "Külasta veebilehte",
+  "visitWebsite": "Külasta veebisaiti",
   "@visitWebsite": {
     "description": "Visit website link"
   },
@@ -447,7 +447,7 @@
   "@joinCommunity": {
     "description": "Discord community link"
   },
-  "membersAndCounting": "8000+ liiget ja kasvab.",
+  "membersAndCounting": "8000+ liiget ja arv kasvab.",
   "@membersAndCounting": {
     "description": "Discord member count"
   },
@@ -2781,5 +2781,6 @@
   "accessibility": "Juurdepääsetavus",
   "detectBrowserBasedMeetings": "Tuvastage brauseripõhised koosolekud",
   "accessibilityDescription": "Omi vajab juurdepääsetavuse luba, et tuvastada, millal te liitute Zoom, Meet või Teams koosolekutega oma brauseris.",
-  "pleaseWait": "Palun oodake..."
+  "pleaseWait": "Palun oodake...",
+  "joinTheCommunity": "Liitu kogukonnaga!"
 }

@@ -435,11 +435,11 @@
   "@privacyPolicy": {
     "description": "Privacy policy link"
   },
-  "visitWebsite": "Aplankyti svetainę",
+  "visitWebsite": "Apsilankyti svetainėje",
   "@visitWebsite": {
     "description": "Visit website link"
   },
-  "helpOrInquiries": "Pagalba ar klausimai?",
+  "helpOrInquiries": "Pagalba ar užklausos?",
   "@helpOrInquiries": {
     "description": "Help link title"
   },
@@ -447,7 +447,7 @@
   "@joinCommunity": {
     "description": "Discord community link"
   },
-  "membersAndCounting": "8000+ narių ir vis daugėja.",
+  "membersAndCounting": "8000+ narių ir skaičius auga.",
   "@membersAndCounting": {
     "description": "Discord member count"
   },
@@ -2763,5 +2763,6 @@
   "accessibility": "Prieinamumas",
   "detectBrowserBasedMeetings": "Aptikti naršyklėje vykstančius susitikimus",
   "accessibilityDescription": "Omi reikia prieinamumo leidimo, kad aptiktų, kada prisijungiate prie Zoom, Meet ar Teams susitikimų naršyklėje.",
-  "pleaseWait": "Prašome palaukti..."
+  "pleaseWait": "Prašome palaukti...",
+  "joinTheCommunity": "Prisijunkite prie bendruomenės!"
 }

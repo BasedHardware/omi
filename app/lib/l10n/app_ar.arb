@@ -427,7 +427,7 @@
   "@unableToFetchApps": {
     "description": "Error when apps fail to load"
   },
-  "aboutOmi": "عن Omi",
+  "aboutOmi": "حول Omi",
   "@aboutOmi": {
     "description": "About page title"
   },
@@ -447,7 +447,7 @@
   "@joinCommunity": {
     "description": "Discord community link"
   },
-  "membersAndCounting": "أكثر من 8000 عضو وما زال العدد في ازدياد.",
+  "membersAndCounting": "8000+ عضو وما زال العدد في ازدياد.",
   "@membersAndCounting": {
     "description": "Discord member count"
   },
@@ -2813,5 +2813,6 @@
   "accessibility": "إمكانية الوصول",
   "detectBrowserBasedMeetings": "اكتشاف الاجتماعات عبر المتصفح",
   "accessibilityDescription": "يحتاج Omi إلى إذن إمكانية الوصول لاكتشاف متى تنضم إلى اجتماعات Zoom أو Meet أو Teams في متصفحك.",
-  "pleaseWait": "يرجى الانتظار..."
+  "pleaseWait": "يرجى الانتظار...",
+  "joinTheCommunity": "انضم إلى المجتمع!"
 }

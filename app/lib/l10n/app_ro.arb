@@ -435,7 +435,7 @@
   "@privacyPolicy": {
     "description": "Link text for Privacy Policy"
   },
-  "visitWebsite": "Vizitează site-ul web",
+  "visitWebsite": "Vizitați site-ul web",
   "@visitWebsite": {
     "description": "Visit website link"
   },
@@ -447,7 +447,7 @@
   "@joinCommunity": {
     "description": "Discord community link"
   },
-  "membersAndCounting": "Peste 8000 de membri și numărul crește.",
+  "membersAndCounting": "8000+ membri și numărul crește.",
   "@membersAndCounting": {
     "description": "Discord member count"
   },
@@ -2781,5 +2781,6 @@
   "accessibility": "Accesibilitate",
   "detectBrowserBasedMeetings": "Detectați întâlnirile bazate pe browser",
   "accessibilityDescription": "Omi are nevoie de permisiune de accesibilitate pentru a detecta când vă alăturați întâlnirilor Zoom, Meet sau Teams în browser-ul dvs.",
-  "pleaseWait": "Vă rugăm așteptați..."
+  "pleaseWait": "Vă rugăm așteptați...",
+  "joinTheCommunity": "Alăturați-vă comunității!"
 }

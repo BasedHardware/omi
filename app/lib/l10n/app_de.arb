@@ -1228,5 +1228,6 @@
   "accessibility": "Barrierefreiheit",
   "detectBrowserBasedMeetings": "Browserbasierte Besprechungen erkennen",
   "accessibilityDescription": "Omi benötigt die Berechtigung für Barrierefreiheit, um zu erkennen, wann Sie Zoom-, Meet- oder Teams-Besprechungen in Ihrem Browser beitreten.",
-  "pleaseWait": "Bitte warten..."
+  "pleaseWait": "Bitte warten...",
+  "joinTheCommunity": "Treten Sie der Community bei!"
 }

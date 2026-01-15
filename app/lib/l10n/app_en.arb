@@ -4033,5 +4033,6 @@
   "accessibility": "Accessibility",
   "detectBrowserBasedMeetings": "Detect browser-based meetings",
   "accessibilityDescription": "Omi needs accessibility permission to detect when you join Zoom, Meet, or Teams meetings in your browser.",
-  "pleaseWait": "Please wait..."
+  "pleaseWait": "Please wait...",
+  "joinTheCommunity": "Join the community!"
 }

@@ -435,7 +435,7 @@
   "@privacyPolicy": {
     "description": "Link text for Privacy Policy"
   },
-  "visitWebsite": "Odwiedź stronę",
+  "visitWebsite": "Odwiedź stronę internetową",
   "@visitWebsite": {
     "description": "Visit website link"
   },
@@ -447,7 +447,7 @@
   "@joinCommunity": {
     "description": "Discord community link"
   },
-  "membersAndCounting": "Ponad 8000 członków i wciąż przybywa.",
+  "membersAndCounting": "8000+ członków i przybywa.",
   "@membersAndCounting": {
     "description": "Discord member count"
   },
@@ -2781,5 +2781,6 @@
   "accessibility": "Dostępność",
   "detectBrowserBasedMeetings": "Wykrywaj spotkania oparte na przeglądarce",
   "accessibilityDescription": "Omi potrzebuje uprawnień dostępności, aby wykrywać, kiedy dołączasz do spotkań Zoom, Meet lub Teams w przeglądarce.",
-  "pleaseWait": "Proszę czekać..."
+  "pleaseWait": "Proszę czekać...",
+  "joinTheCommunity": "Dołącz do społeczności!"
 }

@@ -435,11 +435,11 @@
   "@privacyPolicy": {
     "description": "Privacy policy link"
   },
-  "visitWebsite": "Web Sitesini Ziyaret Et",
+  "visitWebsite": "Web sitesini ziyaret edin",
   "@visitWebsite": {
     "description": "Visit website link"
   },
-  "helpOrInquiries": "Yardım veya Sorular?",
+  "helpOrInquiries": "Yardım veya sorularınız mı var?",
   "@helpOrInquiries": {
     "description": "Help link title"
   },
@@ -447,7 +447,7 @@
   "@joinCommunity": {
     "description": "Discord community link"
   },
-  "membersAndCounting": "8000+ üye ve artıyor.",
+  "membersAndCounting": "8000+ üye ve sayı artıyor.",
   "@membersAndCounting": {
     "description": "Discord member count"
   },
@@ -2763,5 +2763,6 @@
   "accessibility": "Erişilebilirlik",
   "detectBrowserBasedMeetings": "Tarayıcı tabanlı toplantıları algıla",
   "accessibilityDescription": "Omi, tarayıcınızda Zoom, Meet veya Teams toplantılarına katıldığınızı algılamak için erişilebilirlik izni gerektirir.",
-  "pleaseWait": "Lütfen bekleyin..."
+  "pleaseWait": "Lütfen bekleyin...",
+  "joinTheCommunity": "Topluluğa katılın!"
 }

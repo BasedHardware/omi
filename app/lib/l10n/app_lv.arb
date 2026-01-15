@@ -447,7 +447,7 @@
   "@joinCommunity": {
     "description": "Discord community link"
   },
-  "membersAndCounting": "8000+ biedri un turpina pieaugt.",
+  "membersAndCounting": "8000+ dalībnieki un turpina pieaugt.",
   "@membersAndCounting": {
     "description": "Discord member count"
   },
@@ -2781,5 +2781,6 @@
   "accessibility": "Pieejamība",
   "detectBrowserBasedMeetings": "Noteikt pārlūkprogrammā balstītas sapulces",
   "accessibilityDescription": "Omi nepieciešama pieejamības atļauja, lai noteiktu, kad pievienojaties Zoom, Meet vai Teams sapulcēm savā pārlūkprogrammā.",
-  "pleaseWait": "Lūdzu, uzgaidiet..."
+  "pleaseWait": "Lūdzu, uzgaidiet...",
+  "joinTheCommunity": "Pievienojieties kopienai!"
 }

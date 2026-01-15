@@ -427,7 +427,7 @@
   "@unableToFetchApps": {
     "description": "Error when apps fail to load"
   },
-  "aboutOmi": "O aplikaci Omi",
+  "aboutOmi": "O Omi",
   "@aboutOmi": {
     "description": "About page title"
   },
@@ -435,7 +435,7 @@
   "@privacyPolicy": {
     "description": "Link text for Privacy Policy"
   },
-  "visitWebsite": "Navštívit webové stránky",
+  "visitWebsite": "Navštívit web",
   "@visitWebsite": {
     "description": "Visit website link"
   },
@@ -2799,5 +2799,6 @@
   "accessibility": "Přístupnost",
   "detectBrowserBasedMeetings": "Detekovat schůzky v prohlížeči",
   "accessibilityDescription": "Omi potřebuje oprávnění k přístupnosti pro detekci, kdy se připojujete ke schůzkám Zoom, Meet nebo Teams ve vašem prohlížeči.",
-  "pleaseWait": "Prosím čekejte..."
+  "pleaseWait": "Prosím čekejte...",
+  "joinTheCommunity": "Připojte se ke komunitě!"
 }

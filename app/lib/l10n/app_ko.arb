@@ -427,7 +427,7 @@
   "@unableToFetchApps": {
     "description": "Error when apps fail to load"
   },
-  "aboutOmi": "Omi 정보",
+  "aboutOmi": "Omi 소개",
   "@aboutOmi": {
     "description": "About page title"
   },
@@ -439,7 +439,7 @@
   "@visitWebsite": {
     "description": "Visit website link"
   },
-  "helpOrInquiries": "도움말 또는 문의사항이 있으신가요?",
+  "helpOrInquiries": "도움말 또는 문의?",
   "@helpOrInquiries": {
     "description": "Help link title"
   },
@@ -447,7 +447,7 @@
   "@joinCommunity": {
     "description": "Discord community link"
   },
-  "membersAndCounting": "8000명 이상의 멤버가 함께하고 있습니다.",
+  "membersAndCounting": "8000+명의 회원이 있으며 계속 증가하고 있습니다.",
   "@membersAndCounting": {
     "description": "Discord member count"
   },
@@ -2781,5 +2781,6 @@
   "accessibility": "접근성",
   "detectBrowserBasedMeetings": "브라우저 기반 회의 감지",
   "accessibilityDescription": "Omi는 브라우저에서 Zoom, Meet 또는 Teams 회의에 참여할 때를 감지하기 위해 접근성 권한이 필요합니다.",
-  "pleaseWait": "잠시만 기다려 주세요..."
+  "pleaseWait": "잠시만 기다려 주세요...",
+  "joinTheCommunity": "커뮤니티에 참여하세요!"
 }

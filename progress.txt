@@ -10,11 +10,11 @@ Strategy: Prioritize small/medium files, defer large files
 
 OVERALL STATISTICS
 ------------------
-Files Completed: 34
+Files Completed: 35
 Files Skipped (Internal): 2
 Files Skipped (Large): 3
-Total Keys Added: 334
-Total Translations: 11,356 (334 keys × 34 languages)
+Total Keys Added: 347
+Total Translations: 11,798 (347 keys × 34 languages)
 
 ================================================================================
 COMPLETED FILES
@@ -477,6 +477,29 @@ Notes: Localized name input screen including error messages, screen title and
        dynamic l10n values.
 Commit: 3af19eaaf
 
+FILE 63: desktop_permissions_screen.dart
+-----------------------------------------
+Location: app/lib/desktop/pages/onboarding/screens/
+Keys Added: 13
+Keys: grantPermissions, enableFeaturesForBestExperience, microphoneAccess,
+      recordAudioConversations, microphoneAccessDescription, screenRecording,
+      captureSystemAudioFromMeetings, screenRecordingDescription, accessibility,
+      detectBrowserBasedMeetings, accessibilityDescription, pleaseWait, skip
+Script: /tmp/translate_permissions_screen_keys.py
+Status: ✅ COMPLETED
+Notes: Localized permissions screen including screen title/subtitle, three permission
+       types (microphone, screen recording, accessibility) with titles, subtitles,
+       and dialog descriptions, plus UI states. Reused existing keys (cancel,
+       continue, back). Removed const from widgets to support dynamic l10n values.
+Commit: 072ec3faa
+
+desktop_complete_screen.dart
+-----------------------------
+Location: app/lib/desktop/pages/onboarding/screens/
+Status: ✅ ALREADY LOCALIZED
+Notes: Already using l10n keys: youreAllSet, welcomeToOmiDescription, startUsingOmi,
+       back. No further work needed.
+
 ================================================================================
 SKIPPED FILES (LARGE - TO BE COMPLETED LATER)
 ================================================================================
@@ -678,6 +701,6 @@ echo "✅ Translated <feature> keys for all 34 languages!"
 END OF PROGRESS TRACKER
 ================================================================================
 Last Updated: 2026-01-14
-Last Completed: FILE 62 - desktop_name_screen.dart (6 keys, 204 translations)
-Previous Completed: FILE 61 - desktop_language_screen.dart (8 keys, 272 translations)
+Last Completed: FILE 63 - desktop_permissions_screen.dart (13 keys, 442 translations)
+Previous Completed: FILE 62 - desktop_name_screen.dart (6 keys, 204 translations)
 Current Session: [active]

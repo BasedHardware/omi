@@ -435,7 +435,7 @@
   "@privacyPolicy": {
     "description": "Link text for Privacy Policy"
   },
-  "visitWebsite": "Besøg hjemmeside",
+  "visitWebsite": "Besøg hjemmesiden",
   "@visitWebsite": {
     "description": "Visit website link"
   },
@@ -2781,5 +2781,6 @@
   "accessibility": "Tilgængelighed",
   "detectBrowserBasedMeetings": "Opdage browserbaserede møder",
   "accessibilityDescription": "Omi har brug for tilgængelighedstilladelse for at opdage, når du deltager i Zoom-, Meet- eller Teams-møder i din browser.",
-  "pleaseWait": "Vent venligst..."
+  "pleaseWait": "Vent venligst...",
+  "joinTheCommunity": "Bliv en del af fællesskabet!"
 }

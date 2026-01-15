@@ -427,7 +427,7 @@
   "@unableToFetchApps": {
     "description": "Error when apps fail to load"
   },
-  "aboutOmi": "O aplikácii Omi",
+  "aboutOmi": "O Omi",
   "@aboutOmi": {
     "description": "About page title"
   },
@@ -447,7 +447,7 @@
   "@joinCommunity": {
     "description": "Discord community link"
   },
-  "membersAndCounting": "Viac ako 8000 členov a stále pribúdajú.",
+  "membersAndCounting": "8000+ členov a ich počet rastie.",
   "@membersAndCounting": {
     "description": "Discord member count"
   },
@@ -2781,5 +2781,6 @@
   "accessibility": "Prístupnosť",
   "detectBrowserBasedMeetings": "Detekovať schôdzky v prehliadači",
   "accessibilityDescription": "Omi potrebuje povolenie prístupnosti na detekciu, kedy sa pripájate k schôdzkam Zoom, Meet alebo Teams vo vašom prehliadači.",
-  "pleaseWait": "Prosím čakajte..."
+  "pleaseWait": "Prosím čakajte...",
+  "joinTheCommunity": "Pripojte sa ku komunite!"
 }
