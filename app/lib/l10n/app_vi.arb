@@ -2757,7 +2757,6 @@
   "chooseYourLanguage": "Chọn ngôn ngữ của bạn",
   "selectPreferredLanguageForBestExperience": "Chọn ngôn ngữ ưu tiên của bạn để có trải nghiệm Omi tốt nhất",
   "searchLanguages": "Tìm kiếm ngôn ngữ...",
-  "continue": "Tiếp tục",
   "selectALanguage": "Chọn một ngôn ngữ",
   "tryDifferentSearchTerm": "Thử một từ khóa tìm kiếm khác",
   "pleaseEnterYourName": "Vui lòng nhập tên của bạn",
@@ -2950,5 +2949,10 @@
   "endpointURL": "URL Điểm cuối",
   "links": "Liên kết",
   "discordMemberCount": "Hơn 8000 thành viên trên Discord",
-  "userInformation": "Thông tin Người dùng"
+  "userInformation": "Thông tin Người dùng",
+  "capabilities": "Khả năng",
+  "previewScreenshots": "Xem trước ảnh chụp màn hình",
+  "holdOnPreparingForm": "Vui lòng đợi, chúng tôi đang chuẩn bị biểu mẫu cho bạn",
+  "bySubmittingYouAgreeToOmi": "Bằng việc gửi, bạn đồng ý với ",
+  "termsAndPrivacyPolicy": "Điều khoản và Chính sách Bảo mật"
 }

@@ -2757,7 +2757,6 @@
   "chooseYourLanguage": "Välj ditt språk",
   "selectPreferredLanguageForBestExperience": "Välj ditt föredragna språk för den bästa Omi-upplevelsen",
   "searchLanguages": "Sök språk...",
-  "continue": "Fortsätt",
   "selectALanguage": "Välj ett språk",
   "tryDifferentSearchTerm": "Prova ett annat sökord",
   "pleaseEnterYourName": "Vänligen ange ditt namn",
@@ -2950,5 +2949,10 @@
   "endpointURL": "Slutpunkts-URL",
   "links": "Länkar",
   "discordMemberCount": "Över 8000 medlemmar på Discord",
-  "userInformation": "Användarinformation"
+  "userInformation": "Användarinformation",
+  "capabilities": "Funktioner",
+  "previewScreenshots": "Förhandsgranskning av skärmdumpar",
+  "holdOnPreparingForm": "Vänta, vi förbereder formuläret åt dig",
+  "bySubmittingYouAgreeToOmi": "Genom att skicka godkänner du Omi ",
+  "termsAndPrivacyPolicy": "Villkor och Integritetspolicy"
 }

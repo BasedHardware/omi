@@ -2757,7 +2757,6 @@
   "chooseYourLanguage": "เลือกภาษาของคุณ",
   "selectPreferredLanguageForBestExperience": "เลือกภาษาที่คุณต้องการสำหรับประสบการณ์ Omi ที่ดีที่สุด",
   "searchLanguages": "ค้นหาภาษา...",
-  "continue": "ดำเนินการต่อ",
   "selectALanguage": "เลือกภาษา",
   "tryDifferentSearchTerm": "ลองใช้คำค้นหาอื่น",
   "pleaseEnterYourName": "กรุณาใส่ชื่อของคุณ",
@@ -2950,5 +2949,10 @@
   "endpointURL": "URL ปลายทาง",
   "links": "ลิงก์",
   "discordMemberCount": "สมาชิกกว่า 8000 คนใน Discord",
-  "userInformation": "ข้อมูลผู้ใช้"
+  "userInformation": "ข้อมูลผู้ใช้",
+  "capabilities": "ความสามารถ",
+  "previewScreenshots": "ตัวอย่างภาพหน้าจอ",
+  "holdOnPreparingForm": "รอสักครู่ เรากำลังเตรียมแบบฟอร์มให้คุณ",
+  "bySubmittingYouAgreeToOmi": "การส่งหมายถึงคุณยอมรับ ",
+  "termsAndPrivacyPolicy": "ข้อกำหนดและนโยบายความเป็นส่วนตัว"
 }

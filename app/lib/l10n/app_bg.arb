@@ -2775,7 +2775,6 @@
   "chooseYourLanguage": "Изберете вашия език",
   "selectPreferredLanguageForBestExperience": "Изберете предпочитания език за най-добро Omi изживяване",
   "searchLanguages": "Търсене на езици...",
-  "continue": "Продължи",
   "selectALanguage": "Изберете език",
   "tryDifferentSearchTerm": "Опитайте с различен термин за търсене",
   "pleaseEnterYourName": "Моля, въведете вашето име",
@@ -2952,5 +2951,10 @@
   "endpointURL": "URL на крайна точка",
   "links": "Връзки",
   "discordMemberCount": "Над 8000 членове в Discord",
-  "userInformation": "Информация за потребителя"
+  "userInformation": "Информация за потребителя",
+  "capabilities": "Възможности",
+  "previewScreenshots": "Преглед на екранни снимки",
+  "holdOnPreparingForm": "Моля, изчакайте, подготвяме формуляра за вас",
+  "bySubmittingYouAgreeToOmi": "С изпращането се съгласявате с Omi ",
+  "termsAndPrivacyPolicy": "Условия и Политика за поверителност"
 }

@@ -1204,7 +1204,6 @@
   "chooseYourLanguage": "Elige tu idioma",
   "selectPreferredLanguageForBestExperience": "Seleccione su idioma preferido para la mejor experiencia Omi",
   "searchLanguages": "Buscar idiomas...",
-  "continue": "Continuar",
   "selectALanguage": "Seleccione un idioma",
   "tryDifferentSearchTerm": "Pruebe con un término de búsqueda diferente",
   "pleaseEnterYourName": "Por favor, introduce tu nombre",
@@ -1397,5 +1396,10 @@
   "endpointURL": "URL del Punto Final",
   "links": "Enlaces",
   "discordMemberCount": "Más de 8000 miembros en Discord",
-  "userInformation": "Información del Usuario"
+  "userInformation": "Información del Usuario",
+  "capabilities": "Capacidades",
+  "previewScreenshots": "Vista previa de capturas",
+  "holdOnPreparingForm": "Espera, estamos preparando el formulario para ti",
+  "bySubmittingYouAgreeToOmi": "Al enviar, aceptas los ",
+  "termsAndPrivacyPolicy": "Términos y Política de Privacidad"
 }

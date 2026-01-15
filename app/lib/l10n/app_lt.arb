@@ -2739,7 +2739,6 @@
   "chooseYourLanguage": "Pasirinkite kalbą",
   "selectPreferredLanguageForBestExperience": "Pasirinkite pageidaujamą kalbą geriausiam Omi patirčiai",
   "searchLanguages": "Ieškoti kalbų...",
-  "continue": "Tęsti",
   "selectALanguage": "Pasirinkite kalbą",
   "tryDifferentSearchTerm": "Pabandykite kitą paieškos terminą",
   "pleaseEnterYourName": "Įveskite savo vardą",
@@ -2932,5 +2931,10 @@
   "endpointURL": "Galinio taško URL",
   "links": "Nuorodos",
   "discordMemberCount": "Daugiau nei 8000 narių Discord platformoje",
-  "userInformation": "Vartotojo informacija"
+  "userInformation": "Vartotojo informacija",
+  "capabilities": "Galimybės",
+  "previewScreenshots": "Ekrano nuotraukų peržiūra",
+  "holdOnPreparingForm": "Palaukite, ruošiame jums formą",
+  "bySubmittingYouAgreeToOmi": "Pateikdami sutinkate su Omi ",
+  "termsAndPrivacyPolicy": "Sąlygos ir Privatumo Politika"
 }

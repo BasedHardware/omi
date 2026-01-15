@@ -4009,7 +4009,6 @@
   "chooseYourLanguage": "Choose your language",
   "selectPreferredLanguageForBestExperience": "Select your preferred language for the best Omi experience",
   "searchLanguages": "Search languages...",
-  "continue": "Continue",
   "selectALanguage": "Select a language",
   "tryDifferentSearchTerm": "Try a different search term",
   "pleaseEnterYourName": "Please enter your name",
@@ -4052,7 +4051,6 @@
   "helpImproveOmiBySharing": "Help improve Omi by sharing anonymized analytics data",
   "deleteAccount": "Delete Account",
   "deleteYourAccountAndAllData": "Delete your account and all data",
-  "helpsD iagnoseIssuesAutoDeletes": "Helps diagnose issues. Auto-deletes after 3 days.",
   "clearLogs": "Clear logs",
   "debugLogsCleared": "Debug logs cleared",
   "exportConversations": "Export Conversations",
@@ -4449,5 +4447,26 @@
   "endpointURL": "Endpoint URL",
   "links": "Links",
   "discordMemberCount": "8000+ members on Discord",
-  "userInformation": "User Information"
+  "userInformation": "User Information",
+  "capabilities": "Capabilities",
+  "@capabilities": {
+    "description": "Section title for app capabilities"
+  },
+  "previewScreenshots": "Preview Screenshots",
+  "@previewScreenshots": {
+    "description": "Section title for preview screenshots"
+  },
+  "holdOnPreparingForm": "Hold on, we are preparing the form for you",
+  "@holdOnPreparingForm": {
+    "description": "Loading message while preparing form"
+  },
+  "bySubmittingYouAgreeToOmi": "By submitting, you agree to Omi ",
+  "@bySubmittingYouAgreeToOmi": {
+    "description": "Text before Terms & Privacy Policy link"
+  },
+  "termsAndPrivacyPolicy": "Terms & Privacy Policy",
+  "@termsAndPrivacyPolicy": {
+    "description": "Terms and Privacy Policy link text"
+  },
+  "helpsDiagnoseIssuesAutoDeletes": "Helps diagnose issues. Auto-deletes after 3 days."
 }

@@ -1575,7 +1575,6 @@
   "chooseYourLanguage": "Kies uw taal",
   "selectPreferredLanguageForBestExperience": "Selecteer uw voorkeurstaal voor de beste Omi-ervaring",
   "searchLanguages": "Zoek talen...",
-  "continue": "Doorgaan",
   "selectALanguage": "Selecteer een taal",
   "tryDifferentSearchTerm": "Probeer een andere zoekterm",
   "pleaseEnterYourName": "Voer uw naam in",
@@ -1768,5 +1767,10 @@
   "endpointURL": "Eindpunt-URL",
   "links": "Links",
   "discordMemberCount": "Meer dan 8000 leden op Discord",
-  "userInformation": "Gebruikersinformatie"
+  "userInformation": "Gebruikersinformatie",
+  "capabilities": "Mogelijkheden",
+  "previewScreenshots": "Voorbeeld schermafbeeldingen",
+  "holdOnPreparingForm": "Even geduld, we bereiden het formulier voor u voor",
+  "bySubmittingYouAgreeToOmi": "Door in te dienen, gaat u akkoord met Omi ",
+  "termsAndPrivacyPolicy": "Voorwaarden en Privacybeleid"
 }

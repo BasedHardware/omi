@@ -2757,7 +2757,6 @@
   "chooseYourLanguage": "Оберіть вашу мову",
   "selectPreferredLanguageForBestExperience": "Оберіть бажану мову для найкращого досвіду Omi",
   "searchLanguages": "Пошук мов...",
-  "continue": "Продовжити",
   "selectALanguage": "Оберіть мову",
   "tryDifferentSearchTerm": "Спробуйте інший пошуковий запит",
   "pleaseEnterYourName": "Будь ласка, введіть ваше ім'я",
@@ -2950,5 +2949,10 @@
   "endpointURL": "URL кінцевої точки",
   "links": "Посилання",
   "discordMemberCount": "Понад 8000 учасників у Discord",
-  "userInformation": "Інформація про користувача"
+  "userInformation": "Інформація про користувача",
+  "capabilities": "Можливості",
+  "previewScreenshots": "Попередній перегляд знімків",
+  "holdOnPreparingForm": "Зачекайте, ми готуємо форму для вас",
+  "bySubmittingYouAgreeToOmi": "Надсилаючи, ви погоджуєтеся з Omi ",
+  "termsAndPrivacyPolicy": "Умови та Політика конфіденційності"
 }

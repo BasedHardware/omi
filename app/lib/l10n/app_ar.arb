@@ -2789,7 +2789,6 @@
   "chooseYourLanguage": "اختر لغتك",
   "selectPreferredLanguageForBestExperience": "اختر لغتك المفضلة للحصول على أفضل تجربة Omi",
   "searchLanguages": "بحث عن اللغات...",
-  "continue": "متابعة",
   "selectALanguage": "اختر لغة",
   "tryDifferentSearchTerm": "جرب مصطلح بحث مختلف",
   "pleaseEnterYourName": "يرجى إدخال اسمك",
@@ -2969,5 +2968,10 @@
   "endpointURL": "عنوان URL لنقطة النهاية",
   "links": "الروابط",
   "discordMemberCount": "أكثر من 8000 عضو على Discord",
-  "userInformation": "معلومات المستخدم"
+  "userInformation": "معلومات المستخدم",
+  "capabilities": "القدرات",
+  "previewScreenshots": "معاينة لقطات الشاشة",
+  "holdOnPreparingForm": "انتظر قليلاً، نحن نجهز النموذج لك",
+  "bySubmittingYouAgreeToOmi": "بالإرسال، أنت توافق على Omi ",
+  "termsAndPrivacyPolicy": "الشروط وسياسة الخصوصية"
 }

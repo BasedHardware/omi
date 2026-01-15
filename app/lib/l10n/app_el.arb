@@ -2757,7 +2757,6 @@
   "chooseYourLanguage": "Επιλέξτε τη γλώσσα σας",
   "selectPreferredLanguageForBestExperience": "Επιλέξτε την προτιμώμενη γλώσσα σας για την καλύτερη εμπειρία Omi",
   "searchLanguages": "Αναζήτηση γλωσσών...",
-  "continue": "Συνέχεια",
   "selectALanguage": "Επιλέξτε μια γλώσσα",
   "tryDifferentSearchTerm": "Δοκιμάστε έναν διαφορετικό όρο αναζήτησης",
   "pleaseEnterYourName": "Παρακαλώ εισάγετε το όνομά σας",
@@ -2950,5 +2949,10 @@
   "endpointURL": "URL τελικού σημείου",
   "links": "Σύνδεσμοι",
   "discordMemberCount": "Πάνω από 8000 μέλη στο Discord",
-  "userInformation": "Πληροφορίες χρήστη"
+  "userInformation": "Πληροφορίες χρήστη",
+  "capabilities": "Δυνατότητες",
+  "previewScreenshots": "Προεπισκόπηση στιγμιότυπων",
+  "holdOnPreparingForm": "Περιμένετε, ετοιμάζουμε τη φόρμα για εσάς",
+  "bySubmittingYouAgreeToOmi": "Με την υποβολή, συμφωνείτε με το Omi ",
+  "termsAndPrivacyPolicy": "Όροι & Πολιτική Απορρήτου"
 }

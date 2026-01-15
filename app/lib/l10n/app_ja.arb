@@ -1183,7 +1183,6 @@
   "chooseYourLanguage": "言語を選択",
   "selectPreferredLanguageForBestExperience": "最高のOmi体験のために優先言語を選択してください",
   "searchLanguages": "言語を検索...",
-  "continue": "続ける",
   "selectALanguage": "言語を選択",
   "tryDifferentSearchTerm": "別の検索語を試してください",
   "pleaseEnterYourName": "お名前を入力してください",
@@ -1376,5 +1375,10 @@
   "endpointURL": "エンドポイント URL",
   "links": "リンク",
   "discordMemberCount": "Discord に 8000 人以上のメンバー",
-  "userInformation": "ユーザー情報"
+  "userInformation": "ユーザー情報",
+  "capabilities": "機能",
+  "previewScreenshots": "スクリーンショットプレビュー",
+  "holdOnPreparingForm": "お待ちください、フォームを準備しています",
+  "bySubmittingYouAgreeToOmi": "送信することで、Omiの",
+  "termsAndPrivacyPolicy": "利用規約とプライバシーポリシー"
 }

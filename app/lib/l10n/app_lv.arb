@@ -2757,7 +2757,6 @@
   "chooseYourLanguage": "Izvēlieties savu valodu",
   "selectPreferredLanguageForBestExperience": "Izvēlieties vēlamo valodu labākajai Omi pieredzei",
   "searchLanguages": "Meklēt valodas...",
-  "continue": "Turpināt",
   "selectALanguage": "Izvēlieties valodu",
   "tryDifferentSearchTerm": "Mēģiniet citu meklēšanas terminu",
   "pleaseEnterYourName": "Lūdzu, ievadiet savu vārdu",
@@ -2950,5 +2949,10 @@
   "endpointURL": "Galapunkta URL",
   "links": "Saites",
   "discordMemberCount": "Vairāk nekā 8000 dalībnieku Discord",
-  "userInformation": "Lietotāja informācija"
+  "userInformation": "Lietotāja informācija",
+  "capabilities": "Iespējas",
+  "previewScreenshots": "Ekrānuzņēmumu priekšskatījums",
+  "holdOnPreparingForm": "Uzgaidiet, mēs sagatavojam veidlapu jums",
+  "bySubmittingYouAgreeToOmi": "Iesniedzot, jūs piekrītat Omi ",
+  "termsAndPrivacyPolicy": "Noteikumi un Privātuma Politika"
 }

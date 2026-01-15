@@ -2757,7 +2757,6 @@
   "chooseYourLanguage": "Válassza ki a nyelvét",
   "selectPreferredLanguageForBestExperience": "Válassza ki a preferált nyelvét a legjobb Omi élményért",
   "searchLanguages": "Nyelvek keresése...",
-  "continue": "Folytatás",
   "selectALanguage": "Válasszon egy nyelvet",
   "tryDifferentSearchTerm": "Próbáljon ki egy másik keresési kifejezést",
   "pleaseEnterYourName": "Kérjük, adja meg a nevét",
@@ -2950,5 +2949,10 @@
   "endpointURL": "Végpont URL",
   "links": "Linkek",
   "discordMemberCount": "Több mint 8000 tag a Discordon",
-  "userInformation": "Felhasználói információk"
+  "userInformation": "Felhasználói információk",
+  "capabilities": "Képességek",
+  "previewScreenshots": "Képernyőkép előnézet",
+  "holdOnPreparingForm": "Várjon, előkészítjük az űrlapot",
+  "bySubmittingYouAgreeToOmi": "Beküldéssel elfogadja az Omi ",
+  "termsAndPrivacyPolicy": "Feltételek és Adatvédelmi Irányelvek"
 }

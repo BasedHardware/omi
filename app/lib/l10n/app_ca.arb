@@ -2775,7 +2775,6 @@
   "chooseYourLanguage": "Trieu el vostre idioma",
   "selectPreferredLanguageForBestExperience": "Seleccioneu el vostre idioma preferit per a la millor experiència Omi",
   "searchLanguages": "Cerca idiomes...",
-  "continue": "Continuar",
   "selectALanguage": "Seleccioneu un idioma",
   "tryDifferentSearchTerm": "Proveu un terme de cerca diferent",
   "pleaseEnterYourName": "Si us plau, introduïu el vostre nom",
@@ -2952,5 +2951,10 @@
   "endpointURL": "URL del Punt Final",
   "links": "Enllaços",
   "discordMemberCount": "Més de 8000 membres a Discord",
-  "userInformation": "Informació de l'Usuari"
+  "userInformation": "Informació de l'Usuari",
+  "capabilities": "Capacitats",
+  "previewScreenshots": "Vista prèvia de captures",
+  "holdOnPreparingForm": "Espera, estem preparant el formulari per a tu",
+  "bySubmittingYouAgreeToOmi": "En enviar, acceptes Omi ",
+  "termsAndPrivacyPolicy": "Termes i Política de Privacitat"
 }

@@ -2775,7 +2775,6 @@
   "chooseYourLanguage": "Vyberte svůj jazyk",
   "selectPreferredLanguageForBestExperience": "Vyberte si preferovaný jazyk pro nejlepší Omi zážitek",
   "searchLanguages": "Hledat jazyky...",
-  "continue": "Pokračovat",
   "selectALanguage": "Vyberte jazyk",
   "tryDifferentSearchTerm": "Zkuste jiný výraz pro vyhledávání",
   "pleaseEnterYourName": "Prosím zadejte své jméno",
@@ -2952,5 +2951,10 @@
   "endpointURL": "URL koncového bodu",
   "links": "Odkazy",
   "discordMemberCount": "Více než 8000 členů na Discordu",
-  "userInformation": "Informace o uživateli"
+  "userInformation": "Informace o uživateli",
+  "capabilities": "Schopnosti",
+  "previewScreenshots": "Náhled snímků obrazovky",
+  "holdOnPreparingForm": "Počkejte, připravujeme pro vás formulář",
+  "bySubmittingYouAgreeToOmi": "Odesláním souhlasíte s Omi ",
+  "termsAndPrivacyPolicy": "Podmínky a Zásady ochrany osobních údajů"
 }

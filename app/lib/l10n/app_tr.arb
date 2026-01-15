@@ -1469,7 +1469,7 @@
       }
     }
   },
-  "continueButton": "Devam Et",
+  "continueButton": "Devam et",
   "appIntegration": "{appName} Entegrasyonu",
   "@appIntegration": {
     "placeholders": {
@@ -2739,7 +2739,6 @@
   "chooseYourLanguage": "Dilinizi seçin",
   "selectPreferredLanguageForBestExperience": "En iyi Omi deneyimi için tercih ettiğiniz dili seçin",
   "searchLanguages": "Dil ara...",
-  "continue": "Devam et",
   "selectALanguage": "Bir dil seçin",
   "tryDifferentSearchTerm": "Farklı bir arama terimi deneyin",
   "pleaseEnterYourName": "Lütfen adınızı girin",
@@ -2932,5 +2931,10 @@
   "endpointURL": "Uç Nokta URL'si",
   "links": "Bağlantılar",
   "discordMemberCount": "Discord'da 8000'den fazla üye",
-  "userInformation": "Kullanıcı Bilgileri"
+  "userInformation": "Kullanıcı Bilgileri",
+  "capabilities": "Yetenekler",
+  "previewScreenshots": "Ekran görüntüsü önizlemesi",
+  "holdOnPreparingForm": "Bekleyin, formu sizin için hazırlıyoruz",
+  "bySubmittingYouAgreeToOmi": "Göndererek, Omi ",
+  "termsAndPrivacyPolicy": "Şartlar ve Gizlilik Politikası"
 }

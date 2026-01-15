@@ -55,7 +55,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get close => 'Tancar';
 
   @override
-  String get clear => 'Netejar';
+  String get clear => 'Neteja';
 
   @override
   String get copyTranscript => 'Copiar transcripció';
@@ -70,7 +70,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get reprocessConversation => 'Reprocessar conversa';
 
   @override
-  String get deleteConversation => 'Eliminar conversa';
+  String get deleteConversation => 'Suprimir conversa';
 
   @override
   String get contentCopied => 'Contingut copiat al porta-retalls';
@@ -126,7 +126,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get createPersonHint => 'Creeu una nova persona i ensenyeu a Omi a reconèixer la seva veu també!';
 
   @override
-  String get speechProfile => 'Perfil de veu';
+  String get speechProfile => 'Perfil de Veu';
 
   @override
   String sampleNumber(int number) {
@@ -225,7 +225,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get noConversationsYet => 'Encara no hi ha converses';
 
   @override
-  String get noStarredConversations => 'Encara no hi ha converses destacades.';
+  String get noStarredConversations => 'No hi ha converses destacades';
 
   @override
   String get starConversationHint =>
@@ -263,16 +263,16 @@ class AppLocalizationsCa extends AppLocalizations {
   String get noMessagesYet => 'Encara no hi ha missatges!\nPer què no comenceu una conversa?';
 
   @override
-  String get deletingMessages => 'Eliminant els vostres missatges de la memòria d\'Omi...';
+  String get deletingMessages => 'Suprimint els teus missatges de la memòria d\'Omi...';
 
   @override
-  String get messageCopied => 'Missatge copiat al porta-retalls.';
+  String get messageCopied => '✨ Missatge copiat al porta-retalls';
 
   @override
   String get cannotReportOwnMessage => 'No podeu denunciar els vostres propis missatges.';
 
   @override
-  String get reportMessage => 'Denunciar missatge';
+  String get reportMessage => 'Informar del missatge';
 
   @override
   String get reportMessageConfirm => 'Esteu segur que voleu denunciar aquest missatge?';
@@ -330,7 +330,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get privacyPolicy => 'Política de privadesa';
 
   @override
-  String get visitWebsite => 'Visitar lloc web';
+  String get visitWebsite => 'Visitar el lloc web';
 
   @override
   String get helpOrInquiries => 'Ajuda o consultes?';
@@ -339,7 +339,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get joinCommunity => 'Uniu-vos a la comunitat!';
 
   @override
-  String get membersAndCounting => 'Més de 8000 membres i sumant.';
+  String get membersAndCounting => '8000+ membres i sumant.';
 
   @override
   String get deleteAccountTitle => 'Eliminar compte';
@@ -391,22 +391,22 @@ class AppLocalizationsCa extends AppLocalizations {
   String get email => 'Correu electrònic';
 
   @override
-  String get customVocabulary => 'Vocabulari personalitzat';
+  String get customVocabulary => 'Vocabulari Personalitzat';
 
   @override
-  String get identifyingOthers => 'Identificar altres';
+  String get identifyingOthers => 'Identificació d\'Altres';
 
   @override
-  String get paymentMethods => 'Mètodes de pagament';
+  String get paymentMethods => 'Mètodes de Pagament';
 
   @override
-  String get conversationDisplay => 'Visualització de converses';
+  String get conversationDisplay => 'Visualització de Converses';
 
   @override
-  String get dataPrivacy => 'Dades i privadesa';
+  String get dataPrivacy => 'Privadesa de Dades';
 
   @override
-  String get userId => 'ID d\'usuari';
+  String get userId => 'ID d\'Usuari';
 
   @override
   String get notSet => 'No establert';
@@ -445,7 +445,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get referralProgram => 'Programa de recomanacions';
 
   @override
-  String get signOut => 'Tancar sessió';
+  String get signOut => 'Tancar Sessió';
 
   @override
   String get appAndDeviceCopied => 'Detalls de l\'aplicació i el dispositiu copiats';
@@ -674,7 +674,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get createKeyToStart => 'Creeu una clau per començar';
 
   @override
-  String get createKey => 'Crear clau';
+  String get createKey => 'Crea Clau';
 
   @override
   String get docs => 'Documentació';
@@ -846,7 +846,7 @@ class AppLocalizationsCa extends AppLocalizations {
       'Això eliminarà totes les dades derivades del graf de coneixement (nodes i connexions). Els vostres records originals restaran segurs. El graf es reconstruirà amb el temps o a la propera sol·licitud.';
 
   @override
-  String get knowledgeGraphDeleted => 'Graf de coneixement eliminat correctament';
+  String get knowledgeGraphDeleted => 'Graf de coneixement eliminat';
 
   @override
   String deleteGraphFailed(String error) {
@@ -872,7 +872,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get serverUrl => 'URL del servidor';
 
   @override
-  String get urlCopied => 'URL copiada';
+  String get urlCopied => 'URL copiat';
 
   @override
   String get apiKeyAuth => 'Autenticació amb clau API';
@@ -944,7 +944,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get understandingWords => 'Entenent (paraules)';
 
   @override
-  String get insights => 'Informacions';
+  String get insights => 'Informació';
 
   @override
   String get memories => 'Records';
@@ -1204,7 +1204,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get yourMeetings => 'Les vostres reunions';
 
   @override
-  String get refresh => 'Actualitzar';
+  String get refresh => 'Actualitza';
 
   @override
   String get noUpcomingMeetings => 'No s\'han trobat reunions properes';
@@ -1298,7 +1298,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get noLanguagesFound => 'No s\'han trobat idiomes';
 
   @override
-  String get skip => 'Ometre';
+  String get skip => 'Saltar';
 
   @override
   String languageSetTo(String language) {
@@ -1619,7 +1619,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get privacyFirst => 'Privadesa primer';
 
   @override
-  String get saveChanges => 'Desar canvis';
+  String get saveChanges => 'Desa els canvis';
 
   @override
   String get resetToDefault => 'Restableix per defecte';
@@ -1688,7 +1688,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get customChatbotPersonality => 'Personalitat de xatbot personalitzada';
 
   @override
-  String get makePublic => 'Fer pública';
+  String get makePublic => 'Fer públic';
 
   @override
   String get anyoneCanDiscover => 'Qualsevol pot descobrir la vostra aplicació';
@@ -1756,7 +1756,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get connectLater => 'Connectar més tard';
 
   @override
-  String get grantPermissions => 'Atorgar permisos';
+  String get grantPermissions => 'Concedir permisos';
 
   @override
   String get backgroundActivity => 'Activitat en segon pla';
@@ -1886,7 +1886,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get wantDifferentName => 'Voleu que us anomeni d\'una altra manera?';
 
   @override
-  String get whatsYourName => 'Com us dieu?';
+  String get whatsYourName => 'Com et dius?';
 
   @override
   String get speakTranscribeSummarize => 'Parlar. Transcriure. Resumir.';
@@ -1967,7 +1967,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get selectYourLanguage => 'Seleccioneu el vostre idioma';
 
   @override
-  String get personalGrowthJourney => 'El vostre viatge de creixement personal amb IA que escolta cada paraula vostra.';
+  String get personalGrowthJourney => 'El teu viatge de creixement personal amb IA que escolta cada paraula teva.';
 
   @override
   String get actionItemsTitle => 'Tasques';
@@ -2060,9 +2060,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get deleteSelected => 'Eliminar seleccionats';
 
   @override
-  String searchMemories(int count) {
-    return 'Cercar $count records';
-  }
+  String get searchMemories => 'Cerca records...';
 
   @override
   String get memoryDeleted => 'Record eliminat.';
@@ -2071,7 +2069,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get undo => 'Desfer';
 
   @override
-  String get noMemoriesYet => 'Encara no hi ha records';
+  String get noMemoriesYet => '🧠 Encara no hi ha records';
 
   @override
   String get noAutoMemories => 'Encara no hi ha records extrets automàticament';
@@ -2083,7 +2081,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get noMemoriesInCategories => 'No hi ha records en aquestes categories';
 
   @override
-  String get noMemoriesFound => 'No s\'han trobat records';
+  String get noMemoriesFound => '🔍 No s\'han trobat records';
 
   @override
   String get addFirstMemory => 'Afegiu el vostre primer record';
@@ -2110,7 +2108,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get createActionItemTooltip => 'Crear nova tasca';
 
   @override
-  String get memoryManagement => 'Gestió de records';
+  String get memoryManagement => 'Gestió de memòria';
 
   @override
   String get filterMemories => 'Filtrar records';
@@ -2142,10 +2140,10 @@ class AppLocalizationsCa extends AppLocalizations {
   String get allMemoriesPublicResult => 'Tots els records són ara públics';
 
   @override
-  String get newMemory => 'Nou record';
+  String get newMemory => '✨ Nova memòria';
 
   @override
-  String get editMemory => 'Editar record';
+  String get editMemory => '✏️ Edita memòria';
 
   @override
   String get memoryContentHint => 'M\'agrada menjar gelat...';
@@ -2157,7 +2155,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get saveMemory => 'Desar record';
 
   @override
-  String get retry => 'Tornar a provar';
+  String get retry => 'Tornar a intentar';
 
   @override
   String get createActionItem => 'Crear tasca';
@@ -2258,7 +2256,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get tellUsMoreWhatWentWrong => 'Explica\'ns més sobre què va anar malament...';
 
   @override
-  String get selectText => 'Selecciona text';
+  String get selectText => 'Seleccionar text';
 
   @override
   String maximumGoalsAllowed(int count) {
@@ -2326,7 +2324,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get conversationNotFoundOrDeleted => 'Conversa no trobada o ha estat eliminada';
 
   @override
-  String get deleteMemory => 'Eliminar memòria?';
+  String get deleteMemory => 'Eliminar memòria';
 
   @override
   String get thisActionCannotBeUndone => 'Aquesta acció no es pot desfer.';
@@ -2340,7 +2338,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get noMemoriesInCategory => 'Encara no hi ha memòries en aquesta categoria';
 
   @override
-  String get addYourFirstMemory => 'Afegeix la teva primera memòria';
+  String get addYourFirstMemory => 'Afegeix el teu primer record';
 
   @override
   String get firmwareDisconnectUsb => 'Desconnecta USB';
@@ -2455,13 +2453,13 @@ class AppLocalizationsCa extends AppLocalizations {
   String get importDataFromOtherSources => 'Import data from other sources';
 
   @override
-  String get debugAndDiagnostics => 'Debug & Diagnostics';
+  String get debugAndDiagnostics => 'Depuració i Diagnòstics';
 
   @override
-  String get autoDeletesAfter3Days => 'Auto-deletes after 3 days.';
+  String get autoDeletesAfter3Days => 'S\'elimina automàticament després de 3 dies';
 
   @override
-  String get helpsDiagnoseIssues => 'Helps diagnose issues';
+  String get helpsDiagnoseIssues => 'Ajuda a diagnosticar problemes';
 
   @override
   String get exportStartedMessage => 'Export started. This may take a few seconds...';
@@ -2490,37 +2488,37 @@ class AppLocalizationsCa extends AppLocalizations {
   String get useYourMcpApiKey => 'Use your MCP API key';
 
   @override
-  String get realTimeTranscript => 'Real-time Transcript';
+  String get realTimeTranscript => 'Transcripció en Temps Real';
 
   @override
   String get experimental => 'Experimental';
 
   @override
-  String get transcriptionDiagnostics => 'Transcription Diagnostics';
+  String get transcriptionDiagnostics => 'Diagnòstics de Transcripció';
 
   @override
-  String get detailedDiagnosticMessages => 'Detailed diagnostic messages';
+  String get detailedDiagnosticMessages => 'Missatges de diagnòstic detallats';
 
   @override
-  String get autoCreateSpeakers => 'Auto-create Speakers';
+  String get autoCreateSpeakers => 'Crea Parlants Automàticament';
 
   @override
   String get autoCreateWhenNameDetected => 'Auto-create when name detected';
 
   @override
-  String get followUpQuestions => 'Follow-up Questions';
+  String get followUpQuestions => 'Preguntes de Seguiment';
 
   @override
-  String get suggestQuestionsAfterConversations => 'Suggest questions after conversations';
+  String get suggestQuestionsAfterConversations => 'Suggerir preguntes després de les converses';
 
   @override
-  String get goalTracker => 'Goal Tracker';
+  String get goalTracker => 'Seguidor d\'Objectius';
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Track your personal goals on homepage';
 
   @override
-  String get dailyReflection => 'Daily Reflection';
+  String get dailyReflection => 'Reflexió Diària';
 
   @override
   String get get9PmReminderToReflect => 'Get a 9 PM reminder to reflect on your day';
@@ -2602,7 +2600,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get back => 'Enrere';
 
   @override
-  String get keyboardShortcuts => 'Dreceres de teclat';
+  String get keyboardShortcuts => 'Dreceres de Teclat';
 
   @override
   String get toggleControlBar => 'Commuta la barra de control';
@@ -2661,7 +2659,9 @@ class AppLocalizationsCa extends AppLocalizations {
   String get tapToAddGoal => 'Toca per afegir un objectiu';
 
   @override
-  String get welcomeBack => 'Benvingut de nou';
+  String welcomeBack(String name) {
+    return 'Benvingut de nou, $name';
+  }
 
   @override
   String get yourConversations => 'Les teves converses';
@@ -2808,7 +2808,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get browseInstallCreateApps => 'Explora, instal·la i crea aplicacions';
 
   @override
-  String get all => 'Tot';
+  String get all => 'Tots';
 
   @override
   String get open => 'Obrir';
@@ -2989,4 +2989,1005 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get installed => 'Instal·lat';
+
+  @override
+  String get appIdLabel => 'ID de l\'aplicació';
+
+  @override
+  String get appNameLabel => 'Nom de l\'aplicació';
+
+  @override
+  String get appNamePlaceholder => 'La meva aplicació fantàstica';
+
+  @override
+  String get pleaseEnterAppName => 'Si us plau, introduïu el nom de l\'aplicació';
+
+  @override
+  String get categoryLabel => 'Categoria';
+
+  @override
+  String get selectCategory => 'Seleccioneu categoria';
+
+  @override
+  String get descriptionLabel => 'Descripció';
+
+  @override
+  String get appDescriptionPlaceholder =>
+      'La meva aplicació fantàstica és una aplicació genial que fa coses increïbles. És la millor aplicació!';
+
+  @override
+  String get pleaseProvideValidDescription => 'Si us plau, proporcioneu una descripció vàlida';
+
+  @override
+  String get appPricingLabel => 'Preu de l\'aplicació';
+
+  @override
+  String get noneSelected => 'Cap seleccionat';
+
+  @override
+  String get appIdCopiedToClipboard => 'ID de l\'aplicació copiat al porta-retalls';
+
+  @override
+  String get appCategoryModalTitle => 'Categoria de l\'aplicació';
+
+  @override
+  String get pricingFree => 'Gratuït';
+
+  @override
+  String get pricingPaid => 'De pagament';
+
+  @override
+  String get loadingCapabilities => 'Carregant capacitats...';
+
+  @override
+  String get filterInstalled => 'Instal·lades';
+
+  @override
+  String get filterMyApps => 'Les meves aplicacions';
+
+  @override
+  String get clearSelection => 'Esborrar selecció';
+
+  @override
+  String get filterCategory => 'Categoria';
+
+  @override
+  String get rating4PlusStars => '4+ estrelles';
+
+  @override
+  String get rating3PlusStars => '3+ estrelles';
+
+  @override
+  String get rating2PlusStars => '2+ estrelles';
+
+  @override
+  String get rating1PlusStars => '1+ estrelles';
+
+  @override
+  String get filterRating => 'Valoració';
+
+  @override
+  String get filterCapabilities => 'Capacitats';
+
+  @override
+  String get noNotificationScopesAvailable => 'No hi ha àmbits de notificació disponibles';
+
+  @override
+  String get popularApps => 'Aplicacions populars';
+
+  @override
+  String get pleaseProvidePrompt => 'Si us plau, proporcioneu una indicació';
+
+  @override
+  String chatWithAppName(String appName) {
+    return 'Xat amb $appName';
+  }
+
+  @override
+  String get defaultAiAssistant => 'Assistent d\'IA per defecte';
+
+  @override
+  String get readyToChat => '✨ Llest per xatejar!';
+
+  @override
+  String get connectionNeeded => '🌐 Connexió necessària';
+
+  @override
+  String get startConversation => 'Comença una conversa i deixa que la màgia comenci';
+
+  @override
+  String get checkInternetConnection => 'Si us plau, comprova la teva connexió a Internet';
+
+  @override
+  String get wasThisHelpful => 'Ha estat útil?';
+
+  @override
+  String get thankYouForFeedback => 'Gràcies pels teus comentaris!';
+
+  @override
+  String get maxFilesUploadError => 'Només pots pujar 4 fitxers a la vegada';
+
+  @override
+  String get attachedFiles => '📎 Fitxers adjunts';
+
+  @override
+  String get takePhoto => 'Fer una foto';
+
+  @override
+  String get captureWithCamera => 'Capturar amb la càmera';
+
+  @override
+  String get selectImages => 'Seleccionar imatges';
+
+  @override
+  String get chooseFromGallery => 'Triar de la galeria';
+
+  @override
+  String get selectFile => 'Seleccionar un fitxer';
+
+  @override
+  String get chooseAnyFileType => 'Triar qualsevol tipus de fitxer';
+
+  @override
+  String get cannotReportOwnMessages => 'No pots informar dels teus propis missatges';
+
+  @override
+  String get messageReportedSuccessfully => '✅ Missatge informat correctament';
+
+  @override
+  String get confirmReportMessage => 'Estàs segur que vols informar d\'aquest missatge?';
+
+  @override
+  String get selectChatAssistant => 'Seleccionar assistent de xat';
+
+  @override
+  String get enableMoreApps => 'Activar més aplicacions';
+
+  @override
+  String get chatCleared => 'Xat esborrat';
+
+  @override
+  String get clearChatTitle => 'Esborrar el xat?';
+
+  @override
+  String get confirmClearChat => 'Estàs segur que vols esborrar el xat? Aquesta acció no es pot desfer.';
+
+  @override
+  String get copy => 'Copiar';
+
+  @override
+  String get share => 'Compartir';
+
+  @override
+  String get report => 'Informar';
+
+  @override
+  String get microphonePermissionRequired => 'Es requereix permís de micròfon per a l\'enregistrament de veu.';
+
+  @override
+  String get microphonePermissionDenied =>
+      'Permís de micròfon denegat. Si us plau, concediu permís a Preferències del Sistema > Privacitat i Seguretat > Micròfon.';
+
+  @override
+  String failedToCheckMicrophonePermission(String error) {
+    return 'Error en comprovar el permís del micròfon: $error';
+  }
+
+  @override
+  String get failedToTranscribeAudio => 'Error en transcriure l\'àudio';
+
+  @override
+  String get transcribing => 'Transcrivint...';
+
+  @override
+  String get transcriptionFailed => 'Transcripció fallida';
+
+  @override
+  String get discardedConversation => 'Conversa descartada';
+
+  @override
+  String get at => 'a';
+
+  @override
+  String get from => 'des de';
+
+  @override
+  String get copied => 'Copiat!';
+
+  @override
+  String get copyLink => 'Copiar enllaç';
+
+  @override
+  String get hideTranscript => 'Amagar transcripció';
+
+  @override
+  String get viewTranscript => 'Veure transcripció';
+
+  @override
+  String get conversationDetails => 'Detalls de la conversa';
+
+  @override
+  String get transcript => 'Transcripció';
+
+  @override
+  String segmentsCount(int count) {
+    return '$count segments';
+  }
+
+  @override
+  String get noTranscriptAvailable => 'No hi ha transcripció disponible';
+
+  @override
+  String get noTranscriptMessage => 'Aquesta conversa no té transcripció.';
+
+  @override
+  String get conversationUrlCouldNotBeGenerated => 'No s\'ha pogut generar l\'URL de la conversa.';
+
+  @override
+  String get failedToGenerateConversationLink => 'No s\'ha pogut generar l\'enllaç de la conversa';
+
+  @override
+  String get failedToGenerateShareLink => 'No s\'ha pogut generar l\'enllaç per compartir';
+
+  @override
+  String get reloadingConversations => 'Recarregant converses...';
+
+  @override
+  String get user => 'Usuari';
+
+  @override
+  String get starred => 'Destacades';
+
+  @override
+  String get date => 'Data';
+
+  @override
+  String get noResultsFound => 'No s\'han trobat resultats';
+
+  @override
+  String get tryAdjustingSearchTerms => 'Prova d\'ajustar els termes de cerca';
+
+  @override
+  String get starConversationsToFindQuickly => 'Destaca converses per trobar-les ràpidament aquí';
+
+  @override
+  String noConversationsOnDate(String date) {
+    return 'No hi ha converses el $date';
+  }
+
+  @override
+  String get trySelectingDifferentDate => 'Prova de seleccionar una altra data';
+
+  @override
+  String get conversations => 'Converses';
+
+  @override
+  String get chat => 'Xat';
+
+  @override
+  String get actions => 'Accions';
+
+  @override
+  String get syncAvailable => 'Sincronització disponible';
+
+  @override
+  String get referAFriend => 'Recomana a un amic';
+
+  @override
+  String get help => 'Ajuda';
+
+  @override
+  String get pro => 'Pro';
+
+  @override
+  String get upgradeToPro => 'Actualitza a Pro';
+
+  @override
+  String get getOmiDevice => 'Aconsegueix el dispositiu Omi';
+
+  @override
+  String get wearableAiCompanion => 'Company d\'IA portàtil';
+
+  @override
+  String get loadingMemories => 'Carregant records...';
+
+  @override
+  String get allMemories => 'Tots els records';
+
+  @override
+  String get aboutYou => 'Sobre tu';
+
+  @override
+  String get manual => 'Manual';
+
+  @override
+  String get loadingYourMemories => 'Carregant els teus records...';
+
+  @override
+  String get createYourFirstMemory => 'Crea el teu primer record per començar';
+
+  @override
+  String get tryAdjustingFilter => 'Prova d\'ajustar la cerca o el filtre';
+
+  @override
+  String get whatWouldYouLikeToRemember => 'Què vols recordar?';
+
+  @override
+  String get category => 'Categoria';
+
+  @override
+  String get public => 'Públic';
+
+  @override
+  String get failedToSaveCheckConnection => 'Error en desar. Comprova la connexió.';
+
+  @override
+  String get createMemory => 'Crear memòria';
+
+  @override
+  String get deleteMemoryConfirmation =>
+      'Estàs segur que vols eliminar aquesta memòria? Aquesta acció no es pot desfer.';
+
+  @override
+  String get makePrivate => 'Fer privat';
+
+  @override
+  String get organizeAndControlMemories => 'Organitza i controla els teus records';
+
+  @override
+  String get total => 'Total';
+
+  @override
+  String get makeAllMemoriesPrivate => 'Fer privats tots els records';
+
+  @override
+  String get setAllMemoriesToPrivate => 'Establir tots els records com a privats';
+
+  @override
+  String get makeAllMemoriesPublic => 'Fer públics tots els records';
+
+  @override
+  String get setAllMemoriesToPublic => 'Establir tots els records com a públics';
+
+  @override
+  String get permanentlyRemoveAllMemories => 'Eliminar permanentment tots els records d\'Omi';
+
+  @override
+  String get allMemoriesAreNowPrivate => 'Tots els records són ara privats';
+
+  @override
+  String get allMemoriesAreNowPublic => 'Tots els records són ara públics';
+
+  @override
+  String get clearOmisMemory => 'Esborrar la memòria d\'Omi';
+
+  @override
+  String clearMemoryConfirmation(int count) {
+    return 'Estàs segur que vols esborrar la memòria d\'Omi? Aquesta acció no es pot desfer i eliminarà permanentment tots els $count records.';
+  }
+
+  @override
+  String get omisMemoryCleared => 'S\'ha esborrat la memòria d\'Omi sobre tu';
+
+  @override
+  String get welcomeToOmi => 'Benvingut a Omi';
+
+  @override
+  String get continueWithApple => 'Continua amb Apple';
+
+  @override
+  String get continueWithGoogle => 'Continua amb Google';
+
+  @override
+  String get byContinuingYouAgree => 'En continuar, acceptes els nostres ';
+
+  @override
+  String get termsOfService => 'Termes del servei';
+
+  @override
+  String get and => ' i ';
+
+  @override
+  String get dataAndPrivacy => 'Dades i privadesa';
+
+  @override
+  String get secureAuthViaAppleId => 'Autenticació segura via Apple ID';
+
+  @override
+  String get secureAuthViaGoogleAccount => 'Autenticació segura via compte de Google';
+
+  @override
+  String get whatWeCollect => 'Què recopilem';
+
+  @override
+  String get dataCollectionMessage =>
+      'En continuar, les teves converses, enregistraments i informació personal s\'emmagatzemaran de manera segura als nostres servidors per proporcionar informació impulsada per IA i habilitar totes les funcions de l\'aplicació.';
+
+  @override
+  String get dataProtection => 'Protecció de dades';
+
+  @override
+  String get yourDataIsProtected => 'Les teves dades estan protegides i regides per la nostra ';
+
+  @override
+  String get pleaseSelectYourPrimaryLanguage => 'Si us plau, seleccioneu la vostra llengua principal';
+
+  @override
+  String get chooseYourLanguage => 'Trieu el vostre idioma';
+
+  @override
+  String get selectPreferredLanguageForBestExperience =>
+      'Seleccioneu el vostre idioma preferit per a la millor experiència Omi';
+
+  @override
+  String get searchLanguages => 'Cerca idiomes...';
+
+  @override
+  String get selectALanguage => 'Seleccioneu un idioma';
+
+  @override
+  String get tryDifferentSearchTerm => 'Proveu un terme de cerca diferent';
+
+  @override
+  String get pleaseEnterYourName => 'Si us plau, introduïu el vostre nom';
+
+  @override
+  String get nameMustBeAtLeast2Characters => 'El nom ha de tenir almenys 2 caràcters';
+
+  @override
+  String get tellUsHowYouWouldLikeToBeAddressed =>
+      'Digueu-nos com us agradaria que us adrecem. Això ajuda a personalitzar la vostra experiència Omi.';
+
+  @override
+  String charactersCount(int count) {
+    return '$count caràcters';
+  }
+
+  @override
+  String get enableFeaturesForBestExperience =>
+      'Activeu les funcions per a la millor experiència Omi al vostre dispositiu.';
+
+  @override
+  String get microphoneAccess => 'Accés al micròfon';
+
+  @override
+  String get recordAudioConversations => 'Enregistrar converses d\'àudio';
+
+  @override
+  String get microphoneAccessDescription =>
+      'Omi necessita accés al micròfon per enregistrar les vostres converses i proporcionar transcripcions.';
+
+  @override
+  String get screenRecording => 'Gravació de pantalla';
+
+  @override
+  String get captureSystemAudioFromMeetings => 'Capturar àudio del sistema de reunions';
+
+  @override
+  String get screenRecordingDescription =>
+      'Omi necessita permís de gravació de pantalla per capturar l\'àudio del sistema de les vostres reunions basades en el navegador.';
+
+  @override
+  String get accessibility => 'Accessibilitat';
+
+  @override
+  String get detectBrowserBasedMeetings => 'Detectar reunions basades en el navegador';
+
+  @override
+  String get accessibilityDescription =>
+      'Omi necessita permís d\'accessibilitat per detectar quan us uniu a reunions de Zoom, Meet o Teams al vostre navegador.';
+
+  @override
+  String get pleaseWait => 'Si us plau, espereu...';
+
+  @override
+  String get joinTheCommunity => 'Uneix-te a la comunitat!';
+
+  @override
+  String get loadingProfile => 'Carregant perfil...';
+
+  @override
+  String get profileSettings => 'Configuració del perfil';
+
+  @override
+  String get noEmailSet => 'No hi ha correu electrònic configurat';
+
+  @override
+  String get userIdCopiedToClipboard => 'ID d\'usuari copiat';
+
+  @override
+  String get yourInformation => 'La Teva Informació';
+
+  @override
+  String get setYourName => 'Estableix el vostre nom';
+
+  @override
+  String get changeYourName => 'Canvia el vostre nom';
+
+  @override
+  String get manageYourOmiPersona => 'Gestiona la teva persona Omi';
+
+  @override
+  String get voiceAndPeople => 'Veu i Persones';
+
+  @override
+  String get teachOmiYourVoice => 'Ensenya a Omi la teva veu';
+
+  @override
+  String get tellOmiWhoSaidIt => 'Digues a Omi qui ho va dir 🗣️';
+
+  @override
+  String get payment => 'Pagament';
+
+  @override
+  String get addOrChangeYourPaymentMethod => 'Afegeix o canvia el mètode de pagament';
+
+  @override
+  String get preferences => 'Preferències';
+
+  @override
+  String get helpImproveOmiBySharing => 'Ajuda a millorar Omi compartint dades d\'anàlisi anonimitzades';
+
+  @override
+  String get deleteAccount => 'Eliminar Compte';
+
+  @override
+  String get deleteYourAccountAndAllData => 'Elimina el compte i totes les dades';
+
+  @override
+  String get clearLogs => 'Esborrar registres';
+
+  @override
+  String get debugLogsCleared => 'Registres de depuració esborrats';
+
+  @override
+  String get exportConversations => 'Exportar converses';
+
+  @override
+  String get exportAllConversationsToJson => 'Exporteu totes les vostres converses a un fitxer JSON.';
+
+  @override
+  String get conversationsExportStarted =>
+      'S\'ha iniciat l\'exportació de converses. Això pot trigar uns segons, espereu.';
+
+  @override
+  String get mcpDescription =>
+      'Per connectar Omi amb altres aplicacions per llegir, cercar i gestionar els vostres records i converses. Creeu una clau per començar.';
+
+  @override
+  String get apiKeys => 'Claus API';
+
+  @override
+  String errorLabel(String error) {
+    return 'Error: $error';
+  }
+
+  @override
+  String get noApiKeysFound => 'No s\'han trobat claus API. Creeu-ne una per començar.';
+
+  @override
+  String get advancedSettings => 'Configuració avançada';
+
+  @override
+  String get triggersWhenNewConversationCreated => 'S\'activa quan es crea una conversa nova.';
+
+  @override
+  String get triggersWhenNewTranscriptReceived => 'S\'activa quan es rep una transcripció nova.';
+
+  @override
+  String get realtimeAudioBytes => 'Bytes d\'àudio en temps real';
+
+  @override
+  String get triggersWhenAudioBytesReceived => 'S\'activa quan es reben bytes d\'àudio.';
+
+  @override
+  String get everyXSeconds => 'Cada x segons';
+
+  @override
+  String get triggersWhenDaySummaryGenerated => 'S\'activa quan es genera un resum del dia.';
+
+  @override
+  String get tryLatestExperimentalFeatures => 'Proveu les últimes funcions experimentals de l\'equip d\'Omi.';
+
+  @override
+  String get transcriptionServiceDiagnosticStatus => 'Estat de diagnòstic del servei de transcripció';
+
+  @override
+  String get enableDetailedDiagnosticMessages => 'Activeu missatges de diagnòstic detallats del servei de transcripció';
+
+  @override
+  String get autoCreateAndTagNewSpeakers => 'Creació i etiquetatge automàtic de parlants nous';
+
+  @override
+  String get automaticallyCreateNewPerson =>
+      'Crear automàticament una persona nova quan es detecti un nom a la transcripció.';
+
+  @override
+  String get pilotFeatures => 'Funcions pilot';
+
+  @override
+  String get pilotFeaturesDescription => 'Aquestes funcions són proves i no se\'n garanteix el suport.';
+
+  @override
+  String get suggestFollowUpQuestion => 'Suggerir una pregunta de seguiment';
+
+  @override
+  String get saveSettings => 'Desa la Configuració';
+
+  @override
+  String get syncingDeveloperSettings => 'S\'està sincronitzant la configuració de desenvolupador...';
+
+  @override
+  String get summary => 'Resum';
+
+  @override
+  String get auto => 'Automàtic';
+
+  @override
+  String get noSummaryForApp =>
+      'No hi ha cap resum disponible per a aquesta aplicació. Proveu una altra aplicació per obtenir millors resultats.';
+
+  @override
+  String get tryAnotherApp => 'Provar una altra aplicació';
+
+  @override
+  String generatedBy(String appName) {
+    return 'Generat per $appName';
+  }
+
+  @override
+  String get overview => 'Visió general';
+
+  @override
+  String get otherAppResults => 'Resultats d\'altres aplicacions';
+
+  @override
+  String get unknownApp => 'Aplicació desconeguda';
+
+  @override
+  String get noSummaryAvailable => 'No hi ha cap resum disponible';
+
+  @override
+  String get conversationNoSummaryYet => 'Aquesta conversa encara no té resum.';
+
+  @override
+  String get chooseSummarizationApp => 'Trieu l\'aplicació de resum';
+
+  @override
+  String setAsDefaultSummarizationApp(String appName) {
+    return '$appName s\'ha establert com a aplicació de resum predeterminada';
+  }
+
+  @override
+  String get letOmiChooseAutomatically => 'Deixeu que Omi esculli automàticament la millor aplicació';
+
+  @override
+  String get deleteConversationConfirmation =>
+      'Esteu segur que voleu suprimir aquesta conversa? Aquesta acció no es pot desfer.';
+
+  @override
+  String get conversationDeleted => 'Conversa suprimida';
+
+  @override
+  String get generatingLink => 'Generant enllaç...';
+
+  @override
+  String get editConversation => 'Editar conversa';
+
+  @override
+  String get conversationLinkCopiedToClipboard => 'Enllaç de la conversa copiat al porta-retalls';
+
+  @override
+  String get conversationTranscriptCopiedToClipboard => 'Transcripció de la conversa copiada al porta-retalls';
+
+  @override
+  String get editConversationDialogTitle => 'Editar conversa';
+
+  @override
+  String get changeTheConversationTitle => 'Canviar el títol de la conversa';
+
+  @override
+  String get conversationTitle => 'Títol de la conversa';
+
+  @override
+  String get enterConversationTitle => 'Introduïu el títol de la conversa...';
+
+  @override
+  String get conversationTitleUpdatedSuccessfully => 'Títol de la conversa actualitzat correctament';
+
+  @override
+  String get failedToUpdateConversationTitle => 'No s\'ha pogut actualitzar el títol de la conversa';
+
+  @override
+  String get errorUpdatingConversationTitle => 'Error en actualitzar el títol de la conversa';
+
+  @override
+  String get settingUp => 'Configurant...';
+
+  @override
+  String get startYourFirstRecording => 'Comenceu la vostra primera gravació';
+
+  @override
+  String get preparingSystemAudioCapture => 'Preparant la captura d\'àudio del sistema';
+
+  @override
+  String get clickTheButtonToCaptureAudio =>
+      'Feu clic al botó per capturar àudio per a transcripcions en directe, informació d\'IA i desament automàtic.';
+
+  @override
+  String get reconnecting => 'Reconnectant...';
+
+  @override
+  String get recordingPaused => 'Gravació en pausa';
+
+  @override
+  String get recordingActive => 'Gravació activa';
+
+  @override
+  String get startRecording => 'Comença la gravació';
+
+  @override
+  String resumingInCountdown(String countdown) {
+    return 'Reprenent en ${countdown}s...';
+  }
+
+  @override
+  String get tapPlayToResume => 'Toqueu reproducció per reprendre';
+
+  @override
+  String get listeningForAudio => 'Escoltant àudio...';
+
+  @override
+  String get preparingAudioCapture => 'Preparant la captura d\'àudio';
+
+  @override
+  String get clickToBeginRecording => 'Feu clic per començar la gravació';
+
+  @override
+  String get translated => 'traduït';
+
+  @override
+  String get liveTranscript => 'Transcripció en directe';
+
+  @override
+  String segmentsSingular(String count) {
+    return '$count segment';
+  }
+
+  @override
+  String segmentsPlural(String count) {
+    return '$count segments';
+  }
+
+  @override
+  String get startRecordingToSeeTranscript => 'Comenceu la gravació per veure la transcripció en directe';
+
+  @override
+  String get paused => 'En pausa';
+
+  @override
+  String get initializing => 'Inicialitzant...';
+
+  @override
+  String get recording => 'Gravant';
+
+  @override
+  String microphoneChangedResumingIn(String countdown) {
+    return 'El micròfon ha canviat. Reprenent en ${countdown}s';
+  }
+
+  @override
+  String get clickPlayToResumeOrStop => 'Feu clic a reproducció per reprendre o atura per acabar';
+
+  @override
+  String get settingUpSystemAudioCapture => 'Configurant la captura d\'àudio del sistema';
+
+  @override
+  String get capturingAudioAndGeneratingTranscript => 'Capturant àudio i generant transcripció';
+
+  @override
+  String get clickToBeginRecordingSystemAudio => 'Feu clic per començar a gravar àudio del sistema';
+
+  @override
+  String get you => 'Tu';
+
+  @override
+  String speakerWithId(String speakerId) {
+    return 'Parlant $speakerId';
+  }
+
+  @override
+  String get translatedByOmi => 'traduït per omi';
+
+  @override
+  String get backToConversations => 'Tornar a Converses';
+
+  @override
+  String get systemAudio => 'Sistema';
+
+  @override
+  String get mic => 'Micròfon';
+
+  @override
+  String audioInputSetTo(String deviceName) {
+    return 'Entrada d\'àudio establerta a $deviceName';
+  }
+
+  @override
+  String errorSwitchingAudioDevice(String error) {
+    return 'Error en canviar el dispositiu d\'àudio: $error';
+  }
+
+  @override
+  String get selectAudioInput => 'Seleccioneu l\'entrada d\'àudio';
+
+  @override
+  String get loadingDevices => 'Carregant dispositius...';
+
+  @override
+  String get settingsHeader => 'CONFIGURACIÓ';
+
+  @override
+  String get plansAndBilling => 'Plans i Facturació';
+
+  @override
+  String get calendarIntegration => 'Integració de Calendari';
+
+  @override
+  String get dailySummary => 'Resum Diari';
+
+  @override
+  String get developer => 'Desenvolupador';
+
+  @override
+  String get about => 'Quant a';
+
+  @override
+  String get selectTime => 'Selecciona l\'Hora';
+
+  @override
+  String get accountGroup => 'Compte';
+
+  @override
+  String get signOutQuestion => 'Tancar Sessió?';
+
+  @override
+  String get signOutConfirmation => 'Estàs segur que vols tancar la sessió?';
+
+  @override
+  String get customVocabularyHeader => 'VOCABULARI PERSONALITZAT';
+
+  @override
+  String get addWordsDescription => 'Afegeix paraules que Omi hauria de reconèixer durant la transcripció.';
+
+  @override
+  String get enterWordsHint => 'Introdueix paraules (separades per comes)';
+
+  @override
+  String get dailySummaryHeader => 'RESUM DIARI';
+
+  @override
+  String get dailySummaryTitle => 'Resum Diari';
+
+  @override
+  String get dailySummaryDescription => 'Obtén un resum personalitzat de les teves converses';
+
+  @override
+  String get deliveryTime => 'Hora de Lliurament';
+
+  @override
+  String get deliveryTimeDescription => 'Quan rebre el teu resum diari';
+
+  @override
+  String get subscription => 'Subscripció';
+
+  @override
+  String get viewPlansAndUsage => 'Veure Plans i Ús';
+
+  @override
+  String get viewPlansDescription => 'Gestiona la teva subscripció i consulta estadístiques d\'ús';
+
+  @override
+  String get addOrChangePaymentMethod => 'Afegeix o canvia el teu mètode de pagament';
+
+  @override
+  String get displayOptions => 'Opcions de Visualització';
+
+  @override
+  String get showMeetingsInMenuBar => 'Mostra Reunions a la Barra de Menú';
+
+  @override
+  String get displayUpcomingMeetingsDescription => 'Mostra les reunions properes a la barra de menú';
+
+  @override
+  String get showEventsWithoutParticipants => 'Mostra Esdeveniments Sense Participants';
+
+  @override
+  String get includePersonalEventsDescription => 'Inclou esdeveniments personals sense assistents';
+
+  @override
+  String get upcomingMeetings => 'REUNIONS PROPERES';
+
+  @override
+  String get checkingNext7Days => 'Comprovant els propers 7 dies';
+
+  @override
+  String get shortcuts => 'Dreceres';
+
+  @override
+  String get shortcutChangeInstruction => 'Feu clic en una drecera per canviar-la. Premeu Escape per cancel·lar.';
+
+  @override
+  String get configurePersonaDescription => 'Configura la teva persona d\'IA';
+
+  @override
+  String get configureSTTProvider => 'Configura el proveïdor STT';
+
+  @override
+  String get setConversationEndDescription => 'Estableix quan finalitzen automàticament les converses';
+
+  @override
+  String get importDataDescription => 'Importa dades d\'altres fonts';
+
+  @override
+  String get exportConversationsDescription => 'Exporta converses a JSON';
+
+  @override
+  String get exportingConversations => 'Exportant converses...';
+
+  @override
+  String get clearNodesDescription => 'Esborra tots els nodes i connexions';
+
+  @override
+  String get deleteKnowledgeGraphQuestion => 'Eliminar Gràfic de Coneixement?';
+
+  @override
+  String get deleteKnowledgeGraphWarning =>
+      'Això eliminarà totes les dades derivades del gràfic de coneixement. Els teus records originals romanen segurs.';
+
+  @override
+  String get connectOmiWithAI => 'Connecta Omi amb assistents d\'IA';
+
+  @override
+  String get noAPIKeys => 'No hi ha claus API. Crea\'n una per començar.';
+
+  @override
+  String get autoCreateWhenDetected => 'Crea automàticament quan es detecti el nom';
+
+  @override
+  String get trackPersonalGoals => 'Fes el seguiment d\'objectius personals a la pàgina d\'inici';
+
+  @override
+  String get dailyReflectionDescription => 'Recordatori a les 9 PM per reflexionar sobre el teu dia';
+
+  @override
+  String get endpointURL => 'URL del Punt Final';
+
+  @override
+  String get links => 'Enllaços';
+
+  @override
+  String get discordMemberCount => 'Més de 8000 membres a Discord';
+
+  @override
+  String get userInformation => 'Informació de l\'Usuari';
+
+  @override
+  String get capabilities => 'Capacitats';
+
+  @override
+  String get previewScreenshots => 'Vista prèvia de captures';
+
+  @override
+  String get holdOnPreparingForm => 'Espera, estem preparant el formulari per a tu';
+
+  @override
+  String get bySubmittingYouAgreeToOmi => 'En enviar, acceptes Omi ';
+
+  @override
+  String get termsAndPrivacyPolicy => 'Termes i Política de Privacitat';
+
+  @override
+  String get helpsDiagnoseIssuesAutoDeletes =>
+      'Ajuda a diagnosticar problemes. S\'elimina automàticament després de 3 dies.';
 }

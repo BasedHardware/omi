@@ -2757,7 +2757,6 @@
   "chooseYourLanguage": "Valige oma keel",
   "selectPreferredLanguageForBestExperience": "Valige oma eelistatud keel parima Omi kogemuse jaoks",
   "searchLanguages": "Otsi keeli...",
-  "continue": "Jätka",
   "selectALanguage": "Valige keel",
   "tryDifferentSearchTerm": "Proovige teist otsingusõna",
   "pleaseEnterYourName": "Palun sisestage oma nimi",
@@ -2950,5 +2949,10 @@
   "endpointURL": "Lõpp-punkti URL",
   "links": "Lingid",
   "discordMemberCount": "Üle 8000 liikme Discordis",
-  "userInformation": "Kasutajateave"
+  "userInformation": "Kasutajateave",
+  "capabilities": "Võimalused",
+  "previewScreenshots": "Ekraanipiltide eelvaade",
+  "holdOnPreparingForm": "Oota, valmistame vormi teile ette",
+  "bySubmittingYouAgreeToOmi": "Esitades nõustute Omi ",
+  "termsAndPrivacyPolicy": "Tingimused ja Privaatsuspoliitika"
 }

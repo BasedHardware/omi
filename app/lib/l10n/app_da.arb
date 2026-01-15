@@ -1469,7 +1469,7 @@
       }
     }
   },
-  "continueButton": "Continue",
+  "continueButton": "Fortsæt",
   "appIntegration": "{appName} Integration",
   "@appIntegration": {
     "placeholders": {
@@ -2757,7 +2757,6 @@
   "chooseYourLanguage": "Vælg dit sprog",
   "selectPreferredLanguageForBestExperience": "Vælg dit foretrukne sprog for den bedste Omi-oplevelse",
   "searchLanguages": "Søg sprog...",
-  "continue": "Fortsæt",
   "selectALanguage": "Vælg et sprog",
   "tryDifferentSearchTerm": "Prøv et andet søgeord",
   "pleaseEnterYourName": "Indtast venligst dit navn",
@@ -2950,5 +2949,10 @@
   "endpointURL": "Endepunkts-URL",
   "links": "Links",
   "discordMemberCount": "Over 8000 medlemmer på Discord",
-  "userInformation": "Brugeroplysninger"
+  "userInformation": "Brugeroplysninger",
+  "capabilities": "Funktioner",
+  "previewScreenshots": "Forhåndsvisning af skærmbilleder",
+  "holdOnPreparingForm": "Vent venligst, vi forbereder formularen til dig",
+  "bySubmittingYouAgreeToOmi": "Ved at indsende accepterer du Omi ",
+  "termsAndPrivacyPolicy": "Vilkår og Privatlivspolitik"
 }

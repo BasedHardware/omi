@@ -1204,7 +1204,6 @@
   "chooseYourLanguage": "选择您的语言",
   "selectPreferredLanguageForBestExperience": "选择您的首选语言以获得最佳 Omi 体验",
   "searchLanguages": "搜索语言...",
-  "continue": "继续",
   "selectALanguage": "选择语言",
   "tryDifferentSearchTerm": "尝试不同的搜索词",
   "pleaseEnterYourName": "请输入您的姓名",
@@ -1397,5 +1396,10 @@
   "endpointURL": "端点 URL",
   "links": "链接",
   "discordMemberCount": "Discord 上超过 8000 名成员",
-  "userInformation": "用户信息"
+  "userInformation": "用户信息",
+  "capabilities": "功能",
+  "previewScreenshots": "预览截图",
+  "holdOnPreparingForm": "请稍候，我们正在为您准备表单",
+  "bySubmittingYouAgreeToOmi": "提交即表示您同意Omi ",
+  "termsAndPrivacyPolicy": "条款与隐私政策"
 }

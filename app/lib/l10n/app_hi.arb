@@ -1204,7 +1204,6 @@
   "chooseYourLanguage": "अपनी भाषा चुनें",
   "selectPreferredLanguageForBestExperience": "सर्वोत्तम Omi अनुभव के लिए अपनी पसंदीदा भाषा चुनें",
   "searchLanguages": "भाषाएं खोजें...",
-  "continue": "जारी रखें",
   "selectALanguage": "एक भाषा चुनें",
   "tryDifferentSearchTerm": "एक अलग खोज शब्द आज़माएं",
   "pleaseEnterYourName": "कृपया अपना नाम दर्ज करें",
@@ -1397,5 +1396,10 @@
   "endpointURL": "एंडपॉइंट URL",
   "links": "लिंक",
   "discordMemberCount": "Discord पर 8000+ सदस्य",
-  "userInformation": "उपयोगकर्ता जानकारी"
+  "userInformation": "उपयोगकर्ता जानकारी",
+  "capabilities": "क्षमताएं",
+  "previewScreenshots": "स्क्रीनशॉट पूर्वावलोकन",
+  "holdOnPreparingForm": "रुकिए, हम आपके लिए फॉर्म तैयार कर रहे हैं",
+  "bySubmittingYouAgreeToOmi": "सबमिट करके, आप Omi की ",
+  "termsAndPrivacyPolicy": "शर्तें और गोपनीयता नीति"
 }

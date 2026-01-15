@@ -2757,7 +2757,6 @@
   "chooseYourLanguage": "Valitse kielesi",
   "selectPreferredLanguageForBestExperience": "Valitse suosikkikielesi parhaan Omi-kokemuksen saamiseksi",
   "searchLanguages": "Hae kieliä...",
-  "continue": "Jatka",
   "selectALanguage": "Valitse kieli",
   "tryDifferentSearchTerm": "Kokeile eri hakusanaa",
   "pleaseEnterYourName": "Syötä nimesi",
@@ -2950,5 +2949,10 @@
   "endpointURL": "Päätepisteen URL",
   "links": "Linkit",
   "discordMemberCount": "Yli 8000 jäsentä Discordissa",
-  "userInformation": "Käyttäjätiedot"
+  "userInformation": "Käyttäjätiedot",
+  "capabilities": "Ominaisuudet",
+  "previewScreenshots": "Kuvakaappausten esikatselu",
+  "holdOnPreparingForm": "Odota hetki, valmistelemme lomaketta sinulle",
+  "bySubmittingYouAgreeToOmi": "Lähettämällä hyväksyt Omin ",
+  "termsAndPrivacyPolicy": "Ehdot ja Tietosuojakäytäntö"
 }

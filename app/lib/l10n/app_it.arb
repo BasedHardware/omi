@@ -2739,7 +2739,6 @@
   "chooseYourLanguage": "Scegli la tua lingua",
   "selectPreferredLanguageForBestExperience": "Seleziona la tua lingua preferita per la migliore esperienza Omi",
   "searchLanguages": "Cerca lingue...",
-  "continue": "Continua",
   "selectALanguage": "Seleziona una lingua",
   "tryDifferentSearchTerm": "Prova un termine di ricerca diverso",
   "pleaseEnterYourName": "Inserisci il tuo nome",
@@ -2932,5 +2931,10 @@
   "endpointURL": "URL dell'Endpoint",
   "links": "Link",
   "discordMemberCount": "Oltre 8000 membri su Discord",
-  "userInformation": "Informazioni Utente"
+  "userInformation": "Informazioni Utente",
+  "capabilities": "Capacità",
+  "previewScreenshots": "Anteprima schermate",
+  "holdOnPreparingForm": "Attendi, stiamo preparando il modulo per te",
+  "bySubmittingYouAgreeToOmi": "Inviando, accetti i ",
+  "termsAndPrivacyPolicy": "Termini e Informativa sulla Privacy"
 }

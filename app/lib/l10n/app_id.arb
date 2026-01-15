@@ -2757,7 +2757,6 @@
   "chooseYourLanguage": "Pilih bahasa Anda",
   "selectPreferredLanguageForBestExperience": "Pilih bahasa pilihan Anda untuk pengalaman Omi terbaik",
   "searchLanguages": "Cari bahasa...",
-  "continue": "Lanjutkan",
   "selectALanguage": "Pilih bahasa",
   "tryDifferentSearchTerm": "Coba istilah pencarian yang berbeda",
   "pleaseEnterYourName": "Silakan masukkan nama Anda",
@@ -2950,5 +2949,10 @@
   "endpointURL": "URL Endpoint",
   "links": "Tautan",
   "discordMemberCount": "8000+ anggota di Discord",
-  "userInformation": "Informasi Pengguna"
+  "userInformation": "Informasi Pengguna",
+  "capabilities": "Kemampuan",
+  "previewScreenshots": "Pratinjau tangkapan layar",
+  "holdOnPreparingForm": "Tunggu sebentar, kami sedang menyiapkan formulir untuk Anda",
+  "bySubmittingYouAgreeToOmi": "Dengan mengirimkan, Anda menyetujui ",
+  "termsAndPrivacyPolicy": "Syarat & Kebijakan Privasi"
 }
