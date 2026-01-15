@@ -10,11 +10,11 @@ Strategy: Prioritize small/medium files, defer large files
 
 OVERALL STATISTICS
 ------------------
-Files Completed: 35
+Files Completed: 37
 Files Skipped (Internal): 2
 Files Skipped (Large): 3
-Total Keys Added: 347
-Total Translations: 11,798 (347 keys × 34 languages)
+Total Keys Added: 378
+Total Translations: 12,852 (378 keys × 34 languages)
 
 ================================================================================
 COMPLETED FILES
@@ -500,6 +500,34 @@ Status: ✅ ALREADY LOCALIZED
 Notes: Already using l10n keys: youreAllSet, welcomeToOmiDescription, startUsingOmi,
        back. No further work needed.
 
+FILE 64: desktop_about_page.dart
+---------------------------------
+Location: app/lib/desktop/pages/settings/
+Keys Added: 5
+Keys: aboutOmi, visitWebsite, helpOrInquiries, joinTheCommunity, membersAndCounting
+Script: /tmp/translate_about_page_keys.py
+Status: ✅ COMPLETED
+Notes: Localized about page including page title, menu items, and community section.
+       Reused existing key (privacyPolicy). URLs and email addresses kept as-is.
+Commit: 93b83575a
+
+FILE 65: desktop_profile_page.dart
+-----------------------------------
+Location: app/lib/desktop/pages/settings/
+Keys Added: 26
+Keys: loadingProfile, profileSettings, user, noEmailSet, userId, userIdCopiedToClipboard,
+      yourInformation, setYourName, changeYourName, notSet, primaryLanguage, persona,
+      manageYourOmiPersona, voiceAndPeople, speechProfile, teachOmiYourVoice,
+      identifyingOthers, tellOmiWhoSaidIt, payment, paymentMethods,
+      addOrChangeYourPaymentMethod, preferences, helpImproveOmiBySharing, account,
+      deleteAccount, deleteYourAccountAndAllData
+Script: /tmp/translate_profile_page_keys.py
+Status: ✅ COMPLETED
+Notes: Localized desktop profile settings page including loading states, user information,
+       voice & people settings, payment methods, preferences, and account management sections.
+       Removed const from loading indicator to allow dynamic l10n usage.
+Commit: 08a75e632
+
 ================================================================================
 SKIPPED FILES (LARGE - TO BE COMPLETED LATER)
 ================================================================================
@@ -700,7 +728,7 @@ echo "✅ Translated <feature> keys for all 34 languages!"
 ================================================================================
 END OF PROGRESS TRACKER
 ================================================================================
-Last Updated: 2026-01-14
-Last Completed: FILE 63 - desktop_permissions_screen.dart (13 keys, 442 translations)
-Previous Completed: FILE 62 - desktop_name_screen.dart (6 keys, 204 translations)
+Last Updated: 2026-01-15
+Last Completed: FILE 65 - desktop_profile_page.dart (26 keys, 884 translations)
+Previous Completed: FILE 64 - desktop_about_page.dart (5 keys, 170 translations)
 Current Session: [active]
