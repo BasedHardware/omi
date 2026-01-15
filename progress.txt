@@ -49,7 +49,7 @@ MEDIUM PRIORITY - Widgets and Components
 [✓] app/lib/widgets/upgrade_alert.dart
     Strings: 'New Version Available', 'No', 'Upgrade'
 
-[ ] app/lib/pages/apps/app_detail/app_detail.dart
+[✓] app/lib/pages/apps/app_detail/app_detail.dart
     Strings: 'Failed to cancel subscription...', 'Invalid payment URL',
              'Please select a rating', error messages
 
@@ -930,12 +930,36 @@ Status: ✅ COMPLETED
 Notes: Localized app upgrade dialog for both Cupertino and Material styles.
 Commit: 88e986794
 
+FILE 75 (Phase 2 FILE 5): app_detail.dart
+------------------------------------------
+Location: app/lib/pages/apps/app_detail/
+Keys Added: 41 (new) + 9 (reused) = 50 total
+New Keys: subscriptionCancelledSuccessfully, failedToCancelSubscription,
+         invalidPaymentUrl, permissionsAndTriggers, chatFeatures, uninstall,
+         installs, priceLabel, updatedLabel, createdLabel, featuredLabel,
+         cancelSubscriptionQuestion, cancelSubscriptionConfirmation,
+         cancelSubscriptionButton, cancelling, betaTesterMessage,
+         appUnderReviewMessage, appRejectedMessage, invalidIntegrationUrl,
+         tapToComplete, completed, invalidSetupInstructionsUrl, aboutTheApp,
+         aboutThePersona, pushToTalk, summaryPrompt, pleaseSelectARating,
+         reviewAddedSuccessfully, reviewUpdatedSuccessfully, failedToSubmitReview,
+         addYourReview, editYourReview, writeAReviewOptional, submitReview,
+         updateReview, yourReview, anonymousUser, errorActivatingApp,
+         issueActivatingApp, ratingsCount, dataAccessNoticeDescription
+Reused Keys: dataAccessNotice, ratingsAndReviews, install, free, preview,
+            setupInstructions, integrationInstructions, chatPersonality, noRatings
+Script: /tmp/translate_app_detail_keys.py
+Status: ✅ COMPLETED
+Notes: Large file (111KB) - key user-facing strings localized including
+       subscription management, reviews, error messages, and dialogs.
+Commit: 96a7942cb
+
 ================================================================================
 END OF PROGRESS TRACKER
 ================================================================================
 Last Updated: 2026-01-15
-Last Completed: FILE 74 - upgrade_alert.dart (2 new keys + 1 reused, 68 new translations)
-Previous Completed: FILE 73 - manage_create_page.dart (4 new keys + 2 reused, 136 new translations)
+Last Completed: FILE 75 - app_detail.dart (41 new keys + 9 reused, 1394 new translations)
+Previous Completed: FILE 74 - upgrade_alert.dart (2 new keys + 1 reused, 68 new translations)
 Current Session: Phase 2 - Mobile/Pages localization in progress
 
 🎉 PHASE 1 (DESKTOP) COMPLETE! 🎉
@@ -945,5 +969,5 @@ Current Session: Phase 2 - Mobile/Pages localization in progress
 
 📋 PHASE 2 (MOBILE/PAGES) IN PROGRESS
 59 files identified with hardcoded strings
-Files Completed: 4
+Files Completed: 5
 Estimated 200-300 new keys needed
