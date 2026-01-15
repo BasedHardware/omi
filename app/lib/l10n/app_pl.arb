@@ -159,7 +159,7 @@
   "@createPersonHint": {
     "description": "Hint text for creating a person"
   },
-  "speechProfile": "Profil głosu",
+  "speechProfile": "Profil mowy",
   "@speechProfile": {
     "description": "Speech profile label"
   },
@@ -515,7 +515,7 @@
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Identyfikacja innych osób",
+  "identifyingOthers": "Identyfikowanie innych",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
@@ -2782,5 +2782,23 @@
   "detectBrowserBasedMeetings": "Wykrywaj spotkania oparte na przeglądarce",
   "accessibilityDescription": "Omi potrzebuje uprawnień dostępności, aby wykrywać, kiedy dołączasz do spotkań Zoom, Meet lub Teams w przeglądarce.",
   "pleaseWait": "Proszę czekać...",
-  "joinTheCommunity": "Dołącz do społeczności!"
+  "joinTheCommunity": "Dołącz do społeczności!",
+  "loadingProfile": "Ładowanie profilu...",
+  "profileSettings": "Ustawienia profilu",
+  "noEmailSet": "Nie ustawiono e-maila",
+  "userIdCopiedToClipboard": "ID użytkownika skopiowany do schowka",
+  "yourInformation": "Twoje informacje",
+  "setYourName": "Ustaw swoje imię",
+  "changeYourName": "Zmień swoje imię",
+  "persona": "Persona",
+  "manageYourOmiPersona": "Zarządzaj swoją personą Omi",
+  "voiceAndPeople": "Głos i ludzie",
+  "teachOmiYourVoice": "Naucz Omi swojego głosu",
+  "tellOmiWhoSaidIt": "Powiedz Omi, kto to powiedział 🗣️",
+  "payment": "Płatność",
+  "addOrChangeYourPaymentMethod": "Dodaj lub zmień metodę płatności",
+  "preferences": "Preferencje",
+  "helpImproveOmiBySharing": "Pomóż ulepszyć Omi, udostępniając zanonimizowane dane analityczne",
+  "deleteAccount": "Usuń konto",
+  "deleteYourAccountAndAllData": "Usuń swoje konto i wszystkie dane"
 }

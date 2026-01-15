@@ -519,7 +519,7 @@
   "@identifyingOthers": {
     "description": "People identification setting"
   },
-  "paymentMethods": "결제 수단",
+  "paymentMethods": "결제 방법",
   "@paymentMethods": {
     "description": "Payment methods setting"
   },
@@ -2782,5 +2782,23 @@
   "detectBrowserBasedMeetings": "브라우저 기반 회의 감지",
   "accessibilityDescription": "Omi는 브라우저에서 Zoom, Meet 또는 Teams 회의에 참여할 때를 감지하기 위해 접근성 권한이 필요합니다.",
   "pleaseWait": "잠시만 기다려 주세요...",
-  "joinTheCommunity": "커뮤니티에 참여하세요!"
+  "joinTheCommunity": "커뮤니티에 참여하세요!",
+  "loadingProfile": "프로필 로딩 중...",
+  "profileSettings": "프로필 설정",
+  "noEmailSet": "이메일이 설정되지 않음",
+  "userIdCopiedToClipboard": "사용자 ID가 클립보드에 복사됨",
+  "yourInformation": "귀하의 정보",
+  "setYourName": "이름 설정",
+  "changeYourName": "이름 변경",
+  "persona": "페르소나",
+  "manageYourOmiPersona": "Omi 페르소나 관리",
+  "voiceAndPeople": "음성 및 사람",
+  "teachOmiYourVoice": "Omi에게 목소리 가르치기",
+  "tellOmiWhoSaidIt": "누가 말했는지 Omi에게 알려주기 🗣️",
+  "payment": "결제",
+  "addOrChangeYourPaymentMethod": "결제 방법 추가 또는 변경",
+  "preferences": "환경설정",
+  "helpImproveOmiBySharing": "익명화된 분석 데이터를 공유하여 Omi 개선 돕기",
+  "deleteAccount": "계정 삭제",
+  "deleteYourAccountAndAllData": "계정 및 모든 데이터 삭제"
 }

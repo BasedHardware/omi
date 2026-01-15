@@ -515,7 +515,7 @@
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Identificar altres",
+  "identifyingOthers": "Identificant altres",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
@@ -2800,5 +2800,23 @@
   "detectBrowserBasedMeetings": "Detectar reunions basades en el navegador",
   "accessibilityDescription": "Omi necessita permís d'accessibilitat per detectar quan us uniu a reunions de Zoom, Meet o Teams al vostre navegador.",
   "pleaseWait": "Si us plau, espereu...",
-  "joinTheCommunity": "Uneix-te a la comunitat!"
+  "joinTheCommunity": "Uneix-te a la comunitat!",
+  "loadingProfile": "Carregant perfil...",
+  "profileSettings": "Configuració del perfil",
+  "noEmailSet": "No hi ha correu electrònic configurat",
+  "userIdCopiedToClipboard": "ID d'usuari copiat al porta-retalls",
+  "yourInformation": "La vostra informació",
+  "setYourName": "Estableix el vostre nom",
+  "changeYourName": "Canvia el vostre nom",
+  "persona": "Persona",
+  "manageYourOmiPersona": "Gestiona la teva persona Omi",
+  "voiceAndPeople": "Veu i persones",
+  "teachOmiYourVoice": "Ensenya a Omi la teva veu",
+  "tellOmiWhoSaidIt": "Digues a Omi qui ho va dir 🗣️",
+  "payment": "Pagament",
+  "addOrChangeYourPaymentMethod": "Afegeix o canvia el mètode de pagament",
+  "preferences": "Preferències",
+  "helpImproveOmiBySharing": "Ajuda a millorar Omi compartint dades d'anàlisi anonimitzades",
+  "deleteAccount": "Eliminar compte",
+  "deleteYourAccountAndAllData": "Elimina el compte i totes les dades"
 }

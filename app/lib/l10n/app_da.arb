@@ -515,7 +515,7 @@
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Identifikation af andre",
+  "identifyingOthers": "Identificering af andre",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
@@ -1377,7 +1377,7 @@
       }
     }
   },
-  "account": "Account",
+  "account": "Konto",
   "actionItemsSyncedTo": "Your action items will be synced to your {appName} account",
   "@actionItemsSyncedTo": {
     "placeholders": {
@@ -2782,5 +2782,23 @@
   "detectBrowserBasedMeetings": "Opdage browserbaserede møder",
   "accessibilityDescription": "Omi har brug for tilgængelighedstilladelse for at opdage, når du deltager i Zoom-, Meet- eller Teams-møder i din browser.",
   "pleaseWait": "Vent venligst...",
-  "joinTheCommunity": "Bliv en del af fællesskabet!"
+  "joinTheCommunity": "Bliv en del af fællesskabet!",
+  "loadingProfile": "Indlæser profil...",
+  "profileSettings": "Profilindstillinger",
+  "noEmailSet": "Ingen e-mail angivet",
+  "userIdCopiedToClipboard": "Bruger-ID kopieret til udklipsholder",
+  "yourInformation": "Dine oplysninger",
+  "setYourName": "Angiv dit navn",
+  "changeYourName": "Skift dit navn",
+  "persona": "Persona",
+  "manageYourOmiPersona": "Administrer din Omi-persona",
+  "voiceAndPeople": "Stemme og mennesker",
+  "teachOmiYourVoice": "Lær Omi din stemme",
+  "tellOmiWhoSaidIt": "Fortæl Omi hvem der sagde det 🗣️",
+  "payment": "Betaling",
+  "addOrChangeYourPaymentMethod": "Tilføj eller skift betalingsmetode",
+  "preferences": "Præferencer",
+  "helpImproveOmiBySharing": "Hjælp med at forbedre Omi ved at dele anonymiserede analysedata",
+  "deleteAccount": "Slet konto",
+  "deleteYourAccountAndAllData": "Slet din konto og alle data"
 }

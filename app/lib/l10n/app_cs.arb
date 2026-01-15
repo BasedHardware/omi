@@ -159,7 +159,7 @@
   "@createPersonHint": {
     "description": "Hint text for creating a person"
   },
-  "speechProfile": "Hlasový profil",
+  "speechProfile": "Profil řeči",
   "@speechProfile": {
     "description": "Speech profile label"
   },
@@ -1250,7 +1250,7 @@
   },
   "continueAction": "Pokračovat",
   "languageTitle": "Jazyk",
-  "primaryLanguage": "Primární jazyk",
+  "primaryLanguage": "Hlavní jazyk",
   "automaticTranslation": "Automatický překlad",
   "detectLanguages": "Detekovat 10+ jazyků",
   "authorizeSavingRecordings": "Autorizovat ukládání nahrávek",
@@ -2800,5 +2800,23 @@
   "detectBrowserBasedMeetings": "Detekovat schůzky v prohlížeči",
   "accessibilityDescription": "Omi potřebuje oprávnění k přístupnosti pro detekci, kdy se připojujete ke schůzkám Zoom, Meet nebo Teams ve vašem prohlížeči.",
   "pleaseWait": "Prosím čekejte...",
-  "joinTheCommunity": "Připojte se ke komunitě!"
+  "joinTheCommunity": "Připojte se ke komunitě!",
+  "loadingProfile": "Načítání profilu...",
+  "profileSettings": "Nastavení profilu",
+  "noEmailSet": "Email není nastaven",
+  "userIdCopiedToClipboard": "ID uživatele zkopírováno do schránky",
+  "yourInformation": "Vaše informace",
+  "setYourName": "Nastavit své jméno",
+  "changeYourName": "Změnit své jméno",
+  "persona": "Persona",
+  "manageYourOmiPersona": "Spravovat svou Omi personu",
+  "voiceAndPeople": "Hlas a lidé",
+  "teachOmiYourVoice": "Naučit Omi svůj hlas",
+  "tellOmiWhoSaidIt": "Řekněte Omi, kdo to řekl 🗣️",
+  "payment": "Platba",
+  "addOrChangeYourPaymentMethod": "Přidat nebo změnit platební metodu",
+  "preferences": "Předvolby",
+  "helpImproveOmiBySharing": "Pomozte vylepšit Omi sdílením anonymizovaných analytických dat",
+  "deleteAccount": "Smazat účet",
+  "deleteYourAccountAndAllData": "Smazat účet a všechna data"
 }

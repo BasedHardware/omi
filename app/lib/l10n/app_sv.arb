@@ -159,7 +159,7 @@
   "@createPersonHint": {
     "description": "Hint text for creating a person"
   },
-  "speechProfile": "Röstprofil",
+  "speechProfile": "Talprofil",
   "@speechProfile": {
     "description": "Speech profile label"
   },
@@ -535,7 +535,7 @@
   "@userId": {
     "description": "User ID label"
   },
-  "notSet": "Inte inställt",
+  "notSet": "Inte inställd",
   "@notSet": {
     "description": "Default value when not set"
   },
@@ -2782,5 +2782,23 @@
   "detectBrowserBasedMeetings": "Upptäck webbläsarbaserade möten",
   "accessibilityDescription": "Omi behöver tillgänglighetstillstånd för att upptäcka när du ansluter till Zoom-, Meet- eller Teams-möten i din webbläsare.",
   "pleaseWait": "Vänta...",
-  "joinTheCommunity": "Gå med i communityn!"
+  "joinTheCommunity": "Gå med i communityn!",
+  "loadingProfile": "Laddar profil...",
+  "profileSettings": "Profilinställningar",
+  "noEmailSet": "Ingen e-post inställd",
+  "userIdCopiedToClipboard": "Användar-ID kopierat till urklipp",
+  "yourInformation": "Din information",
+  "setYourName": "Ange ditt namn",
+  "changeYourName": "Ändra ditt namn",
+  "persona": "Persona",
+  "manageYourOmiPersona": "Hantera din Omi-persona",
+  "voiceAndPeople": "Röst och människor",
+  "teachOmiYourVoice": "Lär Omi din röst",
+  "tellOmiWhoSaidIt": "Berätta för Omi vem som sa det 🗣️",
+  "payment": "Betalning",
+  "addOrChangeYourPaymentMethod": "Lägg till eller ändra betalningsmetod",
+  "preferences": "Preferenser",
+  "helpImproveOmiBySharing": "Hjälp till att förbättra Omi genom att dela anonymiserade analysdata",
+  "deleteAccount": "Radera konto",
+  "deleteYourAccountAndAllData": "Radera ditt konto och alla data"
 }

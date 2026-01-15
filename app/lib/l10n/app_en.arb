@@ -4034,5 +4034,22 @@
   "detectBrowserBasedMeetings": "Detect browser-based meetings",
   "accessibilityDescription": "Omi needs accessibility permission to detect when you join Zoom, Meet, or Teams meetings in your browser.",
   "pleaseWait": "Please wait...",
-  "joinTheCommunity": "Join the community!"
+  "joinTheCommunity": "Join the community!",
+  "loadingProfile": "Loading profile...",
+  "profileSettings": "Profile Settings",
+  "noEmailSet": "No email set",
+  "userIdCopiedToClipboard": "User ID copied to clipboard",
+  "yourInformation": "Your Information",
+  "setYourName": "Set Your Name",
+  "changeYourName": "Change Your Name",
+  "manageYourOmiPersona": "Manage your Omi persona",
+  "voiceAndPeople": "Voice & People",
+  "teachOmiYourVoice": "Teach Omi your voice",
+  "tellOmiWhoSaidIt": "Tell Omi who said it 🗣️",
+  "payment": "Payment",
+  "addOrChangeYourPaymentMethod": "Add or change your payment method",
+  "preferences": "Preferences",
+  "helpImproveOmiBySharing": "Help improve Omi by sharing anonymized analytics data",
+  "deleteAccount": "Delete Account",
+  "deleteYourAccountAndAllData": "Delete your account and all data"
 }

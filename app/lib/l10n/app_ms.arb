@@ -515,7 +515,7 @@
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Mengenal Pasti Orang Lain",
+  "identifyingOthers": "Mengenal pasti Orang Lain",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
@@ -2782,5 +2782,23 @@
   "detectBrowserBasedMeetings": "Kesan mesyuarat berasaskan pelayar",
   "accessibilityDescription": "Omi memerlukan kebenaran kebolehcapaian untuk mengesan apabila anda menyertai mesyuarat Zoom, Meet, atau Teams dalam pelayar anda.",
   "pleaseWait": "Sila tunggu...",
-  "joinTheCommunity": "Sertai komuniti!"
+  "joinTheCommunity": "Sertai komuniti!",
+  "loadingProfile": "Memuatkan profil...",
+  "profileSettings": "Tetapan Profil",
+  "noEmailSet": "Tiada e-mel ditetapkan",
+  "userIdCopiedToClipboard": "ID Pengguna disalin ke papan keratan",
+  "yourInformation": "Maklumat Anda",
+  "setYourName": "Tetapkan Nama Anda",
+  "changeYourName": "Tukar Nama Anda",
+  "persona": "Persona",
+  "manageYourOmiPersona": "Urus persona Omi anda",
+  "voiceAndPeople": "Suara & Orang",
+  "teachOmiYourVoice": "Ajar Omi suara anda",
+  "tellOmiWhoSaidIt": "Beritahu Omi siapa yang mengatakannya 🗣️",
+  "payment": "Pembayaran",
+  "addOrChangeYourPaymentMethod": "Tambah atau tukar kaedah pembayaran",
+  "preferences": "Keutamaan",
+  "helpImproveOmiBySharing": "Bantu tingkatkan Omi dengan berkongsi data analitik tanpa nama",
+  "deleteAccount": "Padam Akaun",
+  "deleteYourAccountAndAllData": "Padam akaun dan semua data anda"
 }

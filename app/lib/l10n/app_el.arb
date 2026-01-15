@@ -159,7 +159,7 @@
   "@createPersonHint": {
     "description": "Hint text for creating a person"
   },
-  "speechProfile": "Προφίλ Ομιλίας",
+  "speechProfile": "Προφίλ ομιλίας",
   "@speechProfile": {
     "description": "Speech profile label"
   },
@@ -515,11 +515,11 @@
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Αναγνώριση Άλλων",
+  "identifyingOthers": "Αναγνώριση άλλων",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
-  "paymentMethods": "Μέθοδοι Πληρωμής",
+  "paymentMethods": "Μέθοδοι πληρωμής",
   "@paymentMethods": {
     "description": "Payment methods setting"
   },
@@ -531,7 +531,7 @@
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
-  "userId": "Αναγνωριστικό Χρήστη",
+  "userId": "ID χρήστη",
   "@userId": {
     "description": "User ID label"
   },
@@ -1250,7 +1250,7 @@
   },
   "continueAction": "Συνέχεια",
   "languageTitle": "Γλώσσα",
-  "primaryLanguage": "Κύρια Γλώσσα",
+  "primaryLanguage": "Κύρια γλώσσα",
   "automaticTranslation": "Αυτόματη Μετάφραση",
   "detectLanguages": "Ανίχνευση 10+ γλωσσών",
   "authorizeSavingRecordings": "Εξουσιοδότηση Αποθήκευσης Εγγραφών",
@@ -2782,5 +2782,23 @@
   "detectBrowserBasedMeetings": "Ανίχνευση συναντήσεων που βασίζονται στον περιηγητή",
   "accessibilityDescription": "Το Omi χρειάζεται άδεια προσβασιμότητας για να ανιχνεύει πότε συμμετέχετε σε συναντήσεις Zoom, Meet ή Teams στον περιηγητή σας.",
   "pleaseWait": "Παρακαλώ περιμένετε...",
-  "joinTheCommunity": "Γίνετε μέλος της κοινότητας!"
+  "joinTheCommunity": "Γίνετε μέλος της κοινότητας!",
+  "loadingProfile": "Φόρτωση προφίλ...",
+  "profileSettings": "Ρυθμίσεις προφίλ",
+  "noEmailSet": "Δεν έχει οριστεί email",
+  "userIdCopiedToClipboard": "Το ID χρήστη αντιγράφηκε στο πρόχειρο",
+  "yourInformation": "Οι πληροφορίες σας",
+  "setYourName": "Ορίστε το όνομά σας",
+  "changeYourName": "Αλλάξτε το όνομά σας",
+  "persona": "Persona",
+  "manageYourOmiPersona": "Διαχειριστείτε την Omi persona σας",
+  "voiceAndPeople": "Φωνή και άτομα",
+  "teachOmiYourVoice": "Μάθετε στο Omi τη φωνή σας",
+  "tellOmiWhoSaidIt": "Πείτε στο Omi ποιος το είπε 🗣️",
+  "payment": "Πληρωμή",
+  "addOrChangeYourPaymentMethod": "Προσθέστε ή αλλάξτε μέθοδο πληρωμής",
+  "preferences": "Προτιμήσεις",
+  "helpImproveOmiBySharing": "Βοηθήστε στη βελτίωση του Omi μοιράζοντας ανώνυμα δεδομένα ανάλυσης",
+  "deleteAccount": "Διαγραφή λογαριασμού",
+  "deleteYourAccountAndAllData": "Διαγράψτε τον λογαριασμό και όλα τα δεδομένα σας"
 }

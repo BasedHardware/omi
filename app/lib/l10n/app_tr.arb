@@ -515,7 +515,7 @@
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Diğerlerini Tanımlama",
+  "identifyingOthers": "Başkalarını Tanımlama",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
@@ -531,7 +531,7 @@
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
-  "userId": "Kullanıcı Kimliği",
+  "userId": "Kullanıcı ID",
   "@userId": {
     "description": "User ID label"
   },
@@ -1250,7 +1250,7 @@
   },
   "continueAction": "Devam Et",
   "languageTitle": "Dil",
-  "primaryLanguage": "Ana Dil",
+  "primaryLanguage": "Birincil Dil",
   "automaticTranslation": "Otomatik Çeviri",
   "detectLanguages": "10+ dil algıla",
   "authorizeSavingRecordings": "Kayıtların Kaydedilmesine İzin Ver",
@@ -2764,5 +2764,23 @@
   "detectBrowserBasedMeetings": "Tarayıcı tabanlı toplantıları algıla",
   "accessibilityDescription": "Omi, tarayıcınızda Zoom, Meet veya Teams toplantılarına katıldığınızı algılamak için erişilebilirlik izni gerektirir.",
   "pleaseWait": "Lütfen bekleyin...",
-  "joinTheCommunity": "Topluluğa katılın!"
+  "joinTheCommunity": "Topluluğa katılın!",
+  "loadingProfile": "Profil yükleniyor...",
+  "profileSettings": "Profil Ayarları",
+  "noEmailSet": "E-posta ayarlanmadı",
+  "userIdCopiedToClipboard": "Kullanıcı ID panoya kopyalandı",
+  "yourInformation": "Bilgileriniz",
+  "setYourName": "Adınızı belirleyin",
+  "changeYourName": "Adınızı değiştirin",
+  "persona": "Persona",
+  "manageYourOmiPersona": "Omi personanızı yönetin",
+  "voiceAndPeople": "Ses ve İnsanlar",
+  "teachOmiYourVoice": "Omi'ye sesinizi öğretin",
+  "tellOmiWhoSaidIt": "Omi'ye kimin söylediğini söyleyin 🗣️",
+  "payment": "Ödeme",
+  "addOrChangeYourPaymentMethod": "Ödeme yöntemi ekleyin veya değiştirin",
+  "preferences": "Tercihler",
+  "helpImproveOmiBySharing": "Anonimleştirilmiş analitik verileri paylaşarak Omi'yi geliştirmeye yardımcı olun",
+  "deleteAccount": "Hesabı Sil",
+  "deleteYourAccountAndAllData": "Hesabınızı ve tüm verilerinizi silin"
 }

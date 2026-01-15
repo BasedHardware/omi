@@ -159,7 +159,7 @@
   "@createPersonHint": {
     "description": "Hint text for creating a person"
   },
-  "speechProfile": "Profilo Vocale",
+  "speechProfile": "Profilo vocale",
   "@speechProfile": {
     "description": "Speech profile label"
   },
@@ -515,11 +515,11 @@
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Identificazione Altri",
+  "identifyingOthers": "Identificazione degli altri",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
-  "paymentMethods": "Metodi di Pagamento",
+  "paymentMethods": "Metodi di pagamento",
   "@paymentMethods": {
     "description": "Payment methods setting"
   },
@@ -531,7 +531,7 @@
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
-  "userId": "ID Utente",
+  "userId": "ID utente",
   "@userId": {
     "description": "User ID label"
   },
@@ -1250,7 +1250,7 @@
   },
   "continueAction": "Continua",
   "languageTitle": "Lingua",
-  "primaryLanguage": "Lingua Principale",
+  "primaryLanguage": "Lingua principale",
   "automaticTranslation": "Traduzione Automatica",
   "detectLanguages": "Rileva oltre 10 lingue",
   "authorizeSavingRecordings": "Autorizza Salvataggio Registrazioni",
@@ -2764,5 +2764,23 @@
   "detectBrowserBasedMeetings": "Rileva riunioni basate sul browser",
   "accessibilityDescription": "Omi ha bisogno dell'autorizzazione di accessibilità per rilevare quando partecipi a riunioni Zoom, Meet o Teams nel tuo browser.",
   "pleaseWait": "Attendere prego...",
-  "joinTheCommunity": "Unisciti alla comunità!"
+  "joinTheCommunity": "Unisciti alla comunità!",
+  "loadingProfile": "Caricamento del profilo...",
+  "profileSettings": "Impostazioni del profilo",
+  "noEmailSet": "Nessuna email impostata",
+  "userIdCopiedToClipboard": "ID utente copiato negli appunti",
+  "yourInformation": "Le tue informazioni",
+  "setYourName": "Imposta il tuo nome",
+  "changeYourName": "Cambia il tuo nome",
+  "persona": "Persona",
+  "manageYourOmiPersona": "Gestisci la tua persona Omi",
+  "voiceAndPeople": "Voce e persone",
+  "teachOmiYourVoice": "Insegna a Omi la tua voce",
+  "tellOmiWhoSaidIt": "Dì a Omi chi l'ha detto 🗣️",
+  "payment": "Pagamento",
+  "addOrChangeYourPaymentMethod": "Aggiungi o modifica metodo di pagamento",
+  "preferences": "Preferenze",
+  "helpImproveOmiBySharing": "Aiuta a migliorare Omi condividendo dati analitici anonimi",
+  "deleteAccount": "Elimina account",
+  "deleteYourAccountAndAllData": "Elimina account e tutti i dati"
 }

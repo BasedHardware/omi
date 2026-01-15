@@ -519,7 +519,7 @@
   "@identifyingOthers": {
     "description": "People identification setting"
   },
-  "paymentMethods": "Maksājumu metodes",
+  "paymentMethods": "Maksājuma metodes",
   "@paymentMethods": {
     "description": "Payment methods setting"
   },
@@ -2782,5 +2782,23 @@
   "detectBrowserBasedMeetings": "Noteikt pārlūkprogrammā balstītas sapulces",
   "accessibilityDescription": "Omi nepieciešama pieejamības atļauja, lai noteiktu, kad pievienojaties Zoom, Meet vai Teams sapulcēm savā pārlūkprogrammā.",
   "pleaseWait": "Lūdzu, uzgaidiet...",
-  "joinTheCommunity": "Pievienojieties kopienai!"
+  "joinTheCommunity": "Pievienojieties kopienai!",
+  "loadingProfile": "Ielādē profilu...",
+  "profileSettings": "Profila iestatījumi",
+  "noEmailSet": "E-pasts nav iestatīts",
+  "userIdCopiedToClipboard": "Lietotāja ID nokopēts starpliktuvē",
+  "yourInformation": "Jūsu informācija",
+  "setYourName": "Iestatīt savu vārdu",
+  "changeYourName": "Mainīt savu vārdu",
+  "persona": "Persona",
+  "manageYourOmiPersona": "Pārvaldīt savu Omi personu",
+  "voiceAndPeople": "Balss un cilvēki",
+  "teachOmiYourVoice": "Iemāciet Omi savu balsi",
+  "tellOmiWhoSaidIt": "Pastāstiet Omi, kas to teica 🗣️",
+  "payment": "Maksājums",
+  "addOrChangeYourPaymentMethod": "Pievienot vai mainīt maksājuma metodi",
+  "preferences": "Preferences",
+  "helpImproveOmiBySharing": "Palīdziet uzlabot Omi, daloties ar anonimizētiem analīzes datiem",
+  "deleteAccount": "Dzēst kontu",
+  "deleteYourAccountAndAllData": "Dzēst savu kontu un visus datus"
 }

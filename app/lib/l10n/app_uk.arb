@@ -159,7 +159,7 @@
   "@createPersonHint": {
     "description": "Hint text for creating a person"
   },
-  "speechProfile": "Мовний профіль",
+  "speechProfile": "Профіль мовлення",
   "@speechProfile": {
     "description": "Speech profile label"
   },
@@ -2782,5 +2782,23 @@
   "detectBrowserBasedMeetings": "Виявлення зустрічей на основі браузера",
   "accessibilityDescription": "Omi потребує дозволу доступності для виявлення, коли ви приєднуєтесь до зустрічей Zoom, Meet або Teams у вашому браузері.",
   "pleaseWait": "Будь ласка, зачекайте...",
-  "joinTheCommunity": "Приєднуйтесь до спільноти!"
+  "joinTheCommunity": "Приєднуйтесь до спільноти!",
+  "loadingProfile": "Завантаження профілю...",
+  "profileSettings": "Налаштування профілю",
+  "noEmailSet": "Електронну пошту не встановлено",
+  "userIdCopiedToClipboard": "ID користувача скопійовано в буфер обміну",
+  "yourInformation": "Ваша інформація",
+  "setYourName": "Встановити ваше ім'я",
+  "changeYourName": "Змінити ваше ім'я",
+  "persona": "Персона",
+  "manageYourOmiPersona": "Керування вашою персоною Omi",
+  "voiceAndPeople": "Голос і люди",
+  "teachOmiYourVoice": "Навчіть Omi вашому голосу",
+  "tellOmiWhoSaidIt": "Скажіть Omi, хто це сказав 🗣️",
+  "payment": "Оплата",
+  "addOrChangeYourPaymentMethod": "Додати або змінити спосіб оплати",
+  "preferences": "Налаштування",
+  "helpImproveOmiBySharing": "Допоможіть покращити Omi, діліться анонімними аналітичними даними",
+  "deleteAccount": "Видалити обліковий запис",
+  "deleteYourAccountAndAllData": "Видалити обліковий запис та всі дані"
 }

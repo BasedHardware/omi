@@ -159,7 +159,7 @@
   "@createPersonHint": {
     "description": "Hint text for creating a person"
   },
-  "speechProfile": "Голосовой профиль",
+  "speechProfile": "Профиль речи",
   "@speechProfile": {
     "description": "Speech profile label"
   },
@@ -535,7 +535,7 @@
   "@userId": {
     "description": "User ID label"
   },
-  "notSet": "Не задано",
+  "notSet": "Не установлено",
   "@notSet": {
     "description": "Default value when not set"
   },
@@ -2782,5 +2782,23 @@
   "detectBrowserBasedMeetings": "Обнаружение встреч на базе браузера",
   "accessibilityDescription": "Omi нужно разрешение доступности для обнаружения, когда вы присоединяетесь к встречам Zoom, Meet или Teams в вашем браузере.",
   "pleaseWait": "Пожалуйста, подождите...",
-  "joinTheCommunity": "Присоединяйтесь к сообществу!"
+  "joinTheCommunity": "Присоединяйтесь к сообществу!",
+  "loadingProfile": "Загрузка профиля...",
+  "profileSettings": "Настройки профиля",
+  "noEmailSet": "Электронная почта не установлена",
+  "userIdCopiedToClipboard": "ID пользователя скопирован в буфер обмена",
+  "yourInformation": "Ваша информация",
+  "setYourName": "Установить ваше имя",
+  "changeYourName": "Изменить ваше имя",
+  "persona": "Персона",
+  "manageYourOmiPersona": "Управление вашей персоной Omi",
+  "voiceAndPeople": "Голос и люди",
+  "teachOmiYourVoice": "Научите Omi вашему голосу",
+  "tellOmiWhoSaidIt": "Скажите Omi, кто это сказал 🗣️",
+  "payment": "Оплата",
+  "addOrChangeYourPaymentMethod": "Добавить или изменить способ оплаты",
+  "preferences": "Предпочтения",
+  "helpImproveOmiBySharing": "Помогите улучшить Omi, делясь анонимными аналитическими данными",
+  "deleteAccount": "Удалить аккаунт",
+  "deleteYourAccountAndAllData": "Удалить аккаунт и все данные"
 }

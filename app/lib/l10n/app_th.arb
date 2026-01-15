@@ -515,7 +515,7 @@
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "การระบุบุคคลอื่น",
+  "identifyingOthers": "การระบุผู้อื่น",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
@@ -531,7 +531,7 @@
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
-  "userId": "รหัสผู้ใช้",
+  "userId": "ID ผู้ใช้",
   "@userId": {
     "description": "User ID label"
   },
@@ -2782,5 +2782,23 @@
   "detectBrowserBasedMeetings": "ตรวจจับการประชุมที่ใช้เบราว์เซอร์",
   "accessibilityDescription": "Omi ต้องการสิทธิ์การเข้าถึงเพื่อตรวจจับเมื่อคุณเข้าร่วมการประชุม Zoom, Meet หรือ Teams ในเบราว์เซอร์ของคุณ",
   "pleaseWait": "กรุณารอสักครู่...",
-  "joinTheCommunity": "เข้าร่วมชุมชน!"
+  "joinTheCommunity": "เข้าร่วมชุมชน!",
+  "loadingProfile": "กำลังโหลดโปรไฟล์...",
+  "profileSettings": "การตั้งค่าโปรไฟล์",
+  "noEmailSet": "ไม่ได้ตั้งค่าอีเมล",
+  "userIdCopiedToClipboard": "คัดลอก ID ผู้ใช้ไปยังคลิปบอร์ดแล้ว",
+  "yourInformation": "ข้อมูลของคุณ",
+  "setYourName": "ตั้งชื่อของคุณ",
+  "changeYourName": "เปลี่ยนชื่อของคุณ",
+  "persona": "บุคลิกภาพ",
+  "manageYourOmiPersona": "จัดการบุคลิกภาพ Omi ของคุณ",
+  "voiceAndPeople": "เสียงและคน",
+  "teachOmiYourVoice": "สอน Omi เสียงของคุณ",
+  "tellOmiWhoSaidIt": "บอก Omi ว่าใครพูด 🗣️",
+  "payment": "การชำระเงิน",
+  "addOrChangeYourPaymentMethod": "เพิ่มหรือเปลี่ยนวิธีการชำระเงิน",
+  "preferences": "การตั้งค่า",
+  "helpImproveOmiBySharing": "ช่วยปรับปรุง Omi โดยการแชร์ข้อมูลการวิเคราะห์แบบไม่ระบุตัวตน",
+  "deleteAccount": "ลบบัญชี",
+  "deleteYourAccountAndAllData": "ลบบัญชีและข้อมูลทั้งหมดของคุณ"
 }

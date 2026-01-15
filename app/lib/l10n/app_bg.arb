@@ -159,7 +159,7 @@
   "@createPersonHint": {
     "description": "Hint text for creating a person"
   },
-  "speechProfile": "Гласов профил",
+  "speechProfile": "Профил на говора",
   "@speechProfile": {
     "description": "Speech profile label"
   },
@@ -531,7 +531,7 @@
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
-  "userId": "ID на потребител",
+  "userId": "Потребителски ID",
   "@userId": {
     "description": "User ID label"
   },
@@ -2800,5 +2800,23 @@
   "detectBrowserBasedMeetings": "Откриване на срещи в браузъра",
   "accessibilityDescription": "Omi се нуждае от разрешение за достъпност, за да открива кога се присъединявате към срещи в Zoom, Meet или Teams във вашия браузър.",
   "pleaseWait": "Моля, изчакайте...",
-  "joinTheCommunity": "Присъединете се към общността!"
+  "joinTheCommunity": "Присъединете се към общността!",
+  "loadingProfile": "Зареждане на профила...",
+  "profileSettings": "Настройки на профила",
+  "noEmailSet": "Няма зададен имейл",
+  "userIdCopiedToClipboard": "Потребителски ID копиран в клипборда",
+  "yourInformation": "Вашата информация",
+  "setYourName": "Задайте вашето име",
+  "changeYourName": "Променете вашето име",
+  "persona": "Персона",
+  "manageYourOmiPersona": "Управлявайте вашата Omi персона",
+  "voiceAndPeople": "Глас и хора",
+  "teachOmiYourVoice": "Научете Omi на вашия глас",
+  "tellOmiWhoSaidIt": "Кажете на Omi кой го каза 🗣️",
+  "payment": "Плащане",
+  "addOrChangeYourPaymentMethod": "Добавете или променете метод на плащане",
+  "preferences": "Предпочитания",
+  "helpImproveOmiBySharing": "Помогнете за подобряването на Omi чрез споделяне на анонимизирани данни за анализ",
+  "deleteAccount": "Изтриване на акаунт",
+  "deleteYourAccountAndAllData": "Изтрийте вашия акаунт и всички данни"
 }

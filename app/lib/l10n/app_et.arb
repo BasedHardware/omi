@@ -535,7 +535,7 @@
   "@userId": {
     "description": "User ID label"
   },
-  "notSet": "Pole määratud",
+  "notSet": "Ei ole seatud",
   "@notSet": {
     "description": "Default value when not set"
   },
@@ -2782,5 +2782,23 @@
   "detectBrowserBasedMeetings": "Tuvastage brauseripõhised koosolekud",
   "accessibilityDescription": "Omi vajab juurdepääsetavuse luba, et tuvastada, millal te liitute Zoom, Meet või Teams koosolekutega oma brauseris.",
   "pleaseWait": "Palun oodake...",
-  "joinTheCommunity": "Liitu kogukonnaga!"
+  "joinTheCommunity": "Liitu kogukonnaga!",
+  "loadingProfile": "Profiili laadimine...",
+  "profileSettings": "Profiili seaded",
+  "noEmailSet": "E-posti ei ole seatud",
+  "userIdCopiedToClipboard": "Kasutaja ID kopeeriti lõikelauale",
+  "yourInformation": "Teie teave",
+  "setYourName": "Määra oma nimi",
+  "changeYourName": "Muuda oma nime",
+  "persona": "Persona",
+  "manageYourOmiPersona": "Halda oma Omi personat",
+  "voiceAndPeople": "Hääl ja inimesed",
+  "teachOmiYourVoice": "Õpeta Omi-le oma häält",
+  "tellOmiWhoSaidIt": "Ütle Omi-le, kes seda ütles 🗣️",
+  "payment": "Makse",
+  "addOrChangeYourPaymentMethod": "Lisa või muuda makseviisi",
+  "preferences": "Eelistused",
+  "helpImproveOmiBySharing": "Aita Omi-d parandada, jagades anonümiseeritud analüüsandmeid",
+  "deleteAccount": "Kustuta konto",
+  "deleteYourAccountAndAllData": "Kustuta oma konto ja kõik andmed"
 }

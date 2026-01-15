@@ -159,7 +159,7 @@
   "@createPersonHint": {
     "description": "Hint text for creating a person"
   },
-  "speechProfile": "Hlasový profil",
+  "speechProfile": "Profil reči",
   "@speechProfile": {
     "description": "Speech profile label"
   },
@@ -535,7 +535,7 @@
   "@userId": {
     "description": "User ID label"
   },
-  "notSet": "Nie je nastavené",
+  "notSet": "Nenastavené",
   "@notSet": {
     "description": "Default value when not set"
   },
@@ -2782,5 +2782,23 @@
   "detectBrowserBasedMeetings": "Detekovať schôdzky v prehliadači",
   "accessibilityDescription": "Omi potrebuje povolenie prístupnosti na detekciu, kedy sa pripájate k schôdzkam Zoom, Meet alebo Teams vo vašom prehliadači.",
   "pleaseWait": "Prosím čakajte...",
-  "joinTheCommunity": "Pripojte sa ku komunite!"
+  "joinTheCommunity": "Pripojte sa ku komunite!",
+  "loadingProfile": "Načítavanie profilu...",
+  "profileSettings": "Nastavenia profilu",
+  "noEmailSet": "Email nie je nastavený",
+  "userIdCopiedToClipboard": "ID používateľa skopírované do schránky",
+  "yourInformation": "Vaše informácie",
+  "setYourName": "Nastaviť svoje meno",
+  "changeYourName": "Zmeniť svoje meno",
+  "persona": "Persona",
+  "manageYourOmiPersona": "Spravovať svoju Omi personu",
+  "voiceAndPeople": "Hlas a ľudia",
+  "teachOmiYourVoice": "Naučiť Omi svoj hlas",
+  "tellOmiWhoSaidIt": "Povedzte Omi, kto to povedal 🗣️",
+  "payment": "Platba",
+  "addOrChangeYourPaymentMethod": "Pridať alebo zmeniť platobnú metódu",
+  "preferences": "Predvoľby",
+  "helpImproveOmiBySharing": "Pomôžte vylepšiť Omi zdieľaním anonymizovaných analytických dát",
+  "deleteAccount": "Vymazať účet",
+  "deleteYourAccountAndAllData": "Vymazať účet a všetky údaje"
 }

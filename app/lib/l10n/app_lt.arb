@@ -531,7 +531,7 @@
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
-  "userId": "Naudotojo ID",
+  "userId": "Vartotojo ID",
   "@userId": {
     "description": "User ID label"
   },
@@ -2764,5 +2764,23 @@
   "detectBrowserBasedMeetings": "Aptikti naršyklėje vykstančius susitikimus",
   "accessibilityDescription": "Omi reikia prieinamumo leidimo, kad aptiktų, kada prisijungiate prie Zoom, Meet ar Teams susitikimų naršyklėje.",
   "pleaseWait": "Prašome palaukti...",
-  "joinTheCommunity": "Prisijunkite prie bendruomenės!"
+  "joinTheCommunity": "Prisijunkite prie bendruomenės!",
+  "loadingProfile": "Įkeliamas profilis...",
+  "profileSettings": "Profilio nustatymai",
+  "noEmailSet": "El. paštas nenustatytas",
+  "userIdCopiedToClipboard": "Vartotojo ID nukopijuotas į iškarpinę",
+  "yourInformation": "Jūsų informacija",
+  "setYourName": "Nustatyti savo vardą",
+  "changeYourName": "Pakeisti savo vardą",
+  "persona": "Persona",
+  "manageYourOmiPersona": "Valdyti savo Omi personą",
+  "voiceAndPeople": "Balsas ir žmonės",
+  "teachOmiYourVoice": "Išmokykite Omi savo balsą",
+  "tellOmiWhoSaidIt": "Pasakykite Omi, kas tai pasakė 🗣️",
+  "payment": "Mokėjimas",
+  "addOrChangeYourPaymentMethod": "Pridėti arba pakeisti mokėjimo būdą",
+  "preferences": "Nuostatos",
+  "helpImproveOmiBySharing": "Padėkite tobulinti Omi dalindamiesi anoniminiais analitikos duomenimis",
+  "deleteAccount": "Ištrinti paskyrą",
+  "deleteYourAccountAndAllData": "Ištrinti paskyrą ir visus duomenis"
 }

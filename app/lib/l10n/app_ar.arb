@@ -159,7 +159,7 @@
   "@createPersonHint": {
     "description": "Hint text for creating a person"
   },
-  "speechProfile": "ملف الصوت",
+  "speechProfile": "ملف تعريف الكلام",
   "@speechProfile": {
     "description": "Speech profile label"
   },
@@ -535,7 +535,7 @@
   "@userId": {
     "description": "User ID label"
   },
-  "notSet": "غير محدد",
+  "notSet": "غير معيّن",
   "@notSet": {
     "description": "Default value when not set"
   },
@@ -2814,5 +2814,22 @@
   "detectBrowserBasedMeetings": "اكتشاف الاجتماعات عبر المتصفح",
   "accessibilityDescription": "يحتاج Omi إلى إذن إمكانية الوصول لاكتشاف متى تنضم إلى اجتماعات Zoom أو Meet أو Teams في متصفحك.",
   "pleaseWait": "يرجى الانتظار...",
-  "joinTheCommunity": "انضم إلى المجتمع!"
+  "joinTheCommunity": "انضم إلى المجتمع!",
+  "loadingProfile": "جارٍ تحميل الملف الشخصي...",
+  "profileSettings": "إعدادات الملف الشخصي",
+  "noEmailSet": "لم يتم تعيين بريد إلكتروني",
+  "userIdCopiedToClipboard": "تم نسخ معرف المستخدم إلى الحافظة",
+  "yourInformation": "معلوماتك",
+  "setYourName": "عيّن اسمك",
+  "changeYourName": "غيّر اسمك",
+  "manageYourOmiPersona": "إدارة شخصيتك في Omi",
+  "voiceAndPeople": "الصوت والأشخاص",
+  "teachOmiYourVoice": "علّم Omi صوتك",
+  "tellOmiWhoSaidIt": "أخبر Omi من قال ذلك 🗣️",
+  "payment": "الدفع",
+  "addOrChangeYourPaymentMethod": "إضافة أو تغيير طريقة الدفع",
+  "preferences": "التفضيلات",
+  "helpImproveOmiBySharing": "ساعد في تحسين Omi من خلال مشاركة بيانات التحليلات المجهولة",
+  "deleteAccount": "حذف الحساب",
+  "deleteYourAccountAndAllData": "حذف حسابك وجميع البيانات"
 }

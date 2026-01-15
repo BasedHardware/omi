@@ -159,7 +159,7 @@
   "@createPersonHint": {
     "description": "Hint text for creating a person"
   },
-  "speechProfile": "Profil Suara",
+  "speechProfile": "Profil Ucapan",
   "@speechProfile": {
     "description": "Speech profile label"
   },
@@ -515,7 +515,7 @@
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Identifikasi Orang Lain",
+  "identifyingOthers": "Mengidentifikasi Orang Lain",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
@@ -2782,5 +2782,23 @@
   "detectBrowserBasedMeetings": "Deteksi rapat berbasis browser",
   "accessibilityDescription": "Omi memerlukan izin aksesibilitas untuk mendeteksi saat Anda bergabung dengan rapat Zoom, Meet, atau Teams di browser Anda.",
   "pleaseWait": "Harap tunggu...",
-  "joinTheCommunity": "Bergabunglah dengan komunitas!"
+  "joinTheCommunity": "Bergabunglah dengan komunitas!",
+  "loadingProfile": "Memuat profil...",
+  "profileSettings": "Pengaturan Profil",
+  "noEmailSet": "Tidak ada email yang diatur",
+  "userIdCopiedToClipboard": "ID Pengguna disalin ke papan klip",
+  "yourInformation": "Informasi Anda",
+  "setYourName": "Atur Nama Anda",
+  "changeYourName": "Ubah Nama Anda",
+  "persona": "Persona",
+  "manageYourOmiPersona": "Kelola persona Omi Anda",
+  "voiceAndPeople": "Suara & Orang",
+  "teachOmiYourVoice": "Ajari Omi suara Anda",
+  "tellOmiWhoSaidIt": "Beri tahu Omi siapa yang mengatakannya 🗣️",
+  "payment": "Pembayaran",
+  "addOrChangeYourPaymentMethod": "Tambah atau ubah metode pembayaran",
+  "preferences": "Preferensi",
+  "helpImproveOmiBySharing": "Bantu tingkatkan Omi dengan berbagi data analitik anonim",
+  "deleteAccount": "Hapus Akun",
+  "deleteYourAccountAndAllData": "Hapus akun dan semua data Anda"
 }
