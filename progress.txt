@@ -53,7 +53,7 @@ MEDIUM PRIORITY - Widgets and Components
     Strings: 'Failed to cancel subscription...', 'Invalid payment URL',
              'Please select a rating', error messages
 
-[ ] app/lib/pages/conversation_detail/share.dart
+[✓] app/lib/pages/conversation_detail/share.dart
     Strings: Sharing-related strings
 
 [ ] app/lib/pages/action_items/widgets/action_item_tile_widget.dart
@@ -954,12 +954,29 @@ Notes: Large file (111KB) - key user-facing strings localized including
        subscription management, reviews, error messages, and dialogs.
 Commit: 96a7942cb
 
+FILE 76 (Phase 2 FILE 6): share.dart
+--------------------------------------
+Location: app/lib/pages/conversation_detail/
+Keys Added: 6 (new) + 7 (reused) = 13 total
+New Keys: copyUrl, copyTranscript, copySummary, discardedConversation,
+         txtFormat, pdfFormat
+Reused Keys: transcriptCopiedToClipboard, summaryCopiedToClipboard,
+            conversationUrlCouldNotBeShared, urlCopiedToClipboard,
+            exportTranscript, exportSummary, exportButton
+Script: /tmp/translate_share_keys.py
+Status: ✅ COMPLETED
+Notes: Localized share bottom sheet including copy buttons, export format labels,
+       and discarded conversation title. File already had l10n import and some
+       localized strings. PDF export strings (internal to PDF library) not
+       localized as they use pw.Context instead of BuildContext.
+Commit: 387727651
+
 ================================================================================
 END OF PROGRESS TRACKER
 ================================================================================
 Last Updated: 2026-01-15
-Last Completed: FILE 75 - app_detail.dart (41 new keys + 9 reused, 1394 new translations)
-Previous Completed: FILE 74 - upgrade_alert.dart (2 new keys + 1 reused, 68 new translations)
+Last Completed: FILE 76 - share.dart (6 new keys + 7 reused, 204 new translations)
+Previous Completed: FILE 75 - app_detail.dart (41 new keys + 9 reused, 1394 new translations)
 Current Session: Phase 2 - Mobile/Pages localization in progress
 
 🎉 PHASE 1 (DESKTOP) COMPLETE! 🎉
@@ -969,5 +986,5 @@ Current Session: Phase 2 - Mobile/Pages localization in progress
 
 📋 PHASE 2 (MOBILE/PAGES) IN PROGRESS
 59 files identified with hardcoded strings
-Files Completed: 5
+Files Completed: 6
 Estimated 200-300 new keys needed
