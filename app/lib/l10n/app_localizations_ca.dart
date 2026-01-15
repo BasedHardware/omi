@@ -4009,4 +4009,22 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get updateApp => 'Actualitzar aplicació';
+
+  @override
+  String get createAndSubmitNewApp => 'Crea i envia una nova aplicació';
+
+  @override
+  String appsCount(String count) {
+    return 'Aplicacions ($count)';
+  }
+
+  @override
+  String privateAppsCount(String count) {
+    return 'Aplicacions privades ($count)';
+  }
+
+  @override
+  String publicAppsCount(String count) {
+    return 'Aplicacions públiques ($count)';
+  }
 }

@@ -3997,4 +3997,22 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get updateApp => 'Uygulamayı Güncelle';
+
+  @override
+  String get createAndSubmitNewApp => 'Yeni bir uygulama oluştur ve gönder';
+
+  @override
+  String appsCount(String count) {
+    return 'Uygulamalar ($count)';
+  }
+
+  @override
+  String privateAppsCount(String count) {
+    return 'Özel Uygulamalar ($count)';
+  }
+
+  @override
+  String publicAppsCount(String count) {
+    return 'Herkese Açık Uygulamalar ($count)';
+  }
 }

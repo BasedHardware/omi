@@ -3987,4 +3987,22 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get updateApp => 'Päivitä sovellus';
+
+  @override
+  String get createAndSubmitNewApp => 'Luo ja lähetä uusi sovellus';
+
+  @override
+  String appsCount(String count) {
+    return 'Sovellukset ($count)';
+  }
+
+  @override
+  String privateAppsCount(String count) {
+    return 'Yksityiset sovellukset ($count)';
+  }
+
+  @override
+  String publicAppsCount(String count) {
+    return 'Julkiset sovellukset ($count)';
+  }
 }

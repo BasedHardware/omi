@@ -3988,4 +3988,22 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get updateApp => 'Oppdater app';
+
+  @override
+  String get createAndSubmitNewApp => 'Opprett og send inn en ny app';
+
+  @override
+  String appsCount(String count) {
+    return 'Apper ($count)';
+  }
+
+  @override
+  String privateAppsCount(String count) {
+    return 'Private apper ($count)';
+  }
+
+  @override
+  String publicAppsCount(String count) {
+    return 'Offentlige apper ($count)';
+  }
 }

@@ -4008,4 +4008,22 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get updateApp => 'Aggiorna app';
+
+  @override
+  String get createAndSubmitNewApp => 'Crea e invia una nuova app';
+
+  @override
+  String appsCount(String count) {
+    return 'App ($count)';
+  }
+
+  @override
+  String privateAppsCount(String count) {
+    return 'App private ($count)';
+  }
+
+  @override
+  String publicAppsCount(String count) {
+    return 'App pubbliche ($count)';
+  }
 }

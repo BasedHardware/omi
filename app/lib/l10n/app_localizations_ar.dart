@@ -3958,4 +3958,22 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get updateApp => 'تحديث التطبيق';
+
+  @override
+  String get createAndSubmitNewApp => 'إنشاء وإرسال تطبيق جديد';
+
+  @override
+  String appsCount(String count) {
+    return 'التطبيقات ($count)';
+  }
+
+  @override
+  String privateAppsCount(String count) {
+    return 'التطبيقات الخاصة ($count)';
+  }
+
+  @override
+  String publicAppsCount(String count) {
+    return 'التطبيقات العامة ($count)';
+  }
 }

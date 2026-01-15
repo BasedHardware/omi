@@ -2960,5 +2960,9 @@
   "fetchingYourAppDetails": "앱 세부정보 가져오는 중",
   "updateAppQuestion": "앱을 업데이트하시겠습니까?",
   "updateAppConfirmation": "앱을 업데이트하시겠습니까? 변경 사항은 팀 검토 후 반영됩니다.",
-  "updateApp": "앱 업데이트"
+  "updateApp": "앱 업데이트",
+  "createAndSubmitNewApp": "새 앱 만들기 및 제출",
+  "appsCount": "앱 ({count})",
+  "privateAppsCount": "비공개 앱 ({count})",
+  "publicAppsCount": "공개 앱 ({count})"
 }

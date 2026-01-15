@@ -4010,4 +4010,22 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get updateApp => 'Alkalmazás frissítése';
+
+  @override
+  String get createAndSubmitNewApp => 'Új alkalmazás létrehozása és beküldése';
+
+  @override
+  String appsCount(String count) {
+    return 'Alkalmazások ($count)';
+  }
+
+  @override
+  String privateAppsCount(String count) {
+    return 'Privát alkalmazások ($count)';
+  }
+
+  @override
+  String publicAppsCount(String count) {
+    return 'Nyilvános alkalmazások ($count)';
+  }
 }

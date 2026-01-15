@@ -3995,4 +3995,22 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get updateApp => 'Cập nhật ứng dụng';
+
+  @override
+  String get createAndSubmitNewApp => 'Tạo và gửi ứng dụng mới';
+
+  @override
+  String appsCount(String count) {
+    return 'Ứng dụng ($count)';
+  }
+
+  @override
+  String privateAppsCount(String count) {
+    return 'Ứng dụng riêng tư ($count)';
+  }
+
+  @override
+  String publicAppsCount(String count) {
+    return 'Ứng dụng công khai ($count)';
+  }
 }

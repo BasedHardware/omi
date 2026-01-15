@@ -3989,4 +3989,22 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get updateApp => 'Värskenda rakendust';
+
+  @override
+  String get createAndSubmitNewApp => 'Loo ja esita uus rakendus';
+
+  @override
+  String appsCount(String count) {
+    return 'Rakendused ($count)';
+  }
+
+  @override
+  String privateAppsCount(String count) {
+    return 'Privaatsed rakendused ($count)';
+  }
+
+  @override
+  String publicAppsCount(String count) {
+    return 'Avalikud rakendused ($count)';
+  }
 }

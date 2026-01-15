@@ -3986,4 +3986,22 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get updateApp => 'Aktualizovat aplikaci';
+
+  @override
+  String get createAndSubmitNewApp => 'Vytvořte a odešlete novou aplikaci';
+
+  @override
+  String appsCount(String count) {
+    return 'Aplikace ($count)';
+  }
+
+  @override
+  String privateAppsCount(String count) {
+    return 'Soukromé aplikace ($count)';
+  }
+
+  @override
+  String publicAppsCount(String count) {
+    return 'Veřejné aplikace ($count)';
+  }
 }

@@ -2960,5 +2960,9 @@
   "fetchingYourAppDetails": "Hämtar appdetaljer",
   "updateAppQuestion": "Uppdatera app?",
   "updateAppConfirmation": "Är du säker på att du vill uppdatera din app? Ändringarna visas efter granskning av vårt team.",
-  "updateApp": "Uppdatera app"
+  "updateApp": "Uppdatera app",
+  "createAndSubmitNewApp": "Skapa och skicka in en ny app",
+  "appsCount": "Appar ({count})",
+  "privateAppsCount": "Privata appar ({count})",
+  "publicAppsCount": "Offentliga appar ({count})"
 }

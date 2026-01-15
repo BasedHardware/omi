@@ -2960,5 +2960,9 @@
   "fetchingYourAppDetails": "Alkalmazás részleteinek lekérése",
   "updateAppQuestion": "Alkalmazás frissítése?",
   "updateAppConfirmation": "Biztosan frissíteni szeretné az alkalmazást? A változtatások a csapatunk általi felülvizsgálat után lépnek érvénybe.",
-  "updateApp": "Alkalmazás frissítése"
+  "updateApp": "Alkalmazás frissítése",
+  "createAndSubmitNewApp": "Új alkalmazás létrehozása és beküldése",
+  "appsCount": "Alkalmazások ({count})",
+  "privateAppsCount": "Privát alkalmazások ({count})",
+  "publicAppsCount": "Nyilvános alkalmazások ({count})"
 }

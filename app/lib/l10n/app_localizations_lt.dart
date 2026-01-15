@@ -3988,4 +3988,22 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get updateApp => 'Atnaujinti programėlę';
+
+  @override
+  String get createAndSubmitNewApp => 'Sukurkite ir pateikite naują programėlę';
+
+  @override
+  String appsCount(String count) {
+    return 'Programėlės ($count)';
+  }
+
+  @override
+  String privateAppsCount(String count) {
+    return 'Privačios programėlės ($count)';
+  }
+
+  @override
+  String publicAppsCount(String count) {
+    return 'Viešos programėlės ($count)';
+  }
 }

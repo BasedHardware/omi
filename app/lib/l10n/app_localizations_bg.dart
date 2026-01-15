@@ -3999,4 +3999,22 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get updateApp => 'Актуализиране на приложението';
+
+  @override
+  String get createAndSubmitNewApp => 'Създайте и изпратете ново приложение';
+
+  @override
+  String appsCount(String count) {
+    return 'Приложения ($count)';
+  }
+
+  @override
+  String privateAppsCount(String count) {
+    return 'Лични приложения ($count)';
+  }
+
+  @override
+  String publicAppsCount(String count) {
+    return 'Публични приложения ($count)';
+  }
 }

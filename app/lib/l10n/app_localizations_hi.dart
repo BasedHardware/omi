@@ -3965,4 +3965,22 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get updateApp => 'ऐप अपडेट करें';
+
+  @override
+  String get createAndSubmitNewApp => 'नया ऐप बनाएं और सबमिट करें';
+
+  @override
+  String appsCount(String count) {
+    return 'ऐप्स ($count)';
+  }
+
+  @override
+  String privateAppsCount(String count) {
+    return 'निजी ऐप्स ($count)';
+  }
+
+  @override
+  String publicAppsCount(String count) {
+    return 'सार्वजनिक ऐप्स ($count)';
+  }
 }

@@ -2960,5 +2960,9 @@
   "fetchingYourAppDetails": "กำลังดึงข้อมูลแอปของคุณ",
   "updateAppQuestion": "อัปเดตแอป?",
   "updateAppConfirmation": "คุณแน่ใจหรือไม่ว่าต้องการอัปเดตแอป? การเปลี่ยนแปลงจะมีผลหลังจากทีมของเราตรวจสอบ",
-  "updateApp": "อัปเดตแอป"
+  "updateApp": "อัปเดตแอป",
+  "createAndSubmitNewApp": "สร้างและส่งแอปใหม่",
+  "appsCount": "แอป ({count})",
+  "privateAppsCount": "แอปส่วนตัว ({count})",
+  "publicAppsCount": "แอปสาธารณะ ({count})"
 }

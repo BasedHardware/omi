@@ -4018,4 +4018,22 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get updateApp => 'Ενημέρωση εφαρμογής';
+
+  @override
+  String get createAndSubmitNewApp => 'Δημιουργήστε και υποβάλετε μια νέα εφαρμογή';
+
+  @override
+  String appsCount(String count) {
+    return 'Εφαρμογές ($count)';
+  }
+
+  @override
+  String privateAppsCount(String count) {
+    return 'Ιδιωτικές εφαρμογές ($count)';
+  }
+
+  @override
+  String publicAppsCount(String count) {
+    return 'Δημόσιες εφαρμογές ($count)';
+  }
 }

@@ -3992,4 +3992,22 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get updateApp => 'Оновити додаток';
+
+  @override
+  String get createAndSubmitNewApp => 'Створіть і надішліть новий додаток';
+
+  @override
+  String appsCount(String count) {
+    return 'Додатки ($count)';
+  }
+
+  @override
+  String privateAppsCount(String count) {
+    return 'Приватні додатки ($count)';
+  }
+
+  @override
+  String publicAppsCount(String count) {
+    return 'Публічні додатки ($count)';
+  }
 }

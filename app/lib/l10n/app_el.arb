@@ -2960,5 +2960,9 @@
   "fetchingYourAppDetails": "Ανάκτηση λεπτομερειών εφαρμογής",
   "updateAppQuestion": "Ενημέρωση εφαρμογής;",
   "updateAppConfirmation": "Είστε σίγουροι ότι θέλετε να ενημερώσετε την εφαρμογή σας; Οι αλλαγές θα εμφανιστούν μετά τον έλεγχο από την ομάδα μας.",
-  "updateApp": "Ενημέρωση εφαρμογής"
+  "updateApp": "Ενημέρωση εφαρμογής",
+  "createAndSubmitNewApp": "Δημιουργήστε και υποβάλετε μια νέα εφαρμογή",
+  "appsCount": "Εφαρμογές ({count})",
+  "privateAppsCount": "Ιδιωτικές εφαρμογές ({count})",
+  "publicAppsCount": "Δημόσιες εφαρμογές ({count})"
 }

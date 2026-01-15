@@ -4020,4 +4020,22 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get updateApp => 'Mettre à jour l\'application';
+
+  @override
+  String get createAndSubmitNewApp => 'Créer et soumettre une nouvelle application';
+
+  @override
+  String appsCount(String count) {
+    return 'Applications ($count)';
+  }
+
+  @override
+  String privateAppsCount(String count) {
+    return 'Applications privées ($count)';
+  }
+
+  @override
+  String publicAppsCount(String count) {
+    return 'Applications publiques ($count)';
+  }
 }

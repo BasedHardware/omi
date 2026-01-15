@@ -2960,5 +2960,9 @@
   "fetchingYourAppDetails": "Iegūst lietotnes informāciju",
   "updateAppQuestion": "Atjaunināt lietotni?",
   "updateAppConfirmation": "Vai tiešām vēlaties atjaunināt savu lietotni? Izmaiņas būs redzamas pēc mūsu komandas pārskatīšanas.",
-  "updateApp": "Atjaunināt lietotni"
+  "updateApp": "Atjaunināt lietotni",
+  "createAndSubmitNewApp": "Izveidojiet un iesniedziet jaunu lietotni",
+  "appsCount": "Lietotnes ({count})",
+  "privateAppsCount": "Privātās lietotnes ({count})",
+  "publicAppsCount": "Publiskās lietotnes ({count})"
 }

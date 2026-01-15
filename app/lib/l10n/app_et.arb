@@ -2960,5 +2960,9 @@
   "fetchingYourAppDetails": "Rakenduse üksikasjade hankimine",
   "updateAppQuestion": "Värskenda rakendust?",
   "updateAppConfirmation": "Kas olete kindel, et soovite oma rakendust värskendada? Muudatused jõustuvad pärast meie meeskonna ülevaatust.",
-  "updateApp": "Värskenda rakendust"
+  "updateApp": "Värskenda rakendust",
+  "createAndSubmitNewApp": "Loo ja esita uus rakendus",
+  "appsCount": "Rakendused ({count})",
+  "privateAppsCount": "Privaatsed rakendused ({count})",
+  "publicAppsCount": "Avalikud rakendused ({count})"
 }

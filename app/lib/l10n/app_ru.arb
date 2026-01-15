@@ -2960,5 +2960,9 @@
   "fetchingYourAppDetails": "Получение данных приложения",
   "updateAppQuestion": "Обновить приложение?",
   "updateAppConfirmation": "Вы уверены, что хотите обновить приложение? Изменения вступят в силу после проверки нашей командой.",
-  "updateApp": "Обновить приложение"
+  "updateApp": "Обновить приложение",
+  "createAndSubmitNewApp": "Создать и отправить новое приложение",
+  "appsCount": "Приложения ({count})",
+  "privateAppsCount": "Приватные приложения ({count})",
+  "publicAppsCount": "Публичные приложения ({count})"
 }

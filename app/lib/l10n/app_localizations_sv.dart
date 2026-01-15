@@ -3994,4 +3994,22 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get updateApp => 'Uppdatera app';
+
+  @override
+  String get createAndSubmitNewApp => 'Skapa och skicka in en ny app';
+
+  @override
+  String appsCount(String count) {
+    return 'Appar ($count)';
+  }
+
+  @override
+  String privateAppsCount(String count) {
+    return 'Privata appar ($count)';
+  }
+
+  @override
+  String publicAppsCount(String count) {
+    return 'Offentliga appar ($count)';
+  }
 }

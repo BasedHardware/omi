@@ -1407,5 +1407,9 @@
   "fetchingYourAppDetails": "आपके ऐप का विवरण प्राप्त हो रहा है",
   "updateAppQuestion": "ऐप अपडेट करें?",
   "updateAppConfirmation": "क्या आप वाकई अपना ऐप अपडेट करना चाहते हैं? परिवर्तन हमारी टीम द्वारा समीक्षा के बाद दिखाई देंगे।",
-  "updateApp": "ऐप अपडेट करें"
+  "updateApp": "ऐप अपडेट करें",
+  "createAndSubmitNewApp": "नया ऐप बनाएं और सबमिट करें",
+  "appsCount": "ऐप्स ({count})",
+  "privateAppsCount": "निजी ऐप्स ({count})",
+  "publicAppsCount": "सार्वजनिक ऐप्स ({count})"
 }

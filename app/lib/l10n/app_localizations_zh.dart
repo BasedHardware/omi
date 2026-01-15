@@ -3916,4 +3916,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get updateApp => '更新应用';
+
+  @override
+  String get createAndSubmitNewApp => '创建并提交新应用';
+
+  @override
+  String appsCount(String count) {
+    return '应用 ($count)';
+  }
+
+  @override
+  String privateAppsCount(String count) {
+    return '私有应用 ($count)';
+  }
+
+  @override
+  String publicAppsCount(String count) {
+    return '公开应用 ($count)';
+  }
 }

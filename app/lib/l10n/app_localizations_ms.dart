@@ -4001,4 +4001,22 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get updateApp => 'Kemas kini Aplikasi';
+
+  @override
+  String get createAndSubmitNewApp => 'Cipta dan hantar aplikasi baharu';
+
+  @override
+  String appsCount(String count) {
+    return 'Aplikasi ($count)';
+  }
+
+  @override
+  String privateAppsCount(String count) {
+    return 'Aplikasi Peribadi ($count)';
+  }
+
+  @override
+  String publicAppsCount(String count) {
+    return 'Aplikasi Awam ($count)';
+  }
 }

@@ -2960,5 +2960,9 @@
   "fetchingYourAppDetails": "Mendapatkan butiran aplikasi anda",
   "updateAppQuestion": "Kemas kini Aplikasi?",
   "updateAppConfirmation": "Adakah anda pasti mahu mengemas kini aplikasi anda? Perubahan akan dipaparkan selepas disemak oleh pasukan kami.",
-  "updateApp": "Kemas kini Aplikasi"
+  "updateApp": "Kemas kini Aplikasi",
+  "createAndSubmitNewApp": "Cipta dan hantar aplikasi baharu",
+  "appsCount": "Aplikasi ({count})",
+  "privateAppsCount": "Aplikasi Peribadi ({count})",
+  "publicAppsCount": "Aplikasi Awam ({count})"
 }

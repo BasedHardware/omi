@@ -4492,5 +4492,36 @@
   "updateApp": "Update App",
   "@updateApp": {
     "description": "Button text to update app"
+  },
+  "createAndSubmitNewApp": "Create and submit a new app",
+  "@createAndSubmitNewApp": {
+    "description": "Button text to create and submit a new app"
+  },
+  "appsCount": "Apps ({count})",
+  "@appsCount": {
+    "description": "Label showing number of installed apps",
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "privateAppsCount": "Private Apps ({count})",
+  "@privateAppsCount": {
+    "description": "Label showing number of private apps",
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "publicAppsCount": "Public Apps ({count})",
+  "@publicAppsCount": {
+    "description": "Label showing number of public apps",
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
   }
 }

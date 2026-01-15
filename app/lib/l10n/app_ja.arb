@@ -1386,5 +1386,9 @@
   "fetchingYourAppDetails": "アプリの詳細を取得中",
   "updateAppQuestion": "アプリを更新しますか？",
   "updateAppConfirmation": "アプリを更新してよろしいですか？変更はチームの審査後に反映されます。",
-  "updateApp": "アプリを更新"
+  "updateApp": "アプリを更新",
+  "createAndSubmitNewApp": "新しいアプリを作成して送信",
+  "appsCount": "アプリ ({count})",
+  "privateAppsCount": "プライベートアプリ ({count})",
+  "publicAppsCount": "公開アプリ ({count})"
 }

@@ -2960,5 +2960,9 @@
   "fetchingYourAppDetails": "Pobieranie szczegółów aplikacji",
   "updateAppQuestion": "Zaktualizować aplikację?",
   "updateAppConfirmation": "Czy na pewno chcesz zaktualizować aplikację? Zmiany zostaną wprowadzone po sprawdzeniu przez nasz zespół.",
-  "updateApp": "Zaktualizuj aplikację"
+  "updateApp": "Zaktualizuj aplikację",
+  "createAndSubmitNewApp": "Utwórz i prześlij nową aplikację",
+  "appsCount": "Aplikacje ({count})",
+  "privateAppsCount": "Prywatne aplikacje ({count})",
+  "publicAppsCount": "Publiczne aplikacje ({count})"
 }

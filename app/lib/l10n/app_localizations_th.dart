@@ -3965,4 +3965,22 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get updateApp => 'อัปเดตแอป';
+
+  @override
+  String get createAndSubmitNewApp => 'สร้างและส่งแอปใหม่';
+
+  @override
+  String appsCount(String count) {
+    return 'แอป ($count)';
+  }
+
+  @override
+  String privateAppsCount(String count) {
+    return 'แอปส่วนตัว ($count)';
+  }
+
+  @override
+  String publicAppsCount(String count) {
+    return 'แอปสาธารณะ ($count)';
+  }
 }

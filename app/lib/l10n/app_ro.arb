@@ -2960,5 +2960,9 @@
   "fetchingYourAppDetails": "Se preiau detaliile aplicației",
   "updateAppQuestion": "Actualizați aplicația?",
   "updateAppConfirmation": "Sunteți sigur că doriți să actualizați aplicația? Modificările vor fi vizibile după examinarea de către echipa noastră.",
-  "updateApp": "Actualizare aplicație"
+  "updateApp": "Actualizare aplicație",
+  "createAndSubmitNewApp": "Creați și trimiteți o aplicație nouă",
+  "appsCount": "Aplicații ({count})",
+  "privateAppsCount": "Aplicații private ({count})",
+  "publicAppsCount": "Aplicații publice ({count})"
 }

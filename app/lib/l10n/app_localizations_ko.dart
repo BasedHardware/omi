@@ -3921,4 +3921,22 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get updateApp => '앱 업데이트';
+
+  @override
+  String get createAndSubmitNewApp => '새 앱 만들기 및 제출';
+
+  @override
+  String appsCount(String count) {
+    return '앱 ($count)';
+  }
+
+  @override
+  String privateAppsCount(String count) {
+    return '비공개 앱 ($count)';
+  }
+
+  @override
+  String publicAppsCount(String count) {
+    return '공개 앱 ($count)';
+  }
 }

@@ -3993,4 +3993,22 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get updateApp => 'Atjaunināt lietotni';
+
+  @override
+  String get createAndSubmitNewApp => 'Izveidojiet un iesniedziet jaunu lietotni';
+
+  @override
+  String appsCount(String count) {
+    return 'Lietotnes ($count)';
+  }
+
+  @override
+  String privateAppsCount(String count) {
+    return 'Privātās lietotnes ($count)';
+  }
+
+  @override
+  String publicAppsCount(String count) {
+    return 'Publiskās lietotnes ($count)';
+  }
 }

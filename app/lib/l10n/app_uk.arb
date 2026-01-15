@@ -2960,5 +2960,9 @@
   "fetchingYourAppDetails": "Отримання даних додатка",
   "updateAppQuestion": "Оновити додаток?",
   "updateAppConfirmation": "Ви впевнені, що хочете оновити свій додаток? Зміни набудуть чинності після перевірки нашою командою.",
-  "updateApp": "Оновити додаток"
+  "updateApp": "Оновити додаток",
+  "createAndSubmitNewApp": "Створіть і надішліть новий додаток",
+  "appsCount": "Додатки ({count})",
+  "privateAppsCount": "Приватні додатки ({count})",
+  "publicAppsCount": "Публічні додатки ({count})"
 }

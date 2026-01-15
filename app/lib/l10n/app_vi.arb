@@ -2960,5 +2960,9 @@
   "fetchingYourAppDetails": "Đang tải thông tin ứng dụng",
   "updateAppQuestion": "Cập nhật ứng dụng?",
   "updateAppConfirmation": "Bạn có chắc chắn muốn cập nhật ứng dụng? Các thay đổi sẽ được phản ánh sau khi được đội ngũ của chúng tôi xem xét.",
-  "updateApp": "Cập nhật ứng dụng"
+  "updateApp": "Cập nhật ứng dụng",
+  "createAndSubmitNewApp": "Tạo và gửi ứng dụng mới",
+  "appsCount": "Ứng dụng ({count})",
+  "privateAppsCount": "Ứng dụng riêng tư ({count})",
+  "publicAppsCount": "Ứng dụng công khai ({count})"
 }

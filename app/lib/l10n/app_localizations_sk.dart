@@ -3990,4 +3990,22 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get updateApp => 'Aktualizovať aplikáciu';
+
+  @override
+  String get createAndSubmitNewApp => 'Vytvorte a odošlite novú aplikáciu';
+
+  @override
+  String appsCount(String count) {
+    return 'Aplikácie ($count)';
+  }
+
+  @override
+  String privateAppsCount(String count) {
+    return 'Súkromné aplikácie ($count)';
+  }
+
+  @override
+  String publicAppsCount(String count) {
+    return 'Verejné aplikácie ($count)';
+  }
 }

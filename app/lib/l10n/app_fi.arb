@@ -2960,5 +2960,9 @@
   "fetchingYourAppDetails": "Haetaan sovelluksen tietoja",
   "updateAppQuestion": "Päivitä sovellus?",
   "updateAppConfirmation": "Haluatko varmasti päivittää sovelluksesi? Muutokset näkyvät tiimimme tarkistuksen jälkeen.",
-  "updateApp": "Päivitä sovellus"
+  "updateApp": "Päivitä sovellus",
+  "createAndSubmitNewApp": "Luo ja lähetä uusi sovellus",
+  "appsCount": "Sovellukset ({count})",
+  "privateAppsCount": "Yksityiset sovellukset ({count})",
+  "publicAppsCount": "Julkiset sovellukset ({count})"
 }

@@ -2979,5 +2979,9 @@
   "fetchingYourAppDetails": "جارٍ جلب تفاصيل تطبيقك",
   "updateAppQuestion": "تحديث التطبيق؟",
   "updateAppConfirmation": "هل أنت متأكد من رغبتك في تحديث تطبيقك؟ ستظهر التغييرات بعد مراجعتها من قبل فريقنا.",
-  "updateApp": "تحديث التطبيق"
+  "updateApp": "تحديث التطبيق",
+  "createAndSubmitNewApp": "إنشاء وإرسال تطبيق جديد",
+  "appsCount": "التطبيقات ({count})",
+  "privateAppsCount": "التطبيقات الخاصة ({count})",
+  "publicAppsCount": "التطبيقات العامة ({count})"
 }

@@ -1407,5 +1407,9 @@
   "fetchingYourAppDetails": "正在获取应用详情",
   "updateAppQuestion": "更新应用？",
   "updateAppConfirmation": "确定要更新您的应用吗？更改将在我们团队审核后生效。",
-  "updateApp": "更新应用"
+  "updateApp": "更新应用",
+  "createAndSubmitNewApp": "创建并提交新应用",
+  "appsCount": "应用 ({count})",
+  "privateAppsCount": "私有应用 ({count})",
+  "publicAppsCount": "公开应用 ({count})"
 }

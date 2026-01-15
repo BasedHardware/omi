@@ -2962,5 +2962,9 @@
   "fetchingYourAppDetails": "Obtenint els detalls de la teva aplicació",
   "updateAppQuestion": "Actualitzar l'aplicació?",
   "updateAppConfirmation": "Estàs segur que vols actualitzar la teva aplicació? Els canvis es reflectiran un cop revisats pel nostre equip.",
-  "updateApp": "Actualitzar aplicació"
+  "updateApp": "Actualitzar aplicació",
+  "createAndSubmitNewApp": "Crea i envia una nova aplicació",
+  "appsCount": "Aplicacions ({count})",
+  "privateAppsCount": "Aplicacions privades ({count})",
+  "publicAppsCount": "Aplicacions públiques ({count})"
 }

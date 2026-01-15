@@ -4000,4 +4000,22 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get updateApp => 'App bijwerken';
+
+  @override
+  String get createAndSubmitNewApp => 'Maak en dien een nieuwe app in';
+
+  @override
+  String appsCount(String count) {
+    return 'Apps ($count)';
+  }
+
+  @override
+  String privateAppsCount(String count) {
+    return 'Privé-apps ($count)';
+  }
+
+  @override
+  String publicAppsCount(String count) {
+    return 'Openbare apps ($count)';
+  }
 }

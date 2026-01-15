@@ -1407,5 +1407,9 @@
   "fetchingYourAppDetails": "A obter detalhes da aplicação",
   "updateAppQuestion": "Atualizar aplicação?",
   "updateAppConfirmation": "Tem a certeza de que pretende atualizar a sua aplicação? As alterações serão refletidas após revisão pela nossa equipa.",
-  "updateApp": "Atualizar aplicação"
+  "updateApp": "Atualizar aplicação",
+  "createAndSubmitNewApp": "Criar e enviar uma nova aplicação",
+  "appsCount": "Aplicações ({count})",
+  "privateAppsCount": "Aplicações privadas ({count})",
+  "publicAppsCount": "Aplicações públicas ({count})"
 }

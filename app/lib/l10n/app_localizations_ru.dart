@@ -3999,4 +3999,22 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get updateApp => 'Обновить приложение';
+
+  @override
+  String get createAndSubmitNewApp => 'Создать и отправить новое приложение';
+
+  @override
+  String appsCount(String count) {
+    return 'Приложения ($count)';
+  }
+
+  @override
+  String privateAppsCount(String count) {
+    return 'Приватные приложения ($count)';
+  }
+
+  @override
+  String publicAppsCount(String count) {
+    return 'Публичные приложения ($count)';
+  }
 }

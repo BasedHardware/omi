@@ -4009,4 +4009,22 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get updateApp => 'Actualizare aplicație';
+
+  @override
+  String get createAndSubmitNewApp => 'Creați și trimiteți o aplicație nouă';
+
+  @override
+  String appsCount(String count) {
+    return 'Aplicații ($count)';
+  }
+
+  @override
+  String privateAppsCount(String count) {
+    return 'Aplicații private ($count)';
+  }
+
+  @override
+  String publicAppsCount(String count) {
+    return 'Aplicații publice ($count)';
+  }
 }

@@ -2942,5 +2942,9 @@
   "fetchingYourAppDetails": "Recupero dei dettagli della tua app",
   "updateAppQuestion": "Aggiornare l'app?",
   "updateAppConfirmation": "Sei sicuro di voler aggiornare la tua app? Le modifiche saranno visibili dopo la revisione del nostro team.",
-  "updateApp": "Aggiorna app"
+  "updateApp": "Aggiorna app",
+  "createAndSubmitNewApp": "Crea e invia una nuova app",
+  "appsCount": "App ({count})",
+  "privateAppsCount": "App private ({count})",
+  "publicAppsCount": "App pubbliche ({count})"
 }

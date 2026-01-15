@@ -2942,5 +2942,9 @@
   "fetchingYourAppDetails": "Gaunama programėlės informacija",
   "updateAppQuestion": "Atnaujinti programėlę?",
   "updateAppConfirmation": "Ar tikrai norite atnaujinti savo programėlę? Pakeitimai bus matomi po mūsų komandos peržiūros.",
-  "updateApp": "Atnaujinti programėlę"
+  "updateApp": "Atnaujinti programėlę",
+  "createAndSubmitNewApp": "Sukurkite ir pateikite naują programėlę",
+  "appsCount": "Programėlės ({count})",
+  "privateAppsCount": "Privačios programėlės ({count})",
+  "publicAppsCount": "Viešos programėlės ({count})"
 }

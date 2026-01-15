@@ -2960,5 +2960,9 @@
   "fetchingYourAppDetails": "Načítanie podrobností aplikácie",
   "updateAppQuestion": "Aktualizovať aplikáciu?",
   "updateAppConfirmation": "Ste si istý, že chcete aktualizovať svoju aplikáciu? Zmeny sa prejavia po kontrole naším tímom.",
-  "updateApp": "Aktualizovať aplikáciu"
+  "updateApp": "Aktualizovať aplikáciu",
+  "createAndSubmitNewApp": "Vytvorte a odošlite novú aplikáciu",
+  "appsCount": "Aplikácie ({count})",
+  "privateAppsCount": "Súkromné aplikácie ({count})",
+  "publicAppsCount": "Verejné aplikácie ({count})"
 }

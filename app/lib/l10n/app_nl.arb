@@ -1778,5 +1778,9 @@
   "fetchingYourAppDetails": "App-details ophalen",
   "updateAppQuestion": "App bijwerken?",
   "updateAppConfirmation": "Weet u zeker dat u uw app wilt bijwerken? De wijzigingen worden doorgevoerd na beoordeling door ons team.",
-  "updateApp": "App bijwerken"
+  "updateApp": "App bijwerken",
+  "createAndSubmitNewApp": "Maak en dien een nieuwe app in",
+  "appsCount": "Apps ({count})",
+  "privateAppsCount": "Privé-apps ({count})",
+  "publicAppsCount": "Openbare apps ({count})"
 }

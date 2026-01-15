@@ -2960,5 +2960,9 @@
   "fetchingYourAppDetails": "Mengambil detail aplikasi Anda",
   "updateAppQuestion": "Perbarui Aplikasi?",
   "updateAppConfirmation": "Apakah Anda yakin ingin memperbarui aplikasi? Perubahan akan terlihat setelah ditinjau oleh tim kami.",
-  "updateApp": "Perbarui Aplikasi"
+  "updateApp": "Perbarui Aplikasi",
+  "createAndSubmitNewApp": "Buat dan kirim aplikasi baru",
+  "appsCount": "Aplikasi ({count})",
+  "privateAppsCount": "Aplikasi Pribadi ({count})",
+  "publicAppsCount": "Aplikasi Publik ({count})"
 }

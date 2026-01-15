@@ -3969,4 +3969,22 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get updateApp => 'Atualizar aplicação';
+
+  @override
+  String get createAndSubmitNewApp => 'Criar e enviar uma nova aplicação';
+
+  @override
+  String appsCount(String count) {
+    return 'Aplicações ($count)';
+  }
+
+  @override
+  String privateAppsCount(String count) {
+    return 'Aplicações privadas ($count)';
+  }
+
+  @override
+  String publicAppsCount(String count) {
+    return 'Aplicações públicas ($count)';
+  }
 }

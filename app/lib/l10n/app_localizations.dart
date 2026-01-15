@@ -7652,6 +7652,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Update App'**
   String get updateApp;
+
+  /// Button text to create and submit a new app
+  ///
+  /// In en, this message translates to:
+  /// **'Create and submit a new app'**
+  String get createAndSubmitNewApp;
+
+  /// Label showing number of installed apps
+  ///
+  /// In en, this message translates to:
+  /// **'Apps ({count})'**
+  String appsCount(String count);
+
+  /// Label showing number of private apps
+  ///
+  /// In en, this message translates to:
+  /// **'Private Apps ({count})'**
+  String privateAppsCount(String count);
+
+  /// Label showing number of public apps
+  ///
+  /// In en, this message translates to:
+  /// **'Public Apps ({count})'**
+  String publicAppsCount(String count);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

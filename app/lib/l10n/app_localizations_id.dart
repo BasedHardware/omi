@@ -3998,4 +3998,22 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get updateApp => 'Perbarui Aplikasi';
+
+  @override
+  String get createAndSubmitNewApp => 'Buat dan kirim aplikasi baru';
+
+  @override
+  String appsCount(String count) {
+    return 'Aplikasi ($count)';
+  }
+
+  @override
+  String privateAppsCount(String count) {
+    return 'Aplikasi Pribadi ($count)';
+  }
+
+  @override
+  String publicAppsCount(String count) {
+    return 'Aplikasi Publik ($count)';
+  }
 }

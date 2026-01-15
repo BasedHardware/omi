@@ -3921,4 +3921,22 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get updateApp => 'アプリを更新';
+
+  @override
+  String get createAndSubmitNewApp => '新しいアプリを作成して送信';
+
+  @override
+  String appsCount(String count) {
+    return 'アプリ ($count)';
+  }
+
+  @override
+  String privateAppsCount(String count) {
+    return 'プライベートアプリ ($count)';
+  }
+
+  @override
+  String publicAppsCount(String count) {
+    return '公開アプリ ($count)';
+  }
 }

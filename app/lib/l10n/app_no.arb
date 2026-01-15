@@ -2960,5 +2960,9 @@
   "fetchingYourAppDetails": "Henter app-detaljer",
   "updateAppQuestion": "Oppdater app?",
   "updateAppConfirmation": "Er du sikker på at du vil oppdatere appen din? Endringene vil vises etter gjennomgang av teamet vårt.",
-  "updateApp": "Oppdater app"
+  "updateApp": "Oppdater app",
+  "createAndSubmitNewApp": "Opprett og send inn en ny app",
+  "appsCount": "Apper ({count})",
+  "privateAppsCount": "Private apper ({count})",
+  "publicAppsCount": "Offentlige apper ({count})"
 }
