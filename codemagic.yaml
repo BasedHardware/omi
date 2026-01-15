@@ -109,14 +109,20 @@ workflows:
         script: |
           dart run build_runner build --delete-conflicting-outputs
 
-      - name: Enable watchOS companion app
-        script: |
-          chmod +x ios/scripts/enable_watchos.sh
-          ios/scripts/enable_watchos.sh
-
       - name: Installs pod
         script: |
           cd ios && pod install --repo-update
+
+      - name: Build watchOS app
+        script: |
+          cd ios
+          xcode-project use-profiles
+          xcodebuild -workspace Runner.xcworkspace \
+            -scheme omiWatchApp \
+            -configuration Release-prod \
+            -sdk watchos \
+            -destination 'generic/platform=watchOS' \
+            build
 
       - name: Flutter build ipa
         script: |
@@ -138,10 +144,6 @@ workflows:
             --build-number=$BUILD_NUMBER \
             --flavor prod \
             --export-options-plist=$HOME/export_options.plist
-
-          # Debug: Check if watch app is in archive
-          echo "=== Checking archive contents ==="
-          ls -la build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app/Watch/ 2>/dev/null || echo "NO WATCH FOLDER IN ARCHIVE"
 
     artifacts:
       - build/ios/ipa/*.ipa
@@ -455,14 +457,20 @@ workflows:
         script: |
           dart run build_runner build --delete-conflicting-outputs
 
-      - name: Enable watchOS companion app
-        script: |
-          chmod +x ios/scripts/enable_watchos.sh
-          ios/scripts/enable_watchos.sh
-
       - name: Installs pod
         script: |
           cd ios && pod install --repo-update
+
+      - name: Build watchOS app
+        script: |
+          cd ios
+          xcode-project use-profiles
+          xcodebuild -workspace Runner.xcworkspace \
+            -scheme omiWatchApp \
+            -configuration Release-prod \
+            -sdk watchos \
+            -destination 'generic/platform=watchOS' \
+            build
 
       - name: Flutter build ipa
         script: |
@@ -1008,14 +1016,20 @@ workflows:
         script: |
           dart run build_runner build --delete-conflicting-outputs
 
-      - name: Enable watchOS companion app
-        script: |
-          chmod +x ios/scripts/enable_watchos.sh
-          ios/scripts/enable_watchos.sh
-
       - name: Installs pod
         script: |
           cd ios && pod install --repo-update
+
+      - name: Build watchOS app
+        script: |
+          cd ios
+          xcode-project use-profiles
+          xcodebuild -workspace Runner.xcworkspace \
+            -scheme omiWatchApp \
+            -configuration Release-prod \
+            -sdk watchos \
+            -destination 'generic/platform=watchOS' \
+            build
 
       - name: Patch iOS app with Shorebird
         script: |
