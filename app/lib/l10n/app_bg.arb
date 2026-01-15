@@ -65,7 +65,7 @@
   "@clear": {
     "description": "Clear button label"
   },
-  "copyTranscript": "Копирай транскрипт",
+  "copyTranscript": "Копиране на текст",
   "@copyTranscript": {
     "description": "Menu item to copy transcript"
   },
@@ -81,7 +81,7 @@
   "@reprocessConversation": {
     "description": "Menu item to reprocess a conversation"
   },
-  "deleteConversation": "Изтрий разговор",
+  "deleteConversation": "Изтриване на разговор",
   "@deleteConversation": {
     "description": "Menu item to delete a conversation"
   },
@@ -2327,7 +2327,7 @@
   "deleteFolder": "Изтриване на папка",
   "transcriptCopiedToClipboard": "Преписът е копиран в клипборда",
   "summaryCopiedToClipboard": "Резюмето е копирано в клипборда",
-  "conversationUrlCouldNotBeShared": "URL адресът на разговора не може да бъде споделен.",
+  "conversationUrlCouldNotBeShared": "URL адресът на разговора не можа да бъде споделен.",
   "urlCopiedToClipboard": "URL адресът е копиран в клипборда",
   "exportTranscript": "Експортиране на препис",
   "exportSummary": "Експортиране на резюме",
@@ -2595,7 +2595,7 @@
   "failedToTranscribeAudio": "Неуспешно транскрибиране на аудио",
   "transcribing": "Транскрибиране...",
   "transcriptionFailed": "Транскрибирането не успя",
-  "discardedConversation": "Изхвърлен разговор",
+  "discardedConversation": "Отхвърлен разговор",
   "at": "в",
   "from": "от",
   "copied": "Копирано!",
@@ -2607,8 +2607,8 @@
   "segmentsCount": "{count} сегмента",
   "noTranscriptAvailable": "Няма наличен транскрипт",
   "noTranscriptMessage": "Този разговор няма транскрипт.",
-  "conversationUrlCouldNotBeGenerated": "URL адресът на разговора не може да бъде генериран.",
-  "failedToGenerateConversationLink": "Неуспешно генериране на връзка към разговор",
+  "conversationUrlCouldNotBeGenerated": "URL адресът на разговора не можа да бъде генериран.",
+  "failedToGenerateConversationLink": "Неуспешно генериране на връзка към разговора",
   "failedToGenerateShareLink": "Неуспешно генериране на връзка за споделяне",
   "reloadingConversations": "Презареждане на разговори...",
   "@reloadingConversations": {
@@ -2859,5 +2859,18 @@
   "conversationNoSummaryYet": "Този разговор все още няма резюме.",
   "chooseSummarizationApp": "Изберете приложение за резюме",
   "setAsDefaultSummarizationApp": "{appName} е зададено като приложение за резюме по подразбиране",
-  "letOmiChooseAutomatically": "Нека Omi избере най-доброто приложение автоматично"
+  "letOmiChooseAutomatically": "Нека Omi избере най-доброто приложение автоматично",
+  "deleteConversationConfirmation": "Сигурни ли сте, че искате да изтриете този разговор? Това действие не може да бъде отменено.",
+  "conversationDeleted": "Разговорът е изтрит",
+  "generatingLink": "Генериране на връзка...",
+  "editConversation": "Редактиране на разговор",
+  "conversationLinkCopiedToClipboard": "Връзката към разговора е копирана в клипборда",
+  "conversationTranscriptCopiedToClipboard": "Текстът на разговора е копиран в клипборда",
+  "editConversationDialogTitle": "Редактиране на разговор",
+  "changeTheConversationTitle": "Промяна на заглавието на разговора",
+  "conversationTitle": "Заглавие на разговора",
+  "enterConversationTitle": "Въведете заглавие на разговора...",
+  "conversationTitleUpdatedSuccessfully": "Заглавието на разговора е актуализирано успешно",
+  "failedToUpdateConversationTitle": "Неуспешна актуализация на заглавието на разговора",
+  "errorUpdatingConversationTitle": "Грешка при актуализиране на заглавието на разговора"
 }

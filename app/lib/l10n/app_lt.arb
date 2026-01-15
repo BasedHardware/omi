@@ -65,7 +65,7 @@
   "@clear": {
     "description": "Clear button label"
   },
-  "copyTranscript": "Kopijuoti transkripciją",
+  "copyTranscript": "Kopijuoti transkripcijos tekstą",
   "@copyTranscript": {
     "description": "Menu item to copy transcript"
   },
@@ -2309,7 +2309,7 @@
   "deleteFolder": "Ištrinti aplanką",
   "transcriptCopiedToClipboard": "Transkriptai nukopijuoti į iškarpinę",
   "summaryCopiedToClipboard": "Santrauka nukopijuota į iškarpinę",
-  "conversationUrlCouldNotBeShared": "Nepavyko bendrinti pokalbio URL.",
+  "conversationUrlCouldNotBeShared": "Pokalbio URL negalima bendrinti.",
   "urlCopiedToClipboard": "URL nukopijuotas į iškarpinę",
   "exportTranscript": "Eksportuoti transkriptą",
   "exportSummary": "Eksportuoti santrauką",
@@ -2571,7 +2571,7 @@
   "segmentsCount": "{count} segmentai",
   "noTranscriptAvailable": "Nėra transkriptų",
   "noTranscriptMessage": "Šis pokalbis neturi transkripcijos.",
-  "conversationUrlCouldNotBeGenerated": "Nepavyko sugeneruoti pokalbio URL.",
+  "conversationUrlCouldNotBeGenerated": "Pokalbio URL negalima sugeneruoti.",
   "failedToGenerateConversationLink": "Nepavyko sugeneruoti pokalbio nuorodos",
   "failedToGenerateShareLink": "Nepavyko sugeneruoti bendrinimo nuorodos",
   "reloadingConversations": "Pokalbių perkrovimas...",
@@ -2823,5 +2823,18 @@
   "conversationNoSummaryYet": "Šis pokalbis dar neturi santraukos.",
   "chooseSummarizationApp": "Pasirinkite santraukos programėlę",
   "setAsDefaultSummarizationApp": "{appName} nustatyta kaip numatytoji santraukos programėlė",
-  "letOmiChooseAutomatically": "Leisti Omi automatiškai pasirinkti geriausią programėlę"
+  "letOmiChooseAutomatically": "Leisti Omi automatiškai pasirinkti geriausią programėlę",
+  "deleteConversationConfirmation": "Ar tikrai norite ištrinti šį pokalbį? Šio veiksmo negalima atšaukti.",
+  "conversationDeleted": "Pokalbis ištrintas",
+  "generatingLink": "Generuojama nuoroda...",
+  "editConversation": "Redaguoti pokalbį",
+  "conversationLinkCopiedToClipboard": "Pokalbio nuoroda nukopijuota į iškarpinę",
+  "conversationTranscriptCopiedToClipboard": "Pokalbio transkripcijos tekstas nukopijuotas į iškarpinę",
+  "editConversationDialogTitle": "Redaguoti pokalbį",
+  "changeTheConversationTitle": "Pakeisti pokalbio pavadinimą",
+  "conversationTitle": "Pokalbio pavadinimas",
+  "enterConversationTitle": "Įveskite pokalbio pavadinimą...",
+  "conversationTitleUpdatedSuccessfully": "Pokalbio pavadinimas sėkmingai atnaujintas",
+  "failedToUpdateConversationTitle": "Nepavyko atnaujinti pokalbio pavadinimo",
+  "errorUpdatingConversationTitle": "Klaida atnaujinant pokalbio pavadinimą"
 }

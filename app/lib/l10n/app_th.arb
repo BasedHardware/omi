@@ -65,7 +65,7 @@
   "@clear": {
     "description": "Clear button label"
   },
-  "copyTranscript": "คัดลอกบันทึกเสียง",
+  "copyTranscript": "คัดลอกบันทึก",
   "@copyTranscript": {
     "description": "Menu item to copy transcript"
   },
@@ -81,7 +81,7 @@
   "@reprocessConversation": {
     "description": "Menu item to reprocess a conversation"
   },
-  "deleteConversation": "ลบบทสนทนา",
+  "deleteConversation": "ลบการสนทนา",
   "@deleteConversation": {
     "description": "Menu item to delete a conversation"
   },
@@ -2590,8 +2590,8 @@
   "noTranscriptAvailable": "ไม่มีบันทึกคำพูด",
   "noTranscriptMessage": "การสนทนานี้ไม่มีบันทึกคำพูด",
   "conversationUrlCouldNotBeGenerated": "ไม่สามารถสร้าง URL การสนทนาได้",
-  "failedToGenerateConversationLink": "สร้างลิงก์การสนทนาไม่สำเร็จ",
-  "failedToGenerateShareLink": "สร้างลิงก์แชร์ไม่สำเร็จ",
+  "failedToGenerateConversationLink": "การสร้างลิงก์การสนทนาล้มเหลว",
+  "failedToGenerateShareLink": "การสร้างลิงก์แชร์ล้มเหลว",
   "reloadingConversations": "กำลังโหลดการสนทนาใหม่...",
   "@reloadingConversations": {
     "description": "Loading message when refreshing conversations"
@@ -2841,5 +2841,18 @@
   "conversationNoSummaryYet": "การสนทนานี้ยังไม่มีสรุป",
   "chooseSummarizationApp": "เลือกแอปสรุป",
   "setAsDefaultSummarizationApp": "ตั้ง {appName} เป็นแอปสรุปเริ่มต้น",
-  "letOmiChooseAutomatically": "ให้ Omi เลือกแอปที่ดีที่สุดโดยอัตโนมัติ"
+  "letOmiChooseAutomatically": "ให้ Omi เลือกแอปที่ดีที่สุดโดยอัตโนมัติ",
+  "deleteConversationConfirmation": "คุณแน่ใจหรือไม่ว่าต้องการลบการสนทนานี้? การกระทำนี้ไม่สามารถยกเลิกได้",
+  "conversationDeleted": "ลบการสนทนาแล้ว",
+  "generatingLink": "กำลังสร้างลิงก์...",
+  "editConversation": "แก้ไขการสนทนา",
+  "conversationLinkCopiedToClipboard": "คัดลอกลิงก์การสนทนาไปยังคลิปบอร์ดแล้ว",
+  "conversationTranscriptCopiedToClipboard": "คัดลอกบันทึกการสนทนาไปยังคลิปบอร์ดแล้ว",
+  "editConversationDialogTitle": "แก้ไขการสนทนา",
+  "changeTheConversationTitle": "เปลี่ยนชื่อการสนทนา",
+  "conversationTitle": "ชื่อการสนทนา",
+  "enterConversationTitle": "ป้อนชื่อการสนทนา...",
+  "conversationTitleUpdatedSuccessfully": "อัปเดตชื่อการสนทนาเรียบร้อยแล้ว",
+  "failedToUpdateConversationTitle": "การอัปเดตชื่อการสนทนาล้มเหลว",
+  "errorUpdatingConversationTitle": "เกิดข้อผิดพลาดในการอัปเดตชื่อการสนทนา"
 }

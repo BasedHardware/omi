@@ -65,7 +65,7 @@
   "@clear": {
     "description": "Clear button label"
   },
-  "copyTranscript": "Salin Transkrip",
+  "copyTranscript": "Salin transkrip",
   "@copyTranscript": {
     "description": "Menu item to copy transcript"
   },
@@ -2400,7 +2400,7 @@
   "space": "Spasi",
   "search": "Cari",
   "searchPlaceholder": "Cari...",
-  "untitledConversation": "Percakapan tanpa judul",
+  "untitledConversation": "Percakapan Tanpa Judul",
   "countRemaining": "{count} tersisa",
   "addGoal": "Tambah tujuan",
   "editGoal": "Edit tujuan",
@@ -2577,11 +2577,11 @@
   "failedToTranscribeAudio": "Gagal menyalin audio",
   "transcribing": "Menyalin...",
   "transcriptionFailed": "Transkripsi gagal",
-  "discardedConversation": "Percakapan yang dibuang",
+  "discardedConversation": "Percakapan Dibuang",
   "at": "pada",
   "from": "dari",
   "copied": "Disalin!",
-  "copyLink": "Salin Tautan",
+  "copyLink": "Salin tautan",
   "hideTranscript": "Sembunyikan Transkrip",
   "viewTranscript": "Lihat Transkrip",
   "conversationDetails": "Detail Percakapan",
@@ -2841,5 +2841,18 @@
   "conversationNoSummaryYet": "Percakapan ini belum memiliki ringkasan.",
   "chooseSummarizationApp": "Pilih Aplikasi Ringkasan",
   "setAsDefaultSummarizationApp": "{appName} ditetapkan sebagai aplikasi ringkasan default",
-  "letOmiChooseAutomatically": "Biarkan Omi memilih aplikasi terbaik secara otomatis"
+  "letOmiChooseAutomatically": "Biarkan Omi memilih aplikasi terbaik secara otomatis",
+  "deleteConversationConfirmation": "Apakah Anda yakin ingin menghapus percakapan ini? Tindakan ini tidak dapat dibatalkan.",
+  "conversationDeleted": "Percakapan dihapus",
+  "generatingLink": "Membuat tautan...",
+  "editConversation": "Edit percakapan",
+  "conversationLinkCopiedToClipboard": "Tautan percakapan disalin ke clipboard",
+  "conversationTranscriptCopiedToClipboard": "Transkrip percakapan disalin ke clipboard",
+  "editConversationDialogTitle": "Edit Percakapan",
+  "changeTheConversationTitle": "Ubah judul percakapan",
+  "conversationTitle": "Judul Percakapan",
+  "enterConversationTitle": "Masukkan judul percakapan...",
+  "conversationTitleUpdatedSuccessfully": "Judul percakapan berhasil diperbarui",
+  "failedToUpdateConversationTitle": "Gagal memperbarui judul percakapan",
+  "errorUpdatingConversationTitle": "Kesalahan memperbarui judul percakapan"
 }

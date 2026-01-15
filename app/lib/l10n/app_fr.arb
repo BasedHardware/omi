@@ -1380,7 +1380,7 @@
   "failedToTranscribeAudio": "Échec de la transcription audio",
   "transcribing": "Transcription...",
   "transcriptionFailed": "Transcription échouée",
-  "discardedConversation": "Conversation ignorée",
+  "discardedConversation": "Conversation rejetée",
   "at": "à",
   "from": "de",
   "copied": "Copié !",
@@ -1659,5 +1659,18 @@
   "conversationNoSummaryYet": "Cette conversation n'a pas encore de résumé.",
   "chooseSummarizationApp": "Choisir l'application de résumé",
   "setAsDefaultSummarizationApp": "{appName} définie comme application de résumé par défaut",
-  "letOmiChooseAutomatically": "Laissez Omi choisir automatiquement la meilleure application"
+  "letOmiChooseAutomatically": "Laissez Omi choisir automatiquement la meilleure application",
+  "deleteConversationConfirmation": "Êtes-vous sûr de vouloir supprimer cette conversation ? Cette action ne peut pas être annulée.",
+  "conversationDeleted": "Conversation supprimée",
+  "generatingLink": "Génération du lien...",
+  "editConversation": "Modifier la conversation",
+  "conversationLinkCopiedToClipboard": "Lien de la conversation copié dans le presse-papiers",
+  "conversationTranscriptCopiedToClipboard": "Transcription de la conversation copiée dans le presse-papiers",
+  "editConversationDialogTitle": "Modifier la conversation",
+  "changeTheConversationTitle": "Modifier le titre de la conversation",
+  "conversationTitle": "Titre de la conversation",
+  "enterConversationTitle": "Saisissez le titre de la conversation...",
+  "conversationTitleUpdatedSuccessfully": "Titre de la conversation mis à jour avec succès",
+  "failedToUpdateConversationTitle": "Échec de la mise à jour du titre de la conversation",
+  "errorUpdatingConversationTitle": "Erreur lors de la mise à jour du titre de la conversation"
 }

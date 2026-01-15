@@ -20,7 +20,7 @@
   "copySummary": "Zusammenfassung kopieren",
   "testPrompt": "Prompt testen",
   "reprocessConversation": "Unterhaltung neu verarbeiten",
-  "deleteConversation": "Unterhaltung löschen",
+  "deleteConversation": "Gespräch löschen",
   "contentCopied": "Inhalt in die Zwischenablage kopiert",
   "failedToUpdateStarred": "Favoriten-Status konnte nicht aktualisiert werden.",
   "conversationUrlNotShared": "Unterhaltungs-URL konnte nicht geteilt werden.",
@@ -1019,8 +1019,8 @@
   "noTranscriptAvailable": "Kein Transkript verfügbar",
   "noTranscriptMessage": "Dieses Gespräch hat kein Transkript.",
   "conversationUrlCouldNotBeGenerated": "Gesprächs-URL konnte nicht generiert werden.",
-  "failedToGenerateConversationLink": "Gesprächslink konnte nicht generiert werden",
-  "failedToGenerateShareLink": "Freigabelink konnte nicht generiert werden",
+  "failedToGenerateConversationLink": "Fehler beim Generieren des Gesprächslinks",
+  "failedToGenerateShareLink": "Fehler beim Generieren des Freigabe-Links",
   "reloadingConversations": "Gespräche werden neu geladen...",
   "@reloadingConversations": {
     "description": "Loading message when refreshing conversations"
@@ -1288,5 +1288,18 @@
   "conversationNoSummaryYet": "Dieses Gespräch hat noch keine Zusammenfassung.",
   "chooseSummarizationApp": "Zusammenfassungs-App auswählen",
   "setAsDefaultSummarizationApp": "{appName} als Standard-Zusammenfassungs-App festgelegt",
-  "letOmiChooseAutomatically": "Lassen Sie Omi automatisch die beste App auswählen"
+  "letOmiChooseAutomatically": "Lassen Sie Omi automatisch die beste App auswählen",
+  "deleteConversationConfirmation": "Möchten Sie dieses Gespräch wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
+  "conversationDeleted": "Gespräch gelöscht",
+  "generatingLink": "Link wird generiert...",
+  "editConversation": "Gespräch bearbeiten",
+  "conversationLinkCopiedToClipboard": "Gesprächslink in Zwischenablage kopiert",
+  "conversationTranscriptCopiedToClipboard": "Gesprächstranskript in Zwischenablage kopiert",
+  "editConversationDialogTitle": "Gespräch bearbeiten",
+  "changeTheConversationTitle": "Gesprächstitel ändern",
+  "conversationTitle": "Gesprächstitel",
+  "enterConversationTitle": "Gesprächstitel eingeben...",
+  "conversationTitleUpdatedSuccessfully": "Gesprächstitel erfolgreich aktualisiert",
+  "failedToUpdateConversationTitle": "Fehler beim Aktualisieren des Gesprächstitels",
+  "errorUpdatingConversationTitle": "Fehler beim Aktualisieren des Gesprächstitels"
 }

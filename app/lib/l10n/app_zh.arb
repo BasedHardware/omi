@@ -16,7 +16,7 @@
   "edit": "编辑",
   "close": "关闭",
   "clear": "清除",
-  "copyTranscript": "复制转录",
+  "copyTranscript": "复制记录",
   "copySummary": "复制摘要",
   "testPrompt": "测试提示词",
   "reprocessConversation": "重新处理对话",
@@ -1288,5 +1288,18 @@
   "conversationNoSummaryYet": "此对话还没有摘要。",
   "chooseSummarizationApp": "选择摘要应用",
   "setAsDefaultSummarizationApp": "{appName} 已设置为默认摘要应用",
-  "letOmiChooseAutomatically": "让 Omi 自动选择最佳应用"
+  "letOmiChooseAutomatically": "让 Omi 自动选择最佳应用",
+  "deleteConversationConfirmation": "您确定要删除此对话吗？此操作无法撤销。",
+  "conversationDeleted": "对话已删除",
+  "generatingLink": "正在生成链接...",
+  "editConversation": "编辑对话",
+  "conversationLinkCopiedToClipboard": "对话链接已复制到剪贴板",
+  "conversationTranscriptCopiedToClipboard": "对话记录已复制到剪贴板",
+  "editConversationDialogTitle": "编辑对话",
+  "changeTheConversationTitle": "更改对话标题",
+  "conversationTitle": "对话标题",
+  "enterConversationTitle": "输入对话标题...",
+  "conversationTitleUpdatedSuccessfully": "对话标题更新成功",
+  "failedToUpdateConversationTitle": "对话标题更新失败",
+  "errorUpdatingConversationTitle": "更新对话标题时出错"
 }

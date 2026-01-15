@@ -12,6 +12,7 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
 import 'package:omi/ui/molecules/omi_context_menu.dart';
 import 'package:omi/ui/molecules/omi_edit_dialog.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
@@ -42,10 +43,10 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
   void _showDeleteConfirmation() async {
     final confirmed = await OmiConfirmDialog.show(
       context,
-      title: 'Delete Conversation',
-      message: 'Are you sure you want to delete this conversation? This action cannot be undone.',
-      confirmLabel: 'Delete',
-      cancelLabel: 'Cancel',
+      title: context.l10n.deleteConversation,
+      message: context.l10n.deleteConversationConfirmation,
+      confirmLabel: context.l10n.delete,
+      cancelLabel: context.l10n.cancel,
       confirmColor: ResponsiveHelper.errorColor,
     );
 
@@ -60,17 +61,17 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Row(
+        content: Row(
           children: [
-            Icon(
+            const Icon(
               Icons.check_circle_outline_rounded,
               color: ResponsiveHelper.successColor,
               size: 20,
             ),
-            SizedBox(width: 12),
+            const SizedBox(width: 12),
             Text(
-              'Conversation deleted',
-              style: TextStyle(
+              context.l10n.conversationDeleted,
+              style: const TextStyle(
                 color: ResponsiveHelper.textPrimary,
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
@@ -144,10 +145,10 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
                     children: [
                       Text(
                         widget.conversation.discarded
-                            ? 'Discarded Conversation'
+                            ? context.l10n.discardedConversation
                             : (widget.conversation.structured.title.isNotEmpty
                                 ? widget.conversation.structured.title.decodeString
-                                : 'Untitled Conversation'),
+                                : context.l10n.untitledConversation),
                         style: const TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w500,
@@ -231,7 +232,7 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
     final List<OmiContextMenuItem> menuItems = [
       OmiContextMenuItem(
         id: 'copy_link',
-        title: _isSharing ? 'Generating link...' : 'Copy link',
+        title: _isSharing ? context.l10n.generatingLink : context.l10n.copyLink,
         icon: _isSharing ? Icons.hourglass_empty : Icons.link_outlined,
         iconColor: _isSharing ? ResponsiveHelper.textTertiary : ResponsiveHelper.purplePrimary,
         backgroundColor: _isSharing
@@ -241,21 +242,21 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
       ),
       OmiContextMenuItem(
         id: 'copy',
-        title: 'Copy transcript',
+        title: context.l10n.copyTranscript,
         icon: Icons.copy_outlined,
         iconColor: ResponsiveHelper.infoColor,
         backgroundColor: ResponsiveHelper.infoColor.withValues(alpha: 0.1),
       ),
       OmiContextMenuItem(
         id: 'edit',
-        title: 'Edit conversation',
+        title: context.l10n.editConversation,
         icon: Icons.edit_outlined,
         iconColor: ResponsiveHelper.warningColor,
         backgroundColor: ResponsiveHelper.warningColor.withValues(alpha: 0.1),
       ),
       OmiContextMenuItem(
         id: 'delete',
-        title: 'Delete conversation',
+        title: context.l10n.deleteConversation,
         icon: Icons.delete_outline_rounded,
         iconColor: ResponsiveHelper.errorColor,
         backgroundColor: ResponsiveHelper.errorColor.withValues(alpha: 0.1),
@@ -301,7 +302,7 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
     try {
       bool shared = await setConversationVisibility(widget.conversation.id);
       if (!shared) {
-        _showSnackBar('Conversation URL could not be shared.');
+        _showSnackBar(context.l10n.conversationUrlCouldNotBeShared);
         setState(() => _isSharing = false);
         return;
       }
@@ -309,7 +310,7 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
       String content = 'https://h.omi.me/conversations/${widget.conversation.id}';
       await Share.share(content);
     } catch (e) {
-      _showSnackBar('Failed to generate share link');
+      _showSnackBar(context.l10n.failedToGenerateShareLink);
     } finally {
       setState(() => _isSharing = false);
     }
@@ -322,7 +323,7 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
     try {
       bool shared = await setConversationVisibility(widget.conversation.id);
       if (!shared) {
-        _showSnackBar('Conversation URL could not be generated.');
+        _showSnackBar(context.l10n.conversationUrlCouldNotBeGenerated);
         setState(() => _isSharing = false);
         return;
       }
@@ -332,17 +333,17 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Row(
+          content: Row(
             children: [
-              Icon(
+              const Icon(
                 Icons.check_circle_outline_rounded,
                 color: ResponsiveHelper.successColor,
                 size: 20,
               ),
-              SizedBox(width: 12),
+              const SizedBox(width: 12),
               Text(
-                'Conversation link copied to clipboard',
-                style: TextStyle(
+                context.l10n.conversationLinkCopiedToClipboard,
+                style: const TextStyle(
                   color: ResponsiveHelper.textPrimary,
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
@@ -360,7 +361,7 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
         ),
       );
     } catch (e) {
-      _showSnackBar('Failed to generate conversation link');
+      _showSnackBar(context.l10n.failedToGenerateConversationLink);
     } finally {
       setState(() => _isSharing = false);
     }
@@ -404,17 +405,17 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Row(
+        content: Row(
           children: [
-            Icon(
+            const Icon(
               Icons.check_circle_outline_rounded,
               color: ResponsiveHelper.successColor,
               size: 20,
             ),
-            SizedBox(width: 12),
+            const SizedBox(width: 12),
             Text(
-              'Conversation transcript copied to clipboard',
-              style: TextStyle(
+              context.l10n.conversationTranscriptCopiedToClipboard,
+              style: const TextStyle(
                 color: ResponsiveHelper.textPrimary,
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
@@ -436,16 +437,16 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
   void _editConversation() async {
     final currentTitle = widget.conversation.structured.title.isNotEmpty
         ? widget.conversation.structured.title.decodeString
-        : 'Untitled Conversation';
+        : context.l10n.untitledConversation;
 
     final newTitle = await OmiEditDialog.show(
       context,
-      title: 'Edit Conversation',
-      subtitle: 'Change the conversation title',
+      title: context.l10n.editConversationDialogTitle,
+      subtitle: context.l10n.changeTheConversationTitle,
       currentValue: currentTitle,
       icon: Icons.edit_outlined,
-      fieldLabel: 'Conversation Title',
-      fieldHint: 'Enter conversation title...',
+      fieldLabel: context.l10n.conversationTitle,
+      fieldHint: context.l10n.enterConversationTitle,
       maxLines: 2,
     );
 
@@ -462,12 +463,12 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
         widget.conversation.structured.title = newTitle;
         final provider = Provider.of<ConversationProvider>(context, listen: false);
         provider.updateConversationInSortedList(widget.conversation);
-        _showSnackBar('Conversation title updated successfully');
+        _showSnackBar(context.l10n.conversationTitleUpdatedSuccessfully);
       } else {
-        _showSnackBar('Failed to update conversation title');
+        _showSnackBar(context.l10n.failedToUpdateConversationTitle);
       }
     } catch (e) {
-      _showSnackBar('Error updating conversation title');
+      _showSnackBar(context.l10n.errorUpdatingConversationTitle);
     }
   }
 }

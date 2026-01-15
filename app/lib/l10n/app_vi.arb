@@ -2581,7 +2581,7 @@
   "at": "lúc",
   "from": "từ",
   "copied": "Đã sao chép!",
-  "copyLink": "Sao chép Liên kết",
+  "copyLink": "Sao chép liên kết",
   "hideTranscript": "Ẩn Bản ghi",
   "viewTranscript": "Xem Bản ghi",
   "conversationDetails": "Chi tiết Cuộc trò chuyện",
@@ -2590,8 +2590,8 @@
   "noTranscriptAvailable": "Không có Bản ghi",
   "noTranscriptMessage": "Cuộc trò chuyện này không có bản ghi.",
   "conversationUrlCouldNotBeGenerated": "Không thể tạo URL cuộc trò chuyện.",
-  "failedToGenerateConversationLink": "Không thể tạo liên kết cuộc trò chuyện",
-  "failedToGenerateShareLink": "Không thể tạo liên kết chia sẻ",
+  "failedToGenerateConversationLink": "Không tạo được liên kết cuộc trò chuyện",
+  "failedToGenerateShareLink": "Không tạo được liên kết chia sẻ",
   "reloadingConversations": "Đang tải lại cuộc trò chuyện...",
   "@reloadingConversations": {
     "description": "Loading message when refreshing conversations"
@@ -2841,5 +2841,18 @@
   "conversationNoSummaryYet": "Cuộc trò chuyện này chưa có bản tóm tắt.",
   "chooseSummarizationApp": "Chọn ứng dụng tóm tắt",
   "setAsDefaultSummarizationApp": "Đã đặt {appName} làm ứng dụng tóm tắt mặc định",
-  "letOmiChooseAutomatically": "Để Omi tự động chọn ứng dụng tốt nhất"
+  "letOmiChooseAutomatically": "Để Omi tự động chọn ứng dụng tốt nhất",
+  "deleteConversationConfirmation": "Bạn có chắc chắn muốn xóa cuộc trò chuyện này không? Hành động này không thể hoàn tác.",
+  "conversationDeleted": "Đã xóa cuộc trò chuyện",
+  "generatingLink": "Đang tạo liên kết...",
+  "editConversation": "Chỉnh sửa cuộc trò chuyện",
+  "conversationLinkCopiedToClipboard": "Đã sao chép liên kết cuộc trò chuyện vào clipboard",
+  "conversationTranscriptCopiedToClipboard": "Đã sao chép bản ghi cuộc trò chuyện vào clipboard",
+  "editConversationDialogTitle": "Chỉnh sửa cuộc trò chuyện",
+  "changeTheConversationTitle": "Thay đổi tiêu đề cuộc trò chuyện",
+  "conversationTitle": "Tiêu đề cuộc trò chuyện",
+  "enterConversationTitle": "Nhập tiêu đề cuộc trò chuyện...",
+  "conversationTitleUpdatedSuccessfully": "Đã cập nhật tiêu đề cuộc trò chuyện thành công",
+  "failedToUpdateConversationTitle": "Không cập nhật được tiêu đề cuộc trò chuyện",
+  "errorUpdatingConversationTitle": "Lỗi khi cập nhật tiêu đề cuộc trò chuyện"
 }

@@ -808,7 +808,7 @@
   "space": "スペース",
   "search": "検索",
   "searchPlaceholder": "検索...",
-  "untitledConversation": "タイトルなしの会話",
+  "untitledConversation": "無題の会話",
   "countRemaining": "{count} 残り",
   "addGoal": "目標を追加",
   "editGoal": "目標を編集",
@@ -998,7 +998,7 @@
   "noTranscriptAvailable": "文字起こしがありません",
   "noTranscriptMessage": "この会話には文字起こしがありません。",
   "conversationUrlCouldNotBeGenerated": "会話のURLを生成できませんでした。",
-  "failedToGenerateConversationLink": "会話リンクの生成に失敗しました",
+  "failedToGenerateConversationLink": "会話のリンク生成に失敗しました",
   "failedToGenerateShareLink": "共有リンクの生成に失敗しました",
   "reloadingConversations": "会話を再読み込み中...",
   "@reloadingConversations": {
@@ -1267,5 +1267,18 @@
   "conversationNoSummaryYet": "この会話にはまだ概要がありません。",
   "chooseSummarizationApp": "要約アプリを選択",
   "setAsDefaultSummarizationApp": "{appName}をデフォルトの要約アプリとして設定しました",
-  "letOmiChooseAutomatically": "Omiに最適なアプリを自動的に選択させる"
+  "letOmiChooseAutomatically": "Omiに最適なアプリを自動的に選択させる",
+  "deleteConversationConfirmation": "この会話を削除してもよろしいですか？この操作は元に戻せません。",
+  "conversationDeleted": "会話が削除されました",
+  "generatingLink": "リンクを生成中...",
+  "editConversation": "会話を編集",
+  "conversationLinkCopiedToClipboard": "会話のリンクがクリップボードにコピーされました",
+  "conversationTranscriptCopiedToClipboard": "会話のトランスクリプトがクリップボードにコピーされました",
+  "editConversationDialogTitle": "会話を編集",
+  "changeTheConversationTitle": "会話のタイトルを変更",
+  "conversationTitle": "会話のタイトル",
+  "enterConversationTitle": "会話のタイトルを入力...",
+  "conversationTitleUpdatedSuccessfully": "会話のタイトルが正常に更新されました",
+  "failedToUpdateConversationTitle": "会話のタイトルの更新に失敗しました",
+  "errorUpdatingConversationTitle": "会話のタイトルの更新中にエラーが発生しました"
 }

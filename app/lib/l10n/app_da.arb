@@ -2581,7 +2581,7 @@
   "at": "kl.",
   "from": "fra",
   "copied": "Kopieret!",
-  "copyLink": "Kopiér link",
+  "copyLink": "Kopier link",
   "hideTranscript": "Skjul transskription",
   "viewTranscript": "Vis transskription",
   "conversationDetails": "Samtaledetaljer",
@@ -2841,5 +2841,18 @@
   "conversationNoSummaryYet": "Denne samtale har endnu ikke et resumé.",
   "chooseSummarizationApp": "Vælg resumé-app",
   "setAsDefaultSummarizationApp": "{appName} indstillet som standard resumé-app",
-  "letOmiChooseAutomatically": "Lad Omi automatisk vælge den bedste app"
+  "letOmiChooseAutomatically": "Lad Omi automatisk vælge den bedste app",
+  "deleteConversationConfirmation": "Er du sikker på, at du vil slette denne samtale? Denne handling kan ikke fortrydes.",
+  "conversationDeleted": "Samtale slettet",
+  "generatingLink": "Genererer link...",
+  "editConversation": "Rediger samtale",
+  "conversationLinkCopiedToClipboard": "Samtalelink kopieret til udklipsholder",
+  "conversationTranscriptCopiedToClipboard": "Samtaleudskrift kopieret til udklipsholder",
+  "editConversationDialogTitle": "Rediger samtale",
+  "changeTheConversationTitle": "Skift samtalens titel",
+  "conversationTitle": "Samtaletitel",
+  "enterConversationTitle": "Indtast samtaletitel...",
+  "conversationTitleUpdatedSuccessfully": "Samtaletitel opdateret",
+  "failedToUpdateConversationTitle": "Kunne ikke opdatere samtaletitel",
+  "errorUpdatingConversationTitle": "Fejl ved opdatering af samtaletitel"
 }

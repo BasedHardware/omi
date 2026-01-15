@@ -65,7 +65,7 @@
   "@clear": {
     "description": "Clear button label"
   },
-  "copyTranscript": "Copia Trascrizione",
+  "copyTranscript": "Copia trascrizione",
   "@copyTranscript": {
     "description": "Menu item to copy transcript"
   },
@@ -81,7 +81,7 @@
   "@reprocessConversation": {
     "description": "Menu item to reprocess a conversation"
   },
-  "deleteConversation": "Elimina Conversazione",
+  "deleteConversation": "Elimina conversazione",
   "@deleteConversation": {
     "description": "Menu item to delete a conversation"
   },
@@ -2309,7 +2309,7 @@
   "deleteFolder": "Elimina cartella",
   "transcriptCopiedToClipboard": "Trascrizione copiata negli appunti",
   "summaryCopiedToClipboard": "Riepilogo copiato negli appunti",
-  "conversationUrlCouldNotBeShared": "Impossibile condividere l'URL della conversazione.",
+  "conversationUrlCouldNotBeShared": "L'URL della conversazione non può essere condiviso.",
   "urlCopiedToClipboard": "URL copiato negli appunti",
   "exportTranscript": "Esporta trascrizione",
   "exportSummary": "Esporta riepilogo",
@@ -2571,9 +2571,9 @@
   "segmentsCount": "{count} segmenti",
   "noTranscriptAvailable": "Nessuna trascrizione disponibile",
   "noTranscriptMessage": "Questa conversazione non ha una trascrizione.",
-  "conversationUrlCouldNotBeGenerated": "Impossibile generare l'URL della conversazione.",
-  "failedToGenerateConversationLink": "Impossibile generare il link alla conversazione",
-  "failedToGenerateShareLink": "Impossibile generare il link di condivisione",
+  "conversationUrlCouldNotBeGenerated": "L'URL della conversazione non può essere generato.",
+  "failedToGenerateConversationLink": "Generazione del link della conversazione non riuscita",
+  "failedToGenerateShareLink": "Generazione del link di condivisione non riuscita",
   "reloadingConversations": "Ricaricamento conversazioni...",
   "@reloadingConversations": {
     "description": "Loading message when refreshing conversations"
@@ -2823,5 +2823,18 @@
   "conversationNoSummaryYet": "Questa conversazione non ha ancora un riepilogo.",
   "chooseSummarizationApp": "Scegli app di riepilogo",
   "setAsDefaultSummarizationApp": "{appName} impostata come app di riepilogo predefinita",
-  "letOmiChooseAutomatically": "Lascia che Omi scelga automaticamente l'app migliore"
+  "letOmiChooseAutomatically": "Lascia che Omi scelga automaticamente l'app migliore",
+  "deleteConversationConfirmation": "Sei sicuro di voler eliminare questa conversazione? Questa azione non può essere annullata.",
+  "conversationDeleted": "Conversazione eliminata",
+  "generatingLink": "Generazione link...",
+  "editConversation": "Modifica conversazione",
+  "conversationLinkCopiedToClipboard": "Link della conversazione copiato negli appunti",
+  "conversationTranscriptCopiedToClipboard": "Trascrizione della conversazione copiata negli appunti",
+  "editConversationDialogTitle": "Modifica conversazione",
+  "changeTheConversationTitle": "Cambia il titolo della conversazione",
+  "conversationTitle": "Titolo della conversazione",
+  "enterConversationTitle": "Inserisci il titolo della conversazione...",
+  "conversationTitleUpdatedSuccessfully": "Titolo della conversazione aggiornato con successo",
+  "failedToUpdateConversationTitle": "Aggiornamento del titolo della conversazione non riuscito",
+  "errorUpdatingConversationTitle": "Errore nell'aggiornamento del titolo della conversazione"
 }

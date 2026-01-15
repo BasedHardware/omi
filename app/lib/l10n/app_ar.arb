@@ -65,7 +65,7 @@
   "@clear": {
     "description": "Clear button label"
   },
-  "copyTranscript": "نسخ النص المكتوب",
+  "copyTranscript": "نسخ النص",
   "@copyTranscript": {
     "description": "Menu item to copy transcript"
   },
@@ -2327,7 +2327,7 @@
   "deleteFolder": "حذف المجلد",
   "transcriptCopiedToClipboard": "تم نسخ النص إلى الحافظة",
   "summaryCopiedToClipboard": "تم نسخ الملخص إلى الحافظة",
-  "conversationUrlCouldNotBeShared": "تعذر مشاركة عنوان URL للمحادثة.",
+  "conversationUrlCouldNotBeShared": "تعذرت مشاركة رابط المحادثة.",
   "urlCopiedToClipboard": "تم نسخ الرابط إلى الحافظة",
   "exportTranscript": "تصدير النص",
   "exportSummary": "تصدير الملخص",
@@ -2621,7 +2621,7 @@
   "segmentsCount": "{count} مقاطع",
   "noTranscriptAvailable": "لا يوجد نسخ متاح",
   "noTranscriptMessage": "هذه المحادثة ليس لديها نسخ.",
-  "conversationUrlCouldNotBeGenerated": "تعذر إنشاء عنوان URL للمحادثة.",
+  "conversationUrlCouldNotBeGenerated": "تعذر إنشاء رابط المحادثة.",
   "failedToGenerateConversationLink": "فشل إنشاء رابط المحادثة",
   "failedToGenerateShareLink": "فشل إنشاء رابط المشاركة",
   "reloadingConversations": "إعادة تحميل المحادثات...",
@@ -2871,5 +2871,18 @@
   "conversationNoSummaryYet": "لا يحتوي هذا الحوار على ملخص بعد.",
   "chooseSummarizationApp": "اختر تطبيق الملخص",
   "setAsDefaultSummarizationApp": "تم تعيين {appName} كتطبيق ملخص افتراضي",
-  "letOmiChooseAutomatically": "دع Omi يختار أفضل تطبيق تلقائيًا"
+  "letOmiChooseAutomatically": "دع Omi يختار أفضل تطبيق تلقائيًا",
+  "deleteConversationConfirmation": "هل أنت متأكد من حذف هذه المحادثة؟ لا يمكن التراجع عن هذا الإجراء.",
+  "conversationDeleted": "تم حذف المحادثة",
+  "generatingLink": "جارٍ إنشاء الرابط...",
+  "editConversation": "تحرير المحادثة",
+  "conversationLinkCopiedToClipboard": "تم نسخ رابط المحادثة إلى الحافظة",
+  "conversationTranscriptCopiedToClipboard": "تم نسخ نص المحادثة إلى الحافظة",
+  "editConversationDialogTitle": "تحرير المحادثة",
+  "changeTheConversationTitle": "تغيير عنوان المحادثة",
+  "conversationTitle": "عنوان المحادثة",
+  "enterConversationTitle": "أدخل عنوان المحادثة...",
+  "conversationTitleUpdatedSuccessfully": "تم تحديث عنوان المحادثة بنجاح",
+  "failedToUpdateConversationTitle": "فشل تحديث عنوان المحادثة",
+  "errorUpdatingConversationTitle": "خطأ في تحديث عنوان المحادثة"
 }

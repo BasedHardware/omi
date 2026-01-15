@@ -65,7 +65,7 @@
   "@clear": {
     "description": "Clear button label"
   },
-  "copyTranscript": "녹취록 복사",
+  "copyTranscript": "대화록 복사",
   "@copyTranscript": {
     "description": "Menu item to copy transcript"
   },
@@ -2841,5 +2841,18 @@
   "conversationNoSummaryYet": "이 대화에는 아직 요약이 없습니다.",
   "chooseSummarizationApp": "요약 앱 선택",
   "setAsDefaultSummarizationApp": "{appName}이(가) 기본 요약 앱으로 설정되었습니다",
-  "letOmiChooseAutomatically": "Omi가 자동으로 최적의 앱을 선택하도록 허용"
+  "letOmiChooseAutomatically": "Omi가 자동으로 최적의 앱을 선택하도록 허용",
+  "deleteConversationConfirmation": "이 대화를 삭제하시겠습니까? 이 작업은 취소할 수 없습니다.",
+  "conversationDeleted": "대화가 삭제되었습니다",
+  "generatingLink": "링크 생성 중...",
+  "editConversation": "대화 편집",
+  "conversationLinkCopiedToClipboard": "대화 링크가 클립보드에 복사되었습니다",
+  "conversationTranscriptCopiedToClipboard": "대화록이 클립보드에 복사되었습니다",
+  "editConversationDialogTitle": "대화 편집",
+  "changeTheConversationTitle": "대화 제목 변경",
+  "conversationTitle": "대화 제목",
+  "enterConversationTitle": "대화 제목 입력...",
+  "conversationTitleUpdatedSuccessfully": "대화 제목이 성공적으로 업데이트되었습니다",
+  "failedToUpdateConversationTitle": "대화 제목 업데이트 실패",
+  "errorUpdatingConversationTitle": "대화 제목 업데이트 중 오류 발생"
 }

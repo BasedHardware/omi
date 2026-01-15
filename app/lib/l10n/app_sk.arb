@@ -65,7 +65,7 @@
   "@clear": {
     "description": "Clear button label"
   },
-  "copyTranscript": "Skopírovať prepis",
+  "copyTranscript": "Kopírovať prepis",
   "@copyTranscript": {
     "description": "Menu item to copy transcript"
   },
@@ -2327,7 +2327,7 @@
   "deleteFolder": "Odstrániť priečinok",
   "transcriptCopiedToClipboard": "Prepis skopírovaný do schránky",
   "summaryCopiedToClipboard": "Zhrnutie skopírované do schránky",
-  "conversationUrlCouldNotBeShared": "URL konverzácie sa nepodarilo zdieľať.",
+  "conversationUrlCouldNotBeShared": "URL konverzácie sa nedá zdieľať.",
   "urlCopiedToClipboard": "URL skopírovaná do schránky",
   "exportTranscript": "Exportovať prepis",
   "exportSummary": "Exportovať zhrnutie",
@@ -2589,7 +2589,7 @@
   "segmentsCount": "{count} segmentov",
   "noTranscriptAvailable": "Prepis nie je k dispozícii",
   "noTranscriptMessage": "Táto konverzácia nemá prepis.",
-  "conversationUrlCouldNotBeGenerated": "URL konverzácie sa nepodarilo vygenerovať.",
+  "conversationUrlCouldNotBeGenerated": "URL konverzácie sa nedá vygenerovať.",
   "failedToGenerateConversationLink": "Nepodarilo sa vygenerovať odkaz na konverzáciu",
   "failedToGenerateShareLink": "Nepodarilo sa vygenerovať odkaz na zdieľanie",
   "reloadingConversations": "Opätovné načítanie konverzácií...",
@@ -2841,5 +2841,18 @@
   "conversationNoSummaryYet": "Táto konverzácia ešte nemá zhrnutie.",
   "chooseSummarizationApp": "Vybrať aplikáciu na zhrnutie",
   "setAsDefaultSummarizationApp": "Aplikácia {appName} nastavená ako predvolená aplikácia na zhrnutie",
-  "letOmiChooseAutomatically": "Nechajte Omi automaticky vybrať najlepšiu aplikáciu"
+  "letOmiChooseAutomatically": "Nechajte Omi automaticky vybrať najlepšiu aplikáciu",
+  "deleteConversationConfirmation": "Naozaj chcete odstrániť túto konverzáciu? Túto akciu nemožno vrátiť späť.",
+  "conversationDeleted": "Konverzácia odstránená",
+  "generatingLink": "Generovanie odkazu...",
+  "editConversation": "Upraviť konverzáciu",
+  "conversationLinkCopiedToClipboard": "Odkaz na konverzáciu skopírovaný do schránky",
+  "conversationTranscriptCopiedToClipboard": "Prepis konverzácie skopírovaný do schránky",
+  "editConversationDialogTitle": "Upraviť konverzáciu",
+  "changeTheConversationTitle": "Zmeniť názov konverzácie",
+  "conversationTitle": "Názov konverzácie",
+  "enterConversationTitle": "Zadajte názov konverzácie...",
+  "conversationTitleUpdatedSuccessfully": "Názov konverzácie úspešne aktualizovaný",
+  "failedToUpdateConversationTitle": "Nepodarilo sa aktualizovať názov konverzácie",
+  "errorUpdatingConversationTitle": "Chyba pri aktualizácii názvu konverzácie"
 }

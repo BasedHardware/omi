@@ -20,7 +20,7 @@
   "copySummary": "Copiar resumen",
   "testPrompt": "Probar prompt",
   "reprocessConversation": "Reprocesar conversación",
-  "deleteConversation": "Borrar conversación",
+  "deleteConversation": "Eliminar conversación",
   "contentCopied": "Contenido copiado al portapapeles",
   "failedToUpdateStarred": "Error al actualizar estado de favorito.",
   "conversationUrlNotShared": "La URL de la conversación no se compartió.",
@@ -1019,8 +1019,8 @@
   "noTranscriptAvailable": "No hay transcripción disponible",
   "noTranscriptMessage": "Esta conversación no tiene transcripción.",
   "conversationUrlCouldNotBeGenerated": "No se pudo generar la URL de la conversación.",
-  "failedToGenerateConversationLink": "Error al generar enlace de conversación",
-  "failedToGenerateShareLink": "Error al generar enlace para compartir",
+  "failedToGenerateConversationLink": "Error al generar el enlace de la conversación",
+  "failedToGenerateShareLink": "Error al generar el enlace para compartir",
   "reloadingConversations": "Recargando conversaciones...",
   "@reloadingConversations": {
     "description": "Loading message when refreshing conversations"
@@ -1288,5 +1288,18 @@
   "conversationNoSummaryYet": "Esta conversación aún no tiene un resumen.",
   "chooseSummarizationApp": "Elegir aplicación de resumen",
   "setAsDefaultSummarizationApp": "{appName} establecida como aplicación de resumen predeterminada",
-  "letOmiChooseAutomatically": "Deja que Omi elija automáticamente la mejor aplicación"
+  "letOmiChooseAutomatically": "Deja que Omi elija automáticamente la mejor aplicación",
+  "deleteConversationConfirmation": "¿Estás seguro de que quieres eliminar esta conversación? Esta acción no se puede deshacer.",
+  "conversationDeleted": "Conversación eliminada",
+  "generatingLink": "Generando enlace...",
+  "editConversation": "Editar conversación",
+  "conversationLinkCopiedToClipboard": "Enlace de la conversación copiado al portapapeles",
+  "conversationTranscriptCopiedToClipboard": "Transcripción de la conversación copiada al portapapeles",
+  "editConversationDialogTitle": "Editar conversación",
+  "changeTheConversationTitle": "Cambiar el título de la conversación",
+  "conversationTitle": "Título de la conversación",
+  "enterConversationTitle": "Introduzca el título de la conversación...",
+  "conversationTitleUpdatedSuccessfully": "Título de la conversación actualizado correctamente",
+  "failedToUpdateConversationTitle": "Error al actualizar el título de la conversación",
+  "errorUpdatingConversationTitle": "Error al actualizar el título de la conversación"
 }

@@ -2327,7 +2327,7 @@
   "deleteFolder": "Usuń folder",
   "transcriptCopiedToClipboard": "Transkrypcja skopiowana do schowka",
   "summaryCopiedToClipboard": "Podsumowanie skopiowane do schowka",
-  "conversationUrlCouldNotBeShared": "Nie można udostępnić URL rozmowy.",
+  "conversationUrlCouldNotBeShared": "Adres URL rozmowy nie może być udostępniony.",
   "urlCopiedToClipboard": "URL skopiowany do schowka",
   "exportTranscript": "Eksportuj transkrypcję",
   "exportSummary": "Eksportuj podsumowanie",
@@ -2589,9 +2589,9 @@
   "segmentsCount": "{count} segmentów",
   "noTranscriptAvailable": "Brak dostępnej transkrypcji",
   "noTranscriptMessage": "Ta rozmowa nie ma transkrypcji.",
-  "conversationUrlCouldNotBeGenerated": "Nie można wygenerować URL rozmowy.",
-  "failedToGenerateConversationLink": "Nie udało się wygenerować linku do rozmowy",
-  "failedToGenerateShareLink": "Nie udało się wygenerować linku do udostępniania",
+  "conversationUrlCouldNotBeGenerated": "Adres URL rozmowy nie może być wygenerowany.",
+  "failedToGenerateConversationLink": "Nie udało się wygenerować linku rozmowy",
+  "failedToGenerateShareLink": "Nie udało się wygenerować linku do udostępnienia",
   "reloadingConversations": "Ponowne ładowanie rozmów...",
   "@reloadingConversations": {
     "description": "Loading message when refreshing conversations"
@@ -2841,5 +2841,18 @@
   "conversationNoSummaryYet": "Ta rozmowa nie ma jeszcze podsumowania.",
   "chooseSummarizationApp": "Wybierz aplikację do podsumowania",
   "setAsDefaultSummarizationApp": "{appName} ustawiona jako domyślna aplikacja do podsumowania",
-  "letOmiChooseAutomatically": "Pozwól Omi automatycznie wybrać najlepszą aplikację"
+  "letOmiChooseAutomatically": "Pozwól Omi automatycznie wybrać najlepszą aplikację",
+  "deleteConversationConfirmation": "Czy na pewno chcesz usunąć tę rozmowę? Ta operacja nie może zostać cofnięta.",
+  "conversationDeleted": "Rozmowa usunięta",
+  "generatingLink": "Generowanie linku...",
+  "editConversation": "Edytuj rozmowę",
+  "conversationLinkCopiedToClipboard": "Link rozmowy skopiowany do schowka",
+  "conversationTranscriptCopiedToClipboard": "Transkrypcja rozmowy skopiowana do schowka",
+  "editConversationDialogTitle": "Edytuj rozmowę",
+  "changeTheConversationTitle": "Zmień tytuł rozmowy",
+  "conversationTitle": "Tytuł rozmowy",
+  "enterConversationTitle": "Wprowadź tytuł rozmowy...",
+  "conversationTitleUpdatedSuccessfully": "Tytuł rozmowy został pomyślnie zaktualizowany",
+  "failedToUpdateConversationTitle": "Nie udało się zaktualizować tytułu rozmowy",
+  "errorUpdatingConversationTitle": "Błąd podczas aktualizacji tytułu rozmowy"
 }

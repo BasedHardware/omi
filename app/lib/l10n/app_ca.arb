@@ -37,7 +37,7 @@
   "@ok": {
     "description": "Generic OK button text"
   },
-  "delete": "Eliminar",
+  "delete": "Suprimir",
   "@delete": {
     "description": "Button label"
   },
@@ -81,7 +81,7 @@
   "@reprocessConversation": {
     "description": "Menu item to reprocess a conversation"
   },
-  "deleteConversation": "Eliminar conversa",
+  "deleteConversation": "Suprimir conversa",
   "@deleteConversation": {
     "description": "Menu item to delete a conversation"
   },
@@ -2608,8 +2608,8 @@
   "noTranscriptAvailable": "No hi ha transcripció disponible",
   "noTranscriptMessage": "Aquesta conversa no té transcripció.",
   "conversationUrlCouldNotBeGenerated": "No s'ha pogut generar l'URL de la conversa.",
-  "failedToGenerateConversationLink": "Error en generar l'enllaç de la conversa",
-  "failedToGenerateShareLink": "Error en generar l'enllaç per compartir",
+  "failedToGenerateConversationLink": "No s'ha pogut generar l'enllaç de la conversa",
+  "failedToGenerateShareLink": "No s'ha pogut generar l'enllaç per compartir",
   "reloadingConversations": "Recarregant converses...",
   "@reloadingConversations": {
     "description": "Loading message when refreshing conversations"
@@ -2859,5 +2859,18 @@
   "conversationNoSummaryYet": "Aquesta conversa encara no té resum.",
   "chooseSummarizationApp": "Trieu l'aplicació de resum",
   "setAsDefaultSummarizationApp": "{appName} s'ha establert com a aplicació de resum predeterminada",
-  "letOmiChooseAutomatically": "Deixeu que Omi esculli automàticament la millor aplicació"
+  "letOmiChooseAutomatically": "Deixeu que Omi esculli automàticament la millor aplicació",
+  "deleteConversationConfirmation": "Esteu segur que voleu suprimir aquesta conversa? Aquesta acció no es pot desfer.",
+  "conversationDeleted": "Conversa suprimida",
+  "generatingLink": "Generant enllaç...",
+  "editConversation": "Editar conversa",
+  "conversationLinkCopiedToClipboard": "Enllaç de la conversa copiat al porta-retalls",
+  "conversationTranscriptCopiedToClipboard": "Transcripció de la conversa copiada al porta-retalls",
+  "editConversationDialogTitle": "Editar conversa",
+  "changeTheConversationTitle": "Canviar el títol de la conversa",
+  "conversationTitle": "Títol de la conversa",
+  "enterConversationTitle": "Introduïu el títol de la conversa...",
+  "conversationTitleUpdatedSuccessfully": "Títol de la conversa actualitzat correctament",
+  "failedToUpdateConversationTitle": "No s'ha pogut actualitzar el títol de la conversa",
+  "errorUpdatingConversationTitle": "Error en actualitzar el títol de la conversa"
 }

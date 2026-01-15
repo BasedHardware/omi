@@ -65,7 +65,7 @@
   "@clear": {
     "description": "Clear button label"
   },
-  "copyTranscript": "Αντιγραφή Απομαγνητοφώνησης",
+  "copyTranscript": "Αντιγραφή απομαγνητοφώνησης",
   "@copyTranscript": {
     "description": "Menu item to copy transcript"
   },
@@ -81,7 +81,7 @@
   "@reprocessConversation": {
     "description": "Menu item to reprocess a conversation"
   },
-  "deleteConversation": "Διαγραφή Συνομιλίας",
+  "deleteConversation": "Διαγραφή συνομιλίας",
   "@deleteConversation": {
     "description": "Menu item to delete a conversation"
   },
@@ -2327,7 +2327,7 @@
   "deleteFolder": "Διαγραφή φακέλου",
   "transcriptCopiedToClipboard": "Το αντίγραφο αντιγράφηκε στο πρόχειρο",
   "summaryCopiedToClipboard": "Η περίληψη αντιγράφηκε στο πρόχειρο",
-  "conversationUrlCouldNotBeShared": "Δεν ήταν δυνατή η κοινοποίηση URL συνομιλίας.",
+  "conversationUrlCouldNotBeShared": "Η διεύθυνση URL της συνομιλίας δεν μπόρεσε να κοινοποιηθεί.",
   "urlCopiedToClipboard": "Η διεύθυνση URL αντιγράφηκε στο πρόχειρο",
   "exportTranscript": "Εξαγωγή αντιγράφου",
   "exportSummary": "Εξαγωγή περίληψης",
@@ -2589,9 +2589,9 @@
   "segmentsCount": "{count} τμήματα",
   "noTranscriptAvailable": "Δεν υπάρχει διαθέσιμη μεταγραφή",
   "noTranscriptMessage": "Αυτή η συνομιλία δεν έχει μεταγραφή.",
-  "conversationUrlCouldNotBeGenerated": "Δεν ήταν δυνατή η δημιουργία URL συνομιλίας.",
+  "conversationUrlCouldNotBeGenerated": "Η διεύθυνση URL της συνομιλίας δεν μπόρεσε να δημιουργηθεί.",
   "failedToGenerateConversationLink": "Αποτυχία δημιουργίας συνδέσμου συνομιλίας",
-  "failedToGenerateShareLink": "Αποτυχία δημιουργίας συνδέσμου κοινοποίησης",
+  "failedToGenerateShareLink": "Αποτυχία δημιουργίας συνδέσμου κοινής χρήσης",
   "reloadingConversations": "Επαναφόρτωση συνομιλιών...",
   "@reloadingConversations": {
     "description": "Loading message when refreshing conversations"
@@ -2841,5 +2841,18 @@
   "conversationNoSummaryYet": "Αυτή η συνομιλία δεν έχει ακόμη περίληψη.",
   "chooseSummarizationApp": "Επιλέξτε εφαρμογή περίληψης",
   "setAsDefaultSummarizationApp": "Η {appName} ορίστηκε ως προεπιλεγμένη εφαρμογή περίληψης",
-  "letOmiChooseAutomatically": "Αφήστε το Omi να επιλέξει αυτόματα την καλύτερη εφαρμογή"
+  "letOmiChooseAutomatically": "Αφήστε το Omi να επιλέξει αυτόματα την καλύτερη εφαρμογή",
+  "deleteConversationConfirmation": "Είστε σίγουροι ότι θέλετε να διαγράψετε αυτή τη συνομιλία; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.",
+  "conversationDeleted": "Η συνομιλία διαγράφηκε",
+  "generatingLink": "Δημιουργία συνδέσμου...",
+  "editConversation": "Επεξεργασία συνομιλίας",
+  "conversationLinkCopiedToClipboard": "Ο σύνδεσμος συνομιλίας αντιγράφηκε στο πρόχειρο",
+  "conversationTranscriptCopiedToClipboard": "Η απομαγνητοφώνηση της συνομιλίας αντιγράφηκε στο πρόχειρο",
+  "editConversationDialogTitle": "Επεξεργασία συνομιλίας",
+  "changeTheConversationTitle": "Αλλαγή τίτλου συνομιλίας",
+  "conversationTitle": "Τίτλος συνομιλίας",
+  "enterConversationTitle": "Εισαγάγετε τίτλο συνομιλίας...",
+  "conversationTitleUpdatedSuccessfully": "Ο τίτλος της συνομιλίας ενημερώθηκε επιτυχώς",
+  "failedToUpdateConversationTitle": "Αποτυχία ενημέρωσης τίτλου συνομιλίας",
+  "errorUpdatingConversationTitle": "Σφάλμα κατά την ενημέρωση του τίτλου της συνομιλίας"
 }

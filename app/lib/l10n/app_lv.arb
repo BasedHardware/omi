@@ -65,7 +65,7 @@
   "@clear": {
     "description": "Clear button label"
   },
-  "copyTranscript": "Kopēt transkripciju",
+  "copyTranscript": "Kopēt transkriptu",
   "@copyTranscript": {
     "description": "Menu item to copy transcript"
   },
@@ -2327,7 +2327,7 @@
   "deleteFolder": "Dzēst mapi",
   "transcriptCopiedToClipboard": "Transkripts nokopēts starpliktuvē",
   "summaryCopiedToClipboard": "Kopsavilkums nokopēts starpliktuvē",
-  "conversationUrlCouldNotBeShared": "Neizdevās kopīgot sarunas URL.",
+  "conversationUrlCouldNotBeShared": "Sarunas URL nevarēja kopīgot.",
   "urlCopiedToClipboard": "URL nokopēts starpliktuvē",
   "exportTranscript": "Eksportēt transkriptu",
   "exportSummary": "Eksportēt kopsavilkumu",
@@ -2589,9 +2589,9 @@
   "segmentsCount": "{count} segmenti",
   "noTranscriptAvailable": "Nav pieejama transkripcija",
   "noTranscriptMessage": "Šai sarunai nav transkripcijas.",
-  "conversationUrlCouldNotBeGenerated": "Neizdevās ģenerēt sarunas URL.",
-  "failedToGenerateConversationLink": "Neizdevās ģenerēt sarunas saiti",
-  "failedToGenerateShareLink": "Neizdevās ģenerēt kopīgošanas saiti",
+  "conversationUrlCouldNotBeGenerated": "Sarunas URL nevarēja izveidot.",
+  "failedToGenerateConversationLink": "Neizdevās izveidot sarunas saiti",
+  "failedToGenerateShareLink": "Neizdevās izveidot kopīgošanas saiti",
   "reloadingConversations": "Sarunu atkārtota ielāde...",
   "@reloadingConversations": {
     "description": "Loading message when refreshing conversations"
@@ -2841,5 +2841,18 @@
   "conversationNoSummaryYet": "Šai sarunai vēl nav kopsavilkuma.",
   "chooseSummarizationApp": "Izvēlieties kopsavilkuma lietotni",
   "setAsDefaultSummarizationApp": "{appName} iestatīta kā noklusējuma kopsavilkuma lietotne",
-  "letOmiChooseAutomatically": "Ļaujiet Omi automātiski izvēlēties labāko lietotni"
+  "letOmiChooseAutomatically": "Ļaujiet Omi automātiski izvēlēties labāko lietotni",
+  "deleteConversationConfirmation": "Vai tiešām vēlaties dzēst šo sarunu? Šo darbību nevar atsaukt.",
+  "conversationDeleted": "Saruna dzēsta",
+  "generatingLink": "Ģenerē saiti...",
+  "editConversation": "Rediģēt sarunu",
+  "conversationLinkCopiedToClipboard": "Sarunas saite nokopēta starpliktuvē",
+  "conversationTranscriptCopiedToClipboard": "Sarunas transkripts nokopēts starpliktuvē",
+  "editConversationDialogTitle": "Rediģēt sarunu",
+  "changeTheConversationTitle": "Mainīt sarunas nosaukumu",
+  "conversationTitle": "Sarunas nosaukums",
+  "enterConversationTitle": "Ievadiet sarunas nosaukumu...",
+  "conversationTitleUpdatedSuccessfully": "Sarunas nosaukums veiksmīgi atjaunināts",
+  "failedToUpdateConversationTitle": "Neizdevās atjaunināt sarunas nosaukumu",
+  "errorUpdatingConversationTitle": "Kļūda, atjauninot sarunas nosaukumu"
 }

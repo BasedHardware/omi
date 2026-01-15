@@ -65,7 +65,7 @@
   "@clear": {
     "description": "Clear button label"
   },
-  "copyTranscript": "Átirat másolása",
+  "copyTranscript": "Átírás másolása",
   "@copyTranscript": {
     "description": "Menu item to copy transcript"
   },
@@ -2327,7 +2327,7 @@
   "deleteFolder": "Mappa törlése",
   "transcriptCopiedToClipboard": "Átirat vágólapra másolva",
   "summaryCopiedToClipboard": "Összefoglaló vágólapra másolva",
-  "conversationUrlCouldNotBeShared": "A beszélgetés URL-jét nem sikerült megosztani.",
+  "conversationUrlCouldNotBeShared": "A beszélgetés URL-je nem osztható meg.",
   "urlCopiedToClipboard": "URL vágólapra másolva",
   "exportTranscript": "Átirat exportálása",
   "exportSummary": "Összefoglaló exportálása",
@@ -2400,7 +2400,7 @@
   "space": "Szóköz",
   "search": "Keresés",
   "searchPlaceholder": "Keresés...",
-  "untitledConversation": "Cím nélküli beszélgetés",
+  "untitledConversation": "Névtelen beszélgetés",
   "countRemaining": "{count} hátra",
   "addGoal": "Cél hozzáadása",
   "editGoal": "Cél szerkesztése",
@@ -2589,9 +2589,9 @@
   "segmentsCount": "{count} szegmens",
   "noTranscriptAvailable": "Nincs elérhető átirat",
   "noTranscriptMessage": "Ehhez a beszélgetéshez nincs átirat.",
-  "conversationUrlCouldNotBeGenerated": "A beszélgetés URL-jét nem sikerült generálni.",
-  "failedToGenerateConversationLink": "A beszélgetés linkjének generálása sikertelen",
-  "failedToGenerateShareLink": "A megosztási link generálása sikertelen",
+  "conversationUrlCouldNotBeGenerated": "A beszélgetés URL-je nem generálható.",
+  "failedToGenerateConversationLink": "Beszélgetés link generálása sikertelen",
+  "failedToGenerateShareLink": "Megosztási link generálása sikertelen",
   "reloadingConversations": "Beszélgetések újratöltése...",
   "@reloadingConversations": {
     "description": "Loading message when refreshing conversations"
@@ -2841,5 +2841,18 @@
   "conversationNoSummaryYet": "Ennek a beszélgetésnek még nincs összefoglalója.",
   "chooseSummarizationApp": "Összefoglaló alkalmazás kiválasztása",
   "setAsDefaultSummarizationApp": "{appName} beállítva alapértelmezett összefoglaló alkalmazásként",
-  "letOmiChooseAutomatically": "Hagyja, hogy az Omi automatikusan válassza ki a legjobb alkalmazást"
+  "letOmiChooseAutomatically": "Hagyja, hogy az Omi automatikusan válassza ki a legjobb alkalmazást",
+  "deleteConversationConfirmation": "Biztosan törli ezt a beszélgetést? Ez a művelet nem vonható vissza.",
+  "conversationDeleted": "Beszélgetés törölve",
+  "generatingLink": "Link generálása...",
+  "editConversation": "Beszélgetés szerkesztése",
+  "conversationLinkCopiedToClipboard": "Beszélgetés link vágólapra másolva",
+  "conversationTranscriptCopiedToClipboard": "Beszélgetés átírása vágólapra másolva",
+  "editConversationDialogTitle": "Beszélgetés szerkesztése",
+  "changeTheConversationTitle": "Beszélgetés címének módosítása",
+  "conversationTitle": "Beszélgetés címe",
+  "enterConversationTitle": "Adja meg a beszélgetés címét...",
+  "conversationTitleUpdatedSuccessfully": "Beszélgetés címe sikeresen frissítve",
+  "failedToUpdateConversationTitle": "Beszélgetés címének frissítése sikertelen",
+  "errorUpdatingConversationTitle": "Hiba a beszélgetés címének frissítése során"
 }

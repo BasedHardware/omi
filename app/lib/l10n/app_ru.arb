@@ -2327,7 +2327,7 @@
   "deleteFolder": "Удалить папку",
   "transcriptCopiedToClipboard": "Транскрипт скопирован в буфер обмена",
   "summaryCopiedToClipboard": "Резюме скопировано в буфер обмена",
-  "conversationUrlCouldNotBeShared": "Не удалось поделиться URL разговора.",
+  "conversationUrlCouldNotBeShared": "URL-адрес разговора не может быть передан.",
   "urlCopiedToClipboard": "URL скопирован в буфер обмена",
   "exportTranscript": "Экспортировать транскрипт",
   "exportSummary": "Экспортировать резюме",
@@ -2589,9 +2589,9 @@
   "segmentsCount": "{count} сегментов",
   "noTranscriptAvailable": "Расшифровка недоступна",
   "noTranscriptMessage": "У этого разговора нет расшифровки.",
-  "conversationUrlCouldNotBeGenerated": "Не удалось создать URL разговора.",
+  "conversationUrlCouldNotBeGenerated": "URL-адрес разговора не может быть создан.",
   "failedToGenerateConversationLink": "Не удалось создать ссылку на разговор",
-  "failedToGenerateShareLink": "Не удалось создать ссылку для обмена",
+  "failedToGenerateShareLink": "Не удалось создать ссылку для совместного использования",
   "reloadingConversations": "Перезагрузка бесед...",
   "@reloadingConversations": {
     "description": "Loading message when refreshing conversations"
@@ -2841,5 +2841,18 @@
   "conversationNoSummaryYet": "У этого разговора пока нет резюме.",
   "chooseSummarizationApp": "Выберите приложение для резюме",
   "setAsDefaultSummarizationApp": "{appName} установлено как приложение для резюме по умолчанию",
-  "letOmiChooseAutomatically": "Позвольте Omi автоматически выбрать лучшее приложение"
+  "letOmiChooseAutomatically": "Позвольте Omi автоматически выбрать лучшее приложение",
+  "deleteConversationConfirmation": "Вы уверены, что хотите удалить этот разговор? Это действие нельзя отменить.",
+  "conversationDeleted": "Разговор удален",
+  "generatingLink": "Генерация ссылки...",
+  "editConversation": "Редактировать разговор",
+  "conversationLinkCopiedToClipboard": "Ссылка на разговор скопирована в буфер обмена",
+  "conversationTranscriptCopiedToClipboard": "Расшифровка разговора скопирована в буфер обмена",
+  "editConversationDialogTitle": "Редактировать разговор",
+  "changeTheConversationTitle": "Изменить название разговора",
+  "conversationTitle": "Название разговора",
+  "enterConversationTitle": "Введите название разговора...",
+  "conversationTitleUpdatedSuccessfully": "Название разговора успешно обновлено",
+  "failedToUpdateConversationTitle": "Не удалось обновить название разговора",
+  "errorUpdatingConversationTitle": "Ошибка при обновлении названия разговора"
 }

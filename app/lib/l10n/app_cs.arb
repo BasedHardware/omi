@@ -2859,5 +2859,18 @@
   "conversationNoSummaryYet": "Tato konverzace ještě nemá souhrn.",
   "chooseSummarizationApp": "Vybrat aplikaci pro souhrn",
   "setAsDefaultSummarizationApp": "Aplikace {appName} nastavena jako výchozí aplikace pro souhrn",
-  "letOmiChooseAutomatically": "Nechte Omi automaticky vybrat nejlepší aplikaci"
+  "letOmiChooseAutomatically": "Nechte Omi automaticky vybrat nejlepší aplikaci",
+  "deleteConversationConfirmation": "Opravdu chcete smazat tuto konverzaci? Tuto akci nelze vrátit zpět.",
+  "conversationDeleted": "Konverzace smazána",
+  "generatingLink": "Generování odkazu...",
+  "editConversation": "Upravit konverzaci",
+  "conversationLinkCopiedToClipboard": "Odkaz na konverzaci zkopírován do schránky",
+  "conversationTranscriptCopiedToClipboard": "Přepis konverzace zkopírován do schránky",
+  "editConversationDialogTitle": "Upravit konverzaci",
+  "changeTheConversationTitle": "Změnit název konverzace",
+  "conversationTitle": "Název konverzace",
+  "enterConversationTitle": "Zadejte název konverzace...",
+  "conversationTitleUpdatedSuccessfully": "Název konverzace úspěšně aktualizován",
+  "failedToUpdateConversationTitle": "Nepodařilo se aktualizovat název konverzace",
+  "errorUpdatingConversationTitle": "Chyba při aktualizaci názvu konverzace"
 }

@@ -37,7 +37,7 @@
   "@ok": {
     "description": "Generic OK button text"
   },
-  "delete": "Ta bort",
+  "delete": "Radera",
   "@delete": {
     "description": "Button label"
   },
@@ -81,7 +81,7 @@
   "@reprocessConversation": {
     "description": "Menu item to reprocess a conversation"
   },
-  "deleteConversation": "Ta bort konversation",
+  "deleteConversation": "Radera konversation",
   "@deleteConversation": {
     "description": "Menu item to delete a conversation"
   },
@@ -2400,7 +2400,7 @@
   "space": "Mellanslag",
   "search": "Sök",
   "searchPlaceholder": "Sök...",
-  "untitledConversation": "Konversation utan titel",
+  "untitledConversation": "Namnlös konversation",
   "countRemaining": "{count} återstår",
   "addGoal": "Lägg till mål",
   "editGoal": "Redigera mål",
@@ -2577,7 +2577,7 @@
   "failedToTranscribeAudio": "Kunde inte transkribera ljud",
   "transcribing": "Transkriberar...",
   "transcriptionFailed": "Transkription misslyckades",
-  "discardedConversation": "Bortvald konversation",
+  "discardedConversation": "Kasserad konversation",
   "at": "kl.",
   "from": "från",
   "copied": "Kopierat!",
@@ -2590,8 +2590,8 @@
   "noTranscriptAvailable": "Ingen transkription tillgänglig",
   "noTranscriptMessage": "Den här konversationen har ingen transkription.",
   "conversationUrlCouldNotBeGenerated": "Konversations-URL kunde inte genereras.",
-  "failedToGenerateConversationLink": "Kunde inte generera konversationslänk",
-  "failedToGenerateShareLink": "Kunde inte generera delningslänk",
+  "failedToGenerateConversationLink": "Misslyckades generera konversationslänk",
+  "failedToGenerateShareLink": "Misslyckades generera delningslänk",
   "reloadingConversations": "Laddar om konversationer...",
   "@reloadingConversations": {
     "description": "Loading message when refreshing conversations"
@@ -2841,5 +2841,18 @@
   "conversationNoSummaryYet": "Den här konversationen har ingen sammanfattning ännu.",
   "chooseSummarizationApp": "Välj sammanfattningsapp",
   "setAsDefaultSummarizationApp": "{appName} inställd som standardapp för sammanfattning",
-  "letOmiChooseAutomatically": "Låt Omi automatiskt välja den bästa appen"
+  "letOmiChooseAutomatically": "Låt Omi automatiskt välja den bästa appen",
+  "deleteConversationConfirmation": "Är du säker på att du vill radera den här konversationen? Denna åtgärd kan inte ångras.",
+  "conversationDeleted": "Konversation raderad",
+  "generatingLink": "Genererar länk...",
+  "editConversation": "Redigera konversation",
+  "conversationLinkCopiedToClipboard": "Konversationslänk kopierad till urklipp",
+  "conversationTranscriptCopiedToClipboard": "Konversationstranskription kopierad till urklipp",
+  "editConversationDialogTitle": "Redigera konversation",
+  "changeTheConversationTitle": "Ändra konversationens titel",
+  "conversationTitle": "Konversationstitel",
+  "enterConversationTitle": "Ange konversationstitel...",
+  "conversationTitleUpdatedSuccessfully": "Konversationstitel uppdaterad",
+  "failedToUpdateConversationTitle": "Misslyckades uppdatera konversationstitel",
+  "errorUpdatingConversationTitle": "Fel vid uppdatering av konversationstitel"
 }

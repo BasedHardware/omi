@@ -65,7 +65,7 @@
   "@clear": {
     "description": "Clear button label"
   },
-  "copyTranscript": "Salin Transkrip",
+  "copyTranscript": "Salin transkrip",
   "@copyTranscript": {
     "description": "Menu item to copy transcript"
   },
@@ -2400,7 +2400,7 @@
   "space": "Ruang",
   "search": "Cari",
   "searchPlaceholder": "Cari...",
-  "untitledConversation": "Perbualan tanpa tajuk",
+  "untitledConversation": "Perbualan Tanpa Tajuk",
   "countRemaining": "{count} baki",
   "addGoal": "Tambah matlamat",
   "editGoal": "Edit matlamat",
@@ -2577,11 +2577,11 @@
   "failedToTranscribeAudio": "Gagal menyalin audio",
   "transcribing": "Menyalin...",
   "transcriptionFailed": "Penyalinan gagal",
-  "discardedConversation": "Perbualan dibuang",
+  "discardedConversation": "Perbualan Dibuang",
   "at": "pada",
   "from": "dari",
   "copied": "Disalin!",
-  "copyLink": "Salin Pautan",
+  "copyLink": "Salin pautan",
   "hideTranscript": "Sembunyikan Transkrip",
   "viewTranscript": "Lihat Transkrip",
   "conversationDetails": "Butiran Perbualan",
@@ -2841,5 +2841,18 @@
   "conversationNoSummaryYet": "Perbualan ini belum mempunyai ringkasan.",
   "chooseSummarizationApp": "Pilih Aplikasi Ringkasan",
   "setAsDefaultSummarizationApp": "{appName} ditetapkan sebagai aplikasi ringkasan lalai",
-  "letOmiChooseAutomatically": "Biarkan Omi memilih aplikasi terbaik secara automatik"
+  "letOmiChooseAutomatically": "Biarkan Omi memilih aplikasi terbaik secara automatik",
+  "deleteConversationConfirmation": "Adakah anda pasti mahu memadam perbualan ini? Tindakan ini tidak boleh dibatalkan.",
+  "conversationDeleted": "Perbualan dipadam",
+  "generatingLink": "Menjana pautan...",
+  "editConversation": "Edit perbualan",
+  "conversationLinkCopiedToClipboard": "Pautan perbualan disalin ke papan keratan",
+  "conversationTranscriptCopiedToClipboard": "Transkrip perbualan disalin ke papan keratan",
+  "editConversationDialogTitle": "Edit Perbualan",
+  "changeTheConversationTitle": "Tukar tajuk perbualan",
+  "conversationTitle": "Tajuk Perbualan",
+  "enterConversationTitle": "Masukkan tajuk perbualan...",
+  "conversationTitleUpdatedSuccessfully": "Tajuk perbualan berjaya dikemas kini",
+  "failedToUpdateConversationTitle": "Gagal mengemas kini tajuk perbualan",
+  "errorUpdatingConversationTitle": "Ralat mengemas kini tajuk perbualan"
 }

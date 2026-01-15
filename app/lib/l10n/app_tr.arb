@@ -65,7 +65,7 @@
   "@clear": {
     "description": "Clear button label"
   },
-  "copyTranscript": "Transkripti Kopyala",
+  "copyTranscript": "Transkripti kopyala",
   "@copyTranscript": {
     "description": "Menu item to copy transcript"
   },
@@ -81,7 +81,7 @@
   "@reprocessConversation": {
     "description": "Menu item to reprocess a conversation"
   },
-  "deleteConversation": "Konuşmayı Sil",
+  "deleteConversation": "Sohbeti Sil",
   "@deleteConversation": {
     "description": "Menu item to delete a conversation"
   },
@@ -2559,11 +2559,11 @@
   "failedToTranscribeAudio": "Ses transkribe edilemedi",
   "transcribing": "Transkribe ediliyor...",
   "transcriptionFailed": "Transkripsiyon başarısız",
-  "discardedConversation": "Atılmış Sohbet",
+  "discardedConversation": "İptal Edilen Sohbet",
   "at": "saat",
   "from": "itibaren",
   "copied": "Kopyalandı!",
-  "copyLink": "Bağlantıyı Kopyala",
+  "copyLink": "Bağlantıyı kopyala",
   "hideTranscript": "Transkripti Gizle",
   "viewTranscript": "Transkripti Görüntüle",
   "conversationDetails": "Sohbet Detayları",
@@ -2823,5 +2823,18 @@
   "conversationNoSummaryYet": "Bu konuşmanın henüz bir özeti yok.",
   "chooseSummarizationApp": "Özet Uygulaması Seçin",
   "setAsDefaultSummarizationApp": "{appName} varsayılan özet uygulaması olarak ayarlandı",
-  "letOmiChooseAutomatically": "Omi'nin en iyi uygulamayı otomatik olarak seçmesine izin verin"
+  "letOmiChooseAutomatically": "Omi'nin en iyi uygulamayı otomatik olarak seçmesine izin verin",
+  "deleteConversationConfirmation": "Bu sohbeti silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.",
+  "conversationDeleted": "Sohbet silindi",
+  "generatingLink": "Bağlantı oluşturuluyor...",
+  "editConversation": "Sohbeti düzenle",
+  "conversationLinkCopiedToClipboard": "Sohbet bağlantısı panoya kopyalandı",
+  "conversationTranscriptCopiedToClipboard": "Sohbet transkripti panoya kopyalandı",
+  "editConversationDialogTitle": "Sohbeti Düzenle",
+  "changeTheConversationTitle": "Sohbet başlığını değiştir",
+  "conversationTitle": "Sohbet Başlığı",
+  "enterConversationTitle": "Sohbet başlığı girin...",
+  "conversationTitleUpdatedSuccessfully": "Sohbet başlığı başarıyla güncellendi",
+  "failedToUpdateConversationTitle": "Sohbet başlığı güncellenemedi",
+  "errorUpdatingConversationTitle": "Sohbet başlığı güncellenirken hata oluştu"
 }

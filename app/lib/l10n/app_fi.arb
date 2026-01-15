@@ -2841,5 +2841,18 @@
   "conversationNoSummaryYet": "Tällä keskustelulla ei ole vielä yhteenvetoa.",
   "chooseSummarizationApp": "Valitse yhteenvetosovellus",
   "setAsDefaultSummarizationApp": "{appName} asetettu oletusyhteenvetosovellukseksi",
-  "letOmiChooseAutomatically": "Anna Omin valita paras sovellus automaattisesti"
+  "letOmiChooseAutomatically": "Anna Omin valita paras sovellus automaattisesti",
+  "deleteConversationConfirmation": "Haluatko varmasti poistaa tämän keskustelun? Tätä toimintoa ei voi kumota.",
+  "conversationDeleted": "Keskustelu poistettu",
+  "generatingLink": "Luodaan linkkiä...",
+  "editConversation": "Muokkaa keskustelua",
+  "conversationLinkCopiedToClipboard": "Keskustelun linkki kopioitu leikepöydälle",
+  "conversationTranscriptCopiedToClipboard": "Keskustelun litterointi kopioitu leikepöydälle",
+  "editConversationDialogTitle": "Muokkaa keskustelua",
+  "changeTheConversationTitle": "Muuta keskustelun otsikkoa",
+  "conversationTitle": "Keskustelun otsikko",
+  "enterConversationTitle": "Syötä keskustelun otsikko...",
+  "conversationTitleUpdatedSuccessfully": "Keskustelun otsikko päivitetty onnistuneesti",
+  "failedToUpdateConversationTitle": "Keskustelun otsikon päivitys epäonnistui",
+  "errorUpdatingConversationTitle": "Virhe keskustelun otsikon päivityksessä"
 }

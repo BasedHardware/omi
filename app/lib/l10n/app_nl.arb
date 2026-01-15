@@ -1393,8 +1393,8 @@
   "noTranscriptAvailable": "Geen transcript beschikbaar",
   "noTranscriptMessage": "Dit gesprek heeft geen transcript.",
   "conversationUrlCouldNotBeGenerated": "Gesprek-URL kon niet worden gegenereerd.",
-  "failedToGenerateConversationLink": "Kan gesprekslink niet genereren",
-  "failedToGenerateShareLink": "Kan deellink niet genereren",
+  "failedToGenerateConversationLink": "Kan geen gesprekslink genereren",
+  "failedToGenerateShareLink": "Kan geen deellink genereren",
   "reloadingConversations": "Gesprekken opnieuw laden...",
   "@reloadingConversations": {
     "description": "Loading message when refreshing conversations"
@@ -1659,5 +1659,18 @@
   "conversationNoSummaryYet": "Dit gesprek heeft nog geen samenvatting.",
   "chooseSummarizationApp": "Kies samenvattingsapp",
   "setAsDefaultSummarizationApp": "{appName} ingesteld als standaard samenvattingsapp",
-  "letOmiChooseAutomatically": "Laat Omi automatisch de beste app kiezen"
+  "letOmiChooseAutomatically": "Laat Omi automatisch de beste app kiezen",
+  "deleteConversationConfirmation": "Weet u zeker dat u dit gesprek wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.",
+  "conversationDeleted": "Gesprek verwijderd",
+  "generatingLink": "Link wordt gegenereerd...",
+  "editConversation": "Gesprek bewerken",
+  "conversationLinkCopiedToClipboard": "Gesprekslink gekopieerd naar klembord",
+  "conversationTranscriptCopiedToClipboard": "Gesprekstranscript gekopieerd naar klembord",
+  "editConversationDialogTitle": "Gesprek bewerken",
+  "changeTheConversationTitle": "Gesprekstitel wijzigen",
+  "conversationTitle": "Gesprekstitel",
+  "enterConversationTitle": "Voer gesprekstitel in...",
+  "conversationTitleUpdatedSuccessfully": "Gesprekstitel succesvol bijgewerkt",
+  "failedToUpdateConversationTitle": "Kan gesprekstitel niet bijwerken",
+  "errorUpdatingConversationTitle": "Fout bij bijwerken van gesprekstitel"
 }
