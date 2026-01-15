@@ -91,7 +91,7 @@ from utils.llm.persona import generate_persona_intro_message
 from utils.llm.app_generator import generate_description
 from utils.notifications import send_notification, send_app_review_reply_notification, send_new_app_review_notification
 from utils.other import endpoints as auth
-from models.app import App, ActionType, AppCreate, AppUpdate
+from models.app import App, ActionType, AppCreate, AppUpdate, AppBaseModel
 from utils.other.storage import upload_app_logo, delete_app_logo, upload_app_thumbnail, get_app_thumbnail_url
 from utils.social import (
     get_twitter_profile,
@@ -130,7 +130,7 @@ def _get_categories():
 # ******************************************************
 
 
-@router.get('/v1/apps', tags=['v1'])
+@router.get('/v1/apps', tags=['v1'], response_model=List[AppBaseModel])
 def get_apps(uid: str = Depends(auth.get_current_user_uid), include_reviews: bool = True):
     apps = get_available_apps(uid, include_reviews=include_reviews)
     return [normalize_app_numeric_fields(app.to_reduced_dict()) for app in apps]
@@ -360,7 +360,7 @@ def search_apps(
     }
 
 
-@router.get('/v1/approved-apps', tags=['v1'])
+@router.get('/v1/approved-apps', tags=['v1'], response_model=List[AppBaseModel])
 def get_approved_apps(include_reviews: bool = False):
     apps = get_approved_available_apps(include_reviews=include_reviews)
     # Always exclude persona type apps
@@ -368,7 +368,7 @@ def get_approved_apps(include_reviews: bool = False):
     return [normalize_app_numeric_fields(app.to_reduced_dict()) for app in filtered_apps]
 
 
-@router.get('/v1/apps/popular', tags=['v1'])
+@router.get('/v1/apps/popular', tags=['v1'], response_model=List[AppBaseModel])
 def get_popular_apps_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     apps = get_popular_apps()
     # Always exclude persona type apps
