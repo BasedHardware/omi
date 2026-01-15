@@ -1029,7 +1029,7 @@ class _PlansSheetState extends State<PlansSheet> {
                           return Text(
                             isUnlimited
                                 ? 'You are on the Unlimited Plan.'
-                                : 'Omi is free, but freemium has limits that affect your experience:',
+                                : 'Choose your plan to unlock unlimited Omi.',
                             textAlign: TextAlign.center,
                             style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
                           );
@@ -1083,8 +1083,8 @@ class _PlansSheetState extends State<PlansSheet> {
                         }),
                       ],
                       const SizedBox(height: 24),
-                      // Features list for unlimited users, Downsides for basic users
-                      if (isUnlimited)
+                      // Features list - only for unlimited users
+                      if (isUnlimited) ...[
                         Column(
                           children: [
                             _buildFeatureItem(
@@ -1102,32 +1102,9 @@ class _PlansSheetState extends State<PlansSheet> {
                               text: 'Unlock Omi\'s infinite memory',
                             ),
                           ],
-                        )
-                      else
-                        Column(
-                          children: [
-                            _buildLimitationItem(
-                              icon: Icons.battery_alert,
-                              text: '7x battery consumption',
-                            ),
-                            const SizedBox(height: 16),
-                            _buildLimitationItem(
-                              icon: Icons.warning_amber,
-                              text: '30% less transcription quality',
-                            ),
-                            const SizedBox(height: 16),
-                            _buildLimitationItem(
-                              icon: Icons.timer_off,
-                              text: '5-7 second delay (not real-time)',
-                            ),
-                            const SizedBox(height: 16),
-                            _buildLimitationItem(
-                              icon: Icons.person_off,
-                              text: 'Cannot identify speakers',
-                            ),
-                          ],
                         ),
-                      const SizedBox(height: 32),
+                        const SizedBox(height: 32),
+                      ],
 
                       // Training Data Opt-in Option - only show after plans are loaded
                       Consumer2<UsageProvider, UserProvider>(
@@ -1550,6 +1527,44 @@ class _PlansSheetState extends State<PlansSheet> {
                           ),
                         );
                       }),
+
+                      // Freemium limitations warning - only show for basic users before downgrade option
+                      if (!isUnlimited) ...[
+                        const SizedBox(height: 32),
+                        Text(
+                          'Omi is free, but freemium has limits that affect your experience:',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.grey.shade400,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Column(
+                          children: [
+                            _buildLimitationItem(
+                              icon: Icons.battery_alert,
+                              text: '7x battery consumption',
+                            ),
+                            const SizedBox(height: 12),
+                            _buildLimitationItem(
+                              icon: Icons.warning_amber,
+                              text: '30% less transcription quality',
+                            ),
+                            const SizedBox(height: 12),
+                            _buildLimitationItem(
+                              icon: Icons.timer_off,
+                              text: '5-7 second delay (not real-time)',
+                            ),
+                            const SizedBox(height: 12),
+                            _buildLimitationItem(
+                              icon: Icons.person_off,
+                              text: 'Cannot identify speakers',
+                            ),
+                          ],
+                        ),
+                      ],
 
                       // Downgrade to Freemium button - only show for basic users
                       if (!isUnlimited)
