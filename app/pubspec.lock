@@ -2571,8 +2571,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "fix/android-16kb-page-size"
-      resolved-ref: "026cfc7e9b42432d3cd7f1e9da5cfd21425aef28"
+      ref: "684fb43710dd4de5538ac2da7d0b1fa405363212"
+      resolved-ref: "684fb43710dd4de5538ac2da7d0b1fa405363212"
       url: "https://github.com/BasedHardware/whisper_flutter_new.git"
     source: git
     version: "1.0.1"
