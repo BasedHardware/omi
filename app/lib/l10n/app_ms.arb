@@ -2954,5 +2954,11 @@
   "previewScreenshots": "Pratonton tangkapan skrin",
   "holdOnPreparingForm": "Sila tunggu, kami sedang menyediakan borang untuk anda",
   "bySubmittingYouAgreeToOmi": "Dengan menghantar, anda bersetuju dengan ",
-  "termsAndPrivacyPolicy": "Terma & Dasar Privasi"
+  "termsAndPrivacyPolicy": "Terma & Dasar Privasi",
+  "manageYourApp": "Urus Aplikasi Anda",
+  "updatingYourApp": "Mengemas kini aplikasi anda",
+  "fetchingYourAppDetails": "Mendapatkan butiran aplikasi anda",
+  "updateAppQuestion": "Kemas kini Aplikasi?",
+  "updateAppConfirmation": "Adakah anda pasti mahu mengemas kini aplikasi anda? Perubahan akan dipaparkan selepas disemak oleh pasukan kami.",
+  "updateApp": "Kemas kini Aplikasi"
 }

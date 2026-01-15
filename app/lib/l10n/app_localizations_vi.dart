@@ -3976,4 +3976,23 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get helpsDiagnoseIssuesAutoDeletes => 'Giúp chẩn đoán sự cố. Tự động xóa sau 3 ngày.';
+
+  @override
+  String get manageYourApp => 'Quản lý ứng dụng của bạn';
+
+  @override
+  String get updatingYourApp => 'Đang cập nhật ứng dụng của bạn';
+
+  @override
+  String get fetchingYourAppDetails => 'Đang tải thông tin ứng dụng';
+
+  @override
+  String get updateAppQuestion => 'Cập nhật ứng dụng?';
+
+  @override
+  String get updateAppConfirmation =>
+      'Bạn có chắc chắn muốn cập nhật ứng dụng? Các thay đổi sẽ được phản ánh sau khi được đội ngũ của chúng tôi xem xét.';
+
+  @override
+  String get updateApp => 'Cập nhật ứng dụng';
 }

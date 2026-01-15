@@ -2954,5 +2954,11 @@
   "previewScreenshots": "Pratinjau tangkapan layar",
   "holdOnPreparingForm": "Tunggu sebentar, kami sedang menyiapkan formulir untuk Anda",
   "bySubmittingYouAgreeToOmi": "Dengan mengirimkan, Anda menyetujui ",
-  "termsAndPrivacyPolicy": "Syarat & Kebijakan Privasi"
+  "termsAndPrivacyPolicy": "Syarat & Kebijakan Privasi",
+  "manageYourApp": "Kelola Aplikasi Anda",
+  "updatingYourApp": "Memperbarui aplikasi Anda",
+  "fetchingYourAppDetails": "Mengambil detail aplikasi Anda",
+  "updateAppQuestion": "Perbarui Aplikasi?",
+  "updateAppConfirmation": "Apakah Anda yakin ingin memperbarui aplikasi? Perubahan akan terlihat setelah ditinjau oleh tim kami.",
+  "updateApp": "Perbarui Aplikasi"
 }

@@ -2936,5 +2936,11 @@
   "previewScreenshots": "Ekran görüntüsü önizlemesi",
   "holdOnPreparingForm": "Bekleyin, formu sizin için hazırlıyoruz",
   "bySubmittingYouAgreeToOmi": "Göndererek, Omi ",
-  "termsAndPrivacyPolicy": "Şartlar ve Gizlilik Politikası"
+  "termsAndPrivacyPolicy": "Şartlar ve Gizlilik Politikası",
+  "manageYourApp": "Uygulamanızı Yönetin",
+  "updatingYourApp": "Uygulamanız güncelleniyor",
+  "fetchingYourAppDetails": "Uygulama bilgileri alınıyor",
+  "updateAppQuestion": "Uygulama güncellensin mi?",
+  "updateAppConfirmation": "Uygulamanızı güncellemek istediğinizden emin misiniz? Değişiklikler ekibimiz tarafından incelendikten sonra yansıtılacaktır.",
+  "updateApp": "Uygulamayı Güncelle"
 }

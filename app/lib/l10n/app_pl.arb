@@ -2954,5 +2954,11 @@
   "previewScreenshots": "Podgląd zrzutów ekranu",
   "holdOnPreparingForm": "Poczekaj, przygotowujemy formularz dla Ciebie",
   "bySubmittingYouAgreeToOmi": "Wysyłając, zgadzasz się z Omi ",
-  "termsAndPrivacyPolicy": "Warunki i Polityka Prywatności"
+  "termsAndPrivacyPolicy": "Warunki i Polityka Prywatności",
+  "manageYourApp": "Zarządzaj swoją aplikacją",
+  "updatingYourApp": "Aktualizowanie aplikacji",
+  "fetchingYourAppDetails": "Pobieranie szczegółów aplikacji",
+  "updateAppQuestion": "Zaktualizować aplikację?",
+  "updateAppConfirmation": "Czy na pewno chcesz zaktualizować aplikację? Zmiany zostaną wprowadzone po sprawdzeniu przez nasz zespół.",
+  "updateApp": "Zaktualizuj aplikację"
 }

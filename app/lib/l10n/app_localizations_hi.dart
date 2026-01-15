@@ -3946,4 +3946,23 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String get helpsDiagnoseIssuesAutoDeletes =>
       'समस्याओं का निदान करने में मदद करता है। 3 दिनों के बाद स्वचालित रूप से हटा दिया जाता है।';
+
+  @override
+  String get manageYourApp => 'अपना ऐप प्रबंधित करें';
+
+  @override
+  String get updatingYourApp => 'आपका ऐप अपडेट हो रहा है';
+
+  @override
+  String get fetchingYourAppDetails => 'आपके ऐप का विवरण प्राप्त हो रहा है';
+
+  @override
+  String get updateAppQuestion => 'ऐप अपडेट करें?';
+
+  @override
+  String get updateAppConfirmation =>
+      'क्या आप वाकई अपना ऐप अपडेट करना चाहते हैं? परिवर्तन हमारी टीम द्वारा समीक्षा के बाद दिखाई देंगे।';
+
+  @override
+  String get updateApp => 'ऐप अपडेट करें';
 }

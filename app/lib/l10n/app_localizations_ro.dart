@@ -3990,4 +3990,23 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get helpsDiagnoseIssuesAutoDeletes => 'Ajută la diagnosticarea problemelor. Șters automat după 3 zile.';
+
+  @override
+  String get manageYourApp => 'Gestionează-ți aplicația';
+
+  @override
+  String get updatingYourApp => 'Se actualizează aplicația';
+
+  @override
+  String get fetchingYourAppDetails => 'Se preiau detaliile aplicației';
+
+  @override
+  String get updateAppQuestion => 'Actualizați aplicația?';
+
+  @override
+  String get updateAppConfirmation =>
+      'Sunteți sigur că doriți să actualizați aplicația? Modificările vor fi vizibile după examinarea de către echipa noastră.';
+
+  @override
+  String get updateApp => 'Actualizare aplicație';
 }

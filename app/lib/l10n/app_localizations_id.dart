@@ -3979,4 +3979,23 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get helpsDiagnoseIssuesAutoDeletes => 'Membantu mendiagnosis masalah. Otomatis dihapus setelah 3 hari.';
+
+  @override
+  String get manageYourApp => 'Kelola Aplikasi Anda';
+
+  @override
+  String get updatingYourApp => 'Memperbarui aplikasi Anda';
+
+  @override
+  String get fetchingYourAppDetails => 'Mengambil detail aplikasi Anda';
+
+  @override
+  String get updateAppQuestion => 'Perbarui Aplikasi?';
+
+  @override
+  String get updateAppConfirmation =>
+      'Apakah Anda yakin ingin memperbarui aplikasi? Perubahan akan terlihat setelah ditinjau oleh tim kami.';
+
+  @override
+  String get updateApp => 'Perbarui Aplikasi';
 }

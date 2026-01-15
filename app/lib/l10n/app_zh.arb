@@ -1401,5 +1401,11 @@
   "previewScreenshots": "预览截图",
   "holdOnPreparingForm": "请稍候，我们正在为您准备表单",
   "bySubmittingYouAgreeToOmi": "提交即表示您同意Omi ",
-  "termsAndPrivacyPolicy": "条款与隐私政策"
+  "termsAndPrivacyPolicy": "条款与隐私政策",
+  "manageYourApp": "管理您的应用",
+  "updatingYourApp": "正在更新您的应用",
+  "fetchingYourAppDetails": "正在获取应用详情",
+  "updateAppQuestion": "更新应用？",
+  "updateAppConfirmation": "确定要更新您的应用吗？更改将在我们团队审核后生效。",
+  "updateApp": "更新应用"
 }

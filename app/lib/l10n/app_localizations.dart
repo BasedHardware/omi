@@ -7616,6 +7616,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Helps diagnose issues. Auto-deletes after 3 days.'**
   String get helpsDiagnoseIssuesAutoDeletes;
+
+  /// Title for app management page
+  ///
+  /// In en, this message translates to:
+  /// **'Manage Your App'**
+  String get manageYourApp;
+
+  /// Loading message when updating app
+  ///
+  /// In en, this message translates to:
+  /// **'Updating your app'**
+  String get updatingYourApp;
+
+  /// Loading message when fetching app details
+  ///
+  /// In en, this message translates to:
+  /// **'Fetching your app details'**
+  String get fetchingYourAppDetails;
+
+  /// Dialog title asking to confirm app update
+  ///
+  /// In en, this message translates to:
+  /// **'Update App?'**
+  String get updateAppQuestion;
+
+  /// Dialog description explaining app update will be reviewed
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to update your app? The changes will reflect once reviewed by our team.'**
+  String get updateAppConfirmation;
+
+  /// Button text to update app
+  ///
+  /// In en, this message translates to:
+  /// **'Update App'**
+  String get updateApp;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

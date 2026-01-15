@@ -1772,5 +1772,11 @@
   "previewScreenshots": "Voorbeeld schermafbeeldingen",
   "holdOnPreparingForm": "Even geduld, we bereiden het formulier voor u voor",
   "bySubmittingYouAgreeToOmi": "Door in te dienen, gaat u akkoord met Omi ",
-  "termsAndPrivacyPolicy": "Voorwaarden en Privacybeleid"
+  "termsAndPrivacyPolicy": "Voorwaarden en Privacybeleid",
+  "manageYourApp": "Beheer uw app",
+  "updatingYourApp": "Uw app bijwerken",
+  "fetchingYourAppDetails": "App-details ophalen",
+  "updateAppQuestion": "App bijwerken?",
+  "updateAppConfirmation": "Weet u zeker dat u uw app wilt bijwerken? De wijzigingen worden doorgevoerd na beoordeling door ons team.",
+  "updateApp": "App bijwerken"
 }

@@ -2956,5 +2956,11 @@
   "previewScreenshots": "Vista prèvia de captures",
   "holdOnPreparingForm": "Espera, estem preparant el formulari per a tu",
   "bySubmittingYouAgreeToOmi": "En enviar, acceptes Omi ",
-  "termsAndPrivacyPolicy": "Termes i Política de Privacitat"
+  "termsAndPrivacyPolicy": "Termes i Política de Privacitat",
+  "manageYourApp": "Gestiona la teva aplicació",
+  "updatingYourApp": "Actualitzant la teva aplicació",
+  "fetchingYourAppDetails": "Obtenint els detalls de la teva aplicació",
+  "updateAppQuestion": "Actualitzar l'aplicació?",
+  "updateAppConfirmation": "Estàs segur que vols actualitzar la teva aplicació? Els canvis es reflectiran un cop revisats pel nostre equip.",
+  "updateApp": "Actualitzar aplicació"
 }

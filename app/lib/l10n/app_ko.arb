@@ -2954,5 +2954,11 @@
   "previewScreenshots": "스크린샷 미리보기",
   "holdOnPreparingForm": "잠시만요, 양식을 준비하고 있습니다",
   "bySubmittingYouAgreeToOmi": "제출하면 Omi ",
-  "termsAndPrivacyPolicy": "이용약관 및 개인정보 처리방침"
+  "termsAndPrivacyPolicy": "이용약관 및 개인정보 처리방침",
+  "manageYourApp": "앱 관리",
+  "updatingYourApp": "앱 업데이트 중",
+  "fetchingYourAppDetails": "앱 세부정보 가져오는 중",
+  "updateAppQuestion": "앱을 업데이트하시겠습니까?",
+  "updateAppConfirmation": "앱을 업데이트하시겠습니까? 변경 사항은 팀 검토 후 반영됩니다.",
+  "updateApp": "앱 업데이트"
 }

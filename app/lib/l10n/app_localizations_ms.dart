@@ -3982,4 +3982,23 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get helpsDiagnoseIssuesAutoDeletes => 'Membantu mendiagnosis isu. Dipadam secara automatik selepas 3 hari.';
+
+  @override
+  String get manageYourApp => 'Urus Aplikasi Anda';
+
+  @override
+  String get updatingYourApp => 'Mengemas kini aplikasi anda';
+
+  @override
+  String get fetchingYourAppDetails => 'Mendapatkan butiran aplikasi anda';
+
+  @override
+  String get updateAppQuestion => 'Kemas kini Aplikasi?';
+
+  @override
+  String get updateAppConfirmation =>
+      'Adakah anda pasti mahu mengemas kini aplikasi anda? Perubahan akan dipaparkan selepas disemak oleh pasukan kami.';
+
+  @override
+  String get updateApp => 'Kemas kini Aplikasi';
 }

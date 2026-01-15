@@ -3950,4 +3950,23 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get helpsDiagnoseIssuesAutoDeletes => 'Ajuda a diagnosticar problemas. Eliminado automaticamente após 3 dias.';
+
+  @override
+  String get manageYourApp => 'Gerir a sua aplicação';
+
+  @override
+  String get updatingYourApp => 'A atualizar a sua aplicação';
+
+  @override
+  String get fetchingYourAppDetails => 'A obter detalhes da aplicação';
+
+  @override
+  String get updateAppQuestion => 'Atualizar aplicação?';
+
+  @override
+  String get updateAppConfirmation =>
+      'Tem a certeza de que pretende atualizar a sua aplicação? As alterações serão refletidas após revisão pela nossa equipa.';
+
+  @override
+  String get updateApp => 'Atualizar aplicação';
 }

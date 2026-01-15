@@ -4001,4 +4001,23 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get helpsDiagnoseIssuesAutoDeletes =>
       'Aide à diagnostiquer les problèmes. Supprimé automatiquement après 3 jours.';
+
+  @override
+  String get manageYourApp => 'Gérer votre application';
+
+  @override
+  String get updatingYourApp => 'Mise à jour de votre application';
+
+  @override
+  String get fetchingYourAppDetails => 'Récupération des détails de votre application';
+
+  @override
+  String get updateAppQuestion => 'Mettre à jour l\'application ?';
+
+  @override
+  String get updateAppConfirmation =>
+      'Êtes-vous sûr de vouloir mettre à jour votre application ? Les modifications seront appliquées après examen par notre équipe.';
+
+  @override
+  String get updateApp => 'Mettre à jour l\'application';
 }

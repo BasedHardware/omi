@@ -2954,5 +2954,11 @@
   "previewScreenshots": "Попередній перегляд знімків",
   "holdOnPreparingForm": "Зачекайте, ми готуємо форму для вас",
   "bySubmittingYouAgreeToOmi": "Надсилаючи, ви погоджуєтеся з Omi ",
-  "termsAndPrivacyPolicy": "Умови та Політика конфіденційності"
+  "termsAndPrivacyPolicy": "Умови та Політика конфіденційності",
+  "manageYourApp": "Керуйте своїм додатком",
+  "updatingYourApp": "Оновлення вашого додатка",
+  "fetchingYourAppDetails": "Отримання даних додатка",
+  "updateAppQuestion": "Оновити додаток?",
+  "updateAppConfirmation": "Ви впевнені, що хочете оновити свій додаток? Зміни набудуть чинності після перевірки нашою командою.",
+  "updateApp": "Оновити додаток"
 }

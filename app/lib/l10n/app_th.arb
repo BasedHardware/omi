@@ -2954,5 +2954,11 @@
   "previewScreenshots": "ตัวอย่างภาพหน้าจอ",
   "holdOnPreparingForm": "รอสักครู่ เรากำลังเตรียมแบบฟอร์มให้คุณ",
   "bySubmittingYouAgreeToOmi": "การส่งหมายถึงคุณยอมรับ ",
-  "termsAndPrivacyPolicy": "ข้อกำหนดและนโยบายความเป็นส่วนตัว"
+  "termsAndPrivacyPolicy": "ข้อกำหนดและนโยบายความเป็นส่วนตัว",
+  "manageYourApp": "จัดการแอปของคุณ",
+  "updatingYourApp": "กำลังอัปเดตแอปของคุณ",
+  "fetchingYourAppDetails": "กำลังดึงข้อมูลแอปของคุณ",
+  "updateAppQuestion": "อัปเดตแอป?",
+  "updateAppConfirmation": "คุณแน่ใจหรือไม่ว่าต้องการอัปเดตแอป? การเปลี่ยนแปลงจะมีผลหลังจากทีมของเราตรวจสอบ",
+  "updateApp": "อัปเดตแอป"
 }

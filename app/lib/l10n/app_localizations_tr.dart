@@ -3978,4 +3978,23 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get helpsDiagnoseIssuesAutoDeletes =>
       'Sorunların teşhisine yardımcı olur. 3 gün sonra otomatik olarak silinir.';
+
+  @override
+  String get manageYourApp => 'Uygulamanızı Yönetin';
+
+  @override
+  String get updatingYourApp => 'Uygulamanız güncelleniyor';
+
+  @override
+  String get fetchingYourAppDetails => 'Uygulama bilgileri alınıyor';
+
+  @override
+  String get updateAppQuestion => 'Uygulama güncellensin mi?';
+
+  @override
+  String get updateAppConfirmation =>
+      'Uygulamanızı güncellemek istediğinizden emin misiniz? Değişiklikler ekibimiz tarafından incelendikten sonra yansıtılacaktır.';
+
+  @override
+  String get updateApp => 'Uygulamayı Güncelle';
 }

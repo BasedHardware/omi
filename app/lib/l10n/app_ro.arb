@@ -2954,5 +2954,11 @@
   "previewScreenshots": "Previzualizare capturi de ecran",
   "holdOnPreparingForm": "Așteptați, pregătim formularul pentru dumneavoastră",
   "bySubmittingYouAgreeToOmi": "Prin trimitere, sunteți de acord cu ",
-  "termsAndPrivacyPolicy": "Termeni și Politica de Confidențialitate"
+  "termsAndPrivacyPolicy": "Termeni și Politica de Confidențialitate",
+  "manageYourApp": "Gestionează-ți aplicația",
+  "updatingYourApp": "Se actualizează aplicația",
+  "fetchingYourAppDetails": "Se preiau detaliile aplicației",
+  "updateAppQuestion": "Actualizați aplicația?",
+  "updateAppConfirmation": "Sunteți sigur că doriți să actualizați aplicația? Modificările vor fi vizibile după examinarea de către echipa noastră.",
+  "updateApp": "Actualizare aplicație"
 }

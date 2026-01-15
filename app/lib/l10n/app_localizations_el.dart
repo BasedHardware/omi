@@ -3999,4 +3999,23 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get helpsDiagnoseIssuesAutoDeletes =>
       'Βοηθά στη διάγνωση προβλημάτων. Διαγράφεται αυτόματα μετά από 3 ημέρες.';
+
+  @override
+  String get manageYourApp => 'Διαχείριση της εφαρμογής σας';
+
+  @override
+  String get updatingYourApp => 'Ενημέρωση της εφαρμογής σας';
+
+  @override
+  String get fetchingYourAppDetails => 'Ανάκτηση λεπτομερειών εφαρμογής';
+
+  @override
+  String get updateAppQuestion => 'Ενημέρωση εφαρμογής;';
+
+  @override
+  String get updateAppConfirmation =>
+      'Είστε σίγουροι ότι θέλετε να ενημερώσετε την εφαρμογή σας; Οι αλλαγές θα εμφανιστούν μετά τον έλεγχο από την ομάδα μας.';
+
+  @override
+  String get updateApp => 'Ενημέρωση εφαρμογής';
 }

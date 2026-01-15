@@ -3903,4 +3903,22 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get helpsDiagnoseIssuesAutoDeletes => '문제 진단에 도움이 됩니다. 3일 후 자동 삭제됩니다.';
+
+  @override
+  String get manageYourApp => '앱 관리';
+
+  @override
+  String get updatingYourApp => '앱 업데이트 중';
+
+  @override
+  String get fetchingYourAppDetails => '앱 세부정보 가져오는 중';
+
+  @override
+  String get updateAppQuestion => '앱을 업데이트하시겠습니까?';
+
+  @override
+  String get updateAppConfirmation => '앱을 업데이트하시겠습니까? 변경 사항은 팀 검토 후 반영됩니다.';
+
+  @override
+  String get updateApp => '앱 업데이트';
 }

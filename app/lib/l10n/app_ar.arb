@@ -2973,5 +2973,11 @@
   "previewScreenshots": "معاينة لقطات الشاشة",
   "holdOnPreparingForm": "انتظر قليلاً، نحن نجهز النموذج لك",
   "bySubmittingYouAgreeToOmi": "بالإرسال، أنت توافق على Omi ",
-  "termsAndPrivacyPolicy": "الشروط وسياسة الخصوصية"
+  "termsAndPrivacyPolicy": "الشروط وسياسة الخصوصية",
+  "manageYourApp": "إدارة تطبيقك",
+  "updatingYourApp": "جارٍ تحديث تطبيقك",
+  "fetchingYourAppDetails": "جارٍ جلب تفاصيل تطبيقك",
+  "updateAppQuestion": "تحديث التطبيق؟",
+  "updateAppConfirmation": "هل أنت متأكد من رغبتك في تحديث تطبيقك؟ ستظهر التغييرات بعد مراجعتها من قبل فريقنا.",
+  "updateApp": "تحديث التطبيق"
 }

@@ -2954,5 +2954,11 @@
   "previewScreenshots": "Kuvakaappausten esikatselu",
   "holdOnPreparingForm": "Odota hetki, valmistelemme lomaketta sinulle",
   "bySubmittingYouAgreeToOmi": "Lähettämällä hyväksyt Omin ",
-  "termsAndPrivacyPolicy": "Ehdot ja Tietosuojakäytäntö"
+  "termsAndPrivacyPolicy": "Ehdot ja Tietosuojakäytäntö",
+  "manageYourApp": "Hallinnoi sovellustasi",
+  "updatingYourApp": "Päivitetään sovellustasi",
+  "fetchingYourAppDetails": "Haetaan sovelluksen tietoja",
+  "updateAppQuestion": "Päivitä sovellus?",
+  "updateAppConfirmation": "Haluatko varmasti päivittää sovelluksesi? Muutokset näkyvät tiimimme tarkistuksen jälkeen.",
+  "updateApp": "Päivitä sovellus"
 }

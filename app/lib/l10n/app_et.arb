@@ -2954,5 +2954,11 @@
   "previewScreenshots": "Ekraanipiltide eelvaade",
   "holdOnPreparingForm": "Oota, valmistame vormi teile ette",
   "bySubmittingYouAgreeToOmi": "Esitades nõustute Omi ",
-  "termsAndPrivacyPolicy": "Tingimused ja Privaatsuspoliitika"
+  "termsAndPrivacyPolicy": "Tingimused ja Privaatsuspoliitika",
+  "manageYourApp": "Halda oma rakendust",
+  "updatingYourApp": "Rakenduse värskendamine",
+  "fetchingYourAppDetails": "Rakenduse üksikasjade hankimine",
+  "updateAppQuestion": "Värskenda rakendust?",
+  "updateAppConfirmation": "Kas olete kindel, et soovite oma rakendust värskendada? Muudatused jõustuvad pärast meie meeskonna ülevaatust.",
+  "updateApp": "Värskenda rakendust"
 }

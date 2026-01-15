@@ -3976,4 +3976,23 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get helpsDiagnoseIssuesAutoDeletes =>
       'Hjælper med at diagnosticere problemer. Slettes automatisk efter 3 dage.';
+
+  @override
+  String get manageYourApp => 'Administrer din app';
+
+  @override
+  String get updatingYourApp => 'Opdaterer din app';
+
+  @override
+  String get fetchingYourAppDetails => 'Henter dine app-detaljer';
+
+  @override
+  String get updateAppQuestion => 'Opdater app?';
+
+  @override
+  String get updateAppConfirmation =>
+      'Er du sikker på, at du vil opdatere din app? Ændringerne vil blive synlige efter gennemgang af vores team.';
+
+  @override
+  String get updateApp => 'Opdater app';
 }

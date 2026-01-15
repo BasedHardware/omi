@@ -3990,4 +3990,23 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get helpsDiagnoseIssuesAutoDeletes =>
       'Ajuda a diagnosticar problemes. S\'elimina automàticament després de 3 dies.';
+
+  @override
+  String get manageYourApp => 'Gestiona la teva aplicació';
+
+  @override
+  String get updatingYourApp => 'Actualitzant la teva aplicació';
+
+  @override
+  String get fetchingYourAppDetails => 'Obtenint els detalls de la teva aplicació';
+
+  @override
+  String get updateAppQuestion => 'Actualitzar l\'aplicació?';
+
+  @override
+  String get updateAppConfirmation =>
+      'Estàs segur que vols actualitzar la teva aplicació? Els canvis es reflectiran un cop revisats pel nostre equip.';
+
+  @override
+  String get updateApp => 'Actualitzar aplicació';
 }

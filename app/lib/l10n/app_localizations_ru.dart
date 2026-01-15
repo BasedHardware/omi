@@ -3980,4 +3980,23 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get helpsDiagnoseIssuesAutoDeletes =>
       'Помогает диагностировать проблемы. Автоматически удаляется через 3 дня.';
+
+  @override
+  String get manageYourApp => 'Управление приложением';
+
+  @override
+  String get updatingYourApp => 'Обновление приложения';
+
+  @override
+  String get fetchingYourAppDetails => 'Получение данных приложения';
+
+  @override
+  String get updateAppQuestion => 'Обновить приложение?';
+
+  @override
+  String get updateAppConfirmation =>
+      'Вы уверены, что хотите обновить приложение? Изменения вступят в силу после проверки нашей командой.';
+
+  @override
+  String get updateApp => 'Обновить приложение';
 }

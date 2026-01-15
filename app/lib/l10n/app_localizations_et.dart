@@ -3970,4 +3970,23 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get helpsDiagnoseIssuesAutoDeletes => 'Aitab diagnoosida probleeme. Kustutatakse automaatselt 3 päeva pärast.';
+
+  @override
+  String get manageYourApp => 'Halda oma rakendust';
+
+  @override
+  String get updatingYourApp => 'Rakenduse värskendamine';
+
+  @override
+  String get fetchingYourAppDetails => 'Rakenduse üksikasjade hankimine';
+
+  @override
+  String get updateAppQuestion => 'Värskenda rakendust?';
+
+  @override
+  String get updateAppConfirmation =>
+      'Kas olete kindel, et soovite oma rakendust värskendada? Muudatused jõustuvad pärast meie meeskonna ülevaatust.';
+
+  @override
+  String get updateApp => 'Värskenda rakendust';
 }

@@ -2936,5 +2936,11 @@
   "previewScreenshots": "Anteprima schermate",
   "holdOnPreparingForm": "Attendi, stiamo preparando il modulo per te",
   "bySubmittingYouAgreeToOmi": "Inviando, accetti i ",
-  "termsAndPrivacyPolicy": "Termini e Informativa sulla Privacy"
+  "termsAndPrivacyPolicy": "Termini e Informativa sulla Privacy",
+  "manageYourApp": "Gestisci la tua app",
+  "updatingYourApp": "Aggiornamento della tua app",
+  "fetchingYourAppDetails": "Recupero dei dettagli della tua app",
+  "updateAppQuestion": "Aggiornare l'app?",
+  "updateAppConfirmation": "Sei sicuro di voler aggiornare la tua app? Le modifiche saranno visibili dopo la revisione del nostro team.",
+  "updateApp": "Aggiorna app"
 }

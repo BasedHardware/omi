@@ -3991,4 +3991,23 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get helpsDiagnoseIssuesAutoDeletes =>
       'Segít a problémák diagnosztizálásában. 3 nap után automatikusan törlődik.';
+
+  @override
+  String get manageYourApp => 'Alkalmazás kezelése';
+
+  @override
+  String get updatingYourApp => 'Alkalmazás frissítése';
+
+  @override
+  String get fetchingYourAppDetails => 'Alkalmazás részleteinek lekérése';
+
+  @override
+  String get updateAppQuestion => 'Alkalmazás frissítése?';
+
+  @override
+  String get updateAppConfirmation =>
+      'Biztosan frissíteni szeretné az alkalmazást? A változtatások a csapatunk általi felülvizsgálat után lépnek érvénybe.';
+
+  @override
+  String get updateApp => 'Alkalmazás frissítése';
 }

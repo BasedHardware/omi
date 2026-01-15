@@ -3903,4 +3903,22 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get helpsDiagnoseIssuesAutoDeletes => '問題の診断に役立ちます。3日後に自動削除されます。';
+
+  @override
+  String get manageYourApp => 'アプリを管理';
+
+  @override
+  String get updatingYourApp => 'アプリを更新中';
+
+  @override
+  String get fetchingYourAppDetails => 'アプリの詳細を取得中';
+
+  @override
+  String get updateAppQuestion => 'アプリを更新しますか？';
+
+  @override
+  String get updateAppConfirmation => 'アプリを更新してよろしいですか？変更はチームの審査後に反映されます。';
+
+  @override
+  String get updateApp => 'アプリを更新';
 }

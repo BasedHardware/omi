@@ -2954,5 +2954,11 @@
   "previewScreenshots": "Náhľad snímok obrazovky",
   "holdOnPreparingForm": "Počkajte, pripravujeme pre vás formulár",
   "bySubmittingYouAgreeToOmi": "Odoslaním súhlasíte s Omi ",
-  "termsAndPrivacyPolicy": "Podmienky a Zásady ochrany osobných údajov"
+  "termsAndPrivacyPolicy": "Podmienky a Zásady ochrany osobných údajov",
+  "manageYourApp": "Spravujte svoju aplikáciu",
+  "updatingYourApp": "Aktualizácia vašej aplikácie",
+  "fetchingYourAppDetails": "Načítanie podrobností aplikácie",
+  "updateAppQuestion": "Aktualizovať aplikáciu?",
+  "updateAppConfirmation": "Ste si istý, že chcete aktualizovať svoju aplikáciu? Zmeny sa prejavia po kontrole naším tímom.",
+  "updateApp": "Aktualizovať aplikáciu"
 }

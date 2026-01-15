@@ -2954,5 +2954,11 @@
   "previewScreenshots": "Forhåndsvisning af skærmbilleder",
   "holdOnPreparingForm": "Vent venligst, vi forbereder formularen til dig",
   "bySubmittingYouAgreeToOmi": "Ved at indsende accepterer du Omi ",
-  "termsAndPrivacyPolicy": "Vilkår og Privatlivspolitik"
+  "termsAndPrivacyPolicy": "Vilkår og Privatlivspolitik",
+  "manageYourApp": "Administrer din app",
+  "updatingYourApp": "Opdaterer din app",
+  "fetchingYourAppDetails": "Henter dine app-detaljer",
+  "updateAppQuestion": "Opdater app?",
+  "updateAppConfirmation": "Er du sikker på, at du vil opdatere din app? Ændringerne vil blive synlige efter gennemgang af vores team.",
+  "updateApp": "Opdater app"
 }

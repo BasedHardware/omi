@@ -3989,4 +3989,23 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get helpsDiagnoseIssuesAutoDeletes =>
       'Aiuta a diagnosticare i problemi. Eliminato automaticamente dopo 3 giorni.';
+
+  @override
+  String get manageYourApp => 'Gestisci la tua app';
+
+  @override
+  String get updatingYourApp => 'Aggiornamento della tua app';
+
+  @override
+  String get fetchingYourAppDetails => 'Recupero dei dettagli della tua app';
+
+  @override
+  String get updateAppQuestion => 'Aggiornare l\'app?';
+
+  @override
+  String get updateAppConfirmation =>
+      'Sei sicuro di voler aggiornare la tua app? Le modifiche saranno visibili dopo la revisione del nostro team.';
+
+  @override
+  String get updateApp => 'Aggiorna app';
 }

@@ -3981,4 +3981,23 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get helpsDiagnoseIssuesAutoDeletes =>
       'Helpt bij het diagnosticeren van problemen. Wordt na 3 dagen automatisch verwijderd.';
+
+  @override
+  String get manageYourApp => 'Beheer uw app';
+
+  @override
+  String get updatingYourApp => 'Uw app bijwerken';
+
+  @override
+  String get fetchingYourAppDetails => 'App-details ophalen';
+
+  @override
+  String get updateAppQuestion => 'App bijwerken?';
+
+  @override
+  String get updateAppConfirmation =>
+      'Weet u zeker dat u uw app wilt bijwerken? De wijzigingen worden doorgevoerd na beoordeling door ons team.';
+
+  @override
+  String get updateApp => 'App bijwerken';
 }

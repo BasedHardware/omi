@@ -3971,4 +3971,23 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get helpsDiagnoseIssuesAutoDeletes => 'Pomáha diagnostikovať problémy. Automaticky sa vymaže po 3 dňoch.';
+
+  @override
+  String get manageYourApp => 'Spravujte svoju aplikáciu';
+
+  @override
+  String get updatingYourApp => 'Aktualizácia vašej aplikácie';
+
+  @override
+  String get fetchingYourAppDetails => 'Načítanie podrobností aplikácie';
+
+  @override
+  String get updateAppQuestion => 'Aktualizovať aplikáciu?';
+
+  @override
+  String get updateAppConfirmation =>
+      'Ste si istý, že chcete aktualizovať svoju aplikáciu? Zmeny sa prejavia po kontrole naším tímom.';
+
+  @override
+  String get updateApp => 'Aktualizovať aplikáciu';
 }

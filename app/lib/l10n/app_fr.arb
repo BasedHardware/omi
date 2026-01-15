@@ -1772,5 +1772,11 @@
   "previewScreenshots": "Aperçu des captures",
   "holdOnPreparingForm": "Patientez, nous préparons le formulaire pour vous",
   "bySubmittingYouAgreeToOmi": "En soumettant, vous acceptez les ",
-  "termsAndPrivacyPolicy": "Conditions et Politique de Confidentialité"
+  "termsAndPrivacyPolicy": "Conditions et Politique de Confidentialité",
+  "manageYourApp": "Gérer votre application",
+  "updatingYourApp": "Mise à jour de votre application",
+  "fetchingYourAppDetails": "Récupération des détails de votre application",
+  "updateAppQuestion": "Mettre à jour l'application ?",
+  "updateAppConfirmation": "Êtes-vous sûr de vouloir mettre à jour votre application ? Les modifications seront appliquées après examen par notre équipe.",
+  "updateApp": "Mettre à jour l'application"
 }

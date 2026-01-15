@@ -1401,5 +1401,11 @@
   "previewScreenshots": "स्क्रीनशॉट पूर्वावलोकन",
   "holdOnPreparingForm": "रुकिए, हम आपके लिए फॉर्म तैयार कर रहे हैं",
   "bySubmittingYouAgreeToOmi": "सबमिट करके, आप Omi की ",
-  "termsAndPrivacyPolicy": "शर्तें और गोपनीयता नीति"
+  "termsAndPrivacyPolicy": "शर्तें और गोपनीयता नीति",
+  "manageYourApp": "अपना ऐप प्रबंधित करें",
+  "updatingYourApp": "आपका ऐप अपडेट हो रहा है",
+  "fetchingYourAppDetails": "आपके ऐप का विवरण प्राप्त हो रहा है",
+  "updateAppQuestion": "ऐप अपडेट करें?",
+  "updateAppConfirmation": "क्या आप वाकई अपना ऐप अपडेट करना चाहते हैं? परिवर्तन हमारी टीम द्वारा समीक्षा के बाद दिखाई देंगे।",
+  "updateApp": "ऐप अपडेट करें"
 }

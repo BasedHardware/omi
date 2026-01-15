@@ -2954,5 +2954,11 @@
   "previewScreenshots": "Ekrānuzņēmumu priekšskatījums",
   "holdOnPreparingForm": "Uzgaidiet, mēs sagatavojam veidlapu jums",
   "bySubmittingYouAgreeToOmi": "Iesniedzot, jūs piekrītat Omi ",
-  "termsAndPrivacyPolicy": "Noteikumi un Privātuma Politika"
+  "termsAndPrivacyPolicy": "Noteikumi un Privātuma Politika",
+  "manageYourApp": "Pārvaldīt jūsu lietotni",
+  "updatingYourApp": "Atjaunina jūsu lietotni",
+  "fetchingYourAppDetails": "Iegūst lietotnes informāciju",
+  "updateAppQuestion": "Atjaunināt lietotni?",
+  "updateAppConfirmation": "Vai tiešām vēlaties atjaunināt savu lietotni? Izmaiņas būs redzamas pēc mūsu komandas pārskatīšanas.",
+  "updateApp": "Atjaunināt lietotni"
 }

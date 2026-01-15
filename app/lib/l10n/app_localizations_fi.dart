@@ -3968,4 +3968,23 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get helpsDiagnoseIssuesAutoDeletes =>
       'Auttaa ongelmien diagnosoinnissa. Poistetaan automaattisesti 3 päivän kuluttua.';
+
+  @override
+  String get manageYourApp => 'Hallinnoi sovellustasi';
+
+  @override
+  String get updatingYourApp => 'Päivitetään sovellustasi';
+
+  @override
+  String get fetchingYourAppDetails => 'Haetaan sovelluksen tietoja';
+
+  @override
+  String get updateAppQuestion => 'Päivitä sovellus?';
+
+  @override
+  String get updateAppConfirmation =>
+      'Haluatko varmasti päivittää sovelluksesi? Muutokset näkyvät tiimimme tarkistuksen jälkeen.';
+
+  @override
+  String get updateApp => 'Päivitä sovellus';
 }

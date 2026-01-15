@@ -3974,4 +3974,23 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get helpsDiagnoseIssuesAutoDeletes => 'Palīdz diagnosticēt problēmas. Automātiski izdzēsts pēc 3 dienām.';
+
+  @override
+  String get manageYourApp => 'Pārvaldīt jūsu lietotni';
+
+  @override
+  String get updatingYourApp => 'Atjaunina jūsu lietotni';
+
+  @override
+  String get fetchingYourAppDetails => 'Iegūst lietotnes informāciju';
+
+  @override
+  String get updateAppQuestion => 'Atjaunināt lietotni?';
+
+  @override
+  String get updateAppConfirmation =>
+      'Vai tiešām vēlaties atjaunināt savu lietotni? Izmaiņas būs redzamas pēc mūsu komandas pārskatīšanas.';
+
+  @override
+  String get updateApp => 'Atjaunināt lietotni';
 }

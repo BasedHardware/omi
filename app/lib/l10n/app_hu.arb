@@ -2954,5 +2954,11 @@
   "previewScreenshots": "Képernyőkép előnézet",
   "holdOnPreparingForm": "Várjon, előkészítjük az űrlapot",
   "bySubmittingYouAgreeToOmi": "Beküldéssel elfogadja az Omi ",
-  "termsAndPrivacyPolicy": "Feltételek és Adatvédelmi Irányelvek"
+  "termsAndPrivacyPolicy": "Feltételek és Adatvédelmi Irányelvek",
+  "manageYourApp": "Alkalmazás kezelése",
+  "updatingYourApp": "Alkalmazás frissítése",
+  "fetchingYourAppDetails": "Alkalmazás részleteinek lekérése",
+  "updateAppQuestion": "Alkalmazás frissítése?",
+  "updateAppConfirmation": "Biztosan frissíteni szeretné az alkalmazást? A változtatások a csapatunk általi felülvizsgálat után lépnek érvénybe.",
+  "updateApp": "Alkalmazás frissítése"
 }

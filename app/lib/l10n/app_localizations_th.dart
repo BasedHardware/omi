@@ -3947,4 +3947,22 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get helpsDiagnoseIssuesAutoDeletes => 'ช่วยในการวินิจฉัยปัญหา ลบอัตโนมัติหลังจาก 3 วัน';
+
+  @override
+  String get manageYourApp => 'จัดการแอปของคุณ';
+
+  @override
+  String get updatingYourApp => 'กำลังอัปเดตแอปของคุณ';
+
+  @override
+  String get fetchingYourAppDetails => 'กำลังดึงข้อมูลแอปของคุณ';
+
+  @override
+  String get updateAppQuestion => 'อัปเดตแอป?';
+
+  @override
+  String get updateAppConfirmation => 'คุณแน่ใจหรือไม่ว่าต้องการอัปเดตแอป? การเปลี่ยนแปลงจะมีผลหลังจากทีมของเราตรวจสอบ';
+
+  @override
+  String get updateApp => 'อัปเดตแอป';
 }

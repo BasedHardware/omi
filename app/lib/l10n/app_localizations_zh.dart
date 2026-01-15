@@ -3898,4 +3898,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get helpsDiagnoseIssuesAutoDeletes => '帮助诊断问题。3天后自动删除。';
+
+  @override
+  String get manageYourApp => '管理您的应用';
+
+  @override
+  String get updatingYourApp => '正在更新您的应用';
+
+  @override
+  String get fetchingYourAppDetails => '正在获取应用详情';
+
+  @override
+  String get updateAppQuestion => '更新应用？';
+
+  @override
+  String get updateAppConfirmation => '确定要更新您的应用吗？更改将在我们团队审核后生效。';
+
+  @override
+  String get updateApp => '更新应用';
 }

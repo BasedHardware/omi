@@ -3939,4 +3939,23 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get helpsDiagnoseIssuesAutoDeletes => 'يساعد في تشخيص المشاكل. يحذف تلقائيًا بعد 3 أيام.';
+
+  @override
+  String get manageYourApp => 'إدارة تطبيقك';
+
+  @override
+  String get updatingYourApp => 'جارٍ تحديث تطبيقك';
+
+  @override
+  String get fetchingYourAppDetails => 'جارٍ جلب تفاصيل تطبيقك';
+
+  @override
+  String get updateAppQuestion => 'تحديث التطبيق؟';
+
+  @override
+  String get updateAppConfirmation =>
+      'هل أنت متأكد من رغبتك في تحديث تطبيقك؟ ستظهر التغييرات بعد مراجعتها من قبل فريقنا.';
+
+  @override
+  String get updateApp => 'تحديث التطبيق';
 }

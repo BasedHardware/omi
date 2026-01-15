@@ -1401,5 +1401,11 @@
   "previewScreenshots": "Pré-visualização de capturas",
   "holdOnPreparingForm": "Aguarde, estamos preparando o formulário para você",
   "bySubmittingYouAgreeToOmi": "Ao enviar, você concorda com os ",
-  "termsAndPrivacyPolicy": "Termos e Política de Privacidade"
+  "termsAndPrivacyPolicy": "Termos e Política de Privacidade",
+  "manageYourApp": "Gerir a sua aplicação",
+  "updatingYourApp": "A atualizar a sua aplicação",
+  "fetchingYourAppDetails": "A obter detalhes da aplicação",
+  "updateAppQuestion": "Atualizar aplicação?",
+  "updateAppConfirmation": "Tem a certeza de que pretende atualizar a sua aplicação? As alterações serão refletidas após revisão pela nossa equipa.",
+  "updateApp": "Atualizar aplicação"
 }

@@ -3969,4 +3969,23 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get helpsDiagnoseIssuesAutoDeletes => 'Padeda diagnozuoti problemas. Automatiškai ištrinamas po 3 dienų.';
+
+  @override
+  String get manageYourApp => 'Tvarkykite savo programėlę';
+
+  @override
+  String get updatingYourApp => 'Atnaujinama jūsų programėlė';
+
+  @override
+  String get fetchingYourAppDetails => 'Gaunama programėlės informacija';
+
+  @override
+  String get updateAppQuestion => 'Atnaujinti programėlę?';
+
+  @override
+  String get updateAppConfirmation =>
+      'Ar tikrai norite atnaujinti savo programėlę? Pakeitimai bus matomi po mūsų komandos peržiūros.';
+
+  @override
+  String get updateApp => 'Atnaujinti programėlę';
 }

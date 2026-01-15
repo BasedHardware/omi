@@ -3967,4 +3967,23 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get helpsDiagnoseIssuesAutoDeletes => 'Pomáhá diagnostikovat problémy. Automaticky maže po 3 dnech.';
+
+  @override
+  String get manageYourApp => 'Správa vaší aplikace';
+
+  @override
+  String get updatingYourApp => 'Aktualizace vaší aplikace';
+
+  @override
+  String get fetchingYourAppDetails => 'Načítání podrobností vaší aplikace';
+
+  @override
+  String get updateAppQuestion => 'Aktualizovat aplikaci?';
+
+  @override
+  String get updateAppConfirmation =>
+      'Opravdu chcete aktualizovat svou aplikaci? Změny se projeví po kontrole naším týmem.';
+
+  @override
+  String get updateApp => 'Aktualizovat aplikaci';
 }

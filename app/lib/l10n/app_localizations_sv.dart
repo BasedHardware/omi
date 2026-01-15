@@ -3975,4 +3975,23 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String get helpsDiagnoseIssuesAutoDeletes =>
       'Hjälper till att diagnostisera problem. Raderas automatiskt efter 3 dagar.';
+
+  @override
+  String get manageYourApp => 'Hantera din app';
+
+  @override
+  String get updatingYourApp => 'Uppdaterar din app';
+
+  @override
+  String get fetchingYourAppDetails => 'Hämtar appdetaljer';
+
+  @override
+  String get updateAppQuestion => 'Uppdatera app?';
+
+  @override
+  String get updateAppConfirmation =>
+      'Är du säker på att du vill uppdatera din app? Ändringarna visas efter granskning av vårt team.';
+
+  @override
+  String get updateApp => 'Uppdatera app';
 }

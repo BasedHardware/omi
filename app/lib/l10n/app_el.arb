@@ -2954,5 +2954,11 @@
   "previewScreenshots": "Προεπισκόπηση στιγμιότυπων",
   "holdOnPreparingForm": "Περιμένετε, ετοιμάζουμε τη φόρμα για εσάς",
   "bySubmittingYouAgreeToOmi": "Με την υποβολή, συμφωνείτε με το Omi ",
-  "termsAndPrivacyPolicy": "Όροι & Πολιτική Απορρήτου"
+  "termsAndPrivacyPolicy": "Όροι & Πολιτική Απορρήτου",
+  "manageYourApp": "Διαχείριση της εφαρμογής σας",
+  "updatingYourApp": "Ενημέρωση της εφαρμογής σας",
+  "fetchingYourAppDetails": "Ανάκτηση λεπτομερειών εφαρμογής",
+  "updateAppQuestion": "Ενημέρωση εφαρμογής;",
+  "updateAppConfirmation": "Είστε σίγουροι ότι θέλετε να ενημερώσετε την εφαρμογή σας; Οι αλλαγές θα εμφανιστούν μετά τον έλεγχο από την ομάδα μας.",
+  "updateApp": "Ενημέρωση εφαρμογής"
 }

@@ -3973,4 +3973,23 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get helpsDiagnoseIssuesAutoDeletes => 'Допомагає діагностувати проблеми. Автоматично видаляється через 3 дні.';
+
+  @override
+  String get manageYourApp => 'Керуйте своїм додатком';
+
+  @override
+  String get updatingYourApp => 'Оновлення вашого додатка';
+
+  @override
+  String get fetchingYourAppDetails => 'Отримання даних додатка';
+
+  @override
+  String get updateAppQuestion => 'Оновити додаток?';
+
+  @override
+  String get updateAppConfirmation =>
+      'Ви впевнені, що хочете оновити свій додаток? Зміни набудуть чинності після перевірки нашою командою.';
+
+  @override
+  String get updateApp => 'Оновити додаток';
 }

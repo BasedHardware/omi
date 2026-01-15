@@ -4468,5 +4468,29 @@
   "@termsAndPrivacyPolicy": {
     "description": "Terms and Privacy Policy link text"
   },
-  "helpsDiagnoseIssuesAutoDeletes": "Helps diagnose issues. Auto-deletes after 3 days."
+  "helpsDiagnoseIssuesAutoDeletes": "Helps diagnose issues. Auto-deletes after 3 days.",
+  "manageYourApp": "Manage Your App",
+  "@manageYourApp": {
+    "description": "Title for app management page"
+  },
+  "updatingYourApp": "Updating your app",
+  "@updatingYourApp": {
+    "description": "Loading message when updating app"
+  },
+  "fetchingYourAppDetails": "Fetching your app details",
+  "@fetchingYourAppDetails": {
+    "description": "Loading message when fetching app details"
+  },
+  "updateAppQuestion": "Update App?",
+  "@updateAppQuestion": {
+    "description": "Dialog title asking to confirm app update"
+  },
+  "updateAppConfirmation": "Are you sure you want to update your app? The changes will reflect once reviewed by our team.",
+  "@updateAppConfirmation": {
+    "description": "Dialog description explaining app update will be reviewed"
+  },
+  "updateApp": "Update App",
+  "@updateApp": {
+    "description": "Button text to update app"
+  }
 }

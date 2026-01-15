@@ -3980,4 +3980,23 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get helpsDiagnoseIssuesAutoDeletes => 'Помага за диагностициране на проблеми. Автоматично изтрива след 3 дни.';
+
+  @override
+  String get manageYourApp => 'Управление на приложението ви';
+
+  @override
+  String get updatingYourApp => 'Актуализиране на приложението ви';
+
+  @override
+  String get fetchingYourAppDetails => 'Извличане на детайлите на приложението';
+
+  @override
+  String get updateAppQuestion => 'Актуализиране на приложението?';
+
+  @override
+  String get updateAppConfirmation =>
+      'Сигурни ли сте, че искате да актуализирате приложението си? Промените ще бъдат отразени след преглед от нашия екип.';
+
+  @override
+  String get updateApp => 'Актуализиране на приложението';
 }

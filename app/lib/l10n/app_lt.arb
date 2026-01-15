@@ -2936,5 +2936,11 @@
   "previewScreenshots": "Ekrano nuotraukų peržiūra",
   "holdOnPreparingForm": "Palaukite, ruošiame jums formą",
   "bySubmittingYouAgreeToOmi": "Pateikdami sutinkate su Omi ",
-  "termsAndPrivacyPolicy": "Sąlygos ir Privatumo Politika"
+  "termsAndPrivacyPolicy": "Sąlygos ir Privatumo Politika",
+  "manageYourApp": "Tvarkykite savo programėlę",
+  "updatingYourApp": "Atnaujinama jūsų programėlė",
+  "fetchingYourAppDetails": "Gaunama programėlės informacija",
+  "updateAppQuestion": "Atnaujinti programėlę?",
+  "updateAppConfirmation": "Ar tikrai norite atnaujinti savo programėlę? Pakeitimai bus matomi po mūsų komandos peržiūros.",
+  "updateApp": "Atnaujinti programėlę"
 }

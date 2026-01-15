@@ -3969,4 +3969,23 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get helpsDiagnoseIssuesAutoDeletes =>
       'Hjelper med å diagnostisere problemer. Slettes automatisk etter 3 dager.';
+
+  @override
+  String get manageYourApp => 'Administrer appen din';
+
+  @override
+  String get updatingYourApp => 'Oppdaterer appen din';
+
+  @override
+  String get fetchingYourAppDetails => 'Henter app-detaljer';
+
+  @override
+  String get updateAppQuestion => 'Oppdater app?';
+
+  @override
+  String get updateAppConfirmation =>
+      'Er du sikker på at du vil oppdatere appen din? Endringene vil vises etter gjennomgang av teamet vårt.';
+
+  @override
+  String get updateApp => 'Oppdater app';
 }
