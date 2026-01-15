@@ -4033,4 +4033,118 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get no => 'Nu';
+
+  @override
+  String get subscriptionCancelledSuccessfully =>
+      'Abonament anulat cu succes. Va rămâne activ până la sfârșitul perioadei curente de facturare.';
+
+  @override
+  String get failedToCancelSubscription => 'Anularea abonamentului a eșuat. Vă rugăm să încercați din nou.';
+
+  @override
+  String get invalidPaymentUrl => 'URL de plată invalid';
+
+  @override
+  String get permissionsAndTriggers => 'Permisiuni și declanșatoare';
+
+  @override
+  String get chatFeatures => 'Funcții de chat';
+
+  @override
+  String get uninstall => 'Dezinstalare';
+
+  @override
+  String get installs => 'INSTALĂRI';
+
+  @override
+  String get priceLabel => 'PREȚ';
+
+  @override
+  String get updatedLabel => 'ACTUALIZAT';
+
+  @override
+  String get createdLabel => 'CREAT';
+
+  @override
+  String get featuredLabel => 'RECOMANDAT';
+
+  @override
+  String get cancelSubscriptionQuestion => 'Anulați abonamentul?';
+
+  @override
+  String get cancelSubscriptionConfirmation =>
+      'Sunteți sigur că doriți să vă anulați abonamentul? Veți avea în continuare acces până la sfârșitul perioadei curente de facturare.';
+
+  @override
+  String get cancelSubscriptionButton => 'Anulare abonament';
+
+  @override
+  String get cancelling => 'Se anulează...';
+
+  @override
+  String get betaTesterMessage =>
+      'Sunteți un tester beta pentru această aplicație. Nu este încă publică. Va fi publică după aprobare.';
+
+  @override
+  String get appUnderReviewMessage =>
+      'Aplicația dvs. este în curs de examinare și vizibilă doar pentru dvs. Va fi publică după aprobare.';
+
+  @override
+  String get appRejectedMessage =>
+      'Aplicația dvs. a fost respinsă. Actualizați detaliile și retrimiteți pentru examinare.';
+
+  @override
+  String get invalidIntegrationUrl => 'URL de integrare invalid';
+
+  @override
+  String get tapToComplete => 'Atingeți pentru a finaliza';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'URL instrucțiuni de configurare invalid';
+
+  @override
+  String get pushToTalk => 'Apăsați pentru a vorbi';
+
+  @override
+  String get summaryPrompt => 'Prompt de rezumat';
+
+  @override
+  String get pleaseSelectARating => 'Vă rugăm să selectați o evaluare';
+
+  @override
+  String get reviewAddedSuccessfully => 'Recenzie adăugată cu succes 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Recenzie actualizată cu succes 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Trimiterea recenziei a eșuat. Vă rugăm să încercați din nou.';
+
+  @override
+  String get addYourReview => 'Adăugați recenzia dvs.';
+
+  @override
+  String get editYourReview => 'Editați recenzia dvs.';
+
+  @override
+  String get writeAReviewOptional => 'Scrieți o recenzie (opțional)';
+
+  @override
+  String get submitReview => 'Trimite recenzia';
+
+  @override
+  String get updateReview => 'Actualizare recenzie';
+
+  @override
+  String get yourReview => 'Recenzia dvs.';
+
+  @override
+  String get anonymousUser => 'Utilizator anonim';
+
+  @override
+  String get issueActivatingApp => 'A apărut o problemă la activarea acestei aplicații. Vă rugăm să încercați din nou.';
+
+  @override
+  String get dataAccessNoticeDescription =>
+      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
 }

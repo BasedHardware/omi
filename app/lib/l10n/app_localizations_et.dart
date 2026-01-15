@@ -4013,4 +4013,118 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get no => 'Ei';
+
+  @override
+  String get subscriptionCancelledSuccessfully =>
+      'Tellimus tühistatud edukalt. See jääb aktiivseks kuni praeguse arveldusperioodi lõpuni.';
+
+  @override
+  String get failedToCancelSubscription => 'Tellimuse tühistamine ebaõnnestus. Palun proovi uuesti.';
+
+  @override
+  String get invalidPaymentUrl => 'Vigane makse URL';
+
+  @override
+  String get permissionsAndTriggers => 'Load ja päästikud';
+
+  @override
+  String get chatFeatures => 'Vestluse funktsioonid';
+
+  @override
+  String get uninstall => 'Desinstalli';
+
+  @override
+  String get installs => 'PAIGALDUSED';
+
+  @override
+  String get priceLabel => 'HIND';
+
+  @override
+  String get updatedLabel => 'UUENDATUD';
+
+  @override
+  String get createdLabel => 'LOODUD';
+
+  @override
+  String get featuredLabel => 'ESILETÕSTETUD';
+
+  @override
+  String get cancelSubscriptionQuestion => 'Tühista tellimus?';
+
+  @override
+  String get cancelSubscriptionConfirmation =>
+      'Kas olete kindel, et soovite tellimuse tühistada? Teil on juurdepääs praeguse arveldusperioodi lõpuni.';
+
+  @override
+  String get cancelSubscriptionButton => 'Tühista tellimus';
+
+  @override
+  String get cancelling => 'Tühistamine...';
+
+  @override
+  String get betaTesterMessage =>
+      'Olete selle rakenduse beetatestija. See ei ole veel avalik. See muutub avalikuks pärast heakskiitu.';
+
+  @override
+  String get appUnderReviewMessage =>
+      'Teie rakendus on läbivaatamisel ja nähtav ainult teile. See muutub avalikuks pärast heakskiitu.';
+
+  @override
+  String get appRejectedMessage =>
+      'Teie rakendus lükati tagasi. Palun uuendage andmeid ja esitage uuesti läbivaatamiseks.';
+
+  @override
+  String get invalidIntegrationUrl => 'Vigane integratsiooni URL';
+
+  @override
+  String get tapToComplete => 'Puuduta lõpetamiseks';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Vigane seadistusjuhiste URL';
+
+  @override
+  String get pushToTalk => 'Vajuta rääkimiseks';
+
+  @override
+  String get summaryPrompt => 'Kokkuvõtte viip';
+
+  @override
+  String get pleaseSelectARating => 'Palun valige hinnang';
+
+  @override
+  String get reviewAddedSuccessfully => 'Arvustus lisatud edukalt 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Arvustus uuendatud edukalt 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Arvustuse esitamine ebaõnnestus. Palun proovi uuesti.';
+
+  @override
+  String get addYourReview => 'Lisa oma arvustus';
+
+  @override
+  String get editYourReview => 'Muuda oma arvustust';
+
+  @override
+  String get writeAReviewOptional => 'Kirjuta arvustus (valikuline)';
+
+  @override
+  String get submitReview => 'Esita arvustus';
+
+  @override
+  String get updateReview => 'Uuenda arvustust';
+
+  @override
+  String get yourReview => 'Teie arvustus';
+
+  @override
+  String get anonymousUser => 'Anonüümne kasutaja';
+
+  @override
+  String get issueActivatingApp => 'Selle rakenduse aktiveerimisel tekkis probleem. Palun proovi uuesti.';
+
+  @override
+  String get dataAccessNoticeDescription =>
+      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
 }

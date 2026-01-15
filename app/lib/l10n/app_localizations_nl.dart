@@ -4024,4 +4024,117 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get no => 'Nee';
+
+  @override
+  String get subscriptionCancelledSuccessfully =>
+      'Abonnement succesvol geannuleerd. Het blijft actief tot het einde van de huidige factureringsperiode.';
+
+  @override
+  String get failedToCancelSubscription => 'Annuleren van abonnement mislukt. Probeer het opnieuw.';
+
+  @override
+  String get invalidPaymentUrl => 'Ongeldige betalings-URL';
+
+  @override
+  String get permissionsAndTriggers => 'Machtigingen & triggers';
+
+  @override
+  String get chatFeatures => 'Chat-functies';
+
+  @override
+  String get uninstall => 'Verwijderen';
+
+  @override
+  String get installs => 'INSTALLATIES';
+
+  @override
+  String get priceLabel => 'PRIJS';
+
+  @override
+  String get updatedLabel => 'BIJGEWERKT';
+
+  @override
+  String get createdLabel => 'AANGEMAAKT';
+
+  @override
+  String get featuredLabel => 'UITGELICHT';
+
+  @override
+  String get cancelSubscriptionQuestion => 'Abonnement annuleren?';
+
+  @override
+  String get cancelSubscriptionConfirmation =>
+      'Weet u zeker dat u uw abonnement wilt annuleren? U behoudt toegang tot het einde van uw huidige factureringsperiode.';
+
+  @override
+  String get cancelSubscriptionButton => 'Abonnement annuleren';
+
+  @override
+  String get cancelling => 'Annuleren...';
+
+  @override
+  String get betaTesterMessage =>
+      'U bent een bètatester voor deze app. Deze is nog niet openbaar. Deze wordt openbaar na goedkeuring.';
+
+  @override
+  String get appUnderReviewMessage =>
+      'Uw app wordt beoordeeld en is alleen voor u zichtbaar. Deze wordt openbaar na goedkeuring.';
+
+  @override
+  String get appRejectedMessage => 'Uw app is afgewezen. Werk de gegevens bij en dien opnieuw in ter beoordeling.';
+
+  @override
+  String get invalidIntegrationUrl => 'Ongeldige integratie-URL';
+
+  @override
+  String get tapToComplete => 'Tik om te voltooien';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Ongeldige URL voor installatie-instructies';
+
+  @override
+  String get pushToTalk => 'Druk om te praten';
+
+  @override
+  String get summaryPrompt => 'Samenvattingsprompt';
+
+  @override
+  String get pleaseSelectARating => 'Selecteer een beoordeling';
+
+  @override
+  String get reviewAddedSuccessfully => 'Beoordeling succesvol toegevoegd 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Beoordeling succesvol bijgewerkt 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Beoordeling verzenden mislukt. Probeer het opnieuw.';
+
+  @override
+  String get addYourReview => 'Voeg uw beoordeling toe';
+
+  @override
+  String get editYourReview => 'Bewerk uw beoordeling';
+
+  @override
+  String get writeAReviewOptional => 'Schrijf een beoordeling (optioneel)';
+
+  @override
+  String get submitReview => 'Beoordeling verzenden';
+
+  @override
+  String get updateReview => 'Beoordeling bijwerken';
+
+  @override
+  String get yourReview => 'Uw beoordeling';
+
+  @override
+  String get anonymousUser => 'Anonieme gebruiker';
+
+  @override
+  String get issueActivatingApp => 'Er is een probleem opgetreden bij het activeren van deze app. Probeer het opnieuw.';
+
+  @override
+  String get dataAccessNoticeDescription =>
+      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
 }

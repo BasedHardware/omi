@@ -4033,4 +4033,118 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get no => 'No';
+
+  @override
+  String get subscriptionCancelledSuccessfully =>
+      'Subscripció cancel·lada amb èxit. Romandrà activa fins al final del període de facturació actual.';
+
+  @override
+  String get failedToCancelSubscription => 'No s\'ha pogut cancel·lar la subscripció. Torna-ho a provar.';
+
+  @override
+  String get invalidPaymentUrl => 'URL de pagament no vàlid';
+
+  @override
+  String get permissionsAndTriggers => 'Permisos i activadors';
+
+  @override
+  String get chatFeatures => 'Funcions de xat';
+
+  @override
+  String get uninstall => 'Desinstal·lar';
+
+  @override
+  String get installs => 'INSTAL·LACIONS';
+
+  @override
+  String get priceLabel => 'PREU';
+
+  @override
+  String get updatedLabel => 'ACTUALITZAT';
+
+  @override
+  String get createdLabel => 'CREAT';
+
+  @override
+  String get featuredLabel => 'DESTACAT';
+
+  @override
+  String get cancelSubscriptionQuestion => 'Cancel·lar subscripció?';
+
+  @override
+  String get cancelSubscriptionConfirmation =>
+      'Estàs segur que vols cancel·lar la subscripció? Continuaràs tenint accés fins al final del període de facturació actual.';
+
+  @override
+  String get cancelSubscriptionButton => 'Cancel·lar subscripció';
+
+  @override
+  String get cancelling => 'Cancel·lant...';
+
+  @override
+  String get betaTesterMessage =>
+      'Ets un provador beta d\'aquesta aplicació. Encara no és pública. Serà pública un cop aprovada.';
+
+  @override
+  String get appUnderReviewMessage =>
+      'La teva aplicació està en revisió i només és visible per a tu. Serà pública un cop aprovada.';
+
+  @override
+  String get appRejectedMessage =>
+      'La teva aplicació ha estat rebutjada. Actualitza els detalls i torna a enviar-la per a revisió.';
+
+  @override
+  String get invalidIntegrationUrl => 'URL d\'integració no vàlid';
+
+  @override
+  String get tapToComplete => 'Toca per completar';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'URL d\'instruccions de configuració no vàlid';
+
+  @override
+  String get pushToTalk => 'Prem per parlar';
+
+  @override
+  String get summaryPrompt => 'Indicació de resum';
+
+  @override
+  String get pleaseSelectARating => 'Si us plau, selecciona una valoració';
+
+  @override
+  String get reviewAddedSuccessfully => 'Ressenya afegida amb èxit 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Ressenya actualitzada amb èxit 🚀';
+
+  @override
+  String get failedToSubmitReview => 'No s\'ha pogut enviar la ressenya. Torna-ho a provar.';
+
+  @override
+  String get addYourReview => 'Afegeix la teva ressenya';
+
+  @override
+  String get editYourReview => 'Edita la teva ressenya';
+
+  @override
+  String get writeAReviewOptional => 'Escriu una ressenya (opcional)';
+
+  @override
+  String get submitReview => 'Enviar ressenya';
+
+  @override
+  String get updateReview => 'Actualitzar ressenya';
+
+  @override
+  String get yourReview => 'La teva ressenya';
+
+  @override
+  String get anonymousUser => 'Usuari anònim';
+
+  @override
+  String get issueActivatingApp => 'Hi ha hagut un problema en activar aquesta aplicació. Torna-ho a provar.';
+
+  @override
+  String get dataAccessNoticeDescription =>
+      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
 }

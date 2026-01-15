@@ -4019,4 +4019,117 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get no => 'Không';
+
+  @override
+  String get subscriptionCancelledSuccessfully =>
+      'Đã hủy đăng ký thành công. Nó sẽ vẫn hoạt động cho đến cuối kỳ thanh toán hiện tại.';
+
+  @override
+  String get failedToCancelSubscription => 'Không thể hủy đăng ký. Vui lòng thử lại.';
+
+  @override
+  String get invalidPaymentUrl => 'URL thanh toán không hợp lệ';
+
+  @override
+  String get permissionsAndTriggers => 'Quyền và trình kích hoạt';
+
+  @override
+  String get chatFeatures => 'Tính năng trò chuyện';
+
+  @override
+  String get uninstall => 'Gỡ cài đặt';
+
+  @override
+  String get installs => 'LƯỢT CÀI ĐẶT';
+
+  @override
+  String get priceLabel => 'GIÁ';
+
+  @override
+  String get updatedLabel => 'CẬP NHẬT';
+
+  @override
+  String get createdLabel => 'TẠO LÚC';
+
+  @override
+  String get featuredLabel => 'NỔI BẬT';
+
+  @override
+  String get cancelSubscriptionQuestion => 'Hủy đăng ký?';
+
+  @override
+  String get cancelSubscriptionConfirmation =>
+      'Bạn có chắc chắn muốn hủy đăng ký? Bạn sẽ tiếp tục có quyền truy cập cho đến cuối kỳ thanh toán hiện tại.';
+
+  @override
+  String get cancelSubscriptionButton => 'Hủy đăng ký';
+
+  @override
+  String get cancelling => 'Đang hủy...';
+
+  @override
+  String get betaTesterMessage =>
+      'Bạn là người thử nghiệm beta cho ứng dụng này. Nó chưa được công khai. Sẽ được công khai sau khi được phê duyệt.';
+
+  @override
+  String get appUnderReviewMessage =>
+      'Ứng dụng của bạn đang được xem xét và chỉ hiển thị với bạn. Sẽ được công khai sau khi được phê duyệt.';
+
+  @override
+  String get appRejectedMessage => 'Ứng dụng của bạn đã bị từ chối. Vui lòng cập nhật thông tin và gửi lại để xem xét.';
+
+  @override
+  String get invalidIntegrationUrl => 'URL tích hợp không hợp lệ';
+
+  @override
+  String get tapToComplete => 'Nhấn để hoàn thành';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'URL hướng dẫn cài đặt không hợp lệ';
+
+  @override
+  String get pushToTalk => 'Nhấn để nói';
+
+  @override
+  String get summaryPrompt => 'Gợi ý tóm tắt';
+
+  @override
+  String get pleaseSelectARating => 'Vui lòng chọn đánh giá';
+
+  @override
+  String get reviewAddedSuccessfully => 'Đã thêm đánh giá thành công 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Đã cập nhật đánh giá thành công 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Không thể gửi đánh giá. Vui lòng thử lại.';
+
+  @override
+  String get addYourReview => 'Thêm đánh giá của bạn';
+
+  @override
+  String get editYourReview => 'Chỉnh sửa đánh giá của bạn';
+
+  @override
+  String get writeAReviewOptional => 'Viết đánh giá (tùy chọn)';
+
+  @override
+  String get submitReview => 'Gửi đánh giá';
+
+  @override
+  String get updateReview => 'Cập nhật đánh giá';
+
+  @override
+  String get yourReview => 'Đánh giá của bạn';
+
+  @override
+  String get anonymousUser => 'Người dùng ẩn danh';
+
+  @override
+  String get issueActivatingApp => 'Đã xảy ra sự cố khi kích hoạt ứng dụng này. Vui lòng thử lại.';
+
+  @override
+  String get dataAccessNoticeDescription =>
+      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
 }

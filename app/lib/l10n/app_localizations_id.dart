@@ -4022,4 +4022,117 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get no => 'Tidak';
+
+  @override
+  String get subscriptionCancelledSuccessfully =>
+      'Langganan berhasil dibatalkan. Akan tetap aktif hingga akhir periode penagihan saat ini.';
+
+  @override
+  String get failedToCancelSubscription => 'Gagal membatalkan langganan. Silakan coba lagi.';
+
+  @override
+  String get invalidPaymentUrl => 'URL pembayaran tidak valid';
+
+  @override
+  String get permissionsAndTriggers => 'Izin & Pemicu';
+
+  @override
+  String get chatFeatures => 'Fitur Obrolan';
+
+  @override
+  String get uninstall => 'Copot pemasangan';
+
+  @override
+  String get installs => 'PEMASANGAN';
+
+  @override
+  String get priceLabel => 'HARGA';
+
+  @override
+  String get updatedLabel => 'DIPERBARUI';
+
+  @override
+  String get createdLabel => 'DIBUAT';
+
+  @override
+  String get featuredLabel => 'UNGGULAN';
+
+  @override
+  String get cancelSubscriptionQuestion => 'Batalkan Langganan?';
+
+  @override
+  String get cancelSubscriptionConfirmation =>
+      'Apakah Anda yakin ingin membatalkan langganan? Anda akan tetap memiliki akses hingga akhir periode penagihan saat ini.';
+
+  @override
+  String get cancelSubscriptionButton => 'Batalkan Langganan';
+
+  @override
+  String get cancelling => 'Membatalkan...';
+
+  @override
+  String get betaTesterMessage =>
+      'Anda adalah penguji beta untuk aplikasi ini. Belum dipublikasikan. Akan dipublikasikan setelah disetujui.';
+
+  @override
+  String get appUnderReviewMessage =>
+      'Aplikasi Anda sedang ditinjau dan hanya terlihat oleh Anda. Akan dipublikasikan setelah disetujui.';
+
+  @override
+  String get appRejectedMessage => 'Aplikasi Anda ditolak. Perbarui detail dan kirim ulang untuk ditinjau.';
+
+  @override
+  String get invalidIntegrationUrl => 'URL integrasi tidak valid';
+
+  @override
+  String get tapToComplete => 'Ketuk untuk menyelesaikan';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'URL petunjuk pengaturan tidak valid';
+
+  @override
+  String get pushToTalk => 'Tekan untuk Berbicara';
+
+  @override
+  String get summaryPrompt => 'Prompt Ringkasan';
+
+  @override
+  String get pleaseSelectARating => 'Silakan pilih penilaian';
+
+  @override
+  String get reviewAddedSuccessfully => 'Ulasan berhasil ditambahkan 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Ulasan berhasil diperbarui 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Gagal mengirim ulasan. Silakan coba lagi.';
+
+  @override
+  String get addYourReview => 'Tambahkan Ulasan Anda';
+
+  @override
+  String get editYourReview => 'Edit Ulasan Anda';
+
+  @override
+  String get writeAReviewOptional => 'Tulis ulasan (opsional)';
+
+  @override
+  String get submitReview => 'Kirim Ulasan';
+
+  @override
+  String get updateReview => 'Perbarui Ulasan';
+
+  @override
+  String get yourReview => 'Ulasan Anda';
+
+  @override
+  String get anonymousUser => 'Pengguna Anonim';
+
+  @override
+  String get issueActivatingApp => 'Terjadi masalah saat mengaktifkan aplikasi ini. Silakan coba lagi.';
+
+  @override
+  String get dataAccessNoticeDescription =>
+      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
 }

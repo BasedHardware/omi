@@ -3945,4 +3945,112 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get no => '아니요';
+
+  @override
+  String get subscriptionCancelledSuccessfully => '구독이 성공적으로 취소되었습니다. 현재 결제 기간이 끝날 때까지 유효합니다.';
+
+  @override
+  String get failedToCancelSubscription => '구독 취소에 실패했습니다. 다시 시도해 주세요.';
+
+  @override
+  String get invalidPaymentUrl => '잘못된 결제 URL';
+
+  @override
+  String get permissionsAndTriggers => '권한 및 트리거';
+
+  @override
+  String get chatFeatures => '채팅 기능';
+
+  @override
+  String get uninstall => '제거';
+
+  @override
+  String get installs => '설치 수';
+
+  @override
+  String get priceLabel => '가격';
+
+  @override
+  String get updatedLabel => '업데이트됨';
+
+  @override
+  String get createdLabel => '생성됨';
+
+  @override
+  String get featuredLabel => '추천';
+
+  @override
+  String get cancelSubscriptionQuestion => '구독을 취소하시겠습니까?';
+
+  @override
+  String get cancelSubscriptionConfirmation => '구독을 취소하시겠습니까? 현재 결제 기간이 끝날 때까지 계속 이용할 수 있습니다.';
+
+  @override
+  String get cancelSubscriptionButton => '구독 취소';
+
+  @override
+  String get cancelling => '취소 중...';
+
+  @override
+  String get betaTesterMessage => '이 앱의 베타 테스터입니다. 아직 공개되지 않았습니다. 승인 후 공개됩니다.';
+
+  @override
+  String get appUnderReviewMessage => '앱이 검토 중이며 본인에게만 표시됩니다. 승인 후 공개됩니다.';
+
+  @override
+  String get appRejectedMessage => '앱이 거부되었습니다. 세부 정보를 업데이트하고 다시 제출해 주세요.';
+
+  @override
+  String get invalidIntegrationUrl => '잘못된 통합 URL';
+
+  @override
+  String get tapToComplete => '탭하여 완료';
+
+  @override
+  String get invalidSetupInstructionsUrl => '잘못된 설정 안내 URL';
+
+  @override
+  String get pushToTalk => '말하려면 누르기';
+
+  @override
+  String get summaryPrompt => '요약 프롬프트';
+
+  @override
+  String get pleaseSelectARating => '평점을 선택해 주세요';
+
+  @override
+  String get reviewAddedSuccessfully => '리뷰가 성공적으로 추가되었습니다 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => '리뷰가 성공적으로 업데이트되었습니다 🚀';
+
+  @override
+  String get failedToSubmitReview => '리뷰 제출에 실패했습니다. 다시 시도해 주세요.';
+
+  @override
+  String get addYourReview => '리뷰 추가';
+
+  @override
+  String get editYourReview => '리뷰 수정';
+
+  @override
+  String get writeAReviewOptional => '리뷰 작성 (선택사항)';
+
+  @override
+  String get submitReview => '리뷰 제출';
+
+  @override
+  String get updateReview => '리뷰 업데이트';
+
+  @override
+  String get yourReview => '내 리뷰';
+
+  @override
+  String get anonymousUser => '익명 사용자';
+
+  @override
+  String get issueActivatingApp => '이 앱을 활성화하는 데 문제가 발생했습니다. 다시 시도해 주세요.';
+
+  @override
+  String get dataAccessNoticeDescription => '이 앱은 귀하의 데이터에 액세스합니다. Omi AI는 이 앱에 의한 데이터 사용, 수정 또는 삭제에 대해 책임지지 않습니다';
 }

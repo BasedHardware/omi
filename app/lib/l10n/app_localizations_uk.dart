@@ -4016,4 +4016,115 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get no => 'Ні';
+
+  @override
+  String get subscriptionCancelledSuccessfully =>
+      'Підписку успішно скасовано. Вона залишиться активною до кінця поточного розрахункового періоду.';
+
+  @override
+  String get failedToCancelSubscription => 'Не вдалося скасувати підписку. Будь ласка, спробуйте ще раз.';
+
+  @override
+  String get invalidPaymentUrl => 'Недійсний URL оплати';
+
+  @override
+  String get permissionsAndTriggers => 'Дозволи та тригери';
+
+  @override
+  String get chatFeatures => 'Функції чату';
+
+  @override
+  String get uninstall => 'Видалити';
+
+  @override
+  String get installs => 'ВСТАНОВЛЕННЯ';
+
+  @override
+  String get priceLabel => 'ЦІНА';
+
+  @override
+  String get updatedLabel => 'ОНОВЛЕНО';
+
+  @override
+  String get createdLabel => 'СТВОРЕНО';
+
+  @override
+  String get featuredLabel => 'РЕКОМЕНДОВАНО';
+
+  @override
+  String get cancelSubscriptionQuestion => 'Скасувати підписку?';
+
+  @override
+  String get cancelSubscriptionConfirmation =>
+      'Ви впевнені, що хочете скасувати підписку? Ви матимете доступ до кінця поточного розрахункового періоду.';
+
+  @override
+  String get cancelSubscriptionButton => 'Скасувати підписку';
+
+  @override
+  String get cancelling => 'Скасування...';
+
+  @override
+  String get betaTesterMessage => 'Ви бета-тестер цього додатка. Він ще не публічний. Стане публічним після схвалення.';
+
+  @override
+  String get appUnderReviewMessage => 'Ваш додаток на розгляді і видимий тільки вам. Стане публічним після схвалення.';
+
+  @override
+  String get appRejectedMessage => 'Ваш додаток відхилено. Оновіть дані та надішліть повторно на розгляд.';
+
+  @override
+  String get invalidIntegrationUrl => 'Недійсний URL інтеграції';
+
+  @override
+  String get tapToComplete => 'Торкніться для завершення';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Недійсний URL інструкцій з налаштування';
+
+  @override
+  String get pushToTalk => 'Натисніть, щоб говорити';
+
+  @override
+  String get summaryPrompt => 'Промпт резюме';
+
+  @override
+  String get pleaseSelectARating => 'Будь ласка, виберіть оцінку';
+
+  @override
+  String get reviewAddedSuccessfully => 'Відгук успішно додано 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Відгук успішно оновлено 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Не вдалося надіслати відгук. Будь ласка, спробуйте ще раз.';
+
+  @override
+  String get addYourReview => 'Додайте свій відгук';
+
+  @override
+  String get editYourReview => 'Редагувати свій відгук';
+
+  @override
+  String get writeAReviewOptional => 'Написати відгук (необов\'язково)';
+
+  @override
+  String get submitReview => 'Надіслати відгук';
+
+  @override
+  String get updateReview => 'Оновити відгук';
+
+  @override
+  String get yourReview => 'Ваш відгук';
+
+  @override
+  String get anonymousUser => 'Анонімний користувач';
+
+  @override
+  String get issueActivatingApp => 'Виникла проблема з активацією цього додатка. Будь ласка, спробуйте ще раз.';
+
+  @override
+  String get dataAccessNoticeDescription =>
+      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
 }

@@ -4018,4 +4018,117 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get no => 'Nej';
+
+  @override
+  String get subscriptionCancelledSuccessfully =>
+      'Prenumeration avbruten. Den förblir aktiv till slutet av den aktuella faktureringsperioden.';
+
+  @override
+  String get failedToCancelSubscription => 'Det gick inte att avbryta prenumerationen. Försök igen.';
+
+  @override
+  String get invalidPaymentUrl => 'Ogiltig betalnings-URL';
+
+  @override
+  String get permissionsAndTriggers => 'Behörigheter och utlösare';
+
+  @override
+  String get chatFeatures => 'Chattfunktioner';
+
+  @override
+  String get uninstall => 'Avinstallera';
+
+  @override
+  String get installs => 'INSTALLATIONER';
+
+  @override
+  String get priceLabel => 'PRIS';
+
+  @override
+  String get updatedLabel => 'UPPDATERAD';
+
+  @override
+  String get createdLabel => 'SKAPAD';
+
+  @override
+  String get featuredLabel => 'UTVALD';
+
+  @override
+  String get cancelSubscriptionQuestion => 'Avbryt prenumeration?';
+
+  @override
+  String get cancelSubscriptionConfirmation =>
+      'Är du säker på att du vill avbryta din prenumeration? Du kommer att ha tillgång till slutet av din nuvarande faktureringsperiod.';
+
+  @override
+  String get cancelSubscriptionButton => 'Avbryt prenumeration';
+
+  @override
+  String get cancelling => 'Avbryter...';
+
+  @override
+  String get betaTesterMessage =>
+      'Du är betatestare för denna app. Den är inte offentlig ännu. Den blir offentlig efter godkännande.';
+
+  @override
+  String get appUnderReviewMessage =>
+      'Din app granskas och är endast synlig för dig. Den blir offentlig efter godkännande.';
+
+  @override
+  String get appRejectedMessage => 'Din app har avvisats. Uppdatera uppgifterna och skicka in igen för granskning.';
+
+  @override
+  String get invalidIntegrationUrl => 'Ogiltig integrations-URL';
+
+  @override
+  String get tapToComplete => 'Tryck för att slutföra';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Ogiltig URL för installationsinstruktioner';
+
+  @override
+  String get pushToTalk => 'Tryck för att prata';
+
+  @override
+  String get summaryPrompt => 'Sammanfattningsprompt';
+
+  @override
+  String get pleaseSelectARating => 'Välj ett betyg';
+
+  @override
+  String get reviewAddedSuccessfully => 'Recension tillagd 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Recension uppdaterad 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Det gick inte att skicka recensionen. Försök igen.';
+
+  @override
+  String get addYourReview => 'Lägg till din recension';
+
+  @override
+  String get editYourReview => 'Redigera din recension';
+
+  @override
+  String get writeAReviewOptional => 'Skriv en recension (valfritt)';
+
+  @override
+  String get submitReview => 'Skicka recension';
+
+  @override
+  String get updateReview => 'Uppdatera recension';
+
+  @override
+  String get yourReview => 'Din recension';
+
+  @override
+  String get anonymousUser => 'Anonym användare';
+
+  @override
+  String get issueActivatingApp => 'Det uppstod ett problem vid aktivering av denna app. Försök igen.';
+
+  @override
+  String get dataAccessNoticeDescription =>
+      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
 }

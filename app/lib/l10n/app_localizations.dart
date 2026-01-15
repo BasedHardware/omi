@@ -7688,6 +7688,222 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No'**
   String get no;
+
+  /// Success message when subscription is cancelled
+  ///
+  /// In en, this message translates to:
+  /// **'Subscription cancelled successfully. It will remain active until the end of the current billing period.'**
+  String get subscriptionCancelledSuccessfully;
+
+  /// Error message when subscription cancellation fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to cancel subscription. Please try again.'**
+  String get failedToCancelSubscription;
+
+  /// Error message for invalid payment URL
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid payment URL'**
+  String get invalidPaymentUrl;
+
+  /// Section title for permissions and triggers
+  ///
+  /// In en, this message translates to:
+  /// **'Permissions & Triggers'**
+  String get permissionsAndTriggers;
+
+  /// Section title for chat features
+  ///
+  /// In en, this message translates to:
+  /// **'Chat Features'**
+  String get chatFeatures;
+
+  /// Button text to uninstall app
+  ///
+  /// In en, this message translates to:
+  /// **'Uninstall'**
+  String get uninstall;
+
+  /// Label for install count
+  ///
+  /// In en, this message translates to:
+  /// **'INSTALLS'**
+  String get installs;
+
+  /// Label for price
+  ///
+  /// In en, this message translates to:
+  /// **'PRICE'**
+  String get priceLabel;
+
+  /// Label for updated date
+  ///
+  /// In en, this message translates to:
+  /// **'UPDATED'**
+  String get updatedLabel;
+
+  /// Label for created date
+  ///
+  /// In en, this message translates to:
+  /// **'CREATED'**
+  String get createdLabel;
+
+  /// Label for featured status
+  ///
+  /// In en, this message translates to:
+  /// **'FEATURED'**
+  String get featuredLabel;
+
+  /// Dialog title for cancel subscription
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel Subscription?'**
+  String get cancelSubscriptionQuestion;
+
+  /// Dialog description for cancel subscription
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to cancel your subscription? You will continue to have access until the end of your current billing period.'**
+  String get cancelSubscriptionConfirmation;
+
+  /// Button text to cancel subscription
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel Subscription'**
+  String get cancelSubscriptionButton;
+
+  /// Loading text while cancelling
+  ///
+  /// In en, this message translates to:
+  /// **'Cancelling...'**
+  String get cancelling;
+
+  /// Message shown to beta testers
+  ///
+  /// In en, this message translates to:
+  /// **'You are a beta tester for this app. It is not public yet. It will be public once approved.'**
+  String get betaTesterMessage;
+
+  /// Message shown when app is under review
+  ///
+  /// In en, this message translates to:
+  /// **'Your app is under review and visible only to you. It will be public once approved.'**
+  String get appUnderReviewMessage;
+
+  /// Message shown when app is rejected
+  ///
+  /// In en, this message translates to:
+  /// **'Your app has been rejected. Please update the app details and resubmit for review.'**
+  String get appRejectedMessage;
+
+  /// Error message for invalid integration URL
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid integration URL'**
+  String get invalidIntegrationUrl;
+
+  /// Text prompting user to tap to complete setup
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to complete'**
+  String get tapToComplete;
+
+  /// Error message for invalid setup instructions URL
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid setup instructions URL'**
+  String get invalidSetupInstructionsUrl;
+
+  /// Feature name for push to talk
+  ///
+  /// In en, this message translates to:
+  /// **'Push to Talk'**
+  String get pushToTalk;
+
+  /// Label for summary prompt
+  ///
+  /// In en, this message translates to:
+  /// **'Summary Prompt'**
+  String get summaryPrompt;
+
+  /// Error message when no rating selected
+  ///
+  /// In en, this message translates to:
+  /// **'Please select a rating'**
+  String get pleaseSelectARating;
+
+  /// Success message when review is added
+  ///
+  /// In en, this message translates to:
+  /// **'Review added successfully 🚀'**
+  String get reviewAddedSuccessfully;
+
+  /// Success message when review is updated
+  ///
+  /// In en, this message translates to:
+  /// **'Review updated successfully 🚀'**
+  String get reviewUpdatedSuccessfully;
+
+  /// Error message when review submission fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to submit review. Please try again.'**
+  String get failedToSubmitReview;
+
+  /// Dialog title for adding review
+  ///
+  /// In en, this message translates to:
+  /// **'Add Your Review'**
+  String get addYourReview;
+
+  /// Dialog title for editing review
+  ///
+  /// In en, this message translates to:
+  /// **'Edit Your Review'**
+  String get editYourReview;
+
+  /// Placeholder text for review input
+  ///
+  /// In en, this message translates to:
+  /// **'Write a review (optional)'**
+  String get writeAReviewOptional;
+
+  /// Button text to submit review
+  ///
+  /// In en, this message translates to:
+  /// **'Submit Review'**
+  String get submitReview;
+
+  /// Button text to update review
+  ///
+  /// In en, this message translates to:
+  /// **'Update Review'**
+  String get updateReview;
+
+  /// Label for user's own review
+  ///
+  /// In en, this message translates to:
+  /// **'Your Review'**
+  String get yourReview;
+
+  /// Display name for anonymous users
+  ///
+  /// In en, this message translates to:
+  /// **'Anonymous User'**
+  String get anonymousUser;
+
+  /// Dialog description for activation error
+  ///
+  /// In en, this message translates to:
+  /// **'There was an issue activating this app. Please try again.'**
+  String get issueActivatingApp;
+
+  /// Description for data access notice dialog
+  ///
+  /// In en, this message translates to:
+  /// **'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app'**
+  String get dataAccessNoticeDescription;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

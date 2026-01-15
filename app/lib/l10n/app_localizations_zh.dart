@@ -3940,4 +3940,112 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get no => '否';
+
+  @override
+  String get subscriptionCancelledSuccessfully => '订阅已成功取消。它将保持有效直到当前计费周期结束。';
+
+  @override
+  String get failedToCancelSubscription => '取消订阅失败。请重试。';
+
+  @override
+  String get invalidPaymentUrl => '无效的支付链接';
+
+  @override
+  String get permissionsAndTriggers => '权限和触发器';
+
+  @override
+  String get chatFeatures => '聊天功能';
+
+  @override
+  String get uninstall => '卸载';
+
+  @override
+  String get installs => '安装量';
+
+  @override
+  String get priceLabel => '价格';
+
+  @override
+  String get updatedLabel => '更新于';
+
+  @override
+  String get createdLabel => '创建于';
+
+  @override
+  String get featuredLabel => '精选';
+
+  @override
+  String get cancelSubscriptionQuestion => '取消订阅？';
+
+  @override
+  String get cancelSubscriptionConfirmation => '确定要取消订阅吗？您将继续享有访问权限直到当前计费周期结束。';
+
+  @override
+  String get cancelSubscriptionButton => '取消订阅';
+
+  @override
+  String get cancelling => '正在取消...';
+
+  @override
+  String get betaTesterMessage => '您是此应用的测试用户。目前尚未公开。批准后将公开。';
+
+  @override
+  String get appUnderReviewMessage => '您的应用正在审核中，仅对您可见。批准后将公开。';
+
+  @override
+  String get appRejectedMessage => '您的应用已被拒绝。请更新应用详情并重新提交审核。';
+
+  @override
+  String get invalidIntegrationUrl => '无效的集成链接';
+
+  @override
+  String get tapToComplete => '点击完成';
+
+  @override
+  String get invalidSetupInstructionsUrl => '无效的设置说明链接';
+
+  @override
+  String get pushToTalk => '按住说话';
+
+  @override
+  String get summaryPrompt => '摘要提示';
+
+  @override
+  String get pleaseSelectARating => '请选择评分';
+
+  @override
+  String get reviewAddedSuccessfully => '评论添加成功 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => '评论更新成功 🚀';
+
+  @override
+  String get failedToSubmitReview => '提交评论失败。请重试。';
+
+  @override
+  String get addYourReview => '添加您的评论';
+
+  @override
+  String get editYourReview => '编辑您的评论';
+
+  @override
+  String get writeAReviewOptional => '写评论（可选）';
+
+  @override
+  String get submitReview => '提交评论';
+
+  @override
+  String get updateReview => '更新评论';
+
+  @override
+  String get yourReview => '您的评论';
+
+  @override
+  String get anonymousUser => '匿名用户';
+
+  @override
+  String get issueActivatingApp => '激活此应用时出现问题。请重试。';
+
+  @override
+  String get dataAccessNoticeDescription => '此应用将访问您的数据。Omi AI不对此应用如何使用、修改或删除您的数据负责';
 }

@@ -4034,4 +4034,117 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get no => 'Nem';
+
+  @override
+  String get subscriptionCancelledSuccessfully =>
+      'Előfizetés sikeresen lemondva. Az aktuális számlázási időszak végéig aktív marad.';
+
+  @override
+  String get failedToCancelSubscription => 'Az előfizetés lemondása sikertelen. Kérjük, próbálja újra.';
+
+  @override
+  String get invalidPaymentUrl => 'Érvénytelen fizetési URL';
+
+  @override
+  String get permissionsAndTriggers => 'Engedélyek és triggerek';
+
+  @override
+  String get chatFeatures => 'Chat funkciók';
+
+  @override
+  String get uninstall => 'Eltávolítás';
+
+  @override
+  String get installs => 'TELEPÍTÉSEK';
+
+  @override
+  String get priceLabel => 'ÁR';
+
+  @override
+  String get updatedLabel => 'FRISSÍTVE';
+
+  @override
+  String get createdLabel => 'LÉTREHOZVA';
+
+  @override
+  String get featuredLabel => 'KIEMELT';
+
+  @override
+  String get cancelSubscriptionQuestion => 'Előfizetés lemondása?';
+
+  @override
+  String get cancelSubscriptionConfirmation =>
+      'Biztosan le szeretné mondani az előfizetését? Az aktuális számlázási időszak végéig továbbra is hozzáférhet.';
+
+  @override
+  String get cancelSubscriptionButton => 'Előfizetés lemondása';
+
+  @override
+  String get cancelling => 'Lemondás...';
+
+  @override
+  String get betaTesterMessage =>
+      'Ön ennek az alkalmazásnak a béta tesztelője. Még nem nyilvános. A jóváhagyás után lesz nyilvános.';
+
+  @override
+  String get appUnderReviewMessage =>
+      'Az alkalmazása felülvizsgálat alatt áll és csak Ön láthatja. A jóváhagyás után lesz nyilvános.';
+
+  @override
+  String get appRejectedMessage => 'Az alkalmazása el lett utasítva. Kérjük, frissítse az adatokat és küldje el újra.';
+
+  @override
+  String get invalidIntegrationUrl => 'Érvénytelen integrációs URL';
+
+  @override
+  String get tapToComplete => 'Koppintson a befejezéshez';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Érvénytelen beállítási útmutató URL';
+
+  @override
+  String get pushToTalk => 'Nyomja meg a beszédhez';
+
+  @override
+  String get summaryPrompt => 'Összefoglaló prompt';
+
+  @override
+  String get pleaseSelectARating => 'Kérjük, válasszon értékelést';
+
+  @override
+  String get reviewAddedSuccessfully => 'Értékelés sikeresen hozzáadva 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Értékelés sikeresen frissítve 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Az értékelés elküldése sikertelen. Kérjük, próbálja újra.';
+
+  @override
+  String get addYourReview => 'Értékelés hozzáadása';
+
+  @override
+  String get editYourReview => 'Értékelés szerkesztése';
+
+  @override
+  String get writeAReviewOptional => 'Írjon értékelést (opcionális)';
+
+  @override
+  String get submitReview => 'Értékelés küldése';
+
+  @override
+  String get updateReview => 'Értékelés frissítése';
+
+  @override
+  String get yourReview => 'Az Ön értékelése';
+
+  @override
+  String get anonymousUser => 'Névtelen felhasználó';
+
+  @override
+  String get issueActivatingApp => 'Probléma merült fel az alkalmazás aktiválásakor. Kérjük, próbálja újra.';
+
+  @override
+  String get dataAccessNoticeDescription =>
+      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
 }

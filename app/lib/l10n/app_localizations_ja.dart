@@ -3945,4 +3945,112 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get no => 'いいえ';
+
+  @override
+  String get subscriptionCancelledSuccessfully => 'サブスクリプションが正常にキャンセルされました。現在の請求期間の終了まで有効です。';
+
+  @override
+  String get failedToCancelSubscription => 'サブスクリプションのキャンセルに失敗しました。もう一度お試しください。';
+
+  @override
+  String get invalidPaymentUrl => '無効な支払いURL';
+
+  @override
+  String get permissionsAndTriggers => '権限とトリガー';
+
+  @override
+  String get chatFeatures => 'チャット機能';
+
+  @override
+  String get uninstall => 'アンインストール';
+
+  @override
+  String get installs => 'インストール数';
+
+  @override
+  String get priceLabel => '価格';
+
+  @override
+  String get updatedLabel => '更新日';
+
+  @override
+  String get createdLabel => '作成日';
+
+  @override
+  String get featuredLabel => 'おすすめ';
+
+  @override
+  String get cancelSubscriptionQuestion => 'サブスクリプションをキャンセルしますか？';
+
+  @override
+  String get cancelSubscriptionConfirmation => 'サブスクリプションをキャンセルしてもよろしいですか？現在の請求期間の終了までアクセスできます。';
+
+  @override
+  String get cancelSubscriptionButton => 'サブスクリプションをキャンセル';
+
+  @override
+  String get cancelling => 'キャンセル中...';
+
+  @override
+  String get betaTesterMessage => 'あなたはこのアプリのベータテスターです。まだ公開されていません。承認後に公開されます。';
+
+  @override
+  String get appUnderReviewMessage => 'あなたのアプリは審査中で、あなただけに表示されています。承認後に公開されます。';
+
+  @override
+  String get appRejectedMessage => 'アプリが却下されました。詳細を更新して再度審査に提出してください。';
+
+  @override
+  String get invalidIntegrationUrl => '無効な統合URL';
+
+  @override
+  String get tapToComplete => 'タップして完了';
+
+  @override
+  String get invalidSetupInstructionsUrl => '無効なセットアップ手順URL';
+
+  @override
+  String get pushToTalk => 'プッシュトゥトーク';
+
+  @override
+  String get summaryPrompt => '要約プロンプト';
+
+  @override
+  String get pleaseSelectARating => '評価を選択してください';
+
+  @override
+  String get reviewAddedSuccessfully => 'レビューが正常に追加されました 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'レビューが正常に更新されました 🚀';
+
+  @override
+  String get failedToSubmitReview => 'レビューの送信に失敗しました。もう一度お試しください。';
+
+  @override
+  String get addYourReview => 'レビューを追加';
+
+  @override
+  String get editYourReview => 'レビューを編集';
+
+  @override
+  String get writeAReviewOptional => 'レビューを書く（任意）';
+
+  @override
+  String get submitReview => 'レビューを送信';
+
+  @override
+  String get updateReview => 'レビューを更新';
+
+  @override
+  String get yourReview => 'あなたのレビュー';
+
+  @override
+  String get anonymousUser => '匿名ユーザー';
+
+  @override
+  String get issueActivatingApp => 'このアプリのアクティベーションで問題が発生しました。もう一度お試しください。';
+
+  @override
+  String get dataAccessNoticeDescription => 'このアプリはあなたのデータにアクセスします。Omi AIは、このアプリによるデータの使用、変更、削除について責任を負いません';
 }

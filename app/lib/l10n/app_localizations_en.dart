@@ -4015,4 +4015,117 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get no => 'No';
+
+  @override
+  String get subscriptionCancelledSuccessfully =>
+      'Subscription cancelled successfully. It will remain active until the end of the current billing period.';
+
+  @override
+  String get failedToCancelSubscription => 'Failed to cancel subscription. Please try again.';
+
+  @override
+  String get invalidPaymentUrl => 'Invalid payment URL';
+
+  @override
+  String get permissionsAndTriggers => 'Permissions & Triggers';
+
+  @override
+  String get chatFeatures => 'Chat Features';
+
+  @override
+  String get uninstall => 'Uninstall';
+
+  @override
+  String get installs => 'INSTALLS';
+
+  @override
+  String get priceLabel => 'PRICE';
+
+  @override
+  String get updatedLabel => 'UPDATED';
+
+  @override
+  String get createdLabel => 'CREATED';
+
+  @override
+  String get featuredLabel => 'FEATURED';
+
+  @override
+  String get cancelSubscriptionQuestion => 'Cancel Subscription?';
+
+  @override
+  String get cancelSubscriptionConfirmation =>
+      'Are you sure you want to cancel your subscription? You will continue to have access until the end of your current billing period.';
+
+  @override
+  String get cancelSubscriptionButton => 'Cancel Subscription';
+
+  @override
+  String get cancelling => 'Cancelling...';
+
+  @override
+  String get betaTesterMessage =>
+      'You are a beta tester for this app. It is not public yet. It will be public once approved.';
+
+  @override
+  String get appUnderReviewMessage =>
+      'Your app is under review and visible only to you. It will be public once approved.';
+
+  @override
+  String get appRejectedMessage => 'Your app has been rejected. Please update the app details and resubmit for review.';
+
+  @override
+  String get invalidIntegrationUrl => 'Invalid integration URL';
+
+  @override
+  String get tapToComplete => 'Tap to complete';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Invalid setup instructions URL';
+
+  @override
+  String get pushToTalk => 'Push to Talk';
+
+  @override
+  String get summaryPrompt => 'Summary Prompt';
+
+  @override
+  String get pleaseSelectARating => 'Please select a rating';
+
+  @override
+  String get reviewAddedSuccessfully => 'Review added successfully 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Review updated successfully 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Failed to submit review. Please try again.';
+
+  @override
+  String get addYourReview => 'Add Your Review';
+
+  @override
+  String get editYourReview => 'Edit Your Review';
+
+  @override
+  String get writeAReviewOptional => 'Write a review (optional)';
+
+  @override
+  String get submitReview => 'Submit Review';
+
+  @override
+  String get updateReview => 'Update Review';
+
+  @override
+  String get yourReview => 'Your Review';
+
+  @override
+  String get anonymousUser => 'Anonymous User';
+
+  @override
+  String get issueActivatingApp => 'There was an issue activating this app. Please try again.';
+
+  @override
+  String get dataAccessNoticeDescription =>
+      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
 }

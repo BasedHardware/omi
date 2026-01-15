@@ -4011,4 +4011,117 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get no => 'Ei';
+
+  @override
+  String get subscriptionCancelledSuccessfully =>
+      'Tilaus peruutettu onnistuneesti. Se pysyy aktiivisena nykyisen laskutuskauden loppuun.';
+
+  @override
+  String get failedToCancelSubscription => 'Tilauksen peruuttaminen epäonnistui. Yritä uudelleen.';
+
+  @override
+  String get invalidPaymentUrl => 'Virheellinen maksu-URL';
+
+  @override
+  String get permissionsAndTriggers => 'Käyttöoikeudet ja laukaisimet';
+
+  @override
+  String get chatFeatures => 'Chat-ominaisuudet';
+
+  @override
+  String get uninstall => 'Poista asennus';
+
+  @override
+  String get installs => 'ASENNUKSET';
+
+  @override
+  String get priceLabel => 'HINTA';
+
+  @override
+  String get updatedLabel => 'PÄIVITETTY';
+
+  @override
+  String get createdLabel => 'LUOTU';
+
+  @override
+  String get featuredLabel => 'ESITELTY';
+
+  @override
+  String get cancelSubscriptionQuestion => 'Peruuta tilaus?';
+
+  @override
+  String get cancelSubscriptionConfirmation =>
+      'Haluatko varmasti peruuttaa tilauksesi? Sinulla on edelleen pääsy nykyisen laskutuskauden loppuun.';
+
+  @override
+  String get cancelSubscriptionButton => 'Peruuta tilaus';
+
+  @override
+  String get cancelling => 'Peruutetaan...';
+
+  @override
+  String get betaTesterMessage =>
+      'Olet tämän sovelluksen beta-testaaja. Se ei ole vielä julkinen. Se julkaistaan hyväksynnän jälkeen.';
+
+  @override
+  String get appUnderReviewMessage =>
+      'Sovelluksesi on tarkistettavana ja näkyy vain sinulle. Se julkaistaan hyväksynnän jälkeen.';
+
+  @override
+  String get appRejectedMessage => 'Sovelluksesi on hylätty. Päivitä tiedot ja lähetä uudelleen tarkistettavaksi.';
+
+  @override
+  String get invalidIntegrationUrl => 'Virheellinen integraatio-URL';
+
+  @override
+  String get tapToComplete => 'Napauta viimeistelläksesi';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Virheellinen asennusohjeiden URL';
+
+  @override
+  String get pushToTalk => 'Paina puhuaksesi';
+
+  @override
+  String get summaryPrompt => 'Yhteenvetokehote';
+
+  @override
+  String get pleaseSelectARating => 'Valitse arvosana';
+
+  @override
+  String get reviewAddedSuccessfully => 'Arvostelu lisätty onnistuneesti 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Arvostelu päivitetty onnistuneesti 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Arvostelun lähettäminen epäonnistui. Yritä uudelleen.';
+
+  @override
+  String get addYourReview => 'Lisää arvostelusi';
+
+  @override
+  String get editYourReview => 'Muokkaa arvostelua';
+
+  @override
+  String get writeAReviewOptional => 'Kirjoita arvostelu (valinnainen)';
+
+  @override
+  String get submitReview => 'Lähetä arvostelu';
+
+  @override
+  String get updateReview => 'Päivitä arvostelu';
+
+  @override
+  String get yourReview => 'Arvostelusi';
+
+  @override
+  String get anonymousUser => 'Anonyymi käyttäjä';
+
+  @override
+  String get issueActivatingApp => 'Sovelluksen aktivoinnissa ilmeni ongelma. Yritä uudelleen.';
+
+  @override
+  String get dataAccessNoticeDescription =>
+      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
 }

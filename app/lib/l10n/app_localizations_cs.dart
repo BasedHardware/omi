@@ -4010,4 +4010,116 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get no => 'Ne';
+
+  @override
+  String get subscriptionCancelledSuccessfully =>
+      'Předplatné bylo úspěšně zrušeno. Zůstane aktivní do konce aktuálního fakturačního období.';
+
+  @override
+  String get failedToCancelSubscription => 'Zrušení předplatného se nezdařilo. Zkuste to prosím znovu.';
+
+  @override
+  String get invalidPaymentUrl => 'Neplatná adresa URL platby';
+
+  @override
+  String get permissionsAndTriggers => 'Oprávnění a spouštěče';
+
+  @override
+  String get chatFeatures => 'Funkce chatu';
+
+  @override
+  String get uninstall => 'Odinstalovat';
+
+  @override
+  String get installs => 'INSTALACE';
+
+  @override
+  String get priceLabel => 'CENA';
+
+  @override
+  String get updatedLabel => 'AKTUALIZOVÁNO';
+
+  @override
+  String get createdLabel => 'VYTVOŘENO';
+
+  @override
+  String get featuredLabel => 'DOPORUČENÉ';
+
+  @override
+  String get cancelSubscriptionQuestion => 'Zrušit předplatné?';
+
+  @override
+  String get cancelSubscriptionConfirmation =>
+      'Opravdu chcete zrušit předplatné? Budete mít přístup do konce aktuálního fakturačního období.';
+
+  @override
+  String get cancelSubscriptionButton => 'Zrušit předplatné';
+
+  @override
+  String get cancelling => 'Rušení...';
+
+  @override
+  String get betaTesterMessage => 'Jste beta tester této aplikace. Zatím není veřejná. Bude veřejná po schválení.';
+
+  @override
+  String get appUnderReviewMessage =>
+      'Vaše aplikace je v procesu kontroly a viditelná pouze pro vás. Bude veřejná po schválení.';
+
+  @override
+  String get appRejectedMessage => 'Vaše aplikace byla zamítnuta. Aktualizujte údaje a znovu odešlete ke kontrole.';
+
+  @override
+  String get invalidIntegrationUrl => 'Neplatná adresa URL integrace';
+
+  @override
+  String get tapToComplete => 'Klepněte pro dokončení';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Neplatná adresa URL pokynů k nastavení';
+
+  @override
+  String get pushToTalk => 'Stiskni pro mluvení';
+
+  @override
+  String get summaryPrompt => 'Výzva k shrnutí';
+
+  @override
+  String get pleaseSelectARating => 'Vyberte prosím hodnocení';
+
+  @override
+  String get reviewAddedSuccessfully => 'Recenze úspěšně přidána 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Recenze úspěšně aktualizována 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Odeslání recenze se nezdařilo. Zkuste to prosím znovu.';
+
+  @override
+  String get addYourReview => 'Přidejte svou recenzi';
+
+  @override
+  String get editYourReview => 'Upravte svou recenzi';
+
+  @override
+  String get writeAReviewOptional => 'Napište recenzi (volitelné)';
+
+  @override
+  String get submitReview => 'Odeslat recenzi';
+
+  @override
+  String get updateReview => 'Aktualizovat recenzi';
+
+  @override
+  String get yourReview => 'Vaše recenze';
+
+  @override
+  String get anonymousUser => 'Anonymní uživatel';
+
+  @override
+  String get issueActivatingApp => 'Při aktivaci této aplikace došlo k problému. Zkuste to prosím znovu.';
+
+  @override
+  String get dataAccessNoticeDescription =>
+      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
 }

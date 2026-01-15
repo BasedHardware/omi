@@ -3989,4 +3989,117 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get no => 'ไม่';
+
+  @override
+  String get subscriptionCancelledSuccessfully =>
+      'ยกเลิกการสมัครสมาชิกสำเร็จ จะยังคงใช้งานได้จนถึงสิ้นสุดรอบบิลปัจจุบัน';
+
+  @override
+  String get failedToCancelSubscription => 'ไม่สามารถยกเลิกการสมัครสมาชิกได้ กรุณาลองอีกครั้ง';
+
+  @override
+  String get invalidPaymentUrl => 'URL การชำระเงินไม่ถูกต้อง';
+
+  @override
+  String get permissionsAndTriggers => 'สิทธิ์และทริกเกอร์';
+
+  @override
+  String get chatFeatures => 'คุณสมบัติแชท';
+
+  @override
+  String get uninstall => 'ถอนการติดตั้ง';
+
+  @override
+  String get installs => 'การติดตั้ง';
+
+  @override
+  String get priceLabel => 'ราคา';
+
+  @override
+  String get updatedLabel => 'อัปเดตเมื่อ';
+
+  @override
+  String get createdLabel => 'สร้างเมื่อ';
+
+  @override
+  String get featuredLabel => 'แนะนำ';
+
+  @override
+  String get cancelSubscriptionQuestion => 'ยกเลิกการสมัครสมาชิก?';
+
+  @override
+  String get cancelSubscriptionConfirmation =>
+      'คุณแน่ใจหรือไม่ว่าต้องการยกเลิกการสมัครสมาชิก? คุณจะยังคงเข้าถึงได้จนถึงสิ้นสุดรอบบิลปัจจุบัน';
+
+  @override
+  String get cancelSubscriptionButton => 'ยกเลิกการสมัครสมาชิก';
+
+  @override
+  String get cancelling => 'กำลังยกเลิก...';
+
+  @override
+  String get betaTesterMessage =>
+      'คุณเป็นผู้ทดสอบเบต้าของแอปนี้ ยังไม่เปิดให้สาธารณะ จะเปิดให้สาธารณะเมื่อได้รับการอนุมัติ';
+
+  @override
+  String get appUnderReviewMessage =>
+      'แอปของคุณกำลังอยู่ระหว่างการตรวจสอบและมองเห็นได้เฉพาะคุณ จะเปิดให้สาธารณะเมื่อได้รับการอนุมัติ';
+
+  @override
+  String get appRejectedMessage => 'แอปของคุณถูกปฏิเสธ กรุณาอัปเดตรายละเอียดและส่งใหม่เพื่อตรวจสอบ';
+
+  @override
+  String get invalidIntegrationUrl => 'URL การรวมระบบไม่ถูกต้อง';
+
+  @override
+  String get tapToComplete => 'แตะเพื่อเสร็จสิ้น';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'URL คำแนะนำการตั้งค่าไม่ถูกต้อง';
+
+  @override
+  String get pushToTalk => 'กดเพื่อพูด';
+
+  @override
+  String get summaryPrompt => 'พรอมต์สรุป';
+
+  @override
+  String get pleaseSelectARating => 'กรุณาเลือกคะแนน';
+
+  @override
+  String get reviewAddedSuccessfully => 'เพิ่มรีวิวสำเร็จ 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'อัปเดตรีวิวสำเร็จ 🚀';
+
+  @override
+  String get failedToSubmitReview => 'ไม่สามารถส่งรีวิวได้ กรุณาลองอีกครั้ง';
+
+  @override
+  String get addYourReview => 'เพิ่มรีวิวของคุณ';
+
+  @override
+  String get editYourReview => 'แก้ไขรีวิวของคุณ';
+
+  @override
+  String get writeAReviewOptional => 'เขียนรีวิว (ไม่บังคับ)';
+
+  @override
+  String get submitReview => 'ส่งรีวิว';
+
+  @override
+  String get updateReview => 'อัปเดตรีวิว';
+
+  @override
+  String get yourReview => 'รีวิวของคุณ';
+
+  @override
+  String get anonymousUser => 'ผู้ใช้นิรนาม';
+
+  @override
+  String get issueActivatingApp => 'เกิดปัญหาในการเปิดใช้งานแอปนี้ กรุณาลองอีกครั้ง';
+
+  @override
+  String get dataAccessNoticeDescription =>
+      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
 }

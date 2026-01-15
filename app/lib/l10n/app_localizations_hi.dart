@@ -3989,4 +3989,117 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get no => 'नहीं';
+
+  @override
+  String get subscriptionCancelledSuccessfully =>
+      'सदस्यता सफलतापूर्वक रद्द हो गई। यह वर्तमान बिलिंग अवधि के अंत तक सक्रिय रहेगी।';
+
+  @override
+  String get failedToCancelSubscription => 'सदस्यता रद्द करने में विफल। कृपया पुनः प्रयास करें।';
+
+  @override
+  String get invalidPaymentUrl => 'अमान्य भुगतान URL';
+
+  @override
+  String get permissionsAndTriggers => 'अनुमतियाँ और ट्रिगर';
+
+  @override
+  String get chatFeatures => 'चैट सुविधाएं';
+
+  @override
+  String get uninstall => 'अनइंस्टॉल करें';
+
+  @override
+  String get installs => 'इंस्टॉल';
+
+  @override
+  String get priceLabel => 'मूल्य';
+
+  @override
+  String get updatedLabel => 'अपडेट किया गया';
+
+  @override
+  String get createdLabel => 'बनाया गया';
+
+  @override
+  String get featuredLabel => 'विशेष';
+
+  @override
+  String get cancelSubscriptionQuestion => 'सदस्यता रद्द करें?';
+
+  @override
+  String get cancelSubscriptionConfirmation =>
+      'क्या आप वाकई अपनी सदस्यता रद्द करना चाहते हैं? आपकी वर्तमान बिलिंग अवधि के अंत तक पहुंच जारी रहेगी।';
+
+  @override
+  String get cancelSubscriptionButton => 'सदस्यता रद्द करें';
+
+  @override
+  String get cancelling => 'रद्द हो रहा है...';
+
+  @override
+  String get betaTesterMessage =>
+      'आप इस ऐप के बीटा टेस्टर हैं। यह अभी सार्वजनिक नहीं है। अनुमोदित होने के बाद सार्वजनिक होगा।';
+
+  @override
+  String get appUnderReviewMessage =>
+      'आपका ऐप समीक्षाधीन है और केवल आपको दिखाई दे रहा है। अनुमोदित होने के बाद सार्वजनिक होगा।';
+
+  @override
+  String get appRejectedMessage => 'आपका ऐप अस्वीकृत हो गया। कृपया विवरण अपडेट करें और समीक्षा के लिए पुनः सबमिट करें।';
+
+  @override
+  String get invalidIntegrationUrl => 'अमान्य एकीकरण URL';
+
+  @override
+  String get tapToComplete => 'पूर्ण करने के लिए टैप करें';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'अमान्य सेटअप निर्देश URL';
+
+  @override
+  String get pushToTalk => 'बोलने के लिए दबाएं';
+
+  @override
+  String get summaryPrompt => 'सारांश प्रॉम्प्ट';
+
+  @override
+  String get pleaseSelectARating => 'कृपया एक रेटिंग चुनें';
+
+  @override
+  String get reviewAddedSuccessfully => 'समीक्षा सफलतापूर्वक जोड़ी गई 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'समीक्षा सफलतापूर्वक अपडेट की गई 🚀';
+
+  @override
+  String get failedToSubmitReview => 'समीक्षा सबमिट करने में विफल। कृपया पुनः प्रयास करें।';
+
+  @override
+  String get addYourReview => 'अपनी समीक्षा जोड़ें';
+
+  @override
+  String get editYourReview => 'अपनी समीक्षा संपादित करें';
+
+  @override
+  String get writeAReviewOptional => 'समीक्षा लिखें (वैकल्पिक)';
+
+  @override
+  String get submitReview => 'समीक्षा सबमिट करें';
+
+  @override
+  String get updateReview => 'समीक्षा अपडेट करें';
+
+  @override
+  String get yourReview => 'आपकी समीक्षा';
+
+  @override
+  String get anonymousUser => 'अनाम उपयोगकर्ता';
+
+  @override
+  String get issueActivatingApp => 'इस ऐप को सक्रिय करने में समस्या हुई। कृपया पुनः प्रयास करें।';
+
+  @override
+  String get dataAccessNoticeDescription =>
+      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
 }

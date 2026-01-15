@@ -4531,5 +4531,149 @@
   "no": "No",
   "@no": {
     "description": "Button text to decline or dismiss"
+  },
+  "subscriptionCancelledSuccessfully": "Subscription cancelled successfully. It will remain active until the end of the current billing period.",
+  "@subscriptionCancelledSuccessfully": {
+    "description": "Success message when subscription is cancelled"
+  },
+  "failedToCancelSubscription": "Failed to cancel subscription. Please try again.",
+  "@failedToCancelSubscription": {
+    "description": "Error message when subscription cancellation fails"
+  },
+  "invalidPaymentUrl": "Invalid payment URL",
+  "@invalidPaymentUrl": {
+    "description": "Error message for invalid payment URL"
+  },
+  "permissionsAndTriggers": "Permissions & Triggers",
+  "@permissionsAndTriggers": {
+    "description": "Section title for permissions and triggers"
+  },
+  "chatFeatures": "Chat Features",
+  "@chatFeatures": {
+    "description": "Section title for chat features"
+  },
+  "uninstall": "Uninstall",
+  "@uninstall": {
+    "description": "Button text to uninstall app"
+  },
+  "installs": "INSTALLS",
+  "@installs": {
+    "description": "Label for install count"
+  },
+  "priceLabel": "PRICE",
+  "@priceLabel": {
+    "description": "Label for price"
+  },
+  "updatedLabel": "UPDATED",
+  "@updatedLabel": {
+    "description": "Label for updated date"
+  },
+  "createdLabel": "CREATED",
+  "@createdLabel": {
+    "description": "Label for created date"
+  },
+  "featuredLabel": "FEATURED",
+  "@featuredLabel": {
+    "description": "Label for featured status"
+  },
+  "cancelSubscriptionQuestion": "Cancel Subscription?",
+  "@cancelSubscriptionQuestion": {
+    "description": "Dialog title for cancel subscription"
+  },
+  "cancelSubscriptionConfirmation": "Are you sure you want to cancel your subscription? You will continue to have access until the end of your current billing period.",
+  "@cancelSubscriptionConfirmation": {
+    "description": "Dialog description for cancel subscription"
+  },
+  "cancelSubscriptionButton": "Cancel Subscription",
+  "@cancelSubscriptionButton": {
+    "description": "Button text to cancel subscription"
+  },
+  "cancelling": "Cancelling...",
+  "@cancelling": {
+    "description": "Loading text while cancelling"
+  },
+  "betaTesterMessage": "You are a beta tester for this app. It is not public yet. It will be public once approved.",
+  "@betaTesterMessage": {
+    "description": "Message shown to beta testers"
+  },
+  "appUnderReviewMessage": "Your app is under review and visible only to you. It will be public once approved.",
+  "@appUnderReviewMessage": {
+    "description": "Message shown when app is under review"
+  },
+  "appRejectedMessage": "Your app has been rejected. Please update the app details and resubmit for review.",
+  "@appRejectedMessage": {
+    "description": "Message shown when app is rejected"
+  },
+  "invalidIntegrationUrl": "Invalid integration URL",
+  "@invalidIntegrationUrl": {
+    "description": "Error message for invalid integration URL"
+  },
+  "tapToComplete": "Tap to complete",
+  "@tapToComplete": {
+    "description": "Text prompting user to tap to complete setup"
+  },
+  "invalidSetupInstructionsUrl": "Invalid setup instructions URL",
+  "@invalidSetupInstructionsUrl": {
+    "description": "Error message for invalid setup instructions URL"
+  },
+  "pushToTalk": "Push to Talk",
+  "@pushToTalk": {
+    "description": "Feature name for push to talk"
+  },
+  "summaryPrompt": "Summary Prompt",
+  "@summaryPrompt": {
+    "description": "Label for summary prompt"
+  },
+  "pleaseSelectARating": "Please select a rating",
+  "@pleaseSelectARating": {
+    "description": "Error message when no rating selected"
+  },
+  "reviewAddedSuccessfully": "Review added successfully 🚀",
+  "@reviewAddedSuccessfully": {
+    "description": "Success message when review is added"
+  },
+  "reviewUpdatedSuccessfully": "Review updated successfully 🚀",
+  "@reviewUpdatedSuccessfully": {
+    "description": "Success message when review is updated"
+  },
+  "failedToSubmitReview": "Failed to submit review. Please try again.",
+  "@failedToSubmitReview": {
+    "description": "Error message when review submission fails"
+  },
+  "addYourReview": "Add Your Review",
+  "@addYourReview": {
+    "description": "Dialog title for adding review"
+  },
+  "editYourReview": "Edit Your Review",
+  "@editYourReview": {
+    "description": "Dialog title for editing review"
+  },
+  "writeAReviewOptional": "Write a review (optional)",
+  "@writeAReviewOptional": {
+    "description": "Placeholder text for review input"
+  },
+  "submitReview": "Submit Review",
+  "@submitReview": {
+    "description": "Button text to submit review"
+  },
+  "updateReview": "Update Review",
+  "@updateReview": {
+    "description": "Button text to update review"
+  },
+  "yourReview": "Your Review",
+  "@yourReview": {
+    "description": "Label for user's own review"
+  },
+  "anonymousUser": "Anonymous User",
+  "@anonymousUser": {
+    "description": "Display name for anonymous users"
+  },
+  "issueActivatingApp": "There was an issue activating this app. Please try again.",
+  "@issueActivatingApp": {
+    "description": "Dialog description for activation error"
+  },
+  "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
+  "@dataAccessNoticeDescription": {
+    "description": "Description for data access notice dialog"
   }
 }

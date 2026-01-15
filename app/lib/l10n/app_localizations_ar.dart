@@ -3982,4 +3982,114 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get no => 'لا';
+
+  @override
+  String get subscriptionCancelledSuccessfully => 'تم إلغاء الاشتراك بنجاح. سيظل نشطًا حتى نهاية فترة الفوترة الحالية.';
+
+  @override
+  String get failedToCancelSubscription => 'فشل إلغاء الاشتراك. يرجى المحاولة مرة أخرى.';
+
+  @override
+  String get invalidPaymentUrl => 'رابط الدفع غير صالح';
+
+  @override
+  String get permissionsAndTriggers => 'الأذونات والمحفزات';
+
+  @override
+  String get chatFeatures => 'ميزات الدردشة';
+
+  @override
+  String get uninstall => 'إلغاء التثبيت';
+
+  @override
+  String get installs => 'التثبيتات';
+
+  @override
+  String get priceLabel => 'السعر';
+
+  @override
+  String get updatedLabel => 'محدث';
+
+  @override
+  String get createdLabel => 'تم الإنشاء';
+
+  @override
+  String get featuredLabel => 'مميز';
+
+  @override
+  String get cancelSubscriptionQuestion => 'إلغاء الاشتراك؟';
+
+  @override
+  String get cancelSubscriptionConfirmation =>
+      'هل أنت متأكد من رغبتك في إلغاء اشتراكك؟ سيستمر وصولك حتى نهاية فترة الفوترة الحالية.';
+
+  @override
+  String get cancelSubscriptionButton => 'إلغاء الاشتراك';
+
+  @override
+  String get cancelling => 'جارٍ الإلغاء...';
+
+  @override
+  String get betaTesterMessage => 'أنت مختبر تجريبي لهذا التطبيق. إنه ليس عامًا بعد. سيصبح عامًا بعد الموافقة.';
+
+  @override
+  String get appUnderReviewMessage => 'تطبيقك قيد المراجعة ومرئي لك فقط. سيصبح عامًا بعد الموافقة.';
+
+  @override
+  String get appRejectedMessage => 'تم رفض تطبيقك. يرجى تحديث تفاصيل التطبيق وإعادة الإرسال للمراجعة.';
+
+  @override
+  String get invalidIntegrationUrl => 'رابط التكامل غير صالح';
+
+  @override
+  String get tapToComplete => 'انقر للإكمال';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'رابط تعليمات الإعداد غير صالح';
+
+  @override
+  String get pushToTalk => 'اضغط للتحدث';
+
+  @override
+  String get summaryPrompt => 'موجه الملخص';
+
+  @override
+  String get pleaseSelectARating => 'يرجى اختيار تقييم';
+
+  @override
+  String get reviewAddedSuccessfully => 'تمت إضافة المراجعة بنجاح 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'تم تحديث المراجعة بنجاح 🚀';
+
+  @override
+  String get failedToSubmitReview => 'فشل إرسال المراجعة. يرجى المحاولة مرة أخرى.';
+
+  @override
+  String get addYourReview => 'أضف مراجعتك';
+
+  @override
+  String get editYourReview => 'تعديل مراجعتك';
+
+  @override
+  String get writeAReviewOptional => 'اكتب مراجعة (اختياري)';
+
+  @override
+  String get submitReview => 'إرسال المراجعة';
+
+  @override
+  String get updateReview => 'تحديث المراجعة';
+
+  @override
+  String get yourReview => 'مراجعتك';
+
+  @override
+  String get anonymousUser => 'مستخدم مجهول';
+
+  @override
+  String get issueActivatingApp => 'حدثت مشكلة في تفعيل هذا التطبيق. يرجى المحاولة مرة أخرى.';
+
+  @override
+  String get dataAccessNoticeDescription =>
+      'سيصل هذا التطبيق إلى بياناتك. Omi AI ليس مسؤولاً عن كيفية استخدام بياناتك أو تعديلها أو حذفها بواسطة هذا التطبيق';
 }

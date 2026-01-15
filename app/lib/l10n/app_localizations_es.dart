@@ -4003,4 +4003,118 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get no => 'No';
+
+  @override
+  String get subscriptionCancelledSuccessfully =>
+      'Suscripción cancelada con éxito. Permanecerá activa hasta el final del período de facturación actual.';
+
+  @override
+  String get failedToCancelSubscription => 'Error al cancelar la suscripción. Por favor, inténtalo de nuevo.';
+
+  @override
+  String get invalidPaymentUrl => 'URL de pago no válida';
+
+  @override
+  String get permissionsAndTriggers => 'Permisos y disparadores';
+
+  @override
+  String get chatFeatures => 'Funciones de chat';
+
+  @override
+  String get uninstall => 'Desinstalar';
+
+  @override
+  String get installs => 'INSTALACIONES';
+
+  @override
+  String get priceLabel => 'PRECIO';
+
+  @override
+  String get updatedLabel => 'ACTUALIZADO';
+
+  @override
+  String get createdLabel => 'CREADO';
+
+  @override
+  String get featuredLabel => 'DESTACADO';
+
+  @override
+  String get cancelSubscriptionQuestion => '¿Cancelar suscripción?';
+
+  @override
+  String get cancelSubscriptionConfirmation =>
+      '¿Estás seguro de que quieres cancelar tu suscripción? Seguirás teniendo acceso hasta el final de tu período de facturación actual.';
+
+  @override
+  String get cancelSubscriptionButton => 'Cancelar suscripción';
+
+  @override
+  String get cancelling => 'Cancelando...';
+
+  @override
+  String get betaTesterMessage =>
+      'Eres un probador beta de esta aplicación. Aún no es pública. Será pública una vez aprobada.';
+
+  @override
+  String get appUnderReviewMessage =>
+      'Tu aplicación está en revisión y solo es visible para ti. Será pública una vez aprobada.';
+
+  @override
+  String get appRejectedMessage =>
+      'Tu aplicación ha sido rechazada. Actualiza los detalles y vuelve a enviarla para revisión.';
+
+  @override
+  String get invalidIntegrationUrl => 'URL de integración no válida';
+
+  @override
+  String get tapToComplete => 'Toca para completar';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'URL de instrucciones de configuración no válida';
+
+  @override
+  String get pushToTalk => 'Pulsa para hablar';
+
+  @override
+  String get summaryPrompt => 'Indicación de resumen';
+
+  @override
+  String get pleaseSelectARating => 'Por favor, selecciona una calificación';
+
+  @override
+  String get reviewAddedSuccessfully => 'Reseña añadida con éxito 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Reseña actualizada con éxito 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Error al enviar la reseña. Por favor, inténtalo de nuevo.';
+
+  @override
+  String get addYourReview => 'Añade tu reseña';
+
+  @override
+  String get editYourReview => 'Edita tu reseña';
+
+  @override
+  String get writeAReviewOptional => 'Escribe una reseña (opcional)';
+
+  @override
+  String get submitReview => 'Enviar reseña';
+
+  @override
+  String get updateReview => 'Actualizar reseña';
+
+  @override
+  String get yourReview => 'Tu reseña';
+
+  @override
+  String get anonymousUser => 'Usuario anónimo';
+
+  @override
+  String get issueActivatingApp => 'Hubo un problema al activar esta aplicación. Por favor, inténtalo de nuevo.';
+
+  @override
+  String get dataAccessNoticeDescription =>
+      'Esta aplicación accederá a tus datos. Omi AI no es responsable de cómo esta aplicación utiliza, modifica o elimina tus datos';
 }

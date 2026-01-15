@@ -4017,4 +4017,118 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get no => 'Nē';
+
+  @override
+  String get subscriptionCancelledSuccessfully =>
+      'Abonements veiksmīgi atcelts. Tas paliks aktīvs līdz pašreizējā norēķinu perioda beigām.';
+
+  @override
+  String get failedToCancelSubscription => 'Neizdevās atcelt abonementu. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get invalidPaymentUrl => 'Nederīgs maksājuma URL';
+
+  @override
+  String get permissionsAndTriggers => 'Atļaujas un aktivizētāji';
+
+  @override
+  String get chatFeatures => 'Tērzēšanas funkcijas';
+
+  @override
+  String get uninstall => 'Atinstalēt';
+
+  @override
+  String get installs => 'INSTALĀCIJAS';
+
+  @override
+  String get priceLabel => 'CENA';
+
+  @override
+  String get updatedLabel => 'ATJAUNINĀTS';
+
+  @override
+  String get createdLabel => 'IZVEIDOTS';
+
+  @override
+  String get featuredLabel => 'IETEIKTS';
+
+  @override
+  String get cancelSubscriptionQuestion => 'Atcelt abonementu?';
+
+  @override
+  String get cancelSubscriptionConfirmation =>
+      'Vai tiešām vēlaties atcelt abonementu? Jums būs piekļuve līdz pašreizējā norēķinu perioda beigām.';
+
+  @override
+  String get cancelSubscriptionButton => 'Atcelt abonementu';
+
+  @override
+  String get cancelling => 'Atceļ...';
+
+  @override
+  String get betaTesterMessage =>
+      'Jūs esat šīs lietotnes beta testētājs. Tā vēl nav publiska. Tā kļūs publiska pēc apstiprināšanas.';
+
+  @override
+  String get appUnderReviewMessage =>
+      'Jūsu lietotne tiek pārskatīta un ir redzama tikai jums. Tā kļūs publiska pēc apstiprināšanas.';
+
+  @override
+  String get appRejectedMessage =>
+      'Jūsu lietotne tika noraidīta. Lūdzu, atjauniniet informāciju un iesniedziet atkārtoti.';
+
+  @override
+  String get invalidIntegrationUrl => 'Nederīgs integrācijas URL';
+
+  @override
+  String get tapToComplete => 'Pieskarieties, lai pabeigtu';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Nederīgs iestatīšanas instrukciju URL';
+
+  @override
+  String get pushToTalk => 'Spiediet, lai runātu';
+
+  @override
+  String get summaryPrompt => 'Kopsavilkuma uzvedne';
+
+  @override
+  String get pleaseSelectARating => 'Lūdzu, izvēlieties vērtējumu';
+
+  @override
+  String get reviewAddedSuccessfully => 'Atsauksme veiksmīgi pievienota 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Atsauksme veiksmīgi atjaunināta 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Neizdevās iesniegt atsauksmi. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get addYourReview => 'Pievienojiet savu atsauksmi';
+
+  @override
+  String get editYourReview => 'Rediģēt savu atsauksmi';
+
+  @override
+  String get writeAReviewOptional => 'Uzrakstiet atsauksmi (neobligāti)';
+
+  @override
+  String get submitReview => 'Iesniegt atsauksmi';
+
+  @override
+  String get updateReview => 'Atjaunināt atsauksmi';
+
+  @override
+  String get yourReview => 'Jūsu atsauksme';
+
+  @override
+  String get anonymousUser => 'Anonīms lietotājs';
+
+  @override
+  String get issueActivatingApp => 'Aktivizējot šo lietotni, radās problēma. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get dataAccessNoticeDescription =>
+      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
 }

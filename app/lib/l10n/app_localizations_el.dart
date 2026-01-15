@@ -4042,4 +4042,119 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get no => 'Όχι';
+
+  @override
+  String get subscriptionCancelledSuccessfully =>
+      'Η συνδρομή ακυρώθηκε επιτυχώς. Θα παραμείνει ενεργή μέχρι το τέλος της τρέχουσας περιόδου χρέωσης.';
+
+  @override
+  String get failedToCancelSubscription => 'Αποτυχία ακύρωσης συνδρομής. Παρακαλώ δοκιμάστε ξανά.';
+
+  @override
+  String get invalidPaymentUrl => 'Μη έγκυρο URL πληρωμής';
+
+  @override
+  String get permissionsAndTriggers => 'Δικαιώματα & Ενεργοποιητές';
+
+  @override
+  String get chatFeatures => 'Λειτουργίες συνομιλίας';
+
+  @override
+  String get uninstall => 'Απεγκατάσταση';
+
+  @override
+  String get installs => 'ΕΓΚΑΤΑΣΤΑΣΕΙΣ';
+
+  @override
+  String get priceLabel => 'ΤΙΜΗ';
+
+  @override
+  String get updatedLabel => 'ΕΝΗΜΕΡΩΜΕΝΟ';
+
+  @override
+  String get createdLabel => 'ΔΗΜΙΟΥΡΓΗΘΗΚΕ';
+
+  @override
+  String get featuredLabel => 'ΠΡΟΤΕΙΝΟΜΕΝΟ';
+
+  @override
+  String get cancelSubscriptionQuestion => 'Ακύρωση συνδρομής;';
+
+  @override
+  String get cancelSubscriptionConfirmation =>
+      'Είστε σίγουροι ότι θέλετε να ακυρώσετε τη συνδρομή σας; Θα συνεχίσετε να έχετε πρόσβαση μέχρι το τέλος της τρέχουσας περιόδου χρέωσης.';
+
+  @override
+  String get cancelSubscriptionButton => 'Ακύρωση συνδρομής';
+
+  @override
+  String get cancelling => 'Ακύρωση...';
+
+  @override
+  String get betaTesterMessage =>
+      'Είστε δοκιμαστής beta για αυτήν την εφαρμογή. Δεν είναι ακόμα δημόσια. Θα γίνει δημόσια μετά την έγκριση.';
+
+  @override
+  String get appUnderReviewMessage =>
+      'Η εφαρμογή σας είναι υπό αξιολόγηση και ορατή μόνο σε εσάς. Θα γίνει δημόσια μετά την έγκριση.';
+
+  @override
+  String get appRejectedMessage =>
+      'Η εφαρμογή σας απορρίφθηκε. Ενημερώστε τα στοιχεία και υποβάλετε ξανά για αξιολόγηση.';
+
+  @override
+  String get invalidIntegrationUrl => 'Μη έγκυρο URL ενσωμάτωσης';
+
+  @override
+  String get tapToComplete => 'Πατήστε για ολοκλήρωση';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Μη έγκυρο URL οδηγιών εγκατάστασης';
+
+  @override
+  String get pushToTalk => 'Πατήστε για ομιλία';
+
+  @override
+  String get summaryPrompt => 'Προτροπή σύνοψης';
+
+  @override
+  String get pleaseSelectARating => 'Παρακαλώ επιλέξτε βαθμολογία';
+
+  @override
+  String get reviewAddedSuccessfully => 'Η κριτική προστέθηκε επιτυχώς 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Η κριτική ενημερώθηκε επιτυχώς 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Αποτυχία υποβολής κριτικής. Παρακαλώ δοκιμάστε ξανά.';
+
+  @override
+  String get addYourReview => 'Προσθέστε την κριτική σας';
+
+  @override
+  String get editYourReview => 'Επεξεργαστείτε την κριτική σας';
+
+  @override
+  String get writeAReviewOptional => 'Γράψτε μια κριτική (προαιρετικό)';
+
+  @override
+  String get submitReview => 'Υποβολή κριτικής';
+
+  @override
+  String get updateReview => 'Ενημέρωση κριτικής';
+
+  @override
+  String get yourReview => 'Η κριτική σας';
+
+  @override
+  String get anonymousUser => 'Ανώνυμος χρήστης';
+
+  @override
+  String get issueActivatingApp =>
+      'Υπήρξε πρόβλημα κατά την ενεργοποίηση αυτής της εφαρμογής. Παρακαλώ δοκιμάστε ξανά.';
+
+  @override
+  String get dataAccessNoticeDescription =>
+      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
 }

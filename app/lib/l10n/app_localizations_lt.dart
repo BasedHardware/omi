@@ -4012,4 +4012,117 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get no => 'Ne';
+
+  @override
+  String get subscriptionCancelledSuccessfully =>
+      'Prenumerata sėkmingai atšaukta. Ji liks aktyvi iki dabartinio atsiskaitymo laikotarpio pabaigos.';
+
+  @override
+  String get failedToCancelSubscription => 'Nepavyko atšaukti prenumeratos. Bandykite dar kartą.';
+
+  @override
+  String get invalidPaymentUrl => 'Netinkamas mokėjimo URL';
+
+  @override
+  String get permissionsAndTriggers => 'Leidimai ir aktyvikliai';
+
+  @override
+  String get chatFeatures => 'Pokalbio funkcijos';
+
+  @override
+  String get uninstall => 'Pašalinti';
+
+  @override
+  String get installs => 'ĮDIEGIMAI';
+
+  @override
+  String get priceLabel => 'KAINA';
+
+  @override
+  String get updatedLabel => 'ATNAUJINTA';
+
+  @override
+  String get createdLabel => 'SUKURTA';
+
+  @override
+  String get featuredLabel => 'REKOMENDUOJAMA';
+
+  @override
+  String get cancelSubscriptionQuestion => 'Atšaukti prenumeratą?';
+
+  @override
+  String get cancelSubscriptionConfirmation =>
+      'Ar tikrai norite atšaukti prenumeratą? Turėsite prieigą iki dabartinio atsiskaitymo laikotarpio pabaigos.';
+
+  @override
+  String get cancelSubscriptionButton => 'Atšaukti prenumeratą';
+
+  @override
+  String get cancelling => 'Atšaukiama...';
+
+  @override
+  String get betaTesterMessage =>
+      'Jūs esate šios programėlės beta testuotojas. Ji dar nėra vieša. Ji taps vieša po patvirtinimo.';
+
+  @override
+  String get appUnderReviewMessage =>
+      'Jūsų programėlė yra peržiūrima ir matoma tik jums. Ji taps vieša po patvirtinimo.';
+
+  @override
+  String get appRejectedMessage => 'Jūsų programėlė buvo atmesta. Atnaujinkite informaciją ir pateikite iš naujo.';
+
+  @override
+  String get invalidIntegrationUrl => 'Netinkamas integracijos URL';
+
+  @override
+  String get tapToComplete => 'Bakstelėkite norėdami užbaigti';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Netinkamas sąrankos instrukcijų URL';
+
+  @override
+  String get pushToTalk => 'Spausk kalbėti';
+
+  @override
+  String get summaryPrompt => 'Santraukos užuomina';
+
+  @override
+  String get pleaseSelectARating => 'Pasirinkite įvertinimą';
+
+  @override
+  String get reviewAddedSuccessfully => 'Atsiliepimas sėkmingai pridėtas 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Atsiliepimas sėkmingai atnaujintas 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Nepavyko pateikti atsiliepimo. Bandykite dar kartą.';
+
+  @override
+  String get addYourReview => 'Pridėkite savo atsiliepimą';
+
+  @override
+  String get editYourReview => 'Redaguoti savo atsiliepimą';
+
+  @override
+  String get writeAReviewOptional => 'Parašykite atsiliepimą (neprivaloma)';
+
+  @override
+  String get submitReview => 'Pateikti atsiliepimą';
+
+  @override
+  String get updateReview => 'Atnaujinti atsiliepimą';
+
+  @override
+  String get yourReview => 'Jūsų atsiliepimas';
+
+  @override
+  String get anonymousUser => 'Anoniminis naudotojas';
+
+  @override
+  String get issueActivatingApp => 'Aktyvuojant šią programėlę įvyko klaida. Bandykite dar kartą.';
+
+  @override
+  String get dataAccessNoticeDescription =>
+      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
 }

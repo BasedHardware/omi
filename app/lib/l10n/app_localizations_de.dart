@@ -4043,4 +4043,119 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get no => 'Nein';
+
+  @override
+  String get subscriptionCancelledSuccessfully =>
+      'Abonnement erfolgreich gekündigt. Es bleibt bis zum Ende des aktuellen Abrechnungszeitraums aktiv.';
+
+  @override
+  String get failedToCancelSubscription => 'Kündigung des Abonnements fehlgeschlagen. Bitte versuchen Sie es erneut.';
+
+  @override
+  String get invalidPaymentUrl => 'Ungültige Zahlungs-URL';
+
+  @override
+  String get permissionsAndTriggers => 'Berechtigungen & Auslöser';
+
+  @override
+  String get chatFeatures => 'Chat-Funktionen';
+
+  @override
+  String get uninstall => 'Deinstallieren';
+
+  @override
+  String get installs => 'INSTALLATIONEN';
+
+  @override
+  String get priceLabel => 'PREIS';
+
+  @override
+  String get updatedLabel => 'AKTUALISIERT';
+
+  @override
+  String get createdLabel => 'ERSTELLT';
+
+  @override
+  String get featuredLabel => 'EMPFOHLEN';
+
+  @override
+  String get cancelSubscriptionQuestion => 'Abonnement kündigen?';
+
+  @override
+  String get cancelSubscriptionConfirmation =>
+      'Sind Sie sicher, dass Sie Ihr Abonnement kündigen möchten? Sie haben weiterhin Zugang bis zum Ende Ihres aktuellen Abrechnungszeitraums.';
+
+  @override
+  String get cancelSubscriptionButton => 'Abonnement kündigen';
+
+  @override
+  String get cancelling => 'Wird gekündigt...';
+
+  @override
+  String get betaTesterMessage =>
+      'Sie sind Beta-Tester für diese App. Sie ist noch nicht öffentlich. Sie wird nach Genehmigung öffentlich.';
+
+  @override
+  String get appUnderReviewMessage =>
+      'Ihre App wird überprüft und ist nur für Sie sichtbar. Sie wird nach Genehmigung öffentlich.';
+
+  @override
+  String get appRejectedMessage =>
+      'Ihre App wurde abgelehnt. Bitte aktualisieren Sie die App-Details und reichen Sie sie erneut ein.';
+
+  @override
+  String get invalidIntegrationUrl => 'Ungültige Integrations-URL';
+
+  @override
+  String get tapToComplete => 'Tippen zum Abschließen';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Ungültige URL für Einrichtungsanweisungen';
+
+  @override
+  String get pushToTalk => 'Drücken zum Sprechen';
+
+  @override
+  String get summaryPrompt => 'Zusammenfassungs-Prompt';
+
+  @override
+  String get pleaseSelectARating => 'Bitte wählen Sie eine Bewertung';
+
+  @override
+  String get reviewAddedSuccessfully => 'Bewertung erfolgreich hinzugefügt 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Bewertung erfolgreich aktualisiert 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Bewertung konnte nicht gesendet werden. Bitte versuchen Sie es erneut.';
+
+  @override
+  String get addYourReview => 'Bewertung hinzufügen';
+
+  @override
+  String get editYourReview => 'Bewertung bearbeiten';
+
+  @override
+  String get writeAReviewOptional => 'Bewertung schreiben (optional)';
+
+  @override
+  String get submitReview => 'Bewertung absenden';
+
+  @override
+  String get updateReview => 'Bewertung aktualisieren';
+
+  @override
+  String get yourReview => 'Ihre Bewertung';
+
+  @override
+  String get anonymousUser => 'Anonymer Benutzer';
+
+  @override
+  String get issueActivatingApp =>
+      'Bei der Aktivierung dieser App ist ein Problem aufgetreten. Bitte versuchen Sie es erneut.';
+
+  @override
+  String get dataAccessNoticeDescription =>
+      'Diese App wird auf Ihre Daten zugreifen. Omi AI ist nicht verantwortlich für die Verwendung, Änderung oder Löschung Ihrer Daten durch diese App';
 }

@@ -4012,4 +4012,117 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get no => 'Nei';
+
+  @override
+  String get subscriptionCancelledSuccessfully =>
+      'Abonnement kansellert. Det forblir aktivt til slutten av gjeldende faktureringsperiode.';
+
+  @override
+  String get failedToCancelSubscription => 'Kunne ikke kansellere abonnement. Prøv igjen.';
+
+  @override
+  String get invalidPaymentUrl => 'Ugyldig betalings-URL';
+
+  @override
+  String get permissionsAndTriggers => 'Tillatelser og utløsere';
+
+  @override
+  String get chatFeatures => 'Chat-funksjoner';
+
+  @override
+  String get uninstall => 'Avinstaller';
+
+  @override
+  String get installs => 'INSTALLASJONER';
+
+  @override
+  String get priceLabel => 'PRIS';
+
+  @override
+  String get updatedLabel => 'OPPDATERT';
+
+  @override
+  String get createdLabel => 'OPPRETTET';
+
+  @override
+  String get featuredLabel => 'FREMHEVET';
+
+  @override
+  String get cancelSubscriptionQuestion => 'Kanseller abonnement?';
+
+  @override
+  String get cancelSubscriptionConfirmation =>
+      'Er du sikker på at du vil kansellere abonnementet? Du vil fortsatt ha tilgang til slutten av gjeldende faktureringsperiode.';
+
+  @override
+  String get cancelSubscriptionButton => 'Kanseller abonnement';
+
+  @override
+  String get cancelling => 'Kansellerer...';
+
+  @override
+  String get betaTesterMessage =>
+      'Du er betatester for denne appen. Den er ikke offentlig ennå. Den blir offentlig etter godkjenning.';
+
+  @override
+  String get appUnderReviewMessage =>
+      'Appen din er under vurdering og bare synlig for deg. Den blir offentlig etter godkjenning.';
+
+  @override
+  String get appRejectedMessage => 'Appen din er avvist. Oppdater detaljene og send inn på nytt for vurdering.';
+
+  @override
+  String get invalidIntegrationUrl => 'Ugyldig integrasjons-URL';
+
+  @override
+  String get tapToComplete => 'Trykk for å fullføre';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Ugyldig URL for oppsettsinstruksjoner';
+
+  @override
+  String get pushToTalk => 'Trykk for å snakke';
+
+  @override
+  String get summaryPrompt => 'Sammendragsprompt';
+
+  @override
+  String get pleaseSelectARating => 'Velg en vurdering';
+
+  @override
+  String get reviewAddedSuccessfully => 'Anmeldelse lagt til 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Anmeldelse oppdatert 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Kunne ikke sende anmeldelse. Prøv igjen.';
+
+  @override
+  String get addYourReview => 'Legg til din anmeldelse';
+
+  @override
+  String get editYourReview => 'Rediger din anmeldelse';
+
+  @override
+  String get writeAReviewOptional => 'Skriv en anmeldelse (valgfritt)';
+
+  @override
+  String get submitReview => 'Send anmeldelse';
+
+  @override
+  String get updateReview => 'Oppdater anmeldelse';
+
+  @override
+  String get yourReview => 'Din anmeldelse';
+
+  @override
+  String get anonymousUser => 'Anonym bruker';
+
+  @override
+  String get issueActivatingApp => 'Det oppstod et problem ved aktivering av denne appen. Prøv igjen.';
+
+  @override
+  String get dataAccessNoticeDescription =>
+      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
 }

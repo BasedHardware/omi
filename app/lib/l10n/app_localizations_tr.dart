@@ -4021,4 +4021,117 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get no => 'Hayır';
+
+  @override
+  String get subscriptionCancelledSuccessfully =>
+      'Abonelik başarıyla iptal edildi. Mevcut fatura döneminin sonuna kadar aktif kalacaktır.';
+
+  @override
+  String get failedToCancelSubscription => 'Abonelik iptal edilemedi. Lütfen tekrar deneyin.';
+
+  @override
+  String get invalidPaymentUrl => 'Geçersiz ödeme URL\'si';
+
+  @override
+  String get permissionsAndTriggers => 'İzinler ve Tetikleyiciler';
+
+  @override
+  String get chatFeatures => 'Sohbet Özellikleri';
+
+  @override
+  String get uninstall => 'Kaldır';
+
+  @override
+  String get installs => 'YÜKLEMELER';
+
+  @override
+  String get priceLabel => 'FİYAT';
+
+  @override
+  String get updatedLabel => 'GÜNCELLENDİ';
+
+  @override
+  String get createdLabel => 'OLUŞTURULDU';
+
+  @override
+  String get featuredLabel => 'ÖNE ÇIKAN';
+
+  @override
+  String get cancelSubscriptionQuestion => 'Aboneliği iptal et?';
+
+  @override
+  String get cancelSubscriptionConfirmation =>
+      'Aboneliğinizi iptal etmek istediğinizden emin misiniz? Mevcut fatura döneminin sonuna kadar erişiminiz devam edecektir.';
+
+  @override
+  String get cancelSubscriptionButton => 'Aboneliği İptal Et';
+
+  @override
+  String get cancelling => 'İptal ediliyor...';
+
+  @override
+  String get betaTesterMessage =>
+      'Bu uygulamanın beta test kullanıcısısınız. Henüz herkese açık değil. Onaylandıktan sonra herkese açık olacak.';
+
+  @override
+  String get appUnderReviewMessage =>
+      'Uygulamanız inceleniyor ve yalnızca size görünür. Onaylandıktan sonra herkese açık olacak.';
+
+  @override
+  String get appRejectedMessage => 'Uygulamanız reddedildi. Lütfen detayları güncelleyip tekrar gönderin.';
+
+  @override
+  String get invalidIntegrationUrl => 'Geçersiz entegrasyon URL\'si';
+
+  @override
+  String get tapToComplete => 'Tamamlamak için dokunun';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Geçersiz kurulum talimatları URL\'si';
+
+  @override
+  String get pushToTalk => 'Konuşmak için Basın';
+
+  @override
+  String get summaryPrompt => 'Özet İstemi';
+
+  @override
+  String get pleaseSelectARating => 'Lütfen bir puan seçin';
+
+  @override
+  String get reviewAddedSuccessfully => 'Değerlendirme başarıyla eklendi 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Değerlendirme başarıyla güncellendi 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Değerlendirme gönderilemedi. Lütfen tekrar deneyin.';
+
+  @override
+  String get addYourReview => 'Değerlendirmenizi Ekleyin';
+
+  @override
+  String get editYourReview => 'Değerlendirmenizi Düzenleyin';
+
+  @override
+  String get writeAReviewOptional => 'Bir değerlendirme yazın (isteğe bağlı)';
+
+  @override
+  String get submitReview => 'Değerlendirmeyi Gönder';
+
+  @override
+  String get updateReview => 'Değerlendirmeyi Güncelle';
+
+  @override
+  String get yourReview => 'Değerlendirmeniz';
+
+  @override
+  String get anonymousUser => 'Anonim Kullanıcı';
+
+  @override
+  String get issueActivatingApp => 'Bu uygulamayı etkinleştirirken bir sorun oluştu. Lütfen tekrar deneyin.';
+
+  @override
+  String get dataAccessNoticeDescription =>
+      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
 }

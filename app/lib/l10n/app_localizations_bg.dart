@@ -4023,4 +4023,118 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get no => 'Не';
+
+  @override
+  String get subscriptionCancelledSuccessfully =>
+      'Абонаментът е отменен успешно. Той ще остане активен до края на текущия период на фактуриране.';
+
+  @override
+  String get failedToCancelSubscription => 'Неуспешно отменяне на абонамента. Моля, опитайте отново.';
+
+  @override
+  String get invalidPaymentUrl => 'Невалиден URL за плащане';
+
+  @override
+  String get permissionsAndTriggers => 'Разрешения и тригери';
+
+  @override
+  String get chatFeatures => 'Функции за чат';
+
+  @override
+  String get uninstall => 'Деинсталиране';
+
+  @override
+  String get installs => 'ИНСТАЛАЦИИ';
+
+  @override
+  String get priceLabel => 'ЦЕНА';
+
+  @override
+  String get updatedLabel => 'АКТУАЛИЗИРАНО';
+
+  @override
+  String get createdLabel => 'СЪЗДАДЕНО';
+
+  @override
+  String get featuredLabel => 'ПРЕПОРЪЧАНО';
+
+  @override
+  String get cancelSubscriptionQuestion => 'Отмяна на абонамента?';
+
+  @override
+  String get cancelSubscriptionConfirmation =>
+      'Сигурни ли сте, че искате да отмените абонамента си? Ще имате достъп до края на текущия период на фактуриране.';
+
+  @override
+  String get cancelSubscriptionButton => 'Отмяна на абонамента';
+
+  @override
+  String get cancelling => 'Отменяне...';
+
+  @override
+  String get betaTesterMessage =>
+      'Вие сте бета тестер за това приложение. То все още не е публично. Ще стане публично след одобрение.';
+
+  @override
+  String get appUnderReviewMessage =>
+      'Вашето приложение е в процес на преглед и е видимо само за вас. Ще стане публично след одобрение.';
+
+  @override
+  String get appRejectedMessage =>
+      'Вашето приложение беше отхвърлено. Моля, актуализирайте детайлите и изпратете отново за преглед.';
+
+  @override
+  String get invalidIntegrationUrl => 'Невалиден URL за интеграция';
+
+  @override
+  String get tapToComplete => 'Докоснете за завършване';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Невалиден URL за инструкции за настройка';
+
+  @override
+  String get pushToTalk => 'Натисни за говорене';
+
+  @override
+  String get summaryPrompt => 'Подкана за обобщение';
+
+  @override
+  String get pleaseSelectARating => 'Моля, изберете оценка';
+
+  @override
+  String get reviewAddedSuccessfully => 'Отзивът е добавен успешно 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Отзивът е актуализиран успешно 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Неуспешно изпращане на отзив. Моля, опитайте отново.';
+
+  @override
+  String get addYourReview => 'Добавете вашия отзив';
+
+  @override
+  String get editYourReview => 'Редактирайте вашия отзив';
+
+  @override
+  String get writeAReviewOptional => 'Напишете отзив (по избор)';
+
+  @override
+  String get submitReview => 'Изпрати отзив';
+
+  @override
+  String get updateReview => 'Актуализиране на отзива';
+
+  @override
+  String get yourReview => 'Вашият отзив';
+
+  @override
+  String get anonymousUser => 'Анонимен потребител';
+
+  @override
+  String get issueActivatingApp => 'Възникна проблем при активирането на това приложение. Моля, опитайте отново.';
+
+  @override
+  String get dataAccessNoticeDescription =>
+      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
 }

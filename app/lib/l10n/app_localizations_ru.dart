@@ -4023,4 +4023,117 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get no => 'Нет';
+
+  @override
+  String get subscriptionCancelledSuccessfully =>
+      'Подписка успешно отменена. Она останется активной до конца текущего расчетного периода.';
+
+  @override
+  String get failedToCancelSubscription => 'Не удалось отменить подписку. Пожалуйста, попробуйте снова.';
+
+  @override
+  String get invalidPaymentUrl => 'Неверный URL оплаты';
+
+  @override
+  String get permissionsAndTriggers => 'Разрешения и триггеры';
+
+  @override
+  String get chatFeatures => 'Функции чата';
+
+  @override
+  String get uninstall => 'Удалить';
+
+  @override
+  String get installs => 'УСТАНОВКИ';
+
+  @override
+  String get priceLabel => 'ЦЕНА';
+
+  @override
+  String get updatedLabel => 'ОБНОВЛЕНО';
+
+  @override
+  String get createdLabel => 'СОЗДАНО';
+
+  @override
+  String get featuredLabel => 'РЕКОМЕНДУЕМОЕ';
+
+  @override
+  String get cancelSubscriptionQuestion => 'Отменить подписку?';
+
+  @override
+  String get cancelSubscriptionConfirmation =>
+      'Вы уверены, что хотите отменить подписку? У вас будет доступ до конца текущего расчетного периода.';
+
+  @override
+  String get cancelSubscriptionButton => 'Отменить подписку';
+
+  @override
+  String get cancelling => 'Отмена...';
+
+  @override
+  String get betaTesterMessage =>
+      'Вы бета-тестер этого приложения. Оно еще не опубликовано. Станет публичным после одобрения.';
+
+  @override
+  String get appUnderReviewMessage =>
+      'Ваше приложение на рассмотрении и видно только вам. Станет публичным после одобрения.';
+
+  @override
+  String get appRejectedMessage => 'Ваше приложение отклонено. Обновите данные и отправьте повторно на рассмотрение.';
+
+  @override
+  String get invalidIntegrationUrl => 'Неверный URL интеграции';
+
+  @override
+  String get tapToComplete => 'Нажмите для завершения';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Неверный URL инструкций по настройке';
+
+  @override
+  String get pushToTalk => 'Нажмите, чтобы говорить';
+
+  @override
+  String get summaryPrompt => 'Промпт резюме';
+
+  @override
+  String get pleaseSelectARating => 'Пожалуйста, выберите оценку';
+
+  @override
+  String get reviewAddedSuccessfully => 'Отзыв успешно добавлен 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Отзыв успешно обновлен 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Не удалось отправить отзыв. Пожалуйста, попробуйте снова.';
+
+  @override
+  String get addYourReview => 'Добавить отзыв';
+
+  @override
+  String get editYourReview => 'Редактировать отзыв';
+
+  @override
+  String get writeAReviewOptional => 'Написать отзыв (необязательно)';
+
+  @override
+  String get submitReview => 'Отправить отзыв';
+
+  @override
+  String get updateReview => 'Обновить отзыв';
+
+  @override
+  String get yourReview => 'Ваш отзыв';
+
+  @override
+  String get anonymousUser => 'Анонимный пользователь';
+
+  @override
+  String get issueActivatingApp => 'При активации этого приложения возникла проблема. Пожалуйста, попробуйте снова.';
+
+  @override
+  String get dataAccessNoticeDescription =>
+      'Это приложение получит доступ к вашим данным. Omi AI не несет ответственности за то, как ваши данные используются, изменяются или удаляются этим приложением';
 }

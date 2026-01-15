@@ -31,6 +31,7 @@ import 'package:omi/widgets/animated_loading_button.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import '../../../backend/http/api/payment.dart';
 import '../../../backend/schema/app.dart';
 import '../widgets/show_app_options_sheet.dart';
@@ -203,9 +204,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                  'Subscription cancelled successfully. It will remain active until the end of the current billing period.'),
+            SnackBar(
+              content: Text(context.l10n.subscriptionCancelledSuccessfully),
               backgroundColor: Colors.green,
             ),
           );
@@ -213,8 +213,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to cancel subscription. Please try again.'),
+            SnackBar(
+              content: Text(context.l10n.failedToCancelSubscription),
               backgroundColor: Colors.red,
             ),
           );
@@ -457,7 +457,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Permissions & Triggers',
+            context.l10n.permissionsAndTriggers,
             style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 18),
@@ -550,7 +550,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Chat Features',
+            context.l10n.chatFeatures,
             style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 16),
@@ -878,7 +878,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   )
                                 : app.enabled
                                     ? AnimatedLoadingButton(
-                                        text: 'Uninstall',
+                                        text: context.l10n.uninstall,
                                         width: 90,
                                         height: 32,
                                         onPressed: () => _toggleApp(app.id, false),
@@ -900,7 +900,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                                 final uri = Uri.tryParse(app.paymentLink!);
                                                 if (uri == null) {
                                                   ScaffoldMessenger.of(context).showSnackBar(
-                                                    const SnackBar(content: Text('Invalid payment URL')),
+                                                    SnackBar(content: Text(context.l10n.invalidPaymentUrl)),
                                                   );
                                                   return;
                                                 }
@@ -915,7 +915,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                         : AnimatedLoadingButton(
                                             width: 75,
                                             height: 32,
-                                            text: 'Install',
+                                            text: context.l10n.install,
                                             onPressed: () async {
                                               if (app.worksExternally()) {
                                                 showDialog(
@@ -923,9 +923,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                                   builder: (ctx) {
                                                     return StatefulBuilder(builder: (ctx, setState) {
                                                       return ConfirmationDialog(
-                                                        title: 'Data Access Notice',
-                                                        description:
-                                                            'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app',
+                                                        title: context.l10n.dataAccessNotice,
+                                                        description: context.l10n.dataAccessNoticeDescription,
                                                         onConfirm: () {
                                                           _toggleApp(app.id, true);
                                                           Navigator.pop(context);
