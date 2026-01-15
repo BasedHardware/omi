@@ -7904,6 +7904,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app'**
   String get dataAccessNoticeDescription;
+
+  /// Button to copy conversation URL to clipboard
+  ///
+  /// In en, this message translates to:
+  /// **'Copy URL'**
+  String get copyUrl;
+
+  /// TXT file format label
+  ///
+  /// In en, this message translates to:
+  /// **'TXT'**
+  String get txtFormat;
+
+  /// PDF file format label
+  ///
+  /// In en, this message translates to:
+  /// **'PDF'**
+  String get pdfFormat;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

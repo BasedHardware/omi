@@ -3002,5 +3002,8 @@
   "yourReview": "Din anmeldelse",
   "anonymousUser": "Anonym bruker",
   "issueActivatingApp": "Det oppstod et problem ved aktivering av denne appen. Prøv igjen.",
-  "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app"
+  "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
+  "copyUrl": "Kopier URL",
+  "txtFormat": "TXT",
+  "pdfFormat": "PDF"
 }

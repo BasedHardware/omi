@@ -1449,5 +1449,8 @@
   "yourReview": "您的评论",
   "anonymousUser": "匿名用户",
   "issueActivatingApp": "激活此应用时出现问题。请重试。",
-  "dataAccessNoticeDescription": "此应用将访问您的数据。Omi AI不对此应用如何使用、修改或删除您的数据负责"
+  "dataAccessNoticeDescription": "此应用将访问您的数据。Omi AI不对此应用如何使用、修改或删除您的数据负责",
+  "copyUrl": "复制链接",
+  "txtFormat": "TXT",
+  "pdfFormat": "PDF"
 }

@@ -3002,5 +3002,8 @@
   "yourReview": "Ваш відгук",
   "anonymousUser": "Анонімний користувач",
   "issueActivatingApp": "Виникла проблема з активацією цього додатка. Будь ласка, спробуйте ще раз.",
-  "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app"
+  "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
+  "copyUrl": "Копіювати URL",
+  "txtFormat": "TXT",
+  "pdfFormat": "PDF"
 }

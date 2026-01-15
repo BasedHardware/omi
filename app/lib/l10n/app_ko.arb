@@ -3002,5 +3002,8 @@
   "yourReview": "내 리뷰",
   "anonymousUser": "익명 사용자",
   "issueActivatingApp": "이 앱을 활성화하는 데 문제가 발생했습니다. 다시 시도해 주세요.",
-  "dataAccessNoticeDescription": "이 앱은 귀하의 데이터에 액세스합니다. Omi AI는 이 앱에 의한 데이터 사용, 수정 또는 삭제에 대해 책임지지 않습니다"
+  "dataAccessNoticeDescription": "이 앱은 귀하의 데이터에 액세스합니다. Omi AI는 이 앱에 의한 데이터 사용, 수정 또는 삭제에 대해 책임지지 않습니다",
+  "copyUrl": "URL 복사",
+  "txtFormat": "TXT",
+  "pdfFormat": "PDF"
 }

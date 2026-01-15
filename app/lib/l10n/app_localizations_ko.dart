@@ -4053,4 +4053,13 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get dataAccessNoticeDescription => '이 앱은 귀하의 데이터에 액세스합니다. Omi AI는 이 앱에 의한 데이터 사용, 수정 또는 삭제에 대해 책임지지 않습니다';
+
+  @override
+  String get copyUrl => 'URL 복사';
+
+  @override
+  String get txtFormat => 'TXT';
+
+  @override
+  String get pdfFormat => 'PDF';
 }

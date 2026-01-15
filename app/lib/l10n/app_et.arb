@@ -3002,5 +3002,8 @@
   "yourReview": "Teie arvustus",
   "anonymousUser": "Anonüümne kasutaja",
   "issueActivatingApp": "Selle rakenduse aktiveerimisel tekkis probleem. Palun proovi uuesti.",
-  "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app"
+  "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
+  "copyUrl": "Kopeeri URL",
+  "txtFormat": "TXT",
+  "pdfFormat": "PDF"
 }

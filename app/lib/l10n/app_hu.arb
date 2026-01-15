@@ -3002,5 +3002,8 @@
   "yourReview": "Az Ön értékelése",
   "anonymousUser": "Névtelen felhasználó",
   "issueActivatingApp": "Probléma merült fel az alkalmazás aktiválásakor. Kérjük, próbálja újra.",
-  "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app"
+  "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
+  "copyUrl": "URL másolása",
+  "txtFormat": "TXT",
+  "pdfFormat": "PDF"
 }

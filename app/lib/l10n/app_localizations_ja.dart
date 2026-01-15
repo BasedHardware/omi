@@ -4053,4 +4053,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get dataAccessNoticeDescription => 'このアプリはあなたのデータにアクセスします。Omi AIは、このアプリによるデータの使用、変更、削除について責任を負いません';
+
+  @override
+  String get copyUrl => 'URLをコピー';
+
+  @override
+  String get txtFormat => 'TXT';
+
+  @override
+  String get pdfFormat => 'PDF';
 }

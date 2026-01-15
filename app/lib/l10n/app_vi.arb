@@ -3002,5 +3002,8 @@
   "yourReview": "Đánh giá của bạn",
   "anonymousUser": "Người dùng ẩn danh",
   "issueActivatingApp": "Đã xảy ra sự cố khi kích hoạt ứng dụng này. Vui lòng thử lại.",
-  "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app"
+  "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
+  "copyUrl": "Sao chép URL",
+  "txtFormat": "TXT",
+  "pdfFormat": "PDF"
 }

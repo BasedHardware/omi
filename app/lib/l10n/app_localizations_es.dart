@@ -4117,4 +4117,13 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get dataAccessNoticeDescription =>
       'Esta aplicación accederá a tus datos. Omi AI no es responsable de cómo esta aplicación utiliza, modifica o elimina tus datos';
+
+  @override
+  String get copyUrl => 'Copiar URL';
+
+  @override
+  String get txtFormat => 'TXT';
+
+  @override
+  String get pdfFormat => 'PDF';
 }

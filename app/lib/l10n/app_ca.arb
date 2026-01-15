@@ -3004,5 +3004,8 @@
   "yourReview": "La teva ressenya",
   "anonymousUser": "Usuari anònim",
   "issueActivatingApp": "Hi ha hagut un problema en activar aquesta aplicació. Torna-ho a provar.",
-  "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app"
+  "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
+  "copyUrl": "Copia l'URL",
+  "txtFormat": "TXT",
+  "pdfFormat": "PDF"
 }

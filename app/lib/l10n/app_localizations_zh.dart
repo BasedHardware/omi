@@ -4048,4 +4048,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get dataAccessNoticeDescription => '此应用将访问您的数据。Omi AI不对此应用如何使用、修改或删除您的数据负责';
+
+  @override
+  String get copyUrl => '复制链接';
+
+  @override
+  String get txtFormat => 'TXT';
+
+  @override
+  String get pdfFormat => 'PDF';
 }

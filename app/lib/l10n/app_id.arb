@@ -3002,5 +3002,8 @@
   "yourReview": "Ulasan Anda",
   "anonymousUser": "Pengguna Anonim",
   "issueActivatingApp": "Terjadi masalah saat mengaktifkan aplikasi ini. Silakan coba lagi.",
-  "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app"
+  "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
+  "copyUrl": "Salin URL",
+  "txtFormat": "TXT",
+  "pdfFormat": "PDF"
 }

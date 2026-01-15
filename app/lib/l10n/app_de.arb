@@ -1449,5 +1449,8 @@
   "yourReview": "Ihre Bewertung",
   "anonymousUser": "Anonymer Benutzer",
   "issueActivatingApp": "Bei der Aktivierung dieser App ist ein Problem aufgetreten. Bitte versuchen Sie es erneut.",
-  "dataAccessNoticeDescription": "Diese App wird auf Ihre Daten zugreifen. Omi AI ist nicht verantwortlich für die Verwendung, Änderung oder Löschung Ihrer Daten durch diese App"
+  "dataAccessNoticeDescription": "Diese App wird auf Ihre Daten zugreifen. Omi AI ist nicht verantwortlich für die Verwendung, Änderung oder Löschung Ihrer Daten durch diese App",
+  "copyUrl": "URL kopieren",
+  "txtFormat": "TXT",
+  "pdfFormat": "PDF"
 }

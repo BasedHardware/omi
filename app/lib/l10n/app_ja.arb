@@ -1428,5 +1428,8 @@
   "yourReview": "あなたのレビュー",
   "anonymousUser": "匿名ユーザー",
   "issueActivatingApp": "このアプリのアクティベーションで問題が発生しました。もう一度お試しください。",
-  "dataAccessNoticeDescription": "このアプリはあなたのデータにアクセスします。Omi AIは、このアプリによるデータの使用、変更、削除について責任を負いません"
+  "dataAccessNoticeDescription": "このアプリはあなたのデータにアクセスします。Omi AIは、このアプリによるデータの使用、変更、削除について責任を負いません",
+  "copyUrl": "URLをコピー",
+  "txtFormat": "TXT",
+  "pdfFormat": "PDF"
 }
