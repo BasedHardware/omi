@@ -48,7 +48,8 @@ def transcribe_deepgram(audio_path: str) -> DiarizationResult:
         audio_data = f.read()
 
     options = PrerecordedOptions(
-        model="nova-2",
+        model="nova-3",
+        language="en",
         smart_format=True,
         diarize=True,
         punctuate=True,
@@ -300,15 +301,29 @@ def main():
     # Load ground truth if provided
     ground_truth = None
     if ground_truth_path:
-        with open(ground_truth_path) as f:
-            data = json.load(f)
-            # Handle both formats: raw list or wrapped with 'segments' key
-            if isinstance(data, list):
-                ground_truth = data
-            elif isinstance(data, dict) and 'segments' in data:
-                ground_truth = data['segments']
-            else:
-                ground_truth = data
+        if ground_truth_path.endswith('.rttm'):
+            # Parse RTTM format: SPEAKER <file> <channel> <start> <duration> <NA> <NA> <speaker_id> <NA> <NA>
+            ground_truth = []
+            with open(ground_truth_path) as f:
+                for line in f:
+                    parts = line.strip().split()
+                    if parts[0] == 'SPEAKER':
+                        start = float(parts[3])
+                        duration = float(parts[4])
+                        speaker = parts[7]
+                        ground_truth.append({'start': start, 'end': start + duration, 'speaker': speaker})
+        else:
+            with open(ground_truth_path) as f:
+                data = json.load(f)
+                # Handle multiple formats: raw list, or wrapped with 'segments'/'ground_truth' key
+                if isinstance(data, list):
+                    ground_truth = data
+                elif isinstance(data, dict) and 'segments' in data:
+                    ground_truth = data['segments']
+                elif isinstance(data, dict) and 'ground_truth' in data:
+                    ground_truth = data['ground_truth']
+                else:
+                    ground_truth = data
         print(f"Ground truth: {ground_truth_path} ({len(ground_truth)} segments)")
 
     results = []
