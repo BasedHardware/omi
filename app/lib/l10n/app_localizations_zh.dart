@@ -2373,7 +2373,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get noApiKeysYet => 'No API keys yet';
+  String get noApiKeysYet => '还没有API密钥。创建一个以与您的应用集成。';
 
   @override
   String get createKeyToGetStarted => 'Create a key to get started';
@@ -4114,4 +4114,53 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get permissionDeniedForAppleReminders => 'Apple提醒事项权限被拒绝';
+
+  @override
+  String failedToCreateApiKey(String error) {
+    return '创建提供商API密钥失败: $error';
+  }
+
+  @override
+  String get createAKey => '创建密钥';
+
+  @override
+  String get apiKeyRevokedSuccessfully => 'API密钥已成功撤销';
+
+  @override
+  String failedToRevokeApiKey(String error) {
+    return '撤销API密钥失败: $error';
+  }
+
+  @override
+  String get omiApiKeys => 'Omi API密钥';
+
+  @override
+  String get apiKeysDescription => 'API密钥用于在您的应用程序与OMI服务器通信时进行身份验证。它们允许您的应用程序创建记忆并安全地访问其他OMI服务。';
+
+  @override
+  String get aboutOmiApiKeys => '关于Omi API密钥';
+
+  @override
+  String get yourNewKey => '您的新密钥:';
+
+  @override
+  String get copyToClipboard => '复制到剪贴板';
+
+  @override
+  String get pleaseCopyKeyNow => '请立即复制并保存在安全的地方。';
+
+  @override
+  String get willNotSeeAgain => '您将无法再次查看。';
+
+  @override
+  String get revokeKey => '撤销密钥';
+
+  @override
+  String get revokeApiKeyQuestion => '撤销API密钥?';
+
+  @override
+  String get revokeApiKeyWarning => '此操作无法撤消。使用此密钥的任何应用程序将无法再访问API。';
+
+  @override
+  String get revoke => '撤销';
 }

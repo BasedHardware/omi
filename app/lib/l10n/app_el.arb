@@ -3020,5 +3020,21 @@
   "addingToService": "Προσθήκη σε {serviceName}...",
   "addedToService": "Προστέθηκε στο {serviceName}",
   "failedToAddToService": "Αποτυχία προσθήκης στο {serviceName}",
-  "permissionDeniedForAppleReminders": "Η άδεια για τις Υπενθυμίσεις Apple απορρίφθηκε"
+  "permissionDeniedForAppleReminders": "Η άδεια για τις Υπενθυμίσεις Apple απορρίφθηκε",
+  "failedToCreateApiKey": "Αποτυχία δημιουργίας κλειδιού API παρόχου: {error}",
+  "createAKey": "Δημιουργία κλειδιού",
+  "apiKeyRevokedSuccessfully": "Το κλειδί API ανακλήθηκε επιτυχώς",
+  "failedToRevokeApiKey": "Αποτυχία ανάκλησης κλειδιού API: {error}",
+  "omiApiKeys": "Κλειδιά API Omi",
+  "apiKeysDescription": "Τα κλειδιά API χρησιμοποιούνται για έλεγχο ταυτότητας όταν η εφαρμογή σας επικοινωνεί με τον διακομιστή OMI. Επιτρέπουν στην εφαρμογή σας να δημιουργεί αναμνήσεις και να έχει ασφαλή πρόσβαση σε άλλες υπηρεσίες OMI.",
+  "aboutOmiApiKeys": "Σχετικά με τα κλειδιά API Omi",
+  "noApiKeysYet": "Δεν υπάρχουν ακόμα κλειδιά API. Δημιουργήστε ένα για ενσωμάτωση με την εφαρμογή σας.",
+  "yourNewKey": "Το νέο σας κλειδί:",
+  "copyToClipboard": "Αντιγραφή στο πρόχειρο",
+  "pleaseCopyKeyNow": "Παρακαλούμε αντιγράψτε το τώρα και σημειώστε το κάπου ασφαλές. ",
+  "willNotSeeAgain": "Δεν θα μπορείτε να το δείτε ξανά.",
+  "revokeKey": "Ανάκληση κλειδιού",
+  "revokeApiKeyQuestion": "Ανάκληση κλειδιού API;",
+  "revokeApiKeyWarning": "Αυτή η ενέργεια δεν μπορεί να αναιρεθεί. Οι εφαρμογές που χρησιμοποιούν αυτό το κλειδί δεν θα έχουν πλέον πρόσβαση στο API.",
+  "revoke": "Ανάκληση"
 }

@@ -4194,4 +4194,55 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get permissionDeniedForAppleReminders => 'Permission denied for Apple Reminders';
+
+  @override
+  String failedToCreateApiKey(String error) {
+    return 'Failed to create provider API key: $error';
+  }
+
+  @override
+  String get createAKey => 'Create a Key';
+
+  @override
+  String get apiKeyRevokedSuccessfully => 'API key revoked successfully';
+
+  @override
+  String failedToRevokeApiKey(String error) {
+    return 'Failed to revoke API key: $error';
+  }
+
+  @override
+  String get omiApiKeys => 'Omi API Keys';
+
+  @override
+  String get apiKeysDescription =>
+      'API Keys are used for authentication when your app communicates with the OMI server. They allow your application to create memories and access other OMI services securely.';
+
+  @override
+  String get aboutOmiApiKeys => 'About Omi API Keys';
+
+  @override
+  String get yourNewKey => 'Your new key:';
+
+  @override
+  String get copyToClipboard => 'Copy to clipboard';
+
+  @override
+  String get pleaseCopyKeyNow => 'Please copy it now and write it down somewhere safe. ';
+
+  @override
+  String get willNotSeeAgain => 'You will not be able to see it again.';
+
+  @override
+  String get revokeKey => 'Revoke key';
+
+  @override
+  String get revokeApiKeyQuestion => 'Revoke API Key?';
+
+  @override
+  String get revokeApiKeyWarning =>
+      'This action cannot be undone. Any applications using this key will no longer be able to access the API.';
+
+  @override
+  String get revoke => 'Revoke';
 }

@@ -2438,7 +2438,7 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String get noApiKeysYet => 'No API keys yet';
+  String get noApiKeysYet => 'Pas encore de clés API. Créez-en une pour intégrer votre application.';
 
   @override
   String get createKeyToGetStarted => 'Create a key to get started';
@@ -4225,4 +4225,55 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get permissionDeniedForAppleReminders => 'Autorisation refusée pour Apple Reminders';
+
+  @override
+  String failedToCreateApiKey(String error) {
+    return 'Échec de la création de la clé API du fournisseur : $error';
+  }
+
+  @override
+  String get createAKey => 'Créer une clé';
+
+  @override
+  String get apiKeyRevokedSuccessfully => 'Clé API révoquée avec succès';
+
+  @override
+  String failedToRevokeApiKey(String error) {
+    return 'Échec de la révocation de la clé API : $error';
+  }
+
+  @override
+  String get omiApiKeys => 'Clés API Omi';
+
+  @override
+  String get apiKeysDescription =>
+      'Les clés API sont utilisées pour l\'authentification lorsque votre application communique avec le serveur OMI. Elles permettent à votre application de créer des souvenirs et d\'accéder à d\'autres services OMI en toute sécurité.';
+
+  @override
+  String get aboutOmiApiKeys => 'À propos des clés API Omi';
+
+  @override
+  String get yourNewKey => 'Votre nouvelle clé :';
+
+  @override
+  String get copyToClipboard => 'Copier dans le presse-papiers';
+
+  @override
+  String get pleaseCopyKeyNow => 'Veuillez le copier maintenant et le noter dans un endroit sûr. ';
+
+  @override
+  String get willNotSeeAgain => 'Vous ne pourrez plus le voir.';
+
+  @override
+  String get revokeKey => 'Révoquer la clé';
+
+  @override
+  String get revokeApiKeyQuestion => 'Révoquer la clé API ?';
+
+  @override
+  String get revokeApiKeyWarning =>
+      'Cette action ne peut pas être annulée. Les applications utilisant cette clé ne pourront plus accéder à l\'API.';
+
+  @override
+  String get revoke => 'Révoquer';
 }

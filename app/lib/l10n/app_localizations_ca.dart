@@ -2432,7 +2432,7 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String get noApiKeysYet => 'No API keys yet';
+  String get noApiKeysYet => 'Encara no hi ha claus API. Crea\'n una per integrar-la amb la teva aplicació.';
 
   @override
   String get createKeyToGetStarted => 'Create a key to get started';
@@ -4213,4 +4213,55 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get permissionDeniedForAppleReminders => 'Permís denegat per a Apple Reminders';
+
+  @override
+  String failedToCreateApiKey(String error) {
+    return 'Error en crear la clau API del proveïdor: $error';
+  }
+
+  @override
+  String get createAKey => 'Crear una clau';
+
+  @override
+  String get apiKeyRevokedSuccessfully => 'Clau API revocada correctament';
+
+  @override
+  String failedToRevokeApiKey(String error) {
+    return 'Error en revocar la clau API: $error';
+  }
+
+  @override
+  String get omiApiKeys => 'Claus API d\'Omi';
+
+  @override
+  String get apiKeysDescription =>
+      'Les claus API s\'utilitzen per a l\'autenticació quan la teva aplicació es comunica amb el servidor OMI. Permeten que la teva aplicació creï records i accedeixi a altres serveis d\'OMI de manera segura.';
+
+  @override
+  String get aboutOmiApiKeys => 'Sobre les claus API d\'Omi';
+
+  @override
+  String get yourNewKey => 'La teva nova clau:';
+
+  @override
+  String get copyToClipboard => 'Copia al porta-retalls';
+
+  @override
+  String get pleaseCopyKeyNow => 'Si us plau, copia\'l ara i escriu-lo en un lloc segur. ';
+
+  @override
+  String get willNotSeeAgain => 'No podràs veure\'l de nou.';
+
+  @override
+  String get revokeKey => 'Revocar clau';
+
+  @override
+  String get revokeApiKeyQuestion => 'Revocar clau API?';
+
+  @override
+  String get revokeApiKeyWarning =>
+      'Aquesta acció no es pot desfer. Les aplicacions que utilitzin aquesta clau ja no podran accedir a l\'API.';
+
+  @override
+  String get revoke => 'Revocar';
 }

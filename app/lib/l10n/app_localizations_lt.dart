@@ -2418,7 +2418,7 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get noApiKeysYet => 'No API keys yet';
+  String get noApiKeysYet => 'Dar nėra API raktų. Sukurkite vieną integracijai su savo programa.';
 
   @override
   String get createKeyToGetStarted => 'Create a key to get started';
@@ -4191,4 +4191,55 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get permissionDeniedForAppleReminders => 'Apple Reminders leidimas atmestas';
+
+  @override
+  String failedToCreateApiKey(String error) {
+    return 'Nepavyko sukurti tiekėjo API rakto: $error';
+  }
+
+  @override
+  String get createAKey => 'Sukurti raktą';
+
+  @override
+  String get apiKeyRevokedSuccessfully => 'API raktas sėkmingai atšauktas';
+
+  @override
+  String failedToRevokeApiKey(String error) {
+    return 'Nepavyko atšaukti API rakto: $error';
+  }
+
+  @override
+  String get omiApiKeys => 'Omi API raktai';
+
+  @override
+  String get apiKeysDescription =>
+      'API raktai naudojami autentifikavimui, kai jūsų programa bendrauja su OMI serveriu. Jie leidžia jūsų programai kurti prisiminimus ir saugiai pasiekti kitas OMI paslaugas.';
+
+  @override
+  String get aboutOmiApiKeys => 'Apie Omi API raktus';
+
+  @override
+  String get yourNewKey => 'Jūsų naujas raktas:';
+
+  @override
+  String get copyToClipboard => 'Kopijuoti į iškarpinę';
+
+  @override
+  String get pleaseCopyKeyNow => 'Prašome nukopijuoti dabar ir užsirašyti saugioje vietoje. ';
+
+  @override
+  String get willNotSeeAgain => 'Negalėsite jo pamatyti dar kartą.';
+
+  @override
+  String get revokeKey => 'Atšaukti raktą';
+
+  @override
+  String get revokeApiKeyQuestion => 'Atšaukti API raktą?';
+
+  @override
+  String get revokeApiKeyWarning =>
+      'Šio veiksmo negalima atšaukti. Programos, naudojančios šį raktą, nebegalės pasiekti API.';
+
+  @override
+  String get revoke => 'Atšaukti';
 }

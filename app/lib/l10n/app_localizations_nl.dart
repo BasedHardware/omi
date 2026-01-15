@@ -2427,7 +2427,7 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String get noApiKeysYet => 'No API keys yet';
+  String get noApiKeysYet => 'Nog geen API-sleutels. Maak er een aan om te integreren met uw app.';
 
   @override
   String get createKeyToGetStarted => 'Create a key to get started';
@@ -4203,4 +4203,55 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get permissionDeniedForAppleReminders => 'Toestemming geweigerd voor Apple Herinneringen';
+
+  @override
+  String failedToCreateApiKey(String error) {
+    return 'Kan provider API-sleutel niet maken: $error';
+  }
+
+  @override
+  String get createAKey => 'Sleutel maken';
+
+  @override
+  String get apiKeyRevokedSuccessfully => 'API-sleutel succesvol ingetrokken';
+
+  @override
+  String failedToRevokeApiKey(String error) {
+    return 'Kan API-sleutel niet intrekken: $error';
+  }
+
+  @override
+  String get omiApiKeys => 'Omi API-sleutels';
+
+  @override
+  String get apiKeysDescription =>
+      'API-sleutels worden gebruikt voor authenticatie wanneer uw app communiceert met de OMI-server. Ze stellen uw applicatie in staat om herinneringen te maken en veilig toegang te krijgen tot andere OMI-services.';
+
+  @override
+  String get aboutOmiApiKeys => 'Over Omi API-sleutels';
+
+  @override
+  String get yourNewKey => 'Uw nieuwe sleutel:';
+
+  @override
+  String get copyToClipboard => 'Kopiëren naar klembord';
+
+  @override
+  String get pleaseCopyKeyNow => 'Kopieer het nu en schrijf het ergens veilig op. ';
+
+  @override
+  String get willNotSeeAgain => 'U zult het niet meer kunnen zien.';
+
+  @override
+  String get revokeKey => 'Sleutel intrekken';
+
+  @override
+  String get revokeApiKeyQuestion => 'API-sleutel intrekken?';
+
+  @override
+  String get revokeApiKeyWarning =>
+      'Deze actie kan niet ongedaan worden gemaakt. Applicaties die deze sleutel gebruiken, hebben geen toegang meer tot de API.';
+
+  @override
+  String get revoke => 'Intrekken';
 }

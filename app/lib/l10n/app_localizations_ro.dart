@@ -2430,7 +2430,7 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get noApiKeysYet => 'No API keys yet';
+  String get noApiKeysYet => 'Încă nu există chei API. Creează una pentru a integra cu aplicația ta.';
 
   @override
   String get createKeyToGetStarted => 'Create a key to get started';
@@ -4213,4 +4213,55 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get permissionDeniedForAppleReminders => 'Permisiune refuzată pentru Apple Reminders';
+
+  @override
+  String failedToCreateApiKey(String error) {
+    return 'Nu s-a putut crea cheia API a furnizorului: $error';
+  }
+
+  @override
+  String get createAKey => 'Creează o cheie';
+
+  @override
+  String get apiKeyRevokedSuccessfully => 'Cheie API revocată cu succes';
+
+  @override
+  String failedToRevokeApiKey(String error) {
+    return 'Nu s-a putut revoca cheia API: $error';
+  }
+
+  @override
+  String get omiApiKeys => 'Chei API Omi';
+
+  @override
+  String get apiKeysDescription =>
+      'Cheile API sunt folosite pentru autentificare atunci când aplicația ta comunică cu serverul OMI. Ele permit aplicației tale să creeze amintiri și să acceseze alte servicii OMI în siguranță.';
+
+  @override
+  String get aboutOmiApiKeys => 'Despre cheile API Omi';
+
+  @override
+  String get yourNewKey => 'Noua ta cheie:';
+
+  @override
+  String get copyToClipboard => 'Copiază în clipboard';
+
+  @override
+  String get pleaseCopyKeyNow => 'Te rugăm să o copiezi acum și să o notezi într-un loc sigur. ';
+
+  @override
+  String get willNotSeeAgain => 'Nu o vei mai putea vedea din nou.';
+
+  @override
+  String get revokeKey => 'Revocă cheia';
+
+  @override
+  String get revokeApiKeyQuestion => 'Revoci cheia API?';
+
+  @override
+  String get revokeApiKeyWarning =>
+      'Această acțiune nu poate fi anulată. Orice aplicații care folosesc această cheie nu vor mai putea accesa API-ul.';
+
+  @override
+  String get revoke => 'Revocă';
 }

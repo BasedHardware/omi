@@ -3020,5 +3020,21 @@
   "addingToService": "Lägger till i {serviceName}...",
   "addedToService": "Tillagd i {serviceName}",
   "failedToAddToService": "Kunde inte lägga till i {serviceName}",
-  "permissionDeniedForAppleReminders": "Behörighet nekad för Apple Påminnelser"
+  "permissionDeniedForAppleReminders": "Behörighet nekad för Apple Påminnelser",
+  "failedToCreateApiKey": "Kunde inte skapa leverantörens API-nyckel: {error}",
+  "createAKey": "Skapa en nyckel",
+  "apiKeyRevokedSuccessfully": "API-nyckel återkallad",
+  "failedToRevokeApiKey": "Kunde inte återkalla API-nyckel: {error}",
+  "omiApiKeys": "Omi API-nycklar",
+  "apiKeysDescription": "API-nycklar används för autentisering när din app kommunicerar med OMI-servern. De låter din applikation skapa minnen och få säker åtkomst till andra OMI-tjänster.",
+  "aboutOmiApiKeys": "Om Omi API-nycklar",
+  "noApiKeysYet": "Inga API-nycklar ännu. Skapa en för att integrera med din app.",
+  "yourNewKey": "Din nya nyckel:",
+  "copyToClipboard": "Kopiera till urklipp",
+  "pleaseCopyKeyNow": "Vänligen kopiera den nu och skriv ner den på ett säkert ställe. ",
+  "willNotSeeAgain": "Du kommer inte att kunna se den igen.",
+  "revokeKey": "Återkalla nyckel",
+  "revokeApiKeyQuestion": "Återkalla API-nyckel?",
+  "revokeApiKeyWarning": "Denna åtgärd kan inte ångras. Alla applikationer som använder denna nyckel kommer inte längre att kunna komma åt API:et.",
+  "revoke": "Återkalla"
 }

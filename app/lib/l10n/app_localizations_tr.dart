@@ -2426,7 +2426,7 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get noApiKeysYet => 'No API keys yet';
+  String get noApiKeysYet => 'Henüz API anahtarı yok. Uygulamanızla entegre etmek için bir tane oluşturun.';
 
   @override
   String get createKeyToGetStarted => 'Create a key to get started';
@@ -4200,4 +4200,55 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get permissionDeniedForAppleReminders => 'Apple Hatırlatıcılar için izin reddedildi';
+
+  @override
+  String failedToCreateApiKey(String error) {
+    return 'Sağlayıcı API anahtarı oluşturulamadı: $error';
+  }
+
+  @override
+  String get createAKey => 'Anahtar Oluştur';
+
+  @override
+  String get apiKeyRevokedSuccessfully => 'API anahtarı başarıyla iptal edildi';
+
+  @override
+  String failedToRevokeApiKey(String error) {
+    return 'API anahtarı iptal edilemedi: $error';
+  }
+
+  @override
+  String get omiApiKeys => 'Omi API Anahtarları';
+
+  @override
+  String get apiKeysDescription =>
+      'API anahtarları, uygulamanız OMI sunucusuyla iletişim kurarken kimlik doğrulama için kullanılır. Uygulamanızın anılar oluşturmasına ve diğer OMI hizmetlerine güvenli bir şekilde erişmesine olanak tanır.';
+
+  @override
+  String get aboutOmiApiKeys => 'Omi API Anahtarları Hakkında';
+
+  @override
+  String get yourNewKey => 'Yeni anahtarınız:';
+
+  @override
+  String get copyToClipboard => 'Panoya kopyala';
+
+  @override
+  String get pleaseCopyKeyNow => 'Lütfen şimdi kopyalayın ve güvenli bir yere yazın. ';
+
+  @override
+  String get willNotSeeAgain => 'Tekrar göremeyeceksiniz.';
+
+  @override
+  String get revokeKey => 'Anahtarı iptal et';
+
+  @override
+  String get revokeApiKeyQuestion => 'API Anahtarını İptal Et?';
+
+  @override
+  String get revokeApiKeyWarning =>
+      'Bu işlem geri alınamaz. Bu anahtarı kullanan uygulamalar artık API\'ye erişemeyecektir.';
+
+  @override
+  String get revoke => 'İptal Et';
 }

@@ -2428,7 +2428,7 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String get noApiKeysYet => 'No API keys yet';
+  String get noApiKeysYet => 'Belum ada kunci API. Cipta satu untuk mengintegrasikan dengan aplikasi anda.';
 
   @override
   String get createKeyToGetStarted => 'Create a key to get started';
@@ -4205,4 +4205,55 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get permissionDeniedForAppleReminders => 'Kebenaran ditolak untuk Apple Reminders';
+
+  @override
+  String failedToCreateApiKey(String error) {
+    return 'Gagal mencipta kunci API pembekal: $error';
+  }
+
+  @override
+  String get createAKey => 'Cipta Kunci';
+
+  @override
+  String get apiKeyRevokedSuccessfully => 'Kunci API berjaya dibatalkan';
+
+  @override
+  String failedToRevokeApiKey(String error) {
+    return 'Gagal membatalkan kunci API: $error';
+  }
+
+  @override
+  String get omiApiKeys => 'Kunci API Omi';
+
+  @override
+  String get apiKeysDescription =>
+      'Kunci API digunakan untuk pengesahan apabila aplikasi anda berkomunikasi dengan pelayan OMI. Ia membenarkan aplikasi anda mencipta memori dan mengakses perkhidmatan OMI lain dengan selamat.';
+
+  @override
+  String get aboutOmiApiKeys => 'Tentang Kunci API Omi';
+
+  @override
+  String get yourNewKey => 'Kunci baharu anda:';
+
+  @override
+  String get copyToClipboard => 'Salin ke papan keratan';
+
+  @override
+  String get pleaseCopyKeyNow => 'Sila salin sekarang dan simpan di tempat yang selamat. ';
+
+  @override
+  String get willNotSeeAgain => 'Anda tidak akan dapat melihatnya lagi.';
+
+  @override
+  String get revokeKey => 'Batalkan kunci';
+
+  @override
+  String get revokeApiKeyQuestion => 'Batalkan Kunci API?';
+
+  @override
+  String get revokeApiKeyWarning =>
+      'Tindakan ini tidak boleh dibuat asal. Sebarang aplikasi yang menggunakan kunci ini tidak akan dapat mengakses API lagi.';
+
+  @override
+  String get revoke => 'Batalkan';
 }

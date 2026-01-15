@@ -2434,7 +2434,7 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get noApiKeysYet => 'No API keys yet';
+  String get noApiKeysYet => 'Még nincsenek API-kulcsok. Hozzon létre egyet az alkalmazásával való integrációhoz.';
 
   @override
   String get createKeyToGetStarted => 'Create a key to get started';
@@ -4213,4 +4213,55 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get permissionDeniedForAppleReminders => 'Engedély megtagadva az Apple Emlékeztetők számára';
+
+  @override
+  String failedToCreateApiKey(String error) {
+    return 'Nem sikerült létrehozni a szolgáltató API-kulcsát: $error';
+  }
+
+  @override
+  String get createAKey => 'Kulcs létrehozása';
+
+  @override
+  String get apiKeyRevokedSuccessfully => 'API-kulcs sikeresen visszavonva';
+
+  @override
+  String failedToRevokeApiKey(String error) {
+    return 'Nem sikerült visszavonni az API-kulcsot: $error';
+  }
+
+  @override
+  String get omiApiKeys => 'Omi API-kulcsok';
+
+  @override
+  String get apiKeysDescription =>
+      'Az API-kulcsokat hitelesítésre használják, amikor az alkalmazásod kommunikál az OMI szerverrel. Lehetővé teszik az alkalmazásod számára, hogy emlékeket hozzon létre és biztonságosan hozzáférjen más OMI szolgáltatásokhoz.';
+
+  @override
+  String get aboutOmiApiKeys => 'Az Omi API-kulcsokról';
+
+  @override
+  String get yourNewKey => 'Az új kulcsod:';
+
+  @override
+  String get copyToClipboard => 'Másolás a vágólapra';
+
+  @override
+  String get pleaseCopyKeyNow => 'Kérjük, másold le most és írd le valahova biztonságos helyre. ';
+
+  @override
+  String get willNotSeeAgain => 'Nem fogod tudni újra látni.';
+
+  @override
+  String get revokeKey => 'Kulcs visszavonása';
+
+  @override
+  String get revokeApiKeyQuestion => 'API-kulcs visszavonása?';
+
+  @override
+  String get revokeApiKeyWarning =>
+      'Ez a művelet nem vonható vissza. Az ezt a kulcsot használó alkalmazások többé nem férhetnek hozzá az API-hoz.';
+
+  @override
+  String get revoke => 'Visszavonás';
 }

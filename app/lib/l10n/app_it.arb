@@ -3002,5 +3002,21 @@
   "addingToService": "Aggiunta a {serviceName}...",
   "addedToService": "Aggiunto a {serviceName}",
   "failedToAddToService": "Impossibile aggiungere a {serviceName}",
-  "permissionDeniedForAppleReminders": "Permesso negato per Apple Reminders"
+  "permissionDeniedForAppleReminders": "Permesso negato per Apple Reminders",
+  "failedToCreateApiKey": "Impossibile creare la chiave API del provider: {error}",
+  "createAKey": "Crea una chiave",
+  "apiKeyRevokedSuccessfully": "Chiave API revocata con successo",
+  "failedToRevokeApiKey": "Impossibile revocare la chiave API: {error}",
+  "omiApiKeys": "Chiavi API Omi",
+  "apiKeysDescription": "Le chiavi API vengono utilizzate per l'autenticazione quando la tua app comunica con il server OMI. Consentono alla tua applicazione di creare ricordi e accedere ad altri servizi OMI in modo sicuro.",
+  "aboutOmiApiKeys": "Informazioni sulle chiavi API Omi",
+  "noApiKeysYet": "Nessuna chiave API ancora. Creane una per integrare con la tua app.",
+  "yourNewKey": "La tua nuova chiave:",
+  "copyToClipboard": "Copia negli appunti",
+  "pleaseCopyKeyNow": "Per favore copiala ora e annotala in un posto sicuro. ",
+  "willNotSeeAgain": "Non potrai vederla di nuovo.",
+  "revokeKey": "Revoca chiave",
+  "revokeApiKeyQuestion": "Revocare la chiave API?",
+  "revokeApiKeyWarning": "Questa azione non può essere annullata. Le applicazioni che utilizzano questa chiave non potranno più accedere all'API.",
+  "revoke": "Revoca"
 }

@@ -2423,7 +2423,7 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get noApiKeysYet => 'No API keys yet';
+  String get noApiKeysYet => 'Chưa có khóa API. Tạo một khóa để tích hợp với ứng dụng của bạn.';
 
   @override
   String get createKeyToGetStarted => 'Create a key to get started';
@@ -4198,4 +4198,55 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get permissionDeniedForAppleReminders => 'Quyền truy cập Apple Reminders bị từ chối';
+
+  @override
+  String failedToCreateApiKey(String error) {
+    return 'Không thể tạo khóa API nhà cung cấp: $error';
+  }
+
+  @override
+  String get createAKey => 'Tạo khóa';
+
+  @override
+  String get apiKeyRevokedSuccessfully => 'Khóa API đã được thu hồi thành công';
+
+  @override
+  String failedToRevokeApiKey(String error) {
+    return 'Không thể thu hồi khóa API: $error';
+  }
+
+  @override
+  String get omiApiKeys => 'Khóa API Omi';
+
+  @override
+  String get apiKeysDescription =>
+      'Khóa API được sử dụng để xác thực khi ứng dụng của bạn giao tiếp với máy chủ OMI. Chúng cho phép ứng dụng của bạn tạo kỷ niệm và truy cập an toàn vào các dịch vụ OMI khác.';
+
+  @override
+  String get aboutOmiApiKeys => 'Về khóa API Omi';
+
+  @override
+  String get yourNewKey => 'Khóa mới của bạn:';
+
+  @override
+  String get copyToClipboard => 'Sao chép vào bộ nhớ tạm';
+
+  @override
+  String get pleaseCopyKeyNow => 'Vui lòng sao chép ngay và ghi lại ở nơi an toàn. ';
+
+  @override
+  String get willNotSeeAgain => 'Bạn sẽ không thể xem lại được.';
+
+  @override
+  String get revokeKey => 'Thu hồi khóa';
+
+  @override
+  String get revokeApiKeyQuestion => 'Thu hồi khóa API?';
+
+  @override
+  String get revokeApiKeyWarning =>
+      'Hành động này không thể hoàn tác. Bất kỳ ứng dụng nào sử dụng khóa này sẽ không thể truy cập API nữa.';
+
+  @override
+  String get revoke => 'Thu hồi';
 }

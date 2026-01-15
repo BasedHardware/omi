@@ -3020,5 +3020,21 @@
   "addingToService": "Se adaugă în {serviceName}...",
   "addedToService": "Adăugat în {serviceName}",
   "failedToAddToService": "Nu s-a putut adăuga în {serviceName}",
-  "permissionDeniedForAppleReminders": "Permisiune refuzată pentru Apple Reminders"
+  "permissionDeniedForAppleReminders": "Permisiune refuzată pentru Apple Reminders",
+  "failedToCreateApiKey": "Nu s-a putut crea cheia API a furnizorului: {error}",
+  "createAKey": "Creează o cheie",
+  "apiKeyRevokedSuccessfully": "Cheie API revocată cu succes",
+  "failedToRevokeApiKey": "Nu s-a putut revoca cheia API: {error}",
+  "omiApiKeys": "Chei API Omi",
+  "apiKeysDescription": "Cheile API sunt folosite pentru autentificare atunci când aplicația ta comunică cu serverul OMI. Ele permit aplicației tale să creeze amintiri și să acceseze alte servicii OMI în siguranță.",
+  "aboutOmiApiKeys": "Despre cheile API Omi",
+  "noApiKeysYet": "Încă nu există chei API. Creează una pentru a integra cu aplicația ta.",
+  "yourNewKey": "Noua ta cheie:",
+  "copyToClipboard": "Copiază în clipboard",
+  "pleaseCopyKeyNow": "Te rugăm să o copiezi acum și să o notezi într-un loc sigur. ",
+  "willNotSeeAgain": "Nu o vei mai putea vedea din nou.",
+  "revokeKey": "Revocă cheia",
+  "revokeApiKeyQuestion": "Revoci cheia API?",
+  "revokeApiKeyWarning": "Această acțiune nu poate fi anulată. Orice aplicații care folosesc această cheie nu vor mai putea accesa API-ul.",
+  "revoke": "Revocă"
 }

@@ -2422,7 +2422,7 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get noApiKeysYet => 'No API keys yet';
+  String get noApiKeysYet => 'Inga API-nycklar ännu. Skapa en för att integrera med din app.';
 
   @override
   String get createKeyToGetStarted => 'Create a key to get started';
@@ -4197,4 +4197,55 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get permissionDeniedForAppleReminders => 'Behörighet nekad för Apple Påminnelser';
+
+  @override
+  String failedToCreateApiKey(String error) {
+    return 'Kunde inte skapa leverantörens API-nyckel: $error';
+  }
+
+  @override
+  String get createAKey => 'Skapa en nyckel';
+
+  @override
+  String get apiKeyRevokedSuccessfully => 'API-nyckel återkallad';
+
+  @override
+  String failedToRevokeApiKey(String error) {
+    return 'Kunde inte återkalla API-nyckel: $error';
+  }
+
+  @override
+  String get omiApiKeys => 'Omi API-nycklar';
+
+  @override
+  String get apiKeysDescription =>
+      'API-nycklar används för autentisering när din app kommunicerar med OMI-servern. De låter din applikation skapa minnen och få säker åtkomst till andra OMI-tjänster.';
+
+  @override
+  String get aboutOmiApiKeys => 'Om Omi API-nycklar';
+
+  @override
+  String get yourNewKey => 'Din nya nyckel:';
+
+  @override
+  String get copyToClipboard => 'Kopiera till urklipp';
+
+  @override
+  String get pleaseCopyKeyNow => 'Vänligen kopiera den nu och skriv ner den på ett säkert ställe. ';
+
+  @override
+  String get willNotSeeAgain => 'Du kommer inte att kunna se den igen.';
+
+  @override
+  String get revokeKey => 'Återkalla nyckel';
+
+  @override
+  String get revokeApiKeyQuestion => 'Återkalla API-nyckel?';
+
+  @override
+  String get revokeApiKeyWarning =>
+      'Denna åtgärd kan inte ångras. Alla applikationer som använder denna nyckel kommer inte längre att kunna komma åt API:et.';
+
+  @override
+  String get revoke => 'Återkalla';
 }

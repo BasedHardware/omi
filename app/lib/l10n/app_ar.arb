@@ -3039,5 +3039,20 @@
   "addingToService": "جارٍ الإضافة إلى {serviceName}...",
   "addedToService": "تمت الإضافة إلى {serviceName}",
   "failedToAddToService": "فشل الإضافة إلى {serviceName}",
-  "permissionDeniedForAppleReminders": "تم رفض الإذن لتذكيرات Apple"
+  "permissionDeniedForAppleReminders": "تم رفض الإذن لتذكيرات Apple",
+  "failedToCreateApiKey": "فشل إنشاء مفتاح API للمزود: {error}",
+  "createAKey": "إنشاء مفتاح",
+  "apiKeyRevokedSuccessfully": "تم إلغاء مفتاح API بنجاح",
+  "failedToRevokeApiKey": "فشل إلغاء مفتاح API: {error}",
+  "omiApiKeys": "مفاتيح Omi API",
+  "apiKeysDescription": "تُستخدم مفاتيح API للمصادقة عندما يتواصل تطبيقك مع خادم OMI. تسمح لتطبيقك بإنشاء ذكريات والوصول إلى خدمات OMI الأخرى بأمان.",
+  "aboutOmiApiKeys": "حول مفاتيح Omi API",
+  "yourNewKey": "مفتاحك الجديد:",
+  "copyToClipboard": "نسخ إلى الحافظة",
+  "pleaseCopyKeyNow": "يرجى نسخه الآن وكتابته في مكان آمن. ",
+  "willNotSeeAgain": "لن تتمكن من رؤيته مرة أخرى.",
+  "revokeKey": "إلغاء المفتاح",
+  "revokeApiKeyQuestion": "إلغاء مفتاح API؟",
+  "revokeApiKeyWarning": "لا يمكن التراجع عن هذا الإجراء. لن تتمكن أي تطبيقات تستخدم هذا المفتاح من الوصول إلى API بعد الآن.",
+  "revoke": "إلغاء"
 }

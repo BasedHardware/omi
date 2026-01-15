@@ -2438,7 +2438,7 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get noApiKeysYet => 'No API keys yet';
+  String get noApiKeysYet => 'Δεν υπάρχουν ακόμα κλειδιά API. Δημιουργήστε ένα για ενσωμάτωση με την εφαρμογή σας.';
 
   @override
   String get createKeyToGetStarted => 'Create a key to get started';
@@ -4223,4 +4223,55 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get permissionDeniedForAppleReminders => 'Η άδεια για τις Υπενθυμίσεις Apple απορρίφθηκε';
+
+  @override
+  String failedToCreateApiKey(String error) {
+    return 'Αποτυχία δημιουργίας κλειδιού API παρόχου: $error';
+  }
+
+  @override
+  String get createAKey => 'Δημιουργία κλειδιού';
+
+  @override
+  String get apiKeyRevokedSuccessfully => 'Το κλειδί API ανακλήθηκε επιτυχώς';
+
+  @override
+  String failedToRevokeApiKey(String error) {
+    return 'Αποτυχία ανάκλησης κλειδιού API: $error';
+  }
+
+  @override
+  String get omiApiKeys => 'Κλειδιά API Omi';
+
+  @override
+  String get apiKeysDescription =>
+      'Τα κλειδιά API χρησιμοποιούνται για έλεγχο ταυτότητας όταν η εφαρμογή σας επικοινωνεί με τον διακομιστή OMI. Επιτρέπουν στην εφαρμογή σας να δημιουργεί αναμνήσεις και να έχει ασφαλή πρόσβαση σε άλλες υπηρεσίες OMI.';
+
+  @override
+  String get aboutOmiApiKeys => 'Σχετικά με τα κλειδιά API Omi';
+
+  @override
+  String get yourNewKey => 'Το νέο σας κλειδί:';
+
+  @override
+  String get copyToClipboard => 'Αντιγραφή στο πρόχειρο';
+
+  @override
+  String get pleaseCopyKeyNow => 'Παρακαλούμε αντιγράψτε το τώρα και σημειώστε το κάπου ασφαλές. ';
+
+  @override
+  String get willNotSeeAgain => 'Δεν θα μπορείτε να το δείτε ξανά.';
+
+  @override
+  String get revokeKey => 'Ανάκληση κλειδιού';
+
+  @override
+  String get revokeApiKeyQuestion => 'Ανάκληση κλειδιού API;';
+
+  @override
+  String get revokeApiKeyWarning =>
+      'Αυτή η ενέργεια δεν μπορεί να αναιρεθεί. Οι εφαρμογές που χρησιμοποιούν αυτό το κλειδί δεν θα έχουν πλέον πρόσβαση στο API.';
+
+  @override
+  String get revoke => 'Ανάκληση';
 }

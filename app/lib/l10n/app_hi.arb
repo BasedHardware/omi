@@ -1467,5 +1467,21 @@
   "addingToService": "{serviceName} में जोड़ा जा रहा है...",
   "addedToService": "{serviceName} में जोड़ा गया",
   "failedToAddToService": "{serviceName} में जोड़ने में विफल",
-  "permissionDeniedForAppleReminders": "Apple Reminders के लिए अनुमति अस्वीकृत"
+  "permissionDeniedForAppleReminders": "Apple Reminders के लिए अनुमति अस्वीकृत",
+  "failedToCreateApiKey": "प्रदाता API कुंजी बनाने में विफल: {error}",
+  "createAKey": "एक कुंजी बनाएं",
+  "apiKeyRevokedSuccessfully": "API कुंजी सफलतापूर्वक रद्द की गई",
+  "failedToRevokeApiKey": "API कुंजी रद्द करने में विफल: {error}",
+  "omiApiKeys": "Omi API कुंजियाँ",
+  "apiKeysDescription": "API कुंजियाँ प्रमाणीकरण के लिए उपयोग की जाती हैं जब आपका ऐप OMI सर्वर के साथ संवाद करता है। वे आपके एप्लिकेशन को यादें बनाने और अन्य OMI सेवाओं तक सुरक्षित रूप से पहुंचने की अनुमति देती हैं।",
+  "aboutOmiApiKeys": "Omi API कुंजियों के बारे में",
+  "noApiKeysYet": "अभी तक कोई API कुंजी नहीं है। अपने ऐप के साथ एकीकृत करने के लिए एक बनाएं।",
+  "yourNewKey": "आपकी नई कुंजी:",
+  "copyToClipboard": "क्लिपबोर्ड पर कॉपी करें",
+  "pleaseCopyKeyNow": "कृपया इसे अभी कॉपी करें और कहीं सुरक्षित जगह लिख लें। ",
+  "willNotSeeAgain": "आप इसे फिर से नहीं देख पाएंगे।",
+  "revokeKey": "कुंजी रद्द करें",
+  "revokeApiKeyQuestion": "API कुंजी रद्द करें?",
+  "revokeApiKeyWarning": "यह क्रिया वापस नहीं की जा सकती। इस कुंजी का उपयोग करने वाले कोई भी एप्लिकेशन अब API तक नहीं पहुंच पाएंगे।",
+  "revoke": "रद्द करें"
 }

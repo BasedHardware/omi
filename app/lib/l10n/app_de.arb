@@ -1467,5 +1467,21 @@
   "addingToService": "Wird zu {serviceName} hinzugefügt...",
   "addedToService": "Zu {serviceName} hinzugefügt",
   "failedToAddToService": "Fehler beim Hinzufügen zu {serviceName}",
-  "permissionDeniedForAppleReminders": "Berechtigung für Apple Erinnerungen verweigert"
+  "permissionDeniedForAppleReminders": "Berechtigung für Apple Erinnerungen verweigert",
+  "failedToCreateApiKey": "Fehler beim Erstellen des Anbieter-API-Schlüssels: {error}",
+  "createAKey": "Schlüssel erstellen",
+  "apiKeyRevokedSuccessfully": "API-Schlüssel erfolgreich widerrufen",
+  "failedToRevokeApiKey": "Fehler beim Widerrufen des API-Schlüssels: {error}",
+  "omiApiKeys": "Omi API-Schlüssel",
+  "apiKeysDescription": "API-Schlüssel werden zur Authentifizierung verwendet, wenn Ihre App mit dem OMI-Server kommuniziert. Sie ermöglichen Ihrer Anwendung, Erinnerungen zu erstellen und sicher auf andere OMI-Dienste zuzugreifen.",
+  "aboutOmiApiKeys": "Über Omi API-Schlüssel",
+  "noApiKeysYet": "Noch keine API-Schlüssel. Erstellen Sie einen zur Integration mit Ihrer App.",
+  "yourNewKey": "Ihr neuer Schlüssel:",
+  "copyToClipboard": "In Zwischenablage kopieren",
+  "pleaseCopyKeyNow": "Bitte kopieren Sie ihn jetzt und notieren Sie ihn an einem sicheren Ort. ",
+  "willNotSeeAgain": "Sie werden ihn nicht wieder sehen können.",
+  "revokeKey": "Schlüssel widerrufen",
+  "revokeApiKeyQuestion": "API-Schlüssel widerrufen?",
+  "revokeApiKeyWarning": "Diese Aktion kann nicht rückgängig gemacht werden. Alle Anwendungen, die diesen Schlüssel verwenden, können nicht mehr auf die API zugreifen.",
+  "revoke": "Widerrufen"
 }

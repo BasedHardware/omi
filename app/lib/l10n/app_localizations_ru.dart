@@ -2427,7 +2427,7 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String get noApiKeysYet => 'No API keys yet';
+  String get noApiKeysYet => 'API-ключей пока нет. Создайте один для интеграции с вашим приложением.';
 
   @override
   String get createKeyToGetStarted => 'Create a key to get started';
@@ -4202,4 +4202,55 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get permissionDeniedForAppleReminders => 'Разрешение для Apple Reminders отклонено';
+
+  @override
+  String failedToCreateApiKey(String error) {
+    return 'Не удалось создать API-ключ провайдера: $error';
+  }
+
+  @override
+  String get createAKey => 'Создать ключ';
+
+  @override
+  String get apiKeyRevokedSuccessfully => 'API-ключ успешно отозван';
+
+  @override
+  String failedToRevokeApiKey(String error) {
+    return 'Не удалось отозвать API-ключ: $error';
+  }
+
+  @override
+  String get omiApiKeys => 'API-ключи Omi';
+
+  @override
+  String get apiKeysDescription =>
+      'API-ключи используются для аутентификации, когда ваше приложение взаимодействует с сервером OMI. Они позволяют вашему приложению создавать воспоминания и безопасно получать доступ к другим сервисам OMI.';
+
+  @override
+  String get aboutOmiApiKeys => 'Об API-ключах Omi';
+
+  @override
+  String get yourNewKey => 'Ваш новый ключ:';
+
+  @override
+  String get copyToClipboard => 'Копировать в буфер обмена';
+
+  @override
+  String get pleaseCopyKeyNow => 'Пожалуйста, скопируйте его сейчас и запишите в надёжном месте. ';
+
+  @override
+  String get willNotSeeAgain => 'Вы не сможете увидеть его снова.';
+
+  @override
+  String get revokeKey => 'Отозвать ключ';
+
+  @override
+  String get revokeApiKeyQuestion => 'Отозвать API-ключ?';
+
+  @override
+  String get revokeApiKeyWarning =>
+      'Это действие нельзя отменить. Приложения, использующие этот ключ, больше не смогут получить доступ к API.';
+
+  @override
+  String get revoke => 'Отозвать';
 }

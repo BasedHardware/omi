@@ -2423,7 +2423,7 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String get noApiKeysYet => 'No API keys yet';
+  String get noApiKeysYet => 'API-ключів поки немає. Створіть один для інтеграції з вашим додатком.';
 
   @override
   String get createKeyToGetStarted => 'Create a key to get started';
@@ -4193,4 +4193,55 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get permissionDeniedForAppleReminders => 'Дозвіл для Apple Reminders відхилено';
+
+  @override
+  String failedToCreateApiKey(String error) {
+    return 'Не вдалося створити API-ключ провайдера: $error';
+  }
+
+  @override
+  String get createAKey => 'Створити ключ';
+
+  @override
+  String get apiKeyRevokedSuccessfully => 'API-ключ успішно відкликано';
+
+  @override
+  String failedToRevokeApiKey(String error) {
+    return 'Не вдалося відкликати API-ключ: $error';
+  }
+
+  @override
+  String get omiApiKeys => 'API-ключі Omi';
+
+  @override
+  String get apiKeysDescription =>
+      'API-ключі використовуються для автентифікації, коли ваш додаток взаємодіє з сервером OMI. Вони дозволяють вашому додатку створювати спогади та безпечно отримувати доступ до інших сервісів OMI.';
+
+  @override
+  String get aboutOmiApiKeys => 'Про API-ключі Omi';
+
+  @override
+  String get yourNewKey => 'Ваш новий ключ:';
+
+  @override
+  String get copyToClipboard => 'Копіювати в буфер обміну';
+
+  @override
+  String get pleaseCopyKeyNow => 'Будь ласка, скопіюйте його зараз і запишіть у безпечному місці. ';
+
+  @override
+  String get willNotSeeAgain => 'Ви не зможете побачити його знову.';
+
+  @override
+  String get revokeKey => 'Відкликати ключ';
+
+  @override
+  String get revokeApiKeyQuestion => 'Відкликати API-ключ?';
+
+  @override
+  String get revokeApiKeyWarning =>
+      'Цю дію не можна скасувати. Будь-які додатки, що використовують цей ключ, більше не зможуть отримати доступ до API.';
+
+  @override
+  String get revoke => 'Відкликати';
 }

@@ -4777,5 +4777,75 @@
   "permissionDeniedForAppleReminders": "Permission denied for Apple Reminders",
   "@permissionDeniedForAppleReminders": {
     "description": "Error when Apple Reminders permission is denied"
+  },
+  "failedToCreateApiKey": "Failed to create provider API key: {error}",
+  "@failedToCreateApiKey": {
+    "description": "Error message when API key creation fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "createAKey": "Create a Key",
+  "@createAKey": {
+    "description": "Dialog title for creating a new API key"
+  },
+  "apiKeyRevokedSuccessfully": "API key revoked successfully",
+  "@apiKeyRevokedSuccessfully": {
+    "description": "Success message when API key is revoked"
+  },
+  "failedToRevokeApiKey": "Failed to revoke API key: {error}",
+  "@failedToRevokeApiKey": {
+    "description": "Error message when API key revocation fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "omiApiKeys": "Omi API Keys",
+  "@omiApiKeys": {
+    "description": "Dialog title for API keys info"
+  },
+  "apiKeysDescription": "API Keys are used for authentication when your app communicates with the OMI server. They allow your application to create memories and access other OMI services securely.",
+  "@apiKeysDescription": {
+    "description": "Description of what API keys are used for"
+  },
+  "aboutOmiApiKeys": "About Omi API Keys",
+  "@aboutOmiApiKeys": {
+    "description": "Tooltip for API keys info button"
+  },
+  "yourNewKey": "Your new key:",
+  "@yourNewKey": {
+    "description": "Label shown above newly created API key"
+  },
+  "copyToClipboard": "Copy to clipboard",
+  "@copyToClipboard": {
+    "description": "Tooltip for copy button"
+  },
+  "pleaseCopyKeyNow": "Please copy it now and write it down somewhere safe. ",
+  "@pleaseCopyKeyNow": {
+    "description": "Warning to copy key immediately"
+  },
+  "willNotSeeAgain": "You will not be able to see it again.",
+  "@willNotSeeAgain": {
+    "description": "Warning that key won't be shown again"
+  },
+  "revokeKey": "Revoke key",
+  "@revokeKey": {
+    "description": "Tooltip for revoke button"
+  },
+  "revokeApiKeyQuestion": "Revoke API Key?",
+  "@revokeApiKeyQuestion": {
+    "description": "Confirmation dialog title for revoking API key"
+  },
+  "revokeApiKeyWarning": "This action cannot be undone. Any applications using this key will no longer be able to access the API.",
+  "@revokeApiKeyWarning": {
+    "description": "Warning message about revoking API key"
+  },
+  "revoke": "Revoke",
+  "@revoke": {
+    "description": "Button text to confirm revocation"
   }
 }

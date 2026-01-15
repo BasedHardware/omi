@@ -2430,7 +2430,7 @@ class AppLocalizationsIt extends AppLocalizations {
   }
 
   @override
-  String get noApiKeysYet => 'No API keys yet';
+  String get noApiKeysYet => 'Nessuna chiave API ancora. Creane una per integrare con la tua app.';
 
   @override
   String get createKeyToGetStarted => 'Create a key to get started';
@@ -4212,4 +4212,55 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get permissionDeniedForAppleReminders => 'Permesso negato per Apple Reminders';
+
+  @override
+  String failedToCreateApiKey(String error) {
+    return 'Impossibile creare la chiave API del provider: $error';
+  }
+
+  @override
+  String get createAKey => 'Crea una chiave';
+
+  @override
+  String get apiKeyRevokedSuccessfully => 'Chiave API revocata con successo';
+
+  @override
+  String failedToRevokeApiKey(String error) {
+    return 'Impossibile revocare la chiave API: $error';
+  }
+
+  @override
+  String get omiApiKeys => 'Chiavi API Omi';
+
+  @override
+  String get apiKeysDescription =>
+      'Le chiavi API vengono utilizzate per l\'autenticazione quando la tua app comunica con il server OMI. Consentono alla tua applicazione di creare ricordi e accedere ad altri servizi OMI in modo sicuro.';
+
+  @override
+  String get aboutOmiApiKeys => 'Informazioni sulle chiavi API Omi';
+
+  @override
+  String get yourNewKey => 'La tua nuova chiave:';
+
+  @override
+  String get copyToClipboard => 'Copia negli appunti';
+
+  @override
+  String get pleaseCopyKeyNow => 'Per favore copiala ora e annotala in un posto sicuro. ';
+
+  @override
+  String get willNotSeeAgain => 'Non potrai vederla di nuovo.';
+
+  @override
+  String get revokeKey => 'Revoca chiave';
+
+  @override
+  String get revokeApiKeyQuestion => 'Revocare la chiave API?';
+
+  @override
+  String get revokeApiKeyWarning =>
+      'Questa azione non può essere annullata. Le applicazioni che utilizzano questa chiave non potranno più accedere all\'API.';
+
+  @override
+  String get revoke => 'Revoca';
 }

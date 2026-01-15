@@ -2406,7 +2406,7 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get noApiKeysYet => 'No API keys yet';
+  String get noApiKeysYet => 'ยังไม่มีคีย์ API สร้างคีย์เพื่อเชื่อมต่อกับแอปของคุณ';
 
   @override
   String get createKeyToGetStarted => 'Create a key to get started';
@@ -4168,4 +4168,55 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get permissionDeniedForAppleReminders => 'ถูกปฏิเสธสิทธิ์สำหรับ Apple Reminders';
+
+  @override
+  String failedToCreateApiKey(String error) {
+    return 'ไม่สามารถสร้างคีย์ API ของผู้ให้บริการ: $error';
+  }
+
+  @override
+  String get createAKey => 'สร้างคีย์';
+
+  @override
+  String get apiKeyRevokedSuccessfully => 'เพิกถอนคีย์ API สำเร็จ';
+
+  @override
+  String failedToRevokeApiKey(String error) {
+    return 'ไม่สามารถเพิกถอนคีย์ API: $error';
+  }
+
+  @override
+  String get omiApiKeys => 'คีย์ API ของ Omi';
+
+  @override
+  String get apiKeysDescription =>
+      'คีย์ API ใช้สำหรับการยืนยันตัวตนเมื่อแอปของคุณสื่อสารกับเซิร์ฟเวอร์ OMI ช่วยให้แอปพลิเคชันของคุณสร้างความทรงจำและเข้าถึงบริการ OMI อื่นๆ ได้อย่างปลอดภัย';
+
+  @override
+  String get aboutOmiApiKeys => 'เกี่ยวกับคีย์ API ของ Omi';
+
+  @override
+  String get yourNewKey => 'คีย์ใหม่ของคุณ:';
+
+  @override
+  String get copyToClipboard => 'คัดลอกไปยังคลิปบอร์ด';
+
+  @override
+  String get pleaseCopyKeyNow => 'กรุณาคัดลอกตอนนี้และจดไว้ในที่ปลอดภัย ';
+
+  @override
+  String get willNotSeeAgain => 'คุณจะไม่สามารถดูได้อีก';
+
+  @override
+  String get revokeKey => 'เพิกถอนคีย์';
+
+  @override
+  String get revokeApiKeyQuestion => 'เพิกถอนคีย์ API?';
+
+  @override
+  String get revokeApiKeyWarning =>
+      'การดำเนินการนี้ไม่สามารถยกเลิกได้ แอปพลิเคชันใดๆ ที่ใช้คีย์นี้จะไม่สามารถเข้าถึง API ได้อีกต่อไป';
+
+  @override
+  String get revoke => 'เพิกถอน';
 }

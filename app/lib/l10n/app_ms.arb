@@ -3020,5 +3020,21 @@
   "addingToService": "Menambah ke {serviceName}...",
   "addedToService": "Ditambah ke {serviceName}",
   "failedToAddToService": "Gagal menambah ke {serviceName}",
-  "permissionDeniedForAppleReminders": "Kebenaran ditolak untuk Apple Reminders"
+  "permissionDeniedForAppleReminders": "Kebenaran ditolak untuk Apple Reminders",
+  "failedToCreateApiKey": "Gagal mencipta kunci API pembekal: {error}",
+  "createAKey": "Cipta Kunci",
+  "apiKeyRevokedSuccessfully": "Kunci API berjaya dibatalkan",
+  "failedToRevokeApiKey": "Gagal membatalkan kunci API: {error}",
+  "omiApiKeys": "Kunci API Omi",
+  "apiKeysDescription": "Kunci API digunakan untuk pengesahan apabila aplikasi anda berkomunikasi dengan pelayan OMI. Ia membenarkan aplikasi anda mencipta memori dan mengakses perkhidmatan OMI lain dengan selamat.",
+  "aboutOmiApiKeys": "Tentang Kunci API Omi",
+  "noApiKeysYet": "Belum ada kunci API. Cipta satu untuk mengintegrasikan dengan aplikasi anda.",
+  "yourNewKey": "Kunci baharu anda:",
+  "copyToClipboard": "Salin ke papan keratan",
+  "pleaseCopyKeyNow": "Sila salin sekarang dan simpan di tempat yang selamat. ",
+  "willNotSeeAgain": "Anda tidak akan dapat melihatnya lagi.",
+  "revokeKey": "Batalkan kunci",
+  "revokeApiKeyQuestion": "Batalkan Kunci API?",
+  "revokeApiKeyWarning": "Tindakan ini tidak boleh dibuat asal. Sebarang aplikasi yang menggunakan kunci ini tidak akan dapat mengakses API lagi.",
+  "revoke": "Batalkan"
 }

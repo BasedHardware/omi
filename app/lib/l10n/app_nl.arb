@@ -1838,5 +1838,21 @@
   "addingToService": "Toevoegen aan {serviceName}...",
   "addedToService": "Toegevoegd aan {serviceName}",
   "failedToAddToService": "Toevoegen aan {serviceName} mislukt",
-  "permissionDeniedForAppleReminders": "Toestemming geweigerd voor Apple Herinneringen"
+  "permissionDeniedForAppleReminders": "Toestemming geweigerd voor Apple Herinneringen",
+  "failedToCreateApiKey": "Kan provider API-sleutel niet maken: {error}",
+  "createAKey": "Sleutel maken",
+  "apiKeyRevokedSuccessfully": "API-sleutel succesvol ingetrokken",
+  "failedToRevokeApiKey": "Kan API-sleutel niet intrekken: {error}",
+  "omiApiKeys": "Omi API-sleutels",
+  "apiKeysDescription": "API-sleutels worden gebruikt voor authenticatie wanneer uw app communiceert met de OMI-server. Ze stellen uw applicatie in staat om herinneringen te maken en veilig toegang te krijgen tot andere OMI-services.",
+  "aboutOmiApiKeys": "Over Omi API-sleutels",
+  "noApiKeysYet": "Nog geen API-sleutels. Maak er een aan om te integreren met uw app.",
+  "yourNewKey": "Uw nieuwe sleutel:",
+  "copyToClipboard": "Kopiëren naar klembord",
+  "pleaseCopyKeyNow": "Kopieer het nu en schrijf het ergens veilig op. ",
+  "willNotSeeAgain": "U zult het niet meer kunnen zien.",
+  "revokeKey": "Sleutel intrekken",
+  "revokeApiKeyQuestion": "API-sleutel intrekken?",
+  "revokeApiKeyWarning": "Deze actie kan niet ongedaan worden gemaakt. Applicaties die deze sleutel gebruiken, hebben geen toegang meer tot de API.",
+  "revoke": "Intrekken"
 }

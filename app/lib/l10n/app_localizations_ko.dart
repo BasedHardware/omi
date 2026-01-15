@@ -2378,7 +2378,7 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get noApiKeysYet => 'No API keys yet';
+  String get noApiKeysYet => '아직 API 키가 없습니다. 앱과 통합하려면 하나를 만드세요.';
 
   @override
   String get createKeyToGetStarted => 'Create a key to get started';
@@ -4119,4 +4119,54 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get permissionDeniedForAppleReminders => 'Apple 미리 알림 권한이 거부됨';
+
+  @override
+  String failedToCreateApiKey(String error) {
+    return '공급자 API 키 생성 실패: $error';
+  }
+
+  @override
+  String get createAKey => '키 생성';
+
+  @override
+  String get apiKeyRevokedSuccessfully => 'API 키가 성공적으로 취소됨';
+
+  @override
+  String failedToRevokeApiKey(String error) {
+    return 'API 키 취소 실패: $error';
+  }
+
+  @override
+  String get omiApiKeys => 'Omi API 키';
+
+  @override
+  String get apiKeysDescription =>
+      'API 키는 앱이 OMI 서버와 통신할 때 인증에 사용됩니다. 애플리케이션이 메모리를 생성하고 다른 OMI 서비스에 안전하게 접근할 수 있게 합니다.';
+
+  @override
+  String get aboutOmiApiKeys => 'Omi API 키 정보';
+
+  @override
+  String get yourNewKey => '새 키:';
+
+  @override
+  String get copyToClipboard => '클립보드에 복사';
+
+  @override
+  String get pleaseCopyKeyNow => '지금 복사하여 안전한 곳에 적어두세요. ';
+
+  @override
+  String get willNotSeeAgain => '다시 볼 수 없습니다.';
+
+  @override
+  String get revokeKey => '키 취소';
+
+  @override
+  String get revokeApiKeyQuestion => 'API 키를 취소하시겠습니까?';
+
+  @override
+  String get revokeApiKeyWarning => '이 작업은 취소할 수 없습니다. 이 키를 사용하는 애플리케이션은 더 이상 API에 접근할 수 없습니다.';
+
+  @override
+  String get revoke => '취소';
 }

@@ -3020,5 +3020,21 @@
   "addingToService": "Додавання до {serviceName}...",
   "addedToService": "Додано до {serviceName}",
   "failedToAddToService": "Не вдалося додати до {serviceName}",
-  "permissionDeniedForAppleReminders": "Дозвіл для Apple Reminders відхилено"
+  "permissionDeniedForAppleReminders": "Дозвіл для Apple Reminders відхилено",
+  "failedToCreateApiKey": "Не вдалося створити API-ключ провайдера: {error}",
+  "createAKey": "Створити ключ",
+  "apiKeyRevokedSuccessfully": "API-ключ успішно відкликано",
+  "failedToRevokeApiKey": "Не вдалося відкликати API-ключ: {error}",
+  "omiApiKeys": "API-ключі Omi",
+  "apiKeysDescription": "API-ключі використовуються для автентифікації, коли ваш додаток взаємодіє з сервером OMI. Вони дозволяють вашому додатку створювати спогади та безпечно отримувати доступ до інших сервісів OMI.",
+  "aboutOmiApiKeys": "Про API-ключі Omi",
+  "noApiKeysYet": "API-ключів поки немає. Створіть один для інтеграції з вашим додатком.",
+  "yourNewKey": "Ваш новий ключ:",
+  "copyToClipboard": "Копіювати в буфер обміну",
+  "pleaseCopyKeyNow": "Будь ласка, скопіюйте його зараз і запишіть у безпечному місці. ",
+  "willNotSeeAgain": "Ви не зможете побачити його знову.",
+  "revokeKey": "Відкликати ключ",
+  "revokeApiKeyQuestion": "Відкликати API-ключ?",
+  "revokeApiKeyWarning": "Цю дію не можна скасувати. Будь-які додатки, що використовують цей ключ, більше не зможуть отримати доступ до API.",
+  "revoke": "Відкликати"
 }

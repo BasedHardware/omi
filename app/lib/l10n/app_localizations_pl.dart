@@ -2423,7 +2423,7 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
-  String get noApiKeysYet => 'No API keys yet';
+  String get noApiKeysYet => 'Brak kluczy API. Utwórz jeden, aby zintegrować z aplikacją.';
 
   @override
   String get createKeyToGetStarted => 'Create a key to get started';
@@ -4196,4 +4196,55 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get permissionDeniedForAppleReminders => 'Odmowa uprawnień dla Apple Reminders';
+
+  @override
+  String failedToCreateApiKey(String error) {
+    return 'Nie udało się utworzyć klucza API dostawcy: $error';
+  }
+
+  @override
+  String get createAKey => 'Utwórz klucz';
+
+  @override
+  String get apiKeyRevokedSuccessfully => 'Klucz API został pomyślnie unieważniony';
+
+  @override
+  String failedToRevokeApiKey(String error) {
+    return 'Nie udało się unieważnić klucza API: $error';
+  }
+
+  @override
+  String get omiApiKeys => 'Klucze API Omi';
+
+  @override
+  String get apiKeysDescription =>
+      'Klucze API są używane do uwierzytelniania, gdy aplikacja komunikuje się z serwerem OMI. Umożliwiają aplikacji tworzenie wspomnień i bezpieczny dostęp do innych usług OMI.';
+
+  @override
+  String get aboutOmiApiKeys => 'O kluczach API Omi';
+
+  @override
+  String get yourNewKey => 'Twój nowy klucz:';
+
+  @override
+  String get copyToClipboard => 'Kopiuj do schowka';
+
+  @override
+  String get pleaseCopyKeyNow => 'Skopiuj go teraz i zapisz w bezpiecznym miejscu. ';
+
+  @override
+  String get willNotSeeAgain => 'Nie będziesz mógł go ponownie zobaczyć.';
+
+  @override
+  String get revokeKey => 'Unieważnij klucz';
+
+  @override
+  String get revokeApiKeyQuestion => 'Unieważnić klucz API?';
+
+  @override
+  String get revokeApiKeyWarning =>
+      'Tej akcji nie można cofnąć. Aplikacje używające tego klucza nie będą już mogły uzyskać dostępu do API.';
+
+  @override
+  String get revoke => 'Unieważnij';
 }

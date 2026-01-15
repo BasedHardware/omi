@@ -3002,5 +3002,21 @@
   "addingToService": "Pridedama į {serviceName}...",
   "addedToService": "Pridėta į {serviceName}",
   "failedToAddToService": "Nepavyko pridėti į {serviceName}",
-  "permissionDeniedForAppleReminders": "Apple Reminders leidimas atmestas"
+  "permissionDeniedForAppleReminders": "Apple Reminders leidimas atmestas",
+  "failedToCreateApiKey": "Nepavyko sukurti tiekėjo API rakto: {error}",
+  "createAKey": "Sukurti raktą",
+  "apiKeyRevokedSuccessfully": "API raktas sėkmingai atšauktas",
+  "failedToRevokeApiKey": "Nepavyko atšaukti API rakto: {error}",
+  "omiApiKeys": "Omi API raktai",
+  "apiKeysDescription": "API raktai naudojami autentifikavimui, kai jūsų programa bendrauja su OMI serveriu. Jie leidžia jūsų programai kurti prisiminimus ir saugiai pasiekti kitas OMI paslaugas.",
+  "aboutOmiApiKeys": "Apie Omi API raktus",
+  "noApiKeysYet": "Dar nėra API raktų. Sukurkite vieną integracijai su savo programa.",
+  "yourNewKey": "Jūsų naujas raktas:",
+  "copyToClipboard": "Kopijuoti į iškarpinę",
+  "pleaseCopyKeyNow": "Prašome nukopijuoti dabar ir užsirašyti saugioje vietoje. ",
+  "willNotSeeAgain": "Negalėsite jo pamatyti dar kartą.",
+  "revokeKey": "Atšaukti raktą",
+  "revokeApiKeyQuestion": "Atšaukti API raktą?",
+  "revokeApiKeyWarning": "Šio veiksmo negalima atšaukti. Programos, naudojančios šį raktą, nebegalės pasiekti API.",
+  "revoke": "Atšaukti"
 }

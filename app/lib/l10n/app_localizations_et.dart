@@ -2420,7 +2420,7 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get noApiKeysYet => 'No API keys yet';
+  String get noApiKeysYet => 'API võtmeid pole veel. Looge üks oma rakendusega integreerimiseks.';
 
   @override
   String get createKeyToGetStarted => 'Create a key to get started';
@@ -4193,4 +4193,55 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get permissionDeniedForAppleReminders => 'Apple Reminders luba keelatud';
+
+  @override
+  String failedToCreateApiKey(String error) {
+    return 'Teenusepakkuja API võtme loomine ebaõnnestus: $error';
+  }
+
+  @override
+  String get createAKey => 'Loo võti';
+
+  @override
+  String get apiKeyRevokedSuccessfully => 'API võti tühistatud edukalt';
+
+  @override
+  String failedToRevokeApiKey(String error) {
+    return 'API võtme tühistamine ebaõnnestus: $error';
+  }
+
+  @override
+  String get omiApiKeys => 'Omi API võtmed';
+
+  @override
+  String get apiKeysDescription =>
+      'API võtmeid kasutatakse autentimiseks, kui teie rakendus suhtleb OMI serveriga. Need võimaldavad teie rakendusel luua mälestusi ja turvaliselt juurde pääseda teistele OMI teenustele.';
+
+  @override
+  String get aboutOmiApiKeys => 'Omi API võtmete kohta';
+
+  @override
+  String get yourNewKey => 'Teie uus võti:';
+
+  @override
+  String get copyToClipboard => 'Kopeeri lõikelauale';
+
+  @override
+  String get pleaseCopyKeyNow => 'Palun kopeerige see nüüd ja kirjutage kuhugi turvalisesse kohta. ';
+
+  @override
+  String get willNotSeeAgain => 'Te ei saa seda enam näha.';
+
+  @override
+  String get revokeKey => 'Tühista võti';
+
+  @override
+  String get revokeApiKeyQuestion => 'Tühistada API võti?';
+
+  @override
+  String get revokeApiKeyWarning =>
+      'Seda toimingut ei saa tagasi võtta. Ükski rakendus, mis kasutab seda võtit, ei pääse enam API-le ligi.';
+
+  @override
+  String get revoke => 'Tühista';
 }

@@ -3022,5 +3022,21 @@
   "addingToService": "Přidávání do {serviceName}...",
   "addedToService": "Přidáno do {serviceName}",
   "failedToAddToService": "Nepodařilo se přidat do {serviceName}",
-  "permissionDeniedForAppleReminders": "Oprávnění pro Apple Reminders bylo zamítnuto"
+  "permissionDeniedForAppleReminders": "Oprávnění pro Apple Reminders bylo zamítnuto",
+  "failedToCreateApiKey": "Nepodařilo se vytvořit API klíč poskytovatele: {error}",
+  "createAKey": "Vytvořit klíč",
+  "apiKeyRevokedSuccessfully": "API klíč byl úspěšně odvolán",
+  "failedToRevokeApiKey": "Nepodařilo se odvolat API klíč: {error}",
+  "omiApiKeys": "Omi API klíče",
+  "apiKeysDescription": "API klíče se používají pro ověření, když vaše aplikace komunikuje se serverem OMI. Umožňují vaší aplikaci vytvářet vzpomínky a bezpečně přistupovat k dalším službám OMI.",
+  "aboutOmiApiKeys": "O Omi API klíčích",
+  "noApiKeysYet": "Zatím žádné API klíče. Vytvořte jeden pro integraci s vaší aplikací.",
+  "yourNewKey": "Váš nový klíč:",
+  "copyToClipboard": "Kopírovat do schránky",
+  "pleaseCopyKeyNow": "Prosím zkopírujte si ho nyní a zapište si ho na bezpečné místo. ",
+  "willNotSeeAgain": "Nebudete jej moci znovu zobrazit.",
+  "revokeKey": "Odvolat klíč",
+  "revokeApiKeyQuestion": "Odvolat API klíč?",
+  "revokeApiKeyWarning": "Tuto akci nelze vrátit zpět. Všechny aplikace používající tento klíč již nebudou mít přístup k API.",
+  "revoke": "Odvolat"
 }

@@ -2424,7 +2424,7 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get noApiKeysYet => 'No API keys yet';
+  String get noApiKeysYet => 'Vēl nav API atslēgu. Izveidojiet vienu integrācijai ar savu lietotni.';
 
   @override
   String get createKeyToGetStarted => 'Create a key to get started';
@@ -4197,4 +4197,55 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get permissionDeniedForAppleReminders => 'Apple Reminders atļauja liegta';
+
+  @override
+  String failedToCreateApiKey(String error) {
+    return 'Neizdevās izveidot pakalpojumu sniedzēja API atslēgu: $error';
+  }
+
+  @override
+  String get createAKey => 'Izveidot atslēgu';
+
+  @override
+  String get apiKeyRevokedSuccessfully => 'API atslēga veiksmīgi atsaukta';
+
+  @override
+  String failedToRevokeApiKey(String error) {
+    return 'Neizdevās atsaukt API atslēgu: $error';
+  }
+
+  @override
+  String get omiApiKeys => 'Omi API atslēgas';
+
+  @override
+  String get apiKeysDescription =>
+      'API atslēgas izmanto autentifikācijai, kad jūsu lietotne sazinās ar OMI serveri. Tās ļauj jūsu lietojumprogrammai droši izveidot atmiņas un piekļūt citiem OMI pakalpojumiem.';
+
+  @override
+  String get aboutOmiApiKeys => 'Par Omi API atslēgām';
+
+  @override
+  String get yourNewKey => 'Jūsu jaunā atslēga:';
+
+  @override
+  String get copyToClipboard => 'Kopēt starpliktuvē';
+
+  @override
+  String get pleaseCopyKeyNow => 'Lūdzu, nokopējiet to tagad un pierakstiet drošā vietā. ';
+
+  @override
+  String get willNotSeeAgain => 'Jūs to vairs nevarēsiet redzēt.';
+
+  @override
+  String get revokeKey => 'Atsaukt atslēgu';
+
+  @override
+  String get revokeApiKeyQuestion => 'Atsaukt API atslēgu?';
+
+  @override
+  String get revokeApiKeyWarning =>
+      'Šo darbību nevar atsaukt. Lietojumprogrammas, kas izmanto šo atslēgu, vairs nevarēs piekļūt API.';
+
+  @override
+  String get revoke => 'Atsaukt';
 }

@@ -2425,7 +2425,7 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get noApiKeysYet => 'No API keys yet';
+  String get noApiKeysYet => 'Zatiaľ žiadne API kľúče. Vytvorte jeden pre integráciu s vašou aplikáciou.';
 
   @override
   String get createKeyToGetStarted => 'Create a key to get started';
@@ -4192,4 +4192,55 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get permissionDeniedForAppleReminders => 'Povolenie pre Apple Reminders zamietnuté';
+
+  @override
+  String failedToCreateApiKey(String error) {
+    return 'Nepodarilo sa vytvoriť API kľúč poskytovateľa: $error';
+  }
+
+  @override
+  String get createAKey => 'Vytvoriť kľúč';
+
+  @override
+  String get apiKeyRevokedSuccessfully => 'API kľúč bol úspešne odvolaný';
+
+  @override
+  String failedToRevokeApiKey(String error) {
+    return 'Nepodarilo sa odvolať API kľúč: $error';
+  }
+
+  @override
+  String get omiApiKeys => 'Omi API kľúče';
+
+  @override
+  String get apiKeysDescription =>
+      'API kľúče sa používajú na overenie, keď vaša aplikácia komunikuje so serverom OMI. Umožňujú vašej aplikácii vytvárať spomienky a bezpečne pristupovať k ďalším službám OMI.';
+
+  @override
+  String get aboutOmiApiKeys => 'O Omi API kľúčoch';
+
+  @override
+  String get yourNewKey => 'Váš nový kľúč:';
+
+  @override
+  String get copyToClipboard => 'Kopírovať do schránky';
+
+  @override
+  String get pleaseCopyKeyNow => 'Prosím skopírujte si ho teraz a zapíšte si ho na bezpečné miesto. ';
+
+  @override
+  String get willNotSeeAgain => 'Nebudete ho môcť znova zobraziť.';
+
+  @override
+  String get revokeKey => 'Odvolať kľúč';
+
+  @override
+  String get revokeApiKeyQuestion => 'Odvolať API kľúč?';
+
+  @override
+  String get revokeApiKeyWarning =>
+      'Túto akciu nie je možné vrátiť späť. Aplikácie používajúce tento kľúč už nebudú mať prístup k API.';
+
+  @override
+  String get revoke => 'Odvolať';
 }

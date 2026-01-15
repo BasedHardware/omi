@@ -3020,5 +3020,21 @@
   "addingToService": "Lisamine {serviceName}...",
   "addedToService": "Lisatud {serviceName}",
   "failedToAddToService": "Lisamine {serviceName} ebaõnnestus",
-  "permissionDeniedForAppleReminders": "Apple Reminders luba keelatud"
+  "permissionDeniedForAppleReminders": "Apple Reminders luba keelatud",
+  "failedToCreateApiKey": "Teenusepakkuja API võtme loomine ebaõnnestus: {error}",
+  "createAKey": "Loo võti",
+  "apiKeyRevokedSuccessfully": "API võti tühistatud edukalt",
+  "failedToRevokeApiKey": "API võtme tühistamine ebaõnnestus: {error}",
+  "omiApiKeys": "Omi API võtmed",
+  "apiKeysDescription": "API võtmeid kasutatakse autentimiseks, kui teie rakendus suhtleb OMI serveriga. Need võimaldavad teie rakendusel luua mälestusi ja turvaliselt juurde pääseda teistele OMI teenustele.",
+  "aboutOmiApiKeys": "Omi API võtmete kohta",
+  "noApiKeysYet": "API võtmeid pole veel. Looge üks oma rakendusega integreerimiseks.",
+  "yourNewKey": "Teie uus võti:",
+  "copyToClipboard": "Kopeeri lõikelauale",
+  "pleaseCopyKeyNow": "Palun kopeerige see nüüd ja kirjutage kuhugi turvalisesse kohta. ",
+  "willNotSeeAgain": "Te ei saa seda enam näha.",
+  "revokeKey": "Tühista võti",
+  "revokeApiKeyQuestion": "Tühistada API võti?",
+  "revokeApiKeyWarning": "Seda toimingut ei saa tagasi võtta. Ükski rakendus, mis kasutab seda võtit, ei pääse enam API-le ligi.",
+  "revoke": "Tühista"
 }

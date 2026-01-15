@@ -3020,5 +3020,21 @@
   "addingToService": "Lisätään kohteeseen {serviceName}...",
   "addedToService": "Lisätty kohteeseen {serviceName}",
   "failedToAddToService": "Lisääminen kohteeseen {serviceName} epäonnistui",
-  "permissionDeniedForAppleReminders": "Käyttöoikeus Apple Muistutuksille evätty"
+  "permissionDeniedForAppleReminders": "Käyttöoikeus Apple Muistutuksille evätty",
+  "failedToCreateApiKey": "Palveluntarjoajan API-avaimen luominen epäonnistui: {error}",
+  "createAKey": "Luo avain",
+  "apiKeyRevokedSuccessfully": "API-avain peruutettu onnistuneesti",
+  "failedToRevokeApiKey": "API-avaimen peruuttaminen epäonnistui: {error}",
+  "omiApiKeys": "Omi API-avaimet",
+  "apiKeysDescription": "API-avaimia käytetään todentamiseen, kun sovelluksesi kommunikoi OMI-palvelimen kanssa. Ne mahdollistavat sovelluksesi luoda muistoja ja käyttää muita OMI-palveluita turvallisesti.",
+  "aboutOmiApiKeys": "Tietoja Omi API-avaimista",
+  "noApiKeysYet": "Ei vielä API-avaimia. Luo yksi integroidaksesi sovelluksesi kanssa.",
+  "yourNewKey": "Uusi avaimesi:",
+  "copyToClipboard": "Kopioi leikepöydälle",
+  "pleaseCopyKeyNow": "Ole hyvä ja kopioi se nyt ja kirjoita se turvalliseen paikkaan. ",
+  "willNotSeeAgain": "Et voi nähdä sitä uudelleen.",
+  "revokeKey": "Peruuta avain",
+  "revokeApiKeyQuestion": "Peruuta API-avain?",
+  "revokeApiKeyWarning": "Tätä toimintoa ei voi kumota. Tätä avainta käyttävät sovellukset eivät enää pääse API:in.",
+  "revoke": "Peruuta"
 }

@@ -3022,5 +3022,21 @@
   "addingToService": "Добавяне към {serviceName}...",
   "addedToService": "Добавено в {serviceName}",
   "failedToAddToService": "Неуспешно добавяне към {serviceName}",
-  "permissionDeniedForAppleReminders": "Разрешението за Apple Reminders е отказано"
+  "permissionDeniedForAppleReminders": "Разрешението за Apple Reminders е отказано",
+  "failedToCreateApiKey": "Неуспешно създаване на API ключ на доставчика: {error}",
+  "createAKey": "Създаване на ключ",
+  "apiKeyRevokedSuccessfully": "API ключът е отменен успешно",
+  "failedToRevokeApiKey": "Неуспешно отменяне на API ключ: {error}",
+  "omiApiKeys": "Omi API ключове",
+  "apiKeysDescription": "API ключовете се използват за удостоверяване, когато приложението ви комуникира със сървъра на OMI. Те позволяват на приложението ви да създава спомени и да получава достъп до други услуги на OMI по сигурен начин.",
+  "aboutOmiApiKeys": "Относно Omi API ключове",
+  "noApiKeysYet": "Все още няма API ключове. Създайте един за интеграция с приложението си.",
+  "yourNewKey": "Вашият нов ключ:",
+  "copyToClipboard": "Копиране в клипборда",
+  "pleaseCopyKeyNow": "Моля, копирайте го сега и го запишете на сигурно място. ",
+  "willNotSeeAgain": "Няма да можете да го видите отново.",
+  "revokeKey": "Отмяна на ключ",
+  "revokeApiKeyQuestion": "Отмяна на API ключ?",
+  "revokeApiKeyWarning": "Това действие не може да бъде отменено. Всички приложения, използващи този ключ, вече няма да имат достъп до API.",
+  "revoke": "Отмяна"
 }

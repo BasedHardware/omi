@@ -1467,5 +1467,21 @@
   "addingToService": "正在添加到{serviceName}...",
   "addedToService": "已添加到{serviceName}",
   "failedToAddToService": "添加到{serviceName}失败",
-  "permissionDeniedForAppleReminders": "Apple提醒事项权限被拒绝"
+  "permissionDeniedForAppleReminders": "Apple提醒事项权限被拒绝",
+  "failedToCreateApiKey": "创建提供商API密钥失败: {error}",
+  "createAKey": "创建密钥",
+  "apiKeyRevokedSuccessfully": "API密钥已成功撤销",
+  "failedToRevokeApiKey": "撤销API密钥失败: {error}",
+  "omiApiKeys": "Omi API密钥",
+  "apiKeysDescription": "API密钥用于在您的应用程序与OMI服务器通信时进行身份验证。它们允许您的应用程序创建记忆并安全地访问其他OMI服务。",
+  "aboutOmiApiKeys": "关于Omi API密钥",
+  "noApiKeysYet": "还没有API密钥。创建一个以与您的应用集成。",
+  "yourNewKey": "您的新密钥:",
+  "copyToClipboard": "复制到剪贴板",
+  "pleaseCopyKeyNow": "请立即复制并保存在安全的地方。",
+  "willNotSeeAgain": "您将无法再次查看。",
+  "revokeKey": "撤销密钥",
+  "revokeApiKeyQuestion": "撤销API密钥?",
+  "revokeApiKeyWarning": "此操作无法撤消。使用此密钥的任何应用程序将无法再访问API。",
+  "revoke": "撤销"
 }

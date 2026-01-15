@@ -3020,5 +3020,21 @@
   "addingToService": "Đang thêm vào {serviceName}...",
   "addedToService": "Đã thêm vào {serviceName}",
   "failedToAddToService": "Không thể thêm vào {serviceName}",
-  "permissionDeniedForAppleReminders": "Quyền truy cập Apple Reminders bị từ chối"
+  "permissionDeniedForAppleReminders": "Quyền truy cập Apple Reminders bị từ chối",
+  "failedToCreateApiKey": "Không thể tạo khóa API nhà cung cấp: {error}",
+  "createAKey": "Tạo khóa",
+  "apiKeyRevokedSuccessfully": "Khóa API đã được thu hồi thành công",
+  "failedToRevokeApiKey": "Không thể thu hồi khóa API: {error}",
+  "omiApiKeys": "Khóa API Omi",
+  "apiKeysDescription": "Khóa API được sử dụng để xác thực khi ứng dụng của bạn giao tiếp với máy chủ OMI. Chúng cho phép ứng dụng của bạn tạo kỷ niệm và truy cập an toàn vào các dịch vụ OMI khác.",
+  "aboutOmiApiKeys": "Về khóa API Omi",
+  "noApiKeysYet": "Chưa có khóa API. Tạo một khóa để tích hợp với ứng dụng của bạn.",
+  "yourNewKey": "Khóa mới của bạn:",
+  "copyToClipboard": "Sao chép vào bộ nhớ tạm",
+  "pleaseCopyKeyNow": "Vui lòng sao chép ngay và ghi lại ở nơi an toàn. ",
+  "willNotSeeAgain": "Bạn sẽ không thể xem lại được.",
+  "revokeKey": "Thu hồi khóa",
+  "revokeApiKeyQuestion": "Thu hồi khóa API?",
+  "revokeApiKeyWarning": "Hành động này không thể hoàn tác. Bất kỳ ứng dụng nào sử dụng khóa này sẽ không thể truy cập API nữa.",
+  "revoke": "Thu hồi"
 }

@@ -8012,6 +8012,96 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Permission denied for Apple Reminders'**
   String get permissionDeniedForAppleReminders;
+
+  /// Error message when API key creation fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to create provider API key: {error}'**
+  String failedToCreateApiKey(String error);
+
+  /// Dialog title for creating a new API key
+  ///
+  /// In en, this message translates to:
+  /// **'Create a Key'**
+  String get createAKey;
+
+  /// Success message when API key is revoked
+  ///
+  /// In en, this message translates to:
+  /// **'API key revoked successfully'**
+  String get apiKeyRevokedSuccessfully;
+
+  /// Error message when API key revocation fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to revoke API key: {error}'**
+  String failedToRevokeApiKey(String error);
+
+  /// Dialog title for API keys info
+  ///
+  /// In en, this message translates to:
+  /// **'Omi API Keys'**
+  String get omiApiKeys;
+
+  /// Description of what API keys are used for
+  ///
+  /// In en, this message translates to:
+  /// **'API Keys are used for authentication when your app communicates with the OMI server. They allow your application to create memories and access other OMI services securely.'**
+  String get apiKeysDescription;
+
+  /// Tooltip for API keys info button
+  ///
+  /// In en, this message translates to:
+  /// **'About Omi API Keys'**
+  String get aboutOmiApiKeys;
+
+  /// Label shown above newly created API key
+  ///
+  /// In en, this message translates to:
+  /// **'Your new key:'**
+  String get yourNewKey;
+
+  /// Tooltip for copy button
+  ///
+  /// In en, this message translates to:
+  /// **'Copy to clipboard'**
+  String get copyToClipboard;
+
+  /// Warning to copy key immediately
+  ///
+  /// In en, this message translates to:
+  /// **'Please copy it now and write it down somewhere safe. '**
+  String get pleaseCopyKeyNow;
+
+  /// Warning that key won't be shown again
+  ///
+  /// In en, this message translates to:
+  /// **'You will not be able to see it again.'**
+  String get willNotSeeAgain;
+
+  /// Tooltip for revoke button
+  ///
+  /// In en, this message translates to:
+  /// **'Revoke key'**
+  String get revokeKey;
+
+  /// Confirmation dialog title for revoking API key
+  ///
+  /// In en, this message translates to:
+  /// **'Revoke API Key?'**
+  String get revokeApiKeyQuestion;
+
+  /// Warning message about revoking API key
+  ///
+  /// In en, this message translates to:
+  /// **'This action cannot be undone. Any applications using this key will no longer be able to access the API.'**
+  String get revokeApiKeyWarning;
+
+  /// Button text to confirm revocation
+  ///
+  /// In en, this message translates to:
+  /// **'Revoke'**
+  String get revoke;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

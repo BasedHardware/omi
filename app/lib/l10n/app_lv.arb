@@ -3020,5 +3020,21 @@
   "addingToService": "Pievieno {serviceName}...",
   "addedToService": "Pievienots {serviceName}",
   "failedToAddToService": "Neizdevās pievienot {serviceName}",
-  "permissionDeniedForAppleReminders": "Apple Reminders atļauja liegta"
+  "permissionDeniedForAppleReminders": "Apple Reminders atļauja liegta",
+  "failedToCreateApiKey": "Neizdevās izveidot pakalpojumu sniedzēja API atslēgu: {error}",
+  "createAKey": "Izveidot atslēgu",
+  "apiKeyRevokedSuccessfully": "API atslēga veiksmīgi atsaukta",
+  "failedToRevokeApiKey": "Neizdevās atsaukt API atslēgu: {error}",
+  "omiApiKeys": "Omi API atslēgas",
+  "apiKeysDescription": "API atslēgas izmanto autentifikācijai, kad jūsu lietotne sazinās ar OMI serveri. Tās ļauj jūsu lietojumprogrammai droši izveidot atmiņas un piekļūt citiem OMI pakalpojumiem.",
+  "aboutOmiApiKeys": "Par Omi API atslēgām",
+  "noApiKeysYet": "Vēl nav API atslēgu. Izveidojiet vienu integrācijai ar savu lietotni.",
+  "yourNewKey": "Jūsu jaunā atslēga:",
+  "copyToClipboard": "Kopēt starpliktuvē",
+  "pleaseCopyKeyNow": "Lūdzu, nokopējiet to tagad un pierakstiet drošā vietā. ",
+  "willNotSeeAgain": "Jūs to vairs nevarēsiet redzēt.",
+  "revokeKey": "Atsaukt atslēgu",
+  "revokeApiKeyQuestion": "Atsaukt API atslēgu?",
+  "revokeApiKeyWarning": "Šo darbību nevar atsaukt. Lietojumprogrammas, kas izmanto šo atslēgu, vairs nevarēs piekļūt API.",
+  "revoke": "Atsaukt"
 }

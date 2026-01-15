@@ -3002,5 +3002,21 @@
   "addingToService": "{serviceName} platformuna ekleniyor...",
   "addedToService": "{serviceName} platformuna eklendi",
   "failedToAddToService": "{serviceName} platformuna eklenemedi",
-  "permissionDeniedForAppleReminders": "Apple Hatırlatıcılar için izin reddedildi"
+  "permissionDeniedForAppleReminders": "Apple Hatırlatıcılar için izin reddedildi",
+  "failedToCreateApiKey": "Sağlayıcı API anahtarı oluşturulamadı: {error}",
+  "createAKey": "Anahtar Oluştur",
+  "apiKeyRevokedSuccessfully": "API anahtarı başarıyla iptal edildi",
+  "failedToRevokeApiKey": "API anahtarı iptal edilemedi: {error}",
+  "omiApiKeys": "Omi API Anahtarları",
+  "apiKeysDescription": "API anahtarları, uygulamanız OMI sunucusuyla iletişim kurarken kimlik doğrulama için kullanılır. Uygulamanızın anılar oluşturmasına ve diğer OMI hizmetlerine güvenli bir şekilde erişmesine olanak tanır.",
+  "aboutOmiApiKeys": "Omi API Anahtarları Hakkında",
+  "noApiKeysYet": "Henüz API anahtarı yok. Uygulamanızla entegre etmek için bir tane oluşturun.",
+  "yourNewKey": "Yeni anahtarınız:",
+  "copyToClipboard": "Panoya kopyala",
+  "pleaseCopyKeyNow": "Lütfen şimdi kopyalayın ve güvenli bir yere yazın. ",
+  "willNotSeeAgain": "Tekrar göremeyeceksiniz.",
+  "revokeKey": "Anahtarı iptal et",
+  "revokeApiKeyQuestion": "API Anahtarını İptal Et?",
+  "revokeApiKeyWarning": "Bu işlem geri alınamaz. Bu anahtarı kullanan uygulamalar artık API'ye erişemeyecektir.",
+  "revoke": "İptal Et"
 }

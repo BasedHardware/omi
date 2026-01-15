@@ -2417,7 +2417,7 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get noApiKeysYet => 'No API keys yet';
+  String get noApiKeysYet => 'Ei vielä API-avaimia. Luo yksi integroidaksesi sovelluksesi kanssa.';
 
   @override
   String get createKeyToGetStarted => 'Create a key to get started';
@@ -4190,4 +4190,55 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get permissionDeniedForAppleReminders => 'Käyttöoikeus Apple Muistutuksille evätty';
+
+  @override
+  String failedToCreateApiKey(String error) {
+    return 'Palveluntarjoajan API-avaimen luominen epäonnistui: $error';
+  }
+
+  @override
+  String get createAKey => 'Luo avain';
+
+  @override
+  String get apiKeyRevokedSuccessfully => 'API-avain peruutettu onnistuneesti';
+
+  @override
+  String failedToRevokeApiKey(String error) {
+    return 'API-avaimen peruuttaminen epäonnistui: $error';
+  }
+
+  @override
+  String get omiApiKeys => 'Omi API-avaimet';
+
+  @override
+  String get apiKeysDescription =>
+      'API-avaimia käytetään todentamiseen, kun sovelluksesi kommunikoi OMI-palvelimen kanssa. Ne mahdollistavat sovelluksesi luoda muistoja ja käyttää muita OMI-palveluita turvallisesti.';
+
+  @override
+  String get aboutOmiApiKeys => 'Tietoja Omi API-avaimista';
+
+  @override
+  String get yourNewKey => 'Uusi avaimesi:';
+
+  @override
+  String get copyToClipboard => 'Kopioi leikepöydälle';
+
+  @override
+  String get pleaseCopyKeyNow => 'Ole hyvä ja kopioi se nyt ja kirjoita se turvalliseen paikkaan. ';
+
+  @override
+  String get willNotSeeAgain => 'Et voi nähdä sitä uudelleen.';
+
+  @override
+  String get revokeKey => 'Peruuta avain';
+
+  @override
+  String get revokeApiKeyQuestion => 'Peruuta API-avain?';
+
+  @override
+  String get revokeApiKeyWarning =>
+      'Tätä toimintoa ei voi kumota. Tätä avainta käyttävät sovellukset eivät enää pääse API:in.';
+
+  @override
+  String get revoke => 'Peruuta';
 }

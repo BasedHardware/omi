@@ -3020,5 +3020,21 @@
   "addingToService": "Dodawanie do {serviceName}...",
   "addedToService": "Dodano do {serviceName}",
   "failedToAddToService": "Nie udało się dodać do {serviceName}",
-  "permissionDeniedForAppleReminders": "Odmowa uprawnień dla Apple Reminders"
+  "permissionDeniedForAppleReminders": "Odmowa uprawnień dla Apple Reminders",
+  "failedToCreateApiKey": "Nie udało się utworzyć klucza API dostawcy: {error}",
+  "createAKey": "Utwórz klucz",
+  "apiKeyRevokedSuccessfully": "Klucz API został pomyślnie unieważniony",
+  "failedToRevokeApiKey": "Nie udało się unieważnić klucza API: {error}",
+  "omiApiKeys": "Klucze API Omi",
+  "apiKeysDescription": "Klucze API są używane do uwierzytelniania, gdy aplikacja komunikuje się z serwerem OMI. Umożliwiają aplikacji tworzenie wspomnień i bezpieczny dostęp do innych usług OMI.",
+  "aboutOmiApiKeys": "O kluczach API Omi",
+  "noApiKeysYet": "Brak kluczy API. Utwórz jeden, aby zintegrować z aplikacją.",
+  "yourNewKey": "Twój nowy klucz:",
+  "copyToClipboard": "Kopiuj do schowka",
+  "pleaseCopyKeyNow": "Skopiuj go teraz i zapisz w bezpiecznym miejscu. ",
+  "willNotSeeAgain": "Nie będziesz mógł go ponownie zobaczyć.",
+  "revokeKey": "Unieważnij klucz",
+  "revokeApiKeyQuestion": "Unieważnić klucz API?",
+  "revokeApiKeyWarning": "Tej akcji nie można cofnąć. Aplikacje używające tego klucza nie będą już mogły uzyskać dostępu do API.",
+  "revoke": "Unieważnij"
 }

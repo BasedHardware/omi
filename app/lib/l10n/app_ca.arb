@@ -3022,5 +3022,21 @@
   "addingToService": "Afegint a {serviceName}...",
   "addedToService": "Afegit a {serviceName}",
   "failedToAddToService": "Error en afegir a {serviceName}",
-  "permissionDeniedForAppleReminders": "Permís denegat per a Apple Reminders"
+  "permissionDeniedForAppleReminders": "Permís denegat per a Apple Reminders",
+  "failedToCreateApiKey": "Error en crear la clau API del proveïdor: {error}",
+  "createAKey": "Crear una clau",
+  "apiKeyRevokedSuccessfully": "Clau API revocada correctament",
+  "failedToRevokeApiKey": "Error en revocar la clau API: {error}",
+  "omiApiKeys": "Claus API d'Omi",
+  "apiKeysDescription": "Les claus API s'utilitzen per a l'autenticació quan la teva aplicació es comunica amb el servidor OMI. Permeten que la teva aplicació creï records i accedeixi a altres serveis d'OMI de manera segura.",
+  "aboutOmiApiKeys": "Sobre les claus API d'Omi",
+  "noApiKeysYet": "Encara no hi ha claus API. Crea'n una per integrar-la amb la teva aplicació.",
+  "yourNewKey": "La teva nova clau:",
+  "copyToClipboard": "Copia al porta-retalls",
+  "pleaseCopyKeyNow": "Si us plau, copia'l ara i escriu-lo en un lloc segur. ",
+  "willNotSeeAgain": "No podràs veure'l de nou.",
+  "revokeKey": "Revocar clau",
+  "revokeApiKeyQuestion": "Revocar clau API?",
+  "revokeApiKeyWarning": "Aquesta acció no es pot desfer. Les aplicacions que utilitzin aquesta clau ja no podran accedir a l'API.",
+  "revoke": "Revocar"
 }

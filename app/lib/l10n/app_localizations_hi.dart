@@ -2393,7 +2393,7 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
-  String get noApiKeysYet => 'No API keys yet';
+  String get noApiKeysYet => 'अभी तक कोई API कुंजी नहीं है। अपने ऐप के साथ एकीकृत करने के लिए एक बनाएं।';
 
   @override
   String get createKeyToGetStarted => 'Create a key to get started';
@@ -4168,4 +4168,55 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get permissionDeniedForAppleReminders => 'Apple Reminders के लिए अनुमति अस्वीकृत';
+
+  @override
+  String failedToCreateApiKey(String error) {
+    return 'प्रदाता API कुंजी बनाने में विफल: $error';
+  }
+
+  @override
+  String get createAKey => 'एक कुंजी बनाएं';
+
+  @override
+  String get apiKeyRevokedSuccessfully => 'API कुंजी सफलतापूर्वक रद्द की गई';
+
+  @override
+  String failedToRevokeApiKey(String error) {
+    return 'API कुंजी रद्द करने में विफल: $error';
+  }
+
+  @override
+  String get omiApiKeys => 'Omi API कुंजियाँ';
+
+  @override
+  String get apiKeysDescription =>
+      'API कुंजियाँ प्रमाणीकरण के लिए उपयोग की जाती हैं जब आपका ऐप OMI सर्वर के साथ संवाद करता है। वे आपके एप्लिकेशन को यादें बनाने और अन्य OMI सेवाओं तक सुरक्षित रूप से पहुंचने की अनुमति देती हैं।';
+
+  @override
+  String get aboutOmiApiKeys => 'Omi API कुंजियों के बारे में';
+
+  @override
+  String get yourNewKey => 'आपकी नई कुंजी:';
+
+  @override
+  String get copyToClipboard => 'क्लिपबोर्ड पर कॉपी करें';
+
+  @override
+  String get pleaseCopyKeyNow => 'कृपया इसे अभी कॉपी करें और कहीं सुरक्षित जगह लिख लें। ';
+
+  @override
+  String get willNotSeeAgain => 'आप इसे फिर से नहीं देख पाएंगे।';
+
+  @override
+  String get revokeKey => 'कुंजी रद्द करें';
+
+  @override
+  String get revokeApiKeyQuestion => 'API कुंजी रद्द करें?';
+
+  @override
+  String get revokeApiKeyWarning =>
+      'यह क्रिया वापस नहीं की जा सकती। इस कुंजी का उपयोग करने वाले कोई भी एप्लिकेशन अब API तक नहीं पहुंच पाएंगे।';
+
+  @override
+  String get revoke => 'रद्द करें';
 }

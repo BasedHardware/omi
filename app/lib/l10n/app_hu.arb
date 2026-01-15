@@ -3020,5 +3020,21 @@
   "addingToService": "Hozzáadás a {serviceName} szolgáltatáshoz...",
   "addedToService": "Hozzáadva a {serviceName} szolgáltatáshoz",
   "failedToAddToService": "Nem sikerült hozzáadni a {serviceName} szolgáltatáshoz",
-  "permissionDeniedForAppleReminders": "Engedély megtagadva az Apple Emlékeztetők számára"
+  "permissionDeniedForAppleReminders": "Engedély megtagadva az Apple Emlékeztetők számára",
+  "failedToCreateApiKey": "Nem sikerült létrehozni a szolgáltató API-kulcsát: {error}",
+  "createAKey": "Kulcs létrehozása",
+  "apiKeyRevokedSuccessfully": "API-kulcs sikeresen visszavonva",
+  "failedToRevokeApiKey": "Nem sikerült visszavonni az API-kulcsot: {error}",
+  "omiApiKeys": "Omi API-kulcsok",
+  "apiKeysDescription": "Az API-kulcsokat hitelesítésre használják, amikor az alkalmazásod kommunikál az OMI szerverrel. Lehetővé teszik az alkalmazásod számára, hogy emlékeket hozzon létre és biztonságosan hozzáférjen más OMI szolgáltatásokhoz.",
+  "aboutOmiApiKeys": "Az Omi API-kulcsokról",
+  "noApiKeysYet": "Még nincsenek API-kulcsok. Hozzon létre egyet az alkalmazásával való integrációhoz.",
+  "yourNewKey": "Az új kulcsod:",
+  "copyToClipboard": "Másolás a vágólapra",
+  "pleaseCopyKeyNow": "Kérjük, másold le most és írd le valahova biztonságos helyre. ",
+  "willNotSeeAgain": "Nem fogod tudni újra látni.",
+  "revokeKey": "Kulcs visszavonása",
+  "revokeApiKeyQuestion": "API-kulcs visszavonása?",
+  "revokeApiKeyWarning": "Ez a művelet nem vonható vissza. Az ezt a kulcsot használó alkalmazások többé nem férhetnek hozzá az API-hoz.",
+  "revoke": "Visszavonás"
 }

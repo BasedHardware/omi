@@ -3020,5 +3020,21 @@
   "addingToService": "Tilføjer til {serviceName}...",
   "addedToService": "Tilføjet til {serviceName}",
   "failedToAddToService": "Kunne ikke tilføje til {serviceName}",
-  "permissionDeniedForAppleReminders": "Tilladelse afvist for Apple Reminders"
+  "permissionDeniedForAppleReminders": "Tilladelse afvist for Apple Reminders",
+  "failedToCreateApiKey": "Kunne ikke oprette udbyderens API-nøgle: {error}",
+  "createAKey": "Opret en nøgle",
+  "apiKeyRevokedSuccessfully": "API-nøgle tilbagekaldt",
+  "failedToRevokeApiKey": "Kunne ikke tilbagekalde API-nøgle: {error}",
+  "omiApiKeys": "Omi API-nøgler",
+  "apiKeysDescription": "API-nøgler bruges til godkendelse, når din app kommunikerer med OMI-serveren. De gør det muligt for din applikation at oprette minder og få sikker adgang til andre OMI-tjenester.",
+  "aboutOmiApiKeys": "Om Omi API-nøgler",
+  "noApiKeysYet": "Ingen API-nøgler endnu. Opret en for at integrere med din app.",
+  "yourNewKey": "Din nye nøgle:",
+  "copyToClipboard": "Kopiér til udklipsholder",
+  "pleaseCopyKeyNow": "Kopiér den nu og skriv den ned et sikkert sted. ",
+  "willNotSeeAgain": "Du vil ikke kunne se den igen.",
+  "revokeKey": "Tilbagekald nøgle",
+  "revokeApiKeyQuestion": "Tilbagekald API-nøgle?",
+  "revokeApiKeyWarning": "Denne handling kan ikke fortrydes. Alle applikationer, der bruger denne nøgle, vil ikke længere kunne få adgang til API'et.",
+  "revoke": "Tilbagekald"
 }

@@ -2440,7 +2440,7 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get noApiKeysYet => 'No API keys yet';
+  String get noApiKeysYet => 'Noch keine API-Schlüssel. Erstellen Sie einen zur Integration mit Ihrer App.';
 
   @override
   String get createKeyToGetStarted => 'Create a key to get started';
@@ -4224,4 +4224,55 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get permissionDeniedForAppleReminders => 'Berechtigung für Apple Erinnerungen verweigert';
+
+  @override
+  String failedToCreateApiKey(String error) {
+    return 'Fehler beim Erstellen des Anbieter-API-Schlüssels: $error';
+  }
+
+  @override
+  String get createAKey => 'Schlüssel erstellen';
+
+  @override
+  String get apiKeyRevokedSuccessfully => 'API-Schlüssel erfolgreich widerrufen';
+
+  @override
+  String failedToRevokeApiKey(String error) {
+    return 'Fehler beim Widerrufen des API-Schlüssels: $error';
+  }
+
+  @override
+  String get omiApiKeys => 'Omi API-Schlüssel';
+
+  @override
+  String get apiKeysDescription =>
+      'API-Schlüssel werden zur Authentifizierung verwendet, wenn Ihre App mit dem OMI-Server kommuniziert. Sie ermöglichen Ihrer Anwendung, Erinnerungen zu erstellen und sicher auf andere OMI-Dienste zuzugreifen.';
+
+  @override
+  String get aboutOmiApiKeys => 'Über Omi API-Schlüssel';
+
+  @override
+  String get yourNewKey => 'Ihr neuer Schlüssel:';
+
+  @override
+  String get copyToClipboard => 'In Zwischenablage kopieren';
+
+  @override
+  String get pleaseCopyKeyNow => 'Bitte kopieren Sie ihn jetzt und notieren Sie ihn an einem sicheren Ort. ';
+
+  @override
+  String get willNotSeeAgain => 'Sie werden ihn nicht wieder sehen können.';
+
+  @override
+  String get revokeKey => 'Schlüssel widerrufen';
+
+  @override
+  String get revokeApiKeyQuestion => 'API-Schlüssel widerrufen?';
+
+  @override
+  String get revokeApiKeyWarning =>
+      'Diese Aktion kann nicht rückgängig gemacht werden. Alle Anwendungen, die diesen Schlüssel verwenden, können nicht mehr auf die API zugreifen.';
+
+  @override
+  String get revoke => 'Widerrufen';
 }

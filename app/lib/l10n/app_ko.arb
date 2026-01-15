@@ -3020,5 +3020,21 @@
   "addingToService": "{serviceName}에 추가 중...",
   "addedToService": "{serviceName}에 추가됨",
   "failedToAddToService": "{serviceName}에 추가 실패",
-  "permissionDeniedForAppleReminders": "Apple 미리 알림 권한이 거부됨"
+  "permissionDeniedForAppleReminders": "Apple 미리 알림 권한이 거부됨",
+  "failedToCreateApiKey": "공급자 API 키 생성 실패: {error}",
+  "createAKey": "키 생성",
+  "apiKeyRevokedSuccessfully": "API 키가 성공적으로 취소됨",
+  "failedToRevokeApiKey": "API 키 취소 실패: {error}",
+  "omiApiKeys": "Omi API 키",
+  "apiKeysDescription": "API 키는 앱이 OMI 서버와 통신할 때 인증에 사용됩니다. 애플리케이션이 메모리를 생성하고 다른 OMI 서비스에 안전하게 접근할 수 있게 합니다.",
+  "aboutOmiApiKeys": "Omi API 키 정보",
+  "noApiKeysYet": "아직 API 키가 없습니다. 앱과 통합하려면 하나를 만드세요.",
+  "yourNewKey": "새 키:",
+  "copyToClipboard": "클립보드에 복사",
+  "pleaseCopyKeyNow": "지금 복사하여 안전한 곳에 적어두세요. ",
+  "willNotSeeAgain": "다시 볼 수 없습니다.",
+  "revokeKey": "키 취소",
+  "revokeApiKeyQuestion": "API 키를 취소하시겠습니까?",
+  "revokeApiKeyWarning": "이 작업은 취소할 수 없습니다. 이 키를 사용하는 애플리케이션은 더 이상 API에 접근할 수 없습니다.",
+  "revoke": "취소"
 }

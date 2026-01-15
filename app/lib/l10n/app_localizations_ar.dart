@@ -4158,4 +4158,55 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get permissionDeniedForAppleReminders => 'تم رفض الإذن لتذكيرات Apple';
+
+  @override
+  String failedToCreateApiKey(String error) {
+    return 'فشل إنشاء مفتاح API للمزود: $error';
+  }
+
+  @override
+  String get createAKey => 'إنشاء مفتاح';
+
+  @override
+  String get apiKeyRevokedSuccessfully => 'تم إلغاء مفتاح API بنجاح';
+
+  @override
+  String failedToRevokeApiKey(String error) {
+    return 'فشل إلغاء مفتاح API: $error';
+  }
+
+  @override
+  String get omiApiKeys => 'مفاتيح Omi API';
+
+  @override
+  String get apiKeysDescription =>
+      'تُستخدم مفاتيح API للمصادقة عندما يتواصل تطبيقك مع خادم OMI. تسمح لتطبيقك بإنشاء ذكريات والوصول إلى خدمات OMI الأخرى بأمان.';
+
+  @override
+  String get aboutOmiApiKeys => 'حول مفاتيح Omi API';
+
+  @override
+  String get yourNewKey => 'مفتاحك الجديد:';
+
+  @override
+  String get copyToClipboard => 'نسخ إلى الحافظة';
+
+  @override
+  String get pleaseCopyKeyNow => 'يرجى نسخه الآن وكتابته في مكان آمن. ';
+
+  @override
+  String get willNotSeeAgain => 'لن تتمكن من رؤيته مرة أخرى.';
+
+  @override
+  String get revokeKey => 'إلغاء المفتاح';
+
+  @override
+  String get revokeApiKeyQuestion => 'إلغاء مفتاح API؟';
+
+  @override
+  String get revokeApiKeyWarning =>
+      'لا يمكن التراجع عن هذا الإجراء. لن تتمكن أي تطبيقات تستخدم هذا المفتاح من الوصول إلى API بعد الآن.';
+
+  @override
+  String get revoke => 'إلغاء';
 }

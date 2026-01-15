@@ -3020,5 +3020,21 @@
   "addingToService": "กำลังเพิ่มไปยัง {serviceName}...",
   "addedToService": "เพิ่มไปยัง {serviceName} แล้ว",
   "failedToAddToService": "ไม่สามารถเพิ่มไปยัง {serviceName}",
-  "permissionDeniedForAppleReminders": "ถูกปฏิเสธสิทธิ์สำหรับ Apple Reminders"
+  "permissionDeniedForAppleReminders": "ถูกปฏิเสธสิทธิ์สำหรับ Apple Reminders",
+  "failedToCreateApiKey": "ไม่สามารถสร้างคีย์ API ของผู้ให้บริการ: {error}",
+  "createAKey": "สร้างคีย์",
+  "apiKeyRevokedSuccessfully": "เพิกถอนคีย์ API สำเร็จ",
+  "failedToRevokeApiKey": "ไม่สามารถเพิกถอนคีย์ API: {error}",
+  "omiApiKeys": "คีย์ API ของ Omi",
+  "apiKeysDescription": "คีย์ API ใช้สำหรับการยืนยันตัวตนเมื่อแอปของคุณสื่อสารกับเซิร์ฟเวอร์ OMI ช่วยให้แอปพลิเคชันของคุณสร้างความทรงจำและเข้าถึงบริการ OMI อื่นๆ ได้อย่างปลอดภัย",
+  "aboutOmiApiKeys": "เกี่ยวกับคีย์ API ของ Omi",
+  "noApiKeysYet": "ยังไม่มีคีย์ API สร้างคีย์เพื่อเชื่อมต่อกับแอปของคุณ",
+  "yourNewKey": "คีย์ใหม่ของคุณ:",
+  "copyToClipboard": "คัดลอกไปยังคลิปบอร์ด",
+  "pleaseCopyKeyNow": "กรุณาคัดลอกตอนนี้และจดไว้ในที่ปลอดภัย ",
+  "willNotSeeAgain": "คุณจะไม่สามารถดูได้อีก",
+  "revokeKey": "เพิกถอนคีย์",
+  "revokeApiKeyQuestion": "เพิกถอนคีย์ API?",
+  "revokeApiKeyWarning": "การดำเนินการนี้ไม่สามารถยกเลิกได้ แอปพลิเคชันใดๆ ที่ใช้คีย์นี้จะไม่สามารถเข้าถึง API ได้อีกต่อไป",
+  "revoke": "เพิกถอน"
 }
