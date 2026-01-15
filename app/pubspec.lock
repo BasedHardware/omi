@@ -2570,10 +2570,11 @@ packages:
   whisper_flutter_new:
     dependency: "direct main"
     description:
-      name: whisper_flutter_new
-      sha256: "56f5449cd459ed9bbb9d3641aae6a72ed594e1a200f56b1939891996fbd7dd4d"
-      url: "https://pub.dev"
-    source: hosted
+      path: "."
+      ref: "fix/android-16kb-page-size"
+      resolved-ref: "026cfc7e9b42432d3cd7f1e9da5cfd21425aef28"
+      url: "https://github.com/BasedHardware/whisper_flutter_new.git"
+    source: git
     version: "1.0.1"
   win32:
     dependency: transitive
