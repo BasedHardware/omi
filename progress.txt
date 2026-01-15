@@ -65,7 +65,7 @@ MEDIUM PRIORITY - Widgets and Components
 [✓] app/lib/pages/apps/widgets/app_metadata_widget.dart
     Strings: Form labels and validation messages
 
-[ ] app/lib/pages/apps/widgets/create_options_sheet.dart
+[✓] app/lib/pages/apps/widgets/create_options_sheet.dart
     Strings: Options-related strings
 
 [ ] app/lib/pages/apps/widgets/show_app_options_sheet.dart
@@ -1027,12 +1027,24 @@ Notes: Localized app metadata form widget including App ID field with copy butto
        required field asterisks (e.g., "${context.l10n.appNameLabel}*").
 Commit: 38a51737a
 
+FILE 80 (Phase 2 FILE 10): create_options_sheet.dart
+-----------------------------------------------------
+Location: app/lib/pages/apps/widgets/
+Keys Added: 5 (new) + 0 (reused) = 5 total
+New Keys: whatWouldYouLikeToCreate, createAnApp, createAndShareYourApp,
+         createMyClone, createYourDigitalClone
+Script: /tmp/translate_create_options_keys.py
+Status: ✅ COMPLETED
+Notes: Localized create options bottom sheet with title and two option cards
+       (Create an App, Create my Clone) including their titles and subtitles.
+Commit: 22a624c68
+
 ================================================================================
 END OF PROGRESS TRACKER
 ================================================================================
 Last Updated: 2026-01-15
-Last Completed: FILE 79 - app_metadata_widget.dart (0 new keys + 12 reused, 100% key reuse)
-Previous Completed: FILE 78 - api_keys_widget.dart (16 new keys + 7 reused, 544 new translations)
+Last Completed: FILE 80 - create_options_sheet.dart (5 new keys, 170 new translations)
+Previous Completed: FILE 79 - app_metadata_widget.dart (0 new keys + 12 reused, 100% key reuse)
 Current Session: Phase 2 - Mobile/Pages localization in progress
 
 🎉 PHASE 1 (DESKTOP) COMPLETE! 🎉
@@ -1042,5 +1054,5 @@ Current Session: Phase 2 - Mobile/Pages localization in progress
 
 📋 PHASE 2 (MOBILE/PAGES) IN PROGRESS
 59 files identified with hardcoded strings
-Files Completed: 9
+Files Completed: 10
 Estimated 200-300 new keys needed
