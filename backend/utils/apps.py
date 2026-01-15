@@ -169,7 +169,10 @@ def get_popular_apps() -> List[App]:
             # Database query
             print('get_popular_apps from db')
             popular_apps = get_popular_apps_db()
-            set_generic_cache(cache_key, popular_apps, 60 * 30)  # 30 minutes cached
+            # Reduce cache size by excluding large fields
+            reduced_apps = [App.reduce_dict(app) for app in popular_apps]
+            set_generic_cache(cache_key, reduced_apps, 60 * 30)  # 30 minutes cached
+            popular_apps = reduced_apps
 
         # Process apps (add installs, reviews, ratings)
         app_ids = [app['id'] for app in popular_apps]
@@ -206,8 +209,10 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
             return data
         print('get_public_approved_apps_data from db')
         data = get_public_approved_apps_db()
-        set_generic_cache(cache_key, data, 60 * 10)  # 10 minutes cached
-        return data
+        # Reduce cache size by excluding large fields
+        reduced_data = [App.reduce_dict(app) for app in data]
+        set_generic_cache(cache_key, reduced_data, 60 * 10)  # 10 minutes cached
+        return reduced_data
 
     # Singleflight: only ONE request fetches, others wait
     public_approved_data = memory_cache.get_or_fetch(cache_key, fetch_public_approved, ttl=30) or []
@@ -340,7 +345,10 @@ def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
             # Database query
             print('get_public_approved_apps_data from db')
             all_apps = get_public_approved_apps_db()
-            set_generic_cache(redis_cache_key, all_apps, 60 * 10)  # 10 minutes cached
+            # Reduce cache size by excluding large fields
+            reduced_apps = [App.reduce_dict(app) for app in all_apps]
+            set_generic_cache(redis_cache_key, reduced_apps, 60 * 10)  # 10 minutes cached
+            all_apps = reduced_apps
 
         # Process apps (add installs, reviews, etc.)
         app_ids = [app['id'] for app in all_apps]
@@ -1130,7 +1138,7 @@ def build_capability_groups_response(
                     'id': capability_id,
                     'title': id_to_title.get(capability_id, capability_id.title().replace('_', ' ')),
                 },
-                'data': [normalize_app_numeric_fields(app.model_dump(mode='json')) for app in page],
+                'data': [normalize_app_numeric_fields(app.to_reduced_dict()) for app in page],
                 'pagination': build_pagination_metadata(total, offset, limit, capability_id),
             }
         )
@@ -1250,7 +1258,7 @@ def build_capability_category_groups_response(grouped_apps: Dict[str, List[App]]
                     'id': category_id,
                     'title': title,
                 },
-                'data': [normalize_app_numeric_fields(app.model_dump(mode='json')) for app in apps],
+                'data': [normalize_app_numeric_fields(app.to_reduced_dict()) for app in apps],
                 'count': len(apps),
             }
         )
