@@ -59,7 +59,7 @@ MEDIUM PRIORITY - Widgets and Components
 [✓] app/lib/pages/action_items/widgets/action_item_tile_widget.dart
     Strings: Action item strings
 
-[ ] app/lib/pages/apps/widgets/api_keys_widget.dart
+[✓] app/lib/pages/apps/widgets/api_keys_widget.dart
     Strings: API key related strings
 
 [ ] app/lib/pages/apps/widgets/app_metadata_widget.dart
@@ -993,12 +993,29 @@ Notes: Localized action item tile component with date/time formatting, task
        for task service names to reduce key count.
 Commit: 420b924ce
 
+FILE 78 (Phase 2 FILE 8): api_keys_widget.dart
+-----------------------------------------------
+Location: app/lib/pages/apps/widgets/
+Keys Added: 16 (new) + 7 (reused) = 23 total
+New Keys: failedToCreateApiKey (parameterized), createAKey, apiKeyRevokedSuccessfully,
+         failedToRevokeApiKey (parameterized), omiApiKeys, apiKeysDescription,
+         aboutOmiApiKeys, noApiKeysYet, yourNewKey, copyToClipboard,
+         pleaseCopyKeyNow, willNotSeeAgain, revokeKey, revokeApiKeyQuestion,
+         revokeApiKeyWarning, revoke
+Reused Keys: apiKeys, done, cancel, gotIt, creating, createKey, copiedToClipboard
+Script: /tmp/translate_api_keys_widget.py
+Status: ✅ COMPLETED
+Notes: Localized API keys management widget including create/revoke dialogs,
+       error messages, empty state, and key display with copy functionality.
+       Used parameterized translations for error messages with dynamic content.
+Commit: b34cf5401
+
 ================================================================================
 END OF PROGRESS TRACKER
 ================================================================================
 Last Updated: 2026-01-15
-Last Completed: FILE 77 - action_item_tile_widget.dart (15 new keys + 18 reused, 510 new translations)
-Previous Completed: FILE 76 - share.dart (6 new keys + 7 reused, 204 new translations)
+Last Completed: FILE 78 - api_keys_widget.dart (16 new keys + 7 reused, 544 new translations)
+Previous Completed: FILE 77 - action_item_tile_widget.dart (15 new keys + 18 reused, 510 new translations)
 Current Session: Phase 2 - Mobile/Pages localization in progress
 
 🎉 PHASE 1 (DESKTOP) COMPLETE! 🎉
@@ -1008,5 +1025,5 @@ Current Session: Phase 2 - Mobile/Pages localization in progress
 
 📋 PHASE 2 (MOBILE/PAGES) IN PROGRESS
 59 files identified with hardcoded strings
-Files Completed: 7
+Files Completed: 8
 Estimated 200-300 new keys needed
