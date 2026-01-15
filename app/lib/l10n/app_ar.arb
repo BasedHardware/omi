@@ -1,0 +1,2317 @@
+{
+  "@@locale": "ar",
+  "@@last_modified": "2026-01-13",
+  "appTitle": "Omi",
+  "@appTitle": {
+    "description": "The app title displayed in various places"
+  },
+  "conversationTab": "المحادثة",
+  "@conversationTab": {
+    "description": "Tab label for conversation summary"
+  },
+  "transcriptTab": "النص المكتوب",
+  "@transcriptTab": {
+    "description": "Tab label for transcript view"
+  },
+  "actionItemsTab": "المهام",
+  "@actionItemsTab": {
+    "description": "Tab label for action items"
+  },
+  "deleteConversationTitle": "حذف المحادثة؟",
+  "@deleteConversationTitle": {
+    "description": "Title for delete confirmation dialog"
+  },
+  "deleteConversationMessage": "هل أنت متأكد من رغبتك في حذف هذه المحادثة؟ لا يمكن التراجع عن هذا الإجراء.",
+  "@deleteConversationMessage": {
+    "description": "Message for delete confirmation dialog"
+  },
+  "confirm": "تأكيد",
+  "@confirm": {
+    "description": "Confirm button label"
+  },
+  "cancel": "إلغاء",
+  "@cancel": {
+    "description": "Button label"
+  },
+  "ok": "حسناً",
+  "@ok": {
+    "description": "Generic OK button text"
+  },
+  "delete": "حذف",
+  "@delete": {
+    "description": "Button label"
+  },
+  "add": "إضافة",
+  "@add": {
+    "description": "Add button label"
+  },
+  "update": "تحديث",
+  "@update": {
+    "description": "Update button label"
+  },
+  "save": "حفظ",
+  "@save": {
+    "description": "Save button label"
+  },
+  "edit": "تعديل",
+  "@edit": {
+    "description": "Edit button/action label"
+  },
+  "close": "إغلاق",
+  "@close": {
+    "description": "Close button label"
+  },
+  "clear": "مسح",
+  "@clear": {
+    "description": "Clear button label"
+  },
+  "copyTranscript": "نسخ النص المكتوب",
+  "@copyTranscript": {
+    "description": "Menu item to copy transcript"
+  },
+  "copySummary": "نسخ الملخص",
+  "@copySummary": {
+    "description": "Menu item to copy summary"
+  },
+  "testPrompt": "اختبار الأمر",
+  "@testPrompt": {
+    "description": "Menu item for testing prompts"
+  },
+  "reprocessConversation": "إعادة معالجة المحادثة",
+  "@reprocessConversation": {
+    "description": "Menu item to reprocess a conversation"
+  },
+  "deleteConversation": "حذف المحادثة",
+  "@deleteConversation": {
+    "description": "Menu item to delete a conversation"
+  },
+  "contentCopied": "تم نسخ المحتوى إلى الحافظة",
+  "@contentCopied": {
+    "description": "Snackbar message when content is copied"
+  },
+  "failedToUpdateStarred": "فشل تحديث حالة التمييز بنجمة.",
+  "@failedToUpdateStarred": {
+    "description": "Error message when starring fails"
+  },
+  "conversationUrlNotShared": "تعذرت مشاركة رابط المحادثة.",
+  "@conversationUrlNotShared": {
+    "description": "Error message when sharing fails"
+  },
+  "errorProcessingConversation": "خطأ أثناء معالجة المحادثة. يرجى المحاولة مرة أخرى لاحقاً.",
+  "@errorProcessingConversation": {
+    "description": "Error message for conversation processing failure"
+  },
+  "noInternetConnection": "يرجى التحقق من اتصالك بالإنترنت والمحاولة مرة أخرى.",
+  "@noInternetConnection": {
+    "description": "Message shown when there's no internet"
+  },
+  "unableToDeleteConversation": "تعذر حذف المحادثة",
+  "@unableToDeleteConversation": {
+    "description": "Title for delete error dialog"
+  },
+  "somethingWentWrong": "حدث خطأ ما! يرجى المحاولة مرة أخرى لاحقاً.",
+  "@somethingWentWrong": {
+    "description": "Generic error message"
+  },
+  "copyErrorMessage": "نسخ رسالة الخطأ",
+  "@copyErrorMessage": {
+    "description": "Button to copy error details"
+  },
+  "errorCopied": "تم نسخ رسالة الخطأ إلى الحافظة",
+  "@errorCopied": {
+    "description": "Snackbar message after copying error"
+  },
+  "remaining": "المتبقي",
+  "@remaining": {
+    "description": "Label for remaining time/items"
+  },
+  "loading": "جاري التحميل...",
+  "@loading": {
+    "description": "Loading indicator text"
+  },
+  "loadingDuration": "جاري تحميل المدة...",
+  "@loadingDuration": {
+    "description": "Loading duration indicator"
+  },
+  "secondsCount": "{count} ثانية",
+  "@secondsCount": {
+    "description": "Duration in seconds",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "30"
+      }
+    }
+  },
+  "people": "الأشخاص",
+  "@people": {
+    "description": "People section title"
+  },
+  "addNewPerson": "إضافة شخص جديد",
+  "@addNewPerson": {
+    "description": "Title for add person dialog"
+  },
+  "editPerson": "تعديل الشخص",
+  "@editPerson": {
+    "description": "Title for edit person dialog"
+  },
+  "createPersonHint": "أنشئ شخصاً جديداً ودرب Omi على التعرف على صوته أيضاً!",
+  "@createPersonHint": {
+    "description": "Hint text for creating a person"
+  },
+  "speechProfile": "ملف الصوت",
+  "@speechProfile": {
+    "description": "Speech profile label"
+  },
+  "sampleNumber": "عينة {number}",
+  "@sampleNumber": {
+    "description": "Label for speech sample",
+    "placeholders": {
+      "number": {
+        "type": "int",
+        "example": "1"
+      }
+    }
+  },
+  "settings": "الإعدادات",
+  "@settings": {
+    "description": "Settings page title"
+  },
+  "language": "اللغة",
+  "@language": {
+    "description": "Language setting label"
+  },
+  "selectLanguage": "اختر اللغة",
+  "@selectLanguage": {
+    "description": "Title for language selection"
+  },
+  "deleting": "جاري الحذف...",
+  "@deleting": {
+    "description": "Deleting in progress indicator"
+  },
+  "pleaseCompleteAuthentication": "يرجى إكمال المصادقة في متصفحك. بعد الانتهاء، ارجع إلى التطبيق.",
+  "@pleaseCompleteAuthentication": {
+    "description": "Message shown during OAuth flow"
+  },
+  "failedToStartAuthentication": "فشل بدء المصادقة",
+  "@failedToStartAuthentication": {
+    "description": "Error when OAuth fails to start"
+  },
+  "importStarted": "بدأ الاستيراد! سيتم إشعارك عند اكتماله.",
+  "@importStarted": {
+    "description": "Success message when import begins"
+  },
+  "failedToStartImport": "فشل بدء الاستيراد. يرجى المحاولة مرة أخرى.",
+  "@failedToStartImport": {
+    "description": "Error when import fails to start"
+  },
+  "couldNotAccessFile": "تعذر الوصول إلى الملف المحدد",
+  "@couldNotAccessFile": {
+    "description": "Error when file access fails"
+  },
+  "askOmi": "اسأل Omi",
+  "@askOmi": {
+    "description": "Chat button label"
+  },
+  "done": "تم",
+  "@done": {
+    "description": "Button label"
+  },
+  "disconnected": "غير متصل",
+  "@disconnected": {
+    "description": "Device disconnected status"
+  },
+  "searching": "جاري البحث",
+  "@searching": {
+    "description": "Searching for device status"
+  },
+  "connectDevice": "توصيل جهاز",
+  "@connectDevice": {
+    "description": "Button to connect a device"
+  },
+  "monthlyLimitReached": "لقد وصلت إلى الحد الشهري.",
+  "@monthlyLimitReached": {
+    "description": "Message when usage limit is reached"
+  },
+  "checkUsage": "التحقق من الاستخدام",
+  "@checkUsage": {
+    "description": "Button to check usage details"
+  },
+  "syncingRecordings": "مزامنة التسجيلات",
+  "@syncingRecordings": {
+    "description": "Title when sync is in progress"
+  },
+  "recordingsToSync": "التسجيلات المراد مزامنتها",
+  "@recordingsToSync": {
+    "description": "Title when there are recordings to sync"
+  },
+  "allCaughtUp": "كل شيء محدث",
+  "@allCaughtUp": {
+    "description": "Title when everything is synced"
+  },
+  "sync": "مزامنة",
+  "@sync": {
+    "description": "Sync button label"
+  },
+  "pendantUpToDate": "القلادة محدثة",
+  "@pendantUpToDate": {
+    "description": "Status when pendant is synced"
+  },
+  "allRecordingsSynced": "جميع التسجيلات متزامنة",
+  "@allRecordingsSynced": {
+    "description": "Status text when sync is complete"
+  },
+  "syncingInProgress": "المزامنة قيد التنفيذ",
+  "@syncingInProgress": {
+    "description": "Status when sync is happening"
+  },
+  "readyToSync": "جاهز للمزامنة",
+  "@readyToSync": {
+    "description": "Status when ready to sync"
+  },
+  "tapSyncToStart": "اضغط على مزامنة للبدء",
+  "@tapSyncToStart": {
+    "description": "Hint to start sync"
+  },
+  "pendantNotConnected": "القلادة غير متصلة. قم بالتوصيل للمزامنة.",
+  "@pendantNotConnected": {
+    "description": "Warning when pendant is not connected"
+  },
+  "everythingSynced": "كل شيء متزامن بالفعل.",
+  "@everythingSynced": {
+    "description": "Message when all is synced"
+  },
+  "recordingsNotSynced": "لديك تسجيلات لم تتم مزامنتها بعد.",
+  "@recordingsNotSynced": {
+    "description": "Message when there are unsynced recordings"
+  },
+  "syncingBackground": "سنستمر في مزامنة تسجيلاتك في الخلفية.",
+  "@syncingBackground": {
+    "description": "Message during background sync"
+  },
+  "noConversationsYet": "لا توجد محادثات بعد.",
+  "@noConversationsYet": {
+    "description": "Empty state when no conversations exist"
+  },
+  "noStarredConversations": "لا توجد محادثات مميزة بنجمة بعد.",
+  "@noStarredConversations": {
+    "description": "Empty state for starred filter"
+  },
+  "starConversationHint": "لتمييز محادثة بنجمة، افتحها واضغط على أيقونة النجمة في الرأس.",
+  "@starConversationHint": {
+    "description": "Hint explaining how to star conversations"
+  },
+  "searchConversations": "بحث في المحادثات",
+  "@searchConversations": {
+    "description": "Search field placeholder"
+  },
+  "selectedCount": "{count} محدد",
+  "@selectedCount": {
+    "description": "Selection count label",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "merge": "دمج",
+  "@merge": {
+    "description": "Merge button label"
+  },
+  "mergeConversations": "دمج المحادثات",
+  "@mergeConversations": {
+    "description": "Merge dialog title"
+  },
+  "mergeConversationsMessage": "سيؤدي هذا إلى دمج {count} محادثة في واحدة. سيتم دمج وإعادة إنشاء جميع المحتويات.",
+  "@mergeConversationsMessage": {
+    "description": "Merge confirmation message",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mergingInBackground": "جاري الدمج في الخلفية. قد يستغرق هذا لحظة.",
+  "@mergingInBackground": {
+    "description": "Snackbar message during merge"
+  },
+  "failedToStartMerge": "فشل بدء الدمج",
+  "@failedToStartMerge": {
+    "description": "Error message when merge fails"
+  },
+  "askAnything": "اسأل أي شيء",
+  "@askAnything": {
+    "description": "Chat input placeholder"
+  },
+  "noMessagesYet": "لا توجد رسائل بعد!\nلماذا لا تبدأ محادثة؟",
+  "@noMessagesYet": {
+    "description": "Empty chat state message"
+  },
+  "deletingMessages": "جاري حذف رسائلك من ذاكرة Omi...",
+  "@deletingMessages": {
+    "description": "Loading text while clearing chat"
+  },
+  "messageCopied": "تم نسخ الرسالة إلى الحافظة.",
+  "@messageCopied": {
+    "description": "Snackbar after copying message"
+  },
+  "cannotReportOwnMessage": "لا يمكنك الإبلاغ عن رسائلك الخاصة.",
+  "@cannotReportOwnMessage": {
+    "description": "Error when trying to report own message"
+  },
+  "reportMessage": "الإبلاغ عن رسالة",
+  "@reportMessage": {
+    "description": "Report message dialog title"
+  },
+  "reportMessageConfirm": "هل أنت متأكد من رغبتك في الإبلاغ عن هذه الرسالة؟",
+  "@reportMessageConfirm": {
+    "description": "Report message confirmation"
+  },
+  "messageReported": "تم الإبلاغ عن الرسالة بنجاح.",
+  "@messageReported": {
+    "description": "Confirmation after reporting message"
+  },
+  "thankYouFeedback": "شكراً لك على ملاحظاتك!",
+  "@thankYouFeedback": {
+    "description": "After thumbs up/down feedback"
+  },
+  "clearChat": "مسح المحادثة؟",
+  "@clearChat": {
+    "description": "Clear chat dialog title"
+  },
+  "clearChatConfirm": "هل أنت متأكد من رغبتك في مسح المحادثة؟ لا يمكن التراجع عن هذا الإجراء.",
+  "@clearChatConfirm": {
+    "description": "Clear chat confirmation message"
+  },
+  "maxFilesLimit": "يمكنك تحميل 4 ملفات فقط في كل مرة",
+  "@maxFilesLimit": {
+    "description": "Max files upload warning"
+  },
+  "chatWithOmi": "الدردشة مع Omi",
+  "@chatWithOmi": {
+    "description": "Chat share subject"
+  },
+  "apps": "التطبيقات",
+  "@apps": {
+    "description": "Apps page title"
+  },
+  "noAppsFound": "لم يتم العثور على تطبيقات",
+  "@noAppsFound": {
+    "description": "Empty state when no apps match"
+  },
+  "tryAdjustingSearch": "حاول تعديل البحث أو الفلاتر",
+  "@tryAdjustingSearch": {
+    "description": "Hint when no apps found"
+  },
+  "createYourOwnApp": "أنشئ تطبيقك الخاص",
+  "@createYourOwnApp": {
+    "description": "Create app button title"
+  },
+  "buildAndShareApp": "أنشئ وشارك تطبيقك المخصص",
+  "@buildAndShareApp": {
+    "description": "Create app button subtitle"
+  },
+  "searchApps": "بحث في أكثر من 1500 تطبيق",
+  "@searchApps": {
+    "description": "Apps search placeholder"
+  },
+  "myApps": "تطبيقاتي",
+  "@myApps": {
+    "description": "My Apps filter button"
+  },
+  "installedApps": "التطبيقات المثبتة",
+  "@installedApps": {
+    "description": "Installed Apps filter button"
+  },
+  "unableToFetchApps": "تعذر جلب التطبيقات :(\n\nيرجى التحقق من اتصالك بالإنترنت والمحاولة مرة أخرى.",
+  "@unableToFetchApps": {
+    "description": "Error when apps fail to load"
+  },
+  "aboutOmi": "عن Omi",
+  "@aboutOmi": {
+    "description": "About page title"
+  },
+  "privacyPolicy": "سياسة الخصوصية",
+  "@privacyPolicy": {
+    "description": "Link text for Privacy Policy"
+  },
+  "visitWebsite": "زيارة الموقع",
+  "@visitWebsite": {
+    "description": "Visit website link"
+  },
+  "helpOrInquiries": "مساعدة أو استفسارات؟",
+  "@helpOrInquiries": {
+    "description": "Help link title"
+  },
+  "joinCommunity": "انضم إلى المجتمع!",
+  "@joinCommunity": {
+    "description": "Discord community link"
+  },
+  "membersAndCounting": "أكثر من 8000 عضو وما زال العدد في ازدياد.",
+  "@membersAndCounting": {
+    "description": "Discord member count"
+  },
+  "deleteAccountTitle": "حذف الحساب",
+  "@deleteAccountTitle": {
+    "description": "Delete account page title"
+  },
+  "deleteAccountConfirm": "هل أنت متأكد من رغبتك في حذف حسابك؟",
+  "@deleteAccountConfirm": {
+    "description": "Delete account confirmation"
+  },
+  "cannotBeUndone": "لا يمكن التراجع عن هذا.",
+  "@cannotBeUndone": {
+    "description": "Warning that action is permanent"
+  },
+  "allDataErased": "سيتم حذف جميع ذكرياتك ومحادثاتك بشكل دائم.",
+  "@allDataErased": {
+    "description": "Delete account warning 1"
+  },
+  "appsDisconnected": "سيتم فصل تطبيقاتك وتكاملاتك فوراً.",
+  "@appsDisconnected": {
+    "description": "Delete account warning 2"
+  },
+  "exportBeforeDelete": "يمكنك تصدير بياناتك قبل حذف حسابك، ولكن بمجرد الحذف، لا يمكن استردادها.",
+  "@exportBeforeDelete": {
+    "description": "Delete account warning 3"
+  },
+  "deleteAccountCheckbox": "أدرك أن حذف حسابي دائم وأن جميع البيانات، بما في ذلك الذكريات والمحادثات، ستُفقد ولا يمكن استردادها.",
+  "@deleteAccountCheckbox": {
+    "description": "Delete account checkbox confirmation"
+  },
+  "areYouSure": "هل أنت متأكد؟",
+  "@areYouSure": {
+    "description": "Final confirmation title"
+  },
+  "deleteAccountFinal": "هذا الإجراء لا رجعة فيه وسيحذف حسابك وجميع البيانات المرتبطة به نهائياً. هل أنت متأكد من رغبتك في المتابعة؟",
+  "@deleteAccountFinal": {
+    "description": "Final delete confirmation message"
+  },
+  "deleteNow": "احذف الآن",
+  "@deleteNow": {
+    "description": "Delete now button"
+  },
+  "goBack": "العودة",
+  "@goBack": {
+    "description": "Go back button"
+  },
+  "checkBoxToConfirm": "حدد المربع لتأكيد فهمك أن حذف حسابك دائم ولا رجعة فيه.",
+  "@checkBoxToConfirm": {
+    "description": "Checkbox validation error"
+  },
+  "profile": "الملف الشخصي",
+  "@profile": {
+    "description": "Profile page title"
+  },
+  "name": "الاسم",
+  "@name": {
+    "description": "Name field label"
+  },
+  "email": "البريد الإلكتروني",
+  "@email": {
+    "description": "Email field label"
+  },
+  "customVocabulary": "المفردات المخصصة",
+  "@customVocabulary": {
+    "description": "Custom vocabulary setting"
+  },
+  "identifyingOthers": "التعرف على الآخرين",
+  "@identifyingOthers": {
+    "description": "People identification setting"
+  },
+  "paymentMethods": "طرق الدفع",
+  "@paymentMethods": {
+    "description": "Payment methods setting"
+  },
+  "conversationDisplay": "عرض المحادثة",
+  "@conversationDisplay": {
+    "description": "Conversation display setting"
+  },
+  "dataPrivacy": "البيانات والخصوصية",
+  "@dataPrivacy": {
+    "description": "Data and privacy setting"
+  },
+  "userId": "معرف المستخدم",
+  "@userId": {
+    "description": "User ID label"
+  },
+  "notSet": "غير محدد",
+  "@notSet": {
+    "description": "Default value when not set"
+  },
+  "userIdCopied": "تم نسخ معرف المستخدم إلى الحافظة",
+  "@userIdCopied": {
+    "description": "Confirmation when user ID is copied"
+  },
+  "systemDefault": "افتراضي النظام",
+  "@systemDefault": {
+    "description": "System language option"
+  },
+  "planAndUsage": "الخطة والاستخدام",
+  "@planAndUsage": {
+    "description": "Plan and usage menu item"
+  },
+  "offlineSync": "المزامنة دون اتصال",
+  "@offlineSync": {
+    "description": "Offline sync menu item"
+  },
+  "deviceSettings": "إعدادات الجهاز",
+  "@deviceSettings": {
+    "description": "Device settings menu item"
+  },
+  "chatTools": "أدوات الدردشة",
+  "@chatTools": {
+    "description": "Chat tools menu item"
+  },
+  "feedbackBug": "ملاحظات / خطأ",
+  "@feedbackBug": {
+    "description": "Feedback menu item"
+  },
+  "helpCenter": "مركز المساعدة",
+  "@helpCenter": {
+    "description": "Help center menu item"
+  },
+  "developerSettings": "إعدادات المطور",
+  "@developerSettings": {
+    "description": "Developer settings menu item"
+  },
+  "getOmiForMac": "احصل على Omi لنظام Mac",
+  "@getOmiForMac": {
+    "description": "Mac app download link"
+  },
+  "referralProgram": "برنامج الإحالة",
+  "@referralProgram": {
+    "description": "Referral program menu item"
+  },
+  "signOut": "تسجيل الخروج",
+  "@signOut": {
+    "description": "Sign out button"
+  },
+  "appAndDeviceCopied": "تم نسخ تفاصيل التطبيق والجهاز",
+  "@appAndDeviceCopied": {
+    "description": "Confirmation when version info is copied"
+  },
+  "wrapped2025": "ملخص 2025",
+  "@wrapped2025": {
+    "description": "Wrapped 2025 menu item"
+  },
+  "yourPrivacyYourControl": "خصوصيتك، تحكمك",
+  "@yourPrivacyYourControl": {
+    "description": "Data privacy page heading"
+  },
+  "privacyIntro": "في Omi، نحن ملتزمون بحماية خصوصيتك. تتيح لك هذه الصفحة التحكم في كيفية تخزين بياناتك واستخدامها.",
+  "@privacyIntro": {
+    "description": "Data privacy page introduction"
+  },
+  "learnMore": "اعرف المزيد...",
+  "@learnMore": {
+    "description": "Learn more link"
+  },
+  "dataProtectionLevel": "مستوى حماية البيانات",
+  "@dataProtectionLevel": {
+    "description": "Data protection section title"
+  },
+  "dataProtectionDesc": "بياناتك محمية افتراضياً بتشفير قوي. راجع إعداداتك وخيارات الخصوصية المستقبلية أدناه.",
+  "@dataProtectionDesc": {
+    "description": "Data protection section description"
+  },
+  "appAccess": "وصول التطبيقات",
+  "@appAccess": {
+    "description": "App access section title"
+  },
+  "appAccessDesc": "يمكن للتطبيقات التالية الوصول إلى بياناتك. اضغط على تطبيق لإدارة أذوناته.",
+  "@appAccessDesc": {
+    "description": "App access section description"
+  },
+  "noAppsExternalAccess": "لا توجد تطبيقات مثبتة لها وصول خارجي إلى بياناتك.",
+  "@noAppsExternalAccess": {
+    "description": "Empty state for app access"
+  },
+  "deviceName": "اسم الجهاز",
+  "@deviceName": {
+    "description": "Device name label"
+  },
+  "deviceId": "معرف الجهاز",
+  "@deviceId": {
+    "description": "Device ID label"
+  },
+  "firmware": "البرنامج الثابت",
+  "@firmware": {
+    "description": "Firmware label"
+  },
+  "sdCardSync": "مزامنة بطاقة SD",
+  "@sdCardSync": {
+    "description": "SD Card sync label"
+  },
+  "hardwareRevision": "مراجعة الأجهزة",
+  "@hardwareRevision": {
+    "description": "Hardware revision label"
+  },
+  "modelNumber": "رقم الطراز",
+  "@modelNumber": {
+    "description": "Model number label"
+  },
+  "manufacturer": "الشركة المصنعة",
+  "@manufacturer": {
+    "description": "Manufacturer label"
+  },
+  "doubleTap": "نقرة مزدوجة",
+  "@doubleTap": {
+    "description": "Double tap action label"
+  },
+  "ledBrightness": "سطوع LED",
+  "@ledBrightness": {
+    "description": "LED brightness setting"
+  },
+  "micGain": "تضخيم الميكروفون",
+  "@micGain": {
+    "description": "Microphone gain setting"
+  },
+  "disconnect": "قطع الاتصال",
+  "@disconnect": {
+    "description": "Disconnect device button"
+  },
+  "forgetDevice": "نسيان الجهاز",
+  "@forgetDevice": {
+    "description": "Forget device button"
+  },
+  "chargingIssues": "مشاكل الشحن",
+  "@chargingIssues": {
+    "description": "Charging issues help item"
+  },
+  "disconnectDevice": "قطع اتصال الجهاز",
+  "@disconnectDevice": {
+    "description": "Disconnect device button"
+  },
+  "unpairDevice": "إلغاء إقران الجهاز",
+  "@unpairDevice": {
+    "description": "Unpair device button"
+  },
+  "unpairAndForget": "إلغاء الإقران ونسيان الجهاز",
+  "@unpairAndForget": {
+    "description": "Unpair and forget device button"
+  },
+  "deviceDisconnectedMessage": "تم قطع اتصال Omi الخاص بك 😔",
+  "@deviceDisconnectedMessage": {
+    "description": "Message shown when device is disconnected"
+  },
+  "deviceUnpairedMessage": "تم إلغاء إقران الجهاز. انتقل إلى الإعدادات > البلوتوث وانسَ الجهاز لإكمال إلغاء الإقران.",
+  "@deviceUnpairedMessage": {
+    "description": "Message shown when device is unpaired"
+  },
+  "unpairDialogTitle": "إلغاء إقران الجهاز",
+  "@unpairDialogTitle": {
+    "description": "Unpair dialog title"
+  },
+  "unpairDialogMessage": "سيؤدي هذا إلى إلغاء إقران الجهاز بحيث يمكن توصيله بهاتف آخر. ستحتاج إلى الذهاب إلى الإعدادات > البلوتوث ونسيان الجهاز لإكمال العملية.",
+  "@unpairDialogMessage": {
+    "description": "Unpair dialog message"
+  },
+  "deviceNotConnected": "الجهاز غير متصل",
+  "@deviceNotConnected": {
+    "description": "Device not connected header"
+  },
+  "connectDeviceMessage": "قم بتوصيل جهاز Omi الخاص بك للوصول\nإلى إعدادات الجهاز والتخصيص",
+  "@connectDeviceMessage": {
+    "description": "Message encouraging user to connect device"
+  },
+  "deviceInfoSection": "معلومات الجهاز",
+  "@deviceInfoSection": {
+    "description": "Device information section header"
+  },
+  "customizationSection": "التخصيص",
+  "@customizationSection": {
+    "description": "Customization section header"
+  },
+  "hardwareSection": "الأجهزة",
+  "@hardwareSection": {
+    "description": "Hardware section header"
+  },
+  "v2Undetected": "لم يتم اكتشاف V2",
+  "@v2Undetected": {
+    "description": "V2 device undeteced dialog title"
+  },
+  "v2UndetectedMessage": "نرى أن لديك جهاز V1 أو أن جهازك غير متصل. وظيفة بطاقة SD متاحة فقط لأجهزة V2.",
+  "@v2UndetectedMessage": {
+    "description": "V2 device undeteced dialog message"
+  },
+  "endConversation": "إنهاء المحادثة",
+  "@endConversation": {
+    "description": "End conversation action"
+  },
+  "pauseResume": "إيقاف مؤقت/استئناف",
+  "@pauseResume": {
+    "description": "Pause/Resume action"
+  },
+  "starConversation": "تمييز المحادثة بنجمة",
+  "@starConversation": {
+    "description": "Star conversation action"
+  },
+  "doubleTapAction": "إجراء النقر المزدوج",
+  "@doubleTapAction": {
+    "description": "Double tap action setting"
+  },
+  "endAndProcess": "إنهاء ومعالجة المحادثة",
+  "@endAndProcess": {
+    "description": "End and process action"
+  },
+  "pauseResumeRecording": "إيقاف مؤقت/استئناف التسجيل",
+  "@pauseResumeRecording": {
+    "description": "Pause/Resume recording action"
+  },
+  "starOngoing": "تمييز المحادثة الجارية بنجمة",
+  "@starOngoing": {
+    "description": "Star ongoing conversation action"
+  },
+  "off": "متوقف",
+  "@off": {
+    "description": "Off state"
+  },
+  "max": "الحد الأقصى",
+  "@max": {
+    "description": "Max state"
+  },
+  "mute": "كتم",
+  "@mute": {
+    "description": "Mute state"
+  },
+  "quiet": "هادئ",
+  "@quiet": {
+    "description": "Quiet preset"
+  },
+  "normal": "عادي",
+  "@normal": {
+    "description": "Normal preset"
+  },
+  "high": "عالي",
+  "@high": {
+    "description": "High preset"
+  },
+  "micGainDescMuted": "الميكروفون مكتوم",
+  "@micGainDescMuted": {
+    "description": "Mic gain description: Muted"
+  },
+  "micGainDescLow": "هادئ جداً - للبيئات الصاخبة",
+  "@micGainDescLow": {
+    "description": "Mic gain description: Low"
+  },
+  "micGainDescModerate": "هادئ - للضوضاء المعتدلة",
+  "@micGainDescModerate": {
+    "description": "Mic gain description: Moderate"
+  },
+  "micGainDescNeutral": "متعادل - تسجيل متوازن",
+  "@micGainDescNeutral": {
+    "description": "Mic gain description: Neutral"
+  },
+  "micGainDescSlightlyBoosted": "معزز قليلاً - للاستخدام العادي",
+  "@micGainDescSlightlyBoosted": {
+    "description": "Mic gain description: Slightly Boosted"
+  },
+  "micGainDescBoosted": "معزز - للبيئات الهادئة",
+  "@micGainDescBoosted": {
+    "description": "Mic gain description: Boosted"
+  },
+  "micGainDescHigh": "عالي - للأصوات البعيدة أو الناعمة",
+  "@micGainDescHigh": {
+    "description": "Mic gain description: High"
+  },
+  "micGainDescVeryHigh": "عالي جداً - للمصادر الهادئة جداً",
+  "@micGainDescVeryHigh": {
+    "description": "Mic gain description: Very High"
+  },
+  "micGainDescMax": "الحد الأقصى - استخدم بحذر",
+  "@micGainDescMax": {
+    "description": "Mic gain description: Max"
+  },
+  "developerSettingsTitle": "إعدادات المطور",
+  "@developerSettingsTitle": {
+    "description": "Developer settings page title"
+  },
+  "saving": "جاري الحفظ...",
+  "@saving": {
+    "description": "Saving state text"
+  },
+  "personaConfig": "قم بتكوين شخصية الذكاء الاصطناعي الخاصة بك",
+  "@personaConfig": {
+    "description": "Persona configuration subtitle"
+  },
+  "beta": "تجريبي",
+  "@beta": {
+    "description": "Beta tag"
+  },
+  "transcription": "النسخ الصوتي",
+  "@transcription": {
+    "description": "Transcription settings title"
+  },
+  "transcriptionConfig": "قم بتكوين موفر STT",
+  "@transcriptionConfig": {
+    "description": "Transcription configuration subtitle"
+  },
+  "conversationTimeout": "انتهاء مهلة المحادثة",
+  "@conversationTimeout": {
+    "description": "Conversation timeout settings title"
+  },
+  "conversationTimeoutConfig": "حدد متى تنتهي المحادثات تلقائياً",
+  "@conversationTimeoutConfig": {
+    "description": "Conversation timeout configuration subtitle"
+  },
+  "importData": "استيراد البيانات",
+  "@importData": {
+    "description": "Import data details title"
+  },
+  "importDataConfig": "استيراد البيانات من مصادر أخرى",
+  "@importDataConfig": {
+    "description": "Import data details subtitle"
+  },
+  "debugDiagnostics": "تصحيح الأخطاء والتشخيصات",
+  "@debugDiagnostics": {
+    "description": "Debug & Diagnostics section header"
+  },
+  "endpointUrl": "رابط نقطة النهاية",
+  "@endpointUrl": {
+    "description": "Endpoint URL label"
+  },
+  "noApiKeys": "لا توجد مفاتيح API بعد",
+  "@noApiKeys": {
+    "description": "No API keys message"
+  },
+  "createKeyToStart": "أنشئ مفتاحاً للبدء",
+  "@createKeyToStart": {
+    "description": "Create key instruction"
+  },
+  "createKey": "إنشاء مفتاح",
+  "@createKey": {
+    "description": "Create Key button"
+  },
+  "docs": "المستندات",
+  "@docs": {
+    "description": "Documentation link"
+  },
+  "yourOmiInsights": "رؤى Omi الخاصة بك",
+  "@yourOmiInsights": {
+    "description": "Usage page title"
+  },
+  "today": "اليوم",
+  "@today": {
+    "description": "Time period: Today"
+  },
+  "thisMonth": "هذا الشهر",
+  "@thisMonth": {
+    "description": "Time period: This Month"
+  },
+  "thisYear": "هذا العام",
+  "@thisYear": {
+    "description": "Time period: This Year"
+  },
+  "allTime": "كل الأوقات",
+  "@allTime": {
+    "description": "Time period: All Time"
+  },
+  "noActivityYet": "لا يوجد نشاط بعد",
+  "@noActivityYet": {
+    "description": "Empty state title"
+  },
+  "startConversationToSeeInsights": "ابدأ محادثة مع Omi\nلرؤية رؤى استخدامك هنا.",
+  "@startConversationToSeeInsights": {
+    "description": "Empty state description"
+  },
+  "listening": "الاستماع",
+  "@listening": {
+    "description": "Listening stat title"
+  },
+  "listeningSubtitle": "إجمالي الوقت الذي استمع فيه Omi بنشاط.",
+  "@listeningSubtitle": {
+    "description": "Listening stat subtitle"
+  },
+  "understanding": "الفهم",
+  "@understanding": {
+    "description": "Understanding stat title"
+  },
+  "understandingSubtitle": "الكلمات المفهومة من محادثاتك.",
+  "@understandingSubtitle": {
+    "description": "Understanding stat subtitle"
+  },
+  "providing": "التوفير",
+  "@providing": {
+    "description": "Providing stat title"
+  },
+  "providingSubtitle": "المهام والملاحظات الملتقطة تلقائياً.",
+  "@providingSubtitle": {
+    "description": "Providing stat subtitle"
+  },
+  "remembering": "التذكر",
+  "@remembering": {
+    "description": "Remembering stat title"
+  },
+  "rememberingSubtitle": "الحقائق والتفاصيل المحفوظة من أجلك.",
+  "@rememberingSubtitle": {
+    "description": "Remembering stat subtitle"
+  },
+  "unlimitedPlan": "خطة غير محدودة",
+  "@unlimitedPlan": {
+    "description": "Unlimited plan name"
+  },
+  "managePlan": "إدارة الخطة",
+  "@managePlan": {
+    "description": "Manage plan button"
+  },
+  "cancelAtPeriodEnd": "ستنتهي خطتك في {date}.",
+  "@cancelAtPeriodEnd": {
+    "description": "Cancellation message",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Jan 1, 2026"
+      }
+    }
+  },
+  "renewsOn": "تتجدد خطتك في {date}.",
+  "@renewsOn": {
+    "description": "Renewal message",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Jan 1, 2026"
+      }
+    }
+  },
+  "basicPlan": "خطة مجانية",
+  "@basicPlan": {
+    "description": "Basic plan name"
+  },
+  "usageLimitMessage": "{used} من {limit} دقيقة مستخدمة",
+  "@usageLimitMessage": {
+    "description": "Usage limit message",
+    "placeholders": {
+      "used": {
+        "type": "String",
+        "example": "100"
+      },
+      "limit": {
+        "type": "int",
+        "example": "60"
+      }
+    }
+  },
+  "upgrade": "ترقية",
+  "@upgrade": {
+    "description": "Upgrade button"
+  },
+  "upgradeToUnlimited": "الترقية إلى غير محدود",
+  "@upgradeToUnlimited": {
+    "description": "Upgrade to unlimited button"
+  },
+  "basicPlanDesc": "تتضمن خطتك {limit} دقيقة مجانية شهرياً. قم بالترقية للحصول على دقائق غير محدودة.",
+  "@basicPlanDesc": {
+    "description": "Basic plan description",
+    "placeholders": {
+      "limit": {
+        "type": "int",
+        "example": "60"
+      }
+    }
+  },
+  "shareStatsMessage": "مشاركة إحصائيات Omi الخاصة بي! (omi.me - مساعدك الذكي الدائم)",
+  "@shareStatsMessage": {
+    "description": "Share stats base message"
+  },
+  "sharePeriodToday": "اليوم، قام omi بـ:",
+  "@sharePeriodToday": {
+    "description": "Share stats period: Today"
+  },
+  "sharePeriodMonth": "هذا الشهر، قام omi بـ:",
+  "@sharePeriodMonth": {
+    "description": "Share stats period: Month"
+  },
+  "sharePeriodYear": "هذا العام، قام omi بـ:",
+  "@sharePeriodYear": {
+    "description": "Share stats period: Year"
+  },
+  "sharePeriodAllTime": "حتى الآن، قام omi بـ:",
+  "@sharePeriodAllTime": {
+    "description": "Share stats period: All Time"
+  },
+  "shareStatsListened": "🎧 استمع لمدة {minutes} دقيقة",
+  "@shareStatsListened": {
+    "description": "Share stats: listened",
+    "placeholders": {
+      "minutes": {
+        "type": "String",
+        "example": "120"
+      }
+    }
+  },
+  "shareStatsWords": "🧠 فهم {words} كلمة",
+  "@shareStatsWords": {
+    "description": "Share stats: words",
+    "placeholders": {
+      "words": {
+        "type": "String",
+        "example": "5000"
+      }
+    }
+  },
+  "shareStatsInsights": "✨ قدم {count} رؤية",
+  "@shareStatsInsights": {
+    "description": "Share stats: insights",
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "10"
+      }
+    }
+  },
+  "shareStatsMemories": "📚 تذكر {count} ذكرى",
+  "@shareStatsMemories": {
+    "description": "Share stats: memories",
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "5"
+      }
+    }
+  },
+  "debugLogs": "سجلات التصحيح",
+  "debugLogsAutoDelete": "يتم الحذف التلقائي بعد 3 أيام.",
+  "debugLogsDesc": "يساعد في تشخيص المشاكل",
+  "noLogFilesFound": "لم يتم العثور على ملفات سجل.",
+  "omiDebugLog": "سجل تصحيح Omi",
+  "logShared": "تمت مشاركة السجل",
+  "selectLogFile": "حدد ملف السجل",
+  "shareLogs": "مشاركة السجلات",
+  "debugLogCleared": "تم مسح سجل التصحيح",
+  "exportStarted": "بدأ التصدير. قد يستغرق هذا بضع ثوان...",
+  "exportAllData": "تصدير جميع البيانات",
+  "exportDataDesc": "تصدير المحادثات إلى ملف JSON",
+  "exportedConversations": "المحادثات المصدرة من Omi",
+  "exportShared": "تمت مشاركة التصدير",
+  "deleteKnowledgeGraphTitle": "حذف رسم المعرفة؟",
+  "deleteKnowledgeGraphMessage": "سيؤدي هذا إلى حذف جميع بيانات رسم المعرفة المشتقة (العقد والاتصالات). ستبقى ذكرياتك الأصلية آمنة. سيتم إعادة بناء الرسم بمرور الوقت أو عند الطلب التالي.",
+  "knowledgeGraphDeleted": "تم حذف رسم المعرفة بنجاح",
+  "deleteGraphFailed": "فشل حذف الرسم: {error}",
+  "@deleteGraphFailed": {
+    "description": "Error message when deleting graph fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteKnowledgeGraph": "حذف رسم المعرفة",
+  "deleteKnowledgeGraphDesc": "مسح جميع العقد والاتصالات",
+  "mcp": "MCP",
+  "mcpServer": "خادم MCP",
+  "mcpServerDesc": "ربط مساعدي الذكاء الاصطناعي ببياناتك",
+  "serverUrl": "رابط الخادم",
+  "urlCopied": "تم نسخ الرابط",
+  "apiKeyAuth": "مصادقة مفتاح API",
+  "header": "الترويسة",
+  "authorizationBearer": "Authorization: Bearer <key>",
+  "oauth": "OAuth",
+  "clientId": "معرف العميل",
+  "clientSecret": "سر العميل",
+  "useMcpApiKey": "استخدم مفتاح MCP API الخاص بك",
+  "webhooks": "Webhooks",
+  "conversationEvents": "أحداث المحادثة",
+  "newConversationCreated": "تم إنشاء محادثة جديدة",
+  "realtimeTranscript": "نص مباشر",
+  "transcriptReceived": "تم استلام النص",
+  "audioBytes": "بايتات الصوت",
+  "audioDataReceived": "تم استلام بيانات الصوت",
+  "intervalSeconds": "الفاصل الزمني (بالثواني)",
+  "daySummary": "ملخص اليوم",
+  "summaryGenerated": "تم إنشاء الملخص",
+  "claudeDesktop": "Claude Desktop",
+  "addToClaudeConfig": "أضف إلى claude_desktop_config.json",
+  "copyConfig": "نسخ التكوين",
+  "configCopied": "تم نسخ التكوين إلى الحافظة",
+  "listeningMins": "الاستماع (دقائق)",
+  "understandingWords": "الفهم (كلمات)",
+  "insights": "رؤى",
+  "memories": "ذكريات",
+  "minsUsedThisMonth": "{used} من {limit} دقيقة مستخدمة هذا الشهر",
+  "@minsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "wordsUsedThisMonth": "{used} من {limit} كلمة مستخدمة هذا الشهر",
+  "@wordsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "insightsUsedThisMonth": "{used} من {limit} رؤية تم اكتسابها هذا الشهر",
+  "@insightsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "memoriesUsedThisMonth": "{used} من {limit} ذكرى تم إنشاؤها هذا الشهر",
+  "@memoriesUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "visibility": "الرؤية",
+  "visibilitySubtitle": "تحكم في المحادثات التي تظهر في قائمتك",
+  "showShortConversations": "إظهار المحادثات القصيرة",
+  "showShortConversationsDesc": "عرض المحادثات الأقصر من الحد الأدنى",
+  "showDiscardedConversations": "إظهار المحادثات المهملة",
+  "showDiscardedConversationsDesc": "تضمين المحادثات المميزة كمهملة",
+  "shortConversationThreshold": "حد المحادثة القصيرة",
+  "shortConversationThresholdSubtitle": "سيتم إخفاء المحادثات الأقصر من هذا ما لم يتم تمكينها أعلاه",
+  "durationThreshold": "حد المدة",
+  "durationThresholdDesc": "إخفاء المحادثات الأقصر من هذا",
+  "minLabel": "{count} دقيقة",
+  "@minLabel": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "customVocabularyTitle": "المفردات المخصصة",
+  "addWords": "إضافة كلمات",
+  "addWordsDesc": "أسماء أو مصطلحات أو كلمات غير شائعة",
+  "vocabularyHint": "Omi، Callie، OpenAI",
+  "connect": "اتصال",
+  "comingSoon": "قريباً",
+  "chatToolsFooter": "قم بتوصيل تطبيقاتك لعرض البيانات والمقاييس في الدردشة.",
+  "completeAuthInBrowser": "يرجى إكمال المصادقة في متصفحك. بعد الانتهاء، ارجع إلى التطبيق.",
+  "failedToStartAuth": "فشل بدء مصادقة {appName}",
+  "@failedToStartAuth": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectAppTitle": "قطع الاتصال بـ {appName}؟",
+  "@disconnectAppTitle": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectAppMessage": "هل أنت متأكد من رغبتك في قطع الاتصال بـ {appName}؟ يمكنك إعادة الاتصال في أي وقت.",
+  "@disconnectAppMessage": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectedFrom": "تم قطع الاتصال بـ {appName}",
+  "@disconnectedFrom": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToDisconnect": "فشل قطع الاتصال",
+  "connectTo": "الاتصال بـ {appName}",
+  "@connectTo": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "authAccessMessage": "ستحتاج إلى تفويض Omi للوصول إلى بيانات {appName} الخاصة بك. سيتم فتح متصفحك للمصادقة.",
+  "@authAccessMessage": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "continueAction": "متابعة",
+  "languageTitle": "اللغة",
+  "primaryLanguage": "اللغة الأساسية",
+  "automaticTranslation": "الترجمة التلقائية",
+  "detectLanguages": "اكتشاف أكثر من 10 لغات",
+  "authorizeSavingRecordings": "التفويض بحفظ التسجيلات",
+  "thanksForAuthorizing": "شكراً على التفويض!",
+  "needYourPermission": "نحتاج إذنك",
+  "alreadyGavePermission": "لقد منحتنا بالفعل إذناً بحفظ تسجيلاتك. إليك تذكير بسبب حاجتنا إليه:",
+  "wouldLikePermission": "نود الحصول على إذنك لحفظ تسجيلاتك الصوتية. إليك السبب:",
+  "improveSpeechProfile": "تحسين ملف الصوت الخاص بك",
+  "improveSpeechProfileDesc": "نستخدم التسجيلات لمواصلة تدريب وتحسين ملف الصوت الشخصي الخاص بك.",
+  "trainFamilyProfiles": "تدريب ملفات تعريف الأصدقاء والعائلة",
+  "trainFamilyProfilesDesc": "تساعدنا تسجيلاتك في التعرف على أصدقائك وعائلتك وإنشاء ملفات تعريف لهم.",
+  "enhanceTranscriptAccuracy": "تحسين دقة النص المكتوب",
+  "enhanceTranscriptAccuracyDesc": "مع تحسن نموذجنا، يمكننا توفير نتائج نسخ أفضل لتسجيلاتك.",
+  "legalNotice": "إشعار قانوني: قد تختلف قانونية تسجيل وتخزين البيانات الصوتية اعتماداً على موقعك وكيفية استخدامك لهذه الميزة. من مسؤوليتك ضمان الامتثال للقوانين واللوائح المحلية.",
+  "alreadyAuthorized": "تم التفويض بالفعل",
+  "authorize": "تفويض",
+  "revokeAuthorization": "إلغاء التفويض",
+  "authorizationSuccessful": "التفويض ناجح!",
+  "failedToAuthorize": "فشل التفويض. يرجى المحاولة مرة أخرى.",
+  "authorizationRevoked": "تم إلغاء التفويض.",
+  "recordingsDeleted": "تم حذف التسجيلات.",
+  "failedToRevoke": "فشل إلغاء التفويض. يرجى المحاولة مرة أخرى.",
+  "permissionRevokedTitle": "تم إلغاء الإذن",
+  "permissionRevokedMessage": "هل تريد منا حذف جميع تسجيلاتك الحالية أيضاً؟",
+  "yes": "نعم",
+  "editName": "تعديل الاسم",
+  "howShouldOmiCallYou": "كيف يجب على Omi أن يناديك؟",
+  "enterYourName": "أدخل اسمك",
+  "nameCannotBeEmpty": "لا يمكن أن يكون الاسم فارغاً",
+  "nameUpdatedSuccessfully": "تم تحديث الاسم بنجاح!",
+  "calendarSettings": "إعدادات التقويم",
+  "calendarProviders": "موفرو التقويم",
+  "macOsCalendar": "تقويم macOS",
+  "connectMacOsCalendar": "قم بتوصيل تقويم macOS المحلي الخاص بك",
+  "googleCalendar": "تقويم Google",
+  "syncGoogleAccount": "المزامنة مع حساب Google الخاص بك",
+  "showMeetingsMenuBar": "إظهار الاجتماعات القادمة في شريط القوائم",
+  "showMeetingsMenuBarDesc": "عرض اجتماعك التالي والوقت حتى يبدأ في شريط قوائم macOS",
+  "showEventsNoParticipants": "إظهار الأحداث بدون مشاركين",
+  "showEventsNoParticipantsDesc": "عند التمكين، يعرض القادم الأحداث بدون مشاركين أو رابط فيديو.",
+  "yourMeetings": "اجتماعاتك",
+  "refresh": "تحديث",
+  "noUpcomingMeetings": "لم يتم العثور على اجتماعات قادمة",
+  "checkingNextDays": "التحقق من الـ 30 يوماً القادمة",
+  "tomorrow": "غداً",
+  "googleCalendarComingSoon": "تكامل تقويم Google قريباً!",
+  "connectedAsUser": "متصل كمستخدم: {userId}",
+  "@connectedAsUser": {
+    "placeholders": {
+      "userId": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultWorkspace": "مساحة العمل الافتراضية",
+  "tasksCreatedInWorkspace": "سيتم إنشاء المهام في مساحة العمل هذه",
+  "defaultProjectOptional": "المشروع الافتراضي (اختياري)",
+  "leaveUnselectedTasks": "اترك غير محدد لإنشاء مهام بدون مشروع",
+  "noProjectsInWorkspace": "لم يتم العثور على مشاريع في مساحة العمل هذه",
+  "conversationTimeoutDesc": "اختر المدة التي يجب الانتظار فيها في صمت قبل إنهاء المحادثة تلقائياً:",
+  "timeout2Minutes": "دقيقتان",
+  "timeout2MinutesDesc": "إنهاء المحادثة بعد دقيقتين من الصمت",
+  "timeout5Minutes": "5 دقائق",
+  "timeout5MinutesDesc": "إنهاء المحادثة بعد 5 دقائق من الصمت",
+  "timeout10Minutes": "10 دقائق",
+  "timeout10MinutesDesc": "إنهاء المحادثة بعد 10 دقائق من الصمت",
+  "timeout30Minutes": "30 دقيقة",
+  "timeout30MinutesDesc": "إنهاء المحادثة بعد 30 دقيقة من الصمت",
+  "timeout4Hours": "4 ساعات",
+  "timeout4HoursDesc": "إنهاء المحادثة بعد 4 ساعات من الصمت",
+  "conversationEndAfterHours": "ستنتهي المحادثات الآن بعد 4 ساعات من الصمت",
+  "conversationEndAfterMinutes": "ستنتهي المحادثات الآن بعد {minutes} دقيقة من الصمت",
+  "@conversationEndAfterMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "tellUsPrimaryLanguage": "أخبرنا بلغتك الأساسية",
+  "languageForTranscription": "حدد لغتك للحصول على نسخ أكثر دقة وتجربة شخصية.",
+  "singleLanguageModeInfo": "وضع اللغة الواحدة ممكّن. الترجمة معطلة لدقة أعلى.",
+  "searchLanguageHint": "بحث عن اللغة بالاسم أو الرمز",
+  "noLanguagesFound": "لم يتم العثور على لغات",
+  "skip": "تخطي",
+  "languageSetTo": "تم تعيين اللغة إلى {language}",
+  "@languageSetTo": {
+    "placeholders": {
+      "language": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToSetLanguage": "فشل تعيين اللغة",
+  "appSettings": "إعدادات {appName}",
+  "@appSettings": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectFromApp": "قطع الاتصال بـ {appName}؟",
+  "@disconnectFromApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectFromAppDesc": "سيؤدي هذا إلى حذف مصادقة {appName} الخاصة بك. ستحتاج إلى إعادة الاتصال لاستخدامه مرة أخرى.",
+  "@disconnectFromAppDesc": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "connectedToApp": "متصل بـ {appName}",
+  "@connectedToApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "account": "الحساب",
+  "actionItemsSyncedTo": "سيتم مزامنة مهامك مع حساب {appName} الخاص بك",
+  "@actionItemsSyncedTo": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultSpace": "المساحة الافتراضية",
+  "selectSpaceInWorkspace": "حدد مساحة في مساحة العمل الخاصة بك",
+  "noSpacesInWorkspace": "لم يتم العثور على مساحات في مساحة العمل هذه",
+  "defaultList": "القائمة الافتراضية",
+  "tasksAddedToList": "سيتم إضافة المهام إلى هذه القائمة",
+  "noListsInSpace": "لم يتم العثور على قوائم في هذه المساحة",
+  "failedToLoadRepos": "فشل تحميل المستودعات: {error}",
+  "@failedToLoadRepos": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultRepoSaved": "تم حفظ المستودع الافتراضي",
+  "failedToSaveDefaultRepo": "فشل حفظ المستودع الافتراضي",
+  "defaultRepository": "المستودع الافتراضي",
+  "selectDefaultRepoDesc": "حدد مستودعاً افتراضياً لإنشاء المشكلات. لا يزال بإمكانك تحديد مستودع مختلف عند إنشاء المشكلات.",
+  "noReposFound": "لم يتم العثور على مستودعات",
+  "private": "خاص",
+  "updatedDate": "تم التحديث {date}",
+  "@updatedDate": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "yesterday": "أمس",
+  "daysAgo": "منذ {count} أيام",
+  "@daysAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "oneWeekAgo": "منذ أسبوع",
+  "weeksAgo": "منذ {count} أسابيع",
+  "@weeksAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "oneMonthAgo": "منذ شهر",
+  "monthsAgo": "منذ {count} أشهر",
+  "@monthsAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "issuesCreatedInRepo": "سيتم إنشاء المشكلات في مستودعك الافتراضي",
+  "taskIntegrations": "تكاملات المهام",
+  "configureSettings": "تكوين الإعدادات",
+  "completeAuthBrowser": "يرجى إكمال المصادقة في متصفحك. بعد الانتهاء، ارجع إلى التطبيق.",
+  "failedToStartAppAuth": "فشل بدء مصادقة {appName}",
+  "@failedToStartAppAuth": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "connectToAppTitle": "الاتصال بـ {appName}",
+  "@connectToAppTitle": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "authorizeOmiForTasks": "ستحتاج إلى تفويض Omi لإنشاء مهام في حساب {appName} الخاص بك. سيتم فتح متصفحك للمصادقة.",
+  "@authorizeOmiForTasks": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "continueButton": "متابعة",
+  "appIntegration": "تكامل {appName}",
+  "@appIntegration": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "integrationComingSoon": "التكامل مع {appName} قريباً! نعمل بجد لنوفر لك المزيد من خيارات إدارة المهام.",
+  "@integrationComingSoon": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "gotIt": "فهمت",
+  "tasksExportedOneApp": "يمكن تصدير المهام إلى تطبيق واحد في كل مرة.",
+  "completeYourUpgrade": "أكمل ترقيتك",
+  "importConfiguration": "استيراد التكوين",
+  "exportConfiguration": "تصدير التكوين",
+  "bringYourOwn": "احضر الخاص بك",
+  "payYourSttProvider": "استخدم omi بحرية. أنت تدفع فقط لموفر STT الخاص بك مباشرة.",
+  "freeMinutesMonth": "1,200 دقيقة مجانية شهرياً متضمنة. غير محدود مع ",
+  "omiUnlimited": "Omi Unlimited",
+  "hostRequired": "المضيف مطلوب",
+  "validPortRequired": "المنفذ الصحيح مطلوب",
+  "validWebsocketUrlRequired": "رابط WebSocket صحيح مطلوب (wss://)",
+  "apiUrlRequired": "رابط API مطلوب",
+  "apiKeyRequired": "مفتاح API مطلوب",
+  "invalidJsonConfig": "تكوين JSON غير صالح",
+  "errorSaving": "خطأ في الحفظ: {error}",
+  "@errorSaving": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "configCopiedToClipboard": "تم نسخ التكوين إلى الحافظة",
+  "pasteJsonConfig": "الصق تكوين JSON الخاص بك أدناه:",
+  "addApiKeyAfterImport": "ستحتاج إلى إضافة مفتاح API الخاص بك بعد الاستيراد",
+  "paste": "لصق",
+  "import": "استيراد",
+  "invalidProviderInConfig": "موفر غير صالح في التكوين",
+  "importedConfig": "تم استيراد تكوين {providerName}",
+  "@importedConfig": {
+    "placeholders": {
+      "providerName": {
+        "type": "String"
+      }
+    }
+  },
+  "invalidJson": "JSON غير صالح: {error}",
+  "@invalidJson": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "provider": "الموفر",
+  "live": "مباشر",
+  "onDevice": "على الجهاز",
+  "apiUrl": "رابط API",
+  "enterSttHttpEndpoint": "أدخل نقطة نهاية STT HTTP الخاصة بك",
+  "websocketUrl": "رابط WebSocket",
+  "enterLiveSttWebsocket": "أدخل نقطة نهاية WebSocket STT المباشرة",
+  "apiKey": "مفتاح API",
+  "enterApiKey": "أدخل مفتاح API الخاص بك",
+  "storedLocallyNeverShared": "يُخزن محلياً، ولا يُشارك أبداً",
+  "host": "المضيف",
+  "port": "المنفذ",
+  "advanced": "متقدم",
+  "configuration": "التكوين",
+  "requestConfiguration": "تكوين الطلب",
+  "responseSchema": "مخطط الاستجابة",
+  "modified": "معدل",
+  "resetRequestConfig": "إعادة تعيين تكوين الطلب إلى الافتراضي",
+  "logs": "السجلات",
+  "logsCopied": "تم نسخ السجلات",
+  "noLogsYet": "لا توجد سجلات بعد. ابدأ التسجيل لرؤية نشاط STT المخصص.",
+  "deviceUsesCodec": "{deviceName} يستخدم {codecReason}. سيتم استخدام Omi.",
+  "@deviceUsesCodec": {
+    "placeholders": {
+      "deviceName": {
+        "type": "String"
+      },
+      "codecReason": {
+        "type": "String"
+      }
+    }
+  },
+  "omiTranscription": "نسخ Omi",
+  "bestInClassTranscription": "أفضل نسخ في فئته بدون إعداد",
+  "instantSpeakerLabels": "تسميات المتحدثين الفورية",
+  "languageTranslation": "ترجمة أكثر من 100 لغة",
+  "optimizedForConversation": "محسّن للمحادثة",
+  "autoLanguageDetection": "اكتشاف اللغة التلقائي",
+  "highAccuracy": "دقة عالية",
+  "privacyFirst": "الخصوصية أولاً",
+  "saveChanges": "حفظ التغييرات",
+  "resetToDefault": "إعادة التعيين إلى الافتراضي",
+  "viewTemplate": "عرض النموذج",
+  "trySomethingLike": "جرب شيئاً مثل...",
+  "tryIt": "جربه",
+  "creatingPlan": "إنشاء خطة",
+  "developingLogic": "تطوير المنطق",
+  "designingApp": "تصميم التطبيق",
+  "generatingIconStep": "إنشاء أيقونة",
+  "finalTouches": "اللمسات الأخيرة",
+  "processing": "جاري المعالجة...",
+  "features": "الميزات",
+  "creatingYourApp": "جاري إنشاء تطبيقك...",
+  "generatingIcon": "جاري إنشاء الأيقونة...",
+  "whatShouldWeMake": "ماذا يجب أن نصنع؟",
+  "appName": "اسم التطبيق",
+  "description": "الوصف",
+  "publicLabel": "عام",
+  "privateLabel": "خاص",
+  "free": "مجاني",
+  "perMonth": "/ شهرياً",
+  "tailoredConversationSummaries": "ملخصات محادثة مخصصة",
+  "customChatbotPersonality": "شخصية chatbot مخصصة",
+  "makePublic": "جعله عاماً",
+  "anyoneCanDiscover": "يمكن لأي شخص اكتشاف تطبيقك",
+  "onlyYouCanUse": "أنت فقط يمكنك استخدام هذا التطبيق",
+  "paidApp": "تطبيق مدفوع",
+  "usersPayToUse": "يدفع المستخدمون لاستخدام تطبيقك",
+  "freeForEveryone": "مجاني للجميع",
+  "perMonthLabel": "/ شهرياً",
+  "creating": "جاري الإنشاء...",
+  "@creating": {
+    "description": "Loading state text when app generation is in progress"
+  },
+  "createApp": "إنشاء تطبيق",
+  "@createApp": {
+    "description": "Button text to initiate app creation"
+  },
+  "@connect": {
+    "description": "Title for device connection page"
+  },
+  "searchingForDevices": "جاري البحث عن الأجهزة...",
+  "@searchingForDevices": {
+    "description": "Status text while scanning for Bluetooth devices"
+  },
+  "devicesFoundNearby": "{count} {count, plural, =1{جهاز} other{أجهزة}} تم العثور عليها بالقرب منك",
+  "@devicesFoundNearby": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pairingSuccessful": "نجح الإقران",
+  "errorConnectingAppleWatch": "خطأ في الاتصال بـ Apple Watch: {error}",
+  "@errorConnectingAppleWatch": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "dontShowAgain": "لا تظهر مرة أخرى",
+  "@dontShowAgain": {
+    "description": "Checkbox text to suppress future connection confirmations"
+  },
+  "iUnderstand": "أفهم",
+  "@iUnderstand": {
+    "description": "Button text to acknowledge connection warnings"
+  },
+  "enableBluetooth": "تمكين البلوتوث",
+  "@enableBluetooth": {
+    "description": "Title for dialog prompting user to enable Bluetooth"
+  },
+  "bluetoothNeeded": "يحتاج Omi إلى البلوتوث للاتصال بجهازك القابل للارتداء. يرجى تمكين البلوتوث والمحاولة مرة أخرى.",
+  "@bluetoothNeeded": {
+    "description": "Explanation text for why Bluetooth is required"
+  },
+  "contactSupport": "الاتصال بالدعم؟",
+  "@contactSupport": {
+    "description": "Link text to contact support"
+  },
+  "connectLater": "الاتصال لاحقاً",
+  "@connectLater": {
+    "description": "Button text to skip immediate device connection"
+  },
+  "grantPermissions": "منح الأذونات",
+  "@grantPermissions": {
+    "description": "Title for the permissions request page"
+  },
+  "backgroundActivity": "النشاط في الخلفية",
+  "@backgroundActivity": {
+    "description": "Title for background activity permission"
+  },
+  "backgroundActivityDesc": "دع Omi يعمل في الخلفية لاستقرار أفضل",
+  "@backgroundActivityDesc": {
+    "description": "Description for background activity permission"
+  },
+  "locationAccess": "الوصول إلى الموقع",
+  "@locationAccess": {
+    "description": "Title for location access permission"
+  },
+  "locationAccessDesc": "تمكين الموقع في الخلفية للحصول على التجربة الكاملة",
+  "@locationAccessDesc": {
+    "description": "Description for location access permission"
+  },
+  "notifications": "الإشعارات",
+  "@notifications": {
+    "description": "Title for notifications permission"
+  },
+  "notificationsDesc": "تمكين الإشعارات للبقاء على اطلاع",
+  "@notificationsDesc": {
+    "description": "Description for notifications permission"
+  },
+  "@continueButton": {
+    "description": "Generic continue button text"
+  },
+  "locationServiceDisabled": "خدمة الموقع معطلة",
+  "@locationServiceDisabled": {
+    "description": "Title for dialog when location services are off"
+  },
+  "locationServiceDisabledDesc": "خدمة الموقع معطلة. يرجى الذهاب إلى الإعدادات > الخصوصية والأمان > خدمات الموقع وتمكينها",
+  "@locationServiceDisabledDesc": {
+    "description": "Instructions to enable location services"
+  },
+  "backgroundLocationDenied": "تم رفض الوصول إلى الموقع في الخلفية",
+  "@backgroundLocationDenied": {
+    "description": "Title for dialog when background location is denied"
+  },
+  "backgroundLocationDeniedDesc": "يرجى الذهاب إلى إعدادات الجهاز وتعيين إذن الموقع إلى \"السماح دائماً\"",
+  "@backgroundLocationDeniedDesc": {
+    "description": "Instructions to grant background location permission"
+  },
+  "lovingOmi": "تحب Omi؟",
+  "@lovingOmi": {
+    "description": "Title for the app review prompt"
+  },
+  "leaveReviewIos": "ساعدنا في الوصول إلى المزيد من الأشخاص من خلال ترك تقييم في App Store. ملاحظاتك تعني لنا الكثير!",
+  "@leaveReviewIos": {
+    "description": "App review prompt text for iOS users"
+  },
+  "leaveReviewAndroid": "ساعدنا في الوصول إلى المزيد من الأشخاص من خلال ترك تقييم في Google Play Store. ملاحظاتك تعني لنا الكثير!",
+  "@leaveReviewAndroid": {
+    "description": "App review prompt text for Android users"
+  },
+  "rateOnAppStore": "التقييم على App Store",
+  "@rateOnAppStore": {
+    "description": "Button text to rate on Apple App Store"
+  },
+  "rateOnGooglePlay": "التقييم على Google Play",
+  "@rateOnGooglePlay": {
+    "description": "Button text to rate on Google Play Store"
+  },
+  "maybeLater": "ربما لاحقاً",
+  "@maybeLater": {
+    "description": "Button text to dismiss the review prompt"
+  },
+  "speechProfileIntro": "يحتاج Omi إلى تعلم أهدافك وصوتك. ستتمكن من تعديله لاحقاً.",
+  "@speechProfileIntro": {
+    "description": "Introduction text for speech profile creation"
+  },
+  "getStarted": "ابدأ",
+  "@getStarted": {
+    "description": "Button text to begin a process"
+  },
+  "allDone": "تم كل شيء!",
+  "@allDone": {
+    "description": "Success message after completing a task"
+  },
+  "keepGoing": "استمر، أنت تقوم بعمل رائع",
+  "@keepGoing": {
+    "description": "Encouragement text during a multi-step process"
+  },
+  "skipThisQuestion": "تخطي هذا السؤال",
+  "@skipThisQuestion": {
+    "description": "Button text to skip the current question"
+  },
+  "skipForNow": "تخطي الآن",
+  "@skipForNow": {
+    "description": "Button text to skip the entire process temporarily"
+  },
+  "connectionError": "خطأ في الاتصال",
+  "@connectionError": {
+    "description": "Title for connection error dialog"
+  },
+  "connectionErrorDesc": "فشل الاتصال بالخادم. يرجى التحقق من اتصالك بالإنترنت والمحاولة مرة أخرى.",
+  "@connectionErrorDesc": {
+    "description": "Description of connection error"
+  },
+  "invalidRecordingMultipleSpeakers": "تم اكتشاف تسجيل غير صالح",
+  "@invalidRecordingMultipleSpeakers": {
+    "description": "Error title when multiple speakers are detected"
+  },
+  "multipleSpeakersDesc": "يبدو أن هناك عدة متحدثين في التسجيل. يرجى التأكد من أنك في موقع هادئ والمحاولة مرة أخرى.",
+  "@multipleSpeakersDesc": {
+    "description": "Error description for multiple speakers"
+  },
+  "tooShortDesc": "لا يوجد كلام كافٍ مكتشف. يرجى التحدث أكثر والمحاولة مرة أخرى.",
+  "@tooShortDesc": {
+    "description": "Error description for recording being too short"
+  },
+  "invalidRecordingDesc": "يرجى التأكد من التحدث لمدة 5 ثوانٍ على الأقل وليس أكثر من 90.",
+  "@invalidRecordingDesc": {
+    "description": "Error description for invalid recording duration"
+  },
+  "areYouThere": "هل أنت هناك؟",
+  "@areYouThere": {
+    "description": "Timeout warning title"
+  },
+  "noSpeechDesc": "لم نتمكن من اكتشاف أي كلام. يرجى التأكد من التحدث لمدة 10 ثوانٍ على الأقل وليس أكثر من 3 دقائق.",
+  "@noSpeechDesc": {
+    "description": "Error description when no speech is detected"
+  },
+  "connectionLost": "فُقد الاتصال",
+  "@connectionLost": {
+    "description": "Title for lost connection dialog"
+  },
+  "connectionLostDesc": "تم انقطاع الاتصال. يرجى التحقق من اتصالك بالإنترنت والمحاولة مرة أخرى.",
+  "@connectionLostDesc": {
+    "description": "Description for lost connection"
+  },
+  "tryAgain": "حاول مرة أخرى",
+  "@tryAgain": {
+    "description": "Button text to retry an action"
+  },
+  "connectOmiOmiGlass": "توصيل Omi / OmiGlass",
+  "@connectOmiOmiGlass": {
+    "description": "Button text to connect specific device models"
+  },
+  "continueWithoutDevice": "متابعة بدون جهاز",
+  "@continueWithoutDevice": {
+    "description": "Button text to proceed without connecting a hardware device"
+  },
+  "permissionsRequired": "الأذونات مطلوبة",
+  "@permissionsRequired": {
+    "description": "Title for permissions required dialog"
+  },
+  "permissionsRequiredDesc": "يحتاج هذا التطبيق إلى أذونات البلوتوث والموقع للعمل بشكل صحيح. يرجى تمكينها في الإعدادات.",
+  "@permissionsRequiredDesc": {
+    "description": "Explanation of why permissions are needed"
+  },
+  "openSettings": "فتح الإعدادات",
+  "@openSettings": {
+    "description": "Button text to open app settings"
+  },
+  "wantDifferentName": "تريد أن يُناديك باسم آخر؟",
+  "@wantDifferentName": {
+    "description": "Question asking if user wants to change their display name"
+  },
+  "whatsYourName": "ما اسمك؟",
+  "@whatsYourName": {
+    "description": "Question asking for user's name"
+  },
+  "@enterYourName": {
+    "description": "Hint text for name input field"
+  },
+  "speakTranscribeSummarize": "تحدث. انسخ. لخص.",
+  "@speakTranscribeSummarize": {
+    "description": "Tagline or slogan on the welcome/auth screen"
+  },
+  "signInWithApple": "تسجيل الدخول باستخدام Apple",
+  "@signInWithApple": {
+    "description": "Button text for Apple Sign In"
+  },
+  "signInWithGoogle": "تسجيل الدخول باستخدام Google",
+  "@signInWithGoogle": {
+    "description": "Button text for Google Sign In"
+  },
+  "byContinuingAgree": "بالمتابعة، فإنك توافق على ",
+  "@byContinuingAgree": {
+    "description": "Legal disclaimer prefix text"
+  },
+  "termsOfUse": "شروط الاستخدام",
+  "@termsOfUse": {
+    "description": "Link text for Terms of Use"
+  },
+  "omiYourAiCompanion": "Omi – رفيقك الذكي",
+  "@omiYourAiCompanion": {
+    "description": "App title or branding on onboarding screen"
+  },
+  "captureEveryMoment": "احتفظ بكل لحظة. احصل على ملخصات مدعومة بالذكاء الاصطناعي.\nلا تدون ملاحظات بعد الآن.",
+  "@captureEveryMoment": {
+    "description": "App value proposition or description"
+  },
+  "appleWatchSetup": "إعداد Apple Watch",
+  "@appleWatchSetup": {
+    "description": "Title for Apple Watch setup page"
+  },
+  "permissionRequestedExclaim": "تم طلب الإذن!",
+  "@permissionRequestedExclaim": {
+    "description": "Title when permission has been requested"
+  },
+  "microphonePermission": "إذن الميكروفون",
+  "@microphonePermission": {
+    "description": "Title for microphone permission section"
+  },
+  "permissionGrantedNow": "تم منح الإذن! الآن:\n\nافتح تطبيق Omi على ساعتك واضغط على \"متابعة\" أدناه",
+  "@permissionGrantedNow": {
+    "description": "Instructions after permission is granted"
+  },
+  "needMicrophonePermission": "نحتاج إذن الميكروفون.\n\n1. اضغط على \"منح الإذن\"\n2. اسمح على iPhone الخاص بك\n3. سيُغلق تطبيق الساعة\n4. أعد فتحه واضغط على \"متابعة\"",
+  "@needMicrophonePermission": {
+    "description": "Instructions for granting microphone permission"
+  },
+  "grantPermissionButton": "منح الإذن",
+  "@grantPermissionButton": {
+    "description": "Button to request permission"
+  },
+  "needHelp": "تحتاج مساعدة؟",
+  "@needHelp": {
+    "description": "Link to help dialog"
+  },
+  "troubleshootingSteps": "استكشاف الأخطاء وإصلاحها:\n\n1. تأكد من تثبيت Omi على ساعتك\n2. افتح تطبيق Omi على ساعتك\n3. ابحث عن نافذة الإذن المنبثقة\n4. اضغط على \"السماح\" عند المطالبة\n5. سيغلق التطبيق على ساعتك - أعد فتحه\n6. ارجع واضغط على \"متابعة\" على iPhone الخاص بك",
+  "@troubleshootingSteps": {
+    "description": "Troubleshooting instructions for watch setup"
+  },
+  "@gotIt": {
+    "description": "Button to dismiss dialog"
+  },
+  "recordingStartedSuccessfully": "بدأ التسجيل بنجاح!",
+  "@recordingStartedSuccessfully": {
+    "description": "Success message"
+  },
+  "permissionNotGrantedYet": "لم يتم منح الإذن بعد. يرجى التأكد من أنك سمحت بالوصول إلى الميكروفون وأعدت فتح التطبيق على ساعتك.",
+  "@permissionNotGrantedYet": {
+    "description": "Error message when permission is missing"
+  },
+  "errorRequestingPermission": "خطأ في طلب الإذن: {error}",
+  "@errorRequestingPermission": {
+    "description": "Error message for permission request failure",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "errorStartingRecording": "خطأ في بدء التسجيل: {error}",
+  "@errorStartingRecording": {
+    "description": "Error message for recording start failure",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "selectPrimaryLanguage": "حدد لغتك الأساسية",
+  "@selectPrimaryLanguage": {
+    "description": "Title for language selection dialog"
+  },
+  "languageBenefits": "حدد لغتك للحصول على نسخ أكثر دقة وتجربة شخصية",
+  "@languageBenefits": {
+    "description": "Explanation of why language selection matters"
+  },
+  "@searchLanguageHint": {
+    "description": "Hint text for language search"
+  },
+  "@noLanguagesFound": {
+    "description": "Text when search returns no results"
+  },
+  "whatsYourPrimaryLanguage": "ما هي لغتك الأساسية؟",
+  "@whatsYourPrimaryLanguage": {
+    "description": "Question asking for primary language"
+  },
+  "selectYourLanguage": "حدد لغتك",
+  "@selectYourLanguage": {
+    "description": "Placeholder for selected language name"
+  },
+  "personalGrowthJourney": "رحلة نموك الشخصية مع الذكاء الاصطناعي الذي يستمع إلى كل كلمة تقولها.",
+  "@personalGrowthJourney": {
+    "description": "Tagline on onboarding wrapper"
+  },
+  "actionItemsTitle": "المهام",
+  "@actionItemsTitle": {
+    "description": "Title for the Action Items page"
+  },
+  "actionItemsDescription": "اضغط للتعديل • اضغط مطولاً للتحديد • اسحب للإجراءات",
+  "@actionItemsDescription": {
+    "description": "Instruction text for Action Items interactions"
+  },
+  "tabToDo": "للقيام به",
+  "@tabToDo": {
+    "description": "Label for To Do tab"
+  },
+  "tabDone": "تم",
+  "@tabDone": {
+    "description": "Label for Done tab"
+  },
+  "tabOld": "قديم",
+  "@tabOld": {
+    "description": "Label for Old tab"
+  },
+  "emptyTodoMessage": "🎉 كل شيء محدث!\nلا توجد مهام معلقة",
+  "@emptyTodoMessage": {
+    "description": "Message when To Do list is empty"
+  },
+  "emptyDoneMessage": "لا توجد عناصر مكتملة بعد",
+  "@emptyDoneMessage": {
+    "description": "Message when Done list is empty"
+  },
+  "emptyOldMessage": "✅ لا توجد مهام قديمة",
+  "@emptyOldMessage": {
+    "description": "Message when Old list is empty"
+  },
+  "noItems": "لا توجد عناصر",
+  "@noItems": {
+    "description": "Generic no items message"
+  },
+  "actionItemMarkedIncomplete": "تم وضع علامة على المهمة كغير مكتملة",
+  "@actionItemMarkedIncomplete": {
+    "description": "Snackbar message when item marked incomplete"
+  },
+  "actionItemCompleted": "تم إنجاز المهمة",
+  "@actionItemCompleted": {
+    "description": "Snackbar message when item completed"
+  },
+  "deleteActionItemTitle": "حذف المهمة",
+  "@deleteActionItemTitle": {
+    "description": "Title for delete item dialog"
+  },
+  "deleteActionItemMessage": "هل أنت متأكد من رغبتك في حذف هذه المهمة؟",
+  "@deleteActionItemMessage": {
+    "description": "Confirmation message for deleting single item"
+  },
+  "deleteSelectedItemsTitle": "حذف العناصر المحددة",
+  "@deleteSelectedItemsTitle": {
+    "description": "Title for bulk delete dialog"
+  },
+  "deleteSelectedItemsMessage": "هل أنت متأكد من رغبتك في حذف {count} مهمة محددة{s}؟",
+  "@deleteSelectedItemsMessage": {
+    "description": "Confirmation message for bulk delete",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "s": {
+        "type": "String",
+        "description": "Plural suffix (s) if needed, handled by logic or just append 's' for simplicity if count > 1"
+      }
+    }
+  },
+  "actionItemDeletedResult": "تم حذف المهمة \"{description}\"",
+  "@actionItemDeletedResult": {
+    "description": "Snackbar message after deleting single item",
+    "placeholders": {
+      "description": {
+        "type": "String"
+      }
+    }
+  },
+  "itemsDeletedResult": "تم حذف {count} مهمة{s}",
+  "@itemsDeletedResult": {
+    "description": "Snackbar message after bulk delete",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "s": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToDeleteItem": "فشل حذف المهمة",
+  "@failedToDeleteItem": {
+    "description": "Error message when deletion fails"
+  },
+  "failedToDeleteItems": "فشل حذف المهام",
+  "@failedToDeleteItems": {
+    "description": "Error message when bulk deletion fails"
+  },
+  "failedToDeleteSomeItems": "فشل حذف بعض المهام",
+  "@failedToDeleteSomeItems": {
+    "description": "Error message when partial deletion failure"
+  },
+  "welcomeActionItemsTitle": "جاهز للمهام",
+  "@welcomeActionItemsTitle": {
+    "description": "Heading for empty state welcome"
+  },
+  "welcomeActionItemsDescription": "سيستخرج الذكاء الاصطناعي الخاص بك المهام والأعمال تلقائياً من محادثاتك. ستظهر هنا عند إنشائها.",
+  "@welcomeActionItemsDescription": {
+    "description": "Description for empty state welcome"
+  },
+  "autoExtractionFeature": "يتم استخراجها تلقائياً من المحادثات",
+  "@autoExtractionFeature": {
+    "description": "Feature point description"
+  },
+  "editSwipeFeature": "اضغط للتعديل، اسحب للإكمال أو الحذف",
+  "@editSwipeFeature": {
+    "description": "Feature point description"
+  },
+  "itemsSelected": "{count} محدد",
+  "@itemsSelected": {
+    "description": "Selection count in app bar",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "selectAll": "تحديد الكل",
+  "@selectAll": {
+    "description": "Tooltip for select all"
+  },
+  "deleteSelected": "حذف المحدد",
+  "@deleteSelected": {
+    "description": "Tooltip for delete selected"
+  },
+  "searchMemories": "بحث في {count} ذكرى",
+  "@searchMemories": {
+    "description": "Hint text for memories search bar",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "memoryDeleted": "تم حذف الذكرى.",
+  "@memoryDeleted": {
+    "description": "Notification when memory deleted"
+  },
+  "undo": "تراجع",
+  "@undo": {
+    "description": "Undo button text"
+  },
+  "noMemoriesYet": "لا توجد ذكريات بعد",
+  "@noMemoriesYet": {
+    "description": "Empty state text"
+  },
+  "noAutoMemories": "لا توجد ذكريات مستخرجة تلقائياً بعد",
+  "@noAutoMemories": {
+    "description": "Empty state text for auto category"
+  },
+  "noManualMemories": "لا توجد ذكريات يدوية بعد",
+  "@noManualMemories": {
+    "description": "Empty state text for manual category"
+  },
+  "noMemoriesInCategories": "لا توجد ذكريات في هذه الفئات",
+  "@noMemoriesInCategories": {
+    "description": "Empty state text for filtered categories"
+  },
+  "noMemoriesFound": "لم يتم العثور على ذكريات",
+  "@noMemoriesFound": {
+    "description": "Empty state text for search results"
+  },
+  "addFirstMemory": "أضف ذكرتك الأولى",
+  "@addFirstMemory": {
+    "description": "Button to add first memory"
+  },
+  "clearMemoryTitle": "مسح ذاكرة Omi",
+  "@clearMemoryTitle": {
+    "description": "Dialog title for clearing memory"
+  },
+  "clearMemoryMessage": "هل أنت متأكد من رغبتك في مسح ذاكرة Omi؟ لا يمكن التراجع عن هذا الإجراء.",
+  "@clearMemoryMessage": {
+    "description": "Dialog content for clearing memory"
+  },
+  "clearMemoryButton": "مسح الذاكرة",
+  "@clearMemoryButton": {
+    "description": "Button text to confirm clear"
+  },
+  "memoryClearedSuccess": "تم مسح ذاكرة Omi عنك",
+  "@memoryClearedSuccess": {
+    "description": "Snackbar success message"
+  },
+  "noMemoriesToDelete": "لا توجد ذكريات لحذفها",
+  "@noMemoriesToDelete": {
+    "description": "Snackbar message"
+  },
+  "createMemoryTooltip": "إنشاء ذكرى جديدة",
+  "@createMemoryTooltip": {
+    "description": "Tooltip for create memory FAB"
+  },
+  "createActionItemTooltip": "إنشاء مهمة جديدة",
+  "@createActionItemTooltip": {
+    "description": "Tooltip for create action item FAB"
+  },
+  "memoryManagement": "إدارة الذاكرة",
+  "@memoryManagement": {
+    "description": "Title for memory management sheet"
+  },
+  "filterMemories": "تصفية الذكريات",
+  "@filterMemories": {
+    "description": "Section header"
+  },
+  "totalMemoriesCount": "لديك {count} ذكرى إجمالية",
+  "@totalMemoriesCount": {
+    "description": "Count display",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "publicMemories": "ذكريات عامة",
+  "@publicMemories": {
+    "description": "Label"
+  },
+  "privateMemories": "ذكريات خاصة",
+  "@privateMemories": {
+    "description": "Label"
+  },
+  "makeAllPrivate": "جعل جميع الذكريات خاصة",
+  "@makeAllPrivate": {
+    "description": "Button label"
+  },
+  "makeAllPublic": "جعل جميع الذكريات عامة",
+  "@makeAllPublic": {
+    "description": "Button label"
+  },
+  "deleteAllMemories": "حذف جميع الذكريات",
+  "@deleteAllMemories": {
+    "description": "Button label"
+  },
+  "allMemoriesPrivateResult": "جميع الذكريات خاصة الآن",
+  "@allMemoriesPrivateResult": {
+    "description": "Snackbar"
+  },
+  "allMemoriesPublicResult": "جميع الذكريات عامة الآن",
+  "@allMemoriesPublicResult": {
+    "description": "Snackbar"
+  },
+  "newMemory": "ذكرى جديدة",
+  "@newMemory": {
+    "description": "Dialog title"
+  },
+  "editMemory": "تعديل الذكرى",
+  "@editMemory": {
+    "description": "Dialog title"
+  },
+  "memoryContentHint": "أحب تناول الآيس كريم...",
+  "@memoryContentHint": {
+    "description": "Input hint"
+  },
+  "failedToSaveMemory": "فشل الحفظ. يرجى التحقق من اتصالك.",
+  "@failedToSaveMemory": {
+    "description": "Error message"
+  },
+  "saveMemory": "حفظ الذكرى",
+  "@saveMemory": {
+    "description": "Button label"
+  },
+  "retry": "إعادة المحاولة",
+  "@retry": {
+    "description": "Button label"
+  },
+  "createActionItem": "إنشاء مهمة",
+  "@createActionItem": {
+    "description": "Sheet title"
+  },
+  "editActionItem": "تعديل المهمة",
+  "@editActionItem": {
+    "description": "Sheet title"
+  },
+  "actionItemDescriptionHint": "ما الذي يجب القيام به؟",
+  "@actionItemDescriptionHint": {
+    "description": "Input hint"
+  },
+  "actionItemDescriptionEmpty": "لا يمكن أن يكون وصف المهمة فارغاً.",
+  "@actionItemDescriptionEmpty": {
+    "description": "Error message"
+  },
+  "actionItemUpdated": "تم تحديث المهمة",
+  "@actionItemUpdated": {
+    "description": "Snackbar"
+  },
+  "failedToUpdateActionItem": "فشل تحديث المهمة",
+  "@failedToUpdateActionItem": {
+    "description": "Snackbar"
+  },
+  "actionItemCreated": "تم إنشاء المهمة",
+  "@actionItemCreated": {
+    "description": "Snackbar"
+  },
+  "failedToCreateActionItem": "فشل إنشاء المهمة",
+  "@failedToCreateActionItem": {
+    "description": "Snackbar"
+  },
+  "dueDate": "تاريخ الاستحقاق",
+  "@dueDate": {
+    "description": "Label"
+  },
+  "time": "الوقت",
+  "@time": {
+    "description": "Label"
+  },
+  "addDueDate": "إضافة تاريخ استحقاق",
+  "@addDueDate": {
+    "description": "Placeholder"
+  },
+  "pressDoneToSave": "اضغط على تم للحفظ",
+  "@pressDoneToSave": {
+    "description": "Instruction"
+  },
+  "pressDoneToCreate": "اضغط على تم للإنشاء",
+  "@pressDoneToCreate": {
+    "description": "Instruction"
+  },
+  "filterAll": "الكل",
+  "@filterAll": {
+    "description": "Filter option"
+  },
+  "filterSystem": "عنك",
+  "@filterSystem": {
+    "description": "Filter option for facts about the user"
+  },
+  "filterInteresting": "رؤى",
+  "@filterInteresting": {
+    "description": "Filter option for external wisdom/advice"
+  },
+  "filterManual": "يدوي",
+  "@filterManual": {
+    "description": "Filter option"
+  },
+  "completed": "مكتمل",
+  "@completed": {
+    "description": "Status label"
+  },
+  "markComplete": "وضع علامة كمكتمل",
+  "@markComplete": {
+    "description": "Action label"
+  },
+  "actionItemDeleted": "تم حذف المهمة",
+  "@actionItemDeleted": {
+    "description": "Snackbar"
+  },
+  "failedToDeleteActionItem": "فشل حذف المهمة",
+  "@failedToDeleteActionItem": {
+    "description": "Snackbar"
+  },
+  "deleteActionItemConfirmTitle": "حذف المهمة",
+  "@deleteActionItemConfirmTitle": {
+    "description": "Dialog title"
+  },
+  "deleteActionItemConfirmMessage": "هل أنت متأكد من رغبتك في حذف هذه المهمة؟",
+  "@deleteActionItemConfirmMessage": {
+    "description": "Dialog message"
+  },
+  "appLanguage": "لغة التطبيق",
+  "@appLanguage": {
+    "description": "Label for app language selector"
+  },
+  "appInterfaceSectionTitle": "واجهة التطبيق",
+  "speechTranscriptionSectionTitle": "الكلام والنسخ",
+  "languageSettingsHelperText": "لغة التطبيق تغير القوائم والأزرار. لغة الكلام تؤثر على كيفية نسخ تسجيلاتك."
+}

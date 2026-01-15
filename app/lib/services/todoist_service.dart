@@ -1,6 +1,9 @@
 import 'package:flutter/foundation.dart';
-import 'package:omi/backend/http/api/task_integrations.dart';
+
 import 'package:url_launcher/url_launcher.dart';
+
+import 'package:omi/backend/http/api/task_integrations.dart';
+import 'package:omi/utils/logger.dart';
 
 class TodoistService {
   static final TodoistService _instance = TodoistService._internal();
@@ -21,16 +24,16 @@ class TodoistService {
     try {
       final authUrl = await getOAuthUrl('todoist');
       if (authUrl == null) {
-        debugPrint('Failed to get Todoist OAuth URL from backend');
+        Logger.debug('Failed to get Todoist OAuth URL from backend');
         return false;
       }
 
       final authUri = Uri.parse(authUrl);
-      debugPrint('Opening Todoist auth URL');
+      Logger.debug('Opening Todoist auth URL');
 
       final canLaunch = await canLaunchUrl(authUri);
       if (!canLaunch) {
-        debugPrint('Cannot launch auth URL');
+        Logger.debug('Cannot launch auth URL');
         return false;
       }
 
@@ -41,7 +44,7 @@ class TodoistService {
 
       return true;
     } catch (e) {
-      debugPrint('Error starting Todoist authentication: $e');
+      Logger.debug('Error starting Todoist authentication: $e');
       return false;
     }
   }
@@ -49,7 +52,7 @@ class TodoistService {
   /// Handle OAuth callback (tokens stored in backend Firebase)
   Future<bool> handleCallback() async {
     _isAuthenticated = true;
-    debugPrint('Todoist authentication successful');
+    Logger.debug('Todoist authentication successful');
     return true;
   }
 
@@ -68,14 +71,14 @@ class TodoistService {
       );
 
       if (result != null && result['success'] == true) {
-        debugPrint('Task created successfully in Todoist');
+        Logger.debug('Task created successfully in Todoist');
         return true;
       }
 
-      debugPrint('Failed to create task in Todoist: ${result?['error']}');
+      Logger.debug('Failed to create task in Todoist: ${result?['error']}');
       return false;
     } catch (e) {
-      debugPrint('Error creating task in Todoist: $e');
+      Logger.debug('Error creating task in Todoist: $e');
       return false;
     }
   }
@@ -85,9 +88,9 @@ class TodoistService {
     try {
       await deleteTaskIntegration('todoist');
       _isAuthenticated = false;
-      debugPrint('✓ Disconnected from Todoist');
+      Logger.debug('✓ Disconnected from Todoist');
     } catch (e) {
-      debugPrint('Error disconnecting from Todoist: $e');
+      Logger.debug('Error disconnecting from Todoist: $e');
     }
   }
 }

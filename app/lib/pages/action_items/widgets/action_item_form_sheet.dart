@@ -1,15 +1,17 @@
-import 'package:calendar_date_picker2/calendar_date_picker2.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'package:calendar_date_picker2/calendar_date_picker2.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/calendar_date_picker_sheet.dart';
-import 'package:provider/provider.dart';
-import 'package:omi/utils/l10n_extensions.dart';
 
 class ActionItemFormSheet extends StatefulWidget {
   final ActionItemWithMetadata? actionItem; // null for create, non-null for edit
@@ -76,8 +78,9 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
       // Compare due dates - handle null cases explicitly
       bool dueDateChanged = (_selectedDueDate == null && widget.actionItem!.dueAt != null) ||
           (_selectedDueDate != null && widget.actionItem!.dueAt == null) ||
-          (_selectedDueDate != null && widget.actionItem!.dueAt != null && 
-           _selectedDueDate!.millisecondsSinceEpoch != widget.actionItem!.dueAt!.millisecondsSinceEpoch);
+          (_selectedDueDate != null &&
+              widget.actionItem!.dueAt != null &&
+              _selectedDueDate!.millisecondsSinceEpoch != widget.actionItem!.dueAt!.millisecondsSinceEpoch);
       bool completionChanged = _isCompleted != widget.actionItem!.completed;
 
       if (!descriptionChanged && !dueDateChanged && !completionChanged) {

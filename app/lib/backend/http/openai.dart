@@ -3,12 +3,15 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+
+import 'package:tuple/tuple.dart';
+
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/env/env.dart';
-import 'package:tuple/tuple.dart';
+import 'package:omi/utils/logger.dart';
 
 class SummaryResult {
   final Structured structured;
@@ -106,6 +109,6 @@ Future<String> executeGptPrompt(String? prompt, {bool ignoreCache = false}) asyn
     {'role': 'system', 'content': prompt}
   ]);
   prefs.setGptCompletionCache(promptBase64, response);
-  debugPrint('executeGptPrompt response: $response');
+  Logger.debug('executeGptPrompt response: $response');
   return response;
 }

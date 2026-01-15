@@ -1,8 +1,11 @@
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:omi/providers/action_items_provider.dart';
+
 import 'package:provider/provider.dart';
+
+import 'package:omi/providers/action_items_provider.dart';
 
 /// Daily Score Widget - Shows task completion rate as a 0-5 score
 class DailyScoreWidget extends StatefulWidget {
@@ -25,8 +28,7 @@ class _DailyScoreWidgetState extends State<DailyScoreWidget> {
         // Get tasks due today only
         final todayTasks = provider.actionItems.where((item) {
           if (item.dueAt == null) return false;
-          return item.dueAt!.isAfter(todayStart.subtract(const Duration(days: 1))) && 
-                 item.dueAt!.isBefore(todayEnd);
+          return item.dueAt!.isAfter(todayStart.subtract(const Duration(days: 1))) && item.dueAt!.isBefore(todayEnd);
         }).toList();
 
         final totalTasks = todayTasks.length;
@@ -338,6 +340,5 @@ class _SemicircleGaugePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_SemicircleGaugePainter old) =>
-      old.score != score || old.color != color;
+  bool shouldRepaint(_SemicircleGaugePainter old) => old.score != score || old.color != color;
 }

@@ -1,8 +1,10 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/logger.dart';
 
 /// Wrapped status enum
 enum WrappedStatus {
@@ -64,7 +66,7 @@ Future<Wrapped2025Response?> getWrapped2025() async {
   );
 
   if (response == null) return null;
-  debugPrint('getWrapped2025 response: ${response.body}');
+  Logger.debug('getWrapped2025 response: ${response.body}');
 
   if (response.statusCode == 200) {
     return Wrapped2025Response.fromJson(jsonDecode(response.body));
@@ -82,7 +84,7 @@ Future<Wrapped2025Response?> generateWrapped2025() async {
   );
 
   if (response == null) return null;
-  debugPrint('generateWrapped2025 response: ${response.body}');
+  Logger.debug('generateWrapped2025 response: ${response.body}');
 
   if (response.statusCode == 200) {
     final json = jsonDecode(response.body);

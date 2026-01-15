@@ -3,14 +3,17 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+
+import 'package:http/http.dart' as http;
+import 'package:path/path.dart';
+
 import 'package:omi/backend/http/http_pool_manager.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:http/http.dart' as http;
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:path/path.dart';
 
 class ApiClient {
   static const Duration requestTimeoutRead = Duration(seconds: 30);
@@ -101,7 +104,8 @@ Future<http.Response?> makeApiCall({
       fromHeaders: headers,
     );
 
-    final effectiveTimeout = timeout ?? (method == 'GET' ? ApiClient.requestTimeoutRead : ApiClient.requestTimeoutWrite);
+    final effectiveTimeout =
+        timeout ?? (method == 'GET' ? ApiClient.requestTimeoutRead : ApiClient.requestTimeoutWrite);
     final effectiveRetries = retries ?? 1;
 
     http.Response response = await HttpPoolManager.instance.send(
@@ -138,7 +142,7 @@ Future<http.Response?> makeApiCall({
 
     return response;
   } catch (e, stackTrace) {
-    debugPrint('HTTP request failed: $e, $stackTrace');
+    Logger.debug('HTTP request failed: $e, $stackTrace');
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
     return null;
   }
@@ -192,7 +196,7 @@ Future<http.Response> makeMultipartApiCall({
     var streamedResponse = await HttpPoolManager.instance.sendStreaming(request);
     return await http.Response.fromStream(streamedResponse);
   } catch (e, stackTrace) {
-    debugPrint('Multipart HTTP request failed: $e, $stackTrace');
+    Logger.debug('Multipart HTTP request failed: $e, $stackTrace');
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
     rethrow;
   }
@@ -327,13 +331,13 @@ dynamic extractContentFromResponse(
     }
     var message = data['choices'][0]['message'];
     if (isFunctionCalling && message['tool_calls'] != null) {
-      debugPrint('message $message');
-      debugPrint('message ${message['tool_calls'].runtimeType}');
+      Logger.debug('message $message');
+      Logger.debug('message ${message['tool_calls'].runtimeType}');
       return message['tool_calls'];
     }
     return data['choices'][0]['message']['content'];
   } else {
-    debugPrint('Error fetching data: ${response?.statusCode}');
+    Logger.debug('Error fetching data: ${response?.statusCode}');
     // TODO: handle error, better specially for script migration
     PlatformManager.instance.crashReporter
         .reportCrash(Exception('Error fetching data: ${response?.statusCode}'), StackTrace.current, userAttributes: {

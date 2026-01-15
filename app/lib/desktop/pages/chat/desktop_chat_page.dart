@@ -2,40 +2,41 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:shimmer/shimmer.dart';
+import 'package:visibility_detector/visibility_detector.dart';
+
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/desktop/pages/chat/widgets/desktop_voice_recorder_widget.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/chat/select_text_screen.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/pages/chat/widgets/markdown_message_widget.dart';
-import 'package:omi/desktop/pages/chat/widgets/desktop_voice_recorder_widget.dart';
-import 'package:omi/providers/connectivity_provider.dart';
-import 'package:omi/providers/home_provider.dart';
-import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/message_provider.dart';
+import 'package:omi/ui/atoms/omi_avatar.dart';
+import 'package:omi/ui/atoms/omi_icon_button.dart';
+import 'package:omi/ui/atoms/omi_message_input.dart';
+import 'package:omi/ui/atoms/omi_send_button.dart';
 import 'package:omi/ui/atoms/omi_typing_indicator.dart';
+import 'package:omi/ui/molecules/omi_chat_bubble.dart';
+import 'package:omi/ui/molecules/omi_section_header.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
-import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:shimmer/shimmer.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/ui/atoms/omi_avatar.dart';
-import 'package:omi/ui/molecules/omi_chat_bubble.dart';
-import 'package:omi/ui/atoms/omi_message_input.dart';
-import 'package:omi/ui/atoms/omi_send_button.dart';
-import 'package:omi/ui/atoms/omi_icon_button.dart';
-import 'package:omi/ui/molecules/omi_section_header.dart';
-import 'package:visibility_detector/visibility_detector.dart';
-
 import 'widgets/desktop_message_action_menu.dart';
 
 class DesktopChatPage extends StatefulWidget {
@@ -808,8 +809,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.subdirectory_arrow_right,
-                                size: 14, color: ResponsiveHelper.textSecondary),
+                            const Icon(Icons.subdirectory_arrow_right, size: 14, color: ResponsiveHelper.textSecondary),
                             const SizedBox(width: 8),
                             Flexible(
                               child: Text(

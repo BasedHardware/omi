@@ -1,21 +1,25 @@
 import 'dart:ui';
-import 'package:cached_network_image/cached_network_image.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/backend/schema/app.dart';
-import 'package:omi/pages/apps/providers/add_app_provider.dart';
-import 'package:omi/providers/connectivity_provider.dart';
-import 'package:omi/providers/app_provider.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:omi/utils/other/debouncer.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
-import 'widgets/desktop_app_detail.dart';
-import 'package:omi/ui/atoms/omi_search_input.dart';
+
+import 'package:omi/backend/schema/app.dart';
+import 'package:omi/pages/apps/providers/add_app_provider.dart';
+import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/ui/atoms/omi_button.dart';
+import 'package:omi/ui/atoms/omi_search_input.dart';
 import 'package:omi/ui/molecules/omi_empty_state.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/other/debouncer.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'widgets/desktop_app_detail.dart';
 
 class DesktopAppsPage extends StatefulWidget {
   final VoidCallback? onNavigateToCreateApp;
@@ -118,7 +122,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
         }
       }
     } catch (e) {
-      debugPrint('Error during initialization: $e');
+      Logger.debug('Error during initialization: $e');
       setState(() {
         _isLoadingData = false;
       });
@@ -162,7 +166,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
     try {
       context.read<AppProvider>().removeListener(_handleAppProviderChange);
     } catch (e) {
-      debugPrint('Could not remove AppProvider listener: $e');
+      Logger.debug('Could not remove AppProvider listener: $e');
     }
 
     _searchController.dispose();
@@ -896,4 +900,3 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
     }
   }
 }
-

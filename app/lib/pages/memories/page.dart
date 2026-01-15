@@ -1,23 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:shimmer/shimmer.dart';
+
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 import 'package:omi/widgets/extensions/functions.dart';
-import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
-
-import 'widgets/memory_edit_sheet.dart';
-import 'widgets/memory_item.dart';
 import 'widgets/memory_dialog.dart';
-
-import 'package:omi/utils/l10n_extensions.dart';
-
-import 'widgets/memory_management_sheet.dart';
+import 'widgets/memory_edit_sheet.dart';
 import 'widgets/memory_graph_page.dart';
+import 'widgets/memory_item.dart';
+import 'widgets/memory_management_sheet.dart';
 
 class MemoriesPage extends StatefulWidget {
   const MemoriesPage({super.key});

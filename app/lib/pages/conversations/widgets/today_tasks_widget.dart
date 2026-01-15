@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/home_provider.dart';
-import 'package:provider/provider.dart';
 
 /// Widget showing top 3 today's tasks with "Show all ->" button
 class TodayTasksWidget extends StatelessWidget {
@@ -137,9 +139,7 @@ class _TaskItem extends StatelessWidget {
                 ),
                 color: task.completed ? Colors.amber : Colors.transparent,
               ),
-              child: task.completed
-                  ? const Icon(Icons.check, size: 14, color: Colors.black)
-                  : null,
+              child: task.completed ? const Icon(Icons.check, size: 14, color: Colors.black) : null,
             ),
           ),
           // Task text

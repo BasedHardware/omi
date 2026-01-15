@@ -2,8 +2,10 @@
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+
 import 'package:upgrader/upgrader.dart';
+
+import 'package:omi/utils/analytics/mixpanel.dart';
 
 class MyUpgrader extends Upgrader {
   MyUpgrader({super.debugLogging, super.debugDisplayOnce});

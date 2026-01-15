@@ -1,6 +1,9 @@
 import 'dart:async';
-import 'package:collection/collection.dart';
+
 import 'package:flutter/widgets.dart';
+
+import 'package:collection/collection.dart';
+
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
@@ -8,6 +11,7 @@ import 'package:omi/providers/base_provider.dart';
 import 'package:omi/utils/alerts/app_dialog.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/logger.dart';
 
 class AppProvider extends BaseProvider {
   List<App> apps = [];
@@ -395,7 +399,7 @@ class AppProvider extends BaseProvider {
         notifyListeners(); // This should notify as it affects UI state
       }
     } else {
-      debugPrint("Error: Attempted to set loading state for invalid index $index");
+      Logger.debug("Error: Attempted to set loading state for invalid index $index");
     }
   }
 
@@ -432,7 +436,7 @@ class AppProvider extends BaseProvider {
       await Future.delayed(const Duration(milliseconds: 50));
       filterApps();
     } catch (e) {
-      debugPrint('Error loading apps: $e');
+      Logger.debug('Error loading apps: $e');
       // Fallback to cached data
       setAppsFromCache();
     } finally {
@@ -447,7 +451,7 @@ class AppProvider extends BaseProvider {
       setIsLoading(true);
       popularApps = await retrievePopularApps();
     } catch (e) {
-      debugPrint('Error loading popular apps: $e');
+      Logger.debug('Error loading popular apps: $e');
       // Fallback to cached data or empty list
       popularApps = [];
     } finally {
@@ -565,7 +569,7 @@ class AppProvider extends BaseProvider {
 
   Future<void> refreshAppsAfterChange() async {
     try {
-      debugPrint('Refreshing apps after installation/change...');
+      Logger.debug('Refreshing apps after installation/change...');
       // Fetch grouped apps from server (backend handles all filtering and grouping)
       final groups = await retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: true);
       groupedApps = groups;
@@ -587,7 +591,7 @@ class AppProvider extends BaseProvider {
       updatePrefApps();
       notifyListeners();
     } catch (e) {
-      debugPrint('Error refreshing apps after change: $e');
+      Logger.debug('Error refreshing apps after change: $e');
     }
   }
 
@@ -619,7 +623,7 @@ class AppProvider extends BaseProvider {
       try {
         SharedPreferencesUtil().appsList = apps;
       } catch (e) {
-        debugPrint('Error updating preferences: $e');
+        Logger.debug('Error updating preferences: $e');
       }
     });
   }
@@ -739,7 +743,7 @@ class AppProvider extends BaseProvider {
       appLoading[loadingIndex] = true;
       notifyListeners();
     } else if (idx != null) {
-      debugPrint("Warning: Invalid index $idx provided to toggleApp.");
+      Logger.debug("Warning: Invalid index $idx provided to toggleApp.");
     }
 
     var prefs = SharedPreferencesUtil();
@@ -793,7 +797,7 @@ class AppProvider extends BaseProvider {
         // Debounced preferences update to prevent database locks
         updatePrefApps();
       } else {
-        debugPrint("Error: Toggled app $appId not found in local 'apps' list after successful toggle.");
+        Logger.debug("Error: Toggled app $appId not found in local 'apps' list after successful toggle.");
       }
     }
 

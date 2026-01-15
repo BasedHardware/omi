@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';

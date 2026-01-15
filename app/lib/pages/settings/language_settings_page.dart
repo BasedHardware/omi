@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/locale_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:provider/provider.dart';
-import 'package:omi/providers/locale_provider.dart';
 
 class LanguageSettingsPage extends StatefulWidget {
   const LanguageSettingsPage({super.key});
@@ -18,11 +20,89 @@ class LanguageSettingsPage extends StatefulWidget {
 class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
   bool _isUpdatingLanguage = false;
 
-  Widget _buildLanguageCard(
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 8),
+      child: Text(
+        title,
+        style: TextStyle(
+          color: Colors.grey.shade500,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAppInterfaceCard(LocaleProvider localeProvider) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _showAppLanguageSelectionSheet(localeProvider),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: const Color(0xFF2A2A2E),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Center(
+                child: FaIcon(
+                  FontAwesomeIcons.textHeight,
+                  color: Colors.grey.shade400,
+                  size: 16,
+                ),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    context.l10n.appLanguage,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    localeProvider.locale != null
+                        ? LocaleProvider.getDisplayName(localeProvider.locale!)
+                        : context.l10n.systemDefault,
+                    style: TextStyle(
+                      color: Colors.grey.shade500,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            FaIcon(
+              FontAwesomeIcons.chevronRight,
+              color: Colors.grey.shade600,
+              size: 14,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSpeechTranscriptionCard(
     HomeProvider homeProvider,
     UserProvider userProvider,
     CaptureProvider captureProvider,
-    LocaleProvider localeProvider,
   ) {
     final languageName = homeProvider.userPrimaryLanguage.isNotEmpty
         ? homeProvider.availableLanguages.entries
@@ -44,66 +124,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
       ),
       child: Column(
         children: [
-          // App Language Row
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => _showAppLanguageSelectionSheet(localeProvider),
-            child: Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2A2A2E),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Center(
-                    child: FaIcon(
-                      FontAwesomeIcons.mobileScreen,
-                      color: Colors.grey.shade400,
-                      size: 16,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        context.l10n.appLanguage,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        localeProvider.locale != null
-                            ? LocaleProvider.getDisplayName(localeProvider.locale!)
-                            : context.l10n.systemDefault,
-                        style: TextStyle(
-                          color: Colors.grey.shade500,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                FaIcon(
-                  FontAwesomeIcons.chevronRight,
-                  color: Colors.grey.shade600,
-                  size: 14,
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            child: Divider(height: 1, color: Colors.grey.shade800),
-          ),
-          // Primary Language Row
+          // Speech Language Row
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: _isUpdatingLanguage ? null : () => _showLanguageSelectionSheet(homeProvider, captureProvider),
@@ -118,7 +139,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                   ),
                   child: Center(
                     child: FaIcon(
-                      FontAwesomeIcons.globe,
+                      FontAwesomeIcons.microphone,
                       color: Colors.grey.shade400,
                       size: 16,
                     ),
@@ -172,7 +193,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
             child: Divider(height: 1, color: Colors.grey.shade800),
           ),
 
-          // Automatic Translation Row
+          // Multi-language Detection Row
           Row(
             children: [
               Container(
@@ -238,6 +259,20 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildHelperText() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+      child: Text(
+        context.l10n.languageSettingsHelperText,
+        style: TextStyle(
+          color: Colors.grey.shade600,
+          fontSize: 12,
+          height: 1.4,
+        ),
       ),
     );
   }
@@ -433,7 +468,15 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 16),
-                _buildLanguageCard(homeProvider, userProvider, captureProvider, localeProvider),
+                // App Interface Section
+                _buildSectionHeader(context.l10n.appInterfaceSectionTitle),
+                _buildAppInterfaceCard(localeProvider),
+                const SizedBox(height: 24),
+                // Speech & Transcription Section
+                _buildSectionHeader(context.l10n.speechTranscriptionSectionTitle),
+                _buildSpeechTranscriptionCard(homeProvider, userProvider, captureProvider),
+                const SizedBox(height: 12),
+                _buildHelperText(),
                 const SizedBox(height: 32),
               ],
             ),

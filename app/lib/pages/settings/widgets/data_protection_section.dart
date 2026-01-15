@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:omi/providers/user_provider.dart';
+
 import 'package:provider/provider.dart';
+
+import 'package:omi/providers/user_provider.dart';
 
 extension StringExtension on String {
   String capitalize() {

@@ -1,18 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/devices/apple_watch_connection.dart';
 import 'package:omi/services/devices/device_connection.dart';
+import 'package:omi/services/devices/discovery/device_locator.dart';
+import 'package:omi/services/devices/fieldy_connection.dart';
 import 'package:omi/services/devices/frame_connection.dart';
 import 'package:omi/services/devices/friend_pendant_connection.dart';
 import 'package:omi/services/devices/limitless_connection.dart';
-import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/devices/models.dart';
+import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/devices/plaud_connection.dart';
-import 'package:omi/services/devices/fieldy_connection.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:omi/services/devices/discovery/device_locator.dart';
+import 'package:omi/utils/logger.dart';
 
 enum ImageOrientation {
   orientation0, // 0 degrees
@@ -677,7 +680,7 @@ class BtDevice {
       final data = manufacturerData[93]!;
 
       // Log the pattern to learn new devices
-      debugPrint(
+      Logger.debug(
           '[PLAUD] Found manufacturer ID 93 with data: ${data.map((e) => e.toRadixString(16).padLeft(2, '0')).join()}');
 
       // Known pattern for NotePin: 0456cf00
@@ -688,7 +691,7 @@ class BtDevice {
       // Accept any device with manufacturer ID 93 if it has data
       // This catches other PLAUD models we haven't seen yet
       if (data.isNotEmpty) {
-        debugPrint('[PLAUD] Accepting device with manufacturer ID 93');
+        Logger.debug('[PLAUD] Accepting device with manufacturer ID 93');
         return true;
       }
     }

@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:shimmer/shimmer.dart';
+
+import 'package:omi/pages/apps/add_app.dart';
+import 'package:omi/pages/settings/github_settings_page.dart';
 import 'package:omi/providers/integration_provider.dart';
+import 'package:omi/services/github_service.dart';
 import 'package:omi/services/google_calendar_service.dart';
 import 'package:omi/services/notion_service.dart';
 import 'package:omi/services/twitter_service.dart';
 import 'package:omi/services/whoop_service.dart';
-import 'package:omi/services/github_service.dart';
-import 'package:omi/pages/settings/github_settings_page.dart';
-import 'package:omi/pages/apps/add_app.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
 
 enum IntegrationApp {
   whoop,
@@ -221,7 +224,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
           );
         }
         await _loadFromBackend();
-        debugPrint('✓ Integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
+        Logger.debug('✓ Integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
       } else {
         if (mounted) {
           scaffoldMessenger.showSnackBar(

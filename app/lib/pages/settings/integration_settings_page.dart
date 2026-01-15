@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+
+import 'package:provider/provider.dart';
+
 import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
-import 'package:provider/provider.dart';
 
 class IntegrationSettingsPage extends StatefulWidget {
   final String appName;
@@ -85,9 +88,9 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
         final fallback = candidates.isNotEmpty ? candidates.first : null;
         if (fallback != null) {
           await provider.setSelectedApp(fallback);
-          debugPrint('Task integration disabled: ${widget.appName} - switched to ${fallback.key}');
+          Logger.debug('Task integration disabled: ${widget.appName} - switched to ${fallback.key}');
         } else {
-          debugPrint('Task integration disabled: ${widget.appName} - no active integration selected');
+          Logger.debug('Task integration disabled: ${widget.appName} - no active integration selected');
         }
       }
       provider.refresh();

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'package:omi/backend/schema/app.dart';
 
 class CategoryCard extends StatelessWidget {

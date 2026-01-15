@@ -106,6 +106,7 @@ methods_timeout = {
 
 app.add_middleware(TimeoutMiddleware, methods_timeout=methods_timeout)
 
+
 modal_app = App(
     name='backend',
     secrets=[Secret.from_name("gcp-credentials"), Secret.from_name('envs')],

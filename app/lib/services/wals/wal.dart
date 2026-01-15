@@ -1,5 +1,6 @@
-import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:path_provider/path_provider.dart';
+
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 
 const chunkSizeInSeconds = 60;
 const flushIntervalInSeconds = 90;

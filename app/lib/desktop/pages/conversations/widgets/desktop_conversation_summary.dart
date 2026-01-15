@@ -1,7 +1,10 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -9,16 +12,16 @@ import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/apps/page.dart';
 import 'package:omi/pages/chat/widgets/markdown_message_widget.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/ui/atoms/omi_avatar.dart';
 import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
-import 'package:omi/ui/atoms/omi_avatar.dart';
+import 'package:omi/ui/molecules/omi_empty_state.dart';
+import 'package:omi/ui/molecules/omi_panel_header.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/extensions/string.dart';
-import 'package:provider/provider.dart';
-import 'package:omi/ui/molecules/omi_empty_state.dart';
-import 'package:omi/ui/molecules/omi_panel_header.dart';
 
 class DesktopConversationSummary extends StatelessWidget {
   final ServerConversation conversation;
@@ -461,7 +464,7 @@ class _DesktopAppSelectionSheetState extends State<_DesktopAppSelectionSheet> {
         });
       }
     } catch (e) {
-      debugPrint('Error fetching apps: $e');
+      Logger.debug('Error fetching apps: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;

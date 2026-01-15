@@ -1,15 +1,17 @@
 import 'dart:io';
 
-import 'package:collection/collection.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+
+import 'package:collection/collection.dart';
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/schema/person.dart';
-import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/providers/people_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/functions.dart';
-import 'package:omi/utils/l10n_extensions.dart';
-import 'package:provider/provider.dart';
 
 class UserPeoplePage extends StatelessWidget {
   const UserPeoplePage({super.key});
@@ -296,9 +298,8 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
                                             ),
                                             onPressed: () => provider.playPause(index, j, sample),
                                           ),
-                                          title: Text(j == 0
-                                              ? context.l10n.speechProfile
-                                              : context.l10n.sampleNumber(j)),
+                                          title:
+                                              Text(j == 0 ? context.l10n.speechProfile : context.l10n.sampleNumber(j)),
                                           onTap: () => _confirmDeleteSample(index, person, j, provider),
                                           subtitle: Text('Tap to delete'),
                                         )),

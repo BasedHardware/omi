@@ -1,8 +1,10 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/logger.dart';
 
 /// Response model for integration
 class IntegrationResponse {
@@ -37,7 +39,7 @@ Future<IntegrationResponse?> getIntegration(String appKey) async {
     var body = utf8.decode(response.bodyBytes);
     return IntegrationResponse.fromJson(jsonDecode(body));
   } else {
-    debugPrint('getIntegration error ${response.statusCode}');
+    Logger.debug('getIntegration error ${response.statusCode}');
     return null;
   }
 }
@@ -56,7 +58,7 @@ Future<bool> saveIntegration(String appKey, Map<String, dynamic> details) async 
   if (response.statusCode == 200) {
     return true;
   } else {
-    debugPrint('saveIntegration error ${response.statusCode}');
+    Logger.debug('saveIntegration error ${response.statusCode}');
     return false;
   }
 }
@@ -75,7 +77,7 @@ Future<bool> deleteIntegration(String appKey) async {
   if (response.statusCode == 204 || response.statusCode == 200) {
     return true;
   } else {
-    debugPrint('deleteIntegration error ${response.statusCode}');
+    Logger.debug('deleteIntegration error ${response.statusCode}');
     return false;
   }
 }
@@ -96,7 +98,7 @@ Future<String?> getIntegrationOAuthUrl(String appKey) async {
     var data = jsonDecode(body);
     return data['auth_url'] as String?;
   } else {
-    debugPrint('getIntegrationOAuthUrl error ${response.statusCode}');
+    Logger.debug('getIntegrationOAuthUrl error ${response.statusCode}');
     return null;
   }
 }
@@ -148,7 +150,7 @@ Future<List<GitHubRepository>> getGitHubRepositories() async {
     var repos = data['repositories'] as List? ?? [];
     return repos.map((repo) => GitHubRepository.fromJson(repo)).toList();
   } else {
-    debugPrint('getGitHubRepositories error ${response.statusCode}');
+    Logger.debug('getGitHubRepositories error ${response.statusCode}');
     return [];
   }
 }
@@ -167,7 +169,7 @@ Future<bool> setGitHubDefaultRepo(String defaultRepo) async {
   if (response.statusCode == 200) {
     return true;
   } else {
-    debugPrint('setGitHubDefaultRepo error ${response.statusCode}');
+    Logger.debug('setGitHubDefaultRepo error ${response.statusCode}');
     return false;
   }
 }

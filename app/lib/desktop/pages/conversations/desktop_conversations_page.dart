@@ -1,27 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
-import 'package:omi/backend/preferences.dart';
-import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
-import 'package:omi/providers/capture_provider.dart';
-import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/providers/device_provider.dart';
-import 'package:omi/providers/app_provider.dart';
-import 'package:omi/utils/enums.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/device_provider.dart';
+import 'package:omi/utils/enums.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'desktop_conversation_detail_page.dart';
 import 'widgets/desktop_conversation_card.dart';
 import 'widgets/desktop_daily_score_widget.dart';
 import 'widgets/desktop_empty_conversations.dart';
 import 'widgets/desktop_goals_widget.dart';
-import 'widgets/desktop_search_widget.dart';
-import 'widgets/desktop_search_result_header.dart';
 import 'widgets/desktop_recording_widget.dart';
+import 'widgets/desktop_search_result_header.dart';
+import 'widgets/desktop_search_widget.dart';
 import 'widgets/desktop_today_tasks_widget.dart';
 
 class DesktopConversationsPage extends StatefulWidget {
@@ -154,8 +155,7 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
 
     // If conversation has no app results, update details
     if (detailProvider.conversation.appResults.isEmpty) {
-      await conversationProvider.updateSearchedConvoDetails(
-          detailProvider.conversation.id, date, index);
+      await conversationProvider.updateSearchedConvoDetails(detailProvider.conversation.id, date, index);
       detailProvider.updateConversation(detailProvider.conversation.id, date);
     }
 

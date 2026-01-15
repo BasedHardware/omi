@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:talker_flutter/talker_flutter.dart';
+
 import 'package:omi/utils/debug_log_manager.dart';
 
 class CrashlyticsTalkerObserver extends TalkerObserver {

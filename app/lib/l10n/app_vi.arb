@@ -1,0 +1,2317 @@
+{
+  "@@locale": "vi",
+  "@@last_modified": "2026-01-13",
+  "appTitle": "Omi",
+  "@appTitle": {
+    "description": "The app title displayed in various places"
+  },
+  "conversationTab": "Cuộc trò chuyện",
+  "@conversationTab": {
+    "description": "Tab label for conversation summary"
+  },
+  "transcriptTab": "Bản ghi",
+  "@transcriptTab": {
+    "description": "Tab label for transcript view"
+  },
+  "actionItemsTab": "Việc cần làm",
+  "@actionItemsTab": {
+    "description": "Tab label for action items"
+  },
+  "deleteConversationTitle": "Xóa cuộc trò chuyện?",
+  "@deleteConversationTitle": {
+    "description": "Title for delete confirmation dialog"
+  },
+  "deleteConversationMessage": "Bạn có chắc chắn muốn xóa cuộc trò chuyện này? Hành động này không thể hoàn tác.",
+  "@deleteConversationMessage": {
+    "description": "Message for delete confirmation dialog"
+  },
+  "confirm": "Xác nhận",
+  "@confirm": {
+    "description": "Confirm button label"
+  },
+  "cancel": "Hủy",
+  "@cancel": {
+    "description": "Button label"
+  },
+  "ok": "Ok",
+  "@ok": {
+    "description": "Generic OK button text"
+  },
+  "delete": "Xóa",
+  "@delete": {
+    "description": "Button label"
+  },
+  "add": "Thêm",
+  "@add": {
+    "description": "Add button label"
+  },
+  "update": "Cập nhật",
+  "@update": {
+    "description": "Update button label"
+  },
+  "save": "Lưu",
+  "@save": {
+    "description": "Save button label"
+  },
+  "edit": "Sửa",
+  "@edit": {
+    "description": "Edit button/action label"
+  },
+  "close": "Đóng",
+  "@close": {
+    "description": "Close button label"
+  },
+  "clear": "Xóa",
+  "@clear": {
+    "description": "Clear button label"
+  },
+  "copyTranscript": "Sao chép bản ghi",
+  "@copyTranscript": {
+    "description": "Menu item to copy transcript"
+  },
+  "copySummary": "Sao chép tóm tắt",
+  "@copySummary": {
+    "description": "Menu item to copy summary"
+  },
+  "testPrompt": "Thử nghiệm",
+  "@testPrompt": {
+    "description": "Menu item for testing prompts"
+  },
+  "reprocessConversation": "Xử lý lại cuộc trò chuyện",
+  "@reprocessConversation": {
+    "description": "Menu item to reprocess a conversation"
+  },
+  "deleteConversation": "Xóa cuộc trò chuyện",
+  "@deleteConversation": {
+    "description": "Menu item to delete a conversation"
+  },
+  "contentCopied": "Đã sao chép nội dung vào clipboard",
+  "@contentCopied": {
+    "description": "Snackbar message when content is copied"
+  },
+  "failedToUpdateStarred": "Không thể cập nhật trạng thái gắn sao.",
+  "@failedToUpdateStarred": {
+    "description": "Error message when starring fails"
+  },
+  "conversationUrlNotShared": "Không thể chia sẻ URL cuộc trò chuyện.",
+  "@conversationUrlNotShared": {
+    "description": "Error message when sharing fails"
+  },
+  "errorProcessingConversation": "Lỗi khi xử lý cuộc trò chuyện. Vui lòng thử lại sau.",
+  "@errorProcessingConversation": {
+    "description": "Error message for conversation processing failure"
+  },
+  "noInternetConnection": "Vui lòng kiểm tra kết nối internet và thử lại.",
+  "@noInternetConnection": {
+    "description": "Message shown when there's no internet"
+  },
+  "unableToDeleteConversation": "Không thể xóa cuộc trò chuyện",
+  "@unableToDeleteConversation": {
+    "description": "Title for delete error dialog"
+  },
+  "somethingWentWrong": "Đã có lỗi xảy ra! Vui lòng thử lại sau.",
+  "@somethingWentWrong": {
+    "description": "Generic error message"
+  },
+  "copyErrorMessage": "Sao chép thông báo lỗi",
+  "@copyErrorMessage": {
+    "description": "Button to copy error details"
+  },
+  "errorCopied": "Đã sao chép thông báo lỗi vào clipboard",
+  "@errorCopied": {
+    "description": "Snackbar message after copying error"
+  },
+  "remaining": "Còn lại",
+  "@remaining": {
+    "description": "Label for remaining time/items"
+  },
+  "loading": "Đang tải...",
+  "@loading": {
+    "description": "Loading indicator text"
+  },
+  "loadingDuration": "Đang tải thời lượng...",
+  "@loadingDuration": {
+    "description": "Loading duration indicator"
+  },
+  "secondsCount": "{count} giây",
+  "@secondsCount": {
+    "description": "Duration in seconds",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "30"
+      }
+    }
+  },
+  "people": "Mọi người",
+  "@people": {
+    "description": "People section title"
+  },
+  "addNewPerson": "Thêm người mới",
+  "@addNewPerson": {
+    "description": "Title for add person dialog"
+  },
+  "editPerson": "Chỉnh sửa người",
+  "@editPerson": {
+    "description": "Title for edit person dialog"
+  },
+  "createPersonHint": "Tạo một người mới và huấn luyện Omi để nhận biết giọng nói của họ!",
+  "@createPersonHint": {
+    "description": "Hint text for creating a person"
+  },
+  "speechProfile": "Hồ sơ giọng nói",
+  "@speechProfile": {
+    "description": "Speech profile label"
+  },
+  "sampleNumber": "Mẫu {number}",
+  "@sampleNumber": {
+    "description": "Label for speech sample",
+    "placeholders": {
+      "number": {
+        "type": "int",
+        "example": "1"
+      }
+    }
+  },
+  "settings": "Cài đặt",
+  "@settings": {
+    "description": "Settings page title"
+  },
+  "language": "Ngôn ngữ",
+  "@language": {
+    "description": "Language setting label"
+  },
+  "selectLanguage": "Chọn ngôn ngữ",
+  "@selectLanguage": {
+    "description": "Title for language selection"
+  },
+  "deleting": "Đang xóa...",
+  "@deleting": {
+    "description": "Deleting in progress indicator"
+  },
+  "pleaseCompleteAuthentication": "Vui lòng hoàn tất xác thực trong trình duyệt của bạn. Sau khi hoàn tất, hãy quay lại ứng dụng.",
+  "@pleaseCompleteAuthentication": {
+    "description": "Message shown during OAuth flow"
+  },
+  "failedToStartAuthentication": "Không thể bắt đầu xác thực",
+  "@failedToStartAuthentication": {
+    "description": "Error when OAuth fails to start"
+  },
+  "importStarted": "Đã bắt đầu nhập dữ liệu! Bạn sẽ được thông báo khi hoàn tất.",
+  "@importStarted": {
+    "description": "Success message when import begins"
+  },
+  "failedToStartImport": "Không thể bắt đầu nhập dữ liệu. Vui lòng thử lại.",
+  "@failedToStartImport": {
+    "description": "Error when import fails to start"
+  },
+  "couldNotAccessFile": "Không thể truy cập tệp đã chọn",
+  "@couldNotAccessFile": {
+    "description": "Error when file access fails"
+  },
+  "askOmi": "Hỏi Omi",
+  "@askOmi": {
+    "description": "Chat button label"
+  },
+  "done": "Xong",
+  "@done": {
+    "description": "Button label"
+  },
+  "disconnected": "Đã ngắt kết nối",
+  "@disconnected": {
+    "description": "Device disconnected status"
+  },
+  "searching": "Đang tìm kiếm",
+  "@searching": {
+    "description": "Searching for device status"
+  },
+  "connectDevice": "Kết nối thiết bị",
+  "@connectDevice": {
+    "description": "Button to connect a device"
+  },
+  "monthlyLimitReached": "Bạn đã đạt đến giới hạn hàng tháng.",
+  "@monthlyLimitReached": {
+    "description": "Message when usage limit is reached"
+  },
+  "checkUsage": "Kiểm tra mức sử dụng",
+  "@checkUsage": {
+    "description": "Button to check usage details"
+  },
+  "syncingRecordings": "Đang đồng bộ bản ghi âm",
+  "@syncingRecordings": {
+    "description": "Title when sync is in progress"
+  },
+  "recordingsToSync": "Bản ghi âm cần đồng bộ",
+  "@recordingsToSync": {
+    "description": "Title when there are recordings to sync"
+  },
+  "allCaughtUp": "Đã đồng bộ tất cả",
+  "@allCaughtUp": {
+    "description": "Title when everything is synced"
+  },
+  "sync": "Đồng bộ",
+  "@sync": {
+    "description": "Sync button label"
+  },
+  "pendantUpToDate": "Pendant đã được cập nhật",
+  "@pendantUpToDate": {
+    "description": "Status when pendant is synced"
+  },
+  "allRecordingsSynced": "Tất cả bản ghi âm đã được đồng bộ",
+  "@allRecordingsSynced": {
+    "description": "Status text when sync is complete"
+  },
+  "syncingInProgress": "Đang đồng bộ",
+  "@syncingInProgress": {
+    "description": "Status when sync is happening"
+  },
+  "readyToSync": "Sẵn sàng đồng bộ",
+  "@readyToSync": {
+    "description": "Status when ready to sync"
+  },
+  "tapSyncToStart": "Nhấn Đồng bộ để bắt đầu",
+  "@tapSyncToStart": {
+    "description": "Hint to start sync"
+  },
+  "pendantNotConnected": "Pendant chưa kết nối. Kết nối để đồng bộ.",
+  "@pendantNotConnected": {
+    "description": "Warning when pendant is not connected"
+  },
+  "everythingSynced": "Mọi thứ đã được đồng bộ.",
+  "@everythingSynced": {
+    "description": "Message when all is synced"
+  },
+  "recordingsNotSynced": "Bạn có những bản ghi âm chưa được đồng bộ.",
+  "@recordingsNotSynced": {
+    "description": "Message when there are unsynced recordings"
+  },
+  "syncingBackground": "Chúng tôi sẽ tiếp tục đồng bộ bản ghi âm của bạn trong nền.",
+  "@syncingBackground": {
+    "description": "Message during background sync"
+  },
+  "noConversationsYet": "Chưa có cuộc trò chuyện nào.",
+  "@noConversationsYet": {
+    "description": "Empty state when no conversations exist"
+  },
+  "noStarredConversations": "Chưa có cuộc trò chuyện được gắn sao.",
+  "@noStarredConversations": {
+    "description": "Empty state for starred filter"
+  },
+  "starConversationHint": "Để gắn sao cuộc trò chuyện, hãy mở nó và nhấn vào biểu tượng ngôi sao ở phần đầu.",
+  "@starConversationHint": {
+    "description": "Hint explaining how to star conversations"
+  },
+  "searchConversations": "Tìm kiếm cuộc trò chuyện",
+  "@searchConversations": {
+    "description": "Search field placeholder"
+  },
+  "selectedCount": "Đã chọn {count}",
+  "@selectedCount": {
+    "description": "Selection count label",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "merge": "Gộp",
+  "@merge": {
+    "description": "Merge button label"
+  },
+  "mergeConversations": "Gộp cuộc trò chuyện",
+  "@mergeConversations": {
+    "description": "Merge dialog title"
+  },
+  "mergeConversationsMessage": "Thao tác này sẽ kết hợp {count} cuộc trò chuyện thành một. Tất cả nội dung sẽ được gộp và tạo lại.",
+  "@mergeConversationsMessage": {
+    "description": "Merge confirmation message",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mergingInBackground": "Đang gộp trong nền. Có thể mất một chút thời gian.",
+  "@mergingInBackground": {
+    "description": "Snackbar message during merge"
+  },
+  "failedToStartMerge": "Không thể bắt đầu gộp",
+  "@failedToStartMerge": {
+    "description": "Error message when merge fails"
+  },
+  "askAnything": "Hỏi bất cứ điều gì",
+  "@askAnything": {
+    "description": "Chat input placeholder"
+  },
+  "noMessagesYet": "Chưa có tin nhắn nào!\nHãy bắt đầu cuộc trò chuyện nhé?",
+  "@noMessagesYet": {
+    "description": "Empty chat state message"
+  },
+  "deletingMessages": "Đang xóa tin nhắn của bạn khỏi bộ nhớ của Omi...",
+  "@deletingMessages": {
+    "description": "Loading text while clearing chat"
+  },
+  "messageCopied": "Đã sao chép tin nhắn vào clipboard.",
+  "@messageCopied": {
+    "description": "Snackbar after copying message"
+  },
+  "cannotReportOwnMessage": "Bạn không thể báo cáo tin nhắn của chính mình.",
+  "@cannotReportOwnMessage": {
+    "description": "Error when trying to report own message"
+  },
+  "reportMessage": "Báo cáo tin nhắn",
+  "@reportMessage": {
+    "description": "Report message dialog title"
+  },
+  "reportMessageConfirm": "Bạn có chắc chắn muốn báo cáo tin nhắn này?",
+  "@reportMessageConfirm": {
+    "description": "Report message confirmation"
+  },
+  "messageReported": "Đã báo cáo tin nhắn thành công.",
+  "@messageReported": {
+    "description": "Confirmation after reporting message"
+  },
+  "thankYouFeedback": "Cảm ơn phản hồi của bạn!",
+  "@thankYouFeedback": {
+    "description": "After thumbs up/down feedback"
+  },
+  "clearChat": "Xóa trò chuyện?",
+  "@clearChat": {
+    "description": "Clear chat dialog title"
+  },
+  "clearChatConfirm": "Bạn có chắc chắn muốn xóa trò chuyện? Hành động này không thể hoàn tác.",
+  "@clearChatConfirm": {
+    "description": "Clear chat confirmation message"
+  },
+  "maxFilesLimit": "Bạn chỉ có thể tải lên tối đa 4 tệp cùng lúc",
+  "@maxFilesLimit": {
+    "description": "Max files upload warning"
+  },
+  "chatWithOmi": "Trò chuyện với Omi",
+  "@chatWithOmi": {
+    "description": "Chat share subject"
+  },
+  "apps": "Ứng dụng",
+  "@apps": {
+    "description": "Apps page title"
+  },
+  "noAppsFound": "Không tìm thấy ứng dụng",
+  "@noAppsFound": {
+    "description": "Empty state when no apps match"
+  },
+  "tryAdjustingSearch": "Thử điều chỉnh tìm kiếm hoặc bộ lọc của bạn",
+  "@tryAdjustingSearch": {
+    "description": "Hint when no apps found"
+  },
+  "createYourOwnApp": "Tạo ứng dụng của riêng bạn",
+  "@createYourOwnApp": {
+    "description": "Create app button title"
+  },
+  "buildAndShareApp": "Xây dựng và chia sẻ ứng dụng tùy chỉnh của bạn",
+  "@buildAndShareApp": {
+    "description": "Create app button subtitle"
+  },
+  "searchApps": "Tìm kiếm hơn 1500 ứng dụng",
+  "@searchApps": {
+    "description": "Apps search placeholder"
+  },
+  "myApps": "Ứng dụng của tôi",
+  "@myApps": {
+    "description": "My Apps filter button"
+  },
+  "installedApps": "Ứng dụng đã cài đặt",
+  "@installedApps": {
+    "description": "Installed Apps filter button"
+  },
+  "unableToFetchApps": "Không thể tải ứng dụng :(\n\nVui lòng kiểm tra kết nối internet và thử lại.",
+  "@unableToFetchApps": {
+    "description": "Error when apps fail to load"
+  },
+  "aboutOmi": "Về Omi",
+  "@aboutOmi": {
+    "description": "About page title"
+  },
+  "privacyPolicy": "Chính sách bảo mật",
+  "@privacyPolicy": {
+    "description": "Link text for Privacy Policy"
+  },
+  "visitWebsite": "Truy cập website",
+  "@visitWebsite": {
+    "description": "Visit website link"
+  },
+  "helpOrInquiries": "Trợ giúp hoặc thắc mắc?",
+  "@helpOrInquiries": {
+    "description": "Help link title"
+  },
+  "joinCommunity": "Tham gia cộng đồng!",
+  "@joinCommunity": {
+    "description": "Discord community link"
+  },
+  "membersAndCounting": "Hơn 8000 thành viên và đang tăng.",
+  "@membersAndCounting": {
+    "description": "Discord member count"
+  },
+  "deleteAccountTitle": "Xóa tài khoản",
+  "@deleteAccountTitle": {
+    "description": "Delete account page title"
+  },
+  "deleteAccountConfirm": "Bạn có chắc chắn muốn xóa tài khoản của mình?",
+  "@deleteAccountConfirm": {
+    "description": "Delete account confirmation"
+  },
+  "cannotBeUndone": "Hành động này không thể hoàn tác.",
+  "@cannotBeUndone": {
+    "description": "Warning that action is permanent"
+  },
+  "allDataErased": "Tất cả ký ức và cuộc trò chuyện của bạn sẽ bị xóa vĩnh viễn.",
+  "@allDataErased": {
+    "description": "Delete account warning 1"
+  },
+  "appsDisconnected": "Các ứng dụng và tích hợp của bạn sẽ bị ngắt kết nối ngay lập tức.",
+  "@appsDisconnected": {
+    "description": "Delete account warning 2"
+  },
+  "exportBeforeDelete": "Bạn có thể xuất dữ liệu trước khi xóa tài khoản, nhưng một khi đã xóa, dữ liệu không thể khôi phục.",
+  "@exportBeforeDelete": {
+    "description": "Delete account warning 3"
+  },
+  "deleteAccountCheckbox": "Tôi hiểu rằng việc xóa tài khoản là vĩnh viễn và tất cả dữ liệu, bao gồm ký ức và cuộc trò chuyện, sẽ bị mất và không thể khôi phục.",
+  "@deleteAccountCheckbox": {
+    "description": "Delete account checkbox confirmation"
+  },
+  "areYouSure": "Bạn có chắc chắn?",
+  "@areYouSure": {
+    "description": "Final confirmation title"
+  },
+  "deleteAccountFinal": "Hành động này không thể hoàn tác và sẽ xóa vĩnh viễn tài khoản cùng tất cả dữ liệu liên quan. Bạn có chắc chắn muốn tiếp tục?",
+  "@deleteAccountFinal": {
+    "description": "Final delete confirmation message"
+  },
+  "deleteNow": "Xóa ngay",
+  "@deleteNow": {
+    "description": "Delete now button"
+  },
+  "goBack": "Quay lại",
+  "@goBack": {
+    "description": "Go back button"
+  },
+  "checkBoxToConfirm": "Đánh dấu vào ô để xác nhận bạn hiểu rằng việc xóa tài khoản là vĩnh viễn và không thể hoàn tác.",
+  "@checkBoxToConfirm": {
+    "description": "Checkbox validation error"
+  },
+  "profile": "Hồ sơ",
+  "@profile": {
+    "description": "Profile page title"
+  },
+  "name": "Tên",
+  "@name": {
+    "description": "Name field label"
+  },
+  "email": "Email",
+  "@email": {
+    "description": "Email field label"
+  },
+  "customVocabulary": "Từ vựng tùy chỉnh",
+  "@customVocabulary": {
+    "description": "Custom vocabulary setting"
+  },
+  "identifyingOthers": "Nhận diện người khác",
+  "@identifyingOthers": {
+    "description": "People identification setting"
+  },
+  "paymentMethods": "Phương thức thanh toán",
+  "@paymentMethods": {
+    "description": "Payment methods setting"
+  },
+  "conversationDisplay": "Hiển thị cuộc trò chuyện",
+  "@conversationDisplay": {
+    "description": "Conversation display setting"
+  },
+  "dataPrivacy": "Dữ liệu & Bảo mật",
+  "@dataPrivacy": {
+    "description": "Data and privacy setting"
+  },
+  "userId": "ID người dùng",
+  "@userId": {
+    "description": "User ID label"
+  },
+  "notSet": "Chưa đặt",
+  "@notSet": {
+    "description": "Default value when not set"
+  },
+  "userIdCopied": "Đã sao chép ID người dùng vào clipboard",
+  "@userIdCopied": {
+    "description": "Confirmation when user ID is copied"
+  },
+  "systemDefault": "Mặc định hệ thống",
+  "@systemDefault": {
+    "description": "System language option"
+  },
+  "planAndUsage": "Gói & Mức sử dụng",
+  "@planAndUsage": {
+    "description": "Plan and usage menu item"
+  },
+  "offlineSync": "Đồng bộ ngoại tuyến",
+  "@offlineSync": {
+    "description": "Offline sync menu item"
+  },
+  "deviceSettings": "Cài đặt thiết bị",
+  "@deviceSettings": {
+    "description": "Device settings menu item"
+  },
+  "chatTools": "Công cụ trò chuyện",
+  "@chatTools": {
+    "description": "Chat tools menu item"
+  },
+  "feedbackBug": "Phản hồi / Báo lỗi",
+  "@feedbackBug": {
+    "description": "Feedback menu item"
+  },
+  "helpCenter": "Trung tâm trợ giúp",
+  "@helpCenter": {
+    "description": "Help center menu item"
+  },
+  "developerSettings": "Cài đặt nhà phát triển",
+  "@developerSettings": {
+    "description": "Developer settings menu item"
+  },
+  "getOmiForMac": "Tải Omi cho Mac",
+  "@getOmiForMac": {
+    "description": "Mac app download link"
+  },
+  "referralProgram": "Chương trình giới thiệu",
+  "@referralProgram": {
+    "description": "Referral program menu item"
+  },
+  "signOut": "Đăng xuất",
+  "@signOut": {
+    "description": "Sign out button"
+  },
+  "appAndDeviceCopied": "Đã sao chép thông tin ứng dụng và thiết bị",
+  "@appAndDeviceCopied": {
+    "description": "Confirmation when version info is copied"
+  },
+  "wrapped2025": "Tổng kết 2025",
+  "@wrapped2025": {
+    "description": "Wrapped 2025 menu item"
+  },
+  "yourPrivacyYourControl": "Quyền riêng tư của bạn, Quyền kiểm soát của bạn",
+  "@yourPrivacyYourControl": {
+    "description": "Data privacy page heading"
+  },
+  "privacyIntro": "Tại Omi, chúng tôi cam kết bảo vệ quyền riêng tư của bạn. Trang này cho phép bạn kiểm soát cách dữ liệu của bạn được lưu trữ và sử dụng.",
+  "@privacyIntro": {
+    "description": "Data privacy page introduction"
+  },
+  "learnMore": "Tìm hiểu thêm...",
+  "@learnMore": {
+    "description": "Learn more link"
+  },
+  "dataProtectionLevel": "Mức độ bảo vệ dữ liệu",
+  "@dataProtectionLevel": {
+    "description": "Data protection section title"
+  },
+  "dataProtectionDesc": "Dữ liệu của bạn được bảo mật mặc định với mã hóa mạnh. Xem lại cài đặt và các tùy chọn bảo mật trong tương lai bên dưới.",
+  "@dataProtectionDesc": {
+    "description": "Data protection section description"
+  },
+  "appAccess": "Quyền truy cập ứng dụng",
+  "@appAccess": {
+    "description": "App access section title"
+  },
+  "appAccessDesc": "Các ứng dụng sau có thể truy cập dữ liệu của bạn. Nhấn vào ứng dụng để quản lý quyền của nó.",
+  "@appAccessDesc": {
+    "description": "App access section description"
+  },
+  "noAppsExternalAccess": "Không có ứng dụng đã cài đặt nào có quyền truy cập bên ngoài vào dữ liệu của bạn.",
+  "@noAppsExternalAccess": {
+    "description": "Empty state for app access"
+  },
+  "deviceName": "Tên thiết bị",
+  "@deviceName": {
+    "description": "Device name label"
+  },
+  "deviceId": "ID thiết bị",
+  "@deviceId": {
+    "description": "Device ID label"
+  },
+  "firmware": "Phần mềm",
+  "@firmware": {
+    "description": "Firmware label"
+  },
+  "sdCardSync": "Đồng bộ thẻ SD",
+  "@sdCardSync": {
+    "description": "SD Card sync label"
+  },
+  "hardwareRevision": "Phiên bản phần cứng",
+  "@hardwareRevision": {
+    "description": "Hardware revision label"
+  },
+  "modelNumber": "Số model",
+  "@modelNumber": {
+    "description": "Model number label"
+  },
+  "manufacturer": "Nhà sản xuất",
+  "@manufacturer": {
+    "description": "Manufacturer label"
+  },
+  "doubleTap": "Nhấn đúp",
+  "@doubleTap": {
+    "description": "Double tap action label"
+  },
+  "ledBrightness": "Độ sáng đèn LED",
+  "@ledBrightness": {
+    "description": "LED brightness setting"
+  },
+  "micGain": "Độ tăng micro",
+  "@micGain": {
+    "description": "Microphone gain setting"
+  },
+  "disconnect": "Ngắt kết nối",
+  "@disconnect": {
+    "description": "Disconnect device button"
+  },
+  "forgetDevice": "Xóa thiết bị",
+  "@forgetDevice": {
+    "description": "Forget device button"
+  },
+  "chargingIssues": "Vấn đề sạc pin",
+  "@chargingIssues": {
+    "description": "Charging issues help item"
+  },
+  "disconnectDevice": "Ngắt kết nối thiết bị",
+  "@disconnectDevice": {
+    "description": "Disconnect device button"
+  },
+  "unpairDevice": "Hủy ghép nối thiết bị",
+  "@unpairDevice": {
+    "description": "Unpair device button"
+  },
+  "unpairAndForget": "Hủy ghép nối và xóa thiết bị",
+  "@unpairAndForget": {
+    "description": "Unpair and forget device button"
+  },
+  "deviceDisconnectedMessage": "Omi của bạn đã bị ngắt kết nối 😔",
+  "@deviceDisconnectedMessage": {
+    "description": "Message shown when device is disconnected"
+  },
+  "deviceUnpairedMessage": "Đã hủy ghép nối thiết bị. Vào Cài đặt > Bluetooth và xóa thiết bị để hoàn tất việc hủy ghép nối.",
+  "@deviceUnpairedMessage": {
+    "description": "Message shown when device is unpaired"
+  },
+  "unpairDialogTitle": "Hủy ghép nối thiết bị",
+  "@unpairDialogTitle": {
+    "description": "Unpair dialog title"
+  },
+  "unpairDialogMessage": "Thao tác này sẽ hủy ghép nối thiết bị để có thể kết nối với điện thoại khác. Bạn cần vào Cài đặt > Bluetooth và xóa thiết bị để hoàn tất quá trình.",
+  "@unpairDialogMessage": {
+    "description": "Unpair dialog message"
+  },
+  "deviceNotConnected": "Thiết bị chưa kết nối",
+  "@deviceNotConnected": {
+    "description": "Device not connected header"
+  },
+  "connectDeviceMessage": "Kết nối thiết bị Omi của bạn để truy cập\ncài đặt thiết bị và tùy chỉnh",
+  "@connectDeviceMessage": {
+    "description": "Message encouraging user to connect device"
+  },
+  "deviceInfoSection": "Thông tin thiết bị",
+  "@deviceInfoSection": {
+    "description": "Device information section header"
+  },
+  "customizationSection": "Tùy chỉnh",
+  "@customizationSection": {
+    "description": "Customization section header"
+  },
+  "hardwareSection": "Phần cứng",
+  "@hardwareSection": {
+    "description": "Hardware section header"
+  },
+  "v2Undetected": "Không phát hiện V2",
+  "@v2Undetected": {
+    "description": "V2 device undeteced dialog title"
+  },
+  "v2UndetectedMessage": "Chúng tôi thấy rằng bạn có thiết bị V1 hoặc thiết bị của bạn chưa được kết nối. Chức năng thẻ SD chỉ khả dụng cho thiết bị V2.",
+  "@v2UndetectedMessage": {
+    "description": "V2 device undeteced dialog message"
+  },
+  "endConversation": "Kết thúc cuộc trò chuyện",
+  "@endConversation": {
+    "description": "End conversation action"
+  },
+  "pauseResume": "Tạm dừng/Tiếp tục",
+  "@pauseResume": {
+    "description": "Pause/Resume action"
+  },
+  "starConversation": "Gắn sao cuộc trò chuyện",
+  "@starConversation": {
+    "description": "Star conversation action"
+  },
+  "doubleTapAction": "Hành động nhấn đúp",
+  "@doubleTapAction": {
+    "description": "Double tap action setting"
+  },
+  "endAndProcess": "Kết thúc & Xử lý cuộc trò chuyện",
+  "@endAndProcess": {
+    "description": "End and process action"
+  },
+  "pauseResumeRecording": "Tạm dừng/Tiếp tục ghi âm",
+  "@pauseResumeRecording": {
+    "description": "Pause/Resume recording action"
+  },
+  "starOngoing": "Gắn sao cuộc trò chuyện đang diễn ra",
+  "@starOngoing": {
+    "description": "Star ongoing conversation action"
+  },
+  "off": "Tắt",
+  "@off": {
+    "description": "Off state"
+  },
+  "max": "Tối đa",
+  "@max": {
+    "description": "Max state"
+  },
+  "mute": "Tắt tiếng",
+  "@mute": {
+    "description": "Mute state"
+  },
+  "quiet": "Yên tĩnh",
+  "@quiet": {
+    "description": "Quiet preset"
+  },
+  "normal": "Bình thường",
+  "@normal": {
+    "description": "Normal preset"
+  },
+  "high": "Cao",
+  "@high": {
+    "description": "High preset"
+  },
+  "micGainDescMuted": "Microphone đã tắt tiếng",
+  "@micGainDescMuted": {
+    "description": "Mic gain description: Muted"
+  },
+  "micGainDescLow": "Rất yên tĩnh - cho môi trường ồn ào",
+  "@micGainDescLow": {
+    "description": "Mic gain description: Low"
+  },
+  "micGainDescModerate": "Yên tĩnh - cho tiếng ồn vừa phải",
+  "@micGainDescModerate": {
+    "description": "Mic gain description: Moderate"
+  },
+  "micGainDescNeutral": "Trung tính - ghi âm cân bằng",
+  "@micGainDescNeutral": {
+    "description": "Mic gain description: Neutral"
+  },
+  "micGainDescSlightlyBoosted": "Tăng nhẹ - sử dụng thông thường",
+  "@micGainDescSlightlyBoosted": {
+    "description": "Mic gain description: Slightly Boosted"
+  },
+  "micGainDescBoosted": "Tăng cao - cho môi trường yên tĩnh",
+  "@micGainDescBoosted": {
+    "description": "Mic gain description: Boosted"
+  },
+  "micGainDescHigh": "Cao - cho giọng nói xa hoặc nhỏ",
+  "@micGainDescHigh": {
+    "description": "Mic gain description: High"
+  },
+  "micGainDescVeryHigh": "Rất cao - cho nguồn rất yên tĩnh",
+  "@micGainDescVeryHigh": {
+    "description": "Mic gain description: Very High"
+  },
+  "micGainDescMax": "Tối đa - sử dụng cẩn thận",
+  "@micGainDescMax": {
+    "description": "Mic gain description: Max"
+  },
+  "developerSettingsTitle": "Cài đặt nhà phát triển",
+  "@developerSettingsTitle": {
+    "description": "Developer settings page title"
+  },
+  "saving": "Đang lưu...",
+  "@saving": {
+    "description": "Saving state text"
+  },
+  "personaConfig": "Cấu hình nhân cách AI của bạn",
+  "@personaConfig": {
+    "description": "Persona configuration subtitle"
+  },
+  "beta": "BETA",
+  "@beta": {
+    "description": "Beta tag"
+  },
+  "transcription": "Phiên âm",
+  "@transcription": {
+    "description": "Transcription settings title"
+  },
+  "transcriptionConfig": "Cấu hình nhà cung cấp STT",
+  "@transcriptionConfig": {
+    "description": "Transcription configuration subtitle"
+  },
+  "conversationTimeout": "Thời gian chờ cuộc trò chuyện",
+  "@conversationTimeout": {
+    "description": "Conversation timeout settings title"
+  },
+  "conversationTimeoutConfig": "Đặt thời gian tự động kết thúc cuộc trò chuyện",
+  "@conversationTimeoutConfig": {
+    "description": "Conversation timeout configuration subtitle"
+  },
+  "importData": "Nhập dữ liệu",
+  "@importData": {
+    "description": "Import data details title"
+  },
+  "importDataConfig": "Nhập dữ liệu từ các nguồn khác",
+  "@importDataConfig": {
+    "description": "Import data details subtitle"
+  },
+  "debugDiagnostics": "Gỡ lỗi & Chẩn đoán",
+  "@debugDiagnostics": {
+    "description": "Debug & Diagnostics section header"
+  },
+  "endpointUrl": "URL điểm cuối",
+  "@endpointUrl": {
+    "description": "Endpoint URL label"
+  },
+  "noApiKeys": "Chưa có API key",
+  "@noApiKeys": {
+    "description": "No API keys message"
+  },
+  "createKeyToStart": "Tạo key để bắt đầu",
+  "@createKeyToStart": {
+    "description": "Create key instruction"
+  },
+  "createKey": "Tạo Key",
+  "@createKey": {
+    "description": "Create Key button"
+  },
+  "docs": "Tài liệu",
+  "@docs": {
+    "description": "Documentation link"
+  },
+  "yourOmiInsights": "Thông tin chi tiết Omi của bạn",
+  "@yourOmiInsights": {
+    "description": "Usage page title"
+  },
+  "today": "Hôm nay",
+  "@today": {
+    "description": "Time period: Today"
+  },
+  "thisMonth": "Tháng này",
+  "@thisMonth": {
+    "description": "Time period: This Month"
+  },
+  "thisYear": "Năm nay",
+  "@thisYear": {
+    "description": "Time period: This Year"
+  },
+  "allTime": "Tất cả thời gian",
+  "@allTime": {
+    "description": "Time period: All Time"
+  },
+  "noActivityYet": "Chưa có hoạt động",
+  "@noActivityYet": {
+    "description": "Empty state title"
+  },
+  "startConversationToSeeInsights": "Bắt đầu cuộc trò chuyện với Omi\nđể xem thông tin chi tiết về mức sử dụng của bạn tại đây.",
+  "@startConversationToSeeInsights": {
+    "description": "Empty state description"
+  },
+  "listening": "Lắng nghe",
+  "@listening": {
+    "description": "Listening stat title"
+  },
+  "listeningSubtitle": "Tổng thời gian Omi đã lắng nghe tích cực.",
+  "@listeningSubtitle": {
+    "description": "Listening stat subtitle"
+  },
+  "understanding": "Hiểu biết",
+  "@understanding": {
+    "description": "Understanding stat title"
+  },
+  "understandingSubtitle": "Số từ đã hiểu từ cuộc trò chuyện của bạn.",
+  "@understandingSubtitle": {
+    "description": "Understanding stat subtitle"
+  },
+  "providing": "Cung cấp",
+  "@providing": {
+    "description": "Providing stat title"
+  },
+  "providingSubtitle": "Việc cần làm và ghi chú được ghi lại tự động.",
+  "@providingSubtitle": {
+    "description": "Providing stat subtitle"
+  },
+  "remembering": "Ghi nhớ",
+  "@remembering": {
+    "description": "Remembering stat title"
+  },
+  "rememberingSubtitle": "Sự kiện và chi tiết được ghi nhớ cho bạn.",
+  "@rememberingSubtitle": {
+    "description": "Remembering stat subtitle"
+  },
+  "unlimitedPlan": "Gói không giới hạn",
+  "@unlimitedPlan": {
+    "description": "Unlimited plan name"
+  },
+  "managePlan": "Quản lý gói",
+  "@managePlan": {
+    "description": "Manage plan button"
+  },
+  "cancelAtPeriodEnd": "Gói của bạn sẽ bị hủy vào {date}.",
+  "@cancelAtPeriodEnd": {
+    "description": "Cancellation message",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Jan 1, 2026"
+      }
+    }
+  },
+  "renewsOn": "Gói của bạn sẽ gia hạn vào {date}.",
+  "@renewsOn": {
+    "description": "Renewal message",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Jan 1, 2026"
+      }
+    }
+  },
+  "basicPlan": "Gói miễn phí",
+  "@basicPlan": {
+    "description": "Basic plan name"
+  },
+  "usageLimitMessage": "Đã sử dụng {used} trong số {limit} phút",
+  "@usageLimitMessage": {
+    "description": "Usage limit message",
+    "placeholders": {
+      "used": {
+        "type": "String",
+        "example": "100"
+      },
+      "limit": {
+        "type": "int",
+        "example": "60"
+      }
+    }
+  },
+  "upgrade": "Nâng cấp",
+  "@upgrade": {
+    "description": "Upgrade button"
+  },
+  "upgradeToUnlimited": "Nâng cấp lên không giới hạn",
+  "@upgradeToUnlimited": {
+    "description": "Upgrade to unlimited button"
+  },
+  "basicPlanDesc": "Gói của bạn bao gồm {limit} phút miễn phí mỗi tháng. Nâng cấp để sử dụng không giới hạn.",
+  "@basicPlanDesc": {
+    "description": "Basic plan description",
+    "placeholders": {
+      "limit": {
+        "type": "int",
+        "example": "60"
+      }
+    }
+  },
+  "shareStatsMessage": "Chia sẻ thống kê Omi của tôi! (omi.me - trợ lý AI luôn bên bạn)",
+  "@shareStatsMessage": {
+    "description": "Share stats base message"
+  },
+  "sharePeriodToday": "Hôm nay, omi đã:",
+  "@sharePeriodToday": {
+    "description": "Share stats period: Today"
+  },
+  "sharePeriodMonth": "Tháng này, omi đã:",
+  "@sharePeriodMonth": {
+    "description": "Share stats period: Month"
+  },
+  "sharePeriodYear": "Năm nay, omi đã:",
+  "@sharePeriodYear": {
+    "description": "Share stats period: Year"
+  },
+  "sharePeriodAllTime": "Cho đến nay, omi đã:",
+  "@sharePeriodAllTime": {
+    "description": "Share stats period: All Time"
+  },
+  "shareStatsListened": "🎧 Đã lắng nghe trong {minutes} phút",
+  "@shareStatsListened": {
+    "description": "Share stats: listened",
+    "placeholders": {
+      "minutes": {
+        "type": "String",
+        "example": "120"
+      }
+    }
+  },
+  "shareStatsWords": "🧠 Đã hiểu {words} từ",
+  "@shareStatsWords": {
+    "description": "Share stats: words",
+    "placeholders": {
+      "words": {
+        "type": "String",
+        "example": "5000"
+      }
+    }
+  },
+  "shareStatsInsights": "✨ Đã cung cấp {count} thông tin chi tiết",
+  "@shareStatsInsights": {
+    "description": "Share stats: insights",
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "10"
+      }
+    }
+  },
+  "shareStatsMemories": "📚 Đã ghi nhớ {count} ký ức",
+  "@shareStatsMemories": {
+    "description": "Share stats: memories",
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "5"
+      }
+    }
+  },
+  "debugLogs": "Nhật ký gỡ lỗi",
+  "debugLogsAutoDelete": "Tự động xóa sau 3 ngày.",
+  "debugLogsDesc": "Giúp chẩn đoán các vấn đề",
+  "noLogFilesFound": "Không tìm thấy tệp nhật ký.",
+  "omiDebugLog": "Nhật ký gỡ lỗi Omi",
+  "logShared": "Đã chia sẻ nhật ký",
+  "selectLogFile": "Chọn tệp nhật ký",
+  "shareLogs": "Chia sẻ nhật ký",
+  "debugLogCleared": "Đã xóa nhật ký gỡ lỗi",
+  "exportStarted": "Đã bắt đầu xuất dữ liệu. Có thể mất vài giây...",
+  "exportAllData": "Xuất tất cả dữ liệu",
+  "exportDataDesc": "Xuất cuộc trò chuyện sang tệp JSON",
+  "exportedConversations": "Cuộc trò chuyện đã xuất từ Omi",
+  "exportShared": "Đã chia sẻ bản xuất",
+  "deleteKnowledgeGraphTitle": "Xóa biểu đồ tri thức?",
+  "deleteKnowledgeGraphMessage": "Thao tác này sẽ xóa tất cả dữ liệu biểu đồ tri thức được tạo ra (nút và kết nối). Ký ức gốc của bạn sẽ vẫn an toàn. Biểu đồ sẽ được xây dựng lại theo thời gian hoặc khi có yêu cầu tiếp theo.",
+  "knowledgeGraphDeleted": "Đã xóa biểu đồ tri thức thành công",
+  "deleteGraphFailed": "Không thể xóa biểu đồ: {error}",
+  "@deleteGraphFailed": {
+    "description": "Error message when deleting graph fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteKnowledgeGraph": "Xóa biểu đồ tri thức",
+  "deleteKnowledgeGraphDesc": "Xóa tất cả nút và kết nối",
+  "mcp": "MCP",
+  "mcpServer": "Máy chủ MCP",
+  "mcpServerDesc": "Kết nối trợ lý AI với dữ liệu của bạn",
+  "serverUrl": "URL máy chủ",
+  "urlCopied": "Đã sao chép URL",
+  "apiKeyAuth": "Xác thực API Key",
+  "header": "Header",
+  "authorizationBearer": "Authorization: Bearer <key>",
+  "oauth": "OAuth",
+  "clientId": "Client ID",
+  "clientSecret": "Client Secret",
+  "useMcpApiKey": "Sử dụng API key MCP của bạn",
+  "webhooks": "Webhooks",
+  "conversationEvents": "Sự kiện cuộc trò chuyện",
+  "newConversationCreated": "Đã tạo cuộc trò chuyện mới",
+  "realtimeTranscript": "Bản ghi thời gian thực",
+  "transcriptReceived": "Đã nhận bản ghi",
+  "audioBytes": "Dữ liệu âm thanh",
+  "audioDataReceived": "Đã nhận dữ liệu âm thanh",
+  "intervalSeconds": "Khoảng thời gian (giây)",
+  "daySummary": "Tóm tắt ngày",
+  "summaryGenerated": "Đã tạo tóm tắt",
+  "claudeDesktop": "Claude Desktop",
+  "addToClaudeConfig": "Thêm vào claude_desktop_config.json",
+  "copyConfig": "Sao chép cấu hình",
+  "configCopied": "Đã sao chép cấu hình vào clipboard",
+  "listeningMins": "Lắng nghe (phút)",
+  "understandingWords": "Hiểu biết (từ)",
+  "insights": "Thông tin chi tiết",
+  "memories": "Ký ức",
+  "minsUsedThisMonth": "Đã sử dụng {used} trong số {limit} phút trong tháng này",
+  "@minsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "wordsUsedThisMonth": "Đã sử dụng {used} trong số {limit} từ trong tháng này",
+  "@wordsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "insightsUsedThisMonth": "Đã thu được {used} trong số {limit} thông tin chi tiết trong tháng này",
+  "@insightsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "memoriesUsedThisMonth": "Đã tạo {used} trong số {limit} ký ức trong tháng này",
+  "@memoriesUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "visibility": "Hiển thị",
+  "visibilitySubtitle": "Kiểm soát cuộc trò chuyện nào xuất hiện trong danh sách của bạn",
+  "showShortConversations": "Hiển thị cuộc trò chuyện ngắn",
+  "showShortConversationsDesc": "Hiển thị cuộc trò chuyện ngắn hơn ngưỡng",
+  "showDiscardedConversations": "Hiển thị cuộc trò chuyện đã hủy",
+  "showDiscardedConversationsDesc": "Bao gồm cuộc trò chuyện được đánh dấu là đã hủy",
+  "shortConversationThreshold": "Ngưỡng cuộc trò chuyện ngắn",
+  "shortConversationThresholdSubtitle": "Cuộc trò chuyện ngắn hơn sẽ bị ẩn trừ khi được bật ở trên",
+  "durationThreshold": "Ngưỡng thời lượng",
+  "durationThresholdDesc": "Ẩn cuộc trò chuyện ngắn hơn",
+  "minLabel": "{count} phút",
+  "@minLabel": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "customVocabularyTitle": "Từ vựng tùy chỉnh",
+  "addWords": "Thêm từ",
+  "addWordsDesc": "Tên, thuật ngữ hoặc từ không phổ biến",
+  "vocabularyHint": "Omi, Callie, OpenAI",
+  "connect": "Kết nối",
+  "comingSoon": "Sắp ra mắt",
+  "chatToolsFooter": "Kết nối ứng dụng của bạn để xem dữ liệu và số liệu trong trò chuyện.",
+  "completeAuthInBrowser": "Vui lòng hoàn tất xác thực trong trình duyệt của bạn. Sau khi hoàn tất, hãy quay lại ứng dụng.",
+  "failedToStartAuth": "Không thể bắt đầu xác thực {appName}",
+  "@failedToStartAuth": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectAppTitle": "Ngắt kết nối {appName}?",
+  "@disconnectAppTitle": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectAppMessage": "Bạn có chắc chắn muốn ngắt kết nối khỏi {appName}? Bạn có thể kết nối lại bất kỳ lúc nào.",
+  "@disconnectAppMessage": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectedFrom": "Đã ngắt kết nối khỏi {appName}",
+  "@disconnectedFrom": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToDisconnect": "Không thể ngắt kết nối",
+  "connectTo": "Kết nối với {appName}",
+  "@connectTo": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "authAccessMessage": "Bạn cần cho phép Omi truy cập dữ liệu {appName} của bạn. Thao tác này sẽ mở trình duyệt để xác thực.",
+  "@authAccessMessage": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "continueAction": "Tiếp tục",
+  "languageTitle": "Ngôn ngữ",
+  "primaryLanguage": "Ngôn ngữ chính",
+  "automaticTranslation": "Dịch tự động",
+  "detectLanguages": "Phát hiện hơn 10 ngôn ngữ",
+  "authorizeSavingRecordings": "Cho phép lưu bản ghi âm",
+  "thanksForAuthorizing": "Cảm ơn bạn đã cho phép!",
+  "needYourPermission": "Chúng tôi cần sự cho phép của bạn",
+  "alreadyGavePermission": "Bạn đã cho phép chúng tôi lưu bản ghi âm của bạn. Đây là lời nhắc nhở về lý do chúng tôi cần:",
+  "wouldLikePermission": "Chúng tôi muốn được phép lưu bản ghi âm giọng nói của bạn. Đây là lý do:",
+  "improveSpeechProfile": "Cải thiện hồ sơ giọng nói của bạn",
+  "improveSpeechProfileDesc": "Chúng tôi sử dụng bản ghi âm để huấn luyện và nâng cao hồ sơ giọng nói cá nhân của bạn.",
+  "trainFamilyProfiles": "Huấn luyện hồ sơ cho bạn bè và gia đình",
+  "trainFamilyProfilesDesc": "Bản ghi âm của bạn giúp chúng tôi nhận dạng và tạo hồ sơ cho bạn bè và gia đình của bạn.",
+  "enhanceTranscriptAccuracy": "Tăng độ chính xác bản ghi",
+  "enhanceTranscriptAccuracyDesc": "Khi mô hình của chúng tôi được cải thiện, chúng tôi có thể cung cấp kết quả phiên âm tốt hơn cho bản ghi âm của bạn.",
+  "legalNotice": "Thông báo pháp lý: Tính hợp pháp của việc ghi âm và lưu trữ dữ liệu giọng nói có thể khác nhau tùy thuộc vào vị trí của bạn và cách bạn sử dụng tính năng này. Bạn có trách nhiệm đảm bảo tuân thủ luật pháp và quy định địa phương.",
+  "alreadyAuthorized": "Đã cho phép",
+  "authorize": "Cho phép",
+  "revokeAuthorization": "Thu hồi quyền",
+  "authorizationSuccessful": "Cho phép thành công!",
+  "failedToAuthorize": "Không thể cho phép. Vui lòng thử lại.",
+  "authorizationRevoked": "Đã thu hồi quyền.",
+  "recordingsDeleted": "Đã xóa bản ghi âm.",
+  "failedToRevoke": "Không thể thu hồi quyền. Vui lòng thử lại.",
+  "permissionRevokedTitle": "Đã thu hồi quyền",
+  "permissionRevokedMessage": "Bạn có muốn chúng tôi xóa tất cả bản ghi âm hiện có của bạn không?",
+  "yes": "Có",
+  "editName": "Chỉnh sửa tên",
+  "howShouldOmiCallYou": "Omi nên gọi bạn như thế nào?",
+  "enterYourName": "Nhập tên của bạn",
+  "nameCannotBeEmpty": "Tên không được để trống",
+  "nameUpdatedSuccessfully": "Đã cập nhật tên thành công!",
+  "calendarSettings": "Cài đặt lịch",
+  "calendarProviders": "Nhà cung cấp lịch",
+  "macOsCalendar": "Lịch macOS",
+  "connectMacOsCalendar": "Kết nối lịch macOS cục bộ của bạn",
+  "googleCalendar": "Google Calendar",
+  "syncGoogleAccount": "Đồng bộ với tài khoản Google của bạn",
+  "showMeetingsMenuBar": "Hiển thị cuộc họp sắp tới trên thanh menu",
+  "showMeetingsMenuBarDesc": "Hiển thị cuộc họp tiếp theo và thời gian cho đến khi nó bắt đầu trên thanh menu macOS",
+  "showEventsNoParticipants": "Hiển thị sự kiện không có người tham gia",
+  "showEventsNoParticipantsDesc": "Khi được bật, Coming Up hiển thị các sự kiện không có người tham gia hoặc liên kết video.",
+  "yourMeetings": "Cuộc họp của bạn",
+  "refresh": "Làm mới",
+  "noUpcomingMeetings": "Không tìm thấy cuộc họp sắp tới",
+  "checkingNextDays": "Kiểm tra 30 ngày tiếp theo",
+  "tomorrow": "Ngày mai",
+  "googleCalendarComingSoon": "Tích hợp Google Calendar sắp ra mắt!",
+  "connectedAsUser": "Đã kết nối với tư cách người dùng: {userId}",
+  "@connectedAsUser": {
+    "placeholders": {
+      "userId": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultWorkspace": "Workspace mặc định",
+  "tasksCreatedInWorkspace": "Nhiệm vụ sẽ được tạo trong workspace này",
+  "defaultProjectOptional": "Dự án mặc định (Tùy chọn)",
+  "leaveUnselectedTasks": "Bỏ trống để tạo nhiệm vụ không có dự án",
+  "noProjectsInWorkspace": "Không tìm thấy dự án trong workspace này",
+  "conversationTimeoutDesc": "Chọn thời gian chờ im lặng trước khi tự động kết thúc cuộc trò chuyện:",
+  "timeout2Minutes": "2 phút",
+  "timeout2MinutesDesc": "Kết thúc cuộc trò chuyện sau 2 phút im lặng",
+  "timeout5Minutes": "5 phút",
+  "timeout5MinutesDesc": "Kết thúc cuộc trò chuyện sau 5 phút im lặng",
+  "timeout10Minutes": "10 phút",
+  "timeout10MinutesDesc": "Kết thúc cuộc trò chuyện sau 10 phút im lặng",
+  "timeout30Minutes": "30 phút",
+  "timeout30MinutesDesc": "Kết thúc cuộc trò chuyện sau 30 phút im lặng",
+  "timeout4Hours": "4 giờ",
+  "timeout4HoursDesc": "Kết thúc cuộc trò chuyện sau 4 giờ im lặng",
+  "conversationEndAfterHours": "Cuộc trò chuyện bây giờ sẽ kết thúc sau 4 giờ im lặng",
+  "conversationEndAfterMinutes": "Cuộc trò chuyện bây giờ sẽ kết thúc sau {minutes} phút im lặng",
+  "@conversationEndAfterMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "tellUsPrimaryLanguage": "Cho chúng tôi biết ngôn ngữ chính của bạn",
+  "languageForTranscription": "Đặt ngôn ngữ của bạn để có phiên âm chính xác hơn và trải nghiệm được cá nhân hóa.",
+  "singleLanguageModeInfo": "Chế độ đơn ngôn ngữ đã được bật. Dịch bị vô hiệu hóa để có độ chính xác cao hơn.",
+  "searchLanguageHint": "Tìm kiếm ngôn ngữ theo tên hoặc mã",
+  "noLanguagesFound": "Không tìm thấy ngôn ngữ",
+  "skip": "Bỏ qua",
+  "languageSetTo": "Đã đặt ngôn ngữ thành {language}",
+  "@languageSetTo": {
+    "placeholders": {
+      "language": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToSetLanguage": "Không thể đặt ngôn ngữ",
+  "appSettings": "Cài đặt {appName}",
+  "@appSettings": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectFromApp": "Ngắt kết nối khỏi {appName}?",
+  "@disconnectFromApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectFromAppDesc": "Thao tác này sẽ xóa xác thực {appName} của bạn. Bạn sẽ cần kết nối lại để sử dụng.",
+  "@disconnectFromAppDesc": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "connectedToApp": "Đã kết nối với {appName}",
+  "@connectedToApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "account": "Tài khoản",
+  "actionItemsSyncedTo": "Việc cần làm của bạn sẽ được đồng bộ với tài khoản {appName} của bạn",
+  "@actionItemsSyncedTo": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultSpace": "Space mặc định",
+  "selectSpaceInWorkspace": "Chọn một space trong workspace của bạn",
+  "noSpacesInWorkspace": "Không tìm thấy space trong workspace này",
+  "defaultList": "Danh sách mặc định",
+  "tasksAddedToList": "Nhiệm vụ sẽ được thêm vào danh sách này",
+  "noListsInSpace": "Không tìm thấy danh sách trong space này",
+  "failedToLoadRepos": "Không thể tải kho lưu trữ: {error}",
+  "@failedToLoadRepos": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultRepoSaved": "Đã lưu kho lưu trữ mặc định",
+  "failedToSaveDefaultRepo": "Không thể lưu kho lưu trữ mặc định",
+  "defaultRepository": "Kho lưu trữ mặc định",
+  "selectDefaultRepoDesc": "Chọn một kho lưu trữ mặc định để tạo issue. Bạn vẫn có thể chỉ định kho lưu trữ khác khi tạo issue.",
+  "noReposFound": "Không tìm thấy kho lưu trữ",
+  "private": "Riêng tư",
+  "updatedDate": "Đã cập nhật {date}",
+  "@updatedDate": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "yesterday": "hôm qua",
+  "daysAgo": "{count} ngày trước",
+  "@daysAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "oneWeekAgo": "1 tuần trước",
+  "weeksAgo": "{count} tuần trước",
+  "@weeksAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "oneMonthAgo": "1 tháng trước",
+  "monthsAgo": "{count} tháng trước",
+  "@monthsAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "issuesCreatedInRepo": "Issue sẽ được tạo trong kho lưu trữ mặc định của bạn",
+  "taskIntegrations": "Tích hợp nhiệm vụ",
+  "configureSettings": "Cấu hình cài đặt",
+  "completeAuthBrowser": "Vui lòng hoàn tất xác thực trong trình duyệt của bạn. Sau khi hoàn tất, hãy quay lại ứng dụng.",
+  "failedToStartAppAuth": "Không thể bắt đầu xác thực {appName}",
+  "@failedToStartAppAuth": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "connectToAppTitle": "Kết nối với {appName}",
+  "@connectToAppTitle": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "authorizeOmiForTasks": "Bạn cần cho phép Omi tạo nhiệm vụ trong tài khoản {appName} của bạn. Thao tác này sẽ mở trình duyệt để xác thực.",
+  "@authorizeOmiForTasks": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "continueButton": "Tiếp tục",
+  "appIntegration": "Tích hợp {appName}",
+  "@appIntegration": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "integrationComingSoon": "Tích hợp với {appName} sắp ra mắt! Chúng tôi đang nỗ lực để mang đến cho bạn nhiều tùy chọn quản lý nhiệm vụ hơn.",
+  "@integrationComingSoon": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "gotIt": "Đã hiểu",
+  "tasksExportedOneApp": "Nhiệm vụ có thể được xuất sang một ứng dụng tại một thời điểm.",
+  "completeYourUpgrade": "Hoàn tất nâng cấp của bạn",
+  "importConfiguration": "Nhập cấu hình",
+  "exportConfiguration": "Xuất cấu hình",
+  "bringYourOwn": "Mang của riêng bạn",
+  "payYourSttProvider": "Sử dụng omi tự do. Bạn chỉ trả tiền cho nhà cung cấp STT trực tiếp.",
+  "freeMinutesMonth": "1.200 phút miễn phí/tháng được bao gồm. Không giới hạn với ",
+  "omiUnlimited": "Omi Unlimited",
+  "hostRequired": "Bắt buộc có host",
+  "validPortRequired": "Bắt buộc có port hợp lệ",
+  "validWebsocketUrlRequired": "Bắt buộc có URL WebSocket hợp lệ (wss://)",
+  "apiUrlRequired": "Bắt buộc có URL API",
+  "apiKeyRequired": "Bắt buộc có API key",
+  "invalidJsonConfig": "Cấu hình JSON không hợp lệ",
+  "errorSaving": "Lỗi khi lưu: {error}",
+  "@errorSaving": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "configCopiedToClipboard": "Đã sao chép cấu hình vào clipboard",
+  "pasteJsonConfig": "Dán cấu hình JSON của bạn bên dưới:",
+  "addApiKeyAfterImport": "Bạn cần thêm API key của riêng mình sau khi nhập",
+  "paste": "Dán",
+  "import": "Nhập",
+  "invalidProviderInConfig": "Nhà cung cấp không hợp lệ trong cấu hình",
+  "importedConfig": "Đã nhập cấu hình {providerName}",
+  "@importedConfig": {
+    "placeholders": {
+      "providerName": {
+        "type": "String"
+      }
+    }
+  },
+  "invalidJson": "JSON không hợp lệ: {error}",
+  "@invalidJson": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "provider": "Nhà cung cấp",
+  "live": "Trực tiếp",
+  "onDevice": "Trên thiết bị",
+  "apiUrl": "URL API",
+  "enterSttHttpEndpoint": "Nhập điểm cuối HTTP STT của bạn",
+  "websocketUrl": "URL WebSocket",
+  "enterLiveSttWebsocket": "Nhập điểm cuối WebSocket STT trực tiếp của bạn",
+  "apiKey": "API Key",
+  "enterApiKey": "Nhập API key của bạn",
+  "storedLocallyNeverShared": "Lưu trữ cục bộ, không bao giờ chia sẻ",
+  "host": "Host",
+  "port": "Port",
+  "advanced": "Nâng cao",
+  "configuration": "Cấu hình",
+  "requestConfiguration": "Cấu hình yêu cầu",
+  "responseSchema": "Schema phản hồi",
+  "modified": "Đã sửa đổi",
+  "resetRequestConfig": "Đặt lại cấu hình yêu cầu về mặc định",
+  "logs": "Nhật ký",
+  "logsCopied": "Đã sao chép nhật ký",
+  "noLogsYet": "Chưa có nhật ký. Bắt đầu ghi âm để xem hoạt động STT tùy chỉnh.",
+  "deviceUsesCodec": "{deviceName} sử dụng {codecReason}. Omi sẽ được sử dụng.",
+  "@deviceUsesCodec": {
+    "placeholders": {
+      "deviceName": {
+        "type": "String"
+      },
+      "codecReason": {
+        "type": "String"
+      }
+    }
+  },
+  "omiTranscription": "Phiên âm Omi",
+  "bestInClassTranscription": "Phiên âm tốt nhất với cài đặt bằng không",
+  "instantSpeakerLabels": "Nhãn người nói tức thì",
+  "languageTranslation": "Dịch hơn 100 ngôn ngữ",
+  "optimizedForConversation": "Được tối ưu hóa cho cuộc trò chuyện",
+  "autoLanguageDetection": "Tự động phát hiện ngôn ngữ",
+  "highAccuracy": "Độ chính xác cao",
+  "privacyFirst": "Ưu tiên bảo mật",
+  "saveChanges": "Lưu thay đổi",
+  "resetToDefault": "Đặt lại về mặc định",
+  "viewTemplate": "Xem mẫu",
+  "trySomethingLike": "Thử một cái gì đó như...",
+  "tryIt": "Thử ngay",
+  "creatingPlan": "Đang tạo kế hoạch",
+  "developingLogic": "Đang phát triển logic",
+  "designingApp": "Đang thiết kế ứng dụng",
+  "generatingIconStep": "Đang tạo biểu tượng",
+  "finalTouches": "Hoàn thiện cuối cùng",
+  "processing": "Đang xử lý...",
+  "features": "Tính năng",
+  "creatingYourApp": "Đang tạo ứng dụng của bạn...",
+  "generatingIcon": "Đang tạo biểu tượng...",
+  "whatShouldWeMake": "Chúng ta nên tạo gì?",
+  "appName": "Tên ứng dụng",
+  "description": "Mô tả",
+  "publicLabel": "Công khai",
+  "privateLabel": "Riêng tư",
+  "free": "Miễn phí",
+  "perMonth": "/ Tháng",
+  "tailoredConversationSummaries": "Tóm tắt cuộc trò chuyện được tùy chỉnh",
+  "customChatbotPersonality": "Tính cách chatbot tùy chỉnh",
+  "makePublic": "Công khai",
+  "anyoneCanDiscover": "Bất kỳ ai cũng có thể khám phá ứng dụng của bạn",
+  "onlyYouCanUse": "Chỉ bạn mới có thể sử dụng ứng dụng này",
+  "paidApp": "Ứng dụng trả phí",
+  "usersPayToUse": "Người dùng trả tiền để sử dụng ứng dụng của bạn",
+  "freeForEveryone": "Miễn phí cho tất cả mọi người",
+  "perMonthLabel": "/ tháng",
+  "creating": "Đang tạo...",
+  "@creating": {
+    "description": "Loading state text when app generation is in progress"
+  },
+  "createApp": "Tạo ứng dụng",
+  "@createApp": {
+    "description": "Button text to initiate app creation"
+  },
+  "@connect": {
+    "description": "Title for device connection page"
+  },
+  "searchingForDevices": "Đang tìm kiếm thiết bị...",
+  "@searchingForDevices": {
+    "description": "Status text while scanning for Bluetooth devices"
+  },
+  "devicesFoundNearby": "ĐÃ TÌM THẤY {count} {count, plural, =1{THIẾT BỊ} other{THIẾT BỊ}} GẦN ĐÂY",
+  "@devicesFoundNearby": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pairingSuccessful": "GHÉP NỐI THÀNH CÔNG",
+  "errorConnectingAppleWatch": "Lỗi khi kết nối với Apple Watch: {error}",
+  "@errorConnectingAppleWatch": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "dontShowAgain": "Không hiển thị lại",
+  "@dontShowAgain": {
+    "description": "Checkbox text to suppress future connection confirmations"
+  },
+  "iUnderstand": "Tôi hiểu",
+  "@iUnderstand": {
+    "description": "Button text to acknowledge connection warnings"
+  },
+  "enableBluetooth": "Bật Bluetooth",
+  "@enableBluetooth": {
+    "description": "Title for dialog prompting user to enable Bluetooth"
+  },
+  "bluetoothNeeded": "Omi cần Bluetooth để kết nối với thiết bị đeo của bạn. Vui lòng bật Bluetooth và thử lại.",
+  "@bluetoothNeeded": {
+    "description": "Explanation text for why Bluetooth is required"
+  },
+  "contactSupport": "Liên hệ hỗ trợ?",
+  "@contactSupport": {
+    "description": "Link text to contact support"
+  },
+  "connectLater": "Kết nối sau",
+  "@connectLater": {
+    "description": "Button text to skip immediate device connection"
+  },
+  "grantPermissions": "Cấp quyền",
+  "@grantPermissions": {
+    "description": "Title for the permissions request page"
+  },
+  "backgroundActivity": "Hoạt động nền",
+  "@backgroundActivity": {
+    "description": "Title for background activity permission"
+  },
+  "backgroundActivityDesc": "Cho phép Omi chạy trong nền để ổn định hơn",
+  "@backgroundActivityDesc": {
+    "description": "Description for background activity permission"
+  },
+  "locationAccess": "Truy cập vị trí",
+  "@locationAccess": {
+    "description": "Title for location access permission"
+  },
+  "locationAccessDesc": "Bật vị trí nền để có trải nghiệm đầy đủ",
+  "@locationAccessDesc": {
+    "description": "Description for location access permission"
+  },
+  "notifications": "Thông báo",
+  "@notifications": {
+    "description": "Title for notifications permission"
+  },
+  "notificationsDesc": "Bật thông báo để luôn được thông tin",
+  "@notificationsDesc": {
+    "description": "Description for notifications permission"
+  },
+  "@continueButton": {
+    "description": "Generic continue button text"
+  },
+  "locationServiceDisabled": "Dịch vụ vị trí đã bị tắt",
+  "@locationServiceDisabled": {
+    "description": "Title for dialog when location services are off"
+  },
+  "locationServiceDisabledDesc": "Dịch vụ vị trí đã bị tắt. Vui lòng vào Cài đặt > Quyền riêng tư & Bảo mật > Dịch vụ vị trí và bật nó",
+  "@locationServiceDisabledDesc": {
+    "description": "Instructions to enable location services"
+  },
+  "backgroundLocationDenied": "Quyền truy cập vị trí nền bị từ chối",
+  "@backgroundLocationDenied": {
+    "description": "Title for dialog when background location is denied"
+  },
+  "backgroundLocationDeniedDesc": "Vui lòng vào cài đặt thiết bị và đặt quyền vị trí thành \"Luôn cho phép\"",
+  "@backgroundLocationDeniedDesc": {
+    "description": "Instructions to grant background location permission"
+  },
+  "lovingOmi": "Bạn thích Omi?",
+  "@lovingOmi": {
+    "description": "Title for the app review prompt"
+  },
+  "leaveReviewIos": "Giúp chúng tôi tiếp cận nhiều người hơn bằng cách để lại đánh giá trên App Store. Phản hồi của bạn có ý nghĩa rất lớn với chúng tôi!",
+  "@leaveReviewIos": {
+    "description": "App review prompt text for iOS users"
+  },
+  "leaveReviewAndroid": "Giúp chúng tôi tiếp cận nhiều người hơn bằng cách để lại đánh giá trên Google Play Store. Phản hồi của bạn có ý nghĩa rất lớn với chúng tôi!",
+  "@leaveReviewAndroid": {
+    "description": "App review prompt text for Android users"
+  },
+  "rateOnAppStore": "Đánh giá trên App Store",
+  "@rateOnAppStore": {
+    "description": "Button text to rate on Apple App Store"
+  },
+  "rateOnGooglePlay": "Đánh giá trên Google Play",
+  "@rateOnGooglePlay": {
+    "description": "Button text to rate on Google Play Store"
+  },
+  "maybeLater": "Có thể sau",
+  "@maybeLater": {
+    "description": "Button text to dismiss the review prompt"
+  },
+  "speechProfileIntro": "Omi cần học hỏi mục tiêu và giọng nói của bạn. Bạn có thể sửa đổi nó sau.",
+  "@speechProfileIntro": {
+    "description": "Introduction text for speech profile creation"
+  },
+  "getStarted": "Bắt đầu",
+  "@getStarted": {
+    "description": "Button text to begin a process"
+  },
+  "allDone": "Hoàn tất!",
+  "@allDone": {
+    "description": "Success message after completing a task"
+  },
+  "keepGoing": "Tiếp tục, bạn đang làm rất tốt",
+  "@keepGoing": {
+    "description": "Encouragement text during a multi-step process"
+  },
+  "skipThisQuestion": "Bỏ qua câu hỏi này",
+  "@skipThisQuestion": {
+    "description": "Button text to skip the current question"
+  },
+  "skipForNow": "Bỏ qua bây giờ",
+  "@skipForNow": {
+    "description": "Button text to skip the entire process temporarily"
+  },
+  "connectionError": "Lỗi kết nối",
+  "@connectionError": {
+    "description": "Title for connection error dialog"
+  },
+  "connectionErrorDesc": "Không thể kết nối với máy chủ. Vui lòng kiểm tra kết nối internet và thử lại.",
+  "@connectionErrorDesc": {
+    "description": "Description of connection error"
+  },
+  "invalidRecordingMultipleSpeakers": "Phát hiện bản ghi âm không hợp lệ",
+  "@invalidRecordingMultipleSpeakers": {
+    "description": "Error title when multiple speakers are detected"
+  },
+  "multipleSpeakersDesc": "Có vẻ như có nhiều người nói trong bản ghi âm. Vui lòng đảm bảo bạn ở nơi yên tĩnh và thử lại.",
+  "@multipleSpeakersDesc": {
+    "description": "Error description for multiple speakers"
+  },
+  "tooShortDesc": "Không phát hiện đủ giọng nói. Vui lòng nói nhiều hơn và thử lại.",
+  "@tooShortDesc": {
+    "description": "Error description for recording being too short"
+  },
+  "invalidRecordingDesc": "Vui lòng đảm bảo bạn nói ít nhất 5 giây và không quá 90 giây.",
+  "@invalidRecordingDesc": {
+    "description": "Error description for invalid recording duration"
+  },
+  "areYouThere": "Bạn có ở đó không?",
+  "@areYouThere": {
+    "description": "Timeout warning title"
+  },
+  "noSpeechDesc": "Chúng tôi không thể phát hiện giọng nói nào. Vui lòng đảm bảo nói ít nhất 10 giây và không quá 3 phút.",
+  "@noSpeechDesc": {
+    "description": "Error description when no speech is detected"
+  },
+  "connectionLost": "Mất kết nối",
+  "@connectionLost": {
+    "description": "Title for lost connection dialog"
+  },
+  "connectionLostDesc": "Kết nối đã bị gián đoạn. Vui lòng kiểm tra kết nối internet và thử lại.",
+  "@connectionLostDesc": {
+    "description": "Description for lost connection"
+  },
+  "tryAgain": "Thử lại",
+  "@tryAgain": {
+    "description": "Button text to retry an action"
+  },
+  "connectOmiOmiGlass": "Kết nối Omi / OmiGlass",
+  "@connectOmiOmiGlass": {
+    "description": "Button text to connect specific device models"
+  },
+  "continueWithoutDevice": "Tiếp tục không có thiết bị",
+  "@continueWithoutDevice": {
+    "description": "Button text to proceed without connecting a hardware device"
+  },
+  "permissionsRequired": "Yêu cầu quyền",
+  "@permissionsRequired": {
+    "description": "Title for permissions required dialog"
+  },
+  "permissionsRequiredDesc": "Ứng dụng này cần quyền Bluetooth và Vị trí để hoạt động đúng cách. Vui lòng bật chúng trong cài đặt.",
+  "@permissionsRequiredDesc": {
+    "description": "Explanation of why permissions are needed"
+  },
+  "openSettings": "Mở cài đặt",
+  "@openSettings": {
+    "description": "Button text to open app settings"
+  },
+  "wantDifferentName": "Muốn được gọi bằng tên khác?",
+  "@wantDifferentName": {
+    "description": "Question asking if user wants to change their display name"
+  },
+  "whatsYourName": "Bạn tên gì?",
+  "@whatsYourName": {
+    "description": "Question asking for user's name"
+  },
+  "@enterYourName": {
+    "description": "Hint text for name input field"
+  },
+  "speakTranscribeSummarize": "Nói. Phiên âm. Tóm tắt.",
+  "@speakTranscribeSummarize": {
+    "description": "Tagline or slogan on the welcome/auth screen"
+  },
+  "signInWithApple": "Đăng nhập bằng Apple",
+  "@signInWithApple": {
+    "description": "Button text for Apple Sign In"
+  },
+  "signInWithGoogle": "Đăng nhập bằng Google",
+  "@signInWithGoogle": {
+    "description": "Button text for Google Sign In"
+  },
+  "byContinuingAgree": "Bằng cách tiếp tục, bạn đồng ý với ",
+  "@byContinuingAgree": {
+    "description": "Legal disclaimer prefix text"
+  },
+  "termsOfUse": "Điều khoản sử dụng",
+  "@termsOfUse": {
+    "description": "Link text for Terms of Use"
+  },
+  "omiYourAiCompanion": "Omi – Trợ lý AI của bạn",
+  "@omiYourAiCompanion": {
+    "description": "App title or branding on onboarding screen"
+  },
+  "captureEveryMoment": "Ghi lại mọi khoảnh khắc. Nhận tóm tắt\nbằng AI. Không bao giờ phải ghi chú lại.",
+  "@captureEveryMoment": {
+    "description": "App value proposition or description"
+  },
+  "appleWatchSetup": "Thiết lập Apple Watch",
+  "@appleWatchSetup": {
+    "description": "Title for Apple Watch setup page"
+  },
+  "permissionRequestedExclaim": "Đã yêu cầu quyền!",
+  "@permissionRequestedExclaim": {
+    "description": "Title when permission has been requested"
+  },
+  "microphonePermission": "Quyền microphone",
+  "@microphonePermission": {
+    "description": "Title for microphone permission section"
+  },
+  "permissionGrantedNow": "Đã cấp quyền! Bây giờ:\n\nMở ứng dụng Omi trên đồng hồ của bạn và nhấn \"Tiếp tục\" bên dưới",
+  "@permissionGrantedNow": {
+    "description": "Instructions after permission is granted"
+  },
+  "needMicrophonePermission": "Chúng tôi cần quyền microphone.\n\n1. Nhấn \"Cấp quyền\"\n2. Cho phép trên iPhone của bạn\n3. Ứng dụng đồng hồ sẽ đóng\n4. Mở lại và nhấn \"Tiếp tục\"",
+  "@needMicrophonePermission": {
+    "description": "Instructions for granting microphone permission"
+  },
+  "grantPermissionButton": "Cấp quyền",
+  "@grantPermissionButton": {
+    "description": "Button to request permission"
+  },
+  "needHelp": "Cần trợ giúp?",
+  "@needHelp": {
+    "description": "Link to help dialog"
+  },
+  "troubleshootingSteps": "Khắc phục sự cố:\n\n1. Đảm bảo Omi được cài đặt trên đồng hồ của bạn\n2. Mở ứng dụng Omi trên đồng hồ của bạn\n3. Tìm cửa sổ bật lên yêu cầu quyền\n4. Nhấn \"Cho phép\" khi được nhắc\n5. Ứng dụng trên đồng hồ của bạn sẽ đóng - mở lại\n6. Quay lại và nhấn \"Tiếp tục\" trên iPhone của bạn",
+  "@troubleshootingSteps": {
+    "description": "Troubleshooting instructions for watch setup"
+  },
+  "@gotIt": {
+    "description": "Button to dismiss dialog"
+  },
+  "recordingStartedSuccessfully": "Đã bắt đầu ghi âm thành công!",
+  "@recordingStartedSuccessfully": {
+    "description": "Success message"
+  },
+  "permissionNotGrantedYet": "Quyền chưa được cấp. Vui lòng đảm bảo bạn đã cho phép quyền microphone và mở lại ứng dụng trên đồng hồ của bạn.",
+  "@permissionNotGrantedYet": {
+    "description": "Error message when permission is missing"
+  },
+  "errorRequestingPermission": "Lỗi khi yêu cầu quyền: {error}",
+  "@errorRequestingPermission": {
+    "description": "Error message for permission request failure",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "errorStartingRecording": "Lỗi khi bắt đầu ghi âm: {error}",
+  "@errorStartingRecording": {
+    "description": "Error message for recording start failure",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "selectPrimaryLanguage": "Chọn ngôn ngữ chính của bạn",
+  "@selectPrimaryLanguage": {
+    "description": "Title for language selection dialog"
+  },
+  "languageBenefits": "Đặt ngôn ngữ của bạn để có phiên âm chính xác hơn và trải nghiệm được cá nhân hóa",
+  "@languageBenefits": {
+    "description": "Explanation of why language selection matters"
+  },
+  "@searchLanguageHint": {
+    "description": "Hint text for language search"
+  },
+  "@noLanguagesFound": {
+    "description": "Text when search returns no results"
+  },
+  "whatsYourPrimaryLanguage": "Ngôn ngữ chính của bạn là gì?",
+  "@whatsYourPrimaryLanguage": {
+    "description": "Question asking for primary language"
+  },
+  "selectYourLanguage": "Chọn ngôn ngữ của bạn",
+  "@selectYourLanguage": {
+    "description": "Placeholder for selected language name"
+  },
+  "personalGrowthJourney": "Hành trình phát triển cá nhân của bạn với AI lắng nghe mọi lời nói của bạn.",
+  "@personalGrowthJourney": {
+    "description": "Tagline on onboarding wrapper"
+  },
+  "actionItemsTitle": "Việc cần làm",
+  "@actionItemsTitle": {
+    "description": "Title for the Action Items page"
+  },
+  "actionItemsDescription": "Nhấn để sửa • Nhấn giữ để chọn • Vuốt để thực hiện hành động",
+  "@actionItemsDescription": {
+    "description": "Instruction text for Action Items interactions"
+  },
+  "tabToDo": "Cần làm",
+  "@tabToDo": {
+    "description": "Label for To Do tab"
+  },
+  "tabDone": "Đã xong",
+  "@tabDone": {
+    "description": "Label for Done tab"
+  },
+  "tabOld": "Cũ",
+  "@tabOld": {
+    "description": "Label for Old tab"
+  },
+  "emptyTodoMessage": "🎉 Đã hoàn tất tất cả!\nKhông còn việc cần làm",
+  "@emptyTodoMessage": {
+    "description": "Message when To Do list is empty"
+  },
+  "emptyDoneMessage": "Chưa có mục nào hoàn thành",
+  "@emptyDoneMessage": {
+    "description": "Message when Done list is empty"
+  },
+  "emptyOldMessage": "✅ Không có nhiệm vụ cũ",
+  "@emptyOldMessage": {
+    "description": "Message when Old list is empty"
+  },
+  "noItems": "Không có mục nào",
+  "@noItems": {
+    "description": "Generic no items message"
+  },
+  "actionItemMarkedIncomplete": "Đã đánh dấu việc cần làm là chưa hoàn thành",
+  "@actionItemMarkedIncomplete": {
+    "description": "Snackbar message when item marked incomplete"
+  },
+  "actionItemCompleted": "Đã hoàn thành việc cần làm",
+  "@actionItemCompleted": {
+    "description": "Snackbar message when item completed"
+  },
+  "deleteActionItemTitle": "Xóa việc cần làm",
+  "@deleteActionItemTitle": {
+    "description": "Title for delete item dialog"
+  },
+  "deleteActionItemMessage": "Bạn có chắc chắn muốn xóa việc cần làm này?",
+  "@deleteActionItemMessage": {
+    "description": "Confirmation message for deleting single item"
+  },
+  "deleteSelectedItemsTitle": "Xóa các mục đã chọn",
+  "@deleteSelectedItemsTitle": {
+    "description": "Title for bulk delete dialog"
+  },
+  "deleteSelectedItemsMessage": "Bạn có chắc chắn muốn xóa {count} việc cần làm{s} đã chọn?",
+  "@deleteSelectedItemsMessage": {
+    "description": "Confirmation message for bulk delete",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "s": {
+        "type": "String",
+        "description": "Plural suffix (s) if needed, handled by logic or just append 's' for simplicity if count > 1"
+      }
+    }
+  },
+  "actionItemDeletedResult": "Đã xóa việc cần làm \"{description}\"",
+  "@actionItemDeletedResult": {
+    "description": "Snackbar message after deleting single item",
+    "placeholders": {
+      "description": {
+        "type": "String"
+      }
+    }
+  },
+  "itemsDeletedResult": "Đã xóa {count} việc cần làm{s}",
+  "@itemsDeletedResult": {
+    "description": "Snackbar message after bulk delete",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "s": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToDeleteItem": "Không thể xóa việc cần làm",
+  "@failedToDeleteItem": {
+    "description": "Error message when deletion fails"
+  },
+  "failedToDeleteItems": "Không thể xóa các mục",
+  "@failedToDeleteItems": {
+    "description": "Error message when bulk deletion fails"
+  },
+  "failedToDeleteSomeItems": "Không thể xóa một số mục",
+  "@failedToDeleteSomeItems": {
+    "description": "Error message when partial deletion failure"
+  },
+  "welcomeActionItemsTitle": "Sẵn sàng cho việc cần làm",
+  "@welcomeActionItemsTitle": {
+    "description": "Heading for empty state welcome"
+  },
+  "welcomeActionItemsDescription": "AI của bạn sẽ tự động trích xuất nhiệm vụ và việc cần làm từ cuộc trò chuyện của bạn. Chúng sẽ xuất hiện ở đây khi được tạo.",
+  "@welcomeActionItemsDescription": {
+    "description": "Description for empty state welcome"
+  },
+  "autoExtractionFeature": "Tự động trích xuất từ cuộc trò chuyện",
+  "@autoExtractionFeature": {
+    "description": "Feature point description"
+  },
+  "editSwipeFeature": "Nhấn để sửa, vuốt để hoàn thành hoặc xóa",
+  "@editSwipeFeature": {
+    "description": "Feature point description"
+  },
+  "itemsSelected": "Đã chọn {count}",
+  "@itemsSelected": {
+    "description": "Selection count in app bar",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "selectAll": "Chọn tất cả",
+  "@selectAll": {
+    "description": "Tooltip for select all"
+  },
+  "deleteSelected": "Xóa đã chọn",
+  "@deleteSelected": {
+    "description": "Tooltip for delete selected"
+  },
+  "searchMemories": "Tìm kiếm {count} ký ức",
+  "@searchMemories": {
+    "description": "Hint text for memories search bar",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "memoryDeleted": "Đã xóa ký ức.",
+  "@memoryDeleted": {
+    "description": "Notification when memory deleted"
+  },
+  "undo": "Hoàn tác",
+  "@undo": {
+    "description": "Undo button text"
+  },
+  "noMemoriesYet": "Chưa có ký ức",
+  "@noMemoriesYet": {
+    "description": "Empty state text"
+  },
+  "noAutoMemories": "Chưa có ký ức tự động trích xuất",
+  "@noAutoMemories": {
+    "description": "Empty state text for auto category"
+  },
+  "noManualMemories": "Chưa có ký ức thủ công",
+  "@noManualMemories": {
+    "description": "Empty state text for manual category"
+  },
+  "noMemoriesInCategories": "Không có ký ức trong các danh mục này",
+  "@noMemoriesInCategories": {
+    "description": "Empty state text for filtered categories"
+  },
+  "noMemoriesFound": "Không tìm thấy ký ức",
+  "@noMemoriesFound": {
+    "description": "Empty state text for search results"
+  },
+  "addFirstMemory": "Thêm ký ức đầu tiên của bạn",
+  "@addFirstMemory": {
+    "description": "Button to add first memory"
+  },
+  "clearMemoryTitle": "Xóa bộ nhớ của Omi",
+  "@clearMemoryTitle": {
+    "description": "Dialog title for clearing memory"
+  },
+  "clearMemoryMessage": "Bạn có chắc chắn muốn xóa bộ nhớ của Omi? Hành động này không thể hoàn tác.",
+  "@clearMemoryMessage": {
+    "description": "Dialog content for clearing memory"
+  },
+  "clearMemoryButton": "Xóa bộ nhớ",
+  "@clearMemoryButton": {
+    "description": "Button text to confirm clear"
+  },
+  "memoryClearedSuccess": "Đã xóa bộ nhớ của Omi về bạn",
+  "@memoryClearedSuccess": {
+    "description": "Snackbar success message"
+  },
+  "noMemoriesToDelete": "Không có ký ức để xóa",
+  "@noMemoriesToDelete": {
+    "description": "Snackbar message"
+  },
+  "createMemoryTooltip": "Tạo ký ức mới",
+  "@createMemoryTooltip": {
+    "description": "Tooltip for create memory FAB"
+  },
+  "createActionItemTooltip": "Tạo việc cần làm mới",
+  "@createActionItemTooltip": {
+    "description": "Tooltip for create action item FAB"
+  },
+  "memoryManagement": "Quản lý ký ức",
+  "@memoryManagement": {
+    "description": "Title for memory management sheet"
+  },
+  "filterMemories": "Lọc ký ức",
+  "@filterMemories": {
+    "description": "Section header"
+  },
+  "totalMemoriesCount": "Bạn có tổng cộng {count} ký ức",
+  "@totalMemoriesCount": {
+    "description": "Count display",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "publicMemories": "Ký ức công khai",
+  "@publicMemories": {
+    "description": "Label"
+  },
+  "privateMemories": "Ký ức riêng tư",
+  "@privateMemories": {
+    "description": "Label"
+  },
+  "makeAllPrivate": "Đặt tất cả ký ức thành riêng tư",
+  "@makeAllPrivate": {
+    "description": "Button label"
+  },
+  "makeAllPublic": "Đặt tất cả ký ức thành công khai",
+  "@makeAllPublic": {
+    "description": "Button label"
+  },
+  "deleteAllMemories": "Xóa tất cả ký ức",
+  "@deleteAllMemories": {
+    "description": "Button label"
+  },
+  "allMemoriesPrivateResult": "Tất cả ký ức hiện là riêng tư",
+  "@allMemoriesPrivateResult": {
+    "description": "Snackbar"
+  },
+  "allMemoriesPublicResult": "Tất cả ký ức hiện là công khai",
+  "@allMemoriesPublicResult": {
+    "description": "Snackbar"
+  },
+  "newMemory": "Ký ức mới",
+  "@newMemory": {
+    "description": "Dialog title"
+  },
+  "editMemory": "Chỉnh sửa ký ức",
+  "@editMemory": {
+    "description": "Dialog title"
+  },
+  "memoryContentHint": "Tôi thích ăn kem...",
+  "@memoryContentHint": {
+    "description": "Input hint"
+  },
+  "failedToSaveMemory": "Không thể lưu. Vui lòng kiểm tra kết nối của bạn.",
+  "@failedToSaveMemory": {
+    "description": "Error message"
+  },
+  "saveMemory": "Lưu ký ức",
+  "@saveMemory": {
+    "description": "Button label"
+  },
+  "retry": "Thử lại",
+  "@retry": {
+    "description": "Button label"
+  },
+  "createActionItem": "Tạo việc cần làm",
+  "@createActionItem": {
+    "description": "Sheet title"
+  },
+  "editActionItem": "Chỉnh sửa việc cần làm",
+  "@editActionItem": {
+    "description": "Sheet title"
+  },
+  "actionItemDescriptionHint": "Cần làm gì?",
+  "@actionItemDescriptionHint": {
+    "description": "Input hint"
+  },
+  "actionItemDescriptionEmpty": "Mô tả việc cần làm không được để trống.",
+  "@actionItemDescriptionEmpty": {
+    "description": "Error message"
+  },
+  "actionItemUpdated": "Đã cập nhật việc cần làm",
+  "@actionItemUpdated": {
+    "description": "Snackbar"
+  },
+  "failedToUpdateActionItem": "Không thể cập nhật việc cần làm",
+  "@failedToUpdateActionItem": {
+    "description": "Snackbar"
+  },
+  "actionItemCreated": "Đã tạo việc cần làm",
+  "@actionItemCreated": {
+    "description": "Snackbar"
+  },
+  "failedToCreateActionItem": "Không thể tạo việc cần làm",
+  "@failedToCreateActionItem": {
+    "description": "Snackbar"
+  },
+  "dueDate": "Ngày đến hạn",
+  "@dueDate": {
+    "description": "Label"
+  },
+  "time": "Thời gian",
+  "@time": {
+    "description": "Label"
+  },
+  "addDueDate": "Thêm ngày đến hạn",
+  "@addDueDate": {
+    "description": "Placeholder"
+  },
+  "pressDoneToSave": "Nhấn xong để lưu",
+  "@pressDoneToSave": {
+    "description": "Instruction"
+  },
+  "pressDoneToCreate": "Nhấn xong để tạo",
+  "@pressDoneToCreate": {
+    "description": "Instruction"
+  },
+  "filterAll": "Tất cả",
+  "@filterAll": {
+    "description": "Filter option"
+  },
+  "filterSystem": "Về bạn",
+  "@filterSystem": {
+    "description": "Filter option for facts about the user"
+  },
+  "filterInteresting": "Thông tin chi tiết",
+  "@filterInteresting": {
+    "description": "Filter option for external wisdom/advice"
+  },
+  "filterManual": "Thủ công",
+  "@filterManual": {
+    "description": "Filter option"
+  },
+  "completed": "Đã hoàn thành",
+  "@completed": {
+    "description": "Status label"
+  },
+  "markComplete": "Đánh dấu hoàn thành",
+  "@markComplete": {
+    "description": "Action label"
+  },
+  "actionItemDeleted": "Đã xóa việc cần làm",
+  "@actionItemDeleted": {
+    "description": "Snackbar"
+  },
+  "failedToDeleteActionItem": "Không thể xóa việc cần làm",
+  "@failedToDeleteActionItem": {
+    "description": "Snackbar"
+  },
+  "deleteActionItemConfirmTitle": "Xóa việc cần làm",
+  "@deleteActionItemConfirmTitle": {
+    "description": "Dialog title"
+  },
+  "deleteActionItemConfirmMessage": "Bạn có chắc chắn muốn xóa việc cần làm này?",
+  "@deleteActionItemConfirmMessage": {
+    "description": "Dialog message"
+  },
+  "appLanguage": "Ngôn ngữ ứng dụng",
+  "@appLanguage": {
+    "description": "Label for app language selector"
+  },
+  "appInterfaceSectionTitle": "GIAO DIỆN ỨNG DỤNG",
+  "speechTranscriptionSectionTitle": "GIỌNG NÓI & PHIÊN ÂM",
+  "languageSettingsHelperText": "Ngôn ngữ Ứng dụng thay đổi menu và nút. Ngôn ngữ Giọng nói ảnh hưởng đến cách bản ghi âm của bạn được phiên âm."
+}

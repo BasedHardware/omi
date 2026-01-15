@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+
+import 'package:provider/provider.dart';
+
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
-import 'package:provider/provider.dart';
 import 'desktop_home_page.dart';
 
 class DesktopHomePageWrapper extends StatefulWidget {

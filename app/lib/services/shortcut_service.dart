@@ -32,7 +32,7 @@ class ShortcutService {
 
   static void initialize() {
     if (!isSupported) return;
-    
+
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'openKeyboardShortcutsPage') {
         onOpenKeyboardShortcutsPage?.call();

@@ -1,8 +1,13 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:pull_down_button/pull_down_button.dart';
+
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/pages/settings/wifi_sync_settings_page.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
@@ -12,13 +17,9 @@ import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
-import 'package:provider/provider.dart';
-import 'package:pull_down_button/pull_down_button.dart';
-
 import 'local_storage_page.dart';
 import 'private_cloud_sync_page.dart';
 import 'synced_conversations_page.dart';
-import 'package:omi/pages/settings/wifi_sync_settings_page.dart';
 import 'wal_item_detail/wal_item_detail_page.dart';
 
 Widget _buildFaIcon(IconData icon, {double size = 18, Color color = const Color(0xFF8E8E93)}) {

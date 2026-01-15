@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+
 import 'package:provider/provider.dart';
-import 'package:omi/providers/memories_provider.dart';
-import 'package:omi/utils/ui_guidelines.dart';
+
 import 'package:omi/backend/schema/memory.dart';
+import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/ui_guidelines.dart';
 
 class MemoryManagementSheet extends StatelessWidget {
   final MemoriesProvider provider;

@@ -1,0 +1,2317 @@
+{
+  "@@locale": "ko",
+  "@@last_modified": "2026-01-13",
+  "appTitle": "Omi",
+  "@appTitle": {
+    "description": "The app title displayed in various places"
+  },
+  "conversationTab": "대화",
+  "@conversationTab": {
+    "description": "Tab label for conversation summary"
+  },
+  "transcriptTab": "녹취록",
+  "@transcriptTab": {
+    "description": "Tab label for transcript view"
+  },
+  "actionItemsTab": "할 일",
+  "@actionItemsTab": {
+    "description": "Tab label for action items"
+  },
+  "deleteConversationTitle": "대화를 삭제하시겠습니까?",
+  "@deleteConversationTitle": {
+    "description": "Title for delete confirmation dialog"
+  },
+  "deleteConversationMessage": "이 대화를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
+  "@deleteConversationMessage": {
+    "description": "Message for delete confirmation dialog"
+  },
+  "confirm": "확인",
+  "@confirm": {
+    "description": "Confirm button label"
+  },
+  "cancel": "취소",
+  "@cancel": {
+    "description": "Button label"
+  },
+  "ok": "확인",
+  "@ok": {
+    "description": "Generic OK button text"
+  },
+  "delete": "삭제",
+  "@delete": {
+    "description": "Button label"
+  },
+  "add": "추가",
+  "@add": {
+    "description": "Add button label"
+  },
+  "update": "업데이트",
+  "@update": {
+    "description": "Update button label"
+  },
+  "save": "저장",
+  "@save": {
+    "description": "Save button label"
+  },
+  "edit": "편집",
+  "@edit": {
+    "description": "Edit button/action label"
+  },
+  "close": "닫기",
+  "@close": {
+    "description": "Close button label"
+  },
+  "clear": "지우기",
+  "@clear": {
+    "description": "Clear button label"
+  },
+  "copyTranscript": "녹취록 복사",
+  "@copyTranscript": {
+    "description": "Menu item to copy transcript"
+  },
+  "copySummary": "요약 복사",
+  "@copySummary": {
+    "description": "Menu item to copy summary"
+  },
+  "testPrompt": "프롬프트 테스트",
+  "@testPrompt": {
+    "description": "Menu item for testing prompts"
+  },
+  "reprocessConversation": "대화 재처리",
+  "@reprocessConversation": {
+    "description": "Menu item to reprocess a conversation"
+  },
+  "deleteConversation": "대화 삭제",
+  "@deleteConversation": {
+    "description": "Menu item to delete a conversation"
+  },
+  "contentCopied": "콘텐츠가 클립보드에 복사되었습니다",
+  "@contentCopied": {
+    "description": "Snackbar message when content is copied"
+  },
+  "failedToUpdateStarred": "즐겨찾기 상태 업데이트에 실패했습니다.",
+  "@failedToUpdateStarred": {
+    "description": "Error message when starring fails"
+  },
+  "conversationUrlNotShared": "대화 URL을 공유할 수 없습니다.",
+  "@conversationUrlNotShared": {
+    "description": "Error message when sharing fails"
+  },
+  "errorProcessingConversation": "대화 처리 중 오류가 발생했습니다. 나중에 다시 시도해 주세요.",
+  "@errorProcessingConversation": {
+    "description": "Error message for conversation processing failure"
+  },
+  "noInternetConnection": "인터넷 연결을 확인하고 다시 시도해 주세요.",
+  "@noInternetConnection": {
+    "description": "Message shown when there's no internet"
+  },
+  "unableToDeleteConversation": "대화를 삭제할 수 없습니다",
+  "@unableToDeleteConversation": {
+    "description": "Title for delete error dialog"
+  },
+  "somethingWentWrong": "문제가 발생했습니다! 나중에 다시 시도해 주세요.",
+  "@somethingWentWrong": {
+    "description": "Generic error message"
+  },
+  "copyErrorMessage": "오류 메시지 복사",
+  "@copyErrorMessage": {
+    "description": "Button to copy error details"
+  },
+  "errorCopied": "오류 메시지가 클립보드에 복사되었습니다",
+  "@errorCopied": {
+    "description": "Snackbar message after copying error"
+  },
+  "remaining": "남은",
+  "@remaining": {
+    "description": "Label for remaining time/items"
+  },
+  "loading": "로딩 중...",
+  "@loading": {
+    "description": "Loading indicator text"
+  },
+  "loadingDuration": "지속 시간 로딩 중...",
+  "@loadingDuration": {
+    "description": "Loading duration indicator"
+  },
+  "secondsCount": "{count}초",
+  "@secondsCount": {
+    "description": "Duration in seconds",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "30"
+      }
+    }
+  },
+  "people": "사람들",
+  "@people": {
+    "description": "People section title"
+  },
+  "addNewPerson": "새로운 사람 추가",
+  "@addNewPerson": {
+    "description": "Title for add person dialog"
+  },
+  "editPerson": "사람 편집",
+  "@editPerson": {
+    "description": "Title for edit person dialog"
+  },
+  "createPersonHint": "새로운 사람을 만들고 Omi가 그들의 음성을 인식하도록 학습시키세요!",
+  "@createPersonHint": {
+    "description": "Hint text for creating a person"
+  },
+  "speechProfile": "음성 프로필",
+  "@speechProfile": {
+    "description": "Speech profile label"
+  },
+  "sampleNumber": "샘플 {number}",
+  "@sampleNumber": {
+    "description": "Label for speech sample",
+    "placeholders": {
+      "number": {
+        "type": "int",
+        "example": "1"
+      }
+    }
+  },
+  "settings": "설정",
+  "@settings": {
+    "description": "Settings page title"
+  },
+  "language": "언어",
+  "@language": {
+    "description": "Language setting label"
+  },
+  "selectLanguage": "언어 선택",
+  "@selectLanguage": {
+    "description": "Title for language selection"
+  },
+  "deleting": "삭제 중...",
+  "@deleting": {
+    "description": "Deleting in progress indicator"
+  },
+  "pleaseCompleteAuthentication": "브라우저에서 인증을 완료해 주세요. 완료되면 앱으로 돌아가세요.",
+  "@pleaseCompleteAuthentication": {
+    "description": "Message shown during OAuth flow"
+  },
+  "failedToStartAuthentication": "인증 시작에 실패했습니다",
+  "@failedToStartAuthentication": {
+    "description": "Error when OAuth fails to start"
+  },
+  "importStarted": "가져오기가 시작되었습니다! 완료되면 알려드리겠습니다.",
+  "@importStarted": {
+    "description": "Success message when import begins"
+  },
+  "failedToStartImport": "가져오기 시작에 실패했습니다. 다시 시도해 주세요.",
+  "@failedToStartImport": {
+    "description": "Error when import fails to start"
+  },
+  "couldNotAccessFile": "선택한 파일에 접근할 수 없습니다",
+  "@couldNotAccessFile": {
+    "description": "Error when file access fails"
+  },
+  "askOmi": "Omi에게 질문하기",
+  "@askOmi": {
+    "description": "Chat button label"
+  },
+  "done": "완료",
+  "@done": {
+    "description": "Button label"
+  },
+  "disconnected": "연결 끊김",
+  "@disconnected": {
+    "description": "Device disconnected status"
+  },
+  "searching": "검색 중",
+  "@searching": {
+    "description": "Searching for device status"
+  },
+  "connectDevice": "기기 연결",
+  "@connectDevice": {
+    "description": "Button to connect a device"
+  },
+  "monthlyLimitReached": "월간 한도에 도달했습니다.",
+  "@monthlyLimitReached": {
+    "description": "Message when usage limit is reached"
+  },
+  "checkUsage": "사용량 확인",
+  "@checkUsage": {
+    "description": "Button to check usage details"
+  },
+  "syncingRecordings": "녹음 동기화 중",
+  "@syncingRecordings": {
+    "description": "Title when sync is in progress"
+  },
+  "recordingsToSync": "동기화할 녹음",
+  "@recordingsToSync": {
+    "description": "Title when there are recordings to sync"
+  },
+  "allCaughtUp": "모두 완료",
+  "@allCaughtUp": {
+    "description": "Title when everything is synced"
+  },
+  "sync": "동기화",
+  "@sync": {
+    "description": "Sync button label"
+  },
+  "pendantUpToDate": "펜던트가 최신 상태입니다",
+  "@pendantUpToDate": {
+    "description": "Status when pendant is synced"
+  },
+  "allRecordingsSynced": "모든 녹음이 동기화되었습니다",
+  "@allRecordingsSynced": {
+    "description": "Status text when sync is complete"
+  },
+  "syncingInProgress": "동기화 진행 중",
+  "@syncingInProgress": {
+    "description": "Status when sync is happening"
+  },
+  "readyToSync": "동기화 준비 완료",
+  "@readyToSync": {
+    "description": "Status when ready to sync"
+  },
+  "tapSyncToStart": "동기화를 탭하여 시작하세요",
+  "@tapSyncToStart": {
+    "description": "Hint to start sync"
+  },
+  "pendantNotConnected": "펜던트가 연결되지 않았습니다. 동기화하려면 연결하세요.",
+  "@pendantNotConnected": {
+    "description": "Warning when pendant is not connected"
+  },
+  "everythingSynced": "모든 항목이 이미 동기화되었습니다.",
+  "@everythingSynced": {
+    "description": "Message when all is synced"
+  },
+  "recordingsNotSynced": "아직 동기화되지 않은 녹음이 있습니다.",
+  "@recordingsNotSynced": {
+    "description": "Message when there are unsynced recordings"
+  },
+  "syncingBackground": "백그라운드에서 녹음을 계속 동기화하겠습니다.",
+  "@syncingBackground": {
+    "description": "Message during background sync"
+  },
+  "noConversationsYet": "아직 대화가 없습니다.",
+  "@noConversationsYet": {
+    "description": "Empty state when no conversations exist"
+  },
+  "noStarredConversations": "아직 즐겨찾기한 대화가 없습니다.",
+  "@noStarredConversations": {
+    "description": "Empty state for starred filter"
+  },
+  "starConversationHint": "대화를 즐겨찾기하려면 대화를 열고 헤더의 별 아이콘을 탭하세요.",
+  "@starConversationHint": {
+    "description": "Hint explaining how to star conversations"
+  },
+  "searchConversations": "대화 검색",
+  "@searchConversations": {
+    "description": "Search field placeholder"
+  },
+  "selectedCount": "{count}개 선택됨",
+  "@selectedCount": {
+    "description": "Selection count label",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "merge": "병합",
+  "@merge": {
+    "description": "Merge button label"
+  },
+  "mergeConversations": "대화 병합",
+  "@mergeConversations": {
+    "description": "Merge dialog title"
+  },
+  "mergeConversationsMessage": "{count}개의 대화를 하나로 결합합니다. 모든 내용이 병합되고 재생성됩니다.",
+  "@mergeConversationsMessage": {
+    "description": "Merge confirmation message",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mergingInBackground": "백그라운드에서 병합 중입니다. 잠시 시간이 걸릴 수 있습니다.",
+  "@mergingInBackground": {
+    "description": "Snackbar message during merge"
+  },
+  "failedToStartMerge": "병합 시작에 실패했습니다",
+  "@failedToStartMerge": {
+    "description": "Error message when merge fails"
+  },
+  "askAnything": "무엇이든 물어보세요",
+  "@askAnything": {
+    "description": "Chat input placeholder"
+  },
+  "noMessagesYet": "아직 메시지가 없습니다!\n대화를 시작해보는 건 어떨까요?",
+  "@noMessagesYet": {
+    "description": "Empty chat state message"
+  },
+  "deletingMessages": "Omi의 메모리에서 메시지를 삭제하는 중...",
+  "@deletingMessages": {
+    "description": "Loading text while clearing chat"
+  },
+  "messageCopied": "메시지가 클립보드에 복사되었습니다.",
+  "@messageCopied": {
+    "description": "Snackbar after copying message"
+  },
+  "cannotReportOwnMessage": "자신의 메시지는 신고할 수 없습니다.",
+  "@cannotReportOwnMessage": {
+    "description": "Error when trying to report own message"
+  },
+  "reportMessage": "메시지 신고",
+  "@reportMessage": {
+    "description": "Report message dialog title"
+  },
+  "reportMessageConfirm": "이 메시지를 신고하시겠습니까?",
+  "@reportMessageConfirm": {
+    "description": "Report message confirmation"
+  },
+  "messageReported": "메시지가 성공적으로 신고되었습니다.",
+  "@messageReported": {
+    "description": "Confirmation after reporting message"
+  },
+  "thankYouFeedback": "피드백 감사합니다!",
+  "@thankYouFeedback": {
+    "description": "After thumbs up/down feedback"
+  },
+  "clearChat": "채팅을 지우시겠습니까?",
+  "@clearChat": {
+    "description": "Clear chat dialog title"
+  },
+  "clearChatConfirm": "채팅을 지우시겠습니까? 이 작업은 되돌릴 수 없습니다.",
+  "@clearChatConfirm": {
+    "description": "Clear chat confirmation message"
+  },
+  "maxFilesLimit": "한 번에 최대 4개의 파일만 업로드할 수 있습니다",
+  "@maxFilesLimit": {
+    "description": "Max files upload warning"
+  },
+  "chatWithOmi": "Omi와 채팅하기",
+  "@chatWithOmi": {
+    "description": "Chat share subject"
+  },
+  "apps": "앱",
+  "@apps": {
+    "description": "Apps page title"
+  },
+  "noAppsFound": "앱을 찾을 수 없습니다",
+  "@noAppsFound": {
+    "description": "Empty state when no apps match"
+  },
+  "tryAdjustingSearch": "검색어나 필터를 조정해 보세요",
+  "@tryAdjustingSearch": {
+    "description": "Hint when no apps found"
+  },
+  "createYourOwnApp": "나만의 앱 만들기",
+  "@createYourOwnApp": {
+    "description": "Create app button title"
+  },
+  "buildAndShareApp": "맞춤형 앱을 만들고 공유하세요",
+  "@buildAndShareApp": {
+    "description": "Create app button subtitle"
+  },
+  "searchApps": "1500개 이상의 앱 검색",
+  "@searchApps": {
+    "description": "Apps search placeholder"
+  },
+  "myApps": "내 앱",
+  "@myApps": {
+    "description": "My Apps filter button"
+  },
+  "installedApps": "설치된 앱",
+  "@installedApps": {
+    "description": "Installed Apps filter button"
+  },
+  "unableToFetchApps": "앱을 가져올 수 없습니다 :(\n\n인터넷 연결을 확인하고 다시 시도해 주세요.",
+  "@unableToFetchApps": {
+    "description": "Error when apps fail to load"
+  },
+  "aboutOmi": "Omi 정보",
+  "@aboutOmi": {
+    "description": "About page title"
+  },
+  "privacyPolicy": "개인정보 처리방침",
+  "@privacyPolicy": {
+    "description": "Link text for Privacy Policy"
+  },
+  "visitWebsite": "웹사이트 방문",
+  "@visitWebsite": {
+    "description": "Visit website link"
+  },
+  "helpOrInquiries": "도움말 또는 문의사항이 있으신가요?",
+  "@helpOrInquiries": {
+    "description": "Help link title"
+  },
+  "joinCommunity": "커뮤니티에 참여하세요!",
+  "@joinCommunity": {
+    "description": "Discord community link"
+  },
+  "membersAndCounting": "8000명 이상의 멤버가 함께하고 있습니다.",
+  "@membersAndCounting": {
+    "description": "Discord member count"
+  },
+  "deleteAccountTitle": "계정 삭제",
+  "@deleteAccountTitle": {
+    "description": "Delete account page title"
+  },
+  "deleteAccountConfirm": "계정을 삭제하시겠습니까?",
+  "@deleteAccountConfirm": {
+    "description": "Delete account confirmation"
+  },
+  "cannotBeUndone": "이 작업은 되돌릴 수 없습니다.",
+  "@cannotBeUndone": {
+    "description": "Warning that action is permanent"
+  },
+  "allDataErased": "모든 기억과 대화가 영구적으로 삭제됩니다.",
+  "@allDataErased": {
+    "description": "Delete account warning 1"
+  },
+  "appsDisconnected": "앱 및 통합 기능이 즉시 연결 해제됩니다.",
+  "@appsDisconnected": {
+    "description": "Delete account warning 2"
+  },
+  "exportBeforeDelete": "계정을 삭제하기 전에 데이터를 내보낼 수 있지만, 삭제된 후에는 복구할 수 없습니다.",
+  "@exportBeforeDelete": {
+    "description": "Delete account warning 3"
+  },
+  "deleteAccountCheckbox": "계정 삭제는 영구적이며 기억과 대화를 포함한 모든 데이터가 손실되어 복구할 수 없음을 이해합니다.",
+  "@deleteAccountCheckbox": {
+    "description": "Delete account checkbox confirmation"
+  },
+  "areYouSure": "정말 확실하신가요?",
+  "@areYouSure": {
+    "description": "Final confirmation title"
+  },
+  "deleteAccountFinal": "이 작업은 되돌릴 수 없으며 계정과 관련된 모든 데이터가 영구적으로 삭제됩니다. 계속하시겠습니까?",
+  "@deleteAccountFinal": {
+    "description": "Final delete confirmation message"
+  },
+  "deleteNow": "지금 삭제",
+  "@deleteNow": {
+    "description": "Delete now button"
+  },
+  "goBack": "돌아가기",
+  "@goBack": {
+    "description": "Go back button"
+  },
+  "checkBoxToConfirm": "계정 삭제가 영구적이고 되돌릴 수 없음을 이해했음을 확인하려면 체크박스를 선택하세요.",
+  "@checkBoxToConfirm": {
+    "description": "Checkbox validation error"
+  },
+  "profile": "프로필",
+  "@profile": {
+    "description": "Profile page title"
+  },
+  "name": "이름",
+  "@name": {
+    "description": "Name field label"
+  },
+  "email": "이메일",
+  "@email": {
+    "description": "Email field label"
+  },
+  "customVocabulary": "사용자 지정 어휘",
+  "@customVocabulary": {
+    "description": "Custom vocabulary setting"
+  },
+  "identifyingOthers": "다른 사람 식별",
+  "@identifyingOthers": {
+    "description": "People identification setting"
+  },
+  "paymentMethods": "결제 수단",
+  "@paymentMethods": {
+    "description": "Payment methods setting"
+  },
+  "conversationDisplay": "대화 표시",
+  "@conversationDisplay": {
+    "description": "Conversation display setting"
+  },
+  "dataPrivacy": "데이터 및 개인정보",
+  "@dataPrivacy": {
+    "description": "Data and privacy setting"
+  },
+  "userId": "사용자 ID",
+  "@userId": {
+    "description": "User ID label"
+  },
+  "notSet": "설정되지 않음",
+  "@notSet": {
+    "description": "Default value when not set"
+  },
+  "userIdCopied": "사용자 ID가 클립보드에 복사되었습니다",
+  "@userIdCopied": {
+    "description": "Confirmation when user ID is copied"
+  },
+  "systemDefault": "시스템 기본값",
+  "@systemDefault": {
+    "description": "System language option"
+  },
+  "planAndUsage": "플랜 및 사용량",
+  "@planAndUsage": {
+    "description": "Plan and usage menu item"
+  },
+  "offlineSync": "오프라인 동기화",
+  "@offlineSync": {
+    "description": "Offline sync menu item"
+  },
+  "deviceSettings": "기기 설정",
+  "@deviceSettings": {
+    "description": "Device settings menu item"
+  },
+  "chatTools": "채팅 도구",
+  "@chatTools": {
+    "description": "Chat tools menu item"
+  },
+  "feedbackBug": "피드백 / 버그",
+  "@feedbackBug": {
+    "description": "Feedback menu item"
+  },
+  "helpCenter": "고객센터",
+  "@helpCenter": {
+    "description": "Help center menu item"
+  },
+  "developerSettings": "개발자 설정",
+  "@developerSettings": {
+    "description": "Developer settings menu item"
+  },
+  "getOmiForMac": "Mac용 Omi 다운로드",
+  "@getOmiForMac": {
+    "description": "Mac app download link"
+  },
+  "referralProgram": "추천 프로그램",
+  "@referralProgram": {
+    "description": "Referral program menu item"
+  },
+  "signOut": "로그아웃",
+  "@signOut": {
+    "description": "Sign out button"
+  },
+  "appAndDeviceCopied": "앱 및 기기 정보가 복사되었습니다",
+  "@appAndDeviceCopied": {
+    "description": "Confirmation when version info is copied"
+  },
+  "wrapped2025": "Wrapped 2025",
+  "@wrapped2025": {
+    "description": "Wrapped 2025 menu item"
+  },
+  "yourPrivacyYourControl": "당신의 개인정보, 당신의 제어",
+  "@yourPrivacyYourControl": {
+    "description": "Data privacy page heading"
+  },
+  "privacyIntro": "Omi는 귀하의 개인정보 보호에 최선을 다하고 있습니다. 이 페이지에서 데이터 저장 및 사용 방법을 제어할 수 있습니다.",
+  "@privacyIntro": {
+    "description": "Data privacy page introduction"
+  },
+  "learnMore": "자세히 알아보기...",
+  "@learnMore": {
+    "description": "Learn more link"
+  },
+  "dataProtectionLevel": "데이터 보호 수준",
+  "@dataProtectionLevel": {
+    "description": "Data protection section title"
+  },
+  "dataProtectionDesc": "귀하의 데이터는 기본적으로 강력한 암호화로 보호됩니다. 아래에서 설정 및 향후 개인정보 옵션을 검토하세요.",
+  "@dataProtectionDesc": {
+    "description": "Data protection section description"
+  },
+  "appAccess": "앱 접근",
+  "@appAccess": {
+    "description": "App access section title"
+  },
+  "appAccessDesc": "다음 앱이 귀하의 데이터에 접근할 수 있습니다. 앱을 탭하여 권한을 관리하세요.",
+  "@appAccessDesc": {
+    "description": "App access section description"
+  },
+  "noAppsExternalAccess": "설치된 앱 중 귀하의 데이터에 외부 접근 권한이 있는 앱이 없습니다.",
+  "@noAppsExternalAccess": {
+    "description": "Empty state for app access"
+  },
+  "deviceName": "기기 이름",
+  "@deviceName": {
+    "description": "Device name label"
+  },
+  "deviceId": "기기 ID",
+  "@deviceId": {
+    "description": "Device ID label"
+  },
+  "firmware": "펌웨어",
+  "@firmware": {
+    "description": "Firmware label"
+  },
+  "sdCardSync": "SD 카드 동기화",
+  "@sdCardSync": {
+    "description": "SD Card sync label"
+  },
+  "hardwareRevision": "하드웨어 버전",
+  "@hardwareRevision": {
+    "description": "Hardware revision label"
+  },
+  "modelNumber": "모델 번호",
+  "@modelNumber": {
+    "description": "Model number label"
+  },
+  "manufacturer": "제조사",
+  "@manufacturer": {
+    "description": "Manufacturer label"
+  },
+  "doubleTap": "더블 탭",
+  "@doubleTap": {
+    "description": "Double tap action label"
+  },
+  "ledBrightness": "LED 밝기",
+  "@ledBrightness": {
+    "description": "LED brightness setting"
+  },
+  "micGain": "마이크 게인",
+  "@micGain": {
+    "description": "Microphone gain setting"
+  },
+  "disconnect": "연결 해제",
+  "@disconnect": {
+    "description": "Disconnect device button"
+  },
+  "forgetDevice": "기기 삭제",
+  "@forgetDevice": {
+    "description": "Forget device button"
+  },
+  "chargingIssues": "충전 문제",
+  "@chargingIssues": {
+    "description": "Charging issues help item"
+  },
+  "disconnectDevice": "기기 연결 해제",
+  "@disconnectDevice": {
+    "description": "Disconnect device button"
+  },
+  "unpairDevice": "기기 페어링 해제",
+  "@unpairDevice": {
+    "description": "Unpair device button"
+  },
+  "unpairAndForget": "기기 페어링 해제 및 삭제",
+  "@unpairAndForget": {
+    "description": "Unpair and forget device button"
+  },
+  "deviceDisconnectedMessage": "Omi 기기의 연결이 해제되었습니다 😔",
+  "@deviceDisconnectedMessage": {
+    "description": "Message shown when device is disconnected"
+  },
+  "deviceUnpairedMessage": "기기 페어링이 해제되었습니다. 페어링 해제를 완료하려면 설정 > 블루투스로 이동하여 기기를 삭제하세요.",
+  "@deviceUnpairedMessage": {
+    "description": "Message shown when device is unpaired"
+  },
+  "unpairDialogTitle": "기기 페어링 해제",
+  "@unpairDialogTitle": {
+    "description": "Unpair dialog title"
+  },
+  "unpairDialogMessage": "다른 휴대폰에 연결할 수 있도록 기기의 페어링을 해제합니다. 프로세스를 완료하려면 설정 > 블루투스로 이동하여 기기를 삭제해야 합니다.",
+  "@unpairDialogMessage": {
+    "description": "Unpair dialog message"
+  },
+  "deviceNotConnected": "기기가 연결되지 않음",
+  "@deviceNotConnected": {
+    "description": "Device not connected header"
+  },
+  "connectDeviceMessage": "Omi 기기를 연결하여\n기기 설정 및 사용자 지정에 접근하세요",
+  "@connectDeviceMessage": {
+    "description": "Message encouraging user to connect device"
+  },
+  "deviceInfoSection": "기기 정보",
+  "@deviceInfoSection": {
+    "description": "Device information section header"
+  },
+  "customizationSection": "사용자 지정",
+  "@customizationSection": {
+    "description": "Customization section header"
+  },
+  "hardwareSection": "하드웨어",
+  "@hardwareSection": {
+    "description": "Hardware section header"
+  },
+  "v2Undetected": "V2를 감지할 수 없음",
+  "@v2Undetected": {
+    "description": "V2 device undeteced dialog title"
+  },
+  "v2UndetectedMessage": "V1 기기를 사용하고 있거나 기기가 연결되지 않았습니다. SD 카드 기능은 V2 기기에서만 사용할 수 있습니다.",
+  "@v2UndetectedMessage": {
+    "description": "V2 device undeteced dialog message"
+  },
+  "endConversation": "대화 종료",
+  "@endConversation": {
+    "description": "End conversation action"
+  },
+  "pauseResume": "일시정지/재개",
+  "@pauseResume": {
+    "description": "Pause/Resume action"
+  },
+  "starConversation": "대화 즐겨찾기",
+  "@starConversation": {
+    "description": "Star conversation action"
+  },
+  "doubleTapAction": "더블 탭 동작",
+  "@doubleTapAction": {
+    "description": "Double tap action setting"
+  },
+  "endAndProcess": "대화 종료 및 처리",
+  "@endAndProcess": {
+    "description": "End and process action"
+  },
+  "pauseResumeRecording": "녹음 일시정지/재개",
+  "@pauseResumeRecording": {
+    "description": "Pause/Resume recording action"
+  },
+  "starOngoing": "진행 중인 대화 즐겨찾기",
+  "@starOngoing": {
+    "description": "Star ongoing conversation action"
+  },
+  "off": "끄기",
+  "@off": {
+    "description": "Off state"
+  },
+  "max": "최대",
+  "@max": {
+    "description": "Max state"
+  },
+  "mute": "음소거",
+  "@mute": {
+    "description": "Mute state"
+  },
+  "quiet": "조용함",
+  "@quiet": {
+    "description": "Quiet preset"
+  },
+  "normal": "보통",
+  "@normal": {
+    "description": "Normal preset"
+  },
+  "high": "높음",
+  "@high": {
+    "description": "High preset"
+  },
+  "micGainDescMuted": "마이크가 음소거되었습니다",
+  "@micGainDescMuted": {
+    "description": "Mic gain description: Muted"
+  },
+  "micGainDescLow": "매우 조용함 - 시끄러운 환경용",
+  "@micGainDescLow": {
+    "description": "Mic gain description: Low"
+  },
+  "micGainDescModerate": "조용함 - 보통 소음용",
+  "@micGainDescModerate": {
+    "description": "Mic gain description: Moderate"
+  },
+  "micGainDescNeutral": "중립 - 균형 잡힌 녹음",
+  "@micGainDescNeutral": {
+    "description": "Mic gain description: Neutral"
+  },
+  "micGainDescSlightlyBoosted": "약간 증폭 - 일반 사용",
+  "@micGainDescSlightlyBoosted": {
+    "description": "Mic gain description: Slightly Boosted"
+  },
+  "micGainDescBoosted": "증폭 - 조용한 환경용",
+  "@micGainDescBoosted": {
+    "description": "Mic gain description: Boosted"
+  },
+  "micGainDescHigh": "높음 - 멀리 있거나 부드러운 목소리용",
+  "@micGainDescHigh": {
+    "description": "Mic gain description: High"
+  },
+  "micGainDescVeryHigh": "매우 높음 - 매우 조용한 소스용",
+  "@micGainDescVeryHigh": {
+    "description": "Mic gain description: Very High"
+  },
+  "micGainDescMax": "최대 - 주의해서 사용",
+  "@micGainDescMax": {
+    "description": "Mic gain description: Max"
+  },
+  "developerSettingsTitle": "개발자 설정",
+  "@developerSettingsTitle": {
+    "description": "Developer settings page title"
+  },
+  "saving": "저장 중...",
+  "@saving": {
+    "description": "Saving state text"
+  },
+  "personaConfig": "AI 페르소나 구성",
+  "@personaConfig": {
+    "description": "Persona configuration subtitle"
+  },
+  "beta": "베타",
+  "@beta": {
+    "description": "Beta tag"
+  },
+  "transcription": "음성 변환",
+  "@transcription": {
+    "description": "Transcription settings title"
+  },
+  "transcriptionConfig": "STT 제공업체 구성",
+  "@transcriptionConfig": {
+    "description": "Transcription configuration subtitle"
+  },
+  "conversationTimeout": "대화 시간 제한",
+  "@conversationTimeout": {
+    "description": "Conversation timeout settings title"
+  },
+  "conversationTimeoutConfig": "대화 자동 종료 시간 설정",
+  "@conversationTimeoutConfig": {
+    "description": "Conversation timeout configuration subtitle"
+  },
+  "importData": "데이터 가져오기",
+  "@importData": {
+    "description": "Import data details title"
+  },
+  "importDataConfig": "다른 소스에서 데이터 가져오기",
+  "@importDataConfig": {
+    "description": "Import data details subtitle"
+  },
+  "debugDiagnostics": "디버그 및 진단",
+  "@debugDiagnostics": {
+    "description": "Debug & Diagnostics section header"
+  },
+  "endpointUrl": "엔드포인트 URL",
+  "@endpointUrl": {
+    "description": "Endpoint URL label"
+  },
+  "noApiKeys": "아직 API 키가 없습니다",
+  "@noApiKeys": {
+    "description": "No API keys message"
+  },
+  "createKeyToStart": "시작하려면 키를 만드세요",
+  "@createKeyToStart": {
+    "description": "Create key instruction"
+  },
+  "createKey": "키 만들기",
+  "@createKey": {
+    "description": "Create Key button"
+  },
+  "docs": "문서",
+  "@docs": {
+    "description": "Documentation link"
+  },
+  "yourOmiInsights": "Omi 인사이트",
+  "@yourOmiInsights": {
+    "description": "Usage page title"
+  },
+  "today": "오늘",
+  "@today": {
+    "description": "Time period: Today"
+  },
+  "thisMonth": "이번 달",
+  "@thisMonth": {
+    "description": "Time period: This Month"
+  },
+  "thisYear": "올해",
+  "@thisYear": {
+    "description": "Time period: This Year"
+  },
+  "allTime": "전체 기간",
+  "@allTime": {
+    "description": "Time period: All Time"
+  },
+  "noActivityYet": "아직 활동이 없습니다",
+  "@noActivityYet": {
+    "description": "Empty state title"
+  },
+  "startConversationToSeeInsights": "Omi와 대화를 시작하여\n사용량 인사이트를 확인하세요.",
+  "@startConversationToSeeInsights": {
+    "description": "Empty state description"
+  },
+  "listening": "청취",
+  "@listening": {
+    "description": "Listening stat title"
+  },
+  "listeningSubtitle": "Omi가 적극적으로 청취한 총 시간입니다.",
+  "@listeningSubtitle": {
+    "description": "Listening stat subtitle"
+  },
+  "understanding": "이해",
+  "@understanding": {
+    "description": "Understanding stat title"
+  },
+  "understandingSubtitle": "대화에서 이해한 단어 수입니다.",
+  "@understandingSubtitle": {
+    "description": "Understanding stat subtitle"
+  },
+  "providing": "제공",
+  "@providing": {
+    "description": "Providing stat title"
+  },
+  "providingSubtitle": "자동으로 캡처된 할 일 및 메모입니다.",
+  "@providingSubtitle": {
+    "description": "Providing stat subtitle"
+  },
+  "remembering": "기억",
+  "@remembering": {
+    "description": "Remembering stat title"
+  },
+  "rememberingSubtitle": "당신을 위해 기억된 사실과 세부 정보입니다.",
+  "@rememberingSubtitle": {
+    "description": "Remembering stat subtitle"
+  },
+  "unlimitedPlan": "무제한 플랜",
+  "@unlimitedPlan": {
+    "description": "Unlimited plan name"
+  },
+  "managePlan": "플랜 관리",
+  "@managePlan": {
+    "description": "Manage plan button"
+  },
+  "cancelAtPeriodEnd": "플랜이 {date}에 취소됩니다.",
+  "@cancelAtPeriodEnd": {
+    "description": "Cancellation message",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Jan 1, 2026"
+      }
+    }
+  },
+  "renewsOn": "플랜이 {date}에 갱신됩니다.",
+  "@renewsOn": {
+    "description": "Renewal message",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Jan 1, 2026"
+      }
+    }
+  },
+  "basicPlan": "무료 플랜",
+  "@basicPlan": {
+    "description": "Basic plan name"
+  },
+  "usageLimitMessage": "{limit}분 중 {used}분 사용",
+  "@usageLimitMessage": {
+    "description": "Usage limit message",
+    "placeholders": {
+      "used": {
+        "type": "String",
+        "example": "100"
+      },
+      "limit": {
+        "type": "int",
+        "example": "60"
+      }
+    }
+  },
+  "upgrade": "업그레이드",
+  "@upgrade": {
+    "description": "Upgrade button"
+  },
+  "upgradeToUnlimited": "무제한으로 업그레이드",
+  "@upgradeToUnlimited": {
+    "description": "Upgrade to unlimited button"
+  },
+  "basicPlanDesc": "플랜에는 매월 {limit}분의 무료 시간이 포함됩니다. 무제한으로 업그레이드하세요.",
+  "@basicPlanDesc": {
+    "description": "Basic plan description",
+    "placeholders": {
+      "limit": {
+        "type": "int",
+        "example": "60"
+      }
+    }
+  },
+  "shareStatsMessage": "내 Omi 통계를 공유합니다! (omi.me - 항상 켜져 있는 AI 어시스턴트)",
+  "@shareStatsMessage": {
+    "description": "Share stats base message"
+  },
+  "sharePeriodToday": "오늘 Omi는:",
+  "@sharePeriodToday": {
+    "description": "Share stats period: Today"
+  },
+  "sharePeriodMonth": "이번 달 Omi는:",
+  "@sharePeriodMonth": {
+    "description": "Share stats period: Month"
+  },
+  "sharePeriodYear": "올해 Omi는:",
+  "@sharePeriodYear": {
+    "description": "Share stats period: Year"
+  },
+  "sharePeriodAllTime": "지금까지 Omi는:",
+  "@sharePeriodAllTime": {
+    "description": "Share stats period: All Time"
+  },
+  "shareStatsListened": "🎧 {minutes}분 동안 청취했습니다",
+  "@shareStatsListened": {
+    "description": "Share stats: listened",
+    "placeholders": {
+      "minutes": {
+        "type": "String",
+        "example": "120"
+      }
+    }
+  },
+  "shareStatsWords": "🧠 {words}개의 단어를 이해했습니다",
+  "@shareStatsWords": {
+    "description": "Share stats: words",
+    "placeholders": {
+      "words": {
+        "type": "String",
+        "example": "5000"
+      }
+    }
+  },
+  "shareStatsInsights": "✨ {count}개의 인사이트를 제공했습니다",
+  "@shareStatsInsights": {
+    "description": "Share stats: insights",
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "10"
+      }
+    }
+  },
+  "shareStatsMemories": "📚 {count}개의 기억을 저장했습니다",
+  "@shareStatsMemories": {
+    "description": "Share stats: memories",
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "5"
+      }
+    }
+  },
+  "debugLogs": "디버그 로그",
+  "debugLogsAutoDelete": "3일 후 자동 삭제됩니다.",
+  "debugLogsDesc": "문제 진단에 도움이 됩니다",
+  "noLogFilesFound": "로그 파일을 찾을 수 없습니다.",
+  "omiDebugLog": "Omi 디버그 로그",
+  "logShared": "로그가 공유되었습니다",
+  "selectLogFile": "로그 파일 선택",
+  "shareLogs": "로그 공유",
+  "debugLogCleared": "디버그 로그가 지워졌습니다",
+  "exportStarted": "내보내기가 시작되었습니다. 몇 초 정도 걸릴 수 있습니다...",
+  "exportAllData": "모든 데이터 내보내기",
+  "exportDataDesc": "대화를 JSON 파일로 내보내기",
+  "exportedConversations": "Omi에서 내보낸 대화",
+  "exportShared": "내보내기가 공유되었습니다",
+  "deleteKnowledgeGraphTitle": "지식 그래프를 삭제하시겠습니까?",
+  "deleteKnowledgeGraphMessage": "파생된 모든 지식 그래프 데이터(노드 및 연결)가 삭제됩니다. 원본 기억은 안전하게 유지됩니다. 그래프는 시간이 지나면 다시 구축되거나 다음 요청 시 재구축됩니다.",
+  "knowledgeGraphDeleted": "지식 그래프가 성공적으로 삭제되었습니다",
+  "deleteGraphFailed": "그래프 삭제 실패: {error}",
+  "@deleteGraphFailed": {
+    "description": "Error message when deleting graph fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteKnowledgeGraph": "지식 그래프 삭제",
+  "deleteKnowledgeGraphDesc": "모든 노드 및 연결 지우기",
+  "mcp": "MCP",
+  "mcpServer": "MCP 서버",
+  "mcpServerDesc": "AI 어시스턴트를 데이터에 연결",
+  "serverUrl": "서버 URL",
+  "urlCopied": "URL이 복사되었습니다",
+  "apiKeyAuth": "API 키 인증",
+  "header": "헤더",
+  "authorizationBearer": "Authorization: Bearer <key>",
+  "oauth": "OAuth",
+  "clientId": "클라이언트 ID",
+  "clientSecret": "클라이언트 시크릿",
+  "useMcpApiKey": "MCP API 키 사용",
+  "webhooks": "웹훅",
+  "conversationEvents": "대화 이벤트",
+  "newConversationCreated": "새 대화가 생성됨",
+  "realtimeTranscript": "실시간 녹취록",
+  "transcriptReceived": "녹취록 수신됨",
+  "audioBytes": "오디오 바이트",
+  "audioDataReceived": "오디오 데이터 수신됨",
+  "intervalSeconds": "간격(초)",
+  "daySummary": "일일 요약",
+  "summaryGenerated": "요약 생성됨",
+  "claudeDesktop": "Claude Desktop",
+  "addToClaudeConfig": "claude_desktop_config.json에 추가",
+  "copyConfig": "구성 복사",
+  "configCopied": "구성이 클립보드에 복사되었습니다",
+  "listeningMins": "청취(분)",
+  "understandingWords": "이해(단어)",
+  "insights": "인사이트",
+  "memories": "기억",
+  "minsUsedThisMonth": "이번 달 {limit}분 중 {used}분 사용",
+  "@minsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "wordsUsedThisMonth": "이번 달 {limit}단어 중 {used}단어 사용",
+  "@wordsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "insightsUsedThisMonth": "이번 달 {limit}개 중 {used}개의 인사이트 획득",
+  "@insightsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "memoriesUsedThisMonth": "이번 달 {limit}개 중 {used}개의 기억 생성",
+  "@memoriesUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "visibility": "가시성",
+  "visibilitySubtitle": "목록에 표시할 대화 제어",
+  "showShortConversations": "짧은 대화 표시",
+  "showShortConversationsDesc": "임계값보다 짧은 대화 표시",
+  "showDiscardedConversations": "폐기된 대화 표시",
+  "showDiscardedConversationsDesc": "폐기된 것으로 표시된 대화 포함",
+  "shortConversationThreshold": "짧은 대화 임계값",
+  "shortConversationThresholdSubtitle": "이보다 짧은 대화는 위에서 활성화하지 않는 한 숨겨집니다",
+  "durationThreshold": "지속 시간 임계값",
+  "durationThresholdDesc": "이보다 짧은 대화 숨기기",
+  "minLabel": "{count}분",
+  "@minLabel": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "customVocabularyTitle": "사용자 지정 어휘",
+  "addWords": "단어 추가",
+  "addWordsDesc": "이름, 용어 또는 일반적이지 않은 단어",
+  "vocabularyHint": "Omi, Callie, OpenAI",
+  "connect": "연결",
+  "comingSoon": "곧 출시",
+  "chatToolsFooter": "채팅에서 데이터 및 지표를 보려면 앱을 연결하세요.",
+  "completeAuthInBrowser": "브라우저에서 인증을 완료해 주세요. 완료되면 앱으로 돌아가세요.",
+  "failedToStartAuth": "{appName} 인증 시작에 실패했습니다",
+  "@failedToStartAuth": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectAppTitle": "{appName}의 연결을 해제하시겠습니까?",
+  "@disconnectAppTitle": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectAppMessage": "{appName}과의 연결을 해제하시겠습니까? 언제든지 다시 연결할 수 있습니다.",
+  "@disconnectAppMessage": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectedFrom": "{appName}과의 연결이 해제되었습니다",
+  "@disconnectedFrom": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToDisconnect": "연결 해제 실패",
+  "connectTo": "{appName}에 연결",
+  "@connectTo": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "authAccessMessage": "Omi가 {appName} 데이터에 접근하도록 권한을 부여해야 합니다. 인증을 위해 브라우저가 열립니다.",
+  "@authAccessMessage": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "continueAction": "계속",
+  "languageTitle": "언어",
+  "primaryLanguage": "기본 언어",
+  "automaticTranslation": "자동 번역",
+  "detectLanguages": "10개 이상의 언어 감지",
+  "authorizeSavingRecordings": "녹음 저장 권한 부여",
+  "thanksForAuthorizing": "권한을 부여해 주셔서 감사합니다!",
+  "needYourPermission": "귀하의 권한이 필요합니다",
+  "alreadyGavePermission": "녹음 저장 권한을 이미 부여하셨습니다. 필요한 이유를 다시 안내드립니다:",
+  "wouldLikePermission": "음성 녹음 저장 권한을 부여해 주세요. 그 이유는 다음과 같습니다:",
+  "improveSpeechProfile": "음성 프로필 개선",
+  "improveSpeechProfileDesc": "녹음을 사용하여 개인 음성 프로필을 추가로 학습하고 향상시킵니다.",
+  "trainFamilyProfiles": "친구 및 가족 프로필 학습",
+  "trainFamilyProfilesDesc": "녹음은 친구와 가족을 인식하고 프로필을 만드는 데 도움이 됩니다.",
+  "enhanceTranscriptAccuracy": "녹취록 정확도 향상",
+  "enhanceTranscriptAccuracyDesc": "모델이 개선됨에 따라 녹음에 대한 더 나은 변환 결과를 제공할 수 있습니다.",
+  "legalNotice": "법적 고지: 음성 데이터 녹음 및 저장의 합법성은 위치 및 이 기능 사용 방법에 따라 다를 수 있습니다. 현지 법률 및 규정을 준수하는지 확인하는 것은 귀하의 책임입니다.",
+  "alreadyAuthorized": "이미 승인됨",
+  "authorize": "권한 부여",
+  "revokeAuthorization": "권한 취소",
+  "authorizationSuccessful": "권한 부여 성공!",
+  "failedToAuthorize": "권한 부여에 실패했습니다. 다시 시도해 주세요.",
+  "authorizationRevoked": "권한이 취소되었습니다.",
+  "recordingsDeleted": "녹음이 삭제되었습니다.",
+  "failedToRevoke": "권한 취소에 실패했습니다. 다시 시도해 주세요.",
+  "permissionRevokedTitle": "권한 취소됨",
+  "permissionRevokedMessage": "기존 녹음도 모두 삭제하시겠습니까?",
+  "yes": "예",
+  "editName": "이름 편집",
+  "howShouldOmiCallYou": "Omi가 어떻게 불러드릴까요?",
+  "enterYourName": "이름을 입력하세요",
+  "nameCannotBeEmpty": "이름은 비워둘 수 없습니다",
+  "nameUpdatedSuccessfully": "이름이 성공적으로 업데이트되었습니다!",
+  "calendarSettings": "캘린더 설정",
+  "calendarProviders": "캘린더 제공업체",
+  "macOsCalendar": "macOS 캘린더",
+  "connectMacOsCalendar": "로컬 macOS 캘린더 연결",
+  "googleCalendar": "Google 캘린더",
+  "syncGoogleAccount": "Google 계정과 동기화",
+  "showMeetingsMenuBar": "메뉴 바에 예정된 회의 표시",
+  "showMeetingsMenuBarDesc": "macOS 메뉴 바에 다음 회의 및 시작까지의 시간 표시",
+  "showEventsNoParticipants": "참가자가 없는 이벤트 표시",
+  "showEventsNoParticipantsDesc": "활성화하면 참가자나 비디오 링크가 없는 이벤트가 Coming Up에 표시됩니다.",
+  "yourMeetings": "내 회의",
+  "refresh": "새로고침",
+  "noUpcomingMeetings": "예정된 회의를 찾을 수 없습니다",
+  "checkingNextDays": "향후 30일 확인",
+  "tomorrow": "내일",
+  "googleCalendarComingSoon": "Google 캘린더 통합이 곧 출시됩니다!",
+  "connectedAsUser": "다음 사용자로 연결됨: {userId}",
+  "@connectedAsUser": {
+    "placeholders": {
+      "userId": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultWorkspace": "기본 워크스페이스",
+  "tasksCreatedInWorkspace": "작업이 이 워크스페이스에 생성됩니다",
+  "defaultProjectOptional": "기본 프로젝트(선택 사항)",
+  "leaveUnselectedTasks": "프로젝트 없이 작업을 생성하려면 선택하지 마세요",
+  "noProjectsInWorkspace": "이 워크스페이스에서 프로젝트를 찾을 수 없습니다",
+  "conversationTimeoutDesc": "대화를 자동으로 종료하기 전에 대기할 침묵 시간을 선택하세요:",
+  "timeout2Minutes": "2분",
+  "timeout2MinutesDesc": "2분간 침묵 후 대화 종료",
+  "timeout5Minutes": "5분",
+  "timeout5MinutesDesc": "5분간 침묵 후 대화 종료",
+  "timeout10Minutes": "10분",
+  "timeout10MinutesDesc": "10분간 침묵 후 대화 종료",
+  "timeout30Minutes": "30분",
+  "timeout30MinutesDesc": "30분간 침묵 후 대화 종료",
+  "timeout4Hours": "4시간",
+  "timeout4HoursDesc": "4시간 침묵 후 대화 종료",
+  "conversationEndAfterHours": "이제 4시간 침묵 후 대화가 종료됩니다",
+  "conversationEndAfterMinutes": "이제 {minutes}분 침묵 후 대화가 종료됩니다",
+  "@conversationEndAfterMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "tellUsPrimaryLanguage": "기본 언어를 알려주세요",
+  "languageForTranscription": "더 정확한 변환과 맞춤형 경험을 위해 언어를 설정하세요.",
+  "singleLanguageModeInfo": "단일 언어 모드가 활성화되었습니다. 정확도 향상을 위해 번역이 비활성화됩니다.",
+  "searchLanguageHint": "이름 또는 코드로 언어 검색",
+  "noLanguagesFound": "언어를 찾을 수 없습니다",
+  "skip": "건너뛰기",
+  "languageSetTo": "언어가 {language}(으)로 설정되었습니다",
+  "@languageSetTo": {
+    "placeholders": {
+      "language": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToSetLanguage": "언어 설정 실패",
+  "appSettings": "{appName} 설정",
+  "@appSettings": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectFromApp": "{appName}과의 연결을 해제하시겠습니까?",
+  "@disconnectFromApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectFromAppDesc": "{appName} 인증이 제거됩니다. 다시 사용하려면 다시 연결해야 합니다.",
+  "@disconnectFromAppDesc": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "connectedToApp": "{appName}에 연결됨",
+  "@connectedToApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "account": "계정",
+  "actionItemsSyncedTo": "할 일 항목이 {appName} 계정과 동기화됩니다",
+  "@actionItemsSyncedTo": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultSpace": "기본 스페이스",
+  "selectSpaceInWorkspace": "워크스페이스에서 스페이스 선택",
+  "noSpacesInWorkspace": "이 워크스페이스에서 스페이스를 찾을 수 없습니다",
+  "defaultList": "기본 목록",
+  "tasksAddedToList": "작업이 이 목록에 추가됩니다",
+  "noListsInSpace": "이 스페이스에서 목록을 찾을 수 없습니다",
+  "failedToLoadRepos": "저장소 로드 실패: {error}",
+  "@failedToLoadRepos": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultRepoSaved": "기본 저장소가 저장되었습니다",
+  "failedToSaveDefaultRepo": "기본 저장소 저장 실패",
+  "defaultRepository": "기본 저장소",
+  "selectDefaultRepoDesc": "이슈 생성을 위한 기본 저장소를 선택하세요. 이슈 생성 시 다른 저장소를 지정할 수도 있습니다.",
+  "noReposFound": "저장소를 찾을 수 없습니다",
+  "private": "비공개",
+  "updatedDate": "{date} 업데이트됨",
+  "@updatedDate": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "yesterday": "어제",
+  "daysAgo": "{count}일 전",
+  "@daysAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "oneWeekAgo": "1주일 전",
+  "weeksAgo": "{count}주 전",
+  "@weeksAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "oneMonthAgo": "1개월 전",
+  "monthsAgo": "{count}개월 전",
+  "@monthsAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "issuesCreatedInRepo": "이슈가 기본 저장소에 생성됩니다",
+  "taskIntegrations": "작업 통합",
+  "configureSettings": "설정 구성",
+  "completeAuthBrowser": "브라우저에서 인증을 완료해 주세요. 완료되면 앱으로 돌아가세요.",
+  "failedToStartAppAuth": "{appName} 인증 시작에 실패했습니다",
+  "@failedToStartAppAuth": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "connectToAppTitle": "{appName}에 연결",
+  "@connectToAppTitle": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "authorizeOmiForTasks": "{appName} 계정에서 작업을 생성하도록 Omi에 권한을 부여해야 합니다. 인증을 위해 브라우저가 열립니다.",
+  "@authorizeOmiForTasks": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "continueButton": "계속",
+  "appIntegration": "{appName} 통합",
+  "@appIntegration": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "integrationComingSoon": "{appName}과의 통합이 곧 출시됩니다! 더 많은 작업 관리 옵션을 제공하기 위해 열심히 노력하고 있습니다.",
+  "@integrationComingSoon": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "gotIt": "알겠습니다",
+  "tasksExportedOneApp": "작업은 한 번에 하나의 앱으로 내보낼 수 있습니다.",
+  "completeYourUpgrade": "업그레이드 완료",
+  "importConfiguration": "구성 가져오기",
+  "exportConfiguration": "구성 내보내기",
+  "bringYourOwn": "직접 가져오기",
+  "payYourSttProvider": "Omi를 자유롭게 사용하세요. STT 제공업체에 직접 비용을 지불하기만 하면 됩니다.",
+  "freeMinutesMonth": "월 1,200분 무료 포함. ",
+  "omiUnlimited": "Omi Unlimited",
+  "hostRequired": "호스트가 필요합니다",
+  "validPortRequired": "유효한 포트가 필요합니다",
+  "validWebsocketUrlRequired": "유효한 WebSocket URL이 필요합니다(wss://)",
+  "apiUrlRequired": "API URL이 필요합니다",
+  "apiKeyRequired": "API 키가 필요합니다",
+  "invalidJsonConfig": "잘못된 JSON 구성",
+  "errorSaving": "저장 오류: {error}",
+  "@errorSaving": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "configCopiedToClipboard": "구성이 클립보드에 복사되었습니다",
+  "pasteJsonConfig": "아래에 JSON 구성을 붙여넣으세요:",
+  "addApiKeyAfterImport": "가져오기 후 자신의 API 키를 추가해야 합니다",
+  "paste": "붙여넣기",
+  "import": "가져오기",
+  "invalidProviderInConfig": "구성의 제공업체가 잘못되었습니다",
+  "importedConfig": "{providerName} 구성을 가져왔습니다",
+  "@importedConfig": {
+    "placeholders": {
+      "providerName": {
+        "type": "String"
+      }
+    }
+  },
+  "invalidJson": "잘못된 JSON: {error}",
+  "@invalidJson": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "provider": "제공업체",
+  "live": "실시간",
+  "onDevice": "기기에서",
+  "apiUrl": "API URL",
+  "enterSttHttpEndpoint": "STT HTTP 엔드포인트를 입력하세요",
+  "websocketUrl": "WebSocket URL",
+  "enterLiveSttWebsocket": "실시간 STT WebSocket 엔드포인트를 입력하세요",
+  "apiKey": "API 키",
+  "enterApiKey": "API 키를 입력하세요",
+  "storedLocallyNeverShared": "로컬에 저장되며 절대 공유되지 않습니다",
+  "host": "호스트",
+  "port": "포트",
+  "advanced": "고급",
+  "configuration": "구성",
+  "requestConfiguration": "요청 구성",
+  "responseSchema": "응답 스키마",
+  "modified": "수정됨",
+  "resetRequestConfig": "요청 구성을 기본값으로 재설정",
+  "logs": "로그",
+  "logsCopied": "로그가 복사되었습니다",
+  "noLogsYet": "아직 로그가 없습니다. 녹음을 시작하여 사용자 지정 STT 활동을 확인하세요.",
+  "deviceUsesCodec": "{deviceName}은(는) {codecReason}을(를) 사용합니다. Omi가 사용됩니다.",
+  "@deviceUsesCodec": {
+    "placeholders": {
+      "deviceName": {
+        "type": "String"
+      },
+      "codecReason": {
+        "type": "String"
+      }
+    }
+  },
+  "omiTranscription": "Omi 음성 변환",
+  "bestInClassTranscription": "설정이 필요 없는 최고 수준의 음성 변환",
+  "instantSpeakerLabels": "즉시 화자 레이블 지정",
+  "languageTranslation": "100개 이상의 언어 번역",
+  "optimizedForConversation": "대화에 최적화",
+  "autoLanguageDetection": "자동 언어 감지",
+  "highAccuracy": "높은 정확도",
+  "privacyFirst": "개인정보 보호 우선",
+  "saveChanges": "변경 사항 저장",
+  "resetToDefault": "기본값으로 재설정",
+  "viewTemplate": "템플릿 보기",
+  "trySomethingLike": "다음과 같이 시도해 보세요...",
+  "tryIt": "시도해 보기",
+  "creatingPlan": "계획 생성 중",
+  "developingLogic": "로직 개발 중",
+  "designingApp": "앱 디자인 중",
+  "generatingIconStep": "아이콘 생성 중",
+  "finalTouches": "최종 마무리",
+  "processing": "처리 중...",
+  "features": "기능",
+  "creatingYourApp": "앱을 만드는 중...",
+  "generatingIcon": "아이콘 생성 중...",
+  "whatShouldWeMake": "무엇을 만들까요?",
+  "appName": "앱 이름",
+  "description": "설명",
+  "publicLabel": "공개",
+  "privateLabel": "비공개",
+  "free": "무료",
+  "perMonth": "/ 월",
+  "tailoredConversationSummaries": "맞춤형 대화 요약",
+  "customChatbotPersonality": "사용자 지정 챗봇 성격",
+  "makePublic": "공개하기",
+  "anyoneCanDiscover": "누구나 앱을 찾을 수 있습니다",
+  "onlyYouCanUse": "본인만 이 앱을 사용할 수 있습니다",
+  "paidApp": "유료 앱",
+  "usersPayToUse": "사용자가 앱을 사용하려면 비용을 지불합니다",
+  "freeForEveryone": "모두에게 무료",
+  "perMonthLabel": "/ 월",
+  "creating": "생성 중...",
+  "@creating": {
+    "description": "Loading state text when app generation is in progress"
+  },
+  "createApp": "앱 만들기",
+  "@createApp": {
+    "description": "Button text to initiate app creation"
+  },
+  "@connect": {
+    "description": "Title for device connection page"
+  },
+  "searchingForDevices": "기기 검색 중...",
+  "@searchingForDevices": {
+    "description": "Status text while scanning for Bluetooth devices"
+  },
+  "devicesFoundNearby": "근처에서 {count}개의 기기 발견",
+  "@devicesFoundNearby": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pairingSuccessful": "페어링 성공",
+  "errorConnectingAppleWatch": "Apple Watch 연결 오류: {error}",
+  "@errorConnectingAppleWatch": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "dontShowAgain": "다시 표시하지 않기",
+  "@dontShowAgain": {
+    "description": "Checkbox text to suppress future connection confirmations"
+  },
+  "iUnderstand": "이해했습니다",
+  "@iUnderstand": {
+    "description": "Button text to acknowledge connection warnings"
+  },
+  "enableBluetooth": "블루투스 활성화",
+  "@enableBluetooth": {
+    "description": "Title for dialog prompting user to enable Bluetooth"
+  },
+  "bluetoothNeeded": "Omi가 웨어러블에 연결하려면 블루투스가 필요합니다. 블루투스를 활성화하고 다시 시도해 주세요.",
+  "@bluetoothNeeded": {
+    "description": "Explanation text for why Bluetooth is required"
+  },
+  "contactSupport": "지원팀에 문의하시겠습니까?",
+  "@contactSupport": {
+    "description": "Link text to contact support"
+  },
+  "connectLater": "나중에 연결",
+  "@connectLater": {
+    "description": "Button text to skip immediate device connection"
+  },
+  "grantPermissions": "권한 부여",
+  "@grantPermissions": {
+    "description": "Title for the permissions request page"
+  },
+  "backgroundActivity": "백그라운드 활동",
+  "@backgroundActivity": {
+    "description": "Title for background activity permission"
+  },
+  "backgroundActivityDesc": "더 나은 안정성을 위해 Omi가 백그라운드에서 실행되도록 허용",
+  "@backgroundActivityDesc": {
+    "description": "Description for background activity permission"
+  },
+  "locationAccess": "위치 접근",
+  "@locationAccess": {
+    "description": "Title for location access permission"
+  },
+  "locationAccessDesc": "완전한 경험을 위해 백그라운드 위치 활성화",
+  "@locationAccessDesc": {
+    "description": "Description for location access permission"
+  },
+  "notifications": "알림",
+  "@notifications": {
+    "description": "Title for notifications permission"
+  },
+  "notificationsDesc": "정보를 받기 위해 알림 활성화",
+  "@notificationsDesc": {
+    "description": "Description for notifications permission"
+  },
+  "@continueButton": {
+    "description": "Generic continue button text"
+  },
+  "locationServiceDisabled": "위치 서비스 비활성화됨",
+  "@locationServiceDisabled": {
+    "description": "Title for dialog when location services are off"
+  },
+  "locationServiceDisabledDesc": "위치 서비스가 비활성화되어 있습니다. 설정 > 개인정보 보호 및 보안 > 위치 서비스로 이동하여 활성화하세요",
+  "@locationServiceDisabledDesc": {
+    "description": "Instructions to enable location services"
+  },
+  "backgroundLocationDenied": "백그라운드 위치 접근 거부됨",
+  "@backgroundLocationDenied": {
+    "description": "Title for dialog when background location is denied"
+  },
+  "backgroundLocationDeniedDesc": "기기 설정으로 이동하여 위치 권한을 \"항상 허용\"으로 설정하세요",
+  "@backgroundLocationDeniedDesc": {
+    "description": "Instructions to grant background location permission"
+  },
+  "lovingOmi": "Omi가 마음에 드시나요?",
+  "@lovingOmi": {
+    "description": "Title for the app review prompt"
+  },
+  "leaveReviewIos": "App Store에 리뷰를 남겨 더 많은 사람들에게 다가가도록 도와주세요. 귀하의 피드백은 저희에게 큰 의미가 있습니다!",
+  "@leaveReviewIos": {
+    "description": "App review prompt text for iOS users"
+  },
+  "leaveReviewAndroid": "Google Play 스토어에 리뷰를 남겨 더 많은 사람들에게 다가가도록 도와주세요. 귀하의 피드백은 저희에게 큰 의미가 있습니다!",
+  "@leaveReviewAndroid": {
+    "description": "App review prompt text for Android users"
+  },
+  "rateOnAppStore": "App Store에서 평가하기",
+  "@rateOnAppStore": {
+    "description": "Button text to rate on Apple App Store"
+  },
+  "rateOnGooglePlay": "Google Play에서 평가하기",
+  "@rateOnGooglePlay": {
+    "description": "Button text to rate on Google Play Store"
+  },
+  "maybeLater": "나중에",
+  "@maybeLater": {
+    "description": "Button text to dismiss the review prompt"
+  },
+  "speechProfileIntro": "Omi가 귀하의 목표와 음성을 학습해야 합니다. 나중에 수정할 수 있습니다.",
+  "@speechProfileIntro": {
+    "description": "Introduction text for speech profile creation"
+  },
+  "getStarted": "시작하기",
+  "@getStarted": {
+    "description": "Button text to begin a process"
+  },
+  "allDone": "모두 완료!",
+  "@allDone": {
+    "description": "Success message after completing a task"
+  },
+  "keepGoing": "계속하세요, 잘하고 있습니다",
+  "@keepGoing": {
+    "description": "Encouragement text during a multi-step process"
+  },
+  "skipThisQuestion": "이 질문 건너뛰기",
+  "@skipThisQuestion": {
+    "description": "Button text to skip the current question"
+  },
+  "skipForNow": "지금은 건너뛰기",
+  "@skipForNow": {
+    "description": "Button text to skip the entire process temporarily"
+  },
+  "connectionError": "연결 오류",
+  "@connectionError": {
+    "description": "Title for connection error dialog"
+  },
+  "connectionErrorDesc": "서버 연결에 실패했습니다. 인터넷 연결을 확인하고 다시 시도해 주세요.",
+  "@connectionErrorDesc": {
+    "description": "Description of connection error"
+  },
+  "invalidRecordingMultipleSpeakers": "잘못된 녹음 감지됨",
+  "@invalidRecordingMultipleSpeakers": {
+    "description": "Error title when multiple speakers are detected"
+  },
+  "multipleSpeakersDesc": "녹음에 여러 명의 화자가 있는 것 같습니다. 조용한 장소에 있는지 확인하고 다시 시도하세요.",
+  "@multipleSpeakersDesc": {
+    "description": "Error description for multiple speakers"
+  },
+  "tooShortDesc": "음성이 충분히 감지되지 않았습니다. 더 많이 말하고 다시 시도하세요.",
+  "@tooShortDesc": {
+    "description": "Error description for recording being too short"
+  },
+  "invalidRecordingDesc": "최소 5초 이상 90초 이하로 말씀해 주세요.",
+  "@invalidRecordingDesc": {
+    "description": "Error description for invalid recording duration"
+  },
+  "areYouThere": "계십니까?",
+  "@areYouThere": {
+    "description": "Timeout warning title"
+  },
+  "noSpeechDesc": "음성을 감지할 수 없습니다. 최소 10초 이상 3분 이하로 말씀해 주세요.",
+  "@noSpeechDesc": {
+    "description": "Error description when no speech is detected"
+  },
+  "connectionLost": "연결 끊김",
+  "@connectionLost": {
+    "description": "Title for lost connection dialog"
+  },
+  "connectionLostDesc": "연결이 중단되었습니다. 인터넷 연결을 확인하고 다시 시도해 주세요.",
+  "@connectionLostDesc": {
+    "description": "Description for lost connection"
+  },
+  "tryAgain": "다시 시도",
+  "@tryAgain": {
+    "description": "Button text to retry an action"
+  },
+  "connectOmiOmiGlass": "Omi / OmiGlass 연결",
+  "@connectOmiOmiGlass": {
+    "description": "Button text to connect specific device models"
+  },
+  "continueWithoutDevice": "기기 없이 계속",
+  "@continueWithoutDevice": {
+    "description": "Button text to proceed without connecting a hardware device"
+  },
+  "permissionsRequired": "권한 필요",
+  "@permissionsRequired": {
+    "description": "Title for permissions required dialog"
+  },
+  "permissionsRequiredDesc": "이 앱은 제대로 작동하려면 블루투스 및 위치 권한이 필요합니다. 설정에서 활성화하세요.",
+  "@permissionsRequiredDesc": {
+    "description": "Explanation of why permissions are needed"
+  },
+  "openSettings": "설정 열기",
+  "@openSettings": {
+    "description": "Button text to open app settings"
+  },
+  "wantDifferentName": "다른 이름으로 부르시겠습니까?",
+  "@wantDifferentName": {
+    "description": "Question asking if user wants to change their display name"
+  },
+  "whatsYourName": "이름이 무엇인가요?",
+  "@whatsYourName": {
+    "description": "Question asking for user's name"
+  },
+  "@enterYourName": {
+    "description": "Hint text for name input field"
+  },
+  "speakTranscribeSummarize": "말하기. 변환. 요약.",
+  "@speakTranscribeSummarize": {
+    "description": "Tagline or slogan on the welcome/auth screen"
+  },
+  "signInWithApple": "Apple로 로그인",
+  "@signInWithApple": {
+    "description": "Button text for Apple Sign In"
+  },
+  "signInWithGoogle": "Google로 로그인",
+  "@signInWithGoogle": {
+    "description": "Button text for Google Sign In"
+  },
+  "byContinuingAgree": "계속하면 다음에 동의하는 것입니다 ",
+  "@byContinuingAgree": {
+    "description": "Legal disclaimer prefix text"
+  },
+  "termsOfUse": "이용약관",
+  "@termsOfUse": {
+    "description": "Link text for Terms of Use"
+  },
+  "omiYourAiCompanion": "Omi – 당신의 AI 동반자",
+  "@omiYourAiCompanion": {
+    "description": "App title or branding on onboarding screen"
+  },
+  "captureEveryMoment": "모든 순간을 기록하세요. AI 기반\n요약을 받으세요. 더 이상 메모할 필요가 없습니다.",
+  "@captureEveryMoment": {
+    "description": "App value proposition or description"
+  },
+  "appleWatchSetup": "Apple Watch 설정",
+  "@appleWatchSetup": {
+    "description": "Title for Apple Watch setup page"
+  },
+  "permissionRequestedExclaim": "권한 요청됨!",
+  "@permissionRequestedExclaim": {
+    "description": "Title when permission has been requested"
+  },
+  "microphonePermission": "마이크 권한",
+  "@microphonePermission": {
+    "description": "Title for microphone permission section"
+  },
+  "permissionGrantedNow": "권한이 부여되었습니다! 이제:\n\n워치에서 Omi 앱을 열고 아래의 \"계속\"을 탭하세요",
+  "@permissionGrantedNow": {
+    "description": "Instructions after permission is granted"
+  },
+  "needMicrophonePermission": "마이크 권한이 필요합니다.\n\n1. \"권한 부여\" 탭\n2. iPhone에서 허용\n3. 워치 앱이 닫힙니다\n4. 다시 열고 \"계속\" 탭",
+  "@needMicrophonePermission": {
+    "description": "Instructions for granting microphone permission"
+  },
+  "grantPermissionButton": "권한 부여",
+  "@grantPermissionButton": {
+    "description": "Button to request permission"
+  },
+  "needHelp": "도움이 필요하신가요?",
+  "@needHelp": {
+    "description": "Link to help dialog"
+  },
+  "troubleshootingSteps": "문제 해결:\n\n1. 워치에 Omi가 설치되어 있는지 확인\n2. 워치에서 Omi 앱 열기\n3. 권한 팝업 찾기\n4. 메시지가 나타나면 \"허용\" 탭\n5. 워치의 앱이 닫힙니다 - 다시 열기\n6. 돌아와서 iPhone에서 \"계속\" 탭",
+  "@troubleshootingSteps": {
+    "description": "Troubleshooting instructions for watch setup"
+  },
+  "@gotIt": {
+    "description": "Button to dismiss dialog"
+  },
+  "recordingStartedSuccessfully": "녹음이 성공적으로 시작되었습니다!",
+  "@recordingStartedSuccessfully": {
+    "description": "Success message"
+  },
+  "permissionNotGrantedYet": "아직 권한이 부여되지 않았습니다. 마이크 접근을 허용하고 워치에서 앱을 다시 열었는지 확인하세요.",
+  "@permissionNotGrantedYet": {
+    "description": "Error message when permission is missing"
+  },
+  "errorRequestingPermission": "권한 요청 오류: {error}",
+  "@errorRequestingPermission": {
+    "description": "Error message for permission request failure",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "errorStartingRecording": "녹음 시작 오류: {error}",
+  "@errorStartingRecording": {
+    "description": "Error message for recording start failure",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "selectPrimaryLanguage": "기본 언어 선택",
+  "@selectPrimaryLanguage": {
+    "description": "Title for language selection dialog"
+  },
+  "languageBenefits": "더 정확한 변환과 맞춤형 경험을 위해 언어를 설정하세요",
+  "@languageBenefits": {
+    "description": "Explanation of why language selection matters"
+  },
+  "@searchLanguageHint": {
+    "description": "Hint text for language search"
+  },
+  "@noLanguagesFound": {
+    "description": "Text when search returns no results"
+  },
+  "whatsYourPrimaryLanguage": "기본 언어가 무엇인가요?",
+  "@whatsYourPrimaryLanguage": {
+    "description": "Question asking for primary language"
+  },
+  "selectYourLanguage": "언어를 선택하세요",
+  "@selectYourLanguage": {
+    "description": "Placeholder for selected language name"
+  },
+  "personalGrowthJourney": "당신의 모든 말을 듣는 AI와 함께하는 개인 성장 여정.",
+  "@personalGrowthJourney": {
+    "description": "Tagline on onboarding wrapper"
+  },
+  "actionItemsTitle": "할 일",
+  "@actionItemsTitle": {
+    "description": "Title for the Action Items page"
+  },
+  "actionItemsDescription": "탭하여 편집 • 길게 눌러 선택 • 스와이프하여 작업",
+  "@actionItemsDescription": {
+    "description": "Instruction text for Action Items interactions"
+  },
+  "tabToDo": "할 일",
+  "@tabToDo": {
+    "description": "Label for To Do tab"
+  },
+  "tabDone": "완료",
+  "@tabDone": {
+    "description": "Label for Done tab"
+  },
+  "tabOld": "이전",
+  "@tabOld": {
+    "description": "Label for Old tab"
+  },
+  "emptyTodoMessage": "🎉 모두 완료!\n대기 중인 작업 항목이 없습니다",
+  "@emptyTodoMessage": {
+    "description": "Message when To Do list is empty"
+  },
+  "emptyDoneMessage": "아직 완료된 항목이 없습니다",
+  "@emptyDoneMessage": {
+    "description": "Message when Done list is empty"
+  },
+  "emptyOldMessage": "✅ 오래된 작업 없음",
+  "@emptyOldMessage": {
+    "description": "Message when Old list is empty"
+  },
+  "noItems": "항목 없음",
+  "@noItems": {
+    "description": "Generic no items message"
+  },
+  "actionItemMarkedIncomplete": "작업 항목이 미완료로 표시되었습니다",
+  "@actionItemMarkedIncomplete": {
+    "description": "Snackbar message when item marked incomplete"
+  },
+  "actionItemCompleted": "작업 항목이 완료되었습니다",
+  "@actionItemCompleted": {
+    "description": "Snackbar message when item completed"
+  },
+  "deleteActionItemTitle": "작업 항목 삭제",
+  "@deleteActionItemTitle": {
+    "description": "Title for delete item dialog"
+  },
+  "deleteActionItemMessage": "이 작업 항목을 삭제하시겠습니까?",
+  "@deleteActionItemMessage": {
+    "description": "Confirmation message for deleting single item"
+  },
+  "deleteSelectedItemsTitle": "선택한 항목 삭제",
+  "@deleteSelectedItemsTitle": {
+    "description": "Title for bulk delete dialog"
+  },
+  "deleteSelectedItemsMessage": "선택한 {count}개의 작업 항목{s}을(를) 삭제하시겠습니까?",
+  "@deleteSelectedItemsMessage": {
+    "description": "Confirmation message for bulk delete",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "s": {
+        "type": "String",
+        "description": "Plural suffix (s) if needed, handled by logic or just append 's' for simplicity if count > 1"
+      }
+    }
+  },
+  "actionItemDeletedResult": "작업 항목 \"{description}\"이(가) 삭제되었습니다",
+  "@actionItemDeletedResult": {
+    "description": "Snackbar message after deleting single item",
+    "placeholders": {
+      "description": {
+        "type": "String"
+      }
+    }
+  },
+  "itemsDeletedResult": "{count}개의 작업 항목{s}이(가) 삭제되었습니다",
+  "@itemsDeletedResult": {
+    "description": "Snackbar message after bulk delete",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "s": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToDeleteItem": "작업 항목 삭제 실패",
+  "@failedToDeleteItem": {
+    "description": "Error message when deletion fails"
+  },
+  "failedToDeleteItems": "항목 삭제 실패",
+  "@failedToDeleteItems": {
+    "description": "Error message when bulk deletion fails"
+  },
+  "failedToDeleteSomeItems": "일부 항목 삭제 실패",
+  "@failedToDeleteSomeItems": {
+    "description": "Error message when partial deletion failure"
+  },
+  "welcomeActionItemsTitle": "작업 항목 준비 완료",
+  "@welcomeActionItemsTitle": {
+    "description": "Heading for empty state welcome"
+  },
+  "welcomeActionItemsDescription": "AI가 대화에서 작업과 할 일을 자동으로 추출합니다. 생성되면 여기에 표시됩니다.",
+  "@welcomeActionItemsDescription": {
+    "description": "Description for empty state welcome"
+  },
+  "autoExtractionFeature": "대화에서 자동 추출",
+  "@autoExtractionFeature": {
+    "description": "Feature point description"
+  },
+  "editSwipeFeature": "탭하여 편집, 스와이프하여 완료 또는 삭제",
+  "@editSwipeFeature": {
+    "description": "Feature point description"
+  },
+  "itemsSelected": "{count}개 선택됨",
+  "@itemsSelected": {
+    "description": "Selection count in app bar",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "selectAll": "모두 선택",
+  "@selectAll": {
+    "description": "Tooltip for select all"
+  },
+  "deleteSelected": "선택 항목 삭제",
+  "@deleteSelected": {
+    "description": "Tooltip for delete selected"
+  },
+  "searchMemories": "{count}개의 기억 검색",
+  "@searchMemories": {
+    "description": "Hint text for memories search bar",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "memoryDeleted": "기억이 삭제되었습니다.",
+  "@memoryDeleted": {
+    "description": "Notification when memory deleted"
+  },
+  "undo": "실행 취소",
+  "@undo": {
+    "description": "Undo button text"
+  },
+  "noMemoriesYet": "아직 기억이 없습니다",
+  "@noMemoriesYet": {
+    "description": "Empty state text"
+  },
+  "noAutoMemories": "아직 자동 추출된 기억이 없습니다",
+  "@noAutoMemories": {
+    "description": "Empty state text for auto category"
+  },
+  "noManualMemories": "아직 수동 기억이 없습니다",
+  "@noManualMemories": {
+    "description": "Empty state text for manual category"
+  },
+  "noMemoriesInCategories": "이 카테고리에 기억이 없습니다",
+  "@noMemoriesInCategories": {
+    "description": "Empty state text for filtered categories"
+  },
+  "noMemoriesFound": "기억을 찾을 수 없습니다",
+  "@noMemoriesFound": {
+    "description": "Empty state text for search results"
+  },
+  "addFirstMemory": "첫 번째 기억 추가",
+  "@addFirstMemory": {
+    "description": "Button to add first memory"
+  },
+  "clearMemoryTitle": "Omi의 기억 지우기",
+  "@clearMemoryTitle": {
+    "description": "Dialog title for clearing memory"
+  },
+  "clearMemoryMessage": "Omi의 기억을 지우시겠습니까? 이 작업은 되돌릴 수 없습니다.",
+  "@clearMemoryMessage": {
+    "description": "Dialog content for clearing memory"
+  },
+  "clearMemoryButton": "기억 지우기",
+  "@clearMemoryButton": {
+    "description": "Button text to confirm clear"
+  },
+  "memoryClearedSuccess": "Omi의 기억이 지워졌습니다",
+  "@memoryClearedSuccess": {
+    "description": "Snackbar success message"
+  },
+  "noMemoriesToDelete": "삭제할 기억이 없습니다",
+  "@noMemoriesToDelete": {
+    "description": "Snackbar message"
+  },
+  "createMemoryTooltip": "새 기억 만들기",
+  "@createMemoryTooltip": {
+    "description": "Tooltip for create memory FAB"
+  },
+  "createActionItemTooltip": "새 작업 항목 만들기",
+  "@createActionItemTooltip": {
+    "description": "Tooltip for create action item FAB"
+  },
+  "memoryManagement": "기억 관리",
+  "@memoryManagement": {
+    "description": "Title for memory management sheet"
+  },
+  "filterMemories": "기억 필터링",
+  "@filterMemories": {
+    "description": "Section header"
+  },
+  "totalMemoriesCount": "총 {count}개의 기억이 있습니다",
+  "@totalMemoriesCount": {
+    "description": "Count display",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "publicMemories": "공개 기억",
+  "@publicMemories": {
+    "description": "Label"
+  },
+  "privateMemories": "비공개 기억",
+  "@privateMemories": {
+    "description": "Label"
+  },
+  "makeAllPrivate": "모든 기억을 비공개로 만들기",
+  "@makeAllPrivate": {
+    "description": "Button label"
+  },
+  "makeAllPublic": "모든 기억을 공개로 만들기",
+  "@makeAllPublic": {
+    "description": "Button label"
+  },
+  "deleteAllMemories": "모든 기억 삭제",
+  "@deleteAllMemories": {
+    "description": "Button label"
+  },
+  "allMemoriesPrivateResult": "모든 기억이 이제 비공개입니다",
+  "@allMemoriesPrivateResult": {
+    "description": "Snackbar"
+  },
+  "allMemoriesPublicResult": "모든 기억이 이제 공개입니다",
+  "@allMemoriesPublicResult": {
+    "description": "Snackbar"
+  },
+  "newMemory": "새 기억",
+  "@newMemory": {
+    "description": "Dialog title"
+  },
+  "editMemory": "기억 편집",
+  "@editMemory": {
+    "description": "Dialog title"
+  },
+  "memoryContentHint": "아이스크림 먹는 걸 좋아해요...",
+  "@memoryContentHint": {
+    "description": "Input hint"
+  },
+  "failedToSaveMemory": "저장에 실패했습니다. 연결을 확인하세요.",
+  "@failedToSaveMemory": {
+    "description": "Error message"
+  },
+  "saveMemory": "기억 저장",
+  "@saveMemory": {
+    "description": "Button label"
+  },
+  "retry": "다시 시도",
+  "@retry": {
+    "description": "Button label"
+  },
+  "createActionItem": "작업 항목 만들기",
+  "@createActionItem": {
+    "description": "Sheet title"
+  },
+  "editActionItem": "작업 항목 편집",
+  "@editActionItem": {
+    "description": "Sheet title"
+  },
+  "actionItemDescriptionHint": "무엇을 해야 하나요?",
+  "@actionItemDescriptionHint": {
+    "description": "Input hint"
+  },
+  "actionItemDescriptionEmpty": "작업 항목 설명은 비워둘 수 없습니다.",
+  "@actionItemDescriptionEmpty": {
+    "description": "Error message"
+  },
+  "actionItemUpdated": "작업 항목이 업데이트되었습니다",
+  "@actionItemUpdated": {
+    "description": "Snackbar"
+  },
+  "failedToUpdateActionItem": "작업 항목 업데이트 실패",
+  "@failedToUpdateActionItem": {
+    "description": "Snackbar"
+  },
+  "actionItemCreated": "작업 항목이 생성되었습니다",
+  "@actionItemCreated": {
+    "description": "Snackbar"
+  },
+  "failedToCreateActionItem": "작업 항목 생성 실패",
+  "@failedToCreateActionItem": {
+    "description": "Snackbar"
+  },
+  "dueDate": "마감일",
+  "@dueDate": {
+    "description": "Label"
+  },
+  "time": "시간",
+  "@time": {
+    "description": "Label"
+  },
+  "addDueDate": "마감일 추가",
+  "@addDueDate": {
+    "description": "Placeholder"
+  },
+  "pressDoneToSave": "완료를 눌러 저장하세요",
+  "@pressDoneToSave": {
+    "description": "Instruction"
+  },
+  "pressDoneToCreate": "완료를 눌러 생성하세요",
+  "@pressDoneToCreate": {
+    "description": "Instruction"
+  },
+  "filterAll": "모두",
+  "@filterAll": {
+    "description": "Filter option"
+  },
+  "filterSystem": "본인 정보",
+  "@filterSystem": {
+    "description": "Filter option for facts about the user"
+  },
+  "filterInteresting": "인사이트",
+  "@filterInteresting": {
+    "description": "Filter option for external wisdom/advice"
+  },
+  "filterManual": "수동",
+  "@filterManual": {
+    "description": "Filter option"
+  },
+  "completed": "완료됨",
+  "@completed": {
+    "description": "Status label"
+  },
+  "markComplete": "완료로 표시",
+  "@markComplete": {
+    "description": "Action label"
+  },
+  "actionItemDeleted": "작업 항목이 삭제되었습니다",
+  "@actionItemDeleted": {
+    "description": "Snackbar"
+  },
+  "failedToDeleteActionItem": "작업 항목 삭제 실패",
+  "@failedToDeleteActionItem": {
+    "description": "Snackbar"
+  },
+  "deleteActionItemConfirmTitle": "작업 항목 삭제",
+  "@deleteActionItemConfirmTitle": {
+    "description": "Dialog title"
+  },
+  "deleteActionItemConfirmMessage": "이 작업 항목을 삭제하시겠습니까?",
+  "@deleteActionItemConfirmMessage": {
+    "description": "Dialog message"
+  },
+  "appLanguage": "앱 언어",
+  "@appLanguage": {
+    "description": "Label for app language selector"
+  },
+  "appInterfaceSectionTitle": "앱 인터페이스",
+  "speechTranscriptionSectionTitle": "음성 및 전사",
+  "languageSettingsHelperText": "앱 언어는 메뉴와 버튼을 변경합니다. 음성 언어는 녹음이 전사되는 방식에 영향을 줍니다."
+}

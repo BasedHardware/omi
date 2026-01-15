@@ -1,0 +1,2299 @@
+{
+  "@@locale": "lt",
+  "@@last_modified": "2026-01-13",
+  "appTitle": "Omi",
+  "@appTitle": {
+    "description": "The app title displayed in various places"
+  },
+  "conversationTab": "Pokalbis",
+  "@conversationTab": {
+    "description": "Tab label for conversation summary"
+  },
+  "transcriptTab": "Transkripcija",
+  "@transcriptTab": {
+    "description": "Tab label for transcript view"
+  },
+  "actionItemsTab": "Užduotys",
+  "@actionItemsTab": {
+    "description": "Tab label for action items"
+  },
+  "deleteConversationTitle": "Ištrinti pokalbį?",
+  "@deleteConversationTitle": {
+    "description": "Title for delete confirmation dialog"
+  },
+  "deleteConversationMessage": "Ar tikrai norite ištrinti šį pokalbį? Šio veiksmo negalima atšaukti.",
+  "@deleteConversationMessage": {
+    "description": "Message for delete confirmation dialog"
+  },
+  "confirm": "Patvirtinti",
+  "@confirm": {
+    "description": "Confirm button label"
+  },
+  "cancel": "Atšaukti",
+  "@cancel": {
+    "description": "Cancel button label"
+  },
+  "ok": "Gerai",
+  "@ok": {
+    "description": "OK button label"
+  },
+  "delete": "Ištrinti",
+  "@delete": {
+    "description": "Delete button/action label"
+  },
+  "add": "Pridėti",
+  "@add": {
+    "description": "Add button label"
+  },
+  "update": "Atnaujinti",
+  "@update": {
+    "description": "Update button label"
+  },
+  "save": "Išsaugoti",
+  "@save": {
+    "description": "Save button label"
+  },
+  "edit": "Redaguoti",
+  "@edit": {
+    "description": "Edit button/action label"
+  },
+  "close": "Uždaryti",
+  "@close": {
+    "description": "Close button label"
+  },
+  "clear": "Išvalyti",
+  "@clear": {
+    "description": "Clear button label"
+  },
+  "copyTranscript": "Kopijuoti transkripciją",
+  "@copyTranscript": {
+    "description": "Menu item to copy transcript"
+  },
+  "copySummary": "Kopijuoti santrauką",
+  "@copySummary": {
+    "description": "Menu item to copy summary"
+  },
+  "testPrompt": "Testuoti užklausą",
+  "@testPrompt": {
+    "description": "Menu item for testing prompts"
+  },
+  "reprocessConversation": "Perdoroti pokalbį",
+  "@reprocessConversation": {
+    "description": "Menu item to reprocess a conversation"
+  },
+  "deleteConversation": "Ištrinti pokalbį",
+  "@deleteConversation": {
+    "description": "Menu item to delete a conversation"
+  },
+  "contentCopied": "Turinys nukopijuotas į iškarpinę",
+  "@contentCopied": {
+    "description": "Snackbar message when content is copied"
+  },
+  "failedToUpdateStarred": "Nepavyko atnaujinti žvaigždutės būsenos.",
+  "@failedToUpdateStarred": {
+    "description": "Error message when starring fails"
+  },
+  "conversationUrlNotShared": "Pokalbio nuorodos nepavyko bendrinti.",
+  "@conversationUrlNotShared": {
+    "description": "Error message when sharing fails"
+  },
+  "errorProcessingConversation": "Klaida dorojant pokalbį. Bandykite dar kartą vėliau.",
+  "@errorProcessingConversation": {
+    "description": "Error message for conversation processing failure"
+  },
+  "noInternetConnection": "Patikrinkite interneto ryšį ir bandykite dar kartą.",
+  "@noInternetConnection": {
+    "description": "Message shown when there's no internet"
+  },
+  "unableToDeleteConversation": "Nepavyko ištrinti pokalbio",
+  "@unableToDeleteConversation": {
+    "description": "Title for delete error dialog"
+  },
+  "somethingWentWrong": "Kažkas nepavyko! Bandykite dar kartą vėliau.",
+  "@somethingWentWrong": {
+    "description": "Generic error message"
+  },
+  "copyErrorMessage": "Kopijuoti klaidos pranešimą",
+  "@copyErrorMessage": {
+    "description": "Button to copy error details"
+  },
+  "errorCopied": "Klaidos pranešimas nukopijuotas į iškarpinę",
+  "@errorCopied": {
+    "description": "Snackbar message after copying error"
+  },
+  "remaining": "Likę",
+  "@remaining": {
+    "description": "Label for remaining time/items"
+  },
+  "loading": "Kraunama...",
+  "@loading": {
+    "description": "Loading indicator text"
+  },
+  "loadingDuration": "Kraunama trukmė...",
+  "@loadingDuration": {
+    "description": "Loading duration indicator"
+  },
+  "secondsCount": "{count} sek.",
+  "@secondsCount": {
+    "description": "Duration in seconds",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "30"
+      }
+    }
+  },
+  "people": "Žmonės",
+  "@people": {
+    "description": "People section title"
+  },
+  "addNewPerson": "Pridėti naują asmenį",
+  "@addNewPerson": {
+    "description": "Title for add person dialog"
+  },
+  "editPerson": "Redaguoti asmenį",
+  "@editPerson": {
+    "description": "Title for edit person dialog"
+  },
+  "createPersonHint": "Sukurkite naują asmenį ir apmokykite Omi atpažinti jų kalbą!",
+  "@createPersonHint": {
+    "description": "Hint text for creating a person"
+  },
+  "speechProfile": "Kalbos profilis",
+  "@speechProfile": {
+    "description": "Speech profile label"
+  },
+  "sampleNumber": "Pavyzdys {number}",
+  "@sampleNumber": {
+    "description": "Label for speech sample",
+    "placeholders": {
+      "number": {
+        "type": "int",
+        "example": "1"
+      }
+    }
+  },
+  "settings": "Nustatymai",
+  "@settings": {
+    "description": "Settings page title"
+  },
+  "language": "Kalba",
+  "@language": {
+    "description": "Language setting label"
+  },
+  "selectLanguage": "Pasirinkti kalbą",
+  "@selectLanguage": {
+    "description": "Title for language selection"
+  },
+  "deleting": "Trinama...",
+  "@deleting": {
+    "description": "Deleting in progress indicator"
+  },
+  "pleaseCompleteAuthentication": "Užbaikite autentifikaciją naršyklėje. Baigę grįžkite į programą.",
+  "@pleaseCompleteAuthentication": {
+    "description": "Message shown during OAuth flow"
+  },
+  "failedToStartAuthentication": "Nepavyko pradėti autentifikacijos",
+  "@failedToStartAuthentication": {
+    "description": "Error when OAuth fails to start"
+  },
+  "importStarted": "Importavimas pradėtas! Gausite pranešimą, kai bus baigta.",
+  "@importStarted": {
+    "description": "Success message when import begins"
+  },
+  "failedToStartImport": "Nepavyko pradėti importavimo. Bandykite dar kartą.",
+  "@failedToStartImport": {
+    "description": "Error when import fails to start"
+  },
+  "couldNotAccessFile": "Nepavyko pasiekti pasirinkto failo",
+  "@couldNotAccessFile": {
+    "description": "Error when file access fails"
+  },
+  "askOmi": "Klauskite Omi",
+  "@askOmi": {
+    "description": "Chat button label"
+  },
+  "done": "Atlikta",
+  "@done": {
+    "description": "Done button label"
+  },
+  "disconnected": "Atjungta",
+  "@disconnected": {
+    "description": "Device disconnected status"
+  },
+  "searching": "Ieškoma",
+  "@searching": {
+    "description": "Searching for device status"
+  },
+  "connectDevice": "Prijungti įrenginį",
+  "@connectDevice": {
+    "description": "Button to connect a device"
+  },
+  "monthlyLimitReached": "Pasiekėte mėnesio limitą.",
+  "@monthlyLimitReached": {
+    "description": "Message when usage limit is reached"
+  },
+  "checkUsage": "Tikrinti naudojimą",
+  "@checkUsage": {
+    "description": "Button to check usage details"
+  },
+  "syncingRecordings": "Sinchronizuojami įrašai",
+  "@syncingRecordings": {
+    "description": "Title when sync is in progress"
+  },
+  "recordingsToSync": "Įrašai sinchronizavimui",
+  "@recordingsToSync": {
+    "description": "Title when there are recordings to sync"
+  },
+  "allCaughtUp": "Viskas atnaujinta",
+  "@allCaughtUp": {
+    "description": "Title when everything is synced"
+  },
+  "sync": "Sinchronizuoti",
+  "@sync": {
+    "description": "Sync button label"
+  },
+  "pendantUpToDate": "Pakabukas atnaujintas",
+  "@pendantUpToDate": {
+    "description": "Status when pendant is synced"
+  },
+  "allRecordingsSynced": "Visi įrašai sinchronizuoti",
+  "@allRecordingsSynced": {
+    "description": "Status text when sync is complete"
+  },
+  "syncingInProgress": "Vyksta sinchronizavimas",
+  "@syncingInProgress": {
+    "description": "Status when sync is happening"
+  },
+  "readyToSync": "Paruošta sinchronizuoti",
+  "@readyToSync": {
+    "description": "Status when ready to sync"
+  },
+  "tapSyncToStart": "Paspauskite Sinchronizuoti, kad pradėtumėte",
+  "@tapSyncToStart": {
+    "description": "Hint to start sync"
+  },
+  "pendantNotConnected": "Pakabukas neprijungtas. Prijunkite, kad sinchronizuotumėte.",
+  "@pendantNotConnected": {
+    "description": "Warning when pendant is not connected"
+  },
+  "everythingSynced": "Viskas jau sinchronizuota.",
+  "@everythingSynced": {
+    "description": "Message when all is synced"
+  },
+  "recordingsNotSynced": "Turite nesinchronizuotų įrašų.",
+  "@recordingsNotSynced": {
+    "description": "Message when there are unsynced recordings"
+  },
+  "syncingBackground": "Tęsime įrašų sinchronizavimą fone.",
+  "@syncingBackground": {
+    "description": "Message during background sync"
+  },
+  "noConversationsYet": "Kol kas nėra pokalbių.",
+  "@noConversationsYet": {
+    "description": "Empty state when no conversations exist"
+  },
+  "noStarredConversations": "Kol kas nėra pažymėtų pokalbių.",
+  "@noStarredConversations": {
+    "description": "Empty state for starred filter"
+  },
+  "starConversationHint": "Norėdami pažymėti pokalbį, atidarykite jį ir paspauskite žvaigždutės piktogramą antraštėje.",
+  "@starConversationHint": {
+    "description": "Hint explaining how to star conversations"
+  },
+  "searchConversations": "Ieškoti pokalbių",
+  "@searchConversations": {
+    "description": "Search field placeholder"
+  },
+  "selectedCount": "Pasirinkta: {count}",
+  "@selectedCount": {
+    "description": "Selection count label",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "merge": "Sujungti",
+  "@merge": {
+    "description": "Merge button label"
+  },
+  "mergeConversations": "Sujungti pokalbius",
+  "@mergeConversations": {
+    "description": "Merge dialog title"
+  },
+  "mergeConversationsMessage": "Bus sujungti {count} pokalbiai į vieną. Visas turinys bus sujungtas ir iš naujo sugeneruotas.",
+  "@mergeConversationsMessage": {
+    "description": "Merge confirmation message",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mergingInBackground": "Sujungiama fone. Tai gali užtrukti.",
+  "@mergingInBackground": {
+    "description": "Snackbar message during merge"
+  },
+  "failedToStartMerge": "Nepavyko pradėti sujungimo",
+  "@failedToStartMerge": {
+    "description": "Error message when merge fails"
+  },
+  "askAnything": "Klauskite bet ko",
+  "@askAnything": {
+    "description": "Chat input placeholder"
+  },
+  "noMessagesYet": "Kol kas nėra žinučių!\nKodėl gi nepradėtumėte pokalbio?",
+  "@noMessagesYet": {
+    "description": "Empty chat state message"
+  },
+  "deletingMessages": "Ištrinamos jūsų žinutės iš Omi atminties...",
+  "@deletingMessages": {
+    "description": "Loading text while clearing chat"
+  },
+  "messageCopied": "Žinutė nukopijuota į iškarpinę.",
+  "@messageCopied": {
+    "description": "Snackbar after copying message"
+  },
+  "cannotReportOwnMessage": "Negalite pranešti apie savo žinutes.",
+  "@cannotReportOwnMessage": {
+    "description": "Error when trying to report own message"
+  },
+  "reportMessage": "Pranešti apie žinutę",
+  "@reportMessage": {
+    "description": "Report message dialog title"
+  },
+  "reportMessageConfirm": "Ar tikrai norite pranešti apie šią žinutę?",
+  "@reportMessageConfirm": {
+    "description": "Report message confirmation"
+  },
+  "messageReported": "Apie žinutę pranešta sėkmingai.",
+  "@messageReported": {
+    "description": "Confirmation after reporting message"
+  },
+  "thankYouFeedback": "Ačiū už jūsų atsiliepimą!",
+  "@thankYouFeedback": {
+    "description": "After thumbs up/down feedback"
+  },
+  "clearChat": "Išvalyti pokalbį?",
+  "@clearChat": {
+    "description": "Clear chat dialog title"
+  },
+  "clearChatConfirm": "Ar tikrai norite išvalyti pokalbį? Šio veiksmo negalima atšaukti.",
+  "@clearChatConfirm": {
+    "description": "Clear chat confirmation message"
+  },
+  "maxFilesLimit": "Galite įkelti tik 4 failus vienu metu",
+  "@maxFilesLimit": {
+    "description": "Max files upload warning"
+  },
+  "chatWithOmi": "Pokalbis su Omi",
+  "@chatWithOmi": {
+    "description": "Chat share subject"
+  },
+  "apps": "Programėlės",
+  "@apps": {
+    "description": "Apps page title"
+  },
+  "noAppsFound": "Programėlių nerasta",
+  "@noAppsFound": {
+    "description": "Empty state when no apps match"
+  },
+  "tryAdjustingSearch": "Pabandykite pakeisti paiešką arba filtrus",
+  "@tryAdjustingSearch": {
+    "description": "Hint when no apps found"
+  },
+  "createYourOwnApp": "Sukurkite savo programėlę",
+  "@createYourOwnApp": {
+    "description": "Create app button title"
+  },
+  "buildAndShareApp": "Sukurkite ir bendrinkite savo programėlę",
+  "@buildAndShareApp": {
+    "description": "Create app button subtitle"
+  },
+  "searchApps": "Ieškoti 1500+ programėlių",
+  "@searchApps": {
+    "description": "Apps search placeholder"
+  },
+  "myApps": "Mano programėlės",
+  "@myApps": {
+    "description": "My Apps filter button"
+  },
+  "installedApps": "Įdiegtos programėlės",
+  "@installedApps": {
+    "description": "Installed Apps filter button"
+  },
+  "unableToFetchApps": "Nepavyko gauti programėlių :(\n\nPatikrinkite interneto ryšį ir bandykite dar kartą.",
+  "@unableToFetchApps": {
+    "description": "Error when apps fail to load"
+  },
+  "aboutOmi": "Apie Omi",
+  "@aboutOmi": {
+    "description": "About page title"
+  },
+  "privacyPolicy": "Privatumo politika",
+  "@privacyPolicy": {
+    "description": "Privacy policy link"
+  },
+  "visitWebsite": "Aplankyti svetainę",
+  "@visitWebsite": {
+    "description": "Visit website link"
+  },
+  "helpOrInquiries": "Pagalba ar klausimai?",
+  "@helpOrInquiries": {
+    "description": "Help link title"
+  },
+  "joinCommunity": "Prisijunkite prie bendruomenės!",
+  "@joinCommunity": {
+    "description": "Discord community link"
+  },
+  "membersAndCounting": "8000+ narių ir vis daugėja.",
+  "@membersAndCounting": {
+    "description": "Discord member count"
+  },
+  "deleteAccountTitle": "Ištrinti paskyrą",
+  "@deleteAccountTitle": {
+    "description": "Delete account page title"
+  },
+  "deleteAccountConfirm": "Ar tikrai norite ištrinti savo paskyrą?",
+  "@deleteAccountConfirm": {
+    "description": "Delete account confirmation"
+  },
+  "cannotBeUndone": "Šio veiksmo negalima atšaukti.",
+  "@cannotBeUndone": {
+    "description": "Warning that action is permanent"
+  },
+  "allDataErased": "Visi jūsų prisiminimai ir pokalbiai bus negrįžtamai ištrinti.",
+  "@allDataErased": {
+    "description": "Delete account warning 1"
+  },
+  "appsDisconnected": "Jūsų programėlės ir integracijos bus nedelsiant atjungtos.",
+  "@appsDisconnected": {
+    "description": "Delete account warning 2"
+  },
+  "exportBeforeDelete": "Prieš ištrindami paskyrą galite eksportuoti duomenis, tačiau ištrynus jų atkurti neįmanoma.",
+  "@exportBeforeDelete": {
+    "description": "Delete account warning 3"
+  },
+  "deleteAccountCheckbox": "Suprantu, kad mano paskyros ištrynimas yra galutinis ir visi duomenys, įskaitant prisiminimus ir pokalbius, bus prarasti ir jų atkurti nebus įmanoma.",
+  "@deleteAccountCheckbox": {
+    "description": "Delete account checkbox confirmation"
+  },
+  "areYouSure": "Ar tikrai?",
+  "@areYouSure": {
+    "description": "Final confirmation title"
+  },
+  "deleteAccountFinal": "Šis veiksmas yra negrįžtamas ir galutinai ištrins jūsų paskyrą ir visus susijusius duomenis. Ar tikrai norite tęsti?",
+  "@deleteAccountFinal": {
+    "description": "Final delete confirmation message"
+  },
+  "deleteNow": "Ištrinti dabar",
+  "@deleteNow": {
+    "description": "Delete now button"
+  },
+  "goBack": "Grįžti atgal",
+  "@goBack": {
+    "description": "Go back button"
+  },
+  "checkBoxToConfirm": "Pažymėkite langelį, kad patvirtintumėte, jog suprantate, kad paskyros ištrynimas yra galutinis ir negrįžtamas.",
+  "@checkBoxToConfirm": {
+    "description": "Checkbox validation error"
+  },
+  "profile": "Profilis",
+  "@profile": {
+    "description": "Profile page title"
+  },
+  "name": "Vardas",
+  "@name": {
+    "description": "Name field label"
+  },
+  "email": "El. paštas",
+  "@email": {
+    "description": "Email field label"
+  },
+  "customVocabulary": "Pasirinktinis žodynas",
+  "@customVocabulary": {
+    "description": "Custom vocabulary setting"
+  },
+  "identifyingOthers": "Kitų atpažinimas",
+  "@identifyingOthers": {
+    "description": "People identification setting"
+  },
+  "paymentMethods": "Mokėjimo būdai",
+  "@paymentMethods": {
+    "description": "Payment methods setting"
+  },
+  "conversationDisplay": "Pokalbių rodymas",
+  "@conversationDisplay": {
+    "description": "Conversation display setting"
+  },
+  "dataPrivacy": "Duomenys ir privatumas",
+  "@dataPrivacy": {
+    "description": "Data and privacy setting"
+  },
+  "userId": "Naudotojo ID",
+  "@userId": {
+    "description": "User ID label"
+  },
+  "notSet": "Nenustatyta",
+  "@notSet": {
+    "description": "Default value when not set"
+  },
+  "userIdCopied": "Naudotojo ID nukopijuotas į iškarpinę",
+  "@userIdCopied": {
+    "description": "Confirmation when user ID is copied"
+  },
+  "systemDefault": "Sistemos numatytasis",
+  "@systemDefault": {
+    "description": "System language option"
+  },
+  "planAndUsage": "Planas ir naudojimas",
+  "@planAndUsage": {
+    "description": "Plan and usage menu item"
+  },
+  "offlineSync": "Autonominė sinchronizacija",
+  "@offlineSync": {
+    "description": "Offline sync menu item"
+  },
+  "deviceSettings": "Įrenginio nustatymai",
+  "@deviceSettings": {
+    "description": "Device settings menu item"
+  },
+  "chatTools": "Pokalbių įrankiai",
+  "@chatTools": {
+    "description": "Chat tools menu item"
+  },
+  "feedbackBug": "Atsiliepimai / Klaida",
+  "@feedbackBug": {
+    "description": "Feedback menu item"
+  },
+  "helpCenter": "Pagalbos centras",
+  "@helpCenter": {
+    "description": "Help center menu item"
+  },
+  "developerSettings": "Kūrėjo nustatymai",
+  "@developerSettings": {
+    "description": "Developer settings menu item"
+  },
+  "getOmiForMac": "Gauti Omi Mac",
+  "@getOmiForMac": {
+    "description": "Mac app download link"
+  },
+  "referralProgram": "Rekomendacijų programa",
+  "@referralProgram": {
+    "description": "Referral program menu item"
+  },
+  "signOut": "Atsijungti",
+  "@signOut": {
+    "description": "Sign out button"
+  },
+  "appAndDeviceCopied": "Programėlės ir įrenginio informacija nukopijuota",
+  "@appAndDeviceCopied": {
+    "description": "Confirmation when version info is copied"
+  },
+  "wrapped2025": "Wrapped 2025",
+  "@wrapped2025": {
+    "description": "Wrapped 2025 menu item"
+  },
+  "yourPrivacyYourControl": "Jūsų privatumas, jūsų kontrolė",
+  "@yourPrivacyYourControl": {
+    "description": "Data privacy page heading"
+  },
+  "privacyIntro": "Omi įsipareigoja saugoti jūsų privatumą. Šis puslapis leidžia kontroliuoti, kaip jūsų duomenys saugomi ir naudojami.",
+  "@privacyIntro": {
+    "description": "Data privacy page introduction"
+  },
+  "learnMore": "Sužinoti daugiau...",
+  "@learnMore": {
+    "description": "Learn more link"
+  },
+  "dataProtectionLevel": "Duomenų apsaugos lygis",
+  "@dataProtectionLevel": {
+    "description": "Data protection section title"
+  },
+  "dataProtectionDesc": "Jūsų duomenys pagal numatytuosius nustatymus apsaugoti stipriu šifravimu. Peržiūrėkite savo nustatymus ir būsimas privatumo parinktis žemiau.",
+  "@dataProtectionDesc": {
+    "description": "Data protection section description"
+  },
+  "appAccess": "Programėlių prieiga",
+  "@appAccess": {
+    "description": "App access section title"
+  },
+  "appAccessDesc": "Šios programėlės gali pasiekti jūsų duomenis. Paspauskite programėlę, kad valdytumėte jos leidimus.",
+  "@appAccessDesc": {
+    "description": "App access section description"
+  },
+  "noAppsExternalAccess": "Jokios įdiegtos programėlės neturi išorinės prieigos prie jūsų duomenų.",
+  "@noAppsExternalAccess": {
+    "description": "Empty state for app access"
+  },
+  "deviceName": "Įrenginio pavadinimas",
+  "@deviceName": {
+    "description": "Device name label"
+  },
+  "deviceId": "Įrenginio ID",
+  "@deviceId": {
+    "description": "Device ID label"
+  },
+  "firmware": "Programinė įranga",
+  "@firmware": {
+    "description": "Firmware label"
+  },
+  "sdCardSync": "SD kortelės sinchronizacija",
+  "@sdCardSync": {
+    "description": "SD Card sync label"
+  },
+  "hardwareRevision": "Aparatinės įrangos versija",
+  "@hardwareRevision": {
+    "description": "Hardware revision label"
+  },
+  "modelNumber": "Modelio numeris",
+  "@modelNumber": {
+    "description": "Model number label"
+  },
+  "manufacturer": "Gamintojas",
+  "@manufacturer": {
+    "description": "Manufacturer label"
+  },
+  "doubleTap": "Dvigubas bakstelėjimas",
+  "@doubleTap": {
+    "description": "Double tap action label"
+  },
+  "ledBrightness": "LED ryškumas",
+  "@ledBrightness": {
+    "description": "LED brightness label"
+  },
+  "micGain": "Mikrofono stiprinimas",
+  "@micGain": {
+    "description": "Microphone gain label"
+  },
+  "disconnect": "Atjungti",
+  "@disconnect": {
+    "description": "Disconnect device button"
+  },
+  "forgetDevice": "Pamiršti įrenginį",
+  "@forgetDevice": {
+    "description": "Forget device button"
+  },
+  "chargingIssues": "Krovimo problemos",
+  "@chargingIssues": {
+    "description": "Charging issues help item"
+  },
+  "disconnectDevice": "Atjungti įrenginį",
+  "@disconnectDevice": {
+    "description": "Disconnect device button"
+  },
+  "unpairDevice": "Atjungti įrenginį",
+  "@unpairDevice": {
+    "description": "Unpair device button"
+  },
+  "unpairAndForget": "Atjungti ir pamiršti įrenginį",
+  "@unpairAndForget": {
+    "description": "Unpair and forget device button"
+  },
+  "deviceDisconnectedMessage": "Jūsų Omi buvo atjungtas 😔",
+  "@deviceDisconnectedMessage": {
+    "description": "Message shown when device is disconnected"
+  },
+  "deviceUnpairedMessage": "Įrenginys atjungtas. Eikite į Nustatymus > „Bluetooth\" ir pamiršti įrenginį, kad užbaigtumėte atjungimą.",
+  "@deviceUnpairedMessage": {
+    "description": "Message shown when device is unpaired"
+  },
+  "unpairDialogTitle": "Atjungti įrenginį",
+  "@unpairDialogTitle": {
+    "description": "Unpair dialog title"
+  },
+  "unpairDialogMessage": "Taip atjungsite įrenginį, kad jį būtų galima prijungti prie kito telefono. Norėdami užbaigti procesą, turėsite eiti į Nustatymus > „Bluetooth\" ir pamiršti įrenginį.",
+  "@unpairDialogMessage": {
+    "description": "Unpair dialog message"
+  },
+  "deviceNotConnected": "Įrenginys neprijungtas",
+  "@deviceNotConnected": {
+    "description": "Device not connected header"
+  },
+  "connectDeviceMessage": "Prijunkite Omi įrenginį, kad pasiektumėte\nįrenginio nustatymus ir pritaikymą",
+  "@connectDeviceMessage": {
+    "description": "Message encouraging user to connect device"
+  },
+  "deviceInfoSection": "Įrenginio informacija",
+  "@deviceInfoSection": {
+    "description": "Device information section header"
+  },
+  "customizationSection": "Pritaikymas",
+  "@customizationSection": {
+    "description": "Customization section header"
+  },
+  "hardwareSection": "Aparatinė įranga",
+  "@hardwareSection": {
+    "description": "Hardware section header"
+  },
+  "v2Undetected": "V2 neaptiktas",
+  "@v2Undetected": {
+    "description": "V2 device undeteced dialog title"
+  },
+  "v2UndetectedMessage": "Matome, kad turite V1 įrenginį arba jūsų įrenginys neprijungtas. SD kortelės funkcija prieinama tik V2 įrenginiams.",
+  "@v2UndetectedMessage": {
+    "description": "V2 device undeteced dialog message"
+  },
+  "endConversation": "Baigti pokalbį",
+  "@endConversation": {
+    "description": "End conversation action"
+  },
+  "pauseResume": "Pristabdyti / tęsti",
+  "@pauseResume": {
+    "description": "Pause/Resume action"
+  },
+  "starConversation": "Pažymėti pokalbį",
+  "@starConversation": {
+    "description": "Star conversation action"
+  },
+  "doubleTapAction": "Dvigubo bakstelėjimo veiksmas",
+  "@doubleTapAction": {
+    "description": "Double tap action setting"
+  },
+  "endAndProcess": "Baigti ir apdoroti pokalbį",
+  "@endAndProcess": {
+    "description": "End and process action"
+  },
+  "pauseResumeRecording": "Pristabdyti / tęsti įrašymą",
+  "@pauseResumeRecording": {
+    "description": "Pause/Resume recording action"
+  },
+  "starOngoing": "Pažymėti vykstantį pokalbį",
+  "@starOngoing": {
+    "description": "Star ongoing conversation action"
+  },
+  "off": "Išjungta",
+  "@off": {
+    "description": "Off state"
+  },
+  "max": "Maksimalus",
+  "@max": {
+    "description": "Max state"
+  },
+  "mute": "Nutildyti",
+  "@mute": {
+    "description": "Mute state"
+  },
+  "quiet": "Tylus",
+  "@quiet": {
+    "description": "Quiet preset"
+  },
+  "normal": "Normalus",
+  "@normal": {
+    "description": "Normal preset"
+  },
+  "high": "Aukštas",
+  "@high": {
+    "description": "High preset"
+  },
+  "micGainDescMuted": "Mikrofonas nutildytas",
+  "@micGainDescMuted": {
+    "description": "Mic gain description: Muted"
+  },
+  "micGainDescLow": "Labai tylus – triukšmingai aplinkai",
+  "@micGainDescLow": {
+    "description": "Mic gain description: Low"
+  },
+  "micGainDescModerate": "Tylus – vidutiniam triukšmui",
+  "@micGainDescModerate": {
+    "description": "Mic gain description: Moderate"
+  },
+  "micGainDescNeutral": "Neutralus – subalansuotas įrašymas",
+  "@micGainDescNeutral": {
+    "description": "Mic gain description: Neutral"
+  },
+  "micGainDescSlightlyBoosted": "Šiek tiek sustiprintas – įprastam naudojimui",
+  "@micGainDescSlightlyBoosted": {
+    "description": "Mic gain description: Slightly Boosted"
+  },
+  "micGainDescBoosted": "Sustiprintas – tyliai aplinkai",
+  "@micGainDescBoosted": {
+    "description": "Mic gain description: Boosted"
+  },
+  "micGainDescHigh": "Aukštas – tolimam ar tyliam balsui",
+  "@micGainDescHigh": {
+    "description": "Mic gain description: High"
+  },
+  "micGainDescVeryHigh": "Labai aukštas – labai tyliems šaltiniams",
+  "@micGainDescVeryHigh": {
+    "description": "Mic gain description: Very High"
+  },
+  "micGainDescMax": "Maksimalus – naudokite atsargiai",
+  "@micGainDescMax": {
+    "description": "Mic gain description: Max"
+  },
+  "developerSettingsTitle": "Kūrėjo nustatymai",
+  "@developerSettingsTitle": {
+    "description": "Developer settings page title"
+  },
+  "saving": "Išsaugoma...",
+  "@saving": {
+    "description": "Saving state text"
+  },
+  "personaConfig": "Konfigūruokite savo DI asmens charakteristikų",
+  "@personaConfig": {
+    "description": "Persona configuration subtitle"
+  },
+  "beta": "BETA",
+  "@beta": {
+    "description": "Beta tag"
+  },
+  "transcription": "Transkripcija",
+  "@transcription": {
+    "description": "Transcription settings title"
+  },
+  "transcriptionConfig": "Konfigūruoti STT teikėją",
+  "@transcriptionConfig": {
+    "description": "Transcription configuration subtitle"
+  },
+  "conversationTimeout": "Pokalbio skirtasis laikas",
+  "@conversationTimeout": {
+    "description": "Conversation timeout settings title"
+  },
+  "conversationTimeoutConfig": "Nustatykite, kada automatiškai baigiami pokalbiai",
+  "@conversationTimeoutConfig": {
+    "description": "Conversation timeout configuration subtitle"
+  },
+  "importData": "Importuoti duomenis",
+  "@importData": {
+    "description": "Import data details title"
+  },
+  "importDataConfig": "Importuoti duomenis iš kitų šaltinių",
+  "@importDataConfig": {
+    "description": "Import data details subtitle"
+  },
+  "debugDiagnostics": "Derinimas ir diagnostika",
+  "@debugDiagnostics": {
+    "description": "Debug & Diagnostics section header"
+  },
+  "endpointUrl": "Galinio taško URL",
+  "@endpointUrl": {
+    "description": "Endpoint URL label"
+  },
+  "noApiKeys": "Kol kas nėra API raktų",
+  "@noApiKeys": {
+    "description": "No API keys message"
+  },
+  "createKeyToStart": "Sukurkite raktą, kad pradėtumėte",
+  "@createKeyToStart": {
+    "description": "Create key instruction"
+  },
+  "createKey": "Sukurti raktą",
+  "@createKey": {
+    "description": "Create Key button"
+  },
+  "docs": "Dokumentai",
+  "@docs": {
+    "description": "Documentation link"
+  },
+  "yourOmiInsights": "Jūsų Omi įžvalgos",
+  "@yourOmiInsights": {
+    "description": "Usage page title"
+  },
+  "today": "Šiandien",
+  "@today": {
+    "description": "Time period: Today"
+  },
+  "thisMonth": "Šį mėnesį",
+  "@thisMonth": {
+    "description": "Time period: This Month"
+  },
+  "thisYear": "Šiais metais",
+  "@thisYear": {
+    "description": "Time period: This Year"
+  },
+  "allTime": "Visą laiką",
+  "@allTime": {
+    "description": "Time period: All Time"
+  },
+  "noActivityYet": "Kol kas nėra veiklos",
+  "@noActivityYet": {
+    "description": "Empty state title"
+  },
+  "startConversationToSeeInsights": "Pradėkite pokalbį su Omi,\nkad čia matytumėte naudojimo įžvalgas.",
+  "@startConversationToSeeInsights": {
+    "description": "Empty state description"
+  },
+  "listening": "Klausymasis",
+  "@listening": {
+    "description": "Listening stat title"
+  },
+  "listeningSubtitle": "Bendras laikas, kurį Omi aktyviai klausėsi.",
+  "@listeningSubtitle": {
+    "description": "Listening stat subtitle"
+  },
+  "understanding": "Supratimas",
+  "@understanding": {
+    "description": "Understanding stat title"
+  },
+  "understandingSubtitle": "Žodžiai, suprasti iš jūsų pokalbių.",
+  "@understandingSubtitle": {
+    "description": "Understanding stat subtitle"
+  },
+  "providing": "Teikimas",
+  "@providing": {
+    "description": "Providing stat title"
+  },
+  "providingSubtitle": "Automatiškai užfiksuotos užduotys ir pastabos.",
+  "@providingSubtitle": {
+    "description": "Providing stat subtitle"
+  },
+  "remembering": "Prisiminimas",
+  "@remembering": {
+    "description": "Remembering stat title"
+  },
+  "rememberingSubtitle": "Faktai ir detalės, prisiminti jums.",
+  "@rememberingSubtitle": {
+    "description": "Remembering stat subtitle"
+  },
+  "unlimitedPlan": "Neribojamas planas",
+  "@unlimitedPlan": {
+    "description": "Unlimited plan name"
+  },
+  "managePlan": "Valdyti planą",
+  "@managePlan": {
+    "description": "Manage plan button"
+  },
+  "cancelAtPeriodEnd": "Jūsų planas bus atšauktas {date}.",
+  "@cancelAtPeriodEnd": {
+    "description": "Cancellation message",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Jan 1, 2026"
+      }
+    }
+  },
+  "renewsOn": "Jūsų planas bus atnaujintas {date}.",
+  "@renewsOn": {
+    "description": "Renewal message",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Jan 1, 2026"
+      }
+    }
+  },
+  "basicPlan": "Nemokamas planas",
+  "@basicPlan": {
+    "description": "Basic plan name"
+  },
+  "usageLimitMessage": "Panaudota {used} iš {limit} min.",
+  "@usageLimitMessage": {
+    "description": "Usage limit message",
+    "placeholders": {
+      "used": {
+        "type": "String",
+        "example": "100"
+      },
+      "limit": {
+        "type": "int",
+        "example": "60"
+      }
+    }
+  },
+  "upgrade": "Atnaujinti",
+  "@upgrade": {
+    "description": "Upgrade button"
+  },
+  "upgradeToUnlimited": "Atnaujinti į neribotą",
+  "@upgradeToUnlimited": {
+    "description": "Upgrade to unlimited button"
+  },
+  "basicPlanDesc": "Jūsų planas apima {limit} nemokamų minučių per mėnesį. Atnaujinkite, kad gautumėte neribotą.",
+  "@basicPlanDesc": {
+    "description": "Basic plan description",
+    "placeholders": {
+      "limit": {
+        "type": "int",
+        "example": "60"
+      }
+    }
+  },
+  "shareStatsMessage": "Dalinu savo Omi statistika! (omi.me – jūsų visada veikiantis DI asistentas)",
+  "@shareStatsMessage": {
+    "description": "Share stats base message"
+  },
+  "sharePeriodToday": "Šiandien omi:",
+  "@sharePeriodToday": {
+    "description": "Share stats period: Today"
+  },
+  "sharePeriodMonth": "Šį mėnesį omi:",
+  "@sharePeriodMonth": {
+    "description": "Share stats period: Month"
+  },
+  "sharePeriodYear": "Šiais metais omi:",
+  "@sharePeriodYear": {
+    "description": "Share stats period: Year"
+  },
+  "sharePeriodAllTime": "Iki šiol omi:",
+  "@sharePeriodAllTime": {
+    "description": "Share stats period: All Time"
+  },
+  "shareStatsListened": "🎧 Klausėsi {minutes} minučių",
+  "@shareStatsListened": {
+    "description": "Share stats: listened",
+    "placeholders": {
+      "minutes": {
+        "type": "String",
+        "example": "120"
+      }
+    }
+  },
+  "shareStatsWords": "🧠 Suprato {words} žodžių",
+  "@shareStatsWords": {
+    "description": "Share stats: words",
+    "placeholders": {
+      "words": {
+        "type": "String",
+        "example": "5000"
+      }
+    }
+  },
+  "shareStatsInsights": "✨ Suteikė {count} įžvalgų",
+  "@shareStatsInsights": {
+    "description": "Share stats: insights",
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "10"
+      }
+    }
+  },
+  "shareStatsMemories": "📚 Prisiminė {count} prisiminimų",
+  "@shareStatsMemories": {
+    "description": "Share stats: memories",
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "5"
+      }
+    }
+  },
+  "debugLogs": "Derinimo žurnalai",
+  "debugLogsAutoDelete": "Automatiškai ištrinami po 3 dienų.",
+  "debugLogsDesc": "Padeda diagnozuoti problemas",
+  "noLogFilesFound": "Žurnalų failų nerasta.",
+  "omiDebugLog": "Omi derinimo žurnalas",
+  "logShared": "Žurnalas bendrintas",
+  "selectLogFile": "Pasirinkti žurnalo failą",
+  "shareLogs": "Bendrinti žurnalus",
+  "debugLogCleared": "Derinimo žurnalas išvalytas",
+  "exportStarted": "Eksportavimas pradėtas. Tai gali užtrukti keletą sekundžių...",
+  "exportAllData": "Eksportuoti visus duomenis",
+  "exportDataDesc": "Eksportuoti pokalbius į JSON failą",
+  "exportedConversations": "Eksportuoti pokalbiai iš Omi",
+  "exportShared": "Eksportas bendrintas",
+  "deleteKnowledgeGraphTitle": "Ištrinti žinių grafiką?",
+  "deleteKnowledgeGraphMessage": "Taip bus ištrinti visi išvesti žinių grafiko duomenys (mazgai ir ryšiai). Jūsų originalūs prisiminimai liks saugūs. Grafikas bus atstatytas laikui bėgant arba pagal kitą užklausą.",
+  "knowledgeGraphDeleted": "Žinių grafikas sėkmingai ištrintas",
+  "deleteGraphFailed": "Nepavyko ištrinti grafiko: {error}",
+  "@deleteGraphFailed": {
+    "description": "Error message when deleting graph fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteKnowledgeGraph": "Ištrinti žinių grafiką",
+  "deleteKnowledgeGraphDesc": "Išvalyti visus mazgus ir ryšius",
+  "mcp": "MCP",
+  "mcpServer": "MCP serveris",
+  "mcpServerDesc": "Prijunkite DI asistentus prie savo duomenų",
+  "serverUrl": "Serverio URL",
+  "urlCopied": "URL nukopijuotas",
+  "apiKeyAuth": "API rakto autentifikacija",
+  "header": "Antraštė",
+  "authorizationBearer": "Authorization: Bearer <key>",
+  "oauth": "OAuth",
+  "clientId": "Kliento ID",
+  "clientSecret": "Kliento paslaptis",
+  "useMcpApiKey": "Naudokite savo MCP API raktą",
+  "webhooks": "Webhooks",
+  "conversationEvents": "Pokalbių įvykiai",
+  "newConversationCreated": "Sukurtas naujas pokalbis",
+  "realtimeTranscript": "Realaus laiko transkripcija",
+  "transcriptReceived": "Transkripcija gauta",
+  "audioBytes": "Garso baitai",
+  "audioDataReceived": "Garso duomenys gauti",
+  "intervalSeconds": "Intervalas (sekundės)",
+  "daySummary": "Dienos santrauka",
+  "summaryGenerated": "Santrauka sugeneruota",
+  "claudeDesktop": "Claude Desktop",
+  "addToClaudeConfig": "Pridėti į claude_desktop_config.json",
+  "copyConfig": "Kopijuoti konfigūraciją",
+  "configCopied": "Konfigūracija nukopijuota į iškarpinę",
+  "listeningMins": "Klausymasis (min.)",
+  "understandingWords": "Supratimas (žodžiai)",
+  "insights": "Įžvalgos",
+  "memories": "Prisiminimai",
+  "minsUsedThisMonth": "Šį mėnesį panaudota {used} iš {limit} min.",
+  "@minsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "wordsUsedThisMonth": "Šį mėnesį panaudota {used} iš {limit} žodžių",
+  "@wordsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "insightsUsedThisMonth": "Šį mėnesį gauta {used} iš {limit} įžvalgų",
+  "@insightsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "memoriesUsedThisMonth": "Šį mėnesį sukurta {used} iš {limit} prisiminimų",
+  "@memoriesUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "visibility": "Matomumas",
+  "visibilitySubtitle": "Kontroliuokite, kurie pokalbiai rodomi jūsų sąraše",
+  "showShortConversations": "Rodyti trumpus pokalbius",
+  "showShortConversationsDesc": "Rodyti pokalbius, trumpesnius už ribą",
+  "showDiscardedConversations": "Rodyti atmestus pokalbius",
+  "showDiscardedConversationsDesc": "Įtraukti pokalbius, pažymėtus kaip atmesti",
+  "shortConversationThreshold": "Trumpo pokalbio riba",
+  "shortConversationThresholdSubtitle": "Pokalbiai, trumpesni už šią ribą, bus paslėpti, nebent įjungta aukščiau",
+  "durationThreshold": "Trukmės riba",
+  "durationThresholdDesc": "Slėpti pokalbius, trumpesnius už šią ribą",
+  "minLabel": "{count} min.",
+  "@minLabel": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "customVocabularyTitle": "Pasirinktinis žodynas",
+  "addWords": "Pridėti žodžių",
+  "addWordsDesc": "Vardai, terminai ar neįprasti žodžiai",
+  "vocabularyHint": "Omi, Callie, OpenAI",
+  "connect": "Prisijungti",
+  "comingSoon": "Greitai",
+  "chatToolsFooter": "Prijunkite savo programėles, kad matytumėte duomenis ir metrikas pokalbyje.",
+  "completeAuthInBrowser": "Užbaikite autentifikaciją naršyklėje. Baigę grįžkite į programą.",
+  "failedToStartAuth": "Nepavyko pradėti {appName} autentifikacijos",
+  "@failedToStartAuth": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectAppTitle": "Atjungti {appName}?",
+  "@disconnectAppTitle": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectAppMessage": "Ar tikrai norite atsijungti nuo {appName}? Galite bet kada vėl prisijungti.",
+  "@disconnectAppMessage": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectedFrom": "Atjungta nuo {appName}",
+  "@disconnectedFrom": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToDisconnect": "Nepavyko atjungti",
+  "connectTo": "Prisijungti prie {appName}",
+  "@connectTo": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "authAccessMessage": "Jums reikės autorizuoti Omi prieigą prie jūsų {appName} duomenų. Bus atidaryta naršyklė autentifikacijai.",
+  "@authAccessMessage": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "continueAction": "Tęsti",
+  "languageTitle": "Kalba",
+  "primaryLanguage": "Pagrindinė kalba",
+  "automaticTranslation": "Automatinis vertimas",
+  "detectLanguages": "Aptikti 10+ kalbų",
+  "authorizeSavingRecordings": "Leisti išsaugoti įrašus",
+  "thanksForAuthorizing": "Ačiū, kad leidote!",
+  "needYourPermission": "Mums reikia jūsų leidimo",
+  "alreadyGavePermission": "Jau davėte mums leidimą išsaugoti jūsų įrašus. Primename, kodėl mums to reikia:",
+  "wouldLikePermission": "Norėtume jūsų leidimo išsaugoti jūsų balso įrašus. Štai kodėl:",
+  "improveSpeechProfile": "Pagerinti jūsų kalbos profilį",
+  "improveSpeechProfileDesc": "Naudojame įrašus tolesniam jūsų asmeninio kalbos profilio mokymui ir tobulinimui.",
+  "trainFamilyProfiles": "Mokyti draugų ir šeimos profilius",
+  "trainFamilyProfilesDesc": "Jūsų įrašai padeda atpažinti ir kurti profilius jūsų draugams ir šeimai.",
+  "enhanceTranscriptAccuracy": "Pagerinti transkripcijos tikslumą",
+  "enhanceTranscriptAccuracyDesc": "Mūsų modeliui tobulėjant, galime pateikti geresnius transkripcijos rezultatus jūsų įrašams.",
+  "legalNotice": "Teisinis pranešimas: balso duomenų įrašymo ir saugojimo teisėtumas gali skirtis priklausomai nuo jūsų buvimo vietos ir kaip naudojate šią funkciją. Tai jūsų atsakomybė užtikrinti atitiktį vietiniams įstatymams ir taisyklėms.",
+  "alreadyAuthorized": "Jau autorizuota",
+  "authorize": "Leisti",
+  "revokeAuthorization": "Atšaukti leidimą",
+  "authorizationSuccessful": "Leidimas sėkmingas!",
+  "failedToAuthorize": "Nepavyko autorizuoti. Bandykite dar kartą.",
+  "authorizationRevoked": "Leidimas atšauktas.",
+  "recordingsDeleted": "Įrašai ištrinti.",
+  "failedToRevoke": "Nepavyko atšaukti leidimo. Bandykite dar kartą.",
+  "permissionRevokedTitle": "Leidimas atšauktas",
+  "permissionRevokedMessage": "Ar norite, kad ištrintume visus jūsų esamus įrašus?",
+  "yes": "Taip",
+  "editName": "Redaguoti vardą",
+  "howShouldOmiCallYou": "Kaip Omi turėtų jus vadinti?",
+  "enterYourName": "Įveskite savo vardą",
+  "nameCannotBeEmpty": "Vardas negali būti tuščias",
+  "nameUpdatedSuccessfully": "Vardas sėkmingai atnaujintas!",
+  "calendarSettings": "Kalendoriaus nustatymai",
+  "calendarProviders": "Kalendoriaus teikėjai",
+  "macOsCalendar": "macOS kalendorius",
+  "connectMacOsCalendar": "Prijunkite savo vietinį macOS kalendorių",
+  "googleCalendar": "Google kalendorius",
+  "syncGoogleAccount": "Sinchronizuoti su savo Google paskyra",
+  "showMeetingsMenuBar": "Rodyti būsimus susitikimus meniu juostoje",
+  "showMeetingsMenuBarDesc": "Rodyti kitą susitikimą ir laiką iki jo pradžios macOS meniu juostoje",
+  "showEventsNoParticipants": "Rodyti renginius be dalyvių",
+  "showEventsNoParticipantsDesc": "Kai įjungta, „Coming Up\" rodo renginius be dalyvių ar vaizdo nuorodos.",
+  "yourMeetings": "Jūsų susitikimai",
+  "refresh": "Atnaujinti",
+  "noUpcomingMeetings": "Nerasta būsimų susitikimų",
+  "checkingNextDays": "Tikrinama ateinančių 30 dienų",
+  "tomorrow": "Rytoj",
+  "googleCalendarComingSoon": "Google kalendoriaus integracija greitai!",
+  "connectedAsUser": "Prisijungta kaip vartotojas: {userId}",
+  "@connectedAsUser": {
+    "placeholders": {
+      "userId": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultWorkspace": "Numatytoji darbo sritis",
+  "tasksCreatedInWorkspace": "Užduotys bus sukurtos šioje darbo srityje",
+  "defaultProjectOptional": "Numatytasis projektas (nebūtinas)",
+  "leaveUnselectedTasks": "Palikite nepasirinkus, kad sukurtumėte užduotis be projekto",
+  "noProjectsInWorkspace": "Šioje darbo srityje nerasta projektų",
+  "conversationTimeoutDesc": "Pasirinkite, kiek laiko laukti tylos prieš automatiškai baigiant pokalbį:",
+  "timeout2Minutes": "2 minutės",
+  "timeout2MinutesDesc": "Baigti pokalbį po 2 minučių tylos",
+  "timeout5Minutes": "5 minutės",
+  "timeout5MinutesDesc": "Baigti pokalbį po 5 minučių tylos",
+  "timeout10Minutes": "10 minučių",
+  "timeout10MinutesDesc": "Baigti pokalbį po 10 minučių tylos",
+  "timeout30Minutes": "30 minučių",
+  "timeout30MinutesDesc": "Baigti pokalbį po 30 minučių tylos",
+  "timeout4Hours": "4 valandos",
+  "timeout4HoursDesc": "Baigti pokalbį po 4 valandų tylos",
+  "conversationEndAfterHours": "Pokalbiai dabar bus baigiami po 4 valandų tylos",
+  "conversationEndAfterMinutes": "Pokalbiai dabar bus baigiami po {minutes} minutės(-ių) tylos",
+  "@conversationEndAfterMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "tellUsPrimaryLanguage": "Pasakykite mums savo pagrindinę kalbą",
+  "languageForTranscription": "Nustatykite savo kalbą tikslesnėms transkripcijoms ir individualizuotai patirčiai.",
+  "singleLanguageModeInfo": "Įjungtas vienos kalbos režimas. Vertimas išjungtas, kad būtų didesnis tikslumas.",
+  "searchLanguageHint": "Ieškoti kalbos pagal pavadinimą ar kodą",
+  "noLanguagesFound": "Kalbų nerasta",
+  "skip": "Praleisti",
+  "languageSetTo": "Kalba nustatyta į {language}",
+  "@languageSetTo": {
+    "placeholders": {
+      "language": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToSetLanguage": "Nepavyko nustatyti kalbos",
+  "appSettings": "{appName} nustatymai",
+  "@appSettings": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectFromApp": "Atjungti nuo {appName}?",
+  "@disconnectFromApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectFromAppDesc": "Bus pašalinta jūsų {appName} autentifikacija. Jums reikės vėl prisijungti, kad ją naudotumėte.",
+  "@disconnectFromAppDesc": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "connectedToApp": "Prisijungta prie {appName}",
+  "@connectedToApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "account": "Paskyra",
+  "actionItemsSyncedTo": "Jūsų užduotys bus sinchronizuotos su jūsų {appName} paskyra",
+  "@actionItemsSyncedTo": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultSpace": "Numatytoji erdvė",
+  "selectSpaceInWorkspace": "Pasirinkite erdvę savo darbo srityje",
+  "noSpacesInWorkspace": "Šioje darbo srityje nerasta erdvių",
+  "defaultList": "Numatytasis sąrašas",
+  "tasksAddedToList": "Užduotys bus pridėtos į šį sąrašą",
+  "noListsInSpace": "Šioje erdvėje nerasta sąrašų",
+  "failedToLoadRepos": "Nepavyko įkelti saugyklų: {error}",
+  "@failedToLoadRepos": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultRepoSaved": "Numatytoji saugykla išsaugota",
+  "failedToSaveDefaultRepo": "Nepavyko išsaugoti numatytosios saugyklos",
+  "defaultRepository": "Numatytoji saugykla",
+  "selectDefaultRepoDesc": "Pasirinkite numatytąją saugyklą problemų kūrimui. Kurdami problemas galite nurodyti kitą saugyklą.",
+  "noReposFound": "Saugyklų nerasta",
+  "private": "Privati",
+  "updatedDate": "Atnaujinta {date}",
+  "@updatedDate": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "yesterday": "vakar",
+  "daysAgo": "prieš {count} d.",
+  "@daysAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "oneWeekAgo": "prieš 1 savaitę",
+  "weeksAgo": "prieš {count} sav.",
+  "@weeksAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "oneMonthAgo": "prieš 1 mėnesį",
+  "monthsAgo": "prieš {count} mėn.",
+  "@monthsAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "issuesCreatedInRepo": "Problemos bus sukurtos jūsų numatytojoje saugykloje",
+  "taskIntegrations": "Užduočių integracijos",
+  "configureSettings": "Konfigūruoti nustatymus",
+  "completeAuthBrowser": "Užbaikite autentifikaciją naršyklėje. Baigę grįžkite į programą.",
+  "failedToStartAppAuth": "Nepavyko pradėti {appName} autentifikacijos",
+  "@failedToStartAppAuth": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "connectToAppTitle": "Prisijungti prie {appName}",
+  "@connectToAppTitle": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "authorizeOmiForTasks": "Jums reikės autorizuoti Omi kurti užduotis jūsų {appName} paskyroje. Bus atidaryta naršyklė autentifikacijai.",
+  "@authorizeOmiForTasks": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "continueButton": "Tęsti",
+  "appIntegration": "{appName} integracija",
+  "@appIntegration": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "integrationComingSoon": "Integracija su {appName} greitai! Sunkiai dirbame, kad suteiktume daugiau užduočių valdymo parinkčių.",
+  "@integrationComingSoon": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "gotIt": "Supratau",
+  "tasksExportedOneApp": "Užduotys gali būti eksportuojamos į vieną programėlę vienu metu.",
+  "completeYourUpgrade": "Užbaikite savo atnaujinimą",
+  "importConfiguration": "Importuoti konfigūraciją",
+  "exportConfiguration": "Eksportuoti konfigūraciją",
+  "bringYourOwn": "Naudokite savo",
+  "payYourSttProvider": "Laisvai naudokite omi. Mokate tik savo STT teikėjui tiesiogiai.",
+  "freeMinutesMonth": "1 200 nemokamų minučių per mėnesį įtraukta. Neribota su ",
+  "omiUnlimited": "Omi Unlimited",
+  "hostRequired": "Reikalingas pagrindinis kompiuteris",
+  "validPortRequired": "Reikalingas tinkamas prievadas",
+  "validWebsocketUrlRequired": "Reikalingas tinkamas WebSocket URL (wss://)",
+  "apiUrlRequired": "Reikalingas API URL",
+  "apiKeyRequired": "Reikalingas API raktas",
+  "invalidJsonConfig": "Netinkama JSON konfigūracija",
+  "errorSaving": "Klaida išsaugant: {error}",
+  "@errorSaving": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "configCopiedToClipboard": "Konfigūracija nukopijuota į iškarpinę",
+  "pasteJsonConfig": "Įklijuokite savo JSON konfigūraciją žemiau:",
+  "addApiKeyAfterImport": "Importavę turėsite pridėti savo API raktą",
+  "paste": "Įklijuoti",
+  "import": "Importuoti",
+  "invalidProviderInConfig": "Netinkamas teikėjas konfigūracijoje",
+  "importedConfig": "Importuota {providerName} konfigūracija",
+  "@importedConfig": {
+    "placeholders": {
+      "providerName": {
+        "type": "String"
+      }
+    }
+  },
+  "invalidJson": "Netinkamas JSON: {error}",
+  "@invalidJson": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "provider": "Teikėjas",
+  "live": "Tiesioginis",
+  "onDevice": "Įrenginyje",
+  "apiUrl": "API URL",
+  "enterSttHttpEndpoint": "Įveskite savo STT HTTP galinį tašką",
+  "websocketUrl": "WebSocket URL",
+  "enterLiveSttWebsocket": "Įveskite savo tiesioginį STT WebSocket galinį tašką",
+  "apiKey": "API raktas",
+  "enterApiKey": "Įveskite savo API raktą",
+  "storedLocallyNeverShared": "Saugoma vietoje, niekada nebendrinam",
+  "host": "Pagrindinis kompiuteris",
+  "port": "Prievadas",
+  "advanced": "Išplėstiniai",
+  "configuration": "Konfigūracija",
+  "requestConfiguration": "Užklausos konfigūracija",
+  "responseSchema": "Atsakymo schema",
+  "modified": "Pakeista",
+  "resetRequestConfig": "Atkurti užklausos konfigūraciją į numatytąją",
+  "logs": "Žurnalai",
+  "logsCopied": "Žurnalai nukopijuoti",
+  "noLogsYet": "Kol kas nėra žurnalų. Pradėkite įrašinėti, kad matytumėte pasirinktinio STT veiklą.",
+  "deviceUsesCodec": "{deviceName} naudoja {codecReason}. Bus naudojamas Omi.",
+  "@deviceUsesCodec": {
+    "placeholders": {
+      "deviceName": {
+        "type": "String"
+      },
+      "codecReason": {
+        "type": "String"
+      }
+    }
+  },
+  "omiTranscription": "Omi transkripcija",
+  "bestInClassTranscription": "Geriausia klasės transkripcija be jokio nustatymo",
+  "instantSpeakerLabels": "Akimirksniu kalbėtojų etiketės",
+  "languageTranslation": "100+ kalbų vertimas",
+  "optimizedForConversation": "Optimizuota pokalbiams",
+  "autoLanguageDetection": "Automatinis kalbos aptikimas",
+  "highAccuracy": "Aukštas tikslumas",
+  "privacyFirst": "Pirmiausiai privatumas",
+  "saveChanges": "Išsaugoti pakeitimus",
+  "resetToDefault": "Atkurti į numatytuosius",
+  "viewTemplate": "Peržiūrėti šabloną",
+  "trySomethingLike": "Pabandykite kažką panašaus...",
+  "tryIt": "Išbandykite",
+  "creatingPlan": "Kuriamas planas",
+  "developingLogic": "Kuriama logika",
+  "designingApp": "Projektuojama programėlė",
+  "generatingIconStep": "Generuojama piktograma",
+  "finalTouches": "Paskutiniai patobulinimai",
+  "processing": "Apdorojama...",
+  "features": "Funkcijos",
+  "creatingYourApp": "Kuriama jūsų programėlė...",
+  "generatingIcon": "Generuojama piktograma...",
+  "whatShouldWeMake": "Ką turėtume sukurti?",
+  "appName": "Programėlės pavadinimas",
+  "description": "Aprašymas",
+  "publicLabel": "Vieša",
+  "privateLabel": "Privati",
+  "free": "Nemokai",
+  "perMonth": "/ Mėnesį",
+  "tailoredConversationSummaries": "Pritaikytos pokalbių santraukos",
+  "customChatbotPersonality": "Pasirinktinė pokalbių roboto asmenybė",
+  "makePublic": "Padaryti viešą",
+  "anyoneCanDiscover": "Bet kas gali rasti jūsų programėlę",
+  "onlyYouCanUse": "Tik jūs galite naudoti šią programėlę",
+  "paidApp": "Mokama programėlė",
+  "usersPayToUse": "Vartotojai moka, kad naudotų jūsų programėlę",
+  "freeForEveryone": "Nemokamai visiems",
+  "perMonthLabel": "/ mėnesį",
+  "creating": "Kuriama...",
+  "@creating": {
+    "description": "Loading state text when app generation is in progress"
+  },
+  "createApp": "Sukurti programėlę",
+  "@createApp": {
+    "description": "Button text to initiate app creation"
+  },
+  "searchingForDevices": "Ieškoma įrenginių...",
+  "@searchingForDevices": {
+    "description": "Status text while scanning for Bluetooth devices"
+  },
+  "devicesFoundNearby": "RASTA {count} {count, plural, =1{ĮRENGINYS} other{ĮRENGINIAI}} NETOLIESE",
+  "@devicesFoundNearby": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pairingSuccessful": "SUSIEJIMAS SĖKMINGAS",
+  "errorConnectingAppleWatch": "Klaida jungiantis prie Apple Watch: {error}",
+  "@errorConnectingAppleWatch": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "dontShowAgain": "Daugiau nerodyti",
+  "@dontShowAgain": {
+    "description": "Checkbox text to suppress future connection confirmations"
+  },
+  "iUnderstand": "Suprantu",
+  "@iUnderstand": {
+    "description": "Button text to acknowledge connection warnings"
+  },
+  "enableBluetooth": "Įjungti Bluetooth",
+  "@enableBluetooth": {
+    "description": "Title for dialog prompting user to enable Bluetooth"
+  },
+  "bluetoothNeeded": "Omi reikia Bluetooth, kad prisijungtų prie jūsų nešiojamo įrenginio. Įjunkite Bluetooth ir bandykite dar kartą.",
+  "@bluetoothNeeded": {
+    "description": "Explanation text for why Bluetooth is required"
+  },
+  "contactSupport": "Susisiekti su palaikymu?",
+  "@contactSupport": {
+    "description": "Link text to contact support"
+  },
+  "connectLater": "Prijungti vėliau",
+  "@connectLater": {
+    "description": "Button text to skip immediate device connection"
+  },
+  "grantPermissions": "Suteikti leidimus",
+  "@grantPermissions": {
+    "description": "Title for the permissions request page"
+  },
+  "backgroundActivity": "Foninė veikla",
+  "@backgroundActivity": {
+    "description": "Title for background activity permission"
+  },
+  "backgroundActivityDesc": "Leiskite Omi veikti fone geresniam stabilumui",
+  "@backgroundActivityDesc": {
+    "description": "Description for background activity permission"
+  },
+  "locationAccess": "Vietos prieiga",
+  "@locationAccess": {
+    "description": "Title for location access permission"
+  },
+  "locationAccessDesc": "Įjunkite foninę vietos nustatymą visapusiškesnei patirčiai",
+  "@locationAccessDesc": {
+    "description": "Description for location access permission"
+  },
+  "notifications": "Pranešimai",
+  "@notifications": {
+    "description": "Title for notifications permission"
+  },
+  "notificationsDesc": "Įjunkite pranešimus, kad būtumėte informuoti",
+  "@notificationsDesc": {
+    "description": "Description for notifications permission"
+  },
+  "locationServiceDisabled": "Vietos tarnyba išjungta",
+  "@locationServiceDisabled": {
+    "description": "Title for dialog when location services are off"
+  },
+  "locationServiceDisabledDesc": "Vietos tarnyba išjungta. Eikite į Nustatymus > Privatumas ir sauga > Vietos tarnybos ir įjunkite ją",
+  "@locationServiceDisabledDesc": {
+    "description": "Instructions to enable location services"
+  },
+  "backgroundLocationDenied": "Foninės vietos prieiga atmesta",
+  "@backgroundLocationDenied": {
+    "description": "Title for dialog when background location is denied"
+  },
+  "backgroundLocationDeniedDesc": "Eikite į įrenginio nustatymus ir nustatykite vietos leidimą į „Visada leisti\"",
+  "@backgroundLocationDeniedDesc": {
+    "description": "Instructions to grant background location permission"
+  },
+  "lovingOmi": "Patinka Omi?",
+  "@lovingOmi": {
+    "description": "Title for the app review prompt"
+  },
+  "leaveReviewIos": "Padėkite mums pasiekti daugiau žmonių palikdami atsiliepimą App Store. Jūsų atsiliepimas mums reiškia labai daug!",
+  "@leaveReviewIos": {
+    "description": "App review prompt text for iOS users"
+  },
+  "leaveReviewAndroid": "Padėkite mums pasiekti daugiau žmonių palikdami atsiliepimą „Google Play\" parduotuvėje. Jūsų atsiliepimas mums reiškia labai daug!",
+  "@leaveReviewAndroid": {
+    "description": "App review prompt text for Android users"
+  },
+  "rateOnAppStore": "Įvertinti App Store",
+  "@rateOnAppStore": {
+    "description": "Button text to rate on Apple App Store"
+  },
+  "rateOnGooglePlay": "Įvertinti „Google Play\"",
+  "@rateOnGooglePlay": {
+    "description": "Button text to rate on Google Play Store"
+  },
+  "maybeLater": "Galbūt vėliau",
+  "@maybeLater": {
+    "description": "Button text to dismiss the review prompt"
+  },
+  "speechProfileIntro": "Omi turi išmokti jūsų tikslų ir jūsų balso. Vėliau galėsite jį keisti.",
+  "@speechProfileIntro": {
+    "description": "Introduction text for speech profile creation"
+  },
+  "getStarted": "Pradėti",
+  "@getStarted": {
+    "description": "Button text to begin a process"
+  },
+  "allDone": "Viskas atlikta!",
+  "@allDone": {
+    "description": "Success message after completing a task"
+  },
+  "keepGoing": "Tęskite, jums puikiai sekasi",
+  "@keepGoing": {
+    "description": "Encouragement text during a multi-step process"
+  },
+  "skipThisQuestion": "Praleisti šį klausimą",
+  "@skipThisQuestion": {
+    "description": "Button text to skip the current question"
+  },
+  "skipForNow": "Kol kas praleisti",
+  "@skipForNow": {
+    "description": "Button text to skip the entire process temporarily"
+  },
+  "connectionError": "Ryšio klaida",
+  "@connectionError": {
+    "description": "Title for connection error dialog"
+  },
+  "connectionErrorDesc": "Nepavyko prisijungti prie serverio. Patikrinkite interneto ryšį ir bandykite dar kartą.",
+  "@connectionErrorDesc": {
+    "description": "Description of connection error"
+  },
+  "invalidRecordingMultipleSpeakers": "Aptiktas netinkamas įrašas",
+  "@invalidRecordingMultipleSpeakers": {
+    "description": "Error title when multiple speakers are detected"
+  },
+  "multipleSpeakersDesc": "Atrodo, kad įraše yra keli kalbėtojai. Įsitikinkite, kad esate tylioje vietoje, ir bandykite dar kartą.",
+  "@multipleSpeakersDesc": {
+    "description": "Error description for multiple speakers"
+  },
+  "tooShortDesc": "Neaptikta pakankamai kalbos. Kalbėkite daugiau ir bandykite dar kartą.",
+  "@tooShortDesc": {
+    "description": "Error description for recording being too short"
+  },
+  "invalidRecordingDesc": "Įsitikinkite, kad kalbate bent 5 sekundes ir ne ilgiau nei 90.",
+  "@invalidRecordingDesc": {
+    "description": "Error description for invalid recording duration"
+  },
+  "areYouThere": "Ar jūs čia?",
+  "@areYouThere": {
+    "description": "Timeout warning title"
+  },
+  "noSpeechDesc": "Nepavyko aptikti jokios kalbos. Įsitikinkite, kad kalbate bent 10 sekundžių ir ne ilgiau nei 3 minutes.",
+  "@noSpeechDesc": {
+    "description": "Error description when no speech is detected"
+  },
+  "connectionLost": "Ryšys prarastas",
+  "@connectionLost": {
+    "description": "Title for lost connection dialog"
+  },
+  "connectionLostDesc": "Ryšys buvo nutrauktas. Patikrinkite interneto ryšį ir bandykite dar kartą.",
+  "@connectionLostDesc": {
+    "description": "Description for lost connection"
+  },
+  "tryAgain": "Bandyti dar kartą",
+  "@tryAgain": {
+    "description": "Button text to retry an action"
+  },
+  "connectOmiOmiGlass": "Prijungti Omi / OmiGlass",
+  "@connectOmiOmiGlass": {
+    "description": "Button text to connect specific device models"
+  },
+  "continueWithoutDevice": "Tęsti be įrenginio",
+  "@continueWithoutDevice": {
+    "description": "Button text to proceed without connecting a hardware device"
+  },
+  "permissionsRequired": "Reikalingi leidimai",
+  "@permissionsRequired": {
+    "description": "Title for permissions required dialog"
+  },
+  "permissionsRequiredDesc": "Šiai programai reikia Bluetooth ir vietos leidimų, kad tinkamai veiktų. Įjunkite juos nustatymuose.",
+  "@permissionsRequiredDesc": {
+    "description": "Explanation of why permissions are needed"
+  },
+  "openSettings": "Atidaryti nustatymus",
+  "@openSettings": {
+    "description": "Button text to open app settings"
+  },
+  "wantDifferentName": "Norite, kad jus vadintų kitaip?",
+  "@wantDifferentName": {
+    "description": "Question asking if user wants to change their display name"
+  },
+  "whatsYourName": "Koks jūsų vardas?",
+  "@whatsYourName": {
+    "description": "Question asking for user's name"
+  },
+  "speakTranscribeSummarize": "Kalbėti. Transkribuoti. Apibendrinti.",
+  "@speakTranscribeSummarize": {
+    "description": "Tagline or slogan on the welcome/auth screen"
+  },
+  "signInWithApple": "Prisijungti su Apple",
+  "@signInWithApple": {
+    "description": "Button text for Apple Sign In"
+  },
+  "signInWithGoogle": "Prisijungti su Google",
+  "@signInWithGoogle": {
+    "description": "Button text for Google Sign In"
+  },
+  "byContinuingAgree": "Tęsdami sutinkate su mūsų ",
+  "@byContinuingAgree": {
+    "description": "Legal disclaimer prefix text"
+  },
+  "termsOfUse": "Naudojimo sąlygomis",
+  "@termsOfUse": {
+    "description": "Link text for Terms of Use"
+  },
+  "omiYourAiCompanion": "Omi – jūsų DI palydovas",
+  "@omiYourAiCompanion": {
+    "description": "App title or branding on onboarding screen"
+  },
+  "captureEveryMoment": "Užfiksuokite kiekvieną akimirką. Gaukite DI pagrindu\nsukurtas santraukas. Daugiau nebedarykite užrašų.",
+  "@captureEveryMoment": {
+    "description": "App value proposition or description"
+  },
+  "appleWatchSetup": "Apple Watch sąranka",
+  "@appleWatchSetup": {
+    "description": "Title for Apple Watch setup page"
+  },
+  "permissionRequestedExclaim": "Leidimas paprašytas!",
+  "@permissionRequestedExclaim": {
+    "description": "Title when permission has been requested"
+  },
+  "microphonePermission": "Mikrofono leidimas",
+  "@microphonePermission": {
+    "description": "Title for microphone permission section"
+  },
+  "permissionGrantedNow": "Leidimas suteiktas! Dabar:\n\nAtidarykite Omi programą savo laikrodyje ir paspauskite „Tęsti\" žemiau",
+  "@permissionGrantedNow": {
+    "description": "Instructions after permission is granted"
+  },
+  "needMicrophonePermission": "Mums reikia mikrofono leidimo.\n\n1. Paspauskite „Suteikti leidimą\"\n2. Leiskite savo iPhone\n3. Laikrodžio programėlė užsidarys\n4. Atidarykite iš naujo ir paspauskite „Tęsti\"",
+  "@needMicrophonePermission": {
+    "description": "Instructions for granting microphone permission"
+  },
+  "grantPermissionButton": "Suteikti leidimą",
+  "@grantPermissionButton": {
+    "description": "Button to request permission"
+  },
+  "needHelp": "Reikia pagalbos?",
+  "@needHelp": {
+    "description": "Link to help dialog"
+  },
+  "troubleshootingSteps": "Trikčių šalinimas:\n\n1. Įsitikinkite, kad Omi įdiegtas jūsų laikrodyje\n2. Atidarykite Omi programą savo laikrodyje\n3. Ieškokite leidimo iššokančio lango\n4. Paspauskite „Leisti\", kai bus paprašyta\n5. Programėlė jūsų laikrodyje užsidarys – atidarykite ją iš naujo\n6. Grįžkite ir paspauskite „Tęsti\" savo iPhone",
+  "@troubleshootingSteps": {
+    "description": "Troubleshooting instructions for watch setup"
+  },
+  "recordingStartedSuccessfully": "Įrašymas pradėtas sėkmingai!",
+  "@recordingStartedSuccessfully": {
+    "description": "Success message"
+  },
+  "permissionNotGrantedYet": "Leidimas dar nesuteiktas. Įsitikinkite, kad leidote prieigą prie mikrofono ir iš naujo atidarėte programą savo laikrodyje.",
+  "@permissionNotGrantedYet": {
+    "description": "Error message when permission is missing"
+  },
+  "errorRequestingPermission": "Klaida prašant leidimo: {error}",
+  "@errorRequestingPermission": {
+    "description": "Error message for permission request failure",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "errorStartingRecording": "Klaida pradedant įrašymą: {error}",
+  "@errorStartingRecording": {
+    "description": "Error message for recording start failure",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "selectPrimaryLanguage": "Pasirinkite savo pagrindinę kalbą",
+  "@selectPrimaryLanguage": {
+    "description": "Title for language selection dialog"
+  },
+  "languageBenefits": "Nustatykite savo kalbą tikslesnėms transkripcijoms ir individualizuotai patirčiai",
+  "@languageBenefits": {
+    "description": "Explanation of why language selection matters"
+  },
+  "whatsYourPrimaryLanguage": "Kokia jūsų pagrindinė kalba?",
+  "@whatsYourPrimaryLanguage": {
+    "description": "Question asking for primary language"
+  },
+  "selectYourLanguage": "Pasirinkite savo kalbą",
+  "@selectYourLanguage": {
+    "description": "Placeholder for selected language name"
+  },
+  "personalGrowthJourney": "Jūsų asmeninio augimo kelionė su DI, kuris klauso kiekvieno jūsų žodžio.",
+  "@personalGrowthJourney": {
+    "description": "Tagline on onboarding wrapper"
+  },
+  "actionItemsTitle": "Užduotys",
+  "@actionItemsTitle": {
+    "description": "Title for the Action Items page"
+  },
+  "actionItemsDescription": "Bakstelėkite, kad redaguotumėte • Ilgai spauskite, kad pasirinktumėte • Braukite veiksmams",
+  "@actionItemsDescription": {
+    "description": "Instruction text for Action Items interactions"
+  },
+  "tabToDo": "Atlikti",
+  "@tabToDo": {
+    "description": "Label for To Do tab"
+  },
+  "tabDone": "Baigta",
+  "@tabDone": {
+    "description": "Label for Done tab"
+  },
+  "tabOld": "Senos",
+  "@tabOld": {
+    "description": "Label for Old tab"
+  },
+  "emptyTodoMessage": "🎉 Viskas atnaujinta!\nNėra laukiančių užduočių",
+  "@emptyTodoMessage": {
+    "description": "Message when To Do list is empty"
+  },
+  "emptyDoneMessage": "Kol kas nėra baigtų elementų",
+  "@emptyDoneMessage": {
+    "description": "Message when Done list is empty"
+  },
+  "emptyOldMessage": "✅ Nėra senų užduočių",
+  "@emptyOldMessage": {
+    "description": "Message when Old list is empty"
+  },
+  "noItems": "Nėra elementų",
+  "@noItems": {
+    "description": "Generic no items message"
+  },
+  "actionItemMarkedIncomplete": "Užduotis pažymėta kaip nebaigta",
+  "@actionItemMarkedIncomplete": {
+    "description": "Snackbar message when item marked incomplete"
+  },
+  "actionItemCompleted": "Užduotis baigta",
+  "@actionItemCompleted": {
+    "description": "Snackbar message when item completed"
+  },
+  "deleteActionItemTitle": "Ištrinti užduotį",
+  "@deleteActionItemTitle": {
+    "description": "Title for delete item dialog"
+  },
+  "deleteActionItemMessage": "Ar tikrai norite ištrinti šią užduotį?",
+  "@deleteActionItemMessage": {
+    "description": "Confirmation message for deleting single item"
+  },
+  "deleteSelectedItemsTitle": "Ištrinti pasirinktus elementus",
+  "@deleteSelectedItemsTitle": {
+    "description": "Title for bulk delete dialog"
+  },
+  "deleteSelectedItemsMessage": "Ar tikrai norite ištrinti {count} pasirinktą(-s) užduotį(-is)?",
+  "@deleteSelectedItemsMessage": {
+    "description": "Confirmation message for bulk delete",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "s": {
+        "type": "String",
+        "description": "Plural suffix (s) if needed, handled by logic or just append 's' for simplicity if count > 1"
+      }
+    }
+  },
+  "actionItemDeletedResult": "Užduotis „{description}\" ištrinta",
+  "@actionItemDeletedResult": {
+    "description": "Snackbar message after deleting single item",
+    "placeholders": {
+      "description": {
+        "type": "String"
+      }
+    }
+  },
+  "itemsDeletedResult": "Ištrinta {count} užduotis(-ių)",
+  "@itemsDeletedResult": {
+    "description": "Snackbar message after bulk delete",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "s": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToDeleteItem": "Nepavyko ištrinti užduoties",
+  "@failedToDeleteItem": {
+    "description": "Error message when deletion fails"
+  },
+  "failedToDeleteItems": "Nepavyko ištrinti elementų",
+  "@failedToDeleteItems": {
+    "description": "Error message when bulk deletion fails"
+  },
+  "failedToDeleteSomeItems": "Nepavyko ištrinti kai kurių elementų",
+  "@failedToDeleteSomeItems": {
+    "description": "Error message when partial deletion failure"
+  },
+  "welcomeActionItemsTitle": "Pasiruošę užduotims",
+  "@welcomeActionItemsTitle": {
+    "description": "Heading for empty state welcome"
+  },
+  "welcomeActionItemsDescription": "Jūsų DI automatiškai išgaus užduotis iš jūsų pokalbių. Jos atsiras čia, kai bus sukurtos.",
+  "@welcomeActionItemsDescription": {
+    "description": "Description for empty state welcome"
+  },
+  "autoExtractionFeature": "Automatiškai išgauta iš pokalbių",
+  "@autoExtractionFeature": {
+    "description": "Feature point description"
+  },
+  "editSwipeFeature": "Bakstelėkite, kad redaguotumėte, braukite, kad baigtumėte ar ištrintumėte",
+  "@editSwipeFeature": {
+    "description": "Feature point description"
+  },
+  "itemsSelected": "Pasirinkta: {count}",
+  "@itemsSelected": {
+    "description": "Selection count in app bar",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "selectAll": "Pasirinkti viską",
+  "@selectAll": {
+    "description": "Tooltip for select all"
+  },
+  "deleteSelected": "Ištrinti pasirinktus",
+  "@deleteSelected": {
+    "description": "Tooltip for delete selected"
+  },
+  "searchMemories": "Ieškoti {count} prisiminimų",
+  "@searchMemories": {
+    "description": "Hint text for memories search bar",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "memoryDeleted": "Prisiminimas ištrintas.",
+  "@memoryDeleted": {
+    "description": "Notification when memory deleted"
+  },
+  "undo": "Atšaukti",
+  "@undo": {
+    "description": "Undo button text"
+  },
+  "noMemoriesYet": "Kol kas nėra prisiminimų",
+  "@noMemoriesYet": {
+    "description": "Empty state text"
+  },
+  "noAutoMemories": "Kol kas nėra automatiškai išgautų prisiminimų",
+  "@noAutoMemories": {
+    "description": "Empty state text for auto category"
+  },
+  "noManualMemories": "Kol kas nėra rankinio prisiminimų",
+  "@noManualMemories": {
+    "description": "Empty state text for manual category"
+  },
+  "noMemoriesInCategories": "Šiose kategorijose nėra prisiminimų",
+  "@noMemoriesInCategories": {
+    "description": "Empty state text for filtered categories"
+  },
+  "noMemoriesFound": "Prisiminimų nerasta",
+  "@noMemoriesFound": {
+    "description": "Empty state text for search results"
+  },
+  "addFirstMemory": "Pridėti pirmąjį prisiminimą",
+  "@addFirstMemory": {
+    "description": "Button to add first memory"
+  },
+  "clearMemoryTitle": "Išvalyti Omi atmintį",
+  "@clearMemoryTitle": {
+    "description": "Dialog title for clearing memory"
+  },
+  "clearMemoryMessage": "Ar tikrai norite išvalyti Omi atmintį? Šio veiksmo negalima atšaukti.",
+  "@clearMemoryMessage": {
+    "description": "Dialog content for clearing memory"
+  },
+  "clearMemoryButton": "Išvalyti atmintį",
+  "@clearMemoryButton": {
+    "description": "Button text to confirm clear"
+  },
+  "memoryClearedSuccess": "Omi atmintis apie jus išvalyta",
+  "@memoryClearedSuccess": {
+    "description": "Snackbar success message"
+  },
+  "noMemoriesToDelete": "Nėra prisiminimų trinimui",
+  "@noMemoriesToDelete": {
+    "description": "Snackbar message"
+  },
+  "createMemoryTooltip": "Sukurti naują prisiminimą",
+  "@createMemoryTooltip": {
+    "description": "Tooltip for create memory FAB"
+  },
+  "createActionItemTooltip": "Sukurti naują užduotį",
+  "@createActionItemTooltip": {
+    "description": "Tooltip for create action item FAB"
+  },
+  "memoryManagement": "Prisiminimų valdymas",
+  "@memoryManagement": {
+    "description": "Title for memory management sheet"
+  },
+  "filterMemories": "Filtruoti prisiminimus",
+  "@filterMemories": {
+    "description": "Section header"
+  },
+  "totalMemoriesCount": "Turite {count} prisiminimų iš viso",
+  "@totalMemoriesCount": {
+    "description": "Count display",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "publicMemories": "Vieši prisiminimai",
+  "@publicMemories": {
+    "description": "Label"
+  },
+  "privateMemories": "Privatūs prisiminimai",
+  "@privateMemories": {
+    "description": "Label"
+  },
+  "makeAllPrivate": "Padaryti visus prisiminimus privačius",
+  "@makeAllPrivate": {
+    "description": "Button label"
+  },
+  "makeAllPublic": "Padaryti visus prisiminimus viešus",
+  "@makeAllPublic": {
+    "description": "Button label"
+  },
+  "deleteAllMemories": "Ištrinti visus prisiminimus",
+  "@deleteAllMemories": {
+    "description": "Button label"
+  },
+  "allMemoriesPrivateResult": "Visi prisiminimai dabar privatūs",
+  "@allMemoriesPrivateResult": {
+    "description": "Snackbar"
+  },
+  "allMemoriesPublicResult": "Visi prisiminimai dabar vieši",
+  "@allMemoriesPublicResult": {
+    "description": "Snackbar"
+  },
+  "newMemory": "Naujas prisiminimas",
+  "@newMemory": {
+    "description": "Dialog title"
+  },
+  "editMemory": "Redaguoti prisiminimą",
+  "@editMemory": {
+    "description": "Dialog title"
+  },
+  "memoryContentHint": "Mėgstu valgyti ledus...",
+  "@memoryContentHint": {
+    "description": "Input hint"
+  },
+  "failedToSaveMemory": "Nepavyko išsaugoti. Patikrinkite ryšį.",
+  "@failedToSaveMemory": {
+    "description": "Error message"
+  },
+  "saveMemory": "Išsaugoti prisiminimą",
+  "@saveMemory": {
+    "description": "Button label"
+  },
+  "retry": "Bandyti dar kartą",
+  "@retry": {
+    "description": "Button label"
+  },
+  "createActionItem": "Sukurti užduotį",
+  "@createActionItem": {
+    "description": "Sheet title"
+  },
+  "editActionItem": "Redaguoti užduotį",
+  "@editActionItem": {
+    "description": "Sheet title"
+  },
+  "actionItemDescriptionHint": "Ką reikia padaryti?",
+  "@actionItemDescriptionHint": {
+    "description": "Input hint"
+  },
+  "actionItemDescriptionEmpty": "Užduoties aprašymas negali būti tuščias.",
+  "@actionItemDescriptionEmpty": {
+    "description": "Error message"
+  },
+  "actionItemUpdated": "Užduotis atnaujinta",
+  "@actionItemUpdated": {
+    "description": "Snackbar"
+  },
+  "failedToUpdateActionItem": "Nepavyko atnaujinti užduoties",
+  "@failedToUpdateActionItem": {
+    "description": "Snackbar"
+  },
+  "actionItemCreated": "Užduotis sukurta",
+  "@actionItemCreated": {
+    "description": "Snackbar"
+  },
+  "failedToCreateActionItem": "Nepavyko sukurti užduoties",
+  "@failedToCreateActionItem": {
+    "description": "Snackbar"
+  },
+  "dueDate": "Terminas",
+  "@dueDate": {
+    "description": "Label"
+  },
+  "time": "Laikas",
+  "@time": {
+    "description": "Label"
+  },
+  "addDueDate": "Pridėti terminą",
+  "@addDueDate": {
+    "description": "Placeholder"
+  },
+  "pressDoneToSave": "Paspauskite atlikta, kad išsaugotumėte",
+  "@pressDoneToSave": {
+    "description": "Instruction"
+  },
+  "pressDoneToCreate": "Paspauskite atlikta, kad sukurtumėte",
+  "@pressDoneToCreate": {
+    "description": "Instruction"
+  },
+  "filterAll": "Viskas",
+  "@filterAll": {
+    "description": "Filter option"
+  },
+  "filterSystem": "Apie jus",
+  "@filterSystem": {
+    "description": "Filter option for facts about the user"
+  },
+  "filterInteresting": "Įžvalgos",
+  "@filterInteresting": {
+    "description": "Filter option for external wisdom/advice"
+  },
+  "filterManual": "Rankinis",
+  "@filterManual": {
+    "description": "Filter option"
+  },
+  "completed": "Baigta",
+  "@completed": {
+    "description": "Status label"
+  },
+  "markComplete": "Pažymėti kaip baigtą",
+  "@markComplete": {
+    "description": "Action label"
+  },
+  "actionItemDeleted": "Užduotis ištrinta",
+  "@actionItemDeleted": {
+    "description": "Snackbar"
+  },
+  "failedToDeleteActionItem": "Nepavyko ištrinti užduoties",
+  "@failedToDeleteActionItem": {
+    "description": "Snackbar"
+  },
+  "deleteActionItemConfirmTitle": "Ištrinti užduotį",
+  "@deleteActionItemConfirmTitle": {
+    "description": "Dialog title"
+  },
+  "deleteActionItemConfirmMessage": "Ar tikrai norite ištrinti šią užduotį?",
+  "@deleteActionItemConfirmMessage": {
+    "description": "Dialog message"
+  },
+  "appLanguage": "Programėlės kalba",
+  "@appLanguage": {
+    "description": "Label for app language selector"
+  },
+  "appInterfaceSectionTitle": "PROGRAMOS SĄSAJA",
+  "speechTranscriptionSectionTitle": "KALBA IR TRANSKRIBAVIMAS",
+  "languageSettingsHelperText": "Programos kalba keičia meniu ir mygtukus. Kalbos kalba įtakoja, kaip transkribuojami jūsų įrašai."
+}

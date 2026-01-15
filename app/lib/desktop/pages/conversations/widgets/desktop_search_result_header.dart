@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
+
 import 'package:provider/provider.dart';
+
+import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/ui/atoms/omi_badge.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/ui/atoms/omi_loading_badge.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class DesktopSearchResultHeader extends StatelessWidget {
   const DesktopSearchResultHeader({super.key});

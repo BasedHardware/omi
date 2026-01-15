@@ -1,15 +1,19 @@
 import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:omi/widgets/extensions/string.dart';
+import 'package:tuple/tuple.dart';
+import 'package:uuid/uuid.dart';
+
 import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:tuple/tuple.dart';
-import 'package:uuid/uuid.dart';
-import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:omi/utils/logger.dart';
+import 'package:omi/widgets/extensions/string.dart';
 
 class MemoriesProvider extends ChangeNotifier {
   List<Memory> _memories = [];
@@ -179,7 +183,7 @@ class MemoriesProvider extends ChangeNotifier {
     if (pendingMemories.isEmpty) return;
 
     _isSyncing = true;
-    debugPrint('MemoriesProvider: Syncing ${pendingMemories.length} pending memories...');
+    Logger.debug('MemoriesProvider: Syncing ${pendingMemories.length} pending memories...');
 
     for (var memory in List.from(pendingMemories)) {
       try {
@@ -197,7 +201,7 @@ class MemoriesProvider extends ChangeNotifier {
           }
         }
       } catch (e) {
-        debugPrint('MemoriesProvider: Failed to sync memory ${memory.id}: $e');
+        Logger.debug('MemoriesProvider: Failed to sync memory ${memory.id}: $e');
         // Keep in pending list for next sync attempt
       }
     }

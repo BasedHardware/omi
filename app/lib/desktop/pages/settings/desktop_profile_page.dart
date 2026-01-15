@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/payments/payments_page.dart';
 import 'package:omi/pages/persona/persona_profile.dart';
@@ -20,7 +23,6 @@ import 'package:omi/ui/atoms/omi_settings_tile.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:provider/provider.dart';
 
 class DesktopProfilePage extends StatefulWidget {
   const DesktopProfilePage({super.key});

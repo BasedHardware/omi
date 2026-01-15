@@ -3,11 +3,14 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+
+import 'package:permission_handler/permission_handler.dart';
+
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/file.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:omi/utils/logger.dart';
 
 enum VoiceRecorderState {
   idle,
@@ -122,7 +125,7 @@ class VoiceRecorderProvider extends ChangeNotifier {
         }
       },
       onRecording: () {
-        debugPrint('VoiceRecorderProvider: Recording started');
+        Logger.debug('VoiceRecorderProvider: Recording started');
         _state = VoiceRecorderState.recording;
         _audioChunks = [];
         // Reset audio levels
@@ -132,10 +135,10 @@ class VoiceRecorderProvider extends ChangeNotifier {
         notifyListeners();
       },
       onStop: () {
-        debugPrint('VoiceRecorderProvider: Recording stopped');
+        Logger.debug('VoiceRecorderProvider: Recording stopped');
       },
       onInitializing: () {
-        debugPrint('VoiceRecorderProvider: Initializing');
+        Logger.debug('VoiceRecorderProvider: Initializing');
       },
     );
   }
@@ -183,7 +186,7 @@ class VoiceRecorderProvider extends ChangeNotifier {
         close();
       }
     } catch (e) {
-      debugPrint('Error processing recording: $e');
+      Logger.debug('Error processing recording: $e');
       _state = VoiceRecorderState.transcribeFailed;
       _isProcessing = false;
       notifyListeners();
@@ -201,6 +204,10 @@ class VoiceRecorderProvider extends ChangeNotifier {
   }
 
   void close() {
+    if (_state == VoiceRecorderState.idle) {
+      return;
+    }
+
     if (_state == VoiceRecorderState.recording) {
       stopRecording();
     }
@@ -209,12 +216,12 @@ class VoiceRecorderProvider extends ChangeNotifier {
     _audioChunks = [];
     _transcript = '';
     _isProcessing = false;
-    
+
     // Reset audio levels
     for (int i = 0; i < _audioLevels.length; i++) {
       _audioLevels[i] = 0.1;
     }
-    
+
     notifyListeners();
     _onClose?.call();
   }
@@ -228,4 +235,3 @@ class VoiceRecorderProvider extends ChangeNotifier {
     super.dispose();
   }
 }
-

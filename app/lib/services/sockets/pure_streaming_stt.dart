@@ -3,16 +3,17 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:flutter/material.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/services/sockets/pure_socket.dart';
-import 'package:omi/services/custom_stt_log_service.dart';
 import 'package:omi/models/stt_response_schema.dart';
 import 'package:omi/models/stt_result.dart';
+import 'package:omi/services/custom_stt_log_service.dart';
+import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/utils/audio/audio_transcoder.dart';
 import 'package:omi/utils/debug_log_manager.dart';
+import 'package:omi/utils/logger.dart';
 
 /// Configuration for streaming STT WebSocket connections
 class StreamingSttConfig {
@@ -193,11 +194,11 @@ class GeminiStreamingSttSocket implements IPureSocket {
       try {
         messageStr = utf8.decode(message);
       } catch (e) {
-        debugPrint("[GeminiStreaming] Failed to decode binary message: $e");
+        Logger.debug("[GeminiStreaming] Failed to decode binary message: $e");
         return;
       }
     } else {
-      debugPrint("[GeminiStreaming] Unsupported message type: ${message.runtimeType}");
+      Logger.debug("[GeminiStreaming] Unsupported message type: ${message.runtimeType}");
       return;
     }
 
@@ -246,7 +247,7 @@ class GeminiStreamingSttSocket implements IPureSocket {
       }
     } catch (e, trace) {
       CustomSttLogService.instance.error('GeminiStreaming', 'Parse error: $e');
-      debugPrintStack(stackTrace: trace);
+      Logger.handle(e, trace, message: 'GeminiStreaming parse error');
     }
   }
 
@@ -522,7 +523,7 @@ class PureStreamingSttSocket implements IPureSocket {
       if (json is Map && json.containsKey('type')) {
         final type = json['type'];
         if (type == 'Metadata' || type == 'UtteranceEnd') {
-          debugPrint("[StreamingSTT] Received $type message");
+          Logger.debug("[StreamingSTT] Received $type message");
           return;
         }
         if (type != 'Results') {
@@ -573,7 +574,7 @@ class PureStreamingSttSocket implements IPureSocket {
       }
     } catch (e, trace) {
       CustomSttLogService.instance.error(config.serviceId, 'Parse error: $e');
-      debugPrintStack(stackTrace: trace);
+      Logger.handle(e, trace, message: '${config.serviceId} parse error');
     }
   }
 

@@ -1,5 +1,6 @@
 import 'package:mixpanel_analytics/mixpanel_analytics.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/memory.dart';

@@ -1,16 +1,19 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:omi/backend/preferences.dart';
-import 'package:provider/provider.dart';
 import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/ui/atoms/omi_checkbox.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class DesktopActionItemFormDialog extends StatefulWidget {
   final ActionItemWithMetadata? actionItem;
@@ -188,7 +191,7 @@ class _DesktopActionItemFormDialogState extends State<DesktopActionItemFormDialo
         Navigator.of(context).pop(true);
       }
     } catch (e) {
-      debugPrint('Error saving action item: $e');
+      Logger.debug('Error saving action item: $e');
       _showSnackBar(
         _isEditing ? 'Failed to update action item' : 'Failed to create action item',
         Colors.red,
@@ -223,7 +226,7 @@ class _DesktopActionItemFormDialogState extends State<DesktopActionItemFormDialo
           Navigator.of(context).pop(true);
         }
       } catch (e) {
-        debugPrint('Error deleting action item: $e');
+        Logger.debug('Error deleting action item: $e');
         _showSnackBar('Failed to delete action item', Colors.red);
         setState(() {
           _isLoading = false;
@@ -258,7 +261,7 @@ class _DesktopActionItemFormDialogState extends State<DesktopActionItemFormDialo
         Navigator.of(context).pop(true);
       }
     } catch (e) {
-      debugPrint('Error deleting action item: $e');
+      Logger.debug('Error deleting action item: $e');
       _showSnackBar('Failed to delete action item', Colors.red);
     } finally {
       if (mounted) {

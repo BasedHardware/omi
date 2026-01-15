@@ -2,8 +2,11 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:permission_handler/permission_handler.dart';
+
 import 'package:omi/backend/http/api/speech_profile.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
@@ -17,7 +20,7 @@ import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
 import 'package:omi/utils/constants.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:omi/utils/logger.dart';
 
 class SpeechProfileProvider extends ChangeNotifier
     with MessageNotifierMixin
@@ -136,7 +139,7 @@ class SpeechProfileProvider extends ChangeNotifier
       setInitialised(true);
       return true;
     } catch (e) {
-      debugPrint('Error during initialise: $e');
+      Logger.debug('Error during initialise: $e');
       notifyError('SOCKET_INIT_FAILED');
       return false;
     } finally {
@@ -176,7 +179,7 @@ class SpeechProfileProvider extends ChangeNotifier
 
   /// Start phone microphone streaming (alternative to BLE device streaming)
   Future<void> _initiatePhoneMicStreaming() async {
-    debugPrint('Starting phone mic streaming for speech profile...');
+    Logger.debug('Starting phone mic streaming for speech profile...');
 
     // Request mic permission
     await Permission.microphone.request();
@@ -194,11 +197,11 @@ class SpeechProfileProvider extends ChangeNotifier
         }
       },
       onRecording: () {
-        debugPrint('Phone mic recording started');
+        Logger.debug('Phone mic recording started');
         updateStartedRecording(true);
       },
       onStop: () {
-        debugPrint('Phone mic recording stopped');
+        Logger.debug('Phone mic recording stopped');
       },
     );
   }
@@ -206,7 +209,7 @@ class SpeechProfileProvider extends ChangeNotifier
   /// Stop phone microphone streaming
   void _stopPhoneMicStreaming() {
     if (usePhoneMic) {
-      debugPrint('Stopping phone mic streaming');
+      Logger.debug('Stopping phone mic streaming');
       ServiceManager.instance().mic.stop();
     }
   }
@@ -214,11 +217,7 @@ class SpeechProfileProvider extends ChangeNotifier
   _handleCompletion() async {
     if (uploadingProfile || profileCompleted) return;
     // Only count words from user segments, not Omi questions
-    String userText = segments
-        .where((e) => e.speakerId != omiSpeakerId)
-        .map((e) => e.text)
-        .join(' ')
-        .trim();
+    String userText = segments.where((e) => e.speakerId != omiSpeakerId).map((e) => e.text).join(' ').trim();
     int wordsCount = userText.split(' ').length;
     percentageCompleted = (wordsCount / targetWordsCount).clamp(0, 1);
     notifyListeners();
@@ -243,22 +242,22 @@ class SpeechProfileProvider extends ChangeNotifier
       _bleBytesStream?.cancel();
 
       updateLoadingText('Memorizing your voice...');
-      debugPrint('Creating WAV file...');
+      Logger.debug('Creating WAV file...');
       var data = await audioStorage.createWavFile(filename: 'speaker_profile.wav');
-      debugPrint('WAV file created, uploading profile...');
+      Logger.debug('WAV file created, uploading profile...');
 
       bool uploadSuccess = false;
       try {
         uploadSuccess = await uploadProfile(data.item1).timeout(
           const Duration(seconds: 30),
           onTimeout: () {
-            debugPrint('Profile upload timed out after 30 seconds');
+            Logger.debug('Profile upload timed out after 30 seconds');
             return false;
           },
         );
-        debugPrint('Profile upload completed: $uploadSuccess');
+        Logger.debug('Profile upload completed: $uploadSuccess');
       } catch (e) {
-        debugPrint('Error uploading profile: $e');
+        Logger.debug('Error uploading profile: $e');
         uploadSuccess = false;
       }
 
@@ -269,20 +268,20 @@ class SpeechProfileProvider extends ChangeNotifier
 
         // Still trigger conversation processing
         if (_processConversationCallback != null) {
-          debugPrint('Triggering conversation processing despite upload failure...');
+          Logger.debug('Triggering conversation processing despite upload failure...');
           _processConversationCallback!();
         }
         return;
       }
 
       SharedPreferencesUtil().hasSpeakerProfile = true;
-      debugPrint('Speaker profile saved to preferences');
+      Logger.debug('Speaker profile saved to preferences');
 
       updateLoadingText('Personalizing your experience...');
 
       // Trigger conversation processing before marking complete
       if (_processConversationCallback != null) {
-        debugPrint('Triggering conversation processing...');
+        Logger.debug('Triggering conversation processing...');
         _processConversationCallback!();
       }
 
@@ -346,9 +345,9 @@ class SpeechProfileProvider extends ChangeNotifier
   _validateSingleSpeaker() {
     // Filter out Omi question segments for speaker validation
     final userSegments = segments.where((e) => e.speakerId != omiSpeakerId).toList();
-    
+
     int speakersCount = userSegments.map((e) => e.speaker).toSet().length;
-    debugPrint('_validateSingleSpeaker speakers count: $speakersCount');
+    Logger.debug('_validateSingleSpeaker speakers count: $speakersCount');
     if (speakersCount > 1) {
       var speakerToWords = userSegments.fold<Map<int, int>>(
         {},
@@ -357,7 +356,7 @@ class SpeechProfileProvider extends ChangeNotifier
           return previousValue;
         },
       );
-      debugPrint('speakerToWords: $speakerToWords');
+      Logger.debug('speakerToWords: $speakerToWords');
       if (speakerToWords.values.every((element) => element / userSegments.length > 0.08)) {
         notifyError('MULTIPLE_SPEAKERS');
       }
@@ -384,11 +383,7 @@ class SpeechProfileProvider extends ChangeNotifier
 
   void updateProgressMessage() {
     // Only show user's speech, not Omi questions
-    text = segments
-        .where((e) => e.speakerId != omiSpeakerId)
-        .map((e) => e.text)
-        .join(' ')
-        .trim();
+    text = segments.where((e) => e.speakerId != omiSpeakerId).map((e) => e.text).join(' ').trim();
     int wordsCount = text.split(' ').length;
     message = 'Keep speaking until you get 100%.';
     if (wordsCount > 10) {
@@ -454,7 +449,7 @@ class SpeechProfileProvider extends ChangeNotifier
           notifyListeners();
         }
       default:
-        debugPrint("Device connection state is not supported $state");
+        Logger.debug("Device connection state is not supported $state");
     }
   }
 
@@ -466,7 +461,7 @@ class SpeechProfileProvider extends ChangeNotifier
 
   @override
   void onClosed([int? closeCode]) {
-    debugPrint('Speech profile socket closed with code: $closeCode');
+    Logger.debug('Speech profile socket closed with code: $closeCode');
     // Only notify error if we're still recording and not completed
     if (startedRecording && !profileCompleted && !uploadingProfile) {
       notifyError('SOCKET_DISCONNECTED');
@@ -475,7 +470,7 @@ class SpeechProfileProvider extends ChangeNotifier
 
   @override
   void onError(Object err) {
-    debugPrint('Speech profile socket error: $err');
+    Logger.debug('Speech profile socket error: $err');
     if (startedRecording && !profileCompleted && !uploadingProfile) {
       notifyError('SOCKET_ERROR');
     }
@@ -483,19 +478,19 @@ class SpeechProfileProvider extends ChangeNotifier
 
   @override
   void onMessageEventReceived(MessageEvent event) {
-    debugPrint('onMessageEventReceived: ${event.eventType}');
+    Logger.debug('onMessageEventReceived: ${event.eventType}');
 
     if (event is OnboardingQuestionEvent) {
       currentQuestion = event.question;
       currentQuestionIndex = event.questionIndex;
       totalQuestions = event.totalQuestions;
-      debugPrint('Received question ${event.questionIndex + 1}/${event.totalQuestions}: ${event.question}');
+      Logger.debug('Received question ${event.questionIndex + 1}/${event.totalQuestions}: ${event.question}');
       notifyListeners();
     } else if (event is OnboardingQuestionAnsweredEvent) {
-      debugPrint('Question ${event.questionIndex} answered');
+      Logger.debug('Question ${event.questionIndex} answered');
       notifyInfo('NEXT_QUESTION');
     } else if (event is OnboardingCompleteEvent) {
-      debugPrint('Onboarding complete from backend: conversationId=${event.conversationId}');
+      Logger.debug('Onboarding complete from backend: conversationId=${event.conversationId}');
       finalize();
     }
   }
@@ -504,7 +499,7 @@ class SpeechProfileProvider extends ChangeNotifier
   void onSegmentReceived(List<TranscriptSegment> newSegments) {
     if (newSegments.isEmpty) return;
 
-    debugPrint('onSegmentReceived: ${newSegments.length} new segments, existing: ${segments.length}');
+    Logger.debug('onSegmentReceived: ${newSegments.length} new segments, existing: ${segments.length}');
 
     // Filter out Omi question segments for audio trimming calculation
     final userSegments = newSegments.where((s) => s.speakerId != omiSpeakerId).toList();
@@ -523,11 +518,7 @@ class SpeechProfileProvider extends ChangeNotifier
     _validateSingleSpeaker();
 
     // Display only user's speech, not Omi's questions
-    text = segments
-        .where((e) => e.speakerId != omiSpeakerId)
-        .map((e) => e.text)
-        .join(' ')
-        .trim();
+    text = segments.where((e) => e.speakerId != omiSpeakerId).map((e) => e.text).join(' ').trim();
     percentageCompleted = questionProgress;
 
     notifyInfo('SCROLL_DOWN');

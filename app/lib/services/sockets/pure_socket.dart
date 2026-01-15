@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/status.dart' as socket_channel_status;
 import 'package:web_socket_channel/web_socket_channel.dart';
+
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/utils/debug_log_manager.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 enum PureSocketStatus { notConnected, connecting, connected, disconnected }
@@ -67,7 +68,7 @@ class PureSocket implements IPureSocket {
       return false;
     }
 
-    debugPrint("request wss ${url}");
+    Logger.debug("request wss ${url}");
     final headers = await buildHeaders(requireAuthCheck: true);
 
     _channel = IOWebSocketChannel.connect(
@@ -104,7 +105,7 @@ class PureSocket implements IPureSocket {
       });
     }
     if (err != null) {
-      debugPrint("[Socket] Connect error: $err");
+      Logger.debug("[Socket] Connect error: $err");
       _status = PureSocketStatus.notConnected;
       return false;
     }
@@ -119,7 +120,7 @@ class PureSocket implements IPureSocket {
     _channel?.stream.listen(
       (message) {
         if (message == "ping") {
-          // debugPrint(message);
+          // Logger.debug(message);
           // Pong frame added manually https://www.rfc-editor.org/rfc/rfc6455#section-5.5.2
           _channel?.sink.add([0x8A, 0x00]);
           return;
@@ -130,7 +131,7 @@ class PureSocket implements IPureSocket {
         that.onError(err, trace);
       },
       onDone: () {
-        debugPrint("onDone with close code: ${_channel?.closeCode}");
+        Logger.debug("onDone with close code: ${_channel?.closeCode}");
         that.onClosed(_channel?.closeCode);
       },
       cancelOnError: true,
@@ -150,7 +151,7 @@ class PureSocket implements IPureSocket {
       _channel?.sink.close(socket_channel_status.normalClosure);
     }
     _status = PureSocketStatus.disconnected;
-    debugPrint("[Socket] disconnect");
+    Logger.debug("[Socket] disconnect");
     onClosed(_channel?.closeCode);
   }
 
@@ -166,7 +167,7 @@ class PureSocket implements IPureSocket {
   void onClosed([int? closeCode]) {
     _status = PureSocketStatus.disconnected;
     final closeReason = _getCloseCodeReason(closeCode);
-    debugPrint("Socket closed with code: $closeCode ($closeReason)");
+    Logger.debug("Socket closed with code: $closeCode ($closeReason)");
 
     DebugLogManager.logEvent('pure_socket_closed', {
       'close_code': closeCode ?? -1,
@@ -195,8 +196,7 @@ class PureSocket implements IPureSocket {
   @override
   void onError(Object err, StackTrace trace) {
     _status = PureSocketStatus.disconnected;
-    debugPrint("[Socket] Error: $err");
-    debugPrintStack(stackTrace: trace);
+    Logger.debug("[Socket] Error: $err");
 
     DebugLogManager.logError(err, trace, 'pure_socket_error', {
       'url': url,
@@ -208,7 +208,7 @@ class PureSocket implements IPureSocket {
 
   @override
   void onMessage(dynamic message) {
-    // debugPrint("[Socket] Message $message");
+    // Logger.debug("[Socket] Message $message");
     _listener?.onMessage(message);
   }
 

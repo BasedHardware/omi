@@ -1,19 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/settings/usage_page.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
+import 'package:omi/ui/molecules/omi_context_menu.dart';
+import 'package:omi/ui/molecules/omi_edit_dialog.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/extensions/string.dart';
-import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
-import 'package:omi/ui/molecules/omi_edit_dialog.dart';
-import 'package:omi/ui/molecules/omi_context_menu.dart';
-import 'package:provider/provider.dart';
-import 'package:omi/providers/conversation_provider.dart';
 
 class DesktopConversationCard extends StatefulWidget {
   final ServerConversation conversation;

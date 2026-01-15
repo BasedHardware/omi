@@ -1,0 +1,1119 @@
+{
+  "@@locale": "nl",
+  "@@last_modified": "2024-12-26",
+  "appTitle": "Omi",
+  "conversationTab": "Gesprek",
+  "transcriptTab": "Transcript",
+  "actionItemsTab": "Actiepunten",
+  "deleteConversationTitle": "Gesprek verwijderen?",
+  "deleteConversationMessage": "Weet je zeker dat je dit gesprek wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.",
+  "confirm": "Bevestigen",
+  "cancel": "Annuleren",
+  "ok": "OK",
+  "delete": "Verwijderen",
+  "add": "Toevoegen",
+  "update": "Bijwerken",
+  "save": "Opslaan",
+  "edit": "Bewerken",
+  "close": "Sluiten",
+  "clear": "Wissen",
+  "copyTranscript": "Transcript kopiëren",
+  "copySummary": "Samenvatting kopiëren",
+  "testPrompt": "Prompt testen",
+  "reprocessConversation": "Gesprek opnieuw verwerken",
+  "deleteConversation": "Gesprek verwijderen",
+  "contentCopied": "Inhoud gekopieerd naar klembord",
+  "failedToUpdateStarred": "Kan favorietenstatus niet bijwerken.",
+  "conversationUrlNotShared": "Gesprek-URL kon niet worden gedeeld.",
+  "errorProcessingConversation": "Fout bij het verwerken van gesprek. Probeer het later opnieuw.",
+  "noInternetConnection": "Controleer je internetverbinding en probeer het opnieuw.",
+  "unableToDeleteConversation": "Kan gesprek niet verwijderen",
+  "somethingWentWrong": "Er is iets misgegaan! Probeer het later opnieuw.",
+  "copyErrorMessage": "Foutmelding kopiëren",
+  "errorCopied": "Foutmelding gekopieerd naar klembord",
+  "remaining": "Resterend",
+  "loading": "Laden...",
+  "loadingDuration": "Duur laden...",
+  "secondsCount": "{count} seconden",
+  "@secondsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "30"
+      }
+    }
+  },
+  "people": "Mensen",
+  "addNewPerson": "Nieuwe persoon toevoegen",
+  "editPerson": "Persoon bewerken",
+  "createPersonHint": "Maak een nieuwe persoon aan en train Omi om hun stem te herkennen!",
+  "speechProfile": "Spraakprofiel",
+  "sampleNumber": "Monster {number}",
+  "@sampleNumber": {
+    "placeholders": {
+      "number": {
+        "type": "int",
+        "example": "1"
+      }
+    }
+  },
+  "settings": "Instellingen",
+  "language": "Taal",
+  "selectLanguage": "Selecteer taal",
+  "deleting": "Verwijderen...",
+  "pleaseCompleteAuthentication": "Voltooi de authenticatie in je browser. Keer daarna terug naar de app.",
+  "failedToStartAuthentication": "Kan authenticatie niet starten",
+  "importStarted": "Import gestart! Je krijgt een melding wanneer het klaar is.",
+  "failedToStartImport": "Kan import niet starten. Probeer het opnieuw.",
+  "couldNotAccessFile": "Kan het geselecteerde bestand niet openen",
+  "askOmi": "Vraag Omi",
+  "done": "Klaar",
+  "disconnected": "Niet verbonden",
+  "searching": "Zoeken",
+  "connectDevice": "Apparaat verbinden",
+  "monthlyLimitReached": "Je hebt je maandelijkse limiet bereikt.",
+  "checkUsage": "Verbruik controleren",
+  "syncingRecordings": "Opnames synchroniseren",
+  "recordingsToSync": "Opnames om te synchroniseren",
+  "allCaughtUp": "Alles is bijgewerkt",
+  "sync": "Synchroniseren",
+  "pendantUpToDate": "Hanger is up-to-date",
+  "allRecordingsSynced": "Alle opnames zijn gesynchroniseerd",
+  "syncingInProgress": "Synchronisatie bezig",
+  "readyToSync": "Klaar om te synchroniseren",
+  "tapSyncToStart": "Tik op Synchroniseren om te starten",
+  "pendantNotConnected": "Hanger niet verbonden. Verbind om te synchroniseren.",
+  "everythingSynced": "Alles is al gesynchroniseerd.",
+  "recordingsNotSynced": "Je hebt opnames die nog niet zijn gesynchroniseerd.",
+  "syncingBackground": "We blijven je opnames op de achtergrond synchroniseren.",
+  "noConversationsYet": "Nog geen gesprekken.",
+  "noStarredConversations": "Nog geen favoriete gesprekken.",
+  "starConversationHint": "Om een gesprek als favoriet te markeren, open het en tik op het stericoon in de header.",
+  "searchConversations": "Gesprekken zoeken",
+  "selectedCount": "{count} geselecteerd",
+  "@selectedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "merge": "Samenvoegen",
+  "mergeConversations": "Gesprekken samenvoegen",
+  "mergeConversationsMessage": "Dit combineert {count} gesprekken tot één. Alle inhoud wordt samengevoegd en opnieuw gegenereerd.",
+  "@mergeConversationsMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mergingInBackground": "Samenvoegen op de achtergrond. Dit kan even duren.",
+  "failedToStartMerge": "Kan samenvoegen niet starten",
+  "askAnything": "Vraag wat je wilt",
+  "noMessagesYet": "Nog geen berichten!\nWaarom begin je geen gesprek?",
+  "deletingMessages": "Je berichten verwijderen uit Omi's geheugen...",
+  "messageCopied": "Bericht gekopieerd naar klembord.",
+  "cannotReportOwnMessage": "Je kunt je eigen berichten niet rapporteren.",
+  "reportMessage": "Bericht rapporteren",
+  "reportMessageConfirm": "Weet je zeker dat je dit bericht wilt rapporteren?",
+  "messageReported": "Bericht succesvol gerapporteerd.",
+  "thankYouFeedback": "Bedankt voor je feedback!",
+  "clearChat": "Chat wissen?",
+  "clearChatConfirm": "Weet je zeker dat je de chat wilt wissen? Deze actie kan niet ongedaan worden gemaakt.",
+  "maxFilesLimit": "Je kunt maximaal 4 bestanden tegelijk uploaden",
+  "chatWithOmi": "Chat met Omi",
+  "apps": "Apps",
+  "noAppsFound": "Geen apps gevonden",
+  "tryAdjustingSearch": "Probeer je zoekopdracht of filters aan te passen",
+  "createYourOwnApp": "Maak je eigen app",
+  "buildAndShareApp": "Bouw en deel je aangepaste app",
+  "searchApps": "Zoek in 1500+ apps",
+  "myApps": "Mijn apps",
+  "installedApps": "Geïnstalleerde apps",
+  "unableToFetchApps": "Kan apps niet ophalen :(\n\nControleer je internetverbinding en probeer het opnieuw.",
+  "aboutOmi": "Over Omi",
+  "privacyPolicy": "Privacybeleid",
+  "visitWebsite": "Website bezoeken",
+  "helpOrInquiries": "Hulp of vragen?",
+  "joinCommunity": "Word lid van de community!",
+  "membersAndCounting": "8000+ leden en groeiende.",
+  "deleteAccountTitle": "Account verwijderen",
+  "deleteAccountConfirm": "Weet je zeker dat je je account wilt verwijderen?",
+  "cannotBeUndone": "Dit kan niet ongedaan worden gemaakt.",
+  "allDataErased": "Al je herinneringen en gesprekken worden permanent verwijderd.",
+  "appsDisconnected": "Je apps en integraties worden direct losgekoppeld.",
+  "exportBeforeDelete": "Je kunt je gegevens exporteren voordat je je account verwijdert, maar eenmaal verwijderd kan het niet worden hersteld.",
+  "deleteAccountCheckbox": "Ik begrijp dat het verwijderen van mijn account permanent is en alle gegevens, inclusief herinneringen en gesprekken, verloren gaan en niet kunnen worden hersteld.",
+  "areYouSure": "Weet je het zeker?",
+  "deleteAccountFinal": "Deze actie is onomkeerbaar en verwijdert permanent je account en alle bijbehorende gegevens. Weet je zeker dat je wilt doorgaan?",
+  "deleteNow": "Nu verwijderen",
+  "goBack": "Terug",
+  "checkBoxToConfirm": "Vink het vakje aan om te bevestigen dat je begrijpt dat het verwijderen van je account permanent en onomkeerbaar is.",
+  "profile": "Profiel",
+  "name": "Naam",
+  "email": "E-mail",
+  "customVocabulary": "Aangepaste woordenlijst",
+  "identifyingOthers": "Anderen identificeren",
+  "paymentMethods": "Betaalmethoden",
+  "conversationDisplay": "Gespreksweergave",
+  "dataPrivacy": "Gegevens en privacy",
+  "userId": "Gebruikers-ID",
+  "notSet": "Niet ingesteld",
+  "userIdCopied": "Gebruikers-ID gekopieerd naar klembord",
+  "systemDefault": "Systeemstandaard",
+  "planAndUsage": "Abonnement en gebruik",
+  "offlineSync": "Offline synchronisatie",
+  "deviceSettings": "Apparaatinstellingen",
+  "chatTools": "Chat-tools",
+  "feedbackBug": "Feedback / Bug",
+  "helpCenter": "Helpcentrum",
+  "developerSettings": "Ontwikkelaarsinstellingen",
+  "getOmiForMac": "Omi voor Mac downloaden",
+  "referralProgram": "Doorverwijsprogramma",
+  "signOut": "Uitloggen",
+  "appAndDeviceCopied": "App- en apparaatgegevens gekopieerd",
+  "wrapped2025": "Terugblik 2025",
+  "yourPrivacyYourControl": "Jouw privacy, jouw controle",
+  "privacyIntro": "Bij Omi zijn we toegewijd aan het beschermen van je privacy. Deze pagina stelt je in staat om te bepalen hoe je gegevens worden opgeslagen en gebruikt.",
+  "learnMore": "Meer informatie...",
+  "dataProtectionLevel": "Gegevensbeschermingsniveau",
+  "dataProtectionDesc": "Je gegevens zijn standaard beveiligd met sterke encryptie. Bekijk hieronder je instellingen en toekomstige privacy-opties.",
+  "appAccess": "App-toegang",
+  "appAccessDesc": "De volgende apps hebben toegang tot je gegevens. Tik op een app om de machtigingen te beheren.",
+  "noAppsExternalAccess": "Geen geïnstalleerde apps hebben externe toegang tot je gegevens.",
+  "deviceName": "Apparaatnaam",
+  "deviceId": "Apparaat-ID",
+  "firmware": "Firmware",
+  "sdCardSync": "SD-kaart synchronisatie",
+  "hardwareRevision": "Hardwarerevisie",
+  "modelNumber": "Modelnummer",
+  "manufacturer": "Fabrikant",
+  "doubleTap": "Dubbel tikken",
+  "ledBrightness": "LED-helderheid",
+  "micGain": "Microfoonversterking",
+  "disconnect": "Loskoppelen",
+  "forgetDevice": "Apparaat vergeten",
+  "chargingIssues": "Oplaadproblemen",
+  "disconnectDevice": "Apparaat loskoppelen",
+  "unpairDevice": "Apparaat ontkoppelen",
+  "unpairAndForget": "Apparaat ontkoppelen en vergeten",
+  "deviceDisconnectedMessage": "Je Omi is losgekoppeld 😔",
+  "deviceUnpairedMessage": "Apparaat ontkoppeld. Ga naar Instellingen > Bluetooth en vergeet het apparaat om het ontkoppelen te voltooien.",
+  "unpairDialogTitle": "Apparaat ontkoppelen",
+  "unpairDialogMessage": "Dit ontkoppelt het apparaat zodat het met een andere telefoon kan worden verbonden. Je moet naar Instellingen > Bluetooth gaan en het apparaat vergeten om het proces te voltooien.",
+  "deviceNotConnected": "Apparaat niet verbonden",
+  "connectDeviceMessage": "Verbind je Omi-apparaat om toegang te krijgen tot\napparaatinstellingen en aanpassingen",
+  "deviceInfoSection": "Apparaatinformatie",
+  "customizationSection": "Aanpassingen",
+  "hardwareSection": "Hardware",
+  "v2Undetected": "V2 niet gedetecteerd",
+  "v2UndetectedMessage": "We zien dat je een V1-apparaat hebt of je apparaat is niet verbonden. SD-kaartfunctionaliteit is alleen beschikbaar voor V2-apparaten.",
+  "endConversation": "Gesprek beëindigen",
+  "pauseResume": "Pauzeren/Hervatten",
+  "starConversation": "Gesprek als favoriet markeren",
+  "doubleTapAction": "Dubbel tikken actie",
+  "endAndProcess": "Gesprek beëindigen en verwerken",
+  "pauseResumeRecording": "Opname pauzeren/hervatten",
+  "starOngoing": "Lopend gesprek als favoriet markeren",
+  "off": "Uit",
+  "max": "Max",
+  "mute": "Dempen",
+  "quiet": "Stil",
+  "normal": "Normaal",
+  "high": "Hoog",
+  "micGainDescMuted": "Microfoon is gedempt",
+  "micGainDescLow": "Zeer stil - voor luidruchtige omgevingen",
+  "micGainDescModerate": "Stil - voor matig geluid",
+  "micGainDescNeutral": "Neutraal - gebalanceerde opname",
+  "micGainDescSlightlyBoosted": "Licht versterkt - normaal gebruik",
+  "micGainDescBoosted": "Versterkt - voor stille omgevingen",
+  "micGainDescHigh": "Hoog - voor verre of zachte stemmen",
+  "micGainDescVeryHigh": "Zeer hoog - voor zeer stille bronnen",
+  "micGainDescMax": "Maximum - gebruik met voorzichtigheid",
+  "developerSettingsTitle": "Ontwikkelaarsinstellingen",
+  "saving": "Opslaan...",
+  "personaConfig": "Configureer je AI-persona",
+  "beta": "BETA",
+  "transcription": "Transcriptie",
+  "transcriptionConfig": "STT-provider configureren",
+  "conversationTimeout": "Gesprekstime-out",
+  "conversationTimeoutConfig": "Instellen wanneer gesprekken automatisch eindigen",
+  "importData": "Gegevens importeren",
+  "importDataConfig": "Gegevens importeren uit andere bronnen",
+  "debugDiagnostics": "Debug en diagnostiek",
+  "endpointUrl": "Endpoint-URL",
+  "noApiKeys": "Nog geen API-sleutels",
+  "createKeyToStart": "Maak een sleutel aan om te beginnen",
+  "createKey": "Sleutel aanmaken",
+  "docs": "Documentatie",
+  "yourOmiInsights": "Je Omi-inzichten",
+  "today": "Vandaag",
+  "thisMonth": "Deze maand",
+  "thisYear": "Dit jaar",
+  "allTime": "Altijd",
+  "noActivityYet": "Nog geen activiteit",
+  "startConversationToSeeInsights": "Start een gesprek met Omi\nom je gebruiksinzichten hier te zien.",
+  "listening": "Luisteren",
+  "listeningSubtitle": "Totale tijd dat Omi actief heeft geluisterd.",
+  "understanding": "Begrijpen",
+  "understandingSubtitle": "Woorden begrepen uit je gesprekken.",
+  "providing": "Leveren",
+  "providingSubtitle": "Actiepunten en notities automatisch vastgelegd.",
+  "remembering": "Onthouden",
+  "rememberingSubtitle": "Feiten en details voor je onthouden.",
+  "unlimitedPlan": "Onbeperkt abonnement",
+  "managePlan": "Abonnement beheren",
+  "cancelAtPeriodEnd": "Je abonnement wordt geannuleerd op {date}.",
+  "@cancelAtPeriodEnd": {
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "1 jan 2026"
+      }
+    }
+  },
+  "renewsOn": "Je abonnement wordt verlengd op {date}.",
+  "@renewsOn": {
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "1 jan 2026"
+      }
+    }
+  },
+  "basicPlan": "Gratis abonnement",
+  "usageLimitMessage": "{used} van {limit} min gebruikt",
+  "@usageLimitMessage": {
+    "placeholders": {
+      "used": {
+        "type": "String",
+        "example": "100"
+      },
+      "limit": {
+        "type": "int",
+        "example": "60"
+      }
+    }
+  },
+  "upgrade": "Upgraden",
+  "upgradeToUnlimited": "Upgraden naar onbeperkt",
+  "basicPlanDesc": "Je abonnement bevat {limit} gratis minuten per maand. Upgrade naar onbeperkt.",
+  "@basicPlanDesc": {
+    "placeholders": {
+      "limit": {
+        "type": "int",
+        "example": "60"
+      }
+    }
+  },
+  "shareStatsMessage": "Ik deel mijn Omi-statistieken! (omi.me - je altijd-aan AI-assistent)",
+  "sharePeriodToday": "Vandaag heeft Omi:",
+  "sharePeriodMonth": "Deze maand heeft Omi:",
+  "sharePeriodYear": "Dit jaar heeft Omi:",
+  "sharePeriodAllTime": "Tot nu toe heeft Omi:",
+  "shareStatsListened": "🎧 {minutes} minuten geluisterd",
+  "@shareStatsListened": {
+    "placeholders": {
+      "minutes": {
+        "type": "String",
+        "example": "120"
+      }
+    }
+  },
+  "shareStatsWords": "🧠 {words} woorden begrepen",
+  "@shareStatsWords": {
+    "placeholders": {
+      "words": {
+        "type": "String",
+        "example": "5000"
+      }
+    }
+  },
+  "shareStatsInsights": "✨ {count} inzichten gegeven",
+  "@shareStatsInsights": {
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "10"
+      }
+    }
+  },
+  "shareStatsMemories": "📚 {count} herinneringen onthouden",
+  "@shareStatsMemories": {
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "5"
+      }
+    }
+  },
+  "debugLogs": "Debug-logboeken",
+  "debugLogsAutoDelete": "Automatisch verwijderd na 3 dagen.",
+  "debugLogsDesc": "Helpt bij het diagnosticeren van problemen",
+  "noLogFilesFound": "Geen logbestanden gevonden.",
+  "omiDebugLog": "Omi debug-log",
+  "logShared": "Log gedeeld",
+  "selectLogFile": "Logbestand selecteren",
+  "shareLogs": "Logboeken delen",
+  "debugLogCleared": "Debug-log gewist",
+  "exportStarted": "Export gestart. Dit kan enkele seconden duren...",
+  "exportAllData": "Alle gegevens exporteren",
+  "exportDataDesc": "Gesprekken exporteren naar een JSON-bestand",
+  "exportedConversations": "Geëxporteerde gesprekken van Omi",
+  "exportShared": "Export gedeeld",
+  "deleteKnowledgeGraphTitle": "Kennisgraaf verwijderen?",
+  "deleteKnowledgeGraphMessage": "Dit verwijdert alle afgeleide kennisgraafgegevens (knooppunten en verbindingen). Je originele herinneringen blijven veilig. De graaf wordt na verloop van tijd of bij het volgende verzoek opnieuw opgebouwd.",
+  "knowledgeGraphDeleted": "Kennisgraaf succesvol verwijderd",
+  "deleteGraphFailed": "Verwijderen graaf mislukt: {error}",
+  "@deleteGraphFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteKnowledgeGraph": "Kennisgraaf verwijderen",
+  "deleteKnowledgeGraphDesc": "Alle knooppunten en verbindingen wissen",
+  "mcp": "MCP",
+  "mcpServer": "MCP-server",
+  "mcpServerDesc": "AI-assistenten verbinden met je gegevens",
+  "serverUrl": "Server-URL",
+  "urlCopied": "URL gekopieerd",
+  "apiKeyAuth": "API-sleutel authenticatie",
+  "header": "Header",
+  "authorizationBearer": "Authorization: Bearer <sleutel>",
+  "oauth": "OAuth",
+  "clientId": "Client-ID",
+  "clientSecret": "Client-geheim",
+  "useMcpApiKey": "Gebruik je MCP API-sleutel",
+  "webhooks": "Webhooks",
+  "conversationEvents": "Gespreksgebeurtenissen",
+  "newConversationCreated": "Nieuw gesprek aangemaakt",
+  "realtimeTranscript": "Realtime transcript",
+  "transcriptReceived": "Transcript ontvangen",
+  "audioBytes": "Audiobytes",
+  "audioDataReceived": "Audiogegevens ontvangen",
+  "intervalSeconds": "Interval (seconden)",
+  "daySummary": "Dagsamenvatting",
+  "summaryGenerated": "Samenvatting gegenereerd",
+  "claudeDesktop": "Claude Desktop",
+  "addToClaudeConfig": "Toevoegen aan claude_desktop_config.json",
+  "copyConfig": "Configuratie kopiëren",
+  "configCopied": "Configuratie gekopieerd naar klembord",
+  "listeningMins": "Luisteren (min)",
+  "understandingWords": "Begrijpen (woorden)",
+  "insights": "Inzichten",
+  "memories": "Herinneringen",
+  "minsUsedThisMonth": "{used} van {limit} min gebruikt deze maand",
+  "@minsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "wordsUsedThisMonth": "{used} van {limit} woorden gebruikt deze maand",
+  "@wordsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "insightsUsedThisMonth": "{used} van {limit} inzichten verkregen deze maand",
+  "@insightsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "memoriesUsedThisMonth": "{used} van {limit} herinneringen aangemaakt deze maand",
+  "@memoriesUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "visibility": "Zichtbaarheid",
+  "visibilitySubtitle": "Bepaal welke gesprekken in je lijst verschijnen",
+  "showShortConversations": "Korte gesprekken tonen",
+  "showShortConversationsDesc": "Gesprekken korter dan de drempel weergeven",
+  "showDiscardedConversations": "Verwijderde gesprekken tonen",
+  "showDiscardedConversationsDesc": "Gesprekken gemarkeerd als verwijderd opnemen",
+  "shortConversationThreshold": "Drempel voor korte gesprekken",
+  "shortConversationThresholdSubtitle": "Gesprekken korter dan dit worden verborgen tenzij hierboven ingeschakeld",
+  "durationThreshold": "Duurdrempel",
+  "durationThresholdDesc": "Gesprekken korter dan dit verbergen",
+  "minLabel": "{count} min",
+  "@minLabel": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "customVocabularyTitle": "Aangepaste woordenlijst",
+  "addWords": "Woorden toevoegen",
+  "addWordsDesc": "Namen, termen of ongewone woorden",
+  "vocabularyHint": "Omi, Callie, OpenAI",
+  "connect": "Verbinden",
+  "comingSoon": "Binnenkort beschikbaar",
+  "chatToolsFooter": "Verbind je apps om gegevens en statistieken in de chat te bekijken.",
+  "completeAuthInBrowser": "Voltooi de authenticatie in je browser. Keer daarna terug naar de app.",
+  "failedToStartAuth": "Kan {appName}-authenticatie niet starten",
+  "@failedToStartAuth": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectAppTitle": "{appName} loskoppelen?",
+  "@disconnectAppTitle": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectAppMessage": "Weet je zeker dat je de verbinding met {appName} wilt verbreken? Je kunt altijd opnieuw verbinden.",
+  "@disconnectAppMessage": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectedFrom": "Losgekoppeld van {appName}",
+  "@disconnectedFrom": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToDisconnect": "Loskoppelen mislukt",
+  "connectTo": "Verbinden met {appName}",
+  "@connectTo": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "authAccessMessage": "Je moet Omi autoriseren om toegang te krijgen tot je {appName}-gegevens. Dit opent je browser voor authenticatie.",
+  "@authAccessMessage": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "continueAction": "Doorgaan",
+  "languageTitle": "Taal",
+  "primaryLanguage": "Primaire taal",
+  "automaticTranslation": "Automatische vertaling",
+  "detectLanguages": "Detecteer 10+ talen",
+  "authorizeSavingRecordings": "Opnames opslaan autoriseren",
+  "thanksForAuthorizing": "Bedankt voor het autoriseren!",
+  "needYourPermission": "We hebben je toestemming nodig",
+  "alreadyGavePermission": "Je hebt ons al toestemming gegeven om je opnames op te slaan. Hier is een herinnering waarom we het nodig hebben:",
+  "wouldLikePermission": "We willen graag je toestemming om je spraakopnames op te slaan. Dit is waarom:",
+  "improveSpeechProfile": "Verbeter je spraakprofiel",
+  "improveSpeechProfileDesc": "We gebruiken opnames om je persoonlijke spraakprofiel verder te trainen en te verbeteren.",
+  "trainFamilyProfiles": "Train profielen voor vrienden en familie",
+  "trainFamilyProfilesDesc": "Je opnames helpen ons om profielen voor je vrienden en familie te herkennen en aan te maken.",
+  "enhanceTranscriptAccuracy": "Verbeter transcriptnauwkeurigheid",
+  "enhanceTranscriptAccuracyDesc": "Naarmate ons model verbetert, kunnen we betere transcriptieresultaten voor je opnames bieden.",
+  "legalNotice": "Juridische kennisgeving: De legaliteit van het opnemen en opslaan van spraakgegevens kan variëren afhankelijk van je locatie en hoe je deze functie gebruikt. Het is jouw verantwoordelijkheid om naleving van lokale wet- en regelgeving te waarborgen.",
+  "alreadyAuthorized": "Al geautoriseerd",
+  "authorize": "Autoriseren",
+  "revokeAuthorization": "Autorisatie intrekken",
+  "authorizationSuccessful": "Autorisatie succesvol!",
+  "failedToAuthorize": "Autorisatie mislukt. Probeer het opnieuw.",
+  "authorizationRevoked": "Autorisatie ingetrokken.",
+  "recordingsDeleted": "Opnames verwijderd.",
+  "failedToRevoke": "Autorisatie intrekken mislukt. Probeer het opnieuw.",
+  "permissionRevokedTitle": "Toestemming ingetrokken",
+  "permissionRevokedMessage": "Wil je dat we ook al je bestaande opnames verwijderen?",
+  "yes": "Ja",
+  "editName": "Naam bewerken",
+  "howShouldOmiCallYou": "Hoe moet Omi je noemen?",
+  "enterYourName": "Voer je naam in",
+  "nameCannotBeEmpty": "Naam mag niet leeg zijn",
+  "nameUpdatedSuccessfully": "Naam succesvol bijgewerkt!",
+  "calendarSettings": "Agenda-instellingen",
+  "calendarProviders": "Agenda-providers",
+  "macOsCalendar": "macOS-agenda",
+  "connectMacOsCalendar": "Verbind je lokale macOS-agenda",
+  "googleCalendar": "Google Agenda",
+  "syncGoogleAccount": "Synchroniseer met je Google-account",
+  "showMeetingsMenuBar": "Toon aankomende vergaderingen in menubalk",
+  "showMeetingsMenuBarDesc": "Toon je volgende vergadering en tijd tot deze begint in de macOS-menubalk",
+  "showEventsNoParticipants": "Evenementen zonder deelnemers tonen",
+  "showEventsNoParticipantsDesc": "Wanneer ingeschakeld, toont Binnenkort evenementen zonder deelnemers of videolink.",
+  "yourMeetings": "Je vergaderingen",
+  "refresh": "Vernieuwen",
+  "noUpcomingMeetings": "Geen aankomende vergaderingen gevonden",
+  "checkingNextDays": "Volgende 30 dagen controleren",
+  "tomorrow": "Morgen",
+  "googleCalendarComingSoon": "Google Agenda-integratie komt binnenkort!",
+  "connectedAsUser": "Verbonden als gebruiker: {userId}",
+  "@connectedAsUser": {
+    "placeholders": {
+      "userId": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultWorkspace": "Standaard werkruimte",
+  "tasksCreatedInWorkspace": "Taken worden aangemaakt in deze werkruimte",
+  "defaultProjectOptional": "Standaardproject (optioneel)",
+  "leaveUnselectedTasks": "Laat niet geselecteerd om taken zonder project aan te maken",
+  "noProjectsInWorkspace": "Geen projecten gevonden in deze werkruimte",
+  "conversationTimeoutDesc": "Kies hoe lang te wachten in stilte voordat een gesprek automatisch wordt beëindigd:",
+  "timeout2Minutes": "2 minuten",
+  "timeout2MinutesDesc": "Gesprek beëindigen na 2 minuten stilte",
+  "timeout5Minutes": "5 minuten",
+  "timeout5MinutesDesc": "Gesprek beëindigen na 5 minuten stilte",
+  "timeout10Minutes": "10 minuten",
+  "timeout10MinutesDesc": "Gesprek beëindigen na 10 minuten stilte",
+  "timeout30Minutes": "30 minuten",
+  "timeout30MinutesDesc": "Gesprek beëindigen na 30 minuten stilte",
+  "timeout4Hours": "4 uur",
+  "timeout4HoursDesc": "Gesprek beëindigen na 4 uur stilte",
+  "conversationEndAfterHours": "Gesprekken eindigen nu na 4 uur stilte",
+  "conversationEndAfterMinutes": "Gesprekken eindigen nu na {minutes} minuut/minuten stilte",
+  "@conversationEndAfterMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "tellUsPrimaryLanguage": "Vertel ons je primaire taal",
+  "languageForTranscription": "Stel je taal in voor scherpere transcripties en een gepersonaliseerde ervaring.",
+  "singleLanguageModeInfo": "Enkeltaalmodus is ingeschakeld. Vertaling is uitgeschakeld voor hogere nauwkeurigheid.",
+  "searchLanguageHint": "Zoek taal op naam of code",
+  "noLanguagesFound": "Geen talen gevonden",
+  "skip": "Overslaan",
+  "languageSetTo": "Taal ingesteld op {language}",
+  "@languageSetTo": {
+    "placeholders": {
+      "language": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToSetLanguage": "Kan taal niet instellen",
+  "appSettings": "{appName}-instellingen",
+  "@appSettings": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectFromApp": "Loskoppelen van {appName}?",
+  "@disconnectFromApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectFromAppDesc": "Dit verwijdert je {appName}-authenticatie. Je moet opnieuw verbinden om het weer te gebruiken.",
+  "@disconnectFromAppDesc": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "connectedToApp": "Verbonden met {appName}",
+  "@connectedToApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "account": "Account",
+  "actionItemsSyncedTo": "Je actiepunten worden gesynchroniseerd met je {appName}-account",
+  "@actionItemsSyncedTo": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultSpace": "Standaardruimte",
+  "selectSpaceInWorkspace": "Selecteer een ruimte in je werkruimte",
+  "noSpacesInWorkspace": "Geen ruimtes gevonden in deze werkruimte",
+  "defaultList": "Standaardlijst",
+  "tasksAddedToList": "Taken worden toegevoegd aan deze lijst",
+  "noListsInSpace": "Geen lijsten gevonden in deze ruimte",
+  "failedToLoadRepos": "Laden van repositories mislukt: {error}",
+  "@failedToLoadRepos": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultRepoSaved": "Standaard repository opgeslagen",
+  "failedToSaveDefaultRepo": "Opslaan van standaard repository mislukt",
+  "defaultRepository": "Standaard repository",
+  "selectDefaultRepoDesc": "Selecteer een standaard repository voor het aanmaken van issues. Je kunt nog steeds een andere repository opgeven bij het aanmaken van issues.",
+  "noReposFound": "Geen repositories gevonden",
+  "private": "Privé",
+  "updatedDate": "Bijgewerkt {date}",
+  "@updatedDate": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "yesterday": "gisteren",
+  "daysAgo": "{count} dagen geleden",
+  "@daysAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "oneWeekAgo": "1 week geleden",
+  "weeksAgo": "{count} weken geleden",
+  "@weeksAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "oneMonthAgo": "1 maand geleden",
+  "monthsAgo": "{count} maanden geleden",
+  "@monthsAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "issuesCreatedInRepo": "Issues worden aangemaakt in je standaard repository",
+  "taskIntegrations": "Taakintegraties",
+  "configureSettings": "Instellingen configureren",
+  "completeAuthBrowser": "Voltooi de authenticatie in je browser. Keer daarna terug naar de app.",
+  "failedToStartAppAuth": "Kan {appName}-authenticatie niet starten",
+  "@failedToStartAppAuth": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "connectToAppTitle": "Verbinden met {appName}",
+  "@connectToAppTitle": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "authorizeOmiForTasks": "Je moet Omi autoriseren om taken aan te maken in je {appName}-account. Dit opent je browser voor authenticatie.",
+  "@authorizeOmiForTasks": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "continueButton": "Doorgaan",
+  "appIntegration": "{appName}-integratie",
+  "@appIntegration": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "integrationComingSoon": "Integratie met {appName} komt binnenkort! We werken hard om je meer taakbeheeropties te bieden.",
+  "@integrationComingSoon": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "gotIt": "Begrepen",
+  "tasksExportedOneApp": "Taken kunnen naar één app tegelijk worden geëxporteerd.",
+  "completeYourUpgrade": "Voltooi je upgrade",
+  "importConfiguration": "Configuratie importeren",
+  "exportConfiguration": "Configuratie exporteren",
+  "bringYourOwn": "Breng je eigen mee",
+  "payYourSttProvider": "Gebruik Omi vrij. Je betaalt alleen je STT-provider rechtstreeks.",
+  "freeMinutesMonth": "1.200 gratis minuten/maand inbegrepen. Onbeperkt met ",
+  "omiUnlimited": "Omi Onbeperkt",
+  "hostRequired": "Host is vereist",
+  "validPortRequired": "Geldige poort is vereist",
+  "validWebsocketUrlRequired": "Geldige WebSocket-URL is vereist (wss://)",
+  "apiUrlRequired": "API-URL is vereist",
+  "apiKeyRequired": "API-sleutel is vereist",
+  "invalidJsonConfig": "Ongeldige JSON-configuratie",
+  "errorSaving": "Fout bij opslaan: {error}",
+  "@errorSaving": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "configCopiedToClipboard": "Configuratie gekopieerd naar klembord",
+  "pasteJsonConfig": "Plak je JSON-configuratie hieronder:",
+  "addApiKeyAfterImport": "Je moet je eigen API-sleutel toevoegen na het importeren",
+  "paste": "Plakken",
+  "import": "Importeren",
+  "invalidProviderInConfig": "Ongeldige provider in configuratie",
+  "importedConfig": "{providerName}-configuratie geïmporteerd",
+  "@importedConfig": {
+    "placeholders": {
+      "providerName": {
+        "type": "String"
+      }
+    }
+  },
+  "invalidJson": "Ongeldige JSON: {error}",
+  "@invalidJson": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "provider": "Provider",
+  "live": "Live",
+  "onDevice": "Op apparaat",
+  "apiUrl": "API-URL",
+  "enterSttHttpEndpoint": "Voer je STT HTTP-endpoint in",
+  "websocketUrl": "WebSocket-URL",
+  "enterLiveSttWebsocket": "Voer je live STT WebSocket-endpoint in",
+  "apiKey": "API-sleutel",
+  "enterApiKey": "Voer je API-sleutel in",
+  "storedLocallyNeverShared": "Lokaal opgeslagen, nooit gedeeld",
+  "host": "Host",
+  "port": "Poort",
+  "advanced": "Geavanceerd",
+  "configuration": "Configuratie",
+  "requestConfiguration": "Verzoek configuratie",
+  "responseSchema": "Response schema",
+  "modified": "Aangepast",
+  "resetRequestConfig": "Verzoekconfiguratie resetten naar standaard",
+  "logs": "Logboeken",
+  "logsCopied": "Logboeken gekopieerd",
+  "noLogsYet": "Nog geen logboeken. Start een opname om aangepaste STT-activiteit te zien.",
+  "deviceUsesCodec": "{deviceName} gebruikt {codecReason}. Omi wordt gebruikt.",
+  "@deviceUsesCodec": {
+    "placeholders": {
+      "deviceName": {
+        "type": "String"
+      },
+      "codecReason": {
+        "type": "String"
+      }
+    }
+  },
+  "omiTranscription": "Omi-transcriptie",
+  "bestInClassTranscription": "Beste transcriptie zonder configuratie",
+  "instantSpeakerLabels": "Directe sprekerslabels",
+  "languageTranslation": "100+ taalvertaling",
+  "optimizedForConversation": "Geoptimaliseerd voor gesprekken",
+  "autoLanguageDetection": "Automatische taaldetectie",
+  "highAccuracy": "Hoge nauwkeurigheid",
+  "privacyFirst": "Privacy eerst",
+  "saveChanges": "Wijzigingen opslaan",
+  "resetToDefault": "Resetten naar standaard",
+  "viewTemplate": "Template bekijken",
+  "trySomethingLike": "Probeer iets als...",
+  "tryIt": "Probeer het",
+  "creatingPlan": "Plan maken",
+  "developingLogic": "Logica ontwikkelen",
+  "designingApp": "App ontwerpen",
+  "generatingIconStep": "Icoon genereren",
+  "finalTouches": "Laatste aanpassingen",
+  "processing": "Verwerken...",
+  "features": "Functies",
+  "creatingYourApp": "Je app maken...",
+  "generatingIcon": "Icoon genereren...",
+  "whatShouldWeMake": "Wat zullen we maken?",
+  "appName": "App-naam",
+  "description": "Beschrijving",
+  "publicLabel": "Openbaar",
+  "privateLabel": "Privé",
+  "free": "Gratis",
+  "perMonth": "/ Maand",
+  "tailoredConversationSummaries": "Op maat gemaakte gesprekssamenvattingen",
+  "customChatbotPersonality": "Aangepaste chatbot-persoonlijkheid",
+  "makePublic": "Openbaar maken",
+  "anyoneCanDiscover": "Iedereen kan je app ontdekken",
+  "onlyYouCanUse": "Alleen jij kunt deze app gebruiken",
+  "paidApp": "Betaalde app",
+  "usersPayToUse": "Gebruikers betalen om je app te gebruiken",
+  "freeForEveryone": "Gratis voor iedereen",
+  "perMonthLabel": "/ maand",
+  "creating": "Maken...",
+  "createApp": "App maken",
+  "searchingForDevices": "Zoeken naar apparaten...",
+  "devicesFoundNearby": "{count} {count, plural, =1{APPARAAT} other{APPARATEN}} GEVONDEN IN DE BUURT",
+  "@devicesFoundNearby": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pairingSuccessful": "KOPPELEN SUCCESVOL",
+  "errorConnectingAppleWatch": "Fout bij verbinden met Apple Watch: {error}",
+  "@errorConnectingAppleWatch": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "dontShowAgain": "Niet meer tonen",
+  "iUnderstand": "Ik begrijp het",
+  "enableBluetooth": "Bluetooth inschakelen",
+  "bluetoothNeeded": "Omi heeft Bluetooth nodig om verbinding te maken met je wearable. Schakel Bluetooth in en probeer het opnieuw.",
+  "contactSupport": "Contact opnemen met support?",
+  "connectLater": "Later verbinden",
+  "grantPermissions": "Machtigingen verlenen",
+  "backgroundActivity": "Achtergrondactiviteit",
+  "backgroundActivityDesc": "Laat Omi op de achtergrond draaien voor betere stabiliteit",
+  "locationAccess": "Locatietoegang",
+  "locationAccessDesc": "Schakel achtergrondlocatie in voor de volledige ervaring",
+  "notifications": "Meldingen",
+  "notificationsDesc": "Schakel meldingen in om op de hoogte te blijven",
+  "locationServiceDisabled": "Locatieservice uitgeschakeld",
+  "locationServiceDisabledDesc": "Locatieservice is uitgeschakeld. Ga naar Instellingen > Privacy en beveiliging > Locatievoorzieningen en schakel deze in",
+  "backgroundLocationDenied": "Achtergrondlocatietoegang geweigerd",
+  "backgroundLocationDeniedDesc": "Ga naar apparaatinstellingen en stel locatiemachtiging in op \"Altijd toestaan\"",
+  "lovingOmi": "Ben je blij met Omi?",
+  "leaveReviewIos": "Help ons meer mensen te bereiken door een review achter te laten in de App Store. Je feedback betekent enorm veel voor ons!",
+  "leaveReviewAndroid": "Help ons meer mensen te bereiken door een review achter te laten in de Google Play Store. Je feedback betekent enorm veel voor ons!",
+  "rateOnAppStore": "Beoordelen in App Store",
+  "rateOnGooglePlay": "Beoordelen in Google Play",
+  "maybeLater": "Misschien later",
+  "speechProfileIntro": "Omi moet je doelen en je stem leren. Je kunt dit later aanpassen.",
+  "getStarted": "Aan de slag",
+  "allDone": "Helemaal klaar!",
+  "keepGoing": "Ga zo door, je doet het geweldig",
+  "skipThisQuestion": "Deze vraag overslaan",
+  "skipForNow": "Voorlopig overslaan",
+  "connectionError": "Verbindingsfout",
+  "connectionErrorDesc": "Kan geen verbinding maken met de server. Controleer je internetverbinding en probeer het opnieuw.",
+  "invalidRecordingMultipleSpeakers": "Ongeldige opname gedetecteerd",
+  "multipleSpeakersDesc": "Het lijkt erop dat er meerdere sprekers in de opname zijn. Zorg ervoor dat je op een rustige locatie bent en probeer het opnieuw.",
+  "tooShortDesc": "Er is niet genoeg spraak gedetecteerd. Spreek meer en probeer het opnieuw.",
+  "invalidRecordingDesc": "Zorg ervoor dat je minimaal 5 seconden en niet meer dan 90 seconden spreekt.",
+  "areYouThere": "Ben je er nog?",
+  "noSpeechDesc": "We konden geen spraak detecteren. Zorg ervoor dat je minimaal 10 seconden en niet meer dan 3 minuten spreekt.",
+  "connectionLost": "Verbinding verbroken",
+  "connectionLostDesc": "De verbinding is onderbroken. Controleer je internetverbinding en probeer het opnieuw.",
+  "tryAgain": "Opnieuw proberen",
+  "connectOmiOmiGlass": "Omi / OmiGlass verbinden",
+  "continueWithoutDevice": "Doorgaan zonder apparaat",
+  "permissionsRequired": "Machtigingen vereist",
+  "permissionsRequiredDesc": "Deze app heeft Bluetooth- en locatiemachtigingen nodig om correct te functioneren. Schakel deze in via de instellingen.",
+  "openSettings": "Instellingen openen",
+  "wantDifferentName": "Wil je een andere naam gebruiken?",
+  "whatsYourName": "Hoe heet je?",
+  "speakTranscribeSummarize": "Spreek. Transcribeer. Vat samen.",
+  "signInWithApple": "Inloggen met Apple",
+  "signInWithGoogle": "Inloggen met Google",
+  "byContinuingAgree": "Door verder te gaan, ga je akkoord met ons ",
+  "termsOfUse": "Gebruiksvoorwaarden",
+  "omiYourAiCompanion": "Omi – Je AI-metgezel",
+  "captureEveryMoment": "Leg elk moment vast. Krijg AI-aangedreven\nsamenvattingen. Nooit meer notities maken.",
+  "appleWatchSetup": "Apple Watch instellen",
+  "permissionRequestedExclaim": "Toestemming gevraagd!",
+  "microphonePermission": "Microfoontoestemming",
+  "permissionGrantedNow": "Toestemming verleend! Nu:\n\nOpen de Omi-app op je horloge en tik hieronder op \"Doorgaan\"",
+  "needMicrophonePermission": "We hebben microfoontoestemming nodig.\n\n1. Tik op \"Toestemming verlenen\"\n2. Sta toe op je iPhone\n3. Horloge-app sluit\n4. Heropen en tik op \"Doorgaan\"",
+  "grantPermissionButton": "Toestemming verlenen",
+  "needHelp": "Hulp nodig?",
+  "troubleshootingSteps": "Probleemoplossing:\n\n1. Zorg dat Omi op je horloge is geïnstalleerd\n2. Open de Omi-app op je horloge\n3. Zoek naar de toestemmingspopup\n4. Tik op \"Toestaan\" wanneer gevraagd\n5. App op je horloge sluit - heropen deze\n6. Kom terug en tik op \"Doorgaan\" op je iPhone",
+  "recordingStartedSuccessfully": "Opname succesvol gestart!",
+  "permissionNotGrantedYet": "Toestemming nog niet verleend. Zorg dat je microfoontoestemming hebt gegeven en de app op je horloge hebt heropend.",
+  "errorRequestingPermission": "Fout bij het vragen van toestemming: {error}",
+  "@errorRequestingPermission": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "errorStartingRecording": "Fout bij het starten van opname: {error}",
+  "@errorStartingRecording": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "selectPrimaryLanguage": "Selecteer je primaire taal",
+  "languageBenefits": "Stel je taal in voor scherpere transcripties en een gepersonaliseerde ervaring",
+  "whatsYourPrimaryLanguage": "Wat is je primaire taal?",
+  "selectYourLanguage": "Selecteer je taal",
+  "personalGrowthJourney": "Je persoonlijke groeireis met AI die naar elk woord luistert.",
+  "actionItemsTitle": "Taken",
+  "actionItemsDescription": "Tik om te bewerken • Lang indrukken om te selecteren • Veeg voor acties",
+  "tabToDo": "Te doen",
+  "tabDone": "Klaar",
+  "tabOld": "Oud",
+  "emptyTodoMessage": "🎉 Alles bijgewerkt!\nGeen openstaande actiepunten",
+  "emptyDoneMessage": "Nog geen voltooide items",
+  "emptyOldMessage": "✅ Geen oude taken",
+  "noItems": "Geen items",
+  "actionItemMarkedIncomplete": "Actiepunt gemarkeerd als niet voltooid",
+  "actionItemCompleted": "Actiepunt voltooid",
+  "deleteActionItemTitle": "Actiepunt verwijderen",
+  "deleteActionItemMessage": "Weet je zeker dat je dit actiepunt wilt verwijderen?",
+  "deleteSelectedItemsTitle": "Geselecteerde items verwijderen",
+  "deleteSelectedItemsMessage": "Weet je zeker dat je {count} geselecteerde actiepunt(en) wilt verwijderen?",
+  "@deleteSelectedItemsMessage": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "s": {
+        "type": "String"
+      }
+    }
+  },
+  "actionItemDeletedResult": "Actiepunt \"{description}\" verwijderd",
+  "@actionItemDeletedResult": {
+    "placeholders": {
+      "description": {
+        "type": "String"
+      }
+    }
+  },
+  "itemsDeletedResult": "{count} actiepunt(en) verwijderd",
+  "@itemsDeletedResult": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "s": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToDeleteItem": "Kan actiepunt niet verwijderen",
+  "failedToDeleteItems": "Kan items niet verwijderen",
+  "failedToDeleteSomeItems": "Kan sommige items niet verwijderen",
+  "welcomeActionItemsTitle": "Klaar voor actiepunten",
+  "welcomeActionItemsDescription": "Je AI haalt automatisch taken en to-do's uit je gesprekken. Ze verschijnen hier wanneer ze zijn aangemaakt.",
+  "autoExtractionFeature": "Automatisch geëxtraheerd uit gesprekken",
+  "editSwipeFeature": "Tik om te bewerken, veeg om te voltooien of te verwijderen",
+  "itemsSelected": "{count} geselecteerd",
+  "@itemsSelected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "selectAll": "Alles selecteren",
+  "deleteSelected": "Geselecteerde verwijderen",
+  "searchMemories": "Zoek in {count} herinneringen",
+  "@searchMemories": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "memoryDeleted": "Herinnering verwijderd.",
+  "undo": "Ongedaan maken",
+  "noMemoriesYet": "Nog geen herinneringen",
+  "noAutoMemories": "Nog geen automatisch geëxtraheerde herinneringen",
+  "noManualMemories": "Nog geen handmatige herinneringen",
+  "noMemoriesInCategories": "Geen herinneringen in deze categorieën",
+  "noMemoriesFound": "Geen herinneringen gevonden",
+  "addFirstMemory": "Voeg je eerste herinnering toe",
+  "clearMemoryTitle": "Omi's geheugen wissen",
+  "clearMemoryMessage": "Weet je zeker dat je Omi's geheugen wilt wissen? Deze actie kan niet ongedaan worden gemaakt.",
+  "clearMemoryButton": "Geheugen wissen",
+  "memoryClearedSuccess": "Omi's geheugen over jou is gewist",
+  "noMemoriesToDelete": "Geen herinneringen om te verwijderen",
+  "createMemoryTooltip": "Nieuwe herinnering maken",
+  "createActionItemTooltip": "Nieuw actiepunt maken",
+  "memoryManagement": "Geheugenbeheer",
+  "filterMemories": "Herinneringen filteren",
+  "totalMemoriesCount": "Je hebt {count} herinneringen in totaal",
+  "@totalMemoriesCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "publicMemories": "Openbare herinneringen",
+  "privateMemories": "Privé herinneringen",
+  "makeAllPrivate": "Alle herinneringen privé maken",
+  "makeAllPublic": "Alle herinneringen openbaar maken",
+  "deleteAllMemories": "Alle herinneringen verwijderen",
+  "allMemoriesPrivateResult": "Alle herinneringen zijn nu privé",
+  "allMemoriesPublicResult": "Alle herinneringen zijn nu openbaar",
+  "newMemory": "Nieuwe herinnering",
+  "editMemory": "Herinnering bewerken",
+  "memoryContentHint": "Ik hou van ijs eten...",
+  "failedToSaveMemory": "Opslaan mislukt. Controleer je verbinding.",
+  "saveMemory": "Herinnering opslaan",
+  "retry": "Opnieuw proberen",
+  "createActionItem": "Actiepunt maken",
+  "editActionItem": "Actiepunt bewerken",
+  "actionItemDescriptionHint": "Wat moet er gedaan worden?",
+  "actionItemDescriptionEmpty": "Actiepuntbeschrijving mag niet leeg zijn.",
+  "actionItemUpdated": "Actiepunt bijgewerkt",
+  "failedToUpdateActionItem": "Kan actiepunt niet bijwerken",
+  "actionItemCreated": "Actiepunt aangemaakt",
+  "failedToCreateActionItem": "Kan actiepunt niet maken",
+  "dueDate": "Vervaldatum",
+  "time": "Tijd",
+  "addDueDate": "Vervaldatum toevoegen",
+  "pressDoneToSave": "Druk op Klaar om op te slaan",
+  "pressDoneToCreate": "Druk op Klaar om aan te maken",
+  "filterAll": "Alle",
+  "filterSystem": "Over jou",
+  "filterInteresting": "Inzichten",
+  "filterManual": "Handmatig",
+  "completed": "Voltooid",
+  "markComplete": "Markeer als voltooid",
+  "actionItemDeleted": "Actiepunt verwijderd",
+  "failedToDeleteActionItem": "Kan actiepunt niet verwijderen",
+  "deleteActionItemConfirmTitle": "Actiepunt verwijderen",
+  "deleteActionItemConfirmMessage": "Weet je zeker dat je dit actiepunt wilt verwijderen?",
+  "appLanguage": "App-taal",
+  "appInterfaceSectionTitle": "APP-INTERFACE",
+  "speechTranscriptionSectionTitle": "SPRAAK & TRANSCRIPTIE",
+  "languageSettingsHelperText": "App-taal verandert menu's en knoppen. Spraaktaal beïnvloedt hoe je opnames worden getranscribeerd."
+}

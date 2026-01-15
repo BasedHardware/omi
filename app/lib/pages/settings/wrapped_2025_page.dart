@@ -6,13 +6,16 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+
 import 'package:omi/backend/http/api/wrapped.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/wrapped_2025_share_templates.dart' as templates;
 import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:omi/utils/logger.dart';
 
 // Bold color palette inspired by LinkedIn Wrapped
 class WrappedColors {
@@ -227,7 +230,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
 
       final boundary = _shareTemplateKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) {
-        debugPrint('Share template boundary is null for $filename');
+        Logger.debug('Share template boundary is null for $filename');
         MixpanelManager().wrappedShareFailed(
           cardName: cardName,
           cardIndex: cardIndex,
@@ -277,7 +280,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
         });
       }
     } catch (e) {
-      debugPrint('Error sharing $filename: $e');
+      Logger.debug('Error sharing $filename: $e');
       MixpanelManager().wrappedShareFailed(
         cardName: cardName,
         cardIndex: cardIndex,

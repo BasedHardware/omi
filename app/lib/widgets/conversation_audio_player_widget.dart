@@ -1,9 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
 import 'package:just_audio/just_audio.dart';
+
 import 'package:omi/backend/http/api/audio.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/utils/logger.dart';
 
 class ConversationAudioPlayerWidget extends StatefulWidget {
   final ServerConversation conversation;
@@ -65,8 +68,8 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
     }
 
     _totalDuration = Duration(milliseconds: (totalSeconds * 1000).toInt());
-    debugPrint('Total duration from metadata: $_totalDuration');
-    debugPrint('Track offsets: $_trackStartOffsets');
+    Logger.debug('Total duration from metadata: $_totalDuration');
+    Logger.debug('Track offsets: $_trackStartOffsets');
   }
 
   /// Get combined position across all tracks
@@ -109,7 +112,7 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
       // Listen for playback errors
       _errorSubscription?.cancel();
       _errorSubscription = _audioPlayer.playbackEventStream.handleError((error) {
-        debugPrint('Playback error: $error');
+        Logger.debug('Playback error: $error');
         if (mounted && _retryCount < _maxRetries) {
           _retryCount++;
           Future.delayed(const Duration(seconds: 1), () {
@@ -135,8 +138,8 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
         });
       }
     } catch (e, stackTrace) {
-      debugPrint('Error setting up audio player: $e');
-      debugPrint('Stack trace: $stackTrace');
+      Logger.debug('Error setting up audio player: $e');
+      Logger.debug('Stack trace: $stackTrace');
 
       if (_retryCount < _maxRetries) {
         _retryCount++;

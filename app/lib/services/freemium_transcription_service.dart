@@ -1,9 +1,13 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
+
 import 'package:path_provider/path_provider.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
+import 'package:omi/utils/logger.dart';
 
 /// Enum representing the current freemium transcription state
 enum FreemiumTranscriptionState {
@@ -81,7 +85,7 @@ class FreemiumTranscriptionService extends ChangeNotifier {
         return _readiness;
       }
     } catch (e) {
-      debugPrint('[Freemium] Error checking model readiness: $e');
+      Logger.debug('[Freemium] Error checking model readiness: $e');
     }
 
     _readiness = FreemiumReadiness.requiresSetup;
@@ -114,17 +118,17 @@ class FreemiumTranscriptionService extends ChangeNotifier {
       for (final modelName in modelPriority) {
         for (final file in binFiles) {
           if (file.path.contains('ggml-$modelName.bin') && await file.exists()) {
-            debugPrint('[Freemium] Found model: ${file.path}');
+            Logger.debug('[Freemium] Found model: ${file.path}');
             return file.path;
           }
         }
       }
 
       // Fallback to any .bin file
-      debugPrint('[Freemium] Using fallback model: ${binFiles.first.path}');
+      Logger.debug('[Freemium] Using fallback model: ${binFiles.first.path}');
       return binFiles.first.path;
     } catch (e) {
-      debugPrint('[Freemium] Error finding model: $e');
+      Logger.debug('[Freemium] Error finding model: $e');
     }
     return null;
   }

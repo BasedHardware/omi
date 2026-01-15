@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:omi/widgets/text_selection_controls.dart';
+
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/pages/chat/widgets/files_handler_widget.dart';
 import 'package:omi/widgets/extensions/string.dart';
+import 'package:omi/widgets/text_selection_controls.dart';
 
 class HumanMessage extends StatelessWidget {
   final ServerMessage message;
@@ -47,9 +48,7 @@ class HumanMessage extends StatelessWidget {
                     const SizedBox(width: 8),
                     Flexible(
                       child: Text(
-                        contextText.length > 50
-                            ? '${contextText.substring(0, 50)}...'
-                            : contextText,
+                        contextText.length > 50 ? '${contextText.substring(0, 50)}...' : contextText,
                         style: TextStyle(
                           color: Colors.grey.shade500,
                           fontSize: 13,

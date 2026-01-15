@@ -90,7 +90,9 @@
   "selectedCount": "{count} seleccionados",
   "@selectedCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "merge": "Fusionar",
@@ -98,7 +100,9 @@
   "mergeConversationsMessage": "Esto combinará {count} conversaciones en una sola. Todo el contenido se fusionará y regenerará.",
   "@mergeConversationsMessage": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "mergingInBackground": "Fusionando en segundo plano. Esto puede tardar un momento.",
@@ -408,7 +412,6 @@
   "defaultProjectOptional": "Proyecto por defecto (Opcional)",
   "leaveUnselectedTasks": "Dejar sin seleccionar para tareas sin proyecto",
   "noProjectsInWorkspace": "No se encontraron proyectos en este espacio",
-  "conversationTimeout": "Tiempo de espera de conversación",
   "conversationTimeoutDesc": "Elige cuánto tiempo esperar en silencio antes de terminar:",
   "timeout2Minutes": "2 minutos",
   "timeout2MinutesDesc": "Terminar tras 2 minutos de silencio",
@@ -696,6 +699,8 @@
   "pressDoneToCreate": "Pulsa Hecho para crear",
   "filterAll": "Todos",
   "filterAuto": "Auto",
+  "filterInteresting": "Perspectivas",
+  "filterSystem": "Sobre ti",
   "filterManual": "Manual",
   "completed": "Completado",
   "markComplete": "Marcar como hecho",
@@ -729,5 +734,8 @@
       }
     }
   },
-  "continueButton": "Continuar"
+  "continueButton": "Continuar",
+  "appInterfaceSectionTitle": "INTERFAZ DE LA APLICACIÓN",
+  "speechTranscriptionSectionTitle": "VOZ Y TRANSCRIPCIÓN",
+  "languageSettingsHelperText": "El idioma de la aplicación cambia los menús y botones. El idioma de voz afecta cómo se transcriben tus grabaciones."
 }

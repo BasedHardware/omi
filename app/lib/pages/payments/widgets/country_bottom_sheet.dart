@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:omi/utils/other/temp.dart';
-import 'package:omi/widgets/extensions/string.dart';
+
 import 'package:provider/provider.dart';
 
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/extensions/string.dart';
 import '../payment_method_provider.dart';
 
 class CountryBottomSheet extends StatefulWidget {

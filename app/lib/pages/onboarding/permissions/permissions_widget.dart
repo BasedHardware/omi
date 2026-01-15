@@ -1,11 +1,13 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+
+import 'package:permission_handler/permission_handler.dart';
+import 'package:provider/provider.dart';
+
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/dialog.dart';
-import 'package:permission_handler/permission_handler.dart';
-import 'package:provider/provider.dart';
 
 class PermissionsWidget extends StatefulWidget {
   final VoidCallback goNext;
@@ -111,11 +113,11 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                                 // Update checkbox based on actual permission status
                                 bool wasGranted = permissionStatus.isGranted;
                                 provider.updateLocationPermission(wasGranted);
-                                
+
                                 // Request "Always" permission (iOS may show this later)
                                 // But keep checkbox checked if "When in use" was granted
                                 await provider.alwaysAllowLocation();
-                                
+
                                 // If "When in use" was granted, keep it checked even if "Always" was denied
                                 if (wasGranted) {
                                   provider.updateLocationPermission(true);

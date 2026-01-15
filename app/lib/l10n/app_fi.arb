@@ -1,0 +1,2317 @@
+{
+  "@@locale": "fi",
+  "@@last_modified": "2026-01-13",
+  "appTitle": "Omi",
+  "@appTitle": {
+    "description": "The app title displayed in various places"
+  },
+  "conversationTab": "Keskustelu",
+  "@conversationTab": {
+    "description": "Tab label for conversation summary"
+  },
+  "transcriptTab": "Litterointi",
+  "@transcriptTab": {
+    "description": "Tab label for transcript view"
+  },
+  "actionItemsTab": "Tehtävät",
+  "@actionItemsTab": {
+    "description": "Tab label for action items"
+  },
+  "deleteConversationTitle": "Poista keskustelu?",
+  "@deleteConversationTitle": {
+    "description": "Title for delete confirmation dialog"
+  },
+  "deleteConversationMessage": "Haluatko varmasti poistaa tämän keskustelun? Tätä toimintoa ei voi perua.",
+  "@deleteConversationMessage": {
+    "description": "Message for delete confirmation dialog"
+  },
+  "confirm": "Vahvista",
+  "@confirm": {
+    "description": "Confirm button label"
+  },
+  "cancel": "Peruuta",
+  "@cancel": {
+    "description": "Button label"
+  },
+  "ok": "OK",
+  "@ok": {
+    "description": "Generic OK button text"
+  },
+  "delete": "Poista",
+  "@delete": {
+    "description": "Button label"
+  },
+  "add": "Lisää",
+  "@add": {
+    "description": "Add button label"
+  },
+  "update": "Päivitä",
+  "@update": {
+    "description": "Update button label"
+  },
+  "save": "Tallenna",
+  "@save": {
+    "description": "Save button label"
+  },
+  "edit": "Muokkaa",
+  "@edit": {
+    "description": "Edit button/action label"
+  },
+  "close": "Sulje",
+  "@close": {
+    "description": "Close button label"
+  },
+  "clear": "Tyhjennä",
+  "@clear": {
+    "description": "Clear button label"
+  },
+  "copyTranscript": "Kopioi litterointi",
+  "@copyTranscript": {
+    "description": "Menu item to copy transcript"
+  },
+  "copySummary": "Kopioi yhteenveto",
+  "@copySummary": {
+    "description": "Menu item to copy summary"
+  },
+  "testPrompt": "Testaa kehotetta",
+  "@testPrompt": {
+    "description": "Menu item for testing prompts"
+  },
+  "reprocessConversation": "Käsittele keskustelu uudelleen",
+  "@reprocessConversation": {
+    "description": "Menu item to reprocess a conversation"
+  },
+  "deleteConversation": "Poista keskustelu",
+  "@deleteConversation": {
+    "description": "Menu item to delete a conversation"
+  },
+  "contentCopied": "Sisältö kopioitu leikepöydälle",
+  "@contentCopied": {
+    "description": "Snackbar message when content is copied"
+  },
+  "failedToUpdateStarred": "Tähtimerkkauksen päivitys epäonnistui.",
+  "@failedToUpdateStarred": {
+    "description": "Error message when starring fails"
+  },
+  "conversationUrlNotShared": "Keskustelun URL-osoitetta ei voitu jakaa.",
+  "@conversationUrlNotShared": {
+    "description": "Error message when sharing fails"
+  },
+  "errorProcessingConversation": "Virhe keskustelun käsittelyssä. Yritä myöhemmin uudelleen.",
+  "@errorProcessingConversation": {
+    "description": "Error message for conversation processing failure"
+  },
+  "noInternetConnection": "Tarkista internet-yhteytesi ja yritä uudelleen.",
+  "@noInternetConnection": {
+    "description": "Message shown when there's no internet"
+  },
+  "unableToDeleteConversation": "Keskustelun poisto ei onnistu",
+  "@unableToDeleteConversation": {
+    "description": "Title for delete error dialog"
+  },
+  "somethingWentWrong": "Jokin meni pieleen! Yritä myöhemmin uudelleen.",
+  "@somethingWentWrong": {
+    "description": "Generic error message"
+  },
+  "copyErrorMessage": "Kopioi virheilmoitus",
+  "@copyErrorMessage": {
+    "description": "Button to copy error details"
+  },
+  "errorCopied": "Virheilmoitus kopioitu leikepöydälle",
+  "@errorCopied": {
+    "description": "Snackbar message after copying error"
+  },
+  "remaining": "Jäljellä",
+  "@remaining": {
+    "description": "Label for remaining time/items"
+  },
+  "loading": "Ladataan...",
+  "@loading": {
+    "description": "Loading indicator text"
+  },
+  "loadingDuration": "Ladataan kestoa...",
+  "@loadingDuration": {
+    "description": "Loading duration indicator"
+  },
+  "secondsCount": "{count} sekuntia",
+  "@secondsCount": {
+    "description": "Duration in seconds",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "30"
+      }
+    }
+  },
+  "people": "Ihmiset",
+  "@people": {
+    "description": "People section title"
+  },
+  "addNewPerson": "Lisää uusi henkilö",
+  "@addNewPerson": {
+    "description": "Title for add person dialog"
+  },
+  "editPerson": "Muokkaa henkilöä",
+  "@editPerson": {
+    "description": "Title for edit person dialog"
+  },
+  "createPersonHint": "Luo uusi henkilö ja opeta Omi tunnistamaan hänen puheensa!",
+  "@createPersonHint": {
+    "description": "Hint text for creating a person"
+  },
+  "speechProfile": "Puheprofiili",
+  "@speechProfile": {
+    "description": "Speech profile label"
+  },
+  "sampleNumber": "Näyte {number}",
+  "@sampleNumber": {
+    "description": "Label for speech sample",
+    "placeholders": {
+      "number": {
+        "type": "int",
+        "example": "1"
+      }
+    }
+  },
+  "settings": "Asetukset",
+  "@settings": {
+    "description": "Settings page title"
+  },
+  "language": "Kieli",
+  "@language": {
+    "description": "Language setting label"
+  },
+  "selectLanguage": "Valitse kieli",
+  "@selectLanguage": {
+    "description": "Title for language selection"
+  },
+  "deleting": "Poistetaan...",
+  "@deleting": {
+    "description": "Deleting in progress indicator"
+  },
+  "pleaseCompleteAuthentication": "Viimeistele todennus selaimessasi. Kun olet valmis, palaa sovellukseen.",
+  "@pleaseCompleteAuthentication": {
+    "description": "Message shown during OAuth flow"
+  },
+  "failedToStartAuthentication": "Todennuksen aloitus epäonnistui",
+  "@failedToStartAuthentication": {
+    "description": "Error when OAuth fails to start"
+  },
+  "importStarted": "Tuonti aloitettu! Saat ilmoituksen, kun se on valmis.",
+  "@importStarted": {
+    "description": "Success message when import begins"
+  },
+  "failedToStartImport": "Tuonnin aloitus epäonnistui. Yritä uudelleen.",
+  "@failedToStartImport": {
+    "description": "Error when import fails to start"
+  },
+  "couldNotAccessFile": "Valittua tiedostoa ei voitu käyttää",
+  "@couldNotAccessFile": {
+    "description": "Error when file access fails"
+  },
+  "askOmi": "Kysy Omilta",
+  "@askOmi": {
+    "description": "Chat button label"
+  },
+  "done": "Valmis",
+  "@done": {
+    "description": "Button label"
+  },
+  "disconnected": "Yhteys katkaistu",
+  "@disconnected": {
+    "description": "Device disconnected status"
+  },
+  "searching": "Etsitään",
+  "@searching": {
+    "description": "Searching for device status"
+  },
+  "connectDevice": "Yhdistä laite",
+  "@connectDevice": {
+    "description": "Button to connect a device"
+  },
+  "monthlyLimitReached": "Olet saavuttanut kuukausirajan.",
+  "@monthlyLimitReached": {
+    "description": "Message when usage limit is reached"
+  },
+  "checkUsage": "Tarkista käyttö",
+  "@checkUsage": {
+    "description": "Button to check usage details"
+  },
+  "syncingRecordings": "Synkronoidaan nauhoituksia",
+  "@syncingRecordings": {
+    "description": "Title when sync is in progress"
+  },
+  "recordingsToSync": "Synkronoitavat nauhoitukset",
+  "@recordingsToSync": {
+    "description": "Title when there are recordings to sync"
+  },
+  "allCaughtUp": "Kaikki ajan tasalla",
+  "@allCaughtUp": {
+    "description": "Title when everything is synced"
+  },
+  "sync": "Synkronoi",
+  "@sync": {
+    "description": "Sync button label"
+  },
+  "pendantUpToDate": "Riipus on ajan tasalla",
+  "@pendantUpToDate": {
+    "description": "Status when pendant is synced"
+  },
+  "allRecordingsSynced": "Kaikki nauhoitukset synkronoitu",
+  "@allRecordingsSynced": {
+    "description": "Status text when sync is complete"
+  },
+  "syncingInProgress": "Synkronointi käynnissä",
+  "@syncingInProgress": {
+    "description": "Status when sync is happening"
+  },
+  "readyToSync": "Valmis synkronointiin",
+  "@readyToSync": {
+    "description": "Status when ready to sync"
+  },
+  "tapSyncToStart": "Aloita napauttamalla Synkronoi",
+  "@tapSyncToStart": {
+    "description": "Hint to start sync"
+  },
+  "pendantNotConnected": "Riipus ei ole yhdistetty. Yhdistä synkronoidaksesi.",
+  "@pendantNotConnected": {
+    "description": "Warning when pendant is not connected"
+  },
+  "everythingSynced": "Kaikki on jo synkronoitu.",
+  "@everythingSynced": {
+    "description": "Message when all is synced"
+  },
+  "recordingsNotSynced": "Sinulla on nauhoituksia, joita ei ole vielä synkronoitu.",
+  "@recordingsNotSynced": {
+    "description": "Message when there are unsynced recordings"
+  },
+  "syncingBackground": "Jatkamme nauhoitusten synkronointia taustalla.",
+  "@syncingBackground": {
+    "description": "Message during background sync"
+  },
+  "noConversationsYet": "Ei vielä keskusteluja.",
+  "@noConversationsYet": {
+    "description": "Empty state when no conversations exist"
+  },
+  "noStarredConversations": "Ei vielä tähdellä merkittyjä keskusteluja.",
+  "@noStarredConversations": {
+    "description": "Empty state for starred filter"
+  },
+  "starConversationHint": "Merkitäksesi keskustelun tähdellä, avaa se ja napauta tähti-kuvaketta otsikossa.",
+  "@starConversationHint": {
+    "description": "Hint explaining how to star conversations"
+  },
+  "searchConversations": "Etsi keskusteluja",
+  "@searchConversations": {
+    "description": "Search field placeholder"
+  },
+  "selectedCount": "{count} valittu",
+  "@selectedCount": {
+    "description": "Selection count label",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "merge": "Yhdistä",
+  "@merge": {
+    "description": "Merge button label"
+  },
+  "mergeConversations": "Yhdistä keskustelut",
+  "@mergeConversations": {
+    "description": "Merge dialog title"
+  },
+  "mergeConversationsMessage": "Tämä yhdistää {count} keskustelua yhdeksi. Kaikki sisältö yhdistetään ja luodaan uudelleen.",
+  "@mergeConversationsMessage": {
+    "description": "Merge confirmation message",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mergingInBackground": "Yhdistetään taustalla. Tämä voi kestää hetken.",
+  "@mergingInBackground": {
+    "description": "Snackbar message during merge"
+  },
+  "failedToStartMerge": "Yhdistämisen aloitus epäonnistui",
+  "@failedToStartMerge": {
+    "description": "Error message when merge fails"
+  },
+  "askAnything": "Kysy mitä tahansa",
+  "@askAnything": {
+    "description": "Chat input placeholder"
+  },
+  "noMessagesYet": "Ei vielä viestejä!\nMikset aloittaisi keskustelua?",
+  "@noMessagesYet": {
+    "description": "Empty chat state message"
+  },
+  "deletingMessages": "Poistetaan viestejäsi Omin muistista...",
+  "@deletingMessages": {
+    "description": "Loading text while clearing chat"
+  },
+  "messageCopied": "Viesti kopioitu leikepöydälle.",
+  "@messageCopied": {
+    "description": "Snackbar after copying message"
+  },
+  "cannotReportOwnMessage": "Et voi ilmoittaa omista viesteistäsi.",
+  "@cannotReportOwnMessage": {
+    "description": "Error when trying to report own message"
+  },
+  "reportMessage": "Ilmoita viestistä",
+  "@reportMessage": {
+    "description": "Report message dialog title"
+  },
+  "reportMessageConfirm": "Haluatko varmasti ilmoittaa tästä viestistä?",
+  "@reportMessageConfirm": {
+    "description": "Report message confirmation"
+  },
+  "messageReported": "Viesti ilmoitettu onnistuneesti.",
+  "@messageReported": {
+    "description": "Confirmation after reporting message"
+  },
+  "thankYouFeedback": "Kiitos palautteestasi!",
+  "@thankYouFeedback": {
+    "description": "After thumbs up/down feedback"
+  },
+  "clearChat": "Tyhjennä keskustelu?",
+  "@clearChat": {
+    "description": "Clear chat dialog title"
+  },
+  "clearChatConfirm": "Haluatko varmasti tyhjentää keskustelun? Tätä toimintoa ei voi perua.",
+  "@clearChatConfirm": {
+    "description": "Clear chat confirmation message"
+  },
+  "maxFilesLimit": "Voit ladata vain 4 tiedostoa kerrallaan",
+  "@maxFilesLimit": {
+    "description": "Max files upload warning"
+  },
+  "chatWithOmi": "Keskustele Omin kanssa",
+  "@chatWithOmi": {
+    "description": "Chat share subject"
+  },
+  "apps": "Sovellukset",
+  "@apps": {
+    "description": "Apps page title"
+  },
+  "noAppsFound": "Sovelluksia ei löytynyt",
+  "@noAppsFound": {
+    "description": "Empty state when no apps match"
+  },
+  "tryAdjustingSearch": "Kokeile säätää hakua tai suodattimia",
+  "@tryAdjustingSearch": {
+    "description": "Hint when no apps found"
+  },
+  "createYourOwnApp": "Luo oma sovellus",
+  "@createYourOwnApp": {
+    "description": "Create app button title"
+  },
+  "buildAndShareApp": "Rakenna ja jaa oma sovelluksesi",
+  "@buildAndShareApp": {
+    "description": "Create app button subtitle"
+  },
+  "searchApps": "Etsi yli 1500 sovelluksesta",
+  "@searchApps": {
+    "description": "Apps search placeholder"
+  },
+  "myApps": "Omat sovellukset",
+  "@myApps": {
+    "description": "My Apps filter button"
+  },
+  "installedApps": "Asennetut sovellukset",
+  "@installedApps": {
+    "description": "Installed Apps filter button"
+  },
+  "unableToFetchApps": "Sovellusten haku epäonnistui :(\n\nTarkista internet-yhteytesi ja yritä uudelleen.",
+  "@unableToFetchApps": {
+    "description": "Error when apps fail to load"
+  },
+  "aboutOmi": "Tietoja Omista",
+  "@aboutOmi": {
+    "description": "About page title"
+  },
+  "privacyPolicy": "Tietosuojakäytäntö",
+  "@privacyPolicy": {
+    "description": "Link text for Privacy Policy"
+  },
+  "visitWebsite": "Käy verkkosivulla",
+  "@visitWebsite": {
+    "description": "Visit website link"
+  },
+  "helpOrInquiries": "Apua tai kysymyksiä?",
+  "@helpOrInquiries": {
+    "description": "Help link title"
+  },
+  "joinCommunity": "Liity yhteisöön!",
+  "@joinCommunity": {
+    "description": "Discord community link"
+  },
+  "membersAndCounting": "Yli 8000 jäsentä ja kasvaa.",
+  "@membersAndCounting": {
+    "description": "Discord member count"
+  },
+  "deleteAccountTitle": "Poista tili",
+  "@deleteAccountTitle": {
+    "description": "Delete account page title"
+  },
+  "deleteAccountConfirm": "Haluatko varmasti poistaa tilisi?",
+  "@deleteAccountConfirm": {
+    "description": "Delete account confirmation"
+  },
+  "cannotBeUndone": "Tätä ei voi perua.",
+  "@cannotBeUndone": {
+    "description": "Warning that action is permanent"
+  },
+  "allDataErased": "Kaikki muistosi ja keskustelusi poistetaan pysyvästi.",
+  "@allDataErased": {
+    "description": "Delete account warning 1"
+  },
+  "appsDisconnected": "Sovelluksesi ja integraatiot katkaistaan välittömästi.",
+  "@appsDisconnected": {
+    "description": "Delete account warning 2"
+  },
+  "exportBeforeDelete": "Voit viedä tietosi ennen tilin poistamista, mutta poiston jälkeen niitä ei voi palauttaa.",
+  "@exportBeforeDelete": {
+    "description": "Delete account warning 3"
+  },
+  "deleteAccountCheckbox": "Ymmärrän, että tilini poistaminen on pysyvää ja kaikki tiedot, mukaan lukien muistot ja keskustelut, menetetään eikä niitä voi palauttaa.",
+  "@deleteAccountCheckbox": {
+    "description": "Delete account checkbox confirmation"
+  },
+  "areYouSure": "Oletko varma?",
+  "@areYouSure": {
+    "description": "Final confirmation title"
+  },
+  "deleteAccountFinal": "Tämä toiminto on peruuttamaton ja poistaa tilisi ja kaikki siihen liittyvät tiedot pysyvästi. Haluatko varmasti jatkaa?",
+  "@deleteAccountFinal": {
+    "description": "Final delete confirmation message"
+  },
+  "deleteNow": "Poista nyt",
+  "@deleteNow": {
+    "description": "Delete now button"
+  },
+  "goBack": "Palaa takaisin",
+  "@goBack": {
+    "description": "Go back button"
+  },
+  "checkBoxToConfirm": "Valitse ruutu vahvistaaksesi, että ymmärrät tilin poistamisen olevan pysyvää ja peruuttamatonta.",
+  "@checkBoxToConfirm": {
+    "description": "Checkbox validation error"
+  },
+  "profile": "Profiili",
+  "@profile": {
+    "description": "Profile page title"
+  },
+  "name": "Nimi",
+  "@name": {
+    "description": "Name field label"
+  },
+  "email": "Sähköposti",
+  "@email": {
+    "description": "Email field label"
+  },
+  "customVocabulary": "Mukautettu sanasto",
+  "@customVocabulary": {
+    "description": "Custom vocabulary setting"
+  },
+  "identifyingOthers": "Muiden tunnistaminen",
+  "@identifyingOthers": {
+    "description": "People identification setting"
+  },
+  "paymentMethods": "Maksutavat",
+  "@paymentMethods": {
+    "description": "Payment methods setting"
+  },
+  "conversationDisplay": "Keskustelunäkymä",
+  "@conversationDisplay": {
+    "description": "Conversation display setting"
+  },
+  "dataPrivacy": "Tiedot ja yksityisyys",
+  "@dataPrivacy": {
+    "description": "Data and privacy setting"
+  },
+  "userId": "Käyttäjätunnus",
+  "@userId": {
+    "description": "User ID label"
+  },
+  "notSet": "Ei asetettu",
+  "@notSet": {
+    "description": "Default value when not set"
+  },
+  "userIdCopied": "Käyttäjätunnus kopioitu leikepöydälle",
+  "@userIdCopied": {
+    "description": "Confirmation when user ID is copied"
+  },
+  "systemDefault": "Järjestelmän oletus",
+  "@systemDefault": {
+    "description": "System language option"
+  },
+  "planAndUsage": "Paketti ja käyttö",
+  "@planAndUsage": {
+    "description": "Plan and usage menu item"
+  },
+  "offlineSync": "Offline-synkronointi",
+  "@offlineSync": {
+    "description": "Offline sync menu item"
+  },
+  "deviceSettings": "Laitteen asetukset",
+  "@deviceSettings": {
+    "description": "Device settings menu item"
+  },
+  "chatTools": "Chat-työkalut",
+  "@chatTools": {
+    "description": "Chat tools menu item"
+  },
+  "feedbackBug": "Palaute / Virhe",
+  "@feedbackBug": {
+    "description": "Feedback menu item"
+  },
+  "helpCenter": "Ohjekeskus",
+  "@helpCenter": {
+    "description": "Help center menu item"
+  },
+  "developerSettings": "Kehittäjäasetukset",
+  "@developerSettings": {
+    "description": "Developer settings menu item"
+  },
+  "getOmiForMac": "Hanki Omi Macille",
+  "@getOmiForMac": {
+    "description": "Mac app download link"
+  },
+  "referralProgram": "Suositteluohjelma",
+  "@referralProgram": {
+    "description": "Referral program menu item"
+  },
+  "signOut": "Kirjaudu ulos",
+  "@signOut": {
+    "description": "Sign out button"
+  },
+  "appAndDeviceCopied": "Sovelluksen ja laitteen tiedot kopioitu",
+  "@appAndDeviceCopied": {
+    "description": "Confirmation when version info is copied"
+  },
+  "wrapped2025": "Wrapped 2025",
+  "@wrapped2025": {
+    "description": "Wrapped 2025 menu item"
+  },
+  "yourPrivacyYourControl": "Yksityisyytesi, sinun hallinnassasi",
+  "@yourPrivacyYourControl": {
+    "description": "Data privacy page heading"
+  },
+  "privacyIntro": "Omissa olemme sitoutuneet suojaamaan yksityisyyttäsi. Tämä sivu antaa sinulle mahdollisuuden hallita, miten tietojasi tallennetaan ja käytetään.",
+  "@privacyIntro": {
+    "description": "Data privacy page introduction"
+  },
+  "learnMore": "Lue lisää...",
+  "@learnMore": {
+    "description": "Learn more link"
+  },
+  "dataProtectionLevel": "Tietosuojataso",
+  "@dataProtectionLevel": {
+    "description": "Data protection section title"
+  },
+  "dataProtectionDesc": "Tietosi on oletuksena suojattu vahvalla salauksella. Tarkista asetuksesi ja tulevat yksityisyysvaihtoehdot alla.",
+  "@dataProtectionDesc": {
+    "description": "Data protection section description"
+  },
+  "appAccess": "Sovelluspääsy",
+  "@appAccess": {
+    "description": "App access section title"
+  },
+  "appAccessDesc": "Seuraavat sovellukset voivat käyttää tietojasi. Napauta sovellusta hallitaksesi sen käyttöoikeuksia.",
+  "@appAccessDesc": {
+    "description": "App access section description"
+  },
+  "noAppsExternalAccess": "Yhdelläkään asennetulla sovelluksella ei ole ulkoista pääsyä tietoihisi.",
+  "@noAppsExternalAccess": {
+    "description": "Empty state for app access"
+  },
+  "deviceName": "Laitteen nimi",
+  "@deviceName": {
+    "description": "Device name label"
+  },
+  "deviceId": "Laitetunnus",
+  "@deviceId": {
+    "description": "Device ID label"
+  },
+  "firmware": "Laiteohjelmisto",
+  "@firmware": {
+    "description": "Firmware label"
+  },
+  "sdCardSync": "SD-kortin synkronointi",
+  "@sdCardSync": {
+    "description": "SD Card sync label"
+  },
+  "hardwareRevision": "Laitteistoversio",
+  "@hardwareRevision": {
+    "description": "Hardware revision label"
+  },
+  "modelNumber": "Mallinumero",
+  "@modelNumber": {
+    "description": "Model number label"
+  },
+  "manufacturer": "Valmistaja",
+  "@manufacturer": {
+    "description": "Manufacturer label"
+  },
+  "doubleTap": "Kaksoisnapautus",
+  "@doubleTap": {
+    "description": "Double tap action label"
+  },
+  "ledBrightness": "LED-kirkkaus",
+  "@ledBrightness": {
+    "description": "LED brightness setting"
+  },
+  "micGain": "Mikrofonin vahvistus",
+  "@micGain": {
+    "description": "Microphone gain setting"
+  },
+  "disconnect": "Katkaise yhteys",
+  "@disconnect": {
+    "description": "Disconnect device button"
+  },
+  "forgetDevice": "Unohda laite",
+  "@forgetDevice": {
+    "description": "Forget device button"
+  },
+  "chargingIssues": "Latausongelmat",
+  "@chargingIssues": {
+    "description": "Charging issues help item"
+  },
+  "disconnectDevice": "Katkaise laitteen yhteys",
+  "@disconnectDevice": {
+    "description": "Disconnect device button"
+  },
+  "unpairDevice": "Pura laitepari",
+  "@unpairDevice": {
+    "description": "Unpair device button"
+  },
+  "unpairAndForget": "Pura laitepari ja unohda laite",
+  "@unpairAndForget": {
+    "description": "Unpair and forget device button"
+  },
+  "deviceDisconnectedMessage": "Omin yhteys on katkaistu 😔",
+  "@deviceDisconnectedMessage": {
+    "description": "Message shown when device is disconnected"
+  },
+  "deviceUnpairedMessage": "Laitepari purettu. Siirry kohtaan Asetukset > Bluetooth ja unohda laite viimeistelläksesi purkamisen.",
+  "@deviceUnpairedMessage": {
+    "description": "Message shown when device is unpaired"
+  },
+  "unpairDialogTitle": "Pura laitepari",
+  "@unpairDialogTitle": {
+    "description": "Unpair dialog title"
+  },
+  "unpairDialogMessage": "Tämä purkaa laiteparin, jotta se voidaan yhdistää toiseen puhelimeen. Sinun on siirryttävä kohtaan Asetukset > Bluetooth ja unohdettava laite prosessin viimeistelemiseksi.",
+  "@unpairDialogMessage": {
+    "description": "Unpair dialog message"
+  },
+  "deviceNotConnected": "Laitetta ei ole yhdistetty",
+  "@deviceNotConnected": {
+    "description": "Device not connected header"
+  },
+  "connectDeviceMessage": "Yhdistä Omi-laite käyttääksesi\nlaiteasetuksia ja mukautusta",
+  "@connectDeviceMessage": {
+    "description": "Message encouraging user to connect device"
+  },
+  "deviceInfoSection": "Laitteen tiedot",
+  "@deviceInfoSection": {
+    "description": "Device information section header"
+  },
+  "customizationSection": "Mukautus",
+  "@customizationSection": {
+    "description": "Customization section header"
+  },
+  "hardwareSection": "Laitteisto",
+  "@hardwareSection": {
+    "description": "Hardware section header"
+  },
+  "v2Undetected": "V2 ei havaittu",
+  "@v2Undetected": {
+    "description": "V2 device undeteced dialog title"
+  },
+  "v2UndetectedMessage": "Sinulla näyttää olevan V1-laite tai laitteesi ei ole yhdistetty. SD-korttitoiminto on saatavilla vain V2-laitteille.",
+  "@v2UndetectedMessage": {
+    "description": "V2 device undeteced dialog message"
+  },
+  "endConversation": "Lopeta keskustelu",
+  "@endConversation": {
+    "description": "End conversation action"
+  },
+  "pauseResume": "Keskeytä/Jatka",
+  "@pauseResume": {
+    "description": "Pause/Resume action"
+  },
+  "starConversation": "Merkitse tähdellä",
+  "@starConversation": {
+    "description": "Star conversation action"
+  },
+  "doubleTapAction": "Kaksoisnapaututstoiminto",
+  "@doubleTapAction": {
+    "description": "Double tap action setting"
+  },
+  "endAndProcess": "Lopeta ja käsittele keskustelu",
+  "@endAndProcess": {
+    "description": "End and process action"
+  },
+  "pauseResumeRecording": "Keskeytä/Jatka nauhoitusta",
+  "@pauseResumeRecording": {
+    "description": "Pause/Resume recording action"
+  },
+  "starOngoing": "Merkitse käynnissä oleva keskustelu tähdellä",
+  "@starOngoing": {
+    "description": "Star ongoing conversation action"
+  },
+  "off": "Pois",
+  "@off": {
+    "description": "Off state"
+  },
+  "max": "Maks.",
+  "@max": {
+    "description": "Max state"
+  },
+  "mute": "Vaimenna",
+  "@mute": {
+    "description": "Mute state"
+  },
+  "quiet": "Hiljainen",
+  "@quiet": {
+    "description": "Quiet preset"
+  },
+  "normal": "Normaali",
+  "@normal": {
+    "description": "Normal preset"
+  },
+  "high": "Korkea",
+  "@high": {
+    "description": "High preset"
+  },
+  "micGainDescMuted": "Mikrofoni on vaimennettu",
+  "@micGainDescMuted": {
+    "description": "Mic gain description: Muted"
+  },
+  "micGainDescLow": "Erittäin hiljainen - meluisiin ympäristöihin",
+  "@micGainDescLow": {
+    "description": "Mic gain description: Low"
+  },
+  "micGainDescModerate": "Hiljainen - kohtalaiseen meluun",
+  "@micGainDescModerate": {
+    "description": "Mic gain description: Moderate"
+  },
+  "micGainDescNeutral": "Neutraali - tasapainoinen nauhoitus",
+  "@micGainDescNeutral": {
+    "description": "Mic gain description: Neutral"
+  },
+  "micGainDescSlightlyBoosted": "Hieman vahvistettu - normaalikäyttö",
+  "@micGainDescSlightlyBoosted": {
+    "description": "Mic gain description: Slightly Boosted"
+  },
+  "micGainDescBoosted": "Vahvistettu - hiljaisiin ympäristöihin",
+  "@micGainDescBoosted": {
+    "description": "Mic gain description: Boosted"
+  },
+  "micGainDescHigh": "Korkea - kaukaisille tai pehmeille äänille",
+  "@micGainDescHigh": {
+    "description": "Mic gain description: High"
+  },
+  "micGainDescVeryHigh": "Erittäin korkea - erittäin hiljaisille lähteille",
+  "@micGainDescVeryHigh": {
+    "description": "Mic gain description: Very High"
+  },
+  "micGainDescMax": "Maksimi - käytä varoen",
+  "@micGainDescMax": {
+    "description": "Mic gain description: Max"
+  },
+  "developerSettingsTitle": "Kehittäjäasetukset",
+  "@developerSettingsTitle": {
+    "description": "Developer settings page title"
+  },
+  "saving": "Tallennetaan...",
+  "@saving": {
+    "description": "Saving state text"
+  },
+  "personaConfig": "Määritä AI-persoonasi",
+  "@personaConfig": {
+    "description": "Persona configuration subtitle"
+  },
+  "beta": "BETA",
+  "@beta": {
+    "description": "Beta tag"
+  },
+  "transcription": "Litterointi",
+  "@transcription": {
+    "description": "Transcription settings title"
+  },
+  "transcriptionConfig": "Määritä STT-palveluntarjoaja",
+  "@transcriptionConfig": {
+    "description": "Transcription configuration subtitle"
+  },
+  "conversationTimeout": "Keskustelun aikakatkaisu",
+  "@conversationTimeout": {
+    "description": "Conversation timeout settings title"
+  },
+  "conversationTimeoutConfig": "Aseta milloin keskustelut päättyvät automaattisesti",
+  "@conversationTimeoutConfig": {
+    "description": "Conversation timeout configuration subtitle"
+  },
+  "importData": "Tuo tietoja",
+  "@importData": {
+    "description": "Import data details title"
+  },
+  "importDataConfig": "Tuo tietoja muista lähteistä",
+  "@importDataConfig": {
+    "description": "Import data details subtitle"
+  },
+  "debugDiagnostics": "Vianjäljitys ja diagnostiikka",
+  "@debugDiagnostics": {
+    "description": "Debug & Diagnostics section header"
+  },
+  "endpointUrl": "Päätepisteen URL",
+  "@endpointUrl": {
+    "description": "Endpoint URL label"
+  },
+  "noApiKeys": "Ei vielä API-avaimia",
+  "@noApiKeys": {
+    "description": "No API keys message"
+  },
+  "createKeyToStart": "Luo avain aloittaaksesi",
+  "@createKeyToStart": {
+    "description": "Create key instruction"
+  },
+  "createKey": "Luo avain",
+  "@createKey": {
+    "description": "Create Key button"
+  },
+  "docs": "Dokumentit",
+  "@docs": {
+    "description": "Documentation link"
+  },
+  "yourOmiInsights": "Omi-näkemyksesi",
+  "@yourOmiInsights": {
+    "description": "Usage page title"
+  },
+  "today": "Tänään",
+  "@today": {
+    "description": "Time period: Today"
+  },
+  "thisMonth": "Tässä kuussa",
+  "@thisMonth": {
+    "description": "Time period: This Month"
+  },
+  "thisYear": "Tänä vuonna",
+  "@thisYear": {
+    "description": "Time period: This Year"
+  },
+  "allTime": "Kaikki aika",
+  "@allTime": {
+    "description": "Time period: All Time"
+  },
+  "noActivityYet": "Ei vielä toimintaa",
+  "@noActivityYet": {
+    "description": "Empty state title"
+  },
+  "startConversationToSeeInsights": "Aloita keskustelu Omin kanssa\nnähdäksesi käyttötietosi täällä.",
+  "@startConversationToSeeInsights": {
+    "description": "Empty state description"
+  },
+  "listening": "Kuunteleminen",
+  "@listening": {
+    "description": "Listening stat title"
+  },
+  "listeningSubtitle": "Kokonaisaika, jonka Omi on aktiivisesti kuunnellut.",
+  "@listeningSubtitle": {
+    "description": "Listening stat subtitle"
+  },
+  "understanding": "Ymmärtäminen",
+  "@understanding": {
+    "description": "Understanding stat title"
+  },
+  "understandingSubtitle": "Keskusteluistasi ymmärretyt sanat.",
+  "@understandingSubtitle": {
+    "description": "Understanding stat subtitle"
+  },
+  "providing": "Tarjoaminen",
+  "@providing": {
+    "description": "Providing stat title"
+  },
+  "providingSubtitle": "Tehtävät ja muistiinpanot automaattisesti tallennettu.",
+  "@providingSubtitle": {
+    "description": "Providing stat subtitle"
+  },
+  "remembering": "Muistaminen",
+  "@remembering": {
+    "description": "Remembering stat title"
+  },
+  "rememberingSubtitle": "Sinulle muistetut faktat ja yksityiskohdat.",
+  "@rememberingSubtitle": {
+    "description": "Remembering stat subtitle"
+  },
+  "unlimitedPlan": "Rajoittamaton paketti",
+  "@unlimitedPlan": {
+    "description": "Unlimited plan name"
+  },
+  "managePlan": "Hallitse pakettia",
+  "@managePlan": {
+    "description": "Manage plan button"
+  },
+  "cancelAtPeriodEnd": "Pakettisi peruuntuu {date}.",
+  "@cancelAtPeriodEnd": {
+    "description": "Cancellation message",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Jan 1, 2026"
+      }
+    }
+  },
+  "renewsOn": "Pakettisi uusiutuu {date}.",
+  "@renewsOn": {
+    "description": "Renewal message",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Jan 1, 2026"
+      }
+    }
+  },
+  "basicPlan": "Ilmaispaketti",
+  "@basicPlan": {
+    "description": "Basic plan name"
+  },
+  "usageLimitMessage": "{used}/{limit} min käytetty",
+  "@usageLimitMessage": {
+    "description": "Usage limit message",
+    "placeholders": {
+      "used": {
+        "type": "String",
+        "example": "100"
+      },
+      "limit": {
+        "type": "int",
+        "example": "60"
+      }
+    }
+  },
+  "upgrade": "Päivitä",
+  "@upgrade": {
+    "description": "Upgrade button"
+  },
+  "upgradeToUnlimited": "Päivitä rajoittamattomaan",
+  "@upgradeToUnlimited": {
+    "description": "Upgrade to unlimited button"
+  },
+  "basicPlanDesc": "Pakettisi sisältää {limit} ilmaisminuuttia kuukaudessa. Päivitä saadaksesi rajoittamattoman.",
+  "@basicPlanDesc": {
+    "description": "Basic plan description",
+    "placeholders": {
+      "limit": {
+        "type": "int",
+        "example": "60"
+      }
+    }
+  },
+  "shareStatsMessage": "Jaan Omi-tilastoni! (omi.me - aina päällä oleva tekoälyavustajasi)",
+  "@shareStatsMessage": {
+    "description": "Share stats base message"
+  },
+  "sharePeriodToday": "Tänään omi on:",
+  "@sharePeriodToday": {
+    "description": "Share stats period: Today"
+  },
+  "sharePeriodMonth": "Tässä kuussa omi on:",
+  "@sharePeriodMonth": {
+    "description": "Share stats period: Month"
+  },
+  "sharePeriodYear": "Tänä vuonna omi on:",
+  "@sharePeriodYear": {
+    "description": "Share stats period: Year"
+  },
+  "sharePeriodAllTime": "Tähän mennessä omi on:",
+  "@sharePeriodAllTime": {
+    "description": "Share stats period: All Time"
+  },
+  "shareStatsListened": "🎧 Kuunnellut {minutes} minuuttia",
+  "@shareStatsListened": {
+    "description": "Share stats: listened",
+    "placeholders": {
+      "minutes": {
+        "type": "String",
+        "example": "120"
+      }
+    }
+  },
+  "shareStatsWords": "🧠 Ymmärtänyt {words} sanaa",
+  "@shareStatsWords": {
+    "description": "Share stats: words",
+    "placeholders": {
+      "words": {
+        "type": "String",
+        "example": "5000"
+      }
+    }
+  },
+  "shareStatsInsights": "✨ Tarjonnut {count} näkemystä",
+  "@shareStatsInsights": {
+    "description": "Share stats: insights",
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "10"
+      }
+    }
+  },
+  "shareStatsMemories": "📚 Muistanut {count} muistoa",
+  "@shareStatsMemories": {
+    "description": "Share stats: memories",
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "5"
+      }
+    }
+  },
+  "debugLogs": "Vianjäljityslokit",
+  "debugLogsAutoDelete": "Poistetaan automaattisesti 3 päivän kuluttua.",
+  "debugLogsDesc": "Auttaa ongelmien diagnosoinnissa",
+  "noLogFilesFound": "Lokitiedostoja ei löytynyt.",
+  "omiDebugLog": "Omin vianjäljitysloki",
+  "logShared": "Loki jaettu",
+  "selectLogFile": "Valitse lokitiedosto",
+  "shareLogs": "Jaa lokit",
+  "debugLogCleared": "Vianjäljitysloki tyhjennetty",
+  "exportStarted": "Vienti aloitettu. Tämä voi kestää muutaman sekunnin...",
+  "exportAllData": "Vie kaikki tiedot",
+  "exportDataDesc": "Vie keskustelut JSON-tiedostoon",
+  "exportedConversations": "Viedyt keskustelut Omista",
+  "exportShared": "Vienti jaettu",
+  "deleteKnowledgeGraphTitle": "Poista tietograafi?",
+  "deleteKnowledgeGraphMessage": "Tämä poistaa kaikki johdetut tietograafitiedot (solmut ja yhteydet). Alkuperäiset muistosi pysyvät turvassa. Graafi rakennetaan uudelleen ajan myötä tai seuraavan pyynnön yhteydessä.",
+  "knowledgeGraphDeleted": "Tietograafi poistettu onnistuneesti",
+  "deleteGraphFailed": "Graafin poisto epäonnistui: {error}",
+  "@deleteGraphFailed": {
+    "description": "Error message when deleting graph fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteKnowledgeGraph": "Poista tietograafi",
+  "deleteKnowledgeGraphDesc": "Tyhjennä kaikki solmut ja yhteydet",
+  "mcp": "MCP",
+  "mcpServer": "MCP-palvelin",
+  "mcpServerDesc": "Yhdistä tekoälyavustajat tietoihisi",
+  "serverUrl": "Palvelimen URL",
+  "urlCopied": "URL kopioitu",
+  "apiKeyAuth": "API-avaimen todennus",
+  "header": "Otsikko",
+  "authorizationBearer": "Authorization: Bearer <avain>",
+  "oauth": "OAuth",
+  "clientId": "Asiakas-ID",
+  "clientSecret": "Asiakassalaisuus",
+  "useMcpApiKey": "Käytä MCP API-avainta",
+  "webhooks": "Webhookit",
+  "conversationEvents": "Keskustelutapahtumat",
+  "newConversationCreated": "Uusi keskustelu luotu",
+  "realtimeTranscript": "Reaaliaikainen litterointi",
+  "transcriptReceived": "Litterointi vastaanotettu",
+  "audioBytes": "Äänitavut",
+  "audioDataReceived": "Ääniaineisto vastaanotettu",
+  "intervalSeconds": "Aikaväli (sekunteina)",
+  "daySummary": "Päivän yhteenveto",
+  "summaryGenerated": "Yhteenveto luotu",
+  "claudeDesktop": "Claude Desktop",
+  "addToClaudeConfig": "Lisää claude_desktop_config.json-tiedostoon",
+  "copyConfig": "Kopioi kokoonpano",
+  "configCopied": "Kokoonpano kopioitu leikepöydälle",
+  "listeningMins": "Kuunteleminen (min)",
+  "understandingWords": "Ymmärtäminen (sanaa)",
+  "insights": "Näkemykset",
+  "memories": "Muistot",
+  "minsUsedThisMonth": "{used}/{limit} min käytetty tässä kuussa",
+  "@minsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "wordsUsedThisMonth": "{used}/{limit} sanaa käytetty tässä kuussa",
+  "@wordsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "insightsUsedThisMonth": "{used}/{limit} näkemystä saavutettu tässä kuussa",
+  "@insightsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "memoriesUsedThisMonth": "{used}/{limit} muistoa luotu tässä kuussa",
+  "@memoriesUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "visibility": "Näkyvyys",
+  "visibilitySubtitle": "Hallitse mitä keskusteluja näkyy luettelossasi",
+  "showShortConversations": "Näytä lyhyet keskustelut",
+  "showShortConversationsDesc": "Näytä kynnysarvoa lyhyemmät keskustelut",
+  "showDiscardedConversations": "Näytä hylätyt keskustelut",
+  "showDiscardedConversationsDesc": "Sisällytä hylätyksi merkityt keskustelut",
+  "shortConversationThreshold": "Lyhyen keskustelun kynnysarvo",
+  "shortConversationThresholdSubtitle": "Tätä lyhyemmät keskustelut piilotetaan, ellei niitä ole otettu käyttöön yllä",
+  "durationThreshold": "Kestokynnys",
+  "durationThresholdDesc": "Piilota tätä lyhyemmät keskustelut",
+  "minLabel": "{count} min",
+  "@minLabel": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "customVocabularyTitle": "Mukautettu sanasto",
+  "addWords": "Lisää sanoja",
+  "addWordsDesc": "Nimiä, termejä tai harvinaisia sanoja",
+  "vocabularyHint": "Omi, Callie, OpenAI",
+  "connect": "Yhdistä",
+  "comingSoon": "Tulossa pian",
+  "chatToolsFooter": "Yhdistä sovelluksesi nähdäksesi tiedot ja mittarit chatissa.",
+  "completeAuthInBrowser": "Viimeistele todennus selaimessasi. Kun olet valmis, palaa sovellukseen.",
+  "failedToStartAuth": "{appName}-todennuksen aloitus epäonnistui",
+  "@failedToStartAuth": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectAppTitle": "Katkaise yhteys palveluun {appName}?",
+  "@disconnectAppTitle": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectAppMessage": "Haluatko varmasti katkaista yhteyden palveluun {appName}? Voit yhdistää uudelleen milloin tahansa.",
+  "@disconnectAppMessage": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectedFrom": "Yhteys katkaistu palveluun {appName}",
+  "@disconnectedFrom": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToDisconnect": "Yhteyden katkaisu epäonnistui",
+  "connectTo": "Yhdistä palveluun {appName}",
+  "@connectTo": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "authAccessMessage": "Sinun on valtuutettava Omi käyttämään {appName}-tietojasi. Tämä avaa selaimesi todennusta varten.",
+  "@authAccessMessage": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "continueAction": "Jatka",
+  "languageTitle": "Kieli",
+  "primaryLanguage": "Ensisijainen kieli",
+  "automaticTranslation": "Automaattinen käännös",
+  "detectLanguages": "Tunnista yli 10 kieltä",
+  "authorizeSavingRecordings": "Valtuuta nauhoitusten tallentaminen",
+  "thanksForAuthorizing": "Kiitos valtuutuksesta!",
+  "needYourPermission": "Tarvitsemme lupasi",
+  "alreadyGavePermission": "Olet jo antanut meille luvan tallentaa nauhoituksiasi. Tässä muistutus siitä, miksi tarvitsemme sen:",
+  "wouldLikePermission": "Haluaisimme lupasi tallentaa ääninauhoituksesi. Tässä syy:",
+  "improveSpeechProfile": "Paranna puheprofiiliasi",
+  "improveSpeechProfileDesc": "Käytämme nauhoituksia henkilökohtaisen puheprofiilisi kouluttamiseen ja parantamiseen.",
+  "trainFamilyProfiles": "Kouluta profiileja ystäville ja perheelle",
+  "trainFamilyProfilesDesc": "Nauhoituksesi auttavat meitä tunnistamaan ja luomaan profiileja ystävillesi ja perheellesi.",
+  "enhanceTranscriptAccuracy": "Paranna litterointitarkkuutta",
+  "enhanceTranscriptAccuracyDesc": "Kun mallimme paranee, voimme tarjota parempia litterointituloksia nauhoituksillesi.",
+  "legalNotice": "Oikeudellinen huomautus: Äänidatan nauhoittamisen ja tallentamisen laillisuus voi vaihdella sijaintisi ja tämän ominaisuuden käyttötavan mukaan. Vastaat paikallisten lakien ja määräysten noudattamisesta.",
+  "alreadyAuthorized": "Jo valtuutettu",
+  "authorize": "Valtuuta",
+  "revokeAuthorization": "Peru valtuutus",
+  "authorizationSuccessful": "Valtuutus onnistui!",
+  "failedToAuthorize": "Valtuutus epäonnistui. Yritä uudelleen.",
+  "authorizationRevoked": "Valtuutus peruttu.",
+  "recordingsDeleted": "Nauhoitukset poistettu.",
+  "failedToRevoke": "Valtuutuksen peruutus epäonnistui. Yritä uudelleen.",
+  "permissionRevokedTitle": "Lupa peruttu",
+  "permissionRevokedMessage": "Haluatko meidän poistavan myös kaikki olemassa olevat nauhoituksesi?",
+  "yes": "Kyllä",
+  "editName": "Muokkaa nimeä",
+  "howShouldOmiCallYou": "Miten Omin pitäisi kutsua sinua?",
+  "enterYourName": "Kirjoita nimesi",
+  "nameCannotBeEmpty": "Nimi ei voi olla tyhjä",
+  "nameUpdatedSuccessfully": "Nimi päivitetty onnistuneesti!",
+  "calendarSettings": "Kalenteriasetukset",
+  "calendarProviders": "Kalenteripalvelut",
+  "macOsCalendar": "macOS-kalenteri",
+  "connectMacOsCalendar": "Yhdistä paikallinen macOS-kalenterisi",
+  "googleCalendar": "Google Kalenteri",
+  "syncGoogleAccount": "Synkronoi Google-tilisi kanssa",
+  "showMeetingsMenuBar": "Näytä tulevat kokoukset valikkorivissä",
+  "showMeetingsMenuBarDesc": "Näytä seuraava kokouksesi ja aika sen alkuun macOS-valikkorivissä",
+  "showEventsNoParticipants": "Näytä tapahtumat ilman osallistujia",
+  "showEventsNoParticipantsDesc": "Kun käytössä, Tulossa näyttää tapahtumat ilman osallistujia tai videolinkkiä.",
+  "yourMeetings": "Kokouksesi",
+  "refresh": "Päivitä",
+  "noUpcomingMeetings": "Tulevia kokouksia ei löytynyt",
+  "checkingNextDays": "Tarkistetaan seuraavat 30 päivää",
+  "tomorrow": "Huomenna",
+  "googleCalendarComingSoon": "Google Kalenteri -integraatio tulossa pian!",
+  "connectedAsUser": "Yhdistetty käyttäjänä: {userId}",
+  "@connectedAsUser": {
+    "placeholders": {
+      "userId": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultWorkspace": "Oletustyötila",
+  "tasksCreatedInWorkspace": "Tehtävät luodaan tähän työtilaan",
+  "defaultProjectOptional": "Oletusprojekti (valinnainen)",
+  "leaveUnselectedTasks": "Jätä valitsematta luodaksesi tehtäviä ilman projektia",
+  "noProjectsInWorkspace": "Projekteja ei löytynyt tästä työtilasta",
+  "conversationTimeoutDesc": "Valitse kuinka kauan odotetaan hiljaisuutta ennen keskustelun automaattista päättämistä:",
+  "timeout2Minutes": "2 minuuttia",
+  "timeout2MinutesDesc": "Lopeta keskustelu 2 minuutin hiljaisuuden jälkeen",
+  "timeout5Minutes": "5 minuuttia",
+  "timeout5MinutesDesc": "Lopeta keskustelu 5 minuutin hiljaisuuden jälkeen",
+  "timeout10Minutes": "10 minuuttia",
+  "timeout10MinutesDesc": "Lopeta keskustelu 10 minuutin hiljaisuuden jälkeen",
+  "timeout30Minutes": "30 minuuttia",
+  "timeout30MinutesDesc": "Lopeta keskustelu 30 minuutin hiljaisuuden jälkeen",
+  "timeout4Hours": "4 tuntia",
+  "timeout4HoursDesc": "Lopeta keskustelu 4 tunnin hiljaisuuden jälkeen",
+  "conversationEndAfterHours": "Keskustelut päättyvät nyt 4 tunnin hiljaisuuden jälkeen",
+  "conversationEndAfterMinutes": "Keskustelut päättyvät nyt {minutes} minuutin hiljaisuuden jälkeen",
+  "@conversationEndAfterMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "tellUsPrimaryLanguage": "Kerro meille ensisijainen kielesi",
+  "languageForTranscription": "Aseta kielesi tarkempaa litterointia ja henkilökohtaista kokemusta varten.",
+  "singleLanguageModeInfo": "Yhden kielen tila on käytössä. Käännös on poistettu käytöstä paremman tarkkuuden vuoksi.",
+  "searchLanguageHint": "Etsi kieltä nimen tai koodin perusteella",
+  "noLanguagesFound": "Kieliä ei löytynyt",
+  "skip": "Ohita",
+  "languageSetTo": "Kieleksi asetettu {language}",
+  "@languageSetTo": {
+    "placeholders": {
+      "language": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToSetLanguage": "Kielen asetus epäonnistui",
+  "appSettings": "{appName}-asetukset",
+  "@appSettings": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectFromApp": "Katkaise yhteys palveluun {appName}?",
+  "@disconnectFromApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectFromAppDesc": "Tämä poistaa {appName}-todennuksesi. Sinun on yhdistettävä uudelleen käyttääksesi sitä uudelleen.",
+  "@disconnectFromAppDesc": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "connectedToApp": "Yhdistetty palveluun {appName}",
+  "@connectedToApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "account": "Tili",
+  "actionItemsSyncedTo": "Tehtäväsi synkronoidaan {appName}-tilillesi",
+  "@actionItemsSyncedTo": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultSpace": "Oletustila",
+  "selectSpaceInWorkspace": "Valitse tila työtilassasi",
+  "noSpacesInWorkspace": "Tiloja ei löytynyt tästä työtilasta",
+  "defaultList": "Oletusluettelo",
+  "tasksAddedToList": "Tehtävät lisätään tähän luetteloon",
+  "noListsInSpace": "Luetteloita ei löytynyt tästä tilasta",
+  "failedToLoadRepos": "Repositorioiden lataaminen epäonnistui: {error}",
+  "@failedToLoadRepos": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultRepoSaved": "Oletusrepositorio tallennettu",
+  "failedToSaveDefaultRepo": "Oletusrepositorion tallentaminen epäonnistui",
+  "defaultRepository": "Oletusrepositorio",
+  "selectDefaultRepoDesc": "Valitse oletusrepositorio ongelmien luomiseen. Voit silti määrittää eri repositorion ongelmia luodessa.",
+  "noReposFound": "Repositorioita ei löytynyt",
+  "private": "Yksityinen",
+  "updatedDate": "Päivitetty {date}",
+  "@updatedDate": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "yesterday": "eilen",
+  "daysAgo": "{count} päivää sitten",
+  "@daysAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "oneWeekAgo": "viikko sitten",
+  "weeksAgo": "{count} viikkoa sitten",
+  "@weeksAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "oneMonthAgo": "kuukausi sitten",
+  "monthsAgo": "{count} kuukautta sitten",
+  "@monthsAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "issuesCreatedInRepo": "Ongelmat luodaan oletusrepositoriossasi",
+  "taskIntegrations": "Tehtäväintegraatiot",
+  "configureSettings": "Määritä asetukset",
+  "completeAuthBrowser": "Viimeistele todennus selaimessasi. Kun olet valmis, palaa sovellukseen.",
+  "failedToStartAppAuth": "{appName}-todennuksen aloitus epäonnistui",
+  "@failedToStartAppAuth": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "connectToAppTitle": "Yhdistä palveluun {appName}",
+  "@connectToAppTitle": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "authorizeOmiForTasks": "Sinun on valtuutettava Omi luomaan tehtäviä {appName}-tilillesi. Tämä avaa selaimesi todennusta varten.",
+  "@authorizeOmiForTasks": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "continueButton": "Jatka",
+  "appIntegration": "{appName}-integraatio",
+  "@appIntegration": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "integrationComingSoon": "Integraatio palvelun {appName} kanssa tulossa pian! Työskentelemme ahkerasti tuodaksemme sinulle lisää tehtävänhallinnan vaihtoehtoja.",
+  "@integrationComingSoon": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "gotIt": "Selvä",
+  "tasksExportedOneApp": "Tehtäviä voidaan viedä yhteen sovellukseen kerrallaan",
+  "completeYourUpgrade": "Viimeistele päivityksesi",
+  "importConfiguration": "Tuo kokoonpano",
+  "exportConfiguration": "Vie kokoonpano",
+  "bringYourOwn": "Tuo omasi",
+  "payYourSttProvider": "Käytä omia vapaasti. Maksat vain STT-palveluntarjoajallesi suoraan.",
+  "freeMinutesMonth": "1 200 ilmaisminuuttia kuukaudessa mukana. Rajoittamaton ",
+  "omiUnlimited": "Omi Unlimited",
+  "hostRequired": "Isäntä vaaditaan",
+  "validPortRequired": "Kelvollinen portti vaaditaan",
+  "validWebsocketUrlRequired": "Kelvollinen WebSocket-URL vaaditaan (wss://)",
+  "apiUrlRequired": "API-URL vaaditaan",
+  "apiKeyRequired": "API-avain vaaditaan",
+  "invalidJsonConfig": "Virheellinen JSON-kokoonpano",
+  "errorSaving": "Virhe tallentaessa: {error}",
+  "@errorSaving": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "configCopiedToClipboard": "Kokoonpano kopioitu leikepöydälle",
+  "pasteJsonConfig": "Liitä JSON-kokoonpanosi alle:",
+  "addApiKeyAfterImport": "Sinun on lisättävä oma API-avaimesi tuonnin jälkeen",
+  "paste": "Liitä",
+  "import": "Tuo",
+  "invalidProviderInConfig": "Virheellinen palveluntarjoaja kokoonpanossa",
+  "importedConfig": "Tuotu {providerName}-kokoonpano",
+  "@importedConfig": {
+    "placeholders": {
+      "providerName": {
+        "type": "String"
+      }
+    }
+  },
+  "invalidJson": "Virheellinen JSON: {error}",
+  "@invalidJson": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "provider": "Palveluntarjoaja",
+  "live": "Live",
+  "onDevice": "Laitteella",
+  "apiUrl": "API-URL",
+  "enterSttHttpEndpoint": "Kirjoita STT HTTP -päätepisteesi",
+  "websocketUrl": "WebSocket-URL",
+  "enterLiveSttWebsocket": "Kirjoita live-STT WebSocket -päätepisteesi",
+  "apiKey": "API-avain",
+  "enterApiKey": "Kirjoita API-avaimesi",
+  "storedLocallyNeverShared": "Tallennettu paikallisesti, ei koskaan jaettu",
+  "host": "Isäntä",
+  "port": "Portti",
+  "advanced": "Lisäasetukset",
+  "configuration": "Kokoonpano",
+  "requestConfiguration": "Pyyntökokoonpano",
+  "responseSchema": "Vastauskaavio",
+  "modified": "Muokattu",
+  "resetRequestConfig": "Palauta pyyntökokoonpano oletuksiin",
+  "logs": "Lokit",
+  "logsCopied": "Lokit kopioitu",
+  "noLogsYet": "Ei vielä lokeja. Aloita nauhoitus nähdäksesi mukautetun STT-toiminnan.",
+  "deviceUsesCodec": "{deviceName} käyttää {codecReason}. Omia käytetään.",
+  "@deviceUsesCodec": {
+    "placeholders": {
+      "deviceName": {
+        "type": "String"
+      },
+      "codecReason": {
+        "type": "String"
+      }
+    }
+  },
+  "omiTranscription": "Omi-litterointi",
+  "bestInClassTranscription": "Paras litterointi ilman asennusta",
+  "instantSpeakerLabels": "Välittömät puhujatunnisteet",
+  "languageTranslation": "Yli 100 kielen käännös",
+  "optimizedForConversation": "Optimoitu keskusteluille",
+  "autoLanguageDetection": "Automaattinen kielentunnistus",
+  "highAccuracy": "Korkea tarkkuus",
+  "privacyFirst": "Yksityisyys ensin",
+  "saveChanges": "Tallenna muutokset",
+  "resetToDefault": "Palauta oletuksiin",
+  "viewTemplate": "Näytä malli",
+  "trySomethingLike": "Kokeile jotain tällaista...",
+  "tryIt": "Kokeile",
+  "creatingPlan": "Luodaan suunnitelmaa",
+  "developingLogic": "Kehitetään logiikkaa",
+  "designingApp": "Suunnitellaan sovellusta",
+  "generatingIconStep": "Luodaan kuvaketta",
+  "finalTouches": "Viimeiset viimeistelyt",
+  "processing": "Käsitellään...",
+  "features": "Ominaisuudet",
+  "creatingYourApp": "Luodaan sovellustasi...",
+  "generatingIcon": "Luodaan kuvaketta...",
+  "whatShouldWeMake": "Mitä meidän pitäisi tehdä?",
+  "appName": "Sovelluksen nimi",
+  "description": "Kuvaus",
+  "publicLabel": "Julkinen",
+  "privateLabel": "Yksityinen",
+  "free": "Ilmainen",
+  "perMonth": "/ kuukausi",
+  "tailoredConversationSummaries": "Räätälöidyt keskusteluyhteenvedot",
+  "customChatbotPersonality": "Mukautettu chatbot-persoonallisuus",
+  "makePublic": "Tee julkiseksi",
+  "anyoneCanDiscover": "Kuka tahansa voi löytää sovelluksesi",
+  "onlyYouCanUse": "Vain sinä voit käyttää tätä sovellusta",
+  "paidApp": "Maksullinen sovellus",
+  "usersPayToUse": "Käyttäjät maksavat sovelluksesi käytöstä",
+  "freeForEveryone": "Ilmainen kaikille",
+  "perMonthLabel": "/ kuukausi",
+  "creating": "Luodaan...",
+  "@creating": {
+    "description": "Loading state text when app generation is in progress"
+  },
+  "createApp": "Luo sovellus",
+  "@createApp": {
+    "description": "Button text to initiate app creation"
+  },
+  "@connect": {
+    "description": "Title for device connection page"
+  },
+  "searchingForDevices": "Etsitään laitteita...",
+  "@searchingForDevices": {
+    "description": "Status text while scanning for Bluetooth devices"
+  },
+  "devicesFoundNearby": "{count} {count, plural, =1{LAITE} other{LAITETTA}} LÖYDETTY LÄHISTÖLTÄ",
+  "@devicesFoundNearby": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pairingSuccessful": "PARILIITOS ONNISTUI",
+  "errorConnectingAppleWatch": "Virhe yhdistettäessä Apple Watchiin: {error}",
+  "@errorConnectingAppleWatch": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "dontShowAgain": "Älä näytä uudelleen",
+  "@dontShowAgain": {
+    "description": "Checkbox text to suppress future connection confirmations"
+  },
+  "iUnderstand": "Ymmärrän",
+  "@iUnderstand": {
+    "description": "Button text to acknowledge connection warnings"
+  },
+  "enableBluetooth": "Ota Bluetooth käyttöön",
+  "@enableBluetooth": {
+    "description": "Title for dialog prompting user to enable Bluetooth"
+  },
+  "bluetoothNeeded": "Omi tarvitsee Bluetoothin yhdistääkseen puettavaan laitteeseesi. Ota Bluetooth käyttöön ja yritä uudelleen.",
+  "@bluetoothNeeded": {
+    "description": "Explanation text for why Bluetooth is required"
+  },
+  "contactSupport": "Ota yhteyttä tukeen?",
+  "@contactSupport": {
+    "description": "Link text to contact support"
+  },
+  "connectLater": "Yhdistä myöhemmin",
+  "@connectLater": {
+    "description": "Button text to skip immediate device connection"
+  },
+  "grantPermissions": "Myönnä käyttöoikeudet",
+  "@grantPermissions": {
+    "description": "Title for the permissions request page"
+  },
+  "backgroundActivity": "Taustatoiminta",
+  "@backgroundActivity": {
+    "description": "Title for background activity permission"
+  },
+  "backgroundActivityDesc": "Anna Omin toimia taustalla parempaa vakautta varten",
+  "@backgroundActivityDesc": {
+    "description": "Description for background activity permission"
+  },
+  "locationAccess": "Sijaintipääsy",
+  "@locationAccess": {
+    "description": "Title for location access permission"
+  },
+  "locationAccessDesc": "Ota taustasijaintisi käyttöön täydelliseen kokemukseen",
+  "@locationAccessDesc": {
+    "description": "Description for location access permission"
+  },
+  "notifications": "Ilmoitukset",
+  "@notifications": {
+    "description": "Title for notifications permission"
+  },
+  "notificationsDesc": "Ota ilmoitukset käyttöön pysyäksesi ajan tasalla",
+  "@notificationsDesc": {
+    "description": "Description for notifications permission"
+  },
+  "@continueButton": {
+    "description": "Generic continue button text"
+  },
+  "locationServiceDisabled": "Sijaintipalvelu poistettu käytöstä",
+  "@locationServiceDisabled": {
+    "description": "Title for dialog when location services are off"
+  },
+  "locationServiceDisabledDesc": "Sijaintipalvelu on poistettu käytöstä. Siirry kohtaan Asetukset > Tietosuoja ja turvallisuus > Sijaintipalvelut ja ota se käyttöön",
+  "@locationServiceDisabledDesc": {
+    "description": "Instructions to enable location services"
+  },
+  "backgroundLocationDenied": "Taustasijaintipääsy evätty",
+  "@backgroundLocationDenied": {
+    "description": "Title for dialog when background location is denied"
+  },
+  "backgroundLocationDeniedDesc": "Siirry laitteen asetuksiin ja aseta sijaintioikeus asentoon \"Salli aina\"",
+  "@backgroundLocationDeniedDesc": {
+    "description": "Instructions to grant background location permission"
+  },
+  "lovingOmi": "Pidätkö Omista?",
+  "@lovingOmi": {
+    "description": "Title for the app review prompt"
+  },
+  "leaveReviewIos": "Auta meitä tavoittamaan lisää ihmisiä jättämällä arvostelu App Storeen. Palautteesi on meille tärkeää!",
+  "@leaveReviewIos": {
+    "description": "App review prompt text for iOS users"
+  },
+  "leaveReviewAndroid": "Auta meitä tavoittamaan lisää ihmisiä jättämällä arvostelu Google Play -kauppaan. Palautteesi on meille tärkeää!",
+  "@leaveReviewAndroid": {
+    "description": "App review prompt text for Android users"
+  },
+  "rateOnAppStore": "Arvostele App Storessa",
+  "@rateOnAppStore": {
+    "description": "Button text to rate on Apple App Store"
+  },
+  "rateOnGooglePlay": "Arvostele Google Playssa",
+  "@rateOnGooglePlay": {
+    "description": "Button text to rate on Google Play Store"
+  },
+  "maybeLater": "Ehkä myöhemmin",
+  "@maybeLater": {
+    "description": "Button text to dismiss the review prompt"
+  },
+  "speechProfileIntro": "Omin on opittava tavoitteesi ja äänesi. Voit muokata sitä myöhemmin.",
+  "@speechProfileIntro": {
+    "description": "Introduction text for speech profile creation"
+  },
+  "getStarted": "Aloita",
+  "@getStarted": {
+    "description": "Button text to begin a process"
+  },
+  "allDone": "Kaikki valmista!",
+  "@allDone": {
+    "description": "Success message after completing a task"
+  },
+  "keepGoing": "Jatka, teet loistavasti",
+  "@keepGoing": {
+    "description": "Encouragement text during a multi-step process"
+  },
+  "skipThisQuestion": "Ohita tämä kysymys",
+  "@skipThisQuestion": {
+    "description": "Button text to skip the current question"
+  },
+  "skipForNow": "Ohita toistaiseksi",
+  "@skipForNow": {
+    "description": "Button text to skip the entire process temporarily"
+  },
+  "connectionError": "Yhteysvirhe",
+  "@connectionError": {
+    "description": "Title for connection error dialog"
+  },
+  "connectionErrorDesc": "Yhteys palvelimeen epäonnistui. Tarkista internet-yhteytesi ja yritä uudelleen.",
+  "@connectionErrorDesc": {
+    "description": "Description of connection error"
+  },
+  "invalidRecordingMultipleSpeakers": "Virheellinen nauhoitus havaittu",
+  "@invalidRecordingMultipleSpeakers": {
+    "description": "Error title when multiple speakers are detected"
+  },
+  "multipleSpeakersDesc": "Näyttää siltä, että nauhoituksessa on useita puhujia. Varmista, että olet hiljaisessa paikassa ja yritä uudelleen.",
+  "@multipleSpeakersDesc": {
+    "description": "Error description for multiple speakers"
+  },
+  "tooShortDesc": "Puhetta ei havaittu tarpeeksi. Puhu enemmän ja yritä uudelleen.",
+  "@tooShortDesc": {
+    "description": "Error description for recording being too short"
+  },
+  "invalidRecordingDesc": "Varmista, että puhut vähintään 5 sekuntia ja korkeintaan 90 sekuntia.",
+  "@invalidRecordingDesc": {
+    "description": "Error description for invalid recording duration"
+  },
+  "areYouThere": "Oletko siellä?",
+  "@areYouThere": {
+    "description": "Timeout warning title"
+  },
+  "noSpeechDesc": "Emme voineet havaita mitään puhetta. Varmista, että puhut vähintään 10 sekuntia ja korkeintaan 3 minuuttia.",
+  "@noSpeechDesc": {
+    "description": "Error description when no speech is detected"
+  },
+  "connectionLost": "Yhteys katkesi",
+  "@connectionLost": {
+    "description": "Title for lost connection dialog"
+  },
+  "connectionLostDesc": "Yhteys keskeytyi. Tarkista internet-yhteytesi ja yritä uudelleen.",
+  "@connectionLostDesc": {
+    "description": "Description for lost connection"
+  },
+  "tryAgain": "Yritä uudelleen",
+  "@tryAgain": {
+    "description": "Button text to retry an action"
+  },
+  "connectOmiOmiGlass": "Yhdistä Omi / OmiGlass",
+  "@connectOmiOmiGlass": {
+    "description": "Button text to connect specific device models"
+  },
+  "continueWithoutDevice": "Jatka ilman laitetta",
+  "@continueWithoutDevice": {
+    "description": "Button text to proceed without connecting a hardware device"
+  },
+  "permissionsRequired": "Käyttöoikeudet vaaditaan",
+  "@permissionsRequired": {
+    "description": "Title for permissions required dialog"
+  },
+  "permissionsRequiredDesc": "Tämä sovellus tarvitsee Bluetooth- ja sijaintioikeudet toimiakseen oikein. Ota ne käyttöön asetuksissa.",
+  "@permissionsRequiredDesc": {
+    "description": "Explanation of why permissions are needed"
+  },
+  "openSettings": "Avaa asetukset",
+  "@openSettings": {
+    "description": "Button text to open app settings"
+  },
+  "wantDifferentName": "Haluatko käyttää eri nimeä?",
+  "@wantDifferentName": {
+    "description": "Question asking if user wants to change their display name"
+  },
+  "whatsYourName": "Mikä nimesi on?",
+  "@whatsYourName": {
+    "description": "Question asking for user's name"
+  },
+  "@enterYourName": {
+    "description": "Hint text for name input field"
+  },
+  "speakTranscribeSummarize": "Puhu. Litteroi. Tee yhteenveto.",
+  "@speakTranscribeSummarize": {
+    "description": "Tagline or slogan on the welcome/auth screen"
+  },
+  "signInWithApple": "Kirjaudu Applella",
+  "@signInWithApple": {
+    "description": "Button text for Apple Sign In"
+  },
+  "signInWithGoogle": "Kirjaudu Googlella",
+  "@signInWithGoogle": {
+    "description": "Button text for Google Sign In"
+  },
+  "byContinuingAgree": "Jatkamalla hyväksyt ",
+  "@byContinuingAgree": {
+    "description": "Legal disclaimer prefix text"
+  },
+  "termsOfUse": "Käyttöehdot",
+  "@termsOfUse": {
+    "description": "Link text for Terms of Use"
+  },
+  "omiYourAiCompanion": "Omi – tekoälykumppanisi",
+  "@omiYourAiCompanion": {
+    "description": "App title or branding on onboarding screen"
+  },
+  "captureEveryMoment": "Tallenna jokainen hetki. Saat tekoälyn\nluomat yhteenvedot. Älä enää tee muistiinpanoja.",
+  "@captureEveryMoment": {
+    "description": "App value proposition or description"
+  },
+  "appleWatchSetup": "Apple Watch -asennus",
+  "@appleWatchSetup": {
+    "description": "Title for Apple Watch setup page"
+  },
+  "permissionRequestedExclaim": "Käyttöoikeus pyydetty!",
+  "@permissionRequestedExclaim": {
+    "description": "Title when permission has been requested"
+  },
+  "microphonePermission": "Mikrofonin käyttöoikeus",
+  "@microphonePermission": {
+    "description": "Title for microphone permission section"
+  },
+  "permissionGrantedNow": "Käyttöoikeus myönnetty! Nyt:\n\nAvaa Omi-sovellus kellossasi ja napauta \"Jatka\" alla",
+  "@permissionGrantedNow": {
+    "description": "Instructions after permission is granted"
+  },
+  "needMicrophonePermission": "Tarvitsemme mikrofonin käyttöoikeuden.\n\n1. Napauta \"Myönnä käyttöoikeus\"\n2. Salli iPhonessasi\n3. Kello-sovellus sulkeutuu\n4. Avaa uudelleen ja napauta \"Jatka\"",
+  "@needMicrophonePermission": {
+    "description": "Instructions for granting microphone permission"
+  },
+  "grantPermissionButton": "Myönnä käyttöoikeus",
+  "@grantPermissionButton": {
+    "description": "Button to request permission"
+  },
+  "needHelp": "Tarvitsetko apua?",
+  "@needHelp": {
+    "description": "Link to help dialog"
+  },
+  "troubleshootingSteps": "Vianmääritys:\n\n1. Varmista, että Omi on asennettu kelloosi\n2. Avaa Omi-sovellus kellossasi\n3. Etsi käyttöoikeuspyyntö\n4. Napauta \"Salli\" kehotettaessa\n5. Kello-sovellus sulkeutuu - avaa se uudelleen\n6. Palaa ja napauta \"Jatka\" iPhonessasi",
+  "@troubleshootingSteps": {
+    "description": "Troubleshooting instructions for watch setup"
+  },
+  "@gotIt": {
+    "description": "Button to dismiss dialog"
+  },
+  "recordingStartedSuccessfully": "Nauhoitus aloitettu onnistuneesti!",
+  "@recordingStartedSuccessfully": {
+    "description": "Success message"
+  },
+  "permissionNotGrantedYet": "Käyttöoikeutta ei ole vielä myönnetty. Varmista, että salloit mikrofonin käytön ja avasit sovelluksen kellossasi uudelleen.",
+  "@permissionNotGrantedYet": {
+    "description": "Error message when permission is missing"
+  },
+  "errorRequestingPermission": "Virhe pyydettäessä käyttöoikeutta: {error}",
+  "@errorRequestingPermission": {
+    "description": "Error message for permission request failure",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "errorStartingRecording": "Virhe nauhoituksen aloittamisessa: {error}",
+  "@errorStartingRecording": {
+    "description": "Error message for recording start failure",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "selectPrimaryLanguage": "Valitse ensisijainen kielesi",
+  "@selectPrimaryLanguage": {
+    "description": "Title for language selection dialog"
+  },
+  "languageBenefits": "Aseta kielesi tarkempaa litterointia ja henkilökohtaista kokemusta varten",
+  "@languageBenefits": {
+    "description": "Explanation of why language selection matters"
+  },
+  "@searchLanguageHint": {
+    "description": "Hint text for language search"
+  },
+  "@noLanguagesFound": {
+    "description": "Text when search returns no results"
+  },
+  "whatsYourPrimaryLanguage": "Mikä on ensisijainen kielesi?",
+  "@whatsYourPrimaryLanguage": {
+    "description": "Question asking for primary language"
+  },
+  "selectYourLanguage": "Valitse kielesi",
+  "@selectYourLanguage": {
+    "description": "Placeholder for selected language name"
+  },
+  "personalGrowthJourney": "Henkilökohtainen kasvumatkasi tekoälyn kanssa, joka kuuntelee jokaista sanaasi.",
+  "@personalGrowthJourney": {
+    "description": "Tagline on onboarding wrapper"
+  },
+  "actionItemsTitle": "Tehtävät",
+  "@actionItemsTitle": {
+    "description": "Title for the Action Items page"
+  },
+  "actionItemsDescription": "Napauta muokataksesi • Pidä painettuna valitaksesi • Pyyhkäise toiminnoille",
+  "@actionItemsDescription": {
+    "description": "Instruction text for Action Items interactions"
+  },
+  "tabToDo": "Tekemättä",
+  "@tabToDo": {
+    "description": "Label for To Do tab"
+  },
+  "tabDone": "Tehty",
+  "@tabDone": {
+    "description": "Label for Done tab"
+  },
+  "tabOld": "Vanhat",
+  "@tabOld": {
+    "description": "Label for Old tab"
+  },
+  "emptyTodoMessage": "🎉 Kaikki hoidettu!\nEi odottavia tehtäviä",
+  "@emptyTodoMessage": {
+    "description": "Message when To Do list is empty"
+  },
+  "emptyDoneMessage": "Ei vielä suoritettuja kohteita",
+  "@emptyDoneMessage": {
+    "description": "Message when Done list is empty"
+  },
+  "emptyOldMessage": "✅ Ei vanhoja tehtäviä",
+  "@emptyOldMessage": {
+    "description": "Message when Old list is empty"
+  },
+  "noItems": "Ei kohteita",
+  "@noItems": {
+    "description": "Generic no items message"
+  },
+  "actionItemMarkedIncomplete": "Tehtävä merkitty keskeneräiseksi",
+  "@actionItemMarkedIncomplete": {
+    "description": "Snackbar message when item marked incomplete"
+  },
+  "actionItemCompleted": "Tehtävä suoritettu",
+  "@actionItemCompleted": {
+    "description": "Snackbar message when item completed"
+  },
+  "deleteActionItemTitle": "Poista tehtävä",
+  "@deleteActionItemTitle": {
+    "description": "Title for delete item dialog"
+  },
+  "deleteActionItemMessage": "Haluatko varmasti poistaa tämän tehtävän?",
+  "@deleteActionItemMessage": {
+    "description": "Confirmation message for deleting single item"
+  },
+  "deleteSelectedItemsTitle": "Poista valitut kohteet",
+  "@deleteSelectedItemsTitle": {
+    "description": "Title for bulk delete dialog"
+  },
+  "deleteSelectedItemsMessage": "Haluatko varmasti poistaa {count} valittua tehtävää?",
+  "@deleteSelectedItemsMessage": {
+    "description": "Confirmation message for bulk delete",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "s": {
+        "type": "String",
+        "description": "Plural suffix (s) if needed, handled by logic or just append 's' for simplicity if count > 1"
+      }
+    }
+  },
+  "actionItemDeletedResult": "Tehtävä \"{description}\" poistettu",
+  "@actionItemDeletedResult": {
+    "description": "Snackbar message after deleting single item",
+    "placeholders": {
+      "description": {
+        "type": "String"
+      }
+    }
+  },
+  "itemsDeletedResult": "{count} tehtävää poistettu",
+  "@itemsDeletedResult": {
+    "description": "Snackbar message after bulk delete",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "s": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToDeleteItem": "Tehtävän poisto epäonnistui",
+  "@failedToDeleteItem": {
+    "description": "Error message when deletion fails"
+  },
+  "failedToDeleteItems": "Kohteiden poisto epäonnistui",
+  "@failedToDeleteItems": {
+    "description": "Error message when bulk deletion fails"
+  },
+  "failedToDeleteSomeItems": "Joidenkin kohteiden poisto epäonnistui",
+  "@failedToDeleteSomeItems": {
+    "description": "Error message when partial deletion failure"
+  },
+  "welcomeActionItemsTitle": "Valmis tehtäville",
+  "@welcomeActionItemsTitle": {
+    "description": "Heading for empty state welcome"
+  },
+  "welcomeActionItemsDescription": "Tekoälysi poimii automaattisesti tehtävät ja to-do-listat keskusteluistasi. Ne näkyvät täällä, kun ne on luotu.",
+  "@welcomeActionItemsDescription": {
+    "description": "Description for empty state welcome"
+  },
+  "autoExtractionFeature": "Poimittu automaattisesti keskusteluista",
+  "@autoExtractionFeature": {
+    "description": "Feature point description"
+  },
+  "editSwipeFeature": "Napauta muokataksesi, pyyhkäise suorittaaksesi tai poistaaksesi",
+  "@editSwipeFeature": {
+    "description": "Feature point description"
+  },
+  "itemsSelected": "{count} valittu",
+  "@itemsSelected": {
+    "description": "Selection count in app bar",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "selectAll": "Valitse kaikki",
+  "@selectAll": {
+    "description": "Tooltip for select all"
+  },
+  "deleteSelected": "Poista valitut",
+  "@deleteSelected": {
+    "description": "Tooltip for delete selected"
+  },
+  "searchMemories": "Etsi {count} muistoa",
+  "@searchMemories": {
+    "description": "Hint text for memories search bar",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "memoryDeleted": "Muisto poistettu.",
+  "@memoryDeleted": {
+    "description": "Notification when memory deleted"
+  },
+  "undo": "Kumoa",
+  "@undo": {
+    "description": "Undo button text"
+  },
+  "noMemoriesYet": "Ei vielä muistoja",
+  "@noMemoriesYet": {
+    "description": "Empty state text"
+  },
+  "noAutoMemories": "Ei vielä automaattisesti poimittuja muistoja",
+  "@noAutoMemories": {
+    "description": "Empty state text for auto category"
+  },
+  "noManualMemories": "Ei vielä manuaalisia muistoja",
+  "@noManualMemories": {
+    "description": "Empty state text for manual category"
+  },
+  "noMemoriesInCategories": "Ei muistoja näissä kategorioissa",
+  "@noMemoriesInCategories": {
+    "description": "Empty state text for filtered categories"
+  },
+  "noMemoriesFound": "Muistoja ei löytynyt",
+  "@noMemoriesFound": {
+    "description": "Empty state text for search results"
+  },
+  "addFirstMemory": "Lisää ensimmäinen muistosi",
+  "@addFirstMemory": {
+    "description": "Button to add first memory"
+  },
+  "clearMemoryTitle": "Tyhjennä Omin muisti",
+  "@clearMemoryTitle": {
+    "description": "Dialog title for clearing memory"
+  },
+  "clearMemoryMessage": "Haluatko varmasti tyhjentää Omin muistin? Tätä toimintoa ei voi perua.",
+  "@clearMemoryMessage": {
+    "description": "Dialog content for clearing memory"
+  },
+  "clearMemoryButton": "Tyhjennä muisti",
+  "@clearMemoryButton": {
+    "description": "Button text to confirm clear"
+  },
+  "memoryClearedSuccess": "Omin muisti sinusta on tyhjennetty",
+  "@memoryClearedSuccess": {
+    "description": "Snackbar success message"
+  },
+  "noMemoriesToDelete": "Ei poistettavia muistoja",
+  "@noMemoriesToDelete": {
+    "description": "Snackbar message"
+  },
+  "createMemoryTooltip": "Luo uusi muisto",
+  "@createMemoryTooltip": {
+    "description": "Tooltip for create memory FAB"
+  },
+  "createActionItemTooltip": "Luo uusi tehtävä",
+  "@createActionItemTooltip": {
+    "description": "Tooltip for create action item FAB"
+  },
+  "memoryManagement": "Muistinhallinta",
+  "@memoryManagement": {
+    "description": "Title for memory management sheet"
+  },
+  "filterMemories": "Suodata muistoja",
+  "@filterMemories": {
+    "description": "Section header"
+  },
+  "totalMemoriesCount": "Sinulla on {count} muistoa yhteensä",
+  "@totalMemoriesCount": {
+    "description": "Count display",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "publicMemories": "Julkiset muistot",
+  "@publicMemories": {
+    "description": "Label"
+  },
+  "privateMemories": "Yksityiset muistot",
+  "@privateMemories": {
+    "description": "Label"
+  },
+  "makeAllPrivate": "Tee kaikki muistot yksityisiksi",
+  "@makeAllPrivate": {
+    "description": "Button label"
+  },
+  "makeAllPublic": "Tee kaikki muistot julkisiksi",
+  "@makeAllPublic": {
+    "description": "Button label"
+  },
+  "deleteAllMemories": "Poista kaikki muistot",
+  "@deleteAllMemories": {
+    "description": "Button label"
+  },
+  "allMemoriesPrivateResult": "Kaikki muistot ovat nyt yksityisiä",
+  "@allMemoriesPrivateResult": {
+    "description": "Snackbar"
+  },
+  "allMemoriesPublicResult": "Kaikki muistot ovat nyt julkisia",
+  "@allMemoriesPublicResult": {
+    "description": "Snackbar"
+  },
+  "newMemory": "Uusi muisto",
+  "@newMemory": {
+    "description": "Dialog title"
+  },
+  "editMemory": "Muokkaa muistoa",
+  "@editMemory": {
+    "description": "Dialog title"
+  },
+  "memoryContentHint": "Pidän jäätelön syömisestä...",
+  "@memoryContentHint": {
+    "description": "Input hint"
+  },
+  "failedToSaveMemory": "Tallennus epäonnistui. Tarkista yhteytesi.",
+  "@failedToSaveMemory": {
+    "description": "Error message"
+  },
+  "saveMemory": "Tallenna muisto",
+  "@saveMemory": {
+    "description": "Button label"
+  },
+  "retry": "Yritä uudelleen",
+  "@retry": {
+    "description": "Button label"
+  },
+  "createActionItem": "Luo tehtävä",
+  "@createActionItem": {
+    "description": "Sheet title"
+  },
+  "editActionItem": "Muokkaa tehtävää",
+  "@editActionItem": {
+    "description": "Sheet title"
+  },
+  "actionItemDescriptionHint": "Mitä pitää tehdä?",
+  "@actionItemDescriptionHint": {
+    "description": "Input hint"
+  },
+  "actionItemDescriptionEmpty": "Tehtävän kuvaus ei voi olla tyhjä.",
+  "@actionItemDescriptionEmpty": {
+    "description": "Error message"
+  },
+  "actionItemUpdated": "Tehtävä päivitetty",
+  "@actionItemUpdated": {
+    "description": "Snackbar"
+  },
+  "failedToUpdateActionItem": "Tehtävän päivitys epäonnistui",
+  "@failedToUpdateActionItem": {
+    "description": "Snackbar"
+  },
+  "actionItemCreated": "Tehtävä luotu",
+  "@actionItemCreated": {
+    "description": "Snackbar"
+  },
+  "failedToCreateActionItem": "Tehtävän luonti epäonnistui",
+  "@failedToCreateActionItem": {
+    "description": "Snackbar"
+  },
+  "dueDate": "Eräpäivä",
+  "@dueDate": {
+    "description": "Label"
+  },
+  "time": "Aika",
+  "@time": {
+    "description": "Label"
+  },
+  "addDueDate": "Lisää eräpäivä",
+  "@addDueDate": {
+    "description": "Placeholder"
+  },
+  "pressDoneToSave": "Paina valmis tallentaaksesi",
+  "@pressDoneToSave": {
+    "description": "Instruction"
+  },
+  "pressDoneToCreate": "Paina valmis luodaksesi",
+  "@pressDoneToCreate": {
+    "description": "Instruction"
+  },
+  "filterAll": "Kaikki",
+  "@filterAll": {
+    "description": "Filter option"
+  },
+  "filterSystem": "Tietoja sinusta",
+  "@filterSystem": {
+    "description": "Filter option for facts about the user"
+  },
+  "filterInteresting": "Oivallukset",
+  "@filterInteresting": {
+    "description": "Filter option for external wisdom/advice"
+  },
+  "filterManual": "Manuaalinen",
+  "@filterManual": {
+    "description": "Filter option"
+  },
+  "completed": "Suoritettu",
+  "@completed": {
+    "description": "Status label"
+  },
+  "markComplete": "Merkitse suoritetuksi",
+  "@markComplete": {
+    "description": "Action label"
+  },
+  "actionItemDeleted": "Tehtävä poistettu",
+  "@actionItemDeleted": {
+    "description": "Snackbar"
+  },
+  "failedToDeleteActionItem": "Tehtävän poisto epäonnistui",
+  "@failedToDeleteActionItem": {
+    "description": "Snackbar"
+  },
+  "deleteActionItemConfirmTitle": "Poista tehtävä",
+  "@deleteActionItemConfirmTitle": {
+    "description": "Dialog title"
+  },
+  "deleteActionItemConfirmMessage": "Haluatko varmasti poistaa tämän tehtävän?",
+  "@deleteActionItemConfirmMessage": {
+    "description": "Dialog message"
+  },
+  "appLanguage": "Sovelluksen kieli",
+  "@appLanguage": {
+    "description": "Label for app language selector"
+  },
+  "appInterfaceSectionTitle": "SOVELLUKSEN KÄYTTÖLIITTYMÄ",
+  "speechTranscriptionSectionTitle": "PUHE JA LITTEROINTI",
+  "languageSettingsHelperText": "Sovelluksen kieli muuttaa valikkoja ja painikkeita. Puheen kieli vaikuttaa siihen, miten tallenteet litteroidaan."
+}

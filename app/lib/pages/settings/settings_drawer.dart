@@ -1,32 +1,35 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/backend/preferences.dart';
-import 'package:omi/core/app_shell.dart';
-import 'package:omi/pages/persona/persona_provider.dart';
-import 'package:omi/services/auth_service.dart';
-import 'package:omi/pages/settings/developer.dart';
-import 'package:omi/pages/settings/profile.dart';
-import 'package:omi/pages/settings/integrations_page.dart';
-import 'package:omi/pages/settings/usage_page.dart';
-import 'package:omi/pages/referral/referral_page.dart';
-import 'package:omi/providers/device_provider.dart';
-import 'package:omi/providers/usage_provider.dart';
-import 'package:omi/models/subscription.dart';
-import 'package:omi/utils/other/temp.dart';
-import 'package:omi/utils/platform/platform_service.dart';
-import 'package:omi/widgets/dialog.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
-import 'package:omi/providers/locale_provider.dart';
-import 'package:omi/utils/l10n_extensions.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:device_info_plus/device_info_plus.dart';
+
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/core/app_shell.dart';
+import 'package:omi/models/subscription.dart';
+import 'package:omi/pages/persona/persona_provider.dart';
+import 'package:omi/pages/referral/referral_page.dart';
+import 'package:omi/pages/settings/developer.dart';
+import 'package:omi/pages/settings/integrations_page.dart';
+import 'package:omi/pages/settings/profile.dart';
+import 'package:omi/pages/settings/usage_page.dart';
+import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/locale_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/services/auth_service.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/platform/platform_service.dart';
+import 'package:omi/widgets/dialog.dart';
+import '../conversations/sync_page.dart';
 import 'device_settings.dart';
 import 'wrapped_2025_page.dart';
-import '../conversations/sync_page.dart';
 
 enum SettingsMode {
   no_device,
@@ -300,8 +303,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     });
   }
 
-
-
   Widget _buildOmiModeContent(BuildContext context) {
     return Consumer<UsageProvider>(builder: (context, usageProvider, child) {
       return Column(
@@ -461,7 +462,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   await routeToPage(context, const DeveloperSettingsPage());
                 },
               ),
-
             ],
           ),
           const SizedBox(height: 32),

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+
+import 'package:shimmer/shimmer.dart';
+
 import 'package:omi/backend/http/api/integrations.dart';
 import 'package:omi/pages/settings/integration_settings_page.dart';
 import 'package:omi/services/github_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:shimmer/shimmer.dart';
 
 class GitHubSettingsPage extends StatefulWidget {
   const GitHubSettingsPage({super.key});

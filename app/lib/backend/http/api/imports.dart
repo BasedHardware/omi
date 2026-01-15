@@ -2,8 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/logger.dart';
 
 /// Import job status enum matching the backend
 enum ImportJobStatus {
@@ -82,14 +84,14 @@ Future<ImportJobResponse?> startLimitlessImport(File zipFile, {String language =
 
     if (response.statusCode == 200) {
       var data = jsonDecode(response.body);
-      debugPrint('startLimitlessImport Response: $data');
+      Logger.debug('startLimitlessImport Response: $data');
       return ImportJobResponse.fromJson(data);
     } else {
-      debugPrint('Failed to start import. Status: ${response.statusCode}, Body: ${response.body}');
+      Logger.debug('Failed to start import. Status: ${response.statusCode}, Body: ${response.body}');
       return null;
     }
   } catch (e) {
-    debugPrint('Error starting Limitless import: $e');
+    Logger.debug('Error starting Limitless import: $e');
     return null;
   }
 }
@@ -108,11 +110,11 @@ Future<ImportJobResponse?> getImportJobStatus(String jobId) async {
       var data = jsonDecode(response.body);
       return ImportJobResponse.fromJson(data);
     } else {
-      debugPrint('Failed to get import job status. Response: ${response?.body}');
+      Logger.debug('Failed to get import job status. Response: ${response?.body}');
       return null;
     }
   } catch (e) {
-    debugPrint('Error getting import job status: $e');
+    Logger.debug('Error getting import job status: $e');
     return null;
   }
 }
@@ -131,11 +133,11 @@ Future<List<ImportJobResponse>> getImportJobs({int limit = 50}) async {
       var data = jsonDecode(response.body) as List;
       return data.map((json) => ImportJobResponse.fromJson(json)).toList();
     } else {
-      debugPrint('Failed to get import jobs. Response: ${response?.body}');
+      Logger.debug('Failed to get import jobs. Response: ${response?.body}');
       return [];
     }
   } catch (e) {
-    debugPrint('Error getting import jobs: $e');
+    Logger.debug('Error getting import jobs: $e');
     return [];
   }
 }
@@ -153,14 +155,14 @@ Future<int?> deleteLimitlessConversations() async {
 
     if (response != null && response.statusCode == 200) {
       var data = jsonDecode(response.body);
-      debugPrint('deleteLimitlessConversations Response: $data');
+      Logger.debug('deleteLimitlessConversations Response: $data');
       return data['deleted_count'] as int?;
     } else {
-      debugPrint('Failed to delete Limitless conversations. Response: ${response?.body}');
+      Logger.debug('Failed to delete Limitless conversations. Response: ${response?.body}');
       return null;
     }
   } catch (e) {
-    debugPrint('Error deleting Limitless conversations: $e');
+    Logger.debug('Error deleting Limitless conversations: $e');
     return null;
   }
 }

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
-import 'package:provider/provider.dart';
-
 import 'desktop_conversation_detail_page.dart';
 
 class DesktopConversationDetailWrapper extends StatelessWidget {

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+
+import 'package:provider/provider.dart';
+
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:provider/provider.dart';
+import 'package:omi/utils/other/temp.dart';
 
 class OutOfCreditsWidget extends StatelessWidget {
   const OutOfCreditsWidget({super.key});

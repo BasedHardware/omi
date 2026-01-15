@@ -232,7 +232,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get searchConversations => '会話を検索';
 
   @override
-  String selectedCount(int count) {
+  String selectedCount(int count, Object s) {
     return '$count件選択中';
   }
 
@@ -2150,10 +2150,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get filterAll => 'すべて';
 
   @override
-  String get filterSystem => 'About You';
+  String get filterSystem => 'あなたについて';
 
   @override
-  String get filterInteresting => 'Insights';
+  String get filterInteresting => 'インサイト';
 
   @override
   String get filterManual => '手動';
@@ -2178,4 +2178,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get appLanguage => 'アプリ言語';
+
+  @override
+  String get appInterfaceSectionTitle => 'アプリインターフェース';
+
+  @override
+  String get speechTranscriptionSectionTitle => '音声と文字起こし';
+
+  @override
+  String get languageSettingsHelperText => 'アプリ言語はメニューとボタンを変更します。音声言語は録音の文字起こし方法に影響します。';
 }

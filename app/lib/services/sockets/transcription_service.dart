@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/message_event.dart';
@@ -11,12 +12,12 @@ import 'package:omi/env/env.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/services/notifications.dart';
+import 'package:omi/services/sockets/on_device_apple_provider.dart';
+import 'package:omi/services/sockets/on_device_whisper_provider.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
-
-import 'package:omi/services/sockets/on_device_whisper_provider.dart';
-import 'package:omi/services/sockets/on_device_apple_provider.dart';
 import 'package:omi/utils/debug_log_manager.dart';
+import 'package:omi/utils/logger.dart';
 
 export 'package:omi/utils/audio/audio_transcoder.dart';
 export 'package:omi/services/sockets/composite_transcription_socket.dart';
@@ -140,7 +141,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   Future start() async {
     bool ok = await _socket.connect();
     if (!ok) {
-      debugPrint("Can not connect to websocket");
+      Logger.debug("Can not connect to websocket");
       await DebugLogManager.logWarning('transcription_socket_connect_failed', {
         'url': Env.apiBaseUrl?.replaceAll('https', 'wss') ?? 'null',
         'sample_rate': sampleRate,
@@ -155,7 +156,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     _listeners.clear();
 
     if (reason != null) {
-      debugPrint(reason);
+      Logger.debug(reason);
       await DebugLogManager.logInfo('transcription_socket_stopped', {'reason': reason});
     }
   }
@@ -195,11 +196,11 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     try {
       jsonEvent = jsonDecode(event);
     } on FormatException catch (e) {
-      debugPrint(e.toString());
+      Logger.debug(e.toString());
       DebugLogManager.logWarning('transcription_socket_parse_error', {'error': e.toString()});
     }
     if (jsonEvent == null) {
-      debugPrint("Can not decode message event json $event");
+      Logger.debug("Can not decode message event json $event");
       return;
     }
 
@@ -224,7 +225,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
       return;
     }
 
-    debugPrint(event.toString());
+    Logger.debug(event.toString());
     DebugLogManager.logInfo('transcription_socket_unhandled_message: ${event.toString()}');
   }
 
@@ -308,7 +309,7 @@ class TranscriptSocketServiceFactory {
     final sttConfigId = config.sttConfigId;
     final effectiveLang = config.effectiveLanguage;
     final effectiveModel = config.effectiveModel;
-    debugPrint(
+    Logger.debug(
         "[STTFactory] Creating socket: provider=${config.provider.name}, isLive=${config.isLive}, lang=$effectiveLang, model=$effectiveModel");
 
     // Create primary socket based on isLive/isPolling
@@ -343,7 +344,8 @@ class TranscriptSocketServiceFactory {
     if (config.provider == SttProvider.geminiLive) {
       return GeminiStreamingSttSocket(
         apiKey: config.apiKey ?? '',
-        model: config.effectiveModel.isNotEmpty ? config.effectiveModel : 'gemini-2.5-flash-native-audio-preview-12-2025',
+        model:
+            config.effectiveModel.isNotEmpty ? config.effectiveModel : 'gemini-2.5-flash-native-audio-preview-12-2025',
         language: config.effectiveLanguage,
         sampleRate: sampleRate,
         transcoder: transcoder,
@@ -396,8 +398,6 @@ class TranscriptSocketServiceFactory {
 
     // Build URL with query params for raw_binary type
     final effectiveUrl = requestType == SttRequestType.rawBinary ? _buildUrlWithParams(url, params) : url;
-
-
 
     // Special handling for On-Device Whisper
     if (config.provider == SttProvider.onDeviceWhisper) {

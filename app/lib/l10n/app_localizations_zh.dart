@@ -232,7 +232,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get searchConversations => '搜索对话';
 
   @override
-  String selectedCount(int count) {
+  String selectedCount(int count, Object s) {
     return '已选择 $count 项';
   }
 
@@ -2146,10 +2146,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get filterAll => '全部';
 
   @override
-  String get filterSystem => 'About You';
+  String get filterSystem => '关于你';
 
   @override
-  String get filterInteresting => 'Insights';
+  String get filterInteresting => '见解';
 
   @override
   String get filterManual => '手动';
@@ -2174,4 +2174,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get appLanguage => '应用语言';
+
+  @override
+  String get appInterfaceSectionTitle => '应用界面';
+
+  @override
+  String get speechTranscriptionSectionTitle => '语音与转录';
+
+  @override
+  String get languageSettingsHelperText => '应用语言更改菜单和按钮。语音语言影响录音的转录方式。';
 }

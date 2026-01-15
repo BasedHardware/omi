@@ -3,12 +3,15 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 import 'package:shimmer/shimmer.dart';
+
 import 'package:omi/backend/http/api/imports.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 
 class ImportHistoryPage extends StatefulWidget {
   const ImportHistoryPage({super.key});
@@ -47,7 +50,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
         _startPollingIfNeeded();
       }
     } catch (e) {
-      debugPrint('Error loading import jobs: $e');
+      Logger.debug('Error loading import jobs: $e');
       if (mounted) {
         setState(() => _isLoading = false);
       }
@@ -80,7 +83,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
         }
       }
     } catch (e) {
-      debugPrint('Error refreshing jobs: $e');
+      Logger.debug('Error refreshing jobs: $e');
     }
   }
 
@@ -90,14 +93,14 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       setState(() => _isUploading = true);
 
       // Pick ZIP file
-      debugPrint('Opening file picker for ZIP...');
+      Logger.debug('Opening file picker for ZIP...');
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['zip'],
       );
 
       if (result == null || result.files.isEmpty) {
-        debugPrint('User cancelled file picker');
+        Logger.debug('User cancelled file picker');
         if (mounted) {
           setState(() => _isUploading = false);
         }
@@ -105,7 +108,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       }
 
       final filePath = result.files.single.path;
-      debugPrint('Selected file path: $filePath');
+      Logger.debug('Selected file path: $filePath');
 
       if (filePath == null) {
         if (mounted) {
@@ -125,9 +128,9 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       final file = File(filePath);
 
       // Start import
-      debugPrint('Starting Limitless import...');
+      Logger.debug('Starting Limitless import...');
       final response = await startLimitlessImport(file);
-      debugPrint('Import response: ${response?.jobId}');
+      Logger.debug('Import response: ${response?.jobId}');
 
       if (mounted) {
         setState(() => _isUploading = false);
@@ -174,7 +177,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
         }
       }
     } on PlatformException catch (e) {
-      debugPrint('FilePicker PlatformException: ${e.code} - ${e.message}');
+      Logger.debug('FilePicker PlatformException: ${e.code} - ${e.message}');
       if (mounted) {
         setState(() => _isUploading = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -185,8 +188,8 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
         );
       }
     } catch (e, stackTrace) {
-      debugPrint('Import error: $e');
-      debugPrint('Stack trace: $stackTrace');
+      Logger.debug('Import error: $e');
+      Logger.debug('Stack trace: $stackTrace');
       if (mounted) {
         setState(() => _isUploading = false);
         ScaffoldMessenger.of(context).showSnackBar(

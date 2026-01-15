@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
-
-import 'delete_confirmation.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
+import 'delete_confirmation.dart';
 
 class MemoryDialog extends StatefulWidget {
   final MemoriesProvider provider;
@@ -207,7 +208,7 @@ class _MemoryDialogState extends State<MemoryDialog> {
       }
     } catch (e) {
       success = false;
-      debugPrint('Error saving memory: $e');
+      Logger.debug('Error saving memory: $e');
     }
 
     if (!mounted) return;

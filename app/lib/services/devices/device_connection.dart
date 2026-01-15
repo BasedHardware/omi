@@ -1,26 +1,27 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
-import 'package:omi/services/devices/frame_connection.dart';
 import 'package:omi/services/devices/apple_watch_connection.dart';
+import 'package:omi/services/devices/bee_connection.dart';
+import 'package:omi/services/devices/discovery/device_locator.dart';
+import 'package:omi/services/devices/fieldy_connection.dart';
+import 'package:omi/services/devices/frame_connection.dart';
+import 'package:omi/services/devices/friend_pendant_connection.dart';
+import 'package:omi/services/devices/limitless_connection.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/devices/plaud_connection.dart';
-import 'package:omi/services/devices/bee_connection.dart';
-import 'package:omi/services/devices/fieldy_connection.dart';
-import 'package:omi/services/devices/friend_pendant_connection.dart';
-import 'package:omi/services/devices/limitless_connection.dart';
-import 'package:omi/services/notifications.dart';
-import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/services/devices/transports/ble_transport.dart';
-import 'package:omi/services/devices/transports/companion_device_transport.dart';
-import 'package:omi/services/devices/transports/watch_transport.dart';
+import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/services/devices/transports/frame_transport.dart';
-import 'package:omi/services/devices/discovery/device_locator.dart';
+import 'package:omi/services/devices/transports/watch_transport.dart';
+import 'package:omi/services/notifications.dart';
+import 'package:omi/utils/logger.dart';
 
 class DeviceConnectionFactory {
   static DeviceConnection? create(BtDevice device) {
@@ -35,11 +36,7 @@ class DeviceConnectionFactory {
         final deviceId = locator.bluetoothId;
         if (deviceId == null) return null;
         final bleDevice = BluetoothDevice.fromId(deviceId);
-        if (Platform.isAndroid) {
-          transport = CompanionDeviceTransport(bleDevice);
-        } else {
-          transport = BleTransport(bleDevice);
-        }
+        transport = BleTransport(bleDevice);
         break;
 
       case TransportKind.watchConnectivity:
@@ -131,7 +128,6 @@ abstract class DeviceConnection {
 
   Future<void> connect({
     void Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged,
-    bool autoConnect = false,
   }) async {
     if (_connectionState == DeviceConnectionState.connected) {
       throw DeviceConnectionException("Connection already established, please disconnect before start new connection");
@@ -142,7 +138,7 @@ abstract class DeviceConnection {
 
     try {
       // Use transport to connect
-      await transport.connect(autoConnect: autoConnect);
+      await transport.connect();
 
       // Check connection
       await ping();
@@ -176,7 +172,7 @@ abstract class DeviceConnection {
       }
       return result;
     } catch (e) {
-      debugPrint('Transport ping failed: $e');
+      Logger.debug('Transport ping failed: $e');
       return false;
     }
   }
@@ -232,10 +228,10 @@ abstract class DeviceConnection {
 
   Future<List<int>> getBleButtonState() async {
     if (await isConnected()) {
-      debugPrint('button state called');
+      Logger.debug('button state called');
       return await performGetButtonState();
     }
-    debugPrint('button state error');
+    Logger.debug('button state error');
     return Future.value(<int>[]);
   }
 
@@ -296,7 +292,7 @@ abstract class DeviceConnection {
           .writeCharacteristic(speakerDataStreamServiceUuid, speakerDataStreamCharacteristicUuid, [mode & 0xFF]);
       return true;
     } catch (e) {
-      debugPrint('Failed to play haptic: $e');
+      Logger.debug('Failed to play haptic: $e');
       return false;
     }
   }
@@ -327,7 +323,7 @@ abstract class DeviceConnection {
           [command & 0xFF, numFile & 0xFF, offsetBytes[0], offsetBytes[1], offsetBytes[2], offsetBytes[3]]);
       return true;
     } catch (e) {
-      debugPrint('Failed to write to storage: $e');
+      Logger.debug('Failed to write to storage: $e');
       return false;
     }
   }

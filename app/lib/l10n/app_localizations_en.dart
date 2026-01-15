@@ -234,7 +234,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchConversations => 'Search Conversations';
 
   @override
-  String selectedCount(int count) {
+  String selectedCount(int count, Object s) {
     return '$count selected';
   }
 
@@ -2215,4 +2215,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get appLanguage => 'App Language';
+
+  @override
+  String get appInterfaceSectionTitle => 'APP INTERFACE';
+
+  @override
+  String get speechTranscriptionSectionTitle => 'SPEECH & TRANSCRIPTION';
+
+  @override
+  String get languageSettingsHelperText =>
+      'App Language changes menus and buttons. Speech Language affects how your recordings are transcribed.';
 }

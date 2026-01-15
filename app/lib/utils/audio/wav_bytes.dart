@@ -4,13 +4,16 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/utils/logger.dart';
+
 import 'package:intl/intl.dart';
-import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:tuple/tuple.dart';
+
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 
 /// A class to handle WAV file format conversion
 class WavBytes {
@@ -115,7 +118,7 @@ class WavBytesUtil {
 
     // Lost frame - reset state
     if (index != lastPacketIndex + 1 || (internal != 0 && internal != lastFrameId + 1)) {
-      debugPrint('Lost frame');
+      Logger.debug('Lost frame');
       lastPacketIndex = -1;
       pending = [];
       lost += 1;
@@ -128,7 +131,7 @@ class WavBytesUtil {
       pending = content; // Start new frame
       lastFrameId = internal; // Update internal frame id
       lastPacketIndex = index; // Update packet id
-      // debugPrint('Frames received: ${frames.length} && Lost: $lost');
+      // Logger.debug('Frames received: ${frames.length} && Lost: $lost');
       return;
     }
 
@@ -142,9 +145,9 @@ class WavBytesUtil {
     int fromSecond = 0, // unused
     int toSecond = 0,
   }) {
-    debugPrint('removing frames from ${fromSecond}s to ${toSecond}s');
+    Logger.debug('removing frames from ${fromSecond}s to ${toSecond}s');
     frames.removeRange(fromSecond * framesPerSecond, min(toSecond * framesPerSecond, frames.length));
-    debugPrint('frames length: ${frames.length}');
+    Logger.debug('frames length: ${frames.length}');
   }
 
   void insertAudioBytes(List<List<int>> bytes) => frames.insertAll(0, bytes);
@@ -174,7 +177,7 @@ class WavBytesUtil {
     final totalBytes = await _getDirectorySize(directory);
 
     final totalSize = formatBytes(totalBytes);
-    debugPrint('Total size of $directory: $totalSize');
+    Logger.debug('Total size of $directory: $totalSize');
   }
 
   static Future<int> _getDirectorySize(Directory dir) async {
@@ -185,16 +188,16 @@ class WavBytesUtil {
         final List<FileSystemEntity> entities = dir.listSync(recursive: true, followLinks: false);
         for (var entity in entities) {
           if (entity is File) {
-            // debugPrint('File: ${entity.path}');
+            // Logger.debug('File: ${entity.path}');
             totalBytes += await entity.length();
           } else if (entity is Directory) {
-            // debugPrint('Directory: ${entity.path}');
+            // Logger.debug('Directory: ${entity.path}');
             totalBytes += await _getDirectorySize(entity);
           }
         }
       }
     } catch (e) {
-      debugPrint("Error calculating directory size: $e");
+      Logger.debug("Error calculating directory size: $e");
     }
 
     return totalBytes;
@@ -224,7 +227,7 @@ class WavBytesUtil {
         final List<FileSystemEntity> entities = directory.listSync(recursive: false, followLinks: false);
         for (var entity in entities) {
           if (entity is File && entity.path.endsWith('.wav')) {
-            debugPrint('Removing file: ${entity.path}');
+            Logger.debug('Removing file: ${entity.path}');
             if (entity.existsSync()) {
               await entity.delete();
             }
@@ -252,20 +255,20 @@ class WavBytesUtil {
   }
 
   Future<Tuple2<File, List<List<int>>>> createWavFile({String? filename, int removeLastNSeconds = 0}) async {
-    debugPrint('createWavFile $filename');
+    Logger.debug('createWavFile $filename');
     List<List<int>> framesCopy;
     if (removeLastNSeconds > 0) {
-      debugPrint(' in this branch');
+      Logger.debug(' in this branch');
       removeFramesRange(
           fromSecond: (frames.length ~/ framesPerSecond) - removeLastNSeconds,
           toSecond: frames.length ~/ framesPerSecond);
       framesCopy = List<List<int>>.from(frames); // after trimming, copy the frames
     } else {
-      debugPrint(' in other branch');
+      Logger.debug(' in other branch');
       framesCopy = List<List<int>>.from(frames); // copy the frames before clearing all
       clearAudioBytes();
     }
-    debugPrint('about to write to other codec');
+    Logger.debug('about to write to other codec');
     File file = await createWavByCodec(framesCopy, filename: filename);
     return Tuple2(file, framesCopy);
   }
@@ -308,7 +311,7 @@ class WavBytesUtil {
     }
     final file = File('${directory.path}/$filename');
     await file.writeAsBytes(wavBytes);
-    debugPrint('WAV file created: ${file.path}');
+    Logger.debug('WAV file created: ${file.path}');
     return file;
   }
 
@@ -404,30 +407,30 @@ class ImageBytesUtil {
   Uint8List _buffer = Uint8List(0);
 
   Uint8List? processChunk(List<int> data) {
-    // debugPrint('Received chunk: ${data.length} bytes');
+    // Logger.debug('Received chunk: ${data.length} bytes');
     if (data.isEmpty) return null;
 
     if (data[0] == 255 && data[1] == 255) {
-      debugPrint('Received end of image');
+      Logger.debug('Received end of image');
       previousChunkId = -1;
       return _buffer;
     }
 
     int packetId = data[0] + (data[1] << 8);
     data = data.sublist(2);
-    // debugPrint('Packet ID: $packetId - Previous ID: $previousChunkId');
+    // Logger.debug('Packet ID: $packetId - Previous ID: $previousChunkId');
 
     if (previousChunkId == -1) {
       if (packetId == 0) {
-        debugPrint('Starting new image');
+        Logger.debug('Starting new image');
         _buffer = Uint8List(0);
       } else {
-        // debugPrint('Skipping frame');
+        // Logger.debug('Skipping frame');
         return null;
       }
     } else {
       if (packetId != previousChunkId + 1) {
-        debugPrint('Lost packet ~ lost image');
+        Logger.debug('Lost packet ~ lost image');
         _buffer = Uint8List(0);
         previousChunkId = -1;
         return null;
@@ -435,7 +438,7 @@ class ImageBytesUtil {
     }
     previousChunkId = packetId;
     _buffer = Uint8List.fromList([..._buffer, ...data]);
-    // debugPrint('Added to buffer, new size: ${_buffer.length}');
+    // Logger.debug('Added to buffer, new size: ${_buffer.length}');
     return null;
   }
 }
@@ -460,7 +463,7 @@ class StorageBytesUtil extends WavBytesUtil {
   //     return;
   //   }
   //   if (value.length < 40) {
-  //     debugPrint('packet too small');
+  //     Logger.debug('packet too small');
   //     return;
   //   }
   // for (int i = 0; i < 5; i++) {//unsafe, bad packet values could leak
@@ -476,7 +479,7 @@ class StorageBytesUtil extends WavBytesUtil {
       return;
     }
     if (value.length < 40) {
-      debugPrint('packet too small');
+      Logger.debug('packet too small');
       return;
     }
     //enforce
@@ -487,14 +490,14 @@ class StorageBytesUtil extends WavBytesUtil {
     int amount = value[3];
     List<int> content = value.sublist(4, 4 + amount);
     count = count + 1;
-    // debugPrint('current count: $count');
+    // Logger.debug('current count: $count');
 
     // Start of a new frame
     if (lastPacketIndex == -1 && internal == 0) {
       lastPacketIndex = index;
       lastFrameId = internal;
       pending = content;
-      // debugPrint('discsrd');
+      // Logger.debug('discsrd');
       return;
     }
 
@@ -502,7 +505,7 @@ class StorageBytesUtil extends WavBytesUtil {
 
     // Lost frame - reset statem
     if (index != lastPacketIndex + 1 || (internal != 0 && internal != lastFrameId + 1)) {
-      // debugPrint('Lost frame');
+      // Logger.debug('Lost frame');
       lastPacketIndex = -1;
       pending = [];
       lost += 1;
@@ -515,8 +518,8 @@ class StorageBytesUtil extends WavBytesUtil {
       pending = content; // Start new frame
       lastFrameId = internal; // Update internal frame id
       lastPacketIndex = index; // Update packet id
-      // debugPrint('Frames received: ${frames.length} && Lost: $lost');
-      // debugPrint('new frame');
+      // Logger.debug('Frames received: ${frames.length} && Lost: $lost');
+      // Logger.debug('new frame');
       return;
     }
 
@@ -524,7 +527,7 @@ class StorageBytesUtil extends WavBytesUtil {
     pending.addAll(content);
     lastFrameId = internal; // Update internal frame id
     lastPacketIndex = index; // Update packet id
-    // debugPrint('reached end');
+    // Logger.debug('reached end');
   }
 
   @override
@@ -533,7 +536,7 @@ class StorageBytesUtil extends WavBytesUtil {
     String filename2 = 'recording-$fileNum.wav';
     final file = File('${directory.path}/$filename2');
     await file.writeAsBytes(wavBytes);
-    debugPrint('WAV file created: ${file.path}');
+    Logger.debug('WAV file created: ${file.path}');
     return file;
   }
 

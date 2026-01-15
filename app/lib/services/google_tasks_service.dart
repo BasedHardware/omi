@@ -1,6 +1,9 @@
 import 'package:flutter/foundation.dart';
-import 'package:omi/backend/http/api/task_integrations.dart';
+
 import 'package:url_launcher/url_launcher.dart';
+
+import 'package:omi/backend/http/api/task_integrations.dart';
+import 'package:omi/utils/logger.dart';
 
 class GoogleTasksService {
   static final GoogleTasksService _instance = GoogleTasksService._internal();
@@ -21,16 +24,16 @@ class GoogleTasksService {
     try {
       final authUrl = await getOAuthUrl('google_tasks');
       if (authUrl == null) {
-        debugPrint('Failed to get Google Tasks OAuth URL from backend');
+        Logger.debug('Failed to get Google Tasks OAuth URL from backend');
         return false;
       }
 
       final authUri = Uri.parse(authUrl);
-      debugPrint('Opening Google Tasks auth URL');
+      Logger.debug('Opening Google Tasks auth URL');
 
       final canLaunch = await canLaunchUrl(authUri);
       if (!canLaunch) {
-        debugPrint('Cannot launch auth URL');
+        Logger.debug('Cannot launch auth URL');
         return false;
       }
 
@@ -41,7 +44,7 @@ class GoogleTasksService {
 
       return true;
     } catch (e) {
-      debugPrint('Error starting Google Tasks authentication: $e');
+      Logger.debug('Error starting Google Tasks authentication: $e');
       return false;
     }
   }
@@ -49,7 +52,7 @@ class GoogleTasksService {
   /// Handle OAuth callback (tokens stored in backend Firebase)
   Future<bool> handleCallback() async {
     _isAuthenticated = true;
-    debugPrint('Google Tasks authentication successful');
+    Logger.debug('Google Tasks authentication successful');
     return true;
   }
 
@@ -68,14 +71,14 @@ class GoogleTasksService {
       );
 
       if (result != null && result['success'] == true) {
-        debugPrint('Task created successfully in Google Tasks');
+        Logger.debug('Task created successfully in Google Tasks');
         return true;
       }
 
-      debugPrint('Failed to create task in Google Tasks: ${result?['error']}');
+      Logger.debug('Failed to create task in Google Tasks: ${result?['error']}');
       return false;
     } catch (e) {
-      debugPrint('Error creating task in Google Tasks: $e');
+      Logger.debug('Error creating task in Google Tasks: $e');
       return false;
     }
   }
@@ -85,9 +88,9 @@ class GoogleTasksService {
     try {
       await deleteTaskIntegration('google_tasks');
       _isAuthenticated = false;
-      debugPrint('✓ Disconnected from Google Tasks');
+      Logger.debug('✓ Disconnected from Google Tasks');
     } catch (e) {
-      debugPrint('Error disconnecting from Google Tasks: $e');
+      Logger.debug('Error disconnecting from Google Tasks: $e');
     }
   }
 }

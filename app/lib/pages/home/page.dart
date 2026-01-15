@@ -1,11 +1,17 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'package:calendar_date_picker2/calendar_date_picker2.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:upgrader/upgrader.dart';
 
+import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
@@ -15,16 +21,17 @@ import 'package:omi/pages/action_items/action_items_page.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/apps/page.dart';
 import 'package:omi/pages/chat/page.dart';
-import 'package:omi/pages/conversations/conversations_page.dart';
+import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/pages/conversations/conversations_page.dart';
+import 'package:omi/pages/conversations/sync_page.dart';
+import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
 import 'package:omi/pages/memories/page.dart';
-import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/pages/settings/wrapped_2025_page.dart';
-import 'package:omi/widgets/freemium_switch_dialog.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -33,27 +40,20 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
+import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/notifications/daily_reflection_notification.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/audio/foreground.dart';
+import 'package:omi/utils/enums.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:omi/widgets/upgrade_alert.dart';
-import 'package:omi/utils/l10n_extensions.dart';
-import 'package:provider/provider.dart';
-import 'package:upgrader/upgrader.dart';
-import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:omi/utils/enums.dart';
-import 'package:omi/providers/sync_provider.dart';
-import 'package:omi/pages/conversations/sync_page.dart';
-import 'package:flutter/cupertino.dart';
-import 'package:calendar_date_picker2/calendar_date_picker2.dart';
-
-import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/widgets/calendar_date_picker_sheet.dart';
-import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
-
+import 'package:omi/widgets/freemium_switch_dialog.dart';
+import 'package:omi/widgets/upgrade_alert.dart';
 import 'widgets/battery_info_widget.dart';
 
 class HomePageWrapper extends StatefulWidget {
@@ -177,7 +177,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     } else {
       return;
     }
-    debugPrint(event);
+    Logger.debug(event);
     PlatformManager.instance.crashReporter.logInfo(event);
   }
 
@@ -219,7 +219,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
     if (widget.navigateToRoute != null && widget.navigateToRoute!.isNotEmpty) {
       navigateToUri = Uri.tryParse("http://localhost.com${widget.navigateToRoute!}");
-      debugPrint("initState ${navigateToUri?.pathSegments.join("...")}");
+      Logger.debug("initState ${navigateToUri?.pathSegments.join("...")}");
       var segments = navigateToUri?.pathSegments ?? [];
       if (segments.isNotEmpty) {
         pageAlias = segments[0];
@@ -251,7 +251,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           await ForegroundUtil.initializeForegroundService();
           await ForegroundUtil.startForegroundTask();
         } else {
-          debugPrint('Skipping foreground service: location is not enabled');
+          Logger.debug('Skipping foreground service: location is not enabled');
         }
       }
       if (mounted) {
@@ -361,12 +361,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   ),
                 );
               } else {
-                debugPrint('Conversation not found: $conversationId');
+                Logger.debug('Conversation not found: $conversationId');
               }
             });
           }
           break;
-                  case "daily-summary":
+        case "daily-summary":
           if (detailPageId != null && detailPageId.isNotEmpty) {
             // Track notification opened
             MixpanelManager().dailySummaryNotificationOpened(
@@ -385,7 +385,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               }
             });
           }
-break;
+          break;
         case "wrapped":
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
@@ -429,7 +429,7 @@ break;
 
     final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
     _freemiumHandler.checkAndShowDialog(context, captureProvider).catchError((e) {
-      debugPrint('[Freemium] Error checking dialog: $e');
+      Logger.debug('[Freemium] Error checking dialog: $e');
     });
   }
 
@@ -824,7 +824,7 @@ break;
       MixpanelManager().phoneMicRecordingStopped();
     } else if (recordingState == RecordingState.initialising) {
       // Already initializing, do nothing
-      debugPrint('initialising, have to wait');
+      Logger.debug('initialising, have to wait');
     } else {
       // Start recording directly without dialog
       await captureProvider.streamRecording();

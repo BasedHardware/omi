@@ -1,14 +1,16 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/services/app_review_service.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/services/app_review_service.dart';
+import 'package:omi/utils/logger.dart';
 
 class ConversationProvider extends ChangeNotifier {
   List<ServerConversation> conversations = [];
@@ -274,7 +276,7 @@ class ConversationProvider extends ChangeNotifier {
     // Debounce mechanism: only refresh if enough time has passed since last refresh
     final now = DateTime.now();
     if (_lastRefreshTime != null && now.difference(_lastRefreshTime!) < _refreshCooldown) {
-      debugPrint(
+      Logger.debug(
           'Skipping conversations refresh - too soon since last refresh (${now.difference(_lastRefreshTime!).inSeconds}s ago)');
       return;
     }
@@ -769,7 +771,7 @@ class ConversationProvider extends ChangeNotifier {
       }
       notifyListeners();
     } else {
-      debugPrint("Error: Conversation or action item not found for updateGlobalActionItemState.");
+      Logger.debug("Error: Conversation or action item not found for updateGlobalActionItemState.");
     }
   }
 

@@ -1,35 +1,36 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:auto_size_text/auto_size_text.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+
+import 'package:auto_size_text/auto_size_text.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:collection/collection.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/pages/chat/widgets/files_handler_widget.dart';
+import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:shimmer/shimmer.dart';
+
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/pages/chat/widgets/files_handler_widget.dart';
 import 'package:omi/pages/chat/widgets/typing_indicator.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
-import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:shimmer/shimmer.dart';
-
-import 'markdown_message_widget.dart';
 import 'package:omi/widgets/text_selection_controls.dart';
-import 'package:omi/providers/app_provider.dart';
+import 'markdown_message_widget.dart';
 
 /// Parse app_id from thinking text (format: "text|app_id:app_id")
 String? _parseAppIdFromThinking(String thinkingText) {
@@ -968,7 +969,7 @@ class _FeedbackBottomSheetState extends State<FeedbackBottomSheet> {
       );
       return;
     }
-    
+
     HapticFeedback.mediumImpact();
     final comment = _commentController.text.trim();
     widget.onSubmit(_selectedReason!.key, comment.isEmpty ? null : comment);
@@ -1003,7 +1004,7 @@ class _FeedbackBottomSheetState extends State<FeedbackBottomSheet> {
                 ),
               ),
             ),
-            
+
             // Header with title and submit button
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1021,9 +1022,7 @@ class _FeedbackBottomSheetState extends State<FeedbackBottomSheet> {
                   child: Text(
                     'Submit',
                     style: TextStyle(
-                      color: _selectedReason != null 
-                          ? Colors.blue 
-                          : Colors.grey.shade600,
+                      color: _selectedReason != null ? Colors.blue : Colors.grey.shade600,
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
                     ),
@@ -1043,7 +1042,7 @@ class _FeedbackBottomSheetState extends State<FeedbackBottomSheet> {
               ),
             ),
             const SizedBox(height: 10),
-            
+
             // Reason chips
             Wrap(
               spacing: 8,
@@ -1060,13 +1059,9 @@ class _FeedbackBottomSheetState extends State<FeedbackBottomSheet> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
-                      color: isSelected 
-                          ? Colors.blue.withOpacity(0.2) 
-                          : const Color(0xFF2C2C2E),
+                      color: isSelected ? Colors.blue.withOpacity(0.2) : const Color(0xFF2C2C2E),
                       borderRadius: BorderRadius.circular(20),
-                      border: isSelected 
-                          ? Border.all(color: Colors.blue, width: 1.5) 
-                          : null,
+                      border: isSelected ? Border.all(color: Colors.blue, width: 1.5) : null,
                     ),
                     child: Text(
                       reason.label,
@@ -1193,7 +1188,7 @@ class _MessageActionBarState extends State<MessageActionBar> {
           feedbackReason = '$reason: $comment';
         }
         widget.setMessageNps?.call(-1, reason: feedbackReason);
-        
+
         // Show confirmation snackbar
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1223,12 +1218,12 @@ class _MessageActionBarState extends State<MessageActionBar> {
             onTap: () async {
               HapticFeedback.lightImpact();
               await Clipboard.setData(ClipboardData(text: widget.messageText));
-              
+
               // Implicit positive feedback - user copied the message (silent, no UI change)
               if (_selectedNps == null) {
                 widget.setMessageNps?.call(1, reason: 'user_copied_message');
               }
-              
+
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -1281,7 +1276,7 @@ class _MessageActionBarState extends State<MessageActionBar> {
             onTap: () async {
               HapticFeedback.lightImpact();
               await Share.share(widget.messageText);
-              
+
               // Implicit positive feedback - user shared the message (silent, no UI change)
               if (_selectedNps == null) {
                 widget.setMessageNps?.call(1, reason: 'user_shared_message');

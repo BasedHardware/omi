@@ -1,0 +1,2317 @@
+{
+  "@@locale": "ru",
+  "@@last_modified": "2026-01-13",
+  "appTitle": "Omi",
+  "@appTitle": {
+    "description": "The app title displayed in various places"
+  },
+  "conversationTab": "Разговор",
+  "@conversationTab": {
+    "description": "Tab label for conversation summary"
+  },
+  "transcriptTab": "Расшифровка",
+  "@transcriptTab": {
+    "description": "Tab label for transcript view"
+  },
+  "actionItemsTab": "Задачи",
+  "@actionItemsTab": {
+    "description": "Tab label for action items"
+  },
+  "deleteConversationTitle": "Удалить разговор?",
+  "@deleteConversationTitle": {
+    "description": "Title for delete confirmation dialog"
+  },
+  "deleteConversationMessage": "Вы уверены, что хотите удалить этот разговор? Это действие нельзя будет отменить.",
+  "@deleteConversationMessage": {
+    "description": "Message for delete confirmation dialog"
+  },
+  "confirm": "Подтвердить",
+  "@confirm": {
+    "description": "Confirm button label"
+  },
+  "cancel": "Отмена",
+  "@cancel": {
+    "description": "Button label"
+  },
+  "ok": "Ок",
+  "@ok": {
+    "description": "Generic OK button text"
+  },
+  "delete": "Удалить",
+  "@delete": {
+    "description": "Button label"
+  },
+  "add": "Добавить",
+  "@add": {
+    "description": "Add button label"
+  },
+  "update": "Обновить",
+  "@update": {
+    "description": "Update button label"
+  },
+  "save": "Сохранить",
+  "@save": {
+    "description": "Save button label"
+  },
+  "edit": "Редактировать",
+  "@edit": {
+    "description": "Edit button/action label"
+  },
+  "close": "Закрыть",
+  "@close": {
+    "description": "Close button label"
+  },
+  "clear": "Очистить",
+  "@clear": {
+    "description": "Clear button label"
+  },
+  "copyTranscript": "Копировать расшифровку",
+  "@copyTranscript": {
+    "description": "Menu item to copy transcript"
+  },
+  "copySummary": "Копировать резюме",
+  "@copySummary": {
+    "description": "Menu item to copy summary"
+  },
+  "testPrompt": "Тестовый запрос",
+  "@testPrompt": {
+    "description": "Menu item for testing prompts"
+  },
+  "reprocessConversation": "Переобработать разговор",
+  "@reprocessConversation": {
+    "description": "Menu item to reprocess a conversation"
+  },
+  "deleteConversation": "Удалить разговор",
+  "@deleteConversation": {
+    "description": "Menu item to delete a conversation"
+  },
+  "contentCopied": "Содержимое скопировано в буфер обмена",
+  "@contentCopied": {
+    "description": "Snackbar message when content is copied"
+  },
+  "failedToUpdateStarred": "Не удалось обновить статус избранного.",
+  "@failedToUpdateStarred": {
+    "description": "Error message when starring fails"
+  },
+  "conversationUrlNotShared": "Не удалось поделиться ссылкой на разговор.",
+  "@conversationUrlNotShared": {
+    "description": "Error message when sharing fails"
+  },
+  "errorProcessingConversation": "Ошибка при обработке разговора. Пожалуйста, попробуйте позже.",
+  "@errorProcessingConversation": {
+    "description": "Error message for conversation processing failure"
+  },
+  "noInternetConnection": "Пожалуйста, проверьте подключение к интернету и попробуйте снова.",
+  "@noInternetConnection": {
+    "description": "Message shown when there's no internet"
+  },
+  "unableToDeleteConversation": "Не удалось удалить разговор",
+  "@unableToDeleteConversation": {
+    "description": "Title for delete error dialog"
+  },
+  "somethingWentWrong": "Что-то пошло не так! Пожалуйста, попробуйте позже.",
+  "@somethingWentWrong": {
+    "description": "Generic error message"
+  },
+  "copyErrorMessage": "Копировать сообщение об ошибке",
+  "@copyErrorMessage": {
+    "description": "Button to copy error details"
+  },
+  "errorCopied": "Сообщение об ошибке скопировано в буфер обмена",
+  "@errorCopied": {
+    "description": "Snackbar message after copying error"
+  },
+  "remaining": "Осталось",
+  "@remaining": {
+    "description": "Label for remaining time/items"
+  },
+  "loading": "Загрузка...",
+  "@loading": {
+    "description": "Loading indicator text"
+  },
+  "loadingDuration": "Загрузка длительности...",
+  "@loadingDuration": {
+    "description": "Loading duration indicator"
+  },
+  "secondsCount": "{count} секунд",
+  "@secondsCount": {
+    "description": "Duration in seconds",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "30"
+      }
+    }
+  },
+  "people": "Люди",
+  "@people": {
+    "description": "People section title"
+  },
+  "addNewPerson": "Добавить нового человека",
+  "@addNewPerson": {
+    "description": "Title for add person dialog"
+  },
+  "editPerson": "Редактировать человека",
+  "@editPerson": {
+    "description": "Title for edit person dialog"
+  },
+  "createPersonHint": "Создайте нового человека и обучите Omi распознавать его голос тоже!",
+  "@createPersonHint": {
+    "description": "Hint text for creating a person"
+  },
+  "speechProfile": "Голосовой профиль",
+  "@speechProfile": {
+    "description": "Speech profile label"
+  },
+  "sampleNumber": "Образец {number}",
+  "@sampleNumber": {
+    "description": "Label for speech sample",
+    "placeholders": {
+      "number": {
+        "type": "int",
+        "example": "1"
+      }
+    }
+  },
+  "settings": "Настройки",
+  "@settings": {
+    "description": "Settings page title"
+  },
+  "language": "Язык",
+  "@language": {
+    "description": "Language setting label"
+  },
+  "selectLanguage": "Выберите язык",
+  "@selectLanguage": {
+    "description": "Title for language selection"
+  },
+  "deleting": "Удаление...",
+  "@deleting": {
+    "description": "Deleting in progress indicator"
+  },
+  "pleaseCompleteAuthentication": "Пожалуйста, завершите аутентификацию в браузере. После этого вернитесь в приложение.",
+  "@pleaseCompleteAuthentication": {
+    "description": "Message shown during OAuth flow"
+  },
+  "failedToStartAuthentication": "Не удалось начать аутентификацию",
+  "@failedToStartAuthentication": {
+    "description": "Error when OAuth fails to start"
+  },
+  "importStarted": "Импорт начат! Вы получите уведомление, когда он завершится.",
+  "@importStarted": {
+    "description": "Success message when import begins"
+  },
+  "failedToStartImport": "Не удалось начать импорт. Пожалуйста, попробуйте снова.",
+  "@failedToStartImport": {
+    "description": "Error when import fails to start"
+  },
+  "couldNotAccessFile": "Не удалось получить доступ к выбранному файлу",
+  "@couldNotAccessFile": {
+    "description": "Error when file access fails"
+  },
+  "askOmi": "Спросить Omi",
+  "@askOmi": {
+    "description": "Chat button label"
+  },
+  "done": "Готово",
+  "@done": {
+    "description": "Button label"
+  },
+  "disconnected": "Отключено",
+  "@disconnected": {
+    "description": "Device disconnected status"
+  },
+  "searching": "Поиск",
+  "@searching": {
+    "description": "Searching for device status"
+  },
+  "connectDevice": "Подключить устройство",
+  "@connectDevice": {
+    "description": "Button to connect a device"
+  },
+  "monthlyLimitReached": "Вы достигли месячного лимита.",
+  "@monthlyLimitReached": {
+    "description": "Message when usage limit is reached"
+  },
+  "checkUsage": "Проверить использование",
+  "@checkUsage": {
+    "description": "Button to check usage details"
+  },
+  "syncingRecordings": "Синхронизация записей",
+  "@syncingRecordings": {
+    "description": "Title when sync is in progress"
+  },
+  "recordingsToSync": "Записи для синхронизации",
+  "@recordingsToSync": {
+    "description": "Title when there are recordings to sync"
+  },
+  "allCaughtUp": "Всё синхронизировано",
+  "@allCaughtUp": {
+    "description": "Title when everything is synced"
+  },
+  "sync": "Синхронизация",
+  "@sync": {
+    "description": "Sync button label"
+  },
+  "pendantUpToDate": "Кулон обновлён",
+  "@pendantUpToDate": {
+    "description": "Status when pendant is synced"
+  },
+  "allRecordingsSynced": "Все записи синхронизированы",
+  "@allRecordingsSynced": {
+    "description": "Status text when sync is complete"
+  },
+  "syncingInProgress": "Идёт синхронизация",
+  "@syncingInProgress": {
+    "description": "Status when sync is happening"
+  },
+  "readyToSync": "Готово к синхронизации",
+  "@readyToSync": {
+    "description": "Status when ready to sync"
+  },
+  "tapSyncToStart": "Нажмите Синхронизация для начала",
+  "@tapSyncToStart": {
+    "description": "Hint to start sync"
+  },
+  "pendantNotConnected": "Кулон не подключён. Подключите для синхронизации.",
+  "@pendantNotConnected": {
+    "description": "Warning when pendant is not connected"
+  },
+  "everythingSynced": "Всё уже синхронизировано.",
+  "@everythingSynced": {
+    "description": "Message when all is synced"
+  },
+  "recordingsNotSynced": "У вас есть записи, которые ещё не синхронизированы.",
+  "@recordingsNotSynced": {
+    "description": "Message when there are unsynced recordings"
+  },
+  "syncingBackground": "Мы продолжим синхронизировать ваши записи в фоновом режиме.",
+  "@syncingBackground": {
+    "description": "Message during background sync"
+  },
+  "noConversationsYet": "Разговоров пока нет.",
+  "@noConversationsYet": {
+    "description": "Empty state when no conversations exist"
+  },
+  "noStarredConversations": "Избранных разговоров пока нет.",
+  "@noStarredConversations": {
+    "description": "Empty state for starred filter"
+  },
+  "starConversationHint": "Чтобы добавить разговор в избранное, откройте его и нажмите на значок звезды в заголовке.",
+  "@starConversationHint": {
+    "description": "Hint explaining how to star conversations"
+  },
+  "searchConversations": "Поиск разговоров",
+  "@searchConversations": {
+    "description": "Search field placeholder"
+  },
+  "selectedCount": "Выбрано {count}",
+  "@selectedCount": {
+    "description": "Selection count label",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "merge": "Объединить",
+  "@merge": {
+    "description": "Merge button label"
+  },
+  "mergeConversations": "Объединить разговоры",
+  "@mergeConversations": {
+    "description": "Merge dialog title"
+  },
+  "mergeConversationsMessage": "Это объединит {count} разговоров в один. Всё содержимое будет объединено и перегенерировано.",
+  "@mergeConversationsMessage": {
+    "description": "Merge confirmation message",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mergingInBackground": "Объединение в фоновом режиме. Это может занять некоторое время.",
+  "@mergingInBackground": {
+    "description": "Snackbar message during merge"
+  },
+  "failedToStartMerge": "Не удалось начать объединение",
+  "@failedToStartMerge": {
+    "description": "Error message when merge fails"
+  },
+  "askAnything": "Спросите что угодно",
+  "@askAnything": {
+    "description": "Chat input placeholder"
+  },
+  "noMessagesYet": "Сообщений пока нет!\nПочему бы не начать разговор?",
+  "@noMessagesYet": {
+    "description": "Empty chat state message"
+  },
+  "deletingMessages": "Удаление ваших сообщений из памяти Omi...",
+  "@deletingMessages": {
+    "description": "Loading text while clearing chat"
+  },
+  "messageCopied": "Сообщение скопировано в буфер обмена.",
+  "@messageCopied": {
+    "description": "Snackbar after copying message"
+  },
+  "cannotReportOwnMessage": "Вы не можете пожаловаться на свои собственные сообщения.",
+  "@cannotReportOwnMessage": {
+    "description": "Error when trying to report own message"
+  },
+  "reportMessage": "Пожаловаться на сообщение",
+  "@reportMessage": {
+    "description": "Report message dialog title"
+  },
+  "reportMessageConfirm": "Вы уверены, что хотите пожаловаться на это сообщение?",
+  "@reportMessageConfirm": {
+    "description": "Report message confirmation"
+  },
+  "messageReported": "Жалоба на сообщение успешно отправлена.",
+  "@messageReported": {
+    "description": "Confirmation after reporting message"
+  },
+  "thankYouFeedback": "Спасибо за ваш отзыв!",
+  "@thankYouFeedback": {
+    "description": "After thumbs up/down feedback"
+  },
+  "clearChat": "Очистить чат?",
+  "@clearChat": {
+    "description": "Clear chat dialog title"
+  },
+  "clearChatConfirm": "Вы уверены, что хотите очистить чат? Это действие нельзя будет отменить.",
+  "@clearChatConfirm": {
+    "description": "Clear chat confirmation message"
+  },
+  "maxFilesLimit": "Вы можете загрузить только 4 файла одновременно",
+  "@maxFilesLimit": {
+    "description": "Max files upload warning"
+  },
+  "chatWithOmi": "Чат с Omi",
+  "@chatWithOmi": {
+    "description": "Chat share subject"
+  },
+  "apps": "Приложения",
+  "@apps": {
+    "description": "Apps page title"
+  },
+  "noAppsFound": "Приложения не найдены",
+  "@noAppsFound": {
+    "description": "Empty state when no apps match"
+  },
+  "tryAdjustingSearch": "Попробуйте изменить параметры поиска или фильтры",
+  "@tryAdjustingSearch": {
+    "description": "Hint when no apps found"
+  },
+  "createYourOwnApp": "Создайте своё приложение",
+  "@createYourOwnApp": {
+    "description": "Create app button title"
+  },
+  "buildAndShareApp": "Создавайте и делитесь своим пользовательским приложением",
+  "@buildAndShareApp": {
+    "description": "Create app button subtitle"
+  },
+  "searchApps": "Поиск среди 1500+ приложений",
+  "@searchApps": {
+    "description": "Apps search placeholder"
+  },
+  "myApps": "Мои приложения",
+  "@myApps": {
+    "description": "My Apps filter button"
+  },
+  "installedApps": "Установленные приложения",
+  "@installedApps": {
+    "description": "Installed Apps filter button"
+  },
+  "unableToFetchApps": "Не удалось загрузить приложения :(\n\nПожалуйста, проверьте подключение к интернету и попробуйте снова.",
+  "@unableToFetchApps": {
+    "description": "Error when apps fail to load"
+  },
+  "aboutOmi": "О Omi",
+  "@aboutOmi": {
+    "description": "About page title"
+  },
+  "privacyPolicy": "Политикой конфиденциальности",
+  "@privacyPolicy": {
+    "description": "Link text for Privacy Policy"
+  },
+  "visitWebsite": "Посетить сайт",
+  "@visitWebsite": {
+    "description": "Visit website link"
+  },
+  "helpOrInquiries": "Помощь или вопросы?",
+  "@helpOrInquiries": {
+    "description": "Help link title"
+  },
+  "joinCommunity": "Присоединяйтесь к сообществу!",
+  "@joinCommunity": {
+    "description": "Discord community link"
+  },
+  "membersAndCounting": "Более 8000 участников.",
+  "@membersAndCounting": {
+    "description": "Discord member count"
+  },
+  "deleteAccountTitle": "Удалить аккаунт",
+  "@deleteAccountTitle": {
+    "description": "Delete account page title"
+  },
+  "deleteAccountConfirm": "Вы уверены, что хотите удалить свой аккаунт?",
+  "@deleteAccountConfirm": {
+    "description": "Delete account confirmation"
+  },
+  "cannotBeUndone": "Это действие нельзя отменить.",
+  "@cannotBeUndone": {
+    "description": "Warning that action is permanent"
+  },
+  "allDataErased": "Все ваши воспоминания и разговоры будут безвозвратно удалены.",
+  "@allDataErased": {
+    "description": "Delete account warning 1"
+  },
+  "appsDisconnected": "Ваши приложения и интеграции будут немедленно отключены.",
+  "@appsDisconnected": {
+    "description": "Delete account warning 2"
+  },
+  "exportBeforeDelete": "Вы можете экспортировать свои данные перед удалением аккаунта, но после удаления восстановить их будет невозможно.",
+  "@exportBeforeDelete": {
+    "description": "Delete account warning 3"
+  },
+  "deleteAccountCheckbox": "Я понимаю, что удаление аккаунта необратимо, и все данные, включая воспоминания и разговоры, будут потеряны без возможности восстановления.",
+  "@deleteAccountCheckbox": {
+    "description": "Delete account checkbox confirmation"
+  },
+  "areYouSure": "Вы уверены?",
+  "@areYouSure": {
+    "description": "Final confirmation title"
+  },
+  "deleteAccountFinal": "Это действие необратимо и навсегда удалит ваш аккаунт и все связанные с ним данные. Вы уверены, что хотите продолжить?",
+  "@deleteAccountFinal": {
+    "description": "Final delete confirmation message"
+  },
+  "deleteNow": "Удалить сейчас",
+  "@deleteNow": {
+    "description": "Delete now button"
+  },
+  "goBack": "Вернуться назад",
+  "@goBack": {
+    "description": "Go back button"
+  },
+  "checkBoxToConfirm": "Поставьте галочку, чтобы подтвердить, что вы понимаете: удаление аккаунта необратимо.",
+  "@checkBoxToConfirm": {
+    "description": "Checkbox validation error"
+  },
+  "profile": "Профиль",
+  "@profile": {
+    "description": "Profile page title"
+  },
+  "name": "Имя",
+  "@name": {
+    "description": "Name field label"
+  },
+  "email": "Электронная почта",
+  "@email": {
+    "description": "Email field label"
+  },
+  "customVocabulary": "Пользовательский словарь",
+  "@customVocabulary": {
+    "description": "Custom vocabulary setting"
+  },
+  "identifyingOthers": "Идентификация других",
+  "@identifyingOthers": {
+    "description": "People identification setting"
+  },
+  "paymentMethods": "Способы оплаты",
+  "@paymentMethods": {
+    "description": "Payment methods setting"
+  },
+  "conversationDisplay": "Отображение разговоров",
+  "@conversationDisplay": {
+    "description": "Conversation display setting"
+  },
+  "dataPrivacy": "Данные и конфиденциальность",
+  "@dataPrivacy": {
+    "description": "Data and privacy setting"
+  },
+  "userId": "ID пользователя",
+  "@userId": {
+    "description": "User ID label"
+  },
+  "notSet": "Не задано",
+  "@notSet": {
+    "description": "Default value when not set"
+  },
+  "userIdCopied": "ID пользователя скопирован в буфер обмена",
+  "@userIdCopied": {
+    "description": "Confirmation when user ID is copied"
+  },
+  "systemDefault": "По умолчанию системы",
+  "@systemDefault": {
+    "description": "System language option"
+  },
+  "planAndUsage": "Тариф и использование",
+  "@planAndUsage": {
+    "description": "Plan and usage menu item"
+  },
+  "offlineSync": "Оффлайн-синхронизация",
+  "@offlineSync": {
+    "description": "Offline sync menu item"
+  },
+  "deviceSettings": "Настройки устройства",
+  "@deviceSettings": {
+    "description": "Device settings menu item"
+  },
+  "chatTools": "Инструменты чата",
+  "@chatTools": {
+    "description": "Chat tools menu item"
+  },
+  "feedbackBug": "Отзыв / Ошибка",
+  "@feedbackBug": {
+    "description": "Feedback menu item"
+  },
+  "helpCenter": "Центр помощи",
+  "@helpCenter": {
+    "description": "Help center menu item"
+  },
+  "developerSettings": "Настройки разработчика",
+  "@developerSettings": {
+    "description": "Developer settings menu item"
+  },
+  "getOmiForMac": "Получить Omi для Mac",
+  "@getOmiForMac": {
+    "description": "Mac app download link"
+  },
+  "referralProgram": "Реферальная программа",
+  "@referralProgram": {
+    "description": "Referral program menu item"
+  },
+  "signOut": "Выйти",
+  "@signOut": {
+    "description": "Sign out button"
+  },
+  "appAndDeviceCopied": "Информация о приложении и устройстве скопирована",
+  "@appAndDeviceCopied": {
+    "description": "Confirmation when version info is copied"
+  },
+  "wrapped2025": "Итоги 2025",
+  "@wrapped2025": {
+    "description": "Wrapped 2025 menu item"
+  },
+  "yourPrivacyYourControl": "Ваша конфиденциальность, ваш контроль",
+  "@yourPrivacyYourControl": {
+    "description": "Data privacy page heading"
+  },
+  "privacyIntro": "В Omi мы стремимся защитить вашу конфиденциальность. Эта страница позволяет вам контролировать, как хранятся и используются ваши данные.",
+  "@privacyIntro": {
+    "description": "Data privacy page introduction"
+  },
+  "learnMore": "Узнать больше...",
+  "@learnMore": {
+    "description": "Learn more link"
+  },
+  "dataProtectionLevel": "Уровень защиты данных",
+  "@dataProtectionLevel": {
+    "description": "Data protection section title"
+  },
+  "dataProtectionDesc": "Ваши данные по умолчанию защищены надёжным шифрованием. Просмотрите ваши настройки и будущие опции конфиденциальности ниже.",
+  "@dataProtectionDesc": {
+    "description": "Data protection section description"
+  },
+  "appAccess": "Доступ приложений",
+  "@appAccess": {
+    "description": "App access section title"
+  },
+  "appAccessDesc": "Следующие приложения могут получить доступ к вашим данным. Нажмите на приложение, чтобы управлять его разрешениями.",
+  "@appAccessDesc": {
+    "description": "App access section description"
+  },
+  "noAppsExternalAccess": "Ни одно установленное приложение не имеет внешнего доступа к вашим данным.",
+  "@noAppsExternalAccess": {
+    "description": "Empty state for app access"
+  },
+  "deviceName": "Название устройства",
+  "@deviceName": {
+    "description": "Device name label"
+  },
+  "deviceId": "ID устройства",
+  "@deviceId": {
+    "description": "Device ID label"
+  },
+  "firmware": "Прошивка",
+  "@firmware": {
+    "description": "Firmware label"
+  },
+  "sdCardSync": "Синхронизация SD-карты",
+  "@sdCardSync": {
+    "description": "SD Card sync label"
+  },
+  "hardwareRevision": "Ревизия оборудования",
+  "@hardwareRevision": {
+    "description": "Hardware revision label"
+  },
+  "modelNumber": "Номер модели",
+  "@modelNumber": {
+    "description": "Model number label"
+  },
+  "manufacturer": "Производитель",
+  "@manufacturer": {
+    "description": "Manufacturer label"
+  },
+  "doubleTap": "Двойное нажатие",
+  "@doubleTap": {
+    "description": "Double tap action label"
+  },
+  "ledBrightness": "Яркость LED",
+  "@ledBrightness": {
+    "description": "LED brightness setting"
+  },
+  "micGain": "Усиление микрофона",
+  "@micGain": {
+    "description": "Microphone gain setting"
+  },
+  "disconnect": "Отключить",
+  "@disconnect": {
+    "description": "Disconnect device button"
+  },
+  "forgetDevice": "Забыть устройство",
+  "@forgetDevice": {
+    "description": "Forget device button"
+  },
+  "chargingIssues": "Проблемы с зарядкой",
+  "@chargingIssues": {
+    "description": "Charging issues help item"
+  },
+  "disconnectDevice": "Отключить устройство",
+  "@disconnectDevice": {
+    "description": "Disconnect device button"
+  },
+  "unpairDevice": "Разорвать пару с устройством",
+  "@unpairDevice": {
+    "description": "Unpair device button"
+  },
+  "unpairAndForget": "Разорвать пару и забыть устройство",
+  "@unpairAndForget": {
+    "description": "Unpair and forget device button"
+  },
+  "deviceDisconnectedMessage": "Ваш Omi был отключён 😔",
+  "@deviceDisconnectedMessage": {
+    "description": "Message shown when device is disconnected"
+  },
+  "deviceUnpairedMessage": "Пара с устройством разорвана. Перейдите в Настройки > Bluetooth и забудьте устройство для завершения разрыва пары.",
+  "@deviceUnpairedMessage": {
+    "description": "Message shown when device is unpaired"
+  },
+  "unpairDialogTitle": "Разорвать пару с устройством",
+  "@unpairDialogTitle": {
+    "description": "Unpair dialog title"
+  },
+  "unpairDialogMessage": "Это разорвёт пару с устройством, чтобы оно могло быть подключено к другому телефону. Вам нужно будет перейти в Настройки > Bluetooth и забыть устройство для завершения процесса.",
+  "@unpairDialogMessage": {
+    "description": "Unpair dialog message"
+  },
+  "deviceNotConnected": "Устройство не подключено",
+  "@deviceNotConnected": {
+    "description": "Device not connected header"
+  },
+  "connectDeviceMessage": "Подключите устройство Omi для доступа\nк настройкам устройства и настройке",
+  "@connectDeviceMessage": {
+    "description": "Message encouraging user to connect device"
+  },
+  "deviceInfoSection": "Информация об устройстве",
+  "@deviceInfoSection": {
+    "description": "Device information section header"
+  },
+  "customizationSection": "Настройка",
+  "@customizationSection": {
+    "description": "Customization section header"
+  },
+  "hardwareSection": "Оборудование",
+  "@hardwareSection": {
+    "description": "Hardware section header"
+  },
+  "v2Undetected": "V2 не обнаружено",
+  "@v2Undetected": {
+    "description": "V2 device undeteced dialog title"
+  },
+  "v2UndetectedMessage": "Мы видим, что у вас либо устройство V1, либо ваше устройство не подключено. Функция SD-карты доступна только для устройств V2.",
+  "@v2UndetectedMessage": {
+    "description": "V2 device undeteced dialog message"
+  },
+  "endConversation": "Завершить разговор",
+  "@endConversation": {
+    "description": "End conversation action"
+  },
+  "pauseResume": "Пауза/Возобновить",
+  "@pauseResume": {
+    "description": "Pause/Resume action"
+  },
+  "starConversation": "Добавить разговор в избранное",
+  "@starConversation": {
+    "description": "Star conversation action"
+  },
+  "doubleTapAction": "Действие при двойном нажатии",
+  "@doubleTapAction": {
+    "description": "Double tap action setting"
+  },
+  "endAndProcess": "Завершить и обработать разговор",
+  "@endAndProcess": {
+    "description": "End and process action"
+  },
+  "pauseResumeRecording": "Пауза/Возобновить запись",
+  "@pauseResumeRecording": {
+    "description": "Pause/Resume recording action"
+  },
+  "starOngoing": "Добавить текущий разговор в избранное",
+  "@starOngoing": {
+    "description": "Star ongoing conversation action"
+  },
+  "off": "Выкл",
+  "@off": {
+    "description": "Off state"
+  },
+  "max": "Макс",
+  "@max": {
+    "description": "Max state"
+  },
+  "mute": "Без звука",
+  "@mute": {
+    "description": "Mute state"
+  },
+  "quiet": "Тихий",
+  "@quiet": {
+    "description": "Quiet preset"
+  },
+  "normal": "Обычный",
+  "@normal": {
+    "description": "Normal preset"
+  },
+  "high": "Высокий",
+  "@high": {
+    "description": "High preset"
+  },
+  "micGainDescMuted": "Микрофон выключен",
+  "@micGainDescMuted": {
+    "description": "Mic gain description: Muted"
+  },
+  "micGainDescLow": "Очень тихий - для шумной обстановки",
+  "@micGainDescLow": {
+    "description": "Mic gain description: Low"
+  },
+  "micGainDescModerate": "Тихий - для умеренного шума",
+  "@micGainDescModerate": {
+    "description": "Mic gain description: Moderate"
+  },
+  "micGainDescNeutral": "Нейтральный - сбалансированная запись",
+  "@micGainDescNeutral": {
+    "description": "Mic gain description: Neutral"
+  },
+  "micGainDescSlightlyBoosted": "Слегка усиленный - обычное использование",
+  "@micGainDescSlightlyBoosted": {
+    "description": "Mic gain description: Slightly Boosted"
+  },
+  "micGainDescBoosted": "Усиленный - для тихой обстановки",
+  "@micGainDescBoosted": {
+    "description": "Mic gain description: Boosted"
+  },
+  "micGainDescHigh": "Высокий - для отдалённых или тихих голосов",
+  "@micGainDescHigh": {
+    "description": "Mic gain description: High"
+  },
+  "micGainDescVeryHigh": "Очень высокий - для очень тихих источников",
+  "@micGainDescVeryHigh": {
+    "description": "Mic gain description: Very High"
+  },
+  "micGainDescMax": "Максимальный - используйте с осторожностью",
+  "@micGainDescMax": {
+    "description": "Mic gain description: Max"
+  },
+  "developerSettingsTitle": "Настройки разработчика",
+  "@developerSettingsTitle": {
+    "description": "Developer settings page title"
+  },
+  "saving": "Сохранение...",
+  "@saving": {
+    "description": "Saving state text"
+  },
+  "personaConfig": "Настройте вашу AI-персону",
+  "@personaConfig": {
+    "description": "Persona configuration subtitle"
+  },
+  "beta": "БЕТА",
+  "@beta": {
+    "description": "Beta tag"
+  },
+  "transcription": "Расшифровка",
+  "@transcription": {
+    "description": "Transcription settings title"
+  },
+  "transcriptionConfig": "Настройте провайдера STT",
+  "@transcriptionConfig": {
+    "description": "Transcription configuration subtitle"
+  },
+  "conversationTimeout": "Тайм-аут разговора",
+  "@conversationTimeout": {
+    "description": "Conversation timeout settings title"
+  },
+  "conversationTimeoutConfig": "Установите, когда разговоры автоматически завершаются",
+  "@conversationTimeoutConfig": {
+    "description": "Conversation timeout configuration subtitle"
+  },
+  "importData": "Импорт данных",
+  "@importData": {
+    "description": "Import data details title"
+  },
+  "importDataConfig": "Импортируйте данные из других источников",
+  "@importDataConfig": {
+    "description": "Import data details subtitle"
+  },
+  "debugDiagnostics": "Отладка и диагностика",
+  "@debugDiagnostics": {
+    "description": "Debug & Diagnostics section header"
+  },
+  "endpointUrl": "URL конечной точки",
+  "@endpointUrl": {
+    "description": "Endpoint URL label"
+  },
+  "noApiKeys": "API-ключей пока нет",
+  "@noApiKeys": {
+    "description": "No API keys message"
+  },
+  "createKeyToStart": "Создайте ключ для начала",
+  "@createKeyToStart": {
+    "description": "Create key instruction"
+  },
+  "createKey": "Создать ключ",
+  "@createKey": {
+    "description": "Create Key button"
+  },
+  "docs": "Документация",
+  "@docs": {
+    "description": "Documentation link"
+  },
+  "yourOmiInsights": "Ваша статистика Omi",
+  "@yourOmiInsights": {
+    "description": "Usage page title"
+  },
+  "today": "Сегодня",
+  "@today": {
+    "description": "Time period: Today"
+  },
+  "thisMonth": "Этот месяц",
+  "@thisMonth": {
+    "description": "Time period: This Month"
+  },
+  "thisYear": "Этот год",
+  "@thisYear": {
+    "description": "Time period: This Year"
+  },
+  "allTime": "Всё время",
+  "@allTime": {
+    "description": "Time period: All Time"
+  },
+  "noActivityYet": "Активности пока нет",
+  "@noActivityYet": {
+    "description": "Empty state title"
+  },
+  "startConversationToSeeInsights": "Начните разговор с Omi,\nчтобы увидеть здесь вашу статистику использования.",
+  "@startConversationToSeeInsights": {
+    "description": "Empty state description"
+  },
+  "listening": "Прослушивание",
+  "@listening": {
+    "description": "Listening stat title"
+  },
+  "listeningSubtitle": "Общее время активного прослушивания Omi.",
+  "@listeningSubtitle": {
+    "description": "Listening stat subtitle"
+  },
+  "understanding": "Понимание",
+  "@understanding": {
+    "description": "Understanding stat title"
+  },
+  "understandingSubtitle": "Слов понято из ваших разговоров.",
+  "@understandingSubtitle": {
+    "description": "Understanding stat subtitle"
+  },
+  "providing": "Предоставление",
+  "@providing": {
+    "description": "Providing stat title"
+  },
+  "providingSubtitle": "Задач и заметок, автоматически зафиксированных.",
+  "@providingSubtitle": {
+    "description": "Providing stat subtitle"
+  },
+  "remembering": "Запоминание",
+  "@remembering": {
+    "description": "Remembering stat title"
+  },
+  "rememberingSubtitle": "Фактов и деталей, запомненных для вас.",
+  "@rememberingSubtitle": {
+    "description": "Remembering stat subtitle"
+  },
+  "unlimitedPlan": "Безлимитный тариф",
+  "@unlimitedPlan": {
+    "description": "Unlimited plan name"
+  },
+  "managePlan": "Управление тарифом",
+  "@managePlan": {
+    "description": "Manage plan button"
+  },
+  "cancelAtPeriodEnd": "Ваш тариф будет отменён {date}.",
+  "@cancelAtPeriodEnd": {
+    "description": "Cancellation message",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Jan 1, 2026"
+      }
+    }
+  },
+  "renewsOn": "Ваш тариф продлится {date}.",
+  "@renewsOn": {
+    "description": "Renewal message",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Jan 1, 2026"
+      }
+    }
+  },
+  "basicPlan": "Бесплатный тариф",
+  "@basicPlan": {
+    "description": "Basic plan name"
+  },
+  "usageLimitMessage": "Использовано {used} из {limit} минут",
+  "@usageLimitMessage": {
+    "description": "Usage limit message",
+    "placeholders": {
+      "used": {
+        "type": "String",
+        "example": "100"
+      },
+      "limit": {
+        "type": "int",
+        "example": "60"
+      }
+    }
+  },
+  "upgrade": "Повысить тариф",
+  "@upgrade": {
+    "description": "Upgrade button"
+  },
+  "upgradeToUnlimited": "Перейти на безлимитный",
+  "@upgradeToUnlimited": {
+    "description": "Upgrade to unlimited button"
+  },
+  "basicPlanDesc": "Ваш тариф включает {limit} бесплатных минут в месяц. Перейдите на безлимитный тариф.",
+  "@basicPlanDesc": {
+    "description": "Basic plan description",
+    "placeholders": {
+      "limit": {
+        "type": "int",
+        "example": "60"
+      }
+    }
+  },
+  "shareStatsMessage": "Делюсь статистикой Omi! (omi.me - ваш постоянный AI-помощник)",
+  "@shareStatsMessage": {
+    "description": "Share stats base message"
+  },
+  "sharePeriodToday": "Сегодня omi:",
+  "@sharePeriodToday": {
+    "description": "Share stats period: Today"
+  },
+  "sharePeriodMonth": "В этом месяце omi:",
+  "@sharePeriodMonth": {
+    "description": "Share stats period: Month"
+  },
+  "sharePeriodYear": "В этом году omi:",
+  "@sharePeriodYear": {
+    "description": "Share stats period: Year"
+  },
+  "sharePeriodAllTime": "За всё время omi:",
+  "@sharePeriodAllTime": {
+    "description": "Share stats period: All Time"
+  },
+  "shareStatsListened": "🎧 Слушал {minutes} минут",
+  "@shareStatsListened": {
+    "description": "Share stats: listened",
+    "placeholders": {
+      "minutes": {
+        "type": "String",
+        "example": "120"
+      }
+    }
+  },
+  "shareStatsWords": "🧠 Понял {words} слов",
+  "@shareStatsWords": {
+    "description": "Share stats: words",
+    "placeholders": {
+      "words": {
+        "type": "String",
+        "example": "5000"
+      }
+    }
+  },
+  "shareStatsInsights": "✨ Предоставил {count} инсайтов",
+  "@shareStatsInsights": {
+    "description": "Share stats: insights",
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "10"
+      }
+    }
+  },
+  "shareStatsMemories": "📚 Запомнил {count} воспоминаний",
+  "@shareStatsMemories": {
+    "description": "Share stats: memories",
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "5"
+      }
+    }
+  },
+  "debugLogs": "Журналы отладки",
+  "debugLogsAutoDelete": "Автоматически удаляются через 3 дня.",
+  "debugLogsDesc": "Помогает диагностировать проблемы",
+  "noLogFilesFound": "Файлы журналов не найдены.",
+  "omiDebugLog": "Журнал отладки Omi",
+  "logShared": "Журнал отправлен",
+  "selectLogFile": "Выберите файл журнала",
+  "shareLogs": "Поделиться журналами",
+  "debugLogCleared": "Журнал отладки очищен",
+  "exportStarted": "Экспорт начат. Это может занять несколько секунд...",
+  "exportAllData": "Экспортировать все данные",
+  "exportDataDesc": "Экспортировать разговоры в JSON-файл",
+  "exportedConversations": "Экспортированные разговоры из Omi",
+  "exportShared": "Экспорт отправлен",
+  "deleteKnowledgeGraphTitle": "Удалить граф знаний?",
+  "deleteKnowledgeGraphMessage": "Это удалит все производные данные графа знаний (узлы и связи). Ваши исходные воспоминания останутся в безопасности. Граф будет восстановлен со временем или при следующем запросе.",
+  "knowledgeGraphDeleted": "Граф знаний успешно удалён",
+  "deleteGraphFailed": "Не удалось удалить граф: {error}",
+  "@deleteGraphFailed": {
+    "description": "Error message when deleting graph fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteKnowledgeGraph": "Удалить граф знаний",
+  "deleteKnowledgeGraphDesc": "Очистить все узлы и связи",
+  "mcp": "MCP",
+  "mcpServer": "Сервер MCP",
+  "mcpServerDesc": "Подключите AI-помощников к вашим данным",
+  "serverUrl": "URL сервера",
+  "urlCopied": "URL скопирован",
+  "apiKeyAuth": "Аутентификация по API-ключу",
+  "header": "Заголовок",
+  "authorizationBearer": "Authorization: Bearer <ключ>",
+  "oauth": "OAuth",
+  "clientId": "ID клиента",
+  "clientSecret": "Секрет клиента",
+  "useMcpApiKey": "Используйте ваш MCP API-ключ",
+  "webhooks": "Вебхуки",
+  "conversationEvents": "События разговоров",
+  "newConversationCreated": "Создан новый разговор",
+  "realtimeTranscript": "Расшифровка в реальном времени",
+  "transcriptReceived": "Расшифровка получена",
+  "audioBytes": "Байты аудио",
+  "audioDataReceived": "Данные аудио получены",
+  "intervalSeconds": "Интервал (секунды)",
+  "daySummary": "Сводка дня",
+  "summaryGenerated": "Сводка создана",
+  "claudeDesktop": "Claude Desktop",
+  "addToClaudeConfig": "Добавить в claude_desktop_config.json",
+  "copyConfig": "Копировать конфигурацию",
+  "configCopied": "Конфигурация скопирована в буфер обмена",
+  "listeningMins": "Прослушивание (мин)",
+  "understandingWords": "Понимание (слов)",
+  "insights": "Инсайты",
+  "memories": "Воспоминания",
+  "minsUsedThisMonth": "Использовано {used} из {limit} минут в этом месяце",
+  "@minsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "wordsUsedThisMonth": "Использовано {used} из {limit} слов в этом месяце",
+  "@wordsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "insightsUsedThisMonth": "Получено {used} из {limit} инсайтов в этом месяце",
+  "@insightsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "memoriesUsedThisMonth": "Создано {used} из {limit} воспоминаний в этом месяце",
+  "@memoriesUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "visibility": "Видимость",
+  "visibilitySubtitle": "Контролируйте, какие разговоры появляются в вашем списке",
+  "showShortConversations": "Показывать короткие разговоры",
+  "showShortConversationsDesc": "Показывать разговоры короче порогового значения",
+  "showDiscardedConversations": "Показывать отброшенные разговоры",
+  "showDiscardedConversationsDesc": "Включать разговоры, отмеченные как отброшенные",
+  "shortConversationThreshold": "Порог коротких разговоров",
+  "shortConversationThresholdSubtitle": "Разговоры короче этого значения будут скрыты, если не включено выше",
+  "durationThreshold": "Порог длительности",
+  "durationThresholdDesc": "Скрыть разговоры короче этого значения",
+  "minLabel": "{count} мин",
+  "@minLabel": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "customVocabularyTitle": "Пользовательский словарь",
+  "addWords": "Добавить слова",
+  "addWordsDesc": "Имена, термины или редкие слова",
+  "vocabularyHint": "Omi, Callie, OpenAI",
+  "connect": "Подключить",
+  "comingSoon": "Скоро",
+  "chatToolsFooter": "Подключите ваши приложения для просмотра данных и метрик в чате.",
+  "completeAuthInBrowser": "Пожалуйста, завершите аутентификацию в браузере. После этого вернитесь в приложение.",
+  "failedToStartAuth": "Не удалось начать аутентификацию {appName}",
+  "@failedToStartAuth": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectAppTitle": "Отключить {appName}?",
+  "@disconnectAppTitle": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectAppMessage": "Вы уверены, что хотите отключиться от {appName}? Вы можете переподключиться в любое время.",
+  "@disconnectAppMessage": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectedFrom": "Отключено от {appName}",
+  "@disconnectedFrom": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToDisconnect": "Не удалось отключить",
+  "connectTo": "Подключиться к {appName}",
+  "@connectTo": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "authAccessMessage": "Вам нужно авторизовать Omi для доступа к вашим данным {appName}. Это откроет браузер для аутентификации.",
+  "@authAccessMessage": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "continueAction": "Продолжить",
+  "languageTitle": "Язык",
+  "primaryLanguage": "Основной язык",
+  "automaticTranslation": "Автоматический перевод",
+  "detectLanguages": "Определение 10+ языков",
+  "authorizeSavingRecordings": "Разрешить сохранение записей",
+  "thanksForAuthorizing": "Спасибо за разрешение!",
+  "needYourPermission": "Нам нужно ваше разрешение",
+  "alreadyGavePermission": "Вы уже дали нам разрешение на сохранение ваших записей. Напоминаем, зачем нам это нужно:",
+  "wouldLikePermission": "Мы хотели бы получить ваше разрешение на сохранение ваших голосовых записей. Вот почему:",
+  "improveSpeechProfile": "Улучшение вашего голосового профиля",
+  "improveSpeechProfileDesc": "Мы используем записи для дальнейшего обучения и улучшения вашего персонального голосового профиля.",
+  "trainFamilyProfiles": "Обучение профилей друзей и семьи",
+  "trainFamilyProfilesDesc": "Ваши записи помогают нам распознавать и создавать профили для ваших друзей и семьи.",
+  "enhanceTranscriptAccuracy": "Повышение точности расшифровки",
+  "enhanceTranscriptAccuracyDesc": "По мере улучшения нашей модели мы сможем предоставлять лучшие результаты расшифровки для ваших записей.",
+  "legalNotice": "Юридическое уведомление: Законность записи и хранения голосовых данных может различаться в зависимости от вашего местоположения и того, как вы используете эту функцию. Вы несёте ответственность за соблюдение местных законов и нормативных актов.",
+  "alreadyAuthorized": "Уже разрешено",
+  "authorize": "Разрешить",
+  "revokeAuthorization": "Отозвать разрешение",
+  "authorizationSuccessful": "Разрешение успешно получено!",
+  "failedToAuthorize": "Не удалось получить разрешение. Пожалуйста, попробуйте снова.",
+  "authorizationRevoked": "Разрешение отозвано.",
+  "recordingsDeleted": "Записи удалены.",
+  "failedToRevoke": "Не удалось отозвать разрешение. Пожалуйста, попробуйте снова.",
+  "permissionRevokedTitle": "Разрешение отозвано",
+  "permissionRevokedMessage": "Хотите, чтобы мы удалили все ваши существующие записи тоже?",
+  "yes": "Да",
+  "editName": "Изменить имя",
+  "howShouldOmiCallYou": "Как Omi должен вас называть?",
+  "enterYourName": "Введите ваше имя",
+  "nameCannotBeEmpty": "Имя не может быть пустым",
+  "nameUpdatedSuccessfully": "Имя успешно обновлено!",
+  "calendarSettings": "Настройки календаря",
+  "calendarProviders": "Провайдеры календаря",
+  "macOsCalendar": "Календарь macOS",
+  "connectMacOsCalendar": "Подключите ваш локальный календарь macOS",
+  "googleCalendar": "Google Календарь",
+  "syncGoogleAccount": "Синхронизация с вашим аккаунтом Google",
+  "showMeetingsMenuBar": "Показывать предстоящие встречи в строке меню",
+  "showMeetingsMenuBarDesc": "Отображать вашу следующую встречу и время до её начала в строке меню macOS",
+  "showEventsNoParticipants": "Показывать события без участников",
+  "showEventsNoParticipantsDesc": "Когда включено, Coming Up показывает события без участников или видеосвязи.",
+  "yourMeetings": "Ваши встречи",
+  "refresh": "Обновить",
+  "noUpcomingMeetings": "Предстоящих встреч не найдено",
+  "checkingNextDays": "Проверка следующих 30 дней",
+  "tomorrow": "Завтра",
+  "googleCalendarComingSoon": "Интеграция с Google Календарём скоро!",
+  "connectedAsUser": "Подключено как пользователь: {userId}",
+  "@connectedAsUser": {
+    "placeholders": {
+      "userId": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultWorkspace": "Рабочее пространство по умолчанию",
+  "tasksCreatedInWorkspace": "Задачи будут созданы в этом рабочем пространстве",
+  "defaultProjectOptional": "Проект по умолчанию (опционально)",
+  "leaveUnselectedTasks": "Оставьте не выбранным для создания задач без проекта",
+  "noProjectsInWorkspace": "Проекты в этом рабочем пространстве не найдены",
+  "conversationTimeoutDesc": "Выберите, сколько времени ждать в тишине перед автоматическим завершением разговора:",
+  "timeout2Minutes": "2 минуты",
+  "timeout2MinutesDesc": "Завершить разговор после 2 минут тишины",
+  "timeout5Minutes": "5 минут",
+  "timeout5MinutesDesc": "Завершить разговор после 5 минут тишины",
+  "timeout10Minutes": "10 минут",
+  "timeout10MinutesDesc": "Завершить разговор после 10 минут тишины",
+  "timeout30Minutes": "30 минут",
+  "timeout30MinutesDesc": "Завершить разговор после 30 минут тишины",
+  "timeout4Hours": "4 часа",
+  "timeout4HoursDesc": "Завершить разговор после 4 часов тишины",
+  "conversationEndAfterHours": "Разговоры теперь будут завершаться после 4 часов тишины",
+  "conversationEndAfterMinutes": "Разговоры теперь будут завершаться после {minutes} минут тишины",
+  "@conversationEndAfterMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "tellUsPrimaryLanguage": "Укажите ваш основной язык",
+  "languageForTranscription": "Установите ваш язык для более точной расшифровки и персонализированного опыта.",
+  "singleLanguageModeInfo": "Режим одного языка включён. Перевод отключён для повышения точности.",
+  "searchLanguageHint": "Поиск языка по названию или коду",
+  "noLanguagesFound": "Языки не найдены",
+  "skip": "Пропустить",
+  "languageSetTo": "Язык установлен на {language}",
+  "@languageSetTo": {
+    "placeholders": {
+      "language": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToSetLanguage": "Не удалось установить язык",
+  "appSettings": "Настройки {appName}",
+  "@appSettings": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectFromApp": "Отключиться от {appName}?",
+  "@disconnectFromApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectFromAppDesc": "Это удалит вашу аутентификацию {appName}. Вам нужно будет переподключиться для повторного использования.",
+  "@disconnectFromAppDesc": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "connectedToApp": "Подключено к {appName}",
+  "@connectedToApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "account": "Аккаунт",
+  "actionItemsSyncedTo": "Ваши задачи будут синхронизированы с вашим аккаунтом {appName}",
+  "@actionItemsSyncedTo": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultSpace": "Пространство по умолчанию",
+  "selectSpaceInWorkspace": "Выберите пространство в вашем рабочем пространстве",
+  "noSpacesInWorkspace": "Пространства в этом рабочем пространстве не найдены",
+  "defaultList": "Список по умолчанию",
+  "tasksAddedToList": "Задачи будут добавлены в этот список",
+  "noListsInSpace": "Списки в этом пространстве не найдены",
+  "failedToLoadRepos": "Не удалось загрузить репозитории: {error}",
+  "@failedToLoadRepos": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultRepoSaved": "Репозиторий по умолчанию сохранён",
+  "failedToSaveDefaultRepo": "Не удалось сохранить репозиторий по умолчанию",
+  "defaultRepository": "Репозиторий по умолчанию",
+  "selectDefaultRepoDesc": "Выберите репозиторий по умолчанию для создания задач. Вы все еще можете указать другой репозиторий при создании задач.",
+  "noReposFound": "Репозитории не найдены",
+  "private": "Приватный",
+  "updatedDate": "Обновлено {date}",
+  "@updatedDate": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "yesterday": "вчера",
+  "daysAgo": "{count} дней назад",
+  "@daysAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "oneWeekAgo": "1 неделю назад",
+  "weeksAgo": "{count} недель назад",
+  "@weeksAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "oneMonthAgo": "1 месяц назад",
+  "monthsAgo": "{count} месяцев назад",
+  "@monthsAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "issuesCreatedInRepo": "Задачи будут создаваться в вашем репозитории по умолчанию",
+  "taskIntegrations": "Интеграции задач",
+  "configureSettings": "Настроить параметры",
+  "completeAuthBrowser": "Пожалуйста, завершите аутентификацию в браузере. После этого вернитесь в приложение.",
+  "failedToStartAppAuth": "Не удалось начать аутентификацию {appName}",
+  "@failedToStartAppAuth": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "connectToAppTitle": "Подключиться к {appName}",
+  "@connectToAppTitle": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "authorizeOmiForTasks": "Вам нужно авторизовать Omi для создания задач в вашем аккаунте {appName}. Это откроет браузер для аутентификации.",
+  "@authorizeOmiForTasks": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "continueButton": "Продолжить",
+  "appIntegration": "Интеграция {appName}",
+  "@appIntegration": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "integrationComingSoon": "Интеграция с {appName} скоро! Мы упорно работаем, чтобы предоставить вам больше вариантов управления задачами.",
+  "@integrationComingSoon": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "gotIt": "Понятно",
+  "tasksExportedOneApp": "Задачи могут быть экспортированы только в одно приложение за раз.",
+  "completeYourUpgrade": "Завершите обновление",
+  "importConfiguration": "Импорт конфигурации",
+  "exportConfiguration": "Экспорт конфигурации",
+  "bringYourOwn": "Используйте свой",
+  "payYourSttProvider": "Свободно используйте omi. Вы платите только своему провайдеру STT напрямую.",
+  "freeMinutesMonth": "1200 бесплатных минут в месяц включено. Безлимитно с ",
+  "omiUnlimited": "Omi Unlimited",
+  "hostRequired": "Требуется хост",
+  "validPortRequired": "Требуется действительный порт",
+  "validWebsocketUrlRequired": "Требуется действительный URL WebSocket (wss://)",
+  "apiUrlRequired": "Требуется URL API",
+  "apiKeyRequired": "Требуется API-ключ",
+  "invalidJsonConfig": "Недействительная конфигурация JSON",
+  "errorSaving": "Ошибка сохранения: {error}",
+  "@errorSaving": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "configCopiedToClipboard": "Конфигурация скопирована в буфер обмена",
+  "pasteJsonConfig": "Вставьте вашу конфигурацию JSON ниже:",
+  "addApiKeyAfterImport": "Вам нужно будет добавить свой API-ключ после импорта",
+  "paste": "Вставить",
+  "import": "Импорт",
+  "invalidProviderInConfig": "Недействительный провайдер в конфигурации",
+  "importedConfig": "Импортирована конфигурация {providerName}",
+  "@importedConfig": {
+    "placeholders": {
+      "providerName": {
+        "type": "String"
+      }
+    }
+  },
+  "invalidJson": "Недействительный JSON: {error}",
+  "@invalidJson": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "provider": "Провайдер",
+  "live": "В реальном времени",
+  "onDevice": "На устройстве",
+  "apiUrl": "URL API",
+  "enterSttHttpEndpoint": "Введите вашу конечную точку STT HTTP",
+  "websocketUrl": "URL WebSocket",
+  "enterLiveSttWebsocket": "Введите вашу конечную точку WebSocket для STT в реальном времени",
+  "apiKey": "API-ключ",
+  "enterApiKey": "Введите ваш API-ключ",
+  "storedLocallyNeverShared": "Хранится локально, никогда не передаётся",
+  "host": "Хост",
+  "port": "Порт",
+  "advanced": "Расширенные",
+  "configuration": "Конфигурация",
+  "requestConfiguration": "Конфигурация запроса",
+  "responseSchema": "Схема ответа",
+  "modified": "Изменено",
+  "resetRequestConfig": "Сбросить конфигурацию запроса по умолчанию",
+  "logs": "Журналы",
+  "logsCopied": "Журналы скопированы",
+  "noLogsYet": "Журналов пока нет. Начните запись, чтобы увидеть активность пользовательского STT.",
+  "deviceUsesCodec": "{deviceName} использует {codecReason}. Будет использован Omi.",
+  "@deviceUsesCodec": {
+    "placeholders": {
+      "deviceName": {
+        "type": "String"
+      },
+      "codecReason": {
+        "type": "String"
+      }
+    }
+  },
+  "omiTranscription": "Расшифровка Omi",
+  "bestInClassTranscription": "Лучшая расшифровка без настройки",
+  "instantSpeakerLabels": "Мгновенные метки спикеров",
+  "languageTranslation": "Перевод на 100+ языков",
+  "optimizedForConversation": "Оптимизировано для разговоров",
+  "autoLanguageDetection": "Автоматическое определение языка",
+  "highAccuracy": "Высокая точность",
+  "privacyFirst": "Конфиденциальность прежде всего",
+  "saveChanges": "Сохранить изменения",
+  "resetToDefault": "Сбросить по умолчанию",
+  "viewTemplate": "Просмотреть шаблон",
+  "trySomethingLike": "Попробуйте что-то вроде...",
+  "tryIt": "Попробовать",
+  "creatingPlan": "Создание плана",
+  "developingLogic": "Разработка логики",
+  "designingApp": "Проектирование приложения",
+  "generatingIconStep": "Генерация иконки",
+  "finalTouches": "Завершающие штрихи",
+  "processing": "Обработка...",
+  "features": "Возможности",
+  "creatingYourApp": "Создание вашего приложения...",
+  "generatingIcon": "Генерация иконки...",
+  "whatShouldWeMake": "Что мы должны создать?",
+  "appName": "Название приложения",
+  "description": "Описание",
+  "publicLabel": "Публичное",
+  "privateLabel": "Приватное",
+  "free": "Бесплатно",
+  "perMonth": "/ Месяц",
+  "tailoredConversationSummaries": "Персонализированные резюме разговоров",
+  "customChatbotPersonality": "Пользовательская личность чат-бота",
+  "makePublic": "Сделать публичным",
+  "anyoneCanDiscover": "Любой может найти ваше приложение",
+  "onlyYouCanUse": "Только вы можете использовать это приложение",
+  "paidApp": "Платное приложение",
+  "usersPayToUse": "Пользователи платят за использование вашего приложения",
+  "freeForEveryone": "Бесплатно для всех",
+  "perMonthLabel": "/ месяц",
+  "creating": "Создание...",
+  "@creating": {
+    "description": "Loading state text when app generation is in progress"
+  },
+  "createApp": "Создать приложение",
+  "@createApp": {
+    "description": "Button text to initiate app creation"
+  },
+  "@connect": {
+    "description": "Title for device connection page"
+  },
+  "searchingForDevices": "Поиск устройств...",
+  "@searchingForDevices": {
+    "description": "Status text while scanning for Bluetooth devices"
+  },
+  "devicesFoundNearby": "{count, plural, =1{УСТРОЙСТВО} few{УСТРОЙСТВА} other{УСТРОЙСТВ}} НАЙДЕНО РЯДОМ: {count}",
+  "@devicesFoundNearby": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pairingSuccessful": "СОПРЯЖЕНИЕ УСПЕШНО",
+  "errorConnectingAppleWatch": "Ошибка подключения к Apple Watch: {error}",
+  "@errorConnectingAppleWatch": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "dontShowAgain": "Больше не показывать",
+  "@dontShowAgain": {
+    "description": "Checkbox text to suppress future connection confirmations"
+  },
+  "iUnderstand": "Я понимаю",
+  "@iUnderstand": {
+    "description": "Button text to acknowledge connection warnings"
+  },
+  "enableBluetooth": "Включите Bluetooth",
+  "@enableBluetooth": {
+    "description": "Title for dialog prompting user to enable Bluetooth"
+  },
+  "bluetoothNeeded": "Omi требуется Bluetooth для подключения к вашему устройству. Пожалуйста, включите Bluetooth и попробуйте снова.",
+  "@bluetoothNeeded": {
+    "description": "Explanation text for why Bluetooth is required"
+  },
+  "contactSupport": "Связаться с поддержкой?",
+  "@contactSupport": {
+    "description": "Link text to contact support"
+  },
+  "connectLater": "Подключить позже",
+  "@connectLater": {
+    "description": "Button text to skip immediate device connection"
+  },
+  "grantPermissions": "Предоставить разрешения",
+  "@grantPermissions": {
+    "description": "Title for the permissions request page"
+  },
+  "backgroundActivity": "Фоновая активность",
+  "@backgroundActivity": {
+    "description": "Title for background activity permission"
+  },
+  "backgroundActivityDesc": "Позвольте Omi работать в фоновом режиме для лучшей стабильности",
+  "@backgroundActivityDesc": {
+    "description": "Description for background activity permission"
+  },
+  "locationAccess": "Доступ к местоположению",
+  "@locationAccess": {
+    "description": "Title for location access permission"
+  },
+  "locationAccessDesc": "Включите фоновое определение местоположения для полного опыта",
+  "@locationAccessDesc": {
+    "description": "Description for location access permission"
+  },
+  "notifications": "Уведомления",
+  "@notifications": {
+    "description": "Title for notifications permission"
+  },
+  "notificationsDesc": "Включите уведомления, чтобы быть в курсе",
+  "@notificationsDesc": {
+    "description": "Description for notifications permission"
+  },
+  "@continueButton": {
+    "description": "Generic continue button text"
+  },
+  "locationServiceDisabled": "Служба определения местоположения отключена",
+  "@locationServiceDisabled": {
+    "description": "Title for dialog when location services are off"
+  },
+  "locationServiceDisabledDesc": "Служба определения местоположения отключена. Пожалуйста, перейдите в Настройки > Конфиденциальность и безопасность > Службы геолокации и включите её",
+  "@locationServiceDisabledDesc": {
+    "description": "Instructions to enable location services"
+  },
+  "backgroundLocationDenied": "Доступ к местоположению в фоновом режиме отклонён",
+  "@backgroundLocationDenied": {
+    "description": "Title for dialog when background location is denied"
+  },
+  "backgroundLocationDeniedDesc": "Пожалуйста, перейдите в настройки устройства и установите разрешение на местоположение как \"Всегда разрешать\"",
+  "@backgroundLocationDeniedDesc": {
+    "description": "Instructions to grant background location permission"
+  },
+  "lovingOmi": "Нравится Omi?",
+  "@lovingOmi": {
+    "description": "Title for the app review prompt"
+  },
+  "leaveReviewIos": "Помогите нам достичь большего количества людей, оставив отзыв в App Store. Ваш отзыв очень важен для нас!",
+  "@leaveReviewIos": {
+    "description": "App review prompt text for iOS users"
+  },
+  "leaveReviewAndroid": "Помогите нам достичь большего количества людей, оставив отзыв в Google Play Store. Ваш отзыв очень важен для нас!",
+  "@leaveReviewAndroid": {
+    "description": "App review prompt text for Android users"
+  },
+  "rateOnAppStore": "Оценить в App Store",
+  "@rateOnAppStore": {
+    "description": "Button text to rate on Apple App Store"
+  },
+  "rateOnGooglePlay": "Оценить в Google Play",
+  "@rateOnGooglePlay": {
+    "description": "Button text to rate on Google Play Store"
+  },
+  "maybeLater": "Может быть, позже",
+  "@maybeLater": {
+    "description": "Button text to dismiss the review prompt"
+  },
+  "speechProfileIntro": "Omi нужно узнать ваши цели и ваш голос. Вы сможете изменить это позже.",
+  "@speechProfileIntro": {
+    "description": "Introduction text for speech profile creation"
+  },
+  "getStarted": "Начать",
+  "@getStarted": {
+    "description": "Button text to begin a process"
+  },
+  "allDone": "Всё готово!",
+  "@allDone": {
+    "description": "Success message after completing a task"
+  },
+  "keepGoing": "Продолжайте, вы отлично справляетесь",
+  "@keepGoing": {
+    "description": "Encouragement text during a multi-step process"
+  },
+  "skipThisQuestion": "Пропустить этот вопрос",
+  "@skipThisQuestion": {
+    "description": "Button text to skip the current question"
+  },
+  "skipForNow": "Пропустить пока",
+  "@skipForNow": {
+    "description": "Button text to skip the entire process temporarily"
+  },
+  "connectionError": "Ошибка подключения",
+  "@connectionError": {
+    "description": "Title for connection error dialog"
+  },
+  "connectionErrorDesc": "Не удалось подключиться к серверу. Пожалуйста, проверьте подключение к интернету и попробуйте снова.",
+  "@connectionErrorDesc": {
+    "description": "Description of connection error"
+  },
+  "invalidRecordingMultipleSpeakers": "Обнаружена недействительная запись",
+  "@invalidRecordingMultipleSpeakers": {
+    "description": "Error title when multiple speakers are detected"
+  },
+  "multipleSpeakersDesc": "Похоже, в записи несколько говорящих. Пожалуйста, убедитесь, что вы находитесь в тихом месте, и попробуйте снова.",
+  "@multipleSpeakersDesc": {
+    "description": "Error description for multiple speakers"
+  },
+  "tooShortDesc": "Обнаружено недостаточно речи. Пожалуйста, говорите больше и попробуйте снова.",
+  "@tooShortDesc": {
+    "description": "Error description for recording being too short"
+  },
+  "invalidRecordingDesc": "Пожалуйста, убедитесь, что вы говорите не менее 5 секунд и не более 90.",
+  "@invalidRecordingDesc": {
+    "description": "Error description for invalid recording duration"
+  },
+  "areYouThere": "Вы здесь?",
+  "@areYouThere": {
+    "description": "Timeout warning title"
+  },
+  "noSpeechDesc": "Мы не смогли обнаружить речь. Пожалуйста, убедитесь, что говорите не менее 10 секунд и не более 3 минут.",
+  "@noSpeechDesc": {
+    "description": "Error description when no speech is detected"
+  },
+  "connectionLost": "Соединение потеряно",
+  "@connectionLost": {
+    "description": "Title for lost connection dialog"
+  },
+  "connectionLostDesc": "Соединение было прервано. Пожалуйста, проверьте подключение к интернету и попробуйте снова.",
+  "@connectionLostDesc": {
+    "description": "Description for lost connection"
+  },
+  "tryAgain": "Попробовать снова",
+  "@tryAgain": {
+    "description": "Button text to retry an action"
+  },
+  "connectOmiOmiGlass": "Подключить Omi / OmiGlass",
+  "@connectOmiOmiGlass": {
+    "description": "Button text to connect specific device models"
+  },
+  "continueWithoutDevice": "Продолжить без устройства",
+  "@continueWithoutDevice": {
+    "description": "Button text to proceed without connecting a hardware device"
+  },
+  "permissionsRequired": "Требуются разрешения",
+  "@permissionsRequired": {
+    "description": "Title for permissions required dialog"
+  },
+  "permissionsRequiredDesc": "Этому приложению нужны разрешения Bluetooth и Местоположение для правильной работы. Пожалуйста, включите их в настройках.",
+  "@permissionsRequiredDesc": {
+    "description": "Explanation of why permissions are needed"
+  },
+  "openSettings": "Открыть настройки",
+  "@openSettings": {
+    "description": "Button text to open app settings"
+  },
+  "wantDifferentName": "Хотите использовать другое имя?",
+  "@wantDifferentName": {
+    "description": "Question asking if user wants to change their display name"
+  },
+  "whatsYourName": "Как вас зовут?",
+  "@whatsYourName": {
+    "description": "Question asking for user's name"
+  },
+  "@enterYourName": {
+    "description": "Hint text for name input field"
+  },
+  "speakTranscribeSummarize": "Говорите. Расшифровывайте. Резюмируйте.",
+  "@speakTranscribeSummarize": {
+    "description": "Tagline or slogan on the welcome/auth screen"
+  },
+  "signInWithApple": "Войти с Apple",
+  "@signInWithApple": {
+    "description": "Button text for Apple Sign In"
+  },
+  "signInWithGoogle": "Войти с Google",
+  "@signInWithGoogle": {
+    "description": "Button text for Google Sign In"
+  },
+  "byContinuingAgree": "Продолжая, вы соглашаетесь с нашей ",
+  "@byContinuingAgree": {
+    "description": "Legal disclaimer prefix text"
+  },
+  "termsOfUse": "Условиями использования",
+  "@termsOfUse": {
+    "description": "Link text for Terms of Use"
+  },
+  "omiYourAiCompanion": "Omi – ваш AI-компаньон",
+  "@omiYourAiCompanion": {
+    "description": "App title or branding on onboarding screen"
+  },
+  "captureEveryMoment": "Фиксируйте каждый момент. Получайте резюме на основе AI.\nБольше никаких заметок.",
+  "@captureEveryMoment": {
+    "description": "App value proposition or description"
+  },
+  "appleWatchSetup": "Настройка Apple Watch",
+  "@appleWatchSetup": {
+    "description": "Title for Apple Watch setup page"
+  },
+  "permissionRequestedExclaim": "Разрешение запрошено!",
+  "@permissionRequestedExclaim": {
+    "description": "Title when permission has been requested"
+  },
+  "microphonePermission": "Разрешение на микрофон",
+  "@microphonePermission": {
+    "description": "Title for microphone permission section"
+  },
+  "permissionGrantedNow": "Разрешение предоставлено! Теперь:\n\nОткройте приложение Omi на ваших часах и нажмите \"Продолжить\" ниже",
+  "@permissionGrantedNow": {
+    "description": "Instructions after permission is granted"
+  },
+  "needMicrophonePermission": "Нам нужно разрешение на микрофон.\n\n1. Нажмите \"Предоставить разрешение\"\n2. Разрешите на вашем iPhone\n3. Приложение на часах закроется\n4. Откройте снова и нажмите \"Продолжить\"",
+  "@needMicrophonePermission": {
+    "description": "Instructions for granting microphone permission"
+  },
+  "grantPermissionButton": "Предоставить разрешение",
+  "@grantPermissionButton": {
+    "description": "Button to request permission"
+  },
+  "needHelp": "Нужна помощь?",
+  "@needHelp": {
+    "description": "Link to help dialog"
+  },
+  "troubleshootingSteps": "Устранение неполадок:\n\n1. Убедитесь, что Omi установлен на ваших часах\n2. Откройте приложение Omi на ваших часах\n3. Найдите всплывающее окно с разрешением\n4. Нажмите \"Разрешить\" при запросе\n5. Приложение на часах закроется - откройте его снова\n6. Вернитесь и нажмите \"Продолжить\" на вашем iPhone",
+  "@troubleshootingSteps": {
+    "description": "Troubleshooting instructions for watch setup"
+  },
+  "@gotIt": {
+    "description": "Button to dismiss dialog"
+  },
+  "recordingStartedSuccessfully": "Запись успешно начата!",
+  "@recordingStartedSuccessfully": {
+    "description": "Success message"
+  },
+  "permissionNotGrantedYet": "Разрешение ещё не предоставлено. Пожалуйста, убедитесь, что вы разрешили доступ к микрофону и открыли приложение на часах заново.",
+  "@permissionNotGrantedYet": {
+    "description": "Error message when permission is missing"
+  },
+  "errorRequestingPermission": "Ошибка при запросе разрешения: {error}",
+  "@errorRequestingPermission": {
+    "description": "Error message for permission request failure",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "errorStartingRecording": "Ошибка при начале записи: {error}",
+  "@errorStartingRecording": {
+    "description": "Error message for recording start failure",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "selectPrimaryLanguage": "Выберите ваш основной язык",
+  "@selectPrimaryLanguage": {
+    "description": "Title for language selection dialog"
+  },
+  "languageBenefits": "Установите ваш язык для более точной расшифровки и персонализированного опыта",
+  "@languageBenefits": {
+    "description": "Explanation of why language selection matters"
+  },
+  "@searchLanguageHint": {
+    "description": "Hint text for language search"
+  },
+  "@noLanguagesFound": {
+    "description": "Text when search returns no results"
+  },
+  "whatsYourPrimaryLanguage": "Какой ваш основной язык?",
+  "@whatsYourPrimaryLanguage": {
+    "description": "Question asking for primary language"
+  },
+  "selectYourLanguage": "Выберите ваш язык",
+  "@selectYourLanguage": {
+    "description": "Placeholder for selected language name"
+  },
+  "personalGrowthJourney": "Ваше личностное развитие с AI, который слушает каждое ваше слово.",
+  "@personalGrowthJourney": {
+    "description": "Tagline on onboarding wrapper"
+  },
+  "actionItemsTitle": "Задачи",
+  "@actionItemsTitle": {
+    "description": "Title for the Action Items page"
+  },
+  "actionItemsDescription": "Нажмите для редактирования • Удерживайте для выбора • Свайп для действий",
+  "@actionItemsDescription": {
+    "description": "Instruction text for Action Items interactions"
+  },
+  "tabToDo": "К выполнению",
+  "@tabToDo": {
+    "description": "Label for To Do tab"
+  },
+  "tabDone": "Выполнено",
+  "@tabDone": {
+    "description": "Label for Done tab"
+  },
+  "tabOld": "Старые",
+  "@tabOld": {
+    "description": "Label for Old tab"
+  },
+  "emptyTodoMessage": "🎉 Всё выполнено!\nНет ожидающих задач",
+  "@emptyTodoMessage": {
+    "description": "Message when To Do list is empty"
+  },
+  "emptyDoneMessage": "Выполненных задач пока нет",
+  "@emptyDoneMessage": {
+    "description": "Message when Done list is empty"
+  },
+  "emptyOldMessage": "✅ Нет старых задач",
+  "@emptyOldMessage": {
+    "description": "Message when Old list is empty"
+  },
+  "noItems": "Нет элементов",
+  "@noItems": {
+    "description": "Generic no items message"
+  },
+  "actionItemMarkedIncomplete": "Задача отмечена как невыполненная",
+  "@actionItemMarkedIncomplete": {
+    "description": "Snackbar message when item marked incomplete"
+  },
+  "actionItemCompleted": "Задача выполнена",
+  "@actionItemCompleted": {
+    "description": "Snackbar message when item completed"
+  },
+  "deleteActionItemTitle": "Удалить задачу",
+  "@deleteActionItemTitle": {
+    "description": "Title for delete item dialog"
+  },
+  "deleteActionItemMessage": "Вы уверены, что хотите удалить эту задачу?",
+  "@deleteActionItemMessage": {
+    "description": "Confirmation message for deleting single item"
+  },
+  "deleteSelectedItemsTitle": "Удалить выбранные элементы",
+  "@deleteSelectedItemsTitle": {
+    "description": "Title for bulk delete dialog"
+  },
+  "deleteSelectedItemsMessage": "Вы уверены, что хотите удалить {count} выбранных задач{s}?",
+  "@deleteSelectedItemsMessage": {
+    "description": "Confirmation message for bulk delete",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "s": {
+        "type": "String",
+        "description": "Plural suffix (s) if needed, handled by logic or just append 's' for simplicity if count > 1"
+      }
+    }
+  },
+  "actionItemDeletedResult": "Задача \"{description}\" удалена",
+  "@actionItemDeletedResult": {
+    "description": "Snackbar message after deleting single item",
+    "placeholders": {
+      "description": {
+        "type": "String"
+      }
+    }
+  },
+  "itemsDeletedResult": "Удалено {count} задач{s}",
+  "@itemsDeletedResult": {
+    "description": "Snackbar message after bulk delete",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "s": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToDeleteItem": "Не удалось удалить задачу",
+  "@failedToDeleteItem": {
+    "description": "Error message when deletion fails"
+  },
+  "failedToDeleteItems": "Не удалось удалить элементы",
+  "@failedToDeleteItems": {
+    "description": "Error message when bulk deletion fails"
+  },
+  "failedToDeleteSomeItems": "Не удалось удалить некоторые элементы",
+  "@failedToDeleteSomeItems": {
+    "description": "Error message when partial deletion failure"
+  },
+  "welcomeActionItemsTitle": "Готово к задачам",
+  "@welcomeActionItemsTitle": {
+    "description": "Heading for empty state welcome"
+  },
+  "welcomeActionItemsDescription": "Ваш AI автоматически извлечёт задачи и дела из ваших разговоров. Они появятся здесь при создании.",
+  "@welcomeActionItemsDescription": {
+    "description": "Description for empty state welcome"
+  },
+  "autoExtractionFeature": "Автоматически извлекается из разговоров",
+  "@autoExtractionFeature": {
+    "description": "Feature point description"
+  },
+  "editSwipeFeature": "Нажмите для редактирования, свайп для завершения или удаления",
+  "@editSwipeFeature": {
+    "description": "Feature point description"
+  },
+  "itemsSelected": "Выбрано {count}",
+  "@itemsSelected": {
+    "description": "Selection count in app bar",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "selectAll": "Выбрать всё",
+  "@selectAll": {
+    "description": "Tooltip for select all"
+  },
+  "deleteSelected": "Удалить выбранное",
+  "@deleteSelected": {
+    "description": "Tooltip for delete selected"
+  },
+  "searchMemories": "Поиск среди {count} воспоминаний",
+  "@searchMemories": {
+    "description": "Hint text for memories search bar",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "memoryDeleted": "Воспоминание удалено.",
+  "@memoryDeleted": {
+    "description": "Notification when memory deleted"
+  },
+  "undo": "Отменить",
+  "@undo": {
+    "description": "Undo button text"
+  },
+  "noMemoriesYet": "Воспоминаний пока нет",
+  "@noMemoriesYet": {
+    "description": "Empty state text"
+  },
+  "noAutoMemories": "Автоматически извлечённых воспоминаний пока нет",
+  "@noAutoMemories": {
+    "description": "Empty state text for auto category"
+  },
+  "noManualMemories": "Ручных воспоминаний пока нет",
+  "@noManualMemories": {
+    "description": "Empty state text for manual category"
+  },
+  "noMemoriesInCategories": "Нет воспоминаний в этих категориях",
+  "@noMemoriesInCategories": {
+    "description": "Empty state text for filtered categories"
+  },
+  "noMemoriesFound": "Воспоминания не найдены",
+  "@noMemoriesFound": {
+    "description": "Empty state text for search results"
+  },
+  "addFirstMemory": "Добавьте ваше первое воспоминание",
+  "@addFirstMemory": {
+    "description": "Button to add first memory"
+  },
+  "clearMemoryTitle": "Очистить память Omi",
+  "@clearMemoryTitle": {
+    "description": "Dialog title for clearing memory"
+  },
+  "clearMemoryMessage": "Вы уверены, что хотите очистить память Omi? Это действие нельзя отменить.",
+  "@clearMemoryMessage": {
+    "description": "Dialog content for clearing memory"
+  },
+  "clearMemoryButton": "Очистить память",
+  "@clearMemoryButton": {
+    "description": "Button text to confirm clear"
+  },
+  "memoryClearedSuccess": "Память Omi о вас была очищена",
+  "@memoryClearedSuccess": {
+    "description": "Snackbar success message"
+  },
+  "noMemoriesToDelete": "Нет воспоминаний для удаления",
+  "@noMemoriesToDelete": {
+    "description": "Snackbar message"
+  },
+  "createMemoryTooltip": "Создать новое воспоминание",
+  "@createMemoryTooltip": {
+    "description": "Tooltip for create memory FAB"
+  },
+  "createActionItemTooltip": "Создать новую задачу",
+  "@createActionItemTooltip": {
+    "description": "Tooltip for create action item FAB"
+  },
+  "memoryManagement": "Управление памятью",
+  "@memoryManagement": {
+    "description": "Title for memory management sheet"
+  },
+  "filterMemories": "Фильтр воспоминаний",
+  "@filterMemories": {
+    "description": "Section header"
+  },
+  "totalMemoriesCount": "У вас всего {count} воспоминаний",
+  "@totalMemoriesCount": {
+    "description": "Count display",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "publicMemories": "Публичные воспоминания",
+  "@publicMemories": {
+    "description": "Label"
+  },
+  "privateMemories": "Приватные воспоминания",
+  "@privateMemories": {
+    "description": "Label"
+  },
+  "makeAllPrivate": "Сделать все воспоминания приватными",
+  "@makeAllPrivate": {
+    "description": "Button label"
+  },
+  "makeAllPublic": "Сделать все воспоминания публичными",
+  "@makeAllPublic": {
+    "description": "Button label"
+  },
+  "deleteAllMemories": "Удалить все воспоминания",
+  "@deleteAllMemories": {
+    "description": "Button label"
+  },
+  "allMemoriesPrivateResult": "Все воспоминания теперь приватные",
+  "@allMemoriesPrivateResult": {
+    "description": "Snackbar"
+  },
+  "allMemoriesPublicResult": "Все воспоминания теперь публичные",
+  "@allMemoriesPublicResult": {
+    "description": "Snackbar"
+  },
+  "newMemory": "Новое воспоминание",
+  "@newMemory": {
+    "description": "Dialog title"
+  },
+  "editMemory": "Редактировать воспоминание",
+  "@editMemory": {
+    "description": "Dialog title"
+  },
+  "memoryContentHint": "Я люблю есть мороженое...",
+  "@memoryContentHint": {
+    "description": "Input hint"
+  },
+  "failedToSaveMemory": "Не удалось сохранить. Пожалуйста, проверьте подключение.",
+  "@failedToSaveMemory": {
+    "description": "Error message"
+  },
+  "saveMemory": "Сохранить воспоминание",
+  "@saveMemory": {
+    "description": "Button label"
+  },
+  "retry": "Повторить",
+  "@retry": {
+    "description": "Button label"
+  },
+  "createActionItem": "Создать задачу",
+  "@createActionItem": {
+    "description": "Sheet title"
+  },
+  "editActionItem": "Редактировать задачу",
+  "@editActionItem": {
+    "description": "Sheet title"
+  },
+  "actionItemDescriptionHint": "Что нужно сделать?",
+  "@actionItemDescriptionHint": {
+    "description": "Input hint"
+  },
+  "actionItemDescriptionEmpty": "Описание задачи не может быть пустым.",
+  "@actionItemDescriptionEmpty": {
+    "description": "Error message"
+  },
+  "actionItemUpdated": "Задача обновлена",
+  "@actionItemUpdated": {
+    "description": "Snackbar"
+  },
+  "failedToUpdateActionItem": "Не удалось обновить задачу",
+  "@failedToUpdateActionItem": {
+    "description": "Snackbar"
+  },
+  "actionItemCreated": "Задача создана",
+  "@actionItemCreated": {
+    "description": "Snackbar"
+  },
+  "failedToCreateActionItem": "Не удалось создать задачу",
+  "@failedToCreateActionItem": {
+    "description": "Snackbar"
+  },
+  "dueDate": "Срок выполнения",
+  "@dueDate": {
+    "description": "Label"
+  },
+  "time": "Время",
+  "@time": {
+    "description": "Label"
+  },
+  "addDueDate": "Добавить срок выполнения",
+  "@addDueDate": {
+    "description": "Placeholder"
+  },
+  "pressDoneToSave": "Нажмите готово для сохранения",
+  "@pressDoneToSave": {
+    "description": "Instruction"
+  },
+  "pressDoneToCreate": "Нажмите готово для создания",
+  "@pressDoneToCreate": {
+    "description": "Instruction"
+  },
+  "filterAll": "Все",
+  "@filterAll": {
+    "description": "Filter option"
+  },
+  "filterSystem": "О вас",
+  "@filterSystem": {
+    "description": "Filter option for facts about the user"
+  },
+  "filterInteresting": "Инсайты",
+  "@filterInteresting": {
+    "description": "Filter option for external wisdom/advice"
+  },
+  "filterManual": "Ручные",
+  "@filterManual": {
+    "description": "Filter option"
+  },
+  "completed": "Выполнено",
+  "@completed": {
+    "description": "Status label"
+  },
+  "markComplete": "Отметить как выполненное",
+  "@markComplete": {
+    "description": "Action label"
+  },
+  "actionItemDeleted": "Задача удалена",
+  "@actionItemDeleted": {
+    "description": "Snackbar"
+  },
+  "failedToDeleteActionItem": "Не удалось удалить задачу",
+  "@failedToDeleteActionItem": {
+    "description": "Snackbar"
+  },
+  "deleteActionItemConfirmTitle": "Удалить задачу",
+  "@deleteActionItemConfirmTitle": {
+    "description": "Dialog title"
+  },
+  "deleteActionItemConfirmMessage": "Вы уверены, что хотите удалить эту задачу?",
+  "@deleteActionItemConfirmMessage": {
+    "description": "Dialog message"
+  },
+  "appLanguage": "Язык приложения",
+  "@appLanguage": {
+    "description": "Label for app language selector"
+  },
+  "appInterfaceSectionTitle": "ИНТЕРФЕЙС ПРИЛОЖЕНИЯ",
+  "speechTranscriptionSectionTitle": "РЕЧЬ И ТРАНСКРИПЦИЯ",
+  "languageSettingsHelperText": "Язык приложения изменяет меню и кнопки. Язык речи влияет на то, как транскрибируются ваши записи."
+}

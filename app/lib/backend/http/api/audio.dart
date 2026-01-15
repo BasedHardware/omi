@@ -1,8 +1,10 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/logger.dart';
 
 /// Audio file info from signed URL endpoint
 class AudioFileUrlInfo {
@@ -67,7 +69,7 @@ Future<void> precacheConversationAudio(String conversationId) async {
       body: '',
     );
   } catch (e) {
-    debugPrint('Error pre-caching audio: $e');
+    Logger.debug('Error pre-caching audio: $e');
   }
 }
 
@@ -91,7 +93,7 @@ Future<List<AudioFileUrlInfo>> getConversationAudioSignedUrls(String conversatio
     final audioFiles = decoded['audio_files'] as List<dynamic>? ?? [];
     return audioFiles.map((af) => AudioFileUrlInfo.fromJson(af as Map<String, dynamic>)).toList();
   } catch (e) {
-    debugPrint('Error getting audio signed URLs: $e');
+    Logger.debug('Error getting audio signed URLs: $e');
     return [];
   }
 }

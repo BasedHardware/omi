@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'package:omi/services/services.dart';
 
 class WifiSyncSettingsPage extends StatefulWidget {

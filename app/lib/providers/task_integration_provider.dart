@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'package:omi/backend/http/api/task_integrations.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/services/asana_service.dart';
@@ -6,6 +7,7 @@ import 'package:omi/services/clickup_service.dart';
 import 'package:omi/services/google_tasks_service.dart';
 import 'package:omi/services/todoist_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
 class TaskIntegrationProvider extends ChangeNotifier {
@@ -53,7 +55,7 @@ class TaskIntegrationProvider extends ChangeNotifier {
         }
       }
     } catch (e) {
-      debugPrint('Error loading task integrations from backend: $e');
+      Logger.debug('Error loading task integrations from backend: $e');
     } finally {
       _isLoading = false;
       _hasLoaded = true;
@@ -69,7 +71,7 @@ class TaskIntegrationProvider extends ChangeNotifier {
     try {
       await setDefaultTaskIntegration(app.key);
     } catch (e) {
-      debugPrint('Error saving default task integration: $e');
+      Logger.debug('Error saving default task integration: $e');
     }
   }
 
@@ -91,7 +93,7 @@ class TaskIntegrationProvider extends ChangeNotifier {
       }
       return false;
     } catch (e) {
-      debugPrint('Error saving connection details: $e');
+      Logger.debug('Error saving connection details: $e');
       return false;
     }
   }
@@ -107,7 +109,7 @@ class TaskIntegrationProvider extends ChangeNotifier {
       }
       return false;
     } catch (e) {
-      debugPrint('Error deleting connection: $e');
+      Logger.debug('Error deleting connection: $e');
       return false;
     }
   }

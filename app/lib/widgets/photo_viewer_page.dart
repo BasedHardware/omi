@@ -1,8 +1,11 @@
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
-import 'package:omi/backend/schema/conversation.dart';
+
 import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
+
+import 'package:omi/backend/schema/conversation.dart';
 
 class PhotoViewerPage extends StatefulWidget {
   final List<ConversationPhoto> photos;
