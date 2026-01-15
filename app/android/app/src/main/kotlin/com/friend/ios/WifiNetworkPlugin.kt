@@ -44,7 +44,8 @@ class WifiNetworkPlugin(private val context: Context) : MethodChannel.MethodCall
                     result.success(mapOf("success" to false, "error" to "Invalid arguments", "errorCode" to 0))
                     return
                 }
-                connectToWifi(ssid, result)
+                val password = call.argument<String>("password")
+                connectToWifi(ssid, password, result)
             }
             "disconnectFromWifi" -> {
                 val ssid = call.argument<String>("ssid")
@@ -67,19 +68,19 @@ class WifiNetworkPlugin(private val context: Context) : MethodChannel.MethodCall
     }
 
     /**
-     * Connect to an open WiFi network (no password).
+     * Connect to a WiFi network, optionally with a password.
      */
-    private fun connectToWifi(ssid: String, result: MethodChannel.Result) {
-        Log.d(TAG, "Connecting to SSID: $ssid")
+    private fun connectToWifi(ssid: String, password: String?, result: MethodChannel.Result) {
+        Log.d(TAG, "Connecting to SSID: $ssid, hasPassword: ${password != null}")
 
         val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             // Android 10+ uses WifiNetworkSpecifier
-            connectWithNetworkSpecifier(ssid, connectivityManager, result)
+            connectWithNetworkSpecifier(ssid, password, connectivityManager, result)
         } else {
             // Android 9 and below uses deprecated WifiConfiguration
-            connectWithWifiConfiguration(ssid, result)
+            connectWithWifiConfiguration(ssid, password, result)
         }
     }
 
@@ -89,6 +90,7 @@ class WifiNetworkPlugin(private val context: Context) : MethodChannel.MethodCall
      */
     private fun connectWithNetworkSpecifier(
         ssid: String,
+        password: String?,
         connectivityManager: ConnectivityManager,
         result: MethodChannel.Result
     ) {
@@ -101,9 +103,15 @@ class WifiNetworkPlugin(private val context: Context) : MethodChannel.MethodCall
         cleanupNetworkCallback(connectivityManager)
 
         try {
-            val specifier = WifiNetworkSpecifier.Builder()
+            val specifierBuilder = WifiNetworkSpecifier.Builder()
                 .setSsid(ssid)
-                .build()
+
+            // Add password if provided (WPA2)
+            if (!password.isNullOrEmpty()) {
+                specifierBuilder.setWpa2Passphrase(password)
+            }
+
+            val specifier = specifierBuilder.build()
 
             val request = NetworkRequest.Builder()
                 .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
@@ -172,7 +180,7 @@ class WifiNetworkPlugin(private val context: Context) : MethodChannel.MethodCall
      * This is deprecated but needed for backwards compatibility.
      */
     @Suppress("DEPRECATION")
-    private fun connectWithWifiConfiguration(ssid: String, result: MethodChannel.Result) {
+    private fun connectWithWifiConfiguration(ssid: String, password: String?, result: MethodChannel.Result) {
         try {
             val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
 
@@ -183,10 +191,17 @@ class WifiNetworkPlugin(private val context: Context) : MethodChannel.MethodCall
                 return
             }
 
-            // Create configuration for open network
+            // Create configuration based on whether password is provided
             val config = WifiConfiguration().apply {
                 SSID = "\"$ssid\""
-                allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE)
+                if (!password.isNullOrEmpty()) {
+                    // WPA/WPA2 network
+                    preSharedKey = "\"$password\""
+                    allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK)
+                } else {
+                    // Open network
+                    allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE)
+                }
             }
 
             // Add and enable the network

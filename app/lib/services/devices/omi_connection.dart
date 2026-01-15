@@ -620,7 +620,7 @@ class OmiDeviceConnection extends DeviceConnection {
   }
 
   @override
-  Future<WifiSyncSetupResult> performSetupWifiSync(String ssid) async {
+  Future<WifiSyncSetupResult> performSetupWifiSync(String ssid, String password) async {
     try {
       // Validate SSID length (1-32 characters)
       if (ssid.isEmpty || ssid.length > 32) {
@@ -631,7 +631,15 @@ class OmiDeviceConnection extends DeviceConnection {
         );
       }
 
-      // Format for AP mode: [0x01][ssid_len][ssid]
+      // Validate password length (8-63 characters for WPA2)
+      if (password.isEmpty || password.length < 8 || password.length > 63) {
+        debugPrint('OmiDeviceConnection: Invalid password length: ${password.length}');
+        return WifiSyncSetupResult.failure(
+          WifiSyncErrorCode.passwordLengthInvalid,
+          customMessage: 'Password must be 8-63 characters',
+        );
+      }
+
       final List<int> command = [];
 
       command.add(0x01);
@@ -640,6 +648,11 @@ class OmiDeviceConnection extends DeviceConnection {
       final ssidBytes = ssid.codeUnits;
       command.add(ssidBytes.length);
       command.addAll(ssidBytes);
+
+      // Password
+      final passwordBytes = password.codeUnits;
+      command.add(passwordBytes.length);
+      command.addAll(passwordBytes);
 
       // Set up listener for the response before sending the command
       final completer = Completer<WifiSyncSetupResult>();

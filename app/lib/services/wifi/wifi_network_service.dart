@@ -21,11 +21,20 @@ class WifiNetworkService {
     return 'omi_$suffix';
   }
 
-  Future<WifiConnectionResult> connectToAp(String ssid) async {
-    debugPrint('WifiNetworkService: Connecting to AP: $ssid');
+  /// Generates a password from device ID
+  /// Format: omi_{last8chars} e.g., "omi_a1b2c3d4"
+  static String generatePassword(String deviceId) {
+    final cleanId = deviceId.replaceAll(':', '').replaceAll('-', '');
+    final suffix = cleanId.length >= 8 ? cleanId.substring(cleanId.length - 8).toLowerCase() : cleanId.toLowerCase();
+    return 'omi_$suffix';
+  }
+
+  Future<WifiConnectionResult> connectToAp(String ssid, {String? password}) async {
+    debugPrint('WifiNetworkService: Connecting to AP: $ssid (password: ${password != null ? "provided" : "none"})');
     try {
       final result = await _channel.invokeMethod<Map<dynamic, dynamic>>('connectToWifi', {
         'ssid': ssid,
+        if (password != null) 'password': password,
       });
 
       if (result == null) {

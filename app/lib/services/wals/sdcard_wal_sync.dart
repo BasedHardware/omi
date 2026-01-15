@@ -703,12 +703,22 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
     final deviceId = _device!.id;
 
+    // Set WAL sync state early so UI updates immediately
+    final wal = wals.last;
+    wal.isSyncing = true;
+    wal.syncStartedAt = DateTime.now();
+    listener.onWalUpdated();
+
     final ssid = WifiNetworkService.generateSsid(deviceId);
+    final password = WifiNetworkService.generatePassword(deviceId);
     debugPrint("SDCardWalSync WiFi: Starting sync with device AP SSID: $ssid (deviceId: $deviceId)");
 
     var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) {
       Logger.debug("SDCardWalSync WiFi: Failed to get device connection");
+      wal.isSyncing = false;
+      wal.syncStartedAt = null;
+      listener.onWalUpdated();
       _resetSyncState();
       return null;
     }
@@ -718,7 +728,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
     try {
       debugPrint("SDCardWalSync WiFi: Step 1 - Configuring device AP with SSID: $ssid");
-      final setupResult = await connection.setupWifiSync(ssid);
+      final setupResult = await connection.setupWifiSync(ssid, password);
       if (!setupResult.success) {
         _resetSyncState();
         final errorMessage = setupResult.errorMessage ?? 'Failed to setup WiFi on device';
@@ -742,7 +752,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       }
 
       debugPrint("SDCardWalSync WiFi: Step 4 - Connecting phone to device WiFi AP");
-      final wifiResult = await wifiNetwork.connectToAp(ssid);
+      final wifiResult = await wifiNetwork.connectToAp(ssid, password: password);
       if (!wifiResult.success) {
         await _cleanupWifiSync(null, wifiNetwork, ssid, connection, deviceId: deviceId);
         final errorMsg = wifiResult.errorMessage ?? wifiResult.error?.userMessage ?? 'Failed to connect to device WiFi';
@@ -801,11 +811,6 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       _downloadStartTime = DateTime.now();
 
       var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
-
-      final wal = wals.last;
-      wal.isSyncing = true;
-      wal.syncStartedAt = DateTime.now();
-      listener.onWalUpdated();
 
       List<List<int>> bytesData = [];
       var bytesLeft = 0;
@@ -1042,6 +1047,13 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       return resp;
     } catch (e) {
       Logger.debug("SDCardWalSync WiFi: Error during sync: $e");
+
+      // Reset WAL sync state on error
+      wal.isSyncing = false;
+      wal.syncStartedAt = null;
+      wal.syncEtaSeconds = null;
+      wal.syncSpeedKBps = null;
+      listener.onWalUpdated();
 
       await _cleanupWifiSync(tcpTransport, wifiNetwork, ssid, connection, deviceId: deviceId);
 

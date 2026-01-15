@@ -3,6 +3,7 @@ enum WifiSyncErrorCode {
   invalidPacketLength(0x01),
   invalidSetupLength(0x02),
   ssidLengthInvalid(0x03),
+  passwordLengthInvalid(0x04),
   wifiHardwareNotAvailable(0xFE),
   unknownCommand(0xFF);
 
@@ -26,6 +27,8 @@ enum WifiSyncErrorCode {
         return 'Internal error - please try again';
       case WifiSyncErrorCode.ssidLengthInvalid:
         return 'Device name must be 1-32 characters';
+      case WifiSyncErrorCode.passwordLengthInvalid:
+        return 'Password must be 8-63 characters';
       case WifiSyncErrorCode.wifiHardwareNotAvailable:
         return 'Your device does not support WiFi sync';
       case WifiSyncErrorCode.unknownCommand:
@@ -90,23 +93,52 @@ class WifiSyncException implements Exception {
   String toString() => 'WifiSyncException: $message';
 }
 
-/// Validation helper for WiFi SSID (AP mode - no password needed)
-class WifiSsidValidator {
+/// Validation helper for WiFi credentials
+class WifiCredentialsValidator {
   static const int maxSsidLength = 32;
+  static const int minPasswordLength = 8;
+  static const int maxPasswordLength = 63;
 
   /// Validates SSID and returns error message if invalid, null if valid
-  static String? validate(String ssid) {
+  static String? validateSsid(String ssid) {
     if (ssid.isEmpty) {
-      return 'Device name is required';
+      return 'Network name is required';
     }
     if (ssid.length > maxSsidLength) {
-      return 'Device name must be at most $maxSsidLength characters';
+      return 'Network name must be at most $maxSsidLength characters';
     }
     // Check byte length (UTF-8 encoded)
     final byteLength = ssid.codeUnits.length;
     if (byteLength > maxSsidLength) {
-      return 'Device name is too long';
+      return 'Network name is too long';
     }
     return null;
   }
+
+  /// Validates password and returns error message if invalid, null if valid
+  static String? validatePassword(String password) {
+    if (password.isEmpty) {
+      return 'Password is required';
+    }
+    if (password.length < minPasswordLength) {
+      return 'Password must be at least $minPasswordLength characters';
+    }
+    if (password.length > maxPasswordLength) {
+      return 'Password must be at most $maxPasswordLength characters';
+    }
+    // Check byte length (UTF-8 encoded)
+    final byteLength = password.codeUnits.length;
+    if (byteLength > maxPasswordLength) {
+      return 'Password is too long';
+    }
+    return null;
+  }
+
+  /// Validates both SSID and password, returns first error or null if both valid
+  static String? validate(String ssid, String password) {
+    return validateSsid(ssid) ?? validatePassword(password);
+  }
 }
+
+/// Legacy alias for backwards compatibility
+typedef WifiSsidValidator = WifiCredentialsValidator;

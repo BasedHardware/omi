@@ -470,11 +470,11 @@ abstract class DeviceConnection {
     return false;
   }
 
-  Future<WifiSyncSetupResult> setupWifiSync(String ssid) async {
+  Future<WifiSyncSetupResult> setupWifiSync(String ssid, String password) async {
     final connected = await isConnected();
     debugPrint('DeviceConnection: setupWifiSync - isConnected: $connected, ssid: $ssid');
     if (connected) {
-      final result = await performSetupWifiSync(ssid);
+      final result = await performSetupWifiSync(ssid, password);
       debugPrint('DeviceConnection: setupWifiSync - result: ${result.success}, error: ${result.errorCode}');
       return result;
     }
@@ -482,7 +482,7 @@ abstract class DeviceConnection {
     return WifiSyncSetupResult.connectionFailed();
   }
 
-  Future<WifiSyncSetupResult> performSetupWifiSync(String ssid) async {
+  Future<WifiSyncSetupResult> performSetupWifiSync(String ssid, String password) async {
     return WifiSyncSetupResult.failure(WifiSyncErrorCode.wifiHardwareNotAvailable);
   }
 

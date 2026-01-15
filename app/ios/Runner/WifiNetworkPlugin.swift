@@ -20,7 +20,8 @@ class WifiNetworkPlugin: NSObject {
                 result(["success": false, "error": "Invalid arguments", "errorCode": 0])
                 return
             }
-            connectToWifi(ssid: ssid, result: result)
+            let password = args["password"] as? String
+            connectToWifi(ssid: ssid, password: password, result: result)
 
         case "disconnectFromWifi":
             guard let args = call.arguments as? [String: Any],
@@ -43,17 +44,28 @@ class WifiNetworkPlugin: NSObject {
         }
     }
 
-    /// Connect to an open WiFi network (no password).
-    private func connectToWifi(ssid: String, result: @escaping FlutterResult) {
-        NSLog("WifiNetworkPlugin: Connecting to SSID: \(ssid)")
+    /// Connect to a WiFi network, optionally with a password.
+    private func connectToWifi(ssid: String, password: String?, result: @escaping FlutterResult) {
+        NSLog("WifiNetworkPlugin: Connecting to SSID: \(ssid), hasPassword: \(password != nil)")
+        attemptConnection(ssid: ssid, password: password, isRetry: false, result: result)
+    }
 
-        // Create configuration for open network (no password)
-        let configuration = NEHotspotConfiguration(ssid: ssid)
-        configuration.joinOnce = true
+    /// Attempt to connect, with optional retry after clearing cached config
+    private func attemptConnection(ssid: String, password: String?, isRetry: Bool, result: @escaping FlutterResult) {
+        // Create configuration based on whether password is provided
+        let configuration: NEHotspotConfiguration
+        if let password = password, !password.isEmpty {
+            // WPA/WPA2 network with password
+            configuration = NEHotspotConfiguration(ssid: ssid, passphrase: password, isWEP: false)
+        } else {
+            // Open network (no password)
+            configuration = NEHotspotConfiguration(ssid: ssid)
+        }
+        configuration.joinOnce = false  // Allow saving for seamless future connections
 
-        NEHotspotConfigurationManager.shared.apply(configuration) { error in
+        NEHotspotConfigurationManager.shared.apply(configuration) { [weak self] error in
             if let error = error as NSError? {
-                NSLog("WifiNetworkPlugin: Connection error: \(error)")
+                NSLog("WifiNetworkPlugin: Connection error (isRetry=\(isRetry)): \(error)")
 
                 if error.domain == NEHotspotConfigurationErrorDomain {
                     switch error.code {
@@ -69,7 +81,17 @@ class WifiNetworkPlugin: NSObject {
 
                     case NEHotspotConfigurationError.invalid.rawValue,
                          NEHotspotConfigurationError.invalidSSID.rawValue:
-                        result(["success": false, "error": "Invalid SSID", "errorCode": 3])
+                        // If this is the first attempt, try removing cached config and retry
+                        // This handles the case where old (wrong) credentials are cached
+                        if !isRetry {
+                            NSLog("WifiNetworkPlugin: Invalid config, removing cached config and retrying...")
+                            NEHotspotConfigurationManager.shared.removeConfiguration(forSSID: ssid)
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                self?.attemptConnection(ssid: ssid, password: password, isRetry: true, result: result)
+                            }
+                            return
+                        }
+                        result(["success": false, "error": "Invalid SSID or password", "errorCode": 3])
                         return
 
                     case NEHotspotConfigurationError.joinOnceNotSupported.rawValue,
@@ -78,9 +100,28 @@ class WifiNetworkPlugin: NSObject {
                         return
 
                     default:
+                        // For other errors (like authentication failures), try clearing cache and retry once
+                        if !isRetry {
+                            NSLog("WifiNetworkPlugin: Connection failed, removing cached config and retrying...")
+                            NEHotspotConfigurationManager.shared.removeConfiguration(forSSID: ssid)
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                self?.attemptConnection(ssid: ssid, password: password, isRetry: true, result: result)
+                            }
+                            return
+                        }
                         result(["success": false, "error": error.localizedDescription, "errorCode": 4])
                         return
                     }
+                }
+
+                // For non-hotspot errors, also try retry once
+                if !isRetry {
+                    NSLog("WifiNetworkPlugin: Non-hotspot error, removing cached config and retrying...")
+                    NEHotspotConfigurationManager.shared.removeConfiguration(forSSID: ssid)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        self?.attemptConnection(ssid: ssid, password: password, isRetry: true, result: result)
+                    }
+                    return
                 }
 
                 result(["success": false, "error": error.localizedDescription, "errorCode": 0])
