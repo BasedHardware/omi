@@ -2548,7 +2548,7 @@
   },
   "unknownDevice": "Unknown Device",
   "@unknownDevice": {
-    "description": "Placeholder for unknown device name"
+    "description": "Fallback name for audio device"
   },
   "unknown": "Unknown",
   "@unknown": {
@@ -4125,5 +4125,184 @@
   "enterConversationTitle": "Enter conversation title...",
   "conversationTitleUpdatedSuccessfully": "Conversation title updated successfully",
   "failedToUpdateConversationTitle": "Failed to update conversation title",
-  "errorUpdatingConversationTitle": "Error updating conversation title"
+  "errorUpdatingConversationTitle": "Error updating conversation title",
+  "settingUp": "Setting up...",
+  "@settingUp": {
+    "description": "Status message when initializing recording"
+  },
+  "startYourFirstRecording": "Start Your First Recording",
+  "@startYourFirstRecording": {
+    "description": "Call-to-action text for first recording"
+  },
+  "preparingSystemAudioCapture": "Preparing system audio capture",
+  "@preparingSystemAudioCapture": {
+    "description": "Status when preparing audio capture"
+  },
+  "clickTheButtonToCaptureAudio": "Click the button to capture audio for live transcripts, AI insights, and automatic saving.",
+  "@clickTheButtonToCaptureAudio": {
+    "description": "Instructions for starting recording"
+  },
+  "reconnecting": "Reconnecting...",
+  "@reconnecting": {
+    "description": "Status when reconnecting to audio"
+  },
+  "recordingPaused": "Recording Paused",
+  "@recordingPaused": {
+    "description": "Status when recording is paused"
+  },
+  "recordingActive": "Recording Active",
+  "@recordingActive": {
+    "description": "Status when recording is active"
+  },
+  "startRecording": "Start Recording",
+  "@startRecording": {
+    "description": "Button text to start recording"
+  },
+  "resumingInCountdown": "Resuming in {countdown}s...",
+  "@resumingInCountdown": {
+    "description": "Status when auto-resuming with countdown",
+    "placeholders": {
+      "countdown": {
+        "type": "String"
+      }
+    }
+  },
+  "tapPlayToResume": "Tap play to resume",
+  "@tapPlayToResume": {
+    "description": "Instruction when paused"
+  },
+  "listeningForAudio": "Listening for audio...",
+  "@listeningForAudio": {
+    "description": "Status when listening for audio"
+  },
+  "preparingAudioCapture": "Preparing audio capture",
+  "@preparingAudioCapture": {
+    "description": "Status when preparing to capture"
+  },
+  "clickToBeginRecording": "Click to begin recording",
+  "@clickToBeginRecording": {
+    "description": "Instruction to start recording"
+  },
+  "translated": "translated",
+  "@translated": {
+    "description": "Label for translated text"
+  },
+  "liveTranscript": "Live Transcript",
+  "@liveTranscript": {
+    "description": "Header for live transcript section"
+  },
+  "segmentsSingular": "{count} segment",
+  "@segmentsSingular": {
+    "description": "Segment count (singular)",
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentsPlural": "{count} segments",
+  "@segmentsPlural": {
+    "description": "Segment count (plural)",
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "startRecordingToSeeTranscript": "Start recording to see live transcript",
+  "@startRecordingToSeeTranscript": {
+    "description": "Empty state message for transcript"
+  },
+  "paused": "Paused",
+  "@paused": {
+    "description": "Recording status: paused"
+  },
+  "initializing": "Initializing...",
+  "@initializing": {
+    "description": "Recording status: initializing"
+  },
+  "recording": "Recording",
+  "@recording": {
+    "description": "Recording status: recording"
+  },
+  "microphoneChangedResumingIn": "Microphone changed. Resuming in {countdown}s",
+  "@microphoneChangedResumingIn": {
+    "description": "Status when microphone changed and auto-resuming",
+    "placeholders": {
+      "countdown": {
+        "type": "String"
+      }
+    }
+  },
+  "clickPlayToResumeOrStop": "Click play to resume or stop to finish",
+  "@clickPlayToResumeOrStop": {
+    "description": "Instruction when paused"
+  },
+  "settingUpSystemAudioCapture": "Setting up system audio capture",
+  "@settingUpSystemAudioCapture": {
+    "description": "Status when setting up audio capture"
+  },
+  "capturingAudioAndGeneratingTranscript": "Capturing audio and generating transcript",
+  "@capturingAudioAndGeneratingTranscript": {
+    "description": "Status when actively recording"
+  },
+  "clickToBeginRecordingSystemAudio": "Click to begin recording system audio",
+  "@clickToBeginRecordingSystemAudio": {
+    "description": "Instruction to start system audio recording"
+  },
+  "you": "You",
+  "@you": {
+    "description": "Label for current user in transcript"
+  },
+  "speakerWithId": "Speaker {speakerId}",
+  "@speakerWithId": {
+    "description": "Label for speaker in transcript",
+    "placeholders": {
+      "speakerId": {
+        "type": "String"
+      }
+    }
+  },
+  "translatedByOmi": "translated by omi",
+  "@translatedByOmi": {
+    "description": "Credit line for translations"
+  },
+  "backToConversations": "Back to Conversations",
+  "@backToConversations": {
+    "description": "Back button text"
+  },
+  "systemAudio": "System",
+  "@systemAudio": {
+    "description": "Label for system audio"
+  },
+  "mic": "Mic",
+  "@mic": {
+    "description": "Label for microphone"
+  },
+  "audioInputSetTo": "Audio input set to {deviceName}",
+  "@audioInputSetTo": {
+    "description": "Success message when audio device changed",
+    "placeholders": {
+      "deviceName": {
+        "type": "String"
+      }
+    }
+  },
+  "errorSwitchingAudioDevice": "Error switching audio device: {error}",
+  "@errorSwitchingAudioDevice": {
+    "description": "Error message when device switch fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "selectAudioInput": "Select Audio Input",
+  "@selectAudioInput": {
+    "description": "Dropdown header for audio device selection"
+  },
+  "loadingDevices": "Loading devices...",
+  "@loadingDevices": {
+    "description": "Status when loading audio devices"
+  }
 }
