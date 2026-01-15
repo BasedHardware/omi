@@ -281,7 +281,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                               const SizedBox(
                                 height: 10,
                               ),
-                              const SizedBox(height: 48, child: CapabilitiesChipsWidget()),
+                              const CapabilitiesChipsWidget(),
                             ],
                           ),
                         ),
