@@ -4,12 +4,6 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
 Widget getMarkdownWidget(BuildContext context, String message, {Function(String)? onAskOmi}) {
-
-   // Check if content contains generative UI tags
-  if (enableGenerativeUI && XmlTagParser.containsGenerativeTags(content)) {
-    return GenerativeMarkdownWidget(content: content);
-  } 
-
   return MarkdownBody(
       data: message.trimRight(),
       selectable: PlatformService.isMacOS,

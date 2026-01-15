@@ -8,8 +8,10 @@ import 'package:omi/pages/settings/change_name_widget.dart';
 import 'package:omi/pages/settings/language_settings_page.dart';
 import 'package:omi/pages/settings/custom_vocabulary_page.dart';
 import 'package:omi/pages/settings/daily_summary_settings_page.dart';
+import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/people.dart';
 import 'package:omi/pages/settings/privacy.dart';
+import 'package:omi/pages/persona/persona_profile.dart';
 import 'package:omi/pages/speech_profile/page.dart';
 
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -18,6 +20,7 @@ import 'package:omi/utils/other/temp.dart';
 
 
 import 'package:omi/pages/settings/conversation_display_settings.dart';
+import 'package:omi/pages/settings/conversation_timeout_dialog.dart';
 
 import 'delete_account.dart';
 
@@ -224,7 +227,7 @@ class _ProfilePageState extends State<ProfilePage> {
               children: [
                 _buildProfileItem(
                   title: context.l10n.name,
-                  chipValue: SharedPreferencesUtil().givenName.isEmpty
+                  subtitle: SharedPreferencesUtil().givenName.isEmpty
                       ? context.l10n.notSet
                       : SharedPreferencesUtil().givenName,
                   icon: const FaIcon(FontAwesomeIcons.solidUser, color: Color(0xFF8E8E93), size: 20),
@@ -241,11 +244,10 @@ class _ProfilePageState extends State<ProfilePage> {
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildProfileItem(
                   title: context.l10n.email,
-                  chipValue:
+                  subtitle:
                       SharedPreferencesUtil().email.isEmpty ? context.l10n.notSet : SharedPreferencesUtil().email,
                   icon: const FaIcon(FontAwesomeIcons.solidEnvelope, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {},
-                  showChevron: false,
                 ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildProfileItem(
@@ -262,7 +264,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (context) => const PersonaProfilePage(),
+                        builder: (context) => PersonaProfilePage(),
                         settings: const RouteSettings(
                           arguments: 'from_settings',
                         ),
@@ -346,7 +348,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (context) => const DataPrivacyPage(),
+                        builder: (context) => DataPrivacyPage(),
                       ),
                     );
                   },
@@ -382,7 +384,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         uid.length > 6 ? '${uid.substring(0, 3)}•••••${uid.substring(uid.length - 3)}' : uid;
                     return _buildProfileItem(
                       title: context.l10n.userId,
-                      chipValue: truncatedUid,
+                      subtitle: truncatedUid,
                       icon: const FaIcon(FontAwesomeIcons.solidClipboard, color: Color(0xFF8E8E93), size: 20),
                       onTap: () {
                         Clipboard.setData(ClipboardData(text: uid));

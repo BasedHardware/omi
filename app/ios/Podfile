@@ -38,10 +38,24 @@ target 'Runner' do
 end
 
 post_install do |installer|
+  # Fix DKPhotoGallery/DKImagePickerController asset catalog issue with Xcode 16 simulators
+  problematic_xcassets = [
+    File.join(installer.sandbox.pod_dir('DKPhotoGallery'), 'DKPhotoGallery', 'Resource', 'Resources', 'Images.xcassets'),
+    File.join(installer.sandbox.pod_dir('DKImagePickerController'), 'Sources', 'DKImagePickerController', 'Resource', 'Resources', 'Images.xcassets')
+  ]
+  problematic_xcassets.each do |xcassets_path|
+    if File.exist?(xcassets_path)
+      FileUtils.rm_rf(xcassets_path)
+      puts "Removed problematic xcassets: #{xcassets_path}"
+    end
+  end
+
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
     target.build_configurations.each do |config|
       config.build_settings.delete 'IPHONEOS_DEPLOYMENT_TARGET'
+      # Fix AssetCatalogSimulatorAgent issue in Xcode 16
+      config.build_settings['ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS'] = 'NO'
       config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
         '$(inherited)',
 

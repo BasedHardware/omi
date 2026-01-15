@@ -201,9 +201,9 @@ void main() {
       WidgetsFlutterBinding.ensureInitialized();
       if (PlatformService.isDesktop) {
         await windowManager.ensureInitialized();
-        WindowOptions windowOptions = const WindowOptions(
-          size: Size(1300, 800),
-          minimumSize: Size(1100, 700),
+        WindowOptions windowOptions = WindowOptions(
+          size: const Size(1300, 800),
+          minimumSize: const Size(1100, 700),
           center: true,
           title: Env.appName,
           titleBarStyle: TitleBarStyle.hidden,

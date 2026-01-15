@@ -1,1 +1,4 @@
 APP_BUNDLE_IDENTIFIER=com.nooto-app-with-wearable.ios12
+
+// Fix AssetCatalogSimulatorAgent issue in Xcode 16
+ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS=NO
