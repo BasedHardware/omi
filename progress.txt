@@ -62,7 +62,7 @@ MEDIUM PRIORITY - Widgets and Components
 [✓] app/lib/pages/apps/widgets/api_keys_widget.dart
     Strings: API key related strings
 
-[ ] app/lib/pages/apps/widgets/app_metadata_widget.dart
+[✓] app/lib/pages/apps/widgets/app_metadata_widget.dart
     Strings: Form labels and validation messages
 
 [ ] app/lib/pages/apps/widgets/create_options_sheet.dart
@@ -1010,12 +1010,29 @@ Notes: Localized API keys management widget including create/revoke dialogs,
        Used parameterized translations for error messages with dynamic content.
 Commit: b34cf5401
 
+FILE 79 (Phase 2 FILE 9): app_metadata_widget.dart
+---------------------------------------------------
+Location: app/lib/pages/apps/widgets/
+Keys Added: 0 (new) + 12 (reused) = 12 total
+Reused Keys: appIdLabel, appIdCopiedToClipboard, appNameLabel, pleaseEnterAppName,
+            categoryLabel, appCategoryModalTitle, descriptionLabel,
+            pleaseProvideValidDescription, appPricingLabel, pricingFree,
+            pricingPaid, noneSelected
+Script: None needed - all keys already exist from desktop version
+Status: ✅ COMPLETED
+Notes: Localized app metadata form widget including App ID field with copy button,
+       App Name field with validation, Category selector modal, Description field
+       with validation, and Pricing selector modal. Refactored pricing options list
+       to use l10n keys with isPaid boolean logic. Used string interpolation for
+       required field asterisks (e.g., "${context.l10n.appNameLabel}*").
+Commit: 38a51737a
+
 ================================================================================
 END OF PROGRESS TRACKER
 ================================================================================
 Last Updated: 2026-01-15
-Last Completed: FILE 78 - api_keys_widget.dart (16 new keys + 7 reused, 544 new translations)
-Previous Completed: FILE 77 - action_item_tile_widget.dart (15 new keys + 18 reused, 510 new translations)
+Last Completed: FILE 79 - app_metadata_widget.dart (0 new keys + 12 reused, 100% key reuse)
+Previous Completed: FILE 78 - api_keys_widget.dart (16 new keys + 7 reused, 544 new translations)
 Current Session: Phase 2 - Mobile/Pages localization in progress
 
 🎉 PHASE 1 (DESKTOP) COMPLETE! 🎉
@@ -1025,5 +1042,5 @@ Current Session: Phase 2 - Mobile/Pages localization in progress
 
 📋 PHASE 2 (MOBILE/PAGES) IN PROGRESS
 59 files identified with hardcoded strings
-Files Completed: 8
+Files Completed: 9
 Estimated 200-300 new keys needed
