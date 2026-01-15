@@ -1483,5 +1483,10 @@
   "revokeKey": "Revogar chave",
   "revokeApiKeyQuestion": "Revogar chave API?",
   "revokeApiKeyWarning": "Esta ação não pode ser desfeita. Quaisquer aplicativos que usem esta chave não poderão mais acessar a API.",
-  "revoke": "Revogar"
+  "revoke": "Revogar",
+  "whatWouldYouLikeToCreate": "O que você gostaria de criar?",
+  "createAnApp": "Criar um aplicativo",
+  "createAndShareYourApp": "Crie e compartilhe seu aplicativo",
+  "createMyClone": "Criar meu clone",
+  "createYourDigitalClone": "Crie seu clone digital"
 }

@@ -1854,5 +1854,10 @@
   "revokeKey": "Révoquer la clé",
   "revokeApiKeyQuestion": "Révoquer la clé API ?",
   "revokeApiKeyWarning": "Cette action ne peut pas être annulée. Les applications utilisant cette clé ne pourront plus accéder à l'API.",
-  "revoke": "Révoquer"
+  "revoke": "Révoquer",
+  "whatWouldYouLikeToCreate": "Que souhaitez-vous créer ?",
+  "createAnApp": "Créer une application",
+  "createAndShareYourApp": "Créez et partagez votre application",
+  "createMyClone": "Créer mon clone",
+  "createYourDigitalClone": "Créez votre clone numérique"
 }

@@ -3036,5 +3036,10 @@
   "revokeKey": "Отозвать ключ",
   "revokeApiKeyQuestion": "Отозвать API-ключ?",
   "revokeApiKeyWarning": "Это действие нельзя отменить. Приложения, использующие этот ключ, больше не смогут получить доступ к API.",
-  "revoke": "Отозвать"
+  "revoke": "Отозвать",
+  "whatWouldYouLikeToCreate": "Что вы хотите создать?",
+  "createAnApp": "Создать приложение",
+  "createAndShareYourApp": "Создайте и поделитесь своим приложением",
+  "createMyClone": "Создать мой клон",
+  "createYourDigitalClone": "Создайте свой цифровой клон"
 }

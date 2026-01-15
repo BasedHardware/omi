@@ -3054,5 +3054,10 @@
   "revokeKey": "إلغاء المفتاح",
   "revokeApiKeyQuestion": "إلغاء مفتاح API؟",
   "revokeApiKeyWarning": "لا يمكن التراجع عن هذا الإجراء. لن تتمكن أي تطبيقات تستخدم هذا المفتاح من الوصول إلى API بعد الآن.",
-  "revoke": "إلغاء"
+  "revoke": "إلغاء",
+  "whatWouldYouLikeToCreate": "ماذا تريد أن تنشئ؟",
+  "createAnApp": "إنشاء تطبيق",
+  "createAndShareYourApp": "أنشئ وشارك تطبيقك",
+  "createMyClone": "إنشاء نسختي",
+  "createYourDigitalClone": "أنشئ نسختك الرقمية"
 }

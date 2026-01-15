@@ -3036,5 +3036,10 @@
   "revokeKey": "Revocă cheia",
   "revokeApiKeyQuestion": "Revoci cheia API?",
   "revokeApiKeyWarning": "Această acțiune nu poate fi anulată. Orice aplicații care folosesc această cheie nu vor mai putea accesa API-ul.",
-  "revoke": "Revocă"
+  "revoke": "Revocă",
+  "whatWouldYouLikeToCreate": "Ce ai dori să creezi?",
+  "createAnApp": "Creează o aplicație",
+  "createAndShareYourApp": "Creează și partajează aplicația ta",
+  "createMyClone": "Creează clona mea",
+  "createYourDigitalClone": "Creează clona ta digitală"
 }

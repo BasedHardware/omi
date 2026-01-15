@@ -3036,5 +3036,10 @@
   "revokeKey": "Відкликати ключ",
   "revokeApiKeyQuestion": "Відкликати API-ключ?",
   "revokeApiKeyWarning": "Цю дію не можна скасувати. Будь-які додатки, що використовують цей ключ, більше не зможуть отримати доступ до API.",
-  "revoke": "Відкликати"
+  "revoke": "Відкликати",
+  "whatWouldYouLikeToCreate": "Що ви хочете створити?",
+  "createAnApp": "Створити додаток",
+  "createAndShareYourApp": "Створіть і поділіться своїм додатком",
+  "createMyClone": "Створити мій клон",
+  "createYourDigitalClone": "Створіть свій цифровий клон"
 }

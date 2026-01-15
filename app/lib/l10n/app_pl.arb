@@ -3036,5 +3036,10 @@
   "revokeKey": "Unieważnij klucz",
   "revokeApiKeyQuestion": "Unieważnić klucz API?",
   "revokeApiKeyWarning": "Tej akcji nie można cofnąć. Aplikacje używające tego klucza nie będą już mogły uzyskać dostępu do API.",
-  "revoke": "Unieważnij"
+  "revoke": "Unieważnij",
+  "whatWouldYouLikeToCreate": "Co chciałbyś stworzyć?",
+  "createAnApp": "Utwórz aplikację",
+  "createAndShareYourApp": "Stwórz i udostępnij swoją aplikację",
+  "createMyClone": "Utwórz mojego klona",
+  "createYourDigitalClone": "Stwórz swój cyfrowy klon"
 }

@@ -3036,5 +3036,10 @@
   "revokeKey": "Kulcs visszavonása",
   "revokeApiKeyQuestion": "API-kulcs visszavonása?",
   "revokeApiKeyWarning": "Ez a művelet nem vonható vissza. Az ezt a kulcsot használó alkalmazások többé nem férhetnek hozzá az API-hoz.",
-  "revoke": "Visszavonás"
+  "revoke": "Visszavonás",
+  "whatWouldYouLikeToCreate": "Mit szeretne létrehozni?",
+  "createAnApp": "Alkalmazás létrehozása",
+  "createAndShareYourApp": "Hozza létre és ossza meg alkalmazását",
+  "createMyClone": "Klónom létrehozása",
+  "createYourDigitalClone": "Hozza létre digitális klónját"
 }

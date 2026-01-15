@@ -1483,5 +1483,10 @@
   "revokeKey": "撤销密钥",
   "revokeApiKeyQuestion": "撤销API密钥?",
   "revokeApiKeyWarning": "此操作无法撤消。使用此密钥的任何应用程序将无法再访问API。",
-  "revoke": "撤销"
+  "revoke": "撤销",
+  "whatWouldYouLikeToCreate": "您想创建什么？",
+  "createAnApp": "创建应用",
+  "createAndShareYourApp": "创建并分享您的应用",
+  "createMyClone": "创建我的克隆",
+  "createYourDigitalClone": "创建您的数字克隆"
 }

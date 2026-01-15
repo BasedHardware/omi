@@ -1483,5 +1483,10 @@
   "revokeKey": "Schlüssel widerrufen",
   "revokeApiKeyQuestion": "API-Schlüssel widerrufen?",
   "revokeApiKeyWarning": "Diese Aktion kann nicht rückgängig gemacht werden. Alle Anwendungen, die diesen Schlüssel verwenden, können nicht mehr auf die API zugreifen.",
-  "revoke": "Widerrufen"
+  "revoke": "Widerrufen",
+  "whatWouldYouLikeToCreate": "Was möchten Sie erstellen?",
+  "createAnApp": "Eine App erstellen",
+  "createAndShareYourApp": "Erstellen und teilen Sie Ihre App",
+  "createMyClone": "Meinen Klon erstellen",
+  "createYourDigitalClone": "Erstellen Sie Ihren digitalen Klon"
 }

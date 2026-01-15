@@ -3036,5 +3036,10 @@
   "revokeKey": "Thu hồi khóa",
   "revokeApiKeyQuestion": "Thu hồi khóa API?",
   "revokeApiKeyWarning": "Hành động này không thể hoàn tác. Bất kỳ ứng dụng nào sử dụng khóa này sẽ không thể truy cập API nữa.",
-  "revoke": "Thu hồi"
+  "revoke": "Thu hồi",
+  "whatWouldYouLikeToCreate": "Bạn muốn tạo gì?",
+  "createAnApp": "Tạo ứng dụng",
+  "createAndShareYourApp": "Tạo và chia sẻ ứng dụng của bạn",
+  "createMyClone": "Tạo bản sao của tôi",
+  "createYourDigitalClone": "Tạo bản sao kỹ thuật số của bạn"
 }

@@ -3036,5 +3036,10 @@
   "revokeKey": "Odvolať kľúč",
   "revokeApiKeyQuestion": "Odvolať API kľúč?",
   "revokeApiKeyWarning": "Túto akciu nie je možné vrátiť späť. Aplikácie používajúce tento kľúč už nebudú mať prístup k API.",
-  "revoke": "Odvolať"
+  "revoke": "Odvolať",
+  "whatWouldYouLikeToCreate": "Čo by ste chceli vytvoriť?",
+  "createAnApp": "Vytvoriť aplikáciu",
+  "createAndShareYourApp": "Vytvorte a zdieľajte svoju aplikáciu",
+  "createMyClone": "Vytvoriť môj klon",
+  "createYourDigitalClone": "Vytvorte si digitálny klon"
 }

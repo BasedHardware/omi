@@ -3036,5 +3036,10 @@
   "revokeKey": "키 취소",
   "revokeApiKeyQuestion": "API 키를 취소하시겠습니까?",
   "revokeApiKeyWarning": "이 작업은 취소할 수 없습니다. 이 키를 사용하는 애플리케이션은 더 이상 API에 접근할 수 없습니다.",
-  "revoke": "취소"
+  "revoke": "취소",
+  "whatWouldYouLikeToCreate": "무엇을 만들고 싶으신가요?",
+  "createAnApp": "앱 만들기",
+  "createAndShareYourApp": "앱을 만들고 공유하세요",
+  "createMyClone": "내 클론 만들기",
+  "createYourDigitalClone": "디지털 클론을 만드세요"
 }

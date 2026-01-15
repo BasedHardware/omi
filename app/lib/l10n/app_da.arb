@@ -3036,5 +3036,10 @@
   "revokeKey": "Tilbagekald nøgle",
   "revokeApiKeyQuestion": "Tilbagekald API-nøgle?",
   "revokeApiKeyWarning": "Denne handling kan ikke fortrydes. Alle applikationer, der bruger denne nøgle, vil ikke længere kunne få adgang til API'et.",
-  "revoke": "Tilbagekald"
+  "revoke": "Tilbagekald",
+  "whatWouldYouLikeToCreate": "Hvad vil du gerne oprette?",
+  "createAnApp": "Opret en app",
+  "createAndShareYourApp": "Opret og del din app",
+  "createMyClone": "Opret min klon",
+  "createYourDigitalClone": "Opret din digitale klon"
 }

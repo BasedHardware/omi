@@ -1854,5 +1854,10 @@
   "revokeKey": "Sleutel intrekken",
   "revokeApiKeyQuestion": "API-sleutel intrekken?",
   "revokeApiKeyWarning": "Deze actie kan niet ongedaan worden gemaakt. Applicaties die deze sleutel gebruiken, hebben geen toegang meer tot de API.",
-  "revoke": "Intrekken"
+  "revoke": "Intrekken",
+  "whatWouldYouLikeToCreate": "Wat wilt u maken?",
+  "createAnApp": "Een app maken",
+  "createAndShareYourApp": "Maak en deel uw app",
+  "createMyClone": "Mijn kloon maken",
+  "createYourDigitalClone": "Maak uw digitale kloon"
 }

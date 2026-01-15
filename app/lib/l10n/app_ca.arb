@@ -3038,5 +3038,10 @@
   "revokeKey": "Revocar clau",
   "revokeApiKeyQuestion": "Revocar clau API?",
   "revokeApiKeyWarning": "Aquesta acció no es pot desfer. Les aplicacions que utilitzin aquesta clau ja no podran accedir a l'API.",
-  "revoke": "Revocar"
+  "revoke": "Revocar",
+  "whatWouldYouLikeToCreate": "Què voldries crear?",
+  "createAnApp": "Crear una aplicació",
+  "createAndShareYourApp": "Crea i comparteix la teva aplicació",
+  "createMyClone": "Crear el meu clon",
+  "createYourDigitalClone": "Crea el teu clon digital"
 }

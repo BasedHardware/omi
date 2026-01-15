@@ -3018,5 +3018,10 @@
   "revokeKey": "Anahtarı iptal et",
   "revokeApiKeyQuestion": "API Anahtarını İptal Et?",
   "revokeApiKeyWarning": "Bu işlem geri alınamaz. Bu anahtarı kullanan uygulamalar artık API'ye erişemeyecektir.",
-  "revoke": "İptal Et"
+  "revoke": "İptal Et",
+  "whatWouldYouLikeToCreate": "Ne oluşturmak istersiniz?",
+  "createAnApp": "Uygulama Oluştur",
+  "createAndShareYourApp": "Uygulamanızı oluşturun ve paylaşın",
+  "createMyClone": "Klonumu Oluştur",
+  "createYourDigitalClone": "Dijital klonunuzu oluşturun"
 }

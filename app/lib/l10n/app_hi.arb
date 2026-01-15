@@ -1483,5 +1483,10 @@
   "revokeKey": "कुंजी रद्द करें",
   "revokeApiKeyQuestion": "API कुंजी रद्द करें?",
   "revokeApiKeyWarning": "यह क्रिया वापस नहीं की जा सकती। इस कुंजी का उपयोग करने वाले कोई भी एप्लिकेशन अब API तक नहीं पहुंच पाएंगे।",
-  "revoke": "रद्द करें"
+  "revoke": "रद्द करें",
+  "whatWouldYouLikeToCreate": "आप क्या बनाना चाहेंगे?",
+  "createAnApp": "एक ऐप बनाएं",
+  "createAndShareYourApp": "अपना ऐप बनाएं और साझा करें",
+  "createMyClone": "मेरा क्लोन बनाएं",
+  "createYourDigitalClone": "अपना डिजिटल क्लोन बनाएं"
 }

@@ -1462,5 +1462,10 @@
   "revokeKey": "キーを取り消す",
   "revokeApiKeyQuestion": "APIキーを取り消しますか?",
   "revokeApiKeyWarning": "この操作は取り消せません。このキーを使用しているアプリケーションはAPIにアクセスできなくなります。",
-  "revoke": "取り消す"
+  "revoke": "取り消す",
+  "whatWouldYouLikeToCreate": "何を作成しますか？",
+  "createAnApp": "アプリを作成",
+  "createAndShareYourApp": "アプリを作成して共有",
+  "createMyClone": "クローンを作成",
+  "createYourDigitalClone": "デジタルクローンを作成"
 }

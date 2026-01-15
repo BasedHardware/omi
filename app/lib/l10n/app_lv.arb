@@ -3036,5 +3036,10 @@
   "revokeKey": "Atsaukt atslēgu",
   "revokeApiKeyQuestion": "Atsaukt API atslēgu?",
   "revokeApiKeyWarning": "Šo darbību nevar atsaukt. Lietojumprogrammas, kas izmanto šo atslēgu, vairs nevarēs piekļūt API.",
-  "revoke": "Atsaukt"
+  "revoke": "Atsaukt",
+  "whatWouldYouLikeToCreate": "Ko vēlaties izveidot?",
+  "createAnApp": "Izveidot lietotni",
+  "createAndShareYourApp": "Izveidojiet un dalieties ar savu lietotni",
+  "createMyClone": "Izveidot manu klonu",
+  "createYourDigitalClone": "Izveidojiet savu digitālo klonu"
 }

@@ -4847,5 +4847,25 @@
   "revoke": "Revoke",
   "@revoke": {
     "description": "Button text to confirm revocation"
+  },
+  "whatWouldYouLikeToCreate": "What would you like to create?",
+  "@whatWouldYouLikeToCreate": {
+    "description": "Title asking user what they want to create"
+  },
+  "createAnApp": "Create an App",
+  "@createAnApp": {
+    "description": "Option to create an app"
+  },
+  "createAndShareYourApp": "Create and share your app",
+  "@createAndShareYourApp": {
+    "description": "Subtitle for create app option"
+  },
+  "createMyClone": "Create my Clone",
+  "@createMyClone": {
+    "description": "Option to create digital clone"
+  },
+  "createYourDigitalClone": "Create your digital clone",
+  "@createYourDigitalClone": {
+    "description": "Subtitle for create clone option"
   }
 }

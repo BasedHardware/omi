@@ -3036,5 +3036,10 @@
   "revokeKey": "เพิกถอนคีย์",
   "revokeApiKeyQuestion": "เพิกถอนคีย์ API?",
   "revokeApiKeyWarning": "การดำเนินการนี้ไม่สามารถยกเลิกได้ แอปพลิเคชันใดๆ ที่ใช้คีย์นี้จะไม่สามารถเข้าถึง API ได้อีกต่อไป",
-  "revoke": "เพิกถอน"
+  "revoke": "เพิกถอน",
+  "whatWouldYouLikeToCreate": "คุณต้องการสร้างอะไร?",
+  "createAnApp": "สร้างแอป",
+  "createAndShareYourApp": "สร้างและแชร์แอปของคุณ",
+  "createMyClone": "สร้างโคลนของฉัน",
+  "createYourDigitalClone": "สร้างโคลนดิจิทัลของคุณ"
 }

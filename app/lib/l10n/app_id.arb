@@ -3036,5 +3036,10 @@
   "revokeKey": "Cabut kunci",
   "revokeApiKeyQuestion": "Cabut Kunci API?",
   "revokeApiKeyWarning": "Tindakan ini tidak dapat dibatalkan. Aplikasi apa pun yang menggunakan kunci ini tidak akan dapat mengakses API lagi.",
-  "revoke": "Cabut"
+  "revoke": "Cabut",
+  "whatWouldYouLikeToCreate": "Apa yang ingin Anda buat?",
+  "createAnApp": "Buat Aplikasi",
+  "createAndShareYourApp": "Buat dan bagikan aplikasi Anda",
+  "createMyClone": "Buat Klon Saya",
+  "createYourDigitalClone": "Buat klon digital Anda"
 }

@@ -3038,5 +3038,10 @@
   "revokeKey": "Odvolat klíč",
   "revokeApiKeyQuestion": "Odvolat API klíč?",
   "revokeApiKeyWarning": "Tuto akci nelze vrátit zpět. Všechny aplikace používající tento klíč již nebudou mít přístup k API.",
-  "revoke": "Odvolat"
+  "revoke": "Odvolat",
+  "whatWouldYouLikeToCreate": "Co byste chtěli vytvořit?",
+  "createAnApp": "Vytvořit aplikaci",
+  "createAndShareYourApp": "Vytvořte a sdílejte svou aplikaci",
+  "createMyClone": "Vytvořit můj klon",
+  "createYourDigitalClone": "Vytvořte svůj digitální klon"
 }

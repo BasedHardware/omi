@@ -3036,5 +3036,10 @@
   "revokeKey": "Peruuta avain",
   "revokeApiKeyQuestion": "Peruuta API-avain?",
   "revokeApiKeyWarning": "Tätä toimintoa ei voi kumota. Tätä avainta käyttävät sovellukset eivät enää pääse API:in.",
-  "revoke": "Peruuta"
+  "revoke": "Peruuta",
+  "whatWouldYouLikeToCreate": "Mitä haluaisit luoda?",
+  "createAnApp": "Luo sovellus",
+  "createAndShareYourApp": "Luo ja jaa sovelluksesi",
+  "createMyClone": "Luo kloonini",
+  "createYourDigitalClone": "Luo digitaalinen kloonisi"
 }

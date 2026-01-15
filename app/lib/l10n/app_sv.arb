@@ -3036,5 +3036,10 @@
   "revokeKey": "Återkalla nyckel",
   "revokeApiKeyQuestion": "Återkalla API-nyckel?",
   "revokeApiKeyWarning": "Denna åtgärd kan inte ångras. Alla applikationer som använder denna nyckel kommer inte längre att kunna komma åt API:et.",
-  "revoke": "Återkalla"
+  "revoke": "Återkalla",
+  "whatWouldYouLikeToCreate": "Vad vill du skapa?",
+  "createAnApp": "Skapa en app",
+  "createAndShareYourApp": "Skapa och dela din app",
+  "createMyClone": "Skapa min klon",
+  "createYourDigitalClone": "Skapa din digitala klon"
 }

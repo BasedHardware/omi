@@ -3036,5 +3036,10 @@
   "revokeKey": "Tilbakekall nøkkel",
   "revokeApiKeyQuestion": "Tilbakekalle API-nøkkel?",
   "revokeApiKeyWarning": "Denne handlingen kan ikke angres. Alle applikasjoner som bruker denne nøkkelen vil ikke lenger kunne få tilgang til API-et.",
-  "revoke": "Tilbakekall"
+  "revoke": "Tilbakekall",
+  "whatWouldYouLikeToCreate": "Hva vil du lage?",
+  "createAnApp": "Lag en app",
+  "createAndShareYourApp": "Lag og del appen din",
+  "createMyClone": "Lag min klon",
+  "createYourDigitalClone": "Lag din digitale klon"
 }

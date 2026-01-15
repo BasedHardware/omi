@@ -3018,5 +3018,10 @@
   "revokeKey": "Atšaukti raktą",
   "revokeApiKeyQuestion": "Atšaukti API raktą?",
   "revokeApiKeyWarning": "Šio veiksmo negalima atšaukti. Programos, naudojančios šį raktą, nebegalės pasiekti API.",
-  "revoke": "Atšaukti"
+  "revoke": "Atšaukti",
+  "whatWouldYouLikeToCreate": "Ką norėtumėte sukurti?",
+  "createAnApp": "Sukurti programėlę",
+  "createAndShareYourApp": "Sukurkite ir dalinkitės savo programėle",
+  "createMyClone": "Sukurti mano kloną",
+  "createYourDigitalClone": "Sukurkite savo skaitmeninį kloną"
 }

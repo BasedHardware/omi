@@ -3036,5 +3036,10 @@
   "revokeKey": "Tühista võti",
   "revokeApiKeyQuestion": "Tühistada API võti?",
   "revokeApiKeyWarning": "Seda toimingut ei saa tagasi võtta. Ükski rakendus, mis kasutab seda võtit, ei pääse enam API-le ligi.",
-  "revoke": "Tühista"
+  "revoke": "Tühista",
+  "whatWouldYouLikeToCreate": "Mida soovite luua?",
+  "createAnApp": "Loo rakendus",
+  "createAndShareYourApp": "Loo ja jaga oma rakendust",
+  "createMyClone": "Loo minu kloon",
+  "createYourDigitalClone": "Loo oma digitaalne kloon"
 }
