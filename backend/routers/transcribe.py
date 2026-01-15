@@ -1969,6 +1969,7 @@ async def _listen(
     """
     WebSocket handler for app clients. Accepts the websocket connection and delegates to _stream_handler.
     """
+    print("_listen", uid)
     try:
         await websocket.accept()
     except RuntimeError as e:
@@ -1989,6 +1990,7 @@ async def _listen(
         custom_stt_mode=custom_stt_mode,
         onboarding_mode=onboarding_mode,
     )
+    print("_listen ended", uid)
 
 
 @router.websocket("/v4/listen")
@@ -2043,6 +2045,7 @@ async def web_listen_handler(
     First message must be: {"type": "auth", "token": "<firebase_token>"}
     Response: {"type": "auth_response", "success": true/false}
     """
+    print("web_listen_handler")
     try:
         await websocket.accept()
     except RuntimeError as e:
@@ -2098,6 +2101,7 @@ async def web_listen_handler(
 
     # Send success response
     await websocket.send_json({"type": "auth_response", "success": True})
+    print("web_listen_handler authenticated", uid)
 
     # Proceed with streaming (websocket already accepted, uid already validated)
     custom_stt_mode = CustomSttMode.enabled if custom_stt == 'enabled' else CustomSttMode.disabled
@@ -2117,3 +2121,4 @@ async def web_listen_handler(
         custom_stt_mode=custom_stt_mode,
         onboarding_mode=onboarding_mode,
     )
+    print("web_listen_handler ended", uid)
