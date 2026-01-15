@@ -25,7 +25,7 @@ class FreemiumSwitchHandler {
       await showModalBottomSheet(
         context: context,
         isScrollControlled: true,
-        backgroundColor: Colors.transparent,
+        backgroundColor: Colors.black,
         builder: (sheetContext) => _PlansSheetWrapper(),
       );
 
