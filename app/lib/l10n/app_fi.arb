@@ -511,11 +511,11 @@
   "@email": {
     "description": "Email field label"
   },
-  "customVocabulary": "Mukautettu sanasto",
+  "customVocabulary": "Mukautettu Sanasto",
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Muiden tunnistaminen",
+  "identifyingOthers": "Muiden Tunnistaminen",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
@@ -523,11 +523,11 @@
   "@paymentMethods": {
     "description": "Payment methods setting"
   },
-  "conversationDisplay": "Keskustelunäkymä",
+  "conversationDisplay": "Keskustelujen Näyttö",
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "Tiedot ja yksityisyys",
+  "dataPrivacy": "Tietosuoja",
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
@@ -583,7 +583,7 @@
   "@referralProgram": {
     "description": "Referral program menu item"
   },
-  "signOut": "Kirjaudu ulos",
+  "signOut": "Kirjaudu Ulos",
   "@signOut": {
     "description": "Sign out button"
   },
@@ -879,11 +879,11 @@
   "@createKeyToStart": {
     "description": "Create key instruction"
   },
-  "createKey": "Luo avain",
+  "createKey": "Luo Avain",
   "@createKey": {
     "description": "Create Key button"
   },
-  "docs": "Dokumentit",
+  "docs": "Dokumentaatio",
   "@docs": {
     "description": "Documentation link"
   },
@@ -1087,7 +1087,7 @@
   "exportShared": "Vienti jaettu",
   "deleteKnowledgeGraphTitle": "Poista tietograafi?",
   "deleteKnowledgeGraphMessage": "Tämä poistaa kaikki johdetut tietograafitiedot (solmut ja yhteydet). Alkuperäiset muistosi pysyvät turvassa. Graafi rakennetaan uudelleen ajan myötä tai seuraavan pyynnön yhteydessä.",
-  "knowledgeGraphDeleted": "Tietograafi poistettu onnistuneesti",
+  "knowledgeGraphDeleted": "Tietämysgraafi poistettu",
   "deleteGraphFailed": "Graafin poisto epäonnistui: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -2786,20 +2786,20 @@
   "loadingProfile": "Ladataan profiilia...",
   "profileSettings": "Profiilin asetukset",
   "noEmailSet": "Sähköpostia ei ole asetettu",
-  "userIdCopiedToClipboard": "Käyttäjätunnus kopioitu leikepöydälle",
-  "yourInformation": "Tietosi",
+  "userIdCopiedToClipboard": "Käyttäjätunnus kopioitu",
+  "yourInformation": "Sinun Tietosi",
   "setYourName": "Aseta nimesi",
   "changeYourName": "Vaihda nimesi",
   "persona": "Persona",
   "manageYourOmiPersona": "Hallinnoi Omi-personaasi",
-  "voiceAndPeople": "Ääni ja ihmiset",
+  "voiceAndPeople": "Ääni ja Ihmiset",
   "teachOmiYourVoice": "Opeta Omi äänesi",
   "tellOmiWhoSaidIt": "Kerro Omi:lle, kuka sen sanoi 🗣️",
   "payment": "Maksu",
   "addOrChangeYourPaymentMethod": "Lisää tai vaihda maksutapa",
   "preferences": "Asetukset",
   "helpImproveOmiBySharing": "Auta parantamaan Omi:ta jakamalla anonymisoituja analytiikkatietoja",
-  "deleteAccount": "Poista tili",
+  "deleteAccount": "Poista Tili",
   "deleteYourAccountAndAllData": "Poista tilisi ja kaikki tiedot",
   "helpsDiagnoseIssuesAutoDeletes": "Auttaa ongelmien diagnosoinnissa. Poistetaan automaattisesti 3 päivän kuluttua.",
   "clearLogs": "Tyhjennä lokit",
@@ -2827,7 +2827,7 @@
   "pilotFeatures": "Pilottiominaisuudet",
   "pilotFeaturesDescription": "Nämä ominaisuudet ovat testejä, eikä tukea taata.",
   "suggestFollowUpQuestion": "Ehdota jatkokysymystä",
-  "saveSettings": "Tallenna asetukset",
+  "saveSettings": "Tallenna Asetukset",
   "syncingDeveloperSettings": "Synkronoidaan kehittäjäasetuksia...",
   "summary": "Yhteenveto",
   "auto": "Automaattinen",
@@ -2890,5 +2890,65 @@
   "audioInputSetTo": "Äänitulo asetettu: {deviceName}",
   "errorSwitchingAudioDevice": "Virhe äänitulolaitteen vaihdossa: {error}",
   "selectAudioInput": "Valitse äänitulo",
-  "loadingDevices": "Ladataan laitteita..."
+  "loadingDevices": "Ladataan laitteita...",
+  "settingsHeader": "ASETUKSET",
+  "plansAndBilling": "Suunnitelmat ja Laskutus",
+  "calendarIntegration": "Kalenterin Integraatio",
+  "dailySummary": "Päivittäinen Yhteenveto",
+  "developer": "Kehittäjä",
+  "about": "Tietoja",
+  "selectTime": "Valitse Aika",
+  "accountGroup": "Tili",
+  "signOutQuestion": "Kirjaudu Ulos?",
+  "signOutConfirmation": "Haluatko varmasti kirjautua ulos?",
+  "customVocabularyHeader": "MUKAUTETTU SANASTO",
+  "addWordsDescription": "Lisää sanoja, jotka Omin tulisi tunnistaa transkription aikana.",
+  "enterWordsHint": "Syötä sanat (pilkulla eroteltuina)",
+  "dailySummaryHeader": "PÄIVITTÄINEN YHTEENVETO",
+  "dailySummaryTitle": "Päivittäinen Yhteenveto",
+  "dailySummaryDescription": "Saa henkilökohtainen yhteenveto keskusteluistasi",
+  "deliveryTime": "Toimitusaika",
+  "deliveryTimeDescription": "Milloin vastaanottaa päivittäinen yhteenveto",
+  "subscription": "Tilaus",
+  "viewPlansAndUsage": "Näytä Suunnitelmat ja Käyttö",
+  "viewPlansDescription": "Hallitse tilaustasi ja katso käyttötilastoja",
+  "addOrChangePaymentMethod": "Lisää tai vaihda maksutapa",
+  "displayOptions": "Näyttövaihtoehdot",
+  "showMeetingsInMenuBar": "Näytä kokoukset valikkorivissä",
+  "displayUpcomingMeetingsDescription": "Näytä tulevat kokoukset valikkorivissä",
+  "showEventsWithoutParticipants": "Näytä tapahtumat ilman osallistujia",
+  "includePersonalEventsDescription": "Sisällytä henkilökohtaiset tapahtumat ilman osallistujia",
+  "upcomingMeetings": "TULEVAT KOKOUKSET",
+  "checkingNext7Days": "Tarkistetaan seuraavat 7 päivää",
+  "shortcuts": "Pikanäppäimet",
+  "shortcutChangeInstruction": "Napsauta pikanäppäintä muuttaaksesi sitä. Peruuta painamalla Escape.",
+  "configurePersonaDescription": "Määritä AI-persoonasi",
+  "configureSTTProvider": "Määritä STT-palveluntarjoaja",
+  "setConversationEndDescription": "Aseta, milloin keskustelut päättyvät automaattisesti",
+  "importDataDescription": "Tuo tietoja muista lähteistä",
+  "debugAndDiagnostics": "Virheenkorjaus ja diagnostiikka",
+  "autoDeletesAfter3Days": "Poistetaan automaattisesti 3 päivän kuluttua",
+  "helpsDiagnoseIssues": "Auttaa ongelmien diagnosoinnissa",
+  "exportConversationsDescription": "Vie keskustelut JSON-muotoon",
+  "exportingConversations": "Viedään keskusteluja...",
+  "clearNodesDescription": "Tyhjennä kaikki solmut ja yhteydet",
+  "deleteKnowledgeGraphQuestion": "Poistetaanko tietograafi?",
+  "deleteKnowledgeGraphWarning": "Tämä poistaa kaikki johdetut tietograafitiedot. Alkuperäiset muistosi pysyvät turvassa.",
+  "connectOmiWithAI": "Yhdistä Omi AI-avustajiin",
+  "noAPIKeys": "Ei API-avaimia. Luo yksi aloittaaksesi.",
+  "realTimeTranscript": "Reaaliaikainen litterointi",
+  "transcriptionDiagnostics": "Litterointidiagnostiikka",
+  "detailedDiagnosticMessages": "Yksityiskohtaiset diagnostiikkaviestit",
+  "autoCreateSpeakers": "Luo puhujat automaattisesti",
+  "autoCreateWhenDetected": "Luo automaattisesti, kun nimi havaitaan",
+  "followUpQuestions": "Jatkokysymykset",
+  "suggestQuestionsAfterConversations": "Ehdota kysymyksiä keskustelujen jälkeen",
+  "goalTracker": "Tavoitteiden seuranta",
+  "trackPersonalGoals": "Seuraa henkilökohtaisia tavoitteita etusivulla",
+  "dailyReflection": "Päivittäinen pohdinta",
+  "dailyReflectionDescription": "Klo 21 muistutus päivän pohdintaan",
+  "endpointURL": "Päätepisteen URL",
+  "links": "Linkit",
+  "discordMemberCount": "Yli 8000 jäsentä Discordissa",
+  "userInformation": "Käyttäjätiedot"
 }

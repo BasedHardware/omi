@@ -159,7 +159,7 @@
   "@createPersonHint": {
     "description": "Hint text for creating a person"
   },
-  "speechProfile": "Профиль речи",
+  "speechProfile": "Речевой Профиль",
   "@speechProfile": {
     "description": "Speech profile label"
   },
@@ -507,35 +507,35 @@
   "@name": {
     "description": "Name field label"
   },
-  "email": "Электронная почта",
+  "email": "Эл. почта",
   "@email": {
     "description": "Email field label"
   },
-  "customVocabulary": "Пользовательский словарь",
+  "customVocabulary": "Пользовательский Словарь",
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Идентификация других",
+  "identifyingOthers": "Идентификация Других",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
-  "paymentMethods": "Способы оплаты",
+  "paymentMethods": "Способы Оплаты",
   "@paymentMethods": {
     "description": "Payment methods setting"
   },
-  "conversationDisplay": "Отображение разговоров",
+  "conversationDisplay": "Отображение Разговоров",
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "Данные и конфиденциальность",
+  "dataPrivacy": "Конфиденциальность Данных",
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
-  "userId": "ID пользователя",
+  "userId": "ID Пользователя",
   "@userId": {
     "description": "User ID label"
   },
-  "notSet": "Не установлено",
+  "notSet": "Не задано",
   "@notSet": {
     "description": "Default value when not set"
   },
@@ -879,11 +879,11 @@
   "@createKeyToStart": {
     "description": "Create key instruction"
   },
-  "createKey": "Создать ключ",
+  "createKey": "Создать Ключ",
   "@createKey": {
     "description": "Create Key button"
   },
-  "docs": "Документы",
+  "docs": "Документация",
   "@docs": {
     "description": "Documentation link"
   },
@@ -1087,7 +1087,7 @@
   "exportShared": "Экспорт отправлен",
   "deleteKnowledgeGraphTitle": "Удалить граф знаний?",
   "deleteKnowledgeGraphMessage": "Это удалит все производные данные графа знаний (узлы и связи). Ваши исходные воспоминания останутся в безопасности. Граф будет восстановлен со временем или при следующем запросе.",
-  "knowledgeGraphDeleted": "Граф знаний успешно удалён",
+  "knowledgeGraphDeleted": "Граф знаний удалён",
   "deleteGraphFailed": "Не удалось удалить граф: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -2392,7 +2392,7 @@
   "welcomeToOmiDescription": "Добро пожаловать в Omi! Ваш AI-компаньон готов помочь вам с разговорами, задачами и многим другим.",
   "startUsingOmi": "Начать использовать Omi",
   "back": "Назад",
-  "keyboardShortcuts": "Сочетания клавиш",
+  "keyboardShortcuts": "Горячие Клавиши",
   "toggleControlBar": "Переключить панель управления",
   "pressKeys": "Нажмите клавиши...",
   "cmdRequired": "⌘ требуется",
@@ -2786,20 +2786,20 @@
   "loadingProfile": "Загрузка профиля...",
   "profileSettings": "Настройки профиля",
   "noEmailSet": "Электронная почта не установлена",
-  "userIdCopiedToClipboard": "ID пользователя скопирован в буфер обмена",
-  "yourInformation": "Ваша информация",
+  "userIdCopiedToClipboard": "ID пользователя скопирован",
+  "yourInformation": "Ваша Информация",
   "setYourName": "Установить ваше имя",
   "changeYourName": "Изменить ваше имя",
   "persona": "Персона",
   "manageYourOmiPersona": "Управление вашей персоной Omi",
-  "voiceAndPeople": "Голос и люди",
+  "voiceAndPeople": "Голос и Люди",
   "teachOmiYourVoice": "Научите Omi вашему голосу",
   "tellOmiWhoSaidIt": "Скажите Omi, кто это сказал 🗣️",
   "payment": "Оплата",
   "addOrChangeYourPaymentMethod": "Добавить или изменить способ оплаты",
   "preferences": "Предпочтения",
   "helpImproveOmiBySharing": "Помогите улучшить Omi, делясь анонимными аналитическими данными",
-  "deleteAccount": "Удалить аккаунт",
+  "deleteAccount": "Удалить Аккаунт",
   "deleteYourAccountAndAllData": "Удалить аккаунт и все данные",
   "helpsDiagnoseIssuesAutoDeletes": "Помогает диагностировать проблемы. Автоматически удаляется через 3 дня.",
   "clearLogs": "Очистить журналы",
@@ -2827,7 +2827,7 @@
   "pilotFeatures": "Пилотные функции",
   "pilotFeaturesDescription": "Эти функции являются тестами, и поддержка не гарантируется.",
   "suggestFollowUpQuestion": "Предложить дополнительный вопрос",
-  "saveSettings": "Сохранить настройки",
+  "saveSettings": "Сохранить Настройки",
   "syncingDeveloperSettings": "Синхронизация настроек разработчика...",
   "summary": "Резюме",
   "auto": "Автоматически",
@@ -2890,5 +2890,65 @@
   "audioInputSetTo": "Аудиовход установлен на {deviceName}",
   "errorSwitchingAudioDevice": "Ошибка переключения аудиоустройства: {error}",
   "selectAudioInput": "Выберите аудиовход",
-  "loadingDevices": "Загрузка устройств..."
+  "loadingDevices": "Загрузка устройств...",
+  "settingsHeader": "НАСТРОЙКИ",
+  "plansAndBilling": "Планы и Оплата",
+  "calendarIntegration": "Интеграция Календаря",
+  "dailySummary": "Ежедневная Сводка",
+  "developer": "Разработчик",
+  "about": "О программе",
+  "selectTime": "Выбрать Время",
+  "accountGroup": "Аккаунт",
+  "signOutQuestion": "Выйти?",
+  "signOutConfirmation": "Вы уверены, что хотите выйти?",
+  "customVocabularyHeader": "ПОЛЬЗОВАТЕЛЬСКИЙ СЛОВАРЬ",
+  "addWordsDescription": "Добавьте слова, которые Omi должен распознавать во время транскрипции.",
+  "enterWordsHint": "Введите слова (через запятую)",
+  "dailySummaryHeader": "ЕЖЕДНЕВНАЯ СВОДКА",
+  "dailySummaryTitle": "Ежедневная Сводка",
+  "dailySummaryDescription": "Получайте персонализированную сводку ваших разговоров",
+  "deliveryTime": "Время Доставки",
+  "deliveryTimeDescription": "Когда получать ежедневную сводку",
+  "subscription": "Подписка",
+  "viewPlansAndUsage": "Просмотр Планов и Использования",
+  "viewPlansDescription": "Управляйте подпиской и просматривайте статистику использования",
+  "addOrChangePaymentMethod": "Добавить или изменить способ оплаты",
+  "displayOptions": "Параметры отображения",
+  "showMeetingsInMenuBar": "Показывать встречи в строке меню",
+  "displayUpcomingMeetingsDescription": "Отображать предстоящие встречи в строке меню",
+  "showEventsWithoutParticipants": "Показывать события без участников",
+  "includePersonalEventsDescription": "Включать личные события без участников",
+  "upcomingMeetings": "ПРЕДСТОЯЩИЕ ВСТРЕЧИ",
+  "checkingNext7Days": "Проверка следующих 7 дней",
+  "shortcuts": "Комбинации клавиш",
+  "shortcutChangeInstruction": "Нажмите на комбинацию клавиш, чтобы изменить ее. Нажмите Escape для отмены.",
+  "configurePersonaDescription": "Настройте свою персону ИИ",
+  "configureSTTProvider": "Настроить провайдера STT",
+  "setConversationEndDescription": "Установите, когда разговоры автоматически завершаются",
+  "importDataDescription": "Импортировать данные из других источников",
+  "debugAndDiagnostics": "Отладка и диагностика",
+  "autoDeletesAfter3Days": "Автоматическое удаление через 3 дня",
+  "helpsDiagnoseIssues": "Помогает диагностировать проблемы",
+  "exportConversationsDescription": "Экспортировать разговоры в JSON",
+  "exportingConversations": "Экспорт разговоров...",
+  "clearNodesDescription": "Очистить все узлы и связи",
+  "deleteKnowledgeGraphQuestion": "Удалить граф знаний?",
+  "deleteKnowledgeGraphWarning": "Это удалит все производные данные графа знаний. Ваши исходные воспоминания останутся в безопасности.",
+  "connectOmiWithAI": "Подключите Omi к ИИ-ассистентам",
+  "noAPIKeys": "Нет ключей API. Создайте один, чтобы начать.",
+  "realTimeTranscript": "Транскрипция в реальном времени",
+  "transcriptionDiagnostics": "Диагностика транскрипции",
+  "detailedDiagnosticMessages": "Подробные диагностические сообщения",
+  "autoCreateSpeakers": "Автосоздание спикеров",
+  "autoCreateWhenDetected": "Автосоздание при обнаружении имени",
+  "followUpQuestions": "Дополнительные вопросы",
+  "suggestQuestionsAfterConversations": "Предлагать вопросы после разговоров",
+  "goalTracker": "Отслеживание целей",
+  "trackPersonalGoals": "Отслеживать личные цели на главной странице",
+  "dailyReflection": "Ежедневное размышление",
+  "dailyReflectionDescription": "Напоминание в 21:00 для размышлений о вашем дне",
+  "endpointURL": "URL конечной точки",
+  "links": "Ссылки",
+  "discordMemberCount": "Более 8000 участников в Discord",
+  "userInformation": "Информация о пользователе"
 }

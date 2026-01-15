@@ -159,7 +159,7 @@
   "@createPersonHint": {
     "description": "Hint text for creating a person"
   },
-  "speechProfile": "Profil řeči",
+  "speechProfile": "Řečový Profil",
   "@speechProfile": {
     "description": "Speech profile label"
   },
@@ -511,27 +511,27 @@
   "@email": {
     "description": "Email field label"
   },
-  "customVocabulary": "Vlastní slovník",
+  "customVocabulary": "Vlastní Slovník",
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Identifikace ostatních",
+  "identifyingOthers": "Identifikace Ostatních",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
-  "paymentMethods": "Platební metody",
+  "paymentMethods": "Platební Metody",
   "@paymentMethods": {
     "description": "Payment methods setting"
   },
-  "conversationDisplay": "Zobrazení konverzace",
+  "conversationDisplay": "Zobrazení Konverzací",
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "Data a soukromí",
+  "dataPrivacy": "Soukromí Dat",
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
-  "userId": "ID uživatele",
+  "userId": "ID Uživatele",
   "@userId": {
     "description": "User ID label"
   },
@@ -583,7 +583,7 @@
   "@referralProgram": {
     "description": "Referral program menu item"
   },
-  "signOut": "Odhlásit se",
+  "signOut": "Odhlásit Se",
   "@signOut": {
     "description": "Sign out button"
   },
@@ -879,7 +879,7 @@
   "@createKeyToStart": {
     "description": "Create key instruction"
   },
-  "createKey": "Vytvořit klíč",
+  "createKey": "Vytvořit Klíč",
   "@createKey": {
     "description": "Create Key button"
   },
@@ -1087,7 +1087,7 @@
   "exportShared": "Export sdílen",
   "deleteKnowledgeGraphTitle": "Smazat graf znalostí?",
   "deleteKnowledgeGraphMessage": "Tím se smažou všechna odvozená data grafu znalostí (uzly a spojení). Vaše původní vzpomínky zůstanou v bezpečí. Graf bude v průběhu času znovu vytvořen nebo při dalším požadavku.",
-  "knowledgeGraphDeleted": "Graf znalostí úspěšně smazán",
+  "knowledgeGraphDeleted": "Graf znalostí smazán",
   "deleteGraphFailed": "Smazání grafu se nezdařilo: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -1103,7 +1103,7 @@
   "mcpServer": "Server MCP",
   "mcpServerDesc": "Připojit AI asistenty k vašim datům",
   "serverUrl": "URL serveru",
-  "urlCopied": "URL zkopírována",
+  "urlCopied": "URL zkopírováno",
   "apiKeyAuth": "Ověření API klíčem",
   "header": "Záhlaví",
   "authorizationBearer": "Authorization: Bearer <klíč>",
@@ -2392,7 +2392,7 @@
   "welcomeToOmiDescription": "Vítejte v Omi! Váš AI společník je připraven vám pomoci s rozhovory, úkoly a mnoho dalšího.",
   "startUsingOmi": "Začít používat Omi",
   "back": "Zpět",
-  "keyboardShortcuts": "Klávesové zkratky",
+  "keyboardShortcuts": "Klávesové Zkratky",
   "toggleControlBar": "Přepnout ovládací panel",
   "pressKeys": "Stiskněte klávesy...",
   "cmdRequired": "⌘ vyžadováno",
@@ -2804,20 +2804,20 @@
   "loadingProfile": "Načítání profilu...",
   "profileSettings": "Nastavení profilu",
   "noEmailSet": "Email není nastaven",
-  "userIdCopiedToClipboard": "ID uživatele zkopírováno do schránky",
-  "yourInformation": "Vaše informace",
+  "userIdCopiedToClipboard": "ID uživatele zkopírováno",
+  "yourInformation": "Vaše Informace",
   "setYourName": "Nastavit své jméno",
   "changeYourName": "Změnit své jméno",
   "persona": "Persona",
   "manageYourOmiPersona": "Spravovat svou Omi personu",
-  "voiceAndPeople": "Hlas a lidé",
+  "voiceAndPeople": "Hlas a Lidé",
   "teachOmiYourVoice": "Naučit Omi svůj hlas",
   "tellOmiWhoSaidIt": "Řekněte Omi, kdo to řekl 🗣️",
   "payment": "Platba",
   "addOrChangeYourPaymentMethod": "Přidat nebo změnit platební metodu",
   "preferences": "Předvolby",
   "helpImproveOmiBySharing": "Pomozte vylepšit Omi sdílením anonymizovaných analytických dat",
-  "deleteAccount": "Smazat účet",
+  "deleteAccount": "Smazat Účet",
   "deleteYourAccountAndAllData": "Smazat účet a všechna data",
   "helpsDiagnoseIssuesAutoDeletes": "Pomáhá diagnostikovat problémy. Automaticky maže po 3 dnech.",
   "clearLogs": "Vymazat protokoly",
@@ -2845,7 +2845,7 @@
   "pilotFeatures": "Pilotní funkce",
   "pilotFeaturesDescription": "Tyto funkce jsou testy a není zaručena podpora.",
   "suggestFollowUpQuestion": "Navrhnout následnou otázku",
-  "saveSettings": "Uložit nastavení",
+  "saveSettings": "Uložit Nastavení",
   "syncingDeveloperSettings": "Synchronizace vývojářského nastavení...",
   "summary": "Souhrn",
   "auto": "Automaticky",
@@ -2892,5 +2892,65 @@
   "audioInputSetTo": "Vstup zvuku nastaven na {deviceName}",
   "errorSwitchingAudioDevice": "Chyba při přepínání zvukového zařízení: {error}",
   "selectAudioInput": "Vyberte vstup zvuku",
-  "loadingDevices": "Načítání zařízení..."
+  "loadingDevices": "Načítání zařízení...",
+  "settingsHeader": "NASTAVENÍ",
+  "plansAndBilling": "Plány a Fakturace",
+  "calendarIntegration": "Integrace Kalendáře",
+  "dailySummary": "Denní Souhrn",
+  "developer": "Vývojář",
+  "about": "O aplikaci",
+  "selectTime": "Vybrat Čas",
+  "accountGroup": "Účet",
+  "signOutQuestion": "Odhlásit Se?",
+  "signOutConfirmation": "Opravdu se chcete odhlásit?",
+  "customVocabularyHeader": "VLASTNÍ SLOVNÍK",
+  "addWordsDescription": "Přidejte slova, která má Omi rozpoznávat během přepisu.",
+  "enterWordsHint": "Zadejte slova (oddělená čárkami)",
+  "dailySummaryHeader": "DENNÍ SOUHRN",
+  "dailySummaryTitle": "Denní Souhrn",
+  "dailySummaryDescription": "Získejte personalizovaný souhrn svých konverzací",
+  "deliveryTime": "Čas Doručení",
+  "deliveryTimeDescription": "Kdy přijímat denní souhrn",
+  "subscription": "Předplatné",
+  "viewPlansAndUsage": "Zobrazit Plány a Využití",
+  "viewPlansDescription": "Spravujte své předplatné a prohlédněte si statistiky využití",
+  "addOrChangePaymentMethod": "Přidejte nebo změňte svou platební metodu",
+  "displayOptions": "Možnosti zobrazení",
+  "showMeetingsInMenuBar": "Zobrazit schůzky v řádku nabídek",
+  "displayUpcomingMeetingsDescription": "Zobrazit nadcházející schůzky v řádku nabídek",
+  "showEventsWithoutParticipants": "Zobrazit události bez účastníků",
+  "includePersonalEventsDescription": "Zahrnout osobní události bez účastníků",
+  "upcomingMeetings": "NADCHÁZEJÍCÍ SCHŮZKY",
+  "checkingNext7Days": "Kontrola následujících 7 dní",
+  "shortcuts": "Klávesové zkratky",
+  "shortcutChangeInstruction": "Klikněte na zkratku a změňte ji. Stisknutím Escape zrušíte.",
+  "configurePersonaDescription": "Nakonfigurujte svou AI personu",
+  "configureSTTProvider": "Nakonfigurovat poskytovatele STT",
+  "setConversationEndDescription": "Nastavte, kdy konverzace automaticky končí",
+  "importDataDescription": "Importovat data z jiných zdrojů",
+  "debugAndDiagnostics": "Ladění a diagnostika",
+  "autoDeletesAfter3Days": "Automatické smazání po 3 dnech",
+  "helpsDiagnoseIssues": "Pomáhá diagnostikovat problémy",
+  "exportConversationsDescription": "Exportovat konverzace do JSON",
+  "exportingConversations": "Exportování konverzací...",
+  "clearNodesDescription": "Vymazat všechny uzly a připojení",
+  "deleteKnowledgeGraphQuestion": "Smazat graf znalostí?",
+  "deleteKnowledgeGraphWarning": "Tím se smažou všechna odvozená data grafu znalostí. Vaše původní vzpomínky zůstanou v bezpečí.",
+  "connectOmiWithAI": "Připojte Omi k AI asistentům",
+  "noAPIKeys": "Žádné klíče API. Vytvořte jeden, abyste mohli začít.",
+  "realTimeTranscript": "Přepis v reálném čase",
+  "transcriptionDiagnostics": "Diagnostika přepisu",
+  "detailedDiagnosticMessages": "Podrobné diagnostické zprávy",
+  "autoCreateSpeakers": "Automaticky vytvářet řečníky",
+  "autoCreateWhenDetected": "Automaticky vytvořit při detekci jména",
+  "followUpQuestions": "Následné otázky",
+  "suggestQuestionsAfterConversations": "Navrhovat otázky po konverzacích",
+  "goalTracker": "Sledování cílů",
+  "trackPersonalGoals": "Sledovat osobní cíle na domovské stránce",
+  "dailyReflection": "Denní reflexe",
+  "dailyReflectionDescription": "Připomínka ve 21:00 k zamyšlení nad vaším dnem",
+  "endpointURL": "URL koncového bodu",
+  "links": "Odkazy",
+  "discordMemberCount": "Více než 8000 členů na Discordu",
+  "userInformation": "Informace o uživateli"
 }

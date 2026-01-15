@@ -511,11 +511,11 @@
   "@email": {
     "description": "Email field label"
   },
-  "customVocabulary": "Kohandatud sõnavara",
+  "customVocabulary": "Kohandatud Sõnavara",
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Teiste tuvastamine",
+  "identifyingOthers": "Teiste Tuvastamine",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
@@ -523,11 +523,11 @@
   "@paymentMethods": {
     "description": "Payment methods setting"
   },
-  "conversationDisplay": "Vestluse kuvamine",
+  "conversationDisplay": "Vestluste Kuvamine",
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "Andmed ja privaatsus",
+  "dataPrivacy": "Andmete Privaatsus",
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
@@ -535,7 +535,7 @@
   "@userId": {
     "description": "User ID label"
   },
-  "notSet": "Ei ole seatud",
+  "notSet": "Määramata",
   "@notSet": {
     "description": "Default value when not set"
   },
@@ -583,7 +583,7 @@
   "@referralProgram": {
     "description": "Referral program menu item"
   },
-  "signOut": "Logi välja",
+  "signOut": "Logi Välja",
   "@signOut": {
     "description": "Sign out button"
   },
@@ -879,11 +879,11 @@
   "@createKeyToStart": {
     "description": "Create key instruction"
   },
-  "createKey": "Loo võti",
+  "createKey": "Loo Võti",
   "@createKey": {
     "description": "Create Key button"
   },
-  "docs": "Dokumendid",
+  "docs": "Dokumentatsioon",
   "@docs": {
     "description": "Documentation link"
   },
@@ -1087,7 +1087,7 @@
   "exportShared": "Eksport jagatud",
   "deleteKnowledgeGraphTitle": "Kustuta teadmiste graaf?",
   "deleteKnowledgeGraphMessage": "See kustutab kõik tuletatud teadmiste graafi andmed (sõlmed ja ühendused). Teie algsed mälestused jäävad turvaliseks. Graaf taastatakse aja jooksul või järgmise päringu korral.",
-  "knowledgeGraphDeleted": "Teadmiste graaf kustutati edukalt",
+  "knowledgeGraphDeleted": "Teadmiste graaf kustutatud",
   "deleteGraphFailed": "Graafi kustutamine ebaõnnestus: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -2392,7 +2392,7 @@
   "welcomeToOmiDescription": "Tere tulemast Omi juurde! Teie AI kaaslane on valmis aitama vestluste, ülesannete ja muuga.",
   "startUsingOmi": "Alusta Omi kasutamist",
   "back": "Tagasi",
-  "keyboardShortcuts": "Klaviatuuri otseteed",
+  "keyboardShortcuts": "Kiirklahvid",
   "toggleControlBar": "Lülita juhtpaneeli",
   "pressKeys": "Vajuta klahve...",
   "cmdRequired": "⌘ on nõutud",
@@ -2786,20 +2786,20 @@
   "loadingProfile": "Profiili laadimine...",
   "profileSettings": "Profiili seaded",
   "noEmailSet": "E-posti ei ole seatud",
-  "userIdCopiedToClipboard": "Kasutaja ID kopeeriti lõikelauale",
-  "yourInformation": "Teie teave",
+  "userIdCopiedToClipboard": "Kasutaja ID kopeeritud",
+  "yourInformation": "Teie Andmed",
   "setYourName": "Määra oma nimi",
   "changeYourName": "Muuda oma nime",
   "persona": "Persona",
   "manageYourOmiPersona": "Halda oma Omi personat",
-  "voiceAndPeople": "Hääl ja inimesed",
+  "voiceAndPeople": "Hääl ja Inimesed",
   "teachOmiYourVoice": "Õpeta Omi-le oma häält",
   "tellOmiWhoSaidIt": "Ütle Omi-le, kes seda ütles 🗣️",
   "payment": "Makse",
   "addOrChangeYourPaymentMethod": "Lisa või muuda makseviisi",
   "preferences": "Eelistused",
   "helpImproveOmiBySharing": "Aita Omi-d parandada, jagades anonümiseeritud analüüsandmeid",
-  "deleteAccount": "Kustuta konto",
+  "deleteAccount": "Kustuta Konto",
   "deleteYourAccountAndAllData": "Kustuta oma konto ja kõik andmed",
   "helpsDiagnoseIssuesAutoDeletes": "Aitab diagnoosida probleeme. Kustutatakse automaatselt 3 päeva pärast.",
   "clearLogs": "Kustuta logid",
@@ -2827,7 +2827,7 @@
   "pilotFeatures": "Pilootfunktsioonid",
   "pilotFeaturesDescription": "Need funktsioonid on testid ja toe pakkumist ei garanteerita.",
   "suggestFollowUpQuestion": "Soovita jätkuküsimust",
-  "saveSettings": "Salvesta seaded",
+  "saveSettings": "Salvesta Seaded",
   "syncingDeveloperSettings": "Arendaja seadete sünkroonimine...",
   "summary": "Kokkuvõte",
   "auto": "Automaatne",
@@ -2890,5 +2890,65 @@
   "audioInputSetTo": "Helisisend määratud: {deviceName}",
   "errorSwitchingAudioDevice": "Viga heliseadme vahetamisel: {error}",
   "selectAudioInput": "Valige helisisend",
-  "loadingDevices": "Seadmete laadimine..."
+  "loadingDevices": "Seadmete laadimine...",
+  "settingsHeader": "SEADED",
+  "plansAndBilling": "Plaanid ja Arveldus",
+  "calendarIntegration": "Kalendri Integratsioon",
+  "dailySummary": "Päevane Kokkuvõte",
+  "developer": "Arendaja",
+  "about": "Teave",
+  "selectTime": "Vali Aeg",
+  "accountGroup": "Konto",
+  "signOutQuestion": "Logi Välja?",
+  "signOutConfirmation": "Kas olete kindel, et soovite välja logida?",
+  "customVocabularyHeader": "KOHANDATUD SÕNAVARA",
+  "addWordsDescription": "Lisage sõnad, mida Omi peaks transkribeerimisel ära tundma.",
+  "enterWordsHint": "Sisestage sõnad (komaga eraldatud)",
+  "dailySummaryHeader": "PÄEVANE KOKKUVÕTE",
+  "dailySummaryTitle": "Päevane Kokkuvõte",
+  "dailySummaryDescription": "Saa isikupärastatud kokkuvõte oma vestlustest",
+  "deliveryTime": "Kohaletoimetamise Aeg",
+  "deliveryTimeDescription": "Millal saada päevast kokkuvõtet",
+  "subscription": "Tellimus",
+  "viewPlansAndUsage": "Vaata Plaane ja Kasutust",
+  "viewPlansDescription": "Halda oma tellimust ja vaata kasutusstatistikat",
+  "addOrChangePaymentMethod": "Lisa või muuda oma makseviisi",
+  "displayOptions": "Kuvamisvalikud",
+  "showMeetingsInMenuBar": "Näita kohtumisi menüüribal",
+  "displayUpcomingMeetingsDescription": "Kuva tulevasi kohtumisi menüüribal",
+  "showEventsWithoutParticipants": "Näita sündmusi ilma osalejateta",
+  "includePersonalEventsDescription": "Kaasa isiklikud sündmused ilma osalejateta",
+  "upcomingMeetings": "TULEVASED KOHTUMISED",
+  "checkingNext7Days": "Järgmise 7 päeva kontrollimine",
+  "shortcuts": "Kiirklahvid",
+  "shortcutChangeInstruction": "Klõpsake kiirklahvil, et seda muuta. Tühistamiseks vajutage Escape.",
+  "configurePersonaDescription": "Konfigureerige oma AI isikut",
+  "configureSTTProvider": "Konfigureerige STT pakkuja",
+  "setConversationEndDescription": "Määrake, millal vestlused automaatselt lõpevad",
+  "importDataDescription": "Impordi andmed teistest allikatest",
+  "debugAndDiagnostics": "Silumine ja diagnostika",
+  "autoDeletesAfter3Days": "Automaatne kustutamine 3 päeva pärast",
+  "helpsDiagnoseIssues": "Aitab probleeme diagnoosida",
+  "exportConversationsDescription": "Ekspordi vestlused JSON-vormingus",
+  "exportingConversations": "Vestluste eksportimine...",
+  "clearNodesDescription": "Kustuta kõik sõlmed ja ühendused",
+  "deleteKnowledgeGraphQuestion": "Kustutada teadmiste graafik?",
+  "deleteKnowledgeGraphWarning": "See kustutab kõik tuletatud teadmiste graafiku andmed. Teie algse mälestused jäävad turvaliseks.",
+  "connectOmiWithAI": "Ühenda Omi AI-assistentidega",
+  "noAPIKeys": "API võtmed puuduvad. Looge üks alustamiseks.",
+  "realTimeTranscript": "Reaalajas transkriptsioon",
+  "transcriptionDiagnostics": "Transkriptsiooni diagnostika",
+  "detailedDiagnosticMessages": "Üksikasjalikud diagnostikasõnumid",
+  "autoCreateSpeakers": "Loo kõnelejad automaatselt",
+  "autoCreateWhenDetected": "Loo automaatselt, kui nimi tuvastatakse",
+  "followUpQuestions": "Järgmised küsimused",
+  "suggestQuestionsAfterConversations": "Soovita küsimusi pärast vestlusi",
+  "goalTracker": "Eesmärkide jälgija",
+  "trackPersonalGoals": "Jälgi isiklikke eesmärke avalehel",
+  "dailyReflection": "Igapäevane mõtisklus",
+  "dailyReflectionDescription": "21:00 meeldetuletus mõtisklemiseks oma päeva üle",
+  "endpointURL": "Lõpp-punkti URL",
+  "links": "Lingid",
+  "discordMemberCount": "Üle 8000 liikme Discordis",
+  "userInformation": "Kasutajateave"
 }

@@ -159,7 +159,7 @@
   "@createPersonHint": {
     "description": "Hint text for creating a person"
   },
-  "speechProfile": "ملف تعريف الكلام",
+  "speechProfile": "ملف الصوت",
   "@speechProfile": {
     "description": "Speech profile label"
   },
@@ -515,7 +515,7 @@
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "التعرف على الآخرين",
+  "identifyingOthers": "تحديد الآخرين",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
@@ -523,11 +523,11 @@
   "@paymentMethods": {
     "description": "Payment methods setting"
   },
-  "conversationDisplay": "عرض المحادثة",
+  "conversationDisplay": "عرض المحادثات",
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "البيانات والخصوصية",
+  "dataPrivacy": "خصوصية البيانات",
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
@@ -535,7 +535,7 @@
   "@userId": {
     "description": "User ID label"
   },
-  "notSet": "غير معيّن",
+  "notSet": "غير محدد",
   "@notSet": {
     "description": "Default value when not set"
   },
@@ -1087,7 +1087,7 @@
   "exportShared": "تمت مشاركة التصدير",
   "deleteKnowledgeGraphTitle": "حذف الرسم البياني للمعرفة؟",
   "deleteKnowledgeGraphMessage": "سيؤدي هذا إلى حذف جميع بيانات الرسم البياني للمعرفة المشتقة (العقد والاتصالات). ستبقى ذكرياتك الأصلية آمنة. سيتم إعادة بناء الرسم البياني بمرور الوقت أو عند الطلب التالي.",
-  "knowledgeGraphDeleted": "تم حذف رسم المعرفة بنجاح",
+  "knowledgeGraphDeleted": "تم حذف الرسم البياني المعرفي",
   "deleteGraphFailed": "فشل حذف الرسم: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -1103,7 +1103,7 @@
   "mcpServer": "خادم MCP",
   "mcpServerDesc": "ربط مساعدي الذكاء الاصطناعي ببياناتك",
   "serverUrl": "عنوان URL للخادم",
-  "urlCopied": "تم نسخ عنوان URL",
+  "urlCopied": "تم نسخ الرابط",
   "apiKeyAuth": "مصادقة مفتاح API",
   "header": "الرأس",
   "authorizationBearer": "Authorization: Bearer <key>",
@@ -2818,7 +2818,7 @@
   "loadingProfile": "جارٍ تحميل الملف الشخصي...",
   "profileSettings": "إعدادات الملف الشخصي",
   "noEmailSet": "لم يتم تعيين بريد إلكتروني",
-  "userIdCopiedToClipboard": "تم نسخ معرف المستخدم إلى الحافظة",
+  "userIdCopiedToClipboard": "تم نسخ معرف المستخدم",
   "yourInformation": "معلوماتك",
   "setYourName": "عيّن اسمك",
   "changeYourName": "غيّر اسمك",
@@ -2920,5 +2920,54 @@
   "audioInputSetTo": "تم تعيين إدخال الصوت إلى {deviceName}",
   "errorSwitchingAudioDevice": "خطأ في تبديل جهاز الصوت: {error}",
   "selectAudioInput": "اختر إدخال الصوت",
-  "loadingDevices": "جارٍ تحميل الأجهزة..."
+  "loadingDevices": "جارٍ تحميل الأجهزة...",
+  "settingsHeader": "الإعدادات",
+  "plansAndBilling": "الخطط والفواتير",
+  "calendarIntegration": "تكامل التقويم",
+  "dailySummary": "الملخص اليومي",
+  "developer": "المطور",
+  "about": "حول",
+  "selectTime": "اختر الوقت",
+  "accountGroup": "الحساب",
+  "signOutQuestion": "تسجيل الخروج؟",
+  "signOutConfirmation": "هل أنت متأكد من تسجيل الخروج؟",
+  "customVocabularyHeader": "المفردات المخصصة",
+  "addWordsDescription": "أضف كلمات يجب أن يتعرف عليها Omi أثناء النسخ.",
+  "enterWordsHint": "أدخل الكلمات (مفصولة بفواصل)",
+  "dailySummaryHeader": "الملخص اليومي",
+  "dailySummaryTitle": "الملخص اليومي",
+  "dailySummaryDescription": "احصل على ملخص شخصي لمحادثاتك",
+  "deliveryTime": "وقت التسليم",
+  "deliveryTimeDescription": "متى تتلقى ملخصك اليومي",
+  "subscription": "الاشتراك",
+  "viewPlansAndUsage": "عرض الخطط والاستخدام",
+  "viewPlansDescription": "إدارة اشتراكك ومشاهدة إحصائيات الاستخدام",
+  "addOrChangePaymentMethod": "إضافة أو تغيير طريقة الدفع",
+  "displayOptions": "خيارات العرض",
+  "showMeetingsInMenuBar": "إظهار الاجتماعات في شريط القوائم",
+  "displayUpcomingMeetingsDescription": "عرض الاجتماعات القادمة في شريط القوائم",
+  "showEventsWithoutParticipants": "إظهار الأحداث بدون مشاركين",
+  "includePersonalEventsDescription": "تضمين الأحداث الشخصية بدون حضور",
+  "upcomingMeetings": "الاجتماعات القادمة",
+  "checkingNext7Days": "التحقق من الأيام السبعة القادمة",
+  "shortcuts": "اختصارات",
+  "shortcutChangeInstruction": "انقر فوق اختصار لتغييره. اضغط Escape للإلغاء.",
+  "configurePersonaDescription": "قم بتكوين شخصية الذكاء الاصطناعي الخاصة بك",
+  "configureSTTProvider": "تكوين مزود STT",
+  "setConversationEndDescription": "حدد متى تنتهي المحادثات تلقائيًا",
+  "importDataDescription": "استيراد البيانات من مصادر أخرى",
+  "exportConversationsDescription": "تصدير المحادثات إلى JSON",
+  "exportingConversations": "تصدير المحادثات...",
+  "clearNodesDescription": "مسح جميع العقد والاتصالات",
+  "deleteKnowledgeGraphQuestion": "حذف رسم المعرفة؟",
+  "deleteKnowledgeGraphWarning": "سيؤدي هذا إلى حذف جميع بيانات رسم المعرفة المشتقة. تظل ذكرياتك الأصلية آمنة.",
+  "connectOmiWithAI": "ربط Omi بمساعدي الذكاء الاصطناعي",
+  "noAPIKeys": "لا توجد مفاتيح API. قم بإنشاء واحد للبدء.",
+  "autoCreateWhenDetected": "الإنشاء التلقائي عند اكتشاف الاسم",
+  "trackPersonalGoals": "تتبع الأهداف الشخصية على الصفحة الرئيسية",
+  "dailyReflectionDescription": "تذكير الساعة 9 مساءً للتفكير في يومك",
+  "endpointURL": "عنوان URL لنقطة النهاية",
+  "links": "الروابط",
+  "discordMemberCount": "أكثر من 8000 عضو على Discord",
+  "userInformation": "معلومات المستخدم"
 }

@@ -511,11 +511,11 @@
   "@email": {
     "description": "Email field label"
   },
-  "customVocabulary": "Anpassat ordförråd",
+  "customVocabulary": "Anpassat Ordförråd",
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Identifiera andra",
+  "identifyingOthers": "Identifiering av Andra",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
@@ -527,7 +527,7 @@
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "Data och integritet",
+  "dataPrivacy": "Dataintegritet",
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
@@ -583,7 +583,7 @@
   "@referralProgram": {
     "description": "Referral program menu item"
   },
-  "signOut": "Logga ut",
+  "signOut": "Logga Ut",
   "@signOut": {
     "description": "Sign out button"
   },
@@ -879,11 +879,11 @@
   "@createKeyToStart": {
     "description": "Create key instruction"
   },
-  "createKey": "Skapa nyckel",
+  "createKey": "Skapa Nyckel",
   "@createKey": {
     "description": "Create Key button"
   },
-  "docs": "Dokument",
+  "docs": "Dokumentation",
   "@docs": {
     "description": "Documentation link"
   },
@@ -1087,7 +1087,7 @@
   "exportShared": "Export delad",
   "deleteKnowledgeGraphTitle": "Ta bort kunskapsgraf?",
   "deleteKnowledgeGraphMessage": "Detta kommer att ta bort all härledd kunskapsgrafsdata (noder och kopplingar). Dina ursprungliga minnen förblir säkra. Grafen kommer att byggas om över tid eller vid nästa begäran.",
-  "knowledgeGraphDeleted": "Kunskapsgraf borttagen",
+  "knowledgeGraphDeleted": "Kunskapsgraf raderad",
   "deleteGraphFailed": "Det gick inte att ta bort graf: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -2786,20 +2786,20 @@
   "loadingProfile": "Laddar profil...",
   "profileSettings": "Profilinställningar",
   "noEmailSet": "Ingen e-post inställd",
-  "userIdCopiedToClipboard": "Användar-ID kopierat till urklipp",
-  "yourInformation": "Din information",
+  "userIdCopiedToClipboard": "Användar-ID kopierat",
+  "yourInformation": "Din Information",
   "setYourName": "Ange ditt namn",
   "changeYourName": "Ändra ditt namn",
   "persona": "Persona",
   "manageYourOmiPersona": "Hantera din Omi-persona",
-  "voiceAndPeople": "Röst och människor",
+  "voiceAndPeople": "Röst och Personer",
   "teachOmiYourVoice": "Lär Omi din röst",
   "tellOmiWhoSaidIt": "Berätta för Omi vem som sa det 🗣️",
   "payment": "Betalning",
   "addOrChangeYourPaymentMethod": "Lägg till eller ändra betalningsmetod",
-  "preferences": "Preferenser",
+  "preferences": "Inställningar",
   "helpImproveOmiBySharing": "Hjälp till att förbättra Omi genom att dela anonymiserade analysdata",
-  "deleteAccount": "Radera konto",
+  "deleteAccount": "Radera Konto",
   "deleteYourAccountAndAllData": "Radera ditt konto och alla data",
   "helpsDiagnoseIssuesAutoDeletes": "Hjälper till att diagnostisera problem. Raderas automatiskt efter 3 dagar.",
   "clearLogs": "Rensa loggar",
@@ -2827,7 +2827,7 @@
   "pilotFeatures": "Pilotfunktioner",
   "pilotFeaturesDescription": "Dessa funktioner är tester och ingen support garanteras.",
   "suggestFollowUpQuestion": "Föreslå uppföljningsfråga",
-  "saveSettings": "Spara inställningar",
+  "saveSettings": "Spara Inställningar",
   "syncingDeveloperSettings": "Synkroniserar utvecklarinställningar...",
   "summary": "Sammanfattning",
   "auto": "Automatisk",
@@ -2890,5 +2890,65 @@
   "audioInputSetTo": "Ljudingång inställd på {deviceName}",
   "errorSwitchingAudioDevice": "Fel vid byte av ljudenhet: {error}",
   "selectAudioInput": "Välj ljudingång",
-  "loadingDevices": "Laddar enheter..."
+  "loadingDevices": "Laddar enheter...",
+  "settingsHeader": "INSTÄLLNINGAR",
+  "plansAndBilling": "Planer och Fakturering",
+  "calendarIntegration": "Kalenderintegration",
+  "dailySummary": "Daglig Sammanfattning",
+  "developer": "Utvecklare",
+  "about": "Om",
+  "selectTime": "Välj Tid",
+  "accountGroup": "Konto",
+  "signOutQuestion": "Logga Ut?",
+  "signOutConfirmation": "Är du säker på att du vill logga ut?",
+  "customVocabularyHeader": "ANPASSAT ORDFÖRRÅD",
+  "addWordsDescription": "Lägg till ord som Omi ska känna igen under transkription.",
+  "enterWordsHint": "Ange ord (kommaseparerade)",
+  "dailySummaryHeader": "DAGLIG SAMMANFATTNING",
+  "dailySummaryTitle": "Daglig Sammanfattning",
+  "dailySummaryDescription": "Få en personlig sammanfattning av dina konversationer",
+  "deliveryTime": "Leveranstid",
+  "deliveryTimeDescription": "När du ska få din dagliga sammanfattning",
+  "subscription": "Prenumeration",
+  "viewPlansAndUsage": "Visa Planer och Användning",
+  "viewPlansDescription": "Hantera din prenumeration och se användningsstatistik",
+  "addOrChangePaymentMethod": "Lägg till eller ändra din betalningsmetod",
+  "displayOptions": "Visningsalternativ",
+  "showMeetingsInMenuBar": "Visa möten i menyraden",
+  "displayUpcomingMeetingsDescription": "Visa kommande möten i menyraden",
+  "showEventsWithoutParticipants": "Visa händelser utan deltagare",
+  "includePersonalEventsDescription": "Inkludera personliga händelser utan deltagare",
+  "upcomingMeetings": "KOMMANDE MÖTEN",
+  "checkingNext7Days": "Kontrollerar de kommande 7 dagarna",
+  "shortcuts": "Genvägar",
+  "shortcutChangeInstruction": "Klicka på en genväg för att ändra den. Tryck på Escape för att avbryta.",
+  "configurePersonaDescription": "Konfigurera din AI-persona",
+  "configureSTTProvider": "Konfigurera STT-leverantör",
+  "setConversationEndDescription": "Ställ in när konversationer avslutas automatiskt",
+  "importDataDescription": "Importera data från andra källor",
+  "debugAndDiagnostics": "Felsökning och diagnostik",
+  "autoDeletesAfter3Days": "Raderas automatiskt efter 3 dagar",
+  "helpsDiagnoseIssues": "Hjälper till att diagnostisera problem",
+  "exportConversationsDescription": "Exportera konversationer till JSON",
+  "exportingConversations": "Exporterar konversationer...",
+  "clearNodesDescription": "Rensa alla noder och anslutningar",
+  "deleteKnowledgeGraphQuestion": "Ta bort kunskapsgraf?",
+  "deleteKnowledgeGraphWarning": "Detta raderar all härledd kunskapsgrafdata. Dina ursprungliga minnen förblir säkra.",
+  "connectOmiWithAI": "Anslut Omi till AI-assistenter",
+  "noAPIKeys": "Inga API-nycklar. Skapa en för att komma igång.",
+  "realTimeTranscript": "Realtidstranskription",
+  "transcriptionDiagnostics": "Transkriptionsdiagnostik",
+  "detailedDiagnosticMessages": "Detaljerade diagnostiska meddelanden",
+  "autoCreateSpeakers": "Skapa talare automatiskt",
+  "autoCreateWhenDetected": "Skapa automatiskt när namn upptäcks",
+  "followUpQuestions": "Uppföljningsfrågor",
+  "suggestQuestionsAfterConversations": "Föreslå frågor efter konversationer",
+  "goalTracker": "Målspårare",
+  "trackPersonalGoals": "Spåra personliga mål på startsidan",
+  "dailyReflection": "Daglig reflektion",
+  "dailyReflectionDescription": "21:00 påminnelse att reflektera över din dag",
+  "endpointURL": "Slutpunkts-URL",
+  "links": "Länkar",
+  "discordMemberCount": "Över 8000 medlemmar på Discord",
+  "userInformation": "Användarinformation"
 }

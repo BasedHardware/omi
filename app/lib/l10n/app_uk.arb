@@ -159,7 +159,7 @@
   "@createPersonHint": {
     "description": "Hint text for creating a person"
   },
-  "speechProfile": "Профіль мовлення",
+  "speechProfile": "Мовний Профіль",
   "@speechProfile": {
     "description": "Speech profile label"
   },
@@ -511,31 +511,31 @@
   "@email": {
     "description": "Email field label"
   },
-  "customVocabulary": "Власний словник",
+  "customVocabulary": "Користувацький Словник",
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Ідентифікація інших",
+  "identifyingOthers": "Ідентифікація Інших",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
-  "paymentMethods": "Способи оплати",
+  "paymentMethods": "Способи Оплати",
   "@paymentMethods": {
     "description": "Payment methods setting"
   },
-  "conversationDisplay": "Відображення розмов",
+  "conversationDisplay": "Відображення Розмов",
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "Дані та конфіденційність",
+  "dataPrivacy": "Конфіденційність Даних",
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
-  "userId": "ID користувача",
+  "userId": "ID Користувача",
   "@userId": {
     "description": "User ID label"
   },
-  "notSet": "Не встановлено",
+  "notSet": "Не задано",
   "@notSet": {
     "description": "Default value when not set"
   },
@@ -879,11 +879,11 @@
   "@createKeyToStart": {
     "description": "Create key instruction"
   },
-  "createKey": "Створити ключ",
+  "createKey": "Створити Ключ",
   "@createKey": {
     "description": "Create Key button"
   },
-  "docs": "Документи",
+  "docs": "Документація",
   "@docs": {
     "description": "Documentation link"
   },
@@ -1087,7 +1087,7 @@
   "exportShared": "Експорт надіслано",
   "deleteKnowledgeGraphTitle": "Видалити граф знань?",
   "deleteKnowledgeGraphMessage": "Це видалить всі похідні дані графа знань (вузли та з'єднання). Ваші оригінальні спогади залишаться в безпеці. Граф буде перебудовано з часом або за наступним запитом.",
-  "knowledgeGraphDeleted": "Граф знань успішно видалено",
+  "knowledgeGraphDeleted": "Граф знань видалено",
   "deleteGraphFailed": "Не вдалося видалити граф: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -2392,7 +2392,7 @@
   "welcomeToOmiDescription": "Ласкаво просимо до Omi! Ваш AI-компаньйон готовий допомогти вам із розмовами, завданнями та багато іншим.",
   "startUsingOmi": "Почати використання Omi",
   "back": "Назад",
-  "keyboardShortcuts": "Гарячі клавіші",
+  "keyboardShortcuts": "Гарячі Клавіші",
   "toggleControlBar": "Перемкнути панель керування",
   "pressKeys": "Натисніть клавіші...",
   "cmdRequired": "⌘ потрібно",
@@ -2786,24 +2786,24 @@
   "loadingProfile": "Завантаження профілю...",
   "profileSettings": "Налаштування профілю",
   "noEmailSet": "Електронну пошту не встановлено",
-  "userIdCopiedToClipboard": "ID користувача скопійовано в буфер обміну",
-  "yourInformation": "Ваша інформація",
+  "userIdCopiedToClipboard": "ID користувача скопійовано",
+  "yourInformation": "Ваша Інформація",
   "setYourName": "Встановити ваше ім'я",
   "changeYourName": "Змінити ваше ім'я",
   "persona": "Персона",
   "manageYourOmiPersona": "Керування вашою персоною Omi",
-  "voiceAndPeople": "Голос і люди",
+  "voiceAndPeople": "Голос і Люди",
   "teachOmiYourVoice": "Навчіть Omi вашому голосу",
   "tellOmiWhoSaidIt": "Скажіть Omi, хто це сказав 🗣️",
   "payment": "Оплата",
   "addOrChangeYourPaymentMethod": "Додати або змінити спосіб оплати",
   "preferences": "Налаштування",
   "helpImproveOmiBySharing": "Допоможіть покращити Omi, діліться анонімними аналітичними даними",
-  "deleteAccount": "Видалити обліковий запис",
+  "deleteAccount": "Видалити Обліковий запис",
   "deleteYourAccountAndAllData": "Видалити обліковий запис та всі дані",
   "helpsDiagnoseIssuesAutoDeletes": "Допомагає діагностувати проблеми. Автоматично видаляється через 3 дні.",
   "clearLogs": "Очистити журнали",
-  "debugLogsCleared": "Журнали налагодження очищено",
+  "debugLogsCleared": "Журнали відлагодження очищено",
   "exportConversations": "Експорт розмов",
   "exportAllConversationsToJson": "Експортуйте всі свої розмови до файлу JSON.",
   "conversationsExportStarted": "Експорт розмов розпочато. Це може зайняти кілька секунд, будь ласка, зачекайте.",
@@ -2827,7 +2827,7 @@
   "pilotFeatures": "Пілотні функції",
   "pilotFeaturesDescription": "Ці функції є тестами, і підтримка не гарантується.",
   "suggestFollowUpQuestion": "Запропонувати додаткове запитання",
-  "saveSettings": "Зберегти налаштування",
+  "saveSettings": "Зберегти Налаштування",
   "syncingDeveloperSettings": "Синхронізація налаштувань розробника...",
   "summary": "Резюме",
   "auto": "Автоматично",
@@ -2890,5 +2890,65 @@
   "audioInputSetTo": "Аудіовхід встановлено на {deviceName}",
   "errorSwitchingAudioDevice": "Помилка перемикання аудіопристрою: {error}",
   "selectAudioInput": "Виберіть аудіовхід",
-  "loadingDevices": "Завантаження пристроїв..."
+  "loadingDevices": "Завантаження пристроїв...",
+  "settingsHeader": "НАЛАШТУВАННЯ",
+  "plansAndBilling": "Плани та Оплата",
+  "calendarIntegration": "Інтеграція Календаря",
+  "dailySummary": "Щоденна Зведення",
+  "developer": "Розробник",
+  "about": "Про програму",
+  "selectTime": "Вибрати Час",
+  "accountGroup": "Обліковий запис",
+  "signOutQuestion": "Вийти?",
+  "signOutConfirmation": "Ви впевнені, що хочете вийти?",
+  "customVocabularyHeader": "КОРИСТУВАЦЬКИЙ СЛОВНИК",
+  "addWordsDescription": "Додайте слова, які Omi має розпізнавати під час транскрипції.",
+  "enterWordsHint": "Введіть слова (через кому)",
+  "dailySummaryHeader": "ЩОДЕННА ЗВЕДЕННЯ",
+  "dailySummaryTitle": "Щоденна Зведення",
+  "dailySummaryDescription": "Отримуйте персоналізовану зведення ваших розмов",
+  "deliveryTime": "Час Доставки",
+  "deliveryTimeDescription": "Коли отримувати щоденну зведення",
+  "subscription": "Підписка",
+  "viewPlansAndUsage": "Перегляд Планів та Використання",
+  "viewPlansDescription": "Керуйте підпискою та переглядайте статистику використання",
+  "addOrChangePaymentMethod": "Додати або змінити спосіб оплати",
+  "displayOptions": "Параметри відображення",
+  "showMeetingsInMenuBar": "Показувати зустрічі в рядку меню",
+  "displayUpcomingMeetingsDescription": "Відображати майбутні зустрічі в рядку меню",
+  "showEventsWithoutParticipants": "Показувати події без учасників",
+  "includePersonalEventsDescription": "Включити особисті події без учасників",
+  "upcomingMeetings": "МАЙБУТНІ ЗУСТРІЧІ",
+  "checkingNext7Days": "Перевірка наступних 7 днів",
+  "shortcuts": "Комбінації клавіш",
+  "shortcutChangeInstruction": "Натисніть на комбінацію клавіш, щоб змінити її. Натисніть Escape для скасування.",
+  "configurePersonaDescription": "Налаштуйте свою персону ШІ",
+  "configureSTTProvider": "Налаштувати постачальника STT",
+  "setConversationEndDescription": "Встановіть, коли розмови автоматично завершуються",
+  "importDataDescription": "Імпортувати дані з інших джерел",
+  "debugAndDiagnostics": "Налагодження та діагностика",
+  "autoDeletesAfter3Days": "Автоматичне видалення через 3 дні",
+  "helpsDiagnoseIssues": "Допомагає діагностувати проблеми",
+  "exportConversationsDescription": "Експортувати розмови в JSON",
+  "exportingConversations": "Експорт розмов...",
+  "clearNodesDescription": "Очистити всі вузли та з'єднання",
+  "deleteKnowledgeGraphQuestion": "Видалити граф знань?",
+  "deleteKnowledgeGraphWarning": "Це видалить усі похідні дані графа знань. Ваші оригінальні спогади залишаться в безпеці.",
+  "connectOmiWithAI": "Підключіть Omi до ШІ-асистентів",
+  "noAPIKeys": "Немає ключів API. Створіть один, щоб почати.",
+  "realTimeTranscript": "Транскрипція в реальному часі",
+  "transcriptionDiagnostics": "Діагностика транскрипції",
+  "detailedDiagnosticMessages": "Детальні діагностичні повідомлення",
+  "autoCreateSpeakers": "Автоматично створювати спікерів",
+  "autoCreateWhenDetected": "Автоматично створювати при виявленні імені",
+  "followUpQuestions": "Додаткові питання",
+  "suggestQuestionsAfterConversations": "Пропонувати питання після розмов",
+  "goalTracker": "Відстеження цілей",
+  "trackPersonalGoals": "Відстежувати особисті цілі на головній сторінці",
+  "dailyReflection": "Щоденна рефлексія",
+  "dailyReflectionDescription": "Нагадування о 21:00 для роздумів про ваш день",
+  "endpointURL": "URL кінцевої точки",
+  "links": "Посилання",
+  "discordMemberCount": "Понад 8000 учасників у Discord",
+  "userInformation": "Інформація про користувача"
 }

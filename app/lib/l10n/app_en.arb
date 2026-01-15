@@ -31,7 +31,7 @@
   },
   "cancel": "Cancel",
   "@cancel": {
-    "description": "Cancel button label"
+    "description": "Cancel button"
   },
   "ok": "Ok",
   "@ok": {
@@ -39,7 +39,7 @@
   },
   "delete": "Delete",
   "@delete": {
-    "description": "Delete button label"
+    "description": "Delete button"
   },
   "add": "Add",
   "@add": {
@@ -63,7 +63,7 @@
   },
   "clear": "Clear",
   "@clear": {
-    "description": "Button text to clear debug logs"
+    "description": "Clear button"
   },
   "copyTranscript": "Copy transcript",
   "@copyTranscript": {
@@ -161,7 +161,7 @@
   },
   "speechProfile": "Speech Profile",
   "@speechProfile": {
-    "description": "Speech profile label"
+    "description": "Speech profile setting"
   },
   "sampleNumber": "Sample {number}",
   "@sampleNumber": {
@@ -175,11 +175,11 @@
   },
   "settings": "Settings",
   "@settings": {
-    "description": "Bottom navigation label for settings"
+    "description": "Settings dialog title"
   },
   "language": "Language",
   "@language": {
-    "description": "Language setting label"
+    "description": "Language setting"
   },
   "selectLanguage": "Select Language",
   "@selectLanguage": {
@@ -215,7 +215,7 @@
   },
   "done": "Done",
   "@done": {
-    "description": "Button label to confirm selection"
+    "description": "Done button"
   },
   "disconnected": "Disconnected",
   "@disconnected": {
@@ -513,7 +513,7 @@
   },
   "customVocabulary": "Custom Vocabulary",
   "@customVocabulary": {
-    "description": "Custom vocabulary setting"
+    "description": "Custom vocabulary section"
   },
   "identifyingOthers": "Identifying Others",
   "@identifyingOthers": {
@@ -527,17 +527,17 @@
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "Data & Privacy",
+  "dataPrivacy": "Data Privacy",
   "@dataPrivacy": {
-    "description": "Data and privacy setting"
+    "description": "Data privacy setting"
   },
   "userId": "User ID",
   "@userId": {
-    "description": "User ID label"
+    "description": "User ID field"
   },
   "notSet": "Not set",
   "@notSet": {
-    "description": "Default value when not set"
+    "description": "Value not set placeholder"
   },
   "userIdCopied": "User ID copied to clipboard",
   "@userIdCopied": {
@@ -881,11 +881,11 @@
   },
   "createKey": "Create Key",
   "@createKey": {
-    "description": "Button text to create new API key"
+    "description": "Create API key button"
   },
   "docs": "Docs",
   "@docs": {
-    "description": "Button text for documentation link"
+    "description": "Documentation link"
   },
   "yourOmiInsights": "Your Omi Insights",
   "@yourOmiInsights": {
@@ -893,7 +893,7 @@
   },
   "today": "Today",
   "@today": {
-    "description": "Label for today's date"
+    "description": "Today date label"
   },
   "thisMonth": "This Month",
   "@thisMonth": {
@@ -1087,7 +1087,7 @@
   "exportShared": "Export shared",
   "deleteKnowledgeGraphTitle": "Delete Knowledge Graph?",
   "deleteKnowledgeGraphMessage": "This will delete all derived knowledge graph data (nodes and connections). Your original memories will remain safe. The graph will be rebuilt over time or upon next request.",
-  "knowledgeGraphDeleted": "Knowledge Graph deleted successfully",
+  "knowledgeGraphDeleted": "Knowledge Graph deleted",
   "deleteGraphFailed": "Failed to delete graph: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -2702,7 +2702,7 @@
     "description": "Label for server URL"
   },
   "@urlCopied": {
-    "description": "Snackbar message when URL is copied"
+    "description": "Success message when URL copied"
   },
   "@apiKeyAuth": {
     "description": "Label for API key authentication section"
@@ -2811,7 +2811,7 @@
     "description": "Label for overdue tasks"
   },
   "@tomorrow": {
-    "description": "Label for tomorrow's date"
+    "description": "Tomorrow date label"
   },
   "@yesterday": {
     "description": "Label for yesterday"
@@ -2906,7 +2906,7 @@
   },
   "keyboardShortcuts": "Keyboard Shortcuts",
   "@keyboardShortcuts": {
-    "description": "Title for keyboard shortcuts settings page"
+    "description": "Keyboard shortcuts section"
   },
   "toggleControlBar": "Toggle Control Bar",
   "@toggleControlBar": {
@@ -2929,7 +2929,7 @@
   },
   "space": "Space",
   "@space": {
-    "description": "Name of the space key"
+    "description": "Space key label"
   },
   "search": "Search",
   "@search": {
@@ -4304,5 +4304,150 @@
   "loadingDevices": "Loading devices...",
   "@loadingDevices": {
     "description": "Status when loading audio devices"
-  }
+  },
+  "settingsHeader": "SETTINGS",
+  "@settingsHeader": {
+    "description": "Settings navigation header"
+  },
+  "@account": {
+    "description": "Account section label"
+  },
+  "plansAndBilling": "Plans & Billing",
+  "@plansAndBilling": {
+    "description": "Plans and billing section"
+  },
+  "calendarIntegration": "Calendar Integration",
+  "@calendarIntegration": {
+    "description": "Calendar integration section"
+  },
+  "dailySummary": "Daily Summary",
+  "@dailySummary": {
+    "description": "Daily summary section"
+  },
+  "developer": "Developer",
+  "@developer": {
+    "description": "Developer section"
+  },
+  "about": "About",
+  "@about": {
+    "description": "About section"
+  },
+  "@refresh": {
+    "description": "Refresh button"
+  },
+  "@saveSettings": {
+    "description": "Save settings button"
+  },
+  "selectTime": "Select Time",
+  "@selectTime": {
+    "description": "Time picker dialog title"
+  },
+  "@debugLogsCleared": {
+    "description": "Success message when logs cleared"
+  },
+  "@knowledgeGraphDeleted": {
+    "description": "Success message when knowledge graph deleted"
+  },
+  "@yourInformation": {
+    "description": "Account information section title"
+  },
+  "@voiceAndPeople": {
+    "description": "Voice and people section title"
+  },
+  "@preferences": {
+    "description": "Preferences section title"
+  },
+  "accountGroup": "Account",
+  "@accountGroup": {
+    "description": "Account group title"
+  },
+  "@userIdCopiedToClipboard": {
+    "description": "Success message for User ID copy"
+  },
+  "@deleteAccount": {
+    "description": "Delete account button"
+  },
+  "signOutQuestion": "Sign Out?",
+  "@signOutQuestion": {
+    "description": "Sign out confirmation dialog title"
+  },
+  "signOutConfirmation": "Are you sure you want to sign out?",
+  "@signOutConfirmation": {
+    "description": "Sign out confirmation message"
+  },
+  "customVocabularyHeader": "CUSTOM VOCABULARY",
+  "@customVocabularyHeader": {
+    "description": "Custom vocabulary section header"
+  },
+  "addWordsDescription": "Add words that Omi should recognize during transcription.",
+  "@addWordsDescription": {
+    "description": "Custom vocabulary description"
+  },
+  "enterWordsHint": "Enter words (comma separated)",
+  "@enterWordsHint": {
+    "description": "Text field hint for vocabulary input"
+  },
+  "dailySummaryHeader": "DAILY SUMMARY",
+  "@dailySummaryHeader": {
+    "description": "Daily summary section header"
+  },
+  "dailySummaryTitle": "Daily Summary",
+  "@dailySummaryTitle": {
+    "description": "Daily summary toggle title"
+  },
+  "dailySummaryDescription": "Get a personalized summary of your conversations",
+  "@dailySummaryDescription": {
+    "description": "Daily summary description"
+  },
+  "deliveryTime": "Delivery Time",
+  "@deliveryTime": {
+    "description": "Delivery time setting"
+  },
+  "deliveryTimeDescription": "When to receive your daily summary",
+  "@deliveryTimeDescription": {
+    "description": "Delivery time description"
+  },
+  "subscription": "Subscription",
+  "@subscription": {
+    "description": "Subscription section title"
+  },
+  "viewPlansAndUsage": "View Plans & Usage",
+  "@viewPlansAndUsage": {
+    "description": "View plans button"
+  },
+  "viewPlansDescription": "Manage your subscription and see usage stats",
+  "@viewPlansDescription": {
+    "description": "View plans description"
+  },
+  "addOrChangePaymentMethod": "Add or change your payment method",
+  "@addOrChangePaymentMethod": {
+    "description": "Payment method description"
+  },
+  "displayOptions": "Display Options",
+  "showMeetingsInMenuBar": "Show Meetings in Menu Bar",
+  "displayUpcomingMeetingsDescription": "Display upcoming meetings in the menu bar",
+  "showEventsWithoutParticipants": "Show Events Without Participants",
+  "includePersonalEventsDescription": "Include personal events with no attendees",
+  "upcomingMeetings": "UPCOMING MEETINGS",
+  "checkingNext7Days": "Checking the next 7 days",
+  "shortcuts": "Shortcuts",
+  "shortcutChangeInstruction": "Click on a shortcut to change it. Press Escape to cancel.",
+  "configurePersonaDescription": "Configure your AI persona",
+  "configureSTTProvider": "Configure STT provider",
+  "setConversationEndDescription": "Set when conversations auto-end",
+  "importDataDescription": "Import data from other sources",
+  "exportConversationsDescription": "Export conversations to JSON",
+  "exportingConversations": "Exporting conversations...",
+  "clearNodesDescription": "Clear all nodes and connections",
+  "deleteKnowledgeGraphQuestion": "Delete Knowledge Graph?",
+  "deleteKnowledgeGraphWarning": "This will delete all derived knowledge graph data. Your original memories remain safe.",
+  "connectOmiWithAI": "Connect Omi with AI assistants",
+  "noAPIKeys": "No API keys. Create one to get started.",
+  "autoCreateWhenDetected": "Auto-create when name detected",
+  "trackPersonalGoals": "Track personal goals on homepage",
+  "dailyReflectionDescription": "9 PM reminder to reflect on your day",
+  "endpointURL": "Endpoint URL",
+  "links": "Links",
+  "discordMemberCount": "8000+ members on Discord",
+  "userInformation": "User Information"
 }

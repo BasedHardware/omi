@@ -511,11 +511,11 @@
   "@email": {
     "description": "Email field label"
   },
-  "customVocabulary": "Brugerdefineret ordforråd",
+  "customVocabulary": "Brugerdefineret Ordforråd",
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Identificering af andre",
+  "identifyingOthers": "Identificering af Andre",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
@@ -527,7 +527,7 @@
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "Data og privatliv",
+  "dataPrivacy": "Databeskyttelse",
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
@@ -535,7 +535,7 @@
   "@userId": {
     "description": "User ID label"
   },
-  "notSet": "Ikke angivet",
+  "notSet": "Ikke indstillet",
   "@notSet": {
     "description": "Default value when not set"
   },
@@ -583,7 +583,7 @@
   "@referralProgram": {
     "description": "Referral program menu item"
   },
-  "signOut": "Log ud",
+  "signOut": "Log Ud",
   "@signOut": {
     "description": "Sign out button"
   },
@@ -879,11 +879,11 @@
   "@createKeyToStart": {
     "description": "Create key instruction"
   },
-  "createKey": "Opret nøgle",
+  "createKey": "Opret Nøgle",
   "@createKey": {
     "description": "Create Key button"
   },
-  "docs": "Dokumenter",
+  "docs": "Dokumentation",
   "@docs": {
     "description": "Documentation link"
   },
@@ -1087,7 +1087,7 @@
   "exportShared": "Eksport delt",
   "deleteKnowledgeGraphTitle": "Slet videngraf?",
   "deleteKnowledgeGraphMessage": "Dette vil slette alle afledte videngraf-data (noder og forbindelser). Dine originale minder forbliver sikre. Grafen vil blive genopbygget over tid eller ved næste anmodning.",
-  "knowledgeGraphDeleted": "Videngraf slettet",
+  "knowledgeGraphDeleted": "Vidensgraf slettet",
   "deleteGraphFailed": "Kunne ikke slette graf: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -2786,24 +2786,24 @@
   "loadingProfile": "Indlæser profil...",
   "profileSettings": "Profilindstillinger",
   "noEmailSet": "Ingen e-mail angivet",
-  "userIdCopiedToClipboard": "Bruger-ID kopieret til udklipsholder",
-  "yourInformation": "Dine oplysninger",
+  "userIdCopiedToClipboard": "Bruger-ID kopieret",
+  "yourInformation": "Dine Oplysninger",
   "setYourName": "Angiv dit navn",
   "changeYourName": "Skift dit navn",
   "persona": "Persona",
   "manageYourOmiPersona": "Administrer din Omi-persona",
-  "voiceAndPeople": "Stemme og mennesker",
+  "voiceAndPeople": "Stemme og Personer",
   "teachOmiYourVoice": "Lær Omi din stemme",
   "tellOmiWhoSaidIt": "Fortæl Omi hvem der sagde det 🗣️",
   "payment": "Betaling",
   "addOrChangeYourPaymentMethod": "Tilføj eller skift betalingsmetode",
   "preferences": "Præferencer",
   "helpImproveOmiBySharing": "Hjælp med at forbedre Omi ved at dele anonymiserede analysedata",
-  "deleteAccount": "Slet konto",
+  "deleteAccount": "Slet Konto",
   "deleteYourAccountAndAllData": "Slet din konto og alle data",
   "helpsDiagnoseIssuesAutoDeletes": "Hjælper med at diagnosticere problemer. Slettes automatisk efter 3 dage.",
   "clearLogs": "Ryd logs",
-  "debugLogsCleared": "Fejlfindingslogs ryddet",
+  "debugLogsCleared": "Fejlfindingslogfiler ryddet",
   "exportConversations": "Eksporter samtaler",
   "exportAllConversationsToJson": "Eksporter alle dine samtaler til en JSON-fil.",
   "conversationsExportStarted": "Eksport af samtaler startet. Dette kan tage et par sekunder, vent venligst.",
@@ -2827,7 +2827,7 @@
   "pilotFeatures": "Pilotfunktioner",
   "pilotFeaturesDescription": "Disse funktioner er tests, og der garanteres ingen support.",
   "suggestFollowUpQuestion": "Foreslå opfølgende spørgsmål",
-  "saveSettings": "Gem indstillinger",
+  "saveSettings": "Gem Indstillinger",
   "syncingDeveloperSettings": "Synkroniserer udviklerindstillinger...",
   "summary": "Resumé",
   "auto": "Automatisk",
@@ -2890,5 +2890,65 @@
   "audioInputSetTo": "Lydindgang indstillet til {deviceName}",
   "errorSwitchingAudioDevice": "Fejl ved skift af lydenhed: {error}",
   "selectAudioInput": "Vælg lydindgang",
-  "loadingDevices": "Indlæser enheder..."
+  "loadingDevices": "Indlæser enheder...",
+  "settingsHeader": "INDSTILLINGER",
+  "plansAndBilling": "Planer og Fakturering",
+  "calendarIntegration": "Kalenderintegration",
+  "dailySummary": "Daglig Opsummering",
+  "developer": "Udvikler",
+  "about": "Om",
+  "selectTime": "Vælg Tid",
+  "accountGroup": "Konto",
+  "signOutQuestion": "Log Ud?",
+  "signOutConfirmation": "Er du sikker på, at du vil logge ud?",
+  "customVocabularyHeader": "BRUGERDEFINERET ORDFORRÅD",
+  "addWordsDescription": "Tilføj ord, som Omi skal genkende under transskription.",
+  "enterWordsHint": "Indtast ord (kommasepareret)",
+  "dailySummaryHeader": "DAGLIG OPSUMMERING",
+  "dailySummaryTitle": "Daglig Opsummering",
+  "dailySummaryDescription": "Få en personlig opsummering af dine samtaler",
+  "deliveryTime": "Leveringstidspunkt",
+  "deliveryTimeDescription": "Hvornår du modtager din daglige opsummering",
+  "subscription": "Abonnement",
+  "viewPlansAndUsage": "Se Planer og Forbrug",
+  "viewPlansDescription": "Administrer dit abonnement og se forbrugsstatistikker",
+  "addOrChangePaymentMethod": "Tilføj eller skift din betalingsmetode",
+  "displayOptions": "Visningsmuligheder",
+  "showMeetingsInMenuBar": "Vis møder i menulinjen",
+  "displayUpcomingMeetingsDescription": "Vis kommende møder i menulinjen",
+  "showEventsWithoutParticipants": "Vis begivenheder uden deltagere",
+  "includePersonalEventsDescription": "Inkluder personlige begivenheder uden deltagere",
+  "upcomingMeetings": "KOMMENDE MØDER",
+  "checkingNext7Days": "Kontrollerer de næste 7 dage",
+  "shortcuts": "Genveje",
+  "shortcutChangeInstruction": "Klik på en genvej for at ændre den. Tryk på Escape for at annullere.",
+  "configurePersonaDescription": "Konfigurer din AI-persona",
+  "configureSTTProvider": "Konfigurer STT-udbyder",
+  "setConversationEndDescription": "Indstil, hvornår samtaler afsluttes automatisk",
+  "importDataDescription": "Importer data fra andre kilder",
+  "debugAndDiagnostics": "Fejlfinding og diagnostik",
+  "autoDeletesAfter3Days": "Slettes automatisk efter 3 dage",
+  "helpsDiagnoseIssues": "Hjælper med at diagnosticere problemer",
+  "exportConversationsDescription": "Eksporter samtaler til JSON",
+  "exportingConversations": "Eksporterer samtaler...",
+  "clearNodesDescription": "Ryd alle knudepunkter og forbindelser",
+  "deleteKnowledgeGraphQuestion": "Slet vidensgraf?",
+  "deleteKnowledgeGraphWarning": "Dette vil slette alle afledte vidensgrafsdata. Dine originale minder forbliver sikre.",
+  "connectOmiWithAI": "Forbind Omi med AI-assistenter",
+  "noAPIKeys": "Ingen API-nøgler. Opret en for at komme i gang.",
+  "realTimeTranscript": "Realtidstranskription",
+  "transcriptionDiagnostics": "Transkriptionsdiagnostik",
+  "detailedDiagnosticMessages": "Detaljerede diagnostiske beskeder",
+  "autoCreateSpeakers": "Opret talere automatisk",
+  "autoCreateWhenDetected": "Opret automatisk, når navn registreres",
+  "followUpQuestions": "Opfølgende spørgsmål",
+  "suggestQuestionsAfterConversations": "Foreslå spørgsmål efter samtaler",
+  "goalTracker": "Målsporer",
+  "trackPersonalGoals": "Spor personlige mål på startsiden",
+  "dailyReflection": "Daglig refleksion",
+  "dailyReflectionDescription": "21:00 påmindelse om at reflektere over din dag",
+  "endpointURL": "Endepunkts-URL",
+  "links": "Links",
+  "discordMemberCount": "Over 8000 medlemmer på Discord",
+  "userInformation": "Brugeroplysninger"
 }

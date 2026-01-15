@@ -159,7 +159,7 @@
   "@createPersonHint": {
     "description": "Hint text for creating a person"
   },
-  "speechProfile": "Kalbos profilis",
+  "speechProfile": "Kalbos Profilis",
   "@speechProfile": {
     "description": "Speech profile label"
   },
@@ -511,23 +511,23 @@
   "@email": {
     "description": "Email field label"
   },
-  "customVocabulary": "Pasirinktinis žodynas",
+  "customVocabulary": "Pasirinktinis Žodynas",
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Kitų atpažinimas",
+  "identifyingOthers": "Kitų Identifikavimas",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
-  "paymentMethods": "Mokėjimo būdai",
+  "paymentMethods": "Mokėjimo Būdai",
   "@paymentMethods": {
     "description": "Payment methods setting"
   },
-  "conversationDisplay": "Pokalbių rodymas",
+  "conversationDisplay": "Pokalbių Rodymas",
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "Duomenys ir privatumas",
+  "dataPrivacy": "Duomenų Privatumas",
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
@@ -879,11 +879,11 @@
   "@createKeyToStart": {
     "description": "Create key instruction"
   },
-  "createKey": "Sukurti raktą",
+  "createKey": "Sukurti Raktą",
   "@createKey": {
     "description": "Create Key button"
   },
-  "docs": "Dokumentai",
+  "docs": "Dokumentacija",
   "@docs": {
     "description": "Documentation link"
   },
@@ -1087,7 +1087,7 @@
   "exportShared": "Eksportas bendrintas",
   "deleteKnowledgeGraphTitle": "Ištrinti žinių grafiką?",
   "deleteKnowledgeGraphMessage": "Taip bus ištrinti visi išvesti žinių grafiko duomenys (mazgai ir ryšiai). Jūsų originalūs prisiminimai liks saugūs. Grafikas bus atstatytas laikui bėgant arba pagal kitą užklausą.",
-  "knowledgeGraphDeleted": "Žinių grafikas sėkmingai ištrintas",
+  "knowledgeGraphDeleted": "Žinių grafas ištrintas",
   "deleteGraphFailed": "Nepavyko ištrinti grafiko: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -2374,7 +2374,7 @@
   "welcomeToOmiDescription": "Sveiki atvykę į Omi! Jūsų AI palydovas pasirengęs padėti jums pokalbių, užduočių ir daugiau.",
   "startUsingOmi": "Pradėti naudoti Omi",
   "back": "Atgal",
-  "keyboardShortcuts": "Klaviatūros spartieji klavišai",
+  "keyboardShortcuts": "Klaviatūros Spartieji Klavišai",
   "toggleControlBar": "Perjungti valdymo juostą",
   "pressKeys": "Paspauskite klavišus...",
   "cmdRequired": "⌘ būtinas",
@@ -2768,20 +2768,20 @@
   "loadingProfile": "Įkeliamas profilis...",
   "profileSettings": "Profilio nustatymai",
   "noEmailSet": "El. paštas nenustatytas",
-  "userIdCopiedToClipboard": "Vartotojo ID nukopijuotas į iškarpinę",
-  "yourInformation": "Jūsų informacija",
+  "userIdCopiedToClipboard": "Vartotojo ID nukopijuotas",
+  "yourInformation": "Jūsų Informacija",
   "setYourName": "Nustatyti savo vardą",
   "changeYourName": "Pakeisti savo vardą",
   "persona": "Persona",
   "manageYourOmiPersona": "Valdyti savo Omi personą",
-  "voiceAndPeople": "Balsas ir žmonės",
+  "voiceAndPeople": "Balsas ir Žmonės",
   "teachOmiYourVoice": "Išmokykite Omi savo balsą",
   "tellOmiWhoSaidIt": "Pasakykite Omi, kas tai pasakė 🗣️",
   "payment": "Mokėjimas",
   "addOrChangeYourPaymentMethod": "Pridėti arba pakeisti mokėjimo būdą",
   "preferences": "Nuostatos",
   "helpImproveOmiBySharing": "Padėkite tobulinti Omi dalindamiesi anoniminiais analitikos duomenimis",
-  "deleteAccount": "Ištrinti paskyrą",
+  "deleteAccount": "Ištrinti Paskyrą",
   "deleteYourAccountAndAllData": "Ištrinti paskyrą ir visus duomenis",
   "helpsDiagnoseIssuesAutoDeletes": "Padeda diagnozuoti problemas. Automatiškai ištrinamas po 3 dienų.",
   "clearLogs": "Išvalyti žurnalus",
@@ -2809,7 +2809,7 @@
   "pilotFeatures": "Bandomosios funkcijos",
   "pilotFeaturesDescription": "Šios funkcijos yra testai ir nėra garantuojama parama.",
   "suggestFollowUpQuestion": "Pasiūlyti tolesnį klausimą",
-  "saveSettings": "Išsaugoti nustatymus",
+  "saveSettings": "Išsaugoti Nustatymus",
   "syncingDeveloperSettings": "Sinchronizuojami kūrėjo nustatymai...",
   "summary": "Santrauka",
   "auto": "Automatinis",
@@ -2872,5 +2872,65 @@
   "audioInputSetTo": "Garso įvestis nustatyta į {deviceName}",
   "errorSwitchingAudioDevice": "Klaida keičiant garso įrenginį: {error}",
   "selectAudioInput": "Pasirinkite garso įvestį",
-  "loadingDevices": "Kraunami įrenginiai..."
+  "loadingDevices": "Kraunami įrenginiai...",
+  "settingsHeader": "NUSTATYMAI",
+  "plansAndBilling": "Planai ir Atsiskaitymas",
+  "calendarIntegration": "Kalendoriaus Integracija",
+  "dailySummary": "Dienos Santrauka",
+  "developer": "Kūrėjas",
+  "about": "Apie",
+  "selectTime": "Pasirinkti Laiką",
+  "accountGroup": "Paskyra",
+  "signOutQuestion": "Atsijungti?",
+  "signOutConfirmation": "Ar tikrai norite atsijungti?",
+  "customVocabularyHeader": "PASIRINKTINIS ŽODYNAS",
+  "addWordsDescription": "Pridėkite žodžius, kuriuos Omi turėtų atpažinti transkribavimo metu.",
+  "enterWordsHint": "Įveskite žodžius (atskirti kableliais)",
+  "dailySummaryHeader": "DIENOS SANTRAUKA",
+  "dailySummaryTitle": "Dienos Santrauka",
+  "dailySummaryDescription": "Gaukite asmeninę pokalbių santrauką",
+  "deliveryTime": "Pristatymo Laikas",
+  "deliveryTimeDescription": "Kada gauti dienos santrauką",
+  "subscription": "Prenumerata",
+  "viewPlansAndUsage": "Peržiūrėti Planus ir Naudojimą",
+  "viewPlansDescription": "Tvarkykite prenumeratą ir peržiūrėkite naudojimo statistiką",
+  "addOrChangePaymentMethod": "Pridėkite arba pakeiskite mokėjimo būdą",
+  "displayOptions": "Rodymo parinktys",
+  "showMeetingsInMenuBar": "Rodyti susitikimus meniu juostoje",
+  "displayUpcomingMeetingsDescription": "Rodyti būsimus susitikimus meniu juostoje",
+  "showEventsWithoutParticipants": "Rodyti įvykius be dalyvių",
+  "includePersonalEventsDescription": "Įtraukti asmeninius įvykius be dalyvių",
+  "upcomingMeetings": "BŪSIMI SUSITIKIMAI",
+  "checkingNext7Days": "Tikrinamos kitos 7 dienos",
+  "shortcuts": "Spartieji klavišai",
+  "shortcutChangeInstruction": "Spustelėkite spartųjį klavišą, kad jį pakeistumėte. Paspauskite Escape, kad atšauktumėte.",
+  "configurePersonaDescription": "Sukonfigūruokite savo AI personą",
+  "configureSTTProvider": "Sukonfigūruoti STT teikėją",
+  "setConversationEndDescription": "Nustatykite, kada pokalbiai automatiškai baigiasi",
+  "importDataDescription": "Importuoti duomenis iš kitų šaltinių",
+  "debugAndDiagnostics": "Derinimas ir diagnostika",
+  "autoDeletesAfter3Days": "Automatinis ištrynimas po 3 dienų",
+  "helpsDiagnoseIssues": "Padeda diagnozuoti problemas",
+  "exportConversationsDescription": "Eksportuoti pokalbius į JSON",
+  "exportingConversations": "Eksportuojami pokalbiai...",
+  "clearNodesDescription": "Išvalyti visus mazgus ir ryšius",
+  "deleteKnowledgeGraphQuestion": "Ištrinti žinių grafiką?",
+  "deleteKnowledgeGraphWarning": "Tai ištrins visus išvestinius žinių grafiko duomenis. Jūsų originalios atminties išliks saugios.",
+  "connectOmiWithAI": "Prijunkite Omi prie AI asistentų",
+  "noAPIKeys": "Nėra API raktų. Sukurkite vieną, kad pradėtumėte.",
+  "realTimeTranscript": "Nuorašas realiuoju laiku",
+  "transcriptionDiagnostics": "Nuorašo diagnostika",
+  "detailedDiagnosticMessages": "Išsamūs diagnostiniai pranešimai",
+  "autoCreateSpeakers": "Automatiškai kurti kalbėtojus",
+  "autoCreateWhenDetected": "Automatiškai kurti aptikus vardą",
+  "followUpQuestions": "Tolimesnės užklausos",
+  "suggestQuestionsAfterConversations": "Siūlyti klausimus po pokalbių",
+  "goalTracker": "Tikslų stebėjimas",
+  "trackPersonalGoals": "Stebėti asmeninius tikslus pagrindiniame puslapyje",
+  "dailyReflection": "Kasdienė refleksija",
+  "dailyReflectionDescription": "21:00 priminimas apmąstyti savo dieną",
+  "endpointURL": "Galinio taško URL",
+  "links": "Nuorodos",
+  "discordMemberCount": "Daugiau nei 8000 narių Discord platformoje",
+  "userInformation": "Vartotojo informacija"
 }

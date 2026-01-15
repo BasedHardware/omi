@@ -61,7 +61,7 @@
   "@close": {
     "description": "Close button label"
   },
-  "clear": "Xóa",
+  "clear": "Xóa sạch",
   "@clear": {
     "description": "Clear button label"
   },
@@ -159,7 +159,7 @@
   "@createPersonHint": {
     "description": "Hint text for creating a person"
   },
-  "speechProfile": "Hồ sơ giọng nói",
+  "speechProfile": "Hồ sơ Giọng nói",
   "@speechProfile": {
     "description": "Speech profile label"
   },
@@ -511,27 +511,27 @@
   "@email": {
     "description": "Email field label"
   },
-  "customVocabulary": "Từ vựng tùy chỉnh",
+  "customVocabulary": "Từ vựng Tùy chỉnh",
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Nhận diện người khác",
+  "identifyingOthers": "Nhận dạng Người khác",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
-  "paymentMethods": "Phương thức thanh toán",
+  "paymentMethods": "Phương thức Thanh toán",
   "@paymentMethods": {
     "description": "Payment methods setting"
   },
-  "conversationDisplay": "Hiển thị cuộc trò chuyện",
+  "conversationDisplay": "Hiển thị Cuộc trò chuyện",
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "Dữ liệu & Bảo mật",
+  "dataPrivacy": "Quyền riêng tư Dữ liệu",
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
-  "userId": "ID người dùng",
+  "userId": "ID Người dùng",
   "@userId": {
     "description": "User ID label"
   },
@@ -879,7 +879,7 @@
   "@createKeyToStart": {
     "description": "Create key instruction"
   },
-  "createKey": "Tạo khóa",
+  "createKey": "Tạo Khóa",
   "@createKey": {
     "description": "Create Key button"
   },
@@ -1087,7 +1087,7 @@
   "exportShared": "Đã chia sẻ bản xuất",
   "deleteKnowledgeGraphTitle": "Xóa biểu đồ tri thức?",
   "deleteKnowledgeGraphMessage": "Thao tác này sẽ xóa tất cả dữ liệu biểu đồ tri thức được tạo ra (nút và kết nối). Ký ức gốc của bạn sẽ vẫn an toàn. Biểu đồ sẽ được xây dựng lại theo thời gian hoặc khi có yêu cầu tiếp theo.",
-  "knowledgeGraphDeleted": "Đã xóa biểu đồ tri thức thành công",
+  "knowledgeGraphDeleted": "Đã xóa đồ thị kiến thức",
   "deleteGraphFailed": "Không thể xóa biểu đồ: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -2397,7 +2397,7 @@
   "pressKeys": "Nhấn phím...",
   "cmdRequired": "⌘ bắt buộc",
   "invalidKey": "Phím không hợp lệ",
-  "space": "Khoảng trắng",
+  "space": "Dấu cách",
   "search": "Tìm kiếm",
   "searchPlaceholder": "Tìm kiếm...",
   "untitledConversation": "Cuộc trò chuyện không có tiêu đề",
@@ -2786,20 +2786,20 @@
   "loadingProfile": "Đang tải hồ sơ...",
   "profileSettings": "Cài đặt hồ sơ",
   "noEmailSet": "Chưa đặt email",
-  "userIdCopiedToClipboard": "Đã sao chép ID người dùng vào clipboard",
-  "yourInformation": "Thông tin của bạn",
+  "userIdCopiedToClipboard": "Đã sao chép ID người dùng",
+  "yourInformation": "Thông tin của Bạn",
   "setYourName": "Đặt tên của bạn",
   "changeYourName": "Thay đổi tên của bạn",
   "persona": "Persona",
   "manageYourOmiPersona": "Quản lý persona Omi của bạn",
-  "voiceAndPeople": "Giọng nói và con người",
+  "voiceAndPeople": "Giọng nói & Con người",
   "teachOmiYourVoice": "Dạy Omi giọng nói của bạn",
   "tellOmiWhoSaidIt": "Cho Omi biết ai đã nói điều đó 🗣️",
   "payment": "Thanh toán",
   "addOrChangeYourPaymentMethod": "Thêm hoặc thay đổi phương thức thanh toán",
   "preferences": "Tùy chọn",
   "helpImproveOmiBySharing": "Giúp cải thiện Omi bằng cách chia sẻ dữ liệu phân tích ẩn danh",
-  "deleteAccount": "Xóa tài khoản",
+  "deleteAccount": "Xóa Tài khoản",
   "deleteYourAccountAndAllData": "Xóa tài khoản và tất cả dữ liệu của bạn",
   "helpsDiagnoseIssuesAutoDeletes": "Giúp chẩn đoán sự cố. Tự động xóa sau 3 ngày.",
   "clearLogs": "Xóa nhật ký",
@@ -2827,7 +2827,7 @@
   "pilotFeatures": "Tính năng thử nghiệm",
   "pilotFeaturesDescription": "Các tính năng này là thử nghiệm và không đảm bảo hỗ trợ.",
   "suggestFollowUpQuestion": "Đề xuất câu hỏi tiếp theo",
-  "saveSettings": "Lưu cài đặt",
+  "saveSettings": "Lưu Cài đặt",
   "syncingDeveloperSettings": "Đang đồng bộ cài đặt nhà phát triển...",
   "summary": "Tóm tắt",
   "auto": "Tự động",
@@ -2890,5 +2890,65 @@
   "audioInputSetTo": "Đầu vào âm thanh đã đặt thành {deviceName}",
   "errorSwitchingAudioDevice": "Lỗi chuyển đổi thiết bị âm thanh: {error}",
   "selectAudioInput": "Chọn đầu vào âm thanh",
-  "loadingDevices": "Đang tải thiết bị..."
+  "loadingDevices": "Đang tải thiết bị...",
+  "settingsHeader": "CÀI ĐẶT",
+  "plansAndBilling": "Gói và Thanh toán",
+  "calendarIntegration": "Tích hợp Lịch",
+  "dailySummary": "Tóm tắt Hàng ngày",
+  "developer": "Nhà phát triển",
+  "about": "Giới thiệu",
+  "selectTime": "Chọn Thời gian",
+  "accountGroup": "Tài khoản",
+  "signOutQuestion": "Đăng xuất?",
+  "signOutConfirmation": "Bạn có chắc chắn muốn đăng xuất không?",
+  "customVocabularyHeader": "TỪ VỰNG TÙY CHỈNH",
+  "addWordsDescription": "Thêm từ mà Omi nên nhận biết trong quá trình phiên âm.",
+  "enterWordsHint": "Nhập từ (phân tách bằng dấu phẩy)",
+  "dailySummaryHeader": "TÓM TẮT HÀNG NGÀY",
+  "dailySummaryTitle": "Tóm tắt Hàng ngày",
+  "dailySummaryDescription": "Nhận tóm tắt cá nhân hóa về các cuộc trò chuyện của bạn",
+  "deliveryTime": "Thời gian Giao hàng",
+  "deliveryTimeDescription": "Khi nào nhận tóm tắt hàng ngày của bạn",
+  "subscription": "Đăng ký",
+  "viewPlansAndUsage": "Xem Gói & Sử dụng",
+  "viewPlansDescription": "Quản lý đăng ký và xem thống kê sử dụng",
+  "addOrChangePaymentMethod": "Thêm hoặc thay đổi phương thức thanh toán của bạn",
+  "displayOptions": "Tùy chọn Hiển thị",
+  "showMeetingsInMenuBar": "Hiển thị Cuộc họp trong Thanh Menu",
+  "displayUpcomingMeetingsDescription": "Hiển thị các cuộc họp sắp tới trong thanh menu",
+  "showEventsWithoutParticipants": "Hiển thị Sự kiện Không có Người tham gia",
+  "includePersonalEventsDescription": "Bao gồm các sự kiện cá nhân không có người tham dự",
+  "upcomingMeetings": "CÁC CUỘC HỌP SẮP TỚI",
+  "checkingNext7Days": "Kiểm tra 7 ngày tiếp theo",
+  "shortcuts": "Phím tắt",
+  "shortcutChangeInstruction": "Nhấp vào phím tắt để thay đổi. Nhấn Escape để hủy.",
+  "configurePersonaDescription": "Cấu hình nhân vật AI của bạn",
+  "configureSTTProvider": "Cấu hình nhà cung cấp STT",
+  "setConversationEndDescription": "Đặt khi nào cuộc trò chuyện tự động kết thúc",
+  "importDataDescription": "Nhập dữ liệu từ các nguồn khác",
+  "debugAndDiagnostics": "Gỡ lỗi và Chẩn đoán",
+  "autoDeletesAfter3Days": "Tự động xóa sau 3 ngày",
+  "helpsDiagnoseIssues": "Giúp chẩn đoán vấn đề",
+  "exportConversationsDescription": "Xuất cuộc trò chuyện sang JSON",
+  "exportingConversations": "Đang xuất cuộc trò chuyện...",
+  "clearNodesDescription": "Xóa tất cả các nút và kết nối",
+  "deleteKnowledgeGraphQuestion": "Xóa Đồ thị Tri thức?",
+  "deleteKnowledgeGraphWarning": "Điều này sẽ xóa tất cả dữ liệu đồ thị tri thức dẫn xuất. Ký ức gốc của bạn vẫn an toàn.",
+  "connectOmiWithAI": "Kết nối Omi với trợ lý AI",
+  "noAPIKeys": "Không có khóa API. Tạo một khóa để bắt đầu.",
+  "realTimeTranscript": "Bản ghi âm Thời gian thực",
+  "transcriptionDiagnostics": "Chẩn đoán Ghi âm",
+  "detailedDiagnosticMessages": "Thông báo chẩn đoán chi tiết",
+  "autoCreateSpeakers": "Tự động tạo Người nói",
+  "autoCreateWhenDetected": "Tự động tạo khi phát hiện tên",
+  "followUpQuestions": "Câu hỏi Theo dõi",
+  "suggestQuestionsAfterConversations": "Đề xuất câu hỏi sau cuộc trò chuyện",
+  "goalTracker": "Theo dõi Mục tiêu",
+  "trackPersonalGoals": "Theo dõi mục tiêu cá nhân trên trang chủ",
+  "dailyReflection": "Suy ngẫm Hàng ngày",
+  "dailyReflectionDescription": "Nhắc nhở lúc 9 giờ tối để suy ngẫm về ngày của bạn",
+  "endpointURL": "URL Điểm cuối",
+  "links": "Liên kết",
+  "discordMemberCount": "Hơn 8000 thành viên trên Discord",
+  "userInformation": "Thông tin Người dùng"
 }

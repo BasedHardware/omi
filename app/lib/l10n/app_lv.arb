@@ -159,7 +159,7 @@
   "@createPersonHint": {
     "description": "Hint text for creating a person"
   },
-  "speechProfile": "Runas profils",
+  "speechProfile": "Runas Profils",
   "@speechProfile": {
     "description": "Speech profile label"
   },
@@ -511,23 +511,23 @@
   "@email": {
     "description": "Email field label"
   },
-  "customVocabulary": "Pielāgota vārdnīca",
+  "customVocabulary": "Pielāgots Vārdnīca",
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Citu identificēšana",
+  "identifyingOthers": "Citu Identificēšana",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
-  "paymentMethods": "Maksājuma metodes",
+  "paymentMethods": "Maksājumu Metodes",
   "@paymentMethods": {
     "description": "Payment methods setting"
   },
-  "conversationDisplay": "Sarunas attēlojums",
+  "conversationDisplay": "Sarunu Attēlošana",
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "Dati un privātums",
+  "dataPrivacy": "Datu Privātums",
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
@@ -583,7 +583,7 @@
   "@referralProgram": {
     "description": "Referral program menu item"
   },
-  "signOut": "Izrakstīties",
+  "signOut": "Iziet",
   "@signOut": {
     "description": "Sign out button"
   },
@@ -879,11 +879,11 @@
   "@createKeyToStart": {
     "description": "Create key instruction"
   },
-  "createKey": "Izveidot atslēgu",
+  "createKey": "Izveidot Atslēgu",
   "@createKey": {
     "description": "Create Key button"
   },
-  "docs": "Dokumenti",
+  "docs": "Dokumentācija",
   "@docs": {
     "description": "Documentation link"
   },
@@ -1087,7 +1087,7 @@
   "exportShared": "Eksports kopīgots",
   "deleteKnowledgeGraphTitle": "Dzēst zināšanu grafu?",
   "deleteKnowledgeGraphMessage": "Tas izdzēsīs visus atvasinātos zināšanu grafa datus (mezglus un savienojumus). Jūsu oriģinālās atmiņas paliks drošībā. Grafs tiks atjaunots ar laiku vai pēc nākamā pieprasījuma.",
-  "knowledgeGraphDeleted": "Zināšanu grafs veiksmīgi izdzēsts",
+  "knowledgeGraphDeleted": "Zināšanu grafs izdzēsts",
   "deleteGraphFailed": "Neizdevās dzēst grafu: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -2392,7 +2392,7 @@
   "welcomeToOmiDescription": "Laipni lūdzam Omi! Jūsu AI kompanjons ir gatavs palīdzēt jums sarunās, uzdevumos un vēl daudz ko.",
   "startUsingOmi": "Sākt izmantot Omi",
   "back": "Atpakaļ",
-  "keyboardShortcuts": "Tastatūras īsceļi",
+  "keyboardShortcuts": "Tastatūras Īsceļi",
   "toggleControlBar": "Pārslēgt vadības joslu",
   "pressKeys": "Nospiediet taustiņus...",
   "cmdRequired": "⌘ nepieciešams",
@@ -2786,20 +2786,20 @@
   "loadingProfile": "Ielādē profilu...",
   "profileSettings": "Profila iestatījumi",
   "noEmailSet": "E-pasts nav iestatīts",
-  "userIdCopiedToClipboard": "Lietotāja ID nokopēts starpliktuvē",
-  "yourInformation": "Jūsu informācija",
+  "userIdCopiedToClipboard": "Lietotāja ID nokopēts",
+  "yourInformation": "Jūsu Informācija",
   "setYourName": "Iestatīt savu vārdu",
   "changeYourName": "Mainīt savu vārdu",
   "persona": "Persona",
   "manageYourOmiPersona": "Pārvaldīt savu Omi personu",
-  "voiceAndPeople": "Balss un cilvēki",
+  "voiceAndPeople": "Balss un Cilvēki",
   "teachOmiYourVoice": "Iemāciet Omi savu balsi",
   "tellOmiWhoSaidIt": "Pastāstiet Omi, kas to teica 🗣️",
   "payment": "Maksājums",
   "addOrChangeYourPaymentMethod": "Pievienot vai mainīt maksājuma metodi",
   "preferences": "Preferences",
   "helpImproveOmiBySharing": "Palīdziet uzlabot Omi, daloties ar anonimizētiem analīzes datiem",
-  "deleteAccount": "Dzēst kontu",
+  "deleteAccount": "Dzēst Kontu",
   "deleteYourAccountAndAllData": "Dzēst savu kontu un visus datus",
   "helpsDiagnoseIssuesAutoDeletes": "Palīdz diagnosticēt problēmas. Automātiski izdzēsts pēc 3 dienām.",
   "clearLogs": "Notīrīt žurnālus",
@@ -2827,7 +2827,7 @@
   "pilotFeatures": "Pilotfunkcijas",
   "pilotFeaturesDescription": "Šīs funkcijas ir testi, un atbalsts nav garantēts.",
   "suggestFollowUpQuestion": "Ieteikt turpinājuma jautājumu",
-  "saveSettings": "Saglabāt iestatījumus",
+  "saveSettings": "Saglabāt Iestatījumus",
   "syncingDeveloperSettings": "Sinhronizē izstrādātāja iestatījumus...",
   "summary": "Kopsavilkums",
   "auto": "Automātisks",
@@ -2890,5 +2890,65 @@
   "audioInputSetTo": "Audio ievade iestatīta uz {deviceName}",
   "errorSwitchingAudioDevice": "Kļūda, mainoties audio ierīcei: {error}",
   "selectAudioInput": "Atlasiet audio ievadi",
-  "loadingDevices": "Ielādē ierīces..."
+  "loadingDevices": "Ielādē ierīces...",
+  "settingsHeader": "IESTATĪJUMI",
+  "plansAndBilling": "Plāni un Norēķini",
+  "calendarIntegration": "Kalendāra Integrācija",
+  "dailySummary": "Dienas Kopsavilkums",
+  "developer": "Izstrādātājs",
+  "about": "Par",
+  "selectTime": "Atlasīt Laiku",
+  "accountGroup": "Konts",
+  "signOutQuestion": "Iziet?",
+  "signOutConfirmation": "Vai tiešām vēlaties iziet?",
+  "customVocabularyHeader": "PIELĀGOTS VĀRDNĪCA",
+  "addWordsDescription": "Pievienojiet vārdus, kurus Omi vajadzētu atpazīt transkripcijas laikā.",
+  "enterWordsHint": "Ievadiet vārdus (atdalīti ar komatu)",
+  "dailySummaryHeader": "DIENAS KOPSAVILKUMS",
+  "dailySummaryTitle": "Dienas Kopsavilkums",
+  "dailySummaryDescription": "Saņemiet personalizētu sarunu kopsavilkumu",
+  "deliveryTime": "Piegādes Laiks",
+  "deliveryTimeDescription": "Kad saņemt dienas kopsavilkumu",
+  "subscription": "Abonements",
+  "viewPlansAndUsage": "Skatīt Plānus un Lietošanu",
+  "viewPlansDescription": "Pārvaldiet abonementa un skatiet lietošanas statistiku",
+  "addOrChangePaymentMethod": "Pievienojiet vai mainiet maksājuma metodi",
+  "displayOptions": "Attēlošanas opcijas",
+  "showMeetingsInMenuBar": "Rādīt sapulces izvēlnes joslā",
+  "displayUpcomingMeetingsDescription": "Rādīt gaidāmās sapulces izvēlnes joslā",
+  "showEventsWithoutParticipants": "Rādīt notikumus bez dalībniekiem",
+  "includePersonalEventsDescription": "Iekļaut personīgos notikumus bez dalībniekiem",
+  "upcomingMeetings": "GAIDĀMĀS SAPULCES",
+  "checkingNext7Days": "Pārbaudām nākamās 7 dienas",
+  "shortcuts": "Saīsnes",
+  "shortcutChangeInstruction": "Noklikšķiniet uz saīsnes, lai to mainītu. Nospiediet Escape, lai atceltu.",
+  "configurePersonaDescription": "Konfigurējiet savu AI personu",
+  "configureSTTProvider": "Konfigurēt STT nodrošinātāju",
+  "setConversationEndDescription": "Iestatiet, kad sarunas automātiski beidzas",
+  "importDataDescription": "Importēt datus no citiem avotiem",
+  "debugAndDiagnostics": "Atkļūdošana un diagnostika",
+  "autoDeletesAfter3Days": "Automātiska dzēšana pēc 3 dienām",
+  "helpsDiagnoseIssues": "Palīdz diagnosticēt problēmas",
+  "exportConversationsDescription": "Eksportēt sarunas uz JSON",
+  "exportingConversations": "Eksportē sarunas...",
+  "clearNodesDescription": "Notīrīt visus mezglus un savienojumus",
+  "deleteKnowledgeGraphQuestion": "Dzēst zināšanu grafu?",
+  "deleteKnowledgeGraphWarning": "Tas izdzēsīs visus atvasinātos zināšanu grafa datus. Jūsu sākotnējās atmiņas paliks drošībā.",
+  "connectOmiWithAI": "Savienojiet Omi ar AI asistentiem",
+  "noAPIKeys": "Nav API atslēgu. Izveidojiet vienu, lai sāktu.",
+  "realTimeTranscript": "Reāllaika transkripcija",
+  "transcriptionDiagnostics": "Transkripcijas diagnostika",
+  "detailedDiagnosticMessages": "Detalizēti diagnostikas ziņojumi",
+  "autoCreateSpeakers": "Automātiski izveidot runātājus",
+  "autoCreateWhenDetected": "Automātiski izveidot, kad tiek konstatēts vārds",
+  "followUpQuestions": "Turpinājuma jautājumi",
+  "suggestQuestionsAfterConversations": "Ieteikt jautājumus pēc sarunām",
+  "goalTracker": "Mērķu izsekotājs",
+  "trackPersonalGoals": "Izsekot personīgos mērķus sākumlapā",
+  "dailyReflection": "Ikdienas pārdomas",
+  "dailyReflectionDescription": "21:00 atgādinājums pārdomāt savu dienu",
+  "endpointURL": "Galapunkta URL",
+  "links": "Saites",
+  "discordMemberCount": "Vairāk nekā 8000 dalībnieku Discord",
+  "userInformation": "Lietotāja informācija"
 }

@@ -511,11 +511,11 @@
   "@email": {
     "description": "Email field label"
   },
-  "customVocabulary": "Tilpasset ordforråd",
+  "customVocabulary": "Tilpasset Vokabular",
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Identifisere andre",
+  "identifyingOthers": "Identifisering av Andre",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
@@ -527,7 +527,7 @@
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "Data og personvern",
+  "dataPrivacy": "Datapersonvern",
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
@@ -583,7 +583,7 @@
   "@referralProgram": {
     "description": "Referral program menu item"
   },
-  "signOut": "Logg ut",
+  "signOut": "Logg Ut",
   "@signOut": {
     "description": "Sign out button"
   },
@@ -879,11 +879,11 @@
   "@createKeyToStart": {
     "description": "Create key instruction"
   },
-  "createKey": "Opprett nøkkel",
+  "createKey": "Opprett Nøkkel",
   "@createKey": {
     "description": "Create Key button"
   },
-  "docs": "Dokumenter",
+  "docs": "Dokumentasjon",
   "@docs": {
     "description": "Documentation link"
   },
@@ -2786,20 +2786,20 @@
   "loadingProfile": "Laster profil...",
   "profileSettings": "Profilinnstillinger",
   "noEmailSet": "Ingen e-post angitt",
-  "userIdCopiedToClipboard": "Bruker-ID kopiert til utklippstavle",
-  "yourInformation": "Din informasjon",
+  "userIdCopiedToClipboard": "Bruker-ID kopiert",
+  "yourInformation": "Din Informasjon",
   "setYourName": "Angi navnet ditt",
   "changeYourName": "Endre navnet ditt",
   "persona": "Persona",
   "manageYourOmiPersona": "Administrer din Omi-persona",
-  "voiceAndPeople": "Stemme og mennesker",
+  "voiceAndPeople": "Stemme og Personer",
   "teachOmiYourVoice": "Lær Omi stemmen din",
   "tellOmiWhoSaidIt": "Fortell Omi hvem som sa det 🗣️",
   "payment": "Betaling",
   "addOrChangeYourPaymentMethod": "Legg til eller endre betalingsmetode",
-  "preferences": "Preferanser",
+  "preferences": "Innstillinger",
   "helpImproveOmiBySharing": "Hjelp til med å forbedre Omi ved å dele anonymiserte analysedata",
-  "deleteAccount": "Slett konto",
+  "deleteAccount": "Slett Konto",
   "deleteYourAccountAndAllData": "Slett kontoen din og alle data",
   "helpsDiagnoseIssuesAutoDeletes": "Hjelper med å diagnostisere problemer. Slettes automatisk etter 3 dager.",
   "clearLogs": "Tøm logger",
@@ -2827,7 +2827,7 @@
   "pilotFeatures": "Pilotfunksjoner",
   "pilotFeaturesDescription": "Disse funksjonene er tester og ingen støtte er garantert.",
   "suggestFollowUpQuestion": "Foreslå oppfølgingsspørsmål",
-  "saveSettings": "Lagre innstillinger",
+  "saveSettings": "Lagre Innstillinger",
   "syncingDeveloperSettings": "Synkroniserer utviklerinnstillinger...",
   "summary": "Sammendrag",
   "auto": "Automatisk",
@@ -2890,5 +2890,65 @@
   "audioInputSetTo": "Lydinngang satt til {deviceName}",
   "errorSwitchingAudioDevice": "Feil ved bytte av lydenhet: {error}",
   "selectAudioInput": "Velg lydinngang",
-  "loadingDevices": "Laster inn enheter..."
+  "loadingDevices": "Laster inn enheter...",
+  "settingsHeader": "INNSTILLINGER",
+  "plansAndBilling": "Planer og Fakturering",
+  "calendarIntegration": "Kalenderintegrasjon",
+  "dailySummary": "Daglig Sammendrag",
+  "developer": "Utvikler",
+  "about": "Om",
+  "selectTime": "Velg Tid",
+  "accountGroup": "Konto",
+  "signOutQuestion": "Logg Ut?",
+  "signOutConfirmation": "Er du sikker på at du vil logge ut?",
+  "customVocabularyHeader": "TILPASSET VOKABULAR",
+  "addWordsDescription": "Legg til ord som Omi skal gjenkjenne under transkripsjon.",
+  "enterWordsHint": "Skriv inn ord (kommaseparert)",
+  "dailySummaryHeader": "DAGLIG SAMMENDRAG",
+  "dailySummaryTitle": "Daglig Sammendrag",
+  "dailySummaryDescription": "Få et personlig sammendrag av samtalene dine",
+  "deliveryTime": "Leveringstid",
+  "deliveryTimeDescription": "Når du skal motta det daglige sammendraget",
+  "subscription": "Abonnement",
+  "viewPlansAndUsage": "Se Planer og Bruk",
+  "viewPlansDescription": "Administrer abonnementet ditt og se bruksstatistikk",
+  "addOrChangePaymentMethod": "Legg til eller endre betalingsmåten din",
+  "displayOptions": "Visningsalternativer",
+  "showMeetingsInMenuBar": "Vis møter i menylinjen",
+  "displayUpcomingMeetingsDescription": "Vis kommende møter i menylinjen",
+  "showEventsWithoutParticipants": "Vis hendelser uten deltakere",
+  "includePersonalEventsDescription": "Inkluder personlige hendelser uten deltakere",
+  "upcomingMeetings": "KOMMENDE MØTER",
+  "checkingNext7Days": "Sjekker de neste 7 dagene",
+  "shortcuts": "Snarveier",
+  "shortcutChangeInstruction": "Klikk på en snarvei for å endre den. Trykk Escape for å avbryte.",
+  "configurePersonaDescription": "Konfigurer din AI-persona",
+  "configureSTTProvider": "Konfigurer STT-leverandør",
+  "setConversationEndDescription": "Angi når samtaler avsluttes automatisk",
+  "importDataDescription": "Importer data fra andre kilder",
+  "debugAndDiagnostics": "Feilsøking og diagnostikk",
+  "autoDeletesAfter3Days": "Slettes automatisk etter 3 dager",
+  "helpsDiagnoseIssues": "Hjelper med å diagnostisere problemer",
+  "exportConversationsDescription": "Eksporter samtaler til JSON",
+  "exportingConversations": "Eksporterer samtaler...",
+  "clearNodesDescription": "Tøm alle noder og tilkoblinger",
+  "deleteKnowledgeGraphQuestion": "Slette kunnskapsgraf?",
+  "deleteKnowledgeGraphWarning": "Dette sletter alle avledede kunnskapsgrafdata. Dine opprinnelige minner forblir trygge.",
+  "connectOmiWithAI": "Koble Omi til AI-assistenter",
+  "noAPIKeys": "Ingen API-nøkler. Opprett en for å komme i gang.",
+  "realTimeTranscript": "Sanntidstranskript",
+  "transcriptionDiagnostics": "Transkripsjon-diagnostikk",
+  "detailedDiagnosticMessages": "Detaljerte diagnostiske meldinger",
+  "autoCreateSpeakers": "Opprett talere automatisk",
+  "autoCreateWhenDetected": "Opprett automatisk når navn oppdages",
+  "followUpQuestions": "Oppfølgingsspørsmål",
+  "suggestQuestionsAfterConversations": "Foreslå spørsmål etter samtaler",
+  "goalTracker": "Målsporer",
+  "trackPersonalGoals": "Spor personlige mål på startsiden",
+  "dailyReflection": "Daglig refleksjon",
+  "dailyReflectionDescription": "21:00 påminnelse for å reflektere over dagen",
+  "endpointURL": "Endepunkt-URL",
+  "links": "Lenker",
+  "discordMemberCount": "Over 8000 medlemmer på Discord",
+  "userInformation": "Brukerinformasjon"
 }

@@ -503,7 +503,7 @@
   "@profile": {
     "description": "Profile page title"
   },
-  "name": "İsim",
+  "name": "Ad",
   "@name": {
     "description": "Name field label"
   },
@@ -511,11 +511,11 @@
   "@email": {
     "description": "Email field label"
   },
-  "customVocabulary": "Özel Kelime Hazinesi",
+  "customVocabulary": "Özel Kelime Dağarcığı",
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Başkalarını Tanımlama",
+  "identifyingOthers": "Diğerlerini Tanımlama",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
@@ -523,19 +523,19 @@
   "@paymentMethods": {
     "description": "Payment methods setting"
   },
-  "conversationDisplay": "Konuşma Görünümü",
+  "conversationDisplay": "Konuşma Görüntüleme",
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "Veri ve Gizlilik",
+  "dataPrivacy": "Veri Gizliliği",
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
-  "userId": "Kullanıcı ID",
+  "userId": "Kullanıcı Kimliği",
   "@userId": {
     "description": "User ID label"
   },
-  "notSet": "Ayarlanmadı",
+  "notSet": "Ayarlanmamış",
   "@notSet": {
     "description": "Default value when not set"
   },
@@ -879,7 +879,7 @@
   "@createKeyToStart": {
     "description": "Create key instruction"
   },
-  "createKey": "Anahtar oluştur",
+  "createKey": "Anahtar Oluştur",
   "@createKey": {
     "description": "Create Key button"
   },
@@ -1087,7 +1087,7 @@
   "exportShared": "Dışa aktarma paylaşıldı",
   "deleteKnowledgeGraphTitle": "Bilgi Grafiği Silinsin mi?",
   "deleteKnowledgeGraphMessage": "Bu, tüm türetilmiş bilgi grafiği verilerini (düğümler ve bağlantılar) silecektir. Orijinal anılarınız güvende kalacaktır. Grafik zamanla veya bir sonraki istekte yeniden oluşturulacaktır.",
-  "knowledgeGraphDeleted": "Bilgi Grafiği başarıyla silindi",
+  "knowledgeGraphDeleted": "Bilgi grafiği silindi",
   "deleteGraphFailed": "Grafik silinemedi: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -2768,7 +2768,7 @@
   "loadingProfile": "Profil yükleniyor...",
   "profileSettings": "Profil Ayarları",
   "noEmailSet": "E-posta ayarlanmadı",
-  "userIdCopiedToClipboard": "Kullanıcı ID panoya kopyalandı",
+  "userIdCopiedToClipboard": "Kullanıcı kimliği kopyalandı",
   "yourInformation": "Bilgileriniz",
   "setYourName": "Adınızı belirleyin",
   "changeYourName": "Adınızı değiştirin",
@@ -2809,7 +2809,7 @@
   "pilotFeatures": "Pilot Özellikler",
   "pilotFeaturesDescription": "Bu özellikler testlerdir ve destek garanti edilmez.",
   "suggestFollowUpQuestion": "Takip sorusu öner",
-  "saveSettings": "Ayarları kaydet",
+  "saveSettings": "Ayarları Kaydet",
   "syncingDeveloperSettings": "Geliştirici ayarları senkronize ediliyor...",
   "summary": "Özet",
   "auto": "Otomatik",
@@ -2872,5 +2872,65 @@
   "audioInputSetTo": "Ses girişi {deviceName} olarak ayarlandı",
   "errorSwitchingAudioDevice": "Ses cihazı değiştirilirken hata: {error}",
   "selectAudioInput": "Ses girişini seç",
-  "loadingDevices": "Cihazlar yükleniyor..."
+  "loadingDevices": "Cihazlar yükleniyor...",
+  "settingsHeader": "AYARLAR",
+  "plansAndBilling": "Planlar ve Faturalama",
+  "calendarIntegration": "Takvim Entegrasyonu",
+  "dailySummary": "Günlük Özet",
+  "developer": "Geliştirici",
+  "about": "Hakkında",
+  "selectTime": "Zaman Seç",
+  "accountGroup": "Hesap",
+  "signOutQuestion": "Çıkış Yapılsın mı?",
+  "signOutConfirmation": "Çıkış yapmak istediğinizden emin misiniz?",
+  "customVocabularyHeader": "ÖZEL KELIME DAĞARCIĞI",
+  "addWordsDescription": "Omin transkripsiyon sırasında tanıması gereken kelimeleri ekleyin.",
+  "enterWordsHint": "Kelimeleri girin (virgülle ayrılmış)",
+  "dailySummaryHeader": "GÜNLÜK ÖZET",
+  "dailySummaryTitle": "Günlük Özet",
+  "dailySummaryDescription": "Konuşmalarınızın kişiselleştirilmiş özetini alın",
+  "deliveryTime": "Teslimat Zamanı",
+  "deliveryTimeDescription": "Günlük özetinizi ne zaman alacağınız",
+  "subscription": "Abonelik",
+  "viewPlansAndUsage": "Planları ve Kullanımı Görüntüle",
+  "viewPlansDescription": "Aboneliğinizi yönetin ve kullanım istatistiklerini görün",
+  "addOrChangePaymentMethod": "Ödeme yönteminizi ekleyin veya değiştirin",
+  "displayOptions": "Görüntüleme Seçenekleri",
+  "showMeetingsInMenuBar": "Menü Çubuğunda Toplantıları Göster",
+  "displayUpcomingMeetingsDescription": "Yaklaşan toplantıları menü çubuğunda göster",
+  "showEventsWithoutParticipants": "Katılımcısız Etkinlikleri Göster",
+  "includePersonalEventsDescription": "Katılımcı olmayan kişisel etkinlikleri dahil et",
+  "upcomingMeetings": "YAKLAŞAN TOPLANTILAR",
+  "checkingNext7Days": "Sonraki 7 gün kontrol ediliyor",
+  "shortcuts": "Kısayollar",
+  "shortcutChangeInstruction": "Değiştirmek için bir kısayola tıklayın. İptal etmek için Escape'e basın.",
+  "configurePersonaDescription": "Yapay zeka kişiliğinizi yapılandırın",
+  "configureSTTProvider": "STT sağlayıcısını yapılandır",
+  "setConversationEndDescription": "Konuşmaların otomatik olarak ne zaman sona ereceğini ayarlayın",
+  "importDataDescription": "Diğer kaynaklardan veri içe aktar",
+  "debugAndDiagnostics": "Hata Ayıklama ve Tanılama",
+  "autoDeletesAfter3Days": "3 gün sonra otomatik olarak silinir",
+  "helpsDiagnoseIssues": "Sorunları teşhis etmeye yardımcı olur",
+  "exportConversationsDescription": "Konuşmaları JSON'a aktar",
+  "exportingConversations": "Konuşmalar aktarılıyor...",
+  "clearNodesDescription": "Tüm düğümleri ve bağlantıları temizle",
+  "deleteKnowledgeGraphQuestion": "Bilgi Grafiği Silinsin mi?",
+  "deleteKnowledgeGraphWarning": "Bu, türetilmiş tüm bilgi grafiği verilerini silecektir. Orijinal anılarınız güvende kalır.",
+  "connectOmiWithAI": "Omi'yi yapay zeka asistanlarıyla bağlayın",
+  "noAPIKeys": "API anahtarı yok. Başlamak için bir tane oluşturun.",
+  "realTimeTranscript": "Gerçek Zamanlı Transkript",
+  "transcriptionDiagnostics": "Transkripsiyon Tanılaması",
+  "detailedDiagnosticMessages": "Ayrıntılı tanılama mesajları",
+  "autoCreateSpeakers": "Konuşmacıları Otomatik Oluştur",
+  "autoCreateWhenDetected": "İsim algılandığında otomatik oluştur",
+  "followUpQuestions": "Takip Soruları",
+  "suggestQuestionsAfterConversations": "Konuşmalardan sonra sorular önerin",
+  "goalTracker": "Hedef İzleyici",
+  "trackPersonalGoals": "Ana sayfada kişisel hedefleri izleyin",
+  "dailyReflection": "Günlük Yansıma",
+  "dailyReflectionDescription": "Gününüzü yansıtmak için 21:00 hatırlatıcısı",
+  "endpointURL": "Uç Nokta URL'si",
+  "links": "Bağlantılar",
+  "discordMemberCount": "Discord'da 8000'den fazla üye",
+  "userInformation": "Kullanıcı Bilgileri"
 }

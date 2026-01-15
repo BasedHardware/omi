@@ -159,7 +159,7 @@
   "@createPersonHint": {
     "description": "Hint text for creating a person"
   },
-  "speechProfile": "Profil mowy",
+  "speechProfile": "Profil Mowy",
   "@speechProfile": {
     "description": "Speech profile label"
   },
@@ -507,31 +507,31 @@
   "@name": {
     "description": "Name field label"
   },
-  "email": "Email",
+  "email": "E-mail",
   "@email": {
     "description": "Email field label"
   },
-  "customVocabulary": "Własny słownik",
+  "customVocabulary": "Niestandardowy Słownik",
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Identyfikowanie innych",
+  "identifyingOthers": "Identyfikacja Innych",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
-  "paymentMethods": "Metody płatności",
+  "paymentMethods": "Metody Płatności",
   "@paymentMethods": {
     "description": "Payment methods setting"
   },
-  "conversationDisplay": "Wyświetlanie rozmów",
+  "conversationDisplay": "Wyświetlanie Rozmów",
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "Dane i prywatność",
+  "dataPrivacy": "Prywatność Danych",
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
-  "userId": "ID użytkownika",
+  "userId": "ID Użytkownika",
   "@userId": {
     "description": "User ID label"
   },
@@ -583,7 +583,7 @@
   "@referralProgram": {
     "description": "Referral program menu item"
   },
-  "signOut": "Wyloguj się",
+  "signOut": "Wyloguj",
   "@signOut": {
     "description": "Sign out button"
   },
@@ -879,7 +879,7 @@
   "@createKeyToStart": {
     "description": "Create key instruction"
   },
-  "createKey": "Utwórz klucz",
+  "createKey": "Utwórz Klucz",
   "@createKey": {
     "description": "Create Key button"
   },
@@ -1087,7 +1087,7 @@
   "exportShared": "Eksport udostępniony",
   "deleteKnowledgeGraphTitle": "Usunąć graf wiedzy?",
   "deleteKnowledgeGraphMessage": "Spowoduje to usunięcie wszystkich danych grafu wiedzy (węzłów i połączeń). Twoje oryginalne wspomnienia pozostaną bezpieczne. Graf zostanie odbudowany z czasem lub na następne żądanie.",
-  "knowledgeGraphDeleted": "Graf wiedzy usunięty pomyślnie",
+  "knowledgeGraphDeleted": "Graf wiedzy usunięty",
   "deleteGraphFailed": "Nie udało się usunąć grafu: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -1103,7 +1103,7 @@
   "mcpServer": "Serwer MCP",
   "mcpServerDesc": "Połącz asystentów AI z Twoimi danymi",
   "serverUrl": "Adres URL serwera",
-  "urlCopied": "Adres URL skopiowany",
+  "urlCopied": "URL skopiowany",
   "apiKeyAuth": "Uwierzytelnianie kluczem API",
   "header": "Nagłówek",
   "authorizationBearer": "Authorization: Bearer <klucz>",
@@ -2392,7 +2392,7 @@
   "welcomeToOmiDescription": "Witamy w Omi! Twój towarzysz AI jest gotowy, aby pomóc ci w rozmowach, zadaniach i nie tylko.",
   "startUsingOmi": "Zacznij korzystać z Omi",
   "back": "Wstecz",
-  "keyboardShortcuts": "Skróty klawiszowe",
+  "keyboardShortcuts": "Skróty Klawiszowe",
   "toggleControlBar": "Przełącz pasek sterowania",
   "pressKeys": "Naciśnij klawisze...",
   "cmdRequired": "⌘ wymagane",
@@ -2786,24 +2786,24 @@
   "loadingProfile": "Ładowanie profilu...",
   "profileSettings": "Ustawienia profilu",
   "noEmailSet": "Nie ustawiono e-maila",
-  "userIdCopiedToClipboard": "ID użytkownika skopiowany do schowka",
-  "yourInformation": "Twoje informacje",
+  "userIdCopiedToClipboard": "ID użytkownika skopiowane",
+  "yourInformation": "Twoje Informacje",
   "setYourName": "Ustaw swoje imię",
   "changeYourName": "Zmień swoje imię",
   "persona": "Persona",
   "manageYourOmiPersona": "Zarządzaj swoją personą Omi",
-  "voiceAndPeople": "Głos i ludzie",
+  "voiceAndPeople": "Głos i Ludzie",
   "teachOmiYourVoice": "Naucz Omi swojego głosu",
   "tellOmiWhoSaidIt": "Powiedz Omi, kto to powiedział 🗣️",
   "payment": "Płatność",
   "addOrChangeYourPaymentMethod": "Dodaj lub zmień metodę płatności",
   "preferences": "Preferencje",
   "helpImproveOmiBySharing": "Pomóż ulepszyć Omi, udostępniając zanonimizowane dane analityczne",
-  "deleteAccount": "Usuń konto",
+  "deleteAccount": "Usuń Konto",
   "deleteYourAccountAndAllData": "Usuń swoje konto i wszystkie dane",
   "helpsDiagnoseIssuesAutoDeletes": "Pomaga diagnozować problemy. Automatycznie usuwany po 3 dniach.",
   "clearLogs": "Wyczyść dzienniki",
-  "debugLogsCleared": "Dzienniki debugowania wyczyszczone",
+  "debugLogsCleared": "Logi debugowania wyczyszczone",
   "exportConversations": "Eksportuj rozmowy",
   "exportAllConversationsToJson": "Eksportuj wszystkie rozmowy do pliku JSON.",
   "conversationsExportStarted": "Rozpoczęto eksport rozmów. To może potrwać kilka sekund, proszę czekać.",
@@ -2827,7 +2827,7 @@
   "pilotFeatures": "Funkcje pilotażowe",
   "pilotFeaturesDescription": "Te funkcje są testami i nie gwarantuje się wsparcia.",
   "suggestFollowUpQuestion": "Zaproponuj pytanie uzupełniające",
-  "saveSettings": "Zapisz ustawienia",
+  "saveSettings": "Zapisz Ustawienia",
   "syncingDeveloperSettings": "Synchronizacja ustawień dewelopera...",
   "summary": "Podsumowanie",
   "auto": "Automatycznie",
@@ -2890,5 +2890,65 @@
   "audioInputSetTo": "Wejście audio ustawione na {deviceName}",
   "errorSwitchingAudioDevice": "Błąd przełączania urządzenia audio: {error}",
   "selectAudioInput": "Wybierz wejście audio",
-  "loadingDevices": "Ładowanie urządzeń..."
+  "loadingDevices": "Ładowanie urządzeń...",
+  "settingsHeader": "USTAWIENIA",
+  "plansAndBilling": "Plany i Rozliczenia",
+  "calendarIntegration": "Integracja Kalendarza",
+  "dailySummary": "Dzienne Podsumowanie",
+  "developer": "Deweloper",
+  "about": "O aplikacji",
+  "selectTime": "Wybierz Czas",
+  "accountGroup": "Konto",
+  "signOutQuestion": "Wylogować?",
+  "signOutConfirmation": "Czy na pewno chcesz się wylogować?",
+  "customVocabularyHeader": "NIESTANDARDOWY SŁOWNIK",
+  "addWordsDescription": "Dodaj słowa, które Omi powinien rozpoznawać podczas transkrypcji.",
+  "enterWordsHint": "Wprowadź słowa (oddzielone przecinkami)",
+  "dailySummaryHeader": "DZIENNE PODSUMOWANIE",
+  "dailySummaryTitle": "Dzienne Podsumowanie",
+  "dailySummaryDescription": "Otrzymuj spersonalizowane podsumowanie rozmów",
+  "deliveryTime": "Czas Dostawy",
+  "deliveryTimeDescription": "Kiedy otrzymywać dzienne podsumowanie",
+  "subscription": "Subskrypcja",
+  "viewPlansAndUsage": "Zobacz Plany i Użycie",
+  "viewPlansDescription": "Zarządzaj subskrypcją i zobacz statystyki użycia",
+  "addOrChangePaymentMethod": "Dodaj lub zmień metodę płatności",
+  "displayOptions": "Opcje wyświetlania",
+  "showMeetingsInMenuBar": "Pokaż spotkania na pasku menu",
+  "displayUpcomingMeetingsDescription": "Wyświetl nadchodzące spotkania na pasku menu",
+  "showEventsWithoutParticipants": "Pokaż wydarzenia bez uczestników",
+  "includePersonalEventsDescription": "Uwzględnij wydarzenia osobiste bez uczestników",
+  "upcomingMeetings": "NADCHODZĄCE SPOTKANIA",
+  "checkingNext7Days": "Sprawdzanie następnych 7 dni",
+  "shortcuts": "Skróty",
+  "shortcutChangeInstruction": "Kliknij skrót, aby go zmienić. Naciśnij Escape, aby anulować.",
+  "configurePersonaDescription": "Skonfiguruj swoją personę AI",
+  "configureSTTProvider": "Skonfiguruj dostawcę STT",
+  "setConversationEndDescription": "Ustaw, kiedy rozmowy kończą się automatycznie",
+  "importDataDescription": "Importuj dane z innych źródeł",
+  "debugAndDiagnostics": "Debugowanie i diagnostyka",
+  "autoDeletesAfter3Days": "Automatyczne usuwanie po 3 dniach",
+  "helpsDiagnoseIssues": "Pomaga diagnozować problemy",
+  "exportConversationsDescription": "Eksportuj rozmowy do JSON",
+  "exportingConversations": "Eksportowanie rozmów...",
+  "clearNodesDescription": "Wyczyść wszystkie węzły i połączenia",
+  "deleteKnowledgeGraphQuestion": "Usunąć graf wiedzy?",
+  "deleteKnowledgeGraphWarning": "Spowoduje to usunięcie wszystkich pochodnych danych grafu wiedzy. Twoje oryginalne wspomnienia pozostaną bezpieczne.",
+  "connectOmiWithAI": "Połącz Omi z asystentami AI",
+  "noAPIKeys": "Brak kluczy API. Utwórz jeden, aby rozpocząć.",
+  "realTimeTranscript": "Transkrypcja w czasie rzeczywistym",
+  "transcriptionDiagnostics": "Diagnostyka transkrypcji",
+  "detailedDiagnosticMessages": "Szczegółowe komunikaty diagnostyczne",
+  "autoCreateSpeakers": "Automatycznie twórz mówców",
+  "autoCreateWhenDetected": "Automatycznie twórz po wykryciu nazwy",
+  "followUpQuestions": "Pytania uzupełniające",
+  "suggestQuestionsAfterConversations": "Sugeruj pytania po rozmowach",
+  "goalTracker": "Śledzenie celów",
+  "trackPersonalGoals": "Śledź osobiste cele na stronie głównej",
+  "dailyReflection": "Codzienna refleksja",
+  "dailyReflectionDescription": "Przypomnienie o 21:00, aby zastanowić się nad swoim dniem",
+  "endpointURL": "URL punktu końcowego",
+  "links": "Linki",
+  "discordMemberCount": "Ponad 8000 członków na Discordzie",
+  "userInformation": "Informacje o użytkowniku"
 }

@@ -37,7 +37,7 @@
   "@ok": {
     "description": "Generic OK button text"
   },
-  "delete": "Odstrániť",
+  "delete": "Zmazať",
   "@delete": {
     "description": "Button label"
   },
@@ -159,7 +159,7 @@
   "@createPersonHint": {
     "description": "Hint text for creating a person"
   },
-  "speechProfile": "Profil reči",
+  "speechProfile": "Rečový Profil",
   "@speechProfile": {
     "description": "Speech profile label"
   },
@@ -511,27 +511,27 @@
   "@email": {
     "description": "Email field label"
   },
-  "customVocabulary": "Vlastný slovník",
+  "customVocabulary": "Vlastný Slovník",
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Identifikácia ostatných",
+  "identifyingOthers": "Identifikácia Ostatných",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
-  "paymentMethods": "Platobné metódy",
+  "paymentMethods": "Platobné Metódy",
   "@paymentMethods": {
     "description": "Payment methods setting"
   },
-  "conversationDisplay": "Zobrazenie konverzácií",
+  "conversationDisplay": "Zobrazenie Konverzácií",
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "Údaje a súkromie",
+  "dataPrivacy": "Ochrana Údajov",
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
-  "userId": "ID používateľa",
+  "userId": "ID Používateľa",
   "@userId": {
     "description": "User ID label"
   },
@@ -583,7 +583,7 @@
   "@referralProgram": {
     "description": "Referral program menu item"
   },
-  "signOut": "Odhlásiť sa",
+  "signOut": "Odhlásiť Sa",
   "@signOut": {
     "description": "Sign out button"
   },
@@ -879,7 +879,7 @@
   "@createKeyToStart": {
     "description": "Create key instruction"
   },
-  "createKey": "Vytvoriť kľúč",
+  "createKey": "Vytvoriť Kľúč",
   "@createKey": {
     "description": "Create Key button"
   },
@@ -1087,7 +1087,7 @@
   "exportShared": "Export bol zdieľaný",
   "deleteKnowledgeGraphTitle": "Odstrániť graf znalostí?",
   "deleteKnowledgeGraphMessage": "Týmto odstránite všetky odvodené údaje grafu znalostí (uzly a prepojenia). Vaše pôvodné spomienky zostanú v bezpečí. Graf bude znovu vytvorený postupom času alebo na ďalšiu požiadavku.",
-  "knowledgeGraphDeleted": "Graf znalostí bol úspešne odstránený",
+  "knowledgeGraphDeleted": "Graf znalostí zmazaný",
   "deleteGraphFailed": "Nepodarilo sa odstrániť graf: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -1103,7 +1103,7 @@
   "mcpServer": "MCP server",
   "mcpServerDesc": "Pripojte AI asistentov k vašim údajom",
   "serverUrl": "URL servera",
-  "urlCopied": "URL bola skopírovaná",
+  "urlCopied": "URL skopírované",
   "apiKeyAuth": "Autentifikácia API kľúčom",
   "header": "Hlavička",
   "authorizationBearer": "Authorization: Bearer <key>",
@@ -2392,12 +2392,12 @@
   "welcomeToOmiDescription": "Vitajte v Omi! Váš AI spoločník je pripravený pomôcť vám s rozhovormi, úlohami a oveľa viac.",
   "startUsingOmi": "Začať používať Omi",
   "back": "Späť",
-  "keyboardShortcuts": "Klávesové skratky",
+  "keyboardShortcuts": "Klávesové Skratky",
   "toggleControlBar": "Prepnúť ovládací panel",
   "pressKeys": "Stlačte klávesy...",
   "cmdRequired": "⌘ vyžadované",
   "invalidKey": "Neplatný kláves",
-  "space": "Medzerník",
+  "space": "Medzera",
   "search": "Hľadať",
   "searchPlaceholder": "Hľadať...",
   "untitledConversation": "Konverzácia bez názvu",
@@ -2786,24 +2786,24 @@
   "loadingProfile": "Načítavanie profilu...",
   "profileSettings": "Nastavenia profilu",
   "noEmailSet": "Email nie je nastavený",
-  "userIdCopiedToClipboard": "ID používateľa skopírované do schránky",
-  "yourInformation": "Vaše informácie",
+  "userIdCopiedToClipboard": "ID používateľa skopírované",
+  "yourInformation": "Vaše Informácie",
   "setYourName": "Nastaviť svoje meno",
   "changeYourName": "Zmeniť svoje meno",
   "persona": "Persona",
   "manageYourOmiPersona": "Spravovať svoju Omi personu",
-  "voiceAndPeople": "Hlas a ľudia",
+  "voiceAndPeople": "Hlas a Ľudia",
   "teachOmiYourVoice": "Naučiť Omi svoj hlas",
   "tellOmiWhoSaidIt": "Povedzte Omi, kto to povedal 🗣️",
   "payment": "Platba",
   "addOrChangeYourPaymentMethod": "Pridať alebo zmeniť platobnú metódu",
   "preferences": "Predvoľby",
   "helpImproveOmiBySharing": "Pomôžte vylepšiť Omi zdieľaním anonymizovaných analytických dát",
-  "deleteAccount": "Vymazať účet",
+  "deleteAccount": "Zmazať Účet",
   "deleteYourAccountAndAllData": "Vymazať účet a všetky údaje",
   "helpsDiagnoseIssuesAutoDeletes": "Pomáha diagnostikovať problémy. Automaticky sa vymaže po 3 dňoch.",
   "clearLogs": "Vymazať denníky",
-  "debugLogsCleared": "Denníky ladenia vymazané",
+  "debugLogsCleared": "Protokoly ladenia vymazané",
   "exportConversations": "Exportovať konverzácie",
   "exportAllConversationsToJson": "Exportujte všetky svoje konverzácie do súboru JSON.",
   "conversationsExportStarted": "Export konverzácií začal. Môže to trvať niekoľko sekúnd, prosím čakajte.",
@@ -2827,7 +2827,7 @@
   "pilotFeatures": "Pilotné funkcie",
   "pilotFeaturesDescription": "Tieto funkcie sú testy a podpora nie je zaručená.",
   "suggestFollowUpQuestion": "Navrhnúť následnú otázku",
-  "saveSettings": "Uložiť nastavenia",
+  "saveSettings": "Uložiť Nastavenia",
   "syncingDeveloperSettings": "Synchronizácia nastavení vývojára...",
   "summary": "Zhrnutie",
   "auto": "Automaticky",
@@ -2890,5 +2890,65 @@
   "audioInputSetTo": "Vstup zvuku nastavený na {deviceName}",
   "errorSwitchingAudioDevice": "Chyba pri prepínaní zvukového zariadenia: {error}",
   "selectAudioInput": "Vyberte vstup zvuku",
-  "loadingDevices": "Načítavanie zariadení..."
+  "loadingDevices": "Načítavanie zariadení...",
+  "settingsHeader": "NASTAVENIA",
+  "plansAndBilling": "Plány a Fakturácia",
+  "calendarIntegration": "Integrácia Kalendára",
+  "dailySummary": "Denný Súhrn",
+  "developer": "Vývojár",
+  "about": "O aplikácii",
+  "selectTime": "Vybrať Čas",
+  "accountGroup": "Účet",
+  "signOutQuestion": "Odhlásiť Sa?",
+  "signOutConfirmation": "Naozaj sa chcete odhlásiť?",
+  "customVocabularyHeader": "VLASTNÝ SLOVNÍK",
+  "addWordsDescription": "Pridajte slová, ktoré má Omi rozpoznávať počas prepisu.",
+  "enterWordsHint": "Zadajte slová (oddelené čiarkami)",
+  "dailySummaryHeader": "DENNÝ SÚHRN",
+  "dailySummaryTitle": "Denný Súhrn",
+  "dailySummaryDescription": "Získajte personalizovaný súhrn vašich konverzácií",
+  "deliveryTime": "Čas Doručenia",
+  "deliveryTimeDescription": "Kedy prijímať denný súhrn",
+  "subscription": "Predplatné",
+  "viewPlansAndUsage": "Zobraziť Plány a Využitie",
+  "viewPlansDescription": "Spravujte svoje predplatné a pozrite si štatistiky využitia",
+  "addOrChangePaymentMethod": "Pridajte alebo zmeňte svoju platobnú metódu",
+  "displayOptions": "Možnosti zobrazenia",
+  "showMeetingsInMenuBar": "Zobraziť stretnutia v paneli ponúk",
+  "displayUpcomingMeetingsDescription": "Zobraziť nadchádzajúce stretnutia v paneli ponúk",
+  "showEventsWithoutParticipants": "Zobraziť udalosti bez účastníkov",
+  "includePersonalEventsDescription": "Zahrnúť osobné udalosti bez účastníkov",
+  "upcomingMeetings": "NADCHÁDZAJÚCE STRETNUTIA",
+  "checkingNext7Days": "Kontrola nasledujúcich 7 dní",
+  "shortcuts": "Klávesové skratky",
+  "shortcutChangeInstruction": "Kliknite na skratku a zmeňte ju. Stlačením Escape zrušíte.",
+  "configurePersonaDescription": "Nakonfigurujte svoju AI personu",
+  "configureSTTProvider": "Nakonfigurujte poskytovateľa STT",
+  "setConversationEndDescription": "Nastavte, kedy sa konverzácie automaticky ukončia",
+  "importDataDescription": "Importovať dáta z iných zdrojov",
+  "debugAndDiagnostics": "Ladenie a diagnostika",
+  "autoDeletesAfter3Days": "Automatické vymazanie po 3 dňoch",
+  "helpsDiagnoseIssues": "Pomáha diagnostikovať problémy",
+  "exportConversationsDescription": "Exportovať konverzácie do JSON",
+  "exportingConversations": "Exportovanie konverzácií...",
+  "clearNodesDescription": "Vymazať všetky uzly a pripojenia",
+  "deleteKnowledgeGraphQuestion": "Vymazať graf znalostí?",
+  "deleteKnowledgeGraphWarning": "Tým sa vymažú všetky odvodené údaje grafu znalostí. Vaše pôvodné spomienky zostanú v bezpečí.",
+  "connectOmiWithAI": "Pripojte Omi k AI asistentom",
+  "noAPIKeys": "Žiadne kľúče API. Vytvorte jeden na začatie.",
+  "realTimeTranscript": "Prepis v reálnom čase",
+  "transcriptionDiagnostics": "Diagnostika prepisu",
+  "detailedDiagnosticMessages": "Podrobné diagnostické správy",
+  "autoCreateSpeakers": "Automaticky vytvoriť rečníkov",
+  "autoCreateWhenDetected": "Automaticky vytvoriť pri detekcii mena",
+  "followUpQuestions": "Následné otázky",
+  "suggestQuestionsAfterConversations": "Navrhovať otázky po konverzáciách",
+  "goalTracker": "Sledovanie cieľov",
+  "trackPersonalGoals": "Sledovať osobné ciele na domovskej stránke",
+  "dailyReflection": "Denná reflexia",
+  "dailyReflectionDescription": "Pripomienka o 21:00 na zamyslenie sa nad vaším dňom",
+  "endpointURL": "URL koncového bodu",
+  "links": "Odkazy",
+  "discordMemberCount": "Viac ako 8000 členov na Discorde",
+  "userInformation": "Informácie o používateľovi"
 }

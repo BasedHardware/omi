@@ -29,7 +29,7 @@
   "@confirm": {
     "description": "Confirm button label"
   },
-  "cancel": "Cancel·lar",
+  "cancel": "Cancel·la",
   "@cancel": {
     "description": "Button label"
   },
@@ -37,7 +37,7 @@
   "@ok": {
     "description": "Generic OK button text"
   },
-  "delete": "Suprimir",
+  "delete": "Elimina",
   "@delete": {
     "description": "Button label"
   },
@@ -61,7 +61,7 @@
   "@close": {
     "description": "Close button label"
   },
-  "clear": "Netejar",
+  "clear": "Neteja",
   "@clear": {
     "description": "Clear button label"
   },
@@ -159,7 +159,7 @@
   "@createPersonHint": {
     "description": "Hint text for creating a person"
   },
-  "speechProfile": "Perfil de veu",
+  "speechProfile": "Perfil de Veu",
   "@speechProfile": {
     "description": "Speech profile label"
   },
@@ -511,27 +511,27 @@
   "@email": {
     "description": "Email field label"
   },
-  "customVocabulary": "Vocabulari personalitzat",
+  "customVocabulary": "Vocabulari Personalitzat",
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Identificant altres",
+  "identifyingOthers": "Identificació d'Altres",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
-  "paymentMethods": "Mètodes de pagament",
+  "paymentMethods": "Mètodes de Pagament",
   "@paymentMethods": {
     "description": "Payment methods setting"
   },
-  "conversationDisplay": "Visualització de converses",
+  "conversationDisplay": "Visualització de Converses",
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "Dades i privadesa",
+  "dataPrivacy": "Privadesa de Dades",
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
-  "userId": "ID d'usuari",
+  "userId": "ID d'Usuari",
   "@userId": {
     "description": "User ID label"
   },
@@ -583,7 +583,7 @@
   "@referralProgram": {
     "description": "Referral program menu item"
   },
-  "signOut": "Tancar sessió",
+  "signOut": "Tancar Sessió",
   "@signOut": {
     "description": "Sign out button"
   },
@@ -879,7 +879,7 @@
   "@createKeyToStart": {
     "description": "Create key instruction"
   },
-  "createKey": "Crear clau",
+  "createKey": "Crea Clau",
   "@createKey": {
     "description": "Create Key button"
   },
@@ -1087,7 +1087,7 @@
   "exportShared": "Exportació compartida",
   "deleteKnowledgeGraphTitle": "Eliminar graf de coneixement?",
   "deleteKnowledgeGraphMessage": "Això eliminarà totes les dades derivades del graf de coneixement (nodes i connexions). Els vostres records originals restaran segurs. El graf es reconstruirà amb el temps o a la propera sol·licitud.",
-  "knowledgeGraphDeleted": "Graf de coneixement eliminat correctament",
+  "knowledgeGraphDeleted": "Graf de coneixement eliminat",
   "deleteGraphFailed": "No s'ha pogut eliminar el graf: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -1103,7 +1103,7 @@
   "mcpServer": "Servidor MCP",
   "mcpServerDesc": "Connectar assistents d'IA a les vostres dades",
   "serverUrl": "URL del servidor",
-  "urlCopied": "URL copiada",
+  "urlCopied": "URL copiat",
   "apiKeyAuth": "Autenticació amb clau API",
   "header": "Capçalera",
   "authorizationBearer": "Authorization: Bearer <key>",
@@ -1292,7 +1292,7 @@
   "showEventsNoParticipants": "Mostrar esdeveniments sense participants",
   "showEventsNoParticipantsDesc": "Quan s'activa, Properament mostra esdeveniments sense participants o enllaç de vídeo.",
   "yourMeetings": "Les vostres reunions",
-  "refresh": "Actualitzar",
+  "refresh": "Actualitza",
   "noUpcomingMeetings": "No s'han trobat reunions properes",
   "checkingNextDays": "Comprovant els propers 30 dies",
   "tomorrow": "Demà",
@@ -2392,7 +2392,7 @@
   "welcomeToOmiDescription": "Benvingut a Omi! El teu company d'IA està preparat per ajudar-te amb converses, tasques i molt més.",
   "startUsingOmi": "Comença a utilitzar Omi",
   "back": "Enrere",
-  "keyboardShortcuts": "Dreceres de teclat",
+  "keyboardShortcuts": "Dreceres de Teclat",
   "toggleControlBar": "Commuta la barra de control",
   "pressKeys": "Prem les tecles...",
   "cmdRequired": "⌘ necessari",
@@ -2804,24 +2804,24 @@
   "loadingProfile": "Carregant perfil...",
   "profileSettings": "Configuració del perfil",
   "noEmailSet": "No hi ha correu electrònic configurat",
-  "userIdCopiedToClipboard": "ID d'usuari copiat al porta-retalls",
-  "yourInformation": "La vostra informació",
+  "userIdCopiedToClipboard": "ID d'usuari copiat",
+  "yourInformation": "La Teva Informació",
   "setYourName": "Estableix el vostre nom",
   "changeYourName": "Canvia el vostre nom",
   "persona": "Persona",
   "manageYourOmiPersona": "Gestiona la teva persona Omi",
-  "voiceAndPeople": "Veu i persones",
+  "voiceAndPeople": "Veu i Persones",
   "teachOmiYourVoice": "Ensenya a Omi la teva veu",
   "tellOmiWhoSaidIt": "Digues a Omi qui ho va dir 🗣️",
   "payment": "Pagament",
   "addOrChangeYourPaymentMethod": "Afegeix o canvia el mètode de pagament",
   "preferences": "Preferències",
   "helpImproveOmiBySharing": "Ajuda a millorar Omi compartint dades d'anàlisi anonimitzades",
-  "deleteAccount": "Eliminar compte",
+  "deleteAccount": "Eliminar Compte",
   "deleteYourAccountAndAllData": "Elimina el compte i totes les dades",
   "helpsDiagnoseIssuesAutoDeletes": "Ajuda a diagnosticar problemes. S'elimina automàticament després de 3 dies.",
   "clearLogs": "Esborrar registres",
-  "debugLogsCleared": "S'han esborrat els registres de depuració",
+  "debugLogsCleared": "Registres de depuració esborrats",
   "exportConversations": "Exportar converses",
   "exportAllConversationsToJson": "Exporteu totes les vostres converses a un fitxer JSON.",
   "conversationsExportStarted": "S'ha iniciat l'exportació de converses. Això pot trigar uns segons, espereu.",
@@ -2845,7 +2845,7 @@
   "pilotFeatures": "Funcions pilot",
   "pilotFeaturesDescription": "Aquestes funcions són proves i no se'n garanteix el suport.",
   "suggestFollowUpQuestion": "Suggerir una pregunta de seguiment",
-  "saveSettings": "Desar configuració",
+  "saveSettings": "Desa la Configuració",
   "syncingDeveloperSettings": "S'està sincronitzant la configuració de desenvolupador...",
   "summary": "Resum",
   "auto": "Automàtic",
@@ -2892,5 +2892,65 @@
   "audioInputSetTo": "Entrada d'àudio establerta a {deviceName}",
   "errorSwitchingAudioDevice": "Error en canviar el dispositiu d'àudio: {error}",
   "selectAudioInput": "Seleccioneu l'entrada d'àudio",
-  "loadingDevices": "Carregant dispositius..."
+  "loadingDevices": "Carregant dispositius...",
+  "settingsHeader": "CONFIGURACIÓ",
+  "plansAndBilling": "Plans i Facturació",
+  "calendarIntegration": "Integració de Calendari",
+  "dailySummary": "Resum Diari",
+  "developer": "Desenvolupador",
+  "about": "Quant a",
+  "selectTime": "Selecciona l'Hora",
+  "accountGroup": "Compte",
+  "signOutQuestion": "Tancar Sessió?",
+  "signOutConfirmation": "Estàs segur que vols tancar la sessió?",
+  "customVocabularyHeader": "VOCABULARI PERSONALITZAT",
+  "addWordsDescription": "Afegeix paraules que Omi hauria de reconèixer durant la transcripció.",
+  "enterWordsHint": "Introdueix paraules (separades per comes)",
+  "dailySummaryHeader": "RESUM DIARI",
+  "dailySummaryTitle": "Resum Diari",
+  "dailySummaryDescription": "Obtén un resum personalitzat de les teves converses",
+  "deliveryTime": "Hora de Lliurament",
+  "deliveryTimeDescription": "Quan rebre el teu resum diari",
+  "subscription": "Subscripció",
+  "viewPlansAndUsage": "Veure Plans i Ús",
+  "viewPlansDescription": "Gestiona la teva subscripció i consulta estadístiques d'ús",
+  "addOrChangePaymentMethod": "Afegeix o canvia el teu mètode de pagament",
+  "displayOptions": "Opcions de Visualització",
+  "showMeetingsInMenuBar": "Mostra Reunions a la Barra de Menú",
+  "displayUpcomingMeetingsDescription": "Mostra les reunions properes a la barra de menú",
+  "showEventsWithoutParticipants": "Mostra Esdeveniments Sense Participants",
+  "includePersonalEventsDescription": "Inclou esdeveniments personals sense assistents",
+  "upcomingMeetings": "REUNIONS PROPERES",
+  "checkingNext7Days": "Comprovant els propers 7 dies",
+  "shortcuts": "Dreceres",
+  "shortcutChangeInstruction": "Feu clic en una drecera per canviar-la. Premeu Escape per cancel·lar.",
+  "configurePersonaDescription": "Configura la teva persona d'IA",
+  "configureSTTProvider": "Configura el proveïdor STT",
+  "setConversationEndDescription": "Estableix quan finalitzen automàticament les converses",
+  "importDataDescription": "Importa dades d'altres fonts",
+  "debugAndDiagnostics": "Depuració i Diagnòstics",
+  "autoDeletesAfter3Days": "S'elimina automàticament després de 3 dies",
+  "helpsDiagnoseIssues": "Ajuda a diagnosticar problemes",
+  "exportConversationsDescription": "Exporta converses a JSON",
+  "exportingConversations": "Exportant converses...",
+  "clearNodesDescription": "Esborra tots els nodes i connexions",
+  "deleteKnowledgeGraphQuestion": "Eliminar Gràfic de Coneixement?",
+  "deleteKnowledgeGraphWarning": "Això eliminarà totes les dades derivades del gràfic de coneixement. Els teus records originals romanen segurs.",
+  "connectOmiWithAI": "Connecta Omi amb assistents d'IA",
+  "noAPIKeys": "No hi ha claus API. Crea'n una per començar.",
+  "realTimeTranscript": "Transcripció en Temps Real",
+  "transcriptionDiagnostics": "Diagnòstics de Transcripció",
+  "detailedDiagnosticMessages": "Missatges de diagnòstic detallats",
+  "autoCreateSpeakers": "Crea Parlants Automàticament",
+  "autoCreateWhenDetected": "Crea automàticament quan es detecti el nom",
+  "followUpQuestions": "Preguntes de Seguiment",
+  "suggestQuestionsAfterConversations": "Suggerir preguntes després de les converses",
+  "goalTracker": "Seguidor d'Objectius",
+  "trackPersonalGoals": "Fes el seguiment d'objectius personals a la pàgina d'inici",
+  "dailyReflection": "Reflexió Diària",
+  "dailyReflectionDescription": "Recordatori a les 9 PM per reflexionar sobre el teu dia",
+  "endpointURL": "URL del Punt Final",
+  "links": "Enllaços",
+  "discordMemberCount": "Més de 8000 membres a Discord",
+  "userInformation": "Informació de l'Usuari"
 }

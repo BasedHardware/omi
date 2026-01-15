@@ -159,7 +159,7 @@
   "@createPersonHint": {
     "description": "Hint text for creating a person"
   },
-  "speechProfile": "Profilo vocale",
+  "speechProfile": "Profilo Vocale",
   "@speechProfile": {
     "description": "Speech profile label"
   },
@@ -515,11 +515,11 @@
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Identificazione degli altri",
+  "identifyingOthers": "Identificazione di Altri",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
-  "paymentMethods": "Metodi di pagamento",
+  "paymentMethods": "Metodi di Pagamento",
   "@paymentMethods": {
     "description": "Payment methods setting"
   },
@@ -527,11 +527,11 @@
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "Dati e Privacy",
+  "dataPrivacy": "Privacy dei Dati",
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
-  "userId": "ID utente",
+  "userId": "ID Utente",
   "@userId": {
     "description": "User ID label"
   },
@@ -879,7 +879,7 @@
   "@createKeyToStart": {
     "description": "Create key instruction"
   },
-  "createKey": "Crea chiave",
+  "createKey": "Crea Chiave",
   "@createKey": {
     "description": "Create Key button"
   },
@@ -1087,7 +1087,7 @@
   "exportShared": "Esportazione condivisa",
   "deleteKnowledgeGraphTitle": "Eliminare Grafo di Conoscenza?",
   "deleteKnowledgeGraphMessage": "Questo eliminerà tutti i dati del grafo di conoscenza derivato (nodi e connessioni). I tuoi ricordi originali rimarranno al sicuro. Il grafo sarà ricostruito nel tempo o alla prossima richiesta.",
-  "knowledgeGraphDeleted": "Grafo di Conoscenza eliminato con successo",
+  "knowledgeGraphDeleted": "Grafico della conoscenza eliminato",
   "deleteGraphFailed": "Impossibile eliminare il grafo: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -2374,7 +2374,7 @@
   "welcomeToOmiDescription": "Benvenuto in Omi! Il tuo compagno AI è pronto ad aiutarti con conversazioni, attività e molto altro.",
   "startUsingOmi": "Inizia a usare Omi",
   "back": "Indietro",
-  "keyboardShortcuts": "Scorciatoie da tastiera",
+  "keyboardShortcuts": "Scorciatoie da Tastiera",
   "toggleControlBar": "Attiva/Disattiva barra di controllo",
   "pressKeys": "Premi i tasti...",
   "cmdRequired": "⌘ richiesto",
@@ -2768,20 +2768,20 @@
   "loadingProfile": "Caricamento del profilo...",
   "profileSettings": "Impostazioni del profilo",
   "noEmailSet": "Nessuna email impostata",
-  "userIdCopiedToClipboard": "ID utente copiato negli appunti",
-  "yourInformation": "Le tue informazioni",
+  "userIdCopiedToClipboard": "ID utente copiato",
+  "yourInformation": "Le Tue Informazioni",
   "setYourName": "Imposta il tuo nome",
   "changeYourName": "Cambia il tuo nome",
   "persona": "Persona",
   "manageYourOmiPersona": "Gestisci la tua persona Omi",
-  "voiceAndPeople": "Voce e persone",
+  "voiceAndPeople": "Voce e Persone",
   "teachOmiYourVoice": "Insegna a Omi la tua voce",
   "tellOmiWhoSaidIt": "Dì a Omi chi l'ha detto 🗣️",
   "payment": "Pagamento",
   "addOrChangeYourPaymentMethod": "Aggiungi o modifica metodo di pagamento",
   "preferences": "Preferenze",
   "helpImproveOmiBySharing": "Aiuta a migliorare Omi condividendo dati analitici anonimi",
-  "deleteAccount": "Elimina account",
+  "deleteAccount": "Elimina Account",
   "deleteYourAccountAndAllData": "Elimina account e tutti i dati",
   "helpsDiagnoseIssuesAutoDeletes": "Aiuta a diagnosticare i problemi. Eliminato automaticamente dopo 3 giorni.",
   "clearLogs": "Cancella log",
@@ -2809,7 +2809,7 @@
   "pilotFeatures": "Funzionalità pilota",
   "pilotFeaturesDescription": "Queste funzionalità sono test e non è garantito il supporto.",
   "suggestFollowUpQuestion": "Suggerisci domanda di follow-up",
-  "saveSettings": "Salva impostazioni",
+  "saveSettings": "Salva Impostazioni",
   "syncingDeveloperSettings": "Sincronizzazione impostazioni sviluppatore...",
   "summary": "Riepilogo",
   "auto": "Automatico",
@@ -2872,5 +2872,65 @@
   "audioInputSetTo": "Ingresso audio impostato su {deviceName}",
   "errorSwitchingAudioDevice": "Errore durante il cambio del dispositivo audio: {error}",
   "selectAudioInput": "Seleziona ingresso audio",
-  "loadingDevices": "Caricamento dispositivi..."
+  "loadingDevices": "Caricamento dispositivi...",
+  "settingsHeader": "IMPOSTAZIONI",
+  "plansAndBilling": "Piani e Fatturazione",
+  "calendarIntegration": "Integrazione Calendario",
+  "dailySummary": "Riepilogo Giornaliero",
+  "developer": "Sviluppatore",
+  "about": "Informazioni",
+  "selectTime": "Seleziona Ora",
+  "accountGroup": "Account",
+  "signOutQuestion": "Disconnetti?",
+  "signOutConfirmation": "Sei sicuro di volerti disconnettere?",
+  "customVocabularyHeader": "VOCABOLARIO PERSONALIZZATO",
+  "addWordsDescription": "Aggiungi parole che Omi dovrebbe riconoscere durante la trascrizione.",
+  "enterWordsHint": "Inserisci parole (separate da virgole)",
+  "dailySummaryHeader": "RIEPILOGO GIORNALIERO",
+  "dailySummaryTitle": "Riepilogo Giornaliero",
+  "dailySummaryDescription": "Ricevi un riepilogo personalizzato delle tue conversazioni",
+  "deliveryTime": "Ora di Consegna",
+  "deliveryTimeDescription": "Quando ricevere il riepilogo giornaliero",
+  "subscription": "Abbonamento",
+  "viewPlansAndUsage": "Visualizza Piani e Utilizzo",
+  "viewPlansDescription": "Gestisci il tuo abbonamento e visualizza le statistiche di utilizzo",
+  "addOrChangePaymentMethod": "Aggiungi o modifica il tuo metodo di pagamento",
+  "displayOptions": "Opzioni di Visualizzazione",
+  "showMeetingsInMenuBar": "Mostra Riunioni nella Barra dei Menu",
+  "displayUpcomingMeetingsDescription": "Mostra le riunioni imminenti nella barra dei menu",
+  "showEventsWithoutParticipants": "Mostra Eventi Senza Partecipanti",
+  "includePersonalEventsDescription": "Includi eventi personali senza partecipanti",
+  "upcomingMeetings": "RIUNIONI IMMINENTI",
+  "checkingNext7Days": "Controllo dei prossimi 7 giorni",
+  "shortcuts": "Scorciatoie",
+  "shortcutChangeInstruction": "Fai clic su una scorciatoia per modificarla. Premi Escape per annullare.",
+  "configurePersonaDescription": "Configura la tua persona IA",
+  "configureSTTProvider": "Configura provider STT",
+  "setConversationEndDescription": "Imposta quando le conversazioni terminano automaticamente",
+  "importDataDescription": "Importa dati da altre fonti",
+  "debugAndDiagnostics": "Debug e Diagnostica",
+  "autoDeletesAfter3Days": "Eliminazione automatica dopo 3 giorni",
+  "helpsDiagnoseIssues": "Aiuta a diagnosticare i problemi",
+  "exportConversationsDescription": "Esporta conversazioni in JSON",
+  "exportingConversations": "Esportazione conversazioni...",
+  "clearNodesDescription": "Cancella tutti i nodi e le connessioni",
+  "deleteKnowledgeGraphQuestion": "Eliminare Grafico della Conoscenza?",
+  "deleteKnowledgeGraphWarning": "Questo eliminerà tutti i dati derivati del grafico della conoscenza. I tuoi ricordi originali rimangono al sicuro.",
+  "connectOmiWithAI": "Collega Omi con assistenti IA",
+  "noAPIKeys": "Nessuna chiave API. Creane una per iniziare.",
+  "realTimeTranscript": "Trascrizione in Tempo Reale",
+  "transcriptionDiagnostics": "Diagnostica Trascrizione",
+  "detailedDiagnosticMessages": "Messaggi diagnostici dettagliati",
+  "autoCreateSpeakers": "Crea Automaticamente Relatori",
+  "autoCreateWhenDetected": "Crea automaticamente quando viene rilevato il nome",
+  "followUpQuestions": "Domande di Follow-up",
+  "suggestQuestionsAfterConversations": "Suggerisci domande dopo le conversazioni",
+  "goalTracker": "Tracker degli Obiettivi",
+  "trackPersonalGoals": "Tieni traccia degli obiettivi personali sulla homepage",
+  "dailyReflection": "Riflessione Giornaliera",
+  "dailyReflectionDescription": "Promemoria alle 21:00 per riflettere sulla tua giornata",
+  "endpointURL": "URL dell'Endpoint",
+  "links": "Link",
+  "discordMemberCount": "Oltre 8000 membri su Discord",
+  "userInformation": "Informazioni Utente"
 }

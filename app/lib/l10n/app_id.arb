@@ -159,7 +159,7 @@
   "@createPersonHint": {
     "description": "Hint text for creating a person"
   },
-  "speechProfile": "Profil Ucapan",
+  "speechProfile": "Profil Suara",
   "@speechProfile": {
     "description": "Speech profile label"
   },
@@ -527,7 +527,7 @@
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "Data & Privasi",
+  "dataPrivacy": "Privasi Data",
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
@@ -535,7 +535,7 @@
   "@userId": {
     "description": "User ID label"
   },
-  "notSet": "Belum diatur",
+  "notSet": "Tidak diatur",
   "@notSet": {
     "description": "Default value when not set"
   },
@@ -883,7 +883,7 @@
   "@createKey": {
     "description": "Create Key button"
   },
-  "docs": "Dokumen",
+  "docs": "Dokumentasi",
   "@docs": {
     "description": "Documentation link"
   },
@@ -1087,7 +1087,7 @@
   "exportShared": "Ekspor dibagikan",
   "deleteKnowledgeGraphTitle": "Hapus Grafik Pengetahuan?",
   "deleteKnowledgeGraphMessage": "Ini akan menghapus semua data grafik pengetahuan turunan (simpul dan koneksi). Memori asli Anda akan tetap aman. Grafik akan dibangun kembali seiring waktu atau pada permintaan berikutnya.",
-  "knowledgeGraphDeleted": "Grafik Pengetahuan berhasil dihapus",
+  "knowledgeGraphDeleted": "Grafik pengetahuan dihapus",
   "deleteGraphFailed": "Gagal menghapus grafik: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -2786,7 +2786,7 @@
   "loadingProfile": "Memuat profil...",
   "profileSettings": "Pengaturan Profil",
   "noEmailSet": "Tidak ada email yang diatur",
-  "userIdCopiedToClipboard": "ID Pengguna disalin ke papan klip",
+  "userIdCopiedToClipboard": "ID pengguna disalin",
   "yourInformation": "Informasi Anda",
   "setYourName": "Atur Nama Anda",
   "changeYourName": "Ubah Nama Anda",
@@ -2890,5 +2890,65 @@
   "audioInputSetTo": "Input audio diatur ke {deviceName}",
   "errorSwitchingAudioDevice": "Kesalahan saat mengganti perangkat audio: {error}",
   "selectAudioInput": "Pilih Input Audio",
-  "loadingDevices": "Memuat perangkat..."
+  "loadingDevices": "Memuat perangkat...",
+  "settingsHeader": "PENGATURAN",
+  "plansAndBilling": "Paket & Penagihan",
+  "calendarIntegration": "Integrasi Kalender",
+  "dailySummary": "Ringkasan Harian",
+  "developer": "Pengembang",
+  "about": "Tentang",
+  "selectTime": "Pilih Waktu",
+  "accountGroup": "Akun",
+  "signOutQuestion": "Keluar?",
+  "signOutConfirmation": "Apakah Anda yakin ingin keluar?",
+  "customVocabularyHeader": "KOSAKATA KUSTOM",
+  "addWordsDescription": "Tambahkan kata-kata yang harus dikenali Omi selama transkripsi.",
+  "enterWordsHint": "Masukkan kata (dipisahkan koma)",
+  "dailySummaryHeader": "RINGKASAN HARIAN",
+  "dailySummaryTitle": "Ringkasan Harian",
+  "dailySummaryDescription": "Dapatkan ringkasan yang dipersonalisasi dari percakapan Anda",
+  "deliveryTime": "Waktu Pengiriman",
+  "deliveryTimeDescription": "Kapan menerima ringkasan harian Anda",
+  "subscription": "Langganan",
+  "viewPlansAndUsage": "Lihat Paket & Penggunaan",
+  "viewPlansDescription": "Kelola langganan Anda dan lihat statistik penggunaan",
+  "addOrChangePaymentMethod": "Tambahkan atau ubah metode pembayaran Anda",
+  "displayOptions": "Opsi Tampilan",
+  "showMeetingsInMenuBar": "Tampilkan Rapat di Bilah Menu",
+  "displayUpcomingMeetingsDescription": "Tampilkan rapat mendatang di bilah menu",
+  "showEventsWithoutParticipants": "Tampilkan Acara Tanpa Peserta",
+  "includePersonalEventsDescription": "Sertakan acara pribadi tanpa peserta",
+  "upcomingMeetings": "RAPAT MENDATANG",
+  "checkingNext7Days": "Memeriksa 7 hari ke depan",
+  "shortcuts": "Pintasan",
+  "shortcutChangeInstruction": "Klik pintasan untuk mengubahnya. Tekan Escape untuk membatalkan.",
+  "configurePersonaDescription": "Konfigurasi persona AI Anda",
+  "configureSTTProvider": "Konfigurasi penyedia STT",
+  "setConversationEndDescription": "Atur kapan percakapan berakhir otomatis",
+  "importDataDescription": "Impor data dari sumber lain",
+  "debugAndDiagnostics": "Debug & Diagnostik",
+  "autoDeletesAfter3Days": "Otomatis dihapus setelah 3 hari",
+  "helpsDiagnoseIssues": "Membantu mendiagnosis masalah",
+  "exportConversationsDescription": "Ekspor percakapan ke JSON",
+  "exportingConversations": "Mengekspor percakapan...",
+  "clearNodesDescription": "Hapus semua node dan koneksi",
+  "deleteKnowledgeGraphQuestion": "Hapus Grafik Pengetahuan?",
+  "deleteKnowledgeGraphWarning": "Ini akan menghapus semua data grafik pengetahuan turunan. Kenangan asli Anda tetap aman.",
+  "connectOmiWithAI": "Hubungkan Omi dengan asisten AI",
+  "noAPIKeys": "Tidak ada kunci API. Buat satu untuk memulai.",
+  "realTimeTranscript": "Transkrip Real-time",
+  "transcriptionDiagnostics": "Diagnostik Transkripsi",
+  "detailedDiagnosticMessages": "Pesan diagnostik terperinci",
+  "autoCreateSpeakers": "Buat Pembicara Otomatis",
+  "autoCreateWhenDetected": "Buat otomatis saat nama terdeteksi",
+  "followUpQuestions": "Pertanyaan Lanjutan",
+  "suggestQuestionsAfterConversations": "Sarankan pertanyaan setelah percakapan",
+  "goalTracker": "Pelacak Tujuan",
+  "trackPersonalGoals": "Lacak tujuan pribadi di halaman utama",
+  "dailyReflection": "Refleksi Harian",
+  "dailyReflectionDescription": "Pengingat jam 9 malam untuk merefleksikan hari Anda",
+  "endpointURL": "URL Endpoint",
+  "links": "Tautan",
+  "discordMemberCount": "8000+ anggota di Discord",
+  "userInformation": "Informasi Pengguna"
 }

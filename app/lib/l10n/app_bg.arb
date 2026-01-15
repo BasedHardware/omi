@@ -37,7 +37,7 @@
   "@ok": {
     "description": "Generic OK button text"
   },
-  "delete": "Изтриване",
+  "delete": "Изтрий",
   "@delete": {
     "description": "Button label"
   },
@@ -159,7 +159,7 @@
   "@createPersonHint": {
     "description": "Hint text for creating a person"
   },
-  "speechProfile": "Профил на говора",
+  "speechProfile": "Речеви Профил",
   "@speechProfile": {
     "description": "Speech profile label"
   },
@@ -511,23 +511,23 @@
   "@email": {
     "description": "Email field label"
   },
-  "customVocabulary": "Персонализиран речник",
+  "customVocabulary": "Персонализиран Речник",
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Идентифициране на други",
+  "identifyingOthers": "Идентифициране на Други",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
-  "paymentMethods": "Методи на плащане",
+  "paymentMethods": "Методи за Плащане",
   "@paymentMethods": {
     "description": "Payment methods setting"
   },
-  "conversationDisplay": "Показване на разговор",
+  "conversationDisplay": "Показване на Разговори",
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "Данни и поверителност",
+  "dataPrivacy": "Поверителност на Данните",
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
@@ -583,7 +583,7 @@
   "@referralProgram": {
     "description": "Referral program menu item"
   },
-  "signOut": "Излез",
+  "signOut": "Изход",
   "@signOut": {
     "description": "Sign out button"
   },
@@ -879,7 +879,7 @@
   "@createKeyToStart": {
     "description": "Create key instruction"
   },
-  "createKey": "Създаване на ключ",
+  "createKey": "Създай Ключ",
   "@createKey": {
     "description": "Create Key button"
   },
@@ -1087,7 +1087,7 @@
   "exportShared": "Експортът е споделен",
   "deleteKnowledgeGraphTitle": "Изтриване на граф на знанията?",
   "deleteKnowledgeGraphMessage": "Това ще изтрие всички производни данни от графа на знанията (възли и връзки). Вашите оригинални спомени ще останат в безопасност. Графът ще бъде възстановен с течение на времето или при следващо запитване.",
-  "knowledgeGraphDeleted": "Графът на знанията е изтрит успешно",
+  "knowledgeGraphDeleted": "Графът на знанията е изтрит",
   "deleteGraphFailed": "Неуспешно изтриване на граф: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -1103,7 +1103,7 @@
   "mcpServer": "MCP сървър",
   "mcpServerDesc": "Свържете AI асистенти с вашите данни",
   "serverUrl": "URL на сървър",
-  "urlCopied": "URL е копиран",
+  "urlCopied": "URL копиран",
   "apiKeyAuth": "Удостоверяване с API ключ",
   "header": "Заглавка",
   "authorizationBearer": "Authorization: Bearer <key>",
@@ -1292,7 +1292,7 @@
   "showEventsNoParticipants": "Показвай събития без участници",
   "showEventsNoParticipantsDesc": "Когато е активирано, показва събития без участници или видео връзка.",
   "yourMeetings": "Вашите срещи",
-  "refresh": "Обнови",
+  "refresh": "Опресни",
   "noUpcomingMeetings": "Няма намерени предстоящи срещи",
   "checkingNextDays": "Проверка на следващите 30 дни",
   "tomorrow": "Утре",
@@ -2392,7 +2392,7 @@
   "welcomeToOmiDescription": "Добре дошли в Omi! Вашият AI спътник е готов да ви помогне с разговори, задачи и още.",
   "startUsingOmi": "Започнете да използвате Omi",
   "back": "Назад",
-  "keyboardShortcuts": "Клавишни комбинации",
+  "keyboardShortcuts": "Клавишни Комбинации",
   "toggleControlBar": "Превключване на контролната лента",
   "pressKeys": "Натиснете клавиши...",
   "cmdRequired": "⌘ е задължителен",
@@ -2804,24 +2804,24 @@
   "loadingProfile": "Зареждане на профила...",
   "profileSettings": "Настройки на профила",
   "noEmailSet": "Няма зададен имейл",
-  "userIdCopiedToClipboard": "Потребителски ID копиран в клипборда",
+  "userIdCopiedToClipboard": "Потребителски ID копиран",
   "yourInformation": "Вашата информация",
   "setYourName": "Задайте вашето име",
   "changeYourName": "Променете вашето име",
   "persona": "Персона",
   "manageYourOmiPersona": "Управлявайте вашата Omi персона",
-  "voiceAndPeople": "Глас и хора",
+  "voiceAndPeople": "Глас и Хора",
   "teachOmiYourVoice": "Научете Omi на вашия глас",
   "tellOmiWhoSaidIt": "Кажете на Omi кой го каза 🗣️",
   "payment": "Плащане",
   "addOrChangeYourPaymentMethod": "Добавете или променете метод на плащане",
   "preferences": "Предпочитания",
   "helpImproveOmiBySharing": "Помогнете за подобряването на Omi чрез споделяне на анонимизирани данни за анализ",
-  "deleteAccount": "Изтриване на акаунт",
+  "deleteAccount": "Изтриване на Акаунт",
   "deleteYourAccountAndAllData": "Изтрийте вашия акаунт и всички данни",
   "helpsDiagnoseIssuesAutoDeletes": "Помага за диагностициране на проблеми. Автоматично изтрива след 3 дни.",
   "clearLogs": "Изчистване на регистрационни файлове",
-  "debugLogsCleared": "Регистрационните файлове за отстраняване на грешки са изчистени",
+  "debugLogsCleared": "Логовете за отстраняване на грешки са изчистени",
   "exportConversations": "Експортиране на разговори",
   "exportAllConversationsToJson": "Експортирайте всички свои разговори в JSON файл.",
   "conversationsExportStarted": "Експортирането на разговори започна. Това може да отнеме няколко секунди, моля, изчакайте.",
@@ -2845,7 +2845,7 @@
   "pilotFeatures": "Пилотни функции",
   "pilotFeaturesDescription": "Тези функции са тестове и не се гарантира поддръжка.",
   "suggestFollowUpQuestion": "Предложете последващ въпрос",
-  "saveSettings": "Запазване на настройките",
+  "saveSettings": "Запази Настройки",
   "syncingDeveloperSettings": "Синхронизиране на настройките за разработчици...",
   "summary": "Резюме",
   "auto": "Автоматично",
@@ -2892,5 +2892,65 @@
   "audioInputSetTo": "Аудио входът е зададен на {deviceName}",
   "errorSwitchingAudioDevice": "Грешка при превключване на аудио устройство: {error}",
   "selectAudioInput": "Изберете аудио вход",
-  "loadingDevices": "Зареждане на устройства..."
+  "loadingDevices": "Зареждане на устройства...",
+  "settingsHeader": "НАСТРОЙКИ",
+  "plansAndBilling": "Планове и Фактуриране",
+  "calendarIntegration": "Интеграция на Календар",
+  "dailySummary": "Дневно Резюме",
+  "developer": "Разработчик",
+  "about": "За",
+  "selectTime": "Избери Час",
+  "accountGroup": "Акаунт",
+  "signOutQuestion": "Изход?",
+  "signOutConfirmation": "Сигурни ли сте, че искате да излезете?",
+  "customVocabularyHeader": "ПЕРСОНАЛИЗИРАН РЕЧНИК",
+  "addWordsDescription": "Добавете думи, които Omi трябва да разпознава по време на транскрипция.",
+  "enterWordsHint": "Въведете думи (разделени със запетая)",
+  "dailySummaryHeader": "ДНЕВНО РЕЗЮМЕ",
+  "dailySummaryTitle": "Дневно Резюме",
+  "dailySummaryDescription": "Получете персонализирано резюме на разговорите си",
+  "deliveryTime": "Време на Доставка",
+  "deliveryTimeDescription": "Кога да получавате дневното си резюме",
+  "subscription": "Абонамент",
+  "viewPlansAndUsage": "Преглед на Планове и Използване",
+  "viewPlansDescription": "Управлявайте абонамента си и вижте статистика за използването",
+  "addOrChangePaymentMethod": "Добавете или променете метода си за плащане",
+  "displayOptions": "Опции за показване",
+  "showMeetingsInMenuBar": "Показване на срещи в лентата с менюта",
+  "displayUpcomingMeetingsDescription": "Показване на предстоящи срещи в лентата с менюта",
+  "showEventsWithoutParticipants": "Показване на събития без участници",
+  "includePersonalEventsDescription": "Включване на лични събития без участници",
+  "upcomingMeetings": "ПРЕДСТОЯЩИ СРЕЩИ",
+  "checkingNext7Days": "Проверка на следващите 7 дни",
+  "shortcuts": "Клавишни комбинации",
+  "shortcutChangeInstruction": "Щракнете върху пряк път, за да го промените. Натиснете Escape, за да отмените.",
+  "configurePersonaDescription": "Конфигурирайте вашата AI персона",
+  "configureSTTProvider": "Конфигуриране на доставчик на STT",
+  "setConversationEndDescription": "Задайте кога разговорите приключват автоматично",
+  "importDataDescription": "Импортиране на данни от други източници",
+  "debugAndDiagnostics": "Отстраняване на грешки и диагностика",
+  "autoDeletesAfter3Days": "Автоматично изтриване след 3 дни",
+  "helpsDiagnoseIssues": "Помага при диагностицирането на проблеми",
+  "exportConversationsDescription": "Експортиране на разговори в JSON",
+  "exportingConversations": "Експортиране на разговори...",
+  "clearNodesDescription": "Изчистване на всички възли и връзки",
+  "deleteKnowledgeGraphQuestion": "Изтриване на графа на знанието?",
+  "deleteKnowledgeGraphWarning": "Това ще изтрие всички производни данни от графа на знанието. Вашите оригинални спомени остават в безопасност.",
+  "connectOmiWithAI": "Свържете Omi с AI асистенти",
+  "noAPIKeys": "Няма API ключове. Създайте един, за да започнете.",
+  "realTimeTranscript": "Транскрипция в реално време",
+  "transcriptionDiagnostics": "Диагностика на транскрипция",
+  "detailedDiagnosticMessages": "Подробни диагностични съобщения",
+  "autoCreateSpeakers": "Автоматично създаване на говорители",
+  "autoCreateWhenDetected": "Автоматично създаване при откриване на име",
+  "followUpQuestions": "Последващи въпроси",
+  "suggestQuestionsAfterConversations": "Предложете въпроси след разговори",
+  "goalTracker": "Проследяване на цели",
+  "trackPersonalGoals": "Проследяване на лични цели на началната страница",
+  "dailyReflection": "Ежедневно размисъл",
+  "dailyReflectionDescription": "Напомняне в 21:00 за размисъл над деня ви",
+  "endpointURL": "URL на крайна точка",
+  "links": "Връзки",
+  "discordMemberCount": "Над 8000 членове в Discord",
+  "userInformation": "Информация за потребителя"
 }

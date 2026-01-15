@@ -61,7 +61,7 @@
   "@close": {
     "description": "Close button label"
   },
-  "clear": "Șterge",
+  "clear": "Curăță",
   "@clear": {
     "description": "Clear button label"
   },
@@ -159,7 +159,7 @@
   "@createPersonHint": {
     "description": "Hint text for creating a person"
   },
-  "speechProfile": "Profil vocal",
+  "speechProfile": "Profil Vocal",
   "@speechProfile": {
     "description": "Speech profile label"
   },
@@ -507,35 +507,35 @@
   "@name": {
     "description": "Name field label"
   },
-  "email": "Email",
+  "email": "E-mail",
   "@email": {
     "description": "Email field label"
   },
-  "customVocabulary": "Vocabular personalizat",
+  "customVocabulary": "Vocabular Personalizat",
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Identificarea altora",
+  "identifyingOthers": "Identificarea Altora",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
-  "paymentMethods": "Metode de plată",
+  "paymentMethods": "Metode de Plată",
   "@paymentMethods": {
     "description": "Payment methods setting"
   },
-  "conversationDisplay": "Afișare conversații",
+  "conversationDisplay": "Afișare Conversații",
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "Date și confidențialitate",
+  "dataPrivacy": "Confidențialitatea Datelor",
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
-  "userId": "ID utilizator",
+  "userId": "ID Utilizator",
   "@userId": {
     "description": "User ID label"
   },
-  "notSet": "Nesetat",
+  "notSet": "Nu este setat",
   "@notSet": {
     "description": "Default value when not set"
   },
@@ -879,7 +879,7 @@
   "@createKeyToStart": {
     "description": "Create key instruction"
   },
-  "createKey": "Creați cheie",
+  "createKey": "Creează Cheie",
   "@createKey": {
     "description": "Create Key button"
   },
@@ -1087,7 +1087,7 @@
   "exportShared": "Export partajat",
   "deleteKnowledgeGraphTitle": "Ștergi graficul de cunoștințe?",
   "deleteKnowledgeGraphMessage": "Acest lucru va șterge toate datele derivate din graficul de cunoștințe (noduri și conexiuni). Amintirile tale originale vor rămâne în siguranță. Graficul va fi reconstruit în timp sau la următoarea solicitare.",
-  "knowledgeGraphDeleted": "Grafic de cunoștințe șters cu succes",
+  "knowledgeGraphDeleted": "Graficul de cunoștințe a fost șters",
   "deleteGraphFailed": "Nu s-a putut șterge graficul: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -1292,7 +1292,7 @@
   "showEventsNoParticipants": "Afișează evenimente fără participanți",
   "showEventsNoParticipantsDesc": "Când este activat, Coming Up afișează evenimente fără participanți sau link video.",
   "yourMeetings": "Întâlnirile tale",
-  "refresh": "Reîmprospătează",
+  "refresh": "Actualizează",
   "noUpcomingMeetings": "Nu s-au găsit întâlniri viitoare",
   "checkingNextDays": "Se verifică următoarele 30 de zile",
   "tomorrow": "Mâine",
@@ -2392,7 +2392,7 @@
   "welcomeToOmiDescription": "Bun venit la Omi! Companionul tău AI este gata să te ajute cu conversații, sarcini și multe altele.",
   "startUsingOmi": "Începeți să folosiți Omi",
   "back": "Înapoi",
-  "keyboardShortcuts": "Comenzi rapide de la tastatură",
+  "keyboardShortcuts": "Comenzi Rapide",
   "toggleControlBar": "Comută bara de control",
   "pressKeys": "Apasă tastele...",
   "cmdRequired": "⌘ necesar",
@@ -2786,20 +2786,20 @@
   "loadingProfile": "Se încarcă profilul...",
   "profileSettings": "Setări profil",
   "noEmailSet": "Niciun e-mail setat",
-  "userIdCopiedToClipboard": "ID utilizator copiat în clipboard",
-  "yourInformation": "Informațiile dvs.",
+  "userIdCopiedToClipboard": "ID utilizator copiat",
+  "yourInformation": "Informațiile Dvs.",
   "setYourName": "Setați numele",
   "changeYourName": "Schimbați numele",
   "persona": "Persona",
   "manageYourOmiPersona": "Gestionați persona Omi",
-  "voiceAndPeople": "Voce și persoane",
+  "voiceAndPeople": "Voce și Oameni",
   "teachOmiYourVoice": "Învățați Omi vocea dvs.",
   "tellOmiWhoSaidIt": "Spuneți Omi cine a spus-o 🗣️",
   "payment": "Plată",
   "addOrChangeYourPaymentMethod": "Adăugați sau schimbați metoda de plată",
   "preferences": "Preferințe",
   "helpImproveOmiBySharing": "Ajutați la îmbunătățirea Omi prin partajarea datelor de analiză anonimizate",
-  "deleteAccount": "Ștergeți contul",
+  "deleteAccount": "Șterge Contul",
   "deleteYourAccountAndAllData": "Ștergeți contul și toate datele",
   "helpsDiagnoseIssuesAutoDeletes": "Ajută la diagnosticarea problemelor. Șters automat după 3 zile.",
   "clearLogs": "Ștergeți jurnalele",
@@ -2827,7 +2827,7 @@
   "pilotFeatures": "Funcții pilot",
   "pilotFeaturesDescription": "Aceste funcții sunt teste și nu se garantează suportul.",
   "suggestFollowUpQuestion": "Sugerați întrebare de urmărire",
-  "saveSettings": "Salvați setările",
+  "saveSettings": "Salvează Setările",
   "syncingDeveloperSettings": "Sincronizare setări dezvoltator...",
   "summary": "Rezumat",
   "auto": "Automat",
@@ -2890,5 +2890,65 @@
   "audioInputSetTo": "Intrare audio setată la {deviceName}",
   "errorSwitchingAudioDevice": "Eroare la comutarea dispozitivului audio: {error}",
   "selectAudioInput": "Selectați intrarea audio",
-  "loadingDevices": "Se încarcă dispozitivele..."
+  "loadingDevices": "Se încarcă dispozitivele...",
+  "settingsHeader": "SETĂRI",
+  "plansAndBilling": "Planuri și Facturare",
+  "calendarIntegration": "Integrare Calendar",
+  "dailySummary": "Rezumat Zilnic",
+  "developer": "Dezvoltator",
+  "about": "Despre",
+  "selectTime": "Selectează Ora",
+  "accountGroup": "Cont",
+  "signOutQuestion": "Deconectare?",
+  "signOutConfirmation": "Sigur doriți să vă deconectați?",
+  "customVocabularyHeader": "VOCABULAR PERSONALIZAT",
+  "addWordsDescription": "Adăugați cuvinte pe care Omi ar trebui să le recunoască în timpul transcrierii.",
+  "enterWordsHint": "Introduceți cuvinte (separate prin virgulă)",
+  "dailySummaryHeader": "REZUMAT ZILNIC",
+  "dailySummaryTitle": "Rezumat Zilnic",
+  "dailySummaryDescription": "Primiți un rezumat personalizat al conversațiilor dvs.",
+  "deliveryTime": "Ora de Livrare",
+  "deliveryTimeDescription": "Când să primiți rezumatul zilnic",
+  "subscription": "Abonament",
+  "viewPlansAndUsage": "Vezi Planuri și Utilizare",
+  "viewPlansDescription": "Gestionați abonamentul și vedeți statistici de utilizare",
+  "addOrChangePaymentMethod": "Adăugați sau schimbați metoda de plată",
+  "displayOptions": "Opțiuni de afișare",
+  "showMeetingsInMenuBar": "Afișați întâlnirile în bara de meniu",
+  "displayUpcomingMeetingsDescription": "Afișați întâlnirile viitoare în bara de meniu",
+  "showEventsWithoutParticipants": "Afișați evenimentele fără participanți",
+  "includePersonalEventsDescription": "Includeți evenimentele personale fără participanți",
+  "upcomingMeetings": "ÎNTÂLNIRI VIITOARE",
+  "checkingNext7Days": "Verificarea următoarelor 7 zile",
+  "shortcuts": "Comenzi rapide",
+  "shortcutChangeInstruction": "Faceți clic pe o comandă rapidă pentru a o modifica. Apăsați Escape pentru a anula.",
+  "configurePersonaDescription": "Configurați-vă persona AI",
+  "configureSTTProvider": "Configurați furnizorul STT",
+  "setConversationEndDescription": "Setați când conversațiile se termină automat",
+  "importDataDescription": "Importați date din alte surse",
+  "debugAndDiagnostics": "Depanare și diagnostice",
+  "autoDeletesAfter3Days": "Ștergere automată după 3 zile",
+  "helpsDiagnoseIssues": "Ajută la diagnosticarea problemelor",
+  "exportConversationsDescription": "Exportați conversațiile în JSON",
+  "exportingConversations": "Exportarea conversațiilor...",
+  "clearNodesDescription": "Ștergeți toate nodurile și conexiunile",
+  "deleteKnowledgeGraphQuestion": "Ștergeți graficul de cunoștințe?",
+  "deleteKnowledgeGraphWarning": "Aceasta va șterge toate datele derivate din graficul de cunoștințe. Amintirile dvs. originale rămân în siguranță.",
+  "connectOmiWithAI": "Conectați Omi cu asistenți AI",
+  "noAPIKeys": "Nicio cheie API. Creați una pentru a începe.",
+  "realTimeTranscript": "Transcriere în timp real",
+  "transcriptionDiagnostics": "Diagnostice de transcriere",
+  "detailedDiagnosticMessages": "Mesaje de diagnostic detaliate",
+  "autoCreateSpeakers": "Creați automat vorbitori",
+  "autoCreateWhenDetected": "Creați automat când numele este detectat",
+  "followUpQuestions": "Întrebări de urmărire",
+  "suggestQuestionsAfterConversations": "Sugerați întrebări după conversații",
+  "goalTracker": "Urmăritor de obiective",
+  "trackPersonalGoals": "Urmăriți obiective personale pe pagina de pornire",
+  "dailyReflection": "Reflecție zilnică",
+  "dailyReflectionDescription": "Memento la ora 21:00 pentru a reflecta asupra zilei tale",
+  "endpointURL": "URL punct final",
+  "links": "Linkuri",
+  "discordMemberCount": "Peste 8000 de membri pe Discord",
+  "userInformation": "Informații despre utilizator"
 }
