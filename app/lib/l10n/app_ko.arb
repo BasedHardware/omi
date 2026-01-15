@@ -879,7 +879,7 @@
   "@createKeyToStart": {
     "description": "Create key instruction"
   },
-  "createKey": "키 만들기",
+  "createKey": "키 생성",
   "@createKey": {
     "description": "Create Key button"
   },
@@ -2800,5 +2800,33 @@
   "preferences": "환경설정",
   "helpImproveOmiBySharing": "익명화된 분석 데이터를 공유하여 Omi 개선 돕기",
   "deleteAccount": "계정 삭제",
-  "deleteYourAccountAndAllData": "계정 및 모든 데이터 삭제"
+  "deleteYourAccountAndAllData": "계정 및 모든 데이터 삭제",
+  "helpsDiagnoseIssuesAutoDeletes": "문제 진단에 도움이 됩니다. 3일 후 자동 삭제됩니다.",
+  "clearLogs": "로그 지우기",
+  "debugLogsCleared": "디버그 로그가 지워졌습니다",
+  "exportConversations": "대화 내보내기",
+  "exportAllConversationsToJson": "모든 대화를 JSON 파일로 내보냅니다.",
+  "conversationsExportStarted": "대화 내보내기가 시작되었습니다. 몇 초 정도 걸릴 수 있으니 기다려 주세요.",
+  "mcpDescription": "Omi를 다른 애플리케이션과 연결하여 기억과 대화를 읽고, 검색하고, 관리합니다. 시작하려면 키를 생성하세요.",
+  "apiKeys": "API 키",
+  "errorLabel": "오류: {error}",
+  "noApiKeysFound": "API 키를 찾을 수 없습니다. 시작하려면 하나를 생성하세요.",
+  "advancedSettings": "고급 설정",
+  "triggersWhenNewConversationCreated": "새 대화가 생성되면 트리거됩니다.",
+  "triggersWhenNewTranscriptReceived": "새 녹취록을 받으면 트리거됩니다.",
+  "realtimeAudioBytes": "실시간 오디오 바이트",
+  "triggersWhenAudioBytesReceived": "오디오 바이트를 받으면 트리거됩니다.",
+  "everyXSeconds": "x초마다",
+  "triggersWhenDaySummaryGenerated": "일일 요약이 생성되면 트리거됩니다.",
+  "experimental": "실험적",
+  "tryLatestExperimentalFeatures": "Omi 팀의 최신 실험적 기능을 사용해 보세요.",
+  "transcriptionServiceDiagnosticStatus": "녹취 서비스 진단 상태",
+  "enableDetailedDiagnosticMessages": "녹취 서비스의 상세한 진단 메시지 활성화",
+  "autoCreateAndTagNewSpeakers": "새 화자 자동 생성 및 태그 지정",
+  "automaticallyCreateNewPerson": "녹취록에서 이름이 감지되면 자동으로 새 사람을 생성합니다.",
+  "pilotFeatures": "파일럿 기능",
+  "pilotFeaturesDescription": "이러한 기능은 테스트이며 지원이 보장되지 않습니다.",
+  "suggestFollowUpQuestion": "후속 질문 제안",
+  "saveSettings": "설정 저장",
+  "syncingDeveloperSettings": "개발자 설정 동기화 중..."
 }

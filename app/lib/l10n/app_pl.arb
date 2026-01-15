@@ -571,7 +571,7 @@
   "@helpCenter": {
     "description": "Help center menu item"
   },
-  "developerSettings": "Ustawienia programisty",
+  "developerSettings": "Ustawienia dewelopera",
   "@developerSettings": {
     "description": "Developer settings menu item"
   },
@@ -867,7 +867,7 @@
   "@debugDiagnostics": {
     "description": "Debug & Diagnostics section header"
   },
-  "endpointUrl": "Adres URL punktu końcowego",
+  "endpointUrl": "URL punktu końcowego",
   "@endpointUrl": {
     "description": "Endpoint URL label"
   },
@@ -1071,14 +1071,14 @@
       }
     }
   },
-  "debugLogs": "Logi debugowania",
+  "debugLogs": "Dzienniki debugowania",
   "debugLogsAutoDelete": "Automatyczne usuwanie po 3 dniach.",
   "debugLogsDesc": "Pomaga diagnozować problemy",
-  "noLogFilesFound": "Nie znaleziono plików logów.",
+  "noLogFilesFound": "Nie znaleziono plików dziennika.",
   "omiDebugLog": "Log debugowania Omi",
   "logShared": "Log udostępniony",
   "selectLogFile": "Wybierz plik logu",
-  "shareLogs": "Udostępnij logi",
+  "shareLogs": "Udostępnij dzienniki",
   "debugLogCleared": "Log debugowania wyczyszczony",
   "exportStarted": "Eksport rozpoczęty. To może potrwać kilka sekund...",
   "exportAllData": "Eksportuj wszystkie dane",
@@ -2800,5 +2800,33 @@
   "preferences": "Preferencje",
   "helpImproveOmiBySharing": "Pomóż ulepszyć Omi, udostępniając zanonimizowane dane analityczne",
   "deleteAccount": "Usuń konto",
-  "deleteYourAccountAndAllData": "Usuń swoje konto i wszystkie dane"
+  "deleteYourAccountAndAllData": "Usuń swoje konto i wszystkie dane",
+  "helpsDiagnoseIssuesAutoDeletes": "Pomaga diagnozować problemy. Automatycznie usuwany po 3 dniach.",
+  "clearLogs": "Wyczyść dzienniki",
+  "debugLogsCleared": "Dzienniki debugowania wyczyszczone",
+  "exportConversations": "Eksportuj rozmowy",
+  "exportAllConversationsToJson": "Eksportuj wszystkie rozmowy do pliku JSON.",
+  "conversationsExportStarted": "Rozpoczęto eksport rozmów. To może potrwać kilka sekund, proszę czekać.",
+  "mcpDescription": "Aby połączyć Omi z innymi aplikacjami w celu odczytu, wyszukiwania i zarządzania wspomnieniami i rozmowami. Utwórz klucz, aby rozpocząć.",
+  "apiKeys": "Klucze API",
+  "errorLabel": "Błąd: {error}",
+  "noApiKeysFound": "Nie znaleziono kluczy API. Utwórz jeden, aby rozpocząć.",
+  "advancedSettings": "Ustawienia zaawansowane",
+  "triggersWhenNewConversationCreated": "Wyzwalane, gdy tworzona jest nowa rozmowa.",
+  "triggersWhenNewTranscriptReceived": "Wyzwalane, gdy otrzymywana jest nowa transkrypcja.",
+  "realtimeAudioBytes": "Bajty audio w czasie rzeczywistym",
+  "triggersWhenAudioBytesReceived": "Wyzwalane, gdy otrzymywane są bajty audio.",
+  "everyXSeconds": "Co x sekund",
+  "triggersWhenDaySummaryGenerated": "Wyzwalane, gdy generowane jest podsumowanie dnia.",
+  "experimental": "Eksperymentalne",
+  "tryLatestExperimentalFeatures": "Wypróbuj najnowsze eksperymentalne funkcje zespołu Omi.",
+  "transcriptionServiceDiagnosticStatus": "Status diagnostyczny usługi transkrypcji",
+  "enableDetailedDiagnosticMessages": "Włącz szczegółowe komunikaty diagnostyczne z usługi transkrypcji",
+  "autoCreateAndTagNewSpeakers": "Automatycznie twórz i oznaczaj nowych mówców",
+  "automaticallyCreateNewPerson": "Automatycznie twórz nową osobę, gdy w transkrypcji wykryto imię.",
+  "pilotFeatures": "Funkcje pilotażowe",
+  "pilotFeaturesDescription": "Te funkcje są testami i nie gwarantuje się wsparcia.",
+  "suggestFollowUpQuestion": "Zaproponuj pytanie uzupełniające",
+  "saveSettings": "Zapisz ustawienia",
+  "syncingDeveloperSettings": "Synchronizacja ustawień dewelopera..."
 }

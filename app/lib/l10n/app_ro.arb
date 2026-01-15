@@ -867,7 +867,7 @@
   "@debugDiagnostics": {
     "description": "Debug & Diagnostics section header"
   },
-  "endpointUrl": "URL endpoint",
+  "endpointUrl": "URL punct final",
   "@endpointUrl": {
     "description": "Endpoint URL label"
   },
@@ -879,11 +879,11 @@
   "@createKeyToStart": {
     "description": "Create key instruction"
   },
-  "createKey": "Creează cheie",
+  "createKey": "Creați cheie",
   "@createKey": {
     "description": "Create Key button"
   },
-  "docs": "Documente",
+  "docs": "Documentație",
   "@docs": {
     "description": "Documentation link"
   },
@@ -1074,11 +1074,11 @@
   "debugLogs": "Jurnale de depanare",
   "debugLogsAutoDelete": "Se șterg automat după 3 zile.",
   "debugLogsDesc": "Ajută la diagnosticarea problemelor",
-  "noLogFilesFound": "Nu s-au găsit fișiere jurnal.",
+  "noLogFilesFound": "Niciun fișier jurnal găsit.",
   "omiDebugLog": "Jurnal de depanare Omi",
   "logShared": "Jurnal partajat",
   "selectLogFile": "Selectează fișier jurnal",
-  "shareLogs": "Partajează jurnalele",
+  "shareLogs": "Distribuiți jurnalele",
   "debugLogCleared": "Jurnal de depanare șters",
   "exportStarted": "Export inițiat. Acest lucru poate dura câteva secunde...",
   "exportAllData": "Exportă toate datele",
@@ -2800,5 +2800,33 @@
   "preferences": "Preferințe",
   "helpImproveOmiBySharing": "Ajutați la îmbunătățirea Omi prin partajarea datelor de analiză anonimizate",
   "deleteAccount": "Ștergeți contul",
-  "deleteYourAccountAndAllData": "Ștergeți contul și toate datele"
+  "deleteYourAccountAndAllData": "Ștergeți contul și toate datele",
+  "helpsDiagnoseIssuesAutoDeletes": "Ajută la diagnosticarea problemelor. Șters automat după 3 zile.",
+  "clearLogs": "Ștergeți jurnalele",
+  "debugLogsCleared": "Jurnalele de depanare au fost șterse",
+  "exportConversations": "Exportați conversații",
+  "exportAllConversationsToJson": "Exportați toate conversațiile dvs. într-un fișier JSON.",
+  "conversationsExportStarted": "Export conversații pornit. Aceasta poate dura câteva secunde, vă rugăm așteptați.",
+  "mcpDescription": "Pentru a conecta Omi cu alte aplicații pentru a citi, căuta și gestiona amintirile și conversațiile dvs. Creați o cheie pentru a începe.",
+  "apiKeys": "Chei API",
+  "errorLabel": "Eroare: {error}",
+  "noApiKeysFound": "Nu au fost găsite chei API. Creați una pentru a începe.",
+  "advancedSettings": "Setări avansate",
+  "triggersWhenNewConversationCreated": "Se declanșează când este creată o nouă conversație.",
+  "triggersWhenNewTranscriptReceived": "Se declanșează când este primită o nouă transcriere.",
+  "realtimeAudioBytes": "Octeți audio în timp real",
+  "triggersWhenAudioBytesReceived": "Se declanșează când sunt primiți octeți audio.",
+  "everyXSeconds": "La fiecare x secunde",
+  "triggersWhenDaySummaryGenerated": "Se declanșează când este generat rezumatul zilnic.",
+  "experimental": "Experimental",
+  "tryLatestExperimentalFeatures": "Încercați cele mai recente funcții experimentale de la echipa Omi.",
+  "transcriptionServiceDiagnosticStatus": "Starea diagnostică a serviciului de transcriere",
+  "enableDetailedDiagnosticMessages": "Activați mesajele de diagnostic detaliate de la serviciul de transcriere",
+  "autoCreateAndTagNewSpeakers": "Creați și etich etați automat vorbitori noi",
+  "automaticallyCreateNewPerson": "Creați automat o persoană nouă când un nume este detectat în transcriere.",
+  "pilotFeatures": "Funcții pilot",
+  "pilotFeaturesDescription": "Aceste funcții sunt teste și nu se garantează suportul.",
+  "suggestFollowUpQuestion": "Sugerați întrebare de urmărire",
+  "saveSettings": "Salvați setările",
+  "syncingDeveloperSettings": "Sincronizare setări dezvoltator..."
 }

@@ -867,7 +867,7 @@
   "@debugDiagnostics": {
     "description": "Debug & Diagnostics section header"
   },
-  "endpointUrl": "Endpoint-URL",
+  "endpointUrl": "Slutpunkts-URL",
   "@endpointUrl": {
     "description": "Endpoint URL label"
   },
@@ -883,7 +883,7 @@
   "@createKey": {
     "description": "Create Key button"
   },
-  "docs": "Dokumentation",
+  "docs": "Dokument",
   "@docs": {
     "description": "Documentation link"
   },
@@ -1119,7 +1119,7 @@
   "audioBytes": "Ljudbytes",
   "audioDataReceived": "Ljuddata mottagen",
   "intervalSeconds": "Intervall (sekunder)",
-  "daySummary": "Dagsammanfattning",
+  "daySummary": "Dagssammanfattning",
   "summaryGenerated": "Sammanfattning genererad",
   "claudeDesktop": "Claude Desktop",
   "addToClaudeConfig": "Lägg till i claude_desktop_config.json",
@@ -2800,5 +2800,33 @@
   "preferences": "Preferenser",
   "helpImproveOmiBySharing": "Hjälp till att förbättra Omi genom att dela anonymiserade analysdata",
   "deleteAccount": "Radera konto",
-  "deleteYourAccountAndAllData": "Radera ditt konto och alla data"
+  "deleteYourAccountAndAllData": "Radera ditt konto och alla data",
+  "helpsDiagnoseIssuesAutoDeletes": "Hjälper till att diagnostisera problem. Raderas automatiskt efter 3 dagar.",
+  "clearLogs": "Rensa loggar",
+  "debugLogsCleared": "Felsökningsloggar rensade",
+  "exportConversations": "Exportera konversationer",
+  "exportAllConversationsToJson": "Exportera alla dina konversationer till en JSON-fil.",
+  "conversationsExportStarted": "Export av konversationer startad. Detta kan ta några sekunder, vänligen vänta.",
+  "mcpDescription": "För att ansluta Omi till andra applikationer för att läsa, söka och hantera dina minnen och konversationer. Skapa en nyckel för att komma igång.",
+  "apiKeys": "API-nycklar",
+  "errorLabel": "Fel: {error}",
+  "noApiKeysFound": "Inga API-nycklar hittades. Skapa en för att komma igång.",
+  "advancedSettings": "Avancerade inställningar",
+  "triggersWhenNewConversationCreated": "Utlöses när en ny konversation skapas.",
+  "triggersWhenNewTranscriptReceived": "Utlöses när en ny transkription tas emot.",
+  "realtimeAudioBytes": "Realtids-ljudbytes",
+  "triggersWhenAudioBytesReceived": "Utlöses när ljudbytes tas emot.",
+  "everyXSeconds": "Varje x sekunder",
+  "triggersWhenDaySummaryGenerated": "Utlöses när dagssammanfattningen genereras.",
+  "experimental": "Experimentell",
+  "tryLatestExperimentalFeatures": "Prova de senaste experimentella funktionerna från Omi-teamet.",
+  "transcriptionServiceDiagnosticStatus": "Diagnostisk status för transkriptionstjänsten",
+  "enableDetailedDiagnosticMessages": "Aktivera detaljerade diagnostiska meddelanden från transkriptionstjänsten",
+  "autoCreateAndTagNewSpeakers": "Skapa och tagga nya talare automatiskt",
+  "automaticallyCreateNewPerson": "Skapa automatiskt en ny person när ett namn upptäcks i transkriptionen.",
+  "pilotFeatures": "Pilotfunktioner",
+  "pilotFeaturesDescription": "Dessa funktioner är tester och ingen support garanteras.",
+  "suggestFollowUpQuestion": "Föreslå uppföljningsfråga",
+  "saveSettings": "Spara inställningar",
+  "syncingDeveloperSettings": "Synkroniserar utvecklarinställningar..."
 }

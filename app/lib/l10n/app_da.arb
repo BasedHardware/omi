@@ -867,7 +867,7 @@
   "@debugDiagnostics": {
     "description": "Debug & Diagnostics section header"
   },
-  "endpointUrl": "Endpoint URL",
+  "endpointUrl": "Endpoint-URL",
   "@endpointUrl": {
     "description": "Endpoint URL label"
   },
@@ -883,7 +883,7 @@
   "@createKey": {
     "description": "Create Key button"
   },
-  "docs": "Dokumentation",
+  "docs": "Dokumenter",
   "@docs": {
     "description": "Documentation link"
   },
@@ -1071,14 +1071,14 @@
       }
     }
   },
-  "debugLogs": "Debug-logfiler",
+  "debugLogs": "Fejlfindingslogs",
   "debugLogsAutoDelete": "Slettes automatisk efter 3 dage.",
   "debugLogsDesc": "Hjælper med at diagnosticere problemer",
   "noLogFilesFound": "Ingen logfiler fundet.",
   "omiDebugLog": "Omi debug-log",
   "logShared": "Log delt",
   "selectLogFile": "Vælg logfil",
-  "shareLogs": "Del logfiler",
+  "shareLogs": "Del logs",
   "debugLogCleared": "Debug-log ryddet",
   "exportStarted": "Eksport startet. Dette kan tage et par sekunder...",
   "exportAllData": "Eksporter alle data",
@@ -1114,12 +1114,12 @@
   "webhooks": "Webhooks",
   "conversationEvents": "Samtalehændelser",
   "newConversationCreated": "Ny samtale oprettet",
-  "realtimeTranscript": "Realtids-udskrift",
+  "realtimeTranscript": "Realtidsudskrift",
   "transcriptReceived": "Udskrift modtaget",
   "audioBytes": "Lyd-bytes",
   "audioDataReceived": "Lyddata modtaget",
   "intervalSeconds": "Interval (sekunder)",
-  "daySummary": "Dagsammenfatning",
+  "daySummary": "Dagens resumé",
   "summaryGenerated": "Sammenfatning genereret",
   "claudeDesktop": "Claude Desktop",
   "addToClaudeConfig": "Tilføj til claude_desktop_config.json",
@@ -2800,5 +2800,33 @@
   "preferences": "Præferencer",
   "helpImproveOmiBySharing": "Hjælp med at forbedre Omi ved at dele anonymiserede analysedata",
   "deleteAccount": "Slet konto",
-  "deleteYourAccountAndAllData": "Slet din konto og alle data"
+  "deleteYourAccountAndAllData": "Slet din konto og alle data",
+  "helpsDiagnoseIssuesAutoDeletes": "Hjælper med at diagnosticere problemer. Slettes automatisk efter 3 dage.",
+  "clearLogs": "Ryd logs",
+  "debugLogsCleared": "Fejlfindingslogs ryddet",
+  "exportConversations": "Eksporter samtaler",
+  "exportAllConversationsToJson": "Eksporter alle dine samtaler til en JSON-fil.",
+  "conversationsExportStarted": "Eksport af samtaler startet. Dette kan tage et par sekunder, vent venligst.",
+  "mcpDescription": "For at forbinde Omi med andre applikationer for at læse, søge og administrere dine minder og samtaler. Opret en nøgle for at komme i gang.",
+  "apiKeys": "API-nøgler",
+  "errorLabel": "Fejl: {error}",
+  "noApiKeysFound": "Ingen API-nøgler fundet. Opret en for at komme i gang.",
+  "advancedSettings": "Avancerede indstillinger",
+  "triggersWhenNewConversationCreated": "Udløses, når en ny samtale oprettes.",
+  "triggersWhenNewTranscriptReceived": "Udløses, når en ny udskrift modtages.",
+  "realtimeAudioBytes": "Realtids-lydbytes",
+  "triggersWhenAudioBytesReceived": "Udløses, når lydbytes modtages.",
+  "everyXSeconds": "Hvert x sekund",
+  "triggersWhenDaySummaryGenerated": "Udløses, når dagens resumé genereres.",
+  "experimental": "Eksperimentel",
+  "tryLatestExperimentalFeatures": "Prøv de nyeste eksperimentelle funktioner fra Omi-teamet.",
+  "transcriptionServiceDiagnosticStatus": "Transskriptionstjenestens diagnostiske status",
+  "enableDetailedDiagnosticMessages": "Aktiver detaljerede diagnostiske meddelelser fra transskriptionstjenesten",
+  "autoCreateAndTagNewSpeakers": "Opret og tag nye talere automatisk",
+  "automaticallyCreateNewPerson": "Opret automatisk en ny person, når et navn registreres i udskriften.",
+  "pilotFeatures": "Pilotfunktioner",
+  "pilotFeaturesDescription": "Disse funktioner er tests, og der garanteres ingen support.",
+  "suggestFollowUpQuestion": "Foreslå opfølgende spørgsmål",
+  "saveSettings": "Gem indstillinger",
+  "syncingDeveloperSettings": "Synkroniserer udviklerindstillinger..."
 }

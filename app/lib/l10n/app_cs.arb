@@ -571,7 +571,7 @@
   "@helpCenter": {
     "description": "Help center menu item"
   },
-  "developerSettings": "Nastavení pro vývojáře",
+  "developerSettings": "Vývojářské nastavení",
   "@developerSettings": {
     "description": "Developer settings menu item"
   },
@@ -1074,7 +1074,7 @@
   "debugLogs": "Protokoly ladění",
   "debugLogsAutoDelete": "Automaticky se smažou po 3 dnech.",
   "debugLogsDesc": "Pomáhá diagnostikovat problémy",
-  "noLogFilesFound": "Nenalezeny žádné soubory protokolu.",
+  "noLogFilesFound": "Nebyly nalezeny žádné soubory protokolu.",
   "omiDebugLog": "Protokol ladění Omi",
   "logShared": "Protokol sdílen",
   "selectLogFile": "Vybrat soubor protokolu",
@@ -2818,5 +2818,33 @@
   "preferences": "Předvolby",
   "helpImproveOmiBySharing": "Pomozte vylepšit Omi sdílením anonymizovaných analytických dat",
   "deleteAccount": "Smazat účet",
-  "deleteYourAccountAndAllData": "Smazat účet a všechna data"
+  "deleteYourAccountAndAllData": "Smazat účet a všechna data",
+  "helpsDiagnoseIssuesAutoDeletes": "Pomáhá diagnostikovat problémy. Automaticky maže po 3 dnech.",
+  "clearLogs": "Vymazat protokoly",
+  "debugLogsCleared": "Protokoly ladění vymazány",
+  "exportConversations": "Exportovat konverzace",
+  "exportAllConversationsToJson": "Exportujte všechny své konverzace do souboru JSON.",
+  "conversationsExportStarted": "Export konverzací zahájen. Může to trvat několik sekund, počkejte prosím.",
+  "mcpDescription": "Pro připojení Omi k dalším aplikacím pro čtení, vyhledávání a správu vašich vzpomínek a konverzací. Začněte vytvořením klíče.",
+  "apiKeys": "API klíče",
+  "errorLabel": "Chyba: {error}",
+  "noApiKeysFound": "Nebyly nalezeny žádné API klíče. Začněte vytvořením jednoho.",
+  "advancedSettings": "Pokročilé nastavení",
+  "triggersWhenNewConversationCreated": "Spouští se při vytvoření nové konverzace.",
+  "triggersWhenNewTranscriptReceived": "Spouští se při příjmu nového přepisu.",
+  "realtimeAudioBytes": "Zvukové bajty v reálném čase",
+  "triggersWhenAudioBytesReceived": "Spouští se při příjmu zvukových bajtů.",
+  "everyXSeconds": "Každých x sekund",
+  "triggersWhenDaySummaryGenerated": "Spouští se při vygenerování denního souhrnu.",
+  "experimental": "Experimentální",
+  "tryLatestExperimentalFeatures": "Vyzkoušejte nejnovější experimentální funkce od týmu Omi.",
+  "transcriptionServiceDiagnosticStatus": "Diagnostický stav služby přepisu",
+  "enableDetailedDiagnosticMessages": "Povolit podrobné diagnostické zprávy ze služby přepisu",
+  "autoCreateAndTagNewSpeakers": "Automaticky vytvářet a označovat nové mluvčí",
+  "automaticallyCreateNewPerson": "Automaticky vytvořit novou osobu, když je v přepisu detekováno jméno.",
+  "pilotFeatures": "Pilotní funkce",
+  "pilotFeaturesDescription": "Tyto funkce jsou testy a není zaručena podpora.",
+  "suggestFollowUpQuestion": "Navrhnout následnou otázku",
+  "saveSettings": "Uložit nastavení",
+  "syncingDeveloperSettings": "Synchronizace vývojářského nastavení..."
 }

@@ -883,7 +883,7 @@
   "@createKey": {
     "description": "Create Key button"
   },
-  "docs": "Документація",
+  "docs": "Документи",
   "@docs": {
     "description": "Documentation link"
   },
@@ -1114,7 +1114,7 @@
   "webhooks": "Вебхуки",
   "conversationEvents": "Події розмови",
   "newConversationCreated": "Створено нову розмову",
-  "realtimeTranscript": "Транскрипція в реальному часі",
+  "realtimeTranscript": "Транскрипт у реальному часі",
   "transcriptReceived": "Транскрипцію отримано",
   "audioBytes": "Аудіо байти",
   "audioDataReceived": "Аудіо дані отримано",
@@ -2800,5 +2800,33 @@
   "preferences": "Налаштування",
   "helpImproveOmiBySharing": "Допоможіть покращити Omi, діліться анонімними аналітичними даними",
   "deleteAccount": "Видалити обліковий запис",
-  "deleteYourAccountAndAllData": "Видалити обліковий запис та всі дані"
+  "deleteYourAccountAndAllData": "Видалити обліковий запис та всі дані",
+  "helpsDiagnoseIssuesAutoDeletes": "Допомагає діагностувати проблеми. Автоматично видаляється через 3 дні.",
+  "clearLogs": "Очистити журнали",
+  "debugLogsCleared": "Журнали налагодження очищено",
+  "exportConversations": "Експорт розмов",
+  "exportAllConversationsToJson": "Експортуйте всі свої розмови до файлу JSON.",
+  "conversationsExportStarted": "Експорт розмов розпочато. Це може зайняти кілька секунд, будь ласка, зачекайте.",
+  "mcpDescription": "Для підключення Omi до інших додатків для читання, пошуку та керування вашими спогадами та розмовами. Створіть ключ для початку.",
+  "apiKeys": "Ключі API",
+  "errorLabel": "Помилка: {error}",
+  "noApiKeysFound": "Ключі API не знайдено. Створіть один для початку.",
+  "advancedSettings": "Розширені налаштування",
+  "triggersWhenNewConversationCreated": "Спрацьовує при створенні нової розмови.",
+  "triggersWhenNewTranscriptReceived": "Спрацьовує при отриманні нового транскрипту.",
+  "realtimeAudioBytes": "Байти аудіо в реальному часі",
+  "triggersWhenAudioBytesReceived": "Спрацьовує при отриманні байтів аудіо.",
+  "everyXSeconds": "Кожні x секунд",
+  "triggersWhenDaySummaryGenerated": "Спрацьовує при генерації підсумку дня.",
+  "experimental": "Експериментальний",
+  "tryLatestExperimentalFeatures": "Спробуйте найновіші експериментальні функції від команди Omi.",
+  "transcriptionServiceDiagnosticStatus": "Діагностичний статус служби транскрипції",
+  "enableDetailedDiagnosticMessages": "Увімкнути детальні діагностичні повідомлення від служби транскрипції",
+  "autoCreateAndTagNewSpeakers": "Автоматично створювати та позначати нових мовців",
+  "automaticallyCreateNewPerson": "Автоматично створювати нову особу, коли ім'я виявлено в транскрипті.",
+  "pilotFeatures": "Пілотні функції",
+  "pilotFeaturesDescription": "Ці функції є тестами, і підтримка не гарантується.",
+  "suggestFollowUpQuestion": "Запропонувати додаткове запитання",
+  "saveSettings": "Зберегти налаштування",
+  "syncingDeveloperSettings": "Синхронізація налаштувань розробника..."
 }

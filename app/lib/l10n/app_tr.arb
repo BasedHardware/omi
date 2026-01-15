@@ -867,7 +867,7 @@
   "@debugDiagnostics": {
     "description": "Debug & Diagnostics section header"
   },
-  "endpointUrl": "Uç Nokta URL'si",
+  "endpointUrl": "Uç nokta URL'si",
   "@endpointUrl": {
     "description": "Endpoint URL label"
   },
@@ -879,11 +879,11 @@
   "@createKeyToStart": {
     "description": "Create key instruction"
   },
-  "createKey": "Anahtar Oluştur",
+  "createKey": "Anahtar oluştur",
   "@createKey": {
     "description": "Create Key button"
   },
-  "docs": "Dokümanlar",
+  "docs": "Dokümantasyon",
   "@docs": {
     "description": "Documentation link"
   },
@@ -1071,14 +1071,14 @@
       }
     }
   },
-  "debugLogs": "Hata Ayıklama Günlükleri",
+  "debugLogs": "Hata ayıklama günlükleri",
   "debugLogsAutoDelete": "3 gün sonra otomatik olarak silinir.",
   "debugLogsDesc": "Sorunların teşhisine yardımcı olur",
   "noLogFilesFound": "Günlük dosyası bulunamadı.",
   "omiDebugLog": "Omi hata ayıklama günlüğü",
   "logShared": "Günlük paylaşıldı",
   "selectLogFile": "Günlük Dosyası Seç",
-  "shareLogs": "Günlükleri Paylaş",
+  "shareLogs": "Günlükleri paylaş",
   "debugLogCleared": "Hata ayıklama günlüğü temizlendi",
   "exportStarted": "Dışa aktarma başladı. Bu birkaç saniye sürebilir...",
   "exportAllData": "Tüm Verileri Dışa Aktar",
@@ -1111,15 +1111,15 @@
   "clientId": "İstemci Kimliği",
   "clientSecret": "İstemci Gizli Anahtarı",
   "useMcpApiKey": "MCP API anahtarınızı kullanın",
-  "webhooks": "Web Hook'ları",
+  "webhooks": "Webhook'lar",
   "conversationEvents": "Konuşma Olayları",
   "newConversationCreated": "Yeni konuşma oluşturuldu",
-  "realtimeTranscript": "Gerçek Zamanlı Transkript",
+  "realtimeTranscript": "Gerçek zamanlı transkript",
   "transcriptReceived": "Transkript alındı",
   "audioBytes": "Ses Baytları",
   "audioDataReceived": "Ses verisi alındı",
   "intervalSeconds": "Aralık (saniye)",
-  "daySummary": "Gün Özeti",
+  "daySummary": "Günlük Özet",
   "summaryGenerated": "Özet oluşturuldu",
   "claudeDesktop": "Claude Masaüstü",
   "addToClaudeConfig": "claude_desktop_config.json'a ekle",
@@ -2782,5 +2782,33 @@
   "preferences": "Tercihler",
   "helpImproveOmiBySharing": "Anonimleştirilmiş analitik verileri paylaşarak Omi'yi geliştirmeye yardımcı olun",
   "deleteAccount": "Hesabı Sil",
-  "deleteYourAccountAndAllData": "Hesabınızı ve tüm verilerinizi silin"
+  "deleteYourAccountAndAllData": "Hesabınızı ve tüm verilerinizi silin",
+  "helpsDiagnoseIssuesAutoDeletes": "Sorunların teşhisine yardımcı olur. 3 gün sonra otomatik olarak silinir.",
+  "clearLogs": "Günlükleri temizle",
+  "debugLogsCleared": "Hata ayıklama günlükleri temizlendi",
+  "exportConversations": "Konuşmaları dışa aktar",
+  "exportAllConversationsToJson": "Tüm konuşmalarınızı bir JSON dosyasına aktarın.",
+  "conversationsExportStarted": "Konuşma dışa aktarımı başlatıldı. Bu birkaç saniye sürebilir, lütfen bekleyin.",
+  "mcpDescription": "Anılarınızı ve konuşmalarınızı okumak, aramak ve yönetmek için Omi'yi diğer uygulamalarla bağlamak için. Başlamak için bir anahtar oluşturun.",
+  "apiKeys": "API Anahtarları",
+  "errorLabel": "Hata: {error}",
+  "noApiKeysFound": "API anahtarı bulunamadı. Başlamak için bir tane oluşturun.",
+  "advancedSettings": "Gelişmiş Ayarlar",
+  "triggersWhenNewConversationCreated": "Yeni bir konuşma oluşturulduğunda tetiklenir.",
+  "triggersWhenNewTranscriptReceived": "Yeni bir transkript alındığında tetiklenir.",
+  "realtimeAudioBytes": "Gerçek zamanlı ses baytları",
+  "triggersWhenAudioBytesReceived": "Ses baytları alındığında tetiklenir.",
+  "everyXSeconds": "Her x saniyede",
+  "triggersWhenDaySummaryGenerated": "Günlük özet oluşturulduğunda tetiklenir.",
+  "experimental": "Deneysel",
+  "tryLatestExperimentalFeatures": "Omi Ekibinin en son deneysel özelliklerini deneyin.",
+  "transcriptionServiceDiagnosticStatus": "Transkripsiyon hizmeti tanı durumu",
+  "enableDetailedDiagnosticMessages": "Transkripsiyon hizmetinden ayrıntılı tanı mesajlarını etkinleştir",
+  "autoCreateAndTagNewSpeakers": "Yeni konuşmacıları otomatik olarak oluştur ve etiketle",
+  "automaticallyCreateNewPerson": "Transkriptte bir ad algılandığında otomatik olarak yeni bir kişi oluştur.",
+  "pilotFeatures": "Pilot Özellikler",
+  "pilotFeaturesDescription": "Bu özellikler testlerdir ve destek garanti edilmez.",
+  "suggestFollowUpQuestion": "Takip sorusu öner",
+  "saveSettings": "Ayarları kaydet",
+  "syncingDeveloperSettings": "Geliştirici ayarları senkronize ediliyor..."
 }

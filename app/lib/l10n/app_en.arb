@@ -1071,7 +1071,7 @@
       }
     }
   },
-  "debugLogs": "Debug Logs",
+  "debugLogs": "Debug logs",
   "debugLogsAutoDelete": "Auto-deletes after 3 days.",
   "debugLogsDesc": "Helps diagnose issues",
   "noLogFilesFound": "No log files found.",
@@ -4051,5 +4051,39 @@
   "preferences": "Preferences",
   "helpImproveOmiBySharing": "Help improve Omi by sharing anonymized analytics data",
   "deleteAccount": "Delete Account",
-  "deleteYourAccountAndAllData": "Delete your account and all data"
+  "deleteYourAccountAndAllData": "Delete your account and all data",
+  "helpsD iagnoseIssuesAutoDeletes": "Helps diagnose issues. Auto-deletes after 3 days.",
+  "clearLogs": "Clear logs",
+  "debugLogsCleared": "Debug logs cleared",
+  "exportConversations": "Export Conversations",
+  "exportAllConversationsToJson": "Export all your conversations to a JSON file.",
+  "conversationsExportStarted": "Conversations Export Started. This may take a few seconds, please wait.",
+  "mcpDescription": "To connect Omi with other applications to read, search, and manage your memories and conversations. Create a key to get started.",
+  "apiKeys": "API Keys",
+  "errorLabel": "Error: {error}",
+  "@errorLabel": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "noApiKeysFound": "No API keys found. Create one to get started.",
+  "advancedSettings": "Advanced Settings",
+  "triggersWhenNewConversationCreated": "Triggers when a new conversation is created.",
+  "triggersWhenNewTranscriptReceived": "Triggers when a new transcript is received.",
+  "realtimeAudioBytes": "Realtime Audio Bytes",
+  "triggersWhenAudioBytesReceived": "Triggers when audio bytes are received.",
+  "everyXSeconds": "Every x seconds",
+  "triggersWhenDaySummaryGenerated": "Triggers when day summary is generated.",
+  "tryLatestExperimentalFeatures": "Try the latest experimental features from Omi Team.",
+  "transcriptionServiceDiagnosticStatus": "Transcription service diagnostic status",
+  "enableDetailedDiagnosticMessages": "Enable detailed diagnostic messages from the transcription service",
+  "autoCreateAndTagNewSpeakers": "Auto-create and tag new speakers",
+  "automaticallyCreateNewPerson": "Automatically create a new person when a name is detected in the transcript.",
+  "pilotFeatures": "Pilot Features",
+  "pilotFeaturesDescription": "These features are tests and no support is guaranteed.",
+  "suggestFollowUpQuestion": "Suggest follow up question",
+  "saveSettings": "Save Settings",
+  "syncingDeveloperSettings": "Syncing Developer Settings..."
 }

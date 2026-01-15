@@ -879,7 +879,7 @@
   "@createKeyToStart": {
     "description": "Create key instruction"
   },
-  "createKey": "Tạo Key",
+  "createKey": "Tạo khóa",
   "@createKey": {
     "description": "Create Key button"
   },
@@ -2800,5 +2800,33 @@
   "preferences": "Tùy chọn",
   "helpImproveOmiBySharing": "Giúp cải thiện Omi bằng cách chia sẻ dữ liệu phân tích ẩn danh",
   "deleteAccount": "Xóa tài khoản",
-  "deleteYourAccountAndAllData": "Xóa tài khoản và tất cả dữ liệu của bạn"
+  "deleteYourAccountAndAllData": "Xóa tài khoản và tất cả dữ liệu của bạn",
+  "helpsDiagnoseIssuesAutoDeletes": "Giúp chẩn đoán sự cố. Tự động xóa sau 3 ngày.",
+  "clearLogs": "Xóa nhật ký",
+  "debugLogsCleared": "Đã xóa nhật ký gỡ lỗi",
+  "exportConversations": "Xuất cuộc trò chuyện",
+  "exportAllConversationsToJson": "Xuất tất cả cuộc trò chuyện của bạn vào tệp JSON.",
+  "conversationsExportStarted": "Đã bắt đầu xuất cuộc trò chuyện. Điều này có thể mất vài giây, vui lòng đợi.",
+  "mcpDescription": "Để kết nối Omi với các ứng dụng khác để đọc, tìm kiếm và quản lý ký ức và cuộc trò chuyện của bạn. Tạo khóa để bắt đầu.",
+  "apiKeys": "Khóa API",
+  "errorLabel": "Lỗi: {error}",
+  "noApiKeysFound": "Không tìm thấy khóa API. Tạo một khóa để bắt đầu.",
+  "advancedSettings": "Cài đặt nâng cao",
+  "triggersWhenNewConversationCreated": "Kích hoạt khi tạo cuộc trò chuyện mới.",
+  "triggersWhenNewTranscriptReceived": "Kích hoạt khi nhận được bản ghi mới.",
+  "realtimeAudioBytes": "Byte âm thanh thời gian thực",
+  "triggersWhenAudioBytesReceived": "Kích hoạt khi nhận được byte âm thanh.",
+  "everyXSeconds": "Mỗi x giây",
+  "triggersWhenDaySummaryGenerated": "Kích hoạt khi tạo tóm tắt ngày.",
+  "experimental": "Thử nghiệm",
+  "tryLatestExperimentalFeatures": "Dùng thử các tính năng thử nghiệm mới nhất từ ​​Nhóm Omi.",
+  "transcriptionServiceDiagnosticStatus": "Trạng thái chẩn đoán dịch vụ phiên âm",
+  "enableDetailedDiagnosticMessages": "Bật thông báo chẩn đoán chi tiết từ dịch vụ phiên âm",
+  "autoCreateAndTagNewSpeakers": "Tự động tạo và gắn thẻ người nói mới",
+  "automaticallyCreateNewPerson": "Tự động tạo người mới khi phát hiện tên trong bản ghi.",
+  "pilotFeatures": "Tính năng thử nghiệm",
+  "pilotFeaturesDescription": "Các tính năng này là thử nghiệm và không đảm bảo hỗ trợ.",
+  "suggestFollowUpQuestion": "Đề xuất câu hỏi tiếp theo",
+  "saveSettings": "Lưu cài đặt",
+  "syncingDeveloperSettings": "Đang đồng bộ cài đặt nhà phát triển..."
 }

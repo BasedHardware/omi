@@ -571,7 +571,7 @@
   "@helpCenter": {
     "description": "Help center menu item"
   },
-  "developerSettings": "Impostazioni Sviluppatore",
+  "developerSettings": "Impostazioni sviluppatore",
   "@developerSettings": {
     "description": "Developer settings menu item"
   },
@@ -867,7 +867,7 @@
   "@debugDiagnostics": {
     "description": "Debug & Diagnostics section header"
   },
-  "endpointUrl": "URL Endpoint",
+  "endpointUrl": "URL endpoint",
   "@endpointUrl": {
     "description": "Endpoint URL label"
   },
@@ -879,11 +879,11 @@
   "@createKeyToStart": {
     "description": "Create key instruction"
   },
-  "createKey": "Crea Chiave",
+  "createKey": "Crea chiave",
   "@createKey": {
     "description": "Create Key button"
   },
-  "docs": "Documenti",
+  "docs": "Documentazione",
   "@docs": {
     "description": "Documentation link"
   },
@@ -1071,14 +1071,14 @@
       }
     }
   },
-  "debugLogs": "Log di Debug",
+  "debugLogs": "Log di debug",
   "debugLogsAutoDelete": "Eliminazione automatica dopo 3 giorni.",
   "debugLogsDesc": "Aiuta a diagnosticare i problemi",
   "noLogFilesFound": "Nessun file di log trovato.",
   "omiDebugLog": "Log di debug Omi",
   "logShared": "Log condiviso",
   "selectLogFile": "Seleziona File di Log",
-  "shareLogs": "Condividi Log",
+  "shareLogs": "Condividi log",
   "debugLogCleared": "Log di debug cancellato",
   "exportStarted": "Esportazione avviata. Potrebbe richiedere alcuni secondi...",
   "exportAllData": "Esporta Tutti i Dati",
@@ -1112,14 +1112,14 @@
   "clientSecret": "Segreto Cliente",
   "useMcpApiKey": "Usa la tua chiave API MCP",
   "webhooks": "Webhook",
-  "conversationEvents": "Eventi Conversazione",
+  "conversationEvents": "Eventi conversazione",
   "newConversationCreated": "Nuova conversazione creata",
-  "realtimeTranscript": "Trascrizione in Tempo Reale",
+  "realtimeTranscript": "Trascrizione in tempo reale",
   "transcriptReceived": "Trascrizione ricevuta",
   "audioBytes": "Byte Audio",
   "audioDataReceived": "Dati audio ricevuti",
   "intervalSeconds": "Intervallo (secondi)",
-  "daySummary": "Riepilogo Giornaliero",
+  "daySummary": "Riepilogo giornaliero",
   "summaryGenerated": "Riepilogo generato",
   "claudeDesktop": "Claude Desktop",
   "addToClaudeConfig": "Aggiungi a claude_desktop_config.json",
@@ -2782,5 +2782,33 @@
   "preferences": "Preferenze",
   "helpImproveOmiBySharing": "Aiuta a migliorare Omi condividendo dati analitici anonimi",
   "deleteAccount": "Elimina account",
-  "deleteYourAccountAndAllData": "Elimina account e tutti i dati"
+  "deleteYourAccountAndAllData": "Elimina account e tutti i dati",
+  "helpsDiagnoseIssuesAutoDeletes": "Aiuta a diagnosticare i problemi. Eliminato automaticamente dopo 3 giorni.",
+  "clearLogs": "Cancella log",
+  "debugLogsCleared": "Log di debug cancellati",
+  "exportConversations": "Esporta conversazioni",
+  "exportAllConversationsToJson": "Esporta tutte le tue conversazioni in un file JSON.",
+  "conversationsExportStarted": "Esportazione conversazioni avviata. Questo potrebbe richiedere alcuni secondi, attendere prego.",
+  "mcpDescription": "Per connettere Omi ad altre applicazioni per leggere, cercare e gestire i tuoi ricordi e conversazioni. Crea una chiave per iniziare.",
+  "apiKeys": "Chiavi API",
+  "errorLabel": "Errore: {error}",
+  "noApiKeysFound": "Nessuna chiave API trovata. Creane una per iniziare.",
+  "advancedSettings": "Impostazioni avanzate",
+  "triggersWhenNewConversationCreated": "Si attiva quando viene creata una nuova conversazione.",
+  "triggersWhenNewTranscriptReceived": "Si attiva quando viene ricevuta una nuova trascrizione.",
+  "realtimeAudioBytes": "Byte audio in tempo reale",
+  "triggersWhenAudioBytesReceived": "Si attiva quando vengono ricevuti byte audio.",
+  "everyXSeconds": "Ogni x secondi",
+  "triggersWhenDaySummaryGenerated": "Si attiva quando viene generato il riepilogo giornaliero.",
+  "experimental": "Sperimentale",
+  "tryLatestExperimentalFeatures": "Prova le ultime funzionalità sperimentali dal team Omi.",
+  "transcriptionServiceDiagnosticStatus": "Stato diagnostico del servizio di trascrizione",
+  "enableDetailedDiagnosticMessages": "Abilita messaggi diagnostici dettagliati dal servizio di trascrizione",
+  "autoCreateAndTagNewSpeakers": "Crea e etichetta automaticamente nuovi parlanti",
+  "automaticallyCreateNewPerson": "Crea automaticamente una nuova persona quando viene rilevato un nome nella trascrizione.",
+  "pilotFeatures": "Funzionalità pilota",
+  "pilotFeaturesDescription": "Queste funzionalità sono test e non è garantito il supporto.",
+  "suggestFollowUpQuestion": "Suggerisci domanda di follow-up",
+  "saveSettings": "Salva impostazioni",
+  "syncingDeveloperSettings": "Sincronizzazione impostazioni sviluppatore..."
 }

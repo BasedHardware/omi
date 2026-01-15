@@ -571,7 +571,7 @@
   "@helpCenter": {
     "description": "Help center menu item"
   },
-  "developerSettings": "Ρυθμίσεις Προγραμματιστή",
+  "developerSettings": "Ρυθμίσεις προγραμματιστή",
   "@developerSettings": {
     "description": "Developer settings menu item"
   },
@@ -867,7 +867,7 @@
   "@debugDiagnostics": {
     "description": "Debug & Diagnostics section header"
   },
-  "endpointUrl": "URL Τελικού Σημείου",
+  "endpointUrl": "URL τελικού σημείου",
   "@endpointUrl": {
     "description": "Endpoint URL label"
   },
@@ -879,11 +879,11 @@
   "@createKeyToStart": {
     "description": "Create key instruction"
   },
-  "createKey": "Δημιουργία Κλειδιού",
+  "createKey": "Δημιουργία κλειδιού",
   "@createKey": {
     "description": "Create Key button"
   },
-  "docs": "Τεκμηρίωση",
+  "docs": "Έγγραφα",
   "@docs": {
     "description": "Documentation link"
   },
@@ -1071,14 +1071,14 @@
       }
     }
   },
-  "debugLogs": "Αρχεία Εντοπισμού Σφαλμάτων",
+  "debugLogs": "Αρχεία καταγραφής αποσφαλμάτωσης",
   "debugLogsAutoDelete": "Αυτόματη διαγραφή μετά από 3 ημέρες.",
   "debugLogsDesc": "Βοηθά στη διάγνωση προβλημάτων",
   "noLogFilesFound": "Δεν βρέθηκαν αρχεία καταγραφής.",
   "omiDebugLog": "Αρχείο εντοπισμού σφαλμάτων Omi",
   "logShared": "Το αρχείο καταγραφής κοινοποιήθηκε",
   "selectLogFile": "Επιλογή Αρχείου Καταγραφής",
-  "shareLogs": "Κοινοποίηση Αρχείων Καταγραφής",
+  "shareLogs": "Κοινή χρήση αρχείων καταγραφής",
   "debugLogCleared": "Το αρχείο εντοπισμού σφαλμάτων εκκαθαρίστηκε",
   "exportStarted": "Η εξαγωγή ξεκίνησε. Μπορεί να διαρκέσει μερικά δευτερόλεπτα...",
   "exportAllData": "Εξαγωγή Όλων των Δεδομένων",
@@ -1112,14 +1112,14 @@
   "clientSecret": "Μυστικό Πελάτη",
   "useMcpApiKey": "Χρησιμοποιήστε το κλειδί MCP API σας",
   "webhooks": "Webhooks",
-  "conversationEvents": "Συμβάντα Συνομιλίας",
+  "conversationEvents": "Συμβάντα συνομιλίας",
   "newConversationCreated": "Δημιουργήθηκε νέα συνομιλία",
-  "realtimeTranscript": "Απομαγνητοφώνηση σε Πραγματικό Χρόνο",
+  "realtimeTranscript": "Μεταγραφή σε πραγματικό χρόνο",
   "transcriptReceived": "Λήφθηκε απομαγνητοφώνηση",
   "audioBytes": "Bytes Ήχου",
   "audioDataReceived": "Λήφθηκαν δεδομένα ήχου",
   "intervalSeconds": "Διάστημα (δευτερόλεπτα)",
-  "daySummary": "Περίληψη Ημέρας",
+  "daySummary": "Περίληψη ημέρας",
   "summaryGenerated": "Δημιουργήθηκε περίληψη",
   "claudeDesktop": "Claude Desktop",
   "addToClaudeConfig": "Προσθήκη στο claude_desktop_config.json",
@@ -2800,5 +2800,33 @@
   "preferences": "Προτιμήσεις",
   "helpImproveOmiBySharing": "Βοηθήστε στη βελτίωση του Omi μοιράζοντας ανώνυμα δεδομένα ανάλυσης",
   "deleteAccount": "Διαγραφή λογαριασμού",
-  "deleteYourAccountAndAllData": "Διαγράψτε τον λογαριασμό και όλα τα δεδομένα σας"
+  "deleteYourAccountAndAllData": "Διαγράψτε τον λογαριασμό και όλα τα δεδομένα σας",
+  "helpsDiagnoseIssuesAutoDeletes": "Βοηθά στη διάγνωση προβλημάτων. Διαγράφεται αυτόματα μετά από 3 ημέρες.",
+  "clearLogs": "Εκκαθάριση αρχείων καταγραφής",
+  "debugLogsCleared": "Τα αρχεία καταγραφής αποσφαλμάτωσης διαγράφηκαν",
+  "exportConversations": "Εξαγωγή συνομιλιών",
+  "exportAllConversationsToJson": "Εξάγετε όλες τις συνομιλίες σας σε αρχείο JSON.",
+  "conversationsExportStarted": "Η εξαγωγή συνομιλιών ξεκίνησε. Αυτό μπορεί να διαρκέσει μερικά δευτερόλεπτα, παρακαλώ περιμένετε.",
+  "mcpDescription": "Για να συνδέσετε το Omi με άλλες εφαρμογές για να διαβάσετε, να αναζητήσετε και να διαχειριστείτε τις αναμνήσεις και τις συνομιλίες σας. Δημιουργήστε ένα κλειδί για να ξεκινήσετε.",
+  "apiKeys": "Κλειδιά API",
+  "errorLabel": "Σφάλμα: {error}",
+  "noApiKeysFound": "Δεν βρέθηκαν κλειδιά API. Δημιουργήστε ένα για να ξεκινήσετε.",
+  "advancedSettings": "Προηγμένες ρυθμίσεις",
+  "triggersWhenNewConversationCreated": "Ενεργοποιείται όταν δημιουργείται μια νέα συνομιλία.",
+  "triggersWhenNewTranscriptReceived": "Ενεργοποιείται όταν λαμβάνεται μια νέα μεταγραφή.",
+  "realtimeAudioBytes": "Bytes ήχου σε πραγματικό χρόνο",
+  "triggersWhenAudioBytesReceived": "Ενεργοποιείται όταν λαμβάνονται bytes ήχου.",
+  "everyXSeconds": "Κάθε x δευτερόλεπτα",
+  "triggersWhenDaySummaryGenerated": "Ενεργοποιείται όταν δημιουργείται η περίληψη της ημέρας.",
+  "experimental": "Πειραματικό",
+  "tryLatestExperimentalFeatures": "Δοκιμάστε τις πιο πρόσφατες πειραματικές λειτουργίες από την ομάδα Omi.",
+  "transcriptionServiceDiagnosticStatus": "Κατάσταση διαγνωστικών υπηρεσίας μεταγραφής",
+  "enableDetailedDiagnosticMessages": "Ενεργοποίηση λεπτομερών διαγνωστικών μηνυμάτων από την υπηρεσία μεταγραφής",
+  "autoCreateAndTagNewSpeakers": "Αυτόματη δημιουργία και επισήμανση νέων ομιλητών",
+  "automaticallyCreateNewPerson": "Αυτόματη δημιουργία νέου ατόμου όταν ανιχνεύεται όνομα στη μεταγραφή.",
+  "pilotFeatures": "Πιλοτικές λειτουργίες",
+  "pilotFeaturesDescription": "Αυτές οι λειτουργίες είναι δοκιμές και δεν εγγυάται η υποστήριξη.",
+  "suggestFollowUpQuestion": "Προτείνετε ερώτηση παρακολούθησης",
+  "saveSettings": "Αποθήκευση ρυθμίσεων",
+  "syncingDeveloperSettings": "Συγχρονισμός ρυθμίσεων προγραμματιστή..."
 }
