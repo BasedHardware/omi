@@ -68,7 +68,7 @@ MEDIUM PRIORITY - Widgets and Components
 [✓] app/lib/pages/apps/widgets/create_options_sheet.dart
     Strings: Options-related strings
 
-[ ] app/lib/pages/apps/widgets/show_app_options_sheet.dart
+[✓] app/lib/pages/apps/widgets/show_app_options_sheet.dart
     Strings: Option display strings
 
 ADDITIONAL FILES (to be identified during implementation)
@@ -1039,12 +1039,30 @@ Notes: Localized create options bottom sheet with title and two option cards
        (Create an App, Create my Clone) including their titles and subtitles.
 Commit: 22a624c68
 
+FILE 81 (Phase 2 FILE 11): show_app_options_sheet.dart
+-------------------------------------------------------
+Location: app/lib/pages/apps/widgets/
+Keys Added: 12 (new) + 1 (reused) = 13 total
+New Keys: itemApp, itemPersona (for parameter substitution),
+         keepItemPublic, makeItemPublicQuestion, makeItemPrivateQuestion,
+         makeItemPublicExplanation, makeItemPrivateExplanation (parameterized),
+         manageApp, updatePersonaDetails, deleteItemTitle, deleteItemQuestion,
+         deleteItemConfirmation (parameterized)
+Reused Keys: confirm
+Script: /tmp/translate_show_app_options_keys.py
+Status: ✅ COMPLETED
+Notes: Localized app/persona options bottom sheet with public/private toggles,
+       manage/update menu items, and delete confirmation dialogs. Used
+       parameterized translations with {item} placeholder to handle both
+       App and Persona strings dynamically. 8 of 12 keys use parameters.
+Commit: 3f2e55f53
+
 ================================================================================
 END OF PROGRESS TRACKER
 ================================================================================
 Last Updated: 2026-01-15
-Last Completed: FILE 80 - create_options_sheet.dart (5 new keys, 170 new translations)
-Previous Completed: FILE 79 - app_metadata_widget.dart (0 new keys + 12 reused, 100% key reuse)
+Last Completed: FILE 81 - show_app_options_sheet.dart (12 new keys, 408 new translations)
+Previous Completed: FILE 80 - create_options_sheet.dart (5 new keys, 170 new translations)
 Current Session: Phase 2 - Mobile/Pages localization in progress
 
 🎉 PHASE 1 (DESKTOP) COMPLETE! 🎉
@@ -1054,5 +1072,5 @@ Current Session: Phase 2 - Mobile/Pages localization in progress
 
 📋 PHASE 2 (MOBILE/PAGES) IN PROGRESS
 59 files identified with hardcoded strings
-Files Completed: 10
+Files Completed: 11
 Estimated 200-300 new keys needed
