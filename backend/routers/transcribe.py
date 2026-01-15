@@ -2061,40 +2061,18 @@ async def web_listen_handler(
     except WebSocketDisconnect:
         return
 
-    if first_message.get("type") == "websocket.disconnect":
-        return
-
-    if first_message.get("text") is None:
-        await websocket.close(code=1008, reason="Expected JSON auth message")
-        return
-
+    # Authenticate via first message
     try:
-        auth_data = json.loads(first_message.get("text"))
-    except json.JSONDecodeError:
-        await websocket.close(code=1008, reason="Invalid JSON")
+        uid = auth.get_current_user_uid_from_ws_message(first_message)
+    except ValueError as e:
+        await websocket.close(code=1008, reason=str(e))
         return
-
-    if auth_data.get("type") != "auth":
-        await websocket.close(code=1008, reason="First message must be auth")
-        return
-
-    token = auth_data.get("token")
-    if not token:
-        await websocket.close(code=1008, reason="Missing token")
-        return
-
-    # Verify token using centralized auth utility (supports Firebase token and ADMIN_KEY)
-    try:
-        uid = auth.verify_token(token)
     except InvalidIdTokenError:
-        if os.getenv('LOCAL_DEVELOPMENT') == 'true':
-            uid = '123'
-        else:
-            await websocket.send_json({"type": "auth_response", "success": False})
-            await websocket.close(code=1008, reason="Invalid token")
-            return
+        await websocket.send_json({"type": "auth_response", "success": False})
+        await websocket.close(code=1008, reason="Invalid token")
+        return
     except Exception as e:
-        print(f"web_listen_handler: token verification error {e}")
+        print(f"web_listen_handler: auth error {e}")
         await websocket.send_json({"type": "auth_response", "success": False})
         await websocket.close(code=1008, reason="Auth error")
         return
