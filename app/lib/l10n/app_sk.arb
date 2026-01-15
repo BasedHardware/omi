@@ -3041,5 +3041,17 @@
   "createAnApp": "Vytvoriť aplikáciu",
   "createAndShareYourApp": "Vytvorte a zdieľajte svoju aplikáciu",
   "createMyClone": "Vytvoriť môj klon",
-  "createYourDigitalClone": "Vytvorte si digitálny klon"
+  "createYourDigitalClone": "Vytvorte si digitálny klon",
+  "itemApp": "Aplikácia",
+  "itemPersona": "Persona",
+  "keepItemPublic": "Ponechať {item} verejnú",
+  "makeItemPublicQuestion": "Zverejniť {item}?",
+  "makeItemPrivateQuestion": "Zneverejniť {item}?",
+  "makeItemPublicExplanation": "Ak zverejníte {item}, môže ju používať každý",
+  "makeItemPrivateExplanation": "Ak teraz zneverejníte {item}, prestane fungovať pre všetkých a bude viditeľná len pre vás",
+  "manageApp": "Spravovať aplikáciu",
+  "updatePersonaDetails": "Aktualizovať detaily persony",
+  "deleteItemTitle": "Odstrániť {item}",
+  "deleteItemQuestion": "Odstrániť {item}?",
+  "deleteItemConfirmation": "Ste si istí, že chcete odstrániť túto {item}? Túto akciu nie je možné vrátiť späť."
 }

@@ -3041,5 +3041,17 @@
   "createAnApp": "Buat Aplikasi",
   "createAndShareYourApp": "Buat dan bagikan aplikasi Anda",
   "createMyClone": "Buat Klon Saya",
-  "createYourDigitalClone": "Buat klon digital Anda"
+  "createYourDigitalClone": "Buat klon digital Anda",
+  "itemApp": "Aplikasi",
+  "itemPersona": "Persona",
+  "keepItemPublic": "Pertahankan {item} Publik",
+  "makeItemPublicQuestion": "Jadikan {item} Publik?",
+  "makeItemPrivateQuestion": "Jadikan {item} Pribadi?",
+  "makeItemPublicExplanation": "Jika Anda menjadikan {item} publik, dapat digunakan oleh semua orang",
+  "makeItemPrivateExplanation": "Jika Anda menjadikan {item} pribadi sekarang, itu akan berhenti bekerja untuk semua orang dan hanya akan terlihat oleh Anda",
+  "manageApp": "Kelola Aplikasi",
+  "updatePersonaDetails": "Perbarui Detail Persona",
+  "deleteItemTitle": "Hapus {item}",
+  "deleteItemQuestion": "Hapus {item}?",
+  "deleteItemConfirmation": "Apakah Anda yakin ingin menghapus {item} ini? Tindakan ini tidak dapat dibatalkan."
 }

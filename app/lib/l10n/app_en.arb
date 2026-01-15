@@ -4867,5 +4867,93 @@
   "createYourDigitalClone": "Create your digital clone",
   "@createYourDigitalClone": {
     "description": "Subtitle for create clone option"
+  },
+  "itemApp": "App",
+  "@itemApp": {
+    "description": "The word 'App' used as parameter in other strings"
+  },
+  "itemPersona": "Persona",
+  "@itemPersona": {
+    "description": "The word 'Persona' used as parameter in other strings"
+  },
+  "keepItemPublic": "Keep {item} Public",
+  "@keepItemPublic": {
+    "description": "Toggle label to keep app or persona public",
+    "placeholders": {
+      "item": {
+        "type": "String"
+      }
+    }
+  },
+  "makeItemPublicQuestion": "Make {item} Public?",
+  "@makeItemPublicQuestion": {
+    "description": "Dialog title asking to make app or persona public",
+    "placeholders": {
+      "item": {
+        "type": "String"
+      }
+    }
+  },
+  "makeItemPrivateQuestion": "Make {item} Private?",
+  "@makeItemPrivateQuestion": {
+    "description": "Dialog title asking to make app or persona private",
+    "placeholders": {
+      "item": {
+        "type": "String"
+      }
+    }
+  },
+  "makeItemPublicExplanation": "If you make the {item} public, it can be used by everyone",
+  "@makeItemPublicExplanation": {
+    "description": "Explanation of what happens when making public",
+    "placeholders": {
+      "item": {
+        "type": "String"
+      }
+    }
+  },
+  "makeItemPrivateExplanation": "If you make the {item} private now, it will stop working for everyone and will be visible only to you",
+  "@makeItemPrivateExplanation": {
+    "description": "Explanation of what happens when making private",
+    "placeholders": {
+      "item": {
+        "type": "String"
+      }
+    }
+  },
+  "manageApp": "Manage App",
+  "@manageApp": {
+    "description": "Menu item to manage app settings"
+  },
+  "updatePersonaDetails": "Update Persona Details",
+  "@updatePersonaDetails": {
+    "description": "Menu item to update persona details"
+  },
+  "deleteItemTitle": "Delete {item}",
+  "@deleteItemTitle": {
+    "description": "Menu item to delete app or persona",
+    "placeholders": {
+      "item": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteItemQuestion": "Delete {item}?",
+  "@deleteItemQuestion": {
+    "description": "Dialog title asking to confirm deletion",
+    "placeholders": {
+      "item": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteItemConfirmation": "Are you sure you want to delete this {item}? This action cannot be undone.",
+  "@deleteItemConfirmation": {
+    "description": "Dialog message explaining deletion is permanent",
+    "placeholders": {
+      "item": {
+        "type": "String"
+      }
+    }
   }
 }

@@ -1467,5 +1467,17 @@
   "createAnApp": "アプリを作成",
   "createAndShareYourApp": "アプリを作成して共有",
   "createMyClone": "クローンを作成",
-  "createYourDigitalClone": "デジタルクローンを作成"
+  "createYourDigitalClone": "デジタルクローンを作成",
+  "itemApp": "アプリ",
+  "itemPersona": "ペルソナ",
+  "keepItemPublic": "{item}を公開のままにする",
+  "makeItemPublicQuestion": "{item}を公開しますか？",
+  "makeItemPrivateQuestion": "{item}を非公開にしますか？",
+  "makeItemPublicExplanation": "{item}を公開すると、誰でも使用できるようになります",
+  "makeItemPrivateExplanation": "{item}を非公開にすると、すべての人に対して機能しなくなり、あなただけに表示されます",
+  "manageApp": "アプリを管理",
+  "updatePersonaDetails": "ペルソナの詳細を更新",
+  "deleteItemTitle": "{item}を削除",
+  "deleteItemQuestion": "{item}を削除しますか？",
+  "deleteItemConfirmation": "この{item}を削除してもよろしいですか？この操作は元に戻せません。"
 }

@@ -3041,5 +3041,17 @@
   "createAnApp": "Створити додаток",
   "createAndShareYourApp": "Створіть і поділіться своїм додатком",
   "createMyClone": "Створити мій клон",
-  "createYourDigitalClone": "Створіть свій цифровий клон"
+  "createYourDigitalClone": "Створіть свій цифровий клон",
+  "itemApp": "Додаток",
+  "itemPersona": "Персона",
+  "keepItemPublic": "Залишити {item} публічним",
+  "makeItemPublicQuestion": "Зробити {item} публічним?",
+  "makeItemPrivateQuestion": "Зробити {item} приватним?",
+  "makeItemPublicExplanation": "Якщо ви зробите {item} публічним, ним зможуть користуватися всі",
+  "makeItemPrivateExplanation": "Якщо ви зараз зробите {item} приватним, він перестане працювати для всіх і буде видимий тільки вам",
+  "manageApp": "Керувати додатком",
+  "updatePersonaDetails": "Оновити деталі персони",
+  "deleteItemTitle": "Видалити {item}",
+  "deleteItemQuestion": "Видалити {item}?",
+  "deleteItemConfirmation": "Ви впевнені, що хочете видалити цей {item}? Цю дію неможливо скасувати."
 }

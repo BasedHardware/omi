@@ -3043,5 +3043,17 @@
   "createAnApp": "Vytvořit aplikaci",
   "createAndShareYourApp": "Vytvořte a sdílejte svou aplikaci",
   "createMyClone": "Vytvořit můj klon",
-  "createYourDigitalClone": "Vytvořte svůj digitální klon"
+  "createYourDigitalClone": "Vytvořte svůj digitální klon",
+  "itemApp": "Aplikace",
+  "itemPersona": "Persona",
+  "keepItemPublic": "Ponechat {item} veřejnou",
+  "makeItemPublicQuestion": "Zveřejnit {item}?",
+  "makeItemPrivateQuestion": "Zneveřejnit {item}?",
+  "makeItemPublicExplanation": "Pokud zveřejníte {item}, může ji používat kdokoli",
+  "makeItemPrivateExplanation": "Pokud nyní zneveřejníte {item}, přestane fungovat pro všechny a bude viditelná pouze pro vás",
+  "manageApp": "Spravovat aplikaci",
+  "updatePersonaDetails": "Aktualizovat detaily persony",
+  "deleteItemTitle": "Smazat {item}",
+  "deleteItemQuestion": "Smazat {item}?",
+  "deleteItemConfirmation": "Opravdu chcete smazat tuto {item}? Tuto akci nelze vrátit zpět."
 }

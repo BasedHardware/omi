@@ -3043,5 +3043,17 @@
   "createAnApp": "Crear una aplicació",
   "createAndShareYourApp": "Crea i comparteix la teva aplicació",
   "createMyClone": "Crear el meu clon",
-  "createYourDigitalClone": "Crea el teu clon digital"
+  "createYourDigitalClone": "Crea el teu clon digital",
+  "itemApp": "Aplicació",
+  "itemPersona": "Persona",
+  "keepItemPublic": "Mantenir {item} públic",
+  "makeItemPublicQuestion": "Fer {item} públic?",
+  "makeItemPrivateQuestion": "Fer {item} privat?",
+  "makeItemPublicExplanation": "Si fas {item} públic, pot ser utilitzat per tothom",
+  "makeItemPrivateExplanation": "Si fas {item} privat ara, deixarà de funcionar per a tothom i només serà visible per a tu",
+  "manageApp": "Gestionar aplicació",
+  "updatePersonaDetails": "Actualitzar detalls de la persona",
+  "deleteItemTitle": "Eliminar {item}",
+  "deleteItemQuestion": "Eliminar {item}?",
+  "deleteItemConfirmation": "Estàs segur que vols eliminar aquest {item}? Aquesta acció no es pot desfer."
 }

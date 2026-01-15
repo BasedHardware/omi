@@ -3041,5 +3041,17 @@
   "createAnApp": "Lag en app",
   "createAndShareYourApp": "Lag og del appen din",
   "createMyClone": "Lag min klon",
-  "createYourDigitalClone": "Lag din digitale klon"
+  "createYourDigitalClone": "Lag din digitale klon",
+  "itemApp": "App",
+  "itemPersona": "Persona",
+  "keepItemPublic": "Behold {item} offentlig",
+  "makeItemPublicQuestion": "Gjøre {item} offentlig?",
+  "makeItemPrivateQuestion": "Gjøre {item} privat?",
+  "makeItemPublicExplanation": "Hvis du gjør {item} offentlig, kan den brukes av alle",
+  "makeItemPrivateExplanation": "Hvis du gjør {item} privat nå, slutter den å fungere for alle og vil bare være synlig for deg",
+  "manageApp": "Administrer app",
+  "updatePersonaDetails": "Oppdater persona-detaljer",
+  "deleteItemTitle": "Slett {item}",
+  "deleteItemQuestion": "Slette {item}?",
+  "deleteItemConfirmation": "Er du sikker på at du vil slette denne {item}? Denne handlingen kan ikke angres."
 }

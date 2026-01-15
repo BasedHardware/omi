@@ -3041,5 +3041,17 @@
   "createAnApp": "Loo rakendus",
   "createAndShareYourApp": "Loo ja jaga oma rakendust",
   "createMyClone": "Loo minu kloon",
-  "createYourDigitalClone": "Loo oma digitaalne kloon"
+  "createYourDigitalClone": "Loo oma digitaalne kloon",
+  "itemApp": "Rakendus",
+  "itemPersona": "Persona",
+  "keepItemPublic": "Hoia {item} avalik",
+  "makeItemPublicQuestion": "Muuta {item} avalikuks?",
+  "makeItemPrivateQuestion": "Muuta {item} privaatseks?",
+  "makeItemPublicExplanation": "Kui muudate {item} avalikuks, saavad kõik seda kasutada",
+  "makeItemPrivateExplanation": "Kui muudate {item} nüüd privaatseks, lakkab see töötamast kõigil ja on nähtav ainult teile",
+  "manageApp": "Halda rakendust",
+  "updatePersonaDetails": "Uuenda persona üksikasju",
+  "deleteItemTitle": "Kustuta {item}",
+  "deleteItemQuestion": "Kustuta {item}?",
+  "deleteItemConfirmation": "Kas olete kindel, et soovite seda {item} kustutada? Seda toimingut ei saa tagasi võtta."
 }

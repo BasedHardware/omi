@@ -3041,5 +3041,17 @@
   "createAnApp": "Δημιουργία εφαρμογής",
   "createAndShareYourApp": "Δημιουργήστε και μοιραστείτε την εφαρμογή σας",
   "createMyClone": "Δημιουργία του κλώνου μου",
-  "createYourDigitalClone": "Δημιουργήστε τον ψηφιακό σας κλώνο"
+  "createYourDigitalClone": "Δημιουργήστε τον ψηφιακό σας κλώνο",
+  "itemApp": "Εφαρμογή",
+  "itemPersona": "Περσόνα",
+  "keepItemPublic": "Διατήρηση {item} δημόσιο",
+  "makeItemPublicQuestion": "Δημοσιοποίηση {item};",
+  "makeItemPrivateQuestion": "Ιδιωτικοποίηση {item};",
+  "makeItemPublicExplanation": "Αν κάνετε το {item} δημόσιο, μπορεί να χρησιμοποιηθεί από όλους",
+  "makeItemPrivateExplanation": "Αν κάνετε το {item} ιδιωτικό τώρα, θα σταματήσει να λειτουργεί για όλους και θα είναι ορατό μόνο σε εσάς",
+  "manageApp": "Διαχείριση εφαρμογής",
+  "updatePersonaDetails": "Ενημέρωση στοιχείων περσόνας",
+  "deleteItemTitle": "Διαγραφή {item}",
+  "deleteItemQuestion": "Διαγραφή {item};",
+  "deleteItemConfirmation": "Είστε βέβαιοι ότι θέλετε να διαγράψετε αυτό το {item}; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί."
 }

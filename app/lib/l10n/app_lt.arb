@@ -3023,5 +3023,17 @@
   "createAnApp": "Sukurti programėlę",
   "createAndShareYourApp": "Sukurkite ir dalinkitės savo programėle",
   "createMyClone": "Sukurti mano kloną",
-  "createYourDigitalClone": "Sukurkite savo skaitmeninį kloną"
+  "createYourDigitalClone": "Sukurkite savo skaitmeninį kloną",
+  "itemApp": "Programėlė",
+  "itemPersona": "Persona",
+  "keepItemPublic": "Laikyti {item} viešą",
+  "makeItemPublicQuestion": "Padaryti {item} viešą?",
+  "makeItemPrivateQuestion": "Padaryti {item} privačią?",
+  "makeItemPublicExplanation": "Jei padarysite {item} viešą, ją galės naudoti visi",
+  "makeItemPrivateExplanation": "Jei dabar padarysite {item} privačią, ji nustos veikti visiems ir bus matoma tik jums",
+  "manageApp": "Valdyti programėlę",
+  "updatePersonaDetails": "Atnaujinti personas informaciją",
+  "deleteItemTitle": "Ištrinti {item}",
+  "deleteItemQuestion": "Ištrinti {item}?",
+  "deleteItemConfirmation": "Ar tikrai norite ištrinti šią {item}? Šio veiksmo negalima atšaukti."
 }

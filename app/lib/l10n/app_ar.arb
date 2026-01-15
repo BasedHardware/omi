@@ -3059,5 +3059,17 @@
   "createAnApp": "إنشاء تطبيق",
   "createAndShareYourApp": "أنشئ وشارك تطبيقك",
   "createMyClone": "إنشاء نسختي",
-  "createYourDigitalClone": "أنشئ نسختك الرقمية"
+  "createYourDigitalClone": "أنشئ نسختك الرقمية",
+  "itemApp": "التطبيق",
+  "itemPersona": "الشخصية",
+  "keepItemPublic": "إبقاء {item} عامًا",
+  "makeItemPublicQuestion": "جعل {item} عامًا؟",
+  "makeItemPrivateQuestion": "جعل {item} خاصًا؟",
+  "makeItemPublicExplanation": "إذا جعلت {item} عامًا، يمكن للجميع استخدامه",
+  "makeItemPrivateExplanation": "إذا جعلت {item} خاصًا الآن، سيتوقف عن العمل للجميع وسيكون مرئيًا لك فقط",
+  "manageApp": "إدارة التطبيق",
+  "updatePersonaDetails": "تحديث تفاصيل الشخصية",
+  "deleteItemTitle": "حذف {item}",
+  "deleteItemQuestion": "حذف {item}؟",
+  "deleteItemConfirmation": "هل أنت متأكد أنك تريد حذف هذا {item}؟ لا يمكن التراجع عن هذا الإجراء."
 }

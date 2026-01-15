@@ -3041,5 +3041,17 @@
   "createAnApp": "Creează o aplicație",
   "createAndShareYourApp": "Creează și partajează aplicația ta",
   "createMyClone": "Creează clona mea",
-  "createYourDigitalClone": "Creează clona ta digitală"
+  "createYourDigitalClone": "Creează clona ta digitală",
+  "itemApp": "Aplicație",
+  "itemPersona": "Persona",
+  "keepItemPublic": "Păstrează {item} public",
+  "makeItemPublicQuestion": "Faci {item} public?",
+  "makeItemPrivateQuestion": "Faci {item} privat?",
+  "makeItemPublicExplanation": "Dacă faci {item} public, poate fi folosit de toată lumea",
+  "makeItemPrivateExplanation": "Dacă faci {item} privat acum, va înceta să funcționeze pentru toată lumea și va fi vizibil doar pentru tine",
+  "manageApp": "Gestionează aplicația",
+  "updatePersonaDetails": "Actualizează detaliile persona",
+  "deleteItemTitle": "Șterge {item}",
+  "deleteItemQuestion": "Ștergi {item}?",
+  "deleteItemConfirmation": "Ești sigur că vrei să ștergi acest {item}? Această acțiune nu poate fi anulată."
 }

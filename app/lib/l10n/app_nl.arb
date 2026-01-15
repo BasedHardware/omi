@@ -1859,5 +1859,17 @@
   "createAnApp": "Een app maken",
   "createAndShareYourApp": "Maak en deel uw app",
   "createMyClone": "Mijn kloon maken",
-  "createYourDigitalClone": "Maak uw digitale kloon"
+  "createYourDigitalClone": "Maak uw digitale kloon",
+  "itemApp": "App",
+  "itemPersona": "Persona",
+  "keepItemPublic": "{item} openbaar houden",
+  "makeItemPublicQuestion": "{item} openbaar maken?",
+  "makeItemPrivateQuestion": "{item} privé maken?",
+  "makeItemPublicExplanation": "Als u {item} openbaar maakt, kan het door iedereen worden gebruikt",
+  "makeItemPrivateExplanation": "Als u {item} nu privé maakt, werkt het voor niemand meer en is het alleen voor u zichtbaar",
+  "manageApp": "App beheren",
+  "updatePersonaDetails": "Persona-details bijwerken",
+  "deleteItemTitle": "{item} verwijderen",
+  "deleteItemQuestion": "{item} verwijderen?",
+  "deleteItemConfirmation": "Weet u zeker dat u deze {item} wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt."
 }

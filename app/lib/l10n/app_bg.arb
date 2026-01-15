@@ -3043,5 +3043,17 @@
   "createAnApp": "Създаване на приложение",
   "createAndShareYourApp": "Създайте и споделете вашето приложение",
   "createMyClone": "Създай моя клонинг",
-  "createYourDigitalClone": "Създайте вашия цифров клонинг"
+  "createYourDigitalClone": "Създайте вашия цифров клонинг",
+  "itemApp": "Приложение",
+  "itemPersona": "Персона",
+  "keepItemPublic": "Запази {item} публично",
+  "makeItemPublicQuestion": "Да се направи {item} публично?",
+  "makeItemPrivateQuestion": "Да се направи {item} частно?",
+  "makeItemPublicExplanation": "Ако направите {item} публично, то може да се използва от всички",
+  "makeItemPrivateExplanation": "Ако направите {item} частно сега, то ще спре да работи за всички и ще бъде видимо само за вас",
+  "manageApp": "Управление на приложението",
+  "updatePersonaDetails": "Актуализиране на детайлите на персоната",
+  "deleteItemTitle": "Изтриване на {item}",
+  "deleteItemQuestion": "Изтриване на {item}?",
+  "deleteItemConfirmation": "Сигурни ли сте, че искате да изтриете това {item}? Това действие не може да бъде отменено."
 }

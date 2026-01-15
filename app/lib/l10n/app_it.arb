@@ -3023,5 +3023,17 @@
   "createAnApp": "Crea un'app",
   "createAndShareYourApp": "Crea e condividi la tua app",
   "createMyClone": "Crea il mio clone",
-  "createYourDigitalClone": "Crea il tuo clone digitale"
+  "createYourDigitalClone": "Crea il tuo clone digitale",
+  "itemApp": "App",
+  "itemPersona": "Persona",
+  "keepItemPublic": "Mantieni {item} pubblico",
+  "makeItemPublicQuestion": "Rendere {item} pubblico?",
+  "makeItemPrivateQuestion": "Rendere {item} privato?",
+  "makeItemPublicExplanation": "Se rendi {item} pubblico, può essere usato da tutti",
+  "makeItemPrivateExplanation": "Se rendi {item} privato ora, smetterà di funzionare per tutti e sarà visibile solo a te",
+  "manageApp": "Gestisci app",
+  "updatePersonaDetails": "Aggiorna dettagli persona",
+  "deleteItemTitle": "Elimina {item}",
+  "deleteItemQuestion": "Eliminare {item}?",
+  "deleteItemConfirmation": "Sei sicuro di voler eliminare questo {item}? Questa azione non può essere annullata."
 }

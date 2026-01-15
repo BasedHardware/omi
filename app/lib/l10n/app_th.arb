@@ -3041,5 +3041,17 @@
   "createAnApp": "สร้างแอป",
   "createAndShareYourApp": "สร้างและแชร์แอปของคุณ",
   "createMyClone": "สร้างโคลนของฉัน",
-  "createYourDigitalClone": "สร้างโคลนดิจิทัลของคุณ"
+  "createYourDigitalClone": "สร้างโคลนดิจิทัลของคุณ",
+  "itemApp": "แอป",
+  "itemPersona": "เพอร์โซน่า",
+  "keepItemPublic": "เก็บ{item}เป็นสาธารณะ",
+  "makeItemPublicQuestion": "ทำให้{item}เป็นสาธารณะ?",
+  "makeItemPrivateQuestion": "ทำให้{item}เป็นส่วนตัว?",
+  "makeItemPublicExplanation": "หากคุณทำให้{item}เป็นสาธารณะ ทุกคนสามารถใช้งานได้",
+  "makeItemPrivateExplanation": "หากคุณทำให้{item}เป็นส่วนตัวตอนนี้ มันจะหยุดทำงานสำหรับทุกคนและจะมองเห็นได้เฉพาะคุณเท่านั้น",
+  "manageApp": "จัดการแอป",
+  "updatePersonaDetails": "อัปเดตรายละเอียดเพอร์โซน่า",
+  "deleteItemTitle": "ลบ{item}",
+  "deleteItemQuestion": "ลบ{item}?",
+  "deleteItemConfirmation": "คุณแน่ใจหรือไม่ว่าต้องการลบ{item}นี้? การกระทำนี้ไม่สามารถยกเลิกได้"
 }

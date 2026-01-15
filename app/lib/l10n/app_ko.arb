@@ -3041,5 +3041,17 @@
   "createAnApp": "앱 만들기",
   "createAndShareYourApp": "앱을 만들고 공유하세요",
   "createMyClone": "내 클론 만들기",
-  "createYourDigitalClone": "디지털 클론을 만드세요"
+  "createYourDigitalClone": "디지털 클론을 만드세요",
+  "itemApp": "앱",
+  "itemPersona": "페르소나",
+  "keepItemPublic": "{item}을 공개로 유지",
+  "makeItemPublicQuestion": "{item}을 공개로 설정하시겠습니까?",
+  "makeItemPrivateQuestion": "{item}을 비공개로 설정하시겠습니까?",
+  "makeItemPublicExplanation": "{item}을 공개로 설정하면 모든 사람이 사용할 수 있습니다",
+  "makeItemPrivateExplanation": "{item}을 비공개로 설정하면 모든 사람에게 작동이 중지되고 본인만 볼 수 있습니다",
+  "manageApp": "앱 관리",
+  "updatePersonaDetails": "페르소나 세부 정보 업데이트",
+  "deleteItemTitle": "{item} 삭제",
+  "deleteItemQuestion": "{item}을 삭제하시겠습니까?",
+  "deleteItemConfirmation": "이 {item}을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다."
 }

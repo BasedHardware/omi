@@ -3023,5 +3023,17 @@
   "createAnApp": "Uygulama Oluştur",
   "createAndShareYourApp": "Uygulamanızı oluşturun ve paylaşın",
   "createMyClone": "Klonumu Oluştur",
-  "createYourDigitalClone": "Dijital klonunuzu oluşturun"
+  "createYourDigitalClone": "Dijital klonunuzu oluşturun",
+  "itemApp": "Uygulama",
+  "itemPersona": "Persona",
+  "keepItemPublic": "{item} Herkese Açık Tut",
+  "makeItemPublicQuestion": "{item} Herkese Açık Yap?",
+  "makeItemPrivateQuestion": "{item} Özel Yap?",
+  "makeItemPublicExplanation": "{item} herkese açık yaparsanız, herkes kullanabilir",
+  "makeItemPrivateExplanation": "{item} şimdi özel yaparsanız, herkes için çalışmayı durduracak ve yalnızca size görünür olacak",
+  "manageApp": "Uygulamayı Yönet",
+  "updatePersonaDetails": "Persona Ayrıntılarını Güncelle",
+  "deleteItemTitle": "{item} Sil",
+  "deleteItemQuestion": "{item} Silinsin mi?",
+  "deleteItemConfirmation": "Bu {item} silmek istediğinizden emin misiniz? Bu işlem geri alınamaz."
 }

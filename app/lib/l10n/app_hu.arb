@@ -3041,5 +3041,17 @@
   "createAnApp": "Alkalmazás létrehozása",
   "createAndShareYourApp": "Hozza létre és ossza meg alkalmazását",
   "createMyClone": "Klónom létrehozása",
-  "createYourDigitalClone": "Hozza létre digitális klónját"
+  "createYourDigitalClone": "Hozza létre digitális klónját",
+  "itemApp": "Alkalmazás",
+  "itemPersona": "Persona",
+  "keepItemPublic": "{item} nyilvános tartása",
+  "makeItemPublicQuestion": "{item} nyilvánossá tétele?",
+  "makeItemPrivateQuestion": "{item} priváttá tétele?",
+  "makeItemPublicExplanation": "Ha nyilvánossá teszi a(z) {item}-t, mindenki használhatja",
+  "makeItemPrivateExplanation": "Ha most priváttá teszi a(z) {item}-t, az mindenki számára leáll és csak ön láthatja",
+  "manageApp": "Alkalmazás kezelése",
+  "updatePersonaDetails": "Persona részleteinek frissítése",
+  "deleteItemTitle": "{item} törlése",
+  "deleteItemQuestion": "{item} törlése?",
+  "deleteItemConfirmation": "Biztosan törölni szeretné ezt a(z) {item}-t? Ez a művelet nem vonható vissza."
 }

@@ -3041,5 +3041,17 @@
   "createAnApp": "Luo sovellus",
   "createAndShareYourApp": "Luo ja jaa sovelluksesi",
   "createMyClone": "Luo kloonini",
-  "createYourDigitalClone": "Luo digitaalinen kloonisi"
+  "createYourDigitalClone": "Luo digitaalinen kloonisi",
+  "itemApp": "Sovellus",
+  "itemPersona": "Persona",
+  "keepItemPublic": "Pidä {item} julkisena",
+  "makeItemPublicQuestion": "Tee {item} julkiseksi?",
+  "makeItemPrivateQuestion": "Tee {item} yksityiseksi?",
+  "makeItemPublicExplanation": "Jos teet {item} julkiseksi, kaikki voivat käyttää sitä",
+  "makeItemPrivateExplanation": "Jos teet {item} nyt yksityiseksi, se lakkaa toimimasta kaikille ja on näkyvissä vain sinulle",
+  "manageApp": "Hallitse sovellusta",
+  "updatePersonaDetails": "Päivitä persona-tiedot",
+  "deleteItemTitle": "Poista {item}",
+  "deleteItemQuestion": "Poista {item}?",
+  "deleteItemConfirmation": "Haluatko varmasti poistaa tämän {item}? Tätä toimintoa ei voi kumota."
 }

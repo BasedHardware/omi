@@ -1488,5 +1488,17 @@
   "createAnApp": "创建应用",
   "createAndShareYourApp": "创建并分享您的应用",
   "createMyClone": "创建我的克隆",
-  "createYourDigitalClone": "创建您的数字克隆"
+  "createYourDigitalClone": "创建您的数字克隆",
+  "itemApp": "应用",
+  "itemPersona": "角色",
+  "keepItemPublic": "保持{item}公开",
+  "makeItemPublicQuestion": "公开{item}？",
+  "makeItemPrivateQuestion": "设为私密{item}？",
+  "makeItemPublicExplanation": "如果您将{item}设为公开，所有人都可以使用",
+  "makeItemPrivateExplanation": "如果您现在将{item}设为私密，它将停止为所有人工作，只有您可以看到",
+  "manageApp": "管理应用",
+  "updatePersonaDetails": "更新角色详情",
+  "deleteItemTitle": "删除{item}",
+  "deleteItemQuestion": "删除{item}？",
+  "deleteItemConfirmation": "您确定要删除此{item}吗？此操作无法撤消。"
 }

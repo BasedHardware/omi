@@ -1488,5 +1488,17 @@
   "createAnApp": "Eine App erstellen",
   "createAndShareYourApp": "Erstellen und teilen Sie Ihre App",
   "createMyClone": "Meinen Klon erstellen",
-  "createYourDigitalClone": "Erstellen Sie Ihren digitalen Klon"
+  "createYourDigitalClone": "Erstellen Sie Ihren digitalen Klon",
+  "itemApp": "App",
+  "itemPersona": "Persona",
+  "keepItemPublic": "{item} öffentlich lassen",
+  "makeItemPublicQuestion": "{item} öffentlich machen?",
+  "makeItemPrivateQuestion": "{item} privat machen?",
+  "makeItemPublicExplanation": "Wenn Sie {item} öffentlich machen, kann es von allen genutzt werden",
+  "makeItemPrivateExplanation": "Wenn Sie {item} jetzt privat machen, funktioniert es für niemanden mehr und ist nur für Sie sichtbar",
+  "manageApp": "App verwalten",
+  "updatePersonaDetails": "Persona-Details aktualisieren",
+  "deleteItemTitle": "{item} löschen",
+  "deleteItemQuestion": "{item} löschen?",
+  "deleteItemConfirmation": "Sind Sie sicher, dass Sie {item} löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden."
 }

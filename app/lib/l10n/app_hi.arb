@@ -1488,5 +1488,17 @@
   "createAnApp": "एक ऐप बनाएं",
   "createAndShareYourApp": "अपना ऐप बनाएं और साझा करें",
   "createMyClone": "मेरा क्लोन बनाएं",
-  "createYourDigitalClone": "अपना डिजिटल क्लोन बनाएं"
+  "createYourDigitalClone": "अपना डिजिटल क्लोन बनाएं",
+  "itemApp": "ऐप",
+  "itemPersona": "पर्सोना",
+  "keepItemPublic": "{item} को सार्वजनिक रखें",
+  "makeItemPublicQuestion": "{item} को सार्वजनिक करें?",
+  "makeItemPrivateQuestion": "{item} को निजी करें?",
+  "makeItemPublicExplanation": "यदि आप {item} को सार्वजनिक करते हैं, तो इसे सभी द्वारा उपयोग किया जा सकता है",
+  "makeItemPrivateExplanation": "यदि आप अभी {item} को निजी करते हैं, तो यह सभी के लिए काम करना बंद कर देगा और केवल आपको दिखाई देगा",
+  "manageApp": "ऐप प्रबंधित करें",
+  "updatePersonaDetails": "पर्सोना विवरण अपडेट करें",
+  "deleteItemTitle": "{item} हटाएं",
+  "deleteItemQuestion": "{item} हटाएं?",
+  "deleteItemConfirmation": "क्या आप वाकई इस {item} को हटाना चाहते हैं? इस क्रिया को पूर्ववत नहीं किया जा सकता।"
 }

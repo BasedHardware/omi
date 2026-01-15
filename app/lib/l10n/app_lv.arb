@@ -3041,5 +3041,17 @@
   "createAnApp": "Izveidot lietotni",
   "createAndShareYourApp": "Izveidojiet un dalieties ar savu lietotni",
   "createMyClone": "Izveidot manu klonu",
-  "createYourDigitalClone": "Izveidojiet savu digitālo klonu"
+  "createYourDigitalClone": "Izveidojiet savu digitālo klonu",
+  "itemApp": "Lietotne",
+  "itemPersona": "Persona",
+  "keepItemPublic": "Saglabāt {item} publisku",
+  "makeItemPublicQuestion": "Padarīt {item} publisku?",
+  "makeItemPrivateQuestion": "Padarīt {item} privātu?",
+  "makeItemPublicExplanation": "Ja padarīsiet {item} publisku, to varēs izmantot visi",
+  "makeItemPrivateExplanation": "Ja tagad padarīsiet {item} privātu, tā pārtrauks darboties visiem un būs redzama tikai jums",
+  "manageApp": "Pārvaldīt lietotni",
+  "updatePersonaDetails": "Atjaunināt personas datus",
+  "deleteItemTitle": "Dzēst {item}",
+  "deleteItemQuestion": "Dzēst {item}?",
+  "deleteItemConfirmation": "Vai tiešām vēlaties dzēst šo {item}? Šo darbību nevar atsaukt."
 }

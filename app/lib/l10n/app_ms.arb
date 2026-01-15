@@ -3041,5 +3041,17 @@
   "createAnApp": "Cipta Aplikasi",
   "createAndShareYourApp": "Cipta dan kongsi aplikasi anda",
   "createMyClone": "Cipta Klon Saya",
-  "createYourDigitalClone": "Cipta klon digital anda"
+  "createYourDigitalClone": "Cipta klon digital anda",
+  "itemApp": "Aplikasi",
+  "itemPersona": "Persona",
+  "keepItemPublic": "Kekalkan {item} Awam",
+  "makeItemPublicQuestion": "Jadikan {item} Awam?",
+  "makeItemPrivateQuestion": "Jadikan {item} Peribadi?",
+  "makeItemPublicExplanation": "Jika anda menjadikan {item} awam, ia boleh digunakan oleh semua orang",
+  "makeItemPrivateExplanation": "Jika anda menjadikan {item} peribadi sekarang, ia akan berhenti berfungsi untuk semua orang dan hanya akan kelihatan kepada anda",
+  "manageApp": "Urus Aplikasi",
+  "updatePersonaDetails": "Kemas Kini Butiran Persona",
+  "deleteItemTitle": "Padam {item}",
+  "deleteItemQuestion": "Padam {item}?",
+  "deleteItemConfirmation": "Adakah anda pasti mahu memadamkan {item} ini? Tindakan ini tidak boleh dibuat asal."
 }

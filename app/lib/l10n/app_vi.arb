@@ -3041,5 +3041,17 @@
   "createAnApp": "Tạo ứng dụng",
   "createAndShareYourApp": "Tạo và chia sẻ ứng dụng của bạn",
   "createMyClone": "Tạo bản sao của tôi",
-  "createYourDigitalClone": "Tạo bản sao kỹ thuật số của bạn"
+  "createYourDigitalClone": "Tạo bản sao kỹ thuật số của bạn",
+  "itemApp": "Ứng dụng",
+  "itemPersona": "Persona",
+  "keepItemPublic": "Giữ {item} công khai",
+  "makeItemPublicQuestion": "Đặt {item} thành công khai?",
+  "makeItemPrivateQuestion": "Đặt {item} thành riêng tư?",
+  "makeItemPublicExplanation": "Nếu bạn đặt {item} thành công khai, mọi người đều có thể sử dụng",
+  "makeItemPrivateExplanation": "Nếu bạn đặt {item} thành riêng tư ngay bây giờ, nó sẽ ngừng hoạt động cho mọi người và chỉ hiển thị với bạn",
+  "manageApp": "Quản lý ứng dụng",
+  "updatePersonaDetails": "Cập nhật chi tiết persona",
+  "deleteItemTitle": "Xóa {item}",
+  "deleteItemQuestion": "Xóa {item}?",
+  "deleteItemConfirmation": "Bạn có chắc chắn muốn xóa {item} này? Hành động này không thể hoàn tác."
 }
