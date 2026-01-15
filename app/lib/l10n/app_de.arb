@@ -1411,5 +1411,7 @@
   "createAndSubmitNewApp": "Neue App erstellen und einreichen",
   "appsCount": "Apps ({count})",
   "privateAppsCount": "Private Apps ({count})",
-  "publicAppsCount": "Öffentliche Apps ({count})"
+  "publicAppsCount": "Öffentliche Apps ({count})",
+  "newVersionAvailable": "Neue Version verfügbar  🎉",
+  "no": "Nein"
 }

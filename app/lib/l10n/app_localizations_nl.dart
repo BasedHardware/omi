@@ -4018,4 +4018,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String publicAppsCount(String count) {
     return 'Openbare apps ($count)';
   }
+
+  @override
+  String get newVersionAvailable => 'Nieuwe versie beschikbaar  🎉';
+
+  @override
+  String get no => 'Nee';
 }

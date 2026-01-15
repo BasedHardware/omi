@@ -4005,4 +4005,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String publicAppsCount(String count) {
     return 'Julkiset sovellukset ($count)';
   }
+
+  @override
+  String get newVersionAvailable => 'Uusi versio saatavilla  🎉';
+
+  @override
+  String get no => 'Ei';
 }

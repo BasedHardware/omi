@@ -4027,4 +4027,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String publicAppsCount(String count) {
     return 'Aplicații publice ($count)';
   }
+
+  @override
+  String get newVersionAvailable => 'Versiune nouă disponibilă  🎉';
+
+  @override
+  String get no => 'Nu';
 }

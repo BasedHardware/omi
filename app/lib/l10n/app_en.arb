@@ -4523,5 +4523,13 @@
         "type": "String"
       }
     }
+  },
+  "newVersionAvailable": "New Version Available  🎉",
+  "@newVersionAvailable": {
+    "description": "Dialog title when a new app version is available"
+  },
+  "no": "No",
+  "@no": {
+    "description": "Button text to decline or dismiss"
   }
 }

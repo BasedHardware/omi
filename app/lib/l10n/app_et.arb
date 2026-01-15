@@ -2964,5 +2964,7 @@
   "createAndSubmitNewApp": "Loo ja esita uus rakendus",
   "appsCount": "Rakendused ({count})",
   "privateAppsCount": "Privaatsed rakendused ({count})",
-  "publicAppsCount": "Avalikud rakendused ({count})"
+  "publicAppsCount": "Avalikud rakendused ({count})",
+  "newVersionAvailable": "Uus versioon saadaval  🎉",
+  "no": "Ei"
 }

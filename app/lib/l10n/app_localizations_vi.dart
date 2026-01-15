@@ -4013,4 +4013,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String publicAppsCount(String count) {
     return 'Ứng dụng công khai ($count)';
   }
+
+  @override
+  String get newVersionAvailable => 'Có phiên bản mới  🎉';
+
+  @override
+  String get no => 'Không';
 }

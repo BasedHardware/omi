@@ -4010,4 +4010,10 @@ class AppLocalizationsUk extends AppLocalizations {
   String publicAppsCount(String count) {
     return 'Публічні додатки ($count)';
   }
+
+  @override
+  String get newVersionAvailable => 'Доступна нова версія  🎉';
+
+  @override
+  String get no => 'Ні';
 }

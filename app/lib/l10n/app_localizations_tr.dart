@@ -4015,4 +4015,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String publicAppsCount(String count) {
     return 'Herkese Açık Uygulamalar ($count)';
   }
+
+  @override
+  String get newVersionAvailable => 'Yeni Sürüm Mevcut  🎉';
+
+  @override
+  String get no => 'Hayır';
 }

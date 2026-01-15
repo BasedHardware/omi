@@ -2964,5 +2964,7 @@
   "createAndSubmitNewApp": "Buat dan kirim aplikasi baru",
   "appsCount": "Aplikasi ({count})",
   "privateAppsCount": "Aplikasi Pribadi ({count})",
-  "publicAppsCount": "Aplikasi Publik ({count})"
+  "publicAppsCount": "Aplikasi Publik ({count})",
+  "newVersionAvailable": "Versi Baru Tersedia  🎉",
+  "no": "Tidak"
 }

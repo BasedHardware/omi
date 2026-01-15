@@ -2964,5 +2964,7 @@
   "createAndSubmitNewApp": "새 앱 만들기 및 제출",
   "appsCount": "앱 ({count})",
   "privateAppsCount": "비공개 앱 ({count})",
-  "publicAppsCount": "공개 앱 ({count})"
+  "publicAppsCount": "공개 앱 ({count})",
+  "newVersionAvailable": "새 버전 사용 가능  🎉",
+  "no": "아니요"
 }

@@ -4004,4 +4004,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String publicAppsCount(String count) {
     return 'Veřejné aplikace ($count)';
   }
+
+  @override
+  String get newVersionAvailable => 'K dispozici je nová verze  🎉';
+
+  @override
+  String get no => 'Ne';
 }

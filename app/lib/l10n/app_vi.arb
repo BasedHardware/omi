@@ -2964,5 +2964,7 @@
   "createAndSubmitNewApp": "Tạo và gửi ứng dụng mới",
   "appsCount": "Ứng dụng ({count})",
   "privateAppsCount": "Ứng dụng riêng tư ({count})",
-  "publicAppsCount": "Ứng dụng công khai ({count})"
+  "publicAppsCount": "Ứng dụng công khai ({count})",
+  "newVersionAvailable": "Có phiên bản mới  🎉",
+  "no": "Không"
 }

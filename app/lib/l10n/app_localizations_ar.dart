@@ -3976,4 +3976,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String publicAppsCount(String count) {
     return 'التطبيقات العامة ($count)';
   }
+
+  @override
+  String get newVersionAvailable => 'إصدار جديد متاح  🎉';
+
+  @override
+  String get no => 'لا';
 }

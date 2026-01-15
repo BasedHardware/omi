@@ -3934,4 +3934,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String publicAppsCount(String count) {
     return '公开应用 ($count)';
   }
+
+  @override
+  String get newVersionAvailable => '新版本可用  🎉';
+
+  @override
+  String get no => '否';
 }

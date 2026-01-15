@@ -4008,4 +4008,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String publicAppsCount(String count) {
     return 'Verejné aplikácie ($count)';
   }
+
+  @override
+  String get newVersionAvailable => 'K dispozícii je nová verzia  🎉';
+
+  @override
+  String get no => 'Nie';
 }

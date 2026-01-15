@@ -2964,5 +2964,7 @@
   "createAndSubmitNewApp": "Új alkalmazás létrehozása és beküldése",
   "appsCount": "Alkalmazások ({count})",
   "privateAppsCount": "Privát alkalmazások ({count})",
-  "publicAppsCount": "Nyilvános alkalmazások ({count})"
+  "publicAppsCount": "Nyilvános alkalmazások ({count})",
+  "newVersionAvailable": "Új verzió elérhető  🎉",
+  "no": "Nem"
 }

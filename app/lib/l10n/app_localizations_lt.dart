@@ -4006,4 +4006,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String publicAppsCount(String count) {
     return 'Viešos programėlės ($count)';
   }
+
+  @override
+  String get newVersionAvailable => 'Galima nauja versija  🎉';
+
+  @override
+  String get no => 'Ne';
 }

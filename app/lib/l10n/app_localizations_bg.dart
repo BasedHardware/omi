@@ -4017,4 +4017,10 @@ class AppLocalizationsBg extends AppLocalizations {
   String publicAppsCount(String count) {
     return 'Публични приложения ($count)';
   }
+
+  @override
+  String get newVersionAvailable => 'Налична е нова версия  🎉';
+
+  @override
+  String get no => 'Не';
 }

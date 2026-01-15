@@ -1782,5 +1782,7 @@
   "createAndSubmitNewApp": "Maak en dien een nieuwe app in",
   "appsCount": "Apps ({count})",
   "privateAppsCount": "Privé-apps ({count})",
-  "publicAppsCount": "Openbare apps ({count})"
+  "publicAppsCount": "Openbare apps ({count})",
+  "newVersionAvailable": "Nieuwe versie beschikbaar  🎉",
+  "no": "Nee"
 }

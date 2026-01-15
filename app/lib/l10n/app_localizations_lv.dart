@@ -4011,4 +4011,10 @@ class AppLocalizationsLv extends AppLocalizations {
   String publicAppsCount(String count) {
     return 'Publiskās lietotnes ($count)';
   }
+
+  @override
+  String get newVersionAvailable => 'Pieejama jauna versija  🎉';
+
+  @override
+  String get no => 'Nē';
 }

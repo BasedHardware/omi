@@ -2983,5 +2983,7 @@
   "createAndSubmitNewApp": "إنشاء وإرسال تطبيق جديد",
   "appsCount": "التطبيقات ({count})",
   "privateAppsCount": "التطبيقات الخاصة ({count})",
-  "publicAppsCount": "التطبيقات العامة ({count})"
+  "publicAppsCount": "التطبيقات العامة ({count})",
+  "newVersionAvailable": "إصدار جديد متاح  🎉",
+  "no": "لا"
 }

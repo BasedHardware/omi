@@ -2964,5 +2964,7 @@
   "createAndSubmitNewApp": "Skapa och skicka in en ny app",
   "appsCount": "Appar ({count})",
   "privateAppsCount": "Privata appar ({count})",
-  "publicAppsCount": "Offentliga appar ({count})"
+  "publicAppsCount": "Offentliga appar ({count})",
+  "newVersionAvailable": "Ny version tillgänglig  🎉",
+  "no": "Nej"
 }

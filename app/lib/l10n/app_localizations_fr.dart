@@ -4038,4 +4038,10 @@ class AppLocalizationsFr extends AppLocalizations {
   String publicAppsCount(String count) {
     return 'Applications publiques ($count)';
   }
+
+  @override
+  String get newVersionAvailable => 'Nouvelle version disponible  🎉';
+
+  @override
+  String get no => 'Non';
 }

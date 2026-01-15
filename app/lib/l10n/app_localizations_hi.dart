@@ -3983,4 +3983,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String publicAppsCount(String count) {
     return 'सार्वजनिक ऐप्स ($count)';
   }
+
+  @override
+  String get newVersionAvailable => 'नया संस्करण उपलब्ध  🎉';
+
+  @override
+  String get no => 'नहीं';
 }

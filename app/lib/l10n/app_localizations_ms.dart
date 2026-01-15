@@ -4019,4 +4019,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String publicAppsCount(String count) {
     return 'Aplikasi Awam ($count)';
   }
+
+  @override
+  String get newVersionAvailable => 'Versi Baharu Tersedia  🎉';
+
+  @override
+  String get no => 'Tidak';
 }

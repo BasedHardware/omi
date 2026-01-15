@@ -4036,4 +4036,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String publicAppsCount(String count) {
     return 'Δημόσιες εφαρμογές ($count)';
   }
+
+  @override
+  String get newVersionAvailable => 'Νέα έκδοση διαθέσιμη  🎉';
+
+  @override
+  String get no => 'Όχι';
 }

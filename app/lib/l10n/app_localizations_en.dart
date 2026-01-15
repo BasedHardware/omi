@@ -4009,4 +4009,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String publicAppsCount(String count) {
     return 'Public Apps ($count)';
   }
+
+  @override
+  String get newVersionAvailable => 'New Version Available  🎉';
+
+  @override
+  String get no => 'No';
 }

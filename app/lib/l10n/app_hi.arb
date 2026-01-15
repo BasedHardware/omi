@@ -1411,5 +1411,7 @@
   "createAndSubmitNewApp": "नया ऐप बनाएं और सबमिट करें",
   "appsCount": "ऐप्स ({count})",
   "privateAppsCount": "निजी ऐप्स ({count})",
-  "publicAppsCount": "सार्वजनिक ऐप्स ({count})"
+  "publicAppsCount": "सार्वजनिक ऐप्स ({count})",
+  "newVersionAvailable": "नया संस्करण उपलब्ध  🎉",
+  "no": "नहीं"
 }

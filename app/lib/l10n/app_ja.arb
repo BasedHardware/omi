@@ -1390,5 +1390,7 @@
   "createAndSubmitNewApp": "新しいアプリを作成して送信",
   "appsCount": "アプリ ({count})",
   "privateAppsCount": "プライベートアプリ ({count})",
-  "publicAppsCount": "公開アプリ ({count})"
+  "publicAppsCount": "公開アプリ ({count})",
+  "newVersionAvailable": "新しいバージョンが利用可能です  🎉",
+  "no": "いいえ"
 }

@@ -2964,5 +2964,7 @@
   "createAndSubmitNewApp": "Создать и отправить новое приложение",
   "appsCount": "Приложения ({count})",
   "privateAppsCount": "Приватные приложения ({count})",
-  "publicAppsCount": "Публичные приложения ({count})"
+  "publicAppsCount": "Публичные приложения ({count})",
+  "newVersionAvailable": "Доступна новая версия  🎉",
+  "no": "Нет"
 }

@@ -2964,5 +2964,7 @@
   "createAndSubmitNewApp": "Creați și trimiteți o aplicație nouă",
   "appsCount": "Aplicații ({count})",
   "privateAppsCount": "Aplicații private ({count})",
-  "publicAppsCount": "Aplicații publice ({count})"
+  "publicAppsCount": "Aplicații publice ({count})",
+  "newVersionAvailable": "Versiune nouă disponibilă  🎉",
+  "no": "Nu"
 }

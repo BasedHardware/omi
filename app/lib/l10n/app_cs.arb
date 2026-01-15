@@ -2966,5 +2966,7 @@
   "createAndSubmitNewApp": "Vytvořte a odešlete novou aplikaci",
   "appsCount": "Aplikace ({count})",
   "privateAppsCount": "Soukromé aplikace ({count})",
-  "publicAppsCount": "Veřejné aplikace ({count})"
+  "publicAppsCount": "Veřejné aplikace ({count})",
+  "newVersionAvailable": "K dispozici je nová verze  🎉",
+  "no": "Ne"
 }

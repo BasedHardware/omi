@@ -4006,4 +4006,10 @@ class AppLocalizationsNo extends AppLocalizations {
   String publicAppsCount(String count) {
     return 'Offentlige apper ($count)';
   }
+
+  @override
+  String get newVersionAvailable => 'Ny versjon tilgjengelig  🎉';
+
+  @override
+  String get no => 'Nei';
 }

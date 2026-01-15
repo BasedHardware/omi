@@ -4012,4 +4012,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String publicAppsCount(String count) {
     return 'Offentliga appar ($count)';
   }
+
+  @override
+  String get newVersionAvailable => 'Ny version tillgänglig  🎉';
+
+  @override
+  String get no => 'Nej';
 }

@@ -2964,5 +2964,7 @@
   "createAndSubmitNewApp": "Δημιουργήστε και υποβάλετε μια νέα εφαρμογή",
   "appsCount": "Εφαρμογές ({count})",
   "privateAppsCount": "Ιδιωτικές εφαρμογές ({count})",
-  "publicAppsCount": "Δημόσιες εφαρμογές ({count})"
+  "publicAppsCount": "Δημόσιες εφαρμογές ({count})",
+  "newVersionAvailable": "Νέα έκδοση διαθέσιμη  🎉",
+  "no": "Όχι"
 }

@@ -3939,4 +3939,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String publicAppsCount(String count) {
     return '公開アプリ ($count)';
   }
+
+  @override
+  String get newVersionAvailable => '新しいバージョンが利用可能です  🎉';
+
+  @override
+  String get no => 'いいえ';
 }

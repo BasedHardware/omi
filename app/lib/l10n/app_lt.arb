@@ -2946,5 +2946,7 @@
   "createAndSubmitNewApp": "Sukurkite ir pateikite naują programėlę",
   "appsCount": "Programėlės ({count})",
   "privateAppsCount": "Privačios programėlės ({count})",
-  "publicAppsCount": "Viešos programėlės ({count})"
+  "publicAppsCount": "Viešos programėlės ({count})",
+  "newVersionAvailable": "Galima nauja versija  🎉",
+  "no": "Ne"
 }

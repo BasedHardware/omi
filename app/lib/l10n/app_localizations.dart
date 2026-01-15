@@ -7676,6 +7676,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Public Apps ({count})'**
   String publicAppsCount(String count);
+
+  /// Dialog title when a new app version is available
+  ///
+  /// In en, this message translates to:
+  /// **'New Version Available  🎉'**
+  String get newVersionAvailable;
+
+  /// Button text to decline or dismiss
+  ///
+  /// In en, this message translates to:
+  /// **'No'**
+  String get no;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

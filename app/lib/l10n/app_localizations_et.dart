@@ -4007,4 +4007,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String publicAppsCount(String count) {
     return 'Avalikud rakendused ($count)';
   }
+
+  @override
+  String get newVersionAvailable => 'Uus versioon saadaval  🎉';
+
+  @override
+  String get no => 'Ei';
 }

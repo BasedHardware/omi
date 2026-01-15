@@ -2966,5 +2966,7 @@
   "createAndSubmitNewApp": "Crea i envia una nova aplicació",
   "appsCount": "Aplicacions ({count})",
   "privateAppsCount": "Aplicacions privades ({count})",
-  "publicAppsCount": "Aplicacions públiques ({count})"
+  "publicAppsCount": "Aplicacions públiques ({count})",
+  "newVersionAvailable": "Nova versió disponible  🎉",
+  "no": "No"
 }

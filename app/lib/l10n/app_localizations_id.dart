@@ -4016,4 +4016,10 @@ class AppLocalizationsId extends AppLocalizations {
   String publicAppsCount(String count) {
     return 'Aplikasi Publik ($count)';
   }
+
+  @override
+  String get newVersionAvailable => 'Versi Baru Tersedia  🎉';
+
+  @override
+  String get no => 'Tidak';
 }

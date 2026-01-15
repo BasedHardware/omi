@@ -4013,4 +4013,10 @@ class AppLocalizationsDa extends AppLocalizations {
   String publicAppsCount(String count) {
     return 'Offentlige apps ($count)';
   }
+
+  @override
+  String get newVersionAvailable => 'Ny version tilgængelig  🎉';
+
+  @override
+  String get no => 'Nej';
 }

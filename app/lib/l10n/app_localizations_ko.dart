@@ -3939,4 +3939,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String publicAppsCount(String count) {
     return '공개 앱 ($count)';
   }
+
+  @override
+  String get newVersionAvailable => '새 버전 사용 가능  🎉';
+
+  @override
+  String get no => '아니요';
 }

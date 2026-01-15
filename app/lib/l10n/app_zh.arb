@@ -1411,5 +1411,7 @@
   "createAndSubmitNewApp": "创建并提交新应用",
   "appsCount": "应用 ({count})",
   "privateAppsCount": "私有应用 ({count})",
-  "publicAppsCount": "公开应用 ({count})"
+  "publicAppsCount": "公开应用 ({count})",
+  "newVersionAvailable": "新版本可用  🎉",
+  "no": "否"
 }

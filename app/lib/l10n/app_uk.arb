@@ -2964,5 +2964,7 @@
   "createAndSubmitNewApp": "Створіть і надішліть новий додаток",
   "appsCount": "Додатки ({count})",
   "privateAppsCount": "Приватні додатки ({count})",
-  "publicAppsCount": "Публічні додатки ({count})"
+  "publicAppsCount": "Публічні додатки ({count})",
+  "newVersionAvailable": "Доступна нова версія  🎉",
+  "no": "Ні"
 }

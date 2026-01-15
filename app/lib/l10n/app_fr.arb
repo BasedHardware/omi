@@ -1782,5 +1782,7 @@
   "createAndSubmitNewApp": "Créer et soumettre une nouvelle application",
   "appsCount": "Applications ({count})",
   "privateAppsCount": "Applications privées ({count})",
-  "publicAppsCount": "Applications publiques ({count})"
+  "publicAppsCount": "Applications publiques ({count})",
+  "newVersionAvailable": "Nouvelle version disponible  🎉",
+  "no": "Non"
 }

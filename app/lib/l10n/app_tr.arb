@@ -2946,5 +2946,7 @@
   "createAndSubmitNewApp": "Yeni bir uygulama oluştur ve gönder",
   "appsCount": "Uygulamalar ({count})",
   "privateAppsCount": "Özel Uygulamalar ({count})",
-  "publicAppsCount": "Herkese Açık Uygulamalar ({count})"
+  "publicAppsCount": "Herkese Açık Uygulamalar ({count})",
+  "newVersionAvailable": "Yeni Sürüm Mevcut  🎉",
+  "no": "Hayır"
 }

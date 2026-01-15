@@ -4028,4 +4028,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String publicAppsCount(String count) {
     return 'Nyilvános alkalmazások ($count)';
   }
+
+  @override
+  String get newVersionAvailable => 'Új verzió elérhető  🎉';
+
+  @override
+  String get no => 'Nem';
 }

@@ -2964,5 +2964,7 @@
   "createAndSubmitNewApp": "Opret og indsend en ny app",
   "appsCount": "Apps ({count})",
   "privateAppsCount": "Private apps ({count})",
-  "publicAppsCount": "Offentlige apps ({count})"
+  "publicAppsCount": "Offentlige apps ({count})",
+  "newVersionAvailable": "Ny version tilgængelig  🎉",
+  "no": "Nej"
 }
