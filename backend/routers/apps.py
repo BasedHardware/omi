@@ -130,9 +130,10 @@ def _get_categories():
 # ******************************************************
 
 
-@router.get('/v1/apps', tags=['v1'], response_model=List[App])
+@router.get('/v1/apps', tags=['v1'])
 def get_apps(uid: str = Depends(auth.get_current_user_uid), include_reviews: bool = True):
-    return get_available_apps(uid, include_reviews=include_reviews)
+    apps = get_available_apps(uid, include_reviews=include_reviews)
+    return [normalize_app_numeric_fields(app.to_reduced_dict()) for app in apps]
 
 
 @router.get('/v2/apps', tags=['v2'])
@@ -175,7 +176,7 @@ def get_apps_v2(
         page = paginate_apps(sorted_apps, offset, limit)
 
         res = {
-            'data': [normalize_app_numeric_fields(app.model_dump(mode='json')) for app in page],
+            'data': [normalize_app_numeric_fields(app.to_reduced_dict()) for app in page],
             'pagination': build_pagination_metadata(len(sorted_apps), offset, limit, capability),
             'capability': {
                 'id': capability,
@@ -345,7 +346,7 @@ def search_apps(
     page = paginate_apps(filtered_apps, offset, limit)
 
     return {
-        'data': [normalize_app_numeric_fields(app.model_dump()) for app in page],
+        'data': [normalize_app_numeric_fields(app.to_reduced_dict()) for app in page],
         'pagination': build_pagination_metadata(total, offset, limit),
         'filters': {
             'query': q,
@@ -359,18 +360,20 @@ def search_apps(
     }
 
 
-@router.get('/v1/approved-apps', tags=['v1'], response_model=List[App])
+@router.get('/v1/approved-apps', tags=['v1'])
 def get_approved_apps(include_reviews: bool = False):
     apps = get_approved_available_apps(include_reviews=include_reviews)
     # Always exclude persona type apps
-    return [app for app in apps if not app.is_a_persona()]
+    filtered_apps = [app for app in apps if not app.is_a_persona()]
+    return [normalize_app_numeric_fields(app.to_reduced_dict()) for app in filtered_apps]
 
 
-@router.get('/v1/apps/popular', tags=['v1'], response_model=List[App])
+@router.get('/v1/apps/popular', tags=['v1'])
 def get_popular_apps_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     apps = get_popular_apps()
     # Always exclude persona type apps
-    return [app for app in apps if not app.is_a_persona()]
+    filtered_apps = [app for app in apps if not app.is_a_persona()]
+    return [normalize_app_numeric_fields(app.to_reduced_dict()) for app in filtered_apps]
 
 
 @router.post('/v1/apps', tags=['v1'])

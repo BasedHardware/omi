@@ -1130,7 +1130,7 @@ def build_capability_groups_response(
                     'id': capability_id,
                     'title': id_to_title.get(capability_id, capability_id.title().replace('_', ' ')),
                 },
-                'data': [normalize_app_numeric_fields(app.model_dump(mode='json')) for app in page],
+                'data': [normalize_app_numeric_fields(app.to_reduced_dict()) for app in page],
                 'pagination': build_pagination_metadata(total, offset, limit, capability_id),
             }
         )
@@ -1250,7 +1250,7 @@ def build_capability_category_groups_response(grouped_apps: Dict[str, List[App]]
                     'id': category_id,
                     'title': title,
                 },
-                'data': [normalize_app_numeric_fields(app.model_dump(mode='json')) for app in apps],
+                'data': [normalize_app_numeric_fields(app.to_reduced_dict()) for app in apps],
                 'count': len(apps),
             }
         )

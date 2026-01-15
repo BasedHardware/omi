@@ -166,6 +166,29 @@ class App(BaseModel):
         """Check if app provides chat tools"""
         return bool(self.chat_tools and len(self.chat_tools) > 0)
 
+    def to_reduced_dict(self) -> dict:
+        """Serialize for list views with reduced fields.
+
+        Excludes large/redundant fields that are not needed in app list displays:
+        - Prompts (persona_prompt, chat_prompt, memory_prompt)
+        - Full reviews array (rating_avg/rating_count are sufficient)
+        - Internal payment and social data
+        """
+        return self.model_dump(
+            mode='json',
+            exclude={
+                'reviews',
+                'user_review',
+                'persona_prompt',
+                'chat_prompt',
+                'memory_prompt',
+                'payment_product_id',
+                'payment_price_id',
+                'payment_link_id',
+                'twitter',
+            },
+        )
+
 
 class AppCreate(BaseModel):
     id: str
