@@ -2828,5 +2828,18 @@
   "pilotFeaturesDescription": "คุณสมบัติเหล่านี้เป็นการทดสอบและไม่รับประกันการสนับสนุน",
   "suggestFollowUpQuestion": "แนะนำคำถามติดตาม",
   "saveSettings": "บันทึกการตั้งค่า",
-  "syncingDeveloperSettings": "กำลังซิงค์การตั้งค่านักพัฒนา..."
+  "syncingDeveloperSettings": "กำลังซิงค์การตั้งค่านักพัฒนา...",
+  "summary": "สรุป",
+  "auto": "อัตโนมัติ",
+  "noSummaryForApp": "ไม่มีสรุปสำหรับแอปนี้ ลองแอปอื่นเพื่อผลลัพธ์ที่ดีขึ้น",
+  "tryAnotherApp": "ลองแอปอื่น",
+  "generatedBy": "สร้างโดย {appName}",
+  "overview": "ภาพรวม",
+  "otherAppResults": "ผลลัพธ์จากแอปอื่น",
+  "unknownApp": "แอปที่ไม่รู้จัก",
+  "noSummaryAvailable": "ไม่มีสรุปที่พร้อมใช้งาน",
+  "conversationNoSummaryYet": "การสนทนานี้ยังไม่มีสรุป",
+  "chooseSummarizationApp": "เลือกแอปสรุป",
+  "setAsDefaultSummarizationApp": "ตั้ง {appName} เป็นแอปสรุปเริ่มต้น",
+  "letOmiChooseAutomatically": "ให้ Omi เลือกแอปที่ดีที่สุดโดยอัตโนมัติ"
 }

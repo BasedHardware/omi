@@ -993,7 +993,7 @@
   "messageReportedSuccessfully": "✅ Nachricht erfolgreich gemeldet",
   "confirmReportMessage": "Möchten Sie diese Nachricht wirklich melden?",
   "selectChatAssistant": "Chat-Assistenten auswählen",
-  "enableMoreApps": "Mehr Apps aktivieren",
+  "enableMoreApps": "Weitere Apps aktivieren",
   "chatCleared": "Chat gelöscht",
   "clearChatTitle": "Chat löschen?",
   "confirmClearChat": "Möchten Sie den Chat wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
@@ -1275,5 +1275,18 @@
   "pilotFeaturesDescription": "Diese Funktionen sind Tests und es wird keine Unterstützung garantiert.",
   "suggestFollowUpQuestion": "Folgefrage vorschlagen",
   "saveSettings": "Einstellungen speichern",
-  "syncingDeveloperSettings": "Entwicklereinstellungen synchronisieren..."
+  "syncingDeveloperSettings": "Entwicklereinstellungen synchronisieren...",
+  "summary": "Zusammenfassung",
+  "auto": "Automatisch",
+  "noSummaryForApp": "Für diese App ist keine Zusammenfassung verfügbar. Versuchen Sie eine andere App für bessere Ergebnisse.",
+  "tryAnotherApp": "Andere App ausprobieren",
+  "generatedBy": "Generiert von {appName}",
+  "overview": "Übersicht",
+  "otherAppResults": "Andere App-Ergebnisse",
+  "unknownApp": "Unbekannte App",
+  "noSummaryAvailable": "Keine Zusammenfassung verfügbar",
+  "conversationNoSummaryYet": "Dieses Gespräch hat noch keine Zusammenfassung.",
+  "chooseSummarizationApp": "Zusammenfassungs-App auswählen",
+  "setAsDefaultSummarizationApp": "{appName} als Standard-Zusammenfassungs-App festgelegt",
+  "letOmiChooseAutomatically": "Lassen Sie Omi automatisch die beste App auswählen"
 }

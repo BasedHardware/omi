@@ -1275,5 +1275,18 @@
   "pilotFeaturesDescription": "ये सुविधाएं परीक्षण हैं और समर्थन की गारंटी नहीं है।",
   "suggestFollowUpQuestion": "फॉलो-अप प्रश्न सुझाएं",
   "saveSettings": "सेटिंग्स सहेजें",
-  "syncingDeveloperSettings": "डेवलपर सेटिंग्स सिंक हो रही हैं..."
+  "syncingDeveloperSettings": "डेवलपर सेटिंग्स सिंक हो रही हैं...",
+  "summary": "सारांश",
+  "auto": "स्वचालित",
+  "noSummaryForApp": "इस ऐप के लिए कोई सारांश उपलब्ध नहीं है। बेहतर परिणामों के लिए किसी अन्य ऐप का प्रयास करें।",
+  "tryAnotherApp": "दूसरा ऐप आज़माएं",
+  "generatedBy": "{appName} द्वारा उत्पन्न",
+  "overview": "अवलोकन",
+  "otherAppResults": "अन्य ऐप परिणाम",
+  "unknownApp": "अज्ञात ऐप",
+  "noSummaryAvailable": "कोई सारांश उपलब्ध नहीं",
+  "conversationNoSummaryYet": "इस बातचीत का अभी तक कोई सारांश नहीं है।",
+  "chooseSummarizationApp": "सारांश ऐप चुनें",
+  "setAsDefaultSummarizationApp": "{appName} को डिफ़ॉल्ट सारांश ऐप के रूप में सेट किया गया",
+  "letOmiChooseAutomatically": "Omi को स्वचालित रूप से सर्वोत्तम ऐप चुनने दें"
 }

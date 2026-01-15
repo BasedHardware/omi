@@ -2828,5 +2828,18 @@
   "pilotFeaturesDescription": "Αυτές οι λειτουργίες είναι δοκιμές και δεν εγγυάται η υποστήριξη.",
   "suggestFollowUpQuestion": "Προτείνετε ερώτηση παρακολούθησης",
   "saveSettings": "Αποθήκευση ρυθμίσεων",
-  "syncingDeveloperSettings": "Συγχρονισμός ρυθμίσεων προγραμματιστή..."
+  "syncingDeveloperSettings": "Συγχρονισμός ρυθμίσεων προγραμματιστή...",
+  "summary": "Περίληψη",
+  "auto": "Αυτόματα",
+  "noSummaryForApp": "Δεν υπάρχει διαθέσιμη περίληψη για αυτήν την εφαρμογή. Δοκιμάστε άλλη εφαρμογή για καλύτερα αποτελέσματα.",
+  "tryAnotherApp": "Δοκιμάστε άλλη εφαρμογή",
+  "generatedBy": "Δημιουργήθηκε από {appName}",
+  "overview": "Επισκόπηση",
+  "otherAppResults": "Αποτελέσματα άλλων εφαρμογών",
+  "unknownApp": "Άγνωστη εφαρμογή",
+  "noSummaryAvailable": "Δεν υπάρχει διαθέσιμη περίληψη",
+  "conversationNoSummaryYet": "Αυτή η συνομιλία δεν έχει ακόμη περίληψη.",
+  "chooseSummarizationApp": "Επιλέξτε εφαρμογή περίληψης",
+  "setAsDefaultSummarizationApp": "Η {appName} ορίστηκε ως προεπιλεγμένη εφαρμογή περίληψης",
+  "letOmiChooseAutomatically": "Αφήστε το Omi να επιλέξει αυτόματα την καλύτερη εφαρμογή"
 }

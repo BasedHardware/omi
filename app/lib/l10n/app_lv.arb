@@ -2828,5 +2828,18 @@
   "pilotFeaturesDescription": "Šīs funkcijas ir testi, un atbalsts nav garantēts.",
   "suggestFollowUpQuestion": "Ieteikt turpinājuma jautājumu",
   "saveSettings": "Saglabāt iestatījumus",
-  "syncingDeveloperSettings": "Sinhronizē izstrādātāja iestatījumus..."
+  "syncingDeveloperSettings": "Sinhronizē izstrādātāja iestatījumus...",
+  "summary": "Kopsavilkums",
+  "auto": "Automātisks",
+  "noSummaryForApp": "Šai lietotnei nav pieejams kopsavilkums. Labākiem rezultātiem izmēģiniet citu lietotni.",
+  "tryAnotherApp": "Izmēģiniet citu lietotni",
+  "generatedBy": "Izveidoja {appName}",
+  "overview": "Pārskats",
+  "otherAppResults": "Citu lietotņu rezultāti",
+  "unknownApp": "Nezināma lietotne",
+  "noSummaryAvailable": "Nav pieejams kopsavilkums",
+  "conversationNoSummaryYet": "Šai sarunai vēl nav kopsavilkuma.",
+  "chooseSummarizationApp": "Izvēlieties kopsavilkuma lietotni",
+  "setAsDefaultSummarizationApp": "{appName} iestatīta kā noklusējuma kopsavilkuma lietotne",
+  "letOmiChooseAutomatically": "Ļaujiet Omi automātiski izvēlēties labāko lietotni"
 }

@@ -1275,5 +1275,18 @@
   "pilotFeaturesDescription": "这些功能是测试版本，不保证支持。",
   "suggestFollowUpQuestion": "建议后续问题",
   "saveSettings": "保存设置",
-  "syncingDeveloperSettings": "正在同步开发者设置..."
+  "syncingDeveloperSettings": "正在同步开发者设置...",
+  "summary": "摘要",
+  "auto": "自动",
+  "noSummaryForApp": "此应用没有可用的摘要。尝试其他应用以获得更好的结果。",
+  "tryAnotherApp": "尝试其他应用",
+  "generatedBy": "由 {appName} 生成",
+  "overview": "概述",
+  "otherAppResults": "其他应用结果",
+  "unknownApp": "未知应用",
+  "noSummaryAvailable": "没有可用的摘要",
+  "conversationNoSummaryYet": "此对话还没有摘要。",
+  "chooseSummarizationApp": "选择摘要应用",
+  "setAsDefaultSummarizationApp": "{appName} 已设置为默认摘要应用",
+  "letOmiChooseAutomatically": "让 Omi 自动选择最佳应用"
 }

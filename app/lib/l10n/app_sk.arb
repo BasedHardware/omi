@@ -2828,5 +2828,18 @@
   "pilotFeaturesDescription": "Tieto funkcie sú testy a podpora nie je zaručená.",
   "suggestFollowUpQuestion": "Navrhnúť následnú otázku",
   "saveSettings": "Uložiť nastavenia",
-  "syncingDeveloperSettings": "Synchronizácia nastavení vývojára..."
+  "syncingDeveloperSettings": "Synchronizácia nastavení vývojára...",
+  "summary": "Zhrnutie",
+  "auto": "Automaticky",
+  "noSummaryForApp": "Pre túto aplikáciu nie je k dispozícii žiadne zhrnutie. Skúste inú aplikáciu pre lepšie výsledky.",
+  "tryAnotherApp": "Vyskúšať inú aplikáciu",
+  "generatedBy": "Vygenerované aplikáciou {appName}",
+  "overview": "Prehľad",
+  "otherAppResults": "Výsledky z iných aplikácií",
+  "unknownApp": "Neznáma aplikácia",
+  "noSummaryAvailable": "Nie je k dispozícii žiadne zhrnutie",
+  "conversationNoSummaryYet": "Táto konverzácia ešte nemá zhrnutie.",
+  "chooseSummarizationApp": "Vybrať aplikáciu na zhrnutie",
+  "setAsDefaultSummarizationApp": "Aplikácia {appName} nastavená ako predvolená aplikácia na zhrnutie",
+  "letOmiChooseAutomatically": "Nechajte Omi automaticky vybrať najlepšiu aplikáciu"
 }

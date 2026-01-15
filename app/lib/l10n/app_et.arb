@@ -2828,5 +2828,18 @@
   "pilotFeaturesDescription": "Need funktsioonid on testid ja toe pakkumist ei garanteerita.",
   "suggestFollowUpQuestion": "Soovita jätkuküsimust",
   "saveSettings": "Salvesta seaded",
-  "syncingDeveloperSettings": "Arendaja seadete sünkroonimine..."
+  "syncingDeveloperSettings": "Arendaja seadete sünkroonimine...",
+  "summary": "Kokkuvõte",
+  "auto": "Automaatne",
+  "noSummaryForApp": "Selle rakenduse jaoks pole kokkuvõtet saadaval. Parema tulemuse saamiseks proovige teist rakendust.",
+  "tryAnotherApp": "Proovi teist rakendust",
+  "generatedBy": "Loonud {appName}",
+  "overview": "Ülevaade",
+  "otherAppResults": "Teiste rakenduste tulemused",
+  "unknownApp": "Tundmatu rakendus",
+  "noSummaryAvailable": "Kokkuvõte pole saadaval",
+  "conversationNoSummaryYet": "Sellel vestlusel pole veel kokkuvõtet.",
+  "chooseSummarizationApp": "Vali kokkuvõtte rakendus",
+  "setAsDefaultSummarizationApp": "{appName} määratud vaikerakenduseks kokkuvõtte jaoks",
+  "letOmiChooseAutomatically": "Lase Omil automaatselt parim rakendus valida"
 }

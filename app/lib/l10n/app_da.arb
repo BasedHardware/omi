@@ -2828,5 +2828,18 @@
   "pilotFeaturesDescription": "Disse funktioner er tests, og der garanteres ingen support.",
   "suggestFollowUpQuestion": "Foreslå opfølgende spørgsmål",
   "saveSettings": "Gem indstillinger",
-  "syncingDeveloperSettings": "Synkroniserer udviklerindstillinger..."
+  "syncingDeveloperSettings": "Synkroniserer udviklerindstillinger...",
+  "summary": "Resumé",
+  "auto": "Automatisk",
+  "noSummaryForApp": "Intet resumé tilgængeligt for denne app. Prøv en anden app for bedre resultater.",
+  "tryAnotherApp": "Prøv en anden app",
+  "generatedBy": "Genereret af {appName}",
+  "overview": "Oversigt",
+  "otherAppResults": "Andre app-resultater",
+  "unknownApp": "Ukendt app",
+  "noSummaryAvailable": "Intet resumé tilgængeligt",
+  "conversationNoSummaryYet": "Denne samtale har endnu ikke et resumé.",
+  "chooseSummarizationApp": "Vælg resumé-app",
+  "setAsDefaultSummarizationApp": "{appName} indstillet som standard resumé-app",
+  "letOmiChooseAutomatically": "Lad Omi automatisk vælge den bedste app"
 }

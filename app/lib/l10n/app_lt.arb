@@ -391,7 +391,7 @@
   "@chatWithOmi": {
     "description": "Chat share subject"
   },
-  "apps": "Programos",
+  "apps": "Programėlės",
   "@apps": {
     "description": "Navigation label for apps page"
   },
@@ -2546,7 +2546,7 @@
   "messageReportedSuccessfully": "✅ Pranešimas sėkmingai praneštas",
   "confirmReportMessage": "Ar tikrai norite pranešti apie šį pranešimą?",
   "selectChatAssistant": "Pasirinkti pokalbio asistentą",
-  "enableMoreApps": "Įgalinti daugiau programų",
+  "enableMoreApps": "Įjungti daugiau programėlių",
   "chatCleared": "Pokalbis išvalytas",
   "clearChatTitle": "Išvalyti pokalbį?",
   "confirmClearChat": "Ar tikrai norite išvalyti pokalbį? Šio veiksmo negalima atšaukti.",
@@ -2810,5 +2810,18 @@
   "pilotFeaturesDescription": "Šios funkcijos yra testai ir nėra garantuojama parama.",
   "suggestFollowUpQuestion": "Pasiūlyti tolesnį klausimą",
   "saveSettings": "Išsaugoti nustatymus",
-  "syncingDeveloperSettings": "Sinchronizuojami kūrėjo nustatymai..."
+  "syncingDeveloperSettings": "Sinchronizuojami kūrėjo nustatymai...",
+  "summary": "Santrauka",
+  "auto": "Automatinis",
+  "noSummaryForApp": "Šiai programėlei santrauka nepasiekiama. Geresnių rezultatų rasite išbandę kitą programėlę.",
+  "tryAnotherApp": "Išbandykite kitą programėlę",
+  "generatedBy": "Sugeneravo {appName}",
+  "overview": "Apžvalga",
+  "otherAppResults": "Kitų programėlių rezultatai",
+  "unknownApp": "Nežinoma programėlė",
+  "noSummaryAvailable": "Santrauka nepasiekiama",
+  "conversationNoSummaryYet": "Šis pokalbis dar neturi santraukos.",
+  "chooseSummarizationApp": "Pasirinkite santraukos programėlę",
+  "setAsDefaultSummarizationApp": "{appName} nustatyta kaip numatytoji santraukos programėlė",
+  "letOmiChooseAutomatically": "Leisti Omi automatiškai pasirinkti geriausią programėlę"
 }

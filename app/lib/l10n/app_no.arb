@@ -2326,7 +2326,7 @@
   "editFolder": "Rediger mappe",
   "deleteFolder": "Slett mappe",
   "transcriptCopiedToClipboard": "Transkript kopiert til utklippstavlen",
-  "summaryCopiedToClipboard": "Sammendrag kopiert til utklippstavlen",
+  "summaryCopiedToClipboard": "Sammendrag kopiert til utklippstavle",
   "conversationUrlCouldNotBeShared": "Samtale-URL kunne ikke deles.",
   "urlCopiedToClipboard": "URL kopiert til utklippstavlen",
   "exportTranscript": "Eksporter transkript",
@@ -2828,5 +2828,18 @@
   "pilotFeaturesDescription": "Disse funksjonene er tester og ingen støtte er garantert.",
   "suggestFollowUpQuestion": "Foreslå oppfølgingsspørsmål",
   "saveSettings": "Lagre innstillinger",
-  "syncingDeveloperSettings": "Synkroniserer utviklerinnstillinger..."
+  "syncingDeveloperSettings": "Synkroniserer utviklerinnstillinger...",
+  "summary": "Sammendrag",
+  "auto": "Automatisk",
+  "noSummaryForApp": "Ingen sammendrag tilgjengelig for denne appen. Prøv en annen app for bedre resultater.",
+  "tryAnotherApp": "Prøv en annen app",
+  "generatedBy": "Generert av {appName}",
+  "overview": "Oversikt",
+  "otherAppResults": "Resultater fra andre apper",
+  "unknownApp": "Ukjent app",
+  "noSummaryAvailable": "Ingen sammendrag tilgjengelig",
+  "conversationNoSummaryYet": "Denne samtalen har ikke et sammendrag ennå.",
+  "chooseSummarizationApp": "Velg sammendragsapp",
+  "setAsDefaultSummarizationApp": "{appName} satt som standard sammendragsapp",
+  "letOmiChooseAutomatically": "La Omi velge beste app automatisk"
 }

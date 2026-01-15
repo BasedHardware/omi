@@ -2582,7 +2582,7 @@
   "messageReportedSuccessfully": "✅ Съобщението е докладвано успешно",
   "confirmReportMessage": "Сигурни ли сте, че искате да докладвате това съобщение?",
   "selectChatAssistant": "Изберете чат асистент",
-  "enableMoreApps": "Активирайте повече приложения",
+  "enableMoreApps": "Активиране на повече приложения",
   "chatCleared": "Чатът е изчистен",
   "clearChatTitle": "Изчистване на чата?",
   "confirmClearChat": "Сигурни ли сте, че искате да изчистите чата? Това действие не може да бъде отменено.",
@@ -2846,5 +2846,18 @@
   "pilotFeaturesDescription": "Тези функции са тестове и не се гарантира поддръжка.",
   "suggestFollowUpQuestion": "Предложете последващ въпрос",
   "saveSettings": "Запазване на настройките",
-  "syncingDeveloperSettings": "Синхронизиране на настройките за разработчици..."
+  "syncingDeveloperSettings": "Синхронизиране на настройките за разработчици...",
+  "summary": "Резюме",
+  "auto": "Автоматично",
+  "noSummaryForApp": "Няма налично резюме за това приложение. Опитайте друго приложение за по-добри резултати.",
+  "tryAnotherApp": "Опитайте друго приложение",
+  "generatedBy": "Генерирано от {appName}",
+  "overview": "Общ преглед",
+  "otherAppResults": "Резултати от други приложения",
+  "unknownApp": "Неизвестно приложение",
+  "noSummaryAvailable": "Няма налично резюме",
+  "conversationNoSummaryYet": "Този разговор все още няма резюме.",
+  "chooseSummarizationApp": "Изберете приложение за резюме",
+  "setAsDefaultSummarizationApp": "{appName} е зададено като приложение за резюме по подразбиране",
+  "letOmiChooseAutomatically": "Нека Omi избере най-доброто приложение автоматично"
 }

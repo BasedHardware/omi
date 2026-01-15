@@ -2828,5 +2828,18 @@
   "pilotFeaturesDescription": "이러한 기능은 테스트이며 지원이 보장되지 않습니다.",
   "suggestFollowUpQuestion": "후속 질문 제안",
   "saveSettings": "설정 저장",
-  "syncingDeveloperSettings": "개발자 설정 동기화 중..."
+  "syncingDeveloperSettings": "개발자 설정 동기화 중...",
+  "summary": "요약",
+  "auto": "자동",
+  "noSummaryForApp": "이 앱에 사용할 수 있는 요약이 없습니다. 더 나은 결과를 얻으려면 다른 앱을 시도하세요.",
+  "tryAnotherApp": "다른 앱 시도",
+  "generatedBy": "{appName}에서 생성",
+  "overview": "개요",
+  "otherAppResults": "다른 앱 결과",
+  "unknownApp": "알 수 없는 앱",
+  "noSummaryAvailable": "사용 가능한 요약 없음",
+  "conversationNoSummaryYet": "이 대화에는 아직 요약이 없습니다.",
+  "chooseSummarizationApp": "요약 앱 선택",
+  "setAsDefaultSummarizationApp": "{appName}이(가) 기본 요약 앱으로 설정되었습니다",
+  "letOmiChooseAutomatically": "Omi가 자동으로 최적의 앱을 선택하도록 허용"
 }

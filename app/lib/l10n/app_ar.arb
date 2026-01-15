@@ -2596,7 +2596,7 @@
   "messageReportedSuccessfully": "✅ تم الإبلاغ عن الرسالة بنجاح",
   "confirmReportMessage": "هل أنت متأكد من أنك تريد الإبلاغ عن هذه الرسالة؟",
   "selectChatAssistant": "اختر مساعد الدردشة",
-  "enableMoreApps": "تفعيل المزيد من التطبيقات",
+  "enableMoreApps": "تمكين المزيد من التطبيقات",
   "chatCleared": "تم مسح الدردشة",
   "clearChatTitle": "مسح الدردشة؟",
   "confirmClearChat": "هل أنت متأكد من أنك تريد مسح الدردشة؟ هذا الإجراء لا يمكن التراجع عنه.",
@@ -2858,5 +2858,18 @@
   "pilotFeaturesDescription": "هذه الميزات اختبارية ولا يُضمن دعمها.",
   "suggestFollowUpQuestion": "اقتراح سؤال للمتابعة",
   "saveSettings": "حفظ الإعدادات",
-  "syncingDeveloperSettings": "مزامنة إعدادات المطور..."
+  "syncingDeveloperSettings": "مزامنة إعدادات المطور...",
+  "summary": "ملخص",
+  "auto": "تلقائي",
+  "noSummaryForApp": "لا يوجد ملخص متاح لهذا التطبيق. جرب تطبيقًا آخر للحصول على نتائج أفضل.",
+  "tryAnotherApp": "جرب تطبيقًا آخر",
+  "generatedBy": "تم إنشاؤه بواسطة {appName}",
+  "overview": "نظرة عامة",
+  "otherAppResults": "نتائج التطبيقات الأخرى",
+  "unknownApp": "تطبيق غير معروف",
+  "noSummaryAvailable": "لا يوجد ملخص متاح",
+  "conversationNoSummaryYet": "لا يحتوي هذا الحوار على ملخص بعد.",
+  "chooseSummarizationApp": "اختر تطبيق الملخص",
+  "setAsDefaultSummarizationApp": "تم تعيين {appName} كتطبيق ملخص افتراضي",
+  "letOmiChooseAutomatically": "دع Omi يختار أفضل تطبيق تلقائيًا"
 }

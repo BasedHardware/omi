@@ -2828,5 +2828,18 @@
   "pilotFeaturesDescription": "Nämä ominaisuudet ovat testejä, eikä tukea taata.",
   "suggestFollowUpQuestion": "Ehdota jatkokysymystä",
   "saveSettings": "Tallenna asetukset",
-  "syncingDeveloperSettings": "Synkronoidaan kehittäjäasetuksia..."
+  "syncingDeveloperSettings": "Synkronoidaan kehittäjäasetuksia...",
+  "summary": "Yhteenveto",
+  "auto": "Automaattinen",
+  "noSummaryForApp": "Tälle sovellukselle ei ole saatavilla yhteenvetoa. Kokeile toista sovellusta parempien tulosten saamiseksi.",
+  "tryAnotherApp": "Kokeile toista sovellusta",
+  "generatedBy": "Luonut {appName}",
+  "overview": "Yleiskatsaus",
+  "otherAppResults": "Muiden sovellusten tulokset",
+  "unknownApp": "Tuntematon sovellus",
+  "noSummaryAvailable": "Yhteenvetoa ei ole saatavilla",
+  "conversationNoSummaryYet": "Tällä keskustelulla ei ole vielä yhteenvetoa.",
+  "chooseSummarizationApp": "Valitse yhteenvetosovellus",
+  "setAsDefaultSummarizationApp": "{appName} asetettu oletusyhteenvetosovellukseksi",
+  "letOmiChooseAutomatically": "Anna Omin valita paras sovellus automaattisesti"
 }

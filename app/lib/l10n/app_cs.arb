@@ -2334,7 +2334,7 @@
   "exportButton": "Exportovat",
   "actionItemsCopiedToClipboard": "Položky akcí zkopírovány do schránky",
   "summarize": "Shrnout",
-  "generateSummary": "Generovat shrnutí",
+  "generateSummary": "Vygenerovat souhrn",
   "conversationNotFoundOrDeleted": "Konverzace nenalezena nebo byla smazána",
   "deleteMemory": "Smazat vzpomínku",
   "thisActionCannotBeUndone": "Tuto akci nelze vrátit zpět.",
@@ -2846,5 +2846,18 @@
   "pilotFeaturesDescription": "Tyto funkce jsou testy a není zaručena podpora.",
   "suggestFollowUpQuestion": "Navrhnout následnou otázku",
   "saveSettings": "Uložit nastavení",
-  "syncingDeveloperSettings": "Synchronizace vývojářského nastavení..."
+  "syncingDeveloperSettings": "Synchronizace vývojářského nastavení...",
+  "summary": "Souhrn",
+  "auto": "Automaticky",
+  "noSummaryForApp": "Pro tuto aplikaci není k dispozici žádný souhrn. Zkuste jinou aplikaci pro lepší výsledky.",
+  "tryAnotherApp": "Zkusit jinou aplikaci",
+  "generatedBy": "Vygenerováno aplikací {appName}",
+  "overview": "Přehled",
+  "otherAppResults": "Výsledky z jiných aplikací",
+  "unknownApp": "Neznámá aplikace",
+  "noSummaryAvailable": "Není k dispozici žádný souhrn",
+  "conversationNoSummaryYet": "Tato konverzace ještě nemá souhrn.",
+  "chooseSummarizationApp": "Vybrat aplikaci pro souhrn",
+  "setAsDefaultSummarizationApp": "Aplikace {appName} nastavena jako výchozí aplikace pro souhrn",
+  "letOmiChooseAutomatically": "Nechte Omi automaticky vybrat nejlepší aplikaci"
 }

@@ -2316,7 +2316,7 @@
   "exportButton": "Dışa aktar",
   "actionItemsCopiedToClipboard": "Eylem öğeleri panoya kopyalandı",
   "summarize": "Özetle",
-  "generateSummary": "Özet oluştur",
+  "generateSummary": "Özet Oluştur",
   "conversationNotFoundOrDeleted": "Konuşma bulunamadı veya silindi",
   "deleteMemory": "Hafızayı sil",
   "thisActionCannotBeUndone": "Bu işlem geri alınamaz.",
@@ -2810,5 +2810,18 @@
   "pilotFeaturesDescription": "Bu özellikler testlerdir ve destek garanti edilmez.",
   "suggestFollowUpQuestion": "Takip sorusu öner",
   "saveSettings": "Ayarları kaydet",
-  "syncingDeveloperSettings": "Geliştirici ayarları senkronize ediliyor..."
+  "syncingDeveloperSettings": "Geliştirici ayarları senkronize ediliyor...",
+  "summary": "Özet",
+  "auto": "Otomatik",
+  "noSummaryForApp": "Bu uygulama için özet mevcut değil. Daha iyi sonuçlar için başka bir uygulama deneyin.",
+  "tryAnotherApp": "Başka Bir Uygulama Deneyin",
+  "generatedBy": "{appName} tarafından oluşturuldu",
+  "overview": "Genel Bakış",
+  "otherAppResults": "Diğer Uygulama Sonuçları",
+  "unknownApp": "Bilinmeyen Uygulama",
+  "noSummaryAvailable": "Özet Mevcut Değil",
+  "conversationNoSummaryYet": "Bu konuşmanın henüz bir özeti yok.",
+  "chooseSummarizationApp": "Özet Uygulaması Seçin",
+  "setAsDefaultSummarizationApp": "{appName} varsayılan özet uygulaması olarak ayarlandı",
+  "letOmiChooseAutomatically": "Omi'nin en iyi uygulamayı otomatik olarak seçmesine izin verin"
 }

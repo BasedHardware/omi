@@ -2828,5 +2828,18 @@
   "pilotFeaturesDescription": "Te funkcje są testami i nie gwarantuje się wsparcia.",
   "suggestFollowUpQuestion": "Zaproponuj pytanie uzupełniające",
   "saveSettings": "Zapisz ustawienia",
-  "syncingDeveloperSettings": "Synchronizacja ustawień dewelopera..."
+  "syncingDeveloperSettings": "Synchronizacja ustawień dewelopera...",
+  "summary": "Podsumowanie",
+  "auto": "Automatycznie",
+  "noSummaryForApp": "Brak dostępnego podsumowania dla tej aplikacji. Wypróbuj inną aplikację, aby uzyskać lepsze wyniki.",
+  "tryAnotherApp": "Wypróbuj inną aplikację",
+  "generatedBy": "Wygenerowane przez {appName}",
+  "overview": "Przegląd",
+  "otherAppResults": "Wyniki innych aplikacji",
+  "unknownApp": "Nieznana aplikacja",
+  "noSummaryAvailable": "Brak dostępnego podsumowania",
+  "conversationNoSummaryYet": "Ta rozmowa nie ma jeszcze podsumowania.",
+  "chooseSummarizationApp": "Wybierz aplikację do podsumowania",
+  "setAsDefaultSummarizationApp": "{appName} ustawiona jako domyślna aplikacja do podsumowania",
+  "letOmiChooseAutomatically": "Pozwól Omi automatycznie wybrać najlepszą aplikację"
 }

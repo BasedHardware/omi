@@ -2334,7 +2334,7 @@
   "exportButton": "Exportálás",
   "actionItemsCopiedToClipboard": "Műveletpontok vágólapra másolva",
   "summarize": "Összefoglalás",
-  "generateSummary": "Összefoglalás generálása",
+  "generateSummary": "Összefoglaló létrehozása",
   "conversationNotFoundOrDeleted": "A beszélgetés nem található vagy törölve lett",
   "deleteMemory": "Emlékezet törlése",
   "thisActionCannotBeUndone": "Ez a művelet nem vonható vissza.",
@@ -2828,5 +2828,18 @@
   "pilotFeaturesDescription": "Ezek a funkciók tesztek, és nem garantált a támogatás.",
   "suggestFollowUpQuestion": "Utánkövetési kérdés javaslása",
   "saveSettings": "Beállítások mentése",
-  "syncingDeveloperSettings": "Fejlesztői beállítások szinkronizálása..."
+  "syncingDeveloperSettings": "Fejlesztői beállítások szinkronizálása...",
+  "summary": "Összefoglaló",
+  "auto": "Automatikus",
+  "noSummaryForApp": "Ehhez az alkalmazáshoz nincs elérhető összefoglaló. Jobb eredményekért próbáljon ki egy másik alkalmazást.",
+  "tryAnotherApp": "Próbáljon ki egy másik alkalmazást",
+  "generatedBy": "Létrehozta: {appName}",
+  "overview": "Áttekintés",
+  "otherAppResults": "Más alkalmazások eredményei",
+  "unknownApp": "Ismeretlen alkalmazás",
+  "noSummaryAvailable": "Nincs elérhető összefoglaló",
+  "conversationNoSummaryYet": "Ennek a beszélgetésnek még nincs összefoglalója.",
+  "chooseSummarizationApp": "Összefoglaló alkalmazás kiválasztása",
+  "setAsDefaultSummarizationApp": "{appName} beállítva alapértelmezett összefoglaló alkalmazásként",
+  "letOmiChooseAutomatically": "Hagyja, hogy az Omi automatikusan válassza ki a legjobb alkalmazást"
 }

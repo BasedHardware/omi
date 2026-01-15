@@ -1646,5 +1646,18 @@
   "pilotFeaturesDescription": "Deze functies zijn tests en er wordt geen ondersteuning gegarandeerd.",
   "suggestFollowUpQuestion": "Vervolgvraag voorstellen",
   "saveSettings": "Instellingen opslaan",
-  "syncingDeveloperSettings": "Ontwikkelaarsinstellingen synchroniseren..."
+  "syncingDeveloperSettings": "Ontwikkelaarsinstellingen synchroniseren...",
+  "summary": "Samenvatting",
+  "auto": "Automatisch",
+  "noSummaryForApp": "Geen samenvatting beschikbaar voor deze app. Probeer een andere app voor betere resultaten.",
+  "tryAnotherApp": "Probeer een andere app",
+  "generatedBy": "Gegenereerd door {appName}",
+  "overview": "Overzicht",
+  "otherAppResults": "Resultaten van andere apps",
+  "unknownApp": "Onbekende app",
+  "noSummaryAvailable": "Geen samenvatting beschikbaar",
+  "conversationNoSummaryYet": "Dit gesprek heeft nog geen samenvatting.",
+  "chooseSummarizationApp": "Kies samenvattingsapp",
+  "setAsDefaultSummarizationApp": "{appName} ingesteld als standaard samenvattingsapp",
+  "letOmiChooseAutomatically": "Laat Omi automatisch de beste app kiezen"
 }

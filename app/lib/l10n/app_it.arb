@@ -2810,5 +2810,18 @@
   "pilotFeaturesDescription": "Queste funzionalità sono test e non è garantito il supporto.",
   "suggestFollowUpQuestion": "Suggerisci domanda di follow-up",
   "saveSettings": "Salva impostazioni",
-  "syncingDeveloperSettings": "Sincronizzazione impostazioni sviluppatore..."
+  "syncingDeveloperSettings": "Sincronizzazione impostazioni sviluppatore...",
+  "summary": "Riepilogo",
+  "auto": "Automatico",
+  "noSummaryForApp": "Nessun riepilogo disponibile per questa app. Prova un'altra app per risultati migliori.",
+  "tryAnotherApp": "Prova un'altra app",
+  "generatedBy": "Generato da {appName}",
+  "overview": "Panoramica",
+  "otherAppResults": "Risultati di altre app",
+  "unknownApp": "App sconosciuta",
+  "noSummaryAvailable": "Nessun riepilogo disponibile",
+  "conversationNoSummaryYet": "Questa conversazione non ha ancora un riepilogo.",
+  "chooseSummarizationApp": "Scegli app di riepilogo",
+  "setAsDefaultSummarizationApp": "{appName} impostata come app di riepilogo predefinita",
+  "letOmiChooseAutomatically": "Lascia che Omi scelga automaticamente l'app migliore"
 }

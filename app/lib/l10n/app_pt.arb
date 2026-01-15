@@ -120,7 +120,7 @@
   "clearChatConfirm": "Tem certeza de que deseja limpar o chat? Esta ação não pode ser desfeita.",
   "maxFilesLimit": "Você só pode enviar 4 arquivos por vez",
   "chatWithOmi": "Converse com Omi",
-  "apps": "Apps",
+  "apps": "Aplicativos",
   "noAppsFound": "Nenhum aplicativo encontrado",
   "tryAdjustingSearch": "Tente ajustar sua busca ou filtros",
   "createYourOwnApp": "Crie seu próprio App",
@@ -1275,5 +1275,18 @@
   "pilotFeaturesDescription": "Estas funcionalidades são testes e não há garantia de suporte.",
   "suggestFollowUpQuestion": "Sugerir pergunta de acompanhamento",
   "saveSettings": "Guardar configurações",
-  "syncingDeveloperSettings": "A sincronizar configurações do desenvolvedor..."
+  "syncingDeveloperSettings": "A sincronizar configurações do desenvolvedor...",
+  "summary": "Resumo",
+  "auto": "Automático",
+  "noSummaryForApp": "Nenhum resumo disponível para este aplicativo. Experimente outro aplicativo para obter melhores resultados.",
+  "tryAnotherApp": "Experimentar outro aplicativo",
+  "generatedBy": "Gerado por {appName}",
+  "overview": "Visão geral",
+  "otherAppResults": "Resultados de outros aplicativos",
+  "unknownApp": "Aplicativo desconhecido",
+  "noSummaryAvailable": "Nenhum resumo disponível",
+  "conversationNoSummaryYet": "Esta conversa ainda não tem um resumo.",
+  "chooseSummarizationApp": "Escolher aplicativo de resumo",
+  "setAsDefaultSummarizationApp": "{appName} definido como aplicativo de resumo padrão",
+  "letOmiChooseAutomatically": "Deixe o Omi escolher automaticamente o melhor aplicativo"
 }

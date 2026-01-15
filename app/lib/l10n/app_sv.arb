@@ -2828,5 +2828,18 @@
   "pilotFeaturesDescription": "Dessa funktioner är tester och ingen support garanteras.",
   "suggestFollowUpQuestion": "Föreslå uppföljningsfråga",
   "saveSettings": "Spara inställningar",
-  "syncingDeveloperSettings": "Synkroniserar utvecklarinställningar..."
+  "syncingDeveloperSettings": "Synkroniserar utvecklarinställningar...",
+  "summary": "Sammanfattning",
+  "auto": "Automatisk",
+  "noSummaryForApp": "Ingen sammanfattning tillgänglig för den här appen. Prova en annan app för bättre resultat.",
+  "tryAnotherApp": "Prova en annan app",
+  "generatedBy": "Genererad av {appName}",
+  "overview": "Översikt",
+  "otherAppResults": "Resultat från andra appar",
+  "unknownApp": "Okänd app",
+  "noSummaryAvailable": "Ingen sammanfattning tillgänglig",
+  "conversationNoSummaryYet": "Den här konversationen har ingen sammanfattning ännu.",
+  "chooseSummarizationApp": "Välj sammanfattningsapp",
+  "setAsDefaultSummarizationApp": "{appName} inställd som standardapp för sammanfattning",
+  "letOmiChooseAutomatically": "Låt Omi automatiskt välja den bästa appen"
 }

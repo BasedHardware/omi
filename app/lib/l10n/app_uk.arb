@@ -2828,5 +2828,18 @@
   "pilotFeaturesDescription": "Ці функції є тестами, і підтримка не гарантується.",
   "suggestFollowUpQuestion": "Запропонувати додаткове запитання",
   "saveSettings": "Зберегти налаштування",
-  "syncingDeveloperSettings": "Синхронізація налаштувань розробника..."
+  "syncingDeveloperSettings": "Синхронізація налаштувань розробника...",
+  "summary": "Резюме",
+  "auto": "Автоматично",
+  "noSummaryForApp": "Для цього додатка резюме недоступне. Спробуйте інший додаток для кращих результатів.",
+  "tryAnotherApp": "Спробувати інший додаток",
+  "generatedBy": "Створено {appName}",
+  "overview": "Огляд",
+  "otherAppResults": "Результати інших додатків",
+  "unknownApp": "Невідомий додаток",
+  "noSummaryAvailable": "Резюме недоступне",
+  "conversationNoSummaryYet": "Ця розмова ще не має резюме.",
+  "chooseSummarizationApp": "Виберіть додаток для резюме",
+  "setAsDefaultSummarizationApp": "{appName} встановлено як додаток для резюме за замовчуванням",
+  "letOmiChooseAutomatically": "Дозвольте Omi автоматично вибрати найкращий додаток"
 }

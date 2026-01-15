@@ -2828,5 +2828,18 @@
   "pilotFeaturesDescription": "Эти функции являются тестами, и поддержка не гарантируется.",
   "suggestFollowUpQuestion": "Предложить дополнительный вопрос",
   "saveSettings": "Сохранить настройки",
-  "syncingDeveloperSettings": "Синхронизация настроек разработчика..."
+  "syncingDeveloperSettings": "Синхронизация настроек разработчика...",
+  "summary": "Резюме",
+  "auto": "Автоматически",
+  "noSummaryForApp": "Для этого приложения резюме недоступно. Попробуйте другое приложение для лучших результатов.",
+  "tryAnotherApp": "Попробовать другое приложение",
+  "generatedBy": "Создано {appName}",
+  "overview": "Обзор",
+  "otherAppResults": "Результаты других приложений",
+  "unknownApp": "Неизвестное приложение",
+  "noSummaryAvailable": "Резюме недоступно",
+  "conversationNoSummaryYet": "У этого разговора пока нет резюме.",
+  "chooseSummarizationApp": "Выберите приложение для резюме",
+  "setAsDefaultSummarizationApp": "{appName} установлено как приложение для резюме по умолчанию",
+  "letOmiChooseAutomatically": "Позвольте Omi автоматически выбрать лучшее приложение"
 }

@@ -2846,5 +2846,18 @@
   "pilotFeaturesDescription": "Aquestes funcions són proves i no se'n garanteix el suport.",
   "suggestFollowUpQuestion": "Suggerir una pregunta de seguiment",
   "saveSettings": "Desar configuració",
-  "syncingDeveloperSettings": "S'està sincronitzant la configuració de desenvolupador..."
+  "syncingDeveloperSettings": "S'està sincronitzant la configuració de desenvolupador...",
+  "summary": "Resum",
+  "auto": "Automàtic",
+  "noSummaryForApp": "No hi ha cap resum disponible per a aquesta aplicació. Proveu una altra aplicació per obtenir millors resultats.",
+  "tryAnotherApp": "Provar una altra aplicació",
+  "generatedBy": "Generat per {appName}",
+  "overview": "Visió general",
+  "otherAppResults": "Resultats d'altres aplicacions",
+  "unknownApp": "Aplicació desconeguda",
+  "noSummaryAvailable": "No hi ha cap resum disponible",
+  "conversationNoSummaryYet": "Aquesta conversa encara no té resum.",
+  "chooseSummarizationApp": "Trieu l'aplicació de resum",
+  "setAsDefaultSummarizationApp": "{appName} s'ha establert com a aplicació de resum predeterminada",
+  "letOmiChooseAutomatically": "Deixeu que Omi esculli automàticament la millor aplicació"
 }
