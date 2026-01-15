@@ -3005,5 +3005,20 @@
   "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
   "copyUrl": "Salin URL",
   "txtFormat": "TXT",
-  "pdfFormat": "PDF"
+  "pdfFormat": "PDF",
+  "weekdayMon": "Sen",
+  "weekdayTue": "Sel",
+  "weekdayWed": "Rab",
+  "weekdayThu": "Kam",
+  "weekdayFri": "Jum",
+  "weekdaySat": "Sab",
+  "weekdaySun": "Min",
+  "serviceIntegrationComingSoon": "Integrasi {serviceName} segera hadir",
+  "alreadyExportedTo": "Sudah diekspor ke {platform}",
+  "anotherPlatform": "platform lain",
+  "pleaseAuthenticateWithService": "Silakan autentikasi dengan {serviceName} di Pengaturan > Integrasi Tugas",
+  "addingToService": "Menambahkan ke {serviceName}...",
+  "addedToService": "Ditambahkan ke {serviceName}",
+  "failedToAddToService": "Gagal menambahkan ke {serviceName}",
+  "permissionDeniedForAppleReminders": "Izin ditolak untuk Apple Reminders"
 }

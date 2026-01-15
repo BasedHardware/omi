@@ -3007,5 +3007,20 @@
   "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
   "copyUrl": "Копиране на URL",
   "txtFormat": "TXT",
-  "pdfFormat": "PDF"
+  "pdfFormat": "PDF",
+  "weekdayMon": "Пон",
+  "weekdayTue": "Вт",
+  "weekdayWed": "Ср",
+  "weekdayThu": "Чет",
+  "weekdayFri": "Пет",
+  "weekdaySat": "Съб",
+  "weekdaySun": "Нед",
+  "serviceIntegrationComingSoon": "Интеграцията с {serviceName} предстои",
+  "alreadyExportedTo": "Вече експортирано към {platform}",
+  "anotherPlatform": "друга платформа",
+  "pleaseAuthenticateWithService": "Моля, удостоверете се с {serviceName} в Настройки > Интеграции на задачи",
+  "addingToService": "Добавяне към {serviceName}...",
+  "addedToService": "Добавено в {serviceName}",
+  "failedToAddToService": "Неуспешно добавяне към {serviceName}",
+  "permissionDeniedForAppleReminders": "Разрешението за Apple Reminders е отказано"
 }

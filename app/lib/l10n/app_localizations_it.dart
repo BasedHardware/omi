@@ -4155,4 +4155,61 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get pdfFormat => 'PDF';
+
+  @override
+  String get weekdayMon => 'Lun';
+
+  @override
+  String get weekdayTue => 'Mar';
+
+  @override
+  String get weekdayWed => 'Mer';
+
+  @override
+  String get weekdayThu => 'Gio';
+
+  @override
+  String get weekdayFri => 'Ven';
+
+  @override
+  String get weekdaySat => 'Sab';
+
+  @override
+  String get weekdaySun => 'Dom';
+
+  @override
+  String serviceIntegrationComingSoon(String serviceName) {
+    return 'Integrazione $serviceName in arrivo';
+  }
+
+  @override
+  String alreadyExportedTo(String platform) {
+    return 'Già esportato in $platform';
+  }
+
+  @override
+  String get anotherPlatform => 'un\'altra piattaforma';
+
+  @override
+  String pleaseAuthenticateWithService(String serviceName) {
+    return 'Per favore autenticati con $serviceName in Impostazioni > Integrazioni attività';
+  }
+
+  @override
+  String addingToService(String serviceName) {
+    return 'Aggiunta a $serviceName...';
+  }
+
+  @override
+  String addedToService(String serviceName) {
+    return 'Aggiunto a $serviceName';
+  }
+
+  @override
+  String failedToAddToService(String serviceName) {
+    return 'Impossibile aggiungere a $serviceName';
+  }
+
+  @override
+  String get permissionDeniedForAppleReminders => 'Permesso negato per Apple Reminders';
 }

@@ -1452,5 +1452,20 @@
   "dataAccessNoticeDescription": "Diese App wird auf Ihre Daten zugreifen. Omi AI ist nicht verantwortlich für die Verwendung, Änderung oder Löschung Ihrer Daten durch diese App",
   "copyUrl": "URL kopieren",
   "txtFormat": "TXT",
-  "pdfFormat": "PDF"
+  "pdfFormat": "PDF",
+  "weekdayMon": "Mo",
+  "weekdayTue": "Di",
+  "weekdayWed": "Mi",
+  "weekdayThu": "Do",
+  "weekdayFri": "Fr",
+  "weekdaySat": "Sa",
+  "weekdaySun": "So",
+  "serviceIntegrationComingSoon": "{serviceName}-Integration kommt bald",
+  "alreadyExportedTo": "Bereits nach {platform} exportiert",
+  "anotherPlatform": "eine andere Plattform",
+  "pleaseAuthenticateWithService": "Bitte authentifizieren Sie sich mit {serviceName} unter Einstellungen > Aufgabenintegrationen",
+  "addingToService": "Wird zu {serviceName} hinzugefügt...",
+  "addedToService": "Zu {serviceName} hinzugefügt",
+  "failedToAddToService": "Fehler beim Hinzufügen zu {serviceName}",
+  "permissionDeniedForAppleReminders": "Berechtigung für Apple Erinnerungen verweigert"
 }

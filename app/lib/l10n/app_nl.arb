@@ -1823,5 +1823,20 @@
   "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
   "copyUrl": "URL kopiëren",
   "txtFormat": "TXT",
-  "pdfFormat": "PDF"
+  "pdfFormat": "PDF",
+  "weekdayMon": "Ma",
+  "weekdayTue": "Di",
+  "weekdayWed": "Wo",
+  "weekdayThu": "Do",
+  "weekdayFri": "Vr",
+  "weekdaySat": "Za",
+  "weekdaySun": "Zo",
+  "serviceIntegrationComingSoon": "{serviceName}-integratie binnenkort beschikbaar",
+  "alreadyExportedTo": "Al geëxporteerd naar {platform}",
+  "anotherPlatform": "een ander platform",
+  "pleaseAuthenticateWithService": "Authenticeer a.u.b. met {serviceName} in Instellingen > Taakintegraties",
+  "addingToService": "Toevoegen aan {serviceName}...",
+  "addedToService": "Toegevoegd aan {serviceName}",
+  "failedToAddToService": "Toevoegen aan {serviceName} mislukt",
+  "permissionDeniedForAppleReminders": "Toestemming geweigerd voor Apple Herinneringen"
 }

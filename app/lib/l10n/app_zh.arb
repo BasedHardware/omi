@@ -1452,5 +1452,20 @@
   "dataAccessNoticeDescription": "此应用将访问您的数据。Omi AI不对此应用如何使用、修改或删除您的数据负责",
   "copyUrl": "复制链接",
   "txtFormat": "TXT",
-  "pdfFormat": "PDF"
+  "pdfFormat": "PDF",
+  "weekdayMon": "周一",
+  "weekdayTue": "周二",
+  "weekdayWed": "周三",
+  "weekdayThu": "周四",
+  "weekdayFri": "周五",
+  "weekdaySat": "周六",
+  "weekdaySun": "周日",
+  "serviceIntegrationComingSoon": "{serviceName}集成即将推出",
+  "alreadyExportedTo": "已导出到{platform}",
+  "anotherPlatform": "其他平台",
+  "pleaseAuthenticateWithService": "请在设置 > 任务集成中验证{serviceName}",
+  "addingToService": "正在添加到{serviceName}...",
+  "addedToService": "已添加到{serviceName}",
+  "failedToAddToService": "添加到{serviceName}失败",
+  "permissionDeniedForAppleReminders": "Apple提醒事项权限被拒绝"
 }

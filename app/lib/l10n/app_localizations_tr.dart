@@ -4143,4 +4143,61 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get pdfFormat => 'PDF';
+
+  @override
+  String get weekdayMon => 'Pzt';
+
+  @override
+  String get weekdayTue => 'Sal';
+
+  @override
+  String get weekdayWed => 'Çar';
+
+  @override
+  String get weekdayThu => 'Per';
+
+  @override
+  String get weekdayFri => 'Cum';
+
+  @override
+  String get weekdaySat => 'Cmt';
+
+  @override
+  String get weekdaySun => 'Paz';
+
+  @override
+  String serviceIntegrationComingSoon(String serviceName) {
+    return '$serviceName entegrasyonu yakında';
+  }
+
+  @override
+  String alreadyExportedTo(String platform) {
+    return '$platform platformuna zaten aktarıldı';
+  }
+
+  @override
+  String get anotherPlatform => 'başka bir platform';
+
+  @override
+  String pleaseAuthenticateWithService(String serviceName) {
+    return 'Lütfen Ayarlar > Görev Entegrasyonları bölümünden $serviceName ile kimlik doğrulaması yapın';
+  }
+
+  @override
+  String addingToService(String serviceName) {
+    return '$serviceName platformuna ekleniyor...';
+  }
+
+  @override
+  String addedToService(String serviceName) {
+    return '$serviceName platformuna eklendi';
+  }
+
+  @override
+  String failedToAddToService(String serviceName) {
+    return '$serviceName platformuna eklenemedi';
+  }
+
+  @override
+  String get permissionDeniedForAppleReminders => 'Apple Hatırlatıcılar için izin reddedildi';
 }

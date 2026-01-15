@@ -4145,4 +4145,61 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get pdfFormat => 'PDF';
+
+  @override
+  String get weekdayMon => 'Пн';
+
+  @override
+  String get weekdayTue => 'Вт';
+
+  @override
+  String get weekdayWed => 'Ср';
+
+  @override
+  String get weekdayThu => 'Чт';
+
+  @override
+  String get weekdayFri => 'Пт';
+
+  @override
+  String get weekdaySat => 'Сб';
+
+  @override
+  String get weekdaySun => 'Вс';
+
+  @override
+  String serviceIntegrationComingSoon(String serviceName) {
+    return 'Интеграция с $serviceName скоро';
+  }
+
+  @override
+  String alreadyExportedTo(String platform) {
+    return 'Уже экспортировано в $platform';
+  }
+
+  @override
+  String get anotherPlatform => 'другую платформу';
+
+  @override
+  String pleaseAuthenticateWithService(String serviceName) {
+    return 'Пожалуйста, авторизуйтесь в $serviceName в Настройки > Интеграции задач';
+  }
+
+  @override
+  String addingToService(String serviceName) {
+    return 'Добавление в $serviceName...';
+  }
+
+  @override
+  String addedToService(String serviceName) {
+    return 'Добавлено в $serviceName';
+  }
+
+  @override
+  String failedToAddToService(String serviceName) {
+    return 'Не удалось добавить в $serviceName';
+  }
+
+  @override
+  String get permissionDeniedForAppleReminders => 'Разрешение для Apple Reminders отклонено';
 }

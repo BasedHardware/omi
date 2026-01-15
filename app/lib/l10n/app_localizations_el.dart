@@ -4166,4 +4166,61 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get pdfFormat => 'PDF';
+
+  @override
+  String get weekdayMon => 'Δευ';
+
+  @override
+  String get weekdayTue => 'Τρί';
+
+  @override
+  String get weekdayWed => 'Τετ';
+
+  @override
+  String get weekdayThu => 'Πέμ';
+
+  @override
+  String get weekdayFri => 'Παρ';
+
+  @override
+  String get weekdaySat => 'Σάβ';
+
+  @override
+  String get weekdaySun => 'Κυρ';
+
+  @override
+  String serviceIntegrationComingSoon(String serviceName) {
+    return 'Ενσωμάτωση $serviceName σύντομα';
+  }
+
+  @override
+  String alreadyExportedTo(String platform) {
+    return 'Ήδη εξαγωγή σε $platform';
+  }
+
+  @override
+  String get anotherPlatform => 'άλλη πλατφόρμα';
+
+  @override
+  String pleaseAuthenticateWithService(String serviceName) {
+    return 'Παρακαλώ συνδεθείτε με $serviceName στις Ρυθμίσεις > Ενσωματώσεις εργασιών';
+  }
+
+  @override
+  String addingToService(String serviceName) {
+    return 'Προσθήκη σε $serviceName...';
+  }
+
+  @override
+  String addedToService(String serviceName) {
+    return 'Προστέθηκε στο $serviceName';
+  }
+
+  @override
+  String failedToAddToService(String serviceName) {
+    return 'Αποτυχία προσθήκης στο $serviceName';
+  }
+
+  @override
+  String get permissionDeniedForAppleReminders => 'Η άδεια για τις Υπενθυμίσεις Apple απορρίφθηκε';
 }

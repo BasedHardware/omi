@@ -4111,4 +4111,61 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get pdfFormat => 'PDF';
+
+  @override
+  String get weekdayMon => 'सोम';
+
+  @override
+  String get weekdayTue => 'मंगल';
+
+  @override
+  String get weekdayWed => 'बुध';
+
+  @override
+  String get weekdayThu => 'गुरु';
+
+  @override
+  String get weekdayFri => 'शुक्र';
+
+  @override
+  String get weekdaySat => 'शनि';
+
+  @override
+  String get weekdaySun => 'रवि';
+
+  @override
+  String serviceIntegrationComingSoon(String serviceName) {
+    return '$serviceName एकीकरण जल्द आ रहा है';
+  }
+
+  @override
+  String alreadyExportedTo(String platform) {
+    return '$platform में पहले ही निर्यात किया गया';
+  }
+
+  @override
+  String get anotherPlatform => 'किसी अन्य प्लेटफ़ॉर्म';
+
+  @override
+  String pleaseAuthenticateWithService(String serviceName) {
+    return 'कृपया सेटिंग्स > टास्क इंटीग्रेशन में $serviceName से प्रमाणित करें';
+  }
+
+  @override
+  String addingToService(String serviceName) {
+    return '$serviceName में जोड़ा जा रहा है...';
+  }
+
+  @override
+  String addedToService(String serviceName) {
+    return '$serviceName में जोड़ा गया';
+  }
+
+  @override
+  String failedToAddToService(String serviceName) {
+    return '$serviceName में जोड़ने में विफल';
+  }
+
+  @override
+  String get permissionDeniedForAppleReminders => 'Apple Reminders के लिए अनुमति अस्वीकृत';
 }

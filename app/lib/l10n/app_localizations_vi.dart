@@ -4141,4 +4141,61 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get pdfFormat => 'PDF';
+
+  @override
+  String get weekdayMon => 'T2';
+
+  @override
+  String get weekdayTue => 'T3';
+
+  @override
+  String get weekdayWed => 'T4';
+
+  @override
+  String get weekdayThu => 'T5';
+
+  @override
+  String get weekdayFri => 'T6';
+
+  @override
+  String get weekdaySat => 'T7';
+
+  @override
+  String get weekdaySun => 'CN';
+
+  @override
+  String serviceIntegrationComingSoon(String serviceName) {
+    return 'Tích hợp $serviceName sắp ra mắt';
+  }
+
+  @override
+  String alreadyExportedTo(String platform) {
+    return 'Đã xuất sang $platform';
+  }
+
+  @override
+  String get anotherPlatform => 'nền tảng khác';
+
+  @override
+  String pleaseAuthenticateWithService(String serviceName) {
+    return 'Vui lòng xác thực với $serviceName trong Cài đặt > Tích hợp tác vụ';
+  }
+
+  @override
+  String addingToService(String serviceName) {
+    return 'Đang thêm vào $serviceName...';
+  }
+
+  @override
+  String addedToService(String serviceName) {
+    return 'Đã thêm vào $serviceName';
+  }
+
+  @override
+  String failedToAddToService(String serviceName) {
+    return 'Không thể thêm vào $serviceName';
+  }
+
+  @override
+  String get permissionDeniedForAppleReminders => 'Quyền truy cập Apple Reminders bị từ chối';
 }

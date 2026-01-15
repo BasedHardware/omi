@@ -4144,4 +4144,61 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get pdfFormat => 'PDF';
+
+  @override
+  String get weekdayMon => 'Sen';
+
+  @override
+  String get weekdayTue => 'Sel';
+
+  @override
+  String get weekdayWed => 'Rab';
+
+  @override
+  String get weekdayThu => 'Kam';
+
+  @override
+  String get weekdayFri => 'Jum';
+
+  @override
+  String get weekdaySat => 'Sab';
+
+  @override
+  String get weekdaySun => 'Min';
+
+  @override
+  String serviceIntegrationComingSoon(String serviceName) {
+    return 'Integrasi $serviceName segera hadir';
+  }
+
+  @override
+  String alreadyExportedTo(String platform) {
+    return 'Sudah diekspor ke $platform';
+  }
+
+  @override
+  String get anotherPlatform => 'platform lain';
+
+  @override
+  String pleaseAuthenticateWithService(String serviceName) {
+    return 'Silakan autentikasi dengan $serviceName di Pengaturan > Integrasi Tugas';
+  }
+
+  @override
+  String addingToService(String serviceName) {
+    return 'Menambahkan ke $serviceName...';
+  }
+
+  @override
+  String addedToService(String serviceName) {
+    return 'Ditambahkan ke $serviceName';
+  }
+
+  @override
+  String failedToAddToService(String serviceName) {
+    return 'Gagal menambahkan ke $serviceName';
+  }
+
+  @override
+  String get permissionDeniedForAppleReminders => 'Izin ditolak untuk Apple Reminders';
 }

@@ -4133,4 +4133,61 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get pdfFormat => 'PDF';
+
+  @override
+  String get weekdayMon => 'Ma';
+
+  @override
+  String get weekdayTue => 'Ti';
+
+  @override
+  String get weekdayWed => 'Ke';
+
+  @override
+  String get weekdayThu => 'To';
+
+  @override
+  String get weekdayFri => 'Pe';
+
+  @override
+  String get weekdaySat => 'La';
+
+  @override
+  String get weekdaySun => 'Su';
+
+  @override
+  String serviceIntegrationComingSoon(String serviceName) {
+    return '$serviceName-integraatio tulossa pian';
+  }
+
+  @override
+  String alreadyExportedTo(String platform) {
+    return 'Jo viety kohteeseen $platform';
+  }
+
+  @override
+  String get anotherPlatform => 'toiseen alustaan';
+
+  @override
+  String pleaseAuthenticateWithService(String serviceName) {
+    return 'Ole hyvä ja kirjaudu $serviceName palveluun kohdassa Asetukset > Tehtäväintegraatiot';
+  }
+
+  @override
+  String addingToService(String serviceName) {
+    return 'Lisätään kohteeseen $serviceName...';
+  }
+
+  @override
+  String addedToService(String serviceName) {
+    return 'Lisätty kohteeseen $serviceName';
+  }
+
+  @override
+  String failedToAddToService(String serviceName) {
+    return 'Lisääminen kohteeseen $serviceName epäonnistui';
+  }
+
+  @override
+  String get permissionDeniedForAppleReminders => 'Käyttöoikeus Apple Muistutuksille evätty';
 }

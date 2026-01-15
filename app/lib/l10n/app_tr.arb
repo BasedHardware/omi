@@ -2987,5 +2987,20 @@
   "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
   "copyUrl": "URL'yi Kopyala",
   "txtFormat": "TXT",
-  "pdfFormat": "PDF"
+  "pdfFormat": "PDF",
+  "weekdayMon": "Pzt",
+  "weekdayTue": "Sal",
+  "weekdayWed": "Çar",
+  "weekdayThu": "Per",
+  "weekdayFri": "Cum",
+  "weekdaySat": "Cmt",
+  "weekdaySun": "Paz",
+  "serviceIntegrationComingSoon": "{serviceName} entegrasyonu yakında",
+  "alreadyExportedTo": "{platform} platformuna zaten aktarıldı",
+  "anotherPlatform": "başka bir platform",
+  "pleaseAuthenticateWithService": "Lütfen Ayarlar > Görev Entegrasyonları bölümünden {serviceName} ile kimlik doğrulaması yapın",
+  "addingToService": "{serviceName} platformuna ekleniyor...",
+  "addedToService": "{serviceName} platformuna eklendi",
+  "failedToAddToService": "{serviceName} platformuna eklenemedi",
+  "permissionDeniedForAppleReminders": "Apple Hatırlatıcılar için izin reddedildi"
 }

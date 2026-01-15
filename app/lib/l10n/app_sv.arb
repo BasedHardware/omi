@@ -3005,5 +3005,20 @@
   "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
   "copyUrl": "Kopiera URL",
   "txtFormat": "TXT",
-  "pdfFormat": "PDF"
+  "pdfFormat": "PDF",
+  "weekdayMon": "Mån",
+  "weekdayTue": "Tis",
+  "weekdayWed": "Ons",
+  "weekdayThu": "Tor",
+  "weekdayFri": "Fre",
+  "weekdaySat": "Lör",
+  "weekdaySun": "Sön",
+  "serviceIntegrationComingSoon": "{serviceName}-integration kommer snart",
+  "alreadyExportedTo": "Redan exporterad till {platform}",
+  "anotherPlatform": "en annan plattform",
+  "pleaseAuthenticateWithService": "Vänligen autentisera med {serviceName} i Inställningar > Uppgiftsintegrationer",
+  "addingToService": "Lägger till i {serviceName}...",
+  "addedToService": "Tillagd i {serviceName}",
+  "failedToAddToService": "Kunde inte lägga till i {serviceName}",
+  "permissionDeniedForAppleReminders": "Behörighet nekad för Apple Påminnelser"
 }

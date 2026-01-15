@@ -4156,4 +4156,61 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get pdfFormat => 'PDF';
+
+  @override
+  String get weekdayMon => 'Hét';
+
+  @override
+  String get weekdayTue => 'Kedd';
+
+  @override
+  String get weekdayWed => 'Szer';
+
+  @override
+  String get weekdayThu => 'Csüt';
+
+  @override
+  String get weekdayFri => 'Pén';
+
+  @override
+  String get weekdaySat => 'Szo';
+
+  @override
+  String get weekdaySun => 'Vas';
+
+  @override
+  String serviceIntegrationComingSoon(String serviceName) {
+    return '$serviceName integráció hamarosan';
+  }
+
+  @override
+  String alreadyExportedTo(String platform) {
+    return 'Már exportálva ide: $platform';
+  }
+
+  @override
+  String get anotherPlatform => 'másik platform';
+
+  @override
+  String pleaseAuthenticateWithService(String serviceName) {
+    return 'Kérjük, jelentkezzen be a $serviceName szolgáltatásba a Beállítások > Feladatintegrációk menüben';
+  }
+
+  @override
+  String addingToService(String serviceName) {
+    return 'Hozzáadás a $serviceName szolgáltatáshoz...';
+  }
+
+  @override
+  String addedToService(String serviceName) {
+    return 'Hozzáadva a $serviceName szolgáltatáshoz';
+  }
+
+  @override
+  String failedToAddToService(String serviceName) {
+    return 'Nem sikerült hozzáadni a $serviceName szolgáltatáshoz';
+  }
+
+  @override
+  String get permissionDeniedForAppleReminders => 'Engedély megtagadva az Apple Emlékeztetők számára';
 }

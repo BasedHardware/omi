@@ -4140,4 +4140,61 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get pdfFormat => 'PDF';
+
+  @override
+  String get weekdayMon => 'Mån';
+
+  @override
+  String get weekdayTue => 'Tis';
+
+  @override
+  String get weekdayWed => 'Ons';
+
+  @override
+  String get weekdayThu => 'Tor';
+
+  @override
+  String get weekdayFri => 'Fre';
+
+  @override
+  String get weekdaySat => 'Lör';
+
+  @override
+  String get weekdaySun => 'Sön';
+
+  @override
+  String serviceIntegrationComingSoon(String serviceName) {
+    return '$serviceName-integration kommer snart';
+  }
+
+  @override
+  String alreadyExportedTo(String platform) {
+    return 'Redan exporterad till $platform';
+  }
+
+  @override
+  String get anotherPlatform => 'en annan plattform';
+
+  @override
+  String pleaseAuthenticateWithService(String serviceName) {
+    return 'Vänligen autentisera med $serviceName i Inställningar > Uppgiftsintegrationer';
+  }
+
+  @override
+  String addingToService(String serviceName) {
+    return 'Lägger till i $serviceName...';
+  }
+
+  @override
+  String addedToService(String serviceName) {
+    return 'Tillagd i $serviceName';
+  }
+
+  @override
+  String failedToAddToService(String serviceName) {
+    return 'Kunde inte lägga till i $serviceName';
+  }
+
+  @override
+  String get permissionDeniedForAppleReminders => 'Behörighet nekad för Apple Påminnelser';
 }

@@ -4131,4 +4131,61 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get pdfFormat => 'PDF';
+
+  @override
+  String get weekdayMon => 'Po';
+
+  @override
+  String get weekdayTue => 'Út';
+
+  @override
+  String get weekdayWed => 'St';
+
+  @override
+  String get weekdayThu => 'Čt';
+
+  @override
+  String get weekdayFri => 'Pá';
+
+  @override
+  String get weekdaySat => 'So';
+
+  @override
+  String get weekdaySun => 'Ne';
+
+  @override
+  String serviceIntegrationComingSoon(String serviceName) {
+    return 'Integrace s $serviceName již brzy';
+  }
+
+  @override
+  String alreadyExportedTo(String platform) {
+    return 'Již exportováno do $platform';
+  }
+
+  @override
+  String get anotherPlatform => 'jinou platformu';
+
+  @override
+  String pleaseAuthenticateWithService(String serviceName) {
+    return 'Prosím ověřte se pomocí $serviceName v Nastavení > Integrace úkolů';
+  }
+
+  @override
+  String addingToService(String serviceName) {
+    return 'Přidávání do $serviceName...';
+  }
+
+  @override
+  String addedToService(String serviceName) {
+    return 'Přidáno do $serviceName';
+  }
+
+  @override
+  String failedToAddToService(String serviceName) {
+    return 'Nepodařilo se přidat do $serviceName';
+  }
+
+  @override
+  String get permissionDeniedForAppleReminders => 'Oprávnění pro Apple Reminders bylo zamítnuto';
 }

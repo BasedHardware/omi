@@ -3005,5 +3005,20 @@
   "dataAccessNoticeDescription": "이 앱은 귀하의 데이터에 액세스합니다. Omi AI는 이 앱에 의한 데이터 사용, 수정 또는 삭제에 대해 책임지지 않습니다",
   "copyUrl": "URL 복사",
   "txtFormat": "TXT",
-  "pdfFormat": "PDF"
+  "pdfFormat": "PDF",
+  "weekdayMon": "월",
+  "weekdayTue": "화",
+  "weekdayWed": "수",
+  "weekdayThu": "목",
+  "weekdayFri": "금",
+  "weekdaySat": "토",
+  "weekdaySun": "일",
+  "serviceIntegrationComingSoon": "{serviceName} 연동 곧 출시 예정",
+  "alreadyExportedTo": "{platform}에 이미 내보냄",
+  "anotherPlatform": "다른 플랫폼",
+  "pleaseAuthenticateWithService": "설정 > 작업 통합에서 {serviceName}으로 인증해 주세요",
+  "addingToService": "{serviceName}에 추가 중...",
+  "addedToService": "{serviceName}에 추가됨",
+  "failedToAddToService": "{serviceName}에 추가 실패",
+  "permissionDeniedForAppleReminders": "Apple 미리 알림 권한이 거부됨"
 }

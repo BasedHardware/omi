@@ -4062,4 +4062,61 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get pdfFormat => 'PDF';
+
+  @override
+  String get weekdayMon => '월';
+
+  @override
+  String get weekdayTue => '화';
+
+  @override
+  String get weekdayWed => '수';
+
+  @override
+  String get weekdayThu => '목';
+
+  @override
+  String get weekdayFri => '금';
+
+  @override
+  String get weekdaySat => '토';
+
+  @override
+  String get weekdaySun => '일';
+
+  @override
+  String serviceIntegrationComingSoon(String serviceName) {
+    return '$serviceName 연동 곧 출시 예정';
+  }
+
+  @override
+  String alreadyExportedTo(String platform) {
+    return '$platform에 이미 내보냄';
+  }
+
+  @override
+  String get anotherPlatform => '다른 플랫폼';
+
+  @override
+  String pleaseAuthenticateWithService(String serviceName) {
+    return '설정 > 작업 통합에서 $serviceName으로 인증해 주세요';
+  }
+
+  @override
+  String addingToService(String serviceName) {
+    return '$serviceName에 추가 중...';
+  }
+
+  @override
+  String addedToService(String serviceName) {
+    return '$serviceName에 추가됨';
+  }
+
+  @override
+  String failedToAddToService(String serviceName) {
+    return '$serviceName에 추가 실패';
+  }
+
+  @override
+  String get permissionDeniedForAppleReminders => 'Apple 미리 알림 권한이 거부됨';
 }

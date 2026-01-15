@@ -4687,5 +4687,95 @@
   "pdfFormat": "PDF",
   "@pdfFormat": {
     "description": "PDF file format label"
+  },
+  "weekdayMon": "Mon",
+  "@weekdayMon": {
+    "description": "Abbreviated Monday"
+  },
+  "weekdayTue": "Tue",
+  "@weekdayTue": {
+    "description": "Abbreviated Tuesday"
+  },
+  "weekdayWed": "Wed",
+  "@weekdayWed": {
+    "description": "Abbreviated Wednesday"
+  },
+  "weekdayThu": "Thu",
+  "@weekdayThu": {
+    "description": "Abbreviated Thursday"
+  },
+  "weekdayFri": "Fri",
+  "@weekdayFri": {
+    "description": "Abbreviated Friday"
+  },
+  "weekdaySat": "Sat",
+  "@weekdaySat": {
+    "description": "Abbreviated Saturday"
+  },
+  "weekdaySun": "Sun",
+  "@weekdaySun": {
+    "description": "Abbreviated Sunday"
+  },
+  "serviceIntegrationComingSoon": "{serviceName} integration coming soon",
+  "@serviceIntegrationComingSoon": {
+    "description": "Message shown when task integration is not yet available",
+    "placeholders": {
+      "serviceName": {
+        "type": "String"
+      }
+    }
+  },
+  "alreadyExportedTo": "Already exported to {platform}",
+  "@alreadyExportedTo": {
+    "description": "Message shown when task was already exported to a platform",
+    "placeholders": {
+      "platform": {
+        "type": "String"
+      }
+    }
+  },
+  "anotherPlatform": "another platform",
+  "@anotherPlatform": {
+    "description": "Fallback text for unknown export platform"
+  },
+  "pleaseAuthenticateWithService": "Please authenticate with {serviceName} in Settings > Task Integrations",
+  "@pleaseAuthenticateWithService": {
+    "description": "Message prompting user to authenticate with a task service",
+    "placeholders": {
+      "serviceName": {
+        "type": "String"
+      }
+    }
+  },
+  "addingToService": "Adding to {serviceName}...",
+  "@addingToService": {
+    "description": "Loading message when adding task to a service",
+    "placeholders": {
+      "serviceName": {
+        "type": "String"
+      }
+    }
+  },
+  "addedToService": "Added to {serviceName}",
+  "@addedToService": {
+    "description": "Success message when task was added to a service",
+    "placeholders": {
+      "serviceName": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToAddToService": "Failed to add to {serviceName}",
+  "@failedToAddToService": {
+    "description": "Error message when task could not be added to a service",
+    "placeholders": {
+      "serviceName": {
+        "type": "String"
+      }
+    }
+  },
+  "permissionDeniedForAppleReminders": "Permission denied for Apple Reminders",
+  "@permissionDeniedForAppleReminders": {
+    "description": "Error when Apple Reminders permission is denied"
   }
 }

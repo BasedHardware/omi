@@ -4134,4 +4134,61 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get pdfFormat => 'PDF';
+
+  @override
+  String get weekdayMon => 'Pr';
+
+  @override
+  String get weekdayTue => 'An';
+
+  @override
+  String get weekdayWed => 'Tr';
+
+  @override
+  String get weekdayThu => 'Kt';
+
+  @override
+  String get weekdayFri => 'Pn';
+
+  @override
+  String get weekdaySat => 'Še';
+
+  @override
+  String get weekdaySun => 'Sk';
+
+  @override
+  String serviceIntegrationComingSoon(String serviceName) {
+    return '$serviceName integracija netrukus';
+  }
+
+  @override
+  String alreadyExportedTo(String platform) {
+    return 'Jau eksportuota į $platform';
+  }
+
+  @override
+  String get anotherPlatform => 'kitą platformą';
+
+  @override
+  String pleaseAuthenticateWithService(String serviceName) {
+    return 'Prašome prisijungti prie $serviceName Nustatymai > Užduočių integracijos';
+  }
+
+  @override
+  String addingToService(String serviceName) {
+    return 'Pridedama į $serviceName...';
+  }
+
+  @override
+  String addedToService(String serviceName) {
+    return 'Pridėta į $serviceName';
+  }
+
+  @override
+  String failedToAddToService(String serviceName) {
+    return 'Nepavyko pridėti į $serviceName';
+  }
+
+  @override
+  String get permissionDeniedForAppleReminders => 'Apple Reminders leidimas atmestas';
 }

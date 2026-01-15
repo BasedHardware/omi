@@ -4146,4 +4146,61 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get pdfFormat => 'PDF';
+
+  @override
+  String get weekdayMon => 'Ma';
+
+  @override
+  String get weekdayTue => 'Di';
+
+  @override
+  String get weekdayWed => 'Wo';
+
+  @override
+  String get weekdayThu => 'Do';
+
+  @override
+  String get weekdayFri => 'Vr';
+
+  @override
+  String get weekdaySat => 'Za';
+
+  @override
+  String get weekdaySun => 'Zo';
+
+  @override
+  String serviceIntegrationComingSoon(String serviceName) {
+    return '$serviceName-integratie binnenkort beschikbaar';
+  }
+
+  @override
+  String alreadyExportedTo(String platform) {
+    return 'Al geëxporteerd naar $platform';
+  }
+
+  @override
+  String get anotherPlatform => 'een ander platform';
+
+  @override
+  String pleaseAuthenticateWithService(String serviceName) {
+    return 'Authenticeer a.u.b. met $serviceName in Instellingen > Taakintegraties';
+  }
+
+  @override
+  String addingToService(String serviceName) {
+    return 'Toevoegen aan $serviceName...';
+  }
+
+  @override
+  String addedToService(String serviceName) {
+    return 'Toegevoegd aan $serviceName';
+  }
+
+  @override
+  String failedToAddToService(String serviceName) {
+    return 'Toevoegen aan $serviceName mislukt';
+  }
+
+  @override
+  String get permissionDeniedForAppleReminders => 'Toestemming geweigerd voor Apple Herinneringen';
 }

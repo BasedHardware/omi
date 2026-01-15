@@ -3007,5 +3007,20 @@
   "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
   "copyUrl": "Kopírovat URL",
   "txtFormat": "TXT",
-  "pdfFormat": "PDF"
+  "pdfFormat": "PDF",
+  "weekdayMon": "Po",
+  "weekdayTue": "Út",
+  "weekdayWed": "St",
+  "weekdayThu": "Čt",
+  "weekdayFri": "Pá",
+  "weekdaySat": "So",
+  "weekdaySun": "Ne",
+  "serviceIntegrationComingSoon": "Integrace s {serviceName} již brzy",
+  "alreadyExportedTo": "Již exportováno do {platform}",
+  "anotherPlatform": "jinou platformu",
+  "pleaseAuthenticateWithService": "Prosím ověřte se pomocí {serviceName} v Nastavení > Integrace úkolů",
+  "addingToService": "Přidávání do {serviceName}...",
+  "addedToService": "Přidáno do {serviceName}",
+  "failedToAddToService": "Nepodařilo se přidat do {serviceName}",
+  "permissionDeniedForAppleReminders": "Oprávnění pro Apple Reminders bylo zamítnuto"
 }

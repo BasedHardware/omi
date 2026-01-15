@@ -3005,5 +3005,20 @@
   "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
   "copyUrl": "Kopiér URL",
   "txtFormat": "TXT",
-  "pdfFormat": "PDF"
+  "pdfFormat": "PDF",
+  "weekdayMon": "Man",
+  "weekdayTue": "Tir",
+  "weekdayWed": "Ons",
+  "weekdayThu": "Tor",
+  "weekdayFri": "Fre",
+  "weekdaySat": "Lør",
+  "weekdaySun": "Søn",
+  "serviceIntegrationComingSoon": "{serviceName}-integration kommer snart",
+  "alreadyExportedTo": "Allerede eksporteret til {platform}",
+  "anotherPlatform": "en anden platform",
+  "pleaseAuthenticateWithService": "Log venligst ind med {serviceName} i Indstillinger > Opgaveintegrationer",
+  "addingToService": "Tilføjer til {serviceName}...",
+  "addedToService": "Tilføjet til {serviceName}",
+  "failedToAddToService": "Kunne ikke tilføje til {serviceName}",
+  "permissionDeniedForAppleReminders": "Tilladelse afvist for Apple Reminders"
 }

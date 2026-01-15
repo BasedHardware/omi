@@ -3024,5 +3024,20 @@
   "dataAccessNoticeDescription": "سيصل هذا التطبيق إلى بياناتك. Omi AI ليس مسؤولاً عن كيفية استخدام بياناتك أو تعديلها أو حذفها بواسطة هذا التطبيق",
   "copyUrl": "نسخ الرابط",
   "txtFormat": "TXT",
-  "pdfFormat": "PDF"
+  "pdfFormat": "PDF",
+  "weekdayMon": "الإثنين",
+  "weekdayTue": "الثلاثاء",
+  "weekdayWed": "الأربعاء",
+  "weekdayThu": "الخميس",
+  "weekdayFri": "الجمعة",
+  "weekdaySat": "السبت",
+  "weekdaySun": "الأحد",
+  "serviceIntegrationComingSoon": "تكامل {serviceName} قريباً",
+  "alreadyExportedTo": "تم التصدير بالفعل إلى {platform}",
+  "anotherPlatform": "منصة أخرى",
+  "pleaseAuthenticateWithService": "يرجى المصادقة مع {serviceName} في الإعدادات > تكاملات المهام",
+  "addingToService": "جارٍ الإضافة إلى {serviceName}...",
+  "addedToService": "تمت الإضافة إلى {serviceName}",
+  "failedToAddToService": "فشل الإضافة إلى {serviceName}",
+  "permissionDeniedForAppleReminders": "تم رفض الإذن لتذكيرات Apple"
 }

@@ -4135,4 +4135,61 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get pdfFormat => 'PDF';
+
+  @override
+  String get weekdayMon => 'Po';
+
+  @override
+  String get weekdayTue => 'Ut';
+
+  @override
+  String get weekdayWed => 'St';
+
+  @override
+  String get weekdayThu => 'Št';
+
+  @override
+  String get weekdayFri => 'Pi';
+
+  @override
+  String get weekdaySat => 'So';
+
+  @override
+  String get weekdaySun => 'Ne';
+
+  @override
+  String serviceIntegrationComingSoon(String serviceName) {
+    return 'Integrácia s $serviceName čoskoro';
+  }
+
+  @override
+  String alreadyExportedTo(String platform) {
+    return 'Už exportované do $platform';
+  }
+
+  @override
+  String get anotherPlatform => 'inú platformu';
+
+  @override
+  String pleaseAuthenticateWithService(String serviceName) {
+    return 'Prosím overte sa pomocou $serviceName v Nastavenia > Integrácie úloh';
+  }
+
+  @override
+  String addingToService(String serviceName) {
+    return 'Pridávanie do $serviceName...';
+  }
+
+  @override
+  String addedToService(String serviceName) {
+    return 'Pridané do $serviceName';
+  }
+
+  @override
+  String failedToAddToService(String serviceName) {
+    return 'Nepodarilo sa pridať do $serviceName';
+  }
+
+  @override
+  String get permissionDeniedForAppleReminders => 'Povolenie pre Apple Reminders zamietnuté';
 }

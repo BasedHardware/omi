@@ -4141,4 +4141,61 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get pdfFormat => 'PDF';
+
+  @override
+  String get weekdayMon => 'Man';
+
+  @override
+  String get weekdayTue => 'Tir';
+
+  @override
+  String get weekdayWed => 'Ons';
+
+  @override
+  String get weekdayThu => 'Tor';
+
+  @override
+  String get weekdayFri => 'Fre';
+
+  @override
+  String get weekdaySat => 'Lør';
+
+  @override
+  String get weekdaySun => 'Søn';
+
+  @override
+  String serviceIntegrationComingSoon(String serviceName) {
+    return '$serviceName-integration kommer snart';
+  }
+
+  @override
+  String alreadyExportedTo(String platform) {
+    return 'Allerede eksporteret til $platform';
+  }
+
+  @override
+  String get anotherPlatform => 'en anden platform';
+
+  @override
+  String pleaseAuthenticateWithService(String serviceName) {
+    return 'Log venligst ind med $serviceName i Indstillinger > Opgaveintegrationer';
+  }
+
+  @override
+  String addingToService(String serviceName) {
+    return 'Tilføjer til $serviceName...';
+  }
+
+  @override
+  String addedToService(String serviceName) {
+    return 'Tilføjet til $serviceName';
+  }
+
+  @override
+  String failedToAddToService(String serviceName) {
+    return 'Kunne ikke tilføje til $serviceName';
+  }
+
+  @override
+  String get permissionDeniedForAppleReminders => 'Tilladelse afvist for Apple Reminders';
 }

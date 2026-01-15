@@ -4101,4 +4101,61 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get pdfFormat => 'PDF';
+
+  @override
+  String get weekdayMon => 'الإثنين';
+
+  @override
+  String get weekdayTue => 'الثلاثاء';
+
+  @override
+  String get weekdayWed => 'الأربعاء';
+
+  @override
+  String get weekdayThu => 'الخميس';
+
+  @override
+  String get weekdayFri => 'الجمعة';
+
+  @override
+  String get weekdaySat => 'السبت';
+
+  @override
+  String get weekdaySun => 'الأحد';
+
+  @override
+  String serviceIntegrationComingSoon(String serviceName) {
+    return 'تكامل $serviceName قريباً';
+  }
+
+  @override
+  String alreadyExportedTo(String platform) {
+    return 'تم التصدير بالفعل إلى $platform';
+  }
+
+  @override
+  String get anotherPlatform => 'منصة أخرى';
+
+  @override
+  String pleaseAuthenticateWithService(String serviceName) {
+    return 'يرجى المصادقة مع $serviceName في الإعدادات > تكاملات المهام';
+  }
+
+  @override
+  String addingToService(String serviceName) {
+    return 'جارٍ الإضافة إلى $serviceName...';
+  }
+
+  @override
+  String addedToService(String serviceName) {
+    return 'تمت الإضافة إلى $serviceName';
+  }
+
+  @override
+  String failedToAddToService(String serviceName) {
+    return 'فشل الإضافة إلى $serviceName';
+  }
+
+  @override
+  String get permissionDeniedForAppleReminders => 'تم رفض الإذن لتذكيرات Apple';
 }

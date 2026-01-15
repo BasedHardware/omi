@@ -3005,5 +3005,20 @@
   "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
   "copyUrl": "Копіювати URL",
   "txtFormat": "TXT",
-  "pdfFormat": "PDF"
+  "pdfFormat": "PDF",
+  "weekdayMon": "Пн",
+  "weekdayTue": "Вт",
+  "weekdayWed": "Ср",
+  "weekdayThu": "Чт",
+  "weekdayFri": "Пт",
+  "weekdaySat": "Сб",
+  "weekdaySun": "Нд",
+  "serviceIntegrationComingSoon": "Інтеграція з {serviceName} незабаром",
+  "alreadyExportedTo": "Вже експортовано до {platform}",
+  "anotherPlatform": "іншу платформу",
+  "pleaseAuthenticateWithService": "Будь ласка, авторизуйтесь в {serviceName} у Налаштування > Інтеграції завдань",
+  "addingToService": "Додавання до {serviceName}...",
+  "addedToService": "Додано до {serviceName}",
+  "failedToAddToService": "Не вдалося додати до {serviceName}",
+  "permissionDeniedForAppleReminders": "Дозвіл для Apple Reminders відхилено"
 }

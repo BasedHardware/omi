@@ -4136,4 +4136,61 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get pdfFormat => 'PDF';
+
+  @override
+  String get weekdayMon => 'Esm';
+
+  @override
+  String get weekdayTue => 'Tei';
+
+  @override
+  String get weekdayWed => 'Kol';
+
+  @override
+  String get weekdayThu => 'Nel';
+
+  @override
+  String get weekdayFri => 'Ree';
+
+  @override
+  String get weekdaySat => 'Lau';
+
+  @override
+  String get weekdaySun => 'Püh';
+
+  @override
+  String serviceIntegrationComingSoon(String serviceName) {
+    return '$serviceName integratsioon tuleb peagi';
+  }
+
+  @override
+  String alreadyExportedTo(String platform) {
+    return 'Juba eksporditud $platform';
+  }
+
+  @override
+  String get anotherPlatform => 'teise platvormiga';
+
+  @override
+  String pleaseAuthenticateWithService(String serviceName) {
+    return 'Palun autentimige $serviceName kaudu Seaded > Ülesannete integratsioonid';
+  }
+
+  @override
+  String addingToService(String serviceName) {
+    return 'Lisamine $serviceName...';
+  }
+
+  @override
+  String addedToService(String serviceName) {
+    return 'Lisatud $serviceName';
+  }
+
+  @override
+  String failedToAddToService(String serviceName) {
+    return 'Lisamine $serviceName ebaõnnestus';
+  }
+
+  @override
+  String get permissionDeniedForAppleReminders => 'Apple Reminders luba keelatud';
 }

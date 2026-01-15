@@ -3005,5 +3005,20 @@
   "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
   "copyUrl": "Αντιγραφή URL",
   "txtFormat": "TXT",
-  "pdfFormat": "PDF"
+  "pdfFormat": "PDF",
+  "weekdayMon": "Δευ",
+  "weekdayTue": "Τρί",
+  "weekdayWed": "Τετ",
+  "weekdayThu": "Πέμ",
+  "weekdayFri": "Παρ",
+  "weekdaySat": "Σάβ",
+  "weekdaySun": "Κυρ",
+  "serviceIntegrationComingSoon": "Ενσωμάτωση {serviceName} σύντομα",
+  "alreadyExportedTo": "Ήδη εξαγωγή σε {platform}",
+  "anotherPlatform": "άλλη πλατφόρμα",
+  "pleaseAuthenticateWithService": "Παρακαλώ συνδεθείτε με {serviceName} στις Ρυθμίσεις > Ενσωματώσεις εργασιών",
+  "addingToService": "Προσθήκη σε {serviceName}...",
+  "addedToService": "Προστέθηκε στο {serviceName}",
+  "failedToAddToService": "Αποτυχία προσθήκης στο {serviceName}",
+  "permissionDeniedForAppleReminders": "Η άδεια για τις Υπενθυμίσεις Apple απορρίφθηκε"
 }

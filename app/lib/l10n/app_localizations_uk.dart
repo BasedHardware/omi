@@ -4136,4 +4136,61 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get pdfFormat => 'PDF';
+
+  @override
+  String get weekdayMon => 'Пн';
+
+  @override
+  String get weekdayTue => 'Вт';
+
+  @override
+  String get weekdayWed => 'Ср';
+
+  @override
+  String get weekdayThu => 'Чт';
+
+  @override
+  String get weekdayFri => 'Пт';
+
+  @override
+  String get weekdaySat => 'Сб';
+
+  @override
+  String get weekdaySun => 'Нд';
+
+  @override
+  String serviceIntegrationComingSoon(String serviceName) {
+    return 'Інтеграція з $serviceName незабаром';
+  }
+
+  @override
+  String alreadyExportedTo(String platform) {
+    return 'Вже експортовано до $platform';
+  }
+
+  @override
+  String get anotherPlatform => 'іншу платформу';
+
+  @override
+  String pleaseAuthenticateWithService(String serviceName) {
+    return 'Будь ласка, авторизуйтесь в $serviceName у Налаштування > Інтеграції завдань';
+  }
+
+  @override
+  String addingToService(String serviceName) {
+    return 'Додавання до $serviceName...';
+  }
+
+  @override
+  String addedToService(String serviceName) {
+    return 'Додано до $serviceName';
+  }
+
+  @override
+  String failedToAddToService(String serviceName) {
+    return 'Не вдалося додати до $serviceName';
+  }
+
+  @override
+  String get permissionDeniedForAppleReminders => 'Дозвіл для Apple Reminders відхилено';
 }

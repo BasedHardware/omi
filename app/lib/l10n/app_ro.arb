@@ -3005,5 +3005,20 @@
   "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
   "copyUrl": "Copiază URL",
   "txtFormat": "TXT",
-  "pdfFormat": "PDF"
+  "pdfFormat": "PDF",
+  "weekdayMon": "Lun",
+  "weekdayTue": "Mar",
+  "weekdayWed": "Mie",
+  "weekdayThu": "Joi",
+  "weekdayFri": "Vin",
+  "weekdaySat": "Sâm",
+  "weekdaySun": "Dum",
+  "serviceIntegrationComingSoon": "Integrarea {serviceName} în curând",
+  "alreadyExportedTo": "Deja exportat în {platform}",
+  "anotherPlatform": "altă platformă",
+  "pleaseAuthenticateWithService": "Vă rugăm să vă autentificați cu {serviceName} în Setări > Integrări sarcini",
+  "addingToService": "Se adaugă în {serviceName}...",
+  "addedToService": "Adăugat în {serviceName}",
+  "failedToAddToService": "Nu s-a putut adăuga în {serviceName}",
+  "permissionDeniedForAppleReminders": "Permisiune refuzată pentru Apple Reminders"
 }

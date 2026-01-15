@@ -3005,5 +3005,20 @@
   "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
   "copyUrl": "Sao chép URL",
   "txtFormat": "TXT",
-  "pdfFormat": "PDF"
+  "pdfFormat": "PDF",
+  "weekdayMon": "T2",
+  "weekdayTue": "T3",
+  "weekdayWed": "T4",
+  "weekdayThu": "T5",
+  "weekdayFri": "T6",
+  "weekdaySat": "T7",
+  "weekdaySun": "CN",
+  "serviceIntegrationComingSoon": "Tích hợp {serviceName} sắp ra mắt",
+  "alreadyExportedTo": "Đã xuất sang {platform}",
+  "anotherPlatform": "nền tảng khác",
+  "pleaseAuthenticateWithService": "Vui lòng xác thực với {serviceName} trong Cài đặt > Tích hợp tác vụ",
+  "addingToService": "Đang thêm vào {serviceName}...",
+  "addedToService": "Đã thêm vào {serviceName}",
+  "failedToAddToService": "Không thể thêm vào {serviceName}",
+  "permissionDeniedForAppleReminders": "Quyền truy cập Apple Reminders bị từ chối"
 }

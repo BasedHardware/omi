@@ -4057,4 +4057,61 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get pdfFormat => 'PDF';
+
+  @override
+  String get weekdayMon => '周一';
+
+  @override
+  String get weekdayTue => '周二';
+
+  @override
+  String get weekdayWed => '周三';
+
+  @override
+  String get weekdayThu => '周四';
+
+  @override
+  String get weekdayFri => '周五';
+
+  @override
+  String get weekdaySat => '周六';
+
+  @override
+  String get weekdaySun => '周日';
+
+  @override
+  String serviceIntegrationComingSoon(String serviceName) {
+    return '$serviceName集成即将推出';
+  }
+
+  @override
+  String alreadyExportedTo(String platform) {
+    return '已导出到$platform';
+  }
+
+  @override
+  String get anotherPlatform => '其他平台';
+
+  @override
+  String pleaseAuthenticateWithService(String serviceName) {
+    return '请在设置 > 任务集成中验证$serviceName';
+  }
+
+  @override
+  String addingToService(String serviceName) {
+    return '正在添加到$serviceName...';
+  }
+
+  @override
+  String addedToService(String serviceName) {
+    return '已添加到$serviceName';
+  }
+
+  @override
+  String failedToAddToService(String serviceName) {
+    return '添加到$serviceName失败';
+  }
+
+  @override
+  String get permissionDeniedForAppleReminders => 'Apple提醒事项权限被拒绝';
 }

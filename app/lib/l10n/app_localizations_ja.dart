@@ -4062,4 +4062,61 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get pdfFormat => 'PDF';
+
+  @override
+  String get weekdayMon => '月';
+
+  @override
+  String get weekdayTue => '火';
+
+  @override
+  String get weekdayWed => '水';
+
+  @override
+  String get weekdayThu => '木';
+
+  @override
+  String get weekdayFri => '金';
+
+  @override
+  String get weekdaySat => '土';
+
+  @override
+  String get weekdaySun => '日';
+
+  @override
+  String serviceIntegrationComingSoon(String serviceName) {
+    return '$serviceName連携は近日公開予定';
+  }
+
+  @override
+  String alreadyExportedTo(String platform) {
+    return '$platformにエクスポート済み';
+  }
+
+  @override
+  String get anotherPlatform => '別のプラットフォーム';
+
+  @override
+  String pleaseAuthenticateWithService(String serviceName) {
+    return '設定 > タスク連携で$serviceNameの認証を行ってください';
+  }
+
+  @override
+  String addingToService(String serviceName) {
+    return '$serviceNameに追加中...';
+  }
+
+  @override
+  String addedToService(String serviceName) {
+    return '$serviceNameに追加しました';
+  }
+
+  @override
+  String failedToAddToService(String serviceName) {
+    return '$serviceNameへの追加に失敗しました';
+  }
+
+  @override
+  String get permissionDeniedForAppleReminders => 'Appleリマインダーの権限が拒否されました';
 }

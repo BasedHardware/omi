@@ -2987,5 +2987,20 @@
   "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
   "copyUrl": "Copia URL",
   "txtFormat": "TXT",
-  "pdfFormat": "PDF"
+  "pdfFormat": "PDF",
+  "weekdayMon": "Lun",
+  "weekdayTue": "Mar",
+  "weekdayWed": "Mer",
+  "weekdayThu": "Gio",
+  "weekdayFri": "Ven",
+  "weekdaySat": "Sab",
+  "weekdaySun": "Dom",
+  "serviceIntegrationComingSoon": "Integrazione {serviceName} in arrivo",
+  "alreadyExportedTo": "Già esportato in {platform}",
+  "anotherPlatform": "un'altra piattaforma",
+  "pleaseAuthenticateWithService": "Per favore autenticati con {serviceName} in Impostazioni > Integrazioni attività",
+  "addingToService": "Aggiunta a {serviceName}...",
+  "addedToService": "Aggiunto a {serviceName}",
+  "failedToAddToService": "Impossibile aggiungere a {serviceName}",
+  "permissionDeniedForAppleReminders": "Permesso negato per Apple Reminders"
 }

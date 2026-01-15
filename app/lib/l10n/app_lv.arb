@@ -3005,5 +3005,20 @@
   "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
   "copyUrl": "Kopēt URL",
   "txtFormat": "TXT",
-  "pdfFormat": "PDF"
+  "pdfFormat": "PDF",
+  "weekdayMon": "Pr",
+  "weekdayTue": "Ot",
+  "weekdayWed": "Tr",
+  "weekdayThu": "Ce",
+  "weekdayFri": "Pk",
+  "weekdaySat": "Se",
+  "weekdaySun": "Sv",
+  "serviceIntegrationComingSoon": "{serviceName} integrācija drīzumā",
+  "alreadyExportedTo": "Jau eksportēts uz {platform}",
+  "anotherPlatform": "citu platformu",
+  "pleaseAuthenticateWithService": "Lūdzu, autentificējieties ar {serviceName} Iestatījumi > Uzdevumu integrācijas",
+  "addingToService": "Pievieno {serviceName}...",
+  "addedToService": "Pievienots {serviceName}",
+  "failedToAddToService": "Neizdevās pievienot {serviceName}",
+  "permissionDeniedForAppleReminders": "Apple Reminders atļauja liegta"
 }

@@ -3005,5 +3005,20 @@
   "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
   "copyUrl": "Kopioi URL",
   "txtFormat": "TXT",
-  "pdfFormat": "PDF"
+  "pdfFormat": "PDF",
+  "weekdayMon": "Ma",
+  "weekdayTue": "Ti",
+  "weekdayWed": "Ke",
+  "weekdayThu": "To",
+  "weekdayFri": "Pe",
+  "weekdaySat": "La",
+  "weekdaySun": "Su",
+  "serviceIntegrationComingSoon": "{serviceName}-integraatio tulossa pian",
+  "alreadyExportedTo": "Jo viety kohteeseen {platform}",
+  "anotherPlatform": "toiseen alustaan",
+  "pleaseAuthenticateWithService": "Ole hyvä ja kirjaudu {serviceName} palveluun kohdassa Asetukset > Tehtäväintegraatiot",
+  "addingToService": "Lisätään kohteeseen {serviceName}...",
+  "addedToService": "Lisätty kohteeseen {serviceName}",
+  "failedToAddToService": "Lisääminen kohteeseen {serviceName} epäonnistui",
+  "permissionDeniedForAppleReminders": "Käyttöoikeus Apple Muistutuksille evätty"
 }

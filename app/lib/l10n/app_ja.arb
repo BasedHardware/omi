@@ -1431,5 +1431,20 @@
   "dataAccessNoticeDescription": "このアプリはあなたのデータにアクセスします。Omi AIは、このアプリによるデータの使用、変更、削除について責任を負いません",
   "copyUrl": "URLをコピー",
   "txtFormat": "TXT",
-  "pdfFormat": "PDF"
+  "pdfFormat": "PDF",
+  "weekdayMon": "月",
+  "weekdayTue": "火",
+  "weekdayWed": "水",
+  "weekdayThu": "木",
+  "weekdayFri": "金",
+  "weekdaySat": "土",
+  "weekdaySun": "日",
+  "serviceIntegrationComingSoon": "{serviceName}連携は近日公開予定",
+  "alreadyExportedTo": "{platform}にエクスポート済み",
+  "anotherPlatform": "別のプラットフォーム",
+  "pleaseAuthenticateWithService": "設定 > タスク連携で{serviceName}の認証を行ってください",
+  "addingToService": "{serviceName}に追加中...",
+  "addedToService": "{serviceName}に追加しました",
+  "failedToAddToService": "{serviceName}への追加に失敗しました",
+  "permissionDeniedForAppleReminders": "Appleリマインダーの権限が拒否されました"
 }

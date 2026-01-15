@@ -3005,5 +3005,20 @@
   "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
   "copyUrl": "Kopeeri URL",
   "txtFormat": "TXT",
-  "pdfFormat": "PDF"
+  "pdfFormat": "PDF",
+  "weekdayMon": "Esm",
+  "weekdayTue": "Tei",
+  "weekdayWed": "Kol",
+  "weekdayThu": "Nel",
+  "weekdayFri": "Ree",
+  "weekdaySat": "Lau",
+  "weekdaySun": "Püh",
+  "serviceIntegrationComingSoon": "{serviceName} integratsioon tuleb peagi",
+  "alreadyExportedTo": "Juba eksporditud {platform}",
+  "anotherPlatform": "teise platvormiga",
+  "pleaseAuthenticateWithService": "Palun autentimige {serviceName} kaudu Seaded > Ülesannete integratsioonid",
+  "addingToService": "Lisamine {serviceName}...",
+  "addedToService": "Lisatud {serviceName}",
+  "failedToAddToService": "Lisamine {serviceName} ebaõnnestus",
+  "permissionDeniedForAppleReminders": "Apple Reminders luba keelatud"
 }

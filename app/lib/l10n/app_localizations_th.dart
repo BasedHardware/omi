@@ -4111,4 +4111,61 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get pdfFormat => 'PDF';
+
+  @override
+  String get weekdayMon => 'จ.';
+
+  @override
+  String get weekdayTue => 'อ.';
+
+  @override
+  String get weekdayWed => 'พ.';
+
+  @override
+  String get weekdayThu => 'พฤ.';
+
+  @override
+  String get weekdayFri => 'ศ.';
+
+  @override
+  String get weekdaySat => 'ส.';
+
+  @override
+  String get weekdaySun => 'อา.';
+
+  @override
+  String serviceIntegrationComingSoon(String serviceName) {
+    return 'การเชื่อมต่อ $serviceName เร็วๆ นี้';
+  }
+
+  @override
+  String alreadyExportedTo(String platform) {
+    return 'ส่งออกไปยัง $platform แล้ว';
+  }
+
+  @override
+  String get anotherPlatform => 'แพลตฟอร์มอื่น';
+
+  @override
+  String pleaseAuthenticateWithService(String serviceName) {
+    return 'กรุณาเข้าสู่ระบบ $serviceName ในการตั้งค่า > การเชื่อมต่องาน';
+  }
+
+  @override
+  String addingToService(String serviceName) {
+    return 'กำลังเพิ่มไปยัง $serviceName...';
+  }
+
+  @override
+  String addedToService(String serviceName) {
+    return 'เพิ่มไปยัง $serviceName แล้ว';
+  }
+
+  @override
+  String failedToAddToService(String serviceName) {
+    return 'ไม่สามารถเพิ่มไปยัง $serviceName';
+  }
+
+  @override
+  String get permissionDeniedForAppleReminders => 'ถูกปฏิเสธสิทธิ์สำหรับ Apple Reminders';
 }

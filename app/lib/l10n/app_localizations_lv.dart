@@ -4140,4 +4140,61 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get pdfFormat => 'PDF';
+
+  @override
+  String get weekdayMon => 'Pr';
+
+  @override
+  String get weekdayTue => 'Ot';
+
+  @override
+  String get weekdayWed => 'Tr';
+
+  @override
+  String get weekdayThu => 'Ce';
+
+  @override
+  String get weekdayFri => 'Pk';
+
+  @override
+  String get weekdaySat => 'Se';
+
+  @override
+  String get weekdaySun => 'Sv';
+
+  @override
+  String serviceIntegrationComingSoon(String serviceName) {
+    return '$serviceName integrācija drīzumā';
+  }
+
+  @override
+  String alreadyExportedTo(String platform) {
+    return 'Jau eksportēts uz $platform';
+  }
+
+  @override
+  String get anotherPlatform => 'citu platformu';
+
+  @override
+  String pleaseAuthenticateWithService(String serviceName) {
+    return 'Lūdzu, autentificējieties ar $serviceName Iestatījumi > Uzdevumu integrācijas';
+  }
+
+  @override
+  String addingToService(String serviceName) {
+    return 'Pievieno $serviceName...';
+  }
+
+  @override
+  String addedToService(String serviceName) {
+    return 'Pievienots $serviceName';
+  }
+
+  @override
+  String failedToAddToService(String serviceName) {
+    return 'Neizdevās pievienot $serviceName';
+  }
+
+  @override
+  String get permissionDeniedForAppleReminders => 'Apple Reminders atļauja liegta';
 }

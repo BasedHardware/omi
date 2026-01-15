@@ -2987,5 +2987,20 @@
   "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
   "copyUrl": "Kopijuoti URL",
   "txtFormat": "TXT",
-  "pdfFormat": "PDF"
+  "pdfFormat": "PDF",
+  "weekdayMon": "Pr",
+  "weekdayTue": "An",
+  "weekdayWed": "Tr",
+  "weekdayThu": "Kt",
+  "weekdayFri": "Pn",
+  "weekdaySat": "Še",
+  "weekdaySun": "Sk",
+  "serviceIntegrationComingSoon": "{serviceName} integracija netrukus",
+  "alreadyExportedTo": "Jau eksportuota į {platform}",
+  "anotherPlatform": "kitą platformą",
+  "pleaseAuthenticateWithService": "Prašome prisijungti prie {serviceName} Nustatymai > Užduočių integracijos",
+  "addingToService": "Pridedama į {serviceName}...",
+  "addedToService": "Pridėta į {serviceName}",
+  "failedToAddToService": "Nepavyko pridėti į {serviceName}",
+  "permissionDeniedForAppleReminders": "Apple Reminders leidimas atmestas"
 }

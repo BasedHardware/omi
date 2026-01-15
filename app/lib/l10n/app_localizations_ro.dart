@@ -4156,4 +4156,61 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get pdfFormat => 'PDF';
+
+  @override
+  String get weekdayMon => 'Lun';
+
+  @override
+  String get weekdayTue => 'Mar';
+
+  @override
+  String get weekdayWed => 'Mie';
+
+  @override
+  String get weekdayThu => 'Joi';
+
+  @override
+  String get weekdayFri => 'Vin';
+
+  @override
+  String get weekdaySat => 'Sâm';
+
+  @override
+  String get weekdaySun => 'Dum';
+
+  @override
+  String serviceIntegrationComingSoon(String serviceName) {
+    return 'Integrarea $serviceName în curând';
+  }
+
+  @override
+  String alreadyExportedTo(String platform) {
+    return 'Deja exportat în $platform';
+  }
+
+  @override
+  String get anotherPlatform => 'altă platformă';
+
+  @override
+  String pleaseAuthenticateWithService(String serviceName) {
+    return 'Vă rugăm să vă autentificați cu $serviceName în Setări > Integrări sarcini';
+  }
+
+  @override
+  String addingToService(String serviceName) {
+    return 'Se adaugă în $serviceName...';
+  }
+
+  @override
+  String addedToService(String serviceName) {
+    return 'Adăugat în $serviceName';
+  }
+
+  @override
+  String failedToAddToService(String serviceName) {
+    return 'Nu s-a putut adăuga în $serviceName';
+  }
+
+  @override
+  String get permissionDeniedForAppleReminders => 'Permisiune refuzată pentru Apple Reminders';
 }

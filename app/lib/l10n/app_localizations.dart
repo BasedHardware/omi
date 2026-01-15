@@ -7922,6 +7922,96 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'PDF'**
   String get pdfFormat;
+
+  /// Abbreviated Monday
+  ///
+  /// In en, this message translates to:
+  /// **'Mon'**
+  String get weekdayMon;
+
+  /// Abbreviated Tuesday
+  ///
+  /// In en, this message translates to:
+  /// **'Tue'**
+  String get weekdayTue;
+
+  /// Abbreviated Wednesday
+  ///
+  /// In en, this message translates to:
+  /// **'Wed'**
+  String get weekdayWed;
+
+  /// Abbreviated Thursday
+  ///
+  /// In en, this message translates to:
+  /// **'Thu'**
+  String get weekdayThu;
+
+  /// Abbreviated Friday
+  ///
+  /// In en, this message translates to:
+  /// **'Fri'**
+  String get weekdayFri;
+
+  /// Abbreviated Saturday
+  ///
+  /// In en, this message translates to:
+  /// **'Sat'**
+  String get weekdaySat;
+
+  /// Abbreviated Sunday
+  ///
+  /// In en, this message translates to:
+  /// **'Sun'**
+  String get weekdaySun;
+
+  /// Message shown when task integration is not yet available
+  ///
+  /// In en, this message translates to:
+  /// **'{serviceName} integration coming soon'**
+  String serviceIntegrationComingSoon(String serviceName);
+
+  /// Message shown when task was already exported to a platform
+  ///
+  /// In en, this message translates to:
+  /// **'Already exported to {platform}'**
+  String alreadyExportedTo(String platform);
+
+  /// Fallback text for unknown export platform
+  ///
+  /// In en, this message translates to:
+  /// **'another platform'**
+  String get anotherPlatform;
+
+  /// Message prompting user to authenticate with a task service
+  ///
+  /// In en, this message translates to:
+  /// **'Please authenticate with {serviceName} in Settings > Task Integrations'**
+  String pleaseAuthenticateWithService(String serviceName);
+
+  /// Loading message when adding task to a service
+  ///
+  /// In en, this message translates to:
+  /// **'Adding to {serviceName}...'**
+  String addingToService(String serviceName);
+
+  /// Success message when task was added to a service
+  ///
+  /// In en, this message translates to:
+  /// **'Added to {serviceName}'**
+  String addedToService(String serviceName);
+
+  /// Error message when task could not be added to a service
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to add to {serviceName}'**
+  String failedToAddToService(String serviceName);
+
+  /// Error when Apple Reminders permission is denied
+  ///
+  /// In en, this message translates to:
+  /// **'Permission denied for Apple Reminders'**
+  String get permissionDeniedForAppleReminders;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
