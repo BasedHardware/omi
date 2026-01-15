@@ -13,10 +13,31 @@ def get_user(uid: str):
     return user
 
 
-def get_current_user_uid(authorization: str = Header(None)):
-    if authorization and os.getenv('ADMIN_KEY') in authorization:
-        return authorization.split(os.getenv('ADMIN_KEY'))[1]
+def verify_token(token: str) -> str:
+    """
+    Verify a Firebase token or ADMIN_KEY and return the uid.
 
+    Args:
+        token: The token to verify (Firebase ID token or ADMIN_KEY format)
+
+    Returns:
+        The user's uid
+
+    Raises:
+        InvalidIdTokenError: If the token is invalid
+    """
+    # Check for ADMIN_KEY format
+    admin_key = os.getenv('ADMIN_KEY')
+    if admin_key and admin_key in token:
+        return token.split(admin_key)[1]
+
+    # Verify Firebase token
+    decoded_token = auth.verify_id_token(token)
+    return decoded_token['uid']
+
+
+def get_current_user_uid(authorization: str = Header(None)):
+    """FastAPI dependency for HTTP endpoints with Authorization header."""
     if not authorization:
         raise HTTPException(status_code=401, detail="Authorization header not found")
     elif len(str(authorization).split(' ')) != 2:
@@ -24,9 +45,7 @@ def get_current_user_uid(authorization: str = Header(None)):
 
     try:
         token = authorization.split(' ')[1]
-        decoded_token = auth.verify_id_token(token)
-        # print('get_current_user_uid', decoded_token['uid'])
-        return decoded_token['uid']
+        return verify_token(token)
     except InvalidIdTokenError as e:
         if os.getenv('LOCAL_DEVELOPMENT') == 'true':
             return '123'

@@ -21,7 +21,6 @@ from fastapi.websockets import WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 from websockets.exceptions import ConnectionClosed
 
-from firebase_admin import auth as firebase_auth
 from firebase_admin.auth import InvalidIdTokenError
 
 import database.conversations as conversations_db
@@ -107,7 +106,7 @@ class CustomSttMode(str, Enum):
     enabled = "enabled"
 
 
-async def _listen(
+async def _stream_handler(
     websocket: WebSocket,
     uid: str,
     language: str = 'en',
@@ -121,9 +120,13 @@ async def _listen(
     custom_stt_mode: CustomSttMode = CustomSttMode.disabled,
     onboarding_mode: bool = False,
 ):
+    """
+    Core WebSocket streaming handler. Assumes websocket is already accepted and uid is validated.
+    This function is called by both _listen (for app clients) and web_listen_handler (for web clients).
+    """
     session_id = str(uuid.uuid4())
     print(
-        '_listen',
+        '_stream_handler',
         uid,
         session_id,
         language,
@@ -141,14 +144,6 @@ async def _listen(
     # Onboarding mode overrides: no speech profile (creating new one), single language
     if onboarding_mode:
         include_speech_profile = False
-
-    # Skip accept if already connected (web endpoint pre-accepts for first-message auth)
-    if websocket.client_state != WebSocketState.CONNECTED:
-        try:
-            await websocket.accept()
-        except RuntimeError as e:
-            print(e, uid, session_id)
-            return
 
     if not uid or len(uid) <= 0:
         await websocket.close(code=1008, reason="Bad uid")
@@ -1954,7 +1949,46 @@ async def _listen(
             # Variables might not be defined if an error occurred early
             print(f"Cleanup error (safe to ignore): {e}", uid, session_id)
 
-    print("_listen ended", uid, session_id)
+    print("_stream_handler ended", uid, session_id)
+
+
+async def _listen(
+    websocket: WebSocket,
+    uid: str,
+    language: str = 'en',
+    sample_rate: int = 8000,
+    codec: str = 'pcm8',
+    channels: int = 1,
+    include_speech_profile: bool = True,
+    stt_service: Optional[STTService] = None,
+    conversation_timeout: int = 120,
+    source: Optional[str] = None,
+    custom_stt_mode: CustomSttMode = CustomSttMode.disabled,
+    onboarding_mode: bool = False,
+):
+    """
+    WebSocket handler for app clients. Accepts the websocket connection and delegates to _stream_handler.
+    """
+    try:
+        await websocket.accept()
+    except RuntimeError as e:
+        print(f"_listen: accept error {e}", uid)
+        return
+
+    await _stream_handler(
+        websocket,
+        uid,
+        language,
+        sample_rate,
+        codec,
+        channels,
+        include_speech_profile,
+        stt_service,
+        conversation_timeout=conversation_timeout,
+        source=source,
+        custom_stt_mode=custom_stt_mode,
+        onboarding_mode=onboarding_mode,
+    )
 
 
 @router.websocket("/v4/listen")
@@ -2046,10 +2080,9 @@ async def web_listen_handler(
         await websocket.close(code=1008, reason="Missing token")
         return
 
-    # Verify Firebase token (same pattern as utils/other/endpoints.py)
+    # Verify token using centralized auth utility (supports Firebase token and ADMIN_KEY)
     try:
-        decoded_token = firebase_auth.verify_id_token(token)
-        uid = decoded_token['uid']
+        uid = auth.verify_token(token)
     except InvalidIdTokenError:
         if os.getenv('LOCAL_DEVELOPMENT') == 'true':
             uid = '123'
@@ -2066,11 +2099,11 @@ async def web_listen_handler(
     # Send success response
     await websocket.send_json({"type": "auth_response", "success": True})
 
-    # Proceed with existing listen logic
+    # Proceed with streaming (websocket already accepted, uid already validated)
     custom_stt_mode = CustomSttMode.enabled if custom_stt == 'enabled' else CustomSttMode.disabled
     onboarding_mode = onboarding == 'enabled'
 
-    await _listen(
+    await _stream_handler(
         websocket,
         uid,
         language,
