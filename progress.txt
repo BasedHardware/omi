@@ -10,14 +10,14 @@ Strategy: Prioritize small/medium files, defer large files
 
 OVERALL STATISTICS
 ------------------
-Files Completed: 39
+Files Completed: 40
 Files Skipped (Internal): 2
-Files Skipped (Large): 3
-Total Keys Added: 430
-Total Translations: 14,620 (430 keys × 34 languages)
+Files Skipped (Large): 2
+Total Keys Added: 454
+Total Translations: 15,436 (454 keys × 34 languages)
 
 MILESTONE: All small and medium desktop files completed! ✅
-Only large/complex files remain (26-80+ strings each)
+Only large/complex files remain (40-80+ strings each)
 
 ================================================================================
 COMPLETED FILES
@@ -573,6 +573,28 @@ Notes: Localized conversation summary page including summary header with app sel
        widgets to support dynamic l10n values.
 Commit: 563dd96e5
 
+FILE 68: desktop_conversation_card.dart
+----------------------------------------
+Location: app/lib/desktop/pages/conversations/widgets/
+Keys Added: 24
+Keys: deleteConversation, deleteConversationConfirmation, delete, cancel,
+      conversationDeleted, discardedConversation, untitledConversation,
+      generatingLink, copyLink, copyTranscript, editConversation,
+      conversationUrlCouldNotBeShared, failedToGenerateShareLink,
+      conversationUrlCouldNotBeGenerated, conversationLinkCopiedToClipboard,
+      failedToGenerateConversationLink, conversationTranscriptCopiedToClipboard,
+      editConversationDialogTitle, changeTheConversationTitle,
+      conversationTitle, enterConversationTitle,
+      conversationTitleUpdatedSuccessfully, failedToUpdateConversationTitle,
+      errorUpdatingConversationTitle
+Script: /tmp/translate_conversation_card_keys.py
+Status: ✅ COMPLETED
+Notes: Localized conversation card component with delete/edit dialogs, context menu items
+       (copy link, transcript, edit, delete), and all status/error messages. Updated title
+       display logic to use l10n for discarded/untitled conversations. Removed const from
+       Row widgets in snackbars to support dynamic l10n values.
+Commit: 106657e3f
+
 ================================================================================
 SKIPPED FILES (LARGE - TO BE COMPLETED LATER)
 ================================================================================
@@ -594,21 +616,6 @@ Identified String Types:
 - Developer settings
 - About section
 - Multiple dialog boxes and confirmations
-
-desktop_conversation_card.dart
--------------------------------
-Location: app/lib/desktop/pages/conversations/widgets/
-Estimated Strings: 26
-Estimated Translations: 884 (26 × 34 languages)
-Reason: Too large, complex context menu and dialog strings
-Status: ⏸️ DEFERRED
-
-Identified String Types:
-- Dialog titles and messages
-- Context menu items
-- Snackbar messages
-- Confirmation dialogs
-- Edit dialogs
 
 desktop_recording_widget.dart
 ------------------------------
@@ -777,6 +784,6 @@ echo "✅ Translated <feature> keys for all 34 languages!"
 END OF PROGRESS TRACKER
 ================================================================================
 Last Updated: 2026-01-15
-Last Completed: FILE 67 - desktop_conversation_summary.dart (17 keys, 578 translations)
-Previous Completed: FILE 66 - desktop_developer_page.dart (35 keys, 1,190 translations)
+Last Completed: FILE 68 - desktop_conversation_card.dart (24 keys, 816 translations)
+Previous Completed: FILE 67 - desktop_conversation_summary.dart (17 keys, 578 translations)
 Current Session: [active]
