@@ -46,7 +46,7 @@ HIGH PRIORITY - App Submission/Management Pages
 
 MEDIUM PRIORITY - Widgets and Components
 -----------------------------------------
-[ ] app/lib/widgets/upgrade_alert.dart
+[✓] app/lib/widgets/upgrade_alert.dart
     Strings: 'New Version Available', 'No', 'Upgrade'
 
 [ ] app/lib/pages/apps/app_detail/app_detail.dart
@@ -919,12 +919,23 @@ Notes: Localized app management page with filter chips and section headers.
        Used parameterized translations for dynamic app counts.
 Commit: ac41c405d
 
+FILE 74 (Phase 2 FILE 4): upgrade_alert.dart
+---------------------------------------------
+Location: app/lib/widgets/
+Keys Added: 2 (new) + 1 (reused) = 3 total
+New Keys: newVersionAvailable, no
+Reused Keys: upgrade
+Script: /tmp/translate_upgrade_alert_keys.py
+Status: ✅ COMPLETED
+Notes: Localized app upgrade dialog for both Cupertino and Material styles.
+Commit: 88e986794
+
 ================================================================================
 END OF PROGRESS TRACKER
 ================================================================================
 Last Updated: 2026-01-15
-Last Completed: FILE 73 - manage_create_page.dart (4 new keys + 2 reused, 136 new translations)
-Previous Completed: FILE 72 - update_app.dart (6 new keys + 8 reused, 204 new translations)
+Last Completed: FILE 74 - upgrade_alert.dart (2 new keys + 1 reused, 68 new translations)
+Previous Completed: FILE 73 - manage_create_page.dart (4 new keys + 2 reused, 136 new translations)
 Current Session: Phase 2 - Mobile/Pages localization in progress
 
 🎉 PHASE 1 (DESKTOP) COMPLETE! 🎉
@@ -934,5 +945,5 @@ Current Session: Phase 2 - Mobile/Pages localization in progress
 
 📋 PHASE 2 (MOBILE/PAGES) IN PROGRESS
 59 files identified with hardcoded strings
-Files Completed: 3
+Files Completed: 4
 Estimated 200-300 new keys needed
