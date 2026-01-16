@@ -4636,4 +4636,16 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get learnings => 'สิ่งที่เรียนรู้';
+
+  @override
+  String get autoDeletesAfterThreeDays => 'ลบอัตโนมัติหลัง 3 วัน';
+
+  @override
+  String get knowledgeGraphDeletedSuccessfully => 'ลบกราฟความรู้สำเร็จ';
+
+  @override
+  String get exportStartedMayTakeFewSeconds => 'เริ่มส่งออกแล้ว อาจใช้เวลาสักครู่...';
+
+  @override
+  String get knowledgeGraphDeleteDescription => 'การดำเนินการนี้จะลบข้อมูลกราฟความรู้ที่ได้มาทั้งหมด (โหนดและการเชื่อมต่อ) ความทรงจำดั้งเดิมของคุณจะยังคงปลอดภัย กราฟจะถูกสร้างขึ้นใหม่เมื่อเวลาผ่านไปหรือเมื่อมีการร้องขอครั้งต่อไป';
 }

@@ -4636,4 +4636,16 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get learnings => 'Inzichten';
+
+  @override
+  String get autoDeletesAfterThreeDays => 'Automatisch verwijderd na 3 dagen.';
+
+  @override
+  String get knowledgeGraphDeletedSuccessfully => 'Kennisgrafiek succesvol verwijderd';
+
+  @override
+  String get exportStartedMayTakeFewSeconds => 'Export gestart. Dit kan enkele seconden duren...';
+
+  @override
+  String get knowledgeGraphDeleteDescription => 'Dit verwijdert alle afgeleide kennisgraafgegevens (knooppunten en verbindingen). Uw originele herinneringen blijven veilig. De grafiek wordt in de loop van de tijd of bij het volgende verzoek opnieuw opgebouwd.';
 }

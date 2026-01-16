@@ -4630,4 +4630,16 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get learnings => '배움';
+
+  @override
+  String get autoDeletesAfterThreeDays => '3일 후 자동 삭제됩니다.';
+
+  @override
+  String get knowledgeGraphDeletedSuccessfully => '지식 그래프가 성공적으로 삭제됨';
+
+  @override
+  String get exportStartedMayTakeFewSeconds => '내보내기가 시작되었습니다. 몇 초 정도 걸릴 수 있습니다...';
+
+  @override
+  String get knowledgeGraphDeleteDescription => '이렇게 하면 모든 파생 지식 그래프 데이터(노드 및 연결)가 삭제됩니다. 원본 기억은 안전하게 유지됩니다. 그래프는 시간이 지나면서 또는 다음 요청 시 다시 구축됩니다.';
 }

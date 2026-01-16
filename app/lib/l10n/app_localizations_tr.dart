@@ -4636,4 +4636,16 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get learnings => 'Öğrenilenler';
+
+  @override
+  String get autoDeletesAfterThreeDays => '3 gün sonra otomatik silinir.';
+
+  @override
+  String get knowledgeGraphDeletedSuccessfully => 'Bilgi Grafiği başarıyla silindi';
+
+  @override
+  String get exportStartedMayTakeFewSeconds => 'Dışa aktarma başladı. Bu birkaç saniye sürebilir...';
+
+  @override
+  String get knowledgeGraphDeleteDescription => 'Bu, tüm türetilmiş bilgi grafiği verilerini (düğümler ve bağlantılar) silecektir. Orijinal anılarınız güvende kalacaktır. Grafik zamanla veya bir sonraki istekte yeniden oluşturulacaktır.';
 }

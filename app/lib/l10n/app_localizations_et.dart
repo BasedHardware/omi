@@ -4636,4 +4636,16 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get learnings => 'Õpitu';
+
+  @override
+  String get autoDeletesAfterThreeDays => 'Kustutatakse automaatselt 3 päeva pärast.';
+
+  @override
+  String get knowledgeGraphDeletedSuccessfully => 'Teadmusgraaf edukalt kustutatud';
+
+  @override
+  String get exportStartedMayTakeFewSeconds => 'Eksport alustatud. See võib võtta mõne sekundi...';
+
+  @override
+  String get knowledgeGraphDeleteDescription => 'See kustutab kõik tuletatud teadmusgraafi andmed (sõlmed ja ühendused). Teie algsed mälestused jäävad turvaliseks. Graaf ehitatakse aja jooksul või järgmise päringu korral uuesti üles.';
 }

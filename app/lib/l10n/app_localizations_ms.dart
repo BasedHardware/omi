@@ -4636,4 +4636,16 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get learnings => 'Pembelajaran';
+
+  @override
+  String get autoDeletesAfterThreeDays => 'Padam automatik selepas 3 hari.';
+
+  @override
+  String get knowledgeGraphDeletedSuccessfully => 'Graf Pengetahuan berjaya dipadamkan';
+
+  @override
+  String get exportStartedMayTakeFewSeconds => 'Eksport dimulakan. Ini mungkin mengambil beberapa saat...';
+
+  @override
+  String get knowledgeGraphDeleteDescription => 'Ini akan memadamkan semua data graf pengetahuan terbitan (nod dan sambungan). Memori asal anda akan kekal selamat. Graf akan dibina semula dari semasa ke semasa atau atas permintaan seterusnya.';
 }

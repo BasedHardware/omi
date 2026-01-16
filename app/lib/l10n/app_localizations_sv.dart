@@ -4636,4 +4636,16 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get learnings => 'Lärdomar';
+
+  @override
+  String get autoDeletesAfterThreeDays => 'Raderas automatiskt efter 3 dagar.';
+
+  @override
+  String get knowledgeGraphDeletedSuccessfully => 'Kunskapsgraf borttagen';
+
+  @override
+  String get exportStartedMayTakeFewSeconds => 'Export startad. Detta kan ta några sekunder...';
+
+  @override
+  String get knowledgeGraphDeleteDescription => 'Detta kommer att radera alla härledda kunskapsgrafdata (noder och anslutningar). Dina ursprungliga minnen förblir säkra. Grafen kommer att byggas om över tid eller vid nästa begäran.';
 }

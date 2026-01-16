@@ -4643,4 +4643,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get learnings => 'Learnings';
+
+  @override
+  String get autoDeletesAfterThreeDays => 'Auto-deletes after 3 days.';
+
+  @override
+  String get knowledgeGraphDeletedSuccessfully => 'Knowledge Graph deleted successfully';
+
+  @override
+  String get exportStartedMayTakeFewSeconds => 'Export started. This may take a few seconds...';
+
+  @override
+  String get knowledgeGraphDeleteDescription => 'This will delete all derived knowledge graph data (nodes and connections). Your original memories will remain safe. The graph will be rebuilt over time or upon next request.';
 }

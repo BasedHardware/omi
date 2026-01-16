@@ -4636,4 +4636,16 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get learnings => 'Bài học';
+
+  @override
+  String get autoDeletesAfterThreeDays => 'Tự động xóa sau 3 ngày.';
+
+  @override
+  String get knowledgeGraphDeletedSuccessfully => 'Đã xóa Biểu đồ tri thức thành công';
+
+  @override
+  String get exportStartedMayTakeFewSeconds => 'Đã bắt đầu xuất. Quá trình này có thể mất vài giây...';
+
+  @override
+  String get knowledgeGraphDeleteDescription => 'Thao tác này sẽ xóa tất cả dữ liệu biểu đồ tri thức phái sinh (các nút và kết nối). Ký ức gốc của bạn sẽ vẫn an toàn. Biểu đồ sẽ được xây dựng lại theo thời gian hoặc khi có yêu cầu tiếp theo.';
 }

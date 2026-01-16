@@ -4636,4 +4636,16 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get learnings => 'Pembelajaran';
+
+  @override
+  String get autoDeletesAfterThreeDays => 'Hapus otomatis setelah 3 hari.';
+
+  @override
+  String get knowledgeGraphDeletedSuccessfully => 'Grafik Pengetahuan berhasil dihapus';
+
+  @override
+  String get exportStartedMayTakeFewSeconds => 'Ekspor dimulai. Ini mungkin memerlukan beberapa detik...';
+
+  @override
+  String get knowledgeGraphDeleteDescription => 'Ini akan menghapus semua data grafik pengetahuan turunan (node dan koneksi). Memori asli Anda akan tetap aman. Grafik akan dibangun kembali seiring waktu atau pada permintaan berikutnya.';
 }

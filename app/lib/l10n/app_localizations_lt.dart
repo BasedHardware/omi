@@ -4636,4 +4636,16 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get learnings => 'Išmokta';
+
+  @override
+  String get autoDeletesAfterThreeDays => 'Automatiškai ištrinami po 3 dienų.';
+
+  @override
+  String get knowledgeGraphDeletedSuccessfully => 'Žinių grafas sėkmingai ištrintas';
+
+  @override
+  String get exportStartedMayTakeFewSeconds => 'Eksportas pradėtas. Tai gali užtrukti kelias sekundes...';
+
+  @override
+  String get knowledgeGraphDeleteDescription => 'Tai ištrins visus išvestinius žinių grafo duomenis (mazgus ir ryšius). Jūsų originalūs prisiminimai išliks saugūs. Grafas bus atstatytas laikui bėgant arba kitą kartą pateikus užklausą.';
 }

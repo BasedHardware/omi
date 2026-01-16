@@ -4636,4 +4636,16 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get learnings => 'الدروس المستفادة';
+
+  @override
+  String get autoDeletesAfterThreeDays => 'يحذف تلقائيًا بعد 3 أيام.';
+
+  @override
+  String get knowledgeGraphDeletedSuccessfully => 'تم حذف الرسم البياني المعرفي بنجاح';
+
+  @override
+  String get exportStartedMayTakeFewSeconds => 'بدأ التصدير. قد يستغرق هذا بضع ثوانٍ...';
+
+  @override
+  String get knowledgeGraphDeleteDescription => 'سيؤدي هذا إلى حذف جميع بيانات الرسم البياني المعرفي المشتقة (العقد والاتصالات). ستبقى ذكرياتك الأصلية آمنة. سيتم إعادة بناء الرسم البياني بمرور الوقت أو عند الطلب التالي.';
 }

@@ -4636,4 +4636,16 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get learnings => 'Învățăminte';
+
+  @override
+  String get autoDeletesAfterThreeDays => 'Se șterge automat după 3 zile.';
+
+  @override
+  String get knowledgeGraphDeletedSuccessfully => 'Graficul cunoștințelor șters cu succes';
+
+  @override
+  String get exportStartedMayTakeFewSeconds => 'Export început. Poate dura câteva secunde...';
+
+  @override
+  String get knowledgeGraphDeleteDescription => 'Aceasta va șterge toate datele derivate ale graficului cunoștințelor (noduri și conexiuni). Amintirile tale originale vor rămâne în siguranță. Graficul va fi reconstruit în timp sau la următoarea solicitare.';
 }

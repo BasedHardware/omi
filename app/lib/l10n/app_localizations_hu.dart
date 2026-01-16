@@ -4636,4 +4636,16 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get learnings => 'Tanulságok';
+
+  @override
+  String get autoDeletesAfterThreeDays => 'Automatikusan törlődik 3 nap után.';
+
+  @override
+  String get knowledgeGraphDeletedSuccessfully => 'Tudásgráf sikeresen törölve';
+
+  @override
+  String get exportStartedMayTakeFewSeconds => 'Exportálás elindítva. Ez eltarthat néhány másodpercig...';
+
+  @override
+  String get knowledgeGraphDeleteDescription => 'Ez törli az összes származtatott tudásgráf adatot (csomópontokat és kapcsolatokat). Az eredeti emlékei biztonságban maradnak. A gráf idővel vagy a következő kérésnél újraépül.';
 }

@@ -8960,6 +8960,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Learnings'**
   String get learnings;
+
+  /// Developer settings - autoDeletesAfterThreeDays
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-deletes after 3 days.'**
+  String get autoDeletesAfterThreeDays;
+
+  /// Developer settings - knowledgeGraphDeletedSuccessfully
+  ///
+  /// In en, this message translates to:
+  /// **'Knowledge Graph deleted successfully'**
+  String get knowledgeGraphDeletedSuccessfully;
+
+  /// Developer settings - exportStartedMayTakeFewSeconds
+  ///
+  /// In en, this message translates to:
+  /// **'Export started. This may take a few seconds...'**
+  String get exportStartedMayTakeFewSeconds;
+
+  /// Developer settings - knowledgeGraphDeleteDescription
+  ///
+  /// In en, this message translates to:
+  /// **'This will delete all derived knowledge graph data (nodes and connections). Your original memories will remain safe. The graph will be rebuilt over time or upon next request.'**
+  String get knowledgeGraphDeleteDescription;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

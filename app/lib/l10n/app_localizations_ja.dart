@@ -4630,4 +4630,16 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get learnings => '学び';
+
+  @override
+  String get autoDeletesAfterThreeDays => '3日後に自動削除されます。';
+
+  @override
+  String get knowledgeGraphDeletedSuccessfully => 'ナレッジグラフが正常に削除されました';
+
+  @override
+  String get exportStartedMayTakeFewSeconds => 'エクスポートを開始しました。数秒かかる場合があります...';
+
+  @override
+  String get knowledgeGraphDeleteDescription => 'これにより、すべての派生ナレッジグラフデータ（ノードと接続）が削除されます。元の記憶は安全に保たれます。グラフは時間の経過とともに、または次のリクエスト時に再構築されます。';
 }

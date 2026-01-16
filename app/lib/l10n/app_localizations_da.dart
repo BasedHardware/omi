@@ -4636,4 +4636,16 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get learnings => 'Læringer';
+
+  @override
+  String get autoDeletesAfterThreeDays => 'Slettes automatisk efter 3 dage.';
+
+  @override
+  String get knowledgeGraphDeletedSuccessfully => 'Videngraf slettet';
+
+  @override
+  String get exportStartedMayTakeFewSeconds => 'Eksport startet. Dette kan tage et par sekunder...';
+
+  @override
+  String get knowledgeGraphDeleteDescription => 'Dette vil slette alle afledte videngrafdata (noder og forbindelser). Dine originale minder forbliver sikre. Grafen vil blive genopbygget over tid eller ved næste anmodning.';
 }

@@ -4630,4 +4630,16 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get learnings => '收获';
+
+  @override
+  String get autoDeletesAfterThreeDays => '3天后自动删除。';
+
+  @override
+  String get knowledgeGraphDeletedSuccessfully => '知识图谱已成功删除';
+
+  @override
+  String get exportStartedMayTakeFewSeconds => '导出已开始。这可能需要几秒钟...';
+
+  @override
+  String get knowledgeGraphDeleteDescription => '这将删除所有派生的知识图谱数据（节点和连接）。您的原始记忆将保持安全。图谱将随时间推移或在下次请求时重建。';
 }

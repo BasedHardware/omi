@@ -4636,4 +4636,16 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get learnings => 'Erkenntnisse';
+
+  @override
+  String get autoDeletesAfterThreeDays => 'Wird nach 3 Tagen automatisch gelöscht.';
+
+  @override
+  String get knowledgeGraphDeletedSuccessfully => 'Wissensgraph erfolgreich gelöscht';
+
+  @override
+  String get exportStartedMayTakeFewSeconds => 'Export gestartet. Dies kann einige Sekunden dauern...';
+
+  @override
+  String get knowledgeGraphDeleteDescription => 'Dies löscht alle abgeleiteten Wissensgraph-Daten (Knoten und Verbindungen). Ihre ursprünglichen Erinnerungen bleiben sicher. Der Graph wird im Laufe der Zeit oder bei der nächsten Anfrage neu erstellt.';
 }

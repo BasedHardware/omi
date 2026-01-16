@@ -4636,4 +4636,16 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get learnings => 'Висновки';
+
+  @override
+  String get autoDeletesAfterThreeDays => 'Автоматично видаляється через 3 дні.';
+
+  @override
+  String get knowledgeGraphDeletedSuccessfully => 'Граф знань успішно видалено';
+
+  @override
+  String get exportStartedMayTakeFewSeconds => 'Експорт розпочато. Це може зайняти кілька секунд...';
+
+  @override
+  String get knowledgeGraphDeleteDescription => 'Це видалить усі похідні дані графа знань (вузли та з\'єднання). Ваші оригінальні спогади залишаться в безпеці. Граф буде відновлено з часом або за наступним запитом.';
 }

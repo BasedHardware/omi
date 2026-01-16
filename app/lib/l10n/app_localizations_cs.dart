@@ -4636,4 +4636,16 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get learnings => 'Poznatky';
+
+  @override
+  String get autoDeletesAfterThreeDays => 'Automaticky smazáno po 3 dnech.';
+
+  @override
+  String get knowledgeGraphDeletedSuccessfully => 'Graf znalostí úspěšně smazán';
+
+  @override
+  String get exportStartedMayTakeFewSeconds => 'Export zahájen. Může to trvat několik sekund...';
+
+  @override
+  String get knowledgeGraphDeleteDescription => 'Tímto se odstraní všechna odvozená data grafu znalostí (uzly a spojení). Vaše původní vzpomínky zůstanou v bezpečí. Graf bude postupně obnoven nebo při dalším požadavku.';
 }

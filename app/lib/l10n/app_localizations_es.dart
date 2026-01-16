@@ -4636,4 +4636,16 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get learnings => 'Aprendizajes';
+
+  @override
+  String get autoDeletesAfterThreeDays => 'Se elimina automáticamente después de 3 días.';
+
+  @override
+  String get knowledgeGraphDeletedSuccessfully => 'Grafo de conocimiento eliminado correctamente';
+
+  @override
+  String get exportStartedMayTakeFewSeconds => 'Exportación iniciada. Esto puede tardar unos segundos...';
+
+  @override
+  String get knowledgeGraphDeleteDescription => 'Esto eliminará todos los datos derivados del grafo de conocimiento (nodos y conexiones). Tus recuerdos originales permanecerán seguros. El grafo se reconstruirá con el tiempo o en la próxima solicitud.';
 }

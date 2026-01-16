@@ -4636,4 +4636,16 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get learnings => 'Διδάγματα';
+
+  @override
+  String get autoDeletesAfterThreeDays => 'Αυτόματη διαγραφή μετά από 3 ημέρες.';
+
+  @override
+  String get knowledgeGraphDeletedSuccessfully => 'Ο γράφος γνώσεων διαγράφηκε επιτυχώς';
+
+  @override
+  String get exportStartedMayTakeFewSeconds => 'Η εξαγωγή ξεκίνησε. Αυτό μπορεί να διαρκέσει λίγα δευτερόλεπτα...';
+
+  @override
+  String get knowledgeGraphDeleteDescription => 'Αυτό θα διαγράψει όλα τα παράγωγα δεδομένα του γράφου γνώσεων (κόμβους και συνδέσεις). Οι αρχικές σας αναμνήσεις θα παραμείνουν ασφαλείς. Ο γράφος θα ανακατασκευαστεί σταδιακά ή κατόπιν αιτήματος.';
 }

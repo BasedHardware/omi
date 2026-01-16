@@ -4637,4 +4637,16 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get learnings => 'Выводы';
+
+  @override
+  String get autoDeletesAfterThreeDays => 'Автоматически удаляется через 3 дня.';
+
+  @override
+  String get knowledgeGraphDeletedSuccessfully => 'Граф знаний успешно удалён';
+
+  @override
+  String get exportStartedMayTakeFewSeconds => 'Экспорт начат. Это может занять несколько секунд...';
+
+  @override
+  String get knowledgeGraphDeleteDescription => 'Это удалит все производные данные графа знаний (узлы и связи). Ваши исходные воспоминания останутся в безопасности. Граф будет восстановлен со временем или по следующему запросу.';
 }
