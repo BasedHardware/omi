@@ -4464,4 +4464,168 @@ class AppLocalizationsEt extends AppLocalizations {
   String errorWithMessage(String error) {
     return 'Viga: $error';
   }
+
+  @override
+  String get omiTraining => 'Omi koolitus';
+
+  @override
+  String get trainingDataProgram => 'Treeningandmete programm';
+
+  @override
+  String get getOmiUnlimitedFree => 'Saage Omi Unlimited tasuta, panustades oma andmetega AI mudelite treenimisse.';
+
+  @override
+  String get trainingDataBullets =>
+      '• Teie andmed aitavad parandada AI mudeleid\n• Jagatakse ainult mittetundlikke andmeid\n• Täiesti läbipaistev protsess';
+
+  @override
+  String get learnMoreAtOmiTraining => 'Lisateave omi.me/training';
+
+  @override
+  String get agreeToContributeData => 'Ma mõistan ja nõustun panustama oma andmetega AI treenimisse';
+
+  @override
+  String get submitRequest => 'Esita taotlus';
+
+  @override
+  String get thankYouRequestUnderReview => 'Aitäh! Teie taotlus on läbivaatamisel. Teavitame teid pärast kinnitamist.';
+
+  @override
+  String planRemainsActiveUntil(String date) {
+    return 'Teie plaan jääb aktiivseks kuni $date. Pärast seda kaotate juurdepääsu piiramatutele funktsioonidele. Kas olete kindel?';
+  }
+
+  @override
+  String get confirmCancellation => 'Kinnita tühistamine';
+
+  @override
+  String get keepMyPlan => 'Säilita minu plaan';
+
+  @override
+  String get subscriptionSetToCancel => 'Teie tellimus on seatud tühistuma perioodi lõpus.';
+
+  @override
+  String get switchedToOnDevice => 'Lülitatud seadme transkriptsioonile';
+
+  @override
+  String get couldNotSwitchToFreePlan => 'Tasuta plaanile lülitumine ebaõnnestus. Palun proovi uuesti.';
+
+  @override
+  String get couldNotLoadPlans => 'Saadaolevaid plaane ei õnnestunud laadida. Palun proovi uuesti.';
+
+  @override
+  String get selectedPlanNotAvailable => 'Valitud plaan pole saadaval. Palun proovi uuesti.';
+
+  @override
+  String get upgradeToAnnualPlan => 'Täienda aastasele plaanile';
+
+  @override
+  String get importantBillingInfo => 'Oluline arvelduse teave:';
+
+  @override
+  String get monthlyPlanContinues => 'Teie praegune kuuplaan jätkub kuni arveldusperioodi lõpuni';
+
+  @override
+  String get paymentMethodCharged => 'Teie olemasolev makseviis debiteeritakse automaatselt, kui teie kuuplaan lõpeb';
+
+  @override
+  String get annualSubscriptionStarts => 'Teie 12-kuuline aastatellimus algab automaatselt pärast makse tegemist';
+
+  @override
+  String get thirteenMonthsCoverage => 'Saate kokku 13 kuud katvust (praegune kuu + 12 kuud aastas)';
+
+  @override
+  String get confirmUpgrade => 'Kinnita täiendus';
+
+  @override
+  String get confirmPlanChange => 'Kinnita plaani muutmine';
+
+  @override
+  String get confirmAndProceed => 'Kinnita ja jätka';
+
+  @override
+  String get upgradeScheduled => 'Täiendus planeeritud';
+
+  @override
+  String get changePlan => 'Muuda plaani';
+
+  @override
+  String get upgradeAlreadyScheduled => 'Teie täiendus aastasele plaanile on juba planeeritud';
+
+  @override
+  String get youAreOnUnlimitedPlan => 'Olete Piiramatul plaanil.';
+
+  @override
+  String get yourOmiUnleashed => 'Teie Omi, vabastatud. Minge piiramatu juurde lõputute võimaluste jaoks.';
+
+  @override
+  String planEndedOn(String date) {
+    return 'Teie plaan lõppes $date.\\nTellige uuesti kohe - teilt võetakse kohe tasu uue arveldusperioodi eest.';
+  }
+
+  @override
+  String planSetToCancelOn(String date) {
+    return 'Teie plaan on seatud tühistuma $date.\\nTellige uuesti kohe, et säilitada oma eelised - tasu ei võeta kuni $date.';
+  }
+
+  @override
+  String get annualPlanStartsAutomatically => 'Teie aastane plaan algab automaatselt, kui teie kuuplaan lõpeb.';
+
+  @override
+  String planRenewsOn(String date) {
+    return 'Teie plaan uueneb $date.';
+  }
+
+  @override
+  String get unlimitedConversations => 'Piiramatult vestlusi';
+
+  @override
+  String get askOmiAnything => 'Küsige Omilt kõike oma elu kohta';
+
+  @override
+  String get unlockOmiInfiniteMemory => 'Avage Omi lõpmatu mälu';
+
+  @override
+  String get youreOnAnnualPlan => 'Olete aastasel plaanil';
+
+  @override
+  String get alreadyBestValuePlan => 'Teil on juba parima väärtusega plaan. Muudatusi pole vaja.';
+
+  @override
+  String get unableToLoadPlans => 'Plaane ei saa laadida';
+
+  @override
+  String get checkConnectionTryAgain => 'Palun kontrollige ühendust ja proovige uuesti';
+
+  @override
+  String get useFreePlan => 'Kasuta tasuta plaani';
+
+  @override
+  String get continueText => 'Jätka';
+
+  @override
+  String get resubscribe => 'Telli uuesti';
+
+  @override
+  String get couldNotOpenPaymentSettings => 'Makseseadeid ei saanud avada. Palun proovi uuesti.';
+
+  @override
+  String get managePaymentMethod => 'Halda makseviisi';
+
+  @override
+  String get cancelSubscription => 'Tühista tellimus';
+
+  @override
+  String endsOnDate(String date) {
+    return 'Lõpeb $date';
+  }
+
+  @override
+  String get active => 'Aktiivne';
+
+  @override
+  String get freePlan => 'Tasuta plaan';
+
+  @override
+  String get configure => 'Seadista';
 }

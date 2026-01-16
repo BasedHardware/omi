@@ -4439,4 +4439,170 @@ class AppLocalizationsTh extends AppLocalizations {
   String errorWithMessage(String error) {
     return 'ข้อผิดพลาด: $error';
   }
+
+  @override
+  String get omiTraining => 'การฝึก Omi';
+
+  @override
+  String get trainingDataProgram => 'โปรแกรมข้อมูลการฝึก';
+
+  @override
+  String get getOmiUnlimitedFree => 'รับ Omi Unlimited ฟรีโดยการมีส่วนร่วมข้อมูลของคุณเพื่อฝึกโมเดล AI';
+
+  @override
+  String get trainingDataBullets =>
+      '• ข้อมูลของคุณช่วยปรับปรุงโมเดล AI\n• แชร์เฉพาะข้อมูลที่ไม่ละเอียดอ่อน\n• กระบวนการที่โปร่งใสอย่างสมบูรณ์';
+
+  @override
+  String get learnMoreAtOmiTraining => 'เรียนรู้เพิ่มเติมที่ omi.me/training';
+
+  @override
+  String get agreeToContributeData => 'ฉันเข้าใจและยินยอมที่จะมีส่วนร่วมข้อมูลของฉันสำหรับการฝึก AI';
+
+  @override
+  String get submitRequest => 'ส่งคำขอ';
+
+  @override
+  String get thankYouRequestUnderReview =>
+      'ขอบคุณ! คำขอของคุณอยู่ระหว่างการตรวจสอบ เราจะแจ้งให้คุณทราบเมื่อได้รับการอนุมัติ';
+
+  @override
+  String planRemainsActiveUntil(String date) {
+    return 'แพ็คเกจของคุณจะยังคงใช้งานได้จนถึง $date หลังจากนั้น คุณจะสูญเสียการเข้าถึงฟีเจอร์ไม่จำกัด คุณแน่ใจหรือไม่?';
+  }
+
+  @override
+  String get confirmCancellation => 'ยืนยันการยกเลิก';
+
+  @override
+  String get keepMyPlan => 'เก็บแพ็คเกจของฉัน';
+
+  @override
+  String get subscriptionSetToCancel => 'การสมัครของคุณถูกตั้งค่าให้ยกเลิกเมื่อสิ้นสุดรอบ';
+
+  @override
+  String get switchedToOnDevice => 'เปลี่ยนเป็นการถอดความบนอุปกรณ์';
+
+  @override
+  String get couldNotSwitchToFreePlan => 'ไม่สามารถเปลี่ยนเป็นแพ็คเกจฟรีได้ กรุณาลองอีกครั้ง';
+
+  @override
+  String get couldNotLoadPlans => 'ไม่สามารถโหลดแพ็คเกจที่มีได้ กรุณาลองอีกครั้ง';
+
+  @override
+  String get selectedPlanNotAvailable => 'แพ็คเกจที่เลือกไม่พร้อมใช้งาน กรุณาลองอีกครั้ง';
+
+  @override
+  String get upgradeToAnnualPlan => 'อัปเกรดเป็นแพ็คเกจรายปี';
+
+  @override
+  String get importantBillingInfo => 'ข้อมูลการเรียกเก็บเงินที่สำคัญ:';
+
+  @override
+  String get monthlyPlanContinues => 'แพ็คเกจรายเดือนปัจจุบันของคุณจะดำเนินต่อไปจนถึงสิ้นสุดรอบการเรียกเก็บเงิน';
+
+  @override
+  String get paymentMethodCharged =>
+      'วิธีการชำระเงินที่มีอยู่ของคุณจะถูกเรียกเก็บโดยอัตโนมัติเมื่อแพ็คเกจรายเดือนของคุณสิ้นสุด';
+
+  @override
+  String get annualSubscriptionStarts => 'การสมัครรายปี 12 เดือนของคุณจะเริ่มโดยอัตโนมัติหลังจากการเรียกเก็บเงิน';
+
+  @override
+  String get thirteenMonthsCoverage => 'คุณจะได้รับความคุ้มครองรวม 13 เดือน (เดือนปัจจุบัน + 12 เดือนรายปี)';
+
+  @override
+  String get confirmUpgrade => 'ยืนยันการอัปเกรด';
+
+  @override
+  String get confirmPlanChange => 'ยืนยันการเปลี่ยนแพ็คเกจ';
+
+  @override
+  String get confirmAndProceed => 'ยืนยันและดำเนินการต่อ';
+
+  @override
+  String get upgradeScheduled => 'กำหนดการอัปเกรด';
+
+  @override
+  String get changePlan => 'เปลี่ยนแพ็คเกจ';
+
+  @override
+  String get upgradeAlreadyScheduled => 'การอัปเกรดของคุณไปยังแพ็คเกจรายปีถูกกำหนดไว้แล้ว';
+
+  @override
+  String get youAreOnUnlimitedPlan => 'คุณอยู่ในแพ็คเกจ Unlimited';
+
+  @override
+  String get yourOmiUnleashed => 'Omi ของคุณ ปลดปล่อย ไปสู่ Unlimited เพื่อความเป็นไปได้ไม่สิ้นสุด';
+
+  @override
+  String planEndedOn(String date) {
+    return 'แพ็คเกจของคุณสิ้นสุดเมื่อ $date\\nสมัครใหม่ตอนนี้ - คุณจะถูกเรียกเก็บเงินทันทีสำหรับรอบการเรียกเก็บเงินใหม่';
+  }
+
+  @override
+  String planSetToCancelOn(String date) {
+    return 'แพ็คเกจของคุณถูกตั้งค่าให้ยกเลิกในวันที่ $date\\nสมัครใหม่ตอนนี้เพื่อรักษาสิทธิประโยชน์ - ไม่มีค่าใช้จ่ายจนถึง $date';
+  }
+
+  @override
+  String get annualPlanStartsAutomatically => 'แพ็คเกจรายปีของคุณจะเริ่มโดยอัตโนมัติเมื่อแพ็คเกจรายเดือนของคุณสิ้นสุด';
+
+  @override
+  String planRenewsOn(String date) {
+    return 'แพ็คเกจของคุณต่ออายุในวันที่ $date';
+  }
+
+  @override
+  String get unlimitedConversations => 'บทสนทนาไม่จำกัด';
+
+  @override
+  String get askOmiAnything => 'ถาม Omi อะไรก็ได้เกี่ยวกับชีวิตของคุณ';
+
+  @override
+  String get unlockOmiInfiniteMemory => 'ปลดล็อกหน่วยความจำไม่สิ้นสุดของ Omi';
+
+  @override
+  String get youreOnAnnualPlan => 'คุณอยู่ในแพ็คเกจรายปี';
+
+  @override
+  String get alreadyBestValuePlan => 'คุณมีแพ็คเกจที่คุ้มค่าที่สุดแล้ว ไม่จำเป็นต้องเปลี่ยนแปลง';
+
+  @override
+  String get unableToLoadPlans => 'ไม่สามารถโหลดแพ็คเกจได้';
+
+  @override
+  String get checkConnectionTryAgain => 'กรุณาตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง';
+
+  @override
+  String get useFreePlan => 'ใช้แพ็คเกจฟรี';
+
+  @override
+  String get continueText => 'ดำเนินการต่อ';
+
+  @override
+  String get resubscribe => 'สมัครใหม่';
+
+  @override
+  String get couldNotOpenPaymentSettings => 'ไม่สามารถเปิดการตั้งค่าการชำระเงินได้ กรุณาลองอีกครั้ง';
+
+  @override
+  String get managePaymentMethod => 'จัดการวิธีการชำระเงิน';
+
+  @override
+  String get cancelSubscription => 'ยกเลิกการสมัคร';
+
+  @override
+  String endsOnDate(String date) {
+    return 'สิ้นสุดวันที่ $date';
+  }
+
+  @override
+  String get active => 'ใช้งานอยู่';
+
+  @override
+  String get freePlan => 'แพ็คเกจฟรี';
+
+  @override
+  String get configure => 'กำหนดค่า';
 }

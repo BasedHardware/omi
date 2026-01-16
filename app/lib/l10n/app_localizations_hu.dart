@@ -4486,4 +4486,170 @@ class AppLocalizationsHu extends AppLocalizations {
   String errorWithMessage(String error) {
     return 'Hiba: $error';
   }
+
+  @override
+  String get omiTraining => 'Omi képzés';
+
+  @override
+  String get trainingDataProgram => 'Képzési adatprogram';
+
+  @override
+  String get getOmiUnlimitedFree =>
+      'Szerezze meg az Omi Unlimited-et ingyen, ha hozzájárul adataival az AI modellek képzéséhez.';
+
+  @override
+  String get trainingDataBullets =>
+      '• Az adatai segítenek az AI modellek fejlesztésében\n• Csak nem érzékeny adatok kerülnek megosztásra\n• Teljesen átlátható folyamat';
+
+  @override
+  String get learnMoreAtOmiTraining => 'További információ: omi.me/training';
+
+  @override
+  String get agreeToContributeData => 'Megértem és beleegyezem, hogy hozzájáruljak adataimmal az AI képzéséhez';
+
+  @override
+  String get submitRequest => 'Kérelem beküldése';
+
+  @override
+  String get thankYouRequestUnderReview => 'Köszönjük! Kérelme felülvizsgálat alatt áll. Értesítjük a jóváhagyás után.';
+
+  @override
+  String planRemainsActiveUntil(String date) {
+    return 'A csomagja $date-ig aktív marad. Ezután elveszíti a korlátlan funkciókhoz való hozzáférést. Biztos benne?';
+  }
+
+  @override
+  String get confirmCancellation => 'Lemondás megerősítése';
+
+  @override
+  String get keepMyPlan => 'Csomagom megtartása';
+
+  @override
+  String get subscriptionSetToCancel => 'Az előfizetése az időszak végén törlésre van beállítva.';
+
+  @override
+  String get switchedToOnDevice => 'Eszközön történő átírásra váltva';
+
+  @override
+  String get couldNotSwitchToFreePlan => 'Nem sikerült váltani az ingyenes csomagra. Kérjük, próbálja újra.';
+
+  @override
+  String get couldNotLoadPlans => 'Nem sikerült betölteni az elérhető csomagokat. Kérjük, próbálja újra.';
+
+  @override
+  String get selectedPlanNotAvailable => 'A kiválasztott csomag nem érhető el. Kérjük, próbálja újra.';
+
+  @override
+  String get upgradeToAnnualPlan => 'Frissítés éves csomagra';
+
+  @override
+  String get importantBillingInfo => 'Fontos számlázási információk:';
+
+  @override
+  String get monthlyPlanContinues => 'Jelenlegi havi csomagja a számlázási időszak végéig folytatódik';
+
+  @override
+  String get paymentMethodCharged =>
+      'A meglévő fizetési módja automatikusan terhelésre kerül, amikor a havi csomagja lejár';
+
+  @override
+  String get annualSubscriptionStarts => '12 hónapos éves előfizetése automatikusan elindul a terhelés után';
+
+  @override
+  String get thirteenMonthsCoverage => 'Összesen 13 hónap lefedettséget kap (jelenlegi hónap + 12 hónap éves)';
+
+  @override
+  String get confirmUpgrade => 'Frissítés megerősítése';
+
+  @override
+  String get confirmPlanChange => 'Csomagváltás megerősítése';
+
+  @override
+  String get confirmAndProceed => 'Megerősítés és folytatás';
+
+  @override
+  String get upgradeScheduled => 'Frissítés ütemezve';
+
+  @override
+  String get changePlan => 'Csomag váltás';
+
+  @override
+  String get upgradeAlreadyScheduled => 'Az éves csomagra való frissítése már ütemezve van';
+
+  @override
+  String get youAreOnUnlimitedPlan => 'Ön a Korlátlan csomagban van.';
+
+  @override
+  String get yourOmiUnleashed => 'Az Omi-ja, szabadjára engedve. Váljon korlátlanná a végtelen lehetőségekért.';
+
+  @override
+  String planEndedOn(String date) {
+    return 'A csomagja $date-án lejárt.\\nIratkozzon fel újra most - azonnal felszámítjuk az új számlázási időszakot.';
+  }
+
+  @override
+  String planSetToCancelOn(String date) {
+    return 'A csomagja $date-án törlésre van beállítva.\\nIratkozzon fel újra most, hogy megtartsa előnyeit - nincs díj $date-ig.';
+  }
+
+  @override
+  String get annualPlanStartsAutomatically => 'Az éves csomagja automatikusan elindul, amikor a havi csomagja lejár.';
+
+  @override
+  String planRenewsOn(String date) {
+    return 'A csomagja $date-án megújul.';
+  }
+
+  @override
+  String get unlimitedConversations => 'Korlátlan beszélgetések';
+
+  @override
+  String get askOmiAnything => 'Kérdezzen Omi-tól bármit az életéről';
+
+  @override
+  String get unlockOmiInfiniteMemory => 'Oldja fel Omi végtelen memóriáját';
+
+  @override
+  String get youreOnAnnualPlan => 'Ön az éves csomagon van';
+
+  @override
+  String get alreadyBestValuePlan => 'Már a legjobb értékű csomagja van. Nincs szükség változtatásra.';
+
+  @override
+  String get unableToLoadPlans => 'Nem sikerült betölteni a csomagokat';
+
+  @override
+  String get checkConnectionTryAgain => 'Ellenőrizze a kapcsolatot és próbálja újra';
+
+  @override
+  String get useFreePlan => 'Ingyenes csomag használata';
+
+  @override
+  String get continueText => 'Folytatás';
+
+  @override
+  String get resubscribe => 'Újra feliratkozás';
+
+  @override
+  String get couldNotOpenPaymentSettings => 'Nem sikerült megnyitni a fizetési beállításokat. Kérjük, próbálja újra.';
+
+  @override
+  String get managePaymentMethod => 'Fizetési mód kezelése';
+
+  @override
+  String get cancelSubscription => 'Előfizetés lemondása';
+
+  @override
+  String endsOnDate(String date) {
+    return 'Lejár: $date';
+  }
+
+  @override
+  String get active => 'Aktív';
+
+  @override
+  String get freePlan => 'Ingyenes csomag';
+
+  @override
+  String get configure => 'Beállítás';
 }

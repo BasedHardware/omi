@@ -4487,4 +4487,174 @@ class AppLocalizationsCa extends AppLocalizations {
   String errorWithMessage(String error) {
     return 'Error: $error';
   }
+
+  @override
+  String get omiTraining => 'Entrenament d\'Omi';
+
+  @override
+  String get trainingDataProgram => 'Programa de dades d\'entrenament';
+
+  @override
+  String get getOmiUnlimitedFree =>
+      'Obtén Omi Il·limitat gratis contribuint les teves dades per entrenar models d\'IA.';
+
+  @override
+  String get trainingDataBullets =>
+      '• Les teves dades ajuden a millorar els models d\'IA\n• Només es comparteixen dades no sensibles\n• Procés totalment transparent';
+
+  @override
+  String get learnMoreAtOmiTraining => 'Aprèn més a omi.me/training';
+
+  @override
+  String get agreeToContributeData => 'Entenc i accepto contribuir amb les meves dades per a l\'entrenament d\'IA';
+
+  @override
+  String get submitRequest => 'Enviar sol·licitud';
+
+  @override
+  String get thankYouRequestUnderReview =>
+      'Gràcies! La teva sol·licitud està en revisió. T\'avisarem quan sigui aprovada.';
+
+  @override
+  String planRemainsActiveUntil(String date) {
+    return 'El teu pla romandrà actiu fins $date. Després, perdràs l\'accés a les funcions il·limitades. Estàs segur?';
+  }
+
+  @override
+  String get confirmCancellation => 'Confirmar cancel·lació';
+
+  @override
+  String get keepMyPlan => 'Conservar el meu pla';
+
+  @override
+  String get subscriptionSetToCancel => 'La teva subscripció està configurada per cancel·lar-se al final del període.';
+
+  @override
+  String get switchedToOnDevice => 'Canviat a transcripció al dispositiu';
+
+  @override
+  String get couldNotSwitchToFreePlan => 'No s\'ha pogut canviar al pla gratuït. Si us plau, torna-ho a provar.';
+
+  @override
+  String get couldNotLoadPlans => 'No s\'han pogut carregar els plans disponibles. Si us plau, torna-ho a provar.';
+
+  @override
+  String get selectedPlanNotAvailable => 'El pla seleccionat no està disponible. Si us plau, torna-ho a provar.';
+
+  @override
+  String get upgradeToAnnualPlan => 'Actualitzar al pla anual';
+
+  @override
+  String get importantBillingInfo => 'Informació de facturació important:';
+
+  @override
+  String get monthlyPlanContinues => 'El teu pla mensual actual continuarà fins al final del període de facturació';
+
+  @override
+  String get paymentMethodCharged =>
+      'El teu mètode de pagament existent es cobrarà automàticament quan acabi el teu pla mensual';
+
+  @override
+  String get annualSubscriptionStarts =>
+      'La teva subscripció anual de 12 mesos començarà automàticament després del cobrament';
+
+  @override
+  String get thirteenMonthsCoverage => 'Obtindràs 13 mesos de cobertura en total (mes actual + 12 mesos anuals)';
+
+  @override
+  String get confirmUpgrade => 'Confirmar actualització';
+
+  @override
+  String get confirmPlanChange => 'Confirmar canvi de pla';
+
+  @override
+  String get confirmAndProceed => 'Confirmar i continuar';
+
+  @override
+  String get upgradeScheduled => 'Actualització programada';
+
+  @override
+  String get changePlan => 'Canviar pla';
+
+  @override
+  String get upgradeAlreadyScheduled => 'La teva actualització al pla anual ja està programada';
+
+  @override
+  String get youAreOnUnlimitedPlan => 'Estàs al pla Il·limitat.';
+
+  @override
+  String get yourOmiUnleashed => 'El teu Omi, deslliurat. Fes-te il·limitat per a possibilitats infinites.';
+
+  @override
+  String planEndedOn(String date) {
+    return 'El teu pla va acabar el $date.\\nTorna a subscriure\'t ara - se\'t cobrarà immediatament per un nou període de facturació.';
+  }
+
+  @override
+  String planSetToCancelOn(String date) {
+    return 'El teu pla està configurat per cancel·lar-se el $date.\\nTorna a subscriure\'t ara per mantenir els teus beneficis - sense càrrec fins $date.';
+  }
+
+  @override
+  String get annualPlanStartsAutomatically =>
+      'El teu pla anual començarà automàticament quan acabi el teu pla mensual.';
+
+  @override
+  String planRenewsOn(String date) {
+    return 'El teu pla es renova el $date.';
+  }
+
+  @override
+  String get unlimitedConversations => 'Converses il·limitades';
+
+  @override
+  String get askOmiAnything => 'Pregunta a Omi qualsevol cosa sobre la teva vida';
+
+  @override
+  String get unlockOmiInfiniteMemory => 'Desbloqueja la memòria infinita d\'Omi';
+
+  @override
+  String get youreOnAnnualPlan => 'Estàs al pla anual';
+
+  @override
+  String get alreadyBestValuePlan => 'Ja tens el pla amb millor valor. No cal fer canvis.';
+
+  @override
+  String get unableToLoadPlans => 'No es poden carregar els plans';
+
+  @override
+  String get checkConnectionTryAgain => 'Comprova la connexió i torna-ho a provar';
+
+  @override
+  String get useFreePlan => 'Utilitzar pla gratuït';
+
+  @override
+  String get continueText => 'Continuar';
+
+  @override
+  String get resubscribe => 'Tornar a subscriure';
+
+  @override
+  String get couldNotOpenPaymentSettings =>
+      'No s\'han pogut obrir els ajustos de pagament. Si us plau, torna-ho a provar.';
+
+  @override
+  String get managePaymentMethod => 'Gestionar mètode de pagament';
+
+  @override
+  String get cancelSubscription => 'Cancel·lar subscripció';
+
+  @override
+  String endsOnDate(String date) {
+    return 'Acaba el $date';
+  }
+
+  @override
+  String get active => 'Actiu';
+
+  @override
+  String get freePlan => 'Pla gratuït';
+
+  @override
+  String get configure => 'Configurar';
 }

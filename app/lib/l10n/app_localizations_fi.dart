@@ -4461,4 +4461,171 @@ class AppLocalizationsFi extends AppLocalizations {
   String errorWithMessage(String error) {
     return 'Virhe: $error';
   }
+
+  @override
+  String get omiTraining => 'Omi-koulutus';
+
+  @override
+  String get trainingDataProgram => 'Koulutustietojen ohjelma';
+
+  @override
+  String get getOmiUnlimitedFree =>
+      'Saat Omi Unlimited -tilauksen ilmaiseksi antamalla tietosi AI-mallien kouluttamiseen.';
+
+  @override
+  String get trainingDataBullets =>
+      '• Tietosi auttavat parantamaan AI-malleja\n• Vain ei-arkaluonteiset tiedot jaetaan\n• Täysin läpinäkyvä prosessi';
+
+  @override
+  String get learnMoreAtOmiTraining => 'Lue lisää osoitteessa omi.me/training';
+
+  @override
+  String get agreeToContributeData => 'Ymmärrän ja suostun antamaan tietoni AI:n kouluttamiseen';
+
+  @override
+  String get submitRequest => 'Lähetä pyyntö';
+
+  @override
+  String get thankYouRequestUnderReview =>
+      'Kiitos! Pyyntösi on tarkistettavana. Ilmoitamme sinulle hyväksynnän jälkeen.';
+
+  @override
+  String planRemainsActiveUntil(String date) {
+    return 'Tilauksesi pysyy aktiivisena $date asti. Sen jälkeen menetät pääsyn rajoittamattomiin ominaisuuksiin. Oletko varma?';
+  }
+
+  @override
+  String get confirmCancellation => 'Vahvista peruutus';
+
+  @override
+  String get keepMyPlan => 'Säilytä tilaukseni';
+
+  @override
+  String get subscriptionSetToCancel => 'Tilauksesi on asetettu peruuntumaan jakson lopussa.';
+
+  @override
+  String get switchedToOnDevice => 'Vaihdettu laitteen transkriptioon';
+
+  @override
+  String get couldNotSwitchToFreePlan => 'Ilmaiseen tilaukseen vaihtaminen epäonnistui. Yritä uudelleen.';
+
+  @override
+  String get couldNotLoadPlans => 'Saatavilla olevia tilauksia ei voitu ladata. Yritä uudelleen.';
+
+  @override
+  String get selectedPlanNotAvailable => 'Valittu tilaus ei ole saatavilla. Yritä uudelleen.';
+
+  @override
+  String get upgradeToAnnualPlan => 'Päivitä vuositilaukseen';
+
+  @override
+  String get importantBillingInfo => 'Tärkeää laskutustietoa:';
+
+  @override
+  String get monthlyPlanContinues => 'Nykyinen kuukausitilauksesi jatkuu laskutusjakson loppuun asti';
+
+  @override
+  String get paymentMethodCharged => 'Nykyinen maksutapasi veloitetaan automaattisesti kuukausitilauksesi päättyessä';
+
+  @override
+  String get annualSubscriptionStarts => '12 kuukauden vuositilauksesi alkaa automaattisesti veloituksen jälkeen';
+
+  @override
+  String get thirteenMonthsCoverage =>
+      'Saat yhteensä 13 kuukauden kattavuuden (nykyinen kuukausi + 12 kuukautta vuosittain)';
+
+  @override
+  String get confirmUpgrade => 'Vahvista päivitys';
+
+  @override
+  String get confirmPlanChange => 'Vahvista tilauksen muutos';
+
+  @override
+  String get confirmAndProceed => 'Vahvista ja jatka';
+
+  @override
+  String get upgradeScheduled => 'Päivitys ajoitettu';
+
+  @override
+  String get changePlan => 'Vaihda tilausta';
+
+  @override
+  String get upgradeAlreadyScheduled => 'Päivityksesi vuositilaukseen on jo ajoitettu';
+
+  @override
+  String get youAreOnUnlimitedPlan => 'Sinulla on Rajoittamaton tilaus.';
+
+  @override
+  String get yourOmiUnleashed => 'Omi vapaana. Siirry rajoittamattomaan loputtomien mahdollisuuksien saavuttamiseksi.';
+
+  @override
+  String planEndedOn(String date) {
+    return 'Tilauksesi päättyi $date.\\nTilaa uudelleen nyt - sinulta veloitetaan välittömästi uudesta laskutusjaksosta.';
+  }
+
+  @override
+  String planSetToCancelOn(String date) {
+    return 'Tilauksesi on asetettu peruuntumaan $date.\\nTilaa uudelleen nyt säilyttääksesi edut - ei veloitusta ennen $date.';
+  }
+
+  @override
+  String get annualPlanStartsAutomatically => 'Vuositilauksesi alkaa automaattisesti, kun kuukausitilauksesi päättyy.';
+
+  @override
+  String planRenewsOn(String date) {
+    return 'Tilauksesi uusitaan $date.';
+  }
+
+  @override
+  String get unlimitedConversations => 'Rajoittamattomat keskustelut';
+
+  @override
+  String get askOmiAnything => 'Kysy Omilta mitä tahansa elämästäsi';
+
+  @override
+  String get unlockOmiInfiniteMemory => 'Avaa Omin rajaton muisti';
+
+  @override
+  String get youreOnAnnualPlan => 'Sinulla on vuositilaus';
+
+  @override
+  String get alreadyBestValuePlan => 'Sinulla on jo paras hinta-laatusuhteen tilaus. Muutoksia ei tarvita.';
+
+  @override
+  String get unableToLoadPlans => 'Tilauksia ei voida ladata';
+
+  @override
+  String get checkConnectionTryAgain => 'Tarkista yhteytesi ja yritä uudelleen';
+
+  @override
+  String get useFreePlan => 'Käytä ilmaista tilausta';
+
+  @override
+  String get continueText => 'Jatka';
+
+  @override
+  String get resubscribe => 'Tilaa uudelleen';
+
+  @override
+  String get couldNotOpenPaymentSettings => 'Maksuasetuksia ei voitu avata. Yritä uudelleen.';
+
+  @override
+  String get managePaymentMethod => 'Hallitse maksutapaa';
+
+  @override
+  String get cancelSubscription => 'Peruuta tilaus';
+
+  @override
+  String endsOnDate(String date) {
+    return 'Päättyy $date';
+  }
+
+  @override
+  String get active => 'Aktiivinen';
+
+  @override
+  String get freePlan => 'Ilmainen tilaus';
+
+  @override
+  String get configure => 'Määritä';
 }

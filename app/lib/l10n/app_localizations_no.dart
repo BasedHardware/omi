@@ -4462,4 +4462,172 @@ class AppLocalizationsNo extends AppLocalizations {
   String errorWithMessage(String error) {
     return 'Feil: $error';
   }
+
+  @override
+  String get omiTraining => 'Omi-trening';
+
+  @override
+  String get trainingDataProgram => 'Treningsdataprogram';
+
+  @override
+  String get getOmiUnlimitedFree => 'Få Omi Unlimited gratis ved å bidra med dataene dine til å trene AI-modeller.';
+
+  @override
+  String get trainingDataBullets =>
+      '• Dataene dine hjelper med å forbedre AI-modeller\n• Bare ikke-sensitive data deles\n• Fullstendig gjennomsiktig prosess';
+
+  @override
+  String get learnMoreAtOmiTraining => 'Lær mer på omi.me/training';
+
+  @override
+  String get agreeToContributeData => 'Jeg forstår og godtar å bidra med mine data for AI-trening';
+
+  @override
+  String get submitRequest => 'Send forespørsel';
+
+  @override
+  String get thankYouRequestUnderReview =>
+      'Takk! Forespørselen din er under vurdering. Vi varsler deg når den er godkjent.';
+
+  @override
+  String planRemainsActiveUntil(String date) {
+    return 'Abonnementet ditt forblir aktivt til $date. Etter det mister du tilgang til de ubegrensede funksjonene. Er du sikker?';
+  }
+
+  @override
+  String get confirmCancellation => 'Bekreft kansellering';
+
+  @override
+  String get keepMyPlan => 'Behold mitt abonnement';
+
+  @override
+  String get subscriptionSetToCancel => 'Abonnementet ditt er satt til å bli kansellert ved slutten av perioden.';
+
+  @override
+  String get switchedToOnDevice => 'Byttet til transkribering på enheten';
+
+  @override
+  String get couldNotSwitchToFreePlan => 'Kunne ikke bytte til gratis abonnement. Prøv igjen.';
+
+  @override
+  String get couldNotLoadPlans => 'Kunne ikke laste tilgjengelige abonnementer. Prøv igjen.';
+
+  @override
+  String get selectedPlanNotAvailable => 'Valgt abonnement er ikke tilgjengelig. Prøv igjen.';
+
+  @override
+  String get upgradeToAnnualPlan => 'Oppgrader til årlig abonnement';
+
+  @override
+  String get importantBillingInfo => 'Viktig faktureringsinformasjon:';
+
+  @override
+  String get monthlyPlanContinues =>
+      'Ditt nåværende månedlige abonnement fortsetter til slutten av faktureringsperioden';
+
+  @override
+  String get paymentMethodCharged =>
+      'Din eksisterende betalingsmetode vil automatisk bli belastet når ditt månedlige abonnement avsluttes';
+
+  @override
+  String get annualSubscriptionStarts => 'Ditt 12-måneders årlige abonnement starter automatisk etter belastningen';
+
+  @override
+  String get thirteenMonthsCoverage => 'Du får totalt 13 måneders dekning (nåværende måned + 12 måneder årlig)';
+
+  @override
+  String get confirmUpgrade => 'Bekreft oppgradering';
+
+  @override
+  String get confirmPlanChange => 'Bekreft planendring';
+
+  @override
+  String get confirmAndProceed => 'Bekreft og fortsett';
+
+  @override
+  String get upgradeScheduled => 'Oppgradering planlagt';
+
+  @override
+  String get changePlan => 'Endre abonnement';
+
+  @override
+  String get upgradeAlreadyScheduled => 'Oppgraderingen din til årsabonnementet er allerede planlagt';
+
+  @override
+  String get youAreOnUnlimitedPlan => 'Du er på det ubegrensede abonnementet.';
+
+  @override
+  String get yourOmiUnleashed => 'Din Omi, frigjort. Bli ubegrenset for uendelige muligheter.';
+
+  @override
+  String planEndedOn(String date) {
+    return 'Abonnementet ditt ble avsluttet $date.\\nAbonner på nytt nå - du blir belastet umiddelbart for en ny faktureringsperiode.';
+  }
+
+  @override
+  String planSetToCancelOn(String date) {
+    return 'Abonnementet ditt er satt til å bli kansellert $date.\\nAbonner på nytt nå for å beholde fordelene - ingen belastning til $date.';
+  }
+
+  @override
+  String get annualPlanStartsAutomatically =>
+      'Ditt årlige abonnement starter automatisk når ditt månedlige abonnement avsluttes.';
+
+  @override
+  String planRenewsOn(String date) {
+    return 'Abonnementet ditt fornyes $date.';
+  }
+
+  @override
+  String get unlimitedConversations => 'Ubegrensede samtaler';
+
+  @override
+  String get askOmiAnything => 'Spør Omi om hva som helst om livet ditt';
+
+  @override
+  String get unlockOmiInfiniteMemory => 'Lås opp Omis uendelige hukommelse';
+
+  @override
+  String get youreOnAnnualPlan => 'Du er på årsabonnementet';
+
+  @override
+  String get alreadyBestValuePlan => 'Du har allerede det beste verdi-abonnementet. Ingen endringer nødvendig.';
+
+  @override
+  String get unableToLoadPlans => 'Kan ikke laste abonnementer';
+
+  @override
+  String get checkConnectionTryAgain => 'Sjekk tilkoblingen din og prøv igjen';
+
+  @override
+  String get useFreePlan => 'Bruk gratis abonnement';
+
+  @override
+  String get continueText => 'Fortsett';
+
+  @override
+  String get resubscribe => 'Abonner på nytt';
+
+  @override
+  String get couldNotOpenPaymentSettings => 'Kunne ikke åpne betalingsinnstillinger. Prøv igjen.';
+
+  @override
+  String get managePaymentMethod => 'Administrer betalingsmetode';
+
+  @override
+  String get cancelSubscription => 'Avbryt abonnement';
+
+  @override
+  String endsOnDate(String date) {
+    return 'Slutter $date';
+  }
+
+  @override
+  String get active => 'Aktiv';
+
+  @override
+  String get freePlan => 'Gratis abonnement';
+
+  @override
+  String get configure => 'Konfigurer';
 }

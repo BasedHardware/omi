@@ -4470,4 +4470,170 @@ class AppLocalizationsLv extends AppLocalizations {
   String errorWithMessage(String error) {
     return 'Kļūda: $error';
   }
+
+  @override
+  String get omiTraining => 'Omi apmācība';
+
+  @override
+  String get trainingDataProgram => 'Apmācības datu programma';
+
+  @override
+  String get getOmiUnlimitedFree => 'Iegūstiet Omi Unlimited bez maksas, sniedzot savus datus AI modeļu apmācībai.';
+
+  @override
+  String get trainingDataBullets =>
+      '• Jūsu dati palīdz uzlabot AI modeļus\n• Tiek kopīgoti tikai nejutīgi dati\n• Pilnībā pārredzams process';
+
+  @override
+  String get learnMoreAtOmiTraining => 'Uzziniet vairāk vietnē omi.me/training';
+
+  @override
+  String get agreeToContributeData => 'Es saprotu un piekrītu sniegt savus datus AI apmācībai';
+
+  @override
+  String get submitRequest => 'Iesniegt pieprasījumu';
+
+  @override
+  String get thankYouRequestUnderReview =>
+      'Paldies! Jūsu pieprasījums tiek izskatīts. Mēs jūs informēsim pēc apstiprināšanas.';
+
+  @override
+  String planRemainsActiveUntil(String date) {
+    return 'Jūsu plāns paliks aktīvs līdz $date. Pēc tam jūs zaudēsiet piekļuvi neierobežotajām funkcijām. Vai esat pārliecināts?';
+  }
+
+  @override
+  String get confirmCancellation => 'Apstiprināt atcelšanu';
+
+  @override
+  String get keepMyPlan => 'Paturēt manu plānu';
+
+  @override
+  String get subscriptionSetToCancel => 'Jūsu abonements ir iestatīts atcelšanai perioda beigās.';
+
+  @override
+  String get switchedToOnDevice => 'Pārslēgts uz ierīces transkripciju';
+
+  @override
+  String get couldNotSwitchToFreePlan => 'Nevarēja pārslēgties uz bezmaksas plānu. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get couldNotLoadPlans => 'Nevarēja ielādēt pieejamos plānus. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get selectedPlanNotAvailable => 'Izvēlētais plāns nav pieejams. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get upgradeToAnnualPlan => 'Jaunināt uz gada plānu';
+
+  @override
+  String get importantBillingInfo => 'Svarīga norēķinu informācija:';
+
+  @override
+  String get monthlyPlanContinues => 'Jūsu pašreizējais mēneša plāns turpināsies līdz norēķinu perioda beigām';
+
+  @override
+  String get paymentMethodCharged =>
+      'Jūsu esošais maksājuma veids tiks automātiski iekasēts, kad beigsies jūsu mēneša plāns';
+
+  @override
+  String get annualSubscriptionStarts => 'Jūsu 12 mēnešu gada abonements automātiski sāksies pēc maksājuma';
+
+  @override
+  String get thirteenMonthsCoverage => 'Jūs saņemsiet kopumā 13 mēnešu segumu (pašreizējais mēnesis + 12 mēneši gadā)';
+
+  @override
+  String get confirmUpgrade => 'Apstiprināt jaunināšanu';
+
+  @override
+  String get confirmPlanChange => 'Apstiprināt plāna maiņu';
+
+  @override
+  String get confirmAndProceed => 'Apstiprināt un turpināt';
+
+  @override
+  String get upgradeScheduled => 'Jaunināšana ieplānota';
+
+  @override
+  String get changePlan => 'Mainīt plānu';
+
+  @override
+  String get upgradeAlreadyScheduled => 'Jūsu jaunināšana uz gada plānu jau ir ieplānota';
+
+  @override
+  String get youAreOnUnlimitedPlan => 'Jūs esat Neierobežotajā plānā.';
+
+  @override
+  String get yourOmiUnleashed => 'Jūsu Omi, atbrīvots. Kļūstiet neierobežots bezgalīgām iespējām.';
+
+  @override
+  String planEndedOn(String date) {
+    return 'Jūsu plāns beidzās $date.\\nAbonejiet atkārtoti tagad - jums nekavējoties tiks iekasēta maksa par jauno norēķinu periodu.';
+  }
+
+  @override
+  String planSetToCancelOn(String date) {
+    return 'Jūsu plāns ir iestatīts atcelšanai $date.\\nAbonejiet atkārtoti tagad, lai saglabātu savus ieguvumus - bez maksas līdz $date.';
+  }
+
+  @override
+  String get annualPlanStartsAutomatically => 'Jūsu gada plāns automātiski sāksies, kad beigsies jūsu mēneša plāns.';
+
+  @override
+  String planRenewsOn(String date) {
+    return 'Jūsu plāns tiek atjaunots $date.';
+  }
+
+  @override
+  String get unlimitedConversations => 'Neierobežotas sarunas';
+
+  @override
+  String get askOmiAnything => 'Jautājiet Omi jebko par savu dzīvi';
+
+  @override
+  String get unlockOmiInfiniteMemory => 'Atbloķējiet Omi bezgalīgo atmiņu';
+
+  @override
+  String get youreOnAnnualPlan => 'Jūs esat gada plānā';
+
+  @override
+  String get alreadyBestValuePlan => 'Jums jau ir vislabākās vērtības plāns. Nav nepieciešamas izmaiņas.';
+
+  @override
+  String get unableToLoadPlans => 'Nevar ielādēt plānus';
+
+  @override
+  String get checkConnectionTryAgain => 'Lūdzu, pārbaudiet savienojumu un mēģiniet vēlreiz';
+
+  @override
+  String get useFreePlan => 'Izmantot bezmaksas plānu';
+
+  @override
+  String get continueText => 'Turpināt';
+
+  @override
+  String get resubscribe => 'Atkārtoti abonēt';
+
+  @override
+  String get couldNotOpenPaymentSettings => 'Nevarēja atvērt maksājumu iestatījumus. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get managePaymentMethod => 'Pārvaldīt maksājuma veidu';
+
+  @override
+  String get cancelSubscription => 'Atcelt abonementu';
+
+  @override
+  String endsOnDate(String date) {
+    return 'Beidzas $date';
+  }
+
+  @override
+  String get active => 'Aktīvs';
+
+  @override
+  String get freePlan => 'Bezmaksas plāns';
+
+  @override
+  String get configure => 'Konfigurēt';
 }

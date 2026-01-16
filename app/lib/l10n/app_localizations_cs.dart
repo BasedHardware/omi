@@ -4458,4 +4458,169 @@ class AppLocalizationsCs extends AppLocalizations {
   String errorWithMessage(String error) {
     return 'Chyba: $error';
   }
+
+  @override
+  String get omiTraining => 'Trénink Omi';
+
+  @override
+  String get trainingDataProgram => 'Program trénovacích dat';
+
+  @override
+  String get getOmiUnlimitedFree => 'Získejte Omi Unlimited zdarma přispěním vašich dat k trénování AI modelů.';
+
+  @override
+  String get trainingDataBullets =>
+      '• Vaše data pomáhají vylepšovat AI modely\n• Sdílena jsou pouze necitlivá data\n• Plně transparentní proces';
+
+  @override
+  String get learnMoreAtOmiTraining => 'Zjistěte více na omi.me/training';
+
+  @override
+  String get agreeToContributeData => 'Rozumím a souhlasím s přispěním mých dat pro trénování AI';
+
+  @override
+  String get submitRequest => 'Odeslat žádost';
+
+  @override
+  String get thankYouRequestUnderReview => 'Děkujeme! Vaše žádost se posuzuje. Budeme vás informovat po schválení.';
+
+  @override
+  String planRemainsActiveUntil(String date) {
+    return 'Váš plán zůstane aktivní do $date. Poté ztratíte přístup k neomezeným funkcím. Jste si jisti?';
+  }
+
+  @override
+  String get confirmCancellation => 'Potvrdit zrušení';
+
+  @override
+  String get keepMyPlan => 'Ponechat můj plán';
+
+  @override
+  String get subscriptionSetToCancel => 'Vaše předplatné je nastaveno na zrušení na konci období.';
+
+  @override
+  String get switchedToOnDevice => 'Přepnuto na přepis na zařízení';
+
+  @override
+  String get couldNotSwitchToFreePlan => 'Nelze přepnout na bezplatný plán. Zkuste to prosím znovu.';
+
+  @override
+  String get couldNotLoadPlans => 'Nelze načíst dostupné plány. Zkuste to prosím znovu.';
+
+  @override
+  String get selectedPlanNotAvailable => 'Vybraný plán není k dispozici. Zkuste to prosím znovu.';
+
+  @override
+  String get upgradeToAnnualPlan => 'Upgradovat na roční plán';
+
+  @override
+  String get importantBillingInfo => 'Důležité informace o fakturaci:';
+
+  @override
+  String get monthlyPlanContinues => 'Váš aktuální měsíční plán bude pokračovat do konce fakturačního období';
+
+  @override
+  String get paymentMethodCharged =>
+      'Vaše stávající platební metoda bude automaticky účtována po skončení měsíčního plánu';
+
+  @override
+  String get annualSubscriptionStarts => 'Vaše 12měsíční roční předplatné začne automaticky po zaúčtování';
+
+  @override
+  String get thirteenMonthsCoverage => 'Získáte celkem 13 měsíců pokrytí (aktuální měsíc + 12 měsíců ročně)';
+
+  @override
+  String get confirmUpgrade => 'Potvrdit upgrade';
+
+  @override
+  String get confirmPlanChange => 'Potvrdit změnu plánu';
+
+  @override
+  String get confirmAndProceed => 'Potvrdit a pokračovat';
+
+  @override
+  String get upgradeScheduled => 'Upgrade naplánován';
+
+  @override
+  String get changePlan => 'Změnit plán';
+
+  @override
+  String get upgradeAlreadyScheduled => 'Váš upgrade na roční plán je již naplánován';
+
+  @override
+  String get youAreOnUnlimitedPlan => 'Jste na plánu Unlimited.';
+
+  @override
+  String get yourOmiUnleashed => 'Váš Omi, uvolněný. Přejděte na neomezený pro nekonečné možnosti.';
+
+  @override
+  String planEndedOn(String date) {
+    return 'Váš plán skončil $date.\\nZnovu se přihlaste nyní - budete okamžitě účtováni za nové fakturační období.';
+  }
+
+  @override
+  String planSetToCancelOn(String date) {
+    return 'Váš plán je nastaven na zrušení $date.\\nZnovu se přihlaste nyní, abyste si zachovali výhody - bez poplatku do $date.';
+  }
+
+  @override
+  String get annualPlanStartsAutomatically => 'Váš roční plán začne automaticky, když skončí váš měsíční plán.';
+
+  @override
+  String planRenewsOn(String date) {
+    return 'Váš plán se obnovuje $date.';
+  }
+
+  @override
+  String get unlimitedConversations => 'Neomezené konverzace';
+
+  @override
+  String get askOmiAnything => 'Zeptejte se Omi na cokoli o svém životě';
+
+  @override
+  String get unlockOmiInfiniteMemory => 'Odemkněte nekonečnou paměť Omi';
+
+  @override
+  String get youreOnAnnualPlan => 'Jste na ročním plánu';
+
+  @override
+  String get alreadyBestValuePlan => 'Již máte plán s nejlepší hodnotou. Nejsou potřeba žádné změny.';
+
+  @override
+  String get unableToLoadPlans => 'Nelze načíst plány';
+
+  @override
+  String get checkConnectionTryAgain => 'Zkontrolujte připojení a zkuste to znovu';
+
+  @override
+  String get useFreePlan => 'Použít bezplatný plán';
+
+  @override
+  String get continueText => 'Pokračovat';
+
+  @override
+  String get resubscribe => 'Znovu se přihlásit';
+
+  @override
+  String get couldNotOpenPaymentSettings => 'Nelze otevřít nastavení platby. Zkuste to prosím znovu.';
+
+  @override
+  String get managePaymentMethod => 'Spravovat platební metodu';
+
+  @override
+  String get cancelSubscription => 'Zrušit předplatné';
+
+  @override
+  String endsOnDate(String date) {
+    return 'Končí $date';
+  }
+
+  @override
+  String get active => 'Aktivní';
+
+  @override
+  String get freePlan => 'Bezplatný plán';
+
+  @override
+  String get configure => 'Konfigurovat';
 }

@@ -4379,4 +4379,167 @@ class AppLocalizationsZh extends AppLocalizations {
   String errorWithMessage(String error) {
     return '错误：$error';
   }
+
+  @override
+  String get omiTraining => 'Omi训练';
+
+  @override
+  String get trainingDataProgram => '训练数据计划';
+
+  @override
+  String get getOmiUnlimitedFree => '通过贡献数据来训练AI模型，免费获得Omi无限版。';
+
+  @override
+  String get trainingDataBullets => '• 您的数据有助于改进AI模型\n• 仅共享非敏感数据\n• 完全透明的流程';
+
+  @override
+  String get learnMoreAtOmiTraining => '在omi.me/training了解更多';
+
+  @override
+  String get agreeToContributeData => '我理解并同意为AI训练贡献我的数据';
+
+  @override
+  String get submitRequest => '提交请求';
+
+  @override
+  String get thankYouRequestUnderReview => '谢谢！您的请求正在审核中。批准后我们将通知您。';
+
+  @override
+  String planRemainsActiveUntil(String date) {
+    return '您的计划将在$date之前保持有效。之后，您将失去无限功能的访问权限。您确定吗？';
+  }
+
+  @override
+  String get confirmCancellation => '确认取消';
+
+  @override
+  String get keepMyPlan => '保留我的计划';
+
+  @override
+  String get subscriptionSetToCancel => '您的订阅将在期限结束时取消。';
+
+  @override
+  String get switchedToOnDevice => '已切换到设备端转录';
+
+  @override
+  String get couldNotSwitchToFreePlan => '无法切换到免费计划。请重试。';
+
+  @override
+  String get couldNotLoadPlans => '无法加载可用计划。请重试。';
+
+  @override
+  String get selectedPlanNotAvailable => '所选计划不可用。请重试。';
+
+  @override
+  String get upgradeToAnnualPlan => '升级到年度计划';
+
+  @override
+  String get importantBillingInfo => '重要计费信息：';
+
+  @override
+  String get monthlyPlanContinues => '您当前的月度计划将持续到计费周期结束';
+
+  @override
+  String get paymentMethodCharged => '您的现有付款方式将在月度计划结束时自动扣费';
+
+  @override
+  String get annualSubscriptionStarts => '您的12个月年度订阅将在扣费后自动开始';
+
+  @override
+  String get thirteenMonthsCoverage => '您将获得总共13个月的保障（当前月份 + 12个月年度）';
+
+  @override
+  String get confirmUpgrade => '确认升级';
+
+  @override
+  String get confirmPlanChange => '确认计划变更';
+
+  @override
+  String get confirmAndProceed => '确认并继续';
+
+  @override
+  String get upgradeScheduled => '升级已安排';
+
+  @override
+  String get changePlan => '更改计划';
+
+  @override
+  String get upgradeAlreadyScheduled => '您升级到年度计划的安排已确定';
+
+  @override
+  String get youAreOnUnlimitedPlan => '您正在使用无限版计划。';
+
+  @override
+  String get yourOmiUnleashed => '您的Omi，解放了。选择无限版，开启无限可能。';
+
+  @override
+  String planEndedOn(String date) {
+    return '您的计划于$date结束。\\n立即重新订阅 - 您将立即被收取新计费周期的费用。';
+  }
+
+  @override
+  String planSetToCancelOn(String date) {
+    return '您的计划将于$date取消。\\n立即重新订阅以保留您的权益 - $date之前不收费。';
+  }
+
+  @override
+  String get annualPlanStartsAutomatically => '您的年度计划将在月度计划结束时自动开始。';
+
+  @override
+  String planRenewsOn(String date) {
+    return '您的计划将于$date续订。';
+  }
+
+  @override
+  String get unlimitedConversations => '无限对话';
+
+  @override
+  String get askOmiAnything => '向Omi询问关于您生活的任何事情';
+
+  @override
+  String get unlockOmiInfiniteMemory => '解锁Omi的无限记忆';
+
+  @override
+  String get youreOnAnnualPlan => '您正在使用年度计划';
+
+  @override
+  String get alreadyBestValuePlan => '您已经拥有最超值的计划。无需更改。';
+
+  @override
+  String get unableToLoadPlans => '无法加载计划';
+
+  @override
+  String get checkConnectionTryAgain => '请检查您的连接并重试';
+
+  @override
+  String get useFreePlan => '使用免费计划';
+
+  @override
+  String get continueText => '继续';
+
+  @override
+  String get resubscribe => '重新订阅';
+
+  @override
+  String get couldNotOpenPaymentSettings => '无法打开支付设置。请重试。';
+
+  @override
+  String get managePaymentMethod => '管理支付方式';
+
+  @override
+  String get cancelSubscription => '取消订阅';
+
+  @override
+  String endsOnDate(String date) {
+    return '于$date结束';
+  }
+
+  @override
+  String get active => '活跃';
+
+  @override
+  String get freePlan => '免费计划';
+
+  @override
+  String get configure => '配置';
 }

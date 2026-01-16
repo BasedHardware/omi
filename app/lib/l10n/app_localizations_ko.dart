@@ -4386,4 +4386,167 @@ class AppLocalizationsKo extends AppLocalizations {
   String errorWithMessage(String error) {
     return '오류: $error';
   }
+
+  @override
+  String get omiTraining => 'Omi 훈련';
+
+  @override
+  String get trainingDataProgram => '훈련 데이터 프로그램';
+
+  @override
+  String get getOmiUnlimitedFree => '데이터를 제공하여 AI 모델 훈련에 기여하면 Omi Unlimited를 무료로 받으세요.';
+
+  @override
+  String get trainingDataBullets => '• 귀하의 데이터가 AI 모델 개선에 도움이 됩니다\n• 민감하지 않은 데이터만 공유됩니다\n• 완전히 투명한 프로세스';
+
+  @override
+  String get learnMoreAtOmiTraining => 'omi.me/training에서 자세히 알아보기';
+
+  @override
+  String get agreeToContributeData => 'AI 훈련을 위해 데이터를 제공하는 것에 대해 이해하고 동의합니다';
+
+  @override
+  String get submitRequest => '요청 제출';
+
+  @override
+  String get thankYouRequestUnderReview => '감사합니다! 요청이 검토 중입니다. 승인 후 알려드리겠습니다.';
+
+  @override
+  String planRemainsActiveUntil(String date) {
+    return '플랜은 $date까지 활성 상태로 유지됩니다. 그 이후에는 무제한 기능에 대한 액세스 권한을 잃게 됩니다. 확실합니까?';
+  }
+
+  @override
+  String get confirmCancellation => '취소 확인';
+
+  @override
+  String get keepMyPlan => '내 플랜 유지';
+
+  @override
+  String get subscriptionSetToCancel => '구독이 기간 종료 시 취소되도록 설정되었습니다.';
+
+  @override
+  String get switchedToOnDevice => '기기 내 전사로 전환됨';
+
+  @override
+  String get couldNotSwitchToFreePlan => '무료 플랜으로 전환할 수 없습니다. 다시 시도해 주세요.';
+
+  @override
+  String get couldNotLoadPlans => '사용 가능한 플랜을 로드할 수 없습니다. 다시 시도해 주세요.';
+
+  @override
+  String get selectedPlanNotAvailable => '선택한 플랜을 사용할 수 없습니다. 다시 시도해 주세요.';
+
+  @override
+  String get upgradeToAnnualPlan => '연간 플랜으로 업그레이드';
+
+  @override
+  String get importantBillingInfo => '중요한 결제 정보:';
+
+  @override
+  String get monthlyPlanContinues => '현재 월간 플랜은 결제 기간이 끝날 때까지 계속됩니다';
+
+  @override
+  String get paymentMethodCharged => '월간 플랜이 종료되면 기존 결제 수단으로 자동 청구됩니다';
+
+  @override
+  String get annualSubscriptionStarts => '12개월 연간 구독은 결제 후 자동으로 시작됩니다';
+
+  @override
+  String get thirteenMonthsCoverage => '총 13개월의 혜택을 받게 됩니다 (현재 월 + 연간 12개월)';
+
+  @override
+  String get confirmUpgrade => '업그레이드 확인';
+
+  @override
+  String get confirmPlanChange => '플랜 변경 확인';
+
+  @override
+  String get confirmAndProceed => '확인 및 진행';
+
+  @override
+  String get upgradeScheduled => '업그레이드 예정됨';
+
+  @override
+  String get changePlan => '플랜 변경';
+
+  @override
+  String get upgradeAlreadyScheduled => '연간 플랜으로의 업그레이드가 이미 예정되어 있습니다';
+
+  @override
+  String get youAreOnUnlimitedPlan => '현재 Unlimited 플랜을 사용 중입니다.';
+
+  @override
+  String get yourOmiUnleashed => '당신의 Omi, 해방되다. 무한한 가능성을 위해 Unlimited로.';
+
+  @override
+  String planEndedOn(String date) {
+    return '플랜이 $date에 종료되었습니다.\\n지금 재구독하세요 - 새 청구 기간에 대해 즉시 청구됩니다.';
+  }
+
+  @override
+  String planSetToCancelOn(String date) {
+    return '플랜이 $date에 취소될 예정입니다.\\n혜택을 유지하려면 지금 재구독하세요 - $date까지 요금이 청구되지 않습니다.';
+  }
+
+  @override
+  String get annualPlanStartsAutomatically => '월간 플랜이 종료되면 연간 플랜이 자동으로 시작됩니다.';
+
+  @override
+  String planRenewsOn(String date) {
+    return '플랜이 $date에 갱신됩니다.';
+  }
+
+  @override
+  String get unlimitedConversations => '무제한 대화';
+
+  @override
+  String get askOmiAnything => 'Omi에게 당신의 삶에 대해 무엇이든 물어보세요';
+
+  @override
+  String get unlockOmiInfiniteMemory => 'Omi의 무한 메모리 잠금 해제';
+
+  @override
+  String get youreOnAnnualPlan => '연간 플랜을 사용 중입니다';
+
+  @override
+  String get alreadyBestValuePlan => '이미 가장 가성비 좋은 플랜을 사용 중입니다. 변경이 필요하지 않습니다.';
+
+  @override
+  String get unableToLoadPlans => '플랜을 로드할 수 없습니다';
+
+  @override
+  String get checkConnectionTryAgain => '연결을 확인하고 다시 시도해 주세요';
+
+  @override
+  String get useFreePlan => '무료 플랜 사용';
+
+  @override
+  String get continueText => '계속';
+
+  @override
+  String get resubscribe => '재구독';
+
+  @override
+  String get couldNotOpenPaymentSettings => '결제 설정을 열 수 없습니다. 다시 시도해 주세요.';
+
+  @override
+  String get managePaymentMethod => '결제 수단 관리';
+
+  @override
+  String get cancelSubscription => '구독 취소';
+
+  @override
+  String endsOnDate(String date) {
+    return '$date에 종료';
+  }
+
+  @override
+  String get active => '활성';
+
+  @override
+  String get freePlan => '무료 플랜';
+
+  @override
+  String get configure => '구성';
 }

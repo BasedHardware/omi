@@ -4467,4 +4467,168 @@ class AppLocalizationsSv extends AppLocalizations {
   String errorWithMessage(String error) {
     return 'Fel: $error';
   }
+
+  @override
+  String get omiTraining => 'Omi-träning';
+
+  @override
+  String get trainingDataProgram => 'Träningsdataprogram';
+
+  @override
+  String get getOmiUnlimitedFree => 'Få Omi Unlimited gratis genom att bidra med dina data för att träna AI-modeller.';
+
+  @override
+  String get trainingDataBullets =>
+      '• Dina data hjälper till att förbättra AI-modeller\n• Endast icke-känsliga data delas\n• Helt transparent process';
+
+  @override
+  String get learnMoreAtOmiTraining => 'Läs mer på omi.me/training';
+
+  @override
+  String get agreeToContributeData => 'Jag förstår och godkänner att bidra med mina data för AI-träning';
+
+  @override
+  String get submitRequest => 'Skicka förfrågan';
+
+  @override
+  String get thankYouRequestUnderReview => 'Tack! Din förfrågan granskas. Vi meddelar dig när den har godkänts.';
+
+  @override
+  String planRemainsActiveUntil(String date) {
+    return 'Din plan förblir aktiv till $date. Efter det förlorar du tillgång till dina obegränsade funktioner. Är du säker?';
+  }
+
+  @override
+  String get confirmCancellation => 'Bekräfta avbokning';
+
+  @override
+  String get keepMyPlan => 'Behåll min plan';
+
+  @override
+  String get subscriptionSetToCancel => 'Din prenumeration är inställd på att avslutas vid periodens slut.';
+
+  @override
+  String get switchedToOnDevice => 'Bytte till transkription på enheten';
+
+  @override
+  String get couldNotSwitchToFreePlan => 'Kunde inte byta till gratisplan. Försök igen.';
+
+  @override
+  String get couldNotLoadPlans => 'Kunde inte ladda tillgängliga planer. Försök igen.';
+
+  @override
+  String get selectedPlanNotAvailable => 'Vald plan är inte tillgänglig. Försök igen.';
+
+  @override
+  String get upgradeToAnnualPlan => 'Uppgradera till årsplan';
+
+  @override
+  String get importantBillingInfo => 'Viktig faktureringsinformation:';
+
+  @override
+  String get monthlyPlanContinues => 'Din nuvarande månadsplan fortsätter till slutet av din faktureringsperiod';
+
+  @override
+  String get paymentMethodCharged => 'Din befintliga betalningsmetod debiteras automatiskt när din månadsplan avslutas';
+
+  @override
+  String get annualSubscriptionStarts => 'Din 12-månaders årsprenumeration startar automatiskt efter debiteringen';
+
+  @override
+  String get thirteenMonthsCoverage => 'Du får totalt 13 månaders täckning (nuvarande månad + 12 månader årligen)';
+
+  @override
+  String get confirmUpgrade => 'Bekräfta uppgradering';
+
+  @override
+  String get confirmPlanChange => 'Bekräfta planändring';
+
+  @override
+  String get confirmAndProceed => 'Bekräfta och fortsätt';
+
+  @override
+  String get upgradeScheduled => 'Uppgradering schemalagd';
+
+  @override
+  String get changePlan => 'Ändra plan';
+
+  @override
+  String get upgradeAlreadyScheduled => 'Din uppgradering till årsplanen är redan schemalagd';
+
+  @override
+  String get youAreOnUnlimitedPlan => 'Du har den obegränsade planen.';
+
+  @override
+  String get yourOmiUnleashed => 'Din Omi, frigjord. Bli obegränsad för oändliga möjligheter.';
+
+  @override
+  String planEndedOn(String date) {
+    return 'Din plan avslutades $date.\\nPrenumerera igen nu - du debiteras omedelbart för en ny faktureringsperiod.';
+  }
+
+  @override
+  String planSetToCancelOn(String date) {
+    return 'Din plan är inställd på att avbrytas $date.\\nPrenumerera igen nu för att behålla dina fördelar - ingen avgift till $date.';
+  }
+
+  @override
+  String get annualPlanStartsAutomatically => 'Din årsplan startar automatiskt när din månadsplan avslutas.';
+
+  @override
+  String planRenewsOn(String date) {
+    return 'Din plan förnyas $date.';
+  }
+
+  @override
+  String get unlimitedConversations => 'Obegränsade samtal';
+
+  @override
+  String get askOmiAnything => 'Fråga Omi vad som helst om ditt liv';
+
+  @override
+  String get unlockOmiInfiniteMemory => 'Lås upp Omis oändliga minne';
+
+  @override
+  String get youreOnAnnualPlan => 'Du har årsplanen';
+
+  @override
+  String get alreadyBestValuePlan => 'Du har redan den bästa värdeplanen. Inga ändringar behövs.';
+
+  @override
+  String get unableToLoadPlans => 'Kan inte ladda planer';
+
+  @override
+  String get checkConnectionTryAgain => 'Kontrollera din anslutning och försök igen';
+
+  @override
+  String get useFreePlan => 'Använd gratisplan';
+
+  @override
+  String get continueText => 'Fortsätt';
+
+  @override
+  String get resubscribe => 'Prenumerera igen';
+
+  @override
+  String get couldNotOpenPaymentSettings => 'Kunde inte öppna betalningsinställningar. Försök igen.';
+
+  @override
+  String get managePaymentMethod => 'Hantera betalningsmetod';
+
+  @override
+  String get cancelSubscription => 'Avsluta prenumeration';
+
+  @override
+  String endsOnDate(String date) {
+    return 'Slutar $date';
+  }
+
+  @override
+  String get active => 'Aktiv';
+
+  @override
+  String get freePlan => 'Gratisplan';
+
+  @override
+  String get configure => 'Konfigurera';
 }

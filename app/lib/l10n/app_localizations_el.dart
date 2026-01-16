@@ -4497,4 +4497,174 @@ class AppLocalizationsEl extends AppLocalizations {
   String errorWithMessage(String error) {
     return 'Σφάλμα: $error';
   }
+
+  @override
+  String get omiTraining => 'Εκπαίδευση Omi';
+
+  @override
+  String get trainingDataProgram => 'Πρόγραμμα δεδομένων εκπαίδευσης';
+
+  @override
+  String get getOmiUnlimitedFree =>
+      'Αποκτήστε το Omi Unlimited δωρεάν συνεισφέροντας τα δεδομένα σας για την εκπαίδευση μοντέλων AI.';
+
+  @override
+  String get trainingDataBullets =>
+      '• Τα δεδομένα σας βοηθούν στη βελτίωση των μοντέλων AI\n• Μοιράζονται μόνο μη ευαίσθητα δεδομένα\n• Πλήρως διαφανής διαδικασία';
+
+  @override
+  String get learnMoreAtOmiTraining => 'Μάθετε περισσότερα στο omi.me/training';
+
+  @override
+  String get agreeToContributeData => 'Κατανοώ και συμφωνώ να συνεισφέρω τα δεδομένα μου για εκπαίδευση AI';
+
+  @override
+  String get submitRequest => 'Υποβολή αιτήματος';
+
+  @override
+  String get thankYouRequestUnderReview =>
+      'Ευχαριστούμε! Το αίτημά σας εξετάζεται. Θα σας ειδοποιήσουμε μόλις εγκριθεί.';
+
+  @override
+  String planRemainsActiveUntil(String date) {
+    return 'Το πρόγραμμά σας θα παραμείνει ενεργό μέχρι $date. Μετά από αυτό, θα χάσετε την πρόσβαση στις απεριόριστες λειτουργίες. Είστε σίγουροι;';
+  }
+
+  @override
+  String get confirmCancellation => 'Επιβεβαίωση ακύρωσης';
+
+  @override
+  String get keepMyPlan => 'Διατήρηση του προγράμματός μου';
+
+  @override
+  String get subscriptionSetToCancel => 'Η συνδρομή σας έχει ρυθμιστεί να ακυρωθεί στο τέλος της περιόδου.';
+
+  @override
+  String get switchedToOnDevice => 'Αλλαγή σε μεταγραφή στη συσκευή';
+
+  @override
+  String get couldNotSwitchToFreePlan => 'Δεν ήταν δυνατή η αλλαγή σε δωρεάν πρόγραμμα. Παρακαλώ δοκιμάστε ξανά.';
+
+  @override
+  String get couldNotLoadPlans => 'Δεν ήταν δυνατή η φόρτωση διαθέσιμων προγραμμάτων. Παρακαλώ δοκιμάστε ξανά.';
+
+  @override
+  String get selectedPlanNotAvailable => 'Το επιλεγμένο πρόγραμμα δεν είναι διαθέσιμο. Παρακαλώ δοκιμάστε ξανά.';
+
+  @override
+  String get upgradeToAnnualPlan => 'Αναβάθμιση σε ετήσιο πρόγραμμα';
+
+  @override
+  String get importantBillingInfo => 'Σημαντικές πληροφορίες χρέωσης:';
+
+  @override
+  String get monthlyPlanContinues =>
+      'Το τρέχον μηνιαίο σας πρόγραμμα θα συνεχιστεί μέχρι το τέλος της περιόδου χρέωσης';
+
+  @override
+  String get paymentMethodCharged =>
+      'Ο υπάρχων τρόπος πληρωμής σας θα χρεωθεί αυτόματα όταν λήξει το μηνιαίο σας πρόγραμμα';
+
+  @override
+  String get annualSubscriptionStarts => 'Η 12μηνη ετήσια συνδρομή σας θα ξεκινήσει αυτόματα μετά τη χρέωση';
+
+  @override
+  String get thirteenMonthsCoverage => 'Θα λάβετε συνολικά 13 μήνες κάλυψης (τρέχων μήνας + 12 μήνες ετησίως)';
+
+  @override
+  String get confirmUpgrade => 'Επιβεβαίωση αναβάθμισης';
+
+  @override
+  String get confirmPlanChange => 'Επιβεβαίωση αλλαγής προγράμματος';
+
+  @override
+  String get confirmAndProceed => 'Επιβεβαίωση και συνέχεια';
+
+  @override
+  String get upgradeScheduled => 'Η αναβάθμιση προγραμματίστηκε';
+
+  @override
+  String get changePlan => 'Αλλαγή προγράμματος';
+
+  @override
+  String get upgradeAlreadyScheduled => 'Η αναβάθμισή σας στο ετήσιο πρόγραμμα έχει ήδη προγραμματιστεί';
+
+  @override
+  String get youAreOnUnlimitedPlan => 'Είστε στο Απεριόριστο Πρόγραμμα.';
+
+  @override
+  String get yourOmiUnleashed => 'Το Omi σας, απελευθερωμένο. Γίνετε απεριόριστοι για ατελείωτες δυνατότητες.';
+
+  @override
+  String planEndedOn(String date) {
+    return 'Το πρόγραμμά σας έληξε στις $date.\\nΕπανεγγραφείτε τώρα - θα χρεωθείτε αμέσως για μια νέα περίοδο χρέωσης.';
+  }
+
+  @override
+  String planSetToCancelOn(String date) {
+    return 'Το πρόγραμμά σας έχει ρυθμιστεί να ακυρωθεί στις $date.\\nΕπανεγγραφείτε τώρα για να διατηρήσετε τα οφέλη σας - χωρίς χρέωση μέχρι $date.';
+  }
+
+  @override
+  String get annualPlanStartsAutomatically =>
+      'Το ετήσιο πρόγραμμά σας θα ξεκινήσει αυτόματα όταν λήξει το μηνιαίο σας πρόγραμμα.';
+
+  @override
+  String planRenewsOn(String date) {
+    return 'Το πρόγραμμά σας ανανεώνεται στις $date.';
+  }
+
+  @override
+  String get unlimitedConversations => 'Απεριόριστες συνομιλίες';
+
+  @override
+  String get askOmiAnything => 'Ρωτήστε το Omi οτιδήποτε για τη ζωή σας';
+
+  @override
+  String get unlockOmiInfiniteMemory => 'Ξεκλειδώστε την άπειρη μνήμη του Omi';
+
+  @override
+  String get youreOnAnnualPlan => 'Είστε στο ετήσιο πρόγραμμα';
+
+  @override
+  String get alreadyBestValuePlan => 'Έχετε ήδη το πρόγραμμα με την καλύτερη αξία. Δεν χρειάζονται αλλαγές.';
+
+  @override
+  String get unableToLoadPlans => 'Αδυναμία φόρτωσης προγραμμάτων';
+
+  @override
+  String get checkConnectionTryAgain => 'Ελέγξτε τη σύνδεσή σας και δοκιμάστε ξανά';
+
+  @override
+  String get useFreePlan => 'Χρήση δωρεάν προγράμματος';
+
+  @override
+  String get continueText => 'Συνέχεια';
+
+  @override
+  String get resubscribe => 'Επανεγγραφή';
+
+  @override
+  String get couldNotOpenPaymentSettings =>
+      'Δεν ήταν δυνατό το άνοιγμα των ρυθμίσεων πληρωμής. Παρακαλώ δοκιμάστε ξανά.';
+
+  @override
+  String get managePaymentMethod => 'Διαχείριση μεθόδου πληρωμής';
+
+  @override
+  String get cancelSubscription => 'Ακύρωση συνδρομής';
+
+  @override
+  String endsOnDate(String date) {
+    return 'Λήγει στις $date';
+  }
+
+  @override
+  String get active => 'Ενεργό';
+
+  @override
+  String get freePlan => 'Δωρεάν πρόγραμμα';
+
+  @override
+  String get configure => 'Ρύθμιση';
 }

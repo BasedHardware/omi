@@ -8480,6 +8480,312 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Error: {error}'**
   String errorWithMessage(String error);
+
+  /// Title for Omi training program
+  ///
+  /// In en, this message translates to:
+  /// **'Omi Training'**
+  String get omiTraining;
+
+  /// Label for training data program
+  ///
+  /// In en, this message translates to:
+  /// **'Training Data Program'**
+  String get trainingDataProgram;
+
+  /// Description for getting Omi Unlimited free by contributing data
+  ///
+  /// In en, this message translates to:
+  /// **'Get Omi Unlimited for free by contributing your data to train AI models.'**
+  String get getOmiUnlimitedFree;
+
+  /// Bullet points explaining training data program benefits
+  ///
+  /// In en, this message translates to:
+  /// **'• Your data helps improve AI models\n• Only non-sensitive data is shared\n• Fully transparent process'**
+  String get trainingDataBullets;
+
+  /// Link text to learn more about training
+  ///
+  /// In en, this message translates to:
+  /// **'Learn more at omi.me/training'**
+  String get learnMoreAtOmiTraining;
+
+  /// Checkbox label for agreeing to contribute data
+  ///
+  /// In en, this message translates to:
+  /// **'I understand and agree to contribute my data for AI training'**
+  String get agreeToContributeData;
+
+  /// Button text to submit request
+  ///
+  /// In en, this message translates to:
+  /// **'Submit Request'**
+  String get submitRequest;
+
+  /// Success message after submitting training data request
+  ///
+  /// In en, this message translates to:
+  /// **'Thank you! Your request is under review. We will notify you once approved.'**
+  String get thankYouRequestUnderReview;
+
+  /// Message explaining plan remains active until date
+  ///
+  /// In en, this message translates to:
+  /// **'Your plan will remain active until {date}. After that, you will lose access to your unlimited features. Are you sure?'**
+  String planRemainsActiveUntil(String date);
+
+  /// Button text to confirm cancellation
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm Cancellation'**
+  String get confirmCancellation;
+
+  /// Button text to keep current plan
+  ///
+  /// In en, this message translates to:
+  /// **'Keep My Plan'**
+  String get keepMyPlan;
+
+  /// Message that subscription is set to cancel
+  ///
+  /// In en, this message translates to:
+  /// **'Your subscription is set to cancel at the end of the period.'**
+  String get subscriptionSetToCancel;
+
+  /// Success message when switched to on-device transcription
+  ///
+  /// In en, this message translates to:
+  /// **'Switched to on-device transcription'**
+  String get switchedToOnDevice;
+
+  /// Error message when switching to free plan fails
+  ///
+  /// In en, this message translates to:
+  /// **'Could not switch to free plan. Please try again.'**
+  String get couldNotSwitchToFreePlan;
+
+  /// Error message when plans cannot be loaded
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load available plans. Please try again.'**
+  String get couldNotLoadPlans;
+
+  /// Error message when selected plan is not available
+  ///
+  /// In en, this message translates to:
+  /// **'Selected plan is not available. Please try again.'**
+  String get selectedPlanNotAvailable;
+
+  /// Dialog title for upgrading to annual plan
+  ///
+  /// In en, this message translates to:
+  /// **'Upgrade to Annual Plan'**
+  String get upgradeToAnnualPlan;
+
+  /// Header for billing information section
+  ///
+  /// In en, this message translates to:
+  /// **'Important Billing Information:'**
+  String get importantBillingInfo;
+
+  /// Info about monthly plan continuing
+  ///
+  /// In en, this message translates to:
+  /// **'Your current monthly plan will continue until the end of your billing period'**
+  String get monthlyPlanContinues;
+
+  /// Info about payment method being charged
+  ///
+  /// In en, this message translates to:
+  /// **'Your existing payment method will be charged automatically when your monthly plan ends'**
+  String get paymentMethodCharged;
+
+  /// Info about annual subscription starting
+  ///
+  /// In en, this message translates to:
+  /// **'Your 12-month annual subscription will start automatically after the charge'**
+  String get annualSubscriptionStarts;
+
+  /// Info about total coverage period
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ll get 13 months of coverage total (current month + 12 months annual)'**
+  String get thirteenMonthsCoverage;
+
+  /// Button text to confirm upgrade
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm Upgrade'**
+  String get confirmUpgrade;
+
+  /// Dialog title for confirming plan change
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm Plan Change'**
+  String get confirmPlanChange;
+
+  /// Button text to confirm and proceed
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm & Proceed'**
+  String get confirmAndProceed;
+
+  /// Label when upgrade is scheduled
+  ///
+  /// In en, this message translates to:
+  /// **'Upgrade Scheduled'**
+  String get upgradeScheduled;
+
+  /// Button text to change plan
+  ///
+  /// In en, this message translates to:
+  /// **'Change Plan'**
+  String get changePlan;
+
+  /// Message when upgrade is already scheduled
+  ///
+  /// In en, this message translates to:
+  /// **'Your upgrade to the annual plan is already scheduled'**
+  String get upgradeAlreadyScheduled;
+
+  /// Message showing user is on unlimited plan
+  ///
+  /// In en, this message translates to:
+  /// **'You are on the Unlimited Plan.'**
+  String get youAreOnUnlimitedPlan;
+
+  /// Marketing text for unlimited plan
+  ///
+  /// In en, this message translates to:
+  /// **'Your Omi, unleashed. Go unlimited for endless possibilities.'**
+  String get yourOmiUnleashed;
+
+  /// Message when plan has ended
+  ///
+  /// In en, this message translates to:
+  /// **'Your plan ended on {date}.\\nResubscribe now - you\'ll be charged immediately for a new billing period.'**
+  String planEndedOn(String date);
+
+  /// Message when plan is set to cancel
+  ///
+  /// In en, this message translates to:
+  /// **'Your plan is set to cancel on {date}.\\nResubscribe now to keep your benefits - no charge until {date}.'**
+  String planSetToCancelOn(String date);
+
+  /// Info that annual plan starts automatically
+  ///
+  /// In en, this message translates to:
+  /// **'Your annual plan will start automatically when your monthly plan ends.'**
+  String get annualPlanStartsAutomatically;
+
+  /// Message showing plan renewal date
+  ///
+  /// In en, this message translates to:
+  /// **'Your plan renews on {date}.'**
+  String planRenewsOn(String date);
+
+  /// Feature: unlimited conversations
+  ///
+  /// In en, this message translates to:
+  /// **'Unlimited conversations'**
+  String get unlimitedConversations;
+
+  /// Feature: ask Omi anything
+  ///
+  /// In en, this message translates to:
+  /// **'Ask Omi anything about your life'**
+  String get askOmiAnything;
+
+  /// Feature: unlock infinite memory
+  ///
+  /// In en, this message translates to:
+  /// **'Unlock Omi\'s infinite memory'**
+  String get unlockOmiInfiniteMemory;
+
+  /// Message showing user is on annual plan
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re on the Annual Plan'**
+  String get youreOnAnnualPlan;
+
+  /// Message when user already has best plan
+  ///
+  /// In en, this message translates to:
+  /// **'You already have the best value plan. No changes needed.'**
+  String get alreadyBestValuePlan;
+
+  /// Error message when plans cannot load
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to load plans'**
+  String get unableToLoadPlans;
+
+  /// Message to check connection
+  ///
+  /// In en, this message translates to:
+  /// **'Please check your connection and try again'**
+  String get checkConnectionTryAgain;
+
+  /// Button to use free plan
+  ///
+  /// In en, this message translates to:
+  /// **'Use Free Plan'**
+  String get useFreePlan;
+
+  /// Continue button text
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get continueText;
+
+  /// Button to resubscribe
+  ///
+  /// In en, this message translates to:
+  /// **'Resubscribe'**
+  String get resubscribe;
+
+  /// Error when payment settings cannot open
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open payment settings. Please try again.'**
+  String get couldNotOpenPaymentSettings;
+
+  /// Button to manage payment method
+  ///
+  /// In en, this message translates to:
+  /// **'Manage Payment Method'**
+  String get managePaymentMethod;
+
+  /// Button to cancel subscription
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel Subscription'**
+  String get cancelSubscription;
+
+  /// Shows end date
+  ///
+  /// In en, this message translates to:
+  /// **'Ends on {date}'**
+  String endsOnDate(String date);
+
+  /// Status label for active
+  ///
+  /// In en, this message translates to:
+  /// **'Active'**
+  String get active;
+
+  /// Label for free plan
+  ///
+  /// In en, this message translates to:
+  /// **'Free Plan'**
+  String get freePlan;
+
+  /// Button to configure settings
+  ///
+  /// In en, this message translates to:
+  /// **'Configure'**
+  String get configure;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

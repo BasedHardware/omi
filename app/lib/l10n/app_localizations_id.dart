@@ -4474,4 +4474,173 @@ class AppLocalizationsId extends AppLocalizations {
   String errorWithMessage(String error) {
     return 'Kesalahan: $error';
   }
+
+  @override
+  String get omiTraining => 'Pelatihan Omi';
+
+  @override
+  String get trainingDataProgram => 'Program Data Pelatihan';
+
+  @override
+  String get getOmiUnlimitedFree =>
+      'Dapatkan Omi Unlimited gratis dengan menyumbangkan data Anda untuk melatih model AI.';
+
+  @override
+  String get trainingDataBullets =>
+      '• Data Anda membantu meningkatkan model AI\n• Hanya data non-sensitif yang dibagikan\n• Proses sepenuhnya transparan';
+
+  @override
+  String get learnMoreAtOmiTraining => 'Pelajari lebih lanjut di omi.me/training';
+
+  @override
+  String get agreeToContributeData => 'Saya memahami dan setuju untuk menyumbangkan data saya untuk pelatihan AI';
+
+  @override
+  String get submitRequest => 'Kirim Permintaan';
+
+  @override
+  String get thankYouRequestUnderReview =>
+      'Terima kasih! Permintaan Anda sedang ditinjau. Kami akan memberi tahu Anda setelah disetujui.';
+
+  @override
+  String planRemainsActiveUntil(String date) {
+    return 'Paket Anda akan tetap aktif hingga $date. Setelah itu, Anda akan kehilangan akses ke fitur tak terbatas. Apakah Anda yakin?';
+  }
+
+  @override
+  String get confirmCancellation => 'Konfirmasi Pembatalan';
+
+  @override
+  String get keepMyPlan => 'Pertahankan Paket Saya';
+
+  @override
+  String get subscriptionSetToCancel => 'Langganan Anda diatur untuk dibatalkan di akhir periode.';
+
+  @override
+  String get switchedToOnDevice => 'Beralih ke transkripsi di perangkat';
+
+  @override
+  String get couldNotSwitchToFreePlan => 'Tidak dapat beralih ke paket gratis. Silakan coba lagi.';
+
+  @override
+  String get couldNotLoadPlans => 'Tidak dapat memuat paket yang tersedia. Silakan coba lagi.';
+
+  @override
+  String get selectedPlanNotAvailable => 'Paket yang dipilih tidak tersedia. Silakan coba lagi.';
+
+  @override
+  String get upgradeToAnnualPlan => 'Tingkatkan ke Paket Tahunan';
+
+  @override
+  String get importantBillingInfo => 'Informasi Penagihan Penting:';
+
+  @override
+  String get monthlyPlanContinues => 'Paket bulanan Anda saat ini akan berlanjut hingga akhir periode penagihan';
+
+  @override
+  String get paymentMethodCharged =>
+      'Metode pembayaran Anda yang ada akan dikenakan biaya secara otomatis saat paket bulanan Anda berakhir';
+
+  @override
+  String get annualSubscriptionStarts =>
+      'Langganan tahunan 12 bulan Anda akan dimulai secara otomatis setelah pembayaran';
+
+  @override
+  String get thirteenMonthsCoverage => 'Anda akan mendapatkan total 13 bulan cakupan (bulan ini + 12 bulan tahunan)';
+
+  @override
+  String get confirmUpgrade => 'Konfirmasi Peningkatan';
+
+  @override
+  String get confirmPlanChange => 'Konfirmasi Perubahan Paket';
+
+  @override
+  String get confirmAndProceed => 'Konfirmasi & Lanjutkan';
+
+  @override
+  String get upgradeScheduled => 'Peningkatan Dijadwalkan';
+
+  @override
+  String get changePlan => 'Ubah Paket';
+
+  @override
+  String get upgradeAlreadyScheduled => 'Peningkatan Anda ke paket tahunan sudah dijadwalkan';
+
+  @override
+  String get youAreOnUnlimitedPlan => 'Anda berada di Paket Tak Terbatas.';
+
+  @override
+  String get yourOmiUnleashed => 'Omi Anda, dibebaskan. Pilih tak terbatas untuk kemungkinan tanpa akhir.';
+
+  @override
+  String planEndedOn(String date) {
+    return 'Paket Anda berakhir pada $date.\\nBerlangganan lagi sekarang - Anda akan dikenakan biaya segera untuk periode penagihan baru.';
+  }
+
+  @override
+  String planSetToCancelOn(String date) {
+    return 'Paket Anda diatur untuk dibatalkan pada $date.\\nBerlangganan lagi sekarang untuk mempertahankan manfaat Anda - tidak ada biaya hingga $date.';
+  }
+
+  @override
+  String get annualPlanStartsAutomatically =>
+      'Paket tahunan Anda akan dimulai secara otomatis saat paket bulanan Anda berakhir.';
+
+  @override
+  String planRenewsOn(String date) {
+    return 'Paket Anda diperbarui pada $date.';
+  }
+
+  @override
+  String get unlimitedConversations => 'Percakapan tak terbatas';
+
+  @override
+  String get askOmiAnything => 'Tanya Omi apa saja tentang hidup Anda';
+
+  @override
+  String get unlockOmiInfiniteMemory => 'Buka kunci memori tak terbatas Omi';
+
+  @override
+  String get youreOnAnnualPlan => 'Anda berada di Paket Tahunan';
+
+  @override
+  String get alreadyBestValuePlan => 'Anda sudah memiliki paket dengan nilai terbaik. Tidak perlu perubahan.';
+
+  @override
+  String get unableToLoadPlans => 'Tidak dapat memuat paket';
+
+  @override
+  String get checkConnectionTryAgain => 'Silakan periksa koneksi Anda dan coba lagi';
+
+  @override
+  String get useFreePlan => 'Gunakan Paket Gratis';
+
+  @override
+  String get continueText => 'Lanjutkan';
+
+  @override
+  String get resubscribe => 'Berlangganan lagi';
+
+  @override
+  String get couldNotOpenPaymentSettings => 'Tidak dapat membuka pengaturan pembayaran. Silakan coba lagi.';
+
+  @override
+  String get managePaymentMethod => 'Kelola Metode Pembayaran';
+
+  @override
+  String get cancelSubscription => 'Batalkan Langganan';
+
+  @override
+  String endsOnDate(String date) {
+    return 'Berakhir pada $date';
+  }
+
+  @override
+  String get active => 'Aktif';
+
+  @override
+  String get freePlan => 'Paket Gratis';
+
+  @override
+  String get configure => 'Konfigurasi';
 }

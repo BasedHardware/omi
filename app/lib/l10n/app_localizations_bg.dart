@@ -4475,4 +4475,171 @@ class AppLocalizationsBg extends AppLocalizations {
   String errorWithMessage(String error) {
     return 'Грешка: $error';
   }
+
+  @override
+  String get omiTraining => 'Обучение на Omi';
+
+  @override
+  String get trainingDataProgram => 'Програма за данни за обучение';
+
+  @override
+  String get getOmiUnlimitedFree =>
+      'Получете Omi Unlimited безплатно, като допринесете данните си за обучение на AI модели.';
+
+  @override
+  String get trainingDataBullets =>
+      '• Вашите данни помагат за подобряване на AI модели\n• Споделят се само нечувствителни данни\n• Напълно прозрачен процес';
+
+  @override
+  String get learnMoreAtOmiTraining => 'Научете повече на omi.me/training';
+
+  @override
+  String get agreeToContributeData => 'Разбирам и се съгласявам да допринеса с данните си за обучение на AI';
+
+  @override
+  String get submitRequest => 'Изпрати заявка';
+
+  @override
+  String get thankYouRequestUnderReview => 'Благодарим ви! Вашата заявка се разглежда. Ще ви уведомим след одобрение.';
+
+  @override
+  String planRemainsActiveUntil(String date) {
+    return 'Планът ви ще остане активен до $date. След това ще загубите достъп до неограничените функции. Сигурни ли сте?';
+  }
+
+  @override
+  String get confirmCancellation => 'Потвърдете отказа';
+
+  @override
+  String get keepMyPlan => 'Запази плана ми';
+
+  @override
+  String get subscriptionSetToCancel => 'Абонаментът ви е настроен да бъде отказан в края на периода.';
+
+  @override
+  String get switchedToOnDevice => 'Превключено към транскрипция на устройството';
+
+  @override
+  String get couldNotSwitchToFreePlan => 'Не може да се премине към безплатен план. Моля, опитайте отново.';
+
+  @override
+  String get couldNotLoadPlans => 'Не може да се заредят наличните планове. Моля, опитайте отново.';
+
+  @override
+  String get selectedPlanNotAvailable => 'Избраният план не е наличен. Моля, опитайте отново.';
+
+  @override
+  String get upgradeToAnnualPlan => 'Надграждане до годишен план';
+
+  @override
+  String get importantBillingInfo => 'Важна информация за фактуриране:';
+
+  @override
+  String get monthlyPlanContinues => 'Текущият ви месечен план ще продължи до края на периода на фактуриране';
+
+  @override
+  String get paymentMethodCharged =>
+      'Съществуващият ви метод на плащане ще бъде таксуван автоматично, когато месечният ви план приключи';
+
+  @override
+  String get annualSubscriptionStarts => 'Вашият 12-месечен годишен абонамент ще започне автоматично след таксуването';
+
+  @override
+  String get thirteenMonthsCoverage => 'Ще получите общо 13 месеца покритие (текущ месец + 12 месеца годишно)';
+
+  @override
+  String get confirmUpgrade => 'Потвърдете надграждането';
+
+  @override
+  String get confirmPlanChange => 'Потвърдете промяната на плана';
+
+  @override
+  String get confirmAndProceed => 'Потвърди и продължи';
+
+  @override
+  String get upgradeScheduled => 'Надграждането е планирано';
+
+  @override
+  String get changePlan => 'Промяна на плана';
+
+  @override
+  String get upgradeAlreadyScheduled => 'Вашето надграждане до годишен план вече е планирано';
+
+  @override
+  String get youAreOnUnlimitedPlan => 'Вие сте на план Неограничен.';
+
+  @override
+  String get yourOmiUnleashed => 'Вашият Omi, освободен. Станете неограничени за безкрайни възможности.';
+
+  @override
+  String planEndedOn(String date) {
+    return 'Планът ви приключи на $date.\\nАбонирайте се отново сега - ще бъдете таксувани незабавно за нов период на фактуриране.';
+  }
+
+  @override
+  String planSetToCancelOn(String date) {
+    return 'Планът ви е настроен да се отмени на $date.\\nАбонирайте се отново сега, за да запазите предимствата си - без такса до $date.';
+  }
+
+  @override
+  String get annualPlanStartsAutomatically =>
+      'Годишният ви план ще започне автоматично, когато месечният ви план приключи.';
+
+  @override
+  String planRenewsOn(String date) {
+    return 'Планът ви се подновява на $date.';
+  }
+
+  @override
+  String get unlimitedConversations => 'Неограничени разговори';
+
+  @override
+  String get askOmiAnything => 'Попитайте Omi каквото и да е за живота си';
+
+  @override
+  String get unlockOmiInfiniteMemory => 'Отключете безкрайната памет на Omi';
+
+  @override
+  String get youreOnAnnualPlan => 'Вие сте на годишен план';
+
+  @override
+  String get alreadyBestValuePlan => 'Вече имате плана с най-добра стойност. Не са необходими промени.';
+
+  @override
+  String get unableToLoadPlans => 'Не може да се заредят планове';
+
+  @override
+  String get checkConnectionTryAgain => 'Моля, проверете връзката си и опитайте отново';
+
+  @override
+  String get useFreePlan => 'Използвай безплатен план';
+
+  @override
+  String get continueText => 'Продължи';
+
+  @override
+  String get resubscribe => 'Повторен абонамент';
+
+  @override
+  String get couldNotOpenPaymentSettings => 'Не може да се отворят настройките за плащане. Моля, опитайте отново.';
+
+  @override
+  String get managePaymentMethod => 'Управление на метод на плащане';
+
+  @override
+  String get cancelSubscription => 'Отказ от абонамент';
+
+  @override
+  String endsOnDate(String date) {
+    return 'Изтича на $date';
+  }
+
+  @override
+  String get active => 'Активен';
+
+  @override
+  String get freePlan => 'Безплатен план';
+
+  @override
+  String get configure => 'Конфигуриране';
 }

@@ -4428,4 +4428,169 @@ class AppLocalizationsAr extends AppLocalizations {
   String errorWithMessage(String error) {
     return 'خطأ: $error';
   }
+
+  @override
+  String get omiTraining => 'تدريب أومي';
+
+  @override
+  String get trainingDataProgram => 'برنامج بيانات التدريب';
+
+  @override
+  String get getOmiUnlimitedFree =>
+      'احصل على Omi غير محدود مجاناً من خلال المساهمة ببياناتك لتدريب نماذج الذكاء الاصطناعي.';
+
+  @override
+  String get trainingDataBullets =>
+      '• بياناتك تساعد في تحسين نماذج الذكاء الاصطناعي\n• يتم مشاركة البيانات غير الحساسة فقط\n• عملية شفافة بالكامل';
+
+  @override
+  String get learnMoreAtOmiTraining => 'تعرف على المزيد في omi.me/training';
+
+  @override
+  String get agreeToContributeData => 'أفهم وأوافق على المساهمة ببياناتي لتدريب الذكاء الاصطناعي';
+
+  @override
+  String get submitRequest => 'إرسال الطلب';
+
+  @override
+  String get thankYouRequestUnderReview => 'شكراً لك! طلبك قيد المراجعة. سنعلمك بمجرد الموافقة.';
+
+  @override
+  String planRemainsActiveUntil(String date) {
+    return 'سيبقى اشتراكك نشطاً حتى $date. بعد ذلك، ستفقد الوصول إلى الميزات غير المحدودة. هل أنت متأكد؟';
+  }
+
+  @override
+  String get confirmCancellation => 'تأكيد الإلغاء';
+
+  @override
+  String get keepMyPlan => 'الاحتفاظ باشتراكي';
+
+  @override
+  String get subscriptionSetToCancel => 'تم تعيين اشتراكك للإلغاء في نهاية الفترة.';
+
+  @override
+  String get switchedToOnDevice => 'تم التبديل إلى النسخ على الجهاز';
+
+  @override
+  String get couldNotSwitchToFreePlan => 'تعذر التبديل إلى الخطة المجانية. يرجى المحاولة مرة أخرى.';
+
+  @override
+  String get couldNotLoadPlans => 'تعذر تحميل الخطط المتاحة. يرجى المحاولة مرة أخرى.';
+
+  @override
+  String get selectedPlanNotAvailable => 'الخطة المحددة غير متاحة. يرجى المحاولة مرة أخرى.';
+
+  @override
+  String get upgradeToAnnualPlan => 'الترقية إلى الخطة السنوية';
+
+  @override
+  String get importantBillingInfo => 'معلومات فوترة مهمة:';
+
+  @override
+  String get monthlyPlanContinues => 'ستستمر خطتك الشهرية الحالية حتى نهاية فترة الفوترة';
+
+  @override
+  String get paymentMethodCharged => 'سيتم خصم الرسوم تلقائياً من طريقة الدفع الحالية عند انتهاء خطتك الشهرية';
+
+  @override
+  String get annualSubscriptionStarts => 'سيبدأ اشتراكك السنوي لمدة 12 شهراً تلقائياً بعد الخصم';
+
+  @override
+  String get thirteenMonthsCoverage => 'ستحصل على تغطية إجمالية لمدة 13 شهراً (الشهر الحالي + 12 شهراً سنوياً)';
+
+  @override
+  String get confirmUpgrade => 'تأكيد الترقية';
+
+  @override
+  String get confirmPlanChange => 'تأكيد تغيير الخطة';
+
+  @override
+  String get confirmAndProceed => 'تأكيد ومتابعة';
+
+  @override
+  String get upgradeScheduled => 'تمت جدولة الترقية';
+
+  @override
+  String get changePlan => 'تغيير الخطة';
+
+  @override
+  String get upgradeAlreadyScheduled => 'تمت جدولة ترقيتك إلى الخطة السنوية بالفعل';
+
+  @override
+  String get youAreOnUnlimitedPlan => 'أنت مشترك في الخطة غير المحدودة.';
+
+  @override
+  String get yourOmiUnleashed => 'أطلق العنان لـ Omi الخاص بك. انطلق بلا حدود لإمكانيات لا نهائية.';
+
+  @override
+  String planEndedOn(String date) {
+    return 'انتهت خطتك في $date.\\nأعد الاشتراك الآن - سيتم تحصيل الرسوم فوراً لفترة فوترة جديدة.';
+  }
+
+  @override
+  String planSetToCancelOn(String date) {
+    return 'تم تعيين خطتك للإلغاء في $date.\\nأعد الاشتراك الآن للحفاظ على مزاياك - لن يتم تحصيل رسوم حتى $date.';
+  }
+
+  @override
+  String get annualPlanStartsAutomatically => 'ستبدأ خطتك السنوية تلقائياً عند انتهاء خطتك الشهرية.';
+
+  @override
+  String planRenewsOn(String date) {
+    return 'يتم تجديد خطتك في $date.';
+  }
+
+  @override
+  String get unlimitedConversations => 'محادثات غير محدودة';
+
+  @override
+  String get askOmiAnything => 'اسأل Omi أي شيء عن حياتك';
+
+  @override
+  String get unlockOmiInfiniteMemory => 'افتح ذاكرة Omi اللامحدودة';
+
+  @override
+  String get youreOnAnnualPlan => 'أنت مشترك في الخطة السنوية';
+
+  @override
+  String get alreadyBestValuePlan => 'لديك بالفعل أفضل خطة من حيث القيمة. لا حاجة لأي تغييرات.';
+
+  @override
+  String get unableToLoadPlans => 'تعذر تحميل الخطط';
+
+  @override
+  String get checkConnectionTryAgain => 'يرجى التحقق من اتصالك والمحاولة مرة أخرى';
+
+  @override
+  String get useFreePlan => 'استخدام الخطة المجانية';
+
+  @override
+  String get continueText => 'متابعة';
+
+  @override
+  String get resubscribe => 'إعادة الاشتراك';
+
+  @override
+  String get couldNotOpenPaymentSettings => 'تعذر فتح إعدادات الدفع. يرجى المحاولة مرة أخرى.';
+
+  @override
+  String get managePaymentMethod => 'إدارة طريقة الدفع';
+
+  @override
+  String get cancelSubscription => 'إلغاء الاشتراك';
+
+  @override
+  String endsOnDate(String date) {
+    return 'ينتهي في $date';
+  }
+
+  @override
+  String get active => 'نشط';
+
+  @override
+  String get freePlan => 'الخطة المجانية';
+
+  @override
+  String get configure => 'تكوين';
 }

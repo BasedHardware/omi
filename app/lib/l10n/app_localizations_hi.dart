@@ -4438,4 +4438,171 @@ class AppLocalizationsHi extends AppLocalizations {
   String errorWithMessage(String error) {
     return 'त्रुटि: $error';
   }
+
+  @override
+  String get omiTraining => 'ओमी प्रशिक्षण';
+
+  @override
+  String get trainingDataProgram => 'प्रशिक्षण डेटा कार्यक्रम';
+
+  @override
+  String get getOmiUnlimitedFree =>
+      'AI मॉडल को प्रशिक्षित करने के लिए अपना डेटा योगदान करके मुफ्त में Omi अनलिमिटेड प्राप्त करें।';
+
+  @override
+  String get trainingDataBullets =>
+      '• आपका डेटा AI मॉडल को बेहतर बनाने में मदद करता है\n• केवल गैर-संवेदनशील डेटा साझा किया जाता है\n• पूरी तरह से पारदर्शी प्रक्रिया';
+
+  @override
+  String get learnMoreAtOmiTraining => 'omi.me/training पर और जानें';
+
+  @override
+  String get agreeToContributeData => 'मैं AI प्रशिक्षण के लिए अपना डेटा योगदान करने को समझता/समझती हूं और सहमत हूं';
+
+  @override
+  String get submitRequest => 'अनुरोध सबमिट करें';
+
+  @override
+  String get thankYouRequestUnderReview => 'धन्यवाद! आपका अनुरोध समीक्षाधीन है। स्वीकृति के बाद हम आपको सूचित करेंगे।';
+
+  @override
+  String planRemainsActiveUntil(String date) {
+    return 'आपकी योजना $date तक सक्रिय रहेगी। उसके बाद, आप अपनी असीमित सुविधाओं तक पहुंच खो देंगे। क्या आप सुनिश्चित हैं?';
+  }
+
+  @override
+  String get confirmCancellation => 'रद्दीकरण की पुष्टि करें';
+
+  @override
+  String get keepMyPlan => 'मेरी योजना रखें';
+
+  @override
+  String get subscriptionSetToCancel => 'आपकी सदस्यता अवधि के अंत में रद्द होने के लिए सेट है।';
+
+  @override
+  String get switchedToOnDevice => 'डिवाइस पर ट्रांसक्रिप्शन पर स्विच किया गया';
+
+  @override
+  String get couldNotSwitchToFreePlan => 'मुफ्त योजना पर स्विच नहीं कर सका। कृपया पुनः प्रयास करें।';
+
+  @override
+  String get couldNotLoadPlans => 'उपलब्ध योजनाएं लोड नहीं हो सकीं। कृपया पुनः प्रयास करें।';
+
+  @override
+  String get selectedPlanNotAvailable => 'चयनित योजना उपलब्ध नहीं है। कृपया पुनः प्रयास करें।';
+
+  @override
+  String get upgradeToAnnualPlan => 'वार्षिक योजना में अपग्रेड करें';
+
+  @override
+  String get importantBillingInfo => 'महत्वपूर्ण बिलिंग जानकारी:';
+
+  @override
+  String get monthlyPlanContinues => 'आपकी वर्तमान मासिक योजना आपके बिलिंग अवधि के अंत तक जारी रहेगी';
+
+  @override
+  String get paymentMethodCharged =>
+      'जब आपकी मासिक योजना समाप्त होगी तो आपकी मौजूदा भुगतान विधि से स्वचालित रूप से शुल्क लिया जाएगा';
+
+  @override
+  String get annualSubscriptionStarts => 'आपकी 12 महीने की वार्षिक सदस्यता शुल्क के बाद स्वचालित रूप से शुरू हो जाएगी';
+
+  @override
+  String get thirteenMonthsCoverage => 'आपको कुल 13 महीने की कवरेज मिलेगी (वर्तमान महीना + 12 महीने वार्षिक)';
+
+  @override
+  String get confirmUpgrade => 'अपग्रेड की पुष्टि करें';
+
+  @override
+  String get confirmPlanChange => 'योजना परिवर्तन की पुष्टि करें';
+
+  @override
+  String get confirmAndProceed => 'पुष्टि करें और आगे बढ़ें';
+
+  @override
+  String get upgradeScheduled => 'अपग्रेड निर्धारित';
+
+  @override
+  String get changePlan => 'योजना बदलें';
+
+  @override
+  String get upgradeAlreadyScheduled => 'आपका वार्षिक योजना में अपग्रेड पहले से निर्धारित है';
+
+  @override
+  String get youAreOnUnlimitedPlan => 'आप अनलिमिटेड प्लान पर हैं।';
+
+  @override
+  String get yourOmiUnleashed => 'आपका Omi, मुक्त। असीमित संभावनाओं के लिए अनलिमिटेड हो जाएं।';
+
+  @override
+  String planEndedOn(String date) {
+    return 'आपकी योजना $date को समाप्त हो गई।\\nअभी पुनः सदस्यता लें - नई बिलिंग अवधि के लिए तुरंत शुल्क लिया जाएगा।';
+  }
+
+  @override
+  String planSetToCancelOn(String date) {
+    return 'आपकी योजना $date को रद्द होने के लिए सेट है।\\nअपने लाभ बनाए रखने के लिए अभी पुनः सदस्यता लें - $date तक कोई शुल्क नहीं।';
+  }
+
+  @override
+  String get annualPlanStartsAutomatically =>
+      'जब आपकी मासिक योजना समाप्त होगी तो आपकी वार्षिक योजना स्वचालित रूप से शुरू हो जाएगी।';
+
+  @override
+  String planRenewsOn(String date) {
+    return 'आपकी योजना $date को नवीनीकृत होती है।';
+  }
+
+  @override
+  String get unlimitedConversations => 'असीमित बातचीत';
+
+  @override
+  String get askOmiAnything => 'अपने जीवन के बारे में Omi से कुछ भी पूछें';
+
+  @override
+  String get unlockOmiInfiniteMemory => 'Omi की अनंत स्मृति अनलॉक करें';
+
+  @override
+  String get youreOnAnnualPlan => 'आप वार्षिक योजना पर हैं';
+
+  @override
+  String get alreadyBestValuePlan => 'आपके पास पहले से सबसे अच्छी मूल्य योजना है। किसी बदलाव की जरूरत नहीं।';
+
+  @override
+  String get unableToLoadPlans => 'योजनाएं लोड नहीं हो पाईं';
+
+  @override
+  String get checkConnectionTryAgain => 'कृपया अपना कनेक्शन जांचें और पुनः प्रयास करें';
+
+  @override
+  String get useFreePlan => 'मुफ्त योजना का उपयोग करें';
+
+  @override
+  String get continueText => 'जारी रखें';
+
+  @override
+  String get resubscribe => 'पुनः सदस्यता लें';
+
+  @override
+  String get couldNotOpenPaymentSettings => 'भुगतान सेटिंग्स नहीं खुल सकीं। कृपया पुनः प्रयास करें।';
+
+  @override
+  String get managePaymentMethod => 'भुगतान विधि प्रबंधित करें';
+
+  @override
+  String get cancelSubscription => 'सदस्यता रद्द करें';
+
+  @override
+  String endsOnDate(String date) {
+    return '$date को समाप्त होता है';
+  }
+
+  @override
+  String get active => 'सक्रिय';
+
+  @override
+  String get freePlan => 'मुफ्त योजना';
+
+  @override
+  String get configure => 'कॉन्फ़िगर करें';
 }

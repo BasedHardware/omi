@@ -4485,4 +4485,171 @@ class AppLocalizationsRo extends AppLocalizations {
   String errorWithMessage(String error) {
     return 'Eroare: $error';
   }
+
+  @override
+  String get omiTraining => 'Antrenament Omi';
+
+  @override
+  String get trainingDataProgram => 'Program de date de antrenament';
+
+  @override
+  String get getOmiUnlimitedFree =>
+      'Obțineți Omi Unlimited gratuit contribuind cu datele dvs. pentru antrenarea modelelor AI.';
+
+  @override
+  String get trainingDataBullets =>
+      '• Datele dvs. ajută la îmbunătățirea modelelor AI\n• Sunt partajate doar date nesensibile\n• Proces complet transparent';
+
+  @override
+  String get learnMoreAtOmiTraining => 'Aflați mai multe la omi.me/training';
+
+  @override
+  String get agreeToContributeData => 'Înțeleg și sunt de acord să contribui cu datele mele pentru antrenarea AI';
+
+  @override
+  String get submitRequest => 'Trimite cererea';
+
+  @override
+  String get thankYouRequestUnderReview =>
+      'Mulțumim! Cererea dvs. este în curs de examinare. Vă vom notifica după aprobare.';
+
+  @override
+  String planRemainsActiveUntil(String date) {
+    return 'Planul dvs. va rămâne activ până la $date. După aceea, veți pierde accesul la funcțiile nelimitate. Sunteți sigur?';
+  }
+
+  @override
+  String get confirmCancellation => 'Confirmă anularea';
+
+  @override
+  String get keepMyPlan => 'Păstrează planul meu';
+
+  @override
+  String get subscriptionSetToCancel => 'Abonamentul dvs. este setat să fie anulat la sfârșitul perioadei.';
+
+  @override
+  String get switchedToOnDevice => 'Comutat la transcrierea pe dispozitiv';
+
+  @override
+  String get couldNotSwitchToFreePlan => 'Nu s-a putut comuta la planul gratuit. Vă rugăm să încercați din nou.';
+
+  @override
+  String get couldNotLoadPlans => 'Nu s-au putut încărca planurile disponibile. Vă rugăm să încercați din nou.';
+
+  @override
+  String get selectedPlanNotAvailable => 'Planul selectat nu este disponibil. Vă rugăm să încercați din nou.';
+
+  @override
+  String get upgradeToAnnualPlan => 'Treceți la planul anual';
+
+  @override
+  String get importantBillingInfo => 'Informații importante de facturare:';
+
+  @override
+  String get monthlyPlanContinues => 'Planul dvs. lunar actual va continua până la sfârșitul perioadei de facturare';
+
+  @override
+  String get paymentMethodCharged =>
+      'Metoda dvs. de plată existentă va fi debitată automat când planul lunar se încheie';
+
+  @override
+  String get annualSubscriptionStarts => 'Abonamentul dvs. anual de 12 luni va începe automat după debitare';
+
+  @override
+  String get thirteenMonthsCoverage => 'Veți primi în total 13 luni de acoperire (luna curentă + 12 luni anual)';
+
+  @override
+  String get confirmUpgrade => 'Confirmă upgrade-ul';
+
+  @override
+  String get confirmPlanChange => 'Confirmă schimbarea planului';
+
+  @override
+  String get confirmAndProceed => 'Confirmă și continuă';
+
+  @override
+  String get upgradeScheduled => 'Upgrade programat';
+
+  @override
+  String get changePlan => 'Schimbă planul';
+
+  @override
+  String get upgradeAlreadyScheduled => 'Upgrade-ul dvs. la planul anual este deja programat';
+
+  @override
+  String get youAreOnUnlimitedPlan => 'Sunteți pe planul Nelimitat.';
+
+  @override
+  String get yourOmiUnleashed => 'Omi-ul dvs., dezlănțuit. Deveniți nelimitat pentru posibilități nesfârșite.';
+
+  @override
+  String planEndedOn(String date) {
+    return 'Planul dvs. s-a încheiat pe $date.\\nReabonați-vă acum - veți fi taxat imediat pentru o nouă perioadă de facturare.';
+  }
+
+  @override
+  String planSetToCancelOn(String date) {
+    return 'Planul dvs. este setat să fie anulat pe $date.\\nReabonați-vă acum pentru a vă păstra beneficiile - fără taxă până la $date.';
+  }
+
+  @override
+  String get annualPlanStartsAutomatically => 'Planul dvs. anual va începe automat când planul lunar se încheie.';
+
+  @override
+  String planRenewsOn(String date) {
+    return 'Planul dvs. se reînnoiește pe $date.';
+  }
+
+  @override
+  String get unlimitedConversations => 'Conversații nelimitate';
+
+  @override
+  String get askOmiAnything => 'Întrebați Omi orice despre viața dvs.';
+
+  @override
+  String get unlockOmiInfiniteMemory => 'Deblocați memoria infinită a lui Omi';
+
+  @override
+  String get youreOnAnnualPlan => 'Sunteți pe planul anual';
+
+  @override
+  String get alreadyBestValuePlan => 'Aveți deja planul cu cea mai bună valoare. Nu sunt necesare modificări.';
+
+  @override
+  String get unableToLoadPlans => 'Nu se pot încărca planurile';
+
+  @override
+  String get checkConnectionTryAgain => 'Verificați conexiunea și încercați din nou';
+
+  @override
+  String get useFreePlan => 'Folosește planul gratuit';
+
+  @override
+  String get continueText => 'Continuă';
+
+  @override
+  String get resubscribe => 'Reabonează-te';
+
+  @override
+  String get couldNotOpenPaymentSettings => 'Nu s-au putut deschide setările de plată. Vă rugăm să încercați din nou.';
+
+  @override
+  String get managePaymentMethod => 'Gestionează metoda de plată';
+
+  @override
+  String get cancelSubscription => 'Anulează abonamentul';
+
+  @override
+  String endsOnDate(String date) {
+    return 'Se termină pe $date';
+  }
+
+  @override
+  String get active => 'Activ';
+
+  @override
+  String get freePlan => 'Plan gratuit';
+
+  @override
+  String get configure => 'Configurează';
 }

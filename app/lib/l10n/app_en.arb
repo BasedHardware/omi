@@ -5174,5 +5174,239 @@
         "example": "Connection failed"
       }
     }
+  },
+  "omiTraining": "Omi Training",
+  "@omiTraining": {
+    "description": "Title for Omi training program"
+  },
+  "trainingDataProgram": "Training Data Program",
+  "@trainingDataProgram": {
+    "description": "Label for training data program"
+  },
+  "getOmiUnlimitedFree": "Get Omi Unlimited for free by contributing your data to train AI models.",
+  "@getOmiUnlimitedFree": {
+    "description": "Description for getting Omi Unlimited free by contributing data"
+  },
+  "trainingDataBullets": "• Your data helps improve AI models\n• Only non-sensitive data is shared\n• Fully transparent process",
+  "@trainingDataBullets": {
+    "description": "Bullet points explaining training data program benefits"
+  },
+  "learnMoreAtOmiTraining": "Learn more at omi.me/training",
+  "@learnMoreAtOmiTraining": {
+    "description": "Link text to learn more about training"
+  },
+  "agreeToContributeData": "I understand and agree to contribute my data for AI training",
+  "@agreeToContributeData": {
+    "description": "Checkbox label for agreeing to contribute data"
+  },
+  "submitRequest": "Submit Request",
+  "@submitRequest": {
+    "description": "Button text to submit request"
+  },
+  "thankYouRequestUnderReview": "Thank you! Your request is under review. We will notify you once approved.",
+  "@thankYouRequestUnderReview": {
+    "description": "Success message after submitting training data request"
+  },
+  "planRemainsActiveUntil": "Your plan will remain active until {date}. After that, you will lose access to your unlimited features. Are you sure?",
+  "@planRemainsActiveUntil": {
+    "description": "Message explaining plan remains active until date",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "January 15, 2026"
+      }
+    }
+  },
+  "confirmCancellation": "Confirm Cancellation",
+  "@confirmCancellation": {
+    "description": "Button text to confirm cancellation"
+  },
+  "keepMyPlan": "Keep My Plan",
+  "@keepMyPlan": {
+    "description": "Button text to keep current plan"
+  },
+  "subscriptionSetToCancel": "Your subscription is set to cancel at the end of the period.",
+  "@subscriptionSetToCancel": {
+    "description": "Message that subscription is set to cancel"
+  },
+  "switchedToOnDevice": "Switched to on-device transcription",
+  "@switchedToOnDevice": {
+    "description": "Success message when switched to on-device transcription"
+  },
+  "couldNotSwitchToFreePlan": "Could not switch to free plan. Please try again.",
+  "@couldNotSwitchToFreePlan": {
+    "description": "Error message when switching to free plan fails"
+  },
+  "couldNotLoadPlans": "Could not load available plans. Please try again.",
+  "@couldNotLoadPlans": {
+    "description": "Error message when plans cannot be loaded"
+  },
+  "selectedPlanNotAvailable": "Selected plan is not available. Please try again.",
+  "@selectedPlanNotAvailable": {
+    "description": "Error message when selected plan is not available"
+  },
+  "upgradeToAnnualPlan": "Upgrade to Annual Plan",
+  "@upgradeToAnnualPlan": {
+    "description": "Dialog title for upgrading to annual plan"
+  },
+  "importantBillingInfo": "Important Billing Information:",
+  "@importantBillingInfo": {
+    "description": "Header for billing information section"
+  },
+  "monthlyPlanContinues": "Your current monthly plan will continue until the end of your billing period",
+  "@monthlyPlanContinues": {
+    "description": "Info about monthly plan continuing"
+  },
+  "paymentMethodCharged": "Your existing payment method will be charged automatically when your monthly plan ends",
+  "@paymentMethodCharged": {
+    "description": "Info about payment method being charged"
+  },
+  "annualSubscriptionStarts": "Your 12-month annual subscription will start automatically after the charge",
+  "@annualSubscriptionStarts": {
+    "description": "Info about annual subscription starting"
+  },
+  "thirteenMonthsCoverage": "You'll get 13 months of coverage total (current month + 12 months annual)",
+  "@thirteenMonthsCoverage": {
+    "description": "Info about total coverage period"
+  },
+  "confirmUpgrade": "Confirm Upgrade",
+  "@confirmUpgrade": {
+    "description": "Button text to confirm upgrade"
+  },
+  "confirmPlanChange": "Confirm Plan Change",
+  "@confirmPlanChange": {
+    "description": "Dialog title for confirming plan change"
+  },
+  "confirmAndProceed": "Confirm & Proceed",
+  "@confirmAndProceed": {
+    "description": "Button text to confirm and proceed"
+  },
+  "upgradeScheduled": "Upgrade Scheduled",
+  "@upgradeScheduled": {
+    "description": "Label when upgrade is scheduled"
+  },
+  "changePlan": "Change Plan",
+  "@changePlan": {
+    "description": "Button text to change plan"
+  },
+  "upgradeAlreadyScheduled": "Your upgrade to the annual plan is already scheduled",
+  "@upgradeAlreadyScheduled": {
+    "description": "Message when upgrade is already scheduled"
+  },
+  "youAreOnUnlimitedPlan": "You are on the Unlimited Plan.",
+  "@youAreOnUnlimitedPlan": {
+    "description": "Message showing user is on unlimited plan"
+  },
+  "yourOmiUnleashed": "Your Omi, unleashed. Go unlimited for endless possibilities.",
+  "@yourOmiUnleashed": {
+    "description": "Marketing text for unlimited plan"
+  },
+  "planEndedOn": "Your plan ended on {date}.\\nResubscribe now - you'll be charged immediately for a new billing period.",
+  "@planEndedOn": {
+    "description": "Message when plan has ended",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "January 15, 2026"
+      }
+    }
+  },
+  "planSetToCancelOn": "Your plan is set to cancel on {date}.\\nResubscribe now to keep your benefits - no charge until {date}.",
+  "@planSetToCancelOn": {
+    "description": "Message when plan is set to cancel",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "January 15, 2026"
+      }
+    }
+  },
+  "annualPlanStartsAutomatically": "Your annual plan will start automatically when your monthly plan ends.",
+  "@annualPlanStartsAutomatically": {
+    "description": "Info that annual plan starts automatically"
+  },
+  "planRenewsOn": "Your plan renews on {date}.",
+  "@planRenewsOn": {
+    "description": "Message showing plan renewal date",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "January 15, 2026"
+      }
+    }
+  },
+  "unlimitedConversations": "Unlimited conversations",
+  "@unlimitedConversations": {
+    "description": "Feature: unlimited conversations"
+  },
+  "askOmiAnything": "Ask Omi anything about your life",
+  "@askOmiAnything": {
+    "description": "Feature: ask Omi anything"
+  },
+  "unlockOmiInfiniteMemory": "Unlock Omi's infinite memory",
+  "@unlockOmiInfiniteMemory": {
+    "description": "Feature: unlock infinite memory"
+  },
+  "youreOnAnnualPlan": "You're on the Annual Plan",
+  "@youreOnAnnualPlan": {
+    "description": "Message showing user is on annual plan"
+  },
+  "alreadyBestValuePlan": "You already have the best value plan. No changes needed.",
+  "@alreadyBestValuePlan": {
+    "description": "Message when user already has best plan"
+  },
+  "unableToLoadPlans": "Unable to load plans",
+  "@unableToLoadPlans": {
+    "description": "Error message when plans cannot load"
+  },
+  "checkConnectionTryAgain": "Please check your connection and try again",
+  "@checkConnectionTryAgain": {
+    "description": "Message to check connection"
+  },
+  "useFreePlan": "Use Free Plan",
+  "@useFreePlan": {
+    "description": "Button to use free plan"
+  },
+  "continueText": "Continue",
+  "@continueText": {
+    "description": "Continue button text"
+  },
+  "resubscribe": "Resubscribe",
+  "@resubscribe": {
+    "description": "Button to resubscribe"
+  },
+  "couldNotOpenPaymentSettings": "Could not open payment settings. Please try again.",
+  "@couldNotOpenPaymentSettings": {
+    "description": "Error when payment settings cannot open"
+  },
+  "managePaymentMethod": "Manage Payment Method",
+  "@managePaymentMethod": {
+    "description": "Button to manage payment method"
+  },
+  "cancelSubscription": "Cancel Subscription",
+  "@cancelSubscription": {
+    "description": "Button to cancel subscription"
+  },
+  "endsOnDate": "Ends on {date}",
+  "@endsOnDate": {
+    "description": "Shows end date",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "January 15, 2026"
+      }
+    }
+  },
+  "active": "Active",
+  "@active": {
+    "description": "Status label for active"
+  },
+  "freePlan": "Free Plan",
+  "@freePlan": {
+    "description": "Label for free plan"
+  },
+  "configure": "Configure",
+  "@configure": {
+    "description": "Button to configure settings"
   }
 }

@@ -4385,4 +4385,167 @@ class AppLocalizationsJa extends AppLocalizations {
   String errorWithMessage(String error) {
     return 'エラー: $error';
   }
+
+  @override
+  String get omiTraining => 'Omiトレーニング';
+
+  @override
+  String get trainingDataProgram => 'トレーニングデータプログラム';
+
+  @override
+  String get getOmiUnlimitedFree => 'AIモデルのトレーニングにデータを提供することで、Omi Unlimitedを無料で入手できます。';
+
+  @override
+  String get trainingDataBullets => '• あなたのデータがAIモデルの改善に役立ちます\n• 機密性のないデータのみが共有されます\n• 完全に透明なプロセス';
+
+  @override
+  String get learnMoreAtOmiTraining => '詳細はomi.me/trainingをご覧ください';
+
+  @override
+  String get agreeToContributeData => 'AIトレーニングのためにデータを提供することを理解し、同意します';
+
+  @override
+  String get submitRequest => 'リクエストを送信';
+
+  @override
+  String get thankYouRequestUnderReview => 'ありがとうございます！リクエストは審査中です。承認後にお知らせします。';
+
+  @override
+  String planRemainsActiveUntil(String date) {
+    return 'プランは$dateまで有効です。その後、無制限の機能へのアクセスを失います。よろしいですか？';
+  }
+
+  @override
+  String get confirmCancellation => 'キャンセルを確認';
+
+  @override
+  String get keepMyPlan => 'プランを維持';
+
+  @override
+  String get subscriptionSetToCancel => 'サブスクリプションは期間終了時にキャンセルされるよう設定されています。';
+
+  @override
+  String get switchedToOnDevice => 'デバイス上の文字起こしに切り替えました';
+
+  @override
+  String get couldNotSwitchToFreePlan => '無料プランに切り替えられませんでした。もう一度お試しください。';
+
+  @override
+  String get couldNotLoadPlans => '利用可能なプランを読み込めませんでした。もう一度お試しください。';
+
+  @override
+  String get selectedPlanNotAvailable => '選択したプランは利用できません。もう一度お試しください。';
+
+  @override
+  String get upgradeToAnnualPlan => '年間プランにアップグレード';
+
+  @override
+  String get importantBillingInfo => '重要な請求情報：';
+
+  @override
+  String get monthlyPlanContinues => '現在の月額プランは請求期間の終了まで継続されます';
+
+  @override
+  String get paymentMethodCharged => '月額プランが終了すると、既存のお支払い方法に自動的に請求されます';
+
+  @override
+  String get annualSubscriptionStarts => '12ヶ月の年間サブスクリプションは、請求後に自動的に開始されます';
+
+  @override
+  String get thirteenMonthsCoverage => '合計13ヶ月の保障を受けられます（当月 + 年間12ヶ月）';
+
+  @override
+  String get confirmUpgrade => 'アップグレードを確認';
+
+  @override
+  String get confirmPlanChange => 'プラン変更を確認';
+
+  @override
+  String get confirmAndProceed => '確認して続行';
+
+  @override
+  String get upgradeScheduled => 'アップグレード予定';
+
+  @override
+  String get changePlan => 'プランを変更';
+
+  @override
+  String get upgradeAlreadyScheduled => '年間プランへのアップグレードは既に予定されています';
+
+  @override
+  String get youAreOnUnlimitedPlan => 'Unlimitedプランをご利用中です。';
+
+  @override
+  String get yourOmiUnleashed => 'あなたのOmiを解き放とう。無限の可能性のためにUnlimitedへ。';
+
+  @override
+  String planEndedOn(String date) {
+    return 'プランは$dateに終了しました。\\n今すぐ再登録 - 新しい請求期間の料金が即座に請求されます。';
+  }
+
+  @override
+  String planSetToCancelOn(String date) {
+    return 'プランは$dateにキャンセル予定です。\\n特典を維持するために今すぐ再登録 - $dateまで請求はありません。';
+  }
+
+  @override
+  String get annualPlanStartsAutomatically => '月額プランが終了すると、年間プランが自動的に開始されます。';
+
+  @override
+  String planRenewsOn(String date) {
+    return 'プランは$dateに更新されます。';
+  }
+
+  @override
+  String get unlimitedConversations => '無制限の会話';
+
+  @override
+  String get askOmiAnything => 'Omiにあなたの人生について何でも聞いてください';
+
+  @override
+  String get unlockOmiInfiniteMemory => 'Omiの無限メモリーをアンロック';
+
+  @override
+  String get youreOnAnnualPlan => '年間プランをご利用中です';
+
+  @override
+  String get alreadyBestValuePlan => 'すでに最もお得なプランをご利用中です。変更の必要はありません。';
+
+  @override
+  String get unableToLoadPlans => 'プランを読み込めません';
+
+  @override
+  String get checkConnectionTryAgain => '接続を確認してもう一度お試しください';
+
+  @override
+  String get useFreePlan => '無料プランを使用';
+
+  @override
+  String get continueText => '続ける';
+
+  @override
+  String get resubscribe => '再購読';
+
+  @override
+  String get couldNotOpenPaymentSettings => '支払い設定を開けませんでした。もう一度お試しください。';
+
+  @override
+  String get managePaymentMethod => '支払い方法を管理';
+
+  @override
+  String get cancelSubscription => 'サブスクリプションをキャンセル';
+
+  @override
+  String endsOnDate(String date) {
+    return '$dateに終了';
+  }
+
+  @override
+  String get active => 'アクティブ';
+
+  @override
+  String get freePlan => '無料プラン';
+
+  @override
+  String get configure => '設定';
 }
