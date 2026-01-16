@@ -1338,3 +1338,18 @@ Notes: File was almost fully localized already. Only one hardcoded string
        remained: "Delete Account" button text. Updated to use existing
        context.l10n.deleteAccount key. Removed const from Text widget.
 Commit: 5fa5dc029
+
+--------------------------------------------------------------------------------
+FILE 99 (Phase 2 FILE 29): profile.dart
+--------------------------------------------------------------------------------
+Path: app/lib/pages/settings/profile.dart
+New Keys: configureDailySummaryDigest
+Reused Keys: dailySummary
+Total New Keys: 1
+Script: /tmp/translate_profile.py
+Status: ✅ COMPLETED
+Notes: Profile settings page with user info, voice & people, notifications,
+       payment & privacy sections. Most strings already localized. Added new
+       key for Daily Summary subtitle description. The BETA tag was left as-is
+       since it's commonly kept in English even in localized apps.
+Commit: ca6772dbf
