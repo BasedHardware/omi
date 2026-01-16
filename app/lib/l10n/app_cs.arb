@@ -3087,5 +3087,10 @@
   "readOnlyScope": "Pouze pro čtení",
   "fullAccessScope": "Plný přístup",
   "readScope": "Čtení",
-  "writeScope": "Zápis"
+  "writeScope": "Zápis",
+  "apiKeyCreated": "API klíč vytvořen!",
+  "saveKeyWarning": "Uložte si tento klíč nyní! Znovu ho neuvidíte.",
+  "yourApiKey": "VÁŠ API KLÍČ",
+  "tapToCopy": "Klepnutím zkopírujete",
+  "copyKey": "Kopírovat klíč"
 }

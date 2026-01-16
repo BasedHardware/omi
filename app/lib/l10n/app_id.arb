@@ -3085,5 +3085,10 @@
   "readOnlyScope": "Hanya Baca",
   "fullAccessScope": "Akses Penuh",
   "readScope": "Baca",
-  "writeScope": "Tulis"
+  "writeScope": "Tulis",
+  "apiKeyCreated": "Kunci API Dibuat!",
+  "saveKeyWarning": "Simpan kunci ini sekarang! Anda tidak akan bisa melihatnya lagi.",
+  "yourApiKey": "KUNCI API ANDA",
+  "tapToCopy": "Ketuk untuk menyalin",
+  "copyKey": "Salin Kunci"
 }

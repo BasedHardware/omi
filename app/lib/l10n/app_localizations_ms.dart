@@ -4434,4 +4434,19 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get writeScope => 'Tulis';
+
+  @override
+  String get apiKeyCreated => 'Kunci API Dicipta!';
+
+  @override
+  String get saveKeyWarning => 'Simpan kunci ini sekarang! Anda tidak akan dapat melihatnya lagi.';
+
+  @override
+  String get yourApiKey => 'KUNCI API ANDA';
+
+  @override
+  String get tapToCopy => 'Ketik untuk menyalin';
+
+  @override
+  String get copyKey => 'Salin Kunci';
 }

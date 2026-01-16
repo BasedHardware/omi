@@ -1538,7 +1538,7 @@
   "enterSttHttpEndpoint": "Enter your STT HTTP endpoint",
   "websocketUrl": "WebSocket URL",
   "enterLiveSttWebsocket": "Enter your live STT WebSocket endpoint",
-  "apiKey": "API Key",
+  "apiKey": "API key",
   "enterApiKey": "Enter your API key",
   "storedLocallyNeverShared": "Stored locally, never shared",
   "host": "Host",
@@ -5109,5 +5109,28 @@
   "writeScope": "Write",
   "@writeScope": {
     "description": "Label for write API key scope"
+  },
+  "apiKeyCreated": "API Key Created!",
+  "@apiKeyCreated": {
+    "description": "Title shown when API key is successfully created"
+  },
+  "saveKeyWarning": "Save this key now! You won't be able to see it again.",
+  "@saveKeyWarning": {
+    "description": "Warning message when API key is created"
+  },
+  "yourApiKey": "YOUR API KEY",
+  "@yourApiKey": {
+    "description": "Label for API key display section"
+  },
+  "tapToCopy": "Tap to copy",
+  "@tapToCopy": {
+    "description": "Hint text for tap to copy action"
+  },
+  "copyKey": "Copy Key",
+  "@copyKey": {
+    "description": "Button label to copy API key"
+  },
+  "@apiKey": {
+    "description": "Label for API key (used for clipboard notification)"
   }
 }

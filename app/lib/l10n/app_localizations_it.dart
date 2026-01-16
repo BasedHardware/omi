@@ -4441,4 +4441,19 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get writeScope => 'Scrittura';
+
+  @override
+  String get apiKeyCreated => 'Chiave API creata!';
+
+  @override
+  String get saveKeyWarning => 'Salva questa chiave ora! Non potrai vederla di nuovo.';
+
+  @override
+  String get yourApiKey => 'LA TUA CHIAVE API';
+
+  @override
+  String get tapToCopy => 'Tocca per copiare';
+
+  @override
+  String get copyKey => 'Copia chiave';
 }

@@ -3067,5 +3067,10 @@
   "readOnlyScope": "Tik skaitymas",
   "fullAccessScope": "Pilna prieiga",
   "readScope": "Skaityti",
-  "writeScope": "Rašyti"
+  "writeScope": "Rašyti",
+  "apiKeyCreated": "API raktas sukurtas!",
+  "saveKeyWarning": "Išsaugokite šį raktą dabar! Daugiau jo nematysite.",
+  "yourApiKey": "JŪSŲ API RAKTAS",
+  "tapToCopy": "Bakstelėkite, kad nukopijuotumėte",
+  "copyKey": "Kopijuoti raktą"
 }

@@ -1539,7 +1539,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get enterLiveSttWebsocket => 'Введіть свою WebSocket кінцеву точку STT в реальному часі';
 
   @override
-  String get apiKey => 'API-ключ';
+  String get apiKey => 'API ключ';
 
   @override
   String get enterApiKey => 'Введіть свій API-ключ';
@@ -4422,4 +4422,19 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get writeScope => 'Запис';
+
+  @override
+  String get apiKeyCreated => 'API ключ створено!';
+
+  @override
+  String get saveKeyWarning => 'Збережіть цей ключ зараз! Ви більше не зможете його побачити.';
+
+  @override
+  String get yourApiKey => 'ВАШ API КЛЮЧ';
+
+  @override
+  String get tapToCopy => 'Торкніться, щоб скопіювати';
+
+  @override
+  String get copyKey => 'Копіювати ключ';
 }

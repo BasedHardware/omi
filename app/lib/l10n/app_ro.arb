@@ -3085,5 +3085,10 @@
   "readOnlyScope": "Doar citire",
   "fullAccessScope": "Acces complet",
   "readScope": "Citire",
-  "writeScope": "Scriere"
+  "writeScope": "Scriere",
+  "apiKeyCreated": "Cheie API creată!",
+  "saveKeyWarning": "Salvați această cheie acum! Nu o veți mai putea vedea.",
+  "yourApiKey": "CHEIA DVS. API",
+  "tapToCopy": "Atingeți pentru a copia",
+  "copyKey": "Copiază cheia"
 }

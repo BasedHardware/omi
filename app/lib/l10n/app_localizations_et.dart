@@ -4419,4 +4419,19 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get writeScope => 'Kirjutamine';
+
+  @override
+  String get apiKeyCreated => 'API võti loodud!';
+
+  @override
+  String get saveKeyWarning => 'Salvesta see võti kohe! Sa ei näe seda enam kunagi.';
+
+  @override
+  String get yourApiKey => 'TEIE API VÕTI';
+
+  @override
+  String get tapToCopy => 'Puudutage kopeerimiseks';
+
+  @override
+  String get copyKey => 'Kopeeri võti';
 }

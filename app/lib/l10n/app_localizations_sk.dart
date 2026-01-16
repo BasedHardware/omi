@@ -4418,4 +4418,19 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get writeScope => 'Zápis';
+
+  @override
+  String get apiKeyCreated => 'API kľúč vytvorený!';
+
+  @override
+  String get saveKeyWarning => 'Uložte si tento kľúč teraz! Znovu ho neuvidíte.';
+
+  @override
+  String get yourApiKey => 'VÁŠ API KĽÚČ';
+
+  @override
+  String get tapToCopy => 'Klepnutím skopírujete';
+
+  @override
+  String get copyKey => 'Kopírovať kľúč';
 }

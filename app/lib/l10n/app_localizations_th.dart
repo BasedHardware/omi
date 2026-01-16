@@ -1529,7 +1529,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get enterLiveSttWebsocket => 'ใส่ endpoint WebSocket ของ STT แบบสดของคุณ';
 
   @override
-  String get apiKey => 'API Key';
+  String get apiKey => 'คีย์ API';
 
   @override
   String get enterApiKey => 'ใส่ API key ของคุณ';
@@ -4395,4 +4395,19 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get writeScope => 'เขียน';
+
+  @override
+  String get apiKeyCreated => 'สร้างคีย์ API แล้ว!';
+
+  @override
+  String get saveKeyWarning => 'บันทึกคีย์นี้ตอนนี้! คุณจะไม่สามารถดูได้อีก';
+
+  @override
+  String get yourApiKey => 'คีย์ API ของคุณ';
+
+  @override
+  String get tapToCopy => 'แตะเพื่อคัดลอก';
+
+  @override
+  String get copyKey => 'คัดลอกคีย์';
 }

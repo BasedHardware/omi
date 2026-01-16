@@ -4431,4 +4431,19 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get writeScope => 'Запис';
+
+  @override
+  String get apiKeyCreated => 'API ключът е създаден!';
+
+  @override
+  String get saveKeyWarning => 'Запазете този ключ сега! Няма да можете да го видите отново.';
+
+  @override
+  String get yourApiKey => 'ВАШИЯТ API КЛЮЧ';
+
+  @override
+  String get tapToCopy => 'Докоснете за копиране';
+
+  @override
+  String get copyKey => 'Копиране на ключа';
 }

@@ -4394,4 +4394,19 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get writeScope => 'लिखें';
+
+  @override
+  String get apiKeyCreated => 'API कुंजी बनाई गई!';
+
+  @override
+  String get saveKeyWarning => 'इस कुंजी को अभी सहेजें! आप इसे दोबारा नहीं देख पाएंगे।';
+
+  @override
+  String get yourApiKey => 'आपकी API कुंजी';
+
+  @override
+  String get tapToCopy => 'कॉपी करने के लिए टैप करें';
+
+  @override
+  String get copyKey => 'कुंजी कॉपी करें';
 }

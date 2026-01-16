@@ -4426,4 +4426,19 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get writeScope => 'Zapis';
+
+  @override
+  String get apiKeyCreated => 'Klucz API utworzony!';
+
+  @override
+  String get saveKeyWarning => 'Zapisz ten klucz teraz! Nie będziesz mógł go ponownie zobaczyć.';
+
+  @override
+  String get yourApiKey => 'TWÓJ KLUCZ API';
+
+  @override
+  String get tapToCopy => 'Dotknij, aby skopiować';
+
+  @override
+  String get copyKey => 'Kopiuj klucz';
 }

@@ -3087,5 +3087,10 @@
   "readOnlyScope": "Només lectura",
   "fullAccessScope": "Accés complet",
   "readScope": "Lectura",
-  "writeScope": "Escriptura"
+  "writeScope": "Escriptura",
+  "apiKeyCreated": "Clau API creada!",
+  "saveKeyWarning": "Desa aquesta clau ara! No la podràs veure de nou.",
+  "yourApiKey": "LA TEVA CLAU API",
+  "tapToCopy": "Toca per copiar",
+  "copyKey": "Copia la clau"
 }

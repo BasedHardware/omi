@@ -1903,5 +1903,10 @@
   "readOnlyScope": "Lecture seule",
   "fullAccessScope": "Accès complet",
   "readScope": "Lecture",
-  "writeScope": "Écriture"
+  "writeScope": "Écriture",
+  "apiKeyCreated": "Clé API créée !",
+  "saveKeyWarning": "Enregistrez cette clé maintenant ! Vous ne pourrez plus la voir.",
+  "yourApiKey": "VOTRE CLÉ API",
+  "tapToCopy": "Appuyez pour copier",
+  "copyKey": "Copier la clé"
 }

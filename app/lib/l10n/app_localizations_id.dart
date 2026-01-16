@@ -4430,4 +4430,19 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get writeScope => 'Tulis';
+
+  @override
+  String get apiKeyCreated => 'Kunci API Dibuat!';
+
+  @override
+  String get saveKeyWarning => 'Simpan kunci ini sekarang! Anda tidak akan bisa melihatnya lagi.';
+
+  @override
+  String get yourApiKey => 'KUNCI API ANDA';
+
+  @override
+  String get tapToCopy => 'Ketuk untuk menyalin';
+
+  @override
+  String get copyKey => 'Salin Kunci';
 }

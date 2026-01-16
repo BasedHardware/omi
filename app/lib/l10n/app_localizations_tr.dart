@@ -4427,4 +4427,19 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get writeScope => 'Yazma';
+
+  @override
+  String get apiKeyCreated => 'API Anahtarı Oluşturuldu!';
+
+  @override
+  String get saveKeyWarning => 'Bu anahtarı şimdi kaydedin! Tekrar göremeyeceksiniz.';
+
+  @override
+  String get yourApiKey => 'API ANAHTARINIZ';
+
+  @override
+  String get tapToCopy => 'Kopyalamak için dokunun';
+
+  @override
+  String get copyKey => 'Anahtarı Kopyala';
 }

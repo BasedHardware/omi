@@ -3103,5 +3103,10 @@
   "readOnlyScope": "قراءة فقط",
   "fullAccessScope": "وصول كامل",
   "readScope": "قراءة",
-  "writeScope": "كتابة"
+  "writeScope": "كتابة",
+  "apiKeyCreated": "تم إنشاء مفتاح API!",
+  "saveKeyWarning": "احفظ هذا المفتاح الآن! لن تتمكن من رؤيته مرة أخرى.",
+  "yourApiKey": "مفتاح API الخاص بك",
+  "tapToCopy": "اضغط للنسخ",
+  "copyKey": "نسخ المفتاح"
 }

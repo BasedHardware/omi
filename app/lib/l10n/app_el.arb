@@ -3085,5 +3085,10 @@
   "readOnlyScope": "Μόνο ανάγνωση",
   "fullAccessScope": "Πλήρης πρόσβαση",
   "readScope": "Ανάγνωση",
-  "writeScope": "Εγγραφή"
+  "writeScope": "Εγγραφή",
+  "apiKeyCreated": "Το κλειδί API δημιουργήθηκε!",
+  "saveKeyWarning": "Αποθηκεύστε αυτό το κλειδί τώρα! Δεν θα μπορείτε να το δείτε ξανά.",
+  "yourApiKey": "ΤΟ ΚΛΕΙΔΙ API ΣΑΣ",
+  "tapToCopy": "Πατήστε για αντιγραφή",
+  "copyKey": "Αντιγραφή κλειδιού"
 }

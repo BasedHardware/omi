@@ -4431,4 +4431,19 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get writeScope => 'Schrijven';
+
+  @override
+  String get apiKeyCreated => 'API-sleutel aangemaakt!';
+
+  @override
+  String get saveKeyWarning => 'Sla deze sleutel nu op! U kunt hem niet meer zien.';
+
+  @override
+  String get yourApiKey => 'UW API-SLEUTEL';
+
+  @override
+  String get tapToCopy => 'Tik om te kopiëren';
+
+  @override
+  String get copyKey => 'Sleutel kopiëren';
 }

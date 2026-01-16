@@ -2991,10 +2991,10 @@ abstract class AppLocalizations {
   /// **'Enter your live STT WebSocket endpoint'**
   String get enterLiveSttWebsocket;
 
-  /// No description provided for @apiKey.
+  /// Label for API key (used for clipboard notification)
   ///
   /// In en, this message translates to:
-  /// **'API Key'**
+  /// **'API key'**
   String get apiKey;
 
   /// No description provided for @enterApiKey.
@@ -8396,6 +8396,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Write'**
   String get writeScope;
+
+  /// Title shown when API key is successfully created
+  ///
+  /// In en, this message translates to:
+  /// **'API Key Created!'**
+  String get apiKeyCreated;
+
+  /// Warning message when API key is created
+  ///
+  /// In en, this message translates to:
+  /// **'Save this key now! You won\'t be able to see it again.'**
+  String get saveKeyWarning;
+
+  /// Label for API key display section
+  ///
+  /// In en, this message translates to:
+  /// **'YOUR API KEY'**
+  String get yourApiKey;
+
+  /// Hint text for tap to copy action
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to copy'**
+  String get tapToCopy;
+
+  /// Button label to copy API key
+  ///
+  /// In en, this message translates to:
+  /// **'Copy Key'**
+  String get copyKey;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

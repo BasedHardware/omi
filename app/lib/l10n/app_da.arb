@@ -1538,7 +1538,7 @@
   "enterSttHttpEndpoint": "Enter your STT HTTP endpoint",
   "websocketUrl": "WebSocket URL",
   "enterLiveSttWebsocket": "Enter your live STT WebSocket endpoint",
-  "apiKey": "API Key",
+  "apiKey": "API-nøgle",
   "enterApiKey": "Enter your API key",
   "storedLocallyNeverShared": "Stored locally, never shared",
   "host": "Host",
@@ -3085,5 +3085,10 @@
   "readOnlyScope": "Kun læsning",
   "fullAccessScope": "Fuld adgang",
   "readScope": "Læsning",
-  "writeScope": "Skrivning"
+  "writeScope": "Skrivning",
+  "apiKeyCreated": "API-nøgle oprettet!",
+  "saveKeyWarning": "Gem denne nøgle nu! Du vil ikke kunne se den igen.",
+  "yourApiKey": "DIN API-NØGLE",
+  "tapToCopy": "Tryk for at kopiere",
+  "copyKey": "Kopiér nøgle"
 }

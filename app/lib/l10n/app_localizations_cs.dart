@@ -4414,4 +4414,19 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get writeScope => 'Zápis';
+
+  @override
+  String get apiKeyCreated => 'API klíč vytvořen!';
+
+  @override
+  String get saveKeyWarning => 'Uložte si tento klíč nyní! Znovu ho neuvidíte.';
+
+  @override
+  String get yourApiKey => 'VÁŠ API KLÍČ';
+
+  @override
+  String get tapToCopy => 'Klepnutím zkopírujete';
+
+  @override
+  String get copyKey => 'Kopírovat klíč';
 }

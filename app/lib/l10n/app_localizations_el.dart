@@ -4453,4 +4453,19 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get writeScope => 'Εγγραφή';
+
+  @override
+  String get apiKeyCreated => 'Το κλειδί API δημιουργήθηκε!';
+
+  @override
+  String get saveKeyWarning => 'Αποθηκεύστε αυτό το κλειδί τώρα! Δεν θα μπορείτε να το δείτε ξανά.';
+
+  @override
+  String get yourApiKey => 'ΤΟ ΚΛΕΙΔΙ API ΣΑΣ';
+
+  @override
+  String get tapToCopy => 'Πατήστε για αντιγραφή';
+
+  @override
+  String get copyKey => 'Αντιγραφή κλειδιού';
 }

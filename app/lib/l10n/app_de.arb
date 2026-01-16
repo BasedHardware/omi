@@ -1532,5 +1532,10 @@
   "readOnlyScope": "Nur Lesen",
   "fullAccessScope": "Vollzugriff",
   "readScope": "Lesen",
-  "writeScope": "Schreiben"
+  "writeScope": "Schreiben",
+  "apiKeyCreated": "API-Schlüssel erstellt!",
+  "saveKeyWarning": "Speichern Sie diesen Schlüssel jetzt! Sie werden ihn nicht mehr sehen können.",
+  "yourApiKey": "IHR API-SCHLÜSSEL",
+  "tapToCopy": "Zum Kopieren tippen",
+  "copyKey": "Schlüssel kopieren"
 }

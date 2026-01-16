@@ -1903,5 +1903,10 @@
   "readOnlyScope": "Alleen lezen",
   "fullAccessScope": "Volledige toegang",
   "readScope": "Lezen",
-  "writeScope": "Schrijven"
+  "writeScope": "Schrijven",
+  "apiKeyCreated": "API-sleutel aangemaakt!",
+  "saveKeyWarning": "Sla deze sleutel nu op! U kunt hem niet meer zien.",
+  "yourApiKey": "UW API-SLEUTEL",
+  "tapToCopy": "Tik om te kopiëren",
+  "copyKey": "Sleutel kopiëren"
 }

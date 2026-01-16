@@ -3067,5 +3067,10 @@
   "readOnlyScope": "Solo lettura",
   "fullAccessScope": "Accesso completo",
   "readScope": "Lettura",
-  "writeScope": "Scrittura"
+  "writeScope": "Scrittura",
+  "apiKeyCreated": "Chiave API creata!",
+  "saveKeyWarning": "Salva questa chiave ora! Non potrai vederla di nuovo.",
+  "yourApiKey": "LA TUA CHIAVE API",
+  "tapToCopy": "Tocca per copiare",
+  "copyKey": "Copia chiave"
 }

@@ -4417,4 +4417,19 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get writeScope => 'Kirjoitus';
+
+  @override
+  String get apiKeyCreated => 'API-avain luotu!';
+
+  @override
+  String get saveKeyWarning => 'Tallenna tämä avain nyt! Et näe sitä enää uudelleen.';
+
+  @override
+  String get yourApiKey => 'API-AVAIMESI';
+
+  @override
+  String get tapToCopy => 'Kopioi napauttamalla';
+
+  @override
+  String get copyKey => 'Kopioi avain';
 }

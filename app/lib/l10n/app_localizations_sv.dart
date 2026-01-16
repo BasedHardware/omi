@@ -4423,4 +4423,19 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get writeScope => 'Skriv';
+
+  @override
+  String get apiKeyCreated => 'API-nyckel skapad!';
+
+  @override
+  String get saveKeyWarning => 'Spara denna nyckel nu! Du kommer inte att kunna se den igen.';
+
+  @override
+  String get yourApiKey => 'DIN API-NYCKEL';
+
+  @override
+  String get tapToCopy => 'Tryck för att kopiera';
+
+  @override
+  String get copyKey => 'Kopiera nyckel';
 }

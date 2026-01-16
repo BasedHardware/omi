@@ -1511,5 +1511,10 @@
   "readOnlyScope": "読み取り専用",
   "fullAccessScope": "フルアクセス",
   "readScope": "読み取り",
-  "writeScope": "書き込み"
+  "writeScope": "書き込み",
+  "apiKeyCreated": "APIキーが作成されました！",
+  "saveKeyWarning": "このキーを今すぐ保存してください！再度表示することはできません。",
+  "yourApiKey": "あなたのAPIキー",
+  "tapToCopy": "タップしてコピー",
+  "copyKey": "キーをコピー"
 }

@@ -1534,7 +1534,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get enterLiveSttWebsocket => 'Ingresa tu endpoint STT WebSocket';
 
   @override
-  String get apiKey => 'API Key';
+  String get apiKey => 'Clave API';
 
   @override
   String get enterApiKey => 'Ingresa tu API Key';
@@ -4412,4 +4412,19 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get writeScope => 'Escritura';
+
+  @override
+  String get apiKeyCreated => '¡Clave API creada!';
+
+  @override
+  String get saveKeyWarning => '¡Guarda esta clave ahora! No podrás verla de nuevo.';
+
+  @override
+  String get yourApiKey => 'TU CLAVE API';
+
+  @override
+  String get tapToCopy => 'Toca para copiar';
+
+  @override
+  String get copyKey => 'Copiar clave';
 }

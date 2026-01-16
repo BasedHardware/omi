@@ -1538,7 +1538,7 @@
   "enterSttHttpEndpoint": "Введите вашу конечную точку STT HTTP",
   "websocketUrl": "URL WebSocket",
   "enterLiveSttWebsocket": "Введите вашу конечную точку WebSocket для STT в реальном времени",
-  "apiKey": "API-ключ",
+  "apiKey": "API ключ",
   "enterApiKey": "Введите ваш API-ключ",
   "storedLocallyNeverShared": "Хранится локально, никогда не передаётся",
   "host": "Хост",
@@ -3085,5 +3085,10 @@
   "readOnlyScope": "Только чтение",
   "fullAccessScope": "Полный доступ",
   "readScope": "Чтение",
-  "writeScope": "Запись"
+  "writeScope": "Запись",
+  "apiKeyCreated": "API ключ создан!",
+  "saveKeyWarning": "Сохраните этот ключ сейчас! Вы больше не сможете его увидеть.",
+  "yourApiKey": "ВАШ API КЛЮЧ",
+  "tapToCopy": "Нажмите, чтобы скопировать",
+  "copyKey": "Копировать ключ"
 }

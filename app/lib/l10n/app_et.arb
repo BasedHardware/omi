@@ -3085,5 +3085,10 @@
   "readOnlyScope": "Ainult lugemine",
   "fullAccessScope": "Täielik juurdepääs",
   "readScope": "Lugemine",
-  "writeScope": "Kirjutamine"
+  "writeScope": "Kirjutamine",
+  "apiKeyCreated": "API võti loodud!",
+  "saveKeyWarning": "Salvesta see võti kohe! Sa ei näe seda enam kunagi.",
+  "yourApiKey": "TEIE API VÕTI",
+  "tapToCopy": "Puudutage kopeerimiseks",
+  "copyKey": "Kopeeri võti"
 }

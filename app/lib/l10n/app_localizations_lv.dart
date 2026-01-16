@@ -4426,4 +4426,19 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get writeScope => 'Rakstīt';
+
+  @override
+  String get apiKeyCreated => 'API atslēga izveidota!';
+
+  @override
+  String get saveKeyWarning => 'Saglabājiet šo atslēgu tagad! Jūs to vairs nevarēsiet redzēt.';
+
+  @override
+  String get yourApiKey => 'JŪSU API ATSLĒGA';
+
+  @override
+  String get tapToCopy => 'Pieskarieties, lai kopētu';
+
+  @override
+  String get copyKey => 'Kopēt atslēgu';
 }

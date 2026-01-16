@@ -1515,7 +1515,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get enterLiveSttWebsocket => '输入您的实时 STT WebSocket 端点';
 
   @override
-  String get apiKey => 'API 密钥';
+  String get apiKey => 'API密钥';
 
   @override
   String get enterApiKey => '输入您的 API 密钥';
@@ -4335,4 +4335,19 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get writeScope => '写入';
+
+  @override
+  String get apiKeyCreated => 'API密钥已创建！';
+
+  @override
+  String get saveKeyWarning => '立即保存此密钥！您将无法再次查看。';
+
+  @override
+  String get yourApiKey => '您的API密钥';
+
+  @override
+  String get tapToCopy => '点击复制';
+
+  @override
+  String get copyKey => '复制密钥';
 }

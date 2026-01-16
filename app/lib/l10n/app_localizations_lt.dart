@@ -4418,4 +4418,19 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get writeScope => 'Rašyti';
+
+  @override
+  String get apiKeyCreated => 'API raktas sukurtas!';
+
+  @override
+  String get saveKeyWarning => 'Išsaugokite šį raktą dabar! Daugiau jo nematysite.';
+
+  @override
+  String get yourApiKey => 'JŪSŲ API RAKTAS';
+
+  @override
+  String get tapToCopy => 'Bakstelėkite, kad nukopijuotumėte';
+
+  @override
+  String get copyKey => 'Kopijuoti raktą';
 }

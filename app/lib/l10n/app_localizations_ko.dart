@@ -4342,4 +4342,19 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get writeScope => '쓰기';
+
+  @override
+  String get apiKeyCreated => 'API 키가 생성되었습니다!';
+
+  @override
+  String get saveKeyWarning => '지금 이 키를 저장하세요! 다시 볼 수 없습니다.';
+
+  @override
+  String get yourApiKey => '귀하의 API 키';
+
+  @override
+  String get tapToCopy => '탭하여 복사';
+
+  @override
+  String get copyKey => '키 복사';
 }

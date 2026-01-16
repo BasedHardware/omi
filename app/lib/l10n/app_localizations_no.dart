@@ -4418,4 +4418,19 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get writeScope => 'Skriv';
+
+  @override
+  String get apiKeyCreated => 'API-nøkkel opprettet!';
+
+  @override
+  String get saveKeyWarning => 'Lagre denne nøkkelen nå! Du vil ikke kunne se den igjen.';
+
+  @override
+  String get yourApiKey => 'DIN API-NØKKEL';
+
+  @override
+  String get tapToCopy => 'Trykk for å kopiere';
+
+  @override
+  String get copyKey => 'Kopier nøkkel';
 }

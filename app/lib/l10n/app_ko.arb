@@ -3085,5 +3085,10 @@
   "readOnlyScope": "읽기 전용",
   "fullAccessScope": "전체 액세스",
   "readScope": "읽기",
-  "writeScope": "쓰기"
+  "writeScope": "쓰기",
+  "apiKeyCreated": "API 키가 생성되었습니다!",
+  "saveKeyWarning": "지금 이 키를 저장하세요! 다시 볼 수 없습니다.",
+  "yourApiKey": "귀하의 API 키",
+  "tapToCopy": "탭하여 복사",
+  "copyKey": "키 복사"
 }

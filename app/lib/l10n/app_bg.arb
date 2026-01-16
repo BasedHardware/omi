@@ -3087,5 +3087,10 @@
   "readOnlyScope": "Само за четене",
   "fullAccessScope": "Пълен достъп",
   "readScope": "Четене",
-  "writeScope": "Запис"
+  "writeScope": "Запис",
+  "apiKeyCreated": "API ключът е създаден!",
+  "saveKeyWarning": "Запазете този ключ сега! Няма да можете да го видите отново.",
+  "yourApiKey": "ВАШИЯТ API КЛЮЧ",
+  "tapToCopy": "Докоснете за копиране",
+  "copyKey": "Копиране на ключа"
 }

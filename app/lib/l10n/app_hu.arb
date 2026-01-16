@@ -3085,5 +3085,10 @@
   "readOnlyScope": "Csak olvasható",
   "fullAccessScope": "Teljes hozzáférés",
   "readScope": "Olvasás",
-  "writeScope": "Írás"
+  "writeScope": "Írás",
+  "apiKeyCreated": "API kulcs létrehozva!",
+  "saveKeyWarning": "Mentse el ezt a kulcsot most! Nem fogja tudni újra megtekinteni.",
+  "yourApiKey": "AZ ÖN API KULCSA",
+  "tapToCopy": "Másoláshoz érintse meg",
+  "copyKey": "Kulcs másolása"
 }

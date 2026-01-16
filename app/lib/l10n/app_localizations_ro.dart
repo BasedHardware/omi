@@ -4441,4 +4441,19 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get writeScope => 'Scriere';
+
+  @override
+  String get apiKeyCreated => 'Cheie API creată!';
+
+  @override
+  String get saveKeyWarning => 'Salvați această cheie acum! Nu o veți mai putea vedea.';
+
+  @override
+  String get yourApiKey => 'CHEIA DVS. API';
+
+  @override
+  String get tapToCopy => 'Atingeți pentru a copia';
+
+  @override
+  String get copyKey => 'Copiază cheia';
 }

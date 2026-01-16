@@ -3085,5 +3085,10 @@
   "readOnlyScope": "Kun lesing",
   "fullAccessScope": "Full tilgang",
   "readScope": "Les",
-  "writeScope": "Skriv"
+  "writeScope": "Skriv",
+  "apiKeyCreated": "API-nøkkel opprettet!",
+  "saveKeyWarning": "Lagre denne nøkkelen nå! Du vil ikke kunne se den igjen.",
+  "yourApiKey": "DIN API-NØKKEL",
+  "tapToCopy": "Trykk for å kopiere",
+  "copyKey": "Kopier nøkkel"
 }

@@ -3085,5 +3085,10 @@
   "readOnlyScope": "Tylko odczyt",
   "fullAccessScope": "Pełny dostęp",
   "readScope": "Odczyt",
-  "writeScope": "Zapis"
+  "writeScope": "Zapis",
+  "apiKeyCreated": "Klucz API utworzony!",
+  "saveKeyWarning": "Zapisz ten klucz teraz! Nie będziesz mógł go ponownie zobaczyć.",
+  "yourApiKey": "TWÓJ KLUCZ API",
+  "tapToCopy": "Dotknij, aby skopiować",
+  "copyKey": "Kopiuj klucz"
 }

@@ -4453,4 +4453,19 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get writeScope => 'Schreiben';
+
+  @override
+  String get apiKeyCreated => 'API-Schlüssel erstellt!';
+
+  @override
+  String get saveKeyWarning => 'Speichern Sie diesen Schlüssel jetzt! Sie werden ihn nicht mehr sehen können.';
+
+  @override
+  String get yourApiKey => 'IHR API-SCHLÜSSEL';
+
+  @override
+  String get tapToCopy => 'Zum Kopieren tippen';
+
+  @override
+  String get copyKey => 'Schlüssel kopieren';
 }

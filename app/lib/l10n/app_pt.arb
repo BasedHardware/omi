@@ -495,7 +495,7 @@
   "enterSttHttpEndpoint": "Insira seu endpoint STT HTTP",
   "websocketUrl": "URL WebSocket",
   "enterLiveSttWebsocket": "Insira seu endpoint STT WebSocket",
-  "apiKey": "API Key",
+  "apiKey": "Chave API",
   "enterApiKey": "Insira sua API Key",
   "storedLocallyNeverShared": "Armazenado localmente, nunca compartilhado",
   "host": "Host",
@@ -1532,5 +1532,10 @@
   "readOnlyScope": "Somente leitura",
   "fullAccessScope": "Acesso total",
   "readScope": "Leitura",
-  "writeScope": "Escrita"
+  "writeScope": "Escrita",
+  "apiKeyCreated": "Chave API criada!",
+  "saveKeyWarning": "Salve esta chave agora! Você não poderá vê-la novamente.",
+  "yourApiKey": "SUA CHAVE API",
+  "tapToCopy": "Toque para copiar",
+  "copyKey": "Copiar chave"
 }

@@ -3067,5 +3067,10 @@
   "readOnlyScope": "Yalnızca Okuma",
   "fullAccessScope": "Tam Erişim",
   "readScope": "Okuma",
-  "writeScope": "Yazma"
+  "writeScope": "Yazma",
+  "apiKeyCreated": "API Anahtarı Oluşturuldu!",
+  "saveKeyWarning": "Bu anahtarı şimdi kaydedin! Tekrar göremeyeceksiniz.",
+  "yourApiKey": "API ANAHTARINIZ",
+  "tapToCopy": "Kopyalamak için dokunun",
+  "copyKey": "Anahtarı Kopyala"
 }

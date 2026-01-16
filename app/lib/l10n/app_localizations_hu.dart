@@ -4441,4 +4441,19 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get writeScope => 'Írás';
+
+  @override
+  String get apiKeyCreated => 'API kulcs létrehozva!';
+
+  @override
+  String get saveKeyWarning => 'Mentse el ezt a kulcsot most! Nem fogja tudni újra megtekinteni.';
+
+  @override
+  String get yourApiKey => 'AZ ÖN API KULCSA';
+
+  @override
+  String get tapToCopy => 'Másoláshoz érintse meg';
+
+  @override
+  String get copyKey => 'Kulcs másolása';
 }

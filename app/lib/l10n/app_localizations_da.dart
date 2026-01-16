@@ -1541,7 +1541,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get enterLiveSttWebsocket => 'Enter your live STT WebSocket endpoint';
 
   @override
-  String get apiKey => 'API Key';
+  String get apiKey => 'API-nøgle';
 
   @override
   String get enterApiKey => 'Enter your API key';
@@ -4426,4 +4426,19 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get writeScope => 'Skrivning';
+
+  @override
+  String get apiKeyCreated => 'API-nøgle oprettet!';
+
+  @override
+  String get saveKeyWarning => 'Gem denne nøgle nu! Du vil ikke kunne se den igen.';
+
+  @override
+  String get yourApiKey => 'DIN API-NØGLE';
+
+  @override
+  String get tapToCopy => 'Tryk for at kopiere';
+
+  @override
+  String get copyKey => 'Kopiér nøgle';
 }

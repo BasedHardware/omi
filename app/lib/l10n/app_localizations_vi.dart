@@ -1543,7 +1543,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get enterLiveSttWebsocket => 'Nhập điểm cuối WebSocket STT trực tiếp của bạn';
 
   @override
-  String get apiKey => 'API Key';
+  String get apiKey => 'Khóa API';
 
   @override
   String get enterApiKey => 'Nhập API key của bạn';
@@ -4425,4 +4425,19 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get writeScope => 'Ghi';
+
+  @override
+  String get apiKeyCreated => 'Đã tạo khóa API!';
+
+  @override
+  String get saveKeyWarning => 'Lưu khóa này ngay bây giờ! Bạn sẽ không thể xem lại nó.';
+
+  @override
+  String get yourApiKey => 'KHÓA API CỦA BẠN';
+
+  @override
+  String get tapToCopy => 'Nhấn để sao chép';
+
+  @override
+  String get copyKey => 'Sao chép khóa';
 }

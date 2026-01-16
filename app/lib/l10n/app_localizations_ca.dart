@@ -4443,4 +4443,19 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get writeScope => 'Escriptura';
+
+  @override
+  String get apiKeyCreated => 'Clau API creada!';
+
+  @override
+  String get saveKeyWarning => 'Desa aquesta clau ara! No la podràs veure de nou.';
+
+  @override
+  String get yourApiKey => 'LA TEVA CLAU API';
+
+  @override
+  String get tapToCopy => 'Toca per copiar';
+
+  @override
+  String get copyKey => 'Copia la clau';
 }

@@ -4341,4 +4341,19 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get writeScope => '書き込み';
+
+  @override
+  String get apiKeyCreated => 'APIキーが作成されました！';
+
+  @override
+  String get saveKeyWarning => 'このキーを今すぐ保存してください！再度表示することはできません。';
+
+  @override
+  String get yourApiKey => 'あなたのAPIキー';
+
+  @override
+  String get tapToCopy => 'タップしてコピー';
+
+  @override
+  String get copyKey => 'キーをコピー';
 }

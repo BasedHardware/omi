@@ -3085,5 +3085,10 @@
   "readOnlyScope": "Tikai lasīšana",
   "fullAccessScope": "Pilna piekļuve",
   "readScope": "Lasīt",
-  "writeScope": "Rakstīt"
+  "writeScope": "Rakstīt",
+  "apiKeyCreated": "API atslēga izveidota!",
+  "saveKeyWarning": "Saglabājiet šo atslēgu tagad! Jūs to vairs nevarēsiet redzēt.",
+  "yourApiKey": "JŪSU API ATSLĒGA",
+  "tapToCopy": "Pieskarieties, lai kopētu",
+  "copyKey": "Kopēt atslēgu"
 }

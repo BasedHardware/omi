@@ -1538,7 +1538,7 @@
   "enterSttHttpEndpoint": "ใส่ endpoint HTTP ของ STT ของคุณ",
   "websocketUrl": "URL WebSocket",
   "enterLiveSttWebsocket": "ใส่ endpoint WebSocket ของ STT แบบสดของคุณ",
-  "apiKey": "API Key",
+  "apiKey": "คีย์ API",
   "enterApiKey": "ใส่ API key ของคุณ",
   "storedLocallyNeverShared": "จัดเก็บในเครื่อง ไม่แชร์เลย",
   "host": "Host",
@@ -3085,5 +3085,10 @@
   "readOnlyScope": "อ่านอย่างเดียว",
   "fullAccessScope": "เข้าถึงเต็มที่",
   "readScope": "อ่าน",
-  "writeScope": "เขียน"
+  "writeScope": "เขียน",
+  "apiKeyCreated": "สร้างคีย์ API แล้ว!",
+  "saveKeyWarning": "บันทึกคีย์นี้ตอนนี้! คุณจะไม่สามารถดูได้อีก",
+  "yourApiKey": "คีย์ API ของคุณ",
+  "tapToCopy": "แตะเพื่อคัดลอก",
+  "copyKey": "คัดลอกคีย์"
 }

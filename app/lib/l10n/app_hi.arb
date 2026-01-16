@@ -1532,5 +1532,10 @@
   "readOnlyScope": "केवल पढ़ने के लिए",
   "fullAccessScope": "पूर्ण पहुंच",
   "readScope": "पढ़ें",
-  "writeScope": "लिखें"
+  "writeScope": "लिखें",
+  "apiKeyCreated": "API कुंजी बनाई गई!",
+  "saveKeyWarning": "इस कुंजी को अभी सहेजें! आप इसे दोबारा नहीं देख पाएंगे।",
+  "yourApiKey": "आपकी API कुंजी",
+  "tapToCopy": "कॉपी करने के लिए टैप करें",
+  "copyKey": "कुंजी कॉपी करें"
 }

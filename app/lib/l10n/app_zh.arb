@@ -495,7 +495,7 @@
   "enterSttHttpEndpoint": "输入您的 STT HTTP 端点",
   "websocketUrl": "WebSocket URL",
   "enterLiveSttWebsocket": "输入您的实时 STT WebSocket 端点",
-  "apiKey": "API 密钥",
+  "apiKey": "API密钥",
   "enterApiKey": "输入您的 API 密钥",
   "storedLocallyNeverShared": "本地存储，永不共享",
   "host": "主机",
@@ -1532,5 +1532,10 @@
   "readOnlyScope": "只读",
   "fullAccessScope": "完全访问",
   "readScope": "读取",
-  "writeScope": "写入"
+  "writeScope": "写入",
+  "apiKeyCreated": "API密钥已创建！",
+  "saveKeyWarning": "立即保存此密钥！您将无法再次查看。",
+  "yourApiKey": "您的API密钥",
+  "tapToCopy": "点击复制",
+  "copyKey": "复制密钥"
 }

@@ -3085,5 +3085,10 @@
   "readOnlyScope": "Vain luku",
   "fullAccessScope": "Täysi pääsy",
   "readScope": "Luku",
-  "writeScope": "Kirjoitus"
+  "writeScope": "Kirjoitus",
+  "apiKeyCreated": "API-avain luotu!",
+  "saveKeyWarning": "Tallenna tämä avain nyt! Et näe sitä enää uudelleen.",
+  "yourApiKey": "API-AVAIMESI",
+  "tapToCopy": "Kopioi napauttamalla",
+  "copyKey": "Kopioi avain"
 }

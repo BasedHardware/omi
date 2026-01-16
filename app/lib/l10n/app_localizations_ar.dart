@@ -4384,4 +4384,19 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get writeScope => 'كتابة';
+
+  @override
+  String get apiKeyCreated => 'تم إنشاء مفتاح API!';
+
+  @override
+  String get saveKeyWarning => 'احفظ هذا المفتاح الآن! لن تتمكن من رؤيته مرة أخرى.';
+
+  @override
+  String get yourApiKey => 'مفتاح API الخاص بك';
+
+  @override
+  String get tapToCopy => 'اضغط للنسخ';
+
+  @override
+  String get copyKey => 'نسخ المفتاح';
 }

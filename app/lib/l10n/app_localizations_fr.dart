@@ -4455,4 +4455,19 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get writeScope => 'Écriture';
+
+  @override
+  String get apiKeyCreated => 'Clé API créée !';
+
+  @override
+  String get saveKeyWarning => 'Enregistrez cette clé maintenant ! Vous ne pourrez plus la voir.';
+
+  @override
+  String get yourApiKey => 'VOTRE CLÉ API';
+
+  @override
+  String get tapToCopy => 'Appuyez pour copier';
+
+  @override
+  String get copyKey => 'Copier la clé';
 }

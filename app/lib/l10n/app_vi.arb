@@ -1538,7 +1538,7 @@
   "enterSttHttpEndpoint": "Nhập điểm cuối HTTP STT của bạn",
   "websocketUrl": "URL WebSocket",
   "enterLiveSttWebsocket": "Nhập điểm cuối WebSocket STT trực tiếp của bạn",
-  "apiKey": "API Key",
+  "apiKey": "Khóa API",
   "enterApiKey": "Nhập API key của bạn",
   "storedLocallyNeverShared": "Lưu trữ cục bộ, không bao giờ chia sẻ",
   "host": "Host",
@@ -3085,5 +3085,10 @@
   "readOnlyScope": "Chỉ đọc",
   "fullAccessScope": "Truy cập đầy đủ",
   "readScope": "Đọc",
-  "writeScope": "Ghi"
+  "writeScope": "Ghi",
+  "apiKeyCreated": "Đã tạo khóa API!",
+  "saveKeyWarning": "Lưu khóa này ngay bây giờ! Bạn sẽ không thể xem lại nó.",
+  "yourApiKey": "KHÓA API CỦA BẠN",
+  "tapToCopy": "Nhấn để sao chép",
+  "copyKey": "Sao chép khóa"
 }
