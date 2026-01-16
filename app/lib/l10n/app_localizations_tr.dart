@@ -4415,4 +4415,16 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get dataAlwaysEncrypted =>
       'Seviyeden bağımsız olarak, verileriniz her zaman dinlenme halinde ve aktarım sırasında şifrelenir.';
+
+  @override
+  String get readOnlyScope => 'Yalnızca Okuma';
+
+  @override
+  String get fullAccessScope => 'Tam Erişim';
+
+  @override
+  String get readScope => 'Okuma';
+
+  @override
+  String get writeScope => 'Yazma';
 }

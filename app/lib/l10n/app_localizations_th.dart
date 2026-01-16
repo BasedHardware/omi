@@ -4383,4 +4383,16 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get dataAlwaysEncrypted => 'ไม่ว่าระดับใด ข้อมูลของคุณจะถูกเข้ารหัสเสมอทั้งขณะพักและขณะส่ง';
+
+  @override
+  String get readOnlyScope => 'อ่านอย่างเดียว';
+
+  @override
+  String get fullAccessScope => 'เข้าถึงเต็มที่';
+
+  @override
+  String get readScope => 'อ่าน';
+
+  @override
+  String get writeScope => 'เขียน';
 }

@@ -3063,5 +3063,9 @@
   "secureEncryptionDescription": "Jūsų duomenys yra užšifruoti jums unikaliu raktu mūsų serveriuose, prieglobstuose Google Cloud. Tai reiškia, kad jūsų neapdoroti duomenys yra neprieinami niekam, įskaitant Omi darbuotojus ar Google, tiesiogiai iš duomenų bazės.",
   "endToEndEncryption": "Šifravimas nuo galo iki galo",
   "e2eeCardDescription": "Įgalinkite maksimaliam saugumui, kai tik jūs galite pasiekti savo duomenis. Bakstelėkite, kad sužinotumėte daugiau.",
-  "dataAlwaysEncrypted": "Nepriklausomai nuo lygio, jūsų duomenys visada yra užšifruoti ramybės būsenoje ir perduodami."
+  "dataAlwaysEncrypted": "Nepriklausomai nuo lygio, jūsų duomenys visada yra užšifruoti ramybės būsenoje ir perduodami.",
+  "readOnlyScope": "Tik skaitymas",
+  "fullAccessScope": "Pilna prieiga",
+  "readScope": "Skaityti",
+  "writeScope": "Rašyti"
 }

@@ -4414,4 +4414,16 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get dataAlwaysEncrypted =>
       'Neatkarīgi no līmeņa, jūsu dati vienmēr ir šifrēti miera stāvoklī un pārsūtīšanas laikā.';
+
+  @override
+  String get readOnlyScope => 'Tikai lasīšana';
+
+  @override
+  String get fullAccessScope => 'Pilna piekļuve';
+
+  @override
+  String get readScope => 'Lasīt';
+
+  @override
+  String get writeScope => 'Rakstīt';
 }

@@ -3083,5 +3083,9 @@
   "secureEncryptionDescription": "Les teves dades es xifren amb una clau única per a tu als nostres servidors, allotjats a Google Cloud. Això significa que el teu contingut en brut és inaccessible per a qualsevol, inclòs el personal d'Omi o Google, directament des de la base de dades.",
   "endToEndEncryption": "Xifratge d'extrem a extrem",
   "e2eeCardDescription": "Activa per a la màxima seguretat on només tu pots accedir a les teves dades. Toca per saber-ne més.",
-  "dataAlwaysEncrypted": "Independentment del nivell, les teves dades sempre estan xifrades en repòs i en trànsit."
+  "dataAlwaysEncrypted": "Independentment del nivell, les teves dades sempre estan xifrades en repòs i en trànsit.",
+  "readOnlyScope": "Només lectura",
+  "fullAccessScope": "Accés complet",
+  "readScope": "Lectura",
+  "writeScope": "Escriptura"
 }

@@ -4402,4 +4402,16 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get dataAlwaysEncrypted => 'Bez ohledu na úroveň jsou vaše data vždy šifrována v klidu i při přenosu.';
+
+  @override
+  String get readOnlyScope => 'Pouze pro čtení';
+
+  @override
+  String get fullAccessScope => 'Plný přístup';
+
+  @override
+  String get readScope => 'Čtení';
+
+  @override
+  String get writeScope => 'Zápis';
 }

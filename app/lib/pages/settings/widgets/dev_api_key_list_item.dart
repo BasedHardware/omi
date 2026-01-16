@@ -5,16 +5,17 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/dev_api_key.dart';
 import 'package:omi/providers/dev_api_key_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class DevApiKeyListItem extends StatelessWidget {
   final DevApiKey apiKey;
 
   const DevApiKeyListItem({super.key, required this.apiKey});
 
-  List<Widget> _buildScopeChips(List<String>? scopes) {
+  List<Widget> _buildScopeChips(BuildContext context, List<String>? scopes) {
     if (scopes == null || scopes.isEmpty) {
       return [
-        _buildChip('Read Only', const Color(0xFF3B82F6)),
+        _buildChip(context.l10n.readOnlyScope, const Color(0xFF3B82F6)),
       ];
     }
 
@@ -22,12 +23,12 @@ class DevApiKeyListItem extends StatelessWidget {
     final hasWrite = scopes.any((s) => s.endsWith(':write'));
 
     if (hasRead && hasWrite && scopes.length == 6) {
-      return [_buildChip('Full Access', const Color(0xFF10B981))];
+      return [_buildChip(context.l10n.fullAccessScope, const Color(0xFF10B981))];
     }
 
     final chips = <Widget>[];
-    if (hasRead) chips.add(_buildChip('Read', const Color(0xFF3B82F6)));
-    if (hasWrite) chips.add(_buildChip('Write', const Color(0xFF8B5CF6)));
+    if (hasRead) chips.add(_buildChip(context.l10n.readScope, const Color(0xFF3B82F6)));
+    if (hasWrite) chips.add(_buildChip(context.l10n.writeScope, const Color(0xFF8B5CF6)));
 
     return chips;
   }
@@ -107,9 +108,9 @@ class DevApiKeyListItem extends StatelessWidget {
                     color: const Color(0xFFEF4444).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: const Text(
-                    'Revoke',
-                    style: TextStyle(
+                  child: Text(
+                    context.l10n.revoke,
+                    style: const TextStyle(
                       color: Color(0xFFEF4444),
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
@@ -123,7 +124,7 @@ class DevApiKeyListItem extends StatelessWidget {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: _buildScopeChips(apiKey.scopes),
+            children: _buildScopeChips(context, apiKey.scopes),
           ),
         ],
       ),
@@ -137,21 +138,21 @@ class DevApiKeyListItem extends StatelessWidget {
         return AlertDialog(
           backgroundColor: const Color(0xFF1C1C1E),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text(
-            'Revoke Key?',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+          title: Text(
+            context.l10n.revokeKeyQuestion,
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
           ),
           content: Text(
-            'Are you sure you want to revoke the key "${apiKey.name}"? This action cannot be undone.',
+            context.l10n.revokeKeyConfirmation(apiKey.name),
             style: TextStyle(color: Colors.grey.shade400),
           ),
           actions: <Widget>[
             TextButton(
-              child: Text('Cancel', style: TextStyle(color: Colors.grey.shade400)),
+              child: Text(context.l10n.cancel, style: TextStyle(color: Colors.grey.shade400)),
               onPressed: () => Navigator.of(dialogContext).pop(),
             ),
             TextButton(
-              child: const Text('Revoke', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600)),
+              child: Text(context.l10n.revoke, style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600)),
               onPressed: () {
                 Provider.of<DevApiKeyProvider>(context, listen: false).deleteKey(apiKey.id);
                 Navigator.of(dialogContext).pop();

@@ -4329,4 +4329,16 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get dataAlwaysEncrypted => 'レベルに関係なく、データは常に保存時および転送時に暗号化されています。';
+
+  @override
+  String get readOnlyScope => '読み取り専用';
+
+  @override
+  String get fullAccessScope => 'フルアクセス';
+
+  @override
+  String get readScope => '読み取り';
+
+  @override
+  String get writeScope => '書き込み';
 }

@@ -4406,4 +4406,16 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get dataAlwaysEncrypted =>
       'Nepriklausomai nuo lygio, jūsų duomenys visada yra užšifruoti ramybės būsenoje ir perduodami.';
+
+  @override
+  String get readOnlyScope => 'Tik skaitymas';
+
+  @override
+  String get fullAccessScope => 'Pilna prieiga';
+
+  @override
+  String get readScope => 'Skaityti';
+
+  @override
+  String get writeScope => 'Rašyti';
 }

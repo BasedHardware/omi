@@ -4419,4 +4419,16 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get dataAlwaysEncrypted =>
       'Ongeacht het niveau zijn uw gegevens altijd versleuteld in rust en tijdens overdracht.';
+
+  @override
+  String get readOnlyScope => 'Alleen lezen';
+
+  @override
+  String get fullAccessScope => 'Volledige toegang';
+
+  @override
+  String get readScope => 'Lezen';
+
+  @override
+  String get writeScope => 'Schrijven';
 }

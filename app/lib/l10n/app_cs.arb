@@ -3083,5 +3083,9 @@
   "secureEncryptionDescription": "Vaše data jsou šifrována klíčem jedinečným pro vás na našich serverech hostovaných v Google Cloud. To znamená, že váš surový obsah je nepřístupný nikomu, včetně zaměstnanců Omi nebo Google, přímo z databáze.",
   "endToEndEncryption": "End-to-end šifrování",
   "e2eeCardDescription": "Povolte pro maximální zabezpečení, kde pouze vy máte přístup k vašim datům. Klepnutím se dozvíte více.",
-  "dataAlwaysEncrypted": "Bez ohledu na úroveň jsou vaše data vždy šifrována v klidu i při přenosu."
+  "dataAlwaysEncrypted": "Bez ohledu na úroveň jsou vaše data vždy šifrována v klidu i při přenosu.",
+  "readOnlyScope": "Pouze pro čtení",
+  "fullAccessScope": "Plný přístup",
+  "readScope": "Čtení",
+  "writeScope": "Zápis"
 }

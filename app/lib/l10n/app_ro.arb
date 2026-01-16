@@ -3081,5 +3081,9 @@
   "secureEncryptionDescription": "Datele dvs. sunt criptate cu o cheie unică pentru dvs. pe serverele noastre, găzduite pe Google Cloud. Aceasta înseamnă că conținutul dvs. brut este inaccesibil pentru oricine, inclusiv personalul Omi sau Google, direct din baza de date.",
   "endToEndEncryption": "Criptare end-to-end",
   "e2eeCardDescription": "Activați pentru securitate maximă, unde doar dvs. puteți accesa datele dvs. Atingeți pentru a afla mai multe.",
-  "dataAlwaysEncrypted": "Indiferent de nivel, datele dvs. sunt întotdeauna criptate în repaus și în tranzit."
+  "dataAlwaysEncrypted": "Indiferent de nivel, datele dvs. sunt întotdeauna criptate în repaus și în tranzit.",
+  "readOnlyScope": "Doar citire",
+  "fullAccessScope": "Acces complet",
+  "readScope": "Citire",
+  "writeScope": "Scriere"
 }

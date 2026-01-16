@@ -4413,4 +4413,16 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get dataAlwaysEncrypted => 'Bất kể mức nào, dữ liệu của bạn luôn được mã hóa khi lưu trữ và khi truyền tải.';
+
+  @override
+  String get readOnlyScope => 'Chỉ đọc';
+
+  @override
+  String get fullAccessScope => 'Truy cập đầy đủ';
+
+  @override
+  String get readScope => 'Đọc';
+
+  @override
+  String get writeScope => 'Ghi';
 }

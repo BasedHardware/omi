@@ -3081,5 +3081,9 @@
   "secureEncryptionDescription": "Az adatait egy Önnek egyedi kulccsal titkosítjuk a szervereink, amelyek a Google Cloudon vannak. Ez azt jelenti, hogy a nyers tartalma senkinek sem hozzáférhető, beleértve az Omi személyzetét vagy a Google-t, közvetlenül az adatbázisból.",
   "endToEndEncryption": "Végpontok közötti titkosítás",
   "e2eeCardDescription": "Engedélyezze a maximális biztonságot, ahol csak ön férhet hozzá adataihoz. Érintse meg a további információkért.",
-  "dataAlwaysEncrypted": "A szinttől függetlenül az adatai mindig titkosítva vannak nyugalmi állapotban és átvitel közben."
+  "dataAlwaysEncrypted": "A szinttől függetlenül az adatai mindig titkosítva vannak nyugalmi állapotban és átvitel közben.",
+  "readOnlyScope": "Csak olvasható",
+  "fullAccessScope": "Teljes hozzáférés",
+  "readScope": "Olvasás",
+  "writeScope": "Írás"
 }

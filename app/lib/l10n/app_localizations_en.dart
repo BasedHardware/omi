@@ -4410,4 +4410,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get dataAlwaysEncrypted => 'Regardless of the level, your data is always encrypted at rest and in transit.';
+
+  @override
+  String get readOnlyScope => 'Read Only';
+
+  @override
+  String get fullAccessScope => 'Full Access';
+
+  @override
+  String get readScope => 'Read';
+
+  @override
+  String get writeScope => 'Write';
 }

@@ -4441,4 +4441,16 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get dataAlwaysEncrypted =>
       'Unabhängig vom Level sind Ihre Daten immer im Ruhezustand und während der Übertragung verschlüsselt.';
+
+  @override
+  String get readOnlyScope => 'Nur Lesen';
+
+  @override
+  String get fullAccessScope => 'Vollzugriff';
+
+  @override
+  String get readScope => 'Lesen';
+
+  @override
+  String get writeScope => 'Schreiben';
 }

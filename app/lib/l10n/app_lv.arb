@@ -3081,5 +3081,9 @@
   "secureEncryptionDescription": "Jūsu dati tiek šifrēti ar jums unikālu atslēgu mūsu serveros, kas mitināti Google Cloud. Tas nozīmē, ka jūsu neapstrādātais saturs nav pieejams nevienam, ieskaitot Omi darbiniekus vai Google, tieši no datu bāzes.",
   "endToEndEncryption": "Pilnīga šifrēšana",
   "e2eeCardDescription": "Iespējojiet maksimālu drošību, kur tikai jūs varat piekļūt saviem datiem. Pieskarieties, lai uzzinātu vairāk.",
-  "dataAlwaysEncrypted": "Neatkarīgi no līmeņa, jūsu dati vienmēr ir šifrēti miera stāvoklī un pārsūtīšanas laikā."
+  "dataAlwaysEncrypted": "Neatkarīgi no līmeņa, jūsu dati vienmēr ir šifrēti miera stāvoklī un pārsūtīšanas laikā.",
+  "readOnlyScope": "Tikai lasīšana",
+  "fullAccessScope": "Pilna piekļuve",
+  "readScope": "Lasīt",
+  "writeScope": "Rakstīt"
 }

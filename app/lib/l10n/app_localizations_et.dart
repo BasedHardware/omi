@@ -4407,4 +4407,16 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get dataAlwaysEncrypted => 'Olenemata tasemest on teie andmed alati krüpteeritud puhkeolekus ja edastamisel.';
+
+  @override
+  String get readOnlyScope => 'Ainult lugemine';
+
+  @override
+  String get fullAccessScope => 'Täielik juurdepääs';
+
+  @override
+  String get readScope => 'Lugemine';
+
+  @override
+  String get writeScope => 'Kirjutamine';
 }

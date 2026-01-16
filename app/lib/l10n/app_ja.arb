@@ -1507,5 +1507,9 @@
   "secureEncryptionDescription": "あなたのデータは、Google Cloudでホストされている当社のサーバー上で、あなた固有の鍵で暗号化されています。これは、生のコンテンツがOmiスタッフやGoogleを含む誰にも、データベースから直接アクセスできないことを意味します。",
   "endToEndEncryption": "エンドツーエンド暗号化",
   "e2eeCardDescription": "最大のセキュリティを有効にすると、あなただけがデータにアクセスできます。詳しくはタップしてください。",
-  "dataAlwaysEncrypted": "レベルに関係なく、データは常に保存時および転送時に暗号化されています。"
+  "dataAlwaysEncrypted": "レベルに関係なく、データは常に保存時および転送時に暗号化されています。",
+  "readOnlyScope": "読み取り専用",
+  "fullAccessScope": "フルアクセス",
+  "readScope": "読み取り",
+  "writeScope": "書き込み"
 }

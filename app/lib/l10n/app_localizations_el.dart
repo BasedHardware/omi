@@ -4441,4 +4441,16 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get dataAlwaysEncrypted =>
       'Ανεξάρτητα από το επίπεδο, τα δεδομένα σας είναι πάντα κρυπτογραφημένα σε κατάσταση ηρεμίας και κατά τη μεταφορά.';
+
+  @override
+  String get readOnlyScope => 'Μόνο ανάγνωση';
+
+  @override
+  String get fullAccessScope => 'Πλήρης πρόσβαση';
+
+  @override
+  String get readScope => 'Ανάγνωση';
+
+  @override
+  String get writeScope => 'Εγγραφή';
 }

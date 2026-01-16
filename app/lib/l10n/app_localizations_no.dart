@@ -4406,4 +4406,16 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get dataAlwaysEncrypted => 'Uavhengig av nivå er dataene dine alltid kryptert i hvile og under overføring.';
+
+  @override
+  String get readOnlyScope => 'Kun lesing';
+
+  @override
+  String get fullAccessScope => 'Full tilgang';
+
+  @override
+  String get readScope => 'Les';
+
+  @override
+  String get writeScope => 'Skriv';
 }

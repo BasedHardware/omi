@@ -3081,5 +3081,9 @@
   "secureEncryptionDescription": "Dine data er krypteret med en nøgle, der er unik for dig, på vores servere, der er hostet på Google Cloud. Det betyder, at dit rå indhold er utilgængeligt for alle, inklusive Omi-personale eller Google, direkte fra databasen.",
   "endToEndEncryption": "End-to-end-kryptering",
   "e2eeCardDescription": "Aktiver for maksimal sikkerhed, hvor kun du kan få adgang til dine data. Tryk for at lære mere.",
-  "dataAlwaysEncrypted": "Uanset niveau er dine data altid krypteret i hvile og under overførsel."
+  "dataAlwaysEncrypted": "Uanset niveau er dine data altid krypteret i hvile og under overførsel.",
+  "readOnlyScope": "Kun læsning",
+  "fullAccessScope": "Fuld adgang",
+  "readScope": "Læsning",
+  "writeScope": "Skrivning"
 }

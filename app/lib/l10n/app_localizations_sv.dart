@@ -4411,4 +4411,16 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get dataAlwaysEncrypted => 'Oavsett nivå är dina data alltid krypterade i vila och under överföring.';
+
+  @override
+  String get readOnlyScope => 'Endast läsning';
+
+  @override
+  String get fullAccessScope => 'Full åtkomst';
+
+  @override
+  String get readScope => 'Läs';
+
+  @override
+  String get writeScope => 'Skriv';
 }

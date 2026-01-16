@@ -4422,4 +4422,16 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get dataAlwaysEncrypted =>
       'Tanpa mengira tahap, data anda sentiasa disulitkan semasa berehat dan dalam transit.';
+
+  @override
+  String get readOnlyScope => 'Baca Sahaja';
+
+  @override
+  String get fullAccessScope => 'Akses Penuh';
+
+  @override
+  String get readScope => 'Baca';
+
+  @override
+  String get writeScope => 'Tulis';
 }

@@ -4382,4 +4382,16 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get dataAlwaysEncrypted => 'स्तर के बावजूद, आपका डेटा हमेशा आराम और पारगमन में एन्क्रिप्टेड रहता है।';
+
+  @override
+  String get readOnlyScope => 'केवल पढ़ने के लिए';
+
+  @override
+  String get fullAccessScope => 'पूर्ण पहुंच';
+
+  @override
+  String get readScope => 'पढ़ें';
+
+  @override
+  String get writeScope => 'लिखें';
 }

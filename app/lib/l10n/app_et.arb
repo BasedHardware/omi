@@ -3081,5 +3081,9 @@
   "secureEncryptionDescription": "Teie andmed on krüpteeritud teile ainulaadse võtmega meie serverites, mis asuvad Google Cloudis. See tähendab, et teie toorandmed pole kellelegi kättesaadavad, sealhulgas Omi töötajatele või Google'ile, otse andmebaasist.",
   "endToEndEncryption": "Otsast otsani krüpteerimine",
   "e2eeCardDescription": "Lubab maksimaalse turvalisuse, kus ainult teie saate oma andmetele juurde pääseda. Puudutage, et rohkem teada saada.",
-  "dataAlwaysEncrypted": "Olenemata tasemest on teie andmed alati krüpteeritud puhkeolekus ja edastamisel."
+  "dataAlwaysEncrypted": "Olenemata tasemest on teie andmed alati krüpteeritud puhkeolekus ja edastamisel.",
+  "readOnlyScope": "Ainult lugemine",
+  "fullAccessScope": "Täielik juurdepääs",
+  "readScope": "Lugemine",
+  "writeScope": "Kirjutamine"
 }

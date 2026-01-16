@@ -3081,5 +3081,9 @@
   "secureEncryptionDescription": "Twoje dane są szyfrowane kluczem unikalnym dla Ciebie na naszych serwerach hostowanych w Google Cloud. Oznacza to, że Twoje surowe treści są niedostępne dla nikogo, w tym pracowników Omi lub Google, bezpośrednio z bazy danych.",
   "endToEndEncryption": "Szyfrowanie end-to-end",
   "e2eeCardDescription": "Włącz dla maksymalnego bezpieczeństwa, gdzie tylko Ty masz dostęp do swoich danych. Dotknij, aby dowiedzieć się więcej.",
-  "dataAlwaysEncrypted": "Niezależnie od poziomu, Twoje dane są zawsze szyfrowane w stanie spoczynku i podczas przesyłania."
+  "dataAlwaysEncrypted": "Niezależnie od poziomu, Twoje dane są zawsze szyfrowane w stanie spoczynku i podczas przesyłania.",
+  "readOnlyScope": "Tylko odczyt",
+  "fullAccessScope": "Pełny dostęp",
+  "readScope": "Odczyt",
+  "writeScope": "Zapis"
 }

@@ -1528,5 +1528,9 @@
   "secureEncryptionDescription": "Seus dados são criptografados com uma chave única para você em nossos servidores, hospedados no Google Cloud. Isso significa que seu conteúdo bruto é inacessível para qualquer pessoa, incluindo funcionários da Omi ou Google, diretamente do banco de dados.",
   "endToEndEncryption": "Criptografia de ponta a ponta",
   "e2eeCardDescription": "Ative para máxima segurança onde apenas você pode acessar seus dados. Toque para saber mais.",
-  "dataAlwaysEncrypted": "Independentemente do nível, seus dados estão sempre criptografados em repouso e em trânsito."
+  "dataAlwaysEncrypted": "Independentemente do nível, seus dados estão sempre criptografados em repouso e em trânsito.",
+  "readOnlyScope": "Somente leitura",
+  "fullAccessScope": "Acesso total",
+  "readScope": "Leitura",
+  "writeScope": "Escrita"
 }

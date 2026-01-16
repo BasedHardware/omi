@@ -4414,4 +4414,16 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get dataAlwaysEncrypted => 'Uanset niveau er dine data altid krypteret i hvile og under overførsel.';
+
+  @override
+  String get readOnlyScope => 'Kun læsning';
+
+  @override
+  String get fullAccessScope => 'Fuld adgang';
+
+  @override
+  String get readScope => 'Læsning';
+
+  @override
+  String get writeScope => 'Skrivning';
 }

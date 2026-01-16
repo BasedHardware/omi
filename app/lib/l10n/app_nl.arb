@@ -1899,5 +1899,9 @@
   "secureEncryptionDescription": "Uw gegevens worden versleuteld met een voor u unieke sleutel op onze servers, gehost op Google Cloud. Dit betekent dat uw ruwe inhoud ontoegankelijk is voor iedereen, inclusief Omi-medewerkers of Google, rechtstreeks vanuit de database.",
   "endToEndEncryption": "End-to-end-encryptie",
   "e2eeCardDescription": "Schakel in voor maximale beveiliging waarbij alleen u toegang heeft tot uw gegevens. Tik om meer te weten te komen.",
-  "dataAlwaysEncrypted": "Ongeacht het niveau zijn uw gegevens altijd versleuteld in rust en tijdens overdracht."
+  "dataAlwaysEncrypted": "Ongeacht het niveau zijn uw gegevens altijd versleuteld in rust en tijdens overdracht.",
+  "readOnlyScope": "Alleen lezen",
+  "fullAccessScope": "Volledige toegang",
+  "readScope": "Lezen",
+  "writeScope": "Schrijven"
 }

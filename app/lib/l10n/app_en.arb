@@ -5093,5 +5093,21 @@
   "dataAlwaysEncrypted": "Regardless of the level, your data is always encrypted at rest and in transit.",
   "@dataAlwaysEncrypted": {
     "description": "Info message explaining data is always encrypted"
+  },
+  "readOnlyScope": "Read Only",
+  "@readOnlyScope": {
+    "description": "Label for read-only API key scope"
+  },
+  "fullAccessScope": "Full Access",
+  "@fullAccessScope": {
+    "description": "Label for full access API key scope"
+  },
+  "readScope": "Read",
+  "@readScope": {
+    "description": "Label for read API key scope"
+  },
+  "writeScope": "Write",
+  "@writeScope": {
+    "description": "Label for write API key scope"
   }
 }

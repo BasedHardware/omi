@@ -4418,4 +4418,16 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get dataAlwaysEncrypted =>
       'Terlepas dari levelnya, data Anda selalu dienkripsi saat diam dan dalam perjalanan.';
+
+  @override
+  String get readOnlyScope => 'Hanya Baca';
+
+  @override
+  String get fullAccessScope => 'Akses Penuh';
+
+  @override
+  String get readScope => 'Baca';
+
+  @override
+  String get writeScope => 'Tulis';
 }

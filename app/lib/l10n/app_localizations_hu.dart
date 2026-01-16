@@ -4429,4 +4429,16 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get dataAlwaysEncrypted =>
       'A szinttől függetlenül az adatai mindig titkosítva vannak nyugalmi állapotban és átvitel közben.';
+
+  @override
+  String get readOnlyScope => 'Csak olvasható';
+
+  @override
+  String get fullAccessScope => 'Teljes hozzáférés';
+
+  @override
+  String get readScope => 'Olvasás';
+
+  @override
+  String get writeScope => 'Írás';
 }

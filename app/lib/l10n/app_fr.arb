@@ -1899,5 +1899,9 @@
   "secureEncryptionDescription": "Vos données sont chiffrées avec une clé unique sur nos serveurs, hébergés sur Google Cloud. Cela signifie que votre contenu brut est inaccessible à quiconque, y compris le personnel d'Omi ou Google, directement depuis la base de données.",
   "endToEndEncryption": "Chiffrement de bout en bout",
   "e2eeCardDescription": "Activez pour une sécurité maximale où seul vous pouvez accéder à vos données. Appuyez pour en savoir plus.",
-  "dataAlwaysEncrypted": "Quel que soit le niveau, vos données sont toujours chiffrées au repos et en transit."
+  "dataAlwaysEncrypted": "Quel que soit le niveau, vos données sont toujours chiffrées au repos et en transit.",
+  "readOnlyScope": "Lecture seule",
+  "fullAccessScope": "Accès complet",
+  "readScope": "Lecture",
+  "writeScope": "Écriture"
 }

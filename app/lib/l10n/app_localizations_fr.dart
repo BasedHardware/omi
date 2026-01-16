@@ -4443,4 +4443,16 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get dataAlwaysEncrypted =>
       'Quel que soit le niveau, vos données sont toujours chiffrées au repos et en transit.';
+
+  @override
+  String get readOnlyScope => 'Lecture seule';
+
+  @override
+  String get fullAccessScope => 'Accès complet';
+
+  @override
+  String get readScope => 'Lecture';
+
+  @override
+  String get writeScope => 'Écriture';
 }

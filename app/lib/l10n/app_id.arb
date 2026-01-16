@@ -3081,5 +3081,9 @@
   "secureEncryptionDescription": "Data Anda dienkripsi dengan kunci yang unik untuk Anda di server kami, yang dihosting di Google Cloud. Ini berarti konten mentah Anda tidak dapat diakses oleh siapa pun, termasuk staf Omi atau Google, langsung dari database.",
   "endToEndEncryption": "Enkripsi End-to-End",
   "e2eeCardDescription": "Aktifkan untuk keamanan maksimum di mana hanya Anda yang dapat mengakses data Anda. Ketuk untuk mempelajari lebih lanjut.",
-  "dataAlwaysEncrypted": "Terlepas dari levelnya, data Anda selalu dienkripsi saat diam dan dalam perjalanan."
+  "dataAlwaysEncrypted": "Terlepas dari levelnya, data Anda selalu dienkripsi saat diam dan dalam perjalanan.",
+  "readOnlyScope": "Hanya Baca",
+  "fullAccessScope": "Akses Penuh",
+  "readScope": "Baca",
+  "writeScope": "Tulis"
 }

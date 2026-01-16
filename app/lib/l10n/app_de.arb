@@ -1528,5 +1528,9 @@
   "secureEncryptionDescription": "Ihre Daten werden mit einem für Sie einzigartigen Schlüssel auf unseren Servern verschlüsselt, die bei Google Cloud gehostet werden. Das bedeutet, dass Ihre Rohdaten für niemanden zugänglich sind, einschließlich Omi-Mitarbeiter oder Google, direkt aus der Datenbank.",
   "endToEndEncryption": "End-to-End-Verschlüsselung",
   "e2eeCardDescription": "Aktivieren Sie für maximale Sicherheit, bei der nur Sie auf Ihre Daten zugreifen können. Tippen Sie, um mehr zu erfahren.",
-  "dataAlwaysEncrypted": "Unabhängig vom Level sind Ihre Daten immer im Ruhezustand und während der Übertragung verschlüsselt."
+  "dataAlwaysEncrypted": "Unabhängig vom Level sind Ihre Daten immer im Ruhezustand und während der Übertragung verschlüsselt.",
+  "readOnlyScope": "Nur Lesen",
+  "fullAccessScope": "Vollzugriff",
+  "readScope": "Lesen",
+  "writeScope": "Schreiben"
 }

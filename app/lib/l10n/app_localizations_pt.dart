@@ -4389,4 +4389,16 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get dataAlwaysEncrypted =>
       'Independentemente do nível, seus dados estão sempre criptografados em repouso e em trânsito.';
+
+  @override
+  String get readOnlyScope => 'Somente leitura';
+
+  @override
+  String get fullAccessScope => 'Acesso total';
+
+  @override
+  String get readScope => 'Leitura';
+
+  @override
+  String get writeScope => 'Escrita';
 }

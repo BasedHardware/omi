@@ -4410,4 +4410,16 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String get dataAlwaysEncrypted =>
       'Незалежно від рівня, ваші дані завжди зашифровані в стані спокою та під час передачі.';
+
+  @override
+  String get readOnlyScope => 'Лише читання';
+
+  @override
+  String get fullAccessScope => 'Повний доступ';
+
+  @override
+  String get readScope => 'Читання';
+
+  @override
+  String get writeScope => 'Запис';
 }

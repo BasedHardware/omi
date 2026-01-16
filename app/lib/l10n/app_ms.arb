@@ -3081,5 +3081,9 @@
   "secureEncryptionDescription": "Data anda disulitkan dengan kunci yang unik untuk anda di pelayan kami, yang dihoskan di Google Cloud. Ini bermakna kandungan mentah anda tidak boleh diakses oleh sesiapa, termasuk kakitangan Omi atau Google, terus dari pangkalan data.",
   "endToEndEncryption": "Penyulitan Hujung ke Hujung",
   "e2eeCardDescription": "Aktifkan untuk keselamatan maksimum di mana hanya anda boleh mengakses data anda. Ketik untuk mengetahui lebih lanjut.",
-  "dataAlwaysEncrypted": "Tanpa mengira tahap, data anda sentiasa disulitkan semasa berehat dan dalam transit."
+  "dataAlwaysEncrypted": "Tanpa mengira tahap, data anda sentiasa disulitkan semasa berehat dan dalam transit.",
+  "readOnlyScope": "Baca Sahaja",
+  "fullAccessScope": "Akses Penuh",
+  "readScope": "Baca",
+  "writeScope": "Tulis"
 }

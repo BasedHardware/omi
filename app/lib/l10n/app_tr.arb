@@ -3063,5 +3063,9 @@
   "secureEncryptionDescription": "Verileriniz, Google Cloud'da barındırılan sunucularımızda size özgü bir anahtarla şifrelenir. Bu, ham içeriğinizin Omi personeli veya Google dahil hiç kimse tarafından doğrudan veritabanından erişilemez olduğu anlamına gelir.",
   "endToEndEncryption": "Uçtan Uca Şifreleme",
   "e2eeCardDescription": "Yalnızca sizin verilerinize erişebildiğiniz maksimum güvenlik için etkinleştirin. Daha fazla bilgi için dokunun.",
-  "dataAlwaysEncrypted": "Seviyeden bağımsız olarak, verileriniz her zaman dinlenme halinde ve aktarım sırasında şifrelenir."
+  "dataAlwaysEncrypted": "Seviyeden bağımsız olarak, verileriniz her zaman dinlenme halinde ve aktarım sırasında şifrelenir.",
+  "readOnlyScope": "Yalnızca Okuma",
+  "fullAccessScope": "Tam Erişim",
+  "readScope": "Okuma",
+  "writeScope": "Yazma"
 }

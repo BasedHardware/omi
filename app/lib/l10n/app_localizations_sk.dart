@@ -4406,4 +4406,16 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get dataAlwaysEncrypted => 'Bez ohľadu na úroveň sú vaše údaje vždy šifrované v pokoji aj pri prenose.';
+
+  @override
+  String get readOnlyScope => 'Iba na čítanie';
+
+  @override
+  String get fullAccessScope => 'Plný prístup';
+
+  @override
+  String get readScope => 'Čítanie';
+
+  @override
+  String get writeScope => 'Zápis';
 }

@@ -4372,4 +4372,16 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get dataAlwaysEncrypted => 'بغض النظر عن المستوى، يتم تشفير بياناتك دائمًا أثناء التخزين وأثناء النقل.';
+
+  @override
+  String get readOnlyScope => 'قراءة فقط';
+
+  @override
+  String get fullAccessScope => 'وصول كامل';
+
+  @override
+  String get readScope => 'قراءة';
+
+  @override
+  String get writeScope => 'كتابة';
 }

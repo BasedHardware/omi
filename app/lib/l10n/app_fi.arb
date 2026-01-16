@@ -3081,5 +3081,9 @@
   "secureEncryptionDescription": "Tietosi salataan sinulle yksilöllisellä avaimella palvelimillamme, jotka ovat Google Cloudissa. Tämä tarkoittaa, että raakatietosi eivät ole kenenkään, mukaan lukien Omin henkilöstön tai Googlen, saatavilla suoraan tietokannasta.",
   "endToEndEncryption": "Päästä päähän -salaus",
   "e2eeCardDescription": "Ota käyttöön maksimaalinen turvallisuus, jossa vain sinä pääset käsiksi tietoihisi. Napauta saadaksesi lisätietoja.",
-  "dataAlwaysEncrypted": "Tasosta riippumatta tietosi ovat aina salattuja levossa ja siirrettäessä."
+  "dataAlwaysEncrypted": "Tasosta riippumatta tietosi ovat aina salattuja levossa ja siirrettäessä.",
+  "readOnlyScope": "Vain luku",
+  "fullAccessScope": "Täysi pääsy",
+  "readScope": "Luku",
+  "writeScope": "Kirjoitus"
 }

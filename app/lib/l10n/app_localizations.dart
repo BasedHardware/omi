@@ -8372,6 +8372,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Regardless of the level, your data is always encrypted at rest and in transit.'**
   String get dataAlwaysEncrypted;
+
+  /// Label for read-only API key scope
+  ///
+  /// In en, this message translates to:
+  /// **'Read Only'**
+  String get readOnlyScope;
+
+  /// Label for full access API key scope
+  ///
+  /// In en, this message translates to:
+  /// **'Full Access'**
+  String get fullAccessScope;
+
+  /// Label for read API key scope
+  ///
+  /// In en, this message translates to:
+  /// **'Read'**
+  String get readScope;
+
+  /// Label for write API key scope
+  ///
+  /// In en, this message translates to:
+  /// **'Write'**
+  String get writeScope;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

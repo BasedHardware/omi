@@ -4323,4 +4323,16 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get dataAlwaysEncrypted => '无论级别如何，您的数据始终在静态和传输中加密。';
+
+  @override
+  String get readOnlyScope => '只读';
+
+  @override
+  String get fullAccessScope => '完全访问';
+
+  @override
+  String get readScope => '读取';
+
+  @override
+  String get writeScope => '写入';
 }

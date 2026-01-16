@@ -4429,4 +4429,16 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get dataAlwaysEncrypted =>
       'Indipendentemente dal livello, i tuoi dati sono sempre crittografati a riposo e in transito.';
+
+  @override
+  String get readOnlyScope => 'Solo lettura';
+
+  @override
+  String get fullAccessScope => 'Accesso completo';
+
+  @override
+  String get readScope => 'Lettura';
+
+  @override
+  String get writeScope => 'Scrittura';
 }

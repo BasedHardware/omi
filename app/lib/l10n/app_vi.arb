@@ -3081,5 +3081,9 @@
   "secureEncryptionDescription": "Dữ liệu của bạn được mã hóa bằng một khóa duy nhất cho bạn trên các máy chủ của chúng tôi, được lưu trữ trên Google Cloud. Điều này có nghĩa là nội dung thô của bạn không thể truy cập được bởi bất kỳ ai, bao gồm nhân viên Omi hoặc Google, trực tiếp từ cơ sở dữ liệu.",
   "endToEndEncryption": "Mã hóa đầu cuối",
   "e2eeCardDescription": "Bật để bảo mật tối đa, nơi chỉ bạn mới có thể truy cập dữ liệu của mình. Nhấn để tìm hiểu thêm.",
-  "dataAlwaysEncrypted": "Bất kể mức nào, dữ liệu của bạn luôn được mã hóa khi lưu trữ và khi truyền tải."
+  "dataAlwaysEncrypted": "Bất kể mức nào, dữ liệu của bạn luôn được mã hóa khi lưu trữ và khi truyền tải.",
+  "readOnlyScope": "Chỉ đọc",
+  "fullAccessScope": "Truy cập đầy đủ",
+  "readScope": "Đọc",
+  "writeScope": "Ghi"
 }

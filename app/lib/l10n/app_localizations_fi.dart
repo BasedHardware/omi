@@ -4405,4 +4405,16 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get dataAlwaysEncrypted => 'Tasosta riippumatta tietosi ovat aina salattuja levossa ja siirrettäessä.';
+
+  @override
+  String get readOnlyScope => 'Vain luku';
+
+  @override
+  String get fullAccessScope => 'Täysi pääsy';
+
+  @override
+  String get readScope => 'Luku';
+
+  @override
+  String get writeScope => 'Kirjoitus';
 }

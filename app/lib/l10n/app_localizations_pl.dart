@@ -4414,4 +4414,16 @@ class AppLocalizationsPl extends AppLocalizations {
   @override
   String get dataAlwaysEncrypted =>
       'Niezależnie od poziomu, Twoje dane są zawsze szyfrowane w stanie spoczynku i podczas przesyłania.';
+
+  @override
+  String get readOnlyScope => 'Tylko odczyt';
+
+  @override
+  String get fullAccessScope => 'Pełny dostęp';
+
+  @override
+  String get readScope => 'Odczyt';
+
+  @override
+  String get writeScope => 'Zapis';
 }

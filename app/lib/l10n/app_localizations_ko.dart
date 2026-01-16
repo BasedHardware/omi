@@ -4330,4 +4330,16 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get dataAlwaysEncrypted => '레벨에 관계없이 데이터는 항상 저장 시 및 전송 중에 암호화됩니다.';
+
+  @override
+  String get readOnlyScope => '읽기 전용';
+
+  @override
+  String get fullAccessScope => '전체 액세스';
+
+  @override
+  String get readScope => '읽기';
+
+  @override
+  String get writeScope => '쓰기';
 }

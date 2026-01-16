@@ -4431,4 +4431,16 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get dataAlwaysEncrypted =>
       'Independentment del nivell, les teves dades sempre estan xifrades en repòs i en trànsit.';
+
+  @override
+  String get readOnlyScope => 'Només lectura';
+
+  @override
+  String get fullAccessScope => 'Accés complet';
+
+  @override
+  String get readScope => 'Lectura';
+
+  @override
+  String get writeScope => 'Escriptura';
 }

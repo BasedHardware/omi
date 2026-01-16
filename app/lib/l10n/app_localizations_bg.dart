@@ -4419,4 +4419,16 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get dataAlwaysEncrypted => 'Независимо от нивото, вашите данни винаги са криптирани в покой и при пренос.';
+
+  @override
+  String get readOnlyScope => 'Само за четене';
+
+  @override
+  String get fullAccessScope => 'Пълен достъп';
+
+  @override
+  String get readScope => 'Четене';
+
+  @override
+  String get writeScope => 'Запис';
 }
