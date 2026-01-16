@@ -1258,3 +1258,20 @@ Notes: Localized WiFi sync settings page including page title, info box with
        label and placeholder, save/clear credential buttons, and snackbar
        messages for validation and success/clear states.
 Commit: 7c7699c58
+
+--------------------------------------------------------------------------------
+FILE 94 (Phase 2 FILE 24): daily_summary_settings_page.dart
+--------------------------------------------------------------------------------
+Path: app/lib/pages/settings/daily_summary_settings_page.dart
+New Keys: dailySummaryDescription, summaryGeneratedForDate, 
+         failedToGenerateSummaryCheckConversations
+Reused Keys: cancel, done, selectTime, dailySummary, generateSummary, deliveryTime
+Total New Keys: 3
+Script: /tmp/translate_daily_summary.py
+Status: ✅ COMPLETED
+Notes: Localized daily summary settings page including page title, description,
+       time picker modal (cancel, select time, done), popup menu for generate
+       summary, settings card labels (Daily Summary toggle, Delivery Time),
+       and snackbar messages for success/failure states. The summaryGeneratedForDate
+       key uses a {date} parameter for the formatted date string.
+Commit: 2d4085604
