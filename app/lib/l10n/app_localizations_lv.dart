@@ -4360,4 +4360,58 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get noExternalAppsHaveAccess => 'Nevienai ārējai lietotnei nav piekļuves jūsu datiem.';
+
+  @override
+  String get maximumSecurityE2ee => 'Maksimāla drošība (E2EE)';
+
+  @override
+  String get e2eeDescription =>
+      'Pilnīga šifrēšana ir privātuma zelta standarts. Kad tā ir iespējota, jūsu dati tiek šifrēti jūsu ierīcē pirms nosūtīšanas uz mūsu serveriem. Tas nozīmē, ka neviens, pat ne Omi, nevar piekļūt jūsu saturam.';
+
+  @override
+  String get importantTradeoffs => 'Svarīgi kompromisi:';
+
+  @override
+  String get e2eeTradeoff1 => '• Dažas funkcijas, piemēram, ārējo lietotņu integrācijas, var tikt atspējotas.';
+
+  @override
+  String get e2eeTradeoff2 => '• Ja zaudējat paroli, jūsu datus nevar atgūt.';
+
+  @override
+  String get featureComingSoon => 'Šī funkcija drīzumā būs pieejama!';
+
+  @override
+  String get migrationInProgressMessage =>
+      'Migrācija notiek. Jūs nevarat mainīt aizsardzības līmeni, kamēr tā nav pabeigta.';
+
+  @override
+  String get migrationFailed => 'Migrācija neizdevās';
+
+  @override
+  String migratingFromTo(String source, String target) {
+    return 'Migrācija no $source uz $target';
+  }
+
+  @override
+  String objectsCount(String processed, String total) {
+    return '$processed / $total objekti';
+  }
+
+  @override
+  String get secureEncryption => 'Droša šifrēšana';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Jūsu dati tiek šifrēti ar jums unikālu atslēgu mūsu serveros, kas mitināti Google Cloud. Tas nozīmē, ka jūsu neapstrādātais saturs nav pieejams nevienam, ieskaitot Omi darbiniekus vai Google, tieši no datu bāzes.';
+
+  @override
+  String get endToEndEncryption => 'Pilnīga šifrēšana';
+
+  @override
+  String get e2eeCardDescription =>
+      'Iespējojiet maksimālu drošību, kur tikai jūs varat piekļūt saviem datiem. Pieskarieties, lai uzzinātu vairāk.';
+
+  @override
+  String get dataAlwaysEncrypted =>
+      'Neatkarīgi no līmeņa, jūsu dati vienmēr ir šifrēti miera stāvoklī un pārsūtīšanas laikā.';
 }

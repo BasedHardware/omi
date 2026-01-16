@@ -4359,4 +4359,56 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get noExternalAppsHaveAccess => 'Inga externa appar har åtkomst till dina data.';
+
+  @override
+  String get maximumSecurityE2ee => 'Maximal säkerhet (E2EE)';
+
+  @override
+  String get e2eeDescription =>
+      'End-to-end-kryptering är guldstandarden för integritet. När det är aktiverat krypteras dina data på din enhet innan de skickas till våra servrar. Det betyder att ingen, inte ens Omi, kan komma åt ditt innehåll.';
+
+  @override
+  String get importantTradeoffs => 'Viktiga avvägningar:';
+
+  @override
+  String get e2eeTradeoff1 => '• Vissa funktioner som externa app-integrationer kan vara inaktiverade.';
+
+  @override
+  String get e2eeTradeoff2 => '• Om du tappar ditt lösenord kan dina data inte återställas.';
+
+  @override
+  String get featureComingSoon => 'Den här funktionen kommer snart!';
+
+  @override
+  String get migrationInProgressMessage => 'Migrering pågår. Du kan inte ändra skyddsnivån förrän den är klar.';
+
+  @override
+  String get migrationFailed => 'Migreringen misslyckades';
+
+  @override
+  String migratingFromTo(String source, String target) {
+    return 'Migrerar från $source till $target';
+  }
+
+  @override
+  String objectsCount(String processed, String total) {
+    return '$processed / $total objekt';
+  }
+
+  @override
+  String get secureEncryption => 'Säker kryptering';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Dina data krypteras med en nyckel som är unik för dig på våra servrar, som finns på Google Cloud. Det betyder att ditt råa innehåll är otillgängligt för alla, inklusive Omi-personal eller Google, direkt från databasen.';
+
+  @override
+  String get endToEndEncryption => 'End-to-end-kryptering';
+
+  @override
+  String get e2eeCardDescription =>
+      'Aktivera för maximal säkerhet där endast du kan komma åt dina data. Tryck för att lära dig mer.';
+
+  @override
+  String get dataAlwaysEncrypted => 'Oavsett nivå är dina data alltid krypterade i vila och under överföring.';
 }

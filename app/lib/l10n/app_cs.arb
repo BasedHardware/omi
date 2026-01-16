@@ -3068,5 +3068,20 @@
   "keyWord": "Klíč",
   "externalAppAccess": "Přístup externích aplikací",
   "externalAppAccessDescription": "Následující nainstalované aplikace mají externí integrace a mohou přistupovat k vašim datům, jako jsou konverzace a vzpomínky.",
-  "noExternalAppsHaveAccess": "Žádné externí aplikace nemají přístup k vašim datům."
+  "noExternalAppsHaveAccess": "Žádné externí aplikace nemají přístup k vašim datům.",
+  "maximumSecurityE2ee": "Maximální zabezpečení (E2EE)",
+  "e2eeDescription": "End-to-end šifrování je zlatý standard ochrany soukromí. Když je povoleno, vaše data jsou šifrována na vašem zařízení před odesláním na naše servery. To znamená, že nikdo, ani Omi, nemůže přistupovat k vašemu obsahu.",
+  "importantTradeoffs": "Důležité kompromisy:",
+  "e2eeTradeoff1": "• Některé funkce jako integrace externích aplikací mohou být zakázány.",
+  "e2eeTradeoff2": "• Pokud ztratíte heslo, vaše data nelze obnovit.",
+  "featureComingSoon": "Tato funkce bude brzy k dispozici!",
+  "migrationInProgressMessage": "Migrace probíhá. Úroveň ochrany nelze změnit, dokud nebude dokončena.",
+  "migrationFailed": "Migrace selhala",
+  "migratingFromTo": "Migrace z {source} na {target}",
+  "objectsCount": "{processed} / {total} objektů",
+  "secureEncryption": "Bezpečné šifrování",
+  "secureEncryptionDescription": "Vaše data jsou šifrována klíčem jedinečným pro vás na našich serverech hostovaných v Google Cloud. To znamená, že váš surový obsah je nepřístupný nikomu, včetně zaměstnanců Omi nebo Google, přímo z databáze.",
+  "endToEndEncryption": "End-to-end šifrování",
+  "e2eeCardDescription": "Povolte pro maximální zabezpečení, kde pouze vy máte přístup k vašim datům. Klepnutím se dozvíte více.",
+  "dataAlwaysEncrypted": "Bez ohledu na úroveň jsou vaše data vždy šifrována v klidu i při přenosu."
 }

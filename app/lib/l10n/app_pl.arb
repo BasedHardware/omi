@@ -3066,5 +3066,20 @@
   "keyWord": "Klucz",
   "externalAppAccess": "Dostęp aplikacji zewnętrznych",
   "externalAppAccessDescription": "Następujące zainstalowane aplikacje mają zewnętrzne integracje i mogą uzyskać dostęp do twoich danych, takich jak rozmowy i wspomnienia.",
-  "noExternalAppsHaveAccess": "Żadne zewnętrzne aplikacje nie mają dostępu do twoich danych."
+  "noExternalAppsHaveAccess": "Żadne zewnętrzne aplikacje nie mają dostępu do twoich danych.",
+  "maximumSecurityE2ee": "Maksymalne bezpieczeństwo (E2EE)",
+  "e2eeDescription": "Szyfrowanie end-to-end to złoty standard prywatności. Po włączeniu dane są szyfrowane na urządzeniu przed wysłaniem na nasze serwery. Oznacza to, że nikt, nawet Omi, nie może uzyskać dostępu do Twoich treści.",
+  "importantTradeoffs": "Ważne kompromisy:",
+  "e2eeTradeoff1": "• Niektóre funkcje, takie jak integracje z zewnętrznymi aplikacjami, mogą być wyłączone.",
+  "e2eeTradeoff2": "• Jeśli zgubisz hasło, Twoje dane nie mogą zostać odzyskane.",
+  "featureComingSoon": "Ta funkcja wkrótce będzie dostępna!",
+  "migrationInProgressMessage": "Migracja w toku. Nie możesz zmienić poziomu ochrony, dopóki się nie zakończy.",
+  "migrationFailed": "Migracja nie powiodła się",
+  "migratingFromTo": "Migracja z {source} do {target}",
+  "objectsCount": "{processed} / {total} obiektów",
+  "secureEncryption": "Bezpieczne szyfrowanie",
+  "secureEncryptionDescription": "Twoje dane są szyfrowane kluczem unikalnym dla Ciebie na naszych serwerach hostowanych w Google Cloud. Oznacza to, że Twoje surowe treści są niedostępne dla nikogo, w tym pracowników Omi lub Google, bezpośrednio z bazy danych.",
+  "endToEndEncryption": "Szyfrowanie end-to-end",
+  "e2eeCardDescription": "Włącz dla maksymalnego bezpieczeństwa, gdzie tylko Ty masz dostęp do swoich danych. Dotknij, aby dowiedzieć się więcej.",
+  "dataAlwaysEncrypted": "Niezależnie od poziomu, Twoje dane są zawsze szyfrowane w stanie spoczynku i podczas przesyłania."
 }

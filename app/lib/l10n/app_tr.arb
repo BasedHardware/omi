@@ -3048,5 +3048,20 @@
   "keyWord": "Anahtar",
   "externalAppAccess": "Harici Uygulama Erişimi",
   "externalAppAccessDescription": "Aşağıdaki yüklü uygulamalar harici entegrasyonlara sahiptir ve sohbetler ve anılar gibi verilerinize erişebilir.",
-  "noExternalAppsHaveAccess": "Hiçbir harici uygulama verilerinize erişemiyor."
+  "noExternalAppsHaveAccess": "Hiçbir harici uygulama verilerinize erişemiyor.",
+  "maximumSecurityE2ee": "Maksimum Güvenlik (E2EE)",
+  "e2eeDescription": "Uçtan uca şifreleme, gizlilik için altın standarttır. Etkinleştirildiğinde, verileriniz sunucularımıza gönderilmeden önce cihazınızda şifrelenir. Bu, Omi dahil hiç kimsenin içeriğinize erişemeyeceği anlamına gelir.",
+  "importantTradeoffs": "Önemli Ödünler:",
+  "e2eeTradeoff1": "• Harici uygulama entegrasyonları gibi bazı özellikler devre dışı bırakılabilir.",
+  "e2eeTradeoff2": "• Parolanızı kaybederseniz, verileriniz kurtarılamaz.",
+  "featureComingSoon": "Bu özellik yakında geliyor!",
+  "migrationInProgressMessage": "Geçiş devam ediyor. Tamamlanana kadar koruma seviyesini değiştiremezsiniz.",
+  "migrationFailed": "Geçiş Başarısız",
+  "migratingFromTo": "{source} konumundan {target} konumuna geçiş yapılıyor",
+  "objectsCount": "{processed} / {total} nesne",
+  "secureEncryption": "Güvenli Şifreleme",
+  "secureEncryptionDescription": "Verileriniz, Google Cloud'da barındırılan sunucularımızda size özgü bir anahtarla şifrelenir. Bu, ham içeriğinizin Omi personeli veya Google dahil hiç kimse tarafından doğrudan veritabanından erişilemez olduğu anlamına gelir.",
+  "endToEndEncryption": "Uçtan Uca Şifreleme",
+  "e2eeCardDescription": "Yalnızca sizin verilerinize erişebildiğiniz maksimum güvenlik için etkinleştirin. Daha fazla bilgi için dokunun.",
+  "dataAlwaysEncrypted": "Seviyeden bağımsız olarak, verileriniz her zaman dinlenme halinde ve aktarım sırasında şifrelenir."
 }

@@ -3066,5 +3066,20 @@
   "keyWord": "Nøkkel",
   "externalAppAccess": "Ekstern app-tilgang",
   "externalAppAccessDescription": "Følgende installerte apper har eksterne integrasjoner og kan få tilgang til dataene dine, som samtaler og minner.",
-  "noExternalAppsHaveAccess": "Ingen eksterne apper har tilgang til dataene dine."
+  "noExternalAppsHaveAccess": "Ingen eksterne apper har tilgang til dataene dine.",
+  "maximumSecurityE2ee": "Maksimal sikkerhet (E2EE)",
+  "e2eeDescription": "Ende-til-ende-kryptering er gullstandarden for personvern. Når det er aktivert, krypteres dataene dine på enheten din før de sendes til serverne våre. Dette betyr at ingen, ikke engang Omi, kan få tilgang til innholdet ditt.",
+  "importantTradeoffs": "Viktige avveininger:",
+  "e2eeTradeoff1": "• Noen funksjoner som eksterne app-integrasjoner kan være deaktivert.",
+  "e2eeTradeoff2": "• Hvis du mister passordet ditt, kan dataene dine ikke gjenopprettes.",
+  "featureComingSoon": "Denne funksjonen kommer snart!",
+  "migrationInProgressMessage": "Migrering pågår. Du kan ikke endre beskyttelsesnivået før det er fullført.",
+  "migrationFailed": "Migrering mislyktes",
+  "migratingFromTo": "Migrerer fra {source} til {target}",
+  "objectsCount": "{processed} / {total} objekter",
+  "secureEncryption": "Sikker kryptering",
+  "secureEncryptionDescription": "Dataene dine er kryptert med en nøkkel som er unik for deg på våre servere, hostet på Google Cloud. Dette betyr at råinnholdet ditt er utilgjengelig for alle, inkludert Omi-ansatte eller Google, direkte fra databasen.",
+  "endToEndEncryption": "Ende-til-ende-kryptering",
+  "e2eeCardDescription": "Aktiver for maksimal sikkerhet der bare du har tilgang til dataene dine. Trykk for å lære mer.",
+  "dataAlwaysEncrypted": "Uavhengig av nivå er dataene dine alltid kryptert i hvile og under overføring."
 }

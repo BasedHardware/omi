@@ -3066,5 +3066,20 @@
   "keyWord": "Khóa",
   "externalAppAccess": "Truy cập ứng dụng bên ngoài",
   "externalAppAccessDescription": "Các ứng dụng đã cài đặt sau có tích hợp bên ngoài và có thể truy cập dữ liệu của bạn, chẳng hạn như cuộc trò chuyện và kỷ niệm.",
-  "noExternalAppsHaveAccess": "Không có ứng dụng bên ngoài nào có quyền truy cập vào dữ liệu của bạn."
+  "noExternalAppsHaveAccess": "Không có ứng dụng bên ngoài nào có quyền truy cập vào dữ liệu của bạn.",
+  "maximumSecurityE2ee": "Bảo mật tối đa (E2EE)",
+  "e2eeDescription": "Mã hóa đầu cuối là tiêu chuẩn vàng cho quyền riêng tư. Khi được bật, dữ liệu của bạn được mã hóa trên thiết bị của bạn trước khi gửi đến máy chủ của chúng tôi. Điều này có nghĩa là không ai, kể cả Omi, có thể truy cập nội dung của bạn.",
+  "importantTradeoffs": "Đánh đổi quan trọng:",
+  "e2eeTradeoff1": "• Một số tính năng như tích hợp ứng dụng bên ngoài có thể bị tắt.",
+  "e2eeTradeoff2": "• Nếu bạn mất mật khẩu, dữ liệu của bạn không thể được khôi phục.",
+  "featureComingSoon": "Tính năng này sắp ra mắt!",
+  "migrationInProgressMessage": "Đang di chuyển. Bạn không thể thay đổi mức bảo vệ cho đến khi hoàn tất.",
+  "migrationFailed": "Di chuyển thất bại",
+  "migratingFromTo": "Đang di chuyển từ {source} sang {target}",
+  "objectsCount": "{processed} / {total} đối tượng",
+  "secureEncryption": "Mã hóa an toàn",
+  "secureEncryptionDescription": "Dữ liệu của bạn được mã hóa bằng một khóa duy nhất cho bạn trên các máy chủ của chúng tôi, được lưu trữ trên Google Cloud. Điều này có nghĩa là nội dung thô của bạn không thể truy cập được bởi bất kỳ ai, bao gồm nhân viên Omi hoặc Google, trực tiếp từ cơ sở dữ liệu.",
+  "endToEndEncryption": "Mã hóa đầu cuối",
+  "e2eeCardDescription": "Bật để bảo mật tối đa, nơi chỉ bạn mới có thể truy cập dữ liệu của mình. Nhấn để tìm hiểu thêm.",
+  "dataAlwaysEncrypted": "Bất kể mức nào, dữ liệu của bạn luôn được mã hóa khi lưu trữ và khi truyền tải."
 }

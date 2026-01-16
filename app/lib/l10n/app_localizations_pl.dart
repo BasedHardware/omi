@@ -4359,4 +4359,59 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get noExternalAppsHaveAccess => 'Żadne zewnętrzne aplikacje nie mają dostępu do twoich danych.';
+
+  @override
+  String get maximumSecurityE2ee => 'Maksymalne bezpieczeństwo (E2EE)';
+
+  @override
+  String get e2eeDescription =>
+      'Szyfrowanie end-to-end to złoty standard prywatności. Po włączeniu dane są szyfrowane na urządzeniu przed wysłaniem na nasze serwery. Oznacza to, że nikt, nawet Omi, nie może uzyskać dostępu do Twoich treści.';
+
+  @override
+  String get importantTradeoffs => 'Ważne kompromisy:';
+
+  @override
+  String get e2eeTradeoff1 =>
+      '• Niektóre funkcje, takie jak integracje z zewnętrznymi aplikacjami, mogą być wyłączone.';
+
+  @override
+  String get e2eeTradeoff2 => '• Jeśli zgubisz hasło, Twoje dane nie mogą zostać odzyskane.';
+
+  @override
+  String get featureComingSoon => 'Ta funkcja wkrótce będzie dostępna!';
+
+  @override
+  String get migrationInProgressMessage =>
+      'Migracja w toku. Nie możesz zmienić poziomu ochrony, dopóki się nie zakończy.';
+
+  @override
+  String get migrationFailed => 'Migracja nie powiodła się';
+
+  @override
+  String migratingFromTo(String source, String target) {
+    return 'Migracja z $source do $target';
+  }
+
+  @override
+  String objectsCount(String processed, String total) {
+    return '$processed / $total obiektów';
+  }
+
+  @override
+  String get secureEncryption => 'Bezpieczne szyfrowanie';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Twoje dane są szyfrowane kluczem unikalnym dla Ciebie na naszych serwerach hostowanych w Google Cloud. Oznacza to, że Twoje surowe treści są niedostępne dla nikogo, w tym pracowników Omi lub Google, bezpośrednio z bazy danych.';
+
+  @override
+  String get endToEndEncryption => 'Szyfrowanie end-to-end';
+
+  @override
+  String get e2eeCardDescription =>
+      'Włącz dla maksymalnego bezpieczeństwa, gdzie tylko Ty masz dostęp do swoich danych. Dotknij, aby dowiedzieć się więcej.';
+
+  @override
+  String get dataAlwaysEncrypted =>
+      'Niezależnie od poziomu, Twoje dane są zawsze szyfrowane w stanie spoczynku i podczas przesyłania.';
 }

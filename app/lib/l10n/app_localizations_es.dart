@@ -4345,4 +4345,59 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get noExternalAppsHaveAccess => 'Ninguna aplicación externa tiene acceso a tus datos.';
+
+  @override
+  String get maximumSecurityE2ee => 'Seguridad máxima (E2EE)';
+
+  @override
+  String get e2eeDescription =>
+      'El cifrado de extremo a extremo es el estándar de oro para la privacidad. Cuando está habilitado, tus datos se cifran en tu dispositivo antes de enviarse a nuestros servidores. Esto significa que nadie, ni siquiera Omi, puede acceder a tu contenido.';
+
+  @override
+  String get importantTradeoffs => 'Compensaciones importantes:';
+
+  @override
+  String get e2eeTradeoff1 =>
+      '• Algunas funciones como las integraciones de aplicaciones externas pueden estar deshabilitadas.';
+
+  @override
+  String get e2eeTradeoff2 => '• Si pierdes tu contraseña, tus datos no se pueden recuperar.';
+
+  @override
+  String get featureComingSoon => '¡Esta función estará disponible pronto!';
+
+  @override
+  String get migrationInProgressMessage =>
+      'Migración en progreso. No puedes cambiar el nivel de protección hasta que se complete.';
+
+  @override
+  String get migrationFailed => 'Migración fallida';
+
+  @override
+  String migratingFromTo(String source, String target) {
+    return 'Migrando de $source a $target';
+  }
+
+  @override
+  String objectsCount(String processed, String total) {
+    return '$processed / $total objetos';
+  }
+
+  @override
+  String get secureEncryption => 'Cifrado seguro';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Tus datos se cifran con una clave única para ti en nuestros servidores, alojados en Google Cloud. Esto significa que tu contenido sin procesar es inaccesible para cualquier persona, incluido el personal de Omi o Google, directamente desde la base de datos.';
+
+  @override
+  String get endToEndEncryption => 'Cifrado de extremo a extremo';
+
+  @override
+  String get e2eeCardDescription =>
+      'Activa para máxima seguridad donde solo tú puedes acceder a tus datos. Toca para saber más.';
+
+  @override
+  String get dataAlwaysEncrypted =>
+      'Independientemente del nivel, tus datos siempre están cifrados en reposo y en tránsito.';
 }

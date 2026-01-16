@@ -5017,5 +5017,81 @@
   "noExternalAppsHaveAccess": "No external apps have access to your data.",
   "@noExternalAppsHaveAccess": {
     "description": "Message shown when no external apps have data access"
+  },
+  "maximumSecurityE2ee": "Maximum Security (E2EE)",
+  "@maximumSecurityE2ee": {
+    "description": "Title for End-to-End Encryption dialog"
+  },
+  "e2eeDescription": "End-to-end encryption is the gold standard for privacy. When enabled, your data is encrypted on your device before it's sent to our servers. This means no one, not even Omi, can access your content.",
+  "@e2eeDescription": {
+    "description": "Description of E2EE encryption explaining its benefits"
+  },
+  "importantTradeoffs": "Important Trade-offs:",
+  "@importantTradeoffs": {
+    "description": "Header for trade-offs section in E2EE dialog"
+  },
+  "e2eeTradeoff1": "• Some features like external app integrations may be disabled.",
+  "@e2eeTradeoff1": {
+    "description": "First trade-off bullet point for E2EE"
+  },
+  "e2eeTradeoff2": "• If you lose your password, your data cannot be recovered.",
+  "@e2eeTradeoff2": {
+    "description": "Second trade-off bullet point for E2EE"
+  },
+  "featureComingSoon": "This feature is coming soon!",
+  "@featureComingSoon": {
+    "description": "Message indicating a feature is coming soon"
+  },
+  "migrationInProgressMessage": "Migration in progress. You cannot change the protection level until it is complete.",
+  "@migrationInProgressMessage": {
+    "description": "Message shown when data migration is in progress"
+  },
+  "migrationFailed": "Migration Failed",
+  "@migrationFailed": {
+    "description": "Title shown when data migration fails"
+  },
+  "migratingFromTo": "Migrating from {source} to {target}",
+  "@migratingFromTo": {
+    "description": "Message showing migration progress between protection levels",
+    "placeholders": {
+      "source": {
+        "type": "String"
+      },
+      "target": {
+        "type": "String"
+      }
+    }
+  },
+  "objectsCount": "{processed} / {total} objects",
+  "@objectsCount": {
+    "description": "Shows number of processed objects out of total during migration",
+    "placeholders": {
+      "processed": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "secureEncryption": "Secure Encryption",
+  "@secureEncryption": {
+    "description": "Title for secure encryption card"
+  },
+  "secureEncryptionDescription": "Your data is encrypted with a key unique to you on our servers, hosted on Google Cloud. This means your raw content is inaccessible to anyone, including Omi staff or Google, directly from the database.",
+  "@secureEncryptionDescription": {
+    "description": "Description of secure encryption explaining how data is protected"
+  },
+  "endToEndEncryption": "End-to-End Encryption",
+  "@endToEndEncryption": {
+    "description": "Title for E2EE card"
+  },
+  "e2eeCardDescription": "Enable for maximum security where only you can access your data. Tap to learn more.",
+  "@e2eeCardDescription": {
+    "description": "Description for E2EE card explaining its benefit"
+  },
+  "dataAlwaysEncrypted": "Regardless of the level, your data is always encrypted at rest and in transit.",
+  "@dataAlwaysEncrypted": {
+    "description": "Info message explaining data is always encrypted"
   }
 }

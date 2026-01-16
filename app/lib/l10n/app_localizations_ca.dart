@@ -4376,4 +4376,59 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get noExternalAppsHaveAccess => 'Cap aplicació externa té accés a les teves dades.';
+
+  @override
+  String get maximumSecurityE2ee => 'Seguretat màxima (E2EE)';
+
+  @override
+  String get e2eeDescription =>
+      'El xifratge d\'extrem a extrem és l\'estàndard d\'or per a la privacitat. Quan està activat, les teves dades es xifren al teu dispositiu abans d\'enviar-se als nostres servidors. Això significa que ningú, ni tan sols Omi, pot accedir al teu contingut.';
+
+  @override
+  String get importantTradeoffs => 'Compensacions importants:';
+
+  @override
+  String get e2eeTradeoff1 =>
+      '• Algunes funcions com les integracions d\'aplicacions externes poden estar desactivades.';
+
+  @override
+  String get e2eeTradeoff2 => '• Si perds la teva contrasenya, les teves dades no es poden recuperar.';
+
+  @override
+  String get featureComingSoon => 'Aquesta funció arribarà aviat!';
+
+  @override
+  String get migrationInProgressMessage =>
+      'Migració en curs. No pots canviar el nivell de protecció fins que s\'hagi completat.';
+
+  @override
+  String get migrationFailed => 'La migració ha fallat';
+
+  @override
+  String migratingFromTo(String source, String target) {
+    return 'Migrant de $source a $target';
+  }
+
+  @override
+  String objectsCount(String processed, String total) {
+    return '$processed / $total objectes';
+  }
+
+  @override
+  String get secureEncryption => 'Xifratge segur';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Les teves dades es xifren amb una clau única per a tu als nostres servidors, allotjats a Google Cloud. Això significa que el teu contingut en brut és inaccessible per a qualsevol, inclòs el personal d\'Omi o Google, directament des de la base de dades.';
+
+  @override
+  String get endToEndEncryption => 'Xifratge d\'extrem a extrem';
+
+  @override
+  String get e2eeCardDescription =>
+      'Activa per a la màxima seguretat on només tu pots accedir a les teves dades. Toca per saber-ne més.';
+
+  @override
+  String get dataAlwaysEncrypted =>
+      'Independentment del nivell, les teves dades sempre estan xifrades en repòs i en trànsit.';
 }

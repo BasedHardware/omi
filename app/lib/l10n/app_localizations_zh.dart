@@ -4273,4 +4273,54 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get noExternalAppsHaveAccess => '没有外部应用可以访问您的数据。';
+
+  @override
+  String get maximumSecurityE2ee => '最高安全级别（E2EE）';
+
+  @override
+  String get e2eeDescription => '端到端加密是隐私保护的黄金标准。启用后，您的数据在发送到我们的服务器之前会在您的设备上加密。这意味着没有人，包括Omi，可以访问您的内容。';
+
+  @override
+  String get importantTradeoffs => '重要权衡：';
+
+  @override
+  String get e2eeTradeoff1 => '• 某些功能（如外部应用集成）可能会被禁用。';
+
+  @override
+  String get e2eeTradeoff2 => '• 如果您丢失密码，您的数据将无法恢复。';
+
+  @override
+  String get featureComingSoon => '此功能即将推出！';
+
+  @override
+  String get migrationInProgressMessage => '迁移进行中。在完成之前，您无法更改保护级别。';
+
+  @override
+  String get migrationFailed => '迁移失败';
+
+  @override
+  String migratingFromTo(String source, String target) {
+    return '正在从 $source 迁移到 $target';
+  }
+
+  @override
+  String objectsCount(String processed, String total) {
+    return '$processed / $total 个对象';
+  }
+
+  @override
+  String get secureEncryption => '安全加密';
+
+  @override
+  String get secureEncryptionDescription =>
+      '您的数据使用您独有的密钥在我们托管于Google Cloud的服务器上加密。这意味着包括Omi员工或Google在内的任何人都无法直接从数据库访问您的原始内容。';
+
+  @override
+  String get endToEndEncryption => '端到端加密';
+
+  @override
+  String get e2eeCardDescription => '启用以获得最大安全性，只有您可以访问您的数据。点击了解更多。';
+
+  @override
+  String get dataAlwaysEncrypted => '无论级别如何，您的数据始终在静态和传输中加密。';
 }

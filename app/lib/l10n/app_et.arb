@@ -3066,5 +3066,20 @@
   "keyWord": "Võti",
   "externalAppAccess": "Väliste rakenduste juurdepääs",
   "externalAppAccessDescription": "Järgmistel installitud rakendustel on välised integratsioonid ja need saavad juurdepääsu teie andmetele, nagu vestlused ja mälestused.",
-  "noExternalAppsHaveAccess": "Ühelgi välisel rakendusel pole juurdepääsu teie andmetele."
+  "noExternalAppsHaveAccess": "Ühelgi välisel rakendusel pole juurdepääsu teie andmetele.",
+  "maximumSecurityE2ee": "Maksimaalne turvalisus (E2EE)",
+  "e2eeDescription": "Otsast otsani krüpteerimine on privaatsuse kuldstandard. Kui see on lubatud, krüpteeritakse teie andmed teie seadmes enne nende saatmist meie serveritesse. See tähendab, et keegi, isegi mitte Omi, ei saa teie sisule juurde pääseda.",
+  "importantTradeoffs": "Olulised kompromissid:",
+  "e2eeTradeoff1": "• Mõned funktsioonid, nagu väliste rakenduste integratsioonid, võivad olla keelatud.",
+  "e2eeTradeoff2": "• Kui kaotate oma parooli, ei saa teie andmeid taastada.",
+  "featureComingSoon": "See funktsioon on peagi tulemas!",
+  "migrationInProgressMessage": "Migreerimine käimas. Te ei saa kaitsetaset muuta enne selle lõpetamist.",
+  "migrationFailed": "Migreerimine ebaõnnestus",
+  "migratingFromTo": "Migreerimine {source} kaudu {target}",
+  "objectsCount": "{processed} / {total} objekti",
+  "secureEncryption": "Turvaline krüpteerimine",
+  "secureEncryptionDescription": "Teie andmed on krüpteeritud teile ainulaadse võtmega meie serverites, mis asuvad Google Cloudis. See tähendab, et teie toorandmed pole kellelegi kättesaadavad, sealhulgas Omi töötajatele või Google'ile, otse andmebaasist.",
+  "endToEndEncryption": "Otsast otsani krüpteerimine",
+  "e2eeCardDescription": "Lubab maksimaalse turvalisuse, kus ainult teie saate oma andmetele juurde pääseda. Puudutage, et rohkem teada saada.",
+  "dataAlwaysEncrypted": "Olenemata tasemest on teie andmed alati krüpteeritud puhkeolekus ja edastamisel."
 }

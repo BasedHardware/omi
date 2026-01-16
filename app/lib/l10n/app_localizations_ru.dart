@@ -4365,4 +4365,59 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get noExternalAppsHaveAccess => 'Ни одно внешнее приложение не имеет доступа к вашим данным.';
+
+  @override
+  String get maximumSecurityE2ee => 'Максимальная безопасность (E2EE)';
+
+  @override
+  String get e2eeDescription =>
+      'Сквозное шифрование — это золотой стандарт конфиденциальности. При включении ваши данные шифруются на вашем устройстве перед отправкой на наши серверы. Это означает, что никто, даже Omi, не может получить доступ к вашему контенту.';
+
+  @override
+  String get importantTradeoffs => 'Важные компромиссы:';
+
+  @override
+  String get e2eeTradeoff1 =>
+      '• Некоторые функции, такие как интеграции с внешними приложениями, могут быть отключены.';
+
+  @override
+  String get e2eeTradeoff2 => '• Если вы потеряете пароль, ваши данные не могут быть восстановлены.';
+
+  @override
+  String get featureComingSoon => 'Эта функция скоро появится!';
+
+  @override
+  String get migrationInProgressMessage =>
+      'Миграция выполняется. Вы не можете изменить уровень защиты, пока она не завершится.';
+
+  @override
+  String get migrationFailed => 'Миграция не удалась';
+
+  @override
+  String migratingFromTo(String source, String target) {
+    return 'Миграция с $source на $target';
+  }
+
+  @override
+  String objectsCount(String processed, String total) {
+    return '$processed / $total объектов';
+  }
+
+  @override
+  String get secureEncryption => 'Безопасное шифрование';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Ваши данные шифруются уникальным для вас ключом на наших серверах, размещенных в Google Cloud. Это означает, что ваш необработанный контент недоступен никому, включая сотрудников Omi или Google, напрямую из базы данных.';
+
+  @override
+  String get endToEndEncryption => 'Сквозное шифрование';
+
+  @override
+  String get e2eeCardDescription =>
+      'Включите для максимальной безопасности, где только вы можете получить доступ к своим данным. Нажмите, чтобы узнать больше.';
+
+  @override
+  String get dataAlwaysEncrypted =>
+      'Независимо от уровня, ваши данные всегда зашифрованы в состоянии покоя и при передаче.';
 }

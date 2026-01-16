@@ -1513,5 +1513,20 @@
   "keyWord": "Clave",
   "externalAppAccess": "Acceso de aplicaciones externas",
   "externalAppAccessDescription": "Las siguientes aplicaciones instaladas tienen integraciones externas y pueden acceder a tus datos, como conversaciones y recuerdos.",
-  "noExternalAppsHaveAccess": "Ninguna aplicación externa tiene acceso a tus datos."
+  "noExternalAppsHaveAccess": "Ninguna aplicación externa tiene acceso a tus datos.",
+  "maximumSecurityE2ee": "Seguridad máxima (E2EE)",
+  "e2eeDescription": "El cifrado de extremo a extremo es el estándar de oro para la privacidad. Cuando está habilitado, tus datos se cifran en tu dispositivo antes de enviarse a nuestros servidores. Esto significa que nadie, ni siquiera Omi, puede acceder a tu contenido.",
+  "importantTradeoffs": "Compensaciones importantes:",
+  "e2eeTradeoff1": "• Algunas funciones como las integraciones de aplicaciones externas pueden estar deshabilitadas.",
+  "e2eeTradeoff2": "• Si pierdes tu contraseña, tus datos no se pueden recuperar.",
+  "featureComingSoon": "¡Esta función estará disponible pronto!",
+  "migrationInProgressMessage": "Migración en progreso. No puedes cambiar el nivel de protección hasta que se complete.",
+  "migrationFailed": "Migración fallida",
+  "migratingFromTo": "Migrando de {source} a {target}",
+  "objectsCount": "{processed} / {total} objetos",
+  "secureEncryption": "Cifrado seguro",
+  "secureEncryptionDescription": "Tus datos se cifran con una clave única para ti en nuestros servidores, alojados en Google Cloud. Esto significa que tu contenido sin procesar es inaccesible para cualquier persona, incluido el personal de Omi o Google, directamente desde la base de datos.",
+  "endToEndEncryption": "Cifrado de extremo a extremo",
+  "e2eeCardDescription": "Activa para máxima seguridad donde solo tú puedes acceder a tus datos. Toca para saber más.",
+  "dataAlwaysEncrypted": "Independientemente del nivel, tus datos siempre están cifrados en reposo y en tránsito."
 }

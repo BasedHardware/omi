@@ -4330,4 +4330,56 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get noExternalAppsHaveAccess => 'किसी भी बाहरी ऐप के पास आपके डेटा तक पहुंच नहीं है।';
+
+  @override
+  String get maximumSecurityE2ee => 'अधिकतम सुरक्षा (E2EE)';
+
+  @override
+  String get e2eeDescription =>
+      'एंड-टू-एंड एन्क्रिप्शन गोपनीयता का स्वर्ण मानक है। सक्षम होने पर, आपका डेटा हमारे सर्वर पर भेजे जाने से पहले आपके डिवाइस पर एन्क्रिप्ट किया जाता है। इसका मतलब है कि कोई भी, यहां तक कि Omi भी, आपकी सामग्री तक नहीं पहुंच सकता।';
+
+  @override
+  String get importantTradeoffs => 'महत्वपूर्ण समझौते:';
+
+  @override
+  String get e2eeTradeoff1 => '• बाहरी ऐप इंटीग्रेशन जैसी कुछ सुविधाएं अक्षम हो सकती हैं।';
+
+  @override
+  String get e2eeTradeoff2 => '• यदि आप अपना पासवर्ड खो देते हैं, तो आपका डेटा पुनर्प्राप्त नहीं किया जा सकता।';
+
+  @override
+  String get featureComingSoon => 'यह सुविधा जल्द आ रही है!';
+
+  @override
+  String get migrationInProgressMessage => 'माइग्रेशन प्रगति में है। पूरा होने तक आप सुरक्षा स्तर नहीं बदल सकते।';
+
+  @override
+  String get migrationFailed => 'माइग्रेशन विफल';
+
+  @override
+  String migratingFromTo(String source, String target) {
+    return '$source से $target में माइग्रेट हो रहा है';
+  }
+
+  @override
+  String objectsCount(String processed, String total) {
+    return '$processed / $total ऑब्जेक्ट';
+  }
+
+  @override
+  String get secureEncryption => 'सुरक्षित एन्क्रिप्शन';
+
+  @override
+  String get secureEncryptionDescription =>
+      'आपका डेटा हमारे सर्वर पर आपके लिए एक अद्वितीय कुंजी के साथ एन्क्रिप्ट किया गया है, जो Google Cloud पर होस्ट किया गया है। इसका मतलब है कि आपकी कच्ची सामग्री किसी के लिए भी अप्राप्य है, जिसमें Omi स्टाफ या Google शामिल हैं, सीधे डेटाबेस से।';
+
+  @override
+  String get endToEndEncryption => 'एंड-टू-एंड एन्क्रिप्शन';
+
+  @override
+  String get e2eeCardDescription =>
+      'अधिकतम सुरक्षा के लिए सक्षम करें जहां केवल आप अपना डेटा एक्सेस कर सकते हैं। अधिक जानने के लिए टैप करें।';
+
+  @override
+  String get dataAlwaysEncrypted => 'स्तर के बावजूद, आपका डेटा हमेशा आराम और पारगमन में एन्क्रिप्टेड रहता है।';
 }

@@ -1884,5 +1884,20 @@
   "keyWord": "Sleutel",
   "externalAppAccess": "Externe app-toegang",
   "externalAppAccessDescription": "De volgende geïnstalleerde apps hebben externe integraties en kunnen toegang krijgen tot uw gegevens, zoals gesprekken en herinneringen.",
-  "noExternalAppsHaveAccess": "Geen externe apps hebben toegang tot uw gegevens."
+  "noExternalAppsHaveAccess": "Geen externe apps hebben toegang tot uw gegevens.",
+  "maximumSecurityE2ee": "Maximale beveiliging (E2EE)",
+  "e2eeDescription": "End-to-end-encryptie is de gouden standaard voor privacy. Wanneer ingeschakeld, worden uw gegevens op uw apparaat versleuteld voordat ze naar onze servers worden verzonden. Dit betekent dat niemand, zelfs Omi niet, toegang heeft tot uw inhoud.",
+  "importantTradeoffs": "Belangrijke afwegingen:",
+  "e2eeTradeoff1": "• Sommige functies zoals externe app-integraties kunnen worden uitgeschakeld.",
+  "e2eeTradeoff2": "• Als u uw wachtwoord verliest, kunnen uw gegevens niet worden hersteld.",
+  "featureComingSoon": "Deze functie komt binnenkort!",
+  "migrationInProgressMessage": "Migratie bezig. U kunt het beveiligingsniveau niet wijzigen totdat deze is voltooid.",
+  "migrationFailed": "Migratie mislukt",
+  "migratingFromTo": "Migreren van {source} naar {target}",
+  "objectsCount": "{processed} / {total} objecten",
+  "secureEncryption": "Veilige versleuteling",
+  "secureEncryptionDescription": "Uw gegevens worden versleuteld met een voor u unieke sleutel op onze servers, gehost op Google Cloud. Dit betekent dat uw ruwe inhoud ontoegankelijk is voor iedereen, inclusief Omi-medewerkers of Google, rechtstreeks vanuit de database.",
+  "endToEndEncryption": "End-to-end-encryptie",
+  "e2eeCardDescription": "Schakel in voor maximale beveiliging waarbij alleen u toegang heeft tot uw gegevens. Tik om meer te weten te komen.",
+  "dataAlwaysEncrypted": "Ongeacht het niveau zijn uw gegevens altijd versleuteld in rust en tijdens overdracht."
 }

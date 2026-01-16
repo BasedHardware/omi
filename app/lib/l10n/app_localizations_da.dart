@@ -4361,4 +4361,57 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get noExternalAppsHaveAccess => 'Ingen eksterne apps har adgang til dine data.';
+
+  @override
+  String get maximumSecurityE2ee => 'Maksimal sikkerhed (E2EE)';
+
+  @override
+  String get e2eeDescription =>
+      'End-to-end-kryptering er guldstandarden for privatliv. Når det er aktiveret, krypteres dine data på din enhed, før de sendes til vores servere. Det betyder, at ingen, ikke engang Omi, kan få adgang til dit indhold.';
+
+  @override
+  String get importantTradeoffs => 'Vigtige kompromiser:';
+
+  @override
+  String get e2eeTradeoff1 => '• Nogle funktioner som eksterne app-integrationer kan være deaktiveret.';
+
+  @override
+  String get e2eeTradeoff2 => '• Hvis du mister din adgangskode, kan dine data ikke gendannes.';
+
+  @override
+  String get featureComingSoon => 'Denne funktion kommer snart!';
+
+  @override
+  String get migrationInProgressMessage =>
+      'Migrering i gang. Du kan ikke ændre beskyttelsesniveauet, før det er fuldført.';
+
+  @override
+  String get migrationFailed => 'Migrering mislykkedes';
+
+  @override
+  String migratingFromTo(String source, String target) {
+    return 'Migrerer fra $source til $target';
+  }
+
+  @override
+  String objectsCount(String processed, String total) {
+    return '$processed / $total objekter';
+  }
+
+  @override
+  String get secureEncryption => 'Sikker kryptering';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Dine data er krypteret med en nøgle, der er unik for dig, på vores servere, der er hostet på Google Cloud. Det betyder, at dit rå indhold er utilgængeligt for alle, inklusive Omi-personale eller Google, direkte fra databasen.';
+
+  @override
+  String get endToEndEncryption => 'End-to-end-kryptering';
+
+  @override
+  String get e2eeCardDescription =>
+      'Aktiver for maksimal sikkerhed, hvor kun du kan få adgang til dine data. Tryk for at lære mere.';
+
+  @override
+  String get dataAlwaysEncrypted => 'Uanset niveau er dine data altid krypteret i hvile og under overførsel.';
 }

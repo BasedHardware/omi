@@ -4388,4 +4388,59 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get noExternalAppsHaveAccess => 'Aucune application externe n\'a accès à vos données.';
+
+  @override
+  String get maximumSecurityE2ee => 'Sécurité maximale (E2EE)';
+
+  @override
+  String get e2eeDescription =>
+      'Le chiffrement de bout en bout est la référence en matière de confidentialité. Lorsqu\'il est activé, vos données sont chiffrées sur votre appareil avant d\'être envoyées à nos serveurs. Cela signifie que personne, pas même Omi, ne peut accéder à votre contenu.';
+
+  @override
+  String get importantTradeoffs => 'Compromis importants :';
+
+  @override
+  String get e2eeTradeoff1 =>
+      '• Certaines fonctionnalités comme les intégrations d\'applications externes peuvent être désactivées.';
+
+  @override
+  String get e2eeTradeoff2 => '• Si vous perdez votre mot de passe, vos données ne peuvent pas être récupérées.';
+
+  @override
+  String get featureComingSoon => 'Cette fonctionnalité arrive bientôt !';
+
+  @override
+  String get migrationInProgressMessage =>
+      'Migration en cours. Vous ne pouvez pas modifier le niveau de protection tant qu\'elle n\'est pas terminée.';
+
+  @override
+  String get migrationFailed => 'Échec de la migration';
+
+  @override
+  String migratingFromTo(String source, String target) {
+    return 'Migration de $source vers $target';
+  }
+
+  @override
+  String objectsCount(String processed, String total) {
+    return '$processed / $total objets';
+  }
+
+  @override
+  String get secureEncryption => 'Chiffrement sécurisé';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Vos données sont chiffrées avec une clé unique sur nos serveurs, hébergés sur Google Cloud. Cela signifie que votre contenu brut est inaccessible à quiconque, y compris le personnel d\'Omi ou Google, directement depuis la base de données.';
+
+  @override
+  String get endToEndEncryption => 'Chiffrement de bout en bout';
+
+  @override
+  String get e2eeCardDescription =>
+      'Activez pour une sécurité maximale où seul vous pouvez accéder à vos données. Appuyez pour en savoir plus.';
+
+  @override
+  String get dataAlwaysEncrypted =>
+      'Quel que soit le niveau, vos données sont toujours chiffrées au repos et en transit.';
 }

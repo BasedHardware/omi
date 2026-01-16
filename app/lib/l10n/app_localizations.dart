@@ -8282,6 +8282,96 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No external apps have access to your data.'**
   String get noExternalAppsHaveAccess;
+
+  /// Title for End-to-End Encryption dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum Security (E2EE)'**
+  String get maximumSecurityE2ee;
+
+  /// Description of E2EE encryption explaining its benefits
+  ///
+  /// In en, this message translates to:
+  /// **'End-to-end encryption is the gold standard for privacy. When enabled, your data is encrypted on your device before it\'s sent to our servers. This means no one, not even Omi, can access your content.'**
+  String get e2eeDescription;
+
+  /// Header for trade-offs section in E2EE dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Important Trade-offs:'**
+  String get importantTradeoffs;
+
+  /// First trade-off bullet point for E2EE
+  ///
+  /// In en, this message translates to:
+  /// **'• Some features like external app integrations may be disabled.'**
+  String get e2eeTradeoff1;
+
+  /// Second trade-off bullet point for E2EE
+  ///
+  /// In en, this message translates to:
+  /// **'• If you lose your password, your data cannot be recovered.'**
+  String get e2eeTradeoff2;
+
+  /// Message indicating a feature is coming soon
+  ///
+  /// In en, this message translates to:
+  /// **'This feature is coming soon!'**
+  String get featureComingSoon;
+
+  /// Message shown when data migration is in progress
+  ///
+  /// In en, this message translates to:
+  /// **'Migration in progress. You cannot change the protection level until it is complete.'**
+  String get migrationInProgressMessage;
+
+  /// Title shown when data migration fails
+  ///
+  /// In en, this message translates to:
+  /// **'Migration Failed'**
+  String get migrationFailed;
+
+  /// Message showing migration progress between protection levels
+  ///
+  /// In en, this message translates to:
+  /// **'Migrating from {source} to {target}'**
+  String migratingFromTo(String source, String target);
+
+  /// Shows number of processed objects out of total during migration
+  ///
+  /// In en, this message translates to:
+  /// **'{processed} / {total} objects'**
+  String objectsCount(String processed, String total);
+
+  /// Title for secure encryption card
+  ///
+  /// In en, this message translates to:
+  /// **'Secure Encryption'**
+  String get secureEncryption;
+
+  /// Description of secure encryption explaining how data is protected
+  ///
+  /// In en, this message translates to:
+  /// **'Your data is encrypted with a key unique to you on our servers, hosted on Google Cloud. This means your raw content is inaccessible to anyone, including Omi staff or Google, directly from the database.'**
+  String get secureEncryptionDescription;
+
+  /// Title for E2EE card
+  ///
+  /// In en, this message translates to:
+  /// **'End-to-End Encryption'**
+  String get endToEndEncryption;
+
+  /// Description for E2EE card explaining its benefit
+  ///
+  /// In en, this message translates to:
+  /// **'Enable for maximum security where only you can access your data. Tap to learn more.'**
+  String get e2eeCardDescription;
+
+  /// Info message explaining data is always encrypted
+  ///
+  /// In en, this message translates to:
+  /// **'Regardless of the level, your data is always encrypted at rest and in transit.'**
+  String get dataAlwaysEncrypted;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

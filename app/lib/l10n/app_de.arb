@@ -1513,5 +1513,20 @@
   "keyWord": "Schlüssel",
   "externalAppAccess": "Externer App-Zugriff",
   "externalAppAccessDescription": "Die folgenden installierten Apps haben externe Integrationen und können auf Ihre Daten zugreifen, wie Gespräche und Erinnerungen.",
-  "noExternalAppsHaveAccess": "Keine externen Apps haben Zugriff auf Ihre Daten."
+  "noExternalAppsHaveAccess": "Keine externen Apps haben Zugriff auf Ihre Daten.",
+  "maximumSecurityE2ee": "Maximale Sicherheit (E2EE)",
+  "e2eeDescription": "End-to-End-Verschlüsselung ist der Goldstandard für Datenschutz. Wenn aktiviert, werden Ihre Daten auf Ihrem Gerät verschlüsselt, bevor sie an unsere Server gesendet werden. Das bedeutet, dass niemand, nicht einmal Omi, auf Ihre Inhalte zugreifen kann.",
+  "importantTradeoffs": "Wichtige Kompromisse:",
+  "e2eeTradeoff1": "• Einige Funktionen wie externe App-Integrationen können deaktiviert sein.",
+  "e2eeTradeoff2": "• Wenn Sie Ihr Passwort verlieren, können Ihre Daten nicht wiederhergestellt werden.",
+  "featureComingSoon": "Diese Funktion kommt bald!",
+  "migrationInProgressMessage": "Migration läuft. Sie können das Schutzniveau nicht ändern, bis sie abgeschlossen ist.",
+  "migrationFailed": "Migration fehlgeschlagen",
+  "migratingFromTo": "Migration von {source} nach {target}",
+  "objectsCount": "{processed} / {total} Objekte",
+  "secureEncryption": "Sichere Verschlüsselung",
+  "secureEncryptionDescription": "Ihre Daten werden mit einem für Sie einzigartigen Schlüssel auf unseren Servern verschlüsselt, die bei Google Cloud gehostet werden. Das bedeutet, dass Ihre Rohdaten für niemanden zugänglich sind, einschließlich Omi-Mitarbeiter oder Google, direkt aus der Datenbank.",
+  "endToEndEncryption": "End-to-End-Verschlüsselung",
+  "e2eeCardDescription": "Aktivieren Sie für maximale Sicherheit, bei der nur Sie auf Ihre Daten zugreifen können. Tippen Sie, um mehr zu erfahren.",
+  "dataAlwaysEncrypted": "Unabhängig vom Level sind Ihre Daten immer im Ruhezustand und während der Übertragung verschlüsselt."
 }

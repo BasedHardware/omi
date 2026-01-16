@@ -4364,4 +4364,58 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get noExternalAppsHaveAccess => 'Tidak ada aplikasi eksternal yang memiliki akses ke data Anda.';
+
+  @override
+  String get maximumSecurityE2ee => 'Keamanan Maksimum (E2EE)';
+
+  @override
+  String get e2eeDescription =>
+      'Enkripsi end-to-end adalah standar emas untuk privasi. Saat diaktifkan, data Anda dienkripsi di perangkat Anda sebelum dikirim ke server kami. Ini berarti tidak ada seorang pun, bahkan Omi, yang dapat mengakses konten Anda.';
+
+  @override
+  String get importantTradeoffs => 'Pertimbangan Penting:';
+
+  @override
+  String get e2eeTradeoff1 => '• Beberapa fitur seperti integrasi aplikasi eksternal mungkin dinonaktifkan.';
+
+  @override
+  String get e2eeTradeoff2 => '• Jika Anda kehilangan kata sandi, data Anda tidak dapat dipulihkan.';
+
+  @override
+  String get featureComingSoon => 'Fitur ini akan segera hadir!';
+
+  @override
+  String get migrationInProgressMessage =>
+      'Migrasi sedang berlangsung. Anda tidak dapat mengubah tingkat perlindungan sampai selesai.';
+
+  @override
+  String get migrationFailed => 'Migrasi Gagal';
+
+  @override
+  String migratingFromTo(String source, String target) {
+    return 'Memigrasikan dari $source ke $target';
+  }
+
+  @override
+  String objectsCount(String processed, String total) {
+    return '$processed / $total objek';
+  }
+
+  @override
+  String get secureEncryption => 'Enkripsi Aman';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Data Anda dienkripsi dengan kunci yang unik untuk Anda di server kami, yang dihosting di Google Cloud. Ini berarti konten mentah Anda tidak dapat diakses oleh siapa pun, termasuk staf Omi atau Google, langsung dari database.';
+
+  @override
+  String get endToEndEncryption => 'Enkripsi End-to-End';
+
+  @override
+  String get e2eeCardDescription =>
+      'Aktifkan untuk keamanan maksimum di mana hanya Anda yang dapat mengakses data Anda. Ketuk untuk mempelajari lebih lanjut.';
+
+  @override
+  String get dataAlwaysEncrypted =>
+      'Terlepas dari levelnya, data Anda selalu dienkripsi saat diam dan dalam perjalanan.';
 }

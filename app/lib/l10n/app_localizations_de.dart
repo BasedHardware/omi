@@ -4387,4 +4387,58 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get noExternalAppsHaveAccess => 'Keine externen Apps haben Zugriff auf Ihre Daten.';
+
+  @override
+  String get maximumSecurityE2ee => 'Maximale Sicherheit (E2EE)';
+
+  @override
+  String get e2eeDescription =>
+      'End-to-End-Verschlüsselung ist der Goldstandard für Datenschutz. Wenn aktiviert, werden Ihre Daten auf Ihrem Gerät verschlüsselt, bevor sie an unsere Server gesendet werden. Das bedeutet, dass niemand, nicht einmal Omi, auf Ihre Inhalte zugreifen kann.';
+
+  @override
+  String get importantTradeoffs => 'Wichtige Kompromisse:';
+
+  @override
+  String get e2eeTradeoff1 => '• Einige Funktionen wie externe App-Integrationen können deaktiviert sein.';
+
+  @override
+  String get e2eeTradeoff2 => '• Wenn Sie Ihr Passwort verlieren, können Ihre Daten nicht wiederhergestellt werden.';
+
+  @override
+  String get featureComingSoon => 'Diese Funktion kommt bald!';
+
+  @override
+  String get migrationInProgressMessage =>
+      'Migration läuft. Sie können das Schutzniveau nicht ändern, bis sie abgeschlossen ist.';
+
+  @override
+  String get migrationFailed => 'Migration fehlgeschlagen';
+
+  @override
+  String migratingFromTo(String source, String target) {
+    return 'Migration von $source nach $target';
+  }
+
+  @override
+  String objectsCount(String processed, String total) {
+    return '$processed / $total Objekte';
+  }
+
+  @override
+  String get secureEncryption => 'Sichere Verschlüsselung';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Ihre Daten werden mit einem für Sie einzigartigen Schlüssel auf unseren Servern verschlüsselt, die bei Google Cloud gehostet werden. Das bedeutet, dass Ihre Rohdaten für niemanden zugänglich sind, einschließlich Omi-Mitarbeiter oder Google, direkt aus der Datenbank.';
+
+  @override
+  String get endToEndEncryption => 'End-to-End-Verschlüsselung';
+
+  @override
+  String get e2eeCardDescription =>
+      'Aktivieren Sie für maximale Sicherheit, bei der nur Sie auf Ihre Daten zugreifen können. Tippen Sie, um mehr zu erfahren.';
+
+  @override
+  String get dataAlwaysEncrypted =>
+      'Unabhängig vom Level sind Ihre Daten immer im Ruhezustand und während der Übertragung verschlüsselt.';
 }

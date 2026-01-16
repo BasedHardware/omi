@@ -3048,5 +3048,20 @@
   "keyWord": "Raktas",
   "externalAppAccess": "Išorinių programų prieiga",
   "externalAppAccessDescription": "Šios įdiegtos programos turi išorines integracijas ir gali pasiekti jūsų duomenis, tokius kaip pokalbiai ir prisiminimai.",
-  "noExternalAppsHaveAccess": "Jokios išorinės programos neturi prieigos prie jūsų duomenų."
+  "noExternalAppsHaveAccess": "Jokios išorinės programos neturi prieigos prie jūsų duomenų.",
+  "maximumSecurityE2ee": "Maksimalus saugumas (E2EE)",
+  "e2eeDescription": "Šifravimas nuo galo iki galo yra privatumo aukso standartas. Kai įjungta, jūsų duomenys užšifruojami jūsų įrenginyje prieš juos siunčiant į mūsų serverius. Tai reiškia, kad niekas, net Omi, negali pasiekti jūsų turinio.",
+  "importantTradeoffs": "Svarbūs kompromisai:",
+  "e2eeTradeoff1": "• Kai kurios funkcijos, pvz., išorinių programų integracijos, gali būti išjungtos.",
+  "e2eeTradeoff2": "• Jei prarasite slaptažodį, jūsų duomenų negalima atkurti.",
+  "featureComingSoon": "Ši funkcija netrukus bus prieinama!",
+  "migrationInProgressMessage": "Migracija vyksta. Negalite keisti apsaugos lygio, kol ji nebaigta.",
+  "migrationFailed": "Migracija nepavyko",
+  "migratingFromTo": "Migruojama iš {source} į {target}",
+  "objectsCount": "{processed} / {total} objektų",
+  "secureEncryption": "Saugus šifravimas",
+  "secureEncryptionDescription": "Jūsų duomenys yra užšifruoti jums unikaliu raktu mūsų serveriuose, prieglobstuose Google Cloud. Tai reiškia, kad jūsų neapdoroti duomenys yra neprieinami niekam, įskaitant Omi darbuotojus ar Google, tiesiogiai iš duomenų bazės.",
+  "endToEndEncryption": "Šifravimas nuo galo iki galo",
+  "e2eeCardDescription": "Įgalinkite maksimaliam saugumui, kai tik jūs galite pasiekti savo duomenis. Bakstelėkite, kad sužinotumėte daugiau.",
+  "dataAlwaysEncrypted": "Nepriklausomai nuo lygio, jūsų duomenys visada yra užšifruoti ramybės būsenoje ir perduodami."
 }

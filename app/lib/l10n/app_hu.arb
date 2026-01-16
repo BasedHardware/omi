@@ -3066,5 +3066,20 @@
   "keyWord": "Kulcs",
   "externalAppAccess": "Külső alkalmazás hozzáférés",
   "externalAppAccessDescription": "A következő telepített alkalmazásoknak külső integrációi vannak, és hozzáférhetnek az adataihoz, például beszélgetésekhez és emlékekhez.",
-  "noExternalAppsHaveAccess": "Egyetlen külső alkalmazásnak sincs hozzáférése az adataihoz."
+  "noExternalAppsHaveAccess": "Egyetlen külső alkalmazásnak sincs hozzáférése az adataihoz.",
+  "maximumSecurityE2ee": "Maximális biztonság (E2EE)",
+  "e2eeDescription": "A végpontok közötti titkosítás a magánélet aranystandardja. Ha engedélyezve van, az adatait az eszközén titkosítjuk, mielőtt elküldenénk a szervereinkre. Ez azt jelenti, hogy senki, még az Omi sem férhet hozzá a tartalmához.",
+  "importantTradeoffs": "Fontos kompromisszumok:",
+  "e2eeTradeoff1": "• Egyes funkciók, mint például a külső alkalmazás-integrációk, letilthatók.",
+  "e2eeTradeoff2": "• Ha elveszíti jelszavát, az adatai nem állíthatók helyre.",
+  "featureComingSoon": "Ez a funkció hamarosan érkezik!",
+  "migrationInProgressMessage": "Migráció folyamatban. A védelmi szintet nem módosíthatja, amíg be nem fejeződik.",
+  "migrationFailed": "A migráció sikertelen",
+  "migratingFromTo": "Migráció {source} típusról {target} típusra",
+  "objectsCount": "{processed} / {total} objektum",
+  "secureEncryption": "Biztonságos titkosítás",
+  "secureEncryptionDescription": "Az adatait egy Önnek egyedi kulccsal titkosítjuk a szervereink, amelyek a Google Cloudon vannak. Ez azt jelenti, hogy a nyers tartalma senkinek sem hozzáférhető, beleértve az Omi személyzetét vagy a Google-t, közvetlenül az adatbázisból.",
+  "endToEndEncryption": "Végpontok közötti titkosítás",
+  "e2eeCardDescription": "Engedélyezze a maximális biztonságot, ahol csak ön férhet hozzá adataihoz. Érintse meg a további információkért.",
+  "dataAlwaysEncrypted": "A szinttől függetlenül az adatai mindig titkosítva vannak nyugalmi állapotban és átvitel közben."
 }

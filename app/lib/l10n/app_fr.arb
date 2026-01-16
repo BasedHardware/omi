@@ -1884,5 +1884,20 @@
   "keyWord": "Clé",
   "externalAppAccess": "Accès des applications externes",
   "externalAppAccessDescription": "Les applications installées suivantes ont des intégrations externes et peuvent accéder à vos données, telles que les conversations et les souvenirs.",
-  "noExternalAppsHaveAccess": "Aucune application externe n'a accès à vos données."
+  "noExternalAppsHaveAccess": "Aucune application externe n'a accès à vos données.",
+  "maximumSecurityE2ee": "Sécurité maximale (E2EE)",
+  "e2eeDescription": "Le chiffrement de bout en bout est la référence en matière de confidentialité. Lorsqu'il est activé, vos données sont chiffrées sur votre appareil avant d'être envoyées à nos serveurs. Cela signifie que personne, pas même Omi, ne peut accéder à votre contenu.",
+  "importantTradeoffs": "Compromis importants :",
+  "e2eeTradeoff1": "• Certaines fonctionnalités comme les intégrations d'applications externes peuvent être désactivées.",
+  "e2eeTradeoff2": "• Si vous perdez votre mot de passe, vos données ne peuvent pas être récupérées.",
+  "featureComingSoon": "Cette fonctionnalité arrive bientôt !",
+  "migrationInProgressMessage": "Migration en cours. Vous ne pouvez pas modifier le niveau de protection tant qu'elle n'est pas terminée.",
+  "migrationFailed": "Échec de la migration",
+  "migratingFromTo": "Migration de {source} vers {target}",
+  "objectsCount": "{processed} / {total} objets",
+  "secureEncryption": "Chiffrement sécurisé",
+  "secureEncryptionDescription": "Vos données sont chiffrées avec une clé unique sur nos serveurs, hébergés sur Google Cloud. Cela signifie que votre contenu brut est inaccessible à quiconque, y compris le personnel d'Omi ou Google, directement depuis la base de données.",
+  "endToEndEncryption": "Chiffrement de bout en bout",
+  "e2eeCardDescription": "Activez pour une sécurité maximale où seul vous pouvez accéder à vos données. Appuyez pour en savoir plus.",
+  "dataAlwaysEncrypted": "Quel que soit le niveau, vos données sont toujours chiffrées au repos et en transit."
 }

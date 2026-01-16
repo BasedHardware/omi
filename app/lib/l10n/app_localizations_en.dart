@@ -4357,4 +4357,57 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get noExternalAppsHaveAccess => 'No external apps have access to your data.';
+
+  @override
+  String get maximumSecurityE2ee => 'Maximum Security (E2EE)';
+
+  @override
+  String get e2eeDescription =>
+      'End-to-end encryption is the gold standard for privacy. When enabled, your data is encrypted on your device before it\'s sent to our servers. This means no one, not even Omi, can access your content.';
+
+  @override
+  String get importantTradeoffs => 'Important Trade-offs:';
+
+  @override
+  String get e2eeTradeoff1 => '• Some features like external app integrations may be disabled.';
+
+  @override
+  String get e2eeTradeoff2 => '• If you lose your password, your data cannot be recovered.';
+
+  @override
+  String get featureComingSoon => 'This feature is coming soon!';
+
+  @override
+  String get migrationInProgressMessage =>
+      'Migration in progress. You cannot change the protection level until it is complete.';
+
+  @override
+  String get migrationFailed => 'Migration Failed';
+
+  @override
+  String migratingFromTo(String source, String target) {
+    return 'Migrating from $source to $target';
+  }
+
+  @override
+  String objectsCount(String processed, String total) {
+    return '$processed / $total objects';
+  }
+
+  @override
+  String get secureEncryption => 'Secure Encryption';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Your data is encrypted with a key unique to you on our servers, hosted on Google Cloud. This means your raw content is inaccessible to anyone, including Omi staff or Google, directly from the database.';
+
+  @override
+  String get endToEndEncryption => 'End-to-End Encryption';
+
+  @override
+  String get e2eeCardDescription =>
+      'Enable for maximum security where only you can access your data. Tap to learn more.';
+
+  @override
+  String get dataAlwaysEncrypted => 'Regardless of the level, your data is always encrypted at rest and in transit.';
 }

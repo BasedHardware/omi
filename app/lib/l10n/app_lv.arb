@@ -3066,5 +3066,20 @@
   "keyWord": "Atslēga",
   "externalAppAccess": "Ārējo lietotņu piekļuve",
   "externalAppAccessDescription": "Šīm instalētajām lietotnēm ir ārējās integrācijas, un tās var piekļūt jūsu datiem, piemēram, sarunām un atmiņām.",
-  "noExternalAppsHaveAccess": "Nevienai ārējai lietotnei nav piekļuves jūsu datiem."
+  "noExternalAppsHaveAccess": "Nevienai ārējai lietotnei nav piekļuves jūsu datiem.",
+  "maximumSecurityE2ee": "Maksimāla drošība (E2EE)",
+  "e2eeDescription": "Pilnīga šifrēšana ir privātuma zelta standarts. Kad tā ir iespējota, jūsu dati tiek šifrēti jūsu ierīcē pirms nosūtīšanas uz mūsu serveriem. Tas nozīmē, ka neviens, pat ne Omi, nevar piekļūt jūsu saturam.",
+  "importantTradeoffs": "Svarīgi kompromisi:",
+  "e2eeTradeoff1": "• Dažas funkcijas, piemēram, ārējo lietotņu integrācijas, var tikt atspējotas.",
+  "e2eeTradeoff2": "• Ja zaudējat paroli, jūsu datus nevar atgūt.",
+  "featureComingSoon": "Šī funkcija drīzumā būs pieejama!",
+  "migrationInProgressMessage": "Migrācija notiek. Jūs nevarat mainīt aizsardzības līmeni, kamēr tā nav pabeigta.",
+  "migrationFailed": "Migrācija neizdevās",
+  "migratingFromTo": "Migrācija no {source} uz {target}",
+  "objectsCount": "{processed} / {total} objekti",
+  "secureEncryption": "Droša šifrēšana",
+  "secureEncryptionDescription": "Jūsu dati tiek šifrēti ar jums unikālu atslēgu mūsu serveros, kas mitināti Google Cloud. Tas nozīmē, ka jūsu neapstrādātais saturs nav pieejams nevienam, ieskaitot Omi darbiniekus vai Google, tieši no datu bāzes.",
+  "endToEndEncryption": "Pilnīga šifrēšana",
+  "e2eeCardDescription": "Iespējojiet maksimālu drošību, kur tikai jūs varat piekļūt saviem datiem. Pieskarieties, lai uzzinātu vairāk.",
+  "dataAlwaysEncrypted": "Neatkarīgi no līmeņa, jūsu dati vienmēr ir šifrēti miera stāvoklī un pārsūtīšanas laikā."
 }

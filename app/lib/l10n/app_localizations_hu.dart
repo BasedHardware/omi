@@ -4375,4 +4375,58 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get noExternalAppsHaveAccess => 'Egyetlen külső alkalmazásnak sincs hozzáférése az adataihoz.';
+
+  @override
+  String get maximumSecurityE2ee => 'Maximális biztonság (E2EE)';
+
+  @override
+  String get e2eeDescription =>
+      'A végpontok közötti titkosítás a magánélet aranystandardja. Ha engedélyezve van, az adatait az eszközén titkosítjuk, mielőtt elküldenénk a szervereinkre. Ez azt jelenti, hogy senki, még az Omi sem férhet hozzá a tartalmához.';
+
+  @override
+  String get importantTradeoffs => 'Fontos kompromisszumok:';
+
+  @override
+  String get e2eeTradeoff1 => '• Egyes funkciók, mint például a külső alkalmazás-integrációk, letilthatók.';
+
+  @override
+  String get e2eeTradeoff2 => '• Ha elveszíti jelszavát, az adatai nem állíthatók helyre.';
+
+  @override
+  String get featureComingSoon => 'Ez a funkció hamarosan érkezik!';
+
+  @override
+  String get migrationInProgressMessage =>
+      'Migráció folyamatban. A védelmi szintet nem módosíthatja, amíg be nem fejeződik.';
+
+  @override
+  String get migrationFailed => 'A migráció sikertelen';
+
+  @override
+  String migratingFromTo(String source, String target) {
+    return 'Migráció $source típusról $target típusra';
+  }
+
+  @override
+  String objectsCount(String processed, String total) {
+    return '$processed / $total objektum';
+  }
+
+  @override
+  String get secureEncryption => 'Biztonságos titkosítás';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Az adatait egy Önnek egyedi kulccsal titkosítjuk a szervereink, amelyek a Google Cloudon vannak. Ez azt jelenti, hogy a nyers tartalma senkinek sem hozzáférhető, beleértve az Omi személyzetét vagy a Google-t, közvetlenül az adatbázisból.';
+
+  @override
+  String get endToEndEncryption => 'Végpontok közötti titkosítás';
+
+  @override
+  String get e2eeCardDescription =>
+      'Engedélyezze a maximális biztonságot, ahol csak ön férhet hozzá adataihoz. Érintse meg a további információkért.';
+
+  @override
+  String get dataAlwaysEncrypted =>
+      'A szinttől függetlenül az adatai mindig titkosítva vannak nyugalmi állapotban és átvitel közben.';
 }

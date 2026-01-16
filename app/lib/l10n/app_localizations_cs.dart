@@ -4350,4 +4350,56 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get noExternalAppsHaveAccess => 'Žádné externí aplikace nemají přístup k vašim datům.';
+
+  @override
+  String get maximumSecurityE2ee => 'Maximální zabezpečení (E2EE)';
+
+  @override
+  String get e2eeDescription =>
+      'End-to-end šifrování je zlatý standard ochrany soukromí. Když je povoleno, vaše data jsou šifrována na vašem zařízení před odesláním na naše servery. To znamená, že nikdo, ani Omi, nemůže přistupovat k vašemu obsahu.';
+
+  @override
+  String get importantTradeoffs => 'Důležité kompromisy:';
+
+  @override
+  String get e2eeTradeoff1 => '• Některé funkce jako integrace externích aplikací mohou být zakázány.';
+
+  @override
+  String get e2eeTradeoff2 => '• Pokud ztratíte heslo, vaše data nelze obnovit.';
+
+  @override
+  String get featureComingSoon => 'Tato funkce bude brzy k dispozici!';
+
+  @override
+  String get migrationInProgressMessage => 'Migrace probíhá. Úroveň ochrany nelze změnit, dokud nebude dokončena.';
+
+  @override
+  String get migrationFailed => 'Migrace selhala';
+
+  @override
+  String migratingFromTo(String source, String target) {
+    return 'Migrace z $source na $target';
+  }
+
+  @override
+  String objectsCount(String processed, String total) {
+    return '$processed / $total objektů';
+  }
+
+  @override
+  String get secureEncryption => 'Bezpečné šifrování';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Vaše data jsou šifrována klíčem jedinečným pro vás na našich serverech hostovaných v Google Cloud. To znamená, že váš surový obsah je nepřístupný nikomu, včetně zaměstnanců Omi nebo Google, přímo z databáze.';
+
+  @override
+  String get endToEndEncryption => 'End-to-end šifrování';
+
+  @override
+  String get e2eeCardDescription =>
+      'Povolte pro maximální zabezpečení, kde pouze vy máte přístup k vašim datům. Klepnutím se dozvíte více.';
+
+  @override
+  String get dataAlwaysEncrypted => 'Bez ohledu na úroveň jsou vaše data vždy šifrována v klidu i při přenosu.';
 }

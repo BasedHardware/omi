@@ -4320,4 +4320,56 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get noExternalAppsHaveAccess => 'لا توجد تطبيقات خارجية لديها وصول إلى بياناتك.';
+
+  @override
+  String get maximumSecurityE2ee => 'الأمان الأقصى (E2EE)';
+
+  @override
+  String get e2eeDescription =>
+      'التشفير من طرف إلى طرف هو المعيار الذهبي للخصوصية. عند تفعيله، يتم تشفير بياناتك على جهازك قبل إرسالها إلى خوادمنا. هذا يعني أنه لا أحد، ولا حتى Omi، يمكنه الوصول إلى محتواك.';
+
+  @override
+  String get importantTradeoffs => 'المقايضات المهمة:';
+
+  @override
+  String get e2eeTradeoff1 => '• قد يتم تعطيل بعض الميزات مثل تكامل التطبيقات الخارجية.';
+
+  @override
+  String get e2eeTradeoff2 => '• إذا فقدت كلمة المرور، لا يمكن استرداد بياناتك.';
+
+  @override
+  String get featureComingSoon => 'هذه الميزة قادمة قريباً!';
+
+  @override
+  String get migrationInProgressMessage => 'الترحيل قيد التقدم. لا يمكنك تغيير مستوى الحماية حتى يكتمل.';
+
+  @override
+  String get migrationFailed => 'فشل الترحيل';
+
+  @override
+  String migratingFromTo(String source, String target) {
+    return 'الترحيل من $source إلى $target';
+  }
+
+  @override
+  String objectsCount(String processed, String total) {
+    return '$processed / $total كائنات';
+  }
+
+  @override
+  String get secureEncryption => 'تشفير آمن';
+
+  @override
+  String get secureEncryptionDescription =>
+      'يتم تشفير بياناتك بمفتاح فريد لك على خوادمنا المستضافة على Google Cloud. هذا يعني أن محتواك الأصلي غير متاح لأي شخص، بما في ذلك موظفي Omi أو Google، مباشرة من قاعدة البيانات.';
+
+  @override
+  String get endToEndEncryption => 'التشفير من طرف إلى طرف';
+
+  @override
+  String get e2eeCardDescription =>
+      'قم بالتفعيل لأقصى درجات الأمان حيث يمكنك أنت فقط الوصول إلى بياناتك. انقر لمعرفة المزيد.';
+
+  @override
+  String get dataAlwaysEncrypted => 'بغض النظر عن المستوى، يتم تشفير بياناتك دائمًا أثناء التخزين وأثناء النقل.';
 }

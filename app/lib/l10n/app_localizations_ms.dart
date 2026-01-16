@@ -4368,4 +4368,58 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get noExternalAppsHaveAccess => 'Tiada aplikasi luaran yang mempunyai akses kepada data anda.';
+
+  @override
+  String get maximumSecurityE2ee => 'Keselamatan Maksimum (E2EE)';
+
+  @override
+  String get e2eeDescription =>
+      'Penyulitan hujung ke hujung adalah standard emas untuk privasi. Apabila diaktifkan, data anda disulitkan pada peranti anda sebelum dihantar ke pelayan kami. Ini bermakna tiada sesiapa, malah Omi, boleh mengakses kandungan anda.';
+
+  @override
+  String get importantTradeoffs => 'Pertimbangan Penting:';
+
+  @override
+  String get e2eeTradeoff1 => '• Beberapa ciri seperti integrasi aplikasi luaran mungkin dilumpuhkan.';
+
+  @override
+  String get e2eeTradeoff2 => '• Jika anda kehilangan kata laluan, data anda tidak boleh dipulihkan.';
+
+  @override
+  String get featureComingSoon => 'Ciri ini akan datang tidak lama lagi!';
+
+  @override
+  String get migrationInProgressMessage =>
+      'Migrasi sedang berjalan. Anda tidak boleh menukar tahap perlindungan sehingga selesai.';
+
+  @override
+  String get migrationFailed => 'Migrasi Gagal';
+
+  @override
+  String migratingFromTo(String source, String target) {
+    return 'Memindahkan dari $source ke $target';
+  }
+
+  @override
+  String objectsCount(String processed, String total) {
+    return '$processed / $total objek';
+  }
+
+  @override
+  String get secureEncryption => 'Penyulitan Selamat';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Data anda disulitkan dengan kunci yang unik untuk anda di pelayan kami, yang dihoskan di Google Cloud. Ini bermakna kandungan mentah anda tidak boleh diakses oleh sesiapa, termasuk kakitangan Omi atau Google, terus dari pangkalan data.';
+
+  @override
+  String get endToEndEncryption => 'Penyulitan Hujung ke Hujung';
+
+  @override
+  String get e2eeCardDescription =>
+      'Aktifkan untuk keselamatan maksimum di mana hanya anda boleh mengakses data anda. Ketik untuk mengetahui lebih lanjut.';
+
+  @override
+  String get dataAlwaysEncrypted =>
+      'Tanpa mengira tahap, data anda sentiasa disulitkan semasa berehat dan dalam transit.';
 }

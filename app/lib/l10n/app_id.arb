@@ -3066,5 +3066,20 @@
   "keyWord": "Kunci",
   "externalAppAccess": "Akses Aplikasi Eksternal",
   "externalAppAccessDescription": "Aplikasi terinstal berikut memiliki integrasi eksternal dan dapat mengakses data Anda, seperti percakapan dan kenangan.",
-  "noExternalAppsHaveAccess": "Tidak ada aplikasi eksternal yang memiliki akses ke data Anda."
+  "noExternalAppsHaveAccess": "Tidak ada aplikasi eksternal yang memiliki akses ke data Anda.",
+  "maximumSecurityE2ee": "Keamanan Maksimum (E2EE)",
+  "e2eeDescription": "Enkripsi end-to-end adalah standar emas untuk privasi. Saat diaktifkan, data Anda dienkripsi di perangkat Anda sebelum dikirim ke server kami. Ini berarti tidak ada seorang pun, bahkan Omi, yang dapat mengakses konten Anda.",
+  "importantTradeoffs": "Pertimbangan Penting:",
+  "e2eeTradeoff1": "• Beberapa fitur seperti integrasi aplikasi eksternal mungkin dinonaktifkan.",
+  "e2eeTradeoff2": "• Jika Anda kehilangan kata sandi, data Anda tidak dapat dipulihkan.",
+  "featureComingSoon": "Fitur ini akan segera hadir!",
+  "migrationInProgressMessage": "Migrasi sedang berlangsung. Anda tidak dapat mengubah tingkat perlindungan sampai selesai.",
+  "migrationFailed": "Migrasi Gagal",
+  "migratingFromTo": "Memigrasikan dari {source} ke {target}",
+  "objectsCount": "{processed} / {total} objek",
+  "secureEncryption": "Enkripsi Aman",
+  "secureEncryptionDescription": "Data Anda dienkripsi dengan kunci yang unik untuk Anda di server kami, yang dihosting di Google Cloud. Ini berarti konten mentah Anda tidak dapat diakses oleh siapa pun, termasuk staf Omi atau Google, langsung dari database.",
+  "endToEndEncryption": "Enkripsi End-to-End",
+  "e2eeCardDescription": "Aktifkan untuk keamanan maksimum di mana hanya Anda yang dapat mengakses data Anda. Ketuk untuk mempelajari lebih lanjut.",
+  "dataAlwaysEncrypted": "Terlepas dari levelnya, data Anda selalu dienkripsi saat diam dan dalam perjalanan."
 }

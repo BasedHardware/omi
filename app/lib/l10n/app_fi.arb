@@ -3066,5 +3066,20 @@
   "keyWord": "Avain",
   "externalAppAccess": "Ulkoisten sovellusten käyttöoikeus",
   "externalAppAccessDescription": "Seuraavilla asennetuilla sovelluksilla on ulkoisia integraatioita ja ne voivat käyttää tietojasi, kuten keskusteluja ja muistoja.",
-  "noExternalAppsHaveAccess": "Ulkoisilla sovelluksilla ei ole pääsyä tietoihisi."
+  "noExternalAppsHaveAccess": "Ulkoisilla sovelluksilla ei ole pääsyä tietoihisi.",
+  "maximumSecurityE2ee": "Maksimaalinen turvallisuus (E2EE)",
+  "e2eeDescription": "Päästä päähän -salaus on yksityisyyden kultastandardi. Kun se on käytössä, tietosi salataan laitteellasi ennen kuin ne lähetetään palvelimillemme. Tämä tarkoittaa, että kukaan, ei edes Omi, pääse käsiksi sisältöösi.",
+  "importantTradeoffs": "Tärkeät kompromissit:",
+  "e2eeTradeoff1": "• Jotkin ominaisuudet, kuten ulkoisten sovellusten integraatiot, voivat olla pois käytöstä.",
+  "e2eeTradeoff2": "• Jos kadotat salasanasi, tietojasi ei voi palauttaa.",
+  "featureComingSoon": "Tämä ominaisuus on tulossa pian!",
+  "migrationInProgressMessage": "Siirto käynnissä. Et voi muuttaa suojaustasoa ennen kuin se on valmis.",
+  "migrationFailed": "Siirto epäonnistui",
+  "migratingFromTo": "Siirretään kohteesta {source} kohteeseen {target}",
+  "objectsCount": "{processed} / {total} objektia",
+  "secureEncryption": "Turvallinen salaus",
+  "secureEncryptionDescription": "Tietosi salataan sinulle yksilöllisellä avaimella palvelimillamme, jotka ovat Google Cloudissa. Tämä tarkoittaa, että raakatietosi eivät ole kenenkään, mukaan lukien Omin henkilöstön tai Googlen, saatavilla suoraan tietokannasta.",
+  "endToEndEncryption": "Päästä päähän -salaus",
+  "e2eeCardDescription": "Ota käyttöön maksimaalinen turvallisuus, jossa vain sinä pääset käsiksi tietoihisi. Napauta saadaksesi lisätietoja.",
+  "dataAlwaysEncrypted": "Tasosta riippumatta tietosi ovat aina salattuja levossa ja siirrettäessä."
 }

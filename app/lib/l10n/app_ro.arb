@@ -3066,5 +3066,20 @@
   "keyWord": "Cheie",
   "externalAppAccess": "Acces aplicații externe",
   "externalAppAccessDescription": "Următoarele aplicații instalate au integrări externe și pot accesa datele tale, cum ar fi conversațiile și amintirile.",
-  "noExternalAppsHaveAccess": "Nicio aplicație externă nu are acces la datele tale."
+  "noExternalAppsHaveAccess": "Nicio aplicație externă nu are acces la datele tale.",
+  "maximumSecurityE2ee": "Securitate maximă (E2EE)",
+  "e2eeDescription": "Criptarea end-to-end este standardul de aur pentru confidențialitate. Când este activată, datele dvs. sunt criptate pe dispozitivul dvs. înainte de a fi trimise la serverele noastre. Aceasta înseamnă că nimeni, nici măcar Omi, nu poate accesa conținutul dvs.",
+  "importantTradeoffs": "Compromisuri importante:",
+  "e2eeTradeoff1": "• Unele funcții precum integrările cu aplicații externe pot fi dezactivate.",
+  "e2eeTradeoff2": "• Dacă pierdeți parola, datele dvs. nu pot fi recuperate.",
+  "featureComingSoon": "Această funcție va fi disponibilă în curând!",
+  "migrationInProgressMessage": "Migrație în curs. Nu puteți schimba nivelul de protecție până la finalizare.",
+  "migrationFailed": "Migrația a eșuat",
+  "migratingFromTo": "Migrare de la {source} la {target}",
+  "objectsCount": "{processed} / {total} obiecte",
+  "secureEncryption": "Criptare securizată",
+  "secureEncryptionDescription": "Datele dvs. sunt criptate cu o cheie unică pentru dvs. pe serverele noastre, găzduite pe Google Cloud. Aceasta înseamnă că conținutul dvs. brut este inaccesibil pentru oricine, inclusiv personalul Omi sau Google, direct din baza de date.",
+  "endToEndEncryption": "Criptare end-to-end",
+  "e2eeCardDescription": "Activați pentru securitate maximă, unde doar dvs. puteți accesa datele dvs. Atingeți pentru a afla mai multe.",
+  "dataAlwaysEncrypted": "Indiferent de nivel, datele dvs. sunt întotdeauna criptate în repaus și în tranzit."
 }

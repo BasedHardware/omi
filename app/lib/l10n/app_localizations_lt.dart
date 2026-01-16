@@ -4353,4 +4353,57 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get noExternalAppsHaveAccess => 'Jokios išorinės programos neturi prieigos prie jūsų duomenų.';
+
+  @override
+  String get maximumSecurityE2ee => 'Maksimalus saugumas (E2EE)';
+
+  @override
+  String get e2eeDescription =>
+      'Šifravimas nuo galo iki galo yra privatumo aukso standartas. Kai įjungta, jūsų duomenys užšifruojami jūsų įrenginyje prieš juos siunčiant į mūsų serverius. Tai reiškia, kad niekas, net Omi, negali pasiekti jūsų turinio.';
+
+  @override
+  String get importantTradeoffs => 'Svarbūs kompromisai:';
+
+  @override
+  String get e2eeTradeoff1 => '• Kai kurios funkcijos, pvz., išorinių programų integracijos, gali būti išjungtos.';
+
+  @override
+  String get e2eeTradeoff2 => '• Jei prarasite slaptažodį, jūsų duomenų negalima atkurti.';
+
+  @override
+  String get featureComingSoon => 'Ši funkcija netrukus bus prieinama!';
+
+  @override
+  String get migrationInProgressMessage => 'Migracija vyksta. Negalite keisti apsaugos lygio, kol ji nebaigta.';
+
+  @override
+  String get migrationFailed => 'Migracija nepavyko';
+
+  @override
+  String migratingFromTo(String source, String target) {
+    return 'Migruojama iš $source į $target';
+  }
+
+  @override
+  String objectsCount(String processed, String total) {
+    return '$processed / $total objektų';
+  }
+
+  @override
+  String get secureEncryption => 'Saugus šifravimas';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Jūsų duomenys yra užšifruoti jums unikaliu raktu mūsų serveriuose, prieglobstuose Google Cloud. Tai reiškia, kad jūsų neapdoroti duomenys yra neprieinami niekam, įskaitant Omi darbuotojus ar Google, tiesiogiai iš duomenų bazės.';
+
+  @override
+  String get endToEndEncryption => 'Šifravimas nuo galo iki galo';
+
+  @override
+  String get e2eeCardDescription =>
+      'Įgalinkite maksimaliam saugumui, kai tik jūs galite pasiekti savo duomenis. Bakstelėkite, kad sužinotumėte daugiau.';
+
+  @override
+  String get dataAlwaysEncrypted =>
+      'Nepriklausomai nuo lygio, jūsų duomenys visada yra užšifruoti ramybės būsenoje ir perduodami.';
 }

@@ -4335,4 +4335,58 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get noExternalAppsHaveAccess => 'Nenhum aplicativo externo tem acesso aos seus dados.';
+
+  @override
+  String get maximumSecurityE2ee => 'Segurança máxima (E2EE)';
+
+  @override
+  String get e2eeDescription =>
+      'A criptografia de ponta a ponta é o padrão ouro para privacidade. Quando ativada, seus dados são criptografados no seu dispositivo antes de serem enviados para nossos servidores. Isso significa que ninguém, nem mesmo a Omi, pode acessar seu conteúdo.';
+
+  @override
+  String get importantTradeoffs => 'Compromissos importantes:';
+
+  @override
+  String get e2eeTradeoff1 => '• Alguns recursos como integrações de aplicativos externos podem ser desativados.';
+
+  @override
+  String get e2eeTradeoff2 => '• Se você perder sua senha, seus dados não poderão ser recuperados.';
+
+  @override
+  String get featureComingSoon => 'Este recurso estará disponível em breve!';
+
+  @override
+  String get migrationInProgressMessage =>
+      'Migração em andamento. Você não pode alterar o nível de proteção até que seja concluída.';
+
+  @override
+  String get migrationFailed => 'Falha na migração';
+
+  @override
+  String migratingFromTo(String source, String target) {
+    return 'Migrando de $source para $target';
+  }
+
+  @override
+  String objectsCount(String processed, String total) {
+    return '$processed / $total objetos';
+  }
+
+  @override
+  String get secureEncryption => 'Criptografia segura';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Seus dados são criptografados com uma chave única para você em nossos servidores, hospedados no Google Cloud. Isso significa que seu conteúdo bruto é inacessível para qualquer pessoa, incluindo funcionários da Omi ou Google, diretamente do banco de dados.';
+
+  @override
+  String get endToEndEncryption => 'Criptografia de ponta a ponta';
+
+  @override
+  String get e2eeCardDescription =>
+      'Ative para máxima segurança onde apenas você pode acessar seus dados. Toque para saber mais.';
+
+  @override
+  String get dataAlwaysEncrypted =>
+      'Independentemente do nível, seus dados estão sempre criptografados em repouso e em trânsito.';
 }

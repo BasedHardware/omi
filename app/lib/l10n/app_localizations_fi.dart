@@ -4352,4 +4352,57 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get noExternalAppsHaveAccess => 'Ulkoisilla sovelluksilla ei ole pääsyä tietoihisi.';
+
+  @override
+  String get maximumSecurityE2ee => 'Maksimaalinen turvallisuus (E2EE)';
+
+  @override
+  String get e2eeDescription =>
+      'Päästä päähän -salaus on yksityisyyden kultastandardi. Kun se on käytössä, tietosi salataan laitteellasi ennen kuin ne lähetetään palvelimillemme. Tämä tarkoittaa, että kukaan, ei edes Omi, pääse käsiksi sisältöösi.';
+
+  @override
+  String get importantTradeoffs => 'Tärkeät kompromissit:';
+
+  @override
+  String get e2eeTradeoff1 =>
+      '• Jotkin ominaisuudet, kuten ulkoisten sovellusten integraatiot, voivat olla pois käytöstä.';
+
+  @override
+  String get e2eeTradeoff2 => '• Jos kadotat salasanasi, tietojasi ei voi palauttaa.';
+
+  @override
+  String get featureComingSoon => 'Tämä ominaisuus on tulossa pian!';
+
+  @override
+  String get migrationInProgressMessage => 'Siirto käynnissä. Et voi muuttaa suojaustasoa ennen kuin se on valmis.';
+
+  @override
+  String get migrationFailed => 'Siirto epäonnistui';
+
+  @override
+  String migratingFromTo(String source, String target) {
+    return 'Siirretään kohteesta $source kohteeseen $target';
+  }
+
+  @override
+  String objectsCount(String processed, String total) {
+    return '$processed / $total objektia';
+  }
+
+  @override
+  String get secureEncryption => 'Turvallinen salaus';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Tietosi salataan sinulle yksilöllisellä avaimella palvelimillamme, jotka ovat Google Cloudissa. Tämä tarkoittaa, että raakatietosi eivät ole kenenkään, mukaan lukien Omin henkilöstön tai Googlen, saatavilla suoraan tietokannasta.';
+
+  @override
+  String get endToEndEncryption => 'Päästä päähän -salaus';
+
+  @override
+  String get e2eeCardDescription =>
+      'Ota käyttöön maksimaalinen turvallisuus, jossa vain sinä pääset käsiksi tietoihisi. Napauta saadaksesi lisätietoja.';
+
+  @override
+  String get dataAlwaysEncrypted => 'Tasosta riippumatta tietosi ovat aina salattuja levossa ja siirrettäessä.';
 }

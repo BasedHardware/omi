@@ -4365,4 +4365,58 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get noExternalAppsHaveAccess => 'Geen externe apps hebben toegang tot uw gegevens.';
+
+  @override
+  String get maximumSecurityE2ee => 'Maximale beveiliging (E2EE)';
+
+  @override
+  String get e2eeDescription =>
+      'End-to-end-encryptie is de gouden standaard voor privacy. Wanneer ingeschakeld, worden uw gegevens op uw apparaat versleuteld voordat ze naar onze servers worden verzonden. Dit betekent dat niemand, zelfs Omi niet, toegang heeft tot uw inhoud.';
+
+  @override
+  String get importantTradeoffs => 'Belangrijke afwegingen:';
+
+  @override
+  String get e2eeTradeoff1 => '• Sommige functies zoals externe app-integraties kunnen worden uitgeschakeld.';
+
+  @override
+  String get e2eeTradeoff2 => '• Als u uw wachtwoord verliest, kunnen uw gegevens niet worden hersteld.';
+
+  @override
+  String get featureComingSoon => 'Deze functie komt binnenkort!';
+
+  @override
+  String get migrationInProgressMessage =>
+      'Migratie bezig. U kunt het beveiligingsniveau niet wijzigen totdat deze is voltooid.';
+
+  @override
+  String get migrationFailed => 'Migratie mislukt';
+
+  @override
+  String migratingFromTo(String source, String target) {
+    return 'Migreren van $source naar $target';
+  }
+
+  @override
+  String objectsCount(String processed, String total) {
+    return '$processed / $total objecten';
+  }
+
+  @override
+  String get secureEncryption => 'Veilige versleuteling';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Uw gegevens worden versleuteld met een voor u unieke sleutel op onze servers, gehost op Google Cloud. Dit betekent dat uw ruwe inhoud ontoegankelijk is voor iedereen, inclusief Omi-medewerkers of Google, rechtstreeks vanuit de database.';
+
+  @override
+  String get endToEndEncryption => 'End-to-end-encryptie';
+
+  @override
+  String get e2eeCardDescription =>
+      'Schakel in voor maximale beveiliging waarbij alleen u toegang heeft tot uw gegevens. Tik om meer te weten te komen.';
+
+  @override
+  String get dataAlwaysEncrypted =>
+      'Ongeacht het niveau zijn uw gegevens altijd versleuteld in rust en tijdens overdracht.';
 }

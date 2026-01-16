@@ -4361,4 +4361,56 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get noExternalAppsHaveAccess => 'Không có ứng dụng bên ngoài nào có quyền truy cập vào dữ liệu của bạn.';
+
+  @override
+  String get maximumSecurityE2ee => 'Bảo mật tối đa (E2EE)';
+
+  @override
+  String get e2eeDescription =>
+      'Mã hóa đầu cuối là tiêu chuẩn vàng cho quyền riêng tư. Khi được bật, dữ liệu của bạn được mã hóa trên thiết bị của bạn trước khi gửi đến máy chủ của chúng tôi. Điều này có nghĩa là không ai, kể cả Omi, có thể truy cập nội dung của bạn.';
+
+  @override
+  String get importantTradeoffs => 'Đánh đổi quan trọng:';
+
+  @override
+  String get e2eeTradeoff1 => '• Một số tính năng như tích hợp ứng dụng bên ngoài có thể bị tắt.';
+
+  @override
+  String get e2eeTradeoff2 => '• Nếu bạn mất mật khẩu, dữ liệu của bạn không thể được khôi phục.';
+
+  @override
+  String get featureComingSoon => 'Tính năng này sắp ra mắt!';
+
+  @override
+  String get migrationInProgressMessage => 'Đang di chuyển. Bạn không thể thay đổi mức bảo vệ cho đến khi hoàn tất.';
+
+  @override
+  String get migrationFailed => 'Di chuyển thất bại';
+
+  @override
+  String migratingFromTo(String source, String target) {
+    return 'Đang di chuyển từ $source sang $target';
+  }
+
+  @override
+  String objectsCount(String processed, String total) {
+    return '$processed / $total đối tượng';
+  }
+
+  @override
+  String get secureEncryption => 'Mã hóa an toàn';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Dữ liệu của bạn được mã hóa bằng một khóa duy nhất cho bạn trên các máy chủ của chúng tôi, được lưu trữ trên Google Cloud. Điều này có nghĩa là nội dung thô của bạn không thể truy cập được bởi bất kỳ ai, bao gồm nhân viên Omi hoặc Google, trực tiếp từ cơ sở dữ liệu.';
+
+  @override
+  String get endToEndEncryption => 'Mã hóa đầu cuối';
+
+  @override
+  String get e2eeCardDescription =>
+      'Bật để bảo mật tối đa, nơi chỉ bạn mới có thể truy cập dữ liệu của mình. Nhấn để tìm hiểu thêm.';
+
+  @override
+  String get dataAlwaysEncrypted => 'Bất kể mức nào, dữ liệu của bạn luôn được mã hóa khi lưu trữ và khi truyền tải.';
 }

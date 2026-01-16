@@ -4355,4 +4355,56 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get noExternalAppsHaveAccess => 'Ühelgi välisel rakendusel pole juurdepääsu teie andmetele.';
+
+  @override
+  String get maximumSecurityE2ee => 'Maksimaalne turvalisus (E2EE)';
+
+  @override
+  String get e2eeDescription =>
+      'Otsast otsani krüpteerimine on privaatsuse kuldstandard. Kui see on lubatud, krüpteeritakse teie andmed teie seadmes enne nende saatmist meie serveritesse. See tähendab, et keegi, isegi mitte Omi, ei saa teie sisule juurde pääseda.';
+
+  @override
+  String get importantTradeoffs => 'Olulised kompromissid:';
+
+  @override
+  String get e2eeTradeoff1 => '• Mõned funktsioonid, nagu väliste rakenduste integratsioonid, võivad olla keelatud.';
+
+  @override
+  String get e2eeTradeoff2 => '• Kui kaotate oma parooli, ei saa teie andmeid taastada.';
+
+  @override
+  String get featureComingSoon => 'See funktsioon on peagi tulemas!';
+
+  @override
+  String get migrationInProgressMessage => 'Migreerimine käimas. Te ei saa kaitsetaset muuta enne selle lõpetamist.';
+
+  @override
+  String get migrationFailed => 'Migreerimine ebaõnnestus';
+
+  @override
+  String migratingFromTo(String source, String target) {
+    return 'Migreerimine $source kaudu $target';
+  }
+
+  @override
+  String objectsCount(String processed, String total) {
+    return '$processed / $total objekti';
+  }
+
+  @override
+  String get secureEncryption => 'Turvaline krüpteerimine';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Teie andmed on krüpteeritud teile ainulaadse võtmega meie serverites, mis asuvad Google Cloudis. See tähendab, et teie toorandmed pole kellelegi kättesaadavad, sealhulgas Omi töötajatele või Google\'ile, otse andmebaasist.';
+
+  @override
+  String get endToEndEncryption => 'Otsast otsani krüpteerimine';
+
+  @override
+  String get e2eeCardDescription =>
+      'Lubab maksimaalse turvalisuse, kus ainult teie saate oma andmetele juurde pääseda. Puudutage, et rohkem teada saada.';
+
+  @override
+  String get dataAlwaysEncrypted => 'Olenemata tasemest on teie andmed alati krüpteeritud puhkeolekus ja edastamisel.';
 }

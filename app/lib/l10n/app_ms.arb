@@ -3066,5 +3066,20 @@
   "keyWord": "Kunci",
   "externalAppAccess": "Akses Aplikasi Luaran",
   "externalAppAccessDescription": "Aplikasi yang dipasang berikut mempunyai integrasi luaran dan boleh mengakses data anda, seperti perbualan dan kenangan.",
-  "noExternalAppsHaveAccess": "Tiada aplikasi luaran yang mempunyai akses kepada data anda."
+  "noExternalAppsHaveAccess": "Tiada aplikasi luaran yang mempunyai akses kepada data anda.",
+  "maximumSecurityE2ee": "Keselamatan Maksimum (E2EE)",
+  "e2eeDescription": "Penyulitan hujung ke hujung adalah standard emas untuk privasi. Apabila diaktifkan, data anda disulitkan pada peranti anda sebelum dihantar ke pelayan kami. Ini bermakna tiada sesiapa, malah Omi, boleh mengakses kandungan anda.",
+  "importantTradeoffs": "Pertimbangan Penting:",
+  "e2eeTradeoff1": "• Beberapa ciri seperti integrasi aplikasi luaran mungkin dilumpuhkan.",
+  "e2eeTradeoff2": "• Jika anda kehilangan kata laluan, data anda tidak boleh dipulihkan.",
+  "featureComingSoon": "Ciri ini akan datang tidak lama lagi!",
+  "migrationInProgressMessage": "Migrasi sedang berjalan. Anda tidak boleh menukar tahap perlindungan sehingga selesai.",
+  "migrationFailed": "Migrasi Gagal",
+  "migratingFromTo": "Memindahkan dari {source} ke {target}",
+  "objectsCount": "{processed} / {total} objek",
+  "secureEncryption": "Penyulitan Selamat",
+  "secureEncryptionDescription": "Data anda disulitkan dengan kunci yang unik untuk anda di pelayan kami, yang dihoskan di Google Cloud. Ini bermakna kandungan mentah anda tidak boleh diakses oleh sesiapa, termasuk kakitangan Omi atau Google, terus dari pangkalan data.",
+  "endToEndEncryption": "Penyulitan Hujung ke Hujung",
+  "e2eeCardDescription": "Aktifkan untuk keselamatan maksimum di mana hanya anda boleh mengakses data anda. Ketik untuk mengetahui lebih lanjut.",
+  "dataAlwaysEncrypted": "Tanpa mengira tahap, data anda sentiasa disulitkan semasa berehat dan dalam transit."
 }

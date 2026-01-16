@@ -4330,4 +4330,57 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get noExternalAppsHaveAccess => 'ไม่มีแอปภายนอกที่สามารถเข้าถึงข้อมูลของคุณ';
+
+  @override
+  String get maximumSecurityE2ee => 'ความปลอดภัยสูงสุด (E2EE)';
+
+  @override
+  String get e2eeDescription =>
+      'การเข้ารหัสแบบ end-to-end เป็นมาตรฐานทองคำสำหรับความเป็นส่วนตัว เมื่อเปิดใช้งาน ข้อมูลของคุณจะถูกเข้ารหัสบนอุปกรณ์ของคุณก่อนที่จะส่งไปยังเซิร์ฟเวอร์ของเรา ซึ่งหมายความว่าไม่มีใคร แม้แต่ Omi สามารถเข้าถึงเนื้อหาของคุณได้';
+
+  @override
+  String get importantTradeoffs => 'ข้อควรพิจารณาที่สำคัญ:';
+
+  @override
+  String get e2eeTradeoff1 => '• คุณสมบัติบางอย่าง เช่น การเชื่อมต่อแอปภายนอก อาจถูกปิดใช้งาน';
+
+  @override
+  String get e2eeTradeoff2 => '• หากคุณทำรหัสผ่านหาย ข้อมูลของคุณจะไม่สามารถกู้คืนได้';
+
+  @override
+  String get featureComingSoon => 'คุณสมบัตินี้จะมาเร็วๆ นี้!';
+
+  @override
+  String get migrationInProgressMessage =>
+      'การย้ายข้อมูลกำลังดำเนินการ คุณไม่สามารถเปลี่ยนระดับการป้องกันจนกว่าจะเสร็จสิ้น';
+
+  @override
+  String get migrationFailed => 'การย้ายข้อมูลล้มเหลว';
+
+  @override
+  String migratingFromTo(String source, String target) {
+    return 'กำลังย้ายจาก $source ไปยัง $target';
+  }
+
+  @override
+  String objectsCount(String processed, String total) {
+    return '$processed / $total รายการ';
+  }
+
+  @override
+  String get secureEncryption => 'การเข้ารหัสที่ปลอดภัย';
+
+  @override
+  String get secureEncryptionDescription =>
+      'ข้อมูลของคุณถูกเข้ารหัสด้วยคีย์ที่ไม่ซ้ำกันสำหรับคุณบนเซิร์ฟเวอร์ของเรา ซึ่งโฮสต์บน Google Cloud ซึ่งหมายความว่าเนื้อหาดิบของคุณไม่สามารถเข้าถึงได้โดยใครก็ตาม รวมถึงพนักงาน Omi หรือ Google โดยตรงจากฐานข้อมูล';
+
+  @override
+  String get endToEndEncryption => 'การเข้ารหัสแบบ end-to-end';
+
+  @override
+  String get e2eeCardDescription =>
+      'เปิดใช้งานเพื่อความปลอดภัยสูงสุดที่มีเพียงคุณเท่านั้นที่สามารถเข้าถึงข้อมูลของคุณ แตะเพื่อเรียนรู้เพิ่มเติม';
+
+  @override
+  String get dataAlwaysEncrypted => 'ไม่ว่าระดับใด ข้อมูลของคุณจะถูกเข้ารหัสเสมอทั้งขณะพักและขณะส่ง';
 }

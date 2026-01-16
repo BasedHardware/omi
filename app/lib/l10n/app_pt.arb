@@ -1513,5 +1513,20 @@
   "keyWord": "Chave",
   "externalAppAccess": "Acesso de aplicativos externos",
   "externalAppAccessDescription": "Os seguintes aplicativos instalados têm integrações externas e podem acessar seus dados, como conversas e memórias.",
-  "noExternalAppsHaveAccess": "Nenhum aplicativo externo tem acesso aos seus dados."
+  "noExternalAppsHaveAccess": "Nenhum aplicativo externo tem acesso aos seus dados.",
+  "maximumSecurityE2ee": "Segurança máxima (E2EE)",
+  "e2eeDescription": "A criptografia de ponta a ponta é o padrão ouro para privacidade. Quando ativada, seus dados são criptografados no seu dispositivo antes de serem enviados para nossos servidores. Isso significa que ninguém, nem mesmo a Omi, pode acessar seu conteúdo.",
+  "importantTradeoffs": "Compromissos importantes:",
+  "e2eeTradeoff1": "• Alguns recursos como integrações de aplicativos externos podem ser desativados.",
+  "e2eeTradeoff2": "• Se você perder sua senha, seus dados não poderão ser recuperados.",
+  "featureComingSoon": "Este recurso estará disponível em breve!",
+  "migrationInProgressMessage": "Migração em andamento. Você não pode alterar o nível de proteção até que seja concluída.",
+  "migrationFailed": "Falha na migração",
+  "migratingFromTo": "Migrando de {source} para {target}",
+  "objectsCount": "{processed} / {total} objetos",
+  "secureEncryption": "Criptografia segura",
+  "secureEncryptionDescription": "Seus dados são criptografados com uma chave única para você em nossos servidores, hospedados no Google Cloud. Isso significa que seu conteúdo bruto é inacessível para qualquer pessoa, incluindo funcionários da Omi ou Google, diretamente do banco de dados.",
+  "endToEndEncryption": "Criptografia de ponta a ponta",
+  "e2eeCardDescription": "Ative para máxima segurança onde apenas você pode acessar seus dados. Toque para saber mais.",
+  "dataAlwaysEncrypted": "Independentemente do nível, seus dados estão sempre criptografados em repouso e em trânsito."
 }

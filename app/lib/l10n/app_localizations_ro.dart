@@ -4375,4 +4375,58 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get noExternalAppsHaveAccess => 'Nicio aplicație externă nu are acces la datele tale.';
+
+  @override
+  String get maximumSecurityE2ee => 'Securitate maximă (E2EE)';
+
+  @override
+  String get e2eeDescription =>
+      'Criptarea end-to-end este standardul de aur pentru confidențialitate. Când este activată, datele dvs. sunt criptate pe dispozitivul dvs. înainte de a fi trimise la serverele noastre. Aceasta înseamnă că nimeni, nici măcar Omi, nu poate accesa conținutul dvs.';
+
+  @override
+  String get importantTradeoffs => 'Compromisuri importante:';
+
+  @override
+  String get e2eeTradeoff1 => '• Unele funcții precum integrările cu aplicații externe pot fi dezactivate.';
+
+  @override
+  String get e2eeTradeoff2 => '• Dacă pierdeți parola, datele dvs. nu pot fi recuperate.';
+
+  @override
+  String get featureComingSoon => 'Această funcție va fi disponibilă în curând!';
+
+  @override
+  String get migrationInProgressMessage =>
+      'Migrație în curs. Nu puteți schimba nivelul de protecție până la finalizare.';
+
+  @override
+  String get migrationFailed => 'Migrația a eșuat';
+
+  @override
+  String migratingFromTo(String source, String target) {
+    return 'Migrare de la $source la $target';
+  }
+
+  @override
+  String objectsCount(String processed, String total) {
+    return '$processed / $total obiecte';
+  }
+
+  @override
+  String get secureEncryption => 'Criptare securizată';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Datele dvs. sunt criptate cu o cheie unică pentru dvs. pe serverele noastre, găzduite pe Google Cloud. Aceasta înseamnă că conținutul dvs. brut este inaccesibil pentru oricine, inclusiv personalul Omi sau Google, direct din baza de date.';
+
+  @override
+  String get endToEndEncryption => 'Criptare end-to-end';
+
+  @override
+  String get e2eeCardDescription =>
+      'Activați pentru securitate maximă, unde doar dvs. puteți accesa datele dvs. Atingeți pentru a afla mai multe.';
+
+  @override
+  String get dataAlwaysEncrypted =>
+      'Indiferent de nivel, datele dvs. sunt întotdeauna criptate în repaus și în tranzit.';
 }

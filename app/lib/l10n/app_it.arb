@@ -3048,5 +3048,20 @@
   "keyWord": "Chiave",
   "externalAppAccess": "Accesso app esterne",
   "externalAppAccessDescription": "Le seguenti app installate hanno integrazioni esterne e possono accedere ai tuoi dati, come conversazioni e ricordi.",
-  "noExternalAppsHaveAccess": "Nessuna app esterna ha accesso ai tuoi dati."
+  "noExternalAppsHaveAccess": "Nessuna app esterna ha accesso ai tuoi dati.",
+  "maximumSecurityE2ee": "Sicurezza massima (E2EE)",
+  "e2eeDescription": "La crittografia end-to-end è lo standard d'oro per la privacy. Quando abilitata, i tuoi dati vengono crittografati sul tuo dispositivo prima di essere inviati ai nostri server. Ciò significa che nessuno, nemmeno Omi, può accedere ai tuoi contenuti.",
+  "importantTradeoffs": "Compromessi importanti:",
+  "e2eeTradeoff1": "• Alcune funzionalità come le integrazioni di app esterne potrebbero essere disabilitate.",
+  "e2eeTradeoff2": "• Se perdi la password, i tuoi dati non possono essere recuperati.",
+  "featureComingSoon": "Questa funzionalità sarà disponibile presto!",
+  "migrationInProgressMessage": "Migrazione in corso. Non puoi cambiare il livello di protezione finché non è completata.",
+  "migrationFailed": "Migrazione fallita",
+  "migratingFromTo": "Migrazione da {source} a {target}",
+  "objectsCount": "{processed} / {total} oggetti",
+  "secureEncryption": "Crittografia sicura",
+  "secureEncryptionDescription": "I tuoi dati sono crittografati con una chiave unica per te sui nostri server, ospitati su Google Cloud. Ciò significa che i tuoi contenuti grezzi sono inaccessibili a chiunque, incluso il personale di Omi o Google, direttamente dal database.",
+  "endToEndEncryption": "Crittografia end-to-end",
+  "e2eeCardDescription": "Abilita per la massima sicurezza dove solo tu puoi accedere ai tuoi dati. Tocca per saperne di più.",
+  "dataAlwaysEncrypted": "Indipendentemente dal livello, i tuoi dati sono sempre crittografati a riposo e in transito."
 }

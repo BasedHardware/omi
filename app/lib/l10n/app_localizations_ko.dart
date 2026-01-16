@@ -4279,4 +4279,55 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get noExternalAppsHaveAccess => '외부 앱이 데이터에 접근할 수 없습니다.';
+
+  @override
+  String get maximumSecurityE2ee => '최대 보안 (E2EE)';
+
+  @override
+  String get e2eeDescription =>
+      '엔드투엔드 암호화는 개인정보 보호의 최고 기준입니다. 활성화되면 데이터가 서버로 전송되기 전에 기기에서 암호화됩니다. 이는 Omi를 포함한 그 누구도 귀하의 콘텐츠에 접근할 수 없음을 의미합니다.';
+
+  @override
+  String get importantTradeoffs => '중요한 절충 사항:';
+
+  @override
+  String get e2eeTradeoff1 => '• 외부 앱 통합과 같은 일부 기능이 비활성화될 수 있습니다.';
+
+  @override
+  String get e2eeTradeoff2 => '• 비밀번호를 분실하면 데이터를 복구할 수 없습니다.';
+
+  @override
+  String get featureComingSoon => '이 기능은 곧 제공됩니다!';
+
+  @override
+  String get migrationInProgressMessage => '마이그레이션이 진행 중입니다. 완료될 때까지 보호 수준을 변경할 수 없습니다.';
+
+  @override
+  String get migrationFailed => '마이그레이션 실패';
+
+  @override
+  String migratingFromTo(String source, String target) {
+    return '$source에서 $target으로 마이그레이션 중';
+  }
+
+  @override
+  String objectsCount(String processed, String total) {
+    return '$processed / $total 개체';
+  }
+
+  @override
+  String get secureEncryption => '안전한 암호화';
+
+  @override
+  String get secureEncryptionDescription =>
+      '귀하의 데이터는 Google Cloud에서 호스팅되는 당사 서버에서 귀하만의 고유한 키로 암호화됩니다. 이는 Omi 직원이나 Google을 포함한 누구도 데이터베이스에서 직접 귀하의 원시 콘텐츠에 접근할 수 없음을 의미합니다.';
+
+  @override
+  String get endToEndEncryption => '엔드투엔드 암호화';
+
+  @override
+  String get e2eeCardDescription => '최대 보안을 위해 활성화하면 본인만 데이터에 접근할 수 있습니다. 자세히 알아보려면 탭하세요.';
+
+  @override
+  String get dataAlwaysEncrypted => '레벨에 관계없이 데이터는 항상 저장 시 및 전송 중에 암호화됩니다.';
 }

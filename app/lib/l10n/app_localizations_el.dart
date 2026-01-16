@@ -4386,4 +4386,59 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get noExternalAppsHaveAccess => 'Καμία εξωτερική εφαρμογή δεν έχει πρόσβαση στα δεδομένα σας.';
+
+  @override
+  String get maximumSecurityE2ee => 'Μέγιστη ασφάλεια (E2EE)';
+
+  @override
+  String get e2eeDescription =>
+      'Η κρυπτογράφηση από άκρο σε άκρο είναι το χρυσό πρότυπο για την ιδιωτικότητα. Όταν είναι ενεργοποιημένη, τα δεδομένα σας κρυπτογραφούνται στη συσκευή σας πριν σταλούν στους διακομιστές μας. Αυτό σημαίνει ότι κανείς, ούτε καν η Omi, δεν μπορεί να έχει πρόσβαση στο περιεχόμενό σας.';
+
+  @override
+  String get importantTradeoffs => 'Σημαντικοί συμβιβασμοί:';
+
+  @override
+  String get e2eeTradeoff1 =>
+      '• Ορισμένες λειτουργίες όπως οι ενσωματώσεις εξωτερικών εφαρμογών ενδέχεται να απενεργοποιηθούν.';
+
+  @override
+  String get e2eeTradeoff2 => '• Εάν χάσετε τον κωδικό πρόσβασής σας, τα δεδομένα σας δεν μπορούν να ανακτηθούν.';
+
+  @override
+  String get featureComingSoon => 'Αυτή η λειτουργία έρχεται σύντομα!';
+
+  @override
+  String get migrationInProgressMessage =>
+      'Μετανάστευση σε εξέλιξη. Δεν μπορείτε να αλλάξετε το επίπεδο προστασίας μέχρι να ολοκληρωθεί.';
+
+  @override
+  String get migrationFailed => 'Η μετανάστευση απέτυχε';
+
+  @override
+  String migratingFromTo(String source, String target) {
+    return 'Μετανάστευση από $source σε $target';
+  }
+
+  @override
+  String objectsCount(String processed, String total) {
+    return '$processed / $total αντικείμενα';
+  }
+
+  @override
+  String get secureEncryption => 'Ασφαλής κρυπτογράφηση';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Τα δεδομένα σας κρυπτογραφούνται με ένα μοναδικό κλειδί για εσάς στους διακομιστές μας, που φιλοξενούνται στο Google Cloud. Αυτό σημαίνει ότι το ακατέργαστο περιεχόμενό σας είναι απρόσιτο σε οποιονδήποτε, συμπεριλαμβανομένου του προσωπικού της Omi ή της Google, απευθείας από τη βάση δεδομένων.';
+
+  @override
+  String get endToEndEncryption => 'Κρυπτογράφηση από άκρο σε άκρο';
+
+  @override
+  String get e2eeCardDescription =>
+      'Ενεργοποιήστε για μέγιστη ασφάλεια όπου μόνο εσείς έχετε πρόσβαση στα δεδομένα σας. Πατήστε για να μάθετε περισσότερα.';
+
+  @override
+  String get dataAlwaysEncrypted =>
+      'Ανεξάρτητα από το επίπεδο, τα δεδομένα σας είναι πάντα κρυπτογραφημένα σε κατάσταση ηρεμίας και κατά τη μεταφορά.';
 }

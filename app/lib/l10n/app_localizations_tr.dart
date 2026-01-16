@@ -4362,4 +4362,57 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get noExternalAppsHaveAccess => 'Hiçbir harici uygulama verilerinize erişemiyor.';
+
+  @override
+  String get maximumSecurityE2ee => 'Maksimum Güvenlik (E2EE)';
+
+  @override
+  String get e2eeDescription =>
+      'Uçtan uca şifreleme, gizlilik için altın standarttır. Etkinleştirildiğinde, verileriniz sunucularımıza gönderilmeden önce cihazınızda şifrelenir. Bu, Omi dahil hiç kimsenin içeriğinize erişemeyeceği anlamına gelir.';
+
+  @override
+  String get importantTradeoffs => 'Önemli Ödünler:';
+
+  @override
+  String get e2eeTradeoff1 => '• Harici uygulama entegrasyonları gibi bazı özellikler devre dışı bırakılabilir.';
+
+  @override
+  String get e2eeTradeoff2 => '• Parolanızı kaybederseniz, verileriniz kurtarılamaz.';
+
+  @override
+  String get featureComingSoon => 'Bu özellik yakında geliyor!';
+
+  @override
+  String get migrationInProgressMessage => 'Geçiş devam ediyor. Tamamlanana kadar koruma seviyesini değiştiremezsiniz.';
+
+  @override
+  String get migrationFailed => 'Geçiş Başarısız';
+
+  @override
+  String migratingFromTo(String source, String target) {
+    return '$source konumundan $target konumuna geçiş yapılıyor';
+  }
+
+  @override
+  String objectsCount(String processed, String total) {
+    return '$processed / $total nesne';
+  }
+
+  @override
+  String get secureEncryption => 'Güvenli Şifreleme';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Verileriniz, Google Cloud\'da barındırılan sunucularımızda size özgü bir anahtarla şifrelenir. Bu, ham içeriğinizin Omi personeli veya Google dahil hiç kimse tarafından doğrudan veritabanından erişilemez olduğu anlamına gelir.';
+
+  @override
+  String get endToEndEncryption => 'Uçtan Uca Şifreleme';
+
+  @override
+  String get e2eeCardDescription =>
+      'Yalnızca sizin verilerinize erişebildiğiniz maksimum güvenlik için etkinleştirin. Daha fazla bilgi için dokunun.';
+
+  @override
+  String get dataAlwaysEncrypted =>
+      'Seviyeden bağımsız olarak, verileriniz her zaman dinlenme halinde ve aktarım sırasında şifrelenir.';
 }

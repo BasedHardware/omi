@@ -4354,4 +4354,56 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get noExternalAppsHaveAccess => 'Žiadne externé aplikácie nemajú prístup k vašim údajom.';
+
+  @override
+  String get maximumSecurityE2ee => 'Maximálne zabezpečenie (E2EE)';
+
+  @override
+  String get e2eeDescription =>
+      'End-to-end šifrovanie je zlatý štandard ochrany súkromia. Keď je povolené, vaše údaje sú šifrované na vašom zariadení pred odoslaním na naše servery. To znamená, že nikto, ani Omi, nemôže pristupovať k vášmu obsahu.';
+
+  @override
+  String get importantTradeoffs => 'Dôležité kompromisy:';
+
+  @override
+  String get e2eeTradeoff1 => '• Niektoré funkcie ako integrácie externých aplikácií môžu byť zakázané.';
+
+  @override
+  String get e2eeTradeoff2 => '• Ak stratíte heslo, vaše údaje nie je možné obnoviť.';
+
+  @override
+  String get featureComingSoon => 'Táto funkcia bude čoskoro k dispozícii!';
+
+  @override
+  String get migrationInProgressMessage => 'Migrácia prebieha. Úroveň ochrany nemôžete zmeniť, kým sa nedokončí.';
+
+  @override
+  String get migrationFailed => 'Migrácia zlyhala';
+
+  @override
+  String migratingFromTo(String source, String target) {
+    return 'Migrácia z $source na $target';
+  }
+
+  @override
+  String objectsCount(String processed, String total) {
+    return '$processed / $total objektov';
+  }
+
+  @override
+  String get secureEncryption => 'Bezpečné šifrovanie';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Vaše údaje sú šifrované kľúčom jedinečným pre vás na našich serveroch hostovaných v Google Cloud. To znamená, že váš surový obsah je neprístupný nikomu, vrátane zamestnancov Omi alebo Google, priamo z databázy.';
+
+  @override
+  String get endToEndEncryption => 'End-to-end šifrovanie';
+
+  @override
+  String get e2eeCardDescription =>
+      'Povoľte pre maximálne zabezpečenie, kde iba vy máte prístup k vašim údajom. Klepnutím sa dozviete viac.';
+
+  @override
+  String get dataAlwaysEncrypted => 'Bez ohľadu na úroveň sú vaše údaje vždy šifrované v pokoji aj pri prenose.';
 }
