@@ -1291,3 +1291,21 @@ Notes: Localized daily summary detail page including not found state with
        fallback, and section titles (Your Day's Journey, Highlights, Tasks,
        Unresolved Questions, Decisions, Learnings).
 Commit: 7b8f25fc4
+
+--------------------------------------------------------------------------------
+FILE 96 (Phase 2 FILE 26): developer.dart
+--------------------------------------------------------------------------------
+Path: app/lib/pages/settings/developer.dart
+New Keys: autoDeletesAfterThreeDays, knowledgeGraphDeletedSuccessfully,
+         exportStartedMayTakeFewSeconds, knowledgeGraphDeleteDescription, clear
+Reused Keys: Many existing keys including developerSettings, debugLogs,
+            exportAllData, deleteKnowledgeGraph, cancel, delete,
+            failedToDeleteGraph, helpsDiagnoseIssues, etc.
+Total New Keys: 5
+Script: /tmp/translate_developer.py
+Status: ✅ COMPLETED (partial - large file)
+Notes: Large developer settings file (1693 lines). Localized key user-facing
+       strings including debug log descriptions, clear button, export started
+       message, and knowledge graph delete dialog (title, description, buttons,
+       success/error messages). Many strings already had existing l10n keys.
+Commit: 525a99ee3
