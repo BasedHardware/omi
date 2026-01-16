@@ -1094,12 +1094,23 @@ Notes: Localized MCP API key created success dialog including title, message
        explaining to copy the key, and clipboard success notification.
 Commit: 6a46daf70
 
+FILE 85 (Phase 2 FILE 15): external_integrations_section.dart
+--------------------------------------------------------------
+Location: app/lib/pages/settings/widgets/
+Keys Added: 3 (new) + 0 (reused) = 3 total
+New Keys: externalAppAccess, externalAppAccessDescription, noExternalAppsHaveAccess
+Script: /tmp/translate_external_integrations_keys.py
+Status: ✅ COMPLETED
+Notes: Localized external app access settings section including section title,
+       description explaining external app data access, and empty state message.
+Commit: ea13aa58d
+
 ================================================================================
 END OF PROGRESS TRACKER
 ================================================================================
 Last Updated: 2026-01-16
-Last Completed: FILE 84 - mcp_api_key_created_dialog.dart (3 new keys, 102 new translations)
-Previous Completed: FILE 83 - create_mcp_api_key_dialog.dart (5 new keys, 170 new translations)
+Last Completed: FILE 85 - external_integrations_section.dart (3 new keys, 102 new translations)
+Previous Completed: FILE 84 - mcp_api_key_created_dialog.dart (3 new keys, 102 new translations)
 Current Session: Phase 2 - Mobile/Pages localization in progress
 
 🎉 PHASE 1 (DESKTOP) COMPLETE! 🎉
@@ -1109,5 +1120,5 @@ Current Session: Phase 2 - Mobile/Pages localization in progress
 
 📋 PHASE 2 (MOBILE/PAGES) IN PROGRESS
 59 files identified with hardcoded strings
-Files Completed: 14
+Files Completed: 15
 Estimated 200-300 new keys needed
