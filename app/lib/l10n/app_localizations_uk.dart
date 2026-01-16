@@ -4455,4 +4455,15 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get permissionsInfoNote => 'R = Читання, W = Запис. За замовчуванням лише читання, якщо нічого не вибрано.';
+
+  @override
+  String get developerApi => 'API розробника';
+
+  @override
+  String get createAKeyToGetStarted => 'Створіть ключ, щоб почати';
+
+  @override
+  String errorWithMessage(String error) {
+    return 'Помилка: $error';
+  }
 }

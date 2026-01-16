@@ -1543,5 +1543,8 @@
   "keyNameLabel": "कुंजी नाम",
   "keyNamePlaceholder": "उदा., मेरा ऐप इंटीग्रेशन",
   "permissionsLabel": "अनुमतियाँ",
-  "permissionsInfoNote": "R = पढ़ें, W = लिखें। कुछ भी चयनित न होने पर डिफ़ॉल्ट केवल पढ़ने के लिए।"
+  "permissionsInfoNote": "R = पढ़ें, W = लिखें। कुछ भी चयनित न होने पर डिफ़ॉल्ट केवल पढ़ने के लिए।",
+  "developerApi": "डेवलपर API",
+  "createAKeyToGetStarted": "शुरू करने के लिए एक कुंजी बनाएं",
+  "errorWithMessage": "त्रुटि: {error}"
 }

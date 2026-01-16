@@ -3096,5 +3096,8 @@
   "keyNameLabel": "NYCKELNAMN",
   "keyNamePlaceholder": "t.ex., Min app-integration",
   "permissionsLabel": "BEHÖRIGHETER",
-  "permissionsInfoNote": "R = Läs, W = Skriv. Standard endast läsning om inget är valt."
+  "permissionsInfoNote": "R = Läs, W = Skriv. Standard endast läsning om inget är valt.",
+  "developerApi": "Utvecklar-API",
+  "createAKeyToGetStarted": "Skapa en nyckel för att komma igång",
+  "errorWithMessage": "Fel: {error}"
 }

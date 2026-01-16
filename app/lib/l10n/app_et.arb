@@ -3096,5 +3096,8 @@
   "keyNameLabel": "VÕTME NIMI",
   "keyNamePlaceholder": "nt. Minu rakenduse integratsioon",
   "permissionsLabel": "ÕIGUSED",
-  "permissionsInfoNote": "R = Lugemine, W = Kirjutamine. Vaikimisi ainult lugemine, kui midagi pole valitud."
+  "permissionsInfoNote": "R = Lugemine, W = Kirjutamine. Vaikimisi ainult lugemine, kui midagi pole valitud.",
+  "developerApi": "Arendaja API",
+  "createAKeyToGetStarted": "Alustamiseks loo võti",
+  "errorWithMessage": "Viga: {error}"
 }

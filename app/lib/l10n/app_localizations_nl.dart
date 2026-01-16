@@ -4464,4 +4464,15 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get permissionsInfoNote => 'R = Lezen, W = Schrijven. Standaard alleen lezen als niets is geselecteerd.';
+
+  @override
+  String get developerApi => 'Ontwikkelaar-API';
+
+  @override
+  String get createAKeyToGetStarted => 'Maak een sleutel om te beginnen';
+
+  @override
+  String errorWithMessage(String error) {
+    return 'Fout: $error';
+  }
 }

@@ -3098,5 +3098,8 @@
   "keyNameLabel": "NÁZEV KLÍČE",
   "keyNamePlaceholder": "např. Moje integrace aplikace",
   "permissionsLabel": "OPRÁVNĚNÍ",
-  "permissionsInfoNote": "R = Čtení, W = Zápis. Výchozí je pouze pro čtení, pokud není nic vybráno."
+  "permissionsInfoNote": "R = Čtení, W = Zápis. Výchozí je pouze pro čtení, pokud není nic vybráno.",
+  "developerApi": "Vývojářské API",
+  "createAKeyToGetStarted": "Vytvořte klíč pro začátek",
+  "errorWithMessage": "Chyba: {error}"
 }

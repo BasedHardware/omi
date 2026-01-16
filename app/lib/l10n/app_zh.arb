@@ -1543,5 +1543,8 @@
   "keyNameLabel": "密钥名称",
   "keyNamePlaceholder": "例如：我的应用集成",
   "permissionsLabel": "权限",
-  "permissionsInfoNote": "R = 读取，W = 写入。未选择时默认为只读。"
+  "permissionsInfoNote": "R = 读取，W = 写入。未选择时默认为只读。",
+  "developerApi": "开发者API",
+  "createAKeyToGetStarted": "创建密钥以开始",
+  "errorWithMessage": "错误：{error}"
 }

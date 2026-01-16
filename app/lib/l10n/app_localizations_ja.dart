@@ -4374,4 +4374,15 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get permissionsInfoNote => 'R = 読み取り、W = 書き込み。何も選択しない場合は読み取り専用。';
+
+  @override
+  String get developerApi => '開発者API';
+
+  @override
+  String get createAKeyToGetStarted => 'キーを作成して始めましょう';
+
+  @override
+  String errorWithMessage(String error) {
+    return 'エラー: $error';
+  }
 }

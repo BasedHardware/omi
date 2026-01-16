@@ -3096,5 +3096,8 @@
   "keyNameLabel": "НАЗВА КЛЮЧА",
   "keyNamePlaceholder": "напр., Моя інтеграція",
   "permissionsLabel": "ДОЗВОЛИ",
-  "permissionsInfoNote": "R = Читання, W = Запис. За замовчуванням лише читання, якщо нічого не вибрано."
+  "permissionsInfoNote": "R = Читання, W = Запис. За замовчуванням лише читання, якщо нічого не вибрано.",
+  "developerApi": "API розробника",
+  "createAKeyToGetStarted": "Створіть ключ, щоб почати",
+  "errorWithMessage": "Помилка: {error}"
 }

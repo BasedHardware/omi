@@ -4486,4 +4486,15 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get permissionsInfoNote => 'R = Ανάγνωση, W = Εγγραφή. Προεπιλογή μόνο ανάγνωση αν δεν επιλεγεί τίποτα.';
+
+  @override
+  String get developerApi => 'API προγραμματιστών';
+
+  @override
+  String get createAKeyToGetStarted => 'Δημιουργήστε ένα κλειδί για να ξεκινήσετε';
+
+  @override
+  String errorWithMessage(String error) {
+    return 'Σφάλμα: $error';
+  }
 }

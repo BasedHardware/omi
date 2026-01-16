@@ -3096,5 +3096,8 @@
   "keyNameLabel": "NAMA KUNCI",
   "keyNamePlaceholder": "cth., Integrasi Apl Saya",
   "permissionsLabel": "KEBENARAN",
-  "permissionsInfoNote": "R = Baca, W = Tulis. Lalai baca sahaja jika tiada yang dipilih."
+  "permissionsInfoNote": "R = Baca, W = Tulis. Lalai baca sahaja jika tiada yang dipilih.",
+  "developerApi": "API Pembangun",
+  "createAKeyToGetStarted": "Cipta kunci untuk bermula",
+  "errorWithMessage": "Ralat: {error}"
 }

@@ -4417,4 +4417,15 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get permissionsInfoNote => 'R = قراءة، W = كتابة. الافتراضي قراءة فقط إذا لم يتم تحديد شيء.';
+
+  @override
+  String get developerApi => 'واجهة برمجة تطبيقات المطور';
+
+  @override
+  String get createAKeyToGetStarted => 'أنشئ مفتاحاً للبدء';
+
+  @override
+  String errorWithMessage(String error) {
+    return 'خطأ: $error';
+  }
 }

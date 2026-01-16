@@ -4459,4 +4459,15 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get permissionsInfoNote => 'R = Læs, W = Skriv. Standard kun læsning, hvis intet er valgt.';
+
+  @override
+  String get developerApi => 'Udvikler-API';
+
+  @override
+  String get createAKeyToGetStarted => 'Opret en nøgle for at komme i gang';
+
+  @override
+  String errorWithMessage(String error) {
+    return 'Fejl: $error';
+  }
 }

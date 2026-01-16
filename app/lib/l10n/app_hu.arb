@@ -3096,5 +3096,8 @@
   "keyNameLabel": "KULCS NEVE",
   "keyNamePlaceholder": "pl. Az én integrációm",
   "permissionsLabel": "ENGEDÉLYEK",
-  "permissionsInfoNote": "R = Olvasás, W = Írás. Alapértelmezés szerint csak olvasható, ha nincs semmi kiválasztva."
+  "permissionsInfoNote": "R = Olvasás, W = Írás. Alapértelmezés szerint csak olvasható, ha nincs semmi kiválasztva.",
+  "developerApi": "Fejlesztői API",
+  "createAKeyToGetStarted": "Hozzon létre egy kulcsot a kezdéshez",
+  "errorWithMessage": "Hiba: {error}"
 }

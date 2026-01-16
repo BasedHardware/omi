@@ -4464,4 +4464,15 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get permissionsInfoNote => 'R = Четене, W = Запис. По подразбиране само за четене, ако не е избрано нищо.';
+
+  @override
+  String get developerApi => 'API за разработчици';
+
+  @override
+  String get createAKeyToGetStarted => 'Създайте ключ, за да започнете';
+
+  @override
+  String errorWithMessage(String error) {
+    return 'Грешка: $error';
+  }
 }

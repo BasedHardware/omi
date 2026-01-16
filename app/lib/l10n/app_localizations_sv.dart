@@ -4456,4 +4456,15 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get permissionsInfoNote => 'R = Läs, W = Skriv. Standard endast läsning om inget är valt.';
+
+  @override
+  String get developerApi => 'Utvecklar-API';
+
+  @override
+  String get createAKeyToGetStarted => 'Skapa en nyckel för att komma igång';
+
+  @override
+  String errorWithMessage(String error) {
+    return 'Fel: $error';
+  }
 }

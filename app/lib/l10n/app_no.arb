@@ -3096,5 +3096,8 @@
   "keyNameLabel": "NØKKELNAVN",
   "keyNamePlaceholder": "f.eks., Min app-integrasjon",
   "permissionsLabel": "TILLATELSER",
-  "permissionsInfoNote": "R = Les, W = Skriv. Standard kun lesing hvis ingenting er valgt."
+  "permissionsInfoNote": "R = Les, W = Skriv. Standard kun lesing hvis ingenting er valgt.",
+  "developerApi": "Utvikler-API",
+  "createAKeyToGetStarted": "Opprett en nøkkel for å komme i gang",
+  "errorWithMessage": "Feil: {error}"
 }

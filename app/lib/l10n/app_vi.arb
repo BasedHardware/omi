@@ -3096,5 +3096,8 @@
   "keyNameLabel": "TÊN KHÓA",
   "keyNamePlaceholder": "vd: Tích hợp ứng dụng của tôi",
   "permissionsLabel": "QUYỀN",
-  "permissionsInfoNote": "R = Đọc, W = Ghi. Mặc định chỉ đọc nếu không chọn gì."
+  "permissionsInfoNote": "R = Đọc, W = Ghi. Mặc định chỉ đọc nếu không chọn gì.",
+  "developerApi": "API nhà phát triển",
+  "createAKeyToGetStarted": "Tạo khóa để bắt đầu",
+  "errorWithMessage": "Lỗi: {error}"
 }

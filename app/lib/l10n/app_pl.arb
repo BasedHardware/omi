@@ -3096,5 +3096,8 @@
   "keyNameLabel": "NAZWA KLUCZA",
   "keyNamePlaceholder": "np. Moja integracja",
   "permissionsLabel": "UPRAWNIENIA",
-  "permissionsInfoNote": "R = Odczyt, W = Zapis. Domyślnie tylko odczyt, jeśli nic nie wybrano."
+  "permissionsInfoNote": "R = Odczyt, W = Zapis. Domyślnie tylko odczyt, jeśli nic nie wybrano.",
+  "developerApi": "API dla programistów",
+  "createAKeyToGetStarted": "Utwórz klucz, aby rozpocząć",
+  "errorWithMessage": "Błąd: {error}"
 }

@@ -3078,5 +3078,8 @@
   "keyNameLabel": "RAKTO PAVADINIMAS",
   "keyNamePlaceholder": "pvz., Mano programėlės integracija",
   "permissionsLabel": "LEIDIMAI",
-  "permissionsInfoNote": "R = Skaityti, W = Rašyti. Numatytasis tik skaitymas, jei nieko nepasirinkta."
+  "permissionsInfoNote": "R = Skaityti, W = Rašyti. Numatytasis tik skaitymas, jei nieko nepasirinkta.",
+  "developerApi": "Kūrėjo API",
+  "createAKeyToGetStarted": "Sukurkite raktą, kad pradėtumėte",
+  "errorWithMessage": "Klaida: {error}"
 }

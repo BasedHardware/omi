@@ -4451,4 +4451,15 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get permissionsInfoNote => 'R = Les, W = Skriv. Standard kun lesing hvis ingenting er valgt.';
+
+  @override
+  String get developerApi => 'Utvikler-API';
+
+  @override
+  String get createAKeyToGetStarted => 'Opprett en nøkkel for å komme i gang';
+
+  @override
+  String errorWithMessage(String error) {
+    return 'Feil: $error';
+  }
 }

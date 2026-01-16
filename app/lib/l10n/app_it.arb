@@ -3078,5 +3078,8 @@
   "keyNameLabel": "NOME CHIAVE",
   "keyNamePlaceholder": "es., La mia integrazione",
   "permissionsLabel": "PERMESSI",
-  "permissionsInfoNote": "R = Lettura, W = Scrittura. Solo lettura di default se non viene selezionato nulla."
+  "permissionsInfoNote": "R = Lettura, W = Scrittura. Solo lettura di default se non viene selezionato nulla.",
+  "developerApi": "API sviluppatore",
+  "createAKeyToGetStarted": "Crea una chiave per iniziare",
+  "errorWithMessage": "Errore: {error}"
 }

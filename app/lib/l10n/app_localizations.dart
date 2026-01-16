@@ -8462,6 +8462,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'R = Read, W = Write. Defaults to read-only if nothing selected.'**
   String get permissionsInfoNote;
+
+  /// Section header for developer API keys
+  ///
+  /// In en, this message translates to:
+  /// **'Developer API'**
+  String get developerApi;
+
+  /// Hint text when no API keys exist
+  ///
+  /// In en, this message translates to:
+  /// **'Create a key to get started'**
+  String get createAKeyToGetStarted;
+
+  /// Error message with details
+  ///
+  /// In en, this message translates to:
+  /// **'Error: {error}'**
+  String errorWithMessage(String error);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -5156,5 +5156,23 @@
   "permissionsInfoNote": "R = Read, W = Write. Defaults to read-only if nothing selected.",
   "@permissionsInfoNote": {
     "description": "Info note explaining permission toggles"
+  },
+  "developerApi": "Developer API",
+  "@developerApi": {
+    "description": "Section header for developer API keys"
+  },
+  "createAKeyToGetStarted": "Create a key to get started",
+  "@createAKeyToGetStarted": {
+    "description": "Hint text when no API keys exist"
+  },
+  "errorWithMessage": "Error: {error}",
+  "@errorWithMessage": {
+    "description": "Error message with details",
+    "placeholders": {
+      "error": {
+        "type": "String",
+        "example": "Connection failed"
+      }
+    }
   }
 }

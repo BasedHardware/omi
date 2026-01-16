@@ -8,11 +8,12 @@ import 'package:omi/pages/settings/widgets/create_dev_api_key_sheet.dart';
 import 'package:omi/pages/settings/widgets/dev_api_key_list_item.dart';
 import 'package:omi/providers/dev_api_key_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class DeveloperApiKeysSection extends StatelessWidget {
   const DeveloperApiKeysSection({super.key});
 
-  Widget _buildDocsButton(String url, String label) {
+  Widget _buildDocsButton(BuildContext context, String url, String label) {
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(20),
@@ -22,11 +23,11 @@ class DeveloperApiKeysSection extends StatelessWidget {
           MixpanelManager().pageOpened('$label Docs');
         },
         borderRadius: BorderRadius.circular(20),
-        child: const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           child: Text(
-            'Docs',
-            style: TextStyle(
+            context.l10n.docs,
+            style: const TextStyle(
               color: Colors.black,
               fontWeight: FontWeight.w600,
               fontSize: 12,
@@ -49,14 +50,14 @@ class DeveloperApiKeysSection extends StatelessWidget {
           color: Colors.white.withOpacity(0.1),
           borderRadius: BorderRadius.circular(20),
         ),
-        child: const Row(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            FaIcon(FontAwesomeIcons.plus, color: Colors.white, size: 10),
-            SizedBox(width: 6),
+            const FaIcon(FontAwesomeIcons.plus, color: Colors.white, size: 10),
+            const SizedBox(width: 6),
             Text(
-              'Create Key',
-              style: TextStyle(
+              context.l10n.createKey,
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
@@ -81,16 +82,16 @@ class DeveloperApiKeysSection extends StatelessWidget {
               padding: const EdgeInsets.only(left: 4, right: 4, bottom: 12),
               child: Row(
                 children: [
-                  const Text(
-                    'Developer API',
-                    style: TextStyle(
+                  Text(
+                    context.l10n.developerApi,
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 20,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                   const Spacer(),
-                  _buildDocsButton('https://docs.omi.me/doc/developer/api', 'Developer API'),
+                  _buildDocsButton(context, 'https://docs.omi.me/doc/developer/api', 'Developer API'),
                   const SizedBox(width: 8),
                   _buildCreateKeyButton(context),
                 ],
@@ -121,7 +122,7 @@ class DeveloperApiKeysSection extends StatelessWidget {
                     ),
                     child: Center(
                       child: Text(
-                        'Error: ${provider.error}',
+                        context.l10n.errorWithMessage(provider.error!),
                         style: TextStyle(color: Colors.red.shade300),
                       ),
                     ),
@@ -139,12 +140,12 @@ class DeveloperApiKeysSection extends StatelessWidget {
                         FaIcon(FontAwesomeIcons.key, color: Colors.grey.shade600, size: 28),
                         const SizedBox(height: 12),
                         Text(
-                          'No API keys yet',
+                          context.l10n.noApiKeys,
                           style: TextStyle(color: Colors.grey.shade400, fontSize: 15),
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Create a key to get started',
+                          context.l10n.createAKeyToGetStarted,
                           style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
                         ),
                       ],

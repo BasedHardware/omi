@@ -1914,5 +1914,8 @@
   "keyNameLabel": "NOM DE LA CLÉ",
   "keyNamePlaceholder": "ex., Mon intégration",
   "permissionsLabel": "AUTORISATIONS",
-  "permissionsInfoNote": "R = Lecture, W = Écriture. Lecture seule par défaut si rien n'est sélectionné."
+  "permissionsInfoNote": "R = Lecture, W = Écriture. Lecture seule par défaut si rien n'est sélectionné.",
+  "developerApi": "API développeur",
+  "createAKeyToGetStarted": "Créez une clé pour commencer",
+  "errorWithMessage": "Erreur : {error}"
 }

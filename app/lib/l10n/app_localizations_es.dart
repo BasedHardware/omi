@@ -4445,4 +4445,15 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get permissionsInfoNote => 'R = Lectura, W = Escritura. Por defecto solo lectura si no se selecciona nada.';
+
+  @override
+  String get developerApi => 'API de desarrollador';
+
+  @override
+  String get createAKeyToGetStarted => 'Crea una clave para comenzar';
+
+  @override
+  String errorWithMessage(String error) {
+    return 'Error: $error';
+  }
 }

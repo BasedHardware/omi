@@ -3096,5 +3096,8 @@
   "keyNameLabel": "ชื่อคีย์",
   "keyNamePlaceholder": "เช่น การเชื่อมต่อแอปของฉัน",
   "permissionsLabel": "สิทธิ์",
-  "permissionsInfoNote": "R = อ่าน, W = เขียน ค่าเริ่มต้นเป็นอ่านอย่างเดียวถ้าไม่ได้เลือกอะไร"
+  "permissionsInfoNote": "R = อ่าน, W = เขียน ค่าเริ่มต้นเป็นอ่านอย่างเดียวถ้าไม่ได้เลือกอะไร",
+  "developerApi": "API นักพัฒนา",
+  "createAKeyToGetStarted": "สร้างคีย์เพื่อเริ่มต้น",
+  "errorWithMessage": "ข้อผิดพลาด: {error}"
 }

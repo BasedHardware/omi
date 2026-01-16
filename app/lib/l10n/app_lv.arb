@@ -3096,5 +3096,8 @@
   "keyNameLabel": "ATSLĒGAS NOSAUKUMS",
   "keyNamePlaceholder": "piem., Manas lietotnes integrācija",
   "permissionsLabel": "ATĻAUJAS",
-  "permissionsInfoNote": "R = Lasīt, W = Rakstīt. Noklusējums tikai lasīšana, ja nekas nav atlasīts."
+  "permissionsInfoNote": "R = Lasīt, W = Rakstīt. Noklusējums tikai lasīšana, ja nekas nav atlasīts.",
+  "developerApi": "Izstrādātāja API",
+  "createAKeyToGetStarted": "Izveidojiet atslēgu, lai sāktu",
+  "errorWithMessage": "Kļūda: {error}"
 }

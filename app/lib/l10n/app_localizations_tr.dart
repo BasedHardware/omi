@@ -4460,4 +4460,15 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get permissionsInfoNote => 'R = Okuma, W = Yazma. Hiçbir şey seçilmezse varsayılan salt okunur.';
+
+  @override
+  String get developerApi => 'Geliştirici API\'si';
+
+  @override
+  String get createAKeyToGetStarted => 'Başlamak için bir anahtar oluşturun';
+
+  @override
+  String errorWithMessage(String error) {
+    return 'Hata: $error';
+  }
 }

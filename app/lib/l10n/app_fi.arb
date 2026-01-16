@@ -3096,5 +3096,8 @@
   "keyNameLabel": "AVAIMEN NIMI",
   "keyNamePlaceholder": "esim. Oma sovellus",
   "permissionsLabel": "OIKEUDET",
-  "permissionsInfoNote": "R = Luku, W = Kirjoitus. Oletuksena vain luku, jos mitään ei ole valittu."
+  "permissionsInfoNote": "R = Luku, W = Kirjoitus. Oletuksena vain luku, jos mitään ei ole valittu.",
+  "developerApi": "Kehittäjän API",
+  "createAKeyToGetStarted": "Luo avain aloittaaksesi",
+  "errorWithMessage": "Virhe: {error}"
 }

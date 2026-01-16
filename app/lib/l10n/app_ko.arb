@@ -3096,5 +3096,8 @@
   "keyNameLabel": "키 이름",
   "keyNamePlaceholder": "예: 내 앱 연동",
   "permissionsLabel": "권한",
-  "permissionsInfoNote": "R = 읽기, W = 쓰기. 선택하지 않으면 기본적으로 읽기 전용."
+  "permissionsInfoNote": "R = 읽기, W = 쓰기. 선택하지 않으면 기본적으로 읽기 전용.",
+  "developerApi": "개발자 API",
+  "createAKeyToGetStarted": "시작하려면 키를 만드세요",
+  "errorWithMessage": "오류: {error}"
 }

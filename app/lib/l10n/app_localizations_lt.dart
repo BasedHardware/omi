@@ -4451,4 +4451,15 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get permissionsInfoNote => 'R = Skaityti, W = Rašyti. Numatytasis tik skaitymas, jei nieko nepasirinkta.';
+
+  @override
+  String get developerApi => 'Kūrėjo API';
+
+  @override
+  String get createAKeyToGetStarted => 'Sukurkite raktą, kad pradėtumėte';
+
+  @override
+  String errorWithMessage(String error) {
+    return 'Klaida: $error';
+  }
 }

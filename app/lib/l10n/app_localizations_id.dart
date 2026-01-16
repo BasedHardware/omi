@@ -4463,4 +4463,15 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get permissionsInfoNote => 'R = Baca, W = Tulis. Default hanya baca jika tidak ada yang dipilih.';
+
+  @override
+  String get developerApi => 'API Pengembang';
+
+  @override
+  String get createAKeyToGetStarted => 'Buat kunci untuk memulai';
+
+  @override
+  String errorWithMessage(String error) {
+    return 'Kesalahan: $error';
+  }
 }

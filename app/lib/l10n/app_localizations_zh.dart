@@ -4368,4 +4368,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get permissionsInfoNote => 'R = 读取，W = 写入。未选择时默认为只读。';
+
+  @override
+  String get developerApi => '开发者API';
+
+  @override
+  String get createAKeyToGetStarted => '创建密钥以开始';
+
+  @override
+  String errorWithMessage(String error) {
+    return '错误：$error';
+  }
 }

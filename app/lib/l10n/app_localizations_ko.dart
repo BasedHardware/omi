@@ -4375,4 +4375,15 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get permissionsInfoNote => 'R = 읽기, W = 쓰기. 선택하지 않으면 기본적으로 읽기 전용.';
+
+  @override
+  String get developerApi => '개발자 API';
+
+  @override
+  String get createAKeyToGetStarted => '시작하려면 키를 만드세요';
+
+  @override
+  String errorWithMessage(String error) {
+    return '오류: $error';
+  }
 }

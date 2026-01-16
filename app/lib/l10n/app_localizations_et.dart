@@ -4453,4 +4453,15 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get permissionsInfoNote =>
       'R = Lugemine, W = Kirjutamine. Vaikimisi ainult lugemine, kui midagi pole valitud.';
+
+  @override
+  String get developerApi => 'Arendaja API';
+
+  @override
+  String get createAKeyToGetStarted => 'Alustamiseks loo võti';
+
+  @override
+  String errorWithMessage(String error) {
+    return 'Viga: $error';
+  }
 }

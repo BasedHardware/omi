@@ -4450,4 +4450,15 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get permissionsInfoNote => 'R = Luku, W = Kirjoitus. Oletuksena vain luku, jos mitään ei ole valittu.';
+
+  @override
+  String get developerApi => 'Kehittäjän API';
+
+  @override
+  String get createAKeyToGetStarted => 'Luo avain aloittaaksesi';
+
+  @override
+  String errorWithMessage(String error) {
+    return 'Virhe: $error';
+  }
 }

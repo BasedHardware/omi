@@ -4451,4 +4451,15 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get permissionsInfoNote => 'R = Čítanie, W = Zápis. Predvolené je iba na čítanie, ak nie je nič vybrané.';
+
+  @override
+  String get developerApi => 'Vývojárske API';
+
+  @override
+  String get createAKeyToGetStarted => 'Vytvorte kľúč pre začatie';
+
+  @override
+  String errorWithMessage(String error) {
+    return 'Chyba: $error';
+  }
 }

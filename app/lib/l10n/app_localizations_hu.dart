@@ -4475,4 +4475,15 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get permissionsInfoNote =>
       'R = Olvasás, W = Írás. Alapértelmezés szerint csak olvasható, ha nincs semmi kiválasztva.';
+
+  @override
+  String get developerApi => 'Fejlesztői API';
+
+  @override
+  String get createAKeyToGetStarted => 'Hozzon létre egy kulcsot a kezdéshez';
+
+  @override
+  String errorWithMessage(String error) {
+    return 'Hiba: $error';
+  }
 }

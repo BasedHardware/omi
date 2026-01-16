@@ -4447,4 +4447,15 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get permissionsInfoNote => 'R = Čtení, W = Zápis. Výchozí je pouze pro čtení, pokud není nic vybráno.';
+
+  @override
+  String get developerApi => 'Vývojářské API';
+
+  @override
+  String get createAKeyToGetStarted => 'Vytvořte klíč pro začátek';
+
+  @override
+  String errorWithMessage(String error) {
+    return 'Chyba: $error';
+  }
 }

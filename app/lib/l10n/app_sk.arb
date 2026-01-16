@@ -3096,5 +3096,8 @@
   "keyNameLabel": "NÁZOV KĽÚČA",
   "keyNamePlaceholder": "napr., Moja integrácia aplikácie",
   "permissionsLabel": "OPRÁVNENIA",
-  "permissionsInfoNote": "R = Čítanie, W = Zápis. Predvolené je iba na čítanie, ak nie je nič vybrané."
+  "permissionsInfoNote": "R = Čítanie, W = Zápis. Predvolené je iba na čítanie, ak nie je nič vybrané.",
+  "developerApi": "Vývojárske API",
+  "createAKeyToGetStarted": "Vytvorte kľúč pre začatie",
+  "errorWithMessage": "Chyba: {error}"
 }

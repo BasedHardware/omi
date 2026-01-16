@@ -4465,4 +4465,15 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get permissionsInfoNote => 'R = Чтение, W = Запись. По умолчанию только чтение, если ничего не выбрано.';
+
+  @override
+  String get developerApi => 'API разработчика';
+
+  @override
+  String get createAKeyToGetStarted => 'Создайте ключ для начала';
+
+  @override
+  String errorWithMessage(String error) {
+    return 'Ошибка: $error';
+  }
 }

@@ -4467,4 +4467,15 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get permissionsInfoNote => 'R = Baca, W = Tulis. Lalai baca sahaja jika tiada yang dipilih.';
+
+  @override
+  String get developerApi => 'API Pembangun';
+
+  @override
+  String get createAKeyToGetStarted => 'Cipta kunci untuk bermula';
+
+  @override
+  String errorWithMessage(String error) {
+    return 'Ralat: $error';
+  }
 }

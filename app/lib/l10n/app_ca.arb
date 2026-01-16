@@ -3098,5 +3098,8 @@
   "keyNameLabel": "NOM DE LA CLAU",
   "keyNamePlaceholder": "p. ex., La meva integració",
   "permissionsLabel": "PERMISOS",
-  "permissionsInfoNote": "R = Lectura, W = Escriptura. Per defecte només lectura si no es selecciona res."
+  "permissionsInfoNote": "R = Lectura, W = Escriptura. Per defecte només lectura si no es selecciona res.",
+  "developerApi": "API per a desenvolupadors",
+  "createAKeyToGetStarted": "Crea una clau per començar",
+  "errorWithMessage": "Error: {error}"
 }

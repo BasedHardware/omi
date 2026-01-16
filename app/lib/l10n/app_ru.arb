@@ -3096,5 +3096,8 @@
   "keyNameLabel": "НАЗВАНИЕ КЛЮЧА",
   "keyNamePlaceholder": "напр., Моя интеграция",
   "permissionsLabel": "РАЗРЕШЕНИЯ",
-  "permissionsInfoNote": "R = Чтение, W = Запись. По умолчанию только чтение, если ничего не выбрано."
+  "permissionsInfoNote": "R = Чтение, W = Запись. По умолчанию только чтение, если ничего не выбрано.",
+  "developerApi": "API разработчика",
+  "createAKeyToGetStarted": "Создайте ключ для начала",
+  "errorWithMessage": "Ошибка: {error}"
 }

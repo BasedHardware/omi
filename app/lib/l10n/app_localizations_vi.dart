@@ -4458,4 +4458,15 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get permissionsInfoNote => 'R = Đọc, W = Ghi. Mặc định chỉ đọc nếu không chọn gì.';
+
+  @override
+  String get developerApi => 'API nhà phát triển';
+
+  @override
+  String get createAKeyToGetStarted => 'Tạo khóa để bắt đầu';
+
+  @override
+  String errorWithMessage(String error) {
+    return 'Lỗi: $error';
+  }
 }

@@ -4459,4 +4459,15 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get permissionsInfoNote => 'R = Lasīt, W = Rakstīt. Noklusējums tikai lasīšana, ja nekas nav atlasīts.';
+
+  @override
+  String get developerApi => 'Izstrādātāja API';
+
+  @override
+  String get createAKeyToGetStarted => 'Izveidojiet atslēgu, lai sāktu';
+
+  @override
+  String errorWithMessage(String error) {
+    return 'Kļūda: $error';
+  }
 }

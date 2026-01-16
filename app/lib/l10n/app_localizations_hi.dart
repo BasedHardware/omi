@@ -4427,4 +4427,15 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get permissionsInfoNote => 'R = पढ़ें, W = लिखें। कुछ भी चयनित न होने पर डिफ़ॉल्ट केवल पढ़ने के लिए।';
+
+  @override
+  String get developerApi => 'डेवलपर API';
+
+  @override
+  String get createAKeyToGetStarted => 'शुरू करने के लिए एक कुंजी बनाएं';
+
+  @override
+  String errorWithMessage(String error) {
+    return 'त्रुटि: $error';
+  }
 }

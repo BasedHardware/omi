@@ -3096,5 +3096,8 @@
   "keyNameLabel": "NAMA KUNCI",
   "keyNamePlaceholder": "mis., Integrasi Aplikasi Saya",
   "permissionsLabel": "IZIN",
-  "permissionsInfoNote": "R = Baca, W = Tulis. Default hanya baca jika tidak ada yang dipilih."
+  "permissionsInfoNote": "R = Baca, W = Tulis. Default hanya baca jika tidak ada yang dipilih.",
+  "developerApi": "API Pengembang",
+  "createAKeyToGetStarted": "Buat kunci untuk memulai",
+  "errorWithMessage": "Kesalahan: {error}"
 }

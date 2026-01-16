@@ -3078,5 +3078,8 @@
   "keyNameLabel": "ANAHTAR ADI",
   "keyNamePlaceholder": "ör., Uygulama Entegrasyonum",
   "permissionsLabel": "İZİNLER",
-  "permissionsInfoNote": "R = Okuma, W = Yazma. Hiçbir şey seçilmezse varsayılan salt okunur."
+  "permissionsInfoNote": "R = Okuma, W = Yazma. Hiçbir şey seçilmezse varsayılan salt okunur.",
+  "developerApi": "Geliştirici API'si",
+  "createAKeyToGetStarted": "Başlamak için bir anahtar oluşturun",
+  "errorWithMessage": "Hata: {error}"
 }

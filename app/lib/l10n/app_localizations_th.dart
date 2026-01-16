@@ -4428,4 +4428,15 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get permissionsInfoNote => 'R = อ่าน, W = เขียน ค่าเริ่มต้นเป็นอ่านอย่างเดียวถ้าไม่ได้เลือกอะไร';
+
+  @override
+  String get developerApi => 'API นักพัฒนา';
+
+  @override
+  String get createAKeyToGetStarted => 'สร้างคีย์เพื่อเริ่มต้น';
+
+  @override
+  String errorWithMessage(String error) {
+    return 'ข้อผิดพลาด: $error';
+  }
 }

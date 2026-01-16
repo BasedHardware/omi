@@ -3096,5 +3096,8 @@
   "keyNameLabel": "NUMELE CHEII",
   "keyNamePlaceholder": "ex., Integrarea mea",
   "permissionsLabel": "PERMISIUNI",
-  "permissionsInfoNote": "R = Citire, W = Scriere. Implicit doar citire dacă nu este selectat nimic."
+  "permissionsInfoNote": "R = Citire, W = Scriere. Implicit doar citire dacă nu este selectat nimic.",
+  "developerApi": "API pentru dezvoltatori",
+  "createAKeyToGetStarted": "Creați o cheie pentru a începe",
+  "errorWithMessage": "Eroare: {error}"
 }

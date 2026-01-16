@@ -3096,5 +3096,8 @@
   "keyNameLabel": "ΟΝΟΜΑ ΚΛΕΙΔΙΟΥ",
   "keyNamePlaceholder": "π.χ., Η ενσωμάτωσή μου",
   "permissionsLabel": "ΔΙΚΑΙΩΜΑΤΑ",
-  "permissionsInfoNote": "R = Ανάγνωση, W = Εγγραφή. Προεπιλογή μόνο ανάγνωση αν δεν επιλεγεί τίποτα."
+  "permissionsInfoNote": "R = Ανάγνωση, W = Εγγραφή. Προεπιλογή μόνο ανάγνωση αν δεν επιλεγεί τίποτα.",
+  "developerApi": "API προγραμματιστών",
+  "createAKeyToGetStarted": "Δημιουργήστε ένα κλειδί για να ξεκινήσετε",
+  "errorWithMessage": "Σφάλμα: {error}"
 }

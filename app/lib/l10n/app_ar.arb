@@ -3114,5 +3114,8 @@
   "keyNameLabel": "اسم المفتاح",
   "keyNamePlaceholder": "مثال: تكامل تطبيقي",
   "permissionsLabel": "الأذونات",
-  "permissionsInfoNote": "R = قراءة، W = كتابة. الافتراضي قراءة فقط إذا لم يتم تحديد شيء."
+  "permissionsInfoNote": "R = قراءة، W = كتابة. الافتراضي قراءة فقط إذا لم يتم تحديد شيء.",
+  "developerApi": "واجهة برمجة تطبيقات المطور",
+  "createAKeyToGetStarted": "أنشئ مفتاحاً للبدء",
+  "errorWithMessage": "خطأ: {error}"
 }

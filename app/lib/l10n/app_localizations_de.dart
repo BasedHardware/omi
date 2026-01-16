@@ -4486,4 +4486,15 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get permissionsInfoNote => 'R = Lesen, W = Schreiben. Standardmäßig nur Lesen, wenn nichts ausgewählt.';
+
+  @override
+  String get developerApi => 'Entwickler-API';
+
+  @override
+  String get createAKeyToGetStarted => 'Erstellen Sie einen Schlüssel, um loszulegen';
+
+  @override
+  String errorWithMessage(String error) {
+    return 'Fehler: $error';
+  }
 }

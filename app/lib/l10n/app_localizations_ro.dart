@@ -4474,4 +4474,15 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get permissionsInfoNote => 'R = Citire, W = Scriere. Implicit doar citire dacă nu este selectat nimic.';
+
+  @override
+  String get developerApi => 'API pentru dezvoltatori';
+
+  @override
+  String get createAKeyToGetStarted => 'Creați o cheie pentru a începe';
+
+  @override
+  String errorWithMessage(String error) {
+    return 'Eroare: $error';
+  }
 }

@@ -4488,4 +4488,15 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get permissionsInfoNote => 'R = Lecture, W = Écriture. Lecture seule par défaut si rien n\'est sélectionné.';
+
+  @override
+  String get developerApi => 'API développeur';
+
+  @override
+  String get createAKeyToGetStarted => 'Créez une clé pour commencer';
+
+  @override
+  String errorWithMessage(String error) {
+    return 'Erreur : $error';
+  }
 }

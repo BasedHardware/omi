@@ -1914,5 +1914,8 @@
   "keyNameLabel": "SLEUTELNAAM",
   "keyNamePlaceholder": "bijv., Mijn app-integratie",
   "permissionsLabel": "MACHTIGINGEN",
-  "permissionsInfoNote": "R = Lezen, W = Schrijven. Standaard alleen lezen als niets is geselecteerd."
+  "permissionsInfoNote": "R = Lezen, W = Schrijven. Standaard alleen lezen als niets is geselecteerd.",
+  "developerApi": "Ontwikkelaar-API",
+  "createAKeyToGetStarted": "Maak een sleutel om te beginnen",
+  "errorWithMessage": "Fout: {error}"
 }
