@@ -1069,12 +1069,25 @@ Notes: Localized MCP API key list item including revoke button and confirmation
        dialog. Used parameterized translation for key name in confirmation message.
 Commit: 00a6f62bb
 
+FILE 83 (Phase 2 FILE 13): create_mcp_api_key_dialog.dart
+----------------------------------------------------------
+Location: app/lib/pages/settings/widgets/
+Keys Added: 5 (new) + 3 (reused) = 8 total
+New Keys: createNewKey, keyNameHint, pleaseEnterAName,
+         failedToCreateKeyWithError (parameterized), failedToCreateKeyTryAgain
+Reused Keys: name, cancel, create
+Script: /tmp/translate_create_mcp_key_dialog_keys.py
+Status: ✅ COMPLETED
+Notes: Localized create MCP API key dialog including title, form field labels,
+       hint text, validation error, and error messages for key creation failure.
+Commit: 58ca349ba
+
 ================================================================================
 END OF PROGRESS TRACKER
 ================================================================================
-Last Updated: 2026-01-15
-Last Completed: FILE 82 - mcp_api_key_list_item.dart (2 new keys, 68 new translations)
-Previous Completed: FILE 81 - show_app_options_sheet.dart (12 new keys, 408 new translations)
+Last Updated: 2026-01-16
+Last Completed: FILE 83 - create_mcp_api_key_dialog.dart (5 new keys, 170 new translations)
+Previous Completed: FILE 82 - mcp_api_key_list_item.dart (2 new keys, 68 new translations)
 Current Session: Phase 2 - Mobile/Pages localization in progress
 
 🎉 PHASE 1 (DESKTOP) COMPLETE! 🎉
@@ -1084,5 +1097,5 @@ Current Session: Phase 2 - Mobile/Pages localization in progress
 
 📋 PHASE 2 (MOBILE/PAGES) IN PROGRESS
 59 files identified with hardcoded strings
-Files Completed: 12
+Files Completed: 13
 Estimated 200-300 new keys needed
