@@ -3234,5 +3234,19 @@
   "wifiCredentialsCleared": "WiFi-uppgifter rensade",
   "@wifiCredentialsCleared": {
     "description": "WiFi sync settings - wifiCredentialsCleared"
+  },
+  "summaryGeneratedForDate": "Sammanfattning genererad för {date}",
+  "@summaryGeneratedForDate": {
+    "description": "Daily summary settings - summaryGeneratedForDate",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "1/15/2026"
+      }
+    }
+  },
+  "failedToGenerateSummaryCheckConversations": "Kunde inte generera sammanfattning. Se till att du har samtal för den dagen.",
+  "@failedToGenerateSummaryCheckConversations": {
+    "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
   }
 }

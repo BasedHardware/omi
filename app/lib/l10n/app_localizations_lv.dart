@@ -4610,4 +4610,12 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get wifiCredentialsCleared => 'WiFi akreditācijas dati notīrīti';
+
+  @override
+  String summaryGeneratedForDate(String date) {
+    return 'Kopsavilkums izveidots $date';
+  }
+
+  @override
+  String get failedToGenerateSummaryCheckConversations => 'Neizdevās izveidot kopsavilkumu. Pārliecinieties, ka jums ir sarunas par šo dienu.';
 }

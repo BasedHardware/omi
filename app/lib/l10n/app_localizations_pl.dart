@@ -4611,4 +4611,12 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get wifiCredentialsCleared => 'Dane WiFi wyczyszczone';
+
+  @override
+  String summaryGeneratedForDate(String date) {
+    return 'Podsumowanie wygenerowane dla $date';
+  }
+
+  @override
+  String get failedToGenerateSummaryCheckConversations => 'Nie udało się wygenerować podsumowania. Upewnij się, że masz rozmowy z tego dnia.';
 }

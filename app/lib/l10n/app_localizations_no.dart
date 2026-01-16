@@ -4610,4 +4610,12 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get wifiCredentialsCleared => 'WiFi-påloggingsinformasjon fjernet';
+
+  @override
+  String summaryGeneratedForDate(String date) {
+    return 'Sammendrag generert for $date';
+  }
+
+  @override
+  String get failedToGenerateSummaryCheckConversations => 'Kunne ikke generere sammendrag. Sørg for at du har samtaler for den dagen.';
 }

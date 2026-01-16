@@ -4610,4 +4610,12 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get wifiCredentialsCleared => 'WiFi-legitimationsoplysninger ryddet';
+
+  @override
+  String summaryGeneratedForDate(String date) {
+    return 'Resumé genereret for $date';
+  }
+
+  @override
+  String get failedToGenerateSummaryCheckConversations => 'Kunne ikke generere resumé. Sørg for, at du har samtaler for den dag.';
 }

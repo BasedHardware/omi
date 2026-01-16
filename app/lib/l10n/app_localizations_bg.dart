@@ -4610,4 +4610,12 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get wifiCredentialsCleared => 'WiFi данните са изчистени';
+
+  @override
+  String summaryGeneratedForDate(String date) {
+    return 'Резюмето е генерирано за $date';
+  }
+
+  @override
+  String get failedToGenerateSummaryCheckConversations => 'Неуспешно генериране на резюме. Уверете се, че имате разговори за този ден.';
 }

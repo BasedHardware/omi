@@ -4610,4 +4610,12 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get wifiCredentialsCleared => 'WiFi mandaadid kustutatud';
+
+  @override
+  String summaryGeneratedForDate(String date) {
+    return 'Kokkuvõte loodud kuupäevaks $date';
+  }
+
+  @override
+  String get failedToGenerateSummaryCheckConversations => 'Kokkuvõtte loomine ebaõnnestus. Veenduge, et teil on selle päeva vestlusi.';
 }

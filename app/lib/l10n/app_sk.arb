@@ -3234,5 +3234,19 @@
   "wifiCredentialsCleared": "WiFi prihlasovacie údaje vymazané",
   "@wifiCredentialsCleared": {
     "description": "WiFi sync settings - wifiCredentialsCleared"
+  },
+  "summaryGeneratedForDate": "Zhrnutie vytvorené pre {date}",
+  "@summaryGeneratedForDate": {
+    "description": "Daily summary settings - summaryGeneratedForDate",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "1/15/2026"
+      }
+    }
+  },
+  "failedToGenerateSummaryCheckConversations": "Nepodarilo sa vytvoriť zhrnutie. Uistite sa, že máte konverzácie pre daný deň.",
+  "@failedToGenerateSummaryCheckConversations": {
+    "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
   }
 }

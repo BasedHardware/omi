@@ -8912,6 +8912,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'WiFi credentials cleared'**
   String get wifiCredentialsCleared;
+
+  /// Daily summary settings - summaryGeneratedForDate
+  ///
+  /// In en, this message translates to:
+  /// **'Summary generated for {date}'**
+  String summaryGeneratedForDate(String date);
+
+  /// Daily summary settings - failedToGenerateSummaryCheckConversations
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to generate summary. Make sure you have conversations for that day.'**
+  String get failedToGenerateSummaryCheckConversations;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

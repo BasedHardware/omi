@@ -1660,5 +1660,19 @@
   "wifiCredentialsCleared": "WiFi認証情報をクリアしました",
   "@wifiCredentialsCleared": {
     "description": "WiFi sync settings - wifiCredentialsCleared"
+  },
+  "summaryGeneratedForDate": "{date}の要約を生成しました",
+  "@summaryGeneratedForDate": {
+    "description": "Daily summary settings - summaryGeneratedForDate",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "1/15/2026"
+      }
+    }
+  },
+  "failedToGenerateSummaryCheckConversations": "要約の生成に失敗しました。その日の会話があることを確認してください。",
+  "@failedToGenerateSummaryCheckConversations": {
+    "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
   }
 }

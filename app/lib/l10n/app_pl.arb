@@ -3234,5 +3234,19 @@
   "wifiCredentialsCleared": "Dane WiFi wyczyszczone",
   "@wifiCredentialsCleared": {
     "description": "WiFi sync settings - wifiCredentialsCleared"
+  },
+  "summaryGeneratedForDate": "Podsumowanie wygenerowane dla {date}",
+  "@summaryGeneratedForDate": {
+    "description": "Daily summary settings - summaryGeneratedForDate",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "1/15/2026"
+      }
+    }
+  },
+  "failedToGenerateSummaryCheckConversations": "Nie udało się wygenerować podsumowania. Upewnij się, że masz rozmowy z tego dnia.",
+  "@failedToGenerateSummaryCheckConversations": {
+    "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
   }
 }

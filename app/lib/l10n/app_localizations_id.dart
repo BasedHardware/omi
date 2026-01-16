@@ -4610,4 +4610,12 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get wifiCredentialsCleared => 'Kredensial WiFi dihapus';
+
+  @override
+  String summaryGeneratedForDate(String date) {
+    return 'Ringkasan dibuat untuk $date';
+  }
+
+  @override
+  String get failedToGenerateSummaryCheckConversations => 'Gagal membuat ringkasan. Pastikan Anda memiliki percakapan untuk hari itu.';
 }

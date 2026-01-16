@@ -4604,4 +4604,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get wifiCredentialsCleared => 'WiFi 자격 증명이 지워짐';
+
+  @override
+  String summaryGeneratedForDate(String date) {
+    return '$date 요약이 생성되었습니다';
+  }
+
+  @override
+  String get failedToGenerateSummaryCheckConversations => '요약 생성에 실패했습니다. 해당 날짜의 대화가 있는지 확인하세요.';
 }

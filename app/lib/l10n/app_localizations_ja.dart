@@ -4604,4 +4604,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get wifiCredentialsCleared => 'WiFi認証情報をクリアしました';
+
+  @override
+  String summaryGeneratedForDate(String date) {
+    return '$dateの要約を生成しました';
+  }
+
+  @override
+  String get failedToGenerateSummaryCheckConversations => '要約の生成に失敗しました。その日の会話があることを確認してください。';
 }

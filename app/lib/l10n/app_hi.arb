@@ -1681,5 +1681,19 @@
   "wifiCredentialsCleared": "WiFi क्रेडेंशियल साफ़ किए गए",
   "@wifiCredentialsCleared": {
     "description": "WiFi sync settings - wifiCredentialsCleared"
+  },
+  "summaryGeneratedForDate": "सारांश {date} के लिए बनाया गया",
+  "@summaryGeneratedForDate": {
+    "description": "Daily summary settings - summaryGeneratedForDate",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "1/15/2026"
+      }
+    }
+  },
+  "failedToGenerateSummaryCheckConversations": "सारांश बनाने में विफल। सुनिश्चित करें कि उस दिन की बातचीत हो।",
+  "@failedToGenerateSummaryCheckConversations": {
+    "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
   }
 }

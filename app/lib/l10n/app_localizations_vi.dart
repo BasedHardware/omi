@@ -4610,4 +4610,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get wifiCredentialsCleared => 'Đã xóa thông tin WiFi';
+
+  @override
+  String summaryGeneratedForDate(String date) {
+    return 'Đã tạo tóm tắt cho $date';
+  }
+
+  @override
+  String get failedToGenerateSummaryCheckConversations => 'Không thể tạo tóm tắt. Hãy đảm bảo bạn có cuộc trò chuyện cho ngày đó.';
 }

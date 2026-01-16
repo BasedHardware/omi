@@ -4610,4 +4610,12 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get wifiCredentialsCleared => 'WiFi kimlik bilgileri temizlendi';
+
+  @override
+  String summaryGeneratedForDate(String date) {
+    return '$date için özet oluşturuldu';
+  }
+
+  @override
+  String get failedToGenerateSummaryCheckConversations => 'Özet oluşturulamadı. O gün için konuşmalarınız olduğundan emin olun.';
 }

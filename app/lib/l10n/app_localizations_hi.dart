@@ -4604,4 +4604,12 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get wifiCredentialsCleared => 'WiFi क्रेडेंशियल साफ़ किए गए';
+
+  @override
+  String summaryGeneratedForDate(String date) {
+    return 'सारांश $date के लिए बनाया गया';
+  }
+
+  @override
+  String get failedToGenerateSummaryCheckConversations => 'सारांश बनाने में विफल। सुनिश्चित करें कि उस दिन की बातचीत हो।';
 }

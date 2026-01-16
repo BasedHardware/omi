@@ -4610,4 +4610,12 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get wifiCredentialsCleared => 'Credenciales WiFi borradas';
+
+  @override
+  String summaryGeneratedForDate(String date) {
+    return 'Resumen generado para $date';
+  }
+
+  @override
+  String get failedToGenerateSummaryCheckConversations => 'Error al generar el resumen. Asegúrate de tener conversaciones para ese día.';
 }

@@ -4610,4 +4610,12 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get wifiCredentialsCleared => 'ล้างข้อมูลรับรอง WiFi แล้ว';
+
+  @override
+  String summaryGeneratedForDate(String date) {
+    return 'สร้างสรุปสำหรับ $date แล้ว';
+  }
+
+  @override
+  String get failedToGenerateSummaryCheckConversations => 'ไม่สามารถสร้างสรุปได้ ตรวจสอบให้แน่ใจว่าคุณมีการสนทนาสำหรับวันนั้น';
 }

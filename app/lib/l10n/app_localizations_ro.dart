@@ -4610,4 +4610,12 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get wifiCredentialsCleared => 'Datele WiFi au fost șterse';
+
+  @override
+  String summaryGeneratedForDate(String date) {
+    return 'Rezumat generat pentru $date';
+  }
+
+  @override
+  String get failedToGenerateSummaryCheckConversations => 'Nu s-a putut genera rezumatul. Asigură-te că ai conversații pentru acea zi.';
 }

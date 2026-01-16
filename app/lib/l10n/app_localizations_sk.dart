@@ -4610,4 +4610,12 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get wifiCredentialsCleared => 'WiFi prihlasovacie údaje vymazané';
+
+  @override
+  String summaryGeneratedForDate(String date) {
+    return 'Zhrnutie vytvorené pre $date';
+  }
+
+  @override
+  String get failedToGenerateSummaryCheckConversations => 'Nepodarilo sa vytvoriť zhrnutie. Uistite sa, že máte konverzácie pre daný deň.';
 }

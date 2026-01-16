@@ -4610,4 +4610,12 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get wifiCredentialsCleared => 'Kelayakan WiFi dikosongkan';
+
+  @override
+  String summaryGeneratedForDate(String date) {
+    return 'Ringkasan dijana untuk $date';
+  }
+
+  @override
+  String get failedToGenerateSummaryCheckConversations => 'Gagal menjana ringkasan. Pastikan anda mempunyai perbualan untuk hari itu.';
 }

@@ -4611,4 +4611,12 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get wifiCredentialsCleared => 'Данные WiFi очищены';
+
+  @override
+  String summaryGeneratedForDate(String date) {
+    return 'Сводка создана для $date';
+  }
+
+  @override
+  String get failedToGenerateSummaryCheckConversations => 'Не удалось создать сводку. Убедитесь, что у вас есть разговоры за этот день.';
 }

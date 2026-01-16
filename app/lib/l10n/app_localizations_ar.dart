@@ -4610,4 +4610,12 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get wifiCredentialsCleared => 'تم مسح بيانات اعتماد WiFi';
+
+  @override
+  String summaryGeneratedForDate(String date) {
+    return 'تم إنشاء الملخص لـ $date';
+  }
+
+  @override
+  String get failedToGenerateSummaryCheckConversations => 'فشل في إنشاء الملخص. تأكد من وجود محادثات لذلك اليوم.';
 }

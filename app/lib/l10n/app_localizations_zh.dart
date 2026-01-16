@@ -4604,4 +4604,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get wifiCredentialsCleared => 'WiFi凭据已清除';
+
+  @override
+  String summaryGeneratedForDate(String date) {
+    return '已为 $date 生成摘要';
+  }
+
+  @override
+  String get failedToGenerateSummaryCheckConversations => '无法生成摘要。请确保您当天有对话记录。';
 }

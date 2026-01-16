@@ -4610,4 +4610,12 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get wifiCredentialsCleared => 'Облікові дані WiFi очищено';
+
+  @override
+  String summaryGeneratedForDate(String date) {
+    return 'Підсумок створено для $date';
+  }
+
+  @override
+  String get failedToGenerateSummaryCheckConversations => 'Не вдалося створити підсумок. Переконайтеся, що у вас є розмови за цей день.';
 }

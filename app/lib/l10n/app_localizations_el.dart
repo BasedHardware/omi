@@ -4610,4 +4610,12 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get wifiCredentialsCleared => 'Τα διαπιστευτήρια WiFi διαγράφηκαν';
+
+  @override
+  String summaryGeneratedForDate(String date) {
+    return 'Δημιουργήθηκε σύνοψη για $date';
+  }
+
+  @override
+  String get failedToGenerateSummaryCheckConversations => 'Αποτυχία δημιουργίας σύνοψης. Βεβαιωθείτε ότι έχετε συνομιλίες για εκείνη την ημέρα.';
 }

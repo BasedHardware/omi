@@ -4610,4 +4610,12 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get wifiCredentialsCleared => 'WiFi-tunnukset tyhjennetty';
+
+  @override
+  String summaryGeneratedForDate(String date) {
+    return 'Yhteenveto luotu päivälle $date';
+  }
+
+  @override
+  String get failedToGenerateSummaryCheckConversations => 'Yhteenvedon luominen epäonnistui. Varmista, että sinulla on keskusteluja kyseiseltä päivältä.';
 }

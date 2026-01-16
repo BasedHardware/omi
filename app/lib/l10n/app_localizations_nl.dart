@@ -4610,4 +4610,12 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get wifiCredentialsCleared => 'WiFi-inloggegevens gewist';
+
+  @override
+  String summaryGeneratedForDate(String date) {
+    return 'Samenvatting gegenereerd voor $date';
+  }
+
+  @override
+  String get failedToGenerateSummaryCheckConversations => 'Kon samenvatting niet genereren. Zorg ervoor dat u gesprekken heeft voor die dag.';
 }

@@ -4610,4 +4610,12 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get wifiCredentialsCleared => 'WiFi duomenys išvalyti';
+
+  @override
+  String summaryGeneratedForDate(String date) {
+    return 'Santrauka sugeneruota $date';
+  }
+
+  @override
+  String get failedToGenerateSummaryCheckConversations => 'Nepavyko sukurti santraukos. Įsitikinkite, kad turite pokalbių tai dienai.';
 }

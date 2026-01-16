@@ -4610,4 +4610,12 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get wifiCredentialsCleared => 'WiFi hitelesítő adatok törölve';
+
+  @override
+  String summaryGeneratedForDate(String date) {
+    return 'Összefoglaló létrehozva: $date';
+  }
+
+  @override
+  String get failedToGenerateSummaryCheckConversations => 'Nem sikerült létrehozni az összefoglalót. Győződjön meg róla, hogy vannak beszélgetései aznap.';
 }

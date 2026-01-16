@@ -4610,4 +4610,12 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get wifiCredentialsCleared => 'WLAN-Anmeldedaten gelöscht';
+
+  @override
+  String summaryGeneratedForDate(String date) {
+    return 'Zusammenfassung erstellt für $date';
+  }
+
+  @override
+  String get failedToGenerateSummaryCheckConversations => 'Zusammenfassung konnte nicht erstellt werden. Stellen Sie sicher, dass Sie Gespräche für diesen Tag haben.';
 }
