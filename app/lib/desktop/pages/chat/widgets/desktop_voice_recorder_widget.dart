@@ -195,6 +195,8 @@ class _DesktopVoiceRecorderWidgetState extends State<DesktopVoiceRecorderWidget>
   }
 
   Future<void> _processRecording() async {
+    if (_isProcessing) return;
+
     if (_audioChunks.isEmpty) {
       widget.onClose();
       return;
@@ -212,6 +214,14 @@ class _DesktopVoiceRecorderWidgetState extends State<DesktopVoiceRecorderWidget>
       flattenedBytes.addAll(chunk);
     }
 
+    // Check minimum audio length (0.5 seconds at 16kHz PCM16 = 16000 bytes)
+    const int minAudioBytes = 16000;
+    if (flattenedBytes.length < minAudioBytes) {
+      Logger.debug('Audio too short (${flattenedBytes.length} bytes), closing without error');
+      widget.onClose();
+      return;
+    }
+
     final audioFile = await FileUtils.convertPcmToWavFile(
       Uint8List.fromList(flattenedBytes),
       16000,
@@ -221,14 +231,18 @@ class _DesktopVoiceRecorderWidgetState extends State<DesktopVoiceRecorderWidget>
     try {
       final transcript = await transcribeVoiceMessage(audioFile);
       if (mounted) {
+        if (transcript.isEmpty) {
+          // Empty transcript - close gracefully without error
+          Logger.debug('Empty transcript received, closing without error');
+          widget.onClose();
+          return;
+        }
         setState(() {
           _transcript = transcript;
           _state = RecordingState.transcribeSuccess;
           _isProcessing = false;
         });
-        if (transcript.isNotEmpty) {
-          widget.onTranscriptReady(transcript);
-        }
+        widget.onTranscriptReady(transcript);
       }
     } catch (e) {
       Logger.debug('Error processing recording: $e');
