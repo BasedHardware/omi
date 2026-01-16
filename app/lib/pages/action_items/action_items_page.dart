@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/services/app_review_service.dart';
@@ -24,9 +25,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   // Track indent levels for each task (task id -> indent level 0-3)
   final Map<String, int> _indentLevels = {};
-
-  // Track custom order for each category (category -> list of item ids)
-  final Map<TaskCategory, List<String>> _categoryOrder = {};
 
   // Track the item being hovered over during drag
   String? _hoveredItemId;
@@ -204,35 +202,40 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     HapticFeedback.lightImpact();
   }
 
-  // Get ordered items for a category, respecting custom order
+  // Get ordered items for a category, respecting persistent sort order
   List<ActionItemWithMetadata> _getOrderedItems(
     TaskCategory category,
     List<ActionItemWithMetadata> items,
   ) {
-    final order = _categoryOrder[category];
-    if (order == null || order.isEmpty) {
-      return items;
-    }
+    if (items.isEmpty) return items;
 
-    // Sort items based on custom order, new items go at the end
-    final orderedItems = <ActionItemWithMetadata>[];
-    final itemMap = {for (var item in items) item.id: item};
+    // Get persistent sort order
+    final sortOrderMap = SharedPreferencesUtil().taskSortOrder;
 
-    // Add items in custom order
-    for (final id in order) {
-      if (itemMap.containsKey(id)) {
-        orderedItems.add(itemMap[id]!);
-        itemMap.remove(id);
+    // Sort items by their sort order (lower first), items without order go by createdAt
+    final sortedItems = List<ActionItemWithMetadata>.from(items);
+    sortedItems.sort((a, b) {
+      final orderA = sortOrderMap[a.id];
+      final orderB = sortOrderMap[b.id];
+
+      // If both have sort order, sort by it
+      if (orderA != null && orderB != null) {
+        return orderA.compareTo(orderB);
       }
-    }
+      // If only one has sort order, that one comes first
+      if (orderA != null) return -1;
+      if (orderB != null) return 1;
+      // If neither has sort order, sort by createdAt (newest first)
+      if (a.createdAt != null && b.createdAt != null) {
+        return b.createdAt!.compareTo(a.createdAt!);
+      }
+      return 0;
+    });
 
-    // Add any remaining items (new ones not in custom order)
-    orderedItems.addAll(itemMap.values);
-
-    return orderedItems;
+    return sortedItems;
   }
 
-  // Reorder item within category
+  // Reorder item within category and persist the order
   void _reorderItemInCategory(
     ActionItemWithMetadata draggedItem,
     String targetItemId,
@@ -240,28 +243,31 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     TaskCategory category,
     List<ActionItemWithMetadata> categoryItems,
   ) {
+    // Create ordered list for this category
+    final orderedIds = categoryItems.map((i) => i.id).toList();
+
+    // Remove dragged item from its current position
+    orderedIds.remove(draggedItem.id);
+
+    // Find target position
+    final targetIndex = orderedIds.indexOf(targetItemId);
+    if (targetIndex != -1) {
+      // Insert above or below target
+      final insertIndex = insertAbove ? targetIndex : targetIndex + 1;
+      orderedIds.insert(insertIndex, draggedItem.id);
+    } else {
+      // Target not found, add at end
+      orderedIds.add(draggedItem.id);
+    }
+
+    // Persist the new sort order (use index * 10 to allow for future insertions)
+    final updates = <String, int>{};
+    for (var i = 0; i < orderedIds.length; i++) {
+      updates[orderedIds[i]] = i * 10;
+    }
+    SharedPreferencesUtil().updateTaskSortOrders(updates);
+
     setState(() {
-      // Initialize category order if needed
-      if (!_categoryOrder.containsKey(category)) {
-        _categoryOrder[category] = categoryItems.map((i) => i.id).toList();
-      }
-
-      final order = _categoryOrder[category]!;
-
-      // Remove dragged item from its current position
-      order.remove(draggedItem.id);
-
-      // Find target position
-      final targetIndex = order.indexOf(targetItemId);
-      if (targetIndex != -1) {
-        // Insert above or below target
-        final insertIndex = insertAbove ? targetIndex : targetIndex + 1;
-        order.insert(insertIndex, draggedItem.id);
-      } else {
-        // Target not found, add at end
-        order.add(draggedItem.id);
-      }
-
       // Clear hover state
       _hoveredItemId = null;
     });
@@ -529,20 +535,23 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     TaskCategory category,
     List<ActionItemWithMetadata> categoryItems,
   ) {
+    // Create ordered list for this category
+    final orderedIds = categoryItems.map((i) => i.id).toList();
+
+    // Remove dragged item from its current position
+    orderedIds.remove(draggedItem.id);
+
+    // Insert at first position
+    orderedIds.insert(0, draggedItem.id);
+
+    // Persist the new sort order (use index * 10 to allow for future insertions)
+    final updates = <String, int>{};
+    for (var i = 0; i < orderedIds.length; i++) {
+      updates[orderedIds[i]] = i * 10;
+    }
+    SharedPreferencesUtil().updateTaskSortOrders(updates);
+
     setState(() {
-      // Initialize category order if needed
-      if (!_categoryOrder.containsKey(category)) {
-        _categoryOrder[category] = categoryItems.map((i) => i.id).toList();
-      }
-
-      final order = _categoryOrder[category]!;
-
-      // Remove dragged item from its current position
-      order.remove(draggedItem.id);
-
-      // Insert at first position
-      order.insert(0, draggedItem.id);
-
       // Clear hover state
       _hoveredItemId = null;
     });

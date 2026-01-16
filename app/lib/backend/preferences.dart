@@ -512,6 +512,46 @@ class SharedPreferencesUtil {
 
   List<String> get enabledCalendarIds => getStringList('enabledCalendarIds') ?? [];
 
+  //---------------------------- Task Sorting ---------------------------------//
+
+  /// Get task sort order map (taskId -> sortOrder)
+  Map<String, int> get taskSortOrder {
+    final String json = getString('taskSortOrder');
+    if (json.isEmpty) return {};
+    try {
+      final Map<String, dynamic> decoded = jsonDecode(json);
+      return decoded.map((key, value) => MapEntry(key, value as int));
+    } catch (e) {
+      return {};
+    }
+  }
+
+  /// Set task sort order map
+  set taskSortOrder(Map<String, int> value) {
+    saveString('taskSortOrder', jsonEncode(value));
+  }
+
+  /// Update sort order for a single task
+  void updateTaskSortOrder(String taskId, int sortOrder) {
+    final current = taskSortOrder;
+    current[taskId] = sortOrder;
+    taskSortOrder = current;
+  }
+
+  /// Update sort orders for multiple tasks
+  void updateTaskSortOrders(Map<String, int> updates) {
+    final current = taskSortOrder;
+    current.addAll(updates);
+    taskSortOrder = current;
+  }
+
+  /// Remove sort order for a task (when task is deleted)
+  void removeTaskSortOrder(String taskId) {
+    final current = taskSortOrder;
+    current.remove(taskId);
+    taskSortOrder = current;
+  }
+
   //--------------------------------- Auth ------------------------------------//
 
   String get authToken => getString('authToken');
