@@ -4312,8 +4312,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get secureEncryption => '安全加密';
 
   @override
-  String get secureEncryptionDescription =>
-      '您的数据使用您独有的密钥在我们托管于Google Cloud的服务器上加密。这意味着包括Omi员工或Google在内的任何人都无法直接从数据库访问您的原始内容。';
+  String get secureEncryptionDescription => '您的数据使用您独有的密钥在我们托管于Google Cloud的服务器上加密。这意味着包括Omi员工或Google在内的任何人都无法直接从数据库访问您的原始内容。';
 
   @override
   String get endToEndEncryption => '端到端加密';
@@ -4542,4 +4541,31 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get configure => '配置';
+
+  @override
+  String get privacyInformation => '隐私信息';
+
+  @override
+  String get yourPrivacyMattersToUs => '您的隐私对我们很重要';
+
+  @override
+  String get privacyIntroText => '在Omi，我们非常重视您的隐私。我们希望透明地说明我们收集的数据以及如何使用它们来改进产品。以下是您需要了解的内容：';
+
+  @override
+  String get whatWeTrack => '我们追踪什么';
+
+  @override
+  String get anonymityAndPrivacy => '匿名性和隐私';
+
+  @override
+  String get optInAndOptOutOptions => '加入和退出选项';
+
+  @override
+  String get ourCommitment => '我们的承诺';
+
+  @override
+  String get commitmentText => '我们承诺仅使用收集的数据来为您改进Omi产品。您的隐私和信任对我们至关重要。';
+
+  @override
+  String get thankYouText => '感谢您成为Omi的尊贵用户。如果您有任何问题或疑虑，请随时通过team@basedhardware.com与我们联系。';
 }
