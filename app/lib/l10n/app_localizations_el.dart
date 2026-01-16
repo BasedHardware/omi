@@ -4274,4 +4274,116 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get revoke => 'Ανάκληση';
+
+  @override
+  String get whatWouldYouLikeToCreate => 'Τι θα θέλατε να δημιουργήσετε;';
+
+  @override
+  String get createAnApp => 'Δημιουργία εφαρμογής';
+
+  @override
+  String get createAndShareYourApp => 'Δημιουργήστε και μοιραστείτε την εφαρμογή σας';
+
+  @override
+  String get createMyClone => 'Δημιουργία του κλώνου μου';
+
+  @override
+  String get createYourDigitalClone => 'Δημιουργήστε τον ψηφιακό σας κλώνο';
+
+  @override
+  String get itemApp => 'Εφαρμογή';
+
+  @override
+  String get itemPersona => 'Περσόνα';
+
+  @override
+  String keepItemPublic(String item) {
+    return 'Διατήρηση $item δημόσιο';
+  }
+
+  @override
+  String makeItemPublicQuestion(String item) {
+    return 'Δημοσιοποίηση $item;';
+  }
+
+  @override
+  String makeItemPrivateQuestion(String item) {
+    return 'Ιδιωτικοποίηση $item;';
+  }
+
+  @override
+  String makeItemPublicExplanation(String item) {
+    return 'Αν κάνετε το $item δημόσιο, μπορεί να χρησιμοποιηθεί από όλους';
+  }
+
+  @override
+  String makeItemPrivateExplanation(String item) {
+    return 'Αν κάνετε το $item ιδιωτικό τώρα, θα σταματήσει να λειτουργεί για όλους και θα είναι ορατό μόνο σε εσάς';
+  }
+
+  @override
+  String get manageApp => 'Διαχείριση εφαρμογής';
+
+  @override
+  String get updatePersonaDetails => 'Ενημέρωση στοιχείων περσόνας';
+
+  @override
+  String deleteItemTitle(String item) {
+    return 'Διαγραφή $item';
+  }
+
+  @override
+  String deleteItemQuestion(String item) {
+    return 'Διαγραφή $item;';
+  }
+
+  @override
+  String deleteItemConfirmation(String item) {
+    return 'Είστε βέβαιοι ότι θέλετε να διαγράψετε αυτό το $item; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.';
+  }
+
+  @override
+  String get revokeKeyQuestion => 'Ανάκληση κλειδιού;';
+
+  @override
+  String revokeKeyConfirmation(String keyName) {
+    return 'Είστε βέβαιοι ότι θέλετε να ανακαλέσετε το κλειδί \"$keyName\"; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.';
+  }
+
+  @override
+  String get createNewKey => 'Δημιουργία νέου κλειδιού';
+
+  @override
+  String get keyNameHint => 'π.χ. Claude Desktop';
+
+  @override
+  String get pleaseEnterAName => 'Παρακαλώ εισάγετε ένα όνομα.';
+
+  @override
+  String failedToCreateKeyWithError(String error) {
+    return 'Αποτυχία δημιουργίας κλειδιού: $error';
+  }
+
+  @override
+  String get failedToCreateKeyTryAgain => 'Αποτυχία δημιουργίας κλειδιού. Παρακαλώ δοκιμάστε ξανά.';
+
+  @override
+  String get keyCreated => 'Το κλειδί δημιουργήθηκε';
+
+  @override
+  String get keyCreatedMessage =>
+      'Το νέο σας κλειδί δημιουργήθηκε. Παρακαλώ αντιγράψτε το τώρα. Δεν θα μπορείτε να το δείτε ξανά.';
+
+  @override
+  String get keyWord => 'Κλειδί';
+
+  @override
+  String get externalAppAccess => 'Πρόσβαση εξωτερικών εφαρμογών';
+
+  @override
+  String get externalAppAccessDescription =>
+      'Οι παρακάτω εγκατεστημένες εφαρμογές έχουν εξωτερικές ενσωματώσεις και μπορούν να έχουν πρόσβαση στα δεδομένα σας, όπως συνομιλίες και αναμνήσεις.';
+
+  @override
+  String get noExternalAppsHaveAccess => 'Καμία εξωτερική εφαρμογή δεν έχει πρόσβαση στα δεδομένα σας.';
 }

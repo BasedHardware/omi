@@ -4248,4 +4248,116 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get revoke => 'Atsaukt';
+
+  @override
+  String get whatWouldYouLikeToCreate => 'Ko vēlaties izveidot?';
+
+  @override
+  String get createAnApp => 'Izveidot lietotni';
+
+  @override
+  String get createAndShareYourApp => 'Izveidojiet un dalieties ar savu lietotni';
+
+  @override
+  String get createMyClone => 'Izveidot manu klonu';
+
+  @override
+  String get createYourDigitalClone => 'Izveidojiet savu digitālo klonu';
+
+  @override
+  String get itemApp => 'Lietotne';
+
+  @override
+  String get itemPersona => 'Persona';
+
+  @override
+  String keepItemPublic(String item) {
+    return 'Saglabāt $item publisku';
+  }
+
+  @override
+  String makeItemPublicQuestion(String item) {
+    return 'Padarīt $item publisku?';
+  }
+
+  @override
+  String makeItemPrivateQuestion(String item) {
+    return 'Padarīt $item privātu?';
+  }
+
+  @override
+  String makeItemPublicExplanation(String item) {
+    return 'Ja padarīsiet $item publisku, to varēs izmantot visi';
+  }
+
+  @override
+  String makeItemPrivateExplanation(String item) {
+    return 'Ja tagad padarīsiet $item privātu, tā pārtrauks darboties visiem un būs redzama tikai jums';
+  }
+
+  @override
+  String get manageApp => 'Pārvaldīt lietotni';
+
+  @override
+  String get updatePersonaDetails => 'Atjaunināt personas datus';
+
+  @override
+  String deleteItemTitle(String item) {
+    return 'Dzēst $item';
+  }
+
+  @override
+  String deleteItemQuestion(String item) {
+    return 'Dzēst $item?';
+  }
+
+  @override
+  String deleteItemConfirmation(String item) {
+    return 'Vai tiešām vēlaties dzēst šo $item? Šo darbību nevar atsaukt.';
+  }
+
+  @override
+  String get revokeKeyQuestion => 'Atsaukt atslēgu?';
+
+  @override
+  String revokeKeyConfirmation(String keyName) {
+    return 'Vai tiešām vēlaties atsaukt atslēgu \"$keyName\"? Šo darbību nevar atsaukt.';
+  }
+
+  @override
+  String get createNewKey => 'Izveidot jaunu atslēgu';
+
+  @override
+  String get keyNameHint => 'piem., Claude Desktop';
+
+  @override
+  String get pleaseEnterAName => 'Lūdzu, ievadiet nosaukumu.';
+
+  @override
+  String failedToCreateKeyWithError(String error) {
+    return 'Neizdevās izveidot atslēgu: $error';
+  }
+
+  @override
+  String get failedToCreateKeyTryAgain => 'Neizdevās izveidot atslēgu. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get keyCreated => 'Atslēga izveidota';
+
+  @override
+  String get keyCreatedMessage =>
+      'Jūsu jaunā atslēga ir izveidota. Lūdzu, nokopējiet to tagad. Jūs to vairs neredzēsiet.';
+
+  @override
+  String get keyWord => 'Atslēga';
+
+  @override
+  String get externalAppAccess => 'Ārējo lietotņu piekļuve';
+
+  @override
+  String get externalAppAccessDescription =>
+      'Šīm instalētajām lietotnēm ir ārējās integrācijas, un tās var piekļūt jūsu datiem, piemēram, sarunām un atmiņām.';
+
+  @override
+  String get noExternalAppsHaveAccess => 'Nevienai ārējai lietotnei nav piekļuves jūsu datiem.';
 }

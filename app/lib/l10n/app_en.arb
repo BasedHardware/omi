@@ -5005,5 +5005,17 @@
   "keyWord": "Key",
   "@keyWord": {
     "description": "The word 'Key' for use in parameterized strings"
+  },
+  "externalAppAccess": "External App Access",
+  "@externalAppAccess": {
+    "description": "Section title for external app access settings"
+  },
+  "externalAppAccessDescription": "The following installed apps have external integrations and can access your data, such as conversations and memories.",
+  "@externalAppAccessDescription": {
+    "description": "Description explaining which apps can access user data"
+  },
+  "noExternalAppsHaveAccess": "No external apps have access to your data.",
+  "@noExternalAppsHaveAccess": {
+    "description": "Message shown when no external apps have data access"
   }
 }

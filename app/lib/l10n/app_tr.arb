@@ -3045,5 +3045,8 @@
   "failedToCreateKeyTryAgain": "Anahtar oluşturulamadı. Lütfen tekrar deneyin.",
   "keyCreated": "Anahtar Oluşturuldu",
   "keyCreatedMessage": "Yeni anahtarınız oluşturuldu. Lütfen şimdi kopyalayın. Tekrar göremeyeceksiniz.",
-  "keyWord": "Anahtar"
+  "keyWord": "Anahtar",
+  "externalAppAccess": "Harici Uygulama Erişimi",
+  "externalAppAccessDescription": "Aşağıdaki yüklü uygulamalar harici entegrasyonlara sahiptir ve sohbetler ve anılar gibi verilerinize erişebilir.",
+  "noExternalAppsHaveAccess": "Hiçbir harici uygulama verilerinize erişemiyor."
 }

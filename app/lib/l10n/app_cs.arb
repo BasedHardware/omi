@@ -3065,5 +3065,8 @@
   "failedToCreateKeyTryAgain": "Nepodařilo se vytvořit klíč. Zkuste to prosím znovu.",
   "keyCreated": "Klíč vytvořen",
   "keyCreatedMessage": "Váš nový klíč byl vytvořen. Prosím zkopírujte si ho nyní. Již ho neuvidíte.",
-  "keyWord": "Klíč"
+  "keyWord": "Klíč",
+  "externalAppAccess": "Přístup externích aplikací",
+  "externalAppAccessDescription": "Následující nainstalované aplikace mají externí integrace a mohou přistupovat k vašim datům, jako jsou konverzace a vzpomínky.",
+  "noExternalAppsHaveAccess": "Žádné externí aplikace nemají přístup k vašim datům."
 }

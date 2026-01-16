@@ -3063,5 +3063,8 @@
   "failedToCreateKeyTryAgain": "Kunne ikke oprette nøgle. Prøv venligst igen.",
   "keyCreated": "Nøgle oprettet",
   "keyCreatedMessage": "Din nye nøgle er blevet oprettet. Kopiér den venligst nu. Du vil ikke kunne se den igen.",
-  "keyWord": "Nøgle"
+  "keyWord": "Nøgle",
+  "externalAppAccess": "Ekstern app-adgang",
+  "externalAppAccessDescription": "Følgende installerede apps har eksterne integrationer og kan få adgang til dine data, såsom samtaler og minder.",
+  "noExternalAppsHaveAccess": "Ingen eksterne apps har adgang til dine data."
 }

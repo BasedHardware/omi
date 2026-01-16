@@ -4253,4 +4253,116 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get revoke => 'Отозвать';
+
+  @override
+  String get whatWouldYouLikeToCreate => 'Что вы хотите создать?';
+
+  @override
+  String get createAnApp => 'Создать приложение';
+
+  @override
+  String get createAndShareYourApp => 'Создайте и поделитесь своим приложением';
+
+  @override
+  String get createMyClone => 'Создать мой клон';
+
+  @override
+  String get createYourDigitalClone => 'Создайте свой цифровой клон';
+
+  @override
+  String get itemApp => 'Приложение';
+
+  @override
+  String get itemPersona => 'Персона';
+
+  @override
+  String keepItemPublic(String item) {
+    return 'Оставить $item публичным';
+  }
+
+  @override
+  String makeItemPublicQuestion(String item) {
+    return 'Сделать $item публичным?';
+  }
+
+  @override
+  String makeItemPrivateQuestion(String item) {
+    return 'Сделать $item приватным?';
+  }
+
+  @override
+  String makeItemPublicExplanation(String item) {
+    return 'Если вы сделаете $item публичным, им смогут пользоваться все';
+  }
+
+  @override
+  String makeItemPrivateExplanation(String item) {
+    return 'Если вы сейчас сделаете $item приватным, он перестанет работать для всех и будет виден только вам';
+  }
+
+  @override
+  String get manageApp => 'Управление приложением';
+
+  @override
+  String get updatePersonaDetails => 'Обновить данные персоны';
+
+  @override
+  String deleteItemTitle(String item) {
+    return 'Удалить $item';
+  }
+
+  @override
+  String deleteItemQuestion(String item) {
+    return 'Удалить $item?';
+  }
+
+  @override
+  String deleteItemConfirmation(String item) {
+    return 'Вы уверены, что хотите удалить этот $item? Это действие нельзя отменить.';
+  }
+
+  @override
+  String get revokeKeyQuestion => 'Отозвать ключ?';
+
+  @override
+  String revokeKeyConfirmation(String keyName) {
+    return 'Вы уверены, что хотите отозвать ключ \"$keyName\"? Это действие нельзя отменить.';
+  }
+
+  @override
+  String get createNewKey => 'Создать новый ключ';
+
+  @override
+  String get keyNameHint => 'напр., Claude Desktop';
+
+  @override
+  String get pleaseEnterAName => 'Пожалуйста, введите название.';
+
+  @override
+  String failedToCreateKeyWithError(String error) {
+    return 'Не удалось создать ключ: $error';
+  }
+
+  @override
+  String get failedToCreateKeyTryAgain => 'Не удалось создать ключ. Пожалуйста, попробуйте снова.';
+
+  @override
+  String get keyCreated => 'Ключ создан';
+
+  @override
+  String get keyCreatedMessage =>
+      'Ваш новый ключ создан. Пожалуйста, скопируйте его сейчас. Вы больше не сможете его увидеть.';
+
+  @override
+  String get keyWord => 'Ключ';
+
+  @override
+  String get externalAppAccess => 'Доступ внешних приложений';
+
+  @override
+  String get externalAppAccessDescription =>
+      'Следующие установленные приложения имеют внешние интеграции и могут получить доступ к вашим данным, таким как разговоры и воспоминания.';
+
+  @override
+  String get noExternalAppsHaveAccess => 'Ни одно внешнее приложение не имеет доступа к вашим данным.';
 }

@@ -3063,5 +3063,8 @@
   "failedToCreateKeyTryAgain": "Nie udało się utworzyć klucza. Spróbuj ponownie.",
   "keyCreated": "Klucz utworzony",
   "keyCreatedMessage": "Twój nowy klucz został utworzony. Skopiuj go teraz. Nie będziesz mógł go ponownie zobaczyć.",
-  "keyWord": "Klucz"
+  "keyWord": "Klucz",
+  "externalAppAccess": "Dostęp aplikacji zewnętrznych",
+  "externalAppAccessDescription": "Następujące zainstalowane aplikacje mają zewnętrzne integracje i mogą uzyskać dostęp do twoich danych, takich jak rozmowy i wspomnienia.",
+  "noExternalAppsHaveAccess": "Żadne zewnętrzne aplikacje nie mają dostępu do twoich danych."
 }

@@ -4168,4 +4168,114 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get revoke => '取り消す';
+
+  @override
+  String get whatWouldYouLikeToCreate => '何を作成しますか？';
+
+  @override
+  String get createAnApp => 'アプリを作成';
+
+  @override
+  String get createAndShareYourApp => 'アプリを作成して共有';
+
+  @override
+  String get createMyClone => 'クローンを作成';
+
+  @override
+  String get createYourDigitalClone => 'デジタルクローンを作成';
+
+  @override
+  String get itemApp => 'アプリ';
+
+  @override
+  String get itemPersona => 'ペルソナ';
+
+  @override
+  String keepItemPublic(String item) {
+    return '$itemを公開のままにする';
+  }
+
+  @override
+  String makeItemPublicQuestion(String item) {
+    return '$itemを公開しますか？';
+  }
+
+  @override
+  String makeItemPrivateQuestion(String item) {
+    return '$itemを非公開にしますか？';
+  }
+
+  @override
+  String makeItemPublicExplanation(String item) {
+    return '$itemを公開すると、誰でも使用できるようになります';
+  }
+
+  @override
+  String makeItemPrivateExplanation(String item) {
+    return '$itemを非公開にすると、すべての人に対して機能しなくなり、あなただけに表示されます';
+  }
+
+  @override
+  String get manageApp => 'アプリを管理';
+
+  @override
+  String get updatePersonaDetails => 'ペルソナの詳細を更新';
+
+  @override
+  String deleteItemTitle(String item) {
+    return '$itemを削除';
+  }
+
+  @override
+  String deleteItemQuestion(String item) {
+    return '$itemを削除しますか？';
+  }
+
+  @override
+  String deleteItemConfirmation(String item) {
+    return 'この$itemを削除してもよろしいですか？この操作は元に戻せません。';
+  }
+
+  @override
+  String get revokeKeyQuestion => 'キーを取り消しますか？';
+
+  @override
+  String revokeKeyConfirmation(String keyName) {
+    return 'キー「$keyName」を取り消してもよろしいですか？この操作は元に戻せません。';
+  }
+
+  @override
+  String get createNewKey => '新しいキーを作成';
+
+  @override
+  String get keyNameHint => '例: Claude Desktop';
+
+  @override
+  String get pleaseEnterAName => '名前を入力してください。';
+
+  @override
+  String failedToCreateKeyWithError(String error) {
+    return 'キーの作成に失敗しました: $error';
+  }
+
+  @override
+  String get failedToCreateKeyTryAgain => 'キーの作成に失敗しました。もう一度お試しください。';
+
+  @override
+  String get keyCreated => 'キーが作成されました';
+
+  @override
+  String get keyCreatedMessage => '新しいキーが作成されました。今すぐコピーしてください。再度表示することはできません。';
+
+  @override
+  String get keyWord => 'キー';
+
+  @override
+  String get externalAppAccess => '外部アプリのアクセス';
+
+  @override
+  String get externalAppAccessDescription => '以下のインストール済みアプリは外部連携があり、会話やメモリーなどのデータにアクセスできます。';
+
+  @override
+  String get noExternalAppsHaveAccess => '外部アプリはデータにアクセスできません。';
 }

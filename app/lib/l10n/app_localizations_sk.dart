@@ -4243,4 +4243,115 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get revoke => 'Odvolať';
+
+  @override
+  String get whatWouldYouLikeToCreate => 'Čo by ste chceli vytvoriť?';
+
+  @override
+  String get createAnApp => 'Vytvoriť aplikáciu';
+
+  @override
+  String get createAndShareYourApp => 'Vytvorte a zdieľajte svoju aplikáciu';
+
+  @override
+  String get createMyClone => 'Vytvoriť môj klon';
+
+  @override
+  String get createYourDigitalClone => 'Vytvorte si digitálny klon';
+
+  @override
+  String get itemApp => 'Aplikácia';
+
+  @override
+  String get itemPersona => 'Persona';
+
+  @override
+  String keepItemPublic(String item) {
+    return 'Ponechať $item verejnú';
+  }
+
+  @override
+  String makeItemPublicQuestion(String item) {
+    return 'Zverejniť $item?';
+  }
+
+  @override
+  String makeItemPrivateQuestion(String item) {
+    return 'Zneverejniť $item?';
+  }
+
+  @override
+  String makeItemPublicExplanation(String item) {
+    return 'Ak zverejníte $item, môže ju používať každý';
+  }
+
+  @override
+  String makeItemPrivateExplanation(String item) {
+    return 'Ak teraz zneverejníte $item, prestane fungovať pre všetkých a bude viditeľná len pre vás';
+  }
+
+  @override
+  String get manageApp => 'Spravovať aplikáciu';
+
+  @override
+  String get updatePersonaDetails => 'Aktualizovať detaily persony';
+
+  @override
+  String deleteItemTitle(String item) {
+    return 'Odstrániť $item';
+  }
+
+  @override
+  String deleteItemQuestion(String item) {
+    return 'Odstrániť $item?';
+  }
+
+  @override
+  String deleteItemConfirmation(String item) {
+    return 'Ste si istí, že chcete odstrániť túto $item? Túto akciu nie je možné vrátiť späť.';
+  }
+
+  @override
+  String get revokeKeyQuestion => 'Odvolať kľúč?';
+
+  @override
+  String revokeKeyConfirmation(String keyName) {
+    return 'Ste si istí, že chcete odvolať kľúč \"$keyName\"? Túto akciu nie je možné vrátiť späť.';
+  }
+
+  @override
+  String get createNewKey => 'Vytvoriť nový kľúč';
+
+  @override
+  String get keyNameHint => 'napr. Claude Desktop';
+
+  @override
+  String get pleaseEnterAName => 'Prosím zadajte názov.';
+
+  @override
+  String failedToCreateKeyWithError(String error) {
+    return 'Nepodarilo sa vytvoriť kľúč: $error';
+  }
+
+  @override
+  String get failedToCreateKeyTryAgain => 'Nepodarilo sa vytvoriť kľúč. Skúste to prosím znova.';
+
+  @override
+  String get keyCreated => 'Kľúč vytvorený';
+
+  @override
+  String get keyCreatedMessage => 'Váš nový kľúč bol vytvorený. Prosím skopírujte si ho teraz. Už ho neuvidíte.';
+
+  @override
+  String get keyWord => 'Kľúč';
+
+  @override
+  String get externalAppAccess => 'Prístup externých aplikácií';
+
+  @override
+  String get externalAppAccessDescription =>
+      'Nasledujúce nainštalované aplikácie majú externé integrácie a môžu pristupovať k vašim údajom, ako sú konverzácie a spomienky.';
+
+  @override
+  String get noExternalAppsHaveAccess => 'Žiadne externé aplikácie nemajú prístup k vašim údajom.';
 }

@@ -3063,5 +3063,8 @@
   "failedToCreateKeyTryAgain": "Nu s-a putut crea cheia. Te rugăm să încerci din nou.",
   "keyCreated": "Cheie creată",
   "keyCreatedMessage": "Cheia ta nouă a fost creată. Te rugăm să o copiezi acum. Nu o vei mai putea vedea.",
-  "keyWord": "Cheie"
+  "keyWord": "Cheie",
+  "externalAppAccess": "Acces aplicații externe",
+  "externalAppAccessDescription": "Următoarele aplicații instalate au integrări externe și pot accesa datele tale, cum ar fi conversațiile și amintirile.",
+  "noExternalAppsHaveAccess": "Nicio aplicație externă nu are acces la datele tale."
 }

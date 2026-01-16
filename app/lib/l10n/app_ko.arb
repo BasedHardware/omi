@@ -3063,5 +3063,8 @@
   "failedToCreateKeyTryAgain": "키 생성에 실패했습니다. 다시 시도해 주세요.",
   "keyCreated": "키가 생성되었습니다",
   "keyCreatedMessage": "새 키가 생성되었습니다. 지금 복사하세요. 다시 볼 수 없습니다.",
-  "keyWord": "키"
+  "keyWord": "키",
+  "externalAppAccess": "외부 앱 접근",
+  "externalAppAccessDescription": "다음 설치된 앱은 외부 통합이 있으며 대화 및 기억과 같은 데이터에 접근할 수 있습니다.",
+  "noExternalAppsHaveAccess": "외부 앱이 데이터에 접근할 수 없습니다."
 }

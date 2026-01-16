@@ -1510,5 +1510,8 @@
   "failedToCreateKeyTryAgain": "Error al crear la clave. Por favor, inténtalo de nuevo.",
   "keyCreated": "Clave creada",
   "keyCreatedMessage": "Tu nueva clave ha sido creada. Por favor, cópiala ahora. No podrás verla de nuevo.",
-  "keyWord": "Clave"
+  "keyWord": "Clave",
+  "externalAppAccess": "Acceso de aplicaciones externas",
+  "externalAppAccessDescription": "Las siguientes aplicaciones instaladas tienen integraciones externas y pueden acceder a tus datos, como conversaciones y recuerdos.",
+  "noExternalAppsHaveAccess": "Ninguna aplicación externa tiene acceso a tus datos."
 }

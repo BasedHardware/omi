@@ -4244,4 +4244,115 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get revoke => 'Tühista';
+
+  @override
+  String get whatWouldYouLikeToCreate => 'Mida soovite luua?';
+
+  @override
+  String get createAnApp => 'Loo rakendus';
+
+  @override
+  String get createAndShareYourApp => 'Loo ja jaga oma rakendust';
+
+  @override
+  String get createMyClone => 'Loo minu kloon';
+
+  @override
+  String get createYourDigitalClone => 'Loo oma digitaalne kloon';
+
+  @override
+  String get itemApp => 'Rakendus';
+
+  @override
+  String get itemPersona => 'Persona';
+
+  @override
+  String keepItemPublic(String item) {
+    return 'Hoia $item avalik';
+  }
+
+  @override
+  String makeItemPublicQuestion(String item) {
+    return 'Muuta $item avalikuks?';
+  }
+
+  @override
+  String makeItemPrivateQuestion(String item) {
+    return 'Muuta $item privaatseks?';
+  }
+
+  @override
+  String makeItemPublicExplanation(String item) {
+    return 'Kui muudate $item avalikuks, saavad kõik seda kasutada';
+  }
+
+  @override
+  String makeItemPrivateExplanation(String item) {
+    return 'Kui muudate $item nüüd privaatseks, lakkab see töötamast kõigil ja on nähtav ainult teile';
+  }
+
+  @override
+  String get manageApp => 'Halda rakendust';
+
+  @override
+  String get updatePersonaDetails => 'Uuenda persona üksikasju';
+
+  @override
+  String deleteItemTitle(String item) {
+    return 'Kustuta $item';
+  }
+
+  @override
+  String deleteItemQuestion(String item) {
+    return 'Kustuta $item?';
+  }
+
+  @override
+  String deleteItemConfirmation(String item) {
+    return 'Kas olete kindel, et soovite seda $item kustutada? Seda toimingut ei saa tagasi võtta.';
+  }
+
+  @override
+  String get revokeKeyQuestion => 'Tühista võti?';
+
+  @override
+  String revokeKeyConfirmation(String keyName) {
+    return 'Kas olete kindel, et soovite võtme \"$keyName\" tühistada? Seda toimingut ei saa tagasi võtta.';
+  }
+
+  @override
+  String get createNewKey => 'Loo uus võti';
+
+  @override
+  String get keyNameHint => 'nt Claude Desktop';
+
+  @override
+  String get pleaseEnterAName => 'Palun sisestage nimi.';
+
+  @override
+  String failedToCreateKeyWithError(String error) {
+    return 'Võtme loomine ebaõnnestus: $error';
+  }
+
+  @override
+  String get failedToCreateKeyTryAgain => 'Võtme loomine ebaõnnestus. Palun proovige uuesti.';
+
+  @override
+  String get keyCreated => 'Võti loodud';
+
+  @override
+  String get keyCreatedMessage => 'Teie uus võti on loodud. Palun kopeerige see nüüd. Te ei näe seda enam.';
+
+  @override
+  String get keyWord => 'Võti';
+
+  @override
+  String get externalAppAccess => 'Väliste rakenduste juurdepääs';
+
+  @override
+  String get externalAppAccessDescription =>
+      'Järgmistel installitud rakendustel on välised integratsioonid ja need saavad juurdepääsu teie andmetele, nagu vestlused ja mälestused.';
+
+  @override
+  String get noExternalAppsHaveAccess => 'Ühelgi välisel rakendusel pole juurdepääsu teie andmetele.';
 }

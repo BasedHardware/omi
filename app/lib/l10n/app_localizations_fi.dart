@@ -4241,4 +4241,115 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get revoke => 'Peruuta';
+
+  @override
+  String get whatWouldYouLikeToCreate => 'Mitä haluaisit luoda?';
+
+  @override
+  String get createAnApp => 'Luo sovellus';
+
+  @override
+  String get createAndShareYourApp => 'Luo ja jaa sovelluksesi';
+
+  @override
+  String get createMyClone => 'Luo kloonini';
+
+  @override
+  String get createYourDigitalClone => 'Luo digitaalinen kloonisi';
+
+  @override
+  String get itemApp => 'Sovellus';
+
+  @override
+  String get itemPersona => 'Persona';
+
+  @override
+  String keepItemPublic(String item) {
+    return 'Pidä $item julkisena';
+  }
+
+  @override
+  String makeItemPublicQuestion(String item) {
+    return 'Tee $item julkiseksi?';
+  }
+
+  @override
+  String makeItemPrivateQuestion(String item) {
+    return 'Tee $item yksityiseksi?';
+  }
+
+  @override
+  String makeItemPublicExplanation(String item) {
+    return 'Jos teet $item julkiseksi, kaikki voivat käyttää sitä';
+  }
+
+  @override
+  String makeItemPrivateExplanation(String item) {
+    return 'Jos teet $item nyt yksityiseksi, se lakkaa toimimasta kaikille ja on näkyvissä vain sinulle';
+  }
+
+  @override
+  String get manageApp => 'Hallitse sovellusta';
+
+  @override
+  String get updatePersonaDetails => 'Päivitä persona-tiedot';
+
+  @override
+  String deleteItemTitle(String item) {
+    return 'Poista $item';
+  }
+
+  @override
+  String deleteItemQuestion(String item) {
+    return 'Poista $item?';
+  }
+
+  @override
+  String deleteItemConfirmation(String item) {
+    return 'Haluatko varmasti poistaa tämän $item? Tätä toimintoa ei voi kumota.';
+  }
+
+  @override
+  String get revokeKeyQuestion => 'Peruuta avain?';
+
+  @override
+  String revokeKeyConfirmation(String keyName) {
+    return 'Haluatko varmasti peruuttaa avaimen \"$keyName\"? Tätä toimintoa ei voi kumota.';
+  }
+
+  @override
+  String get createNewKey => 'Luo uusi avain';
+
+  @override
+  String get keyNameHint => 'esim. Claude Desktop';
+
+  @override
+  String get pleaseEnterAName => 'Anna nimi.';
+
+  @override
+  String failedToCreateKeyWithError(String error) {
+    return 'Avaimen luominen epäonnistui: $error';
+  }
+
+  @override
+  String get failedToCreateKeyTryAgain => 'Avaimen luominen epäonnistui. Yritä uudelleen.';
+
+  @override
+  String get keyCreated => 'Avain luotu';
+
+  @override
+  String get keyCreatedMessage => 'Uusi avaimesi on luotu. Kopioi se nyt. Et näe sitä enää uudelleen.';
+
+  @override
+  String get keyWord => 'Avain';
+
+  @override
+  String get externalAppAccess => 'Ulkoisten sovellusten käyttöoikeus';
+
+  @override
+  String get externalAppAccessDescription =>
+      'Seuraavilla asennetuilla sovelluksilla on ulkoisia integraatioita ja ne voivat käyttää tietojasi, kuten keskusteluja ja muistoja.';
+
+  @override
+  String get noExternalAppsHaveAccess => 'Ulkoisilla sovelluksilla ei ole pääsyä tietoihisi.';
 }

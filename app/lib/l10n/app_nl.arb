@@ -1881,5 +1881,8 @@
   "failedToCreateKeyTryAgain": "Sleutel maken mislukt. Probeer het opnieuw.",
   "keyCreated": "Sleutel aangemaakt",
   "keyCreatedMessage": "Uw nieuwe sleutel is aangemaakt. Kopieer deze nu. U kunt deze niet meer zien.",
-  "keyWord": "Sleutel"
+  "keyWord": "Sleutel",
+  "externalAppAccess": "Externe app-toegang",
+  "externalAppAccessDescription": "De volgende geïnstalleerde apps hebben externe integraties en kunnen toegang krijgen tot uw gegevens, zoals gesprekken en herinneringen.",
+  "noExternalAppsHaveAccess": "Geen externe apps hebben toegang tot uw gegevens."
 }

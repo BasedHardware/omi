@@ -4263,4 +4263,115 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get revoke => 'Revoca';
+
+  @override
+  String get whatWouldYouLikeToCreate => 'Cosa vorresti creare?';
+
+  @override
+  String get createAnApp => 'Crea un\'app';
+
+  @override
+  String get createAndShareYourApp => 'Crea e condividi la tua app';
+
+  @override
+  String get createMyClone => 'Crea il mio clone';
+
+  @override
+  String get createYourDigitalClone => 'Crea il tuo clone digitale';
+
+  @override
+  String get itemApp => 'App';
+
+  @override
+  String get itemPersona => 'Persona';
+
+  @override
+  String keepItemPublic(String item) {
+    return 'Mantieni $item pubblico';
+  }
+
+  @override
+  String makeItemPublicQuestion(String item) {
+    return 'Rendere $item pubblico?';
+  }
+
+  @override
+  String makeItemPrivateQuestion(String item) {
+    return 'Rendere $item privato?';
+  }
+
+  @override
+  String makeItemPublicExplanation(String item) {
+    return 'Se rendi $item pubblico, può essere usato da tutti';
+  }
+
+  @override
+  String makeItemPrivateExplanation(String item) {
+    return 'Se rendi $item privato ora, smetterà di funzionare per tutti e sarà visibile solo a te';
+  }
+
+  @override
+  String get manageApp => 'Gestisci app';
+
+  @override
+  String get updatePersonaDetails => 'Aggiorna dettagli persona';
+
+  @override
+  String deleteItemTitle(String item) {
+    return 'Elimina $item';
+  }
+
+  @override
+  String deleteItemQuestion(String item) {
+    return 'Eliminare $item?';
+  }
+
+  @override
+  String deleteItemConfirmation(String item) {
+    return 'Sei sicuro di voler eliminare questo $item? Questa azione non può essere annullata.';
+  }
+
+  @override
+  String get revokeKeyQuestion => 'Revocare la chiave?';
+
+  @override
+  String revokeKeyConfirmation(String keyName) {
+    return 'Sei sicuro di voler revocare la chiave \"$keyName\"? Questa azione non può essere annullata.';
+  }
+
+  @override
+  String get createNewKey => 'Crea nuova chiave';
+
+  @override
+  String get keyNameHint => 'es. Claude Desktop';
+
+  @override
+  String get pleaseEnterAName => 'Inserisci un nome.';
+
+  @override
+  String failedToCreateKeyWithError(String error) {
+    return 'Impossibile creare la chiave: $error';
+  }
+
+  @override
+  String get failedToCreateKeyTryAgain => 'Impossibile creare la chiave. Riprova.';
+
+  @override
+  String get keyCreated => 'Chiave creata';
+
+  @override
+  String get keyCreatedMessage => 'La tua nuova chiave è stata creata. Copiala ora. Non potrai vederla di nuovo.';
+
+  @override
+  String get keyWord => 'Chiave';
+
+  @override
+  String get externalAppAccess => 'Accesso app esterne';
+
+  @override
+  String get externalAppAccessDescription =>
+      'Le seguenti app installate hanno integrazioni esterne e possono accedere ai tuoi dati, come conversazioni e ricordi.';
+
+  @override
+  String get noExternalAppsHaveAccess => 'Nessuna app esterna ha accesso ai tuoi dati.';
 }

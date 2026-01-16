@@ -4249,4 +4249,116 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get revoke => 'Tilbagekald';
+
+  @override
+  String get whatWouldYouLikeToCreate => 'Hvad vil du gerne oprette?';
+
+  @override
+  String get createAnApp => 'Opret en app';
+
+  @override
+  String get createAndShareYourApp => 'Opret og del din app';
+
+  @override
+  String get createMyClone => 'Opret min klon';
+
+  @override
+  String get createYourDigitalClone => 'Opret din digitale klon';
+
+  @override
+  String get itemApp => 'App';
+
+  @override
+  String get itemPersona => 'Persona';
+
+  @override
+  String keepItemPublic(String item) {
+    return 'Behold $item offentlig';
+  }
+
+  @override
+  String makeItemPublicQuestion(String item) {
+    return 'Gør $item offentlig?';
+  }
+
+  @override
+  String makeItemPrivateQuestion(String item) {
+    return 'Gør $item privat?';
+  }
+
+  @override
+  String makeItemPublicExplanation(String item) {
+    return 'Hvis du gør $item offentlig, kan den bruges af alle';
+  }
+
+  @override
+  String makeItemPrivateExplanation(String item) {
+    return 'Hvis du gør $item privat nu, stopper den med at fungere for alle og vil kun være synlig for dig';
+  }
+
+  @override
+  String get manageApp => 'Administrer app';
+
+  @override
+  String get updatePersonaDetails => 'Opdater persona-detaljer';
+
+  @override
+  String deleteItemTitle(String item) {
+    return 'Slet $item';
+  }
+
+  @override
+  String deleteItemQuestion(String item) {
+    return 'Slet $item?';
+  }
+
+  @override
+  String deleteItemConfirmation(String item) {
+    return 'Er du sikker på, at du vil slette denne $item? Denne handling kan ikke fortrydes.';
+  }
+
+  @override
+  String get revokeKeyQuestion => 'Tilbagekald nøgle?';
+
+  @override
+  String revokeKeyConfirmation(String keyName) {
+    return 'Er du sikker på, at du vil tilbagekalde nøglen \"$keyName\"? Denne handling kan ikke fortrydes.';
+  }
+
+  @override
+  String get createNewKey => 'Opret ny nøgle';
+
+  @override
+  String get keyNameHint => 'f.eks. Claude Desktop';
+
+  @override
+  String get pleaseEnterAName => 'Indtast venligst et navn.';
+
+  @override
+  String failedToCreateKeyWithError(String error) {
+    return 'Kunne ikke oprette nøgle: $error';
+  }
+
+  @override
+  String get failedToCreateKeyTryAgain => 'Kunne ikke oprette nøgle. Prøv venligst igen.';
+
+  @override
+  String get keyCreated => 'Nøgle oprettet';
+
+  @override
+  String get keyCreatedMessage =>
+      'Din nye nøgle er blevet oprettet. Kopiér den venligst nu. Du vil ikke kunne se den igen.';
+
+  @override
+  String get keyWord => 'Nøgle';
+
+  @override
+  String get externalAppAccess => 'Ekstern app-adgang';
+
+  @override
+  String get externalAppAccessDescription =>
+      'Følgende installerede apps har eksterne integrationer og kan få adgang til dine data, såsom samtaler og minder.';
+
+  @override
+  String get noExternalAppsHaveAccess => 'Ingen eksterne apps har adgang til dine data.';
 }

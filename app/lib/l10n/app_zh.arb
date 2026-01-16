@@ -1510,5 +1510,8 @@
   "failedToCreateKeyTryAgain": "创建密钥失败。请重试。",
   "keyCreated": "密钥已创建",
   "keyCreatedMessage": "您的新密钥已创建。请立即复制。您将无法再次查看。",
-  "keyWord": "密钥"
+  "keyWord": "密钥",
+  "externalAppAccess": "外部应用访问",
+  "externalAppAccessDescription": "以下已安装的应用具有外部集成，可以访问您的数据，例如对话和记忆。",
+  "noExternalAppsHaveAccess": "没有外部应用可以访问您的数据。"
 }

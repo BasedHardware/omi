@@ -1489,5 +1489,8 @@
   "failedToCreateKeyTryAgain": "キーの作成に失敗しました。もう一度お試しください。",
   "keyCreated": "キーが作成されました",
   "keyCreatedMessage": "新しいキーが作成されました。今すぐコピーしてください。再度表示することはできません。",
-  "keyWord": "キー"
+  "keyWord": "キー",
+  "externalAppAccess": "外部アプリのアクセス",
+  "externalAppAccessDescription": "以下のインストール済みアプリは外部連携があり、会話やメモリーなどのデータにアクセスできます。",
+  "noExternalAppsHaveAccess": "外部アプリはデータにアクセスできません。"
 }

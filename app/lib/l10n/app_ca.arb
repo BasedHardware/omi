@@ -3065,5 +3065,8 @@
   "failedToCreateKeyTryAgain": "Error en crear la clau. Si us plau, torna-ho a provar.",
   "keyCreated": "Clau creada",
   "keyCreatedMessage": "La teva nova clau ha estat creada. Si us plau, copia-la ara. No la podràs veure de nou.",
-  "keyWord": "Clau"
+  "keyWord": "Clau",
+  "externalAppAccess": "Accés d'aplicacions externes",
+  "externalAppAccessDescription": "Les següents aplicacions instal·lades tenen integracions externes i poden accedir a les teves dades, com ara converses i records.",
+  "noExternalAppsHaveAccess": "Cap aplicació externa té accés a les teves dades."
 }

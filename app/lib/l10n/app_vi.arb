@@ -3063,5 +3063,8 @@
   "failedToCreateKeyTryAgain": "Không thể tạo khóa. Vui lòng thử lại.",
   "keyCreated": "Đã tạo khóa",
   "keyCreatedMessage": "Khóa mới của bạn đã được tạo. Vui lòng sao chép ngay bây giờ. Bạn sẽ không thể xem lại.",
-  "keyWord": "Khóa"
+  "keyWord": "Khóa",
+  "externalAppAccess": "Truy cập ứng dụng bên ngoài",
+  "externalAppAccessDescription": "Các ứng dụng đã cài đặt sau có tích hợp bên ngoài và có thể truy cập dữ liệu của bạn, chẳng hạn như cuộc trò chuyện và kỷ niệm.",
+  "noExternalAppsHaveAccess": "Không có ứng dụng bên ngoài nào có quyền truy cập vào dữ liệu của bạn."
 }

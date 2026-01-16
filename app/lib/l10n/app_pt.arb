@@ -1510,5 +1510,8 @@
   "failedToCreateKeyTryAgain": "Falha ao criar chave. Por favor, tente novamente.",
   "keyCreated": "Chave criada",
   "keyCreatedMessage": "Sua nova chave foi criada. Por favor, copie-a agora. Você não poderá vê-la novamente.",
-  "keyWord": "Chave"
+  "keyWord": "Chave",
+  "externalAppAccess": "Acesso de aplicativos externos",
+  "externalAppAccessDescription": "Os seguintes aplicativos instalados têm integrações externas e podem acessar seus dados, como conversas e memórias.",
+  "noExternalAppsHaveAccess": "Nenhum aplicativo externo tem acesso aos seus dados."
 }

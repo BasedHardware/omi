@@ -3063,5 +3063,8 @@
   "failedToCreateKeyTryAgain": "Võtme loomine ebaõnnestus. Palun proovige uuesti.",
   "keyCreated": "Võti loodud",
   "keyCreatedMessage": "Teie uus võti on loodud. Palun kopeerige see nüüd. Te ei näe seda enam.",
-  "keyWord": "Võti"
+  "keyWord": "Võti",
+  "externalAppAccess": "Väliste rakenduste juurdepääs",
+  "externalAppAccessDescription": "Järgmistel installitud rakendustel on välised integratsioonid ja need saavad juurdepääsu teie andmetele, nagu vestlused ja mälestused.",
+  "noExternalAppsHaveAccess": "Ühelgi välisel rakendusel pole juurdepääsu teie andmetele."
 }

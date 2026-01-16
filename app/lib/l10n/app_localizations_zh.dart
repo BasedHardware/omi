@@ -4163,4 +4163,114 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get revoke => '撤销';
+
+  @override
+  String get whatWouldYouLikeToCreate => '您想创建什么？';
+
+  @override
+  String get createAnApp => '创建应用';
+
+  @override
+  String get createAndShareYourApp => '创建并分享您的应用';
+
+  @override
+  String get createMyClone => '创建我的克隆';
+
+  @override
+  String get createYourDigitalClone => '创建您的数字克隆';
+
+  @override
+  String get itemApp => '应用';
+
+  @override
+  String get itemPersona => '角色';
+
+  @override
+  String keepItemPublic(String item) {
+    return '保持$item公开';
+  }
+
+  @override
+  String makeItemPublicQuestion(String item) {
+    return '公开$item？';
+  }
+
+  @override
+  String makeItemPrivateQuestion(String item) {
+    return '设为私密$item？';
+  }
+
+  @override
+  String makeItemPublicExplanation(String item) {
+    return '如果您将$item设为公开，所有人都可以使用';
+  }
+
+  @override
+  String makeItemPrivateExplanation(String item) {
+    return '如果您现在将$item设为私密，它将停止为所有人工作，只有您可以看到';
+  }
+
+  @override
+  String get manageApp => '管理应用';
+
+  @override
+  String get updatePersonaDetails => '更新角色详情';
+
+  @override
+  String deleteItemTitle(String item) {
+    return '删除$item';
+  }
+
+  @override
+  String deleteItemQuestion(String item) {
+    return '删除$item？';
+  }
+
+  @override
+  String deleteItemConfirmation(String item) {
+    return '您确定要删除此$item吗？此操作无法撤消。';
+  }
+
+  @override
+  String get revokeKeyQuestion => '撤销密钥？';
+
+  @override
+  String revokeKeyConfirmation(String keyName) {
+    return '您确定要撤销密钥\"$keyName\"吗？此操作无法撤消。';
+  }
+
+  @override
+  String get createNewKey => '创建新密钥';
+
+  @override
+  String get keyNameHint => '例如：Claude Desktop';
+
+  @override
+  String get pleaseEnterAName => '请输入名称。';
+
+  @override
+  String failedToCreateKeyWithError(String error) {
+    return '创建密钥失败：$error';
+  }
+
+  @override
+  String get failedToCreateKeyTryAgain => '创建密钥失败。请重试。';
+
+  @override
+  String get keyCreated => '密钥已创建';
+
+  @override
+  String get keyCreatedMessage => '您的新密钥已创建。请立即复制。您将无法再次查看。';
+
+  @override
+  String get keyWord => '密钥';
+
+  @override
+  String get externalAppAccess => '外部应用访问';
+
+  @override
+  String get externalAppAccessDescription => '以下已安装的应用具有外部集成，可以访问您的数据，例如对话和记忆。';
+
+  @override
+  String get noExternalAppsHaveAccess => '没有外部应用可以访问您的数据。';
 }

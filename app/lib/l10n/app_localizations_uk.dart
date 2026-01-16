@@ -4244,4 +4244,116 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get revoke => 'Відкликати';
+
+  @override
+  String get whatWouldYouLikeToCreate => 'Що ви хочете створити?';
+
+  @override
+  String get createAnApp => 'Створити додаток';
+
+  @override
+  String get createAndShareYourApp => 'Створіть і поділіться своїм додатком';
+
+  @override
+  String get createMyClone => 'Створити мій клон';
+
+  @override
+  String get createYourDigitalClone => 'Створіть свій цифровий клон';
+
+  @override
+  String get itemApp => 'Додаток';
+
+  @override
+  String get itemPersona => 'Персона';
+
+  @override
+  String keepItemPublic(String item) {
+    return 'Залишити $item публічним';
+  }
+
+  @override
+  String makeItemPublicQuestion(String item) {
+    return 'Зробити $item публічним?';
+  }
+
+  @override
+  String makeItemPrivateQuestion(String item) {
+    return 'Зробити $item приватним?';
+  }
+
+  @override
+  String makeItemPublicExplanation(String item) {
+    return 'Якщо ви зробите $item публічним, ним зможуть користуватися всі';
+  }
+
+  @override
+  String makeItemPrivateExplanation(String item) {
+    return 'Якщо ви зараз зробите $item приватним, він перестане працювати для всіх і буде видимий тільки вам';
+  }
+
+  @override
+  String get manageApp => 'Керувати додатком';
+
+  @override
+  String get updatePersonaDetails => 'Оновити деталі персони';
+
+  @override
+  String deleteItemTitle(String item) {
+    return 'Видалити $item';
+  }
+
+  @override
+  String deleteItemQuestion(String item) {
+    return 'Видалити $item?';
+  }
+
+  @override
+  String deleteItemConfirmation(String item) {
+    return 'Ви впевнені, що хочете видалити цей $item? Цю дію неможливо скасувати.';
+  }
+
+  @override
+  String get revokeKeyQuestion => 'Відкликати ключ?';
+
+  @override
+  String revokeKeyConfirmation(String keyName) {
+    return 'Ви впевнені, що хочете відкликати ключ \"$keyName\"? Цю дію неможливо скасувати.';
+  }
+
+  @override
+  String get createNewKey => 'Створити новий ключ';
+
+  @override
+  String get keyNameHint => 'напр., Claude Desktop';
+
+  @override
+  String get pleaseEnterAName => 'Будь ласка, введіть назву.';
+
+  @override
+  String failedToCreateKeyWithError(String error) {
+    return 'Не вдалося створити ключ: $error';
+  }
+
+  @override
+  String get failedToCreateKeyTryAgain => 'Не вдалося створити ключ. Будь ласка, спробуйте ще раз.';
+
+  @override
+  String get keyCreated => 'Ключ створено';
+
+  @override
+  String get keyCreatedMessage =>
+      'Ваш новий ключ створено. Будь ласка, скопіюйте його зараз. Ви більше не зможете його побачити.';
+
+  @override
+  String get keyWord => 'Ключ';
+
+  @override
+  String get externalAppAccess => 'Доступ зовнішніх додатків';
+
+  @override
+  String get externalAppAccessDescription =>
+      'Наступні встановлені додатки мають зовнішні інтеграції та можуть отримати доступ до ваших даних, таких як розмови та спогади.';
+
+  @override
+  String get noExternalAppsHaveAccess => 'Жоден зовнішній додаток не має доступу до ваших даних.';
 }

@@ -4264,4 +4264,115 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get revoke => 'Revocă';
+
+  @override
+  String get whatWouldYouLikeToCreate => 'Ce ai dori să creezi?';
+
+  @override
+  String get createAnApp => 'Creează o aplicație';
+
+  @override
+  String get createAndShareYourApp => 'Creează și partajează aplicația ta';
+
+  @override
+  String get createMyClone => 'Creează clona mea';
+
+  @override
+  String get createYourDigitalClone => 'Creează clona ta digitală';
+
+  @override
+  String get itemApp => 'Aplicație';
+
+  @override
+  String get itemPersona => 'Persona';
+
+  @override
+  String keepItemPublic(String item) {
+    return 'Păstrează $item public';
+  }
+
+  @override
+  String makeItemPublicQuestion(String item) {
+    return 'Faci $item public?';
+  }
+
+  @override
+  String makeItemPrivateQuestion(String item) {
+    return 'Faci $item privat?';
+  }
+
+  @override
+  String makeItemPublicExplanation(String item) {
+    return 'Dacă faci $item public, poate fi folosit de toată lumea';
+  }
+
+  @override
+  String makeItemPrivateExplanation(String item) {
+    return 'Dacă faci $item privat acum, va înceta să funcționeze pentru toată lumea și va fi vizibil doar pentru tine';
+  }
+
+  @override
+  String get manageApp => 'Gestionează aplicația';
+
+  @override
+  String get updatePersonaDetails => 'Actualizează detaliile persona';
+
+  @override
+  String deleteItemTitle(String item) {
+    return 'Șterge $item';
+  }
+
+  @override
+  String deleteItemQuestion(String item) {
+    return 'Ștergi $item?';
+  }
+
+  @override
+  String deleteItemConfirmation(String item) {
+    return 'Ești sigur că vrei să ștergi acest $item? Această acțiune nu poate fi anulată.';
+  }
+
+  @override
+  String get revokeKeyQuestion => 'Revoci cheia?';
+
+  @override
+  String revokeKeyConfirmation(String keyName) {
+    return 'Ești sigur că vrei să revoci cheia \"$keyName\"? Această acțiune nu poate fi anulată.';
+  }
+
+  @override
+  String get createNewKey => 'Creează cheie nouă';
+
+  @override
+  String get keyNameHint => 'ex. Claude Desktop';
+
+  @override
+  String get pleaseEnterAName => 'Te rugăm să introduci un nume.';
+
+  @override
+  String failedToCreateKeyWithError(String error) {
+    return 'Nu s-a putut crea cheia: $error';
+  }
+
+  @override
+  String get failedToCreateKeyTryAgain => 'Nu s-a putut crea cheia. Te rugăm să încerci din nou.';
+
+  @override
+  String get keyCreated => 'Cheie creată';
+
+  @override
+  String get keyCreatedMessage => 'Cheia ta nouă a fost creată. Te rugăm să o copiezi acum. Nu o vei mai putea vedea.';
+
+  @override
+  String get keyWord => 'Cheie';
+
+  @override
+  String get externalAppAccess => 'Acces aplicații externe';
+
+  @override
+  String get externalAppAccessDescription =>
+      'Următoarele aplicații instalate au integrări externe și pot accesa datele tale, cum ar fi conversațiile și amintirile.';
+
+  @override
+  String get noExternalAppsHaveAccess => 'Nicio aplicație externă nu are acces la datele tale.';
 }

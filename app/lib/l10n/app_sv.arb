@@ -3063,5 +3063,8 @@
   "failedToCreateKeyTryAgain": "Det gick inte att skapa nyckel. Försök igen.",
   "keyCreated": "Nyckel skapad",
   "keyCreatedMessage": "Din nya nyckel har skapats. Kopiera den nu. Du kommer inte att kunna se den igen.",
-  "keyWord": "Nyckel"
+  "keyWord": "Nyckel",
+  "externalAppAccess": "Extern app-åtkomst",
+  "externalAppAccessDescription": "Följande installerade appar har externa integrationer och kan komma åt dina data, såsom konversationer och minnen.",
+  "noExternalAppsHaveAccess": "Inga externa appar har åtkomst till dina data."
 }

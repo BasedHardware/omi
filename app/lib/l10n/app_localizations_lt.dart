@@ -4242,4 +4242,115 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get revoke => 'Atšaukti';
+
+  @override
+  String get whatWouldYouLikeToCreate => 'Ką norėtumėte sukurti?';
+
+  @override
+  String get createAnApp => 'Sukurti programėlę';
+
+  @override
+  String get createAndShareYourApp => 'Sukurkite ir dalinkitės savo programėle';
+
+  @override
+  String get createMyClone => 'Sukurti mano kloną';
+
+  @override
+  String get createYourDigitalClone => 'Sukurkite savo skaitmeninį kloną';
+
+  @override
+  String get itemApp => 'Programėlė';
+
+  @override
+  String get itemPersona => 'Persona';
+
+  @override
+  String keepItemPublic(String item) {
+    return 'Laikyti $item viešą';
+  }
+
+  @override
+  String makeItemPublicQuestion(String item) {
+    return 'Padaryti $item viešą?';
+  }
+
+  @override
+  String makeItemPrivateQuestion(String item) {
+    return 'Padaryti $item privačią?';
+  }
+
+  @override
+  String makeItemPublicExplanation(String item) {
+    return 'Jei padarysite $item viešą, ją galės naudoti visi';
+  }
+
+  @override
+  String makeItemPrivateExplanation(String item) {
+    return 'Jei dabar padarysite $item privačią, ji nustos veikti visiems ir bus matoma tik jums';
+  }
+
+  @override
+  String get manageApp => 'Valdyti programėlę';
+
+  @override
+  String get updatePersonaDetails => 'Atnaujinti personas informaciją';
+
+  @override
+  String deleteItemTitle(String item) {
+    return 'Ištrinti $item';
+  }
+
+  @override
+  String deleteItemQuestion(String item) {
+    return 'Ištrinti $item?';
+  }
+
+  @override
+  String deleteItemConfirmation(String item) {
+    return 'Ar tikrai norite ištrinti šią $item? Šio veiksmo negalima atšaukti.';
+  }
+
+  @override
+  String get revokeKeyQuestion => 'Atšaukti raktą?';
+
+  @override
+  String revokeKeyConfirmation(String keyName) {
+    return 'Ar tikrai norite atšaukti raktą \"$keyName\"? Šio veiksmo negalima atšaukti.';
+  }
+
+  @override
+  String get createNewKey => 'Sukurti naują raktą';
+
+  @override
+  String get keyNameHint => 'pvz., Claude Desktop';
+
+  @override
+  String get pleaseEnterAName => 'Įveskite pavadinimą.';
+
+  @override
+  String failedToCreateKeyWithError(String error) {
+    return 'Nepavyko sukurti rakto: $error';
+  }
+
+  @override
+  String get failedToCreateKeyTryAgain => 'Nepavyko sukurti rakto. Bandykite dar kartą.';
+
+  @override
+  String get keyCreated => 'Raktas sukurtas';
+
+  @override
+  String get keyCreatedMessage => 'Jūsų naujas raktas sukurtas. Prašome nukopijuoti jį dabar. Daugiau jo nematysite.';
+
+  @override
+  String get keyWord => 'Raktas';
+
+  @override
+  String get externalAppAccess => 'Išorinių programų prieiga';
+
+  @override
+  String get externalAppAccessDescription =>
+      'Šios įdiegtos programos turi išorines integracijas ir gali pasiekti jūsų duomenis, tokius kaip pokalbiai ir prisiminimai.';
+
+  @override
+  String get noExternalAppsHaveAccess => 'Jokios išorinės programos neturi prieigos prie jūsų duomenų.';
 }

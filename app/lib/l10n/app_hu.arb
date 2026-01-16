@@ -3063,5 +3063,8 @@
   "failedToCreateKeyTryAgain": "Nem sikerült létrehozni a kulcsot. Kérjük, próbálja újra.",
   "keyCreated": "Kulcs létrehozva",
   "keyCreatedMessage": "Az új kulcsa létrejött. Kérjük, másolja most. Nem fogja tudni újra megtekinteni.",
-  "keyWord": "Kulcs"
+  "keyWord": "Kulcs",
+  "externalAppAccess": "Külső alkalmazás hozzáférés",
+  "externalAppAccessDescription": "A következő telepített alkalmazásoknak külső integrációi vannak, és hozzáférhetnek az adataihoz, például beszélgetésekhez és emlékekhez.",
+  "noExternalAppsHaveAccess": "Egyetlen külső alkalmazásnak sincs hozzáférése az adataihoz."
 }

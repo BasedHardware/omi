@@ -4169,4 +4169,114 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get revoke => '취소';
+
+  @override
+  String get whatWouldYouLikeToCreate => '무엇을 만들고 싶으신가요?';
+
+  @override
+  String get createAnApp => '앱 만들기';
+
+  @override
+  String get createAndShareYourApp => '앱을 만들고 공유하세요';
+
+  @override
+  String get createMyClone => '내 클론 만들기';
+
+  @override
+  String get createYourDigitalClone => '디지털 클론을 만드세요';
+
+  @override
+  String get itemApp => '앱';
+
+  @override
+  String get itemPersona => '페르소나';
+
+  @override
+  String keepItemPublic(String item) {
+    return '$item을 공개로 유지';
+  }
+
+  @override
+  String makeItemPublicQuestion(String item) {
+    return '$item을 공개로 설정하시겠습니까?';
+  }
+
+  @override
+  String makeItemPrivateQuestion(String item) {
+    return '$item을 비공개로 설정하시겠습니까?';
+  }
+
+  @override
+  String makeItemPublicExplanation(String item) {
+    return '$item을 공개로 설정하면 모든 사람이 사용할 수 있습니다';
+  }
+
+  @override
+  String makeItemPrivateExplanation(String item) {
+    return '$item을 비공개로 설정하면 모든 사람에게 작동이 중지되고 본인만 볼 수 있습니다';
+  }
+
+  @override
+  String get manageApp => '앱 관리';
+
+  @override
+  String get updatePersonaDetails => '페르소나 세부 정보 업데이트';
+
+  @override
+  String deleteItemTitle(String item) {
+    return '$item 삭제';
+  }
+
+  @override
+  String deleteItemQuestion(String item) {
+    return '$item을 삭제하시겠습니까?';
+  }
+
+  @override
+  String deleteItemConfirmation(String item) {
+    return '이 $item을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.';
+  }
+
+  @override
+  String get revokeKeyQuestion => '키를 취소하시겠습니까?';
+
+  @override
+  String revokeKeyConfirmation(String keyName) {
+    return '\"$keyName\" 키를 취소하시겠습니까? 이 작업은 되돌릴 수 없습니다.';
+  }
+
+  @override
+  String get createNewKey => '새 키 만들기';
+
+  @override
+  String get keyNameHint => '예: Claude Desktop';
+
+  @override
+  String get pleaseEnterAName => '이름을 입력하세요.';
+
+  @override
+  String failedToCreateKeyWithError(String error) {
+    return '키 생성 실패: $error';
+  }
+
+  @override
+  String get failedToCreateKeyTryAgain => '키 생성에 실패했습니다. 다시 시도해 주세요.';
+
+  @override
+  String get keyCreated => '키가 생성되었습니다';
+
+  @override
+  String get keyCreatedMessage => '새 키가 생성되었습니다. 지금 복사하세요. 다시 볼 수 없습니다.';
+
+  @override
+  String get keyWord => '키';
+
+  @override
+  String get externalAppAccess => '외부 앱 접근';
+
+  @override
+  String get externalAppAccessDescription => '다음 설치된 앱은 외부 통합이 있으며 대화 및 기억과 같은 데이터에 접근할 수 있습니다.';
+
+  @override
+  String get noExternalAppsHaveAccess => '외부 앱이 데이터에 접근할 수 없습니다.';
 }

@@ -4275,4 +4275,116 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get revoke => 'Widerrufen';
+
+  @override
+  String get whatWouldYouLikeToCreate => 'Was möchten Sie erstellen?';
+
+  @override
+  String get createAnApp => 'Eine App erstellen';
+
+  @override
+  String get createAndShareYourApp => 'Erstellen und teilen Sie Ihre App';
+
+  @override
+  String get createMyClone => 'Meinen Klon erstellen';
+
+  @override
+  String get createYourDigitalClone => 'Erstellen Sie Ihren digitalen Klon';
+
+  @override
+  String get itemApp => 'App';
+
+  @override
+  String get itemPersona => 'Persona';
+
+  @override
+  String keepItemPublic(String item) {
+    return '$item öffentlich lassen';
+  }
+
+  @override
+  String makeItemPublicQuestion(String item) {
+    return '$item öffentlich machen?';
+  }
+
+  @override
+  String makeItemPrivateQuestion(String item) {
+    return '$item privat machen?';
+  }
+
+  @override
+  String makeItemPublicExplanation(String item) {
+    return 'Wenn Sie $item öffentlich machen, kann es von allen genutzt werden';
+  }
+
+  @override
+  String makeItemPrivateExplanation(String item) {
+    return 'Wenn Sie $item jetzt privat machen, funktioniert es für niemanden mehr und ist nur für Sie sichtbar';
+  }
+
+  @override
+  String get manageApp => 'App verwalten';
+
+  @override
+  String get updatePersonaDetails => 'Persona-Details aktualisieren';
+
+  @override
+  String deleteItemTitle(String item) {
+    return '$item löschen';
+  }
+
+  @override
+  String deleteItemQuestion(String item) {
+    return '$item löschen?';
+  }
+
+  @override
+  String deleteItemConfirmation(String item) {
+    return 'Sind Sie sicher, dass Sie $item löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.';
+  }
+
+  @override
+  String get revokeKeyQuestion => 'Schlüssel widerrufen?';
+
+  @override
+  String revokeKeyConfirmation(String keyName) {
+    return 'Sind Sie sicher, dass Sie den Schlüssel \"$keyName\" widerrufen möchten? Diese Aktion kann nicht rückgängig gemacht werden.';
+  }
+
+  @override
+  String get createNewKey => 'Neuen Schlüssel erstellen';
+
+  @override
+  String get keyNameHint => 'z.B. Claude Desktop';
+
+  @override
+  String get pleaseEnterAName => 'Bitte geben Sie einen Namen ein.';
+
+  @override
+  String failedToCreateKeyWithError(String error) {
+    return 'Schlüssel konnte nicht erstellt werden: $error';
+  }
+
+  @override
+  String get failedToCreateKeyTryAgain => 'Schlüssel konnte nicht erstellt werden. Bitte versuchen Sie es erneut.';
+
+  @override
+  String get keyCreated => 'Schlüssel erstellt';
+
+  @override
+  String get keyCreatedMessage =>
+      'Ihr neuer Schlüssel wurde erstellt. Bitte kopieren Sie ihn jetzt. Sie werden ihn nicht mehr sehen können.';
+
+  @override
+  String get keyWord => 'Schlüssel';
+
+  @override
+  String get externalAppAccess => 'Externer App-Zugriff';
+
+  @override
+  String get externalAppAccessDescription =>
+      'Die folgenden installierten Apps haben externe Integrationen und können auf Ihre Daten zugreifen, wie Gespräche und Erinnerungen.';
+
+  @override
+  String get noExternalAppsHaveAccess => 'Keine externen Apps haben Zugriff auf Ihre Daten.';
 }

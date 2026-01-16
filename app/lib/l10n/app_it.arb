@@ -3045,5 +3045,8 @@
   "failedToCreateKeyTryAgain": "Impossibile creare la chiave. Riprova.",
   "keyCreated": "Chiave creata",
   "keyCreatedMessage": "La tua nuova chiave è stata creata. Copiala ora. Non potrai vederla di nuovo.",
-  "keyWord": "Chiave"
+  "keyWord": "Chiave",
+  "externalAppAccess": "Accesso app esterne",
+  "externalAppAccessDescription": "Le seguenti app installate hanno integrazioni esterne e possono accedere ai tuoi dati, come conversazioni e ricordi.",
+  "noExternalAppsHaveAccess": "Nessuna app esterna ha accesso ai tuoi dati."
 }

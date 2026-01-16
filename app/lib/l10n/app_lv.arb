@@ -3063,5 +3063,8 @@
   "failedToCreateKeyTryAgain": "Neizdevās izveidot atslēgu. Lūdzu, mēģiniet vēlreiz.",
   "keyCreated": "Atslēga izveidota",
   "keyCreatedMessage": "Jūsu jaunā atslēga ir izveidota. Lūdzu, nokopējiet to tagad. Jūs to vairs neredzēsiet.",
-  "keyWord": "Atslēga"
+  "keyWord": "Atslēga",
+  "externalAppAccess": "Ārējo lietotņu piekļuve",
+  "externalAppAccessDescription": "Šīm instalētajām lietotnēm ir ārējās integrācijas, un tās var piekļūt jūsu datiem, piemēram, sarunām un atmiņām.",
+  "noExternalAppsHaveAccess": "Nevienai ārējai lietotnei nav piekļuves jūsu datiem."
 }

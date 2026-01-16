@@ -1510,5 +1510,8 @@
   "failedToCreateKeyTryAgain": "Schlüssel konnte nicht erstellt werden. Bitte versuchen Sie es erneut.",
   "keyCreated": "Schlüssel erstellt",
   "keyCreatedMessage": "Ihr neuer Schlüssel wurde erstellt. Bitte kopieren Sie ihn jetzt. Sie werden ihn nicht mehr sehen können.",
-  "keyWord": "Schlüssel"
+  "keyWord": "Schlüssel",
+  "externalAppAccess": "Externer App-Zugriff",
+  "externalAppAccessDescription": "Die folgenden installierten Apps haben externe Integrationen und können auf Ihre Daten zugreifen, wie Gespräche und Erinnerungen.",
+  "noExternalAppsHaveAccess": "Keine externen Apps haben Zugriff auf Ihre Daten."
 }

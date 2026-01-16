@@ -3063,5 +3063,8 @@
   "failedToCreateKeyTryAgain": "Gagal membuat kunci. Silakan coba lagi.",
   "keyCreated": "Kunci Dibuat",
   "keyCreatedMessage": "Kunci baru Anda telah dibuat. Silakan salin sekarang. Anda tidak akan dapat melihatnya lagi.",
-  "keyWord": "Kunci"
+  "keyWord": "Kunci",
+  "externalAppAccess": "Akses Aplikasi Eksternal",
+  "externalAppAccessDescription": "Aplikasi terinstal berikut memiliki integrasi eksternal dan dapat mengakses data Anda, seperti percakapan dan kenangan.",
+  "noExternalAppsHaveAccess": "Tidak ada aplikasi eksternal yang memiliki akses ke data Anda."
 }

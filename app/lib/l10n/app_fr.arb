@@ -1881,5 +1881,8 @@
   "failedToCreateKeyTryAgain": "Échec de la création de la clé. Veuillez réessayer.",
   "keyCreated": "Clé créée",
   "keyCreatedMessage": "Votre nouvelle clé a été créée. Veuillez la copier maintenant. Vous ne pourrez plus la voir.",
-  "keyWord": "Clé"
+  "keyWord": "Clé",
+  "externalAppAccess": "Accès des applications externes",
+  "externalAppAccessDescription": "Les applications installées suivantes ont des intégrations externes et peuvent accéder à vos données, telles que les conversations et les souvenirs.",
+  "noExternalAppsHaveAccess": "Aucune application externe n'a accès à vos données."
 }

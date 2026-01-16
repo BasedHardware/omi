@@ -4219,4 +4219,115 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get revoke => 'เพิกถอน';
+
+  @override
+  String get whatWouldYouLikeToCreate => 'คุณต้องการสร้างอะไร?';
+
+  @override
+  String get createAnApp => 'สร้างแอป';
+
+  @override
+  String get createAndShareYourApp => 'สร้างและแชร์แอปของคุณ';
+
+  @override
+  String get createMyClone => 'สร้างโคลนของฉัน';
+
+  @override
+  String get createYourDigitalClone => 'สร้างโคลนดิจิทัลของคุณ';
+
+  @override
+  String get itemApp => 'แอป';
+
+  @override
+  String get itemPersona => 'เพอร์โซน่า';
+
+  @override
+  String keepItemPublic(String item) {
+    return 'เก็บ$itemเป็นสาธารณะ';
+  }
+
+  @override
+  String makeItemPublicQuestion(String item) {
+    return 'ทำให้$itemเป็นสาธารณะ?';
+  }
+
+  @override
+  String makeItemPrivateQuestion(String item) {
+    return 'ทำให้$itemเป็นส่วนตัว?';
+  }
+
+  @override
+  String makeItemPublicExplanation(String item) {
+    return 'หากคุณทำให้$itemเป็นสาธารณะ ทุกคนสามารถใช้งานได้';
+  }
+
+  @override
+  String makeItemPrivateExplanation(String item) {
+    return 'หากคุณทำให้$itemเป็นส่วนตัวตอนนี้ มันจะหยุดทำงานสำหรับทุกคนและจะมองเห็นได้เฉพาะคุณเท่านั้น';
+  }
+
+  @override
+  String get manageApp => 'จัดการแอป';
+
+  @override
+  String get updatePersonaDetails => 'อัปเดตรายละเอียดเพอร์โซน่า';
+
+  @override
+  String deleteItemTitle(String item) {
+    return 'ลบ$item';
+  }
+
+  @override
+  String deleteItemQuestion(String item) {
+    return 'ลบ$item?';
+  }
+
+  @override
+  String deleteItemConfirmation(String item) {
+    return 'คุณแน่ใจหรือไม่ว่าต้องการลบ$itemนี้? การกระทำนี้ไม่สามารถยกเลิกได้';
+  }
+
+  @override
+  String get revokeKeyQuestion => 'เพิกถอนคีย์?';
+
+  @override
+  String revokeKeyConfirmation(String keyName) {
+    return 'คุณแน่ใจหรือไม่ว่าต้องการเพิกถอนคีย์ \"$keyName\"? การกระทำนี้ไม่สามารถยกเลิกได้';
+  }
+
+  @override
+  String get createNewKey => 'สร้างคีย์ใหม่';
+
+  @override
+  String get keyNameHint => 'เช่น Claude Desktop';
+
+  @override
+  String get pleaseEnterAName => 'กรุณากรอกชื่อ';
+
+  @override
+  String failedToCreateKeyWithError(String error) {
+    return 'ไม่สามารถสร้างคีย์: $error';
+  }
+
+  @override
+  String get failedToCreateKeyTryAgain => 'ไม่สามารถสร้างคีย์ได้ กรุณาลองใหม่อีกครั้ง';
+
+  @override
+  String get keyCreated => 'สร้างคีย์แล้ว';
+
+  @override
+  String get keyCreatedMessage => 'คีย์ใหม่ของคุณถูกสร้างแล้ว กรุณาคัดลอกตอนนี้ คุณจะไม่สามารถดูได้อีก';
+
+  @override
+  String get keyWord => 'คีย์';
+
+  @override
+  String get externalAppAccess => 'การเข้าถึงแอปภายนอก';
+
+  @override
+  String get externalAppAccessDescription =>
+      'แอปที่ติดตั้งต่อไปนี้มีการเชื่อมต่อภายนอกและสามารถเข้าถึงข้อมูลของคุณ เช่น การสนทนาและความทรงจำ';
+
+  @override
+  String get noExternalAppsHaveAccess => 'ไม่มีแอปภายนอกที่สามารถเข้าถึงข้อมูลของคุณ';
 }

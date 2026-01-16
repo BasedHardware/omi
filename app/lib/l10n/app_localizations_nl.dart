@@ -4254,4 +4254,115 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get revoke => 'Intrekken';
+
+  @override
+  String get whatWouldYouLikeToCreate => 'Wat wilt u maken?';
+
+  @override
+  String get createAnApp => 'Een app maken';
+
+  @override
+  String get createAndShareYourApp => 'Maak en deel uw app';
+
+  @override
+  String get createMyClone => 'Mijn kloon maken';
+
+  @override
+  String get createYourDigitalClone => 'Maak uw digitale kloon';
+
+  @override
+  String get itemApp => 'App';
+
+  @override
+  String get itemPersona => 'Persona';
+
+  @override
+  String keepItemPublic(String item) {
+    return '$item openbaar houden';
+  }
+
+  @override
+  String makeItemPublicQuestion(String item) {
+    return '$item openbaar maken?';
+  }
+
+  @override
+  String makeItemPrivateQuestion(String item) {
+    return '$item privé maken?';
+  }
+
+  @override
+  String makeItemPublicExplanation(String item) {
+    return 'Als u $item openbaar maakt, kan het door iedereen worden gebruikt';
+  }
+
+  @override
+  String makeItemPrivateExplanation(String item) {
+    return 'Als u $item nu privé maakt, werkt het voor niemand meer en is het alleen voor u zichtbaar';
+  }
+
+  @override
+  String get manageApp => 'App beheren';
+
+  @override
+  String get updatePersonaDetails => 'Persona-details bijwerken';
+
+  @override
+  String deleteItemTitle(String item) {
+    return '$item verwijderen';
+  }
+
+  @override
+  String deleteItemQuestion(String item) {
+    return '$item verwijderen?';
+  }
+
+  @override
+  String deleteItemConfirmation(String item) {
+    return 'Weet u zeker dat u deze $item wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.';
+  }
+
+  @override
+  String get revokeKeyQuestion => 'Sleutel intrekken?';
+
+  @override
+  String revokeKeyConfirmation(String keyName) {
+    return 'Weet u zeker dat u de sleutel \"$keyName\" wilt intrekken? Deze actie kan niet ongedaan worden gemaakt.';
+  }
+
+  @override
+  String get createNewKey => 'Nieuwe sleutel maken';
+
+  @override
+  String get keyNameHint => 'bijv. Claude Desktop';
+
+  @override
+  String get pleaseEnterAName => 'Voer een naam in.';
+
+  @override
+  String failedToCreateKeyWithError(String error) {
+    return 'Sleutel maken mislukt: $error';
+  }
+
+  @override
+  String get failedToCreateKeyTryAgain => 'Sleutel maken mislukt. Probeer het opnieuw.';
+
+  @override
+  String get keyCreated => 'Sleutel aangemaakt';
+
+  @override
+  String get keyCreatedMessage => 'Uw nieuwe sleutel is aangemaakt. Kopieer deze nu. U kunt deze niet meer zien.';
+
+  @override
+  String get keyWord => 'Sleutel';
+
+  @override
+  String get externalAppAccess => 'Externe app-toegang';
+
+  @override
+  String get externalAppAccessDescription =>
+      'De volgende geïnstalleerde apps hebben externe integraties en kunnen toegang krijgen tot uw gegevens, zoals gesprekken en herinneringen.';
+
+  @override
+  String get noExternalAppsHaveAccess => 'Geen externe apps hebben toegang tot uw gegevens.';
 }

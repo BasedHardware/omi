@@ -3045,5 +3045,8 @@
   "failedToCreateKeyTryAgain": "Nepavyko sukurti rakto. Bandykite dar kartą.",
   "keyCreated": "Raktas sukurtas",
   "keyCreatedMessage": "Jūsų naujas raktas sukurtas. Prašome nukopijuoti jį dabar. Daugiau jo nematysite.",
-  "keyWord": "Raktas"
+  "keyWord": "Raktas",
+  "externalAppAccess": "Išorinių programų prieiga",
+  "externalAppAccessDescription": "Šios įdiegtos programos turi išorines integracijas ir gali pasiekti jūsų duomenis, tokius kaip pokalbiai ir prisiminimai.",
+  "noExternalAppsHaveAccess": "Jokios išorinės programos neturi prieigos prie jūsų duomenų."
 }

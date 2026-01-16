@@ -3063,5 +3063,8 @@
   "failedToCreateKeyTryAgain": "Avaimen luominen epäonnistui. Yritä uudelleen.",
   "keyCreated": "Avain luotu",
   "keyCreatedMessage": "Uusi avaimesi on luotu. Kopioi se nyt. Et näe sitä enää uudelleen.",
-  "keyWord": "Avain"
+  "keyWord": "Avain",
+  "externalAppAccess": "Ulkoisten sovellusten käyttöoikeus",
+  "externalAppAccessDescription": "Seuraavilla asennetuilla sovelluksilla on ulkoisia integraatioita ja ne voivat käyttää tietojasi, kuten keskusteluja ja muistoja.",
+  "noExternalAppsHaveAccess": "Ulkoisilla sovelluksilla ei ole pääsyä tietoihisi."
 }

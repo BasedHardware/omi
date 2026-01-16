@@ -4249,4 +4249,116 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get revoke => 'Thu hồi';
+
+  @override
+  String get whatWouldYouLikeToCreate => 'Bạn muốn tạo gì?';
+
+  @override
+  String get createAnApp => 'Tạo ứng dụng';
+
+  @override
+  String get createAndShareYourApp => 'Tạo và chia sẻ ứng dụng của bạn';
+
+  @override
+  String get createMyClone => 'Tạo bản sao của tôi';
+
+  @override
+  String get createYourDigitalClone => 'Tạo bản sao kỹ thuật số của bạn';
+
+  @override
+  String get itemApp => 'Ứng dụng';
+
+  @override
+  String get itemPersona => 'Persona';
+
+  @override
+  String keepItemPublic(String item) {
+    return 'Giữ $item công khai';
+  }
+
+  @override
+  String makeItemPublicQuestion(String item) {
+    return 'Đặt $item thành công khai?';
+  }
+
+  @override
+  String makeItemPrivateQuestion(String item) {
+    return 'Đặt $item thành riêng tư?';
+  }
+
+  @override
+  String makeItemPublicExplanation(String item) {
+    return 'Nếu bạn đặt $item thành công khai, mọi người đều có thể sử dụng';
+  }
+
+  @override
+  String makeItemPrivateExplanation(String item) {
+    return 'Nếu bạn đặt $item thành riêng tư ngay bây giờ, nó sẽ ngừng hoạt động cho mọi người và chỉ hiển thị với bạn';
+  }
+
+  @override
+  String get manageApp => 'Quản lý ứng dụng';
+
+  @override
+  String get updatePersonaDetails => 'Cập nhật chi tiết persona';
+
+  @override
+  String deleteItemTitle(String item) {
+    return 'Xóa $item';
+  }
+
+  @override
+  String deleteItemQuestion(String item) {
+    return 'Xóa $item?';
+  }
+
+  @override
+  String deleteItemConfirmation(String item) {
+    return 'Bạn có chắc chắn muốn xóa $item này? Hành động này không thể hoàn tác.';
+  }
+
+  @override
+  String get revokeKeyQuestion => 'Thu hồi khóa?';
+
+  @override
+  String revokeKeyConfirmation(String keyName) {
+    return 'Bạn có chắc chắn muốn thu hồi khóa \"$keyName\"? Hành động này không thể hoàn tác.';
+  }
+
+  @override
+  String get createNewKey => 'Tạo khóa mới';
+
+  @override
+  String get keyNameHint => 'vd: Claude Desktop';
+
+  @override
+  String get pleaseEnterAName => 'Vui lòng nhập tên.';
+
+  @override
+  String failedToCreateKeyWithError(String error) {
+    return 'Không thể tạo khóa: $error';
+  }
+
+  @override
+  String get failedToCreateKeyTryAgain => 'Không thể tạo khóa. Vui lòng thử lại.';
+
+  @override
+  String get keyCreated => 'Đã tạo khóa';
+
+  @override
+  String get keyCreatedMessage =>
+      'Khóa mới của bạn đã được tạo. Vui lòng sao chép ngay bây giờ. Bạn sẽ không thể xem lại.';
+
+  @override
+  String get keyWord => 'Khóa';
+
+  @override
+  String get externalAppAccess => 'Truy cập ứng dụng bên ngoài';
+
+  @override
+  String get externalAppAccessDescription =>
+      'Các ứng dụng đã cài đặt sau có tích hợp bên ngoài và có thể truy cập dữ liệu của bạn, chẳng hạn như cuộc trò chuyện và kỷ niệm.';
+
+  @override
+  String get noExternalAppsHaveAccess => 'Không có ứng dụng bên ngoài nào có quyền truy cập vào dữ liệu của bạn.';
 }

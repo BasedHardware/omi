@@ -4219,4 +4219,115 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get revoke => 'रद्द करें';
+
+  @override
+  String get whatWouldYouLikeToCreate => 'आप क्या बनाना चाहेंगे?';
+
+  @override
+  String get createAnApp => 'एक ऐप बनाएं';
+
+  @override
+  String get createAndShareYourApp => 'अपना ऐप बनाएं और साझा करें';
+
+  @override
+  String get createMyClone => 'मेरा क्लोन बनाएं';
+
+  @override
+  String get createYourDigitalClone => 'अपना डिजिटल क्लोन बनाएं';
+
+  @override
+  String get itemApp => 'ऐप';
+
+  @override
+  String get itemPersona => 'पर्सोना';
+
+  @override
+  String keepItemPublic(String item) {
+    return '$item को सार्वजनिक रखें';
+  }
+
+  @override
+  String makeItemPublicQuestion(String item) {
+    return '$item को सार्वजनिक करें?';
+  }
+
+  @override
+  String makeItemPrivateQuestion(String item) {
+    return '$item को निजी करें?';
+  }
+
+  @override
+  String makeItemPublicExplanation(String item) {
+    return 'यदि आप $item को सार्वजनिक करते हैं, तो इसे सभी द्वारा उपयोग किया जा सकता है';
+  }
+
+  @override
+  String makeItemPrivateExplanation(String item) {
+    return 'यदि आप अभी $item को निजी करते हैं, तो यह सभी के लिए काम करना बंद कर देगा और केवल आपको दिखाई देगा';
+  }
+
+  @override
+  String get manageApp => 'ऐप प्रबंधित करें';
+
+  @override
+  String get updatePersonaDetails => 'पर्सोना विवरण अपडेट करें';
+
+  @override
+  String deleteItemTitle(String item) {
+    return '$item हटाएं';
+  }
+
+  @override
+  String deleteItemQuestion(String item) {
+    return '$item हटाएं?';
+  }
+
+  @override
+  String deleteItemConfirmation(String item) {
+    return 'क्या आप वाकई इस $item को हटाना चाहते हैं? इस क्रिया को पूर्ववत नहीं किया जा सकता।';
+  }
+
+  @override
+  String get revokeKeyQuestion => 'कुंजी रद्द करें?';
+
+  @override
+  String revokeKeyConfirmation(String keyName) {
+    return 'क्या आप वाकई कुंजी \"$keyName\" को रद्द करना चाहते हैं? इस क्रिया को पूर्ववत नहीं किया जा सकता।';
+  }
+
+  @override
+  String get createNewKey => 'नई कुंजी बनाएं';
+
+  @override
+  String get keyNameHint => 'जैसे, Claude Desktop';
+
+  @override
+  String get pleaseEnterAName => 'कृपया एक नाम दर्ज करें।';
+
+  @override
+  String failedToCreateKeyWithError(String error) {
+    return 'कुंजी बनाने में विफल: $error';
+  }
+
+  @override
+  String get failedToCreateKeyTryAgain => 'कुंजी बनाने में विफल। कृपया पुनः प्रयास करें।';
+
+  @override
+  String get keyCreated => 'कुंजी बनाई गई';
+
+  @override
+  String get keyCreatedMessage => 'आपकी नई कुंजी बना दी गई है। कृपया इसे अभी कॉपी करें। आप इसे दोबारा नहीं देख पाएंगे।';
+
+  @override
+  String get keyWord => 'कुंजी';
+
+  @override
+  String get externalAppAccess => 'बाहरी ऐप एक्सेस';
+
+  @override
+  String get externalAppAccessDescription =>
+      'निम्नलिखित इंस्टॉल किए गए ऐप्स में बाहरी एकीकरण हैं और वे आपके डेटा तक पहुंच सकते हैं, जैसे बातचीत और यादें।';
+
+  @override
+  String get noExternalAppsHaveAccess => 'किसी भी बाहरी ऐप के पास आपके डेटा तक पहुंच नहीं है।';
 }

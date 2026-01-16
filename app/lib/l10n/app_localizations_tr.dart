@@ -4251,4 +4251,115 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get revoke => 'İptal Et';
+
+  @override
+  String get whatWouldYouLikeToCreate => 'Ne oluşturmak istersiniz?';
+
+  @override
+  String get createAnApp => 'Uygulama Oluştur';
+
+  @override
+  String get createAndShareYourApp => 'Uygulamanızı oluşturun ve paylaşın';
+
+  @override
+  String get createMyClone => 'Klonumu Oluştur';
+
+  @override
+  String get createYourDigitalClone => 'Dijital klonunuzu oluşturun';
+
+  @override
+  String get itemApp => 'Uygulama';
+
+  @override
+  String get itemPersona => 'Persona';
+
+  @override
+  String keepItemPublic(String item) {
+    return '$item Herkese Açık Tut';
+  }
+
+  @override
+  String makeItemPublicQuestion(String item) {
+    return '$item Herkese Açık Yap?';
+  }
+
+  @override
+  String makeItemPrivateQuestion(String item) {
+    return '$item Özel Yap?';
+  }
+
+  @override
+  String makeItemPublicExplanation(String item) {
+    return '$item herkese açık yaparsanız, herkes kullanabilir';
+  }
+
+  @override
+  String makeItemPrivateExplanation(String item) {
+    return '$item şimdi özel yaparsanız, herkes için çalışmayı durduracak ve yalnızca size görünür olacak';
+  }
+
+  @override
+  String get manageApp => 'Uygulamayı Yönet';
+
+  @override
+  String get updatePersonaDetails => 'Persona Ayrıntılarını Güncelle';
+
+  @override
+  String deleteItemTitle(String item) {
+    return '$item Sil';
+  }
+
+  @override
+  String deleteItemQuestion(String item) {
+    return '$item Silinsin mi?';
+  }
+
+  @override
+  String deleteItemConfirmation(String item) {
+    return 'Bu $item silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.';
+  }
+
+  @override
+  String get revokeKeyQuestion => 'Anahtar İptal Edilsin mi?';
+
+  @override
+  String revokeKeyConfirmation(String keyName) {
+    return '\"$keyName\" anahtarını iptal etmek istediğinizden emin misiniz? Bu işlem geri alınamaz.';
+  }
+
+  @override
+  String get createNewKey => 'Yeni Anahtar Oluştur';
+
+  @override
+  String get keyNameHint => 'örn. Claude Desktop';
+
+  @override
+  String get pleaseEnterAName => 'Lütfen bir ad girin.';
+
+  @override
+  String failedToCreateKeyWithError(String error) {
+    return 'Anahtar oluşturulamadı: $error';
+  }
+
+  @override
+  String get failedToCreateKeyTryAgain => 'Anahtar oluşturulamadı. Lütfen tekrar deneyin.';
+
+  @override
+  String get keyCreated => 'Anahtar Oluşturuldu';
+
+  @override
+  String get keyCreatedMessage => 'Yeni anahtarınız oluşturuldu. Lütfen şimdi kopyalayın. Tekrar göremeyeceksiniz.';
+
+  @override
+  String get keyWord => 'Anahtar';
+
+  @override
+  String get externalAppAccess => 'Harici Uygulama Erişimi';
+
+  @override
+  String get externalAppAccessDescription =>
+      'Aşağıdaki yüklü uygulamalar harici entegrasyonlara sahiptir ve sohbetler ve anılar gibi verilerinize erişebilir.';
+
+  @override
+  String get noExternalAppsHaveAccess => 'Hiçbir harici uygulama verilerinize erişemiyor.';
 }

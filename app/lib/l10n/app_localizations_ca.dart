@@ -4264,4 +4264,116 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get revoke => 'Revocar';
+
+  @override
+  String get whatWouldYouLikeToCreate => 'Què voldries crear?';
+
+  @override
+  String get createAnApp => 'Crear una aplicació';
+
+  @override
+  String get createAndShareYourApp => 'Crea i comparteix la teva aplicació';
+
+  @override
+  String get createMyClone => 'Crear el meu clon';
+
+  @override
+  String get createYourDigitalClone => 'Crea el teu clon digital';
+
+  @override
+  String get itemApp => 'Aplicació';
+
+  @override
+  String get itemPersona => 'Persona';
+
+  @override
+  String keepItemPublic(String item) {
+    return 'Mantenir $item públic';
+  }
+
+  @override
+  String makeItemPublicQuestion(String item) {
+    return 'Fer $item públic?';
+  }
+
+  @override
+  String makeItemPrivateQuestion(String item) {
+    return 'Fer $item privat?';
+  }
+
+  @override
+  String makeItemPublicExplanation(String item) {
+    return 'Si fas $item públic, pot ser utilitzat per tothom';
+  }
+
+  @override
+  String makeItemPrivateExplanation(String item) {
+    return 'Si fas $item privat ara, deixarà de funcionar per a tothom i només serà visible per a tu';
+  }
+
+  @override
+  String get manageApp => 'Gestionar aplicació';
+
+  @override
+  String get updatePersonaDetails => 'Actualitzar detalls de la persona';
+
+  @override
+  String deleteItemTitle(String item) {
+    return 'Eliminar $item';
+  }
+
+  @override
+  String deleteItemQuestion(String item) {
+    return 'Eliminar $item?';
+  }
+
+  @override
+  String deleteItemConfirmation(String item) {
+    return 'Estàs segur que vols eliminar aquest $item? Aquesta acció no es pot desfer.';
+  }
+
+  @override
+  String get revokeKeyQuestion => 'Revocar la clau?';
+
+  @override
+  String revokeKeyConfirmation(String keyName) {
+    return 'Estàs segur que vols revocar la clau \"$keyName\"? Aquesta acció no es pot desfer.';
+  }
+
+  @override
+  String get createNewKey => 'Crear una nova clau';
+
+  @override
+  String get keyNameHint => 'p. ex., Claude Desktop';
+
+  @override
+  String get pleaseEnterAName => 'Si us plau, introdueix un nom.';
+
+  @override
+  String failedToCreateKeyWithError(String error) {
+    return 'Error en crear la clau: $error';
+  }
+
+  @override
+  String get failedToCreateKeyTryAgain => 'Error en crear la clau. Si us plau, torna-ho a provar.';
+
+  @override
+  String get keyCreated => 'Clau creada';
+
+  @override
+  String get keyCreatedMessage =>
+      'La teva nova clau ha estat creada. Si us plau, copia-la ara. No la podràs veure de nou.';
+
+  @override
+  String get keyWord => 'Clau';
+
+  @override
+  String get externalAppAccess => 'Accés d\'aplicacions externes';
+
+  @override
+  String get externalAppAccessDescription =>
+      'Les següents aplicacions instal·lades tenen integracions externes i poden accedir a les teves dades, com ara converses i records.';
+
+  @override
+  String get noExternalAppsHaveAccess => 'Cap aplicació externa té accés a les teves dades.';
 }

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 
 class ExternalIntegrationsSection extends StatelessWidget {
@@ -18,14 +19,14 @@ class ExternalIntegrationsSection extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'External App Access',
-              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+            Text(
+              context.l10n.externalAppAccess,
+              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'The following installed apps have external integrations and can access your data, such as conversations and memories.',
-              style: TextStyle(color: Colors.grey, fontSize: 14),
+            Text(
+              context.l10n.externalAppAccessDescription,
+              style: const TextStyle(color: Colors.grey, fontSize: 14),
             ),
             const SizedBox(height: 16),
             if (enabledExternalApps.isEmpty)
@@ -36,10 +37,10 @@ class ExternalIntegrationsSection extends StatelessWidget {
                   color: const Color(0xFF1A1A1A),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Center(
+                child: Center(
                   child: Text(
-                    'No external apps have access to your data.',
-                    style: TextStyle(color: Colors.grey),
+                    context.l10n.noExternalAppsHaveAccess,
+                    style: const TextStyle(color: Colors.grey),
                   ),
                 ),
               )

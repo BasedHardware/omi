@@ -4248,4 +4248,115 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get revoke => 'Återkalla';
+
+  @override
+  String get whatWouldYouLikeToCreate => 'Vad vill du skapa?';
+
+  @override
+  String get createAnApp => 'Skapa en app';
+
+  @override
+  String get createAndShareYourApp => 'Skapa och dela din app';
+
+  @override
+  String get createMyClone => 'Skapa min klon';
+
+  @override
+  String get createYourDigitalClone => 'Skapa din digitala klon';
+
+  @override
+  String get itemApp => 'App';
+
+  @override
+  String get itemPersona => 'Persona';
+
+  @override
+  String keepItemPublic(String item) {
+    return 'Behåll $item offentlig';
+  }
+
+  @override
+  String makeItemPublicQuestion(String item) {
+    return 'Gör $item offentlig?';
+  }
+
+  @override
+  String makeItemPrivateQuestion(String item) {
+    return 'Gör $item privat?';
+  }
+
+  @override
+  String makeItemPublicExplanation(String item) {
+    return 'Om du gör $item offentlig kan den användas av alla';
+  }
+
+  @override
+  String makeItemPrivateExplanation(String item) {
+    return 'Om du gör $item privat nu slutar den fungera för alla och blir endast synlig för dig';
+  }
+
+  @override
+  String get manageApp => 'Hantera app';
+
+  @override
+  String get updatePersonaDetails => 'Uppdatera persona-detaljer';
+
+  @override
+  String deleteItemTitle(String item) {
+    return 'Radera $item';
+  }
+
+  @override
+  String deleteItemQuestion(String item) {
+    return 'Radera $item?';
+  }
+
+  @override
+  String deleteItemConfirmation(String item) {
+    return 'Är du säker på att du vill radera denna $item? Denna åtgärd kan inte ångras.';
+  }
+
+  @override
+  String get revokeKeyQuestion => 'Återkalla nyckel?';
+
+  @override
+  String revokeKeyConfirmation(String keyName) {
+    return 'Är du säker på att du vill återkalla nyckeln \"$keyName\"? Denna åtgärd kan inte ångras.';
+  }
+
+  @override
+  String get createNewKey => 'Skapa ny nyckel';
+
+  @override
+  String get keyNameHint => 't.ex. Claude Desktop';
+
+  @override
+  String get pleaseEnterAName => 'Ange ett namn.';
+
+  @override
+  String failedToCreateKeyWithError(String error) {
+    return 'Det gick inte att skapa nyckel: $error';
+  }
+
+  @override
+  String get failedToCreateKeyTryAgain => 'Det gick inte att skapa nyckel. Försök igen.';
+
+  @override
+  String get keyCreated => 'Nyckel skapad';
+
+  @override
+  String get keyCreatedMessage => 'Din nya nyckel har skapats. Kopiera den nu. Du kommer inte att kunna se den igen.';
+
+  @override
+  String get keyWord => 'Nyckel';
+
+  @override
+  String get externalAppAccess => 'Extern app-åtkomst';
+
+  @override
+  String get externalAppAccessDescription =>
+      'Följande installerade appar har externa integrationer och kan komma åt dina data, såsom konversationer och minnen.';
+
+  @override
+  String get noExternalAppsHaveAccess => 'Inga externa appar har åtkomst till dina data.';
 }

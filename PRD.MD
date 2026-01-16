@@ -4,7 +4,9 @@
 
 **Goal:** Localize all hardcoded user-facing strings in the Omi Flutter/Dart application to support 34 languages.
 
-**Scope:** Desktop widgets and pages in `app/lib/desktop/` directory
+**Scope:**
+- Phase 1 (COMPLETED): Desktop widgets and pages in `app/lib/desktop/` directory
+- Phase 2 (IN PROGRESS): Mobile pages and widgets in `app/lib/pages/` and `app/lib/widgets/` directories
 
 **Languages Supported (34 total):**
 Arabic (ar), Bulgarian (bg), Catalan (ca), Czech (cs), Danish (da), German (de), Greek (el), Spanish (es), Estonian (et), Finnish (fi), French (fr), Hindi (hi), Hungarian (hu), Indonesian (id), Italian (it), Japanese (ja), Korean (ko), Lithuanian (lt), Latvian (lv), Malay (ms), Dutch (nl), Norwegian (no), Polish (pl), Portuguese (pt), Romanian (ro), Russian (ru), Slovak (sk), Swedish (sv), Thai (th), Turkish (tr), Ukrainian (uk), Vietnamese (vi), Chinese (zh), English (en)

@@ -4264,4 +4264,115 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get revoke => 'Visszavonás';
+
+  @override
+  String get whatWouldYouLikeToCreate => 'Mit szeretne létrehozni?';
+
+  @override
+  String get createAnApp => 'Alkalmazás létrehozása';
+
+  @override
+  String get createAndShareYourApp => 'Hozza létre és ossza meg alkalmazását';
+
+  @override
+  String get createMyClone => 'Klónom létrehozása';
+
+  @override
+  String get createYourDigitalClone => 'Hozza létre digitális klónját';
+
+  @override
+  String get itemApp => 'Alkalmazás';
+
+  @override
+  String get itemPersona => 'Persona';
+
+  @override
+  String keepItemPublic(String item) {
+    return '$item nyilvános tartása';
+  }
+
+  @override
+  String makeItemPublicQuestion(String item) {
+    return '$item nyilvánossá tétele?';
+  }
+
+  @override
+  String makeItemPrivateQuestion(String item) {
+    return '$item priváttá tétele?';
+  }
+
+  @override
+  String makeItemPublicExplanation(String item) {
+    return 'Ha nyilvánossá teszi a(z) $item-t, mindenki használhatja';
+  }
+
+  @override
+  String makeItemPrivateExplanation(String item) {
+    return 'Ha most priváttá teszi a(z) $item-t, az mindenki számára leáll és csak ön láthatja';
+  }
+
+  @override
+  String get manageApp => 'Alkalmazás kezelése';
+
+  @override
+  String get updatePersonaDetails => 'Persona részleteinek frissítése';
+
+  @override
+  String deleteItemTitle(String item) {
+    return '$item törlése';
+  }
+
+  @override
+  String deleteItemQuestion(String item) {
+    return '$item törlése?';
+  }
+
+  @override
+  String deleteItemConfirmation(String item) {
+    return 'Biztosan törölni szeretné ezt a(z) $item-t? Ez a művelet nem vonható vissza.';
+  }
+
+  @override
+  String get revokeKeyQuestion => 'Kulcs visszavonása?';
+
+  @override
+  String revokeKeyConfirmation(String keyName) {
+    return 'Biztosan vissza szeretné vonni a(z) \"$keyName\" kulcsot? Ez a művelet nem vonható vissza.';
+  }
+
+  @override
+  String get createNewKey => 'Új kulcs létrehozása';
+
+  @override
+  String get keyNameHint => 'pl. Claude Desktop';
+
+  @override
+  String get pleaseEnterAName => 'Kérjük, adjon meg egy nevet.';
+
+  @override
+  String failedToCreateKeyWithError(String error) {
+    return 'Nem sikerült létrehozni a kulcsot: $error';
+  }
+
+  @override
+  String get failedToCreateKeyTryAgain => 'Nem sikerült létrehozni a kulcsot. Kérjük, próbálja újra.';
+
+  @override
+  String get keyCreated => 'Kulcs létrehozva';
+
+  @override
+  String get keyCreatedMessage => 'Az új kulcsa létrejött. Kérjük, másolja most. Nem fogja tudni újra megtekinteni.';
+
+  @override
+  String get keyWord => 'Kulcs';
+
+  @override
+  String get externalAppAccess => 'Külső alkalmazás hozzáférés';
+
+  @override
+  String get externalAppAccessDescription =>
+      'A következő telepített alkalmazásoknak külső integrációi vannak, és hozzáférhetnek az adataihoz, például beszélgetésekhez és emlékekhez.';
+
+  @override
+  String get noExternalAppsHaveAccess => 'Egyetlen külső alkalmazásnak sincs hozzáférése az adataihoz.';
 }

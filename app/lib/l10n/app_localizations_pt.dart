@@ -4223,4 +4223,116 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get revoke => 'Revogar';
+
+  @override
+  String get whatWouldYouLikeToCreate => 'O que você gostaria de criar?';
+
+  @override
+  String get createAnApp => 'Criar um aplicativo';
+
+  @override
+  String get createAndShareYourApp => 'Crie e compartilhe seu aplicativo';
+
+  @override
+  String get createMyClone => 'Criar meu clone';
+
+  @override
+  String get createYourDigitalClone => 'Crie seu clone digital';
+
+  @override
+  String get itemApp => 'Aplicativo';
+
+  @override
+  String get itemPersona => 'Persona';
+
+  @override
+  String keepItemPublic(String item) {
+    return 'Manter $item público';
+  }
+
+  @override
+  String makeItemPublicQuestion(String item) {
+    return 'Tornar $item público?';
+  }
+
+  @override
+  String makeItemPrivateQuestion(String item) {
+    return 'Tornar $item privado?';
+  }
+
+  @override
+  String makeItemPublicExplanation(String item) {
+    return 'Se você tornar $item público, ele pode ser usado por todos';
+  }
+
+  @override
+  String makeItemPrivateExplanation(String item) {
+    return 'Se você tornar $item privado agora, ele deixará de funcionar para todos e será visível apenas para você';
+  }
+
+  @override
+  String get manageApp => 'Gerenciar aplicativo';
+
+  @override
+  String get updatePersonaDetails => 'Atualizar detalhes da persona';
+
+  @override
+  String deleteItemTitle(String item) {
+    return 'Excluir $item';
+  }
+
+  @override
+  String deleteItemQuestion(String item) {
+    return 'Excluir $item?';
+  }
+
+  @override
+  String deleteItemConfirmation(String item) {
+    return 'Tem certeza de que deseja excluir este $item? Esta ação não pode ser desfeita.';
+  }
+
+  @override
+  String get revokeKeyQuestion => 'Revogar chave?';
+
+  @override
+  String revokeKeyConfirmation(String keyName) {
+    return 'Tem certeza de que deseja revogar a chave \"$keyName\"? Esta ação não pode ser desfeita.';
+  }
+
+  @override
+  String get createNewKey => 'Criar nova chave';
+
+  @override
+  String get keyNameHint => 'ex.: Claude Desktop';
+
+  @override
+  String get pleaseEnterAName => 'Por favor, insira um nome.';
+
+  @override
+  String failedToCreateKeyWithError(String error) {
+    return 'Falha ao criar chave: $error';
+  }
+
+  @override
+  String get failedToCreateKeyTryAgain => 'Falha ao criar chave. Por favor, tente novamente.';
+
+  @override
+  String get keyCreated => 'Chave criada';
+
+  @override
+  String get keyCreatedMessage =>
+      'Sua nova chave foi criada. Por favor, copie-a agora. Você não poderá vê-la novamente.';
+
+  @override
+  String get keyWord => 'Chave';
+
+  @override
+  String get externalAppAccess => 'Acesso de aplicativos externos';
+
+  @override
+  String get externalAppAccessDescription =>
+      'Os seguintes aplicativos instalados têm integrações externas e podem acessar seus dados, como conversas e memórias.';
+
+  @override
+  String get noExternalAppsHaveAccess => 'Nenhum aplicativo externo tem acesso aos seus dados.';
 }

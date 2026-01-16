@@ -8102,6 +8102,186 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Revoke'**
   String get revoke;
+
+  /// Title asking user what they want to create
+  ///
+  /// In en, this message translates to:
+  /// **'What would you like to create?'**
+  String get whatWouldYouLikeToCreate;
+
+  /// Option to create an app
+  ///
+  /// In en, this message translates to:
+  /// **'Create an App'**
+  String get createAnApp;
+
+  /// Subtitle for create app option
+  ///
+  /// In en, this message translates to:
+  /// **'Create and share your app'**
+  String get createAndShareYourApp;
+
+  /// Option to create digital clone
+  ///
+  /// In en, this message translates to:
+  /// **'Create my Clone'**
+  String get createMyClone;
+
+  /// Subtitle for create clone option
+  ///
+  /// In en, this message translates to:
+  /// **'Create your digital clone'**
+  String get createYourDigitalClone;
+
+  /// The word 'App' used as parameter in other strings
+  ///
+  /// In en, this message translates to:
+  /// **'App'**
+  String get itemApp;
+
+  /// The word 'Persona' used as parameter in other strings
+  ///
+  /// In en, this message translates to:
+  /// **'Persona'**
+  String get itemPersona;
+
+  /// Toggle label to keep app or persona public
+  ///
+  /// In en, this message translates to:
+  /// **'Keep {item} Public'**
+  String keepItemPublic(String item);
+
+  /// Dialog title asking to make app or persona public
+  ///
+  /// In en, this message translates to:
+  /// **'Make {item} Public?'**
+  String makeItemPublicQuestion(String item);
+
+  /// Dialog title asking to make app or persona private
+  ///
+  /// In en, this message translates to:
+  /// **'Make {item} Private?'**
+  String makeItemPrivateQuestion(String item);
+
+  /// Explanation of what happens when making public
+  ///
+  /// In en, this message translates to:
+  /// **'If you make the {item} public, it can be used by everyone'**
+  String makeItemPublicExplanation(String item);
+
+  /// Explanation of what happens when making private
+  ///
+  /// In en, this message translates to:
+  /// **'If you make the {item} private now, it will stop working for everyone and will be visible only to you'**
+  String makeItemPrivateExplanation(String item);
+
+  /// Menu item to manage app settings
+  ///
+  /// In en, this message translates to:
+  /// **'Manage App'**
+  String get manageApp;
+
+  /// Menu item to update persona details
+  ///
+  /// In en, this message translates to:
+  /// **'Update Persona Details'**
+  String get updatePersonaDetails;
+
+  /// Menu item to delete app or persona
+  ///
+  /// In en, this message translates to:
+  /// **'Delete {item}'**
+  String deleteItemTitle(String item);
+
+  /// Dialog title asking to confirm deletion
+  ///
+  /// In en, this message translates to:
+  /// **'Delete {item}?'**
+  String deleteItemQuestion(String item);
+
+  /// Dialog message explaining deletion is permanent
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to delete this {item}? This action cannot be undone.'**
+  String deleteItemConfirmation(String item);
+
+  /// Dialog title asking to confirm key revocation
+  ///
+  /// In en, this message translates to:
+  /// **'Revoke Key?'**
+  String get revokeKeyQuestion;
+
+  /// Dialog message explaining key revocation is permanent
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to revoke the key \"{keyName}\"? This action cannot be undone.'**
+  String revokeKeyConfirmation(String keyName);
+
+  /// Dialog title for creating a new API key
+  ///
+  /// In en, this message translates to:
+  /// **'Create New Key'**
+  String get createNewKey;
+
+  /// Hint text showing example key name
+  ///
+  /// In en, this message translates to:
+  /// **'e.g., Claude Desktop'**
+  String get keyNameHint;
+
+  /// Validation error when name is empty
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a name.'**
+  String get pleaseEnterAName;
+
+  /// Error message with specific error details
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to create key: {error}'**
+  String failedToCreateKeyWithError(String error);
+
+  /// Generic error message for key creation failure
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to create key. Please try again.'**
+  String get failedToCreateKeyTryAgain;
+
+  /// Dialog title when API key is successfully created
+  ///
+  /// In en, this message translates to:
+  /// **'Key Created'**
+  String get keyCreated;
+
+  /// Message explaining to copy the key now as it won't be shown again
+  ///
+  /// In en, this message translates to:
+  /// **'Your new key has been created. Please copy it now. You will not be able to see it again.'**
+  String get keyCreatedMessage;
+
+  /// The word 'Key' for use in parameterized strings
+  ///
+  /// In en, this message translates to:
+  /// **'Key'**
+  String get keyWord;
+
+  /// Section title for external app access settings
+  ///
+  /// In en, this message translates to:
+  /// **'External App Access'**
+  String get externalAppAccess;
+
+  /// Description explaining which apps can access user data
+  ///
+  /// In en, this message translates to:
+  /// **'The following installed apps have external integrations and can access your data, such as conversations and memories.'**
+  String get externalAppAccessDescription;
+
+  /// Message shown when no external apps have data access
+  ///
+  /// In en, this message translates to:
+  /// **'No external apps have access to your data.'**
+  String get noExternalAppsHaveAccess;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

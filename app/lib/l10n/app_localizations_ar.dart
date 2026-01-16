@@ -4209,4 +4209,115 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get revoke => 'إلغاء';
+
+  @override
+  String get whatWouldYouLikeToCreate => 'ماذا تريد أن تنشئ؟';
+
+  @override
+  String get createAnApp => 'إنشاء تطبيق';
+
+  @override
+  String get createAndShareYourApp => 'أنشئ وشارك تطبيقك';
+
+  @override
+  String get createMyClone => 'إنشاء نسختي';
+
+  @override
+  String get createYourDigitalClone => 'أنشئ نسختك الرقمية';
+
+  @override
+  String get itemApp => 'التطبيق';
+
+  @override
+  String get itemPersona => 'الشخصية';
+
+  @override
+  String keepItemPublic(String item) {
+    return 'إبقاء $item عامًا';
+  }
+
+  @override
+  String makeItemPublicQuestion(String item) {
+    return 'جعل $item عامًا؟';
+  }
+
+  @override
+  String makeItemPrivateQuestion(String item) {
+    return 'جعل $item خاصًا؟';
+  }
+
+  @override
+  String makeItemPublicExplanation(String item) {
+    return 'إذا جعلت $item عامًا، يمكن للجميع استخدامه';
+  }
+
+  @override
+  String makeItemPrivateExplanation(String item) {
+    return 'إذا جعلت $item خاصًا الآن، سيتوقف عن العمل للجميع وسيكون مرئيًا لك فقط';
+  }
+
+  @override
+  String get manageApp => 'إدارة التطبيق';
+
+  @override
+  String get updatePersonaDetails => 'تحديث تفاصيل الشخصية';
+
+  @override
+  String deleteItemTitle(String item) {
+    return 'حذف $item';
+  }
+
+  @override
+  String deleteItemQuestion(String item) {
+    return 'حذف $item؟';
+  }
+
+  @override
+  String deleteItemConfirmation(String item) {
+    return 'هل أنت متأكد أنك تريد حذف هذا $item؟ لا يمكن التراجع عن هذا الإجراء.';
+  }
+
+  @override
+  String get revokeKeyQuestion => 'إلغاء المفتاح؟';
+
+  @override
+  String revokeKeyConfirmation(String keyName) {
+    return 'هل أنت متأكد أنك تريد إلغاء المفتاح \"$keyName\"؟ لا يمكن التراجع عن هذا الإجراء.';
+  }
+
+  @override
+  String get createNewKey => 'إنشاء مفتاح جديد';
+
+  @override
+  String get keyNameHint => 'مثال: Claude Desktop';
+
+  @override
+  String get pleaseEnterAName => 'يرجى إدخال اسم.';
+
+  @override
+  String failedToCreateKeyWithError(String error) {
+    return 'فشل إنشاء المفتاح: $error';
+  }
+
+  @override
+  String get failedToCreateKeyTryAgain => 'فشل إنشاء المفتاح. يرجى المحاولة مرة أخرى.';
+
+  @override
+  String get keyCreated => 'تم إنشاء المفتاح';
+
+  @override
+  String get keyCreatedMessage => 'تم إنشاء مفتاحك الجديد. يرجى نسخه الآن. لن تتمكن من رؤيته مرة أخرى.';
+
+  @override
+  String get keyWord => 'المفتاح';
+
+  @override
+  String get externalAppAccess => 'وصول التطبيقات الخارجية';
+
+  @override
+  String get externalAppAccessDescription =>
+      'التطبيقات المثبتة التالية لديها تكاملات خارجية ويمكنها الوصول إلى بياناتك، مثل المحادثات والذكريات.';
+
+  @override
+  String get noExternalAppsHaveAccess => 'لا توجد تطبيقات خارجية لديها وصول إلى بياناتك.';
 }

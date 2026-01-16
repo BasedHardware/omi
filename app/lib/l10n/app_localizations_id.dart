@@ -4252,4 +4252,116 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get revoke => 'Cabut';
+
+  @override
+  String get whatWouldYouLikeToCreate => 'Apa yang ingin Anda buat?';
+
+  @override
+  String get createAnApp => 'Buat Aplikasi';
+
+  @override
+  String get createAndShareYourApp => 'Buat dan bagikan aplikasi Anda';
+
+  @override
+  String get createMyClone => 'Buat Klon Saya';
+
+  @override
+  String get createYourDigitalClone => 'Buat klon digital Anda';
+
+  @override
+  String get itemApp => 'Aplikasi';
+
+  @override
+  String get itemPersona => 'Persona';
+
+  @override
+  String keepItemPublic(String item) {
+    return 'Pertahankan $item Publik';
+  }
+
+  @override
+  String makeItemPublicQuestion(String item) {
+    return 'Jadikan $item Publik?';
+  }
+
+  @override
+  String makeItemPrivateQuestion(String item) {
+    return 'Jadikan $item Pribadi?';
+  }
+
+  @override
+  String makeItemPublicExplanation(String item) {
+    return 'Jika Anda menjadikan $item publik, dapat digunakan oleh semua orang';
+  }
+
+  @override
+  String makeItemPrivateExplanation(String item) {
+    return 'Jika Anda menjadikan $item pribadi sekarang, itu akan berhenti bekerja untuk semua orang dan hanya akan terlihat oleh Anda';
+  }
+
+  @override
+  String get manageApp => 'Kelola Aplikasi';
+
+  @override
+  String get updatePersonaDetails => 'Perbarui Detail Persona';
+
+  @override
+  String deleteItemTitle(String item) {
+    return 'Hapus $item';
+  }
+
+  @override
+  String deleteItemQuestion(String item) {
+    return 'Hapus $item?';
+  }
+
+  @override
+  String deleteItemConfirmation(String item) {
+    return 'Apakah Anda yakin ingin menghapus $item ini? Tindakan ini tidak dapat dibatalkan.';
+  }
+
+  @override
+  String get revokeKeyQuestion => 'Cabut Kunci?';
+
+  @override
+  String revokeKeyConfirmation(String keyName) {
+    return 'Apakah Anda yakin ingin mencabut kunci \"$keyName\"? Tindakan ini tidak dapat dibatalkan.';
+  }
+
+  @override
+  String get createNewKey => 'Buat Kunci Baru';
+
+  @override
+  String get keyNameHint => 'mis., Claude Desktop';
+
+  @override
+  String get pleaseEnterAName => 'Silakan masukkan nama.';
+
+  @override
+  String failedToCreateKeyWithError(String error) {
+    return 'Gagal membuat kunci: $error';
+  }
+
+  @override
+  String get failedToCreateKeyTryAgain => 'Gagal membuat kunci. Silakan coba lagi.';
+
+  @override
+  String get keyCreated => 'Kunci Dibuat';
+
+  @override
+  String get keyCreatedMessage =>
+      'Kunci baru Anda telah dibuat. Silakan salin sekarang. Anda tidak akan dapat melihatnya lagi.';
+
+  @override
+  String get keyWord => 'Kunci';
+
+  @override
+  String get externalAppAccess => 'Akses Aplikasi Eksternal';
+
+  @override
+  String get externalAppAccessDescription =>
+      'Aplikasi terinstal berikut memiliki integrasi eksternal dan dapat mengakses data Anda, seperti percakapan dan kenangan.';
+
+  @override
+  String get noExternalAppsHaveAccess => 'Tidak ada aplikasi eksternal yang memiliki akses ke data Anda.';
 }

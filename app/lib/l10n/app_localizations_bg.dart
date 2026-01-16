@@ -4254,4 +4254,116 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get revoke => 'Отмяна';
+
+  @override
+  String get whatWouldYouLikeToCreate => 'Какво искате да създадете?';
+
+  @override
+  String get createAnApp => 'Създаване на приложение';
+
+  @override
+  String get createAndShareYourApp => 'Създайте и споделете вашето приложение';
+
+  @override
+  String get createMyClone => 'Създай моя клонинг';
+
+  @override
+  String get createYourDigitalClone => 'Създайте вашия цифров клонинг';
+
+  @override
+  String get itemApp => 'Приложение';
+
+  @override
+  String get itemPersona => 'Персона';
+
+  @override
+  String keepItemPublic(String item) {
+    return 'Запази $item публично';
+  }
+
+  @override
+  String makeItemPublicQuestion(String item) {
+    return 'Да се направи $item публично?';
+  }
+
+  @override
+  String makeItemPrivateQuestion(String item) {
+    return 'Да се направи $item частно?';
+  }
+
+  @override
+  String makeItemPublicExplanation(String item) {
+    return 'Ако направите $item публично, то може да се използва от всички';
+  }
+
+  @override
+  String makeItemPrivateExplanation(String item) {
+    return 'Ако направите $item частно сега, то ще спре да работи за всички и ще бъде видимо само за вас';
+  }
+
+  @override
+  String get manageApp => 'Управление на приложението';
+
+  @override
+  String get updatePersonaDetails => 'Актуализиране на детайлите на персоната';
+
+  @override
+  String deleteItemTitle(String item) {
+    return 'Изтриване на $item';
+  }
+
+  @override
+  String deleteItemQuestion(String item) {
+    return 'Изтриване на $item?';
+  }
+
+  @override
+  String deleteItemConfirmation(String item) {
+    return 'Сигурни ли сте, че искате да изтриете това $item? Това действие не може да бъде отменено.';
+  }
+
+  @override
+  String get revokeKeyQuestion => 'Отмяна на ключа?';
+
+  @override
+  String revokeKeyConfirmation(String keyName) {
+    return 'Сигурни ли сте, че искате да отмените ключа \"$keyName\"? Това действие не може да бъде отменено.';
+  }
+
+  @override
+  String get createNewKey => 'Създаване на нов ключ';
+
+  @override
+  String get keyNameHint => 'напр. Claude Desktop';
+
+  @override
+  String get pleaseEnterAName => 'Моля, въведете име.';
+
+  @override
+  String failedToCreateKeyWithError(String error) {
+    return 'Неуспешно създаване на ключ: $error';
+  }
+
+  @override
+  String get failedToCreateKeyTryAgain => 'Неуспешно създаване на ключ. Моля, опитайте отново.';
+
+  @override
+  String get keyCreated => 'Ключът е създаден';
+
+  @override
+  String get keyCreatedMessage =>
+      'Вашият нов ключ е създаден. Моля, копирайте го сега. Няма да можете да го видите отново.';
+
+  @override
+  String get keyWord => 'Ключ';
+
+  @override
+  String get externalAppAccess => 'Достъп на външни приложения';
+
+  @override
+  String get externalAppAccessDescription =>
+      'Следните инсталирани приложения имат външни интеграции и могат да достъпват данните ви, като разговори и спомени.';
+
+  @override
+  String get noExternalAppsHaveAccess => 'Няма външни приложения с достъп до вашите данни.';
 }
