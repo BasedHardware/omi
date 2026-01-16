@@ -190,6 +190,24 @@ class SharedPreferencesUtil {
 
   int get notificationFrequency => getInt('notificationFrequency', defaultValue: 3);
 
+  // Task category order for drag-and-drop sorting persistence
+  // Format: { "today": ["id1", "id2"], "tomorrow": ["id3"] }
+  set taskCategoryOrder(Map<String, List<String>> value) {
+    final encoded = jsonEncode(value);
+    saveString('taskCategoryOrder', encoded);
+  }
+
+  Map<String, List<String>> get taskCategoryOrder {
+    final encoded = getString('taskCategoryOrder');
+    if (encoded.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(encoded) as Map<String, dynamic>;
+      return decoded.map((key, value) => MapEntry(key, (value as List).cast<String>()));
+    } catch (e) {
+      return {};
+    }
+  }
+
   // Wrapped 2025 - track if user has viewed their wrapped
   set hasViewedWrapped2025(bool value) => saveBool('hasViewedWrapped2025', value);
 
