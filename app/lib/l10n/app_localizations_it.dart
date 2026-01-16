@@ -4574,4 +4574,40 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get thankYouText => 'Grazie per essere un utente prezioso di Omi. Se hai domande o dubbi, non esitare a contattarci a team@basedhardware.com.';
+
+  @override
+  String get wifiSyncSettings => 'Impostazioni sincronizzazione WiFi';
+
+  @override
+  String get enterHotspotCredentials => 'Inserisci le credenziali hotspot del tuo telefono';
+
+  @override
+  String get wifiSyncUsesHotspot => 'La sincronizzazione WiFi usa il telefono come hotspot. Trova nome e password in Impostazioni > Hotspot personale.';
+
+  @override
+  String get hotspotNameSsid => 'Nome hotspot (SSID)';
+
+  @override
+  String get exampleIphoneHotspot => 'es. Hotspot iPhone';
+
+  @override
+  String get password => 'Password';
+
+  @override
+  String get enterHotspotPassword => 'Inserisci la password dell\'hotspot';
+
+  @override
+  String get saveCredentials => 'Salva credenziali';
+
+  @override
+  String get clearCredentials => 'Cancella credenziali';
+
+  @override
+  String get pleaseEnterHotspotName => 'Inserisci un nome hotspot';
+
+  @override
+  String get wifiCredentialsSaved => 'Credenziali WiFi salvate';
+
+  @override
+  String get wifiCredentialsCleared => 'Credenziali WiFi cancellate';
 }

@@ -4574,4 +4574,40 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get thankYouText => 'Kiitos, että olet arvokas Omin käyttäjä. Jos sinulla on kysyttävää tai huolenaiheita, ota rohkeasti yhteyttä osoitteeseen team@basedhardware.com.';
+
+  @override
+  String get wifiSyncSettings => 'WiFi-synkronointiasetukset';
+
+  @override
+  String get enterHotspotCredentials => 'Syötä puhelimesi hotspot-tunnukset';
+
+  @override
+  String get wifiSyncUsesHotspot => 'WiFi-synkronointi käyttää puhelintasi hotspotina. Löydä nimi ja salasana kohdasta Asetukset > Oma hotspot.';
+
+  @override
+  String get hotspotNameSsid => 'Hotspotin nimi (SSID)';
+
+  @override
+  String get exampleIphoneHotspot => 'esim. iPhone Hotspot';
+
+  @override
+  String get password => 'Salasana';
+
+  @override
+  String get enterHotspotPassword => 'Syötä hotspotin salasana';
+
+  @override
+  String get saveCredentials => 'Tallenna tunnukset';
+
+  @override
+  String get clearCredentials => 'Tyhjennä tunnukset';
+
+  @override
+  String get pleaseEnterHotspotName => 'Syötä hotspotin nimi';
+
+  @override
+  String get wifiCredentialsSaved => 'WiFi-tunnukset tallennettu';
+
+  @override
+  String get wifiCredentialsCleared => 'WiFi-tunnukset tyhjennetty';
 }

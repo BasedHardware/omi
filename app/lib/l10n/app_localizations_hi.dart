@@ -4568,4 +4568,40 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get thankYouText => 'Omi के एक मूल्यवान उपयोगकर्ता होने के लिए धन्यवाद। यदि आपके कोई प्रश्न या चिंताएं हैं, तो team@basedhardware.com पर हमसे संपर्क करें।';
+
+  @override
+  String get wifiSyncSettings => 'WiFi सिंक सेटिंग्स';
+
+  @override
+  String get enterHotspotCredentials => 'अपने फोन के हॉटस्पॉट क्रेडेंशियल दर्ज करें';
+
+  @override
+  String get wifiSyncUsesHotspot => 'WiFi सिंक आपके फोन को हॉटस्पॉट के रूप में उपयोग करता है। सेटिंग्स > पर्सनल हॉटस्पॉट में नाम और पासवर्ड खोजें।';
+
+  @override
+  String get hotspotNameSsid => 'हॉटस्पॉट नाम (SSID)';
+
+  @override
+  String get exampleIphoneHotspot => 'उदा. iPhone हॉटस्पॉट';
+
+  @override
+  String get password => 'पासवर्ड';
+
+  @override
+  String get enterHotspotPassword => 'हॉटस्पॉट पासवर्ड दर्ज करें';
+
+  @override
+  String get saveCredentials => 'क्रेडेंशियल सहेजें';
+
+  @override
+  String get clearCredentials => 'क्रेडेंशियल साफ़ करें';
+
+  @override
+  String get pleaseEnterHotspotName => 'कृपया हॉटस्पॉट नाम दर्ज करें';
+
+  @override
+  String get wifiCredentialsSaved => 'WiFi क्रेडेंशियल सहेजे गए';
+
+  @override
+  String get wifiCredentialsCleared => 'WiFi क्रेडेंशियल साफ़ किए गए';
 }

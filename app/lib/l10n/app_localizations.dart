@@ -8840,6 +8840,78 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Thank you for being a valued user of Omi. If you have any questions or concerns, feel free to reach out to us to team@basedhardware.com.'**
   String get thankYouText;
+
+  /// WiFi sync settings - wifiSyncSettings
+  ///
+  /// In en, this message translates to:
+  /// **'WiFi Sync Settings'**
+  String get wifiSyncSettings;
+
+  /// WiFi sync settings - enterHotspotCredentials
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your phone\'s hotspot credentials'**
+  String get enterHotspotCredentials;
+
+  /// WiFi sync settings - wifiSyncUsesHotspot
+  ///
+  /// In en, this message translates to:
+  /// **'WiFi sync uses your phone as a hotspot. Find your hotspot name and password in Settings > Personal Hotspot.'**
+  String get wifiSyncUsesHotspot;
+
+  /// WiFi sync settings - hotspotNameSsid
+  ///
+  /// In en, this message translates to:
+  /// **'Hotspot Name (SSID)'**
+  String get hotspotNameSsid;
+
+  /// WiFi sync settings - exampleIphoneHotspot
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. iPhone Hotspot'**
+  String get exampleIphoneHotspot;
+
+  /// WiFi sync settings - password
+  ///
+  /// In en, this message translates to:
+  /// **'Password'**
+  String get password;
+
+  /// WiFi sync settings - enterHotspotPassword
+  ///
+  /// In en, this message translates to:
+  /// **'Enter hotspot password'**
+  String get enterHotspotPassword;
+
+  /// WiFi sync settings - saveCredentials
+  ///
+  /// In en, this message translates to:
+  /// **'Save Credentials'**
+  String get saveCredentials;
+
+  /// WiFi sync settings - clearCredentials
+  ///
+  /// In en, this message translates to:
+  /// **'Clear Credentials'**
+  String get clearCredentials;
+
+  /// WiFi sync settings - pleaseEnterHotspotName
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a hotspot name'**
+  String get pleaseEnterHotspotName;
+
+  /// WiFi sync settings - wifiCredentialsSaved
+  ///
+  /// In en, this message translates to:
+  /// **'WiFi credentials saved'**
+  String get wifiCredentialsSaved;
+
+  /// WiFi sync settings - wifiCredentialsCleared
+  ///
+  /// In en, this message translates to:
+  /// **'WiFi credentials cleared'**
+  String get wifiCredentialsCleared;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

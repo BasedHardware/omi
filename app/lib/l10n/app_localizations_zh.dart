@@ -4568,4 +4568,40 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get thankYouText => '感谢您成为Omi的尊贵用户。如果您有任何问题或疑虑，请随时通过team@basedhardware.com与我们联系。';
+
+  @override
+  String get wifiSyncSettings => 'WiFi同步设置';
+
+  @override
+  String get enterHotspotCredentials => '输入您手机的热点凭据';
+
+  @override
+  String get wifiSyncUsesHotspot => 'WiFi同步使用您的手机作为热点。在设置 > 个人热点中找到热点名称和密码。';
+
+  @override
+  String get hotspotNameSsid => '热点名称 (SSID)';
+
+  @override
+  String get exampleIphoneHotspot => '例如 iPhone热点';
+
+  @override
+  String get password => '密码';
+
+  @override
+  String get enterHotspotPassword => '输入热点密码';
+
+  @override
+  String get saveCredentials => '保存凭据';
+
+  @override
+  String get clearCredentials => '清除凭据';
+
+  @override
+  String get pleaseEnterHotspotName => '请输入热点名称';
+
+  @override
+  String get wifiCredentialsSaved => 'WiFi凭据已保存';
+
+  @override
+  String get wifiCredentialsCleared => 'WiFi凭据已清除';
 }

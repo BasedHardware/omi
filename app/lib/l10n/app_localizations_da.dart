@@ -4574,4 +4574,40 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get thankYouText => 'Tak fordi du er en værdsat bruger af Omi. Hvis du har spørgsmål eller bekymringer, er du velkommen til at kontakte os på team@basedhardware.com.';
+
+  @override
+  String get wifiSyncSettings => 'WiFi-synkroniseringsindstillinger';
+
+  @override
+  String get enterHotspotCredentials => 'Indtast din telefons hotspot-legitimationsoplysninger';
+
+  @override
+  String get wifiSyncUsesHotspot => 'WiFi-synkronisering bruger din telefon som hotspot. Find dit hotspot-navn og adgangskode i Indstillinger > Personligt hotspot.';
+
+  @override
+  String get hotspotNameSsid => 'Hotspot-navn (SSID)';
+
+  @override
+  String get exampleIphoneHotspot => 'f.eks. iPhone Hotspot';
+
+  @override
+  String get password => 'Adgangskode';
+
+  @override
+  String get enterHotspotPassword => 'Indtast hotspot-adgangskode';
+
+  @override
+  String get saveCredentials => 'Gem legitimationsoplysninger';
+
+  @override
+  String get clearCredentials => 'Ryd legitimationsoplysninger';
+
+  @override
+  String get pleaseEnterHotspotName => 'Indtast venligst et hotspot-navn';
+
+  @override
+  String get wifiCredentialsSaved => 'WiFi-legitimationsoplysninger gemt';
+
+  @override
+  String get wifiCredentialsCleared => 'WiFi-legitimationsoplysninger ryddet';
 }

@@ -4574,4 +4574,40 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get thankYouText => 'Paldies, ka esat vērtīgs Omi lietotājs. Ja jums ir kādi jautājumi vai bažas, sazinieties ar mums pa team@basedhardware.com.';
+
+  @override
+  String get wifiSyncSettings => 'WiFi sinhronizācijas iestatījumi';
+
+  @override
+  String get enterHotspotCredentials => 'Ievadiet tālruņa tīklāja akreditācijas datus';
+
+  @override
+  String get wifiSyncUsesHotspot => 'WiFi sinhronizācija izmanto jūsu tālruni kā tīklāju. Atrodiet nosaukumu un paroli sadaļā Iestatījumi > Personālais tīklājs.';
+
+  @override
+  String get hotspotNameSsid => 'Tīklāja nosaukums (SSID)';
+
+  @override
+  String get exampleIphoneHotspot => 'piem. iPhone Hotspot';
+
+  @override
+  String get password => 'Parole';
+
+  @override
+  String get enterHotspotPassword => 'Ievadiet tīklāja paroli';
+
+  @override
+  String get saveCredentials => 'Saglabāt akreditācijas datus';
+
+  @override
+  String get clearCredentials => 'Notīrīt akreditācijas datus';
+
+  @override
+  String get pleaseEnterHotspotName => 'Lūdzu, ievadiet tīklāja nosaukumu';
+
+  @override
+  String get wifiCredentialsSaved => 'WiFi akreditācijas dati saglabāti';
+
+  @override
+  String get wifiCredentialsCleared => 'WiFi akreditācijas dati notīrīti';
 }

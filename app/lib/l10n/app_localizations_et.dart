@@ -4574,4 +4574,40 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get thankYouText => 'Täname, et olete Omi väärtuslik kasutaja. Kui teil on küsimusi või muresid, võtke meiega ühendust aadressil team@basedhardware.com.';
+
+  @override
+  String get wifiSyncSettings => 'WiFi sünkroonimise seaded';
+
+  @override
+  String get enterHotspotCredentials => 'Sisestage oma telefoni leviala mandaadid';
+
+  @override
+  String get wifiSyncUsesHotspot => 'WiFi sünkroonimine kasutab teie telefoni levialana. Leidke nimi ja parool menüüst Seaded > Isiklik leviala.';
+
+  @override
+  String get hotspotNameSsid => 'Leviala nimi (SSID)';
+
+  @override
+  String get exampleIphoneHotspot => 'nt iPhone Hotspot';
+
+  @override
+  String get password => 'Parool';
+
+  @override
+  String get enterHotspotPassword => 'Sisestage leviala parool';
+
+  @override
+  String get saveCredentials => 'Salvesta mandaadid';
+
+  @override
+  String get clearCredentials => 'Kustuta mandaadid';
+
+  @override
+  String get pleaseEnterHotspotName => 'Palun sisestage leviala nimi';
+
+  @override
+  String get wifiCredentialsSaved => 'WiFi mandaadid salvestatud';
+
+  @override
+  String get wifiCredentialsCleared => 'WiFi mandaadid kustutatud';
 }

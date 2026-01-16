@@ -4574,4 +4574,40 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get thankYouText => 'Благодарим ви, че сте ценен потребител на Omi. Ако имате въпроси или притеснения, не се колебайте да се свържете с нас на team@basedhardware.com.';
+
+  @override
+  String get wifiSyncSettings => 'Настройки за WiFi синхронизация';
+
+  @override
+  String get enterHotspotCredentials => 'Въведете данните за гореща точка на телефона';
+
+  @override
+  String get wifiSyncUsesHotspot => 'WiFi синхронизацията използва телефона ви като гореща точка. Намерете името и паролата в Настройки > Лична гореща точка.';
+
+  @override
+  String get hotspotNameSsid => 'Име на гореща точка (SSID)';
+
+  @override
+  String get exampleIphoneHotspot => 'напр. iPhone Hotspot';
+
+  @override
+  String get password => 'Парола';
+
+  @override
+  String get enterHotspotPassword => 'Въведете парола за гореща точка';
+
+  @override
+  String get saveCredentials => 'Запазване на данните';
+
+  @override
+  String get clearCredentials => 'Изчистване на данните';
+
+  @override
+  String get pleaseEnterHotspotName => 'Моля, въведете име на гореща точка';
+
+  @override
+  String get wifiCredentialsSaved => 'WiFi данните са запазени';
+
+  @override
+  String get wifiCredentialsCleared => 'WiFi данните са изчистени';
 }

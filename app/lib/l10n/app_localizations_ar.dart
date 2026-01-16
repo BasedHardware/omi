@@ -4574,4 +4574,40 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get thankYouText => 'شكرًا لك لكونك مستخدمًا قيمًا لـ Omi. إذا كانت لديك أي أسئلة أو مخاوف، فلا تتردد في التواصل معنا على team@basedhardware.com.';
+
+  @override
+  String get wifiSyncSettings => 'إعدادات مزامنة WiFi';
+
+  @override
+  String get enterHotspotCredentials => 'أدخل بيانات اعتماد نقطة اتصال هاتفك';
+
+  @override
+  String get wifiSyncUsesHotspot => 'تستخدم مزامنة WiFi هاتفك كنقطة اتصال. ابحث عن اسم وكلمة مرور نقطة الاتصال في الإعدادات > نقطة اتصال شخصية.';
+
+  @override
+  String get hotspotNameSsid => 'اسم نقطة الاتصال (SSID)';
+
+  @override
+  String get exampleIphoneHotspot => 'مثال: نقطة اتصال iPhone';
+
+  @override
+  String get password => 'كلمة المرور';
+
+  @override
+  String get enterHotspotPassword => 'أدخل كلمة مرور نقطة الاتصال';
+
+  @override
+  String get saveCredentials => 'حفظ بيانات الاعتماد';
+
+  @override
+  String get clearCredentials => 'مسح بيانات الاعتماد';
+
+  @override
+  String get pleaseEnterHotspotName => 'يرجى إدخال اسم نقطة الاتصال';
+
+  @override
+  String get wifiCredentialsSaved => 'تم حفظ بيانات اعتماد WiFi';
+
+  @override
+  String get wifiCredentialsCleared => 'تم مسح بيانات اعتماد WiFi';
 }

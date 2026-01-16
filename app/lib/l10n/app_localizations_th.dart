@@ -4574,4 +4574,40 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get thankYouText => 'ขอบคุณที่เป็นผู้ใช้ที่มีคุณค่าของ Omi หากคุณมีคำถามหรือข้อกังวลใดๆ โปรดติดต่อเราที่ team@basedhardware.com';
+
+  @override
+  String get wifiSyncSettings => 'การตั้งค่าการซิงค์ WiFi';
+
+  @override
+  String get enterHotspotCredentials => 'ป้อนข้อมูลรับรองฮอตสปอตของโทรศัพท์';
+
+  @override
+  String get wifiSyncUsesHotspot => 'การซิงค์ WiFi ใช้โทรศัพท์ของคุณเป็นฮอตสปอต ค้นหาชื่อและรหัสผ่านในการตั้งค่า > ฮอตสปอตส่วนตัว';
+
+  @override
+  String get hotspotNameSsid => 'ชื่อฮอตสปอต (SSID)';
+
+  @override
+  String get exampleIphoneHotspot => 'เช่น iPhone Hotspot';
+
+  @override
+  String get password => 'รหัสผ่าน';
+
+  @override
+  String get enterHotspotPassword => 'ป้อนรหัสผ่านฮอตสปอต';
+
+  @override
+  String get saveCredentials => 'บันทึกข้อมูลรับรอง';
+
+  @override
+  String get clearCredentials => 'ล้างข้อมูลรับรอง';
+
+  @override
+  String get pleaseEnterHotspotName => 'กรุณาป้อนชื่อฮอตสปอต';
+
+  @override
+  String get wifiCredentialsSaved => 'บันทึกข้อมูลรับรอง WiFi แล้ว';
+
+  @override
+  String get wifiCredentialsCleared => 'ล้างข้อมูลรับรอง WiFi แล้ว';
 }

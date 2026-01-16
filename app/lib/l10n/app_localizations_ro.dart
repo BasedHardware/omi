@@ -4574,4 +4574,40 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get thankYouText => 'Îți mulțumim că ești un utilizator valoros al Omi. Dacă ai întrebări sau nelămuriri, nu ezita să ne contactezi la team@basedhardware.com.';
+
+  @override
+  String get wifiSyncSettings => 'Setări sincronizare WiFi';
+
+  @override
+  String get enterHotspotCredentials => 'Introduceți datele hotspot-ului telefonului';
+
+  @override
+  String get wifiSyncUsesHotspot => 'Sincronizarea WiFi folosește telefonul ca hotspot. Găsește numele și parola în Setări > Hotspot personal.';
+
+  @override
+  String get hotspotNameSsid => 'Nume hotspot (SSID)';
+
+  @override
+  String get exampleIphoneHotspot => 'ex. iPhone Hotspot';
+
+  @override
+  String get password => 'Parolă';
+
+  @override
+  String get enterHotspotPassword => 'Introduceți parola hotspot';
+
+  @override
+  String get saveCredentials => 'Salvează datele de autentificare';
+
+  @override
+  String get clearCredentials => 'Șterge datele de autentificare';
+
+  @override
+  String get pleaseEnterHotspotName => 'Vă rugăm introduceți un nume de hotspot';
+
+  @override
+  String get wifiCredentialsSaved => 'Datele WiFi au fost salvate';
+
+  @override
+  String get wifiCredentialsCleared => 'Datele WiFi au fost șterse';
 }

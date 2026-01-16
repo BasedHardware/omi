@@ -4574,4 +4574,40 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get thankYouText => 'Děkujeme, že jste váženým uživatelem Omi. Máte-li jakékoli dotazy nebo obavy, neváhejte nás kontaktovat na team@basedhardware.com.';
+
+  @override
+  String get wifiSyncSettings => 'Nastavení WiFi synchronizace';
+
+  @override
+  String get enterHotspotCredentials => 'Zadejte přihlašovací údaje hotspotu telefonu';
+
+  @override
+  String get wifiSyncUsesHotspot => 'WiFi synchronizace používá váš telefon jako hotspot. Název a heslo najdete v Nastavení > Osobní hotspot.';
+
+  @override
+  String get hotspotNameSsid => 'Název hotspotu (SSID)';
+
+  @override
+  String get exampleIphoneHotspot => 'např. iPhone Hotspot';
+
+  @override
+  String get password => 'Heslo';
+
+  @override
+  String get enterHotspotPassword => 'Zadejte heslo hotspotu';
+
+  @override
+  String get saveCredentials => 'Uložit přihlašovací údaje';
+
+  @override
+  String get clearCredentials => 'Vymazat přihlašovací údaje';
+
+  @override
+  String get pleaseEnterHotspotName => 'Prosím zadejte název hotspotu';
+
+  @override
+  String get wifiCredentialsSaved => 'WiFi přihlašovací údaje uloženy';
+
+  @override
+  String get wifiCredentialsCleared => 'WiFi přihlašovací údaje vymazány';
 }

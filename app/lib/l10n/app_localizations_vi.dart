@@ -4574,4 +4574,40 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get thankYouText => 'Cảm ơn bạn đã là người dùng quý giá của Omi. Nếu bạn có bất kỳ câu hỏi hoặc lo ngại nào, hãy liên hệ với chúng tôi tại team@basedhardware.com.';
+
+  @override
+  String get wifiSyncSettings => 'Cài đặt đồng bộ WiFi';
+
+  @override
+  String get enterHotspotCredentials => 'Nhập thông tin đăng nhập điểm phát sóng điện thoại';
+
+  @override
+  String get wifiSyncUsesHotspot => 'Đồng bộ WiFi sử dụng điện thoại của bạn làm điểm phát sóng. Tìm tên và mật khẩu trong Cài đặt > Điểm truy cập cá nhân.';
+
+  @override
+  String get hotspotNameSsid => 'Tên điểm phát sóng (SSID)';
+
+  @override
+  String get exampleIphoneHotspot => 'vd: iPhone Hotspot';
+
+  @override
+  String get password => 'Mật khẩu';
+
+  @override
+  String get enterHotspotPassword => 'Nhập mật khẩu điểm phát sóng';
+
+  @override
+  String get saveCredentials => 'Lưu thông tin đăng nhập';
+
+  @override
+  String get clearCredentials => 'Xóa thông tin đăng nhập';
+
+  @override
+  String get pleaseEnterHotspotName => 'Vui lòng nhập tên điểm phát sóng';
+
+  @override
+  String get wifiCredentialsSaved => 'Đã lưu thông tin WiFi';
+
+  @override
+  String get wifiCredentialsCleared => 'Đã xóa thông tin WiFi';
 }

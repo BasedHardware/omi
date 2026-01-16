@@ -4574,4 +4574,40 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get thankYouText => 'Merci d\'être un utilisateur précieux d\'Omi. Si vous avez des questions ou des préoccupations, n\'hésitez pas à nous contacter à team@basedhardware.com.';
+
+  @override
+  String get wifiSyncSettings => 'Paramètres de synchronisation WiFi';
+
+  @override
+  String get enterHotspotCredentials => 'Entrez les identifiants du point d\'accès de votre téléphone';
+
+  @override
+  String get wifiSyncUsesHotspot => 'La synchronisation WiFi utilise votre téléphone comme point d\'accès. Trouvez le nom et le mot de passe dans Réglages > Partage de connexion.';
+
+  @override
+  String get hotspotNameSsid => 'Nom du point d\'accès (SSID)';
+
+  @override
+  String get exampleIphoneHotspot => 'ex. Point d\'accès iPhone';
+
+  @override
+  String get password => 'Mot de passe';
+
+  @override
+  String get enterHotspotPassword => 'Entrez le mot de passe du point d\'accès';
+
+  @override
+  String get saveCredentials => 'Enregistrer les identifiants';
+
+  @override
+  String get clearCredentials => 'Effacer les identifiants';
+
+  @override
+  String get pleaseEnterHotspotName => 'Veuillez entrer un nom de point d\'accès';
+
+  @override
+  String get wifiCredentialsSaved => 'Identifiants WiFi enregistrés';
+
+  @override
+  String get wifiCredentialsCleared => 'Identifiants WiFi effacés';
 }

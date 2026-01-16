@@ -4574,4 +4574,40 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get thankYouText => 'Terima kasih telah menjadi pengguna Omi yang berharga. Jika Anda memiliki pertanyaan atau kekhawatiran, jangan ragu untuk menghubungi kami di team@basedhardware.com.';
+
+  @override
+  String get wifiSyncSettings => 'Pengaturan Sinkronisasi WiFi';
+
+  @override
+  String get enterHotspotCredentials => 'Masukkan kredensial hotspot ponsel Anda';
+
+  @override
+  String get wifiSyncUsesHotspot => 'Sinkronisasi WiFi menggunakan ponsel Anda sebagai hotspot. Temukan nama dan kata sandi di Pengaturan > Hotspot Pribadi.';
+
+  @override
+  String get hotspotNameSsid => 'Nama Hotspot (SSID)';
+
+  @override
+  String get exampleIphoneHotspot => 'mis. iPhone Hotspot';
+
+  @override
+  String get password => 'Kata Sandi';
+
+  @override
+  String get enterHotspotPassword => 'Masukkan kata sandi hotspot';
+
+  @override
+  String get saveCredentials => 'Simpan Kredensial';
+
+  @override
+  String get clearCredentials => 'Hapus Kredensial';
+
+  @override
+  String get pleaseEnterHotspotName => 'Silakan masukkan nama hotspot';
+
+  @override
+  String get wifiCredentialsSaved => 'Kredensial WiFi disimpan';
+
+  @override
+  String get wifiCredentialsCleared => 'Kredensial WiFi dihapus';
 }

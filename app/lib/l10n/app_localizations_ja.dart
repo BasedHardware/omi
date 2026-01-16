@@ -4568,4 +4568,40 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get thankYouText => 'Omiの大切なユーザーであることに感謝します。ご質問やご不明な点がございましたら、team@basedhardware.comまでお気軽にお問い合わせください。';
+
+  @override
+  String get wifiSyncSettings => 'WiFi同期設定';
+
+  @override
+  String get enterHotspotCredentials => 'スマートフォンのホットスポット認証情報を入力';
+
+  @override
+  String get wifiSyncUsesHotspot => 'WiFi同期はスマートフォンをホットスポットとして使用します。設定 > インターネット共有で名前とパスワードを確認してください。';
+
+  @override
+  String get hotspotNameSsid => 'ホットスポット名（SSID）';
+
+  @override
+  String get exampleIphoneHotspot => '例：iPhoneホットスポット';
+
+  @override
+  String get password => 'パスワード';
+
+  @override
+  String get enterHotspotPassword => 'ホットスポットのパスワードを入力';
+
+  @override
+  String get saveCredentials => '認証情報を保存';
+
+  @override
+  String get clearCredentials => '認証情報をクリア';
+
+  @override
+  String get pleaseEnterHotspotName => 'ホットスポット名を入力してください';
+
+  @override
+  String get wifiCredentialsSaved => 'WiFi認証情報を保存しました';
+
+  @override
+  String get wifiCredentialsCleared => 'WiFi認証情報をクリアしました';
 }

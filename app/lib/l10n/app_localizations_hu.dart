@@ -4574,4 +4574,40 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get thankYouText => 'Köszönjük, hogy az Omi értékes felhasználója. Ha kérdése vagy aggálya van, forduljon hozzánk a team@basedhardware.com címen.';
+
+  @override
+  String get wifiSyncSettings => 'WiFi szinkronizálás beállításai';
+
+  @override
+  String get enterHotspotCredentials => 'Adja meg telefonja hotspot hitelesítő adatait';
+
+  @override
+  String get wifiSyncUsesHotspot => 'A WiFi szinkronizálás a telefont hotspotként használja. A nevet és jelszót a Beállítások > Személyes hotspot menüben találja.';
+
+  @override
+  String get hotspotNameSsid => 'Hotspot neve (SSID)';
+
+  @override
+  String get exampleIphoneHotspot => 'pl. iPhone Hotspot';
+
+  @override
+  String get password => 'Jelszó';
+
+  @override
+  String get enterHotspotPassword => 'Adja meg a hotspot jelszavát';
+
+  @override
+  String get saveCredentials => 'Hitelesítő adatok mentése';
+
+  @override
+  String get clearCredentials => 'Hitelesítő adatok törlése';
+
+  @override
+  String get pleaseEnterHotspotName => 'Kérjük, adjon meg egy hotspot nevet';
+
+  @override
+  String get wifiCredentialsSaved => 'WiFi hitelesítő adatok mentve';
+
+  @override
+  String get wifiCredentialsCleared => 'WiFi hitelesítő adatok törölve';
 }

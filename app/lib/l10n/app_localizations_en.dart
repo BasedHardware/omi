@@ -4581,4 +4581,40 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get thankYouText => 'Thank you for being a valued user of Omi. If you have any questions or concerns, feel free to reach out to us to team@basedhardware.com.';
+
+  @override
+  String get wifiSyncSettings => 'WiFi Sync Settings';
+
+  @override
+  String get enterHotspotCredentials => 'Enter your phone\'s hotspot credentials';
+
+  @override
+  String get wifiSyncUsesHotspot => 'WiFi sync uses your phone as a hotspot. Find your hotspot name and password in Settings > Personal Hotspot.';
+
+  @override
+  String get hotspotNameSsid => 'Hotspot Name (SSID)';
+
+  @override
+  String get exampleIphoneHotspot => 'e.g. iPhone Hotspot';
+
+  @override
+  String get password => 'Password';
+
+  @override
+  String get enterHotspotPassword => 'Enter hotspot password';
+
+  @override
+  String get saveCredentials => 'Save Credentials';
+
+  @override
+  String get clearCredentials => 'Clear Credentials';
+
+  @override
+  String get pleaseEnterHotspotName => 'Please enter a hotspot name';
+
+  @override
+  String get wifiCredentialsSaved => 'WiFi credentials saved';
+
+  @override
+  String get wifiCredentialsCleared => 'WiFi credentials cleared';
 }

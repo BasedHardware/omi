@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/services/services.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class WifiSyncSettingsPage extends StatefulWidget {
   final String? initialSsid;
@@ -45,7 +46,7 @@ class _WifiSyncSettingsPageState extends State<WifiSyncSettingsPage> {
 
     if (ssid.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a hotspot name')),
+        SnackBar(content: Text(context.l10n.pleaseEnterHotspotName)),
       );
       return;
     }
@@ -61,7 +62,7 @@ class _WifiSyncSettingsPageState extends State<WifiSyncSettingsPage> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('WiFi credentials saved')),
+          SnackBar(content: Text(context.l10n.wifiCredentialsSaved)),
         );
         Navigator.pop(context, true);
       }
@@ -81,7 +82,7 @@ class _WifiSyncSettingsPageState extends State<WifiSyncSettingsPage> {
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('WiFi credentials cleared')),
+        SnackBar(content: Text(context.l10n.wifiCredentialsCleared)),
       );
       Navigator.pop(context, true);
     }
@@ -94,7 +95,7 @@ class _WifiSyncSettingsPageState extends State<WifiSyncSettingsPage> {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
-        title: const Text('WiFi Sync Settings'),
+        title: Text(context.l10n.wifiSyncSettings),
         backgroundColor: Theme.of(context).colorScheme.primary,
         elevation: 0,
       ),
@@ -121,7 +122,7 @@ class _WifiSyncSettingsPageState extends State<WifiSyncSettingsPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Enter your phone\'s hotspot credentials',
+                          context.l10n.enterHotspotCredentials,
                           style: TextStyle(
                             color: Colors.blue.shade200,
                             fontSize: 14,
@@ -130,7 +131,7 @@ class _WifiSyncSettingsPageState extends State<WifiSyncSettingsPage> {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          'WiFi sync uses your phone as a hotspot. Find your hotspot name and password in Settings > Personal Hotspot.',
+                          context.l10n.wifiSyncUsesHotspot,
                           style: TextStyle(
                             color: Colors.blue.shade300,
                             fontSize: 13,
@@ -145,9 +146,9 @@ class _WifiSyncSettingsPageState extends State<WifiSyncSettingsPage> {
             const SizedBox(height: 28),
 
             // SSID Field
-            const Text(
-              'Hotspot Name (SSID)',
-              style: TextStyle(
+            Text(
+              context.l10n.hotspotNameSsid,
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
@@ -158,7 +159,7 @@ class _WifiSyncSettingsPageState extends State<WifiSyncSettingsPage> {
               controller: _ssidController,
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
-                hintText: 'e.g. iPhone Hotspot',
+                hintText: context.l10n.exampleIphoneHotspot,
                 hintStyle: TextStyle(color: Colors.grey.shade600),
                 filled: true,
                 fillColor: const Color(0xFF2A2A2E),
@@ -172,9 +173,9 @@ class _WifiSyncSettingsPageState extends State<WifiSyncSettingsPage> {
             const SizedBox(height: 20),
 
             // Password Field
-            const Text(
-              'Password',
-              style: TextStyle(
+            Text(
+              context.l10n.password,
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
@@ -186,7 +187,7 @@ class _WifiSyncSettingsPageState extends State<WifiSyncSettingsPage> {
               obscureText: true,
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
-                hintText: 'Enter hotspot password',
+                hintText: context.l10n.enterHotspotPassword,
                 hintStyle: TextStyle(color: Colors.grey.shade600),
                 filled: true,
                 fillColor: const Color(0xFF2A2A2E),
@@ -218,9 +219,9 @@ class _WifiSyncSettingsPageState extends State<WifiSyncSettingsPage> {
                         height: 20,
                         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
                       )
-                    : const Text(
-                        'Save Credentials',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    : Text(
+                        context.l10n.saveCredentials,
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                       ),
               ),
             ),
@@ -233,7 +234,7 @@ class _WifiSyncSettingsPageState extends State<WifiSyncSettingsPage> {
                 child: TextButton(
                   onPressed: _clearCredentials,
                   child: Text(
-                    'Clear Credentials',
+                    context.l10n.clearCredentials,
                     style: TextStyle(color: Colors.red.shade400, fontSize: 14),
                   ),
                 ),

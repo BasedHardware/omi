@@ -4568,4 +4568,40 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get thankYouText => 'Omi의 소중한 사용자가 되어 주셔서 감사합니다. 질문이나 우려 사항이 있으시면 team@basedhardware.com으로 연락해 주세요.';
+
+  @override
+  String get wifiSyncSettings => 'WiFi 동기화 설정';
+
+  @override
+  String get enterHotspotCredentials => '휴대폰 핫스팟 자격 증명 입력';
+
+  @override
+  String get wifiSyncUsesHotspot => 'WiFi 동기화는 휴대폰을 핫스팟으로 사용합니다. 설정 > 개인용 핫스팟에서 이름과 비밀번호를 찾으세요.';
+
+  @override
+  String get hotspotNameSsid => '핫스팟 이름 (SSID)';
+
+  @override
+  String get exampleIphoneHotspot => '예: iPhone 핫스팟';
+
+  @override
+  String get password => '비밀번호';
+
+  @override
+  String get enterHotspotPassword => '핫스팟 비밀번호 입력';
+
+  @override
+  String get saveCredentials => '자격 증명 저장';
+
+  @override
+  String get clearCredentials => '자격 증명 지우기';
+
+  @override
+  String get pleaseEnterHotspotName => '핫스팟 이름을 입력하세요';
+
+  @override
+  String get wifiCredentialsSaved => 'WiFi 자격 증명이 저장됨';
+
+  @override
+  String get wifiCredentialsCleared => 'WiFi 자격 증명이 지워짐';
 }

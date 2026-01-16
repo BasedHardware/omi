@@ -4575,4 +4575,40 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get thankYouText => 'Спасибо, что вы ценный пользователь Omi. Если у вас есть вопросы или проблемы, свяжитесь с нами по адресу team@basedhardware.com.';
+
+  @override
+  String get wifiSyncSettings => 'Настройки синхронизации WiFi';
+
+  @override
+  String get enterHotspotCredentials => 'Введите данные точки доступа телефона';
+
+  @override
+  String get wifiSyncUsesHotspot => 'WiFi синхронизация использует телефон как точку доступа. Найдите имя и пароль в Настройки > Режим модема.';
+
+  @override
+  String get hotspotNameSsid => 'Имя точки доступа (SSID)';
+
+  @override
+  String get exampleIphoneHotspot => 'напр. iPhone Hotspot';
+
+  @override
+  String get password => 'Пароль';
+
+  @override
+  String get enterHotspotPassword => 'Введите пароль точки доступа';
+
+  @override
+  String get saveCredentials => 'Сохранить данные';
+
+  @override
+  String get clearCredentials => 'Очистить данные';
+
+  @override
+  String get pleaseEnterHotspotName => 'Пожалуйста, введите имя точки доступа';
+
+  @override
+  String get wifiCredentialsSaved => 'Данные WiFi сохранены';
+
+  @override
+  String get wifiCredentialsCleared => 'Данные WiFi очищены';
 }

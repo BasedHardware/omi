@@ -4574,4 +4574,40 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get thankYouText => 'Σας ευχαριστούμε που είστε πολύτιμος χρήστης του Omi. Εάν έχετε ερωτήσεις ή ανησυχίες, μη διστάσετε να επικοινωνήσετε μαζί μας στο team@basedhardware.com.';
+
+  @override
+  String get wifiSyncSettings => 'Ρυθμίσεις συγχρονισμού WiFi';
+
+  @override
+  String get enterHotspotCredentials => 'Εισάγετε τα διαπιστευτήρια hotspot του τηλεφώνου σας';
+
+  @override
+  String get wifiSyncUsesHotspot => 'Ο συγχρονισμός WiFi χρησιμοποιεί το τηλέφωνό σας ως hotspot. Βρείτε το όνομα και τον κωδικό στις Ρυθμίσεις > Προσωπικό Hotspot.';
+
+  @override
+  String get hotspotNameSsid => 'Όνομα Hotspot (SSID)';
+
+  @override
+  String get exampleIphoneHotspot => 'π.χ. iPhone Hotspot';
+
+  @override
+  String get password => 'Κωδικός';
+
+  @override
+  String get enterHotspotPassword => 'Εισάγετε κωδικό hotspot';
+
+  @override
+  String get saveCredentials => 'Αποθήκευση διαπιστευτηρίων';
+
+  @override
+  String get clearCredentials => 'Εκκαθάριση διαπιστευτηρίων';
+
+  @override
+  String get pleaseEnterHotspotName => 'Παρακαλώ εισάγετε ένα όνομα hotspot';
+
+  @override
+  String get wifiCredentialsSaved => 'Τα διαπιστευτήρια WiFi αποθηκεύτηκαν';
+
+  @override
+  String get wifiCredentialsCleared => 'Τα διαπιστευτήρια WiFi διαγράφηκαν';
 }

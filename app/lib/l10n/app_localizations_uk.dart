@@ -4574,4 +4574,40 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get thankYouText => 'Дякуємо, що ви цінний користувач Omi. Якщо у вас є запитання чи занепокоєння, зв\'яжіться з нами за адресою team@basedhardware.com.';
+
+  @override
+  String get wifiSyncSettings => 'Налаштування синхронізації WiFi';
+
+  @override
+  String get enterHotspotCredentials => 'Введіть облікові дані точки доступу телефону';
+
+  @override
+  String get wifiSyncUsesHotspot => 'WiFi синхронізація використовує телефон як точку доступу. Знайдіть ім\'я та пароль у Налаштування > Режим модема.';
+
+  @override
+  String get hotspotNameSsid => 'Ім\'я точки доступу (SSID)';
+
+  @override
+  String get exampleIphoneHotspot => 'напр. iPhone Hotspot';
+
+  @override
+  String get password => 'Пароль';
+
+  @override
+  String get enterHotspotPassword => 'Введіть пароль точки доступу';
+
+  @override
+  String get saveCredentials => 'Зберегти облікові дані';
+
+  @override
+  String get clearCredentials => 'Очистити облікові дані';
+
+  @override
+  String get pleaseEnterHotspotName => 'Будь ласка, введіть ім\'я точки доступу';
+
+  @override
+  String get wifiCredentialsSaved => 'Облікові дані WiFi збережено';
+
+  @override
+  String get wifiCredentialsCleared => 'Облікові дані WiFi очищено';
 }

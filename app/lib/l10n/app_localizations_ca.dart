@@ -4574,4 +4574,40 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get thankYouText => 'Gràcies per ser un usuari valorat d\'Omi. Si tens alguna pregunta o preocupació, no dubtis a contactar-nos a team@basedhardware.com.';
+
+  @override
+  String get wifiSyncSettings => 'Configuració de sincronització WiFi';
+
+  @override
+  String get enterHotspotCredentials => 'Introdueix les credencials del punt d\'accés del telèfon';
+
+  @override
+  String get wifiSyncUsesHotspot => 'La sincronització WiFi utilitza el telèfon com a punt d\'accés. Troba el nom i la contrasenya a Configuració > Punt d\'accés personal.';
+
+  @override
+  String get hotspotNameSsid => 'Nom del punt d\'accés (SSID)';
+
+  @override
+  String get exampleIphoneHotspot => 'p. ex. Punt d\'accés iPhone';
+
+  @override
+  String get password => 'Contrasenya';
+
+  @override
+  String get enterHotspotPassword => 'Introdueix la contrasenya del punt d\'accés';
+
+  @override
+  String get saveCredentials => 'Desa les credencials';
+
+  @override
+  String get clearCredentials => 'Esborra les credencials';
+
+  @override
+  String get pleaseEnterHotspotName => 'Si us plau, introdueix un nom de punt d\'accés';
+
+  @override
+  String get wifiCredentialsSaved => 'Credencials WiFi desades';
+
+  @override
+  String get wifiCredentialsCleared => 'Credencials WiFi esborrades';
 }

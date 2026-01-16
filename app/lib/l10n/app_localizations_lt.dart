@@ -4574,4 +4574,40 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get thankYouText => 'Dėkojame, kad esate vertinamas Omi vartotojas. Jei turite klausimų ar rūpesčių, susisiekite su mumis adresu team@basedhardware.com.';
+
+  @override
+  String get wifiSyncSettings => 'WiFi sinchronizavimo nustatymai';
+
+  @override
+  String get enterHotspotCredentials => 'Įveskite telefono viešosios prieigos taško duomenis';
+
+  @override
+  String get wifiSyncUsesHotspot => 'WiFi sinchronizavimas naudoja jūsų telefoną kaip viešosios prieigos tašką. Raskite pavadinimą ir slaptažodį Nustatymai > Asmeninis viešosios prieigos taškas.';
+
+  @override
+  String get hotspotNameSsid => 'Viešosios prieigos taško pavadinimas (SSID)';
+
+  @override
+  String get exampleIphoneHotspot => 'pvz. iPhone Hotspot';
+
+  @override
+  String get password => 'Slaptažodis';
+
+  @override
+  String get enterHotspotPassword => 'Įveskite viešosios prieigos taško slaptažodį';
+
+  @override
+  String get saveCredentials => 'Išsaugoti duomenis';
+
+  @override
+  String get clearCredentials => 'Išvalyti duomenis';
+
+  @override
+  String get pleaseEnterHotspotName => 'Įveskite viešosios prieigos taško pavadinimą';
+
+  @override
+  String get wifiCredentialsSaved => 'WiFi duomenys išsaugoti';
+
+  @override
+  String get wifiCredentialsCleared => 'WiFi duomenys išvalyti';
 }
