@@ -3288,5 +3288,6 @@
   "knowledgeGraphDeleteDescription": "การดำเนินการนี้จะลบข้อมูลกราฟความรู้ที่ได้มาทั้งหมด (โหนดและการเชื่อมต่อ) ความทรงจำดั้งเดิมของคุณจะยังคงปลอดภัย กราฟจะถูกสร้างขึ้นใหม่เมื่อเวลาผ่านไปหรือเมื่อมีการร้องขอครั้งต่อไป",
   "@knowledgeGraphDeleteDescription": {
     "description": "Developer settings - knowledgeGraphDeleteDescription"
-  }
+  },
+  "configureDailySummaryDigest": "กำหนดค่าสรุปงานประจำวันของคุณ"
 }

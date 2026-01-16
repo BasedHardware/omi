@@ -3288,5 +3288,6 @@
   "knowledgeGraphDeleteDescription": "Dette vil slette alle avledede kunnskapsgrafdata (noder og forbindelser). Dine originale minner vil forbli trygge. Grafen vil gjenoppbygges over tid eller ved neste forespørsel.",
   "@knowledgeGraphDeleteDescription": {
     "description": "Developer settings - knowledgeGraphDeleteDescription"
-  }
+  },
+  "configureDailySummaryDigest": "Konfigurer din daglige oppgaveoversikt"
 }

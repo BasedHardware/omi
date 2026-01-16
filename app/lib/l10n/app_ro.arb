@@ -3288,5 +3288,6 @@
   "knowledgeGraphDeleteDescription": "Aceasta va șterge toate datele derivate ale graficului cunoștințelor (noduri și conexiuni). Amintirile tale originale vor rămâne în siguranță. Graficul va fi reconstruit în timp sau la următoarea solicitare.",
   "@knowledgeGraphDeleteDescription": {
     "description": "Developer settings - knowledgeGraphDeleteDescription"
-  }
+  },
+  "configureDailySummaryDigest": "Configurați rezumatul zilnic al sarcinilor"
 }

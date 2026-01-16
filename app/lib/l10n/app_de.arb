@@ -1735,5 +1735,6 @@
   "knowledgeGraphDeleteDescription": "Dies löscht alle abgeleiteten Wissensgraph-Daten (Knoten und Verbindungen). Ihre ursprünglichen Erinnerungen bleiben sicher. Der Graph wird im Laufe der Zeit oder bei der nächsten Anfrage neu erstellt.",
   "@knowledgeGraphDeleteDescription": {
     "description": "Developer settings - knowledgeGraphDeleteDescription"
-  }
+  },
+  "configureDailySummaryDigest": "Konfigurieren Sie Ihre tägliche Aufgabenübersicht"
 }

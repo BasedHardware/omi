@@ -1735,5 +1735,6 @@
   "knowledgeGraphDeleteDescription": "यह सभी व्युत्पन्न नॉलेज ग्राफ डेटा (नोड्स और कनेक्शन) को हटा देगा। आपकी मूल यादें सुरक्षित रहेंगी। ग्राफ समय के साथ या अगले अनुरोध पर पुनर्निर्मित होगा।",
   "@knowledgeGraphDeleteDescription": {
     "description": "Developer settings - knowledgeGraphDeleteDescription"
-  }
+  },
+  "configureDailySummaryDigest": "अपना दैनिक कार्य सारांश कॉन्फ़िगर करें"
 }

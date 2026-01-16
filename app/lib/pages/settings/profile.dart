@@ -249,8 +249,8 @@ class _ProfilePageState extends State<ProfilePage> {
             _buildSectionContainer(
               children: [
                 _buildProfileItem(
-                  title: 'Daily Summary',
-                  subtitle: 'Configure your daily action items digest',
+                  title: context.l10n.dailySummary,
+                  subtitle: context.l10n.configureDailySummaryDigest,
                   icon: const FaIcon(FontAwesomeIcons.solidBell, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
                     routeToPage(context, const DailySummarySettingsPage());

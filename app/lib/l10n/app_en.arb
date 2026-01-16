@@ -5546,5 +5546,9 @@
   "knowledgeGraphDeleteDescription": "This will delete all derived knowledge graph data (nodes and connections). Your original memories will remain safe. The graph will be rebuilt over time or upon next request.",
   "@knowledgeGraphDeleteDescription": {
     "description": "Developer settings - knowledgeGraphDeleteDescription"
+  },
+  "configureDailySummaryDigest": "Configure your daily action items digest",
+  "@configureDailySummaryDigest": {
+    "description": "Subtitle for Daily Summary menu item in profile settings"
   }
 }

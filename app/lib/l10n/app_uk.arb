@@ -3288,5 +3288,6 @@
   "knowledgeGraphDeleteDescription": "Це видалить усі похідні дані графа знань (вузли та з'єднання). Ваші оригінальні спогади залишаться в безпеці. Граф буде відновлено з часом або за наступним запитом.",
   "@knowledgeGraphDeleteDescription": {
     "description": "Developer settings - knowledgeGraphDeleteDescription"
-  }
+  },
+  "configureDailySummaryDigest": "Налаштуйте щоденний підсумок завдань"
 }
