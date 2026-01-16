@@ -3057,5 +3057,10 @@
   "deleteItemQuestion": "Изтриване на {item}?",
   "deleteItemConfirmation": "Сигурни ли сте, че искате да изтриете това {item}? Това действие не може да бъде отменено.",
   "revokeKeyQuestion": "Отмяна на ключа?",
-  "revokeKeyConfirmation": "Сигурни ли сте, че искате да отмените ключа \"{keyName}\"? Това действие не може да бъде отменено."
+  "revokeKeyConfirmation": "Сигурни ли сте, че искате да отмените ключа \"{keyName}\"? Това действие не може да бъде отменено.",
+  "createNewKey": "Създаване на нов ключ",
+  "keyNameHint": "напр. Claude Desktop",
+  "pleaseEnterAName": "Моля, въведете име.",
+  "failedToCreateKeyWithError": "Неуспешно създаване на ключ: {error}",
+  "failedToCreateKeyTryAgain": "Неуспешно създаване на ключ. Моля, опитайте отново."
 }

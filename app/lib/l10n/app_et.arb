@@ -3055,5 +3055,10 @@
   "deleteItemQuestion": "Kustuta {item}?",
   "deleteItemConfirmation": "Kas olete kindel, et soovite seda {item} kustutada? Seda toimingut ei saa tagasi võtta.",
   "revokeKeyQuestion": "Tühista võti?",
-  "revokeKeyConfirmation": "Kas olete kindel, et soovite võtme \"{keyName}\" tühistada? Seda toimingut ei saa tagasi võtta."
+  "revokeKeyConfirmation": "Kas olete kindel, et soovite võtme \"{keyName}\" tühistada? Seda toimingut ei saa tagasi võtta.",
+  "createNewKey": "Loo uus võti",
+  "keyNameHint": "nt Claude Desktop",
+  "pleaseEnterAName": "Palun sisestage nimi.",
+  "failedToCreateKeyWithError": "Võtme loomine ebaõnnestus: {error}",
+  "failedToCreateKeyTryAgain": "Võtme loomine ebaõnnestus. Palun proovige uuesti."
 }

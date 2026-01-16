@@ -1502,5 +1502,10 @@
   "deleteItemQuestion": "{item} löschen?",
   "deleteItemConfirmation": "Sind Sie sicher, dass Sie {item} löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.",
   "revokeKeyQuestion": "Schlüssel widerrufen?",
-  "revokeKeyConfirmation": "Sind Sie sicher, dass Sie den Schlüssel \"{keyName}\" widerrufen möchten? Diese Aktion kann nicht rückgängig gemacht werden."
+  "revokeKeyConfirmation": "Sind Sie sicher, dass Sie den Schlüssel \"{keyName}\" widerrufen möchten? Diese Aktion kann nicht rückgängig gemacht werden.",
+  "createNewKey": "Neuen Schlüssel erstellen",
+  "keyNameHint": "z.B. Claude Desktop",
+  "pleaseEnterAName": "Bitte geben Sie einen Namen ein.",
+  "failedToCreateKeyWithError": "Schlüssel konnte nicht erstellt werden: {error}",
+  "failedToCreateKeyTryAgain": "Schlüssel konnte nicht erstellt werden. Bitte versuchen Sie es erneut."
 }

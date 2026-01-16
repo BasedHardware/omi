@@ -3055,5 +3055,10 @@
   "deleteItemQuestion": "{item} törlése?",
   "deleteItemConfirmation": "Biztosan törölni szeretné ezt a(z) {item}-t? Ez a művelet nem vonható vissza.",
   "revokeKeyQuestion": "Kulcs visszavonása?",
-  "revokeKeyConfirmation": "Biztosan vissza szeretné vonni a(z) \"{keyName}\" kulcsot? Ez a művelet nem vonható vissza."
+  "revokeKeyConfirmation": "Biztosan vissza szeretné vonni a(z) \"{keyName}\" kulcsot? Ez a művelet nem vonható vissza.",
+  "createNewKey": "Új kulcs létrehozása",
+  "keyNameHint": "pl. Claude Desktop",
+  "pleaseEnterAName": "Kérjük, adjon meg egy nevet.",
+  "failedToCreateKeyWithError": "Nem sikerült létrehozni a kulcsot: {error}",
+  "failedToCreateKeyTryAgain": "Nem sikerült létrehozni a kulcsot. Kérjük, próbálja újra."
 }

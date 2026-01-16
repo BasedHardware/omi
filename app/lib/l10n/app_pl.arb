@@ -3055,5 +3055,10 @@
   "deleteItemQuestion": "Usunąć {item}?",
   "deleteItemConfirmation": "Czy na pewno chcesz usunąć tę {item}? Tej czynności nie można cofnąć.",
   "revokeKeyQuestion": "Unieważnić klucz?",
-  "revokeKeyConfirmation": "Czy na pewno chcesz unieważnić klucz \"{keyName}\"? Tej czynności nie można cofnąć."
+  "revokeKeyConfirmation": "Czy na pewno chcesz unieważnić klucz \"{keyName}\"? Tej czynności nie można cofnąć.",
+  "createNewKey": "Utwórz nowy klucz",
+  "keyNameHint": "np. Claude Desktop",
+  "pleaseEnterAName": "Proszę podać nazwę.",
+  "failedToCreateKeyWithError": "Nie udało się utworzyć klucza: {error}",
+  "failedToCreateKeyTryAgain": "Nie udało się utworzyć klucza. Spróbuj ponownie."
 }

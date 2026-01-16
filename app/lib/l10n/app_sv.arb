@@ -3055,5 +3055,10 @@
   "deleteItemQuestion": "Radera {item}?",
   "deleteItemConfirmation": "Är du säker på att du vill radera denna {item}? Denna åtgärd kan inte ångras.",
   "revokeKeyQuestion": "Återkalla nyckel?",
-  "revokeKeyConfirmation": "Är du säker på att du vill återkalla nyckeln \"{keyName}\"? Denna åtgärd kan inte ångras."
+  "revokeKeyConfirmation": "Är du säker på att du vill återkalla nyckeln \"{keyName}\"? Denna åtgärd kan inte ångras.",
+  "createNewKey": "Skapa ny nyckel",
+  "keyNameHint": "t.ex. Claude Desktop",
+  "pleaseEnterAName": "Ange ett namn.",
+  "failedToCreateKeyWithError": "Det gick inte att skapa nyckel: {error}",
+  "failedToCreateKeyTryAgain": "Det gick inte att skapa nyckel. Försök igen."
 }

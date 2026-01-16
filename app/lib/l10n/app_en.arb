@@ -4968,5 +4968,30 @@
         "type": "String"
       }
     }
+  },
+  "createNewKey": "Create New Key",
+  "@createNewKey": {
+    "description": "Dialog title for creating a new API key"
+  },
+  "keyNameHint": "e.g., Claude Desktop",
+  "@keyNameHint": {
+    "description": "Hint text showing example key name"
+  },
+  "pleaseEnterAName": "Please enter a name.",
+  "@pleaseEnterAName": {
+    "description": "Validation error when name is empty"
+  },
+  "failedToCreateKeyWithError": "Failed to create key: {error}",
+  "@failedToCreateKeyWithError": {
+    "description": "Error message with specific error details",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToCreateKeyTryAgain": "Failed to create key. Please try again.",
+  "@failedToCreateKeyTryAgain": {
+    "description": "Generic error message for key creation failure"
   }
 }

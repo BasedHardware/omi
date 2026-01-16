@@ -3055,5 +3055,10 @@
   "deleteItemQuestion": "ลบ{item}?",
   "deleteItemConfirmation": "คุณแน่ใจหรือไม่ว่าต้องการลบ{item}นี้? การกระทำนี้ไม่สามารถยกเลิกได้",
   "revokeKeyQuestion": "เพิกถอนคีย์?",
-  "revokeKeyConfirmation": "คุณแน่ใจหรือไม่ว่าต้องการเพิกถอนคีย์ \"{keyName}\"? การกระทำนี้ไม่สามารถยกเลิกได้"
+  "revokeKeyConfirmation": "คุณแน่ใจหรือไม่ว่าต้องการเพิกถอนคีย์ \"{keyName}\"? การกระทำนี้ไม่สามารถยกเลิกได้",
+  "createNewKey": "สร้างคีย์ใหม่",
+  "keyNameHint": "เช่น Claude Desktop",
+  "pleaseEnterAName": "กรุณากรอกชื่อ",
+  "failedToCreateKeyWithError": "ไม่สามารถสร้างคีย์: {error}",
+  "failedToCreateKeyTryAgain": "ไม่สามารถสร้างคีย์ได้ กรุณาลองใหม่อีกครั้ง"
 }

@@ -1502,5 +1502,10 @@
   "deleteItemQuestion": "Excluir {item}?",
   "deleteItemConfirmation": "Tem certeza de que deseja excluir este {item}? Esta ação não pode ser desfeita.",
   "revokeKeyQuestion": "Revogar chave?",
-  "revokeKeyConfirmation": "Tem certeza de que deseja revogar a chave \"{keyName}\"? Esta ação não pode ser desfeita."
+  "revokeKeyConfirmation": "Tem certeza de que deseja revogar a chave \"{keyName}\"? Esta ação não pode ser desfeita.",
+  "createNewKey": "Criar nova chave",
+  "keyNameHint": "ex.: Claude Desktop",
+  "pleaseEnterAName": "Por favor, insira um nome.",
+  "failedToCreateKeyWithError": "Falha ao criar chave: {error}",
+  "failedToCreateKeyTryAgain": "Falha ao criar chave. Por favor, tente novamente."
 }

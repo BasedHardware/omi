@@ -3055,5 +3055,10 @@
   "deleteItemQuestion": "Slette {item}?",
   "deleteItemConfirmation": "Er du sikker på at du vil slette denne {item}? Denne handlingen kan ikke angres.",
   "revokeKeyQuestion": "Tilbakekall nøkkel?",
-  "revokeKeyConfirmation": "Er du sikker på at du vil tilbakekalle nøkkelen \"{keyName}\"? Denne handlingen kan ikke angres."
+  "revokeKeyConfirmation": "Er du sikker på at du vil tilbakekalle nøkkelen \"{keyName}\"? Denne handlingen kan ikke angres.",
+  "createNewKey": "Opprett ny nøkkel",
+  "keyNameHint": "f.eks. Claude Desktop",
+  "pleaseEnterAName": "Vennligst skriv inn et navn.",
+  "failedToCreateKeyWithError": "Kunne ikke opprette nøkkel: {error}",
+  "failedToCreateKeyTryAgain": "Kunne ikke opprette nøkkel. Vennligst prøv igjen."
 }

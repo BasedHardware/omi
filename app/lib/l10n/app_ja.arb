@@ -1481,5 +1481,10 @@
   "deleteItemQuestion": "{item}を削除しますか？",
   "deleteItemConfirmation": "この{item}を削除してもよろしいですか？この操作は元に戻せません。",
   "revokeKeyQuestion": "キーを取り消しますか？",
-  "revokeKeyConfirmation": "キー「{keyName}」を取り消してもよろしいですか？この操作は元に戻せません。"
+  "revokeKeyConfirmation": "キー「{keyName}」を取り消してもよろしいですか？この操作は元に戻せません。",
+  "createNewKey": "新しいキーを作成",
+  "keyNameHint": "例: Claude Desktop",
+  "pleaseEnterAName": "名前を入力してください。",
+  "failedToCreateKeyWithError": "キーの作成に失敗しました: {error}",
+  "failedToCreateKeyTryAgain": "キーの作成に失敗しました。もう一度お試しください。"
 }

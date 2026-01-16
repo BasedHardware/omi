@@ -1873,5 +1873,10 @@
   "deleteItemQuestion": "{item} verwijderen?",
   "deleteItemConfirmation": "Weet u zeker dat u deze {item} wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.",
   "revokeKeyQuestion": "Sleutel intrekken?",
-  "revokeKeyConfirmation": "Weet u zeker dat u de sleutel \"{keyName}\" wilt intrekken? Deze actie kan niet ongedaan worden gemaakt."
+  "revokeKeyConfirmation": "Weet u zeker dat u de sleutel \"{keyName}\" wilt intrekken? Deze actie kan niet ongedaan worden gemaakt.",
+  "createNewKey": "Nieuwe sleutel maken",
+  "keyNameHint": "bijv. Claude Desktop",
+  "pleaseEnterAName": "Voer een naam in.",
+  "failedToCreateKeyWithError": "Sleutel maken mislukt: {error}",
+  "failedToCreateKeyTryAgain": "Sleutel maken mislukt. Probeer het opnieuw."
 }

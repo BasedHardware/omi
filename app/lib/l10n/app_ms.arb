@@ -3055,5 +3055,10 @@
   "deleteItemQuestion": "Padam {item}?",
   "deleteItemConfirmation": "Adakah anda pasti mahu memadamkan {item} ini? Tindakan ini tidak boleh dibuat asal.",
   "revokeKeyQuestion": "Batalkan Kunci?",
-  "revokeKeyConfirmation": "Adakah anda pasti mahu membatalkan kunci \"{keyName}\"? Tindakan ini tidak boleh dibuat asal."
+  "revokeKeyConfirmation": "Adakah anda pasti mahu membatalkan kunci \"{keyName}\"? Tindakan ini tidak boleh dibuat asal.",
+  "createNewKey": "Cipta Kunci Baharu",
+  "keyNameHint": "cth., Claude Desktop",
+  "pleaseEnterAName": "Sila masukkan nama.",
+  "failedToCreateKeyWithError": "Gagal mencipta kunci: {error}",
+  "failedToCreateKeyTryAgain": "Gagal mencipta kunci. Sila cuba lagi."
 }

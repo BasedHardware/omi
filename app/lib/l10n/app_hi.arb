@@ -1502,5 +1502,10 @@
   "deleteItemQuestion": "{item} हटाएं?",
   "deleteItemConfirmation": "क्या आप वाकई इस {item} को हटाना चाहते हैं? इस क्रिया को पूर्ववत नहीं किया जा सकता।",
   "revokeKeyQuestion": "कुंजी रद्द करें?",
-  "revokeKeyConfirmation": "क्या आप वाकई कुंजी \"{keyName}\" को रद्द करना चाहते हैं? इस क्रिया को पूर्ववत नहीं किया जा सकता।"
+  "revokeKeyConfirmation": "क्या आप वाकई कुंजी \"{keyName}\" को रद्द करना चाहते हैं? इस क्रिया को पूर्ववत नहीं किया जा सकता।",
+  "createNewKey": "नई कुंजी बनाएं",
+  "keyNameHint": "जैसे, Claude Desktop",
+  "pleaseEnterAName": "कृपया एक नाम दर्ज करें।",
+  "failedToCreateKeyWithError": "कुंजी बनाने में विफल: {error}",
+  "failedToCreateKeyTryAgain": "कुंजी बनाने में विफल। कृपया पुनः प्रयास करें।"
 }

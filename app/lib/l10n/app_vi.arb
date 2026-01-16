@@ -3055,5 +3055,10 @@
   "deleteItemQuestion": "Xóa {item}?",
   "deleteItemConfirmation": "Bạn có chắc chắn muốn xóa {item} này? Hành động này không thể hoàn tác.",
   "revokeKeyQuestion": "Thu hồi khóa?",
-  "revokeKeyConfirmation": "Bạn có chắc chắn muốn thu hồi khóa \"{keyName}\"? Hành động này không thể hoàn tác."
+  "revokeKeyConfirmation": "Bạn có chắc chắn muốn thu hồi khóa \"{keyName}\"? Hành động này không thể hoàn tác.",
+  "createNewKey": "Tạo khóa mới",
+  "keyNameHint": "vd: Claude Desktop",
+  "pleaseEnterAName": "Vui lòng nhập tên.",
+  "failedToCreateKeyWithError": "Không thể tạo khóa: {error}",
+  "failedToCreateKeyTryAgain": "Không thể tạo khóa. Vui lòng thử lại."
 }

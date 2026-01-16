@@ -3057,5 +3057,10 @@
   "deleteItemQuestion": "Smazat {item}?",
   "deleteItemConfirmation": "Opravdu chcete smazat tuto {item}? Tuto akci nelze vrátit zpět.",
   "revokeKeyQuestion": "Odvolat klíč?",
-  "revokeKeyConfirmation": "Opravdu chcete odvolat klíč \"{keyName}\"? Tuto akci nelze vrátit zpět."
+  "revokeKeyConfirmation": "Opravdu chcete odvolat klíč \"{keyName}\"? Tuto akci nelze vrátit zpět.",
+  "createNewKey": "Vytvořit nový klíč",
+  "keyNameHint": "např. Claude Desktop",
+  "pleaseEnterAName": "Prosím zadejte název.",
+  "failedToCreateKeyWithError": "Nepodařilo se vytvořit klíč: {error}",
+  "failedToCreateKeyTryAgain": "Nepodařilo se vytvořit klíč. Zkuste to prosím znovu."
 }

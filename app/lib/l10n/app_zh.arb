@@ -1502,5 +1502,10 @@
   "deleteItemQuestion": "删除{item}？",
   "deleteItemConfirmation": "您确定要删除此{item}吗？此操作无法撤消。",
   "revokeKeyQuestion": "撤销密钥？",
-  "revokeKeyConfirmation": "您确定要撤销密钥\"{keyName}\"吗？此操作无法撤消。"
+  "revokeKeyConfirmation": "您确定要撤销密钥\"{keyName}\"吗？此操作无法撤消。",
+  "createNewKey": "创建新密钥",
+  "keyNameHint": "例如：Claude Desktop",
+  "pleaseEnterAName": "请输入名称。",
+  "failedToCreateKeyWithError": "创建密钥失败：{error}",
+  "failedToCreateKeyTryAgain": "创建密钥失败。请重试。"
 }

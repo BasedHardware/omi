@@ -3055,5 +3055,10 @@
   "deleteItemQuestion": "{item}을 삭제하시겠습니까?",
   "deleteItemConfirmation": "이 {item}을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
   "revokeKeyQuestion": "키를 취소하시겠습니까?",
-  "revokeKeyConfirmation": "\"{keyName}\" 키를 취소하시겠습니까? 이 작업은 되돌릴 수 없습니다."
+  "revokeKeyConfirmation": "\"{keyName}\" 키를 취소하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
+  "createNewKey": "새 키 만들기",
+  "keyNameHint": "예: Claude Desktop",
+  "pleaseEnterAName": "이름을 입력하세요.",
+  "failedToCreateKeyWithError": "키 생성 실패: {error}",
+  "failedToCreateKeyTryAgain": "키 생성에 실패했습니다. 다시 시도해 주세요."
 }

@@ -3037,5 +3037,10 @@
   "deleteItemQuestion": "Eliminare {item}?",
   "deleteItemConfirmation": "Sei sicuro di voler eliminare questo {item}? Questa azione non può essere annullata.",
   "revokeKeyQuestion": "Revocare la chiave?",
-  "revokeKeyConfirmation": "Sei sicuro di voler revocare la chiave \"{keyName}\"? Questa azione non può essere annullata."
+  "revokeKeyConfirmation": "Sei sicuro di voler revocare la chiave \"{keyName}\"? Questa azione non può essere annullata.",
+  "createNewKey": "Crea nuova chiave",
+  "keyNameHint": "es. Claude Desktop",
+  "pleaseEnterAName": "Inserisci un nome.",
+  "failedToCreateKeyWithError": "Impossibile creare la chiave: {error}",
+  "failedToCreateKeyTryAgain": "Impossibile creare la chiave. Riprova."
 }

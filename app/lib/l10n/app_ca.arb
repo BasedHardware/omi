@@ -3057,5 +3057,10 @@
   "deleteItemQuestion": "Eliminar {item}?",
   "deleteItemConfirmation": "Estàs segur que vols eliminar aquest {item}? Aquesta acció no es pot desfer.",
   "revokeKeyQuestion": "Revocar la clau?",
-  "revokeKeyConfirmation": "Estàs segur que vols revocar la clau \"{keyName}\"? Aquesta acció no es pot desfer."
+  "revokeKeyConfirmation": "Estàs segur que vols revocar la clau \"{keyName}\"? Aquesta acció no es pot desfer.",
+  "createNewKey": "Crear una nova clau",
+  "keyNameHint": "p. ex., Claude Desktop",
+  "pleaseEnterAName": "Si us plau, introdueix un nom.",
+  "failedToCreateKeyWithError": "Error en crear la clau: {error}",
+  "failedToCreateKeyTryAgain": "Error en crear la clau. Si us plau, torna-ho a provar."
 }

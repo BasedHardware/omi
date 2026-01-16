@@ -3037,5 +3037,10 @@
   "deleteItemQuestion": "{item} Silinsin mi?",
   "deleteItemConfirmation": "Bu {item} silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.",
   "revokeKeyQuestion": "Anahtar İptal Edilsin mi?",
-  "revokeKeyConfirmation": "\"{keyName}\" anahtarını iptal etmek istediğinizden emin misiniz? Bu işlem geri alınamaz."
+  "revokeKeyConfirmation": "\"{keyName}\" anahtarını iptal etmek istediğinizden emin misiniz? Bu işlem geri alınamaz.",
+  "createNewKey": "Yeni Anahtar Oluştur",
+  "keyNameHint": "örn. Claude Desktop",
+  "pleaseEnterAName": "Lütfen bir ad girin.",
+  "failedToCreateKeyWithError": "Anahtar oluşturulamadı: {error}",
+  "failedToCreateKeyTryAgain": "Anahtar oluşturulamadı. Lütfen tekrar deneyin."
 }

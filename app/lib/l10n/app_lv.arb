@@ -3055,5 +3055,10 @@
   "deleteItemQuestion": "Dzēst {item}?",
   "deleteItemConfirmation": "Vai tiešām vēlaties dzēst šo {item}? Šo darbību nevar atsaukt.",
   "revokeKeyQuestion": "Atsaukt atslēgu?",
-  "revokeKeyConfirmation": "Vai tiešām vēlaties atsaukt atslēgu \"{keyName}\"? Šo darbību nevar atsaukt."
+  "revokeKeyConfirmation": "Vai tiešām vēlaties atsaukt atslēgu \"{keyName}\"? Šo darbību nevar atsaukt.",
+  "createNewKey": "Izveidot jaunu atslēgu",
+  "keyNameHint": "piem., Claude Desktop",
+  "pleaseEnterAName": "Lūdzu, ievadiet nosaukumu.",
+  "failedToCreateKeyWithError": "Neizdevās izveidot atslēgu: {error}",
+  "failedToCreateKeyTryAgain": "Neizdevās izveidot atslēgu. Lūdzu, mēģiniet vēlreiz."
 }

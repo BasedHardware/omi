@@ -3055,5 +3055,10 @@
   "deleteItemQuestion": "Poista {item}?",
   "deleteItemConfirmation": "Haluatko varmasti poistaa tämän {item}? Tätä toimintoa ei voi kumota.",
   "revokeKeyQuestion": "Peruuta avain?",
-  "revokeKeyConfirmation": "Haluatko varmasti peruuttaa avaimen \"{keyName}\"? Tätä toimintoa ei voi kumota."
+  "revokeKeyConfirmation": "Haluatko varmasti peruuttaa avaimen \"{keyName}\"? Tätä toimintoa ei voi kumota.",
+  "createNewKey": "Luo uusi avain",
+  "keyNameHint": "esim. Claude Desktop",
+  "pleaseEnterAName": "Anna nimi.",
+  "failedToCreateKeyWithError": "Avaimen luominen epäonnistui: {error}",
+  "failedToCreateKeyTryAgain": "Avaimen luominen epäonnistui. Yritä uudelleen."
 }

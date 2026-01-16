@@ -3055,5 +3055,10 @@
   "deleteItemQuestion": "Διαγραφή {item};",
   "deleteItemConfirmation": "Είστε βέβαιοι ότι θέλετε να διαγράψετε αυτό το {item}; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.",
   "revokeKeyQuestion": "Ανάκληση κλειδιού;",
-  "revokeKeyConfirmation": "Είστε βέβαιοι ότι θέλετε να ανακαλέσετε το κλειδί \"{keyName}\"; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί."
+  "revokeKeyConfirmation": "Είστε βέβαιοι ότι θέλετε να ανακαλέσετε το κλειδί \"{keyName}\"; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.",
+  "createNewKey": "Δημιουργία νέου κλειδιού",
+  "keyNameHint": "π.χ. Claude Desktop",
+  "pleaseEnterAName": "Παρακαλώ εισάγετε ένα όνομα.",
+  "failedToCreateKeyWithError": "Αποτυχία δημιουργίας κλειδιού: {error}",
+  "failedToCreateKeyTryAgain": "Αποτυχία δημιουργίας κλειδιού. Παρακαλώ δοκιμάστε ξανά."
 }

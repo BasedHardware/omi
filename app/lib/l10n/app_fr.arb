@@ -1873,5 +1873,10 @@
   "deleteItemQuestion": "Supprimer {item} ?",
   "deleteItemConfirmation": "Êtes-vous sûr de vouloir supprimer ce {item} ? Cette action est irréversible.",
   "revokeKeyQuestion": "Révoquer la clé ?",
-  "revokeKeyConfirmation": "Êtes-vous sûr de vouloir révoquer la clé \"{keyName}\" ? Cette action est irréversible."
+  "revokeKeyConfirmation": "Êtes-vous sûr de vouloir révoquer la clé \"{keyName}\" ? Cette action est irréversible.",
+  "createNewKey": "Créer une nouvelle clé",
+  "keyNameHint": "ex. Claude Desktop",
+  "pleaseEnterAName": "Veuillez entrer un nom.",
+  "failedToCreateKeyWithError": "Échec de la création de la clé : {error}",
+  "failedToCreateKeyTryAgain": "Échec de la création de la clé. Veuillez réessayer."
 }

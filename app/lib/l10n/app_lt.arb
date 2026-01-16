@@ -3037,5 +3037,10 @@
   "deleteItemQuestion": "Ištrinti {item}?",
   "deleteItemConfirmation": "Ar tikrai norite ištrinti šią {item}? Šio veiksmo negalima atšaukti.",
   "revokeKeyQuestion": "Atšaukti raktą?",
-  "revokeKeyConfirmation": "Ar tikrai norite atšaukti raktą \"{keyName}\"? Šio veiksmo negalima atšaukti."
+  "revokeKeyConfirmation": "Ar tikrai norite atšaukti raktą \"{keyName}\"? Šio veiksmo negalima atšaukti.",
+  "createNewKey": "Sukurti naują raktą",
+  "keyNameHint": "pvz., Claude Desktop",
+  "pleaseEnterAName": "Įveskite pavadinimą.",
+  "failedToCreateKeyWithError": "Nepavyko sukurti rakto: {error}",
+  "failedToCreateKeyTryAgain": "Nepavyko sukurti rakto. Bandykite dar kartą."
 }

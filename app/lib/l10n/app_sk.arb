@@ -3055,5 +3055,10 @@
   "deleteItemQuestion": "Odstrániť {item}?",
   "deleteItemConfirmation": "Ste si istí, že chcete odstrániť túto {item}? Túto akciu nie je možné vrátiť späť.",
   "revokeKeyQuestion": "Odvolať kľúč?",
-  "revokeKeyConfirmation": "Ste si istí, že chcete odvolať kľúč \"{keyName}\"? Túto akciu nie je možné vrátiť späť."
+  "revokeKeyConfirmation": "Ste si istí, že chcete odvolať kľúč \"{keyName}\"? Túto akciu nie je možné vrátiť späť.",
+  "createNewKey": "Vytvoriť nový kľúč",
+  "keyNameHint": "napr. Claude Desktop",
+  "pleaseEnterAName": "Prosím zadajte názov.",
+  "failedToCreateKeyWithError": "Nepodarilo sa vytvoriť kľúč: {error}",
+  "failedToCreateKeyTryAgain": "Nepodarilo sa vytvoriť kľúč. Skúste to prosím znova."
 }

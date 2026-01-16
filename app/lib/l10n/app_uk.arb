@@ -3055,5 +3055,10 @@
   "deleteItemQuestion": "Видалити {item}?",
   "deleteItemConfirmation": "Ви впевнені, що хочете видалити цей {item}? Цю дію неможливо скасувати.",
   "revokeKeyQuestion": "Відкликати ключ?",
-  "revokeKeyConfirmation": "Ви впевнені, що хочете відкликати ключ \"{keyName}\"? Цю дію неможливо скасувати."
+  "revokeKeyConfirmation": "Ви впевнені, що хочете відкликати ключ \"{keyName}\"? Цю дію неможливо скасувати.",
+  "createNewKey": "Створити новий ключ",
+  "keyNameHint": "напр., Claude Desktop",
+  "pleaseEnterAName": "Будь ласка, введіть назву.",
+  "failedToCreateKeyWithError": "Не вдалося створити ключ: {error}",
+  "failedToCreateKeyTryAgain": "Не вдалося створити ключ. Будь ласка, спробуйте ще раз."
 }

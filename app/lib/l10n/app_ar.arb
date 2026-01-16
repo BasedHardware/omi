@@ -3073,5 +3073,10 @@
   "deleteItemQuestion": "حذف {item}؟",
   "deleteItemConfirmation": "هل أنت متأكد أنك تريد حذف هذا {item}؟ لا يمكن التراجع عن هذا الإجراء.",
   "revokeKeyQuestion": "إلغاء المفتاح؟",
-  "revokeKeyConfirmation": "هل أنت متأكد أنك تريد إلغاء المفتاح \"{keyName}\"؟ لا يمكن التراجع عن هذا الإجراء."
+  "revokeKeyConfirmation": "هل أنت متأكد أنك تريد إلغاء المفتاح \"{keyName}\"؟ لا يمكن التراجع عن هذا الإجراء.",
+  "createNewKey": "إنشاء مفتاح جديد",
+  "keyNameHint": "مثال: Claude Desktop",
+  "pleaseEnterAName": "يرجى إدخال اسم.",
+  "failedToCreateKeyWithError": "فشل إنشاء المفتاح: {error}",
+  "failedToCreateKeyTryAgain": "فشل إنشاء المفتاح. يرجى المحاولة مرة أخرى."
 }
