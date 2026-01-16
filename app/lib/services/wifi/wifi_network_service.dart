@@ -138,6 +138,9 @@ enum WifiConnectionError {
   /// Already connected to this network (not an error)
   alreadyConnected,
 
+  /// Failed to join network
+  joinFailed,
+
   /// Unknown error
   unknown;
 
@@ -152,8 +155,10 @@ enum WifiConnectionError {
       case 4:
         return connectionFailed;
       case 5:
-        return timeout;
+        return joinFailed;
       case 6:
+        return timeout;
+      case 7:
         return alreadyConnected;
       default:
         return unknown;
@@ -174,6 +179,8 @@ enum WifiConnectionError {
         return 'WiFi connection timed out';
       case alreadyConnected:
         return 'Already connected';
+      case joinFailed:
+        return 'Failed to join device WiFi. Please try again.';
       case unknown:
         return 'Unknown WiFi error';
     }

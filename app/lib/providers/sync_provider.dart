@@ -86,6 +86,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   List<SyncedConversationPointer> get syncedConversationsPointers => _syncState.syncedConversations;
   String? get syncError => _syncState.errorMessage;
   Wal? get failedWal => _syncState.failedWal;
+  SyncMethod? get currentSyncMethod => _syncState.syncMethod;
 
   // Flash page (Limitless) sync state
   bool get isFlashPageSyncing => _walService.getSyncs().isFlashPageSyncing;
@@ -152,19 +153,19 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     await refreshWals();
   }
 
-  Future<void> syncWals() async {
+  Future<void> syncWals({IWifiConnectionListener? connectionListener}) async {
     _updateSyncState(_syncState.toIdle());
     _initialMissingWalsCount = missingWals.length;
     await _performSync(
-      operation: () => _walService.getSyncs().syncAll(progress: this),
+      operation: () => _walService.getSyncs().syncAll(progress: this, connectionListener: connectionListener),
       context: 'sync all WALs',
     );
   }
 
-  Future<void> syncWal(Wal wal) async {
+  Future<void> syncWal(Wal wal, {IWifiConnectionListener? connectionListener}) async {
     _updateSyncState(_syncState.toIdle());
     await _performSync(
-      operation: () => _walService.getSyncs().syncWal(wal: wal, progress: this),
+      operation: () => _walService.getSyncs().syncWal(wal: wal, progress: this, connectionListener: connectionListener),
       context: 'sync WAL ${wal.id}',
       failedWal: wal,
     );
@@ -328,7 +329,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   /// Transfer a single WAL from device storage (SD card or flash page) to phone storage
-  Future<void> transferWalToPhone(Wal wal) async {
+  Future<void> transferWalToPhone(Wal wal, {IWifiConnectionListener? connectionListener}) async {
     if (wal.storage != WalStorage.sdcard && wal.storage != WalStorage.flashPage) {
       throw Exception('This recording is already on phone');
     }
@@ -337,7 +338,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     _updateSyncState(_syncState.toSyncing());
 
     try {
-      await _walService.getSyncs().syncWal(wal: wal, progress: this);
+      await _walService.getSyncs().syncWal(wal: wal, progress: this, connectionListener: connectionListener);
       await refreshWals();
       _updateSyncState(_syncState.toIdle());
     } catch (e) {

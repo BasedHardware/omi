@@ -1,12 +1,18 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/models/playback_state.dart';
+import 'package:omi/pages/conversations/sync_widgets/fast_transfer_suggestion_dialog.dart';
+import 'package:omi/pages/conversations/sync_widgets/location_permission_dialog.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
+import 'package:omi/ui/molecules/wifi_connection_sheet.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
@@ -524,9 +530,62 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
   }
 
   Future<void> _handleTransferToPhone() async {
+    final preferredMethod = SharedPreferencesUtil().preferredSyncMethod;
+    final wifiSupported = await ServiceManager.instance().wal.getSyncs().sdcard.isWifiSyncSupported();
+
+    if (preferredMethod == 'ble' && wifiSupported && widget.wal.storage == WalStorage.sdcard) {
+      if (!mounted) return;
+      final result = await FastTransferSuggestionDialog.show(context);
+      if (result == null) return;
+
+      if (result == 'switch') {
+        // User wants to switch to Fast Transfer
+        SharedPreferencesUtil().preferredSyncMethod = 'wifi';
+        if (!mounted) return;
+        _showSnackBar('Switched to Fast Transfer', Colors.green);
+      }
+    }
+
+    final currentMethod = SharedPreferencesUtil().preferredSyncMethod;
+    if (Platform.isIOS && widget.wal.storage == WalStorage.sdcard) {
+      if (currentMethod == 'wifi' && wifiSupported) {
+        if (!mounted) return;
+        final hasPermission = await LocationPermissionHelper.checkAndRequest(context);
+        if (!hasPermission) {
+          return;
+        }
+      }
+    }
+
+    if (!mounted) return;
+
     try {
       final syncProvider = context.read<SyncProvider>();
-      await syncProvider.transferWalToPhone(widget.wal);
+      final currentMethod = SharedPreferencesUtil().preferredSyncMethod;
+      final wifiSupported = await ServiceManager.instance().wal.getSyncs().sdcard.isWifiSyncSupported();
+
+      // Show WiFi connection sheet if using WiFi for SD card transfer
+      if (currentMethod == 'wifi' && wifiSupported && widget.wal.storage == WalStorage.sdcard && mounted) {
+        WifiConnectionListenerBridge? listener;
+
+        final controller = await WifiConnectionSheet.show(
+          context,
+          deviceName: 'Omi',
+          onCancel: () {
+            syncProvider.cancelSync();
+          },
+          onRetry: () {
+            if (listener != null) {
+              syncProvider.transferWalToPhone(widget.wal, connectionListener: listener);
+            }
+          },
+        );
+
+        listener = WifiConnectionListenerBridge(controller);
+        await syncProvider.transferWalToPhone(widget.wal, connectionListener: listener);
+      } else {
+        await syncProvider.transferWalToPhone(widget.wal);
+      }
 
       if (mounted) {
         _showSnackBar('Transfer complete! You can now play this recording.', Colors.green);
