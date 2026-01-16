@@ -3092,5 +3092,11 @@
   "saveKeyWarning": "Запазете този ключ сега! Няма да можете да го видите отново.",
   "yourApiKey": "ВАШИЯТ API КЛЮЧ",
   "tapToCopy": "Докоснете за копиране",
-  "copyKey": "Копиране на ключа"
+  "copyKey": "Копиране на ключа",
+  "createApiKey": "Създаване на API ключ",
+  "accessDataProgrammatically": "Достъп до данните ви програмно",
+  "keyNameLabel": "ИМЕ НА КЛЮЧА",
+  "keyNamePlaceholder": "напр., Моята интеграция",
+  "permissionsLabel": "РАЗРЕШЕНИЯ",
+  "permissionsInfoNote": "R = Четене, W = Запис. По подразбиране само за четене, ако не е избрано нищо."
 }

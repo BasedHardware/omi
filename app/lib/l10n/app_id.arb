@@ -3090,5 +3090,11 @@
   "saveKeyWarning": "Simpan kunci ini sekarang! Anda tidak akan bisa melihatnya lagi.",
   "yourApiKey": "KUNCI API ANDA",
   "tapToCopy": "Ketuk untuk menyalin",
-  "copyKey": "Salin Kunci"
+  "copyKey": "Salin Kunci",
+  "createApiKey": "Buat Kunci API",
+  "accessDataProgrammatically": "Akses data Anda secara terprogram",
+  "keyNameLabel": "NAMA KUNCI",
+  "keyNamePlaceholder": "mis., Integrasi Aplikasi Saya",
+  "permissionsLabel": "IZIN",
+  "permissionsInfoNote": "R = Baca, W = Tulis. Default hanya baca jika tidak ada yang dipilih."
 }

@@ -4410,4 +4410,22 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get copyKey => 'คัดลอกคีย์';
+
+  @override
+  String get createApiKey => 'สร้างคีย์ API';
+
+  @override
+  String get accessDataProgrammatically => 'เข้าถึงข้อมูลของคุณแบบโปรแกรม';
+
+  @override
+  String get keyNameLabel => 'ชื่อคีย์';
+
+  @override
+  String get keyNamePlaceholder => 'เช่น การเชื่อมต่อแอปของฉัน';
+
+  @override
+  String get permissionsLabel => 'สิทธิ์';
+
+  @override
+  String get permissionsInfoNote => 'R = อ่าน, W = เขียน ค่าเริ่มต้นเป็นอ่านอย่างเดียวถ้าไม่ได้เลือกอะไร';
 }

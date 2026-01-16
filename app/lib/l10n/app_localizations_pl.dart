@@ -4441,4 +4441,22 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get copyKey => 'Kopiuj klucz';
+
+  @override
+  String get createApiKey => 'Utwórz klucz API';
+
+  @override
+  String get accessDataProgrammatically => 'Uzyskaj programowy dostęp do swoich danych';
+
+  @override
+  String get keyNameLabel => 'NAZWA KLUCZA';
+
+  @override
+  String get keyNamePlaceholder => 'np. Moja integracja';
+
+  @override
+  String get permissionsLabel => 'UPRAWNIENIA';
+
+  @override
+  String get permissionsInfoNote => 'R = Odczyt, W = Zapis. Domyślnie tylko odczyt, jeśli nic nie wybrano.';
 }

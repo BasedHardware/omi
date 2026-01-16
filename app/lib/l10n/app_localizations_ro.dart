@@ -4456,4 +4456,22 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get copyKey => 'Copiază cheia';
+
+  @override
+  String get createApiKey => 'Creați cheie API';
+
+  @override
+  String get accessDataProgrammatically => 'Accesați datele dvs. programatic';
+
+  @override
+  String get keyNameLabel => 'NUMELE CHEII';
+
+  @override
+  String get keyNamePlaceholder => 'ex., Integrarea mea';
+
+  @override
+  String get permissionsLabel => 'PERMISIUNI';
+
+  @override
+  String get permissionsInfoNote => 'R = Citire, W = Scriere. Implicit doar citire dacă nu este selectat nimic.';
 }

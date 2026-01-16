@@ -3090,5 +3090,11 @@
   "saveKeyWarning": "Zapisz ten klucz teraz! Nie będziesz mógł go ponownie zobaczyć.",
   "yourApiKey": "TWÓJ KLUCZ API",
   "tapToCopy": "Dotknij, aby skopiować",
-  "copyKey": "Kopiuj klucz"
+  "copyKey": "Kopiuj klucz",
+  "createApiKey": "Utwórz klucz API",
+  "accessDataProgrammatically": "Uzyskaj programowy dostęp do swoich danych",
+  "keyNameLabel": "NAZWA KLUCZA",
+  "keyNamePlaceholder": "np. Moja integracja",
+  "permissionsLabel": "UPRAWNIENIA",
+  "permissionsInfoNote": "R = Odczyt, W = Zapis. Domyślnie tylko odczyt, jeśli nic nie wybrano."
 }

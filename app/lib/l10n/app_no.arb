@@ -3090,5 +3090,11 @@
   "saveKeyWarning": "Lagre denne nøkkelen nå! Du vil ikke kunne se den igjen.",
   "yourApiKey": "DIN API-NØKKEL",
   "tapToCopy": "Trykk for å kopiere",
-  "copyKey": "Kopier nøkkel"
+  "copyKey": "Kopier nøkkel",
+  "createApiKey": "Opprett API-nøkkel",
+  "accessDataProgrammatically": "Få tilgang til dataene dine programmatisk",
+  "keyNameLabel": "NØKKELNAVN",
+  "keyNamePlaceholder": "f.eks., Min app-integrasjon",
+  "permissionsLabel": "TILLATELSER",
+  "permissionsInfoNote": "R = Les, W = Skriv. Standard kun lesing hvis ingenting er valgt."
 }

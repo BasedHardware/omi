@@ -4456,4 +4456,23 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get copyKey => 'Kulcs másolása';
+
+  @override
+  String get createApiKey => 'API kulcs létrehozása';
+
+  @override
+  String get accessDataProgrammatically => 'Programozott hozzáférés az adataihoz';
+
+  @override
+  String get keyNameLabel => 'KULCS NEVE';
+
+  @override
+  String get keyNamePlaceholder => 'pl. Az én integrációm';
+
+  @override
+  String get permissionsLabel => 'ENGEDÉLYEK';
+
+  @override
+  String get permissionsInfoNote =>
+      'R = Olvasás, W = Írás. Alapértelmezés szerint csak olvasható, ha nincs semmi kiválasztva.';
 }

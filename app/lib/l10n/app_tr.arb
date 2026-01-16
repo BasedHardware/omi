@@ -3072,5 +3072,11 @@
   "saveKeyWarning": "Bu anahtarı şimdi kaydedin! Tekrar göremeyeceksiniz.",
   "yourApiKey": "API ANAHTARINIZ",
   "tapToCopy": "Kopyalamak için dokunun",
-  "copyKey": "Anahtarı Kopyala"
+  "copyKey": "Anahtarı Kopyala",
+  "createApiKey": "API Anahtarı Oluştur",
+  "accessDataProgrammatically": "Verilerinize programatik olarak erişin",
+  "keyNameLabel": "ANAHTAR ADI",
+  "keyNamePlaceholder": "ör., Uygulama Entegrasyonum",
+  "permissionsLabel": "İZİNLER",
+  "permissionsInfoNote": "R = Okuma, W = Yazma. Hiçbir şey seçilmezse varsayılan salt okunur."
 }

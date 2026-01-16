@@ -4468,4 +4468,22 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get copyKey => 'Αντιγραφή κλειδιού';
+
+  @override
+  String get createApiKey => 'Δημιουργία κλειδιού API';
+
+  @override
+  String get accessDataProgrammatically => 'Πρόσβαση στα δεδομένα σας μέσω προγραμματισμού';
+
+  @override
+  String get keyNameLabel => 'ΟΝΟΜΑ ΚΛΕΙΔΙΟΥ';
+
+  @override
+  String get keyNamePlaceholder => 'π.χ., Η ενσωμάτωσή μου';
+
+  @override
+  String get permissionsLabel => 'ΔΙΚΑΙΩΜΑΤΑ';
+
+  @override
+  String get permissionsInfoNote => 'R = Ανάγνωση, W = Εγγραφή. Προεπιλογή μόνο ανάγνωση αν δεν επιλεγεί τίποτα.';
 }

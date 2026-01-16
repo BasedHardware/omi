@@ -4437,4 +4437,22 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get copyKey => 'Копіювати ключ';
+
+  @override
+  String get createApiKey => 'Створити API ключ';
+
+  @override
+  String get accessDataProgrammatically => 'Програмний доступ до ваших даних';
+
+  @override
+  String get keyNameLabel => 'НАЗВА КЛЮЧА';
+
+  @override
+  String get keyNamePlaceholder => 'напр., Моя інтеграція';
+
+  @override
+  String get permissionsLabel => 'ДОЗВОЛИ';
+
+  @override
+  String get permissionsInfoNote => 'R = Читання, W = Запис. За замовчуванням лише читання, якщо нічого не вибрано.';
 }

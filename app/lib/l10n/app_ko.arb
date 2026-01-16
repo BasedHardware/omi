@@ -3090,5 +3090,11 @@
   "saveKeyWarning": "지금 이 키를 저장하세요! 다시 볼 수 없습니다.",
   "yourApiKey": "귀하의 API 키",
   "tapToCopy": "탭하여 복사",
-  "copyKey": "키 복사"
+  "copyKey": "키 복사",
+  "createApiKey": "API 키 생성",
+  "accessDataProgrammatically": "프로그래밍 방식으로 데이터 액세스",
+  "keyNameLabel": "키 이름",
+  "keyNamePlaceholder": "예: 내 앱 연동",
+  "permissionsLabel": "권한",
+  "permissionsInfoNote": "R = 읽기, W = 쓰기. 선택하지 않으면 기본적으로 읽기 전용."
 }

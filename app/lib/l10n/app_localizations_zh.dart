@@ -4350,4 +4350,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get copyKey => '复制密钥';
+
+  @override
+  String get createApiKey => '创建API密钥';
+
+  @override
+  String get accessDataProgrammatically => '以编程方式访问您的数据';
+
+  @override
+  String get keyNameLabel => '密钥名称';
+
+  @override
+  String get keyNamePlaceholder => '例如：我的应用集成';
+
+  @override
+  String get permissionsLabel => '权限';
+
+  @override
+  String get permissionsInfoNote => 'R = 读取，W = 写入。未选择时默认为只读。';
 }

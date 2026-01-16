@@ -3090,5 +3090,11 @@
   "saveKeyWarning": "Saglabājiet šo atslēgu tagad! Jūs to vairs nevarēsiet redzēt.",
   "yourApiKey": "JŪSU API ATSLĒGA",
   "tapToCopy": "Pieskarieties, lai kopētu",
-  "copyKey": "Kopēt atslēgu"
+  "copyKey": "Kopēt atslēgu",
+  "createApiKey": "Izveidot API atslēgu",
+  "accessDataProgrammatically": "Piekļūstiet saviem datiem programmatiski",
+  "keyNameLabel": "ATSLĒGAS NOSAUKUMS",
+  "keyNamePlaceholder": "piem., Manas lietotnes integrācija",
+  "permissionsLabel": "ATĻAUJAS",
+  "permissionsInfoNote": "R = Lasīt, W = Rakstīt. Noklusējums tikai lasīšana, ja nekas nav atlasīts."
 }

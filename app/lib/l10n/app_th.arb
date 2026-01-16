@@ -3090,5 +3090,11 @@
   "saveKeyWarning": "บันทึกคีย์นี้ตอนนี้! คุณจะไม่สามารถดูได้อีก",
   "yourApiKey": "คีย์ API ของคุณ",
   "tapToCopy": "แตะเพื่อคัดลอก",
-  "copyKey": "คัดลอกคีย์"
+  "copyKey": "คัดลอกคีย์",
+  "createApiKey": "สร้างคีย์ API",
+  "accessDataProgrammatically": "เข้าถึงข้อมูลของคุณแบบโปรแกรม",
+  "keyNameLabel": "ชื่อคีย์",
+  "keyNamePlaceholder": "เช่น การเชื่อมต่อแอปของฉัน",
+  "permissionsLabel": "สิทธิ์",
+  "permissionsInfoNote": "R = อ่าน, W = เขียน ค่าเริ่มต้นเป็นอ่านอย่างเดียวถ้าไม่ได้เลือกอะไร"
 }

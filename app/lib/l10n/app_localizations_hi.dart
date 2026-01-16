@@ -4409,4 +4409,22 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get copyKey => 'कुंजी कॉपी करें';
+
+  @override
+  String get createApiKey => 'API कुंजी बनाएं';
+
+  @override
+  String get accessDataProgrammatically => 'अपने डेटा को प्रोग्रामेटिक रूप से एक्सेस करें';
+
+  @override
+  String get keyNameLabel => 'कुंजी नाम';
+
+  @override
+  String get keyNamePlaceholder => 'उदा., मेरा ऐप इंटीग्रेशन';
+
+  @override
+  String get permissionsLabel => 'अनुमतियाँ';
+
+  @override
+  String get permissionsInfoNote => 'R = पढ़ें, W = लिखें। कुछ भी चयनित न होने पर डिफ़ॉल्ट केवल पढ़ने के लिए।';
 }

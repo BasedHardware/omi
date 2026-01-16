@@ -1537,5 +1537,11 @@
   "saveKeyWarning": "¡Guarda esta clave ahora! No podrás verla de nuevo.",
   "yourApiKey": "TU CLAVE API",
   "tapToCopy": "Toca para copiar",
-  "copyKey": "Copiar clave"
+  "copyKey": "Copiar clave",
+  "createApiKey": "Crear clave API",
+  "accessDataProgrammatically": "Accede a tus datos programáticamente",
+  "keyNameLabel": "NOMBRE DE CLAVE",
+  "keyNamePlaceholder": "ej., Mi integración de app",
+  "permissionsLabel": "PERMISOS",
+  "permissionsInfoNote": "R = Lectura, W = Escritura. Por defecto solo lectura si no se selecciona nada."
 }

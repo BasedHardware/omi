@@ -4434,4 +4434,23 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get copyKey => 'Kopeeri võti';
+
+  @override
+  String get createApiKey => 'Loo API võti';
+
+  @override
+  String get accessDataProgrammatically => 'Pääsete oma andmetele programmiliselt juurde';
+
+  @override
+  String get keyNameLabel => 'VÕTME NIMI';
+
+  @override
+  String get keyNamePlaceholder => 'nt. Minu rakenduse integratsioon';
+
+  @override
+  String get permissionsLabel => 'ÕIGUSED';
+
+  @override
+  String get permissionsInfoNote =>
+      'R = Lugemine, W = Kirjutamine. Vaikimisi ainult lugemine, kui midagi pole valitud.';
 }

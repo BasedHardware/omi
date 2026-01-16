@@ -4433,4 +4433,22 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get copyKey => 'Kopijuoti raktą';
+
+  @override
+  String get createApiKey => 'Sukurti API raktą';
+
+  @override
+  String get accessDataProgrammatically => 'Pasiekite savo duomenis programiškai';
+
+  @override
+  String get keyNameLabel => 'RAKTO PAVADINIMAS';
+
+  @override
+  String get keyNamePlaceholder => 'pvz., Mano programėlės integracija';
+
+  @override
+  String get permissionsLabel => 'LEIDIMAI';
+
+  @override
+  String get permissionsInfoNote => 'R = Skaityti, W = Rašyti. Numatytasis tik skaitymas, jei nieko nepasirinkta.';
 }

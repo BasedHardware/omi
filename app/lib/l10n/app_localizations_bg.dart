@@ -4446,4 +4446,22 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get copyKey => 'Копиране на ключа';
+
+  @override
+  String get createApiKey => 'Създаване на API ключ';
+
+  @override
+  String get accessDataProgrammatically => 'Достъп до данните ви програмно';
+
+  @override
+  String get keyNameLabel => 'ИМЕ НА КЛЮЧА';
+
+  @override
+  String get keyNamePlaceholder => 'напр., Моята интеграция';
+
+  @override
+  String get permissionsLabel => 'РАЗРЕШЕНИЯ';
+
+  @override
+  String get permissionsInfoNote => 'R = Четене, W = Запис. По подразбиране само за четене, ако не е избрано нищо.';
 }

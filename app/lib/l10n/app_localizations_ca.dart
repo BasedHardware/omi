@@ -4458,4 +4458,22 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get copyKey => 'Copia la clau';
+
+  @override
+  String get createApiKey => 'Crear clau API';
+
+  @override
+  String get accessDataProgrammatically => 'Accedeix a les teves dades programàticament';
+
+  @override
+  String get keyNameLabel => 'NOM DE LA CLAU';
+
+  @override
+  String get keyNamePlaceholder => 'p. ex., La meva integració';
+
+  @override
+  String get permissionsLabel => 'PERMISOS';
+
+  @override
+  String get permissionsInfoNote => 'R = Lectura, W = Escriptura. Per defecte només lectura si no es selecciona res.';
 }

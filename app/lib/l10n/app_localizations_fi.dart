@@ -4432,4 +4432,22 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get copyKey => 'Kopioi avain';
+
+  @override
+  String get createApiKey => 'Luo API-avain';
+
+  @override
+  String get accessDataProgrammatically => 'Käytä tietojasi ohjelmallisesti';
+
+  @override
+  String get keyNameLabel => 'AVAIMEN NIMI';
+
+  @override
+  String get keyNamePlaceholder => 'esim. Oma sovellus';
+
+  @override
+  String get permissionsLabel => 'OIKEUDET';
+
+  @override
+  String get permissionsInfoNote => 'R = Luku, W = Kirjoitus. Oletuksena vain luku, jos mitään ei ole valittu.';
 }

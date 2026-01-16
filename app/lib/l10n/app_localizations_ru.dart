@@ -4447,4 +4447,22 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get copyKey => 'Копировать ключ';
+
+  @override
+  String get createApiKey => 'Создать API ключ';
+
+  @override
+  String get accessDataProgrammatically => 'Программный доступ к вашим данным';
+
+  @override
+  String get keyNameLabel => 'НАЗВАНИЕ КЛЮЧА';
+
+  @override
+  String get keyNamePlaceholder => 'напр., Моя интеграция';
+
+  @override
+  String get permissionsLabel => 'РАЗРЕШЕНИЯ';
+
+  @override
+  String get permissionsInfoNote => 'R = Чтение, W = Запись. По умолчанию только чтение, если ничего не выбрано.';
 }

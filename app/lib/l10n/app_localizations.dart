@@ -8426,6 +8426,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Copy Key'**
   String get copyKey;
+
+  /// Title for create API key sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Create API Key'**
+  String get createApiKey;
+
+  /// Subtitle for create API key sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Access your data programmatically'**
+  String get accessDataProgrammatically;
+
+  /// Label for key name input field
+  ///
+  /// In en, this message translates to:
+  /// **'KEY NAME'**
+  String get keyNameLabel;
+
+  /// Placeholder text for key name input
+  ///
+  /// In en, this message translates to:
+  /// **'e.g., My App Integration'**
+  String get keyNamePlaceholder;
+
+  /// Label for permissions section
+  ///
+  /// In en, this message translates to:
+  /// **'PERMISSIONS'**
+  String get permissionsLabel;
+
+  /// Info note explaining permission toggles
+  ///
+  /// In en, this message translates to:
+  /// **'R = Read, W = Write. Defaults to read-only if nothing selected.'**
+  String get permissionsInfoNote;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

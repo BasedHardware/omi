@@ -1537,5 +1537,11 @@
   "saveKeyWarning": "Salve esta chave agora! Você não poderá vê-la novamente.",
   "yourApiKey": "SUA CHAVE API",
   "tapToCopy": "Toque para copiar",
-  "copyKey": "Copiar chave"
+  "copyKey": "Copiar chave",
+  "createApiKey": "Criar chave API",
+  "accessDataProgrammatically": "Acesse seus dados programaticamente",
+  "keyNameLabel": "NOME DA CHAVE",
+  "keyNamePlaceholder": "ex., Minha integração",
+  "permissionsLabel": "PERMISSÕES",
+  "permissionsInfoNote": "R = Leitura, W = Escrita. Padrão somente leitura se nada for selecionado."
 }

@@ -4429,4 +4429,22 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get copyKey => 'Kopírovat klíč';
+
+  @override
+  String get createApiKey => 'Vytvořit API klíč';
+
+  @override
+  String get accessDataProgrammatically => 'Programově přistupujte ke svým datům';
+
+  @override
+  String get keyNameLabel => 'NÁZEV KLÍČE';
+
+  @override
+  String get keyNamePlaceholder => 'např. Moje integrace aplikace';
+
+  @override
+  String get permissionsLabel => 'OPRÁVNĚNÍ';
+
+  @override
+  String get permissionsInfoNote => 'R = Čtení, W = Zápis. Výchozí je pouze pro čtení, pokud není nic vybráno.';
 }

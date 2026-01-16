@@ -4356,4 +4356,22 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get copyKey => 'キーをコピー';
+
+  @override
+  String get createApiKey => 'APIキーを作成';
+
+  @override
+  String get accessDataProgrammatically => 'プログラムでデータにアクセス';
+
+  @override
+  String get keyNameLabel => 'キー名';
+
+  @override
+  String get keyNamePlaceholder => '例：マイアプリ連携';
+
+  @override
+  String get permissionsLabel => '権限';
+
+  @override
+  String get permissionsInfoNote => 'R = 読み取り、W = 書き込み。何も選択しない場合は読み取り専用。';
 }

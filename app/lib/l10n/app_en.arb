@@ -5132,5 +5132,29 @@
   },
   "@apiKey": {
     "description": "Label for API key (used for clipboard notification)"
+  },
+  "createApiKey": "Create API Key",
+  "@createApiKey": {
+    "description": "Title for create API key sheet"
+  },
+  "accessDataProgrammatically": "Access your data programmatically",
+  "@accessDataProgrammatically": {
+    "description": "Subtitle for create API key sheet"
+  },
+  "keyNameLabel": "KEY NAME",
+  "@keyNameLabel": {
+    "description": "Label for key name input field"
+  },
+  "keyNamePlaceholder": "e.g., My App Integration",
+  "@keyNamePlaceholder": {
+    "description": "Placeholder text for key name input"
+  },
+  "permissionsLabel": "PERMISSIONS",
+  "@permissionsLabel": {
+    "description": "Label for permissions section"
+  },
+  "permissionsInfoNote": "R = Read, W = Write. Defaults to read-only if nothing selected.",
+  "@permissionsInfoNote": {
+    "description": "Info note explaining permission toggles"
   }
 }

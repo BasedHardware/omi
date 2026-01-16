@@ -4357,4 +4357,22 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get copyKey => '키 복사';
+
+  @override
+  String get createApiKey => 'API 키 생성';
+
+  @override
+  String get accessDataProgrammatically => '프로그래밍 방식으로 데이터 액세스';
+
+  @override
+  String get keyNameLabel => '키 이름';
+
+  @override
+  String get keyNamePlaceholder => '예: 내 앱 연동';
+
+  @override
+  String get permissionsLabel => '권한';
+
+  @override
+  String get permissionsInfoNote => 'R = 읽기, W = 쓰기. 선택하지 않으면 기본적으로 읽기 전용.';
 }

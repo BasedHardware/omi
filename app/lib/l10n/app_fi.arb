@@ -3090,5 +3090,11 @@
   "saveKeyWarning": "Tallenna tämä avain nyt! Et näe sitä enää uudelleen.",
   "yourApiKey": "API-AVAIMESI",
   "tapToCopy": "Kopioi napauttamalla",
-  "copyKey": "Kopioi avain"
+  "copyKey": "Kopioi avain",
+  "createApiKey": "Luo API-avain",
+  "accessDataProgrammatically": "Käytä tietojasi ohjelmallisesti",
+  "keyNameLabel": "AVAIMEN NIMI",
+  "keyNamePlaceholder": "esim. Oma sovellus",
+  "permissionsLabel": "OIKEUDET",
+  "permissionsInfoNote": "R = Luku, W = Kirjoitus. Oletuksena vain luku, jos mitään ei ole valittu."
 }

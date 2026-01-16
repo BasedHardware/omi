@@ -4445,4 +4445,22 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get copyKey => 'Salin Kunci';
+
+  @override
+  String get createApiKey => 'Buat Kunci API';
+
+  @override
+  String get accessDataProgrammatically => 'Akses data Anda secara terprogram';
+
+  @override
+  String get keyNameLabel => 'NAMA KUNCI';
+
+  @override
+  String get keyNamePlaceholder => 'mis., Integrasi Aplikasi Saya';
+
+  @override
+  String get permissionsLabel => 'IZIN';
+
+  @override
+  String get permissionsInfoNote => 'R = Baca, W = Tulis. Default hanya baca jika tidak ada yang dipilih.';
 }

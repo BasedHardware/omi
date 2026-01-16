@@ -3092,5 +3092,11 @@
   "saveKeyWarning": "Desa aquesta clau ara! No la podràs veure de nou.",
   "yourApiKey": "LA TEVA CLAU API",
   "tapToCopy": "Toca per copiar",
-  "copyKey": "Copia la clau"
+  "copyKey": "Copia la clau",
+  "createApiKey": "Crear clau API",
+  "accessDataProgrammatically": "Accedeix a les teves dades programàticament",
+  "keyNameLabel": "NOM DE LA CLAU",
+  "keyNamePlaceholder": "p. ex., La meva integració",
+  "permissionsLabel": "PERMISOS",
+  "permissionsInfoNote": "R = Lectura, W = Escriptura. Per defecte només lectura si no es selecciona res."
 }

@@ -4441,4 +4441,22 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get copyKey => 'Kopiér nøgle';
+
+  @override
+  String get createApiKey => 'Opret API-nøgle';
+
+  @override
+  String get accessDataProgrammatically => 'Få adgang til dine data programmatisk';
+
+  @override
+  String get keyNameLabel => 'NØGLENAVN';
+
+  @override
+  String get keyNamePlaceholder => 'f.eks. Min app-integration';
+
+  @override
+  String get permissionsLabel => 'TILLADELSER';
+
+  @override
+  String get permissionsInfoNote => 'R = Læs, W = Skriv. Standard kun læsning, hvis intet er valgt.';
 }

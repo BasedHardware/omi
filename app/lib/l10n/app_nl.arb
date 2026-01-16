@@ -1908,5 +1908,11 @@
   "saveKeyWarning": "Sla deze sleutel nu op! U kunt hem niet meer zien.",
   "yourApiKey": "UW API-SLEUTEL",
   "tapToCopy": "Tik om te kopiëren",
-  "copyKey": "Sleutel kopiëren"
+  "copyKey": "Sleutel kopiëren",
+  "createApiKey": "API-sleutel maken",
+  "accessDataProgrammatically": "Toegang tot uw gegevens via programmering",
+  "keyNameLabel": "SLEUTELNAAM",
+  "keyNamePlaceholder": "bijv., Mijn app-integratie",
+  "permissionsLabel": "MACHTIGINGEN",
+  "permissionsInfoNote": "R = Lezen, W = Schrijven. Standaard alleen lezen als niets is geselecteerd."
 }

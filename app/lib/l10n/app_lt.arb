@@ -3072,5 +3072,11 @@
   "saveKeyWarning": "Išsaugokite šį raktą dabar! Daugiau jo nematysite.",
   "yourApiKey": "JŪSŲ API RAKTAS",
   "tapToCopy": "Bakstelėkite, kad nukopijuotumėte",
-  "copyKey": "Kopijuoti raktą"
+  "copyKey": "Kopijuoti raktą",
+  "createApiKey": "Sukurti API raktą",
+  "accessDataProgrammatically": "Pasiekite savo duomenis programiškai",
+  "keyNameLabel": "RAKTO PAVADINIMAS",
+  "keyNamePlaceholder": "pvz., Mano programėlės integracija",
+  "permissionsLabel": "LEIDIMAI",
+  "permissionsInfoNote": "R = Skaityti, W = Rašyti. Numatytasis tik skaitymas, jei nieko nepasirinkta."
 }

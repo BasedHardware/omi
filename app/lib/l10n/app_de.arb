@@ -1537,5 +1537,11 @@
   "saveKeyWarning": "Speichern Sie diesen Schlüssel jetzt! Sie werden ihn nicht mehr sehen können.",
   "yourApiKey": "IHR API-SCHLÜSSEL",
   "tapToCopy": "Zum Kopieren tippen",
-  "copyKey": "Schlüssel kopieren"
+  "copyKey": "Schlüssel kopieren",
+  "createApiKey": "API-Schlüssel erstellen",
+  "accessDataProgrammatically": "Greifen Sie programmgesteuert auf Ihre Daten zu",
+  "keyNameLabel": "SCHLÜSSELNAME",
+  "keyNamePlaceholder": "z.B. Meine App-Integration",
+  "permissionsLabel": "BERECHTIGUNGEN",
+  "permissionsInfoNote": "R = Lesen, W = Schreiben. Standardmäßig nur Lesen, wenn nichts ausgewählt."
 }

@@ -3092,5 +3092,11 @@
   "saveKeyWarning": "Uložte si tento klíč nyní! Znovu ho neuvidíte.",
   "yourApiKey": "VÁŠ API KLÍČ",
   "tapToCopy": "Klepnutím zkopírujete",
-  "copyKey": "Kopírovat klíč"
+  "copyKey": "Kopírovat klíč",
+  "createApiKey": "Vytvořit API klíč",
+  "accessDataProgrammatically": "Programově přistupujte ke svým datům",
+  "keyNameLabel": "NÁZEV KLÍČE",
+  "keyNamePlaceholder": "např. Moje integrace aplikace",
+  "permissionsLabel": "OPRÁVNĚNÍ",
+  "permissionsInfoNote": "R = Čtení, W = Zápis. Výchozí je pouze pro čtení, pokud není nic vybráno."
 }

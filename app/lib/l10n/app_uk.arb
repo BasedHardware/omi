@@ -3090,5 +3090,11 @@
   "saveKeyWarning": "Збережіть цей ключ зараз! Ви більше не зможете його побачити.",
   "yourApiKey": "ВАШ API КЛЮЧ",
   "tapToCopy": "Торкніться, щоб скопіювати",
-  "copyKey": "Копіювати ключ"
+  "copyKey": "Копіювати ключ",
+  "createApiKey": "Створити API ключ",
+  "accessDataProgrammatically": "Програмний доступ до ваших даних",
+  "keyNameLabel": "НАЗВА КЛЮЧА",
+  "keyNamePlaceholder": "напр., Моя інтеграція",
+  "permissionsLabel": "ДОЗВОЛИ",
+  "permissionsInfoNote": "R = Читання, W = Запис. За замовчуванням лише читання, якщо нічого не вибрано."
 }

@@ -4437,4 +4437,22 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get copyKey => 'Copy Key';
+
+  @override
+  String get createApiKey => 'Create API Key';
+
+  @override
+  String get accessDataProgrammatically => 'Access your data programmatically';
+
+  @override
+  String get keyNameLabel => 'KEY NAME';
+
+  @override
+  String get keyNamePlaceholder => 'e.g., My App Integration';
+
+  @override
+  String get permissionsLabel => 'PERMISSIONS';
+
+  @override
+  String get permissionsInfoNote => 'R = Read, W = Write. Defaults to read-only if nothing selected.';
 }

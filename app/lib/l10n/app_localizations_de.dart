@@ -4468,4 +4468,22 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get copyKey => 'Schlüssel kopieren';
+
+  @override
+  String get createApiKey => 'API-Schlüssel erstellen';
+
+  @override
+  String get accessDataProgrammatically => 'Greifen Sie programmgesteuert auf Ihre Daten zu';
+
+  @override
+  String get keyNameLabel => 'SCHLÜSSELNAME';
+
+  @override
+  String get keyNamePlaceholder => 'z.B. Meine App-Integration';
+
+  @override
+  String get permissionsLabel => 'BERECHTIGUNGEN';
+
+  @override
+  String get permissionsInfoNote => 'R = Lesen, W = Schreiben. Standardmäßig nur Lesen, wenn nichts ausgewählt.';
 }

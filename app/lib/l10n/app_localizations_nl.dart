@@ -4446,4 +4446,22 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get copyKey => 'Sleutel kopiëren';
+
+  @override
+  String get createApiKey => 'API-sleutel maken';
+
+  @override
+  String get accessDataProgrammatically => 'Toegang tot uw gegevens via programmering';
+
+  @override
+  String get keyNameLabel => 'SLEUTELNAAM';
+
+  @override
+  String get keyNamePlaceholder => 'bijv., Mijn app-integratie';
+
+  @override
+  String get permissionsLabel => 'MACHTIGINGEN';
+
+  @override
+  String get permissionsInfoNote => 'R = Lezen, W = Schrijven. Standaard alleen lezen als niets is geselecteerd.';
 }

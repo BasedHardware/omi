@@ -1516,5 +1516,11 @@
   "saveKeyWarning": "このキーを今すぐ保存してください！再度表示することはできません。",
   "yourApiKey": "あなたのAPIキー",
   "tapToCopy": "タップしてコピー",
-  "copyKey": "キーをコピー"
+  "copyKey": "キーをコピー",
+  "createApiKey": "APIキーを作成",
+  "accessDataProgrammatically": "プログラムでデータにアクセス",
+  "keyNameLabel": "キー名",
+  "keyNamePlaceholder": "例：マイアプリ連携",
+  "permissionsLabel": "権限",
+  "permissionsInfoNote": "R = 読み取り、W = 書き込み。何も選択しない場合は読み取り専用。"
 }

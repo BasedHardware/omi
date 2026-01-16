@@ -3090,5 +3090,11 @@
   "saveKeyWarning": "Lưu khóa này ngay bây giờ! Bạn sẽ không thể xem lại nó.",
   "yourApiKey": "KHÓA API CỦA BẠN",
   "tapToCopy": "Nhấn để sao chép",
-  "copyKey": "Sao chép khóa"
+  "copyKey": "Sao chép khóa",
+  "createApiKey": "Tạo khóa API",
+  "accessDataProgrammatically": "Truy cập dữ liệu của bạn theo chương trình",
+  "keyNameLabel": "TÊN KHÓA",
+  "keyNamePlaceholder": "vd: Tích hợp ứng dụng của tôi",
+  "permissionsLabel": "QUYỀN",
+  "permissionsInfoNote": "R = Đọc, W = Ghi. Mặc định chỉ đọc nếu không chọn gì."
 }

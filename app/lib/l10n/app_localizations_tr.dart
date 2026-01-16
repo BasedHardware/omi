@@ -4442,4 +4442,22 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get copyKey => 'Anahtarı Kopyala';
+
+  @override
+  String get createApiKey => 'API Anahtarı Oluştur';
+
+  @override
+  String get accessDataProgrammatically => 'Verilerinize programatik olarak erişin';
+
+  @override
+  String get keyNameLabel => 'ANAHTAR ADI';
+
+  @override
+  String get keyNamePlaceholder => 'ör., Uygulama Entegrasyonum';
+
+  @override
+  String get permissionsLabel => 'İZİNLER';
+
+  @override
+  String get permissionsInfoNote => 'R = Okuma, W = Yazma. Hiçbir şey seçilmezse varsayılan salt okunur.';
 }

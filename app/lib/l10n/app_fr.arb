@@ -1908,5 +1908,11 @@
   "saveKeyWarning": "Enregistrez cette clé maintenant ! Vous ne pourrez plus la voir.",
   "yourApiKey": "VOTRE CLÉ API",
   "tapToCopy": "Appuyez pour copier",
-  "copyKey": "Copier la clé"
+  "copyKey": "Copier la clé",
+  "createApiKey": "Créer une clé API",
+  "accessDataProgrammatically": "Accédez à vos données par programmation",
+  "keyNameLabel": "NOM DE LA CLÉ",
+  "keyNamePlaceholder": "ex., Mon intégration",
+  "permissionsLabel": "AUTORISATIONS",
+  "permissionsInfoNote": "R = Lecture, W = Écriture. Lecture seule par défaut si rien n'est sélectionné."
 }

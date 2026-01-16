@@ -4438,4 +4438,22 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get copyKey => 'Kopiera nyckel';
+
+  @override
+  String get createApiKey => 'Skapa API-nyckel';
+
+  @override
+  String get accessDataProgrammatically => 'Få programmatisk åtkomst till dina data';
+
+  @override
+  String get keyNameLabel => 'NYCKELNAMN';
+
+  @override
+  String get keyNamePlaceholder => 't.ex., Min app-integration';
+
+  @override
+  String get permissionsLabel => 'BEHÖRIGHETER';
+
+  @override
+  String get permissionsInfoNote => 'R = Läs, W = Skriv. Standard endast läsning om inget är valt.';
 }

@@ -4449,4 +4449,22 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get copyKey => 'Salin Kunci';
+
+  @override
+  String get createApiKey => 'Cipta Kunci API';
+
+  @override
+  String get accessDataProgrammatically => 'Akses data anda secara programatik';
+
+  @override
+  String get keyNameLabel => 'NAMA KUNCI';
+
+  @override
+  String get keyNamePlaceholder => 'cth., Integrasi Apl Saya';
+
+  @override
+  String get permissionsLabel => 'KEBENARAN';
+
+  @override
+  String get permissionsInfoNote => 'R = Baca, W = Tulis. Lalai baca sahaja jika tiada yang dipilih.';
 }

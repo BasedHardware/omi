@@ -1537,5 +1537,11 @@
   "saveKeyWarning": "इस कुंजी को अभी सहेजें! आप इसे दोबारा नहीं देख पाएंगे।",
   "yourApiKey": "आपकी API कुंजी",
   "tapToCopy": "कॉपी करने के लिए टैप करें",
-  "copyKey": "कुंजी कॉपी करें"
+  "copyKey": "कुंजी कॉपी करें",
+  "createApiKey": "API कुंजी बनाएं",
+  "accessDataProgrammatically": "अपने डेटा को प्रोग्रामेटिक रूप से एक्सेस करें",
+  "keyNameLabel": "कुंजी नाम",
+  "keyNamePlaceholder": "उदा., मेरा ऐप इंटीग्रेशन",
+  "permissionsLabel": "अनुमतियाँ",
+  "permissionsInfoNote": "R = पढ़ें, W = लिखें। कुछ भी चयनित न होने पर डिफ़ॉल्ट केवल पढ़ने के लिए।"
 }

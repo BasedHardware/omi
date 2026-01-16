@@ -3090,5 +3090,11 @@
   "saveKeyWarning": "Salvați această cheie acum! Nu o veți mai putea vedea.",
   "yourApiKey": "CHEIA DVS. API",
   "tapToCopy": "Atingeți pentru a copia",
-  "copyKey": "Copiază cheia"
+  "copyKey": "Copiază cheia",
+  "createApiKey": "Creați cheie API",
+  "accessDataProgrammatically": "Accesați datele dvs. programatic",
+  "keyNameLabel": "NUMELE CHEII",
+  "keyNamePlaceholder": "ex., Integrarea mea",
+  "permissionsLabel": "PERMISIUNI",
+  "permissionsInfoNote": "R = Citire, W = Scriere. Implicit doar citire dacă nu este selectat nimic."
 }

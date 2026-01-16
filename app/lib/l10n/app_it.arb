@@ -3072,5 +3072,11 @@
   "saveKeyWarning": "Salva questa chiave ora! Non potrai vederla di nuovo.",
   "yourApiKey": "LA TUA CHIAVE API",
   "tapToCopy": "Tocca per copiare",
-  "copyKey": "Copia chiave"
+  "copyKey": "Copia chiave",
+  "createApiKey": "Crea chiave API",
+  "accessDataProgrammatically": "Accedi ai tuoi dati in modo programmatico",
+  "keyNameLabel": "NOME CHIAVE",
+  "keyNamePlaceholder": "es., La mia integrazione",
+  "permissionsLabel": "PERMESSI",
+  "permissionsInfoNote": "R = Lettura, W = Scrittura. Solo lettura di default se non viene selezionato nulla."
 }

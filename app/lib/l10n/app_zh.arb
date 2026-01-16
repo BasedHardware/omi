@@ -1537,5 +1537,11 @@
   "saveKeyWarning": "立即保存此密钥！您将无法再次查看。",
   "yourApiKey": "您的API密钥",
   "tapToCopy": "点击复制",
-  "copyKey": "复制密钥"
+  "copyKey": "复制密钥",
+  "createApiKey": "创建API密钥",
+  "accessDataProgrammatically": "以编程方式访问您的数据",
+  "keyNameLabel": "密钥名称",
+  "keyNamePlaceholder": "例如：我的应用集成",
+  "permissionsLabel": "权限",
+  "permissionsInfoNote": "R = 读取，W = 写入。未选择时默认为只读。"
 }

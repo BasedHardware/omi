@@ -4399,4 +4399,22 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get copyKey => 'نسخ المفتاح';
+
+  @override
+  String get createApiKey => 'إنشاء مفتاح API';
+
+  @override
+  String get accessDataProgrammatically => 'الوصول إلى بياناتك برمجياً';
+
+  @override
+  String get keyNameLabel => 'اسم المفتاح';
+
+  @override
+  String get keyNamePlaceholder => 'مثال: تكامل تطبيقي';
+
+  @override
+  String get permissionsLabel => 'الأذونات';
+
+  @override
+  String get permissionsInfoNote => 'R = قراءة، W = كتابة. الافتراضي قراءة فقط إذا لم يتم تحديد شيء.';
 }

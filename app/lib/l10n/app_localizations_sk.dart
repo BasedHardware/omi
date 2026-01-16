@@ -4433,4 +4433,22 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get copyKey => 'Kopírovať kľúč';
+
+  @override
+  String get createApiKey => 'Vytvoriť API kľúč';
+
+  @override
+  String get accessDataProgrammatically => 'Programovo pristupujte k svojim údajom';
+
+  @override
+  String get keyNameLabel => 'NÁZOV KĽÚČA';
+
+  @override
+  String get keyNamePlaceholder => 'napr., Moja integrácia aplikácie';
+
+  @override
+  String get permissionsLabel => 'OPRÁVNENIA';
+
+  @override
+  String get permissionsInfoNote => 'R = Čítanie, W = Zápis. Predvolené je iba na čítanie, ak nie je nič vybrané.';
 }

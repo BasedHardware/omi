@@ -4433,4 +4433,22 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get copyKey => 'Kopier nøkkel';
+
+  @override
+  String get createApiKey => 'Opprett API-nøkkel';
+
+  @override
+  String get accessDataProgrammatically => 'Få tilgang til dataene dine programmatisk';
+
+  @override
+  String get keyNameLabel => 'NØKKELNAVN';
+
+  @override
+  String get keyNamePlaceholder => 'f.eks., Min app-integrasjon';
+
+  @override
+  String get permissionsLabel => 'TILLATELSER';
+
+  @override
+  String get permissionsInfoNote => 'R = Les, W = Skriv. Standard kun lesing hvis ingenting er valgt.';
 }

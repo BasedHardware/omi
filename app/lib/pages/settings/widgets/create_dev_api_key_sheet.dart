@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/pages/settings/widgets/dev_api_key_created_dialog.dart';
 import 'package:omi/providers/dev_api_key_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class CreateDevApiKeySheet extends StatefulWidget {
   const CreateDevApiKeySheet({super.key});
@@ -91,9 +92,9 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
         } else {
           final error = Provider.of<DevApiKeyProvider>(context, listen: false).error;
           if (error != null) {
-            AppSnackbar.showSnackbarError('Failed to create key: $error');
+            AppSnackbar.showSnackbarError(context.l10n.failedToCreateKeyWithError(error));
           } else {
-            AppSnackbar.showSnackbarError('Failed to create key. Please try again.');
+            AppSnackbar.showSnackbarError(context.l10n.failedToCreateKeyTryAgain);
           }
         }
       }
@@ -301,22 +302,22 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
                         child: const Icon(Icons.key, color: Colors.white, size: 22),
                       ),
                       const SizedBox(width: 14),
-                      const Expanded(
+                      Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Create API Key',
-                              style: TextStyle(
+                              context.l10n.createApiKey,
+                              style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 20,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
-                            SizedBox(height: 2),
+                            const SizedBox(height: 2),
                             Text(
-                              'Access your data programmatically',
-                              style: TextStyle(
+                              context.l10n.accessDataProgrammatically,
+                              style: const TextStyle(
                                 color: Color(0xFF8E8E93),
                                 fontSize: 13,
                               ),
@@ -345,9 +346,9 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'KEY NAME',
-                        style: TextStyle(
+                      Text(
+                        context.l10n.keyNameLabel,
+                        style: const TextStyle(
                           color: Color(0xFF8E8E93),
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
@@ -360,7 +361,7 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
                         autofocus: false,
                         style: const TextStyle(color: Colors.white, fontSize: 16),
                         decoration: InputDecoration(
-                          hintText: 'e.g., My App Integration',
+                          hintText: context.l10n.keyNamePlaceholder,
                           hintStyle: const TextStyle(color: Color(0xFF6C6C70), fontSize: 16),
                           filled: true,
                           fillColor: const Color(0xFF1A1A1A),
@@ -380,7 +381,7 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
                         ),
                         validator: (value) {
                           if (value == null || value.trim().isEmpty) {
-                            return 'Please enter a name';
+                            return context.l10n.pleaseEnterAName;
                           }
                           return null;
                         },
@@ -395,9 +396,9 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        'PERMISSIONS',
-                        style: TextStyle(
+                      Text(
+                        context.l10n.permissionsLabel,
+                        style: const TextStyle(
                           color: Color(0xFF8E8E93),
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
@@ -406,9 +407,9 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
                       ),
                       Row(
                         children: [
-                          _buildPresetChip('Read Only', _isReadOnly, _selectReadOnly),
+                          _buildPresetChip(context.l10n.readOnlyScope, _isReadOnly, _selectReadOnly),
                           const SizedBox(width: 8),
-                          _buildPresetChip('Full Access', _isFullAccess, _selectFullAccess),
+                          _buildPresetChip(context.l10n.fullAccessScope, _isFullAccess, _selectFullAccess),
                         ],
                       ),
                     ],
@@ -421,10 +422,10 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
                   child: Column(
                     children: [
                       _buildPermissionTile(
-                          'Conversations', 'conversations:read', 'conversations:write', Icons.chat_bubble_outline),
-                      _buildPermissionTile('Memories', 'memories:read', 'memories:write', Icons.psychology_outlined),
+                          context.l10n.conversations, 'conversations:read', 'conversations:write', Icons.chat_bubble_outline),
+                      _buildPermissionTile(context.l10n.memories, 'memories:read', 'memories:write', Icons.psychology_outlined),
                       _buildPermissionTile(
-                          'Action Items', 'action_items:read', 'action_items:write', Icons.task_alt_outlined),
+                          context.l10n.actionItems, 'action_items:read', 'action_items:write', Icons.task_alt_outlined),
                     ],
                   ),
                 ),
@@ -435,10 +436,10 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
                     children: [
                       Icon(Icons.info_outline, color: Colors.amber.shade700, size: 16),
                       const SizedBox(width: 8),
-                      const Expanded(
+                      Expanded(
                         child: Text(
-                          'R = Read, W = Write. Defaults to read-only if nothing selected.',
-                          style: TextStyle(color: Color(0xFF6C6C70), fontSize: 12),
+                          context.l10n.permissionsInfoNote,
+                          style: const TextStyle(color: Color(0xFF6C6C70), fontSize: 12),
                         ),
                       ),
                     ],
@@ -471,9 +472,9 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
                                 valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                               ),
                             )
-                          : const Text(
-                              'Create Key',
-                              style: TextStyle(
+                          : Text(
+                              context.l10n.createKey,
+                              style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
                               ),

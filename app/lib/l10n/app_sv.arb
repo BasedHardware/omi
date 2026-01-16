@@ -3090,5 +3090,11 @@
   "saveKeyWarning": "Spara denna nyckel nu! Du kommer inte att kunna se den igen.",
   "yourApiKey": "DIN API-NYCKEL",
   "tapToCopy": "Tryck för att kopiera",
-  "copyKey": "Kopiera nyckel"
+  "copyKey": "Kopiera nyckel",
+  "createApiKey": "Skapa API-nyckel",
+  "accessDataProgrammatically": "Få programmatisk åtkomst till dina data",
+  "keyNameLabel": "NYCKELNAMN",
+  "keyNamePlaceholder": "t.ex., Min app-integration",
+  "permissionsLabel": "BEHÖRIGHETER",
+  "permissionsInfoNote": "R = Läs, W = Skriv. Standard endast läsning om inget är valt."
 }

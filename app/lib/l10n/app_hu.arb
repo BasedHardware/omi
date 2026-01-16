@@ -3090,5 +3090,11 @@
   "saveKeyWarning": "Mentse el ezt a kulcsot most! Nem fogja tudni újra megtekinteni.",
   "yourApiKey": "AZ ÖN API KULCSA",
   "tapToCopy": "Másoláshoz érintse meg",
-  "copyKey": "Kulcs másolása"
+  "copyKey": "Kulcs másolása",
+  "createApiKey": "API kulcs létrehozása",
+  "accessDataProgrammatically": "Programozott hozzáférés az adataihoz",
+  "keyNameLabel": "KULCS NEVE",
+  "keyNamePlaceholder": "pl. Az én integrációm",
+  "permissionsLabel": "ENGEDÉLYEK",
+  "permissionsInfoNote": "R = Olvasás, W = Írás. Alapértelmezés szerint csak olvasható, ha nincs semmi kiválasztva."
 }

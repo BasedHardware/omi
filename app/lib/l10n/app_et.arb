@@ -3090,5 +3090,11 @@
   "saveKeyWarning": "Salvesta see võti kohe! Sa ei näe seda enam kunagi.",
   "yourApiKey": "TEIE API VÕTI",
   "tapToCopy": "Puudutage kopeerimiseks",
-  "copyKey": "Kopeeri võti"
+  "copyKey": "Kopeeri võti",
+  "createApiKey": "Loo API võti",
+  "accessDataProgrammatically": "Pääsete oma andmetele programmiliselt juurde",
+  "keyNameLabel": "VÕTME NIMI",
+  "keyNamePlaceholder": "nt. Minu rakenduse integratsioon",
+  "permissionsLabel": "ÕIGUSED",
+  "permissionsInfoNote": "R = Lugemine, W = Kirjutamine. Vaikimisi ainult lugemine, kui midagi pole valitud."
 }

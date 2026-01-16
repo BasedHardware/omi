@@ -4441,4 +4441,22 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get copyKey => 'Kopēt atslēgu';
+
+  @override
+  String get createApiKey => 'Izveidot API atslēgu';
+
+  @override
+  String get accessDataProgrammatically => 'Piekļūstiet saviem datiem programmatiski';
+
+  @override
+  String get keyNameLabel => 'ATSLĒGAS NOSAUKUMS';
+
+  @override
+  String get keyNamePlaceholder => 'piem., Manas lietotnes integrācija';
+
+  @override
+  String get permissionsLabel => 'ATĻAUJAS';
+
+  @override
+  String get permissionsInfoNote => 'R = Lasīt, W = Rakstīt. Noklusējums tikai lasīšana, ja nekas nav atlasīts.';
 }

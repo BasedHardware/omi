@@ -4440,4 +4440,22 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get copyKey => 'Sao chép khóa';
+
+  @override
+  String get createApiKey => 'Tạo khóa API';
+
+  @override
+  String get accessDataProgrammatically => 'Truy cập dữ liệu của bạn theo chương trình';
+
+  @override
+  String get keyNameLabel => 'TÊN KHÓA';
+
+  @override
+  String get keyNamePlaceholder => 'vd: Tích hợp ứng dụng của tôi';
+
+  @override
+  String get permissionsLabel => 'QUYỀN';
+
+  @override
+  String get permissionsInfoNote => 'R = Đọc, W = Ghi. Mặc định chỉ đọc nếu không chọn gì.';
 }

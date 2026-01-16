@@ -3108,5 +3108,11 @@
   "saveKeyWarning": "احفظ هذا المفتاح الآن! لن تتمكن من رؤيته مرة أخرى.",
   "yourApiKey": "مفتاح API الخاص بك",
   "tapToCopy": "اضغط للنسخ",
-  "copyKey": "نسخ المفتاح"
+  "copyKey": "نسخ المفتاح",
+  "createApiKey": "إنشاء مفتاح API",
+  "accessDataProgrammatically": "الوصول إلى بياناتك برمجياً",
+  "keyNameLabel": "اسم المفتاح",
+  "keyNamePlaceholder": "مثال: تكامل تطبيقي",
+  "permissionsLabel": "الأذونات",
+  "permissionsInfoNote": "R = قراءة، W = كتابة. الافتراضي قراءة فقط إذا لم يتم تحديد شيء."
 }

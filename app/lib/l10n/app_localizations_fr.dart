@@ -4470,4 +4470,22 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get copyKey => 'Copier la clé';
+
+  @override
+  String get createApiKey => 'Créer une clé API';
+
+  @override
+  String get accessDataProgrammatically => 'Accédez à vos données par programmation';
+
+  @override
+  String get keyNameLabel => 'NOM DE LA CLÉ';
+
+  @override
+  String get keyNamePlaceholder => 'ex., Mon intégration';
+
+  @override
+  String get permissionsLabel => 'AUTORISATIONS';
+
+  @override
+  String get permissionsInfoNote => 'R = Lecture, W = Écriture. Lecture seule par défaut si rien n\'est sélectionné.';
 }
