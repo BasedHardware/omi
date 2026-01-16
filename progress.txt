@@ -1324,3 +1324,17 @@ Notes: Small file (83 lines) containing webview for referral program page.
        already had an existing l10n key (referralProgram). Added l10n import
        and updated title to use context.l10n.referralProgram.
 Commit: 6c8e634d7
+
+--------------------------------------------------------------------------------
+FILE 98 (Phase 2 FILE 28): delete_account.dart
+--------------------------------------------------------------------------------
+Path: app/lib/pages/settings/delete_account.dart
+New Keys: (none - existing key used)
+Reused Keys: deleteAccount
+Total New Keys: 0
+Script: N/A
+Status: ✅ COMPLETED
+Notes: File was almost fully localized already. Only one hardcoded string
+       remained: "Delete Account" button text. Updated to use existing
+       context.l10n.deleteAccount key. Removed const from Text widget.
+Commit: 5fa5dc029
