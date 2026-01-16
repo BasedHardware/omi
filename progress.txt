@@ -1166,12 +1166,25 @@ Notes: Localized create API key sheet including title, subtitle, key name input
        and create button with loading state.
 Commit: 031d76a14
 
+--------------------------------------------------------------------------------
+FILE 90 (Phase 2 FILE 20): developer_api_keys_section.dart
+--------------------------------------------------------------------------------
+Path: app/lib/pages/settings/widgets/developer_api_keys_section.dart
+New Keys: developerApi, createAKeyToGetStarted, errorWithMessage
+Reused Keys: docs, createKey, noApiKeys
+Script: /tmp/translate_developer_api_keys_section.py
+Status: ✅ COMPLETED
+Notes: Localized developer API section with section header, docs button,
+       create key button, error state with message, and empty state with
+       "no API keys yet" and "create a key to get started" messages.
+Commit: 9c7f42341
+
 ================================================================================
 END OF PROGRESS TRACKER
 ================================================================================
 Last Updated: 2026-01-16
-Last Completed: FILE 89 - create_dev_api_key_sheet.dart (6 new keys, 204 new translations)
-Previous Completed: FILE 88 - dev_api_key_created_dialog.dart (6 new keys, 204 new translations)
+Last Completed: FILE 90 - developer_api_keys_section.dart (3 new keys, 102 new translations)
+Previous Completed: FILE 89 - create_dev_api_key_sheet.dart (6 new keys, 204 new translations)
 Current Session: Phase 2 - Mobile/Pages localization in progress
 
 🎉 PHASE 1 (DESKTOP) COMPLETE! 🎉
@@ -1181,5 +1194,5 @@ Current Session: Phase 2 - Mobile/Pages localization in progress
 
 📋 PHASE 2 (MOBILE/PAGES) IN PROGRESS
 59 files identified with hardcoded strings
-Files Completed: 19
+Files Completed: 20
 Estimated 200-300 new keys needed
