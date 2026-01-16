@@ -1241,3 +1241,20 @@ Notes: Localized privacy information page with section headers (Privacy Informat
        Opt-In and Opt-Out Options, Our Commitment), intro text, commitment text,
        and thank you text. Bullet points remain hardcoded (technical descriptions).
 Commit: ac9dfe97d
+
+--------------------------------------------------------------------------------
+FILE 93 (Phase 2 FILE 23): wifi_sync_settings_page.dart
+--------------------------------------------------------------------------------
+Path: app/lib/pages/settings/wifi_sync_settings_page.dart
+New Keys: wifiSyncSettings, enterHotspotCredentials, wifiSyncUsesHotspot,
+         hotspotNameSsid, exampleIphoneHotspot, password, enterHotspotPassword,
+         saveCredentials, clearCredentials, pleaseEnterHotspotName,
+         wifiCredentialsSaved, wifiCredentialsCleared
+Total New Keys: 12
+Script: /tmp/translate_wifi_sync.py
+Status: ✅ COMPLETED
+Notes: Localized WiFi sync settings page including page title, info box with
+       hotspot instructions, SSID field label and placeholder, password field
+       label and placeholder, save/clear credential buttons, and snackbar
+       messages for validation and success/clear states.
+Commit: 7c7699c58
