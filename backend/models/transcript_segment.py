@@ -69,42 +69,33 @@ class TranscriptSegment(BaseModel):
         if not new_segments or len(new_segments) == 0:
             return segments, (len(segments), len(segments))
 
-        # By the first punctuation on text
-        def _split(text: str) -> []:
-            i = -1
-            for m in ['.', '!', '?']:
-                i = text.find(m)
-                break
-            if i == -1:
-                return [text]
+        def _extract_last_incomplete_sentence(text: str) -> Tuple[Optional[str], str]:
+            chunks = [c.strip() for c in re.findall(r'[^.?!]+[.?!]?', text.strip()) if c.strip()]
+            if not chunks:
+                return None, text.strip()
+            last = chunks[-1]
+            if last and last[-1] not in [".", "?", "!"]:
+                prefix = " ".join(chunks[:-1]).strip()
+                return last, prefix
+            return None, text.strip()
 
-            parts = [text[: i + 1]]
-            remaining = text[i + 1 :].strip()
-            if remaining:
-                parts.append(remaining)
-            return parts
+        def _should_merge_same_speaker(a: 'TranscriptSegment', b: 'TranscriptSegment') -> bool:
+            return (
+                (a.speaker == b.speaker or (a.is_user and b.is_user))
+                and a.speech_profile_processed == b.speech_profile_processed
+                and (b.start - a.end < 3)
+                and (len(a.text) < 125 or a.text[-1] not in [".", "?", "!"])
+            )
 
-        # Refined new segments
-        refined_segments = []
-        for segment in new_segments:
-            if segment.text and segment.text[0].islower() and re.search('[.?!]', segment.text):
-                start = segment.start
-                c_rate = (segment.end - segment.start) / len(segment.text)
-                for text in _split(segment.text):
-                    if not text:
-                        continue
-                    s = segment.copy(deep=True)
-                    s.text = text
-
-                    # Time alignment
-                    s.start = start
-                    s.end = start + c_rate * len(text)
-                    start = s.end
-                    refined_segments.append(s)
-            else:
-                refined_segments.append(segment)
-
-        new_segments = refined_segments
+        def _should_merge_lowercase_continuation(a: 'TranscriptSegment', b: 'TranscriptSegment') -> bool:
+            return (
+                a.text
+                and b.text
+                and (a.speaker == b.speaker or (a.is_user and b.is_user))
+                and not a.text[-1] in [".", "?", "!"]
+                and b.text[0].islower()
+                and a.speech_profile_processed == b.speech_profile_processed
+            )
 
         # Combined
         def _merge(a, b: TranscriptSegment):
@@ -112,23 +103,23 @@ class TranscriptSegment(BaseModel):
                 return a, b
             if b.stt_provider != a.stt_provider:
                 return a, b
-            if (
-                (a.speaker == b.speaker or (a.is_user and b.is_user))
-                and a.speech_profile_processed == b.speech_profile_processed
-                and (b.start - a.end < 3)
-                and (len(a.text) < 125 or a.text[-1] not in [".", "?", "!"])
-            ):
+
+            if a.speaker != b.speaker and not (a.is_user and b.is_user) and a.text and b.text:
+                last_incomplete, prefix = _extract_last_incomplete_sentence(a.text)
+                if last_incomplete and len(last_incomplete) < len(b.text.strip()):
+                    b.text = f'{last_incomplete} {b.text}'.strip()
+                    if prefix:
+                        a.text = prefix
+                        a.end = min(a.end, b.start)
+                        return a, b
+                    a.text = ""
+                    return None, b
+            if _should_merge_same_speaker(a, b):
                 a.text += f' {b.text}'
                 a.end = b.end
                 return a, None
 
-            if (
-                a.text
-                and b.text
-                and not a.text[-1] in [".", "?", "!"]
-                and b.text[0].islower()
-                and a.speech_profile_processed == b.speech_profile_processed
-            ):
+            if _should_merge_lowercase_continuation(a, b):
                 a.text += f' {b.text}'
                 a.end = b.end
                 return a, None
@@ -149,6 +140,8 @@ class TranscriptSegment(BaseModel):
             a, b = _merge(joined_similar_segments[-1] if joined_similar_segments else None, new_segment)
             if a:
                 joined_similar_segments[-1] = a
+            elif joined_similar_segments and joined_similar_segments[-1].text == "":
+                joined_similar_segments.pop()
             if b:
                 joined_similar_segments.append(b)
 
