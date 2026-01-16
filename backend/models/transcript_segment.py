@@ -70,14 +70,19 @@ class TranscriptSegment(BaseModel):
             return segments, (len(segments), len(segments))
 
         def _extract_last_incomplete_sentence(text: str) -> Tuple[Optional[str], str]:
-            chunks = [c.strip() for c in re.findall(r'[^.?!]+[.?!]?', text.strip()) if c.strip()]
-            if not chunks:
-                return None, text.strip()
-            last = chunks[-1]
-            if last and last[-1] not in [".", "?", "!"]:
-                prefix = " ".join(chunks[:-1]).strip()
+            text = text.strip()
+            if not text:
+                return None, ""
+            # Use lookbehind to split after sentence-ending punctuation
+            parts = [p for p in re.split(r'(?<=[.?!])\s*', text) if p]
+            if not parts:
+                return None, text
+            last = parts[-1]
+            # Check if the last part is incomplete (doesn't end with punctuation)
+            if last[-1] not in ".?!":
+                prefix = " ".join(parts[:-1]).strip() if len(parts) > 1 else ""
                 return last, prefix
-            return None, text.strip()
+            return None, text
 
         def _should_merge_same_speaker(a: 'TranscriptSegment', b: 'TranscriptSegment') -> bool:
             return (
