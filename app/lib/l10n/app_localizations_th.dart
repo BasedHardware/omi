@@ -4618,4 +4618,22 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get failedToGenerateSummaryCheckConversations => 'ไม่สามารถสร้างสรุปได้ ตรวจสอบให้แน่ใจว่าคุณมีการสนทนาสำหรับวันนั้น';
+
+  @override
+  String get summaryNotFound => 'ไม่พบสรุป';
+
+  @override
+  String get yourDaysJourney => 'การเดินทางของวันนี้';
+
+  @override
+  String get highlights => 'ไฮไลท์';
+
+  @override
+  String get unresolvedQuestions => 'คำถามที่ยังไม่ได้แก้ไข';
+
+  @override
+  String get decisions => 'การตัดสินใจ';
+
+  @override
+  String get learnings => 'สิ่งที่เรียนรู้';
 }

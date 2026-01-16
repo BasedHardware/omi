@@ -3248,5 +3248,29 @@
   "failedToGenerateSummaryCheckConversations": "Neizdevās izveidot kopsavilkumu. Pārliecinieties, ka jums ir sarunas par šo dienu.",
   "@failedToGenerateSummaryCheckConversations": {
     "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Kopsavilkums nav atrasts",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "Jūsu dienas ceļojums",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "Galvenie punkti",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Neatrisināti jautājumi",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Lēmumi",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Mācības",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
   }
 }

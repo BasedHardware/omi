@@ -4618,4 +4618,22 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get failedToGenerateSummaryCheckConversations => 'Gagal menjana ringkasan. Pastikan anda mempunyai perbualan untuk hari itu.';
+
+  @override
+  String get summaryNotFound => 'Ringkasan tidak ditemui';
+
+  @override
+  String get yourDaysJourney => 'Perjalanan Hari Anda';
+
+  @override
+  String get highlights => 'Sorotan';
+
+  @override
+  String get unresolvedQuestions => 'Soalan Tidak Selesai';
+
+  @override
+  String get decisions => 'Keputusan';
+
+  @override
+  String get learnings => 'Pembelajaran';
 }

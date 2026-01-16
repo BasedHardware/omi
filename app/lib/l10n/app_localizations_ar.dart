@@ -4618,4 +4618,22 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get failedToGenerateSummaryCheckConversations => 'فشل في إنشاء الملخص. تأكد من وجود محادثات لذلك اليوم.';
+
+  @override
+  String get summaryNotFound => 'الملخص غير موجود';
+
+  @override
+  String get yourDaysJourney => 'رحلة يومك';
+
+  @override
+  String get highlights => 'أبرز الأحداث';
+
+  @override
+  String get unresolvedQuestions => 'أسئلة لم تحل';
+
+  @override
+  String get decisions => 'القرارات';
+
+  @override
+  String get learnings => 'الدروس المستفادة';
 }

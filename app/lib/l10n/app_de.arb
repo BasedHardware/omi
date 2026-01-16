@@ -1695,5 +1695,29 @@
   "failedToGenerateSummaryCheckConversations": "Zusammenfassung konnte nicht erstellt werden. Stellen Sie sicher, dass Sie Gespräche für diesen Tag haben.",
   "@failedToGenerateSummaryCheckConversations": {
     "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Zusammenfassung nicht gefunden",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "Ihre Tagesreise",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "Höhepunkte",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Offene Fragen",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Entscheidungen",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Erkenntnisse",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
   }
 }

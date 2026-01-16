@@ -3266,5 +3266,29 @@
   "failedToGenerateSummaryCheckConversations": "فشل في إنشاء الملخص. تأكد من وجود محادثات لذلك اليوم.",
   "@failedToGenerateSummaryCheckConversations": {
     "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "الملخص غير موجود",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "رحلة يومك",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "أبرز الأحداث",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "أسئلة لم تحل",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "القرارات",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "الدروس المستفادة",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
   }
 }

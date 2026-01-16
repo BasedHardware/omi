@@ -4612,4 +4612,22 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get failedToGenerateSummaryCheckConversations => 'सारांश बनाने में विफल। सुनिश्चित करें कि उस दिन की बातचीत हो।';
+
+  @override
+  String get summaryNotFound => 'सारांश नहीं मिला';
+
+  @override
+  String get yourDaysJourney => 'आपके दिन की यात्रा';
+
+  @override
+  String get highlights => 'मुख्य बातें';
+
+  @override
+  String get unresolvedQuestions => 'अनसुलझे प्रश्न';
+
+  @override
+  String get decisions => 'निर्णय';
+
+  @override
+  String get learnings => 'सीखें';
 }

@@ -3248,5 +3248,29 @@
   "failedToGenerateSummaryCheckConversations": "요약 생성에 실패했습니다. 해당 날짜의 대화가 있는지 확인하세요.",
   "@failedToGenerateSummaryCheckConversations": {
     "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "요약을 찾을 수 없습니다",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "오늘의 여정",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "하이라이트",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "미해결 질문",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "결정",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "배움",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
   }
 }

@@ -3248,5 +3248,29 @@
   "failedToGenerateSummaryCheckConversations": "Nu s-a putut genera rezumatul. Asigură-te că ai conversații pentru acea zi.",
   "@failedToGenerateSummaryCheckConversations": {
     "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Rezumatul nu a fost găsit",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "Călătoria zilei tale",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "Evidențieri",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Întrebări nerezolvate",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Decizii",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Învățăminte",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
   }
 }

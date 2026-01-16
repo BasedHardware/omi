@@ -3248,5 +3248,29 @@
   "failedToGenerateSummaryCheckConversations": "Не удалось создать сводку. Убедитесь, что у вас есть разговоры за этот день.",
   "@failedToGenerateSummaryCheckConversations": {
     "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Сводка не найдена",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "Ваш путь за день",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "Основные моменты",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Нерешённые вопросы",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Решения",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Выводы",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
   }
 }

@@ -4618,4 +4618,22 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get failedToGenerateSummaryCheckConversations => 'Impossibile generare il riepilogo. Assicurati di avere conversazioni per quel giorno.';
+
+  @override
+  String get summaryNotFound => 'Riepilogo non trovato';
+
+  @override
+  String get yourDaysJourney => 'Il viaggio della tua giornata';
+
+  @override
+  String get highlights => 'In evidenza';
+
+  @override
+  String get unresolvedQuestions => 'Domande irrisolte';
+
+  @override
+  String get decisions => 'Decisioni';
+
+  @override
+  String get learnings => 'Apprendimenti';
 }

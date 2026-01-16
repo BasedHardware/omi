@@ -3248,5 +3248,29 @@
   "failedToGenerateSummaryCheckConversations": "Kunne ikke generere sammendrag. Sørg for at du har samtaler for den dagen.",
   "@failedToGenerateSummaryCheckConversations": {
     "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Sammendrag ikke funnet",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "Dagens reise",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "Høydepunkter",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Ubesvarte spørsmål",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Beslutninger",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Lærdommer",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
   }
 }

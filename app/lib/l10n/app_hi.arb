@@ -1695,5 +1695,29 @@
   "failedToGenerateSummaryCheckConversations": "सारांश बनाने में विफल। सुनिश्चित करें कि उस दिन की बातचीत हो।",
   "@failedToGenerateSummaryCheckConversations": {
     "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "सारांश नहीं मिला",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "आपके दिन की यात्रा",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "मुख्य बातें",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "अनसुलझे प्रश्न",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "निर्णय",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "सीखें",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
   }
 }

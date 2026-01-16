@@ -3250,5 +3250,29 @@
   "failedToGenerateSummaryCheckConversations": "No s'ha pogut generar el resum. Assegura't que tens converses per a aquell dia.",
   "@failedToGenerateSummaryCheckConversations": {
     "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Resum no trobat",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "El viatge del teu dia",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "Punts destacats",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Preguntes no resoltes",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Decisions",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Aprenentatges",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
   }
 }

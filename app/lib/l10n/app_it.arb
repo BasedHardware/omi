@@ -3230,5 +3230,29 @@
   "failedToGenerateSummaryCheckConversations": "Impossibile generare il riepilogo. Assicurati di avere conversazioni per quel giorno.",
   "@failedToGenerateSummaryCheckConversations": {
     "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Riepilogo non trovato",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "Il viaggio della tua giornata",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "In evidenza",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Domande irrisolte",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Decisioni",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Apprendimenti",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
   }
 }

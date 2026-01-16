@@ -4618,4 +4618,22 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get failedToGenerateSummaryCheckConversations => 'Gagal membuat ringkasan. Pastikan Anda memiliki percakapan untuk hari itu.';
+
+  @override
+  String get summaryNotFound => 'Ringkasan tidak ditemukan';
+
+  @override
+  String get yourDaysJourney => 'Perjalanan Hari Anda';
+
+  @override
+  String get highlights => 'Sorotan';
+
+  @override
+  String get unresolvedQuestions => 'Pertanyaan Belum Terjawab';
+
+  @override
+  String get decisions => 'Keputusan';
+
+  @override
+  String get learnings => 'Pembelajaran';
 }

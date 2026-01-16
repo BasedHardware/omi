@@ -4618,4 +4618,22 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get failedToGenerateSummaryCheckConversations => 'Neizdevās izveidot kopsavilkumu. Pārliecinieties, ka jums ir sarunas par šo dienu.';
+
+  @override
+  String get summaryNotFound => 'Kopsavilkums nav atrasts';
+
+  @override
+  String get yourDaysJourney => 'Jūsu dienas ceļojums';
+
+  @override
+  String get highlights => 'Galvenie punkti';
+
+  @override
+  String get unresolvedQuestions => 'Neatrisināti jautājumi';
+
+  @override
+  String get decisions => 'Lēmumi';
+
+  @override
+  String get learnings => 'Mācības';
 }

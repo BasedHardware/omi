@@ -4612,4 +4612,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get failedToGenerateSummaryCheckConversations => '无法生成摘要。请确保您当天有对话记录。';
+
+  @override
+  String get summaryNotFound => '未找到摘要';
+
+  @override
+  String get yourDaysJourney => '您的一天旅程';
+
+  @override
+  String get highlights => '亮点';
+
+  @override
+  String get unresolvedQuestions => '未解决的问题';
+
+  @override
+  String get decisions => '决定';
+
+  @override
+  String get learnings => '收获';
 }

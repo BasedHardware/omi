@@ -3248,5 +3248,29 @@
   "failedToGenerateSummaryCheckConversations": "Kunde inte generera sammanfattning. Se till att du har samtal för den dagen.",
   "@failedToGenerateSummaryCheckConversations": {
     "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Sammanfattning hittades inte",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "Din dags resa",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "Höjdpunkter",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Olösta frågor",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Beslut",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Lärdomar",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
   }
 }

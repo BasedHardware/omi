@@ -4618,4 +4618,22 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get failedToGenerateSummaryCheckConversations => 'Zusammenfassung konnte nicht erstellt werden. Stellen Sie sicher, dass Sie Gespräche für diesen Tag haben.';
+
+  @override
+  String get summaryNotFound => 'Zusammenfassung nicht gefunden';
+
+  @override
+  String get yourDaysJourney => 'Ihre Tagesreise';
+
+  @override
+  String get highlights => 'Höhepunkte';
+
+  @override
+  String get unresolvedQuestions => 'Offene Fragen';
+
+  @override
+  String get decisions => 'Entscheidungen';
+
+  @override
+  String get learnings => 'Erkenntnisse';
 }

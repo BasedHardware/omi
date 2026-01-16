@@ -4618,4 +4618,22 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get failedToGenerateSummaryCheckConversations => 'Nepavyko sukurti santraukos. Įsitikinkite, kad turite pokalbių tai dienai.';
+
+  @override
+  String get summaryNotFound => 'Santrauka nerasta';
+
+  @override
+  String get yourDaysJourney => 'Jūsų dienos kelionė';
+
+  @override
+  String get highlights => 'Svarbiausios vietos';
+
+  @override
+  String get unresolvedQuestions => 'Neišspręsti klausimai';
+
+  @override
+  String get decisions => 'Sprendimai';
+
+  @override
+  String get learnings => 'Išmokta';
 }

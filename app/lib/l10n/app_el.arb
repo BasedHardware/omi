@@ -3248,5 +3248,29 @@
   "failedToGenerateSummaryCheckConversations": "Αποτυχία δημιουργίας σύνοψης. Βεβαιωθείτε ότι έχετε συνομιλίες για εκείνη την ημέρα.",
   "@failedToGenerateSummaryCheckConversations": {
     "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Η σύνοψη δεν βρέθηκε",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "Η διαδρομή της ημέρας σας",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "Κυριότερα σημεία",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Ανεπίλυτες ερωτήσεις",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Αποφάσεις",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Διδάγματα",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
   }
 }

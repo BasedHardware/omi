@@ -1674,5 +1674,29 @@
   "failedToGenerateSummaryCheckConversations": "要約の生成に失敗しました。その日の会話があることを確認してください。",
   "@failedToGenerateSummaryCheckConversations": {
     "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "要約が見つかりません",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "今日の旅程",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "ハイライト",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "未解決の質問",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "決定事項",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "学び",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
   }
 }

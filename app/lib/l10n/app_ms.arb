@@ -3248,5 +3248,29 @@
   "failedToGenerateSummaryCheckConversations": "Gagal menjana ringkasan. Pastikan anda mempunyai perbualan untuk hari itu.",
   "@failedToGenerateSummaryCheckConversations": {
     "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Ringkasan tidak ditemui",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "Perjalanan Hari Anda",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "Sorotan",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Soalan Tidak Selesai",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Keputusan",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Pembelajaran",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
   }
 }

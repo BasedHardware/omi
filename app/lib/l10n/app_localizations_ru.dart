@@ -4619,4 +4619,22 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get failedToGenerateSummaryCheckConversations => 'Не удалось создать сводку. Убедитесь, что у вас есть разговоры за этот день.';
+
+  @override
+  String get summaryNotFound => 'Сводка не найдена';
+
+  @override
+  String get yourDaysJourney => 'Ваш путь за день';
+
+  @override
+  String get highlights => 'Основные моменты';
+
+  @override
+  String get unresolvedQuestions => 'Нерешённые вопросы';
+
+  @override
+  String get decisions => 'Решения';
+
+  @override
+  String get learnings => 'Выводы';
 }

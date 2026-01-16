@@ -3248,5 +3248,29 @@
   "failedToGenerateSummaryCheckConversations": "Nem sikerült létrehozni az összefoglalót. Győződjön meg róla, hogy vannak beszélgetései aznap.",
   "@failedToGenerateSummaryCheckConversations": {
     "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Összefoglaló nem található",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "A napod útja",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "Kiemelések",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Megoldatlan kérdések",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Döntések",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Tanulságok",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
   }
 }

@@ -4618,4 +4618,22 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get failedToGenerateSummaryCheckConversations => 'Nu s-a putut genera rezumatul. Asigură-te că ai conversații pentru acea zi.';
+
+  @override
+  String get summaryNotFound => 'Rezumatul nu a fost găsit';
+
+  @override
+  String get yourDaysJourney => 'Călătoria zilei tale';
+
+  @override
+  String get highlights => 'Evidențieri';
+
+  @override
+  String get unresolvedQuestions => 'Întrebări nerezolvate';
+
+  @override
+  String get decisions => 'Decizii';
+
+  @override
+  String get learnings => 'Învățăminte';
 }

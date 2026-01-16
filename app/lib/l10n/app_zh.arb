@@ -1695,5 +1695,29 @@
   "failedToGenerateSummaryCheckConversations": "无法生成摘要。请确保您当天有对话记录。",
   "@failedToGenerateSummaryCheckConversations": {
     "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "未找到摘要",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "您的一天旅程",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "亮点",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "未解决的问题",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "决定",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "收获",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
   }
 }

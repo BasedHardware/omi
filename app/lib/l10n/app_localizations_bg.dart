@@ -4618,4 +4618,22 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get failedToGenerateSummaryCheckConversations => 'Неуспешно генериране на резюме. Уверете се, че имате разговори за този ден.';
+
+  @override
+  String get summaryNotFound => 'Резюмето не е намерено';
+
+  @override
+  String get yourDaysJourney => 'Пътуването ви за деня';
+
+  @override
+  String get highlights => 'Акценти';
+
+  @override
+  String get unresolvedQuestions => 'Нерешени въпроси';
+
+  @override
+  String get decisions => 'Решения';
+
+  @override
+  String get learnings => 'Научено';
 }

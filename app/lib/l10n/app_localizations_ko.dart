@@ -4612,4 +4612,22 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get failedToGenerateSummaryCheckConversations => '요약 생성에 실패했습니다. 해당 날짜의 대화가 있는지 확인하세요.';
+
+  @override
+  String get summaryNotFound => '요약을 찾을 수 없습니다';
+
+  @override
+  String get yourDaysJourney => '오늘의 여정';
+
+  @override
+  String get highlights => '하이라이트';
+
+  @override
+  String get unresolvedQuestions => '미해결 질문';
+
+  @override
+  String get decisions => '결정';
+
+  @override
+  String get learnings => '배움';
 }

@@ -2066,5 +2066,29 @@
   "failedToGenerateSummaryCheckConversations": "Kon samenvatting niet genereren. Zorg ervoor dat u gesprekken heeft voor die dag.",
   "@failedToGenerateSummaryCheckConversations": {
     "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Samenvatting niet gevonden",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "Uw dagreis",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "Hoogtepunten",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Onopgeloste vragen",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Beslissingen",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Inzichten",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
   }
 }

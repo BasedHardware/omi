@@ -3230,5 +3230,29 @@
   "failedToGenerateSummaryCheckConversations": "Özet oluşturulamadı. O gün için konuşmalarınız olduğundan emin olun.",
   "@failedToGenerateSummaryCheckConversations": {
     "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Özet bulunamadı",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "Günün Yolculuğu",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "Öne Çıkanlar",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Çözülmemiş Sorular",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Kararlar",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Öğrenilenler",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
   }
 }

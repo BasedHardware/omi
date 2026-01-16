@@ -4618,4 +4618,22 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get failedToGenerateSummaryCheckConversations => 'Αποτυχία δημιουργίας σύνοψης. Βεβαιωθείτε ότι έχετε συνομιλίες για εκείνη την ημέρα.';
+
+  @override
+  String get summaryNotFound => 'Η σύνοψη δεν βρέθηκε';
+
+  @override
+  String get yourDaysJourney => 'Η διαδρομή της ημέρας σας';
+
+  @override
+  String get highlights => 'Κυριότερα σημεία';
+
+  @override
+  String get unresolvedQuestions => 'Ανεπίλυτες ερωτήσεις';
+
+  @override
+  String get decisions => 'Αποφάσεις';
+
+  @override
+  String get learnings => 'Διδάγματα';
 }

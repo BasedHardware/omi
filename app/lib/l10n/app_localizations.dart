@@ -8924,6 +8924,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Failed to generate summary. Make sure you have conversations for that day.'**
   String get failedToGenerateSummaryCheckConversations;
+
+  /// Daily summary detail - summaryNotFound
+  ///
+  /// In en, this message translates to:
+  /// **'Summary not found'**
+  String get summaryNotFound;
+
+  /// Daily summary detail - yourDaysJourney
+  ///
+  /// In en, this message translates to:
+  /// **'Your Day\'s Journey'**
+  String get yourDaysJourney;
+
+  /// Daily summary detail - highlights
+  ///
+  /// In en, this message translates to:
+  /// **'Highlights'**
+  String get highlights;
+
+  /// Daily summary detail - unresolvedQuestions
+  ///
+  /// In en, this message translates to:
+  /// **'Unresolved Questions'**
+  String get unresolvedQuestions;
+
+  /// Daily summary detail - decisions
+  ///
+  /// In en, this message translates to:
+  /// **'Decisions'**
+  String get decisions;
+
+  /// Daily summary detail - learnings
+  ///
+  /// In en, this message translates to:
+  /// **'Learnings'**
+  String get learnings;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

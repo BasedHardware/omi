@@ -3248,5 +3248,29 @@
   "failedToGenerateSummaryCheckConversations": "Nie udało się wygenerować podsumowania. Upewnij się, że masz rozmowy z tego dnia.",
   "@failedToGenerateSummaryCheckConversations": {
     "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Nie znaleziono podsumowania",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "Twoja podróż dnia",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "Najważniejsze",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Nierozwiązane pytania",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Decyzje",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Wnioski",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
   }
 }

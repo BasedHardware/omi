@@ -4618,4 +4618,22 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get failedToGenerateSummaryCheckConversations => 'Не вдалося створити підсумок. Переконайтеся, що у вас є розмови за цей день.';
+
+  @override
+  String get summaryNotFound => 'Підсумок не знайдено';
+
+  @override
+  String get yourDaysJourney => 'Ваша подорож за день';
+
+  @override
+  String get highlights => 'Основні моменти';
+
+  @override
+  String get unresolvedQuestions => 'Невирішені питання';
+
+  @override
+  String get decisions => 'Рішення';
+
+  @override
+  String get learnings => 'Висновки';
 }

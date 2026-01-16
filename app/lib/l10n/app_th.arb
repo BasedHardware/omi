@@ -3248,5 +3248,29 @@
   "failedToGenerateSummaryCheckConversations": "ไม่สามารถสร้างสรุปได้ ตรวจสอบให้แน่ใจว่าคุณมีการสนทนาสำหรับวันนั้น",
   "@failedToGenerateSummaryCheckConversations": {
     "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "ไม่พบสรุป",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "การเดินทางของวันนี้",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "ไฮไลท์",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "คำถามที่ยังไม่ได้แก้ไข",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "การตัดสินใจ",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "สิ่งที่เรียนรู้",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
   }
 }

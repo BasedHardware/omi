@@ -4612,4 +4612,22 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get failedToGenerateSummaryCheckConversations => 'Falha ao gerar resumo. Certifique-se de ter conversas para esse dia.';
+
+  @override
+  String get summaryNotFound => 'Resumo não encontrado';
+
+  @override
+  String get yourDaysJourney => 'Sua jornada do dia';
+
+  @override
+  String get highlights => 'Destaques';
+
+  @override
+  String get unresolvedQuestions => 'Perguntas não resolvidas';
+
+  @override
+  String get decisions => 'Decisões';
+
+  @override
+  String get learnings => 'Aprendizados';
 }

@@ -3248,5 +3248,29 @@
   "failedToGenerateSummaryCheckConversations": "Yhteenvedon luominen epäonnistui. Varmista, että sinulla on keskusteluja kyseiseltä päivältä.",
   "@failedToGenerateSummaryCheckConversations": {
     "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Yhteenvetoa ei löytynyt",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "Päiväsi matka",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "Kohokohdat",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Ratkaisemattomat kysymykset",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Päätökset",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Opit",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
   }
 }

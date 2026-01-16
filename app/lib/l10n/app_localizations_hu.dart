@@ -4618,4 +4618,22 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get failedToGenerateSummaryCheckConversations => 'Nem sikerült létrehozni az összefoglalót. Győződjön meg róla, hogy vannak beszélgetései aznap.';
+
+  @override
+  String get summaryNotFound => 'Összefoglaló nem található';
+
+  @override
+  String get yourDaysJourney => 'A napod útja';
+
+  @override
+  String get highlights => 'Kiemelések';
+
+  @override
+  String get unresolvedQuestions => 'Megoldatlan kérdések';
+
+  @override
+  String get decisions => 'Döntések';
+
+  @override
+  String get learnings => 'Tanulságok';
 }

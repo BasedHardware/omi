@@ -4618,4 +4618,22 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get failedToGenerateSummaryCheckConversations => 'Özet oluşturulamadı. O gün için konuşmalarınız olduğundan emin olun.';
+
+  @override
+  String get summaryNotFound => 'Özet bulunamadı';
+
+  @override
+  String get yourDaysJourney => 'Günün Yolculuğu';
+
+  @override
+  String get highlights => 'Öne Çıkanlar';
+
+  @override
+  String get unresolvedQuestions => 'Çözülmemiş Sorular';
+
+  @override
+  String get decisions => 'Kararlar';
+
+  @override
+  String get learnings => 'Öğrenilenler';
 }

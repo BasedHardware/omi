@@ -4618,4 +4618,22 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get failedToGenerateSummaryCheckConversations => 'Kunde inte generera sammanfattning. Se till att du har samtal för den dagen.';
+
+  @override
+  String get summaryNotFound => 'Sammanfattning hittades inte';
+
+  @override
+  String get yourDaysJourney => 'Din dags resa';
+
+  @override
+  String get highlights => 'Höjdpunkter';
+
+  @override
+  String get unresolvedQuestions => 'Olösta frågor';
+
+  @override
+  String get decisions => 'Beslut';
+
+  @override
+  String get learnings => 'Lärdomar';
 }

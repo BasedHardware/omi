@@ -4618,4 +4618,22 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get failedToGenerateSummaryCheckConversations => 'Nepodarilo sa vytvoriť zhrnutie. Uistite sa, že máte konverzácie pre daný deň.';
+
+  @override
+  String get summaryNotFound => 'Zhrnutie nenájdené';
+
+  @override
+  String get yourDaysJourney => 'Vaša denná cesta';
+
+  @override
+  String get highlights => 'Hlavné body';
+
+  @override
+  String get unresolvedQuestions => 'Nevyriešené otázky';
+
+  @override
+  String get decisions => 'Rozhodnutia';
+
+  @override
+  String get learnings => 'Ponaučenia';
 }

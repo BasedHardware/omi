@@ -3248,5 +3248,29 @@
   "failedToGenerateSummaryCheckConversations": "Не вдалося створити підсумок. Переконайтеся, що у вас є розмови за цей день.",
   "@failedToGenerateSummaryCheckConversations": {
     "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Підсумок не знайдено",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "Ваша подорож за день",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "Основні моменти",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Невирішені питання",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Рішення",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Висновки",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
   }
 }

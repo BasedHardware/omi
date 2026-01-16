@@ -4618,4 +4618,22 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get failedToGenerateSummaryCheckConversations => 'Kunne ikke generere resumé. Sørg for, at du har samtaler for den dag.';
+
+  @override
+  String get summaryNotFound => 'Resumé ikke fundet';
+
+  @override
+  String get yourDaysJourney => 'Din dags rejse';
+
+  @override
+  String get highlights => 'Højdepunkter';
+
+  @override
+  String get unresolvedQuestions => 'Uløste spørgsmål';
+
+  @override
+  String get decisions => 'Beslutninger';
+
+  @override
+  String get learnings => 'Læringer';
 }

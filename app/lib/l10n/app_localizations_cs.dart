@@ -4618,4 +4618,22 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get failedToGenerateSummaryCheckConversations => 'Nepodařilo se vygenerovat shrnutí. Ujistěte se, že máte konverzace pro daný den.';
+
+  @override
+  String get summaryNotFound => 'Shrnutí nenalezeno';
+
+  @override
+  String get yourDaysJourney => 'Vaše denní cesta';
+
+  @override
+  String get highlights => 'Zajímavosti';
+
+  @override
+  String get unresolvedQuestions => 'Nevyřešené otázky';
+
+  @override
+  String get decisions => 'Rozhodnutí';
+
+  @override
+  String get learnings => 'Poznatky';
 }

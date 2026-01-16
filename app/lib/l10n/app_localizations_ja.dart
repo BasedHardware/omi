@@ -4612,4 +4612,22 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get failedToGenerateSummaryCheckConversations => '要約の生成に失敗しました。その日の会話があることを確認してください。';
+
+  @override
+  String get summaryNotFound => '要約が見つかりません';
+
+  @override
+  String get yourDaysJourney => '今日の旅程';
+
+  @override
+  String get highlights => 'ハイライト';
+
+  @override
+  String get unresolvedQuestions => '未解決の質問';
+
+  @override
+  String get decisions => '決定事項';
+
+  @override
+  String get learnings => '学び';
 }

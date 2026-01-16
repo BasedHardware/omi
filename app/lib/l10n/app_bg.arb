@@ -3250,5 +3250,29 @@
   "failedToGenerateSummaryCheckConversations": "Неуспешно генериране на резюме. Уверете се, че имате разговори за този ден.",
   "@failedToGenerateSummaryCheckConversations": {
     "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Резюмето не е намерено",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "Пътуването ви за деня",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "Акценти",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Нерешени въпроси",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Решения",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Научено",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
   }
 }

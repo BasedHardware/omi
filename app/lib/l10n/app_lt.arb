@@ -3230,5 +3230,29 @@
   "failedToGenerateSummaryCheckConversations": "Nepavyko sukurti santraukos. Įsitikinkite, kad turite pokalbių tai dienai.",
   "@failedToGenerateSummaryCheckConversations": {
     "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Santrauka nerasta",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "Jūsų dienos kelionė",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "Svarbiausios vietos",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Neišspręsti klausimai",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Sprendimai",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Išmokta",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
   }
 }

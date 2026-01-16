@@ -3248,5 +3248,29 @@
   "failedToGenerateSummaryCheckConversations": "Kokkuvõtte loomine ebaõnnestus. Veenduge, et teil on selle päeva vestlusi.",
   "@failedToGenerateSummaryCheckConversations": {
     "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Kokkuvõtet ei leitud",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "Teie päeva teekond",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "Esiletõstetud",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Lahendamata küsimused",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Otsused",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Õpitu",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
   }
 }

@@ -1695,5 +1695,29 @@
   "failedToGenerateSummaryCheckConversations": "Falha ao gerar resumo. Certifique-se de ter conversas para esse dia.",
   "@failedToGenerateSummaryCheckConversations": {
     "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Resumo não encontrado",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "Sua jornada do dia",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "Destaques",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Perguntas não resolvidas",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Decisões",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Aprendizados",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
   }
 }

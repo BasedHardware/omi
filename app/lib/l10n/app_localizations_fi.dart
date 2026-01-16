@@ -4618,4 +4618,22 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get failedToGenerateSummaryCheckConversations => 'Yhteenvedon luominen epäonnistui. Varmista, että sinulla on keskusteluja kyseiseltä päivältä.';
+
+  @override
+  String get summaryNotFound => 'Yhteenvetoa ei löytynyt';
+
+  @override
+  String get yourDaysJourney => 'Päiväsi matka';
+
+  @override
+  String get highlights => 'Kohokohdat';
+
+  @override
+  String get unresolvedQuestions => 'Ratkaisemattomat kysymykset';
+
+  @override
+  String get decisions => 'Päätökset';
+
+  @override
+  String get learnings => 'Opit';
 }

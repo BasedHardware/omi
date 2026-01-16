@@ -4618,4 +4618,22 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get failedToGenerateSummaryCheckConversations => 'Không thể tạo tóm tắt. Hãy đảm bảo bạn có cuộc trò chuyện cho ngày đó.';
+
+  @override
+  String get summaryNotFound => 'Không tìm thấy tóm tắt';
+
+  @override
+  String get yourDaysJourney => 'Hành trình trong ngày';
+
+  @override
+  String get highlights => 'Điểm nổi bật';
+
+  @override
+  String get unresolvedQuestions => 'Câu hỏi chưa giải quyết';
+
+  @override
+  String get decisions => 'Quyết định';
+
+  @override
+  String get learnings => 'Bài học';
 }

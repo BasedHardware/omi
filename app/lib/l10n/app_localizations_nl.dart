@@ -4618,4 +4618,22 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get failedToGenerateSummaryCheckConversations => 'Kon samenvatting niet genereren. Zorg ervoor dat u gesprekken heeft voor die dag.';
+
+  @override
+  String get summaryNotFound => 'Samenvatting niet gevonden';
+
+  @override
+  String get yourDaysJourney => 'Uw dagreis';
+
+  @override
+  String get highlights => 'Hoogtepunten';
+
+  @override
+  String get unresolvedQuestions => 'Onopgeloste vragen';
+
+  @override
+  String get decisions => 'Beslissingen';
+
+  @override
+  String get learnings => 'Inzichten';
 }

@@ -4618,4 +4618,22 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get failedToGenerateSummaryCheckConversations => 'Kokkuvõtte loomine ebaõnnestus. Veenduge, et teil on selle päeva vestlusi.';
+
+  @override
+  String get summaryNotFound => 'Kokkuvõtet ei leitud';
+
+  @override
+  String get yourDaysJourney => 'Teie päeva teekond';
+
+  @override
+  String get highlights => 'Esiletõstetud';
+
+  @override
+  String get unresolvedQuestions => 'Lahendamata küsimused';
+
+  @override
+  String get decisions => 'Otsused';
+
+  @override
+  String get learnings => 'Õpitu';
 }

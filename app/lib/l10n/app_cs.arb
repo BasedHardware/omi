@@ -3250,5 +3250,29 @@
   "failedToGenerateSummaryCheckConversations": "Nepodařilo se vygenerovat shrnutí. Ujistěte se, že máte konverzace pro daný den.",
   "@failedToGenerateSummaryCheckConversations": {
     "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Shrnutí nenalezeno",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "Vaše denní cesta",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "Zajímavosti",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Nevyřešené otázky",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Rozhodnutí",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Poznatky",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
   }
 }

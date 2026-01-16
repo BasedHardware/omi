@@ -4618,4 +4618,22 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get failedToGenerateSummaryCheckConversations => 'No s\'ha pogut generar el resum. Assegura\'t que tens converses per a aquell dia.';
+
+  @override
+  String get summaryNotFound => 'Resum no trobat';
+
+  @override
+  String get yourDaysJourney => 'El viatge del teu dia';
+
+  @override
+  String get highlights => 'Punts destacats';
+
+  @override
+  String get unresolvedQuestions => 'Preguntes no resoltes';
+
+  @override
+  String get decisions => 'Decisions';
+
+  @override
+  String get learnings => 'Aprenentatges';
 }

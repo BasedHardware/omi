@@ -5506,5 +5506,29 @@
   "failedToGenerateSummaryCheckConversations": "Failed to generate summary. Make sure you have conversations for that day.",
   "@failedToGenerateSummaryCheckConversations": {
     "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Summary not found",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "Your Day's Journey",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "Highlights",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Unresolved Questions",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Decisions",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Learnings",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
   }
 }
