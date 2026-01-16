@@ -1149,12 +1149,29 @@ Notes: Localized API key created success dialog including title, warning message
        buttons. Refactored _copyKey method to accept BuildContext for l10n access.
 Commit: 7ca694516
 
+FILE 89 (Phase 2 FILE 19): create_dev_api_key_sheet.dart
+--------------------------------------------------------
+Location: app/lib/pages/settings/widgets/
+Keys Added: 6 (new) + 10 (reused) = 16 total
+New Keys: createApiKey, accessDataProgrammatically, keyNameLabel, keyNamePlaceholder,
+         permissionsLabel, permissionsInfoNote
+Reused Keys: failedToCreateKeyWithError (parameterized), failedToCreateKeyTryAgain,
+            pleaseEnterAName, readOnlyScope, fullAccessScope, conversations,
+            memories, actionItems, createKey
+Script: /tmp/translate_create_dev_api_key_keys.py
+Status: ✅ COMPLETED
+Notes: Localized create API key sheet including title, subtitle, key name input
+       with placeholder and validation, permissions section with preset chips
+       and permission tiles (Conversations, Memories, Action Items), info note,
+       and create button with loading state.
+Commit: 031d76a14
+
 ================================================================================
 END OF PROGRESS TRACKER
 ================================================================================
 Last Updated: 2026-01-16
-Last Completed: FILE 88 - dev_api_key_created_dialog.dart (6 new keys, 204 new translations)
-Previous Completed: FILE 87 - dev_api_key_list_item.dart (4 new keys, 136 new translations)
+Last Completed: FILE 89 - create_dev_api_key_sheet.dart (6 new keys, 204 new translations)
+Previous Completed: FILE 88 - dev_api_key_created_dialog.dart (6 new keys, 204 new translations)
 Current Session: Phase 2 - Mobile/Pages localization in progress
 
 🎉 PHASE 1 (DESKTOP) COMPLETE! 🎉
@@ -1164,5 +1181,5 @@ Current Session: Phase 2 - Mobile/Pages localization in progress
 
 📋 PHASE 2 (MOBILE/PAGES) IN PROGRESS
 59 files identified with hardcoded strings
-Files Completed: 18
+Files Completed: 19
 Estimated 200-300 new keys needed
