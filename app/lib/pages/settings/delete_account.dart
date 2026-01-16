@@ -165,9 +165,9 @@ class _DeleteAccountState extends State<DeleteAccount> {
                           width: double.infinity,
                           height: 45,
                           alignment: Alignment.center,
-                          child: const Text(
-                            'Delete Account',
-                            style: TextStyle(
+                          child: Text(
+                            context.l10n.deleteAccount,
+                            style: const TextStyle(
                               fontWeight: FontWeight.w400,
                               fontSize: 18,
                               color: Color.fromARGB(255, 255, 255, 255),
