@@ -4993,5 +4993,17 @@
   "failedToCreateKeyTryAgain": "Failed to create key. Please try again.",
   "@failedToCreateKeyTryAgain": {
     "description": "Generic error message for key creation failure"
+  },
+  "keyCreated": "Key Created",
+  "@keyCreated": {
+    "description": "Dialog title when API key is successfully created"
+  },
+  "keyCreatedMessage": "Your new key has been created. Please copy it now. You will not be able to see it again.",
+  "@keyCreatedMessage": {
+    "description": "Message explaining to copy the key now as it won't be shown again"
+  },
+  "keyWord": "Key",
+  "@keyWord": {
+    "description": "The word 'Key' for use in parameterized strings"
   }
 }

@@ -3060,5 +3060,8 @@
   "keyNameHint": "nt Claude Desktop",
   "pleaseEnterAName": "Palun sisestage nimi.",
   "failedToCreateKeyWithError": "Võtme loomine ebaõnnestus: {error}",
-  "failedToCreateKeyTryAgain": "Võtme loomine ebaõnnestus. Palun proovige uuesti."
+  "failedToCreateKeyTryAgain": "Võtme loomine ebaõnnestus. Palun proovige uuesti.",
+  "keyCreated": "Võti loodud",
+  "keyCreatedMessage": "Teie uus võti on loodud. Palun kopeerige see nüüd. Te ei näe seda enam.",
+  "keyWord": "Võti"
 }

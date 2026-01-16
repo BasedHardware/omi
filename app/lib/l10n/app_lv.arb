@@ -3060,5 +3060,8 @@
   "keyNameHint": "piem., Claude Desktop",
   "pleaseEnterAName": "Lūdzu, ievadiet nosaukumu.",
   "failedToCreateKeyWithError": "Neizdevās izveidot atslēgu: {error}",
-  "failedToCreateKeyTryAgain": "Neizdevās izveidot atslēgu. Lūdzu, mēģiniet vēlreiz."
+  "failedToCreateKeyTryAgain": "Neizdevās izveidot atslēgu. Lūdzu, mēģiniet vēlreiz.",
+  "keyCreated": "Atslēga izveidota",
+  "keyCreatedMessage": "Jūsu jaunā atslēga ir izveidota. Lūdzu, nokopējiet to tagad. Jūs to vairs neredzēsiet.",
+  "keyWord": "Atslēga"
 }

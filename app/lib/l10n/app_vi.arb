@@ -3060,5 +3060,8 @@
   "keyNameHint": "vd: Claude Desktop",
   "pleaseEnterAName": "Vui lòng nhập tên.",
   "failedToCreateKeyWithError": "Không thể tạo khóa: {error}",
-  "failedToCreateKeyTryAgain": "Không thể tạo khóa. Vui lòng thử lại."
+  "failedToCreateKeyTryAgain": "Không thể tạo khóa. Vui lòng thử lại.",
+  "keyCreated": "Đã tạo khóa",
+  "keyCreatedMessage": "Khóa mới của bạn đã được tạo. Vui lòng sao chép ngay bây giờ. Bạn sẽ không thể xem lại.",
+  "keyWord": "Khóa"
 }

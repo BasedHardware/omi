@@ -3060,5 +3060,8 @@
   "keyNameHint": "np. Claude Desktop",
   "pleaseEnterAName": "Proszę podać nazwę.",
   "failedToCreateKeyWithError": "Nie udało się utworzyć klucza: {error}",
-  "failedToCreateKeyTryAgain": "Nie udało się utworzyć klucza. Spróbuj ponownie."
+  "failedToCreateKeyTryAgain": "Nie udało się utworzyć klucza. Spróbuj ponownie.",
+  "keyCreated": "Klucz utworzony",
+  "keyCreatedMessage": "Twój nowy klucz został utworzony. Skopiuj go teraz. Nie będziesz mógł go ponownie zobaczyć.",
+  "keyWord": "Klucz"
 }

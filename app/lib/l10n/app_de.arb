@@ -1507,5 +1507,8 @@
   "keyNameHint": "z.B. Claude Desktop",
   "pleaseEnterAName": "Bitte geben Sie einen Namen ein.",
   "failedToCreateKeyWithError": "Schlüssel konnte nicht erstellt werden: {error}",
-  "failedToCreateKeyTryAgain": "Schlüssel konnte nicht erstellt werden. Bitte versuchen Sie es erneut."
+  "failedToCreateKeyTryAgain": "Schlüssel konnte nicht erstellt werden. Bitte versuchen Sie es erneut.",
+  "keyCreated": "Schlüssel erstellt",
+  "keyCreatedMessage": "Ihr neuer Schlüssel wurde erstellt. Bitte kopieren Sie ihn jetzt. Sie werden ihn nicht mehr sehen können.",
+  "keyWord": "Schlüssel"
 }

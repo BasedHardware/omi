@@ -3060,5 +3060,8 @@
   "keyNameHint": "π.χ. Claude Desktop",
   "pleaseEnterAName": "Παρακαλώ εισάγετε ένα όνομα.",
   "failedToCreateKeyWithError": "Αποτυχία δημιουργίας κλειδιού: {error}",
-  "failedToCreateKeyTryAgain": "Αποτυχία δημιουργίας κλειδιού. Παρακαλώ δοκιμάστε ξανά."
+  "failedToCreateKeyTryAgain": "Αποτυχία δημιουργίας κλειδιού. Παρακαλώ δοκιμάστε ξανά.",
+  "keyCreated": "Το κλειδί δημιουργήθηκε",
+  "keyCreatedMessage": "Το νέο σας κλειδί δημιουργήθηκε. Παρακαλώ αντιγράψτε το τώρα. Δεν θα μπορείτε να το δείτε ξανά.",
+  "keyWord": "Κλειδί"
 }

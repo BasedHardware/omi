@@ -3062,5 +3062,8 @@
   "keyNameHint": "напр. Claude Desktop",
   "pleaseEnterAName": "Моля, въведете име.",
   "failedToCreateKeyWithError": "Неуспешно създаване на ключ: {error}",
-  "failedToCreateKeyTryAgain": "Неуспешно създаване на ключ. Моля, опитайте отново."
+  "failedToCreateKeyTryAgain": "Неуспешно създаване на ключ. Моля, опитайте отново.",
+  "keyCreated": "Ключът е създаден",
+  "keyCreatedMessage": "Вашият нов ключ е създаден. Моля, копирайте го сега. Няма да можете да го видите отново.",
+  "keyWord": "Ключ"
 }

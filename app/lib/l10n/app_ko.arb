@@ -3060,5 +3060,8 @@
   "keyNameHint": "예: Claude Desktop",
   "pleaseEnterAName": "이름을 입력하세요.",
   "failedToCreateKeyWithError": "키 생성 실패: {error}",
-  "failedToCreateKeyTryAgain": "키 생성에 실패했습니다. 다시 시도해 주세요."
+  "failedToCreateKeyTryAgain": "키 생성에 실패했습니다. 다시 시도해 주세요.",
+  "keyCreated": "키가 생성되었습니다",
+  "keyCreatedMessage": "새 키가 생성되었습니다. 지금 복사하세요. 다시 볼 수 없습니다.",
+  "keyWord": "키"
 }

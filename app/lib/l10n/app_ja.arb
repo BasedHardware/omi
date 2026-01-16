@@ -1486,5 +1486,8 @@
   "keyNameHint": "例: Claude Desktop",
   "pleaseEnterAName": "名前を入力してください。",
   "failedToCreateKeyWithError": "キーの作成に失敗しました: {error}",
-  "failedToCreateKeyTryAgain": "キーの作成に失敗しました。もう一度お試しください。"
+  "failedToCreateKeyTryAgain": "キーの作成に失敗しました。もう一度お試しください。",
+  "keyCreated": "キーが作成されました",
+  "keyCreatedMessage": "新しいキーが作成されました。今すぐコピーしてください。再度表示することはできません。",
+  "keyWord": "キー"
 }

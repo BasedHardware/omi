@@ -3060,5 +3060,8 @@
   "keyNameHint": "t.ex. Claude Desktop",
   "pleaseEnterAName": "Ange ett namn.",
   "failedToCreateKeyWithError": "Det gick inte att skapa nyckel: {error}",
-  "failedToCreateKeyTryAgain": "Det gick inte att skapa nyckel. Försök igen."
+  "failedToCreateKeyTryAgain": "Det gick inte att skapa nyckel. Försök igen.",
+  "keyCreated": "Nyckel skapad",
+  "keyCreatedMessage": "Din nya nyckel har skapats. Kopiera den nu. Du kommer inte att kunna se den igen.",
+  "keyWord": "Nyckel"
 }

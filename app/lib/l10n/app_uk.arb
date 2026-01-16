@@ -3060,5 +3060,8 @@
   "keyNameHint": "напр., Claude Desktop",
   "pleaseEnterAName": "Будь ласка, введіть назву.",
   "failedToCreateKeyWithError": "Не вдалося створити ключ: {error}",
-  "failedToCreateKeyTryAgain": "Не вдалося створити ключ. Будь ласка, спробуйте ще раз."
+  "failedToCreateKeyTryAgain": "Не вдалося створити ключ. Будь ласка, спробуйте ще раз.",
+  "keyCreated": "Ключ створено",
+  "keyCreatedMessage": "Ваш новий ключ створено. Будь ласка, скопіюйте його зараз. Ви більше не зможете його побачити.",
+  "keyWord": "Ключ"
 }

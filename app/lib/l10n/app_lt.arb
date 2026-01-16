@@ -3042,5 +3042,8 @@
   "keyNameHint": "pvz., Claude Desktop",
   "pleaseEnterAName": "Įveskite pavadinimą.",
   "failedToCreateKeyWithError": "Nepavyko sukurti rakto: {error}",
-  "failedToCreateKeyTryAgain": "Nepavyko sukurti rakto. Bandykite dar kartą."
+  "failedToCreateKeyTryAgain": "Nepavyko sukurti rakto. Bandykite dar kartą.",
+  "keyCreated": "Raktas sukurtas",
+  "keyCreatedMessage": "Jūsų naujas raktas sukurtas. Prašome nukopijuoti jį dabar. Daugiau jo nematysite.",
+  "keyWord": "Raktas"
 }

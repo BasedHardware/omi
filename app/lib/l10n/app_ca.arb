@@ -3062,5 +3062,8 @@
   "keyNameHint": "p. ex., Claude Desktop",
   "pleaseEnterAName": "Si us plau, introdueix un nom.",
   "failedToCreateKeyWithError": "Error en crear la clau: {error}",
-  "failedToCreateKeyTryAgain": "Error en crear la clau. Si us plau, torna-ho a provar."
+  "failedToCreateKeyTryAgain": "Error en crear la clau. Si us plau, torna-ho a provar.",
+  "keyCreated": "Clau creada",
+  "keyCreatedMessage": "La teva nova clau ha estat creada. Si us plau, copia-la ara. No la podràs veure de nou.",
+  "keyWord": "Clau"
 }

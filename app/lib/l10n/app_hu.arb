@@ -3060,5 +3060,8 @@
   "keyNameHint": "pl. Claude Desktop",
   "pleaseEnterAName": "Kérjük, adjon meg egy nevet.",
   "failedToCreateKeyWithError": "Nem sikerült létrehozni a kulcsot: {error}",
-  "failedToCreateKeyTryAgain": "Nem sikerült létrehozni a kulcsot. Kérjük, próbálja újra."
+  "failedToCreateKeyTryAgain": "Nem sikerült létrehozni a kulcsot. Kérjük, próbálja újra.",
+  "keyCreated": "Kulcs létrehozva",
+  "keyCreatedMessage": "Az új kulcsa létrejött. Kérjük, másolja most. Nem fogja tudni újra megtekinteni.",
+  "keyWord": "Kulcs"
 }

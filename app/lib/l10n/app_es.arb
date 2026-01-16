@@ -1507,5 +1507,8 @@
   "keyNameHint": "p. ej., Claude Desktop",
   "pleaseEnterAName": "Por favor, introduce un nombre.",
   "failedToCreateKeyWithError": "Error al crear la clave: {error}",
-  "failedToCreateKeyTryAgain": "Error al crear la clave. Por favor, inténtalo de nuevo."
+  "failedToCreateKeyTryAgain": "Error al crear la clave. Por favor, inténtalo de nuevo.",
+  "keyCreated": "Clave creada",
+  "keyCreatedMessage": "Tu nueva clave ha sido creada. Por favor, cópiala ahora. No podrás verla de nuevo.",
+  "keyWord": "Clave"
 }

@@ -3060,5 +3060,8 @@
   "keyNameHint": "f.eks. Claude Desktop",
   "pleaseEnterAName": "Vennligst skriv inn et navn.",
   "failedToCreateKeyWithError": "Kunne ikke opprette nøkkel: {error}",
-  "failedToCreateKeyTryAgain": "Kunne ikke opprette nøkkel. Vennligst prøv igjen."
+  "failedToCreateKeyTryAgain": "Kunne ikke opprette nøkkel. Vennligst prøv igjen.",
+  "keyCreated": "Nøkkel opprettet",
+  "keyCreatedMessage": "Din nye nøkkel er opprettet. Vennligst kopier den nå. Du vil ikke kunne se den igjen.",
+  "keyWord": "Nøkkel"
 }

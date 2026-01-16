@@ -1507,5 +1507,8 @@
   "keyNameHint": "例如：Claude Desktop",
   "pleaseEnterAName": "请输入名称。",
   "failedToCreateKeyWithError": "创建密钥失败：{error}",
-  "failedToCreateKeyTryAgain": "创建密钥失败。请重试。"
+  "failedToCreateKeyTryAgain": "创建密钥失败。请重试。",
+  "keyCreated": "密钥已创建",
+  "keyCreatedMessage": "您的新密钥已创建。请立即复制。您将无法再次查看。",
+  "keyWord": "密钥"
 }

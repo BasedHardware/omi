@@ -1878,5 +1878,8 @@
   "keyNameHint": "ex. Claude Desktop",
   "pleaseEnterAName": "Veuillez entrer un nom.",
   "failedToCreateKeyWithError": "Échec de la création de la clé : {error}",
-  "failedToCreateKeyTryAgain": "Échec de la création de la clé. Veuillez réessayer."
+  "failedToCreateKeyTryAgain": "Échec de la création de la clé. Veuillez réessayer.",
+  "keyCreated": "Clé créée",
+  "keyCreatedMessage": "Votre nouvelle clé a été créée. Veuillez la copier maintenant. Vous ne pourrez plus la voir.",
+  "keyWord": "Clé"
 }

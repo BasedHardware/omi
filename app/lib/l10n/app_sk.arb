@@ -3060,5 +3060,8 @@
   "keyNameHint": "napr. Claude Desktop",
   "pleaseEnterAName": "Prosím zadajte názov.",
   "failedToCreateKeyWithError": "Nepodarilo sa vytvoriť kľúč: {error}",
-  "failedToCreateKeyTryAgain": "Nepodarilo sa vytvoriť kľúč. Skúste to prosím znova."
+  "failedToCreateKeyTryAgain": "Nepodarilo sa vytvoriť kľúč. Skúste to prosím znova.",
+  "keyCreated": "Kľúč vytvorený",
+  "keyCreatedMessage": "Váš nový kľúč bol vytvorený. Prosím skopírujte si ho teraz. Už ho neuvidíte.",
+  "keyWord": "Kľúč"
 }

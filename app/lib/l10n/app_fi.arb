@@ -3060,5 +3060,8 @@
   "keyNameHint": "esim. Claude Desktop",
   "pleaseEnterAName": "Anna nimi.",
   "failedToCreateKeyWithError": "Avaimen luominen epäonnistui: {error}",
-  "failedToCreateKeyTryAgain": "Avaimen luominen epäonnistui. Yritä uudelleen."
+  "failedToCreateKeyTryAgain": "Avaimen luominen epäonnistui. Yritä uudelleen.",
+  "keyCreated": "Avain luotu",
+  "keyCreatedMessage": "Uusi avaimesi on luotu. Kopioi se nyt. Et näe sitä enää uudelleen.",
+  "keyWord": "Avain"
 }

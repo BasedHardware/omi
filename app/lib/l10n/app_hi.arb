@@ -1507,5 +1507,8 @@
   "keyNameHint": "जैसे, Claude Desktop",
   "pleaseEnterAName": "कृपया एक नाम दर्ज करें।",
   "failedToCreateKeyWithError": "कुंजी बनाने में विफल: {error}",
-  "failedToCreateKeyTryAgain": "कुंजी बनाने में विफल। कृपया पुनः प्रयास करें।"
+  "failedToCreateKeyTryAgain": "कुंजी बनाने में विफल। कृपया पुनः प्रयास करें।",
+  "keyCreated": "कुंजी बनाई गई",
+  "keyCreatedMessage": "आपकी नई कुंजी बना दी गई है। कृपया इसे अभी कॉपी करें। आप इसे दोबारा नहीं देख पाएंगे।",
+  "keyWord": "कुंजी"
 }

@@ -3078,5 +3078,8 @@
   "keyNameHint": "مثال: Claude Desktop",
   "pleaseEnterAName": "يرجى إدخال اسم.",
   "failedToCreateKeyWithError": "فشل إنشاء المفتاح: {error}",
-  "failedToCreateKeyTryAgain": "فشل إنشاء المفتاح. يرجى المحاولة مرة أخرى."
+  "failedToCreateKeyTryAgain": "فشل إنشاء المفتاح. يرجى المحاولة مرة أخرى.",
+  "keyCreated": "تم إنشاء المفتاح",
+  "keyCreatedMessage": "تم إنشاء مفتاحك الجديد. يرجى نسخه الآن. لن تتمكن من رؤيته مرة أخرى.",
+  "keyWord": "المفتاح"
 }

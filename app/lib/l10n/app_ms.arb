@@ -3060,5 +3060,8 @@
   "keyNameHint": "cth., Claude Desktop",
   "pleaseEnterAName": "Sila masukkan nama.",
   "failedToCreateKeyWithError": "Gagal mencipta kunci: {error}",
-  "failedToCreateKeyTryAgain": "Gagal mencipta kunci. Sila cuba lagi."
+  "failedToCreateKeyTryAgain": "Gagal mencipta kunci. Sila cuba lagi.",
+  "keyCreated": "Kunci Dicipta",
+  "keyCreatedMessage": "Kunci baharu anda telah dicipta. Sila salin sekarang. Anda tidak akan dapat melihatnya lagi.",
+  "keyWord": "Kunci"
 }

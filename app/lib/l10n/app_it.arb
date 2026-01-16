@@ -3042,5 +3042,8 @@
   "keyNameHint": "es. Claude Desktop",
   "pleaseEnterAName": "Inserisci un nome.",
   "failedToCreateKeyWithError": "Impossibile creare la chiave: {error}",
-  "failedToCreateKeyTryAgain": "Impossibile creare la chiave. Riprova."
+  "failedToCreateKeyTryAgain": "Impossibile creare la chiave. Riprova.",
+  "keyCreated": "Chiave creata",
+  "keyCreatedMessage": "La tua nuova chiave è stata creata. Copiala ora. Non potrai vederla di nuovo.",
+  "keyWord": "Chiave"
 }

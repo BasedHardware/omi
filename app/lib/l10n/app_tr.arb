@@ -3042,5 +3042,8 @@
   "keyNameHint": "örn. Claude Desktop",
   "pleaseEnterAName": "Lütfen bir ad girin.",
   "failedToCreateKeyWithError": "Anahtar oluşturulamadı: {error}",
-  "failedToCreateKeyTryAgain": "Anahtar oluşturulamadı. Lütfen tekrar deneyin."
+  "failedToCreateKeyTryAgain": "Anahtar oluşturulamadı. Lütfen tekrar deneyin.",
+  "keyCreated": "Anahtar Oluşturuldu",
+  "keyCreatedMessage": "Yeni anahtarınız oluşturuldu. Lütfen şimdi kopyalayın. Tekrar göremeyeceksiniz.",
+  "keyWord": "Anahtar"
 }

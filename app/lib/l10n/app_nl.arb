@@ -1878,5 +1878,8 @@
   "keyNameHint": "bijv. Claude Desktop",
   "pleaseEnterAName": "Voer een naam in.",
   "failedToCreateKeyWithError": "Sleutel maken mislukt: {error}",
-  "failedToCreateKeyTryAgain": "Sleutel maken mislukt. Probeer het opnieuw."
+  "failedToCreateKeyTryAgain": "Sleutel maken mislukt. Probeer het opnieuw.",
+  "keyCreated": "Sleutel aangemaakt",
+  "keyCreatedMessage": "Uw nieuwe sleutel is aangemaakt. Kopieer deze nu. U kunt deze niet meer zien.",
+  "keyWord": "Sleutel"
 }

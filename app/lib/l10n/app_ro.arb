@@ -3060,5 +3060,8 @@
   "keyNameHint": "ex. Claude Desktop",
   "pleaseEnterAName": "Te rugăm să introduci un nume.",
   "failedToCreateKeyWithError": "Nu s-a putut crea cheia: {error}",
-  "failedToCreateKeyTryAgain": "Nu s-a putut crea cheia. Te rugăm să încerci din nou."
+  "failedToCreateKeyTryAgain": "Nu s-a putut crea cheia. Te rugăm să încerci din nou.",
+  "keyCreated": "Cheie creată",
+  "keyCreatedMessage": "Cheia ta nouă a fost creată. Te rugăm să o copiezi acum. Nu o vei mai putea vedea.",
+  "keyWord": "Cheie"
 }
