@@ -67,7 +67,7 @@ class TranscriptSegment(BaseModel):
     @staticmethod
     def combine_segments(segments: [], new_segments: List['TranscriptSegment'], delta_seconds: int = 0):
         if not new_segments or len(new_segments) == 0:
-            return segments, (len(segments), len(segments))
+            return segments, [], []
 
         def _extract_last_incomplete_sentence(text: str) -> Tuple[Optional[str], str]:
             text = text.strip()
@@ -153,9 +153,6 @@ class TranscriptSegment(BaseModel):
 
             return a, b
 
-        # Updates range [starts, ends)
-        starts = len(segments)
-        ends = 0
         removed_ids = []
 
         # Join
@@ -178,16 +175,11 @@ class TranscriptSegment(BaseModel):
                 joined_similar_segments.append(b)
 
         if dropped_existing_tail and segments:
-            starts = len(segments) - 1
             segments.pop(-1)
         elif segments and joined_similar_segments and segments[-1].id == joined_similar_segments[0].id:
-            # having updates
-            if segments[-1].text != joined_similar_segments[0].text:
-                starts = len(segments) - 1
             segments.pop(-1)
 
         segments.extend(joined_similar_segments)
-        ends = len(segments)
 
         # Speechmatics specific issue with punctuation
         for i, segment in enumerate(segments):
@@ -195,7 +187,7 @@ class TranscriptSegment(BaseModel):
                 segments[i].text.strip().replace('  ', ' ').replace(' ,', ',').replace(' .', '.').replace(' ?', '?')
             )
 
-        return segments, (starts, ends), removed_ids
+        return segments, joined_similar_segments, removed_ids
 
 
 class ImprovedTranscriptSegment(BaseModel):
