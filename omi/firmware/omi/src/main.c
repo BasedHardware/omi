@@ -23,6 +23,8 @@
 #include "spi_flash.h"
 #include "wdog_facade.h"
 #include <hal/nrf_reset.h>
+#include "rtc.h"
+#include "lsm6dso_time.h"
 
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -223,6 +225,13 @@ int main(void)
         LOG_ERR("Failed to initialize settings (err %d)", setting_ret);
     }
 
+    init_rtc(1768672190);
+    if (!rtc_is_valid()) {
+        LOG_WRN("UTC time not synchronized yet");
+    }
+
+    (void)lsm6dso_time_boot_adjust_rtc();
+
 #ifdef CONFIG_OMI_ENABLE_MONITOR
     // Initialize monitoring system
     LOG_INF("Initializing monitoring system...\n");
@@ -335,6 +344,13 @@ int main(void)
 
         set_led_state();
         k_msleep(1000);
+        char utc_str[RTC_UTC_DATETIME_STRLEN];
+        int fmt_err = rtc_format_now_utc_datetime(utc_str, sizeof(utc_str));
+        if (fmt_err) {
+            LOG_INF("Current UTC time: <unsynced>");
+        } else {
+            LOG_INF("Current UTC time: %s", utc_str);
+        }
     }
 
     printk("Exiting omi...");

@@ -21,6 +21,8 @@
 #ifdef CONFIG_OMI_ENABLE_WIFI
 #include "wifi.h"
 #endif
+
+#include "lsm6dso_time.h"
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 #include "sd_card.h"
 #endif
@@ -425,8 +427,11 @@ void turnoff_all()
         return;
     }
 
-    LOG_INF("Entering system off; press usr_btn to restart");
+    
+    /* Persist an IMU timestamp base so we can estimate time across system_off. */
+    lsm6dso_time_prepare_for_system_off();
     k_msleep(1000);
+    LOG_INF("Entering system off; press usr_btn to restart");
 
     // Power off the system using sys_poweroff
     sys_poweroff();
