@@ -3358,5 +3358,13 @@
   "updateGuide": "업데이트 가이드",
   "checkingForUpdates": "업데이트 확인 중",
   "checkingFirmwareVersion": "펌웨어 버전 확인 중...",
-  "firmwareUpdate": "펌웨어 업데이트"
+  "firmwareUpdate": "펌웨어 업데이트",
+  "payments": "결제",
+  "connectPaymentMethodInfo": "아래에서 결제 수단을 연결하여 앱 수익금을 받기 시작하세요.",
+  "selectedPaymentMethod": "선택된 결제 수단",
+  "availablePaymentMethods": "사용 가능한 결제 수단",
+  "activeStatus": "활성",
+  "connectedStatus": "연결됨",
+  "notConnectedStatus": "연결 안 됨",
+  "setActive": "활성으로 설정"
 }

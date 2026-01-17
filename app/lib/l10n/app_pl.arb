@@ -3358,5 +3358,13 @@
   "updateGuide": "Przewodnik aktualizacji",
   "checkingForUpdates": "Sprawdzanie aktualizacji",
   "checkingFirmwareVersion": "Sprawdzanie wersji oprogramowania...",
-  "firmwareUpdate": "Aktualizacja oprogramowania"
+  "firmwareUpdate": "Aktualizacja oprogramowania",
+  "payments": "Płatności",
+  "connectPaymentMethodInfo": "Połącz metodę płatności poniżej, aby zacząć otrzymywać wypłaty za swoje aplikacje.",
+  "selectedPaymentMethod": "Wybrana metoda płatności",
+  "availablePaymentMethods": "Dostępne metody płatności",
+  "activeStatus": "Aktywny",
+  "connectedStatus": "Połączono",
+  "notConnectedStatus": "Nie połączono",
+  "setActive": "Ustaw jako aktywny"
 }

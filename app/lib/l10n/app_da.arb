@@ -3358,5 +3358,13 @@
   "updateGuide": "Opdateringsvejledning",
   "checkingForUpdates": "Søger efter opdateringer",
   "checkingFirmwareVersion": "Kontrollerer firmware-version...",
-  "firmwareUpdate": "Firmwareopdatering"
+  "firmwareUpdate": "Firmwareopdatering",
+  "payments": "Betalinger",
+  "connectPaymentMethodInfo": "Tilslut en betalingsmetode nedenfor for at begynde at modtage udbetalinger for dine apps.",
+  "selectedPaymentMethod": "Valgt betalingsmetode",
+  "availablePaymentMethods": "Tilgængelige betalingsmetoder",
+  "activeStatus": "Aktiv",
+  "connectedStatus": "Forbundet",
+  "notConnectedStatus": "Ikke forbundet",
+  "setActive": "Sæt aktiv"
 }

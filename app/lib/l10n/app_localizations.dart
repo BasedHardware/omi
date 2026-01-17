@@ -9404,6 +9404,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Firmware Update'**
   String get firmwareUpdate;
+
+  /// Page title for payments settings
+  ///
+  /// In en, this message translates to:
+  /// **'Payments'**
+  String get payments;
+
+  /// Info message explaining how to connect payment method
+  ///
+  /// In en, this message translates to:
+  /// **'Connect a payment method below to start receiving payouts for your apps.'**
+  String get connectPaymentMethodInfo;
+
+  /// Section header for selected payment method
+  ///
+  /// In en, this message translates to:
+  /// **'Selected Payment Method'**
+  String get selectedPaymentMethod;
+
+  /// Section header for available payment methods
+  ///
+  /// In en, this message translates to:
+  /// **'Available Payment Methods'**
+  String get availablePaymentMethods;
+
+  /// Status label when payment method is active
+  ///
+  /// In en, this message translates to:
+  /// **'Active'**
+  String get activeStatus;
+
+  /// Status label when payment method is connected
+  ///
+  /// In en, this message translates to:
+  /// **'Connected'**
+  String get connectedStatus;
+
+  /// Status label when payment method is not connected
+  ///
+  /// In en, this message translates to:
+  /// **'Not Connected'**
+  String get notConnectedStatus;
+
+  /// Button to set payment method as active
+  ///
+  /// In en, this message translates to:
+  /// **'Set Active'**
+  String get setActive;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
@@ -9415,122 +9463,57 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
   }
 
   @override
-  bool isSupported(Locale locale) => <String>[
-        'ar',
-        'bg',
-        'ca',
-        'cs',
-        'da',
-        'de',
-        'el',
-        'en',
-        'es',
-        'et',
-        'fi',
-        'fr',
-        'hi',
-        'hu',
-        'id',
-        'it',
-        'ja',
-        'ko',
-        'lt',
-        'lv',
-        'ms',
-        'nl',
-        'no',
-        'pl',
-        'pt',
-        'ro',
-        'ru',
-        'sk',
-        'sv',
-        'th',
-        'tr',
-        'uk',
-        'vi',
-        'zh'
-      ].contains(locale.languageCode);
+  bool isSupported(Locale locale) => <String>['ar', 'bg', 'ca', 'cs', 'da', 'de', 'el', 'en', 'es', 'et', 'fi', 'fr', 'hi', 'hu', 'id', 'it', 'ja', 'ko', 'lt', 'lv', 'ms', 'nl', 'no', 'pl', 'pt', 'ro', 'ru', 'sk', 'sv', 'th', 'tr', 'uk', 'vi', 'zh'].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
 }
 
 AppLocalizations lookupAppLocalizations(Locale locale) {
+
+
   // Lookup logic when only language code is specified.
   switch (locale.languageCode) {
-    case 'ar':
-      return AppLocalizationsAr();
-    case 'bg':
-      return AppLocalizationsBg();
-    case 'ca':
-      return AppLocalizationsCa();
-    case 'cs':
-      return AppLocalizationsCs();
-    case 'da':
-      return AppLocalizationsDa();
-    case 'de':
-      return AppLocalizationsDe();
-    case 'el':
-      return AppLocalizationsEl();
-    case 'en':
-      return AppLocalizationsEn();
-    case 'es':
-      return AppLocalizationsEs();
-    case 'et':
-      return AppLocalizationsEt();
-    case 'fi':
-      return AppLocalizationsFi();
-    case 'fr':
-      return AppLocalizationsFr();
-    case 'hi':
-      return AppLocalizationsHi();
-    case 'hu':
-      return AppLocalizationsHu();
-    case 'id':
-      return AppLocalizationsId();
-    case 'it':
-      return AppLocalizationsIt();
-    case 'ja':
-      return AppLocalizationsJa();
-    case 'ko':
-      return AppLocalizationsKo();
-    case 'lt':
-      return AppLocalizationsLt();
-    case 'lv':
-      return AppLocalizationsLv();
-    case 'ms':
-      return AppLocalizationsMs();
-    case 'nl':
-      return AppLocalizationsNl();
-    case 'no':
-      return AppLocalizationsNo();
-    case 'pl':
-      return AppLocalizationsPl();
-    case 'pt':
-      return AppLocalizationsPt();
-    case 'ro':
-      return AppLocalizationsRo();
-    case 'ru':
-      return AppLocalizationsRu();
-    case 'sk':
-      return AppLocalizationsSk();
-    case 'sv':
-      return AppLocalizationsSv();
-    case 'th':
-      return AppLocalizationsTh();
-    case 'tr':
-      return AppLocalizationsTr();
-    case 'uk':
-      return AppLocalizationsUk();
-    case 'vi':
-      return AppLocalizationsVi();
-    case 'zh':
-      return AppLocalizationsZh();
+    case 'ar': return AppLocalizationsAr();
+    case 'bg': return AppLocalizationsBg();
+    case 'ca': return AppLocalizationsCa();
+    case 'cs': return AppLocalizationsCs();
+    case 'da': return AppLocalizationsDa();
+    case 'de': return AppLocalizationsDe();
+    case 'el': return AppLocalizationsEl();
+    case 'en': return AppLocalizationsEn();
+    case 'es': return AppLocalizationsEs();
+    case 'et': return AppLocalizationsEt();
+    case 'fi': return AppLocalizationsFi();
+    case 'fr': return AppLocalizationsFr();
+    case 'hi': return AppLocalizationsHi();
+    case 'hu': return AppLocalizationsHu();
+    case 'id': return AppLocalizationsId();
+    case 'it': return AppLocalizationsIt();
+    case 'ja': return AppLocalizationsJa();
+    case 'ko': return AppLocalizationsKo();
+    case 'lt': return AppLocalizationsLt();
+    case 'lv': return AppLocalizationsLv();
+    case 'ms': return AppLocalizationsMs();
+    case 'nl': return AppLocalizationsNl();
+    case 'no': return AppLocalizationsNo();
+    case 'pl': return AppLocalizationsPl();
+    case 'pt': return AppLocalizationsPt();
+    case 'ro': return AppLocalizationsRo();
+    case 'ru': return AppLocalizationsRu();
+    case 'sk': return AppLocalizationsSk();
+    case 'sv': return AppLocalizationsSv();
+    case 'th': return AppLocalizationsTh();
+    case 'tr': return AppLocalizationsTr();
+    case 'uk': return AppLocalizationsUk();
+    case 'vi': return AppLocalizationsVi();
+    case 'zh': return AppLocalizationsZh();
   }
 
-  throw FlutterError('AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
-      'an issue with the localizations generation tool. Please file an issue '
-      'on GitHub with a reproducible sample app and the gen-l10n configuration '
-      'that was used.');
+  throw FlutterError(
+    'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+    'an issue with the localizations generation tool. Please file an issue '
+    'on GitHub with a reproducible sample app and the gen-l10n configuration '
+    'that was used.'
+  );
 }

@@ -2176,5 +2176,13 @@
   "updateGuide": "Update-handleiding",
   "checkingForUpdates": "Controleren op updates",
   "checkingFirmwareVersion": "Firmware-versie controleren...",
-  "firmwareUpdate": "Firmware-update"
+  "firmwareUpdate": "Firmware-update",
+  "payments": "Betalingen",
+  "connectPaymentMethodInfo": "Verbind hieronder een betaalmethode om uitbetalingen voor uw apps te ontvangen.",
+  "selectedPaymentMethod": "Geselecteerde betaalmethode",
+  "availablePaymentMethods": "Beschikbare betaalmethoden",
+  "activeStatus": "Actief",
+  "connectedStatus": "Verbonden",
+  "notConnectedStatus": "Niet verbonden",
+  "setActive": "Instellen als actief"
 }

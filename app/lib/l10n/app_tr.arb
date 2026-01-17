@@ -3340,5 +3340,13 @@
   "updateGuide": "Güncelleme Kılavuzu",
   "checkingForUpdates": "Güncellemeler kontrol ediliyor",
   "checkingFirmwareVersion": "Aygıt yazılımı sürümü kontrol ediliyor...",
-  "firmwareUpdate": "Aygıt Yazılımı Güncellemesi"
+  "firmwareUpdate": "Aygıt Yazılımı Güncellemesi",
+  "payments": "Ödemeler",
+  "connectPaymentMethodInfo": "Uygulamalarınız için ödeme almaya başlamak için aşağıdan bir ödeme yöntemi bağlayın.",
+  "selectedPaymentMethod": "Seçilen Ödeme Yöntemi",
+  "availablePaymentMethods": "Mevcut Ödeme Yöntemleri",
+  "activeStatus": "Aktif",
+  "connectedStatus": "Bağlandı",
+  "notConnectedStatus": "Bağlı Değil",
+  "setActive": "Aktif Olarak Ayarla"
 }

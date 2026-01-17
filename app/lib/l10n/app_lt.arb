@@ -3340,5 +3340,13 @@
   "updateGuide": "Atnaujinimo vadovas",
   "checkingForUpdates": "Tikrinami atnaujinimai",
   "checkingFirmwareVersion": "Tikrinama programinės įrangos versija...",
-  "firmwareUpdate": "Programinės įrangos atnaujinimas"
+  "firmwareUpdate": "Programinės įrangos atnaujinimas",
+  "payments": "Mokėjimai",
+  "connectPaymentMethodInfo": "Prijunkite mokėjimo būdą žemiau, kad pradėtumėte gauti išmokas už savo programas.",
+  "selectedPaymentMethod": "Pasirinktas mokėjimo būdas",
+  "availablePaymentMethods": "Galimi mokėjimo būdai",
+  "activeStatus": "Aktyvus",
+  "connectedStatus": "Prisijungta",
+  "notConnectedStatus": "Neprisijungta",
+  "setActive": "Nustatyti kaip aktyvų"
 }

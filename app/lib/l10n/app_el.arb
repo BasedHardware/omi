@@ -3358,5 +3358,13 @@
   "updateGuide": "Οδηγός ενημέρωσης",
   "checkingForUpdates": "Έλεγχος για ενημερώσεις",
   "checkingFirmwareVersion": "Έλεγχος έκδοσης υλικολογισμικού...",
-  "firmwareUpdate": "Ενημέρωση υλικολογισμικού"
+  "firmwareUpdate": "Ενημέρωση υλικολογισμικού",
+  "payments": "Πληρωμές",
+  "connectPaymentMethodInfo": "Συνδέστε μια μέθοδο πληρωμής παρακάτω για να αρχίσετε να λαμβάνετε πληρωμές για τις εφαρμογές σας.",
+  "selectedPaymentMethod": "Επιλεγμένη μέθοδος πληρωμής",
+  "availablePaymentMethods": "Διαθέσιμες μέθοδοι πληρωμής",
+  "activeStatus": "Ενεργό",
+  "connectedStatus": "Συνδεδεμένο",
+  "notConnectedStatus": "Δεν έχει συνδεθεί",
+  "setActive": "Ορισμός ως ενεργό"
 }

@@ -3340,5 +3340,13 @@
   "updateGuide": "Guida all'aggiornamento",
   "checkingForUpdates": "Controllo aggiornamenti",
   "checkingFirmwareVersion": "Controllo versione firmware...",
-  "firmwareUpdate": "Aggiornamento firmware"
+  "firmwareUpdate": "Aggiornamento firmware",
+  "payments": "Pagamenti",
+  "connectPaymentMethodInfo": "Collega un metodo di pagamento qui sotto per iniziare a ricevere pagamenti per le tue app.",
+  "selectedPaymentMethod": "Metodo di pagamento selezionato",
+  "availablePaymentMethods": "Metodi di pagamento disponibili",
+  "activeStatus": "Attivo",
+  "connectedStatus": "Connesso",
+  "notConnectedStatus": "Non connesso",
+  "setActive": "Imposta come attivo"
 }

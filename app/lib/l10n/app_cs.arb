@@ -3360,5 +3360,13 @@
   "updateGuide": "Průvodce aktualizací",
   "checkingForUpdates": "Kontrola aktualizací",
   "checkingFirmwareVersion": "Kontrola verze firmwaru...",
-  "firmwareUpdate": "Aktualizace firmwaru"
+  "firmwareUpdate": "Aktualizace firmwaru",
+  "payments": "Platby",
+  "connectPaymentMethodInfo": "Připojte níže platební metodu a začněte přijímat platby za své aplikace.",
+  "selectedPaymentMethod": "Vybraná platební metoda",
+  "availablePaymentMethods": "Dostupné platební metody",
+  "activeStatus": "Aktivní",
+  "connectedStatus": "Připojeno",
+  "notConnectedStatus": "Nepřipojeno",
+  "setActive": "Nastavit jako aktivní"
 }

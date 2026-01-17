@@ -3358,5 +3358,13 @@
   "updateGuide": "Посібник з оновлення",
   "checkingForUpdates": "Перевірка оновлень",
   "checkingFirmwareVersion": "Перевірка версії прошивки...",
-  "firmwareUpdate": "Оновлення прошивки"
+  "firmwareUpdate": "Оновлення прошивки",
+  "payments": "Платежі",
+  "connectPaymentMethodInfo": "Підключіть спосіб оплати нижче, щоб почати отримувати виплати за ваші додатки.",
+  "selectedPaymentMethod": "Обраний спосіб оплати",
+  "availablePaymentMethods": "Доступні способи оплати",
+  "activeStatus": "Активний",
+  "connectedStatus": "Підключено",
+  "notConnectedStatus": "Не підключено",
+  "setActive": "Встановити активним"
 }

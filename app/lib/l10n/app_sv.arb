@@ -3358,5 +3358,13 @@
   "updateGuide": "Uppdateringsguide",
   "checkingForUpdates": "Söker efter uppdateringar",
   "checkingFirmwareVersion": "Kontrollerar firmware-version...",
-  "firmwareUpdate": "Firmwareuppdatering"
+  "firmwareUpdate": "Firmwareuppdatering",
+  "payments": "Betalningar",
+  "connectPaymentMethodInfo": "Anslut en betalningsmetod nedan för att börja ta emot utbetalningar för dina appar.",
+  "selectedPaymentMethod": "Vald betalningsmetod",
+  "availablePaymentMethods": "Tillgängliga betalningsmetoder",
+  "activeStatus": "Aktiv",
+  "connectedStatus": "Ansluten",
+  "notConnectedStatus": "Inte ansluten",
+  "setActive": "Ange som aktiv"
 }

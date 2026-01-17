@@ -3358,5 +3358,13 @@
   "updateGuide": "Panduan Pembaruan",
   "checkingForUpdates": "Memeriksa Pembaruan",
   "checkingFirmwareVersion": "Memeriksa versi firmware...",
-  "firmwareUpdate": "Pembaruan Firmware"
+  "firmwareUpdate": "Pembaruan Firmware",
+  "payments": "Pembayaran",
+  "connectPaymentMethodInfo": "Hubungkan metode pembayaran di bawah untuk mulai menerima pembayaran untuk aplikasi Anda.",
+  "selectedPaymentMethod": "Metode Pembayaran Terpilih",
+  "availablePaymentMethods": "Metode Pembayaran Tersedia",
+  "activeStatus": "Aktif",
+  "connectedStatus": "Terhubung",
+  "notConnectedStatus": "Tidak Terhubung",
+  "setActive": "Tetapkan Aktif"
 }

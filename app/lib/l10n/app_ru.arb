@@ -3358,5 +3358,13 @@
   "updateGuide": "Руководство по обновлению",
   "checkingForUpdates": "Проверка обновлений",
   "checkingFirmwareVersion": "Проверка версии прошивки...",
-  "firmwareUpdate": "Обновление прошивки"
+  "firmwareUpdate": "Обновление прошивки",
+  "payments": "Платежи",
+  "connectPaymentMethodInfo": "Подключите способ оплаты ниже, чтобы начать получать выплаты за ваши приложения.",
+  "selectedPaymentMethod": "Выбранный способ оплаты",
+  "availablePaymentMethods": "Доступные способы оплаты",
+  "activeStatus": "Активный",
+  "connectedStatus": "Подключено",
+  "notConnectedStatus": "Не подключено",
+  "setActive": "Сделать активным"
 }

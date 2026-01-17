@@ -5880,5 +5880,37 @@
   "firmwareUpdate": "Firmware Update",
   "@firmwareUpdate": {
     "description": "Page title for firmware update screen"
+  },
+  "payments": "Payments",
+  "@payments": {
+    "description": "Page title for payments settings"
+  },
+  "connectPaymentMethodInfo": "Connect a payment method below to start receiving payouts for your apps.",
+  "@connectPaymentMethodInfo": {
+    "description": "Info message explaining how to connect payment method"
+  },
+  "selectedPaymentMethod": "Selected Payment Method",
+  "@selectedPaymentMethod": {
+    "description": "Section header for selected payment method"
+  },
+  "availablePaymentMethods": "Available Payment Methods",
+  "@availablePaymentMethods": {
+    "description": "Section header for available payment methods"
+  },
+  "activeStatus": "Active",
+  "@activeStatus": {
+    "description": "Status label when payment method is active"
+  },
+  "connectedStatus": "Connected",
+  "@connectedStatus": {
+    "description": "Status label when payment method is connected"
+  },
+  "notConnectedStatus": "Not Connected",
+  "@notConnectedStatus": {
+    "description": "Status label when payment method is not connected"
+  },
+  "setActive": "Set Active",
+  "@setActive": {
+    "description": "Button to set payment method as active"
   }
 }

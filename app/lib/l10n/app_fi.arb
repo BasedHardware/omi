@@ -3358,5 +3358,13 @@
   "updateGuide": "Päivitysopas",
   "checkingForUpdates": "Tarkistetaan päivityksiä",
   "checkingFirmwareVersion": "Tarkistetaan laiteohjelmiston versiota...",
-  "firmwareUpdate": "Laiteohjelmistopäivitys"
+  "firmwareUpdate": "Laiteohjelmistopäivitys",
+  "payments": "Maksut",
+  "connectPaymentMethodInfo": "Yhdistä maksutapa alla aloittaaksesi maksujen vastaanottamisen sovelluksistasi.",
+  "selectedPaymentMethod": "Valittu maksutapa",
+  "availablePaymentMethods": "Käytettävissä olevat maksutavat",
+  "activeStatus": "Aktiivinen",
+  "connectedStatus": "Yhdistetty",
+  "notConnectedStatus": "Ei yhdistetty",
+  "setActive": "Aseta aktiiviseksi"
 }

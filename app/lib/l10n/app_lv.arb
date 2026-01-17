@@ -3358,5 +3358,13 @@
   "updateGuide": "Atjaunināšanas ceļvedis",
   "checkingForUpdates": "Pārbauda atjauninājumus",
   "checkingFirmwareVersion": "Pārbauda programmaparatūras versiju...",
-  "firmwareUpdate": "Programmaparatūras atjauninājums"
+  "firmwareUpdate": "Programmaparatūras atjauninājums",
+  "payments": "Maksājumi",
+  "connectPaymentMethodInfo": "Pievienojiet maksājuma metodi zemāk, lai sāktu saņemt maksājumus par savām lietotnēm.",
+  "selectedPaymentMethod": "Izvēlētā maksājuma metode",
+  "availablePaymentMethods": "Pieejamās maksājuma metodes",
+  "activeStatus": "Aktīvs",
+  "connectedStatus": "Savienots",
+  "notConnectedStatus": "Nav savienots",
+  "setActive": "Iestatīt kā aktīvu"
 }

@@ -3358,5 +3358,13 @@
   "updateGuide": "Hướng dẫn cập nhật",
   "checkingForUpdates": "Đang kiểm tra cập nhật",
   "checkingFirmwareVersion": "Đang kiểm tra phiên bản firmware...",
-  "firmwareUpdate": "Cập nhật Firmware"
+  "firmwareUpdate": "Cập nhật Firmware",
+  "payments": "Thanh toán",
+  "connectPaymentMethodInfo": "Kết nối phương thức thanh toán bên dưới để bắt đầu nhận thanh toán cho ứng dụng của bạn.",
+  "selectedPaymentMethod": "Phương thức thanh toán đã chọn",
+  "availablePaymentMethods": "Phương thức thanh toán có sẵn",
+  "activeStatus": "Đang hoạt động",
+  "connectedStatus": "Đã kết nối",
+  "notConnectedStatus": "Chưa kết nối",
+  "setActive": "Đặt làm hoạt động"
 }

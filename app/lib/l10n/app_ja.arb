@@ -1784,5 +1784,13 @@
   "updateGuide": "更新ガイド",
   "checkingForUpdates": "アップデートを確認中",
   "checkingFirmwareVersion": "ファームウェアバージョンを確認中...",
-  "firmwareUpdate": "ファームウェア更新"
+  "firmwareUpdate": "ファームウェア更新",
+  "payments": "支払い",
+  "connectPaymentMethodInfo": "下記で支払い方法を接続して、アプリの収益を受け取り始めましょう。",
+  "selectedPaymentMethod": "選択された支払い方法",
+  "availablePaymentMethods": "利用可能な支払い方法",
+  "activeStatus": "アクティブ",
+  "connectedStatus": "接続済み",
+  "notConnectedStatus": "未接続",
+  "setActive": "アクティブに設定"
 }

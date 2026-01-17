@@ -3358,5 +3358,13 @@
   "updateGuide": "Värskendamise juhend",
   "checkingForUpdates": "Värskenduste otsimine",
   "checkingFirmwareVersion": "Püsivara versiooni kontrollimine...",
-  "firmwareUpdate": "Püsivara värskendus"
+  "firmwareUpdate": "Püsivara värskendus",
+  "payments": "Maksed",
+  "connectPaymentMethodInfo": "Ühendage allpool maksemeetod, et alustada oma rakenduste eest maksete saamist.",
+  "selectedPaymentMethod": "Valitud maksemeetod",
+  "availablePaymentMethods": "Saadaolevad maksemeetodid",
+  "activeStatus": "Aktiivne",
+  "connectedStatus": "Ühendatud",
+  "notConnectedStatus": "Pole ühendatud",
+  "setActive": "Määra aktiivseks"
 }

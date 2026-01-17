@@ -1805,5 +1805,13 @@
   "updateGuide": "Update-Anleitung",
   "checkingForUpdates": "Suche nach Updates",
   "checkingFirmwareVersion": "Firmware-Version wird überprüft...",
-  "firmwareUpdate": "Firmware-Update"
+  "firmwareUpdate": "Firmware-Update",
+  "payments": "Zahlungen",
+  "connectPaymentMethodInfo": "Verbinden Sie unten eine Zahlungsmethode, um Auszahlungen für Ihre Apps zu erhalten.",
+  "selectedPaymentMethod": "Ausgewählte Zahlungsmethode",
+  "availablePaymentMethods": "Verfügbare Zahlungsmethoden",
+  "activeStatus": "Aktiv",
+  "connectedStatus": "Verbunden",
+  "notConnectedStatus": "Nicht verbunden",
+  "setActive": "Als aktiv festlegen"
 }

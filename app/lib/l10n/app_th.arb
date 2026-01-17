@@ -3358,5 +3358,13 @@
   "updateGuide": "คู่มือการอัปเดต",
   "checkingForUpdates": "กำลังตรวจสอบการอัปเดต",
   "checkingFirmwareVersion": "กำลังตรวจสอบเวอร์ชันเฟิร์มแวร์...",
-  "firmwareUpdate": "อัปเดตเฟิร์มแวร์"
+  "firmwareUpdate": "อัปเดตเฟิร์มแวร์",
+  "payments": "การชำระเงิน",
+  "connectPaymentMethodInfo": "เชื่อมต่อวิธีการชำระเงินด้านล่างเพื่อเริ่มรับการจ่ายเงินสำหรับแอปของคุณ",
+  "selectedPaymentMethod": "วิธีการชำระเงินที่เลือก",
+  "availablePaymentMethods": "วิธีการชำระเงินที่มี",
+  "activeStatus": "ใช้งานอยู่",
+  "connectedStatus": "เชื่อมต่อแล้ว",
+  "notConnectedStatus": "ไม่ได้เชื่อมต่อ",
+  "setActive": "ตั้งเป็นใช้งาน"
 }

@@ -3360,5 +3360,13 @@
   "updateGuide": "Guia d'actualització",
   "checkingForUpdates": "Comprovant actualitzacions",
   "checkingFirmwareVersion": "Comprovant la versió del firmware...",
-  "firmwareUpdate": "Actualització del firmware"
+  "firmwareUpdate": "Actualització del firmware",
+  "payments": "Pagaments",
+  "connectPaymentMethodInfo": "Connecteu un mètode de pagament a continuació per començar a rebre pagaments per les vostres aplicacions.",
+  "selectedPaymentMethod": "Mètode de pagament seleccionat",
+  "availablePaymentMethods": "Mètodes de pagament disponibles",
+  "activeStatus": "Actiu",
+  "connectedStatus": "Connectat",
+  "notConnectedStatus": "No connectat",
+  "setActive": "Establir com a actiu"
 }

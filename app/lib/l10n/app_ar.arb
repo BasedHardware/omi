@@ -3376,5 +3376,13 @@
   "updateGuide": "دليل التحديث",
   "checkingForUpdates": "جارٍ البحث عن التحديثات",
   "checkingFirmwareVersion": "جارٍ التحقق من إصدار البرنامج الثابت...",
-  "firmwareUpdate": "تحديث البرنامج الثابت"
+  "firmwareUpdate": "تحديث البرنامج الثابت",
+  "payments": "المدفوعات",
+  "connectPaymentMethodInfo": "قم بتوصيل طريقة دفع أدناه لبدء تلقي المدفوعات لتطبيقاتك.",
+  "selectedPaymentMethod": "طريقة الدفع المحددة",
+  "availablePaymentMethods": "طرق الدفع المتاحة",
+  "activeStatus": "نشط",
+  "connectedStatus": "متصل",
+  "notConnectedStatus": "غير متصل",
+  "setActive": "تعيين كنشط"
 }

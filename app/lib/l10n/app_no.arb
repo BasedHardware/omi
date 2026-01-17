@@ -3358,5 +3358,13 @@
   "updateGuide": "Oppdateringsguide",
   "checkingForUpdates": "Ser etter oppdateringer",
   "checkingFirmwareVersion": "Kontrollerer fastvareversjon...",
-  "firmwareUpdate": "Fastvareoppdatering"
+  "firmwareUpdate": "Fastvareoppdatering",
+  "payments": "Betalinger",
+  "connectPaymentMethodInfo": "Koble til en betalingsmetode nedenfor for å begynne å motta utbetalinger for appene dine.",
+  "selectedPaymentMethod": "Valgt betalingsmetode",
+  "availablePaymentMethods": "Tilgjengelige betalingsmetoder",
+  "activeStatus": "Aktiv",
+  "connectedStatus": "Tilkoblet",
+  "notConnectedStatus": "Ikke tilkoblet",
+  "setActive": "Sett som aktiv"
 }

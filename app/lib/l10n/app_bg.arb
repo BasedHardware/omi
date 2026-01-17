@@ -3360,5 +3360,13 @@
   "updateGuide": "Ръководство за актуализация",
   "checkingForUpdates": "Проверка за актуализации",
   "checkingFirmwareVersion": "Проверка на версията на фърмуера...",
-  "firmwareUpdate": "Актуализация на фърмуера"
+  "firmwareUpdate": "Актуализация на фърмуера",
+  "payments": "Плащания",
+  "connectPaymentMethodInfo": "Свържете метод на плащане по-долу, за да започнете да получавате плащания за вашите приложения.",
+  "selectedPaymentMethod": "Избран метод на плащане",
+  "availablePaymentMethods": "Налични методи за плащане",
+  "activeStatus": "Активен",
+  "connectedStatus": "Свързан",
+  "notConnectedStatus": "Не е свързан",
+  "setActive": "Задай като активен"
 }

@@ -3358,5 +3358,13 @@
   "updateGuide": "Ghid de actualizare",
   "checkingForUpdates": "Se verifică actualizările",
   "checkingFirmwareVersion": "Se verifică versiunea firmware-ului...",
-  "firmwareUpdate": "Actualizare firmware"
+  "firmwareUpdate": "Actualizare firmware",
+  "payments": "Plăți",
+  "connectPaymentMethodInfo": "Conectați o metodă de plată mai jos pentru a începe să primiți plăți pentru aplicațiile dvs.",
+  "selectedPaymentMethod": "Metodă de plată selectată",
+  "availablePaymentMethods": "Metode de plată disponibile",
+  "activeStatus": "Activ",
+  "connectedStatus": "Conectat",
+  "notConnectedStatus": "Neconectat",
+  "setActive": "Setează ca activ"
 }

@@ -1805,5 +1805,13 @@
   "updateGuide": "अपडेट गाइड",
   "checkingForUpdates": "अपडेट की जांच हो रही है",
   "checkingFirmwareVersion": "फर्मवेयर संस्करण की जांच हो रही है...",
-  "firmwareUpdate": "फर्मवेयर अपडेट"
+  "firmwareUpdate": "फर्मवेयर अपडेट",
+  "payments": "भुगतान",
+  "connectPaymentMethodInfo": "अपने ऐप्स के लिए भुगतान प्राप्त करना शुरू करने के लिए नीचे एक भुगतान विधि कनेक्ट करें।",
+  "selectedPaymentMethod": "चयनित भुगतान विधि",
+  "availablePaymentMethods": "उपलब्ध भुगतान विधियाँ",
+  "activeStatus": "सक्रिय",
+  "connectedStatus": "कनेक्टेड",
+  "notConnectedStatus": "कनेक्ट नहीं",
+  "setActive": "सक्रिय के रूप में सेट करें"
 }

@@ -3358,5 +3358,13 @@
   "updateGuide": "Frissítési útmutató",
   "checkingForUpdates": "Frissítések keresése",
   "checkingFirmwareVersion": "Firmware verzió ellenőrzése...",
-  "firmwareUpdate": "Firmware frissítés"
+  "firmwareUpdate": "Firmware frissítés",
+  "payments": "Fizetések",
+  "connectPaymentMethodInfo": "Csatlakoztasson alább egy fizetési módot, hogy elkezdhesse fogadni a kifizetéseket az alkalmazásaiért.",
+  "selectedPaymentMethod": "Kiválasztott fizetési mód",
+  "availablePaymentMethods": "Elérhető fizetési módok",
+  "activeStatus": "Aktív",
+  "connectedStatus": "Csatlakoztatva",
+  "notConnectedStatus": "Nincs csatlakoztatva",
+  "setActive": "Beállítás aktívként"
 }

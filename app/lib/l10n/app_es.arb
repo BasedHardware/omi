@@ -1805,5 +1805,13 @@
   "updateGuide": "Guía de actualización",
   "checkingForUpdates": "Buscando actualizaciones",
   "checkingFirmwareVersion": "Comprobando versión del firmware...",
-  "firmwareUpdate": "Actualización de firmware"
+  "firmwareUpdate": "Actualización de firmware",
+  "payments": "Pagos",
+  "connectPaymentMethodInfo": "Conecte un método de pago a continuación para comenzar a recibir pagos por sus aplicaciones.",
+  "selectedPaymentMethod": "Método de pago seleccionado",
+  "availablePaymentMethods": "Métodos de pago disponibles",
+  "activeStatus": "Activo",
+  "connectedStatus": "Conectado",
+  "notConnectedStatus": "No conectado",
+  "setActive": "Establecer como activo"
 }

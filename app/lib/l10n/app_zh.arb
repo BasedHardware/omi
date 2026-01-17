@@ -1805,5 +1805,13 @@
   "updateGuide": "更新指南",
   "checkingForUpdates": "正在检查更新",
   "checkingFirmwareVersion": "正在检查固件版本...",
-  "firmwareUpdate": "固件更新"
+  "firmwareUpdate": "固件更新",
+  "payments": "付款",
+  "connectPaymentMethodInfo": "在下方连接付款方式，开始接收您应用的收入。",
+  "selectedPaymentMethod": "已选付款方式",
+  "availablePaymentMethods": "可用付款方式",
+  "activeStatus": "活跃",
+  "connectedStatus": "已连接",
+  "notConnectedStatus": "未连接",
+  "setActive": "设为活跃"
 }

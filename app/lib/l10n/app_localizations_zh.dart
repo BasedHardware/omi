@@ -4312,8 +4312,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get secureEncryption => '安全加密';
 
   @override
-  String get secureEncryptionDescription =>
-      '您的数据使用您独有的密钥在我们托管于Google Cloud的服务器上加密。这意味着包括Omi员工或Google在内的任何人都无法直接从数据库访问您的原始内容。';
+  String get secureEncryptionDescription => '您的数据使用您独有的密钥在我们托管于Google Cloud的服务器上加密。这意味着包括Omi员工或Google在内的任何人都无法直接从数据库访问您的原始内容。';
 
   @override
   String get endToEndEncryption => '端到端加密';
@@ -4875,4 +4874,28 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get firmwareUpdate => '固件更新';
+
+  @override
+  String get payments => '付款';
+
+  @override
+  String get connectPaymentMethodInfo => '在下方连接付款方式，开始接收您应用的收入。';
+
+  @override
+  String get selectedPaymentMethod => '已选付款方式';
+
+  @override
+  String get availablePaymentMethods => '可用付款方式';
+
+  @override
+  String get activeStatus => '活跃';
+
+  @override
+  String get connectedStatus => '已连接';
+
+  @override
+  String get notConnectedStatus => '未连接';
+
+  @override
+  String get setActive => '设为活跃';
 }

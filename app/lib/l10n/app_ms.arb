@@ -3358,5 +3358,13 @@
   "updateGuide": "Panduan Kemas Kini",
   "checkingForUpdates": "Menyemak Kemas Kini",
   "checkingFirmwareVersion": "Menyemak versi perisian tegar...",
-  "firmwareUpdate": "Kemas Kini Perisian Tegar"
+  "firmwareUpdate": "Kemas Kini Perisian Tegar",
+  "payments": "Pembayaran",
+  "connectPaymentMethodInfo": "Sambungkan kaedah pembayaran di bawah untuk mula menerima pembayaran untuk aplikasi anda.",
+  "selectedPaymentMethod": "Kaedah Pembayaran Dipilih",
+  "availablePaymentMethods": "Kaedah Pembayaran Tersedia",
+  "activeStatus": "Aktif",
+  "connectedStatus": "Disambungkan",
+  "notConnectedStatus": "Tidak Disambungkan",
+  "setActive": "Tetapkan Aktif"
 }
