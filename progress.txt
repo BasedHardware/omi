@@ -1522,3 +1522,21 @@ Notes: Private cloud sync settings page for storing audio on cloud. Localized
        title and message, enable/disable confirmation messages, and error messages.
        Similar structure to local_storage_page.dart.
 Commit: 61b26749a
+
+--------------------------------------------------------------------------------
+FILE 111 (Phase 2 FILE 41): firmware_update.dart
+--------------------------------------------------------------------------------
+Path: app/lib/pages/home/firmware_update.dart
+New Keys: downloadingFirmware, installingFirmware, firmwareUpdateWarning,
+         firmwareUpdated, restartDeviceToComplete (parameterized),
+         yourDeviceIsUpToDate, currentVersion, latestVersion, whatsNew,
+         installUpdate, updateNow, updateGuide, checkingForUpdates,
+         checkingFirmwareVersion, firmwareUpdate
+Reused Keys: done, pleaseWait
+Total New Keys: 15
+Script: /private/tmp/claude/.../translate_firmware_update.py
+Status: ✅ COMPLETED
+Notes: Firmware update page with download/install progress, success screen,
+       version comparison, changelog display, and update guide link. Used
+       parameterized translation for restartDeviceToComplete with device name.
+Commit: 2676fe67f
