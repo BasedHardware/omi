@@ -1,4 +1,5 @@
 import os
+import shutil
 import uuid
 
 import torch
@@ -36,12 +37,14 @@ def embedding_endpoint(file: UploadFile):
         Dictionary containing the embedding vector and metadata
     """
     upload_id = str(uuid.uuid4())
-    file_path = f"_temp/{upload_id}_{file.filename}"
+    # Sanitize filename to prevent path traversal
+    filename = os.path.basename(file.filename)
+    file_path = f"_temp/{upload_id}_{filename}"
     
     try:
-        # Save uploaded file
+        # Save uploaded file in chunks to avoid high memory usage
         with open(file_path, 'wb') as f:
-            f.write(file.file.read())
+            shutil.copyfileobj(file.file, f)
         
         # Extract embedding
         embedding = embedding_inference(file_path)
@@ -66,12 +69,14 @@ def embedding_endpoint_v2(file: UploadFile):
         Dictionary containing the embedding vector and metadata
     """
     upload_id = str(uuid.uuid4())
-    file_path = f"_temp/{upload_id}_{file.filename}"
+    # Sanitize filename to prevent path traversal
+    filename = os.path.basename(file.filename)
+    file_path = f"_temp/{upload_id}_{filename}"
     
     try:
-        # Save uploaded file
+        # Save uploaded file in chunks to avoid high memory usage
         with open(file_path, 'wb') as f:
-            f.write(file.file.read())
+            shutil.copyfileobj(file.file, f)
         
         # Extract embedding using v2 model
         embedding = embedding_inference_v2(file_path)

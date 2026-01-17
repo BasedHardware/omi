@@ -21,7 +21,7 @@ def embedding(file: UploadFile = File(...)):
 
 
 @app.post('/v2/embedding')
-def embedding(file: UploadFile = File(...)):
+def embedding_v2(file: UploadFile = File(...)):
     print('embedding v2')
     return embedding_endpoint_v2(file)
 
