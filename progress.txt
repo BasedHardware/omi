@@ -1577,3 +1577,20 @@ Notes: Stripe Connect setup flow with country selection, onboarding process,
        polling state, success state, and update functionality. Includes feature
        descriptions, legal agreement links, and error messages.
 Commit: 3324eebd0
+
+--------------------------------------------------------------------------------
+FILE 114 (Phase 2 FILE 44): paypal_setup_page.dart
+--------------------------------------------------------------------------------
+Path: app/lib/pages/payments/paypal_setup_page.dart
+New Keys: updatePayPal, setUpPayPal, updatePayPalAccountDetails,
+         connectPayPalToReceivePayments, paypalEmail, paypalMeLink,
+         stripeRecommendation, updatePayPalDetails, savePayPalDetails,
+         pleaseEnterPayPalEmail, pleaseEnterPayPalMeLink, doNotIncludeHttpInLink,
+         pleaseEnterValidPayPalMeLink, pleaseEnterValidEmail
+Total New Keys: 14
+Script: /private/tmp/claude/.../translate_paypal_setup.py
+Status: ✅ COMPLETED
+Notes: PayPal setup page with email and PayPal.me link form fields. Includes
+       form validation messages, Stripe recommendation info, and update/save
+       button text. Modified validators to accept BuildContext parameter.
+Commit: 6588be8d4
