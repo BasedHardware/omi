@@ -3386,5 +3386,19 @@
   "successfullyConnected": "Connectat amb èxit!",
   "stripeReadyForPayments": "El vostre compte de Stripe està ara preparat per rebre pagaments. Podeu començar a guanyar amb les vendes de les vostres aplicacions de seguida.",
   "updateStripeDetails": "Actualitzar els detalls de Stripe",
-  "errorUpdatingStripeDetails": "Error en actualitzar els detalls de Stripe! Si us plau, torneu-ho a provar més tard."
+  "errorUpdatingStripeDetails": "Error en actualitzar els detalls de Stripe! Si us plau, torneu-ho a provar més tard.",
+  "updatePayPal": "Actualitzar PayPal",
+  "setUpPayPal": "Configurar PayPal",
+  "updatePayPalAccountDetails": "Actualitzeu les dades del vostre compte de PayPal",
+  "connectPayPalToReceivePayments": "Connecteu el vostre compte de PayPal per començar a rebre pagaments per les vostres aplicacions",
+  "paypalEmail": "Correu electrònic de PayPal",
+  "paypalMeLink": "Enllaç PayPal.me",
+  "stripeRecommendation": "Si Stripe està disponible al vostre país, us recomanem molt utilitzar-lo per a pagaments més ràpids i fàcils.",
+  "updatePayPalDetails": "Actualitzar els detalls de PayPal",
+  "savePayPalDetails": "Desar els detalls de PayPal",
+  "pleaseEnterPayPalEmail": "Si us plau, introduïu el vostre correu electrònic de PayPal",
+  "pleaseEnterPayPalMeLink": "Si us plau, introduïu el vostre enllaç PayPal.me",
+  "doNotIncludeHttpInLink": "No incloeu http o https o www a l'enllaç",
+  "pleaseEnterValidPayPalMeLink": "Si us plau, introduïu un enllaç PayPal.me vàlid",
+  "pleaseEnterValidEmail": "Si us plau, introduïu una adreça de correu electrònic vàlida"
 }

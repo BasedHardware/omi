@@ -3402,5 +3402,19 @@
   "successfullyConnected": "تم الاتصال بنجاح!",
   "stripeReadyForPayments": "حساب Stripe الخاص بك جاهز الآن لاستقبال المدفوعات. يمكنك البدء في الكسب من مبيعات تطبيقك على الفور.",
   "updateStripeDetails": "تحديث تفاصيل Stripe",
-  "errorUpdatingStripeDetails": "خطأ في تحديث تفاصيل Stripe! يرجى المحاولة مرة أخرى لاحقًا."
+  "errorUpdatingStripeDetails": "خطأ في تحديث تفاصيل Stripe! يرجى المحاولة مرة أخرى لاحقًا.",
+  "updatePayPal": "تحديث PayPal",
+  "setUpPayPal": "إعداد PayPal",
+  "updatePayPalAccountDetails": "تحديث تفاصيل حساب PayPal الخاص بك",
+  "connectPayPalToReceivePayments": "قم بتوصيل حساب PayPal الخاص بك لبدء تلقي المدفوعات لتطبيقاتك",
+  "paypalEmail": "بريد PayPal الإلكتروني",
+  "paypalMeLink": "رابط PayPal.me",
+  "stripeRecommendation": "إذا كان Stripe متاحًا في بلدك، نوصي بشدة باستخدامه للحصول على مدفوعات أسرع وأسهل.",
+  "updatePayPalDetails": "تحديث تفاصيل PayPal",
+  "savePayPalDetails": "حفظ تفاصيل PayPal",
+  "pleaseEnterPayPalEmail": "يرجى إدخال بريد PayPal الإلكتروني الخاص بك",
+  "pleaseEnterPayPalMeLink": "يرجى إدخال رابط PayPal.me الخاص بك",
+  "doNotIncludeHttpInLink": "لا تقم بتضمين http أو https أو www في الرابط",
+  "pleaseEnterValidPayPalMeLink": "يرجى إدخال رابط PayPal.me صالح",
+  "pleaseEnterValidEmail": "يرجى إدخال عنوان بريد إلكتروني صالح"
 }

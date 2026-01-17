@@ -2202,5 +2202,19 @@
   "successfullyConnected": "Succesvol verbonden!",
   "stripeReadyForPayments": "Uw Stripe-account is nu klaar om betalingen te ontvangen. U kunt direct beginnen met verdienen aan uw app-verkopen.",
   "updateStripeDetails": "Stripe-gegevens bijwerken",
-  "errorUpdatingStripeDetails": "Fout bij het bijwerken van Stripe-gegevens! Probeer het later opnieuw."
+  "errorUpdatingStripeDetails": "Fout bij het bijwerken van Stripe-gegevens! Probeer het later opnieuw.",
+  "updatePayPal": "PayPal bijwerken",
+  "setUpPayPal": "PayPal instellen",
+  "updatePayPalAccountDetails": "Werk uw PayPal-accountgegevens bij",
+  "connectPayPalToReceivePayments": "Verbind uw PayPal-account om betalingen voor uw apps te ontvangen",
+  "paypalEmail": "PayPal-e-mail",
+  "paypalMeLink": "PayPal.me-link",
+  "stripeRecommendation": "Als Stripe beschikbaar is in uw land, raden we het ten zeerste aan voor snellere en gemakkelijkere uitbetalingen.",
+  "updatePayPalDetails": "PayPal-gegevens bijwerken",
+  "savePayPalDetails": "PayPal-gegevens opslaan",
+  "pleaseEnterPayPalEmail": "Voer uw PayPal-e-mailadres in",
+  "pleaseEnterPayPalMeLink": "Voer uw PayPal.me-link in",
+  "doNotIncludeHttpInLink": "Neem geen http, https of www op in de link",
+  "pleaseEnterValidPayPalMeLink": "Voer een geldige PayPal.me-link in",
+  "pleaseEnterValidEmail": "Voer een geldig e-mailadres in"
 }

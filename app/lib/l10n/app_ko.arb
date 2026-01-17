@@ -3384,5 +3384,19 @@
   "successfullyConnected": "연결 성공!",
   "stripeReadyForPayments": "Stripe 계정이 결제를 받을 준비가 되었습니다. 바로 앱 판매 수익을 얻기 시작할 수 있습니다.",
   "updateStripeDetails": "Stripe 세부 정보 업데이트",
-  "errorUpdatingStripeDetails": "Stripe 세부 정보 업데이트 오류! 나중에 다시 시도해 주세요."
+  "errorUpdatingStripeDetails": "Stripe 세부 정보 업데이트 오류! 나중에 다시 시도해 주세요.",
+  "updatePayPal": "PayPal 업데이트",
+  "setUpPayPal": "PayPal 설정",
+  "updatePayPalAccountDetails": "PayPal 계정 세부 정보 업데이트",
+  "connectPayPalToReceivePayments": "PayPal 계정을 연결하여 앱 결제 수신을 시작하세요",
+  "paypalEmail": "PayPal 이메일",
+  "paypalMeLink": "PayPal.me 링크",
+  "stripeRecommendation": "귀하의 국가에서 Stripe를 사용할 수 있다면 더 빠르고 쉬운 지급을 위해 사용을 강력히 권장합니다.",
+  "updatePayPalDetails": "PayPal 세부 정보 업데이트",
+  "savePayPalDetails": "PayPal 세부 정보 저장",
+  "pleaseEnterPayPalEmail": "PayPal 이메일을 입력하세요",
+  "pleaseEnterPayPalMeLink": "PayPal.me 링크를 입력하세요",
+  "doNotIncludeHttpInLink": "링크에 http, https 또는 www를 포함하지 마세요",
+  "pleaseEnterValidPayPalMeLink": "유효한 PayPal.me 링크를 입력하세요",
+  "pleaseEnterValidEmail": "유효한 이메일 주소를 입력해 주세요"
 }

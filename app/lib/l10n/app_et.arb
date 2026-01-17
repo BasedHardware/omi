@@ -3384,5 +3384,19 @@
   "successfullyConnected": "Edukalt ühendatud!",
   "stripeReadyForPayments": "Teie Stripe konto on nüüd valmis makseid vastu võtma. Saate kohe alustada oma rakenduste müügist teenimist.",
   "updateStripeDetails": "Värskenda Stripe andmeid",
-  "errorUpdatingStripeDetails": "Viga Stripe andmete värskendamisel! Palun proovige hiljem uuesti."
+  "errorUpdatingStripeDetails": "Viga Stripe andmete värskendamisel! Palun proovige hiljem uuesti.",
+  "updatePayPal": "Värskenda PayPal",
+  "setUpPayPal": "Seadista PayPal",
+  "updatePayPalAccountDetails": "Värskendage oma PayPali konto andmeid",
+  "connectPayPalToReceivePayments": "Ühendage oma PayPali konto, et alustada oma rakenduste eest maksete saamist",
+  "paypalEmail": "PayPali e-post",
+  "paypalMeLink": "PayPal.me link",
+  "stripeRecommendation": "Kui Stripe on teie riigis saadaval, soovitame tungivalt seda kasutada kiiremate ja lihtsamate väljamaksete jaoks.",
+  "updatePayPalDetails": "Värskenda PayPali andmeid",
+  "savePayPalDetails": "Salvesta PayPali andmed",
+  "pleaseEnterPayPalEmail": "Palun sisestage oma PayPali e-post",
+  "pleaseEnterPayPalMeLink": "Palun sisestage oma PayPal.me link",
+  "doNotIncludeHttpInLink": "Ärge lisage lingile http, https ega www",
+  "pleaseEnterValidPayPalMeLink": "Palun sisestage kehtiv PayPal.me link",
+  "pleaseEnterValidEmail": "Palun sisestage kehtiv e-posti aadress"
 }

@@ -3384,5 +3384,19 @@
   "successfullyConnected": "Framgångsrikt ansluten!",
   "stripeReadyForPayments": "Ditt Stripe-konto är nu redo att ta emot betalningar. Du kan börja tjäna pengar på dina appförsäljningar direkt.",
   "updateStripeDetails": "Uppdatera Stripe-uppgifter",
-  "errorUpdatingStripeDetails": "Fel vid uppdatering av Stripe-uppgifter! Försök igen senare."
+  "errorUpdatingStripeDetails": "Fel vid uppdatering av Stripe-uppgifter! Försök igen senare.",
+  "updatePayPal": "Uppdatera PayPal",
+  "setUpPayPal": "Konfigurera PayPal",
+  "updatePayPalAccountDetails": "Uppdatera dina PayPal-kontouppgifter",
+  "connectPayPalToReceivePayments": "Anslut ditt PayPal-konto för att börja ta emot betalningar för dina appar",
+  "paypalEmail": "PayPal-e-post",
+  "paypalMeLink": "PayPal.me-länk",
+  "stripeRecommendation": "Om Stripe är tillgängligt i ditt land rekommenderar vi starkt att använda det för snabbare och enklare utbetalningar.",
+  "updatePayPalDetails": "Uppdatera PayPal-uppgifter",
+  "savePayPalDetails": "Spara PayPal-uppgifter",
+  "pleaseEnterPayPalEmail": "Ange din PayPal-e-post",
+  "pleaseEnterPayPalMeLink": "Ange din PayPal.me-länk",
+  "doNotIncludeHttpInLink": "Inkludera inte http eller https eller www i länken",
+  "pleaseEnterValidPayPalMeLink": "Ange en giltig PayPal.me-länk",
+  "pleaseEnterValidEmail": "Ange en giltig e-postadress"
 }

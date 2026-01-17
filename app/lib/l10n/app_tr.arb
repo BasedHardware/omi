@@ -3366,5 +3366,19 @@
   "successfullyConnected": "Başarıyla Bağlandı!",
   "stripeReadyForPayments": "Stripe hesabınız artık ödeme almaya hazır. Uygulama satışlarınızdan hemen kazanmaya başlayabilirsiniz.",
   "updateStripeDetails": "Stripe Bilgilerini Güncelle",
-  "errorUpdatingStripeDetails": "Stripe bilgilerini güncellerken hata! Lütfen daha sonra tekrar deneyin."
+  "errorUpdatingStripeDetails": "Stripe bilgilerini güncellerken hata! Lütfen daha sonra tekrar deneyin.",
+  "updatePayPal": "PayPal'ı Güncelle",
+  "setUpPayPal": "PayPal'ı Ayarla",
+  "updatePayPalAccountDetails": "PayPal hesap bilgilerinizi güncelleyin",
+  "connectPayPalToReceivePayments": "Uygulamalarınız için ödeme almaya başlamak için PayPal hesabınızı bağlayın",
+  "paypalEmail": "PayPal E-postası",
+  "paypalMeLink": "PayPal.me Bağlantısı",
+  "stripeRecommendation": "Stripe ülkenizde mevcutsa, daha hızlı ve kolay ödemeler için kullanmanızı şiddetle tavsiye ederiz.",
+  "updatePayPalDetails": "PayPal Bilgilerini Güncelle",
+  "savePayPalDetails": "PayPal Bilgilerini Kaydet",
+  "pleaseEnterPayPalEmail": "Lütfen PayPal e-postanızı girin",
+  "pleaseEnterPayPalMeLink": "Lütfen PayPal.me bağlantınızı girin",
+  "doNotIncludeHttpInLink": "Bağlantıya http veya https veya www eklemeyin",
+  "pleaseEnterValidPayPalMeLink": "Lütfen geçerli bir PayPal.me bağlantısı girin",
+  "pleaseEnterValidEmail": "Lütfen geçerli bir e-posta adresi girin"
 }

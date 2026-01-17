@@ -3384,5 +3384,19 @@
   "successfullyConnected": "Успішно підключено!",
   "stripeReadyForPayments": "Ваш обліковий запис Stripe готовий отримувати платежі. Ви можете одразу почати заробляти на продажах додатків.",
   "updateStripeDetails": "Оновити дані Stripe",
-  "errorUpdatingStripeDetails": "Помилка оновлення даних Stripe! Будь ласка, спробуйте пізніше."
+  "errorUpdatingStripeDetails": "Помилка оновлення даних Stripe! Будь ласка, спробуйте пізніше.",
+  "updatePayPal": "Оновити PayPal",
+  "setUpPayPal": "Налаштувати PayPal",
+  "updatePayPalAccountDetails": "Оновіть дані вашого облікового запису PayPal",
+  "connectPayPalToReceivePayments": "Підключіть свій обліковий запис PayPal, щоб почати отримувати платежі за ваші додатки",
+  "paypalEmail": "Email PayPal",
+  "paypalMeLink": "Посилання PayPal.me",
+  "stripeRecommendation": "Якщо Stripe доступний у вашій країні, ми наполегливо рекомендуємо використовувати його для швидших і простіших виплат.",
+  "updatePayPalDetails": "Оновити дані PayPal",
+  "savePayPalDetails": "Зберегти дані PayPal",
+  "pleaseEnterPayPalEmail": "Будь ласка, введіть ваш email PayPal",
+  "pleaseEnterPayPalMeLink": "Будь ласка, введіть ваше посилання PayPal.me",
+  "doNotIncludeHttpInLink": "Не включайте http, https або www у посилання",
+  "pleaseEnterValidPayPalMeLink": "Будь ласка, введіть дійсне посилання PayPal.me",
+  "pleaseEnterValidEmail": "Будь ласка, введіть дійсну адресу електронної пошти"
 }

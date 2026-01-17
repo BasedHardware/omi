@@ -9560,6 +9560,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Error updating Stripe details! Please try again later.'**
   String get errorUpdatingStripeDetails;
+
+  /// App bar title when updating PayPal
+  ///
+  /// In en, this message translates to:
+  /// **'Update PayPal'**
+  String get updatePayPal;
+
+  /// App bar title when setting up PayPal
+  ///
+  /// In en, this message translates to:
+  /// **'Set Up PayPal'**
+  String get setUpPayPal;
+
+  /// Description when updating PayPal account
+  ///
+  /// In en, this message translates to:
+  /// **'Update your PayPal account details'**
+  String get updatePayPalAccountDetails;
+
+  /// Description when connecting PayPal account
+  ///
+  /// In en, this message translates to:
+  /// **'Connect your PayPal account to start receiving payments for your apps'**
+  String get connectPayPalToReceivePayments;
+
+  /// Label for PayPal email field
+  ///
+  /// In en, this message translates to:
+  /// **'PayPal Email'**
+  String get paypalEmail;
+
+  /// Label for PayPal.me link field
+  ///
+  /// In en, this message translates to:
+  /// **'PayPal.me Link'**
+  String get paypalMeLink;
+
+  /// Info message recommending Stripe over PayPal
+  ///
+  /// In en, this message translates to:
+  /// **'If Stripe is available in your country, we highly recommend using it for faster and easier payouts.'**
+  String get stripeRecommendation;
+
+  /// Button text to update PayPal details
+  ///
+  /// In en, this message translates to:
+  /// **'Update PayPal Details'**
+  String get updatePayPalDetails;
+
+  /// Button text to save PayPal details
+  ///
+  /// In en, this message translates to:
+  /// **'Save PayPal Details'**
+  String get savePayPalDetails;
+
+  /// Validation error for empty PayPal email
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter your PayPal email'**
+  String get pleaseEnterPayPalEmail;
+
+  /// Validation error for empty PayPal.me link
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter your PayPal.me link'**
+  String get pleaseEnterPayPalMeLink;
+
+  /// Validation error for http/https/www in link
+  ///
+  /// In en, this message translates to:
+  /// **'Do not include http or https or www in the link'**
+  String get doNotIncludeHttpInLink;
+
+  /// Validation error for invalid PayPal.me link
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a valid PayPal.me link'**
+  String get pleaseEnterValidPayPalMeLink;
+
+  /// No description provided for @pleaseEnterValidEmail.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a valid email address'**
+  String get pleaseEnterValidEmail;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
@@ -9571,57 +9655,122 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
   }
 
   @override
-  bool isSupported(Locale locale) => <String>['ar', 'bg', 'ca', 'cs', 'da', 'de', 'el', 'en', 'es', 'et', 'fi', 'fr', 'hi', 'hu', 'id', 'it', 'ja', 'ko', 'lt', 'lv', 'ms', 'nl', 'no', 'pl', 'pt', 'ro', 'ru', 'sk', 'sv', 'th', 'tr', 'uk', 'vi', 'zh'].contains(locale.languageCode);
+  bool isSupported(Locale locale) => <String>[
+        'ar',
+        'bg',
+        'ca',
+        'cs',
+        'da',
+        'de',
+        'el',
+        'en',
+        'es',
+        'et',
+        'fi',
+        'fr',
+        'hi',
+        'hu',
+        'id',
+        'it',
+        'ja',
+        'ko',
+        'lt',
+        'lv',
+        'ms',
+        'nl',
+        'no',
+        'pl',
+        'pt',
+        'ro',
+        'ru',
+        'sk',
+        'sv',
+        'th',
+        'tr',
+        'uk',
+        'vi',
+        'zh'
+      ].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
 }
 
 AppLocalizations lookupAppLocalizations(Locale locale) {
-
-
   // Lookup logic when only language code is specified.
   switch (locale.languageCode) {
-    case 'ar': return AppLocalizationsAr();
-    case 'bg': return AppLocalizationsBg();
-    case 'ca': return AppLocalizationsCa();
-    case 'cs': return AppLocalizationsCs();
-    case 'da': return AppLocalizationsDa();
-    case 'de': return AppLocalizationsDe();
-    case 'el': return AppLocalizationsEl();
-    case 'en': return AppLocalizationsEn();
-    case 'es': return AppLocalizationsEs();
-    case 'et': return AppLocalizationsEt();
-    case 'fi': return AppLocalizationsFi();
-    case 'fr': return AppLocalizationsFr();
-    case 'hi': return AppLocalizationsHi();
-    case 'hu': return AppLocalizationsHu();
-    case 'id': return AppLocalizationsId();
-    case 'it': return AppLocalizationsIt();
-    case 'ja': return AppLocalizationsJa();
-    case 'ko': return AppLocalizationsKo();
-    case 'lt': return AppLocalizationsLt();
-    case 'lv': return AppLocalizationsLv();
-    case 'ms': return AppLocalizationsMs();
-    case 'nl': return AppLocalizationsNl();
-    case 'no': return AppLocalizationsNo();
-    case 'pl': return AppLocalizationsPl();
-    case 'pt': return AppLocalizationsPt();
-    case 'ro': return AppLocalizationsRo();
-    case 'ru': return AppLocalizationsRu();
-    case 'sk': return AppLocalizationsSk();
-    case 'sv': return AppLocalizationsSv();
-    case 'th': return AppLocalizationsTh();
-    case 'tr': return AppLocalizationsTr();
-    case 'uk': return AppLocalizationsUk();
-    case 'vi': return AppLocalizationsVi();
-    case 'zh': return AppLocalizationsZh();
+    case 'ar':
+      return AppLocalizationsAr();
+    case 'bg':
+      return AppLocalizationsBg();
+    case 'ca':
+      return AppLocalizationsCa();
+    case 'cs':
+      return AppLocalizationsCs();
+    case 'da':
+      return AppLocalizationsDa();
+    case 'de':
+      return AppLocalizationsDe();
+    case 'el':
+      return AppLocalizationsEl();
+    case 'en':
+      return AppLocalizationsEn();
+    case 'es':
+      return AppLocalizationsEs();
+    case 'et':
+      return AppLocalizationsEt();
+    case 'fi':
+      return AppLocalizationsFi();
+    case 'fr':
+      return AppLocalizationsFr();
+    case 'hi':
+      return AppLocalizationsHi();
+    case 'hu':
+      return AppLocalizationsHu();
+    case 'id':
+      return AppLocalizationsId();
+    case 'it':
+      return AppLocalizationsIt();
+    case 'ja':
+      return AppLocalizationsJa();
+    case 'ko':
+      return AppLocalizationsKo();
+    case 'lt':
+      return AppLocalizationsLt();
+    case 'lv':
+      return AppLocalizationsLv();
+    case 'ms':
+      return AppLocalizationsMs();
+    case 'nl':
+      return AppLocalizationsNl();
+    case 'no':
+      return AppLocalizationsNo();
+    case 'pl':
+      return AppLocalizationsPl();
+    case 'pt':
+      return AppLocalizationsPt();
+    case 'ro':
+      return AppLocalizationsRo();
+    case 'ru':
+      return AppLocalizationsRu();
+    case 'sk':
+      return AppLocalizationsSk();
+    case 'sv':
+      return AppLocalizationsSv();
+    case 'th':
+      return AppLocalizationsTh();
+    case 'tr':
+      return AppLocalizationsTr();
+    case 'uk':
+      return AppLocalizationsUk();
+    case 'vi':
+      return AppLocalizationsVi();
+    case 'zh':
+      return AppLocalizationsZh();
   }
 
-  throw FlutterError(
-    'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
-    'an issue with the localizations generation tool. Please file an issue '
-    'on GitHub with a reproducible sample app and the gen-l10n configuration '
-    'that was used.'
-  );
+  throw FlutterError('AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+      'an issue with the localizations generation tool. Please file an issue '
+      'on GitHub with a reproducible sample app and the gen-l10n configuration '
+      'that was used.');
 }

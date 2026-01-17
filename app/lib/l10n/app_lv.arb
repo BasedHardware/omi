@@ -3384,5 +3384,19 @@
   "successfullyConnected": "Veiksmīgi savienots!",
   "stripeReadyForPayments": "Jūsu Stripe konts tagad ir gatavs saņemt maksājumus. Jūs varat nekavējoties sākt pelnīt no savu lietotņu pārdošanas.",
   "updateStripeDetails": "Atjaunināt Stripe informāciju",
-  "errorUpdatingStripeDetails": "Kļūda atjauninot Stripe informāciju! Lūdzu, mēģiniet vēlāk."
+  "errorUpdatingStripeDetails": "Kļūda atjauninot Stripe informāciju! Lūdzu, mēģiniet vēlāk.",
+  "updatePayPal": "Atjaunināt PayPal",
+  "setUpPayPal": "Iestatīt PayPal",
+  "updatePayPalAccountDetails": "Atjauniniet sava PayPal konta informāciju",
+  "connectPayPalToReceivePayments": "Pievienojiet savu PayPal kontu, lai sāktu saņemt maksājumus par savām lietotnēm",
+  "paypalEmail": "PayPal e-pasts",
+  "paypalMeLink": "PayPal.me saite",
+  "stripeRecommendation": "Ja Stripe ir pieejams jūsu valstī, mēs ļoti iesakām to izmantot ātrākiem un vienkāršākiem maksājumiem.",
+  "updatePayPalDetails": "Atjaunināt PayPal informāciju",
+  "savePayPalDetails": "Saglabāt PayPal informāciju",
+  "pleaseEnterPayPalEmail": "Lūdzu, ievadiet savu PayPal e-pastu",
+  "pleaseEnterPayPalMeLink": "Lūdzu, ievadiet savu PayPal.me saiti",
+  "doNotIncludeHttpInLink": "Neiekļaujiet saitē http, https vai www",
+  "pleaseEnterValidPayPalMeLink": "Lūdzu, ievadiet derīgu PayPal.me saiti",
+  "pleaseEnterValidEmail": "Lūdzu, ievadiet derīgu e-pasta adresi"
 }

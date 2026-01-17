@@ -3384,5 +3384,19 @@
   "successfullyConnected": "Berjaya Disambungkan!",
   "stripeReadyForPayments": "Akaun Stripe anda kini sedia menerima pembayaran. Anda boleh mula menjana pendapatan daripada jualan aplikasi anda dengan segera.",
   "updateStripeDetails": "Kemas Kini Butiran Stripe",
-  "errorUpdatingStripeDetails": "Ralat mengemas kini butiran Stripe! Sila cuba lagi kemudian."
+  "errorUpdatingStripeDetails": "Ralat mengemas kini butiran Stripe! Sila cuba lagi kemudian.",
+  "updatePayPal": "Kemas Kini PayPal",
+  "setUpPayPal": "Sediakan PayPal",
+  "updatePayPalAccountDetails": "Kemas kini butiran akaun PayPal anda",
+  "connectPayPalToReceivePayments": "Sambungkan akaun PayPal anda untuk mula menerima pembayaran untuk aplikasi anda",
+  "paypalEmail": "E-mel PayPal",
+  "paypalMeLink": "Pautan PayPal.me",
+  "stripeRecommendation": "Jika Stripe tersedia di negara anda, kami sangat mengesyorkan menggunakannya untuk pembayaran yang lebih cepat dan mudah.",
+  "updatePayPalDetails": "Kemas Kini Butiran PayPal",
+  "savePayPalDetails": "Simpan Butiran PayPal",
+  "pleaseEnterPayPalEmail": "Sila masukkan e-mel PayPal anda",
+  "pleaseEnterPayPalMeLink": "Sila masukkan pautan PayPal.me anda",
+  "doNotIncludeHttpInLink": "Jangan sertakan http atau https atau www dalam pautan",
+  "pleaseEnterValidPayPalMeLink": "Sila masukkan pautan PayPal.me yang sah",
+  "pleaseEnterValidEmail": "Sila masukkan alamat e-mel yang sah"
 }

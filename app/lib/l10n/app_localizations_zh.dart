@@ -4312,7 +4312,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get secureEncryption => '安全加密';
 
   @override
-  String get secureEncryptionDescription => '您的数据使用您独有的密钥在我们托管于Google Cloud的服务器上加密。这意味着包括Omi员工或Google在内的任何人都无法直接从数据库访问您的原始内容。';
+  String get secureEncryptionDescription =>
+      '您的数据使用您独有的密钥在我们托管于Google Cloud的服务器上加密。这意味着包括Omi员工或Google在内的任何人都无法直接从数据库访问您的原始内容。';
 
   @override
   String get endToEndEncryption => '端到端加密';
@@ -4952,4 +4953,46 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get errorUpdatingStripeDetails => '更新 Stripe 详细信息时出错！请稍后重试。';
+
+  @override
+  String get updatePayPal => '更新 PayPal';
+
+  @override
+  String get setUpPayPal => '设置 PayPal';
+
+  @override
+  String get updatePayPalAccountDetails => '更新您的 PayPal 账户详细信息';
+
+  @override
+  String get connectPayPalToReceivePayments => '连接您的 PayPal 账户，开始接收您应用的付款';
+
+  @override
+  String get paypalEmail => 'PayPal 邮箱';
+
+  @override
+  String get paypalMeLink => 'PayPal.me 链接';
+
+  @override
+  String get stripeRecommendation => '如果 Stripe 在您的国家可用，我们强烈建议使用它以获得更快更便捷的付款。';
+
+  @override
+  String get updatePayPalDetails => '更新 PayPal 详细信息';
+
+  @override
+  String get savePayPalDetails => '保存 PayPal 详细信息';
+
+  @override
+  String get pleaseEnterPayPalEmail => '请输入您的 PayPal 邮箱';
+
+  @override
+  String get pleaseEnterPayPalMeLink => '请输入您的 PayPal.me 链接';
+
+  @override
+  String get doNotIncludeHttpInLink => '链接中请勿包含 http、https 或 www';
+
+  @override
+  String get pleaseEnterValidPayPalMeLink => '请输入有效的 PayPal.me 链接';
+
+  @override
+  String get pleaseEnterValidEmail => '请输入有效的电子邮件地址';
 }

@@ -145,7 +145,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get deleting => 'Dzēš...';
 
   @override
-  String get pleaseCompleteAuthentication => 'Lūdzu, pabeidziet autentifikāciju savā pārlūkprogrammā. Kad esat pabeidzis, atgriezieties lietotnē.';
+  String get pleaseCompleteAuthentication =>
+      'Lūdzu, pabeidziet autentifikāciju savā pārlūkprogrammā. Kad esat pabeidzis, atgriezieties lietotnē.';
 
   @override
   String get failedToStartAuthentication => 'Neizdevās sākt autentifikāciju';
@@ -226,7 +227,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get noStarredConversations => 'Nav sarunu ar zvaigzni';
 
   @override
-  String get starConversationHint => 'Lai atzīmētu sarunu ar zvaigznīti, atveriet to un piespiediet zvaigznītes ikonu galvenē.';
+  String get starConversationHint =>
+      'Lai atzīmētu sarunu ar zvaigznīti, atveriet to un piespiediet zvaigznītes ikonu galvenē.';
 
   @override
   String get searchConversations => 'Meklēt sarunas...';
@@ -317,7 +319,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get installedApps => 'Instalētās lietotnes';
 
   @override
-  String get unableToFetchApps => 'Nevar ielādēt lietotnes :(\n\nLūdzu, pārbaudiet interneta savienojumu un mēģiniet vēlreiz.';
+  String get unableToFetchApps =>
+      'Nevar ielādēt lietotnes :(\n\nLūdzu, pārbaudiet interneta savienojumu un mēģiniet vēlreiz.';
 
   @override
   String get aboutOmi => 'Par Omi';
@@ -353,16 +356,19 @@ class AppLocalizationsLv extends AppLocalizations {
   String get appsDisconnected => 'Jūsu lietotnes un integrācijas tiks atsavi notas nekavējoties.';
 
   @override
-  String get exportBeforeDelete => 'Jūs varat eksportēt savus datus pirms konta dzēšanas, bet pēc dzēšanas tos vairs nevarēs atjaunot.';
+  String get exportBeforeDelete =>
+      'Jūs varat eksportēt savus datus pirms konta dzēšanas, bet pēc dzēšanas tos vairs nevarēs atjaunot.';
 
   @override
-  String get deleteAccountCheckbox => 'Es saprotu, ka konta dzēšana ir neatgriezeniska un visi dati, tostarp atmiņas un sarunas, tiks zaudēti un tos nevarēs atgūt.';
+  String get deleteAccountCheckbox =>
+      'Es saprotu, ka konta dzēšana ir neatgriezeniska un visi dati, tostarp atmiņas un sarunas, tiks zaudēti un tos nevarēs atgūt.';
 
   @override
   String get areYouSure => 'Vai esat pārliecināts?';
 
   @override
-  String get deleteAccountFinal => 'Šī darbība ir neatgriezeniska un neatgriezeniski izdzēsīs jūsu kontu un visus saistītos datus. Vai tiešām vēlaties turpināt?';
+  String get deleteAccountFinal =>
+      'Šī darbība ir neatgriezeniska un neatgriezeniski izdzēsīs jūsu kontu un visus saistītos datus. Vai tiešām vēlaties turpināt?';
 
   @override
   String get deleteNow => 'Dzēst tagad';
@@ -371,7 +377,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get goBack => 'Atgriezties';
 
   @override
-  String get checkBoxToConfirm => 'Atzīmējiet izvēles rūtiņu, lai apstiprinātu, ka saprotat, ka konta dzēšana ir neatgriezeniska un neatceļama.';
+  String get checkBoxToConfirm =>
+      'Atzīmējiet izvēles rūtiņu, lai apstiprinātu, ka saprotat, ka konta dzēšana ir neatgriezeniska un neatceļama.';
 
   @override
   String get profile => 'Profils';
@@ -449,7 +456,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get yourPrivacyYourControl => 'Jūsu privātums, jūsu kontrole';
 
   @override
-  String get privacyIntro => 'Omi mēs esam apņēmušies aizsargāt jūsu privātumu. Šī lapa ļauj jums kontrolēt, kā jūsu dati tiek uzglabāti un izmantoti.';
+  String get privacyIntro =>
+      'Omi mēs esam apņēmušies aizsargāt jūsu privātumu. Šī lapa ļauj jums kontrolēt, kā jūsu dati tiek uzglabāti un izmantoti.';
 
   @override
   String get learnMore => 'Uzzināt vairāk...';
@@ -458,13 +466,15 @@ class AppLocalizationsLv extends AppLocalizations {
   String get dataProtectionLevel => 'Datu aizsardzības līmenis';
 
   @override
-  String get dataProtectionDesc => 'Jūsu dati pēc noklusējuma ir aizsargāti ar spēcīgu šifrēšanu. Pārskatiet savus iestatījumus un turpmākās privātuma opcijas zemāk.';
+  String get dataProtectionDesc =>
+      'Jūsu dati pēc noklusējuma ir aizsargāti ar spēcīgu šifrēšanu. Pārskatiet savus iestatījumus un turpmākās privātuma opcijas zemāk.';
 
   @override
   String get appAccess => 'Lietotņu piekļuve';
 
   @override
-  String get appAccessDesc => 'Šādas lietotnes var piekļūt jūsu datiem. Piespiediet uz lietotnes, lai pārvaldītu tās atļaujas.';
+  String get appAccessDesc =>
+      'Šādas lietotnes var piekļūt jūsu datiem. Piespiediet uz lietotnes, lai pārvaldītu tās atļaujas.';
 
   @override
   String get noAppsExternalAccess => 'Nevienai instalētajai lietotnei nav ārējas piekļuves jūsu datiem.';
@@ -521,13 +531,15 @@ class AppLocalizationsLv extends AppLocalizations {
   String get deviceDisconnectedMessage => 'Jūsu Omi ir atvienots 😔';
 
   @override
-  String get deviceUnpairedMessage => 'Ierīce atvienota. Dodieties uz Iestatījumi > Bluetooth un aizmirstiet ierīci, lai pabeigtu sapārošanas atcelšanu.';
+  String get deviceUnpairedMessage =>
+      'Ierīce atvienota. Dodieties uz Iestatījumi > Bluetooth un aizmirstiet ierīci, lai pabeigtu sapārošanas atcelšanu.';
 
   @override
   String get unpairDialogTitle => 'Atpārošana ierīci';
 
   @override
-  String get unpairDialogMessage => 'Tas atpāros ierīci, lai to varētu savienot ar citu tālruni. Jums būs jādodas uz Iestatījumi > Bluetooth un jāaizmirst ierīce, lai pabeigtu procesu.';
+  String get unpairDialogMessage =>
+      'Tas atpāros ierīci, lai to varētu savienot ar citu tālruni. Jums būs jādodas uz Iestatījumi > Bluetooth un jāaizmirst ierīce, lai pabeigtu procesu.';
 
   @override
   String get deviceNotConnected => 'Ierīce nav savienota';
@@ -548,7 +560,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get v2Undetected => 'V2 nav atklāts';
 
   @override
-  String get v2UndetectedMessage => 'Redzam, ka jums ir V1 ierīce vai jūsu ierīce nav savienota. SD kartes funkcionalitāte ir pieejama tikai V2 ierīcēm.';
+  String get v2UndetectedMessage =>
+      'Redzam, ka jums ir V1 ierīce vai jūsu ierīce nav savienota. SD kartes funkcionalitāte ir pieejama tikai V2 ierīcēm.';
 
   @override
   String get endConversation => 'Beigt sarunu';
@@ -825,7 +838,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get deleteKnowledgeGraphTitle => 'Dzēst zināšanu grafu?';
 
   @override
-  String get deleteKnowledgeGraphMessage => 'Tas izdzēsīs visus atvasinātos zināšanu grafa datus (mezglus un savienojumus). Jūsu oriģinālās atmiņas paliks drošībā. Grafs tiks atjaunots ar laiku vai pēc nākamā pieprasījuma.';
+  String get deleteKnowledgeGraphMessage =>
+      'Tas izdzēsīs visus atvasinātos zināšanu grafa datus (mezglus un savienojumus). Jūsu oriģinālās atmiņas paliks drošībā. Grafs tiks atjaunots ar laiku vai pēc nākamā pieprasījuma.';
 
   @override
   String get knowledgeGraphDeleted => 'Zināšanu grafs izdzēsts';
@@ -973,7 +987,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get shortConversationThreshold => 'Īsās sarunas slieksnis';
 
   @override
-  String get shortConversationThresholdSubtitle => 'Sarunas, kas ir īsākas par šo, tiks slēptas, ja vien nav iespējotas iepriekš';
+  String get shortConversationThresholdSubtitle =>
+      'Sarunas, kas ir īsākas par šo, tiks slēptas, ja vien nav iespējotas iepriekš';
 
   @override
   String get durationThreshold => 'Ilguma slieksnis';
@@ -1008,7 +1023,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get chatToolsFooter => 'Savienojiet savas lietotnes, lai skatītu datus un metriku tērzēšanā.';
 
   @override
-  String get completeAuthInBrowser => 'Lūdzu, pabeidziet autentifikāciju savā pārlūkprogrammā. Kad esat pabeidzis, atgriezieties lietotnē.';
+  String get completeAuthInBrowser =>
+      'Lūdzu, pabeidziet autentifikāciju savā pārlūkprogrammā. Kad esat pabeidzis, atgriezieties lietotnē.';
 
   @override
   String failedToStartAuth(String appName) {
@@ -1068,7 +1084,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get needYourPermission => 'Mums nepieciešama jūsu atļauja';
 
   @override
-  String get alreadyGavePermission => 'Jūs jau esat devis mums atļauju saglabāt jūsu ierakstus. Šeit ir atgādinājums, kāpēc mums tas ir nepieciešams:';
+  String get alreadyGavePermission =>
+      'Jūs jau esat devis mums atļauju saglabāt jūsu ierakstus. Šeit ir atgādinājums, kāpēc mums tas ir nepieciešams:';
 
   @override
   String get wouldLikePermission => 'Mēs vēlētos jūsu atļauju saglabāt jūsu balss ierakstus. Šeit ir iemesls:';
@@ -1077,22 +1094,26 @@ class AppLocalizationsLv extends AppLocalizations {
   String get improveSpeechProfile => 'Uzlabot jūsu runas profilu';
 
   @override
-  String get improveSpeechProfileDesc => 'Mēs izmantojam ierakstus, lai turpinātu apmācīt un uzlabotu jūsu personīgo runas profilu.';
+  String get improveSpeechProfileDesc =>
+      'Mēs izmantojam ierakstus, lai turpinātu apmācīt un uzlabotu jūsu personīgo runas profilu.';
 
   @override
   String get trainFamilyProfiles => 'Apmācīt profilus draugiem un ģimenei';
 
   @override
-  String get trainFamilyProfilesDesc => 'Jūsu ieraksti palīdz mums atpazīt un izveidot profilus jūsu draugiem un ģimenei.';
+  String get trainFamilyProfilesDesc =>
+      'Jūsu ieraksti palīdz mums atpazīt un izveidot profilus jūsu draugiem un ģimenei.';
 
   @override
   String get enhanceTranscriptAccuracy => 'Uzlabot transkripcijas precizitāti';
 
   @override
-  String get enhanceTranscriptAccuracyDesc => 'Uzlabojoties mūsu modelim, mēs varam sniegt labākus transkripcijas rezultātus jūsu ierakstiem.';
+  String get enhanceTranscriptAccuracyDesc =>
+      'Uzlabojoties mūsu modelim, mēs varam sniegt labākus transkripcijas rezultātus jūsu ierakstiem.';
 
   @override
-  String get legalNotice => 'Juridisks paziņojums: Balss datu ierakstīšanas un uzglabāšanas likumība var atšķirties atkarībā no jūsu atrašanās vietas un tā, kā izmantojat šo funkciju. Ir jūsu atbildība nodrošināt atbilstību vietējiem likumiem un noteikumiem.';
+  String get legalNotice =>
+      'Juridisks paziņojums: Balss datu ierakstīšanas un uzglabāšanas likumība var atšķirties atkarībā no jūsu atrašanās vietas un tā, kā izmantojat šo funkciju. Ir jūsu atbildība nodrošināt atbilstību vietējiem likumiem un noteikumiem.';
 
   @override
   String get alreadyAuthorized => 'Jau autorizēts';
@@ -1170,7 +1191,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get showEventsNoParticipants => 'Rādīt notikumus bez dalībniekiem';
 
   @override
-  String get showEventsNoParticipantsDesc => 'Ja iespējots, Coming Up rāda notikumus bez dalībniekiem vai video saites.';
+  String get showEventsNoParticipantsDesc =>
+      'Ja iespējots, Coming Up rāda notikumus bez dalībniekiem vai video saites.';
 
   @override
   String get yourMeetings => 'Jūsu sanāksmes';
@@ -1258,7 +1280,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get languageForTranscription => 'Iestatiet savu valodu precīzākai transkripcijai un personalizētai pieredzei.';
 
   @override
-  String get singleLanguageModeInfo => 'Vienas valodas režīms ir iespējots. Tulkošana ir atspējota lielākai precizitātei.';
+  String get singleLanguageModeInfo =>
+      'Vienas valodas režīms ir iespējots. Tulkošana ir atspējota lielākai precizitātei.';
 
   @override
   String get searchLanguageHint => 'Meklēt valodu pēc nosaukuma vai koda';
@@ -1338,7 +1361,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get defaultRepository => 'Noklusējuma repozitorijs';
 
   @override
-  String get selectDefaultRepoDesc => 'Izvēlieties noklusējuma repozitoriju problēmu izveidošanai. Jūs joprojām varat norādīt citu repozitoriju, veidojot problēmas.';
+  String get selectDefaultRepoDesc =>
+      'Izvēlieties noklusējuma repozitoriju problēmu izveidošanai. Jūs joprojām varat norādīt citu repozitoriju, veidojot problēmas.';
 
   @override
   String get noReposFound => 'Repozitoriji nav atrasti';
@@ -1385,7 +1409,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get configureSettings => 'Konfigurēt iestatījumus';
 
   @override
-  String get completeAuthBrowser => 'Lūdzu, pabeidziet autentifikāciju savā pārlūkprogrammā. Kad esat pabeidzis, atgriezieties lietotnē.';
+  String get completeAuthBrowser =>
+      'Lūdzu, pabeidziet autentifikāciju savā pārlūkprogrammā. Kad esat pabeidzis, atgriezieties lietotnē.';
 
   @override
   String failedToStartAppAuth(String appName) {
@@ -1713,7 +1738,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get enableBluetooth => 'Iespējot Bluetooth';
 
   @override
-  String get bluetoothNeeded => 'Omi nepieciešams Bluetooth, lai savienotos ar jūsu valkājamo ierīci. Lūdzu, iespējojiet Bluetooth un mēģiniet vēlreiz.';
+  String get bluetoothNeeded =>
+      'Omi nepieciešams Bluetooth, lai savienotos ar jūsu valkājamo ierīci. Lūdzu, iespējojiet Bluetooth un mēģiniet vēlreiz.';
 
   @override
   String get contactSupport => 'Sazināties ar atbalstu?';
@@ -1746,22 +1772,26 @@ class AppLocalizationsLv extends AppLocalizations {
   String get locationServiceDisabled => 'Atrašanās vietas pakalpojums atspējots';
 
   @override
-  String get locationServiceDisabledDesc => 'Atrašanās vietas pakalpojums ir atspējots. Lūdzu, dodieties uz Iestatījumi > Privātums un drošība > Atrašanās vietas pakalpojumi un iespējojiet to';
+  String get locationServiceDisabledDesc =>
+      'Atrašanās vietas pakalpojums ir atspējots. Lūdzu, dodieties uz Iestatījumi > Privātums un drošība > Atrašanās vietas pakalpojumi un iespējojiet to';
 
   @override
   String get backgroundLocationDenied => 'Fona atrašanās vietas piekļuve liegta';
 
   @override
-  String get backgroundLocationDeniedDesc => 'Lūdzu, dodieties uz ierīces iestatījumiem un iestatiet atrašanās vietas atļauju uz \"Vienmēr atļaut\"';
+  String get backgroundLocationDeniedDesc =>
+      'Lūdzu, dodieties uz ierīces iestatījumiem un iestatiet atrašanās vietas atļauju uz \"Vienmēr atļaut\"';
 
   @override
   String get lovingOmi => 'Patīk Omi?';
 
   @override
-  String get leaveReviewIos => 'Palīdziet mums sasniegt vairāk cilvēku, atstājot atsauksmi App Store. Jūsu atsauksmes mums nozīmē visu!';
+  String get leaveReviewIos =>
+      'Palīdziet mums sasniegt vairāk cilvēku, atstājot atsauksmi App Store. Jūsu atsauksmes mums nozīmē visu!';
 
   @override
-  String get leaveReviewAndroid => 'Palīdziet mums sasniegt vairāk cilvēku, atstājot atsauksmi Google Play Store. Jūsu atsauksmes mums nozīmē visu!';
+  String get leaveReviewAndroid =>
+      'Palīdziet mums sasniegt vairāk cilvēku, atstājot atsauksmi Google Play Store. Jūsu atsauksmes mums nozīmē visu!';
 
   @override
   String get rateOnAppStore => 'Novērtēt App Store';
@@ -1794,13 +1824,15 @@ class AppLocalizationsLv extends AppLocalizations {
   String get connectionError => 'Savienojuma kļūda';
 
   @override
-  String get connectionErrorDesc => 'Neizdevās izveidot savienojumu ar serveri. Lūdzu, pārbaudiet interneta savienojumu un mēģiniet vēlreiz.';
+  String get connectionErrorDesc =>
+      'Neizdevās izveidot savienojumu ar serveri. Lūdzu, pārbaudiet interneta savienojumu un mēģiniet vēlreiz.';
 
   @override
   String get invalidRecordingMultipleSpeakers => 'Atklāts nederīgs ieraksts';
 
   @override
-  String get multipleSpeakersDesc => 'Šķiet, ka ierakstā ir vairāki runātāji. Lūdzu, pārliecinieties, ka atrodaties klusā vietā, un mēģiniet vēlreiz.';
+  String get multipleSpeakersDesc =>
+      'Šķiet, ka ierakstā ir vairāki runātāji. Lūdzu, pārliecinieties, ka atrodaties klusā vietā, un mēģiniet vēlreiz.';
 
   @override
   String get tooShortDesc => 'Nav atklāts pietiekami daudz runas. Lūdzu, runājiet vairāk un mēģiniet vēlreiz.';
@@ -1812,13 +1844,15 @@ class AppLocalizationsLv extends AppLocalizations {
   String get areYouThere => 'Vai jūs esat tur?';
 
   @override
-  String get noSpeechDesc => 'Mēs nevarējām atklāt nevienu runu. Lūdzu, pārliecinieties, ka runājat vismaz 10 sekundes un ne vairāk kā 3 minūtes.';
+  String get noSpeechDesc =>
+      'Mēs nevarējām atklāt nevienu runu. Lūdzu, pārliecinieties, ka runājat vismaz 10 sekundes un ne vairāk kā 3 minūtes.';
 
   @override
   String get connectionLost => 'Savienojums zaudēts';
 
   @override
-  String get connectionLostDesc => 'Savienojums tika pārtraukts. Lūdzu, pārbaudiet interneta savienojumu un mēģiniet vēlreiz.';
+  String get connectionLostDesc =>
+      'Savienojums tika pārtraukts. Lūdzu, pārbaudiet interneta savienojumu un mēģiniet vēlreiz.';
 
   @override
   String get tryAgain => 'Mēģināt vēlreiz';
@@ -1833,7 +1867,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get permissionsRequired => 'Nepieciešamas atļaujas';
 
   @override
-  String get permissionsRequiredDesc => 'Šai lietotnei ir nepieciešamas Bluetooth un Atrašanās vietas atļaujas, lai darbotos pareizi. Lūdzu, iespējojiet tās iestatījumos.';
+  String get permissionsRequiredDesc =>
+      'Šai lietotnei ir nepieciešamas Bluetooth un Atrašanās vietas atļaujas, lai darbotos pareizi. Lūdzu, iespējojiet tās iestatījumos.';
 
   @override
   String get openSettings => 'Atvērt iestatījumus';
@@ -1863,7 +1898,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get omiYourAiCompanion => 'Omi – jūsu AI pavadonis';
 
   @override
-  String get captureEveryMoment => 'Fiksējiet katru brīdi. Iegūstiet AI\nkopsavilkumus. Nekad vairs nerakstiet piezīmes.';
+  String get captureEveryMoment =>
+      'Fiksējiet katru brīdi. Iegūstiet AI\nkopsavilkumus. Nekad vairs nerakstiet piezīmes.';
 
   @override
   String get appleWatchSetup => 'Apple Watch iestatīšana';
@@ -1875,10 +1911,12 @@ class AppLocalizationsLv extends AppLocalizations {
   String get microphonePermission => 'Mikrofona atļauja';
 
   @override
-  String get permissionGrantedNow => 'Atļauja piešķirta! Tagad:\n\nAtveriet Omi lietotni savā pulkstenī un piespiediet \"Turpināt\" zemāk';
+  String get permissionGrantedNow =>
+      'Atļauja piešķirta! Tagad:\n\nAtveriet Omi lietotni savā pulkstenī un piespiediet \"Turpināt\" zemāk';
 
   @override
-  String get needMicrophonePermission => 'Mums nepieciešama mikrofona atļauja.\n\n1. Piespiediet \"Piešķirt atļauju\"\n2. Atļaut iPhone\n3. Pulksteņa lietotne aizvērsies\n4. Atkārtoti atveriet un piespiediet \"Turpināt\"';
+  String get needMicrophonePermission =>
+      'Mums nepieciešama mikrofona atļauja.\n\n1. Piespiediet \"Piešķirt atļauju\"\n2. Atļaut iPhone\n3. Pulksteņa lietotne aizvērsies\n4. Atkārtoti atveriet un piespiediet \"Turpināt\"';
 
   @override
   String get grantPermissionButton => 'Piešķirt atļauju';
@@ -1887,13 +1925,15 @@ class AppLocalizationsLv extends AppLocalizations {
   String get needHelp => 'Nepieciešama palīdzība?';
 
   @override
-  String get troubleshootingSteps => 'Problēmu novēršana:\n\n1. Pārliecinieties, ka Omi ir instalēts jūsu pulkstenī\n2. Atveriet Omi lietotni savā pulkstenī\n3. Meklējiet atļaujas uznirstošo logu\n4. Piespiediet \"Atļaut\", kad tiek piedāvāts\n5. Lietotne jūsu pulkstenī aizvērsies - atkārtoti atveriet to\n6. Atgriezieties un piespiediet \"Turpināt\" savā iPhone';
+  String get troubleshootingSteps =>
+      'Problēmu novēršana:\n\n1. Pārliecinieties, ka Omi ir instalēts jūsu pulkstenī\n2. Atveriet Omi lietotni savā pulkstenī\n3. Meklējiet atļaujas uznirstošo logu\n4. Piespiediet \"Atļaut\", kad tiek piedāvāts\n5. Lietotne jūsu pulkstenī aizvērsies - atkārtoti atveriet to\n6. Atgriezieties un piespiediet \"Turpināt\" savā iPhone';
 
   @override
   String get recordingStartedSuccessfully => 'Ierakstīšana veiksmīgi sākta!';
 
   @override
-  String get permissionNotGrantedYet => 'Atļauja vēl nav piešķirta. Lūdzu, pārliecinieties, ka atļāvāt mikrofona piekļuvi un atkārtoti atvērāt lietotni savā pulkstenī.';
+  String get permissionNotGrantedYet =>
+      'Atļauja vēl nav piešķirta. Lūdzu, pārliecinieties, ka atļāvāt mikrofona piekļuvi un atkārtoti atvērāt lietotni savā pulkstenī.';
 
   @override
   String errorRequestingPermission(String error) {
@@ -1924,7 +1964,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get actionItemsTitle => 'Darāmie darbi';
 
   @override
-  String get actionItemsDescription => 'Piespiediet, lai rediģētu • Ilgi turiet, lai atlasītu • Velciet, lai veiktu darbības';
+  String get actionItemsDescription =>
+      'Piespiediet, lai rediģētu • Ilgi turiet, lai atlasītu • Velciet, lai veiktu darbības';
 
   @override
   String get tabToDo => 'Darāms';
@@ -1990,7 +2031,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get welcomeActionItemsTitle => 'Gatavs uzdevumiem';
 
   @override
-  String get welcomeActionItemsDescription => 'Jūsu AI automātiski izvilks uzdevumus no jūsu sarunām. Tie parādīsies šeit, kad tiks izveidoti.';
+  String get welcomeActionItemsDescription =>
+      'Jūsu AI automātiski izvilks uzdevumus no jūsu sarunām. Tie parādīsies šeit, kad tiks izveidoti.';
 
   @override
   String get autoExtractionFeature => 'Automātiski izvilkts no sarunām';
@@ -2186,13 +2228,15 @@ class AppLocalizationsLv extends AppLocalizations {
   String get speechTranscriptionSectionTitle => 'RUNA UN TRANSKRIPCIJA';
 
   @override
-  String get languageSettingsHelperText => 'Lietojumprogrammas valoda maina izvēlnes un pogas. Runas valoda ietekmē to, kā tiek transkribēti jūsu ieraksti.';
+  String get languageSettingsHelperText =>
+      'Lietojumprogrammas valoda maina izvēlnes un pogas. Runas valoda ietekmē to, kā tiek transkribēti jūsu ieraksti.';
 
   @override
   String get translationNotice => 'Tulkošanas paziņojums';
 
   @override
-  String get translationNoticeMessage => 'Omi tulko sarunas jūsu galvenajā valodā. Atjauniniet to jebkurā laikā sadaļā Iestatījumi → Profili.';
+  String get translationNoticeMessage =>
+      'Omi tulko sarunas jūsu galvenajā valodā. Atjauniniet to jebkurā laikā sadaļā Iestatījumi → Profili.';
 
   @override
   String get pleaseCheckInternetConnection => 'Lūdzu, pārbaudiet interneta savienojumu un mēģiniet vēlreiz';
@@ -2344,7 +2388,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get unpairDeviceDialogTitle => 'Atvienot ierīces sapārošanu';
 
   @override
-  String get unpairDeviceDialogMessage => 'Tas atvienos ierīces sapārošanu, lai to varētu savienot ar citu tālruni. Jums būs jādodas uz Iestatījumi > Bluetooth un jāaizmirst ierīce, lai pabeigtu procesu.';
+  String get unpairDeviceDialogMessage =>
+      'Tas atvienos ierīces sapārošanu, lai to varētu savienot ar citu tālruni. Jums būs jādodas uz Iestatījumi > Bluetooth un jāaizmirst ierīce, lai pabeigtu procesu.';
 
   @override
   String get unpair => 'Atvienot sapārošanu';
@@ -2537,7 +2582,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get youreAllSet => 'Viss ir gatavs!';
 
   @override
-  String get welcomeToOmiDescription => 'Laipni lūdzam Omi! Jūsu AI kompanjons ir gatavs palīdzēt jums sarunās, uzdevumos un vēl daudz ko.';
+  String get welcomeToOmiDescription =>
+      'Laipni lūdzam Omi! Jūsu AI kompanjons ir gatavs palīdzēt jums sarunās, uzdevumos un vēl daudz ko.';
 
   @override
   String get startUsingOmi => 'Sākt izmantot Omi';
@@ -2631,7 +2677,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get showAll => 'Rādīt visu →';
 
   @override
-  String get noTasksForToday => 'Šodien nav uzdevumu.\\nJautājiet Omi par vairāk uzdevumiem vai izveidojiet tos manuāli.';
+  String get noTasksForToday =>
+      'Šodien nav uzdevumu.\\nJautājiet Omi par vairāk uzdevumiem vai izveidojiet tos manuāli.';
 
   @override
   String get dailyScore => 'DIENAS VĒRTĒJUMS';
@@ -2673,7 +2720,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get noTasksYet => 'Vēl nav uzdevumu';
 
   @override
-  String get tasksFromConversationsWillAppear => 'Šeit parādīsies uzdevumi no jūsu sarunām.\nNoklikšķiniet uz Izveidot, lai pievienotu vienu manuāli.';
+  String get tasksFromConversationsWillAppear =>
+      'Šeit parādīsies uzdevumi no jūsu sarunām.\nNoklikšķiniet uz Izveidot, lai pievienotu vienu manuāli.';
 
   @override
   String get monthJan => 'Jan';
@@ -2805,13 +2853,15 @@ class AppLocalizationsLv extends AppLocalizations {
   String get chatPrompt => 'Tērzēšanas norādījums';
 
   @override
-  String get chatPromptPlaceholder => 'Jūs esat lieliska lietotne, jūsu darbs ir atbildēt uz lietotāju jautājumiem un likt viņiem justies labi...';
+  String get chatPromptPlaceholder =>
+      'Jūs esat lieliska lietotne, jūsu darbs ir atbildēt uz lietotāju jautājumiem un likt viņiem justies labi...';
 
   @override
   String get conversationPrompt => 'Sarunas uzvedne';
 
   @override
-  String get conversationPromptPlaceholder => 'Jūs esat lieliska lietotne, jums tiks sniegta sarunas transkripcija un kopsavilkums...';
+  String get conversationPromptPlaceholder =>
+      'Jūs esat lieliska lietotne, jums tiks sniegta sarunas transkripcija un kopsavilkums...';
 
   @override
   String get notificationScopes => 'Paziņojumu jomas';
@@ -2823,7 +2873,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get makeMyAppPublic => 'Padarīt manu lietotni publisku';
 
   @override
-  String get submitAppTermsAgreement => 'Iesniedzot šo lietotni, es piekrītu Omi AI pakalpojumu sniegšanas noteikumiem un privātuma politikai';
+  String get submitAppTermsAgreement =>
+      'Iesniedzot šo lietotni, es piekrītu Omi AI pakalpojumu sniegšanas noteikumiem un privātuma politikai';
 
   @override
   String get submitApp => 'Iesniegt lietotni';
@@ -2838,10 +2889,12 @@ class AppLocalizationsLv extends AppLocalizations {
   String get submitAppQuestion => 'Iesniegt lietotni?';
 
   @override
-  String get submitAppPublicDescription => 'Jūsu lietotne tiks pārskatīta un padarīta publiska. Varat sākt to izmantot uzreiz, pat pārskatīšanas laikā!';
+  String get submitAppPublicDescription =>
+      'Jūsu lietotne tiks pārskatīta un padarīta publiska. Varat sākt to izmantot uzreiz, pat pārskatīšanas laikā!';
 
   @override
-  String get submitAppPrivateDescription => 'Jūsu lietotne tiks pārskatīta un padarīta jums pieejama privāti. Varat sākt to izmantot uzreiz, pat pārskatīšanas laikā!';
+  String get submitAppPrivateDescription =>
+      'Jūsu lietotne tiks pārskatīta un padarīta jums pieejama privāti. Varat sākt to izmantot uzreiz, pat pārskatīšanas laikā!';
 
   @override
   String get startEarning => 'Sāciet pelnīt! 💰';
@@ -2867,19 +2920,23 @@ class AppLocalizationsLv extends AppLocalizations {
   String get dataAccessNotice => 'Datu piekļuves paziņojums';
 
   @override
-  String get dataAccessWarning => 'Šī lietotne piekļūs jūsu datiem. Omi AI nav atbildīgs par to, kā šī lietotne izmanto, modificē vai dzēš jūsu datus';
+  String get dataAccessWarning =>
+      'Šī lietotne piekļūs jūsu datiem. Omi AI nav atbildīgs par to, kā šī lietotne izmanto, modificē vai dzēš jūsu datus';
 
   @override
   String get installApp => 'Instalēt lietotni';
 
   @override
-  String get betaTesterNotice => 'Jūs esat šīs lietotnes beta testētājs. Tā vēl nav publiska. Tā kļūs publiska pēc apstiprināšanas.';
+  String get betaTesterNotice =>
+      'Jūs esat šīs lietotnes beta testētājs. Tā vēl nav publiska. Tā kļūs publiska pēc apstiprināšanas.';
 
   @override
-  String get appUnderReviewOwner => 'Jūsu lietotne tiek pārskatīta un ir redzama tikai jums. Tā kļūs publiska pēc apstiprināšanas.';
+  String get appUnderReviewOwner =>
+      'Jūsu lietotne tiek pārskatīta un ir redzama tikai jums. Tā kļūs publiska pēc apstiprināšanas.';
 
   @override
-  String get appRejectedNotice => 'Jūsu lietotne tika noraidīta. Lūdzu, atjauniniet lietotnes informāciju un atkārtoti iesniedziet to pārskatīšanai.';
+  String get appRejectedNotice =>
+      'Jūsu lietotne tika noraidīta. Lūdzu, atjauniniet lietotnes informāciju un atkārtoti iesniedziet to pārskatīšanai.';
 
   @override
   String get setupSteps => 'Iestatīšanas soļi';
@@ -2944,7 +3001,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get descriptionLabel => 'Apraksts';
 
   @override
-  String get appDescriptionPlaceholder => 'Mana brīnišķīgā lietotne ir lieliska lietotne, kas dara pārsteidzošas lietas. Tā ir labākā lietotne!';
+  String get appDescriptionPlaceholder =>
+      'Mana brīnišķīgā lietotne ir lieliska lietotne, kas dara pārsteidzošas lietas. Tā ir labākā lietotne!';
 
   @override
   String get pleaseProvideValidDescription => 'Lūdzu, norādiet derīgu aprakstu';
@@ -3096,7 +3154,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get microphonePermissionRequired => 'Balss ierakstam nepieciešama mikrofona atļauja.';
 
   @override
-  String get microphonePermissionDenied => 'Mikrofona atļauja liegta. Lūdzu, dodiet atļauju Sistēmas iestatījumi > Privātums un drošība > Mikrofons.';
+  String get microphonePermissionDenied =>
+      'Mikrofona atļauja liegta. Lūdzu, dodiet atļauju Sistēmas iestatījumi > Privātums un drošība > Mikrofons.';
 
   @override
   String failedToCheckMicrophonePermission(String error) {
@@ -3329,7 +3388,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get whatWeCollect => 'Ko mēs vācam';
 
   @override
-  String get dataCollectionMessage => 'Turpinot, jūsu sarunas, ieraksti un personiskā informācija tiks droši glabāta mūsu serveros, lai sniegtu AI vadītu ieskatu un iespējotu visas lietotnes funkcijas.';
+  String get dataCollectionMessage =>
+      'Turpinot, jūsu sarunas, ieraksti un personiskā informācija tiks droši glabāta mūsu serveros, lai sniegtu AI vadītu ieskatu un iespējotu visas lietotnes funkcijas.';
 
   @override
   String get dataProtection => 'Datu aizsardzība';
@@ -3362,7 +3422,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get nameMustBeAtLeast2Characters => 'Vārdam jābūt vismaz 2 rakstzīmes garam';
 
   @override
-  String get tellUsHowYouWouldLikeToBeAddressed => 'Pastāstiet mums, kā jūs vēlētos, lai jūs uzrunātu. Tas palīdz personalizēt jūsu Omi pieredzi.';
+  String get tellUsHowYouWouldLikeToBeAddressed =>
+      'Pastāstiet mums, kā jūs vēlētos, lai jūs uzrunātu. Tas palīdz personalizēt jūsu Omi pieredzi.';
 
   @override
   String charactersCount(int count) {
@@ -3379,7 +3440,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get recordAudioConversations => 'Ierakstīt audio sarunas';
 
   @override
-  String get microphoneAccessDescription => 'Omi nepieciešama mikrofona piekļuve, lai ierakstītu jūsu sarunas un nodrošinātu transkripcijas.';
+  String get microphoneAccessDescription =>
+      'Omi nepieciešama mikrofona piekļuve, lai ierakstītu jūsu sarunas un nodrošinātu transkripcijas.';
 
   @override
   String get screenRecording => 'Ekrāna ierakstīšana';
@@ -3388,7 +3450,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get captureSystemAudioFromMeetings => 'Uzņemt sistēmas audio no sapulcēm';
 
   @override
-  String get screenRecordingDescription => 'Omi nepieciešama ekrāna ierakstīšanas atļauja, lai uzņemtu sistēmas audio no jūsu pārlūkprogrammā balstītajām sapulcēm.';
+  String get screenRecordingDescription =>
+      'Omi nepieciešama ekrāna ierakstīšanas atļauja, lai uzņemtu sistēmas audio no jūsu pārlūkprogrammā balstītajām sapulcēm.';
 
   @override
   String get accessibility => 'Pieejamība';
@@ -3397,7 +3460,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get detectBrowserBasedMeetings => 'Noteikt pārlūkprogrammā balstītas sapulces';
 
   @override
-  String get accessibilityDescription => 'Omi nepieciešama pieejamības atļauja, lai noteiktu, kad pievienojaties Zoom, Meet vai Teams sapulcēm savā pārlūkprogrammā.';
+  String get accessibilityDescription =>
+      'Omi nepieciešama pieejamības atļauja, lai noteiktu, kad pievienojaties Zoom, Meet vai Teams sapulcēm savā pārlūkprogrammā.';
 
   @override
   String get pleaseWait => 'Lūdzu, uzgaidiet...';
@@ -3469,10 +3533,12 @@ class AppLocalizationsLv extends AppLocalizations {
   String get exportAllConversationsToJson => 'Eksportējiet visas savas sarunas uz JSON failu.';
 
   @override
-  String get conversationsExportStarted => 'Sarunu eksportēšana sākta. Tas var aizņemt dažas sekundes, lūdzu, uzgaidiet.';
+  String get conversationsExportStarted =>
+      'Sarunu eksportēšana sākta. Tas var aizņemt dažas sekundes, lūdzu, uzgaidiet.';
 
   @override
-  String get mcpDescription => 'Lai savienotu Omi ar citām lietojumprogrammām, lai lasītu, meklētu un pārvaldītu savas atmiņas un sarunas. Izveidojiet atslēgu, lai sāktu.';
+  String get mcpDescription =>
+      'Lai savienotu Omi ar citām lietojumprogrammām, lai lasītu, meklētu un pārvaldītu savas atmiņas un sarunas. Izveidojiet atslēgu, lai sāktu.';
 
   @override
   String get apiKeys => 'API atslēgas';
@@ -3513,7 +3579,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get transcriptionServiceDiagnosticStatus => 'Transkribēšanas pakalpojuma diagnostikas statuss';
 
   @override
-  String get enableDetailedDiagnosticMessages => 'Iespējot detalizētus diagnostikas ziņojumus no transkribēšanas pakalpojuma';
+  String get enableDetailedDiagnosticMessages =>
+      'Iespējot detalizētus diagnostikas ziņojumus no transkribēšanas pakalpojuma';
 
   @override
   String get autoCreateAndTagNewSpeakers => 'Automātiski izveidot un atzīmēt jaunus runātājus';
@@ -3543,7 +3610,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get auto => 'Automātisks';
 
   @override
-  String get noSummaryForApp => 'Šai lietotnei nav pieejams kopsavilkums. Labākiem rezultātiem izmēģiniet citu lietotni.';
+  String get noSummaryForApp =>
+      'Šai lietotnei nav pieejams kopsavilkums. Labākiem rezultātiem izmēģiniet citu lietotni.';
 
   @override
   String get tryAnotherApp => 'Izmēģiniet citu lietotni';
@@ -3628,7 +3696,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get preparingSystemAudioCapture => 'Notiek sistēmas audio ierakstīšanas sagatavošana';
 
   @override
-  String get clickTheButtonToCaptureAudio => 'Noklikšķiniet uz pogas, lai ierakstītu audio tiešraides transkripcijām, AI ieskaitiem un automātiskai saglabāšanai.';
+  String get clickTheButtonToCaptureAudio =>
+      'Noklikšķiniet uz pogas, lai ierakstītu audio tiešraides transkripcijām, AI ieskaitiem un automātiskai saglabāšanai.';
 
   @override
   String get reconnecting => 'Notiek atkārtota savienošana...';
@@ -3858,7 +3927,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get deleteKnowledgeGraphQuestion => 'Dzēst zināšanu grafu?';
 
   @override
-  String get deleteKnowledgeGraphWarning => 'Tas izdzēsīs visus atvasinātos zināšanu grafa datus. Jūsu sākotnējās atmiņas paliks drošībā.';
+  String get deleteKnowledgeGraphWarning =>
+      'Tas izdzēsīs visus atvasinātos zināšanu grafa datus. Jūsu sākotnējās atmiņas paliks drošībā.';
 
   @override
   String get connectOmiWithAI => 'Savienojiet Omi ar AI asistentiem';
@@ -3918,7 +3988,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get updateAppQuestion => 'Atjaunināt lietotni?';
 
   @override
-  String get updateAppConfirmation => 'Vai tiešām vēlaties atjaunināt savu lietotni? Izmaiņas būs redzamas pēc mūsu komandas pārskatīšanas.';
+  String get updateAppConfirmation =>
+      'Vai tiešām vēlaties atjaunināt savu lietotni? Izmaiņas būs redzamas pēc mūsu komandas pārskatīšanas.';
 
   @override
   String get updateApp => 'Atjaunināt lietotni';
@@ -3948,7 +4019,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get no => 'Nē';
 
   @override
-  String get subscriptionCancelledSuccessfully => 'Abonements veiksmīgi atcelts. Tas paliks aktīvs līdz pašreizējā norēķinu perioda beigām.';
+  String get subscriptionCancelledSuccessfully =>
+      'Abonements veiksmīgi atcelts. Tas paliks aktīvs līdz pašreizējā norēķinu perioda beigām.';
 
   @override
   String get failedToCancelSubscription => 'Neizdevās atcelt abonementu. Lūdzu, mēģiniet vēlreiz.';
@@ -3984,7 +4056,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get cancelSubscriptionQuestion => 'Atcelt abonementu?';
 
   @override
-  String get cancelSubscriptionConfirmation => 'Vai tiešām vēlaties atcelt abonementu? Jums būs piekļuve līdz pašreizējā norēķinu perioda beigām.';
+  String get cancelSubscriptionConfirmation =>
+      'Vai tiešām vēlaties atcelt abonementu? Jums būs piekļuve līdz pašreizējā norēķinu perioda beigām.';
 
   @override
   String get cancelSubscriptionButton => 'Atcelt abonementu';
@@ -3993,13 +4066,16 @@ class AppLocalizationsLv extends AppLocalizations {
   String get cancelling => 'Atceļ...';
 
   @override
-  String get betaTesterMessage => 'Jūs esat šīs lietotnes beta testētājs. Tā vēl nav publiska. Tā kļūs publiska pēc apstiprināšanas.';
+  String get betaTesterMessage =>
+      'Jūs esat šīs lietotnes beta testētājs. Tā vēl nav publiska. Tā kļūs publiska pēc apstiprināšanas.';
 
   @override
-  String get appUnderReviewMessage => 'Jūsu lietotne tiek pārskatīta un ir redzama tikai jums. Tā kļūs publiska pēc apstiprināšanas.';
+  String get appUnderReviewMessage =>
+      'Jūsu lietotne tiek pārskatīta un ir redzama tikai jums. Tā kļūs publiska pēc apstiprināšanas.';
 
   @override
-  String get appRejectedMessage => 'Jūsu lietotne tika noraidīta. Lūdzu, atjauniniet informāciju un iesniedziet atkārtoti.';
+  String get appRejectedMessage =>
+      'Jūsu lietotne tika noraidīta. Lūdzu, atjauniniet informāciju un iesniedziet atkārtoti.';
 
   @override
   String get invalidIntegrationUrl => 'Nederīgs integrācijas URL';
@@ -4053,7 +4129,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get issueActivatingApp => 'Aktivizējot šo lietotni, radās problēma. Lūdzu, mēģiniet vēlreiz.';
 
   @override
-  String get dataAccessNoticeDescription => 'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
+  String get dataAccessNoticeDescription =>
+      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
 
   @override
   String get copyUrl => 'Kopēt URL';
@@ -4141,7 +4218,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get omiApiKeys => 'Omi API atslēgas';
 
   @override
-  String get apiKeysDescription => 'API atslēgas izmanto autentifikācijai, kad jūsu lietotne sazinās ar OMI serveri. Tās ļauj jūsu lietojumprogrammai droši izveidot atmiņas un piekļūt citiem OMI pakalpojumiem.';
+  String get apiKeysDescription =>
+      'API atslēgas izmanto autentifikācijai, kad jūsu lietotne sazinās ar OMI serveri. Tās ļauj jūsu lietojumprogrammai droši izveidot atmiņas un piekļūt citiem OMI pakalpojumiem.';
 
   @override
   String get aboutOmiApiKeys => 'Par Omi API atslēgām';
@@ -4165,7 +4243,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get revokeApiKeyQuestion => 'Atsaukt API atslēgu?';
 
   @override
-  String get revokeApiKeyWarning => 'Šo darbību nevar atsaukt. Lietojumprogrammas, kas izmanto šo atslēgu, vairs nevarēs piekļūt API.';
+  String get revokeApiKeyWarning =>
+      'Šo darbību nevar atsaukt. Lietojumprogrammas, kas izmanto šo atslēgu, vairs nevarēs piekļūt API.';
 
   @override
   String get revoke => 'Atsaukt';
@@ -4266,7 +4345,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get keyCreated => 'Atslēga izveidota';
 
   @override
-  String get keyCreatedMessage => 'Jūsu jaunā atslēga ir izveidota. Lūdzu, nokopējiet to tagad. Jūs to vairs neredzēsiet.';
+  String get keyCreatedMessage =>
+      'Jūsu jaunā atslēga ir izveidota. Lūdzu, nokopējiet to tagad. Jūs to vairs neredzēsiet.';
 
   @override
   String get keyWord => 'Atslēga';
@@ -4275,7 +4355,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get externalAppAccess => 'Ārējo lietotņu piekļuve';
 
   @override
-  String get externalAppAccessDescription => 'Šīm instalētajām lietotnēm ir ārējās integrācijas, un tās var piekļūt jūsu datiem, piemēram, sarunām un atmiņām.';
+  String get externalAppAccessDescription =>
+      'Šīm instalētajām lietotnēm ir ārējās integrācijas, un tās var piekļūt jūsu datiem, piemēram, sarunām un atmiņām.';
 
   @override
   String get noExternalAppsHaveAccess => 'Nevienai ārējai lietotnei nav piekļuves jūsu datiem.';
@@ -4284,7 +4365,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get maximumSecurityE2ee => 'Maksimāla drošība (E2EE)';
 
   @override
-  String get e2eeDescription => 'Pilnīga šifrēšana ir privātuma zelta standarts. Kad tā ir iespējota, jūsu dati tiek šifrēti jūsu ierīcē pirms nosūtīšanas uz mūsu serveriem. Tas nozīmē, ka neviens, pat ne Omi, nevar piekļūt jūsu saturam.';
+  String get e2eeDescription =>
+      'Pilnīga šifrēšana ir privātuma zelta standarts. Kad tā ir iespējota, jūsu dati tiek šifrēti jūsu ierīcē pirms nosūtīšanas uz mūsu serveriem. Tas nozīmē, ka neviens, pat ne Omi, nevar piekļūt jūsu saturam.';
 
   @override
   String get importantTradeoffs => 'Svarīgi kompromisi:';
@@ -4299,7 +4381,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get featureComingSoon => 'Šī funkcija drīzumā būs pieejama!';
 
   @override
-  String get migrationInProgressMessage => 'Migrācija notiek. Jūs nevarat mainīt aizsardzības līmeni, kamēr tā nav pabeigta.';
+  String get migrationInProgressMessage =>
+      'Migrācija notiek. Jūs nevarat mainīt aizsardzības līmeni, kamēr tā nav pabeigta.';
 
   @override
   String get migrationFailed => 'Migrācija neizdevās';
@@ -4318,16 +4401,19 @@ class AppLocalizationsLv extends AppLocalizations {
   String get secureEncryption => 'Droša šifrēšana';
 
   @override
-  String get secureEncryptionDescription => 'Jūsu dati tiek šifrēti ar jums unikālu atslēgu mūsu serveros, kas mitināti Google Cloud. Tas nozīmē, ka jūsu neapstrādātais saturs nav pieejams nevienam, ieskaitot Omi darbiniekus vai Google, tieši no datu bāzes.';
+  String get secureEncryptionDescription =>
+      'Jūsu dati tiek šifrēti ar jums unikālu atslēgu mūsu serveros, kas mitināti Google Cloud. Tas nozīmē, ka jūsu neapstrādātais saturs nav pieejams nevienam, ieskaitot Omi darbiniekus vai Google, tieši no datu bāzes.';
 
   @override
   String get endToEndEncryption => 'Pilnīga šifrēšana';
 
   @override
-  String get e2eeCardDescription => 'Iespējojiet maksimālu drošību, kur tikai jūs varat piekļūt saviem datiem. Pieskarieties, lai uzzinātu vairāk.';
+  String get e2eeCardDescription =>
+      'Iespējojiet maksimālu drošību, kur tikai jūs varat piekļūt saviem datiem. Pieskarieties, lai uzzinātu vairāk.';
 
   @override
-  String get dataAlwaysEncrypted => 'Neatkarīgi no līmeņa, jūsu dati vienmēr ir šifrēti miera stāvoklī un pārsūtīšanas laikā.';
+  String get dataAlwaysEncrypted =>
+      'Neatkarīgi no līmeņa, jūsu dati vienmēr ir šifrēti miera stāvoklī un pārsūtīšanas laikā.';
 
   @override
   String get readOnlyScope => 'Tikai lasīšana';
@@ -4395,7 +4481,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get getOmiUnlimitedFree => 'Iegūstiet Omi Unlimited bez maksas, sniedzot savus datus AI modeļu apmācībai.';
 
   @override
-  String get trainingDataBullets => '• Jūsu dati palīdz uzlabot AI modeļus\n• Tiek kopīgoti tikai nejutīgi dati\n• Pilnībā pārredzams process';
+  String get trainingDataBullets =>
+      '• Jūsu dati palīdz uzlabot AI modeļus\n• Tiek kopīgoti tikai nejutīgi dati\n• Pilnībā pārredzams process';
 
   @override
   String get learnMoreAtOmiTraining => 'Uzziniet vairāk vietnē omi.me/training';
@@ -4407,7 +4494,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get submitRequest => 'Iesniegt pieprasījumu';
 
   @override
-  String get thankYouRequestUnderReview => 'Paldies! Jūsu pieprasījums tiek izskatīts. Mēs jūs informēsim pēc apstiprināšanas.';
+  String get thankYouRequestUnderReview =>
+      'Paldies! Jūsu pieprasījums tiek izskatīts. Mēs jūs informēsim pēc apstiprināšanas.';
 
   @override
   String planRemainsActiveUntil(String date) {
@@ -4445,7 +4533,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get monthlyPlanContinues => 'Jūsu pašreizējais mēneša plāns turpināsies līdz norēķinu perioda beigām';
 
   @override
-  String get paymentMethodCharged => 'Jūsu esošais maksājuma veids tiks automātiski iekasēts, kad beigsies jūsu mēneša plāns';
+  String get paymentMethodCharged =>
+      'Jūsu esošais maksājuma veids tiks automātiski iekasēts, kad beigsies jūsu mēneša plāns';
 
   @override
   String get annualSubscriptionStarts => 'Jūsu 12 mēnešu gada abonements automātiski sāksies pēc maksājuma';
@@ -4555,7 +4644,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get yourPrivacyMattersToUs => 'Jūsu privātums mums ir svarīgs';
 
   @override
-  String get privacyIntroText => 'Omi mēs ļoti nopietni uztveram jūsu privātumu. Mēs vēlamies būt caurspīdīgi par datiem, ko apkopojam un kā tos izmantojam. Lūk, kas jums jāzina:';
+  String get privacyIntroText =>
+      'Omi mēs ļoti nopietni uztveram jūsu privātumu. Mēs vēlamies būt caurspīdīgi par datiem, ko apkopojam un kā tos izmantojam. Lūk, kas jums jāzina:';
 
   @override
   String get whatWeTrack => 'Ko mēs izsekojam';
@@ -4570,10 +4660,12 @@ class AppLocalizationsLv extends AppLocalizations {
   String get ourCommitment => 'Mūsu apņemšanās';
 
   @override
-  String get commitmentText => 'Mēs esam apņēmušies izmantot apkopotos datus tikai, lai padarītu Omi par labāku produktu jums. Jūsu privātums un uzticība mums ir vissvarīgākā.';
+  String get commitmentText =>
+      'Mēs esam apņēmušies izmantot apkopotos datus tikai, lai padarītu Omi par labāku produktu jums. Jūsu privātums un uzticība mums ir vissvarīgākā.';
 
   @override
-  String get thankYouText => 'Paldies, ka esat vērtīgs Omi lietotājs. Ja jums ir kādi jautājumi vai bažas, sazinieties ar mums pa team@basedhardware.com.';
+  String get thankYouText =>
+      'Paldies, ka esat vērtīgs Omi lietotājs. Ja jums ir kādi jautājumi vai bažas, sazinieties ar mums pa team@basedhardware.com.';
 
   @override
   String get wifiSyncSettings => 'WiFi sinhronizācijas iestatījumi';
@@ -4582,7 +4674,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get enterHotspotCredentials => 'Ievadiet tālruņa tīklāja akreditācijas datus';
 
   @override
-  String get wifiSyncUsesHotspot => 'WiFi sinhronizācija izmanto jūsu tālruni kā tīklāju. Atrodiet nosaukumu un paroli sadaļā Iestatījumi > Personālais tīklājs.';
+  String get wifiSyncUsesHotspot =>
+      'WiFi sinhronizācija izmanto jūsu tālruni kā tīklāju. Atrodiet nosaukumu un paroli sadaļā Iestatījumi > Personālais tīklājs.';
 
   @override
   String get hotspotNameSsid => 'Tīklāja nosaukums (SSID)';
@@ -4617,7 +4710,8 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get failedToGenerateSummaryCheckConversations => 'Neizdevās izveidot kopsavilkumu. Pārliecinieties, ka jums ir sarunas par šo dienu.';
+  String get failedToGenerateSummaryCheckConversations =>
+      'Neizdevās izveidot kopsavilkumu. Pārliecinieties, ka jums ir sarunas par šo dienu.';
 
   @override
   String get summaryNotFound => 'Kopsavilkums nav atrasts';
@@ -4647,7 +4741,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get exportStartedMayTakeFewSeconds => 'Eksports sākts. Tas var aizņemt dažas sekundes...';
 
   @override
-  String get knowledgeGraphDeleteDescription => 'Tas dzēsīs visus atvasinātos zināšanu grafa datus (mezglus un savienojumus). Jūsu sākotnējās atmiņas paliks drošībā. Grafs tiks atjaunots laika gaitā vai nākamajā pieprasījumā.';
+  String get knowledgeGraphDeleteDescription =>
+      'Tas dzēsīs visus atvasinātos zināšanu grafa datus (mezglus un savienojumus). Jūsu sākotnējās atmiņas paliks drošībā. Grafs tiks atjaunots laika gaitā vai nākamajā pieprasījumā.';
 
   @override
   String get configureDailySummaryDigest => 'Konfigurējiet savu ikdienas uzdevumu kopsavilkumu';
@@ -4717,7 +4812,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get deleteAllLimitlessConversations => 'Dzēst visas Limitless sarunas?';
 
   @override
-  String get deleteAllLimitlessWarning => 'Tas neatgriezeniski izdzēsīs visas no Limitless importētās sarunas. Šo darbību nevar atsaukt.';
+  String get deleteAllLimitlessWarning =>
+      'Tas neatgriezeniski izdzēsīs visas no Limitless importētās sarunas. Šo darbību nevar atsaukt.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4773,7 +4869,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get howItWorksTitle => 'Kā tas darbojas?';
 
   @override
-  String get howPeopleWorks => 'Kad persona ir izveidota, varat doties uz sarunas transkripciju un piešķirt viņiem atbilstošos segmentus, tādā veidā Omi varēs atpazīt arī viņu runu!';
+  String get howPeopleWorks =>
+      'Kad persona ir izveidota, varat doties uz sarunas transkripciju un piešķirt viņiem atbilstošos segmentus, tādā veidā Omi varēs atpazīt arī viņu runu!';
 
   @override
   String get tapToDelete => 'Pieskarieties, lai dzēstu';
@@ -4799,7 +4896,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get privacyNotice => 'Privātuma paziņojums';
 
   @override
-  String get recordingsMayCaptureOthers => 'Ieraksti var ierakstīt citu cilvēku balsis. Pirms iespējošanas pārliecinieties, ka esat saņēmis visu dalībnieku piekrišanu.';
+  String get recordingsMayCaptureOthers =>
+      'Ieraksti var ierakstīt citu cilvēku balsis. Pirms iespējošanas pārliecinieties, ka esat saņēmis visu dalībnieku piekrišanu.';
 
   @override
   String get enable => 'Iespējot';
@@ -4811,7 +4909,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get on => 'Ieslēgts';
 
   @override
-  String get storeAudioDescription => 'Saglabājiet visus audio ierakstus lokāli savā tālrunī. Kad ir atspējots, tiek saglabāti tikai neveiksmīgie augšupielādēšanas gadījumi, lai ietaupītu vietu.';
+  String get storeAudioDescription =>
+      'Saglabājiet visus audio ierakstus lokāli savā tālrunī. Kad ir atspējots, tiek saglabāti tikai neveiksmīgie augšupielādēšanas gadījumi, lai ietaupītu vietu.';
 
   @override
   String get enableLocalStorage => 'Iespējot lokālo krātuvi';
@@ -4832,7 +4931,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get cloudStorageDialogMessage => 'Jūsu reāllaika ieraksti tiks glabāti privātā mākoņkrātuvē, kamēr runājat.';
 
   @override
-  String get storeAudioCloudDescription => 'Saglabājiet savus reāllaika ierakstus privātā mākoņkrātuvē, kamēr runājat. Audio tiek tverts un droši saglabāts reāllaikā.';
+  String get storeAudioCloudDescription =>
+      'Saglabājiet savus reāllaika ierakstus privātā mākoņkrātuvē, kamēr runājat. Audio tiek tverts un droši saglabāts reāllaikā.';
 
   @override
   String get downloadingFirmware => 'Lejupielādē programmaparatūru';
@@ -4885,7 +4985,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get payments => 'Maksājumi';
 
   @override
-  String get connectPaymentMethodInfo => 'Pievienojiet maksājuma metodi zemāk, lai sāktu saņemt maksājumus par savām lietotnēm.';
+  String get connectPaymentMethodInfo =>
+      'Pievienojiet maksājuma metodi zemāk, lai sāktu saņemt maksājumus par savām lietotnēm.';
 
   @override
   String get selectedPaymentMethod => 'Izvēlētā maksājuma metode';
@@ -4912,7 +5013,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get monthlyPayouts => 'Ikmēneša maksājumi';
 
   @override
-  String get monthlyPayoutsDescription => 'Saņemiet ikmēneša maksājumus tieši savā kontā, kad sasniedzat \$10 ieņēmumus';
+  String get monthlyPayoutsDescription =>
+      'Saņemiet ikmēneša maksājumus tieši savā kontā, kad sasniedzat \$10 ieņēmumus';
 
   @override
   String get secureAndReliable => 'Drošs un uzticams';
@@ -4939,7 +5041,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get connectingYourStripeAccount => 'Jūsu Stripe konta savienošana';
 
   @override
-  String get stripeOnboardingInstructions => 'Lūdzu, pabeidziet Stripe reģistrācijas procesu savā pārlūkprogrammā. Šī lapa tiks automātiski atjaunināta pēc pabeigšanas.';
+  String get stripeOnboardingInstructions =>
+      'Lūdzu, pabeidziet Stripe reģistrācijas procesu savā pārlūkprogrammā. Šī lapa tiks automātiski atjaunināta pēc pabeigšanas.';
 
   @override
   String get failedTryAgain => 'Neizdevās? Mēģināt vēlreiz';
@@ -4951,11 +5054,56 @@ class AppLocalizationsLv extends AppLocalizations {
   String get successfullyConnected => 'Veiksmīgi savienots!';
 
   @override
-  String get stripeReadyForPayments => 'Jūsu Stripe konts tagad ir gatavs saņemt maksājumus. Jūs varat nekavējoties sākt pelnīt no savu lietotņu pārdošanas.';
+  String get stripeReadyForPayments =>
+      'Jūsu Stripe konts tagad ir gatavs saņemt maksājumus. Jūs varat nekavējoties sākt pelnīt no savu lietotņu pārdošanas.';
 
   @override
   String get updateStripeDetails => 'Atjaunināt Stripe informāciju';
 
   @override
   String get errorUpdatingStripeDetails => 'Kļūda atjauninot Stripe informāciju! Lūdzu, mēģiniet vēlāk.';
+
+  @override
+  String get updatePayPal => 'Atjaunināt PayPal';
+
+  @override
+  String get setUpPayPal => 'Iestatīt PayPal';
+
+  @override
+  String get updatePayPalAccountDetails => 'Atjauniniet sava PayPal konta informāciju';
+
+  @override
+  String get connectPayPalToReceivePayments =>
+      'Pievienojiet savu PayPal kontu, lai sāktu saņemt maksājumus par savām lietotnēm';
+
+  @override
+  String get paypalEmail => 'PayPal e-pasts';
+
+  @override
+  String get paypalMeLink => 'PayPal.me saite';
+
+  @override
+  String get stripeRecommendation =>
+      'Ja Stripe ir pieejams jūsu valstī, mēs ļoti iesakām to izmantot ātrākiem un vienkāršākiem maksājumiem.';
+
+  @override
+  String get updatePayPalDetails => 'Atjaunināt PayPal informāciju';
+
+  @override
+  String get savePayPalDetails => 'Saglabāt PayPal informāciju';
+
+  @override
+  String get pleaseEnterPayPalEmail => 'Lūdzu, ievadiet savu PayPal e-pastu';
+
+  @override
+  String get pleaseEnterPayPalMeLink => 'Lūdzu, ievadiet savu PayPal.me saiti';
+
+  @override
+  String get doNotIncludeHttpInLink => 'Neiekļaujiet saitē http, https vai www';
+
+  @override
+  String get pleaseEnterValidPayPalMeLink => 'Lūdzu, ievadiet derīgu PayPal.me saiti';
+
+  @override
+  String get pleaseEnterValidEmail => 'Lūdzu, ievadiet derīgu e-pasta adresi';
 }

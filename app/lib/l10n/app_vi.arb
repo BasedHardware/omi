@@ -3384,5 +3384,19 @@
   "successfullyConnected": "Kết nối thành công!",
   "stripeReadyForPayments": "Tài khoản Stripe của bạn đã sẵn sàng nhận thanh toán. Bạn có thể bắt đầu kiếm tiền từ việc bán ứng dụng ngay bây giờ.",
   "updateStripeDetails": "Cập nhật chi tiết Stripe",
-  "errorUpdatingStripeDetails": "Lỗi cập nhật chi tiết Stripe! Vui lòng thử lại sau."
+  "errorUpdatingStripeDetails": "Lỗi cập nhật chi tiết Stripe! Vui lòng thử lại sau.",
+  "updatePayPal": "Cập nhật PayPal",
+  "setUpPayPal": "Thiết lập PayPal",
+  "updatePayPalAccountDetails": "Cập nhật chi tiết tài khoản PayPal của bạn",
+  "connectPayPalToReceivePayments": "Kết nối tài khoản PayPal của bạn để bắt đầu nhận thanh toán cho ứng dụng của bạn",
+  "paypalEmail": "Email PayPal",
+  "paypalMeLink": "Liên kết PayPal.me",
+  "stripeRecommendation": "Nếu Stripe có sẵn tại quốc gia của bạn, chúng tôi khuyên bạn nên sử dụng để thanh toán nhanh hơn và dễ dàng hơn.",
+  "updatePayPalDetails": "Cập nhật chi tiết PayPal",
+  "savePayPalDetails": "Lưu chi tiết PayPal",
+  "pleaseEnterPayPalEmail": "Vui lòng nhập email PayPal của bạn",
+  "pleaseEnterPayPalMeLink": "Vui lòng nhập liên kết PayPal.me của bạn",
+  "doNotIncludeHttpInLink": "Không bao gồm http hoặc https hoặc www trong liên kết",
+  "pleaseEnterValidPayPalMeLink": "Vui lòng nhập liên kết PayPal.me hợp lệ",
+  "pleaseEnterValidEmail": "Vui lòng nhập địa chỉ email hợp lệ"
 }

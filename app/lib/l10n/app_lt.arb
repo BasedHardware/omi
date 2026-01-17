@@ -3366,5 +3366,19 @@
   "successfullyConnected": "Sėkmingai prisijungta!",
   "stripeReadyForPayments": "Jūsų Stripe paskyra dabar paruošta gauti mokėjimus. Galite iš karto pradėti uždirbti iš programų pardavimų.",
   "updateStripeDetails": "Atnaujinti Stripe duomenis",
-  "errorUpdatingStripeDetails": "Klaida atnaujinant Stripe duomenis! Bandykite dar kartą vėliau."
+  "errorUpdatingStripeDetails": "Klaida atnaujinant Stripe duomenis! Bandykite dar kartą vėliau.",
+  "updatePayPal": "Atnaujinti PayPal",
+  "setUpPayPal": "Nustatyti PayPal",
+  "updatePayPalAccountDetails": "Atnaujinkite savo PayPal paskyros duomenis",
+  "connectPayPalToReceivePayments": "Prijunkite savo PayPal paskyrą, kad pradėtumėte gauti mokėjimus už savo programas",
+  "paypalEmail": "PayPal el. paštas",
+  "paypalMeLink": "PayPal.me nuoroda",
+  "stripeRecommendation": "Jei Stripe yra prieinamas jūsų šalyje, labai rekomenduojame jį naudoti greitesnėms ir lengvesnėms išmokoms.",
+  "updatePayPalDetails": "Atnaujinti PayPal duomenis",
+  "savePayPalDetails": "Išsaugoti PayPal duomenis",
+  "pleaseEnterPayPalEmail": "Įveskite savo PayPal el. paštą",
+  "pleaseEnterPayPalMeLink": "Įveskite savo PayPal.me nuorodą",
+  "doNotIncludeHttpInLink": "Neįtraukite http, https ar www į nuorodą",
+  "pleaseEnterValidPayPalMeLink": "Įveskite galiojančią PayPal.me nuorodą",
+  "pleaseEnterValidEmail": "Įveskite galiojantį el. pašto adresą"
 }

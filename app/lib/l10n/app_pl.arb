@@ -3384,5 +3384,19 @@
   "successfullyConnected": "Pomyślnie połączono!",
   "stripeReadyForPayments": "Twoje konto Stripe jest teraz gotowe do przyjmowania płatności. Możesz od razu zacząć zarabiać na sprzedaży aplikacji.",
   "updateStripeDetails": "Zaktualizuj dane Stripe",
-  "errorUpdatingStripeDetails": "Błąd aktualizacji danych Stripe! Spróbuj ponownie później."
+  "errorUpdatingStripeDetails": "Błąd aktualizacji danych Stripe! Spróbuj ponownie później.",
+  "updatePayPal": "Zaktualizuj PayPal",
+  "setUpPayPal": "Skonfiguruj PayPal",
+  "updatePayPalAccountDetails": "Zaktualizuj dane swojego konta PayPal",
+  "connectPayPalToReceivePayments": "Połącz swoje konto PayPal, aby zacząć otrzymywać płatności za swoje aplikacje",
+  "paypalEmail": "E-mail PayPal",
+  "paypalMeLink": "Link PayPal.me",
+  "stripeRecommendation": "Jeśli Stripe jest dostępny w Twoim kraju, zdecydowanie zalecamy korzystanie z niego dla szybszych i łatwiejszych wypłat.",
+  "updatePayPalDetails": "Zaktualizuj dane PayPal",
+  "savePayPalDetails": "Zapisz dane PayPal",
+  "pleaseEnterPayPalEmail": "Wprowadź swój e-mail PayPal",
+  "pleaseEnterPayPalMeLink": "Wprowadź swój link PayPal.me",
+  "doNotIncludeHttpInLink": "Nie dodawaj http, https ani www do linku",
+  "pleaseEnterValidPayPalMeLink": "Wprowadź prawidłowy link PayPal.me",
+  "pleaseEnterValidEmail": "Proszę podać prawidłowy adres e-mail"
 }

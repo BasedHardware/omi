@@ -3384,5 +3384,19 @@
   "successfullyConnected": "Berhasil Terhubung!",
   "stripeReadyForPayments": "Akun Stripe Anda sekarang siap menerima pembayaran. Anda dapat mulai menghasilkan dari penjualan aplikasi segera.",
   "updateStripeDetails": "Perbarui Detail Stripe",
-  "errorUpdatingStripeDetails": "Kesalahan memperbarui detail Stripe! Silakan coba lagi nanti."
+  "errorUpdatingStripeDetails": "Kesalahan memperbarui detail Stripe! Silakan coba lagi nanti.",
+  "updatePayPal": "Perbarui PayPal",
+  "setUpPayPal": "Siapkan PayPal",
+  "updatePayPalAccountDetails": "Perbarui detail akun PayPal Anda",
+  "connectPayPalToReceivePayments": "Hubungkan akun PayPal Anda untuk mulai menerima pembayaran untuk aplikasi Anda",
+  "paypalEmail": "Email PayPal",
+  "paypalMeLink": "Tautan PayPal.me",
+  "stripeRecommendation": "Jika Stripe tersedia di negara Anda, kami sangat menyarankan untuk menggunakannya untuk pembayaran yang lebih cepat dan mudah.",
+  "updatePayPalDetails": "Perbarui Detail PayPal",
+  "savePayPalDetails": "Simpan Detail PayPal",
+  "pleaseEnterPayPalEmail": "Silakan masukkan email PayPal Anda",
+  "pleaseEnterPayPalMeLink": "Silakan masukkan tautan PayPal.me Anda",
+  "doNotIncludeHttpInLink": "Jangan sertakan http atau https atau www dalam tautan",
+  "pleaseEnterValidPayPalMeLink": "Silakan masukkan tautan PayPal.me yang valid",
+  "pleaseEnterValidEmail": "Silakan masukkan alamat email yang valid"
 }

@@ -1810,5 +1810,19 @@
   "successfullyConnected": "接続に成功しました！",
   "stripeReadyForPayments": "Stripeアカウントが支払いを受け取る準備ができました。すぐにアプリ販売から収益を得られます。",
   "updateStripeDetails": "Stripe詳細を更新",
-  "errorUpdatingStripeDetails": "Stripe詳細の更新エラー！後でもう一度お試しください。"
+  "errorUpdatingStripeDetails": "Stripe詳細の更新エラー！後でもう一度お試しください。",
+  "updatePayPal": "PayPalを更新",
+  "setUpPayPal": "PayPalを設定",
+  "updatePayPalAccountDetails": "PayPalアカウントの詳細を更新",
+  "connectPayPalToReceivePayments": "PayPalアカウントを接続して、アプリの支払いを受け取り始めましょう",
+  "paypalEmail": "PayPalメール",
+  "paypalMeLink": "PayPal.meリンク",
+  "stripeRecommendation": "お住まいの国でStripeが利用可能な場合は、より迅速で簡単な支払いのためにStripeの使用を強くお勧めします。",
+  "updatePayPalDetails": "PayPal詳細を更新",
+  "savePayPalDetails": "PayPal詳細を保存",
+  "pleaseEnterPayPalEmail": "PayPalのメールアドレスを入力してください",
+  "pleaseEnterPayPalMeLink": "PayPal.meリンクを入力してください",
+  "doNotIncludeHttpInLink": "リンクにhttp、https、wwwを含めないでください",
+  "pleaseEnterValidPayPalMeLink": "有効なPayPal.meリンクを入力してください",
+  "pleaseEnterValidEmail": "有効なメールアドレスを入力してください"
 }

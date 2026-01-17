@@ -3384,5 +3384,19 @@
   "successfullyConnected": "Sikeresen csatlakoztatva!",
   "stripeReadyForPayments": "Stripe-fiókja készen áll a kifizetések fogadására. Azonnal elkezdheti a keresést az alkalmazás-eladásaiból.",
   "updateStripeDetails": "Stripe adatok frissítése",
-  "errorUpdatingStripeDetails": "Hiba a Stripe adatok frissítésekor! Kérjük, próbálja újra később."
+  "errorUpdatingStripeDetails": "Hiba a Stripe adatok frissítésekor! Kérjük, próbálja újra később.",
+  "updatePayPal": "PayPal frissítése",
+  "setUpPayPal": "PayPal beállítása",
+  "updatePayPalAccountDetails": "Frissítse PayPal-fiókja adatait",
+  "connectPayPalToReceivePayments": "Csatlakoztassa PayPal-fiókját, hogy elkezdhesse fogadni a kifizetéseket az alkalmazásaiért",
+  "paypalEmail": "PayPal e-mail",
+  "paypalMeLink": "PayPal.me link",
+  "stripeRecommendation": "Ha a Stripe elérhető az Ön országában, erősen javasoljuk, hogy használja a gyorsabb és egyszerűbb kifizetésekhez.",
+  "updatePayPalDetails": "PayPal adatok frissítése",
+  "savePayPalDetails": "PayPal adatok mentése",
+  "pleaseEnterPayPalEmail": "Kérjük, adja meg PayPal e-mail címét",
+  "pleaseEnterPayPalMeLink": "Kérjük, adja meg PayPal.me linkjét",
+  "doNotIncludeHttpInLink": "Ne adjon meg http, https vagy www előtagot a linkben",
+  "pleaseEnterValidPayPalMeLink": "Kérjük, adjon meg egy érvényes PayPal.me linket",
+  "pleaseEnterValidEmail": "Kérjük, adjon meg egy érvényes e-mail címet"
 }

@@ -3384,5 +3384,19 @@
   "successfullyConnected": "Yhdistetty onnistuneesti!",
   "stripeReadyForPayments": "Stripe-tilisi on nyt valmis vastaanottamaan maksuja. Voit alkaa ansaita sovellustesi myynnistä heti.",
   "updateStripeDetails": "Päivitä Stripe-tiedot",
-  "errorUpdatingStripeDetails": "Virhe Stripe-tietojen päivityksessä! Yritä myöhemmin uudelleen."
+  "errorUpdatingStripeDetails": "Virhe Stripe-tietojen päivityksessä! Yritä myöhemmin uudelleen.",
+  "updatePayPal": "Päivitä PayPal",
+  "setUpPayPal": "Määritä PayPal",
+  "updatePayPalAccountDetails": "Päivitä PayPal-tilisi tiedot",
+  "connectPayPalToReceivePayments": "Yhdistä PayPal-tilisi aloittaaksesi maksujen vastaanottamisen sovelluksistasi",
+  "paypalEmail": "PayPal-sähköposti",
+  "paypalMeLink": "PayPal.me-linkki",
+  "stripeRecommendation": "Jos Stripe on saatavilla maassasi, suosittelemme vahvasti sen käyttöä nopeampien ja helpompien maksujen saamiseksi.",
+  "updatePayPalDetails": "Päivitä PayPal-tiedot",
+  "savePayPalDetails": "Tallenna PayPal-tiedot",
+  "pleaseEnterPayPalEmail": "Syötä PayPal-sähköpostisi",
+  "pleaseEnterPayPalMeLink": "Syötä PayPal.me-linkkisi",
+  "doNotIncludeHttpInLink": "Älä sisällytä http, https tai www linkkiin",
+  "pleaseEnterValidPayPalMeLink": "Syötä kelvollinen PayPal.me-linkki",
+  "pleaseEnterValidEmail": "Anna kelvollinen sähköpostiosoite"
 }

@@ -3384,5 +3384,19 @@
   "successfullyConnected": "Succesfuldt forbundet!",
   "stripeReadyForPayments": "Din Stripe-konto er nu klar til at modtage betalinger. Du kan begynde at tjene på dine app-salg med det samme.",
   "updateStripeDetails": "Opdater Stripe-detaljer",
-  "errorUpdatingStripeDetails": "Fejl ved opdatering af Stripe-detaljer! Prøv venligst igen senere."
+  "errorUpdatingStripeDetails": "Fejl ved opdatering af Stripe-detaljer! Prøv venligst igen senere.",
+  "updatePayPal": "Opdater PayPal",
+  "setUpPayPal": "Konfigurer PayPal",
+  "updatePayPalAccountDetails": "Opdater dine PayPal-kontooplysninger",
+  "connectPayPalToReceivePayments": "Tilslut din PayPal-konto for at begynde at modtage betalinger for dine apps",
+  "paypalEmail": "PayPal e-mail",
+  "paypalMeLink": "PayPal.me link",
+  "stripeRecommendation": "Hvis Stripe er tilgængelig i dit land, anbefaler vi stærkt at bruge det til hurtigere og nemmere udbetalinger.",
+  "updatePayPalDetails": "Opdater PayPal-detaljer",
+  "savePayPalDetails": "Gem PayPal-detaljer",
+  "pleaseEnterPayPalEmail": "Indtast venligst din PayPal e-mail",
+  "pleaseEnterPayPalMeLink": "Indtast venligst dit PayPal.me link",
+  "doNotIncludeHttpInLink": "Inkluder ikke http eller https eller www i linket",
+  "pleaseEnterValidPayPalMeLink": "Indtast venligst et gyldigt PayPal.me link",
+  "pleaseEnterValidEmail": "Indtast venligst en gyldig e-mailadresse"
 }

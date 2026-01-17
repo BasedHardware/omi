@@ -1831,5 +1831,19 @@
   "successfullyConnected": "连接成功！",
   "stripeReadyForPayments": "您的 Stripe 账户已准备好接收付款。您可以立即开始从应用销售中获利。",
   "updateStripeDetails": "更新 Stripe 详细信息",
-  "errorUpdatingStripeDetails": "更新 Stripe 详细信息时出错！请稍后重试。"
+  "errorUpdatingStripeDetails": "更新 Stripe 详细信息时出错！请稍后重试。",
+  "updatePayPal": "更新 PayPal",
+  "setUpPayPal": "设置 PayPal",
+  "updatePayPalAccountDetails": "更新您的 PayPal 账户详细信息",
+  "connectPayPalToReceivePayments": "连接您的 PayPal 账户，开始接收您应用的付款",
+  "paypalEmail": "PayPal 邮箱",
+  "paypalMeLink": "PayPal.me 链接",
+  "stripeRecommendation": "如果 Stripe 在您的国家可用，我们强烈建议使用它以获得更快更便捷的付款。",
+  "updatePayPalDetails": "更新 PayPal 详细信息",
+  "savePayPalDetails": "保存 PayPal 详细信息",
+  "pleaseEnterPayPalEmail": "请输入您的 PayPal 邮箱",
+  "pleaseEnterPayPalMeLink": "请输入您的 PayPal.me 链接",
+  "doNotIncludeHttpInLink": "链接中请勿包含 http、https 或 www",
+  "pleaseEnterValidPayPalMeLink": "请输入有效的 PayPal.me 链接",
+  "pleaseEnterValidEmail": "请输入有效的电子邮件地址"
 }

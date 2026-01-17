@@ -3386,5 +3386,19 @@
   "successfullyConnected": "Успешно свързано!",
   "stripeReadyForPayments": "Вашият Stripe акаунт вече е готов да получава плащания. Можете да започнете да печелите от продажбите на приложението си веднага.",
   "updateStripeDetails": "Актуализиране на детайлите на Stripe",
-  "errorUpdatingStripeDetails": "Грешка при актуализиране на детайлите на Stripe! Моля, опитайте отново по-късно."
+  "errorUpdatingStripeDetails": "Грешка при актуализиране на детайлите на Stripe! Моля, опитайте отново по-късно.",
+  "updatePayPal": "Актуализиране на PayPal",
+  "setUpPayPal": "Настройка на PayPal",
+  "updatePayPalAccountDetails": "Актуализирайте данните на вашия PayPal акаунт",
+  "connectPayPalToReceivePayments": "Свържете вашия PayPal акаунт, за да започнете да получавате плащания за вашите приложения",
+  "paypalEmail": "PayPal имейл",
+  "paypalMeLink": "PayPal.me връзка",
+  "stripeRecommendation": "Ако Stripe е наличен във вашата държава, силно препоръчваме да го използвате за по-бързи и лесни плащания.",
+  "updatePayPalDetails": "Актуализиране на детайлите на PayPal",
+  "savePayPalDetails": "Запазване на детайлите на PayPal",
+  "pleaseEnterPayPalEmail": "Моля, въведете вашия PayPal имейл",
+  "pleaseEnterPayPalMeLink": "Моля, въведете вашата PayPal.me връзка",
+  "doNotIncludeHttpInLink": "Не включвайте http или https или www в връзката",
+  "pleaseEnterValidPayPalMeLink": "Моля, въведете валидна PayPal.me връзка",
+  "pleaseEnterValidEmail": "Моля, въведете валиден имейл адрес"
 }

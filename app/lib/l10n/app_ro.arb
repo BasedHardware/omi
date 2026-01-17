@@ -3384,5 +3384,19 @@
   "successfullyConnected": "Conectat cu succes!",
   "stripeReadyForPayments": "Contul dvs. Stripe este acum gata să primească plăți. Puteți începe să câștigați din vânzările aplicațiilor imediat.",
   "updateStripeDetails": "Actualizați detaliile Stripe",
-  "errorUpdatingStripeDetails": "Eroare la actualizarea detaliilor Stripe! Vă rugăm să încercați din nou mai târziu."
+  "errorUpdatingStripeDetails": "Eroare la actualizarea detaliilor Stripe! Vă rugăm să încercați din nou mai târziu.",
+  "updatePayPal": "Actualizați PayPal",
+  "setUpPayPal": "Configurați PayPal",
+  "updatePayPalAccountDetails": "Actualizați detaliile contului dvs. PayPal",
+  "connectPayPalToReceivePayments": "Conectați contul dvs. PayPal pentru a începe să primiți plăți pentru aplicațiile dvs.",
+  "paypalEmail": "E-mail PayPal",
+  "paypalMeLink": "Link PayPal.me",
+  "stripeRecommendation": "Dacă Stripe este disponibil în țara dvs., vă recomandăm cu tărie să îl utilizați pentru plăți mai rapide și mai ușoare.",
+  "updatePayPalDetails": "Actualizați detaliile PayPal",
+  "savePayPalDetails": "Salvați detaliile PayPal",
+  "pleaseEnterPayPalEmail": "Vă rugăm să introduceți e-mailul PayPal",
+  "pleaseEnterPayPalMeLink": "Vă rugăm să introduceți linkul PayPal.me",
+  "doNotIncludeHttpInLink": "Nu includeți http sau https sau www în link",
+  "pleaseEnterValidPayPalMeLink": "Vă rugăm să introduceți un link PayPal.me valid",
+  "pleaseEnterValidEmail": "Vă rugăm să introduceți o adresă de email validă"
 }

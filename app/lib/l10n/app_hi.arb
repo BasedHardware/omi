@@ -1831,5 +1831,19 @@
   "successfullyConnected": "सफलतापूर्वक कनेक्ट हो गया!",
   "stripeReadyForPayments": "आपका Stripe खाता अब भुगतान प्राप्त करने के लिए तैयार है। आप तुरंत अपने ऐप की बिक्री से कमाई शुरू कर सकते हैं।",
   "updateStripeDetails": "Stripe विवरण अपडेट करें",
-  "errorUpdatingStripeDetails": "Stripe विवरण अपडेट करने में त्रुटि! कृपया बाद में पुनः प्रयास करें।"
+  "errorUpdatingStripeDetails": "Stripe विवरण अपडेट करने में त्रुटि! कृपया बाद में पुनः प्रयास करें।",
+  "updatePayPal": "PayPal अपडेट करें",
+  "setUpPayPal": "PayPal सेट अप करें",
+  "updatePayPalAccountDetails": "अपने PayPal खाते का विवरण अपडेट करें",
+  "connectPayPalToReceivePayments": "अपने ऐप्स के लिए भुगतान प्राप्त करना शुरू करने के लिए अपना PayPal खाता कनेक्ट करें",
+  "paypalEmail": "PayPal ईमेल",
+  "paypalMeLink": "PayPal.me लिंक",
+  "stripeRecommendation": "यदि आपके देश में Stripe उपलब्ध है, तो तेज़ और आसान भुगतान के लिए हम इसका उपयोग करने की अत्यधिक अनुशंसा करते हैं।",
+  "updatePayPalDetails": "PayPal विवरण अपडेट करें",
+  "savePayPalDetails": "PayPal विवरण सहेजें",
+  "pleaseEnterPayPalEmail": "कृपया अपना PayPal ईमेल दर्ज करें",
+  "pleaseEnterPayPalMeLink": "कृपया अपना PayPal.me लिंक दर्ज करें",
+  "doNotIncludeHttpInLink": "लिंक में http या https या www शामिल न करें",
+  "pleaseEnterValidPayPalMeLink": "कृपया एक वैध PayPal.me लिंक दर्ज करें",
+  "pleaseEnterValidEmail": "कृपया एक वैध ईमेल पता दर्ज करें"
 }

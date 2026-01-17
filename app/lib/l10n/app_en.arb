@@ -5984,5 +5984,58 @@
   "errorUpdatingStripeDetails": "Error updating Stripe details! Please try again later.",
   "@errorUpdatingStripeDetails": {
     "description": "Error message when Stripe update fails"
-  }
+  },
+  "updatePayPal": "Update PayPal",
+  "@updatePayPal": {
+    "description": "App bar title when updating PayPal"
+  },
+  "setUpPayPal": "Set Up PayPal",
+  "@setUpPayPal": {
+    "description": "App bar title when setting up PayPal"
+  },
+  "updatePayPalAccountDetails": "Update your PayPal account details",
+  "@updatePayPalAccountDetails": {
+    "description": "Description when updating PayPal account"
+  },
+  "connectPayPalToReceivePayments": "Connect your PayPal account to start receiving payments for your apps",
+  "@connectPayPalToReceivePayments": {
+    "description": "Description when connecting PayPal account"
+  },
+  "paypalEmail": "PayPal Email",
+  "@paypalEmail": {
+    "description": "Label for PayPal email field"
+  },
+  "paypalMeLink": "PayPal.me Link",
+  "@paypalMeLink": {
+    "description": "Label for PayPal.me link field"
+  },
+  "stripeRecommendation": "If Stripe is available in your country, we highly recommend using it for faster and easier payouts.",
+  "@stripeRecommendation": {
+    "description": "Info message recommending Stripe over PayPal"
+  },
+  "updatePayPalDetails": "Update PayPal Details",
+  "@updatePayPalDetails": {
+    "description": "Button text to update PayPal details"
+  },
+  "savePayPalDetails": "Save PayPal Details",
+  "@savePayPalDetails": {
+    "description": "Button text to save PayPal details"
+  },
+  "pleaseEnterPayPalEmail": "Please enter your PayPal email",
+  "@pleaseEnterPayPalEmail": {
+    "description": "Validation error for empty PayPal email"
+  },
+  "pleaseEnterPayPalMeLink": "Please enter your PayPal.me link",
+  "@pleaseEnterPayPalMeLink": {
+    "description": "Validation error for empty PayPal.me link"
+  },
+  "doNotIncludeHttpInLink": "Do not include http or https or www in the link",
+  "@doNotIncludeHttpInLink": {
+    "description": "Validation error for http/https/www in link"
+  },
+  "pleaseEnterValidPayPalMeLink": "Please enter a valid PayPal.me link",
+  "@pleaseEnterValidPayPalMeLink": {
+    "description": "Validation error for invalid PayPal.me link"
+  },
+  "pleaseEnterValidEmail": "Please enter a valid email address"
 }

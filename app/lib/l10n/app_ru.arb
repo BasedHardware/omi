@@ -3384,5 +3384,19 @@
   "successfullyConnected": "Успешно подключено!",
   "stripeReadyForPayments": "Ваш аккаунт Stripe готов принимать платежи. Вы можете сразу начать зарабатывать на продажах приложений.",
   "updateStripeDetails": "Обновить данные Stripe",
-  "errorUpdatingStripeDetails": "Ошибка обновления данных Stripe! Пожалуйста, попробуйте позже."
+  "errorUpdatingStripeDetails": "Ошибка обновления данных Stripe! Пожалуйста, попробуйте позже.",
+  "updatePayPal": "Обновить PayPal",
+  "setUpPayPal": "Настроить PayPal",
+  "updatePayPalAccountDetails": "Обновите данные вашего аккаунта PayPal",
+  "connectPayPalToReceivePayments": "Подключите свой аккаунт PayPal, чтобы начать получать платежи за ваши приложения",
+  "paypalEmail": "Email PayPal",
+  "paypalMeLink": "Ссылка PayPal.me",
+  "stripeRecommendation": "Если Stripe доступен в вашей стране, мы настоятельно рекомендуем использовать его для более быстрых и простых выплат.",
+  "updatePayPalDetails": "Обновить данные PayPal",
+  "savePayPalDetails": "Сохранить данные PayPal",
+  "pleaseEnterPayPalEmail": "Пожалуйста, введите ваш email PayPal",
+  "pleaseEnterPayPalMeLink": "Пожалуйста, введите вашу ссылку PayPal.me",
+  "doNotIncludeHttpInLink": "Не включайте http, https или www в ссылку",
+  "pleaseEnterValidPayPalMeLink": "Пожалуйста, введите действительную ссылку PayPal.me",
+  "pleaseEnterValidEmail": "Пожалуйста, введите действительный адрес электронной почты"
 }

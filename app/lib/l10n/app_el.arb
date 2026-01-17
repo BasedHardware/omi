@@ -3384,5 +3384,19 @@
   "successfullyConnected": "Επιτυχής σύνδεση!",
   "stripeReadyForPayments": "Ο λογαριασμός Stripe σας είναι τώρα έτοιμος να λαμβάνει πληρωμές. Μπορείτε να αρχίσετε να κερδίζετε από τις πωλήσεις των εφαρμογών σας αμέσως.",
   "updateStripeDetails": "Ενημέρωση στοιχείων Stripe",
-  "errorUpdatingStripeDetails": "Σφάλμα ενημέρωσης στοιχείων Stripe! Παρακαλώ δοκιμάστε ξανά αργότερα."
+  "errorUpdatingStripeDetails": "Σφάλμα ενημέρωσης στοιχείων Stripe! Παρακαλώ δοκιμάστε ξανά αργότερα.",
+  "updatePayPal": "Ενημέρωση PayPal",
+  "setUpPayPal": "Ρύθμιση PayPal",
+  "updatePayPalAccountDetails": "Ενημερώστε τα στοιχεία του λογαριασμού PayPal σας",
+  "connectPayPalToReceivePayments": "Συνδέστε τον λογαριασμό PayPal σας για να αρχίσετε να λαμβάνετε πληρωμές για τις εφαρμογές σας",
+  "paypalEmail": "Email PayPal",
+  "paypalMeLink": "Σύνδεσμος PayPal.me",
+  "stripeRecommendation": "Εάν το Stripe είναι διαθέσιμο στη χώρα σας, σας συνιστούμε ανεπιφύλακτα να το χρησιμοποιήσετε για ταχύτερες και ευκολότερες πληρωμές.",
+  "updatePayPalDetails": "Ενημέρωση στοιχείων PayPal",
+  "savePayPalDetails": "Αποθήκευση στοιχείων PayPal",
+  "pleaseEnterPayPalEmail": "Παρακαλώ εισάγετε το email PayPal σας",
+  "pleaseEnterPayPalMeLink": "Παρακαλώ εισάγετε τον σύνδεσμο PayPal.me σας",
+  "doNotIncludeHttpInLink": "Μην συμπεριλάβετε http ή https ή www στον σύνδεσμο",
+  "pleaseEnterValidPayPalMeLink": "Παρακαλώ εισάγετε έναν έγκυρο σύνδεσμο PayPal.me",
+  "pleaseEnterValidEmail": "Παρακαλώ εισάγετε μια έγκυρη διεύθυνση email"
 }

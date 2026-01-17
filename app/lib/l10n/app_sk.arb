@@ -3384,5 +3384,19 @@
   "successfullyConnected": "Úspešne pripojené!",
   "stripeReadyForPayments": "Váš účet Stripe je teraz pripravený prijímať platby. Môžete ihneď začať zarábať z predaja aplikácií.",
   "updateStripeDetails": "Aktualizovať údaje Stripe",
-  "errorUpdatingStripeDetails": "Chyba pri aktualizácii údajov Stripe! Skúste to prosím neskôr."
+  "errorUpdatingStripeDetails": "Chyba pri aktualizácii údajov Stripe! Skúste to prosím neskôr.",
+  "updatePayPal": "Aktualizovať PayPal",
+  "setUpPayPal": "Nastaviť PayPal",
+  "updatePayPalAccountDetails": "Aktualizujte údaje svojho účtu PayPal",
+  "connectPayPalToReceivePayments": "Pripojte svoj účet PayPal a začnite prijímať platby za svoje aplikácie",
+  "paypalEmail": "E-mail PayPal",
+  "paypalMeLink": "Odkaz PayPal.me",
+  "stripeRecommendation": "Ak je Stripe k dispozícii vo vašej krajine, dôrazne odporúčame jeho použitie pre rýchlejšie a jednoduchšie výplaty.",
+  "updatePayPalDetails": "Aktualizovať údaje PayPal",
+  "savePayPalDetails": "Uložiť údaje PayPal",
+  "pleaseEnterPayPalEmail": "Zadajte svoj e-mail PayPal",
+  "pleaseEnterPayPalMeLink": "Zadajte svoj odkaz PayPal.me",
+  "doNotIncludeHttpInLink": "Nezahrňujte http alebo https alebo www do odkazu",
+  "pleaseEnterValidPayPalMeLink": "Zadajte platný odkaz PayPal.me",
+  "pleaseEnterValidEmail": "Zadajte platnú e-mailovú adresu"
 }
