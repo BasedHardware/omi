@@ -1490,3 +1490,19 @@ Notes: Main settings drawer/modal. Localized BETA/NEW/PRO tags, sign out
        dialog title and message, "Need Help? Chat with us" menu item,
        "Unknown Device" fallback text, and Settings/Done header buttons.
 Commit: a485ec476
+
+--------------------------------------------------------------------------------
+FILE 109 (Phase 2 FILE 39): local_storage_page.dart
+--------------------------------------------------------------------------------
+Path: app/lib/pages/conversations/local_storage_page.dart
+New Keys: localStorageEnabled, localStorageDisabled, failedToUpdateSettings,
+         privacyNotice, recordingsMayCaptureOthers, enable, storeAudioOnPhone,
+         on, storeAudioDescription, enableLocalStorage
+Reused Keys: cancel, off
+Total New Keys: 10
+Script: /tmp/translate_local_storage.py
+Status: ✅ COMPLETED
+Notes: Local storage settings page for storing audio on phone. Localized
+       page title, toggle labels (On/Off), description text, privacy notice
+       dialog, enable/disable confirmation messages, and error messages.
+Commit: e1fbfcd51
