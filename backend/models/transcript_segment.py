@@ -99,6 +99,20 @@ class TranscriptSegment(BaseModel):
             text = text.strip()
             return bool(text) and text[-1] in ".?!" and text[0].isupper()
 
+        def _can_backward_merge_first_sentence(first_sentence: str, rest: str, last_incomplete: str) -> bool:
+            if not rest:
+                return False
+            if not first_sentence:
+                return False
+            return len(first_sentence) < len(last_incomplete)
+
+        def _can_backward_merge_single_sentence(first_sentence: str, last_incomplete: str) -> bool:
+            if not first_sentence:
+                return False
+            if _is_sentence_complete(first_sentence):
+                return False
+            return len(first_sentence) < len(last_incomplete)
+
         def _should_merge_same_speaker(a: 'TranscriptSegment', b: 'TranscriptSegment') -> bool:
             return (
                 (a.speaker == b.speaker or (a.is_user and b.is_user))
@@ -128,21 +142,13 @@ class TranscriptSegment(BaseModel):
                 last_incomplete, prefix = _extract_last_incomplete_sentence(a.text)
                 if last_incomplete:
                     first_sentence, rest = _split_first_sentence(b.text)
-                    if first_sentence:
-                        if rest:
-                            if (
-                                (not _is_sentence_complete(first_sentence) and len(first_sentence) < len(last_incomplete))
-                                or (_is_sentence_complete(first_sentence) and len(first_sentence) < len(last_incomplete))
-                            ):
-                                a.text = f'{a.text} {first_sentence}'.strip()
-                                b.text = rest
-                                return a, b
-                        elif (
-                            not _is_sentence_complete(first_sentence)
-                            and len(first_sentence) < len(last_incomplete)
-                        ):
-                            a.text = f'{a.text} {first_sentence}'.strip()
-                            return a, None
+                    if _can_backward_merge_first_sentence(first_sentence, rest, last_incomplete):
+                        a.text = f'{a.text} {first_sentence}'.strip()
+                        b.text = rest
+                        return a, b
+                    if _can_backward_merge_single_sentence(first_sentence, last_incomplete):
+                        a.text = f'{a.text} {first_sentence}'.strip()
+                        return a, None
                 if last_incomplete and len(last_incomplete) < len(b.text.strip()):
                     b.text = f'{last_incomplete} {b.text}'.strip()
                     if prefix:
