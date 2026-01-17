@@ -225,7 +225,7 @@ int main(void)
         LOG_ERR("Failed to initialize settings (err %d)", setting_ret);
     }
 
-    init_rtc(1768672190);
+    init_rtc(1768677330);
     if (!rtc_is_valid()) {
         LOG_WRN("UTC time not synchronized yet");
     }

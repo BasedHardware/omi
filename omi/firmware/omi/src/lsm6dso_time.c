@@ -26,6 +26,7 @@ LOG_MODULE_REGISTER(lsm6dso_time, CONFIG_LOG_DEFAULT_LEVEL);
 #define LSM6DS_REG_CTRL10_C         0x19
 #define LSM6DS_REG_WAKE_UP_DUR      0x5C
 #define LSM6DS_REG_TIMESTAMP0       0x40
+#define LSM6DS_REG_TIMESTAMP2       0x42
 #define LSM6DS_REG_WHO_AM_I         0x0F
 
 #define LSM6DS_CTRL10_TIMER_EN      BIT(5)
@@ -255,6 +256,37 @@ static void lsm6dso_timestamp_restart_best_effort(void)
 	k_sleep(K_MSEC(2));
 }
 
+static int lsm6dso_timestamp_reset_by_datasheet(void)
+{
+	/* LSM6DS3TR-C datasheet: to reset the timestamp timer, store 0xAA in TIMESTAMP2 (0x42). */
+	lsm6dso_i2c_resume_best_effort();
+	if (!device_is_ready(lsm6dso_i2c.bus)) {
+		LOG_WRN("lsm6dso i2c bus not ready");
+		return -ENODEV;
+	}
+
+	int err = i2c_reg_write_byte_dt(&lsm6dso_i2c, LSM6DS_REG_TIMESTAMP2, 0xAA);
+	if (err) {
+		LOG_WRN("Failed to write TIMESTAMP2=0xAA (reset) (err %d)", err);
+		if (err == -EIO) {
+			lsm6dso_try_recover_i2c_eio("write TIMESTAMP2 reset");
+			err = i2c_reg_write_byte_dt(&lsm6dso_i2c, LSM6DS_REG_TIMESTAMP2, 0xAA);
+			if (err) {
+				LOG_WRN("Retry write TIMESTAMP2 reset failed (err %d)", err);
+				lsm6dso_i2c_scan_bus_once();
+				return err;
+			}
+		} else {
+			return err;
+		}
+	}
+
+	/* Give the IMU a moment to apply the reset. */
+	k_sleep(K_MSEC(2));
+	LOG_DBG("Timestamp reset requested (TIMESTAMP2=0xAA)");
+	return 0;
+}
+
 static int lsm6dso_timestamp_set_resolution_6p4ms(void)
 {
 	lsm6dso_i2c_resume_best_effort();
@@ -357,7 +389,14 @@ void lsm6dso_time_prepare_for_system_off(void)
 	if (err) {
 		LOG_WRN("system_off prep: timestamp enable failed (err %d)", err);
 	}
-	lsm6dso_timestamp_restart_best_effort();
+
+	/* Reset timestamp so it starts near 0 for maximum off-duration (datasheet method). */
+	err = lsm6dso_timestamp_reset_by_datasheet();
+	if (err) {
+		LOG_WRN("system_off prep: timestamp reset failed (err %d)", err);
+		/* Fall back to older best-effort restart. */
+		lsm6dso_timestamp_restart_best_effort();
+	}
 
 	uint32_t ts;
 	err = lsm6dso_timestamp_read(&ts);
