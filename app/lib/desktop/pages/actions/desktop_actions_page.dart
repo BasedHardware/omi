@@ -54,6 +54,8 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
   // Show completed tasks
   bool _showCompleted = false;
 
+  bool _isDragging = false;
+
   void _requestFocusIfPossible() {
     if (mounted && _focusNode.canRequestFocus) {
       _focusNode.requestFocus();
@@ -255,34 +257,6 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
         // Target not found, add at end
         order.add(draggedItem.id);
       }
-
-      // Clear hover state
-      _hoveredItemId = null;
-      _hoveredFirstPositionCategory = null;
-    });
-    _saveCategoryOrder();
-    HapticFeedback.mediumImpact();
-  }
-
-  // Insert item at the first position of a category
-  void _insertAtFirstPosition(
-    ActionItemWithMetadata draggedItem,
-    TaskCategory category,
-    List<ActionItemWithMetadata> categoryItems,
-  ) {
-    setState(() {
-      // Initialize category order if needed
-      if (!_categoryOrder.containsKey(category)) {
-        _categoryOrder[category] = categoryItems.map((i) => i.id).toList();
-      }
-
-      final order = _categoryOrder[category]!;
-
-      // Remove dragged item from its current position if it exists
-      order.remove(draggedItem.id);
-
-      // Insert at the beginning
-      order.insert(0, draggedItem.id);
 
       // Clear hover state
       _hoveredItemId = null;
@@ -532,14 +506,6 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
                     ),
                   ],
                 ),
-                SizedBox(height: 4),
-                Text(
-                  'Swipe tasks to indent, drag between categories',
-                  style: TextStyle(
-                    color: ResponsiveHelper.textSecondary,
-                    fontSize: 12,
-                  ),
-                ),
               ],
             ),
           ),
@@ -628,11 +594,15 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
       return _buildEmptyState();
     }
 
+    final categoriesToShow = _isDragging
+        ? TaskCategory.values
+        : TaskCategory.values.where((c) => (categorizedItems[c] ?? []).isNotEmpty).toList();
+
     return CustomScrollView(
       controller: _scrollController,
       slivers: [
         const SliverPadding(padding: EdgeInsets.only(top: 8)),
-        for (final category in TaskCategory.values)
+        for (final category in categoriesToShow)
           SliverToBoxAdapter(
             child: _buildCategorySection(
               category: category,
@@ -662,21 +632,38 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     required ActionItemsProvider provider,
   }) {
     final title = _getCategoryTitle(category);
+    final isEmpty = items.isEmpty;
+    final orderedItems = _getOrderedItems(category, items);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
       child: DragTarget<ActionItemWithMetadata>(
         onWillAcceptWithDetails: (details) => true,
         onAcceptWithDetails: (details) {
-          _updateTaskCategory(details.data, category);
+          if (_hoveredItemId == null && _hoveredFirstPositionCategory == null) {
+            _updateTaskCategory(details.data, category);
+          }
         },
         builder: (context, candidateData, rejectedData) {
           final isHovering = candidateData.isNotEmpty;
+          final isEmptyDuringDrag = isEmpty && _isDragging;
+
           return AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             decoration: BoxDecoration(
-              color: isHovering ? ResponsiveHelper.backgroundTertiary.withOpacity(0.5) : Colors.transparent,
+              color: isHovering
+                  ? ResponsiveHelper.backgroundTertiary.withOpacity(0.5)
+                  : isEmptyDuringDrag
+                      ? ResponsiveHelper.backgroundSecondary.withOpacity(0.3)
+                      : Colors.transparent,
               borderRadius: BorderRadius.circular(12),
+              border: isEmptyDuringDrag && !isHovering
+                  ? Border.all(
+                      color: ResponsiveHelper.textTertiary.withOpacity(0.3),
+                      width: 1,
+                      style: BorderStyle.solid,
+                    )
+                  : null,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -688,8 +675,8 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
                     children: [
                       Text(
                         title,
-                        style: const TextStyle(
-                          color: ResponsiveHelper.textPrimary,
+                        style: TextStyle(
+                          color: isEmptyDuringDrag ? ResponsiveHelper.textTertiary : ResponsiveHelper.textPrimary,
                           fontSize: 15,
                           fontWeight: FontWeight.w600,
                         ),
@@ -708,11 +695,11 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
                 ),
 
                 // First position drop zone (only show when there are items)
-                if (items.isNotEmpty)
-                  _buildFirstPositionDropZone(category, items),
+                if (orderedItems.isNotEmpty)
+                  _buildFirstPositionDropZone(category, orderedItems, candidateData.isNotEmpty),
 
                 // Task items with drag reordering
-                ..._getOrderedItems(category, items).map((item) => _buildDraggableTaskItem(
+                ...orderedItems.map((item) => _buildDraggableTaskItem(
                       item: item,
                       provider: provider,
                       category: category,
@@ -732,64 +719,83 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
   Widget _buildFirstPositionDropZone(
     TaskCategory category,
     List<ActionItemWithMetadata> categoryItems,
+    bool isDragging,
   ) {
-    final isHovered = _hoveredFirstPositionCategory == category;
+    final isHoveredFirst = _hoveredFirstPositionCategory == category;
 
     return DragTarget<ActionItemWithMetadata>(
       onWillAcceptWithDetails: (details) {
         // Don't accept if it's already the first item
-        final orderedItems = _getOrderedItems(category, categoryItems);
-        if (orderedItems.isNotEmpty && orderedItems.first.id == details.data.id) {
+        if (categoryItems.isNotEmpty && details.data.id == categoryItems.first.id) {
           return false;
         }
         return true;
       },
-      onMove: (details) {
-        setState(() {
-          _hoveredFirstPositionCategory = category;
-          _hoveredItemId = null;
-        });
-      },
-      onLeave: (_) {
-        setState(() {
-          _hoveredFirstPositionCategory = null;
-        });
-      },
       onAcceptWithDetails: (details) {
-        // Update category if different
-        final draggedCategory = _getCategoryForItem(details.data);
+        final draggedItem = details.data;
+
+        // Insert at first position
+        _reorderItemToFirst(draggedItem, category, categoryItems);
+
+        // Also update category if different
+        final draggedCategory = _getCategoryForItem(draggedItem);
         if (draggedCategory != category) {
-          _updateTaskCategory(details.data, category);
+          _updateTaskCategory(draggedItem, category);
         }
-        _insertAtFirstPosition(details.data, category, categoryItems);
+      },
+      onMove: (details) {
+        if (_hoveredFirstPositionCategory != category) {
+          setState(() {
+            _hoveredFirstPositionCategory = category;
+            _hoveredItemId = null;
+          });
+        }
+      },
+      onLeave: (data) {
+        if (_hoveredFirstPositionCategory == category) {
+          setState(() {
+            _hoveredFirstPositionCategory = null;
+          });
+        }
       },
       builder: (context, candidateData, rejectedData) {
+        final showIndicator = isHoveredFirst && candidateData.isNotEmpty;
         return AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          height: isHovered ? 36 : 16,
+          height: showIndicator ? 6 : (isDragging ? 20 : 4),
           margin: const EdgeInsets.symmetric(horizontal: 4),
           decoration: BoxDecoration(
-            color: isHovered ? Colors.deepPurpleAccent.withOpacity(0.15) : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            border: isHovered
-                ? Border.all(color: Colors.deepPurpleAccent.withOpacity(0.5), width: 1.5)
-                : null,
+            color: showIndicator ? Colors.deepPurpleAccent : Colors.transparent,
+            borderRadius: BorderRadius.circular(2),
           ),
-          child: isHovered
-              ? Center(
-                  child: Text(
-                    'Drop here for first position',
-                    style: TextStyle(
-                      color: Colors.deepPurpleAccent.withOpacity(0.8),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                )
-              : null,
         );
       },
     );
+  }
+
+  void _reorderItemToFirst(
+    ActionItemWithMetadata draggedItem,
+    TaskCategory category,
+    List<ActionItemWithMetadata> categoryItems,
+  ) {
+    setState(() {
+      if (!_categoryOrder.containsKey(category)) {
+        _categoryOrder[category] = categoryItems.map((i) => i.id).toList();
+      }
+
+      final order = _categoryOrder[category]!;
+
+      order.remove(draggedItem.id);
+
+      // Insert at first position
+      order.insert(0, draggedItem.id);
+
+      // Clear hover state
+      _hoveredItemId = null;
+      _hoveredFirstPositionCategory = null;
+    });
+    _saveCategoryOrder();
+    HapticFeedback.mediumImpact();
   }
 
   Widget _buildDraggableTaskItem({
@@ -802,39 +808,51 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
 
     return DragTarget<ActionItemWithMetadata>(
       onWillAcceptWithDetails: (details) {
-        if (details.data.id == item.id) return false;
-        return true;
-      },
-      onMove: (details) {
-        // Determine if we're in the top or bottom half
-        final RenderBox box = context.findRenderObject() as RenderBox;
-        final localPosition = box.globalToLocal(details.offset);
-        setState(() {
-          _hoveredItemId = item.id;
-          _hoverAbove = localPosition.dy < 20;
-          _hoveredFirstPositionCategory = null; // Clear first position hover
-        });
-      },
-      onLeave: (_) {
-        setState(() {
-          _hoveredItemId = null;
-        });
+        return details.data.id != item.id;
       },
       onAcceptWithDetails: (details) {
+        final draggedItem = details.data;
+
         _reorderItemInCategory(
-          details.data,
+          draggedItem,
           item.id,
           _hoverAbove,
           category,
           categoryItems,
         );
+
+        final draggedCategory = _getCategoryForItem(draggedItem);
+        if (draggedCategory != category) {
+          _updateTaskCategory(draggedItem, category);
+        }
+      },
+      onMove: (details) {
+        // Determine if we're in the top or bottom half
+        final RenderBox box = context.findRenderObject() as RenderBox;
+        final localPosition = box.globalToLocal(details.offset);
+        final isAbove = localPosition.dy < 20;
+
+        if (_hoveredItemId != item.id || _hoverAbove != isAbove) {
+          setState(() {
+            _hoveredItemId = item.id;
+            _hoverAbove = isAbove;
+            _hoveredFirstPositionCategory = null; // Clear first position hover
+          });
+        }
+      },
+      onLeave: (data) {
+        if (_hoveredItemId == item.id) {
+          setState(() {
+            _hoveredItemId = null;
+          });
+        }
       },
       builder: (context, candidateData, rejectedData) {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             // Drop indicator above
-            if (isHovered && _hoverAbove)
+            if (isHovered && _hoverAbove && candidateData.isNotEmpty)
               Container(
                 height: 2,
                 margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -845,7 +863,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
               ),
             _buildTaskItem(item, provider),
             // Drop indicator below
-            if (isHovered && !_hoverAbove)
+            if (isHovered && !_hoverAbove && candidateData.isNotEmpty)
               Container(
                 height: 2,
                 margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -866,6 +884,34 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
 
     return LongPressDraggable<ActionItemWithMetadata>(
       data: item,
+      delay: const Duration(milliseconds: 150),
+      hapticFeedbackOnStart: true,
+      onDragStarted: () {
+        HapticFeedback.mediumImpact();
+        setState(() {
+          _isDragging = true;
+        });
+      },
+      onDragEnd: (details) {
+        setState(() {
+          _hoveredItemId = null;
+          _hoveredFirstPositionCategory = null;
+        });
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            setState(() {
+              _isDragging = false;
+            });
+          }
+        });
+      },
+      onDraggableCanceled: (_, __) {
+        setState(() {
+          _isDragging = false;
+          _hoveredItemId = null;
+          _hoveredFirstPositionCategory = null;
+        });
+      },
       feedback: Material(
         color: Colors.transparent,
         child: Container(
