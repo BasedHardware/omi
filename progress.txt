@@ -1405,3 +1405,20 @@ Notes: Import data page for importing conversations from other devices
        texts (pending/processing/completed/failed), delete dialog, error
        messages, and conversation count badges.
 Commit: 6da015df3
+
+--------------------------------------------------------------------------------
+FILE 103 (Phase 2 FILE 33): people.dart
+--------------------------------------------------------------------------------
+Path: app/lib/pages/settings/people.dart
+New Keys: pleaseEnterName, nameMustBeBetweenCharacters, deleteSampleQuestion,
+         deleteSampleConfirmation, confirmDeletion, deletePersonConfirmation,
+         howItWorksTitle, howPeopleWorks, tapToDelete
+Reused Keys: name, gotIt, cancel, add, update, confirm
+Total New Keys: 9
+Script: /tmp/translate_people.py
+Status: ✅ COMPLETED
+Notes: People/speech recognition settings page. Localized name input field
+       placeholder and validation messages, delete sample and delete person
+       confirmation dialogs, "How it works?" dialog, and "Tap to delete" hint.
+       Modified _nameValidator to return a validator function with context.
+Commit: 4b4d217b7
