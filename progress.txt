@@ -1450,3 +1450,16 @@ Status: ✅ COMPLETED
 Notes: Integration settings page template. All required l10n keys already
        existed. Updated refresh tooltip and "Connected to" status message.
 Commit: dfc762dc1
+
+--------------------------------------------------------------------------------
+FILE 106 (Phase 2 FILE 36): github_settings_page.dart
+--------------------------------------------------------------------------------
+Path: app/lib/pages/settings/github_settings_page.dart
+New Keys: (none - all keys already existed)
+Reused Keys: updatedDate, today, yesterday, daysAgo, weeksAgo, monthsAgo
+Total New Keys: 0
+Status: ✅ COMPLETED
+Notes: GitHub integration settings page. All required l10n keys already
+       existed. Updated _formatDate method to accept BuildContext and use
+       l10n for relative date strings (today, yesterday, days/weeks/months ago).
+Commit: 1dec1c08b
