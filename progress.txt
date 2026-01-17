@@ -1506,3 +1506,19 @@ Notes: Local storage settings page for storing audio on phone. Localized
        page title, toggle labels (On/Off), description text, privacy notice
        dialog, enable/disable confirmation messages, and error messages.
 Commit: e1fbfcd51
+
+--------------------------------------------------------------------------------
+FILE 110 (Phase 2 FILE 40): private_cloud_sync_page.dart
+--------------------------------------------------------------------------------
+Path: app/lib/pages/conversations/private_cloud_sync_page.dart
+New Keys: cloudStorageEnabled, cloudStorageDisabled, enableCloudStorage,
+         storeAudioOnCloud, cloudStorageDialogMessage, storeAudioCloudDescription
+Reused Keys: cancel, enable, on, off, failedToUpdateSettings
+Total New Keys: 6
+Script: /private/tmp/claude/.../translate_private_cloud.py
+Status: ✅ COMPLETED
+Notes: Private cloud sync settings page for storing audio on cloud. Localized
+       page title, toggle labels (On/Off), description text, enable dialog
+       title and message, enable/disable confirmation messages, and error messages.
+       Similar structure to local_storage_page.dart.
+Commit: 61b26749a
