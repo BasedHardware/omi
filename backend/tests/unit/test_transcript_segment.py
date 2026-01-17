@@ -70,3 +70,21 @@ def test_lowercase_continuation_only_merges_same_speaker():
     segments, _ = TranscriptSegment.combine_segments([], [a, b])
 
     assert len(segments) == 2
+
+
+def test_backward_merge_first_sentence_from_next_segment():
+    a = _segment(
+        "There are so many versions of trying to get a similar idea of digital objects in physical space",
+        speaker="SPEAKER_02",
+        start=0.0,
+        end=2.0,
+    )
+    b = _segment("move. Mhmm.", speaker="SPEAKER_01", start=2.0, end=2.5)
+
+    segments, _ = TranscriptSegment.combine_segments([], [a, b])
+
+    assert len(segments) == 2
+    assert segments[0].speaker == "SPEAKER_02"
+    assert segments[0].text.endswith("space move.")
+    assert segments[1].speaker == "SPEAKER_01"
+    assert segments[1].text == "Mhmm."

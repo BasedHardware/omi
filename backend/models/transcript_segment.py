@@ -84,6 +84,17 @@ class TranscriptSegment(BaseModel):
                 return last, prefix
             return None, text
 
+        def _split_first_sentence(text: str) -> Tuple[str, str]:
+            text = text.strip()
+            if not text:
+                return "", ""
+            parts = [p for p in re.split(r'(?<=[.?!])\s*', text) if p]
+            if not parts:
+                return "", ""
+            first = parts[0]
+            rest = " ".join(parts[1:]).strip()
+            return first, rest
+
         def _should_merge_same_speaker(a: 'TranscriptSegment', b: 'TranscriptSegment') -> bool:
             return (
                 (a.speaker == b.speaker or (a.is_user and b.is_user))
@@ -111,6 +122,17 @@ class TranscriptSegment(BaseModel):
 
             if a.speaker != b.speaker and not (a.is_user and b.is_user) and a.text and b.text:
                 last_incomplete, prefix = _extract_last_incomplete_sentence(a.text)
+                if last_incomplete:
+                    first_sentence, rest = _split_first_sentence(b.text)
+                    if (
+                        rest
+                        and first_sentence
+                        and first_sentence[-1] in [".", "?", "!"]
+                        and len(first_sentence) < len(last_incomplete)
+                    ):
+                        a.text = f'{a.text} {first_sentence}'.strip()
+                        b.text = rest
+                        return a, b
                 if last_incomplete and len(last_incomplete) < len(b.text.strip()):
                     b.text = f'{last_incomplete} {b.text}'.strip()
                     if prefix:
