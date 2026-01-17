@@ -1540,3 +1540,20 @@ Notes: Firmware update page with download/install progress, success screen,
        version comparison, changelog display, and update guide link. Used
        parameterized translation for restartDeviceToComplete with device name.
 Commit: 2676fe67f
+
+--------------------------------------------------------------------------------
+FILE 112 (Phase 2 FILE 42): payments_page.dart + payment_method_card.dart
+--------------------------------------------------------------------------------
+Path: app/lib/pages/payments/payments_page.dart
+      app/lib/pages/payments/widgets/payment_method_card.dart
+New Keys: payments, connectPaymentMethodInfo, selectedPaymentMethod,
+         availablePaymentMethods, activeStatus, connectedStatus,
+         notConnectedStatus, setActive
+Reused Keys: update, connect
+Total New Keys: 8
+Script: /private/tmp/claude/.../translate_payments.py
+Status: ✅ COMPLETED
+Notes: Main payments page and payment method card widget. Localized page title,
+       info message, section headers, and button/menu labels. Status labels
+       (Active, Connected, Not Connected) keys added for future use.
+Commit: e0e55d173
