@@ -1475,3 +1475,18 @@ Status: ✅ COMPLETED
 Notes: Task integrations page for connecting task apps. All required l10n
        keys already existed. Updated "Coming Soon" and "Connect" button texts.
 Commit: 54518a102
+
+--------------------------------------------------------------------------------
+FILE 108 (Phase 2 FILE 38): settings_drawer.dart
+--------------------------------------------------------------------------------
+Path: app/lib/pages/settings/settings_drawer.dart
+New Keys: newTag, needHelpChatWithUs
+Reused Keys: unknownDevice, beta, pro, signOut, signOutQuestion,
+            signOutConfirmation, settings, done
+Total New Keys: 2
+Script: /tmp/translate_settings_drawer.py
+Status: ✅ COMPLETED
+Notes: Main settings drawer/modal. Localized BETA/NEW/PRO tags, sign out
+       dialog title and message, "Need Help? Chat with us" menu item,
+       "Unknown Device" fallback text, and Settings/Done header buttons.
+Commit: a485ec476
