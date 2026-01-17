@@ -656,7 +656,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
   }
 
   String _formatErrorMessage(String errorMessage) {
-    // Clean up WifiSyncException prefix if present
+    // Clean up exception prefixes
     if (errorMessage.startsWith('WifiSyncException: ')) {
       errorMessage = errorMessage.substring('WifiSyncException: '.length);
     }
@@ -664,27 +664,37 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
       errorMessage = errorMessage.substring('Exception: '.length);
     }
 
+    final lowerMessage = errorMessage.toLowerCase();
+
     // Map known error patterns to user-friendly messages
-    if (errorMessage.contains('does not support WiFi')) {
-      return 'Your device hardware does not support WiFi sync. Use Bluetooth instead.';
+    if (lowerMessage.contains('internal error') ||
+        lowerMessage.contains('invalidpacketlength') ||
+        lowerMessage.contains('packet length')) {
+      return 'Failed to enable WiFi on device. Please try again.';
     }
-    if (errorMessage.contains('Hotspot name must be')) {
+    if (lowerMessage.contains('does not support wifi')) {
+      return 'Your device does not support Fast Transfer. Use Bluetooth instead.';
+    }
+    if (errorMessage.contains('Hotspot name must be') || errorMessage.contains('Password must be')) {
       return errorMessage;
     }
-    if (errorMessage.contains('Password must be')) {
-      return errorMessage;
-    }
-    if (errorMessage.contains('hotspot') && errorMessage.contains('enable')) {
+    if (lowerMessage.contains('hotspot') && lowerMessage.contains('enable')) {
       return 'Please enable your phone\'s hotspot and try again.';
     }
-    if (errorMessage.contains('TCP server')) {
-      return 'Failed to start network server. Please try again.';
+    if (lowerMessage.contains('tcp server') || lowerMessage.contains('network server')) {
+      return 'Failed to start transfer. Please try again.';
     }
-    if (errorMessage.contains('timeout') || errorMessage.contains('did not respond')) {
+    if (lowerMessage.contains('timeout') || lowerMessage.contains('did not respond')) {
       return 'Device did not respond. Please try again.';
     }
-    if (errorMessage.contains('credentials')) {
+    if (lowerMessage.contains('credentials')) {
       return 'Invalid WiFi credentials. Check your hotspot settings.';
+    }
+    if (lowerMessage.contains('connection') && lowerMessage.contains('fail')) {
+      return 'WiFi connection failed. Please try again.';
+    }
+    if (lowerMessage.contains('wifi') && lowerMessage.contains('fail')) {
+      return 'WiFi connection failed. Please try again.';
     }
 
     return errorMessage;
@@ -877,22 +887,6 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                                     : 'Processing ${syncProvider.processedWalsCount}/${syncProvider.initialMissingWalsCount}',
                                 style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                                 overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: isWifiSync ? Colors.blue.withOpacity(0.2) : Colors.deepPurple.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                isWifiSync ? 'Fast' : 'BLE',
-                                style: TextStyle(
-                                  color: isWifiSync ? Colors.blue : Colors.deepPurpleAccent,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                ),
                               ),
                             ),
                           ],

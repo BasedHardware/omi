@@ -206,7 +206,20 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   String _formatSyncError(dynamic error, Wal? wal) {
-    final baseMessage = error.toString().replaceAll('Exception: ', '');
+    var baseMessage = error.toString().replaceAll('Exception: ', '').replaceAll('WifiSyncException: ', '');
+
+    // Convert technical WiFi errors to user-friendly messages
+    if (baseMessage.toLowerCase().contains('internal error') ||
+        baseMessage.toLowerCase().contains('invalidpacketlength') ||
+        baseMessage.toLowerCase().contains('packet length')) {
+      baseMessage = 'Failed to enable WiFi on device';
+    } else if (baseMessage.toLowerCase().contains('wifi') && baseMessage.toLowerCase().contains('setup')) {
+      baseMessage = 'Failed to enable WiFi on device';
+    } else if (baseMessage.toLowerCase().contains('tcp') || baseMessage.toLowerCase().contains('socket')) {
+      baseMessage = 'Connection interrupted';
+    } else if (baseMessage.toLowerCase().contains('timeout')) {
+      baseMessage = 'Device did not respond';
+    }
 
     if (wal != null) {
       final walInfo = '${secondsToHumanReadable(wal.seconds)} (${wal.codec.toFormattedString()})';
@@ -214,7 +227,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       return 'Failed to process $source audio file $walInfo: $baseMessage';
     }
 
-    return 'Error processing audio files: $baseMessage';
+    return baseMessage;
   }
 
   Future<void> retrySync() async {
