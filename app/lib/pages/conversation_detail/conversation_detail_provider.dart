@@ -242,16 +242,15 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
     if (!conversation.discarded) {
       getHasConversationSummaryRating(conversation.id).then((value) {
+        if (_isDisposed) return;
         hasConversationSummaryRatingSet = value;
         notifyListeners();
         if (!hasConversationSummaryRatingSet) {
           _ratingTimer = Timer(const Duration(seconds: 15), () {
-            // Only notify if the timer hasn't been cancelled (provider still alive)
-            if (_ratingTimer?.isActive ?? false) {
-              setConversationSummaryRating(conversation.id, -1); // set -1 to indicate is was shown
-              showRatingUI = true;
-              notifyListeners();
-            }
+            if (_isDisposed) return;
+            setConversationSummaryRating(conversation.id, -1); // set -1 to indicate is was shown
+            showRatingUI = true;
+            notifyListeners();
           });
         }
       });
@@ -267,6 +266,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     updateReprocessConversationId(conversation.id);
     try {
       var updatedConversation = await reProcessConversationServer(conversation.id, appId: appId);
+      if (_isDisposed) return false;
       MixpanelManager().reProcessConversation(conversation);
       updateReprocessConversationLoadingState(false);
       updateReprocessConversationId('');
@@ -290,6 +290,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
         bool appExists = appProvider!.apps.any((app) => app.id == appId);
         if (!appExists) {
           await appProvider!.getApps();
+          if (_isDisposed) return false;
         }
       }
       notifyInfo('REPROCESS_SUCCESS');
@@ -376,6 +377,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   Future<void> fetchAndCacheEnabledConversationApps() async {
     try {
       final apps = await getEnabledConversationAppsFromAPI();
+      if (_isDisposed) return;
 
       // Preserve locally added apps that aren't in the API response yet
       final locallyAddedApps =
@@ -404,6 +406,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   Future<void> fetchAndCacheSuggestedApps() async {
     try {
       final apps = await getSuggestedAppsFromAPI();
+      if (_isDisposed) return;
       _cachedSuggestedApps.clear();
       _cachedSuggestedApps.addAll(apps);
       notifyListeners();
@@ -431,6 +434,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     try {
       // Make the server call to enable the app
       final success = await enableAppServer(app.id);
+      if (_isDisposed) return false;
 
       if (success) {
         // Update SharedPreferences
@@ -491,6 +495,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   Future<void> refreshConversation() async {
     try {
       final updatedConversation = await getConversationById(conversation.id);
+      if (_isDisposed) return;
       if (updatedConversation != null) {
         _cachedConversation = updatedConversation;
         conversationProvider?.updateConversation(updatedConversation);
@@ -543,8 +548,11 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     );
   }
 
+  bool _isDisposed = false;
+
   @override
   void dispose() {
+    _isDisposed = true;
     _ratingTimer?.cancel();
     super.dispose();
   }
