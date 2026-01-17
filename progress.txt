@@ -1353,3 +1353,19 @@ Notes: Profile settings page with user info, voice & people, notifications,
        key for Daily Summary subtitle description. The BETA tag was left as-is
        since it's commonly kept in English even in localized apps.
 Commit: ca6772dbf
+
+--------------------------------------------------------------------------------
+FILE 100 (Phase 2 FILE 30): data_privacy_page.dart
+--------------------------------------------------------------------------------
+Path: app/lib/pages/settings/data_privacy_page.dart
+New Keys: accessesDataTypes, triggeredByType, accessesAndTriggeredBy,
+         isTriggeredBy, noSpecificDataAccessConfigured
+Reused Keys: conversations, memories
+Total New Keys: 5
+Script: /tmp/translate_data_privacy.py
+Status: ✅ COMPLETED
+Notes: Data privacy page showing privacy controls and app access info.
+       Updated _getAccessDescription helper method to accept BuildContext
+       and use l10n keys for dynamic access descriptions. New parameterized
+       keys handle app data access types and trigger descriptions.
+Commit: cdb4dfa9b
