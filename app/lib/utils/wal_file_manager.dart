@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -18,6 +19,7 @@ class WalFileManager {
 
   static File? _walFile;
   static File? _walBackupFile;
+  static Future<void> _lastSaveFuture = Future.value();
 
   static Future<void> init() async {
     final directory =
@@ -53,28 +55,47 @@ class WalFileManager {
   }
 
   static Future<bool> saveWals(List<Wal> wals) async {
-    if (_walFile == null) {
-      await init();
+    final previousFuture = _lastSaveFuture;
+    final completer = Completer<void>();
+    _lastSaveFuture = completer.future;
+
+    await previousFuture.catchError((_) {});
+
+    try {
+      if (_walFile == null) {
+        await init();
+      }
+
+      if (_walFile == null) {
+        Logger.debug('WAL file is null, cannot save');
+        return false;
+      }
+
+      if (!_walFile!.parent.existsSync()) {
+        try {
+          await _walFile!.parent.create(recursive: true);
+        } catch (e) {
+          Logger.debug('Failed to create WAL directory: $e');
+          return false;
+        }
+      }
+
+      await _createBackup();
+
+      final jsonData = {
+        'version': 1,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+        'wals': wals.map((wal) => wal.toJson()).toList(),
+      };
+
+      final jsonString = jsonEncode(jsonData);
+      await _walFile!.writeAsString(jsonString);
+
+      Logger.debug('Successfully saved ${wals.length} WALs to file');
+      return true;
+    } finally {
+      completer.complete();
     }
-
-    if (_walFile == null) {
-      Logger.debug('WAL file is null, cannot save');
-      return false;
-    }
-
-    await _createBackup();
-
-    final jsonData = {
-      'version': 1,
-      'timestamp': DateTime.now().millisecondsSinceEpoch,
-      'wals': wals.map((wal) => wal.toJson()).toList(),
-    };
-
-    final jsonString = jsonEncode(jsonData);
-    await _walFile!.writeAsString(jsonString);
-
-    Logger.debug('Successfully saved ${wals.length} WALs to file');
-    return true;
   }
 
   static Future<void> _createBackup() async {
