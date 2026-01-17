@@ -48,6 +48,7 @@ from models.message_event import (
     MessageServiceStatusEvent,
     PhotoDescribedEvent,
     PhotoProcessingEvent,
+    SegmentsDeletedEvent,
     SpeakerLabelSuggestionEvent,
     TranslationEvent,
 )
@@ -621,11 +622,15 @@ async def _listen(
         finished_at: datetime,
     ):
         starts, ends = (0, 0)
+        removed_ids: List[str] = []
 
         if segments:
+            previous_ids = {segment.id for segment in conversation.transcript_segments}
             conversation.transcript_segments, (starts, ends) = TranscriptSegment.combine_segments(
                 conversation.transcript_segments, segments
             )
+            current_ids = {segment.id for segment in conversation.transcript_segments}
+            removed_ids = list(previous_ids - current_ids)
             _process_speaker_assigned_segments(conversation.transcript_segments[starts:ends])
             conversations_db.update_conversation_segments(
                 uid, conversation.id, [segment.dict() for segment in conversation.transcript_segments]
@@ -639,7 +644,7 @@ async def _listen(
                 conversation.source = ConversationSource.openglass
 
         conversations_db.update_conversation_finished_at(uid, conversation.id, finished_at)
-        return conversation, (starts, ends)
+        return conversation, (starts, ends), removed_ids
 
     # STT
     # Validate websocket_active before initiating STT
@@ -1471,7 +1476,10 @@ async def _listen(
             result = _update_in_progress_conversation(conversation, transcript_segments, photos_to_process, finished_at)
             if not result or not result[0]:
                 continue
-            conversation, (starts, ends) = result
+            conversation, (starts, ends), removed_ids = result
+
+            if removed_ids:
+                _send_message_event(SegmentsDeletedEvent(segment_ids=removed_ids))
 
             if transcript_segments:
                 updates_segments = [segment.dict() for segment in conversation.transcript_segments[starts:ends]]

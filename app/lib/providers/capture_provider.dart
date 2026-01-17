@@ -53,7 +53,8 @@ import 'package:omi/backend/schema/message_event.dart'
         TranslationEvent,
         PhotoProcessingEvent,
         PhotoDescribedEvent,
-        FreemiumThresholdReachedEvent;
+        FreemiumThresholdReachedEvent,
+        SegmentsDeletedEvent;
 
 class CaptureProvider extends ChangeNotifier
     with MessageNotifierMixin, WidgetsBindingObserver
@@ -1345,6 +1346,11 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
 
+    if (event is SegmentsDeletedEvent) {
+      _handleSegmentsDeletedEvent(event);
+      return;
+    }
+
     if (event is MessageServiceStatusEvent) {
       // Handle freemium threshold event via status field
       if (event.status == 'freemium_threshold_reached') {
@@ -1458,6 +1464,16 @@ class CaptureProvider extends ChangeNotifier
     } catch (e) {
       Logger.debug("Error handling translation event: $e");
     }
+  }
+
+  void _handleSegmentsDeletedEvent(SegmentsDeletedEvent event) {
+    if (event.segmentIds.isEmpty) return;
+
+    segments.removeWhere((segment) => event.segmentIds.contains(segment.id));
+    suggestionsBySegmentId.removeWhere((key, value) => event.segmentIds.contains(key));
+    taggingSegmentIds.removeWhere((id) => event.segmentIds.contains(id));
+    hasTranscripts = segments.isNotEmpty;
+    notifyListeners();
   }
 
   void _handleSpeakerLabelSuggestionEvent(SpeakerLabelSuggestionEvent event) {
