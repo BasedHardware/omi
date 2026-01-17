@@ -299,6 +299,16 @@ class ServerConversation {
     return transcriptSegments.indexWhere((element) => element.speakerId == speakerId);
   }
 
+  String getSummary() {
+    if (structured.overview.trim().isNotEmpty) {
+      return structured.overview.trim();
+    }
+    if (appResults.isNotEmpty && appResults[0].content.trim().isNotEmpty) {
+      return appResults[0].content.trim();
+    }
+    return structured.toString();
+  }
+
   String getTag() {
     if (source == ConversationSource.screenpipe) return 'Screenpipe';
     if (source == ConversationSource.openglass) return 'OmiGlass';
