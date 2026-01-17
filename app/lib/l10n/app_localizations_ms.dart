@@ -4904,4 +4904,58 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get setActive => 'Tetapkan Aktif';
+
+  @override
+  String get getPaidThroughStripe => 'Dapatkan bayaran untuk jualan aplikasi anda melalui Stripe';
+
+  @override
+  String get monthlyPayouts => 'Pembayaran bulanan';
+
+  @override
+  String get monthlyPayoutsDescription => 'Terima bayaran bulanan terus ke akaun anda apabila mencapai \$10 dalam pendapatan';
+
+  @override
+  String get secureAndReliable => 'Selamat dan boleh dipercayai';
+
+  @override
+  String get stripeSecureDescription => 'Stripe memastikan pemindahan hasil aplikasi anda yang selamat dan tepat pada masanya';
+
+  @override
+  String get selectYourCountry => 'Pilih negara anda';
+
+  @override
+  String get countrySelectionPermanent => 'Pilihan negara anda adalah kekal dan tidak boleh ditukar kemudian.';
+
+  @override
+  String get byClickingConnectNow => 'Dengan mengklik \"Sambung Sekarang\" anda bersetuju dengan';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Perjanjian Akaun Bersambung Stripe';
+
+  @override
+  String get errorConnectingToStripe => 'Ralat menyambung ke Stripe! Sila cuba lagi kemudian.';
+
+  @override
+  String get connectingYourStripeAccount => 'Menyambungkan akaun Stripe anda';
+
+  @override
+  String get stripeOnboardingInstructions => 'Sila lengkapkan proses penerimaan Stripe dalam pelayar anda. Halaman ini akan dikemas kini secara automatik setelah selesai.';
+
+  @override
+  String get failedTryAgain => 'Gagal? Cuba Lagi';
+
+  @override
+  String get illDoItLater => 'Saya akan lakukannya nanti';
+
+  @override
+  String get successfullyConnected => 'Berjaya Disambungkan!';
+
+  @override
+  String get stripeReadyForPayments => 'Akaun Stripe anda kini sedia menerima pembayaran. Anda boleh mula menjana pendapatan daripada jualan aplikasi anda dengan segera.';
+
+  @override
+  String get updateStripeDetails => 'Kemas Kini Butiran Stripe';
+
+  @override
+  String get errorUpdatingStripeDetails => 'Ralat mengemas kini butiran Stripe! Sila cuba lagi kemudian.';
 }

@@ -4904,4 +4904,58 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get setActive => 'Määra aktiivseks';
+
+  @override
+  String get getPaidThroughStripe => 'Saate oma rakenduste müügi eest tasu Stripe\'i kaudu';
+
+  @override
+  String get monthlyPayouts => 'Igakuised väljamaksed';
+
+  @override
+  String get monthlyPayoutsDescription => 'Saate igakuiseid makseid otse oma kontole, kui jõuate 10 \$ teenimiseni';
+
+  @override
+  String get secureAndReliable => 'Turvaline ja usaldusväärne';
+
+  @override
+  String get stripeSecureDescription => 'Stripe tagab teie rakenduse tulude turvalised ja õigeaegsed ülekanded';
+
+  @override
+  String get selectYourCountry => 'Valige oma riik';
+
+  @override
+  String get countrySelectionPermanent => 'Teie riigivalik on püsiv ja seda ei saa hiljem muuta.';
+
+  @override
+  String get byClickingConnectNow => 'Klõpsates \"Ühenda kohe\" nõustute';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Stripe ühendatud konto leping';
+
+  @override
+  String get errorConnectingToStripe => 'Viga Stripe\'iga ühendamisel! Palun proovige hiljem uuesti.';
+
+  @override
+  String get connectingYourStripeAccount => 'Teie Stripe konto ühendamine';
+
+  @override
+  String get stripeOnboardingInstructions => 'Palun viige Stripe\'i registreerimisprotsess lõpule oma brauseris. See leht värskendatakse automaatselt pärast lõpetamist.';
+
+  @override
+  String get failedTryAgain => 'Ebaõnnestus? Proovi uuesti';
+
+  @override
+  String get illDoItLater => 'Teen seda hiljem';
+
+  @override
+  String get successfullyConnected => 'Edukalt ühendatud!';
+
+  @override
+  String get stripeReadyForPayments => 'Teie Stripe konto on nüüd valmis makseid vastu võtma. Saate kohe alustada oma rakenduste müügist teenimist.';
+
+  @override
+  String get updateStripeDetails => 'Värskenda Stripe andmeid';
+
+  @override
+  String get errorUpdatingStripeDetails => 'Viga Stripe andmete värskendamisel! Palun proovige hiljem uuesti.';
 }

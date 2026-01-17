@@ -4904,4 +4904,58 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get setActive => 'ตั้งเป็นใช้งาน';
+
+  @override
+  String get getPaidThroughStripe => 'รับเงินจากการขายแอปของคุณผ่าน Stripe';
+
+  @override
+  String get monthlyPayouts => 'การจ่ายเงินรายเดือน';
+
+  @override
+  String get monthlyPayoutsDescription => 'รับเงินรายเดือนโดยตรงเข้าบัญชีของคุณเมื่อรายได้ถึง \$10';
+
+  @override
+  String get secureAndReliable => 'ปลอดภัยและเชื่อถือได้';
+
+  @override
+  String get stripeSecureDescription => 'Stripe รับประกันการโอนรายได้จากแอปของคุณอย่างปลอดภัยและตรงเวลา';
+
+  @override
+  String get selectYourCountry => 'เลือกประเทศของคุณ';
+
+  @override
+  String get countrySelectionPermanent => 'การเลือกประเทศของคุณเป็นการถาวรและไม่สามารถเปลี่ยนแปลงได้ในภายหลัง';
+
+  @override
+  String get byClickingConnectNow => 'การคลิก \"เชื่อมต่อตอนนี้\" หมายความว่าคุณยอมรับ';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'ข้อตกลงบัญชี Stripe Connected';
+
+  @override
+  String get errorConnectingToStripe => 'เกิดข้อผิดพลาดในการเชื่อมต่อกับ Stripe! กรุณาลองใหม่ภายหลัง';
+
+  @override
+  String get connectingYourStripeAccount => 'กำลังเชื่อมต่อบัญชี Stripe ของคุณ';
+
+  @override
+  String get stripeOnboardingInstructions => 'กรุณาดำเนินการลงทะเบียน Stripe ให้เสร็จสิ้นในเบราว์เซอร์ของคุณ หน้านี้จะอัปเดตโดยอัตโนมัติเมื่อเสร็จสิ้น';
+
+  @override
+  String get failedTryAgain => 'ล้มเหลว? ลองอีกครั้ง';
+
+  @override
+  String get illDoItLater => 'ฉันจะทำทีหลัง';
+
+  @override
+  String get successfullyConnected => 'เชื่อมต่อสำเร็จ!';
+
+  @override
+  String get stripeReadyForPayments => 'บัญชี Stripe ของคุณพร้อมรับการชำระเงินแล้ว คุณสามารถเริ่มสร้างรายได้จากการขายแอปได้ทันที';
+
+  @override
+  String get updateStripeDetails => 'อัปเดตรายละเอียด Stripe';
+
+  @override
+  String get errorUpdatingStripeDetails => 'เกิดข้อผิดพลาดในการอัปเดตรายละเอียด Stripe! กรุณาลองใหม่ภายหลัง';
 }

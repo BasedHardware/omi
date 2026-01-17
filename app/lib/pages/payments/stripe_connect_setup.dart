@@ -12,6 +12,7 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/animated_loading_button.dart';
 import 'package:omi/widgets/extensions/string.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'payment_method_provider.dart';
 
 class StripeConnectSetup extends StatefulWidget {
@@ -110,9 +111,9 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                         ),
                         const SizedBox(height: 32),
                         if (!provider.isStripePolling && !provider.isStripeConnected) ...[
-                          const Text(
-                            'Get paid for your app sales through Stripe',
-                            style: TextStyle(
+                          Text(
+                            context.l10n.getPaidThroughStripe,
+                            style: const TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.bold,
                               color: Colors.white,
@@ -122,15 +123,14 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                           const SizedBox(height: 48),
                           _buildFeatureRow(
                             icon: Icons.payments_rounded,
-                            title: 'Monthly payouts',
-                            description:
-                                'Receive monthly payments directly to your account when you reach \$10 in earnings',
+                            title: context.l10n.monthlyPayouts,
+                            description: context.l10n.monthlyPayoutsDescription,
                           ),
                           const SizedBox(height: 24),
                           _buildFeatureRow(
                             icon: Icons.shield_outlined,
-                            title: 'Secure and reliable',
-                            description: 'Stripe ensures safe and timely transfers of your app revenue',
+                            title: context.l10n.secureAndReliable,
+                            description: context.l10n.stripeSecureDescription,
                           ),
                           const SizedBox(height: 24),
                           provider.stripeConnectionState == PaymentConnectionState.notConnected
@@ -173,12 +173,12 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                                               const SizedBox(width: 8),
                                               Text(
                                                 provider.selectedCountryId?.isEmpty ?? true
-                                                    ? 'Select your country'
+                                                    ? context.l10n.selectYourCountry
                                                     : ((provider.filteredCountries.firstWhereOrNull((country) =>
                                                                 country['id'] ==
                                                                 provider.selectedCountryId)?['name'] as String?)
                                                             ?.decodeString ??
-                                                        'Select your country'),
+                                                        context.l10n.selectYourCountry),
                                                 style: const TextStyle(color: Colors.white),
                                               ),
                                             ],
@@ -204,7 +204,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                                       const SizedBox(width: 8),
                                       Expanded(
                                         child: Text(
-                                          'Your country selection is permanent and cannot be changed later.',
+                                          context.l10n.countrySelectionPermanent,
                                           style: TextStyle(
                                             color: Colors.red[400],
                                             fontSize: 14,
@@ -217,7 +217,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                               : const SizedBox(),
                           const SizedBox(height: 24),
                           Text(
-                            'By clicking on "Connect Now" you agree to the',
+                            context.l10n.byClickingConnectNow,
                             style: TextStyle(
                               color: Colors.grey[400],
                               fontSize: 14,
@@ -228,9 +228,9 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                             onTap: () {
                               launchUrl(Uri.parse('https://stripe.com/connect-account/legal'));
                             },
-                            child: const Text(
-                              'Stripe Connected Account Agreement',
-                              style: TextStyle(
+                            child: Text(
+                              context.l10n.stripeConnectedAccountAgreement,
+                              style: const TextStyle(
                                 color: Color(0xFF635BFF),
                                 fontSize: 14,
                               ),
@@ -238,7 +238,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                           ),
                           const SizedBox(height: 18),
                           AnimatedLoadingButton(
-                            text: "Connect Now",
+                            text: context.l10n.connectNow,
                             loaderColor: Colors.black,
                             onPressed: provider.stripeConnectionState == PaymentConnectionState.inComplete ||
                                     provider.selectedCountryId != null
@@ -249,8 +249,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                                       provider.startStripePolling();
                                       await launchUrl(Uri.parse(url));
                                     } else {
-                                      AppSnackbar.showSnackbarError(
-                                          "Error connecting to Stripe! Please try again later.");
+                                      AppSnackbar.showSnackbarError(context.l10n.errorConnectingToStripe);
                                     }
                                   }
                                 : () async {},
@@ -301,9 +300,9 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                             },
                           ),
                           const SizedBox(height: 48),
-                          const Text(
-                            'Connecting your Stripe account',
-                            style: TextStyle(
+                          Text(
+                            context.l10n.connectingYourStripeAccount,
+                            style: const TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.bold,
                               color: Colors.white,
@@ -312,7 +311,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            'Please complete the Stripe onboarding process in your browser. This page will automatically update once completed.',
+                            context.l10n.stripeOnboardingInstructions,
                             style: TextStyle(
                               fontSize: 16,
                               color: Colors.grey[400],
@@ -321,7 +320,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                           ),
                           const SizedBox(height: 24),
                           AnimatedLoadingButton(
-                            text: "Failed? Try Again",
+                            text: context.l10n.failedTryAgain,
                             onPressed: () async {
                               MixpanelManager().track('Stripe Connect Retry');
                               var res = await provider.connectStripe();
@@ -329,7 +328,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                                 provider.startStripePolling();
                                 await launchUrl(Uri.parse(res));
                               } else {
-                                AppSnackbar.showSnackbarError("Error connecting to Stripe! Please try again later.");
+                                AppSnackbar.showSnackbarError(context.l10n.errorConnectingToStripe);
                               }
                             },
                             color: Colors.white,
@@ -347,7 +346,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                                 Navigator.pop(context);
                               },
                               child: Text(
-                                "I'll do it later",
+                                context.l10n.illDoItLater,
                                 style: TextStyle(color: Colors.grey[400]),
                               )),
                         ],
@@ -385,9 +384,9 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                                   ),
                                 ),
                                 const SizedBox(height: 24),
-                                const Text(
-                                  'Successfully Connected! 🎉',
-                                  style: TextStyle(
+                                Text(
+                                  '${context.l10n.successfullyConnected} 🎉',
+                                  style: const TextStyle(
                                     fontSize: 24,
                                     fontWeight: FontWeight.bold,
                                     color: Colors.white,
@@ -396,7 +395,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                                 ),
                                 const SizedBox(height: 16),
                                 Text(
-                                  'Your Stripe account is now ready to receive payments. You can start earning from your app sales right away.',
+                                  context.l10n.stripeReadyForPayments,
                                   style: TextStyle(
                                     fontSize: 16,
                                     color: Colors.grey[400],
@@ -409,7 +408,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                           ),
                           const SizedBox(height: 24),
                           AnimatedLoadingButton(
-                            text: "Update Stripe Details",
+                            text: context.l10n.updateStripeDetails,
                             onPressed: () async {
                               MixpanelManager().track('Stripe Connect Update');
                               var url = await provider.connectStripe();
@@ -417,7 +416,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                                 provider.startStripePolling();
                                 await launchUrl(Uri.parse(url));
                               } else {
-                                AppSnackbar.showSnackbarError("Error updating Stripe details! Please try again later.");
+                                AppSnackbar.showSnackbarError(context.l10n.errorUpdatingStripeDetails);
                               }
                             },
                             color: Colors.white,
@@ -435,7 +434,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                               Navigator.pop(context);
                             },
                             child: Text(
-                              "Go back",
+                              context.l10n.goBack,
                               style: TextStyle(color: Colors.grey[400]),
                             ),
                           ),

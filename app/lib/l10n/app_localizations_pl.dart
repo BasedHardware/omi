@@ -4905,4 +4905,58 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get setActive => 'Ustaw jako aktywny';
+
+  @override
+  String get getPaidThroughStripe => 'Otrzymuj płatności za sprzedaż aplikacji przez Stripe';
+
+  @override
+  String get monthlyPayouts => 'Miesięczne wypłaty';
+
+  @override
+  String get monthlyPayoutsDescription => 'Otrzymuj miesięczne płatności bezpośrednio na konto, gdy osiągniesz 10 \$ zarobków';
+
+  @override
+  String get secureAndReliable => 'Bezpieczne i niezawodne';
+
+  @override
+  String get stripeSecureDescription => 'Stripe zapewnia bezpieczne i terminowe przelewy przychodów z aplikacji';
+
+  @override
+  String get selectYourCountry => 'Wybierz swój kraj';
+
+  @override
+  String get countrySelectionPermanent => 'Wybór kraju jest trwały i nie można go później zmienić.';
+
+  @override
+  String get byClickingConnectNow => 'Klikając \"Połącz teraz\" zgadzasz się na';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Umowa konta połączonego Stripe';
+
+  @override
+  String get errorConnectingToStripe => 'Błąd łączenia ze Stripe! Spróbuj ponownie później.';
+
+  @override
+  String get connectingYourStripeAccount => 'Łączenie konta Stripe';
+
+  @override
+  String get stripeOnboardingInstructions => 'Proszę ukończyć proces rejestracji Stripe w przeglądarce. Ta strona zostanie automatycznie zaktualizowana po zakończeniu.';
+
+  @override
+  String get failedTryAgain => 'Nie udało się? Spróbuj ponownie';
+
+  @override
+  String get illDoItLater => 'Zrobię to później';
+
+  @override
+  String get successfullyConnected => 'Pomyślnie połączono!';
+
+  @override
+  String get stripeReadyForPayments => 'Twoje konto Stripe jest teraz gotowe do przyjmowania płatności. Możesz od razu zacząć zarabiać na sprzedaży aplikacji.';
+
+  @override
+  String get updateStripeDetails => 'Zaktualizuj dane Stripe';
+
+  @override
+  String get errorUpdatingStripeDetails => 'Błąd aktualizacji danych Stripe! Spróbuj ponownie później.';
 }

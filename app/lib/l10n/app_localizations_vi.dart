@@ -4904,4 +4904,58 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get setActive => 'Đặt làm hoạt động';
+
+  @override
+  String get getPaidThroughStripe => 'Nhận thanh toán cho việc bán ứng dụng của bạn qua Stripe';
+
+  @override
+  String get monthlyPayouts => 'Thanh toán hàng tháng';
+
+  @override
+  String get monthlyPayoutsDescription => 'Nhận thanh toán hàng tháng trực tiếp vào tài khoản khi đạt \$10 thu nhập';
+
+  @override
+  String get secureAndReliable => 'An toàn và đáng tin cậy';
+
+  @override
+  String get stripeSecureDescription => 'Stripe đảm bảo chuyển khoản an toàn và kịp thời doanh thu ứng dụng của bạn';
+
+  @override
+  String get selectYourCountry => 'Chọn quốc gia của bạn';
+
+  @override
+  String get countrySelectionPermanent => 'Lựa chọn quốc gia của bạn là vĩnh viễn và không thể thay đổi sau này.';
+
+  @override
+  String get byClickingConnectNow => 'Bằng cách nhấp vào \"Kết nối ngay\" bạn đồng ý với';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Thỏa thuận Tài khoản Kết nối Stripe';
+
+  @override
+  String get errorConnectingToStripe => 'Lỗi kết nối với Stripe! Vui lòng thử lại sau.';
+
+  @override
+  String get connectingYourStripeAccount => 'Đang kết nối tài khoản Stripe của bạn';
+
+  @override
+  String get stripeOnboardingInstructions => 'Vui lòng hoàn tất quy trình đăng ký Stripe trong trình duyệt của bạn. Trang này sẽ tự động cập nhật sau khi hoàn tất.';
+
+  @override
+  String get failedTryAgain => 'Thất bại? Thử lại';
+
+  @override
+  String get illDoItLater => 'Tôi sẽ làm sau';
+
+  @override
+  String get successfullyConnected => 'Kết nối thành công!';
+
+  @override
+  String get stripeReadyForPayments => 'Tài khoản Stripe của bạn đã sẵn sàng nhận thanh toán. Bạn có thể bắt đầu kiếm tiền từ việc bán ứng dụng ngay bây giờ.';
+
+  @override
+  String get updateStripeDetails => 'Cập nhật chi tiết Stripe';
+
+  @override
+  String get errorUpdatingStripeDetails => 'Lỗi cập nhật chi tiết Stripe! Vui lòng thử lại sau.';
 }

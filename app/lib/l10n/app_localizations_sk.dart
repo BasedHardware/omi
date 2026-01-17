@@ -4904,4 +4904,58 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get setActive => 'Nastaviť ako aktívne';
+
+  @override
+  String get getPaidThroughStripe => 'Získajte platby za predaj aplikácií cez Stripe';
+
+  @override
+  String get monthlyPayouts => 'Mesačné výplaty';
+
+  @override
+  String get monthlyPayoutsDescription => 'Dostávajte mesačné platby priamo na účet, keď dosiahnete zárobky 10 \$';
+
+  @override
+  String get secureAndReliable => 'Bezpečné a spoľahlivé';
+
+  @override
+  String get stripeSecureDescription => 'Stripe zabezpečuje bezpečné a včasné prevody príjmov z vašej aplikácie';
+
+  @override
+  String get selectYourCountry => 'Vyberte svoju krajinu';
+
+  @override
+  String get countrySelectionPermanent => 'Výber krajiny je trvalý a neskôr ho nemožno zmeniť.';
+
+  @override
+  String get byClickingConnectNow => 'Kliknutím na \"Pripojiť teraz\" súhlasíte s';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Zmluva o pripojenom účte Stripe';
+
+  @override
+  String get errorConnectingToStripe => 'Chyba pri pripájaní k Stripe! Skúste to prosím neskôr.';
+
+  @override
+  String get connectingYourStripeAccount => 'Pripájanie vášho účtu Stripe';
+
+  @override
+  String get stripeOnboardingInstructions => 'Dokončite prosím proces registrácie Stripe vo vašom prehliadači. Táto stránka sa automaticky aktualizuje po dokončení.';
+
+  @override
+  String get failedTryAgain => 'Zlyhalo? Skúsiť znova';
+
+  @override
+  String get illDoItLater => 'Urobím to neskôr';
+
+  @override
+  String get successfullyConnected => 'Úspešne pripojené!';
+
+  @override
+  String get stripeReadyForPayments => 'Váš účet Stripe je teraz pripravený prijímať platby. Môžete ihneď začať zarábať z predaja aplikácií.';
+
+  @override
+  String get updateStripeDetails => 'Aktualizovať údaje Stripe';
+
+  @override
+  String get errorUpdatingStripeDetails => 'Chyba pri aktualizácii údajov Stripe! Skúste to prosím neskôr.';
 }

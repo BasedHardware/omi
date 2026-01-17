@@ -4904,4 +4904,58 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get setActive => 'Imposta come attivo';
+
+  @override
+  String get getPaidThroughStripe => 'Ricevi pagamenti per le vendite delle tue app tramite Stripe';
+
+  @override
+  String get monthlyPayouts => 'Pagamenti mensili';
+
+  @override
+  String get monthlyPayoutsDescription => 'Ricevi pagamenti mensili direttamente sul tuo conto quando raggiungi \$10 di guadagni';
+
+  @override
+  String get secureAndReliable => 'Sicuro e affidabile';
+
+  @override
+  String get stripeSecureDescription => 'Stripe garantisce trasferimenti sicuri e puntuali dei ricavi della tua app';
+
+  @override
+  String get selectYourCountry => 'Seleziona il tuo paese';
+
+  @override
+  String get countrySelectionPermanent => 'La selezione del paese è permanente e non può essere modificata in seguito.';
+
+  @override
+  String get byClickingConnectNow => 'Cliccando su \"Connetti ora\" accetti il';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Accordo Account Connesso Stripe';
+
+  @override
+  String get errorConnectingToStripe => 'Errore di connessione a Stripe! Riprova più tardi.';
+
+  @override
+  String get connectingYourStripeAccount => 'Connessione del tuo account Stripe';
+
+  @override
+  String get stripeOnboardingInstructions => 'Completa il processo di onboarding Stripe nel tuo browser. Questa pagina si aggiornerà automaticamente una volta completato.';
+
+  @override
+  String get failedTryAgain => 'Fallito? Riprova';
+
+  @override
+  String get illDoItLater => 'Lo farò più tardi';
+
+  @override
+  String get successfullyConnected => 'Connesso con successo!';
+
+  @override
+  String get stripeReadyForPayments => 'Il tuo account Stripe è ora pronto a ricevere pagamenti. Puoi iniziare a guadagnare dalle vendite delle tue app subito.';
+
+  @override
+  String get updateStripeDetails => 'Aggiorna dettagli Stripe';
+
+  @override
+  String get errorUpdatingStripeDetails => 'Errore nell\'aggiornamento dei dettagli Stripe! Riprova più tardi.';
 }

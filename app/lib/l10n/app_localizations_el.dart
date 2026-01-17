@@ -4904,4 +4904,58 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get setActive => 'Ορισμός ως ενεργό';
+
+  @override
+  String get getPaidThroughStripe => 'Λάβετε πληρωμή για τις πωλήσεις της εφαρμογής σας μέσω Stripe';
+
+  @override
+  String get monthlyPayouts => 'Μηνιαίες πληρωμές';
+
+  @override
+  String get monthlyPayoutsDescription => 'Λάβετε μηνιαίες πληρωμές απευθείας στον λογαριασμό σας όταν φτάσετε τα \$10 σε κέρδη';
+
+  @override
+  String get secureAndReliable => 'Ασφαλές και αξιόπιστο';
+
+  @override
+  String get stripeSecureDescription => 'Το Stripe εξασφαλίζει ασφαλείς και έγκαιρες μεταφορές των εσόδων της εφαρμογής σας';
+
+  @override
+  String get selectYourCountry => 'Επιλέξτε τη χώρα σας';
+
+  @override
+  String get countrySelectionPermanent => 'Η επιλογή χώρας είναι μόνιμη και δεν μπορεί να αλλάξει αργότερα.';
+
+  @override
+  String get byClickingConnectNow => 'Κάνοντας κλικ στο \"Σύνδεση τώρα\" συμφωνείτε με';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Συμφωνία Συνδεδεμένου Λογαριασμού Stripe';
+
+  @override
+  String get errorConnectingToStripe => 'Σφάλμα σύνδεσης με το Stripe! Παρακαλώ δοκιμάστε ξανά αργότερα.';
+
+  @override
+  String get connectingYourStripeAccount => 'Σύνδεση του λογαριασμού Stripe σας';
+
+  @override
+  String get stripeOnboardingInstructions => 'Παρακαλώ ολοκληρώστε τη διαδικασία εγγραφής Stripe στον browser σας. Αυτή η σελίδα θα ενημερωθεί αυτόματα μετά την ολοκλήρωση.';
+
+  @override
+  String get failedTryAgain => 'Απέτυχε; Δοκιμάστε ξανά';
+
+  @override
+  String get illDoItLater => 'Θα το κάνω αργότερα';
+
+  @override
+  String get successfullyConnected => 'Επιτυχής σύνδεση!';
+
+  @override
+  String get stripeReadyForPayments => 'Ο λογαριασμός Stripe σας είναι τώρα έτοιμος να λαμβάνει πληρωμές. Μπορείτε να αρχίσετε να κερδίζετε από τις πωλήσεις των εφαρμογών σας αμέσως.';
+
+  @override
+  String get updateStripeDetails => 'Ενημέρωση στοιχείων Stripe';
+
+  @override
+  String get errorUpdatingStripeDetails => 'Σφάλμα ενημέρωσης στοιχείων Stripe! Παρακαλώ δοκιμάστε ξανά αργότερα.';
 }

@@ -4904,4 +4904,58 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get setActive => 'Ange som aktiv';
+
+  @override
+  String get getPaidThroughStripe => 'Få betalt för dina appförsäljningar genom Stripe';
+
+  @override
+  String get monthlyPayouts => 'Månatliga utbetalningar';
+
+  @override
+  String get monthlyPayoutsDescription => 'Få månatliga utbetalningar direkt till ditt konto när du når \$10 i intäkter';
+
+  @override
+  String get secureAndReliable => 'Säkert och pålitligt';
+
+  @override
+  String get stripeSecureDescription => 'Stripe säkerställer säkra och snabba överföringar av dina appintäkter';
+
+  @override
+  String get selectYourCountry => 'Välj ditt land';
+
+  @override
+  String get countrySelectionPermanent => 'Ditt landsval är permanent och kan inte ändras senare.';
+
+  @override
+  String get byClickingConnectNow => 'Genom att klicka på \"Anslut nu\" godkänner du';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Stripe Connected Account-avtal';
+
+  @override
+  String get errorConnectingToStripe => 'Fel vid anslutning till Stripe! Försök igen senare.';
+
+  @override
+  String get connectingYourStripeAccount => 'Ansluter ditt Stripe-konto';
+
+  @override
+  String get stripeOnboardingInstructions => 'Slutför Stripe-onboardingprocessen i din webbläsare. Denna sida uppdateras automatiskt när processen är klar.';
+
+  @override
+  String get failedTryAgain => 'Misslyckades? Försök igen';
+
+  @override
+  String get illDoItLater => 'Jag gör det senare';
+
+  @override
+  String get successfullyConnected => 'Framgångsrikt ansluten!';
+
+  @override
+  String get stripeReadyForPayments => 'Ditt Stripe-konto är nu redo att ta emot betalningar. Du kan börja tjäna pengar på dina appförsäljningar direkt.';
+
+  @override
+  String get updateStripeDetails => 'Uppdatera Stripe-uppgifter';
+
+  @override
+  String get errorUpdatingStripeDetails => 'Fel vid uppdatering av Stripe-uppgifter! Försök igen senare.';
 }

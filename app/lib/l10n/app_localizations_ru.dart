@@ -4905,4 +4905,58 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get setActive => 'Сделать активным';
+
+  @override
+  String get getPaidThroughStripe => 'Получайте оплату за продажи приложений через Stripe';
+
+  @override
+  String get monthlyPayouts => 'Ежемесячные выплаты';
+
+  @override
+  String get monthlyPayoutsDescription => 'Получайте ежемесячные выплаты прямо на счёт, когда заработаете \$10';
+
+  @override
+  String get secureAndReliable => 'Безопасно и надёжно';
+
+  @override
+  String get stripeSecureDescription => 'Stripe обеспечивает безопасные и своевременные переводы доходов от приложения';
+
+  @override
+  String get selectYourCountry => 'Выберите свою страну';
+
+  @override
+  String get countrySelectionPermanent => 'Выбор страны является постоянным и не может быть изменён позже.';
+
+  @override
+  String get byClickingConnectNow => 'Нажимая \"Подключить сейчас\", вы соглашаетесь с';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Соглашение о подключенном аккаунте Stripe';
+
+  @override
+  String get errorConnectingToStripe => 'Ошибка подключения к Stripe! Пожалуйста, попробуйте позже.';
+
+  @override
+  String get connectingYourStripeAccount => 'Подключение вашего аккаунта Stripe';
+
+  @override
+  String get stripeOnboardingInstructions => 'Пожалуйста, завершите процесс регистрации Stripe в браузере. Эта страница автоматически обновится после завершения.';
+
+  @override
+  String get failedTryAgain => 'Не удалось? Попробовать снова';
+
+  @override
+  String get illDoItLater => 'Сделаю позже';
+
+  @override
+  String get successfullyConnected => 'Успешно подключено!';
+
+  @override
+  String get stripeReadyForPayments => 'Ваш аккаунт Stripe готов принимать платежи. Вы можете сразу начать зарабатывать на продажах приложений.';
+
+  @override
+  String get updateStripeDetails => 'Обновить данные Stripe';
+
+  @override
+  String get errorUpdatingStripeDetails => 'Ошибка обновления данных Stripe! Пожалуйста, попробуйте позже.';
 }

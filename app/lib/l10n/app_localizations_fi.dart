@@ -4904,4 +4904,58 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get setActive => 'Aseta aktiiviseksi';
+
+  @override
+  String get getPaidThroughStripe => 'Saa maksuja sovellustesi myynnistä Stripen kautta';
+
+  @override
+  String get monthlyPayouts => 'Kuukausittaiset maksut';
+
+  @override
+  String get monthlyPayoutsDescription => 'Saat kuukausittaiset maksut suoraan tilillesi, kun saavutat 10 \$ ansiot';
+
+  @override
+  String get secureAndReliable => 'Turvallinen ja luotettava';
+
+  @override
+  String get stripeSecureDescription => 'Stripe varmistaa sovelluksesi tulojen turvalliset ja oikea-aikaiset siirrot';
+
+  @override
+  String get selectYourCountry => 'Valitse maasi';
+
+  @override
+  String get countrySelectionPermanent => 'Maavalinasi on pysyvä eikä sitä voi muuttaa myöhemmin.';
+
+  @override
+  String get byClickingConnectNow => 'Napsauttamalla \"Yhdistä nyt\" hyväksyt';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Stripe Connected Account -sopimus';
+
+  @override
+  String get errorConnectingToStripe => 'Virhe yhdistettäessä Stripeen! Yritä myöhemmin uudelleen.';
+
+  @override
+  String get connectingYourStripeAccount => 'Stripe-tilisi yhdistäminen';
+
+  @override
+  String get stripeOnboardingInstructions => 'Suorita Stripe-käyttöönottoprosessi selaimessasi. Tämä sivu päivittyy automaattisesti, kun prosessi on valmis.';
+
+  @override
+  String get failedTryAgain => 'Epäonnistui? Yritä uudelleen';
+
+  @override
+  String get illDoItLater => 'Teen sen myöhemmin';
+
+  @override
+  String get successfullyConnected => 'Yhdistetty onnistuneesti!';
+
+  @override
+  String get stripeReadyForPayments => 'Stripe-tilisi on nyt valmis vastaanottamaan maksuja. Voit alkaa ansaita sovellustesi myynnistä heti.';
+
+  @override
+  String get updateStripeDetails => 'Päivitä Stripe-tiedot';
+
+  @override
+  String get errorUpdatingStripeDetails => 'Virhe Stripe-tietojen päivityksessä! Yritä myöhemmin uudelleen.';
 }

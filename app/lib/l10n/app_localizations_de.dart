@@ -4904,4 +4904,58 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get setActive => 'Als aktiv festlegen';
+
+  @override
+  String get getPaidThroughStripe => 'Erhalten Sie Zahlungen für Ihre App-Verkäufe über Stripe';
+
+  @override
+  String get monthlyPayouts => 'Monatliche Auszahlungen';
+
+  @override
+  String get monthlyPayoutsDescription => 'Erhalten Sie monatliche Zahlungen direkt auf Ihr Konto, wenn Sie 10 \$ Einnahmen erreichen';
+
+  @override
+  String get secureAndReliable => 'Sicher und zuverlässig';
+
+  @override
+  String get stripeSecureDescription => 'Stripe gewährleistet sichere und pünktliche Überweisungen Ihrer App-Einnahmen';
+
+  @override
+  String get selectYourCountry => 'Wählen Sie Ihr Land';
+
+  @override
+  String get countrySelectionPermanent => 'Ihre Länderauswahl ist dauerhaft und kann später nicht geändert werden.';
+
+  @override
+  String get byClickingConnectNow => 'Durch Klicken auf \"Jetzt verbinden\" stimmen Sie zu';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Stripe Connected Account-Vereinbarung';
+
+  @override
+  String get errorConnectingToStripe => 'Fehler beim Verbinden mit Stripe! Bitte versuchen Sie es später erneut.';
+
+  @override
+  String get connectingYourStripeAccount => 'Verbindung Ihres Stripe-Kontos';
+
+  @override
+  String get stripeOnboardingInstructions => 'Bitte schließen Sie den Stripe-Onboarding-Prozess in Ihrem Browser ab. Diese Seite wird automatisch aktualisiert, sobald der Vorgang abgeschlossen ist.';
+
+  @override
+  String get failedTryAgain => 'Fehlgeschlagen? Erneut versuchen';
+
+  @override
+  String get illDoItLater => 'Ich mache es später';
+
+  @override
+  String get successfullyConnected => 'Erfolgreich verbunden!';
+
+  @override
+  String get stripeReadyForPayments => 'Ihr Stripe-Konto ist jetzt bereit, Zahlungen zu empfangen. Sie können sofort mit dem Verdienen aus Ihren App-Verkäufen beginnen.';
+
+  @override
+  String get updateStripeDetails => 'Stripe-Details aktualisieren';
+
+  @override
+  String get errorUpdatingStripeDetails => 'Fehler beim Aktualisieren der Stripe-Details! Bitte versuchen Sie es später erneut.';
 }

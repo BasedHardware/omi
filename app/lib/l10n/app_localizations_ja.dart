@@ -4898,4 +4898,58 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get setActive => 'アクティブに設定';
+
+  @override
+  String get getPaidThroughStripe => 'Stripeを通じてアプリ販売の収益を受け取りましょう';
+
+  @override
+  String get monthlyPayouts => '月次支払い';
+
+  @override
+  String get monthlyPayoutsDescription => '収益が10ドルに達すると、毎月の支払いが直接口座に届きます';
+
+  @override
+  String get secureAndReliable => '安全で信頼性が高い';
+
+  @override
+  String get stripeSecureDescription => 'Stripeはアプリ収益の安全でタイムリーな送金を保証します';
+
+  @override
+  String get selectYourCountry => '国を選択してください';
+
+  @override
+  String get countrySelectionPermanent => '国の選択は永続的で、後から変更できません。';
+
+  @override
+  String get byClickingConnectNow => '「今すぐ接続」をクリックすると、以下に同意したことになります';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Stripe Connectアカウント契約';
+
+  @override
+  String get errorConnectingToStripe => 'Stripeへの接続エラー！後でもう一度お試しください。';
+
+  @override
+  String get connectingYourStripeAccount => 'Stripeアカウントを接続中';
+
+  @override
+  String get stripeOnboardingInstructions => 'ブラウザでStripeのオンボーディングプロセスを完了してください。完了すると、このページは自動的に更新されます。';
+
+  @override
+  String get failedTryAgain => '失敗しましたか？再試行';
+
+  @override
+  String get illDoItLater => '後でやります';
+
+  @override
+  String get successfullyConnected => '接続に成功しました！';
+
+  @override
+  String get stripeReadyForPayments => 'Stripeアカウントが支払いを受け取る準備ができました。すぐにアプリ販売から収益を得られます。';
+
+  @override
+  String get updateStripeDetails => 'Stripe詳細を更新';
+
+  @override
+  String get errorUpdatingStripeDetails => 'Stripe詳細の更新エラー！後でもう一度お試しください。';
 }

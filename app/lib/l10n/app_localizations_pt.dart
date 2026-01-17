@@ -4898,4 +4898,58 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get setActive => 'Definir como Ativo';
+
+  @override
+  String get getPaidThroughStripe => 'Receba pagamentos pelas vendas dos seus aplicativos através do Stripe';
+
+  @override
+  String get monthlyPayouts => 'Pagamentos mensais';
+
+  @override
+  String get monthlyPayoutsDescription => 'Receba pagamentos mensais diretamente em sua conta quando atingir \$10 em ganhos';
+
+  @override
+  String get secureAndReliable => 'Seguro e confiável';
+
+  @override
+  String get stripeSecureDescription => 'O Stripe garante transferências seguras e pontuais das receitas do seu aplicativo';
+
+  @override
+  String get selectYourCountry => 'Selecione seu país';
+
+  @override
+  String get countrySelectionPermanent => 'A seleção do país é permanente e não pode ser alterada posteriormente.';
+
+  @override
+  String get byClickingConnectNow => 'Ao clicar em \"Conectar Agora\" você concorda com o';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Acordo de Conta Conectada do Stripe';
+
+  @override
+  String get errorConnectingToStripe => 'Erro ao conectar ao Stripe! Por favor, tente novamente mais tarde.';
+
+  @override
+  String get connectingYourStripeAccount => 'Conectando sua conta Stripe';
+
+  @override
+  String get stripeOnboardingInstructions => 'Por favor, complete o processo de integração do Stripe no seu navegador. Esta página será atualizada automaticamente após a conclusão.';
+
+  @override
+  String get failedTryAgain => 'Falhou? Tente Novamente';
+
+  @override
+  String get illDoItLater => 'Farei isso depois';
+
+  @override
+  String get successfullyConnected => 'Conectado com Sucesso!';
+
+  @override
+  String get stripeReadyForPayments => 'Sua conta Stripe está pronta para receber pagamentos. Você pode começar a ganhar com as vendas dos seus aplicativos imediatamente.';
+
+  @override
+  String get updateStripeDetails => 'Atualizar Detalhes do Stripe';
+
+  @override
+  String get errorUpdatingStripeDetails => 'Erro ao atualizar detalhes do Stripe! Por favor, tente novamente mais tarde.';
 }

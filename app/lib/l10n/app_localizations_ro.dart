@@ -4904,4 +4904,58 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get setActive => 'Setează ca activ';
+
+  @override
+  String get getPaidThroughStripe => 'Primiți plăți pentru vânzările aplicațiilor prin Stripe';
+
+  @override
+  String get monthlyPayouts => 'Plăți lunare';
+
+  @override
+  String get monthlyPayoutsDescription => 'Primiți plăți lunare direct în cont când atingeți \$10 în câștiguri';
+
+  @override
+  String get secureAndReliable => 'Sigur și de încredere';
+
+  @override
+  String get stripeSecureDescription => 'Stripe asigură transferuri sigure și la timp ale veniturilor aplicației dvs.';
+
+  @override
+  String get selectYourCountry => 'Selectați țara dvs.';
+
+  @override
+  String get countrySelectionPermanent => 'Selecția țării este permanentă și nu poate fi modificată ulterior.';
+
+  @override
+  String get byClickingConnectNow => 'Făcând clic pe \"Conectați acum\" sunteți de acord cu';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Acordul contului conectat Stripe';
+
+  @override
+  String get errorConnectingToStripe => 'Eroare la conectarea la Stripe! Vă rugăm să încercați din nou mai târziu.';
+
+  @override
+  String get connectingYourStripeAccount => 'Conectarea contului dvs. Stripe';
+
+  @override
+  String get stripeOnboardingInstructions => 'Vă rugăm să finalizați procesul de integrare Stripe în browserul dvs. Această pagină se va actualiza automat după finalizare.';
+
+  @override
+  String get failedTryAgain => 'A eșuat? Încercați din nou';
+
+  @override
+  String get illDoItLater => 'Voi face mai târziu';
+
+  @override
+  String get successfullyConnected => 'Conectat cu succes!';
+
+  @override
+  String get stripeReadyForPayments => 'Contul dvs. Stripe este acum gata să primească plăți. Puteți începe să câștigați din vânzările aplicațiilor imediat.';
+
+  @override
+  String get updateStripeDetails => 'Actualizați detaliile Stripe';
+
+  @override
+  String get errorUpdatingStripeDetails => 'Eroare la actualizarea detaliilor Stripe! Vă rugăm să încercați din nou mai târziu.';
 }

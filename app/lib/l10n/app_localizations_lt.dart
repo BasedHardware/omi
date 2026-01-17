@@ -4904,4 +4904,58 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get setActive => 'Nustatyti kaip aktyvų';
+
+  @override
+  String get getPaidThroughStripe => 'Gaukite mokėjimus už programų pardavimus per Stripe';
+
+  @override
+  String get monthlyPayouts => 'Mėnesiniai mokėjimai';
+
+  @override
+  String get monthlyPayoutsDescription => 'Gaukite mėnesinius mokėjimus tiesiai į sąskaitą, kai pasiekiate 10 \$ uždarbį';
+
+  @override
+  String get secureAndReliable => 'Saugus ir patikimas';
+
+  @override
+  String get stripeSecureDescription => 'Stripe užtikrina saugius ir savalaikius jūsų programos pajamų pervedimus';
+
+  @override
+  String get selectYourCountry => 'Pasirinkite savo šalį';
+
+  @override
+  String get countrySelectionPermanent => 'Jūsų šalies pasirinkimas yra nuolatinis ir vėliau negali būti pakeistas.';
+
+  @override
+  String get byClickingConnectNow => 'Spustelėdami \"Prisijungti dabar\" sutinkate su';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Stripe susietos paskyros sutartis';
+
+  @override
+  String get errorConnectingToStripe => 'Klaida jungiantis prie Stripe! Bandykite dar kartą vėliau.';
+
+  @override
+  String get connectingYourStripeAccount => 'Jūsų Stripe paskyros prijungimas';
+
+  @override
+  String get stripeOnboardingInstructions => 'Prašome užbaigti Stripe registracijos procesą naršyklėje. Šis puslapis bus automatiškai atnaujintas po užbaigimo.';
+
+  @override
+  String get failedTryAgain => 'Nepavyko? Bandykite dar kartą';
+
+  @override
+  String get illDoItLater => 'Padarysiu vėliau';
+
+  @override
+  String get successfullyConnected => 'Sėkmingai prisijungta!';
+
+  @override
+  String get stripeReadyForPayments => 'Jūsų Stripe paskyra dabar paruošta gauti mokėjimus. Galite iš karto pradėti uždirbti iš programų pardavimų.';
+
+  @override
+  String get updateStripeDetails => 'Atnaujinti Stripe duomenis';
+
+  @override
+  String get errorUpdatingStripeDetails => 'Klaida atnaujinant Stripe duomenis! Bandykite dar kartą vėliau.';
 }

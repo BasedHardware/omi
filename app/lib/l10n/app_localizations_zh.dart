@@ -4898,4 +4898,58 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get setActive => '设为活跃';
+
+  @override
+  String get getPaidThroughStripe => '通过 Stripe 获取您的应用销售收入';
+
+  @override
+  String get monthlyPayouts => '月度付款';
+
+  @override
+  String get monthlyPayoutsDescription => '当您的收入达到 10 美元时，每月直接收款到您的账户';
+
+  @override
+  String get secureAndReliable => '安全可靠';
+
+  @override
+  String get stripeSecureDescription => 'Stripe 确保您的应用收入安全及时转账';
+
+  @override
+  String get selectYourCountry => '选择您的国家';
+
+  @override
+  String get countrySelectionPermanent => '您的国家选择是永久性的，以后无法更改。';
+
+  @override
+  String get byClickingConnectNow => '点击「立即连接」即表示您同意';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Stripe 关联账户协议';
+
+  @override
+  String get errorConnectingToStripe => '连接 Stripe 时出错！请稍后重试。';
+
+  @override
+  String get connectingYourStripeAccount => '正在连接您的 Stripe 账户';
+
+  @override
+  String get stripeOnboardingInstructions => '请在浏览器中完成 Stripe 注册流程。完成后此页面将自动更新。';
+
+  @override
+  String get failedTryAgain => '失败了？重试';
+
+  @override
+  String get illDoItLater => '稍后再做';
+
+  @override
+  String get successfullyConnected => '连接成功！';
+
+  @override
+  String get stripeReadyForPayments => '您的 Stripe 账户已准备好接收付款。您可以立即开始从应用销售中获利。';
+
+  @override
+  String get updateStripeDetails => '更新 Stripe 详细信息';
+
+  @override
+  String get errorUpdatingStripeDetails => '更新 Stripe 详细信息时出错！请稍后重试。';
 }

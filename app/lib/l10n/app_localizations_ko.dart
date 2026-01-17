@@ -4898,4 +4898,58 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get setActive => '활성으로 설정';
+
+  @override
+  String get getPaidThroughStripe => 'Stripe를 통해 앱 판매 수익을 받으세요';
+
+  @override
+  String get monthlyPayouts => '월별 지급';
+
+  @override
+  String get monthlyPayoutsDescription => '수익이 \$10에 도달하면 매월 계좌로 직접 지급받습니다';
+
+  @override
+  String get secureAndReliable => '안전하고 신뢰할 수 있음';
+
+  @override
+  String get stripeSecureDescription => 'Stripe는 앱 수익의 안전하고 적시 전송을 보장합니다';
+
+  @override
+  String get selectYourCountry => '국가를 선택하세요';
+
+  @override
+  String get countrySelectionPermanent => '국가 선택은 영구적이며 나중에 변경할 수 없습니다.';
+
+  @override
+  String get byClickingConnectNow => '\"지금 연결\"을 클릭하면 다음에 동의하는 것입니다';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Stripe 연결 계정 계약';
+
+  @override
+  String get errorConnectingToStripe => 'Stripe 연결 오류! 나중에 다시 시도해 주세요.';
+
+  @override
+  String get connectingYourStripeAccount => 'Stripe 계정 연결 중';
+
+  @override
+  String get stripeOnboardingInstructions => '브라우저에서 Stripe 온보딩 프로세스를 완료하세요. 완료되면 이 페이지가 자동으로 업데이트됩니다.';
+
+  @override
+  String get failedTryAgain => '실패했나요? 다시 시도';
+
+  @override
+  String get illDoItLater => '나중에 할게요';
+
+  @override
+  String get successfullyConnected => '연결 성공!';
+
+  @override
+  String get stripeReadyForPayments => 'Stripe 계정이 결제를 받을 준비가 되었습니다. 바로 앱 판매 수익을 얻기 시작할 수 있습니다.';
+
+  @override
+  String get updateStripeDetails => 'Stripe 세부 정보 업데이트';
+
+  @override
+  String get errorUpdatingStripeDetails => 'Stripe 세부 정보 업데이트 오류! 나중에 다시 시도해 주세요.';
 }

@@ -4904,4 +4904,58 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get setActive => 'Instellen als actief';
+
+  @override
+  String get getPaidThroughStripe => 'Ontvang betalingen voor uw app-verkopen via Stripe';
+
+  @override
+  String get monthlyPayouts => 'Maandelijkse uitbetalingen';
+
+  @override
+  String get monthlyPayoutsDescription => 'Ontvang maandelijkse betalingen rechtstreeks op uw rekening wanneer u \$10 aan inkomsten bereikt';
+
+  @override
+  String get secureAndReliable => 'Veilig en betrouwbaar';
+
+  @override
+  String get stripeSecureDescription => 'Stripe zorgt voor veilige en tijdige overdrachten van uw app-inkomsten';
+
+  @override
+  String get selectYourCountry => 'Selecteer uw land';
+
+  @override
+  String get countrySelectionPermanent => 'Uw landselectie is permanent en kan later niet worden gewijzigd.';
+
+  @override
+  String get byClickingConnectNow => 'Door op \"Nu verbinden\" te klikken gaat u akkoord met';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Stripe Connected Account-overeenkomst';
+
+  @override
+  String get errorConnectingToStripe => 'Fout bij verbinden met Stripe! Probeer het later opnieuw.';
+
+  @override
+  String get connectingYourStripeAccount => 'Uw Stripe-account verbinden';
+
+  @override
+  String get stripeOnboardingInstructions => 'Voltooi het Stripe-onboardingproces in uw browser. Deze pagina wordt automatisch bijgewerkt zodra het proces is voltooid.';
+
+  @override
+  String get failedTryAgain => 'Mislukt? Probeer opnieuw';
+
+  @override
+  String get illDoItLater => 'Ik doe het later';
+
+  @override
+  String get successfullyConnected => 'Succesvol verbonden!';
+
+  @override
+  String get stripeReadyForPayments => 'Uw Stripe-account is nu klaar om betalingen te ontvangen. U kunt direct beginnen met verdienen aan uw app-verkopen.';
+
+  @override
+  String get updateStripeDetails => 'Stripe-gegevens bijwerken';
+
+  @override
+  String get errorUpdatingStripeDetails => 'Fout bij het bijwerken van Stripe-gegevens! Probeer het later opnieuw.';
 }

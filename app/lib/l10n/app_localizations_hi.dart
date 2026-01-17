@@ -4898,4 +4898,58 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get setActive => 'सक्रिय के रूप में सेट करें';
+
+  @override
+  String get getPaidThroughStripe => 'Stripe के माध्यम से अपने ऐप की बिक्री के लिए भुगतान प्राप्त करें';
+
+  @override
+  String get monthlyPayouts => 'मासिक भुगतान';
+
+  @override
+  String get monthlyPayoutsDescription => 'जब आप \$10 की कमाई तक पहुंचें तो सीधे अपने खाते में मासिक भुगतान प्राप्त करें';
+
+  @override
+  String get secureAndReliable => 'सुरक्षित और विश्वसनीय';
+
+  @override
+  String get stripeSecureDescription => 'Stripe आपके ऐप राजस्व के सुरक्षित और समय पर हस्तांतरण सुनिश्चित करता है';
+
+  @override
+  String get selectYourCountry => 'अपना देश चुनें';
+
+  @override
+  String get countrySelectionPermanent => 'आपका देश चयन स्थायी है और बाद में बदला नहीं जा सकता।';
+
+  @override
+  String get byClickingConnectNow => '\"अभी कनेक्ट करें\" पर क्लिक करके आप सहमत होते हैं';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Stripe कनेक्टेड खाता समझौता';
+
+  @override
+  String get errorConnectingToStripe => 'Stripe से कनेक्ट करने में त्रुटि! कृपया बाद में पुनः प्रयास करें।';
+
+  @override
+  String get connectingYourStripeAccount => 'आपका Stripe खाता कनेक्ट हो रहा है';
+
+  @override
+  String get stripeOnboardingInstructions => 'कृपया अपने ब्राउज़र में Stripe ऑनबोर्डिंग प्रक्रिया पूरी करें। पूरा होने पर यह पेज स्वचालित रूप से अपडेट हो जाएगा।';
+
+  @override
+  String get failedTryAgain => 'विफल? पुनः प्रयास करें';
+
+  @override
+  String get illDoItLater => 'मैं बाद में करूंगा';
+
+  @override
+  String get successfullyConnected => 'सफलतापूर्वक कनेक्ट हो गया!';
+
+  @override
+  String get stripeReadyForPayments => 'आपका Stripe खाता अब भुगतान प्राप्त करने के लिए तैयार है। आप तुरंत अपने ऐप की बिक्री से कमाई शुरू कर सकते हैं।';
+
+  @override
+  String get updateStripeDetails => 'Stripe विवरण अपडेट करें';
+
+  @override
+  String get errorUpdatingStripeDetails => 'Stripe विवरण अपडेट करने में त्रुटि! कृपया बाद में पुनः प्रयास करें।';
 }

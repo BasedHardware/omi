@@ -4904,4 +4904,58 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get setActive => 'Aktif Olarak Ayarla';
+
+  @override
+  String get getPaidThroughStripe => 'Stripe üzerinden uygulama satışlarınız için ödeme alın';
+
+  @override
+  String get monthlyPayouts => 'Aylık ödemeler';
+
+  @override
+  String get monthlyPayoutsDescription => '10 \$ kazanca ulaştığınızda aylık ödemeleri doğrudan hesabınıza alın';
+
+  @override
+  String get secureAndReliable => 'Güvenli ve güvenilir';
+
+  @override
+  String get stripeSecureDescription => 'Stripe, uygulama gelirinizin güvenli ve zamanında transferini sağlar';
+
+  @override
+  String get selectYourCountry => 'Ülkenizi seçin';
+
+  @override
+  String get countrySelectionPermanent => 'Ülke seçiminiz kalıcıdır ve daha sonra değiştirilemez.';
+
+  @override
+  String get byClickingConnectNow => '\"Şimdi Bağlan\"a tıklayarak kabul etmiş olursunuz';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Stripe Bağlı Hesap Sözleşmesi';
+
+  @override
+  String get errorConnectingToStripe => 'Stripe\'a bağlanırken hata! Lütfen daha sonra tekrar deneyin.';
+
+  @override
+  String get connectingYourStripeAccount => 'Stripe hesabınız bağlanıyor';
+
+  @override
+  String get stripeOnboardingInstructions => 'Lütfen tarayıcınızda Stripe kayıt sürecini tamamlayın. Bu sayfa tamamlandıktan sonra otomatik olarak güncellenecektir.';
+
+  @override
+  String get failedTryAgain => 'Başarısız mı? Tekrar Dene';
+
+  @override
+  String get illDoItLater => 'Daha sonra yapacağım';
+
+  @override
+  String get successfullyConnected => 'Başarıyla Bağlandı!';
+
+  @override
+  String get stripeReadyForPayments => 'Stripe hesabınız artık ödeme almaya hazır. Uygulama satışlarınızdan hemen kazanmaya başlayabilirsiniz.';
+
+  @override
+  String get updateStripeDetails => 'Stripe Bilgilerini Güncelle';
+
+  @override
+  String get errorUpdatingStripeDetails => 'Stripe bilgilerini güncellerken hata! Lütfen daha sonra tekrar deneyin.';
 }

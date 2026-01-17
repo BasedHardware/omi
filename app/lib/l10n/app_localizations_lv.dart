@@ -4904,4 +4904,58 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get setActive => 'Iestatīt kā aktīvu';
+
+  @override
+  String get getPaidThroughStripe => 'Saņemiet maksājumus par lietotņu pārdošanu caur Stripe';
+
+  @override
+  String get monthlyPayouts => 'Ikmēneša maksājumi';
+
+  @override
+  String get monthlyPayoutsDescription => 'Saņemiet ikmēneša maksājumus tieši savā kontā, kad sasniedzat \$10 ieņēmumus';
+
+  @override
+  String get secureAndReliable => 'Drošs un uzticams';
+
+  @override
+  String get stripeSecureDescription => 'Stripe nodrošina drošus un savlaicīgus jūsu lietotnes ieņēmumu pārskaitījumus';
+
+  @override
+  String get selectYourCountry => 'Izvēlieties savu valsti';
+
+  @override
+  String get countrySelectionPermanent => 'Jūsu valsts izvēle ir pastāvīga un to nevar mainīt vēlāk.';
+
+  @override
+  String get byClickingConnectNow => 'Noklikšķinot uz \"Savienot tagad\" jūs piekrītat';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Stripe savienotā konta līgums';
+
+  @override
+  String get errorConnectingToStripe => 'Kļūda savienojot ar Stripe! Lūdzu, mēģiniet vēlāk.';
+
+  @override
+  String get connectingYourStripeAccount => 'Jūsu Stripe konta savienošana';
+
+  @override
+  String get stripeOnboardingInstructions => 'Lūdzu, pabeidziet Stripe reģistrācijas procesu savā pārlūkprogrammā. Šī lapa tiks automātiski atjaunināta pēc pabeigšanas.';
+
+  @override
+  String get failedTryAgain => 'Neizdevās? Mēģināt vēlreiz';
+
+  @override
+  String get illDoItLater => 'Es to izdarīšu vēlāk';
+
+  @override
+  String get successfullyConnected => 'Veiksmīgi savienots!';
+
+  @override
+  String get stripeReadyForPayments => 'Jūsu Stripe konts tagad ir gatavs saņemt maksājumus. Jūs varat nekavējoties sākt pelnīt no savu lietotņu pārdošanas.';
+
+  @override
+  String get updateStripeDetails => 'Atjaunināt Stripe informāciju';
+
+  @override
+  String get errorUpdatingStripeDetails => 'Kļūda atjauninot Stripe informāciju! Lūdzu, mēģiniet vēlāk.';
 }

@@ -9452,6 +9452,114 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Set Active'**
   String get setActive;
+
+  /// Title for Stripe setup page
+  ///
+  /// In en, this message translates to:
+  /// **'Get paid for your app sales through Stripe'**
+  String get getPaidThroughStripe;
+
+  /// Feature title for monthly payouts
+  ///
+  /// In en, this message translates to:
+  /// **'Monthly payouts'**
+  String get monthlyPayouts;
+
+  /// Description of monthly payout feature
+  ///
+  /// In en, this message translates to:
+  /// **'Receive monthly payments directly to your account when you reach \$10 in earnings'**
+  String get monthlyPayoutsDescription;
+
+  /// Feature title for security
+  ///
+  /// In en, this message translates to:
+  /// **'Secure and reliable'**
+  String get secureAndReliable;
+
+  /// Description of Stripe security feature
+  ///
+  /// In en, this message translates to:
+  /// **'Stripe ensures safe and timely transfers of your app revenue'**
+  String get stripeSecureDescription;
+
+  /// Placeholder for country selector
+  ///
+  /// In en, this message translates to:
+  /// **'Select your country'**
+  String get selectYourCountry;
+
+  /// Warning that country selection cannot be changed
+  ///
+  /// In en, this message translates to:
+  /// **'Your country selection is permanent and cannot be changed later.'**
+  String get countrySelectionPermanent;
+
+  /// Legal agreement intro text
+  ///
+  /// In en, this message translates to:
+  /// **'By clicking on \"Connect Now\" you agree to the'**
+  String get byClickingConnectNow;
+
+  /// Link text for Stripe agreement
+  ///
+  /// In en, this message translates to:
+  /// **'Stripe Connected Account Agreement'**
+  String get stripeConnectedAccountAgreement;
+
+  /// Error message when Stripe connection fails
+  ///
+  /// In en, this message translates to:
+  /// **'Error connecting to Stripe! Please try again later.'**
+  String get errorConnectingToStripe;
+
+  /// Title during Stripe connection process
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting your Stripe account'**
+  String get connectingYourStripeAccount;
+
+  /// Instructions for completing Stripe onboarding
+  ///
+  /// In en, this message translates to:
+  /// **'Please complete the Stripe onboarding process in your browser. This page will automatically update once completed.'**
+  String get stripeOnboardingInstructions;
+
+  /// Button to retry failed connection
+  ///
+  /// In en, this message translates to:
+  /// **'Failed? Try Again'**
+  String get failedTryAgain;
+
+  /// Button to defer connection
+  ///
+  /// In en, this message translates to:
+  /// **'I\'ll do it later'**
+  String get illDoItLater;
+
+  /// Title when connection succeeds
+  ///
+  /// In en, this message translates to:
+  /// **'Successfully Connected!'**
+  String get successfullyConnected;
+
+  /// Description after successful connection
+  ///
+  /// In en, this message translates to:
+  /// **'Your Stripe account is now ready to receive payments. You can start earning from your app sales right away.'**
+  String get stripeReadyForPayments;
+
+  /// Button to update Stripe details
+  ///
+  /// In en, this message translates to:
+  /// **'Update Stripe Details'**
+  String get updateStripeDetails;
+
+  /// Error message when Stripe update fails
+  ///
+  /// In en, this message translates to:
+  /// **'Error updating Stripe details! Please try again later.'**
+  String get errorUpdatingStripeDetails;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -4904,4 +4904,58 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get setActive => 'Встановити активним';
+
+  @override
+  String get getPaidThroughStripe => 'Отримуйте оплату за продажі додатків через Stripe';
+
+  @override
+  String get monthlyPayouts => 'Щомісячні виплати';
+
+  @override
+  String get monthlyPayoutsDescription => 'Отримуйте щомісячні виплати прямо на рахунок, коли заробите \$10';
+
+  @override
+  String get secureAndReliable => 'Безпечно та надійно';
+
+  @override
+  String get stripeSecureDescription => 'Stripe забезпечує безпечні та своєчасні перекази доходів від додатка';
+
+  @override
+  String get selectYourCountry => 'Виберіть свою країну';
+
+  @override
+  String get countrySelectionPermanent => 'Вибір країни є постійним і не може бути змінений пізніше.';
+
+  @override
+  String get byClickingConnectNow => 'Натискаючи \"Підключити зараз\", ви погоджуєтесь з';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Угода про підключений обліковий запис Stripe';
+
+  @override
+  String get errorConnectingToStripe => 'Помилка підключення до Stripe! Будь ласка, спробуйте пізніше.';
+
+  @override
+  String get connectingYourStripeAccount => 'Підключення вашого облікового запису Stripe';
+
+  @override
+  String get stripeOnboardingInstructions => 'Будь ласка, завершіть процес реєстрації Stripe у вашому браузері. Ця сторінка автоматично оновиться після завершення.';
+
+  @override
+  String get failedTryAgain => 'Не вдалося? Спробувати знову';
+
+  @override
+  String get illDoItLater => 'Зроблю це пізніше';
+
+  @override
+  String get successfullyConnected => 'Успішно підключено!';
+
+  @override
+  String get stripeReadyForPayments => 'Ваш обліковий запис Stripe готовий отримувати платежі. Ви можете одразу почати заробляти на продажах додатків.';
+
+  @override
+  String get updateStripeDetails => 'Оновити дані Stripe';
+
+  @override
+  String get errorUpdatingStripeDetails => 'Помилка оновлення даних Stripe! Будь ласка, спробуйте пізніше.';
 }

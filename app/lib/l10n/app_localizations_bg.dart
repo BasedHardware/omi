@@ -4904,4 +4904,58 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get setActive => 'Задай като активен';
+
+  @override
+  String get getPaidThroughStripe => 'Получавайте плащания за продажбите на вашето приложение чрез Stripe';
+
+  @override
+  String get monthlyPayouts => 'Месечни плащания';
+
+  @override
+  String get monthlyPayoutsDescription => 'Получавайте месечни плащания директно в сметката си, когато достигнете \$10 печалби';
+
+  @override
+  String get secureAndReliable => 'Сигурно и надеждно';
+
+  @override
+  String get stripeSecureDescription => 'Stripe осигурява безопасни и навременни преводи на приходите от вашето приложение';
+
+  @override
+  String get selectYourCountry => 'Изберете вашата държава';
+
+  @override
+  String get countrySelectionPermanent => 'Изборът на държава е постоянен и не може да бъде променен по-късно.';
+
+  @override
+  String get byClickingConnectNow => 'Като щракнете върху \"Свържете се сега\", вие се съгласявате с';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Споразумение за свързан акаунт в Stripe';
+
+  @override
+  String get errorConnectingToStripe => 'Грешка при свързване със Stripe! Моля, опитайте отново по-късно.';
+
+  @override
+  String get connectingYourStripeAccount => 'Свързване на вашия Stripe акаунт';
+
+  @override
+  String get stripeOnboardingInstructions => 'Моля, завършете процеса на регистрация в Stripe във вашия браузър. Тази страница ще се актуализира автоматично след завършване.';
+
+  @override
+  String get failedTryAgain => 'Неуспешно? Опитайте отново';
+
+  @override
+  String get illDoItLater => 'Ще го направя по-късно';
+
+  @override
+  String get successfullyConnected => 'Успешно свързано!';
+
+  @override
+  String get stripeReadyForPayments => 'Вашият Stripe акаунт вече е готов да получава плащания. Можете да започнете да печелите от продажбите на приложението си веднага.';
+
+  @override
+  String get updateStripeDetails => 'Актуализиране на детайлите на Stripe';
+
+  @override
+  String get errorUpdatingStripeDetails => 'Грешка при актуализиране на детайлите на Stripe! Моля, опитайте отново по-късно.';
 }

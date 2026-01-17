@@ -4904,4 +4904,58 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get setActive => 'Tetapkan Aktif';
+
+  @override
+  String get getPaidThroughStripe => 'Dapatkan bayaran untuk penjualan aplikasi Anda melalui Stripe';
+
+  @override
+  String get monthlyPayouts => 'Pembayaran bulanan';
+
+  @override
+  String get monthlyPayoutsDescription => 'Terima pembayaran bulanan langsung ke akun Anda saat mencapai \$10 dalam penghasilan';
+
+  @override
+  String get secureAndReliable => 'Aman dan andal';
+
+  @override
+  String get stripeSecureDescription => 'Stripe memastikan transfer pendapatan aplikasi Anda yang aman dan tepat waktu';
+
+  @override
+  String get selectYourCountry => 'Pilih negara Anda';
+
+  @override
+  String get countrySelectionPermanent => 'Pilihan negara Anda bersifat permanen dan tidak dapat diubah nanti.';
+
+  @override
+  String get byClickingConnectNow => 'Dengan mengklik \"Hubungkan Sekarang\" Anda menyetujui';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Perjanjian Akun Terhubung Stripe';
+
+  @override
+  String get errorConnectingToStripe => 'Kesalahan menghubungkan ke Stripe! Silakan coba lagi nanti.';
+
+  @override
+  String get connectingYourStripeAccount => 'Menghubungkan akun Stripe Anda';
+
+  @override
+  String get stripeOnboardingInstructions => 'Silakan selesaikan proses orientasi Stripe di browser Anda. Halaman ini akan diperbarui secara otomatis setelah selesai.';
+
+  @override
+  String get failedTryAgain => 'Gagal? Coba Lagi';
+
+  @override
+  String get illDoItLater => 'Saya akan melakukannya nanti';
+
+  @override
+  String get successfullyConnected => 'Berhasil Terhubung!';
+
+  @override
+  String get stripeReadyForPayments => 'Akun Stripe Anda sekarang siap menerima pembayaran. Anda dapat mulai menghasilkan dari penjualan aplikasi segera.';
+
+  @override
+  String get updateStripeDetails => 'Perbarui Detail Stripe';
+
+  @override
+  String get errorUpdatingStripeDetails => 'Kesalahan memperbarui detail Stripe! Silakan coba lagi nanti.';
 }

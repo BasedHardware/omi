@@ -4904,4 +4904,58 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get setActive => 'Establir com a actiu';
+
+  @override
+  String get getPaidThroughStripe => 'Cobreu les vendes de les vostres aplicacions a través de Stripe';
+
+  @override
+  String get monthlyPayouts => 'Pagaments mensuals';
+
+  @override
+  String get monthlyPayoutsDescription => 'Rebeu pagaments mensuals directament al vostre compte quan arribeu als 10 \$ de guanys';
+
+  @override
+  String get secureAndReliable => 'Segur i fiable';
+
+  @override
+  String get stripeSecureDescription => 'Stripe garanteix transferències segures i puntuals dels ingressos de la vostra aplicació';
+
+  @override
+  String get selectYourCountry => 'Seleccioneu el vostre país';
+
+  @override
+  String get countrySelectionPermanent => 'La selecció del país és permanent i no es pot canviar més tard.';
+
+  @override
+  String get byClickingConnectNow => 'En fer clic a \"Connecta ara\" accepteu el';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Acord de compte connectat de Stripe';
+
+  @override
+  String get errorConnectingToStripe => 'Error en connectar amb Stripe! Si us plau, torneu-ho a provar més tard.';
+
+  @override
+  String get connectingYourStripeAccount => 'Connectant el vostre compte de Stripe';
+
+  @override
+  String get stripeOnboardingInstructions => 'Si us plau, completeu el procés d\'incorporació de Stripe al vostre navegador. Aquesta pàgina s\'actualitzarà automàticament un cop completat.';
+
+  @override
+  String get failedTryAgain => 'Ha fallat? Torneu-ho a provar';
+
+  @override
+  String get illDoItLater => 'Ho faré més tard';
+
+  @override
+  String get successfullyConnected => 'Connectat amb èxit!';
+
+  @override
+  String get stripeReadyForPayments => 'El vostre compte de Stripe està ara preparat per rebre pagaments. Podeu començar a guanyar amb les vendes de les vostres aplicacions de seguida.';
+
+  @override
+  String get updateStripeDetails => 'Actualitzar els detalls de Stripe';
+
+  @override
+  String get errorUpdatingStripeDetails => 'Error en actualitzar els detalls de Stripe! Si us plau, torneu-ho a provar més tard.';
 }

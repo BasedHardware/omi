@@ -4911,4 +4911,58 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get setActive => 'Set Active';
+
+  @override
+  String get getPaidThroughStripe => 'Get paid for your app sales through Stripe';
+
+  @override
+  String get monthlyPayouts => 'Monthly payouts';
+
+  @override
+  String get monthlyPayoutsDescription => 'Receive monthly payments directly to your account when you reach \$10 in earnings';
+
+  @override
+  String get secureAndReliable => 'Secure and reliable';
+
+  @override
+  String get stripeSecureDescription => 'Stripe ensures safe and timely transfers of your app revenue';
+
+  @override
+  String get selectYourCountry => 'Select your country';
+
+  @override
+  String get countrySelectionPermanent => 'Your country selection is permanent and cannot be changed later.';
+
+  @override
+  String get byClickingConnectNow => 'By clicking on \"Connect Now\" you agree to the';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Stripe Connected Account Agreement';
+
+  @override
+  String get errorConnectingToStripe => 'Error connecting to Stripe! Please try again later.';
+
+  @override
+  String get connectingYourStripeAccount => 'Connecting your Stripe account';
+
+  @override
+  String get stripeOnboardingInstructions => 'Please complete the Stripe onboarding process in your browser. This page will automatically update once completed.';
+
+  @override
+  String get failedTryAgain => 'Failed? Try Again';
+
+  @override
+  String get illDoItLater => 'I\'ll do it later';
+
+  @override
+  String get successfullyConnected => 'Successfully Connected!';
+
+  @override
+  String get stripeReadyForPayments => 'Your Stripe account is now ready to receive payments. You can start earning from your app sales right away.';
+
+  @override
+  String get updateStripeDetails => 'Update Stripe Details';
+
+  @override
+  String get errorUpdatingStripeDetails => 'Error updating Stripe details! Please try again later.';
 }

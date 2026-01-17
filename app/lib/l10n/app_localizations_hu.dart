@@ -4904,4 +4904,58 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get setActive => 'Beállítás aktívként';
+
+  @override
+  String get getPaidThroughStripe => 'Kapjon fizetést az alkalmazás-eladásaiért a Stripe-on keresztül';
+
+  @override
+  String get monthlyPayouts => 'Havi kifizetések';
+
+  @override
+  String get monthlyPayoutsDescription => 'Kapjon havi kifizetéseket közvetlenül a számlájára, amikor eléri a 10 \$ bevételt';
+
+  @override
+  String get secureAndReliable => 'Biztonságos és megbízható';
+
+  @override
+  String get stripeSecureDescription => 'A Stripe biztonságos és időben történő átutalásokat biztosít az alkalmazás bevételeihez';
+
+  @override
+  String get selectYourCountry => 'Válassza ki az országát';
+
+  @override
+  String get countrySelectionPermanent => 'Az országválasztás végleges és később nem módosítható.';
+
+  @override
+  String get byClickingConnectNow => 'A \"Csatlakozás most\" gombra kattintva elfogadja';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Stripe Connected Account megállapodás';
+
+  @override
+  String get errorConnectingToStripe => 'Hiba a Stripe-hoz való csatlakozáskor! Kérjük, próbálja újra később.';
+
+  @override
+  String get connectingYourStripeAccount => 'Stripe fiókjának csatlakoztatása';
+
+  @override
+  String get stripeOnboardingInstructions => 'Kérjük, fejezze be a Stripe bevezetési folyamatot a böngészőjében. Ez az oldal automatikusan frissül a befejezés után.';
+
+  @override
+  String get failedTryAgain => 'Sikertelen? Próbálja újra';
+
+  @override
+  String get illDoItLater => 'Később megcsinálom';
+
+  @override
+  String get successfullyConnected => 'Sikeresen csatlakoztatva!';
+
+  @override
+  String get stripeReadyForPayments => 'Stripe-fiókja készen áll a kifizetések fogadására. Azonnal elkezdheti a keresést az alkalmazás-eladásaiból.';
+
+  @override
+  String get updateStripeDetails => 'Stripe adatok frissítése';
+
+  @override
+  String get errorUpdatingStripeDetails => 'Hiba a Stripe adatok frissítésekor! Kérjük, próbálja újra később.';
 }
