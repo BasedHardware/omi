@@ -4904,4 +4904,10 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get tapToDelete => 'Tippen zum Löschen';
+
+  @override
+  String get newTag => 'NEU';
+
+  @override
+  String get needHelpChatWithUs => 'Hilfe benötigt? Schreiben Sie uns';
 }

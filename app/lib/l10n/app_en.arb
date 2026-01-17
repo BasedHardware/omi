@@ -5742,5 +5742,13 @@
   "tapToDelete": "Tap to delete",
   "@tapToDelete": {
     "description": "Hint text for tap to delete action"
+  },
+  "newTag": "NEW",
+  "@newTag": {
+    "description": "newTag label"
+  },
+  "needHelpChatWithUs": "Need Help? Chat with us",
+  "@needHelpChatWithUs": {
+    "description": "needHelpChatWithUs label"
   }
 }

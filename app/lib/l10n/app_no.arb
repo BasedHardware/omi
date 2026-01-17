@@ -3325,5 +3325,7 @@
   "deletePersonConfirmation": "Er du sikker på at du vil slette {name}? Dette vil også fjerne alle tilknyttede taleprøver.",
   "howItWorksTitle": "Hvordan fungerer det?",
   "howPeopleWorks": "Når en person er opprettet, kan du gå til en samtaletranskript og tildele dem deres tilsvarende segmenter, på den måten vil Omi også kunne gjenkjenne deres tale!",
-  "tapToDelete": "Trykk for å slette"
+  "tapToDelete": "Trykk for å slette",
+  "newTag": "NY",
+  "needHelpChatWithUs": "Trenger du hjelp? Chat med oss"
 }

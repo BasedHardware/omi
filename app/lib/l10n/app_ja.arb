@@ -1751,5 +1751,7 @@
   "deletePersonConfirmation": "{name}を削除してもよろしいですか？これにより、関連するすべての音声サンプルも削除されます。",
   "howItWorksTitle": "仕組みは？",
   "howPeopleWorks": "人物を作成したら、会話のトランスクリプトに移動して対応するセグメントを割り当てることで、Omiがその人の音声も認識できるようになります！",
-  "tapToDelete": "タップして削除"
+  "tapToDelete": "タップして削除",
+  "newTag": "新着",
+  "needHelpChatWithUs": "ヘルプが必要ですか？チャットでお問い合わせ"
 }

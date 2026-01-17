@@ -4895,4 +4895,10 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get tapToDelete => 'Toca per eliminar';
+
+  @override
+  String get newTag => 'NOU';
+
+  @override
+  String get needHelpChatWithUs => 'Necessites ajuda? Xateja amb nosaltres';
 }

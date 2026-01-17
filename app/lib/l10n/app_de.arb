@@ -1772,5 +1772,7 @@
   "deletePersonConfirmation": "Sind Sie sicher, dass Sie {name} löschen möchten? Dies entfernt auch alle zugehörigen Sprachproben.",
   "howItWorksTitle": "Wie funktioniert es?",
   "howPeopleWorks": "Sobald eine Person erstellt wurde, können Sie zum Gesprächstranskript gehen und ihr die entsprechenden Segmente zuweisen, so kann Omi auch ihre Sprache erkennen!",
-  "tapToDelete": "Tippen zum Löschen"
+  "tapToDelete": "Tippen zum Löschen",
+  "newTag": "NEU",
+  "needHelpChatWithUs": "Hilfe benötigt? Schreiben Sie uns"
 }

@@ -4880,4 +4880,10 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get tapToDelete => 'Докоснете за изтриване';
+
+  @override
+  String get newTag => 'НОВО';
+
+  @override
+  String get needHelpChatWithUs => 'Нуждаете се от помощ? Свържете се с нас';
 }

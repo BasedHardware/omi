@@ -3325,5 +3325,7 @@
   "deletePersonConfirmation": "Är du säker på att du vill ta bort {name}? Detta tar också bort alla tillhörande röstprover.",
   "howItWorksTitle": "Hur fungerar det?",
   "howPeopleWorks": "När en person har skapats kan du gå till en konversationsutskrift och tilldela dem deras motsvarande segment, på så sätt kommer Omi att kunna känna igen deras tal också!",
-  "tapToDelete": "Tryck för att ta bort"
+  "tapToDelete": "Tryck för att ta bort",
+  "newTag": "NY",
+  "needHelpChatWithUs": "Behöver du hjälp? Chatta med oss"
 }

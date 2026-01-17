@@ -4877,4 +4877,10 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get tapToDelete => 'Silmek için dokunun';
+
+  @override
+  String get newTag => 'YENİ';
+
+  @override
+  String get needHelpChatWithUs => 'Yardıma mı ihtiyacınız var? Bizimle sohbet edin';
 }

@@ -4843,4 +4843,10 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get tapToDelete => 'แตะเพื่อลบ';
+
+  @override
+  String get newTag => 'ใหม่';
+
+  @override
+  String get needHelpChatWithUs => 'ต้องการความช่วยเหลือ? แชทกับเรา';
 }

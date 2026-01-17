@@ -4881,4 +4881,10 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get tapToDelete => 'Ketuk untuk menghapus';
+
+  @override
+  String get newTag => 'BARU';
+
+  @override
+  String get needHelpChatWithUs => 'Butuh bantuan? Hubungi kami';
 }

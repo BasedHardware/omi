@@ -1772,5 +1772,7 @@
   "deletePersonConfirmation": "¿Estás seguro de que quieres eliminar a {name}? Esto también eliminará todas las muestras de voz asociadas.",
   "howItWorksTitle": "¿Cómo funciona?",
   "howPeopleWorks": "Una vez creada una persona, puedes ir a la transcripción de una conversación y asignarle sus segmentos correspondientes, ¡así Omi también podrá reconocer su voz!",
-  "tapToDelete": "Toca para eliminar"
+  "tapToDelete": "Toca para eliminar",
+  "newTag": "NUEVO",
+  "needHelpChatWithUs": "¿Necesitas ayuda? Chatea con nosotros"
 }

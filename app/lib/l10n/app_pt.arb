@@ -1772,5 +1772,7 @@
   "deletePersonConfirmation": "Tem certeza de que deseja excluir {name}? Isso também removerá todas as amostras de fala associadas.",
   "howItWorksTitle": "Como funciona?",
   "howPeopleWorks": "Depois que uma pessoa é criada, você pode ir para a transcrição de uma conversa e atribuir os segmentos correspondentes, assim o Omi também poderá reconhecer a fala dela!",
-  "tapToDelete": "Toque para excluir"
+  "tapToDelete": "Toque para excluir",
+  "newTag": "NOVO",
+  "needHelpChatWithUs": "Precisa de ajuda? Fale conosco"
 }

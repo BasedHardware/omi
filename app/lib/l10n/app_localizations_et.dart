@@ -4866,4 +4866,10 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get tapToDelete => 'Puuduta kustutamiseks';
+
+  @override
+  String get newTag => 'UUS';
+
+  @override
+  String get needHelpChatWithUs => 'Vajad abi? Vestle meiega';
 }

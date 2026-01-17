@@ -4876,4 +4876,10 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get tapToDelete => 'Dotknij, aby usunąć';
+
+  @override
+  String get newTag => 'NOWOŚĆ';
+
+  @override
+  String get needHelpChatWithUs => 'Potrzebujesz pomocy? Porozmawiaj z nami';
 }

@@ -9206,6 +9206,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Tap to delete'**
   String get tapToDelete;
+
+  /// newTag label
+  ///
+  /// In en, this message translates to:
+  /// **'NEW'**
+  String get newTag;
+
+  /// needHelpChatWithUs label
+  ///
+  /// In en, this message translates to:
+  /// **'Need Help? Chat with us'**
+  String get needHelpChatWithUs;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

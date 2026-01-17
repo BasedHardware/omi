@@ -4779,4 +4779,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get tapToDelete => 'タップして削除';
+
+  @override
+  String get newTag => '新着';
+
+  @override
+  String get needHelpChatWithUs => 'ヘルプが必要ですか？チャットでお問い合わせ';
 }

@@ -4865,4 +4865,10 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get tapToDelete => 'Klepnite pre odstránenie';
+
+  @override
+  String get newTag => 'NOVÉ';
+
+  @override
+  String get needHelpChatWithUs => 'Potrebujete pomoc? Napíšte nám';
 }

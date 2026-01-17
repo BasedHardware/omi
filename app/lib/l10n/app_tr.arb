@@ -3307,5 +3307,7 @@
   "deletePersonConfirmation": "{name} kişisini silmek istediğinizden emin misiniz? Bu aynı zamanda tüm ilişkili konuşma örneklerini de kaldıracaktır.",
   "howItWorksTitle": "Nasıl çalışır?",
   "howPeopleWorks": "Bir kişi oluşturulduktan sonra, bir konuşma transkriptine gidebilir ve ilgili bölümleri atayabilirsiniz, böylece Omi onların konuşmasını da tanıyabilir!",
-  "tapToDelete": "Silmek için dokunun"
+  "tapToDelete": "Silmek için dokunun",
+  "newTag": "YENİ",
+  "needHelpChatWithUs": "Yardıma mı ihtiyacınız var? Bizimle sohbet edin"
 }

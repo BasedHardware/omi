@@ -4852,4 +4852,10 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get tapToDelete => 'Toque para excluir';
+
+  @override
+  String get newTag => 'NOVO';
+
+  @override
+  String get needHelpChatWithUs => 'Precisa de ajuda? Fale conosco';
 }

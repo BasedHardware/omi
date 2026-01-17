@@ -3325,5 +3325,7 @@
   "deletePersonConfirmation": "Biztosan törölni szeretné {name} személyt? Ez eltávolítja az összes kapcsolódó hangmintát is.",
   "howItWorksTitle": "Hogyan működik?",
   "howPeopleWorks": "Ha létrehoz egy személyt, elmehet egy beszélgetés átiratához, és hozzárendelheti a megfelelő szegmenseket, így az Omi képes lesz felismerni az ő beszédét is!",
-  "tapToDelete": "Koppintson a törléshez"
+  "tapToDelete": "Koppintson a törléshez",
+  "newTag": "ÚJ",
+  "needHelpChatWithUs": "Segítségre van szüksége? Csevegjen velünk"
 }

@@ -4830,4 +4830,10 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get tapToDelete => 'اضغط للحذف';
+
+  @override
+  String get newTag => 'جديد';
+
+  @override
+  String get needHelpChatWithUs => 'تحتاج مساعدة؟ تحدث معنا';
 }

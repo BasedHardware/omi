@@ -1772,5 +1772,7 @@
   "deletePersonConfirmation": "您确定要删除 {name} 吗？这也将删除所有相关的语音样本。",
   "howItWorksTitle": "它是如何工作的？",
   "howPeopleWorks": "创建人员后，您可以转到对话记录并为他们分配相应的片段，这样 Omi 也能识别他们的语音！",
-  "tapToDelete": "点击删除"
+  "tapToDelete": "点击删除",
+  "newTag": "新",
+  "needHelpChatWithUs": "需要帮助？与我们聊天"
 }

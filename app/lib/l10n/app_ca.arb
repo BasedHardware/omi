@@ -3327,5 +3327,7 @@
   "deletePersonConfirmation": "Estàs segur que vols eliminar {name}? Això també eliminarà totes les mostres de veu associades.",
   "howItWorksTitle": "Com funciona?",
   "howPeopleWorks": "Un cop creada una persona, pots anar a una transcripció de conversa i assignar-li els segments corresponents, així Omi també podrà reconèixer la seva parla!",
-  "tapToDelete": "Toca per eliminar"
+  "tapToDelete": "Toca per eliminar",
+  "newTag": "NOU",
+  "needHelpChatWithUs": "Necessites ajuda? Xateja amb nosaltres"
 }

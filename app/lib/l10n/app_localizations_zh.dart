@@ -4772,4 +4772,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get tapToDelete => '点击删除';
+
+  @override
+  String get newTag => '新';
+
+  @override
+  String get needHelpChatWithUs => '需要帮助？与我们聊天';
 }

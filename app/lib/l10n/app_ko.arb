@@ -3325,5 +3325,7 @@
   "deletePersonConfirmation": "{name}을(를) 삭제하시겠습니까? 이렇게 하면 관련된 모든 음성 샘플도 제거됩니다.",
   "howItWorksTitle": "어떻게 작동하나요?",
   "howPeopleWorks": "사람이 생성되면 대화 기록으로 이동하여 해당 세그먼트를 할당할 수 있습니다. 그러면 Omi가 그들의 음성도 인식할 수 있습니다!",
-  "tapToDelete": "탭하여 삭제"
+  "tapToDelete": "탭하여 삭제",
+  "newTag": "신규",
+  "needHelpChatWithUs": "도움이 필요하신가요? 채팅으로 문의하세요"
 }

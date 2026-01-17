@@ -4905,4 +4905,10 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get tapToDelete => 'Πατήστε για διαγραφή';
+
+  @override
+  String get newTag => 'ΝΕΟ';
+
+  @override
+  String get needHelpChatWithUs => 'Χρειάζεστε βοήθεια; Συνομιλήστε μαζί μας';
 }

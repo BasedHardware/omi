@@ -4843,4 +4843,10 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get tapToDelete => 'हटाने के लिए टैप करें';
+
+  @override
+  String get newTag => 'नया';
+
+  @override
+  String get needHelpChatWithUs => 'मदद चाहिए? हमसे चैट करें';
 }

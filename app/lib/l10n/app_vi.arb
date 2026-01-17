@@ -3325,5 +3325,7 @@
   "deletePersonConfirmation": "Bạn có chắc chắn muốn xóa {name}? Điều này cũng sẽ xóa tất cả các mẫu giọng nói liên quan.",
   "howItWorksTitle": "Nó hoạt động như thế nào?",
   "howPeopleWorks": "Sau khi tạo một người, bạn có thể đi đến bản ghi cuộc trò chuyện và gán các phân đoạn tương ứng cho họ, bằng cách đó Omi cũng sẽ có thể nhận dạng giọng nói của họ!",
-  "tapToDelete": "Nhấn để xóa"
+  "tapToDelete": "Nhấn để xóa",
+  "newTag": "MỚI",
+  "needHelpChatWithUs": "Cần trợ giúp? Trò chuyện với chúng tôi"
 }

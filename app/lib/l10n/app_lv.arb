@@ -3325,5 +3325,7 @@
   "deletePersonConfirmation": "Vai tiešām vēlaties dzēst {name}? Tas arī noņems visus saistītos runas paraugus.",
   "howItWorksTitle": "Kā tas darbojas?",
   "howPeopleWorks": "Kad persona ir izveidota, varat doties uz sarunas transkripciju un piešķirt viņiem atbilstošos segmentus, tādā veidā Omi varēs atpazīt arī viņu runu!",
-  "tapToDelete": "Pieskarieties, lai dzēstu"
+  "tapToDelete": "Pieskarieties, lai dzēstu",
+  "newTag": "JAUNS",
+  "needHelpChatWithUs": "Nepieciešama palīdzība? Sazinies ar mums"
 }

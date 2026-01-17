@@ -4869,4 +4869,10 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get tapToDelete => 'Tryck för att ta bort';
+
+  @override
+  String get newTag => 'NY';
+
+  @override
+  String get needHelpChatWithUs => 'Behöver du hjälp? Chatta med oss';
 }

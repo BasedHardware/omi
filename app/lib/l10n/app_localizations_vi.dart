@@ -4875,4 +4875,10 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get tapToDelete => 'Nhấn để xóa';
+
+  @override
+  String get newTag => 'MỚI';
+
+  @override
+  String get needHelpChatWithUs => 'Cần trợ giúp? Trò chuyện với chúng tôi';
 }

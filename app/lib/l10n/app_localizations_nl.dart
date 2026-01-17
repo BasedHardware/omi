@@ -4880,4 +4880,10 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get tapToDelete => 'Tik om te verwijderen';
+
+  @override
+  String get newTag => 'NIEUW';
+
+  @override
+  String get needHelpChatWithUs => 'Hulp nodig? Chat met ons';
 }

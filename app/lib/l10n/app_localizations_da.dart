@@ -4876,4 +4876,10 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get tapToDelete => 'Tryk for at slette';
+
+  @override
+  String get newTag => 'NY';
+
+  @override
+  String get needHelpChatWithUs => 'Brug for hjælp? Chat med os';
 }

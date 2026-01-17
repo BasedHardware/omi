@@ -4890,4 +4890,10 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get tapToDelete => 'Koppintson a törléshez';
+
+  @override
+  String get newTag => 'ÚJ';
+
+  @override
+  String get needHelpChatWithUs => 'Segítségre van szüksége? Csevegjen velünk';
 }

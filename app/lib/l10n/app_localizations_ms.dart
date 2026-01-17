@@ -4885,4 +4885,10 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get tapToDelete => 'Ketik untuk memadam';
+
+  @override
+  String get newTag => 'BAHARU';
+
+  @override
+  String get needHelpChatWithUs => 'Perlukan bantuan? Berbual dengan kami';
 }

@@ -4871,4 +4871,10 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get tapToDelete => 'Торкніться, щоб видалити';
+
+  @override
+  String get newTag => 'НОВЕ';
+
+  @override
+  String get needHelpChatWithUs => 'Потрібна допомога? Напишіть нам';
 }

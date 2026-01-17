@@ -4868,4 +4868,10 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get tapToDelete => 'Trykk for å slette';
+
+  @override
+  String get newTag => 'NY';
+
+  @override
+  String get needHelpChatWithUs => 'Trenger du hjelp? Chat med oss';
 }

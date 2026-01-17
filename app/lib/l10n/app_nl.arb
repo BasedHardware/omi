@@ -2143,5 +2143,7 @@
   "deletePersonConfirmation": "Weet u zeker dat u {name} wilt verwijderen? Dit verwijdert ook alle bijbehorende spraaksamples.",
   "howItWorksTitle": "Hoe werkt het?",
   "howPeopleWorks": "Zodra een persoon is aangemaakt, kun je naar een gesprekstranscriptie gaan en de bijbehorende segmenten toewijzen, zo kan Omi ook hun spraak herkennen!",
-  "tapToDelete": "Tik om te verwijderen"
+  "tapToDelete": "Tik om te verwijderen",
+  "newTag": "NIEUW",
+  "needHelpChatWithUs": "Hulp nodig? Chat met ons"
 }

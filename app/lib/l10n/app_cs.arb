@@ -3327,5 +3327,7 @@
   "deletePersonConfirmation": "Opravdu chcete smazat {name}? Tím se také odstraní všechny přidružené hlasové vzorky.",
   "howItWorksTitle": "Jak to funguje?",
   "howPeopleWorks": "Jakmile je osoba vytvořena, můžete přejít k přepisu konverzace a přiřadit jim odpovídající segmenty, tak Omi bude moci rozpoznat i jejich řeč!",
-  "tapToDelete": "Klepněte pro smazání"
+  "tapToDelete": "Klepněte pro smazání",
+  "newTag": "NOVÉ",
+  "needHelpChatWithUs": "Potřebujete pomoc? Napište nám"
 }

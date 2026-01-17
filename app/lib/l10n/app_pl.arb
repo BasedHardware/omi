@@ -3325,5 +3325,7 @@
   "deletePersonConfirmation": "Czy na pewno chcesz usunąć {name}? Spowoduje to również usunięcie wszystkich powiązanych próbek mowy.",
   "howItWorksTitle": "Jak to działa?",
   "howPeopleWorks": "Po utworzeniu osoby możesz przejść do transkrypcji rozmowy i przypisać im odpowiednie segmenty, w ten sposób Omi będzie mógł rozpoznać również ich mowę!",
-  "tapToDelete": "Dotknij, aby usunąć"
+  "tapToDelete": "Dotknij, aby usunąć",
+  "newTag": "NOWOŚĆ",
+  "needHelpChatWithUs": "Potrzebujesz pomocy? Porozmawiaj z nami"
 }

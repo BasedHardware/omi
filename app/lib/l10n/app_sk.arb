@@ -3325,5 +3325,7 @@
   "deletePersonConfirmation": "Ste si istí, že chcete odstrániť {name}? Tým sa odstránia aj všetky súvisiace hlasové vzorky.",
   "howItWorksTitle": "Ako to funguje?",
   "howPeopleWorks": "Po vytvorení osoby môžete prejsť na prepis konverzácie a priradiť im zodpovedajúce segmenty, takto bude Omi schopné rozpoznať aj ich reč!",
-  "tapToDelete": "Klepnite pre odstránenie"
+  "tapToDelete": "Klepnite pre odstránenie",
+  "newTag": "NOVÉ",
+  "needHelpChatWithUs": "Potrebujete pomoc? Napíšte nám"
 }

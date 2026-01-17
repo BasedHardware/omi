@@ -4867,4 +4867,10 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get tapToDelete => 'Bakstelėkite, kad ištrintumėte';
+
+  @override
+  String get newTag => 'NAUJA';
+
+  @override
+  String get needHelpChatWithUs => 'Reikia pagalbos? Susisiekite su mumis';
 }

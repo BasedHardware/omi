@@ -4880,4 +4880,10 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get tapToDelete => 'Нажмите для удаления';
+
+  @override
+  String get newTag => 'НОВОЕ';
+
+  @override
+  String get needHelpChatWithUs => 'Нужна помощь? Свяжитесь с нами';
 }

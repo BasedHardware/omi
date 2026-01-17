@@ -4861,4 +4861,10 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get tapToDelete => 'Klepněte pro smazání';
+
+  @override
+  String get newTag => 'NOVÉ';
+
+  @override
+  String get needHelpChatWithUs => 'Potřebujete pomoc? Napište nám';
 }

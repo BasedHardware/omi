@@ -3307,5 +3307,7 @@
   "deletePersonConfirmation": "Ar tikrai norite ištrinti {name}? Tai taip pat pašalins visus susijusius kalbos pavyzdžius.",
   "howItWorksTitle": "Kaip tai veikia?",
   "howPeopleWorks": "Kai asmuo sukurtas, galite eiti į pokalbio transkripciją ir priskirti jam atitinkamus segmentus, tokiu būdu Omi galės atpažinti ir jų kalbą!",
-  "tapToDelete": "Bakstelėkite, kad ištrintumėte"
+  "tapToDelete": "Bakstelėkite, kad ištrintumėte",
+  "newTag": "NAUJA",
+  "needHelpChatWithUs": "Reikia pagalbos? Susisiekite su mumis"
 }

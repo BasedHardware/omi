@@ -4910,4 +4910,10 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get tapToDelete => 'Appuyez pour supprimer';
+
+  @override
+  String get newTag => 'NOUVEAU';
+
+  @override
+  String get needHelpChatWithUs => 'Besoin d\'aide ? Discutez avec nous';
 }

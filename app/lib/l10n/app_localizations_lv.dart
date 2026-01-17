@@ -4874,4 +4874,10 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get tapToDelete => 'Pieskarieties, lai dzēstu';
+
+  @override
+  String get newTag => 'JAUNS';
+
+  @override
+  String get needHelpChatWithUs => 'Nepieciešama palīdzība? Sazinies ar mums';
 }

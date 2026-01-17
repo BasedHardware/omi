@@ -3325,5 +3325,7 @@
   "deletePersonConfirmation": "Sigur doriți să ștergeți {name}? Acest lucru va elimina și toate eșantioanele vocale asociate.",
   "howItWorksTitle": "Cum funcționează?",
   "howPeopleWorks": "Odată ce o persoană este creată, puteți merge la transcripția unei conversații și să le atribuiți segmentele corespunzătoare, astfel Omi va putea recunoaște și vocea lor!",
-  "tapToDelete": "Atingeți pentru a șterge"
+  "tapToDelete": "Atingeți pentru a șterge",
+  "newTag": "NOU",
+  "needHelpChatWithUs": "Aveți nevoie de ajutor? Discutați cu noi"
 }

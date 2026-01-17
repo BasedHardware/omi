@@ -3325,5 +3325,7 @@
   "deletePersonConfirmation": "Kas olete kindel, et soovite kustutada {name}? See eemaldab ka kõik seotud kõnenäidised.",
   "howItWorksTitle": "Kuidas see töötab?",
   "howPeopleWorks": "Kui inimene on loodud, võite minna vestluse transkriptsiooni juurde ja määrata talle vastavad segmendid, nii saab Omi ka tema kõnet tuvastada!",
-  "tapToDelete": "Puuduta kustutamiseks"
+  "tapToDelete": "Puuduta kustutamiseks",
+  "newTag": "UUS",
+  "needHelpChatWithUs": "Vajad abi? Vestle meiega"
 }

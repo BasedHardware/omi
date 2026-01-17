@@ -4890,4 +4890,10 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get tapToDelete => 'Atingeți pentru a șterge';
+
+  @override
+  String get newTag => 'NOU';
+
+  @override
+  String get needHelpChatWithUs => 'Aveți nevoie de ajutor? Discutați cu noi';
 }

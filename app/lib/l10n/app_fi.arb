@@ -3325,5 +3325,7 @@
   "deletePersonConfirmation": "Haluatko varmasti poistaa käyttäjän {name}? Tämä poistaa myös kaikki liittyvät puhenäytteet.",
   "howItWorksTitle": "Miten se toimii?",
   "howPeopleWorks": "Kun henkilö on luotu, voit mennä keskustelun transkriptioon ja määrittää heille vastaavat segmentit, näin Omi voi tunnistaa myös heidän puheensa!",
-  "tapToDelete": "Napauta poistaaksesi"
+  "tapToDelete": "Napauta poistaaksesi",
+  "newTag": "UUSI",
+  "needHelpChatWithUs": "Tarvitsetko apua? Keskustele kanssamme"
 }

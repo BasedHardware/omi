@@ -4866,4 +4866,10 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get tapToDelete => 'Napauta poistaaksesi';
+
+  @override
+  String get newTag => 'UUSI';
+
+  @override
+  String get needHelpChatWithUs => 'Tarvitsetko apua? Keskustele kanssamme';
 }
