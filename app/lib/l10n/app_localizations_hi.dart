@@ -4849,4 +4849,38 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get needHelpChatWithUs => 'मदद चाहिए? हमसे चैट करें';
+
+  @override
+  String get localStorageEnabled => 'स्थानीय संग्रहण सक्षम';
+
+  @override
+  String get localStorageDisabled => 'स्थानीय संग्रहण अक्षम';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return 'सेटिंग्स अपडेट करने में विफल: $error';
+  }
+
+  @override
+  String get privacyNotice => 'गोपनीयता सूचना';
+
+  @override
+  String get recordingsMayCaptureOthers =>
+      'रिकॉर्डिंग दूसरों की आवाज़ें कैप्चर कर सकती हैं। सक्षम करने से पहले सभी प्रतिभागियों की सहमति सुनिश्चित करें।';
+
+  @override
+  String get enable => 'सक्षम करें';
+
+  @override
+  String get storeAudioOnPhone => 'फ़ोन पर ऑडियो संग्रहीत करें';
+
+  @override
+  String get on => 'चालू';
+
+  @override
+  String get storeAudioDescription =>
+      'सभी ऑडियो रिकॉर्डिंग को अपने फ़ोन पर स्थानीय रूप से संग्रहीत रखें। अक्षम होने पर, केवल विफल अपलोड संग्रहण स्थान बचाने के लिए रखे जाते हैं।';
+
+  @override
+  String get enableLocalStorage => 'स्थानीय संग्रहण सक्षम करें';
 }

@@ -3309,5 +3309,15 @@
   "howPeopleWorks": "Kai asmuo sukurtas, galite eiti į pokalbio transkripciją ir priskirti jam atitinkamus segmentus, tokiu būdu Omi galės atpažinti ir jų kalbą!",
   "tapToDelete": "Bakstelėkite, kad ištrintumėte",
   "newTag": "NAUJA",
-  "needHelpChatWithUs": "Reikia pagalbos? Susisiekite su mumis"
+  "needHelpChatWithUs": "Reikia pagalbos? Susisiekite su mumis",
+  "localStorageEnabled": "Vietinė saugykla įjungta",
+  "localStorageDisabled": "Vietinė saugykla išjungta",
+  "failedToUpdateSettings": "Nepavyko atnaujinti nustatymų: {error}",
+  "privacyNotice": "Privatumo pranešimas",
+  "recordingsMayCaptureOthers": "Įrašai gali užfiksuoti kitų balsus. Prieš įjungdami įsitikinkite, kad turite visų dalyvių sutikimą.",
+  "enable": "Įjungti",
+  "storeAudioOnPhone": "Saugoti garsą telefone",
+  "on": "Įjungta",
+  "storeAudioDescription": "Saugokite visus garso įrašus lokaliai savo telefone. Išjungus, saugomi tik nepavykę įkėlimai, kad būtų sutaupyta vietos.",
+  "enableLocalStorage": "Įjungti vietinę saugyklą"
 }

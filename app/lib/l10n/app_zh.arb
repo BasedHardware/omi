@@ -1774,5 +1774,15 @@
   "howPeopleWorks": "创建人员后，您可以转到对话记录并为他们分配相应的片段，这样 Omi 也能识别他们的语音！",
   "tapToDelete": "点击删除",
   "newTag": "新",
-  "needHelpChatWithUs": "需要帮助？与我们聊天"
+  "needHelpChatWithUs": "需要帮助？与我们聊天",
+  "localStorageEnabled": "本地存储已启用",
+  "localStorageDisabled": "本地存储已禁用",
+  "failedToUpdateSettings": "更新设置失败: {error}",
+  "privacyNotice": "隐私声明",
+  "recordingsMayCaptureOthers": "录音可能会捕获他人的声音。启用前请确保获得所有参与者的同意。",
+  "enable": "启用",
+  "storeAudioOnPhone": "在手机上存储音频",
+  "on": "开",
+  "storeAudioDescription": "将所有音频录音存储在手机本地。禁用时，仅保留上传失败的文件以节省存储空间。",
+  "enableLocalStorage": "启用本地存储"
 }

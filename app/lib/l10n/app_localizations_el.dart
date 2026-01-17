@@ -4911,4 +4911,38 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get needHelpChatWithUs => 'Χρειάζεστε βοήθεια; Συνομιλήστε μαζί μας';
+
+  @override
+  String get localStorageEnabled => 'Η τοπική αποθήκευση ενεργοποιήθηκε';
+
+  @override
+  String get localStorageDisabled => 'Η τοπική αποθήκευση απενεργοποιήθηκε';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return 'Αποτυχία ενημέρωσης ρυθμίσεων: $error';
+  }
+
+  @override
+  String get privacyNotice => 'Ειδοποίηση απορρήτου';
+
+  @override
+  String get recordingsMayCaptureOthers =>
+      'Οι εγγραφές μπορεί να καταγράψουν φωνές άλλων. Βεβαιωθείτε ότι έχετε τη συγκατάθεση όλων των συμμετεχόντων πριν την ενεργοποίηση.';
+
+  @override
+  String get enable => 'Ενεργοποίηση';
+
+  @override
+  String get storeAudioOnPhone => 'Αποθήκευση ήχου στο τηλέφωνο';
+
+  @override
+  String get on => 'Ενεργό';
+
+  @override
+  String get storeAudioDescription =>
+      'Διατηρήστε όλες τις ηχογραφήσεις αποθηκευμένες τοπικά στο τηλέφωνό σας. Όταν είναι απενεργοποιημένο, διατηρούνται μόνο οι αποτυχημένες μεταφορτώσεις για εξοικονόμηση χώρου.';
+
+  @override
+  String get enableLocalStorage => 'Ενεργοποίηση τοπικής αποθήκευσης';
 }

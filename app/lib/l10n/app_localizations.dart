@@ -9218,6 +9218,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Need Help? Chat with us'**
   String get needHelpChatWithUs;
+
+  /// localStorageEnabled label
+  ///
+  /// In en, this message translates to:
+  /// **'Local storage enabled'**
+  String get localStorageEnabled;
+
+  /// localStorageDisabled label
+  ///
+  /// In en, this message translates to:
+  /// **'Local storage disabled'**
+  String get localStorageDisabled;
+
+  /// failedToUpdateSettings message
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to update settings: {error}'**
+  String failedToUpdateSettings(String error);
+
+  /// privacyNotice label
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy Notice'**
+  String get privacyNotice;
+
+  /// recordingsMayCaptureOthers label
+  ///
+  /// In en, this message translates to:
+  /// **'Recordings may capture others\' voices. Ensure you have consent from all participants before enabling.'**
+  String get recordingsMayCaptureOthers;
+
+  /// enable label
+  ///
+  /// In en, this message translates to:
+  /// **'Enable'**
+  String get enable;
+
+  /// storeAudioOnPhone label
+  ///
+  /// In en, this message translates to:
+  /// **'Store Audio on Phone'**
+  String get storeAudioOnPhone;
+
+  /// on label
+  ///
+  /// In en, this message translates to:
+  /// **'On'**
+  String get on;
+
+  /// storeAudioDescription label
+  ///
+  /// In en, this message translates to:
+  /// **'Keep all audio recordings stored locally on your phone. When disabled, only failed uploads are kept to save storage space.'**
+  String get storeAudioDescription;
+
+  /// enableLocalStorage label
+  ///
+  /// In en, this message translates to:
+  /// **'Enable Local Storage'**
+  String get enableLocalStorage;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

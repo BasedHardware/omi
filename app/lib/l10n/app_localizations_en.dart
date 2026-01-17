@@ -4875,4 +4875,38 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get needHelpChatWithUs => 'Need Help? Chat with us';
+
+  @override
+  String get localStorageEnabled => 'Local storage enabled';
+
+  @override
+  String get localStorageDisabled => 'Local storage disabled';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return 'Failed to update settings: $error';
+  }
+
+  @override
+  String get privacyNotice => 'Privacy Notice';
+
+  @override
+  String get recordingsMayCaptureOthers =>
+      'Recordings may capture others\' voices. Ensure you have consent from all participants before enabling.';
+
+  @override
+  String get enable => 'Enable';
+
+  @override
+  String get storeAudioOnPhone => 'Store Audio on Phone';
+
+  @override
+  String get on => 'On';
+
+  @override
+  String get storeAudioDescription =>
+      'Keep all audio recordings stored locally on your phone. When disabled, only failed uploads are kept to save storage space.';
+
+  @override
+  String get enableLocalStorage => 'Enable Local Storage';
 }

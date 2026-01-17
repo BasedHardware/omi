@@ -4891,4 +4891,38 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get needHelpChatWithUs => 'Perlukan bantuan? Berbual dengan kami';
+
+  @override
+  String get localStorageEnabled => 'Storan tempatan diaktifkan';
+
+  @override
+  String get localStorageDisabled => 'Storan tempatan dinyahaktifkan';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return 'Gagal mengemas kini tetapan: $error';
+  }
+
+  @override
+  String get privacyNotice => 'Notis Privasi';
+
+  @override
+  String get recordingsMayCaptureOthers =>
+      'Rakaman mungkin menangkap suara orang lain. Pastikan anda mendapat persetujuan daripada semua peserta sebelum mengaktifkan.';
+
+  @override
+  String get enable => 'Aktifkan';
+
+  @override
+  String get storeAudioOnPhone => 'Simpan Audio di Telefon';
+
+  @override
+  String get on => 'Hidup';
+
+  @override
+  String get storeAudioDescription =>
+      'Simpan semua rakaman audio secara tempatan di telefon anda. Apabila dilumpuhkan, hanya muat naik yang gagal disimpan untuk menjimatkan ruang storan.';
+
+  @override
+  String get enableLocalStorage => 'Aktifkan Storan Tempatan';
 }

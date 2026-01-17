@@ -1753,5 +1753,15 @@
   "howPeopleWorks": "人物を作成したら、会話のトランスクリプトに移動して対応するセグメントを割り当てることで、Omiがその人の音声も認識できるようになります！",
   "tapToDelete": "タップして削除",
   "newTag": "新着",
-  "needHelpChatWithUs": "ヘルプが必要ですか？チャットでお問い合わせ"
+  "needHelpChatWithUs": "ヘルプが必要ですか？チャットでお問い合わせ",
+  "localStorageEnabled": "ローカルストレージが有効",
+  "localStorageDisabled": "ローカルストレージが無効",
+  "failedToUpdateSettings": "設定の更新に失敗しました: {error}",
+  "privacyNotice": "プライバシー通知",
+  "recordingsMayCaptureOthers": "録音により他の人の声が記録される場合があります。有効にする前に、すべての参加者の同意を得てください。",
+  "enable": "有効にする",
+  "storeAudioOnPhone": "電話に音声を保存",
+  "on": "オン",
+  "storeAudioDescription": "すべての音声録音を電話にローカルで保存します。無効にすると、ストレージ容量を節約するために失敗したアップロードのみが保持されます。",
+  "enableLocalStorage": "ローカルストレージを有効にする"
 }

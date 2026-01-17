@@ -3327,5 +3327,15 @@
   "howPeopleWorks": "Sebaik sahaja seseorang dicipta, anda boleh pergi ke transkrip perbualan dan menetapkan segmen yang sepadan kepada mereka, dengan cara itu Omi akan dapat mengenali pertuturan mereka juga!",
   "tapToDelete": "Ketik untuk memadam",
   "newTag": "BAHARU",
-  "needHelpChatWithUs": "Perlukan bantuan? Berbual dengan kami"
+  "needHelpChatWithUs": "Perlukan bantuan? Berbual dengan kami",
+  "localStorageEnabled": "Storan tempatan diaktifkan",
+  "localStorageDisabled": "Storan tempatan dinyahaktifkan",
+  "failedToUpdateSettings": "Gagal mengemas kini tetapan: {error}",
+  "privacyNotice": "Notis Privasi",
+  "recordingsMayCaptureOthers": "Rakaman mungkin menangkap suara orang lain. Pastikan anda mendapat persetujuan daripada semua peserta sebelum mengaktifkan.",
+  "enable": "Aktifkan",
+  "storeAudioOnPhone": "Simpan Audio di Telefon",
+  "on": "Hidup",
+  "storeAudioDescription": "Simpan semua rakaman audio secara tempatan di telefon anda. Apabila dilumpuhkan, hanya muat naik yang gagal disimpan untuk menjimatkan ruang storan.",
+  "enableLocalStorage": "Aktifkan Storan Tempatan"
 }

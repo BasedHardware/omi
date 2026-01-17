@@ -4872,4 +4872,38 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get needHelpChatWithUs => 'Vajad abi? Vestle meiega';
+
+  @override
+  String get localStorageEnabled => 'Kohalik salvestus lubatud';
+
+  @override
+  String get localStorageDisabled => 'Kohalik salvestus keelatud';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return 'Seadete värskendamine ebaõnnestus: $error';
+  }
+
+  @override
+  String get privacyNotice => 'Privaatsusteade';
+
+  @override
+  String get recordingsMayCaptureOthers =>
+      'Salvestised võivad jäädvustada teiste inimeste hääli. Enne lubamist veenduge, et teil on kõigi osalejate nõusolek.';
+
+  @override
+  String get enable => 'Luba';
+
+  @override
+  String get storeAudioOnPhone => 'Salvesta heli telefoni';
+
+  @override
+  String get on => 'Sees';
+
+  @override
+  String get storeAudioDescription =>
+      'Hoidke kõik helisalvestised telefonis lokaalselt. Kui on keelatud, salvestatakse ainult ebaõnnestunud üleslaadimised ruumi säästmiseks.';
+
+  @override
+  String get enableLocalStorage => 'Luba kohalik salvestus';
 }

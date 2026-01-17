@@ -4787,4 +4787,36 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get needHelpChatWithUs => '도움이 필요하신가요? 채팅으로 문의하세요';
+
+  @override
+  String get localStorageEnabled => '로컬 저장소 활성화됨';
+
+  @override
+  String get localStorageDisabled => '로컬 저장소 비활성화됨';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return '설정 업데이트 실패: $error';
+  }
+
+  @override
+  String get privacyNotice => '개인정보 보호 안내';
+
+  @override
+  String get recordingsMayCaptureOthers => '녹음 시 다른 사람의 목소리가 녹음될 수 있습니다. 활성화하기 전에 모든 참가자의 동의를 받으세요.';
+
+  @override
+  String get enable => '활성화';
+
+  @override
+  String get storeAudioOnPhone => '휴대폰에 오디오 저장';
+
+  @override
+  String get on => '켜짐';
+
+  @override
+  String get storeAudioDescription => '모든 오디오 녹음을 휴대폰에 로컬로 저장하세요. 비활성화하면 저장 공간 절약을 위해 실패한 업로드만 유지됩니다.';
+
+  @override
+  String get enableLocalStorage => '로컬 저장소 활성화';
 }

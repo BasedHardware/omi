@@ -3327,5 +3327,15 @@
   "howPeopleWorks": "Kui inimene on loodud, võite minna vestluse transkriptsiooni juurde ja määrata talle vastavad segmendid, nii saab Omi ka tema kõnet tuvastada!",
   "tapToDelete": "Puuduta kustutamiseks",
   "newTag": "UUS",
-  "needHelpChatWithUs": "Vajad abi? Vestle meiega"
+  "needHelpChatWithUs": "Vajad abi? Vestle meiega",
+  "localStorageEnabled": "Kohalik salvestus lubatud",
+  "localStorageDisabled": "Kohalik salvestus keelatud",
+  "failedToUpdateSettings": "Seadete värskendamine ebaõnnestus: {error}",
+  "privacyNotice": "Privaatsusteade",
+  "recordingsMayCaptureOthers": "Salvestised võivad jäädvustada teiste inimeste hääli. Enne lubamist veenduge, et teil on kõigi osalejate nõusolek.",
+  "enable": "Luba",
+  "storeAudioOnPhone": "Salvesta heli telefoni",
+  "on": "Sees",
+  "storeAudioDescription": "Hoidke kõik helisalvestised telefonis lokaalselt. Kui on keelatud, salvestatakse ainult ebaõnnestunud üleslaadimised ruumi säästmiseks.",
+  "enableLocalStorage": "Luba kohalik salvestus"
 }

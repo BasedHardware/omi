@@ -4872,4 +4872,38 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get needHelpChatWithUs => 'Tarvitsetko apua? Keskustele kanssamme';
+
+  @override
+  String get localStorageEnabled => 'Paikallinen tallennustila käytössä';
+
+  @override
+  String get localStorageDisabled => 'Paikallinen tallennustila pois käytöstä';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return 'Asetusten päivitys epäonnistui: $error';
+  }
+
+  @override
+  String get privacyNotice => 'Tietosuojailmoitus';
+
+  @override
+  String get recordingsMayCaptureOthers =>
+      'Tallenteet voivat tallentaa muiden ääniä. Varmista, että sinulla on kaikkien osallistujien suostumus ennen käyttöönottoa.';
+
+  @override
+  String get enable => 'Ota käyttöön';
+
+  @override
+  String get storeAudioOnPhone => 'Tallenna ääni puhelimeen';
+
+  @override
+  String get on => 'Päällä';
+
+  @override
+  String get storeAudioDescription =>
+      'Säilytä kaikki äänitallenteet paikallisesti puhelimessasi. Kun pois käytöstä, vain epäonnistuneet lataukset säilytetään tallennustilan säästämiseksi.';
+
+  @override
+  String get enableLocalStorage => 'Ota paikallinen tallennustila käyttöön';
 }

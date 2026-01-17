@@ -4873,4 +4873,38 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get needHelpChatWithUs => 'Reikia pagalbos? Susisiekite su mumis';
+
+  @override
+  String get localStorageEnabled => 'Vietinė saugykla įjungta';
+
+  @override
+  String get localStorageDisabled => 'Vietinė saugykla išjungta';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return 'Nepavyko atnaujinti nustatymų: $error';
+  }
+
+  @override
+  String get privacyNotice => 'Privatumo pranešimas';
+
+  @override
+  String get recordingsMayCaptureOthers =>
+      'Įrašai gali užfiksuoti kitų balsus. Prieš įjungdami įsitikinkite, kad turite visų dalyvių sutikimą.';
+
+  @override
+  String get enable => 'Įjungti';
+
+  @override
+  String get storeAudioOnPhone => 'Saugoti garsą telefone';
+
+  @override
+  String get on => 'Įjungta';
+
+  @override
+  String get storeAudioDescription =>
+      'Saugokite visus garso įrašus lokaliai savo telefone. Išjungus, saugomi tik nepavykę įkėlimai, kad būtų sutaupyta vietos.';
+
+  @override
+  String get enableLocalStorage => 'Įjungti vietinę saugyklą';
 }

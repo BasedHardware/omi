@@ -4886,4 +4886,38 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get needHelpChatWithUs => 'Hulp nodig? Chat met ons';
+
+  @override
+  String get localStorageEnabled => 'Lokale opslag ingeschakeld';
+
+  @override
+  String get localStorageDisabled => 'Lokale opslag uitgeschakeld';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return 'Instellingen bijwerken mislukt: $error';
+  }
+
+  @override
+  String get privacyNotice => 'Privacyverklaring';
+
+  @override
+  String get recordingsMayCaptureOthers =>
+      'Opnames kunnen de stemmen van anderen vastleggen. Zorg ervoor dat u toestemming hebt van alle deelnemers voordat u inschakelt.';
+
+  @override
+  String get enable => 'Inschakelen';
+
+  @override
+  String get storeAudioOnPhone => 'Audio opslaan op telefoon';
+
+  @override
+  String get on => 'Aan';
+
+  @override
+  String get storeAudioDescription =>
+      'Bewaar alle audio-opnames lokaal op uw telefoon. Wanneer uitgeschakeld, worden alleen mislukte uploads bewaard om opslagruimte te besparen.';
+
+  @override
+  String get enableLocalStorage => 'Lokale opslag inschakelen';
 }

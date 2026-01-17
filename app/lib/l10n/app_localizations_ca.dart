@@ -4901,4 +4901,38 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get needHelpChatWithUs => 'Necessites ajuda? Xateja amb nosaltres';
+
+  @override
+  String get localStorageEnabled => 'Emmagatzematge local activat';
+
+  @override
+  String get localStorageDisabled => 'Emmagatzematge local desactivat';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return 'No s\'han pogut actualitzar els paràmetres: $error';
+  }
+
+  @override
+  String get privacyNotice => 'Avís de privacitat';
+
+  @override
+  String get recordingsMayCaptureOthers =>
+      'Les gravacions poden capturar les veus d\'altres persones. Assegureu-vos de tenir el consentiment de tots els participants abans d\'activar.';
+
+  @override
+  String get enable => 'Activa';
+
+  @override
+  String get storeAudioOnPhone => 'Emmagatzema l\'àudio al telèfon';
+
+  @override
+  String get on => 'Activat';
+
+  @override
+  String get storeAudioDescription =>
+      'Manteniu totes les gravacions d\'àudio emmagatzemades localment al telèfon. Quan estigui desactivat, només es conserven les càrregues fallides per estalviar espai.';
+
+  @override
+  String get enableLocalStorage => 'Activa l\'emmagatzematge local';
 }

@@ -4836,4 +4836,38 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get needHelpChatWithUs => 'تحتاج مساعدة؟ تحدث معنا';
+
+  @override
+  String get localStorageEnabled => 'تم تفعيل التخزين المحلي';
+
+  @override
+  String get localStorageDisabled => 'تم تعطيل التخزين المحلي';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return 'فشل تحديث الإعدادات: $error';
+  }
+
+  @override
+  String get privacyNotice => 'إشعار الخصوصية';
+
+  @override
+  String get recordingsMayCaptureOthers =>
+      'قد تلتقط التسجيلات أصوات الآخرين. تأكد من الحصول على موافقة جميع المشاركين قبل التفعيل.';
+
+  @override
+  String get enable => 'تفعيل';
+
+  @override
+  String get storeAudioOnPhone => 'تخزين الصوت على الهاتف';
+
+  @override
+  String get on => 'مفعل';
+
+  @override
+  String get storeAudioDescription =>
+      'احتفظ بجميع التسجيلات الصوتية مخزنة محليًا على هاتفك. عند التعطيل، يتم الاحتفاظ فقط بالتحميلات الفاشلة لتوفير مساحة التخزين.';
+
+  @override
+  String get enableLocalStorage => 'تفعيل التخزين المحلي';
 }

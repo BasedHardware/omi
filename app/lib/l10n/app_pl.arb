@@ -3327,5 +3327,15 @@
   "howPeopleWorks": "Po utworzeniu osoby możesz przejść do transkrypcji rozmowy i przypisać im odpowiednie segmenty, w ten sposób Omi będzie mógł rozpoznać również ich mowę!",
   "tapToDelete": "Dotknij, aby usunąć",
   "newTag": "NOWOŚĆ",
-  "needHelpChatWithUs": "Potrzebujesz pomocy? Porozmawiaj z nami"
+  "needHelpChatWithUs": "Potrzebujesz pomocy? Porozmawiaj z nami",
+  "localStorageEnabled": "Pamięć lokalna włączona",
+  "localStorageDisabled": "Pamięć lokalna wyłączona",
+  "failedToUpdateSettings": "Nie udało się zaktualizować ustawień: {error}",
+  "privacyNotice": "Informacja o prywatności",
+  "recordingsMayCaptureOthers": "Nagrania mogą przechwytywać głosy innych osób. Przed włączeniem upewnij się, że masz zgodę wszystkich uczestników.",
+  "enable": "Włącz",
+  "storeAudioOnPhone": "Przechowuj dźwięk na telefonie",
+  "on": "Włączone",
+  "storeAudioDescription": "Przechowuj wszystkie nagrania audio lokalnie na telefonie. Po wyłączeniu tylko nieudane przesyłania są zachowywane, aby zaoszczędzić miejsce.",
+  "enableLocalStorage": "Włącz pamięć lokalną"
 }

@@ -4881,4 +4881,38 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get needHelpChatWithUs => 'Cần trợ giúp? Trò chuyện với chúng tôi';
+
+  @override
+  String get localStorageEnabled => 'Đã bật bộ nhớ cục bộ';
+
+  @override
+  String get localStorageDisabled => 'Đã tắt bộ nhớ cục bộ';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return 'Không thể cập nhật cài đặt: $error';
+  }
+
+  @override
+  String get privacyNotice => 'Thông báo quyền riêng tư';
+
+  @override
+  String get recordingsMayCaptureOthers =>
+      'Bản ghi có thể ghi lại giọng nói của người khác. Đảm bảo bạn có sự đồng ý của tất cả người tham gia trước khi bật.';
+
+  @override
+  String get enable => 'Bật';
+
+  @override
+  String get storeAudioOnPhone => 'Lưu âm thanh trên điện thoại';
+
+  @override
+  String get on => 'Bật';
+
+  @override
+  String get storeAudioDescription =>
+      'Lưu trữ tất cả bản ghi âm trên điện thoại của bạn. Khi tắt, chỉ các tải lên thất bại được giữ lại để tiết kiệm dung lượng.';
+
+  @override
+  String get enableLocalStorage => 'Bật bộ nhớ cục bộ';
 }

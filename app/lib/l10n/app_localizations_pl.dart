@@ -4882,4 +4882,38 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get needHelpChatWithUs => 'Potrzebujesz pomocy? Porozmawiaj z nami';
+
+  @override
+  String get localStorageEnabled => 'Pamięć lokalna włączona';
+
+  @override
+  String get localStorageDisabled => 'Pamięć lokalna wyłączona';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return 'Nie udało się zaktualizować ustawień: $error';
+  }
+
+  @override
+  String get privacyNotice => 'Informacja o prywatności';
+
+  @override
+  String get recordingsMayCaptureOthers =>
+      'Nagrania mogą przechwytywać głosy innych osób. Przed włączeniem upewnij się, że masz zgodę wszystkich uczestników.';
+
+  @override
+  String get enable => 'Włącz';
+
+  @override
+  String get storeAudioOnPhone => 'Przechowuj dźwięk na telefonie';
+
+  @override
+  String get on => 'Włączone';
+
+  @override
+  String get storeAudioDescription =>
+      'Przechowuj wszystkie nagrania audio lokalnie na telefonie. Po wyłączeniu tylko nieudane przesyłania są zachowywane, aby zaoszczędzić miejsce.';
+
+  @override
+  String get enableLocalStorage => 'Włącz pamięć lokalną';
 }

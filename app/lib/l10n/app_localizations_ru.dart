@@ -4886,4 +4886,38 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get needHelpChatWithUs => 'Нужна помощь? Свяжитесь с нами';
+
+  @override
+  String get localStorageEnabled => 'Локальное хранилище включено';
+
+  @override
+  String get localStorageDisabled => 'Локальное хранилище отключено';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return 'Не удалось обновить настройки: $error';
+  }
+
+  @override
+  String get privacyNotice => 'Уведомление о конфиденциальности';
+
+  @override
+  String get recordingsMayCaptureOthers =>
+      'Записи могут захватывать голоса других людей. Перед включением убедитесь, что у вас есть согласие всех участников.';
+
+  @override
+  String get enable => 'Включить';
+
+  @override
+  String get storeAudioOnPhone => 'Хранить аудио на телефоне';
+
+  @override
+  String get on => 'Вкл.';
+
+  @override
+  String get storeAudioDescription =>
+      'Храните все аудиозаписи локально на телефоне. При отключении сохраняются только неудачные загрузки для экономии места.';
+
+  @override
+  String get enableLocalStorage => 'Включить локальное хранилище';
 }

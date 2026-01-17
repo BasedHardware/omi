@@ -2145,5 +2145,15 @@
   "howPeopleWorks": "Zodra een persoon is aangemaakt, kun je naar een gesprekstranscriptie gaan en de bijbehorende segmenten toewijzen, zo kan Omi ook hun spraak herkennen!",
   "tapToDelete": "Tik om te verwijderen",
   "newTag": "NIEUW",
-  "needHelpChatWithUs": "Hulp nodig? Chat met ons"
+  "needHelpChatWithUs": "Hulp nodig? Chat met ons",
+  "localStorageEnabled": "Lokale opslag ingeschakeld",
+  "localStorageDisabled": "Lokale opslag uitgeschakeld",
+  "failedToUpdateSettings": "Instellingen bijwerken mislukt: {error}",
+  "privacyNotice": "Privacyverklaring",
+  "recordingsMayCaptureOthers": "Opnames kunnen de stemmen van anderen vastleggen. Zorg ervoor dat u toestemming hebt van alle deelnemers voordat u inschakelt.",
+  "enable": "Inschakelen",
+  "storeAudioOnPhone": "Audio opslaan op telefoon",
+  "on": "Aan",
+  "storeAudioDescription": "Bewaar alle audio-opnames lokaal op uw telefoon. Wanneer uitgeschakeld, worden alleen mislukte uploads bewaard om opslagruimte te besparen.",
+  "enableLocalStorage": "Lokale opslag inschakelen"
 }

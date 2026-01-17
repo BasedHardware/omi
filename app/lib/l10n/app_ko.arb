@@ -3327,5 +3327,15 @@
   "howPeopleWorks": "사람이 생성되면 대화 기록으로 이동하여 해당 세그먼트를 할당할 수 있습니다. 그러면 Omi가 그들의 음성도 인식할 수 있습니다!",
   "tapToDelete": "탭하여 삭제",
   "newTag": "신규",
-  "needHelpChatWithUs": "도움이 필요하신가요? 채팅으로 문의하세요"
+  "needHelpChatWithUs": "도움이 필요하신가요? 채팅으로 문의하세요",
+  "localStorageEnabled": "로컬 저장소 활성화됨",
+  "localStorageDisabled": "로컬 저장소 비활성화됨",
+  "failedToUpdateSettings": "설정 업데이트 실패: {error}",
+  "privacyNotice": "개인정보 보호 안내",
+  "recordingsMayCaptureOthers": "녹음 시 다른 사람의 목소리가 녹음될 수 있습니다. 활성화하기 전에 모든 참가자의 동의를 받으세요.",
+  "enable": "활성화",
+  "storeAudioOnPhone": "휴대폰에 오디오 저장",
+  "on": "켜짐",
+  "storeAudioDescription": "모든 오디오 녹음을 휴대폰에 로컬로 저장하세요. 비활성화하면 저장 공간 절약을 위해 실패한 업로드만 유지됩니다.",
+  "enableLocalStorage": "로컬 저장소 활성화"
 }

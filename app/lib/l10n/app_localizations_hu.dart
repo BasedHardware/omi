@@ -4896,4 +4896,38 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get needHelpChatWithUs => 'Segítségre van szüksége? Csevegjen velünk';
+
+  @override
+  String get localStorageEnabled => 'Helyi tárolás engedélyezve';
+
+  @override
+  String get localStorageDisabled => 'Helyi tárolás letiltva';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return 'A beállítások frissítése sikertelen: $error';
+  }
+
+  @override
+  String get privacyNotice => 'Adatvédelmi figyelmeztetés';
+
+  @override
+  String get recordingsMayCaptureOthers =>
+      'A felvételek rögzíthetik mások hangját. A bekapcsolás előtt győződjön meg arról, hogy minden résztvevő beleegyezését megkapta.';
+
+  @override
+  String get enable => 'Engedélyezés';
+
+  @override
+  String get storeAudioOnPhone => 'Hang tárolása a telefonon';
+
+  @override
+  String get on => 'Be';
+
+  @override
+  String get storeAudioDescription =>
+      'Tartsa az összes hangfelvételt helyileg tárolva a telefonján. Letiltva csak a sikertelen feltöltések maradnak meg a tárhely megtakarítása érdekében.';
+
+  @override
+  String get enableLocalStorage => 'Helyi tárolás engedélyezése';
 }

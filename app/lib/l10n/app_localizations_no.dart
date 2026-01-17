@@ -4874,4 +4874,38 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get needHelpChatWithUs => 'Trenger du hjelp? Chat med oss';
+
+  @override
+  String get localStorageEnabled => 'Lokal lagring aktivert';
+
+  @override
+  String get localStorageDisabled => 'Lokal lagring deaktivert';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return 'Kunne ikke oppdatere innstillinger: $error';
+  }
+
+  @override
+  String get privacyNotice => 'Personvernerklæring';
+
+  @override
+  String get recordingsMayCaptureOthers =>
+      'Opptak kan fange opp andres stemmer. Sørg for at du har samtykke fra alle deltakere før du aktiverer.';
+
+  @override
+  String get enable => 'Aktiver';
+
+  @override
+  String get storeAudioOnPhone => 'Lagre lyd på telefon';
+
+  @override
+  String get on => 'På';
+
+  @override
+  String get storeAudioDescription =>
+      'Behold alle lydopptak lagret lokalt på telefonen. Når deaktivert, beholdes bare mislykkede opplastinger for å spare lagringsplass.';
+
+  @override
+  String get enableLocalStorage => 'Aktiver lokal lagring';
 }

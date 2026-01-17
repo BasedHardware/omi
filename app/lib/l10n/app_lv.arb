@@ -3327,5 +3327,15 @@
   "howPeopleWorks": "Kad persona ir izveidota, varat doties uz sarunas transkripciju un piešķirt viņiem atbilstošos segmentus, tādā veidā Omi varēs atpazīt arī viņu runu!",
   "tapToDelete": "Pieskarieties, lai dzēstu",
   "newTag": "JAUNS",
-  "needHelpChatWithUs": "Nepieciešama palīdzība? Sazinies ar mums"
+  "needHelpChatWithUs": "Nepieciešama palīdzība? Sazinies ar mums",
+  "localStorageEnabled": "Lokālā krātuve iespējota",
+  "localStorageDisabled": "Lokālā krātuve atspējota",
+  "failedToUpdateSettings": "Neizdevās atjaunināt iestatījumus: {error}",
+  "privacyNotice": "Privātuma paziņojums",
+  "recordingsMayCaptureOthers": "Ieraksti var ierakstīt citu cilvēku balsis. Pirms iespējošanas pārliecinieties, ka esat saņēmis visu dalībnieku piekrišanu.",
+  "enable": "Iespējot",
+  "storeAudioOnPhone": "Saglabāt audio tālrunī",
+  "on": "Ieslēgts",
+  "storeAudioDescription": "Saglabājiet visus audio ierakstus lokāli savā tālrunī. Kad ir atspējots, tiek saglabāti tikai neveiksmīgie augšupielādēšanas gadījumi, lai ietaupītu vietu.",
+  "enableLocalStorage": "Iespējot lokālo krātuvi"
 }

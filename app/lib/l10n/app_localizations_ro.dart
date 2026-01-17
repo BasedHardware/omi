@@ -4896,4 +4896,38 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get needHelpChatWithUs => 'Aveți nevoie de ajutor? Discutați cu noi';
+
+  @override
+  String get localStorageEnabled => 'Stocare locală activată';
+
+  @override
+  String get localStorageDisabled => 'Stocare locală dezactivată';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return 'Actualizarea setărilor a eșuat: $error';
+  }
+
+  @override
+  String get privacyNotice => 'Notificare de confidențialitate';
+
+  @override
+  String get recordingsMayCaptureOthers =>
+      'Înregistrările pot captura vocile altora. Asigurați-vă că aveți consimțământul tuturor participanților înainte de activare.';
+
+  @override
+  String get enable => 'Activare';
+
+  @override
+  String get storeAudioOnPhone => 'Stocați audio pe telefon';
+
+  @override
+  String get on => 'Activat';
+
+  @override
+  String get storeAudioDescription =>
+      'Păstrați toate înregistrările audio stocate local pe telefon. Când este dezactivat, doar încărcările eșuate sunt păstrate pentru a economisi spațiu.';
+
+  @override
+  String get enableLocalStorage => 'Activare stocare locală';
 }

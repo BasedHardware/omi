@@ -1774,5 +1774,15 @@
   "howPeopleWorks": "Depois que uma pessoa é criada, você pode ir para a transcrição de uma conversa e atribuir os segmentos correspondentes, assim o Omi também poderá reconhecer a fala dela!",
   "tapToDelete": "Toque para excluir",
   "newTag": "NOVO",
-  "needHelpChatWithUs": "Precisa de ajuda? Fale conosco"
+  "needHelpChatWithUs": "Precisa de ajuda? Fale conosco",
+  "localStorageEnabled": "Armazenamento local ativado",
+  "localStorageDisabled": "Armazenamento local desativado",
+  "failedToUpdateSettings": "Falha ao atualizar configurações: {error}",
+  "privacyNotice": "Aviso de privacidade",
+  "recordingsMayCaptureOthers": "As gravações podem capturar as vozes de outras pessoas. Certifique-se de ter o consentimento de todos os participantes antes de ativar.",
+  "enable": "Ativar",
+  "storeAudioOnPhone": "Armazenar áudio no telefone",
+  "on": "Ligado",
+  "storeAudioDescription": "Mantenha todas as gravações de áudio armazenadas localmente no seu telefone. Quando desativado, apenas uploads com falha são mantidos para economizar espaço.",
+  "enableLocalStorage": "Ativar armazenamento local"
 }

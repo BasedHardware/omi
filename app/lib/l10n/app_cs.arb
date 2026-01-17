@@ -3329,5 +3329,15 @@
   "howPeopleWorks": "Jakmile je osoba vytvořena, můžete přejít k přepisu konverzace a přiřadit jim odpovídající segmenty, tak Omi bude moci rozpoznat i jejich řeč!",
   "tapToDelete": "Klepněte pro smazání",
   "newTag": "NOVÉ",
-  "needHelpChatWithUs": "Potřebujete pomoc? Napište nám"
+  "needHelpChatWithUs": "Potřebujete pomoc? Napište nám",
+  "localStorageEnabled": "Místní úložiště povoleno",
+  "localStorageDisabled": "Místní úložiště zakázáno",
+  "failedToUpdateSettings": "Nepodařilo se aktualizovat nastavení: {error}",
+  "privacyNotice": "Oznámení o ochraně soukromí",
+  "recordingsMayCaptureOthers": "Nahrávky mohou zachytit hlasy ostatních. Před povolením se ujistěte, že máte souhlas všech účastníků.",
+  "enable": "Povolit",
+  "storeAudioOnPhone": "Uložit zvuk do telefonu",
+  "on": "Zapnuto",
+  "storeAudioDescription": "Uchovávejte všechny zvukové nahrávky uložené místně v telefonu. Při vypnutí se ukládají pouze neúspěšné nahrávky pro úsporu místa.",
+  "enableLocalStorage": "Povolit místní úložiště"
 }

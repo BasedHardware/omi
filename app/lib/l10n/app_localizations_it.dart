@@ -4902,4 +4902,38 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get needHelpChatWithUs => 'Hai bisogno di aiuto? Chatta con noi';
+
+  @override
+  String get localStorageEnabled => 'Archiviazione locale abilitata';
+
+  @override
+  String get localStorageDisabled => 'Archiviazione locale disabilitata';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return 'Impossibile aggiornare le impostazioni: $error';
+  }
+
+  @override
+  String get privacyNotice => 'Avviso sulla privacy';
+
+  @override
+  String get recordingsMayCaptureOthers =>
+      'Le registrazioni potrebbero catturare le voci di altri. Assicurati di avere il consenso di tutti i partecipanti prima di abilitare.';
+
+  @override
+  String get enable => 'Abilita';
+
+  @override
+  String get storeAudioOnPhone => 'Salva audio sul telefono';
+
+  @override
+  String get on => 'Attivo';
+
+  @override
+  String get storeAudioDescription =>
+      'Mantieni tutte le registrazioni audio memorizzate localmente sul tuo telefono. Quando disabilitato, vengono conservati solo i caricamenti non riusciti per risparmiare spazio.';
+
+  @override
+  String get enableLocalStorage => 'Abilita archiviazione locale';
 }

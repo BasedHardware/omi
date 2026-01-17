@@ -1774,5 +1774,15 @@
   "howPeopleWorks": "Sobald eine Person erstellt wurde, können Sie zum Gesprächstranskript gehen und ihr die entsprechenden Segmente zuweisen, so kann Omi auch ihre Sprache erkennen!",
   "tapToDelete": "Tippen zum Löschen",
   "newTag": "NEU",
-  "needHelpChatWithUs": "Hilfe benötigt? Schreiben Sie uns"
+  "needHelpChatWithUs": "Hilfe benötigt? Schreiben Sie uns",
+  "localStorageEnabled": "Lokaler Speicher aktiviert",
+  "localStorageDisabled": "Lokaler Speicher deaktiviert",
+  "failedToUpdateSettings": "Einstellungen konnten nicht aktualisiert werden: {error}",
+  "privacyNotice": "Datenschutzhinweis",
+  "recordingsMayCaptureOthers": "Aufnahmen können die Stimmen anderer erfassen. Stellen Sie sicher, dass Sie die Zustimmung aller Teilnehmer haben, bevor Sie aktivieren.",
+  "enable": "Aktivieren",
+  "storeAudioOnPhone": "Audio auf dem Telefon speichern",
+  "on": "An",
+  "storeAudioDescription": "Bewahren Sie alle Audioaufnahmen lokal auf Ihrem Telefon auf. Bei Deaktivierung werden nur fehlgeschlagene Uploads gespeichert, um Speicherplatz zu sparen.",
+  "enableLocalStorage": "Lokalen Speicher aktivieren"
 }

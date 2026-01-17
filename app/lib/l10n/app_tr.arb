@@ -3309,5 +3309,15 @@
   "howPeopleWorks": "Bir kişi oluşturulduktan sonra, bir konuşma transkriptine gidebilir ve ilgili bölümleri atayabilirsiniz, böylece Omi onların konuşmasını da tanıyabilir!",
   "tapToDelete": "Silmek için dokunun",
   "newTag": "YENİ",
-  "needHelpChatWithUs": "Yardıma mı ihtiyacınız var? Bizimle sohbet edin"
+  "needHelpChatWithUs": "Yardıma mı ihtiyacınız var? Bizimle sohbet edin",
+  "localStorageEnabled": "Yerel depolama etkinleştirildi",
+  "localStorageDisabled": "Yerel depolama devre dışı bırakıldı",
+  "failedToUpdateSettings": "Ayarlar güncellenemedi: {error}",
+  "privacyNotice": "Gizlilik Bildirimi",
+  "recordingsMayCaptureOthers": "Kayıtlar başkalarının seslerini yakalayabilir. Etkinleştirmeden önce tüm katılımcıların onayını aldığınızdan emin olun.",
+  "enable": "Etkinleştir",
+  "storeAudioOnPhone": "Sesi Telefonda Sakla",
+  "on": "Açık",
+  "storeAudioDescription": "Tüm ses kayıtlarını telefonunuzda yerel olarak saklayın. Devre dışı bırakıldığında, depolama alanından tasarruf etmek için yalnızca başarısız yüklemeler saklanır.",
+  "enableLocalStorage": "Yerel Depolamayı Etkinleştir"
 }

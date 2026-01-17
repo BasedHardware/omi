@@ -4910,4 +4910,38 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get needHelpChatWithUs => 'Hilfe benötigt? Schreiben Sie uns';
+
+  @override
+  String get localStorageEnabled => 'Lokaler Speicher aktiviert';
+
+  @override
+  String get localStorageDisabled => 'Lokaler Speicher deaktiviert';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return 'Einstellungen konnten nicht aktualisiert werden: $error';
+  }
+
+  @override
+  String get privacyNotice => 'Datenschutzhinweis';
+
+  @override
+  String get recordingsMayCaptureOthers =>
+      'Aufnahmen können die Stimmen anderer erfassen. Stellen Sie sicher, dass Sie die Zustimmung aller Teilnehmer haben, bevor Sie aktivieren.';
+
+  @override
+  String get enable => 'Aktivieren';
+
+  @override
+  String get storeAudioOnPhone => 'Audio auf dem Telefon speichern';
+
+  @override
+  String get on => 'An';
+
+  @override
+  String get storeAudioDescription =>
+      'Bewahren Sie alle Audioaufnahmen lokal auf Ihrem Telefon auf. Bei Deaktivierung werden nur fehlgeschlagene Uploads gespeichert, um Speicherplatz zu sparen.';
+
+  @override
+  String get enableLocalStorage => 'Lokalen Speicher aktivieren';
 }

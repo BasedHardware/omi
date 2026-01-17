@@ -4849,4 +4849,38 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get needHelpChatWithUs => 'ต้องการความช่วยเหลือ? แชทกับเรา';
+
+  @override
+  String get localStorageEnabled => 'เปิดใช้งานที่เก็บข้อมูลในเครื่องแล้ว';
+
+  @override
+  String get localStorageDisabled => 'ปิดใช้งานที่เก็บข้อมูลในเครื่องแล้ว';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return 'ไม่สามารถอัปเดตการตั้งค่า: $error';
+  }
+
+  @override
+  String get privacyNotice => 'ประกาศความเป็นส่วนตัว';
+
+  @override
+  String get recordingsMayCaptureOthers =>
+      'การบันทึกอาจบันทึกเสียงของผู้อื่น ตรวจสอบให้แน่ใจว่าคุณได้รับความยินยอมจากผู้เข้าร่วมทุกคนก่อนเปิดใช้งาน';
+
+  @override
+  String get enable => 'เปิดใช้งาน';
+
+  @override
+  String get storeAudioOnPhone => 'เก็บเสียงในโทรศัพท์';
+
+  @override
+  String get on => 'เปิด';
+
+  @override
+  String get storeAudioDescription =>
+      'เก็บการบันทึกเสียงทั้งหมดไว้ในโทรศัพท์ของคุณ เมื่อปิดใช้งาน จะเก็บเฉพาะการอัปโหลดที่ล้มเหลวเพื่อประหยัดพื้นที่';
+
+  @override
+  String get enableLocalStorage => 'เปิดใช้งานที่เก็บข้อมูลในเครื่อง';
 }

@@ -4887,4 +4887,38 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get needHelpChatWithUs => 'Butuh bantuan? Hubungi kami';
+
+  @override
+  String get localStorageEnabled => 'Penyimpanan lokal diaktifkan';
+
+  @override
+  String get localStorageDisabled => 'Penyimpanan lokal dinonaktifkan';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return 'Gagal memperbarui pengaturan: $error';
+  }
+
+  @override
+  String get privacyNotice => 'Pemberitahuan Privasi';
+
+  @override
+  String get recordingsMayCaptureOthers =>
+      'Rekaman dapat menangkap suara orang lain. Pastikan Anda memiliki persetujuan dari semua peserta sebelum mengaktifkan.';
+
+  @override
+  String get enable => 'Aktifkan';
+
+  @override
+  String get storeAudioOnPhone => 'Simpan Audio di Ponsel';
+
+  @override
+  String get on => 'Aktif';
+
+  @override
+  String get storeAudioDescription =>
+      'Simpan semua rekaman audio secara lokal di ponsel Anda. Saat dinonaktifkan, hanya unggahan yang gagal yang disimpan untuk menghemat ruang penyimpanan.';
+
+  @override
+  String get enableLocalStorage => 'Aktifkan Penyimpanan Lokal';
 }

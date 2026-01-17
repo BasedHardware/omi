@@ -4883,4 +4883,38 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get needHelpChatWithUs => 'Yardıma mı ihtiyacınız var? Bizimle sohbet edin';
+
+  @override
+  String get localStorageEnabled => 'Yerel depolama etkinleştirildi';
+
+  @override
+  String get localStorageDisabled => 'Yerel depolama devre dışı bırakıldı';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return 'Ayarlar güncellenemedi: $error';
+  }
+
+  @override
+  String get privacyNotice => 'Gizlilik Bildirimi';
+
+  @override
+  String get recordingsMayCaptureOthers =>
+      'Kayıtlar başkalarının seslerini yakalayabilir. Etkinleştirmeden önce tüm katılımcıların onayını aldığınızdan emin olun.';
+
+  @override
+  String get enable => 'Etkinleştir';
+
+  @override
+  String get storeAudioOnPhone => 'Sesi Telefonda Sakla';
+
+  @override
+  String get on => 'Açık';
+
+  @override
+  String get storeAudioDescription =>
+      'Tüm ses kayıtlarını telefonunuzda yerel olarak saklayın. Devre dışı bırakıldığında, depolama alanından tasarruf etmek için yalnızca başarısız yüklemeler saklanır.';
+
+  @override
+  String get enableLocalStorage => 'Yerel Depolamayı Etkinleştir';
 }

@@ -4785,4 +4785,36 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get needHelpChatWithUs => 'ヘルプが必要ですか？チャットでお問い合わせ';
+
+  @override
+  String get localStorageEnabled => 'ローカルストレージが有効';
+
+  @override
+  String get localStorageDisabled => 'ローカルストレージが無効';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return '設定の更新に失敗しました: $error';
+  }
+
+  @override
+  String get privacyNotice => 'プライバシー通知';
+
+  @override
+  String get recordingsMayCaptureOthers => '録音により他の人の声が記録される場合があります。有効にする前に、すべての参加者の同意を得てください。';
+
+  @override
+  String get enable => '有効にする';
+
+  @override
+  String get storeAudioOnPhone => '電話に音声を保存';
+
+  @override
+  String get on => 'オン';
+
+  @override
+  String get storeAudioDescription => 'すべての音声録音を電話にローカルで保存します。無効にすると、ストレージ容量を節約するために失敗したアップロードのみが保持されます。';
+
+  @override
+  String get enableLocalStorage => 'ローカルストレージを有効にする';
 }

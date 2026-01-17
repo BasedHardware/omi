@@ -5750,5 +5750,51 @@
   "needHelpChatWithUs": "Need Help? Chat with us",
   "@needHelpChatWithUs": {
     "description": "needHelpChatWithUs label"
+  },
+  "localStorageEnabled": "Local storage enabled",
+  "@localStorageEnabled": {
+    "description": "localStorageEnabled label"
+  },
+  "localStorageDisabled": "Local storage disabled",
+  "@localStorageDisabled": {
+    "description": "localStorageDisabled label"
+  },
+  "failedToUpdateSettings": "Failed to update settings: {error}",
+  "@failedToUpdateSettings": {
+    "description": "failedToUpdateSettings message",
+    "placeholders": {
+      "error": {
+        "type": "String",
+        "example": "Connection failed"
+      }
+    }
+  },
+  "privacyNotice": "Privacy Notice",
+  "@privacyNotice": {
+    "description": "privacyNotice label"
+  },
+  "recordingsMayCaptureOthers": "Recordings may capture others' voices. Ensure you have consent from all participants before enabling.",
+  "@recordingsMayCaptureOthers": {
+    "description": "recordingsMayCaptureOthers label"
+  },
+  "enable": "Enable",
+  "@enable": {
+    "description": "enable label"
+  },
+  "storeAudioOnPhone": "Store Audio on Phone",
+  "@storeAudioOnPhone": {
+    "description": "storeAudioOnPhone label"
+  },
+  "on": "On",
+  "@on": {
+    "description": "on label"
+  },
+  "storeAudioDescription": "Keep all audio recordings stored locally on your phone. When disabled, only failed uploads are kept to save storage space.",
+  "@storeAudioDescription": {
+    "description": "storeAudioDescription label"
+  },
+  "enableLocalStorage": "Enable Local Storage",
+  "@enableLocalStorage": {
+    "description": "enableLocalStorage label"
   }
 }

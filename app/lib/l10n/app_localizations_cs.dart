@@ -4867,4 +4867,38 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get needHelpChatWithUs => 'Potřebujete pomoc? Napište nám';
+
+  @override
+  String get localStorageEnabled => 'Místní úložiště povoleno';
+
+  @override
+  String get localStorageDisabled => 'Místní úložiště zakázáno';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return 'Nepodařilo se aktualizovat nastavení: $error';
+  }
+
+  @override
+  String get privacyNotice => 'Oznámení o ochraně soukromí';
+
+  @override
+  String get recordingsMayCaptureOthers =>
+      'Nahrávky mohou zachytit hlasy ostatních. Před povolením se ujistěte, že máte souhlas všech účastníků.';
+
+  @override
+  String get enable => 'Povolit';
+
+  @override
+  String get storeAudioOnPhone => 'Uložit zvuk do telefonu';
+
+  @override
+  String get on => 'Zapnuto';
+
+  @override
+  String get storeAudioDescription =>
+      'Uchovávejte všechny zvukové nahrávky uložené místně v telefonu. Při vypnutí se ukládají pouze neúspěšné nahrávky pro úsporu místa.';
+
+  @override
+  String get enableLocalStorage => 'Povolit místní úložiště';
 }

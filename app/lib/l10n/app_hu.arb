@@ -3327,5 +3327,15 @@
   "howPeopleWorks": "Ha létrehoz egy személyt, elmehet egy beszélgetés átiratához, és hozzárendelheti a megfelelő szegmenseket, így az Omi képes lesz felismerni az ő beszédét is!",
   "tapToDelete": "Koppintson a törléshez",
   "newTag": "ÚJ",
-  "needHelpChatWithUs": "Segítségre van szüksége? Csevegjen velünk"
+  "needHelpChatWithUs": "Segítségre van szüksége? Csevegjen velünk",
+  "localStorageEnabled": "Helyi tárolás engedélyezve",
+  "localStorageDisabled": "Helyi tárolás letiltva",
+  "failedToUpdateSettings": "A beállítások frissítése sikertelen: {error}",
+  "privacyNotice": "Adatvédelmi figyelmeztetés",
+  "recordingsMayCaptureOthers": "A felvételek rögzíthetik mások hangját. A bekapcsolás előtt győződjön meg arról, hogy minden résztvevő beleegyezését megkapta.",
+  "enable": "Engedélyezés",
+  "storeAudioOnPhone": "Hang tárolása a telefonon",
+  "on": "Be",
+  "storeAudioDescription": "Tartsa az összes hangfelvételt helyileg tárolva a telefonján. Letiltva csak a sikertelen feltöltések maradnak meg a tárhely megtakarítása érdekében.",
+  "enableLocalStorage": "Helyi tárolás engedélyezése"
 }

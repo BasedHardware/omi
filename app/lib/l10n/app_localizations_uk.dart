@@ -4877,4 +4877,38 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get needHelpChatWithUs => 'Потрібна допомога? Напишіть нам';
+
+  @override
+  String get localStorageEnabled => 'Локальне сховище увімкнено';
+
+  @override
+  String get localStorageDisabled => 'Локальне сховище вимкнено';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return 'Не вдалося оновити налаштування: $error';
+  }
+
+  @override
+  String get privacyNotice => 'Повідомлення про конфіденційність';
+
+  @override
+  String get recordingsMayCaptureOthers =>
+      'Записи можуть фіксувати голоси інших людей. Перед увімкненням переконайтеся, що ви отримали згоду від усіх учасників.';
+
+  @override
+  String get enable => 'Увімкнути';
+
+  @override
+  String get storeAudioOnPhone => 'Зберігати аудіо на телефоні';
+
+  @override
+  String get on => 'Увімк.';
+
+  @override
+  String get storeAudioDescription =>
+      'Зберігайте всі аудіозаписи локально на телефоні. Коли вимкнено, зберігаються лише невдалі завантаження для економії місця.';
+
+  @override
+  String get enableLocalStorage => 'Увімкнути локальне сховище';
 }

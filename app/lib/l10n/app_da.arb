@@ -3327,5 +3327,15 @@
   "howPeopleWorks": "Når en person er oprettet, kan du gå til en samtaleudskrift og tildele dem deres tilsvarende segmenter, på den måde vil Omi også kunne genkende deres tale!",
   "tapToDelete": "Tryk for at slette",
   "newTag": "NY",
-  "needHelpChatWithUs": "Brug for hjælp? Chat med os"
+  "needHelpChatWithUs": "Brug for hjælp? Chat med os",
+  "localStorageEnabled": "Lokal lagring aktiveret",
+  "localStorageDisabled": "Lokal lagring deaktiveret",
+  "failedToUpdateSettings": "Kunne ikke opdatere indstillinger: {error}",
+  "privacyNotice": "Fortrolighedsmeddelelse",
+  "recordingsMayCaptureOthers": "Optagelser kan optage andres stemmer. Sørg for at have samtykke fra alle deltagere, før du aktiverer.",
+  "enable": "Aktiver",
+  "storeAudioOnPhone": "Gem lyd på telefon",
+  "on": "Til",
+  "storeAudioDescription": "Behold alle lydoptagelser gemt lokalt på din telefon. Når deaktiveret, gemmes kun mislykkede uploads for at spare lagerplads.",
+  "enableLocalStorage": "Aktiver lokal lagring"
 }

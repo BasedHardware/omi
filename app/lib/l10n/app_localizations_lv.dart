@@ -4880,4 +4880,38 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get needHelpChatWithUs => 'Nepieciešama palīdzība? Sazinies ar mums';
+
+  @override
+  String get localStorageEnabled => 'Lokālā krātuve iespējota';
+
+  @override
+  String get localStorageDisabled => 'Lokālā krātuve atspējota';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return 'Neizdevās atjaunināt iestatījumus: $error';
+  }
+
+  @override
+  String get privacyNotice => 'Privātuma paziņojums';
+
+  @override
+  String get recordingsMayCaptureOthers =>
+      'Ieraksti var ierakstīt citu cilvēku balsis. Pirms iespējošanas pārliecinieties, ka esat saņēmis visu dalībnieku piekrišanu.';
+
+  @override
+  String get enable => 'Iespējot';
+
+  @override
+  String get storeAudioOnPhone => 'Saglabāt audio tālrunī';
+
+  @override
+  String get on => 'Ieslēgts';
+
+  @override
+  String get storeAudioDescription =>
+      'Saglabājiet visus audio ierakstus lokāli savā tālrunī. Kad ir atspējots, tiek saglabāti tikai neveiksmīgie augšupielādēšanas gadījumi, lai ietaupītu vietu.';
+
+  @override
+  String get enableLocalStorage => 'Iespējot lokālo krātuvi';
 }

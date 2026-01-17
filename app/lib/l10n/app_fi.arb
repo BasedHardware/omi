@@ -3327,5 +3327,15 @@
   "howPeopleWorks": "Kun henkilö on luotu, voit mennä keskustelun transkriptioon ja määrittää heille vastaavat segmentit, näin Omi voi tunnistaa myös heidän puheensa!",
   "tapToDelete": "Napauta poistaaksesi",
   "newTag": "UUSI",
-  "needHelpChatWithUs": "Tarvitsetko apua? Keskustele kanssamme"
+  "needHelpChatWithUs": "Tarvitsetko apua? Keskustele kanssamme",
+  "localStorageEnabled": "Paikallinen tallennustila käytössä",
+  "localStorageDisabled": "Paikallinen tallennustila pois käytöstä",
+  "failedToUpdateSettings": "Asetusten päivitys epäonnistui: {error}",
+  "privacyNotice": "Tietosuojailmoitus",
+  "recordingsMayCaptureOthers": "Tallenteet voivat tallentaa muiden ääniä. Varmista, että sinulla on kaikkien osallistujien suostumus ennen käyttöönottoa.",
+  "enable": "Ota käyttöön",
+  "storeAudioOnPhone": "Tallenna ääni puhelimeen",
+  "on": "Päällä",
+  "storeAudioDescription": "Säilytä kaikki äänitallenteet paikallisesti puhelimessasi. Kun pois käytöstä, vain epäonnistuneet lataukset säilytetään tallennustilan säästämiseksi.",
+  "enableLocalStorage": "Ota paikallinen tallennustila käyttöön"
 }

@@ -3327,5 +3327,15 @@
   "howPeopleWorks": "Odată ce o persoană este creată, puteți merge la transcripția unei conversații și să le atribuiți segmentele corespunzătoare, astfel Omi va putea recunoaște și vocea lor!",
   "tapToDelete": "Atingeți pentru a șterge",
   "newTag": "NOU",
-  "needHelpChatWithUs": "Aveți nevoie de ajutor? Discutați cu noi"
+  "needHelpChatWithUs": "Aveți nevoie de ajutor? Discutați cu noi",
+  "localStorageEnabled": "Stocare locală activată",
+  "localStorageDisabled": "Stocare locală dezactivată",
+  "failedToUpdateSettings": "Actualizarea setărilor a eșuat: {error}",
+  "privacyNotice": "Notificare de confidențialitate",
+  "recordingsMayCaptureOthers": "Înregistrările pot captura vocile altora. Asigurați-vă că aveți consimțământul tuturor participanților înainte de activare.",
+  "enable": "Activare",
+  "storeAudioOnPhone": "Stocați audio pe telefon",
+  "on": "Activat",
+  "storeAudioDescription": "Păstrați toate înregistrările audio stocate local pe telefon. Când este dezactivat, doar încărcările eșuate sunt păstrate pentru a economisi spațiu.",
+  "enableLocalStorage": "Activare stocare locală"
 }

@@ -4778,4 +4778,36 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get needHelpChatWithUs => '需要帮助？与我们聊天';
+
+  @override
+  String get localStorageEnabled => '本地存储已启用';
+
+  @override
+  String get localStorageDisabled => '本地存储已禁用';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return '更新设置失败: $error';
+  }
+
+  @override
+  String get privacyNotice => '隐私声明';
+
+  @override
+  String get recordingsMayCaptureOthers => '录音可能会捕获他人的声音。启用前请确保获得所有参与者的同意。';
+
+  @override
+  String get enable => '启用';
+
+  @override
+  String get storeAudioOnPhone => '在手机上存储音频';
+
+  @override
+  String get on => '开';
+
+  @override
+  String get storeAudioDescription => '将所有音频录音存储在手机本地。禁用时，仅保留上传失败的文件以节省存储空间。';
+
+  @override
+  String get enableLocalStorage => '启用本地存储';
 }

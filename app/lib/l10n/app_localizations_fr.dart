@@ -4916,4 +4916,38 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get needHelpChatWithUs => 'Besoin d\'aide ? Discutez avec nous';
+
+  @override
+  String get localStorageEnabled => 'Stockage local activé';
+
+  @override
+  String get localStorageDisabled => 'Stockage local désactivé';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return 'Échec de la mise à jour des paramètres : $error';
+  }
+
+  @override
+  String get privacyNotice => 'Avis de confidentialité';
+
+  @override
+  String get recordingsMayCaptureOthers =>
+      'Les enregistrements peuvent capturer les voix d\'autres personnes. Assurez-vous d\'avoir le consentement de tous les participants avant d\'activer.';
+
+  @override
+  String get enable => 'Activer';
+
+  @override
+  String get storeAudioOnPhone => 'Stocker l\'audio sur le téléphone';
+
+  @override
+  String get on => 'Activé';
+
+  @override
+  String get storeAudioDescription =>
+      'Conservez tous les enregistrements audio stockés localement sur votre téléphone. Lorsque désactivé, seuls les téléchargements échoués sont conservés pour économiser de l\'espace.';
+
+  @override
+  String get enableLocalStorage => 'Activer le stockage local';
 }

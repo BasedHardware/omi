@@ -4886,4 +4886,38 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get needHelpChatWithUs => 'Нуждаете се от помощ? Свържете се с нас';
+
+  @override
+  String get localStorageEnabled => 'Локалното хранилище е активирано';
+
+  @override
+  String get localStorageDisabled => 'Локалното хранилище е деактивирано';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return 'Неуспешно актуализиране на настройките: $error';
+  }
+
+  @override
+  String get privacyNotice => 'Известие за поверителност';
+
+  @override
+  String get recordingsMayCaptureOthers =>
+      'Записите могат да уловят гласовете на други хора. Уверете се, че имате съгласието на всички участници преди активиране.';
+
+  @override
+  String get enable => 'Активиране';
+
+  @override
+  String get storeAudioOnPhone => 'Съхраняване на аудио на телефона';
+
+  @override
+  String get on => 'Вкл.';
+
+  @override
+  String get storeAudioDescription =>
+      'Съхранявайте всички аудио записи локално на телефона си. Когато е деактивирано, само неуспешните качвания се запазват, за да се спести място.';
+
+  @override
+  String get enableLocalStorage => 'Активиране на локално хранилище';
 }

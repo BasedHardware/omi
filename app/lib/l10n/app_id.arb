@@ -3327,5 +3327,15 @@
   "howPeopleWorks": "Setelah seseorang dibuat, Anda dapat pergi ke transkrip percakapan dan menetapkan segmen yang sesuai, dengan cara itu Omi akan dapat mengenali ucapan mereka juga!",
   "tapToDelete": "Ketuk untuk menghapus",
   "newTag": "BARU",
-  "needHelpChatWithUs": "Butuh bantuan? Hubungi kami"
+  "needHelpChatWithUs": "Butuh bantuan? Hubungi kami",
+  "localStorageEnabled": "Penyimpanan lokal diaktifkan",
+  "localStorageDisabled": "Penyimpanan lokal dinonaktifkan",
+  "failedToUpdateSettings": "Gagal memperbarui pengaturan: {error}",
+  "privacyNotice": "Pemberitahuan Privasi",
+  "recordingsMayCaptureOthers": "Rekaman dapat menangkap suara orang lain. Pastikan Anda memiliki persetujuan dari semua peserta sebelum mengaktifkan.",
+  "enable": "Aktifkan",
+  "storeAudioOnPhone": "Simpan Audio di Ponsel",
+  "on": "Aktif",
+  "storeAudioDescription": "Simpan semua rekaman audio secara lokal di ponsel Anda. Saat dinonaktifkan, hanya unggahan yang gagal yang disimpan untuk menghemat ruang penyimpanan.",
+  "enableLocalStorage": "Aktifkan Penyimpanan Lokal"
 }

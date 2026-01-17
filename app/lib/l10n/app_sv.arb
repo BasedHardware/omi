@@ -3327,5 +3327,15 @@
   "howPeopleWorks": "När en person har skapats kan du gå till en konversationsutskrift och tilldela dem deras motsvarande segment, på så sätt kommer Omi att kunna känna igen deras tal också!",
   "tapToDelete": "Tryck för att ta bort",
   "newTag": "NY",
-  "needHelpChatWithUs": "Behöver du hjälp? Chatta med oss"
+  "needHelpChatWithUs": "Behöver du hjälp? Chatta med oss",
+  "localStorageEnabled": "Lokal lagring aktiverad",
+  "localStorageDisabled": "Lokal lagring inaktiverad",
+  "failedToUpdateSettings": "Det gick inte att uppdatera inställningarna: {error}",
+  "privacyNotice": "Sekretessmeddelande",
+  "recordingsMayCaptureOthers": "Inspelningar kan fånga andras röster. Se till att du har samtycke från alla deltagare innan du aktiverar.",
+  "enable": "Aktivera",
+  "storeAudioOnPhone": "Spara ljud på telefon",
+  "on": "På",
+  "storeAudioDescription": "Behåll alla ljudinspelningar lagrade lokalt på din telefon. När inaktiverad sparas endast misslyckade uppladdningar för att spara lagringsutrymme.",
+  "enableLocalStorage": "Aktivera lokal lagring"
 }

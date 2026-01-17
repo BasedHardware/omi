@@ -3329,5 +3329,15 @@
   "howPeopleWorks": "Un cop creada una persona, pots anar a una transcripció de conversa i assignar-li els segments corresponents, així Omi també podrà reconèixer la seva parla!",
   "tapToDelete": "Toca per eliminar",
   "newTag": "NOU",
-  "needHelpChatWithUs": "Necessites ajuda? Xateja amb nosaltres"
+  "needHelpChatWithUs": "Necessites ajuda? Xateja amb nosaltres",
+  "localStorageEnabled": "Emmagatzematge local activat",
+  "localStorageDisabled": "Emmagatzematge local desactivat",
+  "failedToUpdateSettings": "No s'han pogut actualitzar els paràmetres: {error}",
+  "privacyNotice": "Avís de privacitat",
+  "recordingsMayCaptureOthers": "Les gravacions poden capturar les veus d'altres persones. Assegureu-vos de tenir el consentiment de tots els participants abans d'activar.",
+  "enable": "Activa",
+  "storeAudioOnPhone": "Emmagatzema l'àudio al telèfon",
+  "on": "Activat",
+  "storeAudioDescription": "Manteniu totes les gravacions d'àudio emmagatzemades localment al telèfon. Quan estigui desactivat, només es conserven les càrregues fallides per estalviar espai.",
+  "enableLocalStorage": "Activa l'emmagatzematge local"
 }
