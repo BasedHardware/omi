@@ -1557,3 +1557,23 @@ Notes: Main payments page and payment method card widget. Localized page title,
        info message, section headers, and button/menu labels. Status labels
        (Active, Connected, Not Connected) keys added for future use.
 Commit: e0e55d173
+
+--------------------------------------------------------------------------------
+FILE 113 (Phase 2 FILE 43): stripe_connect_setup.dart
+--------------------------------------------------------------------------------
+Path: app/lib/pages/payments/stripe_connect_setup.dart
+New Keys: getPaidThroughStripe, monthlyPayouts, monthlyPayoutsDescription,
+         secureAndReliable, stripeSecureDescription, selectYourCountry,
+         countrySelectionPermanent, byClickingConnectNow,
+         stripeConnectedAccountAgreement, connectNow, errorConnectingToStripe,
+         connectingYourStripeAccount, stripeOnboardingInstructions,
+         failedTryAgain, illDoItLater, successfullyConnected,
+         stripeReadyForPayments, updateStripeDetails,
+         errorUpdatingStripeDetails, goBack
+Total New Keys: 18
+Script: /private/tmp/claude/.../translate_stripe_setup.py
+Status: ✅ COMPLETED
+Notes: Stripe Connect setup flow with country selection, onboarding process,
+       polling state, success state, and update functionality. Includes feature
+       descriptions, legal agreement links, and error messages.
+Commit: 3324eebd0
