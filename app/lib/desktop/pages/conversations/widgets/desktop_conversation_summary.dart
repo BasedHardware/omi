@@ -36,9 +36,8 @@ class DesktopConversationSummary extends StatelessWidget {
     return Consumer<ConversationDetailProvider>(
       builder: (context, provider, child) {
         final summarizedApp = provider.getSummarizedApp();
-        final hasOverview = conversation.structured.overview.isNotEmpty;
 
-        if (!hasOverview && conversation.appResults.isEmpty && summarizedApp == null) {
+        if (conversation.appResults.isEmpty && summarizedApp == null) {
           return _buildEmptyState(context, provider);
         }
 
@@ -52,19 +51,12 @@ class DesktopConversationSummary extends StatelessWidget {
             // App summary result (if available)
             if (summarizedApp != null) ...[
               _buildAppSummaryCard(context, summarizedApp, provider),
-              if (hasOverview || conversation.appResults.isNotEmpty) const SizedBox(height: 24),
-            ],
-
-            // Overview section
-            if (hasOverview) ...[
-              _buildSectionHeader('Overview', FontAwesomeIcons.lightbulb),
-              const SizedBox(height: 12),
-              _buildContentCard(context, conversation.structured.overview.decodeString),
+              if (conversation.appResults.isNotEmpty) const SizedBox(height: 24),
             ],
 
             // Other app results section (if any beyond the main summarized app)
             if (conversation.appResults.where((result) => result != summarizedApp).isNotEmpty) ...[
-              if (hasOverview || summarizedApp != null) const SizedBox(height: 24),
+              if (summarizedApp != null) const SizedBox(height: 24),
               _buildSectionHeader('Other App Results', FontAwesomeIcons.robot),
               const SizedBox(height: 12),
               ...conversation.appResults.where((result) => result != summarizedApp).map((result) => Container(
@@ -323,23 +315,6 @@ class DesktopConversationSummary extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildContentCard(BuildContext context, String content) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
-          width: 1,
-        ),
-      ),
-      child: SelectionArea(
-        child: getMarkdownWidget(context, content),
-      ),
     );
   }
 
