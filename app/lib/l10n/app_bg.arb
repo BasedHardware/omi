@@ -3296,5 +3296,13 @@
   "triggeredByType": "задействано от {triggerType}",
   "accessesAndTriggeredBy": "{accessDescription} и е {triggerDescription}.",
   "isTriggeredBy": "Е {triggerDescription}.",
-  "noSpecificDataAccessConfigured": "Няма конфигуриран специфичен достъп до данни."
+  "noSpecificDataAccessConfigured": "Няма конфигуриран специфичен достъп до данни.",
+  "basicPlanDescription": "1 200 премиум минути + неограничено на устройството",
+  "minutes": "минути",
+  "omiHas": "Omi има:",
+  "premiumMinutesUsed": "Използвани премиум минути.",
+  "setupOnDevice": "Настройте на устройството",
+  "forUnlimitedFreeTranscription": "за неограничен безплатен транскрипт.",
+  "premiumMinsLeft": "Остават {count} премиум минути.",
+  "alwaysAvailable": "винаги налично."
 }

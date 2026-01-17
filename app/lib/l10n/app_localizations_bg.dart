@@ -4775,4 +4775,30 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get noSpecificDataAccessConfigured => 'Няма конфигуриран специфичен достъп до данни.';
+
+  @override
+  String get basicPlanDescription => '1 200 премиум минути + неограничено на устройството';
+
+  @override
+  String get minutes => 'минути';
+
+  @override
+  String get omiHas => 'Omi има:';
+
+  @override
+  String get premiumMinutesUsed => 'Използвани премиум минути.';
+
+  @override
+  String get setupOnDevice => 'Настройте на устройството';
+
+  @override
+  String get forUnlimitedFreeTranscription => 'за неограничен безплатен транскрипт.';
+
+  @override
+  String premiumMinsLeft(int count) {
+    return 'Остават $count премиум минути.';
+  }
+
+  @override
+  String get alwaysAvailable => 'винаги налично.';
 }

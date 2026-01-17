@@ -4763,4 +4763,30 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get noSpecificDataAccessConfigured => 'Ingen spesifikk datatilgang konfigurert.';
+
+  @override
+  String get basicPlanDescription => '1 200 premium minutter + ubegrenset on-device';
+
+  @override
+  String get minutes => 'minutter';
+
+  @override
+  String get omiHas => 'Omi har:';
+
+  @override
+  String get premiumMinutesUsed => 'Premium minutter brukt.';
+
+  @override
+  String get setupOnDevice => 'Sett opp on-device';
+
+  @override
+  String get forUnlimitedFreeTranscription => 'for ubegrenset gratis transkripsjon.';
+
+  @override
+  String premiumMinsLeft(int count) {
+    return '$count premium minutter igjen.';
+  }
+
+  @override
+  String get alwaysAvailable => 'alltid tilgjengelig.';
 }

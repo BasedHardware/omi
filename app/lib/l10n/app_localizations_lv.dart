@@ -4769,4 +4769,30 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get noSpecificDataAccessConfigured => 'Nav konfigurēta specifiska datu piekļuve.';
+
+  @override
+  String get basicPlanDescription => '1200 premium minūtes + neierobežots ierīcē';
+
+  @override
+  String get minutes => 'minūtes';
+
+  @override
+  String get omiHas => 'Omi ir:';
+
+  @override
+  String get premiumMinutesUsed => 'Premium minūtes izmantotas.';
+
+  @override
+  String get setupOnDevice => 'Iestatīt ierīcē';
+
+  @override
+  String get forUnlimitedFreeTranscription => 'neierobežotai bezmaksas transkripcijai.';
+
+  @override
+  String premiumMinsLeft(int count) {
+    return 'Atlikušas $count premium minūtes.';
+  }
+
+  @override
+  String get alwaysAvailable => 'vienmēr pieejams.';
 }

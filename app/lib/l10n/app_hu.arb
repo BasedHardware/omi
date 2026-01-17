@@ -3294,5 +3294,13 @@
   "triggeredByType": "{triggerType} által kiváltva",
   "accessesAndTriggeredBy": "{accessDescription} és {triggerDescription}.",
   "isTriggeredBy": "{triggerDescription}.",
-  "noSpecificDataAccessConfigured": "Nincs beállítva specifikus adathozzáférés."
+  "noSpecificDataAccessConfigured": "Nincs beállítva specifikus adathozzáférés.",
+  "basicPlanDescription": "1200 prémium perc + korlátlan eszközön",
+  "minutes": "perc",
+  "omiHas": "Omi:",
+  "premiumMinutesUsed": "Prémium percek elhasználva.",
+  "setupOnDevice": "Eszközön beállítás",
+  "forUnlimitedFreeTranscription": "korlátlan ingyenes átíráshoz.",
+  "premiumMinsLeft": "{count} prémium perc maradt.",
+  "alwaysAvailable": "mindig elérhető."
 }

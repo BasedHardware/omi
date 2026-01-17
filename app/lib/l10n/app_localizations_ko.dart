@@ -4678,4 +4678,30 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get noSpecificDataAccessConfigured => '특정 데이터 액세스가 구성되지 않았습니다.';
+
+  @override
+  String get basicPlanDescription => '1,200 프리미엄 분 + 무제한 온디바이스';
+
+  @override
+  String get minutes => '분';
+
+  @override
+  String get omiHas => 'Omi:';
+
+  @override
+  String get premiumMinutesUsed => '프리미엄 분 사용됨.';
+
+  @override
+  String get setupOnDevice => '온디바이스 설정';
+
+  @override
+  String get forUnlimitedFreeTranscription => '무제한 무료 전사를 위해.';
+
+  @override
+  String premiumMinsLeft(int count) {
+    return '프리미엄 $count분 남음.';
+  }
+
+  @override
+  String get alwaysAvailable => '항상 사용 가능.';
 }

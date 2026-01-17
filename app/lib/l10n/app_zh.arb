@@ -1741,5 +1741,13 @@
   "triggeredByType": "由 {triggerType} 触发",
   "accessesAndTriggeredBy": "{accessDescription}，{triggerDescription}。",
   "isTriggeredBy": "{triggerDescription}。",
-  "noSpecificDataAccessConfigured": "未配置特定数据访问。"
+  "noSpecificDataAccessConfigured": "未配置特定数据访问。",
+  "basicPlanDescription": "1,200 高级分钟 + 设备端无限",
+  "minutes": "分钟",
+  "omiHas": "Omi 拥有：",
+  "premiumMinutesUsed": "高级分钟已用完。",
+  "setupOnDevice": "设置设备端",
+  "forUnlimitedFreeTranscription": "享受无限免费转录。",
+  "premiumMinsLeft": "剩余 {count} 高级分钟。",
+  "alwaysAvailable": "始终可用。"
 }

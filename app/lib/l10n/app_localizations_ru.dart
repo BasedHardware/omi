@@ -4775,4 +4775,30 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get noSpecificDataAccessConfigured => 'Конкретный доступ к данным не настроен.';
+
+  @override
+  String get basicPlanDescription => '1 200 премиум минут + неограниченно на устройстве';
+
+  @override
+  String get minutes => 'минут';
+
+  @override
+  String get omiHas => 'У Omi:';
+
+  @override
+  String get premiumMinutesUsed => 'Премиум минуты использованы.';
+
+  @override
+  String get setupOnDevice => 'Настроить на устройстве';
+
+  @override
+  String get forUnlimitedFreeTranscription => 'для неограниченной бесплатной транскрипции.';
+
+  @override
+  String premiumMinsLeft(int count) {
+    return 'Осталось $count премиум минут.';
+  }
+
+  @override
+  String get alwaysAvailable => 'всегда доступно.';
 }

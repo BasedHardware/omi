@@ -3296,5 +3296,13 @@
   "triggeredByType": "activat per {triggerType}",
   "accessesAndTriggeredBy": "{accessDescription} i és {triggerDescription}.",
   "isTriggeredBy": "És {triggerDescription}.",
-  "noSpecificDataAccessConfigured": "No hi ha accés a dades específic configurat."
+  "noSpecificDataAccessConfigured": "No hi ha accés a dades específic configurat.",
+  "basicPlanDescription": "1.200 minuts premium + il·limitat al dispositiu",
+  "minutes": "minuts",
+  "omiHas": "Omi té:",
+  "premiumMinutesUsed": "Minuts premium utilitzats.",
+  "setupOnDevice": "Configura al dispositiu",
+  "forUnlimitedFreeTranscription": "per a transcripció gratuïta il·limitada.",
+  "premiumMinsLeft": "{count} minuts premium restants.",
+  "alwaysAvailable": "sempre disponible."
 }

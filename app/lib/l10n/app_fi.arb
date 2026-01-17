@@ -3294,5 +3294,13 @@
   "triggeredByType": "laukaisee {triggerType}",
   "accessesAndTriggeredBy": "{accessDescription} ja on {triggerDescription}.",
   "isTriggeredBy": "On {triggerDescription}.",
-  "noSpecificDataAccessConfigured": "Ei määritettyä tietojen käyttöoikeutta."
+  "noSpecificDataAccessConfigured": "Ei määritettyä tietojen käyttöoikeutta.",
+  "basicPlanDescription": "1 200 premium-minuuttia + rajoittamaton laitteella",
+  "minutes": "minuuttia",
+  "omiHas": "Omilla on:",
+  "premiumMinutesUsed": "Premium-minuutit käytetty.",
+  "setupOnDevice": "Määritä laitteella",
+  "forUnlimitedFreeTranscription": "rajattomaan ilmaiseen litterointiin.",
+  "premiumMinsLeft": "{count} premium-minuuttia jäljellä.",
+  "alwaysAvailable": "aina käytettävissä."
 }

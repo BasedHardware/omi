@@ -4738,4 +4738,30 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get noSpecificDataAccessConfigured => 'कोई विशिष्ट डेटा एक्सेस कॉन्फ़िगर नहीं किया गया।';
+
+  @override
+  String get basicPlanDescription => '1,200 प्रीमियम मिनट + डिवाइस पर असीमित';
+
+  @override
+  String get minutes => 'मिनट';
+
+  @override
+  String get omiHas => 'Omi के पास है:';
+
+  @override
+  String get premiumMinutesUsed => 'प्रीमियम मिनट उपयोग किए गए।';
+
+  @override
+  String get setupOnDevice => 'डिवाइस पर सेटअप करें';
+
+  @override
+  String get forUnlimitedFreeTranscription => 'असीमित मुफ्त ट्रांसक्रिप्शन के लिए।';
+
+  @override
+  String premiumMinsLeft(int count) {
+    return '$count प्रीमियम मिनट शेष।';
+  }
+
+  @override
+  String get alwaysAvailable => 'हमेशा उपलब्ध।';
 }

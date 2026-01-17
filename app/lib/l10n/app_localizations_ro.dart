@@ -4785,4 +4785,30 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get noSpecificDataAccessConfigured => 'Niciun acces specific la date configurat.';
+
+  @override
+  String get basicPlanDescription => '1.200 minute premium + nelimitat pe dispozitiv';
+
+  @override
+  String get minutes => 'minute';
+
+  @override
+  String get omiHas => 'Omi are:';
+
+  @override
+  String get premiumMinutesUsed => 'Minute premium utilizate.';
+
+  @override
+  String get setupOnDevice => 'Configurare pe dispozitiv';
+
+  @override
+  String get forUnlimitedFreeTranscription => 'pentru transcriere gratuită nelimitată.';
+
+  @override
+  String premiumMinsLeft(int count) {
+    return '$count minute premium rămase.';
+  }
+
+  @override
+  String get alwaysAvailable => 'întotdeauna disponibil.';
 }

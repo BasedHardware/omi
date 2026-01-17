@@ -3294,5 +3294,13 @@
   "triggeredByType": "aktivizē {triggerType}",
   "accessesAndTriggeredBy": "{accessDescription} un ir {triggerDescription}.",
   "isTriggeredBy": "Ir {triggerDescription}.",
-  "noSpecificDataAccessConfigured": "Nav konfigurēta specifiska datu piekļuve."
+  "noSpecificDataAccessConfigured": "Nav konfigurēta specifiska datu piekļuve.",
+  "basicPlanDescription": "1200 premium minūtes + neierobežots ierīcē",
+  "minutes": "minūtes",
+  "omiHas": "Omi ir:",
+  "premiumMinutesUsed": "Premium minūtes izmantotas.",
+  "setupOnDevice": "Iestatīt ierīcē",
+  "forUnlimitedFreeTranscription": "neierobežotai bezmaksas transkripcijai.",
+  "premiumMinsLeft": "Atlikušas {count} premium minūtes.",
+  "alwaysAvailable": "vienmēr pieejams."
 }

@@ -4776,4 +4776,30 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get noSpecificDataAccessConfigured => 'Tidak ada akses data spesifik yang dikonfigurasi.';
+
+  @override
+  String get basicPlanDescription => '1.200 menit premium + tak terbatas di perangkat';
+
+  @override
+  String get minutes => 'menit';
+
+  @override
+  String get omiHas => 'Omi memiliki:';
+
+  @override
+  String get premiumMinutesUsed => 'Menit premium digunakan.';
+
+  @override
+  String get setupOnDevice => 'Atur di perangkat';
+
+  @override
+  String get forUnlimitedFreeTranscription => 'untuk transkripsi gratis tanpa batas.';
+
+  @override
+  String premiumMinsLeft(int count) {
+    return '$count menit premium tersisa.';
+  }
+
+  @override
+  String get alwaysAvailable => 'selalu tersedia.';
 }

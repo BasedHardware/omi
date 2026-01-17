@@ -1741,5 +1741,13 @@
   "triggeredByType": "{triggerType} द्वारा ट्रिगर",
   "accessesAndTriggeredBy": "{accessDescription} और {triggerDescription}।",
   "isTriggeredBy": "{triggerDescription}।",
-  "noSpecificDataAccessConfigured": "कोई विशिष्ट डेटा एक्सेस कॉन्फ़िगर नहीं किया गया।"
+  "noSpecificDataAccessConfigured": "कोई विशिष्ट डेटा एक्सेस कॉन्फ़िगर नहीं किया गया।",
+  "basicPlanDescription": "1,200 प्रीमियम मिनट + डिवाइस पर असीमित",
+  "minutes": "मिनट",
+  "omiHas": "Omi के पास है:",
+  "premiumMinutesUsed": "प्रीमियम मिनट उपयोग किए गए।",
+  "setupOnDevice": "डिवाइस पर सेटअप करें",
+  "forUnlimitedFreeTranscription": "असीमित मुफ्त ट्रांसक्रिप्शन के लिए।",
+  "premiumMinsLeft": "{count} प्रीमियम मिनट शेष।",
+  "alwaysAvailable": "हमेशा उपलब्ध।"
 }

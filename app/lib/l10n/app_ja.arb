@@ -1720,5 +1720,13 @@
   "triggeredByType": "{triggerType}でトリガー",
   "accessesAndTriggeredBy": "{accessDescription}、{triggerDescription}。",
   "isTriggeredBy": "{triggerDescription}。",
-  "noSpecificDataAccessConfigured": "特定のデータアクセスは設定されていません。"
+  "noSpecificDataAccessConfigured": "特定のデータアクセスは設定されていません。",
+  "basicPlanDescription": "1,200プレミアム分 + デバイス無制限",
+  "minutes": "分",
+  "omiHas": "Omiは:",
+  "premiumMinutesUsed": "プレミアム分を使用済み。",
+  "setupOnDevice": "オンデバイスを設定",
+  "forUnlimitedFreeTranscription": "無制限の無料文字起こしのため。",
+  "premiumMinsLeft": "残りプレミアム{count}分。",
+  "alwaysAvailable": "常に利用可能。"
 }

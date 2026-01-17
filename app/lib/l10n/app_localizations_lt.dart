@@ -4762,4 +4762,30 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get noSpecificDataAccessConfigured => 'Nenustatyta konkreti prieiga prie duomenų.';
+
+  @override
+  String get basicPlanDescription => '1 200 premium minučių + neribota įrenginyje';
+
+  @override
+  String get minutes => 'minučių';
+
+  @override
+  String get omiHas => 'Omi turi:';
+
+  @override
+  String get premiumMinutesUsed => 'Premium minutės išnaudotos.';
+
+  @override
+  String get setupOnDevice => 'Nustatyti įrenginyje';
+
+  @override
+  String get forUnlimitedFreeTranscription => 'neribotam nemokamam transkribavimui.';
+
+  @override
+  String premiumMinsLeft(int count) {
+    return 'Liko $count premium minučių.';
+  }
+
+  @override
+  String get alwaysAvailable => 'visada prieinama.';
 }

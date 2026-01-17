@@ -3294,5 +3294,13 @@
   "triggeredByType": "ทริกเกอร์โดย {triggerType}",
   "accessesAndTriggeredBy": "{accessDescription} และ {triggerDescription}",
   "isTriggeredBy": "{triggerDescription}",
-  "noSpecificDataAccessConfigured": "ไม่มีการกำหนดค่าการเข้าถึงข้อมูลเฉพาะ"
+  "noSpecificDataAccessConfigured": "ไม่มีการกำหนดค่าการเข้าถึงข้อมูลเฉพาะ",
+  "basicPlanDescription": "1,200 นาทีพรีเมียม + ไม่จำกัดบนอุปกรณ์",
+  "minutes": "นาที",
+  "omiHas": "Omi มี:",
+  "premiumMinutesUsed": "ใช้นาทีพรีเมียมแล้ว",
+  "setupOnDevice": "ตั้งค่าบนอุปกรณ์",
+  "forUnlimitedFreeTranscription": "สำหรับการถอดความฟรีไม่จำกัด",
+  "premiumMinsLeft": "เหลือ {count} นาทีพรีเมียม",
+  "alwaysAvailable": "พร้อมใช้งานเสมอ"
 }

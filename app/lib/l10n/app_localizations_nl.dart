@@ -4775,4 +4775,30 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get noSpecificDataAccessConfigured => 'Geen specifieke gegevenstoegang geconfigureerd.';
+
+  @override
+  String get basicPlanDescription => '1.200 premium minuten + onbeperkt op apparaat';
+
+  @override
+  String get minutes => 'minuten';
+
+  @override
+  String get omiHas => 'Omi heeft:';
+
+  @override
+  String get premiumMinutesUsed => 'Premium minuten gebruikt.';
+
+  @override
+  String get setupOnDevice => 'Instellen op apparaat';
+
+  @override
+  String get forUnlimitedFreeTranscription => 'voor onbeperkte gratis transcriptie.';
+
+  @override
+  String premiumMinsLeft(int count) {
+    return '$count premium minuten over.';
+  }
+
+  @override
+  String get alwaysAvailable => 'altijd beschikbaar.';
 }

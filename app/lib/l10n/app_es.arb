@@ -1741,5 +1741,13 @@
   "triggeredByType": "activado por {triggerType}",
   "accessesAndTriggeredBy": "{accessDescription} y es {triggerDescription}.",
   "isTriggeredBy": "Es {triggerDescription}.",
-  "noSpecificDataAccessConfigured": "No hay acceso a datos específico configurado."
+  "noSpecificDataAccessConfigured": "No hay acceso a datos específico configurado.",
+  "basicPlanDescription": "1.200 minutos premium + ilimitado en dispositivo",
+  "minutes": "minutos",
+  "omiHas": "Omi tiene:",
+  "premiumMinutesUsed": "Minutos premium utilizados.",
+  "setupOnDevice": "Configurar en dispositivo",
+  "forUnlimitedFreeTranscription": "para transcripción gratuita ilimitada.",
+  "premiumMinsLeft": "{count} minutos premium restantes.",
+  "alwaysAvailable": "siempre disponible."
 }

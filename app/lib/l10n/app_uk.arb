@@ -3294,5 +3294,13 @@
   "triggeredByType": "запускається {triggerType}",
   "accessesAndTriggeredBy": "{accessDescription} і {triggerDescription}.",
   "isTriggeredBy": "{triggerDescription}.",
-  "noSpecificDataAccessConfigured": "Конкретний доступ до даних не налаштовано."
+  "noSpecificDataAccessConfigured": "Конкретний доступ до даних не налаштовано.",
+  "basicPlanDescription": "1 200 преміум хвилин + необмежено на пристрої",
+  "minutes": "хвилин",
+  "omiHas": "У Omi:",
+  "premiumMinutesUsed": "Преміум хвилини використано.",
+  "setupOnDevice": "Налаштувати на пристрої",
+  "forUnlimitedFreeTranscription": "для необмеженої безкоштовної транскрипції.",
+  "premiumMinsLeft": "Залишилось {count} преміум хвилин.",
+  "alwaysAvailable": "завжди доступно."
 }

@@ -4766,4 +4766,30 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get noSpecificDataAccessConfigured => 'Конкретний доступ до даних не налаштовано.';
+
+  @override
+  String get basicPlanDescription => '1 200 преміум хвилин + необмежено на пристрої';
+
+  @override
+  String get minutes => 'хвилин';
+
+  @override
+  String get omiHas => 'У Omi:';
+
+  @override
+  String get premiumMinutesUsed => 'Преміум хвилини використано.';
+
+  @override
+  String get setupOnDevice => 'Налаштувати на пристрої';
+
+  @override
+  String get forUnlimitedFreeTranscription => 'для необмеженої безкоштовної транскрипції.';
+
+  @override
+  String premiumMinsLeft(int count) {
+    return 'Залишилось $count преміум хвилин.';
+  }
+
+  @override
+  String get alwaysAvailable => 'завжди доступно.';
 }

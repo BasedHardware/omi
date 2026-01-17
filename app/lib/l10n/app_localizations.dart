@@ -9020,6 +9020,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No specific data access configured.'**
   String get noSpecificDataAccessConfigured;
+
+  /// Description of basic plan features in usage page
+  ///
+  /// In en, this message translates to:
+  /// **'1,200 premium mins + unlimited on-device'**
+  String get basicPlanDescription;
+
+  /// Unit label for minutes
+  ///
+  /// In en, this message translates to:
+  /// **'minutes'**
+  String get minutes;
+
+  /// Fallback text for share stats when period is unknown
+  ///
+  /// In en, this message translates to:
+  /// **'Omi has:'**
+  String get omiHas;
+
+  /// Message shown when all premium minutes are used
+  ///
+  /// In en, this message translates to:
+  /// **'Premium minutes used.'**
+  String get premiumMinutesUsed;
+
+  /// Link text to setup on-device transcription
+  ///
+  /// In en, this message translates to:
+  /// **'Setup on-device'**
+  String get setupOnDevice;
+
+  /// Continuation of premium minutes message
+  ///
+  /// In en, this message translates to:
+  /// **'for unlimited free transcription.'**
+  String get forUnlimitedFreeTranscription;
+
+  /// Message showing remaining premium minutes
+  ///
+  /// In en, this message translates to:
+  /// **'{count} premium mins left.'**
+  String premiumMinsLeft(int count);
+
+  /// Text indicating on-device is always available
+  ///
+  /// In en, this message translates to:
+  /// **'always available.'**
+  String get alwaysAvailable;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

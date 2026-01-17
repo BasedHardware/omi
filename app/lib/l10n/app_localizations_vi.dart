@@ -4770,4 +4770,30 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get noSpecificDataAccessConfigured => 'Không có quyền truy cập dữ liệu cụ thể nào được cấu hình.';
+
+  @override
+  String get basicPlanDescription => '1.200 phút cao cấp + không giới hạn trên thiết bị';
+
+  @override
+  String get minutes => 'phút';
+
+  @override
+  String get omiHas => 'Omi có:';
+
+  @override
+  String get premiumMinutesUsed => 'Đã sử dụng phút cao cấp.';
+
+  @override
+  String get setupOnDevice => 'Thiết lập trên thiết bị';
+
+  @override
+  String get forUnlimitedFreeTranscription => 'để phiên âm miễn phí không giới hạn.';
+
+  @override
+  String premiumMinsLeft(int count) {
+    return 'Còn $count phút cao cấp.';
+  }
+
+  @override
+  String get alwaysAvailable => 'luôn có sẵn.';
 }

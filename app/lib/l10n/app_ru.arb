@@ -3294,5 +3294,13 @@
   "triggeredByType": "запускается {triggerType}",
   "accessesAndTriggeredBy": "{accessDescription} и {triggerDescription}.",
   "isTriggeredBy": "{triggerDescription}.",
-  "noSpecificDataAccessConfigured": "Конкретный доступ к данным не настроен."
+  "noSpecificDataAccessConfigured": "Конкретный доступ к данным не настроен.",
+  "basicPlanDescription": "1 200 премиум минут + неограниченно на устройстве",
+  "minutes": "минут",
+  "omiHas": "У Omi:",
+  "premiumMinutesUsed": "Премиум минуты использованы.",
+  "setupOnDevice": "Настроить на устройстве",
+  "forUnlimitedFreeTranscription": "для неограниченной бесплатной транскрипции.",
+  "premiumMinsLeft": "Осталось {count} премиум минут.",
+  "alwaysAvailable": "всегда доступно."
 }

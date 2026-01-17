@@ -3294,5 +3294,13 @@
   "triggeredByType": "utlöst av {triggerType}",
   "accessesAndTriggeredBy": "{accessDescription} och är {triggerDescription}.",
   "isTriggeredBy": "Är {triggerDescription}.",
-  "noSpecificDataAccessConfigured": "Ingen specifik dataåtkomst konfigurerad."
+  "noSpecificDataAccessConfigured": "Ingen specifik dataåtkomst konfigurerad.",
+  "basicPlanDescription": "1 200 premium-minuter + obegränsat på enheten",
+  "minutes": "minuter",
+  "omiHas": "Omi har:",
+  "premiumMinutesUsed": "Premium-minuter använda.",
+  "setupOnDevice": "Konfigurera på enheten",
+  "forUnlimitedFreeTranscription": "för obegränsad gratis transkription.",
+  "premiumMinsLeft": "{count} premium-minuter kvar.",
+  "alwaysAvailable": "alltid tillgängligt."
 }

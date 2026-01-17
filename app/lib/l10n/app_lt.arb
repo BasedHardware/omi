@@ -3276,5 +3276,13 @@
   "triggeredByType": "suaktyvinta {triggerType}",
   "accessesAndTriggeredBy": "{accessDescription} ir yra {triggerDescription}.",
   "isTriggeredBy": "Yra {triggerDescription}.",
-  "noSpecificDataAccessConfigured": "Nenustatyta konkreti prieiga prie duomenų."
+  "noSpecificDataAccessConfigured": "Nenustatyta konkreti prieiga prie duomenų.",
+  "basicPlanDescription": "1 200 premium minučių + neribota įrenginyje",
+  "minutes": "minučių",
+  "omiHas": "Omi turi:",
+  "premiumMinutesUsed": "Premium minutės išnaudotos.",
+  "setupOnDevice": "Nustatyti įrenginyje",
+  "forUnlimitedFreeTranscription": "neribotam nemokamam transkribavimui.",
+  "premiumMinsLeft": "Liko {count} premium minučių.",
+  "alwaysAvailable": "visada prieinama."
 }

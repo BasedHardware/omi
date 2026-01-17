@@ -2112,5 +2112,13 @@
   "triggeredByType": "getriggerd door {triggerType}",
   "accessesAndTriggeredBy": "{accessDescription} en is {triggerDescription}.",
   "isTriggeredBy": "Is {triggerDescription}.",
-  "noSpecificDataAccessConfigured": "Geen specifieke gegevenstoegang geconfigureerd."
+  "noSpecificDataAccessConfigured": "Geen specifieke gegevenstoegang geconfigureerd.",
+  "basicPlanDescription": "1.200 premium minuten + onbeperkt op apparaat",
+  "minutes": "minuten",
+  "omiHas": "Omi heeft:",
+  "premiumMinutesUsed": "Premium minuten gebruikt.",
+  "setupOnDevice": "Instellen op apparaat",
+  "forUnlimitedFreeTranscription": "voor onbeperkte gratis transcriptie.",
+  "premiumMinsLeft": "{count} premium minuten over.",
+  "alwaysAvailable": "altijd beschikbaar."
 }

@@ -3294,5 +3294,13 @@
   "triggeredByType": "käivitab {triggerType}",
   "accessesAndTriggeredBy": "{accessDescription} ja on {triggerDescription}.",
   "isTriggeredBy": "On {triggerDescription}.",
-  "noSpecificDataAccessConfigured": "Konkreetset andmetele juurdepääsu pole seadistatud."
+  "noSpecificDataAccessConfigured": "Konkreetset andmetele juurdepääsu pole seadistatud.",
+  "basicPlanDescription": "1200 premium minutit + piiramatu seadmes",
+  "minutes": "minutit",
+  "omiHas": "Omil on:",
+  "premiumMinutesUsed": "Premium minutid kasutatud.",
+  "setupOnDevice": "Seadista seadmes",
+  "forUnlimitedFreeTranscription": "piiramatuks tasuta transkriptsiooniks.",
+  "premiumMinsLeft": "{count} premium minutit jäänud.",
+  "alwaysAvailable": "alati saadaval."
 }

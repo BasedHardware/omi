@@ -4738,4 +4738,30 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get noSpecificDataAccessConfigured => 'ไม่มีการกำหนดค่าการเข้าถึงข้อมูลเฉพาะ';
+
+  @override
+  String get basicPlanDescription => '1,200 นาทีพรีเมียม + ไม่จำกัดบนอุปกรณ์';
+
+  @override
+  String get minutes => 'นาที';
+
+  @override
+  String get omiHas => 'Omi มี:';
+
+  @override
+  String get premiumMinutesUsed => 'ใช้นาทีพรีเมียมแล้ว';
+
+  @override
+  String get setupOnDevice => 'ตั้งค่าบนอุปกรณ์';
+
+  @override
+  String get forUnlimitedFreeTranscription => 'สำหรับการถอดความฟรีไม่จำกัด';
+
+  @override
+  String premiumMinsLeft(int count) {
+    return 'เหลือ $count นาทีพรีเมียม';
+  }
+
+  @override
+  String get alwaysAvailable => 'พร้อมใช้งานเสมอ';
 }

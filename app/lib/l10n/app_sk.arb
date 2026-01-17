@@ -3294,5 +3294,13 @@
   "triggeredByType": "spustené {triggerType}",
   "accessesAndTriggeredBy": "{accessDescription} a je {triggerDescription}.",
   "isTriggeredBy": "Je {triggerDescription}.",
-  "noSpecificDataAccessConfigured": "Nie je nakonfigurovaný žiadny konkrétny prístup k údajom."
+  "noSpecificDataAccessConfigured": "Nie je nakonfigurovaný žiadny konkrétny prístup k údajom.",
+  "basicPlanDescription": "1 200 prémiových minút + neobmedzené na zariadení",
+  "minutes": "minút",
+  "omiHas": "Omi má:",
+  "premiumMinutesUsed": "Prémiové minúty vyčerpané.",
+  "setupOnDevice": "Nastaviť na zariadení",
+  "forUnlimitedFreeTranscription": "pre neobmedzenú bezplatnú transkripciu.",
+  "premiumMinsLeft": "Zostáva {count} prémiových minút.",
+  "alwaysAvailable": "vždy k dispozícii."
 }

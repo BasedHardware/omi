@@ -3294,5 +3294,13 @@
   "triggeredByType": "declanșat de {triggerType}",
   "accessesAndTriggeredBy": "{accessDescription} și este {triggerDescription}.",
   "isTriggeredBy": "Este {triggerDescription}.",
-  "noSpecificDataAccessConfigured": "Niciun acces specific la date configurat."
+  "noSpecificDataAccessConfigured": "Niciun acces specific la date configurat.",
+  "basicPlanDescription": "1.200 minute premium + nelimitat pe dispozitiv",
+  "minutes": "minute",
+  "omiHas": "Omi are:",
+  "premiumMinutesUsed": "Minute premium utilizate.",
+  "setupOnDevice": "Configurare pe dispozitiv",
+  "forUnlimitedFreeTranscription": "pentru transcriere gratuită nelimitată.",
+  "premiumMinsLeft": "{count} minute premium rămase.",
+  "alwaysAvailable": "întotdeauna disponibil."
 }

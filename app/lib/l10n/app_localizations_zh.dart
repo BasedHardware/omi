@@ -4669,4 +4669,30 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get noSpecificDataAccessConfigured => '未配置特定数据访问。';
+
+  @override
+  String get basicPlanDescription => '1,200 高级分钟 + 设备端无限';
+
+  @override
+  String get minutes => '分钟';
+
+  @override
+  String get omiHas => 'Omi 拥有：';
+
+  @override
+  String get premiumMinutesUsed => '高级分钟已用完。';
+
+  @override
+  String get setupOnDevice => '设置设备端';
+
+  @override
+  String get forUnlimitedFreeTranscription => '享受无限免费转录。';
+
+  @override
+  String premiumMinsLeft(int count) {
+    return '剩余 $count 高级分钟。';
+  }
+
+  @override
+  String get alwaysAvailable => '始终可用。';
 }

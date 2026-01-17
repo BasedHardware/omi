@@ -4761,4 +4761,30 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get noSpecificDataAccessConfigured => 'Ei määritettyä tietojen käyttöoikeutta.';
+
+  @override
+  String get basicPlanDescription => '1 200 premium-minuuttia + rajoittamaton laitteella';
+
+  @override
+  String get minutes => 'minuuttia';
+
+  @override
+  String get omiHas => 'Omilla on:';
+
+  @override
+  String get premiumMinutesUsed => 'Premium-minuutit käytetty.';
+
+  @override
+  String get setupOnDevice => 'Määritä laitteella';
+
+  @override
+  String get forUnlimitedFreeTranscription => 'rajattomaan ilmaiseen litterointiin.';
+
+  @override
+  String premiumMinsLeft(int count) {
+    return '$count premium-minuuttia jäljellä.';
+  }
+
+  @override
+  String get alwaysAvailable => 'aina käytettävissä.';
 }

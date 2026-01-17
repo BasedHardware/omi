@@ -4676,4 +4676,30 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get noSpecificDataAccessConfigured => '特定のデータアクセスは設定されていません。';
+
+  @override
+  String get basicPlanDescription => '1,200プレミアム分 + デバイス無制限';
+
+  @override
+  String get minutes => '分';
+
+  @override
+  String get omiHas => 'Omiは:';
+
+  @override
+  String get premiumMinutesUsed => 'プレミアム分を使用済み。';
+
+  @override
+  String get setupOnDevice => 'オンデバイスを設定';
+
+  @override
+  String get forUnlimitedFreeTranscription => '無制限の無料文字起こしのため。';
+
+  @override
+  String premiumMinsLeft(int count) {
+    return '残りプレミアム$count分。';
+  }
+
+  @override
+  String get alwaysAvailable => '常に利用可能。';
 }

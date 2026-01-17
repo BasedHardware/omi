@@ -3294,5 +3294,13 @@
   "triggeredByType": "được kích hoạt bởi {triggerType}",
   "accessesAndTriggeredBy": "{accessDescription} và {triggerDescription}.",
   "isTriggeredBy": "{triggerDescription}.",
-  "noSpecificDataAccessConfigured": "Không có quyền truy cập dữ liệu cụ thể nào được cấu hình."
+  "noSpecificDataAccessConfigured": "Không có quyền truy cập dữ liệu cụ thể nào được cấu hình.",
+  "basicPlanDescription": "1.200 phút cao cấp + không giới hạn trên thiết bị",
+  "minutes": "phút",
+  "omiHas": "Omi có:",
+  "premiumMinutesUsed": "Đã sử dụng phút cao cấp.",
+  "setupOnDevice": "Thiết lập trên thiết bị",
+  "forUnlimitedFreeTranscription": "để phiên âm miễn phí không giới hạn.",
+  "premiumMinsLeft": "Còn {count} phút cao cấp.",
+  "alwaysAvailable": "luôn có sẵn."
 }

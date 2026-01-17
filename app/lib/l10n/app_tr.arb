@@ -3276,5 +3276,13 @@
   "triggeredByType": "{triggerType} tarafından tetiklendi",
   "accessesAndTriggeredBy": "{accessDescription} ve {triggerDescription}.",
   "isTriggeredBy": "{triggerDescription}.",
-  "noSpecificDataAccessConfigured": "Belirli veri erişimi yapılandırılmamış."
+  "noSpecificDataAccessConfigured": "Belirli veri erişimi yapılandırılmamış.",
+  "basicPlanDescription": "1.200 premium dakika + cihazda sınırsız",
+  "minutes": "dakika",
+  "omiHas": "Omi:",
+  "premiumMinutesUsed": "Premium dakikalar kullanıldı.",
+  "setupOnDevice": "Cihazda ayarla",
+  "forUnlimitedFreeTranscription": "sınırsız ücretsiz transkripsiyon için.",
+  "premiumMinsLeft": "{count} premium dakika kaldı.",
+  "alwaysAvailable": "her zaman mevcut."
 }

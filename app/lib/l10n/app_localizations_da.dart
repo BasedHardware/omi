@@ -4771,4 +4771,30 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get noSpecificDataAccessConfigured => 'Ingen specifik dataadgang konfigureret.';
+
+  @override
+  String get basicPlanDescription => '1.200 premium minutter + ubegrænset on-device';
+
+  @override
+  String get minutes => 'minutter';
+
+  @override
+  String get omiHas => 'Omi har:';
+
+  @override
+  String get premiumMinutesUsed => 'Premium minutter brugt.';
+
+  @override
+  String get setupOnDevice => 'Opsæt on-device';
+
+  @override
+  String get forUnlimitedFreeTranscription => 'for ubegrænset gratis transskription.';
+
+  @override
+  String premiumMinsLeft(int count) {
+    return '$count premium minutter tilbage.';
+  }
+
+  @override
+  String get alwaysAvailable => 'altid tilgængeligt.';
 }

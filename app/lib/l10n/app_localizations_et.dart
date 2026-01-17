@@ -4761,4 +4761,30 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get noSpecificDataAccessConfigured => 'Konkreetset andmetele juurdepääsu pole seadistatud.';
+
+  @override
+  String get basicPlanDescription => '1200 premium minutit + piiramatu seadmes';
+
+  @override
+  String get minutes => 'minutit';
+
+  @override
+  String get omiHas => 'Omil on:';
+
+  @override
+  String get premiumMinutesUsed => 'Premium minutid kasutatud.';
+
+  @override
+  String get setupOnDevice => 'Seadista seadmes';
+
+  @override
+  String get forUnlimitedFreeTranscription => 'piiramatuks tasuta transkriptsiooniks.';
+
+  @override
+  String premiumMinsLeft(int count) {
+    return '$count premium minutit jäänud.';
+  }
+
+  @override
+  String get alwaysAvailable => 'alati saadaval.';
 }

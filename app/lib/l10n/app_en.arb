@@ -5593,5 +5593,42 @@
   "noSpecificDataAccessConfigured": "No specific data access configured.",
   "@noSpecificDataAccessConfigured": {
     "description": "Message shown when app has no specific data access"
+  },
+  "basicPlanDescription": "1,200 premium mins + unlimited on-device",
+  "@basicPlanDescription": {
+    "description": "Description of basic plan features in usage page"
+  },
+  "minutes": "minutes",
+  "@minutes": {
+    "description": "Unit label for minutes"
+  },
+  "omiHas": "Omi has:",
+  "@omiHas": {
+    "description": "Fallback text for share stats when period is unknown"
+  },
+  "premiumMinutesUsed": "Premium minutes used.",
+  "@premiumMinutesUsed": {
+    "description": "Message shown when all premium minutes are used"
+  },
+  "setupOnDevice": "Setup on-device",
+  "@setupOnDevice": {
+    "description": "Link text to setup on-device transcription"
+  },
+  "forUnlimitedFreeTranscription": "for unlimited free transcription.",
+  "@forUnlimitedFreeTranscription": {
+    "description": "Continuation of premium minutes message"
+  },
+  "premiumMinsLeft": "{count} premium mins left.",
+  "@premiumMinsLeft": {
+    "description": "Message showing remaining premium minutes",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "alwaysAvailable": "always available.",
+  "@alwaysAvailable": {
+    "description": "Text indicating on-device is always available"
   }
 }

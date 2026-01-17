@@ -4772,4 +4772,30 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get noSpecificDataAccessConfigured => 'Belirli veri erişimi yapılandırılmamış.';
+
+  @override
+  String get basicPlanDescription => '1.200 premium dakika + cihazda sınırsız';
+
+  @override
+  String get minutes => 'dakika';
+
+  @override
+  String get omiHas => 'Omi:';
+
+  @override
+  String get premiumMinutesUsed => 'Premium dakikalar kullanıldı.';
+
+  @override
+  String get setupOnDevice => 'Cihazda ayarla';
+
+  @override
+  String get forUnlimitedFreeTranscription => 'sınırsız ücretsiz transkripsiyon için.';
+
+  @override
+  String premiumMinsLeft(int count) {
+    return '$count premium dakika kaldı.';
+  }
+
+  @override
+  String get alwaysAvailable => 'her zaman mevcut.';
 }

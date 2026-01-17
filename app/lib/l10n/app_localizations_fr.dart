@@ -4805,4 +4805,30 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get noSpecificDataAccessConfigured => 'Aucun accès aux données spécifique configuré.';
+
+  @override
+  String get basicPlanDescription => '1 200 minutes premium + illimité sur l\'appareil';
+
+  @override
+  String get minutes => 'minutes';
+
+  @override
+  String get omiHas => 'Omi a:';
+
+  @override
+  String get premiumMinutesUsed => 'Minutes premium utilisées.';
+
+  @override
+  String get setupOnDevice => 'Configurer sur l\'appareil';
+
+  @override
+  String get forUnlimitedFreeTranscription => 'pour une transcription gratuite illimitée.';
+
+  @override
+  String premiumMinsLeft(int count) {
+    return '$count minutes premium restantes.';
+  }
+
+  @override
+  String get alwaysAvailable => 'toujours disponible.';
 }

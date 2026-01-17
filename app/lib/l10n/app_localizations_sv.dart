@@ -4764,4 +4764,30 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get noSpecificDataAccessConfigured => 'Ingen specifik dataåtkomst konfigurerad.';
+
+  @override
+  String get basicPlanDescription => '1 200 premium-minuter + obegränsat på enheten';
+
+  @override
+  String get minutes => 'minuter';
+
+  @override
+  String get omiHas => 'Omi har:';
+
+  @override
+  String get premiumMinutesUsed => 'Premium-minuter använda.';
+
+  @override
+  String get setupOnDevice => 'Konfigurera på enheten';
+
+  @override
+  String get forUnlimitedFreeTranscription => 'för obegränsad gratis transkription.';
+
+  @override
+  String premiumMinsLeft(int count) {
+    return '$count premium-minuter kvar.';
+  }
+
+  @override
+  String get alwaysAvailable => 'alltid tillgängligt.';
 }

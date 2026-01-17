@@ -4725,4 +4725,30 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get noSpecificDataAccessConfigured => 'لم يتم تكوين وصول محدد للبيانات.';
+
+  @override
+  String get basicPlanDescription => '1,200 دقيقة مميزة + غير محدود على الجهاز';
+
+  @override
+  String get minutes => 'دقائق';
+
+  @override
+  String get omiHas => 'لدى Omi:';
+
+  @override
+  String get premiumMinutesUsed => 'تم استخدام الدقائق المميزة.';
+
+  @override
+  String get setupOnDevice => 'إعداد على الجهاز';
+
+  @override
+  String get forUnlimitedFreeTranscription => 'للنسخ المجاني غير المحدود.';
+
+  @override
+  String premiumMinsLeft(int count) {
+    return '$count دقائق مميزة متبقية.';
+  }
+
+  @override
+  String get alwaysAvailable => 'متاح دائمًا.';
 }

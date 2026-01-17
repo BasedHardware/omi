@@ -4785,4 +4785,30 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get noSpecificDataAccessConfigured => 'Nincs beállítva specifikus adathozzáférés.';
+
+  @override
+  String get basicPlanDescription => '1200 prémium perc + korlátlan eszközön';
+
+  @override
+  String get minutes => 'perc';
+
+  @override
+  String get omiHas => 'Omi:';
+
+  @override
+  String get premiumMinutesUsed => 'Prémium percek elhasználva.';
+
+  @override
+  String get setupOnDevice => 'Eszközön beállítás';
+
+  @override
+  String get forUnlimitedFreeTranscription => 'korlátlan ingyenes átíráshoz.';
+
+  @override
+  String premiumMinsLeft(int count) {
+    return '$count prémium perc maradt.';
+  }
+
+  @override
+  String get alwaysAvailable => 'mindig elérhető.';
 }

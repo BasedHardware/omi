@@ -3294,5 +3294,13 @@
   "triggeredByType": "dipicu oleh {triggerType}",
   "accessesAndTriggeredBy": "{accessDescription} dan {triggerDescription}.",
   "isTriggeredBy": "{triggerDescription}.",
-  "noSpecificDataAccessConfigured": "Tidak ada akses data spesifik yang dikonfigurasi."
+  "noSpecificDataAccessConfigured": "Tidak ada akses data spesifik yang dikonfigurasi.",
+  "basicPlanDescription": "1.200 menit premium + tak terbatas di perangkat",
+  "minutes": "menit",
+  "omiHas": "Omi memiliki:",
+  "premiumMinutesUsed": "Menit premium digunakan.",
+  "setupOnDevice": "Atur di perangkat",
+  "forUnlimitedFreeTranscription": "untuk transkripsi gratis tanpa batas.",
+  "premiumMinsLeft": "{count} menit premium tersisa.",
+  "alwaysAvailable": "selalu tersedia."
 }

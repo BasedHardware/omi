@@ -3312,5 +3312,13 @@
   "triggeredByType": "يتم تشغيله بواسطة {triggerType}",
   "accessesAndTriggeredBy": "{accessDescription} و{triggerDescription}.",
   "isTriggeredBy": "{triggerDescription}.",
-  "noSpecificDataAccessConfigured": "لم يتم تكوين وصول محدد للبيانات."
+  "noSpecificDataAccessConfigured": "لم يتم تكوين وصول محدد للبيانات.",
+  "basicPlanDescription": "1,200 دقيقة مميزة + غير محدود على الجهاز",
+  "minutes": "دقائق",
+  "omiHas": "لدى Omi:",
+  "premiumMinutesUsed": "تم استخدام الدقائق المميزة.",
+  "setupOnDevice": "إعداد على الجهاز",
+  "forUnlimitedFreeTranscription": "للنسخ المجاني غير المحدود.",
+  "premiumMinsLeft": "{count} دقائق مميزة متبقية.",
+  "alwaysAvailable": "متاح دائمًا."
 }

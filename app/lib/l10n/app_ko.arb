@@ -3294,5 +3294,13 @@
   "triggeredByType": "{triggerType}에 의해 트리거됨",
   "accessesAndTriggeredBy": "{accessDescription} 및 {triggerDescription}.",
   "isTriggeredBy": "{triggerDescription}.",
-  "noSpecificDataAccessConfigured": "특정 데이터 액세스가 구성되지 않았습니다."
+  "noSpecificDataAccessConfigured": "특정 데이터 액세스가 구성되지 않았습니다.",
+  "basicPlanDescription": "1,200 프리미엄 분 + 무제한 온디바이스",
+  "minutes": "분",
+  "omiHas": "Omi:",
+  "premiumMinutesUsed": "프리미엄 분 사용됨.",
+  "setupOnDevice": "온디바이스 설정",
+  "forUnlimitedFreeTranscription": "무제한 무료 전사를 위해.",
+  "premiumMinsLeft": "프리미엄 {count}분 남음.",
+  "alwaysAvailable": "항상 사용 가능."
 }

@@ -4790,4 +4790,30 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get noSpecificDataAccessConfigured => 'No hi ha accés a dades específic configurat.';
+
+  @override
+  String get basicPlanDescription => '1.200 minuts premium + il·limitat al dispositiu';
+
+  @override
+  String get minutes => 'minuts';
+
+  @override
+  String get omiHas => 'Omi té:';
+
+  @override
+  String get premiumMinutesUsed => 'Minuts premium utilitzats.';
+
+  @override
+  String get setupOnDevice => 'Configura al dispositiu';
+
+  @override
+  String get forUnlimitedFreeTranscription => 'per a transcripció gratuïta il·limitada.';
+
+  @override
+  String premiumMinsLeft(int count) {
+    return '$count minuts premium restants.';
+  }
+
+  @override
+  String get alwaysAvailable => 'sempre disponible.';
 }

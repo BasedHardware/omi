@@ -4756,4 +4756,30 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get noSpecificDataAccessConfigured => 'Není nakonfigurován žádný specifický přístup k datům.';
+
+  @override
+  String get basicPlanDescription => '1 200 prémiových minut + neomezené na zařízení';
+
+  @override
+  String get minutes => 'minut';
+
+  @override
+  String get omiHas => 'Omi má:';
+
+  @override
+  String get premiumMinutesUsed => 'Prémiové minuty vyčerpány.';
+
+  @override
+  String get setupOnDevice => 'Nastavit na zařízení';
+
+  @override
+  String get forUnlimitedFreeTranscription => 'pro neomezenou bezplatnou transkripci.';
+
+  @override
+  String premiumMinsLeft(int count) {
+    return 'Zbývá $count prémiových minut.';
+  }
+
+  @override
+  String get alwaysAvailable => 'vždy k dispozici.';
 }

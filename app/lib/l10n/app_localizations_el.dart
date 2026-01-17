@@ -4800,4 +4800,30 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get noSpecificDataAccessConfigured => 'Δεν έχει ρυθμιστεί συγκεκριμένη πρόσβαση δεδομένων.';
+
+  @override
+  String get basicPlanDescription => '1.200 premium λεπτά + απεριόριστα στη συσκευή';
+
+  @override
+  String get minutes => 'λεπτά';
+
+  @override
+  String get omiHas => 'Το Omi έχει:';
+
+  @override
+  String get premiumMinutesUsed => 'Χρησιμοποιήθηκαν τα premium λεπτά.';
+
+  @override
+  String get setupOnDevice => 'Ρύθμιση στη συσκευή';
+
+  @override
+  String get forUnlimitedFreeTranscription => 'για απεριόριστη δωρεάν μεταγραφή.';
+
+  @override
+  String premiumMinsLeft(int count) {
+    return '$count premium λεπτά απομένουν.';
+  }
+
+  @override
+  String get alwaysAvailable => 'πάντα διαθέσιμο.';
 }
