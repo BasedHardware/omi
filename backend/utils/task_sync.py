@@ -65,7 +65,6 @@ async def _sync_to_cloud_service(uid: str, app_key: str, integration: dict, acti
         )
         return {"synced": True, "platform": app_key, "external_task_id": result.get("external_task_id")}
 
-    print(f"Auto-sync failed for action item {action_item['id']}: {result.get('error')}")
     return {"synced": False, "platform": app_key, "error": result.get("error")}
 
 
@@ -77,11 +76,6 @@ def _sync_to_apple_reminders(uid: str, action_item: dict) -> dict:
         description=action_item["description"],
         due_at=action_item.get("due_at"),
     )
-
-    if success:
-        print(f"Sent Apple Reminders sync push for action item {action_item['id']} to user {uid}")
-    else:
-        print(f"Failed to send Apple Reminders sync push for action item {action_item['id']}")
 
     return {"synced": success, "platform": "apple_reminders", "pending_device": True}
 

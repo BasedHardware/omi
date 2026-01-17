@@ -14,6 +14,7 @@ extension FlutterError: Error {}
   private var methodChannel: FlutterMethodChannel?
   private var appleRemindersChannel: FlutterMethodChannel?
   private let appleRemindersService = AppleRemindersService()
+  private static let iso8601DateFormatter = ISO8601DateFormatter()
 
   private var notificationTitleOnKill: String?
   private var notificationBodyOnKill: String?
@@ -160,7 +161,7 @@ extension FlutterError: Error {}
       // Parse due date
       let dueDate: Date? = {
           if let dueDateStr = userInfo["due_at"] as? String, !dueDateStr.isEmpty {
-              return ISO8601DateFormatter().date(from: dueDateStr)
+              return AppDelegate.iso8601DateFormatter.date(from: dueDateStr)
           }
           return nil
       }()
@@ -187,7 +188,6 @@ extension FlutterError: Error {}
 
           completionHandler(.newData)
       } catch {
-          print("Apple Reminders sync: Failed to create reminder - \(error)")
           completionHandler(.failed)
       }
   }
