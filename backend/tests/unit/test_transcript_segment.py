@@ -56,22 +56,24 @@ def test_forward_merge_drops_segment_when_only_incomplete():
     a = _segment("unfinished", speaker="SPEAKER_00", start=0.0, end=2.0)
     b = _segment("continues now.", speaker="SPEAKER_01", start=2.0, end=4.0)
 
-    segments, _, _ = TranscriptSegment.combine_segments([], [a, b])
+    segments, _, removed_ids = TranscriptSegment.combine_segments([], [a, b])
 
     assert len(segments) == 1
     assert segments[0].speaker == "SPEAKER_01"
     assert segments[0].text == "unfinished continues now."
+    assert removed_ids == []
 
 
 def test_forward_merge_drops_existing_tail_segment():
     existing = _segment("we're", speaker="SPEAKER_02", start=0.0, end=1.0)
     new = _segment("we're struggling to connect.", speaker="SPEAKER_01", start=1.2, end=3.0)
 
-    segments, _, _ = TranscriptSegment.combine_segments([existing], [new])
+    segments, _, removed_ids = TranscriptSegment.combine_segments([existing], [new])
 
     assert len(segments) == 1
     assert segments[0].speaker == "SPEAKER_01"
     assert segments[0].text == "we're we're struggling to connect."
+    assert removed_ids == [existing.id]
 
 
 def test_lowercase_continuation_only_merges_same_speaker():
@@ -92,10 +94,11 @@ def test_backward_merge_first_sentence_from_next_segment():
     )
     b = _segment("move. Mhmm.", speaker="SPEAKER_01", start=2.0, end=2.5)
 
-    segments, _, _ = TranscriptSegment.combine_segments([], [a, b])
+    segments, _, removed_ids = TranscriptSegment.combine_segments([], [a, b])
 
     assert len(segments) == 2
     assert segments[0].speaker == "SPEAKER_02"
     assert segments[0].text.endswith("space move.")
     assert segments[1].speaker == "SPEAKER_01"
     assert segments[1].text == "Mhmm."
+    assert removed_ids == []
