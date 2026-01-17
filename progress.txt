@@ -1438,3 +1438,15 @@ Notes: Conversation timeout settings dialog. All required l10n keys already
        existed in the ARB files. Updated timeout options list to use l10n
        labels and descriptions, and confirmation snackbar messages.
 Commit: 2189bb251
+
+--------------------------------------------------------------------------------
+FILE 105 (Phase 2 FILE 35): integration_settings_page.dart
+--------------------------------------------------------------------------------
+Path: app/lib/pages/settings/integration_settings_page.dart
+New Keys: (none - all keys already existed)
+Reused Keys: refresh, connectedToApp
+Total New Keys: 0
+Status: ✅ COMPLETED
+Notes: Integration settings page template. All required l10n keys already
+       existed. Updated refresh tooltip and "Connected to" status message.
+Commit: dfc762dc1
