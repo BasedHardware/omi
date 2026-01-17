@@ -4837,4 +4837,36 @@ class AppLocalizationsSv extends AppLocalizations {
   String nConversations(int count) {
     return '$count konversationer';
   }
+
+  @override
+  String get pleaseEnterName => 'Ange ett namn';
+
+  @override
+  String get nameMustBeBetweenCharacters => 'Namnet måste vara mellan 2 och 40 tecken';
+
+  @override
+  String get deleteSampleQuestion => 'Ta bort prov?';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return 'Är du säker på att du vill ta bort ${name}s prov?';
+  }
+
+  @override
+  String get confirmDeletion => 'Bekräfta borttagning';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return 'Är du säker på att du vill ta bort $name? Detta tar också bort alla tillhörande röstprover.';
+  }
+
+  @override
+  String get howItWorksTitle => 'Hur fungerar det?';
+
+  @override
+  String get howPeopleWorks =>
+      'När en person har skapats kan du gå till en konversationsutskrift och tilldela dem deras motsvarande segment, på så sätt kommer Omi att kunna känna igen deras tal också!';
+
+  @override
+  String get tapToDelete => 'Tryck för att ta bort';
 }

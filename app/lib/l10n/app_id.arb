@@ -3316,5 +3316,14 @@
   "statusProcessing": "Memproses",
   "statusCompleted": "Selesai",
   "statusFailed": "Gagal",
-  "nConversations": "{count} percakapan"
+  "nConversations": "{count} percakapan",
+  "pleaseEnterName": "Silakan masukkan nama",
+  "nameMustBeBetweenCharacters": "Nama harus antara 2 dan 40 karakter",
+  "deleteSampleQuestion": "Hapus Sampel?",
+  "deleteSampleConfirmation": "Apakah Anda yakin ingin menghapus sampel {name}?",
+  "confirmDeletion": "Konfirmasi Penghapusan",
+  "deletePersonConfirmation": "Apakah Anda yakin ingin menghapus {name}? Ini juga akan menghapus semua sampel suara terkait.",
+  "howItWorksTitle": "Bagaimana cara kerjanya?",
+  "howPeopleWorks": "Setelah seseorang dibuat, Anda dapat pergi ke transkrip percakapan dan menetapkan segmen yang sesuai, dengan cara itu Omi akan dapat mengenali ucapan mereka juga!",
+  "tapToDelete": "Ketuk untuk menghapus"
 }

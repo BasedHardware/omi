@@ -3298,5 +3298,14 @@
   "statusProcessing": "İşleniyor",
   "statusCompleted": "Tamamlandı",
   "statusFailed": "Başarısız",
-  "nConversations": "{count} konuşma"
+  "nConversations": "{count} konuşma",
+  "pleaseEnterName": "Lütfen bir ad girin",
+  "nameMustBeBetweenCharacters": "Ad 2 ile 40 karakter arasında olmalıdır",
+  "deleteSampleQuestion": "Örnek silinsin mi?",
+  "deleteSampleConfirmation": "{name} örneğini silmek istediğinizden emin misiniz?",
+  "confirmDeletion": "Silmeyi Onayla",
+  "deletePersonConfirmation": "{name} kişisini silmek istediğinizden emin misiniz? Bu aynı zamanda tüm ilişkili konuşma örneklerini de kaldıracaktır.",
+  "howItWorksTitle": "Nasıl çalışır?",
+  "howPeopleWorks": "Bir kişi oluşturulduktan sonra, bir konuşma transkriptine gidebilir ve ilgili bölümleri atayabilirsiniz, böylece Omi onların konuşmasını da tanıyabilir!",
+  "tapToDelete": "Silmek için dokunun"
 }

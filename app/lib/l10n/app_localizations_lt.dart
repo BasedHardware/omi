@@ -4835,4 +4835,36 @@ class AppLocalizationsLt extends AppLocalizations {
   String nConversations(int count) {
     return '$count pokalbių';
   }
+
+  @override
+  String get pleaseEnterName => 'Įveskite vardą';
+
+  @override
+  String get nameMustBeBetweenCharacters => 'Vardas turi būti nuo 2 iki 40 simbolių';
+
+  @override
+  String get deleteSampleQuestion => 'Ištrinti pavyzdį?';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return 'Ar tikrai norite ištrinti $name pavyzdį?';
+  }
+
+  @override
+  String get confirmDeletion => 'Patvirtinti ištrynimą';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return 'Ar tikrai norite ištrinti $name? Tai taip pat pašalins visus susijusius kalbos pavyzdžius.';
+  }
+
+  @override
+  String get howItWorksTitle => 'Kaip tai veikia?';
+
+  @override
+  String get howPeopleWorks =>
+      'Kai asmuo sukurtas, galite eiti į pokalbio transkripciją ir priskirti jam atitinkamus segmentus, tokiu būdu Omi galės atpažinti ir jų kalbą!';
+
+  @override
+  String get tapToDelete => 'Bakstelėkite, kad ištrintumėte';
 }

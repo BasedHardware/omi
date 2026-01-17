@@ -4842,4 +4842,36 @@ class AppLocalizationsLv extends AppLocalizations {
   String nConversations(int count) {
     return '$count sarunas';
   }
+
+  @override
+  String get pleaseEnterName => 'Lūdzu, ievadiet vārdu';
+
+  @override
+  String get nameMustBeBetweenCharacters => 'Vārdam jābūt no 2 līdz 40 rakstzīmēm';
+
+  @override
+  String get deleteSampleQuestion => 'Dzēst paraugu?';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return 'Vai tiešām vēlaties dzēst $name paraugu?';
+  }
+
+  @override
+  String get confirmDeletion => 'Apstiprināt dzēšanu';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return 'Vai tiešām vēlaties dzēst $name? Tas arī noņems visus saistītos runas paraugus.';
+  }
+
+  @override
+  String get howItWorksTitle => 'Kā tas darbojas?';
+
+  @override
+  String get howPeopleWorks =>
+      'Kad persona ir izveidota, varat doties uz sarunas transkripciju un piešķirt viņiem atbilstošos segmentus, tādā veidā Omi varēs atpazīt arī viņu runu!';
+
+  @override
+  String get tapToDelete => 'Pieskarieties, lai dzēstu';
 }

@@ -4750,4 +4750,35 @@ class AppLocalizationsKo extends AppLocalizations {
   String nConversations(int count) {
     return '$count개의 대화';
   }
+
+  @override
+  String get pleaseEnterName => '이름을 입력하세요';
+
+  @override
+  String get nameMustBeBetweenCharacters => '이름은 2~40자여야 합니다';
+
+  @override
+  String get deleteSampleQuestion => '샘플을 삭제하시겠습니까?';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return '$name의 샘플을 삭제하시겠습니까?';
+  }
+
+  @override
+  String get confirmDeletion => '삭제 확인';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return '$name을(를) 삭제하시겠습니까? 이렇게 하면 관련된 모든 음성 샘플도 제거됩니다.';
+  }
+
+  @override
+  String get howItWorksTitle => '어떻게 작동하나요?';
+
+  @override
+  String get howPeopleWorks => '사람이 생성되면 대화 기록으로 이동하여 해당 세그먼트를 할당할 수 있습니다. 그러면 Omi가 그들의 음성도 인식할 수 있습니다!';
+
+  @override
+  String get tapToDelete => '탭하여 삭제';
 }

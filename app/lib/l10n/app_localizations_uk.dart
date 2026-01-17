@@ -4839,4 +4839,36 @@ class AppLocalizationsUk extends AppLocalizations {
   String nConversations(int count) {
     return '$count розмов';
   }
+
+  @override
+  String get pleaseEnterName => 'Будь ласка, введіть ім\'я';
+
+  @override
+  String get nameMustBeBetweenCharacters => 'Ім\'я має бути від 2 до 40 символів';
+
+  @override
+  String get deleteSampleQuestion => 'Видалити зразок?';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return 'Ви впевнені, що хочете видалити зразок $name?';
+  }
+
+  @override
+  String get confirmDeletion => 'Підтвердити видалення';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return 'Ви впевнені, що хочете видалити $name? Це також видалить усі пов\'язані зразки мовлення.';
+  }
+
+  @override
+  String get howItWorksTitle => 'Як це працює?';
+
+  @override
+  String get howPeopleWorks =>
+      'Після створення особи ви можете перейти до транскрипції розмови та призначити їм відповідні сегменти, таким чином Omi зможе розпізнавати і їхнє мовлення!';
+
+  @override
+  String get tapToDelete => 'Торкніться, щоб видалити';
 }

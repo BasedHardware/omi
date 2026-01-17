@@ -3318,5 +3318,14 @@
   "statusProcessing": "Zpracovává se",
   "statusCompleted": "Dokončeno",
   "statusFailed": "Selhalo",
-  "nConversations": "{count} konverzací"
+  "nConversations": "{count} konverzací",
+  "pleaseEnterName": "Prosím zadejte jméno",
+  "nameMustBeBetweenCharacters": "Jméno musí mít 2 až 40 znaků",
+  "deleteSampleQuestion": "Smazat vzorek?",
+  "deleteSampleConfirmation": "Opravdu chcete smazat vzorek uživatele {name}?",
+  "confirmDeletion": "Potvrdit smazání",
+  "deletePersonConfirmation": "Opravdu chcete smazat {name}? Tím se také odstraní všechny přidružené hlasové vzorky.",
+  "howItWorksTitle": "Jak to funguje?",
+  "howPeopleWorks": "Jakmile je osoba vytvořena, můžete přejít k přepisu konverzace a přiřadit jim odpovídající segmenty, tak Omi bude moci rozpoznat i jejich řeč!",
+  "tapToDelete": "Klepněte pro smazání"
 }

@@ -4848,4 +4848,36 @@ class AppLocalizationsNl extends AppLocalizations {
   String nConversations(int count) {
     return '$count gesprekken';
   }
+
+  @override
+  String get pleaseEnterName => 'Voer een naam in';
+
+  @override
+  String get nameMustBeBetweenCharacters => 'Naam moet tussen 2 en 40 tekens zijn';
+
+  @override
+  String get deleteSampleQuestion => 'Voorbeeld verwijderen?';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return 'Weet u zeker dat u het voorbeeld van $name wilt verwijderen?';
+  }
+
+  @override
+  String get confirmDeletion => 'Verwijdering bevestigen';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return 'Weet u zeker dat u $name wilt verwijderen? Dit verwijdert ook alle bijbehorende spraaksamples.';
+  }
+
+  @override
+  String get howItWorksTitle => 'Hoe werkt het?';
+
+  @override
+  String get howPeopleWorks =>
+      'Zodra een persoon is aangemaakt, kun je naar een gesprekstranscriptie gaan en de bijbehorende segmenten toewijzen, zo kan Omi ook hun spraak herkennen!';
+
+  @override
+  String get tapToDelete => 'Tik om te verwijderen';
 }

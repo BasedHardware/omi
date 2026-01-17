@@ -4845,4 +4845,36 @@ class AppLocalizationsTr extends AppLocalizations {
   String nConversations(int count) {
     return '$count konuşma';
   }
+
+  @override
+  String get pleaseEnterName => 'Lütfen bir ad girin';
+
+  @override
+  String get nameMustBeBetweenCharacters => 'Ad 2 ile 40 karakter arasında olmalıdır';
+
+  @override
+  String get deleteSampleQuestion => 'Örnek silinsin mi?';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return '$name örneğini silmek istediğinizden emin misiniz?';
+  }
+
+  @override
+  String get confirmDeletion => 'Silmeyi Onayla';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return '$name kişisini silmek istediğinizden emin misiniz? Bu aynı zamanda tüm ilişkili konuşma örneklerini de kaldıracaktır.';
+  }
+
+  @override
+  String get howItWorksTitle => 'Nasıl çalışır?';
+
+  @override
+  String get howPeopleWorks =>
+      'Bir kişi oluşturulduktan sonra, bir konuşma transkriptine gidebilir ve ilgili bölümleri atayabilirsiniz, böylece Omi onların konuşmasını da tanıyabilir!';
+
+  @override
+  String get tapToDelete => 'Silmek için dokunun';
 }

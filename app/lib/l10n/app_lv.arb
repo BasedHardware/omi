@@ -3316,5 +3316,14 @@
   "statusProcessing": "Apstrādā",
   "statusCompleted": "Pabeigts",
   "statusFailed": "Neizdevās",
-  "nConversations": "{count} sarunas"
+  "nConversations": "{count} sarunas",
+  "pleaseEnterName": "Lūdzu, ievadiet vārdu",
+  "nameMustBeBetweenCharacters": "Vārdam jābūt no 2 līdz 40 rakstzīmēm",
+  "deleteSampleQuestion": "Dzēst paraugu?",
+  "deleteSampleConfirmation": "Vai tiešām vēlaties dzēst {name} paraugu?",
+  "confirmDeletion": "Apstiprināt dzēšanu",
+  "deletePersonConfirmation": "Vai tiešām vēlaties dzēst {name}? Tas arī noņems visus saistītos runas paraugus.",
+  "howItWorksTitle": "Kā tas darbojas?",
+  "howPeopleWorks": "Kad persona ir izveidota, varat doties uz sarunas transkripciju un piešķirt viņiem atbilstošos segmentus, tādā veidā Omi varēs atpazīt arī viņu runu!",
+  "tapToDelete": "Pieskarieties, lai dzēstu"
 }

@@ -3316,5 +3316,14 @@
   "statusProcessing": "Обробка",
   "statusCompleted": "Завершено",
   "statusFailed": "Помилка",
-  "nConversations": "{count} розмов"
+  "nConversations": "{count} розмов",
+  "pleaseEnterName": "Будь ласка, введіть ім'я",
+  "nameMustBeBetweenCharacters": "Ім'я має бути від 2 до 40 символів",
+  "deleteSampleQuestion": "Видалити зразок?",
+  "deleteSampleConfirmation": "Ви впевнені, що хочете видалити зразок {name}?",
+  "confirmDeletion": "Підтвердити видалення",
+  "deletePersonConfirmation": "Ви впевнені, що хочете видалити {name}? Це також видалить усі пов'язані зразки мовлення.",
+  "howItWorksTitle": "Як це працює?",
+  "howPeopleWorks": "Після створення особи ви можете перейти до транскрипції розмови та призначити їм відповідні сегменти, таким чином Omi зможе розпізнавати і їхнє мовлення!",
+  "tapToDelete": "Торкніться, щоб видалити"
 }

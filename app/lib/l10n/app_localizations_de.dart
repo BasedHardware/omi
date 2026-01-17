@@ -4872,4 +4872,36 @@ class AppLocalizationsDe extends AppLocalizations {
   String nConversations(int count) {
     return '$count Gespräche';
   }
+
+  @override
+  String get pleaseEnterName => 'Bitte geben Sie einen Namen ein';
+
+  @override
+  String get nameMustBeBetweenCharacters => 'Der Name muss zwischen 2 und 40 Zeichen lang sein';
+
+  @override
+  String get deleteSampleQuestion => 'Probe löschen?';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return 'Sind Sie sicher, dass Sie die Probe von $name löschen möchten?';
+  }
+
+  @override
+  String get confirmDeletion => 'Löschen bestätigen';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return 'Sind Sie sicher, dass Sie $name löschen möchten? Dies entfernt auch alle zugehörigen Sprachproben.';
+  }
+
+  @override
+  String get howItWorksTitle => 'Wie funktioniert es?';
+
+  @override
+  String get howPeopleWorks =>
+      'Sobald eine Person erstellt wurde, können Sie zum Gesprächstranskript gehen und ihr die entsprechenden Segmente zuweisen, so kann Omi auch ihre Sprache erkennen!';
+
+  @override
+  String get tapToDelete => 'Tippen zum Löschen';
 }

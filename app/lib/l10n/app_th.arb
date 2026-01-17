@@ -3316,5 +3316,14 @@
   "statusProcessing": "กำลังประมวลผล",
   "statusCompleted": "เสร็จสิ้น",
   "statusFailed": "ล้มเหลว",
-  "nConversations": "{count} การสนทนา"
+  "nConversations": "{count} การสนทนา",
+  "pleaseEnterName": "กรุณากรอกชื่อ",
+  "nameMustBeBetweenCharacters": "ชื่อต้องมีความยาว 2-40 ตัวอักษร",
+  "deleteSampleQuestion": "ลบตัวอย่าง?",
+  "deleteSampleConfirmation": "คุณแน่ใจหรือไม่ว่าต้องการลบตัวอย่างของ {name}?",
+  "confirmDeletion": "ยืนยันการลบ",
+  "deletePersonConfirmation": "คุณแน่ใจหรือไม่ว่าต้องการลบ {name}? การดำเนินการนี้จะลบตัวอย่างเสียงที่เกี่ยวข้องทั้งหมดด้วย",
+  "howItWorksTitle": "มันทำงานอย่างไร?",
+  "howPeopleWorks": "เมื่อสร้างบุคคลแล้ว คุณสามารถไปที่การถอดเสียงบทสนทนาและกำหนดส่วนที่เกี่ยวข้องให้พวกเขา ด้วยวิธีนี้ Omi จะสามารถจดจำเสียงพูดของพวกเขาได้เช่นกัน!",
+  "tapToDelete": "แตะเพื่อลบ"
 }

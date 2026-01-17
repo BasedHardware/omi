@@ -3334,5 +3334,14 @@
   "statusProcessing": "جاري المعالجة",
   "statusCompleted": "مكتمل",
   "statusFailed": "فشل",
-  "nConversations": "{count} محادثات"
+  "nConversations": "{count} محادثات",
+  "pleaseEnterName": "الرجاء إدخال اسم",
+  "nameMustBeBetweenCharacters": "يجب أن يكون الاسم بين 2 و 40 حرفًا",
+  "deleteSampleQuestion": "حذف العينة؟",
+  "deleteSampleConfirmation": "هل أنت متأكد من حذف عينة {name}؟",
+  "confirmDeletion": "تأكيد الحذف",
+  "deletePersonConfirmation": "هل أنت متأكد من حذف {name}؟ سيؤدي ذلك أيضًا إلى إزالة جميع عينات الكلام المرتبطة.",
+  "howItWorksTitle": "كيف يعمل؟",
+  "howPeopleWorks": "بمجرد إنشاء شخص، يمكنك الذهاب إلى نص المحادثة وتعيين الأجزاء المقابلة لهم، وبهذه الطريقة سيتمكن Omi من التعرف على كلامهم أيضًا!",
+  "tapToDelete": "اضغط للحذف"
 }

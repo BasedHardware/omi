@@ -4858,4 +4858,36 @@ class AppLocalizationsHu extends AppLocalizations {
   String nConversations(int count) {
     return '$count beszélgetés';
   }
+
+  @override
+  String get pleaseEnterName => 'Kérjük, adjon meg egy nevet';
+
+  @override
+  String get nameMustBeBetweenCharacters => 'A névnek 2 és 40 karakter között kell lennie';
+
+  @override
+  String get deleteSampleQuestion => 'Minta törlése?';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return 'Biztosan törölni szeretné $name mintáját?';
+  }
+
+  @override
+  String get confirmDeletion => 'Törlés megerősítése';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return 'Biztosan törölni szeretné $name személyt? Ez eltávolítja az összes kapcsolódó hangmintát is.';
+  }
+
+  @override
+  String get howItWorksTitle => 'Hogyan működik?';
+
+  @override
+  String get howPeopleWorks =>
+      'Ha létrehoz egy személyt, elmehet egy beszélgetés átiratához, és hozzárendelheti a megfelelő szegmenseket, így az Omi képes lesz felismerni az ő beszédét is!';
+
+  @override
+  String get tapToDelete => 'Koppintson a törléshez';
 }

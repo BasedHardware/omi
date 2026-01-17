@@ -4834,4 +4834,36 @@ class AppLocalizationsFi extends AppLocalizations {
   String nConversations(int count) {
     return '$count keskustelua';
   }
+
+  @override
+  String get pleaseEnterName => 'Anna nimi';
+
+  @override
+  String get nameMustBeBetweenCharacters => 'Nimen on oltava 2-40 merkkiä';
+
+  @override
+  String get deleteSampleQuestion => 'Poista näyte?';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return 'Haluatko varmasti poistaa käyttäjän $name näytteen?';
+  }
+
+  @override
+  String get confirmDeletion => 'Vahvista poisto';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return 'Haluatko varmasti poistaa käyttäjän $name? Tämä poistaa myös kaikki liittyvät puhenäytteet.';
+  }
+
+  @override
+  String get howItWorksTitle => 'Miten se toimii?';
+
+  @override
+  String get howPeopleWorks =>
+      'Kun henkilö on luotu, voit mennä keskustelun transkriptioon ja määrittää heille vastaavat segmentit, näin Omi voi tunnistaa myös heidän puheensa!';
+
+  @override
+  String get tapToDelete => 'Napauta poistaaksesi';
 }

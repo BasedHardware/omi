@@ -1763,5 +1763,14 @@
   "statusProcessing": "प्रसंस्करण",
   "statusCompleted": "पूर्ण",
   "statusFailed": "विफल",
-  "nConversations": "{count} वार्तालाप"
+  "nConversations": "{count} वार्तालाप",
+  "pleaseEnterName": "कृपया एक नाम दर्ज करें",
+  "nameMustBeBetweenCharacters": "नाम 2 से 40 अक्षरों के बीच होना चाहिए",
+  "deleteSampleQuestion": "नमूना हटाएं?",
+  "deleteSampleConfirmation": "क्या आप वाकई {name} का नमूना हटाना चाहते हैं?",
+  "confirmDeletion": "हटाने की पुष्टि करें",
+  "deletePersonConfirmation": "क्या आप वाकई {name} को हटाना चाहते हैं? इससे सभी संबंधित भाषण नमूने भी हट जाएंगे।",
+  "howItWorksTitle": "यह कैसे काम करता है?",
+  "howPeopleWorks": "एक बार व्यक्ति बन जाने के बाद, आप बातचीत के ट्रांसक्रिप्ट में जा सकते हैं और उन्हें उनके संबंधित सेगमेंट असाइन कर सकते हैं, इस तरह Omi उनकी आवाज़ को भी पहचान पाएगा!",
+  "tapToDelete": "हटाने के लिए टैप करें"
 }

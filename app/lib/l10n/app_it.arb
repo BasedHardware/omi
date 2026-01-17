@@ -3298,5 +3298,14 @@
   "statusProcessing": "Elaborazione",
   "statusCompleted": "Completato",
   "statusFailed": "Fallito",
-  "nConversations": "{count} conversazioni"
+  "nConversations": "{count} conversazioni",
+  "pleaseEnterName": "Inserisci un nome",
+  "nameMustBeBetweenCharacters": "Il nome deve essere compreso tra 2 e 40 caratteri",
+  "deleteSampleQuestion": "Eliminare campione?",
+  "deleteSampleConfirmation": "Sei sicuro di voler eliminare il campione di {name}?",
+  "confirmDeletion": "Conferma eliminazione",
+  "deletePersonConfirmation": "Sei sicuro di voler eliminare {name}? Questo rimuoverà anche tutti i campioni vocali associati.",
+  "howItWorksTitle": "Come funziona?",
+  "howPeopleWorks": "Una volta creata una persona, puoi andare alla trascrizione di una conversazione e assegnare i segmenti corrispondenti, in questo modo Omi sarà in grado di riconoscere anche la loro voce!",
+  "tapToDelete": "Tocca per eliminare"
 }

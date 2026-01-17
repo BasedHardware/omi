@@ -3318,5 +3318,14 @@
   "statusProcessing": "Processant",
   "statusCompleted": "Completat",
   "statusFailed": "Fallat",
-  "nConversations": "{count} converses"
+  "nConversations": "{count} converses",
+  "pleaseEnterName": "Si us plau, introdueix un nom",
+  "nameMustBeBetweenCharacters": "El nom ha de tenir entre 2 i 40 caràcters",
+  "deleteSampleQuestion": "Eliminar la mostra?",
+  "deleteSampleConfirmation": "Estàs segur que vols eliminar la mostra de {name}?",
+  "confirmDeletion": "Confirmar eliminació",
+  "deletePersonConfirmation": "Estàs segur que vols eliminar {name}? Això també eliminarà totes les mostres de veu associades.",
+  "howItWorksTitle": "Com funciona?",
+  "howPeopleWorks": "Un cop creada una persona, pots anar a una transcripció de conversa i assignar-li els segments corresponents, així Omi també podrà reconèixer la seva parla!",
+  "tapToDelete": "Toca per eliminar"
 }

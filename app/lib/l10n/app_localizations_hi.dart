@@ -4811,4 +4811,36 @@ class AppLocalizationsHi extends AppLocalizations {
   String nConversations(int count) {
     return '$count वार्तालाप';
   }
+
+  @override
+  String get pleaseEnterName => 'कृपया एक नाम दर्ज करें';
+
+  @override
+  String get nameMustBeBetweenCharacters => 'नाम 2 से 40 अक्षरों के बीच होना चाहिए';
+
+  @override
+  String get deleteSampleQuestion => 'नमूना हटाएं?';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return 'क्या आप वाकई $name का नमूना हटाना चाहते हैं?';
+  }
+
+  @override
+  String get confirmDeletion => 'हटाने की पुष्टि करें';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return 'क्या आप वाकई $name को हटाना चाहते हैं? इससे सभी संबंधित भाषण नमूने भी हट जाएंगे।';
+  }
+
+  @override
+  String get howItWorksTitle => 'यह कैसे काम करता है?';
+
+  @override
+  String get howPeopleWorks =>
+      'एक बार व्यक्ति बन जाने के बाद, आप बातचीत के ट्रांसक्रिप्ट में जा सकते हैं और उन्हें उनके संबंधित सेगमेंट असाइन कर सकते हैं, इस तरह Omi उनकी आवाज़ को भी पहचान पाएगा!';
+
+  @override
+  String get tapToDelete => 'हटाने के लिए टैप करें';
 }

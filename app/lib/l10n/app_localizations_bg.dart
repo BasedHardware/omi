@@ -4848,4 +4848,36 @@ class AppLocalizationsBg extends AppLocalizations {
   String nConversations(int count) {
     return '$count разговора';
   }
+
+  @override
+  String get pleaseEnterName => 'Моля, въведете име';
+
+  @override
+  String get nameMustBeBetweenCharacters => 'Името трябва да е между 2 и 40 знака';
+
+  @override
+  String get deleteSampleQuestion => 'Изтриване на пробата?';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return 'Сигурни ли сте, че искате да изтриете пробата на $name?';
+  }
+
+  @override
+  String get confirmDeletion => 'Потвърдете изтриването';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return 'Сигурни ли сте, че искате да изтриете $name? Това ще премахне и всички свързани гласови проби.';
+  }
+
+  @override
+  String get howItWorksTitle => 'Как работи?';
+
+  @override
+  String get howPeopleWorks =>
+      'След като създадете човек, можете да отидете в транскрипция на разговор и да му зададете съответните сегменти, така Omi ще може да разпознава и неговата реч!';
+
+  @override
+  String get tapToDelete => 'Докоснете за изтриване';
 }

@@ -4748,4 +4748,35 @@ class AppLocalizationsJa extends AppLocalizations {
   String nConversations(int count) {
     return '$count件の会話';
   }
+
+  @override
+  String get pleaseEnterName => '名前を入力してください';
+
+  @override
+  String get nameMustBeBetweenCharacters => '名前は2〜40文字である必要があります';
+
+  @override
+  String get deleteSampleQuestion => 'サンプルを削除しますか？';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return '$nameのサンプルを削除してもよろしいですか？';
+  }
+
+  @override
+  String get confirmDeletion => '削除の確認';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return '$nameを削除してもよろしいですか？これにより、関連するすべての音声サンプルも削除されます。';
+  }
+
+  @override
+  String get howItWorksTitle => '仕組みは？';
+
+  @override
+  String get howPeopleWorks => '人物を作成したら、会話のトランスクリプトに移動して対応するセグメントを割り当てることで、Omiがその人の音声も認識できるようになります！';
+
+  @override
+  String get tapToDelete => 'タップして削除';
 }

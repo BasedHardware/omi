@@ -3316,5 +3316,14 @@
   "statusProcessing": "Behandler",
   "statusCompleted": "Fuldført",
   "statusFailed": "Fejlet",
-  "nConversations": "{count} samtaler"
+  "nConversations": "{count} samtaler",
+  "pleaseEnterName": "Indtast venligst et navn",
+  "nameMustBeBetweenCharacters": "Navnet skal være mellem 2 og 40 tegn",
+  "deleteSampleQuestion": "Slet prøve?",
+  "deleteSampleConfirmation": "Er du sikker på, at du vil slette {name}s prøve?",
+  "confirmDeletion": "Bekræft sletning",
+  "deletePersonConfirmation": "Er du sikker på, at du vil slette {name}? Dette vil også fjerne alle tilknyttede taleprøver.",
+  "howItWorksTitle": "Hvordan virker det?",
+  "howPeopleWorks": "Når en person er oprettet, kan du gå til en samtaleudskrift og tildele dem deres tilsvarende segmenter, på den måde vil Omi også kunne genkende deres tale!",
+  "tapToDelete": "Tryk for at slette"
 }

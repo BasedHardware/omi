@@ -4829,4 +4829,36 @@ class AppLocalizationsCs extends AppLocalizations {
   String nConversations(int count) {
     return '$count konverzací';
   }
+
+  @override
+  String get pleaseEnterName => 'Prosím zadejte jméno';
+
+  @override
+  String get nameMustBeBetweenCharacters => 'Jméno musí mít 2 až 40 znaků';
+
+  @override
+  String get deleteSampleQuestion => 'Smazat vzorek?';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return 'Opravdu chcete smazat vzorek uživatele $name?';
+  }
+
+  @override
+  String get confirmDeletion => 'Potvrdit smazání';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return 'Opravdu chcete smazat $name? Tím se také odstraní všechny přidružené hlasové vzorky.';
+  }
+
+  @override
+  String get howItWorksTitle => 'Jak to funguje?';
+
+  @override
+  String get howPeopleWorks =>
+      'Jakmile je osoba vytvořena, můžete přejít k přepisu konverzace a přiřadit jim odpovídající segmenty, tak Omi bude moci rozpoznat i jejich řeč!';
+
+  @override
+  String get tapToDelete => 'Klepněte pro smazání';
 }

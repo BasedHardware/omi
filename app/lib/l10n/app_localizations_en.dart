@@ -4837,4 +4837,36 @@ class AppLocalizationsEn extends AppLocalizations {
   String nConversations(int count) {
     return '$count conversations';
   }
+
+  @override
+  String get pleaseEnterName => 'Please enter a name';
+
+  @override
+  String get nameMustBeBetweenCharacters => 'Name must be between 2 and 40 characters';
+
+  @override
+  String get deleteSampleQuestion => 'Delete Sample?';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return 'Are you sure you want to delete $name\'s sample?';
+  }
+
+  @override
+  String get confirmDeletion => 'Confirm Deletion';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return 'Are you sure you want to delete $name? This will also remove all associated speech samples.';
+  }
+
+  @override
+  String get howItWorksTitle => 'How it works?';
+
+  @override
+  String get howPeopleWorks =>
+      'Once a person is created, you can go to a conversation transcript, and assign them their corresponding segments, that way Omi will be able to recognize their speech too!';
+
+  @override
+  String get tapToDelete => 'Tap to delete';
 }

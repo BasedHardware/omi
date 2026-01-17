@@ -3316,5 +3316,14 @@
   "statusProcessing": "Käsitellään",
   "statusCompleted": "Valmis",
   "statusFailed": "Epäonnistui",
-  "nConversations": "{count} keskustelua"
+  "nConversations": "{count} keskustelua",
+  "pleaseEnterName": "Anna nimi",
+  "nameMustBeBetweenCharacters": "Nimen on oltava 2-40 merkkiä",
+  "deleteSampleQuestion": "Poista näyte?",
+  "deleteSampleConfirmation": "Haluatko varmasti poistaa käyttäjän {name} näytteen?",
+  "confirmDeletion": "Vahvista poisto",
+  "deletePersonConfirmation": "Haluatko varmasti poistaa käyttäjän {name}? Tämä poistaa myös kaikki liittyvät puhenäytteet.",
+  "howItWorksTitle": "Miten se toimii?",
+  "howPeopleWorks": "Kun henkilö on luotu, voit mennä keskustelun transkriptioon ja määrittää heille vastaavat segmentit, näin Omi voi tunnistaa myös heidän puheensa!",
+  "tapToDelete": "Napauta poistaaksesi"
 }

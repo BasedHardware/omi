@@ -4834,4 +4834,36 @@ class AppLocalizationsEt extends AppLocalizations {
   String nConversations(int count) {
     return '$count vestlust';
   }
+
+  @override
+  String get pleaseEnterName => 'Palun sisesta nimi';
+
+  @override
+  String get nameMustBeBetweenCharacters => 'Nimi peab olema 2 kuni 40 tähemärki';
+
+  @override
+  String get deleteSampleQuestion => 'Kustuta näidis?';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return 'Kas olete kindel, et soovite kustutada $name näidise?';
+  }
+
+  @override
+  String get confirmDeletion => 'Kinnita kustutamine';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return 'Kas olete kindel, et soovite kustutada $name? See eemaldab ka kõik seotud kõnenäidised.';
+  }
+
+  @override
+  String get howItWorksTitle => 'Kuidas see töötab?';
+
+  @override
+  String get howPeopleWorks =>
+      'Kui inimene on loodud, võite minna vestluse transkriptsiooni juurde ja määrata talle vastavad segmendid, nii saab Omi ka tema kõnet tuvastada!';
+
+  @override
+  String get tapToDelete => 'Puuduta kustutamiseks';
 }

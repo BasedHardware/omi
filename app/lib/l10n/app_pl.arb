@@ -3316,5 +3316,14 @@
   "statusProcessing": "Przetwarzanie",
   "statusCompleted": "Ukończone",
   "statusFailed": "Nieudane",
-  "nConversations": "{count} rozmów"
+  "nConversations": "{count} rozmów",
+  "pleaseEnterName": "Proszę wpisać imię",
+  "nameMustBeBetweenCharacters": "Nazwa musi mieć od 2 do 40 znaków",
+  "deleteSampleQuestion": "Usunąć próbkę?",
+  "deleteSampleConfirmation": "Czy na pewno chcesz usunąć próbkę {name}?",
+  "confirmDeletion": "Potwierdź usunięcie",
+  "deletePersonConfirmation": "Czy na pewno chcesz usunąć {name}? Spowoduje to również usunięcie wszystkich powiązanych próbek mowy.",
+  "howItWorksTitle": "Jak to działa?",
+  "howPeopleWorks": "Po utworzeniu osoby możesz przejść do transkrypcji rozmowy i przypisać im odpowiednie segmenty, w ten sposób Omi będzie mógł rozpoznać również ich mowę!",
+  "tapToDelete": "Dotknij, aby usunąć"
 }

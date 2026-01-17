@@ -4863,4 +4863,36 @@ class AppLocalizationsCa extends AppLocalizations {
   String nConversations(int count) {
     return '$count converses';
   }
+
+  @override
+  String get pleaseEnterName => 'Si us plau, introdueix un nom';
+
+  @override
+  String get nameMustBeBetweenCharacters => 'El nom ha de tenir entre 2 i 40 caràcters';
+
+  @override
+  String get deleteSampleQuestion => 'Eliminar la mostra?';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return 'Estàs segur que vols eliminar la mostra de $name?';
+  }
+
+  @override
+  String get confirmDeletion => 'Confirmar eliminació';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return 'Estàs segur que vols eliminar $name? Això també eliminarà totes les mostres de veu associades.';
+  }
+
+  @override
+  String get howItWorksTitle => 'Com funciona?';
+
+  @override
+  String get howPeopleWorks =>
+      'Un cop creada una persona, pots anar a una transcripció de conversa i assignar-li els segments corresponents, així Omi també podrà reconèixer la seva parla!';
+
+  @override
+  String get tapToDelete => 'Toca per eliminar';
 }

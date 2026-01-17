@@ -2134,5 +2134,14 @@
   "statusProcessing": "Verwerken",
   "statusCompleted": "Voltooid",
   "statusFailed": "Mislukt",
-  "nConversations": "{count} gesprekken"
+  "nConversations": "{count} gesprekken",
+  "pleaseEnterName": "Voer een naam in",
+  "nameMustBeBetweenCharacters": "Naam moet tussen 2 en 40 tekens zijn",
+  "deleteSampleQuestion": "Voorbeeld verwijderen?",
+  "deleteSampleConfirmation": "Weet u zeker dat u het voorbeeld van {name} wilt verwijderen?",
+  "confirmDeletion": "Verwijdering bevestigen",
+  "deletePersonConfirmation": "Weet u zeker dat u {name} wilt verwijderen? Dit verwijdert ook alle bijbehorende spraaksamples.",
+  "howItWorksTitle": "Hoe werkt het?",
+  "howPeopleWorks": "Zodra een persoon is aangemaakt, kun je naar een gesprekstranscriptie gaan en de bijbehorende segmenten toewijzen, zo kan Omi ook hun spraak herkennen!",
+  "tapToDelete": "Tik om te verwijderen"
 }

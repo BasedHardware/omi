@@ -9152,6 +9152,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count} conversations'**
   String nConversations(int count);
+
+  /// Validation message when name field is empty
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a name'**
+  String get pleaseEnterName;
+
+  /// Validation message for name length
+  ///
+  /// In en, this message translates to:
+  /// **'Name must be between 2 and 40 characters'**
+  String get nameMustBeBetweenCharacters;
+
+  /// Dialog title for deleting a speech sample
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Sample?'**
+  String get deleteSampleQuestion;
+
+  /// Confirmation message for deleting a speech sample
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to delete {name}\'s sample?'**
+  String deleteSampleConfirmation(String name);
+
+  /// Dialog title for confirming deletion
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm Deletion'**
+  String get confirmDeletion;
+
+  /// Confirmation message for deleting a person
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to delete {name}? This will also remove all associated speech samples.'**
+  String deletePersonConfirmation(String name);
+
+  /// Help dialog title
+  ///
+  /// In en, this message translates to:
+  /// **'How it works?'**
+  String get howItWorksTitle;
+
+  /// Explanation of how people/speech recognition works
+  ///
+  /// In en, this message translates to:
+  /// **'Once a person is created, you can go to a conversation transcript, and assign them their corresponding segments, that way Omi will be able to recognize their speech too!'**
+  String get howPeopleWorks;
+
+  /// Hint text for tap to delete action
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to delete'**
+  String get tapToDelete;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

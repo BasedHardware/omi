@@ -4843,4 +4843,36 @@ class AppLocalizationsVi extends AppLocalizations {
   String nConversations(int count) {
     return '$count cuộc hội thoại';
   }
+
+  @override
+  String get pleaseEnterName => 'Vui lòng nhập tên';
+
+  @override
+  String get nameMustBeBetweenCharacters => 'Tên phải từ 2 đến 40 ký tự';
+
+  @override
+  String get deleteSampleQuestion => 'Xóa mẫu?';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return 'Bạn có chắc chắn muốn xóa mẫu của $name?';
+  }
+
+  @override
+  String get confirmDeletion => 'Xác nhận xóa';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return 'Bạn có chắc chắn muốn xóa $name? Điều này cũng sẽ xóa tất cả các mẫu giọng nói liên quan.';
+  }
+
+  @override
+  String get howItWorksTitle => 'Nó hoạt động như thế nào?';
+
+  @override
+  String get howPeopleWorks =>
+      'Sau khi tạo một người, bạn có thể đi đến bản ghi cuộc trò chuyện và gán các phân đoạn tương ứng cho họ, bằng cách đó Omi cũng sẽ có thể nhận dạng giọng nói của họ!';
+
+  @override
+  String get tapToDelete => 'Nhấn để xóa';
 }

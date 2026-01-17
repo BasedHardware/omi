@@ -3316,5 +3316,14 @@
   "statusProcessing": "Επεξεργασία",
   "statusCompleted": "Ολοκληρώθηκε",
   "statusFailed": "Απέτυχε",
-  "nConversations": "{count} συνομιλίες"
+  "nConversations": "{count} συνομιλίες",
+  "pleaseEnterName": "Παρακαλώ εισάγετε ένα όνομα",
+  "nameMustBeBetweenCharacters": "Το όνομα πρέπει να έχει 2 έως 40 χαρακτήρες",
+  "deleteSampleQuestion": "Διαγραφή δείγματος;",
+  "deleteSampleConfirmation": "Είστε βέβαιοι ότι θέλετε να διαγράψετε το δείγμα του {name};",
+  "confirmDeletion": "Επιβεβαίωση διαγραφής",
+  "deletePersonConfirmation": "Είστε βέβαιοι ότι θέλετε να διαγράψετε τον/την {name}; Αυτό θα αφαιρέσει επίσης όλα τα σχετικά δείγματα ομιλίας.",
+  "howItWorksTitle": "Πώς λειτουργεί;",
+  "howPeopleWorks": "Μόλις δημιουργηθεί ένα άτομο, μπορείτε να μεταβείτε σε μια μεταγραφή συνομιλίας και να του αντιστοιχίσετε τα αντίστοιχα τμήματα, έτσι το Omi θα μπορεί να αναγνωρίζει και τη δική του ομιλία!",
+  "tapToDelete": "Πατήστε για διαγραφή"
 }

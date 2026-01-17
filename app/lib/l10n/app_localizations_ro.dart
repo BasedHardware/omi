@@ -4858,4 +4858,36 @@ class AppLocalizationsRo extends AppLocalizations {
   String nConversations(int count) {
     return '$count conversații';
   }
+
+  @override
+  String get pleaseEnterName => 'Vă rugăm să introduceți un nume';
+
+  @override
+  String get nameMustBeBetweenCharacters => 'Numele trebuie să aibă între 2 și 40 de caractere';
+
+  @override
+  String get deleteSampleQuestion => 'Ștergeți eșantionul?';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return 'Sigur doriți să ștergeți eșantionul lui $name?';
+  }
+
+  @override
+  String get confirmDeletion => 'Confirmați ștergerea';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return 'Sigur doriți să ștergeți $name? Acest lucru va elimina și toate eșantioanele vocale asociate.';
+  }
+
+  @override
+  String get howItWorksTitle => 'Cum funcționează?';
+
+  @override
+  String get howPeopleWorks =>
+      'Odată ce o persoană este creată, puteți merge la transcripția unei conversații și să le atribuiți segmentele corespunzătoare, astfel Omi va putea recunoaște și vocea lor!';
+
+  @override
+  String get tapToDelete => 'Atingeți pentru a șterge';
 }

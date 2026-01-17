@@ -4873,4 +4873,36 @@ class AppLocalizationsEl extends AppLocalizations {
   String nConversations(int count) {
     return '$count συνομιλίες';
   }
+
+  @override
+  String get pleaseEnterName => 'Παρακαλώ εισάγετε ένα όνομα';
+
+  @override
+  String get nameMustBeBetweenCharacters => 'Το όνομα πρέπει να έχει 2 έως 40 χαρακτήρες';
+
+  @override
+  String get deleteSampleQuestion => 'Διαγραφή δείγματος;';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return 'Είστε βέβαιοι ότι θέλετε να διαγράψετε το δείγμα του $name;';
+  }
+
+  @override
+  String get confirmDeletion => 'Επιβεβαίωση διαγραφής';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return 'Είστε βέβαιοι ότι θέλετε να διαγράψετε τον/την $name; Αυτό θα αφαιρέσει επίσης όλα τα σχετικά δείγματα ομιλίας.';
+  }
+
+  @override
+  String get howItWorksTitle => 'Πώς λειτουργεί;';
+
+  @override
+  String get howPeopleWorks =>
+      'Μόλις δημιουργηθεί ένα άτομο, μπορείτε να μεταβείτε σε μια μεταγραφή συνομιλίας και να του αντιστοιχίσετε τα αντίστοιχα τμήματα, έτσι το Omi θα μπορεί να αναγνωρίζει και τη δική του ομιλία!';
+
+  @override
+  String get tapToDelete => 'Πατήστε για διαγραφή';
 }

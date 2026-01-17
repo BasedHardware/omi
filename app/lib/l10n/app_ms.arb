@@ -3316,5 +3316,14 @@
   "statusProcessing": "Memproses",
   "statusCompleted": "Selesai",
   "statusFailed": "Gagal",
-  "nConversations": "{count} perbualan"
+  "nConversations": "{count} perbualan",
+  "pleaseEnterName": "Sila masukkan nama",
+  "nameMustBeBetweenCharacters": "Nama mestilah antara 2 dan 40 aksara",
+  "deleteSampleQuestion": "Padam Sampel?",
+  "deleteSampleConfirmation": "Adakah anda pasti mahu memadam sampel {name}?",
+  "confirmDeletion": "Sahkan Pemadaman",
+  "deletePersonConfirmation": "Adakah anda pasti mahu memadam {name}? Ini juga akan membuang semua sampel pertuturan yang berkaitan.",
+  "howItWorksTitle": "Bagaimana ia berfungsi?",
+  "howPeopleWorks": "Sebaik sahaja seseorang dicipta, anda boleh pergi ke transkrip perbualan dan menetapkan segmen yang sepadan kepada mereka, dengan cara itu Omi akan dapat mengenali pertuturan mereka juga!",
+  "tapToDelete": "Ketik untuk memadam"
 }

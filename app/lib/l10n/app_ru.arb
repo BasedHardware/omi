@@ -3316,5 +3316,14 @@
   "statusProcessing": "Обработка",
   "statusCompleted": "Завершено",
   "statusFailed": "Ошибка",
-  "nConversations": "{count} разговоров"
+  "nConversations": "{count} разговоров",
+  "pleaseEnterName": "Пожалуйста, введите имя",
+  "nameMustBeBetweenCharacters": "Имя должно содержать от 2 до 40 символов",
+  "deleteSampleQuestion": "Удалить образец?",
+  "deleteSampleConfirmation": "Вы уверены, что хотите удалить образец {name}?",
+  "confirmDeletion": "Подтвердить удаление",
+  "deletePersonConfirmation": "Вы уверены, что хотите удалить {name}? Это также удалит все связанные образцы речи.",
+  "howItWorksTitle": "Как это работает?",
+  "howPeopleWorks": "После создания человека вы можете перейти к расшифровке разговора и назначить ему соответствующие сегменты, тогда Omi сможет распознавать и его речь!",
+  "tapToDelete": "Нажмите для удаления"
 }

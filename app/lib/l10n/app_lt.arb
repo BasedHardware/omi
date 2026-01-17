@@ -3298,5 +3298,14 @@
   "statusProcessing": "Apdorojama",
   "statusCompleted": "Baigta",
   "statusFailed": "Nepavyko",
-  "nConversations": "{count} pokalbių"
+  "nConversations": "{count} pokalbių",
+  "pleaseEnterName": "Įveskite vardą",
+  "nameMustBeBetweenCharacters": "Vardas turi būti nuo 2 iki 40 simbolių",
+  "deleteSampleQuestion": "Ištrinti pavyzdį?",
+  "deleteSampleConfirmation": "Ar tikrai norite ištrinti {name} pavyzdį?",
+  "confirmDeletion": "Patvirtinti ištrynimą",
+  "deletePersonConfirmation": "Ar tikrai norite ištrinti {name}? Tai taip pat pašalins visus susijusius kalbos pavyzdžius.",
+  "howItWorksTitle": "Kaip tai veikia?",
+  "howPeopleWorks": "Kai asmuo sukurtas, galite eiti į pokalbio transkripciją ir priskirti jam atitinkamus segmentus, tokiu būdu Omi galės atpažinti ir jų kalbą!",
+  "tapToDelete": "Bakstelėkite, kad ištrintumėte"
 }

@@ -3316,5 +3316,14 @@
   "statusProcessing": "Feldolgozás",
   "statusCompleted": "Befejezve",
   "statusFailed": "Sikertelen",
-  "nConversations": "{count} beszélgetés"
+  "nConversations": "{count} beszélgetés",
+  "pleaseEnterName": "Kérjük, adjon meg egy nevet",
+  "nameMustBeBetweenCharacters": "A névnek 2 és 40 karakter között kell lennie",
+  "deleteSampleQuestion": "Minta törlése?",
+  "deleteSampleConfirmation": "Biztosan törölni szeretné {name} mintáját?",
+  "confirmDeletion": "Törlés megerősítése",
+  "deletePersonConfirmation": "Biztosan törölni szeretné {name} személyt? Ez eltávolítja az összes kapcsolódó hangmintát is.",
+  "howItWorksTitle": "Hogyan működik?",
+  "howPeopleWorks": "Ha létrehoz egy személyt, elmehet egy beszélgetés átiratához, és hozzárendelheti a megfelelő szegmenseket, így az Omi képes lesz felismerni az ő beszédét is!",
+  "tapToDelete": "Koppintson a törléshez"
 }

@@ -3316,5 +3316,14 @@
   "statusProcessing": "Bearbetar",
   "statusCompleted": "Slutfört",
   "statusFailed": "Misslyckades",
-  "nConversations": "{count} konversationer"
+  "nConversations": "{count} konversationer",
+  "pleaseEnterName": "Ange ett namn",
+  "nameMustBeBetweenCharacters": "Namnet måste vara mellan 2 och 40 tecken",
+  "deleteSampleQuestion": "Ta bort prov?",
+  "deleteSampleConfirmation": "Är du säker på att du vill ta bort {name}s prov?",
+  "confirmDeletion": "Bekräfta borttagning",
+  "deletePersonConfirmation": "Är du säker på att du vill ta bort {name}? Detta tar också bort alla tillhörande röstprover.",
+  "howItWorksTitle": "Hur fungerar det?",
+  "howPeopleWorks": "När en person har skapats kan du gå till en konversationsutskrift och tilldela dem deras motsvarande segment, på så sätt kommer Omi att kunna känna igen deras tal också!",
+  "tapToDelete": "Tryck för att ta bort"
 }

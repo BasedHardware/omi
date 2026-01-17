@@ -4811,4 +4811,36 @@ class AppLocalizationsTh extends AppLocalizations {
   String nConversations(int count) {
     return '$count การสนทนา';
   }
+
+  @override
+  String get pleaseEnterName => 'กรุณากรอกชื่อ';
+
+  @override
+  String get nameMustBeBetweenCharacters => 'ชื่อต้องมีความยาว 2-40 ตัวอักษร';
+
+  @override
+  String get deleteSampleQuestion => 'ลบตัวอย่าง?';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return 'คุณแน่ใจหรือไม่ว่าต้องการลบตัวอย่างของ $name?';
+  }
+
+  @override
+  String get confirmDeletion => 'ยืนยันการลบ';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return 'คุณแน่ใจหรือไม่ว่าต้องการลบ $name? การดำเนินการนี้จะลบตัวอย่างเสียงที่เกี่ยวข้องทั้งหมดด้วย';
+  }
+
+  @override
+  String get howItWorksTitle => 'มันทำงานอย่างไร?';
+
+  @override
+  String get howPeopleWorks =>
+      'เมื่อสร้างบุคคลแล้ว คุณสามารถไปที่การถอดเสียงบทสนทนาและกำหนดส่วนที่เกี่ยวข้องให้พวกเขา ด้วยวิธีนี้ Omi จะสามารถจดจำเสียงพูดของพวกเขาได้เช่นกัน!';
+
+  @override
+  String get tapToDelete => 'แตะเพื่อลบ';
 }

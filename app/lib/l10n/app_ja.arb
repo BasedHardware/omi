@@ -1742,5 +1742,14 @@
   "statusProcessing": "処理中",
   "statusCompleted": "完了",
   "statusFailed": "失敗",
-  "nConversations": "{count}件の会話"
+  "nConversations": "{count}件の会話",
+  "pleaseEnterName": "名前を入力してください",
+  "nameMustBeBetweenCharacters": "名前は2〜40文字である必要があります",
+  "deleteSampleQuestion": "サンプルを削除しますか？",
+  "deleteSampleConfirmation": "{name}のサンプルを削除してもよろしいですか？",
+  "confirmDeletion": "削除の確認",
+  "deletePersonConfirmation": "{name}を削除してもよろしいですか？これにより、関連するすべての音声サンプルも削除されます。",
+  "howItWorksTitle": "仕組みは？",
+  "howPeopleWorks": "人物を作成したら、会話のトランスクリプトに移動して対応するセグメントを割り当てることで、Omiがその人の音声も認識できるようになります！",
+  "tapToDelete": "タップして削除"
 }

@@ -1763,5 +1763,14 @@
   "statusProcessing": "处理中",
   "statusCompleted": "已完成",
   "statusFailed": "失败",
-  "nConversations": "{count} 个对话"
+  "nConversations": "{count} 个对话",
+  "pleaseEnterName": "请输入名称",
+  "nameMustBeBetweenCharacters": "名称必须在2到40个字符之间",
+  "deleteSampleQuestion": "删除样本？",
+  "deleteSampleConfirmation": "您确定要删除 {name} 的样本吗？",
+  "confirmDeletion": "确认删除",
+  "deletePersonConfirmation": "您确定要删除 {name} 吗？这也将删除所有相关的语音样本。",
+  "howItWorksTitle": "它是如何工作的？",
+  "howPeopleWorks": "创建人员后，您可以转到对话记录并为他们分配相应的片段，这样 Omi 也能识别他们的语音！",
+  "tapToDelete": "点击删除"
 }

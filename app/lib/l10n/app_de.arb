@@ -1763,5 +1763,14 @@
   "statusProcessing": "Wird verarbeitet",
   "statusCompleted": "Abgeschlossen",
   "statusFailed": "Fehlgeschlagen",
-  "nConversations": "{count} Gespräche"
+  "nConversations": "{count} Gespräche",
+  "pleaseEnterName": "Bitte geben Sie einen Namen ein",
+  "nameMustBeBetweenCharacters": "Der Name muss zwischen 2 und 40 Zeichen lang sein",
+  "deleteSampleQuestion": "Probe löschen?",
+  "deleteSampleConfirmation": "Sind Sie sicher, dass Sie die Probe von {name} löschen möchten?",
+  "confirmDeletion": "Löschen bestätigen",
+  "deletePersonConfirmation": "Sind Sie sicher, dass Sie {name} löschen möchten? Dies entfernt auch alle zugehörigen Sprachproben.",
+  "howItWorksTitle": "Wie funktioniert es?",
+  "howPeopleWorks": "Sobald eine Person erstellt wurde, können Sie zum Gesprächstranskript gehen und ihr die entsprechenden Segmente zuweisen, so kann Omi auch ihre Sprache erkennen!",
+  "tapToDelete": "Tippen zum Löschen"
 }

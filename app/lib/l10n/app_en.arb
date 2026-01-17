@@ -5696,5 +5696,51 @@
         "type": "int"
       }
     }
+  },
+  "pleaseEnterName": "Please enter a name",
+  "@pleaseEnterName": {
+    "description": "Validation message when name field is empty"
+  },
+  "nameMustBeBetweenCharacters": "Name must be between 2 and 40 characters",
+  "@nameMustBeBetweenCharacters": {
+    "description": "Validation message for name length"
+  },
+  "deleteSampleQuestion": "Delete Sample?",
+  "@deleteSampleQuestion": {
+    "description": "Dialog title for deleting a speech sample"
+  },
+  "deleteSampleConfirmation": "Are you sure you want to delete {name}'s sample?",
+  "@deleteSampleConfirmation": {
+    "description": "Confirmation message for deleting a speech sample",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "confirmDeletion": "Confirm Deletion",
+  "@confirmDeletion": {
+    "description": "Dialog title for confirming deletion"
+  },
+  "deletePersonConfirmation": "Are you sure you want to delete {name}? This will also remove all associated speech samples.",
+  "@deletePersonConfirmation": {
+    "description": "Confirmation message for deleting a person",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "howItWorksTitle": "How it works?",
+  "@howItWorksTitle": {
+    "description": "Help dialog title"
+  },
+  "howPeopleWorks": "Once a person is created, you can go to a conversation transcript, and assign them their corresponding segments, that way Omi will be able to recognize their speech too!",
+  "@howPeopleWorks": {
+    "description": "Explanation of how people/speech recognition works"
+  },
+  "tapToDelete": "Tap to delete",
+  "@tapToDelete": {
+    "description": "Hint text for tap to delete action"
   }
 }

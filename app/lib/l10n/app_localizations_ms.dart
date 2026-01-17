@@ -4853,4 +4853,36 @@ class AppLocalizationsMs extends AppLocalizations {
   String nConversations(int count) {
     return '$count perbualan';
   }
+
+  @override
+  String get pleaseEnterName => 'Sila masukkan nama';
+
+  @override
+  String get nameMustBeBetweenCharacters => 'Nama mestilah antara 2 dan 40 aksara';
+
+  @override
+  String get deleteSampleQuestion => 'Padam Sampel?';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return 'Adakah anda pasti mahu memadam sampel $name?';
+  }
+
+  @override
+  String get confirmDeletion => 'Sahkan Pemadaman';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return 'Adakah anda pasti mahu memadam $name? Ini juga akan membuang semua sampel pertuturan yang berkaitan.';
+  }
+
+  @override
+  String get howItWorksTitle => 'Bagaimana ia berfungsi?';
+
+  @override
+  String get howPeopleWorks =>
+      'Sebaik sahaja seseorang dicipta, anda boleh pergi ke transkrip perbualan dan menetapkan segmen yang sepadan kepada mereka, dengan cara itu Omi akan dapat mengenali pertuturan mereka juga!';
+
+  @override
+  String get tapToDelete => 'Ketik untuk memadam';
 }

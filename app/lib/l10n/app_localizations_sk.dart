@@ -4833,4 +4833,36 @@ class AppLocalizationsSk extends AppLocalizations {
   String nConversations(int count) {
     return '$count konverzácií';
   }
+
+  @override
+  String get pleaseEnterName => 'Prosím zadajte meno';
+
+  @override
+  String get nameMustBeBetweenCharacters => 'Meno musí mať 2 až 40 znakov';
+
+  @override
+  String get deleteSampleQuestion => 'Odstrániť vzorku?';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return 'Ste si istí, že chcete odstrániť vzorku $name?';
+  }
+
+  @override
+  String get confirmDeletion => 'Potvrdiť odstránenie';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return 'Ste si istí, že chcete odstrániť $name? Tým sa odstránia aj všetky súvisiace hlasové vzorky.';
+  }
+
+  @override
+  String get howItWorksTitle => 'Ako to funguje?';
+
+  @override
+  String get howPeopleWorks =>
+      'Po vytvorení osoby môžete prejsť na prepis konverzácie a priradiť im zodpovedajúce segmenty, takto bude Omi schopné rozpoznať aj ich reč!';
+
+  @override
+  String get tapToDelete => 'Klepnite pre odstránenie';
 }

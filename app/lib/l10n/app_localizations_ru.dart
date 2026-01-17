@@ -4848,4 +4848,36 @@ class AppLocalizationsRu extends AppLocalizations {
   String nConversations(int count) {
     return '$count разговоров';
   }
+
+  @override
+  String get pleaseEnterName => 'Пожалуйста, введите имя';
+
+  @override
+  String get nameMustBeBetweenCharacters => 'Имя должно содержать от 2 до 40 символов';
+
+  @override
+  String get deleteSampleQuestion => 'Удалить образец?';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return 'Вы уверены, что хотите удалить образец $name?';
+  }
+
+  @override
+  String get confirmDeletion => 'Подтвердить удаление';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return 'Вы уверены, что хотите удалить $name? Это также удалит все связанные образцы речи.';
+  }
+
+  @override
+  String get howItWorksTitle => 'Как это работает?';
+
+  @override
+  String get howPeopleWorks =>
+      'После создания человека вы можете перейти к расшифровке разговора и назначить ему соответствующие сегменты, тогда Omi сможет распознавать и его речь!';
+
+  @override
+  String get tapToDelete => 'Нажмите для удаления';
 }

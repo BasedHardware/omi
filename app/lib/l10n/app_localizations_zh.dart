@@ -4741,4 +4741,35 @@ class AppLocalizationsZh extends AppLocalizations {
   String nConversations(int count) {
     return '$count 个对话';
   }
+
+  @override
+  String get pleaseEnterName => '请输入名称';
+
+  @override
+  String get nameMustBeBetweenCharacters => '名称必须在2到40个字符之间';
+
+  @override
+  String get deleteSampleQuestion => '删除样本？';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return '您确定要删除 $name 的样本吗？';
+  }
+
+  @override
+  String get confirmDeletion => '确认删除';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return '您确定要删除 $name 吗？这也将删除所有相关的语音样本。';
+  }
+
+  @override
+  String get howItWorksTitle => '它是如何工作的？';
+
+  @override
+  String get howPeopleWorks => '创建人员后，您可以转到对话记录并为他们分配相应的片段，这样 Omi 也能识别他们的语音！';
+
+  @override
+  String get tapToDelete => '点击删除';
 }

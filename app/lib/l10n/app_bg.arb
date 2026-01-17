@@ -3318,5 +3318,14 @@
   "statusProcessing": "Обработва се",
   "statusCompleted": "Завършено",
   "statusFailed": "Неуспешно",
-  "nConversations": "{count} разговора"
+  "nConversations": "{count} разговора",
+  "pleaseEnterName": "Моля, въведете име",
+  "nameMustBeBetweenCharacters": "Името трябва да е между 2 и 40 знака",
+  "deleteSampleQuestion": "Изтриване на пробата?",
+  "deleteSampleConfirmation": "Сигурни ли сте, че искате да изтриете пробата на {name}?",
+  "confirmDeletion": "Потвърдете изтриването",
+  "deletePersonConfirmation": "Сигурни ли сте, че искате да изтриете {name}? Това ще премахне и всички свързани гласови проби.",
+  "howItWorksTitle": "Как работи?",
+  "howPeopleWorks": "След като създадете човек, можете да отидете в транскрипция на разговор и да му зададете съответните сегменти, така Omi ще може да разпознава и неговата реч!",
+  "tapToDelete": "Докоснете за изтриване"
 }

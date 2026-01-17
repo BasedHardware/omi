@@ -4798,4 +4798,36 @@ class AppLocalizationsAr extends AppLocalizations {
   String nConversations(int count) {
     return '$count محادثات';
   }
+
+  @override
+  String get pleaseEnterName => 'الرجاء إدخال اسم';
+
+  @override
+  String get nameMustBeBetweenCharacters => 'يجب أن يكون الاسم بين 2 و 40 حرفًا';
+
+  @override
+  String get deleteSampleQuestion => 'حذف العينة؟';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return 'هل أنت متأكد من حذف عينة $name؟';
+  }
+
+  @override
+  String get confirmDeletion => 'تأكيد الحذف';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return 'هل أنت متأكد من حذف $name؟ سيؤدي ذلك أيضًا إلى إزالة جميع عينات الكلام المرتبطة.';
+  }
+
+  @override
+  String get howItWorksTitle => 'كيف يعمل؟';
+
+  @override
+  String get howPeopleWorks =>
+      'بمجرد إنشاء شخص، يمكنك الذهاب إلى نص المحادثة وتعيين الأجزاء المقابلة لهم، وبهذه الطريقة سيتمكن Omi من التعرف على كلامهم أيضًا!';
+
+  @override
+  String get tapToDelete => 'اضغط للحذف';
 }

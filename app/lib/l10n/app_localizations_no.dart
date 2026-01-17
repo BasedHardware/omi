@@ -4836,4 +4836,36 @@ class AppLocalizationsNo extends AppLocalizations {
   String nConversations(int count) {
     return '$count samtaler';
   }
+
+  @override
+  String get pleaseEnterName => 'Vennligst skriv inn et navn';
+
+  @override
+  String get nameMustBeBetweenCharacters => 'Navnet må være mellom 2 og 40 tegn';
+
+  @override
+  String get deleteSampleQuestion => 'Slett prøve?';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return 'Er du sikker på at du vil slette ${name}s prøve?';
+  }
+
+  @override
+  String get confirmDeletion => 'Bekreft sletting';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return 'Er du sikker på at du vil slette $name? Dette vil også fjerne alle tilknyttede taleprøver.';
+  }
+
+  @override
+  String get howItWorksTitle => 'Hvordan fungerer det?';
+
+  @override
+  String get howPeopleWorks =>
+      'Når en person er opprettet, kan du gå til en samtaletranskript og tildele dem deres tilsvarende segmenter, på den måten vil Omi også kunne gjenkjenne deres tale!';
+
+  @override
+  String get tapToDelete => 'Trykk for å slette';
 }

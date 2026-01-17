@@ -3316,5 +3316,14 @@
   "statusProcessing": "Töötlemine",
   "statusCompleted": "Lõpetatud",
   "statusFailed": "Ebaõnnestunud",
-  "nConversations": "{count} vestlust"
+  "nConversations": "{count} vestlust",
+  "pleaseEnterName": "Palun sisesta nimi",
+  "nameMustBeBetweenCharacters": "Nimi peab olema 2 kuni 40 tähemärki",
+  "deleteSampleQuestion": "Kustuta näidis?",
+  "deleteSampleConfirmation": "Kas olete kindel, et soovite kustutada {name} näidise?",
+  "confirmDeletion": "Kinnita kustutamine",
+  "deletePersonConfirmation": "Kas olete kindel, et soovite kustutada {name}? See eemaldab ka kõik seotud kõnenäidised.",
+  "howItWorksTitle": "Kuidas see töötab?",
+  "howPeopleWorks": "Kui inimene on loodud, võite minna vestluse transkriptsiooni juurde ja määrata talle vastavad segmendid, nii saab Omi ka tema kõnet tuvastada!",
+  "tapToDelete": "Puuduta kustutamiseks"
 }

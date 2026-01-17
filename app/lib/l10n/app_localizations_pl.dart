@@ -4844,4 +4844,36 @@ class AppLocalizationsPl extends AppLocalizations {
   String nConversations(int count) {
     return '$count rozmów';
   }
+
+  @override
+  String get pleaseEnterName => 'Proszę wpisać imię';
+
+  @override
+  String get nameMustBeBetweenCharacters => 'Nazwa musi mieć od 2 do 40 znaków';
+
+  @override
+  String get deleteSampleQuestion => 'Usunąć próbkę?';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return 'Czy na pewno chcesz usunąć próbkę $name?';
+  }
+
+  @override
+  String get confirmDeletion => 'Potwierdź usunięcie';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return 'Czy na pewno chcesz usunąć $name? Spowoduje to również usunięcie wszystkich powiązanych próbek mowy.';
+  }
+
+  @override
+  String get howItWorksTitle => 'Jak to działa?';
+
+  @override
+  String get howPeopleWorks =>
+      'Po utworzeniu osoby możesz przejść do transkrypcji rozmowy i przypisać im odpowiednie segmenty, w ten sposób Omi będzie mógł rozpoznać również ich mowę!';
+
+  @override
+  String get tapToDelete => 'Dotknij, aby usunąć';
 }
