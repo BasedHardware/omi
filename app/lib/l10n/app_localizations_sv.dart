@@ -4741,4 +4741,27 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get configureDailySummaryDigest => 'Konfigurera din dagliga uppgiftssammanfattning';
+
+  @override
+  String accessesDataTypes(String dataTypes) {
+    return 'Åtkomst till $dataTypes';
+  }
+
+  @override
+  String triggeredByType(String triggerType) {
+    return 'utlöst av $triggerType';
+  }
+
+  @override
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+    return '$accessDescription och är $triggerDescription.';
+  }
+
+  @override
+  String isTriggeredBy(String triggerDescription) {
+    return 'Är $triggerDescription.';
+  }
+
+  @override
+  String get noSpecificDataAccessConfigured => 'Ingen specifik dataåtkomst konfigurerad.';
 }

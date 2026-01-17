@@ -2107,5 +2107,10 @@
   "@knowledgeGraphDeleteDescription": {
     "description": "Developer settings - knowledgeGraphDeleteDescription"
   },
-  "configureDailySummaryDigest": "Configurez votre résumé quotidien des tâches"
+  "configureDailySummaryDigest": "Configurez votre résumé quotidien des tâches",
+  "accessesDataTypes": "Accède à {dataTypes}",
+  "triggeredByType": "déclenché par {triggerType}",
+  "accessesAndTriggeredBy": "{accessDescription} et est {triggerDescription}.",
+  "isTriggeredBy": "Est {triggerDescription}.",
+  "noSpecificDataAccessConfigured": "Aucun accès aux données spécifique configuré."
 }

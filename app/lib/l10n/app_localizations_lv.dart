@@ -4746,4 +4746,27 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get configureDailySummaryDigest => 'Konfigurējiet savu ikdienas uzdevumu kopsavilkumu';
+
+  @override
+  String accessesDataTypes(String dataTypes) {
+    return 'Piekļūst $dataTypes';
+  }
+
+  @override
+  String triggeredByType(String triggerType) {
+    return 'aktivizē $triggerType';
+  }
+
+  @override
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+    return '$accessDescription un ir $triggerDescription.';
+  }
+
+  @override
+  String isTriggeredBy(String triggerDescription) {
+    return 'Ir $triggerDescription.';
+  }
+
+  @override
+  String get noSpecificDataAccessConfigured => 'Nav konfigurēta specifiska datu piekļuve.';
 }

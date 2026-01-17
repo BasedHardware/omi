@@ -1715,5 +1715,10 @@
   "@knowledgeGraphDeleteDescription": {
     "description": "Developer settings - knowledgeGraphDeleteDescription"
   },
-  "configureDailySummaryDigest": "毎日のタスクダイジェストを設定する"
+  "configureDailySummaryDigest": "毎日のタスクダイジェストを設定する",
+  "accessesDataTypes": "{dataTypes}にアクセス",
+  "triggeredByType": "{triggerType}でトリガー",
+  "accessesAndTriggeredBy": "{accessDescription}、{triggerDescription}。",
+  "isTriggeredBy": "{triggerDescription}。",
+  "noSpecificDataAccessConfigured": "特定のデータアクセスは設定されていません。"
 }

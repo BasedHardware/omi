@@ -3289,5 +3289,10 @@
   "@knowledgeGraphDeleteDescription": {
     "description": "Developer settings - knowledgeGraphDeleteDescription"
   },
-  "configureDailySummaryDigest": "Määritä päivittäinen tehtäväyhteenveto"
+  "configureDailySummaryDigest": "Määritä päivittäinen tehtäväyhteenveto",
+  "accessesDataTypes": "Käyttää: {dataTypes}",
+  "triggeredByType": "laukaisee {triggerType}",
+  "accessesAndTriggeredBy": "{accessDescription} ja on {triggerDescription}.",
+  "isTriggeredBy": "On {triggerDescription}.",
+  "noSpecificDataAccessConfigured": "Ei määritettyä tietojen käyttöoikeutta."
 }

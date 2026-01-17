@@ -3289,5 +3289,10 @@
   "@knowledgeGraphDeleteDescription": {
     "description": "Developer settings - knowledgeGraphDeleteDescription"
   },
-  "configureDailySummaryDigest": "Настройте ежедневную сводку задач"
+  "configureDailySummaryDigest": "Настройте ежедневную сводку задач",
+  "accessesDataTypes": "Доступ к {dataTypes}",
+  "triggeredByType": "запускается {triggerType}",
+  "accessesAndTriggeredBy": "{accessDescription} и {triggerDescription}.",
+  "isTriggeredBy": "{triggerDescription}.",
+  "noSpecificDataAccessConfigured": "Конкретный доступ к данным не настроен."
 }

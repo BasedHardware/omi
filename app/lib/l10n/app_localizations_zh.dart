@@ -4646,4 +4646,27 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get configureDailySummaryDigest => '配置您的每日任务摘要';
+
+  @override
+  String accessesDataTypes(String dataTypes) {
+    return '访问 $dataTypes';
+  }
+
+  @override
+  String triggeredByType(String triggerType) {
+    return '由 $triggerType 触发';
+  }
+
+  @override
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+    return '$accessDescription，$triggerDescription。';
+  }
+
+  @override
+  String isTriggeredBy(String triggerDescription) {
+    return '$triggerDescription。';
+  }
+
+  @override
+  String get noSpecificDataAccessConfigured => '未配置特定数据访问。';
 }

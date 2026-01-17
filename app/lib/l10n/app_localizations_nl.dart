@@ -4752,4 +4752,27 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get configureDailySummaryDigest => 'Configureer je dagelijkse taaknoverzicht';
+
+  @override
+  String accessesDataTypes(String dataTypes) {
+    return 'Toegang tot $dataTypes';
+  }
+
+  @override
+  String triggeredByType(String triggerType) {
+    return 'getriggerd door $triggerType';
+  }
+
+  @override
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+    return '$accessDescription en is $triggerDescription.';
+  }
+
+  @override
+  String isTriggeredBy(String triggerDescription) {
+    return 'Is $triggerDescription.';
+  }
+
+  @override
+  String get noSpecificDataAccessConfigured => 'Geen specifieke gegevenstoegang geconfigureerd.';
 }

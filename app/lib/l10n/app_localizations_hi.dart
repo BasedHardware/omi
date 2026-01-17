@@ -4715,4 +4715,27 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get configureDailySummaryDigest => 'अपना दैनिक कार्य सारांश कॉन्फ़िगर करें';
+
+  @override
+  String accessesDataTypes(String dataTypes) {
+    return '$dataTypes तक पहुंच';
+  }
+
+  @override
+  String triggeredByType(String triggerType) {
+    return '$triggerType द्वारा ट्रिगर';
+  }
+
+  @override
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+    return '$accessDescription और $triggerDescription।';
+  }
+
+  @override
+  String isTriggeredBy(String triggerDescription) {
+    return '$triggerDescription।';
+  }
+
+  @override
+  String get noSpecificDataAccessConfigured => 'कोई विशिष्ट डेटा एक्सेस कॉन्फ़िगर नहीं किया गया।';
 }

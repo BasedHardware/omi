@@ -3289,5 +3289,10 @@
   "@knowledgeGraphDeleteDescription": {
     "description": "Developer settings - knowledgeGraphDeleteDescription"
   },
-  "configureDailySummaryDigest": "Seadista oma igapäevane ülesannete kokkuvõte"
+  "configureDailySummaryDigest": "Seadista oma igapäevane ülesannete kokkuvõte",
+  "accessesDataTypes": "Juurdepääs: {dataTypes}",
+  "triggeredByType": "käivitab {triggerType}",
+  "accessesAndTriggeredBy": "{accessDescription} ja on {triggerDescription}.",
+  "isTriggeredBy": "On {triggerDescription}.",
+  "noSpecificDataAccessConfigured": "Konkreetset andmetele juurdepääsu pole seadistatud."
 }

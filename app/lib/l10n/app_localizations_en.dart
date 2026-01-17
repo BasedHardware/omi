@@ -4741,4 +4741,27 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get configureDailySummaryDigest => 'Configure your daily action items digest';
+
+  @override
+  String accessesDataTypes(String dataTypes) {
+    return 'Accesses $dataTypes';
+  }
+
+  @override
+  String triggeredByType(String triggerType) {
+    return 'triggered by $triggerType';
+  }
+
+  @override
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+    return '$accessDescription and is $triggerDescription.';
+  }
+
+  @override
+  String isTriggeredBy(String triggerDescription) {
+    return 'Is $triggerDescription.';
+  }
+
+  @override
+  String get noSpecificDataAccessConfigured => 'No specific data access configured.';
 }

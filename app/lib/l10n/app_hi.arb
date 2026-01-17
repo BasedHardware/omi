@@ -1736,5 +1736,10 @@
   "@knowledgeGraphDeleteDescription": {
     "description": "Developer settings - knowledgeGraphDeleteDescription"
   },
-  "configureDailySummaryDigest": "अपना दैनिक कार्य सारांश कॉन्फ़िगर करें"
+  "configureDailySummaryDigest": "अपना दैनिक कार्य सारांश कॉन्फ़िगर करें",
+  "accessesDataTypes": "{dataTypes} तक पहुंच",
+  "triggeredByType": "{triggerType} द्वारा ट्रिगर",
+  "accessesAndTriggeredBy": "{accessDescription} और {triggerDescription}।",
+  "isTriggeredBy": "{triggerDescription}।",
+  "noSpecificDataAccessConfigured": "कोई विशिष्ट डेटा एक्सेस कॉन्फ़िगर नहीं किया गया।"
 }

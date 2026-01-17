@@ -3289,5 +3289,10 @@
   "@knowledgeGraphDeleteDescription": {
     "description": "Developer settings - knowledgeGraphDeleteDescription"
   },
-  "configureDailySummaryDigest": "Állítsa be a napi feladatösszesítőt"
+  "configureDailySummaryDigest": "Állítsa be a napi feladatösszesítőt",
+  "accessesDataTypes": "Hozzáfér: {dataTypes}",
+  "triggeredByType": "{triggerType} által kiváltva",
+  "accessesAndTriggeredBy": "{accessDescription} és {triggerDescription}.",
+  "isTriggeredBy": "{triggerDescription}.",
+  "noSpecificDataAccessConfigured": "Nincs beállítva specifikus adathozzáférés."
 }

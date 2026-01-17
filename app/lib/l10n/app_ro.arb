@@ -3289,5 +3289,10 @@
   "@knowledgeGraphDeleteDescription": {
     "description": "Developer settings - knowledgeGraphDeleteDescription"
   },
-  "configureDailySummaryDigest": "Configurați rezumatul zilnic al sarcinilor"
+  "configureDailySummaryDigest": "Configurați rezumatul zilnic al sarcinilor",
+  "accessesDataTypes": "Accesează {dataTypes}",
+  "triggeredByType": "declanșat de {triggerType}",
+  "accessesAndTriggeredBy": "{accessDescription} și este {triggerDescription}.",
+  "isTriggeredBy": "Este {triggerDescription}.",
+  "noSpecificDataAccessConfigured": "Niciun acces specific la date configurat."
 }

@@ -3289,5 +3289,10 @@
   "@knowledgeGraphDeleteDescription": {
     "description": "Developer settings - knowledgeGraphDeleteDescription"
   },
-  "configureDailySummaryDigest": "กำหนดค่าสรุปงานประจำวันของคุณ"
+  "configureDailySummaryDigest": "กำหนดค่าสรุปงานประจำวันของคุณ",
+  "accessesDataTypes": "เข้าถึง {dataTypes}",
+  "triggeredByType": "ทริกเกอร์โดย {triggerType}",
+  "accessesAndTriggeredBy": "{accessDescription} และ {triggerDescription}",
+  "isTriggeredBy": "{triggerDescription}",
+  "noSpecificDataAccessConfigured": "ไม่มีการกำหนดค่าการเข้าถึงข้อมูลเฉพาะ"
 }

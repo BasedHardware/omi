@@ -4738,4 +4738,27 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get configureDailySummaryDigest => 'Seadista oma igapäevane ülesannete kokkuvõte';
+
+  @override
+  String accessesDataTypes(String dataTypes) {
+    return 'Juurdepääs: $dataTypes';
+  }
+
+  @override
+  String triggeredByType(String triggerType) {
+    return 'käivitab $triggerType';
+  }
+
+  @override
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+    return '$accessDescription ja on $triggerDescription.';
+  }
+
+  @override
+  String isTriggeredBy(String triggerDescription) {
+    return 'On $triggerDescription.';
+  }
+
+  @override
+  String get noSpecificDataAccessConfigured => 'Konkreetset andmetele juurdepääsu pole seadistatud.';
 }

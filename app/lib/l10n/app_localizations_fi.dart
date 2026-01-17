@@ -4738,4 +4738,27 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get configureDailySummaryDigest => 'Määritä päivittäinen tehtäväyhteenveto';
+
+  @override
+  String accessesDataTypes(String dataTypes) {
+    return 'Käyttää: $dataTypes';
+  }
+
+  @override
+  String triggeredByType(String triggerType) {
+    return 'laukaisee $triggerType';
+  }
+
+  @override
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+    return '$accessDescription ja on $triggerDescription.';
+  }
+
+  @override
+  String isTriggeredBy(String triggerDescription) {
+    return 'On $triggerDescription.';
+  }
+
+  @override
+  String get noSpecificDataAccessConfigured => 'Ei määritettyä tietojen käyttöoikeutta.';
 }

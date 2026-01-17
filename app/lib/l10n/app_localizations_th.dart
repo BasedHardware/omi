@@ -4715,4 +4715,27 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get configureDailySummaryDigest => 'กำหนดค่าสรุปงานประจำวันของคุณ';
+
+  @override
+  String accessesDataTypes(String dataTypes) {
+    return 'เข้าถึง $dataTypes';
+  }
+
+  @override
+  String triggeredByType(String triggerType) {
+    return 'ทริกเกอร์โดย $triggerType';
+  }
+
+  @override
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+    return '$accessDescription และ $triggerDescription';
+  }
+
+  @override
+  String isTriggeredBy(String triggerDescription) {
+    return '$triggerDescription';
+  }
+
+  @override
+  String get noSpecificDataAccessConfigured => 'ไม่มีการกำหนดค่าการเข้าถึงข้อมูลเฉพาะ';
 }

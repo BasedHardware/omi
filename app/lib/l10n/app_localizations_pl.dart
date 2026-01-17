@@ -4748,4 +4748,27 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get configureDailySummaryDigest => 'Skonfiguruj dzienny przegląd zadań';
+
+  @override
+  String accessesDataTypes(String dataTypes) {
+    return 'Dostęp do $dataTypes';
+  }
+
+  @override
+  String triggeredByType(String triggerType) {
+    return 'wyzwalane przez $triggerType';
+  }
+
+  @override
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+    return '$accessDescription i jest $triggerDescription.';
+  }
+
+  @override
+  String isTriggeredBy(String triggerDescription) {
+    return 'Jest $triggerDescription.';
+  }
+
+  @override
+  String get noSpecificDataAccessConfigured => 'Nie skonfigurowano konkretnego dostępu do danych.';
 }

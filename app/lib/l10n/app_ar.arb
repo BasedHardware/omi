@@ -3307,5 +3307,10 @@
   "@knowledgeGraphDeleteDescription": {
     "description": "Developer settings - knowledgeGraphDeleteDescription"
   },
-  "configureDailySummaryDigest": "قم بتكوين ملخص مهامك اليومية"
+  "configureDailySummaryDigest": "قم بتكوين ملخص مهامك اليومية",
+  "accessesDataTypes": "يصل إلى {dataTypes}",
+  "triggeredByType": "يتم تشغيله بواسطة {triggerType}",
+  "accessesAndTriggeredBy": "{accessDescription} و{triggerDescription}.",
+  "isTriggeredBy": "{triggerDescription}.",
+  "noSpecificDataAccessConfigured": "لم يتم تكوين وصول محدد للبيانات."
 }

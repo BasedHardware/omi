@@ -3289,5 +3289,10 @@
   "@knowledgeGraphDeleteDescription": {
     "description": "Developer settings - knowledgeGraphDeleteDescription"
   },
-  "configureDailySummaryDigest": "Cấu hình bản tóm tắt công việc hàng ngày của bạn"
+  "configureDailySummaryDigest": "Cấu hình bản tóm tắt công việc hàng ngày của bạn",
+  "accessesDataTypes": "Truy cập {dataTypes}",
+  "triggeredByType": "được kích hoạt bởi {triggerType}",
+  "accessesAndTriggeredBy": "{accessDescription} và {triggerDescription}.",
+  "isTriggeredBy": "{triggerDescription}.",
+  "noSpecificDataAccessConfigured": "Không có quyền truy cập dữ liệu cụ thể nào được cấu hình."
 }

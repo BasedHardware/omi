@@ -1736,5 +1736,10 @@
   "@knowledgeGraphDeleteDescription": {
     "description": "Developer settings - knowledgeGraphDeleteDescription"
   },
-  "configureDailySummaryDigest": "配置您的每日任务摘要"
+  "configureDailySummaryDigest": "配置您的每日任务摘要",
+  "accessesDataTypes": "访问 {dataTypes}",
+  "triggeredByType": "由 {triggerType} 触发",
+  "accessesAndTriggeredBy": "{accessDescription}，{triggerDescription}。",
+  "isTriggeredBy": "{triggerDescription}。",
+  "noSpecificDataAccessConfigured": "未配置特定数据访问。"
 }

@@ -4762,4 +4762,27 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get configureDailySummaryDigest => 'Állítsa be a napi feladatösszesítőt';
+
+  @override
+  String accessesDataTypes(String dataTypes) {
+    return 'Hozzáfér: $dataTypes';
+  }
+
+  @override
+  String triggeredByType(String triggerType) {
+    return '$triggerType által kiváltva';
+  }
+
+  @override
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+    return '$accessDescription és $triggerDescription.';
+  }
+
+  @override
+  String isTriggeredBy(String triggerDescription) {
+    return '$triggerDescription.';
+  }
+
+  @override
+  String get noSpecificDataAccessConfigured => 'Nincs beállítva specifikus adathozzáférés.';
 }

@@ -3271,5 +3271,10 @@
   "@knowledgeGraphDeleteDescription": {
     "description": "Developer settings - knowledgeGraphDeleteDescription"
   },
-  "configureDailySummaryDigest": "Sukonfigūruokite savo kasdienę užduočių suvestinę"
+  "configureDailySummaryDigest": "Sukonfigūruokite savo kasdienę užduočių suvestinę",
+  "accessesDataTypes": "Prieiga prie {dataTypes}",
+  "triggeredByType": "suaktyvinta {triggerType}",
+  "accessesAndTriggeredBy": "{accessDescription} ir yra {triggerDescription}.",
+  "isTriggeredBy": "Yra {triggerDescription}.",
+  "noSpecificDataAccessConfigured": "Nenustatyta konkreti prieiga prie duomenų."
 }

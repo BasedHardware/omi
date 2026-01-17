@@ -3291,5 +3291,10 @@
   "@knowledgeGraphDeleteDescription": {
     "description": "Developer settings - knowledgeGraphDeleteDescription"
   },
-  "configureDailySummaryDigest": "Nastavte si denní přehled úkolů"
+  "configureDailySummaryDigest": "Nastavte si denní přehled úkolů",
+  "accessesDataTypes": "Přistupuje k {dataTypes}",
+  "triggeredByType": "spuštěno {triggerType}",
+  "accessesAndTriggeredBy": "{accessDescription} a je {triggerDescription}.",
+  "isTriggeredBy": "Je {triggerDescription}.",
+  "noSpecificDataAccessConfigured": "Není nakonfigurován žádný specifický přístup k datům."
 }

@@ -4702,4 +4702,27 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get configureDailySummaryDigest => 'قم بتكوين ملخص مهامك اليومية';
+
+  @override
+  String accessesDataTypes(String dataTypes) {
+    return 'يصل إلى $dataTypes';
+  }
+
+  @override
+  String triggeredByType(String triggerType) {
+    return 'يتم تشغيله بواسطة $triggerType';
+  }
+
+  @override
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+    return '$accessDescription و$triggerDescription.';
+  }
+
+  @override
+  String isTriggeredBy(String triggerDescription) {
+    return '$triggerDescription.';
+  }
+
+  @override
+  String get noSpecificDataAccessConfigured => 'لم يتم تكوين وصول محدد للبيانات.';
 }

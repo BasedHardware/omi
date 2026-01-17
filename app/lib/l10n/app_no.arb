@@ -3289,5 +3289,10 @@
   "@knowledgeGraphDeleteDescription": {
     "description": "Developer settings - knowledgeGraphDeleteDescription"
   },
-  "configureDailySummaryDigest": "Konfigurer din daglige oppgaveoversikt"
+  "configureDailySummaryDigest": "Konfigurer din daglige oppgaveoversikt",
+  "accessesDataTypes": "Tilgang til {dataTypes}",
+  "triggeredByType": "utløst av {triggerType}",
+  "accessesAndTriggeredBy": "{accessDescription} og er {triggerDescription}.",
+  "isTriggeredBy": "Er {triggerDescription}.",
+  "noSpecificDataAccessConfigured": "Ingen spesifikk datatilgang konfigurert."
 }

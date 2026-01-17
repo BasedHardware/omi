@@ -4767,4 +4767,27 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get configureDailySummaryDigest => 'Configura el resum diari de les teves tasques';
+
+  @override
+  String accessesDataTypes(String dataTypes) {
+    return 'Accedeix a $dataTypes';
+  }
+
+  @override
+  String triggeredByType(String triggerType) {
+    return 'activat per $triggerType';
+  }
+
+  @override
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+    return '$accessDescription i és $triggerDescription.';
+  }
+
+  @override
+  String isTriggeredBy(String triggerDescription) {
+    return 'És $triggerDescription.';
+  }
+
+  @override
+  String get noSpecificDataAccessConfigured => 'No hi ha accés a dades específic configurat.';
 }

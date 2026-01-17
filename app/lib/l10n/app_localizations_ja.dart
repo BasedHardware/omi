@@ -4653,4 +4653,27 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get configureDailySummaryDigest => '毎日のタスクダイジェストを設定する';
+
+  @override
+  String accessesDataTypes(String dataTypes) {
+    return '$dataTypesにアクセス';
+  }
+
+  @override
+  String triggeredByType(String triggerType) {
+    return '$triggerTypeでトリガー';
+  }
+
+  @override
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+    return '$accessDescription、$triggerDescription。';
+  }
+
+  @override
+  String isTriggeredBy(String triggerDescription) {
+    return '$triggerDescription。';
+  }
+
+  @override
+  String get noSpecificDataAccessConfigured => '特定のデータアクセスは設定されていません。';
 }

@@ -4752,4 +4752,27 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get configureDailySummaryDigest => 'Конфигурирайте вашия дневен дайджест на задачите';
+
+  @override
+  String accessesDataTypes(String dataTypes) {
+    return 'Достъп до $dataTypes';
+  }
+
+  @override
+  String triggeredByType(String triggerType) {
+    return 'задействано от $triggerType';
+  }
+
+  @override
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+    return '$accessDescription и е $triggerDescription.';
+  }
+
+  @override
+  String isTriggeredBy(String triggerDescription) {
+    return 'Е $triggerDescription.';
+  }
+
+  @override
+  String get noSpecificDataAccessConfigured => 'Няма конфигуриран специфичен достъп до данни.';
 }

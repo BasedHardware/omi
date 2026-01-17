@@ -3289,5 +3289,10 @@
   "@knowledgeGraphDeleteDescription": {
     "description": "Developer settings - knowledgeGraphDeleteDescription"
   },
-  "configureDailySummaryDigest": "Διαμορφώστε την καθημερινή σύνοψη εργασιών σας"
+  "configureDailySummaryDigest": "Διαμορφώστε την καθημερινή σύνοψη εργασιών σας",
+  "accessesDataTypes": "Πρόσβαση σε {dataTypes}",
+  "triggeredByType": "ενεργοποιείται από {triggerType}",
+  "accessesAndTriggeredBy": "{accessDescription} και είναι {triggerDescription}.",
+  "isTriggeredBy": "Είναι {triggerDescription}.",
+  "noSpecificDataAccessConfigured": "Δεν έχει ρυθμιστεί συγκεκριμένη πρόσβαση δεδομένων."
 }

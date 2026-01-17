@@ -4737,4 +4737,27 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get configureDailySummaryDigest => 'Nastavte si denný prehľad úloh';
+
+  @override
+  String accessesDataTypes(String dataTypes) {
+    return 'Prístup k $dataTypes';
+  }
+
+  @override
+  String triggeredByType(String triggerType) {
+    return 'spustené $triggerType';
+  }
+
+  @override
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+    return '$accessDescription a je $triggerDescription.';
+  }
+
+  @override
+  String isTriggeredBy(String triggerDescription) {
+    return 'Je $triggerDescription.';
+  }
+
+  @override
+  String get noSpecificDataAccessConfigured => 'Nie je nakonfigurovaný žiadny konkrétny prístup k údajom.';
 }

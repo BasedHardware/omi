@@ -4757,4 +4757,27 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get configureDailySummaryDigest => 'Konfigurasikan ringkasan tugas harian anda';
+
+  @override
+  String accessesDataTypes(String dataTypes) {
+    return 'Mengakses $dataTypes';
+  }
+
+  @override
+  String triggeredByType(String triggerType) {
+    return 'dicetuskan oleh $triggerType';
+  }
+
+  @override
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+    return '$accessDescription dan $triggerDescription.';
+  }
+
+  @override
+  String isTriggeredBy(String triggerDescription) {
+    return '$triggerDescription.';
+  }
+
+  @override
+  String get noSpecificDataAccessConfigured => 'Tiada akses data khusus dikonfigurasi.';
 }

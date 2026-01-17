@@ -4762,4 +4762,27 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get configureDailySummaryDigest => 'Configurați rezumatul zilnic al sarcinilor';
+
+  @override
+  String accessesDataTypes(String dataTypes) {
+    return 'Accesează $dataTypes';
+  }
+
+  @override
+  String triggeredByType(String triggerType) {
+    return 'declanșat de $triggerType';
+  }
+
+  @override
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+    return '$accessDescription și este $triggerDescription.';
+  }
+
+  @override
+  String isTriggeredBy(String triggerDescription) {
+    return 'Este $triggerDescription.';
+  }
+
+  @override
+  String get noSpecificDataAccessConfigured => 'Niciun acces specific la date configurat.';
 }

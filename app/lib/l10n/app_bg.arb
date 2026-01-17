@@ -3291,5 +3291,10 @@
   "@knowledgeGraphDeleteDescription": {
     "description": "Developer settings - knowledgeGraphDeleteDescription"
   },
-  "configureDailySummaryDigest": "Конфигурирайте вашия дневен дайджест на задачите"
+  "configureDailySummaryDigest": "Конфигурирайте вашия дневен дайджест на задачите",
+  "accessesDataTypes": "Достъп до {dataTypes}",
+  "triggeredByType": "задействано от {triggerType}",
+  "accessesAndTriggeredBy": "{accessDescription} и е {triggerDescription}.",
+  "isTriggeredBy": "Е {triggerDescription}.",
+  "noSpecificDataAccessConfigured": "Няма конфигуриран специфичен достъп до данни."
 }

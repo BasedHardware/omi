@@ -4749,4 +4749,27 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get configureDailySummaryDigest => 'Günlük görev özetinizi yapılandırın';
+
+  @override
+  String accessesDataTypes(String dataTypes) {
+    return '$dataTypes erişimi';
+  }
+
+  @override
+  String triggeredByType(String triggerType) {
+    return '$triggerType tarafından tetiklendi';
+  }
+
+  @override
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+    return '$accessDescription ve $triggerDescription.';
+  }
+
+  @override
+  String isTriggeredBy(String triggerDescription) {
+    return '$triggerDescription.';
+  }
+
+  @override
+  String get noSpecificDataAccessConfigured => 'Belirli veri erişimi yapılandırılmamış.';
 }

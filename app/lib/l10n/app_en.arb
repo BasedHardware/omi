@@ -5550,5 +5550,48 @@
   "configureDailySummaryDigest": "Configure your daily action items digest",
   "@configureDailySummaryDigest": {
     "description": "Subtitle for Daily Summary menu item in profile settings"
+  },
+  "accessesDataTypes": "Accesses {dataTypes}",
+  "@accessesDataTypes": {
+    "description": "Description showing what data types an app accesses, e.g. 'Accesses Conversations & Memories'",
+    "placeholders": {
+      "dataTypes": {
+        "type": "String"
+      }
+    }
+  },
+  "triggeredByType": "triggered by {triggerType}",
+  "@triggeredByType": {
+    "description": "Description showing what triggers an app, e.g. 'triggered by conversation end'",
+    "placeholders": {
+      "triggerType": {
+        "type": "String"
+      }
+    }
+  },
+  "accessesAndTriggeredBy": "{accessDescription} and is {triggerDescription}.",
+  "@accessesAndTriggeredBy": {
+    "description": "Combined description of app access and trigger",
+    "placeholders": {
+      "accessDescription": {
+        "type": "String"
+      },
+      "triggerDescription": {
+        "type": "String"
+      }
+    }
+  },
+  "isTriggeredBy": "Is {triggerDescription}.",
+  "@isTriggeredBy": {
+    "description": "Sentence starting with 'Is' for trigger description",
+    "placeholders": {
+      "triggerDescription": {
+        "type": "String"
+      }
+    }
+  },
+  "noSpecificDataAccessConfigured": "No specific data access configured.",
+  "@noSpecificDataAccessConfigured": {
+    "description": "Message shown when app has no specific data access"
   }
 }

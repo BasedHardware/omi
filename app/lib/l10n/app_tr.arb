@@ -3271,5 +3271,10 @@
   "@knowledgeGraphDeleteDescription": {
     "description": "Developer settings - knowledgeGraphDeleteDescription"
   },
-  "configureDailySummaryDigest": "Günlük görev özetinizi yapılandırın"
+  "configureDailySummaryDigest": "Günlük görev özetinizi yapılandırın",
+  "accessesDataTypes": "{dataTypes} erişimi",
+  "triggeredByType": "{triggerType} tarafından tetiklendi",
+  "accessesAndTriggeredBy": "{accessDescription} ve {triggerDescription}.",
+  "isTriggeredBy": "{triggerDescription}.",
+  "noSpecificDataAccessConfigured": "Belirli veri erişimi yapılandırılmamış."
 }

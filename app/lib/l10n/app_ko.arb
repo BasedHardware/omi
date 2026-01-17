@@ -3289,5 +3289,10 @@
   "@knowledgeGraphDeleteDescription": {
     "description": "Developer settings - knowledgeGraphDeleteDescription"
   },
-  "configureDailySummaryDigest": "일일 작업 요약 구성"
+  "configureDailySummaryDigest": "일일 작업 요약 구성",
+  "accessesDataTypes": "{dataTypes} 접근",
+  "triggeredByType": "{triggerType}에 의해 트리거됨",
+  "accessesAndTriggeredBy": "{accessDescription} 및 {triggerDescription}.",
+  "isTriggeredBy": "{triggerDescription}.",
+  "noSpecificDataAccessConfigured": "특정 데이터 액세스가 구성되지 않았습니다."
 }

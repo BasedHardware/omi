@@ -3289,5 +3289,10 @@
   "@knowledgeGraphDeleteDescription": {
     "description": "Developer settings - knowledgeGraphDeleteDescription"
   },
-  "configureDailySummaryDigest": "Konfigurējiet savu ikdienas uzdevumu kopsavilkumu"
+  "configureDailySummaryDigest": "Konfigurējiet savu ikdienas uzdevumu kopsavilkumu",
+  "accessesDataTypes": "Piekļūst {dataTypes}",
+  "triggeredByType": "aktivizē {triggerType}",
+  "accessesAndTriggeredBy": "{accessDescription} un ir {triggerDescription}.",
+  "isTriggeredBy": "Ir {triggerDescription}.",
+  "noSpecificDataAccessConfigured": "Nav konfigurēta specifiska datu piekļuve."
 }

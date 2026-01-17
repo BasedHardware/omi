@@ -4782,4 +4782,27 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get configureDailySummaryDigest => 'Configurez votre résumé quotidien des tâches';
+
+  @override
+  String accessesDataTypes(String dataTypes) {
+    return 'Accède à $dataTypes';
+  }
+
+  @override
+  String triggeredByType(String triggerType) {
+    return 'déclenché par $triggerType';
+  }
+
+  @override
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+    return '$accessDescription et est $triggerDescription.';
+  }
+
+  @override
+  String isTriggeredBy(String triggerDescription) {
+    return 'Est $triggerDescription.';
+  }
+
+  @override
+  String get noSpecificDataAccessConfigured => 'Aucun accès aux données spécifique configuré.';
 }

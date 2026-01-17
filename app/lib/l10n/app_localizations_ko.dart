@@ -4655,4 +4655,27 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get configureDailySummaryDigest => '일일 작업 요약 구성';
+
+  @override
+  String accessesDataTypes(String dataTypes) {
+    return '$dataTypes 접근';
+  }
+
+  @override
+  String triggeredByType(String triggerType) {
+    return '$triggerType에 의해 트리거됨';
+  }
+
+  @override
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+    return '$accessDescription 및 $triggerDescription.';
+  }
+
+  @override
+  String isTriggeredBy(String triggerDescription) {
+    return '$triggerDescription.';
+  }
+
+  @override
+  String get noSpecificDataAccessConfigured => '특정 데이터 액세스가 구성되지 않았습니다.';
 }

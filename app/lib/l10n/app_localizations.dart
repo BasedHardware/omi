@@ -8990,6 +8990,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Configure your daily action items digest'**
   String get configureDailySummaryDigest;
+
+  /// Description showing what data types an app accesses, e.g. 'Accesses Conversations & Memories'
+  ///
+  /// In en, this message translates to:
+  /// **'Accesses {dataTypes}'**
+  String accessesDataTypes(String dataTypes);
+
+  /// Description showing what triggers an app, e.g. 'triggered by conversation end'
+  ///
+  /// In en, this message translates to:
+  /// **'triggered by {triggerType}'**
+  String triggeredByType(String triggerType);
+
+  /// Combined description of app access and trigger
+  ///
+  /// In en, this message translates to:
+  /// **'{accessDescription} and is {triggerDescription}.'**
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription);
+
+  /// Sentence starting with 'Is' for trigger description
+  ///
+  /// In en, this message translates to:
+  /// **'Is {triggerDescription}.'**
+  String isTriggeredBy(String triggerDescription);
+
+  /// Message shown when app has no specific data access
+  ///
+  /// In en, this message translates to:
+  /// **'No specific data access configured.'**
+  String get noSpecificDataAccessConfigured;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

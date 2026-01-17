@@ -4739,4 +4739,27 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get configureDailySummaryDigest => 'Sukonfigūruokite savo kasdienę užduočių suvestinę';
+
+  @override
+  String accessesDataTypes(String dataTypes) {
+    return 'Prieiga prie $dataTypes';
+  }
+
+  @override
+  String triggeredByType(String triggerType) {
+    return 'suaktyvinta $triggerType';
+  }
+
+  @override
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+    return '$accessDescription ir yra $triggerDescription.';
+  }
+
+  @override
+  String isTriggeredBy(String triggerDescription) {
+    return 'Yra $triggerDescription.';
+  }
+
+  @override
+  String get noSpecificDataAccessConfigured => 'Nenustatyta konkreti prieiga prie duomenų.';
 }

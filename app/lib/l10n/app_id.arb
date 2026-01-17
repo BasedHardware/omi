@@ -3289,5 +3289,10 @@
   "@knowledgeGraphDeleteDescription": {
     "description": "Developer settings - knowledgeGraphDeleteDescription"
   },
-  "configureDailySummaryDigest": "Konfigurasikan ringkasan tugas harian Anda"
+  "configureDailySummaryDigest": "Konfigurasikan ringkasan tugas harian Anda",
+  "accessesDataTypes": "Mengakses {dataTypes}",
+  "triggeredByType": "dipicu oleh {triggerType}",
+  "accessesAndTriggeredBy": "{accessDescription} dan {triggerDescription}.",
+  "isTriggeredBy": "{triggerDescription}.",
+  "noSpecificDataAccessConfigured": "Tidak ada akses data spesifik yang dikonfigurasi."
 }

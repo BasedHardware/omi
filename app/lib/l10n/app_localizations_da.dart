@@ -4748,4 +4748,27 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get configureDailySummaryDigest => 'Konfigurer dit daglige opgaveoversigt';
+
+  @override
+  String accessesDataTypes(String dataTypes) {
+    return 'Adgang til $dataTypes';
+  }
+
+  @override
+  String triggeredByType(String triggerType) {
+    return 'udløst af $triggerType';
+  }
+
+  @override
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+    return '$accessDescription og er $triggerDescription.';
+  }
+
+  @override
+  String isTriggeredBy(String triggerDescription) {
+    return 'Er $triggerDescription.';
+  }
+
+  @override
+  String get noSpecificDataAccessConfigured => 'Ingen specifik dataadgang konfigureret.';
 }

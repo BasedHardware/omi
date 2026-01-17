@@ -4743,4 +4743,27 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get configureDailySummaryDigest => 'Налаштуйте щоденний підсумок завдань';
+
+  @override
+  String accessesDataTypes(String dataTypes) {
+    return 'Доступ до $dataTypes';
+  }
+
+  @override
+  String triggeredByType(String triggerType) {
+    return 'запускається $triggerType';
+  }
+
+  @override
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+    return '$accessDescription і $triggerDescription.';
+  }
+
+  @override
+  String isTriggeredBy(String triggerDescription) {
+    return '$triggerDescription.';
+  }
+
+  @override
+  String get noSpecificDataAccessConfigured => 'Конкретний доступ до даних не налаштовано.';
 }

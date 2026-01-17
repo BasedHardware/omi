@@ -4733,4 +4733,27 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get configureDailySummaryDigest => 'Nastavte si denní přehled úkolů';
+
+  @override
+  String accessesDataTypes(String dataTypes) {
+    return 'Přistupuje k $dataTypes';
+  }
+
+  @override
+  String triggeredByType(String triggerType) {
+    return 'spuštěno $triggerType';
+  }
+
+  @override
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+    return '$accessDescription a je $triggerDescription.';
+  }
+
+  @override
+  String isTriggeredBy(String triggerDescription) {
+    return 'Je $triggerDescription.';
+  }
+
+  @override
+  String get noSpecificDataAccessConfigured => 'Není nakonfigurován žádný specifický přístup k datům.';
 }

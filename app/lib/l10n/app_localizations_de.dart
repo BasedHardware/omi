@@ -4776,4 +4776,27 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get configureDailySummaryDigest => 'Konfigurieren Sie Ihre tägliche Aufgabenübersicht';
+
+  @override
+  String accessesDataTypes(String dataTypes) {
+    return 'Greift auf $dataTypes zu';
+  }
+
+  @override
+  String triggeredByType(String triggerType) {
+    return 'ausgelöst durch $triggerType';
+  }
+
+  @override
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+    return '$accessDescription und wird $triggerDescription.';
+  }
+
+  @override
+  String isTriggeredBy(String triggerDescription) {
+    return 'Wird $triggerDescription.';
+  }
+
+  @override
+  String get noSpecificDataAccessConfigured => 'Kein spezifischer Datenzugriff konfiguriert.';
 }

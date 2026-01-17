@@ -4777,4 +4777,27 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get configureDailySummaryDigest => 'Διαμορφώστε την καθημερινή σύνοψη εργασιών σας';
+
+  @override
+  String accessesDataTypes(String dataTypes) {
+    return 'Πρόσβαση σε $dataTypes';
+  }
+
+  @override
+  String triggeredByType(String triggerType) {
+    return 'ενεργοποιείται από $triggerType';
+  }
+
+  @override
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+    return '$accessDescription και είναι $triggerDescription.';
+  }
+
+  @override
+  String isTriggeredBy(String triggerDescription) {
+    return 'Είναι $triggerDescription.';
+  }
+
+  @override
+  String get noSpecificDataAccessConfigured => 'Δεν έχει ρυθμιστεί συγκεκριμένη πρόσβαση δεδομένων.';
 }

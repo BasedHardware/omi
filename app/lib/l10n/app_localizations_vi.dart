@@ -4747,4 +4747,27 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get configureDailySummaryDigest => 'Cấu hình bản tóm tắt công việc hàng ngày của bạn';
+
+  @override
+  String accessesDataTypes(String dataTypes) {
+    return 'Truy cập $dataTypes';
+  }
+
+  @override
+  String triggeredByType(String triggerType) {
+    return 'được kích hoạt bởi $triggerType';
+  }
+
+  @override
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+    return '$accessDescription và $triggerDescription.';
+  }
+
+  @override
+  String isTriggeredBy(String triggerDescription) {
+    return '$triggerDescription.';
+  }
+
+  @override
+  String get noSpecificDataAccessConfigured => 'Không có quyền truy cập dữ liệu cụ thể nào được cấu hình.';
 }

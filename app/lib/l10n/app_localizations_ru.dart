@@ -4752,4 +4752,27 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get configureDailySummaryDigest => 'Настройте ежедневную сводку задач';
+
+  @override
+  String accessesDataTypes(String dataTypes) {
+    return 'Доступ к $dataTypes';
+  }
+
+  @override
+  String triggeredByType(String triggerType) {
+    return 'запускается $triggerType';
+  }
+
+  @override
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+    return '$accessDescription и $triggerDescription.';
+  }
+
+  @override
+  String isTriggeredBy(String triggerDescription) {
+    return '$triggerDescription.';
+  }
+
+  @override
+  String get noSpecificDataAccessConfigured => 'Конкретный доступ к данным не настроен.';
 }
