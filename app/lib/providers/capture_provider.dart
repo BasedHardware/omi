@@ -687,14 +687,6 @@ class CaptureProvider extends ChangeNotifier
     return connection.getBleButtonListener(onButtonReceived: onButtonReceived);
   }
 
-  Future<List<int>> _getBleButtonState(String deviceId) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    if (connection == null) {
-      return Future.value(<int>[]);
-    }
-    return connection.getBleButtonState();
-  }
-
   Future<void> _ensureDeviceSocketConnection() async {
     if (_recordingDevice == null) {
       return;
