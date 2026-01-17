@@ -147,6 +147,51 @@ def test_backward_merge_single_lowercase_sentence_from_next_segment():
     assert removed_ids == []
 
 
+def test_backward_merge_lowercase_phrase_between_same_speaker_segments():
+    a = _segment(
+        "Then I don't at the same time, we only have so many hours in the day, so people need to prioritize what "
+        "they're gonna learn. It may be that, okay, a world with perfect translation, which the way, we basically "
+        "just announced on the Ray Ban Meta is that now you're gonna be able to",
+        speaker="SPEAKER_1",
+        start=0.0,
+        end=2.0,
+    )
+    b = _segment("just, like, go to different countries", speaker="SPEAKER_2", start=2.1, end=2.5)
+    c = _segment(
+        "we're starting out. We're we're starting out with just a few languages, but we'll roll it out to more.",
+        speaker="SPEAKER_1",
+        start=2.5,
+        end=3.5,
+    )
+
+    segments, updated_segments, removed_ids = TranscriptSegment.combine_segments([], [a, b, c])
+
+    assert len(segments) == 1
+    assert segments[0].speaker == "SPEAKER_1"
+    assert "able to just, like, go to different countries" in segments[0].text
+    assert len(updated_segments) == 1
+    assert removed_ids == []
+
+
+def test_backward_merge_lowercase_phrase_at_end_of_speaker_segment():
+    a = _segment(
+        "Like, for example, you mentioned automatic real time translation. Mhmm. Like, basically, the Star Trek "
+        "translator. Yeah. Universal translator. Think they were",
+        speaker="SPEAKER_3",
+        start=0.0,
+        end=2.0,
+    )
+    b = _segment("pretty much", speaker="SPEAKER_1", start=2.0, end=2.5)
+
+    segments, updated_segments, removed_ids = TranscriptSegment.combine_segments([], [a, b])
+
+    assert len(segments) == 1
+    assert segments[0].speaker == "SPEAKER_3"
+    assert segments[0].text.endswith("pretty much")
+    assert len(updated_segments) == 1
+    assert removed_ids == []
+
+
 def test_updated_segments_returned_for_new_non_merge():
     a = _segment("Hello.", speaker="SPEAKER_00", start=0.0, end=1.0)
     b = _segment("Hi.", speaker="SPEAKER_01", start=1.1, end=2.0)
