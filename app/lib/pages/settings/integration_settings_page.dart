@@ -129,7 +129,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
             IconButton(
               icon: const Icon(Icons.refresh, color: Colors.white),
               onPressed: widget.onRefresh,
-              tooltip: 'Refresh',
+              tooltip: context.l10n.refresh,
             ),
         ],
       ),
@@ -153,7 +153,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Connected to ${widget.appName}',
+                        context.l10n.connectedToApp(widget.appName),
                         style: const TextStyle(
                           color: Colors.green,
                           fontSize: 14,
