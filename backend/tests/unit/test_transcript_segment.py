@@ -22,13 +22,13 @@ def test_forward_merge_on_short_incomplete_last_sentence():
 
 def test_no_forward_merge_when_incomplete_is_longer_than_next_segment():
     a = _segment("and then we continue speaking", speaker="SPEAKER_00", start=0.0, end=3.0)
-    b = _segment("ok.", speaker="SPEAKER_01", start=3.0, end=4.0)
+    b = _segment("Ok.", speaker="SPEAKER_01", start=3.0, end=4.0)
 
     segments, _, _ = TranscriptSegment.combine_segments([], [a, b])
 
     assert len(segments) == 2
     assert segments[0].text == "and then we continue speaking"
-    assert segments[1].text == "ok."
+    assert segments[1].text == "Ok."
 
 
 def test_merge_same_speaker_with_small_gap():
@@ -126,6 +126,24 @@ def test_backward_merge_first_sentence_from_next_segment():
     assert len(updated_segments) == 2
     assert updated_segments[0].speaker == "SPEAKER_02"
     assert updated_segments[1].speaker == "SPEAKER_01"
+    assert removed_ids == []
+
+
+def test_backward_merge_single_lowercase_sentence_from_next_segment():
+    a = _segment(
+        "Maybe it's a 20 degree or 30 degree field of view and we read faster than we can",
+        speaker="SPEAKER_01",
+        start=0.0,
+        end=2.0,
+    )
+    b = _segment("listen.", speaker="SPEAKER_02", start=2.0, end=2.2)
+
+    segments, updated_segments, removed_ids = TranscriptSegment.combine_segments([], [a, b])
+
+    assert len(segments) == 1
+    assert segments[0].speaker == "SPEAKER_01"
+    assert segments[0].text.endswith("listen.")
+    assert len(updated_segments) == 1
     assert removed_ids == []
 
 
