@@ -258,9 +258,10 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
         order.add(draggedItem.id);
       }
 
-      // Clear hover state
+      // Clear hover and drag state
       _hoveredItemId = null;
       _hoveredFirstPositionCategory = null;
+      _isDragging = false;
     });
     _saveCategoryOrder();
     HapticFeedback.mediumImpact();
@@ -316,6 +317,12 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     final provider = Provider.of<ActionItemsProvider>(context, listen: false);
     final newDueDate = _getDefaultDueDateForCategory(newCategory);
     provider.updateActionItemDueDate(item, newDueDate);
+    // Clear drag state after category update
+    setState(() {
+      _isDragging = false;
+      _hoveredItemId = null;
+      _hoveredFirstPositionCategory = null;
+    });
   }
 
   int _getIndentLevel(String itemId) {
@@ -762,12 +769,25 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
         final showIndicator = isHoveredFirst && candidateData.isNotEmpty;
         return AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          height: showIndicator ? 6 : (isDragging ? 20 : 4),
+          height: showIndicator ? 36 : (isDragging ? 20 : 4),
           margin: const EdgeInsets.symmetric(horizontal: 4),
           decoration: BoxDecoration(
-            color: showIndicator ? Colors.deepPurpleAccent : Colors.transparent,
-            borderRadius: BorderRadius.circular(2),
+            color: showIndicator ? Colors.deepPurpleAccent.withOpacity(0.15) : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            border: showIndicator ? Border.all(color: Colors.deepPurpleAccent.withOpacity(0.5), width: 1.5) : null,
           ),
+          child: showIndicator
+              ? Center(
+                  child: Text(
+                    'Drop here for first position',
+                    style: TextStyle(
+                      color: Colors.deepPurpleAccent.withOpacity(0.8),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                )
+              : null,
         );
       },
     );
@@ -790,9 +810,10 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
       // Insert at first position
       order.insert(0, draggedItem.id);
 
-      // Clear hover state
+      // Clear hover and drag state
       _hoveredItemId = null;
       _hoveredFirstPositionCategory = null;
+      _isDragging = false;
     });
     _saveCategoryOrder();
     HapticFeedback.mediumImpact();
@@ -894,15 +915,9 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
       },
       onDragEnd: (details) {
         setState(() {
+          _isDragging = false;
           _hoveredItemId = null;
           _hoveredFirstPositionCategory = null;
-        });
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            setState(() {
-              _isDragging = false;
-            });
-          }
         });
       },
       onDraggableCanceled: (_, __) {
