@@ -4950,4 +4950,24 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get enableLocalStorage => 'Activer le stockage local';
+
+  @override
+  String get cloudStorageEnabled => 'Stockage cloud activé';
+
+  @override
+  String get cloudStorageDisabled => 'Stockage cloud désactivé';
+
+  @override
+  String get enableCloudStorage => 'Activer le stockage cloud';
+
+  @override
+  String get storeAudioOnCloud => 'Stocker l\'audio dans le cloud';
+
+  @override
+  String get cloudStorageDialogMessage =>
+      'Vos enregistrements en temps réel seront stockés dans un stockage cloud privé pendant que vous parlez.';
+
+  @override
+  String get storeAudioCloudDescription =>
+      'Stockez vos enregistrements en temps réel dans un stockage cloud privé pendant que vous parlez. L\'audio est capturé et enregistré en toute sécurité en temps réel.';
 }

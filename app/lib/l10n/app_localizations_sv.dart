@@ -4909,4 +4909,23 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get enableLocalStorage => 'Aktivera lokal lagring';
+
+  @override
+  String get cloudStorageEnabled => 'Molnlagring aktiverad';
+
+  @override
+  String get cloudStorageDisabled => 'Molnlagring inaktiverad';
+
+  @override
+  String get enableCloudStorage => 'Aktivera molnlagring';
+
+  @override
+  String get storeAudioOnCloud => 'Spara ljud i molnet';
+
+  @override
+  String get cloudStorageDialogMessage => 'Dina realtidsinspelningar lagras i privat molnlagring medan du talar.';
+
+  @override
+  String get storeAudioCloudDescription =>
+      'Lagra dina realtidsinspelningar i privat molnlagring medan du talar. Ljud fångas upp och sparas säkert i realtid.';
 }

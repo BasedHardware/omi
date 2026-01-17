@@ -4909,4 +4909,24 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get enableLocalStorage => 'Enable Local Storage';
+
+  @override
+  String get cloudStorageEnabled => 'Cloud storage enabled';
+
+  @override
+  String get cloudStorageDisabled => 'Cloud storage disabled';
+
+  @override
+  String get enableCloudStorage => 'Enable Cloud Storage';
+
+  @override
+  String get storeAudioOnCloud => 'Store Audio on Cloud';
+
+  @override
+  String get cloudStorageDialogMessage =>
+      'Your real-time recordings will be stored in private cloud storage as you speak.';
+
+  @override
+  String get storeAudioCloudDescription =>
+      'Store your real-time recordings in private cloud storage as you speak. Audio is captured and saved securely in real-time.';
 }

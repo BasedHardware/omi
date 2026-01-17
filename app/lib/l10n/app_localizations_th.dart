@@ -4883,4 +4883,24 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get enableLocalStorage => 'เปิดใช้งานที่เก็บข้อมูลในเครื่อง';
+
+  @override
+  String get cloudStorageEnabled => 'เปิดใช้งานที่เก็บข้อมูลบนคลาวด์แล้ว';
+
+  @override
+  String get cloudStorageDisabled => 'ปิดใช้งานที่เก็บข้อมูลบนคลาวด์แล้ว';
+
+  @override
+  String get enableCloudStorage => 'เปิดใช้งานที่เก็บข้อมูลบนคลาวด์';
+
+  @override
+  String get storeAudioOnCloud => 'เก็บเสียงบนคลาวด์';
+
+  @override
+  String get cloudStorageDialogMessage =>
+      'การบันทึกแบบเรียลไทม์ของคุณจะถูกเก็บไว้ในที่เก็บข้อมูลคลาวด์ส่วนตัวขณะที่คุณพูด';
+
+  @override
+  String get storeAudioCloudDescription =>
+      'เก็บการบันทึกแบบเรียลไทม์ของคุณในที่เก็บข้อมูลคลาวด์ส่วนตัวขณะที่คุณพูด เสียงจะถูกบันทึกและบันทึกอย่างปลอดภัยแบบเรียลไทม์';
 }

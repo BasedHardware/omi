@@ -4819,4 +4819,22 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get enableLocalStorage => '로컬 저장소 활성화';
+
+  @override
+  String get cloudStorageEnabled => '클라우드 저장소 활성화됨';
+
+  @override
+  String get cloudStorageDisabled => '클라우드 저장소 비활성화됨';
+
+  @override
+  String get enableCloudStorage => '클라우드 저장소 활성화';
+
+  @override
+  String get storeAudioOnCloud => '클라우드에 오디오 저장';
+
+  @override
+  String get cloudStorageDialogMessage => '실시간 녹음이 말하는 동안 개인 클라우드 저장소에 저장됩니다.';
+
+  @override
+  String get storeAudioCloudDescription => '말하는 동안 실시간 녹음을 개인 클라우드 저장소에 저장하세요. 오디오는 실시간으로 안전하게 캡처 및 저장됩니다.';
 }

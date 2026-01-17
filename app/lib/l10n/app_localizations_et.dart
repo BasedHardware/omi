@@ -4906,4 +4906,24 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get enableLocalStorage => 'Luba kohalik salvestus';
+
+  @override
+  String get cloudStorageEnabled => 'Pilvesalvestus lubatud';
+
+  @override
+  String get cloudStorageDisabled => 'Pilvesalvestus keelatud';
+
+  @override
+  String get enableCloudStorage => 'Luba pilvesalvestus';
+
+  @override
+  String get storeAudioOnCloud => 'Salvesta heli pilve';
+
+  @override
+  String get cloudStorageDialogMessage =>
+      'Teie reaalajas salvestised salvestatakse privaatsesse pilvesalvestusse, kui räägite.';
+
+  @override
+  String get storeAudioCloudDescription =>
+      'Salvestage oma reaalajas salvestised privaatsesse pilvesalvestusse, kui räägite. Heli salvestatakse turvaliselt reaalajas.';
 }

@@ -3337,5 +3337,11 @@
   "storeAudioOnPhone": "Przechowuj dźwięk na telefonie",
   "on": "Włączone",
   "storeAudioDescription": "Przechowuj wszystkie nagrania audio lokalnie na telefonie. Po wyłączeniu tylko nieudane przesyłania są zachowywane, aby zaoszczędzić miejsce.",
-  "enableLocalStorage": "Włącz pamięć lokalną"
+  "enableLocalStorage": "Włącz pamięć lokalną",
+  "cloudStorageEnabled": "Pamięć w chmurze włączona",
+  "cloudStorageDisabled": "Pamięć w chmurze wyłączona",
+  "enableCloudStorage": "Włącz pamięć w chmurze",
+  "storeAudioOnCloud": "Przechowuj dźwięk w chmurze",
+  "cloudStorageDialogMessage": "Twoje nagrania w czasie rzeczywistym będą przechowywane w prywatnej chmurze podczas mówienia.",
+  "storeAudioCloudDescription": "Przechowuj nagrania w czasie rzeczywistym w prywatnej chmurze podczas mówienia. Dźwięk jest przechwytywany i bezpiecznie zapisywany w czasie rzeczywistym."
 }

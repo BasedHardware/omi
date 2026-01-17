@@ -3337,5 +3337,11 @@
   "storeAudioOnPhone": "Lưu âm thanh trên điện thoại",
   "on": "Bật",
   "storeAudioDescription": "Lưu trữ tất cả bản ghi âm trên điện thoại của bạn. Khi tắt, chỉ các tải lên thất bại được giữ lại để tiết kiệm dung lượng.",
-  "enableLocalStorage": "Bật bộ nhớ cục bộ"
+  "enableLocalStorage": "Bật bộ nhớ cục bộ",
+  "cloudStorageEnabled": "Đã bật bộ nhớ đám mây",
+  "cloudStorageDisabled": "Đã tắt bộ nhớ đám mây",
+  "enableCloudStorage": "Bật bộ nhớ đám mây",
+  "storeAudioOnCloud": "Lưu âm thanh trên đám mây",
+  "cloudStorageDialogMessage": "Bản ghi thời gian thực của bạn sẽ được lưu trữ trong bộ nhớ đám mây riêng khi bạn nói.",
+  "storeAudioCloudDescription": "Lưu trữ bản ghi thời gian thực của bạn trong bộ nhớ đám mây riêng khi bạn nói. Âm thanh được ghi lại và lưu an toàn theo thời gian thực."
 }

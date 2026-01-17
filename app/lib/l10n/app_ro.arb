@@ -3337,5 +3337,11 @@
   "storeAudioOnPhone": "Stocați audio pe telefon",
   "on": "Activat",
   "storeAudioDescription": "Păstrați toate înregistrările audio stocate local pe telefon. Când este dezactivat, doar încărcările eșuate sunt păstrate pentru a economisi spațiu.",
-  "enableLocalStorage": "Activare stocare locală"
+  "enableLocalStorage": "Activare stocare locală",
+  "cloudStorageEnabled": "Stocare în cloud activată",
+  "cloudStorageDisabled": "Stocare în cloud dezactivată",
+  "enableCloudStorage": "Activare stocare în cloud",
+  "storeAudioOnCloud": "Stocați audio în cloud",
+  "cloudStorageDialogMessage": "Înregistrările dvs. în timp real vor fi stocate în spațiul de stocare cloud privat în timp ce vorbiți.",
+  "storeAudioCloudDescription": "Stocați înregistrările în timp real în spațiul de stocare cloud privat în timp ce vorbiți. Audio este capturat și salvat în siguranță în timp real."
 }

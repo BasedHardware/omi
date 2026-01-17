@@ -3337,5 +3337,11 @@
   "storeAudioOnPhone": "Simpan Audio di Telefon",
   "on": "Hidup",
   "storeAudioDescription": "Simpan semua rakaman audio secara tempatan di telefon anda. Apabila dilumpuhkan, hanya muat naik yang gagal disimpan untuk menjimatkan ruang storan.",
-  "enableLocalStorage": "Aktifkan Storan Tempatan"
+  "enableLocalStorage": "Aktifkan Storan Tempatan",
+  "cloudStorageEnabled": "Storan awan diaktifkan",
+  "cloudStorageDisabled": "Storan awan dinyahaktifkan",
+  "enableCloudStorage": "Aktifkan Storan Awan",
+  "storeAudioOnCloud": "Simpan Audio di Awan",
+  "cloudStorageDialogMessage": "Rakaman masa nyata anda akan disimpan dalam storan awan peribadi semasa anda bercakap.",
+  "storeAudioCloudDescription": "Simpan rakaman masa nyata anda dalam storan awan peribadi semasa anda bercakap. Audio ditangkap dan disimpan dengan selamat dalam masa nyata."
 }

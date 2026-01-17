@@ -4914,4 +4914,23 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get enableLocalStorage => 'Iespējot lokālo krātuvi';
+
+  @override
+  String get cloudStorageEnabled => 'Mākoņkrātuve iespējota';
+
+  @override
+  String get cloudStorageDisabled => 'Mākoņkrātuve atspējota';
+
+  @override
+  String get enableCloudStorage => 'Iespējot mākoņkrātuvi';
+
+  @override
+  String get storeAudioOnCloud => 'Saglabāt audio mākonī';
+
+  @override
+  String get cloudStorageDialogMessage => 'Jūsu reāllaika ieraksti tiks glabāti privātā mākoņkrātuvē, kamēr runājat.';
+
+  @override
+  String get storeAudioCloudDescription =>
+      'Saglabājiet savus reāllaika ierakstus privātā mākoņkrātuvē, kamēr runājat. Audio tiek tverts un droši saglabāts reāllaikā.';
 }

@@ -3337,5 +3337,11 @@
   "storeAudioOnPhone": "Spara ljud på telefon",
   "on": "På",
   "storeAudioDescription": "Behåll alla ljudinspelningar lagrade lokalt på din telefon. När inaktiverad sparas endast misslyckade uppladdningar för att spara lagringsutrymme.",
-  "enableLocalStorage": "Aktivera lokal lagring"
+  "enableLocalStorage": "Aktivera lokal lagring",
+  "cloudStorageEnabled": "Molnlagring aktiverad",
+  "cloudStorageDisabled": "Molnlagring inaktiverad",
+  "enableCloudStorage": "Aktivera molnlagring",
+  "storeAudioOnCloud": "Spara ljud i molnet",
+  "cloudStorageDialogMessage": "Dina realtidsinspelningar lagras i privat molnlagring medan du talar.",
+  "storeAudioCloudDescription": "Lagra dina realtidsinspelningar i privat molnlagring medan du talar. Ljud fångas upp och sparas säkert i realtid."
 }

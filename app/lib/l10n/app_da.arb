@@ -3337,5 +3337,11 @@
   "storeAudioOnPhone": "Gem lyd på telefon",
   "on": "Til",
   "storeAudioDescription": "Behold alle lydoptagelser gemt lokalt på din telefon. Når deaktiveret, gemmes kun mislykkede uploads for at spare lagerplads.",
-  "enableLocalStorage": "Aktiver lokal lagring"
+  "enableLocalStorage": "Aktiver lokal lagring",
+  "cloudStorageEnabled": "Cloud-lagring aktiveret",
+  "cloudStorageDisabled": "Cloud-lagring deaktiveret",
+  "enableCloudStorage": "Aktiver cloud-lagring",
+  "storeAudioOnCloud": "Gem lyd i skyen",
+  "cloudStorageDialogMessage": "Dine optagelser i realtid gemmes i privat cloud-lagring, mens du taler.",
+  "storeAudioCloudDescription": "Gem dine optagelser i realtid i privat cloud-lagring, mens du taler. Lyd optages og gemmes sikkert i realtid."
 }

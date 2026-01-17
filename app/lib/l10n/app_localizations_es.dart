@@ -4900,4 +4900,24 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get enableLocalStorage => 'Habilitar almacenamiento local';
+
+  @override
+  String get cloudStorageEnabled => 'Almacenamiento en la nube habilitado';
+
+  @override
+  String get cloudStorageDisabled => 'Almacenamiento en la nube deshabilitado';
+
+  @override
+  String get enableCloudStorage => 'Habilitar almacenamiento en la nube';
+
+  @override
+  String get storeAudioOnCloud => 'Almacenar audio en la nube';
+
+  @override
+  String get cloudStorageDialogMessage =>
+      'Sus grabaciones en tiempo real se almacenarán en almacenamiento privado en la nube mientras habla.';
+
+  @override
+  String get storeAudioCloudDescription =>
+      'Almacene sus grabaciones en tiempo real en almacenamiento privado en la nube mientras habla. El audio se captura y guarda de forma segura en tiempo real.';
 }

@@ -4935,4 +4935,24 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get enableLocalStorage => 'Activa l\'emmagatzematge local';
+
+  @override
+  String get cloudStorageEnabled => 'Emmagatzematge al núvol activat';
+
+  @override
+  String get cloudStorageDisabled => 'Emmagatzematge al núvol desactivat';
+
+  @override
+  String get enableCloudStorage => 'Activa l\'emmagatzematge al núvol';
+
+  @override
+  String get storeAudioOnCloud => 'Emmagatzema l\'àudio al núvol';
+
+  @override
+  String get cloudStorageDialogMessage =>
+      'Les vostres gravacions en temps real s\'emmagatzemaran a l\'emmagatzematge privat al núvol mentre parleu.';
+
+  @override
+  String get storeAudioCloudDescription =>
+      'Emmagatzemeu les vostres gravacions en temps real a l\'emmagatzematge privat al núvol mentre parleu. L\'àudio es captura i es desa de manera segura en temps real.';
 }

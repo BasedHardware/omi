@@ -4883,4 +4883,24 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get enableLocalStorage => 'स्थानीय संग्रहण सक्षम करें';
+
+  @override
+  String get cloudStorageEnabled => 'क्लाउड स्टोरेज सक्षम';
+
+  @override
+  String get cloudStorageDisabled => 'क्लाउड स्टोरेज अक्षम';
+
+  @override
+  String get enableCloudStorage => 'क्लाउड स्टोरेज सक्षम करें';
+
+  @override
+  String get storeAudioOnCloud => 'क्लाउड पर ऑडियो संग्रहीत करें';
+
+  @override
+  String get cloudStorageDialogMessage =>
+      'बोलते समय आपकी रीयल-टाइम रिकॉर्डिंग निजी क्लाउड स्टोरेज में संग्रहीत की जाएंगी।';
+
+  @override
+  String get storeAudioCloudDescription =>
+      'बोलते समय अपनी रीयल-टाइम रिकॉर्डिंग को निजी क्लाउड स्टोरेज में संग्रहीत करें। ऑडियो रीयल-टाइम में सुरक्षित रूप से कैप्चर और सहेजा जाता है।';
 }

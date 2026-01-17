@@ -3337,5 +3337,11 @@
   "storeAudioOnPhone": "Hang tárolása a telefonon",
   "on": "Be",
   "storeAudioDescription": "Tartsa az összes hangfelvételt helyileg tárolva a telefonján. Letiltva csak a sikertelen feltöltések maradnak meg a tárhely megtakarítása érdekében.",
-  "enableLocalStorage": "Helyi tárolás engedélyezése"
+  "enableLocalStorage": "Helyi tárolás engedélyezése",
+  "cloudStorageEnabled": "Felhőtárhely engedélyezve",
+  "cloudStorageDisabled": "Felhőtárhely letiltva",
+  "enableCloudStorage": "Felhőtárhely engedélyezése",
+  "storeAudioOnCloud": "Hang tárolása a felhőben",
+  "cloudStorageDialogMessage": "Valós idejű felvételei a beszéd közben privát felhőtárhelyen kerülnek tárolásra.",
+  "storeAudioCloudDescription": "Tárolja valós idejű felvételeit privát felhőtárhelyen beszéd közben. A hang valós időben, biztonságosan rögzítésre és mentésre kerül."
 }

@@ -1784,5 +1784,11 @@
   "storeAudioOnPhone": "Almacenar audio en el teléfono",
   "on": "Activado",
   "storeAudioDescription": "Mantenga todas las grabaciones de audio almacenadas localmente en su teléfono. Cuando está deshabilitado, solo se guardan las cargas fallidas para ahorrar espacio.",
-  "enableLocalStorage": "Habilitar almacenamiento local"
+  "enableLocalStorage": "Habilitar almacenamiento local",
+  "cloudStorageEnabled": "Almacenamiento en la nube habilitado",
+  "cloudStorageDisabled": "Almacenamiento en la nube deshabilitado",
+  "enableCloudStorage": "Habilitar almacenamiento en la nube",
+  "storeAudioOnCloud": "Almacenar audio en la nube",
+  "cloudStorageDialogMessage": "Sus grabaciones en tiempo real se almacenarán en almacenamiento privado en la nube mientras habla.",
+  "storeAudioCloudDescription": "Almacene sus grabaciones en tiempo real en almacenamiento privado en la nube mientras habla. El audio se captura y guarda de forma segura en tiempo real."
 }

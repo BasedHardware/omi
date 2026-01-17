@@ -4817,4 +4817,22 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get enableLocalStorage => 'ローカルストレージを有効にする';
+
+  @override
+  String get cloudStorageEnabled => 'クラウドストレージが有効';
+
+  @override
+  String get cloudStorageDisabled => 'クラウドストレージが無効';
+
+  @override
+  String get enableCloudStorage => 'クラウドストレージを有効にする';
+
+  @override
+  String get storeAudioOnCloud => 'クラウドに音声を保存';
+
+  @override
+  String get cloudStorageDialogMessage => 'リアルタイムの録音は、話している間にプライベートクラウドストレージに保存されます。';
+
+  @override
+  String get storeAudioCloudDescription => '話している間、リアルタイムの録音をプライベートクラウドストレージに保存します。音声はリアルタイムで安全にキャプチャおよび保存されます。';
 }

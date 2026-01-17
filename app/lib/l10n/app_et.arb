@@ -3337,5 +3337,11 @@
   "storeAudioOnPhone": "Salvesta heli telefoni",
   "on": "Sees",
   "storeAudioDescription": "Hoidke kõik helisalvestised telefonis lokaalselt. Kui on keelatud, salvestatakse ainult ebaõnnestunud üleslaadimised ruumi säästmiseks.",
-  "enableLocalStorage": "Luba kohalik salvestus"
+  "enableLocalStorage": "Luba kohalik salvestus",
+  "cloudStorageEnabled": "Pilvesalvestus lubatud",
+  "cloudStorageDisabled": "Pilvesalvestus keelatud",
+  "enableCloudStorage": "Luba pilvesalvestus",
+  "storeAudioOnCloud": "Salvesta heli pilve",
+  "cloudStorageDialogMessage": "Teie reaalajas salvestised salvestatakse privaatsesse pilvesalvestusse, kui räägite.",
+  "storeAudioCloudDescription": "Salvestage oma reaalajas salvestised privaatsesse pilvesalvestusse, kui räägite. Heli salvestatakse turvaliselt reaalajas."
 }

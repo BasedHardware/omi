@@ -4920,4 +4920,24 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get enableLocalStorage => 'Включить локальное хранилище';
+
+  @override
+  String get cloudStorageEnabled => 'Облачное хранилище включено';
+
+  @override
+  String get cloudStorageDisabled => 'Облачное хранилище отключено';
+
+  @override
+  String get enableCloudStorage => 'Включить облачное хранилище';
+
+  @override
+  String get storeAudioOnCloud => 'Хранить аудио в облаке';
+
+  @override
+  String get cloudStorageDialogMessage =>
+      'Ваши записи в реальном времени будут храниться в частном облачном хранилище во время разговора.';
+
+  @override
+  String get storeAudioCloudDescription =>
+      'Храните записи в реальном времени в частном облачном хранилище во время разговора. Аудио захватывается и сохраняется безопасно в реальном времени.';
 }

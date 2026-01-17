@@ -4944,4 +4944,24 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get enableLocalStorage => 'Lokalen Speicher aktivieren';
+
+  @override
+  String get cloudStorageEnabled => 'Cloud-Speicher aktiviert';
+
+  @override
+  String get cloudStorageDisabled => 'Cloud-Speicher deaktiviert';
+
+  @override
+  String get enableCloudStorage => 'Cloud-Speicher aktivieren';
+
+  @override
+  String get storeAudioOnCloud => 'Audio in der Cloud speichern';
+
+  @override
+  String get cloudStorageDialogMessage =>
+      'Ihre Echtzeit-Aufnahmen werden während des Sprechens in einem privaten Cloud-Speicher gespeichert.';
+
+  @override
+  String get storeAudioCloudDescription =>
+      'Speichern Sie Ihre Echtzeit-Aufnahmen während des Sprechens in einem privaten Cloud-Speicher. Audio wird in Echtzeit erfasst und sicher gespeichert.';
 }

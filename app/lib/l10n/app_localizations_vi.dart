@@ -4915,4 +4915,24 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get enableLocalStorage => 'Bật bộ nhớ cục bộ';
+
+  @override
+  String get cloudStorageEnabled => 'Đã bật bộ nhớ đám mây';
+
+  @override
+  String get cloudStorageDisabled => 'Đã tắt bộ nhớ đám mây';
+
+  @override
+  String get enableCloudStorage => 'Bật bộ nhớ đám mây';
+
+  @override
+  String get storeAudioOnCloud => 'Lưu âm thanh trên đám mây';
+
+  @override
+  String get cloudStorageDialogMessage =>
+      'Bản ghi thời gian thực của bạn sẽ được lưu trữ trong bộ nhớ đám mây riêng khi bạn nói.';
+
+  @override
+  String get storeAudioCloudDescription =>
+      'Lưu trữ bản ghi thời gian thực của bạn trong bộ nhớ đám mây riêng khi bạn nói. Âm thanh được ghi lại và lưu an toàn theo thời gian thực.';
 }

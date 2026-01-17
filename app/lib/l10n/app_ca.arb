@@ -3339,5 +3339,11 @@
   "storeAudioOnPhone": "Emmagatzema l'àudio al telèfon",
   "on": "Activat",
   "storeAudioDescription": "Manteniu totes les gravacions d'àudio emmagatzemades localment al telèfon. Quan estigui desactivat, només es conserven les càrregues fallides per estalviar espai.",
-  "enableLocalStorage": "Activa l'emmagatzematge local"
+  "enableLocalStorage": "Activa l'emmagatzematge local",
+  "cloudStorageEnabled": "Emmagatzematge al núvol activat",
+  "cloudStorageDisabled": "Emmagatzematge al núvol desactivat",
+  "enableCloudStorage": "Activa l'emmagatzematge al núvol",
+  "storeAudioOnCloud": "Emmagatzema l'àudio al núvol",
+  "cloudStorageDialogMessage": "Les vostres gravacions en temps real s'emmagatzemaran a l'emmagatzematge privat al núvol mentre parleu.",
+  "storeAudioCloudDescription": "Emmagatzemeu les vostres gravacions en temps real a l'emmagatzematge privat al núvol mentre parleu. L'àudio es captura i es desa de manera segura en temps real."
 }

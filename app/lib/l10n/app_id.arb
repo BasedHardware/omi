@@ -3337,5 +3337,11 @@
   "storeAudioOnPhone": "Simpan Audio di Ponsel",
   "on": "Aktif",
   "storeAudioDescription": "Simpan semua rekaman audio secara lokal di ponsel Anda. Saat dinonaktifkan, hanya unggahan yang gagal yang disimpan untuk menghemat ruang penyimpanan.",
-  "enableLocalStorage": "Aktifkan Penyimpanan Lokal"
+  "enableLocalStorage": "Aktifkan Penyimpanan Lokal",
+  "cloudStorageEnabled": "Penyimpanan cloud diaktifkan",
+  "cloudStorageDisabled": "Penyimpanan cloud dinonaktifkan",
+  "enableCloudStorage": "Aktifkan Penyimpanan Cloud",
+  "storeAudioOnCloud": "Simpan Audio di Cloud",
+  "cloudStorageDialogMessage": "Rekaman real-time Anda akan disimpan di penyimpanan cloud pribadi saat Anda berbicara.",
+  "storeAudioCloudDescription": "Simpan rekaman real-time Anda di penyimpanan cloud pribadi saat Anda berbicara. Audio ditangkap dan disimpan dengan aman secara real-time."
 }

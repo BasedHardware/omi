@@ -4810,4 +4810,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get enableLocalStorage => '启用本地存储';
+
+  @override
+  String get cloudStorageEnabled => '云存储已启用';
+
+  @override
+  String get cloudStorageDisabled => '云存储已禁用';
+
+  @override
+  String get enableCloudStorage => '启用云存储';
+
+  @override
+  String get storeAudioOnCloud => '在云端存储音频';
+
+  @override
+  String get cloudStorageDialogMessage => '您的实时录音将在您说话时存储在私有云存储中。';
+
+  @override
+  String get storeAudioCloudDescription => '说话时将实时录音存储在私有云存储中。音频会被实时安全地捕获和保存。';
 }

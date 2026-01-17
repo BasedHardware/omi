@@ -4917,4 +4917,24 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get enableLocalStorage => 'Yerel Depolamayı Etkinleştir';
+
+  @override
+  String get cloudStorageEnabled => 'Bulut depolama etkinleştirildi';
+
+  @override
+  String get cloudStorageDisabled => 'Bulut depolama devre dışı bırakıldı';
+
+  @override
+  String get enableCloudStorage => 'Bulut Depolamayı Etkinleştir';
+
+  @override
+  String get storeAudioOnCloud => 'Sesi Bulutta Sakla';
+
+  @override
+  String get cloudStorageDialogMessage =>
+      'Gerçek zamanlı kayıtlarınız konuşurken özel bulut depolamasında saklanacaktır.';
+
+  @override
+  String get storeAudioCloudDescription =>
+      'Konuşurken gerçek zamanlı kayıtlarınızı özel bulut depolamasında saklayın. Ses gerçek zamanlı olarak güvenli bir şekilde yakalanır ve kaydedilir.';
 }

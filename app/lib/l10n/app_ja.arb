@@ -1763,5 +1763,11 @@
   "storeAudioOnPhone": "電話に音声を保存",
   "on": "オン",
   "storeAudioDescription": "すべての音声録音を電話にローカルで保存します。無効にすると、ストレージ容量を節約するために失敗したアップロードのみが保持されます。",
-  "enableLocalStorage": "ローカルストレージを有効にする"
+  "enableLocalStorage": "ローカルストレージを有効にする",
+  "cloudStorageEnabled": "クラウドストレージが有効",
+  "cloudStorageDisabled": "クラウドストレージが無効",
+  "enableCloudStorage": "クラウドストレージを有効にする",
+  "storeAudioOnCloud": "クラウドに音声を保存",
+  "cloudStorageDialogMessage": "リアルタイムの録音は、話している間にプライベートクラウドストレージに保存されます。",
+  "storeAudioCloudDescription": "話している間、リアルタイムの録音をプライベートクラウドストレージに保存します。音声はリアルタイムで安全にキャプチャおよび保存されます。"
 }

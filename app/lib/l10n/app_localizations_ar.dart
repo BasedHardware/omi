@@ -4870,4 +4870,23 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get enableLocalStorage => 'تفعيل التخزين المحلي';
+
+  @override
+  String get cloudStorageEnabled => 'تم تفعيل التخزين السحابي';
+
+  @override
+  String get cloudStorageDisabled => 'تم تعطيل التخزين السحابي';
+
+  @override
+  String get enableCloudStorage => 'تفعيل التخزين السحابي';
+
+  @override
+  String get storeAudioOnCloud => 'تخزين الصوت على السحابة';
+
+  @override
+  String get cloudStorageDialogMessage => 'سيتم تخزين تسجيلاتك في الوقت الفعلي في التخزين السحابي الخاص أثناء التحدث.';
+
+  @override
+  String get storeAudioCloudDescription =>
+      'قم بتخزين تسجيلاتك في الوقت الفعلي في التخزين السحابي الخاص أثناء التحدث. يتم التقاط الصوت وحفظه بشكل آمن في الوقت الفعلي.';
 }

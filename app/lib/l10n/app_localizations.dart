@@ -9278,6 +9278,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Enable Local Storage'**
   String get enableLocalStorage;
+
+  /// cloudStorageEnabled label
+  ///
+  /// In en, this message translates to:
+  /// **'Cloud storage enabled'**
+  String get cloudStorageEnabled;
+
+  /// cloudStorageDisabled label
+  ///
+  /// In en, this message translates to:
+  /// **'Cloud storage disabled'**
+  String get cloudStorageDisabled;
+
+  /// enableCloudStorage label
+  ///
+  /// In en, this message translates to:
+  /// **'Enable Cloud Storage'**
+  String get enableCloudStorage;
+
+  /// storeAudioOnCloud label
+  ///
+  /// In en, this message translates to:
+  /// **'Store Audio on Cloud'**
+  String get storeAudioOnCloud;
+
+  /// cloudStorageDialogMessage label
+  ///
+  /// In en, this message translates to:
+  /// **'Your real-time recordings will be stored in private cloud storage as you speak.'**
+  String get cloudStorageDialogMessage;
+
+  /// storeAudioCloudDescription label
+  ///
+  /// In en, this message translates to:
+  /// **'Store your real-time recordings in private cloud storage as you speak. Audio is captured and saved securely in real-time.'**
+  String get storeAudioCloudDescription;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

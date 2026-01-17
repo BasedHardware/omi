@@ -4920,4 +4920,24 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get enableLocalStorage => 'Lokale opslag inschakelen';
+
+  @override
+  String get cloudStorageEnabled => 'Cloudopslag ingeschakeld';
+
+  @override
+  String get cloudStorageDisabled => 'Cloudopslag uitgeschakeld';
+
+  @override
+  String get enableCloudStorage => 'Cloudopslag inschakelen';
+
+  @override
+  String get storeAudioOnCloud => 'Audio opslaan in de cloud';
+
+  @override
+  String get cloudStorageDialogMessage =>
+      'Uw realtime opnames worden opgeslagen in privé cloudopslag terwijl u spreekt.';
+
+  @override
+  String get storeAudioCloudDescription =>
+      'Sla uw realtime opnames op in privé cloudopslag terwijl u spreekt. Audio wordt veilig vastgelegd en opgeslagen in realtime.';
 }

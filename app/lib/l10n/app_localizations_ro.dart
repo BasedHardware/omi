@@ -4930,4 +4930,24 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get enableLocalStorage => 'Activare stocare locală';
+
+  @override
+  String get cloudStorageEnabled => 'Stocare în cloud activată';
+
+  @override
+  String get cloudStorageDisabled => 'Stocare în cloud dezactivată';
+
+  @override
+  String get enableCloudStorage => 'Activare stocare în cloud';
+
+  @override
+  String get storeAudioOnCloud => 'Stocați audio în cloud';
+
+  @override
+  String get cloudStorageDialogMessage =>
+      'Înregistrările dvs. în timp real vor fi stocate în spațiul de stocare cloud privat în timp ce vorbiți.';
+
+  @override
+  String get storeAudioCloudDescription =>
+      'Stocați înregistrările în timp real în spațiul de stocare cloud privat în timp ce vorbiți. Audio este capturat și salvat în siguranță în timp real.';
 }

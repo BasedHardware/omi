@@ -4921,4 +4921,24 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get enableLocalStorage => 'Aktifkan Penyimpanan Lokal';
+
+  @override
+  String get cloudStorageEnabled => 'Penyimpanan cloud diaktifkan';
+
+  @override
+  String get cloudStorageDisabled => 'Penyimpanan cloud dinonaktifkan';
+
+  @override
+  String get enableCloudStorage => 'Aktifkan Penyimpanan Cloud';
+
+  @override
+  String get storeAudioOnCloud => 'Simpan Audio di Cloud';
+
+  @override
+  String get cloudStorageDialogMessage =>
+      'Rekaman real-time Anda akan disimpan di penyimpanan cloud pribadi saat Anda berbicara.';
+
+  @override
+  String get storeAudioCloudDescription =>
+      'Simpan rekaman real-time Anda di penyimpanan cloud pribadi saat Anda berbicara. Audio ditangkap dan disimpan dengan aman secara real-time.';
 }

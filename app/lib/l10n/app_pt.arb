@@ -1784,5 +1784,11 @@
   "storeAudioOnPhone": "Armazenar áudio no telefone",
   "on": "Ligado",
   "storeAudioDescription": "Mantenha todas as gravações de áudio armazenadas localmente no seu telefone. Quando desativado, apenas uploads com falha são mantidos para economizar espaço.",
-  "enableLocalStorage": "Ativar armazenamento local"
+  "enableLocalStorage": "Ativar armazenamento local",
+  "cloudStorageEnabled": "Armazenamento em nuvem ativado",
+  "cloudStorageDisabled": "Armazenamento em nuvem desativado",
+  "enableCloudStorage": "Ativar armazenamento em nuvem",
+  "storeAudioOnCloud": "Armazenar áudio na nuvem",
+  "cloudStorageDialogMessage": "Suas gravações em tempo real serão armazenadas em armazenamento em nuvem privado enquanto você fala.",
+  "storeAudioCloudDescription": "Armazene suas gravações em tempo real em armazenamento em nuvem privado enquanto você fala. O áudio é capturado e salvo com segurança em tempo real."
 }

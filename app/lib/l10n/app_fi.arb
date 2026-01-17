@@ -3337,5 +3337,11 @@
   "storeAudioOnPhone": "Tallenna ääni puhelimeen",
   "on": "Päällä",
   "storeAudioDescription": "Säilytä kaikki äänitallenteet paikallisesti puhelimessasi. Kun pois käytöstä, vain epäonnistuneet lataukset säilytetään tallennustilan säästämiseksi.",
-  "enableLocalStorage": "Ota paikallinen tallennustila käyttöön"
+  "enableLocalStorage": "Ota paikallinen tallennustila käyttöön",
+  "cloudStorageEnabled": "Pilvitallennustila käytössä",
+  "cloudStorageDisabled": "Pilvitallennustila pois käytöstä",
+  "enableCloudStorage": "Ota pilvitallennustila käyttöön",
+  "storeAudioOnCloud": "Tallenna ääni pilveen",
+  "cloudStorageDialogMessage": "Reaaliaikaiset tallenteet tallennetaan yksityiseen pilvitallennustilaan puhuessasi.",
+  "storeAudioCloudDescription": "Tallenna reaaliaikaiset tallenteet yksityiseen pilvitallennustilaan puhuessasi. Ääni tallennetaan turvallisesti reaaliajassa."
 }

@@ -4901,4 +4901,24 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get enableLocalStorage => 'Povolit místní úložiště';
+
+  @override
+  String get cloudStorageEnabled => 'Cloudové úložiště povoleno';
+
+  @override
+  String get cloudStorageDisabled => 'Cloudové úložiště zakázáno';
+
+  @override
+  String get enableCloudStorage => 'Povolit cloudové úložiště';
+
+  @override
+  String get storeAudioOnCloud => 'Uložit zvuk do cloudu';
+
+  @override
+  String get cloudStorageDialogMessage =>
+      'Vaše nahrávky v reálném čase budou ukládány do soukromého cloudového úložiště, zatímco mluvíte.';
+
+  @override
+  String get storeAudioCloudDescription =>
+      'Ukládejte své nahrávky v reálném čase do soukromého cloudového úložiště, zatímco mluvíte. Zvuk je zachycen a bezpečně uložen v reálném čase.';
 }

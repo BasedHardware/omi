@@ -4906,4 +4906,24 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get enableLocalStorage => 'Ota paikallinen tallennustila käyttöön';
+
+  @override
+  String get cloudStorageEnabled => 'Pilvitallennustila käytössä';
+
+  @override
+  String get cloudStorageDisabled => 'Pilvitallennustila pois käytöstä';
+
+  @override
+  String get enableCloudStorage => 'Ota pilvitallennustila käyttöön';
+
+  @override
+  String get storeAudioOnCloud => 'Tallenna ääni pilveen';
+
+  @override
+  String get cloudStorageDialogMessage =>
+      'Reaaliaikaiset tallenteet tallennetaan yksityiseen pilvitallennustilaan puhuessasi.';
+
+  @override
+  String get storeAudioCloudDescription =>
+      'Tallenna reaaliaikaiset tallenteet yksityiseen pilvitallennustilaan puhuessasi. Ääni tallennetaan turvallisesti reaaliajassa.';
 }

@@ -3337,5 +3337,11 @@
   "storeAudioOnPhone": "Uložiť zvuk do telefónu",
   "on": "Zapnuté",
   "storeAudioDescription": "Uchovávajte všetky zvukové nahrávky uložené lokálne v telefóne. Pri vypnutí sa ukladajú iba neúspešné nahrávania pre úsporu miesta.",
-  "enableLocalStorage": "Povoliť lokálne úložisko"
+  "enableLocalStorage": "Povoliť lokálne úložisko",
+  "cloudStorageEnabled": "Cloudové úložisko povolené",
+  "cloudStorageDisabled": "Cloudové úložisko zakázané",
+  "enableCloudStorage": "Povoliť cloudové úložisko",
+  "storeAudioOnCloud": "Uložiť zvuk do cloudu",
+  "cloudStorageDialogMessage": "Vaše nahrávky v reálnom čase budú uložené v súkromnom cloudovom úložisku počas rozprávania.",
+  "storeAudioCloudDescription": "Ukladajte svoje nahrávky v reálnom čase do súkromného cloudového úložiska počas rozprávania. Zvuk sa zachytáva a bezpečne ukladá v reálnom čase."
 }

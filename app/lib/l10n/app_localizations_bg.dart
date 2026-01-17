@@ -4920,4 +4920,24 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get enableLocalStorage => 'Активиране на локално хранилище';
+
+  @override
+  String get cloudStorageEnabled => 'Облачното хранилище е активирано';
+
+  @override
+  String get cloudStorageDisabled => 'Облачното хранилище е деактивирано';
+
+  @override
+  String get enableCloudStorage => 'Активиране на облачно хранилище';
+
+  @override
+  String get storeAudioOnCloud => 'Съхраняване на аудио в облака';
+
+  @override
+  String get cloudStorageDialogMessage =>
+      'Вашите записи в реално време ще се съхраняват в частно облачно хранилище, докато говорите.';
+
+  @override
+  String get storeAudioCloudDescription =>
+      'Съхранявайте записите си в реално време в частно облачно хранилище, докато говорите. Аудиото се улавя и запазва сигурно в реално време.';
 }

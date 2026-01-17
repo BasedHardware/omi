@@ -4911,4 +4911,24 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get enableLocalStorage => 'Увімкнути локальне сховище';
+
+  @override
+  String get cloudStorageEnabled => 'Хмарне сховище увімкнено';
+
+  @override
+  String get cloudStorageDisabled => 'Хмарне сховище вимкнено';
+
+  @override
+  String get enableCloudStorage => 'Увімкнути хмарне сховище';
+
+  @override
+  String get storeAudioOnCloud => 'Зберігати аудіо в хмарі';
+
+  @override
+  String get cloudStorageDialogMessage =>
+      'Ваші записи в реальному часі зберігатимуться в приватному хмарному сховищі під час розмови.';
+
+  @override
+  String get storeAudioCloudDescription =>
+      'Зберігайте записи в реальному часі в приватному хмарному сховищі під час розмови. Аудіо захоплюється та безпечно зберігається в реальному часі.';
 }

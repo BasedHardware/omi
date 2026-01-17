@@ -4930,4 +4930,24 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get enableLocalStorage => 'Helyi tárolás engedélyezése';
+
+  @override
+  String get cloudStorageEnabled => 'Felhőtárhely engedélyezve';
+
+  @override
+  String get cloudStorageDisabled => 'Felhőtárhely letiltva';
+
+  @override
+  String get enableCloudStorage => 'Felhőtárhely engedélyezése';
+
+  @override
+  String get storeAudioOnCloud => 'Hang tárolása a felhőben';
+
+  @override
+  String get cloudStorageDialogMessage =>
+      'Valós idejű felvételei a beszéd közben privát felhőtárhelyen kerülnek tárolásra.';
+
+  @override
+  String get storeAudioCloudDescription =>
+      'Tárolja valós idejű felvételeit privát felhőtárhelyen beszéd közben. A hang valós időben, biztonságosan rögzítésre és mentésre kerül.';
 }

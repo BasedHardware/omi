@@ -2155,5 +2155,11 @@
   "storeAudioOnPhone": "Audio opslaan op telefoon",
   "on": "Aan",
   "storeAudioDescription": "Bewaar alle audio-opnames lokaal op uw telefoon. Wanneer uitgeschakeld, worden alleen mislukte uploads bewaard om opslagruimte te besparen.",
-  "enableLocalStorage": "Lokale opslag inschakelen"
+  "enableLocalStorage": "Lokale opslag inschakelen",
+  "cloudStorageEnabled": "Cloudopslag ingeschakeld",
+  "cloudStorageDisabled": "Cloudopslag uitgeschakeld",
+  "enableCloudStorage": "Cloudopslag inschakelen",
+  "storeAudioOnCloud": "Audio opslaan in de cloud",
+  "cloudStorageDialogMessage": "Uw realtime opnames worden opgeslagen in privé cloudopslag terwijl u spreekt.",
+  "storeAudioCloudDescription": "Sla uw realtime opnames op in privé cloudopslag terwijl u spreekt. Audio wordt veilig vastgelegd en opgeslagen in realtime."
 }

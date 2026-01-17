@@ -3319,5 +3319,11 @@
   "storeAudioOnPhone": "Sesi Telefonda Sakla",
   "on": "Açık",
   "storeAudioDescription": "Tüm ses kayıtlarını telefonunuzda yerel olarak saklayın. Devre dışı bırakıldığında, depolama alanından tasarruf etmek için yalnızca başarısız yüklemeler saklanır.",
-  "enableLocalStorage": "Yerel Depolamayı Etkinleştir"
+  "enableLocalStorage": "Yerel Depolamayı Etkinleştir",
+  "cloudStorageEnabled": "Bulut depolama etkinleştirildi",
+  "cloudStorageDisabled": "Bulut depolama devre dışı bırakıldı",
+  "enableCloudStorage": "Bulut Depolamayı Etkinleştir",
+  "storeAudioOnCloud": "Sesi Bulutta Sakla",
+  "cloudStorageDialogMessage": "Gerçek zamanlı kayıtlarınız konuşurken özel bulut depolamasında saklanacaktır.",
+  "storeAudioCloudDescription": "Konuşurken gerçek zamanlı kayıtlarınızı özel bulut depolamasında saklayın. Ses gerçek zamanlı olarak güvenli bir şekilde yakalanır ve kaydedilir."
 }

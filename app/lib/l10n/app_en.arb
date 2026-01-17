@@ -5796,5 +5796,29 @@
   "enableLocalStorage": "Enable Local Storage",
   "@enableLocalStorage": {
     "description": "enableLocalStorage label"
+  },
+  "cloudStorageEnabled": "Cloud storage enabled",
+  "@cloudStorageEnabled": {
+    "description": "cloudStorageEnabled label"
+  },
+  "cloudStorageDisabled": "Cloud storage disabled",
+  "@cloudStorageDisabled": {
+    "description": "cloudStorageDisabled label"
+  },
+  "enableCloudStorage": "Enable Cloud Storage",
+  "@enableCloudStorage": {
+    "description": "enableCloudStorage label"
+  },
+  "storeAudioOnCloud": "Store Audio on Cloud",
+  "@storeAudioOnCloud": {
+    "description": "storeAudioOnCloud label"
+  },
+  "cloudStorageDialogMessage": "Your real-time recordings will be stored in private cloud storage as you speak.",
+  "@cloudStorageDialogMessage": {
+    "description": "cloudStorageDialogMessage label"
+  },
+  "storeAudioCloudDescription": "Store your real-time recordings in private cloud storage as you speak. Audio is captured and saved securely in real-time.",
+  "@storeAudioCloudDescription": {
+    "description": "storeAudioCloudDescription label"
   }
 }

@@ -4916,4 +4916,24 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get enableLocalStorage => 'Włącz pamięć lokalną';
+
+  @override
+  String get cloudStorageEnabled => 'Pamięć w chmurze włączona';
+
+  @override
+  String get cloudStorageDisabled => 'Pamięć w chmurze wyłączona';
+
+  @override
+  String get enableCloudStorage => 'Włącz pamięć w chmurze';
+
+  @override
+  String get storeAudioOnCloud => 'Przechowuj dźwięk w chmurze';
+
+  @override
+  String get cloudStorageDialogMessage =>
+      'Twoje nagrania w czasie rzeczywistym będą przechowywane w prywatnej chmurze podczas mówienia.';
+
+  @override
+  String get storeAudioCloudDescription =>
+      'Przechowuj nagrania w czasie rzeczywistym w prywatnej chmurze podczas mówienia. Dźwięk jest przechwytywany i bezpiecznie zapisywany w czasie rzeczywistym.';
 }

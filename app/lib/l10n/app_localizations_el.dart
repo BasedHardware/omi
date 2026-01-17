@@ -4945,4 +4945,24 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get enableLocalStorage => 'Ενεργοποίηση τοπικής αποθήκευσης';
+
+  @override
+  String get cloudStorageEnabled => 'Η αποθήκευση στο cloud ενεργοποιήθηκε';
+
+  @override
+  String get cloudStorageDisabled => 'Η αποθήκευση στο cloud απενεργοποιήθηκε';
+
+  @override
+  String get enableCloudStorage => 'Ενεργοποίηση αποθήκευσης στο cloud';
+
+  @override
+  String get storeAudioOnCloud => 'Αποθήκευση ήχου στο cloud';
+
+  @override
+  String get cloudStorageDialogMessage =>
+      'Οι εγγραφές σας σε πραγματικό χρόνο θα αποθηκεύονται σε ιδιωτικό χώρο αποθήκευσης cloud καθώς μιλάτε.';
+
+  @override
+  String get storeAudioCloudDescription =>
+      'Αποθηκεύστε τις εγγραφές σας σε πραγματικό χρόνο σε ιδιωτικό χώρο αποθήκευσης cloud καθώς μιλάτε. Ο ήχος καταγράφεται και αποθηκεύεται με ασφάλεια σε πραγματικό χρόνο.';
 }

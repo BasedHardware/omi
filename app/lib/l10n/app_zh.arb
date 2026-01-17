@@ -1784,5 +1784,11 @@
   "storeAudioOnPhone": "在手机上存储音频",
   "on": "开",
   "storeAudioDescription": "将所有音频录音存储在手机本地。禁用时，仅保留上传失败的文件以节省存储空间。",
-  "enableLocalStorage": "启用本地存储"
+  "enableLocalStorage": "启用本地存储",
+  "cloudStorageEnabled": "云存储已启用",
+  "cloudStorageDisabled": "云存储已禁用",
+  "enableCloudStorage": "启用云存储",
+  "storeAudioOnCloud": "在云端存储音频",
+  "cloudStorageDialogMessage": "您的实时录音将在您说话时存储在私有云存储中。",
+  "storeAudioCloudDescription": "说话时将实时录音存储在私有云存储中。音频会被实时安全地捕获和保存。"
 }

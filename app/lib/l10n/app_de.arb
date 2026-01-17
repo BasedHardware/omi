@@ -1784,5 +1784,11 @@
   "storeAudioOnPhone": "Audio auf dem Telefon speichern",
   "on": "An",
   "storeAudioDescription": "Bewahren Sie alle Audioaufnahmen lokal auf Ihrem Telefon auf. Bei Deaktivierung werden nur fehlgeschlagene Uploads gespeichert, um Speicherplatz zu sparen.",
-  "enableLocalStorage": "Lokalen Speicher aktivieren"
+  "enableLocalStorage": "Lokalen Speicher aktivieren",
+  "cloudStorageEnabled": "Cloud-Speicher aktiviert",
+  "cloudStorageDisabled": "Cloud-Speicher deaktiviert",
+  "enableCloudStorage": "Cloud-Speicher aktivieren",
+  "storeAudioOnCloud": "Audio in der Cloud speichern",
+  "cloudStorageDialogMessage": "Ihre Echtzeit-Aufnahmen werden während des Sprechens in einem privaten Cloud-Speicher gespeichert.",
+  "storeAudioCloudDescription": "Speichern Sie Ihre Echtzeit-Aufnahmen während des Sprechens in einem privaten Cloud-Speicher. Audio wird in Echtzeit erfasst und sicher gespeichert."
 }

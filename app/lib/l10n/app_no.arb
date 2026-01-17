@@ -3337,5 +3337,11 @@
   "storeAudioOnPhone": "Lagre lyd på telefon",
   "on": "På",
   "storeAudioDescription": "Behold alle lydopptak lagret lokalt på telefonen. Når deaktivert, beholdes bare mislykkede opplastinger for å spare lagringsplass.",
-  "enableLocalStorage": "Aktiver lokal lagring"
+  "enableLocalStorage": "Aktiver lokal lagring",
+  "cloudStorageEnabled": "Skylagring aktivert",
+  "cloudStorageDisabled": "Skylagring deaktivert",
+  "enableCloudStorage": "Aktiver skylagring",
+  "storeAudioOnCloud": "Lagre lyd i skyen",
+  "cloudStorageDialogMessage": "Dine sanntidsopptak lagres i privat skylagring mens du snakker.",
+  "storeAudioCloudDescription": "Lagre sanntidsopptakene dine i privat skylagring mens du snakker. Lyd fanges opp og lagres sikkert i sanntid."
 }

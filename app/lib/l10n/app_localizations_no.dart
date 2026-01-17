@@ -4908,4 +4908,23 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get enableLocalStorage => 'Aktiver lokal lagring';
+
+  @override
+  String get cloudStorageEnabled => 'Skylagring aktivert';
+
+  @override
+  String get cloudStorageDisabled => 'Skylagring deaktivert';
+
+  @override
+  String get enableCloudStorage => 'Aktiver skylagring';
+
+  @override
+  String get storeAudioOnCloud => 'Lagre lyd i skyen';
+
+  @override
+  String get cloudStorageDialogMessage => 'Dine sanntidsopptak lagres i privat skylagring mens du snakker.';
+
+  @override
+  String get storeAudioCloudDescription =>
+      'Lagre sanntidsopptakene dine i privat skylagring mens du snakker. Lyd fanges opp og lagres sikkert i sanntid.';
 }

@@ -3319,5 +3319,11 @@
   "storeAudioOnPhone": "Saugoti garsą telefone",
   "on": "Įjungta",
   "storeAudioDescription": "Saugokite visus garso įrašus lokaliai savo telefone. Išjungus, saugomi tik nepavykę įkėlimai, kad būtų sutaupyta vietos.",
-  "enableLocalStorage": "Įjungti vietinę saugyklą"
+  "enableLocalStorage": "Įjungti vietinę saugyklą",
+  "cloudStorageEnabled": "Debesų saugykla įjungta",
+  "cloudStorageDisabled": "Debesų saugykla išjungta",
+  "enableCloudStorage": "Įjungti debesų saugyklą",
+  "storeAudioOnCloud": "Saugoti garsą debesyje",
+  "cloudStorageDialogMessage": "Jūsų įrašai realiuoju laiku bus saugomi privačioje debesų saugykloje, kol kalbate.",
+  "storeAudioCloudDescription": "Saugokite savo įrašus realiuoju laiku privačioje debesų saugykloje, kol kalbate. Garsas fiksuojamas ir saugiai išsaugomas realiuoju laiku."
 }

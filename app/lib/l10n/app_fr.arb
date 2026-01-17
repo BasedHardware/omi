@@ -2155,5 +2155,11 @@
   "storeAudioOnPhone": "Stocker l'audio sur le téléphone",
   "on": "Activé",
   "storeAudioDescription": "Conservez tous les enregistrements audio stockés localement sur votre téléphone. Lorsque désactivé, seuls les téléchargements échoués sont conservés pour économiser de l'espace.",
-  "enableLocalStorage": "Activer le stockage local"
+  "enableLocalStorage": "Activer le stockage local",
+  "cloudStorageEnabled": "Stockage cloud activé",
+  "cloudStorageDisabled": "Stockage cloud désactivé",
+  "enableCloudStorage": "Activer le stockage cloud",
+  "storeAudioOnCloud": "Stocker l'audio dans le cloud",
+  "cloudStorageDialogMessage": "Vos enregistrements en temps réel seront stockés dans un stockage cloud privé pendant que vous parlez.",
+  "storeAudioCloudDescription": "Stockez vos enregistrements en temps réel dans un stockage cloud privé pendant que vous parlez. L'audio est capturé et enregistré en toute sécurité en temps réel."
 }

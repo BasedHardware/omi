@@ -4925,4 +4925,24 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get enableLocalStorage => 'Aktifkan Storan Tempatan';
+
+  @override
+  String get cloudStorageEnabled => 'Storan awan diaktifkan';
+
+  @override
+  String get cloudStorageDisabled => 'Storan awan dinyahaktifkan';
+
+  @override
+  String get enableCloudStorage => 'Aktifkan Storan Awan';
+
+  @override
+  String get storeAudioOnCloud => 'Simpan Audio di Awan';
+
+  @override
+  String get cloudStorageDialogMessage =>
+      'Rakaman masa nyata anda akan disimpan dalam storan awan peribadi semasa anda bercakap.';
+
+  @override
+  String get storeAudioCloudDescription =>
+      'Simpan rakaman masa nyata anda dalam storan awan peribadi semasa anda bercakap. Audio ditangkap dan disimpan dengan selamat dalam masa nyata.';
 }

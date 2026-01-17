@@ -4907,4 +4907,24 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get enableLocalStorage => 'Įjungti vietinę saugyklą';
+
+  @override
+  String get cloudStorageEnabled => 'Debesų saugykla įjungta';
+
+  @override
+  String get cloudStorageDisabled => 'Debesų saugykla išjungta';
+
+  @override
+  String get enableCloudStorage => 'Įjungti debesų saugyklą';
+
+  @override
+  String get storeAudioOnCloud => 'Saugoti garsą debesyje';
+
+  @override
+  String get cloudStorageDialogMessage =>
+      'Jūsų įrašai realiuoju laiku bus saugomi privačioje debesų saugykloje, kol kalbate.';
+
+  @override
+  String get storeAudioCloudDescription =>
+      'Saugokite savo įrašus realiuoju laiku privačioje debesų saugykloje, kol kalbate. Garsas fiksuojamas ir saugiai išsaugomas realiuoju laiku.';
 }

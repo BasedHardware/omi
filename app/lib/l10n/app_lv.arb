@@ -3337,5 +3337,11 @@
   "storeAudioOnPhone": "Saglabāt audio tālrunī",
   "on": "Ieslēgts",
   "storeAudioDescription": "Saglabājiet visus audio ierakstus lokāli savā tālrunī. Kad ir atspējots, tiek saglabāti tikai neveiksmīgie augšupielādēšanas gadījumi, lai ietaupītu vietu.",
-  "enableLocalStorage": "Iespējot lokālo krātuvi"
+  "enableLocalStorage": "Iespējot lokālo krātuvi",
+  "cloudStorageEnabled": "Mākoņkrātuve iespējota",
+  "cloudStorageDisabled": "Mākoņkrātuve atspējota",
+  "enableCloudStorage": "Iespējot mākoņkrātuvi",
+  "storeAudioOnCloud": "Saglabāt audio mākonī",
+  "cloudStorageDialogMessage": "Jūsu reāllaika ieraksti tiks glabāti privātā mākoņkrātuvē, kamēr runājat.",
+  "storeAudioCloudDescription": "Saglabājiet savus reāllaika ierakstus privātā mākoņkrātuvē, kamēr runājat. Audio tiek tverts un droši saglabāts reāllaikā."
 }
