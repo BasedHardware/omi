@@ -1386,3 +1386,22 @@ Notes: Large usage/insights page with subscription info, charts, and stats.
        upgrade button, plan description, and share stats fallback text.
        Most UI strings were already localized.
 Commit: ac0941463
+
+--------------------------------------------------------------------------------
+FILE 102 (Phase 2 FILE 32): import_history_page.dart
+--------------------------------------------------------------------------------
+Path: app/lib/pages/settings/import_history_page.dart
+New Keys: importData, importHistory, noImportsYet, selectZipFileToImport,
+         otherDevicesComingSoon, deleteAllLimitlessConversations,
+         deleteAllLimitlessWarning, deletedLimitlessConversations,
+         failedToDeleteConversations, deleteImportedData, statusPending,
+         statusProcessing, statusCompleted, statusFailed, nConversations
+Reused Keys: cancel, delete, deleting, comingSoon
+Total New Keys: 14
+Script: /tmp/translate_import_history.py
+Status: ✅ COMPLETED
+Notes: Import data page for importing conversations from other devices
+       (Limitless). Localized page title, import history section, status
+       texts (pending/processing/completed/failed), delete dialog, error
+       messages, and conversation count badges.
+Commit: 6da015df3
