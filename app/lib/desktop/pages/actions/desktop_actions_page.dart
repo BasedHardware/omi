@@ -237,6 +237,12 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     List<ActionItemWithMetadata> categoryItems,
   ) {
     setState(() {
+      // Remove from old category
+      final oldCategory = _getCategoryForItem(draggedItem);
+      if (oldCategory != category) {
+        _categoryOrder[oldCategory]?.remove(draggedItem.id);
+      }
+
       // Initialize category order if needed
       if (!_categoryOrder.containsKey(category)) {
         _categoryOrder[category] = categoryItems.map((i) => i.id).toList();
@@ -244,7 +250,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
 
       final order = _categoryOrder[category]!;
 
-      // Remove dragged item from its current position
+      // Remove dragged item from its current position (handles same-category reorders)
       order.remove(draggedItem.id);
 
       // Find target position
@@ -799,6 +805,11 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     List<ActionItemWithMetadata> categoryItems,
   ) {
     setState(() {
+      final oldCategory = _getCategoryForItem(draggedItem);
+      if (oldCategory != category) {
+        _categoryOrder[oldCategory]?.remove(draggedItem.id);
+      }
+
       if (!_categoryOrder.containsKey(category)) {
         _categoryOrder[category] = categoryItems.map((i) => i.id).toList();
       }
