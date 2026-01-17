@@ -3343,5 +3343,20 @@
   "enableCloudStorage": "Aktiver cloud-lagring",
   "storeAudioOnCloud": "Gem lyd i skyen",
   "cloudStorageDialogMessage": "Dine optagelser i realtid gemmes i privat cloud-lagring, mens du taler.",
-  "storeAudioCloudDescription": "Gem dine optagelser i realtid i privat cloud-lagring, mens du taler. Lyd optages og gemmes sikkert i realtid."
+  "storeAudioCloudDescription": "Gem dine optagelser i realtid i privat cloud-lagring, mens du taler. Lyd optages og gemmes sikkert i realtid.",
+  "downloadingFirmware": "Downloader firmware",
+  "installingFirmware": "Installerer firmware",
+  "firmwareUpdateWarning": "Luk ikke appen eller sluk enheden. Dette kan ødelægge din enhed.",
+  "firmwareUpdated": "Firmware opdateret",
+  "restartDeviceToComplete": "Genstart venligst din {deviceName} for at fuldføre opdateringen.",
+  "yourDeviceIsUpToDate": "Din enhed er opdateret",
+  "currentVersion": "Nuværende version",
+  "latestVersion": "Seneste version",
+  "whatsNew": "Hvad er nyt",
+  "installUpdate": "Installer opdatering",
+  "updateNow": "Opdater nu",
+  "updateGuide": "Opdateringsvejledning",
+  "checkingForUpdates": "Søger efter opdateringer",
+  "checkingFirmwareVersion": "Kontrollerer firmware-version...",
+  "firmwareUpdate": "Firmwareopdatering"
 }

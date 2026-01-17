@@ -5820,5 +5820,65 @@
   "storeAudioCloudDescription": "Store your real-time recordings in private cloud storage as you speak. Audio is captured and saved securely in real-time.",
   "@storeAudioCloudDescription": {
     "description": "storeAudioCloudDescription label"
+  },
+  "downloadingFirmware": "Downloading Firmware",
+  "@downloadingFirmware": {
+    "description": "Status text shown while downloading firmware"
+  },
+  "installingFirmware": "Installing Firmware",
+  "@installingFirmware": {
+    "description": "Status text shown while installing firmware"
+  },
+  "firmwareUpdateWarning": "Do not close the app or turn off the device. This could corrupt your device.",
+  "@firmwareUpdateWarning": {
+    "description": "Warning message during firmware update"
+  },
+  "firmwareUpdated": "Firmware Updated",
+  "@firmwareUpdated": {
+    "description": "Success message when firmware update is complete"
+  },
+  "restartDeviceToComplete": "Please restart your {deviceName} to complete the update.",
+  "@restartDeviceToComplete": {
+    "description": "Message asking user to restart device after update. {deviceName} is the device name."
+  },
+  "yourDeviceIsUpToDate": "Your device is up to date",
+  "@yourDeviceIsUpToDate": {
+    "description": "Message shown when device firmware is current"
+  },
+  "currentVersion": "Current Version",
+  "@currentVersion": {
+    "description": "Label for current firmware version"
+  },
+  "latestVersion": "Latest Version",
+  "@latestVersion": {
+    "description": "Label for latest available firmware version"
+  },
+  "whatsNew": "What's New",
+  "@whatsNew": {
+    "description": "Section header for changelog"
+  },
+  "installUpdate": "Install Update",
+  "@installUpdate": {
+    "description": "Button text to install firmware update"
+  },
+  "updateNow": "Update Now",
+  "@updateNow": {
+    "description": "Button text to start firmware update"
+  },
+  "updateGuide": "Update Guide",
+  "@updateGuide": {
+    "description": "Link text to firmware update help"
+  },
+  "checkingForUpdates": "Checking for Updates",
+  "@checkingForUpdates": {
+    "description": "Title shown while checking for updates"
+  },
+  "checkingFirmwareVersion": "Checking firmware version...",
+  "@checkingFirmwareVersion": {
+    "description": "Status text while checking firmware version"
+  },
+  "firmwareUpdate": "Firmware Update",
+  "@firmwareUpdate": {
+    "description": "Page title for firmware update screen"
   }
 }

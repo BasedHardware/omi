@@ -3345,5 +3345,20 @@
   "enableCloudStorage": "Activa l'emmagatzematge al núvol",
   "storeAudioOnCloud": "Emmagatzema l'àudio al núvol",
   "cloudStorageDialogMessage": "Les vostres gravacions en temps real s'emmagatzemaran a l'emmagatzematge privat al núvol mentre parleu.",
-  "storeAudioCloudDescription": "Emmagatzemeu les vostres gravacions en temps real a l'emmagatzematge privat al núvol mentre parleu. L'àudio es captura i es desa de manera segura en temps real."
+  "storeAudioCloudDescription": "Emmagatzemeu les vostres gravacions en temps real a l'emmagatzematge privat al núvol mentre parleu. L'àudio es captura i es desa de manera segura en temps real.",
+  "downloadingFirmware": "Descarregant el firmware",
+  "installingFirmware": "Instal·lant el firmware",
+  "firmwareUpdateWarning": "No tanqueu l'aplicació ni apagueu el dispositiu. Això podria danyar el dispositiu.",
+  "firmwareUpdated": "Firmware actualitzat",
+  "restartDeviceToComplete": "Si us plau, reinicieu el vostre {deviceName} per completar l'actualització.",
+  "yourDeviceIsUpToDate": "El vostre dispositiu està actualitzat",
+  "currentVersion": "Versió actual",
+  "latestVersion": "Última versió",
+  "whatsNew": "Què hi ha de nou",
+  "installUpdate": "Instal·lar actualització",
+  "updateNow": "Actualitza ara",
+  "updateGuide": "Guia d'actualització",
+  "checkingForUpdates": "Comprovant actualitzacions",
+  "checkingFirmwareVersion": "Comprovant la versió del firmware...",
+  "firmwareUpdate": "Actualització del firmware"
 }

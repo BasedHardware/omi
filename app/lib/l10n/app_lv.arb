@@ -3343,5 +3343,20 @@
   "enableCloudStorage": "Iespējot mākoņkrātuvi",
   "storeAudioOnCloud": "Saglabāt audio mākonī",
   "cloudStorageDialogMessage": "Jūsu reāllaika ieraksti tiks glabāti privātā mākoņkrātuvē, kamēr runājat.",
-  "storeAudioCloudDescription": "Saglabājiet savus reāllaika ierakstus privātā mākoņkrātuvē, kamēr runājat. Audio tiek tverts un droši saglabāts reāllaikā."
+  "storeAudioCloudDescription": "Saglabājiet savus reāllaika ierakstus privātā mākoņkrātuvē, kamēr runājat. Audio tiek tverts un droši saglabāts reāllaikā.",
+  "downloadingFirmware": "Lejupielādē programmaparatūru",
+  "installingFirmware": "Instalē programmaparatūru",
+  "firmwareUpdateWarning": "Neaizveriet lietotni un neizslēdziet ierīci. Tas var sabojāt jūsu ierīci.",
+  "firmwareUpdated": "Programmaparatūra atjaunināta",
+  "restartDeviceToComplete": "Lūdzu, restartējiet {deviceName}, lai pabeigtu atjauninājumu.",
+  "yourDeviceIsUpToDate": "Jūsu ierīce ir atjaunināta",
+  "currentVersion": "Pašreizējā versija",
+  "latestVersion": "Jaunākā versija",
+  "whatsNew": "Kas jauns",
+  "installUpdate": "Instalēt atjauninājumu",
+  "updateNow": "Atjaunināt tagad",
+  "updateGuide": "Atjaunināšanas ceļvedis",
+  "checkingForUpdates": "Pārbauda atjauninājumus",
+  "checkingFirmwareVersion": "Pārbauda programmaparatūras versiju...",
+  "firmwareUpdate": "Programmaparatūras atjauninājums"
 }

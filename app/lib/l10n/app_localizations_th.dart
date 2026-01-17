@@ -4903,4 +4903,51 @@ class AppLocalizationsTh extends AppLocalizations {
   @override
   String get storeAudioCloudDescription =>
       'เก็บการบันทึกแบบเรียลไทม์ของคุณในที่เก็บข้อมูลคลาวด์ส่วนตัวขณะที่คุณพูด เสียงจะถูกบันทึกและบันทึกอย่างปลอดภัยแบบเรียลไทม์';
+
+  @override
+  String get downloadingFirmware => 'กำลังดาวน์โหลดเฟิร์มแวร์';
+
+  @override
+  String get installingFirmware => 'กำลังติดตั้งเฟิร์มแวร์';
+
+  @override
+  String get firmwareUpdateWarning => 'อย่าปิดแอปหรือปิดอุปกรณ์ อาจทำให้อุปกรณ์เสียหายได้';
+
+  @override
+  String get firmwareUpdated => 'อัปเดตเฟิร์มแวร์แล้ว';
+
+  @override
+  String restartDeviceToComplete(Object deviceName) {
+    return 'กรุณารีสตาร์ท $deviceName ของคุณเพื่อให้การอัปเดตเสร็จสมบูรณ์';
+  }
+
+  @override
+  String get yourDeviceIsUpToDate => 'อุปกรณ์ของคุณเป็นเวอร์ชันล่าสุดแล้ว';
+
+  @override
+  String get currentVersion => 'เวอร์ชันปัจจุบัน';
+
+  @override
+  String get latestVersion => 'เวอร์ชันล่าสุด';
+
+  @override
+  String get whatsNew => 'มีอะไรใหม่';
+
+  @override
+  String get installUpdate => 'ติดตั้งการอัปเดต';
+
+  @override
+  String get updateNow => 'อัปเดตตอนนี้';
+
+  @override
+  String get updateGuide => 'คู่มือการอัปเดต';
+
+  @override
+  String get checkingForUpdates => 'กำลังตรวจสอบการอัปเดต';
+
+  @override
+  String get checkingFirmwareVersion => 'กำลังตรวจสอบเวอร์ชันเฟิร์มแวร์...';
+
+  @override
+  String get firmwareUpdate => 'อัปเดตเฟิร์มแวร์';
 }

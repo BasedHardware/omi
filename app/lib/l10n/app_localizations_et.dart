@@ -4926,4 +4926,52 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get storeAudioCloudDescription =>
       'Salvestage oma reaalajas salvestised privaatsesse pilvesalvestusse, kui räägite. Heli salvestatakse turvaliselt reaalajas.';
+
+  @override
+  String get downloadingFirmware => 'Püsivara allalaadimine';
+
+  @override
+  String get installingFirmware => 'Püsivara paigaldamine';
+
+  @override
+  String get firmwareUpdateWarning =>
+      'Ärge sulgege rakendust ega lülitage seadet välja. See võib teie seadet kahjustada.';
+
+  @override
+  String get firmwareUpdated => 'Püsivara uuendatud';
+
+  @override
+  String restartDeviceToComplete(Object deviceName) {
+    return 'Palun taaskäivitage $deviceName värskenduse lõpuleviimiseks.';
+  }
+
+  @override
+  String get yourDeviceIsUpToDate => 'Teie seade on ajakohane';
+
+  @override
+  String get currentVersion => 'Praegune versioon';
+
+  @override
+  String get latestVersion => 'Uusim versioon';
+
+  @override
+  String get whatsNew => 'Mis on uut';
+
+  @override
+  String get installUpdate => 'Installi värskendus';
+
+  @override
+  String get updateNow => 'Värskenda kohe';
+
+  @override
+  String get updateGuide => 'Värskendamise juhend';
+
+  @override
+  String get checkingForUpdates => 'Värskenduste otsimine';
+
+  @override
+  String get checkingFirmwareVersion => 'Püsivara versiooni kontrollimine...';
+
+  @override
+  String get firmwareUpdate => 'Püsivara värskendus';
 }

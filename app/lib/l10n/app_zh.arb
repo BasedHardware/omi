@@ -1790,5 +1790,20 @@
   "enableCloudStorage": "启用云存储",
   "storeAudioOnCloud": "在云端存储音频",
   "cloudStorageDialogMessage": "您的实时录音将在您说话时存储在私有云存储中。",
-  "storeAudioCloudDescription": "说话时将实时录音存储在私有云存储中。音频会被实时安全地捕获和保存。"
+  "storeAudioCloudDescription": "说话时将实时录音存储在私有云存储中。音频会被实时安全地捕获和保存。",
+  "downloadingFirmware": "正在下载固件",
+  "installingFirmware": "正在安装固件",
+  "firmwareUpdateWarning": "请勿关闭应用或关闭设备。这可能会损坏您的设备。",
+  "firmwareUpdated": "固件已更新",
+  "restartDeviceToComplete": "请重启您的 {deviceName} 以完成更新。",
+  "yourDeviceIsUpToDate": "您的设备已是最新版本",
+  "currentVersion": "当前版本",
+  "latestVersion": "最新版本",
+  "whatsNew": "新功能",
+  "installUpdate": "安装更新",
+  "updateNow": "立即更新",
+  "updateGuide": "更新指南",
+  "checkingForUpdates": "正在检查更新",
+  "checkingFirmwareVersion": "正在检查固件版本...",
+  "firmwareUpdate": "固件更新"
 }

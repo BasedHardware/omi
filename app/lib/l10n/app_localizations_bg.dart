@@ -4940,4 +4940,52 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get storeAudioCloudDescription =>
       'Съхранявайте записите си в реално време в частно облачно хранилище, докато говорите. Аудиото се улавя и запазва сигурно в реално време.';
+
+  @override
+  String get downloadingFirmware => 'Изтегляне на фърмуер';
+
+  @override
+  String get installingFirmware => 'Инсталиране на фърмуер';
+
+  @override
+  String get firmwareUpdateWarning =>
+      'Не затваряйте приложението и не изключвайте устройството. Това може да повреди устройството ви.';
+
+  @override
+  String get firmwareUpdated => 'Фърмуерът е актуализиран';
+
+  @override
+  String restartDeviceToComplete(Object deviceName) {
+    return 'Моля, рестартирайте вашия $deviceName, за да завършите актуализацията.';
+  }
+
+  @override
+  String get yourDeviceIsUpToDate => 'Вашето устройство е актуално';
+
+  @override
+  String get currentVersion => 'Текуща версия';
+
+  @override
+  String get latestVersion => 'Последна версия';
+
+  @override
+  String get whatsNew => 'Какво ново';
+
+  @override
+  String get installUpdate => 'Инсталиране на актуализацията';
+
+  @override
+  String get updateNow => 'Актуализирай сега';
+
+  @override
+  String get updateGuide => 'Ръководство за актуализация';
+
+  @override
+  String get checkingForUpdates => 'Проверка за актуализации';
+
+  @override
+  String get checkingFirmwareVersion => 'Проверка на версията на фърмуера...';
+
+  @override
+  String get firmwareUpdate => 'Актуализация на фърмуера';
 }

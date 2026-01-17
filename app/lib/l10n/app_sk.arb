@@ -3343,5 +3343,20 @@
   "enableCloudStorage": "Povoliť cloudové úložisko",
   "storeAudioOnCloud": "Uložiť zvuk do cloudu",
   "cloudStorageDialogMessage": "Vaše nahrávky v reálnom čase budú uložené v súkromnom cloudovom úložisku počas rozprávania.",
-  "storeAudioCloudDescription": "Ukladajte svoje nahrávky v reálnom čase do súkromného cloudového úložiska počas rozprávania. Zvuk sa zachytáva a bezpečne ukladá v reálnom čase."
+  "storeAudioCloudDescription": "Ukladajte svoje nahrávky v reálnom čase do súkromného cloudového úložiska počas rozprávania. Zvuk sa zachytáva a bezpečne ukladá v reálnom čase.",
+  "downloadingFirmware": "Sťahovanie firmvéru",
+  "installingFirmware": "Inštalácia firmvéru",
+  "firmwareUpdateWarning": "Nezatvárajte aplikáciu ani nevypínajte zariadenie. Mohlo by to poškodiť vaše zariadenie.",
+  "firmwareUpdated": "Firmvér aktualizovaný",
+  "restartDeviceToComplete": "Pre dokončenie aktualizácie reštartujte {deviceName}.",
+  "yourDeviceIsUpToDate": "Vaše zariadenie je aktuálne",
+  "currentVersion": "Aktuálna verzia",
+  "latestVersion": "Najnovšia verzia",
+  "whatsNew": "Čo je nové",
+  "installUpdate": "Nainštalovať aktualizáciu",
+  "updateNow": "Aktualizovať teraz",
+  "updateGuide": "Sprievodca aktualizáciou",
+  "checkingForUpdates": "Kontrola aktualizácií",
+  "checkingFirmwareVersion": "Kontrola verzie firmvéru...",
+  "firmwareUpdate": "Aktualizácia firmvéru"
 }

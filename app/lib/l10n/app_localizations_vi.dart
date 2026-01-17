@@ -4935,4 +4935,52 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get storeAudioCloudDescription =>
       'Lưu trữ bản ghi thời gian thực của bạn trong bộ nhớ đám mây riêng khi bạn nói. Âm thanh được ghi lại và lưu an toàn theo thời gian thực.';
+
+  @override
+  String get downloadingFirmware => 'Đang tải Firmware';
+
+  @override
+  String get installingFirmware => 'Đang cài đặt Firmware';
+
+  @override
+  String get firmwareUpdateWarning =>
+      'Không đóng ứng dụng hoặc tắt thiết bị. Điều này có thể làm hỏng thiết bị của bạn.';
+
+  @override
+  String get firmwareUpdated => 'Đã cập nhật Firmware';
+
+  @override
+  String restartDeviceToComplete(Object deviceName) {
+    return 'Vui lòng khởi động lại $deviceName của bạn để hoàn tất cập nhật.';
+  }
+
+  @override
+  String get yourDeviceIsUpToDate => 'Thiết bị của bạn đã được cập nhật';
+
+  @override
+  String get currentVersion => 'Phiên bản hiện tại';
+
+  @override
+  String get latestVersion => 'Phiên bản mới nhất';
+
+  @override
+  String get whatsNew => 'Có gì mới';
+
+  @override
+  String get installUpdate => 'Cài đặt bản cập nhật';
+
+  @override
+  String get updateNow => 'Cập nhật ngay';
+
+  @override
+  String get updateGuide => 'Hướng dẫn cập nhật';
+
+  @override
+  String get checkingForUpdates => 'Đang kiểm tra cập nhật';
+
+  @override
+  String get checkingFirmwareVersion => 'Đang kiểm tra phiên bản firmware...';
+
+  @override
+  String get firmwareUpdate => 'Cập nhật Firmware';
 }

@@ -4912,4 +4912,52 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get storeAudioCloudDescription =>
       'Armazene suas gravações em tempo real em armazenamento em nuvem privado enquanto você fala. O áudio é capturado e salvo com segurança em tempo real.';
+
+  @override
+  String get downloadingFirmware => 'Baixando Firmware';
+
+  @override
+  String get installingFirmware => 'Instalando Firmware';
+
+  @override
+  String get firmwareUpdateWarning =>
+      'Não feche o aplicativo ou desligue o dispositivo. Isso pode danificar seu dispositivo.';
+
+  @override
+  String get firmwareUpdated => 'Firmware Atualizado';
+
+  @override
+  String restartDeviceToComplete(Object deviceName) {
+    return 'Por favor, reinicie seu $deviceName para concluir a atualização.';
+  }
+
+  @override
+  String get yourDeviceIsUpToDate => 'Seu dispositivo está atualizado';
+
+  @override
+  String get currentVersion => 'Versão Atual';
+
+  @override
+  String get latestVersion => 'Versão Mais Recente';
+
+  @override
+  String get whatsNew => 'Novidades';
+
+  @override
+  String get installUpdate => 'Instalar Atualização';
+
+  @override
+  String get updateNow => 'Atualizar Agora';
+
+  @override
+  String get updateGuide => 'Guia de Atualização';
+
+  @override
+  String get checkingForUpdates => 'Verificando Atualizações';
+
+  @override
+  String get checkingFirmwareVersion => 'Verificando versão do firmware...';
+
+  @override
+  String get firmwareUpdate => 'Atualização de Firmware';
 }

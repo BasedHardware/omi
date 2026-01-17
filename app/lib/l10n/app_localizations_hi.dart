@@ -4903,4 +4903,51 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String get storeAudioCloudDescription =>
       'बोलते समय अपनी रीयल-टाइम रिकॉर्डिंग को निजी क्लाउड स्टोरेज में संग्रहीत करें। ऑडियो रीयल-टाइम में सुरक्षित रूप से कैप्चर और सहेजा जाता है।';
+
+  @override
+  String get downloadingFirmware => 'फर्मवेयर डाउनलोड हो रहा है';
+
+  @override
+  String get installingFirmware => 'फर्मवेयर इंस्टॉल हो रहा है';
+
+  @override
+  String get firmwareUpdateWarning => 'ऐप बंद न करें या डिवाइस बंद न करें। इससे आपका डिवाइस खराब हो सकता है।';
+
+  @override
+  String get firmwareUpdated => 'फर्मवेयर अपडेट हो गया';
+
+  @override
+  String restartDeviceToComplete(Object deviceName) {
+    return 'अपडेट पूरा करने के लिए कृपया अपना $deviceName पुनः प्रारंभ करें।';
+  }
+
+  @override
+  String get yourDeviceIsUpToDate => 'आपका डिवाइस अप टू डेट है';
+
+  @override
+  String get currentVersion => 'वर्तमान संस्करण';
+
+  @override
+  String get latestVersion => 'नवीनतम संस्करण';
+
+  @override
+  String get whatsNew => 'नया क्या है';
+
+  @override
+  String get installUpdate => 'अपडेट इंस्टॉल करें';
+
+  @override
+  String get updateNow => 'अभी अपडेट करें';
+
+  @override
+  String get updateGuide => 'अपडेट गाइड';
+
+  @override
+  String get checkingForUpdates => 'अपडेट की जांच हो रही है';
+
+  @override
+  String get checkingFirmwareVersion => 'फर्मवेयर संस्करण की जांच हो रही है...';
+
+  @override
+  String get firmwareUpdate => 'फर्मवेयर अपडेट';
 }

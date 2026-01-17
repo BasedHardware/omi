@@ -3343,5 +3343,20 @@
   "enableCloudStorage": "Felhőtárhely engedélyezése",
   "storeAudioOnCloud": "Hang tárolása a felhőben",
   "cloudStorageDialogMessage": "Valós idejű felvételei a beszéd közben privát felhőtárhelyen kerülnek tárolásra.",
-  "storeAudioCloudDescription": "Tárolja valós idejű felvételeit privát felhőtárhelyen beszéd közben. A hang valós időben, biztonságosan rögzítésre és mentésre kerül."
+  "storeAudioCloudDescription": "Tárolja valós idejű felvételeit privát felhőtárhelyen beszéd közben. A hang valós időben, biztonságosan rögzítésre és mentésre kerül.",
+  "downloadingFirmware": "Firmware letöltése",
+  "installingFirmware": "Firmware telepítése",
+  "firmwareUpdateWarning": "Ne zárja be az alkalmazást és ne kapcsolja ki az eszközt. Ez károsíthatja az eszközét.",
+  "firmwareUpdated": "Firmware frissítve",
+  "restartDeviceToComplete": "Kérjük, indítsa újra a(z) {deviceName} eszközét a frissítés befejezéséhez.",
+  "yourDeviceIsUpToDate": "Az eszköze naprakész",
+  "currentVersion": "Jelenlegi verzió",
+  "latestVersion": "Legújabb verzió",
+  "whatsNew": "Újdonságok",
+  "installUpdate": "Frissítés telepítése",
+  "updateNow": "Frissítés most",
+  "updateGuide": "Frissítési útmutató",
+  "checkingForUpdates": "Frissítések keresése",
+  "checkingFirmwareVersion": "Firmware verzió ellenőrzése...",
+  "firmwareUpdate": "Firmware frissítés"
 }

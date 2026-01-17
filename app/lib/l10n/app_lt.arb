@@ -3325,5 +3325,20 @@
   "enableCloudStorage": "Įjungti debesų saugyklą",
   "storeAudioOnCloud": "Saugoti garsą debesyje",
   "cloudStorageDialogMessage": "Jūsų įrašai realiuoju laiku bus saugomi privačioje debesų saugykloje, kol kalbate.",
-  "storeAudioCloudDescription": "Saugokite savo įrašus realiuoju laiku privačioje debesų saugykloje, kol kalbate. Garsas fiksuojamas ir saugiai išsaugomas realiuoju laiku."
+  "storeAudioCloudDescription": "Saugokite savo įrašus realiuoju laiku privačioje debesų saugykloje, kol kalbate. Garsas fiksuojamas ir saugiai išsaugomas realiuoju laiku.",
+  "downloadingFirmware": "Atsisiunčiama programinė įranga",
+  "installingFirmware": "Diegiama programinė įranga",
+  "firmwareUpdateWarning": "Neuždarykite programos ir neišjunkite įrenginio. Tai gali sugadinti jūsų įrenginį.",
+  "firmwareUpdated": "Programinė įranga atnaujinta",
+  "restartDeviceToComplete": "Paleiskite {deviceName} iš naujo, kad užbaigtumėte atnaujinimą.",
+  "yourDeviceIsUpToDate": "Jūsų įrenginys yra atnaujintas",
+  "currentVersion": "Dabartinė versija",
+  "latestVersion": "Naujausia versija",
+  "whatsNew": "Kas naujo",
+  "installUpdate": "Įdiegti atnaujinimą",
+  "updateNow": "Atnaujinti dabar",
+  "updateGuide": "Atnaujinimo vadovas",
+  "checkingForUpdates": "Tikrinami atnaujinimai",
+  "checkingFirmwareVersion": "Tikrinama programinės įrangos versija...",
+  "firmwareUpdate": "Programinės įrangos atnaujinimas"
 }

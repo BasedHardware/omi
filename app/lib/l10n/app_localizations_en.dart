@@ -4929,4 +4929,51 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get storeAudioCloudDescription =>
       'Store your real-time recordings in private cloud storage as you speak. Audio is captured and saved securely in real-time.';
+
+  @override
+  String get downloadingFirmware => 'Downloading Firmware';
+
+  @override
+  String get installingFirmware => 'Installing Firmware';
+
+  @override
+  String get firmwareUpdateWarning => 'Do not close the app or turn off the device. This could corrupt your device.';
+
+  @override
+  String get firmwareUpdated => 'Firmware Updated';
+
+  @override
+  String restartDeviceToComplete(Object deviceName) {
+    return 'Please restart your $deviceName to complete the update.';
+  }
+
+  @override
+  String get yourDeviceIsUpToDate => 'Your device is up to date';
+
+  @override
+  String get currentVersion => 'Current Version';
+
+  @override
+  String get latestVersion => 'Latest Version';
+
+  @override
+  String get whatsNew => 'What\'s New';
+
+  @override
+  String get installUpdate => 'Install Update';
+
+  @override
+  String get updateNow => 'Update Now';
+
+  @override
+  String get updateGuide => 'Update Guide';
+
+  @override
+  String get checkingForUpdates => 'Checking for Updates';
+
+  @override
+  String get checkingFirmwareVersion => 'Checking firmware version...';
+
+  @override
+  String get firmwareUpdate => 'Firmware Update';
 }

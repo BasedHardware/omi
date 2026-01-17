@@ -2161,5 +2161,20 @@
   "enableCloudStorage": "Cloudopslag inschakelen",
   "storeAudioOnCloud": "Audio opslaan in de cloud",
   "cloudStorageDialogMessage": "Uw realtime opnames worden opgeslagen in privé cloudopslag terwijl u spreekt.",
-  "storeAudioCloudDescription": "Sla uw realtime opnames op in privé cloudopslag terwijl u spreekt. Audio wordt veilig vastgelegd en opgeslagen in realtime."
+  "storeAudioCloudDescription": "Sla uw realtime opnames op in privé cloudopslag terwijl u spreekt. Audio wordt veilig vastgelegd en opgeslagen in realtime.",
+  "downloadingFirmware": "Firmware downloaden",
+  "installingFirmware": "Firmware installeren",
+  "firmwareUpdateWarning": "Sluit de app niet en schakel het apparaat niet uit. Dit kan uw apparaat beschadigen.",
+  "firmwareUpdated": "Firmware bijgewerkt",
+  "restartDeviceToComplete": "Start uw {deviceName} opnieuw op om de update te voltooien.",
+  "yourDeviceIsUpToDate": "Uw apparaat is up-to-date",
+  "currentVersion": "Huidige versie",
+  "latestVersion": "Nieuwste versie",
+  "whatsNew": "Wat is nieuw",
+  "installUpdate": "Update installeren",
+  "updateNow": "Nu bijwerken",
+  "updateGuide": "Update-handleiding",
+  "checkingForUpdates": "Controleren op updates",
+  "checkingFirmwareVersion": "Firmware-versie controleren...",
+  "firmwareUpdate": "Firmware-update"
 }

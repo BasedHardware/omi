@@ -4937,4 +4937,51 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get storeAudioCloudDescription =>
       'Konuşurken gerçek zamanlı kayıtlarınızı özel bulut depolamasında saklayın. Ses gerçek zamanlı olarak güvenli bir şekilde yakalanır ve kaydedilir.';
+
+  @override
+  String get downloadingFirmware => 'Aygıt yazılımı indiriliyor';
+
+  @override
+  String get installingFirmware => 'Aygıt yazılımı yükleniyor';
+
+  @override
+  String get firmwareUpdateWarning => 'Uygulamayı kapatmayın veya cihazı kapatmayın. Bu, cihazınıza zarar verebilir.';
+
+  @override
+  String get firmwareUpdated => 'Aygıt yazılımı güncellendi';
+
+  @override
+  String restartDeviceToComplete(Object deviceName) {
+    return 'Güncellemeyi tamamlamak için lütfen $deviceName cihazınızı yeniden başlatın.';
+  }
+
+  @override
+  String get yourDeviceIsUpToDate => 'Cihazınız güncel';
+
+  @override
+  String get currentVersion => 'Mevcut Sürüm';
+
+  @override
+  String get latestVersion => 'En Son Sürüm';
+
+  @override
+  String get whatsNew => 'Yenilikler';
+
+  @override
+  String get installUpdate => 'Güncellemeyi Yükle';
+
+  @override
+  String get updateNow => 'Şimdi Güncelle';
+
+  @override
+  String get updateGuide => 'Güncelleme Kılavuzu';
+
+  @override
+  String get checkingForUpdates => 'Güncellemeler kontrol ediliyor';
+
+  @override
+  String get checkingFirmwareVersion => 'Aygıt yazılımı sürümü kontrol ediliyor...';
+
+  @override
+  String get firmwareUpdate => 'Aygıt Yazılımı Güncellemesi';
 }

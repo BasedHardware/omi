@@ -4933,4 +4933,51 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get storeAudioCloudDescription =>
       'Saglabājiet savus reāllaika ierakstus privātā mākoņkrātuvē, kamēr runājat. Audio tiek tverts un droši saglabāts reāllaikā.';
+
+  @override
+  String get downloadingFirmware => 'Lejupielādē programmaparatūru';
+
+  @override
+  String get installingFirmware => 'Instalē programmaparatūru';
+
+  @override
+  String get firmwareUpdateWarning => 'Neaizveriet lietotni un neizslēdziet ierīci. Tas var sabojāt jūsu ierīci.';
+
+  @override
+  String get firmwareUpdated => 'Programmaparatūra atjaunināta';
+
+  @override
+  String restartDeviceToComplete(Object deviceName) {
+    return 'Lūdzu, restartējiet $deviceName, lai pabeigtu atjauninājumu.';
+  }
+
+  @override
+  String get yourDeviceIsUpToDate => 'Jūsu ierīce ir atjaunināta';
+
+  @override
+  String get currentVersion => 'Pašreizējā versija';
+
+  @override
+  String get latestVersion => 'Jaunākā versija';
+
+  @override
+  String get whatsNew => 'Kas jauns';
+
+  @override
+  String get installUpdate => 'Instalēt atjauninājumu';
+
+  @override
+  String get updateNow => 'Atjaunināt tagad';
+
+  @override
+  String get updateGuide => 'Atjaunināšanas ceļvedis';
+
+  @override
+  String get checkingForUpdates => 'Pārbauda atjauninājumus';
+
+  @override
+  String get checkingFirmwareVersion => 'Pārbauda programmaparatūras versiju...';
+
+  @override
+  String get firmwareUpdate => 'Programmaparatūras atjauninājums';
 }

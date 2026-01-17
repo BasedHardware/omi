@@ -4925,4 +4925,52 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String get storeAudioCloudDescription =>
       'Ukladajte svoje nahrávky v reálnom čase do súkromného cloudového úložiska počas rozprávania. Zvuk sa zachytáva a bezpečne ukladá v reálnom čase.';
+
+  @override
+  String get downloadingFirmware => 'Sťahovanie firmvéru';
+
+  @override
+  String get installingFirmware => 'Inštalácia firmvéru';
+
+  @override
+  String get firmwareUpdateWarning =>
+      'Nezatvárajte aplikáciu ani nevypínajte zariadenie. Mohlo by to poškodiť vaše zariadenie.';
+
+  @override
+  String get firmwareUpdated => 'Firmvér aktualizovaný';
+
+  @override
+  String restartDeviceToComplete(Object deviceName) {
+    return 'Pre dokončenie aktualizácie reštartujte $deviceName.';
+  }
+
+  @override
+  String get yourDeviceIsUpToDate => 'Vaše zariadenie je aktuálne';
+
+  @override
+  String get currentVersion => 'Aktuálna verzia';
+
+  @override
+  String get latestVersion => 'Najnovšia verzia';
+
+  @override
+  String get whatsNew => 'Čo je nové';
+
+  @override
+  String get installUpdate => 'Nainštalovať aktualizáciu';
+
+  @override
+  String get updateNow => 'Aktualizovať teraz';
+
+  @override
+  String get updateGuide => 'Sprievodca aktualizáciou';
+
+  @override
+  String get checkingForUpdates => 'Kontrola aktualizácií';
+
+  @override
+  String get checkingFirmwareVersion => 'Kontrola verzie firmvéru...';
+
+  @override
+  String get firmwareUpdate => 'Aktualizácia firmvéru';
 }

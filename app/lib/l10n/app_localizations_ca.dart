@@ -4955,4 +4955,52 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get storeAudioCloudDescription =>
       'Emmagatzemeu les vostres gravacions en temps real a l\'emmagatzematge privat al núvol mentre parleu. L\'àudio es captura i es desa de manera segura en temps real.';
+
+  @override
+  String get downloadingFirmware => 'Descarregant el firmware';
+
+  @override
+  String get installingFirmware => 'Instal·lant el firmware';
+
+  @override
+  String get firmwareUpdateWarning =>
+      'No tanqueu l\'aplicació ni apagueu el dispositiu. Això podria danyar el dispositiu.';
+
+  @override
+  String get firmwareUpdated => 'Firmware actualitzat';
+
+  @override
+  String restartDeviceToComplete(Object deviceName) {
+    return 'Si us plau, reinicieu el vostre $deviceName per completar l\'actualització.';
+  }
+
+  @override
+  String get yourDeviceIsUpToDate => 'El vostre dispositiu està actualitzat';
+
+  @override
+  String get currentVersion => 'Versió actual';
+
+  @override
+  String get latestVersion => 'Última versió';
+
+  @override
+  String get whatsNew => 'Què hi ha de nou';
+
+  @override
+  String get installUpdate => 'Instal·lar actualització';
+
+  @override
+  String get updateNow => 'Actualitza ara';
+
+  @override
+  String get updateGuide => 'Guia d\'actualització';
+
+  @override
+  String get checkingForUpdates => 'Comprovant actualitzacions';
+
+  @override
+  String get checkingFirmwareVersion => 'Comprovant la versió del firmware...';
+
+  @override
+  String get firmwareUpdate => 'Actualització del firmware';
 }

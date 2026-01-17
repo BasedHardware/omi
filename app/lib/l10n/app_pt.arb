@@ -1790,5 +1790,20 @@
   "enableCloudStorage": "Ativar armazenamento em nuvem",
   "storeAudioOnCloud": "Armazenar áudio na nuvem",
   "cloudStorageDialogMessage": "Suas gravações em tempo real serão armazenadas em armazenamento em nuvem privado enquanto você fala.",
-  "storeAudioCloudDescription": "Armazene suas gravações em tempo real em armazenamento em nuvem privado enquanto você fala. O áudio é capturado e salvo com segurança em tempo real."
+  "storeAudioCloudDescription": "Armazene suas gravações em tempo real em armazenamento em nuvem privado enquanto você fala. O áudio é capturado e salvo com segurança em tempo real.",
+  "downloadingFirmware": "Baixando Firmware",
+  "installingFirmware": "Instalando Firmware",
+  "firmwareUpdateWarning": "Não feche o aplicativo ou desligue o dispositivo. Isso pode danificar seu dispositivo.",
+  "firmwareUpdated": "Firmware Atualizado",
+  "restartDeviceToComplete": "Por favor, reinicie seu {deviceName} para concluir a atualização.",
+  "yourDeviceIsUpToDate": "Seu dispositivo está atualizado",
+  "currentVersion": "Versão Atual",
+  "latestVersion": "Versão Mais Recente",
+  "whatsNew": "Novidades",
+  "installUpdate": "Instalar Atualização",
+  "updateNow": "Atualizar Agora",
+  "updateGuide": "Guia de Atualização",
+  "checkingForUpdates": "Verificando Atualizações",
+  "checkingFirmwareVersion": "Verificando versão do firmware...",
+  "firmwareUpdate": "Atualização de Firmware"
 }

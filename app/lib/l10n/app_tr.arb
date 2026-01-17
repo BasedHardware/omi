@@ -3325,5 +3325,20 @@
   "enableCloudStorage": "Bulut Depolamayı Etkinleştir",
   "storeAudioOnCloud": "Sesi Bulutta Sakla",
   "cloudStorageDialogMessage": "Gerçek zamanlı kayıtlarınız konuşurken özel bulut depolamasında saklanacaktır.",
-  "storeAudioCloudDescription": "Konuşurken gerçek zamanlı kayıtlarınızı özel bulut depolamasında saklayın. Ses gerçek zamanlı olarak güvenli bir şekilde yakalanır ve kaydedilir."
+  "storeAudioCloudDescription": "Konuşurken gerçek zamanlı kayıtlarınızı özel bulut depolamasında saklayın. Ses gerçek zamanlı olarak güvenli bir şekilde yakalanır ve kaydedilir.",
+  "downloadingFirmware": "Aygıt yazılımı indiriliyor",
+  "installingFirmware": "Aygıt yazılımı yükleniyor",
+  "firmwareUpdateWarning": "Uygulamayı kapatmayın veya cihazı kapatmayın. Bu, cihazınıza zarar verebilir.",
+  "firmwareUpdated": "Aygıt yazılımı güncellendi",
+  "restartDeviceToComplete": "Güncellemeyi tamamlamak için lütfen {deviceName} cihazınızı yeniden başlatın.",
+  "yourDeviceIsUpToDate": "Cihazınız güncel",
+  "currentVersion": "Mevcut Sürüm",
+  "latestVersion": "En Son Sürüm",
+  "whatsNew": "Yenilikler",
+  "installUpdate": "Güncellemeyi Yükle",
+  "updateNow": "Şimdi Güncelle",
+  "updateGuide": "Güncelleme Kılavuzu",
+  "checkingForUpdates": "Güncellemeler kontrol ediliyor",
+  "checkingFirmwareVersion": "Aygıt yazılımı sürümü kontrol ediliyor...",
+  "firmwareUpdate": "Aygıt Yazılımı Güncellemesi"
 }

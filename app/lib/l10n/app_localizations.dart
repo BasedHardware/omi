@@ -9314,6 +9314,96 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Store your real-time recordings in private cloud storage as you speak. Audio is captured and saved securely in real-time.'**
   String get storeAudioCloudDescription;
+
+  /// Status text shown while downloading firmware
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading Firmware'**
+  String get downloadingFirmware;
+
+  /// Status text shown while installing firmware
+  ///
+  /// In en, this message translates to:
+  /// **'Installing Firmware'**
+  String get installingFirmware;
+
+  /// Warning message during firmware update
+  ///
+  /// In en, this message translates to:
+  /// **'Do not close the app or turn off the device. This could corrupt your device.'**
+  String get firmwareUpdateWarning;
+
+  /// Success message when firmware update is complete
+  ///
+  /// In en, this message translates to:
+  /// **'Firmware Updated'**
+  String get firmwareUpdated;
+
+  /// Message asking user to restart device after update. {deviceName} is the device name.
+  ///
+  /// In en, this message translates to:
+  /// **'Please restart your {deviceName} to complete the update.'**
+  String restartDeviceToComplete(Object deviceName);
+
+  /// Message shown when device firmware is current
+  ///
+  /// In en, this message translates to:
+  /// **'Your device is up to date'**
+  String get yourDeviceIsUpToDate;
+
+  /// Label for current firmware version
+  ///
+  /// In en, this message translates to:
+  /// **'Current Version'**
+  String get currentVersion;
+
+  /// Label for latest available firmware version
+  ///
+  /// In en, this message translates to:
+  /// **'Latest Version'**
+  String get latestVersion;
+
+  /// Section header for changelog
+  ///
+  /// In en, this message translates to:
+  /// **'What\'s New'**
+  String get whatsNew;
+
+  /// Button text to install firmware update
+  ///
+  /// In en, this message translates to:
+  /// **'Install Update'**
+  String get installUpdate;
+
+  /// Button text to start firmware update
+  ///
+  /// In en, this message translates to:
+  /// **'Update Now'**
+  String get updateNow;
+
+  /// Link text to firmware update help
+  ///
+  /// In en, this message translates to:
+  /// **'Update Guide'**
+  String get updateGuide;
+
+  /// Title shown while checking for updates
+  ///
+  /// In en, this message translates to:
+  /// **'Checking for Updates'**
+  String get checkingForUpdates;
+
+  /// Status text while checking firmware version
+  ///
+  /// In en, this message translates to:
+  /// **'Checking firmware version...'**
+  String get checkingFirmwareVersion;
+
+  /// Page title for firmware update screen
+  ///
+  /// In en, this message translates to:
+  /// **'Firmware Update'**
+  String get firmwareUpdate;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -3343,5 +3343,20 @@
   "enableCloudStorage": "Aktiver skylagring",
   "storeAudioOnCloud": "Lagre lyd i skyen",
   "cloudStorageDialogMessage": "Dine sanntidsopptak lagres i privat skylagring mens du snakker.",
-  "storeAudioCloudDescription": "Lagre sanntidsopptakene dine i privat skylagring mens du snakker. Lyd fanges opp og lagres sikkert i sanntid."
+  "storeAudioCloudDescription": "Lagre sanntidsopptakene dine i privat skylagring mens du snakker. Lyd fanges opp og lagres sikkert i sanntid.",
+  "downloadingFirmware": "Laster ned fastvare",
+  "installingFirmware": "Installerer fastvare",
+  "firmwareUpdateWarning": "Ikke lukk appen eller slå av enheten. Dette kan ødelegge enheten din.",
+  "firmwareUpdated": "Fastvare oppdatert",
+  "restartDeviceToComplete": "Vennligst start {deviceName} på nytt for å fullføre oppdateringen.",
+  "yourDeviceIsUpToDate": "Enheten din er oppdatert",
+  "currentVersion": "Gjeldende versjon",
+  "latestVersion": "Nyeste versjon",
+  "whatsNew": "Hva er nytt",
+  "installUpdate": "Installer oppdatering",
+  "updateNow": "Oppdater nå",
+  "updateGuide": "Oppdateringsguide",
+  "checkingForUpdates": "Ser etter oppdateringer",
+  "checkingFirmwareVersion": "Kontrollerer fastvareversjon...",
+  "firmwareUpdate": "Fastvareoppdatering"
 }

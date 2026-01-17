@@ -4927,4 +4927,51 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get storeAudioCloudDescription =>
       'Lagre sanntidsopptakene dine i privat skylagring mens du snakker. Lyd fanges opp og lagres sikkert i sanntid.';
+
+  @override
+  String get downloadingFirmware => 'Laster ned fastvare';
+
+  @override
+  String get installingFirmware => 'Installerer fastvare';
+
+  @override
+  String get firmwareUpdateWarning => 'Ikke lukk appen eller slå av enheten. Dette kan ødelegge enheten din.';
+
+  @override
+  String get firmwareUpdated => 'Fastvare oppdatert';
+
+  @override
+  String restartDeviceToComplete(Object deviceName) {
+    return 'Vennligst start $deviceName på nytt for å fullføre oppdateringen.';
+  }
+
+  @override
+  String get yourDeviceIsUpToDate => 'Enheten din er oppdatert';
+
+  @override
+  String get currentVersion => 'Gjeldende versjon';
+
+  @override
+  String get latestVersion => 'Nyeste versjon';
+
+  @override
+  String get whatsNew => 'Hva er nytt';
+
+  @override
+  String get installUpdate => 'Installer oppdatering';
+
+  @override
+  String get updateNow => 'Oppdater nå';
+
+  @override
+  String get updateGuide => 'Oppdateringsguide';
+
+  @override
+  String get checkingForUpdates => 'Ser etter oppdateringer';
+
+  @override
+  String get checkingFirmwareVersion => 'Kontrollerer fastvareversjon...';
+
+  @override
+  String get firmwareUpdate => 'Fastvareoppdatering';
 }

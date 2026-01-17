@@ -3361,5 +3361,20 @@
   "enableCloudStorage": "تفعيل التخزين السحابي",
   "storeAudioOnCloud": "تخزين الصوت على السحابة",
   "cloudStorageDialogMessage": "سيتم تخزين تسجيلاتك في الوقت الفعلي في التخزين السحابي الخاص أثناء التحدث.",
-  "storeAudioCloudDescription": "قم بتخزين تسجيلاتك في الوقت الفعلي في التخزين السحابي الخاص أثناء التحدث. يتم التقاط الصوت وحفظه بشكل آمن في الوقت الفعلي."
+  "storeAudioCloudDescription": "قم بتخزين تسجيلاتك في الوقت الفعلي في التخزين السحابي الخاص أثناء التحدث. يتم التقاط الصوت وحفظه بشكل آمن في الوقت الفعلي.",
+  "downloadingFirmware": "جارٍ تنزيل البرنامج الثابت",
+  "installingFirmware": "جارٍ تثبيت البرنامج الثابت",
+  "firmwareUpdateWarning": "لا تغلق التطبيق أو توقف الجهاز. قد يؤدي ذلك إلى إتلاف جهازك.",
+  "firmwareUpdated": "تم تحديث البرنامج الثابت",
+  "restartDeviceToComplete": "يرجى إعادة تشغيل {deviceName} لإكمال التحديث.",
+  "yourDeviceIsUpToDate": "جهازك محدث",
+  "currentVersion": "الإصدار الحالي",
+  "latestVersion": "أحدث إصدار",
+  "whatsNew": "ما الجديد",
+  "installUpdate": "تثبيت التحديث",
+  "updateNow": "تحديث الآن",
+  "updateGuide": "دليل التحديث",
+  "checkingForUpdates": "جارٍ البحث عن التحديثات",
+  "checkingFirmwareVersion": "جارٍ التحقق من إصدار البرنامج الثابت...",
+  "firmwareUpdate": "تحديث البرنامج الثابت"
 }

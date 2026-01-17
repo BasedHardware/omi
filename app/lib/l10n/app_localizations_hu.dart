@@ -4950,4 +4950,52 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get storeAudioCloudDescription =>
       'Tárolja valós idejű felvételeit privát felhőtárhelyen beszéd közben. A hang valós időben, biztonságosan rögzítésre és mentésre kerül.';
+
+  @override
+  String get downloadingFirmware => 'Firmware letöltése';
+
+  @override
+  String get installingFirmware => 'Firmware telepítése';
+
+  @override
+  String get firmwareUpdateWarning =>
+      'Ne zárja be az alkalmazást és ne kapcsolja ki az eszközt. Ez károsíthatja az eszközét.';
+
+  @override
+  String get firmwareUpdated => 'Firmware frissítve';
+
+  @override
+  String restartDeviceToComplete(Object deviceName) {
+    return 'Kérjük, indítsa újra a(z) $deviceName eszközét a frissítés befejezéséhez.';
+  }
+
+  @override
+  String get yourDeviceIsUpToDate => 'Az eszköze naprakész';
+
+  @override
+  String get currentVersion => 'Jelenlegi verzió';
+
+  @override
+  String get latestVersion => 'Legújabb verzió';
+
+  @override
+  String get whatsNew => 'Újdonságok';
+
+  @override
+  String get installUpdate => 'Frissítés telepítése';
+
+  @override
+  String get updateNow => 'Frissítés most';
+
+  @override
+  String get updateGuide => 'Frissítési útmutató';
+
+  @override
+  String get checkingForUpdates => 'Frissítések keresése';
+
+  @override
+  String get checkingFirmwareVersion => 'Firmware verzió ellenőrzése...';
+
+  @override
+  String get firmwareUpdate => 'Firmware frissítés';
 }

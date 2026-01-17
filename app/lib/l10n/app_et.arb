@@ -3343,5 +3343,20 @@
   "enableCloudStorage": "Luba pilvesalvestus",
   "storeAudioOnCloud": "Salvesta heli pilve",
   "cloudStorageDialogMessage": "Teie reaalajas salvestised salvestatakse privaatsesse pilvesalvestusse, kui räägite.",
-  "storeAudioCloudDescription": "Salvestage oma reaalajas salvestised privaatsesse pilvesalvestusse, kui räägite. Heli salvestatakse turvaliselt reaalajas."
+  "storeAudioCloudDescription": "Salvestage oma reaalajas salvestised privaatsesse pilvesalvestusse, kui räägite. Heli salvestatakse turvaliselt reaalajas.",
+  "downloadingFirmware": "Püsivara allalaadimine",
+  "installingFirmware": "Püsivara paigaldamine",
+  "firmwareUpdateWarning": "Ärge sulgege rakendust ega lülitage seadet välja. See võib teie seadet kahjustada.",
+  "firmwareUpdated": "Püsivara uuendatud",
+  "restartDeviceToComplete": "Palun taaskäivitage {deviceName} värskenduse lõpuleviimiseks.",
+  "yourDeviceIsUpToDate": "Teie seade on ajakohane",
+  "currentVersion": "Praegune versioon",
+  "latestVersion": "Uusim versioon",
+  "whatsNew": "Mis on uut",
+  "installUpdate": "Installi värskendus",
+  "updateNow": "Värskenda kohe",
+  "updateGuide": "Värskendamise juhend",
+  "checkingForUpdates": "Värskenduste otsimine",
+  "checkingFirmwareVersion": "Püsivara versiooni kontrollimine...",
+  "firmwareUpdate": "Püsivara värskendus"
 }

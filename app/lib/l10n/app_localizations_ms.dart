@@ -4945,4 +4945,51 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get storeAudioCloudDescription =>
       'Simpan rakaman masa nyata anda dalam storan awan peribadi semasa anda bercakap. Audio ditangkap dan disimpan dengan selamat dalam masa nyata.';
+
+  @override
+  String get downloadingFirmware => 'Memuat turun Perisian Tegar';
+
+  @override
+  String get installingFirmware => 'Memasang Perisian Tegar';
+
+  @override
+  String get firmwareUpdateWarning => 'Jangan tutup aplikasi atau matikan peranti. Ini boleh merosakkan peranti anda.';
+
+  @override
+  String get firmwareUpdated => 'Perisian Tegar Dikemas Kini';
+
+  @override
+  String restartDeviceToComplete(Object deviceName) {
+    return 'Sila mulakan semula $deviceName anda untuk melengkapkan kemas kini.';
+  }
+
+  @override
+  String get yourDeviceIsUpToDate => 'Peranti anda adalah terkini';
+
+  @override
+  String get currentVersion => 'Versi Semasa';
+
+  @override
+  String get latestVersion => 'Versi Terkini';
+
+  @override
+  String get whatsNew => 'Apa yang Baharu';
+
+  @override
+  String get installUpdate => 'Pasang Kemas Kini';
+
+  @override
+  String get updateNow => 'Kemas Kini Sekarang';
+
+  @override
+  String get updateGuide => 'Panduan Kemas Kini';
+
+  @override
+  String get checkingForUpdates => 'Menyemak Kemas Kini';
+
+  @override
+  String get checkingFirmwareVersion => 'Menyemak versi perisian tegar...';
+
+  @override
+  String get firmwareUpdate => 'Kemas Kini Perisian Tegar';
 }

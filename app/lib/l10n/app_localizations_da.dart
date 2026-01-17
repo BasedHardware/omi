@@ -4935,4 +4935,51 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get storeAudioCloudDescription =>
       'Gem dine optagelser i realtid i privat cloud-lagring, mens du taler. Lyd optages og gemmes sikkert i realtid.';
+
+  @override
+  String get downloadingFirmware => 'Downloader firmware';
+
+  @override
+  String get installingFirmware => 'Installerer firmware';
+
+  @override
+  String get firmwareUpdateWarning => 'Luk ikke appen eller sluk enheden. Dette kan ødelægge din enhed.';
+
+  @override
+  String get firmwareUpdated => 'Firmware opdateret';
+
+  @override
+  String restartDeviceToComplete(Object deviceName) {
+    return 'Genstart venligst din $deviceName for at fuldføre opdateringen.';
+  }
+
+  @override
+  String get yourDeviceIsUpToDate => 'Din enhed er opdateret';
+
+  @override
+  String get currentVersion => 'Nuværende version';
+
+  @override
+  String get latestVersion => 'Seneste version';
+
+  @override
+  String get whatsNew => 'Hvad er nyt';
+
+  @override
+  String get installUpdate => 'Installer opdatering';
+
+  @override
+  String get updateNow => 'Opdater nu';
+
+  @override
+  String get updateGuide => 'Opdateringsvejledning';
+
+  @override
+  String get checkingForUpdates => 'Søger efter opdateringer';
+
+  @override
+  String get checkingFirmwareVersion => 'Kontrollerer firmware-version...';
+
+  @override
+  String get firmwareUpdate => 'Firmwareopdatering';
 }

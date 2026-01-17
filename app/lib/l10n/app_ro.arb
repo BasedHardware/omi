@@ -3343,5 +3343,20 @@
   "enableCloudStorage": "Activare stocare în cloud",
   "storeAudioOnCloud": "Stocați audio în cloud",
   "cloudStorageDialogMessage": "Înregistrările dvs. în timp real vor fi stocate în spațiul de stocare cloud privat în timp ce vorbiți.",
-  "storeAudioCloudDescription": "Stocați înregistrările în timp real în spațiul de stocare cloud privat în timp ce vorbiți. Audio este capturat și salvat în siguranță în timp real."
+  "storeAudioCloudDescription": "Stocați înregistrările în timp real în spațiul de stocare cloud privat în timp ce vorbiți. Audio este capturat și salvat în siguranță în timp real.",
+  "downloadingFirmware": "Se descarcă firmware-ul",
+  "installingFirmware": "Se instalează firmware-ul",
+  "firmwareUpdateWarning": "Nu închideți aplicația și nu opriți dispozitivul. Acest lucru ar putea deteriora dispozitivul.",
+  "firmwareUpdated": "Firmware actualizat",
+  "restartDeviceToComplete": "Vă rugăm să reporniți {deviceName} pentru a finaliza actualizarea.",
+  "yourDeviceIsUpToDate": "Dispozitivul dvs. este actualizat",
+  "currentVersion": "Versiunea curentă",
+  "latestVersion": "Ultima versiune",
+  "whatsNew": "Ce este nou",
+  "installUpdate": "Instalează actualizarea",
+  "updateNow": "Actualizează acum",
+  "updateGuide": "Ghid de actualizare",
+  "checkingForUpdates": "Se verifică actualizările",
+  "checkingFirmwareVersion": "Se verifică versiunea firmware-ului...",
+  "firmwareUpdate": "Actualizare firmware"
 }

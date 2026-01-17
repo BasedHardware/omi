@@ -3343,5 +3343,20 @@
   "enableCloudStorage": "Aktifkan Storan Awan",
   "storeAudioOnCloud": "Simpan Audio di Awan",
   "cloudStorageDialogMessage": "Rakaman masa nyata anda akan disimpan dalam storan awan peribadi semasa anda bercakap.",
-  "storeAudioCloudDescription": "Simpan rakaman masa nyata anda dalam storan awan peribadi semasa anda bercakap. Audio ditangkap dan disimpan dengan selamat dalam masa nyata."
+  "storeAudioCloudDescription": "Simpan rakaman masa nyata anda dalam storan awan peribadi semasa anda bercakap. Audio ditangkap dan disimpan dengan selamat dalam masa nyata.",
+  "downloadingFirmware": "Memuat turun Perisian Tegar",
+  "installingFirmware": "Memasang Perisian Tegar",
+  "firmwareUpdateWarning": "Jangan tutup aplikasi atau matikan peranti. Ini boleh merosakkan peranti anda.",
+  "firmwareUpdated": "Perisian Tegar Dikemas Kini",
+  "restartDeviceToComplete": "Sila mulakan semula {deviceName} anda untuk melengkapkan kemas kini.",
+  "yourDeviceIsUpToDate": "Peranti anda adalah terkini",
+  "currentVersion": "Versi Semasa",
+  "latestVersion": "Versi Terkini",
+  "whatsNew": "Apa yang Baharu",
+  "installUpdate": "Pasang Kemas Kini",
+  "updateNow": "Kemas Kini Sekarang",
+  "updateGuide": "Panduan Kemas Kini",
+  "checkingForUpdates": "Menyemak Kemas Kini",
+  "checkingFirmwareVersion": "Menyemak versi perisian tegar...",
+  "firmwareUpdate": "Kemas Kini Perisian Tegar"
 }

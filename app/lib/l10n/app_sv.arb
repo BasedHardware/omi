@@ -3343,5 +3343,20 @@
   "enableCloudStorage": "Aktivera molnlagring",
   "storeAudioOnCloud": "Spara ljud i molnet",
   "cloudStorageDialogMessage": "Dina realtidsinspelningar lagras i privat molnlagring medan du talar.",
-  "storeAudioCloudDescription": "Lagra dina realtidsinspelningar i privat molnlagring medan du talar. Ljud fångas upp och sparas säkert i realtid."
+  "storeAudioCloudDescription": "Lagra dina realtidsinspelningar i privat molnlagring medan du talar. Ljud fångas upp och sparas säkert i realtid.",
+  "downloadingFirmware": "Laddar ner firmware",
+  "installingFirmware": "Installerar firmware",
+  "firmwareUpdateWarning": "Stäng inte appen eller stäng av enheten. Detta kan skada din enhet.",
+  "firmwareUpdated": "Firmware uppdaterad",
+  "restartDeviceToComplete": "Starta om din {deviceName} för att slutföra uppdateringen.",
+  "yourDeviceIsUpToDate": "Din enhet är uppdaterad",
+  "currentVersion": "Nuvarande version",
+  "latestVersion": "Senaste versionen",
+  "whatsNew": "Nyheter",
+  "installUpdate": "Installera uppdatering",
+  "updateNow": "Uppdatera nu",
+  "updateGuide": "Uppdateringsguide",
+  "checkingForUpdates": "Söker efter uppdateringar",
+  "checkingFirmwareVersion": "Kontrollerar firmware-version...",
+  "firmwareUpdate": "Firmwareuppdatering"
 }

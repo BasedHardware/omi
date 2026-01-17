@@ -4837,4 +4837,51 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get storeAudioCloudDescription => '말하는 동안 실시간 녹음을 개인 클라우드 저장소에 저장하세요. 오디오는 실시간으로 안전하게 캡처 및 저장됩니다.';
+
+  @override
+  String get downloadingFirmware => '펌웨어 다운로드 중';
+
+  @override
+  String get installingFirmware => '펌웨어 설치 중';
+
+  @override
+  String get firmwareUpdateWarning => '앱을 닫거나 기기를 끄지 마세요. 기기가 손상될 수 있습니다.';
+
+  @override
+  String get firmwareUpdated => '펌웨어 업데이트됨';
+
+  @override
+  String restartDeviceToComplete(Object deviceName) {
+    return '업데이트를 완료하려면 $deviceName을(를) 다시 시작하세요.';
+  }
+
+  @override
+  String get yourDeviceIsUpToDate => '기기가 최신 상태입니다';
+
+  @override
+  String get currentVersion => '현재 버전';
+
+  @override
+  String get latestVersion => '최신 버전';
+
+  @override
+  String get whatsNew => '새로운 기능';
+
+  @override
+  String get installUpdate => '업데이트 설치';
+
+  @override
+  String get updateNow => '지금 업데이트';
+
+  @override
+  String get updateGuide => '업데이트 가이드';
+
+  @override
+  String get checkingForUpdates => '업데이트 확인 중';
+
+  @override
+  String get checkingFirmwareVersion => '펌웨어 버전 확인 중...';
+
+  @override
+  String get firmwareUpdate => '펌웨어 업데이트';
 }

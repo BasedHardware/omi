@@ -4950,4 +4950,52 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get storeAudioCloudDescription =>
       'Stocați înregistrările în timp real în spațiul de stocare cloud privat în timp ce vorbiți. Audio este capturat și salvat în siguranță în timp real.';
+
+  @override
+  String get downloadingFirmware => 'Se descarcă firmware-ul';
+
+  @override
+  String get installingFirmware => 'Se instalează firmware-ul';
+
+  @override
+  String get firmwareUpdateWarning =>
+      'Nu închideți aplicația și nu opriți dispozitivul. Acest lucru ar putea deteriora dispozitivul.';
+
+  @override
+  String get firmwareUpdated => 'Firmware actualizat';
+
+  @override
+  String restartDeviceToComplete(Object deviceName) {
+    return 'Vă rugăm să reporniți $deviceName pentru a finaliza actualizarea.';
+  }
+
+  @override
+  String get yourDeviceIsUpToDate => 'Dispozitivul dvs. este actualizat';
+
+  @override
+  String get currentVersion => 'Versiunea curentă';
+
+  @override
+  String get latestVersion => 'Ultima versiune';
+
+  @override
+  String get whatsNew => 'Ce este nou';
+
+  @override
+  String get installUpdate => 'Instalează actualizarea';
+
+  @override
+  String get updateNow => 'Actualizează acum';
+
+  @override
+  String get updateGuide => 'Ghid de actualizare';
+
+  @override
+  String get checkingForUpdates => 'Se verifică actualizările';
+
+  @override
+  String get checkingFirmwareVersion => 'Se verifică versiunea firmware-ului...';
+
+  @override
+  String get firmwareUpdate => 'Actualizare firmware';
 }

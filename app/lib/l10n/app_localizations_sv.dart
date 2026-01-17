@@ -4928,4 +4928,51 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String get storeAudioCloudDescription =>
       'Lagra dina realtidsinspelningar i privat molnlagring medan du talar. Ljud fångas upp och sparas säkert i realtid.';
+
+  @override
+  String get downloadingFirmware => 'Laddar ner firmware';
+
+  @override
+  String get installingFirmware => 'Installerar firmware';
+
+  @override
+  String get firmwareUpdateWarning => 'Stäng inte appen eller stäng av enheten. Detta kan skada din enhet.';
+
+  @override
+  String get firmwareUpdated => 'Firmware uppdaterad';
+
+  @override
+  String restartDeviceToComplete(Object deviceName) {
+    return 'Starta om din $deviceName för att slutföra uppdateringen.';
+  }
+
+  @override
+  String get yourDeviceIsUpToDate => 'Din enhet är uppdaterad';
+
+  @override
+  String get currentVersion => 'Nuvarande version';
+
+  @override
+  String get latestVersion => 'Senaste versionen';
+
+  @override
+  String get whatsNew => 'Nyheter';
+
+  @override
+  String get installUpdate => 'Installera uppdatering';
+
+  @override
+  String get updateNow => 'Uppdatera nu';
+
+  @override
+  String get updateGuide => 'Uppdateringsguide';
+
+  @override
+  String get checkingForUpdates => 'Söker efter uppdateringar';
+
+  @override
+  String get checkingFirmwareVersion => 'Kontrollerar firmware-version...';
+
+  @override
+  String get firmwareUpdate => 'Firmwareuppdatering';
 }

@@ -4926,4 +4926,51 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get storeAudioCloudDescription =>
       'Tallenna reaaliaikaiset tallenteet yksityiseen pilvitallennustilaan puhuessasi. Ääni tallennetaan turvallisesti reaaliajassa.';
+
+  @override
+  String get downloadingFirmware => 'Ladataan laiteohjelmistoa';
+
+  @override
+  String get installingFirmware => 'Asennetaan laiteohjelmistoa';
+
+  @override
+  String get firmwareUpdateWarning => 'Älä sulje sovellusta tai sammuta laitetta. Tämä voi vaurioittaa laitettasi.';
+
+  @override
+  String get firmwareUpdated => 'Laiteohjelmisto päivitetty';
+
+  @override
+  String restartDeviceToComplete(Object deviceName) {
+    return 'Käynnistä $deviceName uudelleen päivityksen viimeistelemiseksi.';
+  }
+
+  @override
+  String get yourDeviceIsUpToDate => 'Laitteesi on ajan tasalla';
+
+  @override
+  String get currentVersion => 'Nykyinen versio';
+
+  @override
+  String get latestVersion => 'Uusin versio';
+
+  @override
+  String get whatsNew => 'Uutta';
+
+  @override
+  String get installUpdate => 'Asenna päivitys';
+
+  @override
+  String get updateNow => 'Päivitä nyt';
+
+  @override
+  String get updateGuide => 'Päivitysopas';
+
+  @override
+  String get checkingForUpdates => 'Tarkistetaan päivityksiä';
+
+  @override
+  String get checkingFirmwareVersion => 'Tarkistetaan laiteohjelmiston versiota...';
+
+  @override
+  String get firmwareUpdate => 'Laiteohjelmistopäivitys';
 }

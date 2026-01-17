@@ -4941,4 +4941,51 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get storeAudioCloudDescription =>
       'Simpan rekaman real-time Anda di penyimpanan cloud pribadi saat Anda berbicara. Audio ditangkap dan disimpan dengan aman secara real-time.';
+
+  @override
+  String get downloadingFirmware => 'Mengunduh Firmware';
+
+  @override
+  String get installingFirmware => 'Memasang Firmware';
+
+  @override
+  String get firmwareUpdateWarning => 'Jangan tutup aplikasi atau matikan perangkat. Ini dapat merusak perangkat Anda.';
+
+  @override
+  String get firmwareUpdated => 'Firmware Diperbarui';
+
+  @override
+  String restartDeviceToComplete(Object deviceName) {
+    return 'Silakan mulai ulang $deviceName Anda untuk menyelesaikan pembaruan.';
+  }
+
+  @override
+  String get yourDeviceIsUpToDate => 'Perangkat Anda sudah diperbarui';
+
+  @override
+  String get currentVersion => 'Versi Saat Ini';
+
+  @override
+  String get latestVersion => 'Versi Terbaru';
+
+  @override
+  String get whatsNew => 'Yang Baru';
+
+  @override
+  String get installUpdate => 'Pasang Pembaruan';
+
+  @override
+  String get updateNow => 'Perbarui Sekarang';
+
+  @override
+  String get updateGuide => 'Panduan Pembaruan';
+
+  @override
+  String get checkingForUpdates => 'Memeriksa Pembaruan';
+
+  @override
+  String get checkingFirmwareVersion => 'Memeriksa versi firmware...';
+
+  @override
+  String get firmwareUpdate => 'Pembaruan Firmware';
 }

@@ -3343,5 +3343,20 @@
   "enableCloudStorage": "Bật bộ nhớ đám mây",
   "storeAudioOnCloud": "Lưu âm thanh trên đám mây",
   "cloudStorageDialogMessage": "Bản ghi thời gian thực của bạn sẽ được lưu trữ trong bộ nhớ đám mây riêng khi bạn nói.",
-  "storeAudioCloudDescription": "Lưu trữ bản ghi thời gian thực của bạn trong bộ nhớ đám mây riêng khi bạn nói. Âm thanh được ghi lại và lưu an toàn theo thời gian thực."
+  "storeAudioCloudDescription": "Lưu trữ bản ghi thời gian thực của bạn trong bộ nhớ đám mây riêng khi bạn nói. Âm thanh được ghi lại và lưu an toàn theo thời gian thực.",
+  "downloadingFirmware": "Đang tải Firmware",
+  "installingFirmware": "Đang cài đặt Firmware",
+  "firmwareUpdateWarning": "Không đóng ứng dụng hoặc tắt thiết bị. Điều này có thể làm hỏng thiết bị của bạn.",
+  "firmwareUpdated": "Đã cập nhật Firmware",
+  "restartDeviceToComplete": "Vui lòng khởi động lại {deviceName} của bạn để hoàn tất cập nhật.",
+  "yourDeviceIsUpToDate": "Thiết bị của bạn đã được cập nhật",
+  "currentVersion": "Phiên bản hiện tại",
+  "latestVersion": "Phiên bản mới nhất",
+  "whatsNew": "Có gì mới",
+  "installUpdate": "Cài đặt bản cập nhật",
+  "updateNow": "Cập nhật ngay",
+  "updateGuide": "Hướng dẫn cập nhật",
+  "checkingForUpdates": "Đang kiểm tra cập nhật",
+  "checkingFirmwareVersion": "Đang kiểm tra phiên bản firmware...",
+  "firmwareUpdate": "Cập nhật Firmware"
 }

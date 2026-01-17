@@ -1790,5 +1790,20 @@
   "enableCloudStorage": "Cloud-Speicher aktivieren",
   "storeAudioOnCloud": "Audio in der Cloud speichern",
   "cloudStorageDialogMessage": "Ihre Echtzeit-Aufnahmen werden während des Sprechens in einem privaten Cloud-Speicher gespeichert.",
-  "storeAudioCloudDescription": "Speichern Sie Ihre Echtzeit-Aufnahmen während des Sprechens in einem privaten Cloud-Speicher. Audio wird in Echtzeit erfasst und sicher gespeichert."
+  "storeAudioCloudDescription": "Speichern Sie Ihre Echtzeit-Aufnahmen während des Sprechens in einem privaten Cloud-Speicher. Audio wird in Echtzeit erfasst und sicher gespeichert.",
+  "downloadingFirmware": "Firmware wird heruntergeladen",
+  "installingFirmware": "Firmware wird installiert",
+  "firmwareUpdateWarning": "Schließen Sie die App nicht und schalten Sie das Gerät nicht aus. Dies könnte Ihr Gerät beschädigen.",
+  "firmwareUpdated": "Firmware aktualisiert",
+  "restartDeviceToComplete": "Bitte starten Sie Ihr {deviceName} neu, um das Update abzuschließen.",
+  "yourDeviceIsUpToDate": "Ihr Gerät ist auf dem neuesten Stand",
+  "currentVersion": "Aktuelle Version",
+  "latestVersion": "Neueste Version",
+  "whatsNew": "Was ist neu",
+  "installUpdate": "Update installieren",
+  "updateNow": "Jetzt aktualisieren",
+  "updateGuide": "Update-Anleitung",
+  "checkingForUpdates": "Suche nach Updates",
+  "checkingFirmwareVersion": "Firmware-Version wird überprüft...",
+  "firmwareUpdate": "Firmware-Update"
 }

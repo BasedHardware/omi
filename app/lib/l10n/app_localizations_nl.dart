@@ -4940,4 +4940,52 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get storeAudioCloudDescription =>
       'Sla uw realtime opnames op in privé cloudopslag terwijl u spreekt. Audio wordt veilig vastgelegd en opgeslagen in realtime.';
+
+  @override
+  String get downloadingFirmware => 'Firmware downloaden';
+
+  @override
+  String get installingFirmware => 'Firmware installeren';
+
+  @override
+  String get firmwareUpdateWarning =>
+      'Sluit de app niet en schakel het apparaat niet uit. Dit kan uw apparaat beschadigen.';
+
+  @override
+  String get firmwareUpdated => 'Firmware bijgewerkt';
+
+  @override
+  String restartDeviceToComplete(Object deviceName) {
+    return 'Start uw $deviceName opnieuw op om de update te voltooien.';
+  }
+
+  @override
+  String get yourDeviceIsUpToDate => 'Uw apparaat is up-to-date';
+
+  @override
+  String get currentVersion => 'Huidige versie';
+
+  @override
+  String get latestVersion => 'Nieuwste versie';
+
+  @override
+  String get whatsNew => 'Wat is nieuw';
+
+  @override
+  String get installUpdate => 'Update installeren';
+
+  @override
+  String get updateNow => 'Nu bijwerken';
+
+  @override
+  String get updateGuide => 'Update-handleiding';
+
+  @override
+  String get checkingForUpdates => 'Controleren op updates';
+
+  @override
+  String get checkingFirmwareVersion => 'Firmware-versie controleren...';
+
+  @override
+  String get firmwareUpdate => 'Firmware-update';
 }

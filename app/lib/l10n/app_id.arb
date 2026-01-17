@@ -3343,5 +3343,20 @@
   "enableCloudStorage": "Aktifkan Penyimpanan Cloud",
   "storeAudioOnCloud": "Simpan Audio di Cloud",
   "cloudStorageDialogMessage": "Rekaman real-time Anda akan disimpan di penyimpanan cloud pribadi saat Anda berbicara.",
-  "storeAudioCloudDescription": "Simpan rekaman real-time Anda di penyimpanan cloud pribadi saat Anda berbicara. Audio ditangkap dan disimpan dengan aman secara real-time."
+  "storeAudioCloudDescription": "Simpan rekaman real-time Anda di penyimpanan cloud pribadi saat Anda berbicara. Audio ditangkap dan disimpan dengan aman secara real-time.",
+  "downloadingFirmware": "Mengunduh Firmware",
+  "installingFirmware": "Memasang Firmware",
+  "firmwareUpdateWarning": "Jangan tutup aplikasi atau matikan perangkat. Ini dapat merusak perangkat Anda.",
+  "firmwareUpdated": "Firmware Diperbarui",
+  "restartDeviceToComplete": "Silakan mulai ulang {deviceName} Anda untuk menyelesaikan pembaruan.",
+  "yourDeviceIsUpToDate": "Perangkat Anda sudah diperbarui",
+  "currentVersion": "Versi Saat Ini",
+  "latestVersion": "Versi Terbaru",
+  "whatsNew": "Yang Baru",
+  "installUpdate": "Pasang Pembaruan",
+  "updateNow": "Perbarui Sekarang",
+  "updateGuide": "Panduan Pembaruan",
+  "checkingForUpdates": "Memeriksa Pembaruan",
+  "checkingFirmwareVersion": "Memeriksa versi firmware...",
+  "firmwareUpdate": "Pembaruan Firmware"
 }

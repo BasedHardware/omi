@@ -4965,4 +4965,52 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get storeAudioCloudDescription =>
       'Αποθηκεύστε τις εγγραφές σας σε πραγματικό χρόνο σε ιδιωτικό χώρο αποθήκευσης cloud καθώς μιλάτε. Ο ήχος καταγράφεται και αποθηκεύεται με ασφάλεια σε πραγματικό χρόνο.';
+
+  @override
+  String get downloadingFirmware => 'Λήψη υλικολογισμικού';
+
+  @override
+  String get installingFirmware => 'Εγκατάσταση υλικολογισμικού';
+
+  @override
+  String get firmwareUpdateWarning =>
+      'Μην κλείσετε την εφαρμογή ή απενεργοποιήσετε τη συσκευή. Αυτό μπορεί να καταστρέψει τη συσκευή σας.';
+
+  @override
+  String get firmwareUpdated => 'Το υλικολογισμικό ενημερώθηκε';
+
+  @override
+  String restartDeviceToComplete(Object deviceName) {
+    return 'Κάντε επανεκκίνηση της συσκευής $deviceName για να ολοκληρωθεί η ενημέρωση.';
+  }
+
+  @override
+  String get yourDeviceIsUpToDate => 'Η συσκευή σας είναι ενημερωμένη';
+
+  @override
+  String get currentVersion => 'Τρέχουσα έκδοση';
+
+  @override
+  String get latestVersion => 'Τελευταία έκδοση';
+
+  @override
+  String get whatsNew => 'Τι νέο υπάρχει';
+
+  @override
+  String get installUpdate => 'Εγκατάσταση ενημέρωσης';
+
+  @override
+  String get updateNow => 'Ενημέρωση τώρα';
+
+  @override
+  String get updateGuide => 'Οδηγός ενημέρωσης';
+
+  @override
+  String get checkingForUpdates => 'Έλεγχος για ενημερώσεις';
+
+  @override
+  String get checkingFirmwareVersion => 'Έλεγχος έκδοσης υλικολογισμικού...';
+
+  @override
+  String get firmwareUpdate => 'Ενημέρωση υλικολογισμικού';
 }

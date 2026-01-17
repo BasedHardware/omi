@@ -4931,4 +4931,52 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String get storeAudioCloudDescription =>
       'Зберігайте записи в реальному часі в приватному хмарному сховищі під час розмови. Аудіо захоплюється та безпечно зберігається в реальному часі.';
+
+  @override
+  String get downloadingFirmware => 'Завантаження прошивки';
+
+  @override
+  String get installingFirmware => 'Встановлення прошивки';
+
+  @override
+  String get firmwareUpdateWarning =>
+      'Не закривайте програму та не вимикайте пристрій. Це може пошкодити ваш пристрій.';
+
+  @override
+  String get firmwareUpdated => 'Прошивку оновлено';
+
+  @override
+  String restartDeviceToComplete(Object deviceName) {
+    return 'Будь ласка, перезавантажте $deviceName, щоб завершити оновлення.';
+  }
+
+  @override
+  String get yourDeviceIsUpToDate => 'Ваш пристрій оновлено';
+
+  @override
+  String get currentVersion => 'Поточна версія';
+
+  @override
+  String get latestVersion => 'Остання версія';
+
+  @override
+  String get whatsNew => 'Що нового';
+
+  @override
+  String get installUpdate => 'Встановити оновлення';
+
+  @override
+  String get updateNow => 'Оновити зараз';
+
+  @override
+  String get updateGuide => 'Посібник з оновлення';
+
+  @override
+  String get checkingForUpdates => 'Перевірка оновлень';
+
+  @override
+  String get checkingFirmwareVersion => 'Перевірка версії прошивки...';
+
+  @override
+  String get firmwareUpdate => 'Оновлення прошивки';
 }

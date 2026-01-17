@@ -4828,4 +4828,51 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get storeAudioCloudDescription => '说话时将实时录音存储在私有云存储中。音频会被实时安全地捕获和保存。';
+
+  @override
+  String get downloadingFirmware => '正在下载固件';
+
+  @override
+  String get installingFirmware => '正在安装固件';
+
+  @override
+  String get firmwareUpdateWarning => '请勿关闭应用或关闭设备。这可能会损坏您的设备。';
+
+  @override
+  String get firmwareUpdated => '固件已更新';
+
+  @override
+  String restartDeviceToComplete(Object deviceName) {
+    return '请重启您的 $deviceName 以完成更新。';
+  }
+
+  @override
+  String get yourDeviceIsUpToDate => '您的设备已是最新版本';
+
+  @override
+  String get currentVersion => '当前版本';
+
+  @override
+  String get latestVersion => '最新版本';
+
+  @override
+  String get whatsNew => '新功能';
+
+  @override
+  String get installUpdate => '安装更新';
+
+  @override
+  String get updateNow => '立即更新';
+
+  @override
+  String get updateGuide => '更新指南';
+
+  @override
+  String get checkingForUpdates => '正在检查更新';
+
+  @override
+  String get checkingFirmwareVersion => '正在检查固件版本...';
+
+  @override
+  String get firmwareUpdate => '固件更新';
 }
