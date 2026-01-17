@@ -7,6 +7,7 @@ from google.cloud.firestore_v1 import FieldFilter, transactional
 from ._client import db, document_id_from_seed
 from models.users import Subscription, PlanLimits, PlanType, SubscriptionStatus
 from utils.subscription import get_default_basic_subscription
+from utils.other.storage import delete_all_user_private_cloud_sync_data
 
 
 def is_exists_user(uid: str):
@@ -166,10 +167,12 @@ def remove_person_speech_sample(uid: str, person_id: str, sample_path: str) -> b
     if not person_doc.exists:
         return False
 
-    person_ref.update({
-        'speech_samples': firestore.ArrayRemove([sample_path]),
-        'updated_at': datetime.now(timezone.utc),
-    })
+    person_ref.update(
+        {
+            'speech_samples': firestore.ArrayRemove([sample_path]),
+            'updated_at': datetime.now(timezone.utc),
+        }
+    )
     return True
 
 
@@ -252,6 +255,10 @@ def delete_user_data(uid: str):
                 print(f"Processed all documents in {collection_ref.path}")
                 break
 
+    # delete private cloud sync recordings from GCS
+    print(f"Deleting private cloud sync data for user: {uid}")
+    delete_all_user_private_cloud_sync_data(uid)
+
     # delete the user document itself
     print(f"Deleting user document: {uid}")
     user_ref.delete()
@@ -294,12 +301,12 @@ def get_all_ratings(rating_type: str = 'memory_summary'):
 def set_chat_message_rating_score(uid: str, message_id: str, value: int, reason: str = None):
     """
     Store chat message rating/feedback.
-    
+
     Args:
         uid: User ID
         message_id: Message ID being rated
         value: Rating value (1 = thumbs up, -1 = thumbs down, 0 = neutral/removed)
-        reason: Optional reason for thumbs down (e.g. 'too_verbose', 'incorrect_or_hallucination', 
+        reason: Optional reason for thumbs down (e.g. 'too_verbose', 'incorrect_or_hallucination',
                 'not_helpful_or_irrelevant', 'didnt_follow_instructions', 'other')
     """
     doc_id = document_id_from_seed('chat_message' + message_id)
