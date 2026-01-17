@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+
+import 'package:provider/provider.dart';
+
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/widgets/animated_loading_button.dart';
-import 'package:provider/provider.dart';
-
 import '../../utils/other/validators.dart';
 
 class PaypalSetupPage extends StatefulWidget {

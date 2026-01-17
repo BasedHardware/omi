@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/env/env.dart';
@@ -28,7 +27,15 @@ Future<List<ServerMessage>> getMessagesServer({
       return [];
     }
     var messages = decodedBody.map((conversation) => ServerMessage.fromJson(conversation)).toList();
-    debugPrint('getMessages length: ${messages.length}');
+    Logger.debug('getMessages length: ${messages.length}');
+    // Debug: Check if any messages have ratings
+    var ratedMessages = messages.where((m) => m.rating != null).toList();
+    if (ratedMessages.isNotEmpty) {
+      Logger.debug('📊 Messages with ratings: ${ratedMessages.length}');
+      for (var m in ratedMessages) {
+        Logger.debug('  - Message ${m.id}: rating=${m.rating}');
+      }
+    }
     return messages;
   }
   return [];
@@ -142,14 +149,14 @@ Future<List<MessageFile>?> uploadFilesServer(List<File> files, {String? appId}) 
     );
 
     if (response.statusCode == 200) {
-      debugPrint('uploadFileServer response body: ${jsonDecode(response.body)}');
+      Logger.debug('uploadFileServer response body: ${jsonDecode(response.body)}');
       return MessageFile.fromJsonList(jsonDecode(response.body));
     } else {
-      debugPrint('Failed to upload file. Status code: ${response.statusCode} ${response.body}');
+      Logger.debug('Failed to upload file. Status code: ${response.statusCode} ${response.body}');
       throw Exception('Failed to upload file. Status code: ${response.statusCode}');
     }
   } catch (e) {
-    debugPrint('An error occurred uploadFileServer: $e');
+    Logger.debug('An error occurred uploadFileServer: $e');
     throw Exception('An error occurred uploadFileServer: $e');
   }
 }
@@ -178,11 +185,11 @@ Future<String> transcribeVoiceMessage(File audioFile) async {
       final data = jsonDecode(response.body);
       return data['transcript'] ?? '';
     } else {
-      debugPrint('Failed to transcribe voice message: ${response.statusCode} ${response.body}');
+      Logger.debug('Failed to transcribe voice message: ${response.statusCode} ${response.body}');
       throw Exception('Failed to transcribe voice message');
     }
   } catch (e) {
-    debugPrint('Error transcribing voice message: $e');
+    Logger.debug('Error transcribing voice message: $e');
     throw Exception('Error transcribing voice message: $e');
   }
 }

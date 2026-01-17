@@ -1,6 +1,9 @@
 import 'package:flutter/foundation.dart';
-import 'package:omi/backend/http/api/task_integrations.dart';
+
 import 'package:url_launcher/url_launcher.dart';
+
+import 'package:omi/backend/http/api/task_integrations.dart';
+import 'package:omi/utils/logger.dart';
 
 class AsanaService {
   static final AsanaService _instance = AsanaService._internal();
@@ -25,16 +28,16 @@ class AsanaService {
     try {
       final authUrl = await getOAuthUrl('asana');
       if (authUrl == null) {
-        debugPrint('Failed to get Asana OAuth URL from backend');
+        Logger.debug('Failed to get Asana OAuth URL from backend');
         return false;
       }
 
       final authUri = Uri.parse(authUrl);
-      debugPrint('Opening Asana auth URL');
+      Logger.debug('Opening Asana auth URL');
 
       final canLaunch = await canLaunchUrl(authUri);
       if (!canLaunch) {
-        debugPrint('Cannot launch auth URL');
+        Logger.debug('Cannot launch auth URL');
         return false;
       }
 
@@ -45,7 +48,7 @@ class AsanaService {
 
       return true;
     } catch (e) {
-      debugPrint('Error starting Asana authentication: $e');
+      Logger.debug('Error starting Asana authentication: $e');
       return false;
     }
   }
@@ -54,7 +57,7 @@ class AsanaService {
   Future<bool> handleCallback({String? userGid}) async {
     _isAuthenticated = true;
     _userGid = userGid;
-    debugPrint('Asana authentication successful');
+    Logger.debug('Asana authentication successful');
     return true;
   }
 
@@ -64,7 +67,7 @@ class AsanaService {
       final workspaces = await getAsanaWorkspaces();
       return workspaces ?? [];
     } catch (e) {
-      debugPrint('Error fetching Asana workspaces: $e');
+      Logger.debug('Error fetching Asana workspaces: $e');
       return [];
     }
   }
@@ -74,11 +77,11 @@ class AsanaService {
     try {
       final projects = await getAsanaProjects(workspaceGid);
       if (projects != null && projects.isNotEmpty) {
-        debugPrint('✓ Found ${projects.length} projects');
+        Logger.debug('✓ Found ${projects.length} projects');
       }
       return projects ?? [];
     } catch (e) {
-      debugPrint('Error fetching Asana projects: $e');
+      Logger.debug('Error fetching Asana projects: $e');
       return [];
     }
   }
@@ -98,14 +101,14 @@ class AsanaService {
       );
 
       if (result != null && result['success'] == true) {
-        debugPrint('Task created successfully in Asana');
+        Logger.debug('Task created successfully in Asana');
         return true;
       }
 
-      debugPrint('Failed to create task in Asana: ${result?['error']}');
+      Logger.debug('Failed to create task in Asana: ${result?['error']}');
       return false;
     } catch (e) {
-      debugPrint('Error creating task in Asana: $e');
+      Logger.debug('Error creating task in Asana: $e');
       return false;
     }
   }
@@ -116,9 +119,9 @@ class AsanaService {
       await deleteTaskIntegration('asana');
       _isAuthenticated = false;
       _userGid = null;
-      debugPrint('Disconnected from Asana');
+      Logger.debug('Disconnected from Asana');
     } catch (e) {
-      debugPrint('Error disconnecting from Asana: $e');
+      Logger.debug('Error disconnecting from Asana: $e');
     }
   }
 }

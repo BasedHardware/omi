@@ -26,6 +26,8 @@ interface MemoryCardProps {
   isHighlighted?: boolean;
   isSelected?: boolean;
   onToggleSelect?: (id: string) => void;
+  // Double-click to enter selection mode
+  onEnterSelectionMode?: (id: string) => void;
 }
 
 const categoryConfig: Record<MemoryCategory, { icon: React.ReactNode; label: string; color: string }> = {
@@ -56,6 +58,7 @@ export const MemoryCard = memo(function MemoryCard({
   isHighlighted,
   isSelected,
   onToggleSelect,
+  onEnterSelectionMode,
 }: MemoryCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(memory.content);
@@ -116,6 +119,19 @@ export const MemoryCard = memo(function MemoryCard({
     });
   };
 
+  const handleTextDoubleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsEditing(true);
+  };
+
+  const handleCardDoubleClick = () => {
+    // Double-click on card enters selection mode and selects this memory
+    // Only trigger if not already in selection mode and handler is provided
+    if (!onToggleSelect && onEnterSelectionMode) {
+      onEnterSelectionMode(memory.id);
+    }
+  };
+
   return (
     <motion.div
       id={`memory-${memory.id}`}
@@ -125,6 +141,7 @@ export const MemoryCard = memo(function MemoryCard({
       exit={{ opacity: 0, x: -20 }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onDoubleClick={handleCardDoubleClick}
       className={cn(
         'noise-overlay group relative rounded-xl p-4',
         'bg-white/[0.02] border border-white/[0.06]',
@@ -207,7 +224,7 @@ export const MemoryCard = memo(function MemoryCard({
           ) : (
             <div>
               <p
-                onDoubleClick={() => setIsEditing(true)}
+                onDoubleClick={handleTextDoubleClick}
                 title="Double-click to edit"
                 className={cn(
                   'text-sm text-text-primary leading-relaxed',

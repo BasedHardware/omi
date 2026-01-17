@@ -30,6 +30,7 @@ interface VirtualizedConversationListProps {
   hasMore?: boolean;
   onLoadMore?: () => void;
   loading?: boolean;
+  onEnterSelectionMode?: (id: string) => void;
 }
 
 // Memoized conversation card to prevent re-renders
@@ -45,6 +46,7 @@ interface RowProps {
   selectedIds?: Set<string>;
   onSelect?: (id: string) => void;
   mergingIds?: Set<string>;
+  onEnterSelectionMode?: (id: string) => void;
 }
 
 // Row component for react-window v2
@@ -59,6 +61,7 @@ function RowComponent({
   selectedIds,
   onSelect,
   mergingIds,
+  onEnterSelectionMode,
 }: {
   ariaAttributes: {
     'aria-posinset': number;
@@ -99,6 +102,7 @@ function RowComponent({
         isChecked={selectedIds?.has(item.conversation.id) ?? false}
         onSelect={onSelect}
         isMerging={mergingIds?.has(item.conversation.id) ?? false}
+        onEnterSelectionMode={onEnterSelectionMode}
       />
     </div>
   );
@@ -117,6 +121,7 @@ export function VirtualizedConversationList({
   hasMore = false,
   onLoadMore,
   loading = false,
+  onEnterSelectionMode,
 }: VirtualizedConversationListProps) {
   const listRef = useListRef(null);
   const loadMoreTriggeredRef = useRef(false);
@@ -189,8 +194,9 @@ export function VirtualizedConversationList({
       selectedIds,
       onSelect,
       mergingIds,
+      onEnterSelectionMode,
     }),
-    [flatItems, onConversationClick, onStarToggle, selectedId, isSelectionMode, selectedIds, onSelect, mergingIds]
+    [flatItems, onConversationClick, onStarToggle, selectedId, isSelectionMode, selectedIds, onSelect, mergingIds, onEnterSelectionMode]
   );
 
   if (flatItems.length === 0) {

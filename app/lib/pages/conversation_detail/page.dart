@@ -1,11 +1,16 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:omi/utils/l10n_extensions.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:pull_down_button/pull_down_button.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:tuple/tuple.dart';
+
 import 'package:omi/backend/http/api/conversations.dart';
-// import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -17,34 +22,36 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/expandable_text.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/widgets/extensions/string.dart';
-import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:tuple/tuple.dart';
-import 'package:pull_down_button/pull_down_button.dart';
-
 import 'conversation_detail_provider.dart';
-import 'widgets/name_speaker_sheet.dart';
-// import 'share.dart';
 import 'test_prompts.dart';
+import 'widgets/name_speaker_sheet.dart';
+import 'widgets/share_to_contacts_sheet.dart';
+
+// import 'package:omi/backend/preferences.dart';
+
+// import 'share.dart';
 // import 'package:omi/pages/settings/developer.dart';
 // import 'package:omi/backend/http/webhooks.dart';
 
 class ConversationDetailPage extends StatefulWidget {
   final ServerConversation conversation;
   final bool isFromOnboarding;
+  final bool openShareToContactsOnLoad;
   final int initialTabIndex;
 
   const ConversationDetailPage({
     super.key,
     this.isFromOnboarding = false,
     required this.conversation,
+    this.openShareToContactsOnLoad = false,
     this.initialTabIndex = 1, // Default to summary tab
   });
 
@@ -157,7 +164,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
             tabName = 'Action Items';
             break;
           default:
-            debugPrint('Invalid tab index: ${_controller!.index}');
+            Logger.debug('Invalid tab index: ${_controller!.index}');
             selectedTab = ConversationTab.summary;
         }
         if (tabName != null) {
@@ -206,6 +213,15 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
           await _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: true);
         }
       }
+
+      // Auto-open share to contacts sheet if requested (from important conversation notification)
+      if (widget.openShareToContactsOnLoad && mounted) {
+        // Small delay to ensure the page is fully rendered
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (mounted) {
+          _showShareToContactsBottomSheet();
+        }
+      }
     });
     // _animationController = AnimationController(
     //   vsync: this,
@@ -213,8 +229,6 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     // )..repeat(reverse: true);
     //
     // _opacityAnimation = Tween<double>(begin: 1.0, end: 0.5).animate(_animationController);
-
-    super.initState();
   }
 
   @override
@@ -225,6 +239,12 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     _searchController.dispose();
     _searchFocusNode.dispose();
     super.dispose();
+  }
+
+  /// Show the share to contacts bottom sheet
+  void _showShareToContactsBottomSheet() {
+    final provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+    showShareToContactsBottomSheet(context, provider.conversation);
   }
 
   String _getTabTitle(BuildContext context, ConversationTab tab) {
@@ -525,7 +545,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       );
                                     }
                                   } catch (e) {
-                                    debugPrint('Failed to toggle starred status: $e');
+                                    Logger.debug('Failed to toggle starred status: $e');
                                   } finally {
                                     if (mounted) {
                                       setState(() {
@@ -1465,7 +1485,7 @@ class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
           _pendingStates.remove(itemDescription);
         });
       }
-      debugPrint('Error updating action item state: $e');
+      Logger.debug('Error updating action item state: $e');
     }
   }
 }

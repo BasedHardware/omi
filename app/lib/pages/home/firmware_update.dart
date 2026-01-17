@@ -1,13 +1,15 @@
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'firmware_update_dialog.dart';
+
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/pages/home/firmware_mixin.dart';
 import 'package:omi/pages/home/page.dart';
+import 'package:omi/providers/device_provider.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:omi/providers/device_provider.dart';
-import 'package:provider/provider.dart';
+import 'firmware_update_dialog.dart';
 
 class FirmwareUpdate extends StatefulWidget {
   final BtDevice? device;
@@ -56,14 +58,11 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Save reference to provider for safe access in dispose
     _deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
   }
 
   @override
   void dispose() {
-    // Defer the reset to after the frame completes to avoid calling
-    // notifyListeners() while the widget tree is locked
     final provider = _deviceProvider;
     if (provider != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -73,199 +72,259 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
     super.dispose();
   }
 
-  Future<void> _selectLocalFirmwareFile() async {
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['zip'],
-      );
-
-      if (result != null) {
-        String filePath = result.files.single.path!;
-        await startDfu(widget.device!, zipFilePath: filePath);
-      }
-    } catch (e) {
-      debugPrint('Error selecting firmware file: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error selecting firmware file: $e')),
-        );
-      }
-    }
-  }
-
-  Widget _buildProgressSection() {
-    return Card(
-      color: Colors.black.withOpacity(0.2),
-      elevation: 2.0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.white.withOpacity(0.1)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+  Widget _buildSectionHeader(String title, {String? subtitle}) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, right: 4, bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 6),
             Text(
-              isDownloading ? 'Downloading Firmware' : 'Installing Firmware',
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '${isDownloading ? downloadProgress : installProgress}%',
-              style: const TextStyle(
-                fontSize: 36,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Stack(
-              children: [
-                Container(
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-                LayoutBuilder(builder: (context, constraints) {
-                  return AnimatedContainer(
-                    duration: const Duration(milliseconds: 300),
-                    height: 8,
-                    width: constraints.maxWidth * ((isInstalling ? installProgress : downloadProgress) / 100),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.purpleAccent.shade100,
-                          Colors.deepPurple.shade300,
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  );
-                }),
-              ],
-            ),
-            const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.yellow.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.yellow.withOpacity(0.3)),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.warning_rounded, color: Colors.yellow, size: 24),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Please do not close the app or turn off the device.\nIt could result in a corrupted device.',
-                      style: TextStyle(
-                        color: Colors.yellow,
-                        fontSize: 14,
-                        height: 1.4,
-                      ),
-                    ),
-                  ),
-                ],
+              subtitle,
+              style: TextStyle(
+                color: Colors.grey.shade400,
+                fontSize: 14,
               ),
             ),
           ],
-        ),
+        ],
       ),
     );
   }
 
-  Widget _buildSuccessSection() {
-    return Card(
-      color: Colors.black.withOpacity(0.2),
-      elevation: 2.0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.white.withOpacity(0.1)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.check_circle_outline_rounded,
-              color: Colors.green,
-              size: 64,
+  Widget _buildVersionItem({
+    required IconData icon,
+    required String label,
+    required String version,
+    Color? iconColor,
+    Color? chipColor,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      child: Row(
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 5),
+            child: SizedBox(
+              width: 24,
+              height: 24,
+              child: FaIcon(icon, color: iconColor ?? const Color(0xFF8E8E93), size: 18),
             ),
-            const SizedBox(height: 16),
-            const Text(
-              'Firmware Updated Successfully',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
                 color: Colors.white,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Please restart your ${widget.device?.name ?? "Omi device"} to complete the update',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.white.withOpacity(0.8),
+                fontSize: 17,
+                fontWeight: FontWeight.w400,
               ),
             ),
-            const SizedBox(height: 24),
-            Container(
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [
-                    Color.fromARGB(127, 208, 208, 208),
-                    Color.fromARGB(127, 188, 99, 121),
-                    Color.fromARGB(127, 86, 101, 182),
-                    Color.fromARGB(127, 126, 190, 236),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Container(
-                margin: const EdgeInsets.all(2),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: TextButton(
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  onPressed: () async {
-                    // Reset firmware update state before navigating
-                    final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
-                    deviceProvider.resetFirmwareUpdateState();
-                    routeToPage(context, const HomePageWrapper(), replace: true);
-                  },
-                  child: const Text(
-                    "Done",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: chipColor ?? const Color(0xFF2A2A2E),
+              borderRadius: BorderRadius.circular(100),
+            ),
+            child: Text(
+              version,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildProgressSection() {
+    final progress = isInstalling ? installProgress : downloadProgress;
+    final statusText = isDownloading ? 'Downloading Firmware' : 'Installing Firmware';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: const Color(0xFF1C1C1E),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              children: [
+                // Progress circle
+                SizedBox(
+                  width: 120,
+                  height: 120,
+                  child: Stack(
+                    children: [
+                      SizedBox(
+                        width: 120,
+                        height: 120,
+                        child: CircularProgressIndicator(
+                          value: progress / 100,
+                          strokeWidth: 8,
+                          backgroundColor: const Color(0xFF2A2A2E),
+                          valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      ),
+                      Center(
+                        child: Text(
+                          '$progress%',
+                          style: const TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  statusText,
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        // Warning card
+        Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF2A2215),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFF4A3D1A)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                const FaIcon(
+                  FontAwesomeIcons.triangleExclamation,
+                  color: Color(0xFFFFB800),
+                  size: 18,
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    'Do not close the app or turn off the device. This could corrupt your device.',
+                    style: TextStyle(
+                      color: Colors.orange.shade200,
+                      fontSize: 14,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSuccessSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF1C1C1E),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              children: [
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1A3D2E),
+                    borderRadius: BorderRadius.circular(40),
+                  ),
+                  child: const Center(
+                    child: FaIcon(
+                      FontAwesomeIcons.check,
+                      color: Color(0xFF4ADE80),
+                      size: 32,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Firmware Updated',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Please restart your ${widget.device?.name ?? "Omi device"} to complete the update.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: Colors.grey.shade400,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+        // Done button
+        GestureDetector(
+          onTap: () {
+            final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+            deviceProvider.resetFirmwareUpdateState();
+            routeToPage(context, const HomePageWrapper(), replace: true);
+          },
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Center(
+              child: Text(
+                'Done',
+                style: TextStyle(
+                  color: Colors.black,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -273,235 +332,238 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
     dynamic changelogData = latestFirmwareDetails['changelog'];
     bool hasChangelog = changelogData != null && changelogData is List && (List<String>.from(changelogData)).isNotEmpty;
 
-    return Card(
-      color: Colors.black.withOpacity(0.2),
-      elevation: 2.0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.white.withOpacity(0.1)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              crossAxisAlignment: CrossAxisAlignment.center,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Up to date status (only when not needing update)
+        if (!shouldUpdate) ...[
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 12),
+            child: Row(
               children: [
-                Column(
-                  children: [
-                    Text(
-                      'Current Version',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.white.withOpacity(0.6),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Icon(Icons.memory, size: 20, color: Colors.deepPurple.shade100),
-                        const SizedBox(width: 8),
-                        Text(
-                          widget.device!.firmwareRevision,
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                if (latestFirmwareDetails['version'] != null) ...[
-                  Icon(Icons.arrow_forward_ios_rounded, size: 20, color: Colors.white.withOpacity(0.4)),
-                  Column(
-                    children: [
-                      Text(
-                        'Latest Version',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.white.withOpacity(0.6),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Icon(Icons.system_update_alt_rounded, size: 20, color: Colors.purpleAccent.shade100),
-                          const SizedBox(width: 8),
-                          Text(
-                            '${latestFirmwareDetails['version']}',
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                Text(
+                  'Your device is up to date',
+                  style: TextStyle(
+                    color: Colors.grey.shade400,
+                    fontSize: 14,
                   ),
-                ],
+                ),
+                const SizedBox(width: 8),
+                const FaIcon(
+                  FontAwesomeIcons.circleCheck,
+                  color: Color(0xFF4ADE80),
+                  size: 14,
+                ),
               ],
             ),
-            const SizedBox(height: 24),
-            if (hasChangelog) ...[
-              Theme(
-                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                child: ExpansionTile(
-                  iconColor: Colors.white.withOpacity(0.6),
-                  collapsedIconColor: Colors.white.withOpacity(0.6),
-                  tilePadding: EdgeInsets.zero,
-                  title: Text(
-                    'View Changelog',
+          ),
+        ],
+        // Version cards
+        Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF1C1C1E),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Column(
+            children: [
+              _buildVersionItem(
+                icon: FontAwesomeIcons.microchip,
+                label: 'Current Version',
+                version: widget.device!.firmwareRevision,
+                chipColor: shouldUpdate ? const Color(0xFF3D2A2A) : null,
+              ),
+              if (shouldUpdate && latestFirmwareDetails['version'] != null) ...[
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                _buildVersionItem(
+                  icon: FontAwesomeIcons.cloudArrowDown,
+                  label: 'Latest Version',
+                  version: '${latestFirmwareDetails['version']}',
+                  chipColor: const Color(0xFF1A3D2E),
+                ),
+              ],
+            ],
+          ),
+        ),
+
+        // Changelog
+        if (hasChangelog) ...[
+          const SizedBox(height: 24),
+          _buildSectionHeader("What's New"),
+          Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF1C1C1E),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ...(List<String>.from(changelogData)).map((change) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              margin: const EdgeInsets.only(top: 6),
+                              width: 6,
+                              height: 6,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade500,
+                                borderRadius: BorderRadius.circular(3),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                change,
+                                style: TextStyle(
+                                  color: Colors.grey.shade300,
+                                  fontSize: 15,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )),
+                ],
+              ),
+            ),
+          ),
+        ],
+
+        const SizedBox(height: 24),
+
+        // Action buttons
+        if (shouldUpdate) ...[
+          // Update button
+          GestureDetector(
+            onTap: () async {
+              final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+              deviceProvider.setFirmwareUpdateInProgress(true);
+
+              if (otaUpdateSteps.isEmpty) {
+                await downloadFirmware();
+                await startDfu(widget.device!);
+              } else {
+                showFirmwareUpdateSheet(
+                  context: context,
+                  steps: otaUpdateSteps,
+                  onUpdateStart: () async {
+                    await downloadFirmware();
+                    await startDfu(widget.device!);
+                  },
+                );
+              }
+            },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const FaIcon(
+                    FontAwesomeIcons.download,
+                    color: Colors.black,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    otaUpdateSteps.isEmpty ? 'Install Update' : 'Update Now',
+                    style: const TextStyle(
+                      color: Colors.black,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+
+        // Help link
+        if (!shouldUpdate) ...[
+          const SizedBox(height: 12),
+          GestureDetector(
+            onTap: () async {
+              await IntercomManager.instance.displayFirmwareUpdateArticle();
+            },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1C1C1E),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  FaIcon(
+                    FontAwesomeIcons.circleQuestion,
+                    color: Colors.grey.shade400,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Update Guide',
                     style: TextStyle(
-                      color: Colors.deepPurple.shade50,
-                      fontSize: 16,
+                      color: Colors.grey.shade400,
+                      fontSize: 15,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8.0, bottom: 16.0, left: 16.0, right: 16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          ...(List<String>.from(changelogData)).map((change) => Padding(
-                                padding: const EdgeInsets.only(bottom: 6.0),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Padding(
-                                      padding: const EdgeInsets.only(right: 10.0, top: 5.0),
-                                      child:
-                                          Icon(Icons.fiber_manual_record, size: 8, color: Colors.deepPurple.shade100),
-                                    ),
-                                    Expanded(
-                                      child: Text(
-                                        change,
-                                        style:
-                                            TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 14, height: 1.3),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              )),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+                ],
               ),
-              const SizedBox(height: 16),
-            ],
-            if (updateMessage != '0') ...[
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white.withOpacity(0.1))),
-                child: Row(
-                  children: [
-                    Icon(Icons.info_outline_rounded, color: Colors.purpleAccent.shade100, size: 20),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        updateMessage,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          height: 1.4,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-            ],
-            if (updateMessage == '0') ...[
-              TextButton.icon(
-                onPressed: () async {
-                  await IntercomManager.instance.displayFirmwareUpdateArticle();
-                },
-                icon: Icon(Icons.help_outline, color: Colors.white.withOpacity(0.8)),
-                label: Text(
-                  'Open Update Guide',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.8),
-                    fontSize: 15,
-                    decoration: TextDecoration.underline,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
-            if (shouldUpdate) ...[
-              const SizedBox(height: 16),
-              Container(
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [
-                      Color.fromARGB(127, 208, 208, 208),
-                      Color.fromARGB(127, 188, 99, 121),
-                      Color.fromARGB(127, 86, 101, 182),
-                      Color.fromARGB(127, 126, 190, 236),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Container(
-                  margin: const EdgeInsets.all(2),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primary,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: TextButton(
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    onPressed: () async {
-                      // Set firmware update in progress when starting update
-                      final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
-                      deviceProvider.setFirmwareUpdateInProgress(true);
+            ),
+          ),
+        ],
+      ],
+    );
+  }
 
-                      if (otaUpdateSteps.isEmpty) {
-                        await downloadFirmware();
-                        await startDfu(widget.device!);
-                      } else {
-                        showDialog(
-                          context: context,
-                          builder: (context) => FirmwareUpdateDialog(
-                            steps: otaUpdateSteps,
-                            onUpdateStart: () async {
-                              await downloadFirmware();
-                              await startDfu(widget.device!);
-                            },
-                          ),
-                        );
-                      }
-                    },
-                    child: Text(
-                      otaUpdateSteps.isEmpty ? "Start Update" : "Update",
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
+  Widget _buildLoadingSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader('Checking for Updates', subtitle: 'Please wait...'),
+        Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF1C1C1E),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: const Padding(
+            padding: EdgeInsets.all(48),
+            child: Center(
+              child: Column(
+                children: [
+                  SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 3,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                     ),
                   ),
-                ),
+                  SizedBox(height: 20),
+                  Text(
+                    'Checking firmware version...',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ],
+            ),
+          ),
         ),
-      ),
+      ],
     );
   }
 
@@ -510,37 +572,36 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
     return PopScope(
       canPop: !isDownloading && !isInstalling,
       child: Scaffold(
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        backgroundColor: const Color(0xFF0D0D0D),
         appBar: AppBar(
+          backgroundColor: const Color(0xFF0D0D0D),
+          elevation: 0,
+          leading: (isDownloading || isInstalling)
+              ? const SizedBox()
+              : IconButton(
+                  icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
           title: const Text(
             'Firmware Update',
-            style: TextStyle(fontWeight: FontWeight.w600),
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+            ),
           ),
-          backgroundColor: Colors.transparent,
-          elevation: 0,
+          centerTitle: true,
         ),
         body: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: isLoading
-                  ? Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const CircularProgressIndicator(color: Colors.white),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Checking for updates...',
-                          style: TextStyle(color: Colors.white.withOpacity(0.8)),
-                        ),
-                      ],
-                    )
-                  : isDownloading || isInstalling
-                      ? _buildProgressSection()
-                      : isInstalled
-                          ? _buildSuccessSection()
-                          : _buildUpdateSection(),
-            ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: isLoading
+                ? _buildLoadingSection()
+                : isDownloading || isInstalling
+                    ? _buildProgressSection()
+                    : isInstalled
+                        ? _buildSuccessSection()
+                        : _buildUpdateSection(),
           ),
         ),
       ),

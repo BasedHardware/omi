@@ -1,38 +1,41 @@
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:shimmer/shimmer.dart';
-import 'package:omi/pages/apps/app_home_web_page.dart';
-import 'package:collection/collection.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:omi/pages/apps/widgets/full_screen_image_viewer.dart';
+
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:shimmer/shimmer.dart';
+import 'package:skeletonizer/skeletonizer.dart';
+import 'package:timeago/timeago.dart' as timeago;
+import 'package:url_launcher/url_launcher.dart';
+
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/apps/app_detail/reviews_list_page.dart';
+import 'package:omi/pages/apps/app_home_web_page.dart';
 import 'package:omi/pages/apps/markdown_viewer.dart';
-import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
+import 'package:omi/pages/apps/widgets/full_screen_image_viewer.dart';
+import 'package:omi/pages/chat/page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/animated_loading_button.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
-import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:skeletonizer/skeletonizer.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'dart:async';
-
-import '../../../backend/schema/app.dart';
 import '../../../backend/http/api/payment.dart';
+import '../../../backend/schema/app.dart';
 import '../widgets/show_app_options_sheet.dart';
 import 'widgets/capabilities_card.dart';
 import 'widgets/info_card_widget.dart';
-import 'package:timeago/timeago.dart' as timeago;
 
 class AppDetailPage extends StatefulWidget {
   final App app;
@@ -118,13 +121,13 @@ class _AppDetailPageState extends State<AppDetailPage> {
     return '$day $month ${date.year}';
   }
 
-  checkSetupCompleted() {
+  checkSetupCompleted({bool autoInstallIfCompleted = false}) {
     // TODO: move check to backend
     isAppSetupCompleted(app.externalIntegration!.setupCompletedUrl).then((value) {
       if (mounted) {
         setState(() => setupCompleted = value);
 
-        if (value && !app.enabled) {
+        if (autoInstallIfCompleted && value && !app.enabled) {
           _tryAutoInstallAfterSetup();
         }
       }
@@ -280,12 +283,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
           });
         }
       }
-      // Always check setup completed status when there are auth steps
-      if (app.externalIntegration?.authSteps.isNotEmpty == true) {
-        checkSetupCompleted();
-      } else if (!app.enabled) {
-        checkSetupCompleted();
-      }
     }
 
     super.initState();
@@ -374,7 +371,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
           timer.cancel();
           _paymentCheckTimer?.cancel();
         } else {
-          debugPrint('Payment not made yet');
+          Logger.debug('Payment not made yet');
         }
       }
     });
@@ -403,6 +400,13 @@ class _AppDetailPageState extends State<AppDetailPage> {
         title: 'Read Memories',
         type: 'Access',
         description: 'This app can access your memories.',
+      ));
+    }
+    if (actions.any((a) => a.action == 'read_tasks')) {
+      permissionItems.add(_PermissionItem(
+        title: 'Read Tasks',
+        type: 'Access',
+        description: 'This app can access your tasks.',
       ));
     }
 
@@ -1336,7 +1340,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   return;
                                 }
                                 await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
-                                checkSetupCompleted();
+                                checkSetupCompleted(autoInstallIfCompleted: true);
                               },
                               child: Padding(
                                 padding: const EdgeInsets.all(16.0),

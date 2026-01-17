@@ -7,6 +7,7 @@ import 'package:omi/core/app_shell.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/pages/settings/developer.dart';
+import 'package:omi/pages/settings/notifications_settings_page.dart';
 import 'package:omi/pages/settings/profile.dart';
 import 'package:omi/pages/settings/integrations_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
@@ -309,24 +310,33 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
           // Profile & Notifications Section
           _buildSectionContainer(
             children: [
-              _buildSettingsItem(
-                title: context.l10n.wrapped2025,
-                icon: const FaIcon(FontAwesomeIcons.gift, color: Color(0xFF8E8E93), size: 20),
-                showNewTag: true,
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const Wrapped2025Page(),
-                    ),
-                  );
-                },
-              ),
-              const Divider(height: 1, color: Color(0xFF3C3C43)),
+              // Wrapped 2025 - temporarily disabled
+              // _buildSettingsItem(
+              //   title: context.l10n.wrapped2025,
+              //   icon: const FaIcon(FontAwesomeIcons.gift, color: Color(0xFF8E8E93), size: 20),
+              //   showNewTag: true,
+              //   onTap: () {
+              //     Navigator.of(context).push(
+              //       MaterialPageRoute(
+              //         builder: (context) => const Wrapped2025Page(),
+              //       ),
+              //     );
+              //   },
+              // ),
+              // const Divider(height: 1, color: Color(0xFF3C3C43)),
               _buildSettingsItem(
                 title: context.l10n.profile,
                 icon: const FaIcon(FontAwesomeIcons.solidUser, color: Color(0xFF8E8E93), size: 20),
                 onTap: () {
                   routeToPage(context, const ProfilePage());
+                },
+              ),
+              const Divider(height: 1, color: Color(0xFF3C3C43)),
+              _buildSettingsItem(
+                title: 'Notifications',
+                icon: const FaIcon(FontAwesomeIcons.solidBell, color: Color(0xFF8E8E93), size: 20),
+                onTap: () {
+                  routeToPage(context, const NotificationsSettingsPage());
                 },
               ),
               const Divider(height: 1, color: Color(0xFF3C3C43)),

@@ -55,6 +55,8 @@ from utils.apps import (
     get_available_apps,
     get_available_app_by_id,
     get_approved_available_apps,
+    invalidate_approved_apps_cache,
+    invalidate_popular_apps_cache,
     get_available_app_by_id_with_reviews,
     set_app_review,
     get_app_reviews,
@@ -89,7 +91,7 @@ from utils.llm.persona import generate_persona_intro_message
 from utils.llm.app_generator import generate_description
 from utils.notifications import send_notification, send_app_review_reply_notification, send_new_app_review_notification
 from utils.other import endpoints as auth
-from models.app import App, ActionType, AppCreate, AppUpdate
+from models.app import App, ActionType, AppCreate, AppUpdate, AppBaseModel
 from utils.other.storage import upload_app_logo, delete_app_logo, upload_app_thumbnail, get_app_thumbnail_url
 from utils.social import (
     get_twitter_profile,
@@ -128,9 +130,10 @@ def _get_categories():
 # ******************************************************
 
 
-@router.get('/v1/apps', tags=['v1'], response_model=List[App])
+@router.get('/v1/apps', tags=['v1'], response_model=List[AppBaseModel])
 def get_apps(uid: str = Depends(auth.get_current_user_uid), include_reviews: bool = True):
-    return get_available_apps(uid, include_reviews=include_reviews)
+    apps = get_available_apps(uid, include_reviews=include_reviews)
+    return [normalize_app_numeric_fields(app.to_reduced_dict()) for app in apps]
 
 
 @router.get('/v2/apps', tags=['v2'])
@@ -173,7 +176,7 @@ def get_apps_v2(
         page = paginate_apps(sorted_apps, offset, limit)
 
         res = {
-            'data': [normalize_app_numeric_fields(app.model_dump(mode='json')) for app in page],
+            'data': [normalize_app_numeric_fields(app.to_reduced_dict()) for app in page],
             'pagination': build_pagination_metadata(len(sorted_apps), offset, limit, capability),
             'capability': {
                 'id': capability,
@@ -343,7 +346,7 @@ def search_apps(
     page = paginate_apps(filtered_apps, offset, limit)
 
     return {
-        'data': [normalize_app_numeric_fields(app.model_dump()) for app in page],
+        'data': [normalize_app_numeric_fields(app.to_reduced_dict()) for app in page],
         'pagination': build_pagination_metadata(total, offset, limit),
         'filters': {
             'query': q,
@@ -357,18 +360,20 @@ def search_apps(
     }
 
 
-@router.get('/v1/approved-apps', tags=['v1'], response_model=List[App])
+@router.get('/v1/approved-apps', tags=['v1'], response_model=List[AppBaseModel])
 def get_approved_apps(include_reviews: bool = False):
     apps = get_approved_available_apps(include_reviews=include_reviews)
     # Always exclude persona type apps
-    return [app for app in apps if not app.is_a_persona()]
+    filtered_apps = [app for app in apps if not app.is_a_persona()]
+    return [normalize_app_numeric_fields(app.to_reduced_dict()) for app in filtered_apps]
 
 
-@router.get('/v1/apps/popular', tags=['v1'], response_model=List[App])
+@router.get('/v1/apps/popular', tags=['v1'], response_model=List[AppBaseModel])
 def get_popular_apps_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     apps = get_popular_apps()
     # Always exclude persona type apps
-    return [app for app in apps if not app.is_a_persona()]
+    filtered_apps = [app for app in apps if not app.is_a_persona()]
+    return [normalize_app_numeric_fields(app.to_reduced_dict()) for app in filtered_apps]
 
 
 @router.post('/v1/apps', tags=['v1'])
@@ -425,7 +430,6 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     img_url = upload_app_logo(file_path, data['id'])
     data['image'] = img_url
     data['created_at'] = datetime.now(timezone.utc)
-
     # Backward compatibility: Set app_home_url from first auth step if not provided
     if 'external_integration' in data:
         ext_int = data['external_integration']
@@ -551,7 +555,7 @@ async def update_persona(
     update_app_in_db(update_app.model_dump(exclude_unset=True))
 
     if persona['approved'] and (persona['private'] is None or persona['private'] is False):
-        delete_generic_cache('get_public_approved_apps_data')
+        invalidate_approved_apps_cache()
     delete_app_cache_by_id(persona_id)
     return {'status': 'ok', 'app_id': persona_id, 'username': data['username']}
 
@@ -703,7 +707,7 @@ def update_app(
     )
 
     if app['approved'] and (app['private'] is None or app['private'] is False):
-        delete_generic_cache('get_public_approved_apps_data')
+        invalidate_approved_apps_cache()
     delete_app_cache_by_id(app_id)
     return {'status': 'ok'}
 
@@ -717,7 +721,7 @@ def delete_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     delete_app_from_db(app_id)
     if app['approved']:
-        delete_generic_cache('get_public_approved_apps_data')
+        invalidate_approved_apps_cache()
     delete_app_cache_by_id(app_id)
     return {'status': 'ok'}
 
@@ -955,6 +959,12 @@ def get_app_capabilities():
                     'id': 'read_memories',
                     'doc_url': 'https://docs.omi.me/doc/developer/apps/Import',
                     'description': 'Access and read all user memories through the OMI System. This gives the app access to all stored memories.',
+                },
+                {
+                    'title': 'Read tasks',
+                    'id': 'read_tasks',
+                    'doc_url': 'https://docs.omi.me/doc/developer/apps/Import',
+                    'description': 'Access and read all user tasks (to-dos) through the OMI System. This gives the app access to all stored tasks.',
                 },
             ],
         },
@@ -1384,7 +1394,7 @@ def set_app_popular(app_id: str, value: bool = Query(...), secret_key: str = Hea
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     set_app_popular_db(app_id, value)
     delete_app_cache_by_id(app_id)
-    delete_generic_cache('get_popular_apps_data')
+    invalidate_popular_apps_cache()
     return {'status': 'ok'}
 
 
@@ -1393,6 +1403,7 @@ def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     change_app_approval_status(app_id, True)
+    invalidate_approved_apps_cache()  # App is now public, invalidate cache
     delete_app_cache_by_id(app_id)
     app = get_available_app_by_id(app_id, uid)
     send_notification(
@@ -1408,6 +1419,7 @@ def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     change_app_approval_status(app_id, False)
+    invalidate_approved_apps_cache()  # App removed from public list, invalidate cache
     delete_app_cache_by_id(app_id)
     app = get_available_app_by_id(app_id, uid)
     # TODO: Add reason for rejection in payload and also redirect to the app page

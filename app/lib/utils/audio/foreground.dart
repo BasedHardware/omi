@@ -2,8 +2,11 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
+
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
 @pragma('vm:entry-point')
@@ -16,7 +19,7 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
 
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter taskStarter) async {
-    debugPrint("Starting foreground task");
+    Logger.debug("Starting foreground task");
     _locationInBackground();
   }
 
@@ -48,19 +51,19 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
 
   @override
   void onReceiveData(Object data) async {
-    debugPrint('onReceiveData: $data');
+    Logger.debug('onReceiveData: $data');
     await _locationInBackground();
   }
 
   @override
   void onRepeatEvent(DateTime timestamp) async {
-    debugPrint("Foreground repeat event triggered");
+    Logger.debug("Foreground repeat event triggered");
     await _locationInBackground();
   }
 
   @override
   Future<void> onDestroy(DateTime timestamp, bool isTimeout) async {
-    debugPrint("Destroying foreground task");
+    Logger.debug("Destroying foreground task");
     FlutterForegroundTask.stopService();
   }
 }
@@ -95,7 +98,7 @@ class ForegroundUtil {
     if (PlatformService.isDesktop) return;
 
     if (_isInitialized) {
-      debugPrint('ForegroundService already initialized, skipping');
+      Logger.debug('ForegroundService already initialized, skipping');
       return;
     }
 
@@ -104,7 +107,7 @@ class ForegroundUtil {
       return;
     }
 
-    debugPrint('initializeForegroundService');
+    Logger.debug('initializeForegroundService');
 
     try {
       FlutterForegroundTask.init(
@@ -129,14 +132,14 @@ class ForegroundUtil {
           // such as 1m + self-validation in each service.
           eventAction: ForegroundTaskEventAction.repeat(60 * 1000 * 5),
           autoRunOnBoot: false,
-          allowWakeLock: true,
-          allowWifiLock: true,
+          allowWakeLock: false,
+          allowWifiLock: false,
         ),
       );
       _isInitialized = true;
-      debugPrint('ForegroundService initialized successfully');
+      Logger.debug('ForegroundService initialized successfully');
     } catch (e) {
-      debugPrint('ForegroundService initialization failed: $e');
+      Logger.debug('ForegroundService initialization failed: $e');
       _isInitialized = false;
     }
   }
@@ -145,12 +148,12 @@ class ForegroundUtil {
     if (PlatformService.isDesktop) return const ServiceRequestSuccess();
 
     if (_isStarting) {
-      debugPrint('ForegroundTask already starting, skipping');
+      Logger.debug('ForegroundTask already starting, skipping');
       return const ServiceRequestSuccess();
     }
 
     _isStarting = true;
-    debugPrint('startForegroundTask');
+    Logger.debug('startForegroundTask');
 
     try {
       ServiceRequestResult result;
@@ -163,10 +166,10 @@ class ForegroundUtil {
           callback: _startForegroundCallback,
         );
       }
-      debugPrint('ForegroundTask started successfully');
+      Logger.debug('ForegroundTask started successfully');
       return result;
     } catch (e) {
-      debugPrint('ForegroundTask start failed: $e');
+      Logger.debug('ForegroundTask start failed: $e');
       return ServiceRequestFailure(error: e.toString());
     } finally {
       _isStarting = false;
@@ -175,7 +178,7 @@ class ForegroundUtil {
 
   static Future<void> stopForegroundTask() async {
     if (PlatformService.isDesktop) return;
-    debugPrint('stopForegroundTask');
+    Logger.debug('stopForegroundTask');
 
     try {
       if (await FlutterForegroundTask.isRunningService) {
@@ -183,7 +186,7 @@ class ForegroundUtil {
         _isInitialized = false;
       }
     } catch (e) {
-      debugPrint('ForegroundTask stop failed: $e');
+      Logger.debug('ForegroundTask stop failed: $e');
     }
   }
 }

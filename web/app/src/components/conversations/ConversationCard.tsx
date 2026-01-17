@@ -20,6 +20,8 @@ interface ConversationCardProps {
   isChecked?: boolean;
   onSelect?: (id: string) => void;
   isMerging?: boolean;
+  // Double-click to enter selection mode
+  onEnterSelectionMode?: (id: string) => void;
 }
 
 export const ConversationCard = memo(function ConversationCard({
@@ -32,6 +34,7 @@ export const ConversationCard = memo(function ConversationCard({
   isChecked = false,
   onSelect,
   isMerging = false,
+  onEnterSelectionMode,
 }: ConversationCardProps) {
   const [isStarred, setIsStarred] = useState(conversation.starred);
   const [isHovered, setIsHovered] = useState(false);
@@ -74,6 +77,13 @@ export const ConversationCard = memo(function ConversationCard({
     }
   };
 
+  const handleDoubleClick = () => {
+    // Double-click enters selection mode and selects this card
+    if (!isSelectionMode && onEnterSelectionMode) {
+      onEnterSelectionMode(conversation.id);
+    }
+  };
+
   return (
     <motion.div
       whileHover={{ y: compact ? 0 : -1 }}
@@ -81,17 +91,18 @@ export const ConversationCard = memo(function ConversationCard({
       onHoverStart={() => setIsHovered(true)}
       onHoverEnd={() => setIsHovered(false)}
       onClick={handleClick}
+      onDoubleClick={handleDoubleClick}
       className={cn(
-        'noise-overlay group relative rounded-xl cursor-pointer',
+        'noise-overlay group relative rounded-xl cursor-pointer overflow-hidden',
         'border transition-all duration-150',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-primary/50',
         'p-4',
         // Checked state in selection mode (purple highlight)
         isChecked
-          ? 'bg-purple-primary/20 border-purple-primary ring-1 ring-purple-primary/50'
+          ? 'bg-purple-primary/20 border-purple-primary shadow-[0_0_0_1px_rgba(139,92,246,0.5)]'
           // Normal selected state (viewing detail)
           : isSelected
-          ? 'bg-purple-primary/10 border-purple-primary/50'
+          ? 'bg-purple-primary/10 border-purple-primary/50 shadow-[0_0_0_1px_rgba(139,92,246,0.3)]'
           : 'bg-white/[0.02] border-white/[0.06] hover:bg-white/[0.05] hover:border-purple-primary/30',
         // Merging state - dim the card
         isMerging && 'opacity-50 pointer-events-none'
@@ -200,28 +211,27 @@ export const ConversationCard = memo(function ConversationCard({
         </div>
       </div>
 
-      {/* New badge */}
-      {isNew && (
+      {/* Processing indicator - inline with category/duration */}
+      {conversation.status === 'processing' && (
+        <div className="flex items-center gap-1.5 mt-2 ml-[46px]">
+          <div className="w-1.5 h-1.5 rounded-full bg-purple-primary animate-pulse" />
+          <span className="text-xs text-text-quaternary">Processing...</span>
+        </div>
+      )}
+
+      {/* New badge - positioned inside card bounds */}
+      {isNew && !conversation.status?.includes('processing') && (
         <motion.div
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
           className={cn(
-            'absolute -top-1 -right-1',
-            'px-2 py-0.5 rounded-full',
-            'bg-purple-primary text-white text-xs font-medium',
-            'animate-pulse'
+            'absolute top-2 right-2',
+            'px-1.5 py-0.5 rounded',
+            'bg-purple-primary/20 text-purple-primary text-[10px] font-medium'
           )}
         >
           New
         </motion.div>
-      )}
-
-      {/* Processing indicator */}
-      {conversation.status === 'processing' && (
-        <div className="flex items-center gap-1.5 mt-2">
-          <div className="w-1.5 h-1.5 rounded-full bg-purple-primary animate-pulse" />
-          <span className="text-xs text-text-quaternary">Processing...</span>
-        </div>
       )}
     </motion.div>
   );

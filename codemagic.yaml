@@ -1047,11 +1047,24 @@ workflows:
     triggering:
       events:
         - tag
+        - push
       tag_patterns:
+        # Only trigger on manual tags
         - pattern: "v*-desktop-cm"
           include: true
         - pattern: "v*-macos-cm"
           include: true
+        - pattern: "v*-desktop-auto"
+          include: false
+      branch_patterns:
+        - pattern: main
+          include: true
+      cancel_previous_builds: true
+    when:
+      changeset:
+        includes:
+          - 'app/lib/desktop/**'
+          - 'app/macos/**'
     working_directory: app
     scripts:
       - name: Set up Firebase
@@ -1102,12 +1115,37 @@ workflows:
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
 
-      - name: Extract version from tag
+      - name: Extract version (from tag or auto-increment)
         script: |
-          # Extract version from tag (supports both -desktop-cm and -macos-cm)
-          BUILD_NAME=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\1/')
-          BUILD_NUMBER=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\2/')
-          TAG_NAME="$CM_TAG"
+          # Check if triggered by tag or push
+          if [ -n "$CM_TAG" ]; then
+            # Tag-triggered: extract version from tag (supports both -desktop-cm and -macos-cm)
+            echo "Triggered by tag: $CM_TAG"
+            BUILD_NAME=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\1/')
+            BUILD_NUMBER=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\2/')
+            TAG_NAME="$CM_TAG"
+          else
+            # Push-triggered: extract version from pubspec and auto-increment build number
+            echo "Triggered by push to main, auto-incrementing build number..."
+
+            # Extract version name from pubspec.yaml (source of truth)
+            PUBSPEC_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d ' ')
+            BUILD_NAME=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f1)  # e.g., "1.0.78"
+
+            # Get latest build number from GitHub releases for desktop tags and increment
+            LATEST_BUILD=$(gh release list --repo BasedHardware/omi --limit 100 | grep -E 'desktop-cm|macos-cm|desktop-auto' | head -1 | grep -oE '\+[0-9]+' | tr -d '+' || echo "0")
+            if [ -z "$LATEST_BUILD" ] || [ "$LATEST_BUILD" = "0" ]; then
+              # Fallback: try to get build number from release title format "Omi Desktop vX.X.X (BUILD_NUM)"
+              LATEST_BUILD=$(gh release list --repo BasedHardware/omi --limit 100 | grep -i 'desktop\|macos' | head -1 | grep -oE '\([0-9]+\)' | tr -d '()' || echo "0")
+            fi
+            if [ -z "$LATEST_BUILD" ]; then
+              LATEST_BUILD=0
+            fi
+            BUILD_NUMBER=$((LATEST_BUILD + 1))
+            TAG_NAME="v${BUILD_NAME}+${BUILD_NUMBER}-desktop-auto"
+          fi
+
+          echo "Building macOS with version $BUILD_NAME ($BUILD_NUMBER)"
 
           # Export to environment for all subsequent steps
           echo BUILD_NAME="$BUILD_NAME" >> $CM_ENV

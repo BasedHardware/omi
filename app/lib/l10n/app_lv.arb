@@ -1,0 +1,2317 @@
+{
+  "@@locale": "lv",
+  "@@last_modified": "2026-01-13",
+  "appTitle": "Omi",
+  "@appTitle": {
+    "description": "The app title displayed in various places"
+  },
+  "conversationTab": "Saruna",
+  "@conversationTab": {
+    "description": "Tab label for conversation summary"
+  },
+  "transcriptTab": "Transkripcija",
+  "@transcriptTab": {
+    "description": "Tab label for transcript view"
+  },
+  "actionItemsTab": "Uzdevumi",
+  "@actionItemsTab": {
+    "description": "Tab label for action items"
+  },
+  "deleteConversationTitle": "Dzēst sarunu?",
+  "@deleteConversationTitle": {
+    "description": "Title for delete confirmation dialog"
+  },
+  "deleteConversationMessage": "Vai tiešām vēlaties dzēst šo sarunu? Šo darbību nevar atsaukt.",
+  "@deleteConversationMessage": {
+    "description": "Message for delete confirmation dialog"
+  },
+  "confirm": "Apstiprināt",
+  "@confirm": {
+    "description": "Confirm button label"
+  },
+  "cancel": "Atcelt",
+  "@cancel": {
+    "description": "Button label"
+  },
+  "ok": "Labi",
+  "@ok": {
+    "description": "Generic OK button text"
+  },
+  "delete": "Dzēst",
+  "@delete": {
+    "description": "Button label"
+  },
+  "add": "Pievienot",
+  "@add": {
+    "description": "Add button label"
+  },
+  "update": "Atjaunināt",
+  "@update": {
+    "description": "Update button label"
+  },
+  "save": "Saglabāt",
+  "@save": {
+    "description": "Save button label"
+  },
+  "edit": "Rediģēt",
+  "@edit": {
+    "description": "Edit button/action label"
+  },
+  "close": "Aizvērt",
+  "@close": {
+    "description": "Close button label"
+  },
+  "clear": "Notīrīt",
+  "@clear": {
+    "description": "Clear button label"
+  },
+  "copyTranscript": "Kopēt transkripciju",
+  "@copyTranscript": {
+    "description": "Menu item to copy transcript"
+  },
+  "copySummary": "Kopēt kopsavilkumu",
+  "@copySummary": {
+    "description": "Menu item to copy summary"
+  },
+  "testPrompt": "Testēt uzvedni",
+  "@testPrompt": {
+    "description": "Menu item for testing prompts"
+  },
+  "reprocessConversation": "Pārstrādāt sarunu",
+  "@reprocessConversation": {
+    "description": "Menu item to reprocess a conversation"
+  },
+  "deleteConversation": "Dzēst sarunu",
+  "@deleteConversation": {
+    "description": "Menu item to delete a conversation"
+  },
+  "contentCopied": "Saturs nokopēts starpliktuvē",
+  "@contentCopied": {
+    "description": "Snackbar message when content is copied"
+  },
+  "failedToUpdateStarred": "Neizdevās atjaunināt zvaigznītes statusu.",
+  "@failedToUpdateStarred": {
+    "description": "Error message when starring fails"
+  },
+  "conversationUrlNotShared": "Sarunas URL nevarēja kopīgot.",
+  "@conversationUrlNotShared": {
+    "description": "Error message when sharing fails"
+  },
+  "errorProcessingConversation": "Kļūda, apstrādājot sarunu. Lūdzu, mēģiniet vēlreiz vēlāk.",
+  "@errorProcessingConversation": {
+    "description": "Error message for conversation processing failure"
+  },
+  "noInternetConnection": "Lūdzu, pārbaudiet interneta savienojumu un mēģiniet vēlreiz.",
+  "@noInternetConnection": {
+    "description": "Message shown when there's no internet"
+  },
+  "unableToDeleteConversation": "Nevar dzēst sarunu",
+  "@unableToDeleteConversation": {
+    "description": "Title for delete error dialog"
+  },
+  "somethingWentWrong": "Kaut kas nogāja greizi! Lūdzu, mēģiniet vēlreiz vēlāk.",
+  "@somethingWentWrong": {
+    "description": "Generic error message"
+  },
+  "copyErrorMessage": "Kopēt kļūdas ziņojumu",
+  "@copyErrorMessage": {
+    "description": "Button to copy error details"
+  },
+  "errorCopied": "Kļūdas ziņojums nokopēts starpliktuvē",
+  "@errorCopied": {
+    "description": "Snackbar message after copying error"
+  },
+  "remaining": "Atlicis",
+  "@remaining": {
+    "description": "Label for remaining time/items"
+  },
+  "loading": "Ielādē...",
+  "@loading": {
+    "description": "Loading indicator text"
+  },
+  "loadingDuration": "Ielādē ilgumu...",
+  "@loadingDuration": {
+    "description": "Loading duration indicator"
+  },
+  "secondsCount": "{count} sekundes",
+  "@secondsCount": {
+    "description": "Duration in seconds",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "30"
+      }
+    }
+  },
+  "people": "Cilvēki",
+  "@people": {
+    "description": "People section title"
+  },
+  "addNewPerson": "Pievienot jaunu personu",
+  "@addNewPerson": {
+    "description": "Title for add person dialog"
+  },
+  "editPerson": "Rediģēt personu",
+  "@editPerson": {
+    "description": "Title for edit person dialog"
+  },
+  "createPersonHint": "Izveidojiet jaunu personu un apmāciet Omi atpazīt arī viņu runu!",
+  "@createPersonHint": {
+    "description": "Hint text for creating a person"
+  },
+  "speechProfile": "Runas profils",
+  "@speechProfile": {
+    "description": "Speech profile label"
+  },
+  "sampleNumber": "Paraugs {number}",
+  "@sampleNumber": {
+    "description": "Label for speech sample",
+    "placeholders": {
+      "number": {
+        "type": "int",
+        "example": "1"
+      }
+    }
+  },
+  "settings": "Iestatījumi",
+  "@settings": {
+    "description": "Settings page title"
+  },
+  "language": "Valoda",
+  "@language": {
+    "description": "Language setting label"
+  },
+  "selectLanguage": "Izvēlēties valodu",
+  "@selectLanguage": {
+    "description": "Title for language selection"
+  },
+  "deleting": "Dzēš...",
+  "@deleting": {
+    "description": "Deleting in progress indicator"
+  },
+  "pleaseCompleteAuthentication": "Lūdzu, pabeidziet autentifikāciju savā pārlūkprogrammā. Kad esat pabeidzis, atgriezieties lietotnē.",
+  "@pleaseCompleteAuthentication": {
+    "description": "Message shown during OAuth flow"
+  },
+  "failedToStartAuthentication": "Neizdevās sākt autentifikāciju",
+  "@failedToStartAuthentication": {
+    "description": "Error when OAuth fails to start"
+  },
+  "importStarted": "Importēšana sākta! Jūs saņemsiet paziņojumu, kad tā būs pabeigta.",
+  "@importStarted": {
+    "description": "Success message when import begins"
+  },
+  "failedToStartImport": "Neizdevās sākt importēšanu. Lūdzu, mēģiniet vēlreiz.",
+  "@failedToStartImport": {
+    "description": "Error when import fails to start"
+  },
+  "couldNotAccessFile": "Nevarēja piekļūt atlasītajam failam",
+  "@couldNotAccessFile": {
+    "description": "Error when file access fails"
+  },
+  "askOmi": "Jautāt Omi",
+  "@askOmi": {
+    "description": "Chat button label"
+  },
+  "done": "Gatavs",
+  "@done": {
+    "description": "Button label"
+  },
+  "disconnected": "Atvienots",
+  "@disconnected": {
+    "description": "Device disconnected status"
+  },
+  "searching": "Meklē",
+  "@searching": {
+    "description": "Searching for device status"
+  },
+  "connectDevice": "Savienot ierīci",
+  "@connectDevice": {
+    "description": "Button to connect a device"
+  },
+  "monthlyLimitReached": "Jūs esat sasniedzis mēneša limitu.",
+  "@monthlyLimitReached": {
+    "description": "Message when usage limit is reached"
+  },
+  "checkUsage": "Pārbaudīt lietojumu",
+  "@checkUsage": {
+    "description": "Button to check usage details"
+  },
+  "syncingRecordings": "Sinhronizē ierakstus",
+  "@syncingRecordings": {
+    "description": "Title when sync is in progress"
+  },
+  "recordingsToSync": "Ieraksti, kas jāsinhronizē",
+  "@recordingsToSync": {
+    "description": "Title when there are recordings to sync"
+  },
+  "allCaughtUp": "Viss ir sinhronizēts",
+  "@allCaughtUp": {
+    "description": "Title when everything is synced"
+  },
+  "sync": "Sinhronizēt",
+  "@sync": {
+    "description": "Sync button label"
+  },
+  "pendantUpToDate": "Kulons ir atjaunināts",
+  "@pendantUpToDate": {
+    "description": "Status when pendant is synced"
+  },
+  "allRecordingsSynced": "Visi ieraksti ir sinhronizēti",
+  "@allRecordingsSynced": {
+    "description": "Status text when sync is complete"
+  },
+  "syncingInProgress": "Notiek sinhronizācija",
+  "@syncingInProgress": {
+    "description": "Status when sync is happening"
+  },
+  "readyToSync": "Gatavs sinhronizācijai",
+  "@readyToSync": {
+    "description": "Status when ready to sync"
+  },
+  "tapSyncToStart": "Piespiediet Sinhronizēt, lai sāktu",
+  "@tapSyncToStart": {
+    "description": "Hint to start sync"
+  },
+  "pendantNotConnected": "Kulons nav savienots. Savienojiet, lai sinhronizētu.",
+  "@pendantNotConnected": {
+    "description": "Warning when pendant is not connected"
+  },
+  "everythingSynced": "Viss jau ir sinhronizēts.",
+  "@everythingSynced": {
+    "description": "Message when all is synced"
+  },
+  "recordingsNotSynced": "Jums ir ieraksti, kas vēl nav sinhronizēti.",
+  "@recordingsNotSynced": {
+    "description": "Message when there are unsynced recordings"
+  },
+  "syncingBackground": "Mēs turpināsim sinhronizēt jūsu ierakstus fonā.",
+  "@syncingBackground": {
+    "description": "Message during background sync"
+  },
+  "noConversationsYet": "Vēl nav sarunu.",
+  "@noConversationsYet": {
+    "description": "Empty state when no conversations exist"
+  },
+  "noStarredConversations": "Vēl nav atzīmētu sarunu.",
+  "@noStarredConversations": {
+    "description": "Empty state for starred filter"
+  },
+  "starConversationHint": "Lai atzīmētu sarunu ar zvaigznīti, atveriet to un piespiediet zvaigznītes ikonu galvenē.",
+  "@starConversationHint": {
+    "description": "Hint explaining how to star conversations"
+  },
+  "searchConversations": "Meklēt sarunas",
+  "@searchConversations": {
+    "description": "Search field placeholder"
+  },
+  "selectedCount": "{count} atlasīts",
+  "@selectedCount": {
+    "description": "Selection count label",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "merge": "Apvienot",
+  "@merge": {
+    "description": "Merge button label"
+  },
+  "mergeConversations": "Apvienot sarunas",
+  "@mergeConversations": {
+    "description": "Merge dialog title"
+  },
+  "mergeConversationsMessage": "Tas apvienos {count} sarunas vienā. Viss saturs tiks apvienots un ģenerēts no jauna.",
+  "@mergeConversationsMessage": {
+    "description": "Merge confirmation message",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mergingInBackground": "Apvieno fonā. Tas var aizņemt brīdi.",
+  "@mergingInBackground": {
+    "description": "Snackbar message during merge"
+  },
+  "failedToStartMerge": "Neizdevās sākt apvienošanu",
+  "@failedToStartMerge": {
+    "description": "Error message when merge fails"
+  },
+  "askAnything": "Jautājiet jebko",
+  "@askAnything": {
+    "description": "Chat input placeholder"
+  },
+  "noMessagesYet": "Vēl nav ziņojumu!\nKāpēc nesākt sarunu?",
+  "@noMessagesYet": {
+    "description": "Empty chat state message"
+  },
+  "deletingMessages": "Dzēš jūsu ziņojumus no Omi atmiņas...",
+  "@deletingMessages": {
+    "description": "Loading text while clearing chat"
+  },
+  "messageCopied": "Ziņojums nokopēts starpliktuvē.",
+  "@messageCopied": {
+    "description": "Snackbar after copying message"
+  },
+  "cannotReportOwnMessage": "Jūs nevarat ziņot par saviem ziņojumiem.",
+  "@cannotReportOwnMessage": {
+    "description": "Error when trying to report own message"
+  },
+  "reportMessage": "Ziņot par ziņojumu",
+  "@reportMessage": {
+    "description": "Report message dialog title"
+  },
+  "reportMessageConfirm": "Vai tiešām vēlaties ziņot par šo ziņojumu?",
+  "@reportMessageConfirm": {
+    "description": "Report message confirmation"
+  },
+  "messageReported": "Ziņojums veiksmīgi ziņots.",
+  "@messageReported": {
+    "description": "Confirmation after reporting message"
+  },
+  "thankYouFeedback": "Paldies par jūsu atsauksmēm!",
+  "@thankYouFeedback": {
+    "description": "After thumbs up/down feedback"
+  },
+  "clearChat": "Notīrīt tērzēšanu?",
+  "@clearChat": {
+    "description": "Clear chat dialog title"
+  },
+  "clearChatConfirm": "Vai tiešām vēlaties notīrīt tērzēšanu? Šo darbību nevar atsaukt.",
+  "@clearChatConfirm": {
+    "description": "Clear chat confirmation message"
+  },
+  "maxFilesLimit": "Vienlaikus var augšupielādēt tikai 4 failus",
+  "@maxFilesLimit": {
+    "description": "Max files upload warning"
+  },
+  "chatWithOmi": "Tērzēt ar Omi",
+  "@chatWithOmi": {
+    "description": "Chat share subject"
+  },
+  "apps": "Lietotnes",
+  "@apps": {
+    "description": "Apps page title"
+  },
+  "noAppsFound": "Lietotnes nav atrastas",
+  "@noAppsFound": {
+    "description": "Empty state when no apps match"
+  },
+  "tryAdjustingSearch": "Mēģiniet pielāgot meklēšanu vai filtrus",
+  "@tryAdjustingSearch": {
+    "description": "Hint when no apps found"
+  },
+  "createYourOwnApp": "Izveidojiet savu lietotni",
+  "@createYourOwnApp": {
+    "description": "Create app button title"
+  },
+  "buildAndShareApp": "Izveidojiet un kopīgojiet savu pielāgoto lietotni",
+  "@buildAndShareApp": {
+    "description": "Create app button subtitle"
+  },
+  "searchApps": "Meklēt 1500+ lietotnes",
+  "@searchApps": {
+    "description": "Apps search placeholder"
+  },
+  "myApps": "Manas lietotnes",
+  "@myApps": {
+    "description": "My Apps filter button"
+  },
+  "installedApps": "Instalētās lietotnes",
+  "@installedApps": {
+    "description": "Installed Apps filter button"
+  },
+  "unableToFetchApps": "Nevar ielādēt lietotnes :(\n\nLūdzu, pārbaudiet interneta savienojumu un mēģiniet vēlreiz.",
+  "@unableToFetchApps": {
+    "description": "Error when apps fail to load"
+  },
+  "aboutOmi": "Par Omi",
+  "@aboutOmi": {
+    "description": "About page title"
+  },
+  "privacyPolicy": "Privātuma politika",
+  "@privacyPolicy": {
+    "description": "Link text for Privacy Policy"
+  },
+  "visitWebsite": "Apmeklēt vietni",
+  "@visitWebsite": {
+    "description": "Visit website link"
+  },
+  "helpOrInquiries": "Palīdzība vai jautājumi?",
+  "@helpOrInquiries": {
+    "description": "Help link title"
+  },
+  "joinCommunity": "Pievienojieties kopienai!",
+  "@joinCommunity": {
+    "description": "Discord community link"
+  },
+  "membersAndCounting": "8000+ biedri un turpina pieaugt.",
+  "@membersAndCounting": {
+    "description": "Discord member count"
+  },
+  "deleteAccountTitle": "Dzēst kontu",
+  "@deleteAccountTitle": {
+    "description": "Delete account page title"
+  },
+  "deleteAccountConfirm": "Vai tiešām vēlaties dzēst savu kontu?",
+  "@deleteAccountConfirm": {
+    "description": "Delete account confirmation"
+  },
+  "cannotBeUndone": "To nevar atsaukt.",
+  "@cannotBeUndone": {
+    "description": "Warning that action is permanent"
+  },
+  "allDataErased": "Visas jūsu atmiņas un sarunas tiks neatgriezeniski dzēstas.",
+  "@allDataErased": {
+    "description": "Delete account warning 1"
+  },
+  "appsDisconnected": "Jūsu lietotnes un integrācijas tiks atsavi notas nekavējoties.",
+  "@appsDisconnected": {
+    "description": "Delete account warning 2"
+  },
+  "exportBeforeDelete": "Jūs varat eksportēt savus datus pirms konta dzēšanas, bet pēc dzēšanas tos vairs nevarēs atjaunot.",
+  "@exportBeforeDelete": {
+    "description": "Delete account warning 3"
+  },
+  "deleteAccountCheckbox": "Es saprotu, ka konta dzēšana ir neatgriezeniska un visi dati, tostarp atmiņas un sarunas, tiks zaudēti un tos nevarēs atgūt.",
+  "@deleteAccountCheckbox": {
+    "description": "Delete account checkbox confirmation"
+  },
+  "areYouSure": "Vai esat pārliecināts?",
+  "@areYouSure": {
+    "description": "Final confirmation title"
+  },
+  "deleteAccountFinal": "Šī darbība ir neatgriezeniska un neatgriezeniski izdzēsīs jūsu kontu un visus saistītos datus. Vai tiešām vēlaties turpināt?",
+  "@deleteAccountFinal": {
+    "description": "Final delete confirmation message"
+  },
+  "deleteNow": "Dzēst tagad",
+  "@deleteNow": {
+    "description": "Delete now button"
+  },
+  "goBack": "Atgriezties",
+  "@goBack": {
+    "description": "Go back button"
+  },
+  "checkBoxToConfirm": "Atzīmējiet izvēles rūtiņu, lai apstiprinātu, ka saprotat, ka konta dzēšana ir neatgriezeniska un neatceļama.",
+  "@checkBoxToConfirm": {
+    "description": "Checkbox validation error"
+  },
+  "profile": "Profils",
+  "@profile": {
+    "description": "Profile page title"
+  },
+  "name": "Vārds",
+  "@name": {
+    "description": "Name field label"
+  },
+  "email": "E-pasts",
+  "@email": {
+    "description": "Email field label"
+  },
+  "customVocabulary": "Pielāgota vārdnīca",
+  "@customVocabulary": {
+    "description": "Custom vocabulary setting"
+  },
+  "identifyingOthers": "Citu identificēšana",
+  "@identifyingOthers": {
+    "description": "People identification setting"
+  },
+  "paymentMethods": "Maksājumu metodes",
+  "@paymentMethods": {
+    "description": "Payment methods setting"
+  },
+  "conversationDisplay": "Sarunas attēlojums",
+  "@conversationDisplay": {
+    "description": "Conversation display setting"
+  },
+  "dataPrivacy": "Dati un privātums",
+  "@dataPrivacy": {
+    "description": "Data and privacy setting"
+  },
+  "userId": "Lietotāja ID",
+  "@userId": {
+    "description": "User ID label"
+  },
+  "notSet": "Nav iestatīts",
+  "@notSet": {
+    "description": "Default value when not set"
+  },
+  "userIdCopied": "Lietotāja ID nokopēts starpliktuvē",
+  "@userIdCopied": {
+    "description": "Confirmation when user ID is copied"
+  },
+  "systemDefault": "Sistēmas noklusējuma",
+  "@systemDefault": {
+    "description": "System language option"
+  },
+  "planAndUsage": "Plāns un lietojums",
+  "@planAndUsage": {
+    "description": "Plan and usage menu item"
+  },
+  "offlineSync": "Bezsaistes sinhronizācija",
+  "@offlineSync": {
+    "description": "Offline sync menu item"
+  },
+  "deviceSettings": "Ierīces iestatījumi",
+  "@deviceSettings": {
+    "description": "Device settings menu item"
+  },
+  "chatTools": "Tērzēšanas rīki",
+  "@chatTools": {
+    "description": "Chat tools menu item"
+  },
+  "feedbackBug": "Atsauksmes / Kļūda",
+  "@feedbackBug": {
+    "description": "Feedback menu item"
+  },
+  "helpCenter": "Palīdzības centrs",
+  "@helpCenter": {
+    "description": "Help center menu item"
+  },
+  "developerSettings": "Izstrādātāja iestatījumi",
+  "@developerSettings": {
+    "description": "Developer settings menu item"
+  },
+  "getOmiForMac": "Iegūt Omi priekš Mac",
+  "@getOmiForMac": {
+    "description": "Mac app download link"
+  },
+  "referralProgram": "Ieteikšanas programma",
+  "@referralProgram": {
+    "description": "Referral program menu item"
+  },
+  "signOut": "Izrakstīties",
+  "@signOut": {
+    "description": "Sign out button"
+  },
+  "appAndDeviceCopied": "Lietotnes un ierīces informācija nokopēta",
+  "@appAndDeviceCopied": {
+    "description": "Confirmation when version info is copied"
+  },
+  "wrapped2025": "2025. gada apskats",
+  "@wrapped2025": {
+    "description": "Wrapped 2025 menu item"
+  },
+  "yourPrivacyYourControl": "Jūsu privātums, jūsu kontrole",
+  "@yourPrivacyYourControl": {
+    "description": "Data privacy page heading"
+  },
+  "privacyIntro": "Omi mēs esam apņēmušies aizsargāt jūsu privātumu. Šī lapa ļauj jums kontrolēt, kā jūsu dati tiek uzglabāti un izmantoti.",
+  "@privacyIntro": {
+    "description": "Data privacy page introduction"
+  },
+  "learnMore": "Uzzināt vairāk...",
+  "@learnMore": {
+    "description": "Learn more link"
+  },
+  "dataProtectionLevel": "Datu aizsardzības līmenis",
+  "@dataProtectionLevel": {
+    "description": "Data protection section title"
+  },
+  "dataProtectionDesc": "Jūsu dati pēc noklusējuma ir aizsargāti ar spēcīgu šifrēšanu. Pārskatiet savus iestatījumus un turpmākās privātuma opcijas zemāk.",
+  "@dataProtectionDesc": {
+    "description": "Data protection section description"
+  },
+  "appAccess": "Lietotņu piekļuve",
+  "@appAccess": {
+    "description": "App access section title"
+  },
+  "appAccessDesc": "Šādas lietotnes var piekļūt jūsu datiem. Piespiediet uz lietotnes, lai pārvaldītu tās atļaujas.",
+  "@appAccessDesc": {
+    "description": "App access section description"
+  },
+  "noAppsExternalAccess": "Nevienai instalētajai lietotnei nav ārējas piekļuves jūsu datiem.",
+  "@noAppsExternalAccess": {
+    "description": "Empty state for app access"
+  },
+  "deviceName": "Ierīces nosaukums",
+  "@deviceName": {
+    "description": "Device name label"
+  },
+  "deviceId": "Ierīces ID",
+  "@deviceId": {
+    "description": "Device ID label"
+  },
+  "firmware": "Programmaparatūra",
+  "@firmware": {
+    "description": "Firmware label"
+  },
+  "sdCardSync": "SD kartes sinhronizācija",
+  "@sdCardSync": {
+    "description": "SD Card sync label"
+  },
+  "hardwareRevision": "Aparatūras versija",
+  "@hardwareRevision": {
+    "description": "Hardware revision label"
+  },
+  "modelNumber": "Modeļa numurs",
+  "@modelNumber": {
+    "description": "Model number label"
+  },
+  "manufacturer": "Ražotājs",
+  "@manufacturer": {
+    "description": "Manufacturer label"
+  },
+  "doubleTap": "Dubultklikšķis",
+  "@doubleTap": {
+    "description": "Double tap action label"
+  },
+  "ledBrightness": "LED spilgtums",
+  "@ledBrightness": {
+    "description": "LED brightness label"
+  },
+  "micGain": "Mikrofona pastiprinājums",
+  "@micGain": {
+    "description": "Microphone gain label"
+  },
+  "disconnect": "Atvienot",
+  "@disconnect": {
+    "description": "Disconnect device button"
+  },
+  "forgetDevice": "Aizmirst ierīci",
+  "@forgetDevice": {
+    "description": "Forget device button"
+  },
+  "chargingIssues": "Uzlādes problēmas",
+  "@chargingIssues": {
+    "description": "Charging issues help item"
+  },
+  "disconnectDevice": "Atvienot ierīci",
+  "@disconnectDevice": {
+    "description": "Disconnect device button"
+  },
+  "unpairDevice": "Atpārošana ierīci",
+  "@unpairDevice": {
+    "description": "Unpair device button"
+  },
+  "unpairAndForget": "Atpārošana un aizmirst ierīci",
+  "@unpairAndForget": {
+    "description": "Unpair and forget device button"
+  },
+  "deviceDisconnectedMessage": "Jūsu Omi ir atvienots 😔",
+  "@deviceDisconnectedMessage": {
+    "description": "Message shown when device is disconnected"
+  },
+  "deviceUnpairedMessage": "Ierīce atpārota. Dodieties uz Iestatījumi > Bluetooth un aizmirstiet ierīci, lai pabeigtu atpārošanu.",
+  "@deviceUnpairedMessage": {
+    "description": "Message shown when device is unpaired"
+  },
+  "unpairDialogTitle": "Atpārošana ierīci",
+  "@unpairDialogTitle": {
+    "description": "Unpair dialog title"
+  },
+  "unpairDialogMessage": "Tas atpāros ierīci, lai to varētu savienot ar citu tālruni. Jums būs jādodas uz Iestatījumi > Bluetooth un jāaizmirst ierīce, lai pabeigtu procesu.",
+  "@unpairDialogMessage": {
+    "description": "Unpair dialog message"
+  },
+  "deviceNotConnected": "Ierīce nav savienota",
+  "@deviceNotConnected": {
+    "description": "Device not connected header"
+  },
+  "connectDeviceMessage": "Savienojiet savu Omi ierīci, lai piekļūtu\nierīces iestatījumiem un pielāgošanai",
+  "@connectDeviceMessage": {
+    "description": "Message encouraging user to connect device"
+  },
+  "deviceInfoSection": "Ierīces informācija",
+  "@deviceInfoSection": {
+    "description": "Device information section header"
+  },
+  "customizationSection": "Pielāgošana",
+  "@customizationSection": {
+    "description": "Customization section header"
+  },
+  "hardwareSection": "Aparatūra",
+  "@hardwareSection": {
+    "description": "Hardware section header"
+  },
+  "v2Undetected": "V2 nav atklāts",
+  "@v2Undetected": {
+    "description": "V2 device undeteced dialog title"
+  },
+  "v2UndetectedMessage": "Redzam, ka jums ir V1 ierīce vai jūsu ierīce nav savienota. SD kartes funkcionalitāte ir pieejama tikai V2 ierīcēm.",
+  "@v2UndetectedMessage": {
+    "description": "V2 device undeteced dialog message"
+  },
+  "endConversation": "Beigt sarunu",
+  "@endConversation": {
+    "description": "End conversation action"
+  },
+  "pauseResume": "Pauze/Atsākt",
+  "@pauseResume": {
+    "description": "Pause/Resume action"
+  },
+  "starConversation": "Atzīmēt sarunu ar zvaigznīti",
+  "@starConversation": {
+    "description": "Star conversation action"
+  },
+  "doubleTapAction": "Dubultklikšķa darbība",
+  "@doubleTapAction": {
+    "description": "Double tap action setting"
+  },
+  "endAndProcess": "Beigt un apstrādāt sarunu",
+  "@endAndProcess": {
+    "description": "End and process action"
+  },
+  "pauseResumeRecording": "Apturēt/atsākt ierakstīšanu",
+  "@pauseResumeRecording": {
+    "description": "Pause/Resume recording action"
+  },
+  "starOngoing": "Atzīmēt notiekošo sarunu ar zvaigznīti",
+  "@starOngoing": {
+    "description": "Star ongoing conversation action"
+  },
+  "off": "Izslēgts",
+  "@off": {
+    "description": "Off state"
+  },
+  "max": "Maks.",
+  "@max": {
+    "description": "Max state"
+  },
+  "mute": "Apklusināt",
+  "@mute": {
+    "description": "Mute state"
+  },
+  "quiet": "Kluss",
+  "@quiet": {
+    "description": "Quiet preset"
+  },
+  "normal": "Normāls",
+  "@normal": {
+    "description": "Normal preset"
+  },
+  "high": "Augsts",
+  "@high": {
+    "description": "High preset"
+  },
+  "micGainDescMuted": "Mikrofons ir apklusināts",
+  "@micGainDescMuted": {
+    "description": "Mic gain description: Muted"
+  },
+  "micGainDescLow": "Ļoti kluss - skaļām vidēm",
+  "@micGainDescLow": {
+    "description": "Mic gain description: Low"
+  },
+  "micGainDescModerate": "Kluss - mērenai trokšņu videi",
+  "@micGainDescModerate": {
+    "description": "Mic gain description: Moderate"
+  },
+  "micGainDescNeutral": "Neitrāls - līdzsvarots ieraksts",
+  "@micGainDescNeutral": {
+    "description": "Mic gain description: Neutral"
+  },
+  "micGainDescSlightlyBoosted": "Nedaudz pastiprināts - parastas izmantošanas",
+  "@micGainDescSlightlyBoosted": {
+    "description": "Mic gain description: Slightly Boosted"
+  },
+  "micGainDescBoosted": "Pastiprināts - klusām vidēm",
+  "@micGainDescBoosted": {
+    "description": "Mic gain description: Boosted"
+  },
+  "micGainDescHigh": "Augsts - tālām vai klus ām balsīm",
+  "@micGainDescHigh": {
+    "description": "Mic gain description: High"
+  },
+  "micGainDescVeryHigh": "Ļoti augsts - ļoti klusiem avotiem",
+  "@micGainDescVeryHigh": {
+    "description": "Mic gain description: Very High"
+  },
+  "micGainDescMax": "Maksimālais - lietot piesardzīgi",
+  "@micGainDescMax": {
+    "description": "Mic gain description: Max"
+  },
+  "developerSettingsTitle": "Izstrādātāja iestatījumi",
+  "@developerSettingsTitle": {
+    "description": "Developer settings page title"
+  },
+  "saving": "Saglabā...",
+  "@saving": {
+    "description": "Saving state text"
+  },
+  "personaConfig": "Konfigurēt savu AI personību",
+  "@personaConfig": {
+    "description": "Persona configuration subtitle"
+  },
+  "beta": "BETA",
+  "@beta": {
+    "description": "Beta tag"
+  },
+  "transcription": "Transkripcija",
+  "@transcription": {
+    "description": "Transcription settings title"
+  },
+  "transcriptionConfig": "Konfigurēt STT pakalpojumu sniedzēju",
+  "@transcriptionConfig": {
+    "description": "Transcription configuration subtitle"
+  },
+  "conversationTimeout": "Sarunas taimauts",
+  "@conversationTimeout": {
+    "description": "Conversation timeout settings title"
+  },
+  "conversationTimeoutConfig": "Iestatīt, kad sarunas automātiski beidzas",
+  "@conversationTimeoutConfig": {
+    "description": "Conversation timeout configuration subtitle"
+  },
+  "importData": "Importēt datus",
+  "@importData": {
+    "description": "Import data details title"
+  },
+  "importDataConfig": "Importēt datus no citiem avotiem",
+  "@importDataConfig": {
+    "description": "Import data details subtitle"
+  },
+  "debugDiagnostics": "Atkļūdošana un diagnostika",
+  "@debugDiagnostics": {
+    "description": "Debug & Diagnostics section header"
+  },
+  "endpointUrl": "Galapunkta URL",
+  "@endpointUrl": {
+    "description": "Endpoint URL label"
+  },
+  "noApiKeys": "Vēl nav API atslēgu",
+  "@noApiKeys": {
+    "description": "No API keys message"
+  },
+  "createKeyToStart": "Izveidojiet atslēgu, lai sāktu",
+  "@createKeyToStart": {
+    "description": "Create key instruction"
+  },
+  "createKey": "Izveidot atslēgu",
+  "@createKey": {
+    "description": "Create Key button"
+  },
+  "docs": "Dokumentācija",
+  "@docs": {
+    "description": "Documentation link"
+  },
+  "yourOmiInsights": "Jūsu Omi ieskati",
+  "@yourOmiInsights": {
+    "description": "Usage page title"
+  },
+  "today": "Šodien",
+  "@today": {
+    "description": "Time period: Today"
+  },
+  "thisMonth": "Šomēnes",
+  "@thisMonth": {
+    "description": "Time period: This Month"
+  },
+  "thisYear": "Šogad",
+  "@thisYear": {
+    "description": "Time period: This Year"
+  },
+  "allTime": "Visu laiku",
+  "@allTime": {
+    "description": "Time period: All Time"
+  },
+  "noActivityYet": "Vēl nav aktivitātes",
+  "@noActivityYet": {
+    "description": "Empty state title"
+  },
+  "startConversationToSeeInsights": "Sāciet sarunu ar Omi,\nlai šeit redzētu lietošanas statistiku.",
+  "@startConversationToSeeInsights": {
+    "description": "Empty state description"
+  },
+  "listening": "Klausās",
+  "@listening": {
+    "description": "Listening stat title"
+  },
+  "listeningSubtitle": "Kopējais laiks, ko Omi aktīvi klausījies.",
+  "@listeningSubtitle": {
+    "description": "Listening stat subtitle"
+  },
+  "understanding": "Saprot",
+  "@understanding": {
+    "description": "Understanding stat title"
+  },
+  "understandingSubtitle": "Vārdi, kas saprasti no jūsu sarunām.",
+  "@understandingSubtitle": {
+    "description": "Understanding stat subtitle"
+  },
+  "providing": "Sniedz",
+  "@providing": {
+    "description": "Providing stat title"
+  },
+  "providingSubtitle": "Uzdevumi un piezīmes, kas automātiski fiksēti.",
+  "@providingSubtitle": {
+    "description": "Providing stat subtitle"
+  },
+  "remembering": "Atceras",
+  "@remembering": {
+    "description": "Remembering stat title"
+  },
+  "rememberingSubtitle": "Fakti un detaļas, kas atcerētas jums.",
+  "@rememberingSubtitle": {
+    "description": "Remembering stat subtitle"
+  },
+  "unlimitedPlan": "Neierobežots plāns",
+  "@unlimitedPlan": {
+    "description": "Unlimited plan name"
+  },
+  "managePlan": "Pārvaldīt plānu",
+  "@managePlan": {
+    "description": "Manage plan button"
+  },
+  "cancelAtPeriodEnd": "Jūsu plāns tiks atcelts {date}.",
+  "@cancelAtPeriodEnd": {
+    "description": "Cancellation message",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Jan 1, 2026"
+      }
+    }
+  },
+  "renewsOn": "Jūsu plāns atjaunojas {date}.",
+  "@renewsOn": {
+    "description": "Renewal message",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Jan 1, 2026"
+      }
+    }
+  },
+  "basicPlan": "Bezmaksas plāns",
+  "@basicPlan": {
+    "description": "Basic plan name"
+  },
+  "usageLimitMessage": "{used} no {limit} min izmantots",
+  "@usageLimitMessage": {
+    "description": "Usage limit message",
+    "placeholders": {
+      "used": {
+        "type": "String",
+        "example": "100"
+      },
+      "limit": {
+        "type": "int",
+        "example": "60"
+      }
+    }
+  },
+  "upgrade": "Jaunināt",
+  "@upgrade": {
+    "description": "Upgrade button"
+  },
+  "upgradeToUnlimited": "Jaunināt uz neierobežotu",
+  "@upgradeToUnlimited": {
+    "description": "Upgrade to unlimited button"
+  },
+  "basicPlanDesc": "Jūsu plāns ietver {limit} bezmaksas minūtes mēnesī. Jauniniet, lai iegūtu neierobežotu.",
+  "@basicPlanDesc": {
+    "description": "Basic plan description",
+    "placeholders": {
+      "limit": {
+        "type": "int",
+        "example": "60"
+      }
+    }
+  },
+  "shareStatsMessage": "Dalījums ar manu Omi statistiku! (omi.me - jūsu vienmēr ieslēgtais AI asistents)",
+  "@shareStatsMessage": {
+    "description": "Share stats base message"
+  },
+  "sharePeriodToday": "Šodien omi ir:",
+  "@sharePeriodToday": {
+    "description": "Share stats period: Today"
+  },
+  "sharePeriodMonth": "Šomēnes omi ir:",
+  "@sharePeriodMonth": {
+    "description": "Share stats period: Month"
+  },
+  "sharePeriodYear": "Šogad omi ir:",
+  "@sharePeriodYear": {
+    "description": "Share stats period: Year"
+  },
+  "sharePeriodAllTime": "Līdz šim omi ir:",
+  "@sharePeriodAllTime": {
+    "description": "Share stats period: All Time"
+  },
+  "shareStatsListened": "🎧 Klausījies {minutes} minūtes",
+  "@shareStatsListened": {
+    "description": "Share stats: listened",
+    "placeholders": {
+      "minutes": {
+        "type": "String",
+        "example": "120"
+      }
+    }
+  },
+  "shareStatsWords": "🧠 Sapratis {words} vārdus",
+  "@shareStatsWords": {
+    "description": "Share stats: words",
+    "placeholders": {
+      "words": {
+        "type": "String",
+        "example": "5000"
+      }
+    }
+  },
+  "shareStatsInsights": "✨ Sniedzis {count} ieskatus",
+  "@shareStatsInsights": {
+    "description": "Share stats: insights",
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "10"
+      }
+    }
+  },
+  "shareStatsMemories": "📚 Atcerējies {count} atmiņas",
+  "@shareStatsMemories": {
+    "description": "Share stats: memories",
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "5"
+      }
+    }
+  },
+  "debugLogs": "Atkļūdošanas žurnāli",
+  "debugLogsAutoDelete": "Automātiski izdzēš pēc 3 dienām.",
+  "debugLogsDesc": "Palīdz diagnosticēt problēmas",
+  "noLogFilesFound": "Žurnāla faili nav atrasti.",
+  "omiDebugLog": "Omi atkļūdošanas žurnāls",
+  "logShared": "Žurnāls kopīgots",
+  "selectLogFile": "Izvēlēties žurnāla failu",
+  "shareLogs": "Kopīgot žurnālus",
+  "debugLogCleared": "Atkļūdošanas žurnāls notīrīts",
+  "exportStarted": "Eksports sākts. Tas var aizņemt dažas sekundes...",
+  "exportAllData": "Eksportēt visus datus",
+  "exportDataDesc": "Eksportēt sarunas uz JSON failu",
+  "exportedConversations": "Eksportētās sarunas no Omi",
+  "exportShared": "Eksports kopīgots",
+  "deleteKnowledgeGraphTitle": "Dzēst zināšanu grafu?",
+  "deleteKnowledgeGraphMessage": "Tas izdzēsīs visus atvasinātos zināšanu grafa datus (mezglus un savienojumus). Jūsu oriģinālās atmiņas paliks drošībā. Grafs tiks atjaunots ar laiku vai pēc nākamā pieprasījuma.",
+  "knowledgeGraphDeleted": "Zināšanu grafs veiksmīgi izdzēsts",
+  "deleteGraphFailed": "Neizdevās dzēst grafu: {error}",
+  "@deleteGraphFailed": {
+    "description": "Error message when deleting graph fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteKnowledgeGraph": "Dzēst zināšanu grafu",
+  "deleteKnowledgeGraphDesc": "Notīrīt visus mezglus un savienojumus",
+  "mcp": "MCP",
+  "mcpServer": "MCP serveris",
+  "mcpServerDesc": "Savienojiet AI asistentus ar jūsu datiem",
+  "serverUrl": "Servera URL",
+  "urlCopied": "URL nokopēts",
+  "apiKeyAuth": "API atslēgas autentifikācija",
+  "header": "Galvene",
+  "authorizationBearer": "Autorizācija: Bearer <atslēga>",
+  "oauth": "OAuth",
+  "clientId": "Klienta ID",
+  "clientSecret": "Klienta noslēpums",
+  "useMcpApiKey": "Izmantojiet savu MCP API atslēgu",
+  "webhooks": "Tīmekļa āķi",
+  "conversationEvents": "Sarunas notikumi",
+  "newConversationCreated": "Jauna saruna izveidota",
+  "realtimeTranscript": "Reāllaika transkripcija",
+  "transcriptReceived": "Transkripcija saņemta",
+  "audioBytes": "Audio baiti",
+  "audioDataReceived": "Audio dati saņemti",
+  "intervalSeconds": "Intervāls (sekundes)",
+  "daySummary": "Dienas kopsavilkums",
+  "summaryGenerated": "Kopsavilkums izveidots",
+  "claudeDesktop": "Claude Desktop",
+  "addToClaudeConfig": "Pievienot claude_desktop_config.json",
+  "copyConfig": "Kopēt konfigurāciju",
+  "configCopied": "Konfigurācija nokopēta starpliktuvē",
+  "listeningMins": "Klausās (min)",
+  "understandingWords": "Saprot (vārdi)",
+  "insights": "Ieskati",
+  "memories": "Atmiņas",
+  "minsUsedThisMonth": "{used} no {limit} min izmantots šomēnes",
+  "@minsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "wordsUsedThisMonth": "{used} no {limit} vārdiem izmantots šomēnes",
+  "@wordsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "insightsUsedThisMonth": "{used} no {limit} ieskatiem iegūts šomēnes",
+  "@insightsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "memoriesUsedThisMonth": "{used} no {limit} atmiņām izveidots šomēnes",
+  "@memoriesUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "visibility": "Redzamība",
+  "visibilitySubtitle": "Kontrolējiet, kuras sarunas parādās jūsu sarakstā",
+  "showShortConversations": "Rādīt īsas sarunas",
+  "showShortConversationsDesc": "Attēlot sarunas, kas ir īsākas par slieksni",
+  "showDiscardedConversations": "Rādīt atmestas sarunas",
+  "showDiscardedConversationsDesc": "Iekļaut sarunas, kas atzīmētas kā atmestas",
+  "shortConversationThreshold": "Īsās sarunas slieksnis",
+  "shortConversationThresholdSubtitle": "Sarunas, kas ir īsākas par šo, tiks slēptas, ja vien nav iespējotas iepriekš",
+  "durationThreshold": "Ilguma slieksnis",
+  "durationThresholdDesc": "Slēpt sarunas, kas ir īsākas par šo",
+  "minLabel": "{count} min",
+  "@minLabel": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "customVocabularyTitle": "Pielāgota vārdnīca",
+  "addWords": "Pievienot vārdus",
+  "addWordsDesc": "Vārdi, termini vai netipiski vārdi",
+  "vocabularyHint": "Omi, Callie, OpenAI",
+  "connect": "Savienot",
+  "comingSoon": "Drīzumā",
+  "chatToolsFooter": "Savienojiet savas lietotnes, lai skatītu datus un metriku tērzēšanā.",
+  "completeAuthInBrowser": "Lūdzu, pabeidziet autentifikāciju savā pārlūkprogrammā. Kad esat pabeidzis, atgriezieties lietotnē.",
+  "failedToStartAuth": "Neizdevās sākt {appName} autentifikāciju",
+  "@failedToStartAuth": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectAppTitle": "Atvienot {appName}?",
+  "@disconnectAppTitle": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectAppMessage": "Vai tiešām vēlaties atvienot no {appName}? Jūs varat atkārtoti izveidot savienojumu jebkurā laikā.",
+  "@disconnectAppMessage": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectedFrom": "Atvienots no {appName}",
+  "@disconnectedFrom": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToDisconnect": "Neizdevās atvienot",
+  "connectTo": "Savienoties ar {appName}",
+  "@connectTo": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "authAccessMessage": "Jums būs jāautorizē Omi piekļuvei jūsu {appName} datiem. Tas atvērs jūsu pārlūkprogrammu autentifikācijai.",
+  "@authAccessMessage": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "continueAction": "Turpināt",
+  "languageTitle": "Valoda",
+  "primaryLanguage": "Primārā valoda",
+  "automaticTranslation": "Automātiskais tulkojums",
+  "detectLanguages": "Atklāt 10+ valodas",
+  "authorizeSavingRecordings": "Autorizēt ierakstu saglabāšanu",
+  "thanksForAuthorizing": "Paldies par autorizāciju!",
+  "needYourPermission": "Mums nepieciešama jūsu atļauja",
+  "alreadyGavePermission": "Jūs jau esat devis mums atļauju saglabāt jūsu ierakstus. Šeit ir atgādinājums, kāpēc mums tas ir nepieciešams:",
+  "wouldLikePermission": "Mēs vēlētos jūsu atļauju saglabāt jūsu balss ierakstus. Šeit ir iemesls:",
+  "improveSpeechProfile": "Uzlabot jūsu runas profilu",
+  "improveSpeechProfileDesc": "Mēs izmantojam ierakstus, lai turpinātu apmācīt un uzlabotu jūsu personīgo runas profilu.",
+  "trainFamilyProfiles": "Apmācīt profilus draugiem un ģimenei",
+  "trainFamilyProfilesDesc": "Jūsu ieraksti palīdz mums atpazīt un izveidot profilus jūsu draugiem un ģimenei.",
+  "enhanceTranscriptAccuracy": "Uzlabot transkripcijas precizitāti",
+  "enhanceTranscriptAccuracyDesc": "Uzlabojoties mūsu modelim, mēs varam sniegt labākus transkripcijas rezultātus jūsu ierakstiem.",
+  "legalNotice": "Juridisks paziņojums: Balss datu ierakstīšanas un uzglabāšanas likumība var atšķirties atkarībā no jūsu atrašanās vietas un tā, kā izmantojat šo funkciju. Ir jūsu atbildība nodrošināt atbilstību vietējiem likumiem un noteikumiem.",
+  "alreadyAuthorized": "Jau autorizēts",
+  "authorize": "Autorizēt",
+  "revokeAuthorization": "Atsaukt autorizāciju",
+  "authorizationSuccessful": "Autorizācija veiksmīga!",
+  "failedToAuthorize": "Neizdevās autorizēt. Lūdzu, mēģiniet vēlreiz.",
+  "authorizationRevoked": "Autorizācija atsaukta.",
+  "recordingsDeleted": "Ieraksti izdzēsti.",
+  "failedToRevoke": "Neizdevās atsaukt autorizāciju. Lūdzu, mēģiniet vēlreiz.",
+  "permissionRevokedTitle": "Atļauja atsaukta",
+  "permissionRevokedMessage": "Vai vēlaties, lai mēs noņemtu arī visus jūsu esošos ierakstus?",
+  "yes": "Jā",
+  "editName": "Rediģēt vārdu",
+  "howShouldOmiCallYou": "Kā Omi jums vajadzētu uzrunāt?",
+  "enterYourName": "Ievadiet savu vārdu",
+  "nameCannotBeEmpty": "Vārds nevar būt tukšs",
+  "nameUpdatedSuccessfully": "Vārds veiksmīgi atjaunināts!",
+  "calendarSettings": "Kalendāra iestatījumi",
+  "calendarProviders": "Kalendāra pakalpojumu sniedzēji",
+  "macOsCalendar": "macOS kalendārs",
+  "connectMacOsCalendar": "Savienojiet savu vietējo macOS kalendāru",
+  "googleCalendar": "Google kalendārs",
+  "syncGoogleAccount": "Sinhronizēt ar savu Google kontu",
+  "showMeetingsMenuBar": "Rādīt tuvākās sanāksmes izvēlnes joslā",
+  "showMeetingsMenuBarDesc": "Attēlot jūsu nākamo sanāksmi un laiku līdz tās sākumam macOS izvēlnes joslā",
+  "showEventsNoParticipants": "Rādīt notikumus bez dalībniekiem",
+  "showEventsNoParticipantsDesc": "Ja iespējots, Coming Up rāda notikumus bez dalībniekiem vai video saites.",
+  "yourMeetings": "Jūsu sanāksmes",
+  "refresh": "Atsvaidzināt",
+  "noUpcomingMeetings": "Nav atrastas tuvākās sanāksmes",
+  "checkingNextDays": "Pārbauda nākamās 30 dienas",
+  "tomorrow": "Rīt",
+  "googleCalendarComingSoon": "Google Calendar integrācija drīzumā!",
+  "connectedAsUser": "Savienots kā lietotājs: {userId}",
+  "@connectedAsUser": {
+    "placeholders": {
+      "userId": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultWorkspace": "Noklusējuma darba vieta",
+  "tasksCreatedInWorkspace": "Uzdevumi tiks izveidoti šajā darba vietā",
+  "defaultProjectOptional": "Noklusējuma projekts (neobligāts)",
+  "leaveUnselectedTasks": "Atstājiet neizvēlētu, lai izveidotu uzdevumus bez projekta",
+  "noProjectsInWorkspace": "Šajā darba vietā nav atrasti projekti",
+  "conversationTimeoutDesc": "Izvēlieties, cik ilgi gaidīt klusumu, pirms automātiski beidzat sarunu:",
+  "timeout2Minutes": "2 minūtes",
+  "timeout2MinutesDesc": "Beigt sarunu pēc 2 minūšu klusuma",
+  "timeout5Minutes": "5 minūtes",
+  "timeout5MinutesDesc": "Beigt sarunu pēc 5 minūšu klusuma",
+  "timeout10Minutes": "10 minūtes",
+  "timeout10MinutesDesc": "Beigt sarunu pēc 10 minūšu klusuma",
+  "timeout30Minutes": "30 minūtes",
+  "timeout30MinutesDesc": "Beigt sarunu pēc 30 minūšu klusuma",
+  "timeout4Hours": "4 stundas",
+  "timeout4HoursDesc": "Beigt sarunu pēc 4 stundu klusuma",
+  "conversationEndAfterHours": "Sarunas tagad beigsies pēc 4 stundu klusuma",
+  "conversationEndAfterMinutes": "Sarunas tagad beigsies pēc {minutes} minūtes(-ēm) klusuma",
+  "@conversationEndAfterMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "tellUsPrimaryLanguage": "Pastāstiet mums savu primāro valodu",
+  "languageForTranscription": "Iestatiet savu valodu precīzākai transkripcijai un personalizētai pieredzei.",
+  "singleLanguageModeInfo": "Vienas valodas režīms ir iespējots. Tulkošana ir atspējota lielākai precizitātei.",
+  "searchLanguageHint": "Meklēt valodu pēc nosaukuma vai koda",
+  "noLanguagesFound": "Valodas nav atrastas",
+  "skip": "Izlaist",
+  "languageSetTo": "Valoda iestatīta uz {language}",
+  "@languageSetTo": {
+    "placeholders": {
+      "language": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToSetLanguage": "Neizdevās iestatīt valodu",
+  "appSettings": "{appName} iestatījumi",
+  "@appSettings": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectFromApp": "Atvienot no {appName}?",
+  "@disconnectFromApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectFromAppDesc": "Tas noņems jūsu {appName} autentifikāciju. Jums būs atkārtoti jāizveido savienojums, lai to izmantotu vēlreiz.",
+  "@disconnectFromAppDesc": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "connectedToApp": "Savienots ar {appName}",
+  "@connectedToApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "account": "Konts",
+  "actionItemsSyncedTo": "Jūsu uzdevumi tiks sinhronizēti ar jūsu {appName} kontu",
+  "@actionItemsSyncedTo": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultSpace": "Noklusējuma vieta",
+  "selectSpaceInWorkspace": "Izvēlēties vietu savā darba vietā",
+  "noSpacesInWorkspace": "Šajā darba vietā nav atrastas vietas",
+  "defaultList": "Noklusējuma saraksts",
+  "tasksAddedToList": "Uzdevumi tiks pievienoti šim sarakstam",
+  "noListsInSpace": "Šajā vietā nav atrasti saraksti",
+  "failedToLoadRepos": "Neizdevās ielādēt repozitorijus: {error}",
+  "@failedToLoadRepos": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultRepoSaved": "Noklusējuma repozitorijs saglabāts",
+  "failedToSaveDefaultRepo": "Neizdevās saglabāt noklusējuma repozitoriju",
+  "defaultRepository": "Noklusējuma repozitorijs",
+  "selectDefaultRepoDesc": "Izvēlieties noklusējuma repozitoriju problēmu izveidošanai. Jūs joprojām varat norādīt citu repozitoriju, veidojot problēmas.",
+  "noReposFound": "Repozitoriji nav atrasti",
+  "private": "Privāts",
+  "updatedDate": "Atjaunināts {date}",
+  "@updatedDate": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "yesterday": "vakar",
+  "daysAgo": "pirms {count} dienām",
+  "@daysAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "oneWeekAgo": "pirms 1 nedēļas",
+  "weeksAgo": "pirms {count} nedēļām",
+  "@weeksAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "oneMonthAgo": "pirms 1 mēneša",
+  "monthsAgo": "pirms {count} mēnešiem",
+  "@monthsAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "issuesCreatedInRepo": "Problēmas tiks izveidotas jūsu noklusējuma repozitorijā",
+  "taskIntegrations": "Uzdevumu integrācijas",
+  "configureSettings": "Konfigurēt iestatījumus",
+  "completeAuthBrowser": "Lūdzu, pabeidziet autentifikāciju savā pārlūkprogrammā. Kad esat pabeidzis, atgriezieties lietotnē.",
+  "failedToStartAppAuth": "Neizdevās sākt {appName} autentifikāciju",
+  "@failedToStartAppAuth": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "connectToAppTitle": "Savienoties ar {appName}",
+  "@connectToAppTitle": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "authorizeOmiForTasks": "Jums būs jāautorizē Omi, lai izveidotu uzdevumus jūsu {appName} kontā. Tas atvērs jūsu pārlūkprogrammu autentifikācijai.",
+  "@authorizeOmiForTasks": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "continueButton": "Turpināt",
+  "appIntegration": "{appName} integrācija",
+  "@appIntegration": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "integrationComingSoon": "Integrācija ar {appName} drīzumā! Mēs cītīgi strādājam, lai jums piedāvātu vairāk uzdevumu pārvaldības iespēju.",
+  "@integrationComingSoon": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "gotIt": "Sapratu",
+  "tasksExportedOneApp": "Uzdevumus var eksportēt uz vienu lietotni vienlaikus.",
+  "completeYourUpgrade": "Pabeidziet savu jaunināšanu",
+  "importConfiguration": "Importēt konfigurāciju",
+  "exportConfiguration": "Eksportēt konfigurāciju",
+  "bringYourOwn": "Atnesiet savu",
+  "payYourSttProvider": "Brīvi izmantojiet omi. Jūs maksājat tikai savam STT pakalpojumu sniedzējam tieši.",
+  "freeMinutesMonth": "1200 bezmaksas minūtes/mēnesī iekļautas. Neierobežots ar ",
+  "omiUnlimited": "Omi Neierobežots",
+  "hostRequired": "Resursdators ir nepieciešams",
+  "validPortRequired": "Ir nepieciešams derīgs ports",
+  "validWebsocketUrlRequired": "Ir nepieciešams derīgs WebSocket URL (wss://)",
+  "apiUrlRequired": "API URL ir nepieciešams",
+  "apiKeyRequired": "API atslēga ir nepieciešama",
+  "invalidJsonConfig": "Nederīga JSON konfigurācija",
+  "errorSaving": "Kļūda, saglabājot: {error}",
+  "@errorSaving": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "configCopiedToClipboard": "Konfigurācija nokopēta starpliktuvē",
+  "pasteJsonConfig": "Ielīmējiet savu JSON konfigurāciju zemāk:",
+  "addApiKeyAfterImport": "Jums būs jāpievieno sava API atslēga pēc importēšanas",
+  "paste": "Ielīmēt",
+  "import": "Importēt",
+  "invalidProviderInConfig": "Nederīgs pakalpojumu sniedzējs konfigurācijā",
+  "importedConfig": "Importēta {providerName} konfigurācija",
+  "@importedConfig": {
+    "placeholders": {
+      "providerName": {
+        "type": "String"
+      }
+    }
+  },
+  "invalidJson": "Nederīgs JSON: {error}",
+  "@invalidJson": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "provider": "Pakalpojumu sniedzējs",
+  "live": "Tiešraide",
+  "onDevice": "Ierīcē",
+  "apiUrl": "API URL",
+  "enterSttHttpEndpoint": "Ievadiet savu STT HTTP galapunktu",
+  "websocketUrl": "WebSocket URL",
+  "enterLiveSttWebsocket": "Ievadiet savu tiešraides STT WebSocket galapunktu",
+  "apiKey": "API atslēga",
+  "enterApiKey": "Ievadiet savu API atslēgu",
+  "storedLocallyNeverShared": "Saglabāts vietēji, nekad nekopīgots",
+  "host": "Resursdators",
+  "port": "Ports",
+  "advanced": "Papildu",
+  "configuration": "Konfigurācija",
+  "requestConfiguration": "Pieprasījuma konfigurācija",
+  "responseSchema": "Atbildes shēma",
+  "modified": "Modificēts",
+  "resetRequestConfig": "Atiestatīt pieprasījuma konfigurāciju uz noklusējumu",
+  "logs": "Žurnāli",
+  "logsCopied": "Žurnāli nokopēti",
+  "noLogsYet": "Vēl nav žurnālu. Sāciet ierakstīšanu, lai redzētu pielāgoto STT aktivitāti.",
+  "deviceUsesCodec": "{deviceName} izmanto {codecReason}. Tiks izmantots Omi.",
+  "@deviceUsesCodec": {
+    "placeholders": {
+      "deviceName": {
+        "type": "String"
+      },
+      "codecReason": {
+        "type": "String"
+      }
+    }
+  },
+  "omiTranscription": "Omi transkripcija",
+  "bestInClassTranscription": "Labākā klases transkripcija ar nulli iestatījumiem",
+  "instantSpeakerLabels": "Tūlītējas runātāja etiķetes",
+  "languageTranslation": "100+ valodu tulkošana",
+  "optimizedForConversation": "Optimizēts sarunām",
+  "autoLanguageDetection": "Automātiska valodas noteikšana",
+  "highAccuracy": "Augsta precizitāte",
+  "privacyFirst": "Privātums pirmajā vietā",
+  "saveChanges": "Saglabāt izmaiņas",
+  "resetToDefault": "Atiestatīt uz noklusējumu",
+  "viewTemplate": "Skatīt veidni",
+  "trySomethingLike": "Mēģiniet kaut ko līdzīgu...",
+  "tryIt": "Izmēģināt",
+  "creatingPlan": "Izveido plānu",
+  "developingLogic": "Izstrādā loģiku",
+  "designingApp": "Projektē lietotni",
+  "generatingIconStep": "Ģenerē ikonu",
+  "finalTouches": "Pēdējie pieskārieni",
+  "processing": "Apstrādā...",
+  "features": "Funkcijas",
+  "creatingYourApp": "Izveido jūsu lietotni...",
+  "generatingIcon": "Ģenerē ikonu...",
+  "whatShouldWeMake": "Ko mums vajadzētu izveidot?",
+  "appName": "Lietotnes nosaukums",
+  "description": "Apraksts",
+  "publicLabel": "Publisks",
+  "privateLabel": "Privāts",
+  "free": "Bezmaksas",
+  "perMonth": "/ Mēnesī",
+  "tailoredConversationSummaries": "Pielāgoti sarunas kopsavilkumi",
+  "customChatbotPersonality": "Pielāgota tērzēšanas robota personība",
+  "makePublic": "Padarīt publisku",
+  "anyoneCanDiscover": "Ikviens var atklāt jūsu lietotni",
+  "onlyYouCanUse": "Tikai jūs varat izmantot šo lietotni",
+  "paidApp": "Maksas lietotne",
+  "usersPayToUse": "Lietotāji maksā, lai izmantotu jūsu lietotni",
+  "freeForEveryone": "Bezmaksas visiem",
+  "perMonthLabel": "/ mēnesī",
+  "creating": "Izveido...",
+  "@creating": {
+    "description": "Loading state text when app generation is in progress"
+  },
+  "createApp": "Izveidot lietotni",
+  "@createApp": {
+    "description": "Button text to initiate app creation"
+  },
+  "@connect": {
+    "description": "Title for device connection page"
+  },
+  "searchingForDevices": "Meklē ierīces...",
+  "@searchingForDevices": {
+    "description": "Status text while scanning for Bluetooth devices"
+  },
+  "devicesFoundNearby": "{count} {count, plural, =1{IERĪCE} other{IERĪCES}} ATRASTAS TUVUMĀ",
+  "@devicesFoundNearby": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pairingSuccessful": "PĀROŠANA VEIKSMĪGA",
+  "errorConnectingAppleWatch": "Kļūda, savienojoties ar Apple Watch: {error}",
+  "@errorConnectingAppleWatch": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "dontShowAgain": "Vairs nerādīt",
+  "@dontShowAgain": {
+    "description": "Checkbox text to suppress future connection confirmations"
+  },
+  "iUnderstand": "Es saprotu",
+  "@iUnderstand": {
+    "description": "Button text to acknowledge connection warnings"
+  },
+  "enableBluetooth": "Iespējot Bluetooth",
+  "@enableBluetooth": {
+    "description": "Title for dialog prompting user to enable Bluetooth"
+  },
+  "bluetoothNeeded": "Omi nepieciešams Bluetooth, lai savienotos ar jūsu valkājamo ierīci. Lūdzu, iespējojiet Bluetooth un mēģiniet vēlreiz.",
+  "@bluetoothNeeded": {
+    "description": "Explanation text for why Bluetooth is required"
+  },
+  "contactSupport": "Sazināties ar atbalstu?",
+  "@contactSupport": {
+    "description": "Link text to contact support"
+  },
+  "connectLater": "Savienot vēlāk",
+  "@connectLater": {
+    "description": "Button text to skip immediate device connection"
+  },
+  "grantPermissions": "Piešķirt atļaujas",
+  "@grantPermissions": {
+    "description": "Title for the permissions request page"
+  },
+  "backgroundActivity": "Fona aktivitāte",
+  "@backgroundActivity": {
+    "description": "Title for background activity permission"
+  },
+  "backgroundActivityDesc": "Ļaujiet Omi darboties fonā labākai stabilitātei",
+  "@backgroundActivityDesc": {
+    "description": "Description for background activity permission"
+  },
+  "locationAccess": "Atrašanās vietas piekļuve",
+  "@locationAccess": {
+    "description": "Title for location access permission"
+  },
+  "locationAccessDesc": "Iespējojiet fona atrašanās vietu pilnai pieredzei",
+  "@locationAccessDesc": {
+    "description": "Description for location access permission"
+  },
+  "notifications": "Paziņojumi",
+  "@notifications": {
+    "description": "Title for notifications permission"
+  },
+  "notificationsDesc": "Iespējojiet paziņojumus, lai būtu informēti",
+  "@notificationsDesc": {
+    "description": "Description for notifications permission"
+  },
+  "@continueButton": {
+    "description": "Generic continue button text"
+  },
+  "locationServiceDisabled": "Atrašanās vietas pakalpojums atspējots",
+  "@locationServiceDisabled": {
+    "description": "Title for dialog when location services are off"
+  },
+  "locationServiceDisabledDesc": "Atrašanās vietas pakalpojums ir atspējots. Lūdzu, dodieties uz Iestatījumi > Privātums un drošība > Atrašanās vietas pakalpojumi un iespējojiet to",
+  "@locationServiceDisabledDesc": {
+    "description": "Instructions to enable location services"
+  },
+  "backgroundLocationDenied": "Fona atrašanās vietas piekļuve liegta",
+  "@backgroundLocationDenied": {
+    "description": "Title for dialog when background location is denied"
+  },
+  "backgroundLocationDeniedDesc": "Lūdzu, dodieties uz ierīces iestatījumiem un iestatiet atrašanās vietas atļauju uz \"Vienmēr atļaut\"",
+  "@backgroundLocationDeniedDesc": {
+    "description": "Instructions to grant background location permission"
+  },
+  "lovingOmi": "Patīk Omi?",
+  "@lovingOmi": {
+    "description": "Title for the app review prompt"
+  },
+  "leaveReviewIos": "Palīdziet mums sasniegt vairāk cilvēku, atstājot atsauksmi App Store. Jūsu atsauksmes mums nozīmē visu!",
+  "@leaveReviewIos": {
+    "description": "App review prompt text for iOS users"
+  },
+  "leaveReviewAndroid": "Palīdziet mums sasniegt vairāk cilvēku, atstājot atsauksmi Google Play Store. Jūsu atsauksmes mums nozīmē visu!",
+  "@leaveReviewAndroid": {
+    "description": "App review prompt text for Android users"
+  },
+  "rateOnAppStore": "Novērtēt App Store",
+  "@rateOnAppStore": {
+    "description": "Button text to rate on Apple App Store"
+  },
+  "rateOnGooglePlay": "Novērtēt Google Play",
+  "@rateOnGooglePlay": {
+    "description": "Button text to rate on Google Play Store"
+  },
+  "maybeLater": "Varbūt vēlāk",
+  "@maybeLater": {
+    "description": "Button text to dismiss the review prompt"
+  },
+  "speechProfileIntro": "Omi ir jāiemācās jūsu mērķi un jūsu balss. Jūs varēsiet to modificēt vēlāk.",
+  "@speechProfileIntro": {
+    "description": "Introduction text for speech profile creation"
+  },
+  "getStarted": "Sākt",
+  "@getStarted": {
+    "description": "Button text to begin a process"
+  },
+  "allDone": "Viss padarīts!",
+  "@allDone": {
+    "description": "Success message after completing a task"
+  },
+  "keepGoing": "Turpiniet, jūs darāt lieliski",
+  "@keepGoing": {
+    "description": "Encouragement text during a multi-step process"
+  },
+  "skipThisQuestion": "Izlaist šo jautājumu",
+  "@skipThisQuestion": {
+    "description": "Button text to skip the current question"
+  },
+  "skipForNow": "Izlaist pagaidām",
+  "@skipForNow": {
+    "description": "Button text to skip the entire process temporarily"
+  },
+  "connectionError": "Savienojuma kļūda",
+  "@connectionError": {
+    "description": "Title for connection error dialog"
+  },
+  "connectionErrorDesc": "Neizdevās izveidot savienojumu ar serveri. Lūdzu, pārbaudiet interneta savienojumu un mēģiniet vēlreiz.",
+  "@connectionErrorDesc": {
+    "description": "Description of connection error"
+  },
+  "invalidRecordingMultipleSpeakers": "Atklāts nederīgs ieraksts",
+  "@invalidRecordingMultipleSpeakers": {
+    "description": "Error title when multiple speakers are detected"
+  },
+  "multipleSpeakersDesc": "Šķiet, ka ierakstā ir vairāki runātāji. Lūdzu, pārliecinieties, ka atrodaties klusā vietā, un mēģiniet vēlreiz.",
+  "@multipleSpeakersDesc": {
+    "description": "Error description for multiple speakers"
+  },
+  "tooShortDesc": "Nav atklāts pietiekami daudz runas. Lūdzu, runājiet vairāk un mēģiniet vēlreiz.",
+  "@tooShortDesc": {
+    "description": "Error description for recording being too short"
+  },
+  "invalidRecordingDesc": "Lūdzu, pārliecinieties, ka runājat vismaz 5 sekundes un ne vairāk kā 90.",
+  "@invalidRecordingDesc": {
+    "description": "Error description for invalid recording duration"
+  },
+  "areYouThere": "Vai jūs esat tur?",
+  "@areYouThere": {
+    "description": "Timeout warning title"
+  },
+  "noSpeechDesc": "Mēs nevarējām atklāt nevienu runu. Lūdzu, pārliecinieties, ka runājat vismaz 10 sekundes un ne vairāk kā 3 minūtes.",
+  "@noSpeechDesc": {
+    "description": "Error description when no speech is detected"
+  },
+  "connectionLost": "Savienojums zaudēts",
+  "@connectionLost": {
+    "description": "Title for lost connection dialog"
+  },
+  "connectionLostDesc": "Savienojums tika pārtraukts. Lūdzu, pārbaudiet interneta savienojumu un mēģiniet vēlreiz.",
+  "@connectionLostDesc": {
+    "description": "Description for lost connection"
+  },
+  "tryAgain": "Mēģināt vēlreiz",
+  "@tryAgain": {
+    "description": "Button text to retry an action"
+  },
+  "connectOmiOmiGlass": "Savienot Omi / OmiGlass",
+  "@connectOmiOmiGlass": {
+    "description": "Button text to connect specific device models"
+  },
+  "continueWithoutDevice": "Turpināt bez ierīces",
+  "@continueWithoutDevice": {
+    "description": "Button text to proceed without connecting a hardware device"
+  },
+  "permissionsRequired": "Nepieciešamas atļaujas",
+  "@permissionsRequired": {
+    "description": "Title for permissions required dialog"
+  },
+  "permissionsRequiredDesc": "Šai lietotnei ir nepieciešamas Bluetooth un Atrašanās vietas atļaujas, lai darbotos pareizi. Lūdzu, iespējojiet tās iestatījumos.",
+  "@permissionsRequiredDesc": {
+    "description": "Explanation of why permissions are needed"
+  },
+  "openSettings": "Atvērt iestatījumus",
+  "@openSettings": {
+    "description": "Button text to open app settings"
+  },
+  "wantDifferentName": "Vēlaties, lai jūs uzrunā citādi?",
+  "@wantDifferentName": {
+    "description": "Question asking if user wants to change their display name"
+  },
+  "whatsYourName": "Kāds ir jūsu vārds?",
+  "@whatsYourName": {
+    "description": "Question asking for user's name"
+  },
+  "@enterYourName": {
+    "description": "Hint text for name input field"
+  },
+  "speakTranscribeSummarize": "Runāt. Transkribēt. Apkopot.",
+  "@speakTranscribeSummarize": {
+    "description": "Tagline or slogan on the welcome/auth screen"
+  },
+  "signInWithApple": "Pierakstīties ar Apple",
+  "@signInWithApple": {
+    "description": "Button text for Apple Sign In"
+  },
+  "signInWithGoogle": "Pierakstīties ar Google",
+  "@signInWithGoogle": {
+    "description": "Button text for Google Sign In"
+  },
+  "byContinuingAgree": "Turpinot, jūs piekrītat mūsu ",
+  "@byContinuingAgree": {
+    "description": "Legal disclaimer prefix text"
+  },
+  "termsOfUse": "Lietošanas noteikumi",
+  "@termsOfUse": {
+    "description": "Link text for Terms of Use"
+  },
+  "omiYourAiCompanion": "Omi – jūsu AI pavadonis",
+  "@omiYourAiCompanion": {
+    "description": "App title or branding on onboarding screen"
+  },
+  "captureEveryMoment": "Fiksējiet katru brīdi. Iegūstiet AI\nkopsavilkumus. Nekad vairs nerakstiet piezīmes.",
+  "@captureEveryMoment": {
+    "description": "App value proposition or description"
+  },
+  "appleWatchSetup": "Apple Watch iestatīšana",
+  "@appleWatchSetup": {
+    "description": "Title for Apple Watch setup page"
+  },
+  "permissionRequestedExclaim": "Atļauja pieprasīta!",
+  "@permissionRequestedExclaim": {
+    "description": "Title when permission has been requested"
+  },
+  "microphonePermission": "Mikrofona atļauja",
+  "@microphonePermission": {
+    "description": "Title for microphone permission section"
+  },
+  "permissionGrantedNow": "Atļauja piešķirta! Tagad:\n\nAtveriet Omi lietotni savā pulkstenī un piespiediet \"Turpināt\" zemāk",
+  "@permissionGrantedNow": {
+    "description": "Instructions after permission is granted"
+  },
+  "needMicrophonePermission": "Mums nepieciešama mikrofona atļauja.\n\n1. Piespiediet \"Piešķirt atļauju\"\n2. Atļaut iPhone\n3. Pulksteņa lietotne aizvērsies\n4. Atkārtoti atveriet un piespiediet \"Turpināt\"",
+  "@needMicrophonePermission": {
+    "description": "Instructions for granting microphone permission"
+  },
+  "grantPermissionButton": "Piešķirt atļauju",
+  "@grantPermissionButton": {
+    "description": "Button to request permission"
+  },
+  "needHelp": "Nepieciešama palīdzība?",
+  "@needHelp": {
+    "description": "Link to help dialog"
+  },
+  "troubleshootingSteps": "Problēmu novēršana:\n\n1. Pārliecinieties, ka Omi ir instalēts jūsu pulkstenī\n2. Atveriet Omi lietotni savā pulkstenī\n3. Meklējiet atļaujas uznirstošo logu\n4. Piespiediet \"Atļaut\", kad tiek piedāvāts\n5. Lietotne jūsu pulkstenī aizvērsies - atkārtoti atveriet to\n6. Atgriezieties un piespiediet \"Turpināt\" savā iPhone",
+  "@troubleshootingSteps": {
+    "description": "Troubleshooting instructions for watch setup"
+  },
+  "@gotIt": {
+    "description": "Button to dismiss dialog"
+  },
+  "recordingStartedSuccessfully": "Ierakstīšana veiksmīgi sākta!",
+  "@recordingStartedSuccessfully": {
+    "description": "Success message"
+  },
+  "permissionNotGrantedYet": "Atļauja vēl nav piešķirta. Lūdzu, pārliecinieties, ka atļāvāt mikrofona piekļuvi un atkārtoti atvērāt lietotni savā pulkstenī.",
+  "@permissionNotGrantedYet": {
+    "description": "Error message when permission is missing"
+  },
+  "errorRequestingPermission": "Kļūda, pieprasot atļauju: {error}",
+  "@errorRequestingPermission": {
+    "description": "Error message for permission request failure",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "errorStartingRecording": "Kļūda, sākot ierakstīšanu: {error}",
+  "@errorStartingRecording": {
+    "description": "Error message for recording start failure",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "selectPrimaryLanguage": "Izvēlieties savu primāro valodu",
+  "@selectPrimaryLanguage": {
+    "description": "Title for language selection dialog"
+  },
+  "languageBenefits": "Iestatiet savu valodu precīzākai transkripcijai un personalizētai pieredzei",
+  "@languageBenefits": {
+    "description": "Explanation of why language selection matters"
+  },
+  "@searchLanguageHint": {
+    "description": "Hint text for language search"
+  },
+  "@noLanguagesFound": {
+    "description": "Text when search returns no results"
+  },
+  "whatsYourPrimaryLanguage": "Kāda ir jūsu primārā valoda?",
+  "@whatsYourPrimaryLanguage": {
+    "description": "Question asking for primary language"
+  },
+  "selectYourLanguage": "Izvēlieties savu valodu",
+  "@selectYourLanguage": {
+    "description": "Placeholder for selected language name"
+  },
+  "personalGrowthJourney": "Jūsu personīgās izaugsmes ceļojums ar AI, kas klausās katru jūsu vārdu.",
+  "@personalGrowthJourney": {
+    "description": "Tagline on onboarding wrapper"
+  },
+  "actionItemsTitle": "Darāmie darbi",
+  "@actionItemsTitle": {
+    "description": "Title for the Action Items page"
+  },
+  "actionItemsDescription": "Piespiediet, lai rediģētu • Ilgi turiet, lai atlasītu • Velciet, lai veiktu darbības",
+  "@actionItemsDescription": {
+    "description": "Instruction text for Action Items interactions"
+  },
+  "tabToDo": "Darāms",
+  "@tabToDo": {
+    "description": "Label for To Do tab"
+  },
+  "tabDone": "Padarīts",
+  "@tabDone": {
+    "description": "Label for Done tab"
+  },
+  "tabOld": "Vecs",
+  "@tabOld": {
+    "description": "Label for Old tab"
+  },
+  "emptyTodoMessage": "🎉 Viss padarīts!\nNav gaidošu uzdevumu",
+  "@emptyTodoMessage": {
+    "description": "Message when To Do list is empty"
+  },
+  "emptyDoneMessage": "Vēl nav pabeigtu vienību",
+  "@emptyDoneMessage": {
+    "description": "Message when Done list is empty"
+  },
+  "emptyOldMessage": "✅ Nav vecu uzdevumu",
+  "@emptyOldMessage": {
+    "description": "Message when Old list is empty"
+  },
+  "noItems": "Nav vienību",
+  "@noItems": {
+    "description": "Generic no items message"
+  },
+  "actionItemMarkedIncomplete": "Uzdevums atzīmēts kā nepabeigts",
+  "@actionItemMarkedIncomplete": {
+    "description": "Snackbar message when item marked incomplete"
+  },
+  "actionItemCompleted": "Uzdevums pabeigts",
+  "@actionItemCompleted": {
+    "description": "Snackbar message when item completed"
+  },
+  "deleteActionItemTitle": "Dzēst uzdevumu",
+  "@deleteActionItemTitle": {
+    "description": "Title for delete item dialog"
+  },
+  "deleteActionItemMessage": "Vai tiešām vēlaties dzēst šo uzdevumu?",
+  "@deleteActionItemMessage": {
+    "description": "Confirmation message for deleting single item"
+  },
+  "deleteSelectedItemsTitle": "Dzēst atlasītos vienumus",
+  "@deleteSelectedItemsTitle": {
+    "description": "Title for bulk delete dialog"
+  },
+  "deleteSelectedItemsMessage": "Vai tiešām vēlaties dzēst {count} atlasītos uzdevumus?",
+  "@deleteSelectedItemsMessage": {
+    "description": "Confirmation message for bulk delete",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "s": {
+        "type": "String",
+        "description": "Plural suffix (s) if needed, handled by logic or just append 's' for simplicity if count > 1"
+      }
+    }
+  },
+  "actionItemDeletedResult": "Uzdevums \"{description}\" izdzēsts",
+  "@actionItemDeletedResult": {
+    "description": "Snackbar message after deleting single item",
+    "placeholders": {
+      "description": {
+        "type": "String"
+      }
+    }
+  },
+  "itemsDeletedResult": "{count} uzdevumi izdzēsti",
+  "@itemsDeletedResult": {
+    "description": "Snackbar message after bulk delete",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "s": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToDeleteItem": "Neizdevās dzēst uzdevumu",
+  "@failedToDeleteItem": {
+    "description": "Error message when deletion fails"
+  },
+  "failedToDeleteItems": "Neizdevās dzēst vienumus",
+  "@failedToDeleteItems": {
+    "description": "Error message when bulk deletion fails"
+  },
+  "failedToDeleteSomeItems": "Neizdevās dzēst dažus vienumus",
+  "@failedToDeleteSomeItems": {
+    "description": "Error message when partial deletion failure"
+  },
+  "welcomeActionItemsTitle": "Gatavs uzdevumiem",
+  "@welcomeActionItemsTitle": {
+    "description": "Heading for empty state welcome"
+  },
+  "welcomeActionItemsDescription": "Jūsu AI automātiski izvilks uzdevumus no jūsu sarunām. Tie parādīsies šeit, kad tiks izveidoti.",
+  "@welcomeActionItemsDescription": {
+    "description": "Description for empty state welcome"
+  },
+  "autoExtractionFeature": "Automātiski izvilkts no sarunām",
+  "@autoExtractionFeature": {
+    "description": "Feature point description"
+  },
+  "editSwipeFeature": "Piespiediet, lai rediģētu, velciet, lai pabeigtu vai dzēstu",
+  "@editSwipeFeature": {
+    "description": "Feature point description"
+  },
+  "itemsSelected": "{count} atlasīts",
+  "@itemsSelected": {
+    "description": "Selection count in app bar",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "selectAll": "Atlasīt visu",
+  "@selectAll": {
+    "description": "Tooltip for select all"
+  },
+  "deleteSelected": "Dzēst atlasītos",
+  "@deleteSelected": {
+    "description": "Tooltip for delete selected"
+  },
+  "searchMemories": "Meklēt {count} atmiņas",
+  "@searchMemories": {
+    "description": "Hint text for memories search bar",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "memoryDeleted": "Atmiņa izdzēsta.",
+  "@memoryDeleted": {
+    "description": "Notification when memory deleted"
+  },
+  "undo": "Atsaukt",
+  "@undo": {
+    "description": "Undo button text"
+  },
+  "noMemoriesYet": "Vēl nav atmiņu",
+  "@noMemoriesYet": {
+    "description": "Empty state text"
+  },
+  "noAutoMemories": "Vēl nav automātiski izvilktu atmiņu",
+  "@noAutoMemories": {
+    "description": "Empty state text for auto category"
+  },
+  "noManualMemories": "Vēl nav manuālu atmiņu",
+  "@noManualMemories": {
+    "description": "Empty state text for manual category"
+  },
+  "noMemoriesInCategories": "Šajās kategorijās nav atmiņu",
+  "@noMemoriesInCategories": {
+    "description": "Empty state text for filtered categories"
+  },
+  "noMemoriesFound": "Atmiņas nav atrastas",
+  "@noMemoriesFound": {
+    "description": "Empty state text for search results"
+  },
+  "addFirstMemory": "Pievienot savu pirmo atmiņu",
+  "@addFirstMemory": {
+    "description": "Button to add first memory"
+  },
+  "clearMemoryTitle": "Notīrīt Omi atmiņu",
+  "@clearMemoryTitle": {
+    "description": "Dialog title for clearing memory"
+  },
+  "clearMemoryMessage": "Vai tiešām vēlaties notīrīt Omi atmiņu? Šo darbību nevar atsaukt.",
+  "@clearMemoryMessage": {
+    "description": "Dialog content for clearing memory"
+  },
+  "clearMemoryButton": "Notīrīt atmiņu",
+  "@clearMemoryButton": {
+    "description": "Button text to confirm clear"
+  },
+  "memoryClearedSuccess": "Omi atmiņa par jums ir notīrīta",
+  "@memoryClearedSuccess": {
+    "description": "Snackbar success message"
+  },
+  "noMemoriesToDelete": "Nav atmiņu, ko dzēst",
+  "@noMemoriesToDelete": {
+    "description": "Snackbar message"
+  },
+  "createMemoryTooltip": "Izveidot jaunu atmiņu",
+  "@createMemoryTooltip": {
+    "description": "Tooltip for create memory FAB"
+  },
+  "createActionItemTooltip": "Izveidot jaunu uzdevumu",
+  "@createActionItemTooltip": {
+    "description": "Tooltip for create action item FAB"
+  },
+  "memoryManagement": "Atmiņas pārvaldība",
+  "@memoryManagement": {
+    "description": "Title for memory management sheet"
+  },
+  "filterMemories": "Filtrēt atmiņas",
+  "@filterMemories": {
+    "description": "Section header"
+  },
+  "totalMemoriesCount": "Jums ir {count} kopējās atmiņas",
+  "@totalMemoriesCount": {
+    "description": "Count display",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "publicMemories": "Publiskas atmiņas",
+  "@publicMemories": {
+    "description": "Label"
+  },
+  "privateMemories": "Privātas atmiņas",
+  "@privateMemories": {
+    "description": "Label"
+  },
+  "makeAllPrivate": "Padarīt visas atmiņas privātas",
+  "@makeAllPrivate": {
+    "description": "Button label"
+  },
+  "makeAllPublic": "Padarīt visas atmiņas publiskas",
+  "@makeAllPublic": {
+    "description": "Button label"
+  },
+  "deleteAllMemories": "Dzēst visas atmiņas",
+  "@deleteAllMemories": {
+    "description": "Button label"
+  },
+  "allMemoriesPrivateResult": "Visas atmiņas tagad ir privātas",
+  "@allMemoriesPrivateResult": {
+    "description": "Snackbar"
+  },
+  "allMemoriesPublicResult": "Visas atmiņas tagad ir publiskas",
+  "@allMemoriesPublicResult": {
+    "description": "Snackbar"
+  },
+  "newMemory": "Jauna atmiņa",
+  "@newMemory": {
+    "description": "Dialog title"
+  },
+  "editMemory": "Rediģēt atmiņu",
+  "@editMemory": {
+    "description": "Dialog title"
+  },
+  "memoryContentHint": "Man patīk ēst saldējumu...",
+  "@memoryContentHint": {
+    "description": "Input hint"
+  },
+  "failedToSaveMemory": "Neizdevās saglabāt. Lūdzu, pārbaudiet savienojumu.",
+  "@failedToSaveMemory": {
+    "description": "Error message"
+  },
+  "saveMemory": "Saglabāt atmiņu",
+  "@saveMemory": {
+    "description": "Button label"
+  },
+  "retry": "Mēģināt vēlreiz",
+  "@retry": {
+    "description": "Button label"
+  },
+  "createActionItem": "Izveidot uzdevumu",
+  "@createActionItem": {
+    "description": "Sheet title"
+  },
+  "editActionItem": "Rediģēt uzdevumu",
+  "@editActionItem": {
+    "description": "Sheet title"
+  },
+  "actionItemDescriptionHint": "Kas ir jādara?",
+  "@actionItemDescriptionHint": {
+    "description": "Input hint"
+  },
+  "actionItemDescriptionEmpty": "Uzdevuma apraksts nevar būt tukšs.",
+  "@actionItemDescriptionEmpty": {
+    "description": "Error message"
+  },
+  "actionItemUpdated": "Uzdevums atjaunināts",
+  "@actionItemUpdated": {
+    "description": "Snackbar"
+  },
+  "failedToUpdateActionItem": "Neizdevās atjaunināt uzdevumu",
+  "@failedToUpdateActionItem": {
+    "description": "Snackbar"
+  },
+  "actionItemCreated": "Uzdevums izveidots",
+  "@actionItemCreated": {
+    "description": "Snackbar"
+  },
+  "failedToCreateActionItem": "Neizdevās izveidot uzdevumu",
+  "@failedToCreateActionItem": {
+    "description": "Snackbar"
+  },
+  "dueDate": "Termiņš",
+  "@dueDate": {
+    "description": "Label"
+  },
+  "time": "Laiks",
+  "@time": {
+    "description": "Label"
+  },
+  "addDueDate": "Pievienot termiņu",
+  "@addDueDate": {
+    "description": "Placeholder"
+  },
+  "pressDoneToSave": "Piespiediet gatavs, lai saglabātu",
+  "@pressDoneToSave": {
+    "description": "Instruction"
+  },
+  "pressDoneToCreate": "Piespiediet gatavs, lai izveidotu",
+  "@pressDoneToCreate": {
+    "description": "Instruction"
+  },
+  "filterAll": "Visi",
+  "@filterAll": {
+    "description": "Filter option"
+  },
+  "filterSystem": "Par jums",
+  "@filterSystem": {
+    "description": "Filter option for facts about the user"
+  },
+  "filterInteresting": "Ieskati",
+  "@filterInteresting": {
+    "description": "Filter option for external wisdom/advice"
+  },
+  "filterManual": "Manuāli",
+  "@filterManual": {
+    "description": "Filter option"
+  },
+  "completed": "Pabeigts",
+  "@completed": {
+    "description": "Status label"
+  },
+  "markComplete": "Atzīmēt kā pabeigtu",
+  "@markComplete": {
+    "description": "Action label"
+  },
+  "actionItemDeleted": "Uzdevums izdzēsts",
+  "@actionItemDeleted": {
+    "description": "Snackbar"
+  },
+  "failedToDeleteActionItem": "Neizdevās dzēst uzdevumu",
+  "@failedToDeleteActionItem": {
+    "description": "Snackbar"
+  },
+  "deleteActionItemConfirmTitle": "Dzēst uzdevumu",
+  "@deleteActionItemConfirmTitle": {
+    "description": "Dialog title"
+  },
+  "deleteActionItemConfirmMessage": "Vai tiešām vēlaties dzēst šo uzdevumu?",
+  "@deleteActionItemConfirmMessage": {
+    "description": "Dialog message"
+  },
+  "appLanguage": "Lietotnes valoda",
+  "@appLanguage": {
+    "description": "Label for app language selector"
+  },
+  "appInterfaceSectionTitle": "LIETOJUMPROGRAMMAS INTERFEISS",
+  "speechTranscriptionSectionTitle": "RUNA UN TRANSKRIPCIJA",
+  "languageSettingsHelperText": "Lietojumprogrammas valoda maina izvēlnes un pogas. Runas valoda ietekmē to, kā tiek transkribēti jūsu ieraksti."
+}

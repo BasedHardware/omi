@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:omi/services/sockets/pure_socket.dart';
+
 import 'package:omi/services/custom_stt_log_service.dart';
+import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/utils/debug_log_manager.dart';
+import 'package:omi/utils/logger.dart';
 
 class CompositeTranscriptionSocket implements IPureSocket {
   final IPureSocket primarySocket;
@@ -219,7 +221,7 @@ class _PrimarySocketListener implements IPureSocketListener {
   _PrimarySocketListener(this._composite);
 
   @override
-  void onConnected() => debugPrint("[Composite/Primary] Connected");
+  void onConnected() => Logger.debug("[Composite/Primary] Connected");
 
   @override
   void onMessage(dynamic message) => _composite._onPrimaryMessage(message);
@@ -229,7 +231,6 @@ class _PrimarySocketListener implements IPureSocketListener {
 
   @override
   void onError(Object err, StackTrace trace) => _composite._onSocketError('Primary', err, trace);
-
 }
 
 class _SecondarySocketListener implements IPureSocketListener {
@@ -237,7 +238,7 @@ class _SecondarySocketListener implements IPureSocketListener {
   _SecondarySocketListener(this._composite);
 
   @override
-  void onConnected() => debugPrint("[Composite/Secondary] Connected");
+  void onConnected() => Logger.debug("[Composite/Secondary] Connected");
 
   @override
   void onMessage(dynamic message) => _composite._onSecondaryMessage(message);
@@ -248,4 +249,3 @@ class _SecondarySocketListener implements IPureSocketListener {
   @override
   void onError(Object err, StackTrace trace) => _composite._onSocketError('Secondary', err, trace);
 }
-

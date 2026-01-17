@@ -1,7 +1,12 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:shimmer/shimmer.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
@@ -16,15 +21,12 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
-import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
-import 'package:url_launcher/url_launcher.dart';
-
-// Desktop widgets
 import 'widgets/desktop_app_metadata_widget.dart';
 import 'widgets/desktop_capabilities_chips_widget.dart';
-import 'widgets/desktop_prompt_text_field.dart';
 import 'widgets/desktop_notification_scopes_chips_widget.dart';
+import 'widgets/desktop_prompt_text_field.dart';
+
+// Desktop widgets
 
 class DesktopAddAppPage extends StatefulWidget {
   final VoidCallback? onNavigateBack;

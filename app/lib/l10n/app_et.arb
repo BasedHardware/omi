@@ -1,0 +1,2317 @@
+{
+  "@@locale": "et",
+  "@@last_modified": "2026-01-13",
+  "appTitle": "Omi",
+  "@appTitle": {
+    "description": "The app title displayed in various places"
+  },
+  "conversationTab": "Vestlus",
+  "@conversationTab": {
+    "description": "Tab label for conversation summary"
+  },
+  "transcriptTab": "Transkriptsioon",
+  "@transcriptTab": {
+    "description": "Tab label for transcript view"
+  },
+  "actionItemsTab": "Tegevuspunktid",
+  "@actionItemsTab": {
+    "description": "Tab label for action items"
+  },
+  "deleteConversationTitle": "Kustuta vestlus?",
+  "@deleteConversationTitle": {
+    "description": "Title for delete confirmation dialog"
+  },
+  "deleteConversationMessage": "Kas olete kindel, et soovite selle vestluse kustutada? Seda toimingut ei saa tagasi võtta.",
+  "@deleteConversationMessage": {
+    "description": "Message for delete confirmation dialog"
+  },
+  "confirm": "Kinnita",
+  "@confirm": {
+    "description": "Confirm button label"
+  },
+  "cancel": "Tühista",
+  "@cancel": {
+    "description": "Button label"
+  },
+  "ok": "Ok",
+  "@ok": {
+    "description": "Generic OK button text"
+  },
+  "delete": "Kustuta",
+  "@delete": {
+    "description": "Button label"
+  },
+  "add": "Lisa",
+  "@add": {
+    "description": "Add button label"
+  },
+  "update": "Uuenda",
+  "@update": {
+    "description": "Update button label"
+  },
+  "save": "Salvesta",
+  "@save": {
+    "description": "Save button label"
+  },
+  "edit": "Muuda",
+  "@edit": {
+    "description": "Edit button/action label"
+  },
+  "close": "Sulge",
+  "@close": {
+    "description": "Close button label"
+  },
+  "clear": "Tühjenda",
+  "@clear": {
+    "description": "Clear button label"
+  },
+  "copyTranscript": "Kopeeri transkriptsioon",
+  "@copyTranscript": {
+    "description": "Menu item to copy transcript"
+  },
+  "copySummary": "Kopeeri kokkuvõte",
+  "@copySummary": {
+    "description": "Menu item to copy summary"
+  },
+  "testPrompt": "Testi käsku",
+  "@testPrompt": {
+    "description": "Menu item for testing prompts"
+  },
+  "reprocessConversation": "Töötle vestlust uuesti",
+  "@reprocessConversation": {
+    "description": "Menu item to reprocess a conversation"
+  },
+  "deleteConversation": "Kustuta vestlus",
+  "@deleteConversation": {
+    "description": "Menu item to delete a conversation"
+  },
+  "contentCopied": "Sisu kopeeritud lõikelauale",
+  "@contentCopied": {
+    "description": "Snackbar message when content is copied"
+  },
+  "failedToUpdateStarred": "Tärni lisamine ebaõnnestus.",
+  "@failedToUpdateStarred": {
+    "description": "Error message when starring fails"
+  },
+  "conversationUrlNotShared": "Vestluse URL-i ei saanud jagada.",
+  "@conversationUrlNotShared": {
+    "description": "Error message when sharing fails"
+  },
+  "errorProcessingConversation": "Viga vestluse töötlemisel. Palun proovige hiljem uuesti.",
+  "@errorProcessingConversation": {
+    "description": "Error message for conversation processing failure"
+  },
+  "noInternetConnection": "Palun kontrollige oma internetiühendust ja proovige uuesti.",
+  "@noInternetConnection": {
+    "description": "Message shown when there's no internet"
+  },
+  "unableToDeleteConversation": "Vestlust ei õnnestunud kustutada",
+  "@unableToDeleteConversation": {
+    "description": "Title for delete error dialog"
+  },
+  "somethingWentWrong": "Midagi läks valesti! Palun proovige hiljem uuesti.",
+  "@somethingWentWrong": {
+    "description": "Generic error message"
+  },
+  "copyErrorMessage": "Kopeeri veateade",
+  "@copyErrorMessage": {
+    "description": "Button to copy error details"
+  },
+  "errorCopied": "Veateade kopeeritud lõikelauale",
+  "@errorCopied": {
+    "description": "Snackbar message after copying error"
+  },
+  "remaining": "Järelejäänud",
+  "@remaining": {
+    "description": "Label for remaining time/items"
+  },
+  "loading": "Laadimine...",
+  "@loading": {
+    "description": "Loading indicator text"
+  },
+  "loadingDuration": "Kestuse laadimine...",
+  "@loadingDuration": {
+    "description": "Loading duration indicator"
+  },
+  "secondsCount": "{count} sekundit",
+  "@secondsCount": {
+    "description": "Duration in seconds",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "30"
+      }
+    }
+  },
+  "people": "Inimesed",
+  "@people": {
+    "description": "People section title"
+  },
+  "addNewPerson": "Lisa uus isik",
+  "@addNewPerson": {
+    "description": "Title for add person dialog"
+  },
+  "editPerson": "Muuda isikut",
+  "@editPerson": {
+    "description": "Title for edit person dialog"
+  },
+  "createPersonHint": "Looge uus isik ja õpetage Omi-le ära tundma ka tema kõnet!",
+  "@createPersonHint": {
+    "description": "Hint text for creating a person"
+  },
+  "speechProfile": "Kõneprofiil",
+  "@speechProfile": {
+    "description": "Speech profile label"
+  },
+  "sampleNumber": "Näidis {number}",
+  "@sampleNumber": {
+    "description": "Label for speech sample",
+    "placeholders": {
+      "number": {
+        "type": "int",
+        "example": "1"
+      }
+    }
+  },
+  "settings": "Seaded",
+  "@settings": {
+    "description": "Settings page title"
+  },
+  "language": "Keel",
+  "@language": {
+    "description": "Language setting label"
+  },
+  "selectLanguage": "Vali keel",
+  "@selectLanguage": {
+    "description": "Title for language selection"
+  },
+  "deleting": "Kustutamine...",
+  "@deleting": {
+    "description": "Deleting in progress indicator"
+  },
+  "pleaseCompleteAuthentication": "Palun lõpetage autentimine oma brauseris. Kui olete valmis, naasake rakendusse.",
+  "@pleaseCompleteAuthentication": {
+    "description": "Message shown during OAuth flow"
+  },
+  "failedToStartAuthentication": "Autentimise alustamine ebaõnnestus",
+  "@failedToStartAuthentication": {
+    "description": "Error when OAuth fails to start"
+  },
+  "importStarted": "Import algas! Saate teate, kui see on lõpetatud.",
+  "@importStarted": {
+    "description": "Success message when import begins"
+  },
+  "failedToStartImport": "Impordi alustamine ebaõnnestus. Palun proovige uuesti.",
+  "@failedToStartImport": {
+    "description": "Error when import fails to start"
+  },
+  "couldNotAccessFile": "Valitud failile ei pääsenud ligi",
+  "@couldNotAccessFile": {
+    "description": "Error when file access fails"
+  },
+  "askOmi": "Küsi Omi-lt",
+  "@askOmi": {
+    "description": "Chat button label"
+  },
+  "done": "Valmis",
+  "@done": {
+    "description": "Button label"
+  },
+  "disconnected": "Ühendus katkestatud",
+  "@disconnected": {
+    "description": "Device disconnected status"
+  },
+  "searching": "Otsimine",
+  "@searching": {
+    "description": "Searching for device status"
+  },
+  "connectDevice": "Ühenda seade",
+  "@connectDevice": {
+    "description": "Button to connect a device"
+  },
+  "monthlyLimitReached": "Olete jõudnud oma kuulimiidini.",
+  "@monthlyLimitReached": {
+    "description": "Message when usage limit is reached"
+  },
+  "checkUsage": "Kontrolli kasutust",
+  "@checkUsage": {
+    "description": "Button to check usage details"
+  },
+  "syncingRecordings": "Salvestiste sünkroonimine",
+  "@syncingRecordings": {
+    "description": "Title when sync is in progress"
+  },
+  "recordingsToSync": "Sünkroonimist vajavad salvestised",
+  "@recordingsToSync": {
+    "description": "Title when there are recordings to sync"
+  },
+  "allCaughtUp": "Kõik on sünkroonitud",
+  "@allCaughtUp": {
+    "description": "Title when everything is synced"
+  },
+  "sync": "Sünkrooni",
+  "@sync": {
+    "description": "Sync button label"
+  },
+  "pendantUpToDate": "Ripats on ajakohane",
+  "@pendantUpToDate": {
+    "description": "Status when pendant is synced"
+  },
+  "allRecordingsSynced": "Kõik salvestised on sünkroonitud",
+  "@allRecordingsSynced": {
+    "description": "Status text when sync is complete"
+  },
+  "syncingInProgress": "Sünkroonimine käib",
+  "@syncingInProgress": {
+    "description": "Status when sync is happening"
+  },
+  "readyToSync": "Valmis sünkroonimiseks",
+  "@readyToSync": {
+    "description": "Status when ready to sync"
+  },
+  "tapSyncToStart": "Alustamiseks vajutage Sünkrooni",
+  "@tapSyncToStart": {
+    "description": "Hint to start sync"
+  },
+  "pendantNotConnected": "Ripats pole ühendatud. Sünkroonimiseks ühendage see.",
+  "@pendantNotConnected": {
+    "description": "Warning when pendant is not connected"
+  },
+  "everythingSynced": "Kõik on juba sünkroonitud.",
+  "@everythingSynced": {
+    "description": "Message when all is synced"
+  },
+  "recordingsNotSynced": "Teil on salvestisi, mis pole veel sünkroonitud.",
+  "@recordingsNotSynced": {
+    "description": "Message when there are unsynced recordings"
+  },
+  "syncingBackground": "Jätkame teie salvestiste sünkroonimist taustal.",
+  "@syncingBackground": {
+    "description": "Message during background sync"
+  },
+  "noConversationsYet": "Vestlusi pole veel.",
+  "@noConversationsYet": {
+    "description": "Empty state when no conversations exist"
+  },
+  "noStarredConversations": "Tärniga märgitud vestlusi pole veel.",
+  "@noStarredConversations": {
+    "description": "Empty state for starred filter"
+  },
+  "starConversationHint": "Vestluse tärniga märkimiseks avage see ja puudutage päises tärni ikooni.",
+  "@starConversationHint": {
+    "description": "Hint explaining how to star conversations"
+  },
+  "searchConversations": "Otsi vestlusi",
+  "@searchConversations": {
+    "description": "Search field placeholder"
+  },
+  "selectedCount": "{count} valitud",
+  "@selectedCount": {
+    "description": "Selection count label",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "merge": "Ühenda",
+  "@merge": {
+    "description": "Merge button label"
+  },
+  "mergeConversations": "Ühenda vestlused",
+  "@mergeConversations": {
+    "description": "Merge dialog title"
+  },
+  "mergeConversationsMessage": "See ühendab {count} vestlust üheks. Kogu sisu ühendatakse ja luuakse uuesti.",
+  "@mergeConversationsMessage": {
+    "description": "Merge confirmation message",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mergingInBackground": "Ühendamine käib taustal. See võib võtta hetke aega.",
+  "@mergingInBackground": {
+    "description": "Snackbar message during merge"
+  },
+  "failedToStartMerge": "Ühendamise alustamine ebaõnnestus",
+  "@failedToStartMerge": {
+    "description": "Error message when merge fails"
+  },
+  "askAnything": "Küsi mida tahes",
+  "@askAnything": {
+    "description": "Chat input placeholder"
+  },
+  "noMessagesYet": "Sõnumeid pole veel!\nMiks te ei alusta vestlust?",
+  "@noMessagesYet": {
+    "description": "Empty chat state message"
+  },
+  "deletingMessages": "Teie sõnumite kustutamine Omi mälust...",
+  "@deletingMessages": {
+    "description": "Loading text while clearing chat"
+  },
+  "messageCopied": "Sõnum kopeeritud lõikelauale.",
+  "@messageCopied": {
+    "description": "Snackbar after copying message"
+  },
+  "cannotReportOwnMessage": "Te ei saa oma sõnumitest teatada.",
+  "@cannotReportOwnMessage": {
+    "description": "Error when trying to report own message"
+  },
+  "reportMessage": "Teata sõnumist",
+  "@reportMessage": {
+    "description": "Report message dialog title"
+  },
+  "reportMessageConfirm": "Kas olete kindel, et soovite sellest sõnumist teatada?",
+  "@reportMessageConfirm": {
+    "description": "Report message confirmation"
+  },
+  "messageReported": "Sõnumist teatati edukalt.",
+  "@messageReported": {
+    "description": "Confirmation after reporting message"
+  },
+  "thankYouFeedback": "Täname tagasiside eest!",
+  "@thankYouFeedback": {
+    "description": "After thumbs up/down feedback"
+  },
+  "clearChat": "Tühjenda vestlus?",
+  "@clearChat": {
+    "description": "Clear chat dialog title"
+  },
+  "clearChatConfirm": "Kas olete kindel, et soovite vestluse tühjendada? Seda toimingut ei saa tagasi võtta.",
+  "@clearChatConfirm": {
+    "description": "Clear chat confirmation message"
+  },
+  "maxFilesLimit": "Korraga saate üles laadida ainult 4 faili",
+  "@maxFilesLimit": {
+    "description": "Max files upload warning"
+  },
+  "chatWithOmi": "Vestlus Omi-ga",
+  "@chatWithOmi": {
+    "description": "Chat share subject"
+  },
+  "apps": "Rakendused",
+  "@apps": {
+    "description": "Apps page title"
+  },
+  "noAppsFound": "Rakendusi ei leitud",
+  "@noAppsFound": {
+    "description": "Empty state when no apps match"
+  },
+  "tryAdjustingSearch": "Proovige otsingu või filtrite muutmist",
+  "@tryAdjustingSearch": {
+    "description": "Hint when no apps found"
+  },
+  "createYourOwnApp": "Looge oma rakendus",
+  "@createYourOwnApp": {
+    "description": "Create app button title"
+  },
+  "buildAndShareApp": "Looge ja jagage oma kohandatud rakendust",
+  "@buildAndShareApp": {
+    "description": "Create app button subtitle"
+  },
+  "searchApps": "Otsi 1500+ rakendust",
+  "@searchApps": {
+    "description": "Apps search placeholder"
+  },
+  "myApps": "Minu rakendused",
+  "@myApps": {
+    "description": "My Apps filter button"
+  },
+  "installedApps": "Paigaldatud rakendused",
+  "@installedApps": {
+    "description": "Installed Apps filter button"
+  },
+  "unableToFetchApps": "Rakenduste laadimine ebaõnnestus :(\n\nPalun kontrollige oma internetiühendust ja proovige uuesti.",
+  "@unableToFetchApps": {
+    "description": "Error when apps fail to load"
+  },
+  "aboutOmi": "Omi teave",
+  "@aboutOmi": {
+    "description": "About page title"
+  },
+  "privacyPolicy": "Privaatsuspoliitikaga",
+  "@privacyPolicy": {
+    "description": "Link text for Privacy Policy"
+  },
+  "visitWebsite": "Külasta veebilehte",
+  "@visitWebsite": {
+    "description": "Visit website link"
+  },
+  "helpOrInquiries": "Abi või päringud?",
+  "@helpOrInquiries": {
+    "description": "Help link title"
+  },
+  "joinCommunity": "Liitu kogukonnaga!",
+  "@joinCommunity": {
+    "description": "Discord community link"
+  },
+  "membersAndCounting": "8000+ liiget ja kasvab.",
+  "@membersAndCounting": {
+    "description": "Discord member count"
+  },
+  "deleteAccountTitle": "Kustuta konto",
+  "@deleteAccountTitle": {
+    "description": "Delete account page title"
+  },
+  "deleteAccountConfirm": "Kas olete kindel, et soovite oma konto kustutada?",
+  "@deleteAccountConfirm": {
+    "description": "Delete account confirmation"
+  },
+  "cannotBeUndone": "Seda ei saa tagasi võtta.",
+  "@cannotBeUndone": {
+    "description": "Warning that action is permanent"
+  },
+  "allDataErased": "Kõik teie mälestused ja vestlused kustutatakse jäädavalt.",
+  "@allDataErased": {
+    "description": "Delete account warning 1"
+  },
+  "appsDisconnected": "Teie rakendused ja integratsioonid katkestatakse viivitamatult.",
+  "@appsDisconnected": {
+    "description": "Delete account warning 2"
+  },
+  "exportBeforeDelete": "Saate oma andmed enne konto kustutamist eksportida, kuid pärast kustutamist ei saa neid taastada.",
+  "@exportBeforeDelete": {
+    "description": "Delete account warning 3"
+  },
+  "deleteAccountCheckbox": "Mõistan, et minu konto kustutamine on püsiv ja kõik andmed, sealhulgas mälestused ja vestlused, lähevad kaotsi ega ole taastatavad.",
+  "@deleteAccountCheckbox": {
+    "description": "Delete account checkbox confirmation"
+  },
+  "areYouSure": "Kas olete kindel?",
+  "@areYouSure": {
+    "description": "Final confirmation title"
+  },
+  "deleteAccountFinal": "See toiming on pöördumatu ja kustutab jäädavalt teie konto ja kõik sellega seotud andmed. Kas olete kindel, et soovite jätkata?",
+  "@deleteAccountFinal": {
+    "description": "Final delete confirmation message"
+  },
+  "deleteNow": "Kustuta kohe",
+  "@deleteNow": {
+    "description": "Delete now button"
+  },
+  "goBack": "Mine tagasi",
+  "@goBack": {
+    "description": "Go back button"
+  },
+  "checkBoxToConfirm": "Märkige ruut, et kinnitada, et mõistate, et teie konto kustutamine on püsiv ja pöördumatu.",
+  "@checkBoxToConfirm": {
+    "description": "Checkbox validation error"
+  },
+  "profile": "Profiil",
+  "@profile": {
+    "description": "Profile page title"
+  },
+  "name": "Nimi",
+  "@name": {
+    "description": "Name field label"
+  },
+  "email": "E-post",
+  "@email": {
+    "description": "Email field label"
+  },
+  "customVocabulary": "Kohandatud sõnavara",
+  "@customVocabulary": {
+    "description": "Custom vocabulary setting"
+  },
+  "identifyingOthers": "Teiste tuvastamine",
+  "@identifyingOthers": {
+    "description": "People identification setting"
+  },
+  "paymentMethods": "Makseviisid",
+  "@paymentMethods": {
+    "description": "Payment methods setting"
+  },
+  "conversationDisplay": "Vestluse kuvamine",
+  "@conversationDisplay": {
+    "description": "Conversation display setting"
+  },
+  "dataPrivacy": "Andmed ja privaatsus",
+  "@dataPrivacy": {
+    "description": "Data and privacy setting"
+  },
+  "userId": "Kasutaja ID",
+  "@userId": {
+    "description": "User ID label"
+  },
+  "notSet": "Pole määratud",
+  "@notSet": {
+    "description": "Default value when not set"
+  },
+  "userIdCopied": "Kasutaja ID kopeeritud lõikelauale",
+  "@userIdCopied": {
+    "description": "Confirmation when user ID is copied"
+  },
+  "systemDefault": "Süsteemi vaikimisi",
+  "@systemDefault": {
+    "description": "System language option"
+  },
+  "planAndUsage": "Plaan ja kasutus",
+  "@planAndUsage": {
+    "description": "Plan and usage menu item"
+  },
+  "offlineSync": "Võrguühenduseta sünkroonimine",
+  "@offlineSync": {
+    "description": "Offline sync menu item"
+  },
+  "deviceSettings": "Seadme seaded",
+  "@deviceSettings": {
+    "description": "Device settings menu item"
+  },
+  "chatTools": "Vestlustööriistad",
+  "@chatTools": {
+    "description": "Chat tools menu item"
+  },
+  "feedbackBug": "Tagasiside / viga",
+  "@feedbackBug": {
+    "description": "Feedback menu item"
+  },
+  "helpCenter": "Abikeskus",
+  "@helpCenter": {
+    "description": "Help center menu item"
+  },
+  "developerSettings": "Arendaja seaded",
+  "@developerSettings": {
+    "description": "Developer settings menu item"
+  },
+  "getOmiForMac": "Hangi Omi Mac-ile",
+  "@getOmiForMac": {
+    "description": "Mac app download link"
+  },
+  "referralProgram": "Viiteprogramm",
+  "@referralProgram": {
+    "description": "Referral program menu item"
+  },
+  "signOut": "Logi välja",
+  "@signOut": {
+    "description": "Sign out button"
+  },
+  "appAndDeviceCopied": "Rakenduse ja seadme üksikasjad kopeeritud",
+  "@appAndDeviceCopied": {
+    "description": "Confirmation when version info is copied"
+  },
+  "wrapped2025": "Kokkuvõte 2025",
+  "@wrapped2025": {
+    "description": "Wrapped 2025 menu item"
+  },
+  "yourPrivacyYourControl": "Teie privaatsus, teie kontroll",
+  "@yourPrivacyYourControl": {
+    "description": "Data privacy page heading"
+  },
+  "privacyIntro": "Omi-s oleme pühendunud teie privaatsuse kaitsmisele. See leht võimaldab teil kontrollida, kuidas teie andmeid säilitatakse ja kasutatakse.",
+  "@privacyIntro": {
+    "description": "Data privacy page introduction"
+  },
+  "learnMore": "Loe lähemalt...",
+  "@learnMore": {
+    "description": "Learn more link"
+  },
+  "dataProtectionLevel": "Andmekaitse tase",
+  "@dataProtectionLevel": {
+    "description": "Data protection section title"
+  },
+  "dataProtectionDesc": "Teie andmed on vaikimisi kaitstud tugeva krüpteerimisega. Vaadake allpool oma seadeid ja tulevasi privaatsusvalikuid.",
+  "@dataProtectionDesc": {
+    "description": "Data protection section description"
+  },
+  "appAccess": "Rakenduse juurdepääs",
+  "@appAccess": {
+    "description": "App access section title"
+  },
+  "appAccessDesc": "Järgmised rakendused pääsevad juurde teie andmetele. Puudutage rakendust selle õiguste haldamiseks.",
+  "@appAccessDesc": {
+    "description": "App access section description"
+  },
+  "noAppsExternalAccess": "Ühelgi paigaldatud rakendusel pole välise juurdepääsu teie andmetele.",
+  "@noAppsExternalAccess": {
+    "description": "Empty state for app access"
+  },
+  "deviceName": "Seadme nimi",
+  "@deviceName": {
+    "description": "Device name label"
+  },
+  "deviceId": "Seadme ID",
+  "@deviceId": {
+    "description": "Device ID label"
+  },
+  "firmware": "Püsivara",
+  "@firmware": {
+    "description": "Firmware label"
+  },
+  "sdCardSync": "SD-kaardi sünkroonimine",
+  "@sdCardSync": {
+    "description": "SD Card sync label"
+  },
+  "hardwareRevision": "Riistvara versioon",
+  "@hardwareRevision": {
+    "description": "Hardware revision label"
+  },
+  "modelNumber": "Mudeli number",
+  "@modelNumber": {
+    "description": "Model number label"
+  },
+  "manufacturer": "Tootja",
+  "@manufacturer": {
+    "description": "Manufacturer label"
+  },
+  "doubleTap": "Topeltpuudutus",
+  "@doubleTap": {
+    "description": "Double tap action label"
+  },
+  "ledBrightness": "LED heledus",
+  "@ledBrightness": {
+    "description": "LED brightness setting"
+  },
+  "micGain": "Mikrofoni võimendus",
+  "@micGain": {
+    "description": "Microphone gain setting"
+  },
+  "disconnect": "Katkesta ühendus",
+  "@disconnect": {
+    "description": "Disconnect device button"
+  },
+  "forgetDevice": "Unusta seade",
+  "@forgetDevice": {
+    "description": "Forget device button"
+  },
+  "chargingIssues": "Laadimisprobleemid",
+  "@chargingIssues": {
+    "description": "Charging issues help item"
+  },
+  "disconnectDevice": "Katkesta seadme ühendus",
+  "@disconnectDevice": {
+    "description": "Disconnect device button"
+  },
+  "unpairDevice": "Tühista seadme sidumine",
+  "@unpairDevice": {
+    "description": "Unpair device button"
+  },
+  "unpairAndForget": "Tühista sidumine ja unusta seade",
+  "@unpairAndForget": {
+    "description": "Unpair and forget device button"
+  },
+  "deviceDisconnectedMessage": "Teie Omi on ühendus katkestatud 😔",
+  "@deviceDisconnectedMessage": {
+    "description": "Message shown when device is disconnected"
+  },
+  "deviceUnpairedMessage": "Seadme sidumine tühistatud. Minege Seaded > Bluetooth ja unustage seade sidumise lõpetamiseks.",
+  "@deviceUnpairedMessage": {
+    "description": "Message shown when device is unpaired"
+  },
+  "unpairDialogTitle": "Tühista seadme sidumine",
+  "@unpairDialogTitle": {
+    "description": "Unpair dialog title"
+  },
+  "unpairDialogMessage": "See tühistab seadme sidumise, et seda saaks ühendada teise telefoniga. Protsessi lõpetamiseks peate minema Seaded > Bluetooth ja unustama seadme.",
+  "@unpairDialogMessage": {
+    "description": "Unpair dialog message"
+  },
+  "deviceNotConnected": "Seade pole ühendatud",
+  "@deviceNotConnected": {
+    "description": "Device not connected header"
+  },
+  "connectDeviceMessage": "Ühendage oma Omi seade, et pääseda juurde\nseadme seadetele ja kohandamisele",
+  "@connectDeviceMessage": {
+    "description": "Message encouraging user to connect device"
+  },
+  "deviceInfoSection": "Seadme teave",
+  "@deviceInfoSection": {
+    "description": "Device information section header"
+  },
+  "customizationSection": "Kohandamine",
+  "@customizationSection": {
+    "description": "Customization section header"
+  },
+  "hardwareSection": "Riistvara",
+  "@hardwareSection": {
+    "description": "Hardware section header"
+  },
+  "v2Undetected": "V2 tuvastamata",
+  "@v2Undetected": {
+    "description": "V2 device undeteced dialog title"
+  },
+  "v2UndetectedMessage": "Näeme, et teil on kas V1 seade või teie seade pole ühendatud. SD-kaardi funktsioon on saadaval ainult V2 seadmetele.",
+  "@v2UndetectedMessage": {
+    "description": "V2 device undeteced dialog message"
+  },
+  "endConversation": "Lõpeta vestlus",
+  "@endConversation": {
+    "description": "End conversation action"
+  },
+  "pauseResume": "Peata/jätka",
+  "@pauseResume": {
+    "description": "Pause/Resume action"
+  },
+  "starConversation": "Märgi vestlus tärniga",
+  "@starConversation": {
+    "description": "Star conversation action"
+  },
+  "doubleTapAction": "Topeltpuudutuse tegevus",
+  "@doubleTapAction": {
+    "description": "Double tap action setting"
+  },
+  "endAndProcess": "Lõpeta ja töötle vestlus",
+  "@endAndProcess": {
+    "description": "End and process action"
+  },
+  "pauseResumeRecording": "Peata/jätka salvestamine",
+  "@pauseResumeRecording": {
+    "description": "Pause/Resume recording action"
+  },
+  "starOngoing": "Märgi käimasolev vestlus tärniga",
+  "@starOngoing": {
+    "description": "Star ongoing conversation action"
+  },
+  "off": "Väljas",
+  "@off": {
+    "description": "Off state"
+  },
+  "max": "Maks",
+  "@max": {
+    "description": "Max state"
+  },
+  "mute": "Vaigista",
+  "@mute": {
+    "description": "Mute state"
+  },
+  "quiet": "Vaikne",
+  "@quiet": {
+    "description": "Quiet preset"
+  },
+  "normal": "Tavaline",
+  "@normal": {
+    "description": "Normal preset"
+  },
+  "high": "Kõrge",
+  "@high": {
+    "description": "High preset"
+  },
+  "micGainDescMuted": "Mikrofon on vaigistatud",
+  "@micGainDescMuted": {
+    "description": "Mic gain description: Muted"
+  },
+  "micGainDescLow": "Väga vaikne - valjude keskkondade jaoks",
+  "@micGainDescLow": {
+    "description": "Mic gain description: Low"
+  },
+  "micGainDescModerate": "Vaikne - mõõduka müra jaoks",
+  "@micGainDescModerate": {
+    "description": "Mic gain description: Moderate"
+  },
+  "micGainDescNeutral": "Neutraalne - tasakaalustatud salvestamine",
+  "@micGainDescNeutral": {
+    "description": "Mic gain description: Neutral"
+  },
+  "micGainDescSlightlyBoosted": "Veidi võimendatud - tavakasutus",
+  "@micGainDescSlightlyBoosted": {
+    "description": "Mic gain description: Slightly Boosted"
+  },
+  "micGainDescBoosted": "Võimendatud - vaiksetele keskkondadele",
+  "@micGainDescBoosted": {
+    "description": "Mic gain description: Boosted"
+  },
+  "micGainDescHigh": "Kõrge - kaugete või vaikste häälte jaoks",
+  "@micGainDescHigh": {
+    "description": "Mic gain description: High"
+  },
+  "micGainDescVeryHigh": "Väga kõrge - väga vaiksetele allikatele",
+  "@micGainDescVeryHigh": {
+    "description": "Mic gain description: Very High"
+  },
+  "micGainDescMax": "Maksimum - kasutage ettevaatusega",
+  "@micGainDescMax": {
+    "description": "Mic gain description: Max"
+  },
+  "developerSettingsTitle": "Arendaja seaded",
+  "@developerSettingsTitle": {
+    "description": "Developer settings page title"
+  },
+  "saving": "Salvestamine...",
+  "@saving": {
+    "description": "Saving state text"
+  },
+  "personaConfig": "Seadistage oma AI isiksus",
+  "@personaConfig": {
+    "description": "Persona configuration subtitle"
+  },
+  "beta": "BEETA",
+  "@beta": {
+    "description": "Beta tag"
+  },
+  "transcription": "Transkriptsioon",
+  "@transcription": {
+    "description": "Transcription settings title"
+  },
+  "transcriptionConfig": "Seadistage STT pakkuja",
+  "@transcriptionConfig": {
+    "description": "Transcription configuration subtitle"
+  },
+  "conversationTimeout": "Vestluse aegumine",
+  "@conversationTimeout": {
+    "description": "Conversation timeout settings title"
+  },
+  "conversationTimeoutConfig": "Määrake, millal vestlused automaatselt lõpevad",
+  "@conversationTimeoutConfig": {
+    "description": "Conversation timeout configuration subtitle"
+  },
+  "importData": "Impordi andmed",
+  "@importData": {
+    "description": "Import data details title"
+  },
+  "importDataConfig": "Importige andmed teistest allikatest",
+  "@importDataConfig": {
+    "description": "Import data details subtitle"
+  },
+  "debugDiagnostics": "Silumis- ja diagnostika",
+  "@debugDiagnostics": {
+    "description": "Debug & Diagnostics section header"
+  },
+  "endpointUrl": "Otspunkti URL",
+  "@endpointUrl": {
+    "description": "Endpoint URL label"
+  },
+  "noApiKeys": "API võtmeid pole veel",
+  "@noApiKeys": {
+    "description": "No API keys message"
+  },
+  "createKeyToStart": "Alustamiseks looge võti",
+  "@createKeyToStart": {
+    "description": "Create key instruction"
+  },
+  "createKey": "Loo võti",
+  "@createKey": {
+    "description": "Create Key button"
+  },
+  "docs": "Dokumendid",
+  "@docs": {
+    "description": "Documentation link"
+  },
+  "yourOmiInsights": "Teie Omi ülevaated",
+  "@yourOmiInsights": {
+    "description": "Usage page title"
+  },
+  "today": "Täna",
+  "@today": {
+    "description": "Time period: Today"
+  },
+  "thisMonth": "See kuu",
+  "@thisMonth": {
+    "description": "Time period: This Month"
+  },
+  "thisYear": "See aasta",
+  "@thisYear": {
+    "description": "Time period: This Year"
+  },
+  "allTime": "Kogu aeg",
+  "@allTime": {
+    "description": "Time period: All Time"
+  },
+  "noActivityYet": "Tegevust pole veel",
+  "@noActivityYet": {
+    "description": "Empty state title"
+  },
+  "startConversationToSeeInsights": "Alustage Omi-ga vestlust,\net näha siinkohal oma kasutuse ülevaadet.",
+  "@startConversationToSeeInsights": {
+    "description": "Empty state description"
+  },
+  "listening": "Kuulamine",
+  "@listening": {
+    "description": "Listening stat title"
+  },
+  "listeningSubtitle": "Aeg, mil Omi on aktiivselt kuulanud.",
+  "@listeningSubtitle": {
+    "description": "Listening stat subtitle"
+  },
+  "understanding": "Mõistmine",
+  "@understanding": {
+    "description": "Understanding stat title"
+  },
+  "understandingSubtitle": "Teie vestlustest mõistetud sõnad.",
+  "@understandingSubtitle": {
+    "description": "Understanding stat subtitle"
+  },
+  "providing": "Pakkumine",
+  "@providing": {
+    "description": "Providing stat title"
+  },
+  "providingSubtitle": "Tegevuspunktid ja märkmed automaatselt salvestatud.",
+  "@providingSubtitle": {
+    "description": "Providing stat subtitle"
+  },
+  "remembering": "Meelde jätmine",
+  "@remembering": {
+    "description": "Remembering stat title"
+  },
+  "rememberingSubtitle": "Teie jaoks meeles peetud faktid ja üksikasjad.",
+  "@rememberingSubtitle": {
+    "description": "Remembering stat subtitle"
+  },
+  "unlimitedPlan": "Piiramatu plaan",
+  "@unlimitedPlan": {
+    "description": "Unlimited plan name"
+  },
+  "managePlan": "Halda plaani",
+  "@managePlan": {
+    "description": "Manage plan button"
+  },
+  "cancelAtPeriodEnd": "Teie plaan tühistatakse {date}.",
+  "@cancelAtPeriodEnd": {
+    "description": "Cancellation message",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Jan 1, 2026"
+      }
+    }
+  },
+  "renewsOn": "Teie plaan uueneb {date}.",
+  "@renewsOn": {
+    "description": "Renewal message",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Jan 1, 2026"
+      }
+    }
+  },
+  "basicPlan": "Tasuta plaan",
+  "@basicPlan": {
+    "description": "Basic plan name"
+  },
+  "usageLimitMessage": "{used}/{limit} min kasutatud",
+  "@usageLimitMessage": {
+    "description": "Usage limit message",
+    "placeholders": {
+      "used": {
+        "type": "String",
+        "example": "100"
+      },
+      "limit": {
+        "type": "int",
+        "example": "60"
+      }
+    }
+  },
+  "upgrade": "Uuenda",
+  "@upgrade": {
+    "description": "Upgrade button"
+  },
+  "upgradeToUnlimited": "Uuenda piiramatuks",
+  "@upgradeToUnlimited": {
+    "description": "Upgrade to unlimited button"
+  },
+  "basicPlanDesc": "Teie plaan sisaldab {limit} tasuta minutit kuus. Uuendage piiramatuks.",
+  "@basicPlanDesc": {
+    "description": "Basic plan description",
+    "placeholders": {
+      "limit": {
+        "type": "int",
+        "example": "60"
+      }
+    }
+  },
+  "shareStatsMessage": "Jagan oma Omi statistikat! (omi.me - teie alati sees AI assistent)",
+  "@shareStatsMessage": {
+    "description": "Share stats base message"
+  },
+  "sharePeriodToday": "Täna on omi:",
+  "@sharePeriodToday": {
+    "description": "Share stats period: Today"
+  },
+  "sharePeriodMonth": "Sel kuul on omi:",
+  "@sharePeriodMonth": {
+    "description": "Share stats period: Month"
+  },
+  "sharePeriodYear": "Sel aastal on omi:",
+  "@sharePeriodYear": {
+    "description": "Share stats period: Year"
+  },
+  "sharePeriodAllTime": "Seni on omi:",
+  "@sharePeriodAllTime": {
+    "description": "Share stats period: All Time"
+  },
+  "shareStatsListened": "🎧 Kuulanud {minutes} minutit",
+  "@shareStatsListened": {
+    "description": "Share stats: listened",
+    "placeholders": {
+      "minutes": {
+        "type": "String",
+        "example": "120"
+      }
+    }
+  },
+  "shareStatsWords": "🧠 Mõistnud {words} sõna",
+  "@shareStatsWords": {
+    "description": "Share stats: words",
+    "placeholders": {
+      "words": {
+        "type": "String",
+        "example": "5000"
+      }
+    }
+  },
+  "shareStatsInsights": "✨ Pakkunud {count} ülevaadet",
+  "@shareStatsInsights": {
+    "description": "Share stats: insights",
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "10"
+      }
+    }
+  },
+  "shareStatsMemories": "📚 Meelde jätnud {count} mälestust",
+  "@shareStatsMemories": {
+    "description": "Share stats: memories",
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "5"
+      }
+    }
+  },
+  "debugLogs": "Silumislogid",
+  "debugLogsAutoDelete": "Kustutatakse automaatselt 3 päeva pärast.",
+  "debugLogsDesc": "Aitab diagnoosida probleeme",
+  "noLogFilesFound": "Logifaile ei leitud.",
+  "omiDebugLog": "Omi silumislogi",
+  "logShared": "Logi jagatud",
+  "selectLogFile": "Vali logifail",
+  "shareLogs": "Jaga logisid",
+  "debugLogCleared": "Silumislogi tühjendatud",
+  "exportStarted": "Eksport algas. See võib võtta mõne sekundi...",
+  "exportAllData": "Ekspordi kõik andmed",
+  "exportDataDesc": "Ekspordi vestlused JSON-failina",
+  "exportedConversations": "Omi-st eksporditud vestlused",
+  "exportShared": "Eksport jagatud",
+  "deleteKnowledgeGraphTitle": "Kustuta teadmiste graaf?",
+  "deleteKnowledgeGraphMessage": "See kustutab kõik tuletatud teadmiste graafi andmed (sõlmed ja ühendused). Teie algsed mälestused jäävad turvaliseks. Graaf taastatakse aja jooksul või järgmise päringu korral.",
+  "knowledgeGraphDeleted": "Teadmiste graaf kustutati edukalt",
+  "deleteGraphFailed": "Graafi kustutamine ebaõnnestus: {error}",
+  "@deleteGraphFailed": {
+    "description": "Error message when deleting graph fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteKnowledgeGraph": "Kustuta teadmiste graaf",
+  "deleteKnowledgeGraphDesc": "Tühjenda kõik sõlmed ja ühendused",
+  "mcp": "MCP",
+  "mcpServer": "MCP server",
+  "mcpServerDesc": "Ühendage AI assistendid oma andmetega",
+  "serverUrl": "Serveri URL",
+  "urlCopied": "URL kopeeritud",
+  "apiKeyAuth": "API võtme autentimine",
+  "header": "Päis",
+  "authorizationBearer": "Authorization: Bearer <key>",
+  "oauth": "OAuth",
+  "clientId": "Kliendi ID",
+  "clientSecret": "Kliendi saladus",
+  "useMcpApiKey": "Kasutage oma MCP API võtit",
+  "webhooks": "Veebipoogid",
+  "conversationEvents": "Vestluse sündmused",
+  "newConversationCreated": "Uus vestlus loodud",
+  "realtimeTranscript": "Reaalajas transkriptsioon",
+  "transcriptReceived": "Transkriptsioon vastu võetud",
+  "audioBytes": "Helibaite",
+  "audioDataReceived": "Heliandmed vastu võetud",
+  "intervalSeconds": "Intervall (sekundid)",
+  "daySummary": "Päeva kokkuvõte",
+  "summaryGenerated": "Kokkuvõte loodud",
+  "claudeDesktop": "Claude Desktop",
+  "addToClaudeConfig": "Lisa claude_desktop_config.json-i",
+  "copyConfig": "Kopeeri konfiguratsioon",
+  "configCopied": "Konfiguratsioon kopeeritud lõikelauale",
+  "listeningMins": "Kuulamine (min)",
+  "understandingWords": "Mõistmine (sõnad)",
+  "insights": "Ülevaated",
+  "memories": "Mälestused",
+  "minsUsedThisMonth": "{used}/{limit} min kasutatud sel kuul",
+  "@minsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "wordsUsedThisMonth": "{used}/{limit} sõna kasutatud sel kuul",
+  "@wordsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "insightsUsedThisMonth": "{used}/{limit} ülevaadet saadud sel kuul",
+  "@insightsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "memoriesUsedThisMonth": "{used}/{limit} mälestust loodud sel kuul",
+  "@memoriesUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "visibility": "Nähtavus",
+  "visibilitySubtitle": "Kontrollige, millised vestlused teie loendis kuvatakse",
+  "showShortConversations": "Kuva lühikesed vestlused",
+  "showShortConversationsDesc": "Kuva künnisest lühemaid vestlusi",
+  "showDiscardedConversations": "Kuva hüljatud vestlused",
+  "showDiscardedConversationsDesc": "Kaasa hüljatuna märgitud vestlused",
+  "shortConversationThreshold": "Lühikese vestluse künnis",
+  "shortConversationThresholdSubtitle": "Sellest lühemad vestlused peidetakse, kui pole ülalpool lubatud",
+  "durationThreshold": "Kestuse künnis",
+  "durationThresholdDesc": "Peida sellest lühemad vestlused",
+  "minLabel": "{count} min",
+  "@minLabel": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "customVocabularyTitle": "Kohandatud sõnavara",
+  "addWords": "Lisa sõnad",
+  "addWordsDesc": "Nimed, terminid või ebatavalised sõnad",
+  "vocabularyHint": "Omi, Callie, OpenAI",
+  "connect": "Ühenda",
+  "comingSoon": "Tulekul",
+  "chatToolsFooter": "Ühendage oma rakendused, et vestluses andmeid ja mõõdikuid vaadata.",
+  "completeAuthInBrowser": "Palun lõpetage autentimine oma brauseris. Kui olete valmis, naasake rakendusse.",
+  "failedToStartAuth": "{appName} autentimise alustamine ebaõnnestus",
+  "@failedToStartAuth": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectAppTitle": "Katkesta ühendus rakendusega {appName}?",
+  "@disconnectAppTitle": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectAppMessage": "Kas olete kindel, et soovite ühenduse rakendusega {appName} katkestada? Saate igal ajal uuesti ühendada.",
+  "@disconnectAppMessage": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectedFrom": "Ühendus rakendusega {appName} katkestatud",
+  "@disconnectedFrom": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToDisconnect": "Ühenduse katkestamine ebaõnnestus",
+  "connectTo": "Ühenda rakendusega {appName}",
+  "@connectTo": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "authAccessMessage": "Peate andma Omi-le loa juurdepääsuks teie {appName} andmetele. See avab teie brauseri autentimiseks.",
+  "@authAccessMessage": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "continueAction": "Jätka",
+  "languageTitle": "Keel",
+  "primaryLanguage": "Põhikeel",
+  "automaticTranslation": "Automaatne tõlge",
+  "detectLanguages": "Tuvasta 10+ keelt",
+  "authorizeSavingRecordings": "Luba salvestiste salvestamine",
+  "thanksForAuthorizing": "Täname loa andmise eest!",
+  "needYourPermission": "Vajame teie luba",
+  "alreadyGavePermission": "Olete juba andnud meile loa teie salvestiste salvestamiseks. Siin on meeldetuletus, miks me seda vajame:",
+  "wouldLikePermission": "Sooviksime teie luba teie helisalvestiste salvestamiseks. Siin on põhjus:",
+  "improveSpeechProfile": "Parandage oma kõneprofiili",
+  "improveSpeechProfileDesc": "Kasutame salvestisi, et edasi treenida ja parandada teie isiklikku kõneprofiili.",
+  "trainFamilyProfiles": "Treenige profiile sõprade ja pere jaoks",
+  "trainFamilyProfilesDesc": "Teie salvestised aitavad meil ära tunda ja luua profiile teie sõprade ja pere jaoks.",
+  "enhanceTranscriptAccuracy": "Parandage transkriptsiooni täpsust",
+  "enhanceTranscriptAccuracyDesc": "Kui meie mudel paraneb, saame pakkuda teie salvestiste jaoks paremaid transkriptsioone.",
+  "legalNotice": "Õiguslik teade: Häälsalvestuste salvestamise ja salvestamise seaduslikkus võib sõltuvalt teie asukohast ja selle funktsiooni kasutamisest erineda. Teie kohustus on tagada kohalike seaduste ja määruste järgimine.",
+  "alreadyAuthorized": "Juba autoriseeritud",
+  "authorize": "Autoriseeri",
+  "revokeAuthorization": "Tühista autoriseerimine",
+  "authorizationSuccessful": "Autoriseerimine õnnestus!",
+  "failedToAuthorize": "Autoriseerimine ebaõnnestus. Palun proovige uuesti.",
+  "authorizationRevoked": "Autoriseerimine tühistatud.",
+  "recordingsDeleted": "Salvestised kustutatud.",
+  "failedToRevoke": "Autoriseerimise tühistamine ebaõnnestus. Palun proovige uuesti.",
+  "permissionRevokedTitle": "Luba tühistatud",
+  "permissionRevokedMessage": "Kas soovite, et me eemaldaksime ka kõik teie olemasolevad salvestised?",
+  "yes": "Jah",
+  "editName": "Muuda nime",
+  "howShouldOmiCallYou": "Kuidas peaks Omi teid kutsuma?",
+  "enterYourName": "Sisestage oma nimi",
+  "nameCannotBeEmpty": "Nimi ei saa olla tühi",
+  "nameUpdatedSuccessfully": "Nimi edukalt uuendatud!",
+  "calendarSettings": "Kalendri seaded",
+  "calendarProviders": "Kalendri pakkujad",
+  "macOsCalendar": "macOS kalender",
+  "connectMacOsCalendar": "Ühendage oma kohalik macOS kalender",
+  "googleCalendar": "Google Calendar",
+  "syncGoogleAccount": "Sünkroonige oma Google'i kontoga",
+  "showMeetingsMenuBar": "Kuva tulevased koosolekud menüüribal",
+  "showMeetingsMenuBarDesc": "Kuva oma järgmine koosolek ja aeg selle alguseni macOS-i menüüribal",
+  "showEventsNoParticipants": "Kuva ilma osalejateta sündmusi",
+  "showEventsNoParticipantsDesc": "Kui lubatud, näitab Coming Up sündmusi ilma osalejate või videolingita.",
+  "yourMeetings": "Teie koosolekud",
+  "refresh": "Värskenda",
+  "noUpcomingMeetings": "Tulevasi koosolekuid ei leitud",
+  "checkingNextDays": "Kontrolli järgmist 30 päeva",
+  "tomorrow": "Homme",
+  "googleCalendarComingSoon": "Google Calendar integratsioon tuleb varsti!",
+  "connectedAsUser": "Ühendatud kasutajana: {userId}",
+  "@connectedAsUser": {
+    "placeholders": {
+      "userId": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultWorkspace": "Vaikimisi tööala",
+  "tasksCreatedInWorkspace": "Ülesanded luuakse sellesse tööalasse",
+  "defaultProjectOptional": "Vaikimisi projekt (valikuline)",
+  "leaveUnselectedTasks": "Jätke valimata, et luua ülesanded ilma projektita",
+  "noProjectsInWorkspace": "Selles tööalas projekte ei leitud",
+  "conversationTimeoutDesc": "Valige, kui kaua vaikuses oodatakse enne vestluse automaatset lõpetamist:",
+  "timeout2Minutes": "2 minutit",
+  "timeout2MinutesDesc": "Lõpeta vestlus pärast 2-minutilist vaikust",
+  "timeout5Minutes": "5 minutit",
+  "timeout5MinutesDesc": "Lõpeta vestlus pärast 5-minutilist vaikust",
+  "timeout10Minutes": "10 minutit",
+  "timeout10MinutesDesc": "Lõpeta vestlus pärast 10-minutilist vaikust",
+  "timeout30Minutes": "30 minutit",
+  "timeout30MinutesDesc": "Lõpeta vestlus pärast 30-minutilist vaikust",
+  "timeout4Hours": "4 tundi",
+  "timeout4HoursDesc": "Lõpeta vestlus pärast 4-tunnist vaikust",
+  "conversationEndAfterHours": "Vestlused lõpevad nüüd pärast 4-tunnist vaikust",
+  "conversationEndAfterMinutes": "Vestlused lõpevad nüüd pärast {minutes} minuti pikkust vaikust",
+  "@conversationEndAfterMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "tellUsPrimaryLanguage": "Öelge meile oma põhikeel",
+  "languageForTranscription": "Määrake oma keel täpsemate transkriptsioonide ja isikupärastatud kogemuse saamiseks.",
+  "singleLanguageModeInfo": "Ühe keele režiim on lubatud. Tõlge on keelatud suurema täpsuse jaoks.",
+  "searchLanguageHint": "Otsige keelt nime või koodi järgi",
+  "noLanguagesFound": "Keeli ei leitud",
+  "skip": "Jäta vahele",
+  "languageSetTo": "Keeleks määratud {language}",
+  "@languageSetTo": {
+    "placeholders": {
+      "language": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToSetLanguage": "Keele määramine ebaõnnestus",
+  "appSettings": "{appName} seaded",
+  "@appSettings": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectFromApp": "Katkesta ühendus rakendusega {appName}?",
+  "@disconnectFromApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectFromAppDesc": "See eemaldab teie {appName} autentimise. Peate uuesti ühendama, et seda uuesti kasutada.",
+  "@disconnectFromAppDesc": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "connectedToApp": "Ühendatud rakendusega {appName}",
+  "@connectedToApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "account": "Konto",
+  "actionItemsSyncedTo": "Teie tegevuspunktid sünkroonitakse teie {appName} kontoga",
+  "@actionItemsSyncedTo": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultSpace": "Vaikimisi ruum",
+  "selectSpaceInWorkspace": "Valige ruum oma tööalast",
+  "noSpacesInWorkspace": "Selles tööalas ruume ei leitud",
+  "defaultList": "Vaikimisi loend",
+  "tasksAddedToList": "Ülesanded lisatakse sellesse loendisse",
+  "noListsInSpace": "Selles ruumis loendeid ei leitud",
+  "failedToLoadRepos": "Hoidlate laadimine ebaõnnestus: {error}",
+  "@failedToLoadRepos": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultRepoSaved": "Vaikimisi hoidla salvestatud",
+  "failedToSaveDefaultRepo": "Vaikimisi hoidla salvestamine ebaõnnestus",
+  "defaultRepository": "Vaikimisi hoidla",
+  "selectDefaultRepoDesc": "Valige vaikimisi hoidla probleemide loomiseks. Probleemide loomisel saate siiski määrata teise hoidla.",
+  "noReposFound": "Hoidlaid ei leitud",
+  "private": "Privaatne",
+  "updatedDate": "Uuendatud {date}",
+  "@updatedDate": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "yesterday": "eile",
+  "daysAgo": "{count} päeva tagasi",
+  "@daysAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "oneWeekAgo": "1 nädal tagasi",
+  "weeksAgo": "{count} nädalat tagasi",
+  "@weeksAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "oneMonthAgo": "1 kuu tagasi",
+  "monthsAgo": "{count} kuud tagasi",
+  "@monthsAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "issuesCreatedInRepo": "Probleemid luuakse teie vaikimisi hoidlasse",
+  "taskIntegrations": "Ülesannete integratsioonid",
+  "configureSettings": "Seadista seaded",
+  "completeAuthBrowser": "Palun lõpetage autentimine oma brauseris. Kui olete valmis, naasake rakendusse.",
+  "failedToStartAppAuth": "{appName} autentimise alustamine ebaõnnestus",
+  "@failedToStartAppAuth": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "connectToAppTitle": "Ühenda rakendusega {appName}",
+  "@connectToAppTitle": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "authorizeOmiForTasks": "Peate andma Omi-le loa ülesannete loomiseks teie {appName} kontol. See avab teie brauseri autentimiseks.",
+  "@authorizeOmiForTasks": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "continueButton": "Jätka",
+  "appIntegration": "{appName} integratsioon",
+  "@appIntegration": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "integrationComingSoon": "{appName} integratsioon tuleb varsti! Töötame selle nimel, et tuua teile rohkem ülesannete haldamise valikuid.",
+  "@integrationComingSoon": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "gotIt": "Sain aru",
+  "tasksExportedOneApp": "Ülesandeid saab eksportida korraga ühte rakendusse.",
+  "completeYourUpgrade": "Viige oma uuendamine lõpule",
+  "importConfiguration": "Impordi konfiguratsioon",
+  "exportConfiguration": "Ekspordi konfiguratsioon",
+  "bringYourOwn": "Tooge oma oma",
+  "payYourSttProvider": "Kasutage Omi-d vabalt. Maksite ainult oma STT pakkujale otse.",
+  "freeMinutesMonth": "1200 tasuta minutit kuus kaasa arvatud. Piiramatu koos ",
+  "omiUnlimited": "Omi Unlimited",
+  "hostRequired": "Host on nõutud",
+  "validPortRequired": "Kehtiv port on nõutud",
+  "validWebsocketUrlRequired": "Kehtiv WebSocket URL on nõutud (wss://)",
+  "apiUrlRequired": "API URL on nõutud",
+  "apiKeyRequired": "API võti on nõutud",
+  "invalidJsonConfig": "Vigane JSON-konfiguratsioon",
+  "errorSaving": "Salvestamise viga: {error}",
+  "@errorSaving": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "configCopiedToClipboard": "Konfiguratsioon kopeeritud lõikelauale",
+  "pasteJsonConfig": "Kleepige oma JSON-konfiguratsioon allpool:",
+  "addApiKeyAfterImport": "Peate pärast importimist lisama oma API võtme",
+  "paste": "Kleebi",
+  "import": "Impordi",
+  "invalidProviderInConfig": "Vigane pakkuja konfiguratsioonis",
+  "importedConfig": "Imporditud {providerName} konfiguratsioon",
+  "@importedConfig": {
+    "placeholders": {
+      "providerName": {
+        "type": "String"
+      }
+    }
+  },
+  "invalidJson": "Vigane JSON: {error}",
+  "@invalidJson": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "provider": "Pakkuja",
+  "live": "Otse",
+  "onDevice": "Seadmel",
+  "apiUrl": "API URL",
+  "enterSttHttpEndpoint": "Sisestage oma STT HTTP otspunkt",
+  "websocketUrl": "WebSocket URL",
+  "enterLiveSttWebsocket": "Sisestage oma reaalajas STT WebSocket otspunkt",
+  "apiKey": "API võti",
+  "enterApiKey": "Sisestage oma API võti",
+  "storedLocallyNeverShared": "Salvestatud lokaalselt, ei jagata kunagi",
+  "host": "Host",
+  "port": "Port",
+  "advanced": "Täpsem",
+  "configuration": "Konfiguratsioon",
+  "requestConfiguration": "Päringu konfiguratsioon",
+  "responseSchema": "Vastuse skeem",
+  "modified": "Muudetud",
+  "resetRequestConfig": "Lähtesta päringu konfiguratsioon vaikimisi",
+  "logs": "Logid",
+  "logsCopied": "Logid kopeeritud",
+  "noLogsYet": "Logisid pole veel. Alustage salvestamist, et näha kohandatud STT tegevust.",
+  "deviceUsesCodec": "{deviceName} kasutab {codecReason}. Kasutatakse Omi-d.",
+  "@deviceUsesCodec": {
+    "placeholders": {
+      "deviceName": {
+        "type": "String"
+      },
+      "codecReason": {
+        "type": "String"
+      }
+    }
+  },
+  "omiTranscription": "Omi transkriptsioon",
+  "bestInClassTranscription": "Parim oma klassis transkriptsioon nullseadistusega",
+  "instantSpeakerLabels": "Kohesed kõneleja sildid",
+  "languageTranslation": "100+ keele tõlge",
+  "optimizedForConversation": "Optimeeritud vestluseks",
+  "autoLanguageDetection": "Automaatne keele tuvastamine",
+  "highAccuracy": "Kõrge täpsus",
+  "privacyFirst": "Privaatsus esmalt",
+  "saveChanges": "Salvesta muudatused",
+  "resetToDefault": "Lähtesta vaikimisi",
+  "viewTemplate": "Vaata malli",
+  "trySomethingLike": "Proovige midagi sellist nagu...",
+  "tryIt": "Proovi seda",
+  "creatingPlan": "Plaani loomine",
+  "developingLogic": "Loogika arendamine",
+  "designingApp": "Rakenduse kujundamine",
+  "generatingIconStep": "Ikooni genereerimine",
+  "finalTouches": "Viimased lihvid",
+  "processing": "Töötlemine...",
+  "features": "Funktsioonid",
+  "creatingYourApp": "Teie rakenduse loomine...",
+  "generatingIcon": "Ikooni genereerimine...",
+  "whatShouldWeMake": "Mida me peaksime tegema?",
+  "appName": "Rakenduse nimi",
+  "description": "Kirjeldus",
+  "publicLabel": "Avalik",
+  "privateLabel": "Privaatne",
+  "free": "Tasuta",
+  "perMonth": "/ kuu",
+  "tailoredConversationSummaries": "Kohandatud vestluste kokkuvõtted",
+  "customChatbotPersonality": "Kohandatud vestlusroboti isiksus",
+  "makePublic": "Tee avalikuks",
+  "anyoneCanDiscover": "Igaüks saab teie rakendust avastada",
+  "onlyYouCanUse": "Ainult teie saate seda rakendust kasutada",
+  "paidApp": "Tasuline rakendus",
+  "usersPayToUse": "Kasutajad maksavad teie rakenduse kasutamise eest",
+  "freeForEveryone": "Tasuta kõigile",
+  "perMonthLabel": "/ kuu",
+  "creating": "Loomine...",
+  "@creating": {
+    "description": "Loading state text when app generation is in progress"
+  },
+  "createApp": "Loo rakendus",
+  "@createApp": {
+    "description": "Button text to initiate app creation"
+  },
+  "@connect": {
+    "description": "Title for device connection page"
+  },
+  "searchingForDevices": "Seadmete otsimine...",
+  "@searchingForDevices": {
+    "description": "Status text while scanning for Bluetooth devices"
+  },
+  "devicesFoundNearby": "{count} {count, plural, =1{SEADE} other{SEADET}} LEITUD LÄHEDALT",
+  "@devicesFoundNearby": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pairingSuccessful": "ÜHENDAMINE ÕNNESTUS",
+  "errorConnectingAppleWatch": "Viga Apple Watch'iga ühendamisel: {error}",
+  "@errorConnectingAppleWatch": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "dontShowAgain": "Ära näita seda enam",
+  "@dontShowAgain": {
+    "description": "Checkbox text to suppress future connection confirmations"
+  },
+  "iUnderstand": "Sain aru",
+  "@iUnderstand": {
+    "description": "Button text to acknowledge connection warnings"
+  },
+  "enableBluetooth": "Luba Bluetooth",
+  "@enableBluetooth": {
+    "description": "Title for dialog prompting user to enable Bluetooth"
+  },
+  "bluetoothNeeded": "Omi vajab Bluetoothi, et ühenduda teie kantava seadmega. Palun lubage Bluetooth ja proovige uuesti.",
+  "@bluetoothNeeded": {
+    "description": "Explanation text for why Bluetooth is required"
+  },
+  "contactSupport": "Võta ühendust toega?",
+  "@contactSupport": {
+    "description": "Link text to contact support"
+  },
+  "connectLater": "Ühenda hiljem",
+  "@connectLater": {
+    "description": "Button text to skip immediate device connection"
+  },
+  "grantPermissions": "Anna load",
+  "@grantPermissions": {
+    "description": "Title for the permissions request page"
+  },
+  "backgroundActivity": "Taustegevus",
+  "@backgroundActivity": {
+    "description": "Title for background activity permission"
+  },
+  "backgroundActivityDesc": "Lubage Omil töötada taustal parema stabiilsuse tagamiseks",
+  "@backgroundActivityDesc": {
+    "description": "Description for background activity permission"
+  },
+  "locationAccess": "Asukoha juurdepääs",
+  "@locationAccess": {
+    "description": "Title for location access permission"
+  },
+  "locationAccessDesc": "Lubage tausta asukoht täieliku kogemuse saamiseks",
+  "@locationAccessDesc": {
+    "description": "Description for location access permission"
+  },
+  "notifications": "Teavitused",
+  "@notifications": {
+    "description": "Title for notifications permission"
+  },
+  "notificationsDesc": "Lubage teavitused, et püsida kursis",
+  "@notificationsDesc": {
+    "description": "Description for notifications permission"
+  },
+  "@continueButton": {
+    "description": "Generic continue button text"
+  },
+  "locationServiceDisabled": "Asukohateenused keelatud",
+  "@locationServiceDisabled": {
+    "description": "Title for dialog when location services are off"
+  },
+  "locationServiceDisabledDesc": "Asukohateenused on keelatud. Palun minge Seaded > Privaatsus ja turvalisus > Asukohateenused ja lubage see",
+  "@locationServiceDisabledDesc": {
+    "description": "Instructions to enable location services"
+  },
+  "backgroundLocationDenied": "Tausta asukoha juurdepääs keelatud",
+  "@backgroundLocationDenied": {
+    "description": "Title for dialog when background location is denied"
+  },
+  "backgroundLocationDeniedDesc": "Palun minge seadme seadetesse ja määrake asukoha luba väärtusele \"Luba alati\"",
+  "@backgroundLocationDeniedDesc": {
+    "description": "Instructions to grant background location permission"
+  },
+  "lovingOmi": "Meeldib Omi?",
+  "@lovingOmi": {
+    "description": "Title for the app review prompt"
+  },
+  "leaveReviewIos": "Aidake meil jõuda rohkemate inimesteni, jättes arvustuse App Store'i. Teie tagasiside on meile ülimalt oluline!",
+  "@leaveReviewIos": {
+    "description": "App review prompt text for iOS users"
+  },
+  "leaveReviewAndroid": "Aidake meil jõuda rohkemate inimesteni, jättes arvustuse Google Play poodi. Teie tagasiside on meile ülimalt oluline!",
+  "@leaveReviewAndroid": {
+    "description": "App review prompt text for Android users"
+  },
+  "rateOnAppStore": "Hinda App Store'is",
+  "@rateOnAppStore": {
+    "description": "Button text to rate on Apple App Store"
+  },
+  "rateOnGooglePlay": "Hinda Google Play's",
+  "@rateOnGooglePlay": {
+    "description": "Button text to rate on Google Play Store"
+  },
+  "maybeLater": "Võib-olla hiljem",
+  "@maybeLater": {
+    "description": "Button text to dismiss the review prompt"
+  },
+  "speechProfileIntro": "Omi peab õppima teie eesmärke ja häält. Saate seda hiljem muuta.",
+  "@speechProfileIntro": {
+    "description": "Introduction text for speech profile creation"
+  },
+  "getStarted": "Alusta",
+  "@getStarted": {
+    "description": "Button text to begin a process"
+  },
+  "allDone": "Kõik tehtud!",
+  "@allDone": {
+    "description": "Success message after completing a task"
+  },
+  "keepGoing": "Jätkake, teil läheb suurepäraselt",
+  "@keepGoing": {
+    "description": "Encouragement text during a multi-step process"
+  },
+  "skipThisQuestion": "Jäta see küsimus vahele",
+  "@skipThisQuestion": {
+    "description": "Button text to skip the current question"
+  },
+  "skipForNow": "Jäta praegu vahele",
+  "@skipForNow": {
+    "description": "Button text to skip the entire process temporarily"
+  },
+  "connectionError": "Ühenduse viga",
+  "@connectionError": {
+    "description": "Title for connection error dialog"
+  },
+  "connectionErrorDesc": "Serveriga ühendamine ebaõnnestus. Palun kontrollige oma internetiühendust ja proovige uuesti.",
+  "@connectionErrorDesc": {
+    "description": "Description of connection error"
+  },
+  "invalidRecordingMultipleSpeakers": "Vigane salvestis tuvastatud",
+  "@invalidRecordingMultipleSpeakers": {
+    "description": "Error title when multiple speakers are detected"
+  },
+  "multipleSpeakersDesc": "Tundub, et salvestises on mitu kõnelejat. Palun veenduge, et olete vaikses kohas ja proovige uuesti.",
+  "@multipleSpeakersDesc": {
+    "description": "Error description for multiple speakers"
+  },
+  "tooShortDesc": "Kõnet ei tuvastatud piisavalt. Palun rääkige rohkem ja proovige uuesti.",
+  "@tooShortDesc": {
+    "description": "Error description for recording being too short"
+  },
+  "invalidRecordingDesc": "Palun veenduge, et räägite vähemalt 5 sekundit ja mitte rohkem kui 90.",
+  "@invalidRecordingDesc": {
+    "description": "Error description for invalid recording duration"
+  },
+  "areYouThere": "Kas olete seal?",
+  "@areYouThere": {
+    "description": "Timeout warning title"
+  },
+  "noSpeechDesc": "Me ei suutnud kõnet tuvastada. Palun veenduge, et räägite vähemalt 10 sekundit ja mitte rohkem kui 3 minutit.",
+  "@noSpeechDesc": {
+    "description": "Error description when no speech is detected"
+  },
+  "connectionLost": "Ühendus kadus",
+  "@connectionLost": {
+    "description": "Title for lost connection dialog"
+  },
+  "connectionLostDesc": "Ühendus katkestati. Palun kontrollige oma internetiühendust ja proovige uuesti.",
+  "@connectionLostDesc": {
+    "description": "Description for lost connection"
+  },
+  "tryAgain": "Proovi uuesti",
+  "@tryAgain": {
+    "description": "Button text to retry an action"
+  },
+  "connectOmiOmiGlass": "Ühenda Omi / OmiGlass",
+  "@connectOmiOmiGlass": {
+    "description": "Button text to connect specific device models"
+  },
+  "continueWithoutDevice": "Jätka ilma seadmeta",
+  "@continueWithoutDevice": {
+    "description": "Button text to proceed without connecting a hardware device"
+  },
+  "permissionsRequired": "Load on nõutud",
+  "@permissionsRequired": {
+    "description": "Title for permissions required dialog"
+  },
+  "permissionsRequiredDesc": "See rakendus vajab nõuetekohaseks toimimiseks Bluetoothi ja asukoha lube. Palun lubage need seadetes.",
+  "@permissionsRequiredDesc": {
+    "description": "Explanation of why permissions are needed"
+  },
+  "openSettings": "Ava seaded",
+  "@openSettings": {
+    "description": "Button text to open app settings"
+  },
+  "wantDifferentName": "Soovite kasutada muud nime?",
+  "@wantDifferentName": {
+    "description": "Question asking if user wants to change their display name"
+  },
+  "whatsYourName": "Mis on teie nimi?",
+  "@whatsYourName": {
+    "description": "Question asking for user's name"
+  },
+  "@enterYourName": {
+    "description": "Hint text for name input field"
+  },
+  "speakTranscribeSummarize": "Räägi. Transkribeeri. Võta kokku.",
+  "@speakTranscribeSummarize": {
+    "description": "Tagline or slogan on the welcome/auth screen"
+  },
+  "signInWithApple": "Logi sisse Apple'iga",
+  "@signInWithApple": {
+    "description": "Button text for Apple Sign In"
+  },
+  "signInWithGoogle": "Logi sisse Google'iga",
+  "@signInWithGoogle": {
+    "description": "Button text for Google Sign In"
+  },
+  "byContinuingAgree": "Jätkates nõustute meie ",
+  "@byContinuingAgree": {
+    "description": "Legal disclaimer prefix text"
+  },
+  "termsOfUse": "Kasutustingimustega",
+  "@termsOfUse": {
+    "description": "Link text for Terms of Use"
+  },
+  "omiYourAiCompanion": "Omi – teie AI kaaslane",
+  "@omiYourAiCompanion": {
+    "description": "App title or branding on onboarding screen"
+  },
+  "captureEveryMoment": "Jäädvustage iga hetk. Saage AI-põhiseid\nkokkuvõtteid. Ärge tehke enam kunagi märkmeid.",
+  "@captureEveryMoment": {
+    "description": "App value proposition or description"
+  },
+  "appleWatchSetup": "Apple Watch'i seadistamine",
+  "@appleWatchSetup": {
+    "description": "Title for Apple Watch setup page"
+  },
+  "permissionRequestedExclaim": "Luba taotletud!",
+  "@permissionRequestedExclaim": {
+    "description": "Title when permission has been requested"
+  },
+  "microphonePermission": "Mikrofoni luba",
+  "@microphonePermission": {
+    "description": "Title for microphone permission section"
+  },
+  "permissionGrantedNow": "Luba antud! Nüüd:\n\nAvage Omi rakendus oma kellal ja puudutage allpool \"Jätka\"",
+  "@permissionGrantedNow": {
+    "description": "Instructions after permission is granted"
+  },
+  "needMicrophonePermission": "Vajame mikrofoni luba.\n\n1. Puudutage \"Anna luba\"\n2. Lubage oma iPhone'is\n3. Kella rakendus sulgub\n4. Avage uuesti ja puudutage \"Jätka\"",
+  "@needMicrophonePermission": {
+    "description": "Instructions for granting microphone permission"
+  },
+  "grantPermissionButton": "Anna luba",
+  "@grantPermissionButton": {
+    "description": "Button to request permission"
+  },
+  "needHelp": "Vajate abi?",
+  "@needHelp": {
+    "description": "Link to help dialog"
+  },
+  "troubleshootingSteps": "Tõrkeotsing:\n\n1. Veenduge, et Omi on teie kellale installitud\n2. Avage Omi rakendus oma kellal\n3. Otsige loa hüpikakent\n4. Puudutage \"Luba\", kui küsitakse\n5. Rakendus teie kellal sulgub - avage see uuesti\n6. Tulge tagasi ja puudutage \"Jätka\" oma iPhone'is",
+  "@troubleshootingSteps": {
+    "description": "Troubleshooting instructions for watch setup"
+  },
+  "@gotIt": {
+    "description": "Button to dismiss dialog"
+  },
+  "recordingStartedSuccessfully": "Salvestamine algas edukalt!",
+  "@recordingStartedSuccessfully": {
+    "description": "Success message"
+  },
+  "permissionNotGrantedYet": "Luba pole veel antud. Palun veenduge, et lubate mikrofoni juurdepääsu ja avasid rakenduse oma kellal uuesti.",
+  "@permissionNotGrantedYet": {
+    "description": "Error message when permission is missing"
+  },
+  "errorRequestingPermission": "Viga loa taotlemisel: {error}",
+  "@errorRequestingPermission": {
+    "description": "Error message for permission request failure",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "errorStartingRecording": "Viga salvestamise alustamisel: {error}",
+  "@errorStartingRecording": {
+    "description": "Error message for recording start failure",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "selectPrimaryLanguage": "Valige oma põhikeel",
+  "@selectPrimaryLanguage": {
+    "description": "Title for language selection dialog"
+  },
+  "languageBenefits": "Määrake oma keel täpsemate transkriptsioonide ja isikupärastatud kogemuse saamiseks",
+  "@languageBenefits": {
+    "description": "Explanation of why language selection matters"
+  },
+  "@searchLanguageHint": {
+    "description": "Hint text for language search"
+  },
+  "@noLanguagesFound": {
+    "description": "Text when search returns no results"
+  },
+  "whatsYourPrimaryLanguage": "Mis on teie põhikeel?",
+  "@whatsYourPrimaryLanguage": {
+    "description": "Question asking for primary language"
+  },
+  "selectYourLanguage": "Valige oma keel",
+  "@selectYourLanguage": {
+    "description": "Placeholder for selected language name"
+  },
+  "personalGrowthJourney": "Teie isiklik kasvuteekond AI-ga, mis kuulab iga teie sõna.",
+  "@personalGrowthJourney": {
+    "description": "Tagline on onboarding wrapper"
+  },
+  "actionItemsTitle": "Tegevused",
+  "@actionItemsTitle": {
+    "description": "Title for the Action Items page"
+  },
+  "actionItemsDescription": "Puudutage muutmiseks • Vajutage pikalt valimiseks • Libistage toimingute jaoks",
+  "@actionItemsDescription": {
+    "description": "Instruction text for Action Items interactions"
+  },
+  "tabToDo": "Teha",
+  "@tabToDo": {
+    "description": "Label for To Do tab"
+  },
+  "tabDone": "Tehtud",
+  "@tabDone": {
+    "description": "Label for Done tab"
+  },
+  "tabOld": "Vanad",
+  "@tabOld": {
+    "description": "Label for Old tab"
+  },
+  "emptyTodoMessage": "🎉 Kõik tehtud!\nOotel tegevuspunkte pole",
+  "@emptyTodoMessage": {
+    "description": "Message when To Do list is empty"
+  },
+  "emptyDoneMessage": "Lõpetatud punkte pole veel",
+  "@emptyDoneMessage": {
+    "description": "Message when Done list is empty"
+  },
+  "emptyOldMessage": "✅ Vanu ülesandeid pole",
+  "@emptyOldMessage": {
+    "description": "Message when Old list is empty"
+  },
+  "noItems": "Punkte pole",
+  "@noItems": {
+    "description": "Generic no items message"
+  },
+  "actionItemMarkedIncomplete": "Tegevuspunkt märgitud mittelõpetatuks",
+  "@actionItemMarkedIncomplete": {
+    "description": "Snackbar message when item marked incomplete"
+  },
+  "actionItemCompleted": "Tegevuspunkt lõpetatud",
+  "@actionItemCompleted": {
+    "description": "Snackbar message when item completed"
+  },
+  "deleteActionItemTitle": "Kustuta tegevuspunkt",
+  "@deleteActionItemTitle": {
+    "description": "Title for delete item dialog"
+  },
+  "deleteActionItemMessage": "Kas olete kindel, et soovite selle tegevuspunkti kustutada?",
+  "@deleteActionItemMessage": {
+    "description": "Confirmation message for deleting single item"
+  },
+  "deleteSelectedItemsTitle": "Kustuta valitud punktid",
+  "@deleteSelectedItemsTitle": {
+    "description": "Title for bulk delete dialog"
+  },
+  "deleteSelectedItemsMessage": "Kas olete kindel, et soovite kustutada {count} valitud tegevuspunkt{s}?",
+  "@deleteSelectedItemsMessage": {
+    "description": "Confirmation message for bulk delete",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "s": {
+        "type": "String",
+        "description": "Plural suffix (s) if needed, handled by logic or just append 's' for simplicity if count > 1"
+      }
+    }
+  },
+  "actionItemDeletedResult": "Tegevuspunkt \"{description}\" kustutatud",
+  "@actionItemDeletedResult": {
+    "description": "Snackbar message after deleting single item",
+    "placeholders": {
+      "description": {
+        "type": "String"
+      }
+    }
+  },
+  "itemsDeletedResult": "{count} tegevuspunkt{s} kustutatud",
+  "@itemsDeletedResult": {
+    "description": "Snackbar message after bulk delete",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "s": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToDeleteItem": "Tegevuspunkti kustutamine ebaõnnestus",
+  "@failedToDeleteItem": {
+    "description": "Error message when deletion fails"
+  },
+  "failedToDeleteItems": "Punktide kustutamine ebaõnnestus",
+  "@failedToDeleteItems": {
+    "description": "Error message when bulk deletion fails"
+  },
+  "failedToDeleteSomeItems": "Mõne punkti kustutamine ebaõnnestus",
+  "@failedToDeleteSomeItems": {
+    "description": "Error message when partial deletion failure"
+  },
+  "welcomeActionItemsTitle": "Valmis tegevuspunktide jaoks",
+  "@welcomeActionItemsTitle": {
+    "description": "Heading for empty state welcome"
+  },
+  "welcomeActionItemsDescription": "Teie AI eraldab automaatselt ülesanded ja tegevused teie vestlustest. Need ilmuvad siia, kui need luuakse.",
+  "@welcomeActionItemsDescription": {
+    "description": "Description for empty state welcome"
+  },
+  "autoExtractionFeature": "Automaatselt vestlustest eraldatud",
+  "@autoExtractionFeature": {
+    "description": "Feature point description"
+  },
+  "editSwipeFeature": "Puudutage muutmiseks, libistage lõpetamiseks või kustutamiseks",
+  "@editSwipeFeature": {
+    "description": "Feature point description"
+  },
+  "itemsSelected": "{count} valitud",
+  "@itemsSelected": {
+    "description": "Selection count in app bar",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "selectAll": "Vali kõik",
+  "@selectAll": {
+    "description": "Tooltip for select all"
+  },
+  "deleteSelected": "Kustuta valitud",
+  "@deleteSelected": {
+    "description": "Tooltip for delete selected"
+  },
+  "searchMemories": "Otsi {count} mälestust",
+  "@searchMemories": {
+    "description": "Hint text for memories search bar",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "memoryDeleted": "Mälestus kustutatud.",
+  "@memoryDeleted": {
+    "description": "Notification when memory deleted"
+  },
+  "undo": "Tühista",
+  "@undo": {
+    "description": "Undo button text"
+  },
+  "noMemoriesYet": "Mälestusi pole veel",
+  "@noMemoriesYet": {
+    "description": "Empty state text"
+  },
+  "noAutoMemories": "Automaatselt eraldatud mälestusi pole veel",
+  "@noAutoMemories": {
+    "description": "Empty state text for auto category"
+  },
+  "noManualMemories": "Käsitsi lisatud mälestusi pole veel",
+  "@noManualMemories": {
+    "description": "Empty state text for manual category"
+  },
+  "noMemoriesInCategories": "Neis kategooriates pole mälestusi",
+  "@noMemoriesInCategories": {
+    "description": "Empty state text for filtered categories"
+  },
+  "noMemoriesFound": "Mälestusi ei leitud",
+  "@noMemoriesFound": {
+    "description": "Empty state text for search results"
+  },
+  "addFirstMemory": "Lisa oma esimene mälestus",
+  "@addFirstMemory": {
+    "description": "Button to add first memory"
+  },
+  "clearMemoryTitle": "Tühjenda Omi mälu",
+  "@clearMemoryTitle": {
+    "description": "Dialog title for clearing memory"
+  },
+  "clearMemoryMessage": "Kas olete kindel, et soovite Omi mälu tühjendada? Seda tegevust ei saa tagasi võtta.",
+  "@clearMemoryMessage": {
+    "description": "Dialog content for clearing memory"
+  },
+  "clearMemoryButton": "Tühjenda mälu",
+  "@clearMemoryButton": {
+    "description": "Button text to confirm clear"
+  },
+  "memoryClearedSuccess": "Omi mälu teie kohta on tühjendatud",
+  "@memoryClearedSuccess": {
+    "description": "Snackbar success message"
+  },
+  "noMemoriesToDelete": "Kustutatavaid mälestusi pole",
+  "@noMemoriesToDelete": {
+    "description": "Snackbar message"
+  },
+  "createMemoryTooltip": "Loo uus mälestus",
+  "@createMemoryTooltip": {
+    "description": "Tooltip for create memory FAB"
+  },
+  "createActionItemTooltip": "Loo uus tegevuspunkt",
+  "@createActionItemTooltip": {
+    "description": "Tooltip for create action item FAB"
+  },
+  "memoryManagement": "Mälu haldamine",
+  "@memoryManagement": {
+    "description": "Title for memory management sheet"
+  },
+  "filterMemories": "Filtreeri mälestusi",
+  "@filterMemories": {
+    "description": "Section header"
+  },
+  "totalMemoriesCount": "Teil on kokku {count} mälestust",
+  "@totalMemoriesCount": {
+    "description": "Count display",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "publicMemories": "Avalikud mälestused",
+  "@publicMemories": {
+    "description": "Label"
+  },
+  "privateMemories": "Privaatsed mälestused",
+  "@privateMemories": {
+    "description": "Label"
+  },
+  "makeAllPrivate": "Muuda kõik mälestused privaatseks",
+  "@makeAllPrivate": {
+    "description": "Button label"
+  },
+  "makeAllPublic": "Muuda kõik mälestused avalikuks",
+  "@makeAllPublic": {
+    "description": "Button label"
+  },
+  "deleteAllMemories": "Kustuta kõik mälestused",
+  "@deleteAllMemories": {
+    "description": "Button label"
+  },
+  "allMemoriesPrivateResult": "Kõik mälestused on nüüd privaatsed",
+  "@allMemoriesPrivateResult": {
+    "description": "Snackbar"
+  },
+  "allMemoriesPublicResult": "Kõik mälestused on nüüd avalikud",
+  "@allMemoriesPublicResult": {
+    "description": "Snackbar"
+  },
+  "newMemory": "Uus mälestus",
+  "@newMemory": {
+    "description": "Dialog title"
+  },
+  "editMemory": "Muuda mälestust",
+  "@editMemory": {
+    "description": "Dialog title"
+  },
+  "memoryContentHint": "Mulle meeldib süüa jäätist...",
+  "@memoryContentHint": {
+    "description": "Input hint"
+  },
+  "failedToSaveMemory": "Salvestamine ebaõnnestus. Palun kontrollige oma ühendust.",
+  "@failedToSaveMemory": {
+    "description": "Error message"
+  },
+  "saveMemory": "Salvesta mälestus",
+  "@saveMemory": {
+    "description": "Button label"
+  },
+  "retry": "Proovi uuesti",
+  "@retry": {
+    "description": "Button label"
+  },
+  "createActionItem": "Loo tegevuspunkt",
+  "@createActionItem": {
+    "description": "Sheet title"
+  },
+  "editActionItem": "Muuda tegevuspunkti",
+  "@editActionItem": {
+    "description": "Sheet title"
+  },
+  "actionItemDescriptionHint": "Mida on vaja teha?",
+  "@actionItemDescriptionHint": {
+    "description": "Input hint"
+  },
+  "actionItemDescriptionEmpty": "Tegevuspunkti kirjeldus ei saa olla tühi.",
+  "@actionItemDescriptionEmpty": {
+    "description": "Error message"
+  },
+  "actionItemUpdated": "Tegevuspunkt uuendatud",
+  "@actionItemUpdated": {
+    "description": "Snackbar"
+  },
+  "failedToUpdateActionItem": "Tegevuspunkti uuendamine ebaõnnestus",
+  "@failedToUpdateActionItem": {
+    "description": "Snackbar"
+  },
+  "actionItemCreated": "Tegevuspunkt loodud",
+  "@actionItemCreated": {
+    "description": "Snackbar"
+  },
+  "failedToCreateActionItem": "Tegevuspunkti loomine ebaõnnestus",
+  "@failedToCreateActionItem": {
+    "description": "Snackbar"
+  },
+  "dueDate": "Tähtaeg",
+  "@dueDate": {
+    "description": "Label"
+  },
+  "time": "Aeg",
+  "@time": {
+    "description": "Label"
+  },
+  "addDueDate": "Lisa tähtaeg",
+  "@addDueDate": {
+    "description": "Placeholder"
+  },
+  "pressDoneToSave": "Vajutage valmis salvestamiseks",
+  "@pressDoneToSave": {
+    "description": "Instruction"
+  },
+  "pressDoneToCreate": "Vajutage valmis loomiseks",
+  "@pressDoneToCreate": {
+    "description": "Instruction"
+  },
+  "filterAll": "Kõik",
+  "@filterAll": {
+    "description": "Filter option"
+  },
+  "filterSystem": "Teie kohta",
+  "@filterSystem": {
+    "description": "Filter option for facts about the user"
+  },
+  "filterInteresting": "Ülevaated",
+  "@filterInteresting": {
+    "description": "Filter option for external wisdom/advice"
+  },
+  "filterManual": "Käsitsi",
+  "@filterManual": {
+    "description": "Filter option"
+  },
+  "completed": "Lõpetatud",
+  "@completed": {
+    "description": "Status label"
+  },
+  "markComplete": "Märgi lõpetatuks",
+  "@markComplete": {
+    "description": "Action label"
+  },
+  "actionItemDeleted": "Tegevuspunkt kustutatud",
+  "@actionItemDeleted": {
+    "description": "Snackbar"
+  },
+  "failedToDeleteActionItem": "Tegevuspunkti kustutamine ebaõnnestus",
+  "@failedToDeleteActionItem": {
+    "description": "Snackbar"
+  },
+  "deleteActionItemConfirmTitle": "Kustuta tegevuspunkt",
+  "@deleteActionItemConfirmTitle": {
+    "description": "Dialog title"
+  },
+  "deleteActionItemConfirmMessage": "Kas olete kindel, et soovite selle tegevuspunkti kustutada?",
+  "@deleteActionItemConfirmMessage": {
+    "description": "Dialog message"
+  },
+  "appLanguage": "Rakenduse keel",
+  "@appLanguage": {
+    "description": "Label for app language selector"
+  },
+  "appInterfaceSectionTitle": "RAKENDUSE LIIDES",
+  "speechTranscriptionSectionTitle": "KÕNE JA TRANSKRIPTSIOON",
+  "languageSettingsHelperText": "Rakenduse keel muudab menüüsid ja nuppe. Kõne keel mõjutab, kuidas teie salvestisi transkribeeritakse."
+}

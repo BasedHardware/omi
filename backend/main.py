@@ -42,6 +42,10 @@ from routers import (
 )
 
 from utils.other.timeout import TimeoutMiddleware
+from utils.observability import log_langsmith_status
+
+# Log LangSmith tracing status at startup
+log_langsmith_status()
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
@@ -101,6 +105,7 @@ methods_timeout = {
 }
 
 app.add_middleware(TimeoutMiddleware, methods_timeout=methods_timeout)
+
 
 modal_app = App(
     name='backend',

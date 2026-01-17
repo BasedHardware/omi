@@ -1,9 +1,16 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import Image from 'next/image';
 
 type Platform = 'ios' | 'android' | 'other';
+
+// Paths that should bypass mobile detection (pop-out windows, etc.)
+const BYPASS_MOBILE_CHECK_PATHS = [
+  '/record/popout',
+  '/record/popout/transcript',
+];
 
 const APP_STORE_URL = 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163';
 const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.friend.ios';
@@ -25,9 +32,13 @@ function PlayStoreIcon({ className }: { className?: string }) {
 }
 
 export function MobileBlockOverlay() {
+  const pathname = usePathname();
   const [isMobile, setIsMobile] = useState(false);
   const [platform, setPlatform] = useState<Platform>('other');
   const [mounted, setMounted] = useState(false);
+
+  // Check if current path should bypass mobile detection
+  const shouldBypass = BYPASS_MOBILE_CHECK_PATHS.some(path => pathname?.startsWith(path));
 
   useEffect(() => {
     setMounted(true);
@@ -48,8 +59,8 @@ export function MobileBlockOverlay() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Don't render anything on server or if not mobile
-  if (!mounted || !isMobile) return null;
+  // Don't render anything on server, if not mobile, or if on bypass path
+  if (!mounted || !isMobile || shouldBypass) return null;
 
   const storeUrl = platform === 'android' ? PLAY_STORE_URL : APP_STORE_URL;
   const storeName = platform === 'android' ? 'Google Play' : 'App Store';

@@ -202,18 +202,23 @@ def should_discard_conversation(transcript: str, photos: List[ConversationPhoto]
         [
             '''You will receive a transcript, a series of photo descriptions from a wearable camera, or both. Your task is to decide if this content is meaningful enough to be saved as a memory. Length is never a reason to discard.
 
-Task: Decide if the content should be saved as a memory.
+Task: Decide if the content should be saved as conversation summary.
 
 KEEP (output: discard = False) if the content contains any of the following:
 • A task, request, or action item.
 • A decision, commitment, or plan.
 • A question that requires follow-up.
 • Personal facts, preferences, or details likely useful later (e.g., remembering a person, place, or object).
-• An important event, social interaction, or significant moment.
-• An insight, summary, or key takeaway.
+• An important event, social interaction, or significant moment with meaningful context or consequences.
+• An insight, summary, or key takeaway that provides value.
 • A visually significant scene (e.g., a whiteboard with notes, a document, a memorable view, a person's face).
 
-If none of these are present, DISCARD (output: discard = True). For example, discard blurry photos, uninteresting scenery with no context, or trivial conversation snippets.
+DISCARD (output: discard = True) if the content is:
+• Trivial conversation snippets (e.g., brief apologies, casual remarks, single-sentence comments without context).
+• Very brief interactions (5-10 seconds) that lack actionable content or meaningful context.
+• Casual acknowledgments, greetings, or passing comments that don't contain useful information.
+• Blurry photos, uninteresting scenery with no context, or content that doesn't meet the KEEP criteria above.
+• Feels like asking Siri or other AI assistant something in 1-2 sentences or using voice to type something in a chat for 5-10 seconds.
 
 Return exactly one line:
 discard = <True|False>

@@ -3,7 +3,7 @@ description: A new Flutter project.
 
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
-version: 1.0.517+542
+version: 1.0.521+607
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -52,7 +52,7 @@ dependencies:
   sign_in_with_apple: ^6.1.1
 
   # Analytics and Support
-  intercom_flutter: 9.3.3
+  intercom_flutter: 9.4.22
   mixpanel_flutter:
     git:
       url: https://github.com/beastoin/mixpanel-flutter.git
@@ -74,12 +74,12 @@ dependencies:
   # Utils
   pool: ^1.5.1
   collection: ^1.19.1
-  flutter_blue_plus: 1.33.6
-  flutter_blue_plus_windows: 1.24.21
+  flutter_blue_plus: 2.1.0
   http: ^1.4.0
   pdf: ^3.11.0
   intl: 0.20.2
   permission_handler: ^12.0.0+1
+  flutter_contacts: ^1.1.9+2
   share_plus: 11.0.0
   shared_preferences: 2.5.3
   url_launcher: ^6.3.0
@@ -119,7 +119,7 @@ dependencies:
   geolocator: 14.0.1
   version: ^3.0.2
   webview_flutter: 4.13.0
-  flutter_sound: ^9.10.0
+  flutter_sound: 9.25.1
   just_audio: ^0.9.39
   video_player: ^2.8.2
   web_socket_channel: ^3.0.3
@@ -134,7 +134,10 @@ dependencies:
   fl_chart: ^0.68.0
   image: ^4.3.0
   calendar_date_picker2: ^2.0.1
-  whisper_flutter_new: ^1.0.1
+  whisper_flutter_new:
+    git:
+      url: https://github.com/BasedHardware/whisper_flutter_new.git
+      ref: 684fb43710dd4de5538ac2da7d0b1fa405363212
   disk_space_2: ^1.0.11
 
 dependency_overrides:

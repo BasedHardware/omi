@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/models.dart';
+import 'package:omi/utils/logger.dart';
 
 class PlaudDeviceConnection extends DeviceConnection {
   static const int _cmdGetBattery = 9;
@@ -125,12 +127,12 @@ class PlaudDeviceConnection extends DeviceConnection {
         // Response format: [is_charging, battery_level]
         final batteryLevel = response[1];
         final isCharging = response[0] != 0;
-        debugPrint('[PLAUD] Battery: $batteryLevel% ${isCharging ? "(Charging)" : ""}');
+        Logger.debug('[PLAUD] Battery: $batteryLevel% ${isCharging ? "(Charging)" : ""}');
         return batteryLevel;
       }
       return -1;
     } catch (e) {
-      debugPrint('[PLAUD] Error retrieving battery level: $e');
+      Logger.debug('[PLAUD] Error retrieving battery level: $e');
       return -1;
     }
   }
@@ -146,7 +148,7 @@ class PlaudDeviceConnection extends DeviceConnection {
       }
       return null;
     } catch (e) {
-      debugPrint('[PLAUD] Error getting battery state: $e');
+      Logger.debug('[PLAUD] Error getting battery state: $e');
       return null;
     }
   }
@@ -179,7 +181,7 @@ class PlaudDeviceConnection extends DeviceConnection {
           onBatteryLevelChange(batteryLevel);
         }
       } catch (e) {
-        debugPrint('[PLAUD] Error polling battery level: $e');
+        Logger.debug('[PLAUD] Error polling battery level: $e');
       }
     });
 
@@ -192,7 +194,7 @@ class PlaudDeviceConnection extends DeviceConnection {
         onBatteryLevelChange(batteryLevel);
       }
     } catch (e) {
-      debugPrint('[PLAUD] Error getting initial battery level: $e');
+      Logger.debug('[PLAUD] Error getting initial battery level: $e');
     }
 
     return controller.stream.listen(null);
@@ -213,7 +215,7 @@ class PlaudDeviceConnection extends DeviceConnection {
     required void Function(List<int>) onAudioBytesReceived,
   }) async {
     if (!await _setupRecordingSession()) {
-      debugPrint('[PLAUD] Failed to setup recording session after retries');
+      Logger.debug('[PLAUD] Failed to setup recording session after retries');
       return null;
     }
 
@@ -243,7 +245,7 @@ class PlaudDeviceConnection extends DeviceConnection {
     for (int attempt = 0; attempt < maxRetries; attempt++) {
       try {
         if (attempt > 0) {
-          debugPrint('[PLAUD] Retry attempt $attempt/$maxRetries');
+          Logger.debug('[PLAUD] Retry attempt $attempt/$maxRetries');
           await Future.delayed(Duration(seconds: attempt)); // Exponential backoff: 0s, 1s, 2s
         }
 
@@ -259,11 +261,11 @@ class PlaudDeviceConnection extends DeviceConnection {
         await Future.delayed(const Duration(seconds: 1));
 
         if (await _startSync(_sessionId!, startTime)) {
-          debugPrint('[PLAUD] Recording session setup successful');
+          Logger.debug('[PLAUD] Recording session setup successful');
           return true;
         }
       } catch (e) {
-        debugPrint('[PLAUD] Setup error (attempt ${attempt + 1}): $e');
+        Logger.debug('[PLAUD] Setup error (attempt ${attempt + 1}): $e');
       }
     }
 

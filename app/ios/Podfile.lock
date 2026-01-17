@@ -18,6 +18,8 @@ PODS:
     - Flutter
   - device_info_plus (0.0.1):
     - Flutter
+  - disk_space_2 (0.0.1):
+    - Flutter
   - DKImagePickerController/Core (4.3.9):
     - DKImagePickerController/ImageDataManager
     - DKImagePickerController/Resource
@@ -136,16 +138,19 @@ PODS:
     - ZIPFoundation (= 0.9.19)
   - flutter_background_service_ios (0.0.3):
     - Flutter
-  - flutter_blue_plus (0.0.1):
+  - flutter_blue_plus_darwin (0.0.2):
+    - Flutter
+    - FlutterMacOS
+  - flutter_contacts (0.0.1):
     - Flutter
   - flutter_foreground_task (0.0.1):
     - Flutter
   - flutter_native_splash (2.4.3):
     - Flutter
-  - flutter_sound (9.28.0):
+  - flutter_sound (9.25.1):
     - Flutter
-    - flutter_sound_core (= 9.28.0)
-  - flutter_sound_core (9.28.0)
+    - flutter_sound_core (= 9.25.1)
+  - flutter_sound_core (9.25.1)
   - flutter_timezone (0.0.1):
     - Flutter
   - frame_sdk (0.0.2):
@@ -198,10 +203,10 @@ PODS:
     - Flutter
   - integration_test (0.0.1):
     - Flutter
-  - Intercom (18.8.1)
+  - Intercom (19.4.1)
   - intercom_flutter (9.0.0):
     - Flutter
-    - Intercom (= 18.8.1)
+    - Intercom (= 19.4.1)
   - IosAwnCore (0.10.0)
   - iOSDFULibrary (4.15.3):
     - ZIPFoundation (= 0.9.19)
@@ -243,9 +248,9 @@ PODS:
   - PromisesSwift (2.4.0):
     - PromisesObjC (= 2.4.0)
   - RecaptchaInterop (101.0.0)
-  - SDWebImage (5.21.2):
-    - SDWebImage/Core (= 5.21.2)
-  - SDWebImage/Core (5.21.2)
+  - SDWebImage (5.21.5):
+    - SDWebImage/Core (= 5.21.5)
+  - SDWebImage/Core (5.21.5)
   - share_plus (0.0.1):
     - Flutter
   - shared_preferences_foundation (0.0.1):
@@ -257,7 +262,7 @@ PODS:
     - Flutter
     - FlutterMacOS
   - SwiftCBOR (0.4.4)
-  - SwiftProtobuf (1.31.1)
+  - SwiftProtobuf (1.33.3)
   - SwiftyGif (5.4.5)
   - url_launcher_ios (0.0.1):
     - Flutter
@@ -267,6 +272,8 @@ PODS:
   - webview_flutter_wkwebview (0.0.1):
     - Flutter
     - FlutterMacOS
+  - whisper_flutter_new (0.0.1):
+    - Flutter
   - ZIPFoundation (0.9.19)
 
 DEPENDENCIES:
@@ -276,6 +283,7 @@ DEPENDENCIES:
   - awesome_notifications_core (from `.symlinks/plugins/awesome_notifications_core/ios`)
   - connectivity_plus (from `.symlinks/plugins/connectivity_plus/ios`)
   - device_info_plus (from `.symlinks/plugins/device_info_plus/ios`)
+  - disk_space_2 (from `.symlinks/plugins/disk_space_2/ios`)
   - file_picker (from `.symlinks/plugins/file_picker/ios`)
   - firebase_auth (from `.symlinks/plugins/firebase_auth/ios`)
   - firebase_core (from `.symlinks/plugins/firebase_core/ios`)
@@ -284,7 +292,8 @@ DEPENDENCIES:
   - Flutter (from `Flutter`)
   - flutter_archive (from `.symlinks/plugins/flutter_archive/ios`)
   - flutter_background_service_ios (from `.symlinks/plugins/flutter_background_service_ios/ios`)
-  - flutter_blue_plus (from `.symlinks/plugins/flutter_blue_plus/ios`)
+  - flutter_blue_plus_darwin (from `.symlinks/plugins/flutter_blue_plus_darwin/darwin`)
+  - flutter_contacts (from `.symlinks/plugins/flutter_contacts/ios`)
   - flutter_foreground_task (from `.symlinks/plugins/flutter_foreground_task/ios`)
   - flutter_native_splash (from `.symlinks/plugins/flutter_native_splash/ios`)
   - flutter_sound (from `.symlinks/plugins/flutter_sound/ios`)
@@ -312,6 +321,7 @@ DEPENDENCIES:
   - url_launcher_ios (from `.symlinks/plugins/url_launcher_ios/ios`)
   - video_player_avfoundation (from `.symlinks/plugins/video_player_avfoundation/darwin`)
   - webview_flutter_wkwebview (from `.symlinks/plugins/webview_flutter_wkwebview/darwin`)
+  - whisper_flutter_new (from `.symlinks/plugins/whisper_flutter_new/ios`)
 
 SPEC REPOS:
   trunk:
@@ -364,6 +374,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/connectivity_plus/ios"
   device_info_plus:
     :path: ".symlinks/plugins/device_info_plus/ios"
+  disk_space_2:
+    :path: ".symlinks/plugins/disk_space_2/ios"
   file_picker:
     :path: ".symlinks/plugins/file_picker/ios"
   firebase_auth:
@@ -380,8 +392,10 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/flutter_archive/ios"
   flutter_background_service_ios:
     :path: ".symlinks/plugins/flutter_background_service_ios/ios"
-  flutter_blue_plus:
-    :path: ".symlinks/plugins/flutter_blue_plus/ios"
+  flutter_blue_plus_darwin:
+    :path: ".symlinks/plugins/flutter_blue_plus_darwin/darwin"
+  flutter_contacts:
+    :path: ".symlinks/plugins/flutter_contacts/ios"
   flutter_foreground_task:
     :path: ".symlinks/plugins/flutter_foreground_task/ios"
   flutter_native_splash:
@@ -436,6 +450,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/video_player_avfoundation/darwin"
   webview_flutter_wkwebview:
     :path: ".symlinks/plugins/webview_flutter_wkwebview/darwin"
+  whisper_flutter_new:
+    :path: ".symlinks/plugins/whisper_flutter_new/ios"
 
 SPEC CHECKSUMS:
   app_links: 3dbc685f76b1693c66a6d9dd1e9ab6f73d97dc0a
@@ -445,6 +461,7 @@ SPEC CHECKSUMS:
   awesome_notifications_core: 429c28df8746780a474de177e5acde33af87da63
   connectivity_plus: cb623214f4e1f6ef8fe7403d580fdad517d2f7dd
   device_info_plus: 21fcca2080fbcd348be798aa36c3e5ed849eefbe
+  disk_space_2: 6679de97ec91ca990d1f22d75ad6bf7f463b8128
   DKImagePickerController: 946cec48c7873164274ecc4624d19e3da4c1ef3c
   DKPhotoGallery: b3834fecb755ee09a593d7c9e389d8b5d6deed60
   file_picker: a0560bc09d61de87f12d246fc47d2119e6ef37be
@@ -467,11 +484,12 @@ SPEC CHECKSUMS:
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   flutter_archive: ad8edfd7f7d1bb12058d05424ba93e27d9930efe
   flutter_background_service_ios: 00d31bdff7b4bfe06d32375df358abe0329cf87e
-  flutter_blue_plus: e5808fc4e5ebc58bb911635f8fdaf5e2b4da2754
+  flutter_blue_plus_darwin: 20a08bfeaa0f7804d524858d3d8744bcc1b6dbc3
+  flutter_contacts: 5383945387e7ca37cf963d4be57c21f2fc15ca9f
   flutter_foreground_task: a159d2c2173b33699ddb3e6c2a067045d7cebb89
-  flutter_native_splash: 6cad9122ea0fad137d23137dd14b937f3e90b145
-  flutter_sound: b9236a5875299aaa4cef1690afd2f01d52a3f890
-  flutter_sound_core: 427465f72d07ab8c3edbe8ffdde709ddacd3763c
+  flutter_native_splash: c32d145d68aeda5502d5f543ee38c192065986cf
+  flutter_sound: 69343c1dd74d2cc5a7fe6693f20369b63ea2e249
+  flutter_sound_core: 065aca7698f13a934d8cb8156a2865efd282b1e8
   flutter_timezone: ee50ce7786b5fde27e2fe5375bbc8c9661ffc13f
   frame_sdk: 4d4df786d828557bf57e05f6f1856613896cc9db
   geolocator_apple: ab36aa0e8b7d7a2d7639b3b4e48308394e8cef5e
@@ -481,11 +499,11 @@ SPEC CHECKSUMS:
   GoogleUtilities: 00c88b9a86066ef77f0da2fab05f65d7768ed8e1
   GTMAppAuth: 99fb010047ba3973b7026e45393f51f27ab965ae
   GTMSessionFetcher: 5aea5ba6bd522a239e236100971f10cb71b96ab6
-  image_picker_ios: 7fe1ff8e34c1790d6fff70a32484959f563a928a
+  image_picker_ios: e0ece4aa2a75771a7de3fa735d26d90817041326
   in_app_review: 7dd1ea365263f834b8464673f9df72c80c17c937
   integration_test: 4a889634ef21a45d28d50d622cf412dc6d9f586e
-  Intercom: b636b0e27ab832827abdf6573c57a80cf090ff5a
-  intercom_flutter: b9237a96bc29945d2f1e57d2b702d4a5a1952c70
+  Intercom: aca703f001cf9470b1f13b72cb8cc969a09bafca
+  intercom_flutter: fcaa0c39ada316981160e9cd0b231865efe94bb7
   IosAwnCore: 653786a911089012092ce831f2945cd339855a89
   iOSDFULibrary: 198c36ebe5a31bf2ca04ee8fb40837176a423e85
   iOSMcuManagerLibrary: 4102a4595be1c69e5286d7f1520a733c82c30b0a
@@ -498,22 +516,23 @@ SPEC CHECKSUMS:
   nordic_dfu: e4fb6f461f4a290b28ea4b1dfb69071665cdfa3e
   opus_flutter_ios: f16ed3599997ced564ad44509e87003159a86def
   package_info_plus: af8e2ca6888548050f16fa2f1938db7b5a5df499
-  path_provider_foundation: 080d55be775b7414fd5a5ef3ac137b97b097e564
+  path_provider_foundation: bb55f6dbba17d0dccd6737fe6f7f34fbd0376880
   permission_handler_apple: 4ed2196e43d0651e8ff7ca3483a069d469701f2d
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
   PromisesSwift: 9d77319bbe72ebf6d872900551f7eeba9bce2851
   RecaptchaInterop: 11e0b637842dfb48308d242afc3f448062325aba
-  SDWebImage: 9f177d83116802728e122410fb25ad88f5c7608a
+  SDWebImage: e9c98383c7572d713c1a0d7dd2783b10599b9838
   share_plus: 50da8cb520a8f0f65671c6c6a99b3617ed10a58a
-  shared_preferences_foundation: 9e1978ff2562383bd5676f64ec4e9aa8fa06a6f7
+  shared_preferences_foundation: 7036424c3d8ec98dfe75ff1667cb0cd531ec82bb
   sign_in_with_apple: c5dcc141574c8c54d5ac99dd2163c0c72ad22418
   sqflite_darwin: 20b2a3a3b70e43edae938624ce550a3cbf66a3d0
   SwiftCBOR: ce5354ec8b660da2d6fc754462881119dbe1f963
-  SwiftProtobuf: e02f51c8c2df5845657aee2d4de9d61bf50ef788
+  SwiftProtobuf: e1b437c8e31a4c5577b643249a0bb62ed4f02153
   SwiftyGif: 706c60cf65fa2bc5ee0313beece843c8eb8194d4
-  url_launcher_ios: 694010445543906933d732453a59da0a173ae33d
-  video_player_avfoundation: 2cef49524dd1f16c5300b9cd6efd9611ce03639b
-  webview_flutter_wkwebview: 1821ceac936eba6f7984d89a9f3bcb4dea99ebb2
+  url_launcher_ios: 7a95fa5b60cc718a708b8f2966718e93db0cef1b
+  video_player_avfoundation: dd410b52df6d2466a42d28550e33e4146928280a
+  webview_flutter_wkwebview: 8ebf4fded22593026f7dbff1fbff31ea98573c8d
+  whisper_flutter_new: 9276535665f51f845831fe94859b2cccd0334a70
   ZIPFoundation: b8c29ea7ae353b309bc810586181fd073cb3312c
 
 PODFILE CHECKSUM: 0ff3dedbc65a62aff6be5119a19cb4fd9e15742d

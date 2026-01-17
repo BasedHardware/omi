@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'package:omi/pages/speech_profile/page.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 

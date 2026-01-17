@@ -357,9 +357,59 @@ def get_memory_summary_rating(
 def set_chat_message_analytics(
     message_id: str,
     value: int,
+    reason: str = None,  # Reason for thumbs down (e.g. 'too_verbose', 'incorrect_or_hallucination')
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    set_chat_message_rating_score(uid, message_id, value)
+    """
+    Submit feedback rating for a chat message.
+    
+    Args:
+        message_id: ID of the message being rated
+        value: Rating value (1 = thumbs up, -1 = thumbs down, 0 = neutral/removed)
+        reason: Optional reason for thumbs down. Valid values:
+            - 'too_verbose': Response was too long or wordy
+            - 'incorrect_or_hallucination': Response contained incorrect information
+            - 'not_helpful_or_irrelevant': Response didn't address the question
+            - 'didnt_follow_instructions': Response didn't follow user instructions
+            - 'other': Other reason
+    """
+    # Always store feedback in Firestore analytics collection
+    set_chat_message_rating_score(uid, message_id, value, reason)
+    
+    # Also update the rating directly on the message document for persistence
+    rating_value = None if value == 0 else value
+    chat_db.update_message_rating(uid, message_id, rating_value)
+    
+    # Try to submit feedback to LangSmith if the message has a run_id
+    try:
+        from utils.observability import submit_langsmith_feedback
+        
+        # Look up the message to get langsmith_run_id
+        message_result = chat_db.get_message(uid, message_id)
+        if message_result:
+            message, _ = message_result
+            langsmith_run_id = getattr(message, 'langsmith_run_id', None)
+            if not langsmith_run_id and isinstance(message, dict):
+                langsmith_run_id = message.get('langsmith_run_id')
+            
+            if langsmith_run_id:
+                # Map value to score: 1 (thumbs up) -> 1.0, -1 (thumbs down) -> 0.0
+                score = 1.0 if value == 1 else (0.0 if value == -1 else 0.5)
+                
+                # Build comment from reason if provided
+                comment = reason if reason else None
+                
+                # Submit feedback to LangSmith (non-blocking, errors are logged)
+                submit_langsmith_feedback(
+                    run_id=langsmith_run_id,
+                    score=score,
+                    key="chat_message_rating",
+                    comment=comment,
+                )
+    except Exception as e:
+        # Don't fail the request if LangSmith feedback fails
+        print(f"⚠️  LangSmith feedback submission error (non-fatal): {e}")
+    
     return {'status': 'ok'}
 
 

@@ -4,6 +4,22 @@ from typing import List, Optional, Set
 
 from pydantic import BaseModel
 
+# Fields to exclude when reducing App data for list views and cache
+APP_REDUCE_EXCLUDE_FIELDS = {
+    'reviews',
+    'user_review',
+    'persona_prompt',
+    'chat_prompt',
+    'memory_prompt',
+    'payment_product_id',
+    'payment_price_id',
+    'payment_link_id',
+    'twitter',
+    'email',
+    'money_made',
+    'usage_count',
+}
+
 
 class AppReview(BaseModel):
     uid: str
@@ -37,7 +53,7 @@ class ActionType(str, Enum):
     CREATE_FACTS = "create_facts"
     READ_MEMORIES = "read_memories"
     READ_CONVERSATIONS = "read_conversations"
-
+    READ_TASKS = "read_tasks"
 
 class Action(BaseModel):
     action: ActionType
@@ -81,7 +97,9 @@ class ApiKey(BaseModel):
     created_at: Optional[datetime] = None
 
 
-class App(BaseModel):
+class AppBaseModel(BaseModel):
+    """Base App model for list views - contains common fields only."""
+
     id: str
     name: str
     uid: Optional[str] = None
@@ -89,43 +107,49 @@ class App(BaseModel):
     approved: bool = False
     status: str = 'approved'
     category: str
-    email: Optional[str] = None
     author: str
     description: str
     image: str
     capabilities: Set[str]
-    memory_prompt: Optional[str] = None
-    chat_prompt: Optional[str] = None
-    persona_prompt: Optional[str] = None
     username: Optional[str] = None
     connected_accounts: List[str] = []
-    twitter: Optional[dict] = None
     external_integration: Optional[ExternalIntegration] = None
-    reviews: List[AppReview] = []
-    user_review: Optional[AppReview] = None
     rating_avg: Optional[float] = 0
     rating_count: int = 0
     enabled: bool = False
-    trigger_workflow_memories: bool = True  # default true
+    trigger_workflow_memories: bool = True
     installs: int = 0
-    score: Optional[float] = None  # Computed ranking score for sorting
+    score: Optional[float] = None
     proactive_notification: Optional[ProactiveNotification] = None
     created_at: Optional[datetime] = None
+    is_paid: Optional[bool] = False
+    price: Optional[float] = 0.0
+    payment_plan: Optional[str] = None
+    payment_link: Optional[str] = None
+    is_user_paid: Optional[bool] = False
+    thumbnails: Optional[List[str]] = []
+    thumbnail_urls: Optional[List[str]] = []
+    is_influencer: Optional[bool] = False
+    is_popular: Optional[bool] = False
+    chat_tools: Optional[List[ChatTool]] = []
+
+
+class App(AppBaseModel):
+    """Full App model - includes large/internal fields for detail views."""
+
+    # Additional fields for detail views only
+    email: Optional[str] = None
+    memory_prompt: Optional[str] = None
+    chat_prompt: Optional[str] = None
+    persona_prompt: Optional[str] = None
+    twitter: Optional[dict] = None
+    reviews: List[AppReview] = []
+    user_review: Optional[AppReview] = None
     money_made: Optional[float] = None
     usage_count: Optional[int] = None
-    is_paid: Optional[bool] = False
-    price: Optional[float] = 0.0  # cents/100
-    payment_plan: Optional[str] = None
     payment_product_id: Optional[str] = None
     payment_price_id: Optional[str] = None
     payment_link_id: Optional[str] = None
-    payment_link: Optional[str] = None
-    is_user_paid: Optional[bool] = False
-    thumbnails: Optional[List[str]] = []  # List of thumbnail IDs
-    thumbnail_urls: Optional[List[str]] = []  # List of thumbnail URLs
-    is_influencer: Optional[bool] = False
-    is_popular: Optional[bool] = False
-    chat_tools: Optional[List[ChatTool]] = []  # Tools this app provides for chat
 
     def get_rating_avg(self) -> Optional[str]:
         return f'{self.rating_avg:.1f}' if self.rating_avg is not None else None
@@ -165,6 +189,22 @@ class App(BaseModel):
     def has_chat_tools(self) -> bool:
         """Check if app provides chat tools"""
         return bool(self.chat_tools and len(self.chat_tools) > 0)
+
+    def to_reduced_dict(self) -> dict:
+        """Serialize for list views with reduced fields.
+
+        Excludes large/redundant fields that are not needed in app list displays.
+        Uses APP_REDUCE_EXCLUDE_FIELDS constant for consistency with cache reduction.
+        """
+        return self.model_dump(mode='json', exclude=APP_REDUCE_EXCLUDE_FIELDS)
+
+    @staticmethod
+    def reduce_dict(app_dict: dict) -> dict:
+        """Reduce a raw app dict by excluding large/redundant fields.
+
+        Use this for reducing dicts before caching. For App instances, use to_reduced_dict().
+        """
+        return {k: v for k, v in app_dict.items() if k not in APP_REDUCE_EXCLUDE_FIELDS}
 
 
 class AppCreate(BaseModel):

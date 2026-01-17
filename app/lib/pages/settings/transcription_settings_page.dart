@@ -1,27 +1,30 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:device_info_plus/device_info_plus.dart';
+import 'dart:io';
 
-import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:disk_space_2/disk_space_2.dart';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
+import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/capture_provider.dart';
-import 'dart:io';
-import 'package:http/http.dart' as http;
-import 'package:disk_space_2/disk_space_2.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:omi/services/custom_stt_log_service.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
-import 'package:omi/services/custom_stt_log_service.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:provider/provider.dart';
+import 'package:omi/utils/logger.dart';
 
 class TranscriptionSettingsPage extends StatefulWidget {
   const TranscriptionSettingsPage({super.key});
@@ -89,13 +92,13 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   void dispose() {
     _urlController.removeListener(_updateModelPresence);
     _downloadClient?.close();
-    
+
     // Dispose controllers
     _apiKeyController.dispose();
     _hostController.dispose();
     _portController.dispose();
     _urlController.dispose();
-    
+
     super.dispose();
   }
 
@@ -128,7 +131,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           }
         }
       } catch (e) {
-        debugPrint('Error checking device codec: $e');
+        Logger.debug('Error checking device codec: $e');
       }
     }
   }
@@ -188,13 +191,13 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     if (_selectedProvider == SttProvider.onDeviceWhisper && _urlController.text.isEmpty) {
       _checkLocalModel();
     }
-    
+
     // Check for debug mode and warn user
     if (kDebugMode && _selectedProvider == SttProvider.onDeviceWhisper && !_hasShownDebugWarning) {
       _hasShownDebugWarning = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-           ScaffoldMessenger.of(context).showSnackBar(
+          ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Row(
                 children: [
@@ -285,27 +288,27 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             _urlController.text = filePath;
             _updateCurrentProviderConfig(url: filePath);
           });
-          
+
           await _saveCurrentProviderConfig();
           if (_useCustomStt && _selectedProvider == SttProvider.onDeviceWhisper) {
-             final config = _buildCurrentConfig();
-             await SharedPreferencesUtil().saveCustomSttConfig(config);
-             
-             if (mounted) {
-               await Provider.of<CaptureProvider>(context, listen: false).onTranscriptionSettingsChanged();
-             }
+            final config = _buildCurrentConfig();
+            await SharedPreferencesUtil().saveCustomSttConfig(config);
+
+            if (mounted) {
+              await Provider.of<CaptureProvider>(context, listen: false).onTranscriptionSettingsChanged();
+            }
           }
         }
       } else {
         // Clear if not found matching current model
         if (mounted && _urlController.text.isNotEmpty) {
-           setState(() {
+          setState(() {
             _urlController.text = '';
           });
         }
       }
     } catch (e, stack) {
-      debugPrint('Error checking local model: $e\n$stack');
+      Logger.debug('Error checking local model: $e\n$stack');
     }
   }
 
@@ -354,7 +357,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     if (_requestJsonCustomized[_selectedProvider] != true) {
       _regenerateRequestJson(_selectedProvider);
     }
-    
+
     if (_selectedProvider == SttProvider.onDeviceWhisper) {
       _checkLocalModel();
     }
@@ -557,7 +560,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       final configChanged = previousConfig.sttConfigId != activeConfig.sttConfigId;
 
       await SharedPreferencesUtil().saveCustomSttConfig(activeConfig);
-      debugPrint(SharedPreferencesUtil().customSttConfig.provider.toString());
+      Logger.debug(SharedPreferencesUtil().customSttConfig.provider.toString());
 
       if (configChanged && mounted) {
         await Provider.of<CaptureProvider>(context, listen: false).onTranscriptionSettingsChanged();
@@ -835,41 +838,41 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     bool isIOS = Platform.isIOS;
 
     final deviceInfo = DeviceInfoPlugin();
-    
+
     if (Platform.isAndroid) {
       // Check RAM using /proc/meminfo as reliable fallback
       try {
-          final memInfo = await File('/proc/meminfo').readAsString();
-          final totalMemLine = memInfo.split('\n').firstWhere((l) => l.startsWith('MemTotal:'), orElse: () => '');
-          if (totalMemLine.isNotEmpty) {
-              final parts = totalMemLine.split(RegExp(r'\s+'));
-              if (parts.length >= 2) {
-                  final kb = int.tryParse(parts[1]);
-                  if (kb != null) {
-                      final gb = kb / 1024 / 1024;
-                       if (gb < 3.5) {
-                          isLowSpec = true;
-                          specDetails = 'Detected RAM: ${gb.toStringAsFixed(1)} GB. Minimum recommended: 4 GB.';
-                      }
-                  }
+        final memInfo = await File('/proc/meminfo').readAsString();
+        final totalMemLine = memInfo.split('\n').firstWhere((l) => l.startsWith('MemTotal:'), orElse: () => '');
+        if (totalMemLine.isNotEmpty) {
+          final parts = totalMemLine.split(RegExp(r'\s+'));
+          if (parts.length >= 2) {
+            final kb = int.tryParse(parts[1]);
+            if (kb != null) {
+              final gb = kb / 1024 / 1024;
+              if (gb < 3.5) {
+                isLowSpec = true;
+                specDetails = 'Detected RAM: ${gb.toStringAsFixed(1)} GB. Minimum recommended: 4 GB.';
               }
+            }
           }
+        }
       } catch (e) {
-          debugPrint('Error reading meminfo: $e');
+        Logger.debug('Error reading meminfo: $e');
       }
     } else if (Platform.isIOS) {
       final iosInfo = await deviceInfo.iosInfo;
       final machine = iosInfo.utsname.machine;
-      debugPrint('Device Model: $machine');
-      
+      Logger.debug('Device Model: $machine');
+
       if (machine.startsWith('iPhone')) {
         final match = RegExp(r'iPhone(\d+),').firstMatch(machine);
         if (match != null) {
-           final version = int.tryParse(match.group(1) ?? '0') ?? 0;
-           if (version < 11) {
-             isLowSpec = true;
-             specDetails = 'Detected Model: $machine (Older than iPhone XS). On-device recognition may be slower.';
-           }
+          final version = int.tryParse(match.group(1) ?? '0') ?? 0;
+          if (version < 11) {
+            isLowSpec = true;
+            specDetails = 'Detected Model: $machine (Older than iPhone XS). On-device recognition may be slower.';
+          }
         }
       }
     }
@@ -882,152 +885,155 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     if (isLowSpec && !isIOS) {
       // Android low-spec: "Not Compatible" Dialog (Whisper may crash)
       proceed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          backgroundColor: const Color(0xFF1A1A1A),
-          title: const Row(
-            children: [
-              Icon(Icons.error_outline, color: Colors.red, size: 24),
-              SizedBox(width: 8),
-              Text('Device Not Compatible', style: TextStyle(color: Colors.white, fontSize: 18)),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Your device does not meet the requirements for On-Device transcription.',
-                style: TextStyle(color: Colors.white70),
+            context: context,
+            builder: (context) => AlertDialog(
+              backgroundColor: const Color(0xFF1A1A1A),
+              title: const Row(
+                children: [
+                  Icon(Icons.error_outline, color: Colors.red, size: 24),
+                  SizedBox(width: 8),
+                  Text('Device Not Compatible', style: TextStyle(color: Colors.white, fontSize: 18)),
+                ],
               ),
-              const SizedBox(height: 8),
-              Text(
-                specDetails,
-                style: const TextStyle(color: Colors.white38, fontSize: 12),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Your device does not meet the requirements for On-Device transcription.',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    specDetails,
+                    style: const TextStyle(color: Colors.white38, fontSize: 12),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Enabling this will likely cause the app to crash or freeze.',
+                    style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Transcription will be significantly slower and less accurate.',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              const Text(
-                'Enabling this will likely cause the app to crash or freeze.',
-                style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Transcription will be significantly slower and less accurate.',
-                style: TextStyle(color: Colors.white70),
-              ),
-            ],
-          ),
-          actions: [
-             TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Proceed anyway', style: TextStyle(color: Colors.white12, fontSize: 10)),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Proceed anyway', style: TextStyle(color: Colors.white12, fontSize: 10)),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                  child: const Text('Close', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+              actionsAlignment: MainAxisAlignment.spaceBetween,
             ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, false),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              child: const Text('Close', style: TextStyle(color: Colors.white)),
-            ),
-          ],
-          actionsAlignment: MainAxisAlignment.spaceBetween,
-        ),
-      ) ?? false;
+          ) ??
+          false;
     } else if (isLowSpec && isIOS) {
       // iOS low-spec: Milder "Performance Warning" (Apple Speech won't crash)
       proceed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          backgroundColor: const Color(0xFF1A1A1A),
-          title: const Row(
-            children: [
-              Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
-              SizedBox(width: 8),
-              Expanded(child: Text('Older Device Detected', style: TextStyle(color: Colors.white, fontSize: 18))),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                specDetails,
-                style: const TextStyle(color: Colors.white38, fontSize: 12),
+            context: context,
+            builder: (context) => AlertDialog(
+              backgroundColor: const Color(0xFF1A1A1A),
+              title: const Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
+                  SizedBox(width: 8),
+                  Expanded(child: Text('Older Device Detected', style: TextStyle(color: Colors.white, fontSize: 18))),
+                ],
               ),
-              const SizedBox(height: 12),
-              const Text(
-                'On-device transcription may be slower on this device.',
-                style: TextStyle(color: Colors.white70),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    specDetails,
+                    style: const TextStyle(color: Colors.white38, fontSize: 12),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'On-device transcription may be slower on this device.',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    '• Battery usage will be higher than cloud transcription.',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                  const Text(
+                    '• Consider using Omi Cloud for better performance.',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                ],
               ),
-              const SizedBox(height: 8),
-              const Text(
-                '• Battery usage will be higher than cloud transcription.',
-                style: TextStyle(color: Colors.white70),
-              ),
-              const Text(
-                '• Consider using Omi Cloud for better performance.',
-                style: TextStyle(color: Colors.white70),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Continue', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+                ),
+              ],
             ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Continue', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
-            ),
-          ],
-        ),
-      ) ?? false;
+          ) ??
+          false;
     } else {
       // Standard "High Resource Usage" Warning for capable devices
       proceed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          backgroundColor: const Color(0xFF1A1A1A),
-          title: const Row(
-            children: [
-              Icon(Icons.battery_alert, color: Colors.orange, size: 24),
-              SizedBox(width: 8),
-              Text('High Resource Usage', style: TextStyle(color: Colors.white, fontSize: 18)),
-            ],
-          ),
-          content: const Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'On-Device transcription is computationally intensive.',
-                style: TextStyle(color: Colors.white70),
+            context: context,
+            builder: (context) => AlertDialog(
+              backgroundColor: const Color(0xFF1A1A1A),
+              title: const Row(
+                children: [
+                  Icon(Icons.battery_alert, color: Colors.orange, size: 24),
+                  SizedBox(width: 8),
+                  Text('High Resource Usage', style: TextStyle(color: Colors.white, fontSize: 18)),
+                ],
               ),
-              SizedBox(height: 12),
-              Text(
-                '• Battery drain will increase significantly.',
-                style: TextStyle(color: Colors.white70),
+              content: const Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'On-Device transcription is computationally intensive.',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                  SizedBox(height: 12),
+                  Text(
+                    '• Battery drain will increase significantly.',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                  Text(
+                    '• Device may warm up during extended use.',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                  Text(
+                    '• Speed and accuracy may be lower than Cloud models.',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                ],
               ),
-              Text(
-                '• Device may warm up during extended use.',
-                style: TextStyle(color: Colors.white70),
-              ),
-              Text(
-                '• Speed and accuracy may be lower than Cloud models.',
-                style: TextStyle(color: Colors.white70),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('I Understand', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+                ),
+              ],
             ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('I Understand', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
-            ),
-          ],
-        ),
-      ) ?? false;
+          ) ??
+          false;
     }
 
     if (!proceed) return;
@@ -1046,7 +1052,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     // Determine current active tab
     // 0: Omi (default)
     // 1: On-Device
-    // 2: BYO Cloud 
+    // 2: BYO Cloud
     int currentTab = 0;
     if (_useCustomStt) {
       if (_selectedProvider == SttProvider.onDeviceWhisper) {
@@ -1092,9 +1098,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                     _useCustomStt = true;
                     // Switch back to a cloud provider if currently valid onDevice
                     if (_selectedProvider == SttProvider.onDeviceWhisper) {
-                       _selectedProvider = SttProvider.openai;
+                      _selectedProvider = SttProvider.openai;
                     }
-                     
+
                     // Track source selection
                     MixpanelManager().transcriptionSourceSelected(source: 'custom_cloud');
                   });
@@ -1113,11 +1119,11 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               TextSpan(
                 children: [
                   TextSpan(
-                    text: '1,200 free minutes/month included. Unlimited with ',
+                    text: '1,200 premium minutes/month. On-Device tab offers unlimited free transcription. ',
                     style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                   ),
                   TextSpan(
-                    text: 'Omi Unlimited',
+                    text: 'View usage',
                     style: TextStyle(
                       color: Colors.grey.shade400,
                       fontSize: 12,
@@ -1134,7 +1140,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           )
         else if (currentTab == 1)
           Text(
-            'Audio is processed locally. Note that this increases battery usage.',
+            'Audio is processed locally. Works offline, more private, but uses more battery.',
             style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
           )
         else if (currentTab == 2)
@@ -1266,7 +1272,6 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                     ),
                   );
                 }),
-
               ],
               onChanged: (provider) async {
                 if (provider != null) {
@@ -1344,7 +1349,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   Widget _buildLanguageSelector() {
     var languages = _currentConfig.supportedLanguages;
     if (Platform.isIOS) {
-        languages = languages.where((lang) => lang != 'multi').toList();
+      languages = languages.where((lang) => lang != 'multi').toList();
     }
 
     final suggestions = languages.map((lang) {
@@ -1377,25 +1382,24 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       suggestions: models,
       onChanged: (value) {
         final newModel = value.trim();
-        if (_selectedProvider == SttProvider.onDeviceWhisper && 
-            ['medium', 'large-v1', 'large-v2'].contains(newModel)) {
-             showDialog(
-               context: context,
-               builder: (context) => AlertDialog(
-                 backgroundColor: const Color(0xFF1A1A1A),
-                 title: const Text('Performance Warning', style: TextStyle(color: Colors.white)),
-                 content: const Text(
-                   'This model is large and may crash the app or run very slowly on mobile devices.\n\n"small" or "base" is recommended.',
-                   style: TextStyle(color: Colors.white70),
-                 ),
-                 actions: [
-                   TextButton(
-                     onPressed: () => Navigator.pop(context),
-                     child: const Text('OK', style: TextStyle(color: Colors.blue)),
-                   ),
-                 ],
-               ),
-             );
+        if (_selectedProvider == SttProvider.onDeviceWhisper && ['medium', 'large-v1', 'large-v2'].contains(newModel)) {
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              backgroundColor: const Color(0xFF1A1A1A),
+              title: const Text('Performance Warning', style: TextStyle(color: Colors.white)),
+              content: const Text(
+                'This model is large and may crash the app or run very slowly on mobile devices.\n\n"small" or "base" is recommended.',
+                style: TextStyle(color: Colors.white70),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('OK', style: TextStyle(color: Colors.blue)),
+                ),
+              ],
+            ),
+          );
         }
         setState(() {
           _onLanguageOrModelChanged(null, newModel);
@@ -1668,7 +1672,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   Widget _buildOnDeviceWhisperConfig() {
     // If iOS, show simplified Apple Speech UI
     if (Theme.of(context).platform == TargetPlatform.iOS) {
-       return Column(
+      return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
@@ -1693,13 +1697,13 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           ),
           const SizedBox(height: 12),
           const Text(
-             'Your device\'s native speech engine will be used. No model download required.',
-             style: TextStyle(color: Colors.grey, fontSize: 12),
+            'Your device\'s native speech engine will be used. No model download required.',
+            style: TextStyle(color: Colors.grey, fontSize: 12),
           ),
           const SizedBox(height: 20),
           _buildLanguageSelector(),
         ],
-       );
+      );
     }
 
     final hasModel = _isModelFilePresent;
@@ -1787,7 +1791,6 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               ),
             ],
           ),
-          
         const SizedBox(height: 20),
         _buildModelSelector(),
         const SizedBox(height: 20),
@@ -1801,22 +1804,32 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
   Future<void> _downloadModel() async {
     final modelName = _currentModel.isEmpty ? 'tiny' : _currentModel;
-    
+
     double estimatedSizeMB = 1500;
-    switch(modelName) {
-      case 'tiny': estimatedSizeMB = 75; break;
-      case 'base': estimatedSizeMB = 142; break;
-      case 'small': estimatedSizeMB = 466; break;
-      case 'medium': estimatedSizeMB = 1500; break;
-      case 'large-v1': 
-      case 'large-v2': estimatedSizeMB = 2900; break;
+    switch (modelName) {
+      case 'tiny':
+        estimatedSizeMB = 75;
+        break;
+      case 'base':
+        estimatedSizeMB = 142;
+        break;
+      case 'small':
+        estimatedSizeMB = 466;
+        break;
+      case 'medium':
+        estimatedSizeMB = 1500;
+        break;
+      case 'large-v1':
+      case 'large-v2':
+        estimatedSizeMB = 2900;
+        break;
     }
 
     final appDir = await getApplicationSupportDirectory();
     final modelDir = Directory('${appDir.path}/models');
-    
+
     double? freeSpaceMB = await DiskSpace.getFreeDiskSpaceForPath(appDir.path);
-    
+
     if (!mounted) return;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1837,7 +1850,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               style: const TextStyle(color: Colors.white70),
             ),
             const SizedBox(height: 8),
-             Text(
+            Text(
               'Available Space: ${freeSpaceMB != null ? '${freeSpaceMB.toStringAsFixed(0)} MB' : 'Unknown'}',
               style: TextStyle(
                 color: (freeSpaceMB != null && freeSpaceMB < estimatedSizeMB) ? Colors.red : Colors.white70,
@@ -1860,9 +1873,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
           ),
           TextButton(
-             onPressed: (freeSpaceMB != null && freeSpaceMB < estimatedSizeMB) 
-                 ? null 
-                 : () => Navigator.pop(context, true),
+            onPressed:
+                (freeSpaceMB != null && freeSpaceMB < estimatedSizeMB) ? null : () => Navigator.pop(context, true),
             child: const Text('Download', style: TextStyle(color: Colors.blue)),
           ),
         ],
@@ -1885,18 +1897,18 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       final fileName = 'ggml-$modelName.bin';
       final filePath = '${modelDir.path}/$fileName';
       final url = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$fileName';
-      
+
       _downloadClient = http.Client();
       final request = http.Request('GET', Uri.parse(url));
       final response = await _downloadClient!.send(request);
-      
+
       if (response.statusCode != 200) {
         throw Exception('Download failed: ${response.statusCode}');
       }
 
       final contentLength = response.contentLength ?? (estimatedSizeMB * 1024 * 1024).toInt();
       int received = 0;
-      
+
       final file = File(filePath);
       final sink = file.openWrite();
 
@@ -1908,7 +1920,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             if (mounted) {
               setState(() {
                 _downloadProgress = received / contentLength;
-                _modelDownloadStatus = 'Downloading $modelName: ${(received / 1024 / 1024).toStringAsFixed(1)} / ${(contentLength / 1024 / 1024).toStringAsFixed(1)} MB';
+                _modelDownloadStatus =
+                    'Downloading $modelName: ${(received / 1024 / 1024).toStringAsFixed(1)} / ${(contentLength / 1024 / 1024).toStringAsFixed(1)} MB';
               });
             }
           },
@@ -1925,9 +1938,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           _modelDownloadStatus = 'Done';
         });
       }
-      
+
       _updateCurrentProviderConfig(url: filePath);
-      
+
       await _saveCurrentProviderConfig();
       if (!mounted) return;
       if (_useCustomStt && _selectedProvider == SttProvider.onDeviceWhisper) {
@@ -1936,28 +1949,27 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         if (!mounted) return;
         await Provider.of<CaptureProvider>(context, listen: false).onTranscriptionSettingsChanged();
       }
-      
+
       // Auto-delete unused models
       try {
         final List<FileSystemEntity> files = modelDir.listSync();
         for (final file in files) {
           if (file is File && file.path.endsWith('.bin') && file.path != filePath) {
             await file.delete();
-            debugPrint('Deleted unused model: ${file.path}');
+            Logger.debug('Deleted unused model: ${file.path}');
           }
         }
       } catch (e) {
-        debugPrint('Error cleaning up models: $e');
+        Logger.debug('Error cleaning up models: $e');
       }
-
     } catch (e) {
       if (e is http.ClientException) {
-         if (mounted) {
-            setState(() {
-              _isDownloadingModel = false;
-              _modelDownloadStatus = 'Cancelled';
-            });
-         }
+        if (mounted) {
+          setState(() {
+            _isDownloadingModel = false;
+            _modelDownloadStatus = 'Cancelled';
+          });
+        }
       } else {
         if (mounted) {
           setState(() {
@@ -2436,8 +2448,6 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       ),
     );
   }
-
-
 }
 
 class _JsonEditorPage extends StatefulWidget {

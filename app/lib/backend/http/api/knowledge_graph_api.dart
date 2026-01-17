@@ -38,8 +38,6 @@ class KnowledgeGraphApi {
     }
   }
 
-
-
   static Future<void> deleteKnowledgeGraph() async {
     final response = await makeApiCall(
       url: _baseUrl,
@@ -67,7 +65,7 @@ class KnowledgeGraphApi {
     while (stopwatch.elapsed < timeout) {
       try {
         await Future.delayed(interval);
-        
+
         final data = await getKnowledgeGraph();
         final nodes = data['nodes'] as List<dynamic>? ?? [];
         final count = nodes.length;
@@ -78,7 +76,7 @@ class KnowledgeGraphApi {
         } else {
           stableCount = 0;
         }
-        
+
         lastCount = count;
 
         // If stable for [stabilityChecks] cycles and we have data, return it
@@ -90,7 +88,7 @@ class KnowledgeGraphApi {
         print('Polling error: $e');
       }
     }
-    
+
     // Return whatever we have at timeout
     return await getKnowledgeGraph();
   }

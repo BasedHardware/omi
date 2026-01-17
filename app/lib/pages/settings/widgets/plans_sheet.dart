@@ -1,19 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
-import 'package:omi/gen/assets.gen.dart';
-
-import 'package:omi/models/subscription.dart';
-import 'package:omi/providers/usage_provider.dart';
-import 'package:omi/providers/user_provider.dart';
-import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/models/subscription.dart';
+import 'package:omi/pages/settings/transcription_settings_page.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/providers/user_provider.dart';
+import 'package:omi/services/freemium_transcription_service.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/logger.dart';
+import 'package:omi/widgets/confirmation_dialog.dart';
 import '../payment_webview_page.dart';
 
 class PlansSheet extends StatefulWidget {
@@ -41,6 +46,7 @@ class _PlansSheetState extends State<PlansSheet> {
   bool _isCancelling = false;
   bool _isUpgrading = false;
   bool _showTrainingDataOptIn = false; // Control visibility of training data opt-in
+  bool _isSwitchingToFree = false;
 
   Future<void> _loadAvailablePlans() async {
     final provider = context.read<UsageProvider>();
@@ -277,7 +283,7 @@ class _PlansSheetState extends State<PlansSheet> {
 
       return currentPlan;
     } catch (e) {
-      debugPrint('Error getting current plan details: $e');
+      Logger.debug('Error getting current plan details: $e');
       return null;
     }
   }
@@ -299,7 +305,7 @@ class _PlansSheetState extends State<PlansSheet> {
 
       return false;
     } catch (e) {
-      debugPrint('Error checking scheduled upgrade: $e');
+      Logger.debug('Error checking scheduled upgrade: $e');
       return false;
     }
   }
@@ -319,9 +325,129 @@ class _PlansSheetState extends State<PlansSheet> {
 
       return annualPlan;
     } catch (e) {
-      debugPrint('Error getting scheduled plan details: $e');
+      Logger.debug('Error getting scheduled plan details: $e');
       return null;
     }
+  }
+
+  Future<void> _handleSwitchToFreePlan() async {
+    setState(() => _isSwitchingToFree = true);
+
+    try {
+      MixpanelManager().track('Free Plan Selected', properties: {
+        'source': 'plans_sheet',
+      });
+
+      final freemiumService = FreemiumTranscriptionService();
+      final readiness = await freemiumService.checkReadiness();
+
+      if (readiness == FreemiumReadiness.ready) {
+        final config = freemiumService.getFreemiumConfig();
+        if (config != null) {
+          await SharedPreferencesUtil().saveCustomSttConfig(config);
+          if (!mounted) return;
+
+          final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
+          await captureProvider.onRecordProfileSettingChanged();
+
+          if (!mounted) return;
+          AppSnackbar.showSnackbar('Switched to on-device transcription');
+          Navigator.of(context).pop(false); // false = switched to free
+        }
+      } else {
+        // Need to set up on-device first
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const TranscriptionSettingsPage()),
+        );
+      }
+    } catch (e) {
+      Logger.debug('Error switching to free plan: $e');
+      AppSnackbar.showSnackbarError('Could not switch to free plan. Please try again.');
+    } finally {
+      if (mounted) setState(() => _isSwitchingToFree = false);
+    }
+  }
+
+  Future<void> _handleDowngradeToFreemium() async {
+    // Show confirmation dialog with limitations warning
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1F1F25),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Downgrade to Freemium?',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'You will experience these limitations:',
+              style: TextStyle(
+                color: Colors.grey.shade300,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 16),
+            _buildDowngradeLimitationRow(Icons.battery_alert, '7x battery consumption'),
+            const SizedBox(height: 10),
+            _buildDowngradeLimitationRow(Icons.warning_amber, '30% less transcription quality'),
+            const SizedBox(height: 10),
+            _buildDowngradeLimitationRow(Icons.timer_off, '5-7 second delay'),
+            const SizedBox(height: 10),
+            _buildDowngradeLimitationRow(Icons.person_off, 'Cannot identify speakers'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(
+              'Downgrade Anyway',
+              style: TextStyle(color: Colors.red.shade400),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    await _handleSwitchToFreePlan();
+  }
+
+  Widget _buildDowngradeLimitationRow(IconData icon, String text) {
+    return Row(
+      children: [
+        Icon(icon, color: Colors.red.shade400, size: 18),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              color: Colors.red.shade400,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   Future<void> _handleUpgradeWithSelectedPlan() async {
@@ -884,7 +1010,7 @@ class _PlansSheetState extends State<PlansSheet> {
                             );
                           } else {
                             return Text(
-                              isUnlimited ? 'Change Plan' : 'Upgrade to Unlimited',
+                              isUnlimited ? 'Change Plan' : 'Keep Omi Unlimited',
                               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                             );
                           }
@@ -903,7 +1029,7 @@ class _PlansSheetState extends State<PlansSheet> {
                           return Text(
                             isUnlimited
                                 ? 'You are on the Unlimited Plan.'
-                                : 'Your Omi, unleashed. Go unlimited for endless possibilities.',
+                                : 'Choose your plan to unlock unlimited Omi.',
                             textAlign: TextAlign.center,
                             style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
                           );
@@ -957,26 +1083,28 @@ class _PlansSheetState extends State<PlansSheet> {
                         }),
                       ],
                       const SizedBox(height: 24),
-                      // Features list
-                      Column(
-                        children: [
-                          _buildFeatureItem(
-                            faIcon: FontAwesomeIcons.infinity,
-                            text: 'Unlimited conversations',
-                          ),
-                          const SizedBox(height: 16),
-                          _buildFeatureItem(
-                            faIcon: FontAwesomeIcons.solidComments,
-                            text: 'Ask Omi anything about your life',
-                          ),
-                          const SizedBox(height: 16),
-                          _buildFeatureItem(
-                            faIcon: FontAwesomeIcons.brain,
-                            text: 'Unlock Omi\'s infinite memory',
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 32),
+                      // Features list - only for unlimited users
+                      if (isUnlimited) ...[
+                        Column(
+                          children: [
+                            _buildFeatureItem(
+                              faIcon: FontAwesomeIcons.infinity,
+                              text: 'Unlimited conversations',
+                            ),
+                            const SizedBox(height: 16),
+                            _buildFeatureItem(
+                              faIcon: FontAwesomeIcons.solidComments,
+                              text: 'Ask Omi anything about your life',
+                            ),
+                            const SizedBox(height: 16),
+                            _buildFeatureItem(
+                              faIcon: FontAwesomeIcons.brain,
+                              text: 'Unlock Omi\'s infinite memory',
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 32),
+                      ],
 
                       // Training Data Opt-in Option - only show after plans are loaded
                       Consumer2<UsageProvider, UserProvider>(
@@ -1328,7 +1456,7 @@ class _PlansSheetState extends State<PlansSheet> {
 
                       const SizedBox(height: 24),
 
-                      // Continue button - only show for non-annual unlimited users
+                      // Continue/Keep Unlimited button - only show for non-annual unlimited users
                       Builder(builder: (context) {
                         final currentPlan = _getCurrentPlanDetails();
                         final isOnAnnualPlan = currentPlan?['interval'] == 'year';
@@ -1344,19 +1472,23 @@ class _PlansSheetState extends State<PlansSheet> {
                           return const SizedBox.shrink();
                         }
 
+                        final isLoading = _isUpgrading;
+                        // For basic users, show "Keep Unlimited". For unlimited users upgrading, show "Continue"
+                        final buttonText = isUnlimited ? 'Continue' : 'Keep Unlimited';
+
                         return SizedBox(
                           width: double.infinity,
                           height: 56,
                           child: ElevatedButton(
-                            onPressed: _isUpgrading
+                            onPressed: isLoading
                                 ? null
                                 : () {
                                     HapticFeedback.mediumImpact();
                                     _handleUpgradeWithSelectedPlan();
                                   },
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: _isUpgrading ? Colors.grey : Colors.white,
-                              foregroundColor: _isUpgrading ? Colors.white : Colors.black,
+                              backgroundColor: isLoading ? Colors.grey : Colors.white,
+                              foregroundColor: isLoading ? Colors.white : Colors.black,
                               elevation: 0,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16),
@@ -1365,16 +1497,16 @@ class _PlansSheetState extends State<PlansSheet> {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                if (_isUpgrading) ...[
+                                if (isLoading) ...[
                                   const SizedBox(
                                     height: 20,
                                     width: 20,
                                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                                   ),
                                 ] else ...[
-                                  const Text(
-                                    'Continue',
-                                    style: TextStyle(
+                                  Text(
+                                    buttonText,
+                                    style: const TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -1395,6 +1527,87 @@ class _PlansSheetState extends State<PlansSheet> {
                           ),
                         );
                       }),
+
+                      // Freemium limitations warning - only show for basic users before downgrade option
+                      if (!isUnlimited) ...[
+                        const SizedBox(height: 32),
+                        Text(
+                          'Omi is free, but freemium has limits that affect your experience:',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.grey.shade400,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Column(
+                          children: [
+                            _buildLimitationItem(
+                              icon: Icons.battery_alert,
+                              text: '7x battery consumption',
+                            ),
+                            const SizedBox(height: 12),
+                            _buildLimitationItem(
+                              icon: Icons.warning_amber,
+                              text: '30% less transcription quality',
+                            ),
+                            const SizedBox(height: 12),
+                            _buildLimitationItem(
+                              icon: Icons.timer_off,
+                              text: '5-7 second delay (not real-time)',
+                            ),
+                            const SizedBox(height: 12),
+                            _buildLimitationItem(
+                              icon: Icons.person_off,
+                              text: 'Cannot identify speakers',
+                            ),
+                          ],
+                        ),
+                      ],
+
+                      // Downgrade to Freemium button - only show for basic users
+                      if (!isUnlimited)
+                        Builder(builder: (context) {
+                          final usageProvider = context.read<UsageProvider>();
+                          final shouldShowDowngradeButton =
+                              !usageProvider.isLoadingPlans && usageProvider.availablePlans != null;
+
+                          if (!shouldShowDowngradeButton) {
+                            return const SizedBox.shrink();
+                          }
+
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 12),
+                            child: SizedBox(
+                              width: double.infinity,
+                              height: 50,
+                              child: OutlinedButton(
+                                onPressed: _isSwitchingToFree ? null : _handleDowngradeToFreemium,
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.grey.shade400,
+                                  side: BorderSide(color: Colors.grey.shade600, width: 1),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                child: _isSwitchingToFree
+                                    ? const SizedBox(
+                                        height: 20,
+                                        width: 20,
+                                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.grey),
+                                      )
+                                    : const Text(
+                                        'Downgrade to Freemium',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                              ),
+                            ),
+                          );
+                        }),
 
                       // Continue button for canceled subscriptions
                       Builder(builder: (context) {
@@ -1541,6 +1754,43 @@ class _PlansSheetState extends State<PlansSheet> {
               color: Colors.white,
               fontSize: 16,
               fontWeight: FontWeight.w400,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLimitationItem({required IconData icon, required String text}) {
+    return Row(
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: Colors.red.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: Colors.red.shade400,
+              width: 1,
+            ),
+          ),
+          child: Center(
+            child: Icon(
+              icon,
+              color: Colors.red.shade400,
+              size: 18,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              color: Colors.red.shade400,
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ),

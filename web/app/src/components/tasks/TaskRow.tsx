@@ -16,6 +16,8 @@ interface TaskRowProps {
   isSelected?: boolean;
   onSelect?: (id: string, selected: boolean) => void;
   isFocused?: boolean;
+  // Double-click to enter selection mode
+  onEnterSelectionMode?: (id: string) => void;
 }
 
 function formatDueBadge(dueAt: string): { text: string; isOverdue: boolean } {
@@ -54,6 +56,7 @@ export function TaskRow({
   isSelected = false,
   onSelect,
   isFocused = false,
+  onEnterSelectionMode,
 }: TaskRowProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
@@ -106,11 +109,19 @@ export function TaskRow({
     }
   };
 
-  const handleDoubleClick = (e: React.MouseEvent) => {
+  const handleTextDoubleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!task.completed && onUpdateDescription) {
       setEditValue(task.description);
       setIsEditing(true);
+    }
+  };
+
+  const handleRowDoubleClick = () => {
+    // Double-click on row enters selection mode and selects this task
+    // Only trigger if not already in selection mode and handler is provided
+    if (!onSelect && onEnterSelectionMode) {
+      onEnterSelectionMode(task.id);
     }
   };
 
@@ -155,6 +166,7 @@ export function TaskRow({
       transition={{ duration: 0.15 }}
       onHoverStart={() => setIsHovered(true)}
       onHoverEnd={() => setIsHovered(false)}
+      onDoubleClick={handleRowDoubleClick}
       className={cn(
         'group flex items-center gap-3 px-3 py-2.5',
         'border-b border-bg-tertiary/50',
@@ -221,7 +233,7 @@ export function TaskRow({
           />
         ) : (
           <p
-            onDoubleClick={handleDoubleClick}
+            onDoubleClick={handleTextDoubleClick}
             className={cn(
               'text-sm truncate transition-colors',
               task.completed

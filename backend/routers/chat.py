@@ -33,7 +33,6 @@ from utils.chat import (
 )
 from utils.llm.persona import initial_persona_chat_message
 from utils.llm.chat import initial_chat_message
-from utils.llm.tasks import extract_tasks_from_chat, extract_tasks_from_conversation
 from utils.llm.goals import extract_and_update_goal_progress
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
@@ -106,9 +105,8 @@ def send_message(
 
     chat_db.add_message(uid, message.dict())
     
-    # Check for goal progress and extract tasks from user message (background)
+    # Check for goal progress (background)
     threading.Thread(target=extract_and_update_goal_progress, args=(uid, data.text)).start()
-    threading.Thread(target=extract_tasks_from_chat, args=(uid, data.text)).start()
 
     app = get_available_app_by_id(compat_app_id, uid)
     app = App(**app) if app else None
@@ -117,12 +115,13 @@ def send_message(
 
     messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, app_id=compat_app_id)]))
 
-    # Capture user message text for task extraction
-    user_message_text = data.text
 
     def process_message(response: str, callback_data: dict):
         memories = callback_data.get('memories_found', [])
         ask_for_nps = callback_data.get('ask_for_nps', False)
+        langsmith_run_id = callback_data.get('langsmith_run_id')
+        prompt_name = callback_data.get('prompt_name')
+        prompt_commit = callback_data.get('prompt_commit')
 
         # cited extraction
         cited_conversation_idxs = {int(i) for i in re.findall(r'\[(\d+)\]', response)}
@@ -149,6 +148,9 @@ def send_message(
             app_id=app_id_from_app,
             type='text',
             memories_id=memories_id,
+            langsmith_run_id=langsmith_run_id,  # Store run_id for feedback tracking
+            prompt_name=prompt_name,  # LangSmith prompt name for versioning
+            prompt_commit=prompt_commit,  # LangSmith prompt commit for traceability
         )
         if chat_session:
             ai_message.chat_session_id = chat_session.id
@@ -158,9 +160,6 @@ def send_message(
         ai_message.memories = [MessageConversation(**m) for m in (memories if len(memories) < 5 else memories[:5])]
         if app_id:
             record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
-
-        # Extract tasks from full conversation context (user message + AI response) in background
-        threading.Thread(target=extract_tasks_from_conversation, args=(uid, user_message_text, response)).start()
 
         return ai_message, ask_for_nps
 
@@ -295,6 +294,14 @@ def get_messages(
         uid, limit=100, include_conversations=True, app_id=compat_app_id, chat_session_id=chat_session_id
     )
     print('get_messages', len(messages), compat_app_id)
+    
+    # Debug: Check for messages with ratings
+    rated_messages = [m for m in messages if m.get('rating') is not None]
+    if rated_messages:
+        print(f'📊 Messages with ratings: {len(rated_messages)}')
+        for m in rated_messages[:5]:  # Show first 5
+            print(f"  - Message {m.get('id')}: rating={m.get('rating')}")
+    
     if not messages:
         return [initial_message_util(uid, compat_app_id)]
     return messages
@@ -350,23 +357,37 @@ async def transcribe_voice_message(files: List[UploadFile] = File(...), uid: str
         if converted_wav_paths:
             wav_paths.extend(converted_wav_paths)
 
-    # Process all WAV files
+    # Process all WAV files and collect transcripts
+    transcripts = []
     for wav_path in wav_paths:
-        transcript = transcribe_voice_message_segment(wav_path)
+        try:
+            transcript = transcribe_voice_message_segment(wav_path)
+            if transcript:
+                transcripts.append(transcript)
+        except Exception as e:
+            print(f"Error transcribing {wav_path}: {e}")
+            # Cleanup all remaining temp files before raising
+            for p in wav_paths:
+                if p.startswith(f"/tmp/{uid}_"):
+                    try:
+                        Path(p).unlink()
+                    except:
+                        pass
+            raise HTTPException(status_code=500, detail=f'Transcription failed: {str(e)}')
+        finally:
+            # Clean up current temporary WAV file
+            if wav_path.startswith(f"/tmp/{uid}_"):
+                try:
+                    Path(wav_path).unlink()
+                except:
+                    pass
 
-        # Clean up temporary WAV files created directly
-        if wav_path.startswith(f"/tmp/{uid}_"):
-            try:
-                Path(wav_path).unlink()
-            except:
-                pass
-
-        # If we got a transcript, return it
-        if transcript:
-            return {"transcript": transcript}
+    # Combine all transcripts
+    if transcripts:
+        return {"transcript": " ".join(transcripts)}
 
     # If we got here, no transcript was produced
-    raise HTTPException(status_code=400, detail='Failed to transcribe audio')
+    return {"transcript": ""}
 
 
 @router.post('/v2/files', response_model=List[FileChat], tags=['chat'])
@@ -514,54 +535,6 @@ def clear_chat_messages(
         chat_db.delete_chat_session(uid, chat_session_id)
 
     return initial_message_util(uid, compat_app_id)
-
-
-@router.post("/v1/voice-message/transcribe")
-async def transcribe_voice_message(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
-    # Check if files are empty
-    if not files or len(files) == 0:
-        raise HTTPException(status_code=400, detail='No files provided')
-
-    wav_paths = []
-    other_file_paths = []
-
-    # Process all files in a single loop
-    for file in files:
-        if file.filename.lower().endswith('.wav'):
-            # For WAV files, save directly to a temporary path
-            temp_path = f"/tmp/{uid}_{uuid.uuid4()}.wav"
-            with open(temp_path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
-            wav_paths.append(temp_path)
-        else:
-            # For other files, collect paths for later conversion
-            path = retrieve_file_paths([file], uid)
-            if path:
-                other_file_paths.extend(path)
-
-    # Convert other files to WAV if needed
-    if other_file_paths:
-        converted_wav_paths = decode_files_to_wav(other_file_paths)
-        if converted_wav_paths:
-            wav_paths.extend(converted_wav_paths)
-
-    # Process all WAV files
-    for wav_path in wav_paths:
-        transcript = transcribe_voice_message_segment(wav_path)
-
-        # Clean up temporary WAV files created directly
-        if wav_path.startswith(f"/tmp/{uid}_"):
-            try:
-                Path(wav_path).unlink()
-            except:
-                pass
-
-        # If we got a transcript, return it
-        if transcript:
-            return {"transcript": transcript}
-
-    # If we got here, no transcript was produced
-    raise HTTPException(status_code=400, detail='Failed to transcribe audio')
 
 
 @router.post('/v1/initial-message', tags=['chat'], response_model=Message)

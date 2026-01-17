@@ -47,6 +47,7 @@ import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/services/notifications/daily_reflection_notification.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -55,7 +56,7 @@ enum SettingsSection {
   plansAndBilling,
   calendarIntegration,
   customVocabulary,
-  dailySummary,
+  notifications,
   shortcuts,
   developer,
   about,
@@ -116,10 +117,12 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
   Timer? _deletionDebounceTimer;
   bool _isDeletingBatch = false;
 
-  // Daily summary state
+  // Notifications state
   bool _dailySummaryLoading = true;
   bool _dailySummaryEnabled = true;
   int _dailySummaryHour = 22;
+  bool _dailyReflectionEnabled = true;
+  int _notificationFrequency = 3;
 
   @override
   void initState() {
@@ -160,14 +163,22 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
 
   Future<void> _loadDailySummarySettings() async {
     final settings = await getDailySummarySettings();
+    final reflectionEnabled = SharedPreferencesUtil().dailyReflectionEnabled;
+    final frequency = SharedPreferencesUtil().notificationFrequency;
     if (settings != null && mounted) {
       setState(() {
         _dailySummaryEnabled = settings.enabled;
         _dailySummaryHour = settings.hour;
+        _dailyReflectionEnabled = reflectionEnabled;
+        _notificationFrequency = frequency;
         _dailySummaryLoading = false;
       });
     } else if (mounted) {
-      setState(() => _dailySummaryLoading = false);
+      setState(() {
+        _dailyReflectionEnabled = reflectionEnabled;
+        _notificationFrequency = frequency;
+        _dailySummaryLoading = false;
+      });
     }
   }
 
@@ -187,6 +198,61 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
     setState(() => _dailySummaryHour = hour);
     await setDailySummarySettings(hour: hour);
     MixpanelManager().dailySummaryTimeChanged(hour: hour);
+  }
+
+  void _updateDailyReflectionEnabled(bool value) {
+    setState(() => _dailyReflectionEnabled = value);
+    SharedPreferencesUtil().dailyReflectionEnabled = value;
+    
+    // Schedule or cancel the notification based on the setting
+    if (value) {
+      DailyReflectionNotification.scheduleDailyNotification(channelKey: 'channel');
+    } else {
+      DailyReflectionNotification.cancelNotification();
+    }
+  }
+
+  void _updateNotificationFrequency(int value) {
+    setState(() => _notificationFrequency = value);
+    SharedPreferencesUtil().notificationFrequency = value;
+  }
+
+  String _getFrequencyLabel(int value) {
+    switch (value) {
+      case 0:
+        return 'Off';
+      case 1:
+        return 'Minimal';
+      case 2:
+        return 'Low';
+      case 3:
+        return 'Balanced';
+      case 4:
+        return 'High';
+      case 5:
+        return 'Maximum';
+      default:
+        return 'Balanced';
+    }
+  }
+
+  String _getFrequencyDescription(int value) {
+    switch (value) {
+      case 0:
+        return 'No proactive notifications';
+      case 1:
+        return 'Only critical reminders';
+      case 2:
+        return 'Important updates only';
+      case 3:
+        return 'Regular helpful nudges';
+      case 4:
+        return 'Frequent check-ins';
+      case 5:
+        return 'Stay constantly engaged';
+      default:
+        return 'Regular helpful nudges';
+    }
   }
 
   Future<void> _showHourPicker() async {
@@ -440,8 +506,8 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
           ),
           _buildNavItem(
             icon: FontAwesomeIcons.bell,
-            label: 'Daily Summary',
-            section: SettingsSection.dailySummary,
+            label: 'Notifications',
+            section: SettingsSection.notifications,
           ),
           if (ShortcutService.isSupported)
             _buildNavItem(
@@ -541,7 +607,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
         return _buildCalendarIntegrationContent();
       case SettingsSection.customVocabulary:
         return _buildCustomVocabularyContent();
-      case SettingsSection.dailySummary:
+      case SettingsSection.notifications:
         return _buildDailySummaryContent();
       case SettingsSection.shortcuts:
         return _buildShortcutsContent();
@@ -893,7 +959,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'DAILY SUMMARY',
+            'NOTIFICATIONS',
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
@@ -923,6 +989,134 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Notification Frequency Section
+        const Text(
+          'NOTIFICATION FREQUENCY',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: ResponsiveHelper.textTertiary,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Control how often Omi sends you proactive notifications.',
+          style: TextStyle(
+            fontSize: 12,
+            color: ResponsiveHelper.textTertiary,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
+              width: 1,
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _getFrequencyLabel(_notificationFrequency),
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: ResponsiveHelper.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _getFrequencyDescription(_notificationFrequency),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: ResponsiveHelper.textTertiary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: _notificationFrequency == 0 
+                            ? ResponsiveHelper.backgroundTertiary 
+                            : ResponsiveHelper.purplePrimary.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Center(
+                        child: Text(
+                          '$_notificationFrequency',
+                          style: TextStyle(
+                            color: _notificationFrequency == 0 
+                                ? ResponsiveHelper.textTertiary 
+                                : ResponsiveHelper.purplePrimary,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    activeTrackColor: ResponsiveHelper.purplePrimary,
+                    inactiveTrackColor: ResponsiveHelper.backgroundTertiary,
+                    thumbColor: Colors.white,
+                    overlayColor: ResponsiveHelper.purplePrimary.withOpacity(0.2),
+                    trackHeight: 4,
+                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+                  ),
+                  child: Slider(
+                    value: _notificationFrequency.toDouble(),
+                    min: 0,
+                    max: 5,
+                    divisions: 5,
+                    onChanged: (value) => _updateNotificationFrequency(value.round()),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Off',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: ResponsiveHelper.textTertiary,
+                        ),
+                      ),
+                      Text(
+                        'Max',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: ResponsiveHelper.textTertiary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        
+        const SizedBox(height: 24),
+        
+        // Daily Summary Section
         const Text(
           'DAILY SUMMARY',
           style: TextStyle(
@@ -932,7 +1126,15 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
             letterSpacing: 0.5,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
+        Text(
+          'Get a personalized summary of your day\'s conversations delivered as a notification.',
+          style: TextStyle(
+            fontSize: 12,
+            color: ResponsiveHelper.textTertiary,
+          ),
+        ),
+        const SizedBox(height: 12),
         Container(
           decoration: BoxDecoration(
             color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4),
@@ -950,26 +1152,13 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                 child: Row(
                   children: [
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Daily Summary',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                              color: ResponsiveHelper.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Get a personalized summary of your conversations',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: ResponsiveHelper.textTertiary,
-                            ),
-                          ),
-                        ],
+                      child: const Text(
+                        'Enable',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: ResponsiveHelper.textPrimary,
+                        ),
                       ),
                     ),
                     OmiCheckbox(
@@ -1000,26 +1189,13 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                       child: Row(
                         children: [
                           Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Delivery Time',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                    color: ResponsiveHelper.textPrimary,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  'When to receive your daily summary',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: ResponsiveHelper.textTertiary,
-                                  ),
-                                ),
-                              ],
+                            child: const Text(
+                              'Delivery Time',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: ResponsiveHelper.textPrimary,
+                              ),
                             ),
                           ),
                           Text(
@@ -1042,6 +1218,60 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                 ),
               ),
             ],
+          ),
+        ),
+        
+        const SizedBox(height: 24),
+        
+        // Daily Reflection Section
+        const Text(
+          'DAILY REFLECTION',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: ResponsiveHelper.textTertiary,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Get a reminder at 9 PM to reflect on your day and capture your thoughts.',
+          style: TextStyle(
+            fontSize: 12,
+            color: ResponsiveHelper.textTertiary,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
+              width: 1,
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                Expanded(
+                  child: const Text(
+                    'Enable',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: ResponsiveHelper.textPrimary,
+                    ),
+                  ),
+                ),
+                OmiCheckbox(
+                  value: _dailyReflectionEnabled,
+                  onChanged: _updateDailyReflectionEnabled,
+                  size: 18,
+                ),
+              ],
+            ),
           ),
         ),
       ],
@@ -1981,12 +2211,6 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                   subtitle: 'Track personal goals on homepage',
                   value: devProvider.showGoalTrackerEnabled,
                   onChanged: (v) => devProvider.onShowGoalTrackerChanged(v),
-                ),
-                _buildToggleRow(
-                  title: 'Daily Reflection',
-                  subtitle: '9 PM reminder to reflect on your day',
-                  value: devProvider.dailyReflectionEnabled,
-                  onChanged: (v) => devProvider.onDailyReflectionChanged(v),
                 ),
               ],
             ),

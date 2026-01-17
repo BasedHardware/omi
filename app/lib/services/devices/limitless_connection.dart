@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/models.dart';
+import 'package:omi/utils/logger.dart';
 
 class LimitlessDeviceConnection extends DeviceConnection {
   int _messageIndex = 0;
@@ -81,7 +83,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
       _isInitialized = true;
     } catch (e) {
-      debugPrint('Limitless: Initialization failed: $e');
+      Logger.debug('Limitless: Initialization failed: $e');
       rethrow;
     }
   }
@@ -96,7 +98,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
     final packet = _parseBlePacket(data);
     if (packet == null) {
       if (_isBatchMode) {
-        debugPrint(
+        Logger.debug(
             'Limitless: Batch mode - packet parse failed, data=${data.length}b, first bytes: ${data.take(10).toList()}');
       }
       _rawDataBuffer.addAll(data);
@@ -190,7 +192,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
         }
       }
     } catch (e) {
-      debugPrint('Limitless: Error handling pendant message: $e');
+      Logger.debug('Limitless: Error handling pendant message: $e');
     }
   }
 
@@ -268,7 +270,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
         }
       }
     } catch (e) {
-      debugPrint('Limitless: Error handling storage buffer: $e');
+      Logger.debug('Limitless: Error handling storage buffer: $e');
     }
   }
 
@@ -445,7 +447,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
         }
       }
     } catch (e) {
-      debugPrint('Limitless: Error extracting Opus frames from flash page: $e');
+      Logger.debug('Limitless: Error extracting Opus frames from flash page: $e');
     }
 
     return frames;
@@ -631,7 +633,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
         };
       }
     } catch (e) {
-      debugPrint('Limitless: Error parsing BLE wrapper: $e');
+      Logger.debug('Limitless: Error parsing BLE wrapper: $e');
     }
     return null;
   }
@@ -708,9 +710,9 @@ class LimitlessDeviceConnection extends DeviceConnection {
     try {
       final ackCmd = _encodeAcknowledgeProcessedData(upToIndex);
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, ackCmd);
-      debugPrint('Limitless: Acknowledged processed data up to index $upToIndex');
+      Logger.debug('Limitless: Acknowledged processed data up to index $upToIndex');
     } catch (e) {
-      debugPrint('Limitless: Error sending acknowledgment: $e');
+      Logger.debug('Limitless: Error sending acknowledgment: $e');
     }
   }
 
@@ -743,7 +745,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   /// Get storage status
   Future<Map<String, int>?> getStorageStatus() async {
     if (!_isInitialized) {
-      debugPrint('Limitless: Device not initialized');
+      Logger.debug('Limitless: Device not initialized');
       return null;
     }
 
@@ -763,7 +765,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
       _storageStateCompleter = null;
       return result ?? _storageState;
     } catch (e) {
-      debugPrint('Limitless: Error getting storage status: $e');
+      Logger.debug('Limitless: Error getting storage status: $e');
       _storageStateCompleter = null;
       return null;
     }
@@ -797,7 +799,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, cmd);
     } catch (e) {
       _isBatchMode = false;
-      debugPrint('Limitless: Error enabling batch mode: $e');
+      Logger.debug('Limitless: Error enabling batch mode: $e');
     }
   }
 
@@ -1070,7 +1072,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
         }
       }
     } catch (e) {
-      debugPrint('Limitless: Error extracting opus frames from page: $e');
+      Logger.debug('Limitless: Error extracting opus frames from page: $e');
     }
 
     return frames;
@@ -1318,7 +1320,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
         pos++;
       }
     } catch (e) {
-      debugPrint('Limitless: Error parsing StorageBufferMsg: $e');
+      Logger.debug('Limitless: Error parsing StorageBufferMsg: $e');
     }
     return null;
   }
@@ -1433,7 +1435,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
         return batteryData[0];
       }
     } catch (e) {
-      debugPrint('Limitless: Error reading battery level: $e');
+      Logger.debug('Limitless: Error reading battery level: $e');
     }
     return -1;
   }
@@ -1458,7 +1460,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
         }
       });
     } catch (e) {
-      debugPrint('Limitless: Error setting up battery listener: $e');
+      Logger.debug('Limitless: Error setting up battery listener: $e');
       return null;
     }
   }
@@ -1548,7 +1550,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   @override
   Future<void> performSetLedDimRatio(int ratio) async {
     if (!_isInitialized) {
-      debugPrint('Limitless: Device not initialized');
+      Logger.debug('Limitless: Device not initialized');
       return;
     }
 
@@ -1557,9 +1559,9 @@ class LimitlessDeviceConnection extends DeviceConnection {
       final cmd = _encodeSetLedBrightness(brightness);
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, cmd);
       _lastLedBrightness = brightness;
-      debugPrint('Limitless: Set LED brightness to $brightness');
+      Logger.debug('Limitless: Set LED brightness to $brightness');
     } catch (e) {
-      debugPrint('Limitless: Error setting LED brightness: $e');
+      Logger.debug('Limitless: Error setting LED brightness: $e');
     }
   }
 
@@ -1593,34 +1595,34 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   Future<bool> unpairWithoutReset() async {
     if (!_isInitialized) {
-      debugPrint('Limitless: Device not initialized');
+      Logger.debug('Limitless: Device not initialized');
       return false;
     }
 
     try {
       final cmd = _encodeUnpairBluetooth(doNotReset: true);
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, cmd);
-      debugPrint('Limitless: Sent unpair command (without reset)');
+      Logger.debug('Limitless: Sent unpair command (without reset)');
       return true;
     } catch (e) {
-      debugPrint('Limitless: Error sending unpair command: $e');
+      Logger.debug('Limitless: Error sending unpair command: $e');
       return false;
     }
   }
 
   Future<bool> unpairAndReset() async {
     if (!_isInitialized) {
-      debugPrint('Limitless: Device not initialized');
+      Logger.debug('Limitless: Device not initialized');
       return false;
     }
 
     try {
       final cmd = _encodeUnpairBluetooth(doNotReset: false);
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, cmd);
-      debugPrint('Limitless: Sent unpair command (with reset)');
+      Logger.debug('Limitless: Sent unpair command (with reset)');
       return true;
     } catch (e) {
-      debugPrint('Limitless: Error sending unpair command: $e');
+      Logger.debug('Limitless: Error sending unpair command: $e');
       return false;
     }
   }

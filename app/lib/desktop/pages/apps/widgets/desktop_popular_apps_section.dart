@@ -1,6 +1,9 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+
+import 'package:cached_network_image/cached_network_image.dart';
+
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
@@ -284,7 +287,7 @@ class _DesktopPopularAppCardState extends State<_DesktopPopularAppCard> {
 
   void _handleAppTap() {
     // Navigate to app detail page
-    debugPrint('Popular app tapped: ${widget.app.name}');
+    Logger.debug('Popular app tapped: ${widget.app.name}');
     // TODO: Implement navigation to app detail page
   }
 }
