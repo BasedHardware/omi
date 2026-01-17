@@ -78,6 +78,12 @@ void button_pressed_callback(const struct device *dev, struct gpio_callback *cb,
     }
 }
 #define BUTTON_CHECK_INTERVAL 40 // 0.04 seconds, 25 Hz
+#define DEBOUNCE_TIME_MS 20      // Minimum stable time to accept state change
+
+// Debounce state variables
+static uint32_t last_state_change_time = 0;
+static bool pending_state = false;
+static bool debounced_pressed = false;
 
 void check_button_level(struct k_work *work_item);
 
@@ -180,7 +186,21 @@ void check_button_level(struct k_work *work_item)
 {
     current_time = current_time + 1;
 
-    u_int8_t btn_state = was_pressed ? BUTTON_PRESSED : BUTTON_RELEASED;
+    // Debounce logic - filter out electrical noise/contact bounce
+    bool raw_state = was_pressed;
+    if (raw_state != pending_state) {
+        pending_state = raw_state;
+        last_state_change_time = current_time;
+    }
+
+    // Only update debounced state after stable for DEBOUNCE_TIME_MS
+    uint32_t stable_time = (current_time - last_state_change_time) * BUTTON_CHECK_INTERVAL;
+    if (stable_time >= DEBOUNCE_TIME_MS) {
+        debounced_pressed = pending_state;
+    }
+
+    // Use debounced state for all button event detection
+    u_int8_t btn_state = debounced_pressed ? BUTTON_PRESSED : BUTTON_RELEASED;
 
     ButtonEvent event = BUTTON_EVENT_NONE;
 
@@ -246,6 +266,7 @@ void check_button_level(struct k_work *work_item)
         LOG_PRINTK("long press detected\n");
         btn_last_event = event;
         notify_long_tap();
+        play_haptic_milli(100);  // Haptic feedback for long press
     }
 
     // Releases, one time event
