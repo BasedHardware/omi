@@ -1369,3 +1369,20 @@ Notes: Data privacy page showing privacy controls and app access info.
        and use l10n keys for dynamic access descriptions. New parameterized
        keys handle app data access types and trigger descriptions.
 Commit: cdb4dfa9b
+
+--------------------------------------------------------------------------------
+FILE 101 (Phase 2 FILE 31): usage_page.dart
+--------------------------------------------------------------------------------
+Path: app/lib/pages/settings/usage_page.dart
+New Keys: basicPlanDescription, minutes, omiHas, premiumMinutesUsed,
+         setupOnDevice, forUnlimitedFreeTranscription, premiumMinsLeft,
+         alwaysAvailable
+Reused Keys: upgradeToUnlimited, onDevice
+Total New Keys: 8
+Script: /tmp/translate_usage_page.py
+Status: ✅ COMPLETED
+Notes: Large usage/insights page with subscription info, charts, and stats.
+       Updated subscription warning messages for premium minutes usage,
+       upgrade button, plan description, and share stats fallback text.
+       Most UI strings were already localized.
+Commit: ac0941463
