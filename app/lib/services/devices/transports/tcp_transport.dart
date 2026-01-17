@@ -65,12 +65,7 @@ class TcpTransport extends DeviceTransport {
     _updateState(DeviceTransportState.connecting);
 
     try {
-      debugPrint('TcpTransport: Starting TCP server on port $port');
       _serverSocket = await ServerSocket.bind(InternetAddress.anyIPv4, port);
-      debugPrint('TcpTransport: TCP server listening on ${_serverSocket!.address.address}:${_serverSocket!.port}');
-
-      // Wait for device to connect with timeout
-      debugPrint('TcpTransport: Waiting for device to connect (timeout: ${connectionTimeout.inSeconds}s)...');
 
       final clientFuture = _serverSocket!.first.timeout(
         connectionTimeout,
@@ -80,8 +75,6 @@ class TcpTransport extends DeviceTransport {
       );
 
       _clientSocket = await clientFuture;
-      debugPrint(
-          'TcpTransport: Device connected from ${_clientSocket!.remoteAddress.address}:${_clientSocket!.remotePort}');
       _updateState(DeviceTransportState.connected);
 
       // Listen for incoming data from the device
@@ -95,7 +88,6 @@ class TcpTransport extends DeviceTransport {
           disconnect();
         },
         onDone: () {
-          debugPrint('TcpTransport: Device disconnected');
           disconnect();
         },
         cancelOnError: false,
@@ -155,7 +147,6 @@ class TcpTransport extends DeviceTransport {
     _dataStreamController = null;
 
     _updateState(DeviceTransportState.disconnected);
-    debugPrint('TcpTransport: Server stopped on port $port');
   }
 
   @override
@@ -170,7 +161,6 @@ class TcpTransport extends DeviceTransport {
     }
 
     try {
-      // Check if client socket is still valid by accessing remote address
       _clientSocket!.remoteAddress;
       return true;
     } catch (e) {

@@ -139,6 +139,3 @@ class WifiCredentialsValidator {
     return validateSsid(ssid) ?? validatePassword(password);
   }
 }
-
-/// Legacy alias for backwards compatibility
-typedef WifiSsidValidator = WifiCredentialsValidator;

@@ -162,11 +162,8 @@ class WalSyncs implements IWalSync {
       final wifiSupported = await _sdcardSync.isWifiSyncSupported();
 
       if (preferredMethod == 'wifi' && wifiSupported) {
-        Logger.debug("WalSyncs: Using WiFi (Fast Transfer) - user preference");
         await _sdcardSync.syncWithWifi(progress: progress, connectionListener: connectionListener);
       } else {
-        Logger.debug(
-            "WalSyncs: Using BLE sync - ${preferredMethod == 'wifi' ? 'WiFi not supported' : 'user preference'}");
         await _sdcardSync.syncAll(progress: progress);
       }
     }
@@ -199,11 +196,8 @@ class WalSyncs implements IWalSync {
       final wifiSupported = await _sdcardSync.isWifiSyncSupported();
 
       if (preferredMethod == 'wifi' && wifiSupported) {
-        Logger.debug("WalSyncs.syncWal: Using WiFi (Fast Transfer) - user preference");
         return await _sdcardSync.syncWithWifi(progress: progress, connectionListener: connectionListener);
       } else {
-        Logger.debug(
-            "WalSyncs.syncWal: Using BLE sync - ${preferredMethod == 'wifi' ? 'WiFi not supported' : 'user preference'}");
         return _sdcardSync.syncWal(wal: wal, progress: progress);
       }
     } else if (wal.storage == WalStorage.flashPage) {

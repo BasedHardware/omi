@@ -30,7 +30,6 @@ class WifiNetworkService {
   }
 
   Future<WifiConnectionResult> connectToAp(String ssid, {String? password}) async {
-    debugPrint('WifiNetworkService: Connecting to AP: $ssid (password: ${password != null ? "provided" : "none"})');
     try {
       final result = await _channel.invokeMethod<Map<dynamic, dynamic>>('connectToWifi', {
         'ssid': ssid,
