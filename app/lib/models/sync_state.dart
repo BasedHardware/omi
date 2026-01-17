@@ -31,9 +31,9 @@ extension SyncMethodExtension on SyncMethod {
   String get description {
     switch (this) {
       case SyncMethod.ble:
-        return 'Standard sync via Bluetooth';
+        return 'Syncing via Bluetooth';
       case SyncMethod.wifi:
-        return '~10x faster via WiFi';
+        return 'Syncing via WiFi';
     }
   }
 }
