@@ -625,12 +625,9 @@ async def _listen(
         removed_ids: List[str] = []
 
         if segments:
-            previous_ids = {segment.id for segment in conversation.transcript_segments}
-            conversation.transcript_segments, (starts, ends) = TranscriptSegment.combine_segments(
+            conversation.transcript_segments, (starts, ends), removed_ids = TranscriptSegment.combine_segments(
                 conversation.transcript_segments, segments
             )
-            current_ids = {segment.id for segment in conversation.transcript_segments}
-            removed_ids = list(previous_ids - current_ids)
             _process_speaker_assigned_segments(conversation.transcript_segments[starts:ends])
             conversations_db.update_conversation_segments(
                 uid, conversation.id, [segment.dict() for segment in conversation.transcript_segments]
@@ -1469,7 +1466,7 @@ async def _listen(
 
                 for seg in newly_processed_segments:
                     current_session_segments[seg.id] = seg.speech_profile_processed
-                transcript_segments, _ = TranscriptSegment.combine_segments([], newly_processed_segments)
+                transcript_segments, _, _ = TranscriptSegment.combine_segments([], newly_processed_segments)
 
             # Update transcript segments
             conversation = Conversation(**conversation_data)

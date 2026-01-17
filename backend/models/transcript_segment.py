@@ -156,6 +156,7 @@ class TranscriptSegment(BaseModel):
         # Updates range [starts, ends)
         starts = len(segments)
         ends = 0
+        removed_ids = []
 
         # Join
         joined_similar_segments = [segments[-1].copy(deep=True)] if segments else []
@@ -170,6 +171,7 @@ class TranscriptSegment(BaseModel):
                 joined_similar_segments[-1] = a
             elif joined_similar_segments and joined_similar_segments[-1].text == "":
                 if segments and joined_similar_segments[-1].id == segments[-1].id:
+                    removed_ids.append(segments[-1].id)
                     dropped_existing_tail = True
                 joined_similar_segments.pop()
             if b:
@@ -193,7 +195,7 @@ class TranscriptSegment(BaseModel):
                 segments[i].text.strip().replace('  ', ' ').replace(' ,', ',').replace(' .', '.').replace(' ?', '?')
             )
 
-        return segments, (starts, ends)
+        return segments, (starts, ends), removed_ids
 
 
 class ImprovedTranscriptSegment(BaseModel):
