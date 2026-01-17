@@ -174,7 +174,12 @@ export class TranscriptionSocket {
 
         // Send first-message authentication
         if (this.ws && this.pendingToken) {
-          this.ws.send(JSON.stringify({ type: 'auth', token: this.pendingToken }));
+          try {
+            this.ws.send(JSON.stringify({ type: 'auth', token: this.pendingToken }));
+          } catch (err) {
+            console.error('TranscriptionSocket: Failed to send auth message, closing socket.', err);
+            this.ws?.close();
+          }
         }
         // Note: onConnected() and buffer flush happen after auth_response in handleMessage
       };
@@ -276,6 +281,7 @@ export class TranscriptionSocket {
           if (data.success) {
             console.log('TranscriptionSocket: Authenticated');
             this.isAuthenticated = true;
+            this.pendingToken = null;
             this.reconnectAttempts = 0;
             this.isRefreshing = false;
             this.options.onConnected();
@@ -283,17 +289,17 @@ export class TranscriptionSocket {
             // Start token refresh timer for long recordings
             this.startTokenRefresh();
 
-            // Flush buffered audio
+            // Stop buffering and flush buffered audio
+            this.isBuffering = false;
             if (this.audioBuffer.length > 0) {
               console.log(`TranscriptionSocket: Flushing ${this.audioBuffer.length} buffered chunks`);
               this.audioBuffer.forEach((chunk) => this.sendAudio(chunk));
               this.audioBuffer = [];
             }
-            this.isBuffering = false;
           } else {
             console.error('TranscriptionSocket: Auth failed');
             this.options.onError('Authentication failed');
-            this.ws?.close(1008, 'Auth failed');
+            this.ws?.close(1000, 'Auth failed');
           }
         }
         // Handle other event messages
