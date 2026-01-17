@@ -38,3 +38,11 @@ from routers.apps import some_function  # Don't import from higher level
 from database.cache import get_memory_cache
 from database.redis_db import r
 ```
+
+## Testing
+
+### Always Run Tests Before Committing
+After making changes, always run the appropriate test script to verify your changes.
+
+- **Backend changes**: Run `backend/test.sh`
+- **App changes**: Run `app/test.sh`
