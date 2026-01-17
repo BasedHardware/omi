@@ -197,19 +197,25 @@ def update_memory_fields(uid: str, memory_id: str, data: dict):
     memory_ref = memories_ref.document(memory_id)
 
     update_payload = data.copy()
-
-    # Handle content encryption (same pattern as edit_memory)
-    if 'content' in update_payload:
-        doc_snapshot = memory_ref.get()
-        if not doc_snapshot.exists:
-            return
-
-        doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
-        if doc_level == 'enhanced':
-            update_payload['content'] = encryption.encrypt(update_payload['content'], uid)
-
     update_payload['updated_at'] = datetime.now(timezone.utc)
-    memory_ref.update(update_payload)
+
+    if 'content' in update_payload:
+        def _update_transaction(transaction):
+            doc_snapshot = memory_ref.get(transaction=transaction)
+            if not doc_snapshot.exists:
+                return
+
+            payload_to_update = update_payload.copy()
+            doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
+            if doc_level == 'enhanced':
+                # Encrypt from original data to be safe on transaction retries
+                payload_to_update['content'] = encryption.encrypt(data['content'], uid)
+
+            transaction.update(memory_ref, payload_to_update)
+
+        db.run_transaction(_update_transaction)
+    else:
+        memory_ref.update(update_payload)
 
 
 def edit_memory(uid: str, memory_id: str, value: str):
