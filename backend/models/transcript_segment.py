@@ -159,6 +159,7 @@ class TranscriptSegment(BaseModel):
 
         # Join
         joined_similar_segments = [segments[-1].copy(deep=True)] if segments else []
+        dropped_existing_tail = False
         for new_segment in new_segments:
             if delta_seconds > 0:
                 new_segment.start += delta_seconds
@@ -168,11 +169,16 @@ class TranscriptSegment(BaseModel):
             if a:
                 joined_similar_segments[-1] = a
             elif joined_similar_segments and joined_similar_segments[-1].text == "":
+                if segments and joined_similar_segments[-1].id == segments[-1].id:
+                    dropped_existing_tail = True
                 joined_similar_segments.pop()
             if b:
                 joined_similar_segments.append(b)
 
-        if segments and segments[-1].id == joined_similar_segments[0].id:
+        if dropped_existing_tail and segments:
+            starts = len(segments) - 1
+            segments.pop(-1)
+        elif segments and joined_similar_segments and segments[-1].id == joined_similar_segments[0].id:
             # having updates
             if segments[-1].text != joined_similar_segments[0].text:
                 starts = len(segments) - 1

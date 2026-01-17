@@ -63,6 +63,17 @@ def test_forward_merge_drops_segment_when_only_incomplete():
     assert segments[0].text == "unfinished continues now."
 
 
+def test_forward_merge_drops_existing_tail_segment():
+    existing = _segment("we're", speaker="SPEAKER_02", start=0.0, end=1.0)
+    new = _segment("we're struggling to connect.", speaker="SPEAKER_01", start=1.2, end=3.0)
+
+    segments, _ = TranscriptSegment.combine_segments([existing], [new])
+
+    assert len(segments) == 1
+    assert segments[0].speaker == "SPEAKER_01"
+    assert segments[0].text == "we're we're struggling to connect."
+
+
 def test_lowercase_continuation_only_merges_same_speaker():
     a = _segment("hello", speaker="SPEAKER_00", start=0.0, end=1.0)
     b = _segment("world", speaker="SPEAKER_01", start=1.2, end=2.0)
