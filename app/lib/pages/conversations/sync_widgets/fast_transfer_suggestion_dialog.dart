@@ -46,18 +46,9 @@ class FastTransferSuggestionDialog {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Row(
-                              children: [
-                                Text(
-                                  'Fast Transfer',
-                                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-                                ),
-                                SizedBox(width: 8),
-                                Text(
-                                  '5x faster',
-                                  style: TextStyle(color: Colors.blue, fontSize: 12, fontWeight: FontWeight.w500),
-                                ),
-                              ],
+                            const Text(
+                              'Fast Transfer',
+                              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
                             ),
                             const SizedBox(height: 2),
                             Text(
