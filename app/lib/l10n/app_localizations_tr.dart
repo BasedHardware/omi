@@ -4798,4 +4798,51 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get alwaysAvailable => 'her zaman mevcut.';
+
+  @override
+  String get importHistory => 'İçe Aktarma Geçmişi';
+
+  @override
+  String get noImportsYet => 'Henüz içe aktarma yok';
+
+  @override
+  String get selectZipFileToImport => '.zip dosyasını içe aktarmak için seçin!';
+
+  @override
+  String get otherDevicesComingSoon => 'Diğer cihazlar yakında';
+
+  @override
+  String get deleteAllLimitlessConversations => 'Tüm Limitless konuşmaları silinsin mi?';
+
+  @override
+  String get deleteAllLimitlessWarning =>
+      'Bu, Limitless\'tan içe aktarılan tüm konuşmaları kalıcı olarak silecektir. Bu işlem geri alınamaz.';
+
+  @override
+  String deletedLimitlessConversations(int count) {
+    return '$count Limitless konuşması silindi';
+  }
+
+  @override
+  String get failedToDeleteConversations => 'Konuşmalar silinemedi';
+
+  @override
+  String get deleteImportedData => 'İçe Aktarılan Verileri Sil';
+
+  @override
+  String get statusPending => 'Bekliyor';
+
+  @override
+  String get statusProcessing => 'İşleniyor';
+
+  @override
+  String get statusCompleted => 'Tamamlandı';
+
+  @override
+  String get statusFailed => 'Başarısız';
+
+  @override
+  String nConversations(int count) {
+    return '$count konuşma';
+  }
 }

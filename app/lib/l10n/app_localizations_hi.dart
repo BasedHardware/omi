@@ -4764,4 +4764,51 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get alwaysAvailable => 'हमेशा उपलब्ध।';
+
+  @override
+  String get importHistory => 'आयात इतिहास';
+
+  @override
+  String get noImportsYet => 'अभी तक कोई आयात नहीं';
+
+  @override
+  String get selectZipFileToImport => 'आयात करने के लिए .zip फ़ाइल चुनें!';
+
+  @override
+  String get otherDevicesComingSoon => 'अन्य डिवाइस जल्द आ रहे हैं';
+
+  @override
+  String get deleteAllLimitlessConversations => 'सभी Limitless वार्तालाप हटाएं?';
+
+  @override
+  String get deleteAllLimitlessWarning =>
+      'यह Limitless से आयातित सभी वार्तालापों को स्थायी रूप से हटा देगा। यह क्रिया पूर्ववत नहीं की जा सकती।';
+
+  @override
+  String deletedLimitlessConversations(int count) {
+    return '$count Limitless वार्तालाप हटाए गए';
+  }
+
+  @override
+  String get failedToDeleteConversations => 'वार्तालाप हटाने में विफल';
+
+  @override
+  String get deleteImportedData => 'आयातित डेटा हटाएं';
+
+  @override
+  String get statusPending => 'लंबित';
+
+  @override
+  String get statusProcessing => 'प्रसंस्करण';
+
+  @override
+  String get statusCompleted => 'पूर्ण';
+
+  @override
+  String get statusFailed => 'विफल';
+
+  @override
+  String nConversations(int count) {
+    return '$count वार्तालाप';
+  }
 }

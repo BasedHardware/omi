@@ -5630,5 +5630,71 @@
   "alwaysAvailable": "always available.",
   "@alwaysAvailable": {
     "description": "Text indicating on-device is always available"
+  },
+  "importHistory": "Import History",
+  "@importHistory": {
+    "description": "Section header for import history"
+  },
+  "noImportsYet": "No imports yet",
+  "@noImportsYet": {
+    "description": "Message when no imports exist"
+  },
+  "selectZipFileToImport": "Select the .zip file to import!",
+  "@selectZipFileToImport": {
+    "description": "Description for Limitless import option"
+  },
+  "otherDevicesComingSoon": "Other devices coming soon",
+  "@otherDevicesComingSoon": {
+    "description": "Text for other devices placeholder"
+  },
+  "deleteAllLimitlessConversations": "Delete All Limitless Conversations?",
+  "@deleteAllLimitlessConversations": {
+    "description": "Dialog title for deleting Limitless data"
+  },
+  "deleteAllLimitlessWarning": "This will permanently delete all conversations imported from Limitless. This action cannot be undone.",
+  "@deleteAllLimitlessWarning": {
+    "description": "Warning message in delete dialog"
+  },
+  "deletedLimitlessConversations": "Deleted {count} Limitless conversations",
+  "@deletedLimitlessConversations": {
+    "description": "Success message after deleting conversations",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "failedToDeleteConversations": "Failed to delete conversations",
+  "@failedToDeleteConversations": {
+    "description": "Error message when delete fails"
+  },
+  "deleteImportedData": "Delete Imported Data",
+  "@deleteImportedData": {
+    "description": "Menu item to delete imported data"
+  },
+  "statusPending": "Pending",
+  "@statusPending": {
+    "description": "Import job status - pending"
+  },
+  "statusProcessing": "Processing",
+  "@statusProcessing": {
+    "description": "Import job status - processing"
+  },
+  "statusCompleted": "Completed",
+  "@statusCompleted": {
+    "description": "Import job status - completed"
+  },
+  "statusFailed": "Failed",
+  "@statusFailed": {
+    "description": "Import job status - failed"
+  },
+  "nConversations": "{count} conversations",
+  "@nConversations": {
+    "description": "Number of conversations created",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   }
 }

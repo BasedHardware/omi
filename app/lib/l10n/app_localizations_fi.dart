@@ -4787,4 +4787,51 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get alwaysAvailable => 'aina käytettävissä.';
+
+  @override
+  String get importHistory => 'Tuontihistoria';
+
+  @override
+  String get noImportsYet => 'Ei tuonteja vielä';
+
+  @override
+  String get selectZipFileToImport => 'Valitse tuotava .zip-tiedosto!';
+
+  @override
+  String get otherDevicesComingSoon => 'Muut laitteet tulossa pian';
+
+  @override
+  String get deleteAllLimitlessConversations => 'Poista kaikki Limitless-keskustelut?';
+
+  @override
+  String get deleteAllLimitlessWarning =>
+      'Tämä poistaa pysyvästi kaikki Limitlessistä tuodut keskustelut. Tätä toimintoa ei voi kumota.';
+
+  @override
+  String deletedLimitlessConversations(int count) {
+    return 'Poistettu $count Limitless-keskustelua';
+  }
+
+  @override
+  String get failedToDeleteConversations => 'Keskustelujen poistaminen epäonnistui';
+
+  @override
+  String get deleteImportedData => 'Poista tuodut tiedot';
+
+  @override
+  String get statusPending => 'Odottaa';
+
+  @override
+  String get statusProcessing => 'Käsitellään';
+
+  @override
+  String get statusCompleted => 'Valmis';
+
+  @override
+  String get statusFailed => 'Epäonnistui';
+
+  @override
+  String nConversations(int count) {
+    return '$count keskustelua';
+  }
 }

@@ -3304,5 +3304,19 @@
   "setupOnDevice": "Configura al dispositiu",
   "forUnlimitedFreeTranscription": "per a transcripció gratuïta il·limitada.",
   "premiumMinsLeft": "{count} minuts premium restants.",
-  "alwaysAvailable": "sempre disponible."
+  "alwaysAvailable": "sempre disponible.",
+  "importHistory": "Historial d'importació",
+  "noImportsYet": "Encara no hi ha importacions",
+  "selectZipFileToImport": "Selecciona el fitxer .zip per importar!",
+  "otherDevicesComingSoon": "Altres dispositius properament",
+  "deleteAllLimitlessConversations": "Eliminar totes les converses de Limitless?",
+  "deleteAllLimitlessWarning": "Això eliminarà permanentment totes les converses importades de Limitless. Aquesta acció no es pot desfer.",
+  "deletedLimitlessConversations": "S'han eliminat {count} converses de Limitless",
+  "failedToDeleteConversations": "No s'han pogut eliminar les converses",
+  "deleteImportedData": "Eliminar dades importades",
+  "statusPending": "Pendent",
+  "statusProcessing": "Processant",
+  "statusCompleted": "Completat",
+  "statusFailed": "Fallat",
+  "nConversations": "{count} converses"
 }

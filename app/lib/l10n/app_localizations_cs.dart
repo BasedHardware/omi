@@ -4782,4 +4782,51 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get alwaysAvailable => 'vždy k dispozici.';
+
+  @override
+  String get importHistory => 'Historie importu';
+
+  @override
+  String get noImportsYet => 'Zatím žádné importy';
+
+  @override
+  String get selectZipFileToImport => 'Vyberte soubor .zip pro import!';
+
+  @override
+  String get otherDevicesComingSoon => 'Další zařízení již brzy';
+
+  @override
+  String get deleteAllLimitlessConversations => 'Smazat všechny konverzace z Limitless?';
+
+  @override
+  String get deleteAllLimitlessWarning =>
+      'Toto trvale smaže všechny konverzace importované z Limitless. Tuto akci nelze vrátit zpět.';
+
+  @override
+  String deletedLimitlessConversations(int count) {
+    return 'Smazáno $count konverzací z Limitless';
+  }
+
+  @override
+  String get failedToDeleteConversations => 'Nepodařilo se smazat konverzace';
+
+  @override
+  String get deleteImportedData => 'Smazat importovaná data';
+
+  @override
+  String get statusPending => 'Čeká';
+
+  @override
+  String get statusProcessing => 'Zpracovává se';
+
+  @override
+  String get statusCompleted => 'Dokončeno';
+
+  @override
+  String get statusFailed => 'Selhalo';
+
+  @override
+  String nConversations(int count) {
+    return '$count konverzací';
+  }
 }

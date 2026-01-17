@@ -3302,5 +3302,19 @@
   "setupOnDevice": "Iestatīt ierīcē",
   "forUnlimitedFreeTranscription": "neierobežotai bezmaksas transkripcijai.",
   "premiumMinsLeft": "Atlikušas {count} premium minūtes.",
-  "alwaysAvailable": "vienmēr pieejams."
+  "alwaysAvailable": "vienmēr pieejams.",
+  "importHistory": "Importēšanas vēsture",
+  "noImportsYet": "Vēl nav importu",
+  "selectZipFileToImport": "Izvēlieties importēšanai .zip failu!",
+  "otherDevicesComingSoon": "Citas ierīces drīzumā",
+  "deleteAllLimitlessConversations": "Dzēst visas Limitless sarunas?",
+  "deleteAllLimitlessWarning": "Tas neatgriezeniski izdzēsīs visas no Limitless importētās sarunas. Šo darbību nevar atsaukt.",
+  "deletedLimitlessConversations": "Dzēstas {count} Limitless sarunas",
+  "failedToDeleteConversations": "Neizdevās dzēst sarunas",
+  "deleteImportedData": "Dzēst importētos datus",
+  "statusPending": "Gaida",
+  "statusProcessing": "Apstrādā",
+  "statusCompleted": "Pabeigts",
+  "statusFailed": "Neizdevās",
+  "nConversations": "{count} sarunas"
 }

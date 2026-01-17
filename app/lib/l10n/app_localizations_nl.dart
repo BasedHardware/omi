@@ -4801,4 +4801,51 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get alwaysAvailable => 'altijd beschikbaar.';
+
+  @override
+  String get importHistory => 'Importgeschiedenis';
+
+  @override
+  String get noImportsYet => 'Nog geen imports';
+
+  @override
+  String get selectZipFileToImport => 'Selecteer het .zip-bestand om te importeren!';
+
+  @override
+  String get otherDevicesComingSoon => 'Andere apparaten binnenkort';
+
+  @override
+  String get deleteAllLimitlessConversations => 'Alle Limitless-gesprekken verwijderen?';
+
+  @override
+  String get deleteAllLimitlessWarning =>
+      'Dit verwijdert permanent alle gesprekken die zijn geïmporteerd uit Limitless. Deze actie kan niet ongedaan worden gemaakt.';
+
+  @override
+  String deletedLimitlessConversations(int count) {
+    return '$count Limitless-gesprekken verwijderd';
+  }
+
+  @override
+  String get failedToDeleteConversations => 'Gesprekken verwijderen mislukt';
+
+  @override
+  String get deleteImportedData => 'Geïmporteerde gegevens verwijderen';
+
+  @override
+  String get statusPending => 'In behandeling';
+
+  @override
+  String get statusProcessing => 'Verwerken';
+
+  @override
+  String get statusCompleted => 'Voltooid';
+
+  @override
+  String get statusFailed => 'Mislukt';
+
+  @override
+  String nConversations(int count) {
+    return '$count gesprekken';
+  }
 }

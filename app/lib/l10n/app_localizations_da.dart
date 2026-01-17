@@ -4797,4 +4797,51 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get alwaysAvailable => 'altid tilgængeligt.';
+
+  @override
+  String get importHistory => 'Importhistorik';
+
+  @override
+  String get noImportsYet => 'Ingen importer endnu';
+
+  @override
+  String get selectZipFileToImport => 'Vælg .zip-filen til import!';
+
+  @override
+  String get otherDevicesComingSoon => 'Andre enheder kommer snart';
+
+  @override
+  String get deleteAllLimitlessConversations => 'Slet alle Limitless samtaler?';
+
+  @override
+  String get deleteAllLimitlessWarning =>
+      'Dette vil permanent slette alle samtaler importeret fra Limitless. Denne handling kan ikke fortrydes.';
+
+  @override
+  String deletedLimitlessConversations(int count) {
+    return 'Slettet $count Limitless samtaler';
+  }
+
+  @override
+  String get failedToDeleteConversations => 'Kunne ikke slette samtaler';
+
+  @override
+  String get deleteImportedData => 'Slet importerede data';
+
+  @override
+  String get statusPending => 'Afventer';
+
+  @override
+  String get statusProcessing => 'Behandler';
+
+  @override
+  String get statusCompleted => 'Fuldført';
+
+  @override
+  String get statusFailed => 'Fejlet';
+
+  @override
+  String nConversations(int count) {
+    return '$count samtaler';
+  }
 }

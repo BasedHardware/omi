@@ -3302,5 +3302,19 @@
   "setupOnDevice": "Nastaviť na zariadení",
   "forUnlimitedFreeTranscription": "pre neobmedzenú bezplatnú transkripciu.",
   "premiumMinsLeft": "Zostáva {count} prémiových minút.",
-  "alwaysAvailable": "vždy k dispozícii."
+  "alwaysAvailable": "vždy k dispozícii.",
+  "importHistory": "História importu",
+  "noImportsYet": "Zatiaľ žiadne importy",
+  "selectZipFileToImport": "Vyberte súbor .zip na import!",
+  "otherDevicesComingSoon": "Ďalšie zariadenia už čoskoro",
+  "deleteAllLimitlessConversations": "Odstrániť všetky konverzácie Limitless?",
+  "deleteAllLimitlessWarning": "Toto natrvalo odstráni všetky konverzácie importované z Limitless. Túto akciu nemožno vrátiť späť.",
+  "deletedLimitlessConversations": "Odstránených {count} konverzácií Limitless",
+  "failedToDeleteConversations": "Nepodarilo sa odstrániť konverzácie",
+  "deleteImportedData": "Odstrániť importované údaje",
+  "statusPending": "Čaká",
+  "statusProcessing": "Spracováva sa",
+  "statusCompleted": "Dokončené",
+  "statusFailed": "Zlyhalo",
+  "nConversations": "{count} konverzácií"
 }

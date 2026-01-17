@@ -3302,5 +3302,19 @@
   "setupOnDevice": "Налаштувати на пристрої",
   "forUnlimitedFreeTranscription": "для необмеженої безкоштовної транскрипції.",
   "premiumMinsLeft": "Залишилось {count} преміум хвилин.",
-  "alwaysAvailable": "завжди доступно."
+  "alwaysAvailable": "завжди доступно.",
+  "importHistory": "Історія імпорту",
+  "noImportsYet": "Імпортів поки немає",
+  "selectZipFileToImport": "Виберіть .zip файл для імпорту!",
+  "otherDevicesComingSoon": "Інші пристрої незабаром",
+  "deleteAllLimitlessConversations": "Видалити всі розмови Limitless?",
+  "deleteAllLimitlessWarning": "Це назавжди видалить усі розмови, імпортовані з Limitless. Цю дію не можна скасувати.",
+  "deletedLimitlessConversations": "Видалено {count} розмов Limitless",
+  "failedToDeleteConversations": "Не вдалося видалити розмови",
+  "deleteImportedData": "Видалити імпортовані дані",
+  "statusPending": "Очікує",
+  "statusProcessing": "Обробка",
+  "statusCompleted": "Завершено",
+  "statusFailed": "Помилка",
+  "nConversations": "{count} розмов"
 }

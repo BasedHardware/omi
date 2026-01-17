@@ -4704,4 +4704,50 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get alwaysAvailable => '항상 사용 가능.';
+
+  @override
+  String get importHistory => '가져오기 기록';
+
+  @override
+  String get noImportsYet => '아직 가져오기 없음';
+
+  @override
+  String get selectZipFileToImport => '가져올 .zip 파일을 선택하세요!';
+
+  @override
+  String get otherDevicesComingSoon => '다른 기기 곧 지원 예정';
+
+  @override
+  String get deleteAllLimitlessConversations => '모든 Limitless 대화를 삭제하시겠습니까?';
+
+  @override
+  String get deleteAllLimitlessWarning => '이렇게 하면 Limitless에서 가져온 모든 대화가 영구적으로 삭제됩니다. 이 작업은 취소할 수 없습니다.';
+
+  @override
+  String deletedLimitlessConversations(int count) {
+    return 'Limitless 대화 $count개 삭제됨';
+  }
+
+  @override
+  String get failedToDeleteConversations => '대화 삭제 실패';
+
+  @override
+  String get deleteImportedData => '가져온 데이터 삭제';
+
+  @override
+  String get statusPending => '대기 중';
+
+  @override
+  String get statusProcessing => '처리 중';
+
+  @override
+  String get statusCompleted => '완료됨';
+
+  @override
+  String get statusFailed => '실패';
+
+  @override
+  String nConversations(int count) {
+    return '$count개의 대화';
+  }
 }

@@ -4806,4 +4806,51 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get alwaysAvailable => 'sentiasa tersedia.';
+
+  @override
+  String get importHistory => 'Sejarah Import';
+
+  @override
+  String get noImportsYet => 'Tiada import lagi';
+
+  @override
+  String get selectZipFileToImport => 'Pilih fail .zip untuk diimport!';
+
+  @override
+  String get otherDevicesComingSoon => 'Peranti lain akan datang';
+
+  @override
+  String get deleteAllLimitlessConversations => 'Padam Semua Perbualan Limitless?';
+
+  @override
+  String get deleteAllLimitlessWarning =>
+      'Ini akan memadam secara kekal semua perbualan yang diimport dari Limitless. Tindakan ini tidak boleh dibuat asal.';
+
+  @override
+  String deletedLimitlessConversations(int count) {
+    return 'Dipadam $count perbualan Limitless';
+  }
+
+  @override
+  String get failedToDeleteConversations => 'Gagal memadam perbualan';
+
+  @override
+  String get deleteImportedData => 'Padam Data yang Diimport';
+
+  @override
+  String get statusPending => 'Menunggu';
+
+  @override
+  String get statusProcessing => 'Memproses';
+
+  @override
+  String get statusCompleted => 'Selesai';
+
+  @override
+  String get statusFailed => 'Gagal';
+
+  @override
+  String nConversations(int count) {
+    return '$count perbualan';
+  }
 }

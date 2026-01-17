@@ -3304,5 +3304,19 @@
   "setupOnDevice": "Настройте на устройството",
   "forUnlimitedFreeTranscription": "за неограничен безплатен транскрипт.",
   "premiumMinsLeft": "Остават {count} премиум минути.",
-  "alwaysAvailable": "винаги налично."
+  "alwaysAvailable": "винаги налично.",
+  "importHistory": "История на импортиране",
+  "noImportsYet": "Все още няма импортирания",
+  "selectZipFileToImport": "Изберете .zip файл за импортиране!",
+  "otherDevicesComingSoon": "Други устройства очаквайте скоро",
+  "deleteAllLimitlessConversations": "Изтриване на всички разговори от Limitless?",
+  "deleteAllLimitlessWarning": "Това ще изтрие завинаги всички разговори, импортирани от Limitless. Това действие не може да бъде отменено.",
+  "deletedLimitlessConversations": "Изтрити {count} разговора от Limitless",
+  "failedToDeleteConversations": "Неуспешно изтриване на разговори",
+  "deleteImportedData": "Изтриване на импортирани данни",
+  "statusPending": "В изчакване",
+  "statusProcessing": "Обработва се",
+  "statusCompleted": "Завършено",
+  "statusFailed": "Неуспешно",
+  "nConversations": "{count} разговора"
 }

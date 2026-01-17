@@ -4792,4 +4792,51 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get alwaysAvailable => 'завжди доступно.';
+
+  @override
+  String get importHistory => 'Історія імпорту';
+
+  @override
+  String get noImportsYet => 'Імпортів поки немає';
+
+  @override
+  String get selectZipFileToImport => 'Виберіть .zip файл для імпорту!';
+
+  @override
+  String get otherDevicesComingSoon => 'Інші пристрої незабаром';
+
+  @override
+  String get deleteAllLimitlessConversations => 'Видалити всі розмови Limitless?';
+
+  @override
+  String get deleteAllLimitlessWarning =>
+      'Це назавжди видалить усі розмови, імпортовані з Limitless. Цю дію не можна скасувати.';
+
+  @override
+  String deletedLimitlessConversations(int count) {
+    return 'Видалено $count розмов Limitless';
+  }
+
+  @override
+  String get failedToDeleteConversations => 'Не вдалося видалити розмови';
+
+  @override
+  String get deleteImportedData => 'Видалити імпортовані дані';
+
+  @override
+  String get statusPending => 'Очікує';
+
+  @override
+  String get statusProcessing => 'Обробка';
+
+  @override
+  String get statusCompleted => 'Завершено';
+
+  @override
+  String get statusFailed => 'Помилка';
+
+  @override
+  String nConversations(int count) {
+    return '$count розмов';
+  }
 }

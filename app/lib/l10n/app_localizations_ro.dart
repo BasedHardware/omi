@@ -4811,4 +4811,51 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get alwaysAvailable => 'întotdeauna disponibil.';
+
+  @override
+  String get importHistory => 'Istoric importuri';
+
+  @override
+  String get noImportsYet => 'Niciun import încă';
+
+  @override
+  String get selectZipFileToImport => 'Selectați fișierul .zip pentru import!';
+
+  @override
+  String get otherDevicesComingSoon => 'Alte dispozitive în curând';
+
+  @override
+  String get deleteAllLimitlessConversations => 'Ștergeți toate conversațiile Limitless?';
+
+  @override
+  String get deleteAllLimitlessWarning =>
+      'Aceasta va șterge permanent toate conversațiile importate din Limitless. Această acțiune nu poate fi anulată.';
+
+  @override
+  String deletedLimitlessConversations(int count) {
+    return 'Șterse $count conversații Limitless';
+  }
+
+  @override
+  String get failedToDeleteConversations => 'Ștergerea conversațiilor a eșuat';
+
+  @override
+  String get deleteImportedData => 'Șterge datele importate';
+
+  @override
+  String get statusPending => 'În așteptare';
+
+  @override
+  String get statusProcessing => 'Se procesează';
+
+  @override
+  String get statusCompleted => 'Finalizat';
+
+  @override
+  String get statusFailed => 'Eșuat';
+
+  @override
+  String nConversations(int count) {
+    return '$count conversații';
+  }
 }

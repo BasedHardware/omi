@@ -4787,4 +4787,51 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get alwaysAvailable => 'alati saadaval.';
+
+  @override
+  String get importHistory => 'Importimise ajalugu';
+
+  @override
+  String get noImportsYet => 'Importe pole veel';
+
+  @override
+  String get selectZipFileToImport => 'Vali importimiseks .zip fail!';
+
+  @override
+  String get otherDevicesComingSoon => 'Teised seadmed tulekul';
+
+  @override
+  String get deleteAllLimitlessConversations => 'Kustuta kõik Limitless vestlused?';
+
+  @override
+  String get deleteAllLimitlessWarning =>
+      'See kustutab jäädavalt kõik Limitlessist imporditud vestlused. Seda toimingut ei saa tagasi võtta.';
+
+  @override
+  String deletedLimitlessConversations(int count) {
+    return 'Kustutatud $count Limitless vestlust';
+  }
+
+  @override
+  String get failedToDeleteConversations => 'Vestluste kustutamine ebaõnnestus';
+
+  @override
+  String get deleteImportedData => 'Kustuta imporditud andmed';
+
+  @override
+  String get statusPending => 'Ootel';
+
+  @override
+  String get statusProcessing => 'Töötlemine';
+
+  @override
+  String get statusCompleted => 'Lõpetatud';
+
+  @override
+  String get statusFailed => 'Ebaõnnestunud';
+
+  @override
+  String nConversations(int count) {
+    return '$count vestlust';
+  }
 }

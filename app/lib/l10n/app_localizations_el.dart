@@ -4826,4 +4826,51 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get alwaysAvailable => 'πάντα διαθέσιμο.';
+
+  @override
+  String get importHistory => 'Ιστορικό εισαγωγής';
+
+  @override
+  String get noImportsYet => 'Δεν υπάρχουν εισαγωγές ακόμα';
+
+  @override
+  String get selectZipFileToImport => 'Επιλέξτε το αρχείο .zip για εισαγωγή!';
+
+  @override
+  String get otherDevicesComingSoon => 'Άλλες συσκευές έρχονται σύντομα';
+
+  @override
+  String get deleteAllLimitlessConversations => 'Διαγραφή όλων των συνομιλιών Limitless;';
+
+  @override
+  String get deleteAllLimitlessWarning =>
+      'Αυτό θα διαγράψει μόνιμα όλες τις συνομιλίες που εισήχθησαν από το Limitless. Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.';
+
+  @override
+  String deletedLimitlessConversations(int count) {
+    return 'Διαγράφηκαν $count συνομιλίες Limitless';
+  }
+
+  @override
+  String get failedToDeleteConversations => 'Αποτυχία διαγραφής συνομιλιών';
+
+  @override
+  String get deleteImportedData => 'Διαγραφή εισαγόμενων δεδομένων';
+
+  @override
+  String get statusPending => 'Εκκρεμεί';
+
+  @override
+  String get statusProcessing => 'Επεξεργασία';
+
+  @override
+  String get statusCompleted => 'Ολοκληρώθηκε';
+
+  @override
+  String get statusFailed => 'Απέτυχε';
+
+  @override
+  String nConversations(int count) {
+    return '$count συνομιλίες';
+  }
 }

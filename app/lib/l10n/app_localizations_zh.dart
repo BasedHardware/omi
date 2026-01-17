@@ -4695,4 +4695,50 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get alwaysAvailable => '始终可用。';
+
+  @override
+  String get importHistory => '导入历史';
+
+  @override
+  String get noImportsYet => '暂无导入记录';
+
+  @override
+  String get selectZipFileToImport => '选择要导入的.zip文件！';
+
+  @override
+  String get otherDevicesComingSoon => '其他设备即将推出';
+
+  @override
+  String get deleteAllLimitlessConversations => '删除所有Limitless对话？';
+
+  @override
+  String get deleteAllLimitlessWarning => '这将永久删除从Limitless导入的所有对话。此操作无法撤消。';
+
+  @override
+  String deletedLimitlessConversations(int count) {
+    return '已删除 $count 个Limitless对话';
+  }
+
+  @override
+  String get failedToDeleteConversations => '删除对话失败';
+
+  @override
+  String get deleteImportedData => '删除导入的数据';
+
+  @override
+  String get statusPending => '待处理';
+
+  @override
+  String get statusProcessing => '处理中';
+
+  @override
+  String get statusCompleted => '已完成';
+
+  @override
+  String get statusFailed => '失败';
+
+  @override
+  String nConversations(int count) {
+    return '$count 个对话';
+  }
 }

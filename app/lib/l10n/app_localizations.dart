@@ -9068,6 +9068,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'always available.'**
   String get alwaysAvailable;
+
+  /// Section header for import history
+  ///
+  /// In en, this message translates to:
+  /// **'Import History'**
+  String get importHistory;
+
+  /// Message when no imports exist
+  ///
+  /// In en, this message translates to:
+  /// **'No imports yet'**
+  String get noImportsYet;
+
+  /// Description for Limitless import option
+  ///
+  /// In en, this message translates to:
+  /// **'Select the .zip file to import!'**
+  String get selectZipFileToImport;
+
+  /// Text for other devices placeholder
+  ///
+  /// In en, this message translates to:
+  /// **'Other devices coming soon'**
+  String get otherDevicesComingSoon;
+
+  /// Dialog title for deleting Limitless data
+  ///
+  /// In en, this message translates to:
+  /// **'Delete All Limitless Conversations?'**
+  String get deleteAllLimitlessConversations;
+
+  /// Warning message in delete dialog
+  ///
+  /// In en, this message translates to:
+  /// **'This will permanently delete all conversations imported from Limitless. This action cannot be undone.'**
+  String get deleteAllLimitlessWarning;
+
+  /// Success message after deleting conversations
+  ///
+  /// In en, this message translates to:
+  /// **'Deleted {count} Limitless conversations'**
+  String deletedLimitlessConversations(int count);
+
+  /// Error message when delete fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to delete conversations'**
+  String get failedToDeleteConversations;
+
+  /// Menu item to delete imported data
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Imported Data'**
+  String get deleteImportedData;
+
+  /// Import job status - pending
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get statusPending;
+
+  /// Import job status - processing
+  ///
+  /// In en, this message translates to:
+  /// **'Processing'**
+  String get statusProcessing;
+
+  /// Import job status - completed
+  ///
+  /// In en, this message translates to:
+  /// **'Completed'**
+  String get statusCompleted;
+
+  /// Import job status - failed
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get statusFailed;
+
+  /// Number of conversations created
+  ///
+  /// In en, this message translates to:
+  /// **'{count} conversations'**
+  String nConversations(int count);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

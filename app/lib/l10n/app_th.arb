@@ -3302,5 +3302,19 @@
   "setupOnDevice": "ตั้งค่าบนอุปกรณ์",
   "forUnlimitedFreeTranscription": "สำหรับการถอดความฟรีไม่จำกัด",
   "premiumMinsLeft": "เหลือ {count} นาทีพรีเมียม",
-  "alwaysAvailable": "พร้อมใช้งานเสมอ"
+  "alwaysAvailable": "พร้อมใช้งานเสมอ",
+  "importHistory": "ประวัติการนำเข้า",
+  "noImportsYet": "ยังไม่มีการนำเข้า",
+  "selectZipFileToImport": "เลือกไฟล์ .zip เพื่อนำเข้า!",
+  "otherDevicesComingSoon": "อุปกรณ์อื่นๆ เร็วๆ นี้",
+  "deleteAllLimitlessConversations": "ลบการสนทนา Limitless ทั้งหมด?",
+  "deleteAllLimitlessWarning": "การดำเนินการนี้จะลบการสนทนาทั้งหมดที่นำเข้าจาก Limitless อย่างถาวร ไม่สามารถยกเลิกการกระทำนี้ได้",
+  "deletedLimitlessConversations": "ลบการสนทนา Limitless {count} รายการแล้ว",
+  "failedToDeleteConversations": "ไม่สามารถลบการสนทนาได้",
+  "deleteImportedData": "ลบข้อมูลที่นำเข้า",
+  "statusPending": "รอดำเนินการ",
+  "statusProcessing": "กำลังประมวลผล",
+  "statusCompleted": "เสร็จสิ้น",
+  "statusFailed": "ล้มเหลว",
+  "nConversations": "{count} การสนทนา"
 }

@@ -4764,4 +4764,51 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get alwaysAvailable => 'พร้อมใช้งานเสมอ';
+
+  @override
+  String get importHistory => 'ประวัติการนำเข้า';
+
+  @override
+  String get noImportsYet => 'ยังไม่มีการนำเข้า';
+
+  @override
+  String get selectZipFileToImport => 'เลือกไฟล์ .zip เพื่อนำเข้า!';
+
+  @override
+  String get otherDevicesComingSoon => 'อุปกรณ์อื่นๆ เร็วๆ นี้';
+
+  @override
+  String get deleteAllLimitlessConversations => 'ลบการสนทนา Limitless ทั้งหมด?';
+
+  @override
+  String get deleteAllLimitlessWarning =>
+      'การดำเนินการนี้จะลบการสนทนาทั้งหมดที่นำเข้าจาก Limitless อย่างถาวร ไม่สามารถยกเลิกการกระทำนี้ได้';
+
+  @override
+  String deletedLimitlessConversations(int count) {
+    return 'ลบการสนทนา Limitless $count รายการแล้ว';
+  }
+
+  @override
+  String get failedToDeleteConversations => 'ไม่สามารถลบการสนทนาได้';
+
+  @override
+  String get deleteImportedData => 'ลบข้อมูลที่นำเข้า';
+
+  @override
+  String get statusPending => 'รอดำเนินการ';
+
+  @override
+  String get statusProcessing => 'กำลังประมวลผล';
+
+  @override
+  String get statusCompleted => 'เสร็จสิ้น';
+
+  @override
+  String get statusFailed => 'ล้มเหลว';
+
+  @override
+  String nConversations(int count) {
+    return '$count การสนทนา';
+  }
 }

@@ -208,12 +208,12 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1F1F25),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Delete All Limitless Conversations?',
-          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+        title: Text(
+          context.l10n.deleteAllLimitlessConversations,
+          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
         ),
         content: Text(
-          'This will permanently delete all conversations imported from Limitless. This action cannot be undone.',
+          context.l10n.deleteAllLimitlessWarning,
           style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
         ),
         actions: [
@@ -258,7 +258,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                 children: [
                   const Icon(Icons.check_circle, color: Colors.white),
                   const SizedBox(width: 12),
-                  Expanded(child: Text('Deleted $deletedCount Limitless conversations')),
+                  Expanded(child: Text(context.l10n.deletedLimitlessConversations(deletedCount))),
                 ],
               ),
               backgroundColor: Colors.green.shade700,
@@ -269,11 +269,11 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Row(
+              content: Row(
                 children: [
-                  Icon(Icons.error_outline, color: Colors.white),
-                  SizedBox(width: 12),
-                  Expanded(child: Text('Failed to delete conversations')),
+                  const Icon(Icons.error_outline, color: Colors.white),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(context.l10n.failedToDeleteConversations)),
                 ],
               ),
               backgroundColor: Colors.red.shade700,
@@ -351,7 +351,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            'Coming Soon',
+                            context.l10n.comingSoon,
                             style: TextStyle(
                               color: Colors.grey.shade400,
                               fontSize: 10,
@@ -418,7 +418,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
         _buildImportSourceCard(
           name: 'Limitless',
           logoPath: 'assets/competitor-logos/limitless-logo.jpg',
-          description: 'Select the .zip file to import!',
+          description: context.l10n.selectZipFileToImport,
           isAvailable: true,
           onTap: _isUploading ? () {} : _startLimitlessImport,
         ),
@@ -444,7 +444,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
               const SizedBox(width: 16),
               Expanded(
                 child: Text(
-                  'Other devices coming soon',
+                  context.l10n.otherDevicesComingSoon,
                   style: TextStyle(
                     color: Colors.grey.shade500,
                     fontSize: 14,
@@ -468,22 +468,22 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       case ImportJobStatus.pending:
         statusIcon = Icons.hourglass_empty;
         statusColor = Colors.orange;
-        statusText = 'Pending';
+        statusText = context.l10n.statusPending;
         break;
       case ImportJobStatus.processing:
         statusIcon = Icons.sync;
         statusColor = Colors.blue;
-        statusText = 'Processing';
+        statusText = context.l10n.statusProcessing;
         break;
       case ImportJobStatus.completed:
         statusIcon = Icons.done;
         statusColor = Colors.green;
-        statusText = 'Completed';
+        statusText = context.l10n.statusCompleted;
         break;
       case ImportJobStatus.failed:
         statusIcon = Icons.error;
         statusColor = Colors.red;
-        statusText = 'Failed';
+        statusText = context.l10n.statusFailed;
         break;
     }
 
@@ -571,7 +571,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        '${job.conversationsCreated} conversations',
+                        context.l10n.nConversations(job.conversationsCreated!),
                         style: TextStyle(
                           color: Colors.green.shade400,
                           fontSize: 12,
@@ -733,11 +733,11 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Always show the header
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Text(
-            'Import History',
-            style: TextStyle(
+            context.l10n.importHistory,
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 16,
               fontWeight: FontWeight.w600,
@@ -761,7 +761,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                 const SizedBox(width: 16),
                 Expanded(
                   child: Text(
-                    'No imports yet',
+                    context.l10n.noImportsYet,
                     style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
                   ),
                 ),
@@ -780,9 +780,9 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.primary,
-        title: const Text(
-          'Import Data',
-          style: TextStyle(fontWeight: FontWeight.w600),
+        title: Text(
+          context.l10n.importData,
+          style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, size: 20),
@@ -818,7 +818,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
             child: PullDownButton(
               itemBuilder: (context) => [
                 PullDownMenuItem(
-                  title: 'Delete Imported Data',
+                  title: context.l10n.deleteImportedData,
                   iconWidget: const FaIcon(FontAwesomeIcons.trashCan, size: 16, color: Colors.red),
                   onTap: () {
                     _showDeleteLimitlessDialog();

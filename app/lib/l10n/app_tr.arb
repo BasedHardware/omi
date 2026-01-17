@@ -3284,5 +3284,19 @@
   "setupOnDevice": "Cihazda ayarla",
   "forUnlimitedFreeTranscription": "sınırsız ücretsiz transkripsiyon için.",
   "premiumMinsLeft": "{count} premium dakika kaldı.",
-  "alwaysAvailable": "her zaman mevcut."
+  "alwaysAvailable": "her zaman mevcut.",
+  "importHistory": "İçe Aktarma Geçmişi",
+  "noImportsYet": "Henüz içe aktarma yok",
+  "selectZipFileToImport": ".zip dosyasını içe aktarmak için seçin!",
+  "otherDevicesComingSoon": "Diğer cihazlar yakında",
+  "deleteAllLimitlessConversations": "Tüm Limitless konuşmaları silinsin mi?",
+  "deleteAllLimitlessWarning": "Bu, Limitless'tan içe aktarılan tüm konuşmaları kalıcı olarak silecektir. Bu işlem geri alınamaz.",
+  "deletedLimitlessConversations": "{count} Limitless konuşması silindi",
+  "failedToDeleteConversations": "Konuşmalar silinemedi",
+  "deleteImportedData": "İçe Aktarılan Verileri Sil",
+  "statusPending": "Bekliyor",
+  "statusProcessing": "İşleniyor",
+  "statusCompleted": "Tamamlandı",
+  "statusFailed": "Başarısız",
+  "nConversations": "{count} konuşma"
 }

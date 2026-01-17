@@ -4811,4 +4811,51 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get alwaysAvailable => 'mindig elérhető.';
+
+  @override
+  String get importHistory => 'Importálási előzmények';
+
+  @override
+  String get noImportsYet => 'Még nincs importálás';
+
+  @override
+  String get selectZipFileToImport => 'Válassza ki az importálandó .zip fájlt!';
+
+  @override
+  String get otherDevicesComingSoon => 'Más eszközök hamarosan';
+
+  @override
+  String get deleteAllLimitlessConversations => 'Törli az összes Limitless beszélgetést?';
+
+  @override
+  String get deleteAllLimitlessWarning =>
+      'Ez véglegesen törli a Limitlessből importált összes beszélgetést. Ez a művelet nem vonható vissza.';
+
+  @override
+  String deletedLimitlessConversations(int count) {
+    return '$count Limitless beszélgetés törölve';
+  }
+
+  @override
+  String get failedToDeleteConversations => 'A beszélgetések törlése sikertelen';
+
+  @override
+  String get deleteImportedData => 'Importált adatok törlése';
+
+  @override
+  String get statusPending => 'Függőben';
+
+  @override
+  String get statusProcessing => 'Feldolgozás';
+
+  @override
+  String get statusCompleted => 'Befejezve';
+
+  @override
+  String get statusFailed => 'Sikertelen';
+
+  @override
+  String nConversations(int count) {
+    return '$count beszélgetés';
+  }
 }

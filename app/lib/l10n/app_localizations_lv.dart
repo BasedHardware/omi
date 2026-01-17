@@ -4795,4 +4795,51 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get alwaysAvailable => 'vienmēr pieejams.';
+
+  @override
+  String get importHistory => 'Importēšanas vēsture';
+
+  @override
+  String get noImportsYet => 'Vēl nav importu';
+
+  @override
+  String get selectZipFileToImport => 'Izvēlieties importēšanai .zip failu!';
+
+  @override
+  String get otherDevicesComingSoon => 'Citas ierīces drīzumā';
+
+  @override
+  String get deleteAllLimitlessConversations => 'Dzēst visas Limitless sarunas?';
+
+  @override
+  String get deleteAllLimitlessWarning =>
+      'Tas neatgriezeniski izdzēsīs visas no Limitless importētās sarunas. Šo darbību nevar atsaukt.';
+
+  @override
+  String deletedLimitlessConversations(int count) {
+    return 'Dzēstas $count Limitless sarunas';
+  }
+
+  @override
+  String get failedToDeleteConversations => 'Neizdevās dzēst sarunas';
+
+  @override
+  String get deleteImportedData => 'Dzēst importētos datus';
+
+  @override
+  String get statusPending => 'Gaida';
+
+  @override
+  String get statusProcessing => 'Apstrādā';
+
+  @override
+  String get statusCompleted => 'Pabeigts';
+
+  @override
+  String get statusFailed => 'Neizdevās';
+
+  @override
+  String nConversations(int count) {
+    return '$count sarunas';
+  }
 }

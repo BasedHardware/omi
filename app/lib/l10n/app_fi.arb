@@ -3302,5 +3302,19 @@
   "setupOnDevice": "Määritä laitteella",
   "forUnlimitedFreeTranscription": "rajattomaan ilmaiseen litterointiin.",
   "premiumMinsLeft": "{count} premium-minuuttia jäljellä.",
-  "alwaysAvailable": "aina käytettävissä."
+  "alwaysAvailable": "aina käytettävissä.",
+  "importHistory": "Tuontihistoria",
+  "noImportsYet": "Ei tuonteja vielä",
+  "selectZipFileToImport": "Valitse tuotava .zip-tiedosto!",
+  "otherDevicesComingSoon": "Muut laitteet tulossa pian",
+  "deleteAllLimitlessConversations": "Poista kaikki Limitless-keskustelut?",
+  "deleteAllLimitlessWarning": "Tämä poistaa pysyvästi kaikki Limitlessistä tuodut keskustelut. Tätä toimintoa ei voi kumota.",
+  "deletedLimitlessConversations": "Poistettu {count} Limitless-keskustelua",
+  "failedToDeleteConversations": "Keskustelujen poistaminen epäonnistui",
+  "deleteImportedData": "Poista tuodut tiedot",
+  "statusPending": "Odottaa",
+  "statusProcessing": "Käsitellään",
+  "statusCompleted": "Valmis",
+  "statusFailed": "Epäonnistui",
+  "nConversations": "{count} keskustelua"
 }

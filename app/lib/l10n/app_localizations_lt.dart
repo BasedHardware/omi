@@ -4788,4 +4788,51 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get alwaysAvailable => 'visada prieinama.';
+
+  @override
+  String get importHistory => 'Importavimo istorija';
+
+  @override
+  String get noImportsYet => 'Dar nėra importų';
+
+  @override
+  String get selectZipFileToImport => 'Pasirinkite .zip failą importavimui!';
+
+  @override
+  String get otherDevicesComingSoon => 'Kiti įrenginiai netrukus';
+
+  @override
+  String get deleteAllLimitlessConversations => 'Ištrinti visus Limitless pokalbius?';
+
+  @override
+  String get deleteAllLimitlessWarning =>
+      'Tai visam laikui ištrins visus iš Limitless importuotus pokalbius. Šio veiksmo negalima atšaukti.';
+
+  @override
+  String deletedLimitlessConversations(int count) {
+    return 'Ištrinta $count Limitless pokalbių';
+  }
+
+  @override
+  String get failedToDeleteConversations => 'Nepavyko ištrinti pokalbių';
+
+  @override
+  String get deleteImportedData => 'Ištrinti importuotus duomenis';
+
+  @override
+  String get statusPending => 'Laukiama';
+
+  @override
+  String get statusProcessing => 'Apdorojama';
+
+  @override
+  String get statusCompleted => 'Baigta';
+
+  @override
+  String get statusFailed => 'Nepavyko';
+
+  @override
+  String nConversations(int count) {
+    return '$count pokalbių';
+  }
 }

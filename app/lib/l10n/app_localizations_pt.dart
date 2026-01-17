@@ -4773,4 +4773,51 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get alwaysAvailable => 'sempre disponível.';
+
+  @override
+  String get importHistory => 'Histórico de importação';
+
+  @override
+  String get noImportsYet => 'Nenhuma importação ainda';
+
+  @override
+  String get selectZipFileToImport => 'Selecione o arquivo .zip para importar!';
+
+  @override
+  String get otherDevicesComingSoon => 'Outros dispositivos em breve';
+
+  @override
+  String get deleteAllLimitlessConversations => 'Excluir todas as conversas do Limitless?';
+
+  @override
+  String get deleteAllLimitlessWarning =>
+      'Isso excluirá permanentemente todas as conversas importadas do Limitless. Esta ação não pode ser desfeita.';
+
+  @override
+  String deletedLimitlessConversations(int count) {
+    return 'Excluídas $count conversas do Limitless';
+  }
+
+  @override
+  String get failedToDeleteConversations => 'Falha ao excluir conversas';
+
+  @override
+  String get deleteImportedData => 'Excluir dados importados';
+
+  @override
+  String get statusPending => 'Pendente';
+
+  @override
+  String get statusProcessing => 'Processando';
+
+  @override
+  String get statusCompleted => 'Concluído';
+
+  @override
+  String get statusFailed => 'Falhou';
+
+  @override
+  String nConversations(int count) {
+    return '$count conversas';
+  }
 }

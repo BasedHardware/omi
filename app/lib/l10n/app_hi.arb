@@ -1749,5 +1749,19 @@
   "setupOnDevice": "डिवाइस पर सेटअप करें",
   "forUnlimitedFreeTranscription": "असीमित मुफ्त ट्रांसक्रिप्शन के लिए।",
   "premiumMinsLeft": "{count} प्रीमियम मिनट शेष।",
-  "alwaysAvailable": "हमेशा उपलब्ध।"
+  "alwaysAvailable": "हमेशा उपलब्ध।",
+  "importHistory": "आयात इतिहास",
+  "noImportsYet": "अभी तक कोई आयात नहीं",
+  "selectZipFileToImport": "आयात करने के लिए .zip फ़ाइल चुनें!",
+  "otherDevicesComingSoon": "अन्य डिवाइस जल्द आ रहे हैं",
+  "deleteAllLimitlessConversations": "सभी Limitless वार्तालाप हटाएं?",
+  "deleteAllLimitlessWarning": "यह Limitless से आयातित सभी वार्तालापों को स्थायी रूप से हटा देगा। यह क्रिया पूर्ववत नहीं की जा सकती।",
+  "deletedLimitlessConversations": "{count} Limitless वार्तालाप हटाए गए",
+  "failedToDeleteConversations": "वार्तालाप हटाने में विफल",
+  "deleteImportedData": "आयातित डेटा हटाएं",
+  "statusPending": "लंबित",
+  "statusProcessing": "प्रसंस्करण",
+  "statusCompleted": "पूर्ण",
+  "statusFailed": "विफल",
+  "nConversations": "{count} वार्तालाप"
 }

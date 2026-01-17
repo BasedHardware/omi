@@ -4789,4 +4789,51 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get alwaysAvailable => 'alltid tilgjengelig.';
+
+  @override
+  String get importHistory => 'Importhistorikk';
+
+  @override
+  String get noImportsYet => 'Ingen importer ennå';
+
+  @override
+  String get selectZipFileToImport => 'Velg .zip-filen å importere!';
+
+  @override
+  String get otherDevicesComingSoon => 'Andre enheter kommer snart';
+
+  @override
+  String get deleteAllLimitlessConversations => 'Slett alle Limitless-samtaler?';
+
+  @override
+  String get deleteAllLimitlessWarning =>
+      'Dette vil permanent slette alle samtaler importert fra Limitless. Denne handlingen kan ikke angres.';
+
+  @override
+  String deletedLimitlessConversations(int count) {
+    return 'Slettet $count Limitless-samtaler';
+  }
+
+  @override
+  String get failedToDeleteConversations => 'Kunne ikke slette samtaler';
+
+  @override
+  String get deleteImportedData => 'Slett importerte data';
+
+  @override
+  String get statusPending => 'Venter';
+
+  @override
+  String get statusProcessing => 'Behandler';
+
+  @override
+  String get statusCompleted => 'Fullført';
+
+  @override
+  String get statusFailed => 'Mislyktes';
+
+  @override
+  String nConversations(int count) {
+    return '$count samtaler';
+  }
 }

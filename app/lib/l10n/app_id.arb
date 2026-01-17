@@ -3302,5 +3302,19 @@
   "setupOnDevice": "Atur di perangkat",
   "forUnlimitedFreeTranscription": "untuk transkripsi gratis tanpa batas.",
   "premiumMinsLeft": "{count} menit premium tersisa.",
-  "alwaysAvailable": "selalu tersedia."
+  "alwaysAvailable": "selalu tersedia.",
+  "importHistory": "Riwayat Impor",
+  "noImportsYet": "Belum ada impor",
+  "selectZipFileToImport": "Pilih file .zip untuk diimpor!",
+  "otherDevicesComingSoon": "Perangkat lain segera hadir",
+  "deleteAllLimitlessConversations": "Hapus Semua Percakapan Limitless?",
+  "deleteAllLimitlessWarning": "Ini akan menghapus secara permanen semua percakapan yang diimpor dari Limitless. Tindakan ini tidak dapat dibatalkan.",
+  "deletedLimitlessConversations": "Menghapus {count} percakapan Limitless",
+  "failedToDeleteConversations": "Gagal menghapus percakapan",
+  "deleteImportedData": "Hapus Data yang Diimpor",
+  "statusPending": "Menunggu",
+  "statusProcessing": "Memproses",
+  "statusCompleted": "Selesai",
+  "statusFailed": "Gagal",
+  "nConversations": "{count} percakapan"
 }

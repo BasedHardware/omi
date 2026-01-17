@@ -1728,5 +1728,19 @@
   "setupOnDevice": "オンデバイスを設定",
   "forUnlimitedFreeTranscription": "無制限の無料文字起こしのため。",
   "premiumMinsLeft": "残りプレミアム{count}分。",
-  "alwaysAvailable": "常に利用可能。"
+  "alwaysAvailable": "常に利用可能。",
+  "importHistory": "インポート履歴",
+  "noImportsYet": "インポートはまだありません",
+  "selectZipFileToImport": "インポートする.zipファイルを選択してください！",
+  "otherDevicesComingSoon": "他のデバイスは近日対応",
+  "deleteAllLimitlessConversations": "すべてのLimitless会話を削除しますか？",
+  "deleteAllLimitlessWarning": "これにより、Limitlessからインポートされたすべての会話が完全に削除されます。この操作は元に戻せません。",
+  "deletedLimitlessConversations": "{count}件のLimitless会話を削除しました",
+  "failedToDeleteConversations": "会話の削除に失敗しました",
+  "deleteImportedData": "インポートしたデータを削除",
+  "statusPending": "保留中",
+  "statusProcessing": "処理中",
+  "statusCompleted": "完了",
+  "statusFailed": "失敗",
+  "nConversations": "{count}件の会話"
 }

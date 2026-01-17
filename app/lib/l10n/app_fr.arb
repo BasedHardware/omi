@@ -2120,5 +2120,19 @@
   "setupOnDevice": "Configurer sur l'appareil",
   "forUnlimitedFreeTranscription": "pour une transcription gratuite illimitée.",
   "premiumMinsLeft": "{count} minutes premium restantes.",
-  "alwaysAvailable": "toujours disponible."
+  "alwaysAvailable": "toujours disponible.",
+  "importHistory": "Historique d'importation",
+  "noImportsYet": "Aucune importation pour le moment",
+  "selectZipFileToImport": "Sélectionnez le fichier .zip à importer!",
+  "otherDevicesComingSoon": "Autres appareils bientôt disponibles",
+  "deleteAllLimitlessConversations": "Supprimer toutes les conversations Limitless?",
+  "deleteAllLimitlessWarning": "Cela supprimera définitivement toutes les conversations importées de Limitless. Cette action ne peut pas être annulée.",
+  "deletedLimitlessConversations": "{count} conversations Limitless supprimées",
+  "failedToDeleteConversations": "Échec de la suppression des conversations",
+  "deleteImportedData": "Supprimer les données importées",
+  "statusPending": "En attente",
+  "statusProcessing": "Traitement",
+  "statusCompleted": "Terminé",
+  "statusFailed": "Échoué",
+  "nConversations": "{count} conversations"
 }

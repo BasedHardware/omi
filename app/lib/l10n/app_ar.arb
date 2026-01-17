@@ -3320,5 +3320,19 @@
   "setupOnDevice": "إعداد على الجهاز",
   "forUnlimitedFreeTranscription": "للنسخ المجاني غير المحدود.",
   "premiumMinsLeft": "{count} دقائق مميزة متبقية.",
-  "alwaysAvailable": "متاح دائمًا."
+  "alwaysAvailable": "متاح دائمًا.",
+  "importHistory": "سجل الاستيراد",
+  "noImportsYet": "لا توجد عمليات استيراد بعد",
+  "selectZipFileToImport": "اختر ملف .zip للاستيراد!",
+  "otherDevicesComingSoon": "أجهزة أخرى قريبًا",
+  "deleteAllLimitlessConversations": "حذف جميع محادثات Limitless؟",
+  "deleteAllLimitlessWarning": "سيؤدي هذا إلى حذف جميع المحادثات المستوردة من Limitless نهائيًا. لا يمكن التراجع عن هذا الإجراء.",
+  "deletedLimitlessConversations": "تم حذف {count} محادثة Limitless",
+  "failedToDeleteConversations": "فشل في حذف المحادثات",
+  "deleteImportedData": "حذف البيانات المستوردة",
+  "statusPending": "قيد الانتظار",
+  "statusProcessing": "جاري المعالجة",
+  "statusCompleted": "مكتمل",
+  "statusFailed": "فشل",
+  "nConversations": "{count} محادثات"
 }

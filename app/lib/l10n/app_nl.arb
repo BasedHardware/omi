@@ -2120,5 +2120,19 @@
   "setupOnDevice": "Instellen op apparaat",
   "forUnlimitedFreeTranscription": "voor onbeperkte gratis transcriptie.",
   "premiumMinsLeft": "{count} premium minuten over.",
-  "alwaysAvailable": "altijd beschikbaar."
+  "alwaysAvailable": "altijd beschikbaar.",
+  "importHistory": "Importgeschiedenis",
+  "noImportsYet": "Nog geen imports",
+  "selectZipFileToImport": "Selecteer het .zip-bestand om te importeren!",
+  "otherDevicesComingSoon": "Andere apparaten binnenkort",
+  "deleteAllLimitlessConversations": "Alle Limitless-gesprekken verwijderen?",
+  "deleteAllLimitlessWarning": "Dit verwijdert permanent alle gesprekken die zijn geïmporteerd uit Limitless. Deze actie kan niet ongedaan worden gemaakt.",
+  "deletedLimitlessConversations": "{count} Limitless-gesprekken verwijderd",
+  "failedToDeleteConversations": "Gesprekken verwijderen mislukt",
+  "deleteImportedData": "Geïmporteerde gegevens verwijderen",
+  "statusPending": "In behandeling",
+  "statusProcessing": "Verwerken",
+  "statusCompleted": "Voltooid",
+  "statusFailed": "Mislukt",
+  "nConversations": "{count} gesprekken"
 }

@@ -3284,5 +3284,19 @@
   "setupOnDevice": "Nustatyti įrenginyje",
   "forUnlimitedFreeTranscription": "neribotam nemokamam transkribavimui.",
   "premiumMinsLeft": "Liko {count} premium minučių.",
-  "alwaysAvailable": "visada prieinama."
+  "alwaysAvailable": "visada prieinama.",
+  "importHistory": "Importavimo istorija",
+  "noImportsYet": "Dar nėra importų",
+  "selectZipFileToImport": "Pasirinkite .zip failą importavimui!",
+  "otherDevicesComingSoon": "Kiti įrenginiai netrukus",
+  "deleteAllLimitlessConversations": "Ištrinti visus Limitless pokalbius?",
+  "deleteAllLimitlessWarning": "Tai visam laikui ištrins visus iš Limitless importuotus pokalbius. Šio veiksmo negalima atšaukti.",
+  "deletedLimitlessConversations": "Ištrinta {count} Limitless pokalbių",
+  "failedToDeleteConversations": "Nepavyko ištrinti pokalbių",
+  "deleteImportedData": "Ištrinti importuotus duomenis",
+  "statusPending": "Laukiama",
+  "statusProcessing": "Apdorojama",
+  "statusCompleted": "Baigta",
+  "statusFailed": "Nepavyko",
+  "nConversations": "{count} pokalbių"
 }

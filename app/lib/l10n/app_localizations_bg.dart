@@ -4801,4 +4801,51 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get alwaysAvailable => 'винаги налично.';
+
+  @override
+  String get importHistory => 'История на импортиране';
+
+  @override
+  String get noImportsYet => 'Все още няма импортирания';
+
+  @override
+  String get selectZipFileToImport => 'Изберете .zip файл за импортиране!';
+
+  @override
+  String get otherDevicesComingSoon => 'Други устройства очаквайте скоро';
+
+  @override
+  String get deleteAllLimitlessConversations => 'Изтриване на всички разговори от Limitless?';
+
+  @override
+  String get deleteAllLimitlessWarning =>
+      'Това ще изтрие завинаги всички разговори, импортирани от Limitless. Това действие не може да бъде отменено.';
+
+  @override
+  String deletedLimitlessConversations(int count) {
+    return 'Изтрити $count разговора от Limitless';
+  }
+
+  @override
+  String get failedToDeleteConversations => 'Неуспешно изтриване на разговори';
+
+  @override
+  String get deleteImportedData => 'Изтриване на импортирани данни';
+
+  @override
+  String get statusPending => 'В изчакване';
+
+  @override
+  String get statusProcessing => 'Обработва се';
+
+  @override
+  String get statusCompleted => 'Завършено';
+
+  @override
+  String get statusFailed => 'Неуспешно';
+
+  @override
+  String nConversations(int count) {
+    return '$count разговора';
+  }
 }

@@ -4702,4 +4702,50 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get alwaysAvailable => '常に利用可能。';
+
+  @override
+  String get importHistory => 'インポート履歴';
+
+  @override
+  String get noImportsYet => 'インポートはまだありません';
+
+  @override
+  String get selectZipFileToImport => 'インポートする.zipファイルを選択してください！';
+
+  @override
+  String get otherDevicesComingSoon => '他のデバイスは近日対応';
+
+  @override
+  String get deleteAllLimitlessConversations => 'すべてのLimitless会話を削除しますか？';
+
+  @override
+  String get deleteAllLimitlessWarning => 'これにより、Limitlessからインポートされたすべての会話が完全に削除されます。この操作は元に戻せません。';
+
+  @override
+  String deletedLimitlessConversations(int count) {
+    return '$count件のLimitless会話を削除しました';
+  }
+
+  @override
+  String get failedToDeleteConversations => '会話の削除に失敗しました';
+
+  @override
+  String get deleteImportedData => 'インポートしたデータを削除';
+
+  @override
+  String get statusPending => '保留中';
+
+  @override
+  String get statusProcessing => '処理中';
+
+  @override
+  String get statusCompleted => '完了';
+
+  @override
+  String get statusFailed => '失敗';
+
+  @override
+  String nConversations(int count) {
+    return '$count件の会話';
+  }
 }

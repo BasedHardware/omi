@@ -4790,4 +4790,51 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get alwaysAvailable => 'alltid tillgängligt.';
+
+  @override
+  String get importHistory => 'Importhistorik';
+
+  @override
+  String get noImportsYet => 'Inga importer ännu';
+
+  @override
+  String get selectZipFileToImport => 'Välj .zip-filen att importera!';
+
+  @override
+  String get otherDevicesComingSoon => 'Andra enheter kommer snart';
+
+  @override
+  String get deleteAllLimitlessConversations => 'Ta bort alla Limitless-konversationer?';
+
+  @override
+  String get deleteAllLimitlessWarning =>
+      'Detta kommer permanent att radera alla konversationer importerade från Limitless. Denna åtgärd kan inte ångras.';
+
+  @override
+  String deletedLimitlessConversations(int count) {
+    return 'Raderade $count Limitless-konversationer';
+  }
+
+  @override
+  String get failedToDeleteConversations => 'Kunde inte ta bort konversationer';
+
+  @override
+  String get deleteImportedData => 'Ta bort importerad data';
+
+  @override
+  String get statusPending => 'Väntar';
+
+  @override
+  String get statusProcessing => 'Bearbetar';
+
+  @override
+  String get statusCompleted => 'Slutfört';
+
+  @override
+  String get statusFailed => 'Misslyckades';
+
+  @override
+  String nConversations(int count) {
+    return '$count konversationer';
+  }
 }

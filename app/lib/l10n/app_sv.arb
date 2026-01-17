@@ -3302,5 +3302,19 @@
   "setupOnDevice": "Konfigurera på enheten",
   "forUnlimitedFreeTranscription": "för obegränsad gratis transkription.",
   "premiumMinsLeft": "{count} premium-minuter kvar.",
-  "alwaysAvailable": "alltid tillgängligt."
+  "alwaysAvailable": "alltid tillgängligt.",
+  "importHistory": "Importhistorik",
+  "noImportsYet": "Inga importer ännu",
+  "selectZipFileToImport": "Välj .zip-filen att importera!",
+  "otherDevicesComingSoon": "Andra enheter kommer snart",
+  "deleteAllLimitlessConversations": "Ta bort alla Limitless-konversationer?",
+  "deleteAllLimitlessWarning": "Detta kommer permanent att radera alla konversationer importerade från Limitless. Denna åtgärd kan inte ångras.",
+  "deletedLimitlessConversations": "Raderade {count} Limitless-konversationer",
+  "failedToDeleteConversations": "Kunde inte ta bort konversationer",
+  "deleteImportedData": "Ta bort importerad data",
+  "statusPending": "Väntar",
+  "statusProcessing": "Bearbetar",
+  "statusCompleted": "Slutfört",
+  "statusFailed": "Misslyckades",
+  "nConversations": "{count} konversationer"
 }

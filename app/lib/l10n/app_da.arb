@@ -3302,5 +3302,19 @@
   "setupOnDevice": "Opsæt on-device",
   "forUnlimitedFreeTranscription": "for ubegrænset gratis transskription.",
   "premiumMinsLeft": "{count} premium minutter tilbage.",
-  "alwaysAvailable": "altid tilgængeligt."
+  "alwaysAvailable": "altid tilgængeligt.",
+  "importHistory": "Importhistorik",
+  "noImportsYet": "Ingen importer endnu",
+  "selectZipFileToImport": "Vælg .zip-filen til import!",
+  "otherDevicesComingSoon": "Andre enheder kommer snart",
+  "deleteAllLimitlessConversations": "Slet alle Limitless samtaler?",
+  "deleteAllLimitlessWarning": "Dette vil permanent slette alle samtaler importeret fra Limitless. Denne handling kan ikke fortrydes.",
+  "deletedLimitlessConversations": "Slettet {count} Limitless samtaler",
+  "failedToDeleteConversations": "Kunne ikke slette samtaler",
+  "deleteImportedData": "Slet importerede data",
+  "statusPending": "Afventer",
+  "statusProcessing": "Behandler",
+  "statusCompleted": "Fuldført",
+  "statusFailed": "Fejlet",
+  "nConversations": "{count} samtaler"
 }

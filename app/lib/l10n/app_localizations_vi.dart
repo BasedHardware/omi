@@ -4796,4 +4796,51 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get alwaysAvailable => 'luôn có sẵn.';
+
+  @override
+  String get importHistory => 'Lịch sử nhập';
+
+  @override
+  String get noImportsYet => 'Chưa có lần nhập nào';
+
+  @override
+  String get selectZipFileToImport => 'Chọn tệp .zip để nhập!';
+
+  @override
+  String get otherDevicesComingSoon => 'Các thiết bị khác sắp ra mắt';
+
+  @override
+  String get deleteAllLimitlessConversations => 'Xóa tất cả cuộc hội thoại Limitless?';
+
+  @override
+  String get deleteAllLimitlessWarning =>
+      'Điều này sẽ xóa vĩnh viễn tất cả các cuộc hội thoại được nhập từ Limitless. Hành động này không thể hoàn tác.';
+
+  @override
+  String deletedLimitlessConversations(int count) {
+    return 'Đã xóa $count cuộc hội thoại Limitless';
+  }
+
+  @override
+  String get failedToDeleteConversations => 'Không thể xóa cuộc hội thoại';
+
+  @override
+  String get deleteImportedData => 'Xóa dữ liệu đã nhập';
+
+  @override
+  String get statusPending => 'Đang chờ';
+
+  @override
+  String get statusProcessing => 'Đang xử lý';
+
+  @override
+  String get statusCompleted => 'Hoàn thành';
+
+  @override
+  String get statusFailed => 'Thất bại';
+
+  @override
+  String nConversations(int count) {
+    return '$count cuộc hội thoại';
+  }
 }

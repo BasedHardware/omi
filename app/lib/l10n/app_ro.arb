@@ -3302,5 +3302,19 @@
   "setupOnDevice": "Configurare pe dispozitiv",
   "forUnlimitedFreeTranscription": "pentru transcriere gratuită nelimitată.",
   "premiumMinsLeft": "{count} minute premium rămase.",
-  "alwaysAvailable": "întotdeauna disponibil."
+  "alwaysAvailable": "întotdeauna disponibil.",
+  "importHistory": "Istoric importuri",
+  "noImportsYet": "Niciun import încă",
+  "selectZipFileToImport": "Selectați fișierul .zip pentru import!",
+  "otherDevicesComingSoon": "Alte dispozitive în curând",
+  "deleteAllLimitlessConversations": "Ștergeți toate conversațiile Limitless?",
+  "deleteAllLimitlessWarning": "Aceasta va șterge permanent toate conversațiile importate din Limitless. Această acțiune nu poate fi anulată.",
+  "deletedLimitlessConversations": "Șterse {count} conversații Limitless",
+  "failedToDeleteConversations": "Ștergerea conversațiilor a eșuat",
+  "deleteImportedData": "Șterge datele importate",
+  "statusPending": "În așteptare",
+  "statusProcessing": "Se procesează",
+  "statusCompleted": "Finalizat",
+  "statusFailed": "Eșuat",
+  "nConversations": "{count} conversații"
 }

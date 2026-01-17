@@ -3302,5 +3302,19 @@
   "setupOnDevice": "Thiết lập trên thiết bị",
   "forUnlimitedFreeTranscription": "để phiên âm miễn phí không giới hạn.",
   "premiumMinsLeft": "Còn {count} phút cao cấp.",
-  "alwaysAvailable": "luôn có sẵn."
+  "alwaysAvailable": "luôn có sẵn.",
+  "importHistory": "Lịch sử nhập",
+  "noImportsYet": "Chưa có lần nhập nào",
+  "selectZipFileToImport": "Chọn tệp .zip để nhập!",
+  "otherDevicesComingSoon": "Các thiết bị khác sắp ra mắt",
+  "deleteAllLimitlessConversations": "Xóa tất cả cuộc hội thoại Limitless?",
+  "deleteAllLimitlessWarning": "Điều này sẽ xóa vĩnh viễn tất cả các cuộc hội thoại được nhập từ Limitless. Hành động này không thể hoàn tác.",
+  "deletedLimitlessConversations": "Đã xóa {count} cuộc hội thoại Limitless",
+  "failedToDeleteConversations": "Không thể xóa cuộc hội thoại",
+  "deleteImportedData": "Xóa dữ liệu đã nhập",
+  "statusPending": "Đang chờ",
+  "statusProcessing": "Đang xử lý",
+  "statusCompleted": "Hoàn thành",
+  "statusFailed": "Thất bại",
+  "nConversations": "{count} cuộc hội thoại"
 }

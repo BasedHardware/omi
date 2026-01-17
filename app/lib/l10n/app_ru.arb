@@ -3302,5 +3302,19 @@
   "setupOnDevice": "Настроить на устройстве",
   "forUnlimitedFreeTranscription": "для неограниченной бесплатной транскрипции.",
   "premiumMinsLeft": "Осталось {count} премиум минут.",
-  "alwaysAvailable": "всегда доступно."
+  "alwaysAvailable": "всегда доступно.",
+  "importHistory": "История импорта",
+  "noImportsYet": "Импортов пока нет",
+  "selectZipFileToImport": "Выберите .zip файл для импорта!",
+  "otherDevicesComingSoon": "Другие устройства скоро",
+  "deleteAllLimitlessConversations": "Удалить все разговоры Limitless?",
+  "deleteAllLimitlessWarning": "Это навсегда удалит все разговоры, импортированные из Limitless. Это действие нельзя отменить.",
+  "deletedLimitlessConversations": "Удалено {count} разговоров Limitless",
+  "failedToDeleteConversations": "Не удалось удалить разговоры",
+  "deleteImportedData": "Удалить импортированные данные",
+  "statusPending": "Ожидание",
+  "statusProcessing": "Обработка",
+  "statusCompleted": "Завершено",
+  "statusFailed": "Ошибка",
+  "nConversations": "{count} разговоров"
 }

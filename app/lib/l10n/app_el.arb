@@ -3302,5 +3302,19 @@
   "setupOnDevice": "Ρύθμιση στη συσκευή",
   "forUnlimitedFreeTranscription": "για απεριόριστη δωρεάν μεταγραφή.",
   "premiumMinsLeft": "{count} premium λεπτά απομένουν.",
-  "alwaysAvailable": "πάντα διαθέσιμο."
+  "alwaysAvailable": "πάντα διαθέσιμο.",
+  "importHistory": "Ιστορικό εισαγωγής",
+  "noImportsYet": "Δεν υπάρχουν εισαγωγές ακόμα",
+  "selectZipFileToImport": "Επιλέξτε το αρχείο .zip για εισαγωγή!",
+  "otherDevicesComingSoon": "Άλλες συσκευές έρχονται σύντομα",
+  "deleteAllLimitlessConversations": "Διαγραφή όλων των συνομιλιών Limitless;",
+  "deleteAllLimitlessWarning": "Αυτό θα διαγράψει μόνιμα όλες τις συνομιλίες που εισήχθησαν από το Limitless. Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.",
+  "deletedLimitlessConversations": "Διαγράφηκαν {count} συνομιλίες Limitless",
+  "failedToDeleteConversations": "Αποτυχία διαγραφής συνομιλιών",
+  "deleteImportedData": "Διαγραφή εισαγόμενων δεδομένων",
+  "statusPending": "Εκκρεμεί",
+  "statusProcessing": "Επεξεργασία",
+  "statusCompleted": "Ολοκληρώθηκε",
+  "statusFailed": "Απέτυχε",
+  "nConversations": "{count} συνομιλίες"
 }

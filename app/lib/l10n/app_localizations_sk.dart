@@ -4786,4 +4786,51 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get alwaysAvailable => 'vždy k dispozícii.';
+
+  @override
+  String get importHistory => 'História importu';
+
+  @override
+  String get noImportsYet => 'Zatiaľ žiadne importy';
+
+  @override
+  String get selectZipFileToImport => 'Vyberte súbor .zip na import!';
+
+  @override
+  String get otherDevicesComingSoon => 'Ďalšie zariadenia už čoskoro';
+
+  @override
+  String get deleteAllLimitlessConversations => 'Odstrániť všetky konverzácie Limitless?';
+
+  @override
+  String get deleteAllLimitlessWarning =>
+      'Toto natrvalo odstráni všetky konverzácie importované z Limitless. Túto akciu nemožno vrátiť späť.';
+
+  @override
+  String deletedLimitlessConversations(int count) {
+    return 'Odstránených $count konverzácií Limitless';
+  }
+
+  @override
+  String get failedToDeleteConversations => 'Nepodarilo sa odstrániť konverzácie';
+
+  @override
+  String get deleteImportedData => 'Odstrániť importované údaje';
+
+  @override
+  String get statusPending => 'Čaká';
+
+  @override
+  String get statusProcessing => 'Spracováva sa';
+
+  @override
+  String get statusCompleted => 'Dokončené';
+
+  @override
+  String get statusFailed => 'Zlyhalo';
+
+  @override
+  String nConversations(int count) {
+    return '$count konverzácií';
+  }
 }

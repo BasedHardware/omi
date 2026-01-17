@@ -3302,5 +3302,19 @@
   "setupOnDevice": "Seadista seadmes",
   "forUnlimitedFreeTranscription": "piiramatuks tasuta transkriptsiooniks.",
   "premiumMinsLeft": "{count} premium minutit jäänud.",
-  "alwaysAvailable": "alati saadaval."
+  "alwaysAvailable": "alati saadaval.",
+  "importHistory": "Importimise ajalugu",
+  "noImportsYet": "Importe pole veel",
+  "selectZipFileToImport": "Vali importimiseks .zip fail!",
+  "otherDevicesComingSoon": "Teised seadmed tulekul",
+  "deleteAllLimitlessConversations": "Kustuta kõik Limitless vestlused?",
+  "deleteAllLimitlessWarning": "See kustutab jäädavalt kõik Limitlessist imporditud vestlused. Seda toimingut ei saa tagasi võtta.",
+  "deletedLimitlessConversations": "Kustutatud {count} Limitless vestlust",
+  "failedToDeleteConversations": "Vestluste kustutamine ebaõnnestus",
+  "deleteImportedData": "Kustuta imporditud andmed",
+  "statusPending": "Ootel",
+  "statusProcessing": "Töötlemine",
+  "statusCompleted": "Lõpetatud",
+  "statusFailed": "Ebaõnnestunud",
+  "nConversations": "{count} vestlust"
 }

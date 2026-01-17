@@ -4816,4 +4816,51 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get alwaysAvailable => 'sempre disponible.';
+
+  @override
+  String get importHistory => 'Historial d\'importació';
+
+  @override
+  String get noImportsYet => 'Encara no hi ha importacions';
+
+  @override
+  String get selectZipFileToImport => 'Selecciona el fitxer .zip per importar!';
+
+  @override
+  String get otherDevicesComingSoon => 'Altres dispositius properament';
+
+  @override
+  String get deleteAllLimitlessConversations => 'Eliminar totes les converses de Limitless?';
+
+  @override
+  String get deleteAllLimitlessWarning =>
+      'Això eliminarà permanentment totes les converses importades de Limitless. Aquesta acció no es pot desfer.';
+
+  @override
+  String deletedLimitlessConversations(int count) {
+    return 'S\'han eliminat $count converses de Limitless';
+  }
+
+  @override
+  String get failedToDeleteConversations => 'No s\'han pogut eliminar les converses';
+
+  @override
+  String get deleteImportedData => 'Eliminar dades importades';
+
+  @override
+  String get statusPending => 'Pendent';
+
+  @override
+  String get statusProcessing => 'Processant';
+
+  @override
+  String get statusCompleted => 'Completat';
+
+  @override
+  String get statusFailed => 'Fallat';
+
+  @override
+  String nConversations(int count) {
+    return '$count converses';
+  }
 }

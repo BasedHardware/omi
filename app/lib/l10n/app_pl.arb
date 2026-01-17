@@ -3302,5 +3302,19 @@
   "setupOnDevice": "Skonfiguruj na urządzeniu",
   "forUnlimitedFreeTranscription": "do nieograniczonej darmowej transkrypcji.",
   "premiumMinsLeft": "Pozostało {count} minut premium.",
-  "alwaysAvailable": "zawsze dostępne."
+  "alwaysAvailable": "zawsze dostępne.",
+  "importHistory": "Historia importu",
+  "noImportsYet": "Brak importów",
+  "selectZipFileToImport": "Wybierz plik .zip do importu!",
+  "otherDevicesComingSoon": "Inne urządzenia wkrótce",
+  "deleteAllLimitlessConversations": "Usunąć wszystkie rozmowy Limitless?",
+  "deleteAllLimitlessWarning": "Spowoduje to trwałe usunięcie wszystkich rozmów zaimportowanych z Limitless. Tej akcji nie można cofnąć.",
+  "deletedLimitlessConversations": "Usunięto {count} rozmów Limitless",
+  "failedToDeleteConversations": "Nie udało się usunąć rozmów",
+  "deleteImportedData": "Usuń zaimportowane dane",
+  "statusPending": "Oczekuje",
+  "statusProcessing": "Przetwarzanie",
+  "statusCompleted": "Ukończone",
+  "statusFailed": "Nieudane",
+  "nConversations": "{count} rozmów"
 }
