@@ -460,29 +460,6 @@ class CaptureProvider extends ChangeNotifier
     });
   }
 
-  // Just incase the ble connection get loss
-  void _watchVoiceCommands(String deviceId, DateTime session) {
-    Timer.periodic(const Duration(seconds: 3), (t) async {
-      Logger.debug("voice command watch");
-      if (session != _voiceCommandSession) {
-        t.cancel();
-        return;
-      }
-      var value = await _getBleButtonState(deviceId);
-      if (value.isEmpty || value.length < 4) return;
-      var buttonState = ByteData.view(Uint8List.fromList(value.sublist(0, 4).reversed.toList()).buffer).getUint32(0);
-      Logger.debug("watch device button $buttonState");
-
-      // Force process
-      if (buttonState == 5 && session == _voiceCommandSession) {
-        _voiceCommandSession = null; // end session
-        var data = List<List<int>>.from(_commandBytes);
-        _commandBytes = [];
-        _processVoiceCommandBytes(deviceId, data);
-      }
-    });
-  }
-
   // End voice command session and process the collected audio
   void _endVoiceCommandSession(String deviceId) {
     _voiceCommandTimeoutTimer?.cancel();
