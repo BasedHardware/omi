@@ -3389,5 +3389,6 @@
   "additionalSampleIndex": "Ek örnek {index}",
   "durationSeconds": "Süre: {seconds} saniye",
   "additionalSpeechSampleRemoved": "Ek ses örneği kaldırıldı",
-  "consentDataMessage": "Devam ederek, bu uygulamayla paylaştığınız tüm veriler (konuşmalarınız, kayıtlarınız ve kişisel bilgileriniz dahil) size yapay zeka destekli içgörüler sağlamak ve tüm uygulama özelliklerini etkinleştirmek için sunucularımızda güvenli bir şekilde saklanacaktır."
+  "consentDataMessage": "Devam ederek, bu uygulamayla paylaştığınız tüm veriler (konuşmalarınız, kayıtlarınız ve kişisel bilgileriniz dahil) size yapay zeka destekli içgörüler sağlamak ve tüm uygulama özelliklerini etkinleştirmek için sunucularımızda güvenli bir şekilde saklanacaktır.",
+  "tasksEmptyStateMessage": "Konuşmalarınızdaki görevler burada görünecek.\nManuel olarak oluşturmak için + simgesine dokunun."
 }

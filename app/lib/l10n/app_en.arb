@@ -6083,5 +6083,9 @@
   "consentDataMessage": "By continuing, all data you share with this app (including your conversations, recordings, and personal information) will be securely stored on our servers to provide you with AI-powered insights and enable all app features.",
   "@consentDataMessage": {
     "description": "Consent message explaining how user data will be stored and used"
+  },
+  "tasksEmptyStateMessage": "Tasks from your conversations will appear here.\nTap + to create one manually.",
+  "@tasksEmptyStateMessage": {
+    "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
   }
 }

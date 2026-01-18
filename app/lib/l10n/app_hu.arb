@@ -3407,5 +3407,6 @@
   "additionalSampleIndex": "További minta {index}",
   "durationSeconds": "Időtartam: {seconds} másodperc",
   "additionalSpeechSampleRemoved": "További hangminta eltávolítva",
-  "consentDataMessage": "A folytatással az alkalmazással megosztott összes adat (beleértve a beszélgetéseket, felvételeket és személyes adatokat) biztonságosan tárolódik a szervereinkei, hogy AI-alapú betekintéseket nyújthassunk és engedélyezhessük az összes alkalmazásfunkciót."
+  "consentDataMessage": "A folytatással az alkalmazással megosztott összes adat (beleértve a beszélgetéseket, felvételeket és személyes adatokat) biztonságosan tárolódik a szervereinkei, hogy AI-alapú betekintéseket nyújthassunk és engedélyezhessük az összes alkalmazásfunkciót.",
+  "tasksEmptyStateMessage": "A beszélgetéseidből származó feladatok itt jelennek meg.\nKoppints a + gombra manuális létrehozáshoz."
 }

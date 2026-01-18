@@ -3407,5 +3407,6 @@
   "additionalSampleIndex": "Ekstra prøve {index}",
   "durationSeconds": "Varighet: {seconds} sekunder",
   "additionalSpeechSampleRemoved": "Ekstra taleprøve fjernet",
-  "consentDataMessage": "Ved å fortsette vil alle data du deler med denne appen (inkludert samtalene, opptakene og personlig informasjon) bli sikkert lagret på våre servere for å gi deg AI-drevne innsikter og aktivere alle appfunksjoner."
+  "consentDataMessage": "Ved å fortsette vil alle data du deler med denne appen (inkludert samtalene, opptakene og personlig informasjon) bli sikkert lagret på våre servere for å gi deg AI-drevne innsikter og aktivere alle appfunksjoner.",
+  "tasksEmptyStateMessage": "Oppgaver fra samtalene dine vil vises her.\nTrykk på + for å opprette manuelt."
 }

@@ -3407,5 +3407,6 @@
   "additionalSampleIndex": "Ďalšia vzorka {index}",
   "durationSeconds": "Trvanie: {seconds} sekúnd",
   "additionalSpeechSampleRemoved": "Ďalšia hlasová vzorka odstránená",
-  "consentDataMessage": "Pokračovaním budú všetky údaje, ktoré zdieľate s touto aplikáciou (vrátane vašich konverzácií, nahrávok a osobných informácií), bezpečne uložené na našich serveroch, aby sme vám mohli poskytovať poznatky založené na AI a umožniť všetky funkcie aplikácie."
+  "consentDataMessage": "Pokračovaním budú všetky údaje, ktoré zdieľate s touto aplikáciou (vrátane vašich konverzácií, nahrávok a osobných informácií), bezpečne uložené na našich serveroch, aby sme vám mohli poskytovať poznatky založené na AI a umožniť všetky funkcie aplikácie.",
+  "tasksEmptyStateMessage": "Úlohy z vašich konverzácií sa zobrazia tu.\nKlepnite na + pre manuálne vytvorenie."
 }

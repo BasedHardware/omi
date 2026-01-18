@@ -3389,5 +3389,6 @@
   "additionalSampleIndex": "Campione aggiuntivo {index}",
   "durationSeconds": "Durata: {seconds} secondi",
   "additionalSpeechSampleRemoved": "Campione vocale aggiuntivo rimosso",
-  "consentDataMessage": "Continuando, tutti i dati che condividi con questa app (incluse le tue conversazioni, registrazioni e informazioni personali) verranno archiviati in modo sicuro sui nostri server per fornirti approfondimenti basati sull'IA e abilitare tutte le funzionalità dell'app."
+  "consentDataMessage": "Continuando, tutti i dati che condividi con questa app (incluse le tue conversazioni, registrazioni e informazioni personali) verranno archiviati in modo sicuro sui nostri server per fornirti approfondimenti basati sull'IA e abilitare tutte le funzionalità dell'app.",
+  "tasksEmptyStateMessage": "Le attività dalle tue conversazioni appariranno qui.\nTocca + per crearne una manualmente."
 }

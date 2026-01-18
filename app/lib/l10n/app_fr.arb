@@ -2225,5 +2225,6 @@
   "additionalSampleIndex": "Échantillon supplémentaire {index}",
   "durationSeconds": "Durée : {seconds} secondes",
   "additionalSpeechSampleRemoved": "Échantillon vocal supplémentaire supprimé",
-  "consentDataMessage": "En continuant, toutes les données que vous partagez avec cette application (y compris vos conversations, enregistrements et informations personnelles) seront stockées en toute sécurité sur nos serveurs pour vous fournir des informations basées sur l'IA et activer toutes les fonctionnalités de l'application."
+  "consentDataMessage": "En continuant, toutes les données que vous partagez avec cette application (y compris vos conversations, enregistrements et informations personnelles) seront stockées en toute sécurité sur nos serveurs pour vous fournir des informations basées sur l'IA et activer toutes les fonctionnalités de l'application.",
+  "tasksEmptyStateMessage": "Les tâches de vos conversations apparaîtront ici.\nAppuyez sur + pour en créer une manuellement."
 }

@@ -1833,5 +1833,6 @@
   "additionalSampleIndex": "追加サンプル {index}",
   "durationSeconds": "長さ: {seconds} 秒",
   "additionalSpeechSampleRemoved": "追加の音声サンプルを削除しました",
-  "consentDataMessage": "続行すると、このアプリと共有するすべてのデータ（会話、録音、個人情報を含む）が安全に当社のサーバーに保存され、AI搭載のインサイトを提供し、すべてのアプリ機能を有効にします。"
+  "consentDataMessage": "続行すると、このアプリと共有するすべてのデータ（会話、録音、個人情報を含む）が安全に当社のサーバーに保存され、AI搭載のインサイトを提供し、すべてのアプリ機能を有効にします。",
+  "tasksEmptyStateMessage": "会話からのタスクがここに表示されます。\n手動で作成するには + をタップしてください。"
 }
