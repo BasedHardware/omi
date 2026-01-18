@@ -3443,5 +3443,6 @@
   "prompt": "Kehote",
   "result": "Tulos",
   "compareTranscripts": "Vertaa litterointeja",
-  "notHelpful": "Ei hyödyllinen"
+  "notHelpful": "Ei hyödyllinen",
+  "exportTasksWithOneTap": "Vie tehtävät yhdellä napautuksella!"
 }

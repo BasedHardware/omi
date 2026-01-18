@@ -1890,5 +1890,6 @@
   "prompt": "Prompt",
   "result": "Resultado",
   "compareTranscripts": "Comparar transcripciones",
-  "notHelpful": "No fue útil"
+  "notHelpful": "No fue útil",
+  "exportTasksWithOneTap": "¡Exporta tareas con un toque!"
 }

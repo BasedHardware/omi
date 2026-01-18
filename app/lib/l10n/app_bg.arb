@@ -3445,5 +3445,6 @@
   "prompt": "Подкана",
   "result": "Резултат",
   "compareTranscripts": "Сравни транскрипции",
-  "notHelpful": "Не е полезно"
+  "notHelpful": "Не е полезно",
+  "exportTasksWithOneTap": "Експортирайте задачи с едно докосване!"
 }

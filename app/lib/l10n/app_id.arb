@@ -3443,5 +3443,6 @@
   "prompt": "Prompt",
   "result": "Hasil",
   "compareTranscripts": "Bandingkan transkrip",
-  "notHelpful": "Tidak membantu"
+  "notHelpful": "Tidak membantu",
+  "exportTasksWithOneTap": "Ekspor tugas dengan satu ketukan!"
 }

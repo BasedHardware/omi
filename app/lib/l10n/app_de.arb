@@ -1890,5 +1890,6 @@
   "prompt": "Prompt",
   "result": "Ergebnis",
   "compareTranscripts": "Transkripte vergleichen",
-  "notHelpful": "Nicht hilfreich"
+  "notHelpful": "Nicht hilfreich",
+  "exportTasksWithOneTap": "Aufgaben mit einem Tippen exportieren!"
 }

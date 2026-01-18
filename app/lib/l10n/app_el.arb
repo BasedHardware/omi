@@ -3443,5 +3443,6 @@
   "prompt": "Προτροπή",
   "result": "Αποτέλεσμα",
   "compareTranscripts": "Σύγκριση μεταγραφών",
-  "notHelpful": "Δεν ήταν χρήσιμο"
+  "notHelpful": "Δεν ήταν χρήσιμο",
+  "exportTasksWithOneTap": "Εξαγωγή εργασιών με ένα πάτημα!"
 }

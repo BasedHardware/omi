@@ -3443,5 +3443,6 @@
   "prompt": "Polecenie",
   "result": "Wynik",
   "compareTranscripts": "Porównaj transkrypcje",
-  "notHelpful": "Nieprzydatne"
+  "notHelpful": "Nieprzydatne",
+  "exportTasksWithOneTap": "Eksportuj zadania jednym dotknięciem!"
 }

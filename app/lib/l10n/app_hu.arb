@@ -3443,5 +3443,6 @@
   "prompt": "Prompt",
   "result": "Eredmény",
   "compareTranscripts": "Átiratok összehasonlítása",
-  "notHelpful": "Nem hasznos"
+  "notHelpful": "Nem hasznos",
+  "exportTasksWithOneTap": "Feladatok exportálása egy érintéssel!"
 }

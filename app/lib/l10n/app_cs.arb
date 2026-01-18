@@ -3445,5 +3445,6 @@
   "prompt": "Výzva",
   "result": "Výsledek",
   "compareTranscripts": "Porovnat přepisy",
-  "notHelpful": "Nebylo užitečné"
+  "notHelpful": "Nebylo užitečné",
+  "exportTasksWithOneTap": "Exportujte úkoly jedním klepnutím!"
 }

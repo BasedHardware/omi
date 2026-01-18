@@ -1890,5 +1890,6 @@
   "prompt": "प्रॉम्प्ट",
   "result": "परिणाम",
   "compareTranscripts": "ट्रांसक्रिप्ट की तुलना करें",
-  "notHelpful": "सहायक नहीं"
+  "notHelpful": "सहायक नहीं",
+  "exportTasksWithOneTap": "एक टैप से कार्य निर्यात करें!"
 }

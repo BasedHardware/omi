@@ -3461,5 +3461,6 @@
   "prompt": "موجه",
   "result": "النتيجة",
   "compareTranscripts": "مقارنة النصوص",
-  "notHelpful": "غير مفيد"
+  "notHelpful": "غير مفيد",
+  "exportTasksWithOneTap": "صدّر المهام بنقرة واحدة!"
 }

@@ -3443,5 +3443,6 @@
   "prompt": "Lời nhắc",
   "result": "Kết quả",
   "compareTranscripts": "So sánh bản ghi",
-  "notHelpful": "Không hữu ích"
+  "notHelpful": "Không hữu ích",
+  "exportTasksWithOneTap": "Xuất tác vụ chỉ với một chạm!"
 }

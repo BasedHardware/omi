@@ -3443,5 +3443,6 @@
   "prompt": "พรอมต์",
   "result": "ผลลัพธ์",
   "compareTranscripts": "เปรียบเทียบการถอดเสียง",
-  "notHelpful": "ไม่เป็นประโยชน์"
+  "notHelpful": "ไม่เป็นประโยชน์",
+  "exportTasksWithOneTap": "ส่งออกงานด้วยการแตะครั้งเดียว!"
 }

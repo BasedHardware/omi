@@ -2261,5 +2261,6 @@
   "prompt": "Prompt",
   "result": "Resultaat",
   "compareTranscripts": "Transcripties vergelijken",
-  "notHelpful": "Niet nuttig"
+  "notHelpful": "Niet nuttig",
+  "exportTasksWithOneTap": "Exporteer taken met één tik!"
 }

@@ -3443,5 +3443,6 @@
   "prompt": "Запрос",
   "result": "Результат",
   "compareTranscripts": "Сравнить транскрипции",
-  "notHelpful": "Бесполезно"
+  "notHelpful": "Бесполезно",
+  "exportTasksWithOneTap": "Экспортируйте задачи одним нажатием!"
 }

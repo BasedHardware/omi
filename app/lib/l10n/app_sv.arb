@@ -3443,5 +3443,6 @@
   "prompt": "Prompt",
   "result": "Resultat",
   "compareTranscripts": "Jämför transkriptioner",
-  "notHelpful": "Inte hjälpsam"
+  "notHelpful": "Inte hjälpsam",
+  "exportTasksWithOneTap": "Exportera uppgifter med ett tryck!"
 }

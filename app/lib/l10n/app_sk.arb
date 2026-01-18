@@ -3443,5 +3443,6 @@
   "prompt": "Výzva",
   "result": "Výsledok",
   "compareTranscripts": "Porovnať prepisy",
-  "notHelpful": "Nebolo užitočné"
+  "notHelpful": "Nebolo užitočné",
+  "exportTasksWithOneTap": "Exportujte úlohy jedným ťuknutím!"
 }

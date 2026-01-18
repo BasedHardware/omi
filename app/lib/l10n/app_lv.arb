@@ -3443,5 +3443,6 @@
   "prompt": "Uzvedne",
   "result": "Rezultāts",
   "compareTranscripts": "Salīdzināt transkripcijas",
-  "notHelpful": "Nav noderīgs"
+  "notHelpful": "Nav noderīgs",
+  "exportTasksWithOneTap": "Eksportējiet uzdevumus ar vienu pieskārienu!"
 }

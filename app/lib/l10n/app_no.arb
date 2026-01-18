@@ -3443,5 +3443,6 @@
   "prompt": "Prompt",
   "result": "Resultat",
   "compareTranscripts": "Sammenlign transkripsjoner",
-  "notHelpful": "Ikke nyttig"
+  "notHelpful": "Ikke nyttig",
+  "exportTasksWithOneTap": "Eksporter oppgaver med ett trykk!"
 }

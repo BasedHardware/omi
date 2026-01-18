@@ -3443,5 +3443,6 @@
   "prompt": "Viip",
   "result": "Tulemus",
   "compareTranscripts": "Võrdle transkriptsioone",
-  "notHelpful": "Ei olnud kasulik"
+  "notHelpful": "Ei olnud kasulik",
+  "exportTasksWithOneTap": "Ekspordi ülesanded ühe puudutusega!"
 }

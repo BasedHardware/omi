@@ -3443,5 +3443,6 @@
   "prompt": "Prompt",
   "result": "Rezultat",
   "compareTranscripts": "Compară transcrierile",
-  "notHelpful": "Nu a fost util"
+  "notHelpful": "Nu a fost util",
+  "exportTasksWithOneTap": "Exportă sarcinile cu o singură atingere!"
 }

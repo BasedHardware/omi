@@ -3443,5 +3443,6 @@
   "prompt": "프롬프트",
   "result": "결과",
   "compareTranscripts": "녹취록 비교",
-  "notHelpful": "도움이 안 됨"
+  "notHelpful": "도움이 안 됨",
+  "exportTasksWithOneTap": "한 번의 탭으로 작업 내보내기!"
 }

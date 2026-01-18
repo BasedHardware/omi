@@ -3443,5 +3443,6 @@
   "prompt": "Запит",
   "result": "Результат",
   "compareTranscripts": "Порівняти транскрипції",
-  "notHelpful": "Не корисно"
+  "notHelpful": "Не корисно",
+  "exportTasksWithOneTap": "Експортуйте завдання одним дотиком!"
 }

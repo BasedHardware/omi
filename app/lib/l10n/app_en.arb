@@ -6249,5 +6249,9 @@
   "notHelpful": "Not Helpful",
   "@notHelpful": {
     "description": "Label for thumbs down button to indicate response was not helpful"
+  },
+  "exportTasksWithOneTap": "Export tasks with one tap!",
+  "@exportTasksWithOneTap": {
+    "description": "Banner message promoting task export integration feature"
   }
 }

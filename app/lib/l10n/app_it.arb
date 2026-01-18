@@ -3425,5 +3425,6 @@
   "prompt": "Prompt",
   "result": "Risultato",
   "compareTranscripts": "Confronta trascrizioni",
-  "notHelpful": "Non utile"
+  "notHelpful": "Non utile",
+  "exportTasksWithOneTap": "Esporta le attività con un tocco!"
 }
