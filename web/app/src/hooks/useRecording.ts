@@ -66,12 +66,17 @@ export function useRecording() {
     pausedDurationRef.current = 0;
 
     try {
-      // Fetch user's language preference (fallback to 'multi' if not available)
+      // Fetch user's transcription preferences to get language and single_language_mode
+      // If single_language_mode is true, we must send the specific language (not 'multi')
+      // to avoid the backend falling back to English
       let language = 'multi';
       try {
-        language = await getUserLanguage();
+        const prefs = await getTranscriptionPreferences();
+        // Use user's language if set, or 'multi' for multi-language detection
+        // When single_language_mode is true, the backend needs the specific language
+        language = prefs.language || 'multi';
       } catch (langErr) {
-        console.warn('Failed to fetch user language, using multi:', langErr);
+        console.warn('Failed to fetch transcription preferences, using multi:', langErr);
       }
 
       // Create transcription socket
