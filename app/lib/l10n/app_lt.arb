@@ -3433,5 +3433,7 @@
   "content": "Turinys",
   "noContentToDisplay": "Nėra turinio rodyti",
   "noSummary": "Nėra santraukos",
-  "updateOmiFirmware": "Atnaujinti omi programinę įrangą"
+  "updateOmiFirmware": "Atnaujinti omi programinę įrangą",
+  "anErrorOccurredTryAgain": "Įvyko klaida. Bandykite dar kartą.",
+  "welcomeBackSimple": "Sveiki sugrįžę"
 }

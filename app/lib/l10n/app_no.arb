@@ -3451,5 +3451,7 @@
   "content": "Innhold",
   "noContentToDisplay": "Ingen innhold å vise",
   "noSummary": "Ingen oppsummering",
-  "updateOmiFirmware": "Oppdater omi-fastvare"
+  "updateOmiFirmware": "Oppdater omi-fastvare",
+  "anErrorOccurredTryAgain": "Det oppstod en feil. Vennligst prøv igjen.",
+  "welcomeBackSimple": "Velkommen tilbake"
 }

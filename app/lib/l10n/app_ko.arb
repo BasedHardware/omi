@@ -3451,5 +3451,7 @@
   "content": "콘텐츠",
   "noContentToDisplay": "표시할 콘텐츠가 없습니다",
   "noSummary": "요약 없음",
-  "updateOmiFirmware": "omi 펌웨어 업데이트"
+  "updateOmiFirmware": "omi 펌웨어 업데이트",
+  "anErrorOccurredTryAgain": "오류가 발생했습니다. 다시 시도해 주세요.",
+  "welcomeBackSimple": "다시 오신 것을 환영합니다"
 }

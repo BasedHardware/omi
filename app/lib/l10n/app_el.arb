@@ -3451,5 +3451,7 @@
   "content": "Περιεχόμενο",
   "noContentToDisplay": "Δεν υπάρχει περιεχόμενο για εμφάνιση",
   "noSummary": "Χωρίς σύνοψη",
-  "updateOmiFirmware": "Ενημέρωση firmware omi"
+  "updateOmiFirmware": "Ενημέρωση firmware omi",
+  "anErrorOccurredTryAgain": "Παρουσιάστηκε σφάλμα. Παρακαλώ δοκιμάστε ξανά.",
+  "welcomeBackSimple": "Καλώς ήρθατε πίσω"
 }

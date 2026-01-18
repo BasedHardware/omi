@@ -5106,4 +5106,185 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get pleaseEnterValidEmail => 'Lūdzu, ievadiet derīgu e-pasta adresi';
+
+  @override
+  String get syncingYourRecordings => 'Sinhronizē jūsu ierakstus';
+
+  @override
+  String get syncYourRecordings => 'Sinhronizējiet savus ierakstus';
+
+  @override
+  String get syncNow => 'Sinhronizēt tagad';
+
+  @override
+  String get error => 'Kļūda';
+
+  @override
+  String get speechSamples => 'Balss paraugi';
+
+  @override
+  String additionalSampleIndex(String index) {
+    return 'Papildu paraugs $index';
+  }
+
+  @override
+  String durationSeconds(String seconds) {
+    return 'Ilgums: $seconds sekundes';
+  }
+
+  @override
+  String get additionalSpeechSampleRemoved => 'Papildu balss paraugs noņemts';
+
+  @override
+  String get consentDataMessage =>
+      'Turpinot, visi dati, ko kopīgojat ar šo lietotni (tostarp jūsu sarunas, ierakstus un personisko informāciju), tiks droši glabāti mūsu serveros, lai sniegtu jums AI balstītas atziņas un iespējotu visas lietotnes funkcijas.';
+
+  @override
+  String get tasksEmptyStateMessage =>
+      'Uzdevumi no jūsu sarunām parādīsies šeit.\nPieskarieties +, lai izveidotu manuāli.';
+
+  @override
+  String get clearChatAction => 'Notīrīt tērzēšanu';
+
+  @override
+  String get enableApps => 'Iespējot lietotnes';
+
+  @override
+  String get omiAppName => 'Omi';
+
+  @override
+  String get showMore => 'rādīt vairāk ↓';
+
+  @override
+  String get showLess => 'rādīt mazāk ↑';
+
+  @override
+  String get loadingYourRecording => 'Ielādē ierakstu...';
+
+  @override
+  String get photoDiscardedMessage => 'Šī fotogrāfija tika atmesta, jo tā nebija nozīmīga.';
+
+  @override
+  String get analyzing => 'Analizē...';
+
+  @override
+  String get searchCountries => 'Meklēt valstis...';
+
+  @override
+  String get checkingAppleWatch => 'Pārbauda Apple Watch...';
+
+  @override
+  String get installOmiOnAppleWatch => 'Instalējiet Omi savā\nApple Watch';
+
+  @override
+  String get installOmiOnAppleWatchDescription =>
+      'Lai izmantotu Apple Watch ar Omi, vispirms jāinstalē Omi lietotne pulkstenī.';
+
+  @override
+  String get openOmiOnAppleWatch => 'Atveriet Omi savā\nApple Watch';
+
+  @override
+  String get openOmiOnAppleWatchDescription =>
+      'Omi lietotne ir instalēta jūsu Apple Watch. Atveriet to un pieskarieties Sākt.';
+
+  @override
+  String get openWatchApp => 'Atvērt Watch lietotni';
+
+  @override
+  String get iveInstalledAndOpenedTheApp => 'Esmu instalējis un atvēris lietotni';
+
+  @override
+  String get unableToOpenWatchApp =>
+      'Nevar atvērt Apple Watch lietotni. Lūdzu, manuāli atveriet Watch lietotni savā Apple Watch un instalējiet Omi no sadaļas \"Pieejamās lietotnes\".';
+
+  @override
+  String get appleWatchConnectedSuccessfully => 'Apple Watch veiksmīgi savienots!';
+
+  @override
+  String get appleWatchNotReachable =>
+      'Apple Watch joprojām nav sasniedzams. Lūdzu, pārliecinieties, ka Omi lietotne ir atvērta jūsu pulkstenī.';
+
+  @override
+  String errorCheckingConnection(String error) {
+    return 'Savienojuma pārbaudes kļūda: $error';
+  }
+
+  @override
+  String get muted => 'Izslēgts skaņa';
+
+  @override
+  String get processNow => 'Apstrādāt tagad';
+
+  @override
+  String get finishedConversation => 'Saruna pabeigta?';
+
+  @override
+  String get stopRecordingConfirmation => 'Vai tiešām vēlaties apturēt ierakstīšanu un apkopot sarunu tagad?';
+
+  @override
+  String get conversationEndsManually => 'Saruna beigsies tikai manuāli.';
+
+  @override
+  String conversationSummarizedAfterMinutes(int minutes, String suffix) {
+    return 'Saruna tiek apkopota pēc $minutes minūt$suffix klusuma.';
+  }
+
+  @override
+  String get dontAskAgain => 'Vairs nejautāt';
+
+  @override
+  String get waitingForTranscriptOrPhotos => 'Gaida transkripciju vai fotoattēlus...';
+
+  @override
+  String get noSummaryYet => 'Vēl nav kopsavilkuma';
+
+  @override
+  String hints(String text) {
+    return 'Padomi: $text';
+  }
+
+  @override
+  String get testConversationPrompt => 'Testēt sarunas uzvedni';
+
+  @override
+  String get prompt => 'Uzvedne';
+
+  @override
+  String get result => 'Rezultāts';
+
+  @override
+  String get compareTranscripts => 'Salīdzināt transkripcijas';
+
+  @override
+  String get notHelpful => 'Nav noderīgs';
+
+  @override
+  String get exportTasksWithOneTap => 'Eksportējiet uzdevumus ar vienu pieskārienu!';
+
+  @override
+  String get inProgress => 'Notiek';
+
+  @override
+  String get photos => 'Fotoattēli';
+
+  @override
+  String get rawData => 'Neapstrādāti dati';
+
+  @override
+  String get content => 'Saturs';
+
+  @override
+  String get noContentToDisplay => 'Nav satura, ko parādīt';
+
+  @override
+  String get noSummary => 'Nav kopsavilkuma';
+
+  @override
+  String get updateOmiFirmware => 'Atjaunināt omi programmaparatūru';
+
+  @override
+  String get anErrorOccurredTryAgain => 'Radās kļūda. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get welcomeBackSimple => 'Laipni lūdzam atpakaļ';
 }

@@ -3453,5 +3453,7 @@
   "content": "Contingut",
   "noContentToDisplay": "No hi ha contingut per mostrar",
   "noSummary": "Sense resum",
-  "updateOmiFirmware": "Actualitza el firmware d'omi"
+  "updateOmiFirmware": "Actualitza el firmware d'omi",
+  "anErrorOccurredTryAgain": "S'ha produït un error. Si us plau, torna-ho a provar.",
+  "welcomeBackSimple": "Benvingut de nou"
 }

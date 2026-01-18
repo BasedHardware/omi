@@ -3451,5 +3451,7 @@
   "content": "Sisu",
   "noContentToDisplay": "Sisu pole kuvamiseks",
   "noSummary": "Kokkuvõte puudub",
-  "updateOmiFirmware": "Värskenda omi püsivara"
+  "updateOmiFirmware": "Värskenda omi püsivara",
+  "anErrorOccurredTryAgain": "Tekkis viga. Palun proovige uuesti.",
+  "welcomeBackSimple": "Tere tulemast tagasi"
 }

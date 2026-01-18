@@ -3451,5 +3451,7 @@
   "content": "Kandungan",
   "noContentToDisplay": "Tiada kandungan untuk dipaparkan",
   "noSummary": "Tiada ringkasan",
-  "updateOmiFirmware": "Kemas kini perisian tegar omi"
+  "updateOmiFirmware": "Kemas kini perisian tegar omi",
+  "anErrorOccurredTryAgain": "Ralat berlaku. Sila cuba lagi.",
+  "welcomeBackSimple": "Selamat kembali"
 }

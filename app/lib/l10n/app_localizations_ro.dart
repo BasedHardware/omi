@@ -5124,4 +5124,185 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get pleaseEnterValidEmail => 'Vă rugăm să introduceți o adresă de email validă';
+
+  @override
+  String get syncingYourRecordings => 'Sincronizarea înregistrărilor tale';
+
+  @override
+  String get syncYourRecordings => 'Sincronizează înregistrările tale';
+
+  @override
+  String get syncNow => 'Sincronizează acum';
+
+  @override
+  String get error => 'Eroare';
+
+  @override
+  String get speechSamples => 'Mostre vocale';
+
+  @override
+  String additionalSampleIndex(String index) {
+    return 'Mostră suplimentară $index';
+  }
+
+  @override
+  String durationSeconds(String seconds) {
+    return 'Durată: $seconds secunde';
+  }
+
+  @override
+  String get additionalSpeechSampleRemoved => 'Mostră vocală suplimentară eliminată';
+
+  @override
+  String get consentDataMessage =>
+      'Continuând, toate datele pe care le partajați cu această aplicație (inclusiv conversațiile, înregistrările și informațiile personale) vor fi stocate în siguranță pe serverele noastre pentru a vă oferi informații bazate pe IA și pentru a activa toate funcțiile aplicației.';
+
+  @override
+  String get tasksEmptyStateMessage =>
+      'Sarcinile din conversațiile tale vor apărea aici.\nAtinge + pentru a crea una manual.';
+
+  @override
+  String get clearChatAction => 'Șterge conversația';
+
+  @override
+  String get enableApps => 'Activează aplicațiile';
+
+  @override
+  String get omiAppName => 'Omi';
+
+  @override
+  String get showMore => 'arată mai mult ↓';
+
+  @override
+  String get showLess => 'arată mai puțin ↑';
+
+  @override
+  String get loadingYourRecording => 'Se încarcă înregistrarea...';
+
+  @override
+  String get photoDiscardedMessage => 'Această fotografie a fost eliminată deoarece nu era semnificativă.';
+
+  @override
+  String get analyzing => 'Se analizează...';
+
+  @override
+  String get searchCountries => 'Căutați țări...';
+
+  @override
+  String get checkingAppleWatch => 'Se verifică Apple Watch...';
+
+  @override
+  String get installOmiOnAppleWatch => 'Instalează Omi pe\nApple Watch';
+
+  @override
+  String get installOmiOnAppleWatchDescription =>
+      'Pentru a utiliza Apple Watch cu Omi, trebuie să instalezi mai întâi aplicația Omi pe ceas.';
+
+  @override
+  String get openOmiOnAppleWatch => 'Deschide Omi pe\nApple Watch';
+
+  @override
+  String get openOmiOnAppleWatchDescription =>
+      'Aplicația Omi este instalată pe Apple Watch. Deschide-o și apasă Start pentru a începe.';
+
+  @override
+  String get openWatchApp => 'Deschide aplicația Watch';
+
+  @override
+  String get iveInstalledAndOpenedTheApp => 'Am instalat și deschis aplicația';
+
+  @override
+  String get unableToOpenWatchApp =>
+      'Nu se poate deschide aplicația Apple Watch. Deschide manual aplicația Watch pe Apple Watch și instalează Omi din secțiunea \"Aplicații disponibile\".';
+
+  @override
+  String get appleWatchConnectedSuccessfully => 'Apple Watch conectat cu succes!';
+
+  @override
+  String get appleWatchNotReachable =>
+      'Apple Watch încă nu este accesibil. Asigură-te că aplicația Omi este deschisă pe ceas.';
+
+  @override
+  String errorCheckingConnection(String error) {
+    return 'Eroare la verificarea conexiunii: $error';
+  }
+
+  @override
+  String get muted => 'Dezactivat';
+
+  @override
+  String get processNow => 'Procesează acum';
+
+  @override
+  String get finishedConversation => 'Conversație terminată?';
+
+  @override
+  String get stopRecordingConfirmation => 'Sigur doriți să opriți înregistrarea și să rezumați conversația acum?';
+
+  @override
+  String get conversationEndsManually => 'Conversația se va încheia doar manual.';
+
+  @override
+  String conversationSummarizedAfterMinutes(int minutes, String suffix) {
+    return 'Conversația este rezumată după $minutes minut$suffix de tăcere.';
+  }
+
+  @override
+  String get dontAskAgain => 'Nu mai întreba';
+
+  @override
+  String get waitingForTranscriptOrPhotos => 'Se așteaptă transcriere sau fotografii...';
+
+  @override
+  String get noSummaryYet => 'Încă nu există rezumat';
+
+  @override
+  String hints(String text) {
+    return 'Indicii: $text';
+  }
+
+  @override
+  String get testConversationPrompt => 'Testează promptul conversației';
+
+  @override
+  String get prompt => 'Prompt';
+
+  @override
+  String get result => 'Rezultat';
+
+  @override
+  String get compareTranscripts => 'Compară transcrierile';
+
+  @override
+  String get notHelpful => 'Nu a fost util';
+
+  @override
+  String get exportTasksWithOneTap => 'Exportă sarcinile cu o singură atingere!';
+
+  @override
+  String get inProgress => 'În curs';
+
+  @override
+  String get photos => 'Fotografii';
+
+  @override
+  String get rawData => 'Date brute';
+
+  @override
+  String get content => 'Conținut';
+
+  @override
+  String get noContentToDisplay => 'Nu există conținut de afișat';
+
+  @override
+  String get noSummary => 'Fără rezumat';
+
+  @override
+  String get updateOmiFirmware => 'Actualizează firmware-ul omi';
+
+  @override
+  String get anErrorOccurredTryAgain => 'A apărut o eroare. Vă rugăm să încercați din nou.';
+
+  @override
+  String get welcomeBackSimple => 'Bine ai revenit';
 }

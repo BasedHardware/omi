@@ -5059,4 +5059,184 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get pleaseEnterValidEmail => 'يرجى إدخال عنوان بريد إلكتروني صالح';
+
+  @override
+  String get syncingYourRecordings => 'جاري مزامنة تسجيلاتك';
+
+  @override
+  String get syncYourRecordings => 'مزامنة تسجيلاتك';
+
+  @override
+  String get syncNow => 'مزامنة الآن';
+
+  @override
+  String get error => 'خطأ';
+
+  @override
+  String get speechSamples => 'عينات الكلام';
+
+  @override
+  String additionalSampleIndex(String index) {
+    return 'عينة إضافية $index';
+  }
+
+  @override
+  String durationSeconds(String seconds) {
+    return 'المدة: $seconds ثانية';
+  }
+
+  @override
+  String get additionalSpeechSampleRemoved => 'تمت إزالة عينة الكلام الإضافية';
+
+  @override
+  String get consentDataMessage =>
+      'بالمتابعة، سيتم تخزين جميع البيانات التي تشاركها مع هذا التطبيق (بما في ذلك محادثاتك وتسجيلاتك ومعلوماتك الشخصية) بشكل آمن على خوادمنا لتزويدك برؤى مدعومة بالذكاء الاصطناعي وتمكين جميع ميزات التطبيق.';
+
+  @override
+  String get tasksEmptyStateMessage => 'ستظهر المهام من محادثاتك هنا.\nاضغط على + لإنشاء مهمة يدويًا.';
+
+  @override
+  String get clearChatAction => 'مسح المحادثة';
+
+  @override
+  String get enableApps => 'تفعيل التطبيقات';
+
+  @override
+  String get omiAppName => 'Omi';
+
+  @override
+  String get showMore => 'عرض المزيد ↓';
+
+  @override
+  String get showLess => 'عرض أقل ↑';
+
+  @override
+  String get loadingYourRecording => 'جاري تحميل التسجيل...';
+
+  @override
+  String get photoDiscardedMessage => 'تم تجاهل هذه الصورة لأنها غير مهمة.';
+
+  @override
+  String get analyzing => 'جاري التحليل...';
+
+  @override
+  String get searchCountries => 'البحث عن البلدان...';
+
+  @override
+  String get checkingAppleWatch => 'جاري فحص Apple Watch...';
+
+  @override
+  String get installOmiOnAppleWatch => 'قم بتثبيت Omi على\nApple Watch الخاص بك';
+
+  @override
+  String get installOmiOnAppleWatchDescription =>
+      'لاستخدام Apple Watch مع Omi، تحتاج أولاً إلى تثبيت تطبيق Omi على ساعتك.';
+
+  @override
+  String get openOmiOnAppleWatch => 'افتح Omi على\nApple Watch الخاص بك';
+
+  @override
+  String get openOmiOnAppleWatchDescription =>
+      'تم تثبيت تطبيق Omi على Apple Watch الخاص بك. افتحه واضغط على بدء للبدء.';
+
+  @override
+  String get openWatchApp => 'افتح تطبيق الساعة';
+
+  @override
+  String get iveInstalledAndOpenedTheApp => 'لقد قمت بتثبيت وفتح التطبيق';
+
+  @override
+  String get unableToOpenWatchApp =>
+      'تعذر فتح تطبيق Apple Watch. يرجى فتح تطبيق Watch يدويًا على Apple Watch وتثبيت Omi من قسم \"التطبيقات المتاحة\".';
+
+  @override
+  String get appleWatchConnectedSuccessfully => 'تم توصيل Apple Watch بنجاح!';
+
+  @override
+  String get appleWatchNotReachable =>
+      'Apple Watch لا يزال غير قابل للوصول. يرجى التأكد من أن تطبيق Omi مفتوح على ساعتك.';
+
+  @override
+  String errorCheckingConnection(String error) {
+    return 'خطأ في التحقق من الاتصال: $error';
+  }
+
+  @override
+  String get muted => 'مكتوم';
+
+  @override
+  String get processNow => 'معالجة الآن';
+
+  @override
+  String get finishedConversation => 'هل انتهت المحادثة؟';
+
+  @override
+  String get stopRecordingConfirmation => 'هل أنت متأكد أنك تريد إيقاف التسجيل وتلخيص المحادثة الآن؟';
+
+  @override
+  String get conversationEndsManually => 'ستنتهي المحادثة يدويًا فقط.';
+
+  @override
+  String conversationSummarizedAfterMinutes(int minutes, String suffix) {
+    return 'يتم تلخيص المحادثة بعد $minutes دقيقة$suffix من عدم الكلام.';
+  }
+
+  @override
+  String get dontAskAgain => 'لا تسألني مرة أخرى';
+
+  @override
+  String get waitingForTranscriptOrPhotos => 'في انتظار النص أو الصور...';
+
+  @override
+  String get noSummaryYet => 'لا يوجد ملخص بعد';
+
+  @override
+  String hints(String text) {
+    return 'تلميحات: $text';
+  }
+
+  @override
+  String get testConversationPrompt => 'اختبار موجه المحادثة';
+
+  @override
+  String get prompt => 'موجه';
+
+  @override
+  String get result => 'النتيجة';
+
+  @override
+  String get compareTranscripts => 'مقارنة النصوص';
+
+  @override
+  String get notHelpful => 'غير مفيد';
+
+  @override
+  String get exportTasksWithOneTap => 'صدّر المهام بنقرة واحدة!';
+
+  @override
+  String get inProgress => 'قيد التنفيذ';
+
+  @override
+  String get photos => 'الصور';
+
+  @override
+  String get rawData => 'البيانات الخام';
+
+  @override
+  String get content => 'المحتوى';
+
+  @override
+  String get noContentToDisplay => 'لا يوجد محتوى للعرض';
+
+  @override
+  String get noSummary => 'لا يوجد ملخص';
+
+  @override
+  String get updateOmiFirmware => 'تحديث برنامج omi';
+
+  @override
+  String get anErrorOccurredTryAgain => 'حدث خطأ. يرجى المحاولة مرة أخرى.';
+
+  @override
+  String get welcomeBackSimple => 'مرحباً بعودتك';
 }

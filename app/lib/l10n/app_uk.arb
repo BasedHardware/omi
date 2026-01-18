@@ -3451,5 +3451,7 @@
   "content": "Вміст",
   "noContentToDisplay": "Немає вмісту для відображення",
   "noSummary": "Немає підсумку",
-  "updateOmiFirmware": "Оновити прошивку omi"
+  "updateOmiFirmware": "Оновити прошивку omi",
+  "anErrorOccurredTryAgain": "Сталася помилка. Будь ласка, спробуйте ще раз.",
+  "welcomeBackSimple": "З поверненням"
 }

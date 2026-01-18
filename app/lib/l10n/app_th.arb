@@ -3451,5 +3451,7 @@
   "content": "เนื้อหา",
   "noContentToDisplay": "ไม่มีเนื้อหาที่จะแสดง",
   "noSummary": "ไม่มีสรุป",
-  "updateOmiFirmware": "อัปเดตเฟิร์มแวร์ omi"
+  "updateOmiFirmware": "อัปเดตเฟิร์มแวร์ omi",
+  "anErrorOccurredTryAgain": "เกิดข้อผิดพลาด กรุณาลองอีกครั้ง",
+  "welcomeBackSimple": "ยินดีต้อนรับกลับ"
 }

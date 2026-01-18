@@ -5109,4 +5109,185 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get pleaseEnterValidEmail => 'Lütfen geçerli bir e-posta adresi girin';
+
+  @override
+  String get syncingYourRecordings => 'Kayıtlarınız senkronize ediliyor';
+
+  @override
+  String get syncYourRecordings => 'Kayıtlarınızı senkronize edin';
+
+  @override
+  String get syncNow => 'Şimdi senkronize et';
+
+  @override
+  String get error => 'Hata';
+
+  @override
+  String get speechSamples => 'Ses örnekleri';
+
+  @override
+  String additionalSampleIndex(String index) {
+    return 'Ek örnek $index';
+  }
+
+  @override
+  String durationSeconds(String seconds) {
+    return 'Süre: $seconds saniye';
+  }
+
+  @override
+  String get additionalSpeechSampleRemoved => 'Ek ses örneği kaldırıldı';
+
+  @override
+  String get consentDataMessage =>
+      'Devam ederek, bu uygulamayla paylaştığınız tüm veriler (konuşmalarınız, kayıtlarınız ve kişisel bilgileriniz dahil) size yapay zeka destekli içgörüler sağlamak ve tüm uygulama özelliklerini etkinleştirmek için sunucularımızda güvenli bir şekilde saklanacaktır.';
+
+  @override
+  String get tasksEmptyStateMessage =>
+      'Konuşmalarınızdaki görevler burada görünecek.\nManuel olarak oluşturmak için + simgesine dokunun.';
+
+  @override
+  String get clearChatAction => 'Sohbeti temizle';
+
+  @override
+  String get enableApps => 'Uygulamaları etkinleştir';
+
+  @override
+  String get omiAppName => 'Omi';
+
+  @override
+  String get showMore => 'daha fazla göster ↓';
+
+  @override
+  String get showLess => 'daha az göster ↑';
+
+  @override
+  String get loadingYourRecording => 'Kaydınız yükleniyor...';
+
+  @override
+  String get photoDiscardedMessage => 'Bu fotoğraf önemli olmadığı için silindi.';
+
+  @override
+  String get analyzing => 'Analiz ediliyor...';
+
+  @override
+  String get searchCountries => 'Ülke ara...';
+
+  @override
+  String get checkingAppleWatch => 'Apple Watch kontrol ediliyor...';
+
+  @override
+  String get installOmiOnAppleWatch => 'Apple Watch\'unuza\nOmi yükleyin';
+
+  @override
+  String get installOmiOnAppleWatchDescription =>
+      'Apple Watch\'unuzu Omi ile kullanmak için önce saatinize Omi uygulamasını yüklemeniz gerekir.';
+
+  @override
+  String get openOmiOnAppleWatch => 'Apple Watch\'unuzda\nOmi\'yi açın';
+
+  @override
+  String get openOmiOnAppleWatchDescription =>
+      'Omi uygulaması Apple Watch\'unuza yüklü. Açın ve başlamak için Başlat\'a dokunun.';
+
+  @override
+  String get openWatchApp => 'Watch Uygulamasını Aç';
+
+  @override
+  String get iveInstalledAndOpenedTheApp => 'Uygulamayı Yükledim ve Açtım';
+
+  @override
+  String get unableToOpenWatchApp =>
+      'Apple Watch uygulaması açılamadı. Lütfen Apple Watch\'unuzda Watch uygulamasını manuel olarak açın ve \"Mevcut Uygulamalar\" bölümünden Omi\'yi yükleyin.';
+
+  @override
+  String get appleWatchConnectedSuccessfully => 'Apple Watch başarıyla bağlandı!';
+
+  @override
+  String get appleWatchNotReachable =>
+      'Apple Watch hala erişilebilir değil. Lütfen Omi uygulamasının saatinizde açık olduğundan emin olun.';
+
+  @override
+  String errorCheckingConnection(String error) {
+    return 'Bağlantı kontrol hatası: $error';
+  }
+
+  @override
+  String get muted => 'Sessiz';
+
+  @override
+  String get processNow => 'Şimdi işle';
+
+  @override
+  String get finishedConversation => 'Konuşma bitti mi?';
+
+  @override
+  String get stopRecordingConfirmation => 'Kaydı durdurmak ve konuşmayı şimdi özetlemek istediğinizden emin misiniz?';
+
+  @override
+  String get conversationEndsManually => 'Konuşma yalnızca manuel olarak sona erecektir.';
+
+  @override
+  String conversationSummarizedAfterMinutes(int minutes, String suffix) {
+    return 'Konuşma $minutes dakika$suffix sessizlik sonrası özetlenir.';
+  }
+
+  @override
+  String get dontAskAgain => 'Bir daha sorma';
+
+  @override
+  String get waitingForTranscriptOrPhotos => 'Transkript veya fotoğraflar bekleniyor...';
+
+  @override
+  String get noSummaryYet => 'Henüz özet yok';
+
+  @override
+  String hints(String text) {
+    return 'İpuçları: $text';
+  }
+
+  @override
+  String get testConversationPrompt => 'Konuşma istemini test et';
+
+  @override
+  String get prompt => 'İstem';
+
+  @override
+  String get result => 'Sonuç';
+
+  @override
+  String get compareTranscripts => 'Transkriptleri karşılaştır';
+
+  @override
+  String get notHelpful => 'Yardımcı olmadı';
+
+  @override
+  String get exportTasksWithOneTap => 'Görevleri tek dokunuşla dışa aktarın!';
+
+  @override
+  String get inProgress => 'Devam ediyor';
+
+  @override
+  String get photos => 'Fotoğraflar';
+
+  @override
+  String get rawData => 'Ham Veri';
+
+  @override
+  String get content => 'İçerik';
+
+  @override
+  String get noContentToDisplay => 'Gösterilecek içerik yok';
+
+  @override
+  String get noSummary => 'Özet yok';
+
+  @override
+  String get updateOmiFirmware => 'omi yazılımını güncelle';
+
+  @override
+  String get anErrorOccurredTryAgain => 'Bir hata oluştu. Lütfen tekrar deneyin.';
+
+  @override
+  String get welcomeBackSimple => 'Tekrar hoş geldiniz';
 }

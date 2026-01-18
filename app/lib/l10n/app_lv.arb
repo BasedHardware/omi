@@ -3451,5 +3451,7 @@
   "content": "Saturs",
   "noContentToDisplay": "Nav satura, ko parādīt",
   "noSummary": "Nav kopsavilkuma",
-  "updateOmiFirmware": "Atjaunināt omi programmaparatūru"
+  "updateOmiFirmware": "Atjaunināt omi programmaparatūru",
+  "anErrorOccurredTryAgain": "Radās kļūda. Lūdzu, mēģiniet vēlreiz.",
+  "welcomeBackSimple": "Laipni lūdzam atpakaļ"
 }

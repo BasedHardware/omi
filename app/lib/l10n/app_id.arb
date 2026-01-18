@@ -3451,5 +3451,7 @@
   "content": "Konten",
   "noContentToDisplay": "Tidak ada konten untuk ditampilkan",
   "noSummary": "Tidak ada ringkasan",
-  "updateOmiFirmware": "Perbarui firmware omi"
+  "updateOmiFirmware": "Perbarui firmware omi",
+  "anErrorOccurredTryAgain": "Terjadi kesalahan. Silakan coba lagi.",
+  "welcomeBackSimple": "Selamat datang kembali"
 }

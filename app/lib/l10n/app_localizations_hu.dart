@@ -5125,4 +5125,186 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get pleaseEnterValidEmail => 'Kérjük, adjon meg egy érvényes e-mail címet';
+
+  @override
+  String get syncingYourRecordings => 'Felvételek szinkronizálása';
+
+  @override
+  String get syncYourRecordings => 'Szinkronizáld a felvételeidet';
+
+  @override
+  String get syncNow => 'Szinkronizálás most';
+
+  @override
+  String get error => 'Hiba';
+
+  @override
+  String get speechSamples => 'Hangminták';
+
+  @override
+  String additionalSampleIndex(String index) {
+    return 'További minta $index';
+  }
+
+  @override
+  String durationSeconds(String seconds) {
+    return 'Időtartam: $seconds másodperc';
+  }
+
+  @override
+  String get additionalSpeechSampleRemoved => 'További hangminta eltávolítva';
+
+  @override
+  String get consentDataMessage =>
+      'A folytatással az alkalmazással megosztott összes adat (beleértve a beszélgetéseket, felvételeket és személyes adatokat) biztonságosan tárolódik a szervereinkei, hogy AI-alapú betekintéseket nyújthassunk és engedélyezhessük az összes alkalmazásfunkciót.';
+
+  @override
+  String get tasksEmptyStateMessage =>
+      'A beszélgetéseidből származó feladatok itt jelennek meg.\nKoppints a + gombra manuális létrehozáshoz.';
+
+  @override
+  String get clearChatAction => 'Chat törlése';
+
+  @override
+  String get enableApps => 'Alkalmazások engedélyezése';
+
+  @override
+  String get omiAppName => 'Omi';
+
+  @override
+  String get showMore => 'mutass többet ↓';
+
+  @override
+  String get showLess => 'mutass kevesebbet ↑';
+
+  @override
+  String get loadingYourRecording => 'Felvétel betöltése...';
+
+  @override
+  String get photoDiscardedMessage => 'Ez a fotó el lett vetve, mert nem volt jelentős.';
+
+  @override
+  String get analyzing => 'Elemzés...';
+
+  @override
+  String get searchCountries => 'Országok keresése...';
+
+  @override
+  String get checkingAppleWatch => 'Apple Watch ellenőrzése...';
+
+  @override
+  String get installOmiOnAppleWatch => 'Telepítse az Omit az\nApple Watch-ra';
+
+  @override
+  String get installOmiOnAppleWatchDescription =>
+      'Az Apple Watch Omival való használatához először telepítenie kell az Omi alkalmazást az órájára.';
+
+  @override
+  String get openOmiOnAppleWatch => 'Nyissa meg az Omit az\nApple Watch-on';
+
+  @override
+  String get openOmiOnAppleWatchDescription =>
+      'Az Omi alkalmazás telepítve van az Apple Watch-ra. Nyissa meg és érintse meg a Start gombot.';
+
+  @override
+  String get openWatchApp => 'Watch alkalmazás megnyitása';
+
+  @override
+  String get iveInstalledAndOpenedTheApp => 'Telepítettem és megnyitottam az alkalmazást';
+
+  @override
+  String get unableToOpenWatchApp =>
+      'Nem sikerült megnyitni az Apple Watch alkalmazást. Nyissa meg manuálisan a Watch alkalmazást az Apple Watch-on, és telepítse az Omit az \"Elérhető alkalmazások\" részből.';
+
+  @override
+  String get appleWatchConnectedSuccessfully => 'Apple Watch sikeresen csatlakoztatva!';
+
+  @override
+  String get appleWatchNotReachable =>
+      'Az Apple Watch még nem érhető el. Győződjön meg róla, hogy az Omi alkalmazás nyitva van az óráján.';
+
+  @override
+  String errorCheckingConnection(String error) {
+    return 'Hiba a kapcsolat ellenőrzésekor: $error';
+  }
+
+  @override
+  String get muted => 'Némítva';
+
+  @override
+  String get processNow => 'Feldolgozás most';
+
+  @override
+  String get finishedConversation => 'Beszélgetés befejezve?';
+
+  @override
+  String get stopRecordingConfirmation =>
+      'Biztosan le szeretné állítani a felvételt és most összefoglalni a beszélgetést?';
+
+  @override
+  String get conversationEndsManually => 'A beszélgetés csak manuálisan fejeződik be.';
+
+  @override
+  String conversationSummarizedAfterMinutes(int minutes, String suffix) {
+    return 'A beszélgetés $minutes perc$suffix csend után összegződik.';
+  }
+
+  @override
+  String get dontAskAgain => 'Ne kérdezd újra';
+
+  @override
+  String get waitingForTranscriptOrPhotos => 'Várakozás átiratra vagy fotókra...';
+
+  @override
+  String get noSummaryYet => 'Még nincs összefoglaló';
+
+  @override
+  String hints(String text) {
+    return 'Tippek: $text';
+  }
+
+  @override
+  String get testConversationPrompt => 'Beszélgetési prompt tesztelése';
+
+  @override
+  String get prompt => 'Prompt';
+
+  @override
+  String get result => 'Eredmény';
+
+  @override
+  String get compareTranscripts => 'Átiratok összehasonlítása';
+
+  @override
+  String get notHelpful => 'Nem hasznos';
+
+  @override
+  String get exportTasksWithOneTap => 'Feladatok exportálása egy érintéssel!';
+
+  @override
+  String get inProgress => 'Folyamatban';
+
+  @override
+  String get photos => 'Fényképek';
+
+  @override
+  String get rawData => 'Nyers adatok';
+
+  @override
+  String get content => 'Tartalom';
+
+  @override
+  String get noContentToDisplay => 'Nincs megjeleníthető tartalom';
+
+  @override
+  String get noSummary => 'Nincs összefoglaló';
+
+  @override
+  String get updateOmiFirmware => 'Omi firmware frissítése';
+
+  @override
+  String get anErrorOccurredTryAgain => 'Hiba történt. Kérjük, próbálja újra.';
+
+  @override
+  String get welcomeBackSimple => 'Üdv újra';
 }

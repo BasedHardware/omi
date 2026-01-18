@@ -3451,5 +3451,7 @@
   "content": "Indhold",
   "noContentToDisplay": "Intet indhold at vise",
   "noSummary": "Ingen oversigt",
-  "updateOmiFirmware": "Opdater omi-firmware"
+  "updateOmiFirmware": "Opdater omi-firmware",
+  "anErrorOccurredTryAgain": "Der opstod en fejl. Prøv venligst igen.",
+  "welcomeBackSimple": "Velkommen tilbage"
 }

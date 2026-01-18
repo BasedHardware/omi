@@ -1877,5 +1877,7 @@
   "content": "コンテンツ",
   "noContentToDisplay": "表示するコンテンツがありません",
   "noSummary": "要約なし",
-  "updateOmiFirmware": "omiファームウェアを更新"
+  "updateOmiFirmware": "omiファームウェアを更新",
+  "anErrorOccurredTryAgain": "エラーが発生しました。もう一度お試しください。",
+  "welcomeBackSimple": "おかえりなさい"
 }

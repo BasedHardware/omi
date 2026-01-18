@@ -3451,5 +3451,7 @@
   "content": "Tartalom",
   "noContentToDisplay": "Nincs megjeleníthető tartalom",
   "noSummary": "Nincs összefoglaló",
-  "updateOmiFirmware": "Omi firmware frissítése"
+  "updateOmiFirmware": "Omi firmware frissítése",
+  "anErrorOccurredTryAgain": "Hiba történt. Kérjük, próbálja újra.",
+  "welcomeBackSimple": "Üdv újra"
 }

@@ -5002,4 +5002,181 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get pleaseEnterValidEmail => '有効なメールアドレスを入力してください';
+
+  @override
+  String get syncingYourRecordings => '録音を同期中';
+
+  @override
+  String get syncYourRecordings => '録音を同期する';
+
+  @override
+  String get syncNow => '今すぐ同期';
+
+  @override
+  String get error => 'エラー';
+
+  @override
+  String get speechSamples => '音声サンプル';
+
+  @override
+  String additionalSampleIndex(String index) {
+    return '追加サンプル $index';
+  }
+
+  @override
+  String durationSeconds(String seconds) {
+    return '長さ: $seconds 秒';
+  }
+
+  @override
+  String get additionalSpeechSampleRemoved => '追加の音声サンプルを削除しました';
+
+  @override
+  String get consentDataMessage =>
+      '続行すると、このアプリと共有するすべてのデータ（会話、録音、個人情報を含む）が安全に当社のサーバーに保存され、AI搭載のインサイトを提供し、すべてのアプリ機能を有効にします。';
+
+  @override
+  String get tasksEmptyStateMessage => '会話からのタスクがここに表示されます。\n手動で作成するには + をタップしてください。';
+
+  @override
+  String get clearChatAction => 'チャットを消去';
+
+  @override
+  String get enableApps => 'アプリを有効化';
+
+  @override
+  String get omiAppName => 'Omi';
+
+  @override
+  String get showMore => 'もっと見る ↓';
+
+  @override
+  String get showLess => '閉じる ↑';
+
+  @override
+  String get loadingYourRecording => '録音を読み込み中...';
+
+  @override
+  String get photoDiscardedMessage => 'この写真は重要ではなかったため破棄されました。';
+
+  @override
+  String get analyzing => '分析中...';
+
+  @override
+  String get searchCountries => '国を検索...';
+
+  @override
+  String get checkingAppleWatch => 'Apple Watchを確認中...';
+
+  @override
+  String get installOmiOnAppleWatch => 'Apple WatchにOmiを\nインストール';
+
+  @override
+  String get installOmiOnAppleWatchDescription => 'Apple WatchでOmiを使用するには、まずウォッチにOmiアプリをインストールする必要があります。';
+
+  @override
+  String get openOmiOnAppleWatch => 'Apple WatchでOmiを\n開く';
+
+  @override
+  String get openOmiOnAppleWatchDescription => 'OmiアプリはApple Watchにインストールされています。開いてスタートをタップしてください。';
+
+  @override
+  String get openWatchApp => 'Watchアプリを開く';
+
+  @override
+  String get iveInstalledAndOpenedTheApp => 'アプリをインストールして開きました';
+
+  @override
+  String get unableToOpenWatchApp =>
+      'Apple Watchアプリを開けませんでした。Apple WatchのWatchアプリを手動で開き、「利用可能なApp」セクションからOmiをインストールしてください。';
+
+  @override
+  String get appleWatchConnectedSuccessfully => 'Apple Watchが正常に接続されました！';
+
+  @override
+  String get appleWatchNotReachable => 'Apple Watchにまだ接続できません。ウォッチでOmiアプリが開いていることを確認してください。';
+
+  @override
+  String errorCheckingConnection(String error) {
+    return '接続確認エラー: $error';
+  }
+
+  @override
+  String get muted => 'ミュート';
+
+  @override
+  String get processNow => '今すぐ処理';
+
+  @override
+  String get finishedConversation => '会話を終了しますか？';
+
+  @override
+  String get stopRecordingConfirmation => '録音を停止して会話を今すぐ要約しますか？';
+
+  @override
+  String get conversationEndsManually => '会話は手動でのみ終了します。';
+
+  @override
+  String conversationSummarizedAfterMinutes(int minutes, String suffix) {
+    return '会話は$minutes分$suffixの無音後に要約されます。';
+  }
+
+  @override
+  String get dontAskAgain => '次回から表示しない';
+
+  @override
+  String get waitingForTranscriptOrPhotos => '文字起こしまたは写真を待機中...';
+
+  @override
+  String get noSummaryYet => 'まだ要約がありません';
+
+  @override
+  String hints(String text) {
+    return 'ヒント: $text';
+  }
+
+  @override
+  String get testConversationPrompt => '会話プロンプトをテスト';
+
+  @override
+  String get prompt => 'プロンプト';
+
+  @override
+  String get result => '結果';
+
+  @override
+  String get compareTranscripts => '文字起こしを比較';
+
+  @override
+  String get notHelpful => '役に立たなかった';
+
+  @override
+  String get exportTasksWithOneTap => 'ワンタップでタスクをエクスポート！';
+
+  @override
+  String get inProgress => '処理中';
+
+  @override
+  String get photos => '写真';
+
+  @override
+  String get rawData => '生データ';
+
+  @override
+  String get content => 'コンテンツ';
+
+  @override
+  String get noContentToDisplay => '表示するコンテンツがありません';
+
+  @override
+  String get noSummary => '要約なし';
+
+  @override
+  String get updateOmiFirmware => 'omiファームウェアを更新';
+
+  @override
+  String get anErrorOccurredTryAgain => 'エラーが発生しました。もう一度お試しください。';
+
+  @override
+  String get welcomeBackSimple => 'おかえりなさい';
 }

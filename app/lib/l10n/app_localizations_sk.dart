@@ -5097,4 +5097,185 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get pleaseEnterValidEmail => 'Zadajte platnú e-mailovú adresu';
+
+  @override
+  String get syncingYourRecordings => 'Synchronizácia vašich nahrávok';
+
+  @override
+  String get syncYourRecordings => 'Synchronizujte svoje nahrávky';
+
+  @override
+  String get syncNow => 'Synchronizovať teraz';
+
+  @override
+  String get error => 'Chyba';
+
+  @override
+  String get speechSamples => 'Hlasové vzorky';
+
+  @override
+  String additionalSampleIndex(String index) {
+    return 'Ďalšia vzorka $index';
+  }
+
+  @override
+  String durationSeconds(String seconds) {
+    return 'Trvanie: $seconds sekúnd';
+  }
+
+  @override
+  String get additionalSpeechSampleRemoved => 'Ďalšia hlasová vzorka odstránená';
+
+  @override
+  String get consentDataMessage =>
+      'Pokračovaním budú všetky údaje, ktoré zdieľate s touto aplikáciou (vrátane vašich konverzácií, nahrávok a osobných informácií), bezpečne uložené na našich serveroch, aby sme vám mohli poskytovať poznatky založené na AI a umožniť všetky funkcie aplikácie.';
+
+  @override
+  String get tasksEmptyStateMessage =>
+      'Úlohy z vašich konverzácií sa zobrazia tu.\nKlepnite na + pre manuálne vytvorenie.';
+
+  @override
+  String get clearChatAction => 'Vymazať chat';
+
+  @override
+  String get enableApps => 'Povoliť aplikácie';
+
+  @override
+  String get omiAppName => 'Omi';
+
+  @override
+  String get showMore => 'zobraziť viac ↓';
+
+  @override
+  String get showLess => 'zobraziť menej ↑';
+
+  @override
+  String get loadingYourRecording => 'Načítava sa nahrávka...';
+
+  @override
+  String get photoDiscardedMessage => 'Táto fotografia bola vyradená, pretože nebola významná.';
+
+  @override
+  String get analyzing => 'Analyzovanie...';
+
+  @override
+  String get searchCountries => 'Hľadať krajiny...';
+
+  @override
+  String get checkingAppleWatch => 'Kontrola Apple Watch...';
+
+  @override
+  String get installOmiOnAppleWatch => 'Nainštalujte Omi na\nApple Watch';
+
+  @override
+  String get installOmiOnAppleWatchDescription =>
+      'Ak chcete používať Apple Watch s Omi, musíte najprv nainštalovať aplikáciu Omi na hodinky.';
+
+  @override
+  String get openOmiOnAppleWatch => 'Otvorte Omi na\nApple Watch';
+
+  @override
+  String get openOmiOnAppleWatchDescription =>
+      'Aplikácia Omi je nainštalovaná na Apple Watch. Otvorte ju a klepnite na Štart.';
+
+  @override
+  String get openWatchApp => 'Otvoriť aplikáciu Watch';
+
+  @override
+  String get iveInstalledAndOpenedTheApp => 'Nainštaloval(a) som a otvoril(a) aplikáciu';
+
+  @override
+  String get unableToOpenWatchApp =>
+      'Aplikáciu Apple Watch sa nepodarilo otvoriť. Manuálne otvorte aplikáciu Watch na Apple Watch a nainštalujte Omi zo sekcie \"Dostupné aplikácie\".';
+
+  @override
+  String get appleWatchConnectedSuccessfully => 'Apple Watch úspešne pripojené!';
+
+  @override
+  String get appleWatchNotReachable =>
+      'Apple Watch stále nie je dostupné. Uistite sa, že aplikácia Omi je na hodinkách otvorená.';
+
+  @override
+  String errorCheckingConnection(String error) {
+    return 'Chyba pri kontrole pripojenia: $error';
+  }
+
+  @override
+  String get muted => 'Stlmené';
+
+  @override
+  String get processNow => 'Spracovať teraz';
+
+  @override
+  String get finishedConversation => 'Konverzácia dokončená?';
+
+  @override
+  String get stopRecordingConfirmation => 'Ste si istí, že chcete zastaviť nahrávanie a zhrnúť konverzáciu teraz?';
+
+  @override
+  String get conversationEndsManually => 'Konverzácia sa ukončí iba ručne.';
+
+  @override
+  String conversationSummarizedAfterMinutes(int minutes, String suffix) {
+    return 'Konverzácia sa zhrnie po $minutes minút$suffix ticha.';
+  }
+
+  @override
+  String get dontAskAgain => 'Nepýtaj sa znova';
+
+  @override
+  String get waitingForTranscriptOrPhotos => 'Čakanie na prepis alebo fotografie...';
+
+  @override
+  String get noSummaryYet => 'Zatiaľ žiadne zhrnutie';
+
+  @override
+  String hints(String text) {
+    return 'Tipy: $text';
+  }
+
+  @override
+  String get testConversationPrompt => 'Testovať výzvu konverzácie';
+
+  @override
+  String get prompt => 'Výzva';
+
+  @override
+  String get result => 'Výsledok';
+
+  @override
+  String get compareTranscripts => 'Porovnať prepisy';
+
+  @override
+  String get notHelpful => 'Nebolo užitočné';
+
+  @override
+  String get exportTasksWithOneTap => 'Exportujte úlohy jedným ťuknutím!';
+
+  @override
+  String get inProgress => 'Prebieha';
+
+  @override
+  String get photos => 'Fotky';
+
+  @override
+  String get rawData => 'Nespracované dáta';
+
+  @override
+  String get content => 'Obsah';
+
+  @override
+  String get noContentToDisplay => 'Žiadny obsah na zobrazenie';
+
+  @override
+  String get noSummary => 'Žiadny súhrn';
+
+  @override
+  String get updateOmiFirmware => 'Aktualizovať firmvér omi';
+
+  @override
+  String get anErrorOccurredTryAgain => 'Vyskytla sa chyba. Skúste to znova.';
+
+  @override
+  String get welcomeBackSimple => 'Vitajte späť';
 }

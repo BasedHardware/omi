@@ -5098,4 +5098,186 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get pleaseEnterValidEmail => 'Anna kelvollinen sähköpostiosoite';
+
+  @override
+  String get syncingYourRecordings => 'Synkronoidaan tallenteitasi';
+
+  @override
+  String get syncYourRecordings => 'Synkronoi tallenteet';
+
+  @override
+  String get syncNow => 'Synkronoi nyt';
+
+  @override
+  String get error => 'Virhe';
+
+  @override
+  String get speechSamples => 'Puhenäytteet';
+
+  @override
+  String additionalSampleIndex(String index) {
+    return 'Lisänäyte $index';
+  }
+
+  @override
+  String durationSeconds(String seconds) {
+    return 'Kesto: $seconds sekuntia';
+  }
+
+  @override
+  String get additionalSpeechSampleRemoved => 'Lisäpuhenäyte poistettu';
+
+  @override
+  String get consentDataMessage =>
+      'Jatkamalla kaikki tämän sovelluksen kanssa jakamasi tiedot (mukaan lukien keskustelusi, tallenteet ja henkilökohtaiset tietosi) tallennetaan turvallisesti palvelimillemme tarjotaksemme sinulle tekoälypohjaisia oivalluksia ja mahdollistaaksemme kaikki sovelluksen ominaisuudet.';
+
+  @override
+  String get tasksEmptyStateMessage =>
+      'Keskusteluistasi saadut tehtävät näkyvät täällä.\nNapauta + luodaksesi manuaalisesti.';
+
+  @override
+  String get clearChatAction => 'Tyhjennä keskustelu';
+
+  @override
+  String get enableApps => 'Ota sovellukset käyttöön';
+
+  @override
+  String get omiAppName => 'Omi';
+
+  @override
+  String get showMore => 'näytä lisää ↓';
+
+  @override
+  String get showLess => 'näytä vähemmän ↑';
+
+  @override
+  String get loadingYourRecording => 'Ladataan tallennetta...';
+
+  @override
+  String get photoDiscardedMessage => 'Tämä kuva hylättiin, koska se ei ollut merkittävä.';
+
+  @override
+  String get analyzing => 'Analysoidaan...';
+
+  @override
+  String get searchCountries => 'Etsi maita...';
+
+  @override
+  String get checkingAppleWatch => 'Tarkistetaan Apple Watchia...';
+
+  @override
+  String get installOmiOnAppleWatch => 'Asenna Omi\nApple Watchiin';
+
+  @override
+  String get installOmiOnAppleWatchDescription =>
+      'Käyttääksesi Apple Watchia Omin kanssa, sinun on ensin asennettava Omi-sovellus kelloosi.';
+
+  @override
+  String get openOmiOnAppleWatch => 'Avaa Omi\nApple Watchissa';
+
+  @override
+  String get openOmiOnAppleWatchDescription =>
+      'Omi-sovellus on asennettu Apple Watchiin. Avaa se ja napauta Aloita aloittaaksesi.';
+
+  @override
+  String get openWatchApp => 'Avaa Watch-sovellus';
+
+  @override
+  String get iveInstalledAndOpenedTheApp => 'Olen asentanut ja avannut sovelluksen';
+
+  @override
+  String get unableToOpenWatchApp =>
+      'Apple Watch -sovellusta ei voi avata. Avaa Watch-sovellus manuaalisesti Apple Watchissa ja asenna Omi \"Saatavilla olevat sovellukset\" -osiosta.';
+
+  @override
+  String get appleWatchConnectedSuccessfully => 'Apple Watch yhdistetty!';
+
+  @override
+  String get appleWatchNotReachable =>
+      'Apple Watch ei ole vielä tavoitettavissa. Varmista, että Omi-sovellus on auki kellossasi.';
+
+  @override
+  String errorCheckingConnection(String error) {
+    return 'Virhe yhteyden tarkistuksessa: $error';
+  }
+
+  @override
+  String get muted => 'Mykistetty';
+
+  @override
+  String get processNow => 'Käsittele nyt';
+
+  @override
+  String get finishedConversation => 'Keskustelu päättynyt?';
+
+  @override
+  String get stopRecordingConfirmation =>
+      'Haluatko varmasti lopettaa nauhoituksen ja tehdä yhteenvedon keskustelusta nyt?';
+
+  @override
+  String get conversationEndsManually => 'Keskustelu päättyy vain manuaalisesti.';
+
+  @override
+  String conversationSummarizedAfterMinutes(int minutes, String suffix) {
+    return 'Keskustelu tiivistetään $minutes minuuti$suffix hiljaisuuden jälkeen.';
+  }
+
+  @override
+  String get dontAskAgain => 'Älä kysy uudelleen';
+
+  @override
+  String get waitingForTranscriptOrPhotos => 'Odotetaan litterointia tai kuvia...';
+
+  @override
+  String get noSummaryYet => 'Ei yhteenvetoa vielä';
+
+  @override
+  String hints(String text) {
+    return 'Vihjeet: $text';
+  }
+
+  @override
+  String get testConversationPrompt => 'Testaa keskustelukehotetta';
+
+  @override
+  String get prompt => 'Kehote';
+
+  @override
+  String get result => 'Tulos';
+
+  @override
+  String get compareTranscripts => 'Vertaa litterointeja';
+
+  @override
+  String get notHelpful => 'Ei hyödyllinen';
+
+  @override
+  String get exportTasksWithOneTap => 'Vie tehtävät yhdellä napautuksella!';
+
+  @override
+  String get inProgress => 'Käynnissä';
+
+  @override
+  String get photos => 'Kuvat';
+
+  @override
+  String get rawData => 'Raakadata';
+
+  @override
+  String get content => 'Sisältö';
+
+  @override
+  String get noContentToDisplay => 'Ei sisältöä näytettäväksi';
+
+  @override
+  String get noSummary => 'Ei yhteenvetoa';
+
+  @override
+  String get updateOmiFirmware => 'Päivitä omin laiteohjelmisto';
+
+  @override
+  String get anErrorOccurredTryAgain => 'Tapahtui virhe. Yritä uudelleen.';
+
+  @override
+  String get welcomeBackSimple => 'Tervetuloa takaisin';
 }

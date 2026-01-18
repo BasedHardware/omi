@@ -3433,5 +3433,7 @@
   "content": "Contenuto",
   "noContentToDisplay": "Nessun contenuto da visualizzare",
   "noSummary": "Nessun riepilogo",
-  "updateOmiFirmware": "Aggiorna firmware omi"
+  "updateOmiFirmware": "Aggiorna firmware omi",
+  "anErrorOccurredTryAgain": "Si è verificato un errore. Riprova.",
+  "welcomeBackSimple": "Bentornato"
 }

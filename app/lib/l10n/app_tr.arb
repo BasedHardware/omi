@@ -3433,5 +3433,7 @@
   "content": "İçerik",
   "noContentToDisplay": "Gösterilecek içerik yok",
   "noSummary": "Özet yok",
-  "updateOmiFirmware": "omi yazılımını güncelle"
+  "updateOmiFirmware": "omi yazılımını güncelle",
+  "anErrorOccurredTryAgain": "Bir hata oluştu. Lütfen tekrar deneyin.",
+  "welcomeBackSimple": "Tekrar hoş geldiniz"
 }

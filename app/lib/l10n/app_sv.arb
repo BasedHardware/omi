@@ -3451,5 +3451,7 @@
   "content": "Innehåll",
   "noContentToDisplay": "Inget innehåll att visa",
   "noSummary": "Ingen sammanfattning",
-  "updateOmiFirmware": "Uppdatera omi-firmware"
+  "updateOmiFirmware": "Uppdatera omi-firmware",
+  "anErrorOccurredTryAgain": "Ett fel uppstod. Försök igen.",
+  "welcomeBackSimple": "Välkommen tillbaka"
 }

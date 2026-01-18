@@ -5108,4 +5108,185 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get pleaseEnterValidEmail => 'Vui lòng nhập địa chỉ email hợp lệ';
+
+  @override
+  String get syncingYourRecordings => 'Đang đồng bộ bản ghi của bạn';
+
+  @override
+  String get syncYourRecordings => 'Đồng bộ bản ghi của bạn';
+
+  @override
+  String get syncNow => 'Đồng bộ ngay';
+
+  @override
+  String get error => 'Lỗi';
+
+  @override
+  String get speechSamples => 'Mẫu giọng nói';
+
+  @override
+  String additionalSampleIndex(String index) {
+    return 'Mẫu bổ sung $index';
+  }
+
+  @override
+  String durationSeconds(String seconds) {
+    return 'Thời lượng: $seconds giây';
+  }
+
+  @override
+  String get additionalSpeechSampleRemoved => 'Đã xóa mẫu giọng nói bổ sung';
+
+  @override
+  String get consentDataMessage =>
+      'Bằng cách tiếp tục, tất cả dữ liệu bạn chia sẻ với ứng dụng này (bao gồm các cuộc trò chuyện, bản ghi và thông tin cá nhân của bạn) sẽ được lưu trữ an toàn trên máy chủ của chúng tôi để cung cấp cho bạn thông tin chi tiết được hỗ trợ bởi AI và kích hoạt tất cả các tính năng của ứng dụng.';
+
+  @override
+  String get tasksEmptyStateMessage =>
+      'Các nhiệm vụ từ cuộc trò chuyện của bạn sẽ xuất hiện ở đây.\nNhấn + để tạo thủ công.';
+
+  @override
+  String get clearChatAction => 'Xóa cuộc trò chuyện';
+
+  @override
+  String get enableApps => 'Kích hoạt ứng dụng';
+
+  @override
+  String get omiAppName => 'Omi';
+
+  @override
+  String get showMore => 'xem thêm ↓';
+
+  @override
+  String get showLess => 'thu gọn ↑';
+
+  @override
+  String get loadingYourRecording => 'Đang tải bản ghi của bạn...';
+
+  @override
+  String get photoDiscardedMessage => 'Ảnh này đã bị loại bỏ vì không quan trọng.';
+
+  @override
+  String get analyzing => 'Đang phân tích...';
+
+  @override
+  String get searchCountries => 'Tìm kiếm quốc gia...';
+
+  @override
+  String get checkingAppleWatch => 'Đang kiểm tra Apple Watch...';
+
+  @override
+  String get installOmiOnAppleWatch => 'Cài đặt Omi trên\nApple Watch của bạn';
+
+  @override
+  String get installOmiOnAppleWatchDescription =>
+      'Để sử dụng Apple Watch với Omi, bạn cần cài đặt ứng dụng Omi trên đồng hồ trước.';
+
+  @override
+  String get openOmiOnAppleWatch => 'Mở Omi trên\nApple Watch của bạn';
+
+  @override
+  String get openOmiOnAppleWatchDescription =>
+      'Ứng dụng Omi đã được cài đặt trên Apple Watch của bạn. Mở ứng dụng và nhấn Bắt đầu.';
+
+  @override
+  String get openWatchApp => 'Mở ứng dụng Watch';
+
+  @override
+  String get iveInstalledAndOpenedTheApp => 'Tôi đã cài đặt và mở ứng dụng';
+
+  @override
+  String get unableToOpenWatchApp =>
+      'Không thể mở ứng dụng Apple Watch. Vui lòng mở ứng dụng Watch trên Apple Watch và cài đặt Omi từ phần \"Ứng dụng có sẵn\".';
+
+  @override
+  String get appleWatchConnectedSuccessfully => 'Kết nối Apple Watch thành công!';
+
+  @override
+  String get appleWatchNotReachable =>
+      'Vẫn không thể kết nối Apple Watch. Vui lòng đảm bảo ứng dụng Omi đang mở trên đồng hồ.';
+
+  @override
+  String errorCheckingConnection(String error) {
+    return 'Lỗi kiểm tra kết nối: $error';
+  }
+
+  @override
+  String get muted => 'Đã tắt tiếng';
+
+  @override
+  String get processNow => 'Xử lý ngay';
+
+  @override
+  String get finishedConversation => 'Kết thúc cuộc trò chuyện?';
+
+  @override
+  String get stopRecordingConfirmation => 'Bạn có chắc muốn dừng ghi âm và tóm tắt cuộc trò chuyện ngay bây giờ không?';
+
+  @override
+  String get conversationEndsManually => 'Cuộc trò chuyện sẽ chỉ kết thúc thủ công.';
+
+  @override
+  String conversationSummarizedAfterMinutes(int minutes, String suffix) {
+    return 'Cuộc trò chuyện được tóm tắt sau $minutes phút$suffix im lặng.';
+  }
+
+  @override
+  String get dontAskAgain => 'Không hỏi lại';
+
+  @override
+  String get waitingForTranscriptOrPhotos => 'Đang chờ bản ghi hoặc ảnh...';
+
+  @override
+  String get noSummaryYet => 'Chưa có tóm tắt';
+
+  @override
+  String hints(String text) {
+    return 'Gợi ý: $text';
+  }
+
+  @override
+  String get testConversationPrompt => 'Kiểm tra lời nhắc cuộc trò chuyện';
+
+  @override
+  String get prompt => 'Lời nhắc';
+
+  @override
+  String get result => 'Kết quả';
+
+  @override
+  String get compareTranscripts => 'So sánh bản ghi';
+
+  @override
+  String get notHelpful => 'Không hữu ích';
+
+  @override
+  String get exportTasksWithOneTap => 'Xuất tác vụ chỉ với một chạm!';
+
+  @override
+  String get inProgress => 'Đang xử lý';
+
+  @override
+  String get photos => 'Ảnh';
+
+  @override
+  String get rawData => 'Dữ liệu thô';
+
+  @override
+  String get content => 'Nội dung';
+
+  @override
+  String get noContentToDisplay => 'Không có nội dung để hiển thị';
+
+  @override
+  String get noSummary => 'Không có tóm tắt';
+
+  @override
+  String get updateOmiFirmware => 'Cập nhật phần mềm omi';
+
+  @override
+  String get anErrorOccurredTryAgain => 'Đã xảy ra lỗi. Vui lòng thử lại.';
+
+  @override
+  String get welcomeBackSimple => 'Chào mừng trở lại';
 }

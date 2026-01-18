@@ -3469,5 +3469,7 @@
   "content": "المحتوى",
   "noContentToDisplay": "لا يوجد محتوى للعرض",
   "noSummary": "لا يوجد ملخص",
-  "updateOmiFirmware": "تحديث برنامج omi"
+  "updateOmiFirmware": "تحديث برنامج omi",
+  "anErrorOccurredTryAgain": "حدث خطأ. يرجى المحاولة مرة أخرى.",
+  "welcomeBackSimple": "مرحباً بعودتك"
 }

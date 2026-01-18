@@ -3451,5 +3451,7 @@
   "content": "Sisältö",
   "noContentToDisplay": "Ei sisältöä näytettäväksi",
   "noSummary": "Ei yhteenvetoa",
-  "updateOmiFirmware": "Päivitä omin laiteohjelmisto"
+  "updateOmiFirmware": "Päivitä omin laiteohjelmisto",
+  "anErrorOccurredTryAgain": "Tapahtui virhe. Yritä uudelleen.",
+  "welcomeBackSimple": "Tervetuloa takaisin"
 }

@@ -1898,5 +1898,7 @@
   "content": "内容",
   "noContentToDisplay": "没有可显示的内容",
   "noSummary": "无摘要",
-  "updateOmiFirmware": "更新omi固件"
+  "updateOmiFirmware": "更新omi固件",
+  "anErrorOccurredTryAgain": "发生错误，请重试。",
+  "welcomeBackSimple": "欢迎回来"
 }

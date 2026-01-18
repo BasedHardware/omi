@@ -3453,5 +3453,7 @@
   "content": "Obsah",
   "noContentToDisplay": "Žádný obsah k zobrazení",
   "noSummary": "Žádný souhrn",
-  "updateOmiFirmware": "Aktualizovat firmware omi"
+  "updateOmiFirmware": "Aktualizovat firmware omi",
+  "anErrorOccurredTryAgain": "Došlo k chybě. Zkuste to prosím znovu.",
+  "welcomeBackSimple": "Vítejte zpět"
 }

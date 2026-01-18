@@ -3451,5 +3451,7 @@
   "content": "Conținut",
   "noContentToDisplay": "Nu există conținut de afișat",
   "noSummary": "Fără rezumat",
-  "updateOmiFirmware": "Actualizează firmware-ul omi"
+  "updateOmiFirmware": "Actualizează firmware-ul omi",
+  "anErrorOccurredTryAgain": "A apărut o eroare. Vă rugăm să încercați din nou.",
+  "welcomeBackSimple": "Bine ai revenit"
 }

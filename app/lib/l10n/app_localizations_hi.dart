@@ -5076,4 +5076,185 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get pleaseEnterValidEmail => 'कृपया एक वैध ईमेल पता दर्ज करें';
+
+  @override
+  String get syncingYourRecordings => 'आपकी रिकॉर्डिंग सिंक हो रही हैं';
+
+  @override
+  String get syncYourRecordings => 'अपनी रिकॉर्डिंग सिंक करें';
+
+  @override
+  String get syncNow => 'अभी सिंक करें';
+
+  @override
+  String get error => 'त्रुटि';
+
+  @override
+  String get speechSamples => 'भाषण के नमूने';
+
+  @override
+  String additionalSampleIndex(String index) {
+    return 'अतिरिक्त नमूना $index';
+  }
+
+  @override
+  String durationSeconds(String seconds) {
+    return 'अवधि: $seconds सेकंड';
+  }
+
+  @override
+  String get additionalSpeechSampleRemoved => 'अतिरिक्त भाषण नमूना हटाया गया';
+
+  @override
+  String get consentDataMessage =>
+      'जारी रखने पर, इस ऐप के साथ आपके द्वारा साझा किया गया सभी डेटा (आपकी बातचीत, रिकॉर्डिंग और व्यक्तिगत जानकारी सहित) AI-संचालित अंतर्दृष्टि प्रदान करने और सभी ऐप सुविधाओं को सक्षम करने के लिए हमारे सर्वर पर सुरक्षित रूप से संग्रहीत किया जाएगा।';
+
+  @override
+  String get tasksEmptyStateMessage =>
+      'आपकी बातचीत के कार्य यहां दिखाई देंगे।\nमैन्युअल रूप से बनाने के लिए + टैप करें।';
+
+  @override
+  String get clearChatAction => 'चैट साफ़ करें';
+
+  @override
+  String get enableApps => 'ऐप्स सक्षम करें';
+
+  @override
+  String get omiAppName => 'Omi';
+
+  @override
+  String get showMore => 'और दिखाएं ↓';
+
+  @override
+  String get showLess => 'कम दिखाएं ↑';
+
+  @override
+  String get loadingYourRecording => 'आपकी रिकॉर्डिंग लोड हो रही है...';
+
+  @override
+  String get photoDiscardedMessage => 'यह फोटो हटा दी गई क्योंकि यह महत्वपूर्ण नहीं थी।';
+
+  @override
+  String get analyzing => 'विश्लेषण हो रहा है...';
+
+  @override
+  String get searchCountries => 'देश खोजें...';
+
+  @override
+  String get checkingAppleWatch => 'Apple Watch की जाँच हो रही है...';
+
+  @override
+  String get installOmiOnAppleWatch => 'अपने Apple Watch पर\nOmi इंस्टॉल करें';
+
+  @override
+  String get installOmiOnAppleWatchDescription =>
+      'Omi के साथ Apple Watch का उपयोग करने के लिए, आपको पहले अपनी घड़ी पर Omi ऐप इंस्टॉल करना होगा।';
+
+  @override
+  String get openOmiOnAppleWatch => 'अपने Apple Watch पर\nOmi खोलें';
+
+  @override
+  String get openOmiOnAppleWatchDescription =>
+      'Omi ऐप आपके Apple Watch पर इंस्टॉल है। इसे खोलें और शुरू करने के लिए Start पर टैप करें।';
+
+  @override
+  String get openWatchApp => 'Watch ऐप खोलें';
+
+  @override
+  String get iveInstalledAndOpenedTheApp => 'मैंने ऐप इंस्टॉल और खोल लिया है';
+
+  @override
+  String get unableToOpenWatchApp =>
+      'Apple Watch ऐप खोलने में असमर्थ। कृपया अपने Apple Watch पर Watch ऐप मैन्युअल रूप से खोलें और \"उपलब्ध ऐप्स\" सेक्शन से Omi इंस्टॉल करें।';
+
+  @override
+  String get appleWatchConnectedSuccessfully => 'Apple Watch सफलतापूर्वक कनेक्ट हो गया!';
+
+  @override
+  String get appleWatchNotReachable =>
+      'Apple Watch अभी भी पहुंच योग्य नहीं है। कृपया सुनिश्चित करें कि Omi ऐप आपकी घड़ी पर खुला है।';
+
+  @override
+  String errorCheckingConnection(String error) {
+    return 'कनेक्शन जाँचने में त्रुटि: $error';
+  }
+
+  @override
+  String get muted => 'म्यूट';
+
+  @override
+  String get processNow => 'अभी प्रोसेस करें';
+
+  @override
+  String get finishedConversation => 'बातचीत समाप्त?';
+
+  @override
+  String get stopRecordingConfirmation => 'क्या आप वाकई रिकॉर्डिंग रोकना और बातचीत का सारांश अभी बनाना चाहते हैं?';
+
+  @override
+  String get conversationEndsManually => 'बातचीत केवल मैन्युअल रूप से समाप्त होगी।';
+
+  @override
+  String conversationSummarizedAfterMinutes(int minutes, String suffix) {
+    return 'बातचीत $minutes मिनट$suffix की चुप्पी के बाद सारांशित होती है।';
+  }
+
+  @override
+  String get dontAskAgain => 'मुझसे दोबारा मत पूछो';
+
+  @override
+  String get waitingForTranscriptOrPhotos => 'ट्रांसक्रिप्ट या फ़ोटो की प्रतीक्षा...';
+
+  @override
+  String get noSummaryYet => 'अभी तक कोई सारांश नहीं';
+
+  @override
+  String hints(String text) {
+    return 'संकेत: $text';
+  }
+
+  @override
+  String get testConversationPrompt => 'वार्तालाप प्रॉम्प्ट का परीक्षण करें';
+
+  @override
+  String get prompt => 'प्रॉम्प्ट';
+
+  @override
+  String get result => 'परिणाम';
+
+  @override
+  String get compareTranscripts => 'ट्रांसक्रिप्ट की तुलना करें';
+
+  @override
+  String get notHelpful => 'सहायक नहीं';
+
+  @override
+  String get exportTasksWithOneTap => 'एक टैप से कार्य निर्यात करें!';
+
+  @override
+  String get inProgress => 'प्रगति में';
+
+  @override
+  String get photos => 'फ़ोटो';
+
+  @override
+  String get rawData => 'कच्चा डेटा';
+
+  @override
+  String get content => 'सामग्री';
+
+  @override
+  String get noContentToDisplay => 'दिखाने के लिए कोई सामग्री नहीं';
+
+  @override
+  String get noSummary => 'कोई सारांश नहीं';
+
+  @override
+  String get updateOmiFirmware => 'omi फर्मवेयर अपडेट करें';
+
+  @override
+  String get anErrorOccurredTryAgain => 'एक त्रुटि हुई। कृपया पुनः प्रयास करें।';
+
+  @override
+  String get welcomeBackSimple => 'वापसी पर स्वागत है';
 }

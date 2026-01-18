@@ -3451,5 +3451,7 @@
   "content": "Zawartość",
   "noContentToDisplay": "Brak treści do wyświetlenia",
   "noSummary": "Brak podsumowania",
-  "updateOmiFirmware": "Zaktualizuj oprogramowanie omi"
+  "updateOmiFirmware": "Zaktualizuj oprogramowanie omi",
+  "anErrorOccurredTryAgain": "Wystąpił błąd. Spróbuj ponownie.",
+  "welcomeBackSimple": "Witaj ponownie"
 }

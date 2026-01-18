@@ -3451,5 +3451,7 @@
   "content": "Nội dung",
   "noContentToDisplay": "Không có nội dung để hiển thị",
   "noSummary": "Không có tóm tắt",
-  "updateOmiFirmware": "Cập nhật phần mềm omi"
+  "updateOmiFirmware": "Cập nhật phần mềm omi",
+  "anErrorOccurredTryAgain": "Đã xảy ra lỗi. Vui lòng thử lại.",
+  "welcomeBackSimple": "Chào mừng trở lại"
 }

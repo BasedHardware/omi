@@ -3451,5 +3451,7 @@
   "content": "Obsah",
   "noContentToDisplay": "Žiadny obsah na zobrazenie",
   "noSummary": "Žiadny súhrn",
-  "updateOmiFirmware": "Aktualizovať firmvér omi"
+  "updateOmiFirmware": "Aktualizovať firmvér omi",
+  "anErrorOccurredTryAgain": "Vyskytla sa chyba. Skúste to znova.",
+  "welcomeBackSimple": "Vitajte späť"
 }

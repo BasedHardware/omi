@@ -1898,5 +1898,7 @@
   "content": "Inhalt",
   "noContentToDisplay": "Kein Inhalt zum Anzeigen",
   "noSummary": "Keine Zusammenfassung",
-  "updateOmiFirmware": "Omi-Firmware aktualisieren"
+  "updateOmiFirmware": "Omi-Firmware aktualisieren",
+  "anErrorOccurredTryAgain": "Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.",
+  "welcomeBackSimple": "Willkommen zurück"
 }

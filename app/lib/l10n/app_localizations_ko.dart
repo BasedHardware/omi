@@ -5004,4 +5004,181 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get pleaseEnterValidEmail => '유효한 이메일 주소를 입력해 주세요';
+
+  @override
+  String get syncingYourRecordings => '녹음 동기화 중';
+
+  @override
+  String get syncYourRecordings => '녹음 동기화';
+
+  @override
+  String get syncNow => '지금 동기화';
+
+  @override
+  String get error => '오류';
+
+  @override
+  String get speechSamples => '음성 샘플';
+
+  @override
+  String additionalSampleIndex(String index) {
+    return '추가 샘플 $index';
+  }
+
+  @override
+  String durationSeconds(String seconds) {
+    return '길이: $seconds초';
+  }
+
+  @override
+  String get additionalSpeechSampleRemoved => '추가 음성 샘플이 삭제되었습니다';
+
+  @override
+  String get consentDataMessage =>
+      '계속하면 이 앱과 공유하는 모든 데이터(대화, 녹음, 개인 정보 포함)가 당사 서버에 안전하게 저장되어 AI 기반 인사이트를 제공하고 모든 앱 기능을 활성화합니다.';
+
+  @override
+  String get tasksEmptyStateMessage => '대화에서 생성된 작업이 여기에 표시됩니다.\n수동으로 만들려면 +를 탭하세요.';
+
+  @override
+  String get clearChatAction => '채팅 삭제';
+
+  @override
+  String get enableApps => '앱 활성화';
+
+  @override
+  String get omiAppName => 'Omi';
+
+  @override
+  String get showMore => '더 보기 ↓';
+
+  @override
+  String get showLess => '접기 ↑';
+
+  @override
+  String get loadingYourRecording => '녹음을 불러오는 중...';
+
+  @override
+  String get photoDiscardedMessage => '이 사진은 중요하지 않아 삭제되었습니다.';
+
+  @override
+  String get analyzing => '분석 중...';
+
+  @override
+  String get searchCountries => '국가 검색...';
+
+  @override
+  String get checkingAppleWatch => 'Apple Watch 확인 중...';
+
+  @override
+  String get installOmiOnAppleWatch => 'Apple Watch에\nOmi 설치';
+
+  @override
+  String get installOmiOnAppleWatchDescription => 'Omi와 함께 Apple Watch를 사용하려면 먼저 시계에 Omi 앱을 설치해야 합니다.';
+
+  @override
+  String get openOmiOnAppleWatch => 'Apple Watch에서\nOmi 열기';
+
+  @override
+  String get openOmiOnAppleWatchDescription => 'Omi 앱이 Apple Watch에 설치되어 있습니다. 앱을 열고 시작을 탭하세요.';
+
+  @override
+  String get openWatchApp => 'Watch 앱 열기';
+
+  @override
+  String get iveInstalledAndOpenedTheApp => '앱을 설치하고 열었습니다';
+
+  @override
+  String get unableToOpenWatchApp =>
+      'Apple Watch 앱을 열 수 없습니다. Apple Watch에서 Watch 앱을 수동으로 열고 \"사용 가능한 앱\" 섹션에서 Omi를 설치하세요.';
+
+  @override
+  String get appleWatchConnectedSuccessfully => 'Apple Watch가 성공적으로 연결되었습니다!';
+
+  @override
+  String get appleWatchNotReachable => 'Apple Watch에 아직 연결할 수 없습니다. 시계에서 Omi 앱이 열려 있는지 확인하세요.';
+
+  @override
+  String errorCheckingConnection(String error) {
+    return '연결 확인 오류: $error';
+  }
+
+  @override
+  String get muted => '음소거';
+
+  @override
+  String get processNow => '지금 처리';
+
+  @override
+  String get finishedConversation => '대화 종료?';
+
+  @override
+  String get stopRecordingConfirmation => '녹음을 중지하고 지금 대화를 요약하시겠습니까?';
+
+  @override
+  String get conversationEndsManually => '대화는 수동으로만 종료됩니다.';
+
+  @override
+  String conversationSummarizedAfterMinutes(int minutes, String suffix) {
+    return '대화는 $minutes분$suffix 무음 후 요약됩니다.';
+  }
+
+  @override
+  String get dontAskAgain => '다시 묻지 않기';
+
+  @override
+  String get waitingForTranscriptOrPhotos => '녹취록 또는 사진 대기 중...';
+
+  @override
+  String get noSummaryYet => '아직 요약 없음';
+
+  @override
+  String hints(String text) {
+    return '힌트: $text';
+  }
+
+  @override
+  String get testConversationPrompt => '대화 프롬프트 테스트';
+
+  @override
+  String get prompt => '프롬프트';
+
+  @override
+  String get result => '결과';
+
+  @override
+  String get compareTranscripts => '녹취록 비교';
+
+  @override
+  String get notHelpful => '도움이 안 됨';
+
+  @override
+  String get exportTasksWithOneTap => '한 번의 탭으로 작업 내보내기!';
+
+  @override
+  String get inProgress => '진행 중';
+
+  @override
+  String get photos => '사진';
+
+  @override
+  String get rawData => '원시 데이터';
+
+  @override
+  String get content => '콘텐츠';
+
+  @override
+  String get noContentToDisplay => '표시할 콘텐츠가 없습니다';
+
+  @override
+  String get noSummary => '요약 없음';
+
+  @override
+  String get updateOmiFirmware => 'omi 펌웨어 업데이트';
+
+  @override
+  String get anErrorOccurredTryAgain => '오류가 발생했습니다. 다시 시도해 주세요.';
+
+  @override
+  String get welcomeBackSimple => '다시 오신 것을 환영합니다';
 }

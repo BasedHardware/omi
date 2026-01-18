@@ -1898,5 +1898,7 @@
   "content": "सामग्री",
   "noContentToDisplay": "दिखाने के लिए कोई सामग्री नहीं",
   "noSummary": "कोई सारांश नहीं",
-  "updateOmiFirmware": "omi फर्मवेयर अपडेट करें"
+  "updateOmiFirmware": "omi फर्मवेयर अपडेट करें",
+  "anErrorOccurredTryAgain": "एक त्रुटि हुई। कृपया पुनः प्रयास करें।",
+  "welcomeBackSimple": "वापसी पर स्वागत है"
 }

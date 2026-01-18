@@ -6281,5 +6281,13 @@
   "updateOmiFirmware": "Update omi firmware",
   "@updateOmiFirmware": {
     "description": "Button text to update Omi device firmware"
+  },
+  "anErrorOccurredTryAgain": "An error occurred. Please try again.",
+  "@anErrorOccurredTryAgain": {
+    "description": "Generic error message asking user to try again"
+  },
+  "welcomeBackSimple": "Welcome back",
+  "@welcomeBackSimple": {
+    "description": "Simple welcome message without user name"
   }
 }

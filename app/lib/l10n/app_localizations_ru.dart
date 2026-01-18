@@ -5113,4 +5113,184 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get pleaseEnterValidEmail => 'Пожалуйста, введите действительный адрес электронной почты';
+
+  @override
+  String get syncingYourRecordings => 'Синхронизация записей';
+
+  @override
+  String get syncYourRecordings => 'Синхронизировать записи';
+
+  @override
+  String get syncNow => 'Синхронизировать сейчас';
+
+  @override
+  String get error => 'Ошибка';
+
+  @override
+  String get speechSamples => 'Образцы голоса';
+
+  @override
+  String additionalSampleIndex(String index) {
+    return 'Дополнительный образец $index';
+  }
+
+  @override
+  String durationSeconds(String seconds) {
+    return 'Длительность: $seconds секунд';
+  }
+
+  @override
+  String get additionalSpeechSampleRemoved => 'Дополнительный образец голоса удален';
+
+  @override
+  String get consentDataMessage =>
+      'Продолжая, все данные, которыми вы делитесь с этим приложением (включая ваши разговоры, записи и личную информацию), будут надежно храниться на наших серверах для предоставления вам аналитики на основе ИИ и включения всех функций приложения.';
+
+  @override
+  String get tasksEmptyStateMessage => 'Задачи из ваших разговоров появятся здесь.\nНажмите +, чтобы создать вручную.';
+
+  @override
+  String get clearChatAction => 'Очистить чат';
+
+  @override
+  String get enableApps => 'Включить приложения';
+
+  @override
+  String get omiAppName => 'Omi';
+
+  @override
+  String get showMore => 'показать больше ↓';
+
+  @override
+  String get showLess => 'показать меньше ↑';
+
+  @override
+  String get loadingYourRecording => 'Загрузка записи...';
+
+  @override
+  String get photoDiscardedMessage => 'Это фото было отклонено, так как оно не было значимым.';
+
+  @override
+  String get analyzing => 'Анализ...';
+
+  @override
+  String get searchCountries => 'Поиск стран...';
+
+  @override
+  String get checkingAppleWatch => 'Проверка Apple Watch...';
+
+  @override
+  String get installOmiOnAppleWatch => 'Установите Omi на\nApple Watch';
+
+  @override
+  String get installOmiOnAppleWatchDescription =>
+      'Чтобы использовать Apple Watch с Omi, сначала необходимо установить приложение Omi на часы.';
+
+  @override
+  String get openOmiOnAppleWatch => 'Откройте Omi на\nApple Watch';
+
+  @override
+  String get openOmiOnAppleWatchDescription =>
+      'Приложение Omi установлено на Apple Watch. Откройте его и нажмите Старт.';
+
+  @override
+  String get openWatchApp => 'Открыть приложение Watch';
+
+  @override
+  String get iveInstalledAndOpenedTheApp => 'Я установил и открыл приложение';
+
+  @override
+  String get unableToOpenWatchApp =>
+      'Не удалось открыть приложение Apple Watch. Откройте приложение Watch вручную на Apple Watch и установите Omi из раздела \"Доступные приложения\".';
+
+  @override
+  String get appleWatchConnectedSuccessfully => 'Apple Watch успешно подключены!';
+
+  @override
+  String get appleWatchNotReachable =>
+      'Apple Watch все еще недоступны. Убедитесь, что приложение Omi открыто на часах.';
+
+  @override
+  String errorCheckingConnection(String error) {
+    return 'Ошибка проверки подключения: $error';
+  }
+
+  @override
+  String get muted => 'Отключен звук';
+
+  @override
+  String get processNow => 'Обработать сейчас';
+
+  @override
+  String get finishedConversation => 'Завершить разговор?';
+
+  @override
+  String get stopRecordingConfirmation => 'Вы уверены, что хотите остановить запись и подвести итоги разговора сейчас?';
+
+  @override
+  String get conversationEndsManually => 'Разговор завершится только вручную.';
+
+  @override
+  String conversationSummarizedAfterMinutes(int minutes, String suffix) {
+    return 'Разговор подводится итог после $minutes минут$suffix молчания.';
+  }
+
+  @override
+  String get dontAskAgain => 'Больше не спрашивать';
+
+  @override
+  String get waitingForTranscriptOrPhotos => 'Ожидание транскрипции или фотографий...';
+
+  @override
+  String get noSummaryYet => 'Резюме пока нет';
+
+  @override
+  String hints(String text) {
+    return 'Подсказки: $text';
+  }
+
+  @override
+  String get testConversationPrompt => 'Тестировать запрос разговора';
+
+  @override
+  String get prompt => 'Запрос';
+
+  @override
+  String get result => 'Результат';
+
+  @override
+  String get compareTranscripts => 'Сравнить транскрипции';
+
+  @override
+  String get notHelpful => 'Бесполезно';
+
+  @override
+  String get exportTasksWithOneTap => 'Экспортируйте задачи одним нажатием!';
+
+  @override
+  String get inProgress => 'В процессе';
+
+  @override
+  String get photos => 'Фото';
+
+  @override
+  String get rawData => 'Необработанные данные';
+
+  @override
+  String get content => 'Контент';
+
+  @override
+  String get noContentToDisplay => 'Нет контента для отображения';
+
+  @override
+  String get noSummary => 'Нет сводки';
+
+  @override
+  String get updateOmiFirmware => 'Обновить прошивку omi';
+
+  @override
+  String get anErrorOccurredTryAgain => 'Произошла ошибка. Пожалуйста, попробуйте снова.';
+
+  @override
+  String get welcomeBackSimple => 'С возвращением';
 }

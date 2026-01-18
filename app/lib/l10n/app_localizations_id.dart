@@ -5114,4 +5114,186 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get pleaseEnterValidEmail => 'Silakan masukkan alamat email yang valid';
+
+  @override
+  String get syncingYourRecordings => 'Menyinkronkan rekaman Anda';
+
+  @override
+  String get syncYourRecordings => 'Sinkronkan rekaman Anda';
+
+  @override
+  String get syncNow => 'Sinkronkan sekarang';
+
+  @override
+  String get error => 'Kesalahan';
+
+  @override
+  String get speechSamples => 'Sampel suara';
+
+  @override
+  String additionalSampleIndex(String index) {
+    return 'Sampel tambahan $index';
+  }
+
+  @override
+  String durationSeconds(String seconds) {
+    return 'Durasi: $seconds detik';
+  }
+
+  @override
+  String get additionalSpeechSampleRemoved => 'Sampel suara tambahan dihapus';
+
+  @override
+  String get consentDataMessage =>
+      'Dengan melanjutkan, semua data yang Anda bagikan dengan aplikasi ini (termasuk percakapan, rekaman, dan informasi pribadi Anda) akan disimpan dengan aman di server kami untuk memberikan wawasan berbasis AI dan mengaktifkan semua fitur aplikasi.';
+
+  @override
+  String get tasksEmptyStateMessage =>
+      'Tugas dari percakapan Anda akan muncul di sini.\nKetuk + untuk membuat secara manual.';
+
+  @override
+  String get clearChatAction => 'Hapus obrolan';
+
+  @override
+  String get enableApps => 'Aktifkan aplikasi';
+
+  @override
+  String get omiAppName => 'Omi';
+
+  @override
+  String get showMore => 'tampilkan lebih ↓';
+
+  @override
+  String get showLess => 'tampilkan lebih sedikit ↑';
+
+  @override
+  String get loadingYourRecording => 'Memuat rekaman Anda...';
+
+  @override
+  String get photoDiscardedMessage => 'Foto ini dibuang karena tidak signifikan.';
+
+  @override
+  String get analyzing => 'Menganalisis...';
+
+  @override
+  String get searchCountries => 'Cari negara...';
+
+  @override
+  String get checkingAppleWatch => 'Memeriksa Apple Watch...';
+
+  @override
+  String get installOmiOnAppleWatch => 'Instal Omi di\nApple Watch Anda';
+
+  @override
+  String get installOmiOnAppleWatchDescription =>
+      'Untuk menggunakan Apple Watch dengan Omi, Anda perlu menginstal aplikasi Omi di jam tangan Anda terlebih dahulu.';
+
+  @override
+  String get openOmiOnAppleWatch => 'Buka Omi di\nApple Watch Anda';
+
+  @override
+  String get openOmiOnAppleWatchDescription =>
+      'Aplikasi Omi sudah terinstal di Apple Watch Anda. Buka dan ketuk Mulai untuk memulai.';
+
+  @override
+  String get openWatchApp => 'Buka Aplikasi Watch';
+
+  @override
+  String get iveInstalledAndOpenedTheApp => 'Saya Sudah Menginstal & Membuka Aplikasi';
+
+  @override
+  String get unableToOpenWatchApp =>
+      'Tidak dapat membuka aplikasi Apple Watch. Silakan buka aplikasi Watch secara manual di Apple Watch Anda dan instal Omi dari bagian \"Aplikasi Tersedia\".';
+
+  @override
+  String get appleWatchConnectedSuccessfully => 'Apple Watch berhasil terhubung!';
+
+  @override
+  String get appleWatchNotReachable =>
+      'Apple Watch masih tidak dapat dijangkau. Pastikan aplikasi Omi terbuka di jam tangan Anda.';
+
+  @override
+  String errorCheckingConnection(String error) {
+    return 'Kesalahan memeriksa koneksi: $error';
+  }
+
+  @override
+  String get muted => 'Dibisukan';
+
+  @override
+  String get processNow => 'Proses sekarang';
+
+  @override
+  String get finishedConversation => 'Percakapan selesai?';
+
+  @override
+  String get stopRecordingConfirmation =>
+      'Apakah Anda yakin ingin menghentikan rekaman dan merangkum percakapan sekarang?';
+
+  @override
+  String get conversationEndsManually => 'Percakapan hanya akan berakhir secara manual.';
+
+  @override
+  String conversationSummarizedAfterMinutes(int minutes, String suffix) {
+    return 'Percakapan dirangkum setelah $minutes menit$suffix tanpa bicara.';
+  }
+
+  @override
+  String get dontAskAgain => 'Jangan tanya lagi';
+
+  @override
+  String get waitingForTranscriptOrPhotos => 'Menunggu transkrip atau foto...';
+
+  @override
+  String get noSummaryYet => 'Belum ada ringkasan';
+
+  @override
+  String hints(String text) {
+    return 'Petunjuk: $text';
+  }
+
+  @override
+  String get testConversationPrompt => 'Uji prompt percakapan';
+
+  @override
+  String get prompt => 'Prompt';
+
+  @override
+  String get result => 'Hasil';
+
+  @override
+  String get compareTranscripts => 'Bandingkan transkrip';
+
+  @override
+  String get notHelpful => 'Tidak membantu';
+
+  @override
+  String get exportTasksWithOneTap => 'Ekspor tugas dengan satu ketukan!';
+
+  @override
+  String get inProgress => 'Sedang diproses';
+
+  @override
+  String get photos => 'Foto';
+
+  @override
+  String get rawData => 'Data Mentah';
+
+  @override
+  String get content => 'Konten';
+
+  @override
+  String get noContentToDisplay => 'Tidak ada konten untuk ditampilkan';
+
+  @override
+  String get noSummary => 'Tidak ada ringkasan';
+
+  @override
+  String get updateOmiFirmware => 'Perbarui firmware omi';
+
+  @override
+  String get anErrorOccurredTryAgain => 'Terjadi kesalahan. Silakan coba lagi.';
+
+  @override
+  String get welcomeBackSimple => 'Selamat datang kembali';
 }

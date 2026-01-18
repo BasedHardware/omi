@@ -2269,5 +2269,7 @@
   "content": "Inhoud",
   "noContentToDisplay": "Geen inhoud om weer te geven",
   "noSummary": "Geen samenvatting",
-  "updateOmiFirmware": "Omi-firmware bijwerken"
+  "updateOmiFirmware": "Omi-firmware bijwerken",
+  "anErrorOccurredTryAgain": "Er is een fout opgetreden. Probeer het opnieuw.",
+  "welcomeBackSimple": "Welkom terug"
 }

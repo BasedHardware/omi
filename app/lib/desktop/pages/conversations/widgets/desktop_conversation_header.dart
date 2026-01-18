@@ -59,7 +59,7 @@ class _DesktopConversationHeaderState extends State<DesktopConversationHeader> w
                 bottom: responsive.spacing(baseSpacing: 8),
               ),
               child: Text(
-                context.l10n.welcomeBack,
+                context.l10n.welcomeBackSimple,
                 style: TextStyle(
                   fontSize: responsive.responsiveFontSize(baseFontSize: 16),
                   fontWeight: FontWeight.w500,

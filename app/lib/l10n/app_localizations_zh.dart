@@ -4995,4 +4995,179 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get pleaseEnterValidEmail => '请输入有效的电子邮件地址';
+
+  @override
+  String get syncingYourRecordings => '正在同步您的录音';
+
+  @override
+  String get syncYourRecordings => '同步您的录音';
+
+  @override
+  String get syncNow => '立即同步';
+
+  @override
+  String get error => '错误';
+
+  @override
+  String get speechSamples => '语音样本';
+
+  @override
+  String additionalSampleIndex(String index) {
+    return '附加样本 $index';
+  }
+
+  @override
+  String durationSeconds(String seconds) {
+    return '时长: $seconds 秒';
+  }
+
+  @override
+  String get additionalSpeechSampleRemoved => '已删除附加语音样本';
+
+  @override
+  String get consentDataMessage => '继续即表示您与此应用共享的所有数据（包括您的对话、录音和个人信息）将安全存储在我们的服务器上，以便为您提供AI驱动的洞察并启用所有应用功能。';
+
+  @override
+  String get tasksEmptyStateMessage => '来自您对话的任务将显示在这里。\n点击 + 手动创建。';
+
+  @override
+  String get clearChatAction => '清除聊天';
+
+  @override
+  String get enableApps => '启用应用';
+
+  @override
+  String get omiAppName => 'Omi';
+
+  @override
+  String get showMore => '显示更多 ↓';
+
+  @override
+  String get showLess => '收起 ↑';
+
+  @override
+  String get loadingYourRecording => '正在加载您的录音...';
+
+  @override
+  String get photoDiscardedMessage => '此照片因不重要而被丢弃。';
+
+  @override
+  String get analyzing => '分析中...';
+
+  @override
+  String get searchCountries => '搜索国家...';
+
+  @override
+  String get checkingAppleWatch => '正在检查 Apple Watch...';
+
+  @override
+  String get installOmiOnAppleWatch => '在您的 Apple Watch 上\n安装 Omi';
+
+  @override
+  String get installOmiOnAppleWatchDescription => '要将 Apple Watch 与 Omi 配合使用，您需要先在手表上安装 Omi 应用。';
+
+  @override
+  String get openOmiOnAppleWatch => '在您的 Apple Watch 上\n打开 Omi';
+
+  @override
+  String get openOmiOnAppleWatchDescription => 'Omi 应用已安装在您的 Apple Watch 上。打开它并点击开始。';
+
+  @override
+  String get openWatchApp => '打开 Watch 应用';
+
+  @override
+  String get iveInstalledAndOpenedTheApp => '我已安装并打开应用';
+
+  @override
+  String get unableToOpenWatchApp => '无法打开 Apple Watch 应用。请在 Apple Watch 上手动打开 Watch 应用，并从「可用应用」部分安装 Omi。';
+
+  @override
+  String get appleWatchConnectedSuccessfully => 'Apple Watch 连接成功！';
+
+  @override
+  String get appleWatchNotReachable => '仍无法连接 Apple Watch。请确保 Omi 应用在手表上处于打开状态。';
+
+  @override
+  String errorCheckingConnection(String error) {
+    return '检查连接时出错：$error';
+  }
+
+  @override
+  String get muted => '已静音';
+
+  @override
+  String get processNow => '立即处理';
+
+  @override
+  String get finishedConversation => '结束对话？';
+
+  @override
+  String get stopRecordingConfirmation => '您确定要停止录音并立即总结对话吗？';
+
+  @override
+  String get conversationEndsManually => '对话只能手动结束。';
+
+  @override
+  String conversationSummarizedAfterMinutes(int minutes, String suffix) {
+    return '对话将在$minutes分钟$suffix无声后进行总结。';
+  }
+
+  @override
+  String get dontAskAgain => '不再询问';
+
+  @override
+  String get waitingForTranscriptOrPhotos => '等待转录或照片...';
+
+  @override
+  String get noSummaryYet => '暂无摘要';
+
+  @override
+  String hints(String text) {
+    return '提示: $text';
+  }
+
+  @override
+  String get testConversationPrompt => '测试对话提示';
+
+  @override
+  String get prompt => '提示';
+
+  @override
+  String get result => '结果';
+
+  @override
+  String get compareTranscripts => '比较转录';
+
+  @override
+  String get notHelpful => '没有帮助';
+
+  @override
+  String get exportTasksWithOneTap => '一键导出任务！';
+
+  @override
+  String get inProgress => '处理中';
+
+  @override
+  String get photos => '照片';
+
+  @override
+  String get rawData => '原始数据';
+
+  @override
+  String get content => '内容';
+
+  @override
+  String get noContentToDisplay => '没有可显示的内容';
+
+  @override
+  String get noSummary => '无摘要';
+
+  @override
+  String get updateOmiFirmware => '更新omi固件';
+
+  @override
+  String get anErrorOccurredTryAgain => '发生错误，请重试。';
+
+  @override
+  String get welcomeBackSimple => '欢迎回来';
 }

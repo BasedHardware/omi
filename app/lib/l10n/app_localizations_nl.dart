@@ -5113,4 +5113,186 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get pleaseEnterValidEmail => 'Voer een geldig e-mailadres in';
+
+  @override
+  String get syncingYourRecordings => 'Je opnames synchroniseren';
+
+  @override
+  String get syncYourRecordings => 'Synchroniseer je opnames';
+
+  @override
+  String get syncNow => 'Nu synchroniseren';
+
+  @override
+  String get error => 'Fout';
+
+  @override
+  String get speechSamples => 'Spraakvoorbeelden';
+
+  @override
+  String additionalSampleIndex(String index) {
+    return 'Extra voorbeeld $index';
+  }
+
+  @override
+  String durationSeconds(String seconds) {
+    return 'Duur: $seconds seconden';
+  }
+
+  @override
+  String get additionalSpeechSampleRemoved => 'Extra spraakvoorbeeld verwijderd';
+
+  @override
+  String get consentDataMessage =>
+      'Door verder te gaan, worden alle gegevens die je deelt met deze app (inclusief je gesprekken, opnames en persoonlijke informatie) veilig opgeslagen op onze servers om je AI-aangedreven inzichten te bieden en alle app-functies mogelijk te maken.';
+
+  @override
+  String get tasksEmptyStateMessage =>
+      'Taken uit je gesprekken verschijnen hier.\nTik op + om er handmatig een te maken.';
+
+  @override
+  String get clearChatAction => 'Chat wissen';
+
+  @override
+  String get enableApps => 'Apps inschakelen';
+
+  @override
+  String get omiAppName => 'Omi';
+
+  @override
+  String get showMore => 'toon meer ↓';
+
+  @override
+  String get showLess => 'toon minder ↑';
+
+  @override
+  String get loadingYourRecording => 'Uw opname laden...';
+
+  @override
+  String get photoDiscardedMessage => 'Deze foto is verwijderd omdat deze niet significant was.';
+
+  @override
+  String get analyzing => 'Analyseren...';
+
+  @override
+  String get searchCountries => 'Landen zoeken...';
+
+  @override
+  String get checkingAppleWatch => 'Apple Watch controleren...';
+
+  @override
+  String get installOmiOnAppleWatch => 'Installeer Omi op je\nApple Watch';
+
+  @override
+  String get installOmiOnAppleWatchDescription =>
+      'Om je Apple Watch met Omi te gebruiken, moet je eerst de Omi-app op je horloge installeren.';
+
+  @override
+  String get openOmiOnAppleWatch => 'Open Omi op je\nApple Watch';
+
+  @override
+  String get openOmiOnAppleWatchDescription =>
+      'De Omi-app is geïnstalleerd op je Apple Watch. Open deze en tik op Start om te beginnen.';
+
+  @override
+  String get openWatchApp => 'Watch-app openen';
+
+  @override
+  String get iveInstalledAndOpenedTheApp => 'Ik heb de app geïnstalleerd en geopend';
+
+  @override
+  String get unableToOpenWatchApp =>
+      'Kan Apple Watch-app niet openen. Open handmatig de Watch-app op je Apple Watch en installeer Omi vanuit het gedeelte \"Beschikbare apps\".';
+
+  @override
+  String get appleWatchConnectedSuccessfully => 'Apple Watch succesvol verbonden!';
+
+  @override
+  String get appleWatchNotReachable =>
+      'Apple Watch nog steeds niet bereikbaar. Zorg ervoor dat de Omi-app geopend is op je horloge.';
+
+  @override
+  String errorCheckingConnection(String error) {
+    return 'Fout bij controleren verbinding: $error';
+  }
+
+  @override
+  String get muted => 'Gedempt';
+
+  @override
+  String get processNow => 'Nu verwerken';
+
+  @override
+  String get finishedConversation => 'Gesprek beëindigd?';
+
+  @override
+  String get stopRecordingConfirmation =>
+      'Weet je zeker dat je de opname wilt stoppen en het gesprek nu wilt samenvatten?';
+
+  @override
+  String get conversationEndsManually => 'Het gesprek eindigt alleen handmatig.';
+
+  @override
+  String conversationSummarizedAfterMinutes(int minutes, String suffix) {
+    return 'Het gesprek wordt samengevat na $minutes minuut$suffix stilte.';
+  }
+
+  @override
+  String get dontAskAgain => 'Niet opnieuw vragen';
+
+  @override
+  String get waitingForTranscriptOrPhotos => 'Wachten op transcriptie of foto\'s...';
+
+  @override
+  String get noSummaryYet => 'Nog geen samenvatting';
+
+  @override
+  String hints(String text) {
+    return 'Tips: $text';
+  }
+
+  @override
+  String get testConversationPrompt => 'Test gespreksprompt';
+
+  @override
+  String get prompt => 'Prompt';
+
+  @override
+  String get result => 'Resultaat';
+
+  @override
+  String get compareTranscripts => 'Transcripties vergelijken';
+
+  @override
+  String get notHelpful => 'Niet nuttig';
+
+  @override
+  String get exportTasksWithOneTap => 'Exporteer taken met één tik!';
+
+  @override
+  String get inProgress => 'Bezig';
+
+  @override
+  String get photos => 'Foto\'s';
+
+  @override
+  String get rawData => 'Ruwe gegevens';
+
+  @override
+  String get content => 'Inhoud';
+
+  @override
+  String get noContentToDisplay => 'Geen inhoud om weer te geven';
+
+  @override
+  String get noSummary => 'Geen samenvatting';
+
+  @override
+  String get updateOmiFirmware => 'Omi-firmware bijwerken';
+
+  @override
+  String get anErrorOccurredTryAgain => 'Er is een fout opgetreden. Probeer het opnieuw.';
+
+  @override
+  String get welcomeBackSimple => 'Welkom terug';
 }

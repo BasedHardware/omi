@@ -1898,5 +1898,7 @@
   "content": "Contenido",
   "noContentToDisplay": "No hay contenido para mostrar",
   "noSummary": "Sin resumen",
-  "updateOmiFirmware": "Actualizar firmware de omi"
+  "updateOmiFirmware": "Actualizar firmware de omi",
+  "anErrorOccurredTryAgain": "Ocurrió un error. Por favor, inténtalo de nuevo.",
+  "welcomeBackSimple": "Bienvenido de nuevo"
 }

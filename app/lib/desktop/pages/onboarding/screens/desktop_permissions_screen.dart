@@ -110,7 +110,7 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen>
               onPressed: () => Navigator.of(context).pop(),
             ),
             OmiButton(
-              label: context.l10n.continue_,
+              label: context.l10n.continueButton,
               onPressed: () {
                 Navigator.of(context).pop();
                 onContinue();
@@ -294,7 +294,7 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen>
                                     : (provider.hasMicrophonePermission ||
                                             provider.hasScreenCapturePermission ||
                                             provider.hasAccessibilityPermission)
-                                        ? context.l10n.continue_
+                                        ? context.l10n.continueButton
                                         : context.l10n.skip,
                                 onPressed: provider.isLoading
                                     ? null

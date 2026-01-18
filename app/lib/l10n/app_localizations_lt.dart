@@ -5101,4 +5101,185 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get pleaseEnterValidEmail => 'Įveskite galiojantį el. pašto adresą';
+
+  @override
+  String get syncingYourRecordings => 'Sinchronizuojami jūsų įrašai';
+
+  @override
+  String get syncYourRecordings => 'Sinchronizuokite savo įrašus';
+
+  @override
+  String get syncNow => 'Sinchronizuoti dabar';
+
+  @override
+  String get error => 'Klaida';
+
+  @override
+  String get speechSamples => 'Balso pavyzdžiai';
+
+  @override
+  String additionalSampleIndex(String index) {
+    return 'Papildomas pavyzdys $index';
+  }
+
+  @override
+  String durationSeconds(String seconds) {
+    return 'Trukmė: $seconds sekundžių';
+  }
+
+  @override
+  String get additionalSpeechSampleRemoved => 'Papildomas balso pavyzdys pašalintas';
+
+  @override
+  String get consentDataMessage =>
+      'Tęsdami, visi duomenys, kuriuos bendrinate su šia programa (įskaitant jūsų pokalbius, įrašus ir asmeninę informaciją), bus saugiai saugomi mūsų serveriuose, kad galėtume teikti jums dirbtinio intelekto paremtas įžvalgas ir įjungti visas programos funkcijas.';
+
+  @override
+  String get tasksEmptyStateMessage =>
+      'Užduotys iš jūsų pokalbių bus rodomos čia.\nBakstelėkite + norėdami sukurti rankiniu būdu.';
+
+  @override
+  String get clearChatAction => 'Išvalyti pokalbį';
+
+  @override
+  String get enableApps => 'Įjungti programas';
+
+  @override
+  String get omiAppName => 'Omi';
+
+  @override
+  String get showMore => 'rodyti daugiau ↓';
+
+  @override
+  String get showLess => 'rodyti mažiau ↑';
+
+  @override
+  String get loadingYourRecording => 'Įkeliamas įrašas...';
+
+  @override
+  String get photoDiscardedMessage => 'Ši nuotrauka buvo atmesta, nes nebuvo reikšminga.';
+
+  @override
+  String get analyzing => 'Analizuojama...';
+
+  @override
+  String get searchCountries => 'Ieškoti šalių...';
+
+  @override
+  String get checkingAppleWatch => 'Tikrinamas Apple Watch...';
+
+  @override
+  String get installOmiOnAppleWatch => 'Įdiekite Omi savo\nApple Watch';
+
+  @override
+  String get installOmiOnAppleWatchDescription =>
+      'Norėdami naudoti Apple Watch su Omi, pirmiausia turite įdiegti Omi programą savo laikrodyje.';
+
+  @override
+  String get openOmiOnAppleWatch => 'Atidarykite Omi savo\nApple Watch';
+
+  @override
+  String get openOmiOnAppleWatchDescription =>
+      'Omi programa įdiegta jūsų Apple Watch. Atidarykite ją ir bakstelėkite Pradėti.';
+
+  @override
+  String get openWatchApp => 'Atidaryti Watch programą';
+
+  @override
+  String get iveInstalledAndOpenedTheApp => 'Įdiegiau ir atidariau programą';
+
+  @override
+  String get unableToOpenWatchApp =>
+      'Nepavyko atidaryti Apple Watch programos. Rankiniu būdu atidarykite Watch programą savo Apple Watch ir įdiekite Omi iš skyriaus \"Galimos programos\".';
+
+  @override
+  String get appleWatchConnectedSuccessfully => 'Apple Watch sėkmingai prijungtas!';
+
+  @override
+  String get appleWatchNotReachable =>
+      'Apple Watch vis dar nepasiekiamas. Įsitikinkite, kad Omi programa atidaryta jūsų laikrodyje.';
+
+  @override
+  String errorCheckingConnection(String error) {
+    return 'Ryšio tikrinimo klaida: $error';
+  }
+
+  @override
+  String get muted => 'Nutildyta';
+
+  @override
+  String get processNow => 'Apdoroti dabar';
+
+  @override
+  String get finishedConversation => 'Pokalbis baigtas?';
+
+  @override
+  String get stopRecordingConfirmation => 'Ar tikrai norite sustabdyti įrašymą ir apibendrinti pokalbį dabar?';
+
+  @override
+  String get conversationEndsManually => 'Pokalbis baigsis tik rankiniu būdu.';
+
+  @override
+  String conversationSummarizedAfterMinutes(int minutes, String suffix) {
+    return 'Pokalbis apibendrinamas po $minutes minučių$suffix tylos.';
+  }
+
+  @override
+  String get dontAskAgain => 'Daugiau neklausti';
+
+  @override
+  String get waitingForTranscriptOrPhotos => 'Laukiama transkripcijos arba nuotraukų...';
+
+  @override
+  String get noSummaryYet => 'Santraukos dar nėra';
+
+  @override
+  String hints(String text) {
+    return 'Patarimai: $text';
+  }
+
+  @override
+  String get testConversationPrompt => 'Testuoti pokalbio raginimą';
+
+  @override
+  String get prompt => 'Raginimas';
+
+  @override
+  String get result => 'Rezultatas';
+
+  @override
+  String get compareTranscripts => 'Palyginti transkripcijas';
+
+  @override
+  String get notHelpful => 'Nenaudinga';
+
+  @override
+  String get exportTasksWithOneTap => 'Eksportuokite užduotis vienu bakstelėjimu!';
+
+  @override
+  String get inProgress => 'Vykdoma';
+
+  @override
+  String get photos => 'Nuotraukos';
+
+  @override
+  String get rawData => 'Neapdoroti duomenys';
+
+  @override
+  String get content => 'Turinys';
+
+  @override
+  String get noContentToDisplay => 'Nėra turinio rodyti';
+
+  @override
+  String get noSummary => 'Nėra santraukos';
+
+  @override
+  String get updateOmiFirmware => 'Atnaujinti omi programinę įrangą';
+
+  @override
+  String get anErrorOccurredTryAgain => 'Įvyko klaida. Bandykite dar kartą.';
+
+  @override
+  String get welcomeBackSimple => 'Sveiki sugrįžę';
 }

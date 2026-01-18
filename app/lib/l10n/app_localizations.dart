@@ -9644,6 +9644,336 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Please enter a valid email address'**
   String get pleaseEnterValidEmail;
+
+  /// Status message shown while recordings are being synced
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing your recordings'**
+  String get syncingYourRecordings;
+
+  /// Label prompting user to sync their recordings
+  ///
+  /// In en, this message translates to:
+  /// **'Sync your recordings'**
+  String get syncYourRecordings;
+
+  /// Button text to start syncing recordings immediately
+  ///
+  /// In en, this message translates to:
+  /// **'Sync Now'**
+  String get syncNow;
+
+  /// Generic error label shown when an operation fails
+  ///
+  /// In en, this message translates to:
+  /// **'Error'**
+  String get error;
+
+  /// Title for the speech samples page
+  ///
+  /// In en, this message translates to:
+  /// **'Speech Samples'**
+  String get speechSamples;
+
+  /// Title for additional speech samples with index number
+  ///
+  /// In en, this message translates to:
+  /// **'Additional Sample {index}'**
+  String additionalSampleIndex(String index);
+
+  /// Shows the duration of a speech sample in seconds
+  ///
+  /// In en, this message translates to:
+  /// **'Duration: {seconds} seconds'**
+  String durationSeconds(String seconds);
+
+  /// Confirmation message when an additional speech sample is deleted
+  ///
+  /// In en, this message translates to:
+  /// **'Additional Speech Sample Removed'**
+  String get additionalSpeechSampleRemoved;
+
+  /// Consent message explaining how user data will be stored and used
+  ///
+  /// In en, this message translates to:
+  /// **'By continuing, all data you share with this app (including your conversations, recordings, and personal information) will be securely stored on our servers to provide you with AI-powered insights and enable all app features.'**
+  String get consentDataMessage;
+
+  /// Empty state message shown when there are no tasks, with instruction to tap + button
+  ///
+  /// In en, this message translates to:
+  /// **'Tasks from your conversations will appear here.\nTap + to create one manually.'**
+  String get tasksEmptyStateMessage;
+
+  /// Menu item text for clearing chat history
+  ///
+  /// In en, this message translates to:
+  /// **'Clear Chat'**
+  String get clearChatAction;
+
+  /// Menu item text to navigate to apps page and enable more chat apps
+  ///
+  /// In en, this message translates to:
+  /// **'Enable Apps'**
+  String get enableApps;
+
+  /// The Omi app/assistant name shown in chat app selection
+  ///
+  /// In en, this message translates to:
+  /// **'Omi'**
+  String get omiAppName;
+
+  /// Text shown to expand collapsed content, with down arrow
+  ///
+  /// In en, this message translates to:
+  /// **'show more ↓'**
+  String get showMore;
+
+  /// Text shown to collapse expanded content, with up arrow
+  ///
+  /// In en, this message translates to:
+  /// **'show less ↑'**
+  String get showLess;
+
+  /// Loading message shown while audio waveform is being processed
+  ///
+  /// In en, this message translates to:
+  /// **'Loading your recording...'**
+  String get loadingYourRecording;
+
+  /// Message shown when a photo was discarded as not significant
+  ///
+  /// In en, this message translates to:
+  /// **'This photo was discarded as it was not significant.'**
+  String get photoDiscardedMessage;
+
+  /// Loading text shown while analyzing a photo
+  ///
+  /// In en, this message translates to:
+  /// **'Analyzing...'**
+  String get analyzing;
+
+  /// Placeholder text for country search field
+  ///
+  /// In en, this message translates to:
+  /// **'Search countries...'**
+  String get searchCountries;
+
+  /// Loading text while checking Apple Watch status
+  ///
+  /// In en, this message translates to:
+  /// **'Checking Apple Watch...'**
+  String get checkingAppleWatch;
+
+  /// Title prompting user to install Omi on Apple Watch
+  ///
+  /// In en, this message translates to:
+  /// **'Install Omi on your\nApple Watch'**
+  String get installOmiOnAppleWatch;
+
+  /// Description explaining need to install Omi app on watch
+  ///
+  /// In en, this message translates to:
+  /// **'To use your Apple Watch with Omi, you need to install the Omi app on your watch first.'**
+  String get installOmiOnAppleWatchDescription;
+
+  /// Title prompting user to open Omi on Apple Watch
+  ///
+  /// In en, this message translates to:
+  /// **'Open Omi on your\nApple Watch'**
+  String get openOmiOnAppleWatch;
+
+  /// Description explaining Omi is installed and user should open it
+  ///
+  /// In en, this message translates to:
+  /// **'The Omi app is installed on your Apple Watch. Open it and tap Start to begin.'**
+  String get openOmiOnAppleWatchDescription;
+
+  /// Button text to open Watch app on iPhone
+  ///
+  /// In en, this message translates to:
+  /// **'Open Watch App'**
+  String get openWatchApp;
+
+  /// Button text confirming user has installed and opened the app
+  ///
+  /// In en, this message translates to:
+  /// **'I\'ve Installed & Opened the App'**
+  String get iveInstalledAndOpenedTheApp;
+
+  /// Error message when Watch app cannot be opened automatically
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to open Apple Watch app. Please manually open the Watch app on your Apple Watch and install Omi from the \"Available Apps\" section.'**
+  String get unableToOpenWatchApp;
+
+  /// Success message when Apple Watch connects
+  ///
+  /// In en, this message translates to:
+  /// **'Apple Watch connected successfully!'**
+  String get appleWatchConnectedSuccessfully;
+
+  /// Error message when Apple Watch is not reachable
+  ///
+  /// In en, this message translates to:
+  /// **'Apple Watch still not reachable. Please make sure the Omi app is open on your watch.'**
+  String get appleWatchNotReachable;
+
+  /// Error message with error details when connection check fails
+  ///
+  /// In en, this message translates to:
+  /// **'Error checking connection: {error}'**
+  String errorCheckingConnection(String error);
+
+  /// Status text shown when microphone is muted
+  ///
+  /// In en, this message translates to:
+  /// **'Muted'**
+  String get muted;
+
+  /// Button text to process/summarize the conversation immediately
+  ///
+  /// In en, this message translates to:
+  /// **'Process Now'**
+  String get processNow;
+
+  /// Dialog title asking if user wants to end conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Finished Conversation?'**
+  String get finishedConversation;
+
+  /// Confirmation message for stopping recording and summarizing
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to stop recording and summarize the conversation now?'**
+  String get stopRecordingConfirmation;
+
+  /// Hint text explaining conversation only ends manually
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation will only end manually.'**
+  String get conversationEndsManually;
+
+  /// Hint text showing how many minutes of silence before auto-summary
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation is summarized after {minutes} minute{suffix} of no speech.'**
+  String conversationSummarizedAfterMinutes(int minutes, String suffix);
+
+  /// Checkbox label to not show confirmation dialog again
+  ///
+  /// In en, this message translates to:
+  /// **'Don\'t ask me again'**
+  String get dontAskAgain;
+
+  /// Placeholder text shown while waiting for content
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for transcript or photos...'**
+  String get waitingForTranscriptOrPhotos;
+
+  /// Text shown when no summary is available yet
+  ///
+  /// In en, this message translates to:
+  /// **'No summary yet'**
+  String get noSummaryYet;
+
+  /// Label for hints section with dynamic text
+  ///
+  /// In en, this message translates to:
+  /// **'Hints: {text}'**
+  String hints(String text);
+
+  /// App bar title for testing conversation prompts page
+  ///
+  /// In en, this message translates to:
+  /// **'Test Conversation Prompt'**
+  String get testConversationPrompt;
+
+  /// Label for prompt input field
+  ///
+  /// In en, this message translates to:
+  /// **'Prompt'**
+  String get prompt;
+
+  /// Label for result section showing prompt output
+  ///
+  /// In en, this message translates to:
+  /// **'Result'**
+  String get result;
+
+  /// App bar title for comparing transcripts from different services
+  ///
+  /// In en, this message translates to:
+  /// **'Compare Transcripts'**
+  String get compareTranscripts;
+
+  /// Label for thumbs down button to indicate response was not helpful
+  ///
+  /// In en, this message translates to:
+  /// **'Not Helpful'**
+  String get notHelpful;
+
+  /// Banner message promoting task export integration feature
+  ///
+  /// In en, this message translates to:
+  /// **'Export tasks with one tap!'**
+  String get exportTasksWithOneTap;
+
+  /// Title for conversation being processed
+  ///
+  /// In en, this message translates to:
+  /// **'In progress'**
+  String get inProgress;
+
+  /// Tab label for photos content
+  ///
+  /// In en, this message translates to:
+  /// **'Photos'**
+  String get photos;
+
+  /// Tab label for raw data content
+  ///
+  /// In en, this message translates to:
+  /// **'Raw Data'**
+  String get rawData;
+
+  /// Tab label for content
+  ///
+  /// In en, this message translates to:
+  /// **'Content'**
+  String get content;
+
+  /// Message when there is no content available
+  ///
+  /// In en, this message translates to:
+  /// **'No content to display'**
+  String get noContentToDisplay;
+
+  /// Message when no summary is available
+  ///
+  /// In en, this message translates to:
+  /// **'No summary'**
+  String get noSummary;
+
+  /// Button text to update Omi device firmware
+  ///
+  /// In en, this message translates to:
+  /// **'Update omi firmware'**
+  String get updateOmiFirmware;
+
+  /// Generic error message asking user to try again
+  ///
+  /// In en, this message translates to:
+  /// **'An error occurred. Please try again.'**
+  String get anErrorOccurredTryAgain;
+
+  /// Simple welcome message without user name
+  ///
+  /// In en, this message translates to:
+  /// **'Welcome back'**
+  String get welcomeBackSimple;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
