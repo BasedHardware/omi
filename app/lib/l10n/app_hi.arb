@@ -1875,5 +1875,15 @@
   "unableToOpenWatchApp": "Apple Watch ऐप खोलने में असमर्थ। कृपया अपने Apple Watch पर Watch ऐप मैन्युअल रूप से खोलें और \"उपलब्ध ऐप्स\" सेक्शन से Omi इंस्टॉल करें।",
   "appleWatchConnectedSuccessfully": "Apple Watch सफलतापूर्वक कनेक्ट हो गया!",
   "appleWatchNotReachable": "Apple Watch अभी भी पहुंच योग्य नहीं है। कृपया सुनिश्चित करें कि Omi ऐप आपकी घड़ी पर खुला है।",
-  "errorCheckingConnection": "कनेक्शन जाँचने में त्रुटि: {error}"
+  "errorCheckingConnection": "कनेक्शन जाँचने में त्रुटि: {error}",
+  "muted": "म्यूट",
+  "processNow": "अभी प्रोसेस करें",
+  "finishedConversation": "बातचीत समाप्त?",
+  "stopRecordingConfirmation": "क्या आप वाकई रिकॉर्डिंग रोकना और बातचीत का सारांश अभी बनाना चाहते हैं?",
+  "conversationEndsManually": "बातचीत केवल मैन्युअल रूप से समाप्त होगी।",
+  "conversationSummarizedAfterMinutes": "बातचीत {minutes} मिनट{suffix} की चुप्पी के बाद सारांशित होती है।",
+  "dontAskAgain": "मुझसे दोबारा मत पूछो",
+  "waitingForTranscriptOrPhotos": "ट्रांसक्रिप्ट या फ़ोटो की प्रतीक्षा...",
+  "noSummaryYet": "अभी तक कोई सारांश नहीं",
+  "hints": "संकेत: {text}"
 }

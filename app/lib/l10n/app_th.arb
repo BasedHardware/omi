@@ -3428,5 +3428,15 @@
   "unableToOpenWatchApp": "ไม่สามารถเปิดแอป Apple Watch ได้ กรุณาเปิดแอป Watch บน Apple Watch ด้วยตนเองและติดตั้ง Omi จากส่วน \"แอปที่มี\"",
   "appleWatchConnectedSuccessfully": "เชื่อมต่อ Apple Watch สำเร็จ!",
   "appleWatchNotReachable": "ยังไม่สามารถเข้าถึง Apple Watch ได้ โปรดตรวจสอบว่าแอป Omi เปิดอยู่บนนาฬิกาของคุณ",
-  "errorCheckingConnection": "เกิดข้อผิดพลาดในการตรวจสอบการเชื่อมต่อ: {error}"
+  "errorCheckingConnection": "เกิดข้อผิดพลาดในการตรวจสอบการเชื่อมต่อ: {error}",
+  "muted": "ปิดเสียง",
+  "processNow": "ประมวลผลเดี๋ยวนี้",
+  "finishedConversation": "จบการสนทนา?",
+  "stopRecordingConfirmation": "คุณแน่ใจหรือไม่ว่าต้องการหยุดบันทึกและสรุปการสนทนาตอนนี้?",
+  "conversationEndsManually": "การสนทนาจะจบลงด้วยตนเองเท่านั้น",
+  "conversationSummarizedAfterMinutes": "การสนทนาจะถูกสรุปหลังจาก {minutes} นาที{suffix} ที่ไม่มีเสียงพูด",
+  "dontAskAgain": "ไม่ต้องถามอีก",
+  "waitingForTranscriptOrPhotos": "กำลังรอการถอดเสียงหรือรูปภาพ...",
+  "noSummaryYet": "ยังไม่มีสรุป",
+  "hints": "คำแนะนำ: {text}"
 }

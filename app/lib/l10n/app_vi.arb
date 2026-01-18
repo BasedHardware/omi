@@ -3428,5 +3428,15 @@
   "unableToOpenWatchApp": "Không thể mở ứng dụng Apple Watch. Vui lòng mở ứng dụng Watch trên Apple Watch và cài đặt Omi từ phần \"Ứng dụng có sẵn\".",
   "appleWatchConnectedSuccessfully": "Kết nối Apple Watch thành công!",
   "appleWatchNotReachable": "Vẫn không thể kết nối Apple Watch. Vui lòng đảm bảo ứng dụng Omi đang mở trên đồng hồ.",
-  "errorCheckingConnection": "Lỗi kiểm tra kết nối: {error}"
+  "errorCheckingConnection": "Lỗi kiểm tra kết nối: {error}",
+  "muted": "Đã tắt tiếng",
+  "processNow": "Xử lý ngay",
+  "finishedConversation": "Kết thúc cuộc trò chuyện?",
+  "stopRecordingConfirmation": "Bạn có chắc muốn dừng ghi âm và tóm tắt cuộc trò chuyện ngay bây giờ không?",
+  "conversationEndsManually": "Cuộc trò chuyện sẽ chỉ kết thúc thủ công.",
+  "conversationSummarizedAfterMinutes": "Cuộc trò chuyện được tóm tắt sau {minutes} phút{suffix} im lặng.",
+  "dontAskAgain": "Không hỏi lại",
+  "waitingForTranscriptOrPhotos": "Đang chờ bản ghi hoặc ảnh...",
+  "noSummaryYet": "Chưa có tóm tắt",
+  "hints": "Gợi ý: {text}"
 }

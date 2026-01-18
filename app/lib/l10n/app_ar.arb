@@ -3446,5 +3446,15 @@
   "unableToOpenWatchApp": "تعذر فتح تطبيق Apple Watch. يرجى فتح تطبيق Watch يدويًا على Apple Watch وتثبيت Omi من قسم \"التطبيقات المتاحة\".",
   "appleWatchConnectedSuccessfully": "تم توصيل Apple Watch بنجاح!",
   "appleWatchNotReachable": "Apple Watch لا يزال غير قابل للوصول. يرجى التأكد من أن تطبيق Omi مفتوح على ساعتك.",
-  "errorCheckingConnection": "خطأ في التحقق من الاتصال: {error}"
+  "errorCheckingConnection": "خطأ في التحقق من الاتصال: {error}",
+  "muted": "مكتوم",
+  "processNow": "معالجة الآن",
+  "finishedConversation": "هل انتهت المحادثة؟",
+  "stopRecordingConfirmation": "هل أنت متأكد أنك تريد إيقاف التسجيل وتلخيص المحادثة الآن؟",
+  "conversationEndsManually": "ستنتهي المحادثة يدويًا فقط.",
+  "conversationSummarizedAfterMinutes": "يتم تلخيص المحادثة بعد {minutes} دقيقة{suffix} من عدم الكلام.",
+  "dontAskAgain": "لا تسألني مرة أخرى",
+  "waitingForTranscriptOrPhotos": "في انتظار النص أو الصور...",
+  "noSummaryYet": "لا يوجد ملخص بعد",
+  "hints": "تلميحات: {text}"
 }

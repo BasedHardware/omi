@@ -6173,5 +6173,61 @@
         "example": "timeout"
       }
     }
+  },
+  "muted": "Muted",
+  "@muted": {
+    "description": "Status text shown when microphone is muted"
+  },
+  "processNow": "Process Now",
+  "@processNow": {
+    "description": "Button text to process/summarize the conversation immediately"
+  },
+  "finishedConversation": "Finished Conversation?",
+  "@finishedConversation": {
+    "description": "Dialog title asking if user wants to end conversation"
+  },
+  "stopRecordingConfirmation": "Are you sure you want to stop recording and summarize the conversation now?",
+  "@stopRecordingConfirmation": {
+    "description": "Confirmation message for stopping recording and summarizing"
+  },
+  "conversationEndsManually": "Conversation will only end manually.",
+  "@conversationEndsManually": {
+    "description": "Hint text explaining conversation only ends manually"
+  },
+  "conversationSummarizedAfterMinutes": "Conversation is summarized after {minutes} minute{suffix} of no speech.",
+  "@conversationSummarizedAfterMinutes": {
+    "description": "Hint text showing how many minutes of silence before auto-summary",
+    "placeholders": {
+      "minutes": {
+        "type": "int",
+        "example": "2"
+      },
+      "suffix": {
+        "type": "String",
+        "example": "s"
+      }
+    }
+  },
+  "dontAskAgain": "Don't ask me again",
+  "@dontAskAgain": {
+    "description": "Checkbox label to not show confirmation dialog again"
+  },
+  "waitingForTranscriptOrPhotos": "Waiting for transcript or photos...",
+  "@waitingForTranscriptOrPhotos": {
+    "description": "Placeholder text shown while waiting for content"
+  },
+  "noSummaryYet": "No summary yet",
+  "@noSummaryYet": {
+    "description": "Text shown when no summary is available yet"
+  },
+  "hints": "Hints: {text}",
+  "@hints": {
+    "description": "Label for hints section with dynamic text",
+    "placeholders": {
+      "text": {
+        "type": "String",
+        "example": "Conversation will only end manually."
+      }
+    }
   }
 }

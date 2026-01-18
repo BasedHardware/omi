@@ -3428,5 +3428,15 @@
   "unableToOpenWatchApp": "Nu se poate deschide aplicația Apple Watch. Deschide manual aplicația Watch pe Apple Watch și instalează Omi din secțiunea \"Aplicații disponibile\".",
   "appleWatchConnectedSuccessfully": "Apple Watch conectat cu succes!",
   "appleWatchNotReachable": "Apple Watch încă nu este accesibil. Asigură-te că aplicația Omi este deschisă pe ceas.",
-  "errorCheckingConnection": "Eroare la verificarea conexiunii: {error}"
+  "errorCheckingConnection": "Eroare la verificarea conexiunii: {error}",
+  "muted": "Dezactivat",
+  "processNow": "Procesează acum",
+  "finishedConversation": "Conversație terminată?",
+  "stopRecordingConfirmation": "Sigur doriți să opriți înregistrarea și să rezumați conversația acum?",
+  "conversationEndsManually": "Conversația se va încheia doar manual.",
+  "conversationSummarizedAfterMinutes": "Conversația este rezumată după {minutes} minut{suffix} de tăcere.",
+  "dontAskAgain": "Nu mai întreba",
+  "waitingForTranscriptOrPhotos": "Se așteaptă transcriere sau fotografii...",
+  "noSummaryYet": "Încă nu există rezumat",
+  "hints": "Indicii: {text}"
 }

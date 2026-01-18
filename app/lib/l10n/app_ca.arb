@@ -3430,5 +3430,15 @@
   "unableToOpenWatchApp": "No s'ha pogut obrir l'aplicació Apple Watch. Obre manualment l'aplicació Watch al teu Apple Watch i instal·la Omi des de la secció \"Aplicacions disponibles\".",
   "appleWatchConnectedSuccessfully": "Apple Watch connectat correctament!",
   "appleWatchNotReachable": "Apple Watch encara no és accessible. Assegura't que l'aplicació Omi estigui oberta al teu rellotge.",
-  "errorCheckingConnection": "Error en comprovar la connexió: {error}"
+  "errorCheckingConnection": "Error en comprovar la connexió: {error}",
+  "muted": "Silenciat",
+  "processNow": "Processar ara",
+  "finishedConversation": "Conversa acabada?",
+  "stopRecordingConfirmation": "Estàs segur que vols aturar la gravació i resumir la conversa ara?",
+  "conversationEndsManually": "La conversa només acabarà manualment.",
+  "conversationSummarizedAfterMinutes": "La conversa es resumeix després de {minutes} minut{suffix} sense parlar.",
+  "dontAskAgain": "No em tornis a preguntar",
+  "waitingForTranscriptOrPhotos": "Esperant transcripció o fotos...",
+  "noSummaryYet": "Encara no hi ha resum",
+  "hints": "Consells: {text}"
 }

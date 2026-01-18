@@ -3410,5 +3410,15 @@
   "unableToOpenWatchApp": "Apple Watch uygulaması açılamadı. Lütfen Apple Watch'unuzda Watch uygulamasını manuel olarak açın ve \"Mevcut Uygulamalar\" bölümünden Omi'yi yükleyin.",
   "appleWatchConnectedSuccessfully": "Apple Watch başarıyla bağlandı!",
   "appleWatchNotReachable": "Apple Watch hala erişilebilir değil. Lütfen Omi uygulamasının saatinizde açık olduğundan emin olun.",
-  "errorCheckingConnection": "Bağlantı kontrol hatası: {error}"
+  "errorCheckingConnection": "Bağlantı kontrol hatası: {error}",
+  "muted": "Sessiz",
+  "processNow": "Şimdi işle",
+  "finishedConversation": "Konuşma bitti mi?",
+  "stopRecordingConfirmation": "Kaydı durdurmak ve konuşmayı şimdi özetlemek istediğinizden emin misiniz?",
+  "conversationEndsManually": "Konuşma yalnızca manuel olarak sona erecektir.",
+  "conversationSummarizedAfterMinutes": "Konuşma {minutes} dakika{suffix} sessizlik sonrası özetlenir.",
+  "dontAskAgain": "Bir daha sorma",
+  "waitingForTranscriptOrPhotos": "Transkript veya fotoğraflar bekleniyor...",
+  "noSummaryYet": "Henüz özet yok",
+  "hints": "İpuçları: {text}"
 }

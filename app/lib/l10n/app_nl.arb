@@ -2246,5 +2246,15 @@
   "unableToOpenWatchApp": "Kan Apple Watch-app niet openen. Open handmatig de Watch-app op je Apple Watch en installeer Omi vanuit het gedeelte \"Beschikbare apps\".",
   "appleWatchConnectedSuccessfully": "Apple Watch succesvol verbonden!",
   "appleWatchNotReachable": "Apple Watch nog steeds niet bereikbaar. Zorg ervoor dat de Omi-app geopend is op je horloge.",
-  "errorCheckingConnection": "Fout bij controleren verbinding: {error}"
+  "errorCheckingConnection": "Fout bij controleren verbinding: {error}",
+  "muted": "Gedempt",
+  "processNow": "Nu verwerken",
+  "finishedConversation": "Gesprek beëindigd?",
+  "stopRecordingConfirmation": "Weet je zeker dat je de opname wilt stoppen en het gesprek nu wilt samenvatten?",
+  "conversationEndsManually": "Het gesprek eindigt alleen handmatig.",
+  "conversationSummarizedAfterMinutes": "Het gesprek wordt samengevat na {minutes} minuut{suffix} stilte.",
+  "dontAskAgain": "Niet opnieuw vragen",
+  "waitingForTranscriptOrPhotos": "Wachten op transcriptie of foto's...",
+  "noSummaryYet": "Nog geen samenvatting",
+  "hints": "Tips: {text}"
 }

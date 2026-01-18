@@ -3428,5 +3428,15 @@
   "unableToOpenWatchApp": "Tidak dapat membuka aplikasi Apple Watch. Silakan buka aplikasi Watch secara manual di Apple Watch Anda dan instal Omi dari bagian \"Aplikasi Tersedia\".",
   "appleWatchConnectedSuccessfully": "Apple Watch berhasil terhubung!",
   "appleWatchNotReachable": "Apple Watch masih tidak dapat dijangkau. Pastikan aplikasi Omi terbuka di jam tangan Anda.",
-  "errorCheckingConnection": "Kesalahan memeriksa koneksi: {error}"
+  "errorCheckingConnection": "Kesalahan memeriksa koneksi: {error}",
+  "muted": "Dibisukan",
+  "processNow": "Proses sekarang",
+  "finishedConversation": "Percakapan selesai?",
+  "stopRecordingConfirmation": "Apakah Anda yakin ingin menghentikan rekaman dan merangkum percakapan sekarang?",
+  "conversationEndsManually": "Percakapan hanya akan berakhir secara manual.",
+  "conversationSummarizedAfterMinutes": "Percakapan dirangkum setelah {minutes} menit{suffix} tanpa bicara.",
+  "dontAskAgain": "Jangan tanya lagi",
+  "waitingForTranscriptOrPhotos": "Menunggu transkrip atau foto...",
+  "noSummaryYet": "Belum ada ringkasan",
+  "hints": "Petunjuk: {text}"
 }

@@ -3428,5 +3428,15 @@
   "unableToOpenWatchApp": "Δεν είναι δυνατό το άνοιγμα της εφαρμογής Apple Watch. Ανοίξτε χειροκίνητα την εφαρμογή Watch στο Apple Watch και εγκαταστήστε το Omi από την ενότητα \"Διαθέσιμες εφαρμογές\".",
   "appleWatchConnectedSuccessfully": "Το Apple Watch συνδέθηκε επιτυχώς!",
   "appleWatchNotReachable": "Το Apple Watch δεν είναι ακόμα προσβάσιμο. Βεβαιωθείτε ότι η εφαρμογή Omi είναι ανοιχτή στο ρολόι σας.",
-  "errorCheckingConnection": "Σφάλμα ελέγχου σύνδεσης: {error}"
+  "errorCheckingConnection": "Σφάλμα ελέγχου σύνδεσης: {error}",
+  "muted": "Σίγαση",
+  "processNow": "Επεξεργασία τώρα",
+  "finishedConversation": "Τελείωσε η συνομιλία;",
+  "stopRecordingConfirmation": "Είστε σίγουροι ότι θέλετε να σταματήσετε την εγγραφή και να συνοψίσετε τη συνομιλία τώρα;",
+  "conversationEndsManually": "Η συνομιλία θα τελειώσει μόνο χειροκίνητα.",
+  "conversationSummarizedAfterMinutes": "Η συνομιλία συνοψίζεται μετά από {minutes} λεπτ{suffix} χωρίς ομιλία.",
+  "dontAskAgain": "Μη με ρωτήσεις ξανά",
+  "waitingForTranscriptOrPhotos": "Αναμονή για μεταγραφή ή φωτογραφίες...",
+  "noSummaryYet": "Δεν υπάρχει σύνοψη ακόμα",
+  "hints": "Συμβουλές: {text}"
 }

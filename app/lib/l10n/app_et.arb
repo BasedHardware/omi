@@ -3428,5 +3428,15 @@
   "unableToOpenWatchApp": "Apple Watchi rakendust ei saa avada. Avage Watchi rakendus käsitsi oma Apple Watchis ja installige Omi jaotisest \"Saadaolevad rakendused\".",
   "appleWatchConnectedSuccessfully": "Apple Watch ühendatud!",
   "appleWatchNotReachable": "Apple Watch pole veel kättesaadav. Veenduge, et Omi rakendus oleks teie kellas avatud.",
-  "errorCheckingConnection": "Ühenduse kontrollimisel ilmnes viga: {error}"
+  "errorCheckingConnection": "Ühenduse kontrollimisel ilmnes viga: {error}",
+  "muted": "Vaigistatud",
+  "processNow": "Töötle kohe",
+  "finishedConversation": "Vestlus lõppenud?",
+  "stopRecordingConfirmation": "Kas olete kindel, et soovite salvestamise peatada ja vestluse kohe kokku võtta?",
+  "conversationEndsManually": "Vestlus lõpeb ainult käsitsi.",
+  "conversationSummarizedAfterMinutes": "Vestlus võetakse kokku pärast {minutes} minut{suffix} vaikust.",
+  "dontAskAgain": "Ära küsi uuesti",
+  "waitingForTranscriptOrPhotos": "Ootan transkriptsiooni või fotosid...",
+  "noSummaryYet": "Kokkuvõtet veel pole",
+  "hints": "Vihjed: {text}"
 }

@@ -3430,5 +3430,15 @@
   "unableToOpenWatchApp": "Nelze otevřít aplikaci Apple Watch. Ručně otevřete aplikaci Watch na Apple Watch a nainstalujte Omi ze sekce \"Dostupné aplikace\".",
   "appleWatchConnectedSuccessfully": "Apple Watch úspěšně připojeny!",
   "appleWatchNotReachable": "Apple Watch stále není dostupné. Ujistěte se, že aplikace Omi je na hodinkách otevřená.",
-  "errorCheckingConnection": "Chyba při kontrole připojení: {error}"
+  "errorCheckingConnection": "Chyba při kontrole připojení: {error}",
+  "muted": "Ztlumeno",
+  "processNow": "Zpracovat nyní",
+  "finishedConversation": "Dokončená konverzace?",
+  "stopRecordingConfirmation": "Opravdu chcete zastavit nahrávání a shrnout konverzaci nyní?",
+  "conversationEndsManually": "Konverzace skončí pouze ručně.",
+  "conversationSummarizedAfterMinutes": "Konverzace je shrnuta po {minutes} minut{suffix} bez řeči.",
+  "dontAskAgain": "Neptej se mě znovu",
+  "waitingForTranscriptOrPhotos": "Čekání na přepis nebo fotografie...",
+  "noSummaryYet": "Zatím žádné shrnutí",
+  "hints": "Tipy: {text}"
 }

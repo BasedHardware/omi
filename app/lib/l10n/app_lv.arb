@@ -3428,5 +3428,15 @@
   "unableToOpenWatchApp": "Nevar atvērt Apple Watch lietotni. Lūdzu, manuāli atveriet Watch lietotni savā Apple Watch un instalējiet Omi no sadaļas \"Pieejamās lietotnes\".",
   "appleWatchConnectedSuccessfully": "Apple Watch veiksmīgi savienots!",
   "appleWatchNotReachable": "Apple Watch joprojām nav sasniedzams. Lūdzu, pārliecinieties, ka Omi lietotne ir atvērta jūsu pulkstenī.",
-  "errorCheckingConnection": "Savienojuma pārbaudes kļūda: {error}"
+  "errorCheckingConnection": "Savienojuma pārbaudes kļūda: {error}",
+  "muted": "Izslēgts skaņa",
+  "processNow": "Apstrādāt tagad",
+  "finishedConversation": "Saruna pabeigta?",
+  "stopRecordingConfirmation": "Vai tiešām vēlaties apturēt ierakstīšanu un apkopot sarunu tagad?",
+  "conversationEndsManually": "Saruna beigsies tikai manuāli.",
+  "conversationSummarizedAfterMinutes": "Saruna tiek apkopota pēc {minutes} minūt{suffix} klusuma.",
+  "dontAskAgain": "Vairs nejautāt",
+  "waitingForTranscriptOrPhotos": "Gaida transkripciju vai fotoattēlus...",
+  "noSummaryYet": "Vēl nav kopsavilkuma",
+  "hints": "Padomi: {text}"
 }

@@ -3428,5 +3428,15 @@
   "unableToOpenWatchApp": "Nie można otworzyć aplikacji Apple Watch. Ręcznie otwórz aplikację Watch na Apple Watch i zainstaluj Omi z sekcji \"Dostępne aplikacje\".",
   "appleWatchConnectedSuccessfully": "Apple Watch połączony pomyślnie!",
   "appleWatchNotReachable": "Apple Watch nadal nieosiągalny. Upewnij się, że aplikacja Omi jest otwarta na zegarku.",
-  "errorCheckingConnection": "Błąd sprawdzania połączenia: {error}"
+  "errorCheckingConnection": "Błąd sprawdzania połączenia: {error}",
+  "muted": "Wyciszono",
+  "processNow": "Przetwórz teraz",
+  "finishedConversation": "Zakończyć rozmowę?",
+  "stopRecordingConfirmation": "Czy na pewno chcesz zatrzymać nagrywanie i podsumować rozmowę teraz?",
+  "conversationEndsManually": "Rozmowa zakończy się tylko ręcznie.",
+  "conversationSummarizedAfterMinutes": "Rozmowa jest podsumowywana po {minutes} minut{suffix} ciszy.",
+  "dontAskAgain": "Nie pytaj ponownie",
+  "waitingForTranscriptOrPhotos": "Oczekiwanie na transkrypcję lub zdjęcia...",
+  "noSummaryYet": "Brak podsumowania",
+  "hints": "Wskazówki: {text}"
 }

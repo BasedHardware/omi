@@ -3410,5 +3410,15 @@
   "unableToOpenWatchApp": "Nepavyko atidaryti Apple Watch programos. Rankiniu būdu atidarykite Watch programą savo Apple Watch ir įdiekite Omi iš skyriaus \"Galimos programos\".",
   "appleWatchConnectedSuccessfully": "Apple Watch sėkmingai prijungtas!",
   "appleWatchNotReachable": "Apple Watch vis dar nepasiekiamas. Įsitikinkite, kad Omi programa atidaryta jūsų laikrodyje.",
-  "errorCheckingConnection": "Ryšio tikrinimo klaida: {error}"
+  "errorCheckingConnection": "Ryšio tikrinimo klaida: {error}",
+  "muted": "Nutildyta",
+  "processNow": "Apdoroti dabar",
+  "finishedConversation": "Pokalbis baigtas?",
+  "stopRecordingConfirmation": "Ar tikrai norite sustabdyti įrašymą ir apibendrinti pokalbį dabar?",
+  "conversationEndsManually": "Pokalbis baigsis tik rankiniu būdu.",
+  "conversationSummarizedAfterMinutes": "Pokalbis apibendrinamas po {minutes} minučių{suffix} tylos.",
+  "dontAskAgain": "Daugiau neklausti",
+  "waitingForTranscriptOrPhotos": "Laukiama transkripcijos arba nuotraukų...",
+  "noSummaryYet": "Santraukos dar nėra",
+  "hints": "Patarimai: {text}"
 }

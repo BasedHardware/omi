@@ -3428,5 +3428,15 @@
   "unableToOpenWatchApp": "Apple Watch -sovellusta ei voi avata. Avaa Watch-sovellus manuaalisesti Apple Watchissa ja asenna Omi \"Saatavilla olevat sovellukset\" -osiosta.",
   "appleWatchConnectedSuccessfully": "Apple Watch yhdistetty!",
   "appleWatchNotReachable": "Apple Watch ei ole vielä tavoitettavissa. Varmista, että Omi-sovellus on auki kellossasi.",
-  "errorCheckingConnection": "Virhe yhteyden tarkistuksessa: {error}"
+  "errorCheckingConnection": "Virhe yhteyden tarkistuksessa: {error}",
+  "muted": "Mykistetty",
+  "processNow": "Käsittele nyt",
+  "finishedConversation": "Keskustelu päättynyt?",
+  "stopRecordingConfirmation": "Haluatko varmasti lopettaa nauhoituksen ja tehdä yhteenvedon keskustelusta nyt?",
+  "conversationEndsManually": "Keskustelu päättyy vain manuaalisesti.",
+  "conversationSummarizedAfterMinutes": "Keskustelu tiivistetään {minutes} minuuti{suffix} hiljaisuuden jälkeen.",
+  "dontAskAgain": "Älä kysy uudelleen",
+  "waitingForTranscriptOrPhotos": "Odotetaan litterointia tai kuvia...",
+  "noSummaryYet": "Ei yhteenvetoa vielä",
+  "hints": "Vihjeet: {text}"
 }

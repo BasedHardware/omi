@@ -1875,5 +1875,15 @@
   "unableToOpenWatchApp": "无法打开 Apple Watch 应用。请在 Apple Watch 上手动打开 Watch 应用，并从「可用应用」部分安装 Omi。",
   "appleWatchConnectedSuccessfully": "Apple Watch 连接成功！",
   "appleWatchNotReachable": "仍无法连接 Apple Watch。请确保 Omi 应用在手表上处于打开状态。",
-  "errorCheckingConnection": "检查连接时出错：{error}"
+  "errorCheckingConnection": "检查连接时出错：{error}",
+  "muted": "已静音",
+  "processNow": "立即处理",
+  "finishedConversation": "结束对话？",
+  "stopRecordingConfirmation": "您确定要停止录音并立即总结对话吗？",
+  "conversationEndsManually": "对话只能手动结束。",
+  "conversationSummarizedAfterMinutes": "对话将在{minutes}分钟{suffix}无声后进行总结。",
+  "dontAskAgain": "不再询问",
+  "waitingForTranscriptOrPhotos": "等待转录或照片...",
+  "noSummaryYet": "暂无摘要",
+  "hints": "提示: {text}"
 }

@@ -13,6 +13,7 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 
@@ -140,19 +141,19 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
               final timeoutDuration = SharedPreferencesUtil().conversationSilenceDuration;
               String timeoutText;
               if (timeoutDuration == -1) {
-                timeoutText = "Conversation will only end manually.";
+                timeoutText = context.l10n.conversationEndsManually;
               } else {
                 final minutes = timeoutDuration ~/ 60;
                 timeoutText =
-                    "Conversation is summarized after $minutes minute${minutes == 1 ? '' : 's'} of no speech.";
+                    context.l10n.conversationSummarizedAfterMinutes(minutes, minutes == 1 ? '' : 's');
               }
 
               return ConfirmationDialog(
-                title: "Finished Conversation?",
+                title: context.l10n.finishedConversation,
                 description:
-                    "Are you sure you want to stop recording and summarize the conversation now?\n\nHints: $timeoutText",
+                    "${context.l10n.stopRecordingConfirmation}\n\n${context.l10n.hints(timeoutText)}",
                 checkboxValue: !showSummarizeConfirmation,
-                checkboxText: "Don't ask me again",
+                checkboxText: context.l10n.dontAskAgain,
                 onCheckboxChanged: (value) {
                   setState(() {
                     showSummarizeConfirmation = !value;
@@ -202,7 +203,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                   const SizedBox(width: 4),
                   Text(provider.photos.isNotEmpty ? "📸" : (_isMuted ? "🔇" : "🎙️")),
                   const SizedBox(width: 4),
-                  Expanded(child: Text(_isMuted ? "Muted" : "Listening")),
+                  Expanded(child: Text(_isMuted ? context.l10n.muted : context.l10n.listening)),
                 ],
               ),
             ),
@@ -217,10 +218,10 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                       children: [
                         // Transcripts, photos
                         provider.segments.isEmpty && provider.photos.isEmpty
-                            ? const Center(
+                            ? Center(
                                 child: Padding(
-                                  padding: EdgeInsets.only(top: 50.0),
-                                  child: Text("Waiting for transcript or photos..."),
+                                  padding: const EdgeInsets.only(top: 50.0),
+                                  child: Text(context.l10n.waitingForTranscriptOrPhotos),
                                 ),
                               )
                             : getTranscriptWidget(
@@ -273,8 +274,8 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                 const EdgeInsets.symmetric(horizontal: 32.0).copyWith(bottom: 50.0), // Adjust padding
                             child: Text(
                               provider.segments.isEmpty && provider.photos.isEmpty
-                                  ? "No summary yet"
-                                  : _getTimeoutDisplayText(),
+                                  ? context.l10n.noSummaryYet
+                                  : _getTimeoutDisplayText(context),
                               textAlign: TextAlign.center,
                               style: TextStyle(fontSize: provider.segments.isEmpty ? 16 : 22),
                             ),
@@ -309,18 +310,18 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                               ),
                             ],
                           ),
-                          child: const Row(
+                          child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              FaIcon(
+                              const FaIcon(
                                 FontAwesomeIcons.stop,
                                 color: Colors.black,
                                 size: 16.0,
                               ),
-                              SizedBox(width: 10),
+                              const SizedBox(width: 10),
                               Text(
-                                'Process Now',
-                                style: TextStyle(
+                                context.l10n.processNow,
+                                style: const TextStyle(
                                   color: Colors.black,
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
@@ -365,13 +366,13 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     );
   }
 
-  String _getTimeoutDisplayText() {
+  String _getTimeoutDisplayText(BuildContext context) {
     final timeoutDuration = SharedPreferencesUtil().conversationSilenceDuration;
     if (timeoutDuration == -1) {
-      return "Conversation will only end manually 🤫";
+      return "${context.l10n.conversationEndsManually} 🤫";
     } else {
       final minutes = timeoutDuration ~/ 60;
-      return "Conversation is summarized after $minutes minute${minutes == 1 ? '' : 's'} of no speech 🤫";
+      return "${context.l10n.conversationSummarizedAfterMinutes(minutes, minutes == 1 ? '' : 's')} 🤫";
     }
   }
 }

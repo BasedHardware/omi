@@ -3428,5 +3428,15 @@
   "unableToOpenWatchApp": "Не вдалося відкрити додаток Apple Watch. Відкрийте додаток Watch вручну на Apple Watch і встановіть Omi з розділу \"Доступні додатки\".",
   "appleWatchConnectedSuccessfully": "Apple Watch успішно підключено!",
   "appleWatchNotReachable": "Apple Watch досі недоступний. Переконайтеся, що додаток Omi відкритий на годиннику.",
-  "errorCheckingConnection": "Помилка перевірки підключення: {error}"
+  "errorCheckingConnection": "Помилка перевірки підключення: {error}",
+  "muted": "Вимкнено звук",
+  "processNow": "Обробити зараз",
+  "finishedConversation": "Завершити розмову?",
+  "stopRecordingConfirmation": "Ви впевнені, що хочете зупинити запис і підсумувати розмову зараз?",
+  "conversationEndsManually": "Розмова завершиться лише вручну.",
+  "conversationSummarizedAfterMinutes": "Розмова підсумовується після {minutes} хвилин{suffix} мовчання.",
+  "dontAskAgain": "Більше не питати",
+  "waitingForTranscriptOrPhotos": "Очікування транскрипції або фотографій...",
+  "noSummaryYet": "Ще немає підсумку",
+  "hints": "Підказки: {text}"
 }

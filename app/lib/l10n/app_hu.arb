@@ -3428,5 +3428,15 @@
   "unableToOpenWatchApp": "Nem sikerült megnyitni az Apple Watch alkalmazást. Nyissa meg manuálisan a Watch alkalmazást az Apple Watch-on, és telepítse az Omit az \"Elérhető alkalmazások\" részből.",
   "appleWatchConnectedSuccessfully": "Apple Watch sikeresen csatlakoztatva!",
   "appleWatchNotReachable": "Az Apple Watch még nem érhető el. Győződjön meg róla, hogy az Omi alkalmazás nyitva van az óráján.",
-  "errorCheckingConnection": "Hiba a kapcsolat ellenőrzésekor: {error}"
+  "errorCheckingConnection": "Hiba a kapcsolat ellenőrzésekor: {error}",
+  "muted": "Némítva",
+  "processNow": "Feldolgozás most",
+  "finishedConversation": "Beszélgetés befejezve?",
+  "stopRecordingConfirmation": "Biztosan le szeretné állítani a felvételt és most összefoglalni a beszélgetést?",
+  "conversationEndsManually": "A beszélgetés csak manuálisan fejeződik be.",
+  "conversationSummarizedAfterMinutes": "A beszélgetés {minutes} perc{suffix} csend után összegződik.",
+  "dontAskAgain": "Ne kérdezd újra",
+  "waitingForTranscriptOrPhotos": "Várakozás átiratra vagy fotókra...",
+  "noSummaryYet": "Még nincs összefoglaló",
+  "hints": "Tippek: {text}"
 }

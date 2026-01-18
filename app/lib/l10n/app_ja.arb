@@ -1854,5 +1854,15 @@
   "unableToOpenWatchApp": "Apple Watchアプリを開けませんでした。Apple WatchのWatchアプリを手動で開き、「利用可能なApp」セクションからOmiをインストールしてください。",
   "appleWatchConnectedSuccessfully": "Apple Watchが正常に接続されました！",
   "appleWatchNotReachable": "Apple Watchにまだ接続できません。ウォッチでOmiアプリが開いていることを確認してください。",
-  "errorCheckingConnection": "接続確認エラー: {error}"
+  "errorCheckingConnection": "接続確認エラー: {error}",
+  "muted": "ミュート",
+  "processNow": "今すぐ処理",
+  "finishedConversation": "会話を終了しますか？",
+  "stopRecordingConfirmation": "録音を停止して会話を今すぐ要約しますか？",
+  "conversationEndsManually": "会話は手動でのみ終了します。",
+  "conversationSummarizedAfterMinutes": "会話は{minutes}分{suffix}の無音後に要約されます。",
+  "dontAskAgain": "次回から表示しない",
+  "waitingForTranscriptOrPhotos": "文字起こしまたは写真を待機中...",
+  "noSummaryYet": "まだ要約がありません",
+  "hints": "ヒント: {text}"
 }

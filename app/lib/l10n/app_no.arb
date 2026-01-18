@@ -3428,5 +3428,15 @@
   "unableToOpenWatchApp": "Kan ikke åpne Apple Watch-appen. Åpne Watch-appen manuelt på Apple Watch og installer Omi fra seksjonen \"Tilgjengelige apper\".",
   "appleWatchConnectedSuccessfully": "Apple Watch tilkoblet!",
   "appleWatchNotReachable": "Apple Watch er fortsatt ikke tilgjengelig. Sørg for at Omi-appen er åpen på klokken din.",
-  "errorCheckingConnection": "Feil ved kontroll av tilkobling: {error}"
+  "errorCheckingConnection": "Feil ved kontroll av tilkobling: {error}",
+  "muted": "Dempet",
+  "processNow": "Behandle nå",
+  "finishedConversation": "Samtale ferdig?",
+  "stopRecordingConfirmation": "Er du sikker på at du vil stoppe opptaket og oppsummere samtalen nå?",
+  "conversationEndsManually": "Samtalen avsluttes kun manuelt.",
+  "conversationSummarizedAfterMinutes": "Samtalen oppsummeres etter {minutes} minutt{suffix} uten tale.",
+  "dontAskAgain": "Ikke spør igjen",
+  "waitingForTranscriptOrPhotos": "Venter på transkripsjon eller bilder...",
+  "noSummaryYet": "Ingen oppsummering ennå",
+  "hints": "Hint: {text}"
 }
