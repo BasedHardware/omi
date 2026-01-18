@@ -3401,5 +3401,6 @@
   "pleaseEnterValidEmail": "Proszę podać prawidłowy adres e-mail",
   "syncingYourRecordings": "Synchronizacja nagrań",
   "syncYourRecordings": "Zsynchronizuj nagrania",
-  "syncNow": "Synchronizuj teraz"
+  "syncNow": "Synchronizuj teraz",
+  "error": "Błąd"
 }

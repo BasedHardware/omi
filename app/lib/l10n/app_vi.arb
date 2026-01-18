@@ -3401,5 +3401,6 @@
   "pleaseEnterValidEmail": "Vui lòng nhập địa chỉ email hợp lệ",
   "syncingYourRecordings": "Đang đồng bộ bản ghi của bạn",
   "syncYourRecordings": "Đồng bộ bản ghi của bạn",
-  "syncNow": "Đồng bộ ngay"
+  "syncNow": "Đồng bộ ngay",
+  "error": "Lỗi"
 }

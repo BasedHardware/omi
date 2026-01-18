@@ -3401,5 +3401,6 @@
   "pleaseEnterValidEmail": "Παρακαλώ εισάγετε μια έγκυρη διεύθυνση email",
   "syncingYourRecordings": "Συγχρονισμός των εγγραφών σας",
   "syncYourRecordings": "Συγχρονίστε τις εγγραφές σας",
-  "syncNow": "Συγχρονισμός τώρα"
+  "syncNow": "Συγχρονισμός τώρα",
+  "error": "Σφάλμα"
 }

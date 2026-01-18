@@ -3401,5 +3401,6 @@
   "pleaseEnterValidEmail": "Palun sisestage kehtiv e-posti aadress",
   "syncingYourRecordings": "Sinu salvestuste sünkroonimine",
   "syncYourRecordings": "Sünkrooni oma salvestused",
-  "syncNow": "Sünkrooni kohe"
+  "syncNow": "Sünkrooni kohe",
+  "error": "Viga"
 }

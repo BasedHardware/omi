@@ -3401,5 +3401,6 @@
   "pleaseEnterValidEmail": "Vă rugăm să introduceți o adresă de email validă",
   "syncingYourRecordings": "Sincronizarea înregistrărilor tale",
   "syncYourRecordings": "Sincronizează înregistrările tale",
-  "syncNow": "Sincronizează acum"
+  "syncNow": "Sincronizează acum",
+  "error": "Eroare"
 }

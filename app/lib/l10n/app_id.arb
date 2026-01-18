@@ -3401,5 +3401,6 @@
   "pleaseEnterValidEmail": "Silakan masukkan alamat email yang valid",
   "syncingYourRecordings": "Menyinkronkan rekaman Anda",
   "syncYourRecordings": "Sinkronkan rekaman Anda",
-  "syncNow": "Sinkronkan sekarang"
+  "syncNow": "Sinkronkan sekarang",
+  "error": "Kesalahan"
 }

@@ -2219,5 +2219,6 @@
   "pleaseEnterValidEmail": "Veuillez entrer une adresse e-mail valide",
   "syncingYourRecordings": "Synchronisation de vos enregistrements",
   "syncYourRecordings": "Synchroniser vos enregistrements",
-  "syncNow": "Synchroniser maintenant"
+  "syncNow": "Synchroniser maintenant",
+  "error": "Erreur"
 }

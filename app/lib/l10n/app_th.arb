@@ -3401,5 +3401,6 @@
   "pleaseEnterValidEmail": "กรุณากรอกที่อยู่อีเมลที่ถูกต้อง",
   "syncingYourRecordings": "กำลังซิงค์การบันทึกของคุณ",
   "syncYourRecordings": "ซิงค์การบันทึกของคุณ",
-  "syncNow": "ซิงค์เดี๋ยวนี้"
+  "syncNow": "ซิงค์เดี๋ยวนี้",
+  "error": "ข้อผิดพลาด"
 }

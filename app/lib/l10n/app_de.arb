@@ -1848,5 +1848,6 @@
   "pleaseEnterValidEmail": "Bitte geben Sie eine gültige E-Mail-Adresse ein",
   "syncingYourRecordings": "Synchronisiere deine Aufnahmen",
   "syncYourRecordings": "Synchronisiere deine Aufnahmen",
-  "syncNow": "Jetzt synchronisieren"
+  "syncNow": "Jetzt synchronisieren",
+  "error": "Fehler"
 }

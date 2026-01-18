@@ -1848,5 +1848,6 @@
   "pleaseEnterValidEmail": "Por favor, insira um endereço de e-mail válido",
   "syncingYourRecordings": "Sincronizando suas gravações",
   "syncYourRecordings": "Sincronizar suas gravações",
-  "syncNow": "Sincronizar agora"
+  "syncNow": "Sincronizar agora",
+  "error": "Erro"
 }

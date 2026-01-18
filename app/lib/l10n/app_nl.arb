@@ -2219,5 +2219,6 @@
   "pleaseEnterValidEmail": "Voer een geldig e-mailadres in",
   "syncingYourRecordings": "Je opnames synchroniseren",
   "syncYourRecordings": "Synchroniseer je opnames",
-  "syncNow": "Nu synchroniseren"
+  "syncNow": "Nu synchroniseren",
+  "error": "Fout"
 }

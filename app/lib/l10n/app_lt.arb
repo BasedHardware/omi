@@ -3383,5 +3383,6 @@
   "pleaseEnterValidEmail": "Įveskite galiojantį el. pašto adresą",
   "syncingYourRecordings": "Sinchronizuojami jūsų įrašai",
   "syncYourRecordings": "Sinchronizuokite savo įrašus",
-  "syncNow": "Sinchronizuoti dabar"
+  "syncNow": "Sinchronizuoti dabar",
+  "error": "Klaida"
 }

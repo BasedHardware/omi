@@ -3419,5 +3419,6 @@
   "pleaseEnterValidEmail": "يرجى إدخال عنوان بريد إلكتروني صالح",
   "syncingYourRecordings": "جاري مزامنة تسجيلاتك",
   "syncYourRecordings": "مزامنة تسجيلاتك",
-  "syncNow": "مزامنة الآن"
+  "syncNow": "مزامنة الآن",
+  "error": "خطأ"
 }

@@ -3401,5 +3401,6 @@
   "pleaseEnterValidEmail": "Indtast venligst en gyldig e-mailadresse",
   "syncingYourRecordings": "Synkroniserer dine optagelser",
   "syncYourRecordings": "Synkroniser dine optagelser",
-  "syncNow": "Synkroniser nu"
+  "syncNow": "Synkroniser nu",
+  "error": "Fejl"
 }

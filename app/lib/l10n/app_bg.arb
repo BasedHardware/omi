@@ -3403,5 +3403,6 @@
   "pleaseEnterValidEmail": "Моля, въведете валиден имейл адрес",
   "syncingYourRecordings": "Синхронизиране на записите ви",
   "syncYourRecordings": "Синхронизирай записите си",
-  "syncNow": "Синхронизирай сега"
+  "syncNow": "Синхронизирай сега",
+  "error": "Грешка"
 }

@@ -1848,5 +1848,6 @@
   "pleaseEnterValidEmail": "请输入有效的电子邮件地址",
   "syncingYourRecordings": "正在同步您的录音",
   "syncYourRecordings": "同步您的录音",
-  "syncNow": "立即同步"
+  "syncNow": "立即同步",
+  "error": "错误"
 }

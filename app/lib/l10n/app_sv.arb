@@ -3401,5 +3401,6 @@
   "pleaseEnterValidEmail": "Ange en giltig e-postadress",
   "syncingYourRecordings": "Synkroniserar dina inspelningar",
   "syncYourRecordings": "Synkronisera dina inspelningar",
-  "syncNow": "Synkronisera nu"
+  "syncNow": "Synkronisera nu",
+  "error": "Fel"
 }

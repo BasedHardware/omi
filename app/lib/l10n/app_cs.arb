@@ -3403,5 +3403,6 @@
   "pleaseEnterValidEmail": "Zadejte prosím platnou e-mailovou adresu",
   "syncingYourRecordings": "Synchronizace vašich nahrávek",
   "syncYourRecordings": "Synchronizujte své nahrávky",
-  "syncNow": "Synchronizovat nyní"
+  "syncNow": "Synchronizovat nyní",
+  "error": "Chyba"
 }

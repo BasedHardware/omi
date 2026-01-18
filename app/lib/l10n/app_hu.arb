@@ -3401,5 +3401,6 @@
   "pleaseEnterValidEmail": "Kérjük, adjon meg egy érvényes e-mail címet",
   "syncingYourRecordings": "Felvételek szinkronizálása",
   "syncYourRecordings": "Szinkronizáld a felvételeidet",
-  "syncNow": "Szinkronizálás most"
+  "syncNow": "Szinkronizálás most",
+  "error": "Hiba"
 }

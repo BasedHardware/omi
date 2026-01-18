@@ -3403,5 +3403,6 @@
   "pleaseEnterValidEmail": "Si us plau, introduïu una adreça de correu electrònic vàlida",
   "syncingYourRecordings": "Sincronitzant les teves gravacions",
   "syncYourRecordings": "Sincronitza les teves gravacions",
-  "syncNow": "Sincronitza ara"
+  "syncNow": "Sincronitza ara",
+  "error": "Error"
 }

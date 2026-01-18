@@ -3401,5 +3401,6 @@
   "pleaseEnterValidEmail": "Sila masukkan alamat e-mel yang sah",
   "syncingYourRecordings": "Menyegerakkan rakaman anda",
   "syncYourRecordings": "Segerakkan rakaman anda",
-  "syncNow": "Segerak sekarang"
+  "syncNow": "Segerak sekarang",
+  "error": "Ralat"
 }

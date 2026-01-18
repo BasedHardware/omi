@@ -3383,5 +3383,6 @@
   "pleaseEnterValidEmail": "Lütfen geçerli bir e-posta adresi girin",
   "syncingYourRecordings": "Kayıtlarınız senkronize ediliyor",
   "syncYourRecordings": "Kayıtlarınızı senkronize edin",
-  "syncNow": "Şimdi senkronize et"
+  "syncNow": "Şimdi senkronize et",
+  "error": "Hata"
 }

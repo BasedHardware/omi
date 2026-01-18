@@ -6049,5 +6049,9 @@
   "syncNow": "Sync Now",
   "@syncNow": {
     "description": "Button text to start syncing recordings immediately"
+  },
+  "error": "Error",
+  "@error": {
+    "description": "Generic error label shown when an operation fails"
   }
 }

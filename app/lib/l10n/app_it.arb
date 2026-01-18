@@ -3383,5 +3383,6 @@
   "pleaseEnterValidEmail": "Inserisci un indirizzo email valido",
   "syncingYourRecordings": "Sincronizzazione delle tue registrazioni",
   "syncYourRecordings": "Sincronizza le tue registrazioni",
-  "syncNow": "Sincronizza ora"
+  "syncNow": "Sincronizza ora",
+  "error": "Errore"
 }

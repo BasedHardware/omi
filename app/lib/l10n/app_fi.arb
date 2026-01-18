@@ -3401,5 +3401,6 @@
   "pleaseEnterValidEmail": "Anna kelvollinen sähköpostiosoite",
   "syncingYourRecordings": "Synkronoidaan tallenteitasi",
   "syncYourRecordings": "Synkronoi tallenteet",
-  "syncNow": "Synkronoi nyt"
+  "syncNow": "Synkronoi nyt",
+  "error": "Virhe"
 }

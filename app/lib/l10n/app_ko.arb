@@ -3401,5 +3401,6 @@
   "pleaseEnterValidEmail": "유효한 이메일 주소를 입력해 주세요",
   "syncingYourRecordings": "녹음 동기화 중",
   "syncYourRecordings": "녹음 동기화",
-  "syncNow": "지금 동기화"
+  "syncNow": "지금 동기화",
+  "error": "오류"
 }
