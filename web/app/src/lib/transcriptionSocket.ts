@@ -241,7 +241,7 @@ export class TranscriptionSocket {
             const segment: TranscriptSegment = {
               id: segmentData.id || `seg-${Date.now()}-${Math.random()}`,
               text: segmentData.text || '',
-              speaker: parseSpeakerId(segmentData.speakerId ?? segmentData.speaker),
+              speaker: parseSpeakerId(segmentData.speakerId ?? segmentData.speaker_id ?? segmentData.speaker),
               isUser: segmentData.isUser ?? segmentData.is_user ?? false,
               timestamp: Date.now(),
             };
@@ -256,7 +256,7 @@ export class TranscriptionSocket {
           const segment: TranscriptSegment = {
             id: data.id || `seg-${Date.now()}-${Math.random()}`,
             text: data.text,
-            speaker: parseSpeakerId(data.speakerId ?? data.speaker),
+            speaker: parseSpeakerId(data.speakerId ?? data.speaker_id ?? data.speaker),
             isUser: data.isUser ?? data.is_user ?? false,
             timestamp: Date.now(),
           };
