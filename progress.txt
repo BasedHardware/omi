@@ -1212,8 +1212,8 @@ Commit: d77ac398b
 END OF PROGRESS TRACKER
 ================================================================================
 Last Updated: 2026-01-18
-Last Completed: FILE 128 - apple_watch_setup_bottom_sheet.dart (11 new keys, 374 new translations)
-Previous Completed: FILE 127 - country_bottom_sheet.dart (1 new key, 34 new translations)
+Last Completed: FILE 129 - conversation_capturing/page.dart (10 new keys, 340 new translations)
+Previous Completed: FILE 128 - apple_watch_setup_bottom_sheet.dart (11 new keys, 374 new translations)
 Current Session: Phase 2 - Mobile/Pages localization in progress
 
 🎉 PHASE 1 (DESKTOP) COMPLETE! 🎉
@@ -1223,7 +1223,7 @@ Current Session: Phase 2 - Mobile/Pages localization in progress
 
 📋 PHASE 2 (MOBILE/PAGES) IN PROGRESS
 59 files identified with hardcoded strings
-Files Completed: 58
+Files Completed: 59
 Estimated 200-300 new keys needed
 
 --------------------------------------------------------------------------------
@@ -1794,3 +1794,20 @@ Notes: Localized Apple Watch setup bottom sheet with complete setup flow includi
        messages. Refactored _getPrimaryButtonText to accept BuildContext. Used
        parameterized translation for error messages with dynamic error details.
 Commit: 26f49a5be
+
+--------------------------------------------------------------------------------
+FILE 129 (Phase 2 FILE 59): conversation_capturing/page.dart
+--------------------------------------------------------------------------------
+Path: app/lib/pages/conversation_capturing/page.dart
+New Keys: muted, processNow, finishedConversation, stopRecordingConfirmation,
+         conversationEndsManually, conversationSummarizedAfterMinutes (parameterized),
+         dontAskAgain, waitingForTranscriptOrPhotos, noSummaryYet, hints (parameterized)
+Reused Keys: listening
+Total New Keys: 10
+Script: /private/tmp/claude/.../translate_conversation_capturing.py
+Status: ✅ COMPLETED
+Notes: Localized conversation capturing page with recording status, process button,
+       confirmation dialog, and timeout messages. Uses parameterized translations
+       for minute pluralization and hints text. Refactored _getTimeoutDisplayText
+       to accept BuildContext for l10n access.
+Commit: dc54a30a7
