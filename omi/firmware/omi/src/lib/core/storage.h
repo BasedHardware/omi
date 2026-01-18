@@ -14,6 +14,13 @@
  */
 int storage_init();
 
+/**
+ * @brief Stops the current storage transfer
+ *
+ * Stops the current storage transfer
+ */
+void storage_stop_transfer();
+
 #endif // CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 
 #endif // STORAGE_H
