@@ -368,6 +368,38 @@ def get_approved_apps(include_reviews: bool = False):
     return [normalize_app_numeric_fields(app.to_reduced_dict()) for app in filtered_apps]
 
 
+@router.get('/v1/approved-apps/marketplace', tags=['v1'])
+def get_marketplace_apps():
+    """Lightweight endpoint for web marketplace.
+
+    Returns only the fields needed by the web frontend, excluding large fields
+    like external_integration to keep response size under Next.js 2MB cache limit.
+    """
+    apps = get_approved_available_apps(include_reviews=True)
+    filtered_apps = [app for app in apps if not app.is_a_persona()]
+
+    return [
+        normalize_app_numeric_fields({
+            'id': app.id,
+            'name': app.name,
+            'description': app.description,
+            'author': app.author,
+            'image': app.image,
+            'category': app.category,
+            'capabilities': list(app.capabilities),
+            'installs': app.installs,
+            'rating_avg': app.rating_avg,
+            'rating_count': app.rating_count,
+            'created_at': app.created_at,
+            'is_paid': app.is_paid,
+            'price': app.price,
+            'payment_plan': app.payment_plan,
+            'is_popular': app.is_popular,
+        })
+        for app in filtered_apps
+    ]
+
+
 @router.get('/v1/apps/popular', tags=['v1'], response_model=List[AppBaseModel])
 def get_popular_apps_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     apps = get_popular_apps()
