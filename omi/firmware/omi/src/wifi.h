@@ -4,6 +4,7 @@
 #include <zephyr/kernel.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <zephyr/kernel.h>
 
 #define WIFI_MAX_SSID_LEN        32
 #define WIFI_MAX_PASSWORD_LEN    64

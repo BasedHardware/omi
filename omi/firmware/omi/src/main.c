@@ -19,15 +19,16 @@
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 #include "lib/core/storage.h"
 #endif
+#include <hal/nrf_reset.h>
+
 #include "lib/core/sd_card.h"
 #include "spi_flash.h"
 #include "wdog_facade.h"
-#include <hal/nrf_reset.h>
 
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
 
 #ifdef CONFIG_OMI_ENABLE_BATTERY
-#define BATTERY_FULL_THRESHOLD_PERCENT        98 // 98%
+#define BATTERY_FULL_THRESHOLD_PERCENT 98 // 98%
 extern uint8_t battery_percentage;
 #endif
 bool is_connected = false;
@@ -41,7 +42,7 @@ static void print_reset_reason(void)
 
     reas = nrf_reset_resetreas_get(NRF_RESET);
     nrf_reset_resetreas_clear(NRF_RESET, reas);
-    
+
     if (reas & NRF_RESET_RESETREAS_DOG0_MASK) {
         printk("Reset by WATCHDOG\n");
     } else if (reas & NRF_RESET_RESETREAS_NFC_MASK) {

@@ -45,11 +45,11 @@ static ssize_t storage_write_handler(struct bt_conn *conn,
                                      uint8_t flags);
 #ifdef CONFIG_OMI_ENABLE_WIFI
 static ssize_t storage_wifi_handler(struct bt_conn *conn,
-                                     const struct bt_gatt_attr *attr,
-                                     const void *buf,
-                                     uint16_t len,
-                                     uint16_t offset,
-                                     uint8_t flags);
+                                    const struct bt_gatt_attr *attr,
+                                    const void *buf,
+                                    uint16_t len,
+                                    uint16_t offset,
+                                    uint8_t flags);
 static void wifi_start_work_handler(struct k_work *work)
 {
     mic_pause();
@@ -248,11 +248,11 @@ static ssize_t storage_write_handler(struct bt_conn *conn,
 
 #ifdef CONFIG_OMI_ENABLE_WIFI
 static ssize_t storage_wifi_handler(struct bt_conn *conn,
-                                     const struct bt_gatt_attr *attr,
-                                     const void *buf,
-                                     uint16_t len,
-                                     uint16_t offset,
-                                     uint8_t flags)
+                                    const struct bt_gatt_attr *attr,
+                                    const void *buf,
+                                    uint16_t len,
+                                    uint16_t offset,
+                                    uint8_t flags)
 {
     uint8_t result_buffer[1] = {0};
     LOG_INF("wifi config write handler called");
@@ -270,7 +270,7 @@ static ssize_t storage_wifi_handler(struct bt_conn *conn,
         return len;
     }
 
-    const uint8_t cmd = ((const uint8_t *)buf)[0];
+    const uint8_t cmd = ((const uint8_t *) buf)[0];
 
     switch (cmd) {
         case 0x01: // WIFI_SETUP
@@ -318,7 +318,6 @@ static ssize_t storage_wifi_handler(struct bt_conn *conn,
             LOG_INF("WIFI_SHUTDOWN command received");
             wifi_turn_off();
             mic_resume();
-            storage_stop_transfer();
             result_buffer[0] = 0;
             break;
 
@@ -391,11 +390,10 @@ void storage_stop_transfer()
 void storage_write(void)
 {
     static uint8_t tmp_buffer[SD_BLE_SIZE]; // 440 bytes temporary buffer
-    
 
     uint32_t total_sent = 0;
     uint32_t consecutive_errors = 0;
-    
+
     while (1) {
         struct bt_conn *conn = get_current_connection();
 
@@ -436,7 +434,7 @@ void storage_write(void)
         }
 
         if (remaining_length > 0) {
-            if (conn == NULL 
+            if (conn == NULL
 #ifdef CONFIG_OMI_ENABLE_WIFI
                 && !is_wifi_on()
 #endif
@@ -451,12 +449,12 @@ void storage_write(void)
 
 #ifdef CONFIG_OMI_ENABLE_WIFI
             // Send data over TCP if WiFi is ready, otherwise over GATT
-            if(is_wifi_on()) {
+            if (is_wifi_on()) {
                 if (is_wifi_transport_ready()) {
                     write_to_tcp();
                     heartbeat_count = (heartbeat_count + 1) % (MAX_HEARTBEAT_FRAMES + 1);
                 }
-            } else 
+            } else
 #endif
             {
                 write_to_gatt(conn);

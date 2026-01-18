@@ -345,41 +345,6 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
           borderRadius: BorderRadius.circular(16),
           child: Column(
             children: [
-              // Section header
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
-                  border: Border(
-                    bottom: BorderSide(
-                      color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
-                      width: 1,
-                    ),
-                  ),
-                ),
-                child: const Row(
-                  children: [
-                    OmiIconButton(
-                      icon: FontAwesomeIcons.fileLines,
-                      style: OmiIconButtonStyle.neutral,
-                      size: 24,
-                      iconSize: 12,
-                      borderRadius: 6,
-                      onPressed: null,
-                    ),
-                    SizedBox(width: 8),
-                    Text(
-                      'Conversation Details',
-                      style: TextStyle(
-                        color: ResponsiveHelper.textPrimary,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
               // Content
               Expanded(
                 child: SingleChildScrollView(

@@ -185,6 +185,29 @@ class SharedPreferencesUtil {
 
   bool get dailyReflectionEnabled => getBool('dailyReflectionEnabled', defaultValue: true);
 
+  // Notification frequency (0-5): 0 = off, 5 = most frequent. Default is 3 (balanced)
+  set notificationFrequency(int value) => saveInt('notificationFrequency', value);
+
+  int get notificationFrequency => getInt('notificationFrequency', defaultValue: 3);
+
+  // Task category order for drag-and-drop sorting persistence
+  // Format: { "today": ["id1", "id2"], "tomorrow": ["id3"] }
+  set taskCategoryOrder(Map<String, List<String>> value) {
+    final encoded = jsonEncode(value);
+    saveString('taskCategoryOrder', encoded);
+  }
+
+  Map<String, List<String>> get taskCategoryOrder {
+    final encoded = getString('taskCategoryOrder');
+    if (encoded.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(encoded) as Map<String, dynamic>;
+      return decoded.map((key, value) => MapEntry(key, (value as List).cast<String>()));
+    } catch (e) {
+      return {};
+    }
+  }
+
   // Wrapped 2025 - track if user has viewed their wrapped
   set hasViewedWrapped2025(bool value) => saveBool('hasViewedWrapped2025', value);
 
@@ -267,6 +290,16 @@ class SharedPreferencesUtil {
   bool get unlimitedLocalStorageEnabled => getBool('unlimitedLocalStorageEnabled');
 
   set unlimitedLocalStorageEnabled(bool value) => saveBool('unlimitedLocalStorageEnabled', value);
+
+  // Preferred sync method for SD card files: 'wifi' (Fast Transfer) or 'ble' (Bluetooth)
+  String get preferredSyncMethod => getString('preferredSyncMethod', defaultValue: 'ble');
+
+  set preferredSyncMethod(String value) => saveString('preferredSyncMethod', value);
+
+  // Whether the user has been shown the Fast Transfer explanation dialog
+  bool get hasSeenFastTransferIntro => getBool('hasSeenFastTransferIntro');
+
+  set hasSeenFastTransferIntro(bool value) => saveBool('hasSeenFastTransferIntro', value);
 
   bool get hasSpeakerProfile => getBool('hasSpeakerProfile');
 

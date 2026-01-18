@@ -145,70 +145,69 @@ static void tcp_client_stop(void)
 	}
 }
 
-static void wifi_scan_event_handler(struct net_mgmt_event_callback *cb,
-				    uint32_t mgmt_event, struct net_if *iface)
+static void wifi_scan_event_handler(struct net_mgmt_event_callback *cb, uint32_t mgmt_event, struct net_if *iface)
 {
-	ARG_UNUSED(cb);
-	ARG_UNUSED(iface);
+    ARG_UNUSED(cb);
+    ARG_UNUSED(iface);
 
-	if (mgmt_event == NET_EVENT_WIFI_SCAN_DONE) {
-		atomic_set(&wifi_scan_done, 1);
-		k_sem_give(&wifi_scan_done_sem);
-	}
+    if (mgmt_event == NET_EVENT_WIFI_SCAN_DONE) {
+        atomic_set(&wifi_scan_done, 1);
+        k_sem_give(&wifi_scan_done_sem);
+    }
 }
 
 static bool wifi_probe_rpu(struct net_if *iface)
 {
-	struct wifi_scan_params params = { 0 };
-	int ret;
+    struct wifi_scan_params params = {0};
+    int ret;
 
-	atomic_set(&wifi_scan_done, 0);
-	k_sem_reset(&wifi_scan_done_sem);
+    atomic_set(&wifi_scan_done, 0);
+    k_sem_reset(&wifi_scan_done_sem);
 
-	params.scan_type = WIFI_SCAN_TYPE_ACTIVE;
-	params.bands = 0; /* 0 == no restriction */
-	params.dwell_time_active = 20;
-	params.dwell_time_passive = 60;
-	params.max_bss_cnt = 1;
+    params.scan_type = WIFI_SCAN_TYPE_ACTIVE;
+    params.bands = 0; /* 0 == no restriction */
+    params.dwell_time_active = 20;
+    params.dwell_time_passive = 60;
+    params.max_bss_cnt = 1;
 
-	ret = net_mgmt(NET_REQUEST_WIFI_SCAN, iface, &params, sizeof(params));
-	if (ret != 0 && ret != -EALREADY) {
-		LOG_WRN("Wi-Fi scan probe request failed: %d", ret);
-		return false;
-	}
+    ret = net_mgmt(NET_REQUEST_WIFI_SCAN, iface, &params, sizeof(params));
+    if (ret != 0 && ret != -EALREADY) {
+        LOG_WRN("Wi-Fi scan probe request failed: %d", ret);
+        return false;
+    }
 
-	ret = k_sem_take(&wifi_scan_done_sem, K_SECONDS(5));
-	if (ret != 0) {
-		LOG_ERR("Wi-Fi scan probe timed out (RPU not responding?)");
-		return false;
-	}
+    ret = k_sem_take(&wifi_scan_done_sem, K_SECONDS(5));
+    if (ret != 0) {
+        LOG_ERR("Wi-Fi scan probe timed out (RPU not responding?)");
+        return false;
+    }
 
-	return true;
+    return true;
 }
 
 static bool wifi_check_hardware_ready()
 {
-	struct net_if *iface = net_if_get_wifi_sta();
+    struct net_if *iface = net_if_get_wifi_sta();
 
-	if (!iface) {
-		LOG_ERR("No Wi-Fi interface found");
-		return false;
-	}
+    if (!iface) {
+        LOG_ERR("No Wi-Fi interface found");
+        return false;
+    }
 
-	int ret = net_if_up(iface);
-	if (ret != 0 && ret != -EALREADY) {
-		LOG_ERR("net_if_up failed: %d", ret);
-		return false;
-	}
+    int ret = net_if_up(iface);
+    if (ret != 0 && ret != -EALREADY) {
+        LOG_ERR("net_if_up failed: %d", ret);
+        return false;
+    }
 
-	if (!wifi_probe_rpu(iface)) {
-		LOG_ERR("Wi-Fi RPU probe failed");
-		net_if_down(iface);
-		return false;
-	}
-	net_if_down(iface);
+    if (!wifi_probe_rpu(iface)) {
+        LOG_ERR("Wi-Fi RPU probe failed");
+        net_if_down(iface);
+        return false;
+    }
+    net_if_down(iface);
 
-	return true;
+    return true;
 }
 
 static int tcp_client_start(void)
@@ -877,25 +876,25 @@ void wifi_ready_cb(bool wifi_ready)
 
 static int register_wifi_ready(void)
 {
-	int ret = 0;
-	wifi_ready_callback_t cb;
-	struct net_if *iface = net_if_get_first_wifi();
+    int ret = 0;
+    wifi_ready_callback_t cb;
+    struct net_if *iface = net_if_get_first_wifi();
 
-	if (!iface) {
-		LOG_ERR("Failed to get Wi-Fi interface");
-		return -1;
-	}
+    if (!iface) {
+        LOG_ERR("Failed to get Wi-Fi interface");
+        return -1;
+    }
 
-	cb.wifi_ready_cb = wifi_ready_cb;
+    cb.wifi_ready_cb = wifi_ready_cb;
 
-	LOG_DBG("Registering Wi-Fi ready callbacks");
-	ret = register_wifi_ready_callback(cb, iface);
-	if (ret) {
-		LOG_ERR("Failed to register Wi-Fi ready callbacks %s", strerror(ret));
-		return ret;
-	}
+    LOG_DBG("Registering Wi-Fi ready callbacks");
+    ret = register_wifi_ready_callback(cb, iface);
+    if (ret) {
+        LOG_ERR("Failed to register Wi-Fi ready callbacks %s", strerror(ret));
+        return ret;
+    }
 
-	return ret;
+    return ret;
 }
 
 void net_mgmt_callback_init(void)
@@ -928,5 +927,5 @@ int wifi_init(void)
 
 bool wifi_is_hw_available(void)
 {
-	return is_hardware_available;
+    return is_hardware_available;
 }

@@ -485,7 +485,7 @@ def execute_graph_chat(
 ) -> Tuple[str, bool, List[Conversation]]:
     print('execute_graph_chat app    :', app.id if app else '<none>')
     tz = notification_db.get_user_time_zone(uid)
-    
+
     # Get per-request LangSmith tracer callbacks (enables tracing without global env)
     tracer_callbacks = get_chat_tracer_callbacks(
         run_name="chat.graph",
@@ -497,7 +497,7 @@ def execute_graph_chat(
             "tz": tz,
         },
     )
-    
+
     # LangSmith tracing metadata
     run_config = {
         "configurable": {"thread_id": str(uuid.uuid4())},
@@ -511,7 +511,7 @@ def execute_graph_chat(
             "tz": tz,
         },
     }
-    
+
     result = graph.invoke(
         {"uid": uid, "tz": tz, "cited": cited, "messages": messages, "plugin_selected": app},
         run_config,
@@ -667,11 +667,9 @@ async def execute_persona_chat_stream(
         callback_data['langsmith_run_id'] = langsmith_run_id
 
     try:
-        task = asyncio.create_task(llm_medium_stream.agenerate(
-            messages=[formatted_messages], 
-            callbacks=all_callbacks,
-            **run_metadata
-        ))
+        task = asyncio.create_task(
+            llm_medium_stream.agenerate(messages=[formatted_messages], callbacks=all_callbacks, **run_metadata)
+        )
 
         while True:
             try:

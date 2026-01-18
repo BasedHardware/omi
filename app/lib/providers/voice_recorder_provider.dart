@@ -149,6 +149,8 @@ class VoiceRecorderProvider extends ChangeNotifier {
   }
 
   Future<void> processRecording() async {
+    if (_isProcessing) return;
+
     if (_audioChunks.isEmpty) {
       close();
       return;
@@ -164,6 +166,14 @@ class VoiceRecorderProvider extends ChangeNotifier {
     List<int> flattenedBytes = [];
     for (var chunk in _audioChunks) {
       flattenedBytes.addAll(chunk);
+    }
+
+    // Check minimum audio length (0.5 seconds at 16kHz PCM16 = 16000 bytes)
+    const int minAudioBytes = 16000;
+    if (flattenedBytes.length < minAudioBytes) {
+      Logger.debug('Audio too short (${flattenedBytes.length} bytes), closing without error');
+      close();
+      return;
     }
 
     // Convert PCM to WAV file
@@ -183,6 +193,10 @@ class VoiceRecorderProvider extends ChangeNotifier {
       if (transcript.isNotEmpty) {
         _onTranscriptReady?.call(transcript);
         // Auto-close after successful transcription
+        close();
+      } else {
+        // Empty transcript - close gracefully without error
+        Logger.debug('Empty transcript received, closing without error');
         close();
       }
     } catch (e) {

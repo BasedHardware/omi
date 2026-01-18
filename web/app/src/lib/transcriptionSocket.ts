@@ -37,6 +37,8 @@ export class TranscriptionSocket {
   private connectionTimeout: ReturnType<typeof setTimeout> | null = null;
   private tokenRefreshInterval: ReturnType<typeof setInterval> | null = null;
   private isRefreshing = false; // Flag to indicate token refresh in progress
+  private isAuthenticated = false; // Flag to indicate WebSocket auth completed
+  private pendingToken: string | null = null; // Token for first-message auth
   private static readonly CONNECTION_TIMEOUT_MS = 15000; // 15 seconds
   private static readonly TOKEN_REFRESH_INTERVAL_MS = 50 * 60 * 1000; // 50 minutes (tokens expire at 60 min)
 
@@ -63,8 +65,6 @@ export class TranscriptionSocket {
     this.tokenRefreshInterval = setInterval(() => {
       this.refreshConnection();
     }, TranscriptionSocket.TOKEN_REFRESH_INTERVAL_MS);
-
-    console.log('TranscriptionSocket: Token refresh scheduled every 50 minutes');
   }
 
   private stopTokenRefresh(): void {
@@ -81,11 +81,8 @@ export class TranscriptionSocket {
    */
   private async refreshConnection(): Promise<void> {
     if (this.state !== 'connected') {
-      console.log('TranscriptionSocket: Skip token refresh - not connected');
       return;
     }
-
-    console.log('TranscriptionSocket: Refreshing connection with new token...');
 
     // Set refreshing flag to prevent onDisconnected callback during refresh
     this.isRefreshing = true;
@@ -100,6 +97,7 @@ export class TranscriptionSocket {
     }
 
     this.state = 'disconnected';
+    this.isAuthenticated = false;
 
     // Small delay to ensure clean disconnect
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -107,7 +105,6 @@ export class TranscriptionSocket {
     // Reconnect with fresh token
     try {
       await this.connect();
-      console.log('TranscriptionSocket: Connection refreshed successfully');
     } catch (err) {
       console.error('TranscriptionSocket: Failed to refresh connection', err);
       this.isRefreshing = false;
@@ -134,18 +131,20 @@ export class TranscriptionSocket {
         throw new Error('User ID not available');
       }
 
-      // Build WebSocket URL with query parameters
+      // Build WebSocket URL with query parameters (auth via first message)
       const params = new URLSearchParams({
         language: this.options.language || 'multi',
         sample_rate: String(this.options.sampleRate || 16000),
         codec: 'pcm16',
         uid: uid,
-        token: token, // Pass Firebase token for web auth
         source: 'web',
         include_speech_profile: 'true',
       });
 
-      const wsUrl = `${WS_BASE_URL}/v4/listen?${params.toString()}`;
+      // Store token for first-message auth
+      this.pendingToken = token;
+
+      const wsUrl = `${WS_BASE_URL}/v4/web/listen?${params.toString()}`;
 
       this.ws = new WebSocket(wsUrl);
 
@@ -164,22 +163,18 @@ export class TranscriptionSocket {
 
       this.ws.onopen = () => {
         this.clearConnectionTimeout();
-        console.log('TranscriptionSocket: Connected');
         this.state = 'connected';
-        this.reconnectAttempts = 0;
-        this.isRefreshing = false; // Clear refresh flag on successful connection
-        this.options.onConnected();
 
-        // Start token refresh timer for long recordings
-        this.startTokenRefresh();
-
-        // Flush buffered audio
-        if (this.audioBuffer.length > 0) {
-          console.log(`TranscriptionSocket: Flushing ${this.audioBuffer.length} buffered chunks`);
-          this.audioBuffer.forEach((chunk) => this.sendAudio(chunk));
-          this.audioBuffer = [];
+        // Send first-message authentication
+        if (this.ws && this.pendingToken) {
+          try {
+            this.ws.send(JSON.stringify({ type: 'auth', token: this.pendingToken }));
+          } catch (err) {
+            console.error('TranscriptionSocket: Failed to send auth message, closing socket.', err);
+            this.ws?.close();
+          }
         }
-        this.isBuffering = false;
+        // Note: onConnected() and buffer flush happen after auth_response in handleMessage
       };
 
       this.ws.onmessage = (event) => {
@@ -193,7 +188,6 @@ export class TranscriptionSocket {
 
       this.ws.onclose = (event) => {
         this.clearConnectionTimeout();
-        console.log('TranscriptionSocket: Closed', event.code, event.reason);
         this.state = 'disconnected';
         this.ws = null;
 
@@ -205,9 +199,6 @@ export class TranscriptionSocket {
         // Auto-reconnect on unexpected close (but not during token refresh)
         if (!this.isRefreshing && event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
           this.reconnectAttempts++;
-          console.log(
-            `TranscriptionSocket: Reconnecting (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`
-          );
           this.isBuffering = true;
           setTimeout(() => this.connect(), 1000 * this.reconnectAttempts);
         }
@@ -274,14 +265,31 @@ export class TranscriptionSocket {
             this.options.onSegment(segment);
           }
         }
-        // Handle event messages
-        else if (data.type) {
-          console.log('TranscriptionSocket: Event', data.type, data);
+        // Handle auth response (first-message authentication)
+        else if (data.type === 'auth_response') {
+          if (data.success) {
+            this.isAuthenticated = true;
+            this.pendingToken = null;
+            this.reconnectAttempts = 0;
+            this.isRefreshing = false;
+            this.options.onConnected();
+
+            // Start token refresh timer for long recordings
+            this.startTokenRefresh();
+
+            // Stop buffering and flush buffered audio
+            this.isBuffering = false;
+            if (this.audioBuffer.length > 0) {
+              this.audioBuffer.forEach((chunk) => this.sendAudio(chunk));
+              this.audioBuffer = [];
+            }
+          } else {
+            console.error('TranscriptionSocket: Auth failed');
+            this.options.onError('Authentication failed');
+            this.ws?.close(1000, 'Auth failed');
+          }
         }
-      }
-      // Handle binary messages (shouldn't happen, but log if they do)
-      else if (event.data instanceof ArrayBuffer) {
-        console.log('TranscriptionSocket: Received binary data', event.data.byteLength);
+        // Handle other event messages (silently ignore for now)
       }
     } catch (err) {
       console.error('TranscriptionSocket: Failed to parse message', err);
@@ -289,8 +297,8 @@ export class TranscriptionSocket {
   }
 
   sendAudio(pcmData: Int16Array): void {
-    // Buffer if not connected yet
-    if (this.isBuffering || this.state !== 'connected' || !this.ws) {
+    // Buffer if not connected or not authenticated yet
+    if (this.isBuffering || this.state !== 'connected' || !this.ws || !this.isAuthenticated) {
       this.audioBuffer.push(pcmData);
       // Limit buffer size to prevent memory issues
       if (this.audioBuffer.length > 100) {
@@ -311,6 +319,8 @@ export class TranscriptionSocket {
     this.clearConnectionTimeout();
     this.stopTokenRefresh();
     this.isBuffering = false;
+    this.isAuthenticated = false;
+    this.pendingToken = null;
     this.audioBuffer = [];
     this.reconnectAttempts = this.maxReconnectAttempts; // Prevent auto-reconnect
 

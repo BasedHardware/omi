@@ -224,6 +224,9 @@
 		10 d8 08 81
 		];
 		size = <DT_SIZE_M(16)>;
+		has-dpd;
+		t-enter-dpd = <3000>;
+		t-exit-dpd = <8000>;
 	};
 };
 

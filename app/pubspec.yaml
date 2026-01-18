@@ -3,7 +3,7 @@ description: A new Flutter project.
 
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
-version: 1.0.520+592
+version: 1.0.521+607
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -134,7 +134,10 @@ dependencies:
   fl_chart: ^0.68.0
   image: ^4.3.0
   calendar_date_picker2: ^2.0.1
-  whisper_flutter_new: ^1.0.1
+  whisper_flutter_new:
+    git:
+      url: https://github.com/BasedHardware/whisper_flutter_new.git
+      ref: 684fb43710dd4de5538ac2da7d0b1fa405363212
   disk_space_2: ^1.0.11
 
 dependency_overrides:
