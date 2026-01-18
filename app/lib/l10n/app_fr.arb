@@ -2220,5 +2220,9 @@
   "syncingYourRecordings": "Synchronisation de vos enregistrements",
   "syncYourRecordings": "Synchroniser vos enregistrements",
   "syncNow": "Synchroniser maintenant",
-  "error": "Erreur"
+  "error": "Erreur",
+  "speechSamples": "Échantillons vocaux",
+  "additionalSampleIndex": "Échantillon supplémentaire {index}",
+  "durationSeconds": "Durée : {seconds} secondes",
+  "additionalSpeechSampleRemoved": "Échantillon vocal supplémentaire supprimé"
 }

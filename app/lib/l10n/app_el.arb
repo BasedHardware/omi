@@ -3402,5 +3402,9 @@
   "syncingYourRecordings": "Συγχρονισμός των εγγραφών σας",
   "syncYourRecordings": "Συγχρονίστε τις εγγραφές σας",
   "syncNow": "Συγχρονισμός τώρα",
-  "error": "Σφάλμα"
+  "error": "Σφάλμα",
+  "speechSamples": "Δείγματα ομιλίας",
+  "additionalSampleIndex": "Πρόσθετο δείγμα {index}",
+  "durationSeconds": "Διάρκεια: {seconds} δευτερόλεπτα",
+  "additionalSpeechSampleRemoved": "Το πρόσθετο δείγμα ομιλίας αφαιρέθηκε"
 }

@@ -6053,5 +6053,31 @@
   "error": "Error",
   "@error": {
     "description": "Generic error label shown when an operation fails"
+  },
+  "speechSamples": "Speech Samples",
+  "@speechSamples": {
+    "description": "Title for the speech samples page"
+  },
+  "additionalSampleIndex": "Additional Sample {index}",
+  "@additionalSampleIndex": {
+    "description": "Title for additional speech samples with index number",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "durationSeconds": "Duration: {seconds} seconds",
+  "@durationSeconds": {
+    "description": "Shows the duration of a speech sample in seconds",
+    "placeholders": {
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
+  "additionalSpeechSampleRemoved": "Additional Speech Sample Removed",
+  "@additionalSpeechSampleRemoved": {
+    "description": "Confirmation message when an additional speech sample is deleted"
   }
 }

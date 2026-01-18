@@ -3402,5 +3402,9 @@
   "syncingYourRecordings": "Felvételek szinkronizálása",
   "syncYourRecordings": "Szinkronizáld a felvételeidet",
   "syncNow": "Szinkronizálás most",
-  "error": "Hiba"
+  "error": "Hiba",
+  "speechSamples": "Hangminták",
+  "additionalSampleIndex": "További minta {index}",
+  "durationSeconds": "Időtartam: {seconds} másodperc",
+  "additionalSpeechSampleRemoved": "További hangminta eltávolítva"
 }

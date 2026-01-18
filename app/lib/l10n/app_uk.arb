@@ -3402,5 +3402,9 @@
   "syncingYourRecordings": "Синхронізація ваших записів",
   "syncYourRecordings": "Синхронізуйте ваші записи",
   "syncNow": "Синхронізувати зараз",
-  "error": "Помилка"
+  "error": "Помилка",
+  "speechSamples": "Зразки голосу",
+  "additionalSampleIndex": "Додатковий зразок {index}",
+  "durationSeconds": "Тривалість: {seconds} секунд",
+  "additionalSpeechSampleRemoved": "Додатковий зразок голосу видалено"
 }

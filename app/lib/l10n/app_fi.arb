@@ -3402,5 +3402,9 @@
   "syncingYourRecordings": "Synkronoidaan tallenteitasi",
   "syncYourRecordings": "Synkronoi tallenteet",
   "syncNow": "Synkronoi nyt",
-  "error": "Virhe"
+  "error": "Virhe",
+  "speechSamples": "Puhenäytteet",
+  "additionalSampleIndex": "Lisänäyte {index}",
+  "durationSeconds": "Kesto: {seconds} sekuntia",
+  "additionalSpeechSampleRemoved": "Lisäpuhenäyte poistettu"
 }

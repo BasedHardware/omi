@@ -1849,5 +1849,9 @@
   "syncingYourRecordings": "正在同步您的录音",
   "syncYourRecordings": "同步您的录音",
   "syncNow": "立即同步",
-  "error": "错误"
+  "error": "错误",
+  "speechSamples": "语音样本",
+  "additionalSampleIndex": "附加样本 {index}",
+  "durationSeconds": "时长: {seconds} 秒",
+  "additionalSpeechSampleRemoved": "已删除附加语音样本"
 }

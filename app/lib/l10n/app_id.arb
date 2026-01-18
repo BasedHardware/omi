@@ -3402,5 +3402,9 @@
   "syncingYourRecordings": "Menyinkronkan rekaman Anda",
   "syncYourRecordings": "Sinkronkan rekaman Anda",
   "syncNow": "Sinkronkan sekarang",
-  "error": "Kesalahan"
+  "error": "Kesalahan",
+  "speechSamples": "Sampel suara",
+  "additionalSampleIndex": "Sampel tambahan {index}",
+  "durationSeconds": "Durasi: {seconds} detik",
+  "additionalSpeechSampleRemoved": "Sampel suara tambahan dihapus"
 }

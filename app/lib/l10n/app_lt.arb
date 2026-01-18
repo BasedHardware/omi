@@ -3384,5 +3384,9 @@
   "syncingYourRecordings": "Sinchronizuojami jūsų įrašai",
   "syncYourRecordings": "Sinchronizuokite savo įrašus",
   "syncNow": "Sinchronizuoti dabar",
-  "error": "Klaida"
+  "error": "Klaida",
+  "speechSamples": "Balso pavyzdžiai",
+  "additionalSampleIndex": "Papildomas pavyzdys {index}",
+  "durationSeconds": "Trukmė: {seconds} sekundžių",
+  "additionalSpeechSampleRemoved": "Papildomas balso pavyzdys pašalintas"
 }

@@ -3402,5 +3402,9 @@
   "syncingYourRecordings": "Sincronizarea înregistrărilor tale",
   "syncYourRecordings": "Sincronizează înregistrările tale",
   "syncNow": "Sincronizează acum",
-  "error": "Eroare"
+  "error": "Eroare",
+  "speechSamples": "Mostre vocale",
+  "additionalSampleIndex": "Mostră suplimentară {index}",
+  "durationSeconds": "Durată: {seconds} secunde",
+  "additionalSpeechSampleRemoved": "Mostră vocală suplimentară eliminată"
 }

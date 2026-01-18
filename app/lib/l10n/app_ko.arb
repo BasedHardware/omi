@@ -3402,5 +3402,9 @@
   "syncingYourRecordings": "녹음 동기화 중",
   "syncYourRecordings": "녹음 동기화",
   "syncNow": "지금 동기화",
-  "error": "오류"
+  "error": "오류",
+  "speechSamples": "음성 샘플",
+  "additionalSampleIndex": "추가 샘플 {index}",
+  "durationSeconds": "길이: {seconds}초",
+  "additionalSpeechSampleRemoved": "추가 음성 샘플이 삭제되었습니다"
 }

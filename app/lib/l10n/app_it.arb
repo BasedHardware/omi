@@ -3384,5 +3384,9 @@
   "syncingYourRecordings": "Sincronizzazione delle tue registrazioni",
   "syncYourRecordings": "Sincronizza le tue registrazioni",
   "syncNow": "Sincronizza ora",
-  "error": "Errore"
+  "error": "Errore",
+  "speechSamples": "Campioni vocali",
+  "additionalSampleIndex": "Campione aggiuntivo {index}",
+  "durationSeconds": "Durata: {seconds} secondi",
+  "additionalSpeechSampleRemoved": "Campione vocale aggiuntivo rimosso"
 }

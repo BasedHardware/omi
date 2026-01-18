@@ -1849,5 +1849,9 @@
   "syncingYourRecordings": "Sincronizando tus grabaciones",
   "syncYourRecordings": "Sincroniza tus grabaciones",
   "syncNow": "Sincronizar ahora",
-  "error": "Error"
+  "error": "Error",
+  "speechSamples": "Muestras de voz",
+  "additionalSampleIndex": "Muestra adicional {index}",
+  "durationSeconds": "Duración: {seconds} segundos",
+  "additionalSpeechSampleRemoved": "Muestra de voz adicional eliminada"
 }

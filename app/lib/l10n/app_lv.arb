@@ -3402,5 +3402,9 @@
   "syncingYourRecordings": "Sinhronizē jūsu ierakstus",
   "syncYourRecordings": "Sinhronizējiet savus ierakstus",
   "syncNow": "Sinhronizēt tagad",
-  "error": "Kļūda"
+  "error": "Kļūda",
+  "speechSamples": "Balss paraugi",
+  "additionalSampleIndex": "Papildu paraugs {index}",
+  "durationSeconds": "Ilgums: {seconds} sekundes",
+  "additionalSpeechSampleRemoved": "Papildu balss paraugs noņemts"
 }

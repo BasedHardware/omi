@@ -3402,5 +3402,9 @@
   "syncingYourRecordings": "กำลังซิงค์การบันทึกของคุณ",
   "syncYourRecordings": "ซิงค์การบันทึกของคุณ",
   "syncNow": "ซิงค์เดี๋ยวนี้",
-  "error": "ข้อผิดพลาด"
+  "error": "ข้อผิดพลาด",
+  "speechSamples": "ตัวอย่างเสียง",
+  "additionalSampleIndex": "ตัวอย่างเพิ่มเติม {index}",
+  "durationSeconds": "ระยะเวลา: {seconds} วินาที",
+  "additionalSpeechSampleRemoved": "ลบตัวอย่างเสียงเพิ่มเติมแล้ว"
 }

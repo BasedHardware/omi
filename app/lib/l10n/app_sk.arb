@@ -3402,5 +3402,9 @@
   "syncingYourRecordings": "Synchronizácia vašich nahrávok",
   "syncYourRecordings": "Synchronizujte svoje nahrávky",
   "syncNow": "Synchronizovať teraz",
-  "error": "Chyba"
+  "error": "Chyba",
+  "speechSamples": "Hlasové vzorky",
+  "additionalSampleIndex": "Ďalšia vzorka {index}",
+  "durationSeconds": "Trvanie: {seconds} sekúnd",
+  "additionalSpeechSampleRemoved": "Ďalšia hlasová vzorka odstránená"
 }

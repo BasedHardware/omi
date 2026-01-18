@@ -2220,5 +2220,9 @@
   "syncingYourRecordings": "Je opnames synchroniseren",
   "syncYourRecordings": "Synchroniseer je opnames",
   "syncNow": "Nu synchroniseren",
-  "error": "Fout"
+  "error": "Fout",
+  "speechSamples": "Spraakvoorbeelden",
+  "additionalSampleIndex": "Extra voorbeeld {index}",
+  "durationSeconds": "Duur: {seconds} seconden",
+  "additionalSpeechSampleRemoved": "Extra spraakvoorbeeld verwijderd"
 }

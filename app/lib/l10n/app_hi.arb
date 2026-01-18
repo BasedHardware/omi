@@ -1849,5 +1849,9 @@
   "syncingYourRecordings": "आपकी रिकॉर्डिंग सिंक हो रही हैं",
   "syncYourRecordings": "अपनी रिकॉर्डिंग सिंक करें",
   "syncNow": "अभी सिंक करें",
-  "error": "त्रुटि"
+  "error": "त्रुटि",
+  "speechSamples": "भाषण के नमूने",
+  "additionalSampleIndex": "अतिरिक्त नमूना {index}",
+  "durationSeconds": "अवधि: {seconds} सेकंड",
+  "additionalSpeechSampleRemoved": "अतिरिक्त भाषण नमूना हटाया गया"
 }

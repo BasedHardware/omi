@@ -3384,5 +3384,9 @@
   "syncingYourRecordings": "Kayıtlarınız senkronize ediliyor",
   "syncYourRecordings": "Kayıtlarınızı senkronize edin",
   "syncNow": "Şimdi senkronize et",
-  "error": "Hata"
+  "error": "Hata",
+  "speechSamples": "Ses örnekleri",
+  "additionalSampleIndex": "Ek örnek {index}",
+  "durationSeconds": "Süre: {seconds} saniye",
+  "additionalSpeechSampleRemoved": "Ek ses örneği kaldırıldı"
 }

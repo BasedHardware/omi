@@ -3402,5 +3402,9 @@
   "syncingYourRecordings": "Synchronizacja nagrań",
   "syncYourRecordings": "Zsynchronizuj nagrania",
   "syncNow": "Synchronizuj teraz",
-  "error": "Błąd"
+  "error": "Błąd",
+  "speechSamples": "Próbki głosowe",
+  "additionalSampleIndex": "Dodatkowa próbka {index}",
+  "durationSeconds": "Czas trwania: {seconds} sekund",
+  "additionalSpeechSampleRemoved": "Dodatkowa próbka głosowa usunięta"
 }

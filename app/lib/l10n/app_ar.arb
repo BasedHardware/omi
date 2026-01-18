@@ -3420,5 +3420,9 @@
   "syncingYourRecordings": "جاري مزامنة تسجيلاتك",
   "syncYourRecordings": "مزامنة تسجيلاتك",
   "syncNow": "مزامنة الآن",
-  "error": "خطأ"
+  "error": "خطأ",
+  "speechSamples": "عينات الكلام",
+  "additionalSampleIndex": "عينة إضافية {index}",
+  "durationSeconds": "المدة: {seconds} ثانية",
+  "additionalSpeechSampleRemoved": "تمت إزالة عينة الكلام الإضافية"
 }

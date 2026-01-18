@@ -3402,5 +3402,9 @@
   "syncingYourRecordings": "Sinu salvestuste sünkroonimine",
   "syncYourRecordings": "Sünkrooni oma salvestused",
   "syncNow": "Sünkrooni kohe",
-  "error": "Viga"
+  "error": "Viga",
+  "speechSamples": "Kõnenäidised",
+  "additionalSampleIndex": "Lisanäidis {index}",
+  "durationSeconds": "Kestus: {seconds} sekundit",
+  "additionalSpeechSampleRemoved": "Lisakõnenäidis eemaldatud"
 }

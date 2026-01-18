@@ -3404,5 +3404,9 @@
   "syncingYourRecordings": "Sincronitzant les teves gravacions",
   "syncYourRecordings": "Sincronitza les teves gravacions",
   "syncNow": "Sincronitza ara",
-  "error": "Error"
+  "error": "Error",
+  "speechSamples": "Mostres de veu",
+  "additionalSampleIndex": "Mostra addicional {index}",
+  "durationSeconds": "Durada: {seconds} segons",
+  "additionalSpeechSampleRemoved": "S'ha eliminat la mostra de veu addicional"
 }

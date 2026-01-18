@@ -3402,5 +3402,9 @@
   "syncingYourRecordings": "Đang đồng bộ bản ghi của bạn",
   "syncYourRecordings": "Đồng bộ bản ghi của bạn",
   "syncNow": "Đồng bộ ngay",
-  "error": "Lỗi"
+  "error": "Lỗi",
+  "speechSamples": "Mẫu giọng nói",
+  "additionalSampleIndex": "Mẫu bổ sung {index}",
+  "durationSeconds": "Thời lượng: {seconds} giây",
+  "additionalSpeechSampleRemoved": "Đã xóa mẫu giọng nói bổ sung"
 }

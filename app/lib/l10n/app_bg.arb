@@ -3404,5 +3404,9 @@
   "syncingYourRecordings": "Синхронизиране на записите ви",
   "syncYourRecordings": "Синхронизирай записите си",
   "syncNow": "Синхронизирай сега",
-  "error": "Грешка"
+  "error": "Грешка",
+  "speechSamples": "Гласови проби",
+  "additionalSampleIndex": "Допълнителна проба {index}",
+  "durationSeconds": "Продължителност: {seconds} секунди",
+  "additionalSpeechSampleRemoved": "Допълнителната гласова проба е премахната"
 }

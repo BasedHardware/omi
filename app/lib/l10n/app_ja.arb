@@ -1828,5 +1828,9 @@
   "syncingYourRecordings": "録音を同期中",
   "syncYourRecordings": "録音を同期する",
   "syncNow": "今すぐ同期",
-  "error": "エラー"
+  "error": "エラー",
+  "speechSamples": "音声サンプル",
+  "additionalSampleIndex": "追加サンプル {index}",
+  "durationSeconds": "長さ: {seconds} 秒",
+  "additionalSpeechSampleRemoved": "追加の音声サンプルを削除しました"
 }

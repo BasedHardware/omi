@@ -3402,5 +3402,9 @@
   "syncingYourRecordings": "Синхронизация записей",
   "syncYourRecordings": "Синхронизировать записи",
   "syncNow": "Синхронизировать сейчас",
-  "error": "Ошибка"
+  "error": "Ошибка",
+  "speechSamples": "Образцы голоса",
+  "additionalSampleIndex": "Дополнительный образец {index}",
+  "durationSeconds": "Длительность: {seconds} секунд",
+  "additionalSpeechSampleRemoved": "Дополнительный образец голоса удален"
 }

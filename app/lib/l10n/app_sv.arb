@@ -3402,5 +3402,9 @@
   "syncingYourRecordings": "Synkroniserar dina inspelningar",
   "syncYourRecordings": "Synkronisera dina inspelningar",
   "syncNow": "Synkronisera nu",
-  "error": "Fel"
+  "error": "Fel",
+  "speechSamples": "Röstprover",
+  "additionalSampleIndex": "Ytterligare prov {index}",
+  "durationSeconds": "Längd: {seconds} sekunder",
+  "additionalSpeechSampleRemoved": "Ytterligare röstprov borttaget"
 }

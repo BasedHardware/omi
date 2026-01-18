@@ -3402,5 +3402,9 @@
   "syncingYourRecordings": "Synkroniserer opptakene dine",
   "syncYourRecordings": "Synkroniser opptakene dine",
   "syncNow": "Synkroniser nå",
-  "error": "Feil"
+  "error": "Feil",
+  "speechSamples": "Taleprøver",
+  "additionalSampleIndex": "Ekstra prøve {index}",
+  "durationSeconds": "Varighet: {seconds} sekunder",
+  "additionalSpeechSampleRemoved": "Ekstra taleprøve fjernet"
 }
