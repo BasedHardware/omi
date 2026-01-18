@@ -1,11 +1,18 @@
 'use client';
 
 import { MessageCircle, X } from 'lucide-react';
+import { usePathname } from 'next/navigation';
 import { useChat } from './ChatContext';
 import { cn } from '@/lib/utils';
 
 export function ChatBubble() {
   const { isOpen, toggleChat } = useChat();
+  const pathname = usePathname();
+
+  // Hide on chat page since it already has a full chat interface
+  if (pathname === '/chat') {
+    return null;
+  }
 
   return (
     <button
@@ -30,3 +37,4 @@ export function ChatBubble() {
     </button>
   );
 }
+

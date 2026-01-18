@@ -91,14 +91,13 @@ export function MemoryList({
   return (
     <div
       ref={containerRef}
-      className="flex flex-col gap-3 overflow-y-auto scrollbar-thin scrollbar-thumb-bg-quaternary scrollbar-track-transparent"
+      className="flex flex-col gap-4 overflow-y-auto scrollbar-thin scrollbar-thumb-bg-quaternary scrollbar-track-transparent pb-32"
       style={{ maxHeight: 'calc(100vh - 350px)' }}
     >
       <AnimatePresence mode="popLayout">
         {memories.map((memory) => (
           <motion.div
             key={memory.id}
-            layout
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, x: -20 }}

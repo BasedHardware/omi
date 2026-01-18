@@ -72,19 +72,14 @@ const navItems: NavItem[] = [
     icon: <Mic className="w-5 h-5" />,
   },
   {
-    label: 'Recaps',
-    href: '/recaps',
-    icon: <CalendarDays className="w-5 h-5" />,
-  },
-  {
     label: 'Chat',
     href: '/chat',
     icon: <MessageCircle className="w-5 h-5" />,
   },
   {
-    label: 'My Apps',
-    href: '/my-apps',
-    icon: <LayoutGrid className="w-5 h-5" />,
+    label: 'Memories',
+    href: '/memories',
+    icon: <Brain className="w-5 h-5" />,
   },
   {
     label: 'Tasks',
@@ -92,9 +87,14 @@ const navItems: NavItem[] = [
     icon: <ListChecks className="w-5 h-5" />,
   },
   {
-    label: 'Memories',
-    href: '/memories',
-    icon: <Brain className="w-5 h-5" />,
+    label: 'Recaps',
+    href: '/recaps',
+    icon: <CalendarDays className="w-5 h-5" />,
+  },
+  {
+    label: 'My Apps',
+    href: '/my-apps',
+    icon: <LayoutGrid className="w-5 h-5" />,
   },
 ];
 
@@ -237,9 +237,11 @@ export function Sidebar({
                 height={isExpanded ? 24 : 13}
                 className="object-contain"
               />
-              <span className="text-[10px] bg-purple-primary/20 text-purple-primary px-1.5 py-0.5 rounded-full font-medium">
-                Beta
-              </span>
+              {isExpanded && (
+                <span className="text-[10px] bg-purple-primary/20 text-purple-primary px-1.5 py-0.5 rounded-full font-medium">
+                  Beta
+                </span>
+              )}
             </Link>
 
             {/* Mobile close button */}

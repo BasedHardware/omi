@@ -14,7 +14,7 @@ type ListItem =
 
 // Item heights
 const HEADER_HEIGHT = 32;
-const CARD_HEIGHT = 100;
+const CARD_HEIGHT = 128;
 const CARD_GAP = 6;
 
 interface VirtualizedConversationListProps {
@@ -31,6 +31,7 @@ interface VirtualizedConversationListProps {
   onLoadMore?: () => void;
   loading?: boolean;
   onEnterSelectionMode?: (id: string) => void;
+  onDelete?: (id: string) => void;
 }
 
 // Memoized conversation card to prevent re-renders
@@ -41,6 +42,7 @@ interface RowProps {
   items: ListItem[];
   onConversationClick?: (conversation: Conversation) => void;
   onStarToggle?: (id: string, starred: boolean) => void;
+  onDelete?: (id: string) => void;
   selectedId?: string | null;
   isSelectionMode?: boolean;
   selectedIds?: Set<string>;
@@ -69,6 +71,7 @@ function RowComponentImpl(props: RowComponentProps): ReactElement {
     items,
     onConversationClick,
     onStarToggle,
+    onDelete,
     selectedId,
     isSelectionMode,
     selectedIds,
@@ -101,6 +104,7 @@ function RowComponentImpl(props: RowComponentProps): ReactElement {
         conversation={item.conversation}
         onClick={() => onConversationClick?.(item.conversation)}
         onStarToggle={onStarToggle}
+        onDelete={onDelete}
         isSelected={selectedId === item.conversation.id}
         compact={false}
         isSelectionMode={isSelectionMode}
@@ -120,6 +124,7 @@ export function VirtualizedConversationList({
   orderedKeys,
   onConversationClick,
   onStarToggle,
+  onDelete,
   selectedId,
   isSelectionMode = false,
   selectedIds,
@@ -196,6 +201,7 @@ export function VirtualizedConversationList({
       items: flatItems,
       onConversationClick,
       onStarToggle,
+      onDelete,
       selectedId,
       isSelectionMode,
       selectedIds,
@@ -203,7 +209,7 @@ export function VirtualizedConversationList({
       mergingIds,
       onEnterSelectionMode,
     }),
-    [flatItems, onConversationClick, onStarToggle, selectedId, isSelectionMode, selectedIds, onSelect, mergingIds, onEnterSelectionMode]
+    [flatItems, onConversationClick, onStarToggle, onDelete, selectedId, isSelectionMode, selectedIds, onSelect, mergingIds, onEnterSelectionMode]
   );
 
   if (flatItems.length === 0) {

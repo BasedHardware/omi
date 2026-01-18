@@ -11,14 +11,13 @@ interface DateGroupProps {
   conversations: Conversation[];
   onConversationClick?: (conversation: Conversation) => void;
   onStarToggle?: (id: string, starred: boolean) => void;
+  onDelete?: (id: string) => void;
   selectedId?: string | null;
   compact?: boolean;
-  // Selection mode props for merge feature
   isSelectionMode?: boolean;
   selectedIds?: Set<string>;
   onSelect?: (id: string) => void;
   mergingIds?: Set<string>;
-  // Double-click to enter selection mode
   onEnterSelectionMode?: (id: string) => void;
 }
 
@@ -49,6 +48,7 @@ export const DateGroup = memo(function DateGroup({
   conversations,
   onConversationClick,
   onStarToggle,
+  onDelete,
   selectedId,
   compact = false,
   isSelectionMode = false,
@@ -84,6 +84,7 @@ export const DateGroup = memo(function DateGroup({
               conversation={conversation}
               onClick={() => onConversationClick?.(conversation)}
               onStarToggle={onStarToggle}
+              onDelete={onDelete}
               isSelected={selectedId === conversation.id}
               compact={compact}
               isSelectionMode={isSelectionMode}

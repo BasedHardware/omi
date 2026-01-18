@@ -228,6 +228,8 @@ export function ConversationSplitView() {
     setSelectedId(conversation.id);
   }, []);
 
+  // handleSwipeDelete removed as feature is reverted
+
   // Handle star toggle
   const handleStarToggle = useCallback(async (id: string, starred: boolean) => {
     try {
@@ -542,15 +544,18 @@ export function ConversationSplitView() {
           )}
         >
           {/* Search, Date Filter, and Select - stays with list */}
-          <div className="flex-shrink-0 px-3 pt-4 pb-3">
-            <div className="flex items-center gap-2">
-              <SearchBar
-                value={searchQuery}
-                onChange={setSearchQuery}
-                onSearch={handleSearch}
-                placeholder="Search conversations..."
-                className="flex-1"
-              />
+          <div className="flex-shrink-0 px-3 pt-4 pb-3 space-y-3">
+            {/* Search bar - full width */}
+            <SearchBar
+              value={searchQuery}
+              onChange={setSearchQuery}
+              onSearch={handleSearch}
+              placeholder="Search conversations..."
+              className="w-full"
+            />
+
+            {/* Filters and actions row */}
+            <div className="flex items-center justify-between gap-2">
               <DateFilter
                 selectedDate={filterDate}
                 onDateChange={handleDateFilterChange}
@@ -559,8 +564,8 @@ export function ConversationSplitView() {
               <button
                 onClick={isSelectionMode ? exitSelectionMode : enterSelectionMode}
                 className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg flex-shrink-0',
-                  'text-sm font-medium transition-colors',
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
+                  'text-sm font-medium transition-colors whitespace-nowrap',
                   isSelectionMode
                     ? 'bg-purple-primary/20 text-purple-primary hover:bg-purple-primary/30'
                     : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
@@ -649,12 +654,12 @@ export function ConversationSplitView() {
                   {isSearching
                     ? 'No conversations found'
                     : filterDate
-                    ? 'No conversations on this date'
-                    : selectedFolderId === FOLDER_STARRED
-                    ? 'No starred conversations'
-                    : selectedFolderId !== FOLDER_ALL
-                    ? 'No conversations in this folder'
-                    : 'No conversations yet'}
+                      ? 'No conversations on this date'
+                      : selectedFolderId === FOLDER_STARRED
+                        ? 'No starred conversations'
+                        : selectedFolderId !== FOLDER_ALL
+                          ? 'No conversations in this folder'
+                          : 'No conversations yet'}
                 </p>
               </div>
             )}

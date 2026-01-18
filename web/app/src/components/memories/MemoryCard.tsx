@@ -13,6 +13,7 @@ import {
   ThumbsUp,
   ThumbsDown,
 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 import { cn } from '@/lib/utils';
 import type { Memory, MemoryCategory, MemoryVisibility } from '@/types/conversation';
 
@@ -222,8 +223,8 @@ export const MemoryCard = memo(function MemoryCard({
               rows={1}
             />
           ) : (
-            <div>
-              <p
+            <div className="relative">
+              <div
                 onDoubleClick={handleTextDoubleClick}
                 title="Double-click to edit"
                 className={cn(
@@ -233,8 +234,30 @@ export const MemoryCard = memo(function MemoryCard({
                   !isExpanded && needsTruncation && 'line-clamp-2'
                 )}
               >
-                {memory.content}
-              </p>
+                <ReactMarkdown
+                  components={{
+                    p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
+                    a: ({ href, children }) => (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-purple-primary hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {children}
+                      </a>
+                    ),
+                    strong: ({ children }) => <span className="font-bold text-text-primary">{children}</span>,
+                    em: ({ children }) => <span className="italic text-text-secondary">{children}</span>,
+                    code: ({ children }) => (
+                      <code className="bg-bg-tertiary px-1 py-0.5 rounded text-xs font-mono">{children}</code>
+                    ),
+                  }}
+                >
+                  {memory.content}
+                </ReactMarkdown>
+              </div>
               {needsTruncation && (
                 <button
                   onClick={() => setIsExpanded(!isExpanded)}

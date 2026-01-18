@@ -122,7 +122,7 @@ export function SearchBar({
           onBlur={() => setIsFocused(false)}
           placeholder={placeholder}
           className={cn(
-            'flex-1 bg-transparent text-sm text-text-primary',
+            'flex-1 min-w-0 bg-transparent text-sm text-text-primary',
             'placeholder:text-text-quaternary',
             'outline-none'
           )}

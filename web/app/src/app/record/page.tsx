@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, ArrowLeft } from 'lucide-react';
+import { Mic, ArrowLeft, Bookmark, Copy, Check } from 'lucide-react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useRecordingContext } from '@/components/recording/RecordingContext';
@@ -12,14 +13,15 @@ import { RecordingControls } from '@/components/recording/RecordingControls';
 import { LiveTranscript } from '@/components/recording/LiveTranscript';
 import { cn } from '@/lib/utils';
 import { RECORDING_ENABLED } from '@/lib/featureFlags';
+import { useToast } from '@/components/ui/Toast';
 
 /**
  * Inner content component that uses recording context.
  * Must be rendered INSIDE MainLayout (which provides RecordingProvider).
- * Uses context directly instead of useRecording hook to avoid conflicting
- * with the RecordingController that manages the actual recording infrastructure.
  */
 function RecordPageContent() {
+  const searchParams = useSearchParams();
+  const { showToast } = useToast();
   const {
     state,
     audioMode,
@@ -44,6 +46,22 @@ function RecordPageContent() {
   const isProcessing = state === 'processing';
 
   const [showModeSelector, setShowModeSelector] = useState(false);
+  const [showBookmarklet, setShowBookmarklet] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  // Handle autostart query param
+  useEffect(() => {
+    const shouldAutostart = searchParams.get('autostart') === 'true';
+    if (shouldAutostart && isIdle && RECORDING_ENABLED) {
+      // Default to mic-and-system (mic+tab) if not specified, as it's the most capable mode
+      const modeParam = searchParams.get('mode');
+      const mode = (modeParam === 'mic' || modeParam === 'mic-only') ? 'mic-only' : 'mic-and-system';
+      setAudioMode(mode);
+      startRecording(mode); // Pass mode explicitly to ensure immediate effect
+      // Clean up URL
+      window.history.replaceState(null, '', '/record');
+    }
+  }, [searchParams, isIdle, setAudioMode, startRecording]);
 
   const handleStartClick = () => {
     setShowModeSelector(true);
@@ -58,7 +76,32 @@ function RecordPageContent() {
     setShowModeSelector(false);
   };
 
+  const [origin, setOrigin] = useState('');
+
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
+
+  const getBookmarkletCode = () => {
+    const baseUrl = origin || 'https://omi.me';
+    // Use mic-and-system mode to capture tab audio as requested
+    return `javascript:(function(){window.location.href='${baseUrl}/record?autostart=true&mode=system'})()`;
+  };
+
+  const copyBookmarklet = () => {
+    const code = getBookmarkletCode();
+    navigator.clipboard.writeText(code);
+    setCopied(true);
+    showToast('Bookmarklet code copied!', 'success');
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  // Removed bookmarkletRef as we are switching to manual copy mode
+
   const isActive = isRecording || isPaused || isInitializing || isProcessing;
+
+  // ... (JSX changes)
+
 
   return (
     <>
@@ -123,18 +166,61 @@ function RecordPageContent() {
                 </div>
 
                 {RECORDING_ENABLED ? (
-                  <button
-                    onClick={handleStartClick}
-                    className={cn(
-                      'px-6 py-3 rounded-xl font-medium',
-                      'bg-purple-primary hover:bg-purple-secondary text-white',
-                      'transition-all transform hover:scale-105',
-                      'flex items-center gap-2'
-                    )}
-                  >
-                    <Mic className="w-5 h-5" />
-                    <span>Start Recording</span>
-                  </button>
+                  <div className="flex flex-col items-center gap-3">
+                    <button
+                      onClick={handleStartClick}
+                      className={cn(
+                        'px-6 py-3 rounded-xl font-medium',
+                        'bg-purple-primary hover:bg-purple-secondary text-white',
+                        'transition-all transform hover:scale-105',
+                        'flex items-center gap-2'
+                      )}
+                    >
+                      <Mic className="w-5 h-5" />
+                      <span>Start Recording</span>
+                    </button>
+
+                    <button
+                      onClick={() => setShowBookmarklet(!showBookmarklet)}
+                      className="text-xs text-text-tertiary hover:text-text-secondary flex items-center gap-1.5 transition-colors"
+                    >
+                      <Bookmark className="w-3 h-3" />
+                      <span>Create recording bookmark</span>
+                    </button>
+
+                    <AnimatePresence>
+                      {showBookmarklet && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="mt-2 w-full max-w-sm bg-bg-secondary border border-bg-tertiary rounded-xl p-4 overflow-hidden text-left"
+                        >
+                          <p className="text-sm text-text-secondary mb-2 font-medium">
+                            To create a recording bookmark:
+                          </p>
+                          <ol className="text-xs text-text-tertiary list-decimal list-inside mb-3 space-y-1">
+                            <li>Create a new bookmark in your browser</li>
+                            <li>Name it "Start Omi Recording"</li>
+                            <li>Paste the code below into the URL field</li>
+                          </ol>
+
+                          <div className="relative">
+                            <div className="w-full h-24 p-2 bg-bg-tertiary rounded-lg border border-bg-quaternary text-xs text-text-secondary font-mono break-all overflow-y-auto">
+                              {getBookmarkletCode()}
+                            </div>
+                            <button
+                              onClick={copyBookmarklet}
+                              className="absolute top-2 right-2 p-1.5 bg-bg-secondary hover:bg-bg-quaternary text-text-primary rounded-md shadow-sm border border-bg-tertiary transition-colors"
+                              title="Copy code"
+                            >
+                              {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 ) : (
                   <div className="text-center">
                     <p className="text-sm text-text-tertiary mb-2">

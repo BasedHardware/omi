@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
+import ReactMarkdown from 'react-markdown';
 import {
   ArrowLeft,
   Star,
@@ -212,9 +213,9 @@ function SummaryTab({
                     </span>
                   </div>
                 )}
-                <p className="text-text-secondary leading-relaxed text-lg">
-                  {overview}
-                </p>
+                <div className="text-text-secondary leading-relaxed text-lg prose prose-lg prose-invert max-w-none prose-p:my-2 prose-headings:text-text-primary prose-headings:font-medium prose-h1:text-xl prose-h2:text-lg prose-h3:text-base prose-ul:my-2 prose-li:my-1 prose-strong:text-text-primary prose-strong:font-semibold">
+                  <ReactMarkdown>{overview}</ReactMarkdown>
+                </div>
                 {geolocation.address && (
                   <div className="mt-4 flex items-start gap-2 text-sm text-text-tertiary">
                     <MapPin className="w-4 h-4 flex-shrink-0 mt-0.5" />
@@ -261,7 +262,7 @@ function SummaryTab({
         </div>
       ) : (
         /* Full-width overview when no location */
-        <div>
+        <div className="noise-overlay rounded-xl overflow-hidden border border-white/[0.04] p-5">
           {category && (
             <div className="mb-3">
               <span className="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-purple-primary/10 text-purple-primary capitalize">
@@ -269,9 +270,9 @@ function SummaryTab({
               </span>
             </div>
           )}
-          <p className="text-text-secondary leading-relaxed text-lg">
-            {overview}
-          </p>
+          <div className="text-text-secondary leading-relaxed text-lg prose prose-lg prose-invert max-w-none prose-p:my-2 prose-headings:text-text-primary prose-headings:font-medium prose-h1:text-xl prose-h2:text-lg prose-h3:text-base prose-ul:my-2 prose-li:my-1 prose-strong:text-text-primary prose-strong:font-semibold">
+            <ReactMarkdown>{overview}</ReactMarkdown>
+          </div>
         </div>
       )}
 

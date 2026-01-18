@@ -13,7 +13,21 @@ export const metadata: Metadata = {
   },
   description: 'Omi Web App - Access your conversations anywhere',
   icons: {
-    icon: '/favicon.png',
+    icon: [
+      { url: '/favicon.png', sizes: '32x32', type: 'image/png' },
+      { url: '/logo.png', sizes: '192x192', type: 'image/png' },
+      { url: '/logo.png', sizes: '512x512', type: 'image/png' },
+    ],
+    shortcut: ['/favicon.png'],
+    apple: [
+      { url: '/logo.png', sizes: '180x180', type: 'image/png' },
+    ],
+    other: [
+      {
+        rel: 'apple-touch-icon-precomposed',
+        url: '/logo.png',
+      },
+    ],
   },
   openGraph: {
     siteName: 'Omi',
