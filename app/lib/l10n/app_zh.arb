@@ -1885,5 +1885,8 @@
   "dontAskAgain": "不再询问",
   "waitingForTranscriptOrPhotos": "等待转录或照片...",
   "noSummaryYet": "暂无摘要",
-  "hints": "提示: {text}"
+  "hints": "提示: {text}",
+  "testConversationPrompt": "测试对话提示",
+  "prompt": "提示",
+  "result": "结果"
 }

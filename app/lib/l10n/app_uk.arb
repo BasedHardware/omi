@@ -3438,5 +3438,8 @@
   "dontAskAgain": "Більше не питати",
   "waitingForTranscriptOrPhotos": "Очікування транскрипції або фотографій...",
   "noSummaryYet": "Ще немає підсумку",
-  "hints": "Підказки: {text}"
+  "hints": "Підказки: {text}",
+  "testConversationPrompt": "Тестувати запит розмови",
+  "prompt": "Запит",
+  "result": "Результат"
 }

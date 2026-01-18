@@ -3438,5 +3438,8 @@
   "dontAskAgain": "Ära küsi uuesti",
   "waitingForTranscriptOrPhotos": "Ootan transkriptsiooni või fotosid...",
   "noSummaryYet": "Kokkuvõtet veel pole",
-  "hints": "Vihjed: {text}"
+  "hints": "Vihjed: {text}",
+  "testConversationPrompt": "Testi vestluse viipa",
+  "prompt": "Viip",
+  "result": "Tulemus"
 }

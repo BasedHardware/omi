@@ -1885,5 +1885,8 @@
   "dontAskAgain": "मुझसे दोबारा मत पूछो",
   "waitingForTranscriptOrPhotos": "ट्रांसक्रिप्ट या फ़ोटो की प्रतीक्षा...",
   "noSummaryYet": "अभी तक कोई सारांश नहीं",
-  "hints": "संकेत: {text}"
+  "hints": "संकेत: {text}",
+  "testConversationPrompt": "वार्तालाप प्रॉम्प्ट का परीक्षण करें",
+  "prompt": "प्रॉम्प्ट",
+  "result": "परिणाम"
 }

@@ -1885,5 +1885,8 @@
   "dontAskAgain": "Nicht erneut fragen",
   "waitingForTranscriptOrPhotos": "Warte auf Transkript oder Fotos...",
   "noSummaryYet": "Noch keine Zusammenfassung",
-  "hints": "Hinweise: {text}"
+  "hints": "Hinweise: {text}",
+  "testConversationPrompt": "Gesprächs-Prompt testen",
+  "prompt": "Prompt",
+  "result": "Ergebnis"
 }

@@ -3440,5 +3440,8 @@
   "dontAskAgain": "Neptej se mě znovu",
   "waitingForTranscriptOrPhotos": "Čekání na přepis nebo fotografie...",
   "noSummaryYet": "Zatím žádné shrnutí",
-  "hints": "Tipy: {text}"
+  "hints": "Tipy: {text}",
+  "testConversationPrompt": "Test výzvy konverzace",
+  "prompt": "Výzva",
+  "result": "Výsledek"
 }

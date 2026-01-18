@@ -3440,5 +3440,8 @@
   "dontAskAgain": "No em tornis a preguntar",
   "waitingForTranscriptOrPhotos": "Esperant transcripció o fotos...",
   "noSummaryYet": "Encara no hi ha resum",
-  "hints": "Consells: {text}"
+  "hints": "Consells: {text}",
+  "testConversationPrompt": "Prova de prompt de conversa",
+  "prompt": "Prompt",
+  "result": "Resultat"
 }

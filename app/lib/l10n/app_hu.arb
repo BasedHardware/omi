@@ -3438,5 +3438,8 @@
   "dontAskAgain": "Ne kérdezd újra",
   "waitingForTranscriptOrPhotos": "Várakozás átiratra vagy fotókra...",
   "noSummaryYet": "Még nincs összefoglaló",
-  "hints": "Tippek: {text}"
+  "hints": "Tippek: {text}",
+  "testConversationPrompt": "Beszélgetési prompt tesztelése",
+  "prompt": "Prompt",
+  "result": "Eredmény"
 }

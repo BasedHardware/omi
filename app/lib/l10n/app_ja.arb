@@ -1864,5 +1864,8 @@
   "dontAskAgain": "次回から表示しない",
   "waitingForTranscriptOrPhotos": "文字起こしまたは写真を待機中...",
   "noSummaryYet": "まだ要約がありません",
-  "hints": "ヒント: {text}"
+  "hints": "ヒント: {text}",
+  "testConversationPrompt": "会話プロンプトをテスト",
+  "prompt": "プロンプト",
+  "result": "結果"
 }

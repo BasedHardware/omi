@@ -3438,5 +3438,8 @@
   "dontAskAgain": "Nu mai întreba",
   "waitingForTranscriptOrPhotos": "Se așteaptă transcriere sau fotografii...",
   "noSummaryYet": "Încă nu există rezumat",
-  "hints": "Indicii: {text}"
+  "hints": "Indicii: {text}",
+  "testConversationPrompt": "Testează promptul conversației",
+  "prompt": "Prompt",
+  "result": "Rezultat"
 }

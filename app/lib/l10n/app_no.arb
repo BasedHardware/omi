@@ -3438,5 +3438,8 @@
   "dontAskAgain": "Ikke spør igjen",
   "waitingForTranscriptOrPhotos": "Venter på transkripsjon eller bilder...",
   "noSummaryYet": "Ingen oppsummering ennå",
-  "hints": "Hint: {text}"
+  "hints": "Hint: {text}",
+  "testConversationPrompt": "Test samtaleprompt",
+  "prompt": "Prompt",
+  "result": "Resultat"
 }

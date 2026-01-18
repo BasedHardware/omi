@@ -3438,5 +3438,8 @@
   "dontAskAgain": "Không hỏi lại",
   "waitingForTranscriptOrPhotos": "Đang chờ bản ghi hoặc ảnh...",
   "noSummaryYet": "Chưa có tóm tắt",
-  "hints": "Gợi ý: {text}"
+  "hints": "Gợi ý: {text}",
+  "testConversationPrompt": "Kiểm tra lời nhắc cuộc trò chuyện",
+  "prompt": "Lời nhắc",
+  "result": "Kết quả"
 }

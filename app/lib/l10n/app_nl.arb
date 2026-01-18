@@ -2256,5 +2256,8 @@
   "dontAskAgain": "Niet opnieuw vragen",
   "waitingForTranscriptOrPhotos": "Wachten op transcriptie of foto's...",
   "noSummaryYet": "Nog geen samenvatting",
-  "hints": "Tips: {text}"
+  "hints": "Tips: {text}",
+  "testConversationPrompt": "Test gespreksprompt",
+  "prompt": "Prompt",
+  "result": "Resultaat"
 }

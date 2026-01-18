@@ -3420,5 +3420,8 @@
   "dontAskAgain": "Daugiau neklausti",
   "waitingForTranscriptOrPhotos": "Laukiama transkripcijos arba nuotraukų...",
   "noSummaryYet": "Santraukos dar nėra",
-  "hints": "Patarimai: {text}"
+  "hints": "Patarimai: {text}",
+  "testConversationPrompt": "Testuoti pokalbio raginimą",
+  "prompt": "Raginimas",
+  "result": "Rezultatas"
 }

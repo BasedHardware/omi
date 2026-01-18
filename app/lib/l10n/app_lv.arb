@@ -3438,5 +3438,8 @@
   "dontAskAgain": "Vairs nejautāt",
   "waitingForTranscriptOrPhotos": "Gaida transkripciju vai fotoattēlus...",
   "noSummaryYet": "Vēl nav kopsavilkuma",
-  "hints": "Padomi: {text}"
+  "hints": "Padomi: {text}",
+  "testConversationPrompt": "Testēt sarunas uzvedni",
+  "prompt": "Uzvedne",
+  "result": "Rezultāts"
 }

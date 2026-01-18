@@ -3438,5 +3438,8 @@
   "dontAskAgain": "Spørg mig ikke igen",
   "waitingForTranscriptOrPhotos": "Venter på transskription eller billeder...",
   "noSummaryYet": "Intet resumé endnu",
-  "hints": "Hints: {text}"
+  "hints": "Hints: {text}",
+  "testConversationPrompt": "Test samtaleprompt",
+  "prompt": "Prompt",
+  "result": "Resultat"
 }

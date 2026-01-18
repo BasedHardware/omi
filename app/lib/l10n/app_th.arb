@@ -3438,5 +3438,8 @@
   "dontAskAgain": "ไม่ต้องถามอีก",
   "waitingForTranscriptOrPhotos": "กำลังรอการถอดเสียงหรือรูปภาพ...",
   "noSummaryYet": "ยังไม่มีสรุป",
-  "hints": "คำแนะนำ: {text}"
+  "hints": "คำแนะนำ: {text}",
+  "testConversationPrompt": "ทดสอบพรอมต์การสนทนา",
+  "prompt": "พรอมต์",
+  "result": "ผลลัพธ์"
 }

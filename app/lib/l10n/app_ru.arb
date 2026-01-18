@@ -3438,5 +3438,8 @@
   "dontAskAgain": "Больше не спрашивать",
   "waitingForTranscriptOrPhotos": "Ожидание транскрипции или фотографий...",
   "noSummaryYet": "Резюме пока нет",
-  "hints": "Подсказки: {text}"
+  "hints": "Подсказки: {text}",
+  "testConversationPrompt": "Тестировать запрос разговора",
+  "prompt": "Запрос",
+  "result": "Результат"
 }

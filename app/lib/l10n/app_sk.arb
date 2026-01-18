@@ -3438,5 +3438,8 @@
   "dontAskAgain": "Nepýtaj sa znova",
   "waitingForTranscriptOrPhotos": "Čakanie na prepis alebo fotografie...",
   "noSummaryYet": "Zatiaľ žiadne zhrnutie",
-  "hints": "Tipy: {text}"
+  "hints": "Tipy: {text}",
+  "testConversationPrompt": "Testovať výzvu konverzácie",
+  "prompt": "Výzva",
+  "result": "Výsledok"
 }

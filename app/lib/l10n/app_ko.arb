@@ -3438,5 +3438,8 @@
   "dontAskAgain": "다시 묻지 않기",
   "waitingForTranscriptOrPhotos": "녹취록 또는 사진 대기 중...",
   "noSummaryYet": "아직 요약 없음",
-  "hints": "힌트: {text}"
+  "hints": "힌트: {text}",
+  "testConversationPrompt": "대화 프롬프트 테스트",
+  "prompt": "프롬프트",
+  "result": "결과"
 }

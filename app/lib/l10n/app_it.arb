@@ -3420,5 +3420,8 @@
   "dontAskAgain": "Non chiedermelo più",
   "waitingForTranscriptOrPhotos": "In attesa di trascrizione o foto...",
   "noSummaryYet": "Nessun riepilogo ancora",
-  "hints": "Suggerimenti: {text}"
+  "hints": "Suggerimenti: {text}",
+  "testConversationPrompt": "Testa prompt conversazione",
+  "prompt": "Prompt",
+  "result": "Risultato"
 }

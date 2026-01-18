@@ -3438,5 +3438,8 @@
   "dontAskAgain": "Μη με ρωτήσεις ξανά",
   "waitingForTranscriptOrPhotos": "Αναμονή για μεταγραφή ή φωτογραφίες...",
   "noSummaryYet": "Δεν υπάρχει σύνοψη ακόμα",
-  "hints": "Συμβουλές: {text}"
+  "hints": "Συμβουλές: {text}",
+  "testConversationPrompt": "Δοκιμή προτροπής συνομιλίας",
+  "prompt": "Προτροπή",
+  "result": "Αποτέλεσμα"
 }

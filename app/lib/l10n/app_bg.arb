@@ -3440,5 +3440,8 @@
   "dontAskAgain": "Не ме питай отново",
   "waitingForTranscriptOrPhotos": "Изчакване на транскрипция или снимки...",
   "noSummaryYet": "Все още няма резюме",
-  "hints": "Съвети: {text}"
+  "hints": "Съвети: {text}",
+  "testConversationPrompt": "Тест на подкана за разговор",
+  "prompt": "Подкана",
+  "result": "Резултат"
 }

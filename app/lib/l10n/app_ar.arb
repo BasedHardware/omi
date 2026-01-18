@@ -3456,5 +3456,8 @@
   "dontAskAgain": "لا تسألني مرة أخرى",
   "waitingForTranscriptOrPhotos": "في انتظار النص أو الصور...",
   "noSummaryYet": "لا يوجد ملخص بعد",
-  "hints": "تلميحات: {text}"
+  "hints": "تلميحات: {text}",
+  "testConversationPrompt": "اختبار موجه المحادثة",
+  "prompt": "موجه",
+  "result": "النتيجة"
 }

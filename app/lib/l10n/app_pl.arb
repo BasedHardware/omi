@@ -3438,5 +3438,8 @@
   "dontAskAgain": "Nie pytaj ponownie",
   "waitingForTranscriptOrPhotos": "Oczekiwanie na transkrypcję lub zdjęcia...",
   "noSummaryYet": "Brak podsumowania",
-  "hints": "Wskazówki: {text}"
+  "hints": "Wskazówki: {text}",
+  "testConversationPrompt": "Testuj polecenie rozmowy",
+  "prompt": "Polecenie",
+  "result": "Wynik"
 }

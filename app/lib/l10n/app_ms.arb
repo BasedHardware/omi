@@ -3438,5 +3438,8 @@
   "dontAskAgain": "Jangan tanya lagi",
   "waitingForTranscriptOrPhotos": "Menunggu transkrip atau foto...",
   "noSummaryYet": "Belum ada ringkasan",
-  "hints": "Petunjuk: {text}"
+  "hints": "Petunjuk: {text}",
+  "testConversationPrompt": "Uji prompt perbualan",
+  "prompt": "Prompt",
+  "result": "Hasil"
 }

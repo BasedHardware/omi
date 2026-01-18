@@ -3438,5 +3438,8 @@
   "dontAskAgain": "Älä kysy uudelleen",
   "waitingForTranscriptOrPhotos": "Odotetaan litterointia tai kuvia...",
   "noSummaryYet": "Ei yhteenvetoa vielä",
-  "hints": "Vihjeet: {text}"
+  "hints": "Vihjeet: {text}",
+  "testConversationPrompt": "Testaa keskustelukehotetta",
+  "prompt": "Kehote",
+  "result": "Tulos"
 }

@@ -3420,5 +3420,8 @@
   "dontAskAgain": "Bir daha sorma",
   "waitingForTranscriptOrPhotos": "Transkript veya fotoğraflar bekleniyor...",
   "noSummaryYet": "Henüz özet yok",
-  "hints": "İpuçları: {text}"
+  "hints": "İpuçları: {text}",
+  "testConversationPrompt": "Konuşma istemini test et",
+  "prompt": "İstem",
+  "result": "Sonuç"
 }

@@ -6229,5 +6229,17 @@
         "example": "Conversation will only end manually."
       }
     }
+  },
+  "testConversationPrompt": "Test Conversation Prompt",
+  "@testConversationPrompt": {
+    "description": "App bar title for testing conversation prompts page"
+  },
+  "prompt": "Prompt",
+  "@prompt": {
+    "description": "Label for prompt input field"
+  },
+  "result": "Result",
+  "@result": {
+    "description": "Label for result section showing prompt output"
   }
 }
