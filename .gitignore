@@ -201,6 +201,4 @@ app/android/.kotlin/
 .playwright-mcp/
 
 CLAUDE.md
-backend/env
-app/setup/prebuilt/GoogleService-Info.plist
-app/setup/prebuilt/GoogleService-Info.plist
+web/app/next-env.d.ts
