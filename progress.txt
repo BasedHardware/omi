@@ -1212,8 +1212,8 @@ Commit: d77ac398b
 END OF PROGRESS TRACKER
 ================================================================================
 Last Updated: 2026-01-18
-Last Completed: FILE 133 - task_integrations_banner.dart (1 new key, 34 new translations)
-Previous Completed: FILE 132 - message_action_menu.dart (1 new key, 34 new translations)
+Last Completed: FILE 135 - text_selection_controls.dart (0 new keys, used existing)
+Previous Completed: FILE 134 - language_picker.dart (0 new keys, used existing)
 Current Session: Phase 2 - Mobile/Pages localization in progress
 
 🎉 PHASE 1 (DESKTOP) COMPLETE! 🎉
@@ -1223,7 +1223,7 @@ Current Session: Phase 2 - Mobile/Pages localization in progress
 
 📋 PHASE 2 (MOBILE/PAGES) IN PROGRESS
 59 files identified with hardcoded strings
-Files Completed: 63
+Files Completed: 65
 Estimated 200-300 new keys needed
 
 --------------------------------------------------------------------------------
@@ -1862,3 +1862,27 @@ Status: ✅ COMPLETED
 Notes: Localized task integrations banner widget with promotional message and
        NEW badge. Small file (141 lines) promoting task export feature.
 Commit: df77cbca6
+
+--------------------------------------------------------------------------------
+FILE 134 (Phase 2 FILE 64): language_picker.dart
+--------------------------------------------------------------------------------
+Path: app/lib/widgets/language_picker.dart
+New Keys: (none)
+Reused Keys: systemDefault
+Total New Keys: 0
+Status: ✅ COMPLETED
+Notes: Updated to use existing systemDefault key for language picker fallback text.
+       No new translations needed.
+Commit: 4466638df
+
+--------------------------------------------------------------------------------
+FILE 135 (Phase 2 FILE 65): text_selection_controls.dart
+--------------------------------------------------------------------------------
+Path: app/lib/widgets/text_selection_controls.dart
+New Keys: (none)
+Reused Keys: askOmi, copy
+Total New Keys: 0
+Status: ✅ COMPLETED
+Notes: Updated to use existing askOmi and copy keys for text selection toolbar.
+       No new translations needed.
+Commit: 4466638df
