@@ -1212,8 +1212,8 @@ Commit: d77ac398b
 END OF PROGRESS TRACKER
 ================================================================================
 Last Updated: 2026-01-18
-Last Completed: FILE 135 - text_selection_controls.dart (0 new keys, used existing)
-Previous Completed: FILE 134 - language_picker.dart (0 new keys, used existing)
+Last Completed: FILE 138 - capture/widgets/widgets.dart (1 new key, 34 translations)
+Previous Completed: FILE 137 - processing_conversations/page.dart (6 new keys, 204 translations)
 Current Session: Phase 2 - Mobile/Pages localization in progress
 
 🎉 PHASE 1 (DESKTOP) COMPLETE! 🎉
@@ -1223,7 +1223,7 @@ Current Session: Phase 2 - Mobile/Pages localization in progress
 
 📋 PHASE 2 (MOBILE/PAGES) IN PROGRESS
 59 files identified with hardcoded strings
-Files Completed: 65
+Files Completed: 68
 Estimated 200-300 new keys needed
 
 --------------------------------------------------------------------------------
@@ -1886,3 +1886,38 @@ Status: ✅ COMPLETED
 Notes: Updated to use existing askOmi and copy keys for text selection toolbar.
        No new translations needed.
 Commit: 4466638df
+
+--------------------------------------------------------------------------------
+FILE 136 (Phase 2 FILE 66): today_tasks_widget.dart
+--------------------------------------------------------------------------------
+Path: app/lib/pages/conversations/widgets/today_tasks_widget.dart
+New Keys: (none)
+Reused Keys: today, showAll, noTasksForToday
+Total New Keys: 0
+Status: ✅ COMPLETED
+Notes: Updated to use existing l10n keys for task widget header, show all button,
+       and empty state message. No new translations needed.
+Commit: 89d90628e
+
+--------------------------------------------------------------------------------
+FILE 137 (Phase 2 FILE 67): processing_conversations/page.dart
+--------------------------------------------------------------------------------
+Path: app/lib/pages/processing_conversations/page.dart
+New Keys: inProgress, photos, rawData, content, noContentToDisplay, noSummary
+Reused Keys: summary, statusProcessing
+Total New Keys: 6
+Status: ✅ COMPLETED
+Notes: Localized processing conversation page including title, tab labels (Photos,
+       Raw Data, Content, Summary), and empty state messages.
+Commit: 89d90628e
+
+--------------------------------------------------------------------------------
+FILE 138 (Phase 2 FILE 68): capture/widgets/widgets.dart
+--------------------------------------------------------------------------------
+Path: app/lib/pages/capture/widgets/widgets.dart
+New Keys: updateOmiFirmware
+Reused Keys: teachOmiYourVoice
+Total New Keys: 1
+Status: ✅ COMPLETED
+Notes: Localized speech profile card and firmware update card widgets.
+Commit: 89d90628e
