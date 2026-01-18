@@ -3414,5 +3414,7 @@
   "omiAppName": "Omi",
   "showMore": "더 보기 ↓",
   "showLess": "접기 ↑",
-  "loadingYourRecording": "녹음을 불러오는 중..."
+  "loadingYourRecording": "녹음을 불러오는 중...",
+  "photoDiscardedMessage": "이 사진은 중요하지 않아 삭제되었습니다.",
+  "analyzing": "분석 중..."
 }

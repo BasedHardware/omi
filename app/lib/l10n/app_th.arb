@@ -3414,5 +3414,7 @@
   "omiAppName": "Omi",
   "showMore": "แสดงเพิ่มเติม ↓",
   "showLess": "แสดงน้อยลง ↑",
-  "loadingYourRecording": "กำลังโหลดการบันทึกของคุณ..."
+  "loadingYourRecording": "กำลังโหลดการบันทึกของคุณ...",
+  "photoDiscardedMessage": "ภาพนี้ถูกละทิ้งเนื่องจากไม่สำคัญ",
+  "analyzing": "กำลังวิเคราะห์..."
 }

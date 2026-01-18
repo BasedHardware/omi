@@ -3432,5 +3432,7 @@
   "omiAppName": "Omi",
   "showMore": "عرض المزيد ↓",
   "showLess": "عرض أقل ↑",
-  "loadingYourRecording": "جاري تحميل التسجيل..."
+  "loadingYourRecording": "جاري تحميل التسجيل...",
+  "photoDiscardedMessage": "تم تجاهل هذه الصورة لأنها غير مهمة.",
+  "analyzing": "جاري التحليل..."
 }

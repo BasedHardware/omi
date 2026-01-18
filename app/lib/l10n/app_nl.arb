@@ -2232,5 +2232,7 @@
   "omiAppName": "Omi",
   "showMore": "toon meer ↓",
   "showLess": "toon minder ↑",
-  "loadingYourRecording": "Uw opname laden..."
+  "loadingYourRecording": "Uw opname laden...",
+  "photoDiscardedMessage": "Deze foto is verwijderd omdat deze niet significant was.",
+  "analyzing": "Analyseren..."
 }

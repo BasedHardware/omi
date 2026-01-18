@@ -3414,5 +3414,7 @@
   "omiAppName": "Omi",
   "showMore": "xem thêm ↓",
   "showLess": "thu gọn ↑",
-  "loadingYourRecording": "Đang tải bản ghi của bạn..."
+  "loadingYourRecording": "Đang tải bản ghi của bạn...",
+  "photoDiscardedMessage": "Ảnh này đã bị loại bỏ vì không quan trọng.",
+  "analyzing": "Đang phân tích..."
 }

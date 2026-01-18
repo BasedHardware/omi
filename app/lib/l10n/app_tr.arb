@@ -3396,5 +3396,7 @@
   "omiAppName": "Omi",
   "showMore": "daha fazla göster ↓",
   "showLess": "daha az göster ↑",
-  "loadingYourRecording": "Kaydınız yükleniyor..."
+  "loadingYourRecording": "Kaydınız yükleniyor...",
+  "photoDiscardedMessage": "Bu fotoğraf önemli olmadığı için silindi.",
+  "analyzing": "Analiz ediliyor..."
 }

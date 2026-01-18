@@ -2232,5 +2232,7 @@
   "omiAppName": "Omi",
   "showMore": "afficher plus ↓",
   "showLess": "afficher moins ↑",
-  "loadingYourRecording": "Chargement de votre enregistrement..."
+  "loadingYourRecording": "Chargement de votre enregistrement...",
+  "photoDiscardedMessage": "Cette photo a été écartée car elle n'était pas significative.",
+  "analyzing": "Analyse en cours..."
 }

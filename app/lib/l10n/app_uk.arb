@@ -3414,5 +3414,7 @@
   "omiAppName": "Omi",
   "showMore": "показати більше ↓",
   "showLess": "показати менше ↑",
-  "loadingYourRecording": "Завантаження запису..."
+  "loadingYourRecording": "Завантаження запису...",
+  "photoDiscardedMessage": "Це фото було відхилено, оскільки воно не було значущим.",
+  "analyzing": "Аналіз..."
 }

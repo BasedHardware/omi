@@ -3414,5 +3414,7 @@
   "omiAppName": "Omi",
   "showMore": "tunjukkan lagi ↓",
   "showLess": "tunjukkan kurang ↑",
-  "loadingYourRecording": "Memuatkan rakaman anda..."
+  "loadingYourRecording": "Memuatkan rakaman anda...",
+  "photoDiscardedMessage": "Foto ini telah dibuang kerana tidak penting.",
+  "analyzing": "Menganalisis..."
 }

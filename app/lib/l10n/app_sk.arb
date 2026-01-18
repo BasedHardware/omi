@@ -3414,5 +3414,7 @@
   "omiAppName": "Omi",
   "showMore": "zobraziť viac ↓",
   "showLess": "zobraziť menej ↑",
-  "loadingYourRecording": "Načítava sa nahrávka..."
+  "loadingYourRecording": "Načítava sa nahrávka...",
+  "photoDiscardedMessage": "Táto fotografia bola vyradená, pretože nebola významná.",
+  "analyzing": "Analyzovanie..."
 }

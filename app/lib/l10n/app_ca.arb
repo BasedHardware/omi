@@ -3416,5 +3416,7 @@
   "omiAppName": "Omi",
   "showMore": "mostra més ↓",
   "showLess": "mostra menys ↑",
-  "loadingYourRecording": "Carregant la gravació..."
+  "loadingYourRecording": "Carregant la gravació...",
+  "photoDiscardedMessage": "Aquesta foto s'ha descartat perquè no era significativa.",
+  "analyzing": "Analitzant..."
 }

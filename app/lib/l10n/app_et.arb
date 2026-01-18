@@ -3414,5 +3414,7 @@
   "omiAppName": "Omi",
   "showMore": "näita rohkem ↓",
   "showLess": "näita vähem ↑",
-  "loadingYourRecording": "Salvestuse laadimine..."
+  "loadingYourRecording": "Salvestuse laadimine...",
+  "photoDiscardedMessage": "See foto kõrvaldati, kuna see polnud oluline.",
+  "analyzing": "Analüüsimine..."
 }

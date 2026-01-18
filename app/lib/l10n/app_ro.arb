@@ -3414,5 +3414,7 @@
   "omiAppName": "Omi",
   "showMore": "arată mai mult ↓",
   "showLess": "arată mai puțin ↑",
-  "loadingYourRecording": "Se încarcă înregistrarea..."
+  "loadingYourRecording": "Se încarcă înregistrarea...",
+  "photoDiscardedMessage": "Această fotografie a fost eliminată deoarece nu era semnificativă.",
+  "analyzing": "Se analizează..."
 }

@@ -3414,5 +3414,7 @@
   "omiAppName": "Omi",
   "showMore": "vis mer ↓",
   "showLess": "vis mindre ↑",
-  "loadingYourRecording": "Laster inn opptaket..."
+  "loadingYourRecording": "Laster inn opptaket...",
+  "photoDiscardedMessage": "Dette bildet ble forkastet da det ikke var betydningsfullt.",
+  "analyzing": "Analyserer..."
 }

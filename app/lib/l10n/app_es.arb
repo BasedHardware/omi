@@ -1861,5 +1861,7 @@
   "omiAppName": "Omi",
   "showMore": "mostrar más ↓",
   "showLess": "mostrar menos ↑",
-  "loadingYourRecording": "Cargando tu grabación..."
+  "loadingYourRecording": "Cargando tu grabación...",
+  "photoDiscardedMessage": "Esta foto fue descartada porque no era significativa.",
+  "analyzing": "Analizando..."
 }

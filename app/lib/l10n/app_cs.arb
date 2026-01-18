@@ -3416,5 +3416,7 @@
   "omiAppName": "Omi",
   "showMore": "zobrazit více ↓",
   "showLess": "zobrazit méně ↑",
-  "loadingYourRecording": "Načítání nahrávky..."
+  "loadingYourRecording": "Načítání nahrávky...",
+  "photoDiscardedMessage": "Tato fotografie byla zahozena, protože nebyla významná.",
+  "analyzing": "Analyzování..."
 }

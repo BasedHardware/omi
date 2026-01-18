@@ -3414,5 +3414,7 @@
   "omiAppName": "Omi",
   "showMore": "rādīt vairāk ↓",
   "showLess": "rādīt mazāk ↑",
-  "loadingYourRecording": "Ielādē ierakstu..."
+  "loadingYourRecording": "Ielādē ierakstu...",
+  "photoDiscardedMessage": "Šī fotogrāfija tika atmesta, jo tā nebija nozīmīga.",
+  "analyzing": "Analizē..."
 }

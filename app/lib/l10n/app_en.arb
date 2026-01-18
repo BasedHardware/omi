@@ -6111,5 +6111,13 @@
   "loadingYourRecording": "Loading your recording...",
   "@loadingYourRecording": {
     "description": "Loading message shown while audio waveform is being processed"
+  },
+  "photoDiscardedMessage": "This photo was discarded as it was not significant.",
+  "@photoDiscardedMessage": {
+    "description": "Message shown when a photo was discarded as not significant"
+  },
+  "analyzing": "Analyzing...",
+  "@analyzing": {
+    "description": "Loading text shown while analyzing a photo"
   }
 }

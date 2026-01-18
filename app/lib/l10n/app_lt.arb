@@ -3396,5 +3396,7 @@
   "omiAppName": "Omi",
   "showMore": "rodyti daugiau ↓",
   "showLess": "rodyti mažiau ↑",
-  "loadingYourRecording": "Įkeliamas įrašas..."
+  "loadingYourRecording": "Įkeliamas įrašas...",
+  "photoDiscardedMessage": "Ši nuotrauka buvo atmesta, nes nebuvo reikšminga.",
+  "analyzing": "Analizuojama..."
 }

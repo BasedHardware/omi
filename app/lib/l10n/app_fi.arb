@@ -3414,5 +3414,7 @@
   "omiAppName": "Omi",
   "showMore": "näytä lisää ↓",
   "showLess": "näytä vähemmän ↑",
-  "loadingYourRecording": "Ladataan tallennetta..."
+  "loadingYourRecording": "Ladataan tallennetta...",
+  "photoDiscardedMessage": "Tämä kuva hylättiin, koska se ei ollut merkittävä.",
+  "analyzing": "Analysoidaan..."
 }

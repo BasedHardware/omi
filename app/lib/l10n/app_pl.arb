@@ -3414,5 +3414,7 @@
   "omiAppName": "Omi",
   "showMore": "pokaż więcej ↓",
   "showLess": "pokaż mniej ↑",
-  "loadingYourRecording": "Ładowanie nagrania..."
+  "loadingYourRecording": "Ładowanie nagrania...",
+  "photoDiscardedMessage": "To zdjęcie zostało odrzucone, ponieważ nie było istotne.",
+  "analyzing": "Analizowanie..."
 }

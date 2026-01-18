@@ -1861,5 +1861,7 @@
   "omiAppName": "Omi",
   "showMore": "显示更多 ↓",
   "showLess": "收起 ↑",
-  "loadingYourRecording": "正在加载您的录音..."
+  "loadingYourRecording": "正在加载您的录音...",
+  "photoDiscardedMessage": "此照片因不重要而被丢弃。",
+  "analyzing": "分析中..."
 }
