@@ -981,12 +981,14 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
   Widget _buildDisconnectedOverlay() {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(32),
       decoration: BoxDecoration(
         color: const Color(0xFF1C1C1E),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
             width: 64,
