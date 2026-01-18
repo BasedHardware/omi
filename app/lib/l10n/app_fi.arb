@@ -3441,5 +3441,6 @@
   "hints": "Vihjeet: {text}",
   "testConversationPrompt": "Testaa keskustelukehotetta",
   "prompt": "Kehote",
-  "result": "Tulos"
+  "result": "Tulos",
+  "compareTranscripts": "Vertaa litterointeja"
 }

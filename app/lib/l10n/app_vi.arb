@@ -3441,5 +3441,6 @@
   "hints": "Gợi ý: {text}",
   "testConversationPrompt": "Kiểm tra lời nhắc cuộc trò chuyện",
   "prompt": "Lời nhắc",
-  "result": "Kết quả"
+  "result": "Kết quả",
+  "compareTranscripts": "So sánh bản ghi"
 }

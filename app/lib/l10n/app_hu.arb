@@ -3441,5 +3441,6 @@
   "hints": "Tippek: {text}",
   "testConversationPrompt": "Beszélgetési prompt tesztelése",
   "prompt": "Prompt",
-  "result": "Eredmény"
+  "result": "Eredmény",
+  "compareTranscripts": "Átiratok összehasonlítása"
 }

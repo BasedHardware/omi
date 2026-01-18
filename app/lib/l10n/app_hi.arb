@@ -1888,5 +1888,6 @@
   "hints": "संकेत: {text}",
   "testConversationPrompt": "वार्तालाप प्रॉम्प्ट का परीक्षण करें",
   "prompt": "प्रॉम्प्ट",
-  "result": "परिणाम"
+  "result": "परिणाम",
+  "compareTranscripts": "ट्रांसक्रिप्ट की तुलना करें"
 }

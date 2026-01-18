@@ -3441,5 +3441,6 @@
   "hints": "Wskazówki: {text}",
   "testConversationPrompt": "Testuj polecenie rozmowy",
   "prompt": "Polecenie",
-  "result": "Wynik"
+  "result": "Wynik",
+  "compareTranscripts": "Porównaj transkrypcje"
 }

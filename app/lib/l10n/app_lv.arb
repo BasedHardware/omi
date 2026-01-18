@@ -3441,5 +3441,6 @@
   "hints": "Padomi: {text}",
   "testConversationPrompt": "Testēt sarunas uzvedni",
   "prompt": "Uzvedne",
-  "result": "Rezultāts"
+  "result": "Rezultāts",
+  "compareTranscripts": "Salīdzināt transkripcijas"
 }

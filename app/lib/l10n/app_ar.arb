@@ -3459,5 +3459,6 @@
   "hints": "تلميحات: {text}",
   "testConversationPrompt": "اختبار موجه المحادثة",
   "prompt": "موجه",
-  "result": "النتيجة"
+  "result": "النتيجة",
+  "compareTranscripts": "مقارنة النصوص"
 }

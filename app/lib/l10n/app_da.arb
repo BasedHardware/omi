@@ -3441,5 +3441,6 @@
   "hints": "Hints: {text}",
   "testConversationPrompt": "Test samtaleprompt",
   "prompt": "Prompt",
-  "result": "Resultat"
+  "result": "Resultat",
+  "compareTranscripts": "Sammenlign transskriptioner"
 }

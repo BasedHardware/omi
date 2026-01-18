@@ -3441,5 +3441,6 @@
   "hints": "Petunjuk: {text}",
   "testConversationPrompt": "Uji prompt perbualan",
   "prompt": "Prompt",
-  "result": "Hasil"
+  "result": "Hasil",
+  "compareTranscripts": "Bandingkan transkrip"
 }

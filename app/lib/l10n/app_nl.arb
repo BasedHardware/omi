@@ -2259,5 +2259,6 @@
   "hints": "Tips: {text}",
   "testConversationPrompt": "Test gespreksprompt",
   "prompt": "Prompt",
-  "result": "Resultaat"
+  "result": "Resultaat",
+  "compareTranscripts": "Transcripties vergelijken"
 }

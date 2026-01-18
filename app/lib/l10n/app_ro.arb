@@ -3441,5 +3441,6 @@
   "hints": "Indicii: {text}",
   "testConversationPrompt": "Testează promptul conversației",
   "prompt": "Prompt",
-  "result": "Rezultat"
+  "result": "Rezultat",
+  "compareTranscripts": "Compară transcrierile"
 }

@@ -3423,5 +3423,6 @@
   "hints": "Patarimai: {text}",
   "testConversationPrompt": "Testuoti pokalbio raginimą",
   "prompt": "Raginimas",
-  "result": "Rezultatas"
+  "result": "Rezultatas",
+  "compareTranscripts": "Palyginti transkripcijas"
 }

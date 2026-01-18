@@ -1888,5 +1888,6 @@
   "hints": "Dicas: {text}",
   "testConversationPrompt": "Testar prompt de conversa",
   "prompt": "Prompt",
-  "result": "Resultado"
+  "result": "Resultado",
+  "compareTranscripts": "Comparar transcrições"
 }

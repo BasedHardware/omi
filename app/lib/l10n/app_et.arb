@@ -3441,5 +3441,6 @@
   "hints": "Vihjed: {text}",
   "testConversationPrompt": "Testi vestluse viipa",
   "prompt": "Viip",
-  "result": "Tulemus"
+  "result": "Tulemus",
+  "compareTranscripts": "Võrdle transkriptsioone"
 }

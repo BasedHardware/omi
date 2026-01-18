@@ -3441,5 +3441,6 @@
   "hints": "Tipy: {text}",
   "testConversationPrompt": "Testovať výzvu konverzácie",
   "prompt": "Výzva",
-  "result": "Výsledok"
+  "result": "Výsledok",
+  "compareTranscripts": "Porovnať prepisy"
 }

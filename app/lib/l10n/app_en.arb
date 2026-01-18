@@ -6241,5 +6241,9 @@
   "result": "Result",
   "@result": {
     "description": "Label for result section showing prompt output"
+  },
+  "compareTranscripts": "Compare Transcripts",
+  "@compareTranscripts": {
+    "description": "App bar title for comparing transcripts from different services"
   }
 }

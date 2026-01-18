@@ -3441,5 +3441,6 @@
   "hints": "힌트: {text}",
   "testConversationPrompt": "대화 프롬프트 테스트",
   "prompt": "프롬프트",
-  "result": "결과"
+  "result": "결과",
+  "compareTranscripts": "녹취록 비교"
 }

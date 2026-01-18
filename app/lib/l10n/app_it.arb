@@ -3423,5 +3423,6 @@
   "hints": "Suggerimenti: {text}",
   "testConversationPrompt": "Testa prompt conversazione",
   "prompt": "Prompt",
-  "result": "Risultato"
+  "result": "Risultato",
+  "compareTranscripts": "Confronta trascrizioni"
 }

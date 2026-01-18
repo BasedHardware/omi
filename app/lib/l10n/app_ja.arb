@@ -1867,5 +1867,6 @@
   "hints": "ヒント: {text}",
   "testConversationPrompt": "会話プロンプトをテスト",
   "prompt": "プロンプト",
-  "result": "結果"
+  "result": "結果",
+  "compareTranscripts": "文字起こしを比較"
 }

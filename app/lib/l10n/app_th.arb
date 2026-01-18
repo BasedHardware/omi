@@ -3441,5 +3441,6 @@
   "hints": "คำแนะนำ: {text}",
   "testConversationPrompt": "ทดสอบพรอมต์การสนทนา",
   "prompt": "พรอมต์",
-  "result": "ผลลัพธ์"
+  "result": "ผลลัพธ์",
+  "compareTranscripts": "เปรียบเทียบการถอดเสียง"
 }

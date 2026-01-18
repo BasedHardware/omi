@@ -3441,5 +3441,6 @@
   "hints": "Підказки: {text}",
   "testConversationPrompt": "Тестувати запит розмови",
   "prompt": "Запит",
-  "result": "Результат"
+  "result": "Результат",
+  "compareTranscripts": "Порівняти транскрипції"
 }

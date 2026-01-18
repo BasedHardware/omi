@@ -3441,5 +3441,6 @@
   "hints": "Tips: {text}",
   "testConversationPrompt": "Testa konversationsprompt",
   "prompt": "Prompt",
-  "result": "Resultat"
+  "result": "Resultat",
+  "compareTranscripts": "Jämför transkriptioner"
 }

@@ -3443,5 +3443,6 @@
   "hints": "Съвети: {text}",
   "testConversationPrompt": "Тест на подкана за разговор",
   "prompt": "Подкана",
-  "result": "Резултат"
+  "result": "Резултат",
+  "compareTranscripts": "Сравни транскрипции"
 }

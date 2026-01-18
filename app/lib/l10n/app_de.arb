@@ -1888,5 +1888,6 @@
   "hints": "Hinweise: {text}",
   "testConversationPrompt": "Gesprächs-Prompt testen",
   "prompt": "Prompt",
-  "result": "Ergebnis"
+  "result": "Ergebnis",
+  "compareTranscripts": "Transkripte vergleichen"
 }

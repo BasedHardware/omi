@@ -3423,5 +3423,6 @@
   "hints": "İpuçları: {text}",
   "testConversationPrompt": "Konuşma istemini test et",
   "prompt": "İstem",
-  "result": "Sonuç"
+  "result": "Sonuç",
+  "compareTranscripts": "Transkriptleri karşılaştır"
 }

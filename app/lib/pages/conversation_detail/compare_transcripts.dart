@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/transcript.dart';
 
 class CompareTranscriptsPage extends StatefulWidget {
@@ -32,7 +33,7 @@ class _CompareTranscriptsPageState extends State<CompareTranscriptsPage> {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
-        title: const Text('Compare Transcripts'),
+        title: Text(context.l10n.compareTranscripts),
         backgroundColor: Theme.of(context).colorScheme.primary,
       ),
       body: DefaultTabController(

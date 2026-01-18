@@ -1888,5 +1888,6 @@
   "hints": "提示: {text}",
   "testConversationPrompt": "测试对话提示",
   "prompt": "提示",
-  "result": "结果"
+  "result": "结果",
+  "compareTranscripts": "比较转录"
 }

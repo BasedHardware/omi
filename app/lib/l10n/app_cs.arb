@@ -3443,5 +3443,6 @@
   "hints": "Tipy: {text}",
   "testConversationPrompt": "Test výzvy konverzace",
   "prompt": "Výzva",
-  "result": "Výsledek"
+  "result": "Výsledek",
+  "compareTranscripts": "Porovnat přepisy"
 }
