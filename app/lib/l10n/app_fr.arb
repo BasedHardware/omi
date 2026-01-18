@@ -2260,5 +2260,6 @@
   "testConversationPrompt": "Tester le prompt de conversation",
   "prompt": "Prompt",
   "result": "Résultat",
-  "compareTranscripts": "Comparer les transcriptions"
+  "compareTranscripts": "Comparer les transcriptions",
+  "notHelpful": "Pas utile"
 }

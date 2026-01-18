@@ -3442,5 +3442,6 @@
   "testConversationPrompt": "Testaa keskustelukehotetta",
   "prompt": "Kehote",
   "result": "Tulos",
-  "compareTranscripts": "Vertaa litterointeja"
+  "compareTranscripts": "Vertaa litterointeja",
+  "notHelpful": "Ei hyödyllinen"
 }

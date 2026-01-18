@@ -3460,5 +3460,6 @@
   "testConversationPrompt": "اختبار موجه المحادثة",
   "prompt": "موجه",
   "result": "النتيجة",
-  "compareTranscripts": "مقارنة النصوص"
+  "compareTranscripts": "مقارنة النصوص",
+  "notHelpful": "غير مفيد"
 }

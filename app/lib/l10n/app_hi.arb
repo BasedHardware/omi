@@ -1889,5 +1889,6 @@
   "testConversationPrompt": "वार्तालाप प्रॉम्प्ट का परीक्षण करें",
   "prompt": "प्रॉम्प्ट",
   "result": "परिणाम",
-  "compareTranscripts": "ट्रांसक्रिप्ट की तुलना करें"
+  "compareTranscripts": "ट्रांसक्रिप्ट की तुलना करें",
+  "notHelpful": "सहायक नहीं"
 }

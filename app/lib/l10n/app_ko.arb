@@ -3442,5 +3442,6 @@
   "testConversationPrompt": "대화 프롬프트 테스트",
   "prompt": "프롬프트",
   "result": "결과",
-  "compareTranscripts": "녹취록 비교"
+  "compareTranscripts": "녹취록 비교",
+  "notHelpful": "도움이 안 됨"
 }

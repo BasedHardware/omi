@@ -3442,5 +3442,6 @@
   "testConversationPrompt": "Beszélgetési prompt tesztelése",
   "prompt": "Prompt",
   "result": "Eredmény",
-  "compareTranscripts": "Átiratok összehasonlítása"
+  "compareTranscripts": "Átiratok összehasonlítása",
+  "notHelpful": "Nem hasznos"
 }

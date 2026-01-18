@@ -3424,5 +3424,6 @@
   "testConversationPrompt": "Testa prompt conversazione",
   "prompt": "Prompt",
   "result": "Risultato",
-  "compareTranscripts": "Confronta trascrizioni"
+  "compareTranscripts": "Confronta trascrizioni",
+  "notHelpful": "Non utile"
 }

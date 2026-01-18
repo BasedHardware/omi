@@ -3424,5 +3424,6 @@
   "testConversationPrompt": "Konuşma istemini test et",
   "prompt": "İstem",
   "result": "Sonuç",
-  "compareTranscripts": "Transkriptleri karşılaştır"
+  "compareTranscripts": "Transkriptleri karşılaştır",
+  "notHelpful": "Yardımcı olmadı"
 }

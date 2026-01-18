@@ -3442,5 +3442,6 @@
   "testConversationPrompt": "Тестувати запит розмови",
   "prompt": "Запит",
   "result": "Результат",
-  "compareTranscripts": "Порівняти транскрипції"
+  "compareTranscripts": "Порівняти транскрипції",
+  "notHelpful": "Не корисно"
 }

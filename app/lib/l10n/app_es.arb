@@ -1889,5 +1889,6 @@
   "testConversationPrompt": "Probar prompt de conversación",
   "prompt": "Prompt",
   "result": "Resultado",
-  "compareTranscripts": "Comparar transcripciones"
+  "compareTranscripts": "Comparar transcripciones",
+  "notHelpful": "No fue útil"
 }

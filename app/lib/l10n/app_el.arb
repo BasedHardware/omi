@@ -3442,5 +3442,6 @@
   "testConversationPrompt": "Δοκιμή προτροπής συνομιλίας",
   "prompt": "Προτροπή",
   "result": "Αποτέλεσμα",
-  "compareTranscripts": "Σύγκριση μεταγραφών"
+  "compareTranscripts": "Σύγκριση μεταγραφών",
+  "notHelpful": "Δεν ήταν χρήσιμο"
 }

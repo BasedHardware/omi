@@ -3442,5 +3442,6 @@
   "testConversationPrompt": "Testi vestluse viipa",
   "prompt": "Viip",
   "result": "Tulemus",
-  "compareTranscripts": "Võrdle transkriptsioone"
+  "compareTranscripts": "Võrdle transkriptsioone",
+  "notHelpful": "Ei olnud kasulik"
 }

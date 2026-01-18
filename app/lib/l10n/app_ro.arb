@@ -3442,5 +3442,6 @@
   "testConversationPrompt": "Testează promptul conversației",
   "prompt": "Prompt",
   "result": "Rezultat",
-  "compareTranscripts": "Compară transcrierile"
+  "compareTranscripts": "Compară transcrierile",
+  "notHelpful": "Nu a fost util"
 }

@@ -3442,5 +3442,6 @@
   "testConversationPrompt": "ทดสอบพรอมต์การสนทนา",
   "prompt": "พรอมต์",
   "result": "ผลลัพธ์",
-  "compareTranscripts": "เปรียบเทียบการถอดเสียง"
+  "compareTranscripts": "เปรียบเทียบการถอดเสียง",
+  "notHelpful": "ไม่เป็นประโยชน์"
 }

@@ -3444,5 +3444,6 @@
   "testConversationPrompt": "Тест на подкана за разговор",
   "prompt": "Подкана",
   "result": "Резултат",
-  "compareTranscripts": "Сравни транскрипции"
+  "compareTranscripts": "Сравни транскрипции",
+  "notHelpful": "Не е полезно"
 }

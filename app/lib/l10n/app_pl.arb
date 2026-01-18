@@ -3442,5 +3442,6 @@
   "testConversationPrompt": "Testuj polecenie rozmowy",
   "prompt": "Polecenie",
   "result": "Wynik",
-  "compareTranscripts": "Porównaj transkrypcje"
+  "compareTranscripts": "Porównaj transkrypcje",
+  "notHelpful": "Nieprzydatne"
 }

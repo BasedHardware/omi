@@ -6245,5 +6245,9 @@
   "compareTranscripts": "Compare Transcripts",
   "@compareTranscripts": {
     "description": "App bar title for comparing transcripts from different services"
+  },
+  "notHelpful": "Not Helpful",
+  "@notHelpful": {
+    "description": "Label for thumbs down button to indicate response was not helpful"
   }
 }

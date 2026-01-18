@@ -3442,5 +3442,6 @@
   "testConversationPrompt": "Testēt sarunas uzvedni",
   "prompt": "Uzvedne",
   "result": "Rezultāts",
-  "compareTranscripts": "Salīdzināt transkripcijas"
+  "compareTranscripts": "Salīdzināt transkripcijas",
+  "notHelpful": "Nav noderīgs"
 }

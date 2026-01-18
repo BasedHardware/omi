@@ -3442,5 +3442,6 @@
   "testConversationPrompt": "Test samtaleprompt",
   "prompt": "Prompt",
   "result": "Resultat",
-  "compareTranscripts": "Sammenlign transskriptioner"
+  "compareTranscripts": "Sammenlign transskriptioner",
+  "notHelpful": "Ikke nyttigt"
 }

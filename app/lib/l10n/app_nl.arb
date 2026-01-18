@@ -2260,5 +2260,6 @@
   "testConversationPrompt": "Test gespreksprompt",
   "prompt": "Prompt",
   "result": "Resultaat",
-  "compareTranscripts": "Transcripties vergelijken"
+  "compareTranscripts": "Transcripties vergelijken",
+  "notHelpful": "Niet nuttig"
 }

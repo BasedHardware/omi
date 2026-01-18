@@ -3444,5 +3444,6 @@
   "testConversationPrompt": "Test výzvy konverzace",
   "prompt": "Výzva",
   "result": "Výsledek",
-  "compareTranscripts": "Porovnat přepisy"
+  "compareTranscripts": "Porovnat přepisy",
+  "notHelpful": "Nebylo užitečné"
 }

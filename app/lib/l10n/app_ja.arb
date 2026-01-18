@@ -1868,5 +1868,6 @@
   "testConversationPrompt": "会話プロンプトをテスト",
   "prompt": "プロンプト",
   "result": "結果",
-  "compareTranscripts": "文字起こしを比較"
+  "compareTranscripts": "文字起こしを比較",
+  "notHelpful": "役に立たなかった"
 }

@@ -3424,5 +3424,6 @@
   "testConversationPrompt": "Testuoti pokalbio raginimą",
   "prompt": "Raginimas",
   "result": "Rezultatas",
-  "compareTranscripts": "Palyginti transkripcijas"
+  "compareTranscripts": "Palyginti transkripcijas",
+  "notHelpful": "Nenaudinga"
 }
