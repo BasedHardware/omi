@@ -1212,8 +1212,8 @@ Commit: d77ac398b
 END OF PROGRESS TRACKER
 ================================================================================
 Last Updated: 2026-01-18
-Last Completed: FILE 126 - photo_viewer_page.dart (2 new keys, 68 new translations)
-Previous Completed: FILE 125 - waveform_section.dart (1 new key, 34 new translations)
+Last Completed: FILE 127 - country_bottom_sheet.dart (1 new key, 34 new translations)
+Previous Completed: FILE 126 - photo_viewer_page.dart (2 new keys, 68 new translations)
 Current Session: Phase 2 - Mobile/Pages localization in progress
 
 🎉 PHASE 1 (DESKTOP) COMPLETE! 🎉
@@ -1223,7 +1223,7 @@ Current Session: Phase 2 - Mobile/Pages localization in progress
 
 📋 PHASE 2 (MOBILE/PAGES) IN PROGRESS
 59 files identified with hardcoded strings
-Files Completed: 56
+Files Completed: 57
 Estimated 200-300 new keys needed
 
 --------------------------------------------------------------------------------
@@ -1764,3 +1764,15 @@ Notes: Localized photo viewer widget with discarded photo message and
        analyzing status text. Removed const from parent widgets to
        support dynamic l10n values.
 Commit: 14e08e074
+
+--------------------------------------------------------------------------------
+FILE 127 (Phase 2 FILE 57): country_bottom_sheet.dart
+--------------------------------------------------------------------------------
+Path: app/lib/pages/payments/widgets/country_bottom_sheet.dart
+New Keys: searchCountries
+Total New Keys: 1
+Script: /private/tmp/claude/.../translate_country_sheet.py
+Status: ✅ COMPLETED
+Notes: Localized country selection bottom sheet for payment setup.
+       Replaced hardcoded "Search countries..." placeholder with l10n key.
+Commit: c74aebfe0
