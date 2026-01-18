@@ -3424,5 +3424,6 @@
   "speechSamples": "عينات الكلام",
   "additionalSampleIndex": "عينة إضافية {index}",
   "durationSeconds": "المدة: {seconds} ثانية",
-  "additionalSpeechSampleRemoved": "تمت إزالة عينة الكلام الإضافية"
+  "additionalSpeechSampleRemoved": "تمت إزالة عينة الكلام الإضافية",
+  "consentDataMessage": "بالمتابعة، سيتم تخزين جميع البيانات التي تشاركها مع هذا التطبيق (بما في ذلك محادثاتك وتسجيلاتك ومعلوماتك الشخصية) بشكل آمن على خوادمنا لتزويدك برؤى مدعومة بالذكاء الاصطناعي وتمكين جميع ميزات التطبيق."
 }

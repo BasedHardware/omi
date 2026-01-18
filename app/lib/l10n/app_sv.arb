@@ -3406,5 +3406,6 @@
   "speechSamples": "Röstprover",
   "additionalSampleIndex": "Ytterligare prov {index}",
   "durationSeconds": "Längd: {seconds} sekunder",
-  "additionalSpeechSampleRemoved": "Ytterligare röstprov borttaget"
+  "additionalSpeechSampleRemoved": "Ytterligare röstprov borttaget",
+  "consentDataMessage": "Genom att fortsätta kommer all data du delar med denna app (inklusive dina konversationer, inspelningar och personlig information) att lagras säkert på våra servrar för att ge dig AI-drivna insikter och aktivera alla appfunktioner."
 }

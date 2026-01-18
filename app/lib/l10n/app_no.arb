@@ -3406,5 +3406,6 @@
   "speechSamples": "Taleprøver",
   "additionalSampleIndex": "Ekstra prøve {index}",
   "durationSeconds": "Varighet: {seconds} sekunder",
-  "additionalSpeechSampleRemoved": "Ekstra taleprøve fjernet"
+  "additionalSpeechSampleRemoved": "Ekstra taleprøve fjernet",
+  "consentDataMessage": "Ved å fortsette vil alle data du deler med denne appen (inkludert samtalene, opptakene og personlig informasjon) bli sikkert lagret på våre servere for å gi deg AI-drevne innsikter og aktivere alle appfunksjoner."
 }

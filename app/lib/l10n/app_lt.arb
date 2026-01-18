@@ -3388,5 +3388,6 @@
   "speechSamples": "Balso pavyzdžiai",
   "additionalSampleIndex": "Papildomas pavyzdys {index}",
   "durationSeconds": "Trukmė: {seconds} sekundžių",
-  "additionalSpeechSampleRemoved": "Papildomas balso pavyzdys pašalintas"
+  "additionalSpeechSampleRemoved": "Papildomas balso pavyzdys pašalintas",
+  "consentDataMessage": "Tęsdami, visi duomenys, kuriuos bendrinate su šia programa (įskaitant jūsų pokalbius, įrašus ir asmeninę informaciją), bus saugiai saugomi mūsų serveriuose, kad galėtume teikti jums dirbtinio intelekto paremtas įžvalgas ir įjungti visas programos funkcijas."
 }

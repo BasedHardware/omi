@@ -3406,5 +3406,6 @@
   "speechSamples": "Próbki głosowe",
   "additionalSampleIndex": "Dodatkowa próbka {index}",
   "durationSeconds": "Czas trwania: {seconds} sekund",
-  "additionalSpeechSampleRemoved": "Dodatkowa próbka głosowa usunięta"
+  "additionalSpeechSampleRemoved": "Dodatkowa próbka głosowa usunięta",
+  "consentDataMessage": "Kontynuując, wszystkie dane, które udostępniasz tej aplikacji (w tym rozmowy, nagrania i dane osobowe), będą bezpiecznie przechowywane na naszych serwerach, aby zapewnić Ci spostrzeżenia oparte na AI i włączyć wszystkie funkcje aplikacji."
 }

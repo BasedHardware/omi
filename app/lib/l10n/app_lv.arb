@@ -3406,5 +3406,6 @@
   "speechSamples": "Balss paraugi",
   "additionalSampleIndex": "Papildu paraugs {index}",
   "durationSeconds": "Ilgums: {seconds} sekundes",
-  "additionalSpeechSampleRemoved": "Papildu balss paraugs noņemts"
+  "additionalSpeechSampleRemoved": "Papildu balss paraugs noņemts",
+  "consentDataMessage": "Turpinot, visi dati, ko kopīgojat ar šo lietotni (tostarp jūsu sarunas, ierakstus un personisko informāciju), tiks droši glabāti mūsu serveros, lai sniegtu jums AI balstītas atziņas un iespējotu visas lietotnes funkcijas."
 }

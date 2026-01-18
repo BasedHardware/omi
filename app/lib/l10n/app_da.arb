@@ -3406,5 +3406,6 @@
   "speechSamples": "Stemmeprøver",
   "additionalSampleIndex": "Yderligere prøve {index}",
   "durationSeconds": "Varighed: {seconds} sekunder",
-  "additionalSpeechSampleRemoved": "Yderligere stemmeprøve fjernet"
+  "additionalSpeechSampleRemoved": "Yderligere stemmeprøve fjernet",
+  "consentDataMessage": "Ved at fortsætte vil alle data, du deler med denne app (inklusive dine samtaler, optagelser og personlige oplysninger), blive sikkert gemt på vores servere for at give dig AI-drevne indsigter og aktivere alle app-funktioner."
 }

@@ -5,6 +5,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/providers/auth_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class ConsentBottomSheet extends StatelessWidget {
   final String authMethod; // 'google' or 'apple'
@@ -43,9 +44,9 @@ class ConsentBottomSheet extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Title
-                const Text(
-                  'Data & Privacy',
-                  style: TextStyle(
+                Text(
+                  context.l10n.dataAndPrivacy,
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
@@ -71,7 +72,7 @@ class ConsentBottomSheet extends StatelessWidget {
                     ),
                     const SizedBox(width: 12),
                     Text(
-                      'Sign in with ${authMethod == 'apple' ? 'Apple' : 'Google'}',
+                      authMethod == 'apple' ? context.l10n.signInWithApple : context.l10n.signInWithGoogle,
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 16,
@@ -84,9 +85,9 @@ class ConsentBottomSheet extends StatelessWidget {
                 const SizedBox(height: 20),
 
                 // Main message
-                const Text(
-                  'By continuing, all data you share with this app (including your conversations, recordings, and personal information) will be securely stored on our servers to provide you with AI-powered insights and enable all app features.',
-                  style: TextStyle(
+                Text(
+                  context.l10n.consentDataMessage,
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 16,
                     height: 1.4,
@@ -104,9 +105,9 @@ class ConsentBottomSheet extends StatelessWidget {
                       height: 1.4,
                     ),
                     children: [
-                      const TextSpan(text: 'Your data is protected and governed by our '),
+                      TextSpan(text: context.l10n.yourDataIsProtected),
                       TextSpan(
-                        text: 'Privacy Policy',
+                        text: context.l10n.privacyPolicy,
                         style: const TextStyle(
                           color: Colors.white,
                           decoration: TextDecoration.underline,
@@ -116,9 +117,9 @@ class ConsentBottomSheet extends StatelessWidget {
                             context.read<AuthenticationProvider>().openPrivacyPolicy();
                           },
                       ),
-                      const TextSpan(text: ' and '),
+                      TextSpan(text: context.l10n.and),
                       TextSpan(
-                        text: 'Terms of Service',
+                        text: context.l10n.termsOfService,
                         style: const TextStyle(
                           color: Colors.white,
                           decoration: TextDecoration.underline,
@@ -156,7 +157,7 @@ class ConsentBottomSheet extends StatelessWidget {
                           elevation: 0,
                         ),
                         child: Text(
-                          'Continue with ${authMethod == 'apple' ? 'Apple' : 'Google'}',
+                          authMethod == 'apple' ? context.l10n.continueWithApple : context.l10n.continueWithGoogle,
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -181,9 +182,9 @@ class ConsentBottomSheet extends StatelessWidget {
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        child: const Text(
-                          'Cancel',
-                          style: TextStyle(
+                        child: Text(
+                          context.l10n.cancel,
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w500,
                           ),

@@ -3406,5 +3406,6 @@
   "speechSamples": "Sampel suara",
   "additionalSampleIndex": "Sampel tambahan {index}",
   "durationSeconds": "Durasi: {seconds} detik",
-  "additionalSpeechSampleRemoved": "Sampel suara tambahan dihapus"
+  "additionalSpeechSampleRemoved": "Sampel suara tambahan dihapus",
+  "consentDataMessage": "Dengan melanjutkan, semua data yang Anda bagikan dengan aplikasi ini (termasuk percakapan, rekaman, dan informasi pribadi Anda) akan disimpan dengan aman di server kami untuk memberikan wawasan berbasis AI dan mengaktifkan semua fitur aplikasi."
 }

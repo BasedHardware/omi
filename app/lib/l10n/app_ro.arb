@@ -3406,5 +3406,6 @@
   "speechSamples": "Mostre vocale",
   "additionalSampleIndex": "Mostră suplimentară {index}",
   "durationSeconds": "Durată: {seconds} secunde",
-  "additionalSpeechSampleRemoved": "Mostră vocală suplimentară eliminată"
+  "additionalSpeechSampleRemoved": "Mostră vocală suplimentară eliminată",
+  "consentDataMessage": "Continuând, toate datele pe care le partajați cu această aplicație (inclusiv conversațiile, înregistrările și informațiile personale) vor fi stocate în siguranță pe serverele noastre pentru a vă oferi informații bazate pe IA și pentru a activa toate funcțiile aplicației."
 }

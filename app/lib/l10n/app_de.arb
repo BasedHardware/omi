@@ -1853,5 +1853,6 @@
   "speechSamples": "Sprachproben",
   "additionalSampleIndex": "Zusätzliche Probe {index}",
   "durationSeconds": "Dauer: {seconds} Sekunden",
-  "additionalSpeechSampleRemoved": "Zusätzliche Sprachprobe entfernt"
+  "additionalSpeechSampleRemoved": "Zusätzliche Sprachprobe entfernt",
+  "consentDataMessage": "Durch Fortfahren werden alle Daten, die Sie mit dieser App teilen (einschließlich Ihrer Gespräche, Aufnahmen und persönlichen Informationen), sicher auf unseren Servern gespeichert, um Ihnen KI-gestützte Einblicke zu bieten und alle App-Funktionen zu ermöglichen."
 }

@@ -2224,5 +2224,6 @@
   "speechSamples": "Spraakvoorbeelden",
   "additionalSampleIndex": "Extra voorbeeld {index}",
   "durationSeconds": "Duur: {seconds} seconden",
-  "additionalSpeechSampleRemoved": "Extra spraakvoorbeeld verwijderd"
+  "additionalSpeechSampleRemoved": "Extra spraakvoorbeeld verwijderd",
+  "consentDataMessage": "Door verder te gaan, worden alle gegevens die je deelt met deze app (inclusief je gesprekken, opnames en persoonlijke informatie) veilig opgeslagen op onze servers om je AI-aangedreven inzichten te bieden en alle app-functies mogelijk te maken."
 }

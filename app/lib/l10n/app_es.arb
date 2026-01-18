@@ -1853,5 +1853,6 @@
   "speechSamples": "Muestras de voz",
   "additionalSampleIndex": "Muestra adicional {index}",
   "durationSeconds": "Duración: {seconds} segundos",
-  "additionalSpeechSampleRemoved": "Muestra de voz adicional eliminada"
+  "additionalSpeechSampleRemoved": "Muestra de voz adicional eliminada",
+  "consentDataMessage": "Al continuar, todos los datos que compartas con esta aplicación (incluidas tus conversaciones, grabaciones e información personal) se almacenarán de forma segura en nuestros servidores para proporcionarte información basada en IA y habilitar todas las funciones de la aplicación."
 }

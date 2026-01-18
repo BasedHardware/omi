@@ -1853,5 +1853,6 @@
   "speechSamples": "语音样本",
   "additionalSampleIndex": "附加样本 {index}",
   "durationSeconds": "时长: {seconds} 秒",
-  "additionalSpeechSampleRemoved": "已删除附加语音样本"
+  "additionalSpeechSampleRemoved": "已删除附加语音样本",
+  "consentDataMessage": "继续即表示您与此应用共享的所有数据（包括您的对话、录音和个人信息）将安全存储在我们的服务器上，以便为您提供AI驱动的洞察并启用所有应用功能。"
 }

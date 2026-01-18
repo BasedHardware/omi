@@ -3406,5 +3406,6 @@
   "speechSamples": "Puhenäytteet",
   "additionalSampleIndex": "Lisänäyte {index}",
   "durationSeconds": "Kesto: {seconds} sekuntia",
-  "additionalSpeechSampleRemoved": "Lisäpuhenäyte poistettu"
+  "additionalSpeechSampleRemoved": "Lisäpuhenäyte poistettu",
+  "consentDataMessage": "Jatkamalla kaikki tämän sovelluksen kanssa jakamasi tiedot (mukaan lukien keskustelusi, tallenteet ja henkilökohtaiset tietosi) tallennetaan turvallisesti palvelimillemme tarjotaksemme sinulle tekoälypohjaisia oivalluksia ja mahdollistaaksemme kaikki sovelluksen ominaisuudet."
 }

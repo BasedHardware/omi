@@ -6079,5 +6079,9 @@
   "additionalSpeechSampleRemoved": "Additional Speech Sample Removed",
   "@additionalSpeechSampleRemoved": {
     "description": "Confirmation message when an additional speech sample is deleted"
+  },
+  "consentDataMessage": "By continuing, all data you share with this app (including your conversations, recordings, and personal information) will be securely stored on our servers to provide you with AI-powered insights and enable all app features.",
+  "@consentDataMessage": {
+    "description": "Consent message explaining how user data will be stored and used"
   }
 }
