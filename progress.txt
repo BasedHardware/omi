@@ -1212,8 +1212,8 @@ Commit: d77ac398b
 END OF PROGRESS TRACKER
 ================================================================================
 Last Updated: 2026-01-18
-Last Completed: FILE 123 - dialog.dart (0 new keys, reused existing)
-Previous Completed: FILE 122 - date_list_item.dart (0 new keys, reused existing)
+Last Completed: FILE 124 - expandable_text.dart (2 new keys, 68 new translations)
+Previous Completed: FILE 123 - dialog.dart (0 new keys, reused existing)
 Current Session: Phase 2 - Mobile/Pages localization in progress
 
 🎉 PHASE 1 (DESKTOP) COMPLETE! 🎉
@@ -1223,7 +1223,7 @@ Current Session: Phase 2 - Mobile/Pages localization in progress
 
 📋 PHASE 2 (MOBILE/PAGES) IN PROGRESS
 59 files identified with hardcoded strings
-Files Completed: 53
+Files Completed: 54
 Estimated 200-300 new keys needed
 
 --------------------------------------------------------------------------------
@@ -1725,3 +1725,16 @@ Notes: Localized generic dialog utility function. Changed button text parameters
        from hardcoded defaults ('Ok', 'Cancel') to nullable with l10n fallbacks.
        Small utility file (38 lines) used throughout the app for alert dialogs.
 Commit: 5616e1e37
+
+--------------------------------------------------------------------------------
+FILE 124 (Phase 2 FILE 54): expandable_text.dart
+--------------------------------------------------------------------------------
+Path: app/lib/widgets/expandable_text.dart
+New Keys: showMore, showLess
+Total New Keys: 2
+Script: /private/tmp/claude/.../translate_expandable_text.py
+Status: ✅ COMPLETED
+Notes: Localized expandable text widget with show more/less toggle. Changed
+       expand/collapse text parameters to nullable with l10n fallbacks.
+       Keys include arrow symbols (↓/↑) for visual indication.
+Commit: 0963f1f75
