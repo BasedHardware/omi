@@ -145,6 +145,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
       );
     }
 
+    if (!mounted) return;
     final appProvider = Provider.of<AppProvider>(context, listen: false);
     await appProvider.getApps();
 
@@ -326,7 +327,34 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
         responsive.spacing(baseSpacing: 32),
         responsive.spacing(baseSpacing: 24),
       ),
-      child: _buildSearchAndFiltersRow(responsive, appProvider),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Consumer<ConnectivityProvider>(
+            builder: (context, connectivityProvider, _) {
+              if (!connectivityProvider.isConnected) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 16.0),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.wifi_off_rounded, color: ResponsiveHelper.errorColor, size: 16),
+                      const SizedBox(width: 8),
+                      Text(
+                        'No internet connection',
+                        style: responsive.bodyMedium.copyWith(
+                          color: ResponsiveHelper.errorColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
+          _buildSearchAndFiltersRow(responsive, appProvider),
+        ],
+      ),
     );
   }
 
