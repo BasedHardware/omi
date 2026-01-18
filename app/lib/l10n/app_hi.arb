@@ -1860,5 +1860,6 @@
   "enableApps": "ऐप्स सक्षम करें",
   "omiAppName": "Omi",
   "showMore": "और दिखाएं ↓",
-  "showLess": "कम दिखाएं ↑"
+  "showLess": "कम दिखाएं ↑",
+  "loadingYourRecording": "आपकी रिकॉर्डिंग लोड हो रही है..."
 }

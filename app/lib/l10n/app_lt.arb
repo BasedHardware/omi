@@ -3395,5 +3395,6 @@
   "enableApps": "Įjungti programas",
   "omiAppName": "Omi",
   "showMore": "rodyti daugiau ↓",
-  "showLess": "rodyti mažiau ↑"
+  "showLess": "rodyti mažiau ↑",
+  "loadingYourRecording": "Įkeliamas įrašas..."
 }

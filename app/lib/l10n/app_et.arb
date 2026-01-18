@@ -3413,5 +3413,6 @@
   "enableApps": "Luba rakendused",
   "omiAppName": "Omi",
   "showMore": "näita rohkem ↓",
-  "showLess": "näita vähem ↑"
+  "showLess": "näita vähem ↑",
+  "loadingYourRecording": "Salvestuse laadimine..."
 }

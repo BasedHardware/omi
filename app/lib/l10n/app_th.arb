@@ -3413,5 +3413,6 @@
   "enableApps": "เปิดใช้งานแอป",
   "omiAppName": "Omi",
   "showMore": "แสดงเพิ่มเติม ↓",
-  "showLess": "แสดงน้อยลง ↑"
+  "showLess": "แสดงน้อยลง ↑",
+  "loadingYourRecording": "กำลังโหลดการบันทึกของคุณ..."
 }

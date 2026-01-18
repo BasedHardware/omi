@@ -6107,5 +6107,9 @@
   "showLess": "show less ↑",
   "@showLess": {
     "description": "Text shown to collapse expanded content, with up arrow"
+  },
+  "loadingYourRecording": "Loading your recording...",
+  "@loadingYourRecording": {
+    "description": "Loading message shown while audio waveform is being processed"
   }
 }

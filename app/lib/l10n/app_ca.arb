@@ -3415,5 +3415,6 @@
   "enableApps": "Activar aplicacions",
   "omiAppName": "Omi",
   "showMore": "mostra més ↓",
-  "showLess": "mostra menys ↑"
+  "showLess": "mostra menys ↑",
+  "loadingYourRecording": "Carregant la gravació..."
 }

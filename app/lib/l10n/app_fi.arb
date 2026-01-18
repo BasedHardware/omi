@@ -3413,5 +3413,6 @@
   "enableApps": "Ota sovellukset käyttöön",
   "omiAppName": "Omi",
   "showMore": "näytä lisää ↓",
-  "showLess": "näytä vähemmän ↑"
+  "showLess": "näytä vähemmän ↑",
+  "loadingYourRecording": "Ladataan tallennetta..."
 }

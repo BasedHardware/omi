@@ -3413,5 +3413,6 @@
   "enableApps": "Aktifkan aplikasi",
   "omiAppName": "Omi",
   "showMore": "tampilkan lebih ↓",
-  "showLess": "tampilkan lebih sedikit ↑"
+  "showLess": "tampilkan lebih sedikit ↑",
+  "loadingYourRecording": "Memuat rekaman Anda..."
 }

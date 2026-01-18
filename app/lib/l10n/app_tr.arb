@@ -3395,5 +3395,6 @@
   "enableApps": "Uygulamaları etkinleştir",
   "omiAppName": "Omi",
   "showMore": "daha fazla göster ↓",
-  "showLess": "daha az göster ↑"
+  "showLess": "daha az göster ↑",
+  "loadingYourRecording": "Kaydınız yükleniyor..."
 }

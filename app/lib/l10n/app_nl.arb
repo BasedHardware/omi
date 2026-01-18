@@ -2231,5 +2231,6 @@
   "enableApps": "Apps inschakelen",
   "omiAppName": "Omi",
   "showMore": "toon meer ↓",
-  "showLess": "toon minder ↑"
+  "showLess": "toon minder ↑",
+  "loadingYourRecording": "Uw opname laden..."
 }

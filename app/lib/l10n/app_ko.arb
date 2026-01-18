@@ -3413,5 +3413,6 @@
   "enableApps": "앱 활성화",
   "omiAppName": "Omi",
   "showMore": "더 보기 ↓",
-  "showLess": "접기 ↑"
+  "showLess": "접기 ↑",
+  "loadingYourRecording": "녹음을 불러오는 중..."
 }

@@ -3431,5 +3431,6 @@
   "enableApps": "تفعيل التطبيقات",
   "omiAppName": "Omi",
   "showMore": "عرض المزيد ↓",
-  "showLess": "عرض أقل ↑"
+  "showLess": "عرض أقل ↑",
+  "loadingYourRecording": "جاري تحميل التسجيل..."
 }

@@ -3413,5 +3413,6 @@
   "enableApps": "Włącz aplikacje",
   "omiAppName": "Omi",
   "showMore": "pokaż więcej ↓",
-  "showLess": "pokaż mniej ↑"
+  "showLess": "pokaż mniej ↑",
+  "loadingYourRecording": "Ładowanie nagrania..."
 }

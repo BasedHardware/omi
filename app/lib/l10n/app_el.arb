@@ -3413,5 +3413,6 @@
   "enableApps": "Ενεργοποίηση εφαρμογών",
   "omiAppName": "Omi",
   "showMore": "περισσότερα ↓",
-  "showLess": "λιγότερα ↑"
+  "showLess": "λιγότερα ↑",
+  "loadingYourRecording": "Φόρτωση της εγγραφής σας..."
 }

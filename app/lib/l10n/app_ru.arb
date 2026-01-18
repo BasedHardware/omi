@@ -3413,5 +3413,6 @@
   "enableApps": "Включить приложения",
   "omiAppName": "Omi",
   "showMore": "показать больше ↓",
-  "showLess": "показать меньше ↑"
+  "showLess": "показать меньше ↑",
+  "loadingYourRecording": "Загрузка записи..."
 }

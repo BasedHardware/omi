@@ -3413,5 +3413,6 @@
   "enableApps": "Dayakan aplikasi",
   "omiAppName": "Omi",
   "showMore": "tunjukkan lagi ↓",
-  "showLess": "tunjukkan kurang ↑"
+  "showLess": "tunjukkan kurang ↑",
+  "loadingYourRecording": "Memuatkan rakaman anda..."
 }

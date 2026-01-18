@@ -1839,5 +1839,6 @@
   "enableApps": "アプリを有効化",
   "omiAppName": "Omi",
   "showMore": "もっと見る ↓",
-  "showLess": "閉じる ↑"
+  "showLess": "閉じる ↑",
+  "loadingYourRecording": "録音を読み込み中..."
 }

@@ -3415,5 +3415,6 @@
   "enableApps": "Povolit aplikace",
   "omiAppName": "Omi",
   "showMore": "zobrazit více ↓",
-  "showLess": "zobrazit méně ↑"
+  "showLess": "zobrazit méně ↑",
+  "loadingYourRecording": "Načítání nahrávky..."
 }

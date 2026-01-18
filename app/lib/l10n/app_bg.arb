@@ -3415,5 +3415,6 @@
   "enableApps": "Активиране на приложения",
   "omiAppName": "Omi",
   "showMore": "покажи повече ↓",
-  "showLess": "покажи по-малко ↑"
+  "showLess": "покажи по-малко ↑",
+  "loadingYourRecording": "Зареждане на записа..."
 }

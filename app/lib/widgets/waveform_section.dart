@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/models/playback_state.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/waveform_painter.dart';
 
 class WaveformSection extends StatefulWidget {
@@ -92,7 +93,7 @@ class _WaveformSectionState extends State<WaveformSection> {
 
   Widget _buildWaveformVisualization(BuildContext context) {
     if (widget.isProcessingWaveform) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -102,8 +103,8 @@ class _WaveformSectionState extends State<WaveformSection> {
             ),
             const SizedBox(height: 12),
             Text(
-              'Loading your recording...',
-              style: TextStyle(
+              context.l10n.loadingYourRecording,
+              style: const TextStyle(
                 color: Colors.white70,
                 fontSize: 12,
               ),

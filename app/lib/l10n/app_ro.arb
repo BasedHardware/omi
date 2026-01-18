@@ -3413,5 +3413,6 @@
   "enableApps": "Activează aplicațiile",
   "omiAppName": "Omi",
   "showMore": "arată mai mult ↓",
-  "showLess": "arată mai puțin ↑"
+  "showLess": "arată mai puțin ↑",
+  "loadingYourRecording": "Se încarcă înregistrarea..."
 }

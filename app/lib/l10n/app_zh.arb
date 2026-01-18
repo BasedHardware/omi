@@ -1860,5 +1860,6 @@
   "enableApps": "启用应用",
   "omiAppName": "Omi",
   "showMore": "显示更多 ↓",
-  "showLess": "收起 ↑"
+  "showLess": "收起 ↑",
+  "loadingYourRecording": "正在加载您的录音..."
 }
