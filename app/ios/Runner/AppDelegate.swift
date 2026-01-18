@@ -70,6 +70,9 @@ extension FlutterError: Error {}
         speechHandler.handle(call, result: result)
     }
 
+    // Create WiFi Network plugin for device AP connection
+    _ = WifiNetworkPlugin(messenger: controller!.binaryMessenger)
+
     // here, Without this code the task will not work.
     SwiftFlutterForegroundTaskPlugin.setPluginRegistrantCallback { registry in
       GeneratedPluginRegistrant.register(with: registry)
