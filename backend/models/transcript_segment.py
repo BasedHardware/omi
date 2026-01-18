@@ -172,7 +172,7 @@ class TranscriptSegment(BaseModel):
         removed_ids = []
 
         # Join
-        joined_similar_segments = [segments[-1].copy(deep=True)] if segments else []
+        joined_similar_segments = [segments[-1].model_copy(deep=True)] if segments else []
         dropped_existing_tail = False
         for new_segment in new_segments:
             if delta_seconds > 0:
