@@ -12,6 +12,7 @@ import {
   Info,
 } from 'lucide-react';
 import Image from 'next/image';
+import Link from 'next/link';
 import type { Plugin } from '../types';
 import { formatInstalls } from '../utils/format';
 
@@ -52,13 +53,9 @@ const getCapabilityIcon = (capability: string) => {
 };
 
 export const PluginCard = memo(function PluginCard({ plugin }: PluginCardProps) {
-  const handleClick = () => {
-    window.location.href = `/apps/${plugin.id}`;
-  };
-
   return (
-    <button
-      onClick={handleClick}
+    <Link
+      href={`/apps/${plugin.id}`}
       className="group relative flex h-full w-full flex-col overflow-hidden rounded-xl bg-[#1A1F2E] text-left shadow-lg transition-all duration-300 hover:translate-y-[-4px] hover:scale-[1.02] hover:bg-[#242938] hover:shadow-2xl hover:shadow-black/30"
     >
       <div className="absolute inset-0 bg-gradient-to-br from-transparent to-black/5 transition-opacity duration-300 group-hover:opacity-70" />
@@ -136,7 +133,7 @@ export const PluginCard = memo(function PluginCard({ plugin }: PluginCardProps) 
           </div>
         </div>
       </div>
-    </button>
+    </Link>
   );
 });
 

@@ -4,7 +4,12 @@
  * @example formatInstalls(1500000) => "1.5M"
  */
 export const formatInstalls = (num: number): string => {
-  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
-  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
-  return num.toString();
+  if (num < 1000) {
+    return num.toString();
+  }
+
+  return new Intl.NumberFormat('en-US', {
+    notation: 'compact',
+    compactDisplay: 'short',
+  }).format(num);
 };

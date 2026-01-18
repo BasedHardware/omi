@@ -86,21 +86,6 @@ interface AppListProps {
   initialStats: PluginStat[];
 }
 
-// Stable shuffle function using a seed
-function seededShuffle<T>(array: T[], seed: number): T[] {
-  const shuffled = [...array];
-  const random = (i: number) => {
-    const x = Math.sin(i + seed) * 10000;
-    return x - Math.floor(x);
-  };
-
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(random(i) * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  return shuffled;
-}
-
 export default function AppList({ initialPlugins, initialStats }: AppListProps) {
   const [isSearching, setIsSearching] = useState(false);
   const [headerMinimized, setHeaderMinimized] = useState(false);

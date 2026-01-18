@@ -317,12 +317,6 @@ export function MemoriesPage() {
     setSelectedIds(new Set());
   }, []);
 
-  // Clear selection when filters change
-  const handleTagClickWithClearSelection = useCallback((tag: string) => {
-    setSelectedIds(new Set());
-    handleTagClick(tag);
-  }, [handleTagClick]);
-
   // Calculate max activity for chart scaling
   const maxActivity = Math.max(...activityData.map((d) => d.count), 1);
 
