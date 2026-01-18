@@ -1212,8 +1212,8 @@ Commit: d77ac398b
 END OF PROGRESS TRACKER
 ================================================================================
 Last Updated: 2026-01-18
-Last Completed: FILE 127 - country_bottom_sheet.dart (1 new key, 34 new translations)
-Previous Completed: FILE 126 - photo_viewer_page.dart (2 new keys, 68 new translations)
+Last Completed: FILE 128 - apple_watch_setup_bottom_sheet.dart (11 new keys, 374 new translations)
+Previous Completed: FILE 127 - country_bottom_sheet.dart (1 new key, 34 new translations)
 Current Session: Phase 2 - Mobile/Pages localization in progress
 
 🎉 PHASE 1 (DESKTOP) COMPLETE! 🎉
@@ -1223,7 +1223,7 @@ Current Session: Phase 2 - Mobile/Pages localization in progress
 
 📋 PHASE 2 (MOBILE/PAGES) IN PROGRESS
 59 files identified with hardcoded strings
-Files Completed: 57
+Files Completed: 58
 Estimated 200-300 new keys needed
 
 --------------------------------------------------------------------------------
@@ -1776,3 +1776,21 @@ Status: ✅ COMPLETED
 Notes: Localized country selection bottom sheet for payment setup.
        Replaced hardcoded "Search countries..." placeholder with l10n key.
 Commit: c74aebfe0
+
+--------------------------------------------------------------------------------
+FILE 128 (Phase 2 FILE 58): apple_watch_setup_bottom_sheet.dart
+--------------------------------------------------------------------------------
+Path: app/lib/widgets/apple_watch_setup_bottom_sheet.dart
+New Keys: checkingAppleWatch, installOmiOnAppleWatch, installOmiOnAppleWatchDescription,
+         openOmiOnAppleWatch, openOmiOnAppleWatchDescription, openWatchApp,
+         iveInstalledAndOpenedTheApp, unableToOpenWatchApp, appleWatchConnectedSuccessfully,
+         appleWatchNotReachable, errorCheckingConnection (parameterized)
+Reused Keys: cancel
+Total New Keys: 11
+Script: /private/tmp/claude/.../translate_apple_watch.py
+Status: ✅ COMPLETED
+Notes: Localized Apple Watch setup bottom sheet with complete setup flow including
+       loading state, install/open instructions, button texts, and success/error
+       messages. Refactored _getPrimaryButtonText to accept BuildContext. Used
+       parameterized translation for error messages with dynamic error details.
+Commit: 26f49a5be
