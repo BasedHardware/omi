@@ -3462,5 +3462,12 @@
   "result": "النتيجة",
   "compareTranscripts": "مقارنة النصوص",
   "notHelpful": "غير مفيد",
-  "exportTasksWithOneTap": "صدّر المهام بنقرة واحدة!"
+  "exportTasksWithOneTap": "صدّر المهام بنقرة واحدة!",
+  "inProgress": "قيد التنفيذ",
+  "photos": "الصور",
+  "rawData": "البيانات الخام",
+  "content": "المحتوى",
+  "noContentToDisplay": "لا يوجد محتوى للعرض",
+  "noSummary": "لا يوجد ملخص",
+  "updateOmiFirmware": "تحديث برنامج omi"
 }

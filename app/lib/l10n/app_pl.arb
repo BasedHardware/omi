@@ -3444,5 +3444,12 @@
   "result": "Wynik",
   "compareTranscripts": "Porównaj transkrypcje",
   "notHelpful": "Nieprzydatne",
-  "exportTasksWithOneTap": "Eksportuj zadania jednym dotknięciem!"
+  "exportTasksWithOneTap": "Eksportuj zadania jednym dotknięciem!",
+  "inProgress": "W trakcie",
+  "photos": "Zdjęcia",
+  "rawData": "Surowe dane",
+  "content": "Zawartość",
+  "noContentToDisplay": "Brak treści do wyświetlenia",
+  "noSummary": "Brak podsumowania",
+  "updateOmiFirmware": "Zaktualizuj oprogramowanie omi"
 }

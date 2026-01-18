@@ -3444,5 +3444,12 @@
   "result": "Kết quả",
   "compareTranscripts": "So sánh bản ghi",
   "notHelpful": "Không hữu ích",
-  "exportTasksWithOneTap": "Xuất tác vụ chỉ với một chạm!"
+  "exportTasksWithOneTap": "Xuất tác vụ chỉ với một chạm!",
+  "inProgress": "Đang xử lý",
+  "photos": "Ảnh",
+  "rawData": "Dữ liệu thô",
+  "content": "Nội dung",
+  "noContentToDisplay": "Không có nội dung để hiển thị",
+  "noSummary": "Không có tóm tắt",
+  "updateOmiFirmware": "Cập nhật phần mềm omi"
 }

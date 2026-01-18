@@ -3444,5 +3444,12 @@
   "result": "Resultat",
   "compareTranscripts": "Sammenlign transskriptioner",
   "notHelpful": "Ikke nyttigt",
-  "exportTasksWithOneTap": "Eksporter opgaver med ét tryk!"
+  "exportTasksWithOneTap": "Eksporter opgaver med ét tryk!",
+  "inProgress": "I gang",
+  "photos": "Fotos",
+  "rawData": "Rådata",
+  "content": "Indhold",
+  "noContentToDisplay": "Intet indhold at vise",
+  "noSummary": "Ingen oversigt",
+  "updateOmiFirmware": "Opdater omi-firmware"
 }

@@ -3444,5 +3444,12 @@
   "result": "Rezultat",
   "compareTranscripts": "Compară transcrierile",
   "notHelpful": "Nu a fost util",
-  "exportTasksWithOneTap": "Exportă sarcinile cu o singură atingere!"
+  "exportTasksWithOneTap": "Exportă sarcinile cu o singură atingere!",
+  "inProgress": "În curs",
+  "photos": "Fotografii",
+  "rawData": "Date brute",
+  "content": "Conținut",
+  "noContentToDisplay": "Nu există conținut de afișat",
+  "noSummary": "Fără rezumat",
+  "updateOmiFirmware": "Actualizează firmware-ul omi"
 }

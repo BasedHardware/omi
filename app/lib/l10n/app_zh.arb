@@ -1891,5 +1891,12 @@
   "result": "结果",
   "compareTranscripts": "比较转录",
   "notHelpful": "没有帮助",
-  "exportTasksWithOneTap": "一键导出任务！"
+  "exportTasksWithOneTap": "一键导出任务！",
+  "inProgress": "处理中",
+  "photos": "照片",
+  "rawData": "原始数据",
+  "content": "内容",
+  "noContentToDisplay": "没有可显示的内容",
+  "noSummary": "无摘要",
+  "updateOmiFirmware": "更新omi固件"
 }

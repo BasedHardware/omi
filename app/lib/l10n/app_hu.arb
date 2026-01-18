@@ -3444,5 +3444,12 @@
   "result": "Eredmény",
   "compareTranscripts": "Átiratok összehasonlítása",
   "notHelpful": "Nem hasznos",
-  "exportTasksWithOneTap": "Feladatok exportálása egy érintéssel!"
+  "exportTasksWithOneTap": "Feladatok exportálása egy érintéssel!",
+  "inProgress": "Folyamatban",
+  "photos": "Fényképek",
+  "rawData": "Nyers adatok",
+  "content": "Tartalom",
+  "noContentToDisplay": "Nincs megjeleníthető tartalom",
+  "noSummary": "Nincs összefoglaló",
+  "updateOmiFirmware": "Omi firmware frissítése"
 }

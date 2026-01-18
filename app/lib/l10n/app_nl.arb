@@ -2262,5 +2262,12 @@
   "result": "Resultaat",
   "compareTranscripts": "Transcripties vergelijken",
   "notHelpful": "Niet nuttig",
-  "exportTasksWithOneTap": "Exporteer taken met één tik!"
+  "exportTasksWithOneTap": "Exporteer taken met één tik!",
+  "inProgress": "Bezig",
+  "photos": "Foto's",
+  "rawData": "Ruwe gegevens",
+  "content": "Inhoud",
+  "noContentToDisplay": "Geen inhoud om weer te geven",
+  "noSummary": "Geen samenvatting",
+  "updateOmiFirmware": "Omi-firmware bijwerken"
 }

@@ -3444,5 +3444,12 @@
   "result": "Tulos",
   "compareTranscripts": "Vertaa litterointeja",
   "notHelpful": "Ei hyödyllinen",
-  "exportTasksWithOneTap": "Vie tehtävät yhdellä napautuksella!"
+  "exportTasksWithOneTap": "Vie tehtävät yhdellä napautuksella!",
+  "inProgress": "Käynnissä",
+  "photos": "Kuvat",
+  "rawData": "Raakadata",
+  "content": "Sisältö",
+  "noContentToDisplay": "Ei sisältöä näytettäväksi",
+  "noSummary": "Ei yhteenvetoa",
+  "updateOmiFirmware": "Päivitä omin laiteohjelmisto"
 }

@@ -3444,5 +3444,12 @@
   "result": "Αποτέλεσμα",
   "compareTranscripts": "Σύγκριση μεταγραφών",
   "notHelpful": "Δεν ήταν χρήσιμο",
-  "exportTasksWithOneTap": "Εξαγωγή εργασιών με ένα πάτημα!"
+  "exportTasksWithOneTap": "Εξαγωγή εργασιών με ένα πάτημα!",
+  "inProgress": "Σε εξέλιξη",
+  "photos": "Φωτογραφίες",
+  "rawData": "Ανεπεξέργαστα δεδομένα",
+  "content": "Περιεχόμενο",
+  "noContentToDisplay": "Δεν υπάρχει περιεχόμενο για εμφάνιση",
+  "noSummary": "Χωρίς σύνοψη",
+  "updateOmiFirmware": "Ενημέρωση firmware omi"
 }

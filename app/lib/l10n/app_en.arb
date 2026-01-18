@@ -6253,5 +6253,33 @@
   "exportTasksWithOneTap": "Export tasks with one tap!",
   "@exportTasksWithOneTap": {
     "description": "Banner message promoting task export integration feature"
+  },
+  "inProgress": "In progress",
+  "@inProgress": {
+    "description": "Title for conversation being processed"
+  },
+  "photos": "Photos",
+  "@photos": {
+    "description": "Tab label for photos content"
+  },
+  "rawData": "Raw Data",
+  "@rawData": {
+    "description": "Tab label for raw data content"
+  },
+  "content": "Content",
+  "@content": {
+    "description": "Tab label for content"
+  },
+  "noContentToDisplay": "No content to display",
+  "@noContentToDisplay": {
+    "description": "Message when there is no content available"
+  },
+  "noSummary": "No summary",
+  "@noSummary": {
+    "description": "Message when no summary is available"
+  },
+  "updateOmiFirmware": "Update omi firmware",
+  "@updateOmiFirmware": {
+    "description": "Button text to update Omi device firmware"
   }
 }

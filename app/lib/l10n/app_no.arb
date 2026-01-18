@@ -3444,5 +3444,12 @@
   "result": "Resultat",
   "compareTranscripts": "Sammenlign transkripsjoner",
   "notHelpful": "Ikke nyttig",
-  "exportTasksWithOneTap": "Eksporter oppgaver med ett trykk!"
+  "exportTasksWithOneTap": "Eksporter oppgaver med ett trykk!",
+  "inProgress": "Pågår",
+  "photos": "Bilder",
+  "rawData": "Rådata",
+  "content": "Innhold",
+  "noContentToDisplay": "Ingen innhold å vise",
+  "noSummary": "Ingen oppsummering",
+  "updateOmiFirmware": "Oppdater omi-fastvare"
 }

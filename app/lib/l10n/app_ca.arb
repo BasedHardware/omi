@@ -3446,5 +3446,12 @@
   "result": "Resultat",
   "compareTranscripts": "Comparar transcripcions",
   "notHelpful": "No és útil",
-  "exportTasksWithOneTap": "Exporta tasques amb un toc!"
+  "exportTasksWithOneTap": "Exporta tasques amb un toc!",
+  "inProgress": "En curs",
+  "photos": "Fotos",
+  "rawData": "Dades en brut",
+  "content": "Contingut",
+  "noContentToDisplay": "No hi ha contingut per mostrar",
+  "noSummary": "Sense resum",
+  "updateOmiFirmware": "Actualitza el firmware d'omi"
 }

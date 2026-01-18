@@ -3444,5 +3444,12 @@
   "result": "ผลลัพธ์",
   "compareTranscripts": "เปรียบเทียบการถอดเสียง",
   "notHelpful": "ไม่เป็นประโยชน์",
-  "exportTasksWithOneTap": "ส่งออกงานด้วยการแตะครั้งเดียว!"
+  "exportTasksWithOneTap": "ส่งออกงานด้วยการแตะครั้งเดียว!",
+  "inProgress": "กำลังดำเนินการ",
+  "photos": "รูปภาพ",
+  "rawData": "ข้อมูลดิบ",
+  "content": "เนื้อหา",
+  "noContentToDisplay": "ไม่มีเนื้อหาที่จะแสดง",
+  "noSummary": "ไม่มีสรุป",
+  "updateOmiFirmware": "อัปเดตเฟิร์มแวร์ omi"
 }

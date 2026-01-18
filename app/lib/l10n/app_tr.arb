@@ -3426,5 +3426,12 @@
   "result": "Sonuç",
   "compareTranscripts": "Transkriptleri karşılaştır",
   "notHelpful": "Yardımcı olmadı",
-  "exportTasksWithOneTap": "Görevleri tek dokunuşla dışa aktarın!"
+  "exportTasksWithOneTap": "Görevleri tek dokunuşla dışa aktarın!",
+  "inProgress": "Devam ediyor",
+  "photos": "Fotoğraflar",
+  "rawData": "Ham Veri",
+  "content": "İçerik",
+  "noContentToDisplay": "Gösterilecek içerik yok",
+  "noSummary": "Özet yok",
+  "updateOmiFirmware": "omi yazılımını güncelle"
 }

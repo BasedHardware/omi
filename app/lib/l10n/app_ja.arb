@@ -1870,5 +1870,12 @@
   "result": "結果",
   "compareTranscripts": "文字起こしを比較",
   "notHelpful": "役に立たなかった",
-  "exportTasksWithOneTap": "ワンタップでタスクをエクスポート！"
+  "exportTasksWithOneTap": "ワンタップでタスクをエクスポート！",
+  "inProgress": "処理中",
+  "photos": "写真",
+  "rawData": "生データ",
+  "content": "コンテンツ",
+  "noContentToDisplay": "表示するコンテンツがありません",
+  "noSummary": "要約なし",
+  "updateOmiFirmware": "omiファームウェアを更新"
 }

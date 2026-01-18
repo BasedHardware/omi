@@ -3444,5 +3444,12 @@
   "result": "Výsledok",
   "compareTranscripts": "Porovnať prepisy",
   "notHelpful": "Nebolo užitočné",
-  "exportTasksWithOneTap": "Exportujte úlohy jedným ťuknutím!"
+  "exportTasksWithOneTap": "Exportujte úlohy jedným ťuknutím!",
+  "inProgress": "Prebieha",
+  "photos": "Fotky",
+  "rawData": "Nespracované dáta",
+  "content": "Obsah",
+  "noContentToDisplay": "Žiadny obsah na zobrazenie",
+  "noSummary": "Žiadny súhrn",
+  "updateOmiFirmware": "Aktualizovať firmvér omi"
 }

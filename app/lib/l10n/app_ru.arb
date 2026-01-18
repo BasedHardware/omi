@@ -3444,5 +3444,12 @@
   "result": "Результат",
   "compareTranscripts": "Сравнить транскрипции",
   "notHelpful": "Бесполезно",
-  "exportTasksWithOneTap": "Экспортируйте задачи одним нажатием!"
+  "exportTasksWithOneTap": "Экспортируйте задачи одним нажатием!",
+  "inProgress": "В процессе",
+  "photos": "Фото",
+  "rawData": "Необработанные данные",
+  "content": "Контент",
+  "noContentToDisplay": "Нет контента для отображения",
+  "noSummary": "Нет сводки",
+  "updateOmiFirmware": "Обновить прошивку omi"
 }

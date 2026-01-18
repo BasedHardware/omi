@@ -3426,5 +3426,12 @@
   "result": "Risultato",
   "compareTranscripts": "Confronta trascrizioni",
   "notHelpful": "Non utile",
-  "exportTasksWithOneTap": "Esporta le attività con un tocco!"
+  "exportTasksWithOneTap": "Esporta le attività con un tocco!",
+  "inProgress": "In corso",
+  "photos": "Foto",
+  "rawData": "Dati grezzi",
+  "content": "Contenuto",
+  "noContentToDisplay": "Nessun contenuto da visualizzare",
+  "noSummary": "Nessun riepilogo",
+  "updateOmiFirmware": "Aggiorna firmware omi"
 }

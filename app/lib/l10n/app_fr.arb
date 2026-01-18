@@ -2262,5 +2262,12 @@
   "result": "Résultat",
   "compareTranscripts": "Comparer les transcriptions",
   "notHelpful": "Pas utile",
-  "exportTasksWithOneTap": "Exportez vos tâches en un clic !"
+  "exportTasksWithOneTap": "Exportez vos tâches en un clic !",
+  "inProgress": "En cours",
+  "photos": "Photos",
+  "rawData": "Données brutes",
+  "content": "Contenu",
+  "noContentToDisplay": "Aucun contenu à afficher",
+  "noSummary": "Pas de résumé",
+  "updateOmiFirmware": "Mettre à jour le firmware omi"
 }

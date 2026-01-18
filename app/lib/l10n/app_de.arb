@@ -1891,5 +1891,12 @@
   "result": "Ergebnis",
   "compareTranscripts": "Transkripte vergleichen",
   "notHelpful": "Nicht hilfreich",
-  "exportTasksWithOneTap": "Aufgaben mit einem Tippen exportieren!"
+  "exportTasksWithOneTap": "Aufgaben mit einem Tippen exportieren!",
+  "inProgress": "In Bearbeitung",
+  "photos": "Fotos",
+  "rawData": "Rohdaten",
+  "content": "Inhalt",
+  "noContentToDisplay": "Kein Inhalt zum Anzeigen",
+  "noSummary": "Keine Zusammenfassung",
+  "updateOmiFirmware": "Omi-Firmware aktualisieren"
 }

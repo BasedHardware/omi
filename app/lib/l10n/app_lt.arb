@@ -3426,5 +3426,12 @@
   "result": "Rezultatas",
   "compareTranscripts": "Palyginti transkripcijas",
   "notHelpful": "Nenaudinga",
-  "exportTasksWithOneTap": "Eksportuokite užduotis vienu bakstelėjimu!"
+  "exportTasksWithOneTap": "Eksportuokite užduotis vienu bakstelėjimu!",
+  "inProgress": "Vykdoma",
+  "photos": "Nuotraukos",
+  "rawData": "Neapdoroti duomenys",
+  "content": "Turinys",
+  "noContentToDisplay": "Nėra turinio rodyti",
+  "noSummary": "Nėra santraukos",
+  "updateOmiFirmware": "Atnaujinti omi programinę įrangą"
 }

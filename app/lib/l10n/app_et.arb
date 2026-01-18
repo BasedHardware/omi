@@ -3444,5 +3444,12 @@
   "result": "Tulemus",
   "compareTranscripts": "Võrdle transkriptsioone",
   "notHelpful": "Ei olnud kasulik",
-  "exportTasksWithOneTap": "Ekspordi ülesanded ühe puudutusega!"
+  "exportTasksWithOneTap": "Ekspordi ülesanded ühe puudutusega!",
+  "inProgress": "Töötlemisel",
+  "photos": "Fotod",
+  "rawData": "Töötlemata andmed",
+  "content": "Sisu",
+  "noContentToDisplay": "Sisu pole kuvamiseks",
+  "noSummary": "Kokkuvõte puudub",
+  "updateOmiFirmware": "Värskenda omi püsivara"
 }

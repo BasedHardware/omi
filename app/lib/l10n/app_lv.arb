@@ -3444,5 +3444,12 @@
   "result": "Rezultāts",
   "compareTranscripts": "Salīdzināt transkripcijas",
   "notHelpful": "Nav noderīgs",
-  "exportTasksWithOneTap": "Eksportējiet uzdevumus ar vienu pieskārienu!"
+  "exportTasksWithOneTap": "Eksportējiet uzdevumus ar vienu pieskārienu!",
+  "inProgress": "Notiek",
+  "photos": "Fotoattēli",
+  "rawData": "Neapstrādāti dati",
+  "content": "Saturs",
+  "noContentToDisplay": "Nav satura, ko parādīt",
+  "noSummary": "Nav kopsavilkuma",
+  "updateOmiFirmware": "Atjaunināt omi programmaparatūru"
 }

@@ -3444,5 +3444,12 @@
   "result": "Resultat",
   "compareTranscripts": "Jämför transkriptioner",
   "notHelpful": "Inte hjälpsam",
-  "exportTasksWithOneTap": "Exportera uppgifter med ett tryck!"
+  "exportTasksWithOneTap": "Exportera uppgifter med ett tryck!",
+  "inProgress": "Pågår",
+  "photos": "Foton",
+  "rawData": "Rådata",
+  "content": "Innehåll",
+  "noContentToDisplay": "Inget innehåll att visa",
+  "noSummary": "Ingen sammanfattning",
+  "updateOmiFirmware": "Uppdatera omi-firmware"
 }

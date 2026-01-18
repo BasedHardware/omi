@@ -3446,5 +3446,12 @@
   "result": "Резултат",
   "compareTranscripts": "Сравни транскрипции",
   "notHelpful": "Не е полезно",
-  "exportTasksWithOneTap": "Експортирайте задачи с едно докосване!"
+  "exportTasksWithOneTap": "Експортирайте задачи с едно докосване!",
+  "inProgress": "В процес",
+  "photos": "Снимки",
+  "rawData": "Необработени данни",
+  "content": "Съдържание",
+  "noContentToDisplay": "Няма съдържание за показване",
+  "noSummary": "Няма резюме",
+  "updateOmiFirmware": "Актуализиране на фърмуера на omi"
 }

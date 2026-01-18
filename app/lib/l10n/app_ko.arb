@@ -3444,5 +3444,12 @@
   "result": "결과",
   "compareTranscripts": "녹취록 비교",
   "notHelpful": "도움이 안 됨",
-  "exportTasksWithOneTap": "한 번의 탭으로 작업 내보내기!"
+  "exportTasksWithOneTap": "한 번의 탭으로 작업 내보내기!",
+  "inProgress": "진행 중",
+  "photos": "사진",
+  "rawData": "원시 데이터",
+  "content": "콘텐츠",
+  "noContentToDisplay": "표시할 콘텐츠가 없습니다",
+  "noSummary": "요약 없음",
+  "updateOmiFirmware": "omi 펌웨어 업데이트"
 }

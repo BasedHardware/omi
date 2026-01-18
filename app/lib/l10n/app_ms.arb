@@ -3444,5 +3444,12 @@
   "result": "Hasil",
   "compareTranscripts": "Bandingkan transkrip",
   "notHelpful": "Tidak membantu",
-  "exportTasksWithOneTap": "Eksport tugas dengan satu ketukan!"
+  "exportTasksWithOneTap": "Eksport tugas dengan satu ketukan!",
+  "inProgress": "Sedang diproses",
+  "photos": "Foto",
+  "rawData": "Data Mentah",
+  "content": "Kandungan",
+  "noContentToDisplay": "Tiada kandungan untuk dipaparkan",
+  "noSummary": "Tiada ringkasan",
+  "updateOmiFirmware": "Kemas kini perisian tegar omi"
 }

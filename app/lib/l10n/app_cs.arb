@@ -3446,5 +3446,12 @@
   "result": "Výsledek",
   "compareTranscripts": "Porovnat přepisy",
   "notHelpful": "Nebylo užitečné",
-  "exportTasksWithOneTap": "Exportujte úkoly jedním klepnutím!"
+  "exportTasksWithOneTap": "Exportujte úkoly jedním klepnutím!",
+  "inProgress": "Probíhá",
+  "photos": "Fotky",
+  "rawData": "Nezpracovaná data",
+  "content": "Obsah",
+  "noContentToDisplay": "Žádný obsah k zobrazení",
+  "noSummary": "Žádný souhrn",
+  "updateOmiFirmware": "Aktualizovat firmware omi"
 }

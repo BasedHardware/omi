@@ -1891,5 +1891,12 @@
   "result": "परिणाम",
   "compareTranscripts": "ट्रांसक्रिप्ट की तुलना करें",
   "notHelpful": "सहायक नहीं",
-  "exportTasksWithOneTap": "एक टैप से कार्य निर्यात करें!"
+  "exportTasksWithOneTap": "एक टैप से कार्य निर्यात करें!",
+  "inProgress": "प्रगति में",
+  "photos": "फ़ोटो",
+  "rawData": "कच्चा डेटा",
+  "content": "सामग्री",
+  "noContentToDisplay": "दिखाने के लिए कोई सामग्री नहीं",
+  "noSummary": "कोई सारांश नहीं",
+  "updateOmiFirmware": "omi फर्मवेयर अपडेट करें"
 }
