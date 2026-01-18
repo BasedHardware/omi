@@ -1212,8 +1212,8 @@ Commit: d77ac398b
 END OF PROGRESS TRACKER
 ================================================================================
 Last Updated: 2026-01-18
-Last Completed: FILE 117 - user_speech_samples.dart (4 new keys, 136 new translations)
-Previous Completed: FILE 116 - voice_recorder_widget.dart (1 new key, 34 new translations)
+Last Completed: FILE 118 - confirmation_dialog.dart (0 new keys, reused existing)
+Previous Completed: FILE 117 - user_speech_samples.dart (4 new keys, 136 new translations)
 Current Session: Phase 2 - Mobile/Pages localization in progress
 
 🎉 PHASE 1 (DESKTOP) COMPLETE! 🎉
@@ -1223,7 +1223,7 @@ Current Session: Phase 2 - Mobile/Pages localization in progress
 
 📋 PHASE 2 (MOBILE/PAGES) IN PROGRESS
 59 files identified with hardcoded strings
-Files Completed: 47
+Files Completed: 48
 Estimated 200-300 new keys needed
 
 --------------------------------------------------------------------------------
@@ -1637,3 +1637,17 @@ Notes: Localized speech samples page with app bar title, sample list item titles
        (Speech Profile / Additional Sample), duration display with parameterized
        seconds, and deletion confirmation message. Small file (153 lines).
 Commit: 79d47f0d0
+
+--------------------------------------------------------------------------------
+FILE 118 (Phase 2 FILE 48): confirmation_dialog.dart
+--------------------------------------------------------------------------------
+Path: app/lib/widgets/confirmation_dialog.dart
+New Keys: (none)
+Reused Keys: cancel, confirm
+Total New Keys: 0
+Script: N/A - all keys already existed
+Status: ✅ COMPLETED
+Notes: Localized generic confirmation dialog widget. Updated default fallback
+       text for Cancel and Confirm buttons to use l10n keys. Both Android
+       (AlertDialog) and iOS (CupertinoAlertDialog) variants updated.
+Commit: 26d64bdf8
