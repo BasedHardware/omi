@@ -3417,5 +3417,16 @@
   "loadingYourRecording": "Felvétel betöltése...",
   "photoDiscardedMessage": "Ez a fotó el lett vetve, mert nem volt jelentős.",
   "analyzing": "Elemzés...",
-  "searchCountries": "Országok keresése..."
+  "searchCountries": "Országok keresése...",
+  "checkingAppleWatch": "Apple Watch ellenőrzése...",
+  "installOmiOnAppleWatch": "Telepítse az Omit az\nApple Watch-ra",
+  "installOmiOnAppleWatchDescription": "Az Apple Watch Omival való használatához először telepítenie kell az Omi alkalmazást az órájára.",
+  "openOmiOnAppleWatch": "Nyissa meg az Omit az\nApple Watch-on",
+  "openOmiOnAppleWatchDescription": "Az Omi alkalmazás telepítve van az Apple Watch-ra. Nyissa meg és érintse meg a Start gombot.",
+  "openWatchApp": "Watch alkalmazás megnyitása",
+  "iveInstalledAndOpenedTheApp": "Telepítettem és megnyitottam az alkalmazást",
+  "unableToOpenWatchApp": "Nem sikerült megnyitni az Apple Watch alkalmazást. Nyissa meg manuálisan a Watch alkalmazást az Apple Watch-on, és telepítse az Omit az \"Elérhető alkalmazások\" részből.",
+  "appleWatchConnectedSuccessfully": "Apple Watch sikeresen csatlakoztatva!",
+  "appleWatchNotReachable": "Az Apple Watch még nem érhető el. Győződjön meg róla, hogy az Omi alkalmazás nyitva van az óráján.",
+  "errorCheckingConnection": "Hiba a kapcsolat ellenőrzésekor: {error}"
 }

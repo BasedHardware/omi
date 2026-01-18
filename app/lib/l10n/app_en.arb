@@ -6123,5 +6123,55 @@
   "searchCountries": "Search countries...",
   "@searchCountries": {
     "description": "Placeholder text for country search field"
+  },
+  "checkingAppleWatch": "Checking Apple Watch...",
+  "@checkingAppleWatch": {
+    "description": "Loading text while checking Apple Watch status"
+  },
+  "installOmiOnAppleWatch": "Install Omi on your\nApple Watch",
+  "@installOmiOnAppleWatch": {
+    "description": "Title prompting user to install Omi on Apple Watch"
+  },
+  "installOmiOnAppleWatchDescription": "To use your Apple Watch with Omi, you need to install the Omi app on your watch first.",
+  "@installOmiOnAppleWatchDescription": {
+    "description": "Description explaining need to install Omi app on watch"
+  },
+  "openOmiOnAppleWatch": "Open Omi on your\nApple Watch",
+  "@openOmiOnAppleWatch": {
+    "description": "Title prompting user to open Omi on Apple Watch"
+  },
+  "openOmiOnAppleWatchDescription": "The Omi app is installed on your Apple Watch. Open it and tap Start to begin.",
+  "@openOmiOnAppleWatchDescription": {
+    "description": "Description explaining Omi is installed and user should open it"
+  },
+  "openWatchApp": "Open Watch App",
+  "@openWatchApp": {
+    "description": "Button text to open Watch app on iPhone"
+  },
+  "iveInstalledAndOpenedTheApp": "I've Installed & Opened the App",
+  "@iveInstalledAndOpenedTheApp": {
+    "description": "Button text confirming user has installed and opened the app"
+  },
+  "unableToOpenWatchApp": "Unable to open Apple Watch app. Please manually open the Watch app on your Apple Watch and install Omi from the \"Available Apps\" section.",
+  "@unableToOpenWatchApp": {
+    "description": "Error message when Watch app cannot be opened automatically"
+  },
+  "appleWatchConnectedSuccessfully": "Apple Watch connected successfully!",
+  "@appleWatchConnectedSuccessfully": {
+    "description": "Success message when Apple Watch connects"
+  },
+  "appleWatchNotReachable": "Apple Watch still not reachable. Please make sure the Omi app is open on your watch.",
+  "@appleWatchNotReachable": {
+    "description": "Error message when Apple Watch is not reachable"
+  },
+  "errorCheckingConnection": "Error checking connection: {error}",
+  "@errorCheckingConnection": {
+    "description": "Error message with error details when connection check fails",
+    "placeholders": {
+      "error": {
+        "type": "String",
+        "example": "timeout"
+      }
+    }
   }
 }

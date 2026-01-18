@@ -3417,5 +3417,16 @@
   "loadingYourRecording": "Načítava sa nahrávka...",
   "photoDiscardedMessage": "Táto fotografia bola vyradená, pretože nebola významná.",
   "analyzing": "Analyzovanie...",
-  "searchCountries": "Hľadať krajiny..."
+  "searchCountries": "Hľadať krajiny...",
+  "checkingAppleWatch": "Kontrola Apple Watch...",
+  "installOmiOnAppleWatch": "Nainštalujte Omi na\nApple Watch",
+  "installOmiOnAppleWatchDescription": "Ak chcete používať Apple Watch s Omi, musíte najprv nainštalovať aplikáciu Omi na hodinky.",
+  "openOmiOnAppleWatch": "Otvorte Omi na\nApple Watch",
+  "openOmiOnAppleWatchDescription": "Aplikácia Omi je nainštalovaná na Apple Watch. Otvorte ju a klepnite na Štart.",
+  "openWatchApp": "Otvoriť aplikáciu Watch",
+  "iveInstalledAndOpenedTheApp": "Nainštaloval(a) som a otvoril(a) aplikáciu",
+  "unableToOpenWatchApp": "Aplikáciu Apple Watch sa nepodarilo otvoriť. Manuálne otvorte aplikáciu Watch na Apple Watch a nainštalujte Omi zo sekcie \"Dostupné aplikácie\".",
+  "appleWatchConnectedSuccessfully": "Apple Watch úspešne pripojené!",
+  "appleWatchNotReachable": "Apple Watch stále nie je dostupné. Uistite sa, že aplikácia Omi je na hodinkách otvorená.",
+  "errorCheckingConnection": "Chyba pri kontrole pripojenia: {error}"
 }

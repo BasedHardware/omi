@@ -1843,5 +1843,16 @@
   "loadingYourRecording": "録音を読み込み中...",
   "photoDiscardedMessage": "この写真は重要ではなかったため破棄されました。",
   "analyzing": "分析中...",
-  "searchCountries": "国を検索..."
+  "searchCountries": "国を検索...",
+  "checkingAppleWatch": "Apple Watchを確認中...",
+  "installOmiOnAppleWatch": "Apple WatchにOmiを\nインストール",
+  "installOmiOnAppleWatchDescription": "Apple WatchでOmiを使用するには、まずウォッチにOmiアプリをインストールする必要があります。",
+  "openOmiOnAppleWatch": "Apple WatchでOmiを\n開く",
+  "openOmiOnAppleWatchDescription": "OmiアプリはApple Watchにインストールされています。開いてスタートをタップしてください。",
+  "openWatchApp": "Watchアプリを開く",
+  "iveInstalledAndOpenedTheApp": "アプリをインストールして開きました",
+  "unableToOpenWatchApp": "Apple Watchアプリを開けませんでした。Apple WatchのWatchアプリを手動で開き、「利用可能なApp」セクションからOmiをインストールしてください。",
+  "appleWatchConnectedSuccessfully": "Apple Watchが正常に接続されました！",
+  "appleWatchNotReachable": "Apple Watchにまだ接続できません。ウォッチでOmiアプリが開いていることを確認してください。",
+  "errorCheckingConnection": "接続確認エラー: {error}"
 }

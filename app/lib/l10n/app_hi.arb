@@ -1864,5 +1864,16 @@
   "loadingYourRecording": "आपकी रिकॉर्डिंग लोड हो रही है...",
   "photoDiscardedMessage": "यह फोटो हटा दी गई क्योंकि यह महत्वपूर्ण नहीं थी।",
   "analyzing": "विश्लेषण हो रहा है...",
-  "searchCountries": "देश खोजें..."
+  "searchCountries": "देश खोजें...",
+  "checkingAppleWatch": "Apple Watch की जाँच हो रही है...",
+  "installOmiOnAppleWatch": "अपने Apple Watch पर\nOmi इंस्टॉल करें",
+  "installOmiOnAppleWatchDescription": "Omi के साथ Apple Watch का उपयोग करने के लिए, आपको पहले अपनी घड़ी पर Omi ऐप इंस्टॉल करना होगा।",
+  "openOmiOnAppleWatch": "अपने Apple Watch पर\nOmi खोलें",
+  "openOmiOnAppleWatchDescription": "Omi ऐप आपके Apple Watch पर इंस्टॉल है। इसे खोलें और शुरू करने के लिए Start पर टैप करें।",
+  "openWatchApp": "Watch ऐप खोलें",
+  "iveInstalledAndOpenedTheApp": "मैंने ऐप इंस्टॉल और खोल लिया है",
+  "unableToOpenWatchApp": "Apple Watch ऐप खोलने में असमर्थ। कृपया अपने Apple Watch पर Watch ऐप मैन्युअल रूप से खोलें और \"उपलब्ध ऐप्स\" सेक्शन से Omi इंस्टॉल करें।",
+  "appleWatchConnectedSuccessfully": "Apple Watch सफलतापूर्वक कनेक्ट हो गया!",
+  "appleWatchNotReachable": "Apple Watch अभी भी पहुंच योग्य नहीं है। कृपया सुनिश्चित करें कि Omi ऐप आपकी घड़ी पर खुला है।",
+  "errorCheckingConnection": "कनेक्शन जाँचने में त्रुटि: {error}"
 }

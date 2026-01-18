@@ -3417,5 +3417,16 @@
   "loadingYourRecording": "Salvestuse laadimine...",
   "photoDiscardedMessage": "See foto kõrvaldati, kuna see polnud oluline.",
   "analyzing": "Analüüsimine...",
-  "searchCountries": "Otsi riike..."
+  "searchCountries": "Otsi riike...",
+  "checkingAppleWatch": "Apple Watchi kontrollimine...",
+  "installOmiOnAppleWatch": "Installige Omi oma\nApple Watchi",
+  "installOmiOnAppleWatchDescription": "Apple Watchi kasutamiseks Omiga peate esmalt installima Omi rakenduse oma kellale.",
+  "openOmiOnAppleWatch": "Avage Omi oma\nApple Watchis",
+  "openOmiOnAppleWatchDescription": "Omi rakendus on teie Apple Watchile installitud. Avage see ja puudutage käivitamiseks Start.",
+  "openWatchApp": "Ava Watchi rakendus",
+  "iveInstalledAndOpenedTheApp": "Olen rakenduse installinud ja avanud",
+  "unableToOpenWatchApp": "Apple Watchi rakendust ei saa avada. Avage Watchi rakendus käsitsi oma Apple Watchis ja installige Omi jaotisest \"Saadaolevad rakendused\".",
+  "appleWatchConnectedSuccessfully": "Apple Watch ühendatud!",
+  "appleWatchNotReachable": "Apple Watch pole veel kättesaadav. Veenduge, et Omi rakendus oleks teie kellas avatud.",
+  "errorCheckingConnection": "Ühenduse kontrollimisel ilmnes viga: {error}"
 }

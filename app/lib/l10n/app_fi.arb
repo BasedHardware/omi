@@ -3417,5 +3417,16 @@
   "loadingYourRecording": "Ladataan tallennetta...",
   "photoDiscardedMessage": "Tämä kuva hylättiin, koska se ei ollut merkittävä.",
   "analyzing": "Analysoidaan...",
-  "searchCountries": "Etsi maita..."
+  "searchCountries": "Etsi maita...",
+  "checkingAppleWatch": "Tarkistetaan Apple Watchia...",
+  "installOmiOnAppleWatch": "Asenna Omi\nApple Watchiin",
+  "installOmiOnAppleWatchDescription": "Käyttääksesi Apple Watchia Omin kanssa, sinun on ensin asennettava Omi-sovellus kelloosi.",
+  "openOmiOnAppleWatch": "Avaa Omi\nApple Watchissa",
+  "openOmiOnAppleWatchDescription": "Omi-sovellus on asennettu Apple Watchiin. Avaa se ja napauta Aloita aloittaaksesi.",
+  "openWatchApp": "Avaa Watch-sovellus",
+  "iveInstalledAndOpenedTheApp": "Olen asentanut ja avannut sovelluksen",
+  "unableToOpenWatchApp": "Apple Watch -sovellusta ei voi avata. Avaa Watch-sovellus manuaalisesti Apple Watchissa ja asenna Omi \"Saatavilla olevat sovellukset\" -osiosta.",
+  "appleWatchConnectedSuccessfully": "Apple Watch yhdistetty!",
+  "appleWatchNotReachable": "Apple Watch ei ole vielä tavoitettavissa. Varmista, että Omi-sovellus on auki kellossasi.",
+  "errorCheckingConnection": "Virhe yhteyden tarkistuksessa: {error}"
 }

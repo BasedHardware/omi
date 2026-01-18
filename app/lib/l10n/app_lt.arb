@@ -3399,5 +3399,16 @@
   "loadingYourRecording": "Įkeliamas įrašas...",
   "photoDiscardedMessage": "Ši nuotrauka buvo atmesta, nes nebuvo reikšminga.",
   "analyzing": "Analizuojama...",
-  "searchCountries": "Ieškoti šalių..."
+  "searchCountries": "Ieškoti šalių...",
+  "checkingAppleWatch": "Tikrinamas Apple Watch...",
+  "installOmiOnAppleWatch": "Įdiekite Omi savo\nApple Watch",
+  "installOmiOnAppleWatchDescription": "Norėdami naudoti Apple Watch su Omi, pirmiausia turite įdiegti Omi programą savo laikrodyje.",
+  "openOmiOnAppleWatch": "Atidarykite Omi savo\nApple Watch",
+  "openOmiOnAppleWatchDescription": "Omi programa įdiegta jūsų Apple Watch. Atidarykite ją ir bakstelėkite Pradėti.",
+  "openWatchApp": "Atidaryti Watch programą",
+  "iveInstalledAndOpenedTheApp": "Įdiegiau ir atidariau programą",
+  "unableToOpenWatchApp": "Nepavyko atidaryti Apple Watch programos. Rankiniu būdu atidarykite Watch programą savo Apple Watch ir įdiekite Omi iš skyriaus \"Galimos programos\".",
+  "appleWatchConnectedSuccessfully": "Apple Watch sėkmingai prijungtas!",
+  "appleWatchNotReachable": "Apple Watch vis dar nepasiekiamas. Įsitikinkite, kad Omi programa atidaryta jūsų laikrodyje.",
+  "errorCheckingConnection": "Ryšio tikrinimo klaida: {error}"
 }

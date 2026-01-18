@@ -3417,5 +3417,16 @@
   "loadingYourRecording": "Se încarcă înregistrarea...",
   "photoDiscardedMessage": "Această fotografie a fost eliminată deoarece nu era semnificativă.",
   "analyzing": "Se analizează...",
-  "searchCountries": "Căutați țări..."
+  "searchCountries": "Căutați țări...",
+  "checkingAppleWatch": "Se verifică Apple Watch...",
+  "installOmiOnAppleWatch": "Instalează Omi pe\nApple Watch",
+  "installOmiOnAppleWatchDescription": "Pentru a utiliza Apple Watch cu Omi, trebuie să instalezi mai întâi aplicația Omi pe ceas.",
+  "openOmiOnAppleWatch": "Deschide Omi pe\nApple Watch",
+  "openOmiOnAppleWatchDescription": "Aplicația Omi este instalată pe Apple Watch. Deschide-o și apasă Start pentru a începe.",
+  "openWatchApp": "Deschide aplicația Watch",
+  "iveInstalledAndOpenedTheApp": "Am instalat și deschis aplicația",
+  "unableToOpenWatchApp": "Nu se poate deschide aplicația Apple Watch. Deschide manual aplicația Watch pe Apple Watch și instalează Omi din secțiunea \"Aplicații disponibile\".",
+  "appleWatchConnectedSuccessfully": "Apple Watch conectat cu succes!",
+  "appleWatchNotReachable": "Apple Watch încă nu este accesibil. Asigură-te că aplicația Omi este deschisă pe ceas.",
+  "errorCheckingConnection": "Eroare la verificarea conexiunii: {error}"
 }

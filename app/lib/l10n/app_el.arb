@@ -3417,5 +3417,16 @@
   "loadingYourRecording": "Φόρτωση της εγγραφής σας...",
   "photoDiscardedMessage": "Αυτή η φωτογραφία απορρίφθηκε καθώς δεν ήταν σημαντική.",
   "analyzing": "Ανάλυση...",
-  "searchCountries": "Αναζήτηση χωρών..."
+  "searchCountries": "Αναζήτηση χωρών...",
+  "checkingAppleWatch": "Έλεγχος Apple Watch...",
+  "installOmiOnAppleWatch": "Εγκαταστήστε το Omi στο\nApple Watch σας",
+  "installOmiOnAppleWatchDescription": "Για να χρησιμοποιήσετε το Apple Watch με το Omi, πρέπει πρώτα να εγκαταστήσετε την εφαρμογή Omi στο ρολόι σας.",
+  "openOmiOnAppleWatch": "Ανοίξτε το Omi στο\nApple Watch σας",
+  "openOmiOnAppleWatchDescription": "Η εφαρμογή Omi είναι εγκατεστημένη στο Apple Watch σας. Ανοίξτε την και πατήστε Έναρξη.",
+  "openWatchApp": "Άνοιγμα εφαρμογής Watch",
+  "iveInstalledAndOpenedTheApp": "Έχω εγκαταστήσει και ανοίξει την εφαρμογή",
+  "unableToOpenWatchApp": "Δεν είναι δυνατό το άνοιγμα της εφαρμογής Apple Watch. Ανοίξτε χειροκίνητα την εφαρμογή Watch στο Apple Watch και εγκαταστήστε το Omi από την ενότητα \"Διαθέσιμες εφαρμογές\".",
+  "appleWatchConnectedSuccessfully": "Το Apple Watch συνδέθηκε επιτυχώς!",
+  "appleWatchNotReachable": "Το Apple Watch δεν είναι ακόμα προσβάσιμο. Βεβαιωθείτε ότι η εφαρμογή Omi είναι ανοιχτή στο ρολόι σας.",
+  "errorCheckingConnection": "Σφάλμα ελέγχου σύνδεσης: {error}"
 }

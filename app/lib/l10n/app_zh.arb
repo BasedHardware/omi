@@ -1864,5 +1864,16 @@
   "loadingYourRecording": "正在加载您的录音...",
   "photoDiscardedMessage": "此照片因不重要而被丢弃。",
   "analyzing": "分析中...",
-  "searchCountries": "搜索国家..."
+  "searchCountries": "搜索国家...",
+  "checkingAppleWatch": "正在检查 Apple Watch...",
+  "installOmiOnAppleWatch": "在您的 Apple Watch 上\n安装 Omi",
+  "installOmiOnAppleWatchDescription": "要将 Apple Watch 与 Omi 配合使用，您需要先在手表上安装 Omi 应用。",
+  "openOmiOnAppleWatch": "在您的 Apple Watch 上\n打开 Omi",
+  "openOmiOnAppleWatchDescription": "Omi 应用已安装在您的 Apple Watch 上。打开它并点击开始。",
+  "openWatchApp": "打开 Watch 应用",
+  "iveInstalledAndOpenedTheApp": "我已安装并打开应用",
+  "unableToOpenWatchApp": "无法打开 Apple Watch 应用。请在 Apple Watch 上手动打开 Watch 应用，并从「可用应用」部分安装 Omi。",
+  "appleWatchConnectedSuccessfully": "Apple Watch 连接成功！",
+  "appleWatchNotReachable": "仍无法连接 Apple Watch。请确保 Omi 应用在手表上处于打开状态。",
+  "errorCheckingConnection": "检查连接时出错：{error}"
 }

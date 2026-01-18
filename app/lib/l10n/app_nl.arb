@@ -2235,5 +2235,16 @@
   "loadingYourRecording": "Uw opname laden...",
   "photoDiscardedMessage": "Deze foto is verwijderd omdat deze niet significant was.",
   "analyzing": "Analyseren...",
-  "searchCountries": "Landen zoeken..."
+  "searchCountries": "Landen zoeken...",
+  "checkingAppleWatch": "Apple Watch controleren...",
+  "installOmiOnAppleWatch": "Installeer Omi op je\nApple Watch",
+  "installOmiOnAppleWatchDescription": "Om je Apple Watch met Omi te gebruiken, moet je eerst de Omi-app op je horloge installeren.",
+  "openOmiOnAppleWatch": "Open Omi op je\nApple Watch",
+  "openOmiOnAppleWatchDescription": "De Omi-app is geïnstalleerd op je Apple Watch. Open deze en tik op Start om te beginnen.",
+  "openWatchApp": "Watch-app openen",
+  "iveInstalledAndOpenedTheApp": "Ik heb de app geïnstalleerd en geopend",
+  "unableToOpenWatchApp": "Kan Apple Watch-app niet openen. Open handmatig de Watch-app op je Apple Watch en installeer Omi vanuit het gedeelte \"Beschikbare apps\".",
+  "appleWatchConnectedSuccessfully": "Apple Watch succesvol verbonden!",
+  "appleWatchNotReachable": "Apple Watch nog steeds niet bereikbaar. Zorg ervoor dat de Omi-app geopend is op je horloge.",
+  "errorCheckingConnection": "Fout bij controleren verbinding: {error}"
 }

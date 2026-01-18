@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/gen/flutter_communicator.g.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class AppleWatchSetupBottomSheet extends StatefulWidget {
@@ -105,7 +106,7 @@ class _AppleWatchSetupBottomSheetState extends State<AppleWatchSetupBottomSheet>
 
                 if (_isLoading) ...[
                   Text(
-                    'Checking Apple Watch...',
+                    context.l10n.checkingAppleWatch,
                     style: responsive.titleLarge,
                     textAlign: TextAlign.center,
                   ),
@@ -117,26 +118,26 @@ class _AppleWatchSetupBottomSheetState extends State<AppleWatchSetupBottomSheet>
                 ] else if (_isAppInstalled == false) ...[
                   // App not installed
                   Text(
-                    'Install Omi on your\nApple Watch',
+                    context.l10n.installOmiOnAppleWatch,
                     style: responsive.titleLarge.copyWith(height: 1.2),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'To use your Apple Watch with Omi, you need to install the Omi app on your watch first.',
+                    context.l10n.installOmiOnAppleWatchDescription,
                     style: responsive.bodyLarge,
                     textAlign: TextAlign.center,
                   ),
                 ] else ...[
                   // App installed but not reachable (not open)
                   Text(
-                    'Open Omi on your\nApple Watch',
+                    context.l10n.openOmiOnAppleWatch,
                     style: responsive.titleLarge.copyWith(height: 1.2),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'The Omi app is installed on your Apple Watch. Open it and tap Start to begin.',
+                    context.l10n.openOmiOnAppleWatchDescription,
                     style: responsive.bodyLarge,
                     textAlign: TextAlign.center,
                   ),
@@ -170,7 +171,7 @@ class _AppleWatchSetupBottomSheetState extends State<AppleWatchSetupBottomSheet>
                                 ),
                               )
                             : Text(
-                                _getPrimaryButtonText(),
+                                _getPrimaryButtonText(context),
                                 style: const TextStyle(
                                   fontWeight: FontWeight.w600,
                                   fontSize: 16,
@@ -184,9 +185,9 @@ class _AppleWatchSetupBottomSheetState extends State<AppleWatchSetupBottomSheet>
                 const SizedBox(height: 20),
                 InkWell(
                   onTap: () => Navigator.of(context).pop(),
-                  child: const Text(
-                    'Cancel',
-                    style: TextStyle(
+                  child: Text(
+                    context.l10n.cancel,
+                    style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w400,
                     ),
@@ -202,11 +203,11 @@ class _AppleWatchSetupBottomSheetState extends State<AppleWatchSetupBottomSheet>
     );
   }
 
-  String _getPrimaryButtonText() {
+  String _getPrimaryButtonText(BuildContext context) {
     if (_isAppInstalled == false) {
-      return 'Open Watch App';
+      return context.l10n.openWatchApp;
     } else {
-      return 'I\'ve Installed & Opened the App';
+      return context.l10n.iveInstalledAndOpenedTheApp;
     }
   }
 
@@ -229,7 +230,7 @@ class _AppleWatchSetupBottomSheetState extends State<AppleWatchSetupBottomSheet>
       }
     } catch (e) {
       AppSnackbar.showSnackbar(
-        'Unable to open Apple Watch app. Please manually open the Watch app on your Apple Watch and install Omi from the "Available Apps" section.',
+        context.l10n.unableToOpenWatchApp,
         duration: const Duration(seconds: 6),
       );
 
@@ -248,7 +249,7 @@ class _AppleWatchSetupBottomSheetState extends State<AppleWatchSetupBottomSheet>
 
       if (isReachable) {
         AppSnackbar.showSnackbar(
-          'Apple Watch connected successfully!',
+          context.l10n.appleWatchConnectedSuccessfully,
           duration: const Duration(seconds: 2),
         );
 
@@ -257,13 +258,13 @@ class _AppleWatchSetupBottomSheetState extends State<AppleWatchSetupBottomSheet>
         widget.onConnected?.call();
       } else {
         AppSnackbar.showSnackbar(
-          'Apple Watch still not reachable. Please make sure the Omi app is open on your watch.',
+          context.l10n.appleWatchNotReachable,
           duration: const Duration(seconds: 4),
         );
       }
     } catch (e) {
       AppSnackbar.showSnackbar(
-        'Error checking connection: $e',
+        context.l10n.errorCheckingConnection(e.toString()),
         duration: const Duration(seconds: 3),
       );
     } finally {

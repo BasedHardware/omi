@@ -3399,5 +3399,16 @@
   "loadingYourRecording": "Kaydınız yükleniyor...",
   "photoDiscardedMessage": "Bu fotoğraf önemli olmadığı için silindi.",
   "analyzing": "Analiz ediliyor...",
-  "searchCountries": "Ülke ara..."
+  "searchCountries": "Ülke ara...",
+  "checkingAppleWatch": "Apple Watch kontrol ediliyor...",
+  "installOmiOnAppleWatch": "Apple Watch'unuza\nOmi yükleyin",
+  "installOmiOnAppleWatchDescription": "Apple Watch'unuzu Omi ile kullanmak için önce saatinize Omi uygulamasını yüklemeniz gerekir.",
+  "openOmiOnAppleWatch": "Apple Watch'unuzda\nOmi'yi açın",
+  "openOmiOnAppleWatchDescription": "Omi uygulaması Apple Watch'unuza yüklü. Açın ve başlamak için Başlat'a dokunun.",
+  "openWatchApp": "Watch Uygulamasını Aç",
+  "iveInstalledAndOpenedTheApp": "Uygulamayı Yükledim ve Açtım",
+  "unableToOpenWatchApp": "Apple Watch uygulaması açılamadı. Lütfen Apple Watch'unuzda Watch uygulamasını manuel olarak açın ve \"Mevcut Uygulamalar\" bölümünden Omi'yi yükleyin.",
+  "appleWatchConnectedSuccessfully": "Apple Watch başarıyla bağlandı!",
+  "appleWatchNotReachable": "Apple Watch hala erişilebilir değil. Lütfen Omi uygulamasının saatinizde açık olduğundan emin olun.",
+  "errorCheckingConnection": "Bağlantı kontrol hatası: {error}"
 }

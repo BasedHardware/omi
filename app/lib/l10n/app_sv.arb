@@ -3417,5 +3417,16 @@
   "loadingYourRecording": "Laddar din inspelning...",
   "photoDiscardedMessage": "Detta foto kasserades eftersom det inte var betydelsefullt.",
   "analyzing": "Analyserar...",
-  "searchCountries": "Sök länder..."
+  "searchCountries": "Sök länder...",
+  "checkingAppleWatch": "Kontrollerar Apple Watch...",
+  "installOmiOnAppleWatch": "Installera Omi på din\nApple Watch",
+  "installOmiOnAppleWatchDescription": "För att använda din Apple Watch med Omi måste du först installera Omi-appen på din klocka.",
+  "openOmiOnAppleWatch": "Öppna Omi på din\nApple Watch",
+  "openOmiOnAppleWatchDescription": "Omi-appen är installerad på din Apple Watch. Öppna den och tryck på Start för att börja.",
+  "openWatchApp": "Öppna Watch-appen",
+  "iveInstalledAndOpenedTheApp": "Jag har installerat och öppnat appen",
+  "unableToOpenWatchApp": "Kan inte öppna Apple Watch-appen. Öppna Watch-appen manuellt på din Apple Watch och installera Omi från avsnittet \"Tillgängliga appar\".",
+  "appleWatchConnectedSuccessfully": "Apple Watch ansluten!",
+  "appleWatchNotReachable": "Apple Watch är fortfarande inte nåbar. Se till att Omi-appen är öppen på din klocka.",
+  "errorCheckingConnection": "Fel vid kontroll av anslutning: {error}"
 }

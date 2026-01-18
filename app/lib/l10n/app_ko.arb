@@ -3417,5 +3417,16 @@
   "loadingYourRecording": "녹음을 불러오는 중...",
   "photoDiscardedMessage": "이 사진은 중요하지 않아 삭제되었습니다.",
   "analyzing": "분석 중...",
-  "searchCountries": "국가 검색..."
+  "searchCountries": "국가 검색...",
+  "checkingAppleWatch": "Apple Watch 확인 중...",
+  "installOmiOnAppleWatch": "Apple Watch에\nOmi 설치",
+  "installOmiOnAppleWatchDescription": "Omi와 함께 Apple Watch를 사용하려면 먼저 시계에 Omi 앱을 설치해야 합니다.",
+  "openOmiOnAppleWatch": "Apple Watch에서\nOmi 열기",
+  "openOmiOnAppleWatchDescription": "Omi 앱이 Apple Watch에 설치되어 있습니다. 앱을 열고 시작을 탭하세요.",
+  "openWatchApp": "Watch 앱 열기",
+  "iveInstalledAndOpenedTheApp": "앱을 설치하고 열었습니다",
+  "unableToOpenWatchApp": "Apple Watch 앱을 열 수 없습니다. Apple Watch에서 Watch 앱을 수동으로 열고 \"사용 가능한 앱\" 섹션에서 Omi를 설치하세요.",
+  "appleWatchConnectedSuccessfully": "Apple Watch가 성공적으로 연결되었습니다!",
+  "appleWatchNotReachable": "Apple Watch에 아직 연결할 수 없습니다. 시계에서 Omi 앱이 열려 있는지 확인하세요.",
+  "errorCheckingConnection": "연결 확인 오류: {error}"
 }

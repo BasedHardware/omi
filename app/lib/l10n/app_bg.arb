@@ -3419,5 +3419,16 @@
   "loadingYourRecording": "Зареждане на записа...",
   "photoDiscardedMessage": "Тази снимка беше отхвърлена, тъй като не е значима.",
   "analyzing": "Анализиране...",
-  "searchCountries": "Търсене на държави..."
+  "searchCountries": "Търсене на държави...",
+  "checkingAppleWatch": "Проверка на Apple Watch...",
+  "installOmiOnAppleWatch": "Инсталирайте Omi на вашия\nApple Watch",
+  "installOmiOnAppleWatchDescription": "За да използвате Apple Watch с Omi, първо трябва да инсталирате приложението Omi на часовника си.",
+  "openOmiOnAppleWatch": "Отворете Omi на вашия\nApple Watch",
+  "openOmiOnAppleWatchDescription": "Приложението Omi е инсталирано на вашия Apple Watch. Отворете го и натиснете Старт, за да започнете.",
+  "openWatchApp": "Отворете приложението Watch",
+  "iveInstalledAndOpenedTheApp": "Инсталирах и отворих приложението",
+  "unableToOpenWatchApp": "Не може да се отвори приложението Apple Watch. Моля, отворете ръчно приложението Watch на вашия Apple Watch и инсталирайте Omi от секцията \"Налични приложения\".",
+  "appleWatchConnectedSuccessfully": "Apple Watch е свързан успешно!",
+  "appleWatchNotReachable": "Apple Watch все още не е достъпен. Моля, уверете се, че приложението Omi е отворено на часовника ви.",
+  "errorCheckingConnection": "Грешка при проверка на връзката: {error}"
 }

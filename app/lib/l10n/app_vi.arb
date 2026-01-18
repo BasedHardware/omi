@@ -3417,5 +3417,16 @@
   "loadingYourRecording": "Đang tải bản ghi của bạn...",
   "photoDiscardedMessage": "Ảnh này đã bị loại bỏ vì không quan trọng.",
   "analyzing": "Đang phân tích...",
-  "searchCountries": "Tìm kiếm quốc gia..."
+  "searchCountries": "Tìm kiếm quốc gia...",
+  "checkingAppleWatch": "Đang kiểm tra Apple Watch...",
+  "installOmiOnAppleWatch": "Cài đặt Omi trên\nApple Watch của bạn",
+  "installOmiOnAppleWatchDescription": "Để sử dụng Apple Watch với Omi, bạn cần cài đặt ứng dụng Omi trên đồng hồ trước.",
+  "openOmiOnAppleWatch": "Mở Omi trên\nApple Watch của bạn",
+  "openOmiOnAppleWatchDescription": "Ứng dụng Omi đã được cài đặt trên Apple Watch của bạn. Mở ứng dụng và nhấn Bắt đầu.",
+  "openWatchApp": "Mở ứng dụng Watch",
+  "iveInstalledAndOpenedTheApp": "Tôi đã cài đặt và mở ứng dụng",
+  "unableToOpenWatchApp": "Không thể mở ứng dụng Apple Watch. Vui lòng mở ứng dụng Watch trên Apple Watch và cài đặt Omi từ phần \"Ứng dụng có sẵn\".",
+  "appleWatchConnectedSuccessfully": "Kết nối Apple Watch thành công!",
+  "appleWatchNotReachable": "Vẫn không thể kết nối Apple Watch. Vui lòng đảm bảo ứng dụng Omi đang mở trên đồng hồ.",
+  "errorCheckingConnection": "Lỗi kiểm tra kết nối: {error}"
 }

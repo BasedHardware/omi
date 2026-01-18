@@ -3417,5 +3417,16 @@
   "loadingYourRecording": "Загрузка записи...",
   "photoDiscardedMessage": "Это фото было отклонено, так как оно не было значимым.",
   "analyzing": "Анализ...",
-  "searchCountries": "Поиск стран..."
+  "searchCountries": "Поиск стран...",
+  "checkingAppleWatch": "Проверка Apple Watch...",
+  "installOmiOnAppleWatch": "Установите Omi на\nApple Watch",
+  "installOmiOnAppleWatchDescription": "Чтобы использовать Apple Watch с Omi, сначала необходимо установить приложение Omi на часы.",
+  "openOmiOnAppleWatch": "Откройте Omi на\nApple Watch",
+  "openOmiOnAppleWatchDescription": "Приложение Omi установлено на Apple Watch. Откройте его и нажмите Старт.",
+  "openWatchApp": "Открыть приложение Watch",
+  "iveInstalledAndOpenedTheApp": "Я установил и открыл приложение",
+  "unableToOpenWatchApp": "Не удалось открыть приложение Apple Watch. Откройте приложение Watch вручную на Apple Watch и установите Omi из раздела \"Доступные приложения\".",
+  "appleWatchConnectedSuccessfully": "Apple Watch успешно подключены!",
+  "appleWatchNotReachable": "Apple Watch все еще недоступны. Убедитесь, что приложение Omi открыто на часах.",
+  "errorCheckingConnection": "Ошибка проверки подключения: {error}"
 }

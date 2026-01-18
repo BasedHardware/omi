@@ -3435,5 +3435,16 @@
   "loadingYourRecording": "جاري تحميل التسجيل...",
   "photoDiscardedMessage": "تم تجاهل هذه الصورة لأنها غير مهمة.",
   "analyzing": "جاري التحليل...",
-  "searchCountries": "البحث عن البلدان..."
+  "searchCountries": "البحث عن البلدان...",
+  "checkingAppleWatch": "جاري فحص Apple Watch...",
+  "installOmiOnAppleWatch": "قم بتثبيت Omi على\nApple Watch الخاص بك",
+  "installOmiOnAppleWatchDescription": "لاستخدام Apple Watch مع Omi، تحتاج أولاً إلى تثبيت تطبيق Omi على ساعتك.",
+  "openOmiOnAppleWatch": "افتح Omi على\nApple Watch الخاص بك",
+  "openOmiOnAppleWatchDescription": "تم تثبيت تطبيق Omi على Apple Watch الخاص بك. افتحه واضغط على بدء للبدء.",
+  "openWatchApp": "افتح تطبيق الساعة",
+  "iveInstalledAndOpenedTheApp": "لقد قمت بتثبيت وفتح التطبيق",
+  "unableToOpenWatchApp": "تعذر فتح تطبيق Apple Watch. يرجى فتح تطبيق Watch يدويًا على Apple Watch وتثبيت Omi من قسم \"التطبيقات المتاحة\".",
+  "appleWatchConnectedSuccessfully": "تم توصيل Apple Watch بنجاح!",
+  "appleWatchNotReachable": "Apple Watch لا يزال غير قابل للوصول. يرجى التأكد من أن تطبيق Omi مفتوح على ساعتك.",
+  "errorCheckingConnection": "خطأ في التحقق من الاتصال: {error}"
 }

@@ -3417,5 +3417,16 @@
   "loadingYourRecording": "Memuatkan rakaman anda...",
   "photoDiscardedMessage": "Foto ini telah dibuang kerana tidak penting.",
   "analyzing": "Menganalisis...",
-  "searchCountries": "Cari negara..."
+  "searchCountries": "Cari negara...",
+  "checkingAppleWatch": "Menyemak Apple Watch...",
+  "installOmiOnAppleWatch": "Pasang Omi pada\nApple Watch anda",
+  "installOmiOnAppleWatchDescription": "Untuk menggunakan Apple Watch dengan Omi, anda perlu memasang aplikasi Omi pada jam tangan anda terlebih dahulu.",
+  "openOmiOnAppleWatch": "Buka Omi pada\nApple Watch anda",
+  "openOmiOnAppleWatchDescription": "Aplikasi Omi dipasang pada Apple Watch anda. Buka dan ketik Mula untuk bermula.",
+  "openWatchApp": "Buka Aplikasi Watch",
+  "iveInstalledAndOpenedTheApp": "Saya Telah Memasang & Membuka Aplikasi",
+  "unableToOpenWatchApp": "Tidak dapat membuka aplikasi Apple Watch. Sila buka aplikasi Watch secara manual pada Apple Watch anda dan pasang Omi dari bahagian \"Aplikasi Tersedia\".",
+  "appleWatchConnectedSuccessfully": "Apple Watch berjaya disambungkan!",
+  "appleWatchNotReachable": "Apple Watch masih tidak dapat dicapai. Pastikan aplikasi Omi dibuka pada jam tangan anda.",
+  "errorCheckingConnection": "Ralat menyemak sambungan: {error}"
 }
