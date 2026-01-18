@@ -48,6 +48,7 @@ from models.message_event import (
     MessageServiceStatusEvent,
     PhotoDescribedEvent,
     PhotoProcessingEvent,
+    SegmentsDeletedEvent,
     SpeakerLabelSuggestionEvent,
     TranslationEvent,
 )
@@ -620,13 +621,14 @@ async def _listen(
         photos: List[ConversationPhoto],
         finished_at: datetime,
     ):
-        starts, ends = (0, 0)
+        updated_segments: List[TranscriptSegment] = []
+        removed_ids: List[str] = []
 
         if segments:
-            conversation.transcript_segments, (starts, ends) = TranscriptSegment.combine_segments(
+            conversation.transcript_segments, updated_segments, removed_ids = TranscriptSegment.combine_segments(
                 conversation.transcript_segments, segments
             )
-            _process_speaker_assigned_segments(conversation.transcript_segments[starts:ends])
+            _process_speaker_assigned_segments(updated_segments)
             conversations_db.update_conversation_segments(
                 uid, conversation.id, [segment.dict() for segment in conversation.transcript_segments]
             )
@@ -639,7 +641,7 @@ async def _listen(
                 conversation.source = ConversationSource.openglass
 
         conversations_db.update_conversation_finished_at(uid, conversation.id, finished_at)
-        return conversation, (starts, ends)
+        return conversation, updated_segments, removed_ids
 
     # STT
     # Validate websocket_active before initiating STT
@@ -1464,18 +1466,20 @@ async def _listen(
 
                 for seg in newly_processed_segments:
                     current_session_segments[seg.id] = seg.speech_profile_processed
-                transcript_segments, _ = TranscriptSegment.combine_segments([], newly_processed_segments)
+                transcript_segments, _, _ = TranscriptSegment.combine_segments([], newly_processed_segments)
 
             # Update transcript segments
             conversation = Conversation(**conversation_data)
             result = _update_in_progress_conversation(conversation, transcript_segments, photos_to_process, finished_at)
             if not result or not result[0]:
                 continue
-            conversation, (starts, ends) = result
+            conversation, updated_segments, removed_ids = result
+
+            if removed_ids:
+                _send_message_event(SegmentsDeletedEvent(segment_ids=removed_ids))
 
             if transcript_segments:
-                updates_segments = [segment.dict() for segment in conversation.transcript_segments[starts:ends]]
-                await websocket.send_json(updates_segments)
+                await websocket.send_json([segment.dict() for segment in updated_segments])
 
                 if transcript_send is not None and user_has_credits:
                     transcript_send([segment.dict() for segment in transcript_segments])
@@ -1485,10 +1489,10 @@ async def _listen(
                     onboarding_handler.on_segments_received([s.dict() for s in transcript_segments])
 
                 if translation_enabled:
-                    await translate(conversation.transcript_segments[starts:ends], conversation.id)
+                    await translate(updated_segments, conversation.id)
 
                 # Speaker detection
-                for segment in conversation.transcript_segments[starts:ends]:
+                for segment in updated_segments:
                     if segment.person_id or segment.is_user or segment.id in suggested_segments:
                         continue
 

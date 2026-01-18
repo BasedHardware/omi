@@ -32,6 +32,8 @@ abstract class MessageEvent {
         return OnboardingCompleteEvent.fromJson(json);
       case 'freemium_threshold_reached':
         return FreemiumThresholdReachedEvent.fromJson(json);
+      case 'segments_deleted':
+        return SegmentsDeletedEvent.fromJson(json);
       default:
         // Return a generic event or throw an error if the type is unknown
         return UnknownEvent(eventType: json['type'] ?? 'unknown');
@@ -266,6 +268,18 @@ class FreemiumThresholdReachedEvent extends MessageEvent {
     return FreemiumThresholdReachedEvent(
       remainingSeconds: json['remaining_seconds'] ?? 0,
       action: FreemiumAction.fromString(json['action']),
+    );
+  }
+}
+
+class SegmentsDeletedEvent extends MessageEvent {
+  final List<String> segmentIds;
+
+  SegmentsDeletedEvent({required this.segmentIds}) : super(eventType: 'segments_deleted');
+
+  factory SegmentsDeletedEvent.fromJson(Map<String, dynamic> json) {
+    return SegmentsDeletedEvent(
+      segmentIds: (json['segment_ids'] as List<dynamic>).map((e) => e.toString()).toList(),
     );
   }
 }
