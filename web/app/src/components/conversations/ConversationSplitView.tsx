@@ -544,7 +544,7 @@ export function ConversationSplitView() {
           )}
         >
           {/* Search, Date Filter, and Select - stays with list */}
-          <div className="flex-shrink-0 px-3 pt-4 pb-3 space-y-3">
+          <div className="flex-shrink-0 px-3 pt-4 pb-3 space-y-3 relative z-20">
             {/* Search bar - full width */}
             <SearchBar
               value={searchQuery}

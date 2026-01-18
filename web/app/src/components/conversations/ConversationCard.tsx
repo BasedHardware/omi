@@ -92,7 +92,7 @@ export const ConversationCard = memo(function ConversationCard({
           'noise-overlay group relative rounded-xl cursor-pointer',
           'border transition-all duration-150',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-primary/50',
-          'p-4',
+          'p-3', // Reduced from p-4
           isChecked
             ? 'bg-purple-primary/20 border-purple-primary shadow-[0_0_0_1px_rgba(139,92,246,0.5)]'
             : isSelected
@@ -106,7 +106,7 @@ export const ConversationCard = memo(function ConversationCard({
         aria-selected={isSelected || isChecked}
       >
         {/* Top row: Time + Star */}
-        <div className="flex items-center justify-between mb-1.5">
+        <div className="flex items-center justify-between mb-1"> {/* Reduced from mb-1.5 */}
           <span className="text-[11px] text-text-quaternary">
             {formatTime(startedAt)}
           </span>
@@ -138,7 +138,7 @@ export const ConversationCard = memo(function ConversationCard({
         </div>
 
         {/* Main content row: Checkbox + Emoji + Title */}
-        <div className="flex items-start gap-2.5">
+        <div className="flex items-start gap-2"> {/* Reduced from gap-2.5 */}
           {isSelectionMode && (
             <motion.div
               initial={{ opacity: 0, scale: 0.8 }}
@@ -179,7 +179,7 @@ export const ConversationCard = memo(function ConversationCard({
               {conversation.structured.title || 'Untitled conversation'}
             </h3>
 
-            <div className="flex items-center justify-between mt-1.5">
+            <div className="flex items-center justify-between mt-1"> {/* Reduced from mt-1.5 */}
               {category && category !== 'other' ? (
                 <span className="text-[10px] text-text-quaternary capitalize">
                   {category}
