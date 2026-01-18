@@ -21,6 +21,8 @@ from fastapi.websockets import WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 from websockets.exceptions import ConnectionClosed
 
+from firebase_admin.auth import InvalidIdTokenError
+
 import database.conversations as conversations_db
 import database.calendar_meetings as calendar_db
 import database.users as user_db
@@ -105,7 +107,7 @@ class CustomSttMode(str, Enum):
     enabled = "enabled"
 
 
-async def _listen(
+async def _stream_handler(
     websocket: WebSocket,
     uid: str,
     language: str = 'en',
@@ -119,9 +121,13 @@ async def _listen(
     custom_stt_mode: CustomSttMode = CustomSttMode.disabled,
     onboarding_mode: bool = False,
 ):
+    """
+    Core WebSocket streaming handler. Assumes websocket is already accepted and uid is validated.
+    This function is called by both _listen (for app clients) and web_listen_handler (for web clients).
+    """
     session_id = str(uuid.uuid4())
     print(
-        '_listen',
+        '_stream_handler',
         uid,
         session_id,
         language,
@@ -139,12 +145,6 @@ async def _listen(
     # Onboarding mode overrides: no speech profile (creating new one), single language
     if onboarding_mode:
         include_speech_profile = False
-
-    try:
-        await websocket.accept()
-    except RuntimeError as e:
-        print(e, uid, session_id)
-        return
 
     if not uid or len(uid) <= 0:
         await websocket.close(code=1008, reason="Bad uid")
@@ -1953,7 +1953,48 @@ async def _listen(
             # Variables might not be defined if an error occurred early
             print(f"Cleanup error (safe to ignore): {e}", uid, session_id)
 
-    print("_listen ended", uid, session_id)
+    print("_stream_handler ended", uid, session_id)
+
+
+async def _listen(
+    websocket: WebSocket,
+    uid: str,
+    language: str = 'en',
+    sample_rate: int = 8000,
+    codec: str = 'pcm8',
+    channels: int = 1,
+    include_speech_profile: bool = True,
+    stt_service: Optional[STTService] = None,
+    conversation_timeout: int = 120,
+    source: Optional[str] = None,
+    custom_stt_mode: CustomSttMode = CustomSttMode.disabled,
+    onboarding_mode: bool = False,
+):
+    """
+    WebSocket handler for app clients. Accepts the websocket connection and delegates to _stream_handler.
+    """
+    print("_listen", uid)
+    try:
+        await websocket.accept()
+    except RuntimeError as e:
+        print(f"_listen: accept error {e}", uid)
+        return
+
+    await _stream_handler(
+        websocket,
+        uid,
+        language,
+        sample_rate,
+        codec,
+        channels,
+        include_speech_profile,
+        stt_service,
+        conversation_timeout=conversation_timeout,
+        source=source,
+        custom_stt_mode=custom_stt_mode,
+        onboarding_mode=onboarding_mode,
+    )
+    print("_listen ended", uid)
 
 
 @router.websocket("/v4/listen")
@@ -1987,3 +2028,79 @@ async def listen_handler(
         custom_stt_mode=custom_stt_mode,
         onboarding_mode=onboarding_mode,
     )
+
+
+@router.websocket("/v4/web/listen")
+async def web_listen_handler(
+    websocket: WebSocket,
+    language: str = 'en',
+    sample_rate: int = 8000,
+    codec: str = 'pcm8',
+    channels: int = 1,
+    include_speech_profile: bool = True,
+    conversation_timeout: int = 120,
+    source: Optional[str] = None,
+    custom_stt: str = 'disabled',
+    onboarding: str = 'disabled',
+):
+    """
+    WebSocket endpoint for web browser clients using first-message authentication.
+
+    First message must be: {"type": "auth", "token": "<firebase_token>"}
+    Response: {"type": "auth_response", "success": true/false}
+    """
+    print("web_listen_handler")
+    try:
+        await websocket.accept()
+    except RuntimeError as e:
+        print(f"web_listen_handler: accept error {e}")
+        return
+
+    # Wait for auth message with timeout
+    try:
+        first_message = await asyncio.wait_for(websocket.receive(), timeout=5.0)
+    except asyncio.TimeoutError:
+        await websocket.close(code=1008, reason="Auth timeout")
+        return
+    except WebSocketDisconnect:
+        return
+
+    # Authenticate via first message
+    try:
+        uid = auth.get_current_user_uid_from_ws_message(first_message)
+    except ValueError as e:
+        await websocket.close(code=1008, reason=str(e))
+        return
+    except InvalidIdTokenError:
+        await websocket.send_json({"type": "auth_response", "success": False})
+        await websocket.close(code=1008, reason="Invalid token")
+        return
+    except Exception as e:
+        print(f"web_listen_handler: auth error {e}")
+        await websocket.send_json({"type": "auth_response", "success": False})
+        await websocket.close(code=1008, reason="Auth error")
+        return
+
+    # Send success response
+    await websocket.send_json({"type": "auth_response", "success": True})
+    print("web_listen_handler authenticated", uid)
+
+    # Proceed with streaming (websocket already accepted, uid already validated)
+    custom_stt_mode = CustomSttMode.enabled if custom_stt == 'enabled' else CustomSttMode.disabled
+    onboarding_mode = onboarding == 'enabled'
+
+    await _stream_handler(
+        websocket,
+        uid,
+        language,
+        sample_rate,
+        codec,
+        channels,
+        include_speech_profile,
+        None,
+        conversation_timeout=conversation_timeout,
+        source=source,
+        custom_stt_mode=custom_stt_mode,
+        onboarding_mode=onboarding_mode,
+    )
+    print("web_listen_handler ended", uid)
