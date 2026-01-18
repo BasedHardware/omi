@@ -7,7 +7,7 @@ import {
   isAudioCaptureSupported,
 } from '@/lib/audioCapture';
 import { createTranscriptionSocket } from '@/lib/transcriptionSocket';
-import { processInProgressConversation, getUserLanguage } from '@/lib/api';
+import { processInProgressConversation, getTranscriptionPreferences } from '@/lib/api';
 
 /**
  * Hook to manage recording lifecycle.
