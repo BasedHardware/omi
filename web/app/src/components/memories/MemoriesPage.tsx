@@ -60,9 +60,12 @@ export function MemoriesPage() {
   // Chat context for passing selected memory info
   const { setContext } = useChatContext();
 
+  // Extract single selected ID as a primitive to avoid Set reference in dependency array
+  const singleSelectedId = selectedIds.size === 1 ? Array.from(selectedIds)[0] : null;
+
   // Set chat context when a memory is highlighted or single selected
   useEffect(() => {
-    const targetId = highlightedMemoryId || (selectedIds.size === 1 ? Array.from(selectedIds)[0] : null);
+    const targetId = highlightedMemoryId || singleSelectedId;
     if (targetId) {
       const memory = memories.find((m) => m.id === targetId);
       if (memory) {
@@ -78,7 +81,7 @@ export function MemoriesPage() {
     } else {
       setContext(null);
     }
-  }, [highlightedMemoryId, selectedIds, memories, setContext]);
+  }, [highlightedMemoryId, singleSelectedId, memories, setContext]);
 
   // Clear chat context when component unmounts
   useEffect(() => {
@@ -110,25 +113,17 @@ export function MemoriesPage() {
   const topTags = tagStats.slice(0, 12);
   const allTags = tagStats;
 
-  // Get recent memories count (last 7 days) - uses deferred value
-  const recentMemoriesCount = useMemo(() => {
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    const sevenDaysAgoStr = sevenDaysAgo.toISOString();
-    return deferredMemories.filter((m) => m.created_at >= sevenDaysAgoStr).length;
-  }, [deferredMemories]);
-
-  // Get today's memories - uses deferred value
-  const todayMemories = useMemo(() => {
+  // Combined date calculations in a single pass through memories - uses deferred value
+  const { recentMemoriesCount, todayMemories, activityData } = useMemo(() => {
+    const now = new Date();
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayStr = today.toISOString();
-    return deferredMemories.filter((m) => m.created_at >= todayStr);
-  }, [deferredMemories]);
 
-  // Calculate activity data for chart (last 30 days) - uses deferred value
-  const activityData = useMemo(() => {
-    const now = new Date();
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const sevenDaysAgoStr = sevenDaysAgo.toISOString();
+
     now.setHours(23, 59, 59, 999);
     const thirtyDaysAgo = new Date(now);
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
@@ -142,17 +137,35 @@ export function MemoriesPage() {
       dayCounts[date.toISOString().split('T')[0]] = 0;
     }
 
-    // Single pass through deferred memories
-    deferredMemories.forEach((m) => {
+    // Single pass through all memories
+    let recentCount = 0;
+    const todayMems: typeof deferredMemories = [];
+
+    for (const m of deferredMemories) {
+      // Check for recent (last 7 days)
+      if (m.created_at >= sevenDaysAgoStr) {
+        recentCount++;
+      }
+      // Check for today
+      if (m.created_at >= todayStr) {
+        todayMems.push(m);
+      }
+      // Count for activity chart (last 30 days)
       const dateKey = m.created_at.split('T')[0];
       if (dateKey in dayCounts) {
         dayCounts[dateKey]++;
       }
-    });
+    }
 
-    return Object.entries(dayCounts)
+    const activityDataResult = Object.entries(dayCounts)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([date, count]) => ({ date, count }));
+
+    return {
+      recentMemoriesCount: recentCount,
+      todayMemories: todayMems,
+      activityData: activityDataResult,
+    };
   }, [deferredMemories]);
 
   // Filter and sort memories - optimized to avoid full copy when not needed
@@ -197,8 +210,9 @@ export function MemoriesPage() {
   }, [memories, searchQuery, selectedTag, sortBy]);
 
   // Handle node selection from graph
-  const handleNodeSelect = useCallback((nodeId: string, memoryIds: string[]) => {
-    console.log('Selected node:', nodeId, 'with memories:', memoryIds);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const handleNodeSelect = useCallback((_nodeId: string, _memoryIds: string[]) => {
+    // Node selection handler - can be extended for future features
   }, []);
 
   // Handle tag click with transition for smooth loading
@@ -302,12 +316,6 @@ export function MemoriesPage() {
   const clearSelection = useCallback(() => {
     setSelectedIds(new Set());
   }, []);
-
-  // Clear selection when filters change
-  const handleTagClickWithClearSelection = (tag: string) => {
-    setSelectedIds(new Set());
-    handleTagClick(tag);
-  };
 
   // Calculate max activity for chart scaling
   const maxActivity = Math.max(...activityData.map((d) => d.count), 1);
