@@ -3416,5 +3416,8 @@
   "pleaseEnterPayPalMeLink": "يرجى إدخال رابط PayPal.me الخاص بك",
   "doNotIncludeHttpInLink": "لا تقم بتضمين http أو https أو www في الرابط",
   "pleaseEnterValidPayPalMeLink": "يرجى إدخال رابط PayPal.me صالح",
-  "pleaseEnterValidEmail": "يرجى إدخال عنوان بريد إلكتروني صالح"
+  "pleaseEnterValidEmail": "يرجى إدخال عنوان بريد إلكتروني صالح",
+  "syncingYourRecordings": "جاري مزامنة تسجيلاتك",
+  "syncYourRecordings": "مزامنة تسجيلاتك",
+  "syncNow": "مزامنة الآن"
 }

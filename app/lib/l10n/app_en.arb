@@ -6037,5 +6037,17 @@
   "@pleaseEnterValidPayPalMeLink": {
     "description": "Validation error for invalid PayPal.me link"
   },
-  "pleaseEnterValidEmail": "Please enter a valid email address"
+  "pleaseEnterValidEmail": "Please enter a valid email address",
+  "syncingYourRecordings": "Syncing your recordings",
+  "@syncingYourRecordings": {
+    "description": "Status message shown while recordings are being synced"
+  },
+  "syncYourRecordings": "Sync your recordings",
+  "@syncYourRecordings": {
+    "description": "Label prompting user to sync their recordings"
+  },
+  "syncNow": "Sync Now",
+  "@syncNow": {
+    "description": "Button text to start syncing recordings immediately"
+  }
 }

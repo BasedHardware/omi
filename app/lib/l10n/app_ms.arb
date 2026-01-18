@@ -3398,5 +3398,8 @@
   "pleaseEnterPayPalMeLink": "Sila masukkan pautan PayPal.me anda",
   "doNotIncludeHttpInLink": "Jangan sertakan http atau https atau www dalam pautan",
   "pleaseEnterValidPayPalMeLink": "Sila masukkan pautan PayPal.me yang sah",
-  "pleaseEnterValidEmail": "Sila masukkan alamat e-mel yang sah"
+  "pleaseEnterValidEmail": "Sila masukkan alamat e-mel yang sah",
+  "syncingYourRecordings": "Menyegerakkan rakaman anda",
+  "syncYourRecordings": "Segerakkan rakaman anda",
+  "syncNow": "Segerak sekarang"
 }

@@ -3398,5 +3398,8 @@
   "pleaseEnterPayPalMeLink": "Vă rugăm să introduceți linkul PayPal.me",
   "doNotIncludeHttpInLink": "Nu includeți http sau https sau www în link",
   "pleaseEnterValidPayPalMeLink": "Vă rugăm să introduceți un link PayPal.me valid",
-  "pleaseEnterValidEmail": "Vă rugăm să introduceți o adresă de email validă"
+  "pleaseEnterValidEmail": "Vă rugăm să introduceți o adresă de email validă",
+  "syncingYourRecordings": "Sincronizarea înregistrărilor tale",
+  "syncYourRecordings": "Sincronizează înregistrările tale",
+  "syncNow": "Sincronizează acum"
 }

@@ -2216,5 +2216,8 @@
   "pleaseEnterPayPalMeLink": "Voer uw PayPal.me-link in",
   "doNotIncludeHttpInLink": "Neem geen http, https of www op in de link",
   "pleaseEnterValidPayPalMeLink": "Voer een geldige PayPal.me-link in",
-  "pleaseEnterValidEmail": "Voer een geldig e-mailadres in"
+  "pleaseEnterValidEmail": "Voer een geldig e-mailadres in",
+  "syncingYourRecordings": "Je opnames synchroniseren",
+  "syncYourRecordings": "Synchroniseer je opnames",
+  "syncNow": "Nu synchroniseren"
 }

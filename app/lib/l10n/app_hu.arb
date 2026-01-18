@@ -3398,5 +3398,8 @@
   "pleaseEnterPayPalMeLink": "Kérjük, adja meg PayPal.me linkjét",
   "doNotIncludeHttpInLink": "Ne adjon meg http, https vagy www előtagot a linkben",
   "pleaseEnterValidPayPalMeLink": "Kérjük, adjon meg egy érvényes PayPal.me linket",
-  "pleaseEnterValidEmail": "Kérjük, adjon meg egy érvényes e-mail címet"
+  "pleaseEnterValidEmail": "Kérjük, adjon meg egy érvényes e-mail címet",
+  "syncingYourRecordings": "Felvételek szinkronizálása",
+  "syncYourRecordings": "Szinkronizáld a felvételeidet",
+  "syncNow": "Szinkronizálás most"
 }

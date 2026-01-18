@@ -3400,5 +3400,8 @@
   "pleaseEnterPayPalMeLink": "Моля, въведете вашата PayPal.me връзка",
   "doNotIncludeHttpInLink": "Не включвайте http или https или www в връзката",
   "pleaseEnterValidPayPalMeLink": "Моля, въведете валидна PayPal.me връзка",
-  "pleaseEnterValidEmail": "Моля, въведете валиден имейл адрес"
+  "pleaseEnterValidEmail": "Моля, въведете валиден имейл адрес",
+  "syncingYourRecordings": "Синхронизиране на записите ви",
+  "syncYourRecordings": "Синхронизирай записите си",
+  "syncNow": "Синхронизирай сега"
 }

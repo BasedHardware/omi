@@ -1824,5 +1824,8 @@
   "pleaseEnterPayPalMeLink": "PayPal.meリンクを入力してください",
   "doNotIncludeHttpInLink": "リンクにhttp、https、wwwを含めないでください",
   "pleaseEnterValidPayPalMeLink": "有効なPayPal.meリンクを入力してください",
-  "pleaseEnterValidEmail": "有効なメールアドレスを入力してください"
+  "pleaseEnterValidEmail": "有効なメールアドレスを入力してください",
+  "syncingYourRecordings": "録音を同期中",
+  "syncYourRecordings": "録音を同期する",
+  "syncNow": "今すぐ同期"
 }

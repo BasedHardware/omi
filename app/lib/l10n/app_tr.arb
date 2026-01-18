@@ -3380,5 +3380,8 @@
   "pleaseEnterPayPalMeLink": "Lütfen PayPal.me bağlantınızı girin",
   "doNotIncludeHttpInLink": "Bağlantıya http veya https veya www eklemeyin",
   "pleaseEnterValidPayPalMeLink": "Lütfen geçerli bir PayPal.me bağlantısı girin",
-  "pleaseEnterValidEmail": "Lütfen geçerli bir e-posta adresi girin"
+  "pleaseEnterValidEmail": "Lütfen geçerli bir e-posta adresi girin",
+  "syncingYourRecordings": "Kayıtlarınız senkronize ediliyor",
+  "syncYourRecordings": "Kayıtlarınızı senkronize edin",
+  "syncNow": "Şimdi senkronize et"
 }

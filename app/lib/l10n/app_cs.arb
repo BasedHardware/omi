@@ -3400,5 +3400,8 @@
   "pleaseEnterPayPalMeLink": "Zadejte prosím svůj odkaz PayPal.me",
   "doNotIncludeHttpInLink": "Nezahrnujte http nebo https nebo www do odkazu",
   "pleaseEnterValidPayPalMeLink": "Zadejte prosím platný odkaz PayPal.me",
-  "pleaseEnterValidEmail": "Zadejte prosím platnou e-mailovou adresu"
+  "pleaseEnterValidEmail": "Zadejte prosím platnou e-mailovou adresu",
+  "syncingYourRecordings": "Synchronizace vašich nahrávek",
+  "syncYourRecordings": "Synchronizujte své nahrávky",
+  "syncNow": "Synchronizovat nyní"
 }

@@ -3398,5 +3398,8 @@
   "pleaseEnterPayPalMeLink": "Ange din PayPal.me-länk",
   "doNotIncludeHttpInLink": "Inkludera inte http eller https eller www i länken",
   "pleaseEnterValidPayPalMeLink": "Ange en giltig PayPal.me-länk",
-  "pleaseEnterValidEmail": "Ange en giltig e-postadress"
+  "pleaseEnterValidEmail": "Ange en giltig e-postadress",
+  "syncingYourRecordings": "Synkroniserar dina inspelningar",
+  "syncYourRecordings": "Synkronisera dina inspelningar",
+  "syncNow": "Synkronisera nu"
 }

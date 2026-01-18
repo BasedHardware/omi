@@ -3398,5 +3398,8 @@
   "pleaseEnterPayPalMeLink": "PayPal.me 링크를 입력하세요",
   "doNotIncludeHttpInLink": "링크에 http, https 또는 www를 포함하지 마세요",
   "pleaseEnterValidPayPalMeLink": "유효한 PayPal.me 링크를 입력하세요",
-  "pleaseEnterValidEmail": "유효한 이메일 주소를 입력해 주세요"
+  "pleaseEnterValidEmail": "유효한 이메일 주소를 입력해 주세요",
+  "syncingYourRecordings": "녹음 동기화 중",
+  "syncYourRecordings": "녹음 동기화",
+  "syncNow": "지금 동기화"
 }

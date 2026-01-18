@@ -2216,5 +2216,8 @@
   "pleaseEnterPayPalMeLink": "Veuillez entrer votre lien PayPal.me",
   "doNotIncludeHttpInLink": "N'incluez pas http ou https ou www dans le lien",
   "pleaseEnterValidPayPalMeLink": "Veuillez entrer un lien PayPal.me valide",
-  "pleaseEnterValidEmail": "Veuillez entrer une adresse e-mail valide"
+  "pleaseEnterValidEmail": "Veuillez entrer une adresse e-mail valide",
+  "syncingYourRecordings": "Synchronisation de vos enregistrements",
+  "syncYourRecordings": "Synchroniser vos enregistrements",
+  "syncNow": "Synchroniser maintenant"
 }

@@ -3398,5 +3398,8 @@
   "pleaseEnterPayPalMeLink": "Palun sisestage oma PayPal.me link",
   "doNotIncludeHttpInLink": "Ärge lisage lingile http, https ega www",
   "pleaseEnterValidPayPalMeLink": "Palun sisestage kehtiv PayPal.me link",
-  "pleaseEnterValidEmail": "Palun sisestage kehtiv e-posti aadress"
+  "pleaseEnterValidEmail": "Palun sisestage kehtiv e-posti aadress",
+  "syncingYourRecordings": "Sinu salvestuste sünkroonimine",
+  "syncYourRecordings": "Sünkrooni oma salvestused",
+  "syncNow": "Sünkrooni kohe"
 }

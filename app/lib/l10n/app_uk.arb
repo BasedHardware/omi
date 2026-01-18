@@ -3398,5 +3398,8 @@
   "pleaseEnterPayPalMeLink": "Будь ласка, введіть ваше посилання PayPal.me",
   "doNotIncludeHttpInLink": "Не включайте http, https або www у посилання",
   "pleaseEnterValidPayPalMeLink": "Будь ласка, введіть дійсне посилання PayPal.me",
-  "pleaseEnterValidEmail": "Будь ласка, введіть дійсну адресу електронної пошти"
+  "pleaseEnterValidEmail": "Будь ласка, введіть дійсну адресу електронної пошти",
+  "syncingYourRecordings": "Синхронізація ваших записів",
+  "syncYourRecordings": "Синхронізуйте ваші записи",
+  "syncNow": "Синхронізувати зараз"
 }

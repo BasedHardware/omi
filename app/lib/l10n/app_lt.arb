@@ -3380,5 +3380,8 @@
   "pleaseEnterPayPalMeLink": "Įveskite savo PayPal.me nuorodą",
   "doNotIncludeHttpInLink": "Neįtraukite http, https ar www į nuorodą",
   "pleaseEnterValidPayPalMeLink": "Įveskite galiojančią PayPal.me nuorodą",
-  "pleaseEnterValidEmail": "Įveskite galiojantį el. pašto adresą"
+  "pleaseEnterValidEmail": "Įveskite galiojantį el. pašto adresą",
+  "syncingYourRecordings": "Sinchronizuojami jūsų įrašai",
+  "syncYourRecordings": "Sinchronizuokite savo įrašus",
+  "syncNow": "Sinchronizuoti dabar"
 }

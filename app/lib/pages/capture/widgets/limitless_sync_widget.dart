@@ -6,6 +6,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class LimitlessSyncCardWidget extends StatelessWidget {
   const LimitlessSyncCardWidget({super.key});
@@ -51,7 +52,7 @@ class LimitlessSyncCardWidget extends StatelessWidget {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      isSyncing ? 'Syncing your recordings' : 'Sync your recordings',
+                      isSyncing ? context.l10n.syncingYourRecordings : context.l10n.syncYourRecordings,
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 16,
@@ -69,7 +70,7 @@ class LimitlessSyncCardWidget extends StatelessWidget {
                           borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                      child: const Text('Sync Now'),
+                      child: Text(context.l10n.syncNow),
                     )
                   else
                     Text(

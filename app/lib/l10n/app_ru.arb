@@ -3398,5 +3398,8 @@
   "pleaseEnterPayPalMeLink": "Пожалуйста, введите вашу ссылку PayPal.me",
   "doNotIncludeHttpInLink": "Не включайте http, https или www в ссылку",
   "pleaseEnterValidPayPalMeLink": "Пожалуйста, введите действительную ссылку PayPal.me",
-  "pleaseEnterValidEmail": "Пожалуйста, введите действительный адрес электронной почты"
+  "pleaseEnterValidEmail": "Пожалуйста, введите действительный адрес электронной почты",
+  "syncingYourRecordings": "Синхронизация записей",
+  "syncYourRecordings": "Синхронизировать записи",
+  "syncNow": "Синхронизировать сейчас"
 }

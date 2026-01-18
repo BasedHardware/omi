@@ -3398,5 +3398,8 @@
   "pleaseEnterPayPalMeLink": "กรุณาใส่ลิงก์ PayPal.me ของคุณ",
   "doNotIncludeHttpInLink": "อย่าใส่ http หรือ https หรือ www ในลิงก์",
   "pleaseEnterValidPayPalMeLink": "กรุณาใส่ลิงก์ PayPal.me ที่ถูกต้อง",
-  "pleaseEnterValidEmail": "กรุณากรอกที่อยู่อีเมลที่ถูกต้อง"
+  "pleaseEnterValidEmail": "กรุณากรอกที่อยู่อีเมลที่ถูกต้อง",
+  "syncingYourRecordings": "กำลังซิงค์การบันทึกของคุณ",
+  "syncYourRecordings": "ซิงค์การบันทึกของคุณ",
+  "syncNow": "ซิงค์เดี๋ยวนี้"
 }

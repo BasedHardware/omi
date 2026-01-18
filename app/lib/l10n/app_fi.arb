@@ -3398,5 +3398,8 @@
   "pleaseEnterPayPalMeLink": "Syötä PayPal.me-linkkisi",
   "doNotIncludeHttpInLink": "Älä sisällytä http, https tai www linkkiin",
   "pleaseEnterValidPayPalMeLink": "Syötä kelvollinen PayPal.me-linkki",
-  "pleaseEnterValidEmail": "Anna kelvollinen sähköpostiosoite"
+  "pleaseEnterValidEmail": "Anna kelvollinen sähköpostiosoite",
+  "syncingYourRecordings": "Synkronoidaan tallenteitasi",
+  "syncYourRecordings": "Synkronoi tallenteet",
+  "syncNow": "Synkronoi nyt"
 }

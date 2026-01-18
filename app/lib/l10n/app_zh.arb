@@ -1845,5 +1845,8 @@
   "pleaseEnterPayPalMeLink": "请输入您的 PayPal.me 链接",
   "doNotIncludeHttpInLink": "链接中请勿包含 http、https 或 www",
   "pleaseEnterValidPayPalMeLink": "请输入有效的 PayPal.me 链接",
-  "pleaseEnterValidEmail": "请输入有效的电子邮件地址"
+  "pleaseEnterValidEmail": "请输入有效的电子邮件地址",
+  "syncingYourRecordings": "正在同步您的录音",
+  "syncYourRecordings": "同步您的录音",
+  "syncNow": "立即同步"
 }

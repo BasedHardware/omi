@@ -3380,5 +3380,8 @@
   "pleaseEnterPayPalMeLink": "Inserisci il tuo link PayPal.me",
   "doNotIncludeHttpInLink": "Non includere http o https o www nel link",
   "pleaseEnterValidPayPalMeLink": "Inserisci un link PayPal.me valido",
-  "pleaseEnterValidEmail": "Inserisci un indirizzo email valido"
+  "pleaseEnterValidEmail": "Inserisci un indirizzo email valido",
+  "syncingYourRecordings": "Sincronizzazione delle tue registrazioni",
+  "syncYourRecordings": "Sincronizza le tue registrazioni",
+  "syncNow": "Sincronizza ora"
 }

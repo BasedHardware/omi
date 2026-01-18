@@ -3398,5 +3398,8 @@
   "pleaseEnterPayPalMeLink": "Lūdzu, ievadiet savu PayPal.me saiti",
   "doNotIncludeHttpInLink": "Neiekļaujiet saitē http, https vai www",
   "pleaseEnterValidPayPalMeLink": "Lūdzu, ievadiet derīgu PayPal.me saiti",
-  "pleaseEnterValidEmail": "Lūdzu, ievadiet derīgu e-pasta adresi"
+  "pleaseEnterValidEmail": "Lūdzu, ievadiet derīgu e-pasta adresi",
+  "syncingYourRecordings": "Sinhronizē jūsu ierakstus",
+  "syncYourRecordings": "Sinhronizējiet savus ierakstus",
+  "syncNow": "Sinhronizēt tagad"
 }

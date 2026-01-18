@@ -3400,5 +3400,8 @@
   "pleaseEnterPayPalMeLink": "Si us plau, introduïu el vostre enllaç PayPal.me",
   "doNotIncludeHttpInLink": "No incloeu http o https o www a l'enllaç",
   "pleaseEnterValidPayPalMeLink": "Si us plau, introduïu un enllaç PayPal.me vàlid",
-  "pleaseEnterValidEmail": "Si us plau, introduïu una adreça de correu electrònic vàlida"
+  "pleaseEnterValidEmail": "Si us plau, introduïu una adreça de correu electrònic vàlida",
+  "syncingYourRecordings": "Sincronitzant les teves gravacions",
+  "syncYourRecordings": "Sincronitza les teves gravacions",
+  "syncNow": "Sincronitza ara"
 }

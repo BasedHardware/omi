@@ -3398,5 +3398,8 @@
   "pleaseEnterPayPalMeLink": "Παρακαλώ εισάγετε τον σύνδεσμο PayPal.me σας",
   "doNotIncludeHttpInLink": "Μην συμπεριλάβετε http ή https ή www στον σύνδεσμο",
   "pleaseEnterValidPayPalMeLink": "Παρακαλώ εισάγετε έναν έγκυρο σύνδεσμο PayPal.me",
-  "pleaseEnterValidEmail": "Παρακαλώ εισάγετε μια έγκυρη διεύθυνση email"
+  "pleaseEnterValidEmail": "Παρακαλώ εισάγετε μια έγκυρη διεύθυνση email",
+  "syncingYourRecordings": "Συγχρονισμός των εγγραφών σας",
+  "syncYourRecordings": "Συγχρονίστε τις εγγραφές σας",
+  "syncNow": "Συγχρονισμός τώρα"
 }

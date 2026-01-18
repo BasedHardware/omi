@@ -1845,5 +1845,8 @@
   "pleaseEnterPayPalMeLink": "Bitte geben Sie Ihren PayPal.me-Link ein",
   "doNotIncludeHttpInLink": "Fügen Sie http, https oder www nicht in den Link ein",
   "pleaseEnterValidPayPalMeLink": "Bitte geben Sie einen gültigen PayPal.me-Link ein",
-  "pleaseEnterValidEmail": "Bitte geben Sie eine gültige E-Mail-Adresse ein"
+  "pleaseEnterValidEmail": "Bitte geben Sie eine gültige E-Mail-Adresse ein",
+  "syncingYourRecordings": "Synchronisiere deine Aufnahmen",
+  "syncYourRecordings": "Synchronisiere deine Aufnahmen",
+  "syncNow": "Jetzt synchronisieren"
 }
