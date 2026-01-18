@@ -3416,5 +3416,6 @@
   "showLess": "näita vähem ↑",
   "loadingYourRecording": "Salvestuse laadimine...",
   "photoDiscardedMessage": "See foto kõrvaldati, kuna see polnud oluline.",
-  "analyzing": "Analüüsimine..."
+  "analyzing": "Analüüsimine...",
+  "searchCountries": "Otsi riike..."
 }

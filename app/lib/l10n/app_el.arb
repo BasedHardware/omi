@@ -3416,5 +3416,6 @@
   "showLess": "λιγότερα ↑",
   "loadingYourRecording": "Φόρτωση της εγγραφής σας...",
   "photoDiscardedMessage": "Αυτή η φωτογραφία απορρίφθηκε καθώς δεν ήταν σημαντική.",
-  "analyzing": "Ανάλυση..."
+  "analyzing": "Ανάλυση...",
+  "searchCountries": "Αναζήτηση χωρών..."
 }

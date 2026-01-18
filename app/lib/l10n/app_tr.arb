@@ -3398,5 +3398,6 @@
   "showLess": "daha az göster ↑",
   "loadingYourRecording": "Kaydınız yükleniyor...",
   "photoDiscardedMessage": "Bu fotoğraf önemli olmadığı için silindi.",
-  "analyzing": "Analiz ediliyor..."
+  "analyzing": "Analiz ediliyor...",
+  "searchCountries": "Ülke ara..."
 }

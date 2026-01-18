@@ -3416,5 +3416,6 @@
   "showLess": "näytä vähemmän ↑",
   "loadingYourRecording": "Ladataan tallennetta...",
   "photoDiscardedMessage": "Tämä kuva hylättiin, koska se ei ollut merkittävä.",
-  "analyzing": "Analysoidaan..."
+  "analyzing": "Analysoidaan...",
+  "searchCountries": "Etsi maita..."
 }

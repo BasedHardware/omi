@@ -1863,5 +1863,6 @@
   "showLess": "weniger anzeigen ↑",
   "loadingYourRecording": "Aufnahme wird geladen...",
   "photoDiscardedMessage": "Dieses Foto wurde verworfen, da es nicht bedeutsam war.",
-  "analyzing": "Analysiere..."
+  "analyzing": "Analysiere...",
+  "searchCountries": "Länder suchen..."
 }

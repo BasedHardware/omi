@@ -3418,5 +3418,6 @@
   "showLess": "покажи по-малко ↑",
   "loadingYourRecording": "Зареждане на записа...",
   "photoDiscardedMessage": "Тази снимка беше отхвърлена, тъй като не е значима.",
-  "analyzing": "Анализиране..."
+  "analyzing": "Анализиране...",
+  "searchCountries": "Търсене на държави..."
 }

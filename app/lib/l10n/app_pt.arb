@@ -1863,5 +1863,6 @@
   "showLess": "mostrar menos ↑",
   "loadingYourRecording": "Carregando sua gravação...",
   "photoDiscardedMessage": "Esta foto foi descartada pois não era significativa.",
-  "analyzing": "Analisando..."
+  "analyzing": "Analisando...",
+  "searchCountries": "Pesquisar países..."
 }

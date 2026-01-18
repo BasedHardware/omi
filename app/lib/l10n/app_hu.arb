@@ -3416,5 +3416,6 @@
   "showLess": "mutass kevesebbet ↑",
   "loadingYourRecording": "Felvétel betöltése...",
   "photoDiscardedMessage": "Ez a fotó el lett vetve, mert nem volt jelentős.",
-  "analyzing": "Elemzés..."
+  "analyzing": "Elemzés...",
+  "searchCountries": "Országok keresése..."
 }

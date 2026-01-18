@@ -3434,5 +3434,6 @@
   "showLess": "عرض أقل ↑",
   "loadingYourRecording": "جاري تحميل التسجيل...",
   "photoDiscardedMessage": "تم تجاهل هذه الصورة لأنها غير مهمة.",
-  "analyzing": "جاري التحليل..."
+  "analyzing": "جاري التحليل...",
+  "searchCountries": "البحث عن البلدان..."
 }

@@ -1863,5 +1863,6 @@
   "showLess": "कम दिखाएं ↑",
   "loadingYourRecording": "आपकी रिकॉर्डिंग लोड हो रही है...",
   "photoDiscardedMessage": "यह फोटो हटा दी गई क्योंकि यह महत्वपूर्ण नहीं थी।",
-  "analyzing": "विश्लेषण हो रहा है..."
+  "analyzing": "विश्लेषण हो रहा है...",
+  "searchCountries": "देश खोजें..."
 }

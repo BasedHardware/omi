@@ -1842,5 +1842,6 @@
   "showLess": "閉じる ↑",
   "loadingYourRecording": "録音を読み込み中...",
   "photoDiscardedMessage": "この写真は重要ではなかったため破棄されました。",
-  "analyzing": "分析中..."
+  "analyzing": "分析中...",
+  "searchCountries": "国を検索..."
 }

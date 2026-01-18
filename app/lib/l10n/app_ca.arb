@@ -3418,5 +3418,6 @@
   "showLess": "mostra menys ↑",
   "loadingYourRecording": "Carregant la gravació...",
   "photoDiscardedMessage": "Aquesta foto s'ha descartat perquè no era significativa.",
-  "analyzing": "Analitzant..."
+  "analyzing": "Analitzant...",
+  "searchCountries": "Cercar països..."
 }

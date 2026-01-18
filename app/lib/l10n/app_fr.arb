@@ -2234,5 +2234,6 @@
   "showLess": "afficher moins ↑",
   "loadingYourRecording": "Chargement de votre enregistrement...",
   "photoDiscardedMessage": "Cette photo a été écartée car elle n'était pas significative.",
-  "analyzing": "Analyse en cours..."
+  "analyzing": "Analyse en cours...",
+  "searchCountries": "Rechercher des pays..."
 }

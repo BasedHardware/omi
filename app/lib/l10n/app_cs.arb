@@ -3418,5 +3418,6 @@
   "showLess": "zobrazit méně ↑",
   "loadingYourRecording": "Načítání nahrávky...",
   "photoDiscardedMessage": "Tato fotografie byla zahozena, protože nebyla významná.",
-  "analyzing": "Analyzování..."
+  "analyzing": "Analyzování...",
+  "searchCountries": "Hledat země..."
 }

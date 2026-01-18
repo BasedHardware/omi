@@ -3416,5 +3416,6 @@
   "showLess": "vis mindre ↑",
   "loadingYourRecording": "Indlæser din optagelse...",
   "photoDiscardedMessage": "Dette foto blev kasseret, da det ikke var betydningsfuldt.",
-  "analyzing": "Analyserer..."
+  "analyzing": "Analyserer...",
+  "searchCountries": "Søg lande..."
 }

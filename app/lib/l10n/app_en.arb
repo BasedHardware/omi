@@ -6119,5 +6119,9 @@
   "analyzing": "Analyzing...",
   "@analyzing": {
     "description": "Loading text shown while analyzing a photo"
+  },
+  "searchCountries": "Search countries...",
+  "@searchCountries": {
+    "description": "Placeholder text for country search field"
   }
 }
