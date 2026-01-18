@@ -1212,8 +1212,8 @@ Commit: d77ac398b
 END OF PROGRESS TRACKER
 ================================================================================
 Last Updated: 2026-01-18
-Last Completed: FILE 124 - expandable_text.dart (2 new keys, 68 new translations)
-Previous Completed: FILE 123 - dialog.dart (0 new keys, reused existing)
+Last Completed: FILE 125 - waveform_section.dart (1 new key, 34 new translations)
+Previous Completed: FILE 124 - expandable_text.dart (2 new keys, 68 new translations)
 Current Session: Phase 2 - Mobile/Pages localization in progress
 
 🎉 PHASE 1 (DESKTOP) COMPLETE! 🎉
@@ -1223,7 +1223,7 @@ Current Session: Phase 2 - Mobile/Pages localization in progress
 
 📋 PHASE 2 (MOBILE/PAGES) IN PROGRESS
 59 files identified with hardcoded strings
-Files Completed: 54
+Files Completed: 55
 Estimated 200-300 new keys needed
 
 --------------------------------------------------------------------------------
@@ -1738,3 +1738,16 @@ Notes: Localized expandable text widget with show more/less toggle. Changed
        expand/collapse text parameters to nullable with l10n fallbacks.
        Keys include arrow symbols (↓/↑) for visual indication.
 Commit: 0963f1f75
+
+--------------------------------------------------------------------------------
+FILE 125 (Phase 2 FILE 55): waveform_section.dart
+--------------------------------------------------------------------------------
+Path: app/lib/widgets/waveform_section.dart
+New Keys: loadingYourRecording
+Total New Keys: 1
+Script: /private/tmp/claude/.../translate_waveform.py
+Status: ✅ COMPLETED
+Notes: Localized audio waveform visualization widget. Replaced hardcoded
+       "Loading your recording..." message with l10n key. Removed const from
+       parent widgets to support dynamic l10n values.
+Commit: 9f4cdadf4
