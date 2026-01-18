@@ -1212,8 +1212,8 @@ Commit: d77ac398b
 END OF PROGRESS TRACKER
 ================================================================================
 Last Updated: 2026-01-18
-Last Completed: FILE 119 - consent_bottom_sheet.dart (1 new key, 34 new translations)
-Previous Completed: FILE 118 - confirmation_dialog.dart (0 new keys, reused existing)
+Last Completed: FILE 120 - action_items_page.dart (1 new key, 34 new translations)
+Previous Completed: FILE 119 - consent_bottom_sheet.dart (1 new key, 34 new translations)
 Current Session: Phase 2 - Mobile/Pages localization in progress
 
 🎉 PHASE 1 (DESKTOP) COMPLETE! 🎉
@@ -1223,7 +1223,7 @@ Current Session: Phase 2 - Mobile/Pages localization in progress
 
 📋 PHASE 2 (MOBILE/PAGES) IN PROGRESS
 59 files identified with hardcoded strings
-Files Completed: 49
+Files Completed: 50
 Estimated 200-300 new keys needed
 
 --------------------------------------------------------------------------------
@@ -1667,3 +1667,18 @@ Notes: Localized data privacy consent bottom sheet shown during authentication.
        Includes title, sign-in labels, consent message, privacy policy/terms
        links with RichText, and action buttons for both Apple and Google auth.
 Commit: bb5815569
+
+--------------------------------------------------------------------------------
+FILE 120 (Phase 2 FILE 50): action_items_page.dart
+--------------------------------------------------------------------------------
+Path: app/lib/pages/action_items/action_items_page.dart
+New Keys: tasksEmptyStateMessage
+Reused Keys: today, tomorrow, tasksNoDeadline, tasksLater, noTasksYet
+Total New Keys: 1
+Script: /private/tmp/claude/.../translate_action_items.py
+Status: ✅ COMPLETED
+Notes: Localized tasks/action items page with category titles (Today, Tomorrow,
+       No Deadline, Later), empty state title and message. Refactored
+       _getCategoryTitle method to accept BuildContext for l10n access.
+       Large file (882 lines) with drag-and-drop task management.
+Commit: 018a97081
