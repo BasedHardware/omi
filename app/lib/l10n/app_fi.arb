@@ -3408,5 +3408,8 @@
   "durationSeconds": "Kesto: {seconds} sekuntia",
   "additionalSpeechSampleRemoved": "Lisäpuhenäyte poistettu",
   "consentDataMessage": "Jatkamalla kaikki tämän sovelluksen kanssa jakamasi tiedot (mukaan lukien keskustelusi, tallenteet ja henkilökohtaiset tietosi) tallennetaan turvallisesti palvelimillemme tarjotaksemme sinulle tekoälypohjaisia oivalluksia ja mahdollistaaksemme kaikki sovelluksen ominaisuudet.",
-  "tasksEmptyStateMessage": "Keskusteluistasi saadut tehtävät näkyvät täällä.\nNapauta + luodaksesi manuaalisesti."
+  "tasksEmptyStateMessage": "Keskusteluistasi saadut tehtävät näkyvät täällä.\nNapauta + luodaksesi manuaalisesti.",
+  "clearChatAction": "Tyhjennä keskustelu",
+  "enableApps": "Ota sovellukset käyttöön",
+  "omiAppName": "Omi"
 }

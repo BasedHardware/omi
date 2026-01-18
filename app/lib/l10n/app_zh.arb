@@ -1855,5 +1855,8 @@
   "durationSeconds": "时长: {seconds} 秒",
   "additionalSpeechSampleRemoved": "已删除附加语音样本",
   "consentDataMessage": "继续即表示您与此应用共享的所有数据（包括您的对话、录音和个人信息）将安全存储在我们的服务器上，以便为您提供AI驱动的洞察并启用所有应用功能。",
-  "tasksEmptyStateMessage": "来自您对话的任务将显示在这里。\n点击 + 手动创建。"
+  "tasksEmptyStateMessage": "来自您对话的任务将显示在这里。\n点击 + 手动创建。",
+  "clearChatAction": "清除聊天",
+  "enableApps": "启用应用",
+  "omiAppName": "Omi"
 }

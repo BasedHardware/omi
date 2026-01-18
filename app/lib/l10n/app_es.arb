@@ -1855,5 +1855,8 @@
   "durationSeconds": "Duración: {seconds} segundos",
   "additionalSpeechSampleRemoved": "Muestra de voz adicional eliminada",
   "consentDataMessage": "Al continuar, todos los datos que compartas con esta aplicación (incluidas tus conversaciones, grabaciones e información personal) se almacenarán de forma segura en nuestros servidores para proporcionarte información basada en IA y habilitar todas las funciones de la aplicación.",
-  "tasksEmptyStateMessage": "Las tareas de tus conversaciones aparecerán aquí.\nToca + para crear una manualmente."
+  "tasksEmptyStateMessage": "Las tareas de tus conversaciones aparecerán aquí.\nToca + para crear una manualmente.",
+  "clearChatAction": "Borrar chat",
+  "enableApps": "Habilitar apps",
+  "omiAppName": "Omi"
 }

@@ -3408,5 +3408,8 @@
   "durationSeconds": "Kestus: {seconds} sekundit",
   "additionalSpeechSampleRemoved": "Lisakõnenäidis eemaldatud",
   "consentDataMessage": "Jätkates salvestatakse kõik selle rakendusega jagatud andmed (sealhulgas teie vestlused, salvestised ja isiklikud andmed) turvaliselt meie serverites, et pakkuda teile tehisintellektil põhinevaid teadmisi ja võimaldada kõiki rakenduse funktsioone.",
-  "tasksEmptyStateMessage": "Teie vestlustest pärit ülesanded ilmuvad siia.\nPuudutage + käsitsi loomiseks."
+  "tasksEmptyStateMessage": "Teie vestlustest pärit ülesanded ilmuvad siia.\nPuudutage + käsitsi loomiseks.",
+  "clearChatAction": "Tühjenda vestlus",
+  "enableApps": "Luba rakendused",
+  "omiAppName": "Omi"
 }

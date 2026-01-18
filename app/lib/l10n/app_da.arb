@@ -3408,5 +3408,8 @@
   "durationSeconds": "Varighed: {seconds} sekunder",
   "additionalSpeechSampleRemoved": "Yderligere stemmeprøve fjernet",
   "consentDataMessage": "Ved at fortsætte vil alle data, du deler med denne app (inklusive dine samtaler, optagelser og personlige oplysninger), blive sikkert gemt på vores servere for at give dig AI-drevne indsigter og aktivere alle app-funktioner.",
-  "tasksEmptyStateMessage": "Opgaver fra dine samtaler vises her.\nTryk på + for at oprette en manuelt."
+  "tasksEmptyStateMessage": "Opgaver fra dine samtaler vises her.\nTryk på + for at oprette en manuelt.",
+  "clearChatAction": "Ryd chat",
+  "enableApps": "Aktivér apps",
+  "omiAppName": "Omi"
 }

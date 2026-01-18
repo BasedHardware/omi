@@ -3408,5 +3408,8 @@
   "durationSeconds": "Tempoh: {seconds} saat",
   "additionalSpeechSampleRemoved": "Sampel suara tambahan dibuang",
   "consentDataMessage": "Dengan meneruskan, semua data yang anda kongsi dengan aplikasi ini (termasuk perbualan, rakaman dan maklumat peribadi anda) akan disimpan dengan selamat di pelayan kami untuk memberikan anda cerapan berkuasa AI dan membolehkan semua ciri aplikasi.",
-  "tasksEmptyStateMessage": "Tugasan daripada perbualan anda akan muncul di sini.\nKetik + untuk mencipta secara manual."
+  "tasksEmptyStateMessage": "Tugasan daripada perbualan anda akan muncul di sini.\nKetik + untuk mencipta secara manual.",
+  "clearChatAction": "Kosongkan sembang",
+  "enableApps": "Dayakan aplikasi",
+  "omiAppName": "Omi"
 }

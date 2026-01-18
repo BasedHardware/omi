@@ -10,6 +10,7 @@ import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/dialog.dart';
 
 enum ChatMode { chat, chat_clone }
@@ -54,7 +55,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                       maxWidth: 100,
                     ),
                     child: Text(
-                      selectedApp != null ? selectedApp.getName() : "Omi",
+                      selectedApp != null ? selectedApp.getName() : context.l10n.omiAppName,
                       style: const TextStyle(color: Colors.white, fontSize: 16),
                       overflow: TextOverflow.fade,
                     ),
@@ -89,7 +90,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                       }, () {
                         context.read<MessageProvider>().clearChat();
                         Navigator.of(context).pop();
-                      }, "Clear Chat?", "Are you sure you want to clear the chat? This action cannot be undone.");
+                      }, context.l10n.clearChatTitle, context.l10n.confirmClearChat);
                     },
                   );
                   return;
@@ -185,17 +186,17 @@ class ChatAppsDropdownWidget extends StatelessWidget {
       BuildContext context, MessageProvider messageProvider, AppProvider appProvider) {
     var selectedApp = messageProvider.chatApps.firstWhereOrNull((app) => app.id == appProvider.selectedChatAppId);
     return [
-      const PopupMenuItem<String>(
+      PopupMenuItem<String>(
         height: 40,
         value: 'clear_chat',
         child: Padding(
-          padding: EdgeInsets.only(left: 32),
+          padding: const EdgeInsets.only(left: 32),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Clear Chat', style: TextStyle(color: Colors.redAccent, fontSize: 16)),
-              SizedBox(
+              Text(context.l10n.clearChatAction, style: const TextStyle(color: Colors.redAccent, fontSize: 16)),
+              const SizedBox(
                 width: 24,
                 child: Icon(Icons.delete, color: Colors.redAccent, size: 16),
               ),
@@ -221,9 +222,9 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      "Omi",
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
+                    Text(
+                      context.l10n.omiAppName,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                     ),
                     selectedApp == null
                         ? const SizedBox(
@@ -279,17 +280,17 @@ class ChatAppsDropdownWidget extends StatelessWidget {
       BuildContext context, MessageProvider messageProvider, AppProvider appProvider) {
     var selectedApp = messageProvider.chatApps.firstWhereOrNull((app) => app.id == appProvider.selectedChatAppId);
     return [
-      const PopupMenuItem<String>(
+      PopupMenuItem<String>(
         height: 40,
         value: 'clear_chat',
         child: Padding(
-          padding: EdgeInsets.only(left: 32),
+          padding: const EdgeInsets.only(left: 32),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Clear Chat', style: TextStyle(color: Colors.redAccent, fontSize: 16)),
-              SizedBox(
+              Text(context.l10n.clearChatAction, style: const TextStyle(color: Colors.redAccent, fontSize: 16)),
+              const SizedBox(
                 width: 24,
                 child: Icon(Icons.delete, color: Colors.redAccent, size: 16),
               ),
@@ -316,12 +317,12 @@ class ChatAppsDropdownWidget extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Container(
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.max,
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Enable Apps', style: TextStyle(color: Colors.white, fontSize: 16)),
-                    SizedBox(
+                    Text(context.l10n.enableApps, style: const TextStyle(color: Colors.white, fontSize: 16)),
+                    const SizedBox(
                       width: 24,
                       child: Icon(Icons.apps, color: Colors.white60, size: 16),
                     ),
@@ -349,9 +350,9 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      "Omi",
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
+                    Text(
+                      context.l10n.omiAppName,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                     ),
                     selectedApp == null
                         ? const SizedBox(

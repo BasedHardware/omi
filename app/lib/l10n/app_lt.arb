@@ -3390,5 +3390,8 @@
   "durationSeconds": "Trukmė: {seconds} sekundžių",
   "additionalSpeechSampleRemoved": "Papildomas balso pavyzdys pašalintas",
   "consentDataMessage": "Tęsdami, visi duomenys, kuriuos bendrinate su šia programa (įskaitant jūsų pokalbius, įrašus ir asmeninę informaciją), bus saugiai saugomi mūsų serveriuose, kad galėtume teikti jums dirbtinio intelekto paremtas įžvalgas ir įjungti visas programos funkcijas.",
-  "tasksEmptyStateMessage": "Užduotys iš jūsų pokalbių bus rodomos čia.\nBakstelėkite + norėdami sukurti rankiniu būdu."
+  "tasksEmptyStateMessage": "Užduotys iš jūsų pokalbių bus rodomos čia.\nBakstelėkite + norėdami sukurti rankiniu būdu.",
+  "clearChatAction": "Išvalyti pokalbį",
+  "enableApps": "Įjungti programas",
+  "omiAppName": "Omi"
 }

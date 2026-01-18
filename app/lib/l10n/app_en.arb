@@ -6087,5 +6087,17 @@
   "tasksEmptyStateMessage": "Tasks from your conversations will appear here.\nTap + to create one manually.",
   "@tasksEmptyStateMessage": {
     "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
+  },
+  "clearChatAction": "Clear Chat",
+  "@clearChatAction": {
+    "description": "Menu item text for clearing chat history"
+  },
+  "enableApps": "Enable Apps",
+  "@enableApps": {
+    "description": "Menu item text to navigate to apps page and enable more chat apps"
+  },
+  "omiAppName": "Omi",
+  "@omiAppName": {
+    "description": "The Omi app/assistant name shown in chat app selection"
   }
 }

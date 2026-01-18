@@ -3408,5 +3408,8 @@
   "durationSeconds": "Czas trwania: {seconds} sekund",
   "additionalSpeechSampleRemoved": "Dodatkowa próbka głosowa usunięta",
   "consentDataMessage": "Kontynuując, wszystkie dane, które udostępniasz tej aplikacji (w tym rozmowy, nagrania i dane osobowe), będą bezpiecznie przechowywane na naszych serwerach, aby zapewnić Ci spostrzeżenia oparte na AI i włączyć wszystkie funkcje aplikacji.",
-  "tasksEmptyStateMessage": "Zadania z twoich rozmów pojawią się tutaj.\nDotknij +, aby utworzyć ręcznie."
+  "tasksEmptyStateMessage": "Zadania z twoich rozmów pojawią się tutaj.\nDotknij +, aby utworzyć ręcznie.",
+  "clearChatAction": "Wyczyść czat",
+  "enableApps": "Włącz aplikacje",
+  "omiAppName": "Omi"
 }

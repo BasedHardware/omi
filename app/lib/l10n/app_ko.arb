@@ -3408,5 +3408,8 @@
   "durationSeconds": "길이: {seconds}초",
   "additionalSpeechSampleRemoved": "추가 음성 샘플이 삭제되었습니다",
   "consentDataMessage": "계속하면 이 앱과 공유하는 모든 데이터(대화, 녹음, 개인 정보 포함)가 당사 서버에 안전하게 저장되어 AI 기반 인사이트를 제공하고 모든 앱 기능을 활성화합니다.",
-  "tasksEmptyStateMessage": "대화에서 생성된 작업이 여기에 표시됩니다.\n수동으로 만들려면 +를 탭하세요."
+  "tasksEmptyStateMessage": "대화에서 생성된 작업이 여기에 표시됩니다.\n수동으로 만들려면 +를 탭하세요.",
+  "clearChatAction": "채팅 삭제",
+  "enableApps": "앱 활성화",
+  "omiAppName": "Omi"
 }

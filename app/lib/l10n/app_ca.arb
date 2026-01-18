@@ -3410,5 +3410,8 @@
   "durationSeconds": "Durada: {seconds} segons",
   "additionalSpeechSampleRemoved": "S'ha eliminat la mostra de veu addicional",
   "consentDataMessage": "En continuar, totes les dades que comparteixis amb aquesta aplicació (incloent les teves converses, gravacions i informació personal) s'emmagatzemaran de forma segura als nostres servidors per proporcionar-te informació basada en IA i habilitar totes les funcions de l'aplicació.",
-  "tasksEmptyStateMessage": "Les tasques de les teves converses apareixeran aquí.\nToca + per crear-ne una manualment."
+  "tasksEmptyStateMessage": "Les tasques de les teves converses apareixeran aquí.\nToca + per crear-ne una manualment.",
+  "clearChatAction": "Esborrar el xat",
+  "enableApps": "Activar aplicacions",
+  "omiAppName": "Omi"
 }

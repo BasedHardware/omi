@@ -3408,5 +3408,8 @@
   "durationSeconds": "Längd: {seconds} sekunder",
   "additionalSpeechSampleRemoved": "Ytterligare röstprov borttaget",
   "consentDataMessage": "Genom att fortsätta kommer all data du delar med denna app (inklusive dina konversationer, inspelningar och personlig information) att lagras säkert på våra servrar för att ge dig AI-drivna insikter och aktivera alla appfunktioner.",
-  "tasksEmptyStateMessage": "Uppgifter från dina konversationer visas här.\nTryck på + för att skapa manuellt."
+  "tasksEmptyStateMessage": "Uppgifter från dina konversationer visas här.\nTryck på + för att skapa manuellt.",
+  "clearChatAction": "Rensa chatt",
+  "enableApps": "Aktivera appar",
+  "omiAppName": "Omi"
 }
