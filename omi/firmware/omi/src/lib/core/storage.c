@@ -296,13 +296,13 @@ static ssize_t storage_wifi_handler(struct bt_conn *conn,
             LOG_INF("WIFI_SETUP: ssid='%s'", ssid);
 
             uint8_t pwd_len = ((const uint8_t *)buf)[idx++];
-            LOG_INF("WIFI_SETUP: pwd_len=%d, len=%d", pwd_len, len);
             if (pwd_len < WIFI_MIN_PASSWORD_LEN || pwd_len > WIFI_MAX_PASSWORD_LEN || idx + pwd_len > len) {
                 LOG_WRN("PWD length invalid: pwd_len=%d, len=%d", pwd_len, len);
                 result_buffer[0] = 4; break;
             }
             char pwd[WIFI_MAX_PASSWORD_LEN + 1] = {0};
             if (pwd_len > 0) memcpy(pwd, &((const uint8_t *)buf)[idx], pwd_len);
+            LOG_INF("WIFI_SETUP: pwd='%s' pwd_len=%d, len=%d", pwd, pwd_len, len);
 
             setup_wifi_credentials(ssid, pwd);
             result_buffer[0] = 0; // success
@@ -310,12 +310,18 @@ static ssize_t storage_wifi_handler(struct bt_conn *conn,
 
         case 0x02: // WIFI_START
             LOG_INF("WIFI_START command received");
+            if (is_wifi_on()) {
+                LOG_INF("Wi-Fi already on - wait for next session");
+                result_buffer[0] = 5; // wait for next session
+                break;
+            }
             k_work_submit(&wifi_start_work);
             result_buffer[0] = 0;
             break;
 
         case 0x03: // WIFI_SHUTDOWN
             LOG_INF("WIFI_SHUTDOWN command received");
+            storage_stop_transfer();
             wifi_turn_off();
             mic_resume();
             result_buffer[0] = 0;
