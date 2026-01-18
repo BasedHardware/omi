@@ -7,7 +7,7 @@ import {
   isAudioCaptureSupported,
 } from '@/lib/audioCapture';
 import { createTranscriptionSocket } from '@/lib/transcriptionSocket';
-import { processInProgressConversation } from '@/lib/api';
+import { processInProgressConversation, getUserLanguage } from '@/lib/api';
 
 /**
  * Hook to manage recording lifecycle.
@@ -66,8 +66,17 @@ export function useRecording() {
     pausedDurationRef.current = 0;
 
     try {
+      // Fetch user's language preference (fallback to 'multi' if not available)
+      let language = 'multi';
+      try {
+        language = await getUserLanguage();
+      } catch (langErr) {
+        console.warn('Failed to fetch user language, using multi:', langErr);
+      }
+
       // Create transcription socket
       const socket = createTranscriptionSocket({
+        language,
         onSegment: (segment: TranscriptSegment) => {
           if (!isMountedRef.current) return;
           setSegments((prev) => {
