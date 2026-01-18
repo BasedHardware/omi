@@ -3393,5 +3393,7 @@
   "tasksEmptyStateMessage": "Konuşmalarınızdaki görevler burada görünecek.\nManuel olarak oluşturmak için + simgesine dokunun.",
   "clearChatAction": "Sohbeti temizle",
   "enableApps": "Uygulamaları etkinleştir",
-  "omiAppName": "Omi"
+  "omiAppName": "Omi",
+  "showMore": "daha fazla göster ↓",
+  "showLess": "daha az göster ↑"
 }

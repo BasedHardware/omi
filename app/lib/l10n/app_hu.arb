@@ -3411,5 +3411,7 @@
   "tasksEmptyStateMessage": "A beszélgetéseidből származó feladatok itt jelennek meg.\nKoppints a + gombra manuális létrehozáshoz.",
   "clearChatAction": "Chat törlése",
   "enableApps": "Alkalmazások engedélyezése",
-  "omiAppName": "Omi"
+  "omiAppName": "Omi",
+  "showMore": "mutass többet ↓",
+  "showLess": "mutass kevesebbet ↑"
 }

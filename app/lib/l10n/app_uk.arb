@@ -3411,5 +3411,7 @@
   "tasksEmptyStateMessage": "Завдання з ваших розмов з'являться тут.\nНатисніть +, щоб створити вручну.",
   "clearChatAction": "Очистити чат",
   "enableApps": "Увімкнути додатки",
-  "omiAppName": "Omi"
+  "omiAppName": "Omi",
+  "showMore": "показати більше ↓",
+  "showLess": "показати менше ↑"
 }

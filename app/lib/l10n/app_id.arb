@@ -3411,5 +3411,7 @@
   "tasksEmptyStateMessage": "Tugas dari percakapan Anda akan muncul di sini.\nKetuk + untuk membuat secara manual.",
   "clearChatAction": "Hapus obrolan",
   "enableApps": "Aktifkan aplikasi",
-  "omiAppName": "Omi"
+  "omiAppName": "Omi",
+  "showMore": "tampilkan lebih ↓",
+  "showLess": "tampilkan lebih sedikit ↑"
 }

@@ -3411,5 +3411,7 @@
   "tasksEmptyStateMessage": "Uppgifter från dina konversationer visas här.\nTryck på + för att skapa manuellt.",
   "clearChatAction": "Rensa chatt",
   "enableApps": "Aktivera appar",
-  "omiAppName": "Omi"
+  "omiAppName": "Omi",
+  "showMore": "visa mer ↓",
+  "showLess": "visa mindre ↑"
 }

@@ -3411,5 +3411,7 @@
   "tasksEmptyStateMessage": "Οι εργασίες από τις συνομιλίες σας θα εμφανιστούν εδώ.\nΠατήστε + για χειροκίνητη δημιουργία.",
   "clearChatAction": "Διαγραφή συνομιλίας",
   "enableApps": "Ενεργοποίηση εφαρμογών",
-  "omiAppName": "Omi"
+  "omiAppName": "Omi",
+  "showMore": "περισσότερα ↓",
+  "showLess": "λιγότερα ↑"
 }

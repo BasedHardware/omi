@@ -3411,5 +3411,7 @@
   "tasksEmptyStateMessage": "Tugasan daripada perbualan anda akan muncul di sini.\nKetik + untuk mencipta secara manual.",
   "clearChatAction": "Kosongkan sembang",
   "enableApps": "Dayakan aplikasi",
-  "omiAppName": "Omi"
+  "omiAppName": "Omi",
+  "showMore": "tunjukkan lagi ↓",
+  "showLess": "tunjukkan kurang ↑"
 }

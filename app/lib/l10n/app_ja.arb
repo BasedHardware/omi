@@ -1837,5 +1837,7 @@
   "tasksEmptyStateMessage": "会話からのタスクがここに表示されます。\n手動で作成するには + をタップしてください。",
   "clearChatAction": "チャットを消去",
   "enableApps": "アプリを有効化",
-  "omiAppName": "Omi"
+  "omiAppName": "Omi",
+  "showMore": "もっと見る ↓",
+  "showLess": "閉じる ↑"
 }

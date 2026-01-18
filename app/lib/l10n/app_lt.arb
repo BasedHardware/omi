@@ -3393,5 +3393,7 @@
   "tasksEmptyStateMessage": "Užduotys iš jūsų pokalbių bus rodomos čia.\nBakstelėkite + norėdami sukurti rankiniu būdu.",
   "clearChatAction": "Išvalyti pokalbį",
   "enableApps": "Įjungti programas",
-  "omiAppName": "Omi"
+  "omiAppName": "Omi",
+  "showMore": "rodyti daugiau ↓",
+  "showLess": "rodyti mažiau ↑"
 }

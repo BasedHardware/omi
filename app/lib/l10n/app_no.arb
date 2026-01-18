@@ -3411,5 +3411,7 @@
   "tasksEmptyStateMessage": "Oppgaver fra samtalene dine vil vises her.\nTrykk på + for å opprette manuelt.",
   "clearChatAction": "Tøm chat",
   "enableApps": "Aktiver apper",
-  "omiAppName": "Omi"
+  "omiAppName": "Omi",
+  "showMore": "vis mer ↓",
+  "showLess": "vis mindre ↑"
 }

@@ -1858,5 +1858,7 @@
   "tasksEmptyStateMessage": "As tarefas das suas conversas aparecerão aqui.\nToque em + para criar uma manualmente.",
   "clearChatAction": "Limpar conversa",
   "enableApps": "Ativar aplicativos",
-  "omiAppName": "Omi"
+  "omiAppName": "Omi",
+  "showMore": "mostrar mais ↓",
+  "showLess": "mostrar menos ↑"
 }

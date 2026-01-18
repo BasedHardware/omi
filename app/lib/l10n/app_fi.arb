@@ -3411,5 +3411,7 @@
   "tasksEmptyStateMessage": "Keskusteluistasi saadut tehtävät näkyvät täällä.\nNapauta + luodaksesi manuaalisesti.",
   "clearChatAction": "Tyhjennä keskustelu",
   "enableApps": "Ota sovellukset käyttöön",
-  "omiAppName": "Omi"
+  "omiAppName": "Omi",
+  "showMore": "näytä lisää ↓",
+  "showLess": "näytä vähemmän ↑"
 }

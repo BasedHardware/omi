@@ -1858,5 +1858,7 @@
   "tasksEmptyStateMessage": "Aufgaben aus Ihren Gesprächen werden hier angezeigt.\nTippen Sie auf +, um eine manuell zu erstellen.",
   "clearChatAction": "Chat löschen",
   "enableApps": "Apps aktivieren",
-  "omiAppName": "Omi"
+  "omiAppName": "Omi",
+  "showMore": "mehr anzeigen ↓",
+  "showLess": "weniger anzeigen ↑"
 }

@@ -3393,5 +3393,7 @@
   "tasksEmptyStateMessage": "Le attività dalle tue conversazioni appariranno qui.\nTocca + per crearne una manualmente.",
   "clearChatAction": "Cancella chat",
   "enableApps": "Abilita app",
-  "omiAppName": "Omi"
+  "omiAppName": "Omi",
+  "showMore": "mostra di più ↓",
+  "showLess": "mostra meno ↑"
 }

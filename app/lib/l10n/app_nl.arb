@@ -2229,5 +2229,7 @@
   "tasksEmptyStateMessage": "Taken uit je gesprekken verschijnen hier.\nTik op + om er handmatig een te maken.",
   "clearChatAction": "Chat wissen",
   "enableApps": "Apps inschakelen",
-  "omiAppName": "Omi"
+  "omiAppName": "Omi",
+  "showMore": "toon meer ↓",
+  "showLess": "toon minder ↑"
 }

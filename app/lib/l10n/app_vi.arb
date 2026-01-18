@@ -3411,5 +3411,7 @@
   "tasksEmptyStateMessage": "Các nhiệm vụ từ cuộc trò chuyện của bạn sẽ xuất hiện ở đây.\nNhấn + để tạo thủ công.",
   "clearChatAction": "Xóa cuộc trò chuyện",
   "enableApps": "Kích hoạt ứng dụng",
-  "omiAppName": "Omi"
+  "omiAppName": "Omi",
+  "showMore": "xem thêm ↓",
+  "showLess": "thu gọn ↑"
 }

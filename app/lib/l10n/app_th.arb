@@ -3411,5 +3411,7 @@
   "tasksEmptyStateMessage": "งานจากการสนทนาของคุณจะปรากฏที่นี่\nแตะ + เพื่อสร้างด้วยตนเอง",
   "clearChatAction": "ล้างแชท",
   "enableApps": "เปิดใช้งานแอป",
-  "omiAppName": "Omi"
+  "omiAppName": "Omi",
+  "showMore": "แสดงเพิ่มเติม ↓",
+  "showLess": "แสดงน้อยลง ↑"
 }

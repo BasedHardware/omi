@@ -3413,5 +3413,7 @@
   "tasksEmptyStateMessage": "Задачите от вашите разговори ще се появят тук.\nДокоснете + за ръчно създаване.",
   "clearChatAction": "Изчисти чата",
   "enableApps": "Активиране на приложения",
-  "omiAppName": "Omi"
+  "omiAppName": "Omi",
+  "showMore": "покажи повече ↓",
+  "showLess": "покажи по-малко ↑"
 }

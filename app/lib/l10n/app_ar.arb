@@ -3429,5 +3429,7 @@
   "tasksEmptyStateMessage": "ستظهر المهام من محادثاتك هنا.\nاضغط على + لإنشاء مهمة يدويًا.",
   "clearChatAction": "مسح المحادثة",
   "enableApps": "تفعيل التطبيقات",
-  "omiAppName": "Omi"
+  "omiAppName": "Omi",
+  "showMore": "عرض المزيد ↓",
+  "showLess": "عرض أقل ↑"
 }

@@ -3411,5 +3411,7 @@
   "tasksEmptyStateMessage": "Úlohy z vašich konverzácií sa zobrazia tu.\nKlepnite na + pre manuálne vytvorenie.",
   "clearChatAction": "Vymazať chat",
   "enableApps": "Povoliť aplikácie",
-  "omiAppName": "Omi"
+  "omiAppName": "Omi",
+  "showMore": "zobraziť viac ↓",
+  "showLess": "zobraziť menej ↑"
 }

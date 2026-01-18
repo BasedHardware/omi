@@ -3411,5 +3411,7 @@
   "tasksEmptyStateMessage": "Sarcinile din conversațiile tale vor apărea aici.\nAtinge + pentru a crea una manual.",
   "clearChatAction": "Șterge conversația",
   "enableApps": "Activează aplicațiile",
-  "omiAppName": "Omi"
+  "omiAppName": "Omi",
+  "showMore": "arată mai mult ↓",
+  "showLess": "arată mai puțin ↑"
 }

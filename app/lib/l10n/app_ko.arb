@@ -3411,5 +3411,7 @@
   "tasksEmptyStateMessage": "대화에서 생성된 작업이 여기에 표시됩니다.\n수동으로 만들려면 +를 탭하세요.",
   "clearChatAction": "채팅 삭제",
   "enableApps": "앱 활성화",
-  "omiAppName": "Omi"
+  "omiAppName": "Omi",
+  "showMore": "더 보기 ↓",
+  "showLess": "접기 ↑"
 }

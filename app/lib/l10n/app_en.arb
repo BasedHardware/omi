@@ -6099,5 +6099,13 @@
   "omiAppName": "Omi",
   "@omiAppName": {
     "description": "The Omi app/assistant name shown in chat app selection"
+  },
+  "showMore": "show more ↓",
+  "@showMore": {
+    "description": "Text shown to expand collapsed content, with down arrow"
+  },
+  "showLess": "show less ↑",
+  "@showLess": {
+    "description": "Text shown to collapse expanded content, with up arrow"
   }
 }

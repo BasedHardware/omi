@@ -3411,5 +3411,7 @@
   "tasksEmptyStateMessage": "Uzdevumi no jūsu sarunām parādīsies šeit.\nPieskarieties +, lai izveidotu manuāli.",
   "clearChatAction": "Notīrīt tērzēšanu",
   "enableApps": "Iespējot lietotnes",
-  "omiAppName": "Omi"
+  "omiAppName": "Omi",
+  "showMore": "rādīt vairāk ↓",
+  "showLess": "rādīt mazāk ↑"
 }

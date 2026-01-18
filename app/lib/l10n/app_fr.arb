@@ -2229,5 +2229,7 @@
   "tasksEmptyStateMessage": "Les tâches de vos conversations apparaîtront ici.\nAppuyez sur + pour en créer une manuellement.",
   "clearChatAction": "Effacer le chat",
   "enableApps": "Activer les applications",
-  "omiAppName": "Omi"
+  "omiAppName": "Omi",
+  "showMore": "afficher plus ↓",
+  "showLess": "afficher moins ↑"
 }

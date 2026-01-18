@@ -3411,5 +3411,7 @@
   "tasksEmptyStateMessage": "Teie vestlustest pärit ülesanded ilmuvad siia.\nPuudutage + käsitsi loomiseks.",
   "clearChatAction": "Tühjenda vestlus",
   "enableApps": "Luba rakendused",
-  "omiAppName": "Omi"
+  "omiAppName": "Omi",
+  "showMore": "näita rohkem ↓",
+  "showLess": "näita vähem ↑"
 }

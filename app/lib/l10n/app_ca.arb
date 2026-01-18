@@ -3413,5 +3413,7 @@
   "tasksEmptyStateMessage": "Les tasques de les teves converses apareixeran aquí.\nToca + per crear-ne una manualment.",
   "clearChatAction": "Esborrar el xat",
   "enableApps": "Activar aplicacions",
-  "omiAppName": "Omi"
+  "omiAppName": "Omi",
+  "showMore": "mostra més ↓",
+  "showLess": "mostra menys ↑"
 }

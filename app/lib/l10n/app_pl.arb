@@ -3411,5 +3411,7 @@
   "tasksEmptyStateMessage": "Zadania z twoich rozmów pojawią się tutaj.\nDotknij +, aby utworzyć ręcznie.",
   "clearChatAction": "Wyczyść czat",
   "enableApps": "Włącz aplikacje",
-  "omiAppName": "Omi"
+  "omiAppName": "Omi",
+  "showMore": "pokaż więcej ↓",
+  "showLess": "pokaż mniej ↑"
 }

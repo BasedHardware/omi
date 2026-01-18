@@ -1858,5 +1858,7 @@
   "tasksEmptyStateMessage": "来自您对话的任务将显示在这里。\n点击 + 手动创建。",
   "clearChatAction": "清除聊天",
   "enableApps": "启用应用",
-  "omiAppName": "Omi"
+  "omiAppName": "Omi",
+  "showMore": "显示更多 ↓",
+  "showLess": "收起 ↑"
 }
