@@ -80,7 +80,7 @@ Widget omiSelectionMenuBuilder(
   // Ask Omi
   if (text.trim().isNotEmpty) {
     toolbarItems.add(OmiToolbarAction(
-      label: 'Ask Omi',
+      label: context.l10n.askOmi,
       onPressed: () {
         onAskOmi(text);
         delegate.hideToolbar();
@@ -93,7 +93,7 @@ Widget omiSelectionMenuBuilder(
       toolbarItems.add(const OmiToolbarDivider());
     }
     toolbarItems.add(OmiToolbarAction(
-      label: 'Copy',
+      label: context.l10n.copy,
       onPressed: () {
         delegate.copySelection(SelectionChangedCause.toolbar);
         delegate.hideToolbar();
