@@ -86,10 +86,10 @@ export function useRecording() {
           // Don't set error state for socket issues - just log them
         },
         onConnected: () => {
-          console.log('Transcription socket connected');
+          // Socket connected
         },
         onDisconnected: () => {
-          console.log('Transcription socket disconnected');
+          // Socket disconnected
         },
       });
 
@@ -199,13 +199,8 @@ export function useRecording() {
 
     // Process the conversation in the background - don't block the user
     processInProgressConversation()
-      .then((result) => {
-        if (result?.conversation) {
-          console.log('Conversation saved:', result.conversation.id);
-          // Optionally show a toast notification here
-        } else {
-          console.log('No in-progress conversation found');
-        }
+      .then(() => {
+        // Conversation processed - could show a toast notification here
       })
       .catch((err) => {
         console.error('Failed to process conversation:', err);

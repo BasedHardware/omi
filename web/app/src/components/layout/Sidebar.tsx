@@ -82,8 +82,8 @@ const navItems: NavItem[] = [
     icon: <MessageCircle className="w-5 h-5" />,
   },
   {
-    label: 'Apps',
-    href: '/apps',
+    label: 'My Apps',
+    href: '/my-apps',
     icon: <LayoutGrid className="w-5 h-5" />,
   },
   {
@@ -172,10 +172,10 @@ export function Sidebar({
     setIsTemporaryExpand(false); // Manual toggle makes it permanent
   }, []);
 
-  const handleSignOut = async () => {
+  const handleSignOut = useCallback(async () => {
     await signOut();
     onClose();
-  };
+  }, [signOut, onClose]);
 
   // Collapsed width (icon only) vs expanded width
   const sidebarWidth = isExpanded ? 280 : 72;
