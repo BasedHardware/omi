@@ -31,7 +31,7 @@
   },
   "cancel": "Cancel",
   "@cancel": {
-    "description": "Cancel button"
+    "description": "Generic cancel button label"
   },
   "ok": "Ok",
   "@ok": {
@@ -553,7 +553,7 @@
   },
   "offlineSync": "Offline Sync",
   "@offlineSync": {
-    "description": "Offline sync menu item"
+    "description": "Page title for offline sync"
   },
   "deviceSettings": "Device Settings",
   "@deviceSettings": {
@@ -765,7 +765,7 @@
   },
   "off": "Off",
   "@off": {
-    "description": "Off state"
+    "description": "Toggle state label when disabled"
   },
   "max": "Max",
   "@max": {
@@ -2208,7 +2208,7 @@
   },
   "retry": "Retry",
   "@retry": {
-    "description": "Button text to retry after failed save"
+    "description": "Button label to retry an action"
   },
   "createActionItem": "Create Action Item",
   "@createActionItem": {
@@ -3190,7 +3190,7 @@
   },
   "all": "All",
   "@all": {
-    "description": "Label for all items tab"
+    "description": "Filter label to show all items"
   },
   "open": "Open",
   "@open": {
@@ -5783,11 +5783,11 @@
   },
   "storeAudioOnPhone": "Store Audio on Phone",
   "@storeAudioOnPhone": {
-    "description": "storeAudioOnPhone label"
+    "description": "Settings label for storing audio locally on phone"
   },
   "on": "On",
   "@on": {
-    "description": "on label"
+    "description": "Toggle state label when enabled"
   },
   "storeAudioDescription": "Keep all audio recordings stored locally on your phone. When disabled, only failed uploads are kept to save storage space.",
   "@storeAudioDescription": {
@@ -5811,7 +5811,7 @@
   },
   "storeAudioOnCloud": "Store Audio on Cloud",
   "@storeAudioOnCloud": {
-    "description": "storeAudioOnCloud label"
+    "description": "Settings label for storing audio on cloud"
   },
   "cloudStorageDialogMessage": "Your real-time recordings will be stored in private cloud storage as you speak.",
   "@cloudStorageDialogMessage": {
@@ -7040,5 +7040,192 @@
   "trackYourGoalsOnHomepage": "Track your personal goals on homepage",
   "@trackYourGoalsOnHomepage": {
     "description": "Description for goal tracker feature"
+  },
+  "deleteRecording": "Delete Recording",
+  "@deleteRecording": {
+    "description": "Dialog title when deleting a recording"
+  },
+  "thisCannotBeUndone": "This cannot be undone.",
+  "@thisCannotBeUndone": {
+    "description": "Warning message for irreversible actions"
+  },
+  "sdCard": "SD Card",
+  "@sdCard": {
+    "description": "Label for SD card storage"
+  },
+  "fromSd": "From SD",
+  "@fromSd": {
+    "description": "Label indicating content originated from SD card"
+  },
+  "limitless": "Limitless",
+  "@limitless": {
+    "description": "Label for Limitless device storage"
+  },
+  "fastTransfer": "Fast Transfer",
+  "@fastTransfer": {
+    "description": "Label for WiFi fast transfer mode"
+  },
+  "syncingStatus": "Syncing",
+  "@syncingStatus": {
+    "description": "Status label when syncing is in progress"
+  },
+  "failedStatus": "Failed",
+  "@failedStatus": {
+    "description": "Status label when sync has failed"
+  },
+  "etaLabel": "ETA: {time}",
+  "@etaLabel": {
+    "description": "Estimated time remaining label",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "transferMethod": "Transfer Method",
+  "@transferMethod": {
+    "description": "Settings label for transfer method selection"
+  },
+  "fast": "Fast",
+  "@fast": {
+    "description": "Label for fast WiFi transfer method"
+  },
+  "ble": "BLE",
+  "@ble": {
+    "description": "Label for Bluetooth Low Energy transfer method"
+  },
+  "phone": "Phone",
+  "@phone": {
+    "description": "Filter label for phone storage"
+  },
+  "cancelSync": "Cancel Sync",
+  "@cancelSync": {
+    "description": "Dialog title and button to cancel sync"
+  },
+  "cancelSyncMessage": "Data already downloaded will be saved. You can resume later.",
+  "@cancelSyncMessage": {
+    "description": "Message explaining what happens when sync is cancelled"
+  },
+  "syncCancelled": "Sync cancelled",
+  "@syncCancelled": {
+    "description": "Snackbar message when sync is cancelled"
+  },
+  "deleteProcessedFiles": "Delete Processed Files",
+  "@deleteProcessedFiles": {
+    "description": "Dialog title for deleting processed files"
+  },
+  "processedFilesDeleted": "Processed files deleted",
+  "@processedFilesDeleted": {
+    "description": "Snackbar message when processed files are deleted"
+  },
+  "wifiEnableFailed": "Failed to enable WiFi on device. Please try again.",
+  "@wifiEnableFailed": {
+    "description": "Error message when WiFi fails to enable on device"
+  },
+  "deviceNoFastTransfer": "Your device does not support Fast Transfer. Use Bluetooth instead.",
+  "@deviceNoFastTransfer": {
+    "description": "Error message when device does not support fast transfer"
+  },
+  "enableHotspotMessage": "Please enable your phone's hotspot and try again.",
+  "@enableHotspotMessage": {
+    "description": "Error message asking user to enable hotspot"
+  },
+  "transferStartFailed": "Failed to start transfer. Please try again.",
+  "@transferStartFailed": {
+    "description": "Error message when transfer fails to start"
+  },
+  "deviceNotResponding": "Device did not respond. Please try again.",
+  "@deviceNotResponding": {
+    "description": "Error message when device times out"
+  },
+  "invalidWifiCredentials": "Invalid WiFi credentials. Check your hotspot settings.",
+  "@invalidWifiCredentials": {
+    "description": "Error message for invalid WiFi credentials"
+  },
+  "wifiConnectionFailed": "WiFi connection failed. Please try again.",
+  "@wifiConnectionFailed": {
+    "description": "Error message when WiFi connection fails"
+  },
+  "sdCardProcessing": "SD Card Processing",
+  "@sdCardProcessing": {
+    "description": "Dialog title for SD card processing"
+  },
+  "sdCardProcessingMessage": "Processing {count} recording(s). Files will be removed from SD card after.",
+  "@sdCardProcessingMessage": {
+    "description": "Message explaining SD card processing",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "process": "Process",
+  "@process": {
+    "description": "Button label to start processing"
+  },
+  "wifiSyncFailed": "WiFi Sync Failed",
+  "@wifiSyncFailed": {
+    "description": "Error title when WiFi sync fails"
+  },
+  "processingFailed": "Processing Failed",
+  "@processingFailed": {
+    "description": "Error title when processing fails"
+  },
+  "downloadingFromSdCard": "Downloading from SD Card",
+  "@downloadingFromSdCard": {
+    "description": "Progress label when downloading from SD card"
+  },
+  "processingProgress": "Processing {current}/{total}",
+  "@processingProgress": {
+    "description": "Progress label showing current/total items",
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "conversationsCreated": "{count} conversations created",
+  "@conversationsCreated": {
+    "description": "Success message showing number of conversations created",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "internetRequired": "Internet required",
+  "@internetRequired": {
+    "description": "Error message when internet connection is needed"
+  },
+  "processAudio": "Process Audio",
+  "@processAudio": {
+    "description": "Button label to process audio recordings"
+  },
+  "start": "Start",
+  "@start": {
+    "description": "Button label to start an action"
+  },
+  "noRecordings": "No Recordings",
+  "@noRecordings": {
+    "description": "Empty state title when there are no recordings"
+  },
+  "audioFromOmiWillAppearHere": "Audio from your Omi device will appear here",
+  "@audioFromOmiWillAppearHere": {
+    "description": "Empty state description for recordings"
+  },
+  "deleteProcessed": "Delete Processed",
+  "@deleteProcessed": {
+    "description": "Menu item to delete processed files"
+  },
+  "tryDifferentFilter": "Try a different filter",
+  "@tryDifferentFilter": {
+    "description": "Hint when no recordings match current filter"
+  },
+  "recordings": "Recordings",
+  "@recordings": {
+    "description": "Section header for recordings list"
   }
 }

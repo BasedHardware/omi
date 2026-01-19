@@ -30,7 +30,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get confirm => '확인';
 
   @override
-  String get cancel => '취소';
+  String get cancel => 'Cancel';
 
   @override
   String get ok => '확인';
@@ -413,7 +413,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get planAndUsage => '플랜 및 사용량';
 
   @override
-  String get offlineSync => '오프라인 동기화';
+  String get offlineSync => 'Offline Sync';
 
   @override
   String get deviceSettings => '기기 설정';
@@ -572,7 +572,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get starOngoing => '진행 중인 대화 즐겨찾기';
 
   @override
-  String get off => '끄기';
+  String get off => 'Off';
 
   @override
   String get max => '최대';
@@ -2103,7 +2103,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get saveMemory => '기억 저장';
 
   @override
-  String get retry => '다시 시도';
+  String get retry => 'Retry';
 
   @override
   String get createActionItem => '작업 항목 생성';
@@ -2750,7 +2750,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get browseInstallCreateApps => '앱 탐색, 설치 및 생성';
 
   @override
-  String get all => '전체';
+  String get all => 'All';
 
   @override
   String get open => '열기';
@@ -4809,10 +4809,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get enable => '활성화';
 
   @override
-  String get storeAudioOnPhone => '휴대폰에 오디오 저장';
+  String get storeAudioOnPhone => 'Store Audio on Phone';
 
   @override
-  String get on => '켜짐';
+  String get on => 'On';
 
   @override
   String get storeAudioDescription => '모든 오디오 녹음을 휴대폰에 로컬로 저장하세요. 비활성화하면 저장 공간 절약을 위해 실패한 업로드만 유지됩니다.';
@@ -4830,7 +4830,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get enableCloudStorage => '클라우드 저장소 활성화';
 
   @override
-  String get storeAudioOnCloud => '클라우드에 오디오 저장';
+  String get storeAudioOnCloud => 'Store Audio on Cloud';
 
   @override
   String get cloudStorageDialogMessage => '실시간 녹음이 말하는 동안 개인 클라우드 저장소에 저장됩니다.';
@@ -5724,4 +5724,135 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get trackYourGoalsOnHomepage => 'Track your personal goals on homepage';
+
+  @override
+  String get deleteRecording => 'Delete Recording';
+
+  @override
+  String get thisCannotBeUndone => 'This cannot be undone.';
+
+  @override
+  String get sdCard => 'SD Card';
+
+  @override
+  String get fromSd => 'From SD';
+
+  @override
+  String get limitless => 'Limitless';
+
+  @override
+  String get fastTransfer => 'Fast Transfer';
+
+  @override
+  String get syncingStatus => 'Syncing';
+
+  @override
+  String get failedStatus => 'Failed';
+
+  @override
+  String etaLabel(String time) {
+    return 'ETA: $time';
+  }
+
+  @override
+  String get transferMethod => 'Transfer Method';
+
+  @override
+  String get fast => 'Fast';
+
+  @override
+  String get ble => 'BLE';
+
+  @override
+  String get phone => 'Phone';
+
+  @override
+  String get cancelSync => 'Cancel Sync';
+
+  @override
+  String get cancelSyncMessage => 'Data already downloaded will be saved. You can resume later.';
+
+  @override
+  String get syncCancelled => 'Sync cancelled';
+
+  @override
+  String get deleteProcessedFiles => 'Delete Processed Files';
+
+  @override
+  String get processedFilesDeleted => 'Processed files deleted';
+
+  @override
+  String get wifiEnableFailed => 'Failed to enable WiFi on device. Please try again.';
+
+  @override
+  String get deviceNoFastTransfer => 'Your device does not support Fast Transfer. Use Bluetooth instead.';
+
+  @override
+  String get enableHotspotMessage => 'Please enable your phone\'s hotspot and try again.';
+
+  @override
+  String get transferStartFailed => 'Failed to start transfer. Please try again.';
+
+  @override
+  String get deviceNotResponding => 'Device did not respond. Please try again.';
+
+  @override
+  String get invalidWifiCredentials => 'Invalid WiFi credentials. Check your hotspot settings.';
+
+  @override
+  String get wifiConnectionFailed => 'WiFi connection failed. Please try again.';
+
+  @override
+  String get sdCardProcessing => 'SD Card Processing';
+
+  @override
+  String sdCardProcessingMessage(int count) {
+    return 'Processing $count recording(s). Files will be removed from SD card after.';
+  }
+
+  @override
+  String get process => 'Process';
+
+  @override
+  String get wifiSyncFailed => 'WiFi Sync Failed';
+
+  @override
+  String get processingFailed => 'Processing Failed';
+
+  @override
+  String get downloadingFromSdCard => 'Downloading from SD Card';
+
+  @override
+  String processingProgress(int current, int total) {
+    return 'Processing $current/$total';
+  }
+
+  @override
+  String conversationsCreated(int count) {
+    return '$count conversations created';
+  }
+
+  @override
+  String get internetRequired => 'Internet required';
+
+  @override
+  String get processAudio => 'Process Audio';
+
+  @override
+  String get start => 'Start';
+
+  @override
+  String get noRecordings => 'No Recordings';
+
+  @override
+  String get audioFromOmiWillAppearHere => 'Audio from your Omi device will appear here';
+
+  @override
+  String get deleteProcessed => 'Delete Processed';
+
+  @override
+  String get tryDifferentFilter => 'Try a different filter';
+
+  @override
+  String get recordings => 'Recordings';
 }

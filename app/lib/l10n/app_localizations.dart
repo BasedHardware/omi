@@ -201,7 +201,7 @@ abstract class AppLocalizations {
   /// **'Confirm'**
   String get confirm;
 
-  /// Cancel button
+  /// Generic cancel button label
   ///
   /// In en, this message translates to:
   /// **'Cancel'**
@@ -951,7 +951,7 @@ abstract class AppLocalizations {
   /// **'Plan & Usage'**
   String get planAndUsage;
 
-  /// Offline sync menu item
+  /// Page title for offline sync
   ///
   /// In en, this message translates to:
   /// **'Offline Sync'**
@@ -1269,7 +1269,7 @@ abstract class AppLocalizations {
   /// **'Star Ongoing Conversation'**
   String get starOngoing;
 
-  /// Off state
+  /// Toggle state label when disabled
   ///
   /// In en, this message translates to:
   /// **'Off'**
@@ -4119,7 +4119,7 @@ abstract class AppLocalizations {
   /// **'Save Memory'**
   String get saveMemory;
 
-  /// Button text to retry after failed save
+  /// Button label to retry an action
   ///
   /// In en, this message translates to:
   /// **'Retry'**
@@ -5379,7 +5379,7 @@ abstract class AppLocalizations {
   /// **'Browse, install, and create apps'**
   String get browseInstallCreateApps;
 
-  /// Label for all items tab
+  /// Filter label to show all items
   ///
   /// In en, this message translates to:
   /// **'All'**
@@ -9255,13 +9255,13 @@ abstract class AppLocalizations {
   /// **'Enable'**
   String get enable;
 
-  /// storeAudioOnPhone label
+  /// Settings label for storing audio locally on phone
   ///
   /// In en, this message translates to:
   /// **'Store Audio on Phone'**
   String get storeAudioOnPhone;
 
-  /// on label
+  /// Toggle state label when enabled
   ///
   /// In en, this message translates to:
   /// **'On'**
@@ -9297,7 +9297,7 @@ abstract class AppLocalizations {
   /// **'Enable Cloud Storage'**
   String get enableCloudStorage;
 
-  /// storeAudioOnCloud label
+  /// Settings label for storing audio on cloud
   ///
   /// In en, this message translates to:
   /// **'Store Audio on Cloud'**
@@ -11030,6 +11030,252 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Track your personal goals on homepage'**
   String get trackYourGoalsOnHomepage;
+
+  /// Dialog title when deleting a recording
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Recording'**
+  String get deleteRecording;
+
+  /// Warning message for irreversible actions
+  ///
+  /// In en, this message translates to:
+  /// **'This cannot be undone.'**
+  String get thisCannotBeUndone;
+
+  /// Label for SD card storage
+  ///
+  /// In en, this message translates to:
+  /// **'SD Card'**
+  String get sdCard;
+
+  /// Label indicating content originated from SD card
+  ///
+  /// In en, this message translates to:
+  /// **'From SD'**
+  String get fromSd;
+
+  /// Label for Limitless device storage
+  ///
+  /// In en, this message translates to:
+  /// **'Limitless'**
+  String get limitless;
+
+  /// Label for WiFi fast transfer mode
+  ///
+  /// In en, this message translates to:
+  /// **'Fast Transfer'**
+  String get fastTransfer;
+
+  /// Status label when syncing is in progress
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing'**
+  String get syncingStatus;
+
+  /// Status label when sync has failed
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get failedStatus;
+
+  /// Estimated time remaining label
+  ///
+  /// In en, this message translates to:
+  /// **'ETA: {time}'**
+  String etaLabel(String time);
+
+  /// Settings label for transfer method selection
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer Method'**
+  String get transferMethod;
+
+  /// Label for fast WiFi transfer method
+  ///
+  /// In en, this message translates to:
+  /// **'Fast'**
+  String get fast;
+
+  /// Label for Bluetooth Low Energy transfer method
+  ///
+  /// In en, this message translates to:
+  /// **'BLE'**
+  String get ble;
+
+  /// Filter label for phone storage
+  ///
+  /// In en, this message translates to:
+  /// **'Phone'**
+  String get phone;
+
+  /// Dialog title and button to cancel sync
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel Sync'**
+  String get cancelSync;
+
+  /// Message explaining what happens when sync is cancelled
+  ///
+  /// In en, this message translates to:
+  /// **'Data already downloaded will be saved. You can resume later.'**
+  String get cancelSyncMessage;
+
+  /// Snackbar message when sync is cancelled
+  ///
+  /// In en, this message translates to:
+  /// **'Sync cancelled'**
+  String get syncCancelled;
+
+  /// Dialog title for deleting processed files
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Processed Files'**
+  String get deleteProcessedFiles;
+
+  /// Snackbar message when processed files are deleted
+  ///
+  /// In en, this message translates to:
+  /// **'Processed files deleted'**
+  String get processedFilesDeleted;
+
+  /// Error message when WiFi fails to enable on device
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to enable WiFi on device. Please try again.'**
+  String get wifiEnableFailed;
+
+  /// Error message when device does not support fast transfer
+  ///
+  /// In en, this message translates to:
+  /// **'Your device does not support Fast Transfer. Use Bluetooth instead.'**
+  String get deviceNoFastTransfer;
+
+  /// Error message asking user to enable hotspot
+  ///
+  /// In en, this message translates to:
+  /// **'Please enable your phone\'s hotspot and try again.'**
+  String get enableHotspotMessage;
+
+  /// Error message when transfer fails to start
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to start transfer. Please try again.'**
+  String get transferStartFailed;
+
+  /// Error message when device times out
+  ///
+  /// In en, this message translates to:
+  /// **'Device did not respond. Please try again.'**
+  String get deviceNotResponding;
+
+  /// Error message for invalid WiFi credentials
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid WiFi credentials. Check your hotspot settings.'**
+  String get invalidWifiCredentials;
+
+  /// Error message when WiFi connection fails
+  ///
+  /// In en, this message translates to:
+  /// **'WiFi connection failed. Please try again.'**
+  String get wifiConnectionFailed;
+
+  /// Dialog title for SD card processing
+  ///
+  /// In en, this message translates to:
+  /// **'SD Card Processing'**
+  String get sdCardProcessing;
+
+  /// Message explaining SD card processing
+  ///
+  /// In en, this message translates to:
+  /// **'Processing {count} recording(s). Files will be removed from SD card after.'**
+  String sdCardProcessingMessage(int count);
+
+  /// Button label to start processing
+  ///
+  /// In en, this message translates to:
+  /// **'Process'**
+  String get process;
+
+  /// Error title when WiFi sync fails
+  ///
+  /// In en, this message translates to:
+  /// **'WiFi Sync Failed'**
+  String get wifiSyncFailed;
+
+  /// Error title when processing fails
+  ///
+  /// In en, this message translates to:
+  /// **'Processing Failed'**
+  String get processingFailed;
+
+  /// Progress label when downloading from SD card
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading from SD Card'**
+  String get downloadingFromSdCard;
+
+  /// Progress label showing current/total items
+  ///
+  /// In en, this message translates to:
+  /// **'Processing {current}/{total}'**
+  String processingProgress(int current, int total);
+
+  /// Success message showing number of conversations created
+  ///
+  /// In en, this message translates to:
+  /// **'{count} conversations created'**
+  String conversationsCreated(int count);
+
+  /// Error message when internet connection is needed
+  ///
+  /// In en, this message translates to:
+  /// **'Internet required'**
+  String get internetRequired;
+
+  /// Button label to process audio recordings
+  ///
+  /// In en, this message translates to:
+  /// **'Process Audio'**
+  String get processAudio;
+
+  /// Button label to start an action
+  ///
+  /// In en, this message translates to:
+  /// **'Start'**
+  String get start;
+
+  /// Empty state title when there are no recordings
+  ///
+  /// In en, this message translates to:
+  /// **'No Recordings'**
+  String get noRecordings;
+
+  /// Empty state description for recordings
+  ///
+  /// In en, this message translates to:
+  /// **'Audio from your Omi device will appear here'**
+  String get audioFromOmiWillAppearHere;
+
+  /// Menu item to delete processed files
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Processed'**
+  String get deleteProcessed;
+
+  /// Hint when no recordings match current filter
+  ///
+  /// In en, this message translates to:
+  /// **'Try a different filter'**
+  String get tryDifferentFilter;
+
+  /// Section header for recordings list
+  ///
+  /// In en, this message translates to:
+  /// **'Recordings'**
+  String get recordings;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
