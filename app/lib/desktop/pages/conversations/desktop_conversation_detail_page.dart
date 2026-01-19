@@ -12,17 +12,20 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/people_provider.dart';
 import 'package:omi/ui/atoms/omi_avatar.dart';
 import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/ui/molecules/omi_empty_state.dart';
 import 'package:omi/ui/molecules/omi_panel_header.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/widgets/transcript.dart';
 import 'widgets/desktop_action_items_section.dart';
 import 'widgets/desktop_conversation_summary.dart';
+import 'widgets/desktop_name_speaker_dialog.dart';
 
 class DesktopConversationDetailPage extends StatefulWidget {
   final ServerConversation conversation;
@@ -345,6 +348,41 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
           borderRadius: BorderRadius.circular(16),
           child: Column(
             children: [
+              // Section header
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
+                  border: Border(
+                    bottom: BorderSide(
+                      color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+                      width: 1,
+                    ),
+                  ),
+                ),
+                child: const Row(
+                  children: [
+                    OmiIconButton(
+                      icon: FontAwesomeIcons.fileLines,
+                      style: OmiIconButtonStyle.neutral,
+                      size: 24,
+                      iconSize: 12,
+                      borderRadius: 6,
+                      onPressed: null,
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      'Conversation Details',
+                      style: TextStyle(
+                        color: ResponsiveHelper.textPrimary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
               // Content
               Expanded(
                 child: SingleChildScrollView(
@@ -448,6 +486,7 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
                             canDisplaySeconds: true,
                             isConversationDetail: true,
                             bottomMargin: 20,
+                            editSegment: _showSpeakerAssignmentDialog,
                           )
                         : _buildEmptyTranscript(),
                   ),
@@ -518,6 +557,54 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
+    );
+  }
+
+  void _showSpeakerAssignmentDialog(String segmentId, int speakerId) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return DesktopNameSpeakerDialog(
+          speakerId: speakerId,
+          segmentId: segmentId,
+          segments: widget.conversation.transcriptSegments,
+          onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
+            MixpanelManager().taggedSegment(personId == 'user' ? 'User' : 'User Person');
+            String finalPersonId = personId;
+
+            // Create person if new
+            if (finalPersonId.isEmpty) {
+              final peopleProvider = Provider.of<PeopleProvider>(context, listen: false);
+              final newPerson = await peopleProvider.createPersonProvider(personName);
+              if (newPerson != null) {
+                finalPersonId = newPerson.id;
+              } else {
+                return;
+              }
+            }
+
+            final isUser = finalPersonId == 'user';
+            await assignBulkConversationTranscriptSegments(
+              widget.conversation.id,
+              segmentIds,
+              isUser: isUser,
+              personId: isUser ? null : finalPersonId,
+            );
+
+            // Update local state
+            if (mounted) {
+              setState(() {
+                for (var segment in widget.conversation.transcriptSegments) {
+                  if (segmentIds.contains(segment.id)) {
+                    segment.isUser = isUser;
+                    segment.personId = isUser ? null : finalPersonId;
+                  }
+                }
+              });
+            }
+          },
+        );
+      },
     );
   }
 }
