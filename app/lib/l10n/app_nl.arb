@@ -1,6 +1,5 @@
 {
   "@@locale": "nl",
-  "@@last_modified": "2024-12-26",
   "appTitle": "Omi",
   "conversationTab": "Gesprek",
   "transcriptTab": "Transcript",
@@ -35,28 +34,12 @@
   "loading": "Laden...",
   "loadingDuration": "Duur laden...",
   "secondsCount": "{count} seconden",
-  "@secondsCount": {
-    "placeholders": {
-      "count": {
-        "type": "int",
-        "example": "30"
-      }
-    }
-  },
   "people": "Mensen",
   "addNewPerson": "Nieuwe persoon toevoegen",
   "editPerson": "Persoon bewerken",
   "createPersonHint": "Maak een nieuwe persoon aan en train Omi om hun stem te herkennen!",
   "speechProfile": "Spraakprofiel",
   "sampleNumber": "Monster {number}",
-  "@sampleNumber": {
-    "placeholders": {
-      "number": {
-        "type": "int",
-        "example": "1"
-      }
-    }
-  },
   "settings": "Instellingen",
   "language": "Taal",
   "selectLanguage": "Selecteer taal",
@@ -91,23 +74,9 @@
   "starConversationHint": "Om een gesprek als favoriet te markeren, open het en tik op het stericoon in de header.",
   "searchConversations": "Zoek gesprekken...",
   "selectedCount": "{count} geselecteerd",
-  "@selectedCount": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "merge": "Samenvoegen",
   "mergeConversations": "Gesprekken samenvoegen",
   "mergeConversationsMessage": "Dit combineert {count} gesprekken tot één. Alle inhoud wordt samengevoegd en opnieuw gegenereerd.",
-  "@mergeConversationsMessage": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "mergingInBackground": "Samenvoegen op de achtergrond. Dit kan even duren.",
   "failedToStartMerge": "Kan samenvoegen niet starten",
   "askAnything": "Vraag wat je wilt",
@@ -265,89 +234,21 @@
   "unlimitedPlan": "Onbeperkt abonnement",
   "managePlan": "Abonnement beheren",
   "cancelAtPeriodEnd": "Je abonnement wordt geannuleerd op {date}.",
-  "@cancelAtPeriodEnd": {
-    "placeholders": {
-      "date": {
-        "type": "String",
-        "example": "1 jan 2026"
-      }
-    }
-  },
   "renewsOn": "Je abonnement wordt verlengd op {date}.",
-  "@renewsOn": {
-    "placeholders": {
-      "date": {
-        "type": "String",
-        "example": "1 jan 2026"
-      }
-    }
-  },
   "basicPlan": "Gratis abonnement",
   "usageLimitMessage": "{used} van {limit} min gebruikt",
-  "@usageLimitMessage": {
-    "placeholders": {
-      "used": {
-        "type": "String",
-        "example": "100"
-      },
-      "limit": {
-        "type": "int",
-        "example": "60"
-      }
-    }
-  },
   "upgrade": "Upgraden",
   "upgradeToUnlimited": "Upgraden naar onbeperkt",
   "basicPlanDesc": "Je abonnement bevat {limit} gratis minuten per maand. Upgrade naar onbeperkt.",
-  "@basicPlanDesc": {
-    "placeholders": {
-      "limit": {
-        "type": "int",
-        "example": "60"
-      }
-    }
-  },
   "shareStatsMessage": "Ik deel mijn Omi-statistieken! (omi.me - je altijd-aan AI-assistent)",
   "sharePeriodToday": "Vandaag heeft Omi:",
   "sharePeriodMonth": "Deze maand heeft Omi:",
   "sharePeriodYear": "Dit jaar heeft Omi:",
   "sharePeriodAllTime": "Tot nu toe heeft Omi:",
   "shareStatsListened": "🎧 {minutes} minuten geluisterd",
-  "@shareStatsListened": {
-    "placeholders": {
-      "minutes": {
-        "type": "String",
-        "example": "120"
-      }
-    }
-  },
   "shareStatsWords": "🧠 {words} woorden begrepen",
-  "@shareStatsWords": {
-    "placeholders": {
-      "words": {
-        "type": "String",
-        "example": "5000"
-      }
-    }
-  },
   "shareStatsInsights": "✨ {count} inzichten gegeven",
-  "@shareStatsInsights": {
-    "placeholders": {
-      "count": {
-        "type": "String",
-        "example": "10"
-      }
-    }
-  },
   "shareStatsMemories": "📚 {count} herinneringen onthouden",
-  "@shareStatsMemories": {
-    "placeholders": {
-      "count": {
-        "type": "String",
-        "example": "5"
-      }
-    }
-  },
   "debugLogs": "Debuglogboeken",
   "debugLogsAutoDelete": "Automatisch verwijderd na 3 dagen.",
   "debugLogsDesc": "Helpt bij het diagnosticeren van problemen",
@@ -366,13 +267,6 @@
   "deleteKnowledgeGraphMessage": "Dit verwijdert alle afgeleide kennisgraafgegevens (knooppunten en verbindingen). Je originele herinneringen blijven veilig. De graaf wordt na verloop van tijd of bij het volgende verzoek opnieuw opgebouwd.",
   "knowledgeGraphDeleted": "Kennisgraaf verwijderd",
   "deleteGraphFailed": "Verwijderen graaf mislukt: {error}",
-  "@deleteGraphFailed": {
-    "placeholders": {
-      "error": {
-        "type": "String"
-      }
-    }
-  },
   "deleteKnowledgeGraph": "Kennisgraaf verwijderen",
   "deleteKnowledgeGraphDesc": "Alle knooppunten en verbindingen wissen",
   "mcp": "MCP",
@@ -406,49 +300,9 @@
   "insights": "Inzichten",
   "memories": "Herinneringen",
   "minsUsedThisMonth": "{used} van {limit} min gebruikt deze maand",
-  "@minsUsedThisMonth": {
-    "placeholders": {
-      "used": {
-        "type": "String"
-      },
-      "limit": {
-        "type": "int"
-      }
-    }
-  },
   "wordsUsedThisMonth": "{used} van {limit} woorden gebruikt deze maand",
-  "@wordsUsedThisMonth": {
-    "placeholders": {
-      "used": {
-        "type": "String"
-      },
-      "limit": {
-        "type": "String"
-      }
-    }
-  },
   "insightsUsedThisMonth": "{used} van {limit} inzichten verkregen deze maand",
-  "@insightsUsedThisMonth": {
-    "placeholders": {
-      "used": {
-        "type": "String"
-      },
-      "limit": {
-        "type": "String"
-      }
-    }
-  },
   "memoriesUsedThisMonth": "{used} van {limit} herinneringen aangemaakt deze maand",
-  "@memoriesUsedThisMonth": {
-    "placeholders": {
-      "used": {
-        "type": "String"
-      },
-      "limit": {
-        "type": "String"
-      }
-    }
-  },
   "visibility": "Zichtbaarheid",
   "visibilitySubtitle": "Bepaal welke gesprekken in je lijst verschijnen",
   "showShortConversations": "Korte gesprekken tonen",
@@ -460,13 +314,6 @@
   "durationThreshold": "Duurdrempel",
   "durationThresholdDesc": "Gesprekken korter dan dit verbergen",
   "minLabel": "{count} min",
-  "@minLabel": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "customVocabularyTitle": "Aangepaste woordenlijst",
   "addWords": "Woorden toevoegen",
   "addWordsDesc": "Namen, termen of ongewone woorden",
@@ -476,54 +323,12 @@
   "chatToolsFooter": "Verbind je apps om gegevens en statistieken in de chat te bekijken.",
   "completeAuthInBrowser": "Voltooi de authenticatie in je browser. Keer daarna terug naar de app.",
   "failedToStartAuth": "Kan {appName}-authenticatie niet starten",
-  "@failedToStartAuth": {
-    "placeholders": {
-      "appName": {
-        "type": "String"
-      }
-    }
-  },
   "disconnectAppTitle": "{appName} loskoppelen?",
-  "@disconnectAppTitle": {
-    "placeholders": {
-      "appName": {
-        "type": "String"
-      }
-    }
-  },
   "disconnectAppMessage": "Weet je zeker dat je de verbinding met {appName} wilt verbreken? Je kunt altijd opnieuw verbinden.",
-  "@disconnectAppMessage": {
-    "placeholders": {
-      "appName": {
-        "type": "String"
-      }
-    }
-  },
   "disconnectedFrom": "Losgekoppeld van {appName}",
-  "@disconnectedFrom": {
-    "placeholders": {
-      "appName": {
-        "type": "String"
-      }
-    }
-  },
   "failedToDisconnect": "Loskoppelen mislukt",
   "connectTo": "Verbinden met {appName}",
-  "@connectTo": {
-    "placeholders": {
-      "appName": {
-        "type": "String"
-      }
-    }
-  },
   "authAccessMessage": "Je moet Omi autoriseren om toegang te krijgen tot je {appName}-gegevens. Dit opent je browser voor authenticatie.",
-  "@authAccessMessage": {
-    "placeholders": {
-      "appName": {
-        "type": "String"
-      }
-    }
-  },
   "continueAction": "Doorgaan",
   "languageTitle": "Taal",
   "primaryLanguage": "Primaire taal",
@@ -574,13 +379,6 @@
   "tomorrow": "Morgen",
   "googleCalendarComingSoon": "Google Agenda-integratie komt binnenkort!",
   "connectedAsUser": "Verbonden als gebruiker: {userId}",
-  "@connectedAsUser": {
-    "placeholders": {
-      "userId": {
-        "type": "String"
-      }
-    }
-  },
   "defaultWorkspace": "Standaard werkruimte",
   "tasksCreatedInWorkspace": "Taken worden aangemaakt in deze werkruimte",
   "defaultProjectOptional": "Standaardproject (optioneel)",
@@ -599,13 +397,6 @@
   "timeout4HoursDesc": "Gesprek beëindigen na 4 uur stilte",
   "conversationEndAfterHours": "Gesprekken eindigen nu na 4 uur stilte",
   "conversationEndAfterMinutes": "Gesprekken eindigen nu na {minutes} minuut/minuten stilte",
-  "@conversationEndAfterMinutes": {
-    "placeholders": {
-      "minutes": {
-        "type": "int"
-      }
-    }
-  },
   "tellUsPrimaryLanguage": "Vertel ons je primaire taal",
   "languageForTranscription": "Stel je taal in voor scherpere transcripties en een gepersonaliseerde ervaring.",
   "singleLanguageModeInfo": "Enkeltaalmodus is ingeschakeld. Vertaling is uitgeschakeld voor hogere nauwkeurigheid.",
@@ -613,55 +404,13 @@
   "noLanguagesFound": "Geen talen gevonden",
   "skip": "Overslaan",
   "languageSetTo": "Taal ingesteld op {language}",
-  "@languageSetTo": {
-    "placeholders": {
-      "language": {
-        "type": "String"
-      }
-    }
-  },
   "failedToSetLanguage": "Kan taal niet instellen",
   "appSettings": "{appName}-instellingen",
-  "@appSettings": {
-    "placeholders": {
-      "appName": {
-        "type": "String"
-      }
-    }
-  },
   "disconnectFromApp": "Loskoppelen van {appName}?",
-  "@disconnectFromApp": {
-    "placeholders": {
-      "appName": {
-        "type": "String"
-      }
-    }
-  },
   "disconnectFromAppDesc": "Dit verwijdert je {appName}-authenticatie. Je moet opnieuw verbinden om het weer te gebruiken.",
-  "@disconnectFromAppDesc": {
-    "placeholders": {
-      "appName": {
-        "type": "String"
-      }
-    }
-  },
   "connectedToApp": "Verbonden met {appName}",
-  "@connectedToApp": {
-    "placeholders": {
-      "appName": {
-        "type": "String"
-      }
-    }
-  },
   "account": "Account",
   "actionItemsSyncedTo": "Je actiepunten worden gesynchroniseerd met je {appName}-account",
-  "@actionItemsSyncedTo": {
-    "placeholders": {
-      "appName": {
-        "type": "String"
-      }
-    }
-  },
   "defaultSpace": "Standaardruimte",
   "selectSpaceInWorkspace": "Selecteer een ruimte in je werkruimte",
   "noSpacesInWorkspace": "Geen ruimtes gevonden in deze werkruimte",
@@ -669,13 +418,6 @@
   "tasksAddedToList": "Taken worden toegevoegd aan deze lijst",
   "noListsInSpace": "Geen lijsten gevonden in deze ruimte",
   "failedToLoadRepos": "Laden van repositories mislukt: {error}",
-  "@failedToLoadRepos": {
-    "placeholders": {
-      "error": {
-        "type": "String"
-      }
-    }
-  },
   "defaultRepoSaved": "Standaard repository opgeslagen",
   "failedToSaveDefaultRepo": "Opslaan van standaard repository mislukt",
   "defaultRepository": "Standaard repository",
@@ -683,85 +425,22 @@
   "noReposFound": "Geen repositories gevonden",
   "private": "Privé",
   "updatedDate": "Bijgewerkt {date}",
-  "@updatedDate": {
-    "placeholders": {
-      "date": {
-        "type": "String"
-      }
-    }
-  },
   "yesterday": "Gisteren",
   "daysAgo": "{count} dagen geleden",
-  "@daysAgo": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "oneWeekAgo": "1 week geleden",
   "weeksAgo": "{count} weken geleden",
-  "@weeksAgo": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "oneMonthAgo": "1 maand geleden",
   "monthsAgo": "{count} maanden geleden",
-  "@monthsAgo": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "issuesCreatedInRepo": "Issues worden aangemaakt in je standaard repository",
   "taskIntegrations": "Taakintegraties",
   "configureSettings": "Instellingen configureren",
   "completeAuthBrowser": "Voltooi de authenticatie in je browser. Keer daarna terug naar de app.",
   "failedToStartAppAuth": "Kan {appName}-authenticatie niet starten",
-  "@failedToStartAppAuth": {
-    "placeholders": {
-      "appName": {
-        "type": "String"
-      }
-    }
-  },
   "connectToAppTitle": "Verbinden met {appName}",
-  "@connectToAppTitle": {
-    "placeholders": {
-      "appName": {
-        "type": "String"
-      }
-    }
-  },
   "authorizeOmiForTasks": "Je moet Omi autoriseren om taken aan te maken in je {appName}-account. Dit opent je browser voor authenticatie.",
-  "@authorizeOmiForTasks": {
-    "placeholders": {
-      "appName": {
-        "type": "String"
-      }
-    }
-  },
   "continueButton": "Doorgaan",
   "appIntegration": "{appName}-integratie",
-  "@appIntegration": {
-    "placeholders": {
-      "appName": {
-        "type": "String"
-      }
-    }
-  },
   "integrationComingSoon": "Integratie met {appName} komt binnenkort! We werken hard om je meer taakbeheeropties te bieden.",
-  "@integrationComingSoon": {
-    "placeholders": {
-      "appName": {
-        "type": "String"
-      }
-    }
-  },
   "gotIt": "Begrepen",
   "tasksExportedOneApp": "Taken kunnen naar één app tegelijk worden geëxporteerd.",
   "completeYourUpgrade": "Voltooi je upgrade",
@@ -778,13 +457,6 @@
   "apiKeyRequired": "API-sleutel is vereist",
   "invalidJsonConfig": "Ongeldige JSON-configuratie",
   "errorSaving": "Fout bij opslaan: {error}",
-  "@errorSaving": {
-    "placeholders": {
-      "error": {
-        "type": "String"
-      }
-    }
-  },
   "configCopiedToClipboard": "Configuratie gekopieerd naar klembord",
   "pasteJsonConfig": "Plak je JSON-configuratie hieronder:",
   "addApiKeyAfterImport": "Je moet je eigen API-sleutel toevoegen na het importeren",
@@ -792,21 +464,7 @@
   "import": "Importeren",
   "invalidProviderInConfig": "Ongeldige provider in configuratie",
   "importedConfig": "{providerName}-configuratie geïmporteerd",
-  "@importedConfig": {
-    "placeholders": {
-      "providerName": {
-        "type": "String"
-      }
-    }
-  },
   "invalidJson": "Ongeldige JSON: {error}",
-  "@invalidJson": {
-    "placeholders": {
-      "error": {
-        "type": "String"
-      }
-    }
-  },
   "provider": "Provider",
   "live": "Live",
   "onDevice": "Op apparaat",
@@ -829,16 +487,6 @@
   "logsCopied": "Logboeken gekopieerd",
   "noLogsYet": "Nog geen logboeken. Start een opname om aangepaste STT-activiteit te zien.",
   "deviceUsesCodec": "{deviceName} gebruikt {codecReason}. Omi wordt gebruikt.",
-  "@deviceUsesCodec": {
-    "placeholders": {
-      "deviceName": {
-        "type": "String"
-      },
-      "codecReason": {
-        "type": "String"
-      }
-    }
-  },
   "omiTranscription": "Omi-transcriptie",
   "bestInClassTranscription": "Beste transcriptie zonder configuratie",
   "instantSpeakerLabels": "Directe sprekerslabels",
@@ -881,22 +529,8 @@
   "createApp": "App maken",
   "searchingForDevices": "Zoeken naar apparaten...",
   "devicesFoundNearby": "{count} {count, plural, =1{APPARAAT} other{APPARATEN}} GEVONDEN IN DE BUURT",
-  "@devicesFoundNearby": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "pairingSuccessful": "KOPPELEN SUCCESVOL",
   "errorConnectingAppleWatch": "Fout bij verbinden met Apple Watch: {error}",
-  "@errorConnectingAppleWatch": {
-    "placeholders": {
-      "error": {
-        "type": "String"
-      }
-    }
-  },
   "dontShowAgain": "Niet meer weergeven",
   "iUnderstand": "Ik begrijp het",
   "enableBluetooth": "Bluetooth inschakelen",
@@ -962,21 +596,7 @@
   "recordingStartedSuccessfully": "Opname succesvol gestart!",
   "permissionNotGrantedYet": "Toestemming nog niet verleend. Zorg dat je microfoontoestemming hebt gegeven en de app op je horloge hebt heropend.",
   "errorRequestingPermission": "Fout bij het vragen van toestemming: {error}",
-  "@errorRequestingPermission": {
-    "placeholders": {
-      "error": {
-        "type": "String"
-      }
-    }
-  },
   "errorStartingRecording": "Fout bij het starten van opname: {error}",
-  "@errorStartingRecording": {
-    "placeholders": {
-      "error": {
-        "type": "String"
-      }
-    }
-  },
   "selectPrimaryLanguage": "Selecteer je primaire taal",
   "languageBenefits": "Stel je taal in voor scherpere transcripties en een gepersonaliseerde ervaring",
   "whatsYourPrimaryLanguage": "Wat is je primaire taal?",
@@ -997,35 +617,8 @@
   "deleteActionItemMessage": "Weet u zeker dat u dit actiepunt wilt verwijderen?",
   "deleteSelectedItemsTitle": "Geselecteerde items verwijderen",
   "deleteSelectedItemsMessage": "Weet je zeker dat je {count} geselecteerde actiepunt(en) wilt verwijderen?",
-  "@deleteSelectedItemsMessage": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      },
-      "s": {
-        "type": "String"
-      }
-    }
-  },
   "actionItemDeletedResult": "Actiepunt \"{description}\" verwijderd",
-  "@actionItemDeletedResult": {
-    "placeholders": {
-      "description": {
-        "type": "String"
-      }
-    }
-  },
   "itemsDeletedResult": "{count} actiepunt(en) verwijderd",
-  "@itemsDeletedResult": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      },
-      "s": {
-        "type": "String"
-      }
-    }
-  },
   "failedToDeleteItem": "Kan actiepunt niet verwijderen",
   "failedToDeleteItems": "Kan items niet verwijderen",
   "failedToDeleteSomeItems": "Kan sommige items niet verwijderen",
@@ -1034,19 +627,9 @@
   "autoExtractionFeature": "Automatisch geëxtraheerd uit gesprekken",
   "editSwipeFeature": "Tik om te bewerken, veeg om te voltooien of te verwijderen",
   "itemsSelected": "{count} geselecteerd",
-  "@itemsSelected": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "selectAll": "Alles selecteren",
   "deleteSelected": "Geselecteerde verwijderen",
   "searchMemories": "Herinneringen zoeken...",
-  "@searchMemories": {
-    "description": "Search input hint text"
-  },
   "memoryDeleted": "Herinnering verwijderd.",
   "undo": "Ongedaan maken",
   "noMemoriesYet": "🧠 Nog geen herinneringen",
@@ -1065,13 +648,6 @@
   "memoryManagement": "Geheugenbeheer",
   "filterMemories": "Herinneringen filteren",
   "totalMemoriesCount": "Je hebt {count} herinneringen in totaal",
-  "@totalMemoriesCount": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "publicMemories": "Openbare herinneringen",
   "privateMemories": "Privé herinneringen",
   "makeAllPrivate": "Alle herinneringen privé maken",
@@ -1396,149 +972,31 @@
   "failedToGenerateConversationLink": "Kan geen gesprekslink genereren",
   "failedToGenerateShareLink": "Kan geen deellink genereren",
   "reloadingConversations": "Gesprekken opnieuw laden...",
-  "@reloadingConversations": {
-    "description": "Loading message when refreshing conversations"
-  },
-  "@welcomeBack": {
-    "description": "Welcome message with user name",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
   "user": "Gebruiker",
-  "@user": {
-    "description": "Default fallback name when user name is empty"
-  },
   "starred": "Met ster",
-  "@starred": {
-    "description": "Label for starred filter button"
-  },
   "date": "Datum",
-  "@date": {
-    "description": "Label for date filter button"
-  },
   "noResultsFound": "Geen resultaten gevonden",
-  "@noResultsFound": {
-    "description": "Empty state title when search has no results"
-  },
   "tryAdjustingSearchTerms": "Probeer je zoektermen aan te passen",
-  "@tryAdjustingSearchTerms": {
-    "description": "Empty state message for search with no results"
-  },
-  "@noStarredConversations": {
-    "description": "Empty state title when no starred conversations"
-  },
   "starConversationsToFindQuickly": "Geef gesprekken een ster om ze hier snel te vinden",
-  "@starConversationsToFindQuickly": {
-    "description": "Empty state message for starred filter"
-  },
   "noConversationsOnDate": "Geen gesprekken op {date}",
-  "@noConversationsOnDate": {
-    "description": "Empty state title when no conversations on selected date",
-    "placeholders": {
-      "date": {
-        "type": "String"
-      }
-    }
-  },
   "trySelectingDifferentDate": "Probeer een andere datum te selecteren",
-  "@trySelectingDifferentDate": {
-    "description": "Empty state message for date filter"
-  },
   "conversations": "Gesprekken",
-  "@conversations": {
-    "description": "Navigation label for conversations page"
-  },
   "chat": "Chat",
-  "@chat": {
-    "description": "Navigation label for chat page"
-  },
-  "@memories": {
-    "description": "Navigation label for memories page"
-  },
   "actions": "Acties",
-  "@actions": {
-    "description": "Navigation label for actions page"
-  },
-  "@apps": {
-    "description": "Navigation label for apps page"
-  },
   "syncAvailable": "Synchronisatie beschikbaar",
-  "@syncAvailable": {
-    "description": "Label for sync notification"
-  },
-  "@settings": {
-    "description": "Bottom navigation label for settings"
-  },
   "referAFriend": "Verwijs een vriend",
-  "@referAFriend": {
-    "description": "Bottom navigation label for referral program"
-  },
   "help": "Hulp",
-  "@help": {
-    "description": "Bottom navigation label for help"
-  },
   "pro": "Pro",
-  "@pro": {
-    "description": "Badge label for pro/unlimited users"
-  },
   "upgradeToPro": "Upgraden naar Pro",
-  "@upgradeToPro": {
-    "description": "Subscription banner button text"
-  },
   "getOmiDevice": "Ontvang Omi-apparaat",
-  "@getOmiDevice": {
-    "description": "Widget title for device promotion"
-  },
   "wearableAiCompanion": "Draagbare AI-metgezel",
-  "@wearableAiCompanion": {
-    "description": "Widget subtitle for device promotion"
-  },
   "loadingMemories": "Herinneringen laden...",
-  "@loadingMemories": {
-    "description": "Loading overlay message when reloading memories"
-  },
   "allMemories": "Alle herinneringen",
-  "@allMemories": {
-    "description": "Filter option to show all memories"
-  },
   "aboutYou": "Over jou",
-  "@aboutYou": {
-    "description": "Filter option for system memories"
-  },
-  "@insights": {
-    "description": "Filter option for interesting memories"
-  },
   "manual": "Handmatig",
-  "@manual": {
-    "description": "Filter option for manual memories"
-  },
-  "@all": {
-    "description": "Short filter label for all memories"
-  },
   "loadingYourMemories": "Je herinneringen laden...",
-  "@loadingYourMemories": {
-    "description": "Loading state message"
-  },
-  "@noMemoriesYet": {
-    "description": "Empty state title when no memories"
-  },
-  "@noMemoriesFound": {
-    "description": "Empty state title when search/filter has no results"
-  },
   "createYourFirstMemory": "Maak je eerste herinnering om te beginnen",
-  "@createYourFirstMemory": {
-    "description": "Empty state message when no memories"
-  },
   "tryAdjustingFilter": "Probeer je zoekopdracht of filter aan te passen",
-  "@tryAdjustingFilter": {
-    "description": "Empty state message when filter has no results"
-  },
-  "@addYourFirstMemory": {
-    "description": "Button text in empty state"
-  },
   "whatWouldYouLikeToRemember": "Wat wil je onthouden?",
   "category": "Categorie",
   "public": "Openbaar",
@@ -1581,13 +1039,6 @@
   "nameMustBeAtLeast2Characters": "Naam moet minstens 2 tekens bevatten",
   "tellUsHowYouWouldLikeToBeAddressed": "Vertel ons hoe u aangesproken wilt worden. Dit helpt uw Omi-ervaring te personaliseren.",
   "charactersCount": "{count} tekens",
-  "@charactersCount": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "enableFeaturesForBestExperience": "Schakel functies in voor de beste Omi-ervaring op uw apparaat.",
   "microphoneAccess": "Microfoontoegang",
   "recordAudioConversations": "Audiogesprekken opnemen",
@@ -1970,143 +1421,38 @@
   "freePlan": "Gratis abonnement",
   "configure": "Configureren",
   "privacyInformation": "Privacyinformatie",
-  "@privacyInformation": {
-    "description": "Privacy page - privacyInformation"
-  },
   "yourPrivacyMattersToUs": "Uw privacy is belangrijk voor ons",
-  "@yourPrivacyMattersToUs": {
-    "description": "Privacy page - yourPrivacyMattersToUs"
-  },
   "privacyIntroText": "Bij Omi nemen we uw privacy zeer serieus. We willen transparant zijn over de gegevens die we verzamelen en hoe we deze gebruiken. Dit moet u weten:",
-  "@privacyIntroText": {
-    "description": "Privacy page - privacyIntroText"
-  },
   "whatWeTrack": "Wat we bijhouden",
-  "@whatWeTrack": {
-    "description": "Privacy page - whatWeTrack"
-  },
   "anonymityAndPrivacy": "Anonimiteit en privacy",
-  "@anonymityAndPrivacy": {
-    "description": "Privacy page - anonymityAndPrivacy"
-  },
   "optInAndOptOutOptions": "Opt-in en opt-out opties",
-  "@optInAndOptOutOptions": {
-    "description": "Privacy page - optInAndOptOutOptions"
-  },
   "ourCommitment": "Onze toezegging",
-  "@ourCommitment": {
-    "description": "Privacy page - ourCommitment"
-  },
   "commitmentText": "We zijn toegewijd om de verzamelde gegevens alleen te gebruiken om Omi een beter product voor u te maken. Uw privacy en vertrouwen zijn van het grootste belang voor ons.",
-  "@commitmentText": {
-    "description": "Privacy page - commitmentText"
-  },
   "thankYouText": "Bedankt dat u een gewaardeerde gebruiker van Omi bent. Als u vragen of zorgen heeft, neem dan gerust contact met ons op via team@basedhardware.com.",
-  "@thankYouText": {
-    "description": "Privacy page - thankYouText"
-  },
   "wifiSyncSettings": "WiFi-synchronisatie-instellingen",
-  "@wifiSyncSettings": {
-    "description": "WiFi sync settings - wifiSyncSettings"
-  },
   "enterHotspotCredentials": "Voer de hotspot-inloggegevens van uw telefoon in",
-  "@enterHotspotCredentials": {
-    "description": "WiFi sync settings - enterHotspotCredentials"
-  },
   "wifiSyncUsesHotspot": "WiFi-sync gebruikt uw telefoon als hotspot. Vind de naam en het wachtwoord in Instellingen > Persoonlijke hotspot.",
-  "@wifiSyncUsesHotspot": {
-    "description": "WiFi sync settings - wifiSyncUsesHotspot"
-  },
   "hotspotNameSsid": "Hotspotnaam (SSID)",
-  "@hotspotNameSsid": {
-    "description": "WiFi sync settings - hotspotNameSsid"
-  },
   "exampleIphoneHotspot": "bijv. iPhone Hotspot",
-  "@exampleIphoneHotspot": {
-    "description": "WiFi sync settings - exampleIphoneHotspot"
-  },
   "password": "Wachtwoord",
-  "@password": {
-    "description": "WiFi sync settings - password"
-  },
   "enterHotspotPassword": "Voer hotspot-wachtwoord in",
-  "@enterHotspotPassword": {
-    "description": "WiFi sync settings - enterHotspotPassword"
-  },
   "saveCredentials": "Inloggegevens opslaan",
-  "@saveCredentials": {
-    "description": "WiFi sync settings - saveCredentials"
-  },
   "clearCredentials": "Inloggegevens wissen",
-  "@clearCredentials": {
-    "description": "WiFi sync settings - clearCredentials"
-  },
   "pleaseEnterHotspotName": "Voer een hotspotnaam in",
-  "@pleaseEnterHotspotName": {
-    "description": "WiFi sync settings - pleaseEnterHotspotName"
-  },
   "wifiCredentialsSaved": "WiFi-inloggegevens opgeslagen",
-  "@wifiCredentialsSaved": {
-    "description": "WiFi sync settings - wifiCredentialsSaved"
-  },
   "wifiCredentialsCleared": "WiFi-inloggegevens gewist",
-  "@wifiCredentialsCleared": {
-    "description": "WiFi sync settings - wifiCredentialsCleared"
-  },
   "summaryGeneratedForDate": "Samenvatting gegenereerd voor {date}",
-  "@summaryGeneratedForDate": {
-    "description": "Daily summary settings - summaryGeneratedForDate",
-    "placeholders": {
-      "date": {
-        "type": "String",
-        "example": "1/15/2026"
-      }
-    }
-  },
   "failedToGenerateSummaryCheckConversations": "Kon samenvatting niet genereren. Zorg ervoor dat u gesprekken heeft voor die dag.",
-  "@failedToGenerateSummaryCheckConversations": {
-    "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
-  },
   "summaryNotFound": "Samenvatting niet gevonden",
-  "@summaryNotFound": {
-    "description": "Daily summary detail - summaryNotFound"
-  },
   "yourDaysJourney": "Uw dagreis",
-  "@yourDaysJourney": {
-    "description": "Daily summary detail - yourDaysJourney"
-  },
   "highlights": "Hoogtepunten",
-  "@highlights": {
-    "description": "Daily summary detail - highlights"
-  },
   "unresolvedQuestions": "Onopgeloste vragen",
-  "@unresolvedQuestions": {
-    "description": "Daily summary detail - unresolvedQuestions"
-  },
   "decisions": "Beslissingen",
-  "@decisions": {
-    "description": "Daily summary detail - decisions"
-  },
   "learnings": "Inzichten",
-  "@learnings": {
-    "description": "Daily summary detail - learnings"
-  },
   "autoDeletesAfterThreeDays": "Automatisch verwijderd na 3 dagen.",
-  "@autoDeletesAfterThreeDays": {
-    "description": "Developer settings - autoDeletesAfterThreeDays"
-  },
   "knowledgeGraphDeletedSuccessfully": "Kennisgrafiek succesvol verwijderd",
-  "@knowledgeGraphDeletedSuccessfully": {
-    "description": "Developer settings - knowledgeGraphDeletedSuccessfully"
-  },
   "exportStartedMayTakeFewSeconds": "Export gestart. Dit kan enkele seconden duren...",
-  "@exportStartedMayTakeFewSeconds": {
-    "description": "Developer settings - exportStartedMayTakeFewSeconds"
-  },
   "knowledgeGraphDeleteDescription": "Dit verwijdert alle afgeleide kennisgraafgegevens (knooppunten en verbindingen). Uw originele herinneringen blijven veilig. De grafiek wordt in de loop van de tijd of bij het volgende verzoek opnieuw opgebouwd.",
-  "@knowledgeGraphDeleteDescription": {
-    "description": "Developer settings - knowledgeGraphDeleteDescription"
-  },
   "configureDailySummaryDigest": "Configureer je dagelijkse taaknoverzicht",
   "accessesDataTypes": "Toegang tot {dataTypes}",
   "triggeredByType": "getriggerd door {triggerType}",

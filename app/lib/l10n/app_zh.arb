@@ -34,26 +34,12 @@
   "loading": "加载中...",
   "loadingDuration": "加载持续时间...",
   "secondsCount": "{count} 秒",
-  "@secondsCount": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "people": "人员",
   "addNewPerson": "添加新人员",
   "editPerson": "编辑人员",
   "createPersonHint": "创建一个新人员并训练 Omi 识别他们的声音！",
   "speechProfile": "语音配置文件",
   "sampleNumber": "样本 {number}",
-  "@sampleNumber": {
-    "placeholders": {
-      "number": {
-        "type": "int"
-      }
-    }
-  },
   "settings": "设置",
   "language": "语言",
   "selectLanguage": "选择语言",
@@ -88,23 +74,9 @@
   "starConversationHint": "要加星标，请打开对话并点击顶部的星星图标。",
   "searchConversations": "搜索对话...",
   "selectedCount": "已选择 {count} 项",
-  "@selectedCount": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "merge": "合并",
   "mergeConversations": "合并对话",
   "mergeConversationsMessage": "这将把 {count} 个对话合并为一个。所有内容将被合并并重新生成。",
-  "@mergeConversationsMessage": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "mergingInBackground": "后台合并中。这可能需要一点时间。",
   "failedToStartMerge": "无法开始合并",
   "askAnything": "随便问问",
@@ -711,29 +683,8 @@
   "appLanguage": "应用语言",
   "completeAuthBrowser": "请在浏览器中完成身份验证。完成后，返回应用程序。",
   "failedToStartAppAuth": "无法启动 {appName} 身份验证",
-  "@failedToStartAppAuth": {
-    "placeholders": {
-      "appName": {
-        "type": "String"
-      }
-    }
-  },
   "connectToAppTitle": "连接到 {appName}",
-  "@connectToAppTitle": {
-    "placeholders": {
-      "appName": {
-        "type": "String"
-      }
-    }
-  },
   "authorizeOmiForTasks": "您需要授权 Omi 在您的 {appName} 帐户中创建任务。这将打开您的浏览器进行身份验证。",
-  "@authorizeOmiForTasks": {
-    "placeholders": {
-      "appName": {
-        "type": "String"
-      }
-    }
-  },
   "continueButton": "继续",
   "appInterfaceSectionTitle": "应用界面",
   "speechTranscriptionSectionTitle": "语音与转录",
@@ -1022,152 +973,31 @@
   "failedToGenerateConversationLink": "生成对话链接失败",
   "failedToGenerateShareLink": "生成分享链接失败",
   "reloadingConversations": "重新加载对话...",
-  "@reloadingConversations": {
-    "description": "Loading message when refreshing conversations"
-  },
-  "@welcomeBack": {
-    "description": "Welcome message with user name",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
   "user": "用户",
-  "@user": {
-    "description": "Default fallback name when user name is empty"
-  },
   "starred": "已收藏",
-  "@starred": {
-    "description": "Label for starred filter button"
-  },
   "date": "日期",
-  "@date": {
-    "description": "Label for date filter button"
-  },
   "noResultsFound": "未找到结果",
-  "@noResultsFound": {
-    "description": "Empty state title when search has no results"
-  },
   "tryAdjustingSearchTerms": "尝试调整您的搜索词",
-  "@tryAdjustingSearchTerms": {
-    "description": "Empty state message for search with no results"
-  },
-  "@noStarredConversations": {
-    "description": "Empty state title when no starred conversations"
-  },
   "starConversationsToFindQuickly": "为对话加星标以便在此快速找到它们",
-  "@starConversationsToFindQuickly": {
-    "description": "Empty state message for starred filter"
-  },
   "noConversationsOnDate": "{date}没有对话",
-  "@noConversationsOnDate": {
-    "description": "Empty state title when no conversations on selected date",
-    "placeholders": {
-      "date": {
-        "type": "String"
-      }
-    }
-  },
   "trySelectingDifferentDate": "尝试选择其他日期",
-  "@trySelectingDifferentDate": {
-    "description": "Empty state message for date filter"
-  },
   "conversations": "对话",
-  "@conversations": {
-    "description": "Navigation label for conversations page"
-  },
   "chat": "聊天",
-  "@chat": {
-    "description": "Navigation label for chat page"
-  },
-  "@memories": {
-    "description": "Navigation label for memories page"
-  },
   "actions": "操作",
-  "@actions": {
-    "description": "Navigation label for actions page"
-  },
-  "@apps": {
-    "description": "Navigation label for apps page"
-  },
   "syncAvailable": "可同步",
-  "@syncAvailable": {
-    "description": "Label for sync notification"
-  },
-  "@settings": {
-    "description": "Bottom navigation label for settings"
-  },
   "referAFriend": "推荐好友",
-  "@referAFriend": {
-    "description": "Bottom navigation label for referral program"
-  },
   "help": "帮助",
-  "@help": {
-    "description": "Bottom navigation label for help"
-  },
   "pro": "Pro",
-  "@pro": {
-    "description": "Badge label for pro/unlimited users"
-  },
   "upgradeToPro": "升级至Pro",
-  "@upgradeToPro": {
-    "description": "Subscription banner button text"
-  },
   "getOmiDevice": "获取Omi设备",
-  "@getOmiDevice": {
-    "description": "Widget title for device promotion"
-  },
   "wearableAiCompanion": "可穿戴AI伴侣",
-  "@wearableAiCompanion": {
-    "description": "Widget subtitle for device promotion"
-  },
   "loadingMemories": "加载回忆中...",
-  "@loadingMemories": {
-    "description": "Loading overlay message when reloading memories"
-  },
-  "@searchMemories": {
-    "description": "Search input hint text"
-  },
   "allMemories": "所有回忆",
-  "@allMemories": {
-    "description": "Filter option to show all memories"
-  },
   "aboutYou": "关于你",
-  "@aboutYou": {
-    "description": "Filter option for system memories"
-  },
-  "@insights": {
-    "description": "Filter option for interesting memories"
-  },
   "manual": "手动",
-  "@manual": {
-    "description": "Filter option for manual memories"
-  },
-  "@all": {
-    "description": "Short filter label for all memories"
-  },
   "loadingYourMemories": "正在加载您的回忆...",
-  "@loadingYourMemories": {
-    "description": "Loading state message"
-  },
-  "@noMemoriesYet": {
-    "description": "Empty state title when no memories"
-  },
-  "@noMemoriesFound": {
-    "description": "Empty state title when search/filter has no results"
-  },
   "createYourFirstMemory": "创建您的第一个回忆以开始",
-  "@createYourFirstMemory": {
-    "description": "Empty state message when no memories"
-  },
   "tryAdjustingFilter": "尝试调整您的搜索或筛选条件",
-  "@tryAdjustingFilter": {
-    "description": "Empty state message when filter has no results"
-  },
-  "@addYourFirstMemory": {
-    "description": "Button text in empty state"
-  },
   "whatWouldYouLikeToRemember": "您想记住什么？",
   "category": "类别",
   "public": "公开",
@@ -1210,13 +1040,6 @@
   "nameMustBeAtLeast2Characters": "姓名必须至少包含2个字符",
   "tellUsHowYouWouldLikeToBeAddressed": "告诉我们您希望如何称呼您。这有助于个性化您的 Omi 体验。",
   "charactersCount": "{count}个字符",
-  "@charactersCount": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "enableFeaturesForBestExperience": "启用功能以在您的设备上获得最佳 Omi 体验。",
   "microphoneAccess": "麦克风访问",
   "recordAudioConversations": "录制音频对话",
@@ -1599,143 +1422,38 @@
   "freePlan": "免费计划",
   "configure": "配置",
   "privacyInformation": "隐私信息",
-  "@privacyInformation": {
-    "description": "Privacy page - privacyInformation"
-  },
   "yourPrivacyMattersToUs": "您的隐私对我们很重要",
-  "@yourPrivacyMattersToUs": {
-    "description": "Privacy page - yourPrivacyMattersToUs"
-  },
   "privacyIntroText": "在Omi，我们非常重视您的隐私。我们希望透明地说明我们收集的数据以及如何使用它们来改进产品。以下是您需要了解的内容：",
-  "@privacyIntroText": {
-    "description": "Privacy page - privacyIntroText"
-  },
   "whatWeTrack": "我们追踪什么",
-  "@whatWeTrack": {
-    "description": "Privacy page - whatWeTrack"
-  },
   "anonymityAndPrivacy": "匿名性和隐私",
-  "@anonymityAndPrivacy": {
-    "description": "Privacy page - anonymityAndPrivacy"
-  },
   "optInAndOptOutOptions": "加入和退出选项",
-  "@optInAndOptOutOptions": {
-    "description": "Privacy page - optInAndOptOutOptions"
-  },
   "ourCommitment": "我们的承诺",
-  "@ourCommitment": {
-    "description": "Privacy page - ourCommitment"
-  },
   "commitmentText": "我们承诺仅使用收集的数据来为您改进Omi产品。您的隐私和信任对我们至关重要。",
-  "@commitmentText": {
-    "description": "Privacy page - commitmentText"
-  },
   "thankYouText": "感谢您成为Omi的尊贵用户。如果您有任何问题或疑虑，请随时通过team@basedhardware.com与我们联系。",
-  "@thankYouText": {
-    "description": "Privacy page - thankYouText"
-  },
   "wifiSyncSettings": "WiFi同步设置",
-  "@wifiSyncSettings": {
-    "description": "WiFi sync settings - wifiSyncSettings"
-  },
   "enterHotspotCredentials": "输入您手机的热点凭据",
-  "@enterHotspotCredentials": {
-    "description": "WiFi sync settings - enterHotspotCredentials"
-  },
   "wifiSyncUsesHotspot": "WiFi同步使用您的手机作为热点。在设置 > 个人热点中找到热点名称和密码。",
-  "@wifiSyncUsesHotspot": {
-    "description": "WiFi sync settings - wifiSyncUsesHotspot"
-  },
   "hotspotNameSsid": "热点名称 (SSID)",
-  "@hotspotNameSsid": {
-    "description": "WiFi sync settings - hotspotNameSsid"
-  },
   "exampleIphoneHotspot": "例如 iPhone热点",
-  "@exampleIphoneHotspot": {
-    "description": "WiFi sync settings - exampleIphoneHotspot"
-  },
   "password": "密码",
-  "@password": {
-    "description": "WiFi sync settings - password"
-  },
   "enterHotspotPassword": "输入热点密码",
-  "@enterHotspotPassword": {
-    "description": "WiFi sync settings - enterHotspotPassword"
-  },
   "saveCredentials": "保存凭据",
-  "@saveCredentials": {
-    "description": "WiFi sync settings - saveCredentials"
-  },
   "clearCredentials": "清除凭据",
-  "@clearCredentials": {
-    "description": "WiFi sync settings - clearCredentials"
-  },
   "pleaseEnterHotspotName": "请输入热点名称",
-  "@pleaseEnterHotspotName": {
-    "description": "WiFi sync settings - pleaseEnterHotspotName"
-  },
   "wifiCredentialsSaved": "WiFi凭据已保存",
-  "@wifiCredentialsSaved": {
-    "description": "WiFi sync settings - wifiCredentialsSaved"
-  },
   "wifiCredentialsCleared": "WiFi凭据已清除",
-  "@wifiCredentialsCleared": {
-    "description": "WiFi sync settings - wifiCredentialsCleared"
-  },
   "summaryGeneratedForDate": "已为 {date} 生成摘要",
-  "@summaryGeneratedForDate": {
-    "description": "Daily summary settings - summaryGeneratedForDate",
-    "placeholders": {
-      "date": {
-        "type": "String",
-        "example": "1/15/2026"
-      }
-    }
-  },
   "failedToGenerateSummaryCheckConversations": "无法生成摘要。请确保您当天有对话记录。",
-  "@failedToGenerateSummaryCheckConversations": {
-    "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
-  },
   "summaryNotFound": "未找到摘要",
-  "@summaryNotFound": {
-    "description": "Daily summary detail - summaryNotFound"
-  },
   "yourDaysJourney": "您的一天旅程",
-  "@yourDaysJourney": {
-    "description": "Daily summary detail - yourDaysJourney"
-  },
   "highlights": "亮点",
-  "@highlights": {
-    "description": "Daily summary detail - highlights"
-  },
   "unresolvedQuestions": "未解决的问题",
-  "@unresolvedQuestions": {
-    "description": "Daily summary detail - unresolvedQuestions"
-  },
   "decisions": "决定",
-  "@decisions": {
-    "description": "Daily summary detail - decisions"
-  },
   "learnings": "收获",
-  "@learnings": {
-    "description": "Daily summary detail - learnings"
-  },
   "autoDeletesAfterThreeDays": "3天后自动删除。",
-  "@autoDeletesAfterThreeDays": {
-    "description": "Developer settings - autoDeletesAfterThreeDays"
-  },
   "knowledgeGraphDeletedSuccessfully": "知识图谱已成功删除",
-  "@knowledgeGraphDeletedSuccessfully": {
-    "description": "Developer settings - knowledgeGraphDeletedSuccessfully"
-  },
   "exportStartedMayTakeFewSeconds": "导出已开始。这可能需要几秒钟...",
-  "@exportStartedMayTakeFewSeconds": {
-    "description": "Developer settings - exportStartedMayTakeFewSeconds"
-  },
   "knowledgeGraphDeleteDescription": "这将删除所有派生的知识图谱数据（节点和连接）。您的原始记忆将保持安全。图谱将随时间推移或在下次请求时重建。",
-  "@knowledgeGraphDeleteDescription": {
-    "description": "Developer settings - knowledgeGraphDeleteDescription"
-  },
   "configureDailySummaryDigest": "配置您的每日任务摘要",
   "accessesDataTypes": "访问 {dataTypes}",
   "triggeredByType": "由 {triggerType} 触发",

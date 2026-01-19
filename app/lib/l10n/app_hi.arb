@@ -34,26 +34,12 @@
   "loading": "लोड हो रहा है...",
   "loadingDuration": "अवधि लोड हो रही है...",
   "secondsCount": "{count} सेकंड",
-  "@secondsCount": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "people": "लोग",
   "addNewPerson": "नया व्यक्ति जोड़ें",
   "editPerson": "व्यक्ति संपादित करें",
   "createPersonHint": "एक नया व्यक्ति बनाएं और Omi को उनकी आवाज़ पहचानने के लिए प्रशिक्षित करें!",
   "speechProfile": "भाषण प्रोफ़ाइल",
   "sampleNumber": "नमूना {number}",
-  "@sampleNumber": {
-    "placeholders": {
-      "number": {
-        "type": "int"
-      }
-    }
-  },
   "settings": "सेटिंग्स",
   "language": "भाषा",
   "selectLanguage": "भाषा चुनें",
@@ -88,23 +74,9 @@
   "starConversationHint": "बातचीत को तारांकित करने के लिए, उसे खोलें और शीर्ष पर तारे के आइकन को टैप करें।",
   "searchConversations": "बातचीत खोजें...",
   "selectedCount": "{count} चयनित",
-  "@selectedCount": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "merge": "विलय करें",
   "mergeConversations": "बातचीत का विलय करें",
   "mergeConversationsMessage": "यह {count} बातचीतों को एक में मिला देगा। सभी सामग्री विलय और पुन: उत्पन्न की जाएगी।",
-  "@mergeConversationsMessage": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "mergingInBackground": "बैकग्राउंड में विलय हो रहा है। इसमें थोड़ा समय लग सकता है।",
   "failedToStartMerge": "विलय शुरू करने में विफल",
   "askAnything": "कुछ भी पूछें",
@@ -711,29 +683,8 @@
   "appLanguage": "ऐप भाषा",
   "completeAuthBrowser": "कृपया अपने ब्राउज़र में प्रमाणीकरण पूरा करें। हो जाने पर, ऐप पर वापस आएं।",
   "failedToStartAppAuth": "{appName} प्रमाणीकरण शुरू करने में विफल",
-  "@failedToStartAppAuth": {
-    "placeholders": {
-      "appName": {
-        "type": "String"
-      }
-    }
-  },
   "connectToAppTitle": "{appName} से कनेक्ट करें",
-  "@connectToAppTitle": {
-    "placeholders": {
-      "appName": {
-        "type": "String"
-      }
-    }
-  },
   "authorizeOmiForTasks": "आपको अपने {appName} खाते में कार्य बनाने के लिए Omi को अधिकृत करना होगा। यह प्रमाणीकरण के लिए आपका ब्राउज़र खोलेगा।",
-  "@authorizeOmiForTasks": {
-    "placeholders": {
-      "appName": {
-        "type": "String"
-      }
-    }
-  },
   "continueButton": "जारी रखें",
   "appInterfaceSectionTitle": "ऐप इंटरफ़ेस",
   "speechTranscriptionSectionTitle": "वाणी और ट्रांसक्रिप्शन",
@@ -1022,152 +973,31 @@
   "failedToGenerateConversationLink": "बातचीत लिंक बनाने में विफल",
   "failedToGenerateShareLink": "साझा करने का लिंक बनाने में विफल",
   "reloadingConversations": "बातचीत को फिर से लोड किया जा रहा है...",
-  "@reloadingConversations": {
-    "description": "Loading message when refreshing conversations"
-  },
-  "@welcomeBack": {
-    "description": "Welcome message with user name",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
   "user": "उपयोगकर्ता",
-  "@user": {
-    "description": "Default fallback name when user name is empty"
-  },
   "starred": "तारांकित",
-  "@starred": {
-    "description": "Label for starred filter button"
-  },
   "date": "तारीख",
-  "@date": {
-    "description": "Label for date filter button"
-  },
   "noResultsFound": "कोई परिणाम नहीं मिला",
-  "@noResultsFound": {
-    "description": "Empty state title when search has no results"
-  },
   "tryAdjustingSearchTerms": "अपने खोज शब्दों को समायोजित करने का प्रयास करें",
-  "@tryAdjustingSearchTerms": {
-    "description": "Empty state message for search with no results"
-  },
-  "@noStarredConversations": {
-    "description": "Empty state title when no starred conversations"
-  },
   "starConversationsToFindQuickly": "बातचीत को तारांकित करें ताकि उन्हें यहां जल्दी से खोज सकें",
-  "@starConversationsToFindQuickly": {
-    "description": "Empty state message for starred filter"
-  },
   "noConversationsOnDate": "{date} को कोई बातचीत नहीं",
-  "@noConversationsOnDate": {
-    "description": "Empty state title when no conversations on selected date",
-    "placeholders": {
-      "date": {
-        "type": "String"
-      }
-    }
-  },
   "trySelectingDifferentDate": "एक अलग तारीख चुनने का प्रयास करें",
-  "@trySelectingDifferentDate": {
-    "description": "Empty state message for date filter"
-  },
   "conversations": "बातचीत",
-  "@conversations": {
-    "description": "Navigation label for conversations page"
-  },
   "chat": "चैट",
-  "@chat": {
-    "description": "Navigation label for chat page"
-  },
-  "@memories": {
-    "description": "Navigation label for memories page"
-  },
   "actions": "क्रियाएं",
-  "@actions": {
-    "description": "Navigation label for actions page"
-  },
-  "@apps": {
-    "description": "Navigation label for apps page"
-  },
   "syncAvailable": "सिंक उपलब्ध है",
-  "@syncAvailable": {
-    "description": "Label for sync notification"
-  },
-  "@settings": {
-    "description": "Bottom navigation label for settings"
-  },
   "referAFriend": "किसी मित्र को संदर्भित करें",
-  "@referAFriend": {
-    "description": "Bottom navigation label for referral program"
-  },
   "help": "सहायता",
-  "@help": {
-    "description": "Bottom navigation label for help"
-  },
   "pro": "Pro",
-  "@pro": {
-    "description": "Badge label for pro/unlimited users"
-  },
   "upgradeToPro": "Pro में अपग्रेड करें",
-  "@upgradeToPro": {
-    "description": "Subscription banner button text"
-  },
   "getOmiDevice": "Omi डिवाइस प्राप्त करें",
-  "@getOmiDevice": {
-    "description": "Widget title for device promotion"
-  },
   "wearableAiCompanion": "पहनने योग्य AI साथी",
-  "@wearableAiCompanion": {
-    "description": "Widget subtitle for device promotion"
-  },
   "loadingMemories": "यादें लोड हो रही हैं...",
-  "@loadingMemories": {
-    "description": "Loading overlay message when reloading memories"
-  },
-  "@searchMemories": {
-    "description": "Search input hint text"
-  },
   "allMemories": "सभी यादें",
-  "@allMemories": {
-    "description": "Filter option to show all memories"
-  },
   "aboutYou": "आपके बारे में",
-  "@aboutYou": {
-    "description": "Filter option for system memories"
-  },
-  "@insights": {
-    "description": "Filter option for interesting memories"
-  },
   "manual": "मैनुअल",
-  "@manual": {
-    "description": "Filter option for manual memories"
-  },
-  "@all": {
-    "description": "Short filter label for all memories"
-  },
   "loadingYourMemories": "आपकी यादें लोड हो रही हैं...",
-  "@loadingYourMemories": {
-    "description": "Loading state message"
-  },
-  "@noMemoriesYet": {
-    "description": "Empty state title when no memories"
-  },
-  "@noMemoriesFound": {
-    "description": "Empty state title when search/filter has no results"
-  },
   "createYourFirstMemory": "शुरू करने के लिए अपनी पहली याद बनाएं",
-  "@createYourFirstMemory": {
-    "description": "Empty state message when no memories"
-  },
   "tryAdjustingFilter": "अपनी खोज या फ़िल्टर समायोजित करने का प्रयास करें",
-  "@tryAdjustingFilter": {
-    "description": "Empty state message when filter has no results"
-  },
-  "@addYourFirstMemory": {
-    "description": "Button text in empty state"
-  },
   "whatWouldYouLikeToRemember": "आप क्या याद रखना चाहेंगे?",
   "category": "श्रेणी",
   "public": "सार्वजनिक",
@@ -1210,13 +1040,6 @@
   "nameMustBeAtLeast2Characters": "नाम कम से कम 2 वर्णों का होना चाहिए",
   "tellUsHowYouWouldLikeToBeAddressed": "हमें बताएं कि आप कैसे संबोधित होना पसंद करेंगे। यह आपके Omi अनुभव को वैयक्तिकृत करने में मदद करता है।",
   "charactersCount": "{count} वर्ण",
-  "@charactersCount": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "enableFeaturesForBestExperience": "अपने डिवाइस पर सर्वोत्तम Omi अनुभव के लिए सुविधाएं सक्षम करें।",
   "microphoneAccess": "माइक्रोफ़ोन एक्सेस",
   "recordAudioConversations": "ऑडियो वार्तालाप रिकॉर्ड करें",
@@ -1599,143 +1422,38 @@
   "freePlan": "मुफ्त योजना",
   "configure": "कॉन्फ़िगर करें",
   "privacyInformation": "गोपनीयता जानकारी",
-  "@privacyInformation": {
-    "description": "Privacy page - privacyInformation"
-  },
   "yourPrivacyMattersToUs": "आपकी गोपनीयता हमारे लिए महत्वपूर्ण है",
-  "@yourPrivacyMattersToUs": {
-    "description": "Privacy page - yourPrivacyMattersToUs"
-  },
   "privacyIntroText": "Omi में, हम आपकी गोपनीयता को बहुत गंभीरता से लेते हैं। हम उन डेटा के बारे में पारदर्शी रहना चाहते हैं जो हम एकत्र करते हैं और उनका उपयोग कैसे करते हैं। यहाँ आपको क्या जानना चाहिए:",
-  "@privacyIntroText": {
-    "description": "Privacy page - privacyIntroText"
-  },
   "whatWeTrack": "हम क्या ट्रैक करते हैं",
-  "@whatWeTrack": {
-    "description": "Privacy page - whatWeTrack"
-  },
   "anonymityAndPrivacy": "गुमनामी और गोपनीयता",
-  "@anonymityAndPrivacy": {
-    "description": "Privacy page - anonymityAndPrivacy"
-  },
   "optInAndOptOutOptions": "ऑप्ट-इन और ऑप्ट-आउट विकल्प",
-  "@optInAndOptOutOptions": {
-    "description": "Privacy page - optInAndOptOutOptions"
-  },
   "ourCommitment": "हमारी प्रतिबद्धता",
-  "@ourCommitment": {
-    "description": "Privacy page - ourCommitment"
-  },
   "commitmentText": "हम केवल Omi को आपके लिए बेहतर उत्पाद बनाने के लिए एकत्र किए गए डेटा का उपयोग करने के लिए प्रतिबद्ध हैं। आपकी गोपनीयता और विश्वास हमारे लिए सर्वोपरि हैं।",
-  "@commitmentText": {
-    "description": "Privacy page - commitmentText"
-  },
   "thankYouText": "Omi के एक मूल्यवान उपयोगकर्ता होने के लिए धन्यवाद। यदि आपके कोई प्रश्न या चिंताएं हैं, तो team@basedhardware.com पर हमसे संपर्क करें।",
-  "@thankYouText": {
-    "description": "Privacy page - thankYouText"
-  },
   "wifiSyncSettings": "WiFi सिंक सेटिंग्स",
-  "@wifiSyncSettings": {
-    "description": "WiFi sync settings - wifiSyncSettings"
-  },
   "enterHotspotCredentials": "अपने फोन के हॉटस्पॉट क्रेडेंशियल दर्ज करें",
-  "@enterHotspotCredentials": {
-    "description": "WiFi sync settings - enterHotspotCredentials"
-  },
   "wifiSyncUsesHotspot": "WiFi सिंक आपके फोन को हॉटस्पॉट के रूप में उपयोग करता है। सेटिंग्स > पर्सनल हॉटस्पॉट में नाम और पासवर्ड खोजें।",
-  "@wifiSyncUsesHotspot": {
-    "description": "WiFi sync settings - wifiSyncUsesHotspot"
-  },
   "hotspotNameSsid": "हॉटस्पॉट नाम (SSID)",
-  "@hotspotNameSsid": {
-    "description": "WiFi sync settings - hotspotNameSsid"
-  },
   "exampleIphoneHotspot": "उदा. iPhone हॉटस्पॉट",
-  "@exampleIphoneHotspot": {
-    "description": "WiFi sync settings - exampleIphoneHotspot"
-  },
   "password": "पासवर्ड",
-  "@password": {
-    "description": "WiFi sync settings - password"
-  },
   "enterHotspotPassword": "हॉटस्पॉट पासवर्ड दर्ज करें",
-  "@enterHotspotPassword": {
-    "description": "WiFi sync settings - enterHotspotPassword"
-  },
   "saveCredentials": "क्रेडेंशियल सहेजें",
-  "@saveCredentials": {
-    "description": "WiFi sync settings - saveCredentials"
-  },
   "clearCredentials": "क्रेडेंशियल साफ़ करें",
-  "@clearCredentials": {
-    "description": "WiFi sync settings - clearCredentials"
-  },
   "pleaseEnterHotspotName": "कृपया हॉटस्पॉट नाम दर्ज करें",
-  "@pleaseEnterHotspotName": {
-    "description": "WiFi sync settings - pleaseEnterHotspotName"
-  },
   "wifiCredentialsSaved": "WiFi क्रेडेंशियल सहेजे गए",
-  "@wifiCredentialsSaved": {
-    "description": "WiFi sync settings - wifiCredentialsSaved"
-  },
   "wifiCredentialsCleared": "WiFi क्रेडेंशियल साफ़ किए गए",
-  "@wifiCredentialsCleared": {
-    "description": "WiFi sync settings - wifiCredentialsCleared"
-  },
   "summaryGeneratedForDate": "सारांश {date} के लिए बनाया गया",
-  "@summaryGeneratedForDate": {
-    "description": "Daily summary settings - summaryGeneratedForDate",
-    "placeholders": {
-      "date": {
-        "type": "String",
-        "example": "1/15/2026"
-      }
-    }
-  },
   "failedToGenerateSummaryCheckConversations": "सारांश बनाने में विफल। सुनिश्चित करें कि उस दिन की बातचीत हो।",
-  "@failedToGenerateSummaryCheckConversations": {
-    "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
-  },
   "summaryNotFound": "सारांश नहीं मिला",
-  "@summaryNotFound": {
-    "description": "Daily summary detail - summaryNotFound"
-  },
   "yourDaysJourney": "आपके दिन की यात्रा",
-  "@yourDaysJourney": {
-    "description": "Daily summary detail - yourDaysJourney"
-  },
   "highlights": "मुख्य बातें",
-  "@highlights": {
-    "description": "Daily summary detail - highlights"
-  },
   "unresolvedQuestions": "अनसुलझे प्रश्न",
-  "@unresolvedQuestions": {
-    "description": "Daily summary detail - unresolvedQuestions"
-  },
   "decisions": "निर्णय",
-  "@decisions": {
-    "description": "Daily summary detail - decisions"
-  },
   "learnings": "सीखें",
-  "@learnings": {
-    "description": "Daily summary detail - learnings"
-  },
   "autoDeletesAfterThreeDays": "3 दिनों के बाद स्वचालित रूप से हटा दिया जाता है।",
-  "@autoDeletesAfterThreeDays": {
-    "description": "Developer settings - autoDeletesAfterThreeDays"
-  },
   "knowledgeGraphDeletedSuccessfully": "नॉलेज ग्राफ सफलतापूर्वक हटाया गया",
-  "@knowledgeGraphDeletedSuccessfully": {
-    "description": "Developer settings - knowledgeGraphDeletedSuccessfully"
-  },
   "exportStartedMayTakeFewSeconds": "निर्यात शुरू हुआ। इसमें कुछ सेकंड लग सकते हैं...",
-  "@exportStartedMayTakeFewSeconds": {
-    "description": "Developer settings - exportStartedMayTakeFewSeconds"
-  },
   "knowledgeGraphDeleteDescription": "यह सभी व्युत्पन्न नॉलेज ग्राफ डेटा (नोड्स और कनेक्शन) को हटा देगा। आपकी मूल यादें सुरक्षित रहेंगी। ग्राफ समय के साथ या अगले अनुरोध पर पुनर्निर्मित होगा।",
-  "@knowledgeGraphDeleteDescription": {
-    "description": "Developer settings - knowledgeGraphDeleteDescription"
-  },
   "configureDailySummaryDigest": "अपना दैनिक कार्य सारांश कॉन्फ़िगर करें",
   "accessesDataTypes": "{dataTypes} तक पहुंच",
   "triggeredByType": "{triggerType} द्वारा ट्रिगर",

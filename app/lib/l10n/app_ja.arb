@@ -33,26 +33,12 @@
   "loading": "読み込み中...",
   "loadingDuration": "再生時間を読み込み中...",
   "secondsCount": "{count}秒",
-  "@secondsCount": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "people": "ピープル",
   "addNewPerson": "新しい人を追加",
   "editPerson": "人を編集",
   "createPersonHint": "新しい人を作成して、Omiにその人の声も認識させましょう！",
   "speechProfile": "音声プロファイル",
   "sampleNumber": "サンプル {number}",
-  "@sampleNumber": {
-    "placeholders": {
-      "number": {
-        "type": "int"
-      }
-    }
-  },
   "settings": "設定",
   "language": "言語",
   "selectLanguage": "言語を選択",
@@ -87,23 +73,9 @@
   "starConversationHint": "会話をスターするには、会話を開いてヘッダーのスターアイコンをタップしてください。",
   "searchConversations": "会話を検索...",
   "selectedCount": "{count}件選択中",
-  "@selectedCount": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "merge": "マージ",
   "mergeConversations": "会話をマージ",
   "mergeConversationsMessage": "{count}件の会話が1つにまとめられます。すべてのコンテンツがマージされ、再生成されます。",
-  "@mergeConversationsMessage": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "mergingInBackground": "バックグラウンドでマージ中。しばらくお待ちください。",
   "failedToStartMerge": "マージの開始に失敗しました",
   "askAnything": "何でも聞いてください",
@@ -1001,152 +973,31 @@
   "failedToGenerateConversationLink": "会話のリンク生成に失敗しました",
   "failedToGenerateShareLink": "共有リンクの生成に失敗しました",
   "reloadingConversations": "会話を再読み込み中...",
-  "@reloadingConversations": {
-    "description": "Loading message when refreshing conversations"
-  },
-  "@welcomeBack": {
-    "description": "Welcome message with user name",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
   "user": "ユーザー",
-  "@user": {
-    "description": "Default fallback name when user name is empty"
-  },
   "starred": "スター付き",
-  "@starred": {
-    "description": "Label for starred filter button"
-  },
   "date": "日付",
-  "@date": {
-    "description": "Label for date filter button"
-  },
   "noResultsFound": "結果が見つかりませんでした",
-  "@noResultsFound": {
-    "description": "Empty state title when search has no results"
-  },
   "tryAdjustingSearchTerms": "検索語を調整してみてください",
-  "@tryAdjustingSearchTerms": {
-    "description": "Empty state message for search with no results"
-  },
-  "@noStarredConversations": {
-    "description": "Empty state title when no starred conversations"
-  },
   "starConversationsToFindQuickly": "会話にスターを付けると、ここですばやく見つけることができます",
-  "@starConversationsToFindQuickly": {
-    "description": "Empty state message for starred filter"
-  },
   "noConversationsOnDate": "{date}の会話はありません",
-  "@noConversationsOnDate": {
-    "description": "Empty state title when no conversations on selected date",
-    "placeholders": {
-      "date": {
-        "type": "String"
-      }
-    }
-  },
   "trySelectingDifferentDate": "別の日付を選択してみてください",
-  "@trySelectingDifferentDate": {
-    "description": "Empty state message for date filter"
-  },
   "conversations": "会話",
-  "@conversations": {
-    "description": "Navigation label for conversations page"
-  },
   "chat": "チャット",
-  "@chat": {
-    "description": "Navigation label for chat page"
-  },
-  "@memories": {
-    "description": "Navigation label for memories page"
-  },
   "actions": "アクション",
-  "@actions": {
-    "description": "Navigation label for actions page"
-  },
-  "@apps": {
-    "description": "Navigation label for apps page"
-  },
   "syncAvailable": "同期が利用可能",
-  "@syncAvailable": {
-    "description": "Label for sync notification"
-  },
-  "@settings": {
-    "description": "Bottom navigation label for settings"
-  },
   "referAFriend": "友達を紹介",
-  "@referAFriend": {
-    "description": "Bottom navigation label for referral program"
-  },
   "help": "ヘルプ",
-  "@help": {
-    "description": "Bottom navigation label for help"
-  },
   "pro": "Pro",
-  "@pro": {
-    "description": "Badge label for pro/unlimited users"
-  },
   "upgradeToPro": "Proにアップグレード",
-  "@upgradeToPro": {
-    "description": "Subscription banner button text"
-  },
   "getOmiDevice": "Omiデバイスを入手",
-  "@getOmiDevice": {
-    "description": "Widget title for device promotion"
-  },
   "wearableAiCompanion": "ウェアラブルAIコンパニオン",
-  "@wearableAiCompanion": {
-    "description": "Widget subtitle for device promotion"
-  },
   "loadingMemories": "思い出を読み込んでいます...",
-  "@loadingMemories": {
-    "description": "Loading overlay message when reloading memories"
-  },
-  "@searchMemories": {
-    "description": "Search input hint text"
-  },
   "allMemories": "すべての思い出",
-  "@allMemories": {
-    "description": "Filter option to show all memories"
-  },
   "aboutYou": "あなたについて",
-  "@aboutYou": {
-    "description": "Filter option for system memories"
-  },
-  "@insights": {
-    "description": "Filter option for interesting memories"
-  },
   "manual": "手動",
-  "@manual": {
-    "description": "Filter option for manual memories"
-  },
-  "@all": {
-    "description": "Short filter label for all memories"
-  },
   "loadingYourMemories": "思い出を読み込んでいます...",
-  "@loadingYourMemories": {
-    "description": "Loading state message"
-  },
-  "@noMemoriesYet": {
-    "description": "Empty state title when no memories"
-  },
-  "@noMemoriesFound": {
-    "description": "Empty state title when search/filter has no results"
-  },
   "createYourFirstMemory": "最初の思い出を作成して始めましょう",
-  "@createYourFirstMemory": {
-    "description": "Empty state message when no memories"
-  },
   "tryAdjustingFilter": "検索またはフィルターを調整してみてください",
-  "@tryAdjustingFilter": {
-    "description": "Empty state message when filter has no results"
-  },
-  "@addYourFirstMemory": {
-    "description": "Button text in empty state"
-  },
   "whatWouldYouLikeToRemember": "何を覚えておきたいですか？",
   "category": "カテゴリ",
   "public": "公開",
@@ -1189,13 +1040,6 @@
   "nameMustBeAtLeast2Characters": "名前は2文字以上である必要があります",
   "tellUsHowYouWouldLikeToBeAddressed": "どのように呼ばれたいか教えてください。これにより、Omi体験をパーソナライズできます。",
   "charactersCount": "{count}文字",
-  "@charactersCount": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "enableFeaturesForBestExperience": "デバイスで最高のOmi体験を得るために機能を有効にしてください。",
   "microphoneAccess": "マイクアクセス",
   "recordAudioConversations": "音声会話を録音",
@@ -1578,143 +1422,38 @@
   "freePlan": "無料プラン",
   "configure": "設定",
   "privacyInformation": "プライバシー情報",
-  "@privacyInformation": {
-    "description": "Privacy page - privacyInformation"
-  },
   "yourPrivacyMattersToUs": "あなたのプライバシーは私たちにとって大切です",
-  "@yourPrivacyMattersToUs": {
-    "description": "Privacy page - yourPrivacyMattersToUs"
-  },
   "privacyIntroText": "Omiでは、お客様のプライバシーを非常に重要視しています。収集するデータとその使用方法について透明性を保ちたいと考えています。以下が知っておくべきことです：",
-  "@privacyIntroText": {
-    "description": "Privacy page - privacyIntroText"
-  },
   "whatWeTrack": "追跡する内容",
-  "@whatWeTrack": {
-    "description": "Privacy page - whatWeTrack"
-  },
   "anonymityAndPrivacy": "匿名性とプライバシー",
-  "@anonymityAndPrivacy": {
-    "description": "Privacy page - anonymityAndPrivacy"
-  },
   "optInAndOptOutOptions": "オプトインとオプトアウトのオプション",
-  "@optInAndOptOutOptions": {
-    "description": "Privacy page - optInAndOptOutOptions"
-  },
   "ourCommitment": "私たちの約束",
-  "@ourCommitment": {
-    "description": "Privacy page - ourCommitment"
-  },
   "commitmentText": "私たちは収集したデータをOmiをより良い製品にするためだけに使用することを約束します。あなたのプライバシーと信頼は私たちにとって最も重要です。",
-  "@commitmentText": {
-    "description": "Privacy page - commitmentText"
-  },
   "thankYouText": "Omiの大切なユーザーであることに感謝します。ご質問やご不明な点がございましたら、team@basedhardware.comまでお気軽にお問い合わせください。",
-  "@thankYouText": {
-    "description": "Privacy page - thankYouText"
-  },
   "wifiSyncSettings": "WiFi同期設定",
-  "@wifiSyncSettings": {
-    "description": "WiFi sync settings - wifiSyncSettings"
-  },
   "enterHotspotCredentials": "スマートフォンのホットスポット認証情報を入力",
-  "@enterHotspotCredentials": {
-    "description": "WiFi sync settings - enterHotspotCredentials"
-  },
   "wifiSyncUsesHotspot": "WiFi同期はスマートフォンをホットスポットとして使用します。設定 > インターネット共有で名前とパスワードを確認してください。",
-  "@wifiSyncUsesHotspot": {
-    "description": "WiFi sync settings - wifiSyncUsesHotspot"
-  },
   "hotspotNameSsid": "ホットスポット名（SSID）",
-  "@hotspotNameSsid": {
-    "description": "WiFi sync settings - hotspotNameSsid"
-  },
   "exampleIphoneHotspot": "例：iPhoneホットスポット",
-  "@exampleIphoneHotspot": {
-    "description": "WiFi sync settings - exampleIphoneHotspot"
-  },
   "password": "パスワード",
-  "@password": {
-    "description": "WiFi sync settings - password"
-  },
   "enterHotspotPassword": "ホットスポットのパスワードを入力",
-  "@enterHotspotPassword": {
-    "description": "WiFi sync settings - enterHotspotPassword"
-  },
   "saveCredentials": "認証情報を保存",
-  "@saveCredentials": {
-    "description": "WiFi sync settings - saveCredentials"
-  },
   "clearCredentials": "認証情報をクリア",
-  "@clearCredentials": {
-    "description": "WiFi sync settings - clearCredentials"
-  },
   "pleaseEnterHotspotName": "ホットスポット名を入力してください",
-  "@pleaseEnterHotspotName": {
-    "description": "WiFi sync settings - pleaseEnterHotspotName"
-  },
   "wifiCredentialsSaved": "WiFi認証情報を保存しました",
-  "@wifiCredentialsSaved": {
-    "description": "WiFi sync settings - wifiCredentialsSaved"
-  },
   "wifiCredentialsCleared": "WiFi認証情報をクリアしました",
-  "@wifiCredentialsCleared": {
-    "description": "WiFi sync settings - wifiCredentialsCleared"
-  },
   "summaryGeneratedForDate": "{date}の要約を生成しました",
-  "@summaryGeneratedForDate": {
-    "description": "Daily summary settings - summaryGeneratedForDate",
-    "placeholders": {
-      "date": {
-        "type": "String",
-        "example": "1/15/2026"
-      }
-    }
-  },
   "failedToGenerateSummaryCheckConversations": "要約の生成に失敗しました。その日の会話があることを確認してください。",
-  "@failedToGenerateSummaryCheckConversations": {
-    "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
-  },
   "summaryNotFound": "要約が見つかりません",
-  "@summaryNotFound": {
-    "description": "Daily summary detail - summaryNotFound"
-  },
   "yourDaysJourney": "今日の旅程",
-  "@yourDaysJourney": {
-    "description": "Daily summary detail - yourDaysJourney"
-  },
   "highlights": "ハイライト",
-  "@highlights": {
-    "description": "Daily summary detail - highlights"
-  },
   "unresolvedQuestions": "未解決の質問",
-  "@unresolvedQuestions": {
-    "description": "Daily summary detail - unresolvedQuestions"
-  },
   "decisions": "決定事項",
-  "@decisions": {
-    "description": "Daily summary detail - decisions"
-  },
   "learnings": "学び",
-  "@learnings": {
-    "description": "Daily summary detail - learnings"
-  },
   "autoDeletesAfterThreeDays": "3日後に自動削除されます。",
-  "@autoDeletesAfterThreeDays": {
-    "description": "Developer settings - autoDeletesAfterThreeDays"
-  },
   "knowledgeGraphDeletedSuccessfully": "ナレッジグラフが正常に削除されました",
-  "@knowledgeGraphDeletedSuccessfully": {
-    "description": "Developer settings - knowledgeGraphDeletedSuccessfully"
-  },
   "exportStartedMayTakeFewSeconds": "エクスポートを開始しました。数秒かかる場合があります...",
-  "@exportStartedMayTakeFewSeconds": {
-    "description": "Developer settings - exportStartedMayTakeFewSeconds"
-  },
   "knowledgeGraphDeleteDescription": "これにより、すべての派生ナレッジグラフデータ（ノードと接続）が削除されます。元の記憶は安全に保たれます。グラフは時間の経過とともに、または次のリクエスト時に再構築されます。",
-  "@knowledgeGraphDeleteDescription": {
-    "description": "Developer settings - knowledgeGraphDeleteDescription"
-  },
   "configureDailySummaryDigest": "毎日のタスクダイジェストを設定する",
   "accessesDataTypes": "{dataTypes}にアクセス",
   "triggeredByType": "{triggerType}でトリガー",

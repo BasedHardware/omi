@@ -34,26 +34,12 @@
   "loading": "Carregando...",
   "loadingDuration": "Carregando duração...",
   "secondsCount": "{count} segundos",
-  "@secondsCount": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "people": "Pessoas",
   "addNewPerson": "Adicionar nova pessoa",
   "editPerson": "Editar pessoa",
   "createPersonHint": "Crie uma nova pessoa e treine o Omi para reconhecer a voz dela!",
   "speechProfile": "Perfil de Fala",
   "sampleNumber": "Amostra {number}",
-  "@sampleNumber": {
-    "placeholders": {
-      "number": {
-        "type": "int"
-      }
-    }
-  },
   "settings": "Configurações",
   "language": "Idioma",
   "selectLanguage": "Selecionar idioma",
@@ -88,23 +74,9 @@
   "starConversationHint": "Para favoritar uma conversa, abra-a e toque na estrela no topo.",
   "searchConversations": "Pesquisar conversas...",
   "selectedCount": "{count} selecionados",
-  "@selectedCount": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "merge": "Mesclar",
   "mergeConversations": "Mesclar conversas",
   "mergeConversationsMessage": "Isso combinará {count} conversas em uma. Todo o conteúdo será mesclado e regenerado.",
-  "@mergeConversationsMessage": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "mergingInBackground": "Mesclando em segundo plano. Isso pode levar um momento.",
   "failedToStartMerge": "Falha ao iniciar mesclagem",
   "askAnything": "Pergunte qualquer coisa",
@@ -711,29 +683,8 @@
   "appLanguage": "Idioma do App",
   "completeAuthBrowser": "Por favor, complete a autenticação no seu navegador. Quando terminar, volte para o app.",
   "failedToStartAppAuth": "Falha ao iniciar autenticação do {appName}",
-  "@failedToStartAppAuth": {
-    "placeholders": {
-      "appName": {
-        "type": "String"
-      }
-    }
-  },
   "connectToAppTitle": "Conectar ao {appName}",
-  "@connectToAppTitle": {
-    "placeholders": {
-      "appName": {
-        "type": "String"
-      }
-    }
-  },
   "authorizeOmiForTasks": "Você precisará autorizar o Omi para criar tarefas na sua conta {appName}. Isso abrirá seu navegador para autenticação.",
-  "@authorizeOmiForTasks": {
-    "placeholders": {
-      "appName": {
-        "type": "String"
-      }
-    }
-  },
   "continueButton": "Continuar",
   "appInterfaceSectionTitle": "INTERFACE DO APLICATIVO",
   "speechTranscriptionSectionTitle": "FALA E TRANSCRIÇÃO",
@@ -1022,152 +973,31 @@
   "failedToGenerateConversationLink": "Falha ao gerar link da conversa",
   "failedToGenerateShareLink": "Falha ao gerar link de compartilhamento",
   "reloadingConversations": "Recarregando conversas...",
-  "@reloadingConversations": {
-    "description": "Loading message when refreshing conversations"
-  },
-  "@welcomeBack": {
-    "description": "Welcome message with user name",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
   "user": "Usuário",
-  "@user": {
-    "description": "Default fallback name when user name is empty"
-  },
   "starred": "Favoritos",
-  "@starred": {
-    "description": "Label for starred filter button"
-  },
   "date": "Data",
-  "@date": {
-    "description": "Label for date filter button"
-  },
   "noResultsFound": "Nenhum resultado encontrado",
-  "@noResultsFound": {
-    "description": "Empty state title when search has no results"
-  },
   "tryAdjustingSearchTerms": "Tente ajustar seus termos de pesquisa",
-  "@tryAdjustingSearchTerms": {
-    "description": "Empty state message for search with no results"
-  },
-  "@noStarredConversations": {
-    "description": "Empty state title when no starred conversations"
-  },
   "starConversationsToFindQuickly": "Marque conversas como favoritas para encontrá-las rapidamente aqui",
-  "@starConversationsToFindQuickly": {
-    "description": "Empty state message for starred filter"
-  },
   "noConversationsOnDate": "Nenhuma conversa em {date}",
-  "@noConversationsOnDate": {
-    "description": "Empty state title when no conversations on selected date",
-    "placeholders": {
-      "date": {
-        "type": "String"
-      }
-    }
-  },
   "trySelectingDifferentDate": "Tente selecionar uma data diferente",
-  "@trySelectingDifferentDate": {
-    "description": "Empty state message for date filter"
-  },
   "conversations": "Conversas",
-  "@conversations": {
-    "description": "Navigation label for conversations page"
-  },
   "chat": "Chat",
-  "@chat": {
-    "description": "Navigation label for chat page"
-  },
-  "@memories": {
-    "description": "Navigation label for memories page"
-  },
   "actions": "Ações",
-  "@actions": {
-    "description": "Navigation label for actions page"
-  },
-  "@apps": {
-    "description": "Navigation label for apps page"
-  },
   "syncAvailable": "Sincronização disponível",
-  "@syncAvailable": {
-    "description": "Label for sync notification"
-  },
-  "@settings": {
-    "description": "Bottom navigation label for settings"
-  },
   "referAFriend": "Indicar um amigo",
-  "@referAFriend": {
-    "description": "Bottom navigation label for referral program"
-  },
   "help": "Ajuda",
-  "@help": {
-    "description": "Bottom navigation label for help"
-  },
   "pro": "Pro",
-  "@pro": {
-    "description": "Badge label for pro/unlimited users"
-  },
   "upgradeToPro": "Atualizar para Pro",
-  "@upgradeToPro": {
-    "description": "Subscription banner button text"
-  },
   "getOmiDevice": "Obter dispositivo Omi",
-  "@getOmiDevice": {
-    "description": "Widget title for device promotion"
-  },
   "wearableAiCompanion": "Companheiro de IA vestível",
-  "@wearableAiCompanion": {
-    "description": "Widget subtitle for device promotion"
-  },
   "loadingMemories": "Carregando memórias...",
-  "@loadingMemories": {
-    "description": "Loading overlay message when reloading memories"
-  },
-  "@searchMemories": {
-    "description": "Search input hint text"
-  },
   "allMemories": "Todas as memórias",
-  "@allMemories": {
-    "description": "Filter option to show all memories"
-  },
   "aboutYou": "Sobre você",
-  "@aboutYou": {
-    "description": "Filter option for system memories"
-  },
-  "@insights": {
-    "description": "Filter option for interesting memories"
-  },
   "manual": "Manual",
-  "@manual": {
-    "description": "Filter option for manual memories"
-  },
-  "@all": {
-    "description": "Short filter label for all memories"
-  },
   "loadingYourMemories": "Carregando suas memórias...",
-  "@loadingYourMemories": {
-    "description": "Loading state message"
-  },
-  "@noMemoriesYet": {
-    "description": "Empty state title when no memories"
-  },
-  "@noMemoriesFound": {
-    "description": "Empty state title when search/filter has no results"
-  },
   "createYourFirstMemory": "Crie sua primeira memória para começar",
-  "@createYourFirstMemory": {
-    "description": "Empty state message when no memories"
-  },
   "tryAdjustingFilter": "Tente ajustar sua pesquisa ou filtro",
-  "@tryAdjustingFilter": {
-    "description": "Empty state message when filter has no results"
-  },
-  "@addYourFirstMemory": {
-    "description": "Button text in empty state"
-  },
   "whatWouldYouLikeToRemember": "O que você gostaria de lembrar?",
   "category": "Categoria",
   "public": "Público",
@@ -1210,13 +1040,6 @@
   "nameMustBeAtLeast2Characters": "O nome deve ter pelo menos 2 caracteres",
   "tellUsHowYouWouldLikeToBeAddressed": "Diga-nos como gostaria de ser chamado. Isso ajuda a personalizar sua experiência Omi.",
   "charactersCount": "{count} caracteres",
-  "@charactersCount": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "enableFeaturesForBestExperience": "Ative recursos para a melhor experiência Omi no seu dispositivo.",
   "microphoneAccess": "Acesso ao Microfone",
   "recordAudioConversations": "Gravar conversas de áudio",
@@ -1599,143 +1422,38 @@
   "freePlan": "Plano gratuito",
   "configure": "Configurar",
   "privacyInformation": "Informações de privacidade",
-  "@privacyInformation": {
-    "description": "Privacy page - privacyInformation"
-  },
   "yourPrivacyMattersToUs": "Sua privacidade é importante para nós",
-  "@yourPrivacyMattersToUs": {
-    "description": "Privacy page - yourPrivacyMattersToUs"
-  },
   "privacyIntroText": "Na Omi, levamos sua privacidade muito a sério. Queremos ser transparentes sobre os dados que coletamos e como os usamos. Aqui está o que você precisa saber:",
-  "@privacyIntroText": {
-    "description": "Privacy page - privacyIntroText"
-  },
   "whatWeTrack": "O que rastreamos",
-  "@whatWeTrack": {
-    "description": "Privacy page - whatWeTrack"
-  },
   "anonymityAndPrivacy": "Anonimato e privacidade",
-  "@anonymityAndPrivacy": {
-    "description": "Privacy page - anonymityAndPrivacy"
-  },
   "optInAndOptOutOptions": "Opções de aceitar e recusar",
-  "@optInAndOptOutOptions": {
-    "description": "Privacy page - optInAndOptOutOptions"
-  },
   "ourCommitment": "Nosso compromisso",
-  "@ourCommitment": {
-    "description": "Privacy page - ourCommitment"
-  },
   "commitmentText": "Estamos comprometidos em usar os dados que coletamos apenas para tornar o Omi um produto melhor para você. Sua privacidade e confiança são primordiais para nós.",
-  "@commitmentText": {
-    "description": "Privacy page - commitmentText"
-  },
   "thankYouText": "Obrigado por ser um usuário valioso do Omi. Se você tiver alguma dúvida ou preocupação, entre em contato conosco em team@basedhardware.com.",
-  "@thankYouText": {
-    "description": "Privacy page - thankYouText"
-  },
   "wifiSyncSettings": "Configurações de sincronização WiFi",
-  "@wifiSyncSettings": {
-    "description": "WiFi sync settings - wifiSyncSettings"
-  },
   "enterHotspotCredentials": "Insira as credenciais do ponto de acesso do seu telefone",
-  "@enterHotspotCredentials": {
-    "description": "WiFi sync settings - enterHotspotCredentials"
-  },
   "wifiSyncUsesHotspot": "A sincronização WiFi usa seu telefone como ponto de acesso. Encontre o nome e a senha em Ajustes > Ponto de Acesso Pessoal.",
-  "@wifiSyncUsesHotspot": {
-    "description": "WiFi sync settings - wifiSyncUsesHotspot"
-  },
   "hotspotNameSsid": "Nome do ponto de acesso (SSID)",
-  "@hotspotNameSsid": {
-    "description": "WiFi sync settings - hotspotNameSsid"
-  },
   "exampleIphoneHotspot": "ex. Ponto de Acesso iPhone",
-  "@exampleIphoneHotspot": {
-    "description": "WiFi sync settings - exampleIphoneHotspot"
-  },
   "password": "Senha",
-  "@password": {
-    "description": "WiFi sync settings - password"
-  },
   "enterHotspotPassword": "Insira a senha do ponto de acesso",
-  "@enterHotspotPassword": {
-    "description": "WiFi sync settings - enterHotspotPassword"
-  },
   "saveCredentials": "Salvar credenciais",
-  "@saveCredentials": {
-    "description": "WiFi sync settings - saveCredentials"
-  },
   "clearCredentials": "Limpar credenciais",
-  "@clearCredentials": {
-    "description": "WiFi sync settings - clearCredentials"
-  },
   "pleaseEnterHotspotName": "Por favor, insira um nome de ponto de acesso",
-  "@pleaseEnterHotspotName": {
-    "description": "WiFi sync settings - pleaseEnterHotspotName"
-  },
   "wifiCredentialsSaved": "Credenciais WiFi salvas",
-  "@wifiCredentialsSaved": {
-    "description": "WiFi sync settings - wifiCredentialsSaved"
-  },
   "wifiCredentialsCleared": "Credenciais WiFi limpas",
-  "@wifiCredentialsCleared": {
-    "description": "WiFi sync settings - wifiCredentialsCleared"
-  },
   "summaryGeneratedForDate": "Resumo gerado para {date}",
-  "@summaryGeneratedForDate": {
-    "description": "Daily summary settings - summaryGeneratedForDate",
-    "placeholders": {
-      "date": {
-        "type": "String",
-        "example": "1/15/2026"
-      }
-    }
-  },
   "failedToGenerateSummaryCheckConversations": "Falha ao gerar resumo. Certifique-se de ter conversas para esse dia.",
-  "@failedToGenerateSummaryCheckConversations": {
-    "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
-  },
   "summaryNotFound": "Resumo não encontrado",
-  "@summaryNotFound": {
-    "description": "Daily summary detail - summaryNotFound"
-  },
   "yourDaysJourney": "Sua jornada do dia",
-  "@yourDaysJourney": {
-    "description": "Daily summary detail - yourDaysJourney"
-  },
   "highlights": "Destaques",
-  "@highlights": {
-    "description": "Daily summary detail - highlights"
-  },
   "unresolvedQuestions": "Perguntas não resolvidas",
-  "@unresolvedQuestions": {
-    "description": "Daily summary detail - unresolvedQuestions"
-  },
   "decisions": "Decisões",
-  "@decisions": {
-    "description": "Daily summary detail - decisions"
-  },
   "learnings": "Aprendizados",
-  "@learnings": {
-    "description": "Daily summary detail - learnings"
-  },
   "autoDeletesAfterThreeDays": "Excluído automaticamente após 3 dias.",
-  "@autoDeletesAfterThreeDays": {
-    "description": "Developer settings - autoDeletesAfterThreeDays"
-  },
   "knowledgeGraphDeletedSuccessfully": "Grafo de conhecimento excluído com sucesso",
-  "@knowledgeGraphDeletedSuccessfully": {
-    "description": "Developer settings - knowledgeGraphDeletedSuccessfully"
-  },
   "exportStartedMayTakeFewSeconds": "Exportação iniciada. Isso pode levar alguns segundos...",
-  "@exportStartedMayTakeFewSeconds": {
-    "description": "Developer settings - exportStartedMayTakeFewSeconds"
-  },
   "knowledgeGraphDeleteDescription": "Isso excluirá todos os dados derivados do grafo de conhecimento (nós e conexões). Suas memórias originais permanecerão seguras. O grafo será reconstruído ao longo do tempo ou na próxima solicitação.",
-  "@knowledgeGraphDeleteDescription": {
-    "description": "Developer settings - knowledgeGraphDeleteDescription"
-  },
   "configureDailySummaryDigest": "Configure seu resumo diário de tarefas",
   "accessesDataTypes": "Acessa {dataTypes}",
   "triggeredByType": "acionado por {triggerType}",
