@@ -26,55 +26,6 @@
   .font-system-ui {
     font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
-
-  /* Glass-morphism utilities */
-  .glass-surface {
-    background: rgba(26, 26, 26, 0.4);
-    backdrop-filter: blur(16px) saturate(180%);
-    -webkit-backdrop-filter: blur(16px) saturate(180%);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.37);
-  }
-
-  .glass-fade-vertical {
-    background: linear-gradient(
-      to right,
-      rgba(15, 15, 15, 0.9) 0%,
-      rgba(15, 15, 15, 0.4) 50%,
-      transparent 100%
-    );
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-  }
-
-  .glass-fade-diagonal {
-    background: linear-gradient(
-      135deg,
-      rgba(15, 15, 15, 0.95) 0%,
-      rgba(15, 15, 15, 0.6) 40%,
-      rgba(15, 15, 15, 0.2) 70%,
-      transparent 100%
-    );
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-  }
-
-  .glass-fade-radial {
-    background: radial-gradient(
-      circle at 50% 50%,
-      rgba(15, 15, 15, 0.99) 0%,
-      rgba(15, 15, 15, 0.85) 25%,
-      rgba(15, 15, 15, 0.5) 50%,
-      transparent 100%
-    );
-  }
-
-  .radial-blur-overlay {
-    backdrop-filter: blur(60px);
-    -webkit-backdrop-filter: blur(60px);
-    mask-image: radial-gradient(circle at 50% 50%, black 0%, transparent 55%);
-    -webkit-mask-image: radial-gradient(circle at 50% 50%, black 0%, transparent 55%);
-  }
 }
 
 :root {

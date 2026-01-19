@@ -91,7 +91,7 @@ export function LoginClient() {
         className="absolute inset-0 z-0"
       >
         <Image
-          src="https://www.omi.me/cdn/shop/files/gempages_515188559477474548-60e6e62e-9101-4826-84bc-04a22a88619a.png?v=18356679557113353564"
+          src="/login-bg.png"
           alt="Omi Product"
           fill
           className="object-cover"
@@ -103,7 +103,7 @@ export function LoginClient() {
 
       {/* Vignette effect - darkens edges */}
       <div
-        className="absolute inset-0 z-[5] pointer-events-none"
+        className="absolute inset-0 z-10 pointer-events-none"
         style={{
           background: 'radial-gradient(ellipse at 50% 50%, transparent 0%, rgba(0, 0, 0, 0.4) 70%, rgba(0, 0, 0, 0.7) 100%)',
         }}
@@ -131,7 +131,7 @@ export function LoginClient() {
           <motion.p
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: 0.30 }}
+            transition={{ duration: 0.3, delay: 0.3 }}
             className="text-text-tertiary text-lg mb-28"
           >
             thought to action
@@ -143,7 +143,7 @@ export function LoginClient() {
             animate={{ opacity: 1, scale: 1 }}
             whileHover={{ scale: 1.05, rotate: 10 }}
             transition={{ duration: 0.3 }}
-            className="mb-14 cursor-pointer"
+            className="mb-14"
           >
             <div className="w-28 h-28 relative group">
               {/* Blue glow effect - outer */}
