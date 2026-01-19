@@ -650,7 +650,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get debugDiagnostics => '调试与诊断';
 
   @override
-  String get endpointUrl => '端点URL';
+  String get endpointUrl => '端点 URL';
 
   @override
   String get noApiKeys => '暂无 API 密钥';
@@ -854,7 +854,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get serverUrl => '服务器 URL';
 
   @override
-  String get urlCopied => 'URL 已复制';
+  String get urlCopied => '已复制 URL';
 
   @override
   String get apiKeyAuth => 'API 密钥认证';
@@ -1767,7 +1767,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get maybeLater => '稍后再说';
 
   @override
-  String get speechProfileIntro => 'Omi 需要了解您的目标和声音。';
+  String get speechProfileIntro => 'Omi需要学习您的目标和声音。您稍后可以修改它。';
 
   @override
   String get getStarted => '开始';
@@ -2369,29 +2369,29 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String labelCopied(String label) {
-    return '$label copied';
+    return '$label 已复制';
   }
 
   @override
   String get noApiKeysYet => '还没有API密钥。创建一个以与您的应用集成。';
 
   @override
-  String get createKeyToGetStarted => 'Create a key to get started';
+  String get createKeyToGetStarted => '创建密钥以开始';
 
   @override
   String get persona => '人格';
 
   @override
-  String get configureYourAiPersona => 'Configure your AI persona';
+  String get configureYourAiPersona => '配置您的 AI 角色';
 
   @override
-  String get configureSttProvider => 'Configure STT provider';
+  String get configureSttProvider => '配置 STT 提供商';
 
   @override
-  String get setWhenConversationsAutoEnd => 'Set when conversations auto-end';
+  String get setWhenConversationsAutoEnd => '设置对话自动结束时间';
 
   @override
-  String get importDataFromOtherSources => 'Import data from other sources';
+  String get importDataFromOtherSources => '从其他来源导入数据';
 
   @override
   String get debugAndDiagnostics => '调试和诊断';
@@ -2403,30 +2403,30 @@ class AppLocalizationsZh extends AppLocalizations {
   String get helpsDiagnoseIssues => '帮助诊断问题';
 
   @override
-  String get exportStartedMessage => 'Export started. This may take a few seconds...';
+  String get exportStartedMessage => '导出已开始。这可能需要几秒钟...';
 
   @override
-  String get exportConversationsToJson => 'Export conversations to a JSON file';
+  String get exportConversationsToJson => '将对话导出为 JSON 文件';
 
   @override
-  String get knowledgeGraphDeletedSuccess => 'Knowledge Graph deleted successfully';
+  String get knowledgeGraphDeletedSuccess => '知识图谱删除成功';
 
   @override
   String failedToDeleteGraph(String error) {
-    return 'Failed to delete graph: $error';
+    return '删除图谱失败：$error';
   }
 
   @override
-  String get clearAllNodesAndConnections => 'Clear all nodes and connections';
+  String get clearAllNodesAndConnections => '清除所有节点和连接';
 
   @override
-  String get addToClaudeDesktopConfig => 'Add to claude_desktop_config.json';
+  String get addToClaudeDesktopConfig => '添加到 claude_desktop_config.json';
 
   @override
-  String get connectAiAssistantsToData => 'Connect AI assistants to your data';
+  String get connectAiAssistantsToData => '将 AI 助手连接到您的数据';
 
   @override
-  String get useYourMcpApiKey => 'Use your MCP API key';
+  String get useYourMcpApiKey => '使用您的 MCP API 密钥';
 
   @override
   String get realTimeTranscript => '实时转录';
@@ -2444,7 +2444,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get autoCreateSpeakers => '自动创建说话者';
 
   @override
-  String get autoCreateWhenNameDetected => 'Auto-create when name detected';
+  String get autoCreateWhenNameDetected => '检测到名称时自动创建';
 
   @override
   String get followUpQuestions => '后续问题';
@@ -2456,13 +2456,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get goalTracker => '目标追踪器';
 
   @override
-  String get trackPersonalGoalsOnHomepage => 'Track your personal goals on homepage';
+  String get trackPersonalGoalsOnHomepage => '在主页上跟踪您的个人目标';
 
   @override
   String get dailyReflection => '每日反思';
 
   @override
-  String get get9PmReminderToReflect => 'Get a 9 PM reminder to reflect on your day';
+  String get get9PmReminderToReflect => '在晚上 9 点收到提醒，回顾您的一天';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => '操作项描述不能为空';
@@ -2546,13 +2546,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get toggleControlBar => '切换控制栏';
 
   @override
-  String get pressKeys => '按下键...';
+  String get pressKeys => '按下按键...';
 
   @override
   String get cmdRequired => '⌘ 必需';
 
   @override
-  String get invalidKey => '无效的键';
+  String get invalidKey => '无效按键';
 
   @override
   String get space => '空格';
@@ -4669,4 +4669,903 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get noSpecificDataAccessConfigured => '未配置特定数据访问。';
+
+  @override
+  String get basicPlanDescription => '1,200 高级分钟 + 设备端无限';
+
+  @override
+  String get minutes => '分钟';
+
+  @override
+  String get omiHas => 'Omi 拥有：';
+
+  @override
+  String get premiumMinutesUsed => '高级分钟已用完。';
+
+  @override
+  String get setupOnDevice => '设置设备端';
+
+  @override
+  String get forUnlimitedFreeTranscription => '享受无限免费转录。';
+
+  @override
+  String premiumMinsLeft(int count) {
+    return '剩余 $count 高级分钟。';
+  }
+
+  @override
+  String get alwaysAvailable => '始终可用。';
+
+  @override
+  String get importHistory => '导入历史';
+
+  @override
+  String get noImportsYet => '暂无导入记录';
+
+  @override
+  String get selectZipFileToImport => '选择要导入的.zip文件！';
+
+  @override
+  String get otherDevicesComingSoon => '其他设备即将推出';
+
+  @override
+  String get deleteAllLimitlessConversations => '删除所有Limitless对话？';
+
+  @override
+  String get deleteAllLimitlessWarning => '这将永久删除从Limitless导入的所有对话。此操作无法撤消。';
+
+  @override
+  String deletedLimitlessConversations(int count) {
+    return '已删除 $count 个Limitless对话';
+  }
+
+  @override
+  String get failedToDeleteConversations => '删除对话失败';
+
+  @override
+  String get deleteImportedData => '删除导入的数据';
+
+  @override
+  String get statusPending => '待处理';
+
+  @override
+  String get statusProcessing => '处理中';
+
+  @override
+  String get statusCompleted => '已完成';
+
+  @override
+  String get statusFailed => '失败';
+
+  @override
+  String nConversations(int count) {
+    return '$count 个对话';
+  }
+
+  @override
+  String get pleaseEnterName => '请输入名称';
+
+  @override
+  String get nameMustBeBetweenCharacters => '名称必须在2到40个字符之间';
+
+  @override
+  String get deleteSampleQuestion => '删除样本？';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return '您确定要删除 $name 的样本吗？';
+  }
+
+  @override
+  String get confirmDeletion => '确认删除';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return '您确定要删除 $name 吗？这也将删除所有相关的语音样本。';
+  }
+
+  @override
+  String get howItWorksTitle => '它是如何工作的？';
+
+  @override
+  String get howPeopleWorks => '创建人员后，您可以转到对话记录并为他们分配相应的片段，这样 Omi 也能识别他们的语音！';
+
+  @override
+  String get tapToDelete => '点击删除';
+
+  @override
+  String get newTag => '新';
+
+  @override
+  String get needHelpChatWithUs => '需要帮助？与我们聊天';
+
+  @override
+  String get localStorageEnabled => '本地存储已启用';
+
+  @override
+  String get localStorageDisabled => '本地存储已禁用';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return '更新设置失败: $error';
+  }
+
+  @override
+  String get privacyNotice => '隐私声明';
+
+  @override
+  String get recordingsMayCaptureOthers => '录音可能会捕获他人的声音。启用前请确保获得所有参与者的同意。';
+
+  @override
+  String get enable => '启用';
+
+  @override
+  String get storeAudioOnPhone => '在手机上存储音频';
+
+  @override
+  String get on => '开';
+
+  @override
+  String get storeAudioDescription => '将所有音频录音存储在手机本地。禁用时，仅保留上传失败的文件以节省存储空间。';
+
+  @override
+  String get enableLocalStorage => '启用本地存储';
+
+  @override
+  String get cloudStorageEnabled => '云存储已启用';
+
+  @override
+  String get cloudStorageDisabled => '云存储已禁用';
+
+  @override
+  String get enableCloudStorage => '启用云存储';
+
+  @override
+  String get storeAudioOnCloud => '在云端存储音频';
+
+  @override
+  String get cloudStorageDialogMessage => '您的实时录音将在您说话时存储在私有云存储中。';
+
+  @override
+  String get storeAudioCloudDescription => '说话时将实时录音存储在私有云存储中。音频会被实时安全地捕获和保存。';
+
+  @override
+  String get downloadingFirmware => '正在下载固件';
+
+  @override
+  String get installingFirmware => '正在安装固件';
+
+  @override
+  String get firmwareUpdateWarning => '请勿关闭应用或关闭设备。这可能会损坏您的设备。';
+
+  @override
+  String get firmwareUpdated => '固件已更新';
+
+  @override
+  String restartDeviceToComplete(Object deviceName) {
+    return '请重启您的 $deviceName 以完成更新。';
+  }
+
+  @override
+  String get yourDeviceIsUpToDate => '您的设备已是最新版本';
+
+  @override
+  String get currentVersion => '当前版本';
+
+  @override
+  String get latestVersion => '最新版本';
+
+  @override
+  String get whatsNew => '新功能';
+
+  @override
+  String get installUpdate => '安装更新';
+
+  @override
+  String get updateNow => '立即更新';
+
+  @override
+  String get updateGuide => '更新指南';
+
+  @override
+  String get checkingForUpdates => '正在检查更新';
+
+  @override
+  String get checkingFirmwareVersion => '正在检查固件版本...';
+
+  @override
+  String get firmwareUpdate => '固件更新';
+
+  @override
+  String get payments => '付款';
+
+  @override
+  String get connectPaymentMethodInfo => '在下方连接付款方式，开始接收您应用的收入。';
+
+  @override
+  String get selectedPaymentMethod => '已选付款方式';
+
+  @override
+  String get availablePaymentMethods => '可用付款方式';
+
+  @override
+  String get activeStatus => '活跃';
+
+  @override
+  String get connectedStatus => '已连接';
+
+  @override
+  String get notConnectedStatus => '未连接';
+
+  @override
+  String get setActive => '设为活跃';
+
+  @override
+  String get getPaidThroughStripe => '通过 Stripe 获取您的应用销售收入';
+
+  @override
+  String get monthlyPayouts => '月度付款';
+
+  @override
+  String get monthlyPayoutsDescription => '当您的收入达到 10 美元时，每月直接收款到您的账户';
+
+  @override
+  String get secureAndReliable => '安全可靠';
+
+  @override
+  String get stripeSecureDescription => 'Stripe 确保您的应用收入安全及时转账';
+
+  @override
+  String get selectYourCountry => '选择您的国家';
+
+  @override
+  String get countrySelectionPermanent => '您的国家选择是永久性的，以后无法更改。';
+
+  @override
+  String get byClickingConnectNow => '点击「立即连接」即表示您同意';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Stripe 关联账户协议';
+
+  @override
+  String get errorConnectingToStripe => '连接 Stripe 时出错！请稍后重试。';
+
+  @override
+  String get connectingYourStripeAccount => '正在连接您的 Stripe 账户';
+
+  @override
+  String get stripeOnboardingInstructions => '请在浏览器中完成 Stripe 注册流程。完成后此页面将自动更新。';
+
+  @override
+  String get failedTryAgain => '失败了？重试';
+
+  @override
+  String get illDoItLater => '稍后再做';
+
+  @override
+  String get successfullyConnected => '连接成功！';
+
+  @override
+  String get stripeReadyForPayments => '您的 Stripe 账户已准备好接收付款。您可以立即开始从应用销售中获利。';
+
+  @override
+  String get updateStripeDetails => '更新 Stripe 详细信息';
+
+  @override
+  String get errorUpdatingStripeDetails => '更新 Stripe 详细信息时出错！请稍后重试。';
+
+  @override
+  String get updatePayPal => '更新 PayPal';
+
+  @override
+  String get setUpPayPal => '设置 PayPal';
+
+  @override
+  String get updatePayPalAccountDetails => '更新您的 PayPal 账户详细信息';
+
+  @override
+  String get connectPayPalToReceivePayments => '连接您的 PayPal 账户，开始接收您应用的付款';
+
+  @override
+  String get paypalEmail => 'PayPal 邮箱';
+
+  @override
+  String get paypalMeLink => 'PayPal.me 链接';
+
+  @override
+  String get stripeRecommendation => '如果 Stripe 在您的国家可用，我们强烈建议使用它以获得更快更便捷的付款。';
+
+  @override
+  String get updatePayPalDetails => '更新 PayPal 详细信息';
+
+  @override
+  String get savePayPalDetails => '保存 PayPal 详细信息';
+
+  @override
+  String get pleaseEnterPayPalEmail => '请输入您的 PayPal 邮箱';
+
+  @override
+  String get pleaseEnterPayPalMeLink => '请输入您的 PayPal.me 链接';
+
+  @override
+  String get doNotIncludeHttpInLink => '链接中请勿包含 http、https 或 www';
+
+  @override
+  String get pleaseEnterValidPayPalMeLink => '请输入有效的 PayPal.me 链接';
+
+  @override
+  String get pleaseEnterValidEmail => '请输入有效的电子邮件地址';
+
+  @override
+  String get syncingYourRecordings => '正在同步您的录音';
+
+  @override
+  String get syncYourRecordings => '同步您的录音';
+
+  @override
+  String get syncNow => '立即同步';
+
+  @override
+  String get error => '错误';
+
+  @override
+  String get speechSamples => '语音样本';
+
+  @override
+  String additionalSampleIndex(String index) {
+    return '附加样本 $index';
+  }
+
+  @override
+  String durationSeconds(String seconds) {
+    return '时长: $seconds 秒';
+  }
+
+  @override
+  String get additionalSpeechSampleRemoved => '已删除附加语音样本';
+
+  @override
+  String get consentDataMessage => '继续即表示您与此应用共享的所有数据（包括您的对话、录音和个人信息）将安全存储在我们的服务器上，以便为您提供AI驱动的洞察并启用所有应用功能。';
+
+  @override
+  String get tasksEmptyStateMessage => '来自您对话的任务将显示在这里。\n点击 + 手动创建。';
+
+  @override
+  String get clearChatAction => '清除聊天';
+
+  @override
+  String get enableApps => '启用应用';
+
+  @override
+  String get omiAppName => 'Omi';
+
+  @override
+  String get showMore => '显示更多 ↓';
+
+  @override
+  String get showLess => '收起 ↑';
+
+  @override
+  String get loadingYourRecording => '正在加载您的录音...';
+
+  @override
+  String get photoDiscardedMessage => '此照片因不重要而被丢弃。';
+
+  @override
+  String get analyzing => '分析中...';
+
+  @override
+  String get searchCountries => '搜索国家...';
+
+  @override
+  String get checkingAppleWatch => '正在检查 Apple Watch...';
+
+  @override
+  String get installOmiOnAppleWatch => '在您的 Apple Watch 上\n安装 Omi';
+
+  @override
+  String get installOmiOnAppleWatchDescription => '要将 Apple Watch 与 Omi 配合使用，您需要先在手表上安装 Omi 应用。';
+
+  @override
+  String get openOmiOnAppleWatch => '在您的 Apple Watch 上\n打开 Omi';
+
+  @override
+  String get openOmiOnAppleWatchDescription => 'Omi 应用已安装在您的 Apple Watch 上。打开它并点击开始。';
+
+  @override
+  String get openWatchApp => '打开 Watch 应用';
+
+  @override
+  String get iveInstalledAndOpenedTheApp => '我已安装并打开应用';
+
+  @override
+  String get unableToOpenWatchApp => '无法打开 Apple Watch 应用。请在 Apple Watch 上手动打开 Watch 应用，并从「可用应用」部分安装 Omi。';
+
+  @override
+  String get appleWatchConnectedSuccessfully => 'Apple Watch 连接成功！';
+
+  @override
+  String get appleWatchNotReachable => '仍无法连接 Apple Watch。请确保 Omi 应用在手表上处于打开状态。';
+
+  @override
+  String errorCheckingConnection(String error) {
+    return '检查连接时出错：$error';
+  }
+
+  @override
+  String get muted => '已静音';
+
+  @override
+  String get processNow => '立即处理';
+
+  @override
+  String get finishedConversation => '结束对话？';
+
+  @override
+  String get stopRecordingConfirmation => '您确定要停止录音并立即总结对话吗？';
+
+  @override
+  String get conversationEndsManually => '对话只能手动结束。';
+
+  @override
+  String conversationSummarizedAfterMinutes(int minutes, String suffix) {
+    return '对话将在$minutes分钟$suffix无声后进行总结。';
+  }
+
+  @override
+  String get dontAskAgain => '不再询问';
+
+  @override
+  String get waitingForTranscriptOrPhotos => '等待转录或照片...';
+
+  @override
+  String get noSummaryYet => '暂无摘要';
+
+  @override
+  String hints(String text) {
+    return '提示: $text';
+  }
+
+  @override
+  String get testConversationPrompt => '测试对话提示';
+
+  @override
+  String get prompt => '提示';
+
+  @override
+  String get result => '结果';
+
+  @override
+  String get compareTranscripts => '比较转录';
+
+  @override
+  String get notHelpful => '没有帮助';
+
+  @override
+  String get exportTasksWithOneTap => '一键导出任务！';
+
+  @override
+  String get inProgress => '处理中';
+
+  @override
+  String get photos => '照片';
+
+  @override
+  String get rawData => '原始数据';
+
+  @override
+  String get content => '内容';
+
+  @override
+  String get noContentToDisplay => '没有可显示的内容';
+
+  @override
+  String get noSummary => '无摘要';
+
+  @override
+  String get updateOmiFirmware => '更新omi固件';
+
+  @override
+  String get anErrorOccurredTryAgain => '发生错误，请重试。';
+
+  @override
+  String get welcomeBackSimple => '欢迎回来';
+
+  @override
+  String get addVocabularyDescription => '添加Omi在转录时应识别的词语。';
+
+  @override
+  String get enterWordsCommaSeparated => '输入词语（逗号分隔）';
+
+  @override
+  String get whenToReceiveDailySummary => '何时收到每日摘要';
+
+  @override
+  String get checkingNextSevenDays => '检查接下来7天';
+
+  @override
+  String failedToDeleteError(String error) {
+    return '删除失败：$error';
+  }
+
+  @override
+  String get developerApiKeys => '开发者 API 密钥';
+
+  @override
+  String get noApiKeysCreateOne => '没有 API 密钥。创建一个以开始。';
+
+  @override
+  String get commandRequired => '需要 ⌘';
+
+  @override
+  String get spaceKey => '空格';
+
+  @override
+  String loadMoreRemaining(String count) {
+    return '加载更多（剩余$count个）';
+  }
+
+  @override
+  String wrappedTopPercentUser(String percentile) {
+    return '前$percentile%用户';
+  }
+
+  @override
+  String get wrappedMinutes => '分钟';
+
+  @override
+  String get wrappedConversations => '对话';
+
+  @override
+  String get wrappedDaysActive => '活跃天数';
+
+  @override
+  String get wrappedYouTalkedAbout => '你聊过的话题';
+
+  @override
+  String get wrappedActionItems => '任务';
+
+  @override
+  String get wrappedTasksCreated => '创建的任务';
+
+  @override
+  String get wrappedCompleted => '已完成';
+
+  @override
+  String wrappedCompletionRate(String rate) {
+    return '$rate%完成率';
+  }
+
+  @override
+  String get wrappedYourTopDays => '你的最佳日子';
+
+  @override
+  String get wrappedBestMoments => '最佳时刻';
+
+  @override
+  String get wrappedMyBuddies => '我的伙伴';
+
+  @override
+  String get wrappedCouldntStopTalkingAbout => '停不下来聊的话题';
+
+  @override
+  String get wrappedShow => '节目';
+
+  @override
+  String get wrappedMovie => '电影';
+
+  @override
+  String get wrappedBook => '书籍';
+
+  @override
+  String get wrappedCelebrity => '名人';
+
+  @override
+  String get wrappedFood => '美食';
+
+  @override
+  String get wrappedMovieRecs => '推荐给朋友的电影';
+
+  @override
+  String get wrappedBiggest => '最大的';
+
+  @override
+  String get wrappedStruggle => '挑战';
+
+  @override
+  String get wrappedButYouPushedThrough => '但你挺过来了 💪';
+
+  @override
+  String get wrappedWin => '胜利';
+
+  @override
+  String get wrappedYouDidIt => '你做到了！🎉';
+
+  @override
+  String get wrappedTopPhrases => '最常说的5句话';
+
+  @override
+  String get wrappedMins => '分钟';
+
+  @override
+  String get wrappedConvos => '对话';
+
+  @override
+  String get wrappedDays => '天';
+
+  @override
+  String get wrappedMyBuddiesLabel => '我的伙伴';
+
+  @override
+  String get wrappedObsessionsLabel => '痴迷';
+
+  @override
+  String get wrappedStruggleLabel => '挑战';
+
+  @override
+  String get wrappedWinLabel => '胜利';
+
+  @override
+  String get wrappedTopPhrasesLabel => '常说的话';
+
+  @override
+  String get wrappedLetsHitRewind => '让我们回顾你的';
+
+  @override
+  String get wrappedGenerateMyWrapped => '生成我的年度回顾';
+
+  @override
+  String get wrappedProcessingDefault => '处理中...';
+
+  @override
+  String get wrappedCreatingYourStory => '正在创建你的\n2025年故事...';
+
+  @override
+  String get wrappedSomethingWentWrong => '出了点\n问题';
+
+  @override
+  String get wrappedAnErrorOccurred => '发生错误';
+
+  @override
+  String get wrappedTryAgain => '重试';
+
+  @override
+  String get wrappedNoDataAvailable => '暂无数据';
+
+  @override
+  String get wrappedOmiLifeRecap => 'Omi 生活回顾';
+
+  @override
+  String get wrappedSwipeUpToBegin => '向上滑动开始';
+
+  @override
+  String get wrappedShareText => '我的2025，由Omi记录 ✨ omi.me/wrapped';
+
+  @override
+  String get wrappedFailedToShare => '分享失败，请重试。';
+
+  @override
+  String get wrappedFailedToStartGeneration => '无法开始生成，请重试。';
+
+  @override
+  String get wrappedStarting => '启动中...';
+
+  @override
+  String get wrappedShare => '分享';
+
+  @override
+  String get wrappedShareYourWrapped => '分享你的年度回顾';
+
+  @override
+  String get wrappedMy2025 => '我的2025';
+
+  @override
+  String get wrappedRememberedByOmi => '由Omi记录';
+
+  @override
+  String get wrappedMostFunDay => '最开心';
+
+  @override
+  String get wrappedMostProductiveDay => '最高效';
+
+  @override
+  String get wrappedMostIntenseDay => '最紧张';
+
+  @override
+  String get wrappedFunniestMoment => '最搞笑';
+
+  @override
+  String get wrappedMostCringeMoment => '最尴尬';
+
+  @override
+  String get wrappedMinutesLabel => '分钟';
+
+  @override
+  String get wrappedConversationsLabel => '对话';
+
+  @override
+  String get wrappedDaysActiveLabel => '活跃天数';
+
+  @override
+  String get wrappedTasksGenerated => '任务已创建';
+
+  @override
+  String get wrappedTasksCompleted => '任务已完成';
+
+  @override
+  String get wrappedTopFivePhrases => 'Top 5 短语';
+
+  @override
+  String get wrappedAGreatDay => '美好的一天';
+
+  @override
+  String get wrappedGettingItDone => '完成任务';
+
+  @override
+  String get wrappedAChallenge => '一个挑战';
+
+  @override
+  String get wrappedAHilariousMoment => '搞笑时刻';
+
+  @override
+  String get wrappedThatAwkwardMoment => '尴尬时刻';
+
+  @override
+  String get wrappedYouHadFunnyMoments => '今年你有很多有趣的时刻！';
+
+  @override
+  String get wrappedWeveAllBeenThere => '我们都经历过！';
+
+  @override
+  String get wrappedFriend => '朋友';
+
+  @override
+  String get wrappedYourBuddy => '你的伙伴！';
+
+  @override
+  String get wrappedNotMentioned => '未提及';
+
+  @override
+  String get wrappedTheHardPart => '困难部分';
+
+  @override
+  String get wrappedPersonalGrowth => '个人成长';
+
+  @override
+  String get wrappedFunDay => '开心';
+
+  @override
+  String get wrappedProductiveDay => '高效';
+
+  @override
+  String get wrappedIntenseDay => '紧张';
+
+  @override
+  String get wrappedFunnyMomentTitle => '搞笑时刻';
+
+  @override
+  String get wrappedCringeMomentTitle => '尴尬时刻';
+
+  @override
+  String get wrappedYouTalkedAboutBadge => '你谈论了';
+
+  @override
+  String get wrappedCompletedLabel => '已完成';
+
+  @override
+  String get wrappedMyBuddiesCard => '我的朋友们';
+
+  @override
+  String get wrappedBuddiesLabel => '朋友';
+
+  @override
+  String get wrappedObsessionsLabelUpper => '痴迷';
+
+  @override
+  String get wrappedStruggleLabelUpper => '挑战';
+
+  @override
+  String get wrappedWinLabelUpper => '胜利';
+
+  @override
+  String get wrappedTopPhrasesLabelUpper => '热门短语';
+
+  @override
+  String get wrappedYourHeader => '你的';
+
+  @override
+  String get wrappedTopDaysHeader => '最佳日子';
+
+  @override
+  String get wrappedYourTopDaysBadge => '你的最佳日子';
+
+  @override
+  String get wrappedBestHeader => '最佳';
+
+  @override
+  String get wrappedMomentsHeader => '时刻';
+
+  @override
+  String get wrappedBestMomentsBadge => '最佳时刻';
+
+  @override
+  String get wrappedBiggestHeader => '最大的';
+
+  @override
+  String get wrappedStruggleHeader => '挑战';
+
+  @override
+  String get wrappedWinHeader => '胜利';
+
+  @override
+  String get wrappedButYouPushedThroughEmoji => '但你坚持下来了 💪';
+
+  @override
+  String get wrappedYouDidItEmoji => '你做到了！ 🎉';
+
+  @override
+  String get wrappedHours => '小时';
+
+  @override
+  String get wrappedActions => '操作';
+
+  @override
+  String get multipleSpeakersDetected => '检测到多个说话者';
+
+  @override
+  String get multipleSpeakersDescription => '录音中似乎有多个说话者。请确保您在安静的地方，然后重试。';
+
+  @override
+  String get invalidRecordingDetected => '检测到无效录音';
+
+  @override
+  String get notEnoughSpeechDescription => '检测到的语音不足。请多说一些，然后重试。';
+
+  @override
+  String get speechDurationDescription => '请确保您说话至少5秒钟，但不超过90秒。';
+
+  @override
+  String get connectionLostDescription => '连接中断。请检查您的互联网连接并重试。';
+
+  @override
+  String get howToTakeGoodSample => '如何获取好的样本？';
+
+  @override
+  String get goodSampleInstructions => '1. 确保您在安静的地方。\n2. 说话要清晰自然。\n3. 确保您的设备在颈部的自然位置。\n\n创建后，您随时可以改进它或重新创建。';
+
+  @override
+  String get noDeviceConnectedUseMic => '没有连接设备。将使用手机麦克风。';
+
+  @override
+  String get doItAgain => '重新开始';
+
+  @override
+  String get listenToSpeechProfile => '听我的语音档案 ➡️';
+
+  @override
+  String get recognizingOthers => '识别他人 👀';
+
+  @override
+  String get keepGoingGreat => '继续，你做得很棒';
+
+  @override
+  String get somethingWentWrongTryAgain => '出错了！请稍后重试。';
+
+  @override
+  String get uploadingVoiceProfile => '正在上传您的语音配置文件....';
+
+  @override
+  String get memorizingYourVoice => '正在记忆您的声音...';
+
+  @override
+  String get personalizingExperience => '正在个性化您的体验...';
+
+  @override
+  String get keepSpeakingUntil100 => '继续说话直到达到100%。';
+
+  @override
+  String get greatJobAlmostThere => '做得好，就快完成了';
+
+  @override
+  String get soCloseJustLittleMore => '很接近了，再说一点';
 }

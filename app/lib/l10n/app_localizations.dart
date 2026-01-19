@@ -1425,7 +1425,7 @@ abstract class AppLocalizations {
   /// **'Debug & Diagnostics'**
   String get debugDiagnostics;
 
-  /// Label for endpoint URL text field
+  /// Label for webhook endpoint URL field
   ///
   /// In en, this message translates to:
   /// **'Endpoint URL'**
@@ -1461,7 +1461,7 @@ abstract class AppLocalizations {
   /// **'Your Omi Insights'**
   String get yourOmiInsights;
 
-  /// Today date label
+  /// Label for today in date headers
   ///
   /// In en, this message translates to:
   /// **'Today'**
@@ -1671,7 +1671,7 @@ abstract class AppLocalizations {
   /// **'Helps diagnose issues'**
   String get debugLogsDesc;
 
-  /// Error message when no log files exist
+  /// Error message when no debug log files exist
   ///
   /// In en, this message translates to:
   /// **'No log files found.'**
@@ -1797,7 +1797,7 @@ abstract class AppLocalizations {
   /// **'Server URL'**
   String get serverUrl;
 
-  /// Success message when URL copied
+  /// Snackbar message when URL is copied to clipboard
   ///
   /// In en, this message translates to:
   /// **'URL copied'**
@@ -1887,7 +1887,7 @@ abstract class AppLocalizations {
   /// **'Audio data received'**
   String get audioDataReceived;
 
-  /// Label for interval field in seconds
+  /// Label for webhook interval field
   ///
   /// In en, this message translates to:
   /// **'Interval (seconds)'**
@@ -2403,10 +2403,10 @@ abstract class AppLocalizations {
   /// **'Refresh'**
   String get refresh;
 
-  /// No description provided for @noUpcomingMeetings.
+  /// Empty state when no meetings scheduled
   ///
   /// In en, this message translates to:
-  /// **'No upcoming meetings found'**
+  /// **'No upcoming meetings'**
   String get noUpcomingMeetings;
 
   /// No description provided for @checkingNextDays.
@@ -2415,7 +2415,7 @@ abstract class AppLocalizations {
   /// **'Checking next 30 days'**
   String get checkingNextDays;
 
-  /// Tomorrow date label
+  /// Label for tomorrow in date headers
   ///
   /// In en, this message translates to:
   /// **'Tomorrow'**
@@ -3483,7 +3483,7 @@ abstract class AppLocalizations {
   /// **'Maybe Later'**
   String get maybeLater;
 
-  /// Introduction text for speech profile creation
+  /// Introduction text for speech profile setup
   ///
   /// In en, this message translates to:
   /// **'Omi needs to learn your goals and your voice. You\'ll be able to modify it later.'**
@@ -3507,7 +3507,7 @@ abstract class AppLocalizations {
   /// **'Keep going, you are doing great'**
   String get keepGoing;
 
-  /// Button text to skip the current question
+  /// Button text to skip current question
   ///
   /// In en, this message translates to:
   /// **'Skip this question'**
@@ -4989,7 +4989,7 @@ abstract class AppLocalizations {
   /// **'Toggle Control Bar'**
   String get toggleControlBar;
 
-  /// Instruction to press keys for shortcut recording
+  /// Placeholder text when recording keyboard shortcut
   ///
   /// In en, this message translates to:
   /// **'Press keys...'**
@@ -5001,7 +5001,7 @@ abstract class AppLocalizations {
   /// **'⌘ required'**
   String get cmdRequired;
 
-  /// Error message for invalid key press
+  /// Error message when invalid key is pressed for shortcut
   ///
   /// In en, this message translates to:
   /// **'Invalid key'**
@@ -7323,7 +7323,7 @@ abstract class AppLocalizations {
   /// **'About'**
   String get about;
 
-  /// Time picker dialog title
+  /// Dialog title for selecting time
   ///
   /// In en, this message translates to:
   /// **'Select Time'**
@@ -7335,13 +7335,13 @@ abstract class AppLocalizations {
   /// **'Account'**
   String get accountGroup;
 
-  /// Sign out confirmation dialog title
+  /// Dialog title asking user to confirm sign out
   ///
   /// In en, this message translates to:
   /// **'Sign Out?'**
   String get signOutQuestion;
 
-  /// Sign out confirmation message
+  /// Confirmation message in sign out dialog
   ///
   /// In en, this message translates to:
   /// **'Are you sure you want to sign out?'**
@@ -7383,7 +7383,7 @@ abstract class AppLocalizations {
   /// **'Get a personalized summary of your conversations'**
   String get dailySummaryDescription;
 
-  /// Delivery time setting
+  /// Label for daily summary delivery time setting
   ///
   /// In en, this message translates to:
   /// **'Delivery Time'**
@@ -7449,10 +7449,10 @@ abstract class AppLocalizations {
   /// **'Include personal events with no attendees'**
   String get includePersonalEventsDescription;
 
-  /// No description provided for @upcomingMeetings.
+  /// Section header for upcoming meetings in calendar
   ///
   /// In en, this message translates to:
-  /// **'UPCOMING MEETINGS'**
+  /// **'Upcoming Meetings'**
   String get upcomingMeetings;
 
   /// No description provided for @checkingNext7Days.
@@ -7503,7 +7503,7 @@ abstract class AppLocalizations {
   /// **'Export conversations to JSON'**
   String get exportConversationsDescription;
 
-  /// No description provided for @exportingConversations.
+  /// Snackbar message when exporting conversations
   ///
   /// In en, this message translates to:
   /// **'Exporting conversations...'**
@@ -9020,6 +9020,1740 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No specific data access configured.'**
   String get noSpecificDataAccessConfigured;
+
+  /// Description of basic plan features in usage page
+  ///
+  /// In en, this message translates to:
+  /// **'1,200 premium mins + unlimited on-device'**
+  String get basicPlanDescription;
+
+  /// Unit label for minutes
+  ///
+  /// In en, this message translates to:
+  /// **'minutes'**
+  String get minutes;
+
+  /// Fallback text for share stats when period is unknown
+  ///
+  /// In en, this message translates to:
+  /// **'Omi has:'**
+  String get omiHas;
+
+  /// Message shown when all premium minutes are used
+  ///
+  /// In en, this message translates to:
+  /// **'Premium minutes used.'**
+  String get premiumMinutesUsed;
+
+  /// Link text to setup on-device transcription
+  ///
+  /// In en, this message translates to:
+  /// **'Setup on-device'**
+  String get setupOnDevice;
+
+  /// Continuation of premium minutes message
+  ///
+  /// In en, this message translates to:
+  /// **'for unlimited free transcription.'**
+  String get forUnlimitedFreeTranscription;
+
+  /// Message showing remaining premium minutes
+  ///
+  /// In en, this message translates to:
+  /// **'{count} premium mins left.'**
+  String premiumMinsLeft(int count);
+
+  /// Text indicating on-device is always available
+  ///
+  /// In en, this message translates to:
+  /// **'always available.'**
+  String get alwaysAvailable;
+
+  /// Section header for import history
+  ///
+  /// In en, this message translates to:
+  /// **'Import History'**
+  String get importHistory;
+
+  /// Message when no imports exist
+  ///
+  /// In en, this message translates to:
+  /// **'No imports yet'**
+  String get noImportsYet;
+
+  /// Description for Limitless import option
+  ///
+  /// In en, this message translates to:
+  /// **'Select the .zip file to import!'**
+  String get selectZipFileToImport;
+
+  /// Text for other devices placeholder
+  ///
+  /// In en, this message translates to:
+  /// **'Other devices coming soon'**
+  String get otherDevicesComingSoon;
+
+  /// Dialog title for deleting Limitless data
+  ///
+  /// In en, this message translates to:
+  /// **'Delete All Limitless Conversations?'**
+  String get deleteAllLimitlessConversations;
+
+  /// Warning message in delete dialog
+  ///
+  /// In en, this message translates to:
+  /// **'This will permanently delete all conversations imported from Limitless. This action cannot be undone.'**
+  String get deleteAllLimitlessWarning;
+
+  /// Success message after deleting conversations
+  ///
+  /// In en, this message translates to:
+  /// **'Deleted {count} Limitless conversations'**
+  String deletedLimitlessConversations(int count);
+
+  /// Error message when delete fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to delete conversations'**
+  String get failedToDeleteConversations;
+
+  /// Menu item to delete imported data
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Imported Data'**
+  String get deleteImportedData;
+
+  /// Import job status - pending
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get statusPending;
+
+  /// Import job status - processing
+  ///
+  /// In en, this message translates to:
+  /// **'Processing'**
+  String get statusProcessing;
+
+  /// Import job status - completed
+  ///
+  /// In en, this message translates to:
+  /// **'Completed'**
+  String get statusCompleted;
+
+  /// Import job status - failed
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get statusFailed;
+
+  /// Number of conversations created
+  ///
+  /// In en, this message translates to:
+  /// **'{count} conversations'**
+  String nConversations(int count);
+
+  /// Validation message when name field is empty
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a name'**
+  String get pleaseEnterName;
+
+  /// Validation message for name length
+  ///
+  /// In en, this message translates to:
+  /// **'Name must be between 2 and 40 characters'**
+  String get nameMustBeBetweenCharacters;
+
+  /// Dialog title for deleting a speech sample
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Sample?'**
+  String get deleteSampleQuestion;
+
+  /// Confirmation message for deleting a speech sample
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to delete {name}\'s sample?'**
+  String deleteSampleConfirmation(String name);
+
+  /// Dialog title for confirming deletion
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm Deletion'**
+  String get confirmDeletion;
+
+  /// Confirmation message for deleting a person
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to delete {name}? This will also remove all associated speech samples.'**
+  String deletePersonConfirmation(String name);
+
+  /// Help dialog title
+  ///
+  /// In en, this message translates to:
+  /// **'How it works?'**
+  String get howItWorksTitle;
+
+  /// Explanation of how people/speech recognition works
+  ///
+  /// In en, this message translates to:
+  /// **'Once a person is created, you can go to a conversation transcript, and assign them their corresponding segments, that way Omi will be able to recognize their speech too!'**
+  String get howPeopleWorks;
+
+  /// Hint text for tap to delete action
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to delete'**
+  String get tapToDelete;
+
+  /// newTag label
+  ///
+  /// In en, this message translates to:
+  /// **'NEW'**
+  String get newTag;
+
+  /// needHelpChatWithUs label
+  ///
+  /// In en, this message translates to:
+  /// **'Need Help? Chat with us'**
+  String get needHelpChatWithUs;
+
+  /// localStorageEnabled label
+  ///
+  /// In en, this message translates to:
+  /// **'Local storage enabled'**
+  String get localStorageEnabled;
+
+  /// localStorageDisabled label
+  ///
+  /// In en, this message translates to:
+  /// **'Local storage disabled'**
+  String get localStorageDisabled;
+
+  /// failedToUpdateSettings message
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to update settings: {error}'**
+  String failedToUpdateSettings(String error);
+
+  /// privacyNotice label
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy Notice'**
+  String get privacyNotice;
+
+  /// recordingsMayCaptureOthers label
+  ///
+  /// In en, this message translates to:
+  /// **'Recordings may capture others\' voices. Ensure you have consent from all participants before enabling.'**
+  String get recordingsMayCaptureOthers;
+
+  /// enable label
+  ///
+  /// In en, this message translates to:
+  /// **'Enable'**
+  String get enable;
+
+  /// storeAudioOnPhone label
+  ///
+  /// In en, this message translates to:
+  /// **'Store Audio on Phone'**
+  String get storeAudioOnPhone;
+
+  /// on label
+  ///
+  /// In en, this message translates to:
+  /// **'On'**
+  String get on;
+
+  /// storeAudioDescription label
+  ///
+  /// In en, this message translates to:
+  /// **'Keep all audio recordings stored locally on your phone. When disabled, only failed uploads are kept to save storage space.'**
+  String get storeAudioDescription;
+
+  /// enableLocalStorage label
+  ///
+  /// In en, this message translates to:
+  /// **'Enable Local Storage'**
+  String get enableLocalStorage;
+
+  /// cloudStorageEnabled label
+  ///
+  /// In en, this message translates to:
+  /// **'Cloud storage enabled'**
+  String get cloudStorageEnabled;
+
+  /// cloudStorageDisabled label
+  ///
+  /// In en, this message translates to:
+  /// **'Cloud storage disabled'**
+  String get cloudStorageDisabled;
+
+  /// enableCloudStorage label
+  ///
+  /// In en, this message translates to:
+  /// **'Enable Cloud Storage'**
+  String get enableCloudStorage;
+
+  /// storeAudioOnCloud label
+  ///
+  /// In en, this message translates to:
+  /// **'Store Audio on Cloud'**
+  String get storeAudioOnCloud;
+
+  /// cloudStorageDialogMessage label
+  ///
+  /// In en, this message translates to:
+  /// **'Your real-time recordings will be stored in private cloud storage as you speak.'**
+  String get cloudStorageDialogMessage;
+
+  /// storeAudioCloudDescription label
+  ///
+  /// In en, this message translates to:
+  /// **'Store your real-time recordings in private cloud storage as you speak. Audio is captured and saved securely in real-time.'**
+  String get storeAudioCloudDescription;
+
+  /// Status text shown while downloading firmware
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading Firmware'**
+  String get downloadingFirmware;
+
+  /// Status text shown while installing firmware
+  ///
+  /// In en, this message translates to:
+  /// **'Installing Firmware'**
+  String get installingFirmware;
+
+  /// Warning message during firmware update
+  ///
+  /// In en, this message translates to:
+  /// **'Do not close the app or turn off the device. This could corrupt your device.'**
+  String get firmwareUpdateWarning;
+
+  /// Success message when firmware update is complete
+  ///
+  /// In en, this message translates to:
+  /// **'Firmware Updated'**
+  String get firmwareUpdated;
+
+  /// Message asking user to restart device after update. {deviceName} is the device name.
+  ///
+  /// In en, this message translates to:
+  /// **'Please restart your {deviceName} to complete the update.'**
+  String restartDeviceToComplete(Object deviceName);
+
+  /// Message shown when device firmware is current
+  ///
+  /// In en, this message translates to:
+  /// **'Your device is up to date'**
+  String get yourDeviceIsUpToDate;
+
+  /// Label for current firmware version
+  ///
+  /// In en, this message translates to:
+  /// **'Current Version'**
+  String get currentVersion;
+
+  /// Label for latest available firmware version
+  ///
+  /// In en, this message translates to:
+  /// **'Latest Version'**
+  String get latestVersion;
+
+  /// Section header for changelog
+  ///
+  /// In en, this message translates to:
+  /// **'What\'s New'**
+  String get whatsNew;
+
+  /// Button text to install firmware update
+  ///
+  /// In en, this message translates to:
+  /// **'Install Update'**
+  String get installUpdate;
+
+  /// Button text to start firmware update
+  ///
+  /// In en, this message translates to:
+  /// **'Update Now'**
+  String get updateNow;
+
+  /// Link text to firmware update help
+  ///
+  /// In en, this message translates to:
+  /// **'Update Guide'**
+  String get updateGuide;
+
+  /// Title shown while checking for updates
+  ///
+  /// In en, this message translates to:
+  /// **'Checking for Updates'**
+  String get checkingForUpdates;
+
+  /// Status text while checking firmware version
+  ///
+  /// In en, this message translates to:
+  /// **'Checking firmware version...'**
+  String get checkingFirmwareVersion;
+
+  /// Page title for firmware update screen
+  ///
+  /// In en, this message translates to:
+  /// **'Firmware Update'**
+  String get firmwareUpdate;
+
+  /// Page title for payments settings
+  ///
+  /// In en, this message translates to:
+  /// **'Payments'**
+  String get payments;
+
+  /// Info message explaining how to connect payment method
+  ///
+  /// In en, this message translates to:
+  /// **'Connect a payment method below to start receiving payouts for your apps.'**
+  String get connectPaymentMethodInfo;
+
+  /// Section header for selected payment method
+  ///
+  /// In en, this message translates to:
+  /// **'Selected Payment Method'**
+  String get selectedPaymentMethod;
+
+  /// Section header for available payment methods
+  ///
+  /// In en, this message translates to:
+  /// **'Available Payment Methods'**
+  String get availablePaymentMethods;
+
+  /// Status label when payment method is active
+  ///
+  /// In en, this message translates to:
+  /// **'Active'**
+  String get activeStatus;
+
+  /// Status label when payment method is connected
+  ///
+  /// In en, this message translates to:
+  /// **'Connected'**
+  String get connectedStatus;
+
+  /// Status label when payment method is not connected
+  ///
+  /// In en, this message translates to:
+  /// **'Not Connected'**
+  String get notConnectedStatus;
+
+  /// Button to set payment method as active
+  ///
+  /// In en, this message translates to:
+  /// **'Set Active'**
+  String get setActive;
+
+  /// Title for Stripe setup page
+  ///
+  /// In en, this message translates to:
+  /// **'Get paid for your app sales through Stripe'**
+  String get getPaidThroughStripe;
+
+  /// Feature title for monthly payouts
+  ///
+  /// In en, this message translates to:
+  /// **'Monthly payouts'**
+  String get monthlyPayouts;
+
+  /// Description of monthly payout feature
+  ///
+  /// In en, this message translates to:
+  /// **'Receive monthly payments directly to your account when you reach \$10 in earnings'**
+  String get monthlyPayoutsDescription;
+
+  /// Feature title for security
+  ///
+  /// In en, this message translates to:
+  /// **'Secure and reliable'**
+  String get secureAndReliable;
+
+  /// Description of Stripe security feature
+  ///
+  /// In en, this message translates to:
+  /// **'Stripe ensures safe and timely transfers of your app revenue'**
+  String get stripeSecureDescription;
+
+  /// Placeholder for country selector
+  ///
+  /// In en, this message translates to:
+  /// **'Select your country'**
+  String get selectYourCountry;
+
+  /// Warning that country selection cannot be changed
+  ///
+  /// In en, this message translates to:
+  /// **'Your country selection is permanent and cannot be changed later.'**
+  String get countrySelectionPermanent;
+
+  /// Legal agreement intro text
+  ///
+  /// In en, this message translates to:
+  /// **'By clicking on \"Connect Now\" you agree to the'**
+  String get byClickingConnectNow;
+
+  /// Link text for Stripe agreement
+  ///
+  /// In en, this message translates to:
+  /// **'Stripe Connected Account Agreement'**
+  String get stripeConnectedAccountAgreement;
+
+  /// Error message when Stripe connection fails
+  ///
+  /// In en, this message translates to:
+  /// **'Error connecting to Stripe! Please try again later.'**
+  String get errorConnectingToStripe;
+
+  /// Title during Stripe connection process
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting your Stripe account'**
+  String get connectingYourStripeAccount;
+
+  /// Instructions for completing Stripe onboarding
+  ///
+  /// In en, this message translates to:
+  /// **'Please complete the Stripe onboarding process in your browser. This page will automatically update once completed.'**
+  String get stripeOnboardingInstructions;
+
+  /// Button to retry failed connection
+  ///
+  /// In en, this message translates to:
+  /// **'Failed? Try Again'**
+  String get failedTryAgain;
+
+  /// Button to defer connection
+  ///
+  /// In en, this message translates to:
+  /// **'I\'ll do it later'**
+  String get illDoItLater;
+
+  /// Title when connection succeeds
+  ///
+  /// In en, this message translates to:
+  /// **'Successfully Connected!'**
+  String get successfullyConnected;
+
+  /// Description after successful connection
+  ///
+  /// In en, this message translates to:
+  /// **'Your Stripe account is now ready to receive payments. You can start earning from your app sales right away.'**
+  String get stripeReadyForPayments;
+
+  /// Button to update Stripe details
+  ///
+  /// In en, this message translates to:
+  /// **'Update Stripe Details'**
+  String get updateStripeDetails;
+
+  /// Error message when Stripe update fails
+  ///
+  /// In en, this message translates to:
+  /// **'Error updating Stripe details! Please try again later.'**
+  String get errorUpdatingStripeDetails;
+
+  /// App bar title when updating PayPal
+  ///
+  /// In en, this message translates to:
+  /// **'Update PayPal'**
+  String get updatePayPal;
+
+  /// App bar title when setting up PayPal
+  ///
+  /// In en, this message translates to:
+  /// **'Set Up PayPal'**
+  String get setUpPayPal;
+
+  /// Description when updating PayPal account
+  ///
+  /// In en, this message translates to:
+  /// **'Update your PayPal account details'**
+  String get updatePayPalAccountDetails;
+
+  /// Description when connecting PayPal account
+  ///
+  /// In en, this message translates to:
+  /// **'Connect your PayPal account to start receiving payments for your apps'**
+  String get connectPayPalToReceivePayments;
+
+  /// Label for PayPal email field
+  ///
+  /// In en, this message translates to:
+  /// **'PayPal Email'**
+  String get paypalEmail;
+
+  /// Label for PayPal.me link field
+  ///
+  /// In en, this message translates to:
+  /// **'PayPal.me Link'**
+  String get paypalMeLink;
+
+  /// Info message recommending Stripe over PayPal
+  ///
+  /// In en, this message translates to:
+  /// **'If Stripe is available in your country, we highly recommend using it for faster and easier payouts.'**
+  String get stripeRecommendation;
+
+  /// Button text to update PayPal details
+  ///
+  /// In en, this message translates to:
+  /// **'Update PayPal Details'**
+  String get updatePayPalDetails;
+
+  /// Button text to save PayPal details
+  ///
+  /// In en, this message translates to:
+  /// **'Save PayPal Details'**
+  String get savePayPalDetails;
+
+  /// Validation error for empty PayPal email
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter your PayPal email'**
+  String get pleaseEnterPayPalEmail;
+
+  /// Validation error for empty PayPal.me link
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter your PayPal.me link'**
+  String get pleaseEnterPayPalMeLink;
+
+  /// Validation error for http/https/www in link
+  ///
+  /// In en, this message translates to:
+  /// **'Do not include http or https or www in the link'**
+  String get doNotIncludeHttpInLink;
+
+  /// Validation error for invalid PayPal.me link
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a valid PayPal.me link'**
+  String get pleaseEnterValidPayPalMeLink;
+
+  /// No description provided for @pleaseEnterValidEmail.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a valid email address'**
+  String get pleaseEnterValidEmail;
+
+  /// Status message shown while recordings are being synced
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing your recordings'**
+  String get syncingYourRecordings;
+
+  /// Label prompting user to sync their recordings
+  ///
+  /// In en, this message translates to:
+  /// **'Sync your recordings'**
+  String get syncYourRecordings;
+
+  /// Button text to start syncing recordings immediately
+  ///
+  /// In en, this message translates to:
+  /// **'Sync Now'**
+  String get syncNow;
+
+  /// Generic error label shown when an operation fails
+  ///
+  /// In en, this message translates to:
+  /// **'Error'**
+  String get error;
+
+  /// Title for the speech samples page
+  ///
+  /// In en, this message translates to:
+  /// **'Speech Samples'**
+  String get speechSamples;
+
+  /// Title for additional speech samples with index number
+  ///
+  /// In en, this message translates to:
+  /// **'Additional Sample {index}'**
+  String additionalSampleIndex(String index);
+
+  /// Shows the duration of a speech sample in seconds
+  ///
+  /// In en, this message translates to:
+  /// **'Duration: {seconds} seconds'**
+  String durationSeconds(String seconds);
+
+  /// Confirmation message when an additional speech sample is deleted
+  ///
+  /// In en, this message translates to:
+  /// **'Additional Speech Sample Removed'**
+  String get additionalSpeechSampleRemoved;
+
+  /// Consent message explaining how user data will be stored and used
+  ///
+  /// In en, this message translates to:
+  /// **'By continuing, all data you share with this app (including your conversations, recordings, and personal information) will be securely stored on our servers to provide you with AI-powered insights and enable all app features.'**
+  String get consentDataMessage;
+
+  /// Empty state message shown when there are no tasks, with instruction to tap + button
+  ///
+  /// In en, this message translates to:
+  /// **'Tasks from your conversations will appear here.\nTap + to create one manually.'**
+  String get tasksEmptyStateMessage;
+
+  /// Menu item text for clearing chat history
+  ///
+  /// In en, this message translates to:
+  /// **'Clear Chat'**
+  String get clearChatAction;
+
+  /// Menu item text to navigate to apps page and enable more chat apps
+  ///
+  /// In en, this message translates to:
+  /// **'Enable Apps'**
+  String get enableApps;
+
+  /// The Omi app/assistant name shown in chat app selection
+  ///
+  /// In en, this message translates to:
+  /// **'Omi'**
+  String get omiAppName;
+
+  /// Text shown to expand collapsed content, with down arrow
+  ///
+  /// In en, this message translates to:
+  /// **'show more ↓'**
+  String get showMore;
+
+  /// Text shown to collapse expanded content, with up arrow
+  ///
+  /// In en, this message translates to:
+  /// **'show less ↑'**
+  String get showLess;
+
+  /// Loading message shown while audio waveform is being processed
+  ///
+  /// In en, this message translates to:
+  /// **'Loading your recording...'**
+  String get loadingYourRecording;
+
+  /// Message shown when a photo was discarded as not significant
+  ///
+  /// In en, this message translates to:
+  /// **'This photo was discarded as it was not significant.'**
+  String get photoDiscardedMessage;
+
+  /// Loading text shown while analyzing a photo
+  ///
+  /// In en, this message translates to:
+  /// **'Analyzing...'**
+  String get analyzing;
+
+  /// Placeholder text for country search field
+  ///
+  /// In en, this message translates to:
+  /// **'Search countries...'**
+  String get searchCountries;
+
+  /// Loading text while checking Apple Watch status
+  ///
+  /// In en, this message translates to:
+  /// **'Checking Apple Watch...'**
+  String get checkingAppleWatch;
+
+  /// Title prompting user to install Omi on Apple Watch
+  ///
+  /// In en, this message translates to:
+  /// **'Install Omi on your\nApple Watch'**
+  String get installOmiOnAppleWatch;
+
+  /// Description explaining need to install Omi app on watch
+  ///
+  /// In en, this message translates to:
+  /// **'To use your Apple Watch with Omi, you need to install the Omi app on your watch first.'**
+  String get installOmiOnAppleWatchDescription;
+
+  /// Title prompting user to open Omi on Apple Watch
+  ///
+  /// In en, this message translates to:
+  /// **'Open Omi on your\nApple Watch'**
+  String get openOmiOnAppleWatch;
+
+  /// Description explaining Omi is installed and user should open it
+  ///
+  /// In en, this message translates to:
+  /// **'The Omi app is installed on your Apple Watch. Open it and tap Start to begin.'**
+  String get openOmiOnAppleWatchDescription;
+
+  /// Button text to open Watch app on iPhone
+  ///
+  /// In en, this message translates to:
+  /// **'Open Watch App'**
+  String get openWatchApp;
+
+  /// Button text confirming user has installed and opened the app
+  ///
+  /// In en, this message translates to:
+  /// **'I\'ve Installed & Opened the App'**
+  String get iveInstalledAndOpenedTheApp;
+
+  /// Error message when Watch app cannot be opened automatically
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to open Apple Watch app. Please manually open the Watch app on your Apple Watch and install Omi from the \"Available Apps\" section.'**
+  String get unableToOpenWatchApp;
+
+  /// Success message when Apple Watch connects
+  ///
+  /// In en, this message translates to:
+  /// **'Apple Watch connected successfully!'**
+  String get appleWatchConnectedSuccessfully;
+
+  /// Error message when Apple Watch is not reachable
+  ///
+  /// In en, this message translates to:
+  /// **'Apple Watch still not reachable. Please make sure the Omi app is open on your watch.'**
+  String get appleWatchNotReachable;
+
+  /// Error message with error details when connection check fails
+  ///
+  /// In en, this message translates to:
+  /// **'Error checking connection: {error}'**
+  String errorCheckingConnection(String error);
+
+  /// Status text shown when microphone is muted
+  ///
+  /// In en, this message translates to:
+  /// **'Muted'**
+  String get muted;
+
+  /// Button text to process/summarize the conversation immediately
+  ///
+  /// In en, this message translates to:
+  /// **'Process Now'**
+  String get processNow;
+
+  /// Dialog title asking if user wants to end conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Finished Conversation?'**
+  String get finishedConversation;
+
+  /// Confirmation message for stopping recording and summarizing
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to stop recording and summarize the conversation now?'**
+  String get stopRecordingConfirmation;
+
+  /// Hint text explaining conversation only ends manually
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation will only end manually.'**
+  String get conversationEndsManually;
+
+  /// Hint text showing how many minutes of silence before auto-summary
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation is summarized after {minutes} minute{suffix} of no speech.'**
+  String conversationSummarizedAfterMinutes(int minutes, String suffix);
+
+  /// Checkbox label to not show confirmation dialog again
+  ///
+  /// In en, this message translates to:
+  /// **'Don\'t ask me again'**
+  String get dontAskAgain;
+
+  /// Placeholder text shown while waiting for content
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for transcript or photos...'**
+  String get waitingForTranscriptOrPhotos;
+
+  /// Text shown when no summary is available yet
+  ///
+  /// In en, this message translates to:
+  /// **'No summary yet'**
+  String get noSummaryYet;
+
+  /// Label for hints section with dynamic text
+  ///
+  /// In en, this message translates to:
+  /// **'Hints: {text}'**
+  String hints(String text);
+
+  /// App bar title for testing conversation prompts page
+  ///
+  /// In en, this message translates to:
+  /// **'Test Conversation Prompt'**
+  String get testConversationPrompt;
+
+  /// Label for prompt input field
+  ///
+  /// In en, this message translates to:
+  /// **'Prompt'**
+  String get prompt;
+
+  /// Label for result section showing prompt output
+  ///
+  /// In en, this message translates to:
+  /// **'Result'**
+  String get result;
+
+  /// App bar title for comparing transcripts from different services
+  ///
+  /// In en, this message translates to:
+  /// **'Compare Transcripts'**
+  String get compareTranscripts;
+
+  /// Label for thumbs down button to indicate response was not helpful
+  ///
+  /// In en, this message translates to:
+  /// **'Not Helpful'**
+  String get notHelpful;
+
+  /// Banner message promoting task export integration feature
+  ///
+  /// In en, this message translates to:
+  /// **'Export tasks with one tap!'**
+  String get exportTasksWithOneTap;
+
+  /// Title for conversation being processed
+  ///
+  /// In en, this message translates to:
+  /// **'In progress'**
+  String get inProgress;
+
+  /// Tab label for photos content
+  ///
+  /// In en, this message translates to:
+  /// **'Photos'**
+  String get photos;
+
+  /// Tab label for raw data content
+  ///
+  /// In en, this message translates to:
+  /// **'Raw Data'**
+  String get rawData;
+
+  /// Tab label for content
+  ///
+  /// In en, this message translates to:
+  /// **'Content'**
+  String get content;
+
+  /// Message when there is no content available
+  ///
+  /// In en, this message translates to:
+  /// **'No content to display'**
+  String get noContentToDisplay;
+
+  /// Message when no summary is available
+  ///
+  /// In en, this message translates to:
+  /// **'No summary'**
+  String get noSummary;
+
+  /// Button text to update Omi device firmware
+  ///
+  /// In en, this message translates to:
+  /// **'Update omi firmware'**
+  String get updateOmiFirmware;
+
+  /// Generic error message asking user to try again
+  ///
+  /// In en, this message translates to:
+  /// **'An error occurred. Please try again.'**
+  String get anErrorOccurredTryAgain;
+
+  /// Simple welcome message without user name
+  ///
+  /// In en, this message translates to:
+  /// **'Welcome back'**
+  String get welcomeBackSimple;
+
+  /// Description for custom vocabulary section
+  ///
+  /// In en, this message translates to:
+  /// **'Add words that Omi should recognize during transcription.'**
+  String get addVocabularyDescription;
+
+  /// Placeholder hint for vocabulary input field
+  ///
+  /// In en, this message translates to:
+  /// **'Enter words (comma separated)'**
+  String get enterWordsCommaSeparated;
+
+  /// Description for delivery time setting
+  ///
+  /// In en, this message translates to:
+  /// **'When to receive your daily summary'**
+  String get whenToReceiveDailySummary;
+
+  /// Subtitle for no upcoming meetings state
+  ///
+  /// In en, this message translates to:
+  /// **'Checking the next 7 days'**
+  String get checkingNextSevenDays;
+
+  /// Error message when deletion fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to delete: {error}'**
+  String failedToDeleteError(String error);
+
+  /// Section header for developer API keys
+  ///
+  /// In en, this message translates to:
+  /// **'Developer API Keys'**
+  String get developerApiKeys;
+
+  /// Empty state for MCP API keys section
+  ///
+  /// In en, this message translates to:
+  /// **'No API keys. Create one to get started.'**
+  String get noApiKeysCreateOne;
+
+  /// Error message when command key is not pressed for shortcut
+  ///
+  /// In en, this message translates to:
+  /// **'⌘ required'**
+  String get commandRequired;
+
+  /// Display name for the space key in shortcuts
+  ///
+  /// In en, this message translates to:
+  /// **'Space'**
+  String get spaceKey;
+
+  /// Button text showing number of items remaining to load
+  ///
+  /// In en, this message translates to:
+  /// **'Load More ({count} remaining)'**
+  String loadMoreRemaining(String count);
+
+  /// Badge showing user percentile ranking in Wrapped
+  ///
+  /// In en, this message translates to:
+  /// **'Top {percentile}% User'**
+  String wrappedTopPercentUser(String percentile);
+
+  /// Label for minutes stat in Wrapped
+  ///
+  /// In en, this message translates to:
+  /// **'minutes'**
+  String get wrappedMinutes;
+
+  /// Label for conversations stat in Wrapped
+  ///
+  /// In en, this message translates to:
+  /// **'conversations'**
+  String get wrappedConversations;
+
+  /// Label for days active stat in Wrapped
+  ///
+  /// In en, this message translates to:
+  /// **'days active'**
+  String get wrappedDaysActive;
+
+  /// Badge for top categories in Wrapped
+  ///
+  /// In en, this message translates to:
+  /// **'You Talked About'**
+  String get wrappedYouTalkedAbout;
+
+  /// Badge for action items in Wrapped
+  ///
+  /// In en, this message translates to:
+  /// **'Action Items'**
+  String get wrappedActionItems;
+
+  /// Label for tasks created in Wrapped
+  ///
+  /// In en, this message translates to:
+  /// **'tasks created'**
+  String get wrappedTasksCreated;
+
+  /// Label for completed tasks in Wrapped
+  ///
+  /// In en, this message translates to:
+  /// **'completed'**
+  String get wrappedCompleted;
+
+  /// Completion rate badge in Wrapped
+  ///
+  /// In en, this message translates to:
+  /// **'{rate}% completion rate'**
+  String wrappedCompletionRate(String rate);
+
+  /// Badge for top days in Wrapped
+  ///
+  /// In en, this message translates to:
+  /// **'Your Top Days'**
+  String get wrappedYourTopDays;
+
+  /// Badge for best moments in Wrapped
+  ///
+  /// In en, this message translates to:
+  /// **'Best Moments'**
+  String get wrappedBestMoments;
+
+  /// Badge for buddies in Wrapped
+  ///
+  /// In en, this message translates to:
+  /// **'My Buddies'**
+  String get wrappedMyBuddies;
+
+  /// Badge for obsessions in Wrapped
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t Stop Talking About'**
+  String get wrappedCouldntStopTalkingAbout;
+
+  /// Label for show obsession in Wrapped
+  ///
+  /// In en, this message translates to:
+  /// **'SHOW'**
+  String get wrappedShow;
+
+  /// Label for movie obsession in Wrapped
+  ///
+  /// In en, this message translates to:
+  /// **'MOVIE'**
+  String get wrappedMovie;
+
+  /// Label for book obsession in Wrapped
+  ///
+  /// In en, this message translates to:
+  /// **'BOOK'**
+  String get wrappedBook;
+
+  /// Label for celebrity obsession in Wrapped
+  ///
+  /// In en, this message translates to:
+  /// **'CELEBRITY'**
+  String get wrappedCelebrity;
+
+  /// Label for food obsession in Wrapped
+  ///
+  /// In en, this message translates to:
+  /// **'FOOD'**
+  String get wrappedFood;
+
+  /// Badge for movie recommendations in Wrapped
+  ///
+  /// In en, this message translates to:
+  /// **'Movie Recs For Friends'**
+  String get wrappedMovieRecs;
+
+  /// Word Biggest in struggle/win templates
+  ///
+  /// In en, this message translates to:
+  /// **'Biggest'**
+  String get wrappedBiggest;
+
+  /// Word Struggle in Wrapped template
+  ///
+  /// In en, this message translates to:
+  /// **'Struggle'**
+  String get wrappedStruggle;
+
+  /// Encouragement message in struggle template
+  ///
+  /// In en, this message translates to:
+  /// **'But you pushed through 💪'**
+  String get wrappedButYouPushedThrough;
+
+  /// Word Win in Wrapped template
+  ///
+  /// In en, this message translates to:
+  /// **'Win'**
+  String get wrappedWin;
+
+  /// Celebration message in win template
+  ///
+  /// In en, this message translates to:
+  /// **'You did it! 🎉'**
+  String get wrappedYouDidIt;
+
+  /// Badge for top phrases in Wrapped
+  ///
+  /// In en, this message translates to:
+  /// **'Top 5 Phrases'**
+  String get wrappedTopPhrases;
+
+  /// Abbreviated minutes label in Wrapped collage
+  ///
+  /// In en, this message translates to:
+  /// **'mins'**
+  String get wrappedMins;
+
+  /// Short label for conversations
+  ///
+  /// In en, this message translates to:
+  /// **'convos'**
+  String get wrappedConvos;
+
+  /// Abbreviated days label in Wrapped collage
+  ///
+  /// In en, this message translates to:
+  /// **'days'**
+  String get wrappedDays;
+
+  /// Uppercase label for buddies tile in collage
+  ///
+  /// In en, this message translates to:
+  /// **'MY BUDDIES'**
+  String get wrappedMyBuddiesLabel;
+
+  /// Uppercase label for obsessions tile in collage
+  ///
+  /// In en, this message translates to:
+  /// **'OBSESSIONS'**
+  String get wrappedObsessionsLabel;
+
+  /// Uppercase label for struggle tile in collage
+  ///
+  /// In en, this message translates to:
+  /// **'STRUGGLE'**
+  String get wrappedStruggleLabel;
+
+  /// Uppercase label for win tile in collage
+  ///
+  /// In en, this message translates to:
+  /// **'WIN'**
+  String get wrappedWinLabel;
+
+  /// Uppercase label for top phrases tile in collage
+  ///
+  /// In en, this message translates to:
+  /// **'TOP PHRASES'**
+  String get wrappedTopPhrasesLabel;
+
+  /// Intro text on wrapped generate screen before the year 2025
+  ///
+  /// In en, this message translates to:
+  /// **'Let\'s hit rewind on your'**
+  String get wrappedLetsHitRewind;
+
+  /// Button text to start generating the 2025 wrapped
+  ///
+  /// In en, this message translates to:
+  /// **'Generate My Wrapped'**
+  String get wrappedGenerateMyWrapped;
+
+  /// Default processing status text
+  ///
+  /// In en, this message translates to:
+  /// **'Processing...'**
+  String get wrappedProcessingDefault;
+
+  /// Text shown while generating the wrapped, includes newline
+  ///
+  /// In en, this message translates to:
+  /// **'Creating your\n2025 story...'**
+  String get wrappedCreatingYourStory;
+
+  /// Error header text, includes newline
+  ///
+  /// In en, this message translates to:
+  /// **'Something\nwent wrong'**
+  String get wrappedSomethingWentWrong;
+
+  /// Generic error message fallback
+  ///
+  /// In en, this message translates to:
+  /// **'An error occurred'**
+  String get wrappedAnErrorOccurred;
+
+  /// Button text to retry generating wrapped
+  ///
+  /// In en, this message translates to:
+  /// **'Try Again'**
+  String get wrappedTryAgain;
+
+  /// Shown when wrapped result is null
+  ///
+  /// In en, this message translates to:
+  /// **'No data available'**
+  String get wrappedNoDataAvailable;
+
+  /// Subtitle on the intro card
+  ///
+  /// In en, this message translates to:
+  /// **'Omi Life Recap'**
+  String get wrappedOmiLifeRecap;
+
+  /// Instruction text on intro card
+  ///
+  /// In en, this message translates to:
+  /// **'Swipe up to begin'**
+  String get wrappedSwipeUpToBegin;
+
+  /// Text shared when sharing wrapped images
+  ///
+  /// In en, this message translates to:
+  /// **'My 2025, remembered by Omi ✨ omi.me/wrapped'**
+  String get wrappedShareText;
+
+  /// Error message when sharing fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to share. Please try again.'**
+  String get wrappedFailedToShare;
+
+  /// Error message when generation fails to start
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to start generation. Please try again.'**
+  String get wrappedFailedToStartGeneration;
+
+  /// Initial processing step text
+  ///
+  /// In en, this message translates to:
+  /// **'Starting...'**
+  String get wrappedStarting;
+
+  /// Share button label
+  ///
+  /// In en, this message translates to:
+  /// **'Share'**
+  String get wrappedShare;
+
+  /// Button text for sharing wrapped on final card
+  ///
+  /// In en, this message translates to:
+  /// **'Share Your Wrapped'**
+  String get wrappedShareYourWrapped;
+
+  /// Title text for shareable image
+  ///
+  /// In en, this message translates to:
+  /// **'My 2025'**
+  String get wrappedMy2025;
+
+  /// Subtitle text for shareable image
+  ///
+  /// In en, this message translates to:
+  /// **'remembered by Omi'**
+  String get wrappedRememberedByOmi;
+
+  /// Label for the most fun day in memorable days
+  ///
+  /// In en, this message translates to:
+  /// **'Most Fun'**
+  String get wrappedMostFunDay;
+
+  /// Label for the most productive day
+  ///
+  /// In en, this message translates to:
+  /// **'Most Productive'**
+  String get wrappedMostProductiveDay;
+
+  /// Label for the most intense/stressful day
+  ///
+  /// In en, this message translates to:
+  /// **'Most Intense'**
+  String get wrappedMostIntenseDay;
+
+  /// Label for funniest moment
+  ///
+  /// In en, this message translates to:
+  /// **'Funniest'**
+  String get wrappedFunniestMoment;
+
+  /// Label for most embarrassing/cringe moment
+  ///
+  /// In en, this message translates to:
+  /// **'Most Cringe'**
+  String get wrappedMostCringeMoment;
+
+  /// Label under minutes count
+  ///
+  /// In en, this message translates to:
+  /// **'minutes'**
+  String get wrappedMinutesLabel;
+
+  /// Label under conversations count
+  ///
+  /// In en, this message translates to:
+  /// **'conversations'**
+  String get wrappedConversationsLabel;
+
+  /// Label under days active count
+  ///
+  /// In en, this message translates to:
+  /// **'days active'**
+  String get wrappedDaysActiveLabel;
+
+  /// Label under total tasks count
+  ///
+  /// In en, this message translates to:
+  /// **'tasks generated'**
+  String get wrappedTasksGenerated;
+
+  /// Label under completed tasks count
+  ///
+  /// In en, this message translates to:
+  /// **'tasks completed'**
+  String get wrappedTasksCompleted;
+
+  /// Badge text for top phrases card
+  ///
+  /// In en, this message translates to:
+  /// **'Top 5 Phrases'**
+  String get wrappedTopFivePhrases;
+
+  /// Default title for most fun day
+  ///
+  /// In en, this message translates to:
+  /// **'A Great Day'**
+  String get wrappedAGreatDay;
+
+  /// Default title for most productive day
+  ///
+  /// In en, this message translates to:
+  /// **'Getting It Done'**
+  String get wrappedGettingItDone;
+
+  /// Default title for most intense day
+  ///
+  /// In en, this message translates to:
+  /// **'A Challenge'**
+  String get wrappedAChallenge;
+
+  /// Default title for funniest moment
+  ///
+  /// In en, this message translates to:
+  /// **'A Hilarious Moment'**
+  String get wrappedAHilariousMoment;
+
+  /// Default title for most cringe moment
+  ///
+  /// In en, this message translates to:
+  /// **'That Awkward Moment'**
+  String get wrappedThatAwkwardMoment;
+
+  /// Default description for funniest moment
+  ///
+  /// In en, this message translates to:
+  /// **'You had some funny moments this year!'**
+  String get wrappedYouHadFunnyMoments;
+
+  /// Default description for cringe moment
+  ///
+  /// In en, this message translates to:
+  /// **'We\'ve all been there!'**
+  String get wrappedWeveAllBeenThere;
+
+  /// Default name/relationship for buddy
+  ///
+  /// In en, this message translates to:
+  /// **'Friend'**
+  String get wrappedFriend;
+
+  /// Default context for buddy
+  ///
+  /// In en, this message translates to:
+  /// **'Your buddy!'**
+  String get wrappedYourBuddy;
+
+  /// Default value when obsession not found
+  ///
+  /// In en, this message translates to:
+  /// **'Not mentioned'**
+  String get wrappedNotMentioned;
+
+  /// Default title for struggle
+  ///
+  /// In en, this message translates to:
+  /// **'The Hard Part'**
+  String get wrappedTheHardPart;
+
+  /// Default title for personal win
+  ///
+  /// In en, this message translates to:
+  /// **'Personal Growth'**
+  String get wrappedPersonalGrowth;
+
+  /// Short label for fun day in summary
+  ///
+  /// In en, this message translates to:
+  /// **'Fun'**
+  String get wrappedFunDay;
+
+  /// Short label for productive day in summary
+  ///
+  /// In en, this message translates to:
+  /// **'Productive'**
+  String get wrappedProductiveDay;
+
+  /// Short label for intense day in summary
+  ///
+  /// In en, this message translates to:
+  /// **'Intense'**
+  String get wrappedIntenseDay;
+
+  /// Default title for funny moment in collage
+  ///
+  /// In en, this message translates to:
+  /// **'Funny Moment'**
+  String get wrappedFunnyMomentTitle;
+
+  /// Default title for cringe moment in collage
+  ///
+  /// In en, this message translates to:
+  /// **'Cringe Moment'**
+  String get wrappedCringeMomentTitle;
+
+  /// Badge text for category chart card
+  ///
+  /// In en, this message translates to:
+  /// **'You Talked About'**
+  String get wrappedYouTalkedAboutBadge;
+
+  /// Completed label in actions card
+  ///
+  /// In en, this message translates to:
+  /// **'Completed'**
+  String get wrappedCompletedLabel;
+
+  /// Badge text for my buddies card
+  ///
+  /// In en, this message translates to:
+  /// **'My Buddies'**
+  String get wrappedMyBuddiesCard;
+
+  /// Section title in summary collage
+  ///
+  /// In en, this message translates to:
+  /// **'BUDDIES'**
+  String get wrappedBuddiesLabel;
+
+  /// Section title in summary collage (uppercase)
+  ///
+  /// In en, this message translates to:
+  /// **'OBSESSIONS'**
+  String get wrappedObsessionsLabelUpper;
+
+  /// Section title in summary collage (uppercase)
+  ///
+  /// In en, this message translates to:
+  /// **'STRUGGLE'**
+  String get wrappedStruggleLabelUpper;
+
+  /// Section title in summary collage (uppercase)
+  ///
+  /// In en, this message translates to:
+  /// **'WIN'**
+  String get wrappedWinLabelUpper;
+
+  /// Section title in summary collage (uppercase)
+  ///
+  /// In en, this message translates to:
+  /// **'TOP PHRASES'**
+  String get wrappedTopPhrasesLabelUpper;
+
+  /// First line of header for top days card
+  ///
+  /// In en, this message translates to:
+  /// **'Your'**
+  String get wrappedYourHeader;
+
+  /// Second line of header for top days card
+  ///
+  /// In en, this message translates to:
+  /// **'Top Days'**
+  String get wrappedTopDaysHeader;
+
+  /// Badge text for top days summary
+  ///
+  /// In en, this message translates to:
+  /// **'Your Top Days'**
+  String get wrappedYourTopDaysBadge;
+
+  /// First line of header for best moments card
+  ///
+  /// In en, this message translates to:
+  /// **'Best'**
+  String get wrappedBestHeader;
+
+  /// Second line of header for best moments card
+  ///
+  /// In en, this message translates to:
+  /// **'Moments'**
+  String get wrappedMomentsHeader;
+
+  /// Badge text for best moments summary
+  ///
+  /// In en, this message translates to:
+  /// **'Best Moments'**
+  String get wrappedBestMomentsBadge;
+
+  /// Header line for struggle/win cards
+  ///
+  /// In en, this message translates to:
+  /// **'Biggest'**
+  String get wrappedBiggestHeader;
+
+  /// Second line of struggle card header
+  ///
+  /// In en, this message translates to:
+  /// **'Struggle'**
+  String get wrappedStruggleHeader;
+
+  /// Second line of win card header
+  ///
+  /// In en, this message translates to:
+  /// **'Win'**
+  String get wrappedWinHeader;
+
+  /// Subtitle on struggle card with emoji
+  ///
+  /// In en, this message translates to:
+  /// **'But you pushed through 💪'**
+  String get wrappedButYouPushedThroughEmoji;
+
+  /// Subtitle on win card with emoji
+  ///
+  /// In en, this message translates to:
+  /// **'You did it! 🎉'**
+  String get wrappedYouDidItEmoji;
+
+  /// Label for hours stat
+  ///
+  /// In en, this message translates to:
+  /// **'hours'**
+  String get wrappedHours;
+
+  /// Label for actions stat
+  ///
+  /// In en, this message translates to:
+  /// **'actions'**
+  String get wrappedActions;
+
+  /// Dialog title when multiple speakers are detected in speech profile recording
+  ///
+  /// In en, this message translates to:
+  /// **'Multiple speakers detected'**
+  String get multipleSpeakersDetected;
+
+  /// Dialog message explaining multiple speakers issue
+  ///
+  /// In en, this message translates to:
+  /// **'It seems like there are multiple speakers in the recording. Please make sure you are in a quiet location and try again.'**
+  String get multipleSpeakersDescription;
+
+  /// Dialog title for invalid recording
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid recording detected'**
+  String get invalidRecordingDetected;
+
+  /// Dialog message when speech recording is too short
+  ///
+  /// In en, this message translates to:
+  /// **'There is not enough speech detected. Please speak more and try again.'**
+  String get notEnoughSpeechDescription;
+
+  /// Dialog message about speech duration requirements
+  ///
+  /// In en, this message translates to:
+  /// **'Please make sure you speak for at least 5 seconds and not more than 90.'**
+  String get speechDurationDescription;
+
+  /// Dialog message when connection is lost
+  ///
+  /// In en, this message translates to:
+  /// **'The connection was interrupted. Please check your internet connection and try again.'**
+  String get connectionLostDescription;
+
+  /// Dialog title for speech sample instructions
+  ///
+  /// In en, this message translates to:
+  /// **'How to take a good sample?'**
+  String get howToTakeGoodSample;
+
+  /// Instructions for taking a good speech sample
+  ///
+  /// In en, this message translates to:
+  /// **'1. Make sure you are in a quiet place.\n2. Speak clearly and naturally.\n3. Make sure your device is in its natural position, on your neck.\n\nOnce it\'s created, you can always improve it or do it again.'**
+  String get goodSampleInstructions;
+
+  /// Message when no device is connected and phone mic will be used
+  ///
+  /// In en, this message translates to:
+  /// **'No device connected. Will use phone microphone.'**
+  String get noDeviceConnectedUseMic;
+
+  /// Button text to redo speech profile
+  ///
+  /// In en, this message translates to:
+  /// **'Do it again'**
+  String get doItAgain;
+
+  /// Button text to listen to speech profile
+  ///
+  /// In en, this message translates to:
+  /// **'Listen to my speech profile ➡️'**
+  String get listenToSpeechProfile;
+
+  /// Button text to recognize other people
+  ///
+  /// In en, this message translates to:
+  /// **'Recognizing others 👀'**
+  String get recognizingOthers;
+
+  /// Encouragement message during speech recording
+  ///
+  /// In en, this message translates to:
+  /// **'Keep going, you are doing great'**
+  String get keepGoingGreat;
+
+  /// Generic error message shown in snackbar when an error occurs
+  ///
+  /// In en, this message translates to:
+  /// **'Something went wrong! Please try again later.'**
+  String get somethingWentWrongTryAgain;
+
+  /// Loading message shown while uploading voice profile
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading your voice profile....'**
+  String get uploadingVoiceProfile;
+
+  /// Loading message shown while processing voice profile
+  ///
+  /// In en, this message translates to:
+  /// **'Memorizing your voice...'**
+  String get memorizingYourVoice;
+
+  /// Loading message shown while personalizing user experience
+  ///
+  /// In en, this message translates to:
+  /// **'Personalizing your experience...'**
+  String get personalizingExperience;
+
+  /// Instruction to user during speech profile recording
+  ///
+  /// In en, this message translates to:
+  /// **'Keep speaking until you get 100%.'**
+  String get keepSpeakingUntil100;
+
+  /// Encouragement message during speech profile recording
+  ///
+  /// In en, this message translates to:
+  /// **'Great job, you are almost there'**
+  String get greatJobAlmostThere;
+
+  /// Encouragement message when speech profile is nearly complete
+  ///
+  /// In en, this message translates to:
+  /// **'So close, just a little more'**
+  String get soCloseJustLittleMore;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

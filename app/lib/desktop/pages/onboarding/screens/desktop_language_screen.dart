@@ -323,7 +323,7 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     OmiButton(
-                      label: selectedLanguage != null ? context.l10n.continue_ : context.l10n.selectALanguage,
+                      label: selectedLanguage != null ? context.l10n.continueButton : context.l10n.selectALanguage,
                       onPressed: selectedLanguage != null ? _continueWithLanguage : null,
                       enabled: selectedLanguage != null,
                     ),

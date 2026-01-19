@@ -77,10 +77,10 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
         final iosInfo = await deviceInfoPlugin.iosInfo;
         return '${iosInfo.name} — iOS ${iosInfo.systemVersion}';
       } else {
-        return 'Unknown Device';
+        return context.l10n.unknownDevice;
       }
     } catch (e) {
-      return 'Unknown Device';
+      return context.l10n.unknownDevice;
     }
   }
 
@@ -99,7 +99,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          shortDeviceInfo = 'Unknown Device';
+          shortDeviceInfo = context.l10n.unknownDevice;
         });
       }
     }
@@ -150,9 +150,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                           color: Colors.orange.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: const Text(
-                          'BETA',
-                          style: TextStyle(
+                        child: Text(
+                          context.l10n.beta,
+                          style: const TextStyle(
                             color: Colors.orange,
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
@@ -169,9 +169,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                           color: Colors.green.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: const Text(
-                          'NEW',
-                          style: TextStyle(
+                        child: Text(
+                          context.l10n.newTag,
+                          style: const TextStyle(
                             color: Colors.green,
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
@@ -247,7 +247,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
 
   Future<void> _copyVersionInfo() async {
     final versionPart = buildVersion != null ? 'Omi AI ${version ?? ""} ($buildVersion)' : 'Omi AI ${version ?? ""}';
-    final devicePart = shortDeviceInfo ?? 'Unknown Device';
+    final devicePart = shortDeviceInfo ?? context.l10n.unknownDevice;
     final fullVersionInfo = '$versionPart — $devicePart';
 
     await Clipboard.setData(ClipboardData(text: fullVersionInfo));
@@ -353,18 +353,18 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                               color: Colors.amber.withOpacity(0.2),
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: const Row(
+                            child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                FaIcon(
+                                const FaIcon(
                                   FontAwesomeIcons.crown,
                                   color: Colors.amber,
                                   size: 10,
                                 ),
-                                SizedBox(width: 4),
+                                const SizedBox(width: 4),
                                 Text(
-                                  'PRO',
-                                  style: TextStyle(
+                                  context.l10n.pro.toUpperCase(),
+                                  style: const TextStyle(
                                     color: Colors.amber,
                                     fontSize: 10,
                                     fontWeight: FontWeight.w600,
@@ -532,8 +532,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                             routeToPage(context, const AppShell(), replace: true);
                           }
                         },
-                        "Sign Out?",
-                        "Are you sure you want to sign out?",
+                        context.l10n.signOutQuestion,
+                        context.l10n.signOutConfirmation,
                       );
                     },
                   );
@@ -558,7 +558,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
         _buildSectionContainer(
           children: [
             _buildSettingsItem(
-              title: 'Need Help? Chat with us',
+              title: context.l10n.needHelpChatWithUs,
               icon: const FaIcon(FontAwesomeIcons.solidComments, color: Color(0xFF8E8E93), size: 20),
               onTap: () async {
                 await Intercom.instance.displayMessenger();
@@ -572,7 +572,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
         _buildSectionContainer(
           children: [
             _buildSettingsItem(
-              title: 'Sign Out',
+              title: context.l10n.signOut,
               icon: const FaIcon(FontAwesomeIcons.signOutAlt, color: Color(0xFF8E8E93), size: 20),
               onTap: () async {
                 // Capture the provider reference before any navigation
@@ -597,8 +597,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                           routeToPage(context, const AppShell(), replace: true);
                         }
                       },
-                      "Sign Out?",
-                      "Are you sure you want to sign out?",
+                      context.l10n.signOutQuestion,
+                      context.l10n.signOutConfirmation,
                     );
                   },
                 );
@@ -644,10 +644,10 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
             child: Stack(
               children: [
                 // Centered title
-                const Center(
+                Center(
                   child: Text(
-                    'Settings',
-                    style: TextStyle(
+                    context.l10n.settings,
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
@@ -659,9 +659,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   right: 0,
                   child: GestureDetector(
                     onTap: () => Navigator.pop(context),
-                    child: const Text(
-                      'Done',
-                      style: TextStyle(
+                    child: Text(
+                      context.l10n.done,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 17,
                         fontWeight: FontWeight.w400,

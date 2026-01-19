@@ -228,7 +228,7 @@ class _DesktopNameScreenState extends State<DesktopNameScreen> with SingleTicker
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     OmiButton(
-                      label: context.l10n.continue_,
+                      label: context.l10n.continueButton,
                       onPressed: _validateAndProceed,
                     ),
                   ],

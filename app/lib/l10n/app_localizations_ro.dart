@@ -806,7 +806,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get debugLogsDesc => 'Ajută la diagnosticarea problemelor';
 
   @override
-  String get noLogFilesFound => 'Niciun fișier jurnal găsit.';
+  String get noLogFilesFound => 'Nu s-au găsit fișiere jurnal.';
 
   @override
   String get omiDebugLog => 'Jurnal de depanare Omi';
@@ -1206,7 +1206,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get refresh => 'Actualizează';
 
   @override
-  String get noUpcomingMeetings => 'Nu s-au găsit întâlniri viitoare';
+  String get noUpcomingMeetings => 'Nu există întâlniri viitoare';
 
   @override
   String get checkingNextDays => 'Se verifică următoarele 30 de zile';
@@ -1810,7 +1810,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get maybeLater => 'Poate Mai Târziu';
 
   @override
-  String get speechProfileIntro => 'Omi needs to learn your goals and your voice. You\'ll be able to modify it later.';
+  String get speechProfileIntro => 'Omi trebuie să învețe obiectivele și vocea ta. Vei putea să o modifici mai târziu.';
 
   @override
   String get getStarted => 'Get Started';
@@ -1822,7 +1822,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get keepGoing => 'Keep going, you are doing great';
 
   @override
-  String get skipThisQuestion => 'Skip this question';
+  String get skipThisQuestion => 'Sari peste această întrebare';
 
   @override
   String get skipForNow => 'Skip for now';
@@ -2426,29 +2426,29 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String labelCopied(String label) {
-    return '$label copied';
+    return '$label copiat';
   }
 
   @override
   String get noApiKeysYet => 'Încă nu există chei API. Creează una pentru a integra cu aplicația ta.';
 
   @override
-  String get createKeyToGetStarted => 'Create a key to get started';
+  String get createKeyToGetStarted => 'Creează o cheie pentru a începe';
 
   @override
   String get persona => 'Persona';
 
   @override
-  String get configureYourAiPersona => 'Configure your AI persona';
+  String get configureYourAiPersona => 'Configurează-ți personajul AI';
 
   @override
-  String get configureSttProvider => 'Configure STT provider';
+  String get configureSttProvider => 'Configurare furnizor STT';
 
   @override
-  String get setWhenConversationsAutoEnd => 'Set when conversations auto-end';
+  String get setWhenConversationsAutoEnd => 'Setați când conversațiile se încheie automat';
 
   @override
-  String get importDataFromOtherSources => 'Import data from other sources';
+  String get importDataFromOtherSources => 'Importă date din alte surse';
 
   @override
   String get debugAndDiagnostics => 'Depanare și diagnostice';
@@ -2460,30 +2460,30 @@ class AppLocalizationsRo extends AppLocalizations {
   String get helpsDiagnoseIssues => 'Ajută la diagnosticarea problemelor';
 
   @override
-  String get exportStartedMessage => 'Export started. This may take a few seconds...';
+  String get exportStartedMessage => 'Export început. Poate dura câteva secunde...';
 
   @override
-  String get exportConversationsToJson => 'Export conversations to a JSON file';
+  String get exportConversationsToJson => 'Exportă conversațiile într-un fișier JSON';
 
   @override
-  String get knowledgeGraphDeletedSuccess => 'Knowledge Graph deleted successfully';
+  String get knowledgeGraphDeletedSuccess => 'Graful de cunoștințe a fost șters cu succes';
 
   @override
   String failedToDeleteGraph(String error) {
-    return 'Failed to delete graph: $error';
+    return 'Nu s-a putut șterge graful: $error';
   }
 
   @override
-  String get clearAllNodesAndConnections => 'Clear all nodes and connections';
+  String get clearAllNodesAndConnections => 'Șterge toate nodurile și conexiunile';
 
   @override
-  String get addToClaudeDesktopConfig => 'Add to claude_desktop_config.json';
+  String get addToClaudeDesktopConfig => 'Adaugă la claude_desktop_config.json';
 
   @override
-  String get connectAiAssistantsToData => 'Connect AI assistants to your data';
+  String get connectAiAssistantsToData => 'Conectează asistenții AI la datele tale';
 
   @override
-  String get useYourMcpApiKey => 'Use your MCP API key';
+  String get useYourMcpApiKey => 'Folosește cheia ta API MCP';
 
   @override
   String get realTimeTranscript => 'Transcriere în timp real';
@@ -2501,7 +2501,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get autoCreateSpeakers => 'Creați automat vorbitori';
 
   @override
-  String get autoCreateWhenNameDetected => 'Auto-create when name detected';
+  String get autoCreateWhenNameDetected => 'Creare automată când se detectează un nume';
 
   @override
   String get followUpQuestions => 'Întrebări de urmărire';
@@ -2513,13 +2513,13 @@ class AppLocalizationsRo extends AppLocalizations {
   String get goalTracker => 'Urmăritor de obiective';
 
   @override
-  String get trackPersonalGoalsOnHomepage => 'Track your personal goals on homepage';
+  String get trackPersonalGoalsOnHomepage => 'Urmărește-ți obiectivele personale pe pagina principală';
 
   @override
   String get dailyReflection => 'Reflecție zilnică';
 
   @override
-  String get get9PmReminderToReflect => 'Get a 9 PM reminder to reflect on your day';
+  String get get9PmReminderToReflect => 'Primește o reamintire la ora 21 pentru a reflecta asupra zilei tale';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'Descrierea elementului de acțiune nu poate fi goală';
@@ -2605,7 +2605,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get toggleControlBar => 'Comută bara de control';
 
   @override
-  String get pressKeys => 'Apasă tastele...';
+  String get pressKeys => 'Apăsați tastele...';
 
   @override
   String get cmdRequired => '⌘ necesar';
@@ -3843,7 +3843,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get about => 'Despre';
 
   @override
-  String get selectTime => 'Selectează Ora';
+  String get selectTime => 'Selectați ora';
 
   @override
   String get accountGroup => 'Cont';
@@ -3873,7 +3873,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get dailySummaryDescription => 'Primiți un rezumat personalizat al conversațiilor dvs.';
 
   @override
-  String get deliveryTime => 'Ora de Livrare';
+  String get deliveryTime => 'Ora de livrare';
 
   @override
   String get deliveryTimeDescription => 'Când să primiți rezumatul zilnic';
@@ -3906,7 +3906,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get includePersonalEventsDescription => 'Includeți evenimentele personale fără participanți';
 
   @override
-  String get upcomingMeetings => 'ÎNTÂLNIRI VIITOARE';
+  String get upcomingMeetings => 'Întâlniri viitoare';
 
   @override
   String get checkingNext7Days => 'Verificarea următoarelor 7 zile';
@@ -3934,7 +3934,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get exportConversationsDescription => 'Exportați conversațiile în JSON';
 
   @override
-  String get exportingConversations => 'Exportarea conversațiilor...';
+  String get exportingConversations => 'Se exportă conversațiile...';
 
   @override
   String get clearNodesDescription => 'Ștergeți toate nodurile și conexiunile';
@@ -4785,4 +4785,927 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get noSpecificDataAccessConfigured => 'Niciun acces specific la date configurat.';
+
+  @override
+  String get basicPlanDescription => '1.200 minute premium + nelimitat pe dispozitiv';
+
+  @override
+  String get minutes => 'minute';
+
+  @override
+  String get omiHas => 'Omi are:';
+
+  @override
+  String get premiumMinutesUsed => 'Minute premium utilizate.';
+
+  @override
+  String get setupOnDevice => 'Configurare pe dispozitiv';
+
+  @override
+  String get forUnlimitedFreeTranscription => 'pentru transcriere gratuită nelimitată.';
+
+  @override
+  String premiumMinsLeft(int count) {
+    return '$count minute premium rămase.';
+  }
+
+  @override
+  String get alwaysAvailable => 'întotdeauna disponibil.';
+
+  @override
+  String get importHistory => 'Istoric importuri';
+
+  @override
+  String get noImportsYet => 'Niciun import încă';
+
+  @override
+  String get selectZipFileToImport => 'Selectați fișierul .zip pentru import!';
+
+  @override
+  String get otherDevicesComingSoon => 'Alte dispozitive în curând';
+
+  @override
+  String get deleteAllLimitlessConversations => 'Ștergeți toate conversațiile Limitless?';
+
+  @override
+  String get deleteAllLimitlessWarning =>
+      'Aceasta va șterge permanent toate conversațiile importate din Limitless. Această acțiune nu poate fi anulată.';
+
+  @override
+  String deletedLimitlessConversations(int count) {
+    return 'Șterse $count conversații Limitless';
+  }
+
+  @override
+  String get failedToDeleteConversations => 'Ștergerea conversațiilor a eșuat';
+
+  @override
+  String get deleteImportedData => 'Șterge datele importate';
+
+  @override
+  String get statusPending => 'În așteptare';
+
+  @override
+  String get statusProcessing => 'Se procesează';
+
+  @override
+  String get statusCompleted => 'Finalizat';
+
+  @override
+  String get statusFailed => 'Eșuat';
+
+  @override
+  String nConversations(int count) {
+    return '$count conversații';
+  }
+
+  @override
+  String get pleaseEnterName => 'Vă rugăm să introduceți un nume';
+
+  @override
+  String get nameMustBeBetweenCharacters => 'Numele trebuie să aibă între 2 și 40 de caractere';
+
+  @override
+  String get deleteSampleQuestion => 'Ștergeți eșantionul?';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return 'Sigur doriți să ștergeți eșantionul lui $name?';
+  }
+
+  @override
+  String get confirmDeletion => 'Confirmați ștergerea';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return 'Sigur doriți să ștergeți $name? Acest lucru va elimina și toate eșantioanele vocale asociate.';
+  }
+
+  @override
+  String get howItWorksTitle => 'Cum funcționează?';
+
+  @override
+  String get howPeopleWorks =>
+      'Odată ce o persoană este creată, puteți merge la transcripția unei conversații și să le atribuiți segmentele corespunzătoare, astfel Omi va putea recunoaște și vocea lor!';
+
+  @override
+  String get tapToDelete => 'Atingeți pentru a șterge';
+
+  @override
+  String get newTag => 'NOU';
+
+  @override
+  String get needHelpChatWithUs => 'Aveți nevoie de ajutor? Discutați cu noi';
+
+  @override
+  String get localStorageEnabled => 'Stocare locală activată';
+
+  @override
+  String get localStorageDisabled => 'Stocare locală dezactivată';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return 'Actualizarea setărilor a eșuat: $error';
+  }
+
+  @override
+  String get privacyNotice => 'Notificare de confidențialitate';
+
+  @override
+  String get recordingsMayCaptureOthers =>
+      'Înregistrările pot captura vocile altora. Asigurați-vă că aveți consimțământul tuturor participanților înainte de activare.';
+
+  @override
+  String get enable => 'Activare';
+
+  @override
+  String get storeAudioOnPhone => 'Stocați audio pe telefon';
+
+  @override
+  String get on => 'Activat';
+
+  @override
+  String get storeAudioDescription =>
+      'Păstrați toate înregistrările audio stocate local pe telefon. Când este dezactivat, doar încărcările eșuate sunt păstrate pentru a economisi spațiu.';
+
+  @override
+  String get enableLocalStorage => 'Activare stocare locală';
+
+  @override
+  String get cloudStorageEnabled => 'Stocare în cloud activată';
+
+  @override
+  String get cloudStorageDisabled => 'Stocare în cloud dezactivată';
+
+  @override
+  String get enableCloudStorage => 'Activare stocare în cloud';
+
+  @override
+  String get storeAudioOnCloud => 'Stocați audio în cloud';
+
+  @override
+  String get cloudStorageDialogMessage =>
+      'Înregistrările dvs. în timp real vor fi stocate în spațiul de stocare cloud privat în timp ce vorbiți.';
+
+  @override
+  String get storeAudioCloudDescription =>
+      'Stocați înregistrările în timp real în spațiul de stocare cloud privat în timp ce vorbiți. Audio este capturat și salvat în siguranță în timp real.';
+
+  @override
+  String get downloadingFirmware => 'Se descarcă firmware-ul';
+
+  @override
+  String get installingFirmware => 'Se instalează firmware-ul';
+
+  @override
+  String get firmwareUpdateWarning =>
+      'Nu închideți aplicația și nu opriți dispozitivul. Acest lucru ar putea deteriora dispozitivul.';
+
+  @override
+  String get firmwareUpdated => 'Firmware actualizat';
+
+  @override
+  String restartDeviceToComplete(Object deviceName) {
+    return 'Vă rugăm să reporniți $deviceName pentru a finaliza actualizarea.';
+  }
+
+  @override
+  String get yourDeviceIsUpToDate => 'Dispozitivul dvs. este actualizat';
+
+  @override
+  String get currentVersion => 'Versiunea curentă';
+
+  @override
+  String get latestVersion => 'Ultima versiune';
+
+  @override
+  String get whatsNew => 'Ce este nou';
+
+  @override
+  String get installUpdate => 'Instalează actualizarea';
+
+  @override
+  String get updateNow => 'Actualizează acum';
+
+  @override
+  String get updateGuide => 'Ghid de actualizare';
+
+  @override
+  String get checkingForUpdates => 'Se verifică actualizările';
+
+  @override
+  String get checkingFirmwareVersion => 'Se verifică versiunea firmware-ului...';
+
+  @override
+  String get firmwareUpdate => 'Actualizare firmware';
+
+  @override
+  String get payments => 'Plăți';
+
+  @override
+  String get connectPaymentMethodInfo =>
+      'Conectați o metodă de plată mai jos pentru a începe să primiți plăți pentru aplicațiile dvs.';
+
+  @override
+  String get selectedPaymentMethod => 'Metodă de plată selectată';
+
+  @override
+  String get availablePaymentMethods => 'Metode de plată disponibile';
+
+  @override
+  String get activeStatus => 'Activ';
+
+  @override
+  String get connectedStatus => 'Conectat';
+
+  @override
+  String get notConnectedStatus => 'Neconectat';
+
+  @override
+  String get setActive => 'Setează ca activ';
+
+  @override
+  String get getPaidThroughStripe => 'Primiți plăți pentru vânzările aplicațiilor prin Stripe';
+
+  @override
+  String get monthlyPayouts => 'Plăți lunare';
+
+  @override
+  String get monthlyPayoutsDescription => 'Primiți plăți lunare direct în cont când atingeți \$10 în câștiguri';
+
+  @override
+  String get secureAndReliable => 'Sigur și de încredere';
+
+  @override
+  String get stripeSecureDescription => 'Stripe asigură transferuri sigure și la timp ale veniturilor aplicației dvs.';
+
+  @override
+  String get selectYourCountry => 'Selectați țara dvs.';
+
+  @override
+  String get countrySelectionPermanent => 'Selecția țării este permanentă și nu poate fi modificată ulterior.';
+
+  @override
+  String get byClickingConnectNow => 'Făcând clic pe \"Conectați acum\" sunteți de acord cu';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Acordul contului conectat Stripe';
+
+  @override
+  String get errorConnectingToStripe => 'Eroare la conectarea la Stripe! Vă rugăm să încercați din nou mai târziu.';
+
+  @override
+  String get connectingYourStripeAccount => 'Conectarea contului dvs. Stripe';
+
+  @override
+  String get stripeOnboardingInstructions =>
+      'Vă rugăm să finalizați procesul de integrare Stripe în browserul dvs. Această pagină se va actualiza automat după finalizare.';
+
+  @override
+  String get failedTryAgain => 'A eșuat? Încercați din nou';
+
+  @override
+  String get illDoItLater => 'Voi face mai târziu';
+
+  @override
+  String get successfullyConnected => 'Conectat cu succes!';
+
+  @override
+  String get stripeReadyForPayments =>
+      'Contul dvs. Stripe este acum gata să primească plăți. Puteți începe să câștigați din vânzările aplicațiilor imediat.';
+
+  @override
+  String get updateStripeDetails => 'Actualizați detaliile Stripe';
+
+  @override
+  String get errorUpdatingStripeDetails =>
+      'Eroare la actualizarea detaliilor Stripe! Vă rugăm să încercați din nou mai târziu.';
+
+  @override
+  String get updatePayPal => 'Actualizați PayPal';
+
+  @override
+  String get setUpPayPal => 'Configurați PayPal';
+
+  @override
+  String get updatePayPalAccountDetails => 'Actualizați detaliile contului dvs. PayPal';
+
+  @override
+  String get connectPayPalToReceivePayments =>
+      'Conectați contul dvs. PayPal pentru a începe să primiți plăți pentru aplicațiile dvs.';
+
+  @override
+  String get paypalEmail => 'E-mail PayPal';
+
+  @override
+  String get paypalMeLink => 'Link PayPal.me';
+
+  @override
+  String get stripeRecommendation =>
+      'Dacă Stripe este disponibil în țara dvs., vă recomandăm cu tărie să îl utilizați pentru plăți mai rapide și mai ușoare.';
+
+  @override
+  String get updatePayPalDetails => 'Actualizați detaliile PayPal';
+
+  @override
+  String get savePayPalDetails => 'Salvați detaliile PayPal';
+
+  @override
+  String get pleaseEnterPayPalEmail => 'Vă rugăm să introduceți e-mailul PayPal';
+
+  @override
+  String get pleaseEnterPayPalMeLink => 'Vă rugăm să introduceți linkul PayPal.me';
+
+  @override
+  String get doNotIncludeHttpInLink => 'Nu includeți http sau https sau www în link';
+
+  @override
+  String get pleaseEnterValidPayPalMeLink => 'Vă rugăm să introduceți un link PayPal.me valid';
+
+  @override
+  String get pleaseEnterValidEmail => 'Vă rugăm să introduceți o adresă de email validă';
+
+  @override
+  String get syncingYourRecordings => 'Sincronizarea înregistrărilor tale';
+
+  @override
+  String get syncYourRecordings => 'Sincronizează înregistrările tale';
+
+  @override
+  String get syncNow => 'Sincronizează acum';
+
+  @override
+  String get error => 'Eroare';
+
+  @override
+  String get speechSamples => 'Mostre vocale';
+
+  @override
+  String additionalSampleIndex(String index) {
+    return 'Mostră suplimentară $index';
+  }
+
+  @override
+  String durationSeconds(String seconds) {
+    return 'Durată: $seconds secunde';
+  }
+
+  @override
+  String get additionalSpeechSampleRemoved => 'Mostră vocală suplimentară eliminată';
+
+  @override
+  String get consentDataMessage =>
+      'Continuând, toate datele pe care le partajați cu această aplicație (inclusiv conversațiile, înregistrările și informațiile personale) vor fi stocate în siguranță pe serverele noastre pentru a vă oferi informații bazate pe IA și pentru a activa toate funcțiile aplicației.';
+
+  @override
+  String get tasksEmptyStateMessage =>
+      'Sarcinile din conversațiile tale vor apărea aici.\nAtinge + pentru a crea una manual.';
+
+  @override
+  String get clearChatAction => 'Șterge conversația';
+
+  @override
+  String get enableApps => 'Activează aplicațiile';
+
+  @override
+  String get omiAppName => 'Omi';
+
+  @override
+  String get showMore => 'arată mai mult ↓';
+
+  @override
+  String get showLess => 'arată mai puțin ↑';
+
+  @override
+  String get loadingYourRecording => 'Se încarcă înregistrarea...';
+
+  @override
+  String get photoDiscardedMessage => 'Această fotografie a fost eliminată deoarece nu era semnificativă.';
+
+  @override
+  String get analyzing => 'Se analizează...';
+
+  @override
+  String get searchCountries => 'Căutați țări...';
+
+  @override
+  String get checkingAppleWatch => 'Se verifică Apple Watch...';
+
+  @override
+  String get installOmiOnAppleWatch => 'Instalează Omi pe\nApple Watch';
+
+  @override
+  String get installOmiOnAppleWatchDescription =>
+      'Pentru a utiliza Apple Watch cu Omi, trebuie să instalezi mai întâi aplicația Omi pe ceas.';
+
+  @override
+  String get openOmiOnAppleWatch => 'Deschide Omi pe\nApple Watch';
+
+  @override
+  String get openOmiOnAppleWatchDescription =>
+      'Aplicația Omi este instalată pe Apple Watch. Deschide-o și apasă Start pentru a începe.';
+
+  @override
+  String get openWatchApp => 'Deschide aplicația Watch';
+
+  @override
+  String get iveInstalledAndOpenedTheApp => 'Am instalat și deschis aplicația';
+
+  @override
+  String get unableToOpenWatchApp =>
+      'Nu se poate deschide aplicația Apple Watch. Deschide manual aplicația Watch pe Apple Watch și instalează Omi din secțiunea \"Aplicații disponibile\".';
+
+  @override
+  String get appleWatchConnectedSuccessfully => 'Apple Watch conectat cu succes!';
+
+  @override
+  String get appleWatchNotReachable =>
+      'Apple Watch încă nu este accesibil. Asigură-te că aplicația Omi este deschisă pe ceas.';
+
+  @override
+  String errorCheckingConnection(String error) {
+    return 'Eroare la verificarea conexiunii: $error';
+  }
+
+  @override
+  String get muted => 'Dezactivat';
+
+  @override
+  String get processNow => 'Procesează acum';
+
+  @override
+  String get finishedConversation => 'Conversație terminată?';
+
+  @override
+  String get stopRecordingConfirmation => 'Sigur doriți să opriți înregistrarea și să rezumați conversația acum?';
+
+  @override
+  String get conversationEndsManually => 'Conversația se va încheia doar manual.';
+
+  @override
+  String conversationSummarizedAfterMinutes(int minutes, String suffix) {
+    return 'Conversația este rezumată după $minutes minut$suffix de tăcere.';
+  }
+
+  @override
+  String get dontAskAgain => 'Nu mai întreba';
+
+  @override
+  String get waitingForTranscriptOrPhotos => 'Se așteaptă transcriere sau fotografii...';
+
+  @override
+  String get noSummaryYet => 'Încă nu există rezumat';
+
+  @override
+  String hints(String text) {
+    return 'Indicii: $text';
+  }
+
+  @override
+  String get testConversationPrompt => 'Testează promptul conversației';
+
+  @override
+  String get prompt => 'Prompt';
+
+  @override
+  String get result => 'Rezultat';
+
+  @override
+  String get compareTranscripts => 'Compară transcrierile';
+
+  @override
+  String get notHelpful => 'Nu a fost util';
+
+  @override
+  String get exportTasksWithOneTap => 'Exportă sarcinile cu o singură atingere!';
+
+  @override
+  String get inProgress => 'În curs';
+
+  @override
+  String get photos => 'Fotografii';
+
+  @override
+  String get rawData => 'Date brute';
+
+  @override
+  String get content => 'Conținut';
+
+  @override
+  String get noContentToDisplay => 'Nu există conținut de afișat';
+
+  @override
+  String get noSummary => 'Fără rezumat';
+
+  @override
+  String get updateOmiFirmware => 'Actualizează firmware-ul omi';
+
+  @override
+  String get anErrorOccurredTryAgain => 'A apărut o eroare. Vă rugăm să încercați din nou.';
+
+  @override
+  String get welcomeBackSimple => 'Bine ai revenit';
+
+  @override
+  String get addVocabularyDescription =>
+      'Adăugați cuvinte pe care Omi ar trebui să le recunoască în timpul transcrierii.';
+
+  @override
+  String get enterWordsCommaSeparated => 'Introduceți cuvinte (separate prin virgulă)';
+
+  @override
+  String get whenToReceiveDailySummary => 'Când să primiți rezumatul zilnic';
+
+  @override
+  String get checkingNextSevenDays => 'Se verifică următoarele 7 zile';
+
+  @override
+  String failedToDeleteError(String error) {
+    return 'Ștergerea a eșuat: $error';
+  }
+
+  @override
+  String get developerApiKeys => 'Chei API dezvoltator';
+
+  @override
+  String get noApiKeysCreateOne => 'Nu există chei API. Creați una pentru a începe.';
+
+  @override
+  String get commandRequired => '⌘ necesar';
+
+  @override
+  String get spaceKey => 'Spațiu';
+
+  @override
+  String loadMoreRemaining(String count) {
+    return 'Încarcă mai multe ($count rămase)';
+  }
+
+  @override
+  String wrappedTopPercentUser(String percentile) {
+    return 'Top $percentile% utilizator';
+  }
+
+  @override
+  String get wrappedMinutes => 'minute';
+
+  @override
+  String get wrappedConversations => 'conversații';
+
+  @override
+  String get wrappedDaysActive => 'zile active';
+
+  @override
+  String get wrappedYouTalkedAbout => 'Ai vorbit despre';
+
+  @override
+  String get wrappedActionItems => 'Sarcini';
+
+  @override
+  String get wrappedTasksCreated => 'sarcini create';
+
+  @override
+  String get wrappedCompleted => 'finalizate';
+
+  @override
+  String wrappedCompletionRate(String rate) {
+    return '$rate% rată de finalizare';
+  }
+
+  @override
+  String get wrappedYourTopDays => 'Cele mai bune zile';
+
+  @override
+  String get wrappedBestMoments => 'Cele mai bune momente';
+
+  @override
+  String get wrappedMyBuddies => 'Prietenii mei';
+
+  @override
+  String get wrappedCouldntStopTalkingAbout => 'Nu mă puteam opri să vorbesc despre';
+
+  @override
+  String get wrappedShow => 'SERIAL';
+
+  @override
+  String get wrappedMovie => 'FILM';
+
+  @override
+  String get wrappedBook => 'CARTE';
+
+  @override
+  String get wrappedCelebrity => 'CELEBRITATE';
+
+  @override
+  String get wrappedFood => 'MÂNCARE';
+
+  @override
+  String get wrappedMovieRecs => 'Recomandări de filme pentru prieteni';
+
+  @override
+  String get wrappedBiggest => 'Cea mai mare';
+
+  @override
+  String get wrappedStruggle => 'Provocare';
+
+  @override
+  String get wrappedButYouPushedThrough => 'Dar ai reușit 💪';
+
+  @override
+  String get wrappedWin => 'Victorie';
+
+  @override
+  String get wrappedYouDidIt => 'Ai reușit! 🎉';
+
+  @override
+  String get wrappedTopPhrases => 'Top 5 expresii';
+
+  @override
+  String get wrappedMins => 'min';
+
+  @override
+  String get wrappedConvos => 'conversații';
+
+  @override
+  String get wrappedDays => 'zile';
+
+  @override
+  String get wrappedMyBuddiesLabel => 'PRIETENII MEI';
+
+  @override
+  String get wrappedObsessionsLabel => 'OBSESII';
+
+  @override
+  String get wrappedStruggleLabel => 'PROVOCARE';
+
+  @override
+  String get wrappedWinLabel => 'VICTORIE';
+
+  @override
+  String get wrappedTopPhrasesLabel => 'TOP EXPRESII';
+
+  @override
+  String get wrappedLetsHitRewind => 'Să derulăm înapoi';
+
+  @override
+  String get wrappedGenerateMyWrapped => 'Generează Wrapped-ul meu';
+
+  @override
+  String get wrappedProcessingDefault => 'Se procesează...';
+
+  @override
+  String get wrappedCreatingYourStory => 'Se creează\npovestea ta din 2025...';
+
+  @override
+  String get wrappedSomethingWentWrong => 'Ceva nu a\nmers bine';
+
+  @override
+  String get wrappedAnErrorOccurred => 'A apărut o eroare';
+
+  @override
+  String get wrappedTryAgain => 'Încearcă din nou';
+
+  @override
+  String get wrappedNoDataAvailable => 'Nu sunt date disponibile';
+
+  @override
+  String get wrappedOmiLifeRecap => 'Rezumatul vieții Omi';
+
+  @override
+  String get wrappedSwipeUpToBegin => 'Glisează în sus pentru a începe';
+
+  @override
+  String get wrappedShareText => '2025-ul meu, amintit de Omi ✨ omi.me/wrapped';
+
+  @override
+  String get wrappedFailedToShare => 'Partajarea a eșuat. Te rugăm să încerci din nou.';
+
+  @override
+  String get wrappedFailedToStartGeneration => 'Pornirea generării a eșuat. Te rugăm să încerci din nou.';
+
+  @override
+  String get wrappedStarting => 'Se pornește...';
+
+  @override
+  String get wrappedShare => 'Partajează';
+
+  @override
+  String get wrappedShareYourWrapped => 'Partajează Wrapped-ul tău';
+
+  @override
+  String get wrappedMy2025 => '2025-ul meu';
+
+  @override
+  String get wrappedRememberedByOmi => 'amintit de Omi';
+
+  @override
+  String get wrappedMostFunDay => 'Cea mai amuzantă';
+
+  @override
+  String get wrappedMostProductiveDay => 'Cea mai productivă';
+
+  @override
+  String get wrappedMostIntenseDay => 'Cea mai intensă';
+
+  @override
+  String get wrappedFunniestMoment => 'Cel mai amuzant';
+
+  @override
+  String get wrappedMostCringeMoment => 'Cel mai jenant';
+
+  @override
+  String get wrappedMinutesLabel => 'minute';
+
+  @override
+  String get wrappedConversationsLabel => 'conversații';
+
+  @override
+  String get wrappedDaysActiveLabel => 'zile active';
+
+  @override
+  String get wrappedTasksGenerated => 'sarcini generate';
+
+  @override
+  String get wrappedTasksCompleted => 'sarcini finalizate';
+
+  @override
+  String get wrappedTopFivePhrases => 'Top 5 expresii';
+
+  @override
+  String get wrappedAGreatDay => 'O zi grozavă';
+
+  @override
+  String get wrappedGettingItDone => 'A face treaba';
+
+  @override
+  String get wrappedAChallenge => 'O provocare';
+
+  @override
+  String get wrappedAHilariousMoment => 'Un moment amuzant';
+
+  @override
+  String get wrappedThatAwkwardMoment => 'Acel moment jenant';
+
+  @override
+  String get wrappedYouHadFunnyMoments => 'Ai avut momente amuzante anul acesta!';
+
+  @override
+  String get wrappedWeveAllBeenThere => 'Am fost cu toții acolo!';
+
+  @override
+  String get wrappedFriend => 'Prieten';
+
+  @override
+  String get wrappedYourBuddy => 'Prietenul tău!';
+
+  @override
+  String get wrappedNotMentioned => 'Nemenționat';
+
+  @override
+  String get wrappedTheHardPart => 'Partea grea';
+
+  @override
+  String get wrappedPersonalGrowth => 'Creștere personală';
+
+  @override
+  String get wrappedFunDay => 'Amuzant';
+
+  @override
+  String get wrappedProductiveDay => 'Productiv';
+
+  @override
+  String get wrappedIntenseDay => 'Intens';
+
+  @override
+  String get wrappedFunnyMomentTitle => 'Moment amuzant';
+
+  @override
+  String get wrappedCringeMomentTitle => 'Moment jenant';
+
+  @override
+  String get wrappedYouTalkedAboutBadge => 'Ai vorbit despre';
+
+  @override
+  String get wrappedCompletedLabel => 'Finalizat';
+
+  @override
+  String get wrappedMyBuddiesCard => 'Prietenii mei';
+
+  @override
+  String get wrappedBuddiesLabel => 'PRIETENI';
+
+  @override
+  String get wrappedObsessionsLabelUpper => 'OBSESII';
+
+  @override
+  String get wrappedStruggleLabelUpper => 'LUPTĂ';
+
+  @override
+  String get wrappedWinLabelUpper => 'VICTORIE';
+
+  @override
+  String get wrappedTopPhrasesLabelUpper => 'TOP EXPRESII';
+
+  @override
+  String get wrappedYourHeader => 'Zilele tale';
+
+  @override
+  String get wrappedTopDaysHeader => 'de top';
+
+  @override
+  String get wrappedYourTopDaysBadge => 'Zilele tale de top';
+
+  @override
+  String get wrappedBestHeader => 'Cele mai bune';
+
+  @override
+  String get wrappedMomentsHeader => 'Momente';
+
+  @override
+  String get wrappedBestMomentsBadge => 'Cele mai bune momente';
+
+  @override
+  String get wrappedBiggestHeader => 'Cea mai mare';
+
+  @override
+  String get wrappedStruggleHeader => 'Luptă';
+
+  @override
+  String get wrappedWinHeader => 'Victorie';
+
+  @override
+  String get wrappedButYouPushedThroughEmoji => 'Dar ai reușit 💪';
+
+  @override
+  String get wrappedYouDidItEmoji => 'Ai reușit! 🎉';
+
+  @override
+  String get wrappedHours => 'ore';
+
+  @override
+  String get wrappedActions => 'acțiuni';
+
+  @override
+  String get multipleSpeakersDetected => 'Au fost detectați mai mulți vorbitori';
+
+  @override
+  String get multipleSpeakersDescription =>
+      'Se pare că în înregistrare sunt mai mulți vorbitori. Asigurați-vă că sunteți într-un loc liniștit și încercați din nou.';
+
+  @override
+  String get invalidRecordingDetected => 'Înregistrare invalidă detectată';
+
+  @override
+  String get notEnoughSpeechDescription =>
+      'Nu a fost detectată suficientă vorbire. Vă rugăm să vorbiți mai mult și să încercați din nou.';
+
+  @override
+  String get speechDurationDescription => 'Asigurați-vă că vorbiți cel puțin 5 secunde și nu mai mult de 90.';
+
+  @override
+  String get connectionLostDescription =>
+      'Conexiunea a fost întreruptă. Verificați conexiunea la internet și încercați din nou.';
+
+  @override
+  String get howToTakeGoodSample => 'Cum să faci o probă bună?';
+
+  @override
+  String get goodSampleInstructions =>
+      '1. Asigurați-vă că sunteți într-un loc liniștit.\n2. Vorbiți clar și natural.\n3. Asigurați-vă că dispozitivul dvs. este în poziția sa naturală pe gât.\n\nOdată creat, îl puteți îmbunătăți oricând sau îl puteți face din nou.';
+
+  @override
+  String get noDeviceConnectedUseMic => 'Niciun dispozitiv conectat. Se va folosi microfonul telefonului.';
+
+  @override
+  String get doItAgain => 'Fă-o din nou';
+
+  @override
+  String get listenToSpeechProfile => 'Ascultă profilul meu vocal ➡️';
+
+  @override
+  String get recognizingOthers => 'Recunoașterea altora 👀';
+
+  @override
+  String get keepGoingGreat => 'Continuă, te descurci excelent';
+
+  @override
+  String get somethingWentWrongTryAgain => 'Ceva nu a funcționat! Vă rugăm să încercați din nou mai târziu.';
+
+  @override
+  String get uploadingVoiceProfile => 'Se încarcă profilul vocal....';
+
+  @override
+  String get memorizingYourVoice => 'Se memorează vocea ta...';
+
+  @override
+  String get personalizingExperience => 'Se personalizează experiența ta...';
+
+  @override
+  String get keepSpeakingUntil100 => 'Continuă să vorbești până ajungi la 100%.';
+
+  @override
+  String get greatJobAlmostThere => 'Treabă excelentă, ești aproape gata';
+
+  @override
+  String get soCloseJustLittleMore => 'Atât de aproape, doar puțin mai mult';
 }

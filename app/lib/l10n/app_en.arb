@@ -869,7 +869,7 @@
   },
   "endpointUrl": "Endpoint URL",
   "@endpointUrl": {
-    "description": "Label for endpoint URL text field"
+    "description": "Label for webhook endpoint URL field"
   },
   "noApiKeys": "No API keys yet",
   "@noApiKeys": {
@@ -893,7 +893,7 @@
   },
   "today": "Today",
   "@today": {
-    "description": "Today date label"
+    "description": "Label for today in date headers"
   },
   "thisMonth": "This Month",
   "@thisMonth": {
@@ -1293,7 +1293,7 @@
   "showEventsNoParticipantsDesc": "When enabled, Coming Up shows events without participants or a video link.",
   "yourMeetings": "Your Meetings",
   "refresh": "Refresh",
-  "noUpcomingMeetings": "No upcoming meetings found",
+  "noUpcomingMeetings": "No upcoming meetings",
   "checkingNextDays": "Checking next 30 days",
   "tomorrow": "Tomorrow",
   "googleCalendarComingSoon": "Google Calendar integration coming soon!",
@@ -1730,7 +1730,7 @@
   },
   "speechProfileIntro": "Omi needs to learn your goals and your voice. You'll be able to modify it later.",
   "@speechProfileIntro": {
-    "description": "Introduction text for speech profile creation"
+    "description": "Introduction text for speech profile setup"
   },
   "getStarted": "Get Started",
   "@getStarted": {
@@ -1746,7 +1746,7 @@
   },
   "skipThisQuestion": "Skip this question",
   "@skipThisQuestion": {
-    "description": "Button text to skip the current question"
+    "description": "Button text to skip current question"
   },
   "skipForNow": "Skip for now",
   "@skipForNow": {
@@ -2627,7 +2627,7 @@
     "description": "Description for debug logs purpose"
   },
   "@noLogFilesFound": {
-    "description": "Error message when no log files exist"
+    "description": "Error message when no debug log files exist"
   },
   "@selectLogFile": {
     "description": "Dialog title for selecting log file"
@@ -2702,7 +2702,7 @@
     "description": "Label for server URL"
   },
   "@urlCopied": {
-    "description": "Success message when URL copied"
+    "description": "Snackbar message when URL is copied to clipboard"
   },
   "@apiKeyAuth": {
     "description": "Label for API key authentication section"
@@ -2746,7 +2746,7 @@
     "description": "Webhook description for audio data"
   },
   "@intervalSeconds": {
-    "description": "Label for interval field in seconds"
+    "description": "Label for webhook interval field"
   },
   "@daySummary": {
     "description": "Webhook title for day summary"
@@ -2811,7 +2811,7 @@
     "description": "Label for overdue tasks"
   },
   "@tomorrow": {
-    "description": "Tomorrow date label"
+    "description": "Label for tomorrow in date headers"
   },
   "@yesterday": {
     "description": "Label for yesterday"
@@ -2917,7 +2917,7 @@
   },
   "pressKeys": "Press keys...",
   "@pressKeys": {
-    "description": "Instruction to press keys for shortcut recording"
+    "description": "Placeholder text when recording keyboard shortcut"
   },
   "cmdRequired": "⌘ required",
   "@cmdRequired": {
@@ -2925,7 +2925,7 @@
   },
   "invalidKey": "Invalid key",
   "@invalidKey": {
-    "description": "Error message for invalid key press"
+    "description": "Error message when invalid key is pressed for shortcut"
   },
   "space": "Space",
   "@space": {
@@ -4338,7 +4338,7 @@
   },
   "selectTime": "Select Time",
   "@selectTime": {
-    "description": "Time picker dialog title"
+    "description": "Dialog title for selecting time"
   },
   "@debugLogsCleared": {
     "description": "Success message when logs cleared"
@@ -4367,11 +4367,11 @@
   },
   "signOutQuestion": "Sign Out?",
   "@signOutQuestion": {
-    "description": "Sign out confirmation dialog title"
+    "description": "Dialog title asking user to confirm sign out"
   },
   "signOutConfirmation": "Are you sure you want to sign out?",
   "@signOutConfirmation": {
-    "description": "Sign out confirmation message"
+    "description": "Confirmation message in sign out dialog"
   },
   "customVocabularyHeader": "CUSTOM VOCABULARY",
   "@customVocabularyHeader": {
@@ -4399,7 +4399,7 @@
   },
   "deliveryTime": "Delivery Time",
   "@deliveryTime": {
-    "description": "Delivery time setting"
+    "description": "Label for daily summary delivery time setting"
   },
   "deliveryTimeDescription": "When to receive your daily summary",
   "@deliveryTimeDescription": {
@@ -4426,7 +4426,7 @@
   "displayUpcomingMeetingsDescription": "Display upcoming meetings in the menu bar",
   "showEventsWithoutParticipants": "Show Events Without Participants",
   "includePersonalEventsDescription": "Include personal events with no attendees",
-  "upcomingMeetings": "UPCOMING MEETINGS",
+  "upcomingMeetings": "Upcoming Meetings",
   "checkingNext7Days": "Checking the next 7 days",
   "shortcuts": "Shortcuts",
   "shortcutChangeInstruction": "Click on a shortcut to change it. Press Escape to cancel.",
@@ -5593,5 +5593,1250 @@
   "noSpecificDataAccessConfigured": "No specific data access configured.",
   "@noSpecificDataAccessConfigured": {
     "description": "Message shown when app has no specific data access"
+  },
+  "basicPlanDescription": "1,200 premium mins + unlimited on-device",
+  "@basicPlanDescription": {
+    "description": "Description of basic plan features in usage page"
+  },
+  "minutes": "minutes",
+  "@minutes": {
+    "description": "Unit label for minutes"
+  },
+  "omiHas": "Omi has:",
+  "@omiHas": {
+    "description": "Fallback text for share stats when period is unknown"
+  },
+  "premiumMinutesUsed": "Premium minutes used.",
+  "@premiumMinutesUsed": {
+    "description": "Message shown when all premium minutes are used"
+  },
+  "setupOnDevice": "Setup on-device",
+  "@setupOnDevice": {
+    "description": "Link text to setup on-device transcription"
+  },
+  "forUnlimitedFreeTranscription": "for unlimited free transcription.",
+  "@forUnlimitedFreeTranscription": {
+    "description": "Continuation of premium minutes message"
+  },
+  "premiumMinsLeft": "{count} premium mins left.",
+  "@premiumMinsLeft": {
+    "description": "Message showing remaining premium minutes",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "alwaysAvailable": "always available.",
+  "@alwaysAvailable": {
+    "description": "Text indicating on-device is always available"
+  },
+  "importHistory": "Import History",
+  "@importHistory": {
+    "description": "Section header for import history"
+  },
+  "noImportsYet": "No imports yet",
+  "@noImportsYet": {
+    "description": "Message when no imports exist"
+  },
+  "selectZipFileToImport": "Select the .zip file to import!",
+  "@selectZipFileToImport": {
+    "description": "Description for Limitless import option"
+  },
+  "otherDevicesComingSoon": "Other devices coming soon",
+  "@otherDevicesComingSoon": {
+    "description": "Text for other devices placeholder"
+  },
+  "deleteAllLimitlessConversations": "Delete All Limitless Conversations?",
+  "@deleteAllLimitlessConversations": {
+    "description": "Dialog title for deleting Limitless data"
+  },
+  "deleteAllLimitlessWarning": "This will permanently delete all conversations imported from Limitless. This action cannot be undone.",
+  "@deleteAllLimitlessWarning": {
+    "description": "Warning message in delete dialog"
+  },
+  "deletedLimitlessConversations": "Deleted {count} Limitless conversations",
+  "@deletedLimitlessConversations": {
+    "description": "Success message after deleting conversations",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "failedToDeleteConversations": "Failed to delete conversations",
+  "@failedToDeleteConversations": {
+    "description": "Error message when delete fails"
+  },
+  "deleteImportedData": "Delete Imported Data",
+  "@deleteImportedData": {
+    "description": "Menu item to delete imported data"
+  },
+  "statusPending": "Pending",
+  "@statusPending": {
+    "description": "Import job status - pending"
+  },
+  "statusProcessing": "Processing",
+  "@statusProcessing": {
+    "description": "Import job status - processing"
+  },
+  "statusCompleted": "Completed",
+  "@statusCompleted": {
+    "description": "Import job status - completed"
+  },
+  "statusFailed": "Failed",
+  "@statusFailed": {
+    "description": "Import job status - failed"
+  },
+  "nConversations": "{count} conversations",
+  "@nConversations": {
+    "description": "Number of conversations created",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pleaseEnterName": "Please enter a name",
+  "@pleaseEnterName": {
+    "description": "Validation message when name field is empty"
+  },
+  "nameMustBeBetweenCharacters": "Name must be between 2 and 40 characters",
+  "@nameMustBeBetweenCharacters": {
+    "description": "Validation message for name length"
+  },
+  "deleteSampleQuestion": "Delete Sample?",
+  "@deleteSampleQuestion": {
+    "description": "Dialog title for deleting a speech sample"
+  },
+  "deleteSampleConfirmation": "Are you sure you want to delete {name}'s sample?",
+  "@deleteSampleConfirmation": {
+    "description": "Confirmation message for deleting a speech sample",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "confirmDeletion": "Confirm Deletion",
+  "@confirmDeletion": {
+    "description": "Dialog title for confirming deletion"
+  },
+  "deletePersonConfirmation": "Are you sure you want to delete {name}? This will also remove all associated speech samples.",
+  "@deletePersonConfirmation": {
+    "description": "Confirmation message for deleting a person",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "howItWorksTitle": "How it works?",
+  "@howItWorksTitle": {
+    "description": "Help dialog title"
+  },
+  "howPeopleWorks": "Once a person is created, you can go to a conversation transcript, and assign them their corresponding segments, that way Omi will be able to recognize their speech too!",
+  "@howPeopleWorks": {
+    "description": "Explanation of how people/speech recognition works"
+  },
+  "tapToDelete": "Tap to delete",
+  "@tapToDelete": {
+    "description": "Hint text for tap to delete action"
+  },
+  "newTag": "NEW",
+  "@newTag": {
+    "description": "newTag label"
+  },
+  "needHelpChatWithUs": "Need Help? Chat with us",
+  "@needHelpChatWithUs": {
+    "description": "needHelpChatWithUs label"
+  },
+  "localStorageEnabled": "Local storage enabled",
+  "@localStorageEnabled": {
+    "description": "localStorageEnabled label"
+  },
+  "localStorageDisabled": "Local storage disabled",
+  "@localStorageDisabled": {
+    "description": "localStorageDisabled label"
+  },
+  "failedToUpdateSettings": "Failed to update settings: {error}",
+  "@failedToUpdateSettings": {
+    "description": "failedToUpdateSettings message",
+    "placeholders": {
+      "error": {
+        "type": "String",
+        "example": "Connection failed"
+      }
+    }
+  },
+  "privacyNotice": "Privacy Notice",
+  "@privacyNotice": {
+    "description": "privacyNotice label"
+  },
+  "recordingsMayCaptureOthers": "Recordings may capture others' voices. Ensure you have consent from all participants before enabling.",
+  "@recordingsMayCaptureOthers": {
+    "description": "recordingsMayCaptureOthers label"
+  },
+  "enable": "Enable",
+  "@enable": {
+    "description": "enable label"
+  },
+  "storeAudioOnPhone": "Store Audio on Phone",
+  "@storeAudioOnPhone": {
+    "description": "storeAudioOnPhone label"
+  },
+  "on": "On",
+  "@on": {
+    "description": "on label"
+  },
+  "storeAudioDescription": "Keep all audio recordings stored locally on your phone. When disabled, only failed uploads are kept to save storage space.",
+  "@storeAudioDescription": {
+    "description": "storeAudioDescription label"
+  },
+  "enableLocalStorage": "Enable Local Storage",
+  "@enableLocalStorage": {
+    "description": "enableLocalStorage label"
+  },
+  "cloudStorageEnabled": "Cloud storage enabled",
+  "@cloudStorageEnabled": {
+    "description": "cloudStorageEnabled label"
+  },
+  "cloudStorageDisabled": "Cloud storage disabled",
+  "@cloudStorageDisabled": {
+    "description": "cloudStorageDisabled label"
+  },
+  "enableCloudStorage": "Enable Cloud Storage",
+  "@enableCloudStorage": {
+    "description": "enableCloudStorage label"
+  },
+  "storeAudioOnCloud": "Store Audio on Cloud",
+  "@storeAudioOnCloud": {
+    "description": "storeAudioOnCloud label"
+  },
+  "cloudStorageDialogMessage": "Your real-time recordings will be stored in private cloud storage as you speak.",
+  "@cloudStorageDialogMessage": {
+    "description": "cloudStorageDialogMessage label"
+  },
+  "storeAudioCloudDescription": "Store your real-time recordings in private cloud storage as you speak. Audio is captured and saved securely in real-time.",
+  "@storeAudioCloudDescription": {
+    "description": "storeAudioCloudDescription label"
+  },
+  "downloadingFirmware": "Downloading Firmware",
+  "@downloadingFirmware": {
+    "description": "Status text shown while downloading firmware"
+  },
+  "installingFirmware": "Installing Firmware",
+  "@installingFirmware": {
+    "description": "Status text shown while installing firmware"
+  },
+  "firmwareUpdateWarning": "Do not close the app or turn off the device. This could corrupt your device.",
+  "@firmwareUpdateWarning": {
+    "description": "Warning message during firmware update"
+  },
+  "firmwareUpdated": "Firmware Updated",
+  "@firmwareUpdated": {
+    "description": "Success message when firmware update is complete"
+  },
+  "restartDeviceToComplete": "Please restart your {deviceName} to complete the update.",
+  "@restartDeviceToComplete": {
+    "description": "Message asking user to restart device after update. {deviceName} is the device name."
+  },
+  "yourDeviceIsUpToDate": "Your device is up to date",
+  "@yourDeviceIsUpToDate": {
+    "description": "Message shown when device firmware is current"
+  },
+  "currentVersion": "Current Version",
+  "@currentVersion": {
+    "description": "Label for current firmware version"
+  },
+  "latestVersion": "Latest Version",
+  "@latestVersion": {
+    "description": "Label for latest available firmware version"
+  },
+  "whatsNew": "What's New",
+  "@whatsNew": {
+    "description": "Section header for changelog"
+  },
+  "installUpdate": "Install Update",
+  "@installUpdate": {
+    "description": "Button text to install firmware update"
+  },
+  "updateNow": "Update Now",
+  "@updateNow": {
+    "description": "Button text to start firmware update"
+  },
+  "updateGuide": "Update Guide",
+  "@updateGuide": {
+    "description": "Link text to firmware update help"
+  },
+  "checkingForUpdates": "Checking for Updates",
+  "@checkingForUpdates": {
+    "description": "Title shown while checking for updates"
+  },
+  "checkingFirmwareVersion": "Checking firmware version...",
+  "@checkingFirmwareVersion": {
+    "description": "Status text while checking firmware version"
+  },
+  "firmwareUpdate": "Firmware Update",
+  "@firmwareUpdate": {
+    "description": "Page title for firmware update screen"
+  },
+  "payments": "Payments",
+  "@payments": {
+    "description": "Page title for payments settings"
+  },
+  "connectPaymentMethodInfo": "Connect a payment method below to start receiving payouts for your apps.",
+  "@connectPaymentMethodInfo": {
+    "description": "Info message explaining how to connect payment method"
+  },
+  "selectedPaymentMethod": "Selected Payment Method",
+  "@selectedPaymentMethod": {
+    "description": "Section header for selected payment method"
+  },
+  "availablePaymentMethods": "Available Payment Methods",
+  "@availablePaymentMethods": {
+    "description": "Section header for available payment methods"
+  },
+  "activeStatus": "Active",
+  "@activeStatus": {
+    "description": "Status label when payment method is active"
+  },
+  "connectedStatus": "Connected",
+  "@connectedStatus": {
+    "description": "Status label when payment method is connected"
+  },
+  "notConnectedStatus": "Not Connected",
+  "@notConnectedStatus": {
+    "description": "Status label when payment method is not connected"
+  },
+  "setActive": "Set Active",
+  "@setActive": {
+    "description": "Button to set payment method as active"
+  },
+  "getPaidThroughStripe": "Get paid for your app sales through Stripe",
+  "@getPaidThroughStripe": {
+    "description": "Title for Stripe setup page"
+  },
+  "monthlyPayouts": "Monthly payouts",
+  "@monthlyPayouts": {
+    "description": "Feature title for monthly payouts"
+  },
+  "monthlyPayoutsDescription": "Receive monthly payments directly to your account when you reach $10 in earnings",
+  "@monthlyPayoutsDescription": {
+    "description": "Description of monthly payout feature"
+  },
+  "secureAndReliable": "Secure and reliable",
+  "@secureAndReliable": {
+    "description": "Feature title for security"
+  },
+  "stripeSecureDescription": "Stripe ensures safe and timely transfers of your app revenue",
+  "@stripeSecureDescription": {
+    "description": "Description of Stripe security feature"
+  },
+  "selectYourCountry": "Select your country",
+  "@selectYourCountry": {
+    "description": "Placeholder for country selector"
+  },
+  "countrySelectionPermanent": "Your country selection is permanent and cannot be changed later.",
+  "@countrySelectionPermanent": {
+    "description": "Warning that country selection cannot be changed"
+  },
+  "byClickingConnectNow": "By clicking on \"Connect Now\" you agree to the",
+  "@byClickingConnectNow": {
+    "description": "Legal agreement intro text"
+  },
+  "stripeConnectedAccountAgreement": "Stripe Connected Account Agreement",
+  "@stripeConnectedAccountAgreement": {
+    "description": "Link text for Stripe agreement"
+  },
+  "errorConnectingToStripe": "Error connecting to Stripe! Please try again later.",
+  "@errorConnectingToStripe": {
+    "description": "Error message when Stripe connection fails"
+  },
+  "connectingYourStripeAccount": "Connecting your Stripe account",
+  "@connectingYourStripeAccount": {
+    "description": "Title during Stripe connection process"
+  },
+  "stripeOnboardingInstructions": "Please complete the Stripe onboarding process in your browser. This page will automatically update once completed.",
+  "@stripeOnboardingInstructions": {
+    "description": "Instructions for completing Stripe onboarding"
+  },
+  "failedTryAgain": "Failed? Try Again",
+  "@failedTryAgain": {
+    "description": "Button to retry failed connection"
+  },
+  "illDoItLater": "I'll do it later",
+  "@illDoItLater": {
+    "description": "Button to defer connection"
+  },
+  "successfullyConnected": "Successfully Connected!",
+  "@successfullyConnected": {
+    "description": "Title when connection succeeds"
+  },
+  "stripeReadyForPayments": "Your Stripe account is now ready to receive payments. You can start earning from your app sales right away.",
+  "@stripeReadyForPayments": {
+    "description": "Description after successful connection"
+  },
+  "updateStripeDetails": "Update Stripe Details",
+  "@updateStripeDetails": {
+    "description": "Button to update Stripe details"
+  },
+  "errorUpdatingStripeDetails": "Error updating Stripe details! Please try again later.",
+  "@errorUpdatingStripeDetails": {
+    "description": "Error message when Stripe update fails"
+  },
+  "updatePayPal": "Update PayPal",
+  "@updatePayPal": {
+    "description": "App bar title when updating PayPal"
+  },
+  "setUpPayPal": "Set Up PayPal",
+  "@setUpPayPal": {
+    "description": "App bar title when setting up PayPal"
+  },
+  "updatePayPalAccountDetails": "Update your PayPal account details",
+  "@updatePayPalAccountDetails": {
+    "description": "Description when updating PayPal account"
+  },
+  "connectPayPalToReceivePayments": "Connect your PayPal account to start receiving payments for your apps",
+  "@connectPayPalToReceivePayments": {
+    "description": "Description when connecting PayPal account"
+  },
+  "paypalEmail": "PayPal Email",
+  "@paypalEmail": {
+    "description": "Label for PayPal email field"
+  },
+  "paypalMeLink": "PayPal.me Link",
+  "@paypalMeLink": {
+    "description": "Label for PayPal.me link field"
+  },
+  "stripeRecommendation": "If Stripe is available in your country, we highly recommend using it for faster and easier payouts.",
+  "@stripeRecommendation": {
+    "description": "Info message recommending Stripe over PayPal"
+  },
+  "updatePayPalDetails": "Update PayPal Details",
+  "@updatePayPalDetails": {
+    "description": "Button text to update PayPal details"
+  },
+  "savePayPalDetails": "Save PayPal Details",
+  "@savePayPalDetails": {
+    "description": "Button text to save PayPal details"
+  },
+  "pleaseEnterPayPalEmail": "Please enter your PayPal email",
+  "@pleaseEnterPayPalEmail": {
+    "description": "Validation error for empty PayPal email"
+  },
+  "pleaseEnterPayPalMeLink": "Please enter your PayPal.me link",
+  "@pleaseEnterPayPalMeLink": {
+    "description": "Validation error for empty PayPal.me link"
+  },
+  "doNotIncludeHttpInLink": "Do not include http or https or www in the link",
+  "@doNotIncludeHttpInLink": {
+    "description": "Validation error for http/https/www in link"
+  },
+  "pleaseEnterValidPayPalMeLink": "Please enter a valid PayPal.me link",
+  "@pleaseEnterValidPayPalMeLink": {
+    "description": "Validation error for invalid PayPal.me link"
+  },
+  "pleaseEnterValidEmail": "Please enter a valid email address",
+  "syncingYourRecordings": "Syncing your recordings",
+  "@syncingYourRecordings": {
+    "description": "Status message shown while recordings are being synced"
+  },
+  "syncYourRecordings": "Sync your recordings",
+  "@syncYourRecordings": {
+    "description": "Label prompting user to sync their recordings"
+  },
+  "syncNow": "Sync Now",
+  "@syncNow": {
+    "description": "Button text to start syncing recordings immediately"
+  },
+  "error": "Error",
+  "@error": {
+    "description": "Generic error label shown when an operation fails"
+  },
+  "speechSamples": "Speech Samples",
+  "@speechSamples": {
+    "description": "Title for the speech samples page"
+  },
+  "additionalSampleIndex": "Additional Sample {index}",
+  "@additionalSampleIndex": {
+    "description": "Title for additional speech samples with index number",
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
+  },
+  "durationSeconds": "Duration: {seconds} seconds",
+  "@durationSeconds": {
+    "description": "Shows the duration of a speech sample in seconds",
+    "placeholders": {
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
+  "additionalSpeechSampleRemoved": "Additional Speech Sample Removed",
+  "@additionalSpeechSampleRemoved": {
+    "description": "Confirmation message when an additional speech sample is deleted"
+  },
+  "consentDataMessage": "By continuing, all data you share with this app (including your conversations, recordings, and personal information) will be securely stored on our servers to provide you with AI-powered insights and enable all app features.",
+  "@consentDataMessage": {
+    "description": "Consent message explaining how user data will be stored and used"
+  },
+  "tasksEmptyStateMessage": "Tasks from your conversations will appear here.\nTap + to create one manually.",
+  "@tasksEmptyStateMessage": {
+    "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
+  },
+  "clearChatAction": "Clear Chat",
+  "@clearChatAction": {
+    "description": "Menu item text for clearing chat history"
+  },
+  "enableApps": "Enable Apps",
+  "@enableApps": {
+    "description": "Menu item text to navigate to apps page and enable more chat apps"
+  },
+  "omiAppName": "Omi",
+  "@omiAppName": {
+    "description": "The Omi app/assistant name shown in chat app selection"
+  },
+  "showMore": "show more ↓",
+  "@showMore": {
+    "description": "Text shown to expand collapsed content, with down arrow"
+  },
+  "showLess": "show less ↑",
+  "@showLess": {
+    "description": "Text shown to collapse expanded content, with up arrow"
+  },
+  "loadingYourRecording": "Loading your recording...",
+  "@loadingYourRecording": {
+    "description": "Loading message shown while audio waveform is being processed"
+  },
+  "photoDiscardedMessage": "This photo was discarded as it was not significant.",
+  "@photoDiscardedMessage": {
+    "description": "Message shown when a photo was discarded as not significant"
+  },
+  "analyzing": "Analyzing...",
+  "@analyzing": {
+    "description": "Loading text shown while analyzing a photo"
+  },
+  "searchCountries": "Search countries...",
+  "@searchCountries": {
+    "description": "Placeholder text for country search field"
+  },
+  "checkingAppleWatch": "Checking Apple Watch...",
+  "@checkingAppleWatch": {
+    "description": "Loading text while checking Apple Watch status"
+  },
+  "installOmiOnAppleWatch": "Install Omi on your\nApple Watch",
+  "@installOmiOnAppleWatch": {
+    "description": "Title prompting user to install Omi on Apple Watch"
+  },
+  "installOmiOnAppleWatchDescription": "To use your Apple Watch with Omi, you need to install the Omi app on your watch first.",
+  "@installOmiOnAppleWatchDescription": {
+    "description": "Description explaining need to install Omi app on watch"
+  },
+  "openOmiOnAppleWatch": "Open Omi on your\nApple Watch",
+  "@openOmiOnAppleWatch": {
+    "description": "Title prompting user to open Omi on Apple Watch"
+  },
+  "openOmiOnAppleWatchDescription": "The Omi app is installed on your Apple Watch. Open it and tap Start to begin.",
+  "@openOmiOnAppleWatchDescription": {
+    "description": "Description explaining Omi is installed and user should open it"
+  },
+  "openWatchApp": "Open Watch App",
+  "@openWatchApp": {
+    "description": "Button text to open Watch app on iPhone"
+  },
+  "iveInstalledAndOpenedTheApp": "I've Installed & Opened the App",
+  "@iveInstalledAndOpenedTheApp": {
+    "description": "Button text confirming user has installed and opened the app"
+  },
+  "unableToOpenWatchApp": "Unable to open Apple Watch app. Please manually open the Watch app on your Apple Watch and install Omi from the \"Available Apps\" section.",
+  "@unableToOpenWatchApp": {
+    "description": "Error message when Watch app cannot be opened automatically"
+  },
+  "appleWatchConnectedSuccessfully": "Apple Watch connected successfully!",
+  "@appleWatchConnectedSuccessfully": {
+    "description": "Success message when Apple Watch connects"
+  },
+  "appleWatchNotReachable": "Apple Watch still not reachable. Please make sure the Omi app is open on your watch.",
+  "@appleWatchNotReachable": {
+    "description": "Error message when Apple Watch is not reachable"
+  },
+  "errorCheckingConnection": "Error checking connection: {error}",
+  "@errorCheckingConnection": {
+    "description": "Error message with error details when connection check fails",
+    "placeholders": {
+      "error": {
+        "type": "String",
+        "example": "timeout"
+      }
+    }
+  },
+  "muted": "Muted",
+  "@muted": {
+    "description": "Status text shown when microphone is muted"
+  },
+  "processNow": "Process Now",
+  "@processNow": {
+    "description": "Button text to process/summarize the conversation immediately"
+  },
+  "finishedConversation": "Finished Conversation?",
+  "@finishedConversation": {
+    "description": "Dialog title asking if user wants to end conversation"
+  },
+  "stopRecordingConfirmation": "Are you sure you want to stop recording and summarize the conversation now?",
+  "@stopRecordingConfirmation": {
+    "description": "Confirmation message for stopping recording and summarizing"
+  },
+  "conversationEndsManually": "Conversation will only end manually.",
+  "@conversationEndsManually": {
+    "description": "Hint text explaining conversation only ends manually"
+  },
+  "conversationSummarizedAfterMinutes": "Conversation is summarized after {minutes} minute{suffix} of no speech.",
+  "@conversationSummarizedAfterMinutes": {
+    "description": "Hint text showing how many minutes of silence before auto-summary",
+    "placeholders": {
+      "minutes": {
+        "type": "int",
+        "example": "2"
+      },
+      "suffix": {
+        "type": "String",
+        "example": "s"
+      }
+    }
+  },
+  "dontAskAgain": "Don't ask me again",
+  "@dontAskAgain": {
+    "description": "Checkbox label to not show confirmation dialog again"
+  },
+  "waitingForTranscriptOrPhotos": "Waiting for transcript or photos...",
+  "@waitingForTranscriptOrPhotos": {
+    "description": "Placeholder text shown while waiting for content"
+  },
+  "noSummaryYet": "No summary yet",
+  "@noSummaryYet": {
+    "description": "Text shown when no summary is available yet"
+  },
+  "hints": "Hints: {text}",
+  "@hints": {
+    "description": "Label for hints section with dynamic text",
+    "placeholders": {
+      "text": {
+        "type": "String",
+        "example": "Conversation will only end manually."
+      }
+    }
+  },
+  "testConversationPrompt": "Test Conversation Prompt",
+  "@testConversationPrompt": {
+    "description": "App bar title for testing conversation prompts page"
+  },
+  "prompt": "Prompt",
+  "@prompt": {
+    "description": "Label for prompt input field"
+  },
+  "result": "Result",
+  "@result": {
+    "description": "Label for result section showing prompt output"
+  },
+  "compareTranscripts": "Compare Transcripts",
+  "@compareTranscripts": {
+    "description": "App bar title for comparing transcripts from different services"
+  },
+  "notHelpful": "Not Helpful",
+  "@notHelpful": {
+    "description": "Label for thumbs down button to indicate response was not helpful"
+  },
+  "exportTasksWithOneTap": "Export tasks with one tap!",
+  "@exportTasksWithOneTap": {
+    "description": "Banner message promoting task export integration feature"
+  },
+  "inProgress": "In progress",
+  "@inProgress": {
+    "description": "Title for conversation being processed"
+  },
+  "photos": "Photos",
+  "@photos": {
+    "description": "Tab label for photos content"
+  },
+  "rawData": "Raw Data",
+  "@rawData": {
+    "description": "Tab label for raw data content"
+  },
+  "content": "Content",
+  "@content": {
+    "description": "Tab label for content"
+  },
+  "noContentToDisplay": "No content to display",
+  "@noContentToDisplay": {
+    "description": "Message when there is no content available"
+  },
+  "noSummary": "No summary",
+  "@noSummary": {
+    "description": "Message when no summary is available"
+  },
+  "updateOmiFirmware": "Update omi firmware",
+  "@updateOmiFirmware": {
+    "description": "Button text to update Omi device firmware"
+  },
+  "anErrorOccurredTryAgain": "An error occurred. Please try again.",
+  "@anErrorOccurredTryAgain": {
+    "description": "Generic error message asking user to try again"
+  },
+  "welcomeBackSimple": "Welcome back",
+  "@welcomeBackSimple": {
+    "description": "Simple welcome message without user name"
+  },
+  "addVocabularyDescription": "Add words that Omi should recognize during transcription.",
+  "@addVocabularyDescription": {
+    "description": "Description for custom vocabulary section"
+  },
+  "enterWordsCommaSeparated": "Enter words (comma separated)",
+  "@enterWordsCommaSeparated": {
+    "description": "Placeholder hint for vocabulary input field"
+  },
+  "whenToReceiveDailySummary": "When to receive your daily summary",
+  "@whenToReceiveDailySummary": {
+    "description": "Description for delivery time setting"
+  },
+  "@upcomingMeetings": {
+    "description": "Section header for upcoming meetings in calendar"
+  },
+  "@noUpcomingMeetings": {
+    "description": "Empty state when no meetings scheduled"
+  },
+  "checkingNextSevenDays": "Checking the next 7 days",
+  "@checkingNextSevenDays": {
+    "description": "Subtitle for no upcoming meetings state"
+  },
+  "@exportingConversations": {
+    "description": "Snackbar message when exporting conversations"
+  },
+  "failedToDeleteError": "Failed to delete: {error}",
+  "@failedToDeleteError": {
+    "description": "Error message when deletion fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "developerApiKeys": "Developer API Keys",
+  "@developerApiKeys": {
+    "description": "Section header for developer API keys"
+  },
+  "noApiKeysCreateOne": "No API keys. Create one to get started.",
+  "@noApiKeysCreateOne": {
+    "description": "Empty state for MCP API keys section"
+  },
+  "commandRequired": "⌘ required",
+  "@commandRequired": {
+    "description": "Error message when command key is not pressed for shortcut"
+  },
+  "spaceKey": "Space",
+  "@spaceKey": {
+    "description": "Display name for the space key in shortcuts"
+  },
+  "loadMoreRemaining": "Load More ({count} remaining)",
+  "@loadMoreRemaining": {
+    "description": "Button text showing number of items remaining to load",
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "wrappedTopPercentUser": "Top {percentile}% User",
+  "@wrappedTopPercentUser": {
+    "description": "Badge showing user percentile ranking in Wrapped",
+    "placeholders": {
+      "percentile": {
+        "type": "String"
+      }
+    }
+  },
+  "wrappedMinutes": "minutes",
+  "@wrappedMinutes": {
+    "description": "Label for minutes stat in Wrapped"
+  },
+  "wrappedConversations": "conversations",
+  "@wrappedConversations": {
+    "description": "Label for conversations stat in Wrapped"
+  },
+  "wrappedDaysActive": "days active",
+  "@wrappedDaysActive": {
+    "description": "Label for days active stat in Wrapped"
+  },
+  "wrappedYouTalkedAbout": "You Talked About",
+  "@wrappedYouTalkedAbout": {
+    "description": "Badge for top categories in Wrapped"
+  },
+  "wrappedActionItems": "Action Items",
+  "@wrappedActionItems": {
+    "description": "Badge for action items in Wrapped"
+  },
+  "wrappedTasksCreated": "tasks created",
+  "@wrappedTasksCreated": {
+    "description": "Label for tasks created in Wrapped"
+  },
+  "wrappedCompleted": "completed",
+  "@wrappedCompleted": {
+    "description": "Label for completed tasks in Wrapped"
+  },
+  "wrappedCompletionRate": "{rate}% completion rate",
+  "@wrappedCompletionRate": {
+    "description": "Completion rate badge in Wrapped",
+    "placeholders": {
+      "rate": {
+        "type": "String"
+      }
+    }
+  },
+  "wrappedYourTopDays": "Your Top Days",
+  "@wrappedYourTopDays": {
+    "description": "Badge for top days in Wrapped"
+  },
+  "wrappedBestMoments": "Best Moments",
+  "@wrappedBestMoments": {
+    "description": "Badge for best moments in Wrapped"
+  },
+  "wrappedMyBuddies": "My Buddies",
+  "@wrappedMyBuddies": {
+    "description": "Badge for buddies in Wrapped"
+  },
+  "wrappedCouldntStopTalkingAbout": "Couldn't Stop Talking About",
+  "@wrappedCouldntStopTalkingAbout": {
+    "description": "Badge for obsessions in Wrapped"
+  },
+  "wrappedShow": "SHOW",
+  "@wrappedShow": {
+    "description": "Label for show obsession in Wrapped"
+  },
+  "wrappedMovie": "MOVIE",
+  "@wrappedMovie": {
+    "description": "Label for movie obsession in Wrapped"
+  },
+  "wrappedBook": "BOOK",
+  "@wrappedBook": {
+    "description": "Label for book obsession in Wrapped"
+  },
+  "wrappedCelebrity": "CELEBRITY",
+  "@wrappedCelebrity": {
+    "description": "Label for celebrity obsession in Wrapped"
+  },
+  "wrappedFood": "FOOD",
+  "@wrappedFood": {
+    "description": "Label for food obsession in Wrapped"
+  },
+  "wrappedMovieRecs": "Movie Recs For Friends",
+  "@wrappedMovieRecs": {
+    "description": "Badge for movie recommendations in Wrapped"
+  },
+  "wrappedBiggest": "Biggest",
+  "@wrappedBiggest": {
+    "description": "Word Biggest in struggle/win templates"
+  },
+  "wrappedStruggle": "Struggle",
+  "@wrappedStruggle": {
+    "description": "Word Struggle in Wrapped template"
+  },
+  "wrappedButYouPushedThrough": "But you pushed through 💪",
+  "@wrappedButYouPushedThrough": {
+    "description": "Encouragement message in struggle template"
+  },
+  "wrappedWin": "Win",
+  "@wrappedWin": {
+    "description": "Word Win in Wrapped template"
+  },
+  "wrappedYouDidIt": "You did it! 🎉",
+  "@wrappedYouDidIt": {
+    "description": "Celebration message in win template"
+  },
+  "wrappedTopPhrases": "Top 5 Phrases",
+  "@wrappedTopPhrases": {
+    "description": "Badge for top phrases in Wrapped"
+  },
+  "wrappedMins": "mins",
+  "@wrappedMins": {
+    "description": "Abbreviated minutes label in Wrapped collage"
+  },
+  "wrappedConvos": "convos",
+  "@wrappedConvos": {
+    "description": "Short label for conversations"
+  },
+  "wrappedDays": "days",
+  "@wrappedDays": {
+    "description": "Abbreviated days label in Wrapped collage"
+  },
+  "wrappedMyBuddiesLabel": "MY BUDDIES",
+  "@wrappedMyBuddiesLabel": {
+    "description": "Uppercase label for buddies tile in collage"
+  },
+  "wrappedObsessionsLabel": "OBSESSIONS",
+  "@wrappedObsessionsLabel": {
+    "description": "Uppercase label for obsessions tile in collage"
+  },
+  "wrappedStruggleLabel": "STRUGGLE",
+  "@wrappedStruggleLabel": {
+    "description": "Uppercase label for struggle tile in collage"
+  },
+  "wrappedWinLabel": "WIN",
+  "@wrappedWinLabel": {
+    "description": "Uppercase label for win tile in collage"
+  },
+  "wrappedTopPhrasesLabel": "TOP PHRASES",
+  "@wrappedTopPhrasesLabel": {
+    "description": "Uppercase label for top phrases tile in collage"
+  },
+  "wrappedLetsHitRewind": "Let's hit rewind on your",
+  "@wrappedLetsHitRewind": {
+    "description": "Intro text on wrapped generate screen before the year 2025"
+  },
+  "wrappedGenerateMyWrapped": "Generate My Wrapped",
+  "@wrappedGenerateMyWrapped": {
+    "description": "Button text to start generating the 2025 wrapped"
+  },
+  "wrappedProcessingDefault": "Processing...",
+  "@wrappedProcessingDefault": {
+    "description": "Default processing status text"
+  },
+  "wrappedCreatingYourStory": "Creating your\n2025 story...",
+  "@wrappedCreatingYourStory": {
+    "description": "Text shown while generating the wrapped, includes newline"
+  },
+  "wrappedSomethingWentWrong": "Something\nwent wrong",
+  "@wrappedSomethingWentWrong": {
+    "description": "Error header text, includes newline"
+  },
+  "wrappedAnErrorOccurred": "An error occurred",
+  "@wrappedAnErrorOccurred": {
+    "description": "Generic error message fallback"
+  },
+  "wrappedTryAgain": "Try Again",
+  "@wrappedTryAgain": {
+    "description": "Button text to retry generating wrapped"
+  },
+  "wrappedNoDataAvailable": "No data available",
+  "@wrappedNoDataAvailable": {
+    "description": "Shown when wrapped result is null"
+  },
+  "wrappedOmiLifeRecap": "Omi Life Recap",
+  "@wrappedOmiLifeRecap": {
+    "description": "Subtitle on the intro card"
+  },
+  "wrappedSwipeUpToBegin": "Swipe up to begin",
+  "@wrappedSwipeUpToBegin": {
+    "description": "Instruction text on intro card"
+  },
+  "wrappedShareText": "My 2025, remembered by Omi ✨ omi.me/wrapped",
+  "@wrappedShareText": {
+    "description": "Text shared when sharing wrapped images"
+  },
+  "wrappedFailedToShare": "Failed to share. Please try again.",
+  "@wrappedFailedToShare": {
+    "description": "Error message when sharing fails"
+  },
+  "wrappedFailedToStartGeneration": "Failed to start generation. Please try again.",
+  "@wrappedFailedToStartGeneration": {
+    "description": "Error message when generation fails to start"
+  },
+  "wrappedStarting": "Starting...",
+  "@wrappedStarting": {
+    "description": "Initial processing step text"
+  },
+  "wrappedShare": "Share",
+  "@wrappedShare": {
+    "description": "Share button label"
+  },
+  "wrappedShareYourWrapped": "Share Your Wrapped",
+  "@wrappedShareYourWrapped": {
+    "description": "Button text for sharing wrapped on final card"
+  },
+  "wrappedMy2025": "My 2025",
+  "@wrappedMy2025": {
+    "description": "Title text for shareable image"
+  },
+  "wrappedRememberedByOmi": "remembered by Omi",
+  "@wrappedRememberedByOmi": {
+    "description": "Subtitle text for shareable image"
+  },
+  "wrappedMostFunDay": "Most Fun",
+  "@wrappedMostFunDay": {
+    "description": "Label for the most fun day in memorable days"
+  },
+  "wrappedMostProductiveDay": "Most Productive",
+  "@wrappedMostProductiveDay": {
+    "description": "Label for the most productive day"
+  },
+  "wrappedMostIntenseDay": "Most Intense",
+  "@wrappedMostIntenseDay": {
+    "description": "Label for the most intense/stressful day"
+  },
+  "wrappedFunniestMoment": "Funniest",
+  "@wrappedFunniestMoment": {
+    "description": "Label for funniest moment"
+  },
+  "wrappedMostCringeMoment": "Most Cringe",
+  "@wrappedMostCringeMoment": {
+    "description": "Label for most embarrassing/cringe moment"
+  },
+  "wrappedMinutesLabel": "minutes",
+  "@wrappedMinutesLabel": {
+    "description": "Label under minutes count"
+  },
+  "wrappedConversationsLabel": "conversations",
+  "@wrappedConversationsLabel": {
+    "description": "Label under conversations count"
+  },
+  "wrappedDaysActiveLabel": "days active",
+  "@wrappedDaysActiveLabel": {
+    "description": "Label under days active count"
+  },
+  "wrappedTasksGenerated": "tasks generated",
+  "@wrappedTasksGenerated": {
+    "description": "Label under total tasks count"
+  },
+  "wrappedTasksCompleted": "tasks completed",
+  "@wrappedTasksCompleted": {
+    "description": "Label under completed tasks count"
+  },
+  "wrappedTopFivePhrases": "Top 5 Phrases",
+  "@wrappedTopFivePhrases": {
+    "description": "Badge text for top phrases card"
+  },
+  "wrappedAGreatDay": "A Great Day",
+  "@wrappedAGreatDay": {
+    "description": "Default title for most fun day"
+  },
+  "wrappedGettingItDone": "Getting It Done",
+  "@wrappedGettingItDone": {
+    "description": "Default title for most productive day"
+  },
+  "wrappedAChallenge": "A Challenge",
+  "@wrappedAChallenge": {
+    "description": "Default title for most intense day"
+  },
+  "wrappedAHilariousMoment": "A Hilarious Moment",
+  "@wrappedAHilariousMoment": {
+    "description": "Default title for funniest moment"
+  },
+  "wrappedThatAwkwardMoment": "That Awkward Moment",
+  "@wrappedThatAwkwardMoment": {
+    "description": "Default title for most cringe moment"
+  },
+  "wrappedYouHadFunnyMoments": "You had some funny moments this year!",
+  "@wrappedYouHadFunnyMoments": {
+    "description": "Default description for funniest moment"
+  },
+  "wrappedWeveAllBeenThere": "We've all been there!",
+  "@wrappedWeveAllBeenThere": {
+    "description": "Default description for cringe moment"
+  },
+  "wrappedFriend": "Friend",
+  "@wrappedFriend": {
+    "description": "Default name/relationship for buddy"
+  },
+  "wrappedYourBuddy": "Your buddy!",
+  "@wrappedYourBuddy": {
+    "description": "Default context for buddy"
+  },
+  "wrappedNotMentioned": "Not mentioned",
+  "@wrappedNotMentioned": {
+    "description": "Default value when obsession not found"
+  },
+  "wrappedTheHardPart": "The Hard Part",
+  "@wrappedTheHardPart": {
+    "description": "Default title for struggle"
+  },
+  "wrappedPersonalGrowth": "Personal Growth",
+  "@wrappedPersonalGrowth": {
+    "description": "Default title for personal win"
+  },
+  "wrappedFunDay": "Fun",
+  "@wrappedFunDay": {
+    "description": "Short label for fun day in summary"
+  },
+  "wrappedProductiveDay": "Productive",
+  "@wrappedProductiveDay": {
+    "description": "Short label for productive day in summary"
+  },
+  "wrappedIntenseDay": "Intense",
+  "@wrappedIntenseDay": {
+    "description": "Short label for intense day in summary"
+  },
+  "wrappedFunnyMomentTitle": "Funny Moment",
+  "@wrappedFunnyMomentTitle": {
+    "description": "Default title for funny moment in collage"
+  },
+  "wrappedCringeMomentTitle": "Cringe Moment",
+  "@wrappedCringeMomentTitle": {
+    "description": "Default title for cringe moment in collage"
+  },
+  "wrappedYouTalkedAboutBadge": "You Talked About",
+  "@wrappedYouTalkedAboutBadge": {
+    "description": "Badge text for category chart card"
+  },
+  "wrappedCompletedLabel": "Completed",
+  "@wrappedCompletedLabel": {
+    "description": "Completed label in actions card"
+  },
+  "wrappedMyBuddiesCard": "My Buddies",
+  "@wrappedMyBuddiesCard": {
+    "description": "Badge text for my buddies card"
+  },
+  "wrappedBuddiesLabel": "BUDDIES",
+  "@wrappedBuddiesLabel": {
+    "description": "Section title in summary collage"
+  },
+  "wrappedObsessionsLabelUpper": "OBSESSIONS",
+  "@wrappedObsessionsLabelUpper": {
+    "description": "Section title in summary collage (uppercase)"
+  },
+  "wrappedStruggleLabelUpper": "STRUGGLE",
+  "@wrappedStruggleLabelUpper": {
+    "description": "Section title in summary collage (uppercase)"
+  },
+  "wrappedWinLabelUpper": "WIN",
+  "@wrappedWinLabelUpper": {
+    "description": "Section title in summary collage (uppercase)"
+  },
+  "wrappedTopPhrasesLabelUpper": "TOP PHRASES",
+  "@wrappedTopPhrasesLabelUpper": {
+    "description": "Section title in summary collage (uppercase)"
+  },
+  "wrappedYourHeader": "Your",
+  "@wrappedYourHeader": {
+    "description": "First line of header for top days card"
+  },
+  "wrappedTopDaysHeader": "Top Days",
+  "@wrappedTopDaysHeader": {
+    "description": "Second line of header for top days card"
+  },
+  "wrappedYourTopDaysBadge": "Your Top Days",
+  "@wrappedYourTopDaysBadge": {
+    "description": "Badge text for top days summary"
+  },
+  "wrappedBestHeader": "Best",
+  "@wrappedBestHeader": {
+    "description": "First line of header for best moments card"
+  },
+  "wrappedMomentsHeader": "Moments",
+  "@wrappedMomentsHeader": {
+    "description": "Second line of header for best moments card"
+  },
+  "wrappedBestMomentsBadge": "Best Moments",
+  "@wrappedBestMomentsBadge": {
+    "description": "Badge text for best moments summary"
+  },
+  "wrappedBiggestHeader": "Biggest",
+  "@wrappedBiggestHeader": {
+    "description": "Header line for struggle/win cards"
+  },
+  "wrappedStruggleHeader": "Struggle",
+  "@wrappedStruggleHeader": {
+    "description": "Second line of struggle card header"
+  },
+  "wrappedWinHeader": "Win",
+  "@wrappedWinHeader": {
+    "description": "Second line of win card header"
+  },
+  "wrappedButYouPushedThroughEmoji": "But you pushed through 💪",
+  "@wrappedButYouPushedThroughEmoji": {
+    "description": "Subtitle on struggle card with emoji"
+  },
+  "wrappedYouDidItEmoji": "You did it! 🎉",
+  "@wrappedYouDidItEmoji": {
+    "description": "Subtitle on win card with emoji"
+  },
+  "wrappedHours": "hours",
+  "@wrappedHours": {
+    "description": "Label for hours stat"
+  },
+  "wrappedActions": "actions",
+  "@wrappedActions": {
+    "description": "Label for actions stat"
+  },
+  "multipleSpeakersDetected": "Multiple speakers detected",
+  "@multipleSpeakersDetected": {
+    "description": "Dialog title when multiple speakers are detected in speech profile recording"
+  },
+  "multipleSpeakersDescription": "It seems like there are multiple speakers in the recording. Please make sure you are in a quiet location and try again.",
+  "@multipleSpeakersDescription": {
+    "description": "Dialog message explaining multiple speakers issue"
+  },
+  "invalidRecordingDetected": "Invalid recording detected",
+  "@invalidRecordingDetected": {
+    "description": "Dialog title for invalid recording"
+  },
+  "notEnoughSpeechDescription": "There is not enough speech detected. Please speak more and try again.",
+  "@notEnoughSpeechDescription": {
+    "description": "Dialog message when speech recording is too short"
+  },
+  "speechDurationDescription": "Please make sure you speak for at least 5 seconds and not more than 90.",
+  "@speechDurationDescription": {
+    "description": "Dialog message about speech duration requirements"
+  },
+  "connectionLostDescription": "The connection was interrupted. Please check your internet connection and try again.",
+  "@connectionLostDescription": {
+    "description": "Dialog message when connection is lost"
+  },
+  "howToTakeGoodSample": "How to take a good sample?",
+  "@howToTakeGoodSample": {
+    "description": "Dialog title for speech sample instructions"
+  },
+  "goodSampleInstructions": "1. Make sure you are in a quiet place.\n2. Speak clearly and naturally.\n3. Make sure your device is in its natural position, on your neck.\n\nOnce it's created, you can always improve it or do it again.",
+  "@goodSampleInstructions": {
+    "description": "Instructions for taking a good speech sample"
+  },
+  "noDeviceConnectedUseMic": "No device connected. Will use phone microphone.",
+  "@noDeviceConnectedUseMic": {
+    "description": "Message when no device is connected and phone mic will be used"
+  },
+  "doItAgain": "Do it again",
+  "@doItAgain": {
+    "description": "Button text to redo speech profile"
+  },
+  "listenToSpeechProfile": "Listen to my speech profile ➡️",
+  "@listenToSpeechProfile": {
+    "description": "Button text to listen to speech profile"
+  },
+  "recognizingOthers": "Recognizing others 👀",
+  "@recognizingOthers": {
+    "description": "Button text to recognize other people"
+  },
+  "keepGoingGreat": "Keep going, you are doing great",
+  "@keepGoingGreat": {
+    "description": "Encouragement message during speech recording"
+  },
+  "somethingWentWrongTryAgain": "Something went wrong! Please try again later.",
+  "@somethingWentWrongTryAgain": {
+    "description": "Generic error message shown in snackbar when an error occurs"
+  },
+  "uploadingVoiceProfile": "Uploading your voice profile....",
+  "@uploadingVoiceProfile": {
+    "description": "Loading message shown while uploading voice profile"
+  },
+  "memorizingYourVoice": "Memorizing your voice...",
+  "@memorizingYourVoice": {
+    "description": "Loading message shown while processing voice profile"
+  },
+  "personalizingExperience": "Personalizing your experience...",
+  "@personalizingExperience": {
+    "description": "Loading message shown while personalizing user experience"
+  },
+  "keepSpeakingUntil100": "Keep speaking until you get 100%.",
+  "@keepSpeakingUntil100": {
+    "description": "Instruction to user during speech profile recording"
+  },
+  "greatJobAlmostThere": "Great job, you are almost there",
+  "@greatJobAlmostThere": {
+    "description": "Encouragement message during speech profile recording"
+  },
+  "soCloseJustLittleMore": "So close, just a little more",
+  "@soCloseJustLittleMore": {
+    "description": "Encouragement message when speech profile is nearly complete"
   }
 }

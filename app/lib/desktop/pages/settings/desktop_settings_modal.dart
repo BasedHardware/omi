@@ -271,9 +271,9 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                 borderRadius: BorderRadius.circular(12),
                 side: BorderSide(color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5)),
               ),
-              title: const Text(
-                'Select Time',
-                style: TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
+              title: Text(
+                context.l10n.selectTime,
+                style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
               ),
               content: SizedBox(
                 width: 300,
@@ -474,8 +474,8 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
             child: Text(
-              'SETTINGS',
-              style: TextStyle(
+              context.l10n.settings.toUpperCase(),
+              style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 color: ResponsiveHelper.textTertiary,
@@ -782,9 +782,9 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
           children: [
             Row(
               children: [
-                const Text(
-                  'CUSTOM VOCABULARY',
-                  style: TextStyle(
+                Text(
+                  context.l10n.customVocabulary.toUpperCase(),
+                  style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                     color: ResponsiveHelper.textTertiary,
@@ -824,8 +824,8 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Add words that Omi should recognize during transcription.',
-                    style: TextStyle(
+                    context.l10n.addVocabularyDescription,
+                    style: const TextStyle(
                       fontSize: 13,
                       color: ResponsiveHelper.textTertiary,
                     ),
@@ -846,7 +846,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                             enabled: !(userProvider.isUpdatingVocabulary && !_isDeletingBatch),
                             style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 14),
                             decoration: InputDecoration(
-                              hintText: 'Enter words (comma separated)',
+                              hintText: context.l10n.enterWordsCommaSeparated,
                               hintStyle: TextStyle(color: ResponsiveHelper.textTertiary.withValues(alpha: 0.6), fontSize: 14),
                               contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                               border: InputBorder.none,
@@ -959,9 +959,9 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'NOTIFICATIONS',
-            style: TextStyle(
+          Text(
+            context.l10n.notifications.toUpperCase(),
+            style: const TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
               color: ResponsiveHelper.textTertiary,
@@ -991,9 +991,9 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Notification Frequency Section
-        const Text(
-          'NOTIFICATION FREQUENCY',
-          style: TextStyle(
+        Text(
+          context.l10n.notificationFrequency.toUpperCase(),
+          style: const TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w600,
             color: ResponsiveHelper.textTertiary,
@@ -1002,8 +1002,8 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
         ),
         const SizedBox(height: 4),
         Text(
-          'Control how often Omi sends you proactive notifications.',
-          style: TextStyle(
+          context.l10n.controlNotificationFrequency,
+          style: const TextStyle(
             fontSize: 12,
             color: ResponsiveHelper.textTertiary,
           ),
@@ -1039,7 +1039,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                         const SizedBox(height: 2),
                         Text(
                           _getFrequencyDescription(_notificationFrequency),
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 12,
                             color: ResponsiveHelper.textTertiary,
                           ),
@@ -1050,8 +1050,8 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                       width: 40,
                       height: 40,
                       decoration: BoxDecoration(
-                        color: _notificationFrequency == 0 
-                            ? ResponsiveHelper.backgroundTertiary 
+                        color: _notificationFrequency == 0
+                            ? ResponsiveHelper.backgroundTertiary
                             : ResponsiveHelper.purplePrimary.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(10),
                       ),
@@ -1059,8 +1059,8 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                         child: Text(
                           '$_notificationFrequency',
                           style: TextStyle(
-                            color: _notificationFrequency == 0 
-                                ? ResponsiveHelper.textTertiary 
+                            color: _notificationFrequency == 0
+                                ? ResponsiveHelper.textTertiary
                                 : ResponsiveHelper.purplePrimary,
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
@@ -1094,15 +1094,15 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'Off',
-                        style: TextStyle(
+                        context.l10n.off,
+                        style: const TextStyle(
                           fontSize: 11,
                           color: ResponsiveHelper.textTertiary,
                         ),
                       ),
                       Text(
-                        'Max',
-                        style: TextStyle(
+                        context.l10n.max,
+                        style: const TextStyle(
                           fontSize: 11,
                           color: ResponsiveHelper.textTertiary,
                         ),
@@ -1114,13 +1114,13 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
             ),
           ),
         ),
-        
+
         const SizedBox(height: 24),
-        
+
         // Daily Summary Section
-        const Text(
-          'DAILY SUMMARY',
-          style: TextStyle(
+        Text(
+          context.l10n.dailySummary.toUpperCase(),
+          style: const TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w600,
             color: ResponsiveHelper.textTertiary,
@@ -1190,9 +1190,9 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                       child: Row(
                         children: [
                           Expanded(
-                            child: const Text(
-                              'Delivery Time',
-                              style: TextStyle(
+                            child: Text(
+                              context.l10n.deliveryTime,
+                              style: const TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w500,
                                 color: ResponsiveHelper.textPrimary,
@@ -1495,9 +1495,9 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
       children: [
         Row(
           children: [
-            const Text(
-              'UPCOMING MEETINGS',
-              style: TextStyle(
+            Text(
+              context.l10n.upcomingMeetings.toUpperCase(),
+              style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 color: ResponsiveHelper.textTertiary,
@@ -1536,26 +1536,26 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                 width: 1,
               ),
             ),
-            child: const Column(
+            child: Column(
               children: [
-                Icon(
+                const Icon(
                   Icons.event_busy,
                   color: ResponsiveHelper.textTertiary,
                   size: 32,
                 ),
-                SizedBox(height: 12),
+                const SizedBox(height: 12),
                 Text(
-                  'No upcoming meetings',
-                  style: TextStyle(
+                  context.l10n.noUpcomingMeetings,
+                  style: const TextStyle(
                     color: ResponsiveHelper.textSecondary,
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                SizedBox(height: 4),
+                const SizedBox(height: 4),
                 Text(
-                  'Checking the next 7 days',
-                  style: TextStyle(
+                  context.l10n.checkingNextSevenDays,
+                  style: const TextStyle(
                     color: ResponsiveHelper.textTertiary,
                     fontSize: 12,
                   ),
@@ -1591,7 +1591,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
             Padding(
               padding: const EdgeInsets.only(left: 4, bottom: 8, top: 8),
               child: Text(
-                _formatMeetingDateHeader(date),
+                _formatMeetingDateHeader(context, date),
                 style: const TextStyle(
                   color: ResponsiveHelper.textSecondary,
                   fontSize: 12,
@@ -1628,15 +1628,15 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
     );
   }
 
-  String _formatMeetingDateHeader(DateTime date) {
+  String _formatMeetingDateHeader(BuildContext context, DateTime date) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final tomorrow = today.add(const Duration(days: 1));
 
     if (date == today) {
-      return 'Today';
+      return context.l10n.today;
     } else if (date == tomorrow) {
-      return 'Tomorrow';
+      return context.l10n.tomorrow;
     } else {
       return DateFormat('EEEE, MMMM d').format(date);
     }
@@ -1926,7 +1926,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                             onPressed: () async {
                               final files = await DebugLogManager.listLogFiles();
                               if (files.isEmpty) {
-                                AppSnackbar.showSnackbarError('No log files found.');
+                                AppSnackbar.showSnackbarError(context.l10n.noLogFilesFound);
                                 return;
                               }
                               if (files.length == 1) {
@@ -1979,7 +1979,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                           devProvider.loadingExportMemories = true;
                           setState(() {});
 
-                          AppSnackbar.showSnackbar('Exporting conversations...');
+                          AppSnackbar.showSnackbar(context.l10n.exportingConversations);
                           List<ServerConversation> memories = await getConversations(limit: 10000, offset: 0);
                           String json = const JsonEncoder.withIndent("     ").convert(memories);
                           final directory = await getApplicationDocumentsDirectory();
@@ -2022,7 +2022,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                                 await KnowledgeGraphApi.deleteKnowledgeGraph();
                                 AppSnackbar.showSnackbar(context.l10n.knowledgeGraphDeleted);
                               } catch (e) {
-                                AppSnackbar.showSnackbarError('Failed to delete: $e');
+                                AppSnackbar.showSnackbarError(context.l10n.failedToDeleteError(e.toString()));
                               }
                             },
                             child: Text(context.l10n.delete, style: TextStyle(color: Colors.red.shade400)),
@@ -2039,7 +2039,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
 
             // Developer API Keys Section
             _buildSettingsGroup(
-              title: 'Developer API Keys',
+              title: context.l10n.developerApiKeys,
               children: [
                 const Padding(
                   padding: EdgeInsets.all(16),
@@ -2111,7 +2111,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                               icon: const Icon(Icons.copy, size: 16, color: ResponsiveHelper.textTertiary),
                               onPressed: () {
                                 Clipboard.setData(ClipboardData(text: '${Env.apiBaseUrl}v1/mcp/sse'));
-                                AppSnackbar.showSnackbar('URL copied');
+                                AppSnackbar.showSnackbar(context.l10n.urlCopied);
                               },
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
@@ -2128,9 +2128,9 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                           ),
                         )
                       else if (mcpProvider.keys.isEmpty)
-                        const Text(
-                          'No API keys. Create one to get started.',
-                          style: TextStyle(fontSize: 13, color: ResponsiveHelper.textTertiary),
+                        Text(
+                          context.l10n.noApiKeysCreateOne,
+                          style: const TextStyle(fontSize: 13, color: ResponsiveHelper.textTertiary),
                         )
                       else
                         ...mcpProvider.keys.map((key) => McpApiKeyListItem(apiKey: key)),
@@ -2170,7 +2170,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                 ),
                 if (devProvider.audioBytesToggled) ...[
                   _buildWebhookUrlField(devProvider.webhookAudioBytes),
-                  _buildWebhookUrlField(devProvider.webhookAudioBytesDelay, label: 'Interval (seconds)'),
+                  _buildWebhookUrlField(devProvider.webhookAudioBytesDelay, label: context.l10n.intervalSeconds),
                 ],
                 _buildToggleRow(
                   title: context.l10n.daySummary,
@@ -2244,7 +2244,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
     );
   }
 
-  Widget _buildWebhookUrlField(TextEditingController controller, {String label = 'Endpoint URL'}) {
+  Widget _buildWebhookUrlField(TextEditingController controller, {String? label}) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: Container(
@@ -2257,7 +2257,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
           controller: controller,
           style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 13),
           decoration: InputDecoration(
-            labelText: label,
+            labelText: label ?? context.l10n.endpointUrl,
             labelStyle: const TextStyle(color: ResponsiveHelper.textTertiary, fontSize: 12),
             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             border: InputBorder.none,
@@ -2516,17 +2516,17 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
             width: 1,
           ),
         ),
-        title: const Text(
-          'Sign Out?',
-          style: TextStyle(
+        title: Text(
+          context.l10n.signOutQuestion,
+          style: const TextStyle(
             color: ResponsiveHelper.textPrimary,
             fontSize: 18,
             fontWeight: FontWeight.w600,
           ),
         ),
-        content: const Text(
-          'Are you sure you want to sign out?',
-          style: TextStyle(
+        content: Text(
+          context.l10n.signOutConfirmation,
+          style: const TextStyle(
             color: ResponsiveHelper.textSecondary,
             fontSize: 14,
           ),
@@ -2552,7 +2552,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
               }
             },
             child: Text(
-              'Sign Out',
+              context.l10n.signOut,
               style: TextStyle(
                 color: Colors.red.shade400,
               ),
@@ -2577,7 +2577,7 @@ class _ShortcutRecorderBadge extends StatefulWidget {
 
 class _ShortcutRecorderBadgeState extends State<_ShortcutRecorderBadge> {
   final FocusNode _focusNode = FocusNode();
-  String _displayText = 'Press keys...';
+  String? _displayText;
   int? _keyCode;
   int? _modifiers;
   bool _isValid = false;
@@ -2620,7 +2620,7 @@ class _ShortcutRecorderBadgeState extends State<_ShortcutRecorderBadge> {
     final isCommand = HardwareKeyboard.instance.isMetaPressed;
     if (!isCommand) {
       setState(() {
-        _displayText = '⌘ required';
+        _displayText = context.l10n.commandRequired;
         _isValid = false;
       });
       return;
@@ -2640,7 +2640,7 @@ class _ShortcutRecorderBadgeState extends State<_ShortcutRecorderBadge> {
 
     if (carbonKeyCode == null) {
       setState(() {
-        _displayText = 'Invalid key';
+        _displayText = context.l10n.invalidKey;
         _isValid = false;
       });
       return;
@@ -2651,7 +2651,7 @@ class _ShortcutRecorderBadgeState extends State<_ShortcutRecorderBadge> {
     if (isOption) parts.add('⌥');
     if (isShift) parts.add('⇧');
     parts.add('⌘');
-    parts.add(_getKeyName(event.logicalKey));
+    parts.add(_getKeyName(context, event.logicalKey));
 
     setState(() {
       _keyCode = carbonKeyCode;
@@ -2682,9 +2682,9 @@ class _ShortcutRecorderBadgeState extends State<_ShortcutRecorderBadge> {
         key == LogicalKeyboardKey.controlRight;
   }
 
-  String _getKeyName(LogicalKeyboardKey key) {
+  String _getKeyName(BuildContext context, LogicalKeyboardKey key) {
     if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.numpadEnter) return '↩︎';
-    if (key == LogicalKeyboardKey.space) return 'Space';
+    if (key == LogicalKeyboardKey.space) return context.l10n.spaceKey;
     if (key == LogicalKeyboardKey.backslash) return '\\';
     final label = key.keyLabel;
     return label.length == 1 ? label.toUpperCase() : label;
@@ -2703,7 +2703,7 @@ class _ShortcutRecorderBadgeState extends State<_ShortcutRecorderBadge> {
           border: Border.all(color: ResponsiveHelper.purplePrimary, width: 1.5),
         ),
         child: Text(
-          _displayText,
+          _displayText ?? context.l10n.pressKeys,
           style: TextStyle(
             color: _isValid ? ResponsiveHelper.textPrimary : ResponsiveHelper.purplePrimary,
             fontSize: 13,

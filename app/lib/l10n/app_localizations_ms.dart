@@ -803,7 +803,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get debugLogsDesc => 'Membantu mendiagnosis masalah';
 
   @override
-  String get noLogFilesFound => 'Tiada fail log dijumpai.';
+  String get noLogFilesFound => 'Tiada fail log ditemui.';
 
   @override
   String get omiDebugLog => 'Log nyahpepijat Omi';
@@ -1203,7 +1203,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get refresh => 'Muat Semula';
 
   @override
-  String get noUpcomingMeetings => 'Tiada mesyuarat akan datang dijumpai';
+  String get noUpcomingMeetings => 'Tiada mesyuarat akan datang';
 
   @override
   String get checkingNextDays => 'Menyemak 30 hari akan datang';
@@ -2424,29 +2424,29 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String labelCopied(String label) {
-    return '$label copied';
+    return '$label disalin';
   }
 
   @override
   String get noApiKeysYet => 'Belum ada kunci API. Cipta satu untuk mengintegrasikan dengan aplikasi anda.';
 
   @override
-  String get createKeyToGetStarted => 'Create a key to get started';
+  String get createKeyToGetStarted => 'Cipta kunci untuk bermula';
 
   @override
   String get persona => 'Persona';
 
   @override
-  String get configureYourAiPersona => 'Configure your AI persona';
+  String get configureYourAiPersona => 'Konfigurasikan persona AI anda';
 
   @override
-  String get configureSttProvider => 'Configure STT provider';
+  String get configureSttProvider => 'Konfigurasikan pembekal STT';
 
   @override
-  String get setWhenConversationsAutoEnd => 'Set when conversations auto-end';
+  String get setWhenConversationsAutoEnd => 'Tetapkan bila perbualan tamat secara automatik';
 
   @override
-  String get importDataFromOtherSources => 'Import data from other sources';
+  String get importDataFromOtherSources => 'Import data daripada sumber lain';
 
   @override
   String get debugAndDiagnostics => 'Nyahpepijat & Diagnostik';
@@ -2458,30 +2458,30 @@ class AppLocalizationsMs extends AppLocalizations {
   String get helpsDiagnoseIssues => 'Membantu mendiagnosis isu';
 
   @override
-  String get exportStartedMessage => 'Export started. This may take a few seconds...';
+  String get exportStartedMessage => 'Eksport dimulakan. Ini mungkin mengambil masa beberapa saat...';
 
   @override
-  String get exportConversationsToJson => 'Export conversations to a JSON file';
+  String get exportConversationsToJson => 'Eksport perbualan ke fail JSON';
 
   @override
-  String get knowledgeGraphDeletedSuccess => 'Knowledge Graph deleted successfully';
+  String get knowledgeGraphDeletedSuccess => 'Graf pengetahuan berjaya dipadam';
 
   @override
   String failedToDeleteGraph(String error) {
-    return 'Failed to delete graph: $error';
+    return 'Gagal memadam graf: $error';
   }
 
   @override
-  String get clearAllNodesAndConnections => 'Clear all nodes and connections';
+  String get clearAllNodesAndConnections => 'Kosongkan semua nod dan sambungan';
 
   @override
-  String get addToClaudeDesktopConfig => 'Add to claude_desktop_config.json';
+  String get addToClaudeDesktopConfig => 'Tambah ke claude_desktop_config.json';
 
   @override
-  String get connectAiAssistantsToData => 'Connect AI assistants to your data';
+  String get connectAiAssistantsToData => 'Sambungkan pembantu AI ke data anda';
 
   @override
-  String get useYourMcpApiKey => 'Use your MCP API key';
+  String get useYourMcpApiKey => 'Gunakan kunci API MCP anda';
 
   @override
   String get realTimeTranscript => 'Transkrip Masa Nyata';
@@ -2499,7 +2499,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get autoCreateSpeakers => 'Cipta Penceramah Secara Automatik';
 
   @override
-  String get autoCreateWhenNameDetected => 'Auto-create when name detected';
+  String get autoCreateWhenNameDetected => 'Cipta automatik apabila nama dikesan';
 
   @override
   String get followUpQuestions => 'Soalan Susulan';
@@ -2511,13 +2511,13 @@ class AppLocalizationsMs extends AppLocalizations {
   String get goalTracker => 'Penjejak Matlamat';
 
   @override
-  String get trackPersonalGoalsOnHomepage => 'Track your personal goals on homepage';
+  String get trackPersonalGoalsOnHomepage => 'Jejaki matlamat peribadi anda di laman utama';
 
   @override
   String get dailyReflection => 'Refleksi Harian';
 
   @override
-  String get get9PmReminderToReflect => 'Get a 9 PM reminder to reflect on your day';
+  String get get9PmReminderToReflect => 'Dapatkan peringatan jam 9 malam untuk merenung hari anda';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'Penerangan item tindakan tidak boleh kosong';
@@ -3842,7 +3842,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get accountGroup => 'Akaun';
 
   @override
-  String get signOutQuestion => 'Log Keluar?';
+  String get signOutQuestion => 'Log keluar?';
 
   @override
   String get signOutConfirmation => 'Adakah anda pasti mahu log keluar?';
@@ -3899,7 +3899,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get includePersonalEventsDescription => 'Sertakan acara peribadi tanpa kehadiran';
 
   @override
-  String get upcomingMeetings => 'MESYUARAT AKAN DATANG';
+  String get upcomingMeetings => 'Mesyuarat Akan Datang';
 
   @override
   String get checkingNext7Days => 'Memeriksa 7 hari akan datang';
@@ -4780,4 +4780,926 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get noSpecificDataAccessConfigured => 'Tiada akses data khusus dikonfigurasi.';
+
+  @override
+  String get basicPlanDescription => '1,200 minit premium + tanpa had pada peranti';
+
+  @override
+  String get minutes => 'minit';
+
+  @override
+  String get omiHas => 'Omi mempunyai:';
+
+  @override
+  String get premiumMinutesUsed => 'Minit premium digunakan.';
+
+  @override
+  String get setupOnDevice => 'Sediakan pada peranti';
+
+  @override
+  String get forUnlimitedFreeTranscription => 'untuk transkripsi percuma tanpa had.';
+
+  @override
+  String premiumMinsLeft(int count) {
+    return '$count minit premium berbaki.';
+  }
+
+  @override
+  String get alwaysAvailable => 'sentiasa tersedia.';
+
+  @override
+  String get importHistory => 'Sejarah Import';
+
+  @override
+  String get noImportsYet => 'Tiada import lagi';
+
+  @override
+  String get selectZipFileToImport => 'Pilih fail .zip untuk diimport!';
+
+  @override
+  String get otherDevicesComingSoon => 'Peranti lain akan datang';
+
+  @override
+  String get deleteAllLimitlessConversations => 'Padam Semua Perbualan Limitless?';
+
+  @override
+  String get deleteAllLimitlessWarning =>
+      'Ini akan memadam secara kekal semua perbualan yang diimport dari Limitless. Tindakan ini tidak boleh dibuat asal.';
+
+  @override
+  String deletedLimitlessConversations(int count) {
+    return 'Dipadam $count perbualan Limitless';
+  }
+
+  @override
+  String get failedToDeleteConversations => 'Gagal memadam perbualan';
+
+  @override
+  String get deleteImportedData => 'Padam Data yang Diimport';
+
+  @override
+  String get statusPending => 'Menunggu';
+
+  @override
+  String get statusProcessing => 'Memproses';
+
+  @override
+  String get statusCompleted => 'Selesai';
+
+  @override
+  String get statusFailed => 'Gagal';
+
+  @override
+  String nConversations(int count) {
+    return '$count perbualan';
+  }
+
+  @override
+  String get pleaseEnterName => 'Sila masukkan nama';
+
+  @override
+  String get nameMustBeBetweenCharacters => 'Nama mestilah antara 2 dan 40 aksara';
+
+  @override
+  String get deleteSampleQuestion => 'Padam Sampel?';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return 'Adakah anda pasti mahu memadam sampel $name?';
+  }
+
+  @override
+  String get confirmDeletion => 'Sahkan Pemadaman';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return 'Adakah anda pasti mahu memadam $name? Ini juga akan membuang semua sampel pertuturan yang berkaitan.';
+  }
+
+  @override
+  String get howItWorksTitle => 'Bagaimana ia berfungsi?';
+
+  @override
+  String get howPeopleWorks =>
+      'Sebaik sahaja seseorang dicipta, anda boleh pergi ke transkrip perbualan dan menetapkan segmen yang sepadan kepada mereka, dengan cara itu Omi akan dapat mengenali pertuturan mereka juga!';
+
+  @override
+  String get tapToDelete => 'Ketik untuk memadam';
+
+  @override
+  String get newTag => 'BAHARU';
+
+  @override
+  String get needHelpChatWithUs => 'Perlukan bantuan? Berbual dengan kami';
+
+  @override
+  String get localStorageEnabled => 'Storan tempatan diaktifkan';
+
+  @override
+  String get localStorageDisabled => 'Storan tempatan dinyahaktifkan';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return 'Gagal mengemas kini tetapan: $error';
+  }
+
+  @override
+  String get privacyNotice => 'Notis Privasi';
+
+  @override
+  String get recordingsMayCaptureOthers =>
+      'Rakaman mungkin menangkap suara orang lain. Pastikan anda mendapat persetujuan daripada semua peserta sebelum mengaktifkan.';
+
+  @override
+  String get enable => 'Aktifkan';
+
+  @override
+  String get storeAudioOnPhone => 'Simpan Audio di Telefon';
+
+  @override
+  String get on => 'Hidup';
+
+  @override
+  String get storeAudioDescription =>
+      'Simpan semua rakaman audio secara tempatan di telefon anda. Apabila dilumpuhkan, hanya muat naik yang gagal disimpan untuk menjimatkan ruang storan.';
+
+  @override
+  String get enableLocalStorage => 'Aktifkan Storan Tempatan';
+
+  @override
+  String get cloudStorageEnabled => 'Storan awan diaktifkan';
+
+  @override
+  String get cloudStorageDisabled => 'Storan awan dinyahaktifkan';
+
+  @override
+  String get enableCloudStorage => 'Aktifkan Storan Awan';
+
+  @override
+  String get storeAudioOnCloud => 'Simpan Audio di Awan';
+
+  @override
+  String get cloudStorageDialogMessage =>
+      'Rakaman masa nyata anda akan disimpan dalam storan awan peribadi semasa anda bercakap.';
+
+  @override
+  String get storeAudioCloudDescription =>
+      'Simpan rakaman masa nyata anda dalam storan awan peribadi semasa anda bercakap. Audio ditangkap dan disimpan dengan selamat dalam masa nyata.';
+
+  @override
+  String get downloadingFirmware => 'Memuat turun Perisian Tegar';
+
+  @override
+  String get installingFirmware => 'Memasang Perisian Tegar';
+
+  @override
+  String get firmwareUpdateWarning => 'Jangan tutup aplikasi atau matikan peranti. Ini boleh merosakkan peranti anda.';
+
+  @override
+  String get firmwareUpdated => 'Perisian Tegar Dikemas Kini';
+
+  @override
+  String restartDeviceToComplete(Object deviceName) {
+    return 'Sila mulakan semula $deviceName anda untuk melengkapkan kemas kini.';
+  }
+
+  @override
+  String get yourDeviceIsUpToDate => 'Peranti anda adalah terkini';
+
+  @override
+  String get currentVersion => 'Versi Semasa';
+
+  @override
+  String get latestVersion => 'Versi Terkini';
+
+  @override
+  String get whatsNew => 'Apa yang Baharu';
+
+  @override
+  String get installUpdate => 'Pasang Kemas Kini';
+
+  @override
+  String get updateNow => 'Kemas Kini Sekarang';
+
+  @override
+  String get updateGuide => 'Panduan Kemas Kini';
+
+  @override
+  String get checkingForUpdates => 'Menyemak Kemas Kini';
+
+  @override
+  String get checkingFirmwareVersion => 'Menyemak versi perisian tegar...';
+
+  @override
+  String get firmwareUpdate => 'Kemas Kini Perisian Tegar';
+
+  @override
+  String get payments => 'Pembayaran';
+
+  @override
+  String get connectPaymentMethodInfo =>
+      'Sambungkan kaedah pembayaran di bawah untuk mula menerima pembayaran untuk aplikasi anda.';
+
+  @override
+  String get selectedPaymentMethod => 'Kaedah Pembayaran Dipilih';
+
+  @override
+  String get availablePaymentMethods => 'Kaedah Pembayaran Tersedia';
+
+  @override
+  String get activeStatus => 'Aktif';
+
+  @override
+  String get connectedStatus => 'Disambungkan';
+
+  @override
+  String get notConnectedStatus => 'Tidak Disambungkan';
+
+  @override
+  String get setActive => 'Tetapkan Aktif';
+
+  @override
+  String get getPaidThroughStripe => 'Dapatkan bayaran untuk jualan aplikasi anda melalui Stripe';
+
+  @override
+  String get monthlyPayouts => 'Pembayaran bulanan';
+
+  @override
+  String get monthlyPayoutsDescription =>
+      'Terima bayaran bulanan terus ke akaun anda apabila mencapai \$10 dalam pendapatan';
+
+  @override
+  String get secureAndReliable => 'Selamat dan boleh dipercayai';
+
+  @override
+  String get stripeSecureDescription =>
+      'Stripe memastikan pemindahan hasil aplikasi anda yang selamat dan tepat pada masanya';
+
+  @override
+  String get selectYourCountry => 'Pilih negara anda';
+
+  @override
+  String get countrySelectionPermanent => 'Pilihan negara anda adalah kekal dan tidak boleh ditukar kemudian.';
+
+  @override
+  String get byClickingConnectNow => 'Dengan mengklik \"Sambung Sekarang\" anda bersetuju dengan';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Perjanjian Akaun Bersambung Stripe';
+
+  @override
+  String get errorConnectingToStripe => 'Ralat menyambung ke Stripe! Sila cuba lagi kemudian.';
+
+  @override
+  String get connectingYourStripeAccount => 'Menyambungkan akaun Stripe anda';
+
+  @override
+  String get stripeOnboardingInstructions =>
+      'Sila lengkapkan proses penerimaan Stripe dalam pelayar anda. Halaman ini akan dikemas kini secara automatik setelah selesai.';
+
+  @override
+  String get failedTryAgain => 'Gagal? Cuba Lagi';
+
+  @override
+  String get illDoItLater => 'Saya akan lakukannya nanti';
+
+  @override
+  String get successfullyConnected => 'Berjaya Disambungkan!';
+
+  @override
+  String get stripeReadyForPayments =>
+      'Akaun Stripe anda kini sedia menerima pembayaran. Anda boleh mula menjana pendapatan daripada jualan aplikasi anda dengan segera.';
+
+  @override
+  String get updateStripeDetails => 'Kemas Kini Butiran Stripe';
+
+  @override
+  String get errorUpdatingStripeDetails => 'Ralat mengemas kini butiran Stripe! Sila cuba lagi kemudian.';
+
+  @override
+  String get updatePayPal => 'Kemas Kini PayPal';
+
+  @override
+  String get setUpPayPal => 'Sediakan PayPal';
+
+  @override
+  String get updatePayPalAccountDetails => 'Kemas kini butiran akaun PayPal anda';
+
+  @override
+  String get connectPayPalToReceivePayments =>
+      'Sambungkan akaun PayPal anda untuk mula menerima pembayaran untuk aplikasi anda';
+
+  @override
+  String get paypalEmail => 'E-mel PayPal';
+
+  @override
+  String get paypalMeLink => 'Pautan PayPal.me';
+
+  @override
+  String get stripeRecommendation =>
+      'Jika Stripe tersedia di negara anda, kami sangat mengesyorkan menggunakannya untuk pembayaran yang lebih cepat dan mudah.';
+
+  @override
+  String get updatePayPalDetails => 'Kemas Kini Butiran PayPal';
+
+  @override
+  String get savePayPalDetails => 'Simpan Butiran PayPal';
+
+  @override
+  String get pleaseEnterPayPalEmail => 'Sila masukkan e-mel PayPal anda';
+
+  @override
+  String get pleaseEnterPayPalMeLink => 'Sila masukkan pautan PayPal.me anda';
+
+  @override
+  String get doNotIncludeHttpInLink => 'Jangan sertakan http atau https atau www dalam pautan';
+
+  @override
+  String get pleaseEnterValidPayPalMeLink => 'Sila masukkan pautan PayPal.me yang sah';
+
+  @override
+  String get pleaseEnterValidEmail => 'Sila masukkan alamat e-mel yang sah';
+
+  @override
+  String get syncingYourRecordings => 'Menyegerakkan rakaman anda';
+
+  @override
+  String get syncYourRecordings => 'Segerakkan rakaman anda';
+
+  @override
+  String get syncNow => 'Segerak sekarang';
+
+  @override
+  String get error => 'Ralat';
+
+  @override
+  String get speechSamples => 'Sampel suara';
+
+  @override
+  String additionalSampleIndex(String index) {
+    return 'Sampel tambahan $index';
+  }
+
+  @override
+  String durationSeconds(String seconds) {
+    return 'Tempoh: $seconds saat';
+  }
+
+  @override
+  String get additionalSpeechSampleRemoved => 'Sampel suara tambahan dibuang';
+
+  @override
+  String get consentDataMessage =>
+      'Dengan meneruskan, semua data yang anda kongsi dengan aplikasi ini (termasuk perbualan, rakaman dan maklumat peribadi anda) akan disimpan dengan selamat di pelayan kami untuk memberikan anda cerapan berkuasa AI dan membolehkan semua ciri aplikasi.';
+
+  @override
+  String get tasksEmptyStateMessage =>
+      'Tugasan daripada perbualan anda akan muncul di sini.\nKetik + untuk mencipta secara manual.';
+
+  @override
+  String get clearChatAction => 'Kosongkan sembang';
+
+  @override
+  String get enableApps => 'Dayakan aplikasi';
+
+  @override
+  String get omiAppName => 'Omi';
+
+  @override
+  String get showMore => 'tunjukkan lagi ↓';
+
+  @override
+  String get showLess => 'tunjukkan kurang ↑';
+
+  @override
+  String get loadingYourRecording => 'Memuatkan rakaman anda...';
+
+  @override
+  String get photoDiscardedMessage => 'Foto ini telah dibuang kerana tidak penting.';
+
+  @override
+  String get analyzing => 'Menganalisis...';
+
+  @override
+  String get searchCountries => 'Cari negara...';
+
+  @override
+  String get checkingAppleWatch => 'Menyemak Apple Watch...';
+
+  @override
+  String get installOmiOnAppleWatch => 'Pasang Omi pada\nApple Watch anda';
+
+  @override
+  String get installOmiOnAppleWatchDescription =>
+      'Untuk menggunakan Apple Watch dengan Omi, anda perlu memasang aplikasi Omi pada jam tangan anda terlebih dahulu.';
+
+  @override
+  String get openOmiOnAppleWatch => 'Buka Omi pada\nApple Watch anda';
+
+  @override
+  String get openOmiOnAppleWatchDescription =>
+      'Aplikasi Omi dipasang pada Apple Watch anda. Buka dan ketik Mula untuk bermula.';
+
+  @override
+  String get openWatchApp => 'Buka Aplikasi Watch';
+
+  @override
+  String get iveInstalledAndOpenedTheApp => 'Saya Telah Memasang & Membuka Aplikasi';
+
+  @override
+  String get unableToOpenWatchApp =>
+      'Tidak dapat membuka aplikasi Apple Watch. Sila buka aplikasi Watch secara manual pada Apple Watch anda dan pasang Omi dari bahagian \"Aplikasi Tersedia\".';
+
+  @override
+  String get appleWatchConnectedSuccessfully => 'Apple Watch berjaya disambungkan!';
+
+  @override
+  String get appleWatchNotReachable =>
+      'Apple Watch masih tidak dapat dicapai. Pastikan aplikasi Omi dibuka pada jam tangan anda.';
+
+  @override
+  String errorCheckingConnection(String error) {
+    return 'Ralat menyemak sambungan: $error';
+  }
+
+  @override
+  String get muted => 'Dibisukan';
+
+  @override
+  String get processNow => 'Proses sekarang';
+
+  @override
+  String get finishedConversation => 'Perbualan selesai?';
+
+  @override
+  String get stopRecordingConfirmation =>
+      'Adakah anda pasti mahu menghentikan rakaman dan meringkaskan perbualan sekarang?';
+
+  @override
+  String get conversationEndsManually => 'Perbualan hanya akan tamat secara manual.';
+
+  @override
+  String conversationSummarizedAfterMinutes(int minutes, String suffix) {
+    return 'Perbualan diringkaskan selepas $minutes minit$suffix tanpa pertuturan.';
+  }
+
+  @override
+  String get dontAskAgain => 'Jangan tanya lagi';
+
+  @override
+  String get waitingForTranscriptOrPhotos => 'Menunggu transkrip atau foto...';
+
+  @override
+  String get noSummaryYet => 'Belum ada ringkasan';
+
+  @override
+  String hints(String text) {
+    return 'Petunjuk: $text';
+  }
+
+  @override
+  String get testConversationPrompt => 'Uji prompt perbualan';
+
+  @override
+  String get prompt => 'Prompt';
+
+  @override
+  String get result => 'Hasil';
+
+  @override
+  String get compareTranscripts => 'Bandingkan transkrip';
+
+  @override
+  String get notHelpful => 'Tidak membantu';
+
+  @override
+  String get exportTasksWithOneTap => 'Eksport tugas dengan satu ketukan!';
+
+  @override
+  String get inProgress => 'Sedang diproses';
+
+  @override
+  String get photos => 'Foto';
+
+  @override
+  String get rawData => 'Data Mentah';
+
+  @override
+  String get content => 'Kandungan';
+
+  @override
+  String get noContentToDisplay => 'Tiada kandungan untuk dipaparkan';
+
+  @override
+  String get noSummary => 'Tiada ringkasan';
+
+  @override
+  String get updateOmiFirmware => 'Kemas kini perisian tegar omi';
+
+  @override
+  String get anErrorOccurredTryAgain => 'Ralat berlaku. Sila cuba lagi.';
+
+  @override
+  String get welcomeBackSimple => 'Selamat kembali';
+
+  @override
+  String get addVocabularyDescription => 'Tambah perkataan yang Omi perlu kenali semasa transkripsi.';
+
+  @override
+  String get enterWordsCommaSeparated => 'Masukkan perkataan (dipisahkan koma)';
+
+  @override
+  String get whenToReceiveDailySummary => 'Bila untuk menerima ringkasan harian anda';
+
+  @override
+  String get checkingNextSevenDays => 'Menyemak 7 hari akan datang';
+
+  @override
+  String failedToDeleteError(String error) {
+    return 'Gagal memadam: $error';
+  }
+
+  @override
+  String get developerApiKeys => 'Kunci API Pembangun';
+
+  @override
+  String get noApiKeysCreateOne => 'Tiada kunci API. Cipta satu untuk bermula.';
+
+  @override
+  String get commandRequired => '⌘ diperlukan';
+
+  @override
+  String get spaceKey => 'Ruang';
+
+  @override
+  String loadMoreRemaining(String count) {
+    return 'Muat lagi ($count lagi)';
+  }
+
+  @override
+  String wrappedTopPercentUser(String percentile) {
+    return 'Top $percentile% Pengguna';
+  }
+
+  @override
+  String get wrappedMinutes => 'minit';
+
+  @override
+  String get wrappedConversations => 'perbualan';
+
+  @override
+  String get wrappedDaysActive => 'hari aktif';
+
+  @override
+  String get wrappedYouTalkedAbout => 'Anda berbual tentang';
+
+  @override
+  String get wrappedActionItems => 'Tugasan';
+
+  @override
+  String get wrappedTasksCreated => 'tugasan dicipta';
+
+  @override
+  String get wrappedCompleted => 'selesai';
+
+  @override
+  String wrappedCompletionRate(String rate) {
+    return '$rate% kadar penyelesaian';
+  }
+
+  @override
+  String get wrappedYourTopDays => 'Hari terbaik anda';
+
+  @override
+  String get wrappedBestMoments => 'Detik terbaik';
+
+  @override
+  String get wrappedMyBuddies => 'Rakan-rakan saya';
+
+  @override
+  String get wrappedCouldntStopTalkingAbout => 'Tidak dapat berhenti bercakap tentang';
+
+  @override
+  String get wrappedShow => 'RANCANGAN';
+
+  @override
+  String get wrappedMovie => 'FILEM';
+
+  @override
+  String get wrappedBook => 'BUKU';
+
+  @override
+  String get wrappedCelebrity => 'SELEBRITI';
+
+  @override
+  String get wrappedFood => 'MAKANAN';
+
+  @override
+  String get wrappedMovieRecs => 'Cadangan filem untuk rakan';
+
+  @override
+  String get wrappedBiggest => 'Terbesar';
+
+  @override
+  String get wrappedStruggle => 'Cabaran';
+
+  @override
+  String get wrappedButYouPushedThrough => 'Tetapi anda berjaya 💪';
+
+  @override
+  String get wrappedWin => 'Kemenangan';
+
+  @override
+  String get wrappedYouDidIt => 'Anda berjaya! 🎉';
+
+  @override
+  String get wrappedTopPhrases => 'Top 5 frasa';
+
+  @override
+  String get wrappedMins => 'min';
+
+  @override
+  String get wrappedConvos => 'perbualan';
+
+  @override
+  String get wrappedDays => 'hari';
+
+  @override
+  String get wrappedMyBuddiesLabel => 'RAKAN-RAKAN SAYA';
+
+  @override
+  String get wrappedObsessionsLabel => 'OBSESI';
+
+  @override
+  String get wrappedStruggleLabel => 'CABARAN';
+
+  @override
+  String get wrappedWinLabel => 'KEMENANGAN';
+
+  @override
+  String get wrappedTopPhrasesLabel => 'TOP FRASA';
+
+  @override
+  String get wrappedLetsHitRewind => 'Mari kita putar semula';
+
+  @override
+  String get wrappedGenerateMyWrapped => 'Jana Wrapped Saya';
+
+  @override
+  String get wrappedProcessingDefault => 'Memproses...';
+
+  @override
+  String get wrappedCreatingYourStory => 'Mencipta\ncerita 2025 anda...';
+
+  @override
+  String get wrappedSomethingWentWrong => 'Sesuatu telah\nberlaku';
+
+  @override
+  String get wrappedAnErrorOccurred => 'Ralat berlaku';
+
+  @override
+  String get wrappedTryAgain => 'Cuba Lagi';
+
+  @override
+  String get wrappedNoDataAvailable => 'Tiada data tersedia';
+
+  @override
+  String get wrappedOmiLifeRecap => 'Rumusan Hidup Omi';
+
+  @override
+  String get wrappedSwipeUpToBegin => 'Leret ke atas untuk mula';
+
+  @override
+  String get wrappedShareText => '2025 saya, diingati oleh Omi ✨ omi.me/wrapped';
+
+  @override
+  String get wrappedFailedToShare => 'Gagal berkongsi. Sila cuba lagi.';
+
+  @override
+  String get wrappedFailedToStartGeneration => 'Gagal memulakan penjanaan. Sila cuba lagi.';
+
+  @override
+  String get wrappedStarting => 'Memulakan...';
+
+  @override
+  String get wrappedShare => 'Kongsi';
+
+  @override
+  String get wrappedShareYourWrapped => 'Kongsi Wrapped Anda';
+
+  @override
+  String get wrappedMy2025 => '2025 Saya';
+
+  @override
+  String get wrappedRememberedByOmi => 'diingati oleh Omi';
+
+  @override
+  String get wrappedMostFunDay => 'Paling Seronok';
+
+  @override
+  String get wrappedMostProductiveDay => 'Paling Produktif';
+
+  @override
+  String get wrappedMostIntenseDay => 'Paling Sengit';
+
+  @override
+  String get wrappedFunniestMoment => 'Paling Lucu';
+
+  @override
+  String get wrappedMostCringeMoment => 'Paling Memalukan';
+
+  @override
+  String get wrappedMinutesLabel => 'minit';
+
+  @override
+  String get wrappedConversationsLabel => 'perbualan';
+
+  @override
+  String get wrappedDaysActiveLabel => 'hari aktif';
+
+  @override
+  String get wrappedTasksGenerated => 'tugasan dijana';
+
+  @override
+  String get wrappedTasksCompleted => 'tugasan selesai';
+
+  @override
+  String get wrappedTopFivePhrases => 'Top 5 Frasa';
+
+  @override
+  String get wrappedAGreatDay => 'Hari Yang Hebat';
+
+  @override
+  String get wrappedGettingItDone => 'Menyiapkannya';
+
+  @override
+  String get wrappedAChallenge => 'Satu Cabaran';
+
+  @override
+  String get wrappedAHilariousMoment => 'Detik Lucu';
+
+  @override
+  String get wrappedThatAwkwardMoment => 'Detik Janggal Itu';
+
+  @override
+  String get wrappedYouHadFunnyMoments => 'Anda ada detik lucu tahun ini!';
+
+  @override
+  String get wrappedWeveAllBeenThere => 'Kita semua pernah alaminya!';
+
+  @override
+  String get wrappedFriend => 'Rakan';
+
+  @override
+  String get wrappedYourBuddy => 'Kawan anda!';
+
+  @override
+  String get wrappedNotMentioned => 'Tidak disebut';
+
+  @override
+  String get wrappedTheHardPart => 'Bahagian Sukar';
+
+  @override
+  String get wrappedPersonalGrowth => 'Pertumbuhan Peribadi';
+
+  @override
+  String get wrappedFunDay => 'Seronok';
+
+  @override
+  String get wrappedProductiveDay => 'Produktif';
+
+  @override
+  String get wrappedIntenseDay => 'Sengit';
+
+  @override
+  String get wrappedFunnyMomentTitle => 'Detik Lucu';
+
+  @override
+  String get wrappedCringeMomentTitle => 'Detik Memalukan';
+
+  @override
+  String get wrappedYouTalkedAboutBadge => 'Anda Bercakap Tentang';
+
+  @override
+  String get wrappedCompletedLabel => 'Selesai';
+
+  @override
+  String get wrappedMyBuddiesCard => 'Kawan-kawan Saya';
+
+  @override
+  String get wrappedBuddiesLabel => 'KAWAN';
+
+  @override
+  String get wrappedObsessionsLabelUpper => 'OBSESI';
+
+  @override
+  String get wrappedStruggleLabelUpper => 'CABARAN';
+
+  @override
+  String get wrappedWinLabelUpper => 'KEMENANGAN';
+
+  @override
+  String get wrappedTopPhrasesLabelUpper => 'TOP FRASA';
+
+  @override
+  String get wrappedYourHeader => 'Hari';
+
+  @override
+  String get wrappedTopDaysHeader => 'Terbaik Anda';
+
+  @override
+  String get wrappedYourTopDaysBadge => 'Hari Terbaik Anda';
+
+  @override
+  String get wrappedBestHeader => 'Terbaik';
+
+  @override
+  String get wrappedMomentsHeader => 'Detik';
+
+  @override
+  String get wrappedBestMomentsBadge => 'Detik Terbaik';
+
+  @override
+  String get wrappedBiggestHeader => 'Terbesar';
+
+  @override
+  String get wrappedStruggleHeader => 'Cabaran';
+
+  @override
+  String get wrappedWinHeader => 'Kemenangan';
+
+  @override
+  String get wrappedButYouPushedThroughEmoji => 'Tetapi anda berjaya 💪';
+
+  @override
+  String get wrappedYouDidItEmoji => 'Anda berjaya! 🎉';
+
+  @override
+  String get wrappedHours => 'jam';
+
+  @override
+  String get wrappedActions => 'tindakan';
+
+  @override
+  String get multipleSpeakersDetected => 'Berbilang penutur dikesan';
+
+  @override
+  String get multipleSpeakersDescription =>
+      'Nampaknya terdapat berbilang penutur dalam rakaman. Sila pastikan anda berada di tempat yang tenang dan cuba lagi.';
+
+  @override
+  String get invalidRecordingDetected => 'Rakaman tidak sah dikesan';
+
+  @override
+  String get notEnoughSpeechDescription => 'Tidak cukup pertuturan dikesan. Sila bercakap lebih banyak dan cuba lagi.';
+
+  @override
+  String get speechDurationDescription =>
+      'Sila pastikan anda bercakap sekurang-kurangnya 5 saat dan tidak lebih dari 90.';
+
+  @override
+  String get connectionLostDescription => 'Sambungan terputus. Sila semak sambungan internet anda dan cuba lagi.';
+
+  @override
+  String get howToTakeGoodSample => 'Bagaimana untuk membuat sampel yang baik?';
+
+  @override
+  String get goodSampleInstructions =>
+      '1. Pastikan anda berada di tempat yang tenang.\n2. Bercakap dengan jelas dan semula jadi.\n3. Pastikan peranti anda berada dalam kedudukan semula jadi di leher anda.\n\nSetelah dicipta, anda sentiasa boleh memperbaikinya atau membuatnya semula.';
+
+  @override
+  String get noDeviceConnectedUseMic => 'Tiada peranti disambungkan. Mikrofon telefon akan digunakan.';
+
+  @override
+  String get doItAgain => 'Buat lagi';
+
+  @override
+  String get listenToSpeechProfile => 'Dengar profil suara saya ➡️';
+
+  @override
+  String get recognizingOthers => 'Mengenali orang lain 👀';
+
+  @override
+  String get keepGoingGreat => 'Teruskan, anda melakukannya dengan baik';
+
+  @override
+  String get somethingWentWrongTryAgain => 'Sesuatu telah berlaku! Sila cuba lagi kemudian.';
+
+  @override
+  String get uploadingVoiceProfile => 'Memuat naik profil suara anda....';
+
+  @override
+  String get memorizingYourVoice => 'Mengingati suara anda...';
+
+  @override
+  String get personalizingExperience => 'Memperibadikan pengalaman anda...';
+
+  @override
+  String get keepSpeakingUntil100 => 'Teruskan bercakap sehingga mencapai 100%.';
+
+  @override
+  String get greatJobAlmostThere => 'Kerja yang baik, hampir siap';
+
+  @override
+  String get soCloseJustLittleMore => 'Sangat hampir, sedikit lagi';
 }

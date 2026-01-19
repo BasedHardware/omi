@@ -1202,7 +1202,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get refresh => 'Vernieuwen';
 
   @override
-  String get noUpcomingMeetings => 'Geen aankomende vergaderingen gevonden';
+  String get noUpcomingMeetings => 'Geen aankomende vergaderingen';
 
   @override
   String get checkingNextDays => 'Volgende 30 dagen controleren';
@@ -1805,7 +1805,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get maybeLater => 'Misschien later';
 
   @override
-  String get speechProfileIntro => 'Omi moet je doelen en je stem leren. Je kunt dit later aanpassen.';
+  String get speechProfileIntro => 'Omi moet je doelen en je stem leren. Je kunt het later aanpassen.';
 
   @override
   String get getStarted => 'Aan de slag';
@@ -1817,7 +1817,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get keepGoing => 'Ga zo door, je doet het geweldig';
 
   @override
-  String get skipThisQuestion => 'Deze vraag overslaan';
+  String get skipThisQuestion => 'Sla deze vraag over';
 
   @override
   String get skipForNow => 'Voorlopig overslaan';
@@ -2423,29 +2423,29 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String labelCopied(String label) {
-    return '$label copied';
+    return '$label gekopieerd';
   }
 
   @override
   String get noApiKeysYet => 'Nog geen API-sleutels. Maak er een aan om te integreren met uw app.';
 
   @override
-  String get createKeyToGetStarted => 'Create a key to get started';
+  String get createKeyToGetStarted => 'Maak een sleutel aan om te beginnen';
 
   @override
   String get persona => 'Persona';
 
   @override
-  String get configureYourAiPersona => 'Configure your AI persona';
+  String get configureYourAiPersona => 'Configureer je AI-persona';
 
   @override
-  String get configureSttProvider => 'Configure STT provider';
+  String get configureSttProvider => 'STT-provider configureren';
 
   @override
-  String get setWhenConversationsAutoEnd => 'Set when conversations auto-end';
+  String get setWhenConversationsAutoEnd => 'Stel in wanneer gesprekken automatisch eindigen';
 
   @override
-  String get importDataFromOtherSources => 'Import data from other sources';
+  String get importDataFromOtherSources => 'Gegevens importeren uit andere bronnen';
 
   @override
   String get debugAndDiagnostics => 'Debug & Diagnostics';
@@ -2457,30 +2457,30 @@ class AppLocalizationsNl extends AppLocalizations {
   String get helpsDiagnoseIssues => 'Helpt problemen diagnosticeren';
 
   @override
-  String get exportStartedMessage => 'Export started. This may take a few seconds...';
+  String get exportStartedMessage => 'Export gestart. Dit kan enkele seconden duren...';
 
   @override
-  String get exportConversationsToJson => 'Export conversations to a JSON file';
+  String get exportConversationsToJson => 'Gesprekken exporteren naar een JSON-bestand';
 
   @override
-  String get knowledgeGraphDeletedSuccess => 'Knowledge Graph deleted successfully';
+  String get knowledgeGraphDeletedSuccess => 'Kennisgraaf succesvol verwijderd';
 
   @override
   String failedToDeleteGraph(String error) {
-    return 'Failed to delete graph: $error';
+    return 'Kon graaf niet verwijderen: $error';
   }
 
   @override
-  String get clearAllNodesAndConnections => 'Clear all nodes and connections';
+  String get clearAllNodesAndConnections => 'Alle knooppunten en verbindingen wissen';
 
   @override
-  String get addToClaudeDesktopConfig => 'Add to claude_desktop_config.json';
+  String get addToClaudeDesktopConfig => 'Toevoegen aan claude_desktop_config.json';
 
   @override
-  String get connectAiAssistantsToData => 'Connect AI assistants to your data';
+  String get connectAiAssistantsToData => 'Verbind AI-assistenten met je gegevens';
 
   @override
-  String get useYourMcpApiKey => 'Use your MCP API key';
+  String get useYourMcpApiKey => 'Gebruik je MCP API-sleutel';
 
   @override
   String get realTimeTranscript => 'Realtime transcriptie';
@@ -2498,7 +2498,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get autoCreateSpeakers => 'Sprekers automatisch aanmaken';
 
   @override
-  String get autoCreateWhenNameDetected => 'Auto-create when name detected';
+  String get autoCreateWhenNameDetected => 'Automatisch aanmaken wanneer naam gedetecteerd wordt';
 
   @override
   String get followUpQuestions => 'Vervolgvragen';
@@ -2510,13 +2510,13 @@ class AppLocalizationsNl extends AppLocalizations {
   String get goalTracker => 'Doel-tracker';
 
   @override
-  String get trackPersonalGoalsOnHomepage => 'Track your personal goals on homepage';
+  String get trackPersonalGoalsOnHomepage => 'Volg je persoonlijke doelen op de startpagina';
 
   @override
   String get dailyReflection => 'Dagelijkse reflectie';
 
   @override
-  String get get9PmReminderToReflect => 'Get a 9 PM reminder to reflect on your day';
+  String get get9PmReminderToReflect => 'Ontvang om 21:00 uur een herinnering om te reflecteren op je dag';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'Actiepuntomschrijving mag niet leeg zijn';
@@ -3834,7 +3834,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get about => 'Over';
 
   @override
-  String get selectTime => 'Tijd Selecteren';
+  String get selectTime => 'Selecteer tijd';
 
   @override
   String get accountGroup => 'Account';
@@ -3897,7 +3897,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get includePersonalEventsDescription => 'Persoonlijke evenementen zonder deelnemers opnemen';
 
   @override
-  String get upcomingMeetings => 'AANKOMENDE VERGADERINGEN';
+  String get upcomingMeetings => 'Aankomende vergaderingen';
 
   @override
   String get checkingNext7Days => 'Controleren van de komende 7 dagen';
@@ -4775,4 +4775,926 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get noSpecificDataAccessConfigured => 'Geen specifieke gegevenstoegang geconfigureerd.';
+
+  @override
+  String get basicPlanDescription => '1.200 premium minuten + onbeperkt op apparaat';
+
+  @override
+  String get minutes => 'minuten';
+
+  @override
+  String get omiHas => 'Omi heeft:';
+
+  @override
+  String get premiumMinutesUsed => 'Premium minuten gebruikt.';
+
+  @override
+  String get setupOnDevice => 'Instellen op apparaat';
+
+  @override
+  String get forUnlimitedFreeTranscription => 'voor onbeperkte gratis transcriptie.';
+
+  @override
+  String premiumMinsLeft(int count) {
+    return '$count premium minuten over.';
+  }
+
+  @override
+  String get alwaysAvailable => 'altijd beschikbaar.';
+
+  @override
+  String get importHistory => 'Importgeschiedenis';
+
+  @override
+  String get noImportsYet => 'Nog geen imports';
+
+  @override
+  String get selectZipFileToImport => 'Selecteer het .zip-bestand om te importeren!';
+
+  @override
+  String get otherDevicesComingSoon => 'Andere apparaten binnenkort';
+
+  @override
+  String get deleteAllLimitlessConversations => 'Alle Limitless-gesprekken verwijderen?';
+
+  @override
+  String get deleteAllLimitlessWarning =>
+      'Dit verwijdert permanent alle gesprekken die zijn geïmporteerd uit Limitless. Deze actie kan niet ongedaan worden gemaakt.';
+
+  @override
+  String deletedLimitlessConversations(int count) {
+    return '$count Limitless-gesprekken verwijderd';
+  }
+
+  @override
+  String get failedToDeleteConversations => 'Gesprekken verwijderen mislukt';
+
+  @override
+  String get deleteImportedData => 'Geïmporteerde gegevens verwijderen';
+
+  @override
+  String get statusPending => 'In behandeling';
+
+  @override
+  String get statusProcessing => 'Verwerken';
+
+  @override
+  String get statusCompleted => 'Voltooid';
+
+  @override
+  String get statusFailed => 'Mislukt';
+
+  @override
+  String nConversations(int count) {
+    return '$count gesprekken';
+  }
+
+  @override
+  String get pleaseEnterName => 'Voer een naam in';
+
+  @override
+  String get nameMustBeBetweenCharacters => 'Naam moet tussen 2 en 40 tekens zijn';
+
+  @override
+  String get deleteSampleQuestion => 'Voorbeeld verwijderen?';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return 'Weet u zeker dat u het voorbeeld van $name wilt verwijderen?';
+  }
+
+  @override
+  String get confirmDeletion => 'Verwijdering bevestigen';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return 'Weet u zeker dat u $name wilt verwijderen? Dit verwijdert ook alle bijbehorende spraaksamples.';
+  }
+
+  @override
+  String get howItWorksTitle => 'Hoe werkt het?';
+
+  @override
+  String get howPeopleWorks =>
+      'Zodra een persoon is aangemaakt, kun je naar een gesprekstranscriptie gaan en de bijbehorende segmenten toewijzen, zo kan Omi ook hun spraak herkennen!';
+
+  @override
+  String get tapToDelete => 'Tik om te verwijderen';
+
+  @override
+  String get newTag => 'NIEUW';
+
+  @override
+  String get needHelpChatWithUs => 'Hulp nodig? Chat met ons';
+
+  @override
+  String get localStorageEnabled => 'Lokale opslag ingeschakeld';
+
+  @override
+  String get localStorageDisabled => 'Lokale opslag uitgeschakeld';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return 'Instellingen bijwerken mislukt: $error';
+  }
+
+  @override
+  String get privacyNotice => 'Privacyverklaring';
+
+  @override
+  String get recordingsMayCaptureOthers =>
+      'Opnames kunnen de stemmen van anderen vastleggen. Zorg ervoor dat u toestemming hebt van alle deelnemers voordat u inschakelt.';
+
+  @override
+  String get enable => 'Inschakelen';
+
+  @override
+  String get storeAudioOnPhone => 'Audio opslaan op telefoon';
+
+  @override
+  String get on => 'Aan';
+
+  @override
+  String get storeAudioDescription =>
+      'Bewaar alle audio-opnames lokaal op uw telefoon. Wanneer uitgeschakeld, worden alleen mislukte uploads bewaard om opslagruimte te besparen.';
+
+  @override
+  String get enableLocalStorage => 'Lokale opslag inschakelen';
+
+  @override
+  String get cloudStorageEnabled => 'Cloudopslag ingeschakeld';
+
+  @override
+  String get cloudStorageDisabled => 'Cloudopslag uitgeschakeld';
+
+  @override
+  String get enableCloudStorage => 'Cloudopslag inschakelen';
+
+  @override
+  String get storeAudioOnCloud => 'Audio opslaan in de cloud';
+
+  @override
+  String get cloudStorageDialogMessage =>
+      'Uw realtime opnames worden opgeslagen in privé cloudopslag terwijl u spreekt.';
+
+  @override
+  String get storeAudioCloudDescription =>
+      'Sla uw realtime opnames op in privé cloudopslag terwijl u spreekt. Audio wordt veilig vastgelegd en opgeslagen in realtime.';
+
+  @override
+  String get downloadingFirmware => 'Firmware downloaden';
+
+  @override
+  String get installingFirmware => 'Firmware installeren';
+
+  @override
+  String get firmwareUpdateWarning =>
+      'Sluit de app niet en schakel het apparaat niet uit. Dit kan uw apparaat beschadigen.';
+
+  @override
+  String get firmwareUpdated => 'Firmware bijgewerkt';
+
+  @override
+  String restartDeviceToComplete(Object deviceName) {
+    return 'Start uw $deviceName opnieuw op om de update te voltooien.';
+  }
+
+  @override
+  String get yourDeviceIsUpToDate => 'Uw apparaat is up-to-date';
+
+  @override
+  String get currentVersion => 'Huidige versie';
+
+  @override
+  String get latestVersion => 'Nieuwste versie';
+
+  @override
+  String get whatsNew => 'Wat is nieuw';
+
+  @override
+  String get installUpdate => 'Update installeren';
+
+  @override
+  String get updateNow => 'Nu bijwerken';
+
+  @override
+  String get updateGuide => 'Update-handleiding';
+
+  @override
+  String get checkingForUpdates => 'Controleren op updates';
+
+  @override
+  String get checkingFirmwareVersion => 'Firmware-versie controleren...';
+
+  @override
+  String get firmwareUpdate => 'Firmware-update';
+
+  @override
+  String get payments => 'Betalingen';
+
+  @override
+  String get connectPaymentMethodInfo =>
+      'Verbind hieronder een betaalmethode om uitbetalingen voor uw apps te ontvangen.';
+
+  @override
+  String get selectedPaymentMethod => 'Geselecteerde betaalmethode';
+
+  @override
+  String get availablePaymentMethods => 'Beschikbare betaalmethoden';
+
+  @override
+  String get activeStatus => 'Actief';
+
+  @override
+  String get connectedStatus => 'Verbonden';
+
+  @override
+  String get notConnectedStatus => 'Niet verbonden';
+
+  @override
+  String get setActive => 'Instellen als actief';
+
+  @override
+  String get getPaidThroughStripe => 'Ontvang betalingen voor uw app-verkopen via Stripe';
+
+  @override
+  String get monthlyPayouts => 'Maandelijkse uitbetalingen';
+
+  @override
+  String get monthlyPayoutsDescription =>
+      'Ontvang maandelijkse betalingen rechtstreeks op uw rekening wanneer u \$10 aan inkomsten bereikt';
+
+  @override
+  String get secureAndReliable => 'Veilig en betrouwbaar';
+
+  @override
+  String get stripeSecureDescription => 'Stripe zorgt voor veilige en tijdige overdrachten van uw app-inkomsten';
+
+  @override
+  String get selectYourCountry => 'Selecteer uw land';
+
+  @override
+  String get countrySelectionPermanent => 'Uw landselectie is permanent en kan later niet worden gewijzigd.';
+
+  @override
+  String get byClickingConnectNow => 'Door op \"Nu verbinden\" te klikken gaat u akkoord met';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Stripe Connected Account-overeenkomst';
+
+  @override
+  String get errorConnectingToStripe => 'Fout bij verbinden met Stripe! Probeer het later opnieuw.';
+
+  @override
+  String get connectingYourStripeAccount => 'Uw Stripe-account verbinden';
+
+  @override
+  String get stripeOnboardingInstructions =>
+      'Voltooi het Stripe-onboardingproces in uw browser. Deze pagina wordt automatisch bijgewerkt zodra het proces is voltooid.';
+
+  @override
+  String get failedTryAgain => 'Mislukt? Probeer opnieuw';
+
+  @override
+  String get illDoItLater => 'Ik doe het later';
+
+  @override
+  String get successfullyConnected => 'Succesvol verbonden!';
+
+  @override
+  String get stripeReadyForPayments =>
+      'Uw Stripe-account is nu klaar om betalingen te ontvangen. U kunt direct beginnen met verdienen aan uw app-verkopen.';
+
+  @override
+  String get updateStripeDetails => 'Stripe-gegevens bijwerken';
+
+  @override
+  String get errorUpdatingStripeDetails => 'Fout bij het bijwerken van Stripe-gegevens! Probeer het later opnieuw.';
+
+  @override
+  String get updatePayPal => 'PayPal bijwerken';
+
+  @override
+  String get setUpPayPal => 'PayPal instellen';
+
+  @override
+  String get updatePayPalAccountDetails => 'Werk uw PayPal-accountgegevens bij';
+
+  @override
+  String get connectPayPalToReceivePayments => 'Verbind uw PayPal-account om betalingen voor uw apps te ontvangen';
+
+  @override
+  String get paypalEmail => 'PayPal-e-mail';
+
+  @override
+  String get paypalMeLink => 'PayPal.me-link';
+
+  @override
+  String get stripeRecommendation =>
+      'Als Stripe beschikbaar is in uw land, raden we het ten zeerste aan voor snellere en gemakkelijkere uitbetalingen.';
+
+  @override
+  String get updatePayPalDetails => 'PayPal-gegevens bijwerken';
+
+  @override
+  String get savePayPalDetails => 'PayPal-gegevens opslaan';
+
+  @override
+  String get pleaseEnterPayPalEmail => 'Voer uw PayPal-e-mailadres in';
+
+  @override
+  String get pleaseEnterPayPalMeLink => 'Voer uw PayPal.me-link in';
+
+  @override
+  String get doNotIncludeHttpInLink => 'Neem geen http, https of www op in de link';
+
+  @override
+  String get pleaseEnterValidPayPalMeLink => 'Voer een geldige PayPal.me-link in';
+
+  @override
+  String get pleaseEnterValidEmail => 'Voer een geldig e-mailadres in';
+
+  @override
+  String get syncingYourRecordings => 'Je opnames synchroniseren';
+
+  @override
+  String get syncYourRecordings => 'Synchroniseer je opnames';
+
+  @override
+  String get syncNow => 'Nu synchroniseren';
+
+  @override
+  String get error => 'Fout';
+
+  @override
+  String get speechSamples => 'Spraakvoorbeelden';
+
+  @override
+  String additionalSampleIndex(String index) {
+    return 'Extra voorbeeld $index';
+  }
+
+  @override
+  String durationSeconds(String seconds) {
+    return 'Duur: $seconds seconden';
+  }
+
+  @override
+  String get additionalSpeechSampleRemoved => 'Extra spraakvoorbeeld verwijderd';
+
+  @override
+  String get consentDataMessage =>
+      'Door verder te gaan, worden alle gegevens die je deelt met deze app (inclusief je gesprekken, opnames en persoonlijke informatie) veilig opgeslagen op onze servers om je AI-aangedreven inzichten te bieden en alle app-functies mogelijk te maken.';
+
+  @override
+  String get tasksEmptyStateMessage =>
+      'Taken uit je gesprekken verschijnen hier.\nTik op + om er handmatig een te maken.';
+
+  @override
+  String get clearChatAction => 'Chat wissen';
+
+  @override
+  String get enableApps => 'Apps inschakelen';
+
+  @override
+  String get omiAppName => 'Omi';
+
+  @override
+  String get showMore => 'toon meer ↓';
+
+  @override
+  String get showLess => 'toon minder ↑';
+
+  @override
+  String get loadingYourRecording => 'Uw opname laden...';
+
+  @override
+  String get photoDiscardedMessage => 'Deze foto is verwijderd omdat deze niet significant was.';
+
+  @override
+  String get analyzing => 'Analyseren...';
+
+  @override
+  String get searchCountries => 'Landen zoeken...';
+
+  @override
+  String get checkingAppleWatch => 'Apple Watch controleren...';
+
+  @override
+  String get installOmiOnAppleWatch => 'Installeer Omi op je\nApple Watch';
+
+  @override
+  String get installOmiOnAppleWatchDescription =>
+      'Om je Apple Watch met Omi te gebruiken, moet je eerst de Omi-app op je horloge installeren.';
+
+  @override
+  String get openOmiOnAppleWatch => 'Open Omi op je\nApple Watch';
+
+  @override
+  String get openOmiOnAppleWatchDescription =>
+      'De Omi-app is geïnstalleerd op je Apple Watch. Open deze en tik op Start om te beginnen.';
+
+  @override
+  String get openWatchApp => 'Watch-app openen';
+
+  @override
+  String get iveInstalledAndOpenedTheApp => 'Ik heb de app geïnstalleerd en geopend';
+
+  @override
+  String get unableToOpenWatchApp =>
+      'Kan Apple Watch-app niet openen. Open handmatig de Watch-app op je Apple Watch en installeer Omi vanuit het gedeelte \"Beschikbare apps\".';
+
+  @override
+  String get appleWatchConnectedSuccessfully => 'Apple Watch succesvol verbonden!';
+
+  @override
+  String get appleWatchNotReachable =>
+      'Apple Watch nog steeds niet bereikbaar. Zorg ervoor dat de Omi-app geopend is op je horloge.';
+
+  @override
+  String errorCheckingConnection(String error) {
+    return 'Fout bij controleren verbinding: $error';
+  }
+
+  @override
+  String get muted => 'Gedempt';
+
+  @override
+  String get processNow => 'Nu verwerken';
+
+  @override
+  String get finishedConversation => 'Gesprek beëindigd?';
+
+  @override
+  String get stopRecordingConfirmation =>
+      'Weet je zeker dat je de opname wilt stoppen en het gesprek nu wilt samenvatten?';
+
+  @override
+  String get conversationEndsManually => 'Het gesprek eindigt alleen handmatig.';
+
+  @override
+  String conversationSummarizedAfterMinutes(int minutes, String suffix) {
+    return 'Het gesprek wordt samengevat na $minutes minuut$suffix stilte.';
+  }
+
+  @override
+  String get dontAskAgain => 'Niet opnieuw vragen';
+
+  @override
+  String get waitingForTranscriptOrPhotos => 'Wachten op transcriptie of foto\'s...';
+
+  @override
+  String get noSummaryYet => 'Nog geen samenvatting';
+
+  @override
+  String hints(String text) {
+    return 'Tips: $text';
+  }
+
+  @override
+  String get testConversationPrompt => 'Test gespreksprompt';
+
+  @override
+  String get prompt => 'Prompt';
+
+  @override
+  String get result => 'Resultaat';
+
+  @override
+  String get compareTranscripts => 'Transcripties vergelijken';
+
+  @override
+  String get notHelpful => 'Niet nuttig';
+
+  @override
+  String get exportTasksWithOneTap => 'Exporteer taken met één tik!';
+
+  @override
+  String get inProgress => 'Bezig';
+
+  @override
+  String get photos => 'Foto\'s';
+
+  @override
+  String get rawData => 'Ruwe gegevens';
+
+  @override
+  String get content => 'Inhoud';
+
+  @override
+  String get noContentToDisplay => 'Geen inhoud om weer te geven';
+
+  @override
+  String get noSummary => 'Geen samenvatting';
+
+  @override
+  String get updateOmiFirmware => 'Omi-firmware bijwerken';
+
+  @override
+  String get anErrorOccurredTryAgain => 'Er is een fout opgetreden. Probeer het opnieuw.';
+
+  @override
+  String get welcomeBackSimple => 'Welkom terug';
+
+  @override
+  String get addVocabularyDescription => 'Voeg woorden toe die Omi moet herkennen tijdens transcriptie.';
+
+  @override
+  String get enterWordsCommaSeparated => 'Voer woorden in (gescheiden door komma)';
+
+  @override
+  String get whenToReceiveDailySummary => 'Wanneer je dagelijkse samenvatting ontvangen';
+
+  @override
+  String get checkingNextSevenDays => 'De komende 7 dagen controleren';
+
+  @override
+  String failedToDeleteError(String error) {
+    return 'Verwijderen mislukt: $error';
+  }
+
+  @override
+  String get developerApiKeys => 'Ontwikkelaar API-sleutels';
+
+  @override
+  String get noApiKeysCreateOne => 'Geen API-sleutels. Maak er een aan om te beginnen.';
+
+  @override
+  String get commandRequired => '⌘ vereist';
+
+  @override
+  String get spaceKey => 'Spatie';
+
+  @override
+  String loadMoreRemaining(String count) {
+    return 'Meer laden ($count over)';
+  }
+
+  @override
+  String wrappedTopPercentUser(String percentile) {
+    return 'Top $percentile% gebruiker';
+  }
+
+  @override
+  String get wrappedMinutes => 'minuten';
+
+  @override
+  String get wrappedConversations => 'gesprekken';
+
+  @override
+  String get wrappedDaysActive => 'actieve dagen';
+
+  @override
+  String get wrappedYouTalkedAbout => 'Je sprak over';
+
+  @override
+  String get wrappedActionItems => 'Taken';
+
+  @override
+  String get wrappedTasksCreated => 'aangemaakte taken';
+
+  @override
+  String get wrappedCompleted => 'voltooid';
+
+  @override
+  String wrappedCompletionRate(String rate) {
+    return '$rate% voltooiingspercentage';
+  }
+
+  @override
+  String get wrappedYourTopDays => 'Je beste dagen';
+
+  @override
+  String get wrappedBestMoments => 'Beste momenten';
+
+  @override
+  String get wrappedMyBuddies => 'Mijn vrienden';
+
+  @override
+  String get wrappedCouldntStopTalkingAbout => 'Kon niet stoppen met praten over';
+
+  @override
+  String get wrappedShow => 'SERIE';
+
+  @override
+  String get wrappedMovie => 'FILM';
+
+  @override
+  String get wrappedBook => 'BOEK';
+
+  @override
+  String get wrappedCelebrity => 'BEROEMDHEID';
+
+  @override
+  String get wrappedFood => 'ETEN';
+
+  @override
+  String get wrappedMovieRecs => 'Filmaanbevelingen voor vrienden';
+
+  @override
+  String get wrappedBiggest => 'Grootste';
+
+  @override
+  String get wrappedStruggle => 'Uitdaging';
+
+  @override
+  String get wrappedButYouPushedThrough => 'Maar je hebt het gehaald 💪';
+
+  @override
+  String get wrappedWin => 'Overwinning';
+
+  @override
+  String get wrappedYouDidIt => 'Je hebt het gedaan! 🎉';
+
+  @override
+  String get wrappedTopPhrases => 'Top 5 zinnen';
+
+  @override
+  String get wrappedMins => 'min';
+
+  @override
+  String get wrappedConvos => 'gesprekken';
+
+  @override
+  String get wrappedDays => 'dagen';
+
+  @override
+  String get wrappedMyBuddiesLabel => 'MIJN VRIENDEN';
+
+  @override
+  String get wrappedObsessionsLabel => 'OBSESSIES';
+
+  @override
+  String get wrappedStruggleLabel => 'UITDAGING';
+
+  @override
+  String get wrappedWinLabel => 'OVERWINNING';
+
+  @override
+  String get wrappedTopPhrasesLabel => 'TOP ZINNEN';
+
+  @override
+  String get wrappedLetsHitRewind => 'Laten we terugspoelen naar je';
+
+  @override
+  String get wrappedGenerateMyWrapped => 'Genereer mijn Wrapped';
+
+  @override
+  String get wrappedProcessingDefault => 'Verwerken...';
+
+  @override
+  String get wrappedCreatingYourStory => 'Je 2025\nverhaal maken...';
+
+  @override
+  String get wrappedSomethingWentWrong => 'Er ging iets\nmis';
+
+  @override
+  String get wrappedAnErrorOccurred => 'Er is een fout opgetreden';
+
+  @override
+  String get wrappedTryAgain => 'Opnieuw proberen';
+
+  @override
+  String get wrappedNoDataAvailable => 'Geen gegevens beschikbaar';
+
+  @override
+  String get wrappedOmiLifeRecap => 'Omi levenssamenvatting';
+
+  @override
+  String get wrappedSwipeUpToBegin => 'Veeg omhoog om te beginnen';
+
+  @override
+  String get wrappedShareText => 'Mijn 2025, onthouden door Omi ✨ omi.me/wrapped';
+
+  @override
+  String get wrappedFailedToShare => 'Delen mislukt. Probeer het opnieuw.';
+
+  @override
+  String get wrappedFailedToStartGeneration => 'Starten van generatie mislukt. Probeer het opnieuw.';
+
+  @override
+  String get wrappedStarting => 'Starten...';
+
+  @override
+  String get wrappedShare => 'Delen';
+
+  @override
+  String get wrappedShareYourWrapped => 'Deel je Wrapped';
+
+  @override
+  String get wrappedMy2025 => 'Mijn 2025';
+
+  @override
+  String get wrappedRememberedByOmi => 'onthouden door Omi';
+
+  @override
+  String get wrappedMostFunDay => 'Leukste';
+
+  @override
+  String get wrappedMostProductiveDay => 'Meest productief';
+
+  @override
+  String get wrappedMostIntenseDay => 'Meest intens';
+
+  @override
+  String get wrappedFunniestMoment => 'Grappigste';
+
+  @override
+  String get wrappedMostCringeMoment => 'Meest gênant';
+
+  @override
+  String get wrappedMinutesLabel => 'minuten';
+
+  @override
+  String get wrappedConversationsLabel => 'gesprekken';
+
+  @override
+  String get wrappedDaysActiveLabel => 'actieve dagen';
+
+  @override
+  String get wrappedTasksGenerated => 'taken gegenereerd';
+
+  @override
+  String get wrappedTasksCompleted => 'taken voltooid';
+
+  @override
+  String get wrappedTopFivePhrases => 'Top 5 zinnen';
+
+  @override
+  String get wrappedAGreatDay => 'Een geweldige dag';
+
+  @override
+  String get wrappedGettingItDone => 'Het gedaan krijgen';
+
+  @override
+  String get wrappedAChallenge => 'Een uitdaging';
+
+  @override
+  String get wrappedAHilariousMoment => 'Een hilarisch moment';
+
+  @override
+  String get wrappedThatAwkwardMoment => 'Dat ongemakkelijke moment';
+
+  @override
+  String get wrappedYouHadFunnyMoments => 'Je had grappige momenten dit jaar!';
+
+  @override
+  String get wrappedWeveAllBeenThere => 'We zijn er allemaal geweest!';
+
+  @override
+  String get wrappedFriend => 'Vriend';
+
+  @override
+  String get wrappedYourBuddy => 'Je maat!';
+
+  @override
+  String get wrappedNotMentioned => 'Niet genoemd';
+
+  @override
+  String get wrappedTheHardPart => 'Het moeilijke deel';
+
+  @override
+  String get wrappedPersonalGrowth => 'Persoonlijke groei';
+
+  @override
+  String get wrappedFunDay => 'Leuk';
+
+  @override
+  String get wrappedProductiveDay => 'Productief';
+
+  @override
+  String get wrappedIntenseDay => 'Intens';
+
+  @override
+  String get wrappedFunnyMomentTitle => 'Grappig moment';
+
+  @override
+  String get wrappedCringeMomentTitle => 'Gênant moment';
+
+  @override
+  String get wrappedYouTalkedAboutBadge => 'Je praatte over';
+
+  @override
+  String get wrappedCompletedLabel => 'Voltooid';
+
+  @override
+  String get wrappedMyBuddiesCard => 'Mijn vrienden';
+
+  @override
+  String get wrappedBuddiesLabel => 'VRIENDEN';
+
+  @override
+  String get wrappedObsessionsLabelUpper => 'OBSESSIES';
+
+  @override
+  String get wrappedStruggleLabelUpper => 'STRIJD';
+
+  @override
+  String get wrappedWinLabelUpper => 'OVERWINNING';
+
+  @override
+  String get wrappedTopPhrasesLabelUpper => 'TOP ZINNEN';
+
+  @override
+  String get wrappedYourHeader => 'Je';
+
+  @override
+  String get wrappedTopDaysHeader => 'Beste dagen';
+
+  @override
+  String get wrappedYourTopDaysBadge => 'Je beste dagen';
+
+  @override
+  String get wrappedBestHeader => 'Beste';
+
+  @override
+  String get wrappedMomentsHeader => 'Momenten';
+
+  @override
+  String get wrappedBestMomentsBadge => 'Beste momenten';
+
+  @override
+  String get wrappedBiggestHeader => 'Grootste';
+
+  @override
+  String get wrappedStruggleHeader => 'Strijd';
+
+  @override
+  String get wrappedWinHeader => 'Overwinning';
+
+  @override
+  String get wrappedButYouPushedThroughEmoji => 'Maar je hebt het gered 💪';
+
+  @override
+  String get wrappedYouDidItEmoji => 'Je hebt het gedaan! 🎉';
+
+  @override
+  String get wrappedHours => 'uren';
+
+  @override
+  String get wrappedActions => 'acties';
+
+  @override
+  String get multipleSpeakersDetected => 'Meerdere sprekers gedetecteerd';
+
+  @override
+  String get multipleSpeakersDescription =>
+      'Het lijkt erop dat er meerdere sprekers in de opname zijn. Zorg ervoor dat je op een rustige plek bent en probeer het opnieuw.';
+
+  @override
+  String get invalidRecordingDetected => 'Ongeldige opname gedetecteerd';
+
+  @override
+  String get notEnoughSpeechDescription =>
+      'Er is niet genoeg spraak gedetecteerd. Spreek alsjeblieft meer en probeer het opnieuw.';
+
+  @override
+  String get speechDurationDescription => 'Zorg ervoor dat je minimaal 5 seconden en maximaal 90 seconden spreekt.';
+
+  @override
+  String get connectionLostDescription =>
+      'De verbinding werd onderbroken. Controleer je internetverbinding en probeer het opnieuw.';
+
+  @override
+  String get howToTakeGoodSample => 'Hoe maak je een goed voorbeeld?';
+
+  @override
+  String get goodSampleInstructions =>
+      '1. Zorg ervoor dat je op een rustige plek bent.\n2. Spreek duidelijk en natuurlijk.\n3. Zorg ervoor dat je apparaat in zijn natuurlijke positie op je nek zit.\n\nNa het maken kun je het altijd verbeteren of opnieuw doen.';
+
+  @override
+  String get noDeviceConnectedUseMic => 'Geen apparaat verbonden. De telefoonmicrofoon wordt gebruikt.';
+
+  @override
+  String get doItAgain => 'Opnieuw doen';
+
+  @override
+  String get listenToSpeechProfile => 'Luister naar mijn stemprofiel ➡️';
+
+  @override
+  String get recognizingOthers => 'Anderen herkennen 👀';
+
+  @override
+  String get keepGoingGreat => 'Ga zo door, je doet het geweldig';
+
+  @override
+  String get somethingWentWrongTryAgain => 'Er is iets misgegaan! Probeer het later opnieuw.';
+
+  @override
+  String get uploadingVoiceProfile => 'Je stemprofiel wordt geüpload....';
+
+  @override
+  String get memorizingYourVoice => 'Je stem wordt onthouden...';
+
+  @override
+  String get personalizingExperience => 'Je ervaring wordt gepersonaliseerd...';
+
+  @override
+  String get keepSpeakingUntil100 => 'Blijf praten tot je 100% bereikt.';
+
+  @override
+  String get greatJobAlmostThere => 'Goed bezig, je bent er bijna';
+
+  @override
+  String get soCloseJustLittleMore => 'Zo dichtbij, nog even';
 }

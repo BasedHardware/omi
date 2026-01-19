@@ -804,7 +804,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get debugLogsDesc => 'Помогает диагностировать проблемы';
 
   @override
-  String get noLogFilesFound => 'Файлы журналов не найдены.';
+  String get noLogFilesFound => 'Файлы журнала не найдены.';
 
   @override
   String get omiDebugLog => 'Журнал отладки Omi';
@@ -1204,7 +1204,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get refresh => 'Обновить';
 
   @override
-  String get noUpcomingMeetings => 'Предстоящих встреч не найдено';
+  String get noUpcomingMeetings => 'Нет предстоящих встреч';
 
   @override
   String get checkingNextDays => 'Проверка следующих 30 дней';
@@ -2423,29 +2423,29 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String labelCopied(String label) {
-    return '$label copied';
+    return '$label скопировано';
   }
 
   @override
   String get noApiKeysYet => 'API-ключей пока нет. Создайте один для интеграции с вашим приложением.';
 
   @override
-  String get createKeyToGetStarted => 'Create a key to get started';
+  String get createKeyToGetStarted => 'Создайте ключ, чтобы начать';
 
   @override
   String get persona => 'Персона';
 
   @override
-  String get configureYourAiPersona => 'Configure your AI persona';
+  String get configureYourAiPersona => 'Настройте свою AI-персону';
 
   @override
-  String get configureSttProvider => 'Configure STT provider';
+  String get configureSttProvider => 'Настроить провайдера STT';
 
   @override
-  String get setWhenConversationsAutoEnd => 'Set when conversations auto-end';
+  String get setWhenConversationsAutoEnd => 'Установите, когда разговоры заканчиваются автоматически';
 
   @override
-  String get importDataFromOtherSources => 'Import data from other sources';
+  String get importDataFromOtherSources => 'Импорт данных из других источников';
 
   @override
   String get debugAndDiagnostics => 'Отладка и диагностика';
@@ -2457,30 +2457,30 @@ class AppLocalizationsRu extends AppLocalizations {
   String get helpsDiagnoseIssues => 'Помогает диагностировать проблемы';
 
   @override
-  String get exportStartedMessage => 'Export started. This may take a few seconds...';
+  String get exportStartedMessage => 'Экспорт начат. Это может занять несколько секунд...';
 
   @override
-  String get exportConversationsToJson => 'Export conversations to a JSON file';
+  String get exportConversationsToJson => 'Экспорт разговоров в JSON-файл';
 
   @override
-  String get knowledgeGraphDeletedSuccess => 'Knowledge Graph deleted successfully';
+  String get knowledgeGraphDeletedSuccess => 'Граф знаний успешно удалён';
 
   @override
   String failedToDeleteGraph(String error) {
-    return 'Failed to delete graph: $error';
+    return 'Не удалось удалить граф: $error';
   }
 
   @override
-  String get clearAllNodesAndConnections => 'Clear all nodes and connections';
+  String get clearAllNodesAndConnections => 'Очистить все узлы и соединения';
 
   @override
-  String get addToClaudeDesktopConfig => 'Add to claude_desktop_config.json';
+  String get addToClaudeDesktopConfig => 'Добавить в claude_desktop_config.json';
 
   @override
-  String get connectAiAssistantsToData => 'Connect AI assistants to your data';
+  String get connectAiAssistantsToData => 'Подключите AI-помощников к вашим данным';
 
   @override
-  String get useYourMcpApiKey => 'Use your MCP API key';
+  String get useYourMcpApiKey => 'Используйте свой MCP API-ключ';
 
   @override
   String get realTimeTranscript => 'Транскрипция в реальном времени';
@@ -2498,7 +2498,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get autoCreateSpeakers => 'Автосоздание спикеров';
 
   @override
-  String get autoCreateWhenNameDetected => 'Auto-create when name detected';
+  String get autoCreateWhenNameDetected => 'Автоматически создавать при обнаружении имени';
 
   @override
   String get followUpQuestions => 'Дополнительные вопросы';
@@ -2510,13 +2510,13 @@ class AppLocalizationsRu extends AppLocalizations {
   String get goalTracker => 'Отслеживание целей';
 
   @override
-  String get trackPersonalGoalsOnHomepage => 'Track your personal goals on homepage';
+  String get trackPersonalGoalsOnHomepage => 'Отслеживайте личные цели на главной странице';
 
   @override
   String get dailyReflection => 'Ежедневное размышление';
 
   @override
-  String get get9PmReminderToReflect => 'Get a 9 PM reminder to reflect on your day';
+  String get get9PmReminderToReflect => 'Получите напоминание в 21:00, чтобы подвести итоги дня';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'Описание элемента действия не может быть пустым';
@@ -3833,7 +3833,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get about => 'О программе';
 
   @override
-  String get selectTime => 'Выбрать Время';
+  String get selectTime => 'Выберите время';
 
   @override
   String get accountGroup => 'Аккаунт';
@@ -3863,7 +3863,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get dailySummaryDescription => 'Получайте персонализированную сводку ваших разговоров';
 
   @override
-  String get deliveryTime => 'Время Доставки';
+  String get deliveryTime => 'Время доставки';
 
   @override
   String get deliveryTimeDescription => 'Когда получать ежедневную сводку';
@@ -3896,7 +3896,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get includePersonalEventsDescription => 'Включать личные события без участников';
 
   @override
-  String get upcomingMeetings => 'ПРЕДСТОЯЩИЕ ВСТРЕЧИ';
+  String get upcomingMeetings => 'Предстоящие встречи';
 
   @override
   String get checkingNext7Days => 'Проверка следующих 7 дней';
@@ -4775,4 +4775,924 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get noSpecificDataAccessConfigured => 'Конкретный доступ к данным не настроен.';
+
+  @override
+  String get basicPlanDescription => '1 200 премиум минут + неограниченно на устройстве';
+
+  @override
+  String get minutes => 'минут';
+
+  @override
+  String get omiHas => 'У Omi:';
+
+  @override
+  String get premiumMinutesUsed => 'Премиум минуты использованы.';
+
+  @override
+  String get setupOnDevice => 'Настроить на устройстве';
+
+  @override
+  String get forUnlimitedFreeTranscription => 'для неограниченной бесплатной транскрипции.';
+
+  @override
+  String premiumMinsLeft(int count) {
+    return 'Осталось $count премиум минут.';
+  }
+
+  @override
+  String get alwaysAvailable => 'всегда доступно.';
+
+  @override
+  String get importHistory => 'История импорта';
+
+  @override
+  String get noImportsYet => 'Импортов пока нет';
+
+  @override
+  String get selectZipFileToImport => 'Выберите .zip файл для импорта!';
+
+  @override
+  String get otherDevicesComingSoon => 'Другие устройства скоро';
+
+  @override
+  String get deleteAllLimitlessConversations => 'Удалить все разговоры Limitless?';
+
+  @override
+  String get deleteAllLimitlessWarning =>
+      'Это навсегда удалит все разговоры, импортированные из Limitless. Это действие нельзя отменить.';
+
+  @override
+  String deletedLimitlessConversations(int count) {
+    return 'Удалено $count разговоров Limitless';
+  }
+
+  @override
+  String get failedToDeleteConversations => 'Не удалось удалить разговоры';
+
+  @override
+  String get deleteImportedData => 'Удалить импортированные данные';
+
+  @override
+  String get statusPending => 'Ожидание';
+
+  @override
+  String get statusProcessing => 'Обработка';
+
+  @override
+  String get statusCompleted => 'Завершено';
+
+  @override
+  String get statusFailed => 'Ошибка';
+
+  @override
+  String nConversations(int count) {
+    return '$count разговоров';
+  }
+
+  @override
+  String get pleaseEnterName => 'Пожалуйста, введите имя';
+
+  @override
+  String get nameMustBeBetweenCharacters => 'Имя должно содержать от 2 до 40 символов';
+
+  @override
+  String get deleteSampleQuestion => 'Удалить образец?';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return 'Вы уверены, что хотите удалить образец $name?';
+  }
+
+  @override
+  String get confirmDeletion => 'Подтвердить удаление';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return 'Вы уверены, что хотите удалить $name? Это также удалит все связанные образцы речи.';
+  }
+
+  @override
+  String get howItWorksTitle => 'Как это работает?';
+
+  @override
+  String get howPeopleWorks =>
+      'После создания человека вы можете перейти к расшифровке разговора и назначить ему соответствующие сегменты, тогда Omi сможет распознавать и его речь!';
+
+  @override
+  String get tapToDelete => 'Нажмите для удаления';
+
+  @override
+  String get newTag => 'НОВОЕ';
+
+  @override
+  String get needHelpChatWithUs => 'Нужна помощь? Свяжитесь с нами';
+
+  @override
+  String get localStorageEnabled => 'Локальное хранилище включено';
+
+  @override
+  String get localStorageDisabled => 'Локальное хранилище отключено';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return 'Не удалось обновить настройки: $error';
+  }
+
+  @override
+  String get privacyNotice => 'Уведомление о конфиденциальности';
+
+  @override
+  String get recordingsMayCaptureOthers =>
+      'Записи могут захватывать голоса других людей. Перед включением убедитесь, что у вас есть согласие всех участников.';
+
+  @override
+  String get enable => 'Включить';
+
+  @override
+  String get storeAudioOnPhone => 'Хранить аудио на телефоне';
+
+  @override
+  String get on => 'Вкл.';
+
+  @override
+  String get storeAudioDescription =>
+      'Храните все аудиозаписи локально на телефоне. При отключении сохраняются только неудачные загрузки для экономии места.';
+
+  @override
+  String get enableLocalStorage => 'Включить локальное хранилище';
+
+  @override
+  String get cloudStorageEnabled => 'Облачное хранилище включено';
+
+  @override
+  String get cloudStorageDisabled => 'Облачное хранилище отключено';
+
+  @override
+  String get enableCloudStorage => 'Включить облачное хранилище';
+
+  @override
+  String get storeAudioOnCloud => 'Хранить аудио в облаке';
+
+  @override
+  String get cloudStorageDialogMessage =>
+      'Ваши записи в реальном времени будут храниться в частном облачном хранилище во время разговора.';
+
+  @override
+  String get storeAudioCloudDescription =>
+      'Храните записи в реальном времени в частном облачном хранилище во время разговора. Аудио захватывается и сохраняется безопасно в реальном времени.';
+
+  @override
+  String get downloadingFirmware => 'Загрузка прошивки';
+
+  @override
+  String get installingFirmware => 'Установка прошивки';
+
+  @override
+  String get firmwareUpdateWarning =>
+      'Не закрывайте приложение и не выключайте устройство. Это может повредить устройство.';
+
+  @override
+  String get firmwareUpdated => 'Прошивка обновлена';
+
+  @override
+  String restartDeviceToComplete(Object deviceName) {
+    return 'Пожалуйста, перезагрузите $deviceName для завершения обновления.';
+  }
+
+  @override
+  String get yourDeviceIsUpToDate => 'Ваше устройство обновлено';
+
+  @override
+  String get currentVersion => 'Текущая версия';
+
+  @override
+  String get latestVersion => 'Последняя версия';
+
+  @override
+  String get whatsNew => 'Что нового';
+
+  @override
+  String get installUpdate => 'Установить обновление';
+
+  @override
+  String get updateNow => 'Обновить сейчас';
+
+  @override
+  String get updateGuide => 'Руководство по обновлению';
+
+  @override
+  String get checkingForUpdates => 'Проверка обновлений';
+
+  @override
+  String get checkingFirmwareVersion => 'Проверка версии прошивки...';
+
+  @override
+  String get firmwareUpdate => 'Обновление прошивки';
+
+  @override
+  String get payments => 'Платежи';
+
+  @override
+  String get connectPaymentMethodInfo =>
+      'Подключите способ оплаты ниже, чтобы начать получать выплаты за ваши приложения.';
+
+  @override
+  String get selectedPaymentMethod => 'Выбранный способ оплаты';
+
+  @override
+  String get availablePaymentMethods => 'Доступные способы оплаты';
+
+  @override
+  String get activeStatus => 'Активный';
+
+  @override
+  String get connectedStatus => 'Подключено';
+
+  @override
+  String get notConnectedStatus => 'Не подключено';
+
+  @override
+  String get setActive => 'Сделать активным';
+
+  @override
+  String get getPaidThroughStripe => 'Получайте оплату за продажи приложений через Stripe';
+
+  @override
+  String get monthlyPayouts => 'Ежемесячные выплаты';
+
+  @override
+  String get monthlyPayoutsDescription => 'Получайте ежемесячные выплаты прямо на счёт, когда заработаете \$10';
+
+  @override
+  String get secureAndReliable => 'Безопасно и надёжно';
+
+  @override
+  String get stripeSecureDescription => 'Stripe обеспечивает безопасные и своевременные переводы доходов от приложения';
+
+  @override
+  String get selectYourCountry => 'Выберите свою страну';
+
+  @override
+  String get countrySelectionPermanent => 'Выбор страны является постоянным и не может быть изменён позже.';
+
+  @override
+  String get byClickingConnectNow => 'Нажимая \"Подключить сейчас\", вы соглашаетесь с';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Соглашение о подключенном аккаунте Stripe';
+
+  @override
+  String get errorConnectingToStripe => 'Ошибка подключения к Stripe! Пожалуйста, попробуйте позже.';
+
+  @override
+  String get connectingYourStripeAccount => 'Подключение вашего аккаунта Stripe';
+
+  @override
+  String get stripeOnboardingInstructions =>
+      'Пожалуйста, завершите процесс регистрации Stripe в браузере. Эта страница автоматически обновится после завершения.';
+
+  @override
+  String get failedTryAgain => 'Не удалось? Попробовать снова';
+
+  @override
+  String get illDoItLater => 'Сделаю позже';
+
+  @override
+  String get successfullyConnected => 'Успешно подключено!';
+
+  @override
+  String get stripeReadyForPayments =>
+      'Ваш аккаунт Stripe готов принимать платежи. Вы можете сразу начать зарабатывать на продажах приложений.';
+
+  @override
+  String get updateStripeDetails => 'Обновить данные Stripe';
+
+  @override
+  String get errorUpdatingStripeDetails => 'Ошибка обновления данных Stripe! Пожалуйста, попробуйте позже.';
+
+  @override
+  String get updatePayPal => 'Обновить PayPal';
+
+  @override
+  String get setUpPayPal => 'Настроить PayPal';
+
+  @override
+  String get updatePayPalAccountDetails => 'Обновите данные вашего аккаунта PayPal';
+
+  @override
+  String get connectPayPalToReceivePayments =>
+      'Подключите свой аккаунт PayPal, чтобы начать получать платежи за ваши приложения';
+
+  @override
+  String get paypalEmail => 'Email PayPal';
+
+  @override
+  String get paypalMeLink => 'Ссылка PayPal.me';
+
+  @override
+  String get stripeRecommendation =>
+      'Если Stripe доступен в вашей стране, мы настоятельно рекомендуем использовать его для более быстрых и простых выплат.';
+
+  @override
+  String get updatePayPalDetails => 'Обновить данные PayPal';
+
+  @override
+  String get savePayPalDetails => 'Сохранить данные PayPal';
+
+  @override
+  String get pleaseEnterPayPalEmail => 'Пожалуйста, введите ваш email PayPal';
+
+  @override
+  String get pleaseEnterPayPalMeLink => 'Пожалуйста, введите вашу ссылку PayPal.me';
+
+  @override
+  String get doNotIncludeHttpInLink => 'Не включайте http, https или www в ссылку';
+
+  @override
+  String get pleaseEnterValidPayPalMeLink => 'Пожалуйста, введите действительную ссылку PayPal.me';
+
+  @override
+  String get pleaseEnterValidEmail => 'Пожалуйста, введите действительный адрес электронной почты';
+
+  @override
+  String get syncingYourRecordings => 'Синхронизация записей';
+
+  @override
+  String get syncYourRecordings => 'Синхронизировать записи';
+
+  @override
+  String get syncNow => 'Синхронизировать сейчас';
+
+  @override
+  String get error => 'Ошибка';
+
+  @override
+  String get speechSamples => 'Образцы голоса';
+
+  @override
+  String additionalSampleIndex(String index) {
+    return 'Дополнительный образец $index';
+  }
+
+  @override
+  String durationSeconds(String seconds) {
+    return 'Длительность: $seconds секунд';
+  }
+
+  @override
+  String get additionalSpeechSampleRemoved => 'Дополнительный образец голоса удален';
+
+  @override
+  String get consentDataMessage =>
+      'Продолжая, все данные, которыми вы делитесь с этим приложением (включая ваши разговоры, записи и личную информацию), будут надежно храниться на наших серверах для предоставления вам аналитики на основе ИИ и включения всех функций приложения.';
+
+  @override
+  String get tasksEmptyStateMessage => 'Задачи из ваших разговоров появятся здесь.\nНажмите +, чтобы создать вручную.';
+
+  @override
+  String get clearChatAction => 'Очистить чат';
+
+  @override
+  String get enableApps => 'Включить приложения';
+
+  @override
+  String get omiAppName => 'Omi';
+
+  @override
+  String get showMore => 'показать больше ↓';
+
+  @override
+  String get showLess => 'показать меньше ↑';
+
+  @override
+  String get loadingYourRecording => 'Загрузка записи...';
+
+  @override
+  String get photoDiscardedMessage => 'Это фото было отклонено, так как оно не было значимым.';
+
+  @override
+  String get analyzing => 'Анализ...';
+
+  @override
+  String get searchCountries => 'Поиск стран...';
+
+  @override
+  String get checkingAppleWatch => 'Проверка Apple Watch...';
+
+  @override
+  String get installOmiOnAppleWatch => 'Установите Omi на\nApple Watch';
+
+  @override
+  String get installOmiOnAppleWatchDescription =>
+      'Чтобы использовать Apple Watch с Omi, сначала необходимо установить приложение Omi на часы.';
+
+  @override
+  String get openOmiOnAppleWatch => 'Откройте Omi на\nApple Watch';
+
+  @override
+  String get openOmiOnAppleWatchDescription =>
+      'Приложение Omi установлено на Apple Watch. Откройте его и нажмите Старт.';
+
+  @override
+  String get openWatchApp => 'Открыть приложение Watch';
+
+  @override
+  String get iveInstalledAndOpenedTheApp => 'Я установил и открыл приложение';
+
+  @override
+  String get unableToOpenWatchApp =>
+      'Не удалось открыть приложение Apple Watch. Откройте приложение Watch вручную на Apple Watch и установите Omi из раздела \"Доступные приложения\".';
+
+  @override
+  String get appleWatchConnectedSuccessfully => 'Apple Watch успешно подключены!';
+
+  @override
+  String get appleWatchNotReachable =>
+      'Apple Watch все еще недоступны. Убедитесь, что приложение Omi открыто на часах.';
+
+  @override
+  String errorCheckingConnection(String error) {
+    return 'Ошибка проверки подключения: $error';
+  }
+
+  @override
+  String get muted => 'Отключен звук';
+
+  @override
+  String get processNow => 'Обработать сейчас';
+
+  @override
+  String get finishedConversation => 'Завершить разговор?';
+
+  @override
+  String get stopRecordingConfirmation => 'Вы уверены, что хотите остановить запись и подвести итоги разговора сейчас?';
+
+  @override
+  String get conversationEndsManually => 'Разговор завершится только вручную.';
+
+  @override
+  String conversationSummarizedAfterMinutes(int minutes, String suffix) {
+    return 'Разговор подводится итог после $minutes минут$suffix молчания.';
+  }
+
+  @override
+  String get dontAskAgain => 'Больше не спрашивать';
+
+  @override
+  String get waitingForTranscriptOrPhotos => 'Ожидание транскрипции или фотографий...';
+
+  @override
+  String get noSummaryYet => 'Резюме пока нет';
+
+  @override
+  String hints(String text) {
+    return 'Подсказки: $text';
+  }
+
+  @override
+  String get testConversationPrompt => 'Тестировать запрос разговора';
+
+  @override
+  String get prompt => 'Запрос';
+
+  @override
+  String get result => 'Результат';
+
+  @override
+  String get compareTranscripts => 'Сравнить транскрипции';
+
+  @override
+  String get notHelpful => 'Бесполезно';
+
+  @override
+  String get exportTasksWithOneTap => 'Экспортируйте задачи одним нажатием!';
+
+  @override
+  String get inProgress => 'В процессе';
+
+  @override
+  String get photos => 'Фото';
+
+  @override
+  String get rawData => 'Необработанные данные';
+
+  @override
+  String get content => 'Контент';
+
+  @override
+  String get noContentToDisplay => 'Нет контента для отображения';
+
+  @override
+  String get noSummary => 'Нет сводки';
+
+  @override
+  String get updateOmiFirmware => 'Обновить прошивку omi';
+
+  @override
+  String get anErrorOccurredTryAgain => 'Произошла ошибка. Пожалуйста, попробуйте снова.';
+
+  @override
+  String get welcomeBackSimple => 'С возвращением';
+
+  @override
+  String get addVocabularyDescription => 'Добавьте слова, которые Omi должен распознавать при транскрипции.';
+
+  @override
+  String get enterWordsCommaSeparated => 'Введите слова (через запятую)';
+
+  @override
+  String get whenToReceiveDailySummary => 'Когда получать ежедневную сводку';
+
+  @override
+  String get checkingNextSevenDays => 'Проверка ближайших 7 дней';
+
+  @override
+  String failedToDeleteError(String error) {
+    return 'Не удалось удалить: $error';
+  }
+
+  @override
+  String get developerApiKeys => 'API-ключи разработчика';
+
+  @override
+  String get noApiKeysCreateOne => 'Нет API-ключей. Создайте один для начала.';
+
+  @override
+  String get commandRequired => '⌘ обязательна';
+
+  @override
+  String get spaceKey => 'Пробел';
+
+  @override
+  String loadMoreRemaining(String count) {
+    return 'Загрузить ещё ($count осталось)';
+  }
+
+  @override
+  String wrappedTopPercentUser(String percentile) {
+    return 'Топ $percentile% пользователь';
+  }
+
+  @override
+  String get wrappedMinutes => 'минут';
+
+  @override
+  String get wrappedConversations => 'разговоров';
+
+  @override
+  String get wrappedDaysActive => 'активных дней';
+
+  @override
+  String get wrappedYouTalkedAbout => 'Вы говорили о';
+
+  @override
+  String get wrappedActionItems => 'Задачи';
+
+  @override
+  String get wrappedTasksCreated => 'созданных задач';
+
+  @override
+  String get wrappedCompleted => 'выполнено';
+
+  @override
+  String wrappedCompletionRate(String rate) {
+    return '$rate% завершённость';
+  }
+
+  @override
+  String get wrappedYourTopDays => 'Ваши лучшие дни';
+
+  @override
+  String get wrappedBestMoments => 'Лучшие моменты';
+
+  @override
+  String get wrappedMyBuddies => 'Мои друзья';
+
+  @override
+  String get wrappedCouldntStopTalkingAbout => 'Не мог перестать говорить о';
+
+  @override
+  String get wrappedShow => 'СЕРИАЛ';
+
+  @override
+  String get wrappedMovie => 'ФИЛЬМ';
+
+  @override
+  String get wrappedBook => 'КНИГА';
+
+  @override
+  String get wrappedCelebrity => 'ЗНАМЕНИТОСТЬ';
+
+  @override
+  String get wrappedFood => 'ЕДА';
+
+  @override
+  String get wrappedMovieRecs => 'Рекомендации фильмов для друзей';
+
+  @override
+  String get wrappedBiggest => 'Самый большой';
+
+  @override
+  String get wrappedStruggle => 'Вызов';
+
+  @override
+  String get wrappedButYouPushedThrough => 'Но вы справились 💪';
+
+  @override
+  String get wrappedWin => 'Победа';
+
+  @override
+  String get wrappedYouDidIt => 'У вас получилось! 🎉';
+
+  @override
+  String get wrappedTopPhrases => 'Топ-5 фраз';
+
+  @override
+  String get wrappedMins => 'мин';
+
+  @override
+  String get wrappedConvos => 'разговоров';
+
+  @override
+  String get wrappedDays => 'дней';
+
+  @override
+  String get wrappedMyBuddiesLabel => 'МОИ ДРУЗЬЯ';
+
+  @override
+  String get wrappedObsessionsLabel => 'УВЛЕЧЕНИЯ';
+
+  @override
+  String get wrappedStruggleLabel => 'ВЫЗОВ';
+
+  @override
+  String get wrappedWinLabel => 'ПОБЕДА';
+
+  @override
+  String get wrappedTopPhrasesLabel => 'ТОП ФРАЗ';
+
+  @override
+  String get wrappedLetsHitRewind => 'Давай перемотаем твой';
+
+  @override
+  String get wrappedGenerateMyWrapped => 'Создать мой Wrapped';
+
+  @override
+  String get wrappedProcessingDefault => 'Обработка...';
+
+  @override
+  String get wrappedCreatingYourStory => 'Создаём твою\nисторию 2025...';
+
+  @override
+  String get wrappedSomethingWentWrong => 'Что-то пошло\nне так';
+
+  @override
+  String get wrappedAnErrorOccurred => 'Произошла ошибка';
+
+  @override
+  String get wrappedTryAgain => 'Попробовать снова';
+
+  @override
+  String get wrappedNoDataAvailable => 'Данные недоступны';
+
+  @override
+  String get wrappedOmiLifeRecap => 'Обзор жизни Omi';
+
+  @override
+  String get wrappedSwipeUpToBegin => 'Свайпни вверх, чтобы начать';
+
+  @override
+  String get wrappedShareText => 'Мой 2025, сохранённый Omi ✨ omi.me/wrapped';
+
+  @override
+  String get wrappedFailedToShare => 'Не удалось поделиться. Пожалуйста, попробуйте снова.';
+
+  @override
+  String get wrappedFailedToStartGeneration => 'Не удалось начать генерацию. Пожалуйста, попробуйте снова.';
+
+  @override
+  String get wrappedStarting => 'Запуск...';
+
+  @override
+  String get wrappedShare => 'Поделиться';
+
+  @override
+  String get wrappedShareYourWrapped => 'Поделись своим Wrapped';
+
+  @override
+  String get wrappedMy2025 => 'Мой 2025';
+
+  @override
+  String get wrappedRememberedByOmi => 'сохранённый Omi';
+
+  @override
+  String get wrappedMostFunDay => 'Самый весёлый';
+
+  @override
+  String get wrappedMostProductiveDay => 'Самый продуктивный';
+
+  @override
+  String get wrappedMostIntenseDay => 'Самый интенсивный';
+
+  @override
+  String get wrappedFunniestMoment => 'Самый смешной';
+
+  @override
+  String get wrappedMostCringeMoment => 'Самый неловкий';
+
+  @override
+  String get wrappedMinutesLabel => 'минут';
+
+  @override
+  String get wrappedConversationsLabel => 'разговоров';
+
+  @override
+  String get wrappedDaysActiveLabel => 'активных дней';
+
+  @override
+  String get wrappedTasksGenerated => 'задач создано';
+
+  @override
+  String get wrappedTasksCompleted => 'задач выполнено';
+
+  @override
+  String get wrappedTopFivePhrases => 'Топ-5 фраз';
+
+  @override
+  String get wrappedAGreatDay => 'Отличный день';
+
+  @override
+  String get wrappedGettingItDone => 'Сделать это';
+
+  @override
+  String get wrappedAChallenge => 'Вызов';
+
+  @override
+  String get wrappedAHilariousMoment => 'Смешной момент';
+
+  @override
+  String get wrappedThatAwkwardMoment => 'Тот неловкий момент';
+
+  @override
+  String get wrappedYouHadFunnyMoments => 'У тебя были смешные моменты в этом году!';
+
+  @override
+  String get wrappedWeveAllBeenThere => 'Мы все через это проходили!';
+
+  @override
+  String get wrappedFriend => 'Друг';
+
+  @override
+  String get wrappedYourBuddy => 'Твой друг!';
+
+  @override
+  String get wrappedNotMentioned => 'Не упомянуто';
+
+  @override
+  String get wrappedTheHardPart => 'Трудная часть';
+
+  @override
+  String get wrappedPersonalGrowth => 'Личностный рост';
+
+  @override
+  String get wrappedFunDay => 'Весёлый';
+
+  @override
+  String get wrappedProductiveDay => 'Продуктивный';
+
+  @override
+  String get wrappedIntenseDay => 'Интенсивный';
+
+  @override
+  String get wrappedFunnyMomentTitle => 'Смешной момент';
+
+  @override
+  String get wrappedCringeMomentTitle => 'Неловкий момент';
+
+  @override
+  String get wrappedYouTalkedAboutBadge => 'Ты говорил о';
+
+  @override
+  String get wrappedCompletedLabel => 'Выполнено';
+
+  @override
+  String get wrappedMyBuddiesCard => 'Мои друзья';
+
+  @override
+  String get wrappedBuddiesLabel => 'ДРУЗЬЯ';
+
+  @override
+  String get wrappedObsessionsLabelUpper => 'УВЛЕЧЕНИЯ';
+
+  @override
+  String get wrappedStruggleLabelUpper => 'БОРЬБА';
+
+  @override
+  String get wrappedWinLabelUpper => 'ПОБЕДА';
+
+  @override
+  String get wrappedTopPhrasesLabelUpper => 'ТОП ФРАЗЫ';
+
+  @override
+  String get wrappedYourHeader => 'Твои';
+
+  @override
+  String get wrappedTopDaysHeader => 'Лучшие дни';
+
+  @override
+  String get wrappedYourTopDaysBadge => 'Твои лучшие дни';
+
+  @override
+  String get wrappedBestHeader => 'Лучшие';
+
+  @override
+  String get wrappedMomentsHeader => 'Моменты';
+
+  @override
+  String get wrappedBestMomentsBadge => 'Лучшие моменты';
+
+  @override
+  String get wrappedBiggestHeader => 'Самый большой';
+
+  @override
+  String get wrappedStruggleHeader => 'Борьба';
+
+  @override
+  String get wrappedWinHeader => 'Победа';
+
+  @override
+  String get wrappedButYouPushedThroughEmoji => 'Но ты справился 💪';
+
+  @override
+  String get wrappedYouDidItEmoji => 'Ты сделал это! 🎉';
+
+  @override
+  String get wrappedHours => 'часов';
+
+  @override
+  String get wrappedActions => 'действий';
+
+  @override
+  String get multipleSpeakersDetected => 'Обнаружено несколько говорящих';
+
+  @override
+  String get multipleSpeakersDescription =>
+      'Похоже, что в записи несколько говорящих. Убедитесь, что вы находитесь в тихом месте, и попробуйте снова.';
+
+  @override
+  String get invalidRecordingDetected => 'Обнаружена недействительная запись';
+
+  @override
+  String get notEnoughSpeechDescription =>
+      'Недостаточно речи обнаружено. Пожалуйста, говорите больше и попробуйте снова.';
+
+  @override
+  String get speechDurationDescription => 'Убедитесь, что вы говорите не менее 5 секунд и не более 90.';
+
+  @override
+  String get connectionLostDescription =>
+      'Соединение было прервано. Проверьте подключение к интернету и попробуйте снова.';
+
+  @override
+  String get howToTakeGoodSample => 'Как сделать хороший образец?';
+
+  @override
+  String get goodSampleInstructions =>
+      '1. Убедитесь, что вы находитесь в тихом месте.\n2. Говорите четко и естественно.\n3. Убедитесь, что ваше устройство находится в естественном положении на шее.\n\nПосле создания вы всегда можете улучшить его или сделать заново.';
+
+  @override
+  String get noDeviceConnectedUseMic => 'Устройство не подключено. Будет использоваться микрофон телефона.';
+
+  @override
+  String get doItAgain => 'Сделать снова';
+
+  @override
+  String get listenToSpeechProfile => 'Послушать мой голосовой профиль ➡️';
+
+  @override
+  String get recognizingOthers => 'Распознавание других 👀';
+
+  @override
+  String get keepGoingGreat => 'Продолжайте, у вас отлично получается';
+
+  @override
+  String get somethingWentWrongTryAgain => 'Что-то пошло не так! Пожалуйста, попробуйте позже.';
+
+  @override
+  String get uploadingVoiceProfile => 'Загрузка вашего голосового профиля....';
+
+  @override
+  String get memorizingYourVoice => 'Запоминание вашего голоса...';
+
+  @override
+  String get personalizingExperience => 'Персонализация вашего опыта...';
+
+  @override
+  String get keepSpeakingUntil100 => 'Продолжайте говорить до 100%.';
+
+  @override
+  String get greatJobAlmostThere => 'Отличная работа, почти готово';
+
+  @override
+  String get soCloseJustLittleMore => 'Так близко, ещё немного';
 }

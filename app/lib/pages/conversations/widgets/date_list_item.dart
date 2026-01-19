@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 
 class DateListItem extends StatelessWidget {
@@ -26,7 +27,7 @@ class DateListItem extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Text(
-            isYesterday ? 'Yesterday' : dateTimeFormat('MMM dd', date),
+            isYesterday ? context.l10n.yesterday : dateTimeFormat('MMM dd', date),
             style: const TextStyle(color: Colors.white, fontSize: 18),
           ),
         ],

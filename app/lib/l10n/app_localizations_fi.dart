@@ -910,7 +910,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get audioDataReceived => 'Ääniaineisto vastaanotettu';
 
   @override
-  String get intervalSeconds => 'Aikaväli (sekunteina)';
+  String get intervalSeconds => 'Aikaväli (sekuntia)';
 
   @override
   String get daySummary => 'Päivän yhteenveto';
@@ -1197,7 +1197,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get refresh => 'Päivitä';
 
   @override
-  String get noUpcomingMeetings => 'Tulevia kokouksia ei löytynyt';
+  String get noUpcomingMeetings => 'Ei tulevia tapaamisia';
 
   @override
   String get checkingNextDays => 'Tarkistetaan seuraavat 30 päivää';
@@ -1799,7 +1799,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get maybeLater => 'Ehkä myöhemmin';
 
   @override
-  String get speechProfileIntro => 'Omin on opittava tavoitteesi ja äänesi. Voit muokata sitä myöhemmin.';
+  String get speechProfileIntro => 'Omin täytyy oppia tavoitteesi ja äänesi. Voit muokata sitä myöhemmin.';
 
   @override
   String get getStarted => 'Aloita';
@@ -2413,29 +2413,29 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String labelCopied(String label) {
-    return '$label copied';
+    return '$label kopioitu';
   }
 
   @override
   String get noApiKeysYet => 'Ei vielä API-avaimia. Luo yksi integroidaksesi sovelluksesi kanssa.';
 
   @override
-  String get createKeyToGetStarted => 'Create a key to get started';
+  String get createKeyToGetStarted => 'Luo avain aloittaaksesi';
 
   @override
   String get persona => 'Persona';
 
   @override
-  String get configureYourAiPersona => 'Configure your AI persona';
+  String get configureYourAiPersona => 'Määritä AI-persoonasi';
 
   @override
-  String get configureSttProvider => 'Configure STT provider';
+  String get configureSttProvider => 'Määritä STT-palveluntarjoaja';
 
   @override
-  String get setWhenConversationsAutoEnd => 'Set when conversations auto-end';
+  String get setWhenConversationsAutoEnd => 'Aseta milloin keskustelut päättyvät automaattisesti';
 
   @override
-  String get importDataFromOtherSources => 'Import data from other sources';
+  String get importDataFromOtherSources => 'Tuo tietoja muista lähteistä';
 
   @override
   String get debugAndDiagnostics => 'Virheenkorjaus ja diagnostiikka';
@@ -2447,30 +2447,30 @@ class AppLocalizationsFi extends AppLocalizations {
   String get helpsDiagnoseIssues => 'Auttaa ongelmien diagnosoinnissa';
 
   @override
-  String get exportStartedMessage => 'Export started. This may take a few seconds...';
+  String get exportStartedMessage => 'Vienti aloitettu. Tämä voi kestää muutaman sekunnin...';
 
   @override
-  String get exportConversationsToJson => 'Export conversations to a JSON file';
+  String get exportConversationsToJson => 'Vie keskustelut JSON-tiedostoon';
 
   @override
-  String get knowledgeGraphDeletedSuccess => 'Knowledge Graph deleted successfully';
+  String get knowledgeGraphDeletedSuccess => 'Tietograafi poistettu onnistuneesti';
 
   @override
   String failedToDeleteGraph(String error) {
-    return 'Failed to delete graph: $error';
+    return 'Graafin poistaminen epäonnistui: $error';
   }
 
   @override
-  String get clearAllNodesAndConnections => 'Clear all nodes and connections';
+  String get clearAllNodesAndConnections => 'Tyhjennä kaikki solmut ja yhteydet';
 
   @override
-  String get addToClaudeDesktopConfig => 'Add to claude_desktop_config.json';
+  String get addToClaudeDesktopConfig => 'Lisää claude_desktop_config.json-tiedostoon';
 
   @override
-  String get connectAiAssistantsToData => 'Connect AI assistants to your data';
+  String get connectAiAssistantsToData => 'Yhdistä AI-avustajat tietoihisi';
 
   @override
-  String get useYourMcpApiKey => 'Use your MCP API key';
+  String get useYourMcpApiKey => 'Käytä MCP API -avaintasi';
 
   @override
   String get realTimeTranscript => 'Reaaliaikainen litterointi';
@@ -2488,7 +2488,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get autoCreateSpeakers => 'Luo puhujat automaattisesti';
 
   @override
-  String get autoCreateWhenNameDetected => 'Auto-create when name detected';
+  String get autoCreateWhenNameDetected => 'Luo automaattisesti kun nimi havaitaan';
 
   @override
   String get followUpQuestions => 'Jatkokysymykset';
@@ -2500,13 +2500,13 @@ class AppLocalizationsFi extends AppLocalizations {
   String get goalTracker => 'Tavoitteiden seuranta';
 
   @override
-  String get trackPersonalGoalsOnHomepage => 'Track your personal goals on homepage';
+  String get trackPersonalGoalsOnHomepage => 'Seuraa henkilökohtaisia tavoitteitasi etusivulla';
 
   @override
   String get dailyReflection => 'Päivittäinen pohdinta';
 
   @override
-  String get get9PmReminderToReflect => 'Get a 9 PM reminder to reflect on your day';
+  String get get9PmReminderToReflect => 'Saa muistutus klo 21 päiväsi pohtimiseen';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'Toimintokohteen kuvaus ei voi olla tyhjä';
@@ -3821,13 +3821,13 @@ class AppLocalizationsFi extends AppLocalizations {
   String get about => 'Tietoja';
 
   @override
-  String get selectTime => 'Valitse Aika';
+  String get selectTime => 'Valitse aika';
 
   @override
   String get accountGroup => 'Tili';
 
   @override
-  String get signOutQuestion => 'Kirjaudu Ulos?';
+  String get signOutQuestion => 'Kirjaudu ulos?';
 
   @override
   String get signOutConfirmation => 'Haluatko varmasti kirjautua ulos?';
@@ -3884,7 +3884,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get includePersonalEventsDescription => 'Sisällytä henkilökohtaiset tapahtumat ilman osallistujia';
 
   @override
-  String get upcomingMeetings => 'TULEVAT KOKOUKSET';
+  String get upcomingMeetings => 'Tulevat tapaamiset';
 
   @override
   String get checkingNext7Days => 'Tarkistetaan seuraavat 7 päivää';
@@ -4761,4 +4761,923 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get noSpecificDataAccessConfigured => 'Ei määritettyä tietojen käyttöoikeutta.';
+
+  @override
+  String get basicPlanDescription => '1 200 premium-minuuttia + rajoittamaton laitteella';
+
+  @override
+  String get minutes => 'minuuttia';
+
+  @override
+  String get omiHas => 'Omilla on:';
+
+  @override
+  String get premiumMinutesUsed => 'Premium-minuutit käytetty.';
+
+  @override
+  String get setupOnDevice => 'Määritä laitteella';
+
+  @override
+  String get forUnlimitedFreeTranscription => 'rajattomaan ilmaiseen litterointiin.';
+
+  @override
+  String premiumMinsLeft(int count) {
+    return '$count premium-minuuttia jäljellä.';
+  }
+
+  @override
+  String get alwaysAvailable => 'aina käytettävissä.';
+
+  @override
+  String get importHistory => 'Tuontihistoria';
+
+  @override
+  String get noImportsYet => 'Ei tuonteja vielä';
+
+  @override
+  String get selectZipFileToImport => 'Valitse tuotava .zip-tiedosto!';
+
+  @override
+  String get otherDevicesComingSoon => 'Muut laitteet tulossa pian';
+
+  @override
+  String get deleteAllLimitlessConversations => 'Poista kaikki Limitless-keskustelut?';
+
+  @override
+  String get deleteAllLimitlessWarning =>
+      'Tämä poistaa pysyvästi kaikki Limitlessistä tuodut keskustelut. Tätä toimintoa ei voi kumota.';
+
+  @override
+  String deletedLimitlessConversations(int count) {
+    return 'Poistettu $count Limitless-keskustelua';
+  }
+
+  @override
+  String get failedToDeleteConversations => 'Keskustelujen poistaminen epäonnistui';
+
+  @override
+  String get deleteImportedData => 'Poista tuodut tiedot';
+
+  @override
+  String get statusPending => 'Odottaa';
+
+  @override
+  String get statusProcessing => 'Käsitellään';
+
+  @override
+  String get statusCompleted => 'Valmis';
+
+  @override
+  String get statusFailed => 'Epäonnistui';
+
+  @override
+  String nConversations(int count) {
+    return '$count keskustelua';
+  }
+
+  @override
+  String get pleaseEnterName => 'Anna nimi';
+
+  @override
+  String get nameMustBeBetweenCharacters => 'Nimen on oltava 2-40 merkkiä';
+
+  @override
+  String get deleteSampleQuestion => 'Poista näyte?';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return 'Haluatko varmasti poistaa käyttäjän $name näytteen?';
+  }
+
+  @override
+  String get confirmDeletion => 'Vahvista poisto';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return 'Haluatko varmasti poistaa käyttäjän $name? Tämä poistaa myös kaikki liittyvät puhenäytteet.';
+  }
+
+  @override
+  String get howItWorksTitle => 'Miten se toimii?';
+
+  @override
+  String get howPeopleWorks =>
+      'Kun henkilö on luotu, voit mennä keskustelun transkriptioon ja määrittää heille vastaavat segmentit, näin Omi voi tunnistaa myös heidän puheensa!';
+
+  @override
+  String get tapToDelete => 'Napauta poistaaksesi';
+
+  @override
+  String get newTag => 'UUSI';
+
+  @override
+  String get needHelpChatWithUs => 'Tarvitsetko apua? Keskustele kanssamme';
+
+  @override
+  String get localStorageEnabled => 'Paikallinen tallennustila käytössä';
+
+  @override
+  String get localStorageDisabled => 'Paikallinen tallennustila pois käytöstä';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return 'Asetusten päivitys epäonnistui: $error';
+  }
+
+  @override
+  String get privacyNotice => 'Tietosuojailmoitus';
+
+  @override
+  String get recordingsMayCaptureOthers =>
+      'Tallenteet voivat tallentaa muiden ääniä. Varmista, että sinulla on kaikkien osallistujien suostumus ennen käyttöönottoa.';
+
+  @override
+  String get enable => 'Ota käyttöön';
+
+  @override
+  String get storeAudioOnPhone => 'Tallenna ääni puhelimeen';
+
+  @override
+  String get on => 'Päällä';
+
+  @override
+  String get storeAudioDescription =>
+      'Säilytä kaikki äänitallenteet paikallisesti puhelimessasi. Kun pois käytöstä, vain epäonnistuneet lataukset säilytetään tallennustilan säästämiseksi.';
+
+  @override
+  String get enableLocalStorage => 'Ota paikallinen tallennustila käyttöön';
+
+  @override
+  String get cloudStorageEnabled => 'Pilvitallennustila käytössä';
+
+  @override
+  String get cloudStorageDisabled => 'Pilvitallennustila pois käytöstä';
+
+  @override
+  String get enableCloudStorage => 'Ota pilvitallennustila käyttöön';
+
+  @override
+  String get storeAudioOnCloud => 'Tallenna ääni pilveen';
+
+  @override
+  String get cloudStorageDialogMessage =>
+      'Reaaliaikaiset tallenteet tallennetaan yksityiseen pilvitallennustilaan puhuessasi.';
+
+  @override
+  String get storeAudioCloudDescription =>
+      'Tallenna reaaliaikaiset tallenteet yksityiseen pilvitallennustilaan puhuessasi. Ääni tallennetaan turvallisesti reaaliajassa.';
+
+  @override
+  String get downloadingFirmware => 'Ladataan laiteohjelmistoa';
+
+  @override
+  String get installingFirmware => 'Asennetaan laiteohjelmistoa';
+
+  @override
+  String get firmwareUpdateWarning => 'Älä sulje sovellusta tai sammuta laitetta. Tämä voi vaurioittaa laitettasi.';
+
+  @override
+  String get firmwareUpdated => 'Laiteohjelmisto päivitetty';
+
+  @override
+  String restartDeviceToComplete(Object deviceName) {
+    return 'Käynnistä $deviceName uudelleen päivityksen viimeistelemiseksi.';
+  }
+
+  @override
+  String get yourDeviceIsUpToDate => 'Laitteesi on ajan tasalla';
+
+  @override
+  String get currentVersion => 'Nykyinen versio';
+
+  @override
+  String get latestVersion => 'Uusin versio';
+
+  @override
+  String get whatsNew => 'Uutta';
+
+  @override
+  String get installUpdate => 'Asenna päivitys';
+
+  @override
+  String get updateNow => 'Päivitä nyt';
+
+  @override
+  String get updateGuide => 'Päivitysopas';
+
+  @override
+  String get checkingForUpdates => 'Tarkistetaan päivityksiä';
+
+  @override
+  String get checkingFirmwareVersion => 'Tarkistetaan laiteohjelmiston versiota...';
+
+  @override
+  String get firmwareUpdate => 'Laiteohjelmistopäivitys';
+
+  @override
+  String get payments => 'Maksut';
+
+  @override
+  String get connectPaymentMethodInfo =>
+      'Yhdistä maksutapa alla aloittaaksesi maksujen vastaanottamisen sovelluksistasi.';
+
+  @override
+  String get selectedPaymentMethod => 'Valittu maksutapa';
+
+  @override
+  String get availablePaymentMethods => 'Käytettävissä olevat maksutavat';
+
+  @override
+  String get activeStatus => 'Aktiivinen';
+
+  @override
+  String get connectedStatus => 'Yhdistetty';
+
+  @override
+  String get notConnectedStatus => 'Ei yhdistetty';
+
+  @override
+  String get setActive => 'Aseta aktiiviseksi';
+
+  @override
+  String get getPaidThroughStripe => 'Saa maksuja sovellustesi myynnistä Stripen kautta';
+
+  @override
+  String get monthlyPayouts => 'Kuukausittaiset maksut';
+
+  @override
+  String get monthlyPayoutsDescription => 'Saat kuukausittaiset maksut suoraan tilillesi, kun saavutat 10 \$ ansiot';
+
+  @override
+  String get secureAndReliable => 'Turvallinen ja luotettava';
+
+  @override
+  String get stripeSecureDescription => 'Stripe varmistaa sovelluksesi tulojen turvalliset ja oikea-aikaiset siirrot';
+
+  @override
+  String get selectYourCountry => 'Valitse maasi';
+
+  @override
+  String get countrySelectionPermanent => 'Maavalinasi on pysyvä eikä sitä voi muuttaa myöhemmin.';
+
+  @override
+  String get byClickingConnectNow => 'Napsauttamalla \"Yhdistä nyt\" hyväksyt';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Stripe Connected Account -sopimus';
+
+  @override
+  String get errorConnectingToStripe => 'Virhe yhdistettäessä Stripeen! Yritä myöhemmin uudelleen.';
+
+  @override
+  String get connectingYourStripeAccount => 'Stripe-tilisi yhdistäminen';
+
+  @override
+  String get stripeOnboardingInstructions =>
+      'Suorita Stripe-käyttöönottoprosessi selaimessasi. Tämä sivu päivittyy automaattisesti, kun prosessi on valmis.';
+
+  @override
+  String get failedTryAgain => 'Epäonnistui? Yritä uudelleen';
+
+  @override
+  String get illDoItLater => 'Teen sen myöhemmin';
+
+  @override
+  String get successfullyConnected => 'Yhdistetty onnistuneesti!';
+
+  @override
+  String get stripeReadyForPayments =>
+      'Stripe-tilisi on nyt valmis vastaanottamaan maksuja. Voit alkaa ansaita sovellustesi myynnistä heti.';
+
+  @override
+  String get updateStripeDetails => 'Päivitä Stripe-tiedot';
+
+  @override
+  String get errorUpdatingStripeDetails => 'Virhe Stripe-tietojen päivityksessä! Yritä myöhemmin uudelleen.';
+
+  @override
+  String get updatePayPal => 'Päivitä PayPal';
+
+  @override
+  String get setUpPayPal => 'Määritä PayPal';
+
+  @override
+  String get updatePayPalAccountDetails => 'Päivitä PayPal-tilisi tiedot';
+
+  @override
+  String get connectPayPalToReceivePayments =>
+      'Yhdistä PayPal-tilisi aloittaaksesi maksujen vastaanottamisen sovelluksistasi';
+
+  @override
+  String get paypalEmail => 'PayPal-sähköposti';
+
+  @override
+  String get paypalMeLink => 'PayPal.me-linkki';
+
+  @override
+  String get stripeRecommendation =>
+      'Jos Stripe on saatavilla maassasi, suosittelemme vahvasti sen käyttöä nopeampien ja helpompien maksujen saamiseksi.';
+
+  @override
+  String get updatePayPalDetails => 'Päivitä PayPal-tiedot';
+
+  @override
+  String get savePayPalDetails => 'Tallenna PayPal-tiedot';
+
+  @override
+  String get pleaseEnterPayPalEmail => 'Syötä PayPal-sähköpostisi';
+
+  @override
+  String get pleaseEnterPayPalMeLink => 'Syötä PayPal.me-linkkisi';
+
+  @override
+  String get doNotIncludeHttpInLink => 'Älä sisällytä http, https tai www linkkiin';
+
+  @override
+  String get pleaseEnterValidPayPalMeLink => 'Syötä kelvollinen PayPal.me-linkki';
+
+  @override
+  String get pleaseEnterValidEmail => 'Anna kelvollinen sähköpostiosoite';
+
+  @override
+  String get syncingYourRecordings => 'Synkronoidaan tallenteitasi';
+
+  @override
+  String get syncYourRecordings => 'Synkronoi tallenteet';
+
+  @override
+  String get syncNow => 'Synkronoi nyt';
+
+  @override
+  String get error => 'Virhe';
+
+  @override
+  String get speechSamples => 'Puhenäytteet';
+
+  @override
+  String additionalSampleIndex(String index) {
+    return 'Lisänäyte $index';
+  }
+
+  @override
+  String durationSeconds(String seconds) {
+    return 'Kesto: $seconds sekuntia';
+  }
+
+  @override
+  String get additionalSpeechSampleRemoved => 'Lisäpuhenäyte poistettu';
+
+  @override
+  String get consentDataMessage =>
+      'Jatkamalla kaikki tämän sovelluksen kanssa jakamasi tiedot (mukaan lukien keskustelusi, tallenteet ja henkilökohtaiset tietosi) tallennetaan turvallisesti palvelimillemme tarjotaksemme sinulle tekoälypohjaisia oivalluksia ja mahdollistaaksemme kaikki sovelluksen ominaisuudet.';
+
+  @override
+  String get tasksEmptyStateMessage =>
+      'Keskusteluistasi saadut tehtävät näkyvät täällä.\nNapauta + luodaksesi manuaalisesti.';
+
+  @override
+  String get clearChatAction => 'Tyhjennä keskustelu';
+
+  @override
+  String get enableApps => 'Ota sovellukset käyttöön';
+
+  @override
+  String get omiAppName => 'Omi';
+
+  @override
+  String get showMore => 'näytä lisää ↓';
+
+  @override
+  String get showLess => 'näytä vähemmän ↑';
+
+  @override
+  String get loadingYourRecording => 'Ladataan tallennetta...';
+
+  @override
+  String get photoDiscardedMessage => 'Tämä kuva hylättiin, koska se ei ollut merkittävä.';
+
+  @override
+  String get analyzing => 'Analysoidaan...';
+
+  @override
+  String get searchCountries => 'Etsi maita...';
+
+  @override
+  String get checkingAppleWatch => 'Tarkistetaan Apple Watchia...';
+
+  @override
+  String get installOmiOnAppleWatch => 'Asenna Omi\nApple Watchiin';
+
+  @override
+  String get installOmiOnAppleWatchDescription =>
+      'Käyttääksesi Apple Watchia Omin kanssa, sinun on ensin asennettava Omi-sovellus kelloosi.';
+
+  @override
+  String get openOmiOnAppleWatch => 'Avaa Omi\nApple Watchissa';
+
+  @override
+  String get openOmiOnAppleWatchDescription =>
+      'Omi-sovellus on asennettu Apple Watchiin. Avaa se ja napauta Aloita aloittaaksesi.';
+
+  @override
+  String get openWatchApp => 'Avaa Watch-sovellus';
+
+  @override
+  String get iveInstalledAndOpenedTheApp => 'Olen asentanut ja avannut sovelluksen';
+
+  @override
+  String get unableToOpenWatchApp =>
+      'Apple Watch -sovellusta ei voi avata. Avaa Watch-sovellus manuaalisesti Apple Watchissa ja asenna Omi \"Saatavilla olevat sovellukset\" -osiosta.';
+
+  @override
+  String get appleWatchConnectedSuccessfully => 'Apple Watch yhdistetty!';
+
+  @override
+  String get appleWatchNotReachable =>
+      'Apple Watch ei ole vielä tavoitettavissa. Varmista, että Omi-sovellus on auki kellossasi.';
+
+  @override
+  String errorCheckingConnection(String error) {
+    return 'Virhe yhteyden tarkistuksessa: $error';
+  }
+
+  @override
+  String get muted => 'Mykistetty';
+
+  @override
+  String get processNow => 'Käsittele nyt';
+
+  @override
+  String get finishedConversation => 'Keskustelu päättynyt?';
+
+  @override
+  String get stopRecordingConfirmation =>
+      'Haluatko varmasti lopettaa nauhoituksen ja tehdä yhteenvedon keskustelusta nyt?';
+
+  @override
+  String get conversationEndsManually => 'Keskustelu päättyy vain manuaalisesti.';
+
+  @override
+  String conversationSummarizedAfterMinutes(int minutes, String suffix) {
+    return 'Keskustelu tiivistetään $minutes minuuti$suffix hiljaisuuden jälkeen.';
+  }
+
+  @override
+  String get dontAskAgain => 'Älä kysy uudelleen';
+
+  @override
+  String get waitingForTranscriptOrPhotos => 'Odotetaan litterointia tai kuvia...';
+
+  @override
+  String get noSummaryYet => 'Ei yhteenvetoa vielä';
+
+  @override
+  String hints(String text) {
+    return 'Vihjeet: $text';
+  }
+
+  @override
+  String get testConversationPrompt => 'Testaa keskustelukehotetta';
+
+  @override
+  String get prompt => 'Kehote';
+
+  @override
+  String get result => 'Tulos';
+
+  @override
+  String get compareTranscripts => 'Vertaa litterointeja';
+
+  @override
+  String get notHelpful => 'Ei hyödyllinen';
+
+  @override
+  String get exportTasksWithOneTap => 'Vie tehtävät yhdellä napautuksella!';
+
+  @override
+  String get inProgress => 'Käynnissä';
+
+  @override
+  String get photos => 'Kuvat';
+
+  @override
+  String get rawData => 'Raakadata';
+
+  @override
+  String get content => 'Sisältö';
+
+  @override
+  String get noContentToDisplay => 'Ei sisältöä näytettäväksi';
+
+  @override
+  String get noSummary => 'Ei yhteenvetoa';
+
+  @override
+  String get updateOmiFirmware => 'Päivitä omin laiteohjelmisto';
+
+  @override
+  String get anErrorOccurredTryAgain => 'Tapahtui virhe. Yritä uudelleen.';
+
+  @override
+  String get welcomeBackSimple => 'Tervetuloa takaisin';
+
+  @override
+  String get addVocabularyDescription => 'Lisää sanoja, jotka Omin tulisi tunnistaa litteroinnin aikana.';
+
+  @override
+  String get enterWordsCommaSeparated => 'Syötä sanat (pilkulla erotettuna)';
+
+  @override
+  String get whenToReceiveDailySummary => 'Milloin haluat päivittäisen yhteenvedon';
+
+  @override
+  String get checkingNextSevenDays => 'Tarkistetaan seuraavat 7 päivää';
+
+  @override
+  String failedToDeleteError(String error) {
+    return 'Poistaminen epäonnistui: $error';
+  }
+
+  @override
+  String get developerApiKeys => 'Kehittäjän API-avaimet';
+
+  @override
+  String get noApiKeysCreateOne => 'Ei API-avaimia. Luo yksi aloittaaksesi.';
+
+  @override
+  String get commandRequired => '⌘ vaaditaan';
+
+  @override
+  String get spaceKey => 'Välilyönti';
+
+  @override
+  String loadMoreRemaining(String count) {
+    return 'Lataa lisää ($count jäljellä)';
+  }
+
+  @override
+  String wrappedTopPercentUser(String percentile) {
+    return 'Top $percentile% käyttäjä';
+  }
+
+  @override
+  String get wrappedMinutes => 'minuuttia';
+
+  @override
+  String get wrappedConversations => 'keskustelua';
+
+  @override
+  String get wrappedDaysActive => 'aktiivista päivää';
+
+  @override
+  String get wrappedYouTalkedAbout => 'Puhuit aiheesta';
+
+  @override
+  String get wrappedActionItems => 'Tehtävät';
+
+  @override
+  String get wrappedTasksCreated => 'luotua tehtävää';
+
+  @override
+  String get wrappedCompleted => 'valmista';
+
+  @override
+  String wrappedCompletionRate(String rate) {
+    return '$rate% valmistumisaste';
+  }
+
+  @override
+  String get wrappedYourTopDays => 'Parhaat päiväsi';
+
+  @override
+  String get wrappedBestMoments => 'Parhaat hetket';
+
+  @override
+  String get wrappedMyBuddies => 'Ystäväni';
+
+  @override
+  String get wrappedCouldntStopTalkingAbout => 'En voinut lopettaa puhumista';
+
+  @override
+  String get wrappedShow => 'SARJA';
+
+  @override
+  String get wrappedMovie => 'ELOKUVA';
+
+  @override
+  String get wrappedBook => 'KIRJA';
+
+  @override
+  String get wrappedCelebrity => 'JULKKIS';
+
+  @override
+  String get wrappedFood => 'RUOKA';
+
+  @override
+  String get wrappedMovieRecs => 'Elokuvasuosituksia ystäville';
+
+  @override
+  String get wrappedBiggest => 'Suurin';
+
+  @override
+  String get wrappedStruggle => 'Haaste';
+
+  @override
+  String get wrappedButYouPushedThrough => 'Mutta selvisit siitä 💪';
+
+  @override
+  String get wrappedWin => 'Voitto';
+
+  @override
+  String get wrappedYouDidIt => 'Onnistuit! 🎉';
+
+  @override
+  String get wrappedTopPhrases => 'Top 5 lausetta';
+
+  @override
+  String get wrappedMins => 'min';
+
+  @override
+  String get wrappedConvos => 'keskustelua';
+
+  @override
+  String get wrappedDays => 'päivää';
+
+  @override
+  String get wrappedMyBuddiesLabel => 'YSTÄVÄNI';
+
+  @override
+  String get wrappedObsessionsLabel => 'PAKKOMIELTEENI';
+
+  @override
+  String get wrappedStruggleLabel => 'HAASTE';
+
+  @override
+  String get wrappedWinLabel => 'VOITTO';
+
+  @override
+  String get wrappedTopPhrasesLabel => 'TOP LAUSEET';
+
+  @override
+  String get wrappedLetsHitRewind => 'Kelataan taaksepäin vuotesi';
+
+  @override
+  String get wrappedGenerateMyWrapped => 'Luo Wrapped';
+
+  @override
+  String get wrappedProcessingDefault => 'Käsitellään...';
+
+  @override
+  String get wrappedCreatingYourStory => 'Luodaan\n2025 tarinaasi...';
+
+  @override
+  String get wrappedSomethingWentWrong => 'Jokin meni\npieleen';
+
+  @override
+  String get wrappedAnErrorOccurred => 'Tapahtui virhe';
+
+  @override
+  String get wrappedTryAgain => 'Yritä uudelleen';
+
+  @override
+  String get wrappedNoDataAvailable => 'Ei tietoja saatavilla';
+
+  @override
+  String get wrappedOmiLifeRecap => 'Omi elämän yhteenveto';
+
+  @override
+  String get wrappedSwipeUpToBegin => 'Pyyhkäise ylös aloittaaksesi';
+
+  @override
+  String get wrappedShareText => 'Vuoteni 2025, tallentanut Omi ✨ omi.me/wrapped';
+
+  @override
+  String get wrappedFailedToShare => 'Jakaminen epäonnistui. Yritä uudelleen.';
+
+  @override
+  String get wrappedFailedToStartGeneration => 'Luonnin aloitus epäonnistui. Yritä uudelleen.';
+
+  @override
+  String get wrappedStarting => 'Aloitetaan...';
+
+  @override
+  String get wrappedShare => 'Jaa';
+
+  @override
+  String get wrappedShareYourWrapped => 'Jaa Wrapped';
+
+  @override
+  String get wrappedMy2025 => 'Vuoteni 2025';
+
+  @override
+  String get wrappedRememberedByOmi => 'tallentanut Omi';
+
+  @override
+  String get wrappedMostFunDay => 'Hauskin';
+
+  @override
+  String get wrappedMostProductiveDay => 'Tuottavin';
+
+  @override
+  String get wrappedMostIntenseDay => 'Intensiivisin';
+
+  @override
+  String get wrappedFunniestMoment => 'Hauskin';
+
+  @override
+  String get wrappedMostCringeMoment => 'Noloin';
+
+  @override
+  String get wrappedMinutesLabel => 'minuuttia';
+
+  @override
+  String get wrappedConversationsLabel => 'keskustelua';
+
+  @override
+  String get wrappedDaysActiveLabel => 'aktiivista päivää';
+
+  @override
+  String get wrappedTasksGenerated => 'tehtävää luotu';
+
+  @override
+  String get wrappedTasksCompleted => 'tehtävää suoritettu';
+
+  @override
+  String get wrappedTopFivePhrases => 'Top 5 lausetta';
+
+  @override
+  String get wrappedAGreatDay => 'Hieno päivä';
+
+  @override
+  String get wrappedGettingItDone => 'Asian hoitaminen';
+
+  @override
+  String get wrappedAChallenge => 'Haaste';
+
+  @override
+  String get wrappedAHilariousMoment => 'Hauska hetki';
+
+  @override
+  String get wrappedThatAwkwardMoment => 'Se kiusallinen hetki';
+
+  @override
+  String get wrappedYouHadFunnyMoments => 'Sinulla oli hauskoja hetkiä tänä vuonna!';
+
+  @override
+  String get wrappedWeveAllBeenThere => 'Olemme kaikki olleet siellä!';
+
+  @override
+  String get wrappedFriend => 'Ystävä';
+
+  @override
+  String get wrappedYourBuddy => 'Kaverisi!';
+
+  @override
+  String get wrappedNotMentioned => 'Ei mainittu';
+
+  @override
+  String get wrappedTheHardPart => 'Vaikea osuus';
+
+  @override
+  String get wrappedPersonalGrowth => 'Henkilökohtainen kasvu';
+
+  @override
+  String get wrappedFunDay => 'Hauska';
+
+  @override
+  String get wrappedProductiveDay => 'Tuottava';
+
+  @override
+  String get wrappedIntenseDay => 'Intensiivinen';
+
+  @override
+  String get wrappedFunnyMomentTitle => 'Hauska hetki';
+
+  @override
+  String get wrappedCringeMomentTitle => 'Nolo hetki';
+
+  @override
+  String get wrappedYouTalkedAboutBadge => 'Puhuit aiheesta';
+
+  @override
+  String get wrappedCompletedLabel => 'Suoritettu';
+
+  @override
+  String get wrappedMyBuddiesCard => 'Kaverini';
+
+  @override
+  String get wrappedBuddiesLabel => 'KAVERIT';
+
+  @override
+  String get wrappedObsessionsLabelUpper => 'PAKKOMIELTET';
+
+  @override
+  String get wrappedStruggleLabelUpper => 'KAMPPAILU';
+
+  @override
+  String get wrappedWinLabelUpper => 'VOITTO';
+
+  @override
+  String get wrappedTopPhrasesLabelUpper => 'TOP LAUSEET';
+
+  @override
+  String get wrappedYourHeader => 'Sinun';
+
+  @override
+  String get wrappedTopDaysHeader => 'Parhaat päivät';
+
+  @override
+  String get wrappedYourTopDaysBadge => 'Parhaat päiväsi';
+
+  @override
+  String get wrappedBestHeader => 'Parhaat';
+
+  @override
+  String get wrappedMomentsHeader => 'Hetket';
+
+  @override
+  String get wrappedBestMomentsBadge => 'Parhaat hetket';
+
+  @override
+  String get wrappedBiggestHeader => 'Suurin';
+
+  @override
+  String get wrappedStruggleHeader => 'Kamppailu';
+
+  @override
+  String get wrappedWinHeader => 'Voitto';
+
+  @override
+  String get wrappedButYouPushedThroughEmoji => 'Mutta selvisit siitä 💪';
+
+  @override
+  String get wrappedYouDidItEmoji => 'Teit sen! 🎉';
+
+  @override
+  String get wrappedHours => 'tuntia';
+
+  @override
+  String get wrappedActions => 'toimintoa';
+
+  @override
+  String get multipleSpeakersDetected => 'Useita puhujia havaittu';
+
+  @override
+  String get multipleSpeakersDescription =>
+      'Näyttää siltä, että nauhoituksessa on useita puhujia. Varmista, että olet hiljaisessa paikassa ja yritä uudelleen.';
+
+  @override
+  String get invalidRecordingDetected => 'Virheellinen nauhoitus havaittu';
+
+  @override
+  String get notEnoughSpeechDescription => 'Puhetta ei havaittu tarpeeksi. Puhu enemmän ja yritä uudelleen.';
+
+  @override
+  String get speechDurationDescription => 'Varmista, että puhut vähintään 5 sekuntia ja enintään 90.';
+
+  @override
+  String get connectionLostDescription => 'Yhteys katkesi. Tarkista internet-yhteytesi ja yritä uudelleen.';
+
+  @override
+  String get howToTakeGoodSample => 'Miten ottaa hyvä näyte?';
+
+  @override
+  String get goodSampleInstructions =>
+      '1. Varmista, että olet hiljaisessa paikassa.\n2. Puhu selkeästi ja luonnollisesti.\n3. Varmista, että laitteesi on luonnollisessa asennossaan kaulallasi.\n\nKun se on luotu, voit aina parantaa sitä tai tehdä sen uudelleen.';
+
+  @override
+  String get noDeviceConnectedUseMic => 'Laitetta ei ole yhdistetty. Käytetään puhelimen mikrofonia.';
+
+  @override
+  String get doItAgain => 'Tee uudelleen';
+
+  @override
+  String get listenToSpeechProfile => 'Kuuntele ääniprofiiliani ➡️';
+
+  @override
+  String get recognizingOthers => 'Muiden tunnistaminen 👀';
+
+  @override
+  String get keepGoingGreat => 'Jatka, pärjäät loistavasti';
+
+  @override
+  String get somethingWentWrongTryAgain => 'Jokin meni pieleen! Yritä myöhemmin uudelleen.';
+
+  @override
+  String get uploadingVoiceProfile => 'Ladataan ääniprofiiliasi....';
+
+  @override
+  String get memorizingYourVoice => 'Tallennetaan ääntäsi...';
+
+  @override
+  String get personalizingExperience => 'Mukautetaan kokemustasi...';
+
+  @override
+  String get keepSpeakingUntil100 => 'Jatka puhumista kunnes saavutat 100%.';
+
+  @override
+  String get greatJobAlmostThere => 'Hienoa työtä, olet melkein valmis';
+
+  @override
+  String get soCloseJustLittleMore => 'Niin lähellä, vielä vähän';
 }

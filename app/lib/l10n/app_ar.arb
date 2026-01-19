@@ -867,7 +867,7 @@
   "@debugDiagnostics": {
     "description": "Debug & Diagnostics section header"
   },
-  "endpointUrl": "عنوان URL للنقطة النهائية",
+  "endpointUrl": "رابط نقطة النهاية",
   "@endpointUrl": {
     "description": "Endpoint URL label"
   },
@@ -1074,7 +1074,7 @@
   "debugLogs": "سجلات التصحيح",
   "debugLogsAutoDelete": "يتم الحذف التلقائي بعد 3 أيام.",
   "debugLogsDesc": "يساعد في تشخيص المشاكل",
-  "noLogFilesFound": "لم يتم العثور على ملفات سجل.",
+  "noLogFilesFound": "لم يتم العثور على ملفات السجل.",
   "omiDebugLog": "سجل تصحيح Omi",
   "logShared": "تمت مشاركة السجل",
   "selectLogFile": "حدد ملف السجل",
@@ -1118,7 +1118,7 @@
   "transcriptReceived": "تم استلام النسخ",
   "audioBytes": "بايتات الصوت",
   "audioDataReceived": "تم استلام بيانات الصوت",
-  "intervalSeconds": "الفاصل الزمني (ثوان)",
+  "intervalSeconds": "الفاصل الزمني (بالثواني)",
   "daySummary": "ملخص اليوم",
   "summaryGenerated": "تم إنشاء الملخص",
   "claudeDesktop": "Claude Desktop",
@@ -1293,7 +1293,7 @@
   "showEventsNoParticipantsDesc": "عند التمكين، يعرض القادم الأحداث بدون مشاركين أو رابط فيديو.",
   "yourMeetings": "اجتماعاتك",
   "refresh": "تحديث",
-  "noUpcomingMeetings": "لم يتم العثور على اجتماعات قادمة",
+  "noUpcomingMeetings": "لا توجد اجتماعات قادمة",
   "checkingNextDays": "التحقق من الـ 30 يوماً القادمة",
   "tomorrow": "غداً",
   "googleCalendarComingSoon": "تكامل تقويم Google قريباً!",
@@ -1728,7 +1728,7 @@
   "@maybeLater": {
     "description": "Button text to dismiss the review prompt"
   },
-  "speechProfileIntro": "يحتاج Omi إلى تعلم أهدافك وصوتك. ستتمكن من تعديله لاحقاً.",
+  "speechProfileIntro": "يحتاج Omi إلى تعلم أهدافك وصوتك. ستتمكن من تعديله لاحقًا.",
   "@speechProfileIntro": {
     "description": "Introduction text for speech profile creation"
   },
@@ -2372,8 +2372,8 @@
   "noApiKeysYet": "لا توجد مفاتيح API بعد",
   "createKeyToGetStarted": "أنشئ مفتاحًا للبدء",
   "persona": "الشخصية",
-  "configureYourAiPersona": "قم بتكوين شخصيتك الذكية",
-  "configureSttProvider": "تكوين موفر STT",
+  "configureYourAiPersona": "قم بتكوين شخصية الذكاء الاصطناعي الخاصة بك",
+  "configureSttProvider": "تكوين مزود تحويل الكلام إلى نص",
   "setWhenConversationsAutoEnd": "حدد متى تنتهي المحادثات تلقائيًا",
   "importDataFromOtherSources": "استيراد البيانات من مصادر أخرى",
   "debugAndDiagnostics": "التصحيح والتشخيص",
@@ -2381,11 +2381,11 @@
   "helpsDiagnoseIssues": "يساعد في تشخيص المشكلات",
   "exportStartedMessage": "بدأ التصدير. قد يستغرق هذا بضع ثوانٍ...",
   "exportConversationsToJson": "تصدير المحادثات إلى ملف JSON",
-  "knowledgeGraphDeletedSuccess": "تم حذف الرسم البياني للمعرفة بنجاح",
-  "failedToDeleteGraph": "فشل حذف الرسم البياني: {error}",
+  "knowledgeGraphDeletedSuccess": "تم حذف الرسم البياني المعرفي بنجاح",
+  "failedToDeleteGraph": "فشل في حذف الرسم البياني: {error}",
   "clearAllNodesAndConnections": "مسح جميع العقد والاتصالات",
-  "addToClaudeDesktopConfig": "إضافة إلى claude_desktop_config.json",
-  "connectAiAssistantsToData": "ربط مساعدي الذكاء الاصطناعي ببياناتك",
+  "addToClaudeDesktopConfig": "أضف إلى claude_desktop_config.json",
+  "connectAiAssistantsToData": "اربط مساعدي الذكاء الاصطناعي ببياناتك",
   "useYourMcpApiKey": "استخدم مفتاح MCP API الخاص بك",
   "realTimeTranscript": "نسخ في الوقت الفعلي",
   "experimental": "تجريبي",
@@ -2398,7 +2398,7 @@
   "goalTracker": "متتبع الأهداف",
   "trackPersonalGoalsOnHomepage": "تتبع أهدافك الشخصية على الصفحة الرئيسية",
   "dailyReflection": "التفكير اليومي",
-  "get9PmReminderToReflect": "احصل على تذكير في الساعة 9 مساءً للتفكير في يومك",
+  "get9PmReminderToReflect": "احصل على تذكير في الساعة 9 مساءً للتأمل في يومك",
   "actionItemDescriptionCannotBeEmpty": "لا يمكن أن يكون وصف عنصر الإجراء فارغًا",
   "saved": "تم الحفظ",
   "overdue": "متأخر",
@@ -2426,7 +2426,7 @@
   "back": "رجوع",
   "keyboardShortcuts": "اختصارات لوحة المفاتيح",
   "toggleControlBar": "تبديل شريط التحكم",
-  "pressKeys": "اضغط على المفاتيح...",
+  "pressKeys": "اضغط المفاتيح...",
   "cmdRequired": "⌘ مطلوب",
   "invalidKey": "مفتاح غير صالح",
   "space": "مسافة",
@@ -2929,7 +2929,7 @@
   "selectTime": "اختر الوقت",
   "accountGroup": "الحساب",
   "signOutQuestion": "تسجيل الخروج؟",
-  "signOutConfirmation": "هل أنت متأكد من تسجيل الخروج؟",
+  "signOutConfirmation": "هل أنت متأكد من رغبتك في تسجيل الخروج؟",
   "customVocabularyHeader": "المفردات المخصصة",
   "addWordsDescription": "أضف كلمات يجب أن يتعرف عليها Omi أثناء النسخ.",
   "enterWordsHint": "أدخل الكلمات (مفصولة بفواصل)",
@@ -2956,7 +2956,7 @@
   "setConversationEndDescription": "حدد متى تنتهي المحادثات تلقائيًا",
   "importDataDescription": "استيراد البيانات من مصادر أخرى",
   "exportConversationsDescription": "تصدير المحادثات إلى JSON",
-  "exportingConversations": "تصدير المحادثات...",
+  "exportingConversations": "جاري تصدير المحادثات...",
   "clearNodesDescription": "مسح جميع العقد والاتصالات",
   "deleteKnowledgeGraphQuestion": "حذف رسم المعرفة؟",
   "deleteKnowledgeGraphWarning": "سيؤدي هذا إلى حذف جميع بيانات رسم المعرفة المشتقة. تظل ذكرياتك الأصلية آمنة.",
@@ -3312,5 +3312,294 @@
   "triggeredByType": "يتم تشغيله بواسطة {triggerType}",
   "accessesAndTriggeredBy": "{accessDescription} و{triggerDescription}.",
   "isTriggeredBy": "{triggerDescription}.",
-  "noSpecificDataAccessConfigured": "لم يتم تكوين وصول محدد للبيانات."
+  "noSpecificDataAccessConfigured": "لم يتم تكوين وصول محدد للبيانات.",
+  "basicPlanDescription": "1,200 دقيقة مميزة + غير محدود على الجهاز",
+  "minutes": "دقائق",
+  "omiHas": "لدى Omi:",
+  "premiumMinutesUsed": "تم استخدام الدقائق المميزة.",
+  "setupOnDevice": "إعداد على الجهاز",
+  "forUnlimitedFreeTranscription": "للنسخ المجاني غير المحدود.",
+  "premiumMinsLeft": "{count} دقائق مميزة متبقية.",
+  "alwaysAvailable": "متاح دائمًا.",
+  "importHistory": "سجل الاستيراد",
+  "noImportsYet": "لا توجد عمليات استيراد بعد",
+  "selectZipFileToImport": "اختر ملف .zip للاستيراد!",
+  "otherDevicesComingSoon": "أجهزة أخرى قريبًا",
+  "deleteAllLimitlessConversations": "حذف جميع محادثات Limitless؟",
+  "deleteAllLimitlessWarning": "سيؤدي هذا إلى حذف جميع المحادثات المستوردة من Limitless نهائيًا. لا يمكن التراجع عن هذا الإجراء.",
+  "deletedLimitlessConversations": "تم حذف {count} محادثة Limitless",
+  "failedToDeleteConversations": "فشل في حذف المحادثات",
+  "deleteImportedData": "حذف البيانات المستوردة",
+  "statusPending": "قيد الانتظار",
+  "statusProcessing": "جاري المعالجة",
+  "statusCompleted": "مكتمل",
+  "statusFailed": "فشل",
+  "nConversations": "{count} محادثات",
+  "pleaseEnterName": "الرجاء إدخال اسم",
+  "nameMustBeBetweenCharacters": "يجب أن يكون الاسم بين 2 و 40 حرفًا",
+  "deleteSampleQuestion": "حذف العينة؟",
+  "deleteSampleConfirmation": "هل أنت متأكد من حذف عينة {name}؟",
+  "confirmDeletion": "تأكيد الحذف",
+  "deletePersonConfirmation": "هل أنت متأكد من حذف {name}؟ سيؤدي ذلك أيضًا إلى إزالة جميع عينات الكلام المرتبطة.",
+  "howItWorksTitle": "كيف يعمل؟",
+  "howPeopleWorks": "بمجرد إنشاء شخص، يمكنك الذهاب إلى نص المحادثة وتعيين الأجزاء المقابلة لهم، وبهذه الطريقة سيتمكن Omi من التعرف على كلامهم أيضًا!",
+  "tapToDelete": "اضغط للحذف",
+  "newTag": "جديد",
+  "needHelpChatWithUs": "تحتاج مساعدة؟ تحدث معنا",
+  "localStorageEnabled": "تم تفعيل التخزين المحلي",
+  "localStorageDisabled": "تم تعطيل التخزين المحلي",
+  "failedToUpdateSettings": "فشل تحديث الإعدادات: {error}",
+  "privacyNotice": "إشعار الخصوصية",
+  "recordingsMayCaptureOthers": "قد تلتقط التسجيلات أصوات الآخرين. تأكد من الحصول على موافقة جميع المشاركين قبل التفعيل.",
+  "enable": "تفعيل",
+  "storeAudioOnPhone": "تخزين الصوت على الهاتف",
+  "on": "مفعل",
+  "storeAudioDescription": "احتفظ بجميع التسجيلات الصوتية مخزنة محليًا على هاتفك. عند التعطيل، يتم الاحتفاظ فقط بالتحميلات الفاشلة لتوفير مساحة التخزين.",
+  "enableLocalStorage": "تفعيل التخزين المحلي",
+  "cloudStorageEnabled": "تم تفعيل التخزين السحابي",
+  "cloudStorageDisabled": "تم تعطيل التخزين السحابي",
+  "enableCloudStorage": "تفعيل التخزين السحابي",
+  "storeAudioOnCloud": "تخزين الصوت على السحابة",
+  "cloudStorageDialogMessage": "سيتم تخزين تسجيلاتك في الوقت الفعلي في التخزين السحابي الخاص أثناء التحدث.",
+  "storeAudioCloudDescription": "قم بتخزين تسجيلاتك في الوقت الفعلي في التخزين السحابي الخاص أثناء التحدث. يتم التقاط الصوت وحفظه بشكل آمن في الوقت الفعلي.",
+  "downloadingFirmware": "جارٍ تنزيل البرنامج الثابت",
+  "installingFirmware": "جارٍ تثبيت البرنامج الثابت",
+  "firmwareUpdateWarning": "لا تغلق التطبيق أو توقف الجهاز. قد يؤدي ذلك إلى إتلاف جهازك.",
+  "firmwareUpdated": "تم تحديث البرنامج الثابت",
+  "restartDeviceToComplete": "يرجى إعادة تشغيل {deviceName} لإكمال التحديث.",
+  "yourDeviceIsUpToDate": "جهازك محدث",
+  "currentVersion": "الإصدار الحالي",
+  "latestVersion": "أحدث إصدار",
+  "whatsNew": "ما الجديد",
+  "installUpdate": "تثبيت التحديث",
+  "updateNow": "تحديث الآن",
+  "updateGuide": "دليل التحديث",
+  "checkingForUpdates": "جارٍ البحث عن التحديثات",
+  "checkingFirmwareVersion": "جارٍ التحقق من إصدار البرنامج الثابت...",
+  "firmwareUpdate": "تحديث البرنامج الثابت",
+  "payments": "المدفوعات",
+  "connectPaymentMethodInfo": "قم بتوصيل طريقة دفع أدناه لبدء تلقي المدفوعات لتطبيقاتك.",
+  "selectedPaymentMethod": "طريقة الدفع المحددة",
+  "availablePaymentMethods": "طرق الدفع المتاحة",
+  "activeStatus": "نشط",
+  "connectedStatus": "متصل",
+  "notConnectedStatus": "غير متصل",
+  "setActive": "تعيين كنشط",
+  "getPaidThroughStripe": "احصل على أموالك من مبيعات تطبيقاتك عبر Stripe",
+  "monthlyPayouts": "دفعات شهرية",
+  "monthlyPayoutsDescription": "احصل على دفعات شهرية مباشرة إلى حسابك عندما تصل أرباحك إلى 10 دولارات",
+  "secureAndReliable": "آمن وموثوق",
+  "stripeSecureDescription": "يضمن Stripe تحويلات آمنة وفي الوقت المناسب لإيرادات تطبيقك",
+  "selectYourCountry": "اختر بلدك",
+  "countrySelectionPermanent": "اختيار بلدك دائم ولا يمكن تغييره لاحقًا.",
+  "byClickingConnectNow": "بالنقر على \"اتصل الآن\" فإنك توافق على",
+  "stripeConnectedAccountAgreement": "اتفاقية حساب Stripe المتصل",
+  "errorConnectingToStripe": "خطأ في الاتصال بـ Stripe! يرجى المحاولة مرة أخرى لاحقًا.",
+  "connectingYourStripeAccount": "جاري توصيل حساب Stripe الخاص بك",
+  "stripeOnboardingInstructions": "يرجى إكمال عملية تسجيل Stripe في متصفحك. ستتحدث هذه الصفحة تلقائيًا عند الانتهاء.",
+  "failedTryAgain": "فشل؟ حاول مرة أخرى",
+  "illDoItLater": "سأفعل ذلك لاحقًا",
+  "successfullyConnected": "تم الاتصال بنجاح!",
+  "stripeReadyForPayments": "حساب Stripe الخاص بك جاهز الآن لاستقبال المدفوعات. يمكنك البدء في الكسب من مبيعات تطبيقك على الفور.",
+  "updateStripeDetails": "تحديث تفاصيل Stripe",
+  "errorUpdatingStripeDetails": "خطأ في تحديث تفاصيل Stripe! يرجى المحاولة مرة أخرى لاحقًا.",
+  "updatePayPal": "تحديث PayPal",
+  "setUpPayPal": "إعداد PayPal",
+  "updatePayPalAccountDetails": "تحديث تفاصيل حساب PayPal الخاص بك",
+  "connectPayPalToReceivePayments": "قم بتوصيل حساب PayPal الخاص بك لبدء تلقي المدفوعات لتطبيقاتك",
+  "paypalEmail": "بريد PayPal الإلكتروني",
+  "paypalMeLink": "رابط PayPal.me",
+  "stripeRecommendation": "إذا كان Stripe متاحًا في بلدك، نوصي بشدة باستخدامه للحصول على مدفوعات أسرع وأسهل.",
+  "updatePayPalDetails": "تحديث تفاصيل PayPal",
+  "savePayPalDetails": "حفظ تفاصيل PayPal",
+  "pleaseEnterPayPalEmail": "يرجى إدخال بريد PayPal الإلكتروني الخاص بك",
+  "pleaseEnterPayPalMeLink": "يرجى إدخال رابط PayPal.me الخاص بك",
+  "doNotIncludeHttpInLink": "لا تقم بتضمين http أو https أو www في الرابط",
+  "pleaseEnterValidPayPalMeLink": "يرجى إدخال رابط PayPal.me صالح",
+  "pleaseEnterValidEmail": "يرجى إدخال عنوان بريد إلكتروني صالح",
+  "syncingYourRecordings": "جاري مزامنة تسجيلاتك",
+  "syncYourRecordings": "مزامنة تسجيلاتك",
+  "syncNow": "مزامنة الآن",
+  "error": "خطأ",
+  "speechSamples": "عينات الكلام",
+  "additionalSampleIndex": "عينة إضافية {index}",
+  "durationSeconds": "المدة: {seconds} ثانية",
+  "additionalSpeechSampleRemoved": "تمت إزالة عينة الكلام الإضافية",
+  "consentDataMessage": "بالمتابعة، سيتم تخزين جميع البيانات التي تشاركها مع هذا التطبيق (بما في ذلك محادثاتك وتسجيلاتك ومعلوماتك الشخصية) بشكل آمن على خوادمنا لتزويدك برؤى مدعومة بالذكاء الاصطناعي وتمكين جميع ميزات التطبيق.",
+  "tasksEmptyStateMessage": "ستظهر المهام من محادثاتك هنا.\nاضغط على + لإنشاء مهمة يدويًا.",
+  "clearChatAction": "مسح المحادثة",
+  "enableApps": "تفعيل التطبيقات",
+  "omiAppName": "Omi",
+  "showMore": "عرض المزيد ↓",
+  "showLess": "عرض أقل ↑",
+  "loadingYourRecording": "جاري تحميل التسجيل...",
+  "photoDiscardedMessage": "تم تجاهل هذه الصورة لأنها غير مهمة.",
+  "analyzing": "جاري التحليل...",
+  "searchCountries": "البحث عن البلدان...",
+  "checkingAppleWatch": "جاري فحص Apple Watch...",
+  "installOmiOnAppleWatch": "قم بتثبيت Omi على\nApple Watch الخاص بك",
+  "installOmiOnAppleWatchDescription": "لاستخدام Apple Watch مع Omi، تحتاج أولاً إلى تثبيت تطبيق Omi على ساعتك.",
+  "openOmiOnAppleWatch": "افتح Omi على\nApple Watch الخاص بك",
+  "openOmiOnAppleWatchDescription": "تم تثبيت تطبيق Omi على Apple Watch الخاص بك. افتحه واضغط على بدء للبدء.",
+  "openWatchApp": "افتح تطبيق الساعة",
+  "iveInstalledAndOpenedTheApp": "لقد قمت بتثبيت وفتح التطبيق",
+  "unableToOpenWatchApp": "تعذر فتح تطبيق Apple Watch. يرجى فتح تطبيق Watch يدويًا على Apple Watch وتثبيت Omi من قسم \"التطبيقات المتاحة\".",
+  "appleWatchConnectedSuccessfully": "تم توصيل Apple Watch بنجاح!",
+  "appleWatchNotReachable": "Apple Watch لا يزال غير قابل للوصول. يرجى التأكد من أن تطبيق Omi مفتوح على ساعتك.",
+  "errorCheckingConnection": "خطأ في التحقق من الاتصال: {error}",
+  "muted": "مكتوم",
+  "processNow": "معالجة الآن",
+  "finishedConversation": "هل انتهت المحادثة؟",
+  "stopRecordingConfirmation": "هل أنت متأكد أنك تريد إيقاف التسجيل وتلخيص المحادثة الآن؟",
+  "conversationEndsManually": "ستنتهي المحادثة يدويًا فقط.",
+  "conversationSummarizedAfterMinutes": "يتم تلخيص المحادثة بعد {minutes} دقيقة{suffix} من عدم الكلام.",
+  "dontAskAgain": "لا تسألني مرة أخرى",
+  "waitingForTranscriptOrPhotos": "في انتظار النص أو الصور...",
+  "noSummaryYet": "لا يوجد ملخص بعد",
+  "hints": "تلميحات: {text}",
+  "testConversationPrompt": "اختبار موجه المحادثة",
+  "prompt": "موجه",
+  "result": "النتيجة",
+  "compareTranscripts": "مقارنة النصوص",
+  "notHelpful": "غير مفيد",
+  "exportTasksWithOneTap": "صدّر المهام بنقرة واحدة!",
+  "inProgress": "قيد التنفيذ",
+  "photos": "الصور",
+  "rawData": "البيانات الخام",
+  "content": "المحتوى",
+  "noContentToDisplay": "لا يوجد محتوى للعرض",
+  "noSummary": "لا يوجد ملخص",
+  "updateOmiFirmware": "تحديث برنامج omi",
+  "anErrorOccurredTryAgain": "حدث خطأ. يرجى المحاولة مرة أخرى.",
+  "welcomeBackSimple": "مرحباً بعودتك",
+  "addVocabularyDescription": "أضف كلمات يجب أن يتعرف عليها Omi أثناء النسخ.",
+  "enterWordsCommaSeparated": "أدخل الكلمات (مفصولة بفواصل)",
+  "whenToReceiveDailySummary": "متى تستلم ملخصك اليومي",
+  "checkingNextSevenDays": "فحص الأيام السبعة القادمة",
+  "failedToDeleteError": "فشل الحذف: {error}",
+  "developerApiKeys": "مفاتيح API للمطورين",
+  "noApiKeysCreateOne": "لا توجد مفاتيح API. أنشئ واحدة للبدء.",
+  "commandRequired": "⌘ مطلوب",
+  "spaceKey": "المسافة",
+  "loadMoreRemaining": "تحميل المزيد ({count} متبقي)",
+  "wrappedTopPercentUser": "أفضل {percentile}% مستخدم",
+  "wrappedMinutes": "دقائق",
+  "wrappedConversations": "محادثات",
+  "wrappedDaysActive": "أيام نشاط",
+  "wrappedYouTalkedAbout": "تحدثت عن",
+  "wrappedActionItems": "عناصر العمل",
+  "wrappedTasksCreated": "مهام تم إنشاؤها",
+  "wrappedCompleted": "مكتملة",
+  "wrappedCompletionRate": "معدل إتمام {rate}%",
+  "wrappedYourTopDays": "أفضل أيامك",
+  "wrappedBestMoments": "أفضل اللحظات",
+  "wrappedMyBuddies": "أصدقائي",
+  "wrappedCouldntStopTalkingAbout": "لم أتوقف عن الحديث عن",
+  "wrappedShow": "مسلسل",
+  "wrappedMovie": "فيلم",
+  "wrappedBook": "كتاب",
+  "wrappedCelebrity": "مشهور",
+  "wrappedFood": "طعام",
+  "wrappedMovieRecs": "توصيات أفلام للأصدقاء",
+  "wrappedBiggest": "أكبر",
+  "wrappedStruggle": "تحدي",
+  "wrappedButYouPushedThrough": "لكنك تجاوزته 💪",
+  "wrappedWin": "فوز",
+  "wrappedYouDidIt": "لقد فعلتها! 🎉",
+  "wrappedTopPhrases": "أكثر 5 عبارات",
+  "wrappedMins": "دقائق",
+  "wrappedConvos": "محادثات",
+  "wrappedDays": "أيام",
+  "wrappedMyBuddiesLabel": "أصدقائي",
+  "wrappedObsessionsLabel": "هوسي",
+  "wrappedStruggleLabel": "تحدي",
+  "wrappedWinLabel": "فوز",
+  "wrappedTopPhrasesLabel": "أكثر العبارات",
+  "wrappedLetsHitRewind": "هيا نعيد لفّ",
+  "wrappedGenerateMyWrapped": "أنشئ ملخصي",
+  "wrappedProcessingDefault": "جاري المعالجة...",
+  "wrappedCreatingYourStory": "جاري إنشاء\nقصة 2025 الخاصة بك...",
+  "wrappedSomethingWentWrong": "حدث\nخطأ ما",
+  "wrappedAnErrorOccurred": "حدث خطأ",
+  "wrappedTryAgain": "حاول مرة أخرى",
+  "wrappedNoDataAvailable": "لا توجد بيانات متاحة",
+  "wrappedOmiLifeRecap": "ملخص حياة Omi",
+  "wrappedSwipeUpToBegin": "اسحب للأعلى للبدء",
+  "wrappedShareText": "2025 الخاص بي، موثق بواسطة Omi ✨ omi.me/wrapped",
+  "wrappedFailedToShare": "فشلت المشاركة. يرجى المحاولة مرة أخرى.",
+  "wrappedFailedToStartGeneration": "فشل بدء الإنشاء. يرجى المحاولة مرة أخرى.",
+  "wrappedStarting": "جاري البدء...",
+  "wrappedShare": "مشاركة",
+  "wrappedShareYourWrapped": "شارك ملخصك",
+  "wrappedMy2025": "2025 الخاص بي",
+  "wrappedRememberedByOmi": "موثق بواسطة Omi",
+  "wrappedMostFunDay": "الأكثر متعة",
+  "wrappedMostProductiveDay": "الأكثر إنتاجية",
+  "wrappedMostIntenseDay": "الأكثر حدة",
+  "wrappedFunniestMoment": "الأكثر طرافة",
+  "wrappedMostCringeMoment": "الأكثر إحراجاً",
+  "wrappedMinutesLabel": "دقيقة",
+  "wrappedConversationsLabel": "محادثة",
+  "wrappedDaysActiveLabel": "يوم نشط",
+  "wrappedTasksGenerated": "مهمة تم إنشاؤها",
+  "wrappedTasksCompleted": "مهمة مكتملة",
+  "wrappedTopFivePhrases": "أفضل 5 عبارات",
+  "wrappedAGreatDay": "يوم رائع",
+  "wrappedGettingItDone": "إنجاز المهام",
+  "wrappedAChallenge": "تحدي",
+  "wrappedAHilariousMoment": "لحظة مضحكة",
+  "wrappedThatAwkwardMoment": "تلك اللحظة المحرجة",
+  "wrappedYouHadFunnyMoments": "لقد مررت بلحظات مضحكة هذا العام!",
+  "wrappedWeveAllBeenThere": "كلنا مررنا بهذا!",
+  "wrappedFriend": "صديق",
+  "wrappedYourBuddy": "صديقك!",
+  "wrappedNotMentioned": "غير مذكور",
+  "wrappedTheHardPart": "الجزء الصعب",
+  "wrappedPersonalGrowth": "نمو شخصي",
+  "wrappedFunDay": "متعة",
+  "wrappedProductiveDay": "إنتاجي",
+  "wrappedIntenseDay": "حاد",
+  "wrappedFunnyMomentTitle": "لحظة مضحكة",
+  "wrappedCringeMomentTitle": "لحظة محرجة",
+  "wrappedYouTalkedAboutBadge": "تحدثت عن",
+  "wrappedCompletedLabel": "مكتمل",
+  "wrappedMyBuddiesCard": "أصدقائي",
+  "wrappedBuddiesLabel": "الأصدقاء",
+  "wrappedObsessionsLabelUpper": "الهوايات",
+  "wrappedStruggleLabelUpper": "التحدي",
+  "wrappedWinLabelUpper": "الفوز",
+  "wrappedTopPhrasesLabelUpper": "أفضل العبارات",
+  "wrappedYourHeader": "أيامك",
+  "wrappedTopDaysHeader": "الأفضل",
+  "wrappedYourTopDaysBadge": "أفضل أيامك",
+  "wrappedBestHeader": "أفضل",
+  "wrappedMomentsHeader": "اللحظات",
+  "wrappedBestMomentsBadge": "أفضل اللحظات",
+  "wrappedBiggestHeader": "أكبر",
+  "wrappedStruggleHeader": "تحدي",
+  "wrappedWinHeader": "فوز",
+  "wrappedButYouPushedThroughEmoji": "لكنك تجاوزت ذلك 💪",
+  "wrappedYouDidItEmoji": "لقد فعلتها! 🎉",
+  "wrappedHours": "ساعات",
+  "wrappedActions": "إجراءات",
+  "multipleSpeakersDetected": "تم اكتشاف عدة متحدثين",
+  "multipleSpeakersDescription": "يبدو أن هناك عدة متحدثين في التسجيل. يرجى التأكد من أنك في مكان هادئ والمحاولة مرة أخرى.",
+  "invalidRecordingDetected": "تم اكتشاف تسجيل غير صالح",
+  "notEnoughSpeechDescription": "لم يتم اكتشاف كلام كافٍ. يرجى التحدث أكثر والمحاولة مرة أخرى.",
+  "speechDurationDescription": "يرجى التأكد من التحدث لمدة 5 ثوانٍ على الأقل وليس أكثر من 90 ثانية.",
+  "connectionLostDescription": "تم قطع الاتصال. يرجى التحقق من اتصالك بالإنترنت والمحاولة مرة أخرى.",
+  "howToTakeGoodSample": "كيف تأخذ عينة جيدة؟",
+  "goodSampleInstructions": "1. تأكد من أنك في مكان هادئ.\n2. تحدث بوضوح وطبيعية.\n3. تأكد من أن جهازك في وضعه الطبيعي على رقبتك.\n\nبمجرد إنشائه، يمكنك دائمًا تحسينه أو القيام به مرة أخرى.",
+  "noDeviceConnectedUseMic": "لا يوجد جهاز متصل. سيتم استخدام ميكروفون الهاتف.",
+  "doItAgain": "أعد المحاولة",
+  "listenToSpeechProfile": "استمع إلى ملفي الصوتي ➡️",
+  "recognizingOthers": "التعرف على الآخرين 👀",
+  "keepGoingGreat": "استمر، أنت تقوم بعمل رائع",
+  "somethingWentWrongTryAgain": "حدث خطأ ما! يرجى المحاولة مرة أخرى لاحقاً.",
+  "uploadingVoiceProfile": "جاري تحميل ملفك الصوتي....",
+  "memorizingYourVoice": "جاري حفظ صوتك...",
+  "personalizingExperience": "جاري تخصيص تجربتك...",
+  "keepSpeakingUntil100": "استمر في التحدث حتى تصل إلى 100%.",
+  "greatJobAlmostThere": "عمل رائع، أنت على وشك الانتهاء",
+  "soCloseJustLittleMore": "قريب جداً، فقط القليل"
 }
