@@ -235,7 +235,7 @@ export function TaskRow({
           <p
             onDoubleClick={handleTextDoubleClick}
             className={cn(
-              'text-sm truncate transition-colors',
+              'text-sm transition-colors',
               task.completed
                 ? 'text-text-quaternary line-through'
                 : 'text-text-primary',

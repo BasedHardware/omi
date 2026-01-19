@@ -1,9 +1,16 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { AuthProvider } from '@/components/auth/AuthProvider';
 import { MobileBlockOverlay } from '@/components/layout/MobileBlockOverlay';
 import { RecordingProvider, RecordingController } from '@/components/recording';
 import { ToastProvider } from '@/components/ui/Toast';
 import './globals.css';
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://omi.me'),
@@ -33,7 +40,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark">
-      <body className="bg-bg-primary text-text-primary font-body antialiased">
+      <body className="bg-bg-primary text-text-primary font-body antialiased overflow-x-hidden w-full">
         <MobileBlockOverlay />
         <AuthProvider>
           <RecordingProvider>

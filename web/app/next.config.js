@@ -75,6 +75,10 @@ const nextConfig = {
         protocol: 'https',
         hostname: '*.postimg.cc',
       },
+      {
+        protocol: 'https',
+        hostname: '*.gstatic.com',
+      },
     ],
   },
 };

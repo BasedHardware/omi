@@ -1,4 +1,4 @@
-import { getApprovedApps, transformToPlugin } from '@/lib/api/public';
+import { getAllAppsV2, transformToPlugin } from '@/lib/api/public';
 import AppList from '@/components/marketplace/AppList';
 import { PromoCard } from '@/components/marketplace/PromoCard';
 import { CollectionPageJsonLd } from '@/components/seo/JsonLd';
@@ -33,10 +33,12 @@ export const metadata: Metadata = {
 };
 
 export default async function AppsMarketplacePage() {
-  const { plugins: rawPlugins, stats } = await getApprovedApps();
+  // Fetch ALL v2 apps by paginating through all capability groups
+  // This makes multiple requests during build time but ensures all 600+ apps are available
+  const allApps = await getAllAppsV2(true); // include_reviews=true to get ratings
 
   // Transform plugins to have Set for capabilities
-  const plugins = rawPlugins.map(transformToPlugin);
+  const plugins = allApps.map(transformToPlugin);
 
   return (
     <div className="min-h-screen bg-[#0B0F17]">
@@ -45,7 +47,7 @@ export default async function AppsMarketplacePage() {
         description="Explore and install AI-powered apps for Omi. Enhance your experience with productivity tools, conversation insights, and more."
         url="/apps"
       />
-      <AppList initialPlugins={plugins} initialStats={stats} />
+      <AppList initialPlugins={plugins} initialStats={[]} />
       <PromoCard />
     </div>
   );

@@ -326,10 +326,10 @@ export function MemoriesPage() {
       <PageHeader title="Memories" icon={Brain} />
 
       {/* Toolbar */}
-      <header className="flex-shrink-0 bg-bg-secondary border-b border-bg-tertiary">
-        <div className="py-3 px-4">
+      <header className="flex-shrink-0 bg-bg-secondary border-b border-bg-tertiary w-full max-w-full overflow-x-hidden">
+        <div className="py-3 px-4 max-w-full">
           {/* Row 1: View toggle + Select + Sort + Filter + Search + Refresh */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 max-w-full overflow-x-auto">
             {/* Left: View toggle */}
             <div className="flex items-center gap-4 flex-shrink-0">
               <div className="flex items-center gap-1 p-1 bg-bg-tertiary rounded-lg">
@@ -502,9 +502,9 @@ export function MemoriesPage() {
 
       {/* Content - Two column layout */}
       <div className="flex-1 overflow-hidden">
-        <div className="h-full flex flex-col lg:flex-row w-full">
+        <div className="h-full flex flex-col lg:flex-row w-full max-w-full overflow-x-hidden">
           {/* Left Column - Memories list */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 order-last lg:order-first">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 min-w-0 order-1">
             {viewMode === 'list' ? (
               <>
                 {/* Quick add */}
@@ -589,7 +589,7 @@ export function MemoriesPage() {
 
           {/* Right Column - Insights sidebar */}
           {viewMode === 'list' && (
-            <div className="w-full lg:w-[380px] lg:flex-shrink-0 p-4 lg:pl-6 lg:border-l border-bg-tertiary order-first lg:order-last space-y-4 lg:h-full lg:overflow-y-auto">
+            <div className="w-full lg:w-[380px] lg:flex-shrink-0 p-4 lg:pl-6 lg:border-l border-bg-tertiary space-y-4 lg:h-full lg:overflow-y-auto min-w-0 max-w-full order-2">
               {/* Loading state */}
               {loading && memories.length === 0 ? (
                 <div className="space-y-4">

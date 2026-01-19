@@ -68,18 +68,6 @@ export const categoryMetadata: Record<string, CategoryMetadata> = {
       background: 'bg-blue-500/5',
     },
   },
-  'personality-emulation': {
-    id: 'personality-emulation',
-    displayName: 'Persona & AI Chat',
-    description: 'Interact with AI personalities',
-    icon: Brain,
-    theme: {
-      primary: 'text-fuchsia-500',
-      secondary: 'text-fuchsia-400',
-      accent: 'bg-fuchsia-500/15',
-      background: 'bg-fuchsia-500/5',
-    },
-  },
   'utilities-and-tools': {
     id: 'utilities-and-tools',
     displayName: 'Utilities & Tools',
@@ -114,18 +102,6 @@ export const categoryMetadata: Record<string, CategoryMetadata> = {
       secondary: 'text-emerald-400',
       accent: 'bg-emerald-500/15',
       background: 'bg-emerald-500/5',
-    },
-  },
-  'news-and-information': {
-    id: 'news-and-information',
-    displayName: 'News & Info',
-    description: 'Stay informed and up-to-date',
-    icon: Newspaper,
-    theme: {
-      primary: 'text-amber-500',
-      secondary: 'text-amber-400',
-      accent: 'bg-amber-500/15',
-      background: 'bg-amber-500/5',
     },
   },
   'social-and-relationships': {
@@ -164,16 +140,28 @@ export const categoryMetadata: Record<string, CategoryMetadata> = {
       background: 'bg-orange-500/5',
     },
   },
-  'shopping-and-commerce': {
-    id: 'shopping-and-commerce',
-    displayName: 'Shopping',
-    description: 'Shop and manage purchases',
-    icon: ShoppingBag,
+  'communication-improvement': {
+    id: 'communication-improvement',
+    displayName: 'Communication',
+    description: 'Improve your communication skills',
+    icon: MessageSquare,
     theme: {
-      primary: 'text-teal-500',
-      secondary: 'text-teal-400',
-      accent: 'bg-teal-500/15',
-      background: 'bg-teal-500/5',
+      primary: 'text-cyan-500',
+      secondary: 'text-cyan-400',
+      accent: 'bg-cyan-500/15',
+      background: 'bg-cyan-500/5',
+    },
+  },
+  'emotional-and-mental-support': {
+    id: 'emotional-and-mental-support',
+    displayName: 'Mental Wellness',
+    description: 'Support for emotional and mental health',
+    icon: Heart,
+    theme: {
+      primary: 'text-purple-500',
+      secondary: 'text-purple-400',
+      accent: 'bg-purple-500/15',
+      background: 'bg-purple-500/5',
     },
   },
   integration: {
