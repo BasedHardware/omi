@@ -39,6 +39,9 @@ from database.cache import get_memory_cache
 from database.redis_db import r
 ```
 
+### Memory Management
+Free large objects immediately after use. E.g., `del` for byte arrays after processing, `.clear()` for dicts/lists holding data.
+
 ## Testing
 
 ### Always Run Tests Before Committing
@@ -46,3 +49,11 @@ After making changes, always run the appropriate test script to verify your chan
 
 - **Backend changes**: Run `backend/test.sh`
 - **App changes**: Run `app/test.sh`
+
+## Setup
+
+### Install Pre-commit Hook
+Run once to enable auto-formatting on commit:
+```bash
+ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
+```

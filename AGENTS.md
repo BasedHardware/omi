@@ -15,8 +15,14 @@ Module hierarchy (lowest to highest):
 3. `routers/`
 4. `main.py`
 
+- Memory management: free large objects immediately after use. E.g., `del` for byte arrays after processing, `.clear()` for dicts/lists holding data.
+
 ## Testing
 
 - Always run tests before committing:
   - Backend changes: run `backend/test.sh`
   - App changes: run `app/test.sh`
+
+## Setup
+
+- Install pre-commit hook: `ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit`
