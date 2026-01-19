@@ -281,9 +281,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void onDeviceDisconnected() async {
     Logger.debug('onDisconnected inside: $connectedDevice');
 
-    final String trackFirmware = connectedDevice?.firmwareRevision ??
-        pairedDevice?.firmwareRevision ??
-        SharedPreferencesUtil().btDevice.firmwareRevision;
+    final String trackFirmware = [connectedDevice?.firmwareRevision, pairedDevice?.firmwareRevision, SharedPreferencesUtil().btDevice.firmwareRevision].firstWhere((v) => v != null && v.isNotEmpty && v != 'Unknown', orElse: () => 'Unknown');
 
     _havingNewFirmware = false;
     setConnectedDevice(null);
