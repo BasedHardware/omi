@@ -219,10 +219,11 @@ def execute_agentic_chat(
     """
     # Build system prompt
     system_prompt = _get_agentic_qa_prompt(uid, app)
-    
+
     # Get prompt metadata for tracing/versioning
     try:
         from utils.observability.langsmith_prompts import get_prompt_metadata
+
         prompt_name, prompt_commit, prompt_source = get_prompt_metadata()
     except Exception as e:
         print(f"⚠️ Could not get prompt metadata: {e}")
@@ -355,10 +356,11 @@ async def execute_agentic_chat_stream(
     """
     # Build system prompt with file context and page context
     system_prompt = _get_agentic_qa_prompt(uid, app, messages, context=context)
-    
+
     # Get prompt metadata for tracing/versioning
     try:
         from utils.observability.langsmith_prompts import get_prompt_metadata
+
         prompt_name, prompt_commit, prompt_source = get_prompt_metadata()
     except Exception as e:
         print(f"⚠️ Could not get prompt metadata: {e}")

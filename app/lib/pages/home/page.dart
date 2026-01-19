@@ -541,6 +541,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           builder: (context, homeProvider, _) {
             return Scaffold(
               backgroundColor: Theme.of(context).colorScheme.primary,
+              resizeToAvoidBottomInset: false,
               appBar: homeProvider.selectedIndex == 5 ? null : _buildAppBar(context),
               body: DefaultTabController(
                 length: 4,

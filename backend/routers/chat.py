@@ -42,8 +42,6 @@ from utils.retrieval.agentic import execute_agentic_chat, execute_agentic_chat_s
 router = APIRouter()
 
 
-
-
 def filter_messages(messages, app_id):
     print('filter_messages', len(messages), app_id)
     collected = []
@@ -104,7 +102,7 @@ def send_message(
         chat_db.add_message_to_chat_session(uid, chat_session.id, message.id)
 
     chat_db.add_message(uid, message.dict())
-    
+
     # Check for goal progress (background)
     threading.Thread(target=extract_and_update_goal_progress, args=(uid, data.text)).start()
 
@@ -114,7 +112,6 @@ def send_message(
     app_id_from_app = app.id if app else None
 
     messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, app_id=compat_app_id)]))
-
 
     def process_message(response: str, callback_data: dict):
         memories = callback_data.get('memories_found', [])
@@ -167,8 +164,7 @@ def send_message(
         callback_data = {}
         # Using the new agentic system via graph routing
         async for chunk in execute_graph_chat_stream(
-            uid, messages, app, cited=True, callback_data=callback_data, chat_session=chat_session,
-            context=data.context
+            uid, messages, app, cited=True, callback_data=callback_data, chat_session=chat_session, context=data.context
         ):
             if chunk:
                 msg = chunk.replace("\n", "__CRLF__")
@@ -180,7 +176,9 @@ def send_message(
                     ai_message_dict = ai_message.dict()
                     response_message = ResponseMessage(**ai_message_dict)
                     response_message.ask_for_nps = ask_for_nps
-                    encoded_response = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
+                    encoded_response = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode(
+                        'utf-8'
+                    )
                     yield f"done: {encoded_response}\n\n"
 
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
@@ -294,14 +292,14 @@ def get_messages(
         uid, limit=100, include_conversations=True, app_id=compat_app_id, chat_session_id=chat_session_id
     )
     print('get_messages', len(messages), compat_app_id)
-    
+
     # Debug: Check for messages with ratings
     rated_messages = [m for m in messages if m.get('rating') is not None]
     if rated_messages:
         print(f'📊 Messages with ratings: {len(rated_messages)}')
         for m in rated_messages[:5]:  # Show first 5
             print(f"  - Message {m.get('id')}: rating={m.get('rating')}")
-    
+
     if not messages:
         return [initial_message_util(uid, compat_app_id)]
     return messages

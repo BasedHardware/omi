@@ -365,6 +365,40 @@ def send_action_item_data_message(user_id: str, action_item_id: str, description
     _send_to_user(user_id, tag, data=data, is_background=True, priority='high')
 
 
+def send_apple_reminders_sync_push(user_id: str, action_item_id: str, description: str, due_at=None) -> bool:
+    """
+    Sends a silent push notification to trigger Apple Reminders creation on device.
+    iOS will wake the app in background to create the reminder locally.
+
+    Args:
+        user_id: The user's Firebase UID
+        action_item_id: ID of the action item to sync
+        description: Task description
+        due_at: Optional due date (datetime object or ISO string)
+
+    Returns:
+        bool: True if notification was sent successfully
+    """
+    print(f'send_apple_reminders_sync_push to user {user_id}')
+
+    due_at_str = None
+    if due_at:
+        if hasattr(due_at, 'isoformat'):
+            due_at_str = due_at.isoformat()
+        else:
+            due_at_str = str(due_at)
+
+    data = {
+        'type': 'apple_reminders_sync',
+        'action_item_id': action_item_id,
+        'description': description,
+        'due_at': due_at_str or '',
+    }
+    tag = _generate_tag(f"{user_id}:apple_reminders_sync:{action_item_id}")
+    success_count = _send_to_user(user_id, tag, data=data, is_background=True, priority='high')
+    return success_count > 0
+
+
 def send_merge_completed_message(user_id: str, merged_conversation_id: str, removed_conversation_ids: list):
     """
     Sends a data-only FCM message when conversation merge completes.

@@ -10,4 +10,4 @@
  * 2. Change RECORDING_ENABLED to true
  * 3. The "Coming Soon" badges will automatically disappear
  */
-export const RECORDING_ENABLED = false;
+export const RECORDING_ENABLED = true;

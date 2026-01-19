@@ -65,8 +65,6 @@ export class TranscriptionSocket {
     this.tokenRefreshInterval = setInterval(() => {
       this.refreshConnection();
     }, TranscriptionSocket.TOKEN_REFRESH_INTERVAL_MS);
-
-    console.log('TranscriptionSocket: Token refresh scheduled every 50 minutes');
   }
 
   private stopTokenRefresh(): void {
@@ -83,11 +81,8 @@ export class TranscriptionSocket {
    */
   private async refreshConnection(): Promise<void> {
     if (this.state !== 'connected') {
-      console.log('TranscriptionSocket: Skip token refresh - not connected');
       return;
     }
-
-    console.log('TranscriptionSocket: Refreshing connection with new token...');
 
     // Set refreshing flag to prevent onDisconnected callback during refresh
     this.isRefreshing = true;
@@ -110,7 +105,6 @@ export class TranscriptionSocket {
     // Reconnect with fresh token
     try {
       await this.connect();
-      console.log('TranscriptionSocket: Connection refreshed successfully');
     } catch (err) {
       console.error('TranscriptionSocket: Failed to refresh connection', err);
       this.isRefreshing = false;
@@ -169,7 +163,6 @@ export class TranscriptionSocket {
 
       this.ws.onopen = () => {
         this.clearConnectionTimeout();
-        console.log('TranscriptionSocket: Connected, sending auth...');
         this.state = 'connected';
 
         // Send first-message authentication
@@ -195,7 +188,6 @@ export class TranscriptionSocket {
 
       this.ws.onclose = (event) => {
         this.clearConnectionTimeout();
-        console.log('TranscriptionSocket: Closed', event.code, event.reason);
         this.state = 'disconnected';
         this.ws = null;
 
@@ -207,9 +199,6 @@ export class TranscriptionSocket {
         // Auto-reconnect on unexpected close (but not during token refresh)
         if (!this.isRefreshing && event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
           this.reconnectAttempts++;
-          console.log(
-            `TranscriptionSocket: Reconnecting (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`
-          );
           this.isBuffering = true;
           setTimeout(() => this.connect(), 1000 * this.reconnectAttempts);
         }
@@ -252,7 +241,7 @@ export class TranscriptionSocket {
             const segment: TranscriptSegment = {
               id: segmentData.id || `seg-${Date.now()}-${Math.random()}`,
               text: segmentData.text || '',
-              speaker: parseSpeakerId(segmentData.speakerId ?? segmentData.speaker),
+              speaker: parseSpeakerId(segmentData.speakerId ?? segmentData.speaker_id ?? segmentData.speaker),
               isUser: segmentData.isUser ?? segmentData.is_user ?? false,
               timestamp: Date.now(),
             };
@@ -267,7 +256,7 @@ export class TranscriptionSocket {
           const segment: TranscriptSegment = {
             id: data.id || `seg-${Date.now()}-${Math.random()}`,
             text: data.text,
-            speaker: parseSpeakerId(data.speakerId ?? data.speaker),
+            speaker: parseSpeakerId(data.speakerId ?? data.speaker_id ?? data.speaker),
             isUser: data.isUser ?? data.is_user ?? false,
             timestamp: Date.now(),
           };
@@ -279,7 +268,6 @@ export class TranscriptionSocket {
         // Handle auth response (first-message authentication)
         else if (data.type === 'auth_response') {
           if (data.success) {
-            console.log('TranscriptionSocket: Authenticated');
             this.isAuthenticated = true;
             this.pendingToken = null;
             this.reconnectAttempts = 0;
@@ -292,7 +280,6 @@ export class TranscriptionSocket {
             // Stop buffering and flush buffered audio
             this.isBuffering = false;
             if (this.audioBuffer.length > 0) {
-              console.log(`TranscriptionSocket: Flushing ${this.audioBuffer.length} buffered chunks`);
               this.audioBuffer.forEach((chunk) => this.sendAudio(chunk));
               this.audioBuffer = [];
             }
@@ -302,14 +289,7 @@ export class TranscriptionSocket {
             this.ws?.close(1000, 'Auth failed');
           }
         }
-        // Handle other event messages
-        else if (data.type) {
-          console.log('TranscriptionSocket: Event', data.type, data);
-        }
-      }
-      // Handle binary messages (shouldn't happen, but log if they do)
-      else if (event.data instanceof ArrayBuffer) {
-        console.log('TranscriptionSocket: Received binary data', event.data.byteLength);
+        // Handle other event messages (silently ignore for now)
       }
     } catch (err) {
       console.error('TranscriptionSocket: Failed to parse message', err);

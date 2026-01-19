@@ -247,7 +247,7 @@ def report_message(uid: str, msg_doc_id: str):
 def update_message_rating(uid: str, message_id: str, rating: int | None):
     """
     Update the rating on a message document.
-    
+
     Args:
         uid: User ID
         message_id: Message ID (not doc ID)
@@ -259,7 +259,7 @@ def update_message_rating(uid: str, message_id: str, rating: int | None):
     if not message_doc:
         print(f"⚠️ Message {message_id} not found for user {uid}")
         return False
-    
+
     try:
         user_ref.collection('messages').document(message_doc.id).update({'rating': rating})
         print(f"✅ Updated message {message_id} rating to {rating}")

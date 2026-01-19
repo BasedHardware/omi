@@ -1,21 +1,21 @@
 #ifndef _WIFI_H_
 #define _WIFI_H_
 
-#include <zephyr/kernel.h>
 #include <stdint.h>
+#include <zephyr/kernel.h>
 
-#define WIFI_MAX_SSID_LEN        32
-#define WIFI_MAX_PASSWORD_LEN    64
+#define WIFI_MAX_SSID_LEN 32
+#define WIFI_MAX_PASSWORD_LEN 64
 #define WIFI_MAX_SERVER_ADDR_LEN 64
 
 /* WiFi state machine states */
 typedef enum {
-	WIFI_STATE_OFF,          /* WiFi is off */
-	WIFI_STATE_SHUTDOWN,     /* WiFi is shutting down */
-	WIFI_STATE_ON,           /* WiFi is on but not connected */
-	WIFI_STATE_CONNECTING,   /* WiFi is connecting */
-	WIFI_STATE_CONNECTED,    /* WiFi connected but no TCP */
-	WIFI_STATE_TCP_CONNECTED /* WiFi and TCP connected */
+    WIFI_STATE_OFF,          /* WiFi is off */
+    WIFI_STATE_SHUTDOWN,     /* WiFi is shutting down */
+    WIFI_STATE_ON,           /* WiFi is on but not connected */
+    WIFI_STATE_CONNECTING,   /* WiFi is connecting */
+    WIFI_STATE_CONNECTED,    /* WiFi connected but no TCP */
+    WIFI_STATE_TCP_CONNECTED /* WiFi and TCP connected */
 } wifi_state_t;
 
 /* API functions */
