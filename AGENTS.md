@@ -15,6 +15,10 @@ Module hierarchy (lowest to highest):
 3. `routers/`
 4. `main.py`
 
+### App (Flutter)
+
+- All user-facing strings must use l10n (`context.l10n.keyName`). Add keys to ARB files using `jq` to avoid reading large files.
+
 ## Testing
 
 - Always run tests before committing:

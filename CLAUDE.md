@@ -39,6 +39,11 @@ from database.cache import get_memory_cache
 from database.redis_db import r
 ```
 
+## App (Flutter)
+
+### Localization Required
+All user-facing strings must use l10n. Use `context.l10n.keyName` instead of hardcoded strings. Add new keys to ARB files using `jq` (never read full ARB files - they're large and will burn tokens). See skill `add-a-new-localization-key-l10n-arb` for details.
+
 ## Testing
 
 ### Always Run Tests Before Committing
