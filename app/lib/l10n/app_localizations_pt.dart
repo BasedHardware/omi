@@ -304,7 +304,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get tryAdjustingSearch => 'Tente ajustar sua busca ou filtros';
 
   @override
-  String get createYourOwnApp => 'Crie seu próprio App';
+  String get createYourOwnApp => 'Crie seu próprio aplicativo';
 
   @override
   String get buildAndShareApp => 'Construa e compartilhe seu próprio app';
@@ -313,10 +313,10 @@ class AppLocalizationsPt extends AppLocalizations {
   String get searchApps => 'Pesquisar aplicativos...';
 
   @override
-  String get myApps => 'Meus Aplicativos';
+  String get myApps => 'Meus aplicativos';
 
   @override
-  String get installedApps => 'Aplicativos Instalados';
+  String get installedApps => 'Aplicativos instalados';
 
   @override
   String get unableToFetchApps => 'Não foi possível carregar os apps :(\n\nVerifique sua conexão.';
@@ -2480,7 +2480,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get trackPersonalGoalsOnHomepage => 'Acompanhe suas metas pessoais na página inicial';
 
   @override
-  String get dailyReflection => 'Reflexão Diária';
+  String get dailyReflection => 'Reflexão diária';
 
   @override
   String get get9PmReminderToReflect => 'Receba um lembrete às 21h para refletir sobre seu dia';
@@ -2604,7 +2604,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get icon => 'Ícone';
 
   @override
-  String get goalTitle => 'Título do objetivo';
+  String get goalTitle => 'Título da meta';
 
   @override
   String get current => 'Atual';
@@ -2619,7 +2619,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get goals => 'Objetivos';
 
   @override
-  String get tapToAddGoal => 'Toque para adicionar um objetivo';
+  String get tapToAddGoal => 'Toque para adicionar uma meta';
 
   @override
   String welcomeBack(String name) {
@@ -2770,7 +2770,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get browseInstallCreateApps => 'Navegue, instale e crie aplicativos';
 
   @override
-  String get all => 'Todas';
+  String get all => 'Todos';
 
   @override
   String get open => 'Abrir';
@@ -3796,7 +3796,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get calendarIntegration => 'Integração de Calendário';
 
   @override
-  String get dailySummary => 'Resumo Diário';
+  String get dailySummary => 'Resumo diário';
 
   @override
   String get developer => 'Desenvolvedor';
@@ -3832,7 +3832,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get dailySummaryTitle => 'Resumo Diário';
 
   @override
-  String get dailySummaryDescription => 'Receba um resumo personalizado de suas conversas';
+  String get dailySummaryDescription => 'Receba um resumo personalizado das conversas do dia como notificação.';
 
   @override
   String get deliveryTime => 'Horário de entrega';
@@ -3920,7 +3920,8 @@ class AppLocalizationsPt extends AppLocalizations {
   String get trackPersonalGoals => 'Acompanhar metas pessoais na página inicial';
 
   @override
-  String get dailyReflectionDescription => 'Lembrete às 21h para refletir sobre o seu dia';
+  String get dailyReflectionDescription =>
+      'Receba um lembrete às 21h para refletir sobre seu dia e capturar seus pensamentos.';
 
   @override
   String get endpointURL => 'URL do Endpoint';
@@ -5699,4 +5700,50 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get dailyScoreExplanation =>
       'Sua pontuação diária é baseada na conclusão de tarefas. Conclua suas tarefas para melhorar sua pontuação!';
+
+  @override
+  String get notificationFrequencyDescription =>
+      'Controle com que frequência o Omi envia notificações proativas e lembretes.';
+
+  @override
+  String get sliderOff => 'Desligado';
+
+  @override
+  String get sliderMax => 'Máx.';
+
+  @override
+  String summaryGeneratedFor(String date) {
+    return 'Resumo gerado para $date';
+  }
+
+  @override
+  String get failedToGenerateSummary => 'Falha ao gerar resumo. Certifique-se de ter conversas para esse dia.';
+
+  @override
+  String get recap => 'Resumo';
+
+  @override
+  String deleteQuoted(String name) {
+    return 'Excluir \"$name\"';
+  }
+
+  @override
+  String moveConversationsTo(int count) {
+    return 'Mover $count conversas para:';
+  }
+
+  @override
+  String get noFolder => 'Sem pasta';
+
+  @override
+  String get removeFromAllFolders => 'Remover de todas as pastas';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Crie e compartilhe seu aplicativo personalizado';
+
+  @override
+  String get searchAppsPlaceholder => 'Pesquisar em 1500+ aplicativos';
+
+  @override
+  String get filters => 'Filtros';
 }

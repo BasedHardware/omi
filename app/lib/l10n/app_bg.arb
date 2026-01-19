@@ -2334,7 +2334,7 @@
   "exportButton": "Експортиране",
   "actionItemsCopiedToClipboard": "Елементите за действие са копирани в клипборда",
   "summarize": "Резюмиране",
-  "generateSummary": "Генериране на резюме",
+  "generateSummary": "Генерирай обобщение",
   "conversationNotFoundOrDeleted": "Разговорът не е намерен или е изтрит",
   "deleteMemory": "Изтрий спомен",
   "thisActionCannotBeUndone": "Това действие не може да бъде отменено.",
@@ -2626,7 +2626,7 @@
   "@user": {
     "description": "Default fallback name when user name is empty"
   },
-  "starred": "Звездичка",
+  "starred": "Със звезда",
   "@starred": {
     "description": "Label for starred filter button"
   },
@@ -2895,7 +2895,7 @@
   "settingsHeader": "НАСТРОЙКИ",
   "plansAndBilling": "Планове и Фактуриране",
   "calendarIntegration": "Интеграция на Календар",
-  "dailySummary": "Дневно Резюме",
+  "dailySummary": "Дневно обобщение",
   "developer": "Разработчик",
   "about": "За",
   "selectTime": "Изберете час",
@@ -2907,8 +2907,8 @@
   "enterWordsHint": "Въведете думи (разделени със запетая)",
   "dailySummaryHeader": "ДНЕВНО РЕЗЮМЕ",
   "dailySummaryTitle": "Дневно Резюме",
-  "dailySummaryDescription": "Получете персонализирано резюме на разговорите си",
-  "deliveryTime": "Време за доставка",
+  "dailySummaryDescription": "Получавайте персонализирано обобщение на разговорите ви за деня като известие.",
+  "deliveryTime": "Час на доставка",
   "deliveryTimeDescription": "Кога да получавате дневното си резюме",
   "subscription": "Абонамент",
   "viewPlansAndUsage": "Преглед на Планове и Използване",
@@ -2946,8 +2946,8 @@
   "suggestQuestionsAfterConversations": "Предложете въпроси след разговори",
   "goalTracker": "Проследяване на цели",
   "trackPersonalGoals": "Проследяване на лични цели на началната страница",
-  "dailyReflection": "Ежедневно размисъл",
-  "dailyReflectionDescription": "Напомняне в 21:00 за размисъл над деня ви",
+  "dailyReflection": "Дневна рефлексия",
+  "dailyReflectionDescription": "Получавайте напомняне в 21:00 ч. да размислите за деня си и да запишете мислите си.",
   "endpointURL": "URL на крайна точка",
   "links": "Връзки",
   "discordMemberCount": "Над 8000 членове в Discord",
@@ -3612,5 +3612,18 @@
   "tasksCompleted": "Завършени задачи",
   "completionRate": "Процент на завършване",
   "howItWorks": "Как работи",
-  "dailyScoreExplanation": "Дневният ви резултат се базира на завършените задачи. Завършете задачите си, за да подобрите резултата!"
+  "dailyScoreExplanation": "Дневният ви резултат се базира на завършените задачи. Завършете задачите си, за да подобрите резултата!",
+  "notificationFrequencyDescription": "Контролирайте колко често Omi ви изпраща проактивни известия и напомняния.",
+  "sliderOff": "Изкл.",
+  "sliderMax": "Макс.",
+  "summaryGeneratedFor": "Обобщение генерирано за {date}",
+  "failedToGenerateSummary": "Неуспешно генериране на обобщение. Уверете се, че имате разговори за този ден.",
+  "recap": "Резюме",
+  "deleteQuoted": "Изтриване на \"{name}\"",
+  "moveConversationsTo": "Преместване на {count} разговора в:",
+  "noFolder": "Без папка",
+  "removeFromAllFolders": "Премахване от всички папки",
+  "buildAndShareYourCustomApp": "Създайте и споделете персонализирано приложение",
+  "searchAppsPlaceholder": "Търсене в 1500+ приложения",
+  "filters": "Филтри"
 }

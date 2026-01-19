@@ -415,11 +415,11 @@
   "@searchApps": {
     "description": "Apps search placeholder"
   },
-  "myApps": "Aplicațiile Mele",
+  "myApps": "Aplicațiile mele",
   "@myApps": {
     "description": "My Apps filter button"
   },
-  "installedApps": "Aplicații Instalate",
+  "installedApps": "Aplicații instalate",
   "@installedApps": {
     "description": "Installed Apps filter button"
   },
@@ -1677,7 +1677,7 @@
   "@locationAccessDesc": {
     "description": "Description for location access permission"
   },
-  "notifications": "Notifications",
+  "notifications": "Notificări",
   "@notifications": {
     "description": "Title for notifications permission"
   },
@@ -2334,7 +2334,7 @@
   "exportButton": "Exportă",
   "actionItemsCopiedToClipboard": "Elementele de acțiune au fost copiate în clipboard",
   "summarize": "Rezumă",
-  "generateSummary": "Generare rezumat",
+  "generateSummary": "Generează rezumat",
   "conversationNotFoundOrDeleted": "Conversația nu a fost găsită sau a fost ștearsă",
   "deleteMemory": "Șterge amintirea",
   "thisActionCannotBeUndone": "Această acțiune nu poate fi anulată.",
@@ -2405,12 +2405,12 @@
   "addGoal": "Adaugă obiectiv",
   "editGoal": "Editează obiectiv",
   "icon": "Pictogramă",
-  "goalTitle": "Titlu obiectiv",
+  "goalTitle": "Titlul obiectivului",
   "current": "Curent",
   "target": "Obiectiv",
   "saveGoal": "Salvează",
   "goals": "Obiective",
-  "tapToAddGoal": "Atingeți pentru a adăuga un obiectiv",
+  "tapToAddGoal": "Atinge pentru a adăuga un obiectiv",
   "welcomeBack": "Bine ai revenit, {name}",
   "yourConversations": "Conversațiile tale",
   "reviewAndManageConversations": "Revizuiește și gestionează conversațiile înregistrate",
@@ -2893,10 +2893,10 @@
   "settingsHeader": "SETĂRI",
   "plansAndBilling": "Planuri și Facturare",
   "calendarIntegration": "Integrare Calendar",
-  "dailySummary": "Rezumat Zilnic",
+  "dailySummary": "Rezumat zilnic",
   "developer": "Dezvoltator",
   "about": "Despre",
-  "selectTime": "Selectați ora",
+  "selectTime": "Selectează ora",
   "accountGroup": "Cont",
   "signOutQuestion": "Deconectare?",
   "signOutConfirmation": "Sigur doriți să vă deconectați?",
@@ -2905,8 +2905,8 @@
   "enterWordsHint": "Introduceți cuvinte (separate prin virgulă)",
   "dailySummaryHeader": "REZUMAT ZILNIC",
   "dailySummaryTitle": "Rezumat Zilnic",
-  "dailySummaryDescription": "Primiți un rezumat personalizat al conversațiilor dvs.",
-  "deliveryTime": "Ora de livrare",
+  "dailySummaryDescription": "Primește un rezumat personalizat al conversațiilor zilei ca notificare.",
+  "deliveryTime": "Ora livrării",
   "deliveryTimeDescription": "Când să primiți rezumatul zilnic",
   "subscription": "Abonament",
   "viewPlansAndUsage": "Vezi Planuri și Utilizare",
@@ -2945,7 +2945,7 @@
   "goalTracker": "Urmăritor de obiective",
   "trackPersonalGoals": "Urmăriți obiective personale pe pagina de pornire",
   "dailyReflection": "Reflecție zilnică",
-  "dailyReflectionDescription": "Memento la ora 21:00 pentru a reflecta asupra zilei tale",
+  "dailyReflectionDescription": "Primește un memento la ora 21 pentru a reflecta asupra zilei și a-ți nota gândurile.",
   "endpointURL": "URL punct final",
   "links": "Linkuri",
   "discordMemberCount": "Peste 8000 de membri pe Discord",
@@ -3333,7 +3333,7 @@
   "failedToUpdateSettings": "Actualizarea setărilor a eșuat: {error}",
   "privacyNotice": "Notificare de confidențialitate",
   "recordingsMayCaptureOthers": "Înregistrările pot captura vocile altora. Asigurați-vă că aveți consimțământul tuturor participanților înainte de activare.",
-  "enable": "Activare",
+  "enable": "Activează",
   "storeAudioOnPhone": "Stocați audio pe telefon",
   "on": "Activat",
   "storeAudioDescription": "Păstrați toate înregistrările audio stocate local pe telefon. Când este dezactivat, doar încărcările eșuate sunt păstrate pentru a economisi spațiu.",
@@ -3610,5 +3610,18 @@
   "tasksCompleted": "Sarcini finalizate",
   "completionRate": "Rata de finalizare",
   "howItWorks": "Cum funcționează",
-  "dailyScoreExplanation": "Scorul tău zilnic se bazează pe finalizarea sarcinilor. Finalizează sarcinile pentru a-ți îmbunătăți scorul!"
+  "dailyScoreExplanation": "Scorul tău zilnic se bazează pe finalizarea sarcinilor. Finalizează sarcinile pentru a-ți îmbunătăți scorul!",
+  "notificationFrequencyDescription": "Controlează cât de des îți trimite Omi notificări proactive și mementouri.",
+  "sliderOff": "Oprit",
+  "sliderMax": "Max.",
+  "summaryGeneratedFor": "Rezumat generat pentru {date}",
+  "failedToGenerateSummary": "Generarea rezumatului a eșuat. Asigură-te că ai conversații pentru acea zi.",
+  "recap": "Recapitulare",
+  "deleteQuoted": "Șterge \"{name}\"",
+  "moveConversationsTo": "Mută {count} conversații în:",
+  "noFolder": "Fără folder",
+  "removeFromAllFolders": "Elimină din toate folderele",
+  "buildAndShareYourCustomApp": "Construiește și partajează aplicația ta personalizată",
+  "searchAppsPlaceholder": "Caută în 1500+ aplicații",
+  "filters": "Filtre"
 }

@@ -2279,7 +2279,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get summarize => 'सारांश';
 
   @override
-  String get generateSummary => 'सारांश उत्पन्न करें';
+  String get generateSummary => 'सारांश बनाएं';
 
   @override
   String get conversationNotFoundOrDeleted => 'बातचीत नहीं मिली या हटा दी गई है';
@@ -2947,7 +2947,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get integrationSetupRequired => 'यदि यह एक एकीकरण ऐप है, तो सुनिश्चित करें कि सेटअप पूर्ण हो गया है।';
 
   @override
-  String get installed => 'इंस्टॉल किया गया';
+  String get installed => 'इंस्टॉल';
 
   @override
   String get appIdLabel => 'ऐप ID';
@@ -3827,10 +3827,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String get dailySummaryTitle => 'दैनिक सारांश';
 
   @override
-  String get dailySummaryDescription => 'अपनी बातचीत का व्यक्तिगत सारांश प्राप्त करें';
+  String get dailySummaryDescription => 'अपने दिन की बातचीत का एक व्यक्तिगत सारांश सूचना के रूप में प्राप्त करें।';
 
   @override
-  String get deliveryTime => 'डिलीवरी का समय';
+  String get deliveryTime => 'डिलीवरी समय';
 
   @override
   String get deliveryTimeDescription => 'अपना दैनिक सारांश कब प्राप्त करें';
@@ -3915,7 +3915,8 @@ class AppLocalizationsHi extends AppLocalizations {
   String get trackPersonalGoals => 'होमपेज पर व्यक्तिगत लक्ष्यों को ट्रैक करें';
 
   @override
-  String get dailyReflectionDescription => 'अपने दिन पर विचार करने के लिए रात 9 बजे का अनुस्मारक';
+  String get dailyReflectionDescription =>
+      'रात 9 बजे अपने दिन पर विचार करने और अपने विचारों को कैप्चर करने के लिए एक अनुस्मारक प्राप्त करें।';
 
   @override
   String get endpointURL => 'एंडपॉइंट URL';
@@ -5687,4 +5688,50 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String get dailyScoreExplanation =>
       'आपका दैनिक स्कोर कार्य पूर्णता पर आधारित है। अपना स्कोर सुधारने के लिए अपने कार्य पूरे करें!';
+
+  @override
+  String get notificationFrequencyDescription =>
+      'नियंत्रित करें कि Omi आपको कितनी बार सक्रिय सूचनाएं और अनुस्मारक भेजता है।';
+
+  @override
+  String get sliderOff => 'बंद';
+
+  @override
+  String get sliderMax => 'अधिकतम';
+
+  @override
+  String summaryGeneratedFor(String date) {
+    return '$date के लिए सारांश बनाया गया';
+  }
+
+  @override
+  String get failedToGenerateSummary => 'सारांश बनाने में विफल। सुनिश्चित करें कि उस दिन की बातचीत मौजूद है।';
+
+  @override
+  String get recap => 'रीकैप';
+
+  @override
+  String deleteQuoted(String name) {
+    return '\"$name\" हटाएं';
+  }
+
+  @override
+  String moveConversationsTo(int count) {
+    return '$count बातचीत को यहां ले जाएं:';
+  }
+
+  @override
+  String get noFolder => 'कोई फ़ोल्डर नहीं';
+
+  @override
+  String get removeFromAllFolders => 'सभी फ़ोल्डरों से हटाएं';
+
+  @override
+  String get buildAndShareYourCustomApp => 'अपना कस्टम ऐप बनाएं और साझा करें';
+
+  @override
+  String get searchAppsPlaceholder => '1500+ ऐप्स में खोजें';
+
+  @override
+  String get filters => 'फ़िल्टर';
 }

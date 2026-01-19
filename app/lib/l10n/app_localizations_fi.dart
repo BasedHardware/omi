@@ -2503,7 +2503,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get trackPersonalGoalsOnHomepage => 'Seuraa henkilökohtaisia tavoitteitasi etusivulla';
 
   @override
-  String get dailyReflection => 'Päivittäinen pohdinta';
+  String get dailyReflection => 'Päivittäinen reflektio';
 
   @override
   String get get9PmReminderToReflect => 'Saa muistutus klo 21 päiväsi pohtimiseen';
@@ -3812,7 +3812,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get calendarIntegration => 'Kalenterin Integraatio';
 
   @override
-  String get dailySummary => 'Päivittäinen Yhteenveto';
+  String get dailySummary => 'Päivittäinen yhteenveto';
 
   @override
   String get developer => 'Kehittäjä';
@@ -3848,7 +3848,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get dailySummaryTitle => 'Päivittäinen Yhteenveto';
 
   @override
-  String get dailySummaryDescription => 'Saa henkilökohtainen yhteenveto keskusteluistasi';
+  String get dailySummaryDescription => 'Saa henkilökohtainen yhteenveto päivän keskusteluista ilmoituksena.';
 
   @override
   String get deliveryTime => 'Toimitusaika';
@@ -3936,7 +3936,8 @@ class AppLocalizationsFi extends AppLocalizations {
   String get trackPersonalGoals => 'Seuraa henkilökohtaisia tavoitteita etusivulla';
 
   @override
-  String get dailyReflectionDescription => 'Klo 21 muistutus päivän pohdintaan';
+  String get dailyReflectionDescription =>
+      'Saa muistutus klo 21 reflektoidaksesi päivääsi ja tallentaaksesi ajatuksesi.';
 
   @override
   String get endpointURL => 'Päätepisteen URL';
@@ -5708,4 +5709,51 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get dailyScoreExplanation =>
       'Päivittäinen pistemääräsi perustuu tehtävien suorittamiseen. Suorita tehtäväsi parantaaksesi pistemäärääsi!';
+
+  @override
+  String get notificationFrequencyDescription =>
+      'Hallitse kuinka usein Omi lähettää sinulle proaktiivisia ilmoituksia ja muistutuksia.';
+
+  @override
+  String get sliderOff => 'Pois';
+
+  @override
+  String get sliderMax => 'Maks.';
+
+  @override
+  String summaryGeneratedFor(String date) {
+    return 'Yhteenveto luotu päivälle $date';
+  }
+
+  @override
+  String get failedToGenerateSummary =>
+      'Yhteenvedon luominen epäonnistui. Varmista, että sinulla on keskusteluja kyseiseltä päivältä.';
+
+  @override
+  String get recap => 'Kertaus';
+
+  @override
+  String deleteQuoted(String name) {
+    return 'Poista \"$name\"';
+  }
+
+  @override
+  String moveConversationsTo(int count) {
+    return 'Siirrä $count keskustelua kansioon:';
+  }
+
+  @override
+  String get noFolder => 'Ei kansiota';
+
+  @override
+  String get removeFromAllFolders => 'Poista kaikista kansioista';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Rakenna ja jaa mukautettu sovelluksesi';
+
+  @override
+  String get searchAppsPlaceholder => 'Hae yli 1500 sovelluksesta';
+
+  @override
+  String get filters => 'Suodattimet';
 }

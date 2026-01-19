@@ -2260,7 +2260,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get summarize => '总结';
 
   @override
-  String get generateSummary => '生成摘要';
+  String get generateSummary => '生成总结';
 
   @override
   String get conversationNotFoundOrDeleted => '未找到对话或已被删除';
@@ -3160,7 +3160,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get user => '用户';
 
   @override
-  String get starred => '已加星标';
+  String get starred => '已收藏';
 
   @override
   String get date => '日期';
@@ -3744,7 +3744,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get calendarIntegration => '日历集成';
 
   @override
-  String get dailySummary => '每日摘要';
+  String get dailySummary => '每日总结';
 
   @override
   String get developer => '开发者';
@@ -3780,7 +3780,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get dailySummaryTitle => '每日摘要';
 
   @override
-  String get dailySummaryDescription => '获取您对话的个性化摘要';
+  String get dailySummaryDescription => '以通知形式接收当天对话的个性化总结。';
 
   @override
   String get deliveryTime => '发送时间';
@@ -3867,7 +3867,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get trackPersonalGoals => '在主页上跟踪个人目标';
 
   @override
-  String get dailyReflectionDescription => '晚上 9 点提醒反思您的一天';
+  String get dailyReflectionDescription => '晚上 9 点收到提醒，反思您的一天并记录想法。';
 
   @override
   String get endpointURL => '端点 URL';
@@ -5595,4 +5595,49 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get dailyScoreExplanation => '您的每日评分基于任务完成情况。完成任务以提高评分！';
+
+  @override
+  String get notificationFrequencyDescription => '控制 Omi 向您发送主动通知和提醒的频率。';
+
+  @override
+  String get sliderOff => '关闭';
+
+  @override
+  String get sliderMax => '最大';
+
+  @override
+  String summaryGeneratedFor(String date) {
+    return '已为 $date 生成总结';
+  }
+
+  @override
+  String get failedToGenerateSummary => '生成总结失败。请确保当天有对话记录。';
+
+  @override
+  String get recap => '回顾';
+
+  @override
+  String deleteQuoted(String name) {
+    return '删除\"$name\"';
+  }
+
+  @override
+  String moveConversationsTo(int count) {
+    return '移动 $count 个对话到：';
+  }
+
+  @override
+  String get noFolder => '无文件夹';
+
+  @override
+  String get removeFromAllFolders => '从所有文件夹中移除';
+
+  @override
+  String get buildAndShareYourCustomApp => '构建并分享您的自定义应用';
+
+  @override
+  String get searchAppsPlaceholder => '搜索 1500+ 应用';
+
+  @override
+  String get filters => '筛选';
 }

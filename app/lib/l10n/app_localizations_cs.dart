@@ -304,7 +304,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get tryAdjustingSearch => 'Zkuste upravit vyhledávání nebo filtry';
 
   @override
-  String get createYourOwnApp => 'Vytvořte vlastní aplikaci';
+  String get createYourOwnApp => 'Vytvořte si vlastní aplikaci';
 
   @override
   String get buildAndShareApp => 'Vytvořte a sdílejte vlastní aplikaci';
@@ -2307,7 +2307,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get summarize => 'Shrnout';
 
   @override
-  String get generateSummary => 'Vygenerovat souhrn';
+  String get generateSummary => 'Vygenerovat shrnutí';
 
   @override
   String get conversationNotFoundOrDeleted => 'Konverzace nenalezena nebo byla smazána';
@@ -3812,7 +3812,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get calendarIntegration => 'Integrace Kalendáře';
 
   @override
-  String get dailySummary => 'Denní Souhrn';
+  String get dailySummary => 'Denní shrnutí';
 
   @override
   String get developer => 'Vývojář';
@@ -3821,7 +3821,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get about => 'O aplikaci';
 
   @override
-  String get selectTime => 'Vyberte čas';
+  String get selectTime => 'Vybrat čas';
 
   @override
   String get accountGroup => 'Účet';
@@ -3848,7 +3848,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get dailySummaryTitle => 'Denní Souhrn';
 
   @override
-  String get dailySummaryDescription => 'Získejte personalizovaný souhrn svých konverzací';
+  String get dailySummaryDescription => 'Získejte personalizované shrnutí konverzací dne jako oznámení.';
 
   @override
   String get deliveryTime => 'Čas doručení';
@@ -3936,7 +3936,8 @@ class AppLocalizationsCs extends AppLocalizations {
   String get trackPersonalGoals => 'Sledovat osobní cíle na domovské stránce';
 
   @override
-  String get dailyReflectionDescription => 'Připomínka ve 21:00 k zamyšlení nad vaším dnem';
+  String get dailyReflectionDescription =>
+      'Získejte připomínku ve 21:00, abyste se zamysleli nad svým dnem a zachytili své myšlenky.';
 
   @override
   String get endpointURL => 'URL koncového bodu';
@@ -5701,4 +5702,51 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get dailyScoreExplanation =>
       'Vaše denní skóre je založeno na plnění úkolů. Dokončete své úkoly pro zlepšení skóre!';
+
+  @override
+  String get notificationFrequencyDescription =>
+      'Ovládejte, jak často vám Omi zasílá proaktivní oznámení a připomínky.';
+
+  @override
+  String get sliderOff => 'Vyp.';
+
+  @override
+  String get sliderMax => 'Max.';
+
+  @override
+  String summaryGeneratedFor(String date) {
+    return 'Shrnutí vygenerováno pro $date';
+  }
+
+  @override
+  String get failedToGenerateSummary =>
+      'Nepodařilo se vygenerovat shrnutí. Ujistěte se, že máte konverzace pro tento den.';
+
+  @override
+  String get recap => 'Rekapitulace';
+
+  @override
+  String deleteQuoted(String name) {
+    return 'Smazat \"$name\"';
+  }
+
+  @override
+  String moveConversationsTo(int count) {
+    return 'Přesunout $count konverzací do:';
+  }
+
+  @override
+  String get noFolder => 'Žádná složka';
+
+  @override
+  String get removeFromAllFolders => 'Odebrat ze všech složek';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Vytvořte a sdílejte svou vlastní aplikaci';
+
+  @override
+  String get searchAppsPlaceholder => 'Hledat v 1500+ aplikacích';
+
+  @override
+  String get filters => 'Filtry';
 }

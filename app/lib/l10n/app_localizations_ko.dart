@@ -3165,7 +3165,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get user => '사용자';
 
   @override
-  String get starred => '즐겨찾기';
+  String get starred => '별표';
 
   @override
   String get date => '날짜';
@@ -3785,7 +3785,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get dailySummaryTitle => '일일 요약';
 
   @override
-  String get dailySummaryDescription => '대화의 맞춤형 요약을 받으세요';
+  String get dailySummaryDescription => '하루 대화의 개인화된 요약을 알림으로 받습니다.';
 
   @override
   String get deliveryTime => '전송 시간';
@@ -3872,7 +3872,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get trackPersonalGoals => '홈페이지에서 개인 목표 추적';
 
   @override
-  String get dailyReflectionDescription => '오후 9시에 하루를 돌아보는 알림';
+  String get dailyReflectionDescription => '오후 9시에 하루를 되돌아보고 생각을 기록하라는 알림을 받습니다.';
 
   @override
   String get endpointURL => '엔드포인트 URL';
@@ -5607,4 +5607,49 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get dailyScoreExplanation => '일일 점수는 작업 완료를 기반으로 합니다. 작업을 완료하여 점수를 높이세요!';
+
+  @override
+  String get notificationFrequencyDescription => 'Omi가 사전 알림 및 리마인더를 보내는 빈도를 제어합니다.';
+
+  @override
+  String get sliderOff => '끄기';
+
+  @override
+  String get sliderMax => '최대';
+
+  @override
+  String summaryGeneratedFor(String date) {
+    return '$date 요약이 생성되었습니다';
+  }
+
+  @override
+  String get failedToGenerateSummary => '요약 생성에 실패했습니다. 해당 날짜에 대화가 있는지 확인하세요.';
+
+  @override
+  String get recap => '요약';
+
+  @override
+  String deleteQuoted(String name) {
+    return '\"$name\" 삭제';
+  }
+
+  @override
+  String moveConversationsTo(int count) {
+    return '$count개의 대화를 이동:';
+  }
+
+  @override
+  String get noFolder => '폴더 없음';
+
+  @override
+  String get removeFromAllFolders => '모든 폴더에서 제거';
+
+  @override
+  String get buildAndShareYourCustomApp => '맞춤 앱을 만들고 공유하세요';
+
+  @override
+  String get searchAppsPlaceholder => '1500개 이상의 앱 검색';
+
+  @override
+  String get filters => '필터';
 }

@@ -763,7 +763,7 @@
   "exportButton": "导出",
   "actionItemsCopiedToClipboard": "行动项已复制到剪贴板",
   "summarize": "总结",
-  "generateSummary": "生成摘要",
+  "generateSummary": "生成总结",
   "conversationNotFoundOrDeleted": "未找到对话或已被删除",
   "deleteMemory": "删除记忆",
   "thisActionCannotBeUndone": "此操作无法撤消。",
@@ -1037,7 +1037,7 @@
   "@user": {
     "description": "Default fallback name when user name is empty"
   },
-  "starred": "已加星标",
+  "starred": "已收藏",
   "@starred": {
     "description": "Label for starred filter button"
   },
@@ -1340,7 +1340,7 @@
   "settingsHeader": "设置",
   "plansAndBilling": "计划与账单",
   "calendarIntegration": "日历集成",
-  "dailySummary": "每日摘要",
+  "dailySummary": "每日总结",
   "developer": "开发者",
   "about": "关于",
   "selectTime": "选择时间",
@@ -1352,7 +1352,7 @@
   "enterWordsHint": "输入词汇（逗号分隔）",
   "dailySummaryHeader": "每日摘要",
   "dailySummaryTitle": "每日摘要",
-  "dailySummaryDescription": "获取您对话的个性化摘要",
+  "dailySummaryDescription": "以通知形式接收当天对话的个性化总结。",
   "deliveryTime": "发送时间",
   "deliveryTimeDescription": "何时接收您的每日摘要",
   "subscription": "订阅",
@@ -1392,7 +1392,7 @@
   "goalTracker": "目标追踪器",
   "trackPersonalGoals": "在主页上跟踪个人目标",
   "dailyReflection": "每日反思",
-  "dailyReflectionDescription": "晚上 9 点提醒反思您的一天",
+  "dailyReflectionDescription": "晚上 9 点收到提醒，反思您的一天并记录想法。",
   "endpointURL": "端点 URL",
   "links": "链接",
   "discordMemberCount": "Discord 上超过 8000 名成员",
@@ -2057,5 +2057,18 @@
   "tasksCompleted": "已完成任务",
   "completionRate": "完成率",
   "howItWorks": "运作方式",
-  "dailyScoreExplanation": "您的每日评分基于任务完成情况。完成任务以提高评分！"
+  "dailyScoreExplanation": "您的每日评分基于任务完成情况。完成任务以提高评分！",
+  "notificationFrequencyDescription": "控制 Omi 向您发送主动通知和提醒的频率。",
+  "sliderOff": "关闭",
+  "sliderMax": "最大",
+  "summaryGeneratedFor": "已为 {date} 生成总结",
+  "failedToGenerateSummary": "生成总结失败。请确保当天有对话记录。",
+  "recap": "回顾",
+  "deleteQuoted": "删除\"{name}\"",
+  "moveConversationsTo": "移动 {count} 个对话到：",
+  "noFolder": "无文件夹",
+  "removeFromAllFolders": "从所有文件夹中移除",
+  "buildAndShareYourCustomApp": "构建并分享您的自定义应用",
+  "searchAppsPlaceholder": "搜索 1500+ 应用",
+  "filters": "筛选"
 }

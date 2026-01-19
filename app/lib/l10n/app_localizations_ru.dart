@@ -2313,7 +2313,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get summarize => 'Резюмировать';
 
   @override
-  String get generateSummary => 'Создать резюме';
+  String get generateSummary => 'Создать сводку';
 
   @override
   String get conversationNotFoundOrDeleted => 'Разговор не найден или был удален';
@@ -2513,7 +2513,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get trackPersonalGoalsOnHomepage => 'Отслеживайте личные цели на главной странице';
 
   @override
-  String get dailyReflection => 'Ежедневное размышление';
+  String get dailyReflection => 'Ежедневная рефлексия';
 
   @override
   String get get9PmReminderToReflect => 'Получите напоминание в 21:00, чтобы подвести итоги дня';
@@ -3824,7 +3824,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get calendarIntegration => 'Интеграция Календаря';
 
   @override
-  String get dailySummary => 'Ежедневная Сводка';
+  String get dailySummary => 'Ежедневная сводка';
 
   @override
   String get developer => 'Разработчик';
@@ -3833,7 +3833,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get about => 'О программе';
 
   @override
-  String get selectTime => 'Выберите время';
+  String get selectTime => 'Выбрать время';
 
   @override
   String get accountGroup => 'Аккаунт';
@@ -3860,7 +3860,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get dailySummaryTitle => 'Ежедневная Сводка';
 
   @override
-  String get dailySummaryDescription => 'Получайте персонализированную сводку ваших разговоров';
+  String get dailySummaryDescription => 'Получайте персонализированную сводку разговоров за день в виде уведомления.';
 
   @override
   String get deliveryTime => 'Время доставки';
@@ -3948,7 +3948,8 @@ class AppLocalizationsRu extends AppLocalizations {
   String get trackPersonalGoals => 'Отслеживать личные цели на главной странице';
 
   @override
-  String get dailyReflectionDescription => 'Напоминание в 21:00 для размышлений о вашем дне';
+  String get dailyReflectionDescription =>
+      'Получайте напоминание в 21:00 для размышления о прошедшем дне и записи мыслей.';
 
   @override
   String get endpointURL => 'URL конечной точки';
@@ -5723,4 +5724,50 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get dailyScoreExplanation =>
       'Ваш дневной счёт основан на выполнении задач. Выполняйте задачи, чтобы улучшить свой счёт!';
+
+  @override
+  String get notificationFrequencyDescription =>
+      'Управляйте тем, как часто Omi отправляет вам проактивные уведомления и напоминания.';
+
+  @override
+  String get sliderOff => 'Выкл.';
+
+  @override
+  String get sliderMax => 'Макс.';
+
+  @override
+  String summaryGeneratedFor(String date) {
+    return 'Сводка создана для $date';
+  }
+
+  @override
+  String get failedToGenerateSummary => 'Не удалось создать сводку. Убедитесь, что у вас есть разговоры за этот день.';
+
+  @override
+  String get recap => 'Обзор';
+
+  @override
+  String deleteQuoted(String name) {
+    return 'Удалить «$name»';
+  }
+
+  @override
+  String moveConversationsTo(int count) {
+    return 'Переместить $count разговоров в:';
+  }
+
+  @override
+  String get noFolder => 'Без папки';
+
+  @override
+  String get removeFromAllFolders => 'Удалить из всех папок';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Создайте и поделитесь своим приложением';
+
+  @override
+  String get searchAppsPlaceholder => 'Поиск среди 1500+ приложений';
+
+  @override
+  String get filters => 'Фильтры';
 }

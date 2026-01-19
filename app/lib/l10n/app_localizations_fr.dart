@@ -2816,7 +2816,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get browseInstallCreateApps => 'Parcourir, installer et créer des applications';
 
   @override
-  String get all => 'Tous';
+  String get all => 'Tout';
 
   @override
   String get open => 'Ouvrir';
@@ -3845,7 +3845,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get calendarIntegration => 'Intégration du Calendrier';
 
   @override
-  String get dailySummary => 'Résumé Quotidien';
+  String get dailySummary => 'Résumé quotidien';
 
   @override
   String get developer => 'Développeur';
@@ -3881,7 +3881,8 @@ class AppLocalizationsFr extends AppLocalizations {
   String get dailySummaryTitle => 'Résumé Quotidien';
 
   @override
-  String get dailySummaryDescription => 'Obtenez un résumé personnalisé de vos conversations';
+  String get dailySummaryDescription =>
+      'Recevez un résumé personnalisé des conversations de votre journée sous forme de notification.';
 
   @override
   String get deliveryTime => 'Heure de livraison';
@@ -3969,7 +3970,8 @@ class AppLocalizationsFr extends AppLocalizations {
   String get trackPersonalGoals => 'Suivre les objectifs personnels sur la page d\'accueil';
 
   @override
-  String get dailyReflectionDescription => 'Rappel à 21h pour réfléchir sur votre journée';
+  String get dailyReflectionDescription =>
+      'Recevez un rappel à 21h pour réfléchir à votre journée et capturer vos pensées.';
 
   @override
   String get endpointURL => 'URL du point de terminaison';
@@ -5759,4 +5761,51 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get dailyScoreExplanation =>
       'Votre score quotidien est basé sur l\'achèvement des tâches. Terminez vos tâches pour améliorer votre score!';
+
+  @override
+  String get notificationFrequencyDescription =>
+      'Contrôlez la fréquence à laquelle Omi vous envoie des notifications proactives et des rappels.';
+
+  @override
+  String get sliderOff => 'Désactivé';
+
+  @override
+  String get sliderMax => 'Max.';
+
+  @override
+  String summaryGeneratedFor(String date) {
+    return 'Résumé généré pour le $date';
+  }
+
+  @override
+  String get failedToGenerateSummary =>
+      'Échec de la génération du résumé. Assurez-vous d\'avoir des conversations pour ce jour.';
+
+  @override
+  String get recap => 'Récap';
+
+  @override
+  String deleteQuoted(String name) {
+    return 'Supprimer « $name »';
+  }
+
+  @override
+  String moveConversationsTo(int count) {
+    return 'Déplacer $count conversations vers :';
+  }
+
+  @override
+  String get noFolder => 'Aucun dossier';
+
+  @override
+  String get removeFromAllFolders => 'Retirer de tous les dossiers';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Créez et partagez votre application personnalisée';
+
+  @override
+  String get searchAppsPlaceholder => 'Rechercher parmi 1500+ applications';
+
+  @override
+  String get filters => 'Filtres';
 }

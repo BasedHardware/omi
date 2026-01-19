@@ -2510,7 +2510,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get trackPersonalGoalsOnHomepage => 'Izsekojiet savus personīgos mērķus sākumlapā';
 
   @override
-  String get dailyReflection => 'Ikdienas pārdomas';
+  String get dailyReflection => 'Ikdienas pārdomu';
 
   @override
   String get get9PmReminderToReflect => 'Saņemiet atgādinājumu plkst. 21, lai pārdomātu savu dienu';
@@ -2799,7 +2799,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get browseInstallCreateApps => 'Pārlūkojiet, instalējiet un izveidojiet lietotnes';
 
   @override
-  String get all => 'Viss';
+  String get all => 'Visi';
 
   @override
   String get open => 'Atvērt';
@@ -2977,7 +2977,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get integrationSetupRequired => 'Ja šī ir integrācijas lietotne, pārliecinieties, ka iestatīšana ir pabeigta.';
 
   @override
-  String get installed => 'Instalēts';
+  String get installed => 'Instalēta';
 
   @override
   String get appIdLabel => 'Lietotnes ID';
@@ -3225,7 +3225,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get user => 'Lietotājs';
 
   @override
-  String get starred => 'Ar zvaigzni';
+  String get starred => 'Ar zvaigznīti';
 
   @override
   String get date => 'Datums';
@@ -3819,7 +3819,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get calendarIntegration => 'Kalendāra Integrācija';
 
   @override
-  String get dailySummary => 'Dienas Kopsavilkums';
+  String get dailySummary => 'Dienas kopsavilkums';
 
   @override
   String get developer => 'Izstrādātājs';
@@ -3828,7 +3828,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get about => 'Par';
 
   @override
-  String get selectTime => 'Izvēlieties laiku';
+  String get selectTime => 'Izvēlēties laiku';
 
   @override
   String get accountGroup => 'Konts';
@@ -3855,7 +3855,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get dailySummaryTitle => 'Dienas Kopsavilkums';
 
   @override
-  String get dailySummaryDescription => 'Saņemiet personalizētu sarunu kopsavilkumu';
+  String get dailySummaryDescription => 'Saņemiet personalizētu dienas sarunu kopsavilkumu kā paziņojumu.';
 
   @override
   String get deliveryTime => 'Piegādes laiks';
@@ -3943,7 +3943,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get trackPersonalGoals => 'Izsekot personīgos mērķus sākumlapā';
 
   @override
-  String get dailyReflectionDescription => '21:00 atgādinājums pārdomāt savu dienu';
+  String get dailyReflectionDescription =>
+      'Saņemiet atgādinājumu plkst. 21, lai pārdomātu savu dienu un piefiksētu domas.';
 
   @override
   String get endpointURL => 'Galapunkta URL';
@@ -5717,4 +5718,51 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get dailyScoreExplanation =>
       'Jūsu dienas rezultāts balstās uz uzdevumu izpildi. Pabeidziet uzdevumus, lai uzlabotu rezultātu!';
+
+  @override
+  String get notificationFrequencyDescription =>
+      'Kontrolējiet, cik bieži Omi sūta jums proaktīvus paziņojumus un atgādinājumus.';
+
+  @override
+  String get sliderOff => 'Izslēgts';
+
+  @override
+  String get sliderMax => 'Maks.';
+
+  @override
+  String summaryGeneratedFor(String date) {
+    return 'Kopsavilkums izveidots datumam $date';
+  }
+
+  @override
+  String get failedToGenerateSummary =>
+      'Neizdevās izveidot kopsavilkumu. Pārliecinieties, ka jums ir sarunas par šo dienu.';
+
+  @override
+  String get recap => 'Kopsavilkums';
+
+  @override
+  String deleteQuoted(String name) {
+    return 'Dzēst \"$name\"';
+  }
+
+  @override
+  String moveConversationsTo(int count) {
+    return 'Pārvietot $count sarunas uz:';
+  }
+
+  @override
+  String get noFolder => 'Bez mapes';
+
+  @override
+  String get removeFromAllFolders => 'Noņemt no visām mapēm';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Izveidojiet un kopīgojiet savu pielāgoto lietotni';
+
+  @override
+  String get searchAppsPlaceholder => 'Meklēt 1500+ lietotnēs';
+
+  @override
+  String get filters => 'Filtri';
 }

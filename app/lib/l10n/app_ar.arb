@@ -2397,7 +2397,7 @@
   "suggestQuestionsAfterConversations": "اقتراح الأسئلة بعد المحادثات",
   "goalTracker": "متتبع الأهداف",
   "trackPersonalGoalsOnHomepage": "تتبع أهدافك الشخصية على الصفحة الرئيسية",
-  "dailyReflection": "التفكير اليومي",
+  "dailyReflection": "التأمل اليومي",
   "get9PmReminderToReflect": "احصل على تذكير في الساعة 9 مساءً للتأمل في يومك",
   "actionItemDescriptionCannotBeEmpty": "لا يمكن أن يكون وصف عنصر الإجراء فارغًا",
   "saved": "تم الحفظ",
@@ -2546,7 +2546,7 @@
   "ratingsCount": "{count}+ تقييم",
   "errorActivatingApp": "خطأ في تفعيل التطبيق",
   "integrationSetupRequired": "إذا كان هذا تطبيق تكامل، تأكد من اكتمال الإعداد.",
-  "installed": "مثبّت",
+  "installed": "مثبت",
   "appIdLabel": "معرّف التطبيق",
   "appNameLabel": "اسم التطبيق",
   "appNamePlaceholder": "تطبيقي الرائع",
@@ -2640,7 +2640,7 @@
   "@user": {
     "description": "Default fallback name when user name is empty"
   },
-  "starred": "المميزة",
+  "starred": "مميز بنجمة",
   "@starred": {
     "description": "Label for starred filter button"
   },
@@ -2935,7 +2935,7 @@
   "enterWordsHint": "أدخل الكلمات (مفصولة بفواصل)",
   "dailySummaryHeader": "الملخص اليومي",
   "dailySummaryTitle": "الملخص اليومي",
-  "dailySummaryDescription": "احصل على ملخص شخصي لمحادثاتك",
+  "dailySummaryDescription": "احصل على ملخص مخصص لمحادثات يومك يُرسل كإشعار.",
   "deliveryTime": "وقت التسليم",
   "deliveryTimeDescription": "متى تتلقى ملخصك اليومي",
   "subscription": "الاشتراك",
@@ -2964,7 +2964,7 @@
   "noAPIKeys": "لا توجد مفاتيح API. قم بإنشاء واحد للبدء.",
   "autoCreateWhenDetected": "الإنشاء التلقائي عند اكتشاف الاسم",
   "trackPersonalGoals": "تتبع الأهداف الشخصية على الصفحة الرئيسية",
-  "dailyReflectionDescription": "تذكير الساعة 9 مساءً للتفكير في يومك",
+  "dailyReflectionDescription": "احصل على تذكير في الساعة 9 مساءً للتأمل في يومك وتدوين أفكارك.",
   "endpointURL": "عنوان URL لنقطة النهاية",
   "links": "الروابط",
   "discordMemberCount": "أكثر من 8000 عضو على Discord",
@@ -3610,5 +3610,18 @@
   "tasksCompleted": "المهام المكتملة",
   "completionRate": "نسبة الإنجاز",
   "howItWorks": "كيف يعمل",
-  "dailyScoreExplanation": "نتيجتك اليومية تعتمد على إكمال المهام. أكمل مهامك لتحسين نتيجتك!"
+  "dailyScoreExplanation": "نتيجتك اليومية تعتمد على إكمال المهام. أكمل مهامك لتحسين نتيجتك!",
+  "notificationFrequencyDescription": "تحكم في عدد مرات إرسال Omi للإشعارات والتذكيرات الاستباقية.",
+  "sliderOff": "إيقاف",
+  "sliderMax": "الحد الأقصى",
+  "summaryGeneratedFor": "تم إنشاء ملخص لـ {date}",
+  "failedToGenerateSummary": "فشل في إنشاء الملخص. تأكد من وجود محادثات لذلك اليوم.",
+  "recap": "ملخص",
+  "deleteQuoted": "حذف \"{name}\"",
+  "moveConversationsTo": "نقل {count} محادثات إلى:",
+  "noFolder": "بدون مجلد",
+  "removeFromAllFolders": "إزالة من جميع المجلدات",
+  "buildAndShareYourCustomApp": "قم ببناء ومشاركة تطبيقك المخصص",
+  "searchAppsPlaceholder": "ابحث في أكثر من 1500 تطبيق",
+  "filters": "التصفيات"
 }

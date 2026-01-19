@@ -415,11 +415,11 @@
   "@searchApps": {
     "description": "Apps search placeholder"
   },
-  "myApps": "Mina Appar",
+  "myApps": "Mina appar",
   "@myApps": {
     "description": "My Apps filter button"
   },
-  "installedApps": "Installerade Appar",
+  "installedApps": "Installerade appar",
   "@installedApps": {
     "description": "Installed Apps filter button"
   },
@@ -1677,7 +1677,7 @@
   "@locationAccessDesc": {
     "description": "Description for location access permission"
   },
-  "notifications": "Notifieringar",
+  "notifications": "Aviseringar",
   "@notifications": {
     "description": "Title for notifications permission"
   },
@@ -2608,7 +2608,7 @@
   "@user": {
     "description": "Default fallback name when user name is empty"
   },
-  "starred": "Stjärnmärkta",
+  "starred": "Stjärnmärkt",
   "@starred": {
     "description": "Label for starred filter button"
   },
@@ -2893,7 +2893,7 @@
   "settingsHeader": "INSTÄLLNINGAR",
   "plansAndBilling": "Planer och Fakturering",
   "calendarIntegration": "Kalenderintegration",
-  "dailySummary": "Daglig Sammanfattning",
+  "dailySummary": "Daglig sammanfattning",
   "developer": "Utvecklare",
   "about": "Om",
   "selectTime": "Välj tid",
@@ -2905,7 +2905,7 @@
   "enterWordsHint": "Ange ord (kommaseparerade)",
   "dailySummaryHeader": "DAGLIG SAMMANFATTNING",
   "dailySummaryTitle": "Daglig Sammanfattning",
-  "dailySummaryDescription": "Få en personlig sammanfattning av dina konversationer",
+  "dailySummaryDescription": "Få en personlig sammanfattning av dagens konversationer som en avisering.",
   "deliveryTime": "Leveranstid",
   "deliveryTimeDescription": "När du ska få din dagliga sammanfattning",
   "subscription": "Prenumeration",
@@ -2945,7 +2945,7 @@
   "goalTracker": "Målspårare",
   "trackPersonalGoals": "Spåra personliga mål på startsidan",
   "dailyReflection": "Daglig reflektion",
-  "dailyReflectionDescription": "21:00 påminnelse att reflektera över din dag",
+  "dailyReflectionDescription": "Få en påminnelse kl. 21 för att reflektera över din dag och fånga dina tankar.",
   "endpointURL": "Slutpunkts-URL",
   "links": "Länkar",
   "discordMemberCount": "Över 8000 medlemmar på Discord",
@@ -3610,5 +3610,18 @@
   "tasksCompleted": "Uppgifter slutförda",
   "completionRate": "Slutförandegrad",
   "howItWorks": "Så fungerar det",
-  "dailyScoreExplanation": "Din dagliga poäng baseras på uppgiftsslutförande. Slutför dina uppgifter för att förbättra din poäng!"
+  "dailyScoreExplanation": "Din dagliga poäng baseras på uppgiftsslutförande. Slutför dina uppgifter för att förbättra din poäng!",
+  "notificationFrequencyDescription": "Kontrollera hur ofta Omi skickar dig proaktiva aviseringar och påminnelser.",
+  "sliderOff": "Av",
+  "sliderMax": "Max.",
+  "summaryGeneratedFor": "Sammanfattning genererad för {date}",
+  "failedToGenerateSummary": "Kunde inte generera sammanfattning. Se till att du har konversationer för den dagen.",
+  "recap": "Sammanfattning",
+  "deleteQuoted": "Ta bort \"{name}\"",
+  "moveConversationsTo": "Flytta {count} konversationer till:",
+  "noFolder": "Ingen mapp",
+  "removeFromAllFolders": "Ta bort från alla mappar",
+  "buildAndShareYourCustomApp": "Bygg och dela din anpassade app",
+  "searchAppsPlaceholder": "Sök bland 1500+ appar",
+  "filters": "Filter"
 }

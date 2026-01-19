@@ -2310,7 +2310,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get summarize => 'Резюмиране';
 
   @override
-  String get generateSummary => 'Генериране на резюме';
+  String get generateSummary => 'Генерирай обобщение';
 
   @override
   String get conversationNotFoundOrDeleted => 'Разговорът не е намерен или е изтрит';
@@ -2510,7 +2510,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get trackPersonalGoalsOnHomepage => 'Проследявайте личните си цели на началната страница';
 
   @override
-  String get dailyReflection => 'Ежедневно размисъл';
+  String get dailyReflection => 'Дневна рефлексия';
 
   @override
   String get get9PmReminderToReflect => 'Получете напомняне в 21:00 да размислите за деня си';
@@ -3226,7 +3226,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get user => 'Потребител';
 
   @override
-  String get starred => 'Звездичка';
+  String get starred => 'Със звезда';
 
   @override
   String get date => 'Дата';
@@ -3824,7 +3824,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get calendarIntegration => 'Интеграция на Календар';
 
   @override
-  String get dailySummary => 'Дневно Резюме';
+  String get dailySummary => 'Дневно обобщение';
 
   @override
   String get developer => 'Разработчик';
@@ -3860,10 +3860,11 @@ class AppLocalizationsBg extends AppLocalizations {
   String get dailySummaryTitle => 'Дневно Резюме';
 
   @override
-  String get dailySummaryDescription => 'Получете персонализирано резюме на разговорите си';
+  String get dailySummaryDescription =>
+      'Получавайте персонализирано обобщение на разговорите ви за деня като известие.';
 
   @override
-  String get deliveryTime => 'Време за доставка';
+  String get deliveryTime => 'Час на доставка';
 
   @override
   String get deliveryTimeDescription => 'Кога да получавате дневното си резюме';
@@ -3949,7 +3950,8 @@ class AppLocalizationsBg extends AppLocalizations {
   String get trackPersonalGoals => 'Проследяване на лични цели на началната страница';
 
   @override
-  String get dailyReflectionDescription => 'Напомняне в 21:00 за размисъл над деня ви';
+  String get dailyReflectionDescription =>
+      'Получавайте напомняне в 21:00 ч. да размислите за деня си и да запишете мислите си.';
 
   @override
   String get endpointURL => 'URL на крайна точка';
@@ -5726,4 +5728,51 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get dailyScoreExplanation =>
       'Дневният ви резултат се базира на завършените задачи. Завършете задачите си, за да подобрите резултата!';
+
+  @override
+  String get notificationFrequencyDescription =>
+      'Контролирайте колко често Omi ви изпраща проактивни известия и напомняния.';
+
+  @override
+  String get sliderOff => 'Изкл.';
+
+  @override
+  String get sliderMax => 'Макс.';
+
+  @override
+  String summaryGeneratedFor(String date) {
+    return 'Обобщение генерирано за $date';
+  }
+
+  @override
+  String get failedToGenerateSummary =>
+      'Неуспешно генериране на обобщение. Уверете се, че имате разговори за този ден.';
+
+  @override
+  String get recap => 'Резюме';
+
+  @override
+  String deleteQuoted(String name) {
+    return 'Изтриване на \"$name\"';
+  }
+
+  @override
+  String moveConversationsTo(int count) {
+    return 'Преместване на $count разговора в:';
+  }
+
+  @override
+  String get noFolder => 'Без папка';
+
+  @override
+  String get removeFromAllFolders => 'Премахване от всички папки';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Създайте и споделете персонализирано приложение';
+
+  @override
+  String get searchAppsPlaceholder => 'Търсене в 1500+ приложения';
+
+  @override
+  String get filters => 'Филтри';
 }

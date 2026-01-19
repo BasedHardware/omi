@@ -313,10 +313,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String get searchApps => 'Cari apl...';
 
   @override
-  String get myApps => 'Apl Saya';
+  String get myApps => 'Aplikasi Saya';
 
   @override
-  String get installedApps => 'Apl Dipasang';
+  String get installedApps => 'Aplikasi Dipasang';
 
   @override
   String get unableToFetchApps =>
@@ -3863,7 +3863,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get dailySummaryTitle => 'Ringkasan Harian';
 
   @override
-  String get dailySummaryDescription => 'Dapatkan ringkasan peribadi perbualan anda';
+  String get dailySummaryDescription => 'Terima ringkasan diperibadikan perbualan hari anda sebagai pemberitahuan.';
 
   @override
   String get deliveryTime => 'Masa Penghantaran';
@@ -3951,7 +3951,8 @@ class AppLocalizationsMs extends AppLocalizations {
   String get trackPersonalGoals => 'Jejaki matlamat peribadi pada laman utama';
 
   @override
-  String get dailyReflectionDescription => 'Peringatan jam 9 malam untuk merenung hari anda';
+  String get dailyReflectionDescription =>
+      'Terima peringatan pada jam 9 malam untuk merenung hari anda dan mencatat fikiran anda.';
 
   @override
   String get endpointURL => 'URL Titik Akhir';
@@ -5730,4 +5731,51 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get dailyScoreExplanation =>
       'Skor harian anda berdasarkan penyelesaian tugasan. Selesaikan tugasan anda untuk meningkatkan skor!';
+
+  @override
+  String get notificationFrequencyDescription =>
+      'Kawal kekerapan Omi menghantar pemberitahuan dan peringatan proaktif kepada anda.';
+
+  @override
+  String get sliderOff => 'Mati';
+
+  @override
+  String get sliderMax => 'Maks.';
+
+  @override
+  String summaryGeneratedFor(String date) {
+    return 'Ringkasan dijana untuk $date';
+  }
+
+  @override
+  String get failedToGenerateSummary =>
+      'Gagal menjana ringkasan. Pastikan anda mempunyai perbualan untuk hari tersebut.';
+
+  @override
+  String get recap => 'Ringkasan';
+
+  @override
+  String deleteQuoted(String name) {
+    return 'Padam \"$name\"';
+  }
+
+  @override
+  String moveConversationsTo(int count) {
+    return 'Pindahkan $count perbualan ke:';
+  }
+
+  @override
+  String get noFolder => 'Tiada folder';
+
+  @override
+  String get removeFromAllFolders => 'Alih keluar dari semua folder';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Bina dan kongsi aplikasi tersuai anda';
+
+  @override
+  String get searchAppsPlaceholder => 'Cari 1500+ Aplikasi';
+
+  @override
+  String get filters => 'Penapis';
 }

@@ -3853,7 +3853,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dailySummaryTitle => 'Daily Summary';
 
   @override
-  String get dailySummaryDescription => 'Get a personalized summary of your conversations';
+  String get dailySummaryDescription =>
+      'Get a personalized summary of your day\'s conversations delivered as a notification.';
 
   @override
   String get deliveryTime => 'Delivery Time';
@@ -3941,7 +3942,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get trackPersonalGoals => 'Track personal goals on homepage';
 
   @override
-  String get dailyReflectionDescription => '9 PM reminder to reflect on your day';
+  String get dailyReflectionDescription => 'Get a reminder at 9 PM to reflect on your day and capture your thoughts.';
 
   @override
   String get endpointURL => 'Endpoint URL';
@@ -5709,4 +5710,50 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get dailyScoreExplanation =>
       'Your daily score is based on task completion. Complete your tasks to improve your score!';
+
+  @override
+  String get notificationFrequencyDescription =>
+      'Control how often Omi sends you proactive notifications and reminders.';
+
+  @override
+  String get sliderOff => 'Off';
+
+  @override
+  String get sliderMax => 'Max';
+
+  @override
+  String summaryGeneratedFor(String date) {
+    return 'Summary generated for $date';
+  }
+
+  @override
+  String get failedToGenerateSummary => 'Failed to generate summary. Make sure you have conversations for that day.';
+
+  @override
+  String get recap => 'Recap';
+
+  @override
+  String deleteQuoted(String name) {
+    return 'Delete \"$name\"';
+  }
+
+  @override
+  String moveConversationsTo(int count) {
+    return 'Move $count conversations to:';
+  }
+
+  @override
+  String get noFolder => 'No folder';
+
+  @override
+  String get removeFromAllFolders => 'Remove from all folders';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Build and share your custom app';
+
+  @override
+  String get searchAppsPlaceholder => 'Search 1500+ Apps';
+
+  @override
+  String get filters => 'Filters';
 }

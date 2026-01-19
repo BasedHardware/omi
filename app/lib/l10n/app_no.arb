@@ -415,11 +415,11 @@
   "@searchApps": {
     "description": "Apps search placeholder"
   },
-  "myApps": "Mine Apper",
+  "myApps": "Mine apper",
   "@myApps": {
     "description": "My Apps filter button"
   },
-  "installedApps": "Installerte Apper",
+  "installedApps": "Installerte apper",
   "@installedApps": {
     "description": "Installed Apps filter button"
   },
@@ -2608,7 +2608,7 @@
   "@user": {
     "description": "Default fallback name when user name is empty"
   },
-  "starred": "Stjerne",
+  "starred": "Stjernemerket",
   "@starred": {
     "description": "Label for starred filter button"
   },
@@ -2893,7 +2893,7 @@
   "settingsHeader": "INNSTILLINGER",
   "plansAndBilling": "Planer og Fakturering",
   "calendarIntegration": "Kalenderintegrasjon",
-  "dailySummary": "Daglig Sammendrag",
+  "dailySummary": "Daglig sammendrag",
   "developer": "Utvikler",
   "about": "Om",
   "selectTime": "Velg tid",
@@ -2905,7 +2905,7 @@
   "enterWordsHint": "Skriv inn ord (kommaseparert)",
   "dailySummaryHeader": "DAGLIG SAMMENDRAG",
   "dailySummaryTitle": "Daglig Sammendrag",
-  "dailySummaryDescription": "Få et personlig sammendrag av samtalene dine",
+  "dailySummaryDescription": "Få et personlig sammendrag av dagens samtaler levert som et varsel.",
   "deliveryTime": "Leveringstid",
   "deliveryTimeDescription": "Når du skal motta det daglige sammendraget",
   "subscription": "Abonnement",
@@ -2945,7 +2945,7 @@
   "goalTracker": "Målsporer",
   "trackPersonalGoals": "Spor personlige mål på startsiden",
   "dailyReflection": "Daglig refleksjon",
-  "dailyReflectionDescription": "21:00 påminnelse for å reflektere over dagen",
+  "dailyReflectionDescription": "Få en påminnelse kl. 21 for å reflektere over dagen din og fange tankene dine.",
   "endpointURL": "Endepunkt-URL",
   "links": "Lenker",
   "discordMemberCount": "Over 8000 medlemmer på Discord",
@@ -3610,5 +3610,18 @@
   "tasksCompleted": "Oppgaver fullført",
   "completionRate": "Fullføringsgrad",
   "howItWorks": "Slik fungerer det",
-  "dailyScoreExplanation": "Din daglige poengsum er basert på oppgavefullføring. Fullfør oppgavene dine for å forbedre poengsummen!"
+  "dailyScoreExplanation": "Din daglige poengsum er basert på oppgavefullføring. Fullfør oppgavene dine for å forbedre poengsummen!",
+  "notificationFrequencyDescription": "Kontroller hvor ofte Omi sender deg proaktive varsler og påminnelser.",
+  "sliderOff": "Av",
+  "sliderMax": "Maks.",
+  "summaryGeneratedFor": "Sammendrag generert for {date}",
+  "failedToGenerateSummary": "Kunne ikke generere sammendrag. Sørg for at du har samtaler for den dagen.",
+  "recap": "Oppsummering",
+  "deleteQuoted": "Slett \"{name}\"",
+  "moveConversationsTo": "Flytt {count} samtaler til:",
+  "noFolder": "Ingen mappe",
+  "removeFromAllFolders": "Fjern fra alle mapper",
+  "buildAndShareYourCustomApp": "Bygg og del din tilpassede app",
+  "searchAppsPlaceholder": "Søk i 1500+ apper",
+  "filters": "Filtre"
 }

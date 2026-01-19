@@ -305,7 +305,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get tryAdjustingSearch => 'Proovige otsingu või filtrite muutmist';
 
   @override
-  String get createYourOwnApp => 'Looge oma rakendus';
+  String get createYourOwnApp => 'Loo oma rakendus';
 
   @override
   String get buildAndShareApp => 'Looge ja jagage oma kohandatud rakendust';
@@ -317,7 +317,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get myApps => 'Minu rakendused';
 
   @override
-  String get installedApps => 'Installitud rakendused';
+  String get installedApps => 'Paigaldatud rakendused';
 
   @override
   String get unableToFetchApps =>
@@ -2306,7 +2306,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get summarize => 'Kokkuvõte';
 
   @override
-  String get generateSummary => 'Loo kokkuvõte';
+  String get generateSummary => 'Genereeri kokkuvõte';
 
   @override
   String get conversationNotFoundOrDeleted => 'Vestlust ei leitud või see on kustutatud';
@@ -2506,7 +2506,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get trackPersonalGoalsOnHomepage => 'Jälgi oma isiklikke eesmärke avalehel';
 
   @override
-  String get dailyReflection => 'Igapäevane mõtisklus';
+  String get dailyReflection => 'Igapäevane refleksioon';
 
   @override
   String get get9PmReminderToReflect => 'Saa kell 21 meeldetuletus oma päeva üle mõtisklemiseks';
@@ -3815,7 +3815,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get calendarIntegration => 'Kalendri Integratsioon';
 
   @override
-  String get dailySummary => 'Päevane Kokkuvõte';
+  String get dailySummary => 'Päeva kokkuvõte';
 
   @override
   String get developer => 'Arendaja';
@@ -3824,7 +3824,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get about => 'Teave';
 
   @override
-  String get selectTime => 'Valige aeg';
+  String get selectTime => 'Vali aeg';
 
   @override
   String get accountGroup => 'Konto';
@@ -3851,10 +3851,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get dailySummaryTitle => 'Päevane Kokkuvõte';
 
   @override
-  String get dailySummaryDescription => 'Saa isikupärastatud kokkuvõte oma vestlustest';
+  String get dailySummaryDescription => 'Saa isikupärastatud kokkuvõte päeva vestlustest teavitusena.';
 
   @override
-  String get deliveryTime => 'Kohaletoimetamise aeg';
+  String get deliveryTime => 'Edastamise aeg';
 
   @override
   String get deliveryTimeDescription => 'Millal saada päevast kokkuvõtet';
@@ -3939,7 +3939,8 @@ class AppLocalizationsEt extends AppLocalizations {
   String get trackPersonalGoals => 'Jälgi isiklikke eesmärke avalehel';
 
   @override
-  String get dailyReflectionDescription => '21:00 meeldetuletus mõtisklemiseks oma päeva üle';
+  String get dailyReflectionDescription =>
+      'Saa meeldetuletus kell 21, et mõtiskleda oma päeva üle ja jäädvustada oma mõtted.';
 
   @override
   String get endpointURL => 'Lõpp-punkti URL';
@@ -5708,4 +5709,51 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get dailyScoreExplanation =>
       'Teie päeva skoor põhineb ülesannete täitmisel. Täitke oma ülesanded skoori parandamiseks!';
+
+  @override
+  String get notificationFrequencyDescription =>
+      'Kontrolli, kui sageli Omi saadab sulle proaktiivseid teavitusi ja meeldetuletusi.';
+
+  @override
+  String get sliderOff => 'Väljas';
+
+  @override
+  String get sliderMax => 'Maks.';
+
+  @override
+  String summaryGeneratedFor(String date) {
+    return 'Kokkuvõte genereeritud kuupäevale $date';
+  }
+
+  @override
+  String get failedToGenerateSummary =>
+      'Kokkuvõtte genereerimine ebaõnnestus. Veendu, et sul on vestlusi sellel päeval.';
+
+  @override
+  String get recap => 'Kokkuvõte';
+
+  @override
+  String deleteQuoted(String name) {
+    return 'Kustuta \"$name\"';
+  }
+
+  @override
+  String moveConversationsTo(int count) {
+    return 'Teisalda $count vestlust kausta:';
+  }
+
+  @override
+  String get noFolder => 'Kaustata';
+
+  @override
+  String get removeFromAllFolders => 'Eemalda kõigist kaustadest';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Ehita ja jaga oma kohandatud rakendust';
+
+  @override
+  String get searchAppsPlaceholder => 'Otsi 1500+ rakendust';
+
+  @override
+  String get filters => 'Filtrid';
 }

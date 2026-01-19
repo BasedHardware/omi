@@ -314,10 +314,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String get searchApps => 'Hľadať aplikácie...';
 
   @override
-  String get myApps => 'Moje Aplikácie';
+  String get myApps => 'Moje aplikácie';
 
   @override
-  String get installedApps => 'Nainštalované Aplikácie';
+  String get installedApps => 'Nainštalované aplikácie';
 
   @override
   String get unableToFetchApps =>
@@ -2311,7 +2311,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get summarize => 'Zhrnúť';
 
   @override
-  String get generateSummary => 'Vygenerovať zhrnutie';
+  String get generateSummary => 'Vygenerovať súhrn';
 
   @override
   String get conversationNotFoundOrDeleted => 'Konverzácia nebola nájdená alebo bola odstránená';
@@ -2649,7 +2649,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get goals => 'Ciele';
 
   @override
-  String get tapToAddGoal => 'Ťuknite na pridanie cieľa';
+  String get tapToAddGoal => 'Klepnutím pridajte cieľ';
 
   @override
   String welcomeBack(String name) {
@@ -2800,7 +2800,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get browseInstallCreateApps => 'Prechádzajte, inštalujte a vytvárajte aplikácie';
 
   @override
-  String get all => 'Všetky';
+  String get all => 'Všetko';
 
   @override
   String get open => 'Otvoriť';
@@ -3816,7 +3816,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get calendarIntegration => 'Integrácia Kalendára';
 
   @override
-  String get dailySummary => 'Denný Súhrn';
+  String get dailySummary => 'Denný súhrn';
 
   @override
   String get developer => 'Vývojár';
@@ -3825,7 +3825,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get about => 'O aplikácii';
 
   @override
-  String get selectTime => 'Vyberte čas';
+  String get selectTime => 'Vybrať čas';
 
   @override
   String get accountGroup => 'Účet';
@@ -3852,7 +3852,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get dailySummaryTitle => 'Denný Súhrn';
 
   @override
-  String get dailySummaryDescription => 'Získajte personalizovaný súhrn vašich konverzácií';
+  String get dailySummaryDescription => 'Získajte personalizovaný súhrn konverzácií dňa ako upozornenie.';
 
   @override
   String get deliveryTime => 'Čas doručenia';
@@ -3940,7 +3940,8 @@ class AppLocalizationsSk extends AppLocalizations {
   String get trackPersonalGoals => 'Sledovať osobné ciele na domovskej stránke';
 
   @override
-  String get dailyReflectionDescription => 'Pripomienka o 21:00 na zamyslenie sa nad vaším dňom';
+  String get dailyReflectionDescription =>
+      'Získajte pripomienku o 21:00, aby ste sa zamysleli nad svojím dňom a zaznamenali myšlienky.';
 
   @override
   String get endpointURL => 'URL koncového bodu';
@@ -5681,7 +5682,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get soCloseJustLittleMore => 'Tak blízko, len ešte trochu';
 
   @override
-  String get notificationFrequency => 'Frekvencia oznámení';
+  String get notificationFrequency => 'Frekvencia upozornení';
 
   @override
   String get controlNotificationFrequency => 'Ovládajte, ako často vám Omi posiela proaktívne oznámenia.';
@@ -5707,4 +5708,51 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String get dailyScoreExplanation =>
       'Vaše denné skóre je založené na plnení úloh. Dokončite svoje úlohy pre zlepšenie skóre!';
+
+  @override
+  String get notificationFrequencyDescription =>
+      'Ovládajte, ako často vám Omi posiela proaktívne upozornenia a pripomienky.';
+
+  @override
+  String get sliderOff => 'Vyp.';
+
+  @override
+  String get sliderMax => 'Max.';
+
+  @override
+  String summaryGeneratedFor(String date) {
+    return 'Súhrn vygenerovaný pre $date';
+  }
+
+  @override
+  String get failedToGenerateSummary =>
+      'Nepodarilo sa vygenerovať súhrn. Uistite sa, že máte konverzácie pre tento deň.';
+
+  @override
+  String get recap => 'Zhrnutie';
+
+  @override
+  String deleteQuoted(String name) {
+    return 'Odstrániť \"$name\"';
+  }
+
+  @override
+  String moveConversationsTo(int count) {
+    return 'Presunúť $count konverzácií do:';
+  }
+
+  @override
+  String get noFolder => 'Žiadny priečinok';
+
+  @override
+  String get removeFromAllFolders => 'Odstrániť zo všetkých priečinkov';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Vytvorte a zdieľajte svoju vlastnú aplikáciu';
+
+  @override
+  String get searchAppsPlaceholder => 'Hľadať v 1500+ aplikáciách';
+
+  @override
+  String get filters => 'Filtre';
 }

@@ -415,11 +415,11 @@
   "@searchApps": {
     "description": "Apps search placeholder"
   },
-  "myApps": "Ứng Dụng Của Tôi",
+  "myApps": "Ứng dụng của tôi",
   "@myApps": {
     "description": "My Apps filter button"
   },
-  "installedApps": "Ứng Dụng Đã Cài",
+  "installedApps": "Ứng dụng đã cài đặt",
   "@installedApps": {
     "description": "Installed Apps filter button"
   },
@@ -2334,7 +2334,7 @@
   "exportButton": "Xuất",
   "actionItemsCopiedToClipboard": "Đã sao chép các mục hành động vào clipboard",
   "summarize": "Tóm tắt",
-  "generateSummary": "Tạo bản tóm tắt",
+  "generateSummary": "Tạo tóm tắt",
   "conversationNotFoundOrDeleted": "Không tìm thấy cuộc trò chuyện hoặc đã bị xóa",
   "deleteMemory": "Xóa bộ nhớ",
   "thisActionCannotBeUndone": "Hành động này không thể hoàn tác.",
@@ -2608,7 +2608,7 @@
   "@user": {
     "description": "Default fallback name when user name is empty"
   },
-  "starred": "Đã gắn sao",
+  "starred": "Được gắn sao",
   "@starred": {
     "description": "Label for starred filter button"
   },
@@ -2893,7 +2893,7 @@
   "settingsHeader": "CÀI ĐẶT",
   "plansAndBilling": "Gói và Thanh toán",
   "calendarIntegration": "Tích hợp Lịch",
-  "dailySummary": "Tóm tắt Hàng ngày",
+  "dailySummary": "Tóm tắt hàng ngày",
   "developer": "Nhà phát triển",
   "about": "Giới thiệu",
   "selectTime": "Chọn thời gian",
@@ -2905,7 +2905,7 @@
   "enterWordsHint": "Nhập từ (phân tách bằng dấu phẩy)",
   "dailySummaryHeader": "TÓM TẮT HÀNG NGÀY",
   "dailySummaryTitle": "Tóm tắt Hàng ngày",
-  "dailySummaryDescription": "Nhận tóm tắt cá nhân hóa về các cuộc trò chuyện của bạn",
+  "dailySummaryDescription": "Nhận tóm tắt cá nhân hóa về các cuộc trò chuyện trong ngày dưới dạng thông báo.",
   "deliveryTime": "Thời gian gửi",
   "deliveryTimeDescription": "Khi nào nhận tóm tắt hàng ngày của bạn",
   "subscription": "Đăng ký",
@@ -2944,8 +2944,8 @@
   "suggestQuestionsAfterConversations": "Đề xuất câu hỏi sau cuộc trò chuyện",
   "goalTracker": "Theo dõi Mục tiêu",
   "trackPersonalGoals": "Theo dõi mục tiêu cá nhân trên trang chủ",
-  "dailyReflection": "Suy ngẫm Hàng ngày",
-  "dailyReflectionDescription": "Nhắc nhở lúc 9 giờ tối để suy ngẫm về ngày của bạn",
+  "dailyReflection": "Suy ngẫm hàng ngày",
+  "dailyReflectionDescription": "Nhận nhắc nhở lúc 9 giờ tối để suy ngẫm về ngày của bạn và ghi lại suy nghĩ.",
   "endpointURL": "URL Điểm cuối",
   "links": "Liên kết",
   "discordMemberCount": "Hơn 8000 thành viên trên Discord",
@@ -3610,5 +3610,18 @@
   "tasksCompleted": "Nhiệm vụ hoàn thành",
   "completionRate": "Tỷ lệ hoàn thành",
   "howItWorks": "Cách hoạt động",
-  "dailyScoreExplanation": "Điểm hàng ngày dựa trên việc hoàn thành nhiệm vụ. Hoàn thành nhiệm vụ để cải thiện điểm!"
+  "dailyScoreExplanation": "Điểm hàng ngày dựa trên việc hoàn thành nhiệm vụ. Hoàn thành nhiệm vụ để cải thiện điểm!",
+  "notificationFrequencyDescription": "Kiểm soát tần suất Omi gửi thông báo và nhắc nhở chủ động cho bạn.",
+  "sliderOff": "Tắt",
+  "sliderMax": "Tối đa",
+  "summaryGeneratedFor": "Đã tạo tóm tắt cho {date}",
+  "failedToGenerateSummary": "Không thể tạo tóm tắt. Hãy đảm bảo bạn có cuộc trò chuyện cho ngày đó.",
+  "recap": "Tổng kết",
+  "deleteQuoted": "Xóa \"{name}\"",
+  "moveConversationsTo": "Di chuyển {count} cuộc trò chuyện đến:",
+  "noFolder": "Không có thư mục",
+  "removeFromAllFolders": "Xóa khỏi tất cả thư mục",
+  "buildAndShareYourCustomApp": "Xây dựng và chia sẻ ứng dụng tùy chỉnh của bạn",
+  "searchAppsPlaceholder": "Tìm kiếm 1500+ ứng dụng",
+  "filters": "Bộ lọc"
 }

@@ -403,7 +403,7 @@
   "@tryAdjustingSearch": {
     "description": "Hint when no apps found"
   },
-  "createYourOwnApp": "Crea la Tua App",
+  "createYourOwnApp": "Crea la tua app",
   "@createYourOwnApp": {
     "description": "Create app button title"
   },
@@ -415,11 +415,11 @@
   "@searchApps": {
     "description": "Apps search placeholder"
   },
-  "myApps": "Le Mie App",
+  "myApps": "Le mie app",
   "@myApps": {
     "description": "My Apps filter button"
   },
-  "installedApps": "App Installate",
+  "installedApps": "App installate",
   "@installedApps": {
     "description": "Installed Apps filter button"
   },
@@ -2441,7 +2441,7 @@
   "reloadingApps": "Ricaricamento app...",
   "loadingApps": "Caricamento app...",
   "browseInstallCreateApps": "Sfoglia, installa e crea app",
-  "all": "Tutti",
+  "all": "Tutto",
   "open": "Apri",
   "install": "Installa",
   "noAppsAvailable": "Nessuna app disponibile",
@@ -2590,7 +2590,7 @@
   "@user": {
     "description": "Default fallback name when user name is empty"
   },
-  "starred": "Con stella",
+  "starred": "Preferiti",
   "@starred": {
     "description": "Label for starred filter button"
   },
@@ -2875,7 +2875,7 @@
   "settingsHeader": "IMPOSTAZIONI",
   "plansAndBilling": "Piani e Fatturazione",
   "calendarIntegration": "Integrazione Calendario",
-  "dailySummary": "Riepilogo Giornaliero",
+  "dailySummary": "Riepilogo giornaliero",
   "developer": "Sviluppatore",
   "about": "Informazioni",
   "selectTime": "Seleziona orario",
@@ -2887,7 +2887,7 @@
   "enterWordsHint": "Inserisci parole (separate da virgole)",
   "dailySummaryHeader": "RIEPILOGO GIORNALIERO",
   "dailySummaryTitle": "Riepilogo Giornaliero",
-  "dailySummaryDescription": "Ricevi un riepilogo personalizzato delle tue conversazioni",
+  "dailySummaryDescription": "Ricevi un riepilogo personalizzato delle conversazioni della giornata come notifica.",
   "deliveryTime": "Orario di consegna",
   "deliveryTimeDescription": "Quando ricevere il riepilogo giornaliero",
   "subscription": "Abbonamento",
@@ -2926,8 +2926,8 @@
   "suggestQuestionsAfterConversations": "Suggerisci domande dopo le conversazioni",
   "goalTracker": "Tracker degli Obiettivi",
   "trackPersonalGoals": "Tieni traccia degli obiettivi personali sulla homepage",
-  "dailyReflection": "Riflessione Giornaliera",
-  "dailyReflectionDescription": "Promemoria alle 21:00 per riflettere sulla tua giornata",
+  "dailyReflection": "Riflessione giornaliera",
+  "dailyReflectionDescription": "Ricevi un promemoria alle 21:00 per riflettere sulla tua giornata e catturare i tuoi pensieri.",
   "endpointURL": "URL dell'Endpoint",
   "links": "Link",
   "discordMemberCount": "Oltre 8000 membri su Discord",
@@ -3315,7 +3315,7 @@
   "failedToUpdateSettings": "Impossibile aggiornare le impostazioni: {error}",
   "privacyNotice": "Avviso sulla privacy",
   "recordingsMayCaptureOthers": "Le registrazioni potrebbero catturare le voci di altri. Assicurati di avere il consenso di tutti i partecipanti prima di abilitare.",
-  "enable": "Abilita",
+  "enable": "Attiva",
   "storeAudioOnPhone": "Salva audio sul telefono",
   "on": "Attivo",
   "storeAudioDescription": "Mantieni tutte le registrazioni audio memorizzate localmente sul tuo telefono. Quando disabilitato, vengono conservati solo i caricamenti non riusciti per risparmiare spazio.",
@@ -3592,5 +3592,18 @@
   "tasksCompleted": "Attività completate",
   "completionRate": "Tasso di completamento",
   "howItWorks": "Come funziona",
-  "dailyScoreExplanation": "Il tuo punteggio giornaliero si basa sul completamento delle attività. Completa le tue attività per migliorare il punteggio!"
+  "dailyScoreExplanation": "Il tuo punteggio giornaliero si basa sul completamento delle attività. Completa le tue attività per migliorare il punteggio!",
+  "notificationFrequencyDescription": "Controlla quanto spesso Omi ti invia notifiche proattive e promemoria.",
+  "sliderOff": "Off",
+  "sliderMax": "Max.",
+  "summaryGeneratedFor": "Riepilogo generato per {date}",
+  "failedToGenerateSummary": "Impossibile generare il riepilogo. Assicurati di avere conversazioni per quel giorno.",
+  "recap": "Riepilogo",
+  "deleteQuoted": "Elimina \"{name}\"",
+  "moveConversationsTo": "Sposta {count} conversazioni in:",
+  "noFolder": "Nessuna cartella",
+  "removeFromAllFolders": "Rimuovi da tutte le cartelle",
+  "buildAndShareYourCustomApp": "Crea e condividi la tua app personalizzata",
+  "searchAppsPlaceholder": "Cerca tra 1500+ app",
+  "filters": "Filtri"
 }

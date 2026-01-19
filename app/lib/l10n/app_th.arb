@@ -419,7 +419,7 @@
   "@myApps": {
     "description": "My Apps filter button"
   },
-  "installedApps": "แอปที่ติดตั้ง",
+  "installedApps": "แอปที่ติดตั้งแล้ว",
   "@installedApps": {
     "description": "Installed Apps filter button"
   },
@@ -2608,7 +2608,7 @@
   "@user": {
     "description": "Default fallback name when user name is empty"
   },
-  "starred": "ที่ติดดาว",
+  "starred": "ติดดาว",
   "@starred": {
     "description": "Label for starred filter button"
   },
@@ -2905,7 +2905,7 @@
   "enterWordsHint": "ป้อนคำ (คั่นด้วยเครื่องหมายจุลภาค)",
   "dailySummaryHeader": "สรุปรายวัน",
   "dailySummaryTitle": "สรุปรายวัน",
-  "dailySummaryDescription": "รับสรุปส่วนตัวของการสนทนาของคุณ",
+  "dailySummaryDescription": "รับสรุปการสนทนาประจำวันแบบเฉพาะบุคคลในรูปแบบการแจ้งเตือน",
   "deliveryTime": "เวลาส่ง",
   "deliveryTimeDescription": "เวลาที่จะรับสรุปรายวัน",
   "subscription": "การสมัครสมาชิก",
@@ -2944,8 +2944,8 @@
   "suggestQuestionsAfterConversations": "แนะนำคำถามหลังจากการสนทนา",
   "goalTracker": "ตัวติดตามเป้าหมาย",
   "trackPersonalGoals": "ติดตามเป้าหมายส่วนตัวบนหน้าแรก",
-  "dailyReflection": "การไตร่ตรองประจำวัน",
-  "dailyReflectionDescription": "การแจ้งเตือนเวลา 21.00 น. เพื่อไตร่ตรองวันของคุณ",
+  "dailyReflection": "การทบทวนรายวัน",
+  "dailyReflectionDescription": "รับการเตือนความจำเวลา 21.00 น. เพื่อทบทวนวันของคุณและบันทึกความคิด",
   "endpointURL": "URL ปลายทาง",
   "links": "ลิงก์",
   "discordMemberCount": "สมาชิกกว่า 8000 คนใน Discord",
@@ -3610,5 +3610,18 @@
   "tasksCompleted": "งานที่เสร็จแล้ว",
   "completionRate": "อัตราความสำเร็จ",
   "howItWorks": "วิธีการทำงาน",
-  "dailyScoreExplanation": "คะแนนประจำวันของคุณขึ้นอยู่กับการทำงานเสร็จ ทำงานให้เสร็จเพื่อเพิ่มคะแนน!"
+  "dailyScoreExplanation": "คะแนนประจำวันของคุณขึ้นอยู่กับการทำงานเสร็จ ทำงานให้เสร็จเพื่อเพิ่มคะแนน!",
+  "notificationFrequencyDescription": "ควบคุมความถี่ที่ Omi ส่งการแจ้งเตือนเชิงรุกและการเตือนความจำให้คุณ",
+  "sliderOff": "ปิด",
+  "sliderMax": "สูงสุด",
+  "summaryGeneratedFor": "สร้างสรุปสำหรับ {date}",
+  "failedToGenerateSummary": "ไม่สามารถสร้างสรุปได้ ตรวจสอบให้แน่ใจว่าคุณมีการสนทนาในวันนั้น",
+  "recap": "สรุป",
+  "deleteQuoted": "ลบ \"{name}\"",
+  "moveConversationsTo": "ย้าย {count} การสนทนาไปที่:",
+  "noFolder": "ไม่มีโฟลเดอร์",
+  "removeFromAllFolders": "ลบออกจากทุกโฟลเดอร์",
+  "buildAndShareYourCustomApp": "สร้างและแชร์แอปที่กำหนดเอง",
+  "searchAppsPlaceholder": "ค้นหาใน 1500+ แอป",
+  "filters": "ตัวกรอง"
 }

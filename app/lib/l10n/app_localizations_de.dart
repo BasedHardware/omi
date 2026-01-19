@@ -2326,7 +2326,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get summarize => 'Zusammenfassen';
 
   @override
-  String get generateSummary => 'Zusammenfassung generieren';
+  String get generateSummary => 'Zusammenfassung erstellen';
 
   @override
   String get conversationNotFoundOrDeleted => 'Unterhaltung nicht gefunden oder wurde gelöscht';
@@ -3246,7 +3246,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get user => 'Benutzer';
 
   @override
-  String get starred => 'Mit Stern';
+  String get starred => 'Markiert';
 
   @override
   String get date => 'Datum';
@@ -3879,7 +3879,8 @@ class AppLocalizationsDe extends AppLocalizations {
   String get dailySummaryTitle => 'Tägliche Zusammenfassung';
 
   @override
-  String get dailySummaryDescription => 'Erhalten Sie eine personalisierte Zusammenfassung Ihrer Gespräche';
+  String get dailySummaryDescription =>
+      'Erhalten Sie eine personalisierte Zusammenfassung Ihrer Tagesgespräche als Benachrichtigung.';
 
   @override
   String get deliveryTime => 'Lieferzeit';
@@ -3968,7 +3969,8 @@ class AppLocalizationsDe extends AppLocalizations {
   String get trackPersonalGoals => 'Persönliche Ziele auf der Startseite verfolgen';
 
   @override
-  String get dailyReflectionDescription => '21 Uhr Erinnerung, um über Ihren Tag nachzudenken';
+  String get dailyReflectionDescription =>
+      'Erhalten Sie um 21 Uhr eine Erinnerung, über Ihren Tag nachzudenken und Ihre Gedanken festzuhalten.';
 
   @override
   String get endpointURL => 'Endpunkt-URL';
@@ -5751,4 +5753,51 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get dailyScoreExplanation =>
       'Ihr täglicher Score basiert auf der Aufgabenerledigung. Erledigen Sie Ihre Aufgaben, um Ihren Score zu verbessern!';
+
+  @override
+  String get notificationFrequencyDescription =>
+      'Steuern Sie, wie oft Omi Ihnen proaktive Benachrichtigungen und Erinnerungen sendet.';
+
+  @override
+  String get sliderOff => 'Aus';
+
+  @override
+  String get sliderMax => 'Max.';
+
+  @override
+  String summaryGeneratedFor(String date) {
+    return 'Zusammenfassung erstellt für $date';
+  }
+
+  @override
+  String get failedToGenerateSummary =>
+      'Zusammenfassung konnte nicht erstellt werden. Stellen Sie sicher, dass Sie Gespräche für diesen Tag haben.';
+
+  @override
+  String get recap => 'Rückblick';
+
+  @override
+  String deleteQuoted(String name) {
+    return '\"$name\" löschen';
+  }
+
+  @override
+  String moveConversationsTo(int count) {
+    return '$count Gespräche verschieben nach:';
+  }
+
+  @override
+  String get noFolder => 'Kein Ordner';
+
+  @override
+  String get removeFromAllFolders => 'Aus allen Ordnern entfernen';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Erstellen und teilen Sie Ihre benutzerdefinierte App';
+
+  @override
+  String get searchAppsPlaceholder => 'Suche in 1500+ Apps';
+
+  @override
+  String get filters => 'Filter';
 }

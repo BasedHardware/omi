@@ -312,10 +312,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String get searchApps => 'Ieškoti programų...';
 
   @override
-  String get myApps => 'Mano programos';
+  String get myApps => 'Mano programėlės';
 
   @override
-  String get installedApps => 'Įdiegtos programos';
+  String get installedApps => 'Įdiegtos programėlės';
 
   @override
   String get unableToFetchApps =>
@@ -2304,7 +2304,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get summarize => 'Apibendrinti';
 
   @override
-  String get generateSummary => 'Generuoti santrauką';
+  String get generateSummary => 'Generuoti suvestinę';
 
   @override
   String get conversationNotFoundOrDeleted => 'Pokalbis nerastas arba buvo ištrintas';
@@ -2504,7 +2504,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get trackPersonalGoalsOnHomepage => 'Sekite savo asmeninius tikslus pagrindiniame puslapyje';
 
   @override
-  String get dailyReflection => 'Kasdienė refleksija';
+  String get dailyReflection => 'Dienos refleksija';
 
   @override
   String get get9PmReminderToReflect => 'Gaukite priminimą 21 val. apmąstyti savo dieną';
@@ -3219,7 +3219,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get user => 'Vartotojas';
 
   @override
-  String get starred => 'Su žvaigždute';
+  String get starred => 'Pažymėta žvaigždute';
 
   @override
   String get date => 'Data';
@@ -3813,7 +3813,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get calendarIntegration => 'Kalendoriaus Integracija';
 
   @override
-  String get dailySummary => 'Dienos Santrauka';
+  String get dailySummary => 'Dienos suvestinė';
 
   @override
   String get developer => 'Kūrėjas';
@@ -3822,7 +3822,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get about => 'Apie';
 
   @override
-  String get selectTime => 'Pasirinkite laiką';
+  String get selectTime => 'Pasirinkti laiką';
 
   @override
   String get accountGroup => 'Paskyra';
@@ -3849,7 +3849,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get dailySummaryTitle => 'Dienos Santrauka';
 
   @override
-  String get dailySummaryDescription => 'Gaukite asmeninę pokalbių santrauką';
+  String get dailySummaryDescription => 'Gaukite asmeniškai pritaikytą dienos pokalbių suvestinę kaip pranešimą.';
 
   @override
   String get deliveryTime => 'Pristatymo laikas';
@@ -3938,7 +3938,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get trackPersonalGoals => 'Stebėti asmeninius tikslus pagrindiniame puslapyje';
 
   @override
-  String get dailyReflectionDescription => '21:00 priminimas apmąstyti savo dieną';
+  String get dailyReflectionDescription => 'Gaukite priminimą 21 val. apmąstyti savo dieną ir užfiksuoti mintis.';
 
   @override
   String get endpointURL => 'Galinio taško URL';
@@ -5710,4 +5710,50 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get dailyScoreExplanation =>
       'Jūsų dienos balas pagrįstas užduočių atlikimu. Atlikite užduotis, kad pagerintumėte balą!';
+
+  @override
+  String get notificationFrequencyDescription =>
+      'Valdykite, kaip dažnai Omi siunčia jums aktyvius pranešimus ir priminimus.';
+
+  @override
+  String get sliderOff => 'Išjungta';
+
+  @override
+  String get sliderMax => 'Maks.';
+
+  @override
+  String summaryGeneratedFor(String date) {
+    return 'Suvestinė sukurta datai $date';
+  }
+
+  @override
+  String get failedToGenerateSummary => 'Nepavyko sugeneruoti suvestinės. Įsitikinkite, kad tą dieną turite pokalbių.';
+
+  @override
+  String get recap => 'Apžvalga';
+
+  @override
+  String deleteQuoted(String name) {
+    return 'Ištrinti \"$name\"';
+  }
+
+  @override
+  String moveConversationsTo(int count) {
+    return 'Perkelti $count pokalbius į:';
+  }
+
+  @override
+  String get noFolder => 'Be aplanko';
+
+  @override
+  String get removeFromAllFolders => 'Pašalinti iš visų aplankų';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Sukurkite ir dalinkitės savo pritaikyta programėle';
+
+  @override
+  String get searchAppsPlaceholder => 'Ieškoti 1500+ programėlių';
+
+  @override
+  String get filters => 'Filtrai';
 }

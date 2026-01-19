@@ -314,10 +314,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String get searchApps => 'Tìm kiếm ứng dụng...';
 
   @override
-  String get myApps => 'Ứng Dụng Của Tôi';
+  String get myApps => 'Ứng dụng của tôi';
 
   @override
-  String get installedApps => 'Ứng Dụng Đã Cài';
+  String get installedApps => 'Ứng dụng đã cài đặt';
 
   @override
   String get unableToFetchApps => 'Không thể tải ứng dụng :(\n\nVui lòng kiểm tra kết nối internet và thử lại.';
@@ -2309,7 +2309,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get summarize => 'Tóm tắt';
 
   @override
-  String get generateSummary => 'Tạo bản tóm tắt';
+  String get generateSummary => 'Tạo tóm tắt';
 
   @override
   String get conversationNotFoundOrDeleted => 'Không tìm thấy cuộc trò chuyện hoặc đã bị xóa';
@@ -2509,7 +2509,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get trackPersonalGoalsOnHomepage => 'Theo dõi mục tiêu cá nhân trên trang chủ';
 
   @override
-  String get dailyReflection => 'Suy ngẫm Hàng ngày';
+  String get dailyReflection => 'Suy ngẫm hàng ngày';
 
   @override
   String get get9PmReminderToReflect => 'Nhận nhắc nhở lúc 9 giờ tối để suy ngẫm về ngày của bạn';
@@ -3225,7 +3225,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get user => 'Người dùng';
 
   @override
-  String get starred => 'Đã gắn sao';
+  String get starred => 'Được gắn sao';
 
   @override
   String get date => 'Ngày';
@@ -3821,7 +3821,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get calendarIntegration => 'Tích hợp Lịch';
 
   @override
-  String get dailySummary => 'Tóm tắt Hàng ngày';
+  String get dailySummary => 'Tóm tắt hàng ngày';
 
   @override
   String get developer => 'Nhà phát triển';
@@ -3857,7 +3857,8 @@ class AppLocalizationsVi extends AppLocalizations {
   String get dailySummaryTitle => 'Tóm tắt Hàng ngày';
 
   @override
-  String get dailySummaryDescription => 'Nhận tóm tắt cá nhân hóa về các cuộc trò chuyện của bạn';
+  String get dailySummaryDescription =>
+      'Nhận tóm tắt cá nhân hóa về các cuộc trò chuyện trong ngày dưới dạng thông báo.';
 
   @override
   String get deliveryTime => 'Thời gian gửi';
@@ -3945,7 +3946,8 @@ class AppLocalizationsVi extends AppLocalizations {
   String get trackPersonalGoals => 'Theo dõi mục tiêu cá nhân trên trang chủ';
 
   @override
-  String get dailyReflectionDescription => 'Nhắc nhở lúc 9 giờ tối để suy ngẫm về ngày của bạn';
+  String get dailyReflectionDescription =>
+      'Nhận nhắc nhở lúc 9 giờ tối để suy ngẫm về ngày của bạn và ghi lại suy nghĩ.';
 
   @override
   String get endpointURL => 'URL Điểm cuối';
@@ -5718,4 +5720,49 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get dailyScoreExplanation =>
       'Điểm hàng ngày dựa trên việc hoàn thành nhiệm vụ. Hoàn thành nhiệm vụ để cải thiện điểm!';
+
+  @override
+  String get notificationFrequencyDescription => 'Kiểm soát tần suất Omi gửi thông báo và nhắc nhở chủ động cho bạn.';
+
+  @override
+  String get sliderOff => 'Tắt';
+
+  @override
+  String get sliderMax => 'Tối đa';
+
+  @override
+  String summaryGeneratedFor(String date) {
+    return 'Đã tạo tóm tắt cho $date';
+  }
+
+  @override
+  String get failedToGenerateSummary => 'Không thể tạo tóm tắt. Hãy đảm bảo bạn có cuộc trò chuyện cho ngày đó.';
+
+  @override
+  String get recap => 'Tổng kết';
+
+  @override
+  String deleteQuoted(String name) {
+    return 'Xóa \"$name\"';
+  }
+
+  @override
+  String moveConversationsTo(int count) {
+    return 'Di chuyển $count cuộc trò chuyện đến:';
+  }
+
+  @override
+  String get noFolder => 'Không có thư mục';
+
+  @override
+  String get removeFromAllFolders => 'Xóa khỏi tất cả thư mục';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Xây dựng và chia sẻ ứng dụng tùy chỉnh của bạn';
+
+  @override
+  String get searchAppsPlaceholder => 'Tìm kiếm 1500+ ứng dụng';
+
+  @override
+  String get filters => 'Bộ lọc';
 }

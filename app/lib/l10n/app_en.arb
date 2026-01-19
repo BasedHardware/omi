@@ -51,7 +51,7 @@
   },
   "save": "Save",
   "@save": {
-    "description": "Save button label"
+    "description": "Button text to save changes"
   },
   "edit": "Edit",
   "@edit": {
@@ -215,7 +215,7 @@
   },
   "done": "Done",
   "@done": {
-    "description": "Done button"
+    "description": "Button text to confirm action"
   },
   "disconnected": "Disconnected",
   "@disconnected": {
@@ -405,7 +405,7 @@
   },
   "createYourOwnApp": "Create Your Own App",
   "@createYourOwnApp": {
-    "description": "Create app button title"
+    "description": "Button title for creating custom apps"
   },
   "buildAndShareApp": "Build and share your custom app",
   "@buildAndShareApp": {
@@ -417,11 +417,11 @@
   },
   "myApps": "My Apps",
   "@myApps": {
-    "description": "Filter button label for user-created apps"
+    "description": "Filter button for user's own apps"
   },
   "installedApps": "Installed Apps",
   "@installedApps": {
-    "description": "Filter button label for installed apps"
+    "description": "Filter button for installed apps"
   },
   "unableToFetchApps": "Unable to fetch apps :(\n\nPlease check your internet connection and try again.",
   "@unableToFetchApps": {
@@ -1679,7 +1679,7 @@
   },
   "notifications": "Notifications",
   "@notifications": {
-    "description": "Title for notifications permission"
+    "description": "AppBar title for notifications settings page"
   },
   "notificationsDesc": "Enable notifications to stay informed",
   "@notificationsDesc": {
@@ -2425,7 +2425,7 @@
   },
   "generateSummary": "Generate Summary",
   "@generateSummary": {
-    "description": "Button text to generate a summary"
+    "description": "Menu item to generate a summary"
   },
   "conversationNotFoundOrDeleted": "Conversation not found or has been deleted",
   "@conversationNotFoundOrDeleted": {
@@ -2792,7 +2792,7 @@
   },
   "dailyReflection": "Daily Reflection",
   "@dailyReflection": {
-    "description": "Experimental feature title for daily reflection"
+    "description": "Section header for daily reflection settings"
   },
   "get9PmReminderToReflect": "Get a 9 PM reminder to reflect on your day",
   "@get9PmReminderToReflect": {
@@ -2962,11 +2962,11 @@
   },
   "icon": "Icon",
   "@icon": {
-    "description": "Label for icon selection"
+    "description": "Field label for icon selector"
   },
   "goalTitle": "Goal title",
   "@goalTitle": {
-    "description": "Placeholder for goal title input"
+    "description": "Field label for goal title input"
   },
   "current": "Current",
   "@current": {
@@ -2986,7 +2986,7 @@
   },
   "tapToAddGoal": "Tap to add a goal",
   "@tapToAddGoal": {
-    "description": "Instruction to add goal"
+    "description": "Empty state text for goals widget"
   },
   "welcomeBack": "Welcome back, {name}",
   "@welcomeBack": {
@@ -3190,7 +3190,7 @@
   },
   "all": "All",
   "@all": {
-    "description": "Short filter label for all memories"
+    "description": "Label for all items tab"
   },
   "open": "Open",
   "@open": {
@@ -3420,7 +3420,7 @@
   },
   "installed": "Installed",
   "@installed": {
-    "description": "Badge label indicating an app is installed"
+    "description": "Shortened version for installed apps filter"
   },
   "appIdLabel": "App ID",
   "@appIdLabel": {
@@ -3755,7 +3755,7 @@
   },
   "starred": "Starred",
   "@starred": {
-    "description": "Label for starred filter button"
+    "description": "Label for starred folder tab"
   },
   "date": "Date",
   "@date": {
@@ -4320,7 +4320,7 @@
   },
   "dailySummary": "Daily Summary",
   "@dailySummary": {
-    "description": "Daily summary section"
+    "description": "Section header for daily summary settings"
   },
   "developer": "Developer",
   "@developer": {
@@ -4338,7 +4338,7 @@
   },
   "selectTime": "Select Time",
   "@selectTime": {
-    "description": "Dialog title for selecting time"
+    "description": "Title for time picker dialog"
   },
   "@debugLogsCleared": {
     "description": "Success message when logs cleared"
@@ -4393,13 +4393,13 @@
   "@dailySummaryTitle": {
     "description": "Daily summary toggle title"
   },
-  "dailySummaryDescription": "Get a personalized summary of your conversations",
+  "dailySummaryDescription": "Get a personalized summary of your day's conversations delivered as a notification.",
   "@dailySummaryDescription": {
-    "description": "Daily summary description"
+    "description": "Description text for daily summary section"
   },
   "deliveryTime": "Delivery Time",
   "@deliveryTime": {
-    "description": "Label for daily summary delivery time setting"
+    "description": "Label for delivery time setting"
   },
   "deliveryTimeDescription": "When to receive your daily summary",
   "@deliveryTimeDescription": {
@@ -4443,7 +4443,7 @@
   "noAPIKeys": "No API keys. Create one to get started.",
   "autoCreateWhenDetected": "Auto-create when name detected",
   "trackPersonalGoals": "Track personal goals on homepage",
-  "dailyReflectionDescription": "9 PM reminder to reflect on your day",
+  "dailyReflectionDescription": "Get a reminder at 9 PM to reflect on your day and capture your thoughts.",
   "endpointURL": "Endpoint URL",
   "links": "Links",
   "discordMemberCount": "8000+ members on Discord",
@@ -5779,7 +5779,7 @@
   },
   "enable": "Enable",
   "@enable": {
-    "description": "enable label"
+    "description": "Label for enable toggle setting"
   },
   "storeAudioOnPhone": "Store Audio on Phone",
   "@storeAudioOnPhone": {
@@ -6841,7 +6841,7 @@
   },
   "notificationFrequency": "Notification Frequency",
   "@notificationFrequency": {
-    "description": "Header for notification frequency settings section"
+    "description": "Section header for notification frequency settings"
   },
   "controlNotificationFrequency": "Control how often Omi sends you proactive notifications.",
   "@controlNotificationFrequency": {
@@ -6874,5 +6874,75 @@
   "dailyScoreExplanation": "Your daily score is based on task completion. Complete your tasks to improve your score!",
   "@dailyScoreExplanation": {
     "description": "Explanation of how daily score is calculated"
+  },
+  "notificationFrequencyDescription": "Control how often Omi sends you proactive notifications and reminders.",
+  "@notificationFrequencyDescription": {
+    "description": "Description text for notification frequency section"
+  },
+  "@dailyReflectionDescription": {
+    "description": "Description text for daily reflection section"
+  },
+  "sliderOff": "Off",
+  "@sliderOff": {
+    "description": "Label for slider minimum value"
+  },
+  "sliderMax": "Max",
+  "@sliderMax": {
+    "description": "Label for slider maximum value"
+  },
+  "summaryGeneratedFor": "Summary generated for {date}",
+  "@summaryGeneratedFor": {
+    "description": "Success message when summary is generated",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToGenerateSummary": "Failed to generate summary. Make sure you have conversations for that day.",
+  "@failedToGenerateSummary": {
+    "description": "Error message when summary generation fails"
+  },
+  "recap": "Recap",
+  "@recap": {
+    "description": "Label for recap/daily summaries tab"
+  },
+  "deleteQuoted": "Delete \"{name}\"",
+  "@deleteQuoted": {
+    "description": "Dialog title for deleting an item",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "moveConversationsTo": "Move {count} conversations to:",
+  "@moveConversationsTo": {
+    "description": "Dialog subtitle when deleting folder",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "noFolder": "No folder",
+  "@noFolder": {
+    "description": "Option to remove from all folders"
+  },
+  "removeFromAllFolders": "Remove from all folders",
+  "@removeFromAllFolders": {
+    "description": "Description for no folder option"
+  },
+  "buildAndShareYourCustomApp": "Build and share your custom app",
+  "@buildAndShareYourCustomApp": {
+    "description": "Subtitle for create app button"
+  },
+  "searchAppsPlaceholder": "Search 1500+ Apps",
+  "@searchAppsPlaceholder": {
+    "description": "Search bar placeholder text"
+  },
+  "filters": "Filters",
+  "@filters": {
+    "description": "Filter button label"
   }
 }

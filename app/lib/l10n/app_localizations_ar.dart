@@ -2488,7 +2488,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get trackPersonalGoalsOnHomepage => 'تتبع أهدافك الشخصية على الصفحة الرئيسية';
 
   @override
-  String get dailyReflection => 'التفكير اليومي';
+  String get dailyReflection => 'التأمل اليومي';
 
   @override
   String get get9PmReminderToReflect => 'احصل على تذكير في الساعة 9 مساءً للتأمل في يومك';
@@ -2947,7 +2947,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get integrationSetupRequired => 'إذا كان هذا تطبيق تكامل، تأكد من اكتمال الإعداد.';
 
   @override
-  String get installed => 'مثبّت';
+  String get installed => 'مثبت';
 
   @override
   String get appIdLabel => 'معرّف التطبيق';
@@ -3194,7 +3194,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get user => 'مستخدم';
 
   @override
-  String get starred => 'المميزة';
+  String get starred => 'مميز بنجمة';
 
   @override
   String get date => 'التاريخ';
@@ -3820,7 +3820,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get dailySummaryTitle => 'الملخص اليومي';
 
   @override
-  String get dailySummaryDescription => 'احصل على ملخص شخصي لمحادثاتك';
+  String get dailySummaryDescription => 'احصل على ملخص مخصص لمحادثات يومك يُرسل كإشعار.';
 
   @override
   String get deliveryTime => 'وقت التسليم';
@@ -3908,7 +3908,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get trackPersonalGoals => 'تتبع الأهداف الشخصية على الصفحة الرئيسية';
 
   @override
-  String get dailyReflectionDescription => 'تذكير الساعة 9 مساءً للتفكير في يومك';
+  String get dailyReflectionDescription => 'احصل على تذكير في الساعة 9 مساءً للتأمل في يومك وتدوين أفكارك.';
 
   @override
   String get endpointURL => 'عنوان URL لنقطة النهاية';
@@ -5666,4 +5666,49 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get dailyScoreExplanation => 'نتيجتك اليومية تعتمد على إكمال المهام. أكمل مهامك لتحسين نتيجتك!';
+
+  @override
+  String get notificationFrequencyDescription => 'تحكم في عدد مرات إرسال Omi للإشعارات والتذكيرات الاستباقية.';
+
+  @override
+  String get sliderOff => 'إيقاف';
+
+  @override
+  String get sliderMax => 'الحد الأقصى';
+
+  @override
+  String summaryGeneratedFor(String date) {
+    return 'تم إنشاء ملخص لـ $date';
+  }
+
+  @override
+  String get failedToGenerateSummary => 'فشل في إنشاء الملخص. تأكد من وجود محادثات لذلك اليوم.';
+
+  @override
+  String get recap => 'ملخص';
+
+  @override
+  String deleteQuoted(String name) {
+    return 'حذف \"$name\"';
+  }
+
+  @override
+  String moveConversationsTo(int count) {
+    return 'نقل $count محادثات إلى:';
+  }
+
+  @override
+  String get noFolder => 'بدون مجلد';
+
+  @override
+  String get removeFromAllFolders => 'إزالة من جميع المجلدات';
+
+  @override
+  String get buildAndShareYourCustomApp => 'قم ببناء ومشاركة تطبيقك المخصص';
+
+  @override
+  String get searchAppsPlaceholder => 'ابحث في أكثر من 1500 تطبيق';
+
+  @override
+  String get filters => 'التصفيات';
 }

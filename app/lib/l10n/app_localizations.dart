@@ -231,7 +231,7 @@ abstract class AppLocalizations {
   /// **'Update'**
   String get update;
 
-  /// Save button label
+  /// Button text to save changes
   ///
   /// In en, this message translates to:
   /// **'Save'**
@@ -459,7 +459,7 @@ abstract class AppLocalizations {
   /// **'Ask Omi'**
   String get askOmi;
 
-  /// Done button
+  /// Button text to confirm action
   ///
   /// In en, this message translates to:
   /// **'Done'**
@@ -729,7 +729,7 @@ abstract class AppLocalizations {
   /// **'Try adjusting your search or filters'**
   String get tryAdjustingSearch;
 
-  /// Create app button title
+  /// Button title for creating custom apps
   ///
   /// In en, this message translates to:
   /// **'Create Your Own App'**
@@ -747,13 +747,13 @@ abstract class AppLocalizations {
   /// **'Search apps...'**
   String get searchApps;
 
-  /// Filter button label for user-created apps
+  /// Filter button for user's own apps
   ///
   /// In en, this message translates to:
   /// **'My Apps'**
   String get myApps;
 
-  /// Filter button label for installed apps
+  /// Filter button for installed apps
   ///
   /// In en, this message translates to:
   /// **'Installed Apps'**
@@ -3411,7 +3411,7 @@ abstract class AppLocalizations {
   /// **'Enable background location for the full experience'**
   String get locationAccessDesc;
 
-  /// Title for notifications permission
+  /// AppBar title for notifications settings page
   ///
   /// In en, this message translates to:
   /// **'Notifications'**
@@ -4437,7 +4437,7 @@ abstract class AppLocalizations {
   /// **'Summarize'**
   String get summarize;
 
-  /// Button text to generate a summary
+  /// Menu item to generate a summary
   ///
   /// In en, this message translates to:
   /// **'Generate Summary'**
@@ -4815,7 +4815,7 @@ abstract class AppLocalizations {
   /// **'Track your personal goals on homepage'**
   String get trackPersonalGoalsOnHomepage;
 
-  /// Experimental feature title for daily reflection
+  /// Section header for daily reflection settings
   ///
   /// In en, this message translates to:
   /// **'Daily Reflection'**
@@ -5049,13 +5049,13 @@ abstract class AppLocalizations {
   /// **'Edit Goal'**
   String get editGoal;
 
-  /// Label for icon selection
+  /// Field label for icon selector
   ///
   /// In en, this message translates to:
   /// **'Icon'**
   String get icon;
 
-  /// Placeholder for goal title input
+  /// Field label for goal title input
   ///
   /// In en, this message translates to:
   /// **'Goal title'**
@@ -5085,7 +5085,7 @@ abstract class AppLocalizations {
   /// **'Goals'**
   String get goals;
 
-  /// Instruction to add goal
+  /// Empty state text for goals widget
   ///
   /// In en, this message translates to:
   /// **'Tap to add a goal'**
@@ -5379,7 +5379,7 @@ abstract class AppLocalizations {
   /// **'Browse, install, and create apps'**
   String get browseInstallCreateApps;
 
-  /// Short filter label for all memories
+  /// Label for all items tab
   ///
   /// In en, this message translates to:
   /// **'All'**
@@ -5709,7 +5709,7 @@ abstract class AppLocalizations {
   /// **'If this is an integration app, make sure the setup is completed.'**
   String get integrationSetupRequired;
 
-  /// Badge label indicating an app is installed
+  /// Shortened version for installed apps filter
   ///
   /// In en, this message translates to:
   /// **'Installed'**
@@ -6189,7 +6189,7 @@ abstract class AppLocalizations {
   /// **'User'**
   String get user;
 
-  /// Label for starred filter button
+  /// Label for starred folder tab
   ///
   /// In en, this message translates to:
   /// **'Starred'**
@@ -7305,7 +7305,7 @@ abstract class AppLocalizations {
   /// **'Calendar Integration'**
   String get calendarIntegration;
 
-  /// Daily summary section
+  /// Section header for daily summary settings
   ///
   /// In en, this message translates to:
   /// **'Daily Summary'**
@@ -7323,7 +7323,7 @@ abstract class AppLocalizations {
   /// **'About'**
   String get about;
 
-  /// Dialog title for selecting time
+  /// Title for time picker dialog
   ///
   /// In en, this message translates to:
   /// **'Select Time'**
@@ -7377,13 +7377,13 @@ abstract class AppLocalizations {
   /// **'Daily Summary'**
   String get dailySummaryTitle;
 
-  /// Daily summary description
+  /// Description text for daily summary section
   ///
   /// In en, this message translates to:
-  /// **'Get a personalized summary of your conversations'**
+  /// **'Get a personalized summary of your day\'s conversations delivered as a notification.'**
   String get dailySummaryDescription;
 
-  /// Label for daily summary delivery time setting
+  /// Label for delivery time setting
   ///
   /// In en, this message translates to:
   /// **'Delivery Time'**
@@ -7551,10 +7551,10 @@ abstract class AppLocalizations {
   /// **'Track personal goals on homepage'**
   String get trackPersonalGoals;
 
-  /// No description provided for @dailyReflectionDescription.
+  /// Description text for daily reflection section
   ///
   /// In en, this message translates to:
-  /// **'9 PM reminder to reflect on your day'**
+  /// **'Get a reminder at 9 PM to reflect on your day and capture your thoughts.'**
   String get dailyReflectionDescription;
 
   /// No description provided for @endpointURL.
@@ -9249,7 +9249,7 @@ abstract class AppLocalizations {
   /// **'Recordings may capture others\' voices. Ensure you have consent from all participants before enabling.'**
   String get recordingsMayCaptureOthers;
 
-  /// enable label
+  /// Label for enable toggle setting
   ///
   /// In en, this message translates to:
   /// **'Enable'**
@@ -10755,7 +10755,7 @@ abstract class AppLocalizations {
   /// **'So close, just a little more'**
   String get soCloseJustLittleMore;
 
-  /// Header for notification frequency settings section
+  /// Section header for notification frequency settings
   ///
   /// In en, this message translates to:
   /// **'Notification Frequency'**
@@ -10808,6 +10808,84 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your daily score is based on task completion. Complete your tasks to improve your score!'**
   String get dailyScoreExplanation;
+
+  /// Description text for notification frequency section
+  ///
+  /// In en, this message translates to:
+  /// **'Control how often Omi sends you proactive notifications and reminders.'**
+  String get notificationFrequencyDescription;
+
+  /// Label for slider minimum value
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get sliderOff;
+
+  /// Label for slider maximum value
+  ///
+  /// In en, this message translates to:
+  /// **'Max'**
+  String get sliderMax;
+
+  /// Success message when summary is generated
+  ///
+  /// In en, this message translates to:
+  /// **'Summary generated for {date}'**
+  String summaryGeneratedFor(String date);
+
+  /// Error message when summary generation fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to generate summary. Make sure you have conversations for that day.'**
+  String get failedToGenerateSummary;
+
+  /// Label for recap/daily summaries tab
+  ///
+  /// In en, this message translates to:
+  /// **'Recap'**
+  String get recap;
+
+  /// Dialog title for deleting an item
+  ///
+  /// In en, this message translates to:
+  /// **'Delete \"{name}\"'**
+  String deleteQuoted(String name);
+
+  /// Dialog subtitle when deleting folder
+  ///
+  /// In en, this message translates to:
+  /// **'Move {count} conversations to:'**
+  String moveConversationsTo(int count);
+
+  /// Option to remove from all folders
+  ///
+  /// In en, this message translates to:
+  /// **'No folder'**
+  String get noFolder;
+
+  /// Description for no folder option
+  ///
+  /// In en, this message translates to:
+  /// **'Remove from all folders'**
+  String get removeFromAllFolders;
+
+  /// Subtitle for create app button
+  ///
+  /// In en, this message translates to:
+  /// **'Build and share your custom app'**
+  String get buildAndShareYourCustomApp;
+
+  /// Search bar placeholder text
+  ///
+  /// In en, this message translates to:
+  /// **'Search 1500+ Apps'**
+  String get searchAppsPlaceholder;
+
+  /// Filter button label
+  ///
+  /// In en, this message translates to:
+  /// **'Filters'**
+  String get filters;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -302,7 +302,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get tryAdjustingSearch => '検索やフィルターを調整してみてください';
 
   @override
-  String get createYourOwnApp => '自分のアプリを作成';
+  String get createYourOwnApp => '独自のアプリを作成';
 
   @override
   String get buildAndShareApp => 'カスタムアプリを作成して共有';
@@ -2264,7 +2264,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get summarize => '要約';
 
   @override
-  String get generateSummary => '概要を生成';
+  String get generateSummary => 'サマリーを生成';
 
   @override
   String get conversationNotFoundOrDeleted => '会話が見つからないか、削除されました';
@@ -2464,7 +2464,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get trackPersonalGoalsOnHomepage => 'ホームページで個人目標を追跡';
 
   @override
-  String get dailyReflection => '毎日の振り返り';
+  String get dailyReflection => 'デイリー振り返り';
 
   @override
   String get get9PmReminderToReflect => '午後9時に一日を振り返るリマインダーを受け取る';
@@ -2586,7 +2586,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get icon => 'アイコン';
 
   @override
-  String get goalTitle => '目標のタイトル';
+  String get goalTitle => '目標タイトル';
 
   @override
   String get current => '現在';
@@ -3749,7 +3749,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get calendarIntegration => 'カレンダー統合';
 
   @override
-  String get dailySummary => '日次サマリー';
+  String get dailySummary => 'デイリーサマリー';
 
   @override
   String get developer => '開発者';
@@ -3758,7 +3758,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get about => 'について';
 
   @override
-  String get selectTime => '時刻を選択';
+  String get selectTime => '時間を選択';
 
   @override
   String get accountGroup => 'アカウント';
@@ -3785,10 +3785,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get dailySummaryTitle => '日次サマリー';
 
   @override
-  String get dailySummaryDescription => '会話のパーソナライズされたサマリーを取得';
+  String get dailySummaryDescription => '1日の会話のパーソナライズされたサマリーを通知として受け取ります。';
 
   @override
-  String get deliveryTime => '配信時刻';
+  String get deliveryTime => '配信時間';
 
   @override
   String get deliveryTimeDescription => '日次サマリーを受け取る時刻';
@@ -3872,7 +3872,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get trackPersonalGoals => 'ホームページで個人目標を追跡';
 
   @override
-  String get dailyReflectionDescription => '午後9時にあなたの一日を振り返るためのリマインダー';
+  String get dailyReflectionDescription => '午後9時に1日を振り返り、考えを記録するリマインダーを受け取ります。';
 
   @override
   String get endpointURL => 'エンドポイント URL';
@@ -5605,4 +5605,49 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get dailyScoreExplanation => 'デイリースコアはタスクの完了に基づいています。タスクを完了してスコアを向上させましょう！';
+
+  @override
+  String get notificationFrequencyDescription => 'Omiがプロアクティブな通知やリマインダーを送信する頻度を制御します。';
+
+  @override
+  String get sliderOff => 'オフ';
+
+  @override
+  String get sliderMax => '最大';
+
+  @override
+  String summaryGeneratedFor(String date) {
+    return '$dateのサマリーを生成しました';
+  }
+
+  @override
+  String get failedToGenerateSummary => 'サマリーの生成に失敗しました。その日の会話があることを確認してください。';
+
+  @override
+  String get recap => 'まとめ';
+
+  @override
+  String deleteQuoted(String name) {
+    return '「$name」を削除';
+  }
+
+  @override
+  String moveConversationsTo(int count) {
+    return '$count件の会話を移動:';
+  }
+
+  @override
+  String get noFolder => 'フォルダなし';
+
+  @override
+  String get removeFromAllFolders => 'すべてのフォルダから削除';
+
+  @override
+  String get buildAndShareYourCustomApp => 'カスタムアプリを作成して共有';
+
+  @override
+  String get searchAppsPlaceholder => '1500以上のアプリを検索';
+
+  @override
+  String get filters => 'フィルター';
 }

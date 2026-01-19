@@ -305,7 +305,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get tryAdjustingSearch => 'Proveu d\'ajustar la cerca o els filtres';
 
   @override
-  String get createYourOwnApp => 'Creeu la vostra pròpia aplicació';
+  String get createYourOwnApp => 'Crea la teva pròpia aplicació';
 
   @override
   String get buildAndShareApp => 'Construïu i compartiu la vostra aplicació personalitzada';
@@ -2518,7 +2518,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get trackPersonalGoalsOnHomepage => 'Segueix els teus objectius personals a la pàgina d\'inici';
 
   @override
-  String get dailyReflection => 'Reflexió Diària';
+  String get dailyReflection => 'Reflexió diària';
 
   @override
   String get get9PmReminderToReflect => 'Rep un recordatori a les 21:00 per reflexionar sobre el teu dia';
@@ -2808,7 +2808,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get browseInstallCreateApps => 'Explora, instal·la i crea aplicacions';
 
   @override
-  String get all => 'Tots';
+  String get all => 'Tot';
 
   @override
   String get open => 'Obrir';
@@ -3236,7 +3236,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get user => 'Usuari';
 
   @override
-  String get starred => 'Destacades';
+  String get starred => 'Destacat';
 
   @override
   String get date => 'Data';
@@ -3834,7 +3834,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get calendarIntegration => 'Integració de Calendari';
 
   @override
-  String get dailySummary => 'Resum Diari';
+  String get dailySummary => 'Resum diari';
 
   @override
   String get developer => 'Desenvolupador';
@@ -3843,7 +3843,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get about => 'Quant a';
 
   @override
-  String get selectTime => 'Selecciona l\'hora';
+  String get selectTime => 'Selecciona hora';
 
   @override
   String get accountGroup => 'Compte';
@@ -3870,7 +3870,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get dailySummaryTitle => 'Resum Diari';
 
   @override
-  String get dailySummaryDescription => 'Obtén un resum personalitzat de les teves converses';
+  String get dailySummaryDescription => 'Rep un resum personalitzat de les converses del dia com a notificació.';
 
   @override
   String get deliveryTime => 'Hora de lliurament';
@@ -3958,7 +3958,8 @@ class AppLocalizationsCa extends AppLocalizations {
   String get trackPersonalGoals => 'Fes el seguiment d\'objectius personals a la pàgina d\'inici';
 
   @override
-  String get dailyReflectionDescription => 'Recordatori a les 9 PM per reflexionar sobre el teu dia';
+  String get dailyReflectionDescription =>
+      'Rep un recordatori a les 21:00 per reflexionar sobre el teu dia i capturar els teus pensaments.';
 
   @override
   String get endpointURL => 'URL del Punt Final';
@@ -4921,7 +4922,7 @@ class AppLocalizationsCa extends AppLocalizations {
       'Les gravacions poden capturar les veus d\'altres persones. Assegureu-vos de tenir el consentiment de tots els participants abans d\'activar.';
 
   @override
-  String get enable => 'Activa';
+  String get enable => 'Activar';
 
   @override
   String get storeAudioOnPhone => 'Emmagatzema l\'àudio al telèfon';
@@ -5741,4 +5742,51 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get dailyScoreExplanation =>
       'La teva puntuació diària es basa en completar tasques. Completa les teves tasques per millorar la puntuació!';
+
+  @override
+  String get notificationFrequencyDescription =>
+      'Controla amb quina freqüència Omi t\'envia notificacions proactives i recordatoris.';
+
+  @override
+  String get sliderOff => 'Apagat';
+
+  @override
+  String get sliderMax => 'Màx.';
+
+  @override
+  String summaryGeneratedFor(String date) {
+    return 'Resum generat per $date';
+  }
+
+  @override
+  String get failedToGenerateSummary =>
+      'No s\'ha pogut generar el resum. Assegura\'t que tens converses per a aquest dia.';
+
+  @override
+  String get recap => 'Recapitulació';
+
+  @override
+  String deleteQuoted(String name) {
+    return 'Eliminar \"$name\"';
+  }
+
+  @override
+  String moveConversationsTo(int count) {
+    return 'Moure $count converses a:';
+  }
+
+  @override
+  String get noFolder => 'Sense carpeta';
+
+  @override
+  String get removeFromAllFolders => 'Eliminar de totes les carpetes';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Crea i comparteix la teva aplicació personalitzada';
+
+  @override
+  String get searchAppsPlaceholder => 'Cerca entre 1500+ aplicacions';
+
+  @override
+  String get filters => 'Filtres';
 }

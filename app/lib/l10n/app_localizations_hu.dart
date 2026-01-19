@@ -306,7 +306,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get tryAdjustingSearch => 'Próbáld módosítani a keresést vagy a szűrőket';
 
   @override
-  String get createYourOwnApp => 'Saját alkalmazás létrehozása';
+  String get createYourOwnApp => 'Hozd létre saját alkalmazásod';
 
   @override
   String get buildAndShareApp => 'Építsd meg és oszd meg egyedi alkalmazásodat';
@@ -2320,7 +2320,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get summarize => 'Összefoglalás';
 
   @override
-  String get generateSummary => 'Összefoglaló létrehozása';
+  String get generateSummary => 'Összefoglaló generálása';
 
   @override
   String get conversationNotFoundOrDeleted => 'A beszélgetés nem található vagy törölve lett';
@@ -2520,7 +2520,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get trackPersonalGoalsOnHomepage => 'Kövesse személyes céljait a kezdőlapon';
 
   @override
-  String get dailyReflection => 'Napi elmélkedés';
+  String get dailyReflection => 'Napi reflexió';
 
   @override
   String get get9PmReminderToReflect => 'Kapjon emlékeztetőt este 9-kor, hogy elgondolkodjon a napján';
@@ -2659,7 +2659,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get goals => 'Célok';
 
   @override
-  String get tapToAddGoal => 'Érintse meg cél hozzáadásához';
+  String get tapToAddGoal => 'Koppints cél hozzáadásához';
 
   @override
   String welcomeBack(String name) {
@@ -3834,7 +3834,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get calendarIntegration => 'Naptár Integráció';
 
   @override
-  String get dailySummary => 'Napi Összefoglaló';
+  String get dailySummary => 'Napi összefoglaló';
 
   @override
   String get developer => 'Fejlesztő';
@@ -3843,7 +3843,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get about => 'Névjegy';
 
   @override
-  String get selectTime => 'Válasszon időt';
+  String get selectTime => 'Időpont választása';
 
   @override
   String get accountGroup => 'Fiók';
@@ -3870,7 +3870,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get dailySummaryTitle => 'Napi Összefoglaló';
 
   @override
-  String get dailySummaryDescription => 'Kapjon személyre szabott összefoglalót a beszélgetéseiről';
+  String get dailySummaryDescription => 'Kapj személyre szabott összefoglalót a nap beszélgetéseiről értesítésként.';
 
   @override
   String get deliveryTime => 'Kézbesítési idő';
@@ -3959,7 +3959,8 @@ class AppLocalizationsHu extends AppLocalizations {
   String get trackPersonalGoals => 'Személyes célok követése a főoldalon';
 
   @override
-  String get dailyReflectionDescription => '21:00 emlékeztető a napod átgondolására';
+  String get dailyReflectionDescription =>
+      'Kapj emlékeztetőt este 9-kor, hogy elgondolkodj a napodról és rögzítsd gondolataidat.';
 
   @override
   String get endpointURL => 'Végpont URL';
@@ -5738,4 +5739,51 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get dailyScoreExplanation =>
       'A napi pontszáma a feladatok befejezésén alapul. Fejezze be feladatait a pontszám javításához!';
+
+  @override
+  String get notificationFrequencyDescription =>
+      'Szabályozd, milyen gyakran küld az Omi proaktív értesítéseket és emlékeztetőket.';
+
+  @override
+  String get sliderOff => 'Ki';
+
+  @override
+  String get sliderMax => 'Max.';
+
+  @override
+  String summaryGeneratedFor(String date) {
+    return 'Összefoglaló elkészült: $date';
+  }
+
+  @override
+  String get failedToGenerateSummary =>
+      'Nem sikerült összefoglalót generálni. Győződj meg róla, hogy vannak beszélgetések arra a napra.';
+
+  @override
+  String get recap => 'Összefoglaló';
+
+  @override
+  String deleteQuoted(String name) {
+    return '\"$name\" törlése';
+  }
+
+  @override
+  String moveConversationsTo(int count) {
+    return '$count beszélgetés áthelyezése ide:';
+  }
+
+  @override
+  String get noFolder => 'Nincs mappa';
+
+  @override
+  String get removeFromAllFolders => 'Eltávolítás az összes mappából';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Építsd és oszd meg egyedi alkalmazásod';
+
+  @override
+  String get searchAppsPlaceholder => 'Keresés 1500+ alkalmazásban';
+
+  @override
+  String get filters => 'Szűrők';
 }

@@ -314,7 +314,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get myApps => 'แอปของฉัน';
 
   @override
-  String get installedApps => 'แอปที่ติดตั้ง';
+  String get installedApps => 'แอปที่ติดตั้งแล้ว';
 
   @override
   String get unableToFetchApps =>
@@ -2492,7 +2492,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get trackPersonalGoalsOnHomepage => 'ติดตามเป้าหมายส่วนตัวบนหน้าแรก';
 
   @override
-  String get dailyReflection => 'การไตร่ตรองประจำวัน';
+  String get dailyReflection => 'การทบทวนรายวัน';
 
   @override
   String get get9PmReminderToReflect => 'รับการแจ้งเตือนเวลา 21:00 น. เพื่อทบทวนวันของคุณ';
@@ -3202,7 +3202,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get user => 'ผู้ใช้';
 
   @override
-  String get starred => 'ที่ติดดาว';
+  String get starred => 'ติดดาว';
 
   @override
   String get date => 'วันที่';
@@ -3828,7 +3828,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get dailySummaryTitle => 'สรุปรายวัน';
 
   @override
-  String get dailySummaryDescription => 'รับสรุปส่วนตัวของการสนทนาของคุณ';
+  String get dailySummaryDescription => 'รับสรุปการสนทนาประจำวันแบบเฉพาะบุคคลในรูปแบบการแจ้งเตือน';
 
   @override
   String get deliveryTime => 'เวลาส่ง';
@@ -3916,7 +3916,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get trackPersonalGoals => 'ติดตามเป้าหมายส่วนตัวบนหน้าแรก';
 
   @override
-  String get dailyReflectionDescription => 'การแจ้งเตือนเวลา 21.00 น. เพื่อไตร่ตรองวันของคุณ';
+  String get dailyReflectionDescription => 'รับการเตือนความจำเวลา 21.00 น. เพื่อทบทวนวันของคุณและบันทึกความคิด';
 
   @override
   String get endpointURL => 'URL ปลายทาง';
@@ -5680,4 +5680,49 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get dailyScoreExplanation => 'คะแนนประจำวันของคุณขึ้นอยู่กับการทำงานเสร็จ ทำงานให้เสร็จเพื่อเพิ่มคะแนน!';
+
+  @override
+  String get notificationFrequencyDescription => 'ควบคุมความถี่ที่ Omi ส่งการแจ้งเตือนเชิงรุกและการเตือนความจำให้คุณ';
+
+  @override
+  String get sliderOff => 'ปิด';
+
+  @override
+  String get sliderMax => 'สูงสุด';
+
+  @override
+  String summaryGeneratedFor(String date) {
+    return 'สร้างสรุปสำหรับ $date';
+  }
+
+  @override
+  String get failedToGenerateSummary => 'ไม่สามารถสร้างสรุปได้ ตรวจสอบให้แน่ใจว่าคุณมีการสนทนาในวันนั้น';
+
+  @override
+  String get recap => 'สรุป';
+
+  @override
+  String deleteQuoted(String name) {
+    return 'ลบ \"$name\"';
+  }
+
+  @override
+  String moveConversationsTo(int count) {
+    return 'ย้าย $count การสนทนาไปที่:';
+  }
+
+  @override
+  String get noFolder => 'ไม่มีโฟลเดอร์';
+
+  @override
+  String get removeFromAllFolders => 'ลบออกจากทุกโฟลเดอร์';
+
+  @override
+  String get buildAndShareYourCustomApp => 'สร้างและแชร์แอปที่กำหนดเอง';
+
+  @override
+  String get searchAppsPlaceholder => 'ค้นหาใน 1500+ แอป';
+
+  @override
+  String get filters => 'ตัวกรอง';
 }

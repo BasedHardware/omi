@@ -2608,7 +2608,7 @@
   "@user": {
     "description": "Default fallback name when user name is empty"
   },
-  "starred": "즐겨찾기",
+  "starred": "별표",
   "@starred": {
     "description": "Label for starred filter button"
   },
@@ -2905,7 +2905,7 @@
   "enterWordsHint": "단어 입력 (쉼표로 구분)",
   "dailySummaryHeader": "일일 요약",
   "dailySummaryTitle": "일일 요약",
-  "dailySummaryDescription": "대화의 맞춤형 요약을 받으세요",
+  "dailySummaryDescription": "하루 대화의 개인화된 요약을 알림으로 받습니다.",
   "deliveryTime": "전송 시간",
   "deliveryTimeDescription": "일일 요약을 받을 시간",
   "subscription": "구독",
@@ -2945,7 +2945,7 @@
   "goalTracker": "목표 추적기",
   "trackPersonalGoals": "홈페이지에서 개인 목표 추적",
   "dailyReflection": "일일 성찰",
-  "dailyReflectionDescription": "오후 9시에 하루를 돌아보는 알림",
+  "dailyReflectionDescription": "오후 9시에 하루를 되돌아보고 생각을 기록하라는 알림을 받습니다.",
   "endpointURL": "엔드포인트 URL",
   "links": "링크",
   "discordMemberCount": "Discord에 8000명 이상의 회원",
@@ -3610,5 +3610,18 @@
   "tasksCompleted": "완료된 작업",
   "completionRate": "완료율",
   "howItWorks": "작동 방식",
-  "dailyScoreExplanation": "일일 점수는 작업 완료를 기반으로 합니다. 작업을 완료하여 점수를 높이세요!"
+  "dailyScoreExplanation": "일일 점수는 작업 완료를 기반으로 합니다. 작업을 완료하여 점수를 높이세요!",
+  "notificationFrequencyDescription": "Omi가 사전 알림 및 리마인더를 보내는 빈도를 제어합니다.",
+  "sliderOff": "끄기",
+  "sliderMax": "최대",
+  "summaryGeneratedFor": "{date} 요약이 생성되었습니다",
+  "failedToGenerateSummary": "요약 생성에 실패했습니다. 해당 날짜에 대화가 있는지 확인하세요.",
+  "recap": "요약",
+  "deleteQuoted": "\"{name}\" 삭제",
+  "moveConversationsTo": "{count}개의 대화를 이동:",
+  "noFolder": "폴더 없음",
+  "removeFromAllFolders": "모든 폴더에서 제거",
+  "buildAndShareYourCustomApp": "맞춤 앱을 만들고 공유하세요",
+  "searchAppsPlaceholder": "1500개 이상의 앱 검색",
+  "filters": "필터"
 }

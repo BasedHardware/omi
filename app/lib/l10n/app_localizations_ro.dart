@@ -315,10 +315,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String get searchApps => 'Căutați aplicații...';
 
   @override
-  String get myApps => 'Aplicațiile Mele';
+  String get myApps => 'Aplicațiile mele';
 
   @override
-  String get installedApps => 'Aplicații Instalate';
+  String get installedApps => 'Aplicații instalate';
 
   @override
   String get unableToFetchApps =>
@@ -1770,7 +1770,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get locationAccessDesc => 'Enable background location for the full experience';
 
   @override
-  String get notifications => 'Notifications';
+  String get notifications => 'Notificări';
 
   @override
   String get notificationsDesc => 'Enable notifications to stay informed';
@@ -2316,7 +2316,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get summarize => 'Rezumă';
 
   @override
-  String get generateSummary => 'Generare rezumat';
+  String get generateSummary => 'Generează rezumat';
 
   @override
   String get conversationNotFoundOrDeleted => 'Conversația nu a fost găsită sau a fost ștearsă';
@@ -2640,7 +2640,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get icon => 'Pictogramă';
 
   @override
-  String get goalTitle => 'Titlu obiectiv';
+  String get goalTitle => 'Titlul obiectivului';
 
   @override
   String get current => 'Curent';
@@ -2655,7 +2655,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get goals => 'Obiective';
 
   @override
-  String get tapToAddGoal => 'Atingeți pentru a adăuga un obiectiv';
+  String get tapToAddGoal => 'Atinge pentru a adăuga un obiectiv';
 
   @override
   String welcomeBack(String name) {
@@ -3834,7 +3834,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get calendarIntegration => 'Integrare Calendar';
 
   @override
-  String get dailySummary => 'Rezumat Zilnic';
+  String get dailySummary => 'Rezumat zilnic';
 
   @override
   String get developer => 'Dezvoltator';
@@ -3843,7 +3843,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get about => 'Despre';
 
   @override
-  String get selectTime => 'Selectați ora';
+  String get selectTime => 'Selectează ora';
 
   @override
   String get accountGroup => 'Cont';
@@ -3870,10 +3870,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String get dailySummaryTitle => 'Rezumat Zilnic';
 
   @override
-  String get dailySummaryDescription => 'Primiți un rezumat personalizat al conversațiilor dvs.';
+  String get dailySummaryDescription => 'Primește un rezumat personalizat al conversațiilor zilei ca notificare.';
 
   @override
-  String get deliveryTime => 'Ora de livrare';
+  String get deliveryTime => 'Ora livrării';
 
   @override
   String get deliveryTimeDescription => 'Când să primiți rezumatul zilnic';
@@ -3959,7 +3959,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get trackPersonalGoals => 'Urmăriți obiective personale pe pagina de pornire';
 
   @override
-  String get dailyReflectionDescription => 'Memento la ora 21:00 pentru a reflecta asupra zilei tale';
+  String get dailyReflectionDescription =>
+      'Primește un memento la ora 21 pentru a reflecta asupra zilei și a-ți nota gândurile.';
 
   @override
   String get endpointURL => 'URL punct final';
@@ -4916,7 +4917,7 @@ class AppLocalizationsRo extends AppLocalizations {
       'Înregistrările pot captura vocile altora. Asigurați-vă că aveți consimțământul tuturor participanților înainte de activare.';
 
   @override
-  String get enable => 'Activare';
+  String get enable => 'Activează';
 
   @override
   String get storeAudioOnPhone => 'Stocați audio pe telefon';
@@ -5736,4 +5737,50 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get dailyScoreExplanation =>
       'Scorul tău zilnic se bazează pe finalizarea sarcinilor. Finalizează sarcinile pentru a-ți îmbunătăți scorul!';
+
+  @override
+  String get notificationFrequencyDescription =>
+      'Controlează cât de des îți trimite Omi notificări proactive și mementouri.';
+
+  @override
+  String get sliderOff => 'Oprit';
+
+  @override
+  String get sliderMax => 'Max.';
+
+  @override
+  String summaryGeneratedFor(String date) {
+    return 'Rezumat generat pentru $date';
+  }
+
+  @override
+  String get failedToGenerateSummary => 'Generarea rezumatului a eșuat. Asigură-te că ai conversații pentru acea zi.';
+
+  @override
+  String get recap => 'Recapitulare';
+
+  @override
+  String deleteQuoted(String name) {
+    return 'Șterge \"$name\"';
+  }
+
+  @override
+  String moveConversationsTo(int count) {
+    return 'Mută $count conversații în:';
+  }
+
+  @override
+  String get noFolder => 'Fără folder';
+
+  @override
+  String get removeFromAllFolders => 'Elimină din toate folderele';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Construiește și partajează aplicația ta personalizată';
+
+  @override
+  String get searchAppsPlaceholder => 'Caută în 1500+ aplicații';
+
+  @override
+  String get filters => 'Filtre';
 }

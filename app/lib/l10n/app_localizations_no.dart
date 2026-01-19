@@ -313,10 +313,10 @@ class AppLocalizationsNo extends AppLocalizations {
   String get searchApps => 'Søk apper...';
 
   @override
-  String get myApps => 'Mine Apper';
+  String get myApps => 'Mine apper';
 
   @override
-  String get installedApps => 'Installerte Apper';
+  String get installedApps => 'Installerte apper';
 
   @override
   String get unableToFetchApps => 'Kan ikke hente apper :(\n\nSjekk internettforbindelsen din og prøv igjen.';
@@ -3218,7 +3218,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get user => 'Bruker';
 
   @override
-  String get starred => 'Stjerne';
+  String get starred => 'Stjernemerket';
 
   @override
   String get date => 'Dato';
@@ -3813,7 +3813,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get calendarIntegration => 'Kalenderintegrasjon';
 
   @override
-  String get dailySummary => 'Daglig Sammendrag';
+  String get dailySummary => 'Daglig sammendrag';
 
   @override
   String get developer => 'Utvikler';
@@ -3849,7 +3849,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get dailySummaryTitle => 'Daglig Sammendrag';
 
   @override
-  String get dailySummaryDescription => 'Få et personlig sammendrag av samtalene dine';
+  String get dailySummaryDescription => 'Få et personlig sammendrag av dagens samtaler levert som et varsel.';
 
   @override
   String get deliveryTime => 'Leveringstid';
@@ -3937,7 +3937,8 @@ class AppLocalizationsNo extends AppLocalizations {
   String get trackPersonalGoals => 'Spor personlige mål på startsiden';
 
   @override
-  String get dailyReflectionDescription => '21:00 påminnelse for å reflektere over dagen';
+  String get dailyReflectionDescription =>
+      'Få en påminnelse kl. 21 for å reflektere over dagen din og fange tankene dine.';
 
   @override
   String get endpointURL => 'Endepunkt-URL';
@@ -5708,4 +5709,50 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get dailyScoreExplanation =>
       'Din daglige poengsum er basert på oppgavefullføring. Fullfør oppgavene dine for å forbedre poengsummen!';
+
+  @override
+  String get notificationFrequencyDescription =>
+      'Kontroller hvor ofte Omi sender deg proaktive varsler og påminnelser.';
+
+  @override
+  String get sliderOff => 'Av';
+
+  @override
+  String get sliderMax => 'Maks.';
+
+  @override
+  String summaryGeneratedFor(String date) {
+    return 'Sammendrag generert for $date';
+  }
+
+  @override
+  String get failedToGenerateSummary => 'Kunne ikke generere sammendrag. Sørg for at du har samtaler for den dagen.';
+
+  @override
+  String get recap => 'Oppsummering';
+
+  @override
+  String deleteQuoted(String name) {
+    return 'Slett \"$name\"';
+  }
+
+  @override
+  String moveConversationsTo(int count) {
+    return 'Flytt $count samtaler til:';
+  }
+
+  @override
+  String get noFolder => 'Ingen mappe';
+
+  @override
+  String get removeFromAllFolders => 'Fjern fra alle mapper';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Bygg og del din tilpassede app';
+
+  @override
+  String get searchAppsPlaceholder => 'Søk i 1500+ apper';
+
+  @override
+  String get filters => 'Filtre';
 }

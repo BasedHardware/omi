@@ -403,7 +403,7 @@
   "@tryAdjustingSearch": {
     "description": "Hint when no apps found"
   },
-  "createYourOwnApp": "Looge oma rakendus",
+  "createYourOwnApp": "Loo oma rakendus",
   "@createYourOwnApp": {
     "description": "Create app button title"
   },
@@ -419,7 +419,7 @@
   "@myApps": {
     "description": "My Apps filter button"
   },
-  "installedApps": "Installitud rakendused",
+  "installedApps": "Paigaldatud rakendused",
   "@installedApps": {
     "description": "Installed Apps filter button"
   },
@@ -2334,7 +2334,7 @@
   "exportButton": "Ekspordi",
   "actionItemsCopiedToClipboard": "Tegevusüksused kopeeritud lõikelauale",
   "summarize": "Kokkuvõte",
-  "generateSummary": "Loo kokkuvõte",
+  "generateSummary": "Genereeri kokkuvõte",
   "conversationNotFoundOrDeleted": "Vestlust ei leitud või see on kustutatud",
   "deleteMemory": "Kustuta mälestus",
   "thisActionCannotBeUndone": "Seda toimingut ei saa tagasi võtta.",
@@ -2893,10 +2893,10 @@
   "settingsHeader": "SEADED",
   "plansAndBilling": "Plaanid ja Arveldus",
   "calendarIntegration": "Kalendri Integratsioon",
-  "dailySummary": "Päevane Kokkuvõte",
+  "dailySummary": "Päeva kokkuvõte",
   "developer": "Arendaja",
   "about": "Teave",
-  "selectTime": "Valige aeg",
+  "selectTime": "Vali aeg",
   "accountGroup": "Konto",
   "signOutQuestion": "Logi välja?",
   "signOutConfirmation": "Kas olete kindel, et soovite välja logida?",
@@ -2905,8 +2905,8 @@
   "enterWordsHint": "Sisestage sõnad (komaga eraldatud)",
   "dailySummaryHeader": "PÄEVANE KOKKUVÕTE",
   "dailySummaryTitle": "Päevane Kokkuvõte",
-  "dailySummaryDescription": "Saa isikupärastatud kokkuvõte oma vestlustest",
-  "deliveryTime": "Kohaletoimetamise aeg",
+  "dailySummaryDescription": "Saa isikupärastatud kokkuvõte päeva vestlustest teavitusena.",
+  "deliveryTime": "Edastamise aeg",
   "deliveryTimeDescription": "Millal saada päevast kokkuvõtet",
   "subscription": "Tellimus",
   "viewPlansAndUsage": "Vaata Plaane ja Kasutust",
@@ -2944,8 +2944,8 @@
   "suggestQuestionsAfterConversations": "Soovita küsimusi pärast vestlusi",
   "goalTracker": "Eesmärkide jälgija",
   "trackPersonalGoals": "Jälgi isiklikke eesmärke avalehel",
-  "dailyReflection": "Igapäevane mõtisklus",
-  "dailyReflectionDescription": "21:00 meeldetuletus mõtisklemiseks oma päeva üle",
+  "dailyReflection": "Igapäevane refleksioon",
+  "dailyReflectionDescription": "Saa meeldetuletus kell 21, et mõtiskleda oma päeva üle ja jäädvustada oma mõtted.",
   "endpointURL": "Lõpp-punkti URL",
   "links": "Lingid",
   "discordMemberCount": "Üle 8000 liikme Discordis",
@@ -3610,5 +3610,18 @@
   "tasksCompleted": "Ülesanded täidetud",
   "completionRate": "Täitmise määr",
   "howItWorks": "Kuidas see töötab",
-  "dailyScoreExplanation": "Teie päeva skoor põhineb ülesannete täitmisel. Täitke oma ülesanded skoori parandamiseks!"
+  "dailyScoreExplanation": "Teie päeva skoor põhineb ülesannete täitmisel. Täitke oma ülesanded skoori parandamiseks!",
+  "notificationFrequencyDescription": "Kontrolli, kui sageli Omi saadab sulle proaktiivseid teavitusi ja meeldetuletusi.",
+  "sliderOff": "Väljas",
+  "sliderMax": "Maks.",
+  "summaryGeneratedFor": "Kokkuvõte genereeritud kuupäevale {date}",
+  "failedToGenerateSummary": "Kokkuvõtte genereerimine ebaõnnestus. Veendu, et sul on vestlusi sellel päeval.",
+  "recap": "Kokkuvõte",
+  "deleteQuoted": "Kustuta \"{name}\"",
+  "moveConversationsTo": "Teisalda {count} vestlust kausta:",
+  "noFolder": "Kaustata",
+  "removeFromAllFolders": "Eemalda kõigist kaustadest",
+  "buildAndShareYourCustomApp": "Ehita ja jaga oma kohandatud rakendust",
+  "searchAppsPlaceholder": "Otsi 1500+ rakendust",
+  "filters": "Filtrid"
 }

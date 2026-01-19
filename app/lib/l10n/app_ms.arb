@@ -415,11 +415,11 @@
   "@searchApps": {
     "description": "Apps search placeholder"
   },
-  "myApps": "Apl Saya",
+  "myApps": "Aplikasi Saya",
   "@myApps": {
     "description": "My Apps filter button"
   },
-  "installedApps": "Apl Dipasang",
+  "installedApps": "Aplikasi Dipasang",
   "@installedApps": {
     "description": "Installed Apps filter button"
   },
@@ -2905,7 +2905,7 @@
   "enterWordsHint": "Masukkan perkataan (dipisahkan koma)",
   "dailySummaryHeader": "RINGKASAN HARIAN",
   "dailySummaryTitle": "Ringkasan Harian",
-  "dailySummaryDescription": "Dapatkan ringkasan peribadi perbualan anda",
+  "dailySummaryDescription": "Terima ringkasan diperibadikan perbualan hari anda sebagai pemberitahuan.",
   "deliveryTime": "Masa Penghantaran",
   "deliveryTimeDescription": "Bila menerima ringkasan harian anda",
   "subscription": "Langganan",
@@ -2945,7 +2945,7 @@
   "goalTracker": "Penjejak Matlamat",
   "trackPersonalGoals": "Jejaki matlamat peribadi pada laman utama",
   "dailyReflection": "Refleksi Harian",
-  "dailyReflectionDescription": "Peringatan jam 9 malam untuk merenung hari anda",
+  "dailyReflectionDescription": "Terima peringatan pada jam 9 malam untuk merenung hari anda dan mencatat fikiran anda.",
   "endpointURL": "URL Titik Akhir",
   "links": "Pautan",
   "discordMemberCount": "8000+ ahli di Discord",
@@ -3610,5 +3610,18 @@
   "tasksCompleted": "Tugasan Selesai",
   "completionRate": "Kadar Penyelesaian",
   "howItWorks": "Bagaimana ia berfungsi",
-  "dailyScoreExplanation": "Skor harian anda berdasarkan penyelesaian tugasan. Selesaikan tugasan anda untuk meningkatkan skor!"
+  "dailyScoreExplanation": "Skor harian anda berdasarkan penyelesaian tugasan. Selesaikan tugasan anda untuk meningkatkan skor!",
+  "notificationFrequencyDescription": "Kawal kekerapan Omi menghantar pemberitahuan dan peringatan proaktif kepada anda.",
+  "sliderOff": "Mati",
+  "sliderMax": "Maks.",
+  "summaryGeneratedFor": "Ringkasan dijana untuk {date}",
+  "failedToGenerateSummary": "Gagal menjana ringkasan. Pastikan anda mempunyai perbualan untuk hari tersebut.",
+  "recap": "Ringkasan",
+  "deleteQuoted": "Padam \"{name}\"",
+  "moveConversationsTo": "Pindahkan {count} perbualan ke:",
+  "noFolder": "Tiada folder",
+  "removeFromAllFolders": "Alih keluar dari semua folder",
+  "buildAndShareYourCustomApp": "Bina dan kongsi aplikasi tersuai anda",
+  "searchAppsPlaceholder": "Cari 1500+ Aplikasi",
+  "filters": "Penapis"
 }

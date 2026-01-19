@@ -763,7 +763,7 @@
   "exportButton": "Exportieren",
   "actionItemsCopiedToClipboard": "Aktionselemente in Zwischenablage kopiert",
   "summarize": "Zusammenfassen",
-  "generateSummary": "Zusammenfassung generieren",
+  "generateSummary": "Zusammenfassung erstellen",
   "conversationNotFoundOrDeleted": "Unterhaltung nicht gefunden oder wurde gelöscht",
   "deleteMemory": "Erinnerung löschen",
   "thisActionCannotBeUndone": "Diese Aktion kann nicht rückgängig gemacht werden.",
@@ -1037,7 +1037,7 @@
   "@user": {
     "description": "Default fallback name when user name is empty"
   },
-  "starred": "Mit Stern",
+  "starred": "Markiert",
   "@starred": {
     "description": "Label for starred filter button"
   },
@@ -1352,7 +1352,7 @@
   "enterWordsHint": "Wörter eingeben (durch Kommas getrennt)",
   "dailySummaryHeader": "TÄGLICHE ZUSAMMENFASSUNG",
   "dailySummaryTitle": "Tägliche Zusammenfassung",
-  "dailySummaryDescription": "Erhalten Sie eine personalisierte Zusammenfassung Ihrer Gespräche",
+  "dailySummaryDescription": "Erhalten Sie eine personalisierte Zusammenfassung Ihrer Tagesgespräche als Benachrichtigung.",
   "deliveryTime": "Lieferzeit",
   "deliveryTimeDescription": "Wann Sie Ihre tägliche Zusammenfassung erhalten",
   "subscription": "Abonnement",
@@ -1392,7 +1392,7 @@
   "goalTracker": "Ziel-Tracker",
   "trackPersonalGoals": "Persönliche Ziele auf der Startseite verfolgen",
   "dailyReflection": "Tägliche Reflexion",
-  "dailyReflectionDescription": "21 Uhr Erinnerung, um über Ihren Tag nachzudenken",
+  "dailyReflectionDescription": "Erhalten Sie um 21 Uhr eine Erinnerung, über Ihren Tag nachzudenken und Ihre Gedanken festzuhalten.",
   "endpointURL": "Endpunkt-URL",
   "links": "Links",
   "discordMemberCount": "Über 8000 Mitglieder auf Discord",
@@ -2057,5 +2057,18 @@
   "tasksCompleted": "Aufgaben erledigt",
   "completionRate": "Abschlussrate",
   "howItWorks": "So funktioniert es",
-  "dailyScoreExplanation": "Ihr täglicher Score basiert auf der Aufgabenerledigung. Erledigen Sie Ihre Aufgaben, um Ihren Score zu verbessern!"
+  "dailyScoreExplanation": "Ihr täglicher Score basiert auf der Aufgabenerledigung. Erledigen Sie Ihre Aufgaben, um Ihren Score zu verbessern!",
+  "notificationFrequencyDescription": "Steuern Sie, wie oft Omi Ihnen proaktive Benachrichtigungen und Erinnerungen sendet.",
+  "sliderOff": "Aus",
+  "sliderMax": "Max.",
+  "summaryGeneratedFor": "Zusammenfassung erstellt für {date}",
+  "failedToGenerateSummary": "Zusammenfassung konnte nicht erstellt werden. Stellen Sie sicher, dass Sie Gespräche für diesen Tag haben.",
+  "recap": "Rückblick",
+  "deleteQuoted": "\"{name}\" löschen",
+  "moveConversationsTo": "{count} Gespräche verschieben nach:",
+  "noFolder": "Kein Ordner",
+  "removeFromAllFolders": "Aus allen Ordnern entfernen",
+  "buildAndShareYourCustomApp": "Erstellen und teilen Sie Ihre benutzerdefinierte App",
+  "searchAppsPlaceholder": "Suche in 1500+ Apps",
+  "filters": "Filter"
 }

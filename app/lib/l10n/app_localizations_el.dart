@@ -307,7 +307,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get tryAdjustingSearch => 'Δοκιμάστε να προσαρμόσετε την αναζήτηση ή τα φίλτρα σας';
 
   @override
-  String get createYourOwnApp => 'Δημιουργήστε τη Δική σας Εφαρμογή';
+  String get createYourOwnApp => 'Δημιουργήστε τη δική σας εφαρμογή';
 
   @override
   String get buildAndShareApp => 'Δημιουργήστε και μοιραστείτε την προσαρμοσμένη εφαρμογή σας';
@@ -2324,7 +2324,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get summarize => 'Περίληψη';
 
   @override
-  String get generateSummary => 'Δημιουργία περίληψης';
+  String get generateSummary => 'Δημιουργία σύνοψης';
 
   @override
   String get conversationNotFoundOrDeleted => 'Η συνομιλία δεν βρέθηκε ή έχει διαγραφεί';
@@ -2524,7 +2524,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get trackPersonalGoalsOnHomepage => 'Παρακολουθήστε τους προσωπικούς σας στόχους στην αρχική σελίδα';
 
   @override
-  String get dailyReflection => 'Ημερήσιος στοχασμός';
+  String get dailyReflection => 'Ημερήσιος αναστοχασμός';
 
   @override
   String get get9PmReminderToReflect => 'Λάβετε υπενθύμιση στις 9 μ.μ. για να αναλογιστείτε την ημέρα σας';
@@ -3842,7 +3842,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get calendarIntegration => 'Ενσωμάτωση Ημερολογίου';
 
   @override
-  String get dailySummary => 'Ημερήσια Περίληψη';
+  String get dailySummary => 'Ημερήσια σύνοψη';
 
   @override
   String get developer => 'Προγραμματιστής';
@@ -3851,7 +3851,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get about => 'Σχετικά';
 
   @override
-  String get selectTime => 'Επιλέξτε ώρα';
+  String get selectTime => 'Επιλογή ώρας';
 
   @override
   String get accountGroup => 'Λογαριασμός';
@@ -3878,7 +3878,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get dailySummaryTitle => 'Ημερήσια Περίληψη';
 
   @override
-  String get dailySummaryDescription => 'Λάβετε μια εξατομικευμένη περίληψη των συνομιλιών σας';
+  String get dailySummaryDescription => 'Λάβετε μια εξατομικευμένη σύνοψη των συνομιλιών της ημέρας σας ως ειδοποίηση.';
 
   @override
   String get deliveryTime => 'Ώρα παράδοσης';
@@ -3967,7 +3967,8 @@ class AppLocalizationsEl extends AppLocalizations {
   String get trackPersonalGoals => 'Παρακολουθήστε προσωπικούς στόχους στην αρχική σελίδα';
 
   @override
-  String get dailyReflectionDescription => 'Υπενθύμιση στις 9 μ.μ. για στοχασμό στην ημέρα σας';
+  String get dailyReflectionDescription =>
+      'Λάβετε μια υπενθύμιση στις 9 μ.μ. για να αναστοχαστείτε την ημέρα σας και να καταγράψετε τις σκέψεις σας.';
 
   @override
   String get endpointURL => 'URL τελικού σημείου';
@@ -5752,4 +5753,51 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get dailyScoreExplanation =>
       'Το ημερήσιο σκορ σας βασίζεται στην ολοκλήρωση εργασιών. Ολοκληρώστε τις εργασίες σας για να βελτιώσετε το σκορ!';
+
+  @override
+  String get notificationFrequencyDescription =>
+      'Ελέγξτε πόσο συχνά το Omi σας στέλνει προληπτικές ειδοποιήσεις και υπενθυμίσεις.';
+
+  @override
+  String get sliderOff => 'Απεν.';
+
+  @override
+  String get sliderMax => 'Μέγ.';
+
+  @override
+  String summaryGeneratedFor(String date) {
+    return 'Η σύνοψη δημιουργήθηκε για $date';
+  }
+
+  @override
+  String get failedToGenerateSummary =>
+      'Αποτυχία δημιουργίας σύνοψης. Βεβαιωθείτε ότι έχετε συνομιλίες για εκείνη την ημέρα.';
+
+  @override
+  String get recap => 'Ανακεφαλαίωση';
+
+  @override
+  String deleteQuoted(String name) {
+    return 'Διαγραφή \"$name\"';
+  }
+
+  @override
+  String moveConversationsTo(int count) {
+    return 'Μετακίνηση $count συνομιλιών σε:';
+  }
+
+  @override
+  String get noFolder => 'Χωρίς φάκελο';
+
+  @override
+  String get removeFromAllFolders => 'Αφαίρεση από όλους τους φακέλους';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Δημιουργήστε και μοιραστείτε την προσαρμοσμένη σας εφαρμογή';
+
+  @override
+  String get searchAppsPlaceholder => 'Αναζήτηση σε 1500+ εφαρμογές';
+
+  @override
+  String get filters => 'Φίλτρα';
 }

@@ -313,10 +313,10 @@ class AppLocalizationsPl extends AppLocalizations {
   String get searchApps => 'Szukaj aplikacji...';
 
   @override
-  String get myApps => 'Moje Aplikacje';
+  String get myApps => 'Moje aplikacje';
 
   @override
-  String get installedApps => 'Zainstalowane Aplikacje';
+  String get installedApps => 'Zainstalowane aplikacje';
 
   @override
   String get unableToFetchApps => 'Nie można pobrać aplikacji :(\n\nSprawdź połączenie internetowe i spróbuj ponownie.';
@@ -2309,7 +2309,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get summarize => 'Podsumuj';
 
   @override
-  String get generateSummary => 'Wygeneruj podsumowanie';
+  String get generateSummary => 'Generuj podsumowanie';
 
   @override
   String get conversationNotFoundOrDeleted => 'Rozmowa nie została znaleziona lub została usunięta';
@@ -2647,7 +2647,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get goals => 'Cele';
 
   @override
-  String get tapToAddGoal => 'Dotknij, aby dodać cel';
+  String get tapToAddGoal => 'Stuknij, aby dodać cel';
 
   @override
   String welcomeBack(String name) {
@@ -2798,7 +2798,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get browseInstallCreateApps => 'Przeglądaj, instaluj i twórz aplikacje';
 
   @override
-  String get all => 'Wszystkie';
+  String get all => 'Wszystko';
 
   @override
   String get open => 'Otwórz';
@@ -3819,7 +3819,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get calendarIntegration => 'Integracja Kalendarza';
 
   @override
-  String get dailySummary => 'Dzienne Podsumowanie';
+  String get dailySummary => 'Podsumowanie dnia';
 
   @override
   String get developer => 'Deweloper';
@@ -3828,7 +3828,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get about => 'O aplikacji';
 
   @override
-  String get selectTime => 'Wybierz czas';
+  String get selectTime => 'Wybierz godzinę';
 
   @override
   String get accountGroup => 'Konto';
@@ -3855,10 +3855,10 @@ class AppLocalizationsPl extends AppLocalizations {
   String get dailySummaryTitle => 'Dzienne Podsumowanie';
 
   @override
-  String get dailySummaryDescription => 'Otrzymuj spersonalizowane podsumowanie rozmów';
+  String get dailySummaryDescription => 'Otrzymuj spersonalizowane podsumowanie rozmów dnia jako powiadomienie.';
 
   @override
-  String get deliveryTime => 'Czas dostawy';
+  String get deliveryTime => 'Godzina dostarczenia';
 
   @override
   String get deliveryTimeDescription => 'Kiedy otrzymywać dzienne podsumowanie';
@@ -3943,7 +3943,8 @@ class AppLocalizationsPl extends AppLocalizations {
   String get trackPersonalGoals => 'Śledź osobiste cele na stronie głównej';
 
   @override
-  String get dailyReflectionDescription => 'Przypomnienie o 21:00, aby zastanowić się nad swoim dniem';
+  String get dailyReflectionDescription =>
+      'Otrzymuj przypomnienie o 21:00, aby przemyśleć swój dzień i zapisać swoje myśli.';
 
   @override
   String get endpointURL => 'URL punktu końcowego';
@@ -5720,4 +5721,51 @@ class AppLocalizationsPl extends AppLocalizations {
   @override
   String get dailyScoreExplanation =>
       'Twój dzienny wynik opiera się na ukończeniu zadań. Ukończ zadania, aby poprawić wynik!';
+
+  @override
+  String get notificationFrequencyDescription =>
+      'Kontroluj, jak często Omi wysyła Ci proaktywne powiadomienia i przypomnienia.';
+
+  @override
+  String get sliderOff => 'Wył.';
+
+  @override
+  String get sliderMax => 'Maks.';
+
+  @override
+  String summaryGeneratedFor(String date) {
+    return 'Podsumowanie wygenerowane dla $date';
+  }
+
+  @override
+  String get failedToGenerateSummary =>
+      'Nie udało się wygenerować podsumowania. Upewnij się, że masz rozmowy z tego dnia.';
+
+  @override
+  String get recap => 'Podsumowanie';
+
+  @override
+  String deleteQuoted(String name) {
+    return 'Usuń \"$name\"';
+  }
+
+  @override
+  String moveConversationsTo(int count) {
+    return 'Przenieś $count rozmów do:';
+  }
+
+  @override
+  String get noFolder => 'Bez folderu';
+
+  @override
+  String get removeFromAllFolders => 'Usuń ze wszystkich folderów';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Zbuduj i udostępnij swoją niestandardową aplikację';
+
+  @override
+  String get searchAppsPlaceholder => 'Szukaj w 1500+ aplikacjach';
+
+  @override
+  String get filters => 'Filtry';
 }

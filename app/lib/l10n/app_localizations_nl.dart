@@ -314,10 +314,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String get searchApps => 'Apps zoeken...';
 
   @override
-  String get myApps => 'Mijn Apps';
+  String get myApps => 'Mijn apps';
 
   @override
-  String get installedApps => 'Geïnstalleerde Apps';
+  String get installedApps => 'Geïnstalleerde apps';
 
   @override
   String get unableToFetchApps =>
@@ -3825,7 +3825,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get calendarIntegration => 'Agenda-integratie';
 
   @override
-  String get dailySummary => 'Dagelijkse Samenvatting';
+  String get dailySummary => 'Dagelijkse samenvatting';
 
   @override
   String get developer => 'Ontwikkelaar';
@@ -3834,7 +3834,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get about => 'Over';
 
   @override
-  String get selectTime => 'Selecteer tijd';
+  String get selectTime => 'Tijd selecteren';
 
   @override
   String get accountGroup => 'Account';
@@ -3861,7 +3861,8 @@ class AppLocalizationsNl extends AppLocalizations {
   String get dailySummaryTitle => 'Dagelijkse Samenvatting';
 
   @override
-  String get dailySummaryDescription => 'Ontvang een gepersonaliseerde samenvatting van je gesprekken';
+  String get dailySummaryDescription =>
+      'Ontvang een gepersonaliseerde samenvatting van je dagelijkse gesprekken als melding.';
 
   @override
   String get deliveryTime => 'Bezorgtijd';
@@ -3949,7 +3950,8 @@ class AppLocalizationsNl extends AppLocalizations {
   String get trackPersonalGoals => 'Persoonlijke doelen volgen op de homepage';
 
   @override
-  String get dailyReflectionDescription => '21:00 herinnering om na te denken over je dag';
+  String get dailyReflectionDescription =>
+      'Ontvang om 21:00 een herinnering om te reflecteren op je dag en je gedachten vast te leggen.';
 
   @override
   String get endpointURL => 'Eindpunt-URL';
@@ -5725,4 +5727,50 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get dailyScoreExplanation =>
       'Je dagelijkse score is gebaseerd op taakvoltooiing. Voltooi je taken om je score te verbeteren!';
+
+  @override
+  String get notificationFrequencyDescription => 'Bepaal hoe vaak Omi je proactieve meldingen en herinneringen stuurt.';
+
+  @override
+  String get sliderOff => 'Uit';
+
+  @override
+  String get sliderMax => 'Max.';
+
+  @override
+  String summaryGeneratedFor(String date) {
+    return 'Samenvatting gegenereerd voor $date';
+  }
+
+  @override
+  String get failedToGenerateSummary =>
+      'Kon samenvatting niet genereren. Zorg ervoor dat je gesprekken hebt voor die dag.';
+
+  @override
+  String get recap => 'Samenvatting';
+
+  @override
+  String deleteQuoted(String name) {
+    return '\"$name\" verwijderen';
+  }
+
+  @override
+  String moveConversationsTo(int count) {
+    return '$count gesprekken verplaatsen naar:';
+  }
+
+  @override
+  String get noFolder => 'Geen map';
+
+  @override
+  String get removeFromAllFolders => 'Uit alle mappen verwijderen';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Bouw en deel je aangepaste app';
+
+  @override
+  String get searchAppsPlaceholder => 'Zoek in 1500+ apps';
+
+  @override
+  String get filters => 'Filters';
 }

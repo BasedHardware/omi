@@ -2511,7 +2511,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get trackPersonalGoalsOnHomepage => 'Ana sayfada kişisel hedeflerinizi takip edin';
 
   @override
-  String get dailyReflection => 'Günlük Yansıma';
+  String get dailyReflection => 'Günlük Düşünce';
 
   @override
   String get get9PmReminderToReflect => 'Gününüzü değerlendirmek için saat 21:00 hatırlatıcısı alın';
@@ -3830,7 +3830,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get about => 'Hakkında';
 
   @override
-  String get selectTime => 'Saat Seçin';
+  String get selectTime => 'Saat Seç';
 
   @override
   String get accountGroup => 'Hesap';
@@ -3857,10 +3857,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get dailySummaryTitle => 'Günlük Özet';
 
   @override
-  String get dailySummaryDescription => 'Konuşmalarınızın kişiselleştirilmiş özetini alın';
+  String get dailySummaryDescription => 'Günün konuşmalarının kişiselleştirilmiş özetini bildirim olarak alın.';
 
   @override
-  String get deliveryTime => 'Teslimat Saati';
+  String get deliveryTime => 'Gönderim Saati';
 
   @override
   String get deliveryTimeDescription => 'Günlük özetinizi ne zaman alacağınız';
@@ -3945,7 +3945,8 @@ class AppLocalizationsTr extends AppLocalizations {
   String get trackPersonalGoals => 'Ana sayfada kişisel hedefleri izleyin';
 
   @override
-  String get dailyReflectionDescription => 'Gününüzü yansıtmak için 21:00 hatırlatıcısı';
+  String get dailyReflectionDescription =>
+      'Gününüzü değerlendirmek ve düşüncelerinizi kaydetmek için saat 21:00\'da hatırlatıcı alın.';
 
   @override
   String get endpointURL => 'Uç Nokta URL\'si';
@@ -5719,4 +5720,50 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get dailyScoreExplanation =>
       'Günlük skorunuz görev tamamlamaya dayanır. Skorunuzu artırmak için görevlerinizi tamamlayın!';
+
+  @override
+  String get notificationFrequencyDescription =>
+      'Omi\'nin size ne sıklıkla proaktif bildirimler ve hatırlatıcılar gönderdiğini kontrol edin.';
+
+  @override
+  String get sliderOff => 'Kapalı';
+
+  @override
+  String get sliderMax => 'Maks.';
+
+  @override
+  String summaryGeneratedFor(String date) {
+    return '$date için özet oluşturuldu';
+  }
+
+  @override
+  String get failedToGenerateSummary => 'Özet oluşturulamadı. O gün için konuşmalarınız olduğundan emin olun.';
+
+  @override
+  String get recap => 'Özet';
+
+  @override
+  String deleteQuoted(String name) {
+    return '\"$name\" öğesini sil';
+  }
+
+  @override
+  String moveConversationsTo(int count) {
+    return '$count konuşmayı taşı:';
+  }
+
+  @override
+  String get noFolder => 'Klasör yok';
+
+  @override
+  String get removeFromAllFolders => 'Tüm klasörlerden kaldır';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Özel uygulamanızı oluşturun ve paylaşın';
+
+  @override
+  String get searchAppsPlaceholder => '1500+ Uygulamada Ara';
+
+  @override
+  String get filters => 'Filtreler';
 }

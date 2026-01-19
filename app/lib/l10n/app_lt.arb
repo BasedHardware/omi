@@ -415,11 +415,11 @@
   "@searchApps": {
     "description": "Apps search placeholder"
   },
-  "myApps": "Mano programos",
+  "myApps": "Mano programėlės",
   "@myApps": {
     "description": "My Apps filter button"
   },
-  "installedApps": "Įdiegtos programos",
+  "installedApps": "Įdiegtos programėlės",
   "@installedApps": {
     "description": "Installed Apps filter button"
   },
@@ -2316,7 +2316,7 @@
   "exportButton": "Eksportuoti",
   "actionItemsCopiedToClipboard": "Veiksmų elementai nukopijuoti į iškarpinę",
   "summarize": "Apibendrinti",
-  "generateSummary": "Generuoti santrauką",
+  "generateSummary": "Generuoti suvestinę",
   "conversationNotFoundOrDeleted": "Pokalbis nerastas arba buvo ištrintas",
   "deleteMemory": "Ištrinti atminimą",
   "thisActionCannotBeUndone": "Šio veiksmo negalima atšaukti.",
@@ -2590,7 +2590,7 @@
   "@user": {
     "description": "Default fallback name when user name is empty"
   },
-  "starred": "Su žvaigždute",
+  "starred": "Pažymėta žvaigždute",
   "@starred": {
     "description": "Label for starred filter button"
   },
@@ -2875,10 +2875,10 @@
   "settingsHeader": "NUSTATYMAI",
   "plansAndBilling": "Planai ir Atsiskaitymas",
   "calendarIntegration": "Kalendoriaus Integracija",
-  "dailySummary": "Dienos Santrauka",
+  "dailySummary": "Dienos suvestinė",
   "developer": "Kūrėjas",
   "about": "Apie",
-  "selectTime": "Pasirinkite laiką",
+  "selectTime": "Pasirinkti laiką",
   "accountGroup": "Paskyra",
   "signOutQuestion": "Atsijungti?",
   "signOutConfirmation": "Ar tikrai norite atsijungti?",
@@ -2887,7 +2887,7 @@
   "enterWordsHint": "Įveskite žodžius (atskirti kableliais)",
   "dailySummaryHeader": "DIENOS SANTRAUKA",
   "dailySummaryTitle": "Dienos Santrauka",
-  "dailySummaryDescription": "Gaukite asmeninę pokalbių santrauką",
+  "dailySummaryDescription": "Gaukite asmeniškai pritaikytą dienos pokalbių suvestinę kaip pranešimą.",
   "deliveryTime": "Pristatymo laikas",
   "deliveryTimeDescription": "Kada gauti dienos santrauką",
   "subscription": "Prenumerata",
@@ -2926,8 +2926,8 @@
   "suggestQuestionsAfterConversations": "Siūlyti klausimus po pokalbių",
   "goalTracker": "Tikslų stebėjimas",
   "trackPersonalGoals": "Stebėti asmeninius tikslus pagrindiniame puslapyje",
-  "dailyReflection": "Kasdienė refleksija",
-  "dailyReflectionDescription": "21:00 priminimas apmąstyti savo dieną",
+  "dailyReflection": "Dienos refleksija",
+  "dailyReflectionDescription": "Gaukite priminimą 21 val. apmąstyti savo dieną ir užfiksuoti mintis.",
   "endpointURL": "Galinio taško URL",
   "links": "Nuorodos",
   "discordMemberCount": "Daugiau nei 8000 narių Discord platformoje",
@@ -3592,5 +3592,18 @@
   "tasksCompleted": "Užduotys atliktos",
   "completionRate": "Užbaigimo rodiklis",
   "howItWorks": "Kaip tai veikia",
-  "dailyScoreExplanation": "Jūsų dienos balas pagrįstas užduočių atlikimu. Atlikite užduotis, kad pagerintumėte balą!"
+  "dailyScoreExplanation": "Jūsų dienos balas pagrįstas užduočių atlikimu. Atlikite užduotis, kad pagerintumėte balą!",
+  "notificationFrequencyDescription": "Valdykite, kaip dažnai Omi siunčia jums aktyvius pranešimus ir priminimus.",
+  "sliderOff": "Išjungta",
+  "sliderMax": "Maks.",
+  "summaryGeneratedFor": "Suvestinė sukurta datai {date}",
+  "failedToGenerateSummary": "Nepavyko sugeneruoti suvestinės. Įsitikinkite, kad tą dieną turite pokalbių.",
+  "recap": "Apžvalga",
+  "deleteQuoted": "Ištrinti \"{name}\"",
+  "moveConversationsTo": "Perkelti {count} pokalbius į:",
+  "noFolder": "Be aplanko",
+  "removeFromAllFolders": "Pašalinti iš visų aplankų",
+  "buildAndShareYourCustomApp": "Sukurkite ir dalinkitės savo pritaikyta programėle",
+  "searchAppsPlaceholder": "Ieškoti 1500+ programėlių",
+  "filters": "Filtrai"
 }

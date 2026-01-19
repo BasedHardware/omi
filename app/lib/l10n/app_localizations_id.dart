@@ -2635,7 +2635,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get icon => 'Ikon';
 
   @override
-  String get goalTitle => 'Judul tujuan';
+  String get goalTitle => 'Judul sasaran';
 
   @override
   String get current => 'Saat ini';
@@ -2650,7 +2650,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get goals => 'Tujuan';
 
   @override
-  String get tapToAddGoal => 'Ketuk untuk menambah tujuan';
+  String get tapToAddGoal => 'Ketuk untuk menambahkan sasaran';
 
   @override
   String welcomeBack(String name) {
@@ -3860,7 +3860,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get dailySummaryTitle => 'Ringkasan Harian';
 
   @override
-  String get dailySummaryDescription => 'Dapatkan ringkasan yang dipersonalisasi dari percakapan Anda';
+  String get dailySummaryDescription => 'Dapatkan ringkasan percakapan harian yang dipersonalisasi sebagai notifikasi.';
 
   @override
   String get deliveryTime => 'Waktu Pengiriman';
@@ -3948,7 +3948,8 @@ class AppLocalizationsId extends AppLocalizations {
   String get trackPersonalGoals => 'Lacak tujuan pribadi di halaman utama';
 
   @override
-  String get dailyReflectionDescription => 'Pengingat jam 9 malam untuk merefleksikan hari Anda';
+  String get dailyReflectionDescription =>
+      'Dapatkan pengingat pukul 21.00 untuk merefleksikan hari Anda dan mencatat pikiran Anda.';
 
   @override
   String get endpointURL => 'URL Endpoint';
@@ -5725,4 +5726,50 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get dailyScoreExplanation =>
       'Skor harian Anda berdasarkan penyelesaian tugas. Selesaikan tugas Anda untuk meningkatkan skor!';
+
+  @override
+  String get notificationFrequencyDescription =>
+      'Kontrol seberapa sering Omi mengirimkan notifikasi dan pengingat proaktif.';
+
+  @override
+  String get sliderOff => 'Mati';
+
+  @override
+  String get sliderMax => 'Maks.';
+
+  @override
+  String summaryGeneratedFor(String date) {
+    return 'Ringkasan dibuat untuk $date';
+  }
+
+  @override
+  String get failedToGenerateSummary => 'Gagal membuat ringkasan. Pastikan Anda memiliki percakapan untuk hari itu.';
+
+  @override
+  String get recap => 'Rekap';
+
+  @override
+  String deleteQuoted(String name) {
+    return 'Hapus \"$name\"';
+  }
+
+  @override
+  String moveConversationsTo(int count) {
+    return 'Pindahkan $count percakapan ke:';
+  }
+
+  @override
+  String get noFolder => 'Tanpa folder';
+
+  @override
+  String get removeFromAllFolders => 'Hapus dari semua folder';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Buat dan bagikan aplikasi kustom Anda';
+
+  @override
+  String get searchAppsPlaceholder => 'Cari 1500+ Aplikasi';
+
+  @override
+  String get filters => 'Filter';
 }

@@ -403,7 +403,7 @@
   "@tryAdjustingSearch": {
     "description": "Hint when no apps found"
   },
-  "createYourOwnApp": "Vytvořte vlastní aplikaci",
+  "createYourOwnApp": "Vytvořte si vlastní aplikaci",
   "@createYourOwnApp": {
     "description": "Create app button title"
   },
@@ -2334,7 +2334,7 @@
   "exportButton": "Exportovat",
   "actionItemsCopiedToClipboard": "Položky akcí zkopírovány do schránky",
   "summarize": "Shrnout",
-  "generateSummary": "Vygenerovat souhrn",
+  "generateSummary": "Vygenerovat shrnutí",
   "conversationNotFoundOrDeleted": "Konverzace nenalezena nebo byla smazána",
   "deleteMemory": "Smazat vzpomínku",
   "thisActionCannotBeUndone": "Tuto akci nelze vrátit zpět.",
@@ -2895,10 +2895,10 @@
   "settingsHeader": "NASTAVENÍ",
   "plansAndBilling": "Plány a Fakturace",
   "calendarIntegration": "Integrace Kalendáře",
-  "dailySummary": "Denní Souhrn",
+  "dailySummary": "Denní shrnutí",
   "developer": "Vývojář",
   "about": "O aplikaci",
-  "selectTime": "Vyberte čas",
+  "selectTime": "Vybrat čas",
   "accountGroup": "Účet",
   "signOutQuestion": "Odhlásit se?",
   "signOutConfirmation": "Opravdu se chcete odhlásit?",
@@ -2907,7 +2907,7 @@
   "enterWordsHint": "Zadejte slova (oddělená čárkami)",
   "dailySummaryHeader": "DENNÍ SOUHRN",
   "dailySummaryTitle": "Denní Souhrn",
-  "dailySummaryDescription": "Získejte personalizovaný souhrn svých konverzací",
+  "dailySummaryDescription": "Získejte personalizované shrnutí konverzací dne jako oznámení.",
   "deliveryTime": "Čas doručení",
   "deliveryTimeDescription": "Kdy přijímat denní souhrn",
   "subscription": "Předplatné",
@@ -2947,7 +2947,7 @@
   "goalTracker": "Sledování cílů",
   "trackPersonalGoals": "Sledovat osobní cíle na domovské stránce",
   "dailyReflection": "Denní reflexe",
-  "dailyReflectionDescription": "Připomínka ve 21:00 k zamyšlení nad vaším dnem",
+  "dailyReflectionDescription": "Získejte připomínku ve 21:00, abyste se zamysleli nad svým dnem a zachytili své myšlenky.",
   "endpointURL": "URL koncového bodu",
   "links": "Odkazy",
   "discordMemberCount": "Více než 8000 členů na Discordu",
@@ -3612,5 +3612,18 @@
   "tasksCompleted": "Dokončené úkoly",
   "completionRate": "Míra dokončení",
   "howItWorks": "Jak to funguje",
-  "dailyScoreExplanation": "Vaše denní skóre je založeno na plnění úkolů. Dokončete své úkoly pro zlepšení skóre!"
+  "dailyScoreExplanation": "Vaše denní skóre je založeno na plnění úkolů. Dokončete své úkoly pro zlepšení skóre!",
+  "notificationFrequencyDescription": "Ovládejte, jak často vám Omi zasílá proaktivní oznámení a připomínky.",
+  "sliderOff": "Vyp.",
+  "sliderMax": "Max.",
+  "summaryGeneratedFor": "Shrnutí vygenerováno pro {date}",
+  "failedToGenerateSummary": "Nepodařilo se vygenerovat shrnutí. Ujistěte se, že máte konverzace pro tento den.",
+  "recap": "Rekapitulace",
+  "deleteQuoted": "Smazat \"{name}\"",
+  "moveConversationsTo": "Přesunout {count} konverzací do:",
+  "noFolder": "Žádná složka",
+  "removeFromAllFolders": "Odebrat ze všech složek",
+  "buildAndShareYourCustomApp": "Vytvořte a sdílejte svou vlastní aplikaci",
+  "searchAppsPlaceholder": "Hledat v 1500+ aplikacích",
+  "filters": "Filtry"
 }

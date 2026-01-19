@@ -314,10 +314,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get searchApps => 'Sök appar...';
 
   @override
-  String get myApps => 'Mina Appar';
+  String get myApps => 'Mina appar';
 
   @override
-  String get installedApps => 'Installerade Appar';
+  String get installedApps => 'Installerade appar';
 
   @override
   String get unableToFetchApps => 'Kunde inte hämta appar :(\n\nKontrollera din internetanslutning och försök igen.';
@@ -1763,7 +1763,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get locationAccessDesc => 'Aktivera bakgrundsplats för den fullständiga upplevelsen';
 
   @override
-  String get notifications => 'Notifieringar';
+  String get notifications => 'Aviseringar';
 
   @override
   String get notificationsDesc => 'Aktivera notifieringar för att hålla dig informerad';
@@ -3223,7 +3223,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get user => 'Användare';
 
   @override
-  String get starred => 'Stjärnmärkta';
+  String get starred => 'Stjärnmärkt';
 
   @override
   String get date => 'Datum';
@@ -3819,7 +3819,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get calendarIntegration => 'Kalenderintegration';
 
   @override
-  String get dailySummary => 'Daglig Sammanfattning';
+  String get dailySummary => 'Daglig sammanfattning';
 
   @override
   String get developer => 'Utvecklare';
@@ -3855,7 +3855,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get dailySummaryTitle => 'Daglig Sammanfattning';
 
   @override
-  String get dailySummaryDescription => 'Få en personlig sammanfattning av dina konversationer';
+  String get dailySummaryDescription => 'Få en personlig sammanfattning av dagens konversationer som en avisering.';
 
   @override
   String get deliveryTime => 'Leveranstid';
@@ -3943,7 +3943,8 @@ class AppLocalizationsSv extends AppLocalizations {
   String get trackPersonalGoals => 'Spåra personliga mål på startsidan';
 
   @override
-  String get dailyReflectionDescription => '21:00 påminnelse att reflektera över din dag';
+  String get dailyReflectionDescription =>
+      'Få en påminnelse kl. 21 för att reflektera över din dag och fånga dina tankar.';
 
   @override
   String get endpointURL => 'Slutpunkts-URL';
@@ -5711,4 +5712,51 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String get dailyScoreExplanation =>
       'Din dagliga poäng baseras på uppgiftsslutförande. Slutför dina uppgifter för att förbättra din poäng!';
+
+  @override
+  String get notificationFrequencyDescription =>
+      'Kontrollera hur ofta Omi skickar dig proaktiva aviseringar och påminnelser.';
+
+  @override
+  String get sliderOff => 'Av';
+
+  @override
+  String get sliderMax => 'Max.';
+
+  @override
+  String summaryGeneratedFor(String date) {
+    return 'Sammanfattning genererad för $date';
+  }
+
+  @override
+  String get failedToGenerateSummary =>
+      'Kunde inte generera sammanfattning. Se till att du har konversationer för den dagen.';
+
+  @override
+  String get recap => 'Sammanfattning';
+
+  @override
+  String deleteQuoted(String name) {
+    return 'Ta bort \"$name\"';
+  }
+
+  @override
+  String moveConversationsTo(int count) {
+    return 'Flytta $count konversationer till:';
+  }
+
+  @override
+  String get noFolder => 'Ingen mapp';
+
+  @override
+  String get removeFromAllFolders => 'Ta bort från alla mappar';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Bygg och dela din anpassade app';
+
+  @override
+  String get searchAppsPlaceholder => 'Sök bland 1500+ appar';
+
+  @override
+  String get filters => 'Filter';
 }
