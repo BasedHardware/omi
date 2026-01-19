@@ -5710,4 +5710,10 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get soCloseJustLittleMore => 'Olyan közel, már csak egy kicsit';
+
+  @override
+  String get notificationFrequency => 'Értesítések gyakorisága';
+
+  @override
+  String get controlNotificationFrequency => 'Szabályozza, milyen gyakran küld Önnek proaktív értesítéseket az Omi.';
 }

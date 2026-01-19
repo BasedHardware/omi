@@ -5639,4 +5639,10 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get soCloseJustLittleMore => 'قريب جداً، فقط القليل';
+
+  @override
+  String get notificationFrequency => 'تكرار الإشعارات';
+
+  @override
+  String get controlNotificationFrequency => 'تحكم في عدد مرات إرسال Omi للإشعارات الاستباقية.';
 }

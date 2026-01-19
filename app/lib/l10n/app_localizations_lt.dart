@@ -5682,4 +5682,10 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get soCloseJustLittleMore => 'Taip arti, dar truputį';
+
+  @override
+  String get notificationFrequency => 'Pranešimų dažnumas';
+
+  @override
+  String get controlNotificationFrequency => 'Valdykite, kaip dažnai Omi siunčia jums aktyvius pranešimus.';
 }

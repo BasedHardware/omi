@@ -5702,4 +5702,10 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get soCloseJustLittleMore => 'Sangat hampir, sedikit lagi';
+
+  @override
+  String get notificationFrequency => 'Kekerapan Pemberitahuan';
+
+  @override
+  String get controlNotificationFrequency => 'Kawal kekerapan Omi menghantar pemberitahuan proaktif kepada anda.';
 }

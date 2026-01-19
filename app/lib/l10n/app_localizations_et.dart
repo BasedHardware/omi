@@ -5680,4 +5680,10 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get soCloseJustLittleMore => 'Nii lähedal, veel natuke';
+
+  @override
+  String get notificationFrequency => 'Teavituste sagedus';
+
+  @override
+  String get controlNotificationFrequency => 'Määrake, kui sageli Omi saadab teile ennetavaid teavitusi.';
 }

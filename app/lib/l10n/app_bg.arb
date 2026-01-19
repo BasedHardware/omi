@@ -3603,5 +3603,7 @@
   "personalizingExperience": "Персонализиране на вашето изживяване...",
   "keepSpeakingUntil100": "Продължавайте да говорите до 100%.",
   "greatJobAlmostThere": "Страхотна работа, почти сте готови",
-  "soCloseJustLittleMore": "Съвсем малко остава"
+  "soCloseJustLittleMore": "Съвсем малко остава",
+  "notificationFrequency": "Честота на известията",
+  "controlNotificationFrequency": "Контролирайте колко често Omi ви изпраща проактивни известия."
 }

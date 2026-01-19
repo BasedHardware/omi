@@ -5695,4 +5695,10 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get soCloseJustLittleMore => 'Так близко, ещё немного';
+
+  @override
+  String get notificationFrequency => 'Частота уведомлений';
+
+  @override
+  String get controlNotificationFrequency => 'Управляйте частотой отправки проактивных уведомлений от Omi.';
 }

@@ -5730,4 +5730,11 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get soCloseJustLittleMore => 'Si proche, encore un peu';
+
+  @override
+  String get notificationFrequency => 'Fréquence des notifications';
+
+  @override
+  String get controlNotificationFrequency =>
+      'Contrôlez la fréquence à laquelle Omi vous envoie des notifications proactives.';
 }

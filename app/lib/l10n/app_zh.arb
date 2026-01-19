@@ -2048,5 +2048,7 @@
   "personalizingExperience": "正在个性化您的体验...",
   "keepSpeakingUntil100": "继续说话直到达到100%。",
   "greatJobAlmostThere": "做得好，就快完成了",
-  "soCloseJustLittleMore": "很接近了，再说一点"
+  "soCloseJustLittleMore": "很接近了，再说一点",
+  "notificationFrequency": "通知频率",
+  "controlNotificationFrequency": "控制Omi向您发送主动通知的频率。"
 }

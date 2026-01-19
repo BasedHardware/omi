@@ -3601,5 +3601,7 @@
   "personalizingExperience": "Memperibadikan pengalaman anda...",
   "keepSpeakingUntil100": "Teruskan bercakap sehingga mencapai 100%.",
   "greatJobAlmostThere": "Kerja yang baik, hampir siap",
-  "soCloseJustLittleMore": "Sangat hampir, sedikit lagi"
+  "soCloseJustLittleMore": "Sangat hampir, sedikit lagi",
+  "notificationFrequency": "Kekerapan Pemberitahuan",
+  "controlNotificationFrequency": "Kawal kekerapan Omi menghantar pemberitahuan proaktif kepada anda."
 }

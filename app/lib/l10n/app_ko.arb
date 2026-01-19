@@ -3601,5 +3601,7 @@
   "personalizingExperience": "경험을 맞춤 설정하는 중...",
   "keepSpeakingUntil100": "100%가 될 때까지 계속 말씀하세요.",
   "greatJobAlmostThere": "잘하고 있어요, 거의 다 됐어요",
-  "soCloseJustLittleMore": "거의 다 왔어요, 조금만 더"
+  "soCloseJustLittleMore": "거의 다 왔어요, 조금만 더",
+  "notificationFrequency": "알림 빈도",
+  "controlNotificationFrequency": "Omi가 사전 알림을 보내는 빈도를 제어합니다."
 }

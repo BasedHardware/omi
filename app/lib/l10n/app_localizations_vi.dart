@@ -5690,4 +5690,10 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get soCloseJustLittleMore => 'Gần lắm rồi, thêm một chút nữa';
+
+  @override
+  String get notificationFrequency => 'Tần suất thông báo';
+
+  @override
+  String get controlNotificationFrequency => 'Kiểm soát tần suất Omi gửi thông báo chủ động cho bạn.';
 }

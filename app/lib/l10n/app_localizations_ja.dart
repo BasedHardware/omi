@@ -5578,4 +5578,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get soCloseJustLittleMore => 'あと少し';
+
+  @override
+  String get notificationFrequency => '通知頻度';
+
+  @override
+  String get controlNotificationFrequency => 'Omiがプロアクティブ通知を送信する頻度を制御します。';
 }

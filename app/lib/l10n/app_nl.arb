@@ -2419,5 +2419,7 @@
   "personalizingExperience": "Je ervaring wordt gepersonaliseerd...",
   "keepSpeakingUntil100": "Blijf praten tot je 100% bereikt.",
   "greatJobAlmostThere": "Goed bezig, je bent er bijna",
-  "soCloseJustLittleMore": "Zo dichtbij, nog even"
+  "soCloseJustLittleMore": "Zo dichtbij, nog even",
+  "notificationFrequency": "Meldingsfrequentie",
+  "controlNotificationFrequency": "Bepaal hoe vaak Omi u proactieve meldingen stuurt."
 }

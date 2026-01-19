@@ -3583,5 +3583,7 @@
   "personalizingExperience": "Deneyiminiz kişiselleştiriliyor...",
   "keepSpeakingUntil100": "%100'e ulaşana kadar konuşmaya devam edin.",
   "greatJobAlmostThere": "Harika iş, neredeyse bitti",
-  "soCloseJustLittleMore": "Çok yakın, biraz daha"
+  "soCloseJustLittleMore": "Çok yakın, biraz daha",
+  "notificationFrequency": "Bildirim Sıklığı",
+  "controlNotificationFrequency": "Omi'nin size ne sıklıkta proaktif bildirimler göndereceğini kontrol edin."
 }

@@ -5653,4 +5653,10 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get soCloseJustLittleMore => 'ใกล้มากแล้ว อีกนิดเดียว';
+
+  @override
+  String get notificationFrequency => 'ความถี่การแจ้งเตือน';
+
+  @override
+  String get controlNotificationFrequency => 'ควบคุมความถี่ที่ Omi ส่งการแจ้งเตือนเชิงรุกให้คุณ';
 }

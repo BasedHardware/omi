@@ -5708,4 +5708,10 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get soCloseJustLittleMore => 'Atât de aproape, doar puțin mai mult';
+
+  @override
+  String get notificationFrequency => 'Frecvența notificărilor';
+
+  @override
+  String get controlNotificationFrequency => 'Controlați cât de des Omi vă trimite notificări proactive.';
 }

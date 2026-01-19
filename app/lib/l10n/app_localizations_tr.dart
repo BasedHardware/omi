@@ -5690,4 +5690,11 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get soCloseJustLittleMore => 'Çok yakın, biraz daha';
+
+  @override
+  String get notificationFrequency => 'Bildirim Sıklığı';
+
+  @override
+  String get controlNotificationFrequency =>
+      'Omi\'nin size ne sıklıkta proaktif bildirimler göndereceğini kontrol edin.';
 }

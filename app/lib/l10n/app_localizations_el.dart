@@ -5724,4 +5724,10 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get soCloseJustLittleMore => 'Τόσο κοντά, λίγο ακόμα';
+
+  @override
+  String get notificationFrequency => 'Συχνότητα ειδοποιήσεων';
+
+  @override
+  String get controlNotificationFrequency => 'Ελέγξτε πόσο συχνά το Omi σας στέλνει προληπτικές ειδοποιήσεις.';
 }

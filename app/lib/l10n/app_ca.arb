@@ -3603,5 +3603,7 @@
   "personalizingExperience": "Personalitzant la teva experiència...",
   "keepSpeakingUntil100": "Continua parlant fins arribar al 100%.",
   "greatJobAlmostThere": "Molt bé, gairebé hi ets",
-  "soCloseJustLittleMore": "Tan a prop, només una mica més"
+  "soCloseJustLittleMore": "Tan a prop, només una mica més",
+  "notificationFrequency": "Freqüència de notificacions",
+  "controlNotificationFrequency": "Controla amb quina freqüència Omi t'envia notificacions proactives."
 }

@@ -3601,5 +3601,7 @@
   "personalizingExperience": "Đang cá nhân hóa trải nghiệm của bạn...",
   "keepSpeakingUntil100": "Tiếp tục nói cho đến khi đạt 100%.",
   "greatJobAlmostThere": "Tuyệt vời, bạn sắp hoàn thành rồi",
-  "soCloseJustLittleMore": "Gần lắm rồi, thêm một chút nữa"
+  "soCloseJustLittleMore": "Gần lắm rồi, thêm một chút nữa",
+  "notificationFrequency": "Tần suất thông báo",
+  "controlNotificationFrequency": "Kiểm soát tần suất Omi gửi thông báo chủ động cho bạn."
 }

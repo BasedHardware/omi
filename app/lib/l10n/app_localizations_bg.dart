@@ -5698,4 +5698,10 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get soCloseJustLittleMore => 'Съвсем малко остава';
+
+  @override
+  String get notificationFrequency => 'Честота на известията';
+
+  @override
+  String get controlNotificationFrequency => 'Контролирайте колко често Omi ви изпраща проактивни известия.';
 }

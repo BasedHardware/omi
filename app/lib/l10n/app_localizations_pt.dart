@@ -5671,4 +5671,10 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get soCloseJustLittleMore => 'Tão perto, só mais um pouco';
+
+  @override
+  String get notificationFrequency => 'Frequência de notificações';
+
+  @override
+  String get controlNotificationFrequency => 'Controle com que frequência o Omi envia notificações proativas.';
 }

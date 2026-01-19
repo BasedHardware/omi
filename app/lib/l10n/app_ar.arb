@@ -3601,5 +3601,7 @@
   "personalizingExperience": "جاري تخصيص تجربتك...",
   "keepSpeakingUntil100": "استمر في التحدث حتى تصل إلى 100%.",
   "greatJobAlmostThere": "عمل رائع، أنت على وشك الانتهاء",
-  "soCloseJustLittleMore": "قريب جداً، فقط القليل"
+  "soCloseJustLittleMore": "قريب جداً، فقط القليل",
+  "notificationFrequency": "تكرار الإشعارات",
+  "controlNotificationFrequency": "تحكم في عدد مرات إرسال Omi للإشعارات الاستباقية."
 }

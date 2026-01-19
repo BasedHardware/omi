@@ -5568,4 +5568,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get soCloseJustLittleMore => '很接近了，再说一点';
+
+  @override
+  String get notificationFrequency => '通知频率';
+
+  @override
+  String get controlNotificationFrequency => '控制Omi向您发送主动通知的频率。';
 }

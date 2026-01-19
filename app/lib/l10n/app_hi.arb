@@ -2048,5 +2048,7 @@
   "personalizingExperience": "आपका अनुभव व्यक्तिगत किया जा रहा है...",
   "keepSpeakingUntil100": "100% तक पहुंचने तक बोलते रहें।",
   "greatJobAlmostThere": "शानदार काम, आप लगभग वहां हैं",
-  "soCloseJustLittleMore": "बस थोड़ा और"
+  "soCloseJustLittleMore": "बस थोड़ा और",
+  "notificationFrequency": "सूचना आवृत्ति",
+  "controlNotificationFrequency": "नियंत्रित करें कि Omi आपको कितनी बार सक्रिय सूचनाएं भेजता है।"
 }

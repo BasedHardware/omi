@@ -5697,4 +5697,10 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get soCloseJustLittleMore => 'Zo dichtbij, nog even';
+
+  @override
+  String get notificationFrequency => 'Meldingsfrequentie';
+
+  @override
+  String get controlNotificationFrequency => 'Bepaal hoe vaak Omi u proactieve meldingen stuurt.';
 }

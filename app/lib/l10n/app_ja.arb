@@ -2027,5 +2027,7 @@
   "personalizingExperience": "体験をパーソナライズ中...",
   "keepSpeakingUntil100": "100%になるまで話し続けてください。",
   "greatJobAlmostThere": "素晴らしい、もう少しです",
-  "soCloseJustLittleMore": "あと少し"
+  "soCloseJustLittleMore": "あと少し",
+  "notificationFrequency": "通知頻度",
+  "controlNotificationFrequency": "Omiがプロアクティブ通知を送信する頻度を制御します。"
 }

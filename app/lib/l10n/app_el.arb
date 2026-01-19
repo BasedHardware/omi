@@ -3601,5 +3601,7 @@
   "personalizingExperience": "Εξατομίκευση της εμπειρίας σας...",
   "keepSpeakingUntil100": "Συνεχίστε να μιλάτε μέχρι να φτάσετε το 100%.",
   "greatJobAlmostThere": "Εξαιρετική δουλειά, σχεδόν τελειώσατε",
-  "soCloseJustLittleMore": "Τόσο κοντά, λίγο ακόμα"
+  "soCloseJustLittleMore": "Τόσο κοντά, λίγο ακόμα",
+  "notificationFrequency": "Συχνότητα ειδοποιήσεων",
+  "controlNotificationFrequency": "Ελέγξτε πόσο συχνά το Omi σας στέλνει προληπτικές ειδοποιήσεις."
 }

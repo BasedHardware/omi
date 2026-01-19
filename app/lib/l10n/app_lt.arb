@@ -3583,5 +3583,7 @@
   "personalizingExperience": "Pritaikoma jūsų patirtis...",
   "keepSpeakingUntil100": "Kalbėkite toliau, kol pasieksite 100%.",
   "greatJobAlmostThere": "Puikus darbas, beveik baigėte",
-  "soCloseJustLittleMore": "Taip arti, dar truputį"
+  "soCloseJustLittleMore": "Taip arti, dar truputį",
+  "notificationFrequency": "Pranešimų dažnumas",
+  "controlNotificationFrequency": "Valdykite, kaip dažnai Omi siunčia jums aktyvius pranešimus."
 }

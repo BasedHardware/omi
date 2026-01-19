@@ -2048,5 +2048,7 @@
   "personalizingExperience": "Personalizando tu experiencia...",
   "keepSpeakingUntil100": "Sigue hablando hasta llegar al 100%.",
   "greatJobAlmostThere": "Buen trabajo, ya casi terminas",
-  "soCloseJustLittleMore": "Tan cerca, solo un poco más"
+  "soCloseJustLittleMore": "Tan cerca, solo un poco más",
+  "notificationFrequency": "Frecuencia de notificaciones",
+  "controlNotificationFrequency": "Controla con qué frecuencia Omi te envía notificaciones proactivas."
 }

@@ -5680,4 +5680,10 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get soCloseJustLittleMore => 'Niin lähellä, vielä vähän';
+
+  @override
+  String get notificationFrequency => 'Ilmoitusten tiheys';
+
+  @override
+  String get controlNotificationFrequency => 'Hallitse kuinka usein Omi lähettää sinulle ennakoivia ilmoituksia.';
 }

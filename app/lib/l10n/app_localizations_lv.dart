@@ -5689,4 +5689,10 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get soCloseJustLittleMore => 'Tik tuvu, vēl nedaudz';
+
+  @override
+  String get notificationFrequency => 'Paziņojumu biežums';
+
+  @override
+  String get controlNotificationFrequency => 'Kontrolējiet, cik bieži Omi sūta jums proaktīvus paziņojumus.';
 }

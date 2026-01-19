@@ -3601,5 +3601,7 @@
   "personalizingExperience": "Se personalizează experiența ta...",
   "keepSpeakingUntil100": "Continuă să vorbești până ajungi la 100%.",
   "greatJobAlmostThere": "Treabă excelentă, ești aproape gata",
-  "soCloseJustLittleMore": "Atât de aproape, doar puțin mai mult"
+  "soCloseJustLittleMore": "Atât de aproape, doar puțin mai mult",
+  "notificationFrequency": "Frecvența notificărilor",
+  "controlNotificationFrequency": "Controlați cât de des Omi vă trimite notificări proactive."
 }

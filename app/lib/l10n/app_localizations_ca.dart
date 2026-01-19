@@ -5713,4 +5713,10 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get soCloseJustLittleMore => 'Tan a prop, només una mica més';
+
+  @override
+  String get notificationFrequency => 'Freqüència de notificacions';
+
+  @override
+  String get controlNotificationFrequency => 'Controla amb quina freqüència Omi t\'envia notificacions proactives.';
 }

@@ -3601,5 +3601,7 @@
   "personalizingExperience": "กำลังปรับแต่งประสบการณ์ของคุณ...",
   "keepSpeakingUntil100": "พูดต่อไปจนกว่าจะถึง 100%",
   "greatJobAlmostThere": "ทำได้ดีมาก ใกล้เสร็จแล้ว",
-  "soCloseJustLittleMore": "ใกล้มากแล้ว อีกนิดเดียว"
+  "soCloseJustLittleMore": "ใกล้มากแล้ว อีกนิดเดียว",
+  "notificationFrequency": "ความถี่การแจ้งเตือน",
+  "controlNotificationFrequency": "ควบคุมความถี่ที่ Omi ส่งการแจ้งเตือนเชิงรุกให้คุณ"
 }

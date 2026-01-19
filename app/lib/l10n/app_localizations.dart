@@ -10754,6 +10754,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'So close, just a little more'**
   String get soCloseJustLittleMore;
+
+  /// Header for notification frequency settings section
+  ///
+  /// In en, this message translates to:
+  /// **'Notification Frequency'**
+  String get notificationFrequency;
+
+  /// Description for notification frequency control
+  ///
+  /// In en, this message translates to:
+  /// **'Control how often Omi sends you proactive notifications.'**
+  String get controlNotificationFrequency;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

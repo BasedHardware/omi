@@ -5658,4 +5658,10 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get soCloseJustLittleMore => 'बस थोड़ा और';
+
+  @override
+  String get notificationFrequency => 'सूचना आवृत्ति';
+
+  @override
+  String get controlNotificationFrequency => 'नियंत्रित करें कि Omi आपको कितनी बार सक्रिय सूचनाएं भेजता है।';
 }

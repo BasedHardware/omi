@@ -6838,5 +6838,13 @@
   "soCloseJustLittleMore": "So close, just a little more",
   "@soCloseJustLittleMore": {
     "description": "Encouragement message when speech profile is nearly complete"
+  },
+  "notificationFrequency": "Notification Frequency",
+  "@notificationFrequency": {
+    "description": "Header for notification frequency settings section"
+  },
+  "controlNotificationFrequency": "Control how often Omi sends you proactive notifications.",
+  "@controlNotificationFrequency": {
+    "description": "Description for notification frequency control"
   }
 }

@@ -5580,4 +5580,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get soCloseJustLittleMore => '거의 다 왔어요, 조금만 더';
+
+  @override
+  String get notificationFrequency => '알림 빈도';
+
+  @override
+  String get controlNotificationFrequency => 'Omi가 사전 알림을 보내는 빈도를 제어합니다.';
 }

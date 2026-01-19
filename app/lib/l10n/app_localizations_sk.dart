@@ -5679,4 +5679,10 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get soCloseJustLittleMore => 'Tak blízko, len ešte trochu';
+
+  @override
+  String get notificationFrequency => 'Frekvencia oznámení';
+
+  @override
+  String get controlNotificationFrequency => 'Ovládajte, ako často vám Omi posiela proaktívne oznámenia.';
 }

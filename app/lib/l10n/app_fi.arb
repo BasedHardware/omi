@@ -3601,5 +3601,7 @@
   "personalizingExperience": "Mukautetaan kokemustasi...",
   "keepSpeakingUntil100": "Jatka puhumista kunnes saavutat 100%.",
   "greatJobAlmostThere": "Hienoa työtä, olet melkein valmis",
-  "soCloseJustLittleMore": "Niin lähellä, vielä vähän"
+  "soCloseJustLittleMore": "Niin lähellä, vielä vähän",
+  "notificationFrequency": "Ilmoitusten tiheys",
+  "controlNotificationFrequency": "Hallitse kuinka usein Omi lähettää sinulle ennakoivia ilmoituksia."
 }

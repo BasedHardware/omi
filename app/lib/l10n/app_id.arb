@@ -3601,5 +3601,7 @@
   "personalizingExperience": "Mempersonalisasi pengalaman Anda...",
   "keepSpeakingUntil100": "Terus berbicara sampai mencapai 100%.",
   "greatJobAlmostThere": "Kerja bagus, hampir selesai",
-  "soCloseJustLittleMore": "Sangat dekat, sedikit lagi"
+  "soCloseJustLittleMore": "Sangat dekat, sedikit lagi",
+  "notificationFrequency": "Frekuensi Notifikasi",
+  "controlNotificationFrequency": "Kontrol seberapa sering Omi mengirimkan notifikasi proaktif kepada Anda."
 }

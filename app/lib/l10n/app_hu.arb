@@ -3601,5 +3601,7 @@
   "personalizingExperience": "Élményének személyre szabása...",
   "keepSpeakingUntil100": "Beszéljen tovább, amíg el nem éri a 100%-ot.",
   "greatJobAlmostThere": "Remek munka, már majdnem kész",
-  "soCloseJustLittleMore": "Olyan közel, már csak egy kicsit"
+  "soCloseJustLittleMore": "Olyan közel, már csak egy kicsit",
+  "notificationFrequency": "Értesítések gyakorisága",
+  "controlNotificationFrequency": "Szabályozza, milyen gyakran küld Önnek proaktív értesítéseket az Omi."
 }

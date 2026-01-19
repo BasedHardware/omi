@@ -3601,5 +3601,7 @@
   "personalizingExperience": "Tilpasser opplevelsen din...",
   "keepSpeakingUntil100": "Fortsett å snakke til du når 100%.",
   "greatJobAlmostThere": "Flott jobbet, du er nesten der",
-  "soCloseJustLittleMore": "Så nærme, bare litt til"
+  "soCloseJustLittleMore": "Så nærme, bare litt til",
+  "notificationFrequency": "Varslingsfrekvens",
+  "controlNotificationFrequency": "Kontroller hvor ofte Omi sender deg proaktive varsler."
 }

@@ -3601,5 +3601,7 @@
   "personalizingExperience": "Персонализация вашего опыта...",
   "keepSpeakingUntil100": "Продолжайте говорить до 100%.",
   "greatJobAlmostThere": "Отличная работа, почти готово",
-  "soCloseJustLittleMore": "Так близко, ещё немного"
+  "soCloseJustLittleMore": "Так близко, ещё немного",
+  "notificationFrequency": "Частота уведомлений",
+  "controlNotificationFrequency": "Управляйте частотой отправки проактивных уведомлений от Omi."
 }

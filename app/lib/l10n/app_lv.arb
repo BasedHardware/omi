@@ -3601,5 +3601,7 @@
   "personalizingExperience": "Personalizē jūsu pieredzi...",
   "keepSpeakingUntil100": "Turpiniet runāt, līdz sasniedzat 100%.",
   "greatJobAlmostThere": "Lielisks darbs, gandrīz pabeigts",
-  "soCloseJustLittleMore": "Tik tuvu, vēl nedaudz"
+  "soCloseJustLittleMore": "Tik tuvu, vēl nedaudz",
+  "notificationFrequency": "Paziņojumu biežums",
+  "controlNotificationFrequency": "Kontrolējiet, cik bieži Omi sūta jums proaktīvus paziņojumus."
 }

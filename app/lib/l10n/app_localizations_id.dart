@@ -5697,4 +5697,10 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get soCloseJustLittleMore => 'Sangat dekat, sedikit lagi';
+
+  @override
+  String get notificationFrequency => 'Frekuensi Notifikasi';
+
+  @override
+  String get controlNotificationFrequency => 'Kontrol seberapa sering Omi mengirimkan notifikasi proaktif kepada Anda.';
 }

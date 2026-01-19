@@ -3601,5 +3601,7 @@
   "personalizingExperience": "Tilpasser din oplevelse...",
   "keepSpeakingUntil100": "Bliv ved med at tale indtil du når 100%.",
   "greatJobAlmostThere": "Godt arbejde, du er næsten i mål",
-  "soCloseJustLittleMore": "Så tæt på, bare lidt mere"
+  "soCloseJustLittleMore": "Så tæt på, bare lidt mere",
+  "notificationFrequency": "Notifikationsfrekvens",
+  "controlNotificationFrequency": "Kontroller, hvor ofte Omi sender dig proaktive notifikationer."
 }

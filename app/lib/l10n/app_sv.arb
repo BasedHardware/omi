@@ -3601,5 +3601,7 @@
   "personalizingExperience": "Anpassar din upplevelse...",
   "keepSpeakingUntil100": "Fortsätt prata tills du når 100%.",
   "greatJobAlmostThere": "Bra jobbat, du är nästan klar",
-  "soCloseJustLittleMore": "Så nära, bara lite till"
+  "soCloseJustLittleMore": "Så nära, bara lite till",
+  "notificationFrequency": "Aviseringsfrekvens",
+  "controlNotificationFrequency": "Kontrollera hur ofta Omi skickar proaktiva aviseringar till dig."
 }

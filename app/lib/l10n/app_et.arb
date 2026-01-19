@@ -3601,5 +3601,7 @@
   "personalizingExperience": "Teie kogemuse isikupärastamine...",
   "keepSpeakingUntil100": "Rääkige edasi, kuni jõuate 100%-ni.",
   "greatJobAlmostThere": "Suurepärane töö, olete peaaegu kohal",
-  "soCloseJustLittleMore": "Nii lähedal, veel natuke"
+  "soCloseJustLittleMore": "Nii lähedal, veel natuke",
+  "notificationFrequency": "Teavituste sagedus",
+  "controlNotificationFrequency": "Määrake, kui sageli Omi saadab teile ennetavaid teavitusi."
 }

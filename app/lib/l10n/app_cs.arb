@@ -3603,5 +3603,7 @@
   "personalizingExperience": "Přizpůsobování vašeho zážitku...",
   "keepSpeakingUntil100": "Mluvte dál, dokud nedosáhnete 100%.",
   "greatJobAlmostThere": "Skvělá práce, už jste skoro tam",
-  "soCloseJustLittleMore": "Tak blízko, jen ještě trochu"
+  "soCloseJustLittleMore": "Tak blízko, jen ještě trochu",
+  "notificationFrequency": "Frekvence oznámení",
+  "controlNotificationFrequency": "Ovládejte, jak často vám Omi posílá proaktivní oznámení."
 }

@@ -5683,4 +5683,10 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get soCloseJustLittleMore => 'Så nära, bara lite till';
+
+  @override
+  String get notificationFrequency => 'Aviseringsfrekvens';
+
+  @override
+  String get controlNotificationFrequency => 'Kontrollera hur ofta Omi skickar proaktiva aviseringar till dig.';
 }
