@@ -505,6 +505,9 @@ def download_audio_chunks_and_merge(
             if timestamp in chunk_results:
                 merged_data.extend(chunk_results[timestamp])
 
+    # Free memory from chunk results immediately after merging
+    chunk_results.clear()
+
     if not merged_data:
         raise FileNotFoundError(f"No chunks found for conversation {conversation_id}")
 
@@ -574,6 +577,7 @@ def get_or_create_merged_audio(
 
     # Convert to WAV
     wav_data = pcm_to_wav_func(pcm_data)
+    del pcm_data  # Free PCM data immediately after WAV conversion
 
     # Upload to cache in background thread with 3-day TTL
     def _upload_to_cache():
@@ -680,7 +684,7 @@ def precache_conversation_audio(
             except Exception as e:
                 print(f"[PRECACHE] Error caching audio file {af.get('id')}: {e}")
 
-        with ThreadPoolExecutor(max_workers=4) as executor:
+        with ThreadPoolExecutor(max_workers=2) as executor:
             list(executor.map(_cache_single, audio_files))
 
     thread = threading.Thread(target=_precache_all, daemon=True)
