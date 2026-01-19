@@ -15,6 +15,8 @@ Module hierarchy (lowest to highest):
 3. `routers/`
 4. `main.py`
 
+- Memory management: free large objects immediately after use. E.g., `del` for byte arrays after processing, `.clear()` for dicts/lists holding data.
+
 ## Testing
 
 - Always run tests before committing:

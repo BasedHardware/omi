@@ -39,6 +39,9 @@ from database.cache import get_memory_cache
 from database.redis_db import r
 ```
 
+### Memory Management
+Free large objects immediately after use. E.g., `del` for byte arrays after processing, `.clear()` for dicts/lists holding data.
+
 ## Testing
 
 ### Always Run Tests Before Committing
