@@ -20,7 +20,6 @@
 #include "lib/core/storage.h"
 #endif
 #include "lib/core/sd_card.h"
-#include "spi_flash.h"
 #include "wdog_facade.h"
 #include <hal/nrf_reset.h>
 
@@ -159,16 +158,6 @@ void set_led_state()
     set_led_red(red);
 }
 
-static int suspend_unused_modules(void)
-{
-    int err = flash_off();
-    if (err) {
-        LOG_ERR("Can not suspend the spi flash module: %d", err);
-    }
-
-    return 0;
-}
-
 int main(void)
 {
     int ret;
@@ -205,15 +194,6 @@ int main(void)
         LOG_ERR("Failed to initialize LEDs (err %d)", ret);
         error_led_driver();
         return ret;
-    }
-
-    // Suspend unused modules
-    LOG_PRINTK("\n");
-    LOG_INF("Suspending unused modules...\n");
-    ret = suspend_unused_modules();
-    if (ret) {
-        LOG_ERR("Failed to suspend unused modules (err %d)", ret);
-        ret = 0;
     }
 
     // Initialize settings
