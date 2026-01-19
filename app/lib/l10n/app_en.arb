@@ -31,7 +31,7 @@
   },
   "cancel": "Cancel",
   "@cancel": {
-    "description": "Cancel button text"
+    "description": "Cancel button"
   },
   "ok": "Ok",
   "@ok": {
@@ -39,7 +39,7 @@
   },
   "delete": "Delete",
   "@delete": {
-    "description": "Delete button text"
+    "description": "Delete button"
   },
   "add": "Add",
   "@add": {
@@ -55,7 +55,7 @@
   },
   "edit": "Edit",
   "@edit": {
-    "description": "Menu item to edit action item"
+    "description": "Edit menu item label"
   },
   "close": "Close",
   "@close": {
@@ -63,9 +63,9 @@
   },
   "clear": "Clear",
   "@clear": {
-    "description": "Button text to clear debug logs"
+    "description": "Clear button"
   },
-  "copyTranscript": "Copy Transcript",
+  "copyTranscript": "Copy transcript",
   "@copyTranscript": {
     "description": "Menu item to copy transcript"
   },
@@ -161,7 +161,7 @@
   },
   "speechProfile": "Speech Profile",
   "@speechProfile": {
-    "description": "Speech profile label"
+    "description": "Speech profile setting"
   },
   "sampleNumber": "Sample {number}",
   "@sampleNumber": {
@@ -175,11 +175,11 @@
   },
   "settings": "Settings",
   "@settings": {
-    "description": "Settings page title"
+    "description": "Settings dialog title"
   },
   "language": "Language",
   "@language": {
-    "description": "Language setting label"
+    "description": "Language setting"
   },
   "selectLanguage": "Select Language",
   "@selectLanguage": {
@@ -215,7 +215,7 @@
   },
   "done": "Done",
   "@done": {
-    "description": "Button label to confirm selection"
+    "description": "Done button"
   },
   "disconnected": "Disconnected",
   "@disconnected": {
@@ -293,9 +293,9 @@
   "@noConversationsYet": {
     "description": "Title shown when user has no conversations"
   },
-  "noStarredConversations": "No starred conversations yet.",
+  "noStarredConversations": "No starred conversations",
   "@noStarredConversations": {
-    "description": "Empty state for starred filter"
+    "description": "Empty state title when no starred conversations"
   },
   "starConversationHint": "To star a conversation, open it and tap the star icon in the header.",
   "@starConversationHint": {
@@ -349,11 +349,11 @@
   },
   "deletingMessages": "Deleting your messages from Omi's memory...",
   "@deletingMessages": {
-    "description": "Loading text while clearing chat"
+    "description": "Loading text when clearing chat"
   },
-  "messageCopied": "Message copied to clipboard.",
+  "messageCopied": "✨ Message copied to clipboard",
   "@messageCopied": {
-    "description": "Snackbar after copying message"
+    "description": "Snackbar message for copied text"
   },
   "cannotReportOwnMessage": "You cannot report your own messages.",
   "@cannotReportOwnMessage": {
@@ -361,7 +361,7 @@
   },
   "reportMessage": "Report Message",
   "@reportMessage": {
-    "description": "Report message dialog title"
+    "description": "Report dialog title"
   },
   "reportMessageConfirm": "Are you sure you want to report this message?",
   "@reportMessageConfirm": {
@@ -393,7 +393,7 @@
   },
   "apps": "Apps",
   "@apps": {
-    "description": "Apps page title and section header"
+    "description": "Navigation label for apps page"
   },
   "noAppsFound": "No apps found",
   "@noAppsFound": {
@@ -513,7 +513,7 @@
   },
   "customVocabulary": "Custom Vocabulary",
   "@customVocabulary": {
-    "description": "Custom vocabulary setting"
+    "description": "Custom vocabulary section"
   },
   "identifyingOthers": "Identifying Others",
   "@identifyingOthers": {
@@ -527,17 +527,17 @@
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "Data & Privacy",
+  "dataPrivacy": "Data Privacy",
   "@dataPrivacy": {
-    "description": "Data and privacy setting"
+    "description": "Data privacy setting"
   },
   "userId": "User ID",
   "@userId": {
-    "description": "User ID label"
+    "description": "User ID field"
   },
   "notSet": "Not set",
   "@notSet": {
-    "description": "Default value when not set"
+    "description": "Value not set placeholder"
   },
   "userIdCopied": "User ID copied to clipboard",
   "@userIdCopied": {
@@ -829,7 +829,7 @@
   },
   "saving": "Saving...",
   "@saving": {
-    "description": "Button text when saving settings"
+    "description": "Button text while saving is in progress"
   },
   "personaConfig": "Configure your AI persona",
   "@personaConfig": {
@@ -881,11 +881,11 @@
   },
   "createKey": "Create Key",
   "@createKey": {
-    "description": "Button text to create new API key"
+    "description": "Create API key button"
   },
   "docs": "Docs",
   "@docs": {
-    "description": "Button text for documentation link"
+    "description": "Documentation link"
   },
   "yourOmiInsights": "Your Omi Insights",
   "@yourOmiInsights": {
@@ -893,7 +893,7 @@
   },
   "today": "Today",
   "@today": {
-    "description": "Label for today's date"
+    "description": "Today date label"
   },
   "thisMonth": "This Month",
   "@thisMonth": {
@@ -999,7 +999,7 @@
   },
   "upgradeToUnlimited": "Upgrade to unlimited",
   "@upgradeToUnlimited": {
-    "description": "Message for locked premium features"
+    "description": "Message shown on locked memory items"
   },
   "basicPlanDesc": "Your plan includes {limit} free minutes per month. Upgrade to go unlimited.",
   "@basicPlanDesc": {
@@ -1071,7 +1071,7 @@
       }
     }
   },
-  "debugLogs": "Debug Logs",
+  "debugLogs": "Debug logs",
   "debugLogsAutoDelete": "Auto-deletes after 3 days.",
   "debugLogsDesc": "Helps diagnose issues",
   "noLogFilesFound": "No log files found.",
@@ -1087,7 +1087,7 @@
   "exportShared": "Export shared",
   "deleteKnowledgeGraphTitle": "Delete Knowledge Graph?",
   "deleteKnowledgeGraphMessage": "This will delete all derived knowledge graph data (nodes and connections). Your original memories will remain safe. The graph will be rebuilt over time or upon next request.",
-  "knowledgeGraphDeleted": "Knowledge Graph deleted successfully",
+  "knowledgeGraphDeleted": "Knowledge Graph deleted",
   "deleteGraphFailed": "Failed to delete graph: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -1538,7 +1538,7 @@
   "enterSttHttpEndpoint": "Enter your STT HTTP endpoint",
   "websocketUrl": "WebSocket URL",
   "enterLiveSttWebsocket": "Enter your live STT WebSocket endpoint",
-  "apiKey": "API Key",
+  "apiKey": "API key",
   "enterApiKey": "Enter your API key",
   "storedLocallyNeverShared": "Stored locally, never shared",
   "host": "Host",
@@ -1594,7 +1594,7 @@
   "perMonth": "/ Month",
   "tailoredConversationSummaries": "Tailored Conversation Summaries",
   "customChatbotPersonality": "Custom Chatbot Personality",
-  "makePublic": "Make public",
+  "makePublic": "Make Public",
   "anyoneCanDiscover": "Anyone can discover your app",
   "onlyYouCanUse": "Only you can use this app",
   "paidApp": "Paid app",
@@ -1940,7 +1940,7 @@
   },
   "personalGrowthJourney": "Your personal growth journey with AI that listens to your every word.",
   "@personalGrowthJourney": {
-    "description": "Tagline on onboarding wrapper"
+    "description": "Subtitle describing Omi on auth screen"
   },
   "actionItemsTitle": "To-Do's",
   "@actionItemsTitle": {
@@ -2077,14 +2077,9 @@
   "@deleteSelected": {
     "description": "Tooltip for delete selected"
   },
-  "searchMemories": "Search {count} Memories",
+  "searchMemories": "Search memories...",
   "@searchMemories": {
-    "description": "Hint text for memories search bar",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
+    "description": "Search input hint text"
   },
   "memoryDeleted": "Memory Deleted.",
   "@memoryDeleted": {
@@ -2094,9 +2089,9 @@
   "@undo": {
     "description": "Undo button text"
   },
-  "noMemoriesYet": "No memories yet",
+  "noMemoriesYet": "🧠 No memories yet",
   "@noMemoriesYet": {
-    "description": "Empty state text"
+    "description": "Empty state title when no memories"
   },
   "noAutoMemories": "No auto-extracted memories yet",
   "@noAutoMemories": {
@@ -2110,9 +2105,9 @@
   "@noMemoriesInCategories": {
     "description": "Empty state text for filtered categories"
   },
-  "noMemoriesFound": "No memories found",
+  "noMemoriesFound": "🔍 No memories found",
   "@noMemoriesFound": {
-    "description": "Empty state text for search results"
+    "description": "Empty state title when search/filter has no results"
   },
   "addFirstMemory": "Add your first memory",
   "@addFirstMemory": {
@@ -2128,7 +2123,7 @@
   },
   "clearMemoryButton": "Clear Memory",
   "@clearMemoryButton": {
-    "description": "Button text to confirm clear"
+    "description": "Button text to confirm clearing all memories"
   },
   "memoryClearedSuccess": "Omi's memory about you has been cleared",
   "@memoryClearedSuccess": {
@@ -2136,7 +2131,7 @@
   },
   "noMemoriesToDelete": "No memories to delete",
   "@noMemoriesToDelete": {
-    "description": "Snackbar message"
+    "description": "Info message when there are no memories to delete"
   },
   "createMemoryTooltip": "Create new memory",
   "@createMemoryTooltip": {
@@ -2148,7 +2143,7 @@
   },
   "memoryManagement": "Memory Management",
   "@memoryManagement": {
-    "description": "Title for memory management sheet"
+    "description": "Title for memory management dialog"
   },
   "filterMemories": "Filter Memories",
   "@filterMemories": {
@@ -2181,7 +2176,7 @@
   },
   "deleteAllMemories": "Delete All Memories",
   "@deleteAllMemories": {
-    "description": "Button label"
+    "description": "Action to delete all memories"
   },
   "allMemoriesPrivateResult": "All memories are now private",
   "@allMemoriesPrivateResult": {
@@ -2191,13 +2186,13 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "New Memory",
+  "newMemory": "✨ New Memory",
   "@newMemory": {
-    "description": "Dialog title"
+    "description": "Dialog title when creating a new memory"
   },
-  "editMemory": "Edit Memory",
+  "editMemory": "✏️ Edit Memory",
   "@editMemory": {
-    "description": "Dialog title"
+    "description": "Dialog title when editing a memory"
   },
   "memoryContentHint": "I like to eat ice cream...",
   "@memoryContentHint": {
@@ -2213,7 +2208,7 @@
   },
   "retry": "Retry",
   "@retry": {
-    "description": "Button label"
+    "description": "Button text to retry after failed save"
   },
   "createActionItem": "Create Action Item",
   "@createActionItem": {
@@ -2345,7 +2340,7 @@
   },
   "selectText": "Select Text",
   "@selectText": {
-    "description": "Title for screen where user can select and copy text from a message"
+    "description": "Button to select text from message"
   },
   "maximumGoalsAllowed": "Maximum {count} goals allowed",
   "@maximumGoalsAllowed": {
@@ -2436,9 +2431,9 @@
   "@conversationNotFoundOrDeleted": {
     "description": "Error message when conversation cannot be found"
   },
-  "deleteMemory": "Delete memory?",
+  "deleteMemory": "Delete Memory",
   "@deleteMemory": {
-    "description": "Title for delete confirmation dialog"
+    "description": "Confirmation dialog title for deleting memory"
   },
   "thisActionCannotBeUndone": "This action cannot be undone.",
   "@thisActionCannotBeUndone": {
@@ -2459,7 +2454,7 @@
   },
   "addYourFirstMemory": "Add your first memory",
   "@addYourFirstMemory": {
-    "description": "Button text to create first memory in category"
+    "description": "Button text in empty state"
   },
   "firmwareDisconnectUsb": "Disconnect USB",
   "@firmwareDisconnectUsb": {
@@ -2553,7 +2548,7 @@
   },
   "unknownDevice": "Unknown Device",
   "@unknownDevice": {
-    "description": "Placeholder for unknown device name"
+    "description": "Fallback name for audio device"
   },
   "unknown": "Unknown",
   "@unknown": {
@@ -2707,7 +2702,7 @@
     "description": "Label for server URL"
   },
   "@urlCopied": {
-    "description": "Snackbar message when URL is copied"
+    "description": "Success message when URL copied"
   },
   "@apiKeyAuth": {
     "description": "Label for API key authentication section"
@@ -2816,7 +2811,7 @@
     "description": "Label for overdue tasks"
   },
   "@tomorrow": {
-    "description": "Label for tomorrow's date"
+    "description": "Tomorrow date label"
   },
   "@yesterday": {
     "description": "Label for yesterday"
@@ -2911,7 +2906,7 @@
   },
   "keyboardShortcuts": "Keyboard Shortcuts",
   "@keyboardShortcuts": {
-    "description": "Title for keyboard shortcuts settings page"
+    "description": "Keyboard shortcuts section"
   },
   "toggleControlBar": "Toggle Control Bar",
   "@toggleControlBar": {
@@ -2934,7 +2929,7 @@
   },
   "space": "Space",
   "@space": {
-    "description": "Name of the space key"
+    "description": "Space key label"
   },
   "search": "Search",
   "@search": {
@@ -2946,7 +2941,7 @@
   },
   "untitledConversation": "Untitled Conversation",
   "@untitledConversation": {
-    "description": "Default title for conversations without a name"
+    "description": "Title for a conversation without a title"
   },
   "countRemaining": "{count} remaining",
   "@countRemaining": {
@@ -2993,9 +2988,14 @@
   "@tapToAddGoal": {
     "description": "Instruction to add goal"
   },
-  "welcomeBack": "Welcome back",
+  "welcomeBack": "Welcome back, {name}",
   "@welcomeBack": {
-    "description": "Greeting message shown at the top of conversations page"
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   },
   "yourConversations": "Your Conversations",
   "@yourConversations": {
@@ -3190,7 +3190,7 @@
   },
   "all": "All",
   "@all": {
-    "description": "Button label to view all items in a category"
+    "description": "Short filter label for all memories"
   },
   "open": "Open",
   "@open": {
@@ -3421,5 +3421,2177 @@
   "installed": "Installed",
   "@installed": {
     "description": "Badge label indicating an app is installed"
+  },
+  "appIdLabel": "App ID",
+  "@appIdLabel": {
+    "description": "Label for the app ID field"
+  },
+  "appNameLabel": "App Name",
+  "@appNameLabel": {
+    "description": "Label for the app name field"
+  },
+  "appNamePlaceholder": "My Awesome App",
+  "@appNamePlaceholder": {
+    "description": "Placeholder text for app name input"
+  },
+  "pleaseEnterAppName": "Please enter app name",
+  "@pleaseEnterAppName": {
+    "description": "Validation error when app name is empty"
+  },
+  "categoryLabel": "Category",
+  "@categoryLabel": {
+    "description": "Label for the category field"
+  },
+  "selectCategory": "Select Category",
+  "@selectCategory": {
+    "description": "Placeholder text for category dropdown"
+  },
+  "descriptionLabel": "Description",
+  "@descriptionLabel": {
+    "description": "Label for the description field"
+  },
+  "appDescriptionPlaceholder": "My Awesome App is a great app that does amazing things. It is the best app ever!",
+  "@appDescriptionPlaceholder": {
+    "description": "Placeholder text for app description input"
+  },
+  "pleaseProvideValidDescription": "Please provide a valid description",
+  "@pleaseProvideValidDescription": {
+    "description": "Validation error when description is empty"
+  },
+  "appPricingLabel": "App Pricing",
+  "@appPricingLabel": {
+    "description": "Label for the app pricing field"
+  },
+  "noneSelected": "None Selected",
+  "@noneSelected": {
+    "description": "Placeholder text when no pricing option is selected"
+  },
+  "appIdCopiedToClipboard": "App ID copied to clipboard",
+  "@appIdCopiedToClipboard": {
+    "description": "Success message when app ID is copied"
+  },
+  "appCategoryModalTitle": "App Category",
+  "@appCategoryModalTitle": {
+    "description": "Title for the category selection modal"
+  },
+  "pricingFree": "Free",
+  "@pricingFree": {
+    "description": "Free pricing option"
+  },
+  "pricingPaid": "Paid",
+  "@pricingPaid": {
+    "description": "Paid pricing option"
+  },
+  "loadingCapabilities": "Loading capabilities...",
+  "@loadingCapabilities": {
+    "description": "Loading state message while fetching app capabilities"
+  },
+  "filterInstalled": "Installed",
+  "@filterInstalled": {
+    "description": "Filter option for installed apps"
+  },
+  "filterMyApps": "My Apps",
+  "@filterMyApps": {
+    "description": "Filter option for user's own apps"
+  },
+  "clearSelection": "Clear selection",
+  "@clearSelection": {
+    "description": "Option to clear the current filter selection"
+  },
+  "filterCategory": "Category",
+  "@filterCategory": {
+    "description": "Category filter dropdown label"
+  },
+  "rating4PlusStars": "4+ Stars",
+  "@rating4PlusStars": {
+    "description": "Filter for apps with 4 or more stars"
+  },
+  "rating3PlusStars": "3+ Stars",
+  "@rating3PlusStars": {
+    "description": "Filter for apps with 3 or more stars"
+  },
+  "rating2PlusStars": "2+ Stars",
+  "@rating2PlusStars": {
+    "description": "Filter for apps with 2 or more stars"
+  },
+  "rating1PlusStars": "1+ Stars",
+  "@rating1PlusStars": {
+    "description": "Filter for apps with 1 or more stars"
+  },
+  "filterRating": "Rating",
+  "@filterRating": {
+    "description": "Rating filter dropdown label"
+  },
+  "filterCapabilities": "Capabilities",
+  "@filterCapabilities": {
+    "description": "Capabilities filter dropdown label"
+  },
+  "noNotificationScopesAvailable": "No notification scopes available",
+  "@noNotificationScopesAvailable": {
+    "description": "Message shown when no notification scopes are available"
+  },
+  "popularApps": "Popular Apps",
+  "@popularApps": {
+    "description": "Section title for popular apps"
+  },
+  "pleaseProvidePrompt": "Please provide a prompt",
+  "@pleaseProvidePrompt": {
+    "description": "Validation error when prompt text field is empty"
+  },
+  "chatWithAppName": "Chat with {appName}",
+  "@chatWithAppName": {
+    "description": "Chat subtitle with app name",
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultAiAssistant": "Default AI Assistant",
+  "@defaultAiAssistant": {
+    "description": "Label for default AI assistant"
+  },
+  "readyToChat": "✨ Ready to chat!",
+  "@readyToChat": {
+    "description": "Empty state title when connected"
+  },
+  "connectionNeeded": "🌐 Connection needed",
+  "@connectionNeeded": {
+    "description": "Empty state title when not connected"
+  },
+  "startConversation": "Start a conversation and let the magic begin",
+  "@startConversation": {
+    "description": "Empty state subtitle when connected"
+  },
+  "checkInternetConnection": "Please check your internet connection",
+  "@checkInternetConnection": {
+    "description": "Empty state subtitle when not connected"
+  },
+  "wasThisHelpful": "Was this helpful?",
+  "@wasThisHelpful": {
+    "description": "NPS feedback prompt"
+  },
+  "thankYouForFeedback": "Thank you for your feedback!",
+  "@thankYouForFeedback": {
+    "description": "Feedback confirmation message"
+  },
+  "maxFilesUploadError": "You can only upload 4 files at a time",
+  "@maxFilesUploadError": {
+    "description": "Error message for file upload limit"
+  },
+  "attachedFiles": "📎 Attached Files",
+  "@attachedFiles": {
+    "description": "Label for attached files section"
+  },
+  "takePhoto": "Take a Photo",
+  "@takePhoto": {
+    "description": "File option: take photo"
+  },
+  "captureWithCamera": "Capture with camera",
+  "@captureWithCamera": {
+    "description": "File option: capture with camera subtitle"
+  },
+  "selectImages": "Select Images",
+  "@selectImages": {
+    "description": "File option: select images"
+  },
+  "chooseFromGallery": "Choose from gallery",
+  "@chooseFromGallery": {
+    "description": "File option: choose from gallery subtitle"
+  },
+  "selectFile": "Select a File",
+  "@selectFile": {
+    "description": "File option: select file"
+  },
+  "chooseAnyFileType": "Choose any file type",
+  "@chooseAnyFileType": {
+    "description": "File option: choose any file type subtitle"
+  },
+  "cannotReportOwnMessages": "You cannot report your own messages",
+  "@cannotReportOwnMessages": {
+    "description": "Error when trying to report own message"
+  },
+  "messageReportedSuccessfully": "✅ Message reported successfully",
+  "@messageReportedSuccessfully": {
+    "description": "Success message for reported message"
+  },
+  "confirmReportMessage": "Are you sure you want to report this message?",
+  "@confirmReportMessage": {
+    "description": "Report dialog confirmation text"
+  },
+  "selectChatAssistant": "Select Chat Assistant",
+  "@selectChatAssistant": {
+    "description": "App selection modal title"
+  },
+  "enableMoreApps": "Enable More Apps",
+  "@enableMoreApps": {
+    "description": "Link to enable more apps"
+  },
+  "chatCleared": "Chat cleared",
+  "@chatCleared": {
+    "description": "Snackbar message for cleared chat"
+  },
+  "clearChatTitle": "Clear Chat?",
+  "@clearChatTitle": {
+    "description": "Clear chat dialog title"
+  },
+  "confirmClearChat": "Are you sure you want to clear the chat? This action cannot be undone.",
+  "@confirmClearChat": {
+    "description": "Clear chat confirmation text"
+  },
+  "copy": "Copy",
+  "@copy": {
+    "description": "Button to copy message text"
+  },
+  "share": "Share",
+  "@share": {
+    "description": "Button to share message"
+  },
+  "report": "Report",
+  "@report": {
+    "description": "Button to report message"
+  },
+  "microphonePermissionRequired": "Microphone permission is required for voice recording.",
+  "@microphonePermissionRequired": {
+    "description": "Error message when microphone permission is not granted"
+  },
+  "microphonePermissionDenied": "Microphone permission denied. Please grant permission in System Preferences > Privacy & Security > Microphone.",
+  "@microphonePermissionDenied": {
+    "description": "Error message when microphone permission is denied"
+  },
+  "failedToCheckMicrophonePermission": "Failed to check Microphone permission: {error}",
+  "@failedToCheckMicrophonePermission": {
+    "description": "Error message when permission check fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToTranscribeAudio": "Failed to transcribe audio",
+  "@failedToTranscribeAudio": {
+    "description": "Error message when audio transcription fails"
+  },
+  "transcribing": "Transcribing...",
+  "@transcribing": {
+    "description": "Loading message while transcribing audio"
+  },
+  "transcriptionFailed": "Transcription failed",
+  "@transcriptionFailed": {
+    "description": "Error message when transcription fails"
+  },
+  "discardedConversation": "Discarded Conversation",
+  "@discardedConversation": {
+    "description": "Title for a discarded conversation"
+  },
+  "at": "at",
+  "@at": {
+    "description": "Preposition for time when conversation has no start time"
+  },
+  "from": "from",
+  "@from": {
+    "description": "Preposition for time range in conversation"
+  },
+  "copied": "Copied!",
+  "@copied": {
+    "description": "Button label after copying link"
+  },
+  "copyLink": "Copy link",
+  "@copyLink": {
+    "description": "Button label to copy conversation link"
+  },
+  "hideTranscript": "Hide Transcript",
+  "@hideTranscript": {
+    "description": "Button label to hide transcript"
+  },
+  "viewTranscript": "View Transcript",
+  "@viewTranscript": {
+    "description": "Button label to view transcript"
+  },
+  "conversationDetails": "Conversation Details",
+  "@conversationDetails": {
+    "description": "Section header for conversation details"
+  },
+  "transcript": "Transcript",
+  "@transcript": {
+    "description": "Transcript panel title"
+  },
+  "segmentsCount": "{count} segments",
+  "@segmentsCount": {
+    "description": "Badge showing number of transcript segments",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "noTranscriptAvailable": "No Transcript Available",
+  "@noTranscriptAvailable": {
+    "description": "Empty state title when no transcript"
+  },
+  "noTranscriptMessage": "This conversation doesn't have a transcript.",
+  "@noTranscriptMessage": {
+    "description": "Empty state message when no transcript"
+  },
+  "conversationUrlCouldNotBeGenerated": "Conversation URL could not be generated.",
+  "@conversationUrlCouldNotBeGenerated": {
+    "description": "Error when URL generation fails"
+  },
+  "failedToGenerateConversationLink": "Failed to generate conversation link",
+  "@failedToGenerateConversationLink": {
+    "description": "Error when link generation fails"
+  },
+  "failedToGenerateShareLink": "Failed to generate share link",
+  "@failedToGenerateShareLink": {
+    "description": "Error when share link generation fails"
+  },
+  "reloadingConversations": "Reloading conversations...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "user": "User",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "Starred",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "Date",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "No results found",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "Try adjusting your search terms",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "starConversationsToFindQuickly": "Star conversations to find them quickly here",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "No conversations on {date}",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "Try selecting a different date",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  },
+  "conversations": "Conversations",
+  "@conversations": {
+    "description": "Navigation label for conversations page"
+  },
+  "chat": "Chat",
+  "@chat": {
+    "description": "Navigation label for chat page"
+  },
+  "@memories": {
+    "description": "Navigation label for memories page"
+  },
+  "actions": "Actions",
+  "@actions": {
+    "description": "Navigation label for actions page"
+  },
+  "syncAvailable": "Sync Available",
+  "@syncAvailable": {
+    "description": "Label for sync notification"
+  },
+  "referAFriend": "Refer a Friend",
+  "@referAFriend": {
+    "description": "Bottom navigation label for referral program"
+  },
+  "help": "Help",
+  "@help": {
+    "description": "Bottom navigation label for help"
+  },
+  "pro": "Pro",
+  "@pro": {
+    "description": "Badge label for pro/unlimited users"
+  },
+  "upgradeToPro": "Upgrade to Pro",
+  "@upgradeToPro": {
+    "description": "Subscription banner button text"
+  },
+  "getOmiDevice": "Get Omi Device",
+  "@getOmiDevice": {
+    "description": "Widget title for device promotion"
+  },
+  "wearableAiCompanion": "Wearable AI companion",
+  "@wearableAiCompanion": {
+    "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "Loading memories...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "allMemories": "All Memories",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "About You",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "Manual",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "loadingYourMemories": "Loading your memories...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "createYourFirstMemory": "Create your first memory to get started",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "Try adjusting your search or filter",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "whatWouldYouLikeToRemember": "What would you like to remember?",
+  "@whatWouldYouLikeToRemember": {
+    "description": "Hint text for memory content input field"
+  },
+  "category": "Category",
+  "@category": {
+    "description": "Label for memory category selection section"
+  },
+  "@visibility": {
+    "description": "Label for memory visibility selection section"
+  },
+  "public": "Public",
+  "@public": {
+    "description": "Option for public memory visibility"
+  },
+  "@private": {
+    "description": "Option for private memory visibility"
+  },
+  "failedToSaveCheckConnection": "Failed to save. Please check your connection.",
+  "@failedToSaveCheckConnection": {
+    "description": "Error message when saving memory fails"
+  },
+  "@saveChanges": {
+    "description": "Button text to save edited memory"
+  },
+  "createMemory": "Create Memory",
+  "@createMemory": {
+    "description": "Button text to create new memory"
+  },
+  "deleteMemoryConfirmation": "Are you sure you want to delete this memory? This action cannot be undone.",
+  "@deleteMemoryConfirmation": {
+    "description": "Confirmation message for deleting memory"
+  },
+  "@makePublic": {
+    "description": "Menu option to change memory visibility to public"
+  },
+  "makePrivate": "Make Private",
+  "@makePrivate": {
+    "description": "Menu option to change memory visibility to private"
+  },
+  "organizeAndControlMemories": "Organize and control your memories",
+  "@organizeAndControlMemories": {
+    "description": "Subtitle for memory management dialog"
+  },
+  "total": "Total",
+  "@total": {
+    "description": "Label for total memory count statistic"
+  },
+  "makeAllMemoriesPrivate": "Make All Memories Private",
+  "@makeAllMemoriesPrivate": {
+    "description": "Action to make all memories private"
+  },
+  "setAllMemoriesToPrivate": "Set all memories to private visibility",
+  "@setAllMemoriesToPrivate": {
+    "description": "Description for making all memories private"
+  },
+  "makeAllMemoriesPublic": "Make All Memories Public",
+  "@makeAllMemoriesPublic": {
+    "description": "Action to make all memories public"
+  },
+  "setAllMemoriesToPublic": "Set all memories to public visibility",
+  "@setAllMemoriesToPublic": {
+    "description": "Description for making all memories public"
+  },
+  "permanentlyRemoveAllMemories": "Permanently remove all memories from Omi",
+  "@permanentlyRemoveAllMemories": {
+    "description": "Description for deleting all memories"
+  },
+  "allMemoriesAreNowPrivate": "All memories are now private",
+  "@allMemoriesAreNowPrivate": {
+    "description": "Success message after making all memories private"
+  },
+  "allMemoriesAreNowPublic": "All memories are now public",
+  "@allMemoriesAreNowPublic": {
+    "description": "Success message after making all memories public"
+  },
+  "clearOmisMemory": "Clear Omi's Memory",
+  "@clearOmisMemory": {
+    "description": "Confirmation dialog title for clearing all memories"
+  },
+  "clearMemoryConfirmation": "Are you sure you want to clear Omi's memory? This action cannot be undone and will permanently delete all {count} memories.",
+  "@clearMemoryConfirmation": {
+    "description": "Confirmation message for clearing all memories",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "omisMemoryCleared": "Omi's memory about you has been cleared",
+  "@omisMemoryCleared": {
+    "description": "Success message after clearing all memories"
+  },
+  "welcomeToOmi": "Welcome to Omi",
+  "@welcomeToOmi": {
+    "description": "Welcome message on auth screen"
+  },
+  "continueWithApple": "Continue with Apple",
+  "@continueWithApple": {
+    "description": "Button to sign in with Apple"
+  },
+  "continueWithGoogle": "Continue with Google",
+  "@continueWithGoogle": {
+    "description": "Button to sign in with Google"
+  },
+  "byContinuingYouAgree": "By continuing, you agree to our ",
+  "@byContinuingYouAgree": {
+    "description": "First part of terms agreement text"
+  },
+  "termsOfService": "Terms of Service",
+  "@termsOfService": {
+    "description": "Terms of Service link text"
+  },
+  "and": " and ",
+  "@and": {
+    "description": "Conjunction between terms and privacy"
+  },
+  "dataAndPrivacy": "Data & Privacy",
+  "@dataAndPrivacy": {
+    "description": "Consent dialog title"
+  },
+  "secureAuthViaAppleId": "Secure authentication via Apple ID",
+  "@secureAuthViaAppleId": {
+    "description": "Description for Apple authentication"
+  },
+  "secureAuthViaGoogleAccount": "Secure authentication via Google Account",
+  "@secureAuthViaGoogleAccount": {
+    "description": "Description for Google authentication"
+  },
+  "whatWeCollect": "What we collect",
+  "@whatWeCollect": {
+    "description": "Section title in consent dialog"
+  },
+  "dataCollectionMessage": "By continuing, your conversations, recordings, and personal information will be securely stored on our servers to provide AI-powered insights and enable all app features.",
+  "@dataCollectionMessage": {
+    "description": "Explanation of data collection in consent dialog"
+  },
+  "dataProtection": "Data Protection",
+  "@dataProtection": {
+    "description": "Section title for data protection info"
+  },
+  "yourDataIsProtected": "Your data is protected and governed by our ",
+  "@yourDataIsProtected": {
+    "description": "First part of data protection text"
+  },
+  "pleaseSelectYourPrimaryLanguage": "Please select your primary language",
+  "chooseYourLanguage": "Choose your language",
+  "selectPreferredLanguageForBestExperience": "Select your preferred language for the best Omi experience",
+  "searchLanguages": "Search languages...",
+  "selectALanguage": "Select a language",
+  "tryDifferentSearchTerm": "Try a different search term",
+  "pleaseEnterYourName": "Please enter your name",
+  "nameMustBeAtLeast2Characters": "Name must be at least 2 characters",
+  "tellUsHowYouWouldLikeToBeAddressed": "Tell us how you'd like to be addressed. This helps personalize your Omi experience.",
+  "charactersCount": "{count} characters",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "enableFeaturesForBestExperience": "Enable features for the best Omi experience on your device.",
+  "microphoneAccess": "Microphone Access",
+  "recordAudioConversations": "Record audio conversations",
+  "microphoneAccessDescription": "Omi needs microphone access to record your conversations and provide transcriptions.",
+  "screenRecording": "Screen Recording",
+  "captureSystemAudioFromMeetings": "Capture system audio from meetings",
+  "screenRecordingDescription": "Omi needs screen recording permission to capture system audio from your browser-based meetings.",
+  "accessibility": "Accessibility",
+  "detectBrowserBasedMeetings": "Detect browser-based meetings",
+  "accessibilityDescription": "Omi needs accessibility permission to detect when you join Zoom, Meet, or Teams meetings in your browser.",
+  "pleaseWait": "Please wait...",
+  "joinTheCommunity": "Join the community!",
+  "loadingProfile": "Loading profile...",
+  "profileSettings": "Profile Settings",
+  "noEmailSet": "No email set",
+  "userIdCopiedToClipboard": "User ID copied to clipboard",
+  "yourInformation": "Your Information",
+  "setYourName": "Set Your Name",
+  "changeYourName": "Change Your Name",
+  "manageYourOmiPersona": "Manage your Omi persona",
+  "voiceAndPeople": "Voice & People",
+  "teachOmiYourVoice": "Teach Omi your voice",
+  "tellOmiWhoSaidIt": "Tell Omi who said it 🗣️",
+  "payment": "Payment",
+  "addOrChangeYourPaymentMethod": "Add or change your payment method",
+  "preferences": "Preferences",
+  "helpImproveOmiBySharing": "Help improve Omi by sharing anonymized analytics data",
+  "deleteAccount": "Delete Account",
+  "deleteYourAccountAndAllData": "Delete your account and all data",
+  "clearLogs": "Clear logs",
+  "debugLogsCleared": "Debug logs cleared",
+  "exportConversations": "Export Conversations",
+  "exportAllConversationsToJson": "Export all your conversations to a JSON file.",
+  "conversationsExportStarted": "Conversations Export Started. This may take a few seconds, please wait.",
+  "mcpDescription": "To connect Omi with other applications to read, search, and manage your memories and conversations. Create a key to get started.",
+  "apiKeys": "API Keys",
+  "errorLabel": "Error: {error}",
+  "@errorLabel": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "noApiKeysFound": "No API keys found. Create one to get started.",
+  "advancedSettings": "Advanced Settings",
+  "triggersWhenNewConversationCreated": "Triggers when a new conversation is created.",
+  "triggersWhenNewTranscriptReceived": "Triggers when a new transcript is received.",
+  "realtimeAudioBytes": "Realtime Audio Bytes",
+  "triggersWhenAudioBytesReceived": "Triggers when audio bytes are received.",
+  "everyXSeconds": "Every x seconds",
+  "triggersWhenDaySummaryGenerated": "Triggers when day summary is generated.",
+  "tryLatestExperimentalFeatures": "Try the latest experimental features from Omi Team.",
+  "transcriptionServiceDiagnosticStatus": "Transcription service diagnostic status",
+  "enableDetailedDiagnosticMessages": "Enable detailed diagnostic messages from the transcription service",
+  "autoCreateAndTagNewSpeakers": "Auto-create and tag new speakers",
+  "automaticallyCreateNewPerson": "Automatically create a new person when a name is detected in the transcript.",
+  "pilotFeatures": "Pilot Features",
+  "pilotFeaturesDescription": "These features are tests and no support is guaranteed.",
+  "suggestFollowUpQuestion": "Suggest follow up question",
+  "saveSettings": "Save Settings",
+  "syncingDeveloperSettings": "Syncing Developer Settings...",
+  "summary": "Summary",
+  "auto": "Auto",
+  "noSummaryForApp": "No summary available for this app. Try another app for better results.",
+  "tryAnotherApp": "Try Another App",
+  "generatedBy": "Generated by {appName}",
+  "@generatedBy": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "overview": "Overview",
+  "otherAppResults": "Other App Results",
+  "unknownApp": "Unknown App",
+  "noSummaryAvailable": "No Summary Available",
+  "conversationNoSummaryYet": "This conversation doesn't have a summary yet.",
+  "chooseSummarizationApp": "Choose Summarization App",
+  "setAsDefaultSummarizationApp": "{appName} set as default summarization app",
+  "@setAsDefaultSummarizationApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "letOmiChooseAutomatically": "Let Omi choose the best app automatically",
+  "deleteConversationConfirmation": "Are you sure you want to delete this conversation? This action cannot be undone.",
+  "conversationDeleted": "Conversation deleted",
+  "generatingLink": "Generating link...",
+  "editConversation": "Edit conversation",
+  "conversationLinkCopiedToClipboard": "Conversation link copied to clipboard",
+  "conversationTranscriptCopiedToClipboard": "Conversation transcript copied to clipboard",
+  "editConversationDialogTitle": "Edit Conversation",
+  "changeTheConversationTitle": "Change the conversation title",
+  "conversationTitle": "Conversation Title",
+  "enterConversationTitle": "Enter conversation title...",
+  "conversationTitleUpdatedSuccessfully": "Conversation title updated successfully",
+  "failedToUpdateConversationTitle": "Failed to update conversation title",
+  "errorUpdatingConversationTitle": "Error updating conversation title",
+  "settingUp": "Setting up...",
+  "@settingUp": {
+    "description": "Status message when initializing recording"
+  },
+  "startYourFirstRecording": "Start Your First Recording",
+  "@startYourFirstRecording": {
+    "description": "Call-to-action text for first recording"
+  },
+  "preparingSystemAudioCapture": "Preparing system audio capture",
+  "@preparingSystemAudioCapture": {
+    "description": "Status when preparing audio capture"
+  },
+  "clickTheButtonToCaptureAudio": "Click the button to capture audio for live transcripts, AI insights, and automatic saving.",
+  "@clickTheButtonToCaptureAudio": {
+    "description": "Instructions for starting recording"
+  },
+  "reconnecting": "Reconnecting...",
+  "@reconnecting": {
+    "description": "Status when reconnecting to audio"
+  },
+  "recordingPaused": "Recording Paused",
+  "@recordingPaused": {
+    "description": "Status when recording is paused"
+  },
+  "recordingActive": "Recording Active",
+  "@recordingActive": {
+    "description": "Status when recording is active"
+  },
+  "startRecording": "Start Recording",
+  "@startRecording": {
+    "description": "Button text to start recording"
+  },
+  "resumingInCountdown": "Resuming in {countdown}s...",
+  "@resumingInCountdown": {
+    "description": "Status when auto-resuming with countdown",
+    "placeholders": {
+      "countdown": {
+        "type": "String"
+      }
+    }
+  },
+  "tapPlayToResume": "Tap play to resume",
+  "@tapPlayToResume": {
+    "description": "Instruction when paused"
+  },
+  "listeningForAudio": "Listening for audio...",
+  "@listeningForAudio": {
+    "description": "Status when listening for audio"
+  },
+  "preparingAudioCapture": "Preparing audio capture",
+  "@preparingAudioCapture": {
+    "description": "Status when preparing to capture"
+  },
+  "clickToBeginRecording": "Click to begin recording",
+  "@clickToBeginRecording": {
+    "description": "Instruction to start recording"
+  },
+  "translated": "translated",
+  "@translated": {
+    "description": "Label for translated text"
+  },
+  "liveTranscript": "Live Transcript",
+  "@liveTranscript": {
+    "description": "Header for live transcript section"
+  },
+  "segmentsSingular": "{count} segment",
+  "@segmentsSingular": {
+    "description": "Segment count (singular)",
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentsPlural": "{count} segments",
+  "@segmentsPlural": {
+    "description": "Segment count (plural)",
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "startRecordingToSeeTranscript": "Start recording to see live transcript",
+  "@startRecordingToSeeTranscript": {
+    "description": "Empty state message for transcript"
+  },
+  "paused": "Paused",
+  "@paused": {
+    "description": "Recording status: paused"
+  },
+  "initializing": "Initializing...",
+  "@initializing": {
+    "description": "Recording status: initializing"
+  },
+  "recording": "Recording",
+  "@recording": {
+    "description": "Recording status: recording"
+  },
+  "microphoneChangedResumingIn": "Microphone changed. Resuming in {countdown}s",
+  "@microphoneChangedResumingIn": {
+    "description": "Status when microphone changed and auto-resuming",
+    "placeholders": {
+      "countdown": {
+        "type": "String"
+      }
+    }
+  },
+  "clickPlayToResumeOrStop": "Click play to resume or stop to finish",
+  "@clickPlayToResumeOrStop": {
+    "description": "Instruction when paused"
+  },
+  "settingUpSystemAudioCapture": "Setting up system audio capture",
+  "@settingUpSystemAudioCapture": {
+    "description": "Status when setting up audio capture"
+  },
+  "capturingAudioAndGeneratingTranscript": "Capturing audio and generating transcript",
+  "@capturingAudioAndGeneratingTranscript": {
+    "description": "Status when actively recording"
+  },
+  "clickToBeginRecordingSystemAudio": "Click to begin recording system audio",
+  "@clickToBeginRecordingSystemAudio": {
+    "description": "Instruction to start system audio recording"
+  },
+  "you": "You",
+  "@you": {
+    "description": "Label for current user in transcript"
+  },
+  "speakerWithId": "Speaker {speakerId}",
+  "@speakerWithId": {
+    "description": "Label for speaker in transcript",
+    "placeholders": {
+      "speakerId": {
+        "type": "String"
+      }
+    }
+  },
+  "translatedByOmi": "translated by omi",
+  "@translatedByOmi": {
+    "description": "Credit line for translations"
+  },
+  "backToConversations": "Back to Conversations",
+  "@backToConversations": {
+    "description": "Back button text"
+  },
+  "systemAudio": "System",
+  "@systemAudio": {
+    "description": "Label for system audio"
+  },
+  "mic": "Mic",
+  "@mic": {
+    "description": "Label for microphone"
+  },
+  "audioInputSetTo": "Audio input set to {deviceName}",
+  "@audioInputSetTo": {
+    "description": "Success message when audio device changed",
+    "placeholders": {
+      "deviceName": {
+        "type": "String"
+      }
+    }
+  },
+  "errorSwitchingAudioDevice": "Error switching audio device: {error}",
+  "@errorSwitchingAudioDevice": {
+    "description": "Error message when device switch fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "selectAudioInput": "Select Audio Input",
+  "@selectAudioInput": {
+    "description": "Dropdown header for audio device selection"
+  },
+  "loadingDevices": "Loading devices...",
+  "@loadingDevices": {
+    "description": "Status when loading audio devices"
+  },
+  "settingsHeader": "SETTINGS",
+  "@settingsHeader": {
+    "description": "Settings navigation header"
+  },
+  "@account": {
+    "description": "Account section label"
+  },
+  "plansAndBilling": "Plans & Billing",
+  "@plansAndBilling": {
+    "description": "Plans and billing section"
+  },
+  "calendarIntegration": "Calendar Integration",
+  "@calendarIntegration": {
+    "description": "Calendar integration section"
+  },
+  "dailySummary": "Daily Summary",
+  "@dailySummary": {
+    "description": "Daily summary section"
+  },
+  "developer": "Developer",
+  "@developer": {
+    "description": "Developer section"
+  },
+  "about": "About",
+  "@about": {
+    "description": "About section"
+  },
+  "@refresh": {
+    "description": "Refresh button"
+  },
+  "@saveSettings": {
+    "description": "Save settings button"
+  },
+  "selectTime": "Select Time",
+  "@selectTime": {
+    "description": "Time picker dialog title"
+  },
+  "@debugLogsCleared": {
+    "description": "Success message when logs cleared"
+  },
+  "@knowledgeGraphDeleted": {
+    "description": "Success message when knowledge graph deleted"
+  },
+  "@yourInformation": {
+    "description": "Account information section title"
+  },
+  "@voiceAndPeople": {
+    "description": "Voice and people section title"
+  },
+  "@preferences": {
+    "description": "Preferences section title"
+  },
+  "accountGroup": "Account",
+  "@accountGroup": {
+    "description": "Account group title"
+  },
+  "@userIdCopiedToClipboard": {
+    "description": "Success message for User ID copy"
+  },
+  "@deleteAccount": {
+    "description": "Delete account button"
+  },
+  "signOutQuestion": "Sign Out?",
+  "@signOutQuestion": {
+    "description": "Sign out confirmation dialog title"
+  },
+  "signOutConfirmation": "Are you sure you want to sign out?",
+  "@signOutConfirmation": {
+    "description": "Sign out confirmation message"
+  },
+  "customVocabularyHeader": "CUSTOM VOCABULARY",
+  "@customVocabularyHeader": {
+    "description": "Custom vocabulary section header"
+  },
+  "addWordsDescription": "Add words that Omi should recognize during transcription.",
+  "@addWordsDescription": {
+    "description": "Custom vocabulary description"
+  },
+  "enterWordsHint": "Enter words (comma separated)",
+  "@enterWordsHint": {
+    "description": "Text field hint for vocabulary input"
+  },
+  "dailySummaryHeader": "DAILY SUMMARY",
+  "@dailySummaryHeader": {
+    "description": "Daily summary section header"
+  },
+  "dailySummaryTitle": "Daily Summary",
+  "@dailySummaryTitle": {
+    "description": "Daily summary toggle title"
+  },
+  "dailySummaryDescription": "Get a personalized summary of your conversations",
+  "@dailySummaryDescription": {
+    "description": "Daily summary description"
+  },
+  "deliveryTime": "Delivery Time",
+  "@deliveryTime": {
+    "description": "Delivery time setting"
+  },
+  "deliveryTimeDescription": "When to receive your daily summary",
+  "@deliveryTimeDescription": {
+    "description": "Delivery time description"
+  },
+  "subscription": "Subscription",
+  "@subscription": {
+    "description": "Subscription section title"
+  },
+  "viewPlansAndUsage": "View Plans & Usage",
+  "@viewPlansAndUsage": {
+    "description": "View plans button"
+  },
+  "viewPlansDescription": "Manage your subscription and see usage stats",
+  "@viewPlansDescription": {
+    "description": "View plans description"
+  },
+  "addOrChangePaymentMethod": "Add or change your payment method",
+  "@addOrChangePaymentMethod": {
+    "description": "Payment method description"
+  },
+  "displayOptions": "Display Options",
+  "showMeetingsInMenuBar": "Show Meetings in Menu Bar",
+  "displayUpcomingMeetingsDescription": "Display upcoming meetings in the menu bar",
+  "showEventsWithoutParticipants": "Show Events Without Participants",
+  "includePersonalEventsDescription": "Include personal events with no attendees",
+  "upcomingMeetings": "UPCOMING MEETINGS",
+  "checkingNext7Days": "Checking the next 7 days",
+  "shortcuts": "Shortcuts",
+  "shortcutChangeInstruction": "Click on a shortcut to change it. Press Escape to cancel.",
+  "configurePersonaDescription": "Configure your AI persona",
+  "configureSTTProvider": "Configure STT provider",
+  "setConversationEndDescription": "Set when conversations auto-end",
+  "importDataDescription": "Import data from other sources",
+  "exportConversationsDescription": "Export conversations to JSON",
+  "exportingConversations": "Exporting conversations...",
+  "clearNodesDescription": "Clear all nodes and connections",
+  "deleteKnowledgeGraphQuestion": "Delete Knowledge Graph?",
+  "deleteKnowledgeGraphWarning": "This will delete all derived knowledge graph data. Your original memories remain safe.",
+  "connectOmiWithAI": "Connect Omi with AI assistants",
+  "noAPIKeys": "No API keys. Create one to get started.",
+  "autoCreateWhenDetected": "Auto-create when name detected",
+  "trackPersonalGoals": "Track personal goals on homepage",
+  "dailyReflectionDescription": "9 PM reminder to reflect on your day",
+  "endpointURL": "Endpoint URL",
+  "links": "Links",
+  "discordMemberCount": "8000+ members on Discord",
+  "userInformation": "User Information",
+  "capabilities": "Capabilities",
+  "@capabilities": {
+    "description": "Section title for app capabilities"
+  },
+  "previewScreenshots": "Preview Screenshots",
+  "@previewScreenshots": {
+    "description": "Section title for preview screenshots"
+  },
+  "holdOnPreparingForm": "Hold on, we are preparing the form for you",
+  "@holdOnPreparingForm": {
+    "description": "Loading message while preparing form"
+  },
+  "bySubmittingYouAgreeToOmi": "By submitting, you agree to Omi ",
+  "@bySubmittingYouAgreeToOmi": {
+    "description": "Text before Terms & Privacy Policy link"
+  },
+  "termsAndPrivacyPolicy": "Terms & Privacy Policy",
+  "@termsAndPrivacyPolicy": {
+    "description": "Terms and Privacy Policy link text"
+  },
+  "helpsDiagnoseIssuesAutoDeletes": "Helps diagnose issues. Auto-deletes after 3 days.",
+  "manageYourApp": "Manage Your App",
+  "@manageYourApp": {
+    "description": "Title for app management page"
+  },
+  "updatingYourApp": "Updating your app",
+  "@updatingYourApp": {
+    "description": "Loading message when updating app"
+  },
+  "fetchingYourAppDetails": "Fetching your app details",
+  "@fetchingYourAppDetails": {
+    "description": "Loading message when fetching app details"
+  },
+  "updateAppQuestion": "Update App?",
+  "@updateAppQuestion": {
+    "description": "Dialog title asking to confirm app update"
+  },
+  "updateAppConfirmation": "Are you sure you want to update your app? The changes will reflect once reviewed by our team.",
+  "@updateAppConfirmation": {
+    "description": "Dialog description explaining app update will be reviewed"
+  },
+  "updateApp": "Update App",
+  "@updateApp": {
+    "description": "Button text to update app"
+  },
+  "createAndSubmitNewApp": "Create and submit a new app",
+  "@createAndSubmitNewApp": {
+    "description": "Button text to create and submit a new app"
+  },
+  "appsCount": "Apps ({count})",
+  "@appsCount": {
+    "description": "Label showing number of installed apps",
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "privateAppsCount": "Private Apps ({count})",
+  "@privateAppsCount": {
+    "description": "Label showing number of private apps",
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "publicAppsCount": "Public Apps ({count})",
+  "@publicAppsCount": {
+    "description": "Label showing number of public apps",
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "newVersionAvailable": "New Version Available  🎉",
+  "@newVersionAvailable": {
+    "description": "Dialog title when a new app version is available"
+  },
+  "no": "No",
+  "@no": {
+    "description": "Button text to decline or dismiss"
+  },
+  "subscriptionCancelledSuccessfully": "Subscription cancelled successfully. It will remain active until the end of the current billing period.",
+  "@subscriptionCancelledSuccessfully": {
+    "description": "Success message when subscription is cancelled"
+  },
+  "failedToCancelSubscription": "Failed to cancel subscription. Please try again.",
+  "@failedToCancelSubscription": {
+    "description": "Error message when subscription cancellation fails"
+  },
+  "invalidPaymentUrl": "Invalid payment URL",
+  "@invalidPaymentUrl": {
+    "description": "Error message for invalid payment URL"
+  },
+  "permissionsAndTriggers": "Permissions & Triggers",
+  "@permissionsAndTriggers": {
+    "description": "Section title for permissions and triggers"
+  },
+  "chatFeatures": "Chat Features",
+  "@chatFeatures": {
+    "description": "Section title for chat features"
+  },
+  "uninstall": "Uninstall",
+  "@uninstall": {
+    "description": "Button text to uninstall app"
+  },
+  "installs": "INSTALLS",
+  "@installs": {
+    "description": "Label for install count"
+  },
+  "priceLabel": "PRICE",
+  "@priceLabel": {
+    "description": "Label for price"
+  },
+  "updatedLabel": "UPDATED",
+  "@updatedLabel": {
+    "description": "Label for updated date"
+  },
+  "createdLabel": "CREATED",
+  "@createdLabel": {
+    "description": "Label for created date"
+  },
+  "featuredLabel": "FEATURED",
+  "@featuredLabel": {
+    "description": "Label for featured status"
+  },
+  "cancelSubscriptionQuestion": "Cancel Subscription?",
+  "@cancelSubscriptionQuestion": {
+    "description": "Dialog title for cancel subscription"
+  },
+  "cancelSubscriptionConfirmation": "Are you sure you want to cancel your subscription? You will continue to have access until the end of your current billing period.",
+  "@cancelSubscriptionConfirmation": {
+    "description": "Dialog description for cancel subscription"
+  },
+  "cancelSubscriptionButton": "Cancel Subscription",
+  "@cancelSubscriptionButton": {
+    "description": "Button text to cancel subscription"
+  },
+  "cancelling": "Cancelling...",
+  "@cancelling": {
+    "description": "Loading text while cancelling"
+  },
+  "betaTesterMessage": "You are a beta tester for this app. It is not public yet. It will be public once approved.",
+  "@betaTesterMessage": {
+    "description": "Message shown to beta testers"
+  },
+  "appUnderReviewMessage": "Your app is under review and visible only to you. It will be public once approved.",
+  "@appUnderReviewMessage": {
+    "description": "Message shown when app is under review"
+  },
+  "appRejectedMessage": "Your app has been rejected. Please update the app details and resubmit for review.",
+  "@appRejectedMessage": {
+    "description": "Message shown when app is rejected"
+  },
+  "invalidIntegrationUrl": "Invalid integration URL",
+  "@invalidIntegrationUrl": {
+    "description": "Error message for invalid integration URL"
+  },
+  "tapToComplete": "Tap to complete",
+  "@tapToComplete": {
+    "description": "Text prompting user to tap to complete setup"
+  },
+  "invalidSetupInstructionsUrl": "Invalid setup instructions URL",
+  "@invalidSetupInstructionsUrl": {
+    "description": "Error message for invalid setup instructions URL"
+  },
+  "pushToTalk": "Push to Talk",
+  "@pushToTalk": {
+    "description": "Feature name for push to talk"
+  },
+  "summaryPrompt": "Summary Prompt",
+  "@summaryPrompt": {
+    "description": "Label for summary prompt"
+  },
+  "pleaseSelectARating": "Please select a rating",
+  "@pleaseSelectARating": {
+    "description": "Error message when no rating selected"
+  },
+  "reviewAddedSuccessfully": "Review added successfully 🚀",
+  "@reviewAddedSuccessfully": {
+    "description": "Success message when review is added"
+  },
+  "reviewUpdatedSuccessfully": "Review updated successfully 🚀",
+  "@reviewUpdatedSuccessfully": {
+    "description": "Success message when review is updated"
+  },
+  "failedToSubmitReview": "Failed to submit review. Please try again.",
+  "@failedToSubmitReview": {
+    "description": "Error message when review submission fails"
+  },
+  "addYourReview": "Add Your Review",
+  "@addYourReview": {
+    "description": "Dialog title for adding review"
+  },
+  "editYourReview": "Edit Your Review",
+  "@editYourReview": {
+    "description": "Dialog title for editing review"
+  },
+  "writeAReviewOptional": "Write a review (optional)",
+  "@writeAReviewOptional": {
+    "description": "Placeholder text for review input"
+  },
+  "submitReview": "Submit Review",
+  "@submitReview": {
+    "description": "Button text to submit review"
+  },
+  "updateReview": "Update Review",
+  "@updateReview": {
+    "description": "Button text to update review"
+  },
+  "yourReview": "Your Review",
+  "@yourReview": {
+    "description": "Label for user's own review"
+  },
+  "anonymousUser": "Anonymous User",
+  "@anonymousUser": {
+    "description": "Display name for anonymous users"
+  },
+  "issueActivatingApp": "There was an issue activating this app. Please try again.",
+  "@issueActivatingApp": {
+    "description": "Dialog description for activation error"
+  },
+  "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
+  "@dataAccessNoticeDescription": {
+    "description": "Description for data access notice dialog"
+  },
+  "copyUrl": "Copy URL",
+  "@copyUrl": {
+    "description": "Button to copy conversation URL to clipboard"
+  },
+  "txtFormat": "TXT",
+  "@txtFormat": {
+    "description": "TXT file format label"
+  },
+  "pdfFormat": "PDF",
+  "@pdfFormat": {
+    "description": "PDF file format label"
+  },
+  "weekdayMon": "Mon",
+  "@weekdayMon": {
+    "description": "Abbreviated Monday"
+  },
+  "weekdayTue": "Tue",
+  "@weekdayTue": {
+    "description": "Abbreviated Tuesday"
+  },
+  "weekdayWed": "Wed",
+  "@weekdayWed": {
+    "description": "Abbreviated Wednesday"
+  },
+  "weekdayThu": "Thu",
+  "@weekdayThu": {
+    "description": "Abbreviated Thursday"
+  },
+  "weekdayFri": "Fri",
+  "@weekdayFri": {
+    "description": "Abbreviated Friday"
+  },
+  "weekdaySat": "Sat",
+  "@weekdaySat": {
+    "description": "Abbreviated Saturday"
+  },
+  "weekdaySun": "Sun",
+  "@weekdaySun": {
+    "description": "Abbreviated Sunday"
+  },
+  "serviceIntegrationComingSoon": "{serviceName} integration coming soon",
+  "@serviceIntegrationComingSoon": {
+    "description": "Message shown when task integration is not yet available",
+    "placeholders": {
+      "serviceName": {
+        "type": "String"
+      }
+    }
+  },
+  "alreadyExportedTo": "Already exported to {platform}",
+  "@alreadyExportedTo": {
+    "description": "Message shown when task was already exported to a platform",
+    "placeholders": {
+      "platform": {
+        "type": "String"
+      }
+    }
+  },
+  "anotherPlatform": "another platform",
+  "@anotherPlatform": {
+    "description": "Fallback text for unknown export platform"
+  },
+  "pleaseAuthenticateWithService": "Please authenticate with {serviceName} in Settings > Task Integrations",
+  "@pleaseAuthenticateWithService": {
+    "description": "Message prompting user to authenticate with a task service",
+    "placeholders": {
+      "serviceName": {
+        "type": "String"
+      }
+    }
+  },
+  "addingToService": "Adding to {serviceName}...",
+  "@addingToService": {
+    "description": "Loading message when adding task to a service",
+    "placeholders": {
+      "serviceName": {
+        "type": "String"
+      }
+    }
+  },
+  "addedToService": "Added to {serviceName}",
+  "@addedToService": {
+    "description": "Success message when task was added to a service",
+    "placeholders": {
+      "serviceName": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToAddToService": "Failed to add to {serviceName}",
+  "@failedToAddToService": {
+    "description": "Error message when task could not be added to a service",
+    "placeholders": {
+      "serviceName": {
+        "type": "String"
+      }
+    }
+  },
+  "permissionDeniedForAppleReminders": "Permission denied for Apple Reminders",
+  "@permissionDeniedForAppleReminders": {
+    "description": "Error when Apple Reminders permission is denied"
+  },
+  "failedToCreateApiKey": "Failed to create provider API key: {error}",
+  "@failedToCreateApiKey": {
+    "description": "Error message when API key creation fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "createAKey": "Create a Key",
+  "@createAKey": {
+    "description": "Dialog title for creating a new API key"
+  },
+  "apiKeyRevokedSuccessfully": "API key revoked successfully",
+  "@apiKeyRevokedSuccessfully": {
+    "description": "Success message when API key is revoked"
+  },
+  "failedToRevokeApiKey": "Failed to revoke API key: {error}",
+  "@failedToRevokeApiKey": {
+    "description": "Error message when API key revocation fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "omiApiKeys": "Omi API Keys",
+  "@omiApiKeys": {
+    "description": "Dialog title for API keys info"
+  },
+  "apiKeysDescription": "API Keys are used for authentication when your app communicates with the OMI server. They allow your application to create memories and access other OMI services securely.",
+  "@apiKeysDescription": {
+    "description": "Description of what API keys are used for"
+  },
+  "aboutOmiApiKeys": "About Omi API Keys",
+  "@aboutOmiApiKeys": {
+    "description": "Tooltip for API keys info button"
+  },
+  "yourNewKey": "Your new key:",
+  "@yourNewKey": {
+    "description": "Label shown above newly created API key"
+  },
+  "copyToClipboard": "Copy to clipboard",
+  "@copyToClipboard": {
+    "description": "Tooltip for copy button"
+  },
+  "pleaseCopyKeyNow": "Please copy it now and write it down somewhere safe. ",
+  "@pleaseCopyKeyNow": {
+    "description": "Warning to copy key immediately"
+  },
+  "willNotSeeAgain": "You will not be able to see it again.",
+  "@willNotSeeAgain": {
+    "description": "Warning that key won't be shown again"
+  },
+  "revokeKey": "Revoke key",
+  "@revokeKey": {
+    "description": "Tooltip for revoke button"
+  },
+  "revokeApiKeyQuestion": "Revoke API Key?",
+  "@revokeApiKeyQuestion": {
+    "description": "Confirmation dialog title for revoking API key"
+  },
+  "revokeApiKeyWarning": "This action cannot be undone. Any applications using this key will no longer be able to access the API.",
+  "@revokeApiKeyWarning": {
+    "description": "Warning message about revoking API key"
+  },
+  "revoke": "Revoke",
+  "@revoke": {
+    "description": "Button text to confirm revocation"
+  },
+  "whatWouldYouLikeToCreate": "What would you like to create?",
+  "@whatWouldYouLikeToCreate": {
+    "description": "Title asking user what they want to create"
+  },
+  "createAnApp": "Create an App",
+  "@createAnApp": {
+    "description": "Option to create an app"
+  },
+  "createAndShareYourApp": "Create and share your app",
+  "@createAndShareYourApp": {
+    "description": "Subtitle for create app option"
+  },
+  "createMyClone": "Create my Clone",
+  "@createMyClone": {
+    "description": "Option to create digital clone"
+  },
+  "createYourDigitalClone": "Create your digital clone",
+  "@createYourDigitalClone": {
+    "description": "Subtitle for create clone option"
+  },
+  "itemApp": "App",
+  "@itemApp": {
+    "description": "The word 'App' used as parameter in other strings"
+  },
+  "itemPersona": "Persona",
+  "@itemPersona": {
+    "description": "The word 'Persona' used as parameter in other strings"
+  },
+  "keepItemPublic": "Keep {item} Public",
+  "@keepItemPublic": {
+    "description": "Toggle label to keep app or persona public",
+    "placeholders": {
+      "item": {
+        "type": "String"
+      }
+    }
+  },
+  "makeItemPublicQuestion": "Make {item} Public?",
+  "@makeItemPublicQuestion": {
+    "description": "Dialog title asking to make app or persona public",
+    "placeholders": {
+      "item": {
+        "type": "String"
+      }
+    }
+  },
+  "makeItemPrivateQuestion": "Make {item} Private?",
+  "@makeItemPrivateQuestion": {
+    "description": "Dialog title asking to make app or persona private",
+    "placeholders": {
+      "item": {
+        "type": "String"
+      }
+    }
+  },
+  "makeItemPublicExplanation": "If you make the {item} public, it can be used by everyone",
+  "@makeItemPublicExplanation": {
+    "description": "Explanation of what happens when making public",
+    "placeholders": {
+      "item": {
+        "type": "String"
+      }
+    }
+  },
+  "makeItemPrivateExplanation": "If you make the {item} private now, it will stop working for everyone and will be visible only to you",
+  "@makeItemPrivateExplanation": {
+    "description": "Explanation of what happens when making private",
+    "placeholders": {
+      "item": {
+        "type": "String"
+      }
+    }
+  },
+  "manageApp": "Manage App",
+  "@manageApp": {
+    "description": "Menu item to manage app settings"
+  },
+  "updatePersonaDetails": "Update Persona Details",
+  "@updatePersonaDetails": {
+    "description": "Menu item to update persona details"
+  },
+  "deleteItemTitle": "Delete {item}",
+  "@deleteItemTitle": {
+    "description": "Menu item to delete app or persona",
+    "placeholders": {
+      "item": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteItemQuestion": "Delete {item}?",
+  "@deleteItemQuestion": {
+    "description": "Dialog title asking to confirm deletion",
+    "placeholders": {
+      "item": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteItemConfirmation": "Are you sure you want to delete this {item}? This action cannot be undone.",
+  "@deleteItemConfirmation": {
+    "description": "Dialog message explaining deletion is permanent",
+    "placeholders": {
+      "item": {
+        "type": "String"
+      }
+    }
+  },
+  "revokeKeyQuestion": "Revoke Key?",
+  "@revokeKeyQuestion": {
+    "description": "Dialog title asking to confirm key revocation"
+  },
+  "revokeKeyConfirmation": "Are you sure you want to revoke the key \"{keyName}\"? This action cannot be undone.",
+  "@revokeKeyConfirmation": {
+    "description": "Dialog message explaining key revocation is permanent",
+    "placeholders": {
+      "keyName": {
+        "type": "String"
+      }
+    }
+  },
+  "createNewKey": "Create New Key",
+  "@createNewKey": {
+    "description": "Dialog title for creating a new API key"
+  },
+  "keyNameHint": "e.g., Claude Desktop",
+  "@keyNameHint": {
+    "description": "Hint text showing example key name"
+  },
+  "pleaseEnterAName": "Please enter a name.",
+  "@pleaseEnterAName": {
+    "description": "Validation error when name is empty"
+  },
+  "failedToCreateKeyWithError": "Failed to create key: {error}",
+  "@failedToCreateKeyWithError": {
+    "description": "Error message with specific error details",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToCreateKeyTryAgain": "Failed to create key. Please try again.",
+  "@failedToCreateKeyTryAgain": {
+    "description": "Generic error message for key creation failure"
+  },
+  "keyCreated": "Key Created",
+  "@keyCreated": {
+    "description": "Dialog title when API key is successfully created"
+  },
+  "keyCreatedMessage": "Your new key has been created. Please copy it now. You will not be able to see it again.",
+  "@keyCreatedMessage": {
+    "description": "Message explaining to copy the key now as it won't be shown again"
+  },
+  "keyWord": "Key",
+  "@keyWord": {
+    "description": "The word 'Key' for use in parameterized strings"
+  },
+  "externalAppAccess": "External App Access",
+  "@externalAppAccess": {
+    "description": "Section title for external app access settings"
+  },
+  "externalAppAccessDescription": "The following installed apps have external integrations and can access your data, such as conversations and memories.",
+  "@externalAppAccessDescription": {
+    "description": "Description explaining which apps can access user data"
+  },
+  "noExternalAppsHaveAccess": "No external apps have access to your data.",
+  "@noExternalAppsHaveAccess": {
+    "description": "Message shown when no external apps have data access"
+  },
+  "maximumSecurityE2ee": "Maximum Security (E2EE)",
+  "@maximumSecurityE2ee": {
+    "description": "Title for End-to-End Encryption dialog"
+  },
+  "e2eeDescription": "End-to-end encryption is the gold standard for privacy. When enabled, your data is encrypted on your device before it's sent to our servers. This means no one, not even Omi, can access your content.",
+  "@e2eeDescription": {
+    "description": "Description of E2EE encryption explaining its benefits"
+  },
+  "importantTradeoffs": "Important Trade-offs:",
+  "@importantTradeoffs": {
+    "description": "Header for trade-offs section in E2EE dialog"
+  },
+  "e2eeTradeoff1": "• Some features like external app integrations may be disabled.",
+  "@e2eeTradeoff1": {
+    "description": "First trade-off bullet point for E2EE"
+  },
+  "e2eeTradeoff2": "• If you lose your password, your data cannot be recovered.",
+  "@e2eeTradeoff2": {
+    "description": "Second trade-off bullet point for E2EE"
+  },
+  "featureComingSoon": "This feature is coming soon!",
+  "@featureComingSoon": {
+    "description": "Message indicating a feature is coming soon"
+  },
+  "migrationInProgressMessage": "Migration in progress. You cannot change the protection level until it is complete.",
+  "@migrationInProgressMessage": {
+    "description": "Message shown when data migration is in progress"
+  },
+  "migrationFailed": "Migration Failed",
+  "@migrationFailed": {
+    "description": "Title shown when data migration fails"
+  },
+  "migratingFromTo": "Migrating from {source} to {target}",
+  "@migratingFromTo": {
+    "description": "Message showing migration progress between protection levels",
+    "placeholders": {
+      "source": {
+        "type": "String"
+      },
+      "target": {
+        "type": "String"
+      }
+    }
+  },
+  "objectsCount": "{processed} / {total} objects",
+  "@objectsCount": {
+    "description": "Shows number of processed objects out of total during migration",
+    "placeholders": {
+      "processed": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "secureEncryption": "Secure Encryption",
+  "@secureEncryption": {
+    "description": "Title for secure encryption card"
+  },
+  "secureEncryptionDescription": "Your data is encrypted with a key unique to you on our servers, hosted on Google Cloud. This means your raw content is inaccessible to anyone, including Omi staff or Google, directly from the database.",
+  "@secureEncryptionDescription": {
+    "description": "Description of secure encryption explaining how data is protected"
+  },
+  "endToEndEncryption": "End-to-End Encryption",
+  "@endToEndEncryption": {
+    "description": "Title for E2EE card"
+  },
+  "e2eeCardDescription": "Enable for maximum security where only you can access your data. Tap to learn more.",
+  "@e2eeCardDescription": {
+    "description": "Description for E2EE card explaining its benefit"
+  },
+  "dataAlwaysEncrypted": "Regardless of the level, your data is always encrypted at rest and in transit.",
+  "@dataAlwaysEncrypted": {
+    "description": "Info message explaining data is always encrypted"
+  },
+  "readOnlyScope": "Read Only",
+  "@readOnlyScope": {
+    "description": "Label for read-only API key scope"
+  },
+  "fullAccessScope": "Full Access",
+  "@fullAccessScope": {
+    "description": "Label for full access API key scope"
+  },
+  "readScope": "Read",
+  "@readScope": {
+    "description": "Label for read API key scope"
+  },
+  "writeScope": "Write",
+  "@writeScope": {
+    "description": "Label for write API key scope"
+  },
+  "apiKeyCreated": "API Key Created!",
+  "@apiKeyCreated": {
+    "description": "Title shown when API key is successfully created"
+  },
+  "saveKeyWarning": "Save this key now! You won't be able to see it again.",
+  "@saveKeyWarning": {
+    "description": "Warning message when API key is created"
+  },
+  "yourApiKey": "YOUR API KEY",
+  "@yourApiKey": {
+    "description": "Label for API key display section"
+  },
+  "tapToCopy": "Tap to copy",
+  "@tapToCopy": {
+    "description": "Hint text for tap to copy action"
+  },
+  "copyKey": "Copy Key",
+  "@copyKey": {
+    "description": "Button label to copy API key"
+  },
+  "@apiKey": {
+    "description": "Label for API key (used for clipboard notification)"
+  },
+  "createApiKey": "Create API Key",
+  "@createApiKey": {
+    "description": "Title for create API key sheet"
+  },
+  "accessDataProgrammatically": "Access your data programmatically",
+  "@accessDataProgrammatically": {
+    "description": "Subtitle for create API key sheet"
+  },
+  "keyNameLabel": "KEY NAME",
+  "@keyNameLabel": {
+    "description": "Label for key name input field"
+  },
+  "keyNamePlaceholder": "e.g., My App Integration",
+  "@keyNamePlaceholder": {
+    "description": "Placeholder text for key name input"
+  },
+  "permissionsLabel": "PERMISSIONS",
+  "@permissionsLabel": {
+    "description": "Label for permissions section"
+  },
+  "permissionsInfoNote": "R = Read, W = Write. Defaults to read-only if nothing selected.",
+  "@permissionsInfoNote": {
+    "description": "Info note explaining permission toggles"
+  },
+  "developerApi": "Developer API",
+  "@developerApi": {
+    "description": "Section header for developer API keys"
+  },
+  "createAKeyToGetStarted": "Create a key to get started",
+  "@createAKeyToGetStarted": {
+    "description": "Hint text when no API keys exist"
+  },
+  "errorWithMessage": "Error: {error}",
+  "@errorWithMessage": {
+    "description": "Error message with details",
+    "placeholders": {
+      "error": {
+        "type": "String",
+        "example": "Connection failed"
+      }
+    }
+  },
+  "omiTraining": "Omi Training",
+  "@omiTraining": {
+    "description": "Title for Omi training program"
+  },
+  "trainingDataProgram": "Training Data Program",
+  "@trainingDataProgram": {
+    "description": "Label for training data program"
+  },
+  "getOmiUnlimitedFree": "Get Omi Unlimited for free by contributing your data to train AI models.",
+  "@getOmiUnlimitedFree": {
+    "description": "Description for getting Omi Unlimited free by contributing data"
+  },
+  "trainingDataBullets": "• Your data helps improve AI models\n• Only non-sensitive data is shared\n• Fully transparent process",
+  "@trainingDataBullets": {
+    "description": "Bullet points explaining training data program benefits"
+  },
+  "learnMoreAtOmiTraining": "Learn more at omi.me/training",
+  "@learnMoreAtOmiTraining": {
+    "description": "Link text to learn more about training"
+  },
+  "agreeToContributeData": "I understand and agree to contribute my data for AI training",
+  "@agreeToContributeData": {
+    "description": "Checkbox label for agreeing to contribute data"
+  },
+  "submitRequest": "Submit Request",
+  "@submitRequest": {
+    "description": "Button text to submit request"
+  },
+  "thankYouRequestUnderReview": "Thank you! Your request is under review. We will notify you once approved.",
+  "@thankYouRequestUnderReview": {
+    "description": "Success message after submitting training data request"
+  },
+  "planRemainsActiveUntil": "Your plan will remain active until {date}. After that, you will lose access to your unlimited features. Are you sure?",
+  "@planRemainsActiveUntil": {
+    "description": "Message explaining plan remains active until date",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "January 15, 2026"
+      }
+    }
+  },
+  "confirmCancellation": "Confirm Cancellation",
+  "@confirmCancellation": {
+    "description": "Button text to confirm cancellation"
+  },
+  "keepMyPlan": "Keep My Plan",
+  "@keepMyPlan": {
+    "description": "Button text to keep current plan"
+  },
+  "subscriptionSetToCancel": "Your subscription is set to cancel at the end of the period.",
+  "@subscriptionSetToCancel": {
+    "description": "Message that subscription is set to cancel"
+  },
+  "switchedToOnDevice": "Switched to on-device transcription",
+  "@switchedToOnDevice": {
+    "description": "Success message when switched to on-device transcription"
+  },
+  "couldNotSwitchToFreePlan": "Could not switch to free plan. Please try again.",
+  "@couldNotSwitchToFreePlan": {
+    "description": "Error message when switching to free plan fails"
+  },
+  "couldNotLoadPlans": "Could not load available plans. Please try again.",
+  "@couldNotLoadPlans": {
+    "description": "Error message when plans cannot be loaded"
+  },
+  "selectedPlanNotAvailable": "Selected plan is not available. Please try again.",
+  "@selectedPlanNotAvailable": {
+    "description": "Error message when selected plan is not available"
+  },
+  "upgradeToAnnualPlan": "Upgrade to Annual Plan",
+  "@upgradeToAnnualPlan": {
+    "description": "Dialog title for upgrading to annual plan"
+  },
+  "importantBillingInfo": "Important Billing Information:",
+  "@importantBillingInfo": {
+    "description": "Header for billing information section"
+  },
+  "monthlyPlanContinues": "Your current monthly plan will continue until the end of your billing period",
+  "@monthlyPlanContinues": {
+    "description": "Info about monthly plan continuing"
+  },
+  "paymentMethodCharged": "Your existing payment method will be charged automatically when your monthly plan ends",
+  "@paymentMethodCharged": {
+    "description": "Info about payment method being charged"
+  },
+  "annualSubscriptionStarts": "Your 12-month annual subscription will start automatically after the charge",
+  "@annualSubscriptionStarts": {
+    "description": "Info about annual subscription starting"
+  },
+  "thirteenMonthsCoverage": "You'll get 13 months of coverage total (current month + 12 months annual)",
+  "@thirteenMonthsCoverage": {
+    "description": "Info about total coverage period"
+  },
+  "confirmUpgrade": "Confirm Upgrade",
+  "@confirmUpgrade": {
+    "description": "Button text to confirm upgrade"
+  },
+  "confirmPlanChange": "Confirm Plan Change",
+  "@confirmPlanChange": {
+    "description": "Dialog title for confirming plan change"
+  },
+  "confirmAndProceed": "Confirm & Proceed",
+  "@confirmAndProceed": {
+    "description": "Button text to confirm and proceed"
+  },
+  "upgradeScheduled": "Upgrade Scheduled",
+  "@upgradeScheduled": {
+    "description": "Label when upgrade is scheduled"
+  },
+  "changePlan": "Change Plan",
+  "@changePlan": {
+    "description": "Button text to change plan"
+  },
+  "upgradeAlreadyScheduled": "Your upgrade to the annual plan is already scheduled",
+  "@upgradeAlreadyScheduled": {
+    "description": "Message when upgrade is already scheduled"
+  },
+  "youAreOnUnlimitedPlan": "You are on the Unlimited Plan.",
+  "@youAreOnUnlimitedPlan": {
+    "description": "Message showing user is on unlimited plan"
+  },
+  "yourOmiUnleashed": "Your Omi, unleashed. Go unlimited for endless possibilities.",
+  "@yourOmiUnleashed": {
+    "description": "Marketing text for unlimited plan"
+  },
+  "planEndedOn": "Your plan ended on {date}.\\nResubscribe now - you'll be charged immediately for a new billing period.",
+  "@planEndedOn": {
+    "description": "Message when plan has ended",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "January 15, 2026"
+      }
+    }
+  },
+  "planSetToCancelOn": "Your plan is set to cancel on {date}.\\nResubscribe now to keep your benefits - no charge until {date}.",
+  "@planSetToCancelOn": {
+    "description": "Message when plan is set to cancel",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "January 15, 2026"
+      }
+    }
+  },
+  "annualPlanStartsAutomatically": "Your annual plan will start automatically when your monthly plan ends.",
+  "@annualPlanStartsAutomatically": {
+    "description": "Info that annual plan starts automatically"
+  },
+  "planRenewsOn": "Your plan renews on {date}.",
+  "@planRenewsOn": {
+    "description": "Message showing plan renewal date",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "January 15, 2026"
+      }
+    }
+  },
+  "unlimitedConversations": "Unlimited conversations",
+  "@unlimitedConversations": {
+    "description": "Feature: unlimited conversations"
+  },
+  "askOmiAnything": "Ask Omi anything about your life",
+  "@askOmiAnything": {
+    "description": "Feature: ask Omi anything"
+  },
+  "unlockOmiInfiniteMemory": "Unlock Omi's infinite memory",
+  "@unlockOmiInfiniteMemory": {
+    "description": "Feature: unlock infinite memory"
+  },
+  "youreOnAnnualPlan": "You're on the Annual Plan",
+  "@youreOnAnnualPlan": {
+    "description": "Message showing user is on annual plan"
+  },
+  "alreadyBestValuePlan": "You already have the best value plan. No changes needed.",
+  "@alreadyBestValuePlan": {
+    "description": "Message when user already has best plan"
+  },
+  "unableToLoadPlans": "Unable to load plans",
+  "@unableToLoadPlans": {
+    "description": "Error message when plans cannot load"
+  },
+  "checkConnectionTryAgain": "Please check your connection and try again",
+  "@checkConnectionTryAgain": {
+    "description": "Message to check connection"
+  },
+  "useFreePlan": "Use Free Plan",
+  "@useFreePlan": {
+    "description": "Button to use free plan"
+  },
+  "continueText": "Continue",
+  "@continueText": {
+    "description": "Continue button text"
+  },
+  "resubscribe": "Resubscribe",
+  "@resubscribe": {
+    "description": "Button to resubscribe"
+  },
+  "couldNotOpenPaymentSettings": "Could not open payment settings. Please try again.",
+  "@couldNotOpenPaymentSettings": {
+    "description": "Error when payment settings cannot open"
+  },
+  "managePaymentMethod": "Manage Payment Method",
+  "@managePaymentMethod": {
+    "description": "Button to manage payment method"
+  },
+  "cancelSubscription": "Cancel Subscription",
+  "@cancelSubscription": {
+    "description": "Button to cancel subscription"
+  },
+  "endsOnDate": "Ends on {date}",
+  "@endsOnDate": {
+    "description": "Shows end date",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "January 15, 2026"
+      }
+    }
+  },
+  "active": "Active",
+  "@active": {
+    "description": "Status label for active"
+  },
+  "freePlan": "Free Plan",
+  "@freePlan": {
+    "description": "Label for free plan"
+  },
+  "configure": "Configure",
+  "@configure": {
+    "description": "Button to configure settings"
+  },
+  "privacyInformation": "Privacy Information",
+  "@privacyInformation": {
+    "description": "Privacy page - privacyInformation"
+  },
+  "yourPrivacyMattersToUs": "Your Privacy Matters to Us",
+  "@yourPrivacyMattersToUs": {
+    "description": "Privacy page - yourPrivacyMattersToUs"
+  },
+  "privacyIntroText": "At Omi, we take your privacy very seriously. We want to be transparent about the data we collect and how we use it to improve our product for you. Here's what you need to know:",
+  "@privacyIntroText": {
+    "description": "Privacy page - privacyIntroText"
+  },
+  "whatWeTrack": "What We Track",
+  "@whatWeTrack": {
+    "description": "Privacy page - whatWeTrack"
+  },
+  "anonymityAndPrivacy": "Anonymity and Privacy",
+  "@anonymityAndPrivacy": {
+    "description": "Privacy page - anonymityAndPrivacy"
+  },
+  "optInAndOptOutOptions": "Opt-In and Opt-Out Options",
+  "@optInAndOptOutOptions": {
+    "description": "Privacy page - optInAndOptOutOptions"
+  },
+  "ourCommitment": "Our Commitment",
+  "@ourCommitment": {
+    "description": "Privacy page - ourCommitment"
+  },
+  "commitmentText": "We are committed to using the data we collect only to make Omi a better product for you. Your privacy and trust are paramount to us.",
+  "@commitmentText": {
+    "description": "Privacy page - commitmentText"
+  },
+  "thankYouText": "Thank you for being a valued user of Omi. If you have any questions or concerns, feel free to reach out to us to team@basedhardware.com.",
+  "@thankYouText": {
+    "description": "Privacy page - thankYouText"
+  },
+  "wifiSyncSettings": "WiFi Sync Settings",
+  "@wifiSyncSettings": {
+    "description": "WiFi sync settings - wifiSyncSettings"
+  },
+  "enterHotspotCredentials": "Enter your phone's hotspot credentials",
+  "@enterHotspotCredentials": {
+    "description": "WiFi sync settings - enterHotspotCredentials"
+  },
+  "wifiSyncUsesHotspot": "WiFi sync uses your phone as a hotspot. Find your hotspot name and password in Settings > Personal Hotspot.",
+  "@wifiSyncUsesHotspot": {
+    "description": "WiFi sync settings - wifiSyncUsesHotspot"
+  },
+  "hotspotNameSsid": "Hotspot Name (SSID)",
+  "@hotspotNameSsid": {
+    "description": "WiFi sync settings - hotspotNameSsid"
+  },
+  "exampleIphoneHotspot": "e.g. iPhone Hotspot",
+  "@exampleIphoneHotspot": {
+    "description": "WiFi sync settings - exampleIphoneHotspot"
+  },
+  "password": "Password",
+  "@password": {
+    "description": "WiFi sync settings - password"
+  },
+  "enterHotspotPassword": "Enter hotspot password",
+  "@enterHotspotPassword": {
+    "description": "WiFi sync settings - enterHotspotPassword"
+  },
+  "saveCredentials": "Save Credentials",
+  "@saveCredentials": {
+    "description": "WiFi sync settings - saveCredentials"
+  },
+  "clearCredentials": "Clear Credentials",
+  "@clearCredentials": {
+    "description": "WiFi sync settings - clearCredentials"
+  },
+  "pleaseEnterHotspotName": "Please enter a hotspot name",
+  "@pleaseEnterHotspotName": {
+    "description": "WiFi sync settings - pleaseEnterHotspotName"
+  },
+  "wifiCredentialsSaved": "WiFi credentials saved",
+  "@wifiCredentialsSaved": {
+    "description": "WiFi sync settings - wifiCredentialsSaved"
+  },
+  "wifiCredentialsCleared": "WiFi credentials cleared",
+  "@wifiCredentialsCleared": {
+    "description": "WiFi sync settings - wifiCredentialsCleared"
+  },
+  "summaryGeneratedForDate": "Summary generated for {date}",
+  "@summaryGeneratedForDate": {
+    "description": "Daily summary settings - summaryGeneratedForDate",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "1/15/2026"
+      }
+    }
+  },
+  "failedToGenerateSummaryCheckConversations": "Failed to generate summary. Make sure you have conversations for that day.",
+  "@failedToGenerateSummaryCheckConversations": {
+    "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Summary not found",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "Your Day's Journey",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "Highlights",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Unresolved Questions",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Decisions",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Learnings",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
+  },
+  "autoDeletesAfterThreeDays": "Auto-deletes after 3 days.",
+  "@autoDeletesAfterThreeDays": {
+    "description": "Developer settings - autoDeletesAfterThreeDays"
+  },
+  "knowledgeGraphDeletedSuccessfully": "Knowledge Graph deleted successfully",
+  "@knowledgeGraphDeletedSuccessfully": {
+    "description": "Developer settings - knowledgeGraphDeletedSuccessfully"
+  },
+  "exportStartedMayTakeFewSeconds": "Export started. This may take a few seconds...",
+  "@exportStartedMayTakeFewSeconds": {
+    "description": "Developer settings - exportStartedMayTakeFewSeconds"
+  },
+  "knowledgeGraphDeleteDescription": "This will delete all derived knowledge graph data (nodes and connections). Your original memories will remain safe. The graph will be rebuilt over time or upon next request.",
+  "@knowledgeGraphDeleteDescription": {
+    "description": "Developer settings - knowledgeGraphDeleteDescription"
+  },
+  "configureDailySummaryDigest": "Configure your daily action items digest",
+  "@configureDailySummaryDigest": {
+    "description": "Subtitle for Daily Summary menu item in profile settings"
+  },
+  "accessesDataTypes": "Accesses {dataTypes}",
+  "@accessesDataTypes": {
+    "description": "Description showing what data types an app accesses, e.g. 'Accesses Conversations & Memories'",
+    "placeholders": {
+      "dataTypes": {
+        "type": "String"
+      }
+    }
+  },
+  "triggeredByType": "triggered by {triggerType}",
+  "@triggeredByType": {
+    "description": "Description showing what triggers an app, e.g. 'triggered by conversation end'",
+    "placeholders": {
+      "triggerType": {
+        "type": "String"
+      }
+    }
+  },
+  "accessesAndTriggeredBy": "{accessDescription} and is {triggerDescription}.",
+  "@accessesAndTriggeredBy": {
+    "description": "Combined description of app access and trigger",
+    "placeholders": {
+      "accessDescription": {
+        "type": "String"
+      },
+      "triggerDescription": {
+        "type": "String"
+      }
+    }
+  },
+  "isTriggeredBy": "Is {triggerDescription}.",
+  "@isTriggeredBy": {
+    "description": "Sentence starting with 'Is' for trigger description",
+    "placeholders": {
+      "triggerDescription": {
+        "type": "String"
+      }
+    }
+  },
+  "noSpecificDataAccessConfigured": "No specific data access configured.",
+  "@noSpecificDataAccessConfigured": {
+    "description": "Message shown when app has no specific data access"
   }
 }

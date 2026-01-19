@@ -65,7 +65,7 @@
   "@clear": {
     "description": "Clear button label"
   },
-  "copyTranscript": "Transkripti Kopyala",
+  "copyTranscript": "Transkripti kopyala",
   "@copyTranscript": {
     "description": "Menu item to copy transcript"
   },
@@ -81,7 +81,7 @@
   "@reprocessConversation": {
     "description": "Menu item to reprocess a conversation"
   },
-  "deleteConversation": "Konuşmayı Sil",
+  "deleteConversation": "Sohbeti Sil",
   "@deleteConversation": {
     "description": "Menu item to delete a conversation"
   },
@@ -175,7 +175,7 @@
   },
   "settings": "Ayarlar",
   "@settings": {
-    "description": "Settings page title"
+    "description": "Bottom navigation label for settings"
   },
   "language": "Dil",
   "@language": {
@@ -293,9 +293,9 @@
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
-  "noStarredConversations": "Henüz favorilere eklenmiş konuşma yok.",
+  "noStarredConversations": "Yıldızlı konuşma yok",
   "@noStarredConversations": {
-    "description": "Empty state for starred filter"
+    "description": "Empty state title when no starred conversations"
   },
   "starConversationHint": "Bir konuşmayı favorilere eklemek için açın ve üst kısımdaki yıldız simgesine dokunun.",
   "@starConversationHint": {
@@ -351,7 +351,7 @@
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Mesaj panoya kopyalandı.",
+  "messageCopied": "✨ Mesaj panoya kopyalandı",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -393,7 +393,7 @@
   },
   "apps": "Uygulamalar",
   "@apps": {
-    "description": "Apps page title"
+    "description": "Navigation label for apps page"
   },
   "noAppsFound": "Uygulama bulunamadı",
   "@noAppsFound": {
@@ -435,11 +435,11 @@
   "@privacyPolicy": {
     "description": "Privacy policy link"
   },
-  "visitWebsite": "Web Sitesini Ziyaret Et",
+  "visitWebsite": "Web sitesini ziyaret edin",
   "@visitWebsite": {
     "description": "Visit website link"
   },
-  "helpOrInquiries": "Yardım veya Sorular?",
+  "helpOrInquiries": "Yardım veya sorularınız mı var?",
   "@helpOrInquiries": {
     "description": "Help link title"
   },
@@ -447,7 +447,7 @@
   "@joinCommunity": {
     "description": "Discord community link"
   },
-  "membersAndCounting": "8000+ üye ve artıyor.",
+  "membersAndCounting": "8000+ üye ve sayı artıyor.",
   "@membersAndCounting": {
     "description": "Discord member count"
   },
@@ -503,7 +503,7 @@
   "@profile": {
     "description": "Profile page title"
   },
-  "name": "İsim",
+  "name": "Ad",
   "@name": {
     "description": "Name field label"
   },
@@ -511,7 +511,7 @@
   "@email": {
     "description": "Email field label"
   },
-  "customVocabulary": "Özel Kelime Hazinesi",
+  "customVocabulary": "Özel Kelime Dağarcığı",
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
@@ -523,11 +523,11 @@
   "@paymentMethods": {
     "description": "Payment methods setting"
   },
-  "conversationDisplay": "Konuşma Görünümü",
+  "conversationDisplay": "Konuşma Görüntüleme",
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "Veri ve Gizlilik",
+  "dataPrivacy": "Veri Gizliliği",
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
@@ -535,7 +535,7 @@
   "@userId": {
     "description": "User ID label"
   },
-  "notSet": "Ayarlanmadı",
+  "notSet": "Ayarlanmamış",
   "@notSet": {
     "description": "Default value when not set"
   },
@@ -867,7 +867,7 @@
   "@debugDiagnostics": {
     "description": "Debug & Diagnostics section header"
   },
-  "endpointUrl": "Uç Nokta URL'si",
+  "endpointUrl": "Uç nokta URL'si",
   "@endpointUrl": {
     "description": "Endpoint URL label"
   },
@@ -883,7 +883,7 @@
   "@createKey": {
     "description": "Create Key button"
   },
-  "docs": "Dokümanlar",
+  "docs": "Dokümantasyon",
   "@docs": {
     "description": "Documentation link"
   },
@@ -1071,14 +1071,14 @@
       }
     }
   },
-  "debugLogs": "Hata Ayıklama Günlükleri",
+  "debugLogs": "Hata ayıklama günlükleri",
   "debugLogsAutoDelete": "3 gün sonra otomatik olarak silinir.",
   "debugLogsDesc": "Sorunların teşhisine yardımcı olur",
   "noLogFilesFound": "Günlük dosyası bulunamadı.",
   "omiDebugLog": "Omi hata ayıklama günlüğü",
   "logShared": "Günlük paylaşıldı",
   "selectLogFile": "Günlük Dosyası Seç",
-  "shareLogs": "Günlükleri Paylaş",
+  "shareLogs": "Günlükleri paylaş",
   "debugLogCleared": "Hata ayıklama günlüğü temizlendi",
   "exportStarted": "Dışa aktarma başladı. Bu birkaç saniye sürebilir...",
   "exportAllData": "Tüm Verileri Dışa Aktar",
@@ -1087,7 +1087,7 @@
   "exportShared": "Dışa aktarma paylaşıldı",
   "deleteKnowledgeGraphTitle": "Bilgi Grafiği Silinsin mi?",
   "deleteKnowledgeGraphMessage": "Bu, tüm türetilmiş bilgi grafiği verilerini (düğümler ve bağlantılar) silecektir. Orijinal anılarınız güvende kalacaktır. Grafik zamanla veya bir sonraki istekte yeniden oluşturulacaktır.",
-  "knowledgeGraphDeleted": "Bilgi Grafiği başarıyla silindi",
+  "knowledgeGraphDeleted": "Bilgi grafiği silindi",
   "deleteGraphFailed": "Grafik silinemedi: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -1111,15 +1111,15 @@
   "clientId": "İstemci Kimliği",
   "clientSecret": "İstemci Gizli Anahtarı",
   "useMcpApiKey": "MCP API anahtarınızı kullanın",
-  "webhooks": "Web Hook'ları",
+  "webhooks": "Webhook'lar",
   "conversationEvents": "Konuşma Olayları",
   "newConversationCreated": "Yeni konuşma oluşturuldu",
-  "realtimeTranscript": "Gerçek Zamanlı Transkript",
+  "realtimeTranscript": "Gerçek zamanlı transkript",
   "transcriptReceived": "Transkript alındı",
   "audioBytes": "Ses Baytları",
   "audioDataReceived": "Ses verisi alındı",
   "intervalSeconds": "Aralık (saniye)",
-  "daySummary": "Gün Özeti",
+  "daySummary": "Günlük Özet",
   "summaryGenerated": "Özet oluşturuldu",
   "claudeDesktop": "Claude Masaüstü",
   "addToClaudeConfig": "claude_desktop_config.json'a ekle",
@@ -1250,7 +1250,7 @@
   },
   "continueAction": "Devam Et",
   "languageTitle": "Dil",
-  "primaryLanguage": "Ana Dil",
+  "primaryLanguage": "Birincil Dil",
   "automaticTranslation": "Otomatik Çeviri",
   "detectLanguages": "10+ dil algıla",
   "authorizeSavingRecordings": "Kayıtların Kaydedilmesine İzin Ver",
@@ -1278,7 +1278,7 @@
   "yes": "Evet",
   "editName": "İsmi Düzenle",
   "howShouldOmiCallYou": "Omi size nasıl hitap etmeli?",
-  "enterYourName": "İsminizi girin",
+  "enterYourName": "Adınızı girin",
   "nameCannotBeEmpty": "İsim boş olamaz",
   "nameUpdatedSuccessfully": "İsim başarıyla güncellendi!",
   "calendarSettings": "Takvim ayarları",
@@ -1469,7 +1469,7 @@
       }
     }
   },
-  "continueButton": "Devam Et",
+  "continueButton": "Devam et",
   "appIntegration": "{appName} Entegrasyonu",
   "@appIntegration": {
     "placeholders": {
@@ -1571,7 +1571,7 @@
   "autoLanguageDetection": "Otomatik dil algılama",
   "highAccuracy": "Yüksek doğruluk",
   "privacyFirst": "Önce gizlilik",
-  "saveChanges": "Değişiklikleri Kaydet",
+  "saveChanges": "Değişiklikleri kaydet",
   "resetToDefault": "Varsayılana sıfırla",
   "viewTemplate": "Şablonu Görüntüle",
   "trySomethingLike": "Şöyle bir şey deneyin...",
@@ -1814,7 +1814,7 @@
   "@wantDifferentName": {
     "description": "Question asking if user wants to change their display name"
   },
-  "whatsYourName": "Adınız nedir?",
+  "whatsYourName": "Adın ne?",
   "@whatsYourName": {
     "description": "Question asking for user's name"
   },
@@ -2059,14 +2059,9 @@
   "@deleteSelected": {
     "description": "Tooltip for delete selected"
   },
-  "searchMemories": "{count} Anıda Ara",
+  "searchMemories": "Anı ara...",
   "@searchMemories": {
-    "description": "Hint text for memories search bar",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
+    "description": "Search input hint text"
   },
   "memoryDeleted": "Anı Silindi.",
   "@memoryDeleted": {
@@ -2076,9 +2071,9 @@
   "@undo": {
     "description": "Undo button text"
   },
-  "noMemoriesYet": "Henüz anı yok",
+  "noMemoriesYet": "🧠 Henüz anı yok",
   "@noMemoriesYet": {
-    "description": "Empty state text"
+    "description": "Empty state title when no memories"
   },
   "noAutoMemories": "Henüz otomatik çıkarılan anı yok",
   "@noAutoMemories": {
@@ -2092,9 +2087,9 @@
   "@noMemoriesInCategories": {
     "description": "Empty state text for filtered categories"
   },
-  "noMemoriesFound": "Anı bulunamadı",
+  "noMemoriesFound": "🔍 Anı bulunamadı",
   "@noMemoriesFound": {
-    "description": "Empty state text for search results"
+    "description": "Empty state title when search/filter has no results"
   },
   "addFirstMemory": "İlk anınızı ekleyin",
   "@addFirstMemory": {
@@ -2108,7 +2103,7 @@
   "@clearMemoryMessage": {
     "description": "Dialog content for clearing memory"
   },
-  "clearMemoryButton": "Hafızayı Temizle",
+  "clearMemoryButton": "Belleği Temizle",
   "@clearMemoryButton": {
     "description": "Button text to confirm clear"
   },
@@ -2128,7 +2123,7 @@
   "@createActionItemTooltip": {
     "description": "Tooltip for create action item FAB"
   },
-  "memoryManagement": "Anı Yönetimi",
+  "memoryManagement": "Bellek Yönetimi",
   "@memoryManagement": {
     "description": "Title for memory management sheet"
   },
@@ -2173,11 +2168,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "Yeni Anı",
+  "newMemory": "✨ Yeni hafıza",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "Anıyı Düzenle",
+  "editMemory": "✏️ Hafızayı düzenle",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2193,7 +2188,7 @@
   "@saveMemory": {
     "description": "Button label"
   },
-  "retry": "Tekrar Dene",
+  "retry": "Tekrar dene",
   "@retry": {
     "description": "Button label"
   },
@@ -2301,7 +2296,7 @@
   "pleaseCheckInternetConnection": "Lütfen internet bağlantınızı kontrol edin ve tekrar deneyin",
   "pleaseSelectReason": "Lütfen bir neden seçin",
   "tellUsMoreWhatWentWrong": "Neyin yanlış gittiğini bize daha fazla anlatın...",
-  "selectText": "Metni seç",
+  "selectText": "Metin Seç",
   "maximumGoalsAllowed": "Maksimum {count} hedef izin verildi",
   "conversationCannotBeMerged": "Bu konuşma birleştirilemez (kilitli veya zaten birleştiriliyor)",
   "pleaseEnterFolderName": "Lütfen bir klasör adı girin",
@@ -2314,16 +2309,16 @@
   "deleteFolder": "Klasörü sil",
   "transcriptCopiedToClipboard": "Transkript panoya kopyalandı",
   "summaryCopiedToClipboard": "Özet panoya kopyalandı",
-  "conversationUrlCouldNotBeShared": "Konuşma URL'si paylaşılamadı.",
+  "conversationUrlCouldNotBeShared": "Sohbet URL'si paylaşılamadı.",
   "urlCopiedToClipboard": "URL panoya kopyalandı",
   "exportTranscript": "Transkripti dışa aktar",
   "exportSummary": "Özeti dışa aktar",
   "exportButton": "Dışa aktar",
   "actionItemsCopiedToClipboard": "Eylem öğeleri panoya kopyalandı",
   "summarize": "Özetle",
-  "generateSummary": "Özet oluştur",
+  "generateSummary": "Özet Oluştur",
   "conversationNotFoundOrDeleted": "Konuşma bulunamadı veya silindi",
-  "deleteMemory": "Bellek silinsin mi?",
+  "deleteMemory": "Hafızayı sil",
   "thisActionCannotBeUndone": "Bu işlem geri alınamaz.",
   "memoriesCount": "{count} anı",
   "noMemoriesInCategory": "Bu kategoride henüz anı yok",
@@ -2387,7 +2382,7 @@
   "space": "Boşluk",
   "search": "Ara",
   "searchPlaceholder": "Ara...",
-  "untitledConversation": "Başlıksız konuşma",
+  "untitledConversation": "Başlıksız Sohbet",
   "countRemaining": "{count} kalan",
   "addGoal": "Hedef ekle",
   "editGoal": "Hedefi düzenle",
@@ -2398,7 +2393,7 @@
   "saveGoal": "Kaydet",
   "goals": "Hedefler",
   "tapToAddGoal": "Hedef eklemek için dokunun",
-  "welcomeBack": "Tekrar hoş geldiniz",
+  "welcomeBack": "Tekrar hoş geldiniz, {name}",
   "yourConversations": "Görüşmeleriniz",
   "reviewAndManageConversations": "Kaydedilen görüşmelerinizi inceleyin ve yönetin",
   "startCapturingConversations": "Görüşmeleri burada görmek için Omi cihazınızla yakalamaya başlayın.",
@@ -2501,5 +2496,785 @@
   "ratingsCount": "{count}+ puan",
   "errorActivatingApp": "Uygulamayı etkinleştirme hatası",
   "integrationSetupRequired": "Bu bir entegrasyon uygulamasıysa, kurulumun tamamlandığından emin olun.",
-  "installed": "Yüklendi"
+  "installed": "Yüklendi",
+  "appIdLabel": "Uygulama Kimliği",
+  "appNameLabel": "Uygulama Adı",
+  "appNamePlaceholder": "Harika Uygulamam",
+  "pleaseEnterAppName": "Lütfen uygulama adını girin",
+  "categoryLabel": "Kategori",
+  "selectCategory": "Kategori Seçin",
+  "descriptionLabel": "Açıklama",
+  "appDescriptionPlaceholder": "Harika Uygulamam harika şeyler yapan harika bir uygulamadır. En iyi uygulama!",
+  "pleaseProvideValidDescription": "Lütfen geçerli bir açıklama sağlayın",
+  "appPricingLabel": "Uygulama Fiyatlandırması",
+  "noneSelected": "Seçilmedi",
+  "appIdCopiedToClipboard": "Uygulama Kimliği panoya kopyalandı",
+  "appCategoryModalTitle": "Uygulama Kategorisi",
+  "pricingFree": "Ücretsiz",
+  "pricingPaid": "Ücretli",
+  "loadingCapabilities": "Yetenekler yükleniyor...",
+  "filterInstalled": "Yüklü",
+  "filterMyApps": "Uygulamalarım",
+  "clearSelection": "Seçimi temizle",
+  "filterCategory": "Kategori",
+  "rating4PlusStars": "4+ yıldız",
+  "rating3PlusStars": "3+ yıldız",
+  "rating2PlusStars": "2+ yıldız",
+  "rating1PlusStars": "1+ yıldız",
+  "filterRating": "Değerlendirme",
+  "filterCapabilities": "Yetenekler",
+  "noNotificationScopesAvailable": "Kullanılabilir bildirim kapsamı yok",
+  "popularApps": "Popüler Uygulamalar",
+  "pleaseProvidePrompt": "Lütfen bir istem sağlayın",
+  "chatWithAppName": "{appName} ile sohbet",
+  "defaultAiAssistant": "Varsayılan AI Asistanı",
+  "readyToChat": "✨ Sohbete hazır!",
+  "connectionNeeded": "🌐 Bağlantı gerekli",
+  "startConversation": "Bir sohbet başlatın ve büyünün başlamasına izin verin",
+  "checkInternetConnection": "Lütfen internet bağlantınızı kontrol edin",
+  "wasThisHelpful": "Bu yardımcı oldu mu?",
+  "thankYouForFeedback": "Geri bildiriminiz için teşekkürler!",
+  "maxFilesUploadError": "Aynı anda yalnızca 4 dosya yükleyebilirsiniz",
+  "attachedFiles": "📎 Ekli Dosyalar",
+  "takePhoto": "Fotoğraf Çek",
+  "captureWithCamera": "Kamera ile yakala",
+  "selectImages": "Görsel Seç",
+  "chooseFromGallery": "Galeriden seç",
+  "selectFile": "Dosya Seç",
+  "chooseAnyFileType": "Herhangi bir dosya türü seçin",
+  "cannotReportOwnMessages": "Kendi mesajlarınızı bildiremezsiniz",
+  "messageReportedSuccessfully": "✅ Mesaj başarıyla bildirildi",
+  "confirmReportMessage": "Bu mesajı bildirmek istediğinizden emin misiniz?",
+  "selectChatAssistant": "Sohbet Asistanı Seç",
+  "enableMoreApps": "Daha Fazla Uygulama Etkinleştir",
+  "chatCleared": "Sohbet temizlendi",
+  "clearChatTitle": "Sohbeti Temizle?",
+  "confirmClearChat": "Sohbeti temizlemek istediğinizden emin misiniz? Bu işlem geri alınamaz.",
+  "copy": "Kopyala",
+  "share": "Paylaş",
+  "report": "Bildir",
+  "microphonePermissionRequired": "Ses kaydı için mikrofon izni gereklidir.",
+  "microphonePermissionDenied": "Mikrofon izni reddedildi. Lütfen Sistem Tercihleri > Gizlilik ve Güvenlik > Mikrofon'da izin verin.",
+  "failedToCheckMicrophonePermission": "Mikrofon izni kontrol edilemedi: {error}",
+  "failedToTranscribeAudio": "Ses transkribe edilemedi",
+  "transcribing": "Transkribe ediliyor...",
+  "transcriptionFailed": "Transkripsiyon başarısız",
+  "discardedConversation": "İptal Edilen Sohbet",
+  "at": "saat",
+  "from": "itibaren",
+  "copied": "Kopyalandı!",
+  "copyLink": "Bağlantıyı kopyala",
+  "hideTranscript": "Transkripti Gizle",
+  "viewTranscript": "Transkripti Görüntüle",
+  "conversationDetails": "Sohbet Detayları",
+  "transcript": "Transkript",
+  "segmentsCount": "{count} segment",
+  "noTranscriptAvailable": "Transkript Mevcut Değil",
+  "noTranscriptMessage": "Bu sohbetin transkripti yok.",
+  "conversationUrlCouldNotBeGenerated": "Sohbet URL'si oluşturulamadı.",
+  "failedToGenerateConversationLink": "Sohbet bağlantısı oluşturulamadı",
+  "failedToGenerateShareLink": "Paylaşım bağlantısı oluşturulamadı",
+  "reloadingConversations": "Konuşmalar yeniden yükleniyor...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "@welcomeBack": {
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "user": "Kullanıcı",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "Yıldızlı",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "Tarih",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "Sonuç bulunamadı",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "Arama terimlerinizi ayarlamayı deneyin",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "starConversationsToFindQuickly": "Konuşmaları burada hızlıca bulmak için yıldızlayın",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "{date} tarihinde konuşma yok",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "Farklı bir tarih seçmeyi deneyin",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  },
+  "conversations": "Konuşmalar",
+  "@conversations": {
+    "description": "Navigation label for conversations page"
+  },
+  "chat": "Sohbet",
+  "@chat": {
+    "description": "Navigation label for chat page"
+  },
+  "@memories": {
+    "description": "Navigation label for memories page"
+  },
+  "actions": "Eylemler",
+  "@actions": {
+    "description": "Navigation label for actions page"
+  },
+  "syncAvailable": "Senkronizasyon Mevcut",
+  "@syncAvailable": {
+    "description": "Label for sync notification"
+  },
+  "referAFriend": "Arkadaş Öner",
+  "@referAFriend": {
+    "description": "Bottom navigation label for referral program"
+  },
+  "help": "Yardım",
+  "@help": {
+    "description": "Bottom navigation label for help"
+  },
+  "pro": "Pro",
+  "@pro": {
+    "description": "Badge label for pro/unlimited users"
+  },
+  "upgradeToPro": "Pro'ya Yükselt",
+  "@upgradeToPro": {
+    "description": "Subscription banner button text"
+  },
+  "getOmiDevice": "Omi Cihazı Al",
+  "@getOmiDevice": {
+    "description": "Widget title for device promotion"
+  },
+  "wearableAiCompanion": "Giyilebilir AI arkadaşı",
+  "@wearableAiCompanion": {
+    "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "Anılar yükleniyor...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "allMemories": "Tüm anılar",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "Hakkınızda",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "Manuel",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "Anılarınız yükleniyor...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "createYourFirstMemory": "Başlamak için ilk anınızı oluşturun",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "Aramanızı veya filtrenizi ayarlamayı deneyin",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
+  },
+  "whatWouldYouLikeToRemember": "Ne hatırlamak istersiniz?",
+  "category": "Kategori",
+  "public": "Herkese açık",
+  "failedToSaveCheckConnection": "Kaydetme başarısız. Lütfen bağlantınızı kontrol edin.",
+  "createMemory": "Hafıza oluştur",
+  "deleteMemoryConfirmation": "Bu hafızayı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.",
+  "makePrivate": "Özel yap",
+  "organizeAndControlMemories": "Anılarınızı düzenleyin ve kontrol edin",
+  "total": "Toplam",
+  "makeAllMemoriesPrivate": "Tüm Anıları Özel Yap",
+  "setAllMemoriesToPrivate": "Tüm anıları özel görünürlüğe ayarla",
+  "makeAllMemoriesPublic": "Tüm Anıları Herkese Açık Yap",
+  "setAllMemoriesToPublic": "Tüm anıları herkese açık görünürlüğe ayarla",
+  "permanentlyRemoveAllMemories": "Omi'den tüm anıları kalıcı olarak kaldır",
+  "allMemoriesAreNowPrivate": "Tüm anılar artık özel",
+  "allMemoriesAreNowPublic": "Tüm anılar artık herkese açık",
+  "clearOmisMemory": "Omi'nin Belleğini Temizle",
+  "clearMemoryConfirmation": "Omi'nin belleğini temizlemek istediğinizden emin misiniz? Bu işlem geri alınamaz ve tüm {count} anıyı kalıcı olarak siler.",
+  "omisMemoryCleared": "Omi'nin senin hakkındaki belleği temizlendi",
+  "welcomeToOmi": "Omi'ye hoş geldiniz",
+  "continueWithApple": "Apple ile devam et",
+  "continueWithGoogle": "Google ile devam et",
+  "byContinuingYouAgree": "Devam ederek ",
+  "termsOfService": "Hizmet Koşullarını",
+  "and": " ve ",
+  "dataAndPrivacy": "Veri ve Gizlilik",
+  "secureAuthViaAppleId": "Apple ID üzerinden güvenli kimlik doğrulama",
+  "secureAuthViaGoogleAccount": "Google Hesabı üzerinden güvenli kimlik doğrulama",
+  "whatWeCollect": "Topladıklarımız",
+  "dataCollectionMessage": "Devam ederek, konuşmalarınız, kayıtlarınız ve kişisel bilgileriniz AI destekli içgörüler sağlamak ve tüm uygulama özelliklerini etkinleştirmek için sunucularımızda güvenli bir şekilde saklanacaktır.",
+  "dataProtection": "Veri Koruması",
+  "yourDataIsProtected": "Verileriniz korunmaktadır ve ",
+  "pleaseSelectYourPrimaryLanguage": "Lütfen birincil dilinizi seçin",
+  "chooseYourLanguage": "Dilinizi seçin",
+  "selectPreferredLanguageForBestExperience": "En iyi Omi deneyimi için tercih ettiğiniz dili seçin",
+  "searchLanguages": "Dil ara...",
+  "selectALanguage": "Bir dil seçin",
+  "tryDifferentSearchTerm": "Farklı bir arama terimi deneyin",
+  "pleaseEnterYourName": "Lütfen adınızı girin",
+  "nameMustBeAtLeast2Characters": "İsim en az 2 karakter olmalıdır",
+  "tellUsHowYouWouldLikeToBeAddressed": "Nasıl hitap edilmesini istediğinizi bize söyleyin. Bu, Omi deneyiminizi kişiselleştirmeye yardımcı olur.",
+  "charactersCount": "{count} karakter",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "enableFeaturesForBestExperience": "Cihazınızda en iyi Omi deneyimi için özellikleri etkinleştirin.",
+  "microphoneAccess": "Mikrofon Erişimi",
+  "recordAudioConversations": "Sesli konuşmaları kaydet",
+  "microphoneAccessDescription": "Omi, konuşmalarınızı kaydetmek ve transkript sağlamak için mikrofon erişimine ihtiyaç duyar.",
+  "screenRecording": "Ekran Kaydı",
+  "captureSystemAudioFromMeetings": "Toplantılardan sistem sesini yakala",
+  "screenRecordingDescription": "Omi, tarayıcı tabanlı toplantılarınızdan sistem sesini yakalamak için ekran kaydı izni gerektirir.",
+  "accessibility": "Erişilebilirlik",
+  "detectBrowserBasedMeetings": "Tarayıcı tabanlı toplantıları algıla",
+  "accessibilityDescription": "Omi, tarayıcınızda Zoom, Meet veya Teams toplantılarına katıldığınızı algılamak için erişilebilirlik izni gerektirir.",
+  "pleaseWait": "Lütfen bekleyin...",
+  "joinTheCommunity": "Topluluğa katılın!",
+  "loadingProfile": "Profil yükleniyor...",
+  "profileSettings": "Profil Ayarları",
+  "noEmailSet": "E-posta ayarlanmadı",
+  "userIdCopiedToClipboard": "Kullanıcı kimliği kopyalandı",
+  "yourInformation": "Bilgileriniz",
+  "setYourName": "Adınızı belirleyin",
+  "changeYourName": "Adınızı değiştirin",
+  "persona": "Persona",
+  "manageYourOmiPersona": "Omi personanızı yönetin",
+  "voiceAndPeople": "Ses ve İnsanlar",
+  "teachOmiYourVoice": "Omi'ye sesinizi öğretin",
+  "tellOmiWhoSaidIt": "Omi'ye kimin söylediğini söyleyin 🗣️",
+  "payment": "Ödeme",
+  "addOrChangeYourPaymentMethod": "Ödeme yöntemi ekleyin veya değiştirin",
+  "preferences": "Tercihler",
+  "helpImproveOmiBySharing": "Anonimleştirilmiş analitik verileri paylaşarak Omi'yi geliştirmeye yardımcı olun",
+  "deleteAccount": "Hesabı Sil",
+  "deleteYourAccountAndAllData": "Hesabınızı ve tüm verilerinizi silin",
+  "helpsDiagnoseIssuesAutoDeletes": "Sorunların teşhisine yardımcı olur. 3 gün sonra otomatik olarak silinir.",
+  "clearLogs": "Günlükleri temizle",
+  "debugLogsCleared": "Hata ayıklama günlükleri temizlendi",
+  "exportConversations": "Konuşmaları dışa aktar",
+  "exportAllConversationsToJson": "Tüm konuşmalarınızı bir JSON dosyasına aktarın.",
+  "conversationsExportStarted": "Konuşma dışa aktarımı başlatıldı. Bu birkaç saniye sürebilir, lütfen bekleyin.",
+  "mcpDescription": "Anılarınızı ve konuşmalarınızı okumak, aramak ve yönetmek için Omi'yi diğer uygulamalarla bağlamak için. Başlamak için bir anahtar oluşturun.",
+  "apiKeys": "API Anahtarları",
+  "errorLabel": "Hata: {error}",
+  "noApiKeysFound": "API anahtarı bulunamadı. Başlamak için bir tane oluşturun.",
+  "advancedSettings": "Gelişmiş Ayarlar",
+  "triggersWhenNewConversationCreated": "Yeni bir konuşma oluşturulduğunda tetiklenir.",
+  "triggersWhenNewTranscriptReceived": "Yeni bir transkript alındığında tetiklenir.",
+  "realtimeAudioBytes": "Gerçek zamanlı ses baytları",
+  "triggersWhenAudioBytesReceived": "Ses baytları alındığında tetiklenir.",
+  "everyXSeconds": "Her x saniyede",
+  "triggersWhenDaySummaryGenerated": "Günlük özet oluşturulduğunda tetiklenir.",
+  "experimental": "Deneysel",
+  "tryLatestExperimentalFeatures": "Omi Ekibinin en son deneysel özelliklerini deneyin.",
+  "transcriptionServiceDiagnosticStatus": "Transkripsiyon hizmeti tanı durumu",
+  "enableDetailedDiagnosticMessages": "Transkripsiyon hizmetinden ayrıntılı tanı mesajlarını etkinleştir",
+  "autoCreateAndTagNewSpeakers": "Yeni konuşmacıları otomatik olarak oluştur ve etiketle",
+  "automaticallyCreateNewPerson": "Transkriptte bir ad algılandığında otomatik olarak yeni bir kişi oluştur.",
+  "pilotFeatures": "Pilot Özellikler",
+  "pilotFeaturesDescription": "Bu özellikler testlerdir ve destek garanti edilmez.",
+  "suggestFollowUpQuestion": "Takip sorusu öner",
+  "saveSettings": "Ayarları Kaydet",
+  "syncingDeveloperSettings": "Geliştirici ayarları senkronize ediliyor...",
+  "summary": "Özet",
+  "auto": "Otomatik",
+  "noSummaryForApp": "Bu uygulama için özet mevcut değil. Daha iyi sonuçlar için başka bir uygulama deneyin.",
+  "tryAnotherApp": "Başka Bir Uygulama Deneyin",
+  "generatedBy": "{appName} tarafından oluşturuldu",
+  "overview": "Genel Bakış",
+  "otherAppResults": "Diğer Uygulama Sonuçları",
+  "unknownApp": "Bilinmeyen Uygulama",
+  "noSummaryAvailable": "Özet Mevcut Değil",
+  "conversationNoSummaryYet": "Bu konuşmanın henüz bir özeti yok.",
+  "chooseSummarizationApp": "Özet Uygulaması Seçin",
+  "setAsDefaultSummarizationApp": "{appName} varsayılan özet uygulaması olarak ayarlandı",
+  "letOmiChooseAutomatically": "Omi'nin en iyi uygulamayı otomatik olarak seçmesine izin verin",
+  "deleteConversationConfirmation": "Bu sohbeti silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.",
+  "conversationDeleted": "Sohbet silindi",
+  "generatingLink": "Bağlantı oluşturuluyor...",
+  "editConversation": "Sohbeti düzenle",
+  "conversationLinkCopiedToClipboard": "Sohbet bağlantısı panoya kopyalandı",
+  "conversationTranscriptCopiedToClipboard": "Sohbet transkripti panoya kopyalandı",
+  "editConversationDialogTitle": "Sohbeti Düzenle",
+  "changeTheConversationTitle": "Sohbet başlığını değiştir",
+  "conversationTitle": "Sohbet Başlığı",
+  "enterConversationTitle": "Sohbet başlığı girin...",
+  "conversationTitleUpdatedSuccessfully": "Sohbet başlığı başarıyla güncellendi",
+  "failedToUpdateConversationTitle": "Sohbet başlığı güncellenemedi",
+  "errorUpdatingConversationTitle": "Sohbet başlığı güncellenirken hata oluştu",
+  "settingUp": "Kuruluyor...",
+  "preparingSystemAudioCapture": "Sistem ses kaydı hazırlanıyor",
+  "clickTheButtonToCaptureAudio": "Canlı transkriptler, AI içgörüleri ve otomatik kaydetme için ses kaydetmek üzere düğmeye tıklayın.",
+  "startYourFirstRecording": "İlk kaydınızı başlatın",
+  "reconnecting": "Yeniden bağlanıyor...",
+  "recordingPaused": "Kayıt duraklatıldı",
+  "recordingActive": "Kayıt aktif",
+  "startRecording": "Kaydı başlat",
+  "resumingInCountdown": "{countdown} saniye içinde devam ediliyor...",
+  "tapPlayToResume": "Devam etmek için oynat'a dokunun",
+  "listeningForAudio": "Ses dinleniyor...",
+  "preparingAudioCapture": "Ses kaydı hazırlanıyor",
+  "clickToBeginRecording": "Kaydı başlatmak için tıklayın",
+  "translated": "çevrildi",
+  "liveTranscript": "Canlı Transkript",
+  "segmentsSingular": "{count} segment",
+  "segmentsPlural": "{count} segment",
+  "startRecordingToSeeTranscript": "Canlı transkripti görmek için kaydı başlatın",
+  "paused": "Duraklatıldı",
+  "initializing": "Başlatılıyor...",
+  "recording": "Kaydediliyor",
+  "microphoneChangedResumingIn": "Mikrofon değiştirildi. {countdown} saniye içinde devam ediliyor",
+  "clickPlayToResumeOrStop": "Devam etmek için oynat'a veya bitirmek için durdur'a tıklayın",
+  "settingUpSystemAudioCapture": "Sistem ses kaydı kuruluyor",
+  "capturingAudioAndGeneratingTranscript": "Ses kaydediliyor ve transkript oluşturuluyor",
+  "clickToBeginRecordingSystemAudio": "Sistem ses kaydını başlatmak için tıklayın",
+  "you": "Siz",
+  "speakerWithId": "Konuşmacı {speakerId}",
+  "translatedByOmi": "omi tarafından çevrildi",
+  "backToConversations": "Konuşmalara dön",
+  "systemAudio": "Sistem",
+  "mic": "Mikrofon",
+  "audioInputSetTo": "Ses girişi {deviceName} olarak ayarlandı",
+  "errorSwitchingAudioDevice": "Ses cihazı değiştirilirken hata: {error}",
+  "selectAudioInput": "Ses girişini seç",
+  "loadingDevices": "Cihazlar yükleniyor...",
+  "settingsHeader": "AYARLAR",
+  "plansAndBilling": "Planlar ve Faturalama",
+  "calendarIntegration": "Takvim Entegrasyonu",
+  "dailySummary": "Günlük Özet",
+  "developer": "Geliştirici",
+  "about": "Hakkında",
+  "selectTime": "Zaman Seç",
+  "accountGroup": "Hesap",
+  "signOutQuestion": "Çıkış Yapılsın mı?",
+  "signOutConfirmation": "Çıkış yapmak istediğinizden emin misiniz?",
+  "customVocabularyHeader": "ÖZEL KELIME DAĞARCIĞI",
+  "addWordsDescription": "Omin transkripsiyon sırasında tanıması gereken kelimeleri ekleyin.",
+  "enterWordsHint": "Kelimeleri girin (virgülle ayrılmış)",
+  "dailySummaryHeader": "GÜNLÜK ÖZET",
+  "dailySummaryTitle": "Günlük Özet",
+  "dailySummaryDescription": "Konuşmalarınızın kişiselleştirilmiş özetini alın",
+  "deliveryTime": "Teslimat Zamanı",
+  "deliveryTimeDescription": "Günlük özetinizi ne zaman alacağınız",
+  "subscription": "Abonelik",
+  "viewPlansAndUsage": "Planları ve Kullanımı Görüntüle",
+  "viewPlansDescription": "Aboneliğinizi yönetin ve kullanım istatistiklerini görün",
+  "addOrChangePaymentMethod": "Ödeme yönteminizi ekleyin veya değiştirin",
+  "displayOptions": "Görüntüleme Seçenekleri",
+  "showMeetingsInMenuBar": "Menü Çubuğunda Toplantıları Göster",
+  "displayUpcomingMeetingsDescription": "Yaklaşan toplantıları menü çubuğunda göster",
+  "showEventsWithoutParticipants": "Katılımcısız Etkinlikleri Göster",
+  "includePersonalEventsDescription": "Katılımcı olmayan kişisel etkinlikleri dahil et",
+  "upcomingMeetings": "YAKLAŞAN TOPLANTILAR",
+  "checkingNext7Days": "Sonraki 7 gün kontrol ediliyor",
+  "shortcuts": "Kısayollar",
+  "shortcutChangeInstruction": "Değiştirmek için bir kısayola tıklayın. İptal etmek için Escape'e basın.",
+  "configurePersonaDescription": "Yapay zeka kişiliğinizi yapılandırın",
+  "configureSTTProvider": "STT sağlayıcısını yapılandır",
+  "setConversationEndDescription": "Konuşmaların otomatik olarak ne zaman sona ereceğini ayarlayın",
+  "importDataDescription": "Diğer kaynaklardan veri içe aktar",
+  "debugAndDiagnostics": "Hata Ayıklama ve Tanılama",
+  "autoDeletesAfter3Days": "3 gün sonra otomatik olarak silinir",
+  "helpsDiagnoseIssues": "Sorunları teşhis etmeye yardımcı olur",
+  "exportConversationsDescription": "Konuşmaları JSON'a aktar",
+  "exportingConversations": "Konuşmalar aktarılıyor...",
+  "clearNodesDescription": "Tüm düğümleri ve bağlantıları temizle",
+  "deleteKnowledgeGraphQuestion": "Bilgi Grafiği Silinsin mi?",
+  "deleteKnowledgeGraphWarning": "Bu, türetilmiş tüm bilgi grafiği verilerini silecektir. Orijinal anılarınız güvende kalır.",
+  "connectOmiWithAI": "Omi'yi yapay zeka asistanlarıyla bağlayın",
+  "noAPIKeys": "API anahtarı yok. Başlamak için bir tane oluşturun.",
+  "realTimeTranscript": "Gerçek Zamanlı Transkript",
+  "transcriptionDiagnostics": "Transkripsiyon Tanılaması",
+  "detailedDiagnosticMessages": "Ayrıntılı tanılama mesajları",
+  "autoCreateSpeakers": "Konuşmacıları Otomatik Oluştur",
+  "autoCreateWhenDetected": "İsim algılandığında otomatik oluştur",
+  "followUpQuestions": "Takip Soruları",
+  "suggestQuestionsAfterConversations": "Konuşmalardan sonra sorular önerin",
+  "goalTracker": "Hedef İzleyici",
+  "trackPersonalGoals": "Ana sayfada kişisel hedefleri izleyin",
+  "dailyReflection": "Günlük Yansıma",
+  "dailyReflectionDescription": "Gününüzü yansıtmak için 21:00 hatırlatıcısı",
+  "endpointURL": "Uç Nokta URL'si",
+  "links": "Bağlantılar",
+  "discordMemberCount": "Discord'da 8000'den fazla üye",
+  "userInformation": "Kullanıcı Bilgileri",
+  "capabilities": "Yetenekler",
+  "previewScreenshots": "Ekran görüntüsü önizlemesi",
+  "holdOnPreparingForm": "Bekleyin, formu sizin için hazırlıyoruz",
+  "bySubmittingYouAgreeToOmi": "Göndererek, Omi ",
+  "termsAndPrivacyPolicy": "Şartlar ve Gizlilik Politikası",
+  "manageYourApp": "Uygulamanızı Yönetin",
+  "updatingYourApp": "Uygulamanız güncelleniyor",
+  "fetchingYourAppDetails": "Uygulama bilgileri alınıyor",
+  "updateAppQuestion": "Uygulama güncellensin mi?",
+  "updateAppConfirmation": "Uygulamanızı güncellemek istediğinizden emin misiniz? Değişiklikler ekibimiz tarafından incelendikten sonra yansıtılacaktır.",
+  "updateApp": "Uygulamayı Güncelle",
+  "createAndSubmitNewApp": "Yeni bir uygulama oluştur ve gönder",
+  "appsCount": "Uygulamalar ({count})",
+  "privateAppsCount": "Özel Uygulamalar ({count})",
+  "publicAppsCount": "Herkese Açık Uygulamalar ({count})",
+  "newVersionAvailable": "Yeni Sürüm Mevcut  🎉",
+  "no": "Hayır",
+  "subscriptionCancelledSuccessfully": "Abonelik başarıyla iptal edildi. Mevcut fatura döneminin sonuna kadar aktif kalacaktır.",
+  "failedToCancelSubscription": "Abonelik iptal edilemedi. Lütfen tekrar deneyin.",
+  "invalidPaymentUrl": "Geçersiz ödeme URL'si",
+  "permissionsAndTriggers": "İzinler ve Tetikleyiciler",
+  "chatFeatures": "Sohbet Özellikleri",
+  "uninstall": "Kaldır",
+  "installs": "YÜKLEMELER",
+  "priceLabel": "FİYAT",
+  "updatedLabel": "GÜNCELLENDİ",
+  "createdLabel": "OLUŞTURULDU",
+  "featuredLabel": "ÖNE ÇIKAN",
+  "cancelSubscriptionQuestion": "Aboneliği iptal et?",
+  "cancelSubscriptionConfirmation": "Aboneliğinizi iptal etmek istediğinizden emin misiniz? Mevcut fatura döneminin sonuna kadar erişiminiz devam edecektir.",
+  "cancelSubscriptionButton": "Aboneliği İptal Et",
+  "cancelling": "İptal ediliyor...",
+  "betaTesterMessage": "Bu uygulamanın beta test kullanıcısısınız. Henüz herkese açık değil. Onaylandıktan sonra herkese açık olacak.",
+  "appUnderReviewMessage": "Uygulamanız inceleniyor ve yalnızca size görünür. Onaylandıktan sonra herkese açık olacak.",
+  "appRejectedMessage": "Uygulamanız reddedildi. Lütfen detayları güncelleyip tekrar gönderin.",
+  "invalidIntegrationUrl": "Geçersiz entegrasyon URL'si",
+  "tapToComplete": "Tamamlamak için dokunun",
+  "invalidSetupInstructionsUrl": "Geçersiz kurulum talimatları URL'si",
+  "pushToTalk": "Konuşmak için Basın",
+  "summaryPrompt": "Özet İstemi",
+  "pleaseSelectARating": "Lütfen bir puan seçin",
+  "reviewAddedSuccessfully": "Değerlendirme başarıyla eklendi 🚀",
+  "reviewUpdatedSuccessfully": "Değerlendirme başarıyla güncellendi 🚀",
+  "failedToSubmitReview": "Değerlendirme gönderilemedi. Lütfen tekrar deneyin.",
+  "addYourReview": "Değerlendirmenizi Ekleyin",
+  "editYourReview": "Değerlendirmenizi Düzenleyin",
+  "writeAReviewOptional": "Bir değerlendirme yazın (isteğe bağlı)",
+  "submitReview": "Değerlendirmeyi Gönder",
+  "updateReview": "Değerlendirmeyi Güncelle",
+  "yourReview": "Değerlendirmeniz",
+  "anonymousUser": "Anonim Kullanıcı",
+  "issueActivatingApp": "Bu uygulamayı etkinleştirirken bir sorun oluştu. Lütfen tekrar deneyin.",
+  "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
+  "copyUrl": "URL'yi Kopyala",
+  "txtFormat": "TXT",
+  "pdfFormat": "PDF",
+  "weekdayMon": "Pzt",
+  "weekdayTue": "Sal",
+  "weekdayWed": "Çar",
+  "weekdayThu": "Per",
+  "weekdayFri": "Cum",
+  "weekdaySat": "Cmt",
+  "weekdaySun": "Paz",
+  "serviceIntegrationComingSoon": "{serviceName} entegrasyonu yakında",
+  "alreadyExportedTo": "{platform} platformuna zaten aktarıldı",
+  "anotherPlatform": "başka bir platform",
+  "pleaseAuthenticateWithService": "Lütfen Ayarlar > Görev Entegrasyonları bölümünden {serviceName} ile kimlik doğrulaması yapın",
+  "addingToService": "{serviceName} platformuna ekleniyor...",
+  "addedToService": "{serviceName} platformuna eklendi",
+  "failedToAddToService": "{serviceName} platformuna eklenemedi",
+  "permissionDeniedForAppleReminders": "Apple Hatırlatıcılar için izin reddedildi",
+  "failedToCreateApiKey": "Sağlayıcı API anahtarı oluşturulamadı: {error}",
+  "createAKey": "Anahtar Oluştur",
+  "apiKeyRevokedSuccessfully": "API anahtarı başarıyla iptal edildi",
+  "failedToRevokeApiKey": "API anahtarı iptal edilemedi: {error}",
+  "omiApiKeys": "Omi API Anahtarları",
+  "apiKeysDescription": "API anahtarları, uygulamanız OMI sunucusuyla iletişim kurarken kimlik doğrulama için kullanılır. Uygulamanızın anılar oluşturmasına ve diğer OMI hizmetlerine güvenli bir şekilde erişmesine olanak tanır.",
+  "aboutOmiApiKeys": "Omi API Anahtarları Hakkında",
+  "noApiKeysYet": "Henüz API anahtarı yok. Uygulamanızla entegre etmek için bir tane oluşturun.",
+  "yourNewKey": "Yeni anahtarınız:",
+  "copyToClipboard": "Panoya kopyala",
+  "pleaseCopyKeyNow": "Lütfen şimdi kopyalayın ve güvenli bir yere yazın. ",
+  "willNotSeeAgain": "Tekrar göremeyeceksiniz.",
+  "revokeKey": "Anahtarı iptal et",
+  "revokeApiKeyQuestion": "API Anahtarını İptal Et?",
+  "revokeApiKeyWarning": "Bu işlem geri alınamaz. Bu anahtarı kullanan uygulamalar artık API'ye erişemeyecektir.",
+  "revoke": "İptal Et",
+  "whatWouldYouLikeToCreate": "Ne oluşturmak istersiniz?",
+  "createAnApp": "Uygulama Oluştur",
+  "createAndShareYourApp": "Uygulamanızı oluşturun ve paylaşın",
+  "createMyClone": "Klonumu Oluştur",
+  "createYourDigitalClone": "Dijital klonunuzu oluşturun",
+  "itemApp": "Uygulama",
+  "itemPersona": "Persona",
+  "keepItemPublic": "{item} Herkese Açık Tut",
+  "makeItemPublicQuestion": "{item} Herkese Açık Yap?",
+  "makeItemPrivateQuestion": "{item} Özel Yap?",
+  "makeItemPublicExplanation": "{item} herkese açık yaparsanız, herkes kullanabilir",
+  "makeItemPrivateExplanation": "{item} şimdi özel yaparsanız, herkes için çalışmayı durduracak ve yalnızca size görünür olacak",
+  "manageApp": "Uygulamayı Yönet",
+  "updatePersonaDetails": "Persona Ayrıntılarını Güncelle",
+  "deleteItemTitle": "{item} Sil",
+  "deleteItemQuestion": "{item} Silinsin mi?",
+  "deleteItemConfirmation": "Bu {item} silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.",
+  "revokeKeyQuestion": "Anahtar İptal Edilsin mi?",
+  "revokeKeyConfirmation": "\"{keyName}\" anahtarını iptal etmek istediğinizden emin misiniz? Bu işlem geri alınamaz.",
+  "createNewKey": "Yeni Anahtar Oluştur",
+  "keyNameHint": "örn. Claude Desktop",
+  "pleaseEnterAName": "Lütfen bir ad girin.",
+  "failedToCreateKeyWithError": "Anahtar oluşturulamadı: {error}",
+  "failedToCreateKeyTryAgain": "Anahtar oluşturulamadı. Lütfen tekrar deneyin.",
+  "keyCreated": "Anahtar Oluşturuldu",
+  "keyCreatedMessage": "Yeni anahtarınız oluşturuldu. Lütfen şimdi kopyalayın. Tekrar göremeyeceksiniz.",
+  "keyWord": "Anahtar",
+  "externalAppAccess": "Harici Uygulama Erişimi",
+  "externalAppAccessDescription": "Aşağıdaki yüklü uygulamalar harici entegrasyonlara sahiptir ve sohbetler ve anılar gibi verilerinize erişebilir.",
+  "noExternalAppsHaveAccess": "Hiçbir harici uygulama verilerinize erişemiyor.",
+  "maximumSecurityE2ee": "Maksimum Güvenlik (E2EE)",
+  "e2eeDescription": "Uçtan uca şifreleme, gizlilik için altın standarttır. Etkinleştirildiğinde, verileriniz sunucularımıza gönderilmeden önce cihazınızda şifrelenir. Bu, Omi dahil hiç kimsenin içeriğinize erişemeyeceği anlamına gelir.",
+  "importantTradeoffs": "Önemli Ödünler:",
+  "e2eeTradeoff1": "• Harici uygulama entegrasyonları gibi bazı özellikler devre dışı bırakılabilir.",
+  "e2eeTradeoff2": "• Parolanızı kaybederseniz, verileriniz kurtarılamaz.",
+  "featureComingSoon": "Bu özellik yakında geliyor!",
+  "migrationInProgressMessage": "Geçiş devam ediyor. Tamamlanana kadar koruma seviyesini değiştiremezsiniz.",
+  "migrationFailed": "Geçiş Başarısız",
+  "migratingFromTo": "{source} konumundan {target} konumuna geçiş yapılıyor",
+  "objectsCount": "{processed} / {total} nesne",
+  "secureEncryption": "Güvenli Şifreleme",
+  "secureEncryptionDescription": "Verileriniz, Google Cloud'da barındırılan sunucularımızda size özgü bir anahtarla şifrelenir. Bu, ham içeriğinizin Omi personeli veya Google dahil hiç kimse tarafından doğrudan veritabanından erişilemez olduğu anlamına gelir.",
+  "endToEndEncryption": "Uçtan Uca Şifreleme",
+  "e2eeCardDescription": "Yalnızca sizin verilerinize erişebildiğiniz maksimum güvenlik için etkinleştirin. Daha fazla bilgi için dokunun.",
+  "dataAlwaysEncrypted": "Seviyeden bağımsız olarak, verileriniz her zaman dinlenme halinde ve aktarım sırasında şifrelenir.",
+  "readOnlyScope": "Yalnızca Okuma",
+  "fullAccessScope": "Tam Erişim",
+  "readScope": "Okuma",
+  "writeScope": "Yazma",
+  "apiKeyCreated": "API Anahtarı Oluşturuldu!",
+  "saveKeyWarning": "Bu anahtarı şimdi kaydedin! Tekrar göremeyeceksiniz.",
+  "yourApiKey": "API ANAHTARINIZ",
+  "tapToCopy": "Kopyalamak için dokunun",
+  "copyKey": "Anahtarı Kopyala",
+  "createApiKey": "API Anahtarı Oluştur",
+  "accessDataProgrammatically": "Verilerinize programatik olarak erişin",
+  "keyNameLabel": "ANAHTAR ADI",
+  "keyNamePlaceholder": "ör., Uygulama Entegrasyonum",
+  "permissionsLabel": "İZİNLER",
+  "permissionsInfoNote": "R = Okuma, W = Yazma. Hiçbir şey seçilmezse varsayılan salt okunur.",
+  "developerApi": "Geliştirici API'si",
+  "createAKeyToGetStarted": "Başlamak için bir anahtar oluşturun",
+  "errorWithMessage": "Hata: {error}",
+  "omiTraining": "Omi Eğitimi",
+  "trainingDataProgram": "Eğitim Verisi Programı",
+  "getOmiUnlimitedFree": "Verilerinizi AI modellerini eğitmek için katkıda bulunarak Omi Unlimited'ı ücretsiz alın.",
+  "trainingDataBullets": "• Verileriniz AI modellerini geliştirmeye yardımcı olur\n• Yalnızca hassas olmayan veriler paylaşılır\n• Tamamen şeffaf süreç",
+  "learnMoreAtOmiTraining": "omi.me/training adresinde daha fazla bilgi edinin",
+  "agreeToContributeData": "AI eğitimi için verilerimi katkıda bulunmayı anlıyorum ve kabul ediyorum",
+  "submitRequest": "İstek Gönder",
+  "thankYouRequestUnderReview": "Teşekkürler! İsteğiniz inceleniyor. Onaylandıktan sonra sizi bilgilendireceğiz.",
+  "planRemainsActiveUntil": "Planınız {date} tarihine kadar aktif kalacak. Bundan sonra sınırsız özelliklerinize erişiminizi kaybedeceksiniz. Emin misiniz?",
+  "confirmCancellation": "İptali Onayla",
+  "keepMyPlan": "Planımı Koru",
+  "subscriptionSetToCancel": "Aboneliğiniz dönem sonunda iptal edilecek şekilde ayarlandı.",
+  "switchedToOnDevice": "Cihaz üzerinde transkripsiyona geçildi",
+  "couldNotSwitchToFreePlan": "Ücretsiz plana geçilemedi. Lütfen tekrar deneyin.",
+  "couldNotLoadPlans": "Mevcut planlar yüklenemedi. Lütfen tekrar deneyin.",
+  "selectedPlanNotAvailable": "Seçilen plan mevcut değil. Lütfen tekrar deneyin.",
+  "upgradeToAnnualPlan": "Yıllık Plana Yükseltin",
+  "importantBillingInfo": "Önemli Fatura Bilgileri:",
+  "monthlyPlanContinues": "Mevcut aylık planınız fatura döneminizin sonuna kadar devam edecek",
+  "paymentMethodCharged": "Aylık planınız sona erdiğinde mevcut ödeme yönteminiz otomatik olarak tahsil edilecek",
+  "annualSubscriptionStarts": "12 aylık yıllık aboneliğiniz ödeme sonrasında otomatik olarak başlayacak",
+  "thirteenMonthsCoverage": "Toplamda 13 aylık kapsam alacaksınız (mevcut ay + 12 ay yıllık)",
+  "confirmUpgrade": "Yükseltmeyi Onayla",
+  "confirmPlanChange": "Plan Değişikliğini Onayla",
+  "confirmAndProceed": "Onayla ve Devam Et",
+  "upgradeScheduled": "Yükseltme Planlandı",
+  "changePlan": "Planı Değiştir",
+  "upgradeAlreadyScheduled": "Yıllık plana yükseltmeniz zaten planlandı",
+  "youAreOnUnlimitedPlan": "Sınırsız Plan'dasınız.",
+  "yourOmiUnleashed": "Omi'niz, serbest bırakıldı. Sonsuz olasılıklar için sınırsız olun.",
+  "planEndedOn": "Planınız {date} tarihinde sona erdi.\\nŞimdi yeniden abone olun - yeni fatura dönemi için hemen ücretlendirileceksiniz.",
+  "planSetToCancelOn": "Planınız {date} tarihinde iptal edilecek şekilde ayarlandı.\\nAvantajlarınızı korumak için şimdi yeniden abone olun - {date} tarihine kadar ücret yok.",
+  "annualPlanStartsAutomatically": "Aylık planınız sona erdiğinde yıllık planınız otomatik olarak başlayacak.",
+  "planRenewsOn": "Planınız {date} tarihinde yenilenir.",
+  "unlimitedConversations": "Sınırsız konuşmalar",
+  "askOmiAnything": "Hayatınız hakkında Omi'ye her şeyi sorun",
+  "unlockOmiInfiniteMemory": "Omi'nin sonsuz hafızasını açın",
+  "youreOnAnnualPlan": "Yıllık Plan'dasınız",
+  "alreadyBestValuePlan": "Zaten en iyi değerli plana sahipsiniz. Değişiklik gerekmiyor.",
+  "unableToLoadPlans": "Planlar yüklenemiyor",
+  "checkConnectionTryAgain": "Lütfen bağlantınızı kontrol edin ve tekrar deneyin",
+  "useFreePlan": "Ücretsiz Planı Kullan",
+  "continueText": "Devam Et",
+  "resubscribe": "Yeniden Abone Ol",
+  "couldNotOpenPaymentSettings": "Ödeme ayarları açılamadı. Lütfen tekrar deneyin.",
+  "managePaymentMethod": "Ödeme Yöntemini Yönet",
+  "cancelSubscription": "Aboneliği İptal Et",
+  "endsOnDate": "{date} tarihinde sona erer",
+  "active": "Aktif",
+  "freePlan": "Ücretsiz Plan",
+  "configure": "Yapılandır",
+  "privacyInformation": "Gizlilik Bilgileri",
+  "@privacyInformation": {
+    "description": "Privacy page - privacyInformation"
+  },
+  "yourPrivacyMattersToUs": "Gizliliğiniz Bizim İçin Önemli",
+  "@yourPrivacyMattersToUs": {
+    "description": "Privacy page - yourPrivacyMattersToUs"
+  },
+  "privacyIntroText": "Omi'de gizliliğinizi çok ciddiye alıyoruz. Topladığımız veriler ve bunları nasıl kullandığımız konusunda şeffaf olmak istiyoruz. İşte bilmeniz gerekenler:",
+  "@privacyIntroText": {
+    "description": "Privacy page - privacyIntroText"
+  },
+  "whatWeTrack": "Ne Takip Ediyoruz",
+  "@whatWeTrack": {
+    "description": "Privacy page - whatWeTrack"
+  },
+  "anonymityAndPrivacy": "Anonimlik ve Gizlilik",
+  "@anonymityAndPrivacy": {
+    "description": "Privacy page - anonymityAndPrivacy"
+  },
+  "optInAndOptOutOptions": "Katılma ve Ayrılma Seçenekleri",
+  "@optInAndOptOutOptions": {
+    "description": "Privacy page - optInAndOptOutOptions"
+  },
+  "ourCommitment": "Taahhüdümüz",
+  "@ourCommitment": {
+    "description": "Privacy page - ourCommitment"
+  },
+  "commitmentText": "Topladığımız verileri yalnızca Omi'yi sizin için daha iyi bir ürün haline getirmek için kullanmayı taahhüt ediyoruz. Gizliliğiniz ve güveniniz bizim için çok önemlidir.",
+  "@commitmentText": {
+    "description": "Privacy page - commitmentText"
+  },
+  "thankYouText": "Omi'nin değerli bir kullanıcısı olduğunuz için teşekkür ederiz. Herhangi bir sorunuz veya endişeniz varsa, team@basedhardware.com adresinden bize ulaşmaktan çekinmeyin.",
+  "@thankYouText": {
+    "description": "Privacy page - thankYouText"
+  },
+  "wifiSyncSettings": "WiFi Senkronizasyon Ayarları",
+  "@wifiSyncSettings": {
+    "description": "WiFi sync settings - wifiSyncSettings"
+  },
+  "enterHotspotCredentials": "Telefonunuzun hotspot kimlik bilgilerini girin",
+  "@enterHotspotCredentials": {
+    "description": "WiFi sync settings - enterHotspotCredentials"
+  },
+  "wifiSyncUsesHotspot": "WiFi senkronizasyonu telefonunuzu hotspot olarak kullanır. Adı ve şifreyi Ayarlar > Kişisel Erişim Noktası'nda bulun.",
+  "@wifiSyncUsesHotspot": {
+    "description": "WiFi sync settings - wifiSyncUsesHotspot"
+  },
+  "hotspotNameSsid": "Hotspot Adı (SSID)",
+  "@hotspotNameSsid": {
+    "description": "WiFi sync settings - hotspotNameSsid"
+  },
+  "exampleIphoneHotspot": "örn. iPhone Hotspot",
+  "@exampleIphoneHotspot": {
+    "description": "WiFi sync settings - exampleIphoneHotspot"
+  },
+  "password": "Şifre",
+  "@password": {
+    "description": "WiFi sync settings - password"
+  },
+  "enterHotspotPassword": "Hotspot şifresini girin",
+  "@enterHotspotPassword": {
+    "description": "WiFi sync settings - enterHotspotPassword"
+  },
+  "saveCredentials": "Kimlik Bilgilerini Kaydet",
+  "@saveCredentials": {
+    "description": "WiFi sync settings - saveCredentials"
+  },
+  "clearCredentials": "Kimlik Bilgilerini Temizle",
+  "@clearCredentials": {
+    "description": "WiFi sync settings - clearCredentials"
+  },
+  "pleaseEnterHotspotName": "Lütfen bir hotspot adı girin",
+  "@pleaseEnterHotspotName": {
+    "description": "WiFi sync settings - pleaseEnterHotspotName"
+  },
+  "wifiCredentialsSaved": "WiFi kimlik bilgileri kaydedildi",
+  "@wifiCredentialsSaved": {
+    "description": "WiFi sync settings - wifiCredentialsSaved"
+  },
+  "wifiCredentialsCleared": "WiFi kimlik bilgileri temizlendi",
+  "@wifiCredentialsCleared": {
+    "description": "WiFi sync settings - wifiCredentialsCleared"
+  },
+  "summaryGeneratedForDate": "{date} için özet oluşturuldu",
+  "@summaryGeneratedForDate": {
+    "description": "Daily summary settings - summaryGeneratedForDate",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "1/15/2026"
+      }
+    }
+  },
+  "failedToGenerateSummaryCheckConversations": "Özet oluşturulamadı. O gün için konuşmalarınız olduğundan emin olun.",
+  "@failedToGenerateSummaryCheckConversations": {
+    "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Özet bulunamadı",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "Günün Yolculuğu",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "Öne Çıkanlar",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Çözülmemiş Sorular",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Kararlar",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Öğrenilenler",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
+  },
+  "autoDeletesAfterThreeDays": "3 gün sonra otomatik silinir.",
+  "@autoDeletesAfterThreeDays": {
+    "description": "Developer settings - autoDeletesAfterThreeDays"
+  },
+  "knowledgeGraphDeletedSuccessfully": "Bilgi Grafiği başarıyla silindi",
+  "@knowledgeGraphDeletedSuccessfully": {
+    "description": "Developer settings - knowledgeGraphDeletedSuccessfully"
+  },
+  "exportStartedMayTakeFewSeconds": "Dışa aktarma başladı. Bu birkaç saniye sürebilir...",
+  "@exportStartedMayTakeFewSeconds": {
+    "description": "Developer settings - exportStartedMayTakeFewSeconds"
+  },
+  "knowledgeGraphDeleteDescription": "Bu, tüm türetilmiş bilgi grafiği verilerini (düğümler ve bağlantılar) silecektir. Orijinal anılarınız güvende kalacaktır. Grafik zamanla veya bir sonraki istekte yeniden oluşturulacaktır.",
+  "@knowledgeGraphDeleteDescription": {
+    "description": "Developer settings - knowledgeGraphDeleteDescription"
+  },
+  "configureDailySummaryDigest": "Günlük görev özetinizi yapılandırın",
+  "accessesDataTypes": "{dataTypes} erişimi",
+  "triggeredByType": "{triggerType} tarafından tetiklendi",
+  "accessesAndTriggeredBy": "{accessDescription} ve {triggerDescription}.",
+  "isTriggeredBy": "{triggerDescription}.",
+  "noSpecificDataAccessConfigured": "Belirli veri erişimi yapılandırılmamış."
 }

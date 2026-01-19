@@ -65,7 +65,7 @@
   "@clear": {
     "description": "Clear button label"
   },
-  "copyTranscript": "Salin Transkrip",
+  "copyTranscript": "Salin transkrip",
   "@copyTranscript": {
     "description": "Menu item to copy transcript"
   },
@@ -175,7 +175,7 @@
   },
   "settings": "Pengaturan",
   "@settings": {
-    "description": "Settings page title"
+    "description": "Bottom navigation label for settings"
   },
   "language": "Bahasa",
   "@language": {
@@ -293,9 +293,9 @@
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
-  "noStarredConversations": "Belum ada percakapan berbintang.",
+  "noStarredConversations": "Tidak ada percakapan berbintang",
   "@noStarredConversations": {
-    "description": "Empty state for starred filter"
+    "description": "Empty state title when no starred conversations"
   },
   "starConversationHint": "Untuk memberi bintang pada percakapan, buka dan ketuk ikon bintang di header.",
   "@starConversationHint": {
@@ -351,7 +351,7 @@
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Pesan disalin ke clipboard.",
+  "messageCopied": "✨ Pesan disalin ke clipboard",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -393,7 +393,7 @@
   },
   "apps": "Aplikasi",
   "@apps": {
-    "description": "Apps page title"
+    "description": "Navigation label for apps page"
   },
   "noAppsFound": "Tidak ada aplikasi yang ditemukan",
   "@noAppsFound": {
@@ -435,7 +435,7 @@
   "@privacyPolicy": {
     "description": "Link text for Privacy Policy"
   },
-  "visitWebsite": "Kunjungi Website",
+  "visitWebsite": "Kunjungi Situs Web",
   "@visitWebsite": {
     "description": "Visit website link"
   },
@@ -515,7 +515,7 @@
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Identifikasi Orang Lain",
+  "identifyingOthers": "Mengidentifikasi Orang Lain",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
@@ -527,7 +527,7 @@
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "Data & Privasi",
+  "dataPrivacy": "Privasi Data",
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
@@ -535,7 +535,7 @@
   "@userId": {
     "description": "User ID label"
   },
-  "notSet": "Belum diatur",
+  "notSet": "Tidak diatur",
   "@notSet": {
     "description": "Default value when not set"
   },
@@ -997,7 +997,7 @@
   "@upgrade": {
     "description": "Upgrade button"
   },
-  "upgradeToUnlimited": "Tingkatkan ke tak terbatas",
+  "upgradeToUnlimited": "Tingkatkan ke tanpa batas",
   "@upgradeToUnlimited": {
     "description": "Upgrade to unlimited button"
   },
@@ -1074,7 +1074,7 @@
   "debugLogs": "Log Debug",
   "debugLogsAutoDelete": "Otomatis dihapus setelah 3 hari.",
   "debugLogsDesc": "Membantu mendiagnosis masalah",
-  "noLogFilesFound": "Tidak ada file log ditemukan.",
+  "noLogFilesFound": "Tidak ada file log yang ditemukan.",
   "omiDebugLog": "Log debug Omi",
   "logShared": "Log dibagikan",
   "selectLogFile": "Pilih File Log",
@@ -1087,7 +1087,7 @@
   "exportShared": "Ekspor dibagikan",
   "deleteKnowledgeGraphTitle": "Hapus Grafik Pengetahuan?",
   "deleteKnowledgeGraphMessage": "Ini akan menghapus semua data grafik pengetahuan turunan (simpul dan koneksi). Memori asli Anda akan tetap aman. Grafik akan dibangun kembali seiring waktu atau pada permintaan berikutnya.",
-  "knowledgeGraphDeleted": "Grafik Pengetahuan berhasil dihapus",
+  "knowledgeGraphDeleted": "Grafik pengetahuan dihapus",
   "deleteGraphFailed": "Gagal menghapus grafik: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -1111,10 +1111,10 @@
   "clientId": "ID Klien",
   "clientSecret": "Rahasia Klien",
   "useMcpApiKey": "Gunakan kunci API MCP Anda",
-  "webhooks": "Webhooks",
-  "conversationEvents": "Peristiwa Percakapan",
+  "webhooks": "Webhook",
+  "conversationEvents": "Acara Percakapan",
   "newConversationCreated": "Percakapan baru dibuat",
-  "realtimeTranscript": "Transkrip Real-time",
+  "realtimeTranscript": "Transkrip Waktu Nyata",
   "transcriptReceived": "Transkrip diterima",
   "audioBytes": "Byte Audio",
   "audioDataReceived": "Data audio diterima",
@@ -1128,7 +1128,7 @@
   "listeningMins": "Mendengarkan (menit)",
   "understandingWords": "Memahami (kata)",
   "insights": "Wawasan",
-  "memories": "Memori",
+  "memories": "Kenangan",
   "minsUsedThisMonth": "{used} dari {limit} menit terpakai bulan ini",
   "@minsUsedThisMonth": {
     "placeholders": {
@@ -1334,7 +1334,7 @@
   "languageForTranscription": "Atur bahasa Anda untuk transkripsi yang lebih tajam dan pengalaman yang dipersonalisasi.",
   "singleLanguageModeInfo": "Mode Bahasa Tunggal diaktifkan. Terjemahan dinonaktifkan untuk akurasi yang lebih tinggi.",
   "searchLanguageHint": "Cari bahasa berdasarkan nama atau kode",
-  "noLanguagesFound": "Tidak ada bahasa ditemukan",
+  "noLanguagesFound": "Tidak ada bahasa yang ditemukan",
   "skip": "Lewati",
   "languageSetTo": "Bahasa diatur ke {language}",
   "@languageSetTo": {
@@ -1405,7 +1405,7 @@
   "defaultRepository": "Repositori Default",
   "selectDefaultRepoDesc": "Pilih repositori default untuk membuat issue. Anda masih dapat menentukan repositori yang berbeda saat membuat issue.",
   "noReposFound": "Tidak ada repositori ditemukan",
-  "private": "Pribadi",
+  "private": "Privat",
   "updatedDate": "Diperbarui {date}",
   "@updatedDate": {
     "placeholders": {
@@ -1594,7 +1594,7 @@
   "perMonth": "/ Bulan",
   "tailoredConversationSummaries": "Ringkasan Percakapan yang Disesuaikan",
   "customChatbotPersonality": "Kepribadian Chatbot Kustom",
-  "makePublic": "Buat publik",
+  "makePublic": "Jadikan Publik",
   "anyoneCanDiscover": "Siapa saja dapat menemukan aplikasi Anda",
   "onlyYouCanUse": "Hanya Anda yang dapat menggunakan aplikasi ini",
   "paidApp": "Aplikasi berbayar",
@@ -2077,14 +2077,9 @@
   "@deleteSelected": {
     "description": "Tooltip for delete selected"
   },
-  "searchMemories": "Cari {count} Memori",
+  "searchMemories": "Cari kenangan...",
   "@searchMemories": {
-    "description": "Hint text for memories search bar",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
+    "description": "Search input hint text"
   },
   "memoryDeleted": "Memori Dihapus.",
   "@memoryDeleted": {
@@ -2094,9 +2089,9 @@
   "@undo": {
     "description": "Undo button text"
   },
-  "noMemoriesYet": "Belum ada memori",
+  "noMemoriesYet": "🧠 Belum ada kenangan",
   "@noMemoriesYet": {
-    "description": "Empty state text"
+    "description": "Empty state title when no memories"
   },
   "noAutoMemories": "Belum ada memori yang diekstrak otomatis",
   "@noAutoMemories": {
@@ -2110,9 +2105,9 @@
   "@noMemoriesInCategories": {
     "description": "Empty state text for filtered categories"
   },
-  "noMemoriesFound": "Tidak ada memori ditemukan",
+  "noMemoriesFound": "🔍 Tidak ditemukan kenangan",
   "@noMemoriesFound": {
-    "description": "Empty state text for search results"
+    "description": "Empty state title when search/filter has no results"
   },
   "addFirstMemory": "Tambahkan memori pertama Anda",
   "@addFirstMemory": {
@@ -2191,11 +2186,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "Memori Baru",
+  "newMemory": "✨ Memori Baru",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "Edit Memori",
+  "editMemory": "✏️ Edit Memori",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2319,7 +2314,7 @@
   "pleaseCheckInternetConnection": "Harap periksa koneksi internet Anda dan coba lagi",
   "pleaseSelectReason": "Harap pilih alasan",
   "tellUsMoreWhatWentWrong": "Beri tahu kami lebih lanjut tentang apa yang salah...",
-  "selectText": "Pilih teks",
+  "selectText": "Pilih Teks",
   "maximumGoalsAllowed": "Maksimal {count} tujuan diizinkan",
   "conversationCannotBeMerged": "Percakapan ini tidak dapat digabung (terkunci atau sudah digabungkan)",
   "pleaseEnterFolderName": "Harap masukkan nama folder",
@@ -2331,7 +2326,7 @@
   "editFolder": "Edit folder",
   "deleteFolder": "Hapus folder",
   "transcriptCopiedToClipboard": "Transkrip disalin ke papan klip",
-  "summaryCopiedToClipboard": "Ringkasan disalin ke papan klip",
+  "summaryCopiedToClipboard": "Ringkasan disalin ke clipboard",
   "conversationUrlCouldNotBeShared": "URL percakapan tidak dapat dibagikan.",
   "urlCopiedToClipboard": "URL disalin ke papan klip",
   "exportTranscript": "Ekspor transkrip",
@@ -2339,13 +2334,13 @@
   "exportButton": "Ekspor",
   "actionItemsCopiedToClipboard": "Item tindakan disalin ke papan klip",
   "summarize": "Ringkas",
-  "generateSummary": "Buat ringkasan",
+  "generateSummary": "Buat Ringkasan",
   "conversationNotFoundOrDeleted": "Percakapan tidak ditemukan atau telah dihapus",
-  "deleteMemory": "Hapus memori?",
+  "deleteMemory": "Hapus Memori",
   "thisActionCannotBeUndone": "Tindakan ini tidak dapat dibatalkan.",
   "memoriesCount": "{count} memori",
   "noMemoriesInCategory": "Belum ada memori dalam kategori ini",
-  "addYourFirstMemory": "Tambahkan memori pertama Anda",
+  "addYourFirstMemory": "Tambahkan kenangan pertama Anda",
   "firmwareDisconnectUsb": "Putuskan USB",
   "firmwareUsbWarning": "Koneksi USB selama pembaruan dapat merusak perangkat Anda.",
   "firmwareBatteryAbove15": "Baterai di atas 15%",
@@ -2405,7 +2400,7 @@
   "space": "Spasi",
   "search": "Cari",
   "searchPlaceholder": "Cari...",
-  "untitledConversation": "Percakapan tanpa judul",
+  "untitledConversation": "Percakapan Tanpa Judul",
   "countRemaining": "{count} tersisa",
   "addGoal": "Tambah tujuan",
   "editGoal": "Edit tujuan",
@@ -2416,7 +2411,7 @@
   "saveGoal": "Simpan",
   "goals": "Tujuan",
   "tapToAddGoal": "Ketuk untuk menambah tujuan",
-  "welcomeBack": "Selamat datang kembali",
+  "welcomeBack": "Selamat datang kembali, {name}",
   "yourConversations": "Percakapan Anda",
   "reviewAndManageConversations": "Tinjau dan kelola percakapan yang telah direkam",
   "startCapturingConversations": "Mulai merekam percakapan dengan perangkat Omi Anda untuk melihatnya di sini.",
@@ -2519,5 +2514,785 @@
   "ratingsCount": "{count}+ peringkat",
   "errorActivatingApp": "Kesalahan mengaktifkan aplikasi",
   "integrationSetupRequired": "Jika ini adalah aplikasi integrasi, pastikan pengaturan telah selesai.",
-  "installed": "Terinstal"
+  "installed": "Terinstal",
+  "appIdLabel": "ID Aplikasi",
+  "appNameLabel": "Nama Aplikasi",
+  "appNamePlaceholder": "Aplikasi Hebat Saya",
+  "pleaseEnterAppName": "Harap masukkan nama aplikasi",
+  "categoryLabel": "Kategori",
+  "selectCategory": "Pilih Kategori",
+  "descriptionLabel": "Deskripsi",
+  "appDescriptionPlaceholder": "Aplikasi Hebat Saya adalah aplikasi luar biasa yang melakukan hal-hal menakjubkan. Ini adalah aplikasi terbaik!",
+  "pleaseProvideValidDescription": "Harap berikan deskripsi yang valid",
+  "appPricingLabel": "Harga Aplikasi",
+  "noneSelected": "Tidak Ada yang Dipilih",
+  "appIdCopiedToClipboard": "ID Aplikasi disalin ke clipboard",
+  "appCategoryModalTitle": "Kategori Aplikasi",
+  "pricingFree": "Gratis",
+  "pricingPaid": "Berbayar",
+  "loadingCapabilities": "Memuat kemampuan...",
+  "filterInstalled": "Terpasang",
+  "filterMyApps": "Aplikasi Saya",
+  "clearSelection": "Hapus pilihan",
+  "filterCategory": "Kategori",
+  "rating4PlusStars": "4+ Bintang",
+  "rating3PlusStars": "3+ Bintang",
+  "rating2PlusStars": "2+ Bintang",
+  "rating1PlusStars": "1+ Bintang",
+  "filterRating": "Penilaian",
+  "filterCapabilities": "Kemampuan",
+  "noNotificationScopesAvailable": "Tidak ada cakupan notifikasi yang tersedia",
+  "popularApps": "Aplikasi Populer",
+  "pleaseProvidePrompt": "Harap berikan prompt",
+  "chatWithAppName": "Obrolan dengan {appName}",
+  "defaultAiAssistant": "Asisten AI Default",
+  "readyToChat": "✨ Siap mengobrol!",
+  "connectionNeeded": "🌐 Koneksi diperlukan",
+  "startConversation": "Mulai percakapan dan biarkan keajaiban dimulai",
+  "checkInternetConnection": "Silakan periksa koneksi internet Anda",
+  "wasThisHelpful": "Apakah ini membantu?",
+  "thankYouForFeedback": "Terima kasih atas tanggapan Anda!",
+  "maxFilesUploadError": "Anda hanya dapat mengunggah 4 file sekaligus",
+  "attachedFiles": "📎 File Terlampir",
+  "takePhoto": "Ambil Foto",
+  "captureWithCamera": "Tangkap dengan kamera",
+  "selectImages": "Pilih Gambar",
+  "chooseFromGallery": "Pilih dari galeri",
+  "selectFile": "Pilih File",
+  "chooseAnyFileType": "Pilih jenis file apa saja",
+  "cannotReportOwnMessages": "Anda tidak dapat melaporkan pesan Anda sendiri",
+  "messageReportedSuccessfully": "✅ Pesan berhasil dilaporkan",
+  "confirmReportMessage": "Apakah Anda yakin ingin melaporkan pesan ini?",
+  "selectChatAssistant": "Pilih Asisten Obrolan",
+  "enableMoreApps": "Aktifkan Lebih Banyak Aplikasi",
+  "chatCleared": "Obrolan dibersihkan",
+  "clearChatTitle": "Hapus Obrolan?",
+  "confirmClearChat": "Apakah Anda yakin ingin menghapus obrolan? Tindakan ini tidak dapat dibatalkan.",
+  "copy": "Salin",
+  "share": "Bagikan",
+  "report": "Laporkan",
+  "microphonePermissionRequired": "Izin mikrofon diperlukan untuk perekaman suara.",
+  "microphonePermissionDenied": "Izin mikrofon ditolak. Harap berikan izin di Preferensi Sistem > Privasi & Keamanan > Mikrofon.",
+  "failedToCheckMicrophonePermission": "Gagal memeriksa izin mikrofon: {error}",
+  "failedToTranscribeAudio": "Gagal menyalin audio",
+  "transcribing": "Menyalin...",
+  "transcriptionFailed": "Transkripsi gagal",
+  "discardedConversation": "Percakapan Dibuang",
+  "at": "pada",
+  "from": "dari",
+  "copied": "Disalin!",
+  "copyLink": "Salin tautan",
+  "hideTranscript": "Sembunyikan Transkrip",
+  "viewTranscript": "Lihat Transkrip",
+  "conversationDetails": "Detail Percakapan",
+  "transcript": "Transkrip",
+  "segmentsCount": "{count} segmen",
+  "noTranscriptAvailable": "Tidak Ada Transkrip Tersedia",
+  "noTranscriptMessage": "Percakapan ini tidak memiliki transkrip.",
+  "conversationUrlCouldNotBeGenerated": "URL percakapan tidak dapat dibuat.",
+  "failedToGenerateConversationLink": "Gagal membuat tautan percakapan",
+  "failedToGenerateShareLink": "Gagal membuat tautan berbagi",
+  "reloadingConversations": "Memuat ulang percakapan...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "@welcomeBack": {
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "user": "Pengguna",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "Berbintang",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "Tanggal",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "Tidak ada hasil yang ditemukan",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "Coba sesuaikan istilah pencarian Anda",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "starConversationsToFindQuickly": "Beri bintang pada percakapan untuk menemukannya dengan cepat di sini",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "Tidak ada percakapan pada {date}",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "Coba pilih tanggal yang berbeda",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  },
+  "conversations": "Percakapan",
+  "@conversations": {
+    "description": "Navigation label for conversations page"
+  },
+  "chat": "Obrolan",
+  "@chat": {
+    "description": "Navigation label for chat page"
+  },
+  "@memories": {
+    "description": "Navigation label for memories page"
+  },
+  "actions": "Tindakan",
+  "@actions": {
+    "description": "Navigation label for actions page"
+  },
+  "syncAvailable": "Sinkronisasi Tersedia",
+  "@syncAvailable": {
+    "description": "Label for sync notification"
+  },
+  "referAFriend": "Referensikan Teman",
+  "@referAFriend": {
+    "description": "Bottom navigation label for referral program"
+  },
+  "help": "Bantuan",
+  "@help": {
+    "description": "Bottom navigation label for help"
+  },
+  "pro": "Pro",
+  "@pro": {
+    "description": "Badge label for pro/unlimited users"
+  },
+  "upgradeToPro": "Tingkatkan ke Pro",
+  "@upgradeToPro": {
+    "description": "Subscription banner button text"
+  },
+  "getOmiDevice": "Dapatkan Perangkat Omi",
+  "@getOmiDevice": {
+    "description": "Widget title for device promotion"
+  },
+  "wearableAiCompanion": "Pendamping AI yang dapat dikenakan",
+  "@wearableAiCompanion": {
+    "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "Memuat kenangan...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "allMemories": "Semua kenangan",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "Tentang Anda",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "Manual",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "Memuat kenangan Anda...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "createYourFirstMemory": "Buat kenangan pertama Anda untuk memulai",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "Coba sesuaikan pencarian atau filter Anda",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
+  },
+  "whatWouldYouLikeToRemember": "Apa yang ingin Anda ingat?",
+  "category": "Kategori",
+  "public": "Publik",
+  "failedToSaveCheckConnection": "Gagal menyimpan. Silakan periksa koneksi Anda.",
+  "createMemory": "Buat Memori",
+  "deleteMemoryConfirmation": "Apakah Anda yakin ingin menghapus memori ini? Tindakan ini tidak dapat dibatalkan.",
+  "makePrivate": "Jadikan Privat",
+  "organizeAndControlMemories": "Atur dan kontrol memori Anda",
+  "total": "Total",
+  "makeAllMemoriesPrivate": "Jadikan Semua Memori Privat",
+  "setAllMemoriesToPrivate": "Atur semua memori ke visibilitas privat",
+  "makeAllMemoriesPublic": "Jadikan Semua Memori Publik",
+  "setAllMemoriesToPublic": "Atur semua memori ke visibilitas publik",
+  "permanentlyRemoveAllMemories": "Hapus permanen semua memori dari Omi",
+  "allMemoriesAreNowPrivate": "Semua memori sekarang privat",
+  "allMemoriesAreNowPublic": "Semua memori sekarang publik",
+  "clearOmisMemory": "Hapus Memori Omi",
+  "clearMemoryConfirmation": "Apakah Anda yakin ingin menghapus memori Omi? Tindakan ini tidak dapat dibatalkan dan akan menghapus permanen semua {count} memori.",
+  "omisMemoryCleared": "Memori Omi tentang Anda telah dihapus",
+  "welcomeToOmi": "Selamat datang di Omi",
+  "continueWithApple": "Lanjutkan dengan Apple",
+  "continueWithGoogle": "Lanjutkan dengan Google",
+  "byContinuingYouAgree": "Dengan melanjutkan, Anda menyetujui ",
+  "termsOfService": "Ketentuan Layanan",
+  "and": " dan ",
+  "dataAndPrivacy": "Data & Privasi",
+  "secureAuthViaAppleId": "Autentikasi aman melalui Apple ID",
+  "secureAuthViaGoogleAccount": "Autentikasi aman melalui Akun Google",
+  "whatWeCollect": "Apa yang kami kumpulkan",
+  "dataCollectionMessage": "Dengan melanjutkan, percakapan, rekaman, dan informasi pribadi Anda akan disimpan dengan aman di server kami untuk memberikan wawasan berbasis AI dan mengaktifkan semua fitur aplikasi.",
+  "dataProtection": "Perlindungan Data",
+  "yourDataIsProtected": "Data Anda dilindungi dan diatur oleh ",
+  "pleaseSelectYourPrimaryLanguage": "Silakan pilih bahasa utama Anda",
+  "chooseYourLanguage": "Pilih bahasa Anda",
+  "selectPreferredLanguageForBestExperience": "Pilih bahasa pilihan Anda untuk pengalaman Omi terbaik",
+  "searchLanguages": "Cari bahasa...",
+  "selectALanguage": "Pilih bahasa",
+  "tryDifferentSearchTerm": "Coba istilah pencarian yang berbeda",
+  "pleaseEnterYourName": "Silakan masukkan nama Anda",
+  "nameMustBeAtLeast2Characters": "Nama harus minimal 2 karakter",
+  "tellUsHowYouWouldLikeToBeAddressed": "Beri tahu kami bagaimana Anda ingin disapa. Ini membantu mempersonalisasi pengalaman Omi Anda.",
+  "charactersCount": "{count} karakter",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "enableFeaturesForBestExperience": "Aktifkan fitur untuk pengalaman Omi terbaik di perangkat Anda.",
+  "microphoneAccess": "Akses Mikrofon",
+  "recordAudioConversations": "Rekam percakapan audio",
+  "microphoneAccessDescription": "Omi memerlukan akses mikrofon untuk merekam percakapan Anda dan memberikan transkripsi.",
+  "screenRecording": "Perekaman Layar",
+  "captureSystemAudioFromMeetings": "Tangkap audio sistem dari rapat",
+  "screenRecordingDescription": "Omi memerlukan izin perekaman layar untuk menangkap audio sistem dari rapat berbasis browser Anda.",
+  "accessibility": "Aksesibilitas",
+  "detectBrowserBasedMeetings": "Deteksi rapat berbasis browser",
+  "accessibilityDescription": "Omi memerlukan izin aksesibilitas untuk mendeteksi saat Anda bergabung dengan rapat Zoom, Meet, atau Teams di browser Anda.",
+  "pleaseWait": "Harap tunggu...",
+  "joinTheCommunity": "Bergabunglah dengan komunitas!",
+  "loadingProfile": "Memuat profil...",
+  "profileSettings": "Pengaturan Profil",
+  "noEmailSet": "Tidak ada email yang diatur",
+  "userIdCopiedToClipboard": "ID pengguna disalin",
+  "yourInformation": "Informasi Anda",
+  "setYourName": "Atur Nama Anda",
+  "changeYourName": "Ubah Nama Anda",
+  "persona": "Persona",
+  "manageYourOmiPersona": "Kelola persona Omi Anda",
+  "voiceAndPeople": "Suara & Orang",
+  "teachOmiYourVoice": "Ajari Omi suara Anda",
+  "tellOmiWhoSaidIt": "Beri tahu Omi siapa yang mengatakannya 🗣️",
+  "payment": "Pembayaran",
+  "addOrChangeYourPaymentMethod": "Tambah atau ubah metode pembayaran",
+  "preferences": "Preferensi",
+  "helpImproveOmiBySharing": "Bantu tingkatkan Omi dengan berbagi data analitik anonim",
+  "deleteAccount": "Hapus Akun",
+  "deleteYourAccountAndAllData": "Hapus akun dan semua data Anda",
+  "helpsDiagnoseIssuesAutoDeletes": "Membantu mendiagnosis masalah. Otomatis dihapus setelah 3 hari.",
+  "clearLogs": "Hapus log",
+  "debugLogsCleared": "Log debug dibersihkan",
+  "exportConversations": "Ekspor Percakapan",
+  "exportAllConversationsToJson": "Ekspor semua percakapan Anda ke file JSON.",
+  "conversationsExportStarted": "Ekspor Percakapan Dimulai. Ini mungkin memakan waktu beberapa detik, harap tunggu.",
+  "mcpDescription": "Untuk menghubungkan Omi dengan aplikasi lain untuk membaca, mencari, dan mengelola kenangan dan percakapan Anda. Buat kunci untuk memulai.",
+  "apiKeys": "Kunci API",
+  "errorLabel": "Kesalahan: {error}",
+  "noApiKeysFound": "Tidak ada kunci API yang ditemukan. Buat satu untuk memulai.",
+  "advancedSettings": "Pengaturan Lanjutan",
+  "triggersWhenNewConversationCreated": "Dipicu ketika percakapan baru dibuat.",
+  "triggersWhenNewTranscriptReceived": "Dipicu ketika transkrip baru diterima.",
+  "realtimeAudioBytes": "Byte Audio Waktu Nyata",
+  "triggersWhenAudioBytesReceived": "Dipicu ketika byte audio diterima.",
+  "everyXSeconds": "Setiap x detik",
+  "triggersWhenDaySummaryGenerated": "Dipicu ketika ringkasan hari dibuat.",
+  "experimental": "Eksperimental",
+  "tryLatestExperimentalFeatures": "Coba fitur eksperimental terbaru dari Tim Omi.",
+  "transcriptionServiceDiagnosticStatus": "Status diagnostik layanan transkripsi",
+  "enableDetailedDiagnosticMessages": "Aktifkan pesan diagnostik terperinci dari layanan transkripsi",
+  "autoCreateAndTagNewSpeakers": "Buat dan tandai pembicara baru secara otomatis",
+  "automaticallyCreateNewPerson": "Secara otomatis buat orang baru ketika nama terdeteksi dalam transkrip.",
+  "pilotFeatures": "Fitur Pilot",
+  "pilotFeaturesDescription": "Fitur ini adalah tes dan tidak ada jaminan dukungan.",
+  "suggestFollowUpQuestion": "Sarankan pertanyaan lanjutan",
+  "saveSettings": "Simpan Pengaturan",
+  "syncingDeveloperSettings": "Menyinkronkan Pengaturan Pengembang...",
+  "summary": "Ringkasan",
+  "auto": "Otomatis",
+  "noSummaryForApp": "Tidak ada ringkasan yang tersedia untuk aplikasi ini. Coba aplikasi lain untuk hasil yang lebih baik.",
+  "tryAnotherApp": "Coba Aplikasi Lain",
+  "generatedBy": "Dibuat oleh {appName}",
+  "overview": "Ikhtisar",
+  "otherAppResults": "Hasil Aplikasi Lain",
+  "unknownApp": "Aplikasi Tidak Dikenal",
+  "noSummaryAvailable": "Tidak Ada Ringkasan Tersedia",
+  "conversationNoSummaryYet": "Percakapan ini belum memiliki ringkasan.",
+  "chooseSummarizationApp": "Pilih Aplikasi Ringkasan",
+  "setAsDefaultSummarizationApp": "{appName} ditetapkan sebagai aplikasi ringkasan default",
+  "letOmiChooseAutomatically": "Biarkan Omi memilih aplikasi terbaik secara otomatis",
+  "deleteConversationConfirmation": "Apakah Anda yakin ingin menghapus percakapan ini? Tindakan ini tidak dapat dibatalkan.",
+  "conversationDeleted": "Percakapan dihapus",
+  "generatingLink": "Membuat tautan...",
+  "editConversation": "Edit percakapan",
+  "conversationLinkCopiedToClipboard": "Tautan percakapan disalin ke clipboard",
+  "conversationTranscriptCopiedToClipboard": "Transkrip percakapan disalin ke clipboard",
+  "editConversationDialogTitle": "Edit Percakapan",
+  "changeTheConversationTitle": "Ubah judul percakapan",
+  "conversationTitle": "Judul Percakapan",
+  "enterConversationTitle": "Masukkan judul percakapan...",
+  "conversationTitleUpdatedSuccessfully": "Judul percakapan berhasil diperbarui",
+  "failedToUpdateConversationTitle": "Gagal memperbarui judul percakapan",
+  "errorUpdatingConversationTitle": "Kesalahan memperbarui judul percakapan",
+  "settingUp": "Mengatur...",
+  "preparingSystemAudioCapture": "Menyiapkan tangkapan audio sistem",
+  "clickTheButtonToCaptureAudio": "Klik tombol untuk menangkap audio untuk transkripsi langsung, wawasan AI, dan penyimpanan otomatis.",
+  "startYourFirstRecording": "Mulai rekaman pertama Anda",
+  "reconnecting": "Menyambung kembali...",
+  "recordingPaused": "Perekaman dijeda",
+  "recordingActive": "Perekaman aktif",
+  "startRecording": "Mulai merekam",
+  "resumingInCountdown": "Melanjutkan dalam {countdown}d...",
+  "tapPlayToResume": "Ketuk putar untuk melanjutkan",
+  "listeningForAudio": "Mendengarkan audio...",
+  "preparingAudioCapture": "Menyiapkan tangkapan audio",
+  "clickToBeginRecording": "Klik untuk mulai merekam",
+  "translated": "diterjemahkan",
+  "liveTranscript": "Transkripsi Langsung",
+  "segmentsSingular": "{count} segmen",
+  "segmentsPlural": "{count} segmen",
+  "startRecordingToSeeTranscript": "Mulai merekam untuk melihat transkripsi langsung",
+  "paused": "Dijeda",
+  "initializing": "Menginisialisasi...",
+  "recording": "Merekam",
+  "microphoneChangedResumingIn": "Mikrofon diubah. Melanjutkan dalam {countdown}d",
+  "clickPlayToResumeOrStop": "Klik putar untuk melanjutkan atau berhenti untuk menyelesaikan",
+  "settingUpSystemAudioCapture": "Mengatur tangkapan audio sistem",
+  "capturingAudioAndGeneratingTranscript": "Menangkap audio dan menghasilkan transkripsi",
+  "clickToBeginRecordingSystemAudio": "Klik untuk mulai merekam audio sistem",
+  "you": "Anda",
+  "speakerWithId": "Pembicara {speakerId}",
+  "translatedByOmi": "diterjemahkan oleh omi",
+  "backToConversations": "Kembali ke Percakapan",
+  "systemAudio": "Sistem",
+  "mic": "Mikrofon",
+  "audioInputSetTo": "Input audio diatur ke {deviceName}",
+  "errorSwitchingAudioDevice": "Kesalahan saat mengganti perangkat audio: {error}",
+  "selectAudioInput": "Pilih Input Audio",
+  "loadingDevices": "Memuat perangkat...",
+  "settingsHeader": "PENGATURAN",
+  "plansAndBilling": "Paket & Penagihan",
+  "calendarIntegration": "Integrasi Kalender",
+  "dailySummary": "Ringkasan Harian",
+  "developer": "Pengembang",
+  "about": "Tentang",
+  "selectTime": "Pilih Waktu",
+  "accountGroup": "Akun",
+  "signOutQuestion": "Keluar?",
+  "signOutConfirmation": "Apakah Anda yakin ingin keluar?",
+  "customVocabularyHeader": "KOSAKATA KUSTOM",
+  "addWordsDescription": "Tambahkan kata-kata yang harus dikenali Omi selama transkripsi.",
+  "enterWordsHint": "Masukkan kata (dipisahkan koma)",
+  "dailySummaryHeader": "RINGKASAN HARIAN",
+  "dailySummaryTitle": "Ringkasan Harian",
+  "dailySummaryDescription": "Dapatkan ringkasan yang dipersonalisasi dari percakapan Anda",
+  "deliveryTime": "Waktu Pengiriman",
+  "deliveryTimeDescription": "Kapan menerima ringkasan harian Anda",
+  "subscription": "Langganan",
+  "viewPlansAndUsage": "Lihat Paket & Penggunaan",
+  "viewPlansDescription": "Kelola langganan Anda dan lihat statistik penggunaan",
+  "addOrChangePaymentMethod": "Tambahkan atau ubah metode pembayaran Anda",
+  "displayOptions": "Opsi Tampilan",
+  "showMeetingsInMenuBar": "Tampilkan Rapat di Bilah Menu",
+  "displayUpcomingMeetingsDescription": "Tampilkan rapat mendatang di bilah menu",
+  "showEventsWithoutParticipants": "Tampilkan Acara Tanpa Peserta",
+  "includePersonalEventsDescription": "Sertakan acara pribadi tanpa peserta",
+  "upcomingMeetings": "RAPAT MENDATANG",
+  "checkingNext7Days": "Memeriksa 7 hari ke depan",
+  "shortcuts": "Pintasan",
+  "shortcutChangeInstruction": "Klik pintasan untuk mengubahnya. Tekan Escape untuk membatalkan.",
+  "configurePersonaDescription": "Konfigurasi persona AI Anda",
+  "configureSTTProvider": "Konfigurasi penyedia STT",
+  "setConversationEndDescription": "Atur kapan percakapan berakhir otomatis",
+  "importDataDescription": "Impor data dari sumber lain",
+  "debugAndDiagnostics": "Debug & Diagnostik",
+  "autoDeletesAfter3Days": "Otomatis dihapus setelah 3 hari",
+  "helpsDiagnoseIssues": "Membantu mendiagnosis masalah",
+  "exportConversationsDescription": "Ekspor percakapan ke JSON",
+  "exportingConversations": "Mengekspor percakapan...",
+  "clearNodesDescription": "Hapus semua node dan koneksi",
+  "deleteKnowledgeGraphQuestion": "Hapus Grafik Pengetahuan?",
+  "deleteKnowledgeGraphWarning": "Ini akan menghapus semua data grafik pengetahuan turunan. Kenangan asli Anda tetap aman.",
+  "connectOmiWithAI": "Hubungkan Omi dengan asisten AI",
+  "noAPIKeys": "Tidak ada kunci API. Buat satu untuk memulai.",
+  "realTimeTranscript": "Transkrip Real-time",
+  "transcriptionDiagnostics": "Diagnostik Transkripsi",
+  "detailedDiagnosticMessages": "Pesan diagnostik terperinci",
+  "autoCreateSpeakers": "Buat Pembicara Otomatis",
+  "autoCreateWhenDetected": "Buat otomatis saat nama terdeteksi",
+  "followUpQuestions": "Pertanyaan Lanjutan",
+  "suggestQuestionsAfterConversations": "Sarankan pertanyaan setelah percakapan",
+  "goalTracker": "Pelacak Tujuan",
+  "trackPersonalGoals": "Lacak tujuan pribadi di halaman utama",
+  "dailyReflection": "Refleksi Harian",
+  "dailyReflectionDescription": "Pengingat jam 9 malam untuk merefleksikan hari Anda",
+  "endpointURL": "URL Endpoint",
+  "links": "Tautan",
+  "discordMemberCount": "8000+ anggota di Discord",
+  "userInformation": "Informasi Pengguna",
+  "capabilities": "Kemampuan",
+  "previewScreenshots": "Pratinjau tangkapan layar",
+  "holdOnPreparingForm": "Tunggu sebentar, kami sedang menyiapkan formulir untuk Anda",
+  "bySubmittingYouAgreeToOmi": "Dengan mengirimkan, Anda menyetujui ",
+  "termsAndPrivacyPolicy": "Syarat & Kebijakan Privasi",
+  "manageYourApp": "Kelola Aplikasi Anda",
+  "updatingYourApp": "Memperbarui aplikasi Anda",
+  "fetchingYourAppDetails": "Mengambil detail aplikasi Anda",
+  "updateAppQuestion": "Perbarui Aplikasi?",
+  "updateAppConfirmation": "Apakah Anda yakin ingin memperbarui aplikasi? Perubahan akan terlihat setelah ditinjau oleh tim kami.",
+  "updateApp": "Perbarui Aplikasi",
+  "createAndSubmitNewApp": "Buat dan kirim aplikasi baru",
+  "appsCount": "Aplikasi ({count})",
+  "privateAppsCount": "Aplikasi Pribadi ({count})",
+  "publicAppsCount": "Aplikasi Publik ({count})",
+  "newVersionAvailable": "Versi Baru Tersedia  🎉",
+  "no": "Tidak",
+  "subscriptionCancelledSuccessfully": "Langganan berhasil dibatalkan. Akan tetap aktif hingga akhir periode penagihan saat ini.",
+  "failedToCancelSubscription": "Gagal membatalkan langganan. Silakan coba lagi.",
+  "invalidPaymentUrl": "URL pembayaran tidak valid",
+  "permissionsAndTriggers": "Izin & Pemicu",
+  "chatFeatures": "Fitur Obrolan",
+  "uninstall": "Copot pemasangan",
+  "installs": "PEMASANGAN",
+  "priceLabel": "HARGA",
+  "updatedLabel": "DIPERBARUI",
+  "createdLabel": "DIBUAT",
+  "featuredLabel": "UNGGULAN",
+  "cancelSubscriptionQuestion": "Batalkan Langganan?",
+  "cancelSubscriptionConfirmation": "Apakah Anda yakin ingin membatalkan langganan? Anda akan tetap memiliki akses hingga akhir periode penagihan saat ini.",
+  "cancelSubscriptionButton": "Batalkan Langganan",
+  "cancelling": "Membatalkan...",
+  "betaTesterMessage": "Anda adalah penguji beta untuk aplikasi ini. Belum dipublikasikan. Akan dipublikasikan setelah disetujui.",
+  "appUnderReviewMessage": "Aplikasi Anda sedang ditinjau dan hanya terlihat oleh Anda. Akan dipublikasikan setelah disetujui.",
+  "appRejectedMessage": "Aplikasi Anda ditolak. Perbarui detail dan kirim ulang untuk ditinjau.",
+  "invalidIntegrationUrl": "URL integrasi tidak valid",
+  "tapToComplete": "Ketuk untuk menyelesaikan",
+  "invalidSetupInstructionsUrl": "URL petunjuk pengaturan tidak valid",
+  "pushToTalk": "Tekan untuk Berbicara",
+  "summaryPrompt": "Prompt Ringkasan",
+  "pleaseSelectARating": "Silakan pilih penilaian",
+  "reviewAddedSuccessfully": "Ulasan berhasil ditambahkan 🚀",
+  "reviewUpdatedSuccessfully": "Ulasan berhasil diperbarui 🚀",
+  "failedToSubmitReview": "Gagal mengirim ulasan. Silakan coba lagi.",
+  "addYourReview": "Tambahkan Ulasan Anda",
+  "editYourReview": "Edit Ulasan Anda",
+  "writeAReviewOptional": "Tulis ulasan (opsional)",
+  "submitReview": "Kirim Ulasan",
+  "updateReview": "Perbarui Ulasan",
+  "yourReview": "Ulasan Anda",
+  "anonymousUser": "Pengguna Anonim",
+  "issueActivatingApp": "Terjadi masalah saat mengaktifkan aplikasi ini. Silakan coba lagi.",
+  "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
+  "copyUrl": "Salin URL",
+  "txtFormat": "TXT",
+  "pdfFormat": "PDF",
+  "weekdayMon": "Sen",
+  "weekdayTue": "Sel",
+  "weekdayWed": "Rab",
+  "weekdayThu": "Kam",
+  "weekdayFri": "Jum",
+  "weekdaySat": "Sab",
+  "weekdaySun": "Min",
+  "serviceIntegrationComingSoon": "Integrasi {serviceName} segera hadir",
+  "alreadyExportedTo": "Sudah diekspor ke {platform}",
+  "anotherPlatform": "platform lain",
+  "pleaseAuthenticateWithService": "Silakan autentikasi dengan {serviceName} di Pengaturan > Integrasi Tugas",
+  "addingToService": "Menambahkan ke {serviceName}...",
+  "addedToService": "Ditambahkan ke {serviceName}",
+  "failedToAddToService": "Gagal menambahkan ke {serviceName}",
+  "permissionDeniedForAppleReminders": "Izin ditolak untuk Apple Reminders",
+  "failedToCreateApiKey": "Gagal membuat kunci API penyedia: {error}",
+  "createAKey": "Buat Kunci",
+  "apiKeyRevokedSuccessfully": "Kunci API berhasil dicabut",
+  "failedToRevokeApiKey": "Gagal mencabut kunci API: {error}",
+  "omiApiKeys": "Kunci API Omi",
+  "apiKeysDescription": "Kunci API digunakan untuk autentikasi saat aplikasi Anda berkomunikasi dengan server OMI. Kunci ini memungkinkan aplikasi Anda membuat memori dan mengakses layanan OMI lainnya dengan aman.",
+  "aboutOmiApiKeys": "Tentang Kunci API Omi",
+  "noApiKeysYet": "Belum ada kunci API. Buat satu untuk mengintegrasikan dengan aplikasi Anda.",
+  "yourNewKey": "Kunci baru Anda:",
+  "copyToClipboard": "Salin ke papan klip",
+  "pleaseCopyKeyNow": "Silakan salin sekarang dan simpan di tempat yang aman. ",
+  "willNotSeeAgain": "Anda tidak akan dapat melihatnya lagi.",
+  "revokeKey": "Cabut kunci",
+  "revokeApiKeyQuestion": "Cabut Kunci API?",
+  "revokeApiKeyWarning": "Tindakan ini tidak dapat dibatalkan. Aplikasi apa pun yang menggunakan kunci ini tidak akan dapat mengakses API lagi.",
+  "revoke": "Cabut",
+  "whatWouldYouLikeToCreate": "Apa yang ingin Anda buat?",
+  "createAnApp": "Buat Aplikasi",
+  "createAndShareYourApp": "Buat dan bagikan aplikasi Anda",
+  "createMyClone": "Buat Klon Saya",
+  "createYourDigitalClone": "Buat klon digital Anda",
+  "itemApp": "Aplikasi",
+  "itemPersona": "Persona",
+  "keepItemPublic": "Pertahankan {item} Publik",
+  "makeItemPublicQuestion": "Jadikan {item} Publik?",
+  "makeItemPrivateQuestion": "Jadikan {item} Pribadi?",
+  "makeItemPublicExplanation": "Jika Anda menjadikan {item} publik, dapat digunakan oleh semua orang",
+  "makeItemPrivateExplanation": "Jika Anda menjadikan {item} pribadi sekarang, itu akan berhenti bekerja untuk semua orang dan hanya akan terlihat oleh Anda",
+  "manageApp": "Kelola Aplikasi",
+  "updatePersonaDetails": "Perbarui Detail Persona",
+  "deleteItemTitle": "Hapus {item}",
+  "deleteItemQuestion": "Hapus {item}?",
+  "deleteItemConfirmation": "Apakah Anda yakin ingin menghapus {item} ini? Tindakan ini tidak dapat dibatalkan.",
+  "revokeKeyQuestion": "Cabut Kunci?",
+  "revokeKeyConfirmation": "Apakah Anda yakin ingin mencabut kunci \"{keyName}\"? Tindakan ini tidak dapat dibatalkan.",
+  "createNewKey": "Buat Kunci Baru",
+  "keyNameHint": "mis., Claude Desktop",
+  "pleaseEnterAName": "Silakan masukkan nama.",
+  "failedToCreateKeyWithError": "Gagal membuat kunci: {error}",
+  "failedToCreateKeyTryAgain": "Gagal membuat kunci. Silakan coba lagi.",
+  "keyCreated": "Kunci Dibuat",
+  "keyCreatedMessage": "Kunci baru Anda telah dibuat. Silakan salin sekarang. Anda tidak akan dapat melihatnya lagi.",
+  "keyWord": "Kunci",
+  "externalAppAccess": "Akses Aplikasi Eksternal",
+  "externalAppAccessDescription": "Aplikasi terinstal berikut memiliki integrasi eksternal dan dapat mengakses data Anda, seperti percakapan dan kenangan.",
+  "noExternalAppsHaveAccess": "Tidak ada aplikasi eksternal yang memiliki akses ke data Anda.",
+  "maximumSecurityE2ee": "Keamanan Maksimum (E2EE)",
+  "e2eeDescription": "Enkripsi end-to-end adalah standar emas untuk privasi. Saat diaktifkan, data Anda dienkripsi di perangkat Anda sebelum dikirim ke server kami. Ini berarti tidak ada seorang pun, bahkan Omi, yang dapat mengakses konten Anda.",
+  "importantTradeoffs": "Pertimbangan Penting:",
+  "e2eeTradeoff1": "• Beberapa fitur seperti integrasi aplikasi eksternal mungkin dinonaktifkan.",
+  "e2eeTradeoff2": "• Jika Anda kehilangan kata sandi, data Anda tidak dapat dipulihkan.",
+  "featureComingSoon": "Fitur ini akan segera hadir!",
+  "migrationInProgressMessage": "Migrasi sedang berlangsung. Anda tidak dapat mengubah tingkat perlindungan sampai selesai.",
+  "migrationFailed": "Migrasi Gagal",
+  "migratingFromTo": "Memigrasikan dari {source} ke {target}",
+  "objectsCount": "{processed} / {total} objek",
+  "secureEncryption": "Enkripsi Aman",
+  "secureEncryptionDescription": "Data Anda dienkripsi dengan kunci yang unik untuk Anda di server kami, yang dihosting di Google Cloud. Ini berarti konten mentah Anda tidak dapat diakses oleh siapa pun, termasuk staf Omi atau Google, langsung dari database.",
+  "endToEndEncryption": "Enkripsi End-to-End",
+  "e2eeCardDescription": "Aktifkan untuk keamanan maksimum di mana hanya Anda yang dapat mengakses data Anda. Ketuk untuk mempelajari lebih lanjut.",
+  "dataAlwaysEncrypted": "Terlepas dari levelnya, data Anda selalu dienkripsi saat diam dan dalam perjalanan.",
+  "readOnlyScope": "Hanya Baca",
+  "fullAccessScope": "Akses Penuh",
+  "readScope": "Baca",
+  "writeScope": "Tulis",
+  "apiKeyCreated": "Kunci API Dibuat!",
+  "saveKeyWarning": "Simpan kunci ini sekarang! Anda tidak akan bisa melihatnya lagi.",
+  "yourApiKey": "KUNCI API ANDA",
+  "tapToCopy": "Ketuk untuk menyalin",
+  "copyKey": "Salin Kunci",
+  "createApiKey": "Buat Kunci API",
+  "accessDataProgrammatically": "Akses data Anda secara terprogram",
+  "keyNameLabel": "NAMA KUNCI",
+  "keyNamePlaceholder": "mis., Integrasi Aplikasi Saya",
+  "permissionsLabel": "IZIN",
+  "permissionsInfoNote": "R = Baca, W = Tulis. Default hanya baca jika tidak ada yang dipilih.",
+  "developerApi": "API Pengembang",
+  "createAKeyToGetStarted": "Buat kunci untuk memulai",
+  "errorWithMessage": "Kesalahan: {error}",
+  "omiTraining": "Pelatihan Omi",
+  "trainingDataProgram": "Program Data Pelatihan",
+  "getOmiUnlimitedFree": "Dapatkan Omi Unlimited gratis dengan menyumbangkan data Anda untuk melatih model AI.",
+  "trainingDataBullets": "• Data Anda membantu meningkatkan model AI\n• Hanya data non-sensitif yang dibagikan\n• Proses sepenuhnya transparan",
+  "learnMoreAtOmiTraining": "Pelajari lebih lanjut di omi.me/training",
+  "agreeToContributeData": "Saya memahami dan setuju untuk menyumbangkan data saya untuk pelatihan AI",
+  "submitRequest": "Kirim Permintaan",
+  "thankYouRequestUnderReview": "Terima kasih! Permintaan Anda sedang ditinjau. Kami akan memberi tahu Anda setelah disetujui.",
+  "planRemainsActiveUntil": "Paket Anda akan tetap aktif hingga {date}. Setelah itu, Anda akan kehilangan akses ke fitur tak terbatas. Apakah Anda yakin?",
+  "confirmCancellation": "Konfirmasi Pembatalan",
+  "keepMyPlan": "Pertahankan Paket Saya",
+  "subscriptionSetToCancel": "Langganan Anda diatur untuk dibatalkan di akhir periode.",
+  "switchedToOnDevice": "Beralih ke transkripsi di perangkat",
+  "couldNotSwitchToFreePlan": "Tidak dapat beralih ke paket gratis. Silakan coba lagi.",
+  "couldNotLoadPlans": "Tidak dapat memuat paket yang tersedia. Silakan coba lagi.",
+  "selectedPlanNotAvailable": "Paket yang dipilih tidak tersedia. Silakan coba lagi.",
+  "upgradeToAnnualPlan": "Tingkatkan ke Paket Tahunan",
+  "importantBillingInfo": "Informasi Penagihan Penting:",
+  "monthlyPlanContinues": "Paket bulanan Anda saat ini akan berlanjut hingga akhir periode penagihan",
+  "paymentMethodCharged": "Metode pembayaran Anda yang ada akan dikenakan biaya secara otomatis saat paket bulanan Anda berakhir",
+  "annualSubscriptionStarts": "Langganan tahunan 12 bulan Anda akan dimulai secara otomatis setelah pembayaran",
+  "thirteenMonthsCoverage": "Anda akan mendapatkan total 13 bulan cakupan (bulan ini + 12 bulan tahunan)",
+  "confirmUpgrade": "Konfirmasi Peningkatan",
+  "confirmPlanChange": "Konfirmasi Perubahan Paket",
+  "confirmAndProceed": "Konfirmasi & Lanjutkan",
+  "upgradeScheduled": "Peningkatan Dijadwalkan",
+  "changePlan": "Ubah Paket",
+  "upgradeAlreadyScheduled": "Peningkatan Anda ke paket tahunan sudah dijadwalkan",
+  "youAreOnUnlimitedPlan": "Anda berada di Paket Tak Terbatas.",
+  "yourOmiUnleashed": "Omi Anda, dibebaskan. Pilih tak terbatas untuk kemungkinan tanpa akhir.",
+  "planEndedOn": "Paket Anda berakhir pada {date}.\\nBerlangganan lagi sekarang - Anda akan dikenakan biaya segera untuk periode penagihan baru.",
+  "planSetToCancelOn": "Paket Anda diatur untuk dibatalkan pada {date}.\\nBerlangganan lagi sekarang untuk mempertahankan manfaat Anda - tidak ada biaya hingga {date}.",
+  "annualPlanStartsAutomatically": "Paket tahunan Anda akan dimulai secara otomatis saat paket bulanan Anda berakhir.",
+  "planRenewsOn": "Paket Anda diperbarui pada {date}.",
+  "unlimitedConversations": "Percakapan tak terbatas",
+  "askOmiAnything": "Tanya Omi apa saja tentang hidup Anda",
+  "unlockOmiInfiniteMemory": "Buka kunci memori tak terbatas Omi",
+  "youreOnAnnualPlan": "Anda berada di Paket Tahunan",
+  "alreadyBestValuePlan": "Anda sudah memiliki paket dengan nilai terbaik. Tidak perlu perubahan.",
+  "unableToLoadPlans": "Tidak dapat memuat paket",
+  "checkConnectionTryAgain": "Silakan periksa koneksi Anda dan coba lagi",
+  "useFreePlan": "Gunakan Paket Gratis",
+  "continueText": "Lanjutkan",
+  "resubscribe": "Berlangganan lagi",
+  "couldNotOpenPaymentSettings": "Tidak dapat membuka pengaturan pembayaran. Silakan coba lagi.",
+  "managePaymentMethod": "Kelola Metode Pembayaran",
+  "cancelSubscription": "Batalkan Langganan",
+  "endsOnDate": "Berakhir pada {date}",
+  "active": "Aktif",
+  "freePlan": "Paket Gratis",
+  "configure": "Konfigurasi",
+  "privacyInformation": "Informasi Privasi",
+  "@privacyInformation": {
+    "description": "Privacy page - privacyInformation"
+  },
+  "yourPrivacyMattersToUs": "Privasi Anda Penting bagi Kami",
+  "@yourPrivacyMattersToUs": {
+    "description": "Privacy page - yourPrivacyMattersToUs"
+  },
+  "privacyIntroText": "Di Omi, kami menganggap privasi Anda dengan sangat serius. Kami ingin transparan tentang data yang kami kumpulkan dan bagaimana kami menggunakannya. Inilah yang perlu Anda ketahui:",
+  "@privacyIntroText": {
+    "description": "Privacy page - privacyIntroText"
+  },
+  "whatWeTrack": "Apa yang Kami Lacak",
+  "@whatWeTrack": {
+    "description": "Privacy page - whatWeTrack"
+  },
+  "anonymityAndPrivacy": "Anonimitas dan Privasi",
+  "@anonymityAndPrivacy": {
+    "description": "Privacy page - anonymityAndPrivacy"
+  },
+  "optInAndOptOutOptions": "Opsi Ikut Serta dan Tidak Ikut Serta",
+  "@optInAndOptOutOptions": {
+    "description": "Privacy page - optInAndOptOutOptions"
+  },
+  "ourCommitment": "Komitmen Kami",
+  "@ourCommitment": {
+    "description": "Privacy page - ourCommitment"
+  },
+  "commitmentText": "Kami berkomitmen untuk menggunakan data yang kami kumpulkan hanya untuk membuat Omi menjadi produk yang lebih baik untuk Anda. Privasi dan kepercayaan Anda sangat penting bagi kami.",
+  "@commitmentText": {
+    "description": "Privacy page - commitmentText"
+  },
+  "thankYouText": "Terima kasih telah menjadi pengguna Omi yang berharga. Jika Anda memiliki pertanyaan atau kekhawatiran, jangan ragu untuk menghubungi kami di team@basedhardware.com.",
+  "@thankYouText": {
+    "description": "Privacy page - thankYouText"
+  },
+  "wifiSyncSettings": "Pengaturan Sinkronisasi WiFi",
+  "@wifiSyncSettings": {
+    "description": "WiFi sync settings - wifiSyncSettings"
+  },
+  "enterHotspotCredentials": "Masukkan kredensial hotspot ponsel Anda",
+  "@enterHotspotCredentials": {
+    "description": "WiFi sync settings - enterHotspotCredentials"
+  },
+  "wifiSyncUsesHotspot": "Sinkronisasi WiFi menggunakan ponsel Anda sebagai hotspot. Temukan nama dan kata sandi di Pengaturan > Hotspot Pribadi.",
+  "@wifiSyncUsesHotspot": {
+    "description": "WiFi sync settings - wifiSyncUsesHotspot"
+  },
+  "hotspotNameSsid": "Nama Hotspot (SSID)",
+  "@hotspotNameSsid": {
+    "description": "WiFi sync settings - hotspotNameSsid"
+  },
+  "exampleIphoneHotspot": "mis. iPhone Hotspot",
+  "@exampleIphoneHotspot": {
+    "description": "WiFi sync settings - exampleIphoneHotspot"
+  },
+  "password": "Kata Sandi",
+  "@password": {
+    "description": "WiFi sync settings - password"
+  },
+  "enterHotspotPassword": "Masukkan kata sandi hotspot",
+  "@enterHotspotPassword": {
+    "description": "WiFi sync settings - enterHotspotPassword"
+  },
+  "saveCredentials": "Simpan Kredensial",
+  "@saveCredentials": {
+    "description": "WiFi sync settings - saveCredentials"
+  },
+  "clearCredentials": "Hapus Kredensial",
+  "@clearCredentials": {
+    "description": "WiFi sync settings - clearCredentials"
+  },
+  "pleaseEnterHotspotName": "Silakan masukkan nama hotspot",
+  "@pleaseEnterHotspotName": {
+    "description": "WiFi sync settings - pleaseEnterHotspotName"
+  },
+  "wifiCredentialsSaved": "Kredensial WiFi disimpan",
+  "@wifiCredentialsSaved": {
+    "description": "WiFi sync settings - wifiCredentialsSaved"
+  },
+  "wifiCredentialsCleared": "Kredensial WiFi dihapus",
+  "@wifiCredentialsCleared": {
+    "description": "WiFi sync settings - wifiCredentialsCleared"
+  },
+  "summaryGeneratedForDate": "Ringkasan dibuat untuk {date}",
+  "@summaryGeneratedForDate": {
+    "description": "Daily summary settings - summaryGeneratedForDate",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "1/15/2026"
+      }
+    }
+  },
+  "failedToGenerateSummaryCheckConversations": "Gagal membuat ringkasan. Pastikan Anda memiliki percakapan untuk hari itu.",
+  "@failedToGenerateSummaryCheckConversations": {
+    "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Ringkasan tidak ditemukan",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "Perjalanan Hari Anda",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "Sorotan",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Pertanyaan Belum Terjawab",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Keputusan",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Pembelajaran",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
+  },
+  "autoDeletesAfterThreeDays": "Hapus otomatis setelah 3 hari.",
+  "@autoDeletesAfterThreeDays": {
+    "description": "Developer settings - autoDeletesAfterThreeDays"
+  },
+  "knowledgeGraphDeletedSuccessfully": "Grafik Pengetahuan berhasil dihapus",
+  "@knowledgeGraphDeletedSuccessfully": {
+    "description": "Developer settings - knowledgeGraphDeletedSuccessfully"
+  },
+  "exportStartedMayTakeFewSeconds": "Ekspor dimulai. Ini mungkin memerlukan beberapa detik...",
+  "@exportStartedMayTakeFewSeconds": {
+    "description": "Developer settings - exportStartedMayTakeFewSeconds"
+  },
+  "knowledgeGraphDeleteDescription": "Ini akan menghapus semua data grafik pengetahuan turunan (node dan koneksi). Memori asli Anda akan tetap aman. Grafik akan dibangun kembali seiring waktu atau pada permintaan berikutnya.",
+  "@knowledgeGraphDeleteDescription": {
+    "description": "Developer settings - knowledgeGraphDeleteDescription"
+  },
+  "configureDailySummaryDigest": "Konfigurasikan ringkasan tugas harian Anda",
+  "accessesDataTypes": "Mengakses {dataTypes}",
+  "triggeredByType": "dipicu oleh {triggerType}",
+  "accessesAndTriggeredBy": "{accessDescription} dan {triggerDescription}.",
+  "isTriggeredBy": "{triggerDescription}.",
+  "noSpecificDataAccessConfigured": "Tidak ada akses data spesifik yang dikonfigurasi."
 }

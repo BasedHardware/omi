@@ -81,7 +81,7 @@
   "@reprocessConversation": {
     "description": "Menu item to reprocess a conversation"
   },
-  "deleteConversation": "Ta bort konversation",
+  "deleteConversation": "Radera konversation",
   "@deleteConversation": {
     "description": "Menu item to delete a conversation"
   },
@@ -159,7 +159,7 @@
   "@createPersonHint": {
     "description": "Hint text for creating a person"
   },
-  "speechProfile": "Röstprofil",
+  "speechProfile": "Talprofil",
   "@speechProfile": {
     "description": "Speech profile label"
   },
@@ -175,7 +175,7 @@
   },
   "settings": "Inställningar",
   "@settings": {
-    "description": "Settings page title"
+    "description": "Bottom navigation label for settings"
   },
   "language": "Språk",
   "@language": {
@@ -293,9 +293,9 @@
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
-  "noStarredConversations": "Inga stjärnmärkta konversationer ännu.",
+  "noStarredConversations": "Inga stjärnmärkta konversationer",
   "@noStarredConversations": {
-    "description": "Empty state for starred filter"
+    "description": "Empty state title when no starred conversations"
   },
   "starConversationHint": "För att stjärnmärka en konversation, öppna den och tryck på stjärnikonen i sidhuvudet.",
   "@starConversationHint": {
@@ -347,11 +347,11 @@
   "@noMessagesYet": {
     "description": "Empty chat state message"
   },
-  "deletingMessages": "Tar bort dina meddelanden från Omis minne...",
+  "deletingMessages": "Raderar dina meddelanden från Omis minne...",
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Meddelande kopierat till urklipp.",
+  "messageCopied": "✨ Meddelande kopierat till urklipp",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -393,7 +393,7 @@
   },
   "apps": "Appar",
   "@apps": {
-    "description": "Apps page title"
+    "description": "Navigation label for apps page"
   },
   "noAppsFound": "Inga appar hittades",
   "@noAppsFound": {
@@ -447,7 +447,7 @@
   "@joinCommunity": {
     "description": "Discord community link"
   },
-  "membersAndCounting": "8000+ medlemmar och fler tillkommer.",
+  "membersAndCounting": "8000+ medlemmar och ökar.",
   "@membersAndCounting": {
     "description": "Discord member count"
   },
@@ -511,11 +511,11 @@
   "@email": {
     "description": "Email field label"
   },
-  "customVocabulary": "Anpassat ordförråd",
+  "customVocabulary": "Anpassat Ordförråd",
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Identifiera andra",
+  "identifyingOthers": "Identifiering av Andra",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
@@ -527,7 +527,7 @@
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "Data och integritet",
+  "dataPrivacy": "Dataintegritet",
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
@@ -535,7 +535,7 @@
   "@userId": {
     "description": "User ID label"
   },
-  "notSet": "Inte inställt",
+  "notSet": "Inte inställd",
   "@notSet": {
     "description": "Default value when not set"
   },
@@ -583,7 +583,7 @@
   "@referralProgram": {
     "description": "Referral program menu item"
   },
-  "signOut": "Logga ut",
+  "signOut": "Logga Ut",
   "@signOut": {
     "description": "Sign out button"
   },
@@ -867,7 +867,7 @@
   "@debugDiagnostics": {
     "description": "Debug & Diagnostics section header"
   },
-  "endpointUrl": "Endpoint-URL",
+  "endpointUrl": "Slutpunkts-URL",
   "@endpointUrl": {
     "description": "Endpoint URL label"
   },
@@ -879,7 +879,7 @@
   "@createKeyToStart": {
     "description": "Create key instruction"
   },
-  "createKey": "Skapa nyckel",
+  "createKey": "Skapa Nyckel",
   "@createKey": {
     "description": "Create Key button"
   },
@@ -1087,7 +1087,7 @@
   "exportShared": "Export delad",
   "deleteKnowledgeGraphTitle": "Ta bort kunskapsgraf?",
   "deleteKnowledgeGraphMessage": "Detta kommer att ta bort all härledd kunskapsgrafsdata (noder och kopplingar). Dina ursprungliga minnen förblir säkra. Grafen kommer att byggas om över tid eller vid nästa begäran.",
-  "knowledgeGraphDeleted": "Kunskapsgraf borttagen",
+  "knowledgeGraphDeleted": "Kunskapsgraf raderad",
   "deleteGraphFailed": "Det gick inte att ta bort graf: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -1119,7 +1119,7 @@
   "audioBytes": "Ljudbytes",
   "audioDataReceived": "Ljuddata mottagen",
   "intervalSeconds": "Intervall (sekunder)",
-  "daySummary": "Dagsammanfattning",
+  "daySummary": "Dagssammanfattning",
   "summaryGenerated": "Sammanfattning genererad",
   "claudeDesktop": "Claude Desktop",
   "addToClaudeConfig": "Lägg till i claude_desktop_config.json",
@@ -1938,7 +1938,7 @@
   "@selectYourLanguage": {
     "description": "Placeholder for selected language name"
   },
-  "personalGrowthJourney": "Din personliga utvecklingsresa med AI som lyssnar på varje ord.",
+  "personalGrowthJourney": "Din personliga tillväxtresa med AI som lyssnar på varje ord.",
   "@personalGrowthJourney": {
     "description": "Tagline on onboarding wrapper"
   },
@@ -2077,14 +2077,9 @@
   "@deleteSelected": {
     "description": "Tooltip for delete selected"
   },
-  "searchMemories": "Sök {count} minnen",
+  "searchMemories": "Sök minnen...",
   "@searchMemories": {
-    "description": "Hint text for memories search bar",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
+    "description": "Search input hint text"
   },
   "memoryDeleted": "Minne borttaget.",
   "@memoryDeleted": {
@@ -2094,9 +2089,9 @@
   "@undo": {
     "description": "Undo button text"
   },
-  "noMemoriesYet": "Inga minnen ännu",
+  "noMemoriesYet": "🧠 Inga minnen ännu",
   "@noMemoriesYet": {
-    "description": "Empty state text"
+    "description": "Empty state title when no memories"
   },
   "noAutoMemories": "Inga automatiskt extraherade minnen ännu",
   "@noAutoMemories": {
@@ -2110,9 +2105,9 @@
   "@noMemoriesInCategories": {
     "description": "Empty state text for filtered categories"
   },
-  "noMemoriesFound": "Inga minnen hittades",
+  "noMemoriesFound": "🔍 Inga minnen hittades",
   "@noMemoriesFound": {
-    "description": "Empty state text for search results"
+    "description": "Empty state title when search/filter has no results"
   },
   "addFirstMemory": "Lägg till ditt första minne",
   "@addFirstMemory": {
@@ -2191,11 +2186,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "Nytt minne",
+  "newMemory": "✨ Nytt minne",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "Redigera minne",
+  "editMemory": "✏️ Redigera minne",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2341,7 +2336,7 @@
   "summarize": "Sammanfatta",
   "generateSummary": "Generera sammanfattning",
   "conversationNotFoundOrDeleted": "Konversation hittades inte eller har raderats",
-  "deleteMemory": "Ta bort minne?",
+  "deleteMemory": "Ta bort minne",
   "thisActionCannotBeUndone": "Denna åtgärd kan inte ångras.",
   "memoriesCount": "{count} minnen",
   "noMemoriesInCategory": "Inga minnen i denna kategori ännu",
@@ -2416,7 +2411,7 @@
   "saveGoal": "Spara",
   "goals": "Mål",
   "tapToAddGoal": "Tryck för att lägga till ett mål",
-  "welcomeBack": "Välkommen tillbaka",
+  "welcomeBack": "Välkommen tillbaka, {name}",
   "yourConversations": "Dina konversationer",
   "reviewAndManageConversations": "Granska och hantera dina inspelade konversationer",
   "startCapturingConversations": "Börja fånga konversationer med din Omi-enhet för att se dem här.",
@@ -2519,5 +2514,785 @@
   "ratingsCount": "{count}+ betyg",
   "errorActivatingApp": "Fel vid aktivering av app",
   "integrationSetupRequired": "Om detta är en integrationsapp, se till att installationen är klar.",
-  "installed": "Installerad"
+  "installed": "Installerad",
+  "appIdLabel": "App-ID",
+  "appNameLabel": "Appnamn",
+  "appNamePlaceholder": "Min fantastiska app",
+  "pleaseEnterAppName": "Ange appnamn",
+  "categoryLabel": "Kategori",
+  "selectCategory": "Välj kategori",
+  "descriptionLabel": "Beskrivning",
+  "appDescriptionPlaceholder": "Min fantastiska app är en fantastisk app som gör fantastiska saker. Det är den bästa appen!",
+  "pleaseProvideValidDescription": "Ange en giltig beskrivning",
+  "appPricingLabel": "Apppriser",
+  "noneSelected": "Ingen vald",
+  "appIdCopiedToClipboard": "App-ID kopierat till urklipp",
+  "appCategoryModalTitle": "Appkategori",
+  "pricingFree": "Gratis",
+  "pricingPaid": "Betald",
+  "loadingCapabilities": "Laddar funktioner...",
+  "filterInstalled": "Installerade",
+  "filterMyApps": "Mina appar",
+  "clearSelection": "Rensa val",
+  "filterCategory": "Kategori",
+  "rating4PlusStars": "4+ stjärnor",
+  "rating3PlusStars": "3+ stjärnor",
+  "rating2PlusStars": "2+ stjärnor",
+  "rating1PlusStars": "1+ stjärna",
+  "filterRating": "Betyg",
+  "filterCapabilities": "Funktioner",
+  "noNotificationScopesAvailable": "Inga aviseringsområden tillgängliga",
+  "popularApps": "Populära appar",
+  "pleaseProvidePrompt": "Ange en prompt",
+  "chatWithAppName": "Chatta med {appName}",
+  "defaultAiAssistant": "Standard AI-assistent",
+  "readyToChat": "✨ Redo att chatta!",
+  "connectionNeeded": "🌐 Anslutning krävs",
+  "startConversation": "Starta en konversation och låt magin börja",
+  "checkInternetConnection": "Kontrollera din internetanslutning",
+  "wasThisHelpful": "Var detta hjälpsamt?",
+  "thankYouForFeedback": "Tack för din feedback!",
+  "maxFilesUploadError": "Du kan bara ladda upp 4 filer åt gången",
+  "attachedFiles": "📎 Bifogade filer",
+  "takePhoto": "Ta ett foto",
+  "captureWithCamera": "Fånga med kamera",
+  "selectImages": "Välj bilder",
+  "chooseFromGallery": "Välj från galleri",
+  "selectFile": "Välj en fil",
+  "chooseAnyFileType": "Välj vilken filtyp som helst",
+  "cannotReportOwnMessages": "Du kan inte rapportera dina egna meddelanden",
+  "messageReportedSuccessfully": "✅ Meddelande rapporterat",
+  "confirmReportMessage": "Är du säker på att du vill rapportera detta meddelande?",
+  "selectChatAssistant": "Välj chattassistent",
+  "enableMoreApps": "Aktivera fler appar",
+  "chatCleared": "Chatt rensad",
+  "clearChatTitle": "Rensa chatt?",
+  "confirmClearChat": "Är du säker på att du vill rensa chatten? Denna åtgärd kan inte ångras.",
+  "copy": "Kopiera",
+  "share": "Dela",
+  "report": "Rapportera",
+  "microphonePermissionRequired": "Mikrofontillstånd krävs för röstinspelning.",
+  "microphonePermissionDenied": "Mikrofontillstånd nekat. Ge tillstånd i Systeminställningar > Integritet och säkerhet > Mikrofon.",
+  "failedToCheckMicrophonePermission": "Kunde inte kontrollera mikrofontillstånd: {error}",
+  "failedToTranscribeAudio": "Kunde inte transkribera ljud",
+  "transcribing": "Transkriberar...",
+  "transcriptionFailed": "Transkription misslyckades",
+  "discardedConversation": "Kasserad konversation",
+  "at": "kl.",
+  "from": "från",
+  "copied": "Kopierat!",
+  "copyLink": "Kopiera länk",
+  "hideTranscript": "Dölj transkription",
+  "viewTranscript": "Visa transkription",
+  "conversationDetails": "Konversationsdetaljer",
+  "transcript": "Transkription",
+  "segmentsCount": "{count} segment",
+  "noTranscriptAvailable": "Ingen transkription tillgänglig",
+  "noTranscriptMessage": "Den här konversationen har ingen transkription.",
+  "conversationUrlCouldNotBeGenerated": "Konversations-URL kunde inte genereras.",
+  "failedToGenerateConversationLink": "Misslyckades generera konversationslänk",
+  "failedToGenerateShareLink": "Misslyckades generera delningslänk",
+  "reloadingConversations": "Laddar om konversationer...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "@welcomeBack": {
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "user": "Användare",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "Stjärnmärkta",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "Datum",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "Inga resultat hittades",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "Försök justera dina söktermer",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "starConversationsToFindQuickly": "Stjärnmärk konversationer för att hitta dem snabbt här",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "Inga konversationer den {date}",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "Försök välja ett annat datum",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  },
+  "conversations": "Konversationer",
+  "@conversations": {
+    "description": "Navigation label for conversations page"
+  },
+  "chat": "Chatt",
+  "@chat": {
+    "description": "Navigation label for chat page"
+  },
+  "@memories": {
+    "description": "Navigation label for memories page"
+  },
+  "actions": "Åtgärder",
+  "@actions": {
+    "description": "Navigation label for actions page"
+  },
+  "syncAvailable": "Synkronisering tillgänglig",
+  "@syncAvailable": {
+    "description": "Label for sync notification"
+  },
+  "referAFriend": "Rekommendera en vän",
+  "@referAFriend": {
+    "description": "Bottom navigation label for referral program"
+  },
+  "help": "Hjälp",
+  "@help": {
+    "description": "Bottom navigation label for help"
+  },
+  "pro": "Pro",
+  "@pro": {
+    "description": "Badge label for pro/unlimited users"
+  },
+  "upgradeToPro": "Uppgradera till Pro",
+  "@upgradeToPro": {
+    "description": "Subscription banner button text"
+  },
+  "getOmiDevice": "Skaffa Omi-enhet",
+  "@getOmiDevice": {
+    "description": "Widget title for device promotion"
+  },
+  "wearableAiCompanion": "Bärbar AI-följeslagare",
+  "@wearableAiCompanion": {
+    "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "Laddar minnen...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "allMemories": "Alla minnen",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "Om dig",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "Manuell",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "Laddar dina minnen...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "createYourFirstMemory": "Skapa ditt första minne för att komma igång",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "Försök justera din sökning eller filter",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
+  },
+  "whatWouldYouLikeToRemember": "Vad vill du komma ihåg?",
+  "category": "Kategori",
+  "public": "Offentlig",
+  "failedToSaveCheckConnection": "Kunde inte spara. Kontrollera din anslutning.",
+  "createMemory": "Skapa minne",
+  "deleteMemoryConfirmation": "Är du säker på att du vill ta bort detta minne? Denna åtgärd kan inte ångras.",
+  "makePrivate": "Gör privat",
+  "organizeAndControlMemories": "Organisera och kontrollera dina minnen",
+  "total": "Totalt",
+  "makeAllMemoriesPrivate": "Gör alla minnen privata",
+  "setAllMemoriesToPrivate": "Ställ in alla minnen till privat synlighet",
+  "makeAllMemoriesPublic": "Gör alla minnen offentliga",
+  "setAllMemoriesToPublic": "Ställ in alla minnen till offentlig synlighet",
+  "permanentlyRemoveAllMemories": "Ta bort alla minnen permanent från Omi",
+  "allMemoriesAreNowPrivate": "Alla minnen är nu privata",
+  "allMemoriesAreNowPublic": "Alla minnen är nu offentliga",
+  "clearOmisMemory": "Rensa Omis minne",
+  "clearMemoryConfirmation": "Är du säker på att du vill rensa Omis minne? Denna åtgärd kan inte ångras och kommer permanent ta bort alla {count} minnen.",
+  "omisMemoryCleared": "Omis minne om dig har rensats",
+  "welcomeToOmi": "Välkommen till Omi",
+  "continueWithApple": "Fortsätt med Apple",
+  "continueWithGoogle": "Fortsätt med Google",
+  "byContinuingYouAgree": "Genom att fortsätta godkänner du våra ",
+  "termsOfService": "Användarvillkor",
+  "and": " och ",
+  "dataAndPrivacy": "Data och integritet",
+  "secureAuthViaAppleId": "Säker autentisering via Apple ID",
+  "secureAuthViaGoogleAccount": "Säker autentisering via Google-konto",
+  "whatWeCollect": "Vad vi samlar in",
+  "dataCollectionMessage": "Genom att fortsätta kommer dina konversationer, inspelningar och personlig information att lagras säkert på våra servrar för att tillhandahålla AI-drivna insikter och aktivera alla appfunktioner.",
+  "dataProtection": "Dataskydd",
+  "yourDataIsProtected": "Din data är skyddad och styrs av vår ",
+  "pleaseSelectYourPrimaryLanguage": "Välj ditt primära språk",
+  "chooseYourLanguage": "Välj ditt språk",
+  "selectPreferredLanguageForBestExperience": "Välj ditt föredragna språk för den bästa Omi-upplevelsen",
+  "searchLanguages": "Sök språk...",
+  "selectALanguage": "Välj ett språk",
+  "tryDifferentSearchTerm": "Prova ett annat sökord",
+  "pleaseEnterYourName": "Vänligen ange ditt namn",
+  "nameMustBeAtLeast2Characters": "Namnet måste vara minst 2 tecken",
+  "tellUsHowYouWouldLikeToBeAddressed": "Berätta för oss hur du vill bli tilltalad. Detta hjälper till att personalisera din Omi-upplevelse.",
+  "charactersCount": "{count} tecken",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "enableFeaturesForBestExperience": "Aktivera funktioner för den bästa Omi-upplevelsen på din enhet.",
+  "microphoneAccess": "Mikrofonåtkomst",
+  "recordAudioConversations": "Spela in ljudsamtal",
+  "microphoneAccessDescription": "Omi behöver mikrofonåtkomst för att spela in dina samtal och tillhandahålla transkriptioner.",
+  "screenRecording": "Skärminspelning",
+  "captureSystemAudioFromMeetings": "Fånga systemljud från möten",
+  "screenRecordingDescription": "Omi behöver tillstånd för skärminspelning för att fånga systemljud från dina webbläsarbaserade möten.",
+  "accessibility": "Tillgänglighet",
+  "detectBrowserBasedMeetings": "Upptäck webbläsarbaserade möten",
+  "accessibilityDescription": "Omi behöver tillgänglighetstillstånd för att upptäcka när du ansluter till Zoom-, Meet- eller Teams-möten i din webbläsare.",
+  "pleaseWait": "Vänta...",
+  "joinTheCommunity": "Gå med i communityn!",
+  "loadingProfile": "Laddar profil...",
+  "profileSettings": "Profilinställningar",
+  "noEmailSet": "Ingen e-post inställd",
+  "userIdCopiedToClipboard": "Användar-ID kopierat",
+  "yourInformation": "Din Information",
+  "setYourName": "Ange ditt namn",
+  "changeYourName": "Ändra ditt namn",
+  "persona": "Persona",
+  "manageYourOmiPersona": "Hantera din Omi-persona",
+  "voiceAndPeople": "Röst och Personer",
+  "teachOmiYourVoice": "Lär Omi din röst",
+  "tellOmiWhoSaidIt": "Berätta för Omi vem som sa det 🗣️",
+  "payment": "Betalning",
+  "addOrChangeYourPaymentMethod": "Lägg till eller ändra betalningsmetod",
+  "preferences": "Inställningar",
+  "helpImproveOmiBySharing": "Hjälp till att förbättra Omi genom att dela anonymiserade analysdata",
+  "deleteAccount": "Radera Konto",
+  "deleteYourAccountAndAllData": "Radera ditt konto och alla data",
+  "helpsDiagnoseIssuesAutoDeletes": "Hjälper till att diagnostisera problem. Raderas automatiskt efter 3 dagar.",
+  "clearLogs": "Rensa loggar",
+  "debugLogsCleared": "Felsökningsloggar rensade",
+  "exportConversations": "Exportera konversationer",
+  "exportAllConversationsToJson": "Exportera alla dina konversationer till en JSON-fil.",
+  "conversationsExportStarted": "Export av konversationer startad. Detta kan ta några sekunder, vänligen vänta.",
+  "mcpDescription": "För att ansluta Omi till andra applikationer för att läsa, söka och hantera dina minnen och konversationer. Skapa en nyckel för att komma igång.",
+  "apiKeys": "API-nycklar",
+  "errorLabel": "Fel: {error}",
+  "noApiKeysFound": "Inga API-nycklar hittades. Skapa en för att komma igång.",
+  "advancedSettings": "Avancerade inställningar",
+  "triggersWhenNewConversationCreated": "Utlöses när en ny konversation skapas.",
+  "triggersWhenNewTranscriptReceived": "Utlöses när en ny transkription tas emot.",
+  "realtimeAudioBytes": "Realtids-ljudbytes",
+  "triggersWhenAudioBytesReceived": "Utlöses när ljudbytes tas emot.",
+  "everyXSeconds": "Varje x sekunder",
+  "triggersWhenDaySummaryGenerated": "Utlöses när dagssammanfattningen genereras.",
+  "experimental": "Experimentell",
+  "tryLatestExperimentalFeatures": "Prova de senaste experimentella funktionerna från Omi-teamet.",
+  "transcriptionServiceDiagnosticStatus": "Diagnostisk status för transkriptionstjänsten",
+  "enableDetailedDiagnosticMessages": "Aktivera detaljerade diagnostiska meddelanden från transkriptionstjänsten",
+  "autoCreateAndTagNewSpeakers": "Skapa och tagga nya talare automatiskt",
+  "automaticallyCreateNewPerson": "Skapa automatiskt en ny person när ett namn upptäcks i transkriptionen.",
+  "pilotFeatures": "Pilotfunktioner",
+  "pilotFeaturesDescription": "Dessa funktioner är tester och ingen support garanteras.",
+  "suggestFollowUpQuestion": "Föreslå uppföljningsfråga",
+  "saveSettings": "Spara Inställningar",
+  "syncingDeveloperSettings": "Synkroniserar utvecklarinställningar...",
+  "summary": "Sammanfattning",
+  "auto": "Automatisk",
+  "noSummaryForApp": "Ingen sammanfattning tillgänglig för den här appen. Prova en annan app för bättre resultat.",
+  "tryAnotherApp": "Prova en annan app",
+  "generatedBy": "Genererad av {appName}",
+  "overview": "Översikt",
+  "otherAppResults": "Resultat från andra appar",
+  "unknownApp": "Okänd app",
+  "noSummaryAvailable": "Ingen sammanfattning tillgänglig",
+  "conversationNoSummaryYet": "Den här konversationen har ingen sammanfattning ännu.",
+  "chooseSummarizationApp": "Välj sammanfattningsapp",
+  "setAsDefaultSummarizationApp": "{appName} inställd som standardapp för sammanfattning",
+  "letOmiChooseAutomatically": "Låt Omi automatiskt välja den bästa appen",
+  "deleteConversationConfirmation": "Är du säker på att du vill radera den här konversationen? Denna åtgärd kan inte ångras.",
+  "conversationDeleted": "Konversation raderad",
+  "generatingLink": "Genererar länk...",
+  "editConversation": "Redigera konversation",
+  "conversationLinkCopiedToClipboard": "Konversationslänk kopierad till urklipp",
+  "conversationTranscriptCopiedToClipboard": "Konversationstranskription kopierad till urklipp",
+  "editConversationDialogTitle": "Redigera konversation",
+  "changeTheConversationTitle": "Ändra konversationens titel",
+  "conversationTitle": "Konversationstitel",
+  "enterConversationTitle": "Ange konversationstitel...",
+  "conversationTitleUpdatedSuccessfully": "Konversationstitel uppdaterad",
+  "failedToUpdateConversationTitle": "Misslyckades uppdatera konversationstitel",
+  "errorUpdatingConversationTitle": "Fel vid uppdatering av konversationstitel",
+  "settingUp": "Konfigurerar...",
+  "preparingSystemAudioCapture": "Förbereder systemljudupptagning",
+  "clickTheButtonToCaptureAudio": "Klicka på knappen för att fånga ljud för livetranskriptioner, AI-insikter och automatisk sparning.",
+  "startYourFirstRecording": "Starta din första inspelning",
+  "reconnecting": "Återansluter...",
+  "recordingPaused": "Inspelning pausad",
+  "recordingActive": "Inspelning aktiv",
+  "startRecording": "Starta inspelning",
+  "resumingInCountdown": "Återupptar om {countdown}s...",
+  "tapPlayToResume": "Tryck på spela upp för att fortsätta",
+  "listeningForAudio": "Lyssnar efter ljud...",
+  "preparingAudioCapture": "Förbereder ljudupptagning",
+  "clickToBeginRecording": "Klicka för att börja inspelningen",
+  "translated": "översatt",
+  "liveTranscript": "Livetranskription",
+  "segmentsSingular": "{count} segment",
+  "segmentsPlural": "{count} segment",
+  "startRecordingToSeeTranscript": "Starta inspelning för att se livetranskription",
+  "paused": "Pausad",
+  "initializing": "Initialiserar...",
+  "recording": "Spelar in",
+  "microphoneChangedResumingIn": "Mikrofon ändrad. Återupptar om {countdown}s",
+  "clickPlayToResumeOrStop": "Klicka på spela upp för att fortsätta eller stoppa för att avsluta",
+  "settingUpSystemAudioCapture": "Konfigurerar systemljudupptagning",
+  "capturingAudioAndGeneratingTranscript": "Fångar ljud och genererar transkription",
+  "clickToBeginRecordingSystemAudio": "Klicka för att börja spela in systemljud",
+  "you": "Du",
+  "speakerWithId": "Talare {speakerId}",
+  "translatedByOmi": "översatt av omi",
+  "backToConversations": "Tillbaka till samtal",
+  "systemAudio": "System",
+  "mic": "Mikrofon",
+  "audioInputSetTo": "Ljudingång inställd på {deviceName}",
+  "errorSwitchingAudioDevice": "Fel vid byte av ljudenhet: {error}",
+  "selectAudioInput": "Välj ljudingång",
+  "loadingDevices": "Laddar enheter...",
+  "settingsHeader": "INSTÄLLNINGAR",
+  "plansAndBilling": "Planer och Fakturering",
+  "calendarIntegration": "Kalenderintegration",
+  "dailySummary": "Daglig Sammanfattning",
+  "developer": "Utvecklare",
+  "about": "Om",
+  "selectTime": "Välj Tid",
+  "accountGroup": "Konto",
+  "signOutQuestion": "Logga Ut?",
+  "signOutConfirmation": "Är du säker på att du vill logga ut?",
+  "customVocabularyHeader": "ANPASSAT ORDFÖRRÅD",
+  "addWordsDescription": "Lägg till ord som Omi ska känna igen under transkription.",
+  "enterWordsHint": "Ange ord (kommaseparerade)",
+  "dailySummaryHeader": "DAGLIG SAMMANFATTNING",
+  "dailySummaryTitle": "Daglig Sammanfattning",
+  "dailySummaryDescription": "Få en personlig sammanfattning av dina konversationer",
+  "deliveryTime": "Leveranstid",
+  "deliveryTimeDescription": "När du ska få din dagliga sammanfattning",
+  "subscription": "Prenumeration",
+  "viewPlansAndUsage": "Visa Planer och Användning",
+  "viewPlansDescription": "Hantera din prenumeration och se användningsstatistik",
+  "addOrChangePaymentMethod": "Lägg till eller ändra din betalningsmetod",
+  "displayOptions": "Visningsalternativ",
+  "showMeetingsInMenuBar": "Visa möten i menyraden",
+  "displayUpcomingMeetingsDescription": "Visa kommande möten i menyraden",
+  "showEventsWithoutParticipants": "Visa händelser utan deltagare",
+  "includePersonalEventsDescription": "Inkludera personliga händelser utan deltagare",
+  "upcomingMeetings": "KOMMANDE MÖTEN",
+  "checkingNext7Days": "Kontrollerar de kommande 7 dagarna",
+  "shortcuts": "Genvägar",
+  "shortcutChangeInstruction": "Klicka på en genväg för att ändra den. Tryck på Escape för att avbryta.",
+  "configurePersonaDescription": "Konfigurera din AI-persona",
+  "configureSTTProvider": "Konfigurera STT-leverantör",
+  "setConversationEndDescription": "Ställ in när konversationer avslutas automatiskt",
+  "importDataDescription": "Importera data från andra källor",
+  "debugAndDiagnostics": "Felsökning och diagnostik",
+  "autoDeletesAfter3Days": "Raderas automatiskt efter 3 dagar",
+  "helpsDiagnoseIssues": "Hjälper till att diagnostisera problem",
+  "exportConversationsDescription": "Exportera konversationer till JSON",
+  "exportingConversations": "Exporterar konversationer...",
+  "clearNodesDescription": "Rensa alla noder och anslutningar",
+  "deleteKnowledgeGraphQuestion": "Ta bort kunskapsgraf?",
+  "deleteKnowledgeGraphWarning": "Detta raderar all härledd kunskapsgrafdata. Dina ursprungliga minnen förblir säkra.",
+  "connectOmiWithAI": "Anslut Omi till AI-assistenter",
+  "noAPIKeys": "Inga API-nycklar. Skapa en för att komma igång.",
+  "realTimeTranscript": "Realtidstranskription",
+  "transcriptionDiagnostics": "Transkriptionsdiagnostik",
+  "detailedDiagnosticMessages": "Detaljerade diagnostiska meddelanden",
+  "autoCreateSpeakers": "Skapa talare automatiskt",
+  "autoCreateWhenDetected": "Skapa automatiskt när namn upptäcks",
+  "followUpQuestions": "Uppföljningsfrågor",
+  "suggestQuestionsAfterConversations": "Föreslå frågor efter konversationer",
+  "goalTracker": "Målspårare",
+  "trackPersonalGoals": "Spåra personliga mål på startsidan",
+  "dailyReflection": "Daglig reflektion",
+  "dailyReflectionDescription": "21:00 påminnelse att reflektera över din dag",
+  "endpointURL": "Slutpunkts-URL",
+  "links": "Länkar",
+  "discordMemberCount": "Över 8000 medlemmar på Discord",
+  "userInformation": "Användarinformation",
+  "capabilities": "Funktioner",
+  "previewScreenshots": "Förhandsgranskning av skärmdumpar",
+  "holdOnPreparingForm": "Vänta, vi förbereder formuläret åt dig",
+  "bySubmittingYouAgreeToOmi": "Genom att skicka godkänner du Omi ",
+  "termsAndPrivacyPolicy": "Villkor och Integritetspolicy",
+  "manageYourApp": "Hantera din app",
+  "updatingYourApp": "Uppdaterar din app",
+  "fetchingYourAppDetails": "Hämtar appdetaljer",
+  "updateAppQuestion": "Uppdatera app?",
+  "updateAppConfirmation": "Är du säker på att du vill uppdatera din app? Ändringarna visas efter granskning av vårt team.",
+  "updateApp": "Uppdatera app",
+  "createAndSubmitNewApp": "Skapa och skicka in en ny app",
+  "appsCount": "Appar ({count})",
+  "privateAppsCount": "Privata appar ({count})",
+  "publicAppsCount": "Offentliga appar ({count})",
+  "newVersionAvailable": "Ny version tillgänglig  🎉",
+  "no": "Nej",
+  "subscriptionCancelledSuccessfully": "Prenumeration avbruten. Den förblir aktiv till slutet av den aktuella faktureringsperioden.",
+  "failedToCancelSubscription": "Det gick inte att avbryta prenumerationen. Försök igen.",
+  "invalidPaymentUrl": "Ogiltig betalnings-URL",
+  "permissionsAndTriggers": "Behörigheter och utlösare",
+  "chatFeatures": "Chattfunktioner",
+  "uninstall": "Avinstallera",
+  "installs": "INSTALLATIONER",
+  "priceLabel": "PRIS",
+  "updatedLabel": "UPPDATERAD",
+  "createdLabel": "SKAPAD",
+  "featuredLabel": "UTVALD",
+  "cancelSubscriptionQuestion": "Avbryt prenumeration?",
+  "cancelSubscriptionConfirmation": "Är du säker på att du vill avbryta din prenumeration? Du kommer att ha tillgång till slutet av din nuvarande faktureringsperiod.",
+  "cancelSubscriptionButton": "Avbryt prenumeration",
+  "cancelling": "Avbryter...",
+  "betaTesterMessage": "Du är betatestare för denna app. Den är inte offentlig ännu. Den blir offentlig efter godkännande.",
+  "appUnderReviewMessage": "Din app granskas och är endast synlig för dig. Den blir offentlig efter godkännande.",
+  "appRejectedMessage": "Din app har avvisats. Uppdatera uppgifterna och skicka in igen för granskning.",
+  "invalidIntegrationUrl": "Ogiltig integrations-URL",
+  "tapToComplete": "Tryck för att slutföra",
+  "invalidSetupInstructionsUrl": "Ogiltig URL för installationsinstruktioner",
+  "pushToTalk": "Tryck för att prata",
+  "summaryPrompt": "Sammanfattningsprompt",
+  "pleaseSelectARating": "Välj ett betyg",
+  "reviewAddedSuccessfully": "Recension tillagd 🚀",
+  "reviewUpdatedSuccessfully": "Recension uppdaterad 🚀",
+  "failedToSubmitReview": "Det gick inte att skicka recensionen. Försök igen.",
+  "addYourReview": "Lägg till din recension",
+  "editYourReview": "Redigera din recension",
+  "writeAReviewOptional": "Skriv en recension (valfritt)",
+  "submitReview": "Skicka recension",
+  "updateReview": "Uppdatera recension",
+  "yourReview": "Din recension",
+  "anonymousUser": "Anonym användare",
+  "issueActivatingApp": "Det uppstod ett problem vid aktivering av denna app. Försök igen.",
+  "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
+  "copyUrl": "Kopiera URL",
+  "txtFormat": "TXT",
+  "pdfFormat": "PDF",
+  "weekdayMon": "Mån",
+  "weekdayTue": "Tis",
+  "weekdayWed": "Ons",
+  "weekdayThu": "Tor",
+  "weekdayFri": "Fre",
+  "weekdaySat": "Lör",
+  "weekdaySun": "Sön",
+  "serviceIntegrationComingSoon": "{serviceName}-integration kommer snart",
+  "alreadyExportedTo": "Redan exporterad till {platform}",
+  "anotherPlatform": "en annan plattform",
+  "pleaseAuthenticateWithService": "Vänligen autentisera med {serviceName} i Inställningar > Uppgiftsintegrationer",
+  "addingToService": "Lägger till i {serviceName}...",
+  "addedToService": "Tillagd i {serviceName}",
+  "failedToAddToService": "Kunde inte lägga till i {serviceName}",
+  "permissionDeniedForAppleReminders": "Behörighet nekad för Apple Påminnelser",
+  "failedToCreateApiKey": "Kunde inte skapa leverantörens API-nyckel: {error}",
+  "createAKey": "Skapa en nyckel",
+  "apiKeyRevokedSuccessfully": "API-nyckel återkallad",
+  "failedToRevokeApiKey": "Kunde inte återkalla API-nyckel: {error}",
+  "omiApiKeys": "Omi API-nycklar",
+  "apiKeysDescription": "API-nycklar används för autentisering när din app kommunicerar med OMI-servern. De låter din applikation skapa minnen och få säker åtkomst till andra OMI-tjänster.",
+  "aboutOmiApiKeys": "Om Omi API-nycklar",
+  "noApiKeysYet": "Inga API-nycklar ännu. Skapa en för att integrera med din app.",
+  "yourNewKey": "Din nya nyckel:",
+  "copyToClipboard": "Kopiera till urklipp",
+  "pleaseCopyKeyNow": "Vänligen kopiera den nu och skriv ner den på ett säkert ställe. ",
+  "willNotSeeAgain": "Du kommer inte att kunna se den igen.",
+  "revokeKey": "Återkalla nyckel",
+  "revokeApiKeyQuestion": "Återkalla API-nyckel?",
+  "revokeApiKeyWarning": "Denna åtgärd kan inte ångras. Alla applikationer som använder denna nyckel kommer inte längre att kunna komma åt API:et.",
+  "revoke": "Återkalla",
+  "whatWouldYouLikeToCreate": "Vad vill du skapa?",
+  "createAnApp": "Skapa en app",
+  "createAndShareYourApp": "Skapa och dela din app",
+  "createMyClone": "Skapa min klon",
+  "createYourDigitalClone": "Skapa din digitala klon",
+  "itemApp": "App",
+  "itemPersona": "Persona",
+  "keepItemPublic": "Behåll {item} offentlig",
+  "makeItemPublicQuestion": "Gör {item} offentlig?",
+  "makeItemPrivateQuestion": "Gör {item} privat?",
+  "makeItemPublicExplanation": "Om du gör {item} offentlig kan den användas av alla",
+  "makeItemPrivateExplanation": "Om du gör {item} privat nu slutar den fungera för alla och blir endast synlig för dig",
+  "manageApp": "Hantera app",
+  "updatePersonaDetails": "Uppdatera persona-detaljer",
+  "deleteItemTitle": "Radera {item}",
+  "deleteItemQuestion": "Radera {item}?",
+  "deleteItemConfirmation": "Är du säker på att du vill radera denna {item}? Denna åtgärd kan inte ångras.",
+  "revokeKeyQuestion": "Återkalla nyckel?",
+  "revokeKeyConfirmation": "Är du säker på att du vill återkalla nyckeln \"{keyName}\"? Denna åtgärd kan inte ångras.",
+  "createNewKey": "Skapa ny nyckel",
+  "keyNameHint": "t.ex. Claude Desktop",
+  "pleaseEnterAName": "Ange ett namn.",
+  "failedToCreateKeyWithError": "Det gick inte att skapa nyckel: {error}",
+  "failedToCreateKeyTryAgain": "Det gick inte att skapa nyckel. Försök igen.",
+  "keyCreated": "Nyckel skapad",
+  "keyCreatedMessage": "Din nya nyckel har skapats. Kopiera den nu. Du kommer inte att kunna se den igen.",
+  "keyWord": "Nyckel",
+  "externalAppAccess": "Extern app-åtkomst",
+  "externalAppAccessDescription": "Följande installerade appar har externa integrationer och kan komma åt dina data, såsom konversationer och minnen.",
+  "noExternalAppsHaveAccess": "Inga externa appar har åtkomst till dina data.",
+  "maximumSecurityE2ee": "Maximal säkerhet (E2EE)",
+  "e2eeDescription": "End-to-end-kryptering är guldstandarden för integritet. När det är aktiverat krypteras dina data på din enhet innan de skickas till våra servrar. Det betyder att ingen, inte ens Omi, kan komma åt ditt innehåll.",
+  "importantTradeoffs": "Viktiga avvägningar:",
+  "e2eeTradeoff1": "• Vissa funktioner som externa app-integrationer kan vara inaktiverade.",
+  "e2eeTradeoff2": "• Om du tappar ditt lösenord kan dina data inte återställas.",
+  "featureComingSoon": "Den här funktionen kommer snart!",
+  "migrationInProgressMessage": "Migrering pågår. Du kan inte ändra skyddsnivån förrän den är klar.",
+  "migrationFailed": "Migreringen misslyckades",
+  "migratingFromTo": "Migrerar från {source} till {target}",
+  "objectsCount": "{processed} / {total} objekt",
+  "secureEncryption": "Säker kryptering",
+  "secureEncryptionDescription": "Dina data krypteras med en nyckel som är unik för dig på våra servrar, som finns på Google Cloud. Det betyder att ditt råa innehåll är otillgängligt för alla, inklusive Omi-personal eller Google, direkt från databasen.",
+  "endToEndEncryption": "End-to-end-kryptering",
+  "e2eeCardDescription": "Aktivera för maximal säkerhet där endast du kan komma åt dina data. Tryck för att lära dig mer.",
+  "dataAlwaysEncrypted": "Oavsett nivå är dina data alltid krypterade i vila och under överföring.",
+  "readOnlyScope": "Endast läsning",
+  "fullAccessScope": "Full åtkomst",
+  "readScope": "Läs",
+  "writeScope": "Skriv",
+  "apiKeyCreated": "API-nyckel skapad!",
+  "saveKeyWarning": "Spara denna nyckel nu! Du kommer inte att kunna se den igen.",
+  "yourApiKey": "DIN API-NYCKEL",
+  "tapToCopy": "Tryck för att kopiera",
+  "copyKey": "Kopiera nyckel",
+  "createApiKey": "Skapa API-nyckel",
+  "accessDataProgrammatically": "Få programmatisk åtkomst till dina data",
+  "keyNameLabel": "NYCKELNAMN",
+  "keyNamePlaceholder": "t.ex., Min app-integration",
+  "permissionsLabel": "BEHÖRIGHETER",
+  "permissionsInfoNote": "R = Läs, W = Skriv. Standard endast läsning om inget är valt.",
+  "developerApi": "Utvecklar-API",
+  "createAKeyToGetStarted": "Skapa en nyckel för att komma igång",
+  "errorWithMessage": "Fel: {error}",
+  "omiTraining": "Omi-träning",
+  "trainingDataProgram": "Träningsdataprogram",
+  "getOmiUnlimitedFree": "Få Omi Unlimited gratis genom att bidra med dina data för att träna AI-modeller.",
+  "trainingDataBullets": "• Dina data hjälper till att förbättra AI-modeller\n• Endast icke-känsliga data delas\n• Helt transparent process",
+  "learnMoreAtOmiTraining": "Läs mer på omi.me/training",
+  "agreeToContributeData": "Jag förstår och godkänner att bidra med mina data för AI-träning",
+  "submitRequest": "Skicka förfrågan",
+  "thankYouRequestUnderReview": "Tack! Din förfrågan granskas. Vi meddelar dig när den har godkänts.",
+  "planRemainsActiveUntil": "Din plan förblir aktiv till {date}. Efter det förlorar du tillgång till dina obegränsade funktioner. Är du säker?",
+  "confirmCancellation": "Bekräfta avbokning",
+  "keepMyPlan": "Behåll min plan",
+  "subscriptionSetToCancel": "Din prenumeration är inställd på att avslutas vid periodens slut.",
+  "switchedToOnDevice": "Bytte till transkription på enheten",
+  "couldNotSwitchToFreePlan": "Kunde inte byta till gratisplan. Försök igen.",
+  "couldNotLoadPlans": "Kunde inte ladda tillgängliga planer. Försök igen.",
+  "selectedPlanNotAvailable": "Vald plan är inte tillgänglig. Försök igen.",
+  "upgradeToAnnualPlan": "Uppgradera till årsplan",
+  "importantBillingInfo": "Viktig faktureringsinformation:",
+  "monthlyPlanContinues": "Din nuvarande månadsplan fortsätter till slutet av din faktureringsperiod",
+  "paymentMethodCharged": "Din befintliga betalningsmetod debiteras automatiskt när din månadsplan avslutas",
+  "annualSubscriptionStarts": "Din 12-månaders årsprenumeration startar automatiskt efter debiteringen",
+  "thirteenMonthsCoverage": "Du får totalt 13 månaders täckning (nuvarande månad + 12 månader årligen)",
+  "confirmUpgrade": "Bekräfta uppgradering",
+  "confirmPlanChange": "Bekräfta planändring",
+  "confirmAndProceed": "Bekräfta och fortsätt",
+  "upgradeScheduled": "Uppgradering schemalagd",
+  "changePlan": "Ändra plan",
+  "upgradeAlreadyScheduled": "Din uppgradering till årsplanen är redan schemalagd",
+  "youAreOnUnlimitedPlan": "Du har den obegränsade planen.",
+  "yourOmiUnleashed": "Din Omi, frigjord. Bli obegränsad för oändliga möjligheter.",
+  "planEndedOn": "Din plan avslutades {date}.\\nPrenumerera igen nu - du debiteras omedelbart för en ny faktureringsperiod.",
+  "planSetToCancelOn": "Din plan är inställd på att avbrytas {date}.\\nPrenumerera igen nu för att behålla dina fördelar - ingen avgift till {date}.",
+  "annualPlanStartsAutomatically": "Din årsplan startar automatiskt när din månadsplan avslutas.",
+  "planRenewsOn": "Din plan förnyas {date}.",
+  "unlimitedConversations": "Obegränsade samtal",
+  "askOmiAnything": "Fråga Omi vad som helst om ditt liv",
+  "unlockOmiInfiniteMemory": "Lås upp Omis oändliga minne",
+  "youreOnAnnualPlan": "Du har årsplanen",
+  "alreadyBestValuePlan": "Du har redan den bästa värdeplanen. Inga ändringar behövs.",
+  "unableToLoadPlans": "Kan inte ladda planer",
+  "checkConnectionTryAgain": "Kontrollera din anslutning och försök igen",
+  "useFreePlan": "Använd gratisplan",
+  "continueText": "Fortsätt",
+  "resubscribe": "Prenumerera igen",
+  "couldNotOpenPaymentSettings": "Kunde inte öppna betalningsinställningar. Försök igen.",
+  "managePaymentMethod": "Hantera betalningsmetod",
+  "cancelSubscription": "Avsluta prenumeration",
+  "endsOnDate": "Slutar {date}",
+  "active": "Aktiv",
+  "freePlan": "Gratisplan",
+  "configure": "Konfigurera",
+  "privacyInformation": "Integritetsinformation",
+  "@privacyInformation": {
+    "description": "Privacy page - privacyInformation"
+  },
+  "yourPrivacyMattersToUs": "Din integritet är viktig för oss",
+  "@yourPrivacyMattersToUs": {
+    "description": "Privacy page - yourPrivacyMattersToUs"
+  },
+  "privacyIntroText": "På Omi tar vi din integritet på största allvar. Vi vill vara transparenta om de uppgifter vi samlar in och hur vi använder dem. Här är vad du behöver veta:",
+  "@privacyIntroText": {
+    "description": "Privacy page - privacyIntroText"
+  },
+  "whatWeTrack": "Vad vi spårar",
+  "@whatWeTrack": {
+    "description": "Privacy page - whatWeTrack"
+  },
+  "anonymityAndPrivacy": "Anonymitet och integritet",
+  "@anonymityAndPrivacy": {
+    "description": "Privacy page - anonymityAndPrivacy"
+  },
+  "optInAndOptOutOptions": "Samtyckes- och avanmälningsalternativ",
+  "@optInAndOptOutOptions": {
+    "description": "Privacy page - optInAndOptOutOptions"
+  },
+  "ourCommitment": "Vårt åtagande",
+  "@ourCommitment": {
+    "description": "Privacy page - ourCommitment"
+  },
+  "commitmentText": "Vi förbinder oss att endast använda de uppgifter vi samlar in för att göra Omi till en bättre produkt för dig. Din integritet och ditt förtroende är av största vikt för oss.",
+  "@commitmentText": {
+    "description": "Privacy page - commitmentText"
+  },
+  "thankYouText": "Tack för att du är en uppskattad användare av Omi. Om du har frågor eller funderingar, kontakta oss gärna på team@basedhardware.com.",
+  "@thankYouText": {
+    "description": "Privacy page - thankYouText"
+  },
+  "wifiSyncSettings": "WiFi-synkroniseringsinställningar",
+  "@wifiSyncSettings": {
+    "description": "WiFi sync settings - wifiSyncSettings"
+  },
+  "enterHotspotCredentials": "Ange din telefons hotspot-uppgifter",
+  "@enterHotspotCredentials": {
+    "description": "WiFi sync settings - enterHotspotCredentials"
+  },
+  "wifiSyncUsesHotspot": "WiFi-synkronisering använder din telefon som hotspot. Hitta namnet och lösenordet i Inställningar > Internetdelning.",
+  "@wifiSyncUsesHotspot": {
+    "description": "WiFi sync settings - wifiSyncUsesHotspot"
+  },
+  "hotspotNameSsid": "Hotspotnamn (SSID)",
+  "@hotspotNameSsid": {
+    "description": "WiFi sync settings - hotspotNameSsid"
+  },
+  "exampleIphoneHotspot": "t.ex. iPhone Hotspot",
+  "@exampleIphoneHotspot": {
+    "description": "WiFi sync settings - exampleIphoneHotspot"
+  },
+  "password": "Lösenord",
+  "@password": {
+    "description": "WiFi sync settings - password"
+  },
+  "enterHotspotPassword": "Ange hotspot-lösenord",
+  "@enterHotspotPassword": {
+    "description": "WiFi sync settings - enterHotspotPassword"
+  },
+  "saveCredentials": "Spara uppgifter",
+  "@saveCredentials": {
+    "description": "WiFi sync settings - saveCredentials"
+  },
+  "clearCredentials": "Rensa uppgifter",
+  "@clearCredentials": {
+    "description": "WiFi sync settings - clearCredentials"
+  },
+  "pleaseEnterHotspotName": "Ange ett hotspotnamn",
+  "@pleaseEnterHotspotName": {
+    "description": "WiFi sync settings - pleaseEnterHotspotName"
+  },
+  "wifiCredentialsSaved": "WiFi-uppgifter sparade",
+  "@wifiCredentialsSaved": {
+    "description": "WiFi sync settings - wifiCredentialsSaved"
+  },
+  "wifiCredentialsCleared": "WiFi-uppgifter rensade",
+  "@wifiCredentialsCleared": {
+    "description": "WiFi sync settings - wifiCredentialsCleared"
+  },
+  "summaryGeneratedForDate": "Sammanfattning genererad för {date}",
+  "@summaryGeneratedForDate": {
+    "description": "Daily summary settings - summaryGeneratedForDate",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "1/15/2026"
+      }
+    }
+  },
+  "failedToGenerateSummaryCheckConversations": "Kunde inte generera sammanfattning. Se till att du har samtal för den dagen.",
+  "@failedToGenerateSummaryCheckConversations": {
+    "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Sammanfattning hittades inte",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "Din dags resa",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "Höjdpunkter",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Olösta frågor",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Beslut",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Lärdomar",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
+  },
+  "autoDeletesAfterThreeDays": "Raderas automatiskt efter 3 dagar.",
+  "@autoDeletesAfterThreeDays": {
+    "description": "Developer settings - autoDeletesAfterThreeDays"
+  },
+  "knowledgeGraphDeletedSuccessfully": "Kunskapsgraf borttagen",
+  "@knowledgeGraphDeletedSuccessfully": {
+    "description": "Developer settings - knowledgeGraphDeletedSuccessfully"
+  },
+  "exportStartedMayTakeFewSeconds": "Export startad. Detta kan ta några sekunder...",
+  "@exportStartedMayTakeFewSeconds": {
+    "description": "Developer settings - exportStartedMayTakeFewSeconds"
+  },
+  "knowledgeGraphDeleteDescription": "Detta kommer att radera alla härledda kunskapsgrafdata (noder och anslutningar). Dina ursprungliga minnen förblir säkra. Grafen kommer att byggas om över tid eller vid nästa begäran.",
+  "@knowledgeGraphDeleteDescription": {
+    "description": "Developer settings - knowledgeGraphDeleteDescription"
+  },
+  "configureDailySummaryDigest": "Konfigurera din dagliga uppgiftssammanfattning",
+  "accessesDataTypes": "Åtkomst till {dataTypes}",
+  "triggeredByType": "utlöst av {triggerType}",
+  "accessesAndTriggeredBy": "{accessDescription} och är {triggerDescription}.",
+  "isTriggeredBy": "Är {triggerDescription}.",
+  "noSpecificDataAccessConfigured": "Ingen specifik dataåtkomst konfigurerad."
 }

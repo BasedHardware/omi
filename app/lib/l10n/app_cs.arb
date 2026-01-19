@@ -159,7 +159,7 @@
   "@createPersonHint": {
     "description": "Hint text for creating a person"
   },
-  "speechProfile": "Hlasový profil",
+  "speechProfile": "Řečový Profil",
   "@speechProfile": {
     "description": "Speech profile label"
   },
@@ -175,7 +175,7 @@
   },
   "settings": "Nastavení",
   "@settings": {
-    "description": "Settings page title"
+    "description": "Bottom navigation label for settings"
   },
   "language": "Jazyk",
   "@language": {
@@ -293,9 +293,9 @@
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
-  "noStarredConversations": "Zatím žádné oblíbené konverzace.",
+  "noStarredConversations": "Žádné konverzace s hvězdičkou",
   "@noStarredConversations": {
-    "description": "Empty state for starred filter"
+    "description": "Empty state title when no starred conversations"
   },
   "starConversationHint": "Chcete-li konverzaci označit hvězdičkou, otevřete ji a klepněte na ikonu hvězdičky v záhlaví.",
   "@starConversationHint": {
@@ -351,7 +351,7 @@
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Zpráva zkopírována do schránky.",
+  "messageCopied": "✨ Zpráva zkopírována do schránky",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -393,7 +393,7 @@
   },
   "apps": "Aplikace",
   "@apps": {
-    "description": "Apps page title"
+    "description": "Navigation label for apps page"
   },
   "noAppsFound": "Nebyly nalezeny žádné aplikace",
   "@noAppsFound": {
@@ -427,7 +427,7 @@
   "@unableToFetchApps": {
     "description": "Error when apps fail to load"
   },
-  "aboutOmi": "O aplikaci Omi",
+  "aboutOmi": "O Omi",
   "@aboutOmi": {
     "description": "About page title"
   },
@@ -435,7 +435,7 @@
   "@privacyPolicy": {
     "description": "Link text for Privacy Policy"
   },
-  "visitWebsite": "Navštívit webové stránky",
+  "visitWebsite": "Navštívit web",
   "@visitWebsite": {
     "description": "Visit website link"
   },
@@ -511,27 +511,27 @@
   "@email": {
     "description": "Email field label"
   },
-  "customVocabulary": "Vlastní slovník",
+  "customVocabulary": "Vlastní Slovník",
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Identifikace ostatních",
+  "identifyingOthers": "Identifikace Ostatních",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
-  "paymentMethods": "Platební metody",
+  "paymentMethods": "Platební Metody",
   "@paymentMethods": {
     "description": "Payment methods setting"
   },
-  "conversationDisplay": "Zobrazení konverzace",
+  "conversationDisplay": "Zobrazení Konverzací",
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "Data a soukromí",
+  "dataPrivacy": "Soukromí Dat",
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
-  "userId": "ID uživatele",
+  "userId": "ID Uživatele",
   "@userId": {
     "description": "User ID label"
   },
@@ -571,7 +571,7 @@
   "@helpCenter": {
     "description": "Help center menu item"
   },
-  "developerSettings": "Nastavení pro vývojáře",
+  "developerSettings": "Vývojářské nastavení",
   "@developerSettings": {
     "description": "Developer settings menu item"
   },
@@ -583,7 +583,7 @@
   "@referralProgram": {
     "description": "Referral program menu item"
   },
-  "signOut": "Odhlásit se",
+  "signOut": "Odhlásit Se",
   "@signOut": {
     "description": "Sign out button"
   },
@@ -879,7 +879,7 @@
   "@createKeyToStart": {
     "description": "Create key instruction"
   },
-  "createKey": "Vytvořit klíč",
+  "createKey": "Vytvořit Klíč",
   "@createKey": {
     "description": "Create Key button"
   },
@@ -1074,7 +1074,7 @@
   "debugLogs": "Protokoly ladění",
   "debugLogsAutoDelete": "Automaticky se smažou po 3 dnech.",
   "debugLogsDesc": "Pomáhá diagnostikovat problémy",
-  "noLogFilesFound": "Nenalezeny žádné soubory protokolu.",
+  "noLogFilesFound": "Nebyly nalezeny žádné soubory protokolu.",
   "omiDebugLog": "Protokol ladění Omi",
   "logShared": "Protokol sdílen",
   "selectLogFile": "Vybrat soubor protokolu",
@@ -1087,7 +1087,7 @@
   "exportShared": "Export sdílen",
   "deleteKnowledgeGraphTitle": "Smazat graf znalostí?",
   "deleteKnowledgeGraphMessage": "Tím se smažou všechna odvozená data grafu znalostí (uzly a spojení). Vaše původní vzpomínky zůstanou v bezpečí. Graf bude v průběhu času znovu vytvořen nebo při dalším požadavku.",
-  "knowledgeGraphDeleted": "Graf znalostí úspěšně smazán",
+  "knowledgeGraphDeleted": "Graf znalostí smazán",
   "deleteGraphFailed": "Smazání grafu se nezdařilo: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -1103,7 +1103,7 @@
   "mcpServer": "Server MCP",
   "mcpServerDesc": "Připojit AI asistenty k vašim datům",
   "serverUrl": "URL serveru",
-  "urlCopied": "URL zkopírována",
+  "urlCopied": "URL zkopírováno",
   "apiKeyAuth": "Ověření API klíčem",
   "header": "Záhlaví",
   "authorizationBearer": "Authorization: Bearer <klíč>",
@@ -1127,7 +1127,7 @@
   "configCopied": "Konfigurace zkopírována do schránky",
   "listeningMins": "Naslouchání (min)",
   "understandingWords": "Porozumění (slova)",
-  "insights": "Přehledy",
+  "insights": "Postřehy",
   "memories": "Vzpomínky",
   "minsUsedThisMonth": "Tento měsíc využito {used} z {limit} min",
   "@minsUsedThisMonth": {
@@ -1250,7 +1250,7 @@
   },
   "continueAction": "Pokračovat",
   "languageTitle": "Jazyk",
-  "primaryLanguage": "Primární jazyk",
+  "primaryLanguage": "Hlavní jazyk",
   "automaticTranslation": "Automatický překlad",
   "detectLanguages": "Detekovat 10+ jazyků",
   "authorizeSavingRecordings": "Autorizovat ukládání nahrávek",
@@ -1334,7 +1334,7 @@
   "languageForTranscription": "Nastavte svůj jazyk pro ostřejší přepisy a personalizovaný zážitek.",
   "singleLanguageModeInfo": "Režim jednoho jazyka je povolen. Překlad je zakázán pro vyšší přesnost.",
   "searchLanguageHint": "Hledat jazyk podle názvu nebo kódu",
-  "noLanguagesFound": "Nenalezeny žádné jazyky",
+  "noLanguagesFound": "Nebyly nalezeny žádné jazyky",
   "skip": "Přeskočit",
   "languageSetTo": "Jazyk nastaven na {language}",
   "@languageSetTo": {
@@ -2077,14 +2077,9 @@
   "@deleteSelected": {
     "description": "Tooltip for delete selected"
   },
-  "searchMemories": "Hledat ve {count} vzpomínkách",
+  "searchMemories": "Hledat vzpomínky...",
   "@searchMemories": {
-    "description": "Hint text for memories search bar",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
+    "description": "Search input hint text"
   },
   "memoryDeleted": "Vzpomínka smazána.",
   "@memoryDeleted": {
@@ -2094,9 +2089,9 @@
   "@undo": {
     "description": "Undo button text"
   },
-  "noMemoriesYet": "Zatím žádné vzpomínky",
+  "noMemoriesYet": "🧠 Zatím žádné vzpomínky",
   "@noMemoriesYet": {
-    "description": "Empty state text"
+    "description": "Empty state title when no memories"
   },
   "noAutoMemories": "Zatím žádné automaticky extrahované vzpomínky",
   "@noAutoMemories": {
@@ -2110,9 +2105,9 @@
   "@noMemoriesInCategories": {
     "description": "Empty state text for filtered categories"
   },
-  "noMemoriesFound": "Nenalezeny žádné vzpomínky",
+  "noMemoriesFound": "🔍 Nenalezeny žádné vzpomínky",
   "@noMemoriesFound": {
-    "description": "Empty state text for search results"
+    "description": "Empty state title when search/filter has no results"
   },
   "addFirstMemory": "Přidat první vzpomínku",
   "@addFirstMemory": {
@@ -2191,11 +2186,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "Nová vzpomínka",
+  "newMemory": "✨ Nová vzpomínka",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "Upravit vzpomínku",
+  "editMemory": "✏️ Upravit vzpomínku",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2332,16 +2327,16 @@
   "deleteFolder": "Smazat složku",
   "transcriptCopiedToClipboard": "Přepis zkopírován do schránky",
   "summaryCopiedToClipboard": "Souhrn zkopírován do schránky",
-  "conversationUrlCouldNotBeShared": "URL konverzace nemohla být sdílena.",
+  "conversationUrlCouldNotBeShared": "URL konverzace nelze sdílet.",
   "urlCopiedToClipboard": "URL zkopírována do schránky",
   "exportTranscript": "Exportovat přepis",
   "exportSummary": "Exportovat souhrn",
   "exportButton": "Exportovat",
   "actionItemsCopiedToClipboard": "Položky akcí zkopírovány do schránky",
   "summarize": "Shrnout",
-  "generateSummary": "Generovat shrnutí",
+  "generateSummary": "Vygenerovat souhrn",
   "conversationNotFoundOrDeleted": "Konverzace nenalezena nebo byla smazána",
-  "deleteMemory": "Smazat vzpomínku?",
+  "deleteMemory": "Smazat vzpomínku",
   "thisActionCannotBeUndone": "Tuto akci nelze vrátit zpět.",
   "memoriesCount": "{count} vzpomínek",
   "noMemoriesInCategory": "V této kategorii ještě nejsou žádné vzpomínky",
@@ -2397,7 +2392,7 @@
   "welcomeToOmiDescription": "Vítejte v Omi! Váš AI společník je připraven vám pomoci s rozhovory, úkoly a mnoho dalšího.",
   "startUsingOmi": "Začít používat Omi",
   "back": "Zpět",
-  "keyboardShortcuts": "Klávesové zkratky",
+  "keyboardShortcuts": "Klávesové Zkratky",
   "toggleControlBar": "Přepnout ovládací panel",
   "pressKeys": "Stiskněte klávesy...",
   "cmdRequired": "⌘ vyžadováno",
@@ -2406,24 +2401,24 @@
   "search": "Hledat",
   "searchPlaceholder": "Hledat...",
   "settingUp": "Nastavování...",
-  "startYourFirstRecording": "Začněte své první nahrávání",
-  "preparingSystemAudioCapture": "Příprava zachycení systémového zvuku",
+  "startYourFirstRecording": "Zahajte svůj první záznam",
+  "preparingSystemAudioCapture": "Příprava záznamu systémového zvuku",
   "recordingInstructions": "Klikněte na tlačítko pro zachycení zvuku pro živé přepisy, AI poznatky a automatické ukládání.",
-  "reconnecting": "Připojování...",
-  "recordingPaused": "Nahrávání pozastaveno",
-  "recordingActive": "Nahrávání aktivní",
-  "startRecording": "Spustit nahrávání",
+  "reconnecting": "Opětovné připojování...",
+  "recordingPaused": "Záznam pozastaven",
+  "recordingActive": "Záznam aktivní",
+  "startRecording": "Spustit záznam",
   "resumingInSeconds": "Obnovování za {seconds}s...",
-  "tapPlayToResume": "Klepnutím na přehrát obnovíte",
-  "listeningForAudio": "Naslouchám zvuku...",
-  "preparingAudioCapture": "Příprava zachycení zvuku",
-  "clickToBeginRecording": "Kliknutím začnete nahrávání",
+  "tapPlayToResume": "Klepněte na přehrát pro pokračování",
+  "listeningForAudio": "Poslouchání zvuku...",
+  "preparingAudioCapture": "Příprava záznamu zvuku",
+  "clickToBeginRecording": "Klikněte pro zahájení záznamu",
   "liveTranscript": "Živý přepis",
-  "startRecordingToSeeTranscript": "Spusťte nahrávání pro zobrazení živého přepisu",
+  "startRecordingToSeeTranscript": "Spusťte záznam pro zobrazení živého přepisu",
   "paused": "Pozastaveno",
   "initializing": "Inicializace...",
   "recording": "Nahrávání",
-  "untitledConversation": "Nepojmenovaná konverzace",
+  "untitledConversation": "Konverzace bez názvu",
   "countRemaining": "{count} zbývá",
   "addGoal": "Přidat cíl",
   "editGoal": "Upravit cíl",
@@ -2434,7 +2429,7 @@
   "saveGoal": "Uložit",
   "goals": "Cíle",
   "tapToAddGoal": "Klepnutím přidejte cíl",
-  "welcomeBack": "Vítejte zpět",
+  "welcomeBack": "Vítejte zpět, {name}",
   "yourConversations": "Vaše konverzace",
   "reviewAndManageConversations": "Prohlížejte a spravujte své zachycené konverzace",
   "startCapturingConversations": "Začněte zachytávat konverzace pomocí zařízení Omi a zobrazí se zde.",
@@ -2537,5 +2532,769 @@
   "ratingsCount": "{count}+ hodnocení",
   "errorActivatingApp": "Chyba při aktivaci aplikace",
   "integrationSetupRequired": "Pokud se jedná o integrační aplikaci, ujistěte se, že je nastavení dokončeno.",
-  "installed": "Nainstalováno"
+  "installed": "Nainstalováno",
+  "appIdLabel": "ID aplikace",
+  "appNameLabel": "Název aplikace",
+  "appNamePlaceholder": "Má úžasná aplikace",
+  "pleaseEnterAppName": "Zadejte prosím název aplikace",
+  "categoryLabel": "Kategorie",
+  "selectCategory": "Vyberte kategorii",
+  "descriptionLabel": "Popis",
+  "appDescriptionPlaceholder": "Má úžasná aplikace je skvělá aplikace, která dělá úžasné věci. Je to nejlepší aplikace!",
+  "pleaseProvideValidDescription": "Zadejte prosím platný popis",
+  "appPricingLabel": "Cena aplikace",
+  "noneSelected": "Nic nevybráno",
+  "appIdCopiedToClipboard": "ID aplikace zkopírováno do schránky",
+  "appCategoryModalTitle": "Kategorie aplikace",
+  "pricingFree": "Zdarma",
+  "pricingPaid": "Placené",
+  "loadingCapabilities": "Načítání funkcí...",
+  "filterInstalled": "Nainstalováno",
+  "filterMyApps": "Moje aplikace",
+  "clearSelection": "Vymazat výběr",
+  "filterCategory": "Kategorie",
+  "rating4PlusStars": "4+ hvězdiček",
+  "rating3PlusStars": "3+ hvězdiček",
+  "rating2PlusStars": "2+ hvězdiček",
+  "rating1PlusStars": "1+ hvězdička",
+  "filterRating": "Hodnocení",
+  "filterCapabilities": "Funkce",
+  "noNotificationScopesAvailable": "Nejsou k dispozici žádné rozsahy oznámení",
+  "popularApps": "Oblíbené aplikace",
+  "pleaseProvidePrompt": "Zadejte prosím výzvu",
+  "chatWithAppName": "Chat s {appName}",
+  "defaultAiAssistant": "Výchozí AI asistent",
+  "readyToChat": "✨ Připraven k chatu!",
+  "connectionNeeded": "🌐 Vyžadováno připojení",
+  "startConversation": "Začněte konverzaci a nechte kouzlo začít",
+  "checkInternetConnection": "Zkontrolujte prosím své připojení k internetu",
+  "wasThisHelpful": "Bylo to užitečné?",
+  "thankYouForFeedback": "Děkujeme za zpětnou vazbu!",
+  "maxFilesUploadError": "Můžete nahrát pouze 4 soubory najednou",
+  "attachedFiles": "📎 Připojené soubory",
+  "takePhoto": "Vyfotit",
+  "captureWithCamera": "Zachytit kamerou",
+  "selectImages": "Vybrat obrázky",
+  "chooseFromGallery": "Vybrat z galerie",
+  "selectFile": "Vybrat soubor",
+  "chooseAnyFileType": "Vybrat jakýkoli typ souboru",
+  "cannotReportOwnMessages": "Nemůžete nahlásit vlastní zprávy",
+  "messageReportedSuccessfully": "✅ Zpráva úspěšně nahlášena",
+  "confirmReportMessage": "Opravdu chcete nahlásit tuto zprávu?",
+  "selectChatAssistant": "Vybrat chatovacího asistenta",
+  "enableMoreApps": "Povolit více aplikací",
+  "chatCleared": "Chat vymazán",
+  "clearChatTitle": "Vymazat chat?",
+  "confirmClearChat": "Opravdu chcete vymazat chat? Tuto akci nelze vrátit zpět.",
+  "copy": "Kopírovat",
+  "share": "Sdílet",
+  "report": "Nahlásit",
+  "microphonePermissionRequired": "Pro hlasový záznam je vyžadováno oprávnění k mikrofonu.",
+  "microphonePermissionDenied": "Oprávnění k mikrofonu bylo zamítnuto. Udělte prosím oprávnění v Předvolby systému > Soukromí a zabezpečení > Mikrofon.",
+  "failedToCheckMicrophonePermission": "Nepodařilo se zkontrolovat oprávnění k mikrofonu: {error}",
+  "failedToTranscribeAudio": "Nepodařilo se přepsat zvuk",
+  "transcribing": "Přepisování...",
+  "transcriptionFailed": "Přepis se nezdařil",
+  "discardedConversation": "Zahozená konverzace",
+  "at": "v",
+  "from": "od",
+  "copied": "Zkopírováno!",
+  "copyLink": "Kopírovat odkaz",
+  "hideTranscript": "Skrýt přepis",
+  "viewTranscript": "Zobrazit přepis",
+  "conversationDetails": "Detaily konverzace",
+  "transcript": "Přepis",
+  "segmentsCount": "{count} segmentů",
+  "noTranscriptAvailable": "Přepis není k dispozici",
+  "noTranscriptMessage": "Tato konverzace nemá přepis.",
+  "conversationUrlCouldNotBeGenerated": "URL konverzace nelze vygenerovat.",
+  "failedToGenerateConversationLink": "Nepodařilo se vygenerovat odkaz na konverzaci",
+  "failedToGenerateShareLink": "Nepodařilo se vygenerovat odkaz ke sdílení",
+  "reloadingConversations": "Načítání konverzací...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "@welcomeBack": {
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "user": "Uživatel",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "S hvězdičkou",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "Datum",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "Nenalezeny žádné výsledky",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "Zkuste upravit vyhledávací výrazy",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "starConversationsToFindQuickly": "Označte konverzace hvězdičkou, abyste je zde rychle našli",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "Žádné konverzace dne {date}",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "Zkuste vybrat jiné datum",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  },
+  "conversations": "Konverzace",
+  "@conversations": {
+    "description": "Navigation label for conversations page"
+  },
+  "chat": "Chat",
+  "@chat": {
+    "description": "Navigation label for chat page"
+  },
+  "@memories": {
+    "description": "Navigation label for memories page"
+  },
+  "actions": "Akce",
+  "@actions": {
+    "description": "Navigation label for actions page"
+  },
+  "syncAvailable": "Synchronizace k dispozici",
+  "@syncAvailable": {
+    "description": "Label for sync notification"
+  },
+  "referAFriend": "Doporučit příteli",
+  "@referAFriend": {
+    "description": "Bottom navigation label for referral program"
+  },
+  "help": "Nápověda",
+  "@help": {
+    "description": "Bottom navigation label for help"
+  },
+  "pro": "Pro",
+  "@pro": {
+    "description": "Badge label for pro/unlimited users"
+  },
+  "upgradeToPro": "Upgrade na Pro",
+  "@upgradeToPro": {
+    "description": "Subscription banner button text"
+  },
+  "getOmiDevice": "Získat zařízení Omi",
+  "@getOmiDevice": {
+    "description": "Widget title for device promotion"
+  },
+  "wearableAiCompanion": "Nositelný AI společník",
+  "@wearableAiCompanion": {
+    "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "Načítání vzpomínek...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "allMemories": "Všechny vzpomínky",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "O tobě",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "Ruční",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "Načítání vašich vzpomínek...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "createYourFirstMemory": "Vytvořte svou první vzpomínku a začněte",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "Zkuste upravit vyhledávání nebo filtr",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
+  },
+  "whatWouldYouLikeToRemember": "Co si chcete zapamatovat?",
+  "category": "Kategorie",
+  "public": "Veřejné",
+  "failedToSaveCheckConnection": "Uložení se nezdařilo. Zkontrolujte připojení.",
+  "createMemory": "Vytvořit vzpomínku",
+  "deleteMemoryConfirmation": "Opravdu chcete smazat tuto vzpomínku? Tuto akci nelze vrátit zpět.",
+  "makePrivate": "Nastavit jako soukromé",
+  "organizeAndControlMemories": "Organizujte a ovládejte své vzpomínky",
+  "total": "Celkem",
+  "makeAllMemoriesPrivate": "Nastavit všechny vzpomínky jako soukromé",
+  "setAllMemoriesToPrivate": "Nastavit všechny vzpomínky na soukromou viditelnost",
+  "makeAllMemoriesPublic": "Nastavit všechny vzpomínky jako veřejné",
+  "setAllMemoriesToPublic": "Nastavit všechny vzpomínky na veřejnou viditelnost",
+  "permanentlyRemoveAllMemories": "Trvale odstranit všechny vzpomínky z Omi",
+  "allMemoriesAreNowPrivate": "Všechny vzpomínky jsou nyní soukromé",
+  "allMemoriesAreNowPublic": "Všechny vzpomínky jsou nyní veřejné",
+  "clearOmisMemory": "Vymazat paměť Omi",
+  "clearMemoryConfirmation": "Opravdu chcete vymazat paměť Omi? Tuto akci nelze vrátit zpět a trvale odstraní všech {count} vzpomínek.",
+  "omisMemoryCleared": "Paměť Omi o vás byla vymazána",
+  "welcomeToOmi": "Vítejte v Omi",
+  "continueWithApple": "Pokračovat s Apple",
+  "continueWithGoogle": "Pokračovat s Google",
+  "byContinuingYouAgree": "Pokračováním souhlasíte s našimi ",
+  "termsOfService": "Podmínkami služby",
+  "and": " a ",
+  "dataAndPrivacy": "Data a soukromí",
+  "secureAuthViaAppleId": "Bezpečné ověření přes Apple ID",
+  "secureAuthViaGoogleAccount": "Bezpečné ověření přes účet Google",
+  "whatWeCollect": "Co sbíráme",
+  "dataCollectionMessage": "Pokračováním budou vaše konverzace, nahrávky a osobní údaje bezpečně uloženy na našich serverech, aby poskytly přehledy založené na AI a umožnily všechny funkce aplikace.",
+  "dataProtection": "Ochrana dat",
+  "yourDataIsProtected": "Vaše data jsou chráněna a řídí se našimi ",
+  "pleaseSelectYourPrimaryLanguage": "Prosím vyberte svůj primární jazyk",
+  "chooseYourLanguage": "Vyberte svůj jazyk",
+  "selectPreferredLanguageForBestExperience": "Vyberte si preferovaný jazyk pro nejlepší Omi zážitek",
+  "searchLanguages": "Hledat jazyky...",
+  "selectALanguage": "Vyberte jazyk",
+  "tryDifferentSearchTerm": "Zkuste jiný výraz pro vyhledávání",
+  "pleaseEnterYourName": "Prosím zadejte své jméno",
+  "nameMustBeAtLeast2Characters": "Jméno musí mít alespoň 2 znaky",
+  "tellUsHowYouWouldLikeToBeAddressed": "Řekněte nám, jak byste chtěli být oslovováni. To pomáhá personalizovat váš Omi zážitek.",
+  "charactersCount": "{count} znaků",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "enableFeaturesForBestExperience": "Povolte funkce pro nejlepší Omi zážitek na vašem zařízení.",
+  "microphoneAccess": "Přístup k mikrofonu",
+  "recordAudioConversations": "Nahrávat audio konverzace",
+  "microphoneAccessDescription": "Omi potřebuje přístup k mikrofonu pro nahrávání vašich konverzací a poskytování přepisů.",
+  "screenRecording": "Záznam obrazovky",
+  "captureSystemAudioFromMeetings": "Zachytit systémový zvuk ze schůzek",
+  "screenRecordingDescription": "Omi potřebuje oprávnění k záznamu obrazovky pro zachycení systémového zvuku z vašich schůzek v prohlížeči.",
+  "accessibility": "Přístupnost",
+  "detectBrowserBasedMeetings": "Detekovat schůzky v prohlížeči",
+  "accessibilityDescription": "Omi potřebuje oprávnění k přístupnosti pro detekci, kdy se připojujete ke schůzkám Zoom, Meet nebo Teams ve vašem prohlížeči.",
+  "pleaseWait": "Prosím čekejte...",
+  "joinTheCommunity": "Připojte se ke komunitě!",
+  "loadingProfile": "Načítání profilu...",
+  "profileSettings": "Nastavení profilu",
+  "noEmailSet": "Email není nastaven",
+  "userIdCopiedToClipboard": "ID uživatele zkopírováno",
+  "yourInformation": "Vaše Informace",
+  "setYourName": "Nastavit své jméno",
+  "changeYourName": "Změnit své jméno",
+  "persona": "Persona",
+  "manageYourOmiPersona": "Spravovat svou Omi personu",
+  "voiceAndPeople": "Hlas a Lidé",
+  "teachOmiYourVoice": "Naučit Omi svůj hlas",
+  "tellOmiWhoSaidIt": "Řekněte Omi, kdo to řekl 🗣️",
+  "payment": "Platba",
+  "addOrChangeYourPaymentMethod": "Přidat nebo změnit platební metodu",
+  "preferences": "Předvolby",
+  "helpImproveOmiBySharing": "Pomozte vylepšit Omi sdílením anonymizovaných analytických dat",
+  "deleteAccount": "Smazat Účet",
+  "deleteYourAccountAndAllData": "Smazat účet a všechna data",
+  "helpsDiagnoseIssuesAutoDeletes": "Pomáhá diagnostikovat problémy. Automaticky maže po 3 dnech.",
+  "clearLogs": "Vymazat protokoly",
+  "debugLogsCleared": "Protokoly ladění vymazány",
+  "exportConversations": "Exportovat konverzace",
+  "exportAllConversationsToJson": "Exportujte všechny své konverzace do souboru JSON.",
+  "conversationsExportStarted": "Export konverzací zahájen. Může to trvat několik sekund, počkejte prosím.",
+  "mcpDescription": "Pro připojení Omi k dalším aplikacím pro čtení, vyhledávání a správu vašich vzpomínek a konverzací. Začněte vytvořením klíče.",
+  "apiKeys": "API klíče",
+  "errorLabel": "Chyba: {error}",
+  "noApiKeysFound": "Nebyly nalezeny žádné API klíče. Začněte vytvořením jednoho.",
+  "advancedSettings": "Pokročilé nastavení",
+  "triggersWhenNewConversationCreated": "Spouští se při vytvoření nové konverzace.",
+  "triggersWhenNewTranscriptReceived": "Spouští se při příjmu nového přepisu.",
+  "realtimeAudioBytes": "Zvukové bajty v reálném čase",
+  "triggersWhenAudioBytesReceived": "Spouští se při příjmu zvukových bajtů.",
+  "everyXSeconds": "Každých x sekund",
+  "triggersWhenDaySummaryGenerated": "Spouští se při vygenerování denního souhrnu.",
+  "experimental": "Experimentální",
+  "tryLatestExperimentalFeatures": "Vyzkoušejte nejnovější experimentální funkce od týmu Omi.",
+  "transcriptionServiceDiagnosticStatus": "Diagnostický stav služby přepisu",
+  "enableDetailedDiagnosticMessages": "Povolit podrobné diagnostické zprávy ze služby přepisu",
+  "autoCreateAndTagNewSpeakers": "Automaticky vytvářet a označovat nové mluvčí",
+  "automaticallyCreateNewPerson": "Automaticky vytvořit novou osobu, když je v přepisu detekováno jméno.",
+  "pilotFeatures": "Pilotní funkce",
+  "pilotFeaturesDescription": "Tyto funkce jsou testy a není zaručena podpora.",
+  "suggestFollowUpQuestion": "Navrhnout následnou otázku",
+  "saveSettings": "Uložit Nastavení",
+  "syncingDeveloperSettings": "Synchronizace vývojářského nastavení...",
+  "summary": "Souhrn",
+  "auto": "Automaticky",
+  "noSummaryForApp": "Pro tuto aplikaci není k dispozici žádný souhrn. Zkuste jinou aplikaci pro lepší výsledky.",
+  "tryAnotherApp": "Zkusit jinou aplikaci",
+  "generatedBy": "Vygenerováno aplikací {appName}",
+  "overview": "Přehled",
+  "otherAppResults": "Výsledky z jiných aplikací",
+  "unknownApp": "Neznámá aplikace",
+  "noSummaryAvailable": "Není k dispozici žádný souhrn",
+  "conversationNoSummaryYet": "Tato konverzace ještě nemá souhrn.",
+  "chooseSummarizationApp": "Vybrat aplikaci pro souhrn",
+  "setAsDefaultSummarizationApp": "Aplikace {appName} nastavena jako výchozí aplikace pro souhrn",
+  "letOmiChooseAutomatically": "Nechte Omi automaticky vybrat nejlepší aplikaci",
+  "deleteConversationConfirmation": "Opravdu chcete smazat tuto konverzaci? Tuto akci nelze vrátit zpět.",
+  "conversationDeleted": "Konverzace smazána",
+  "generatingLink": "Generování odkazu...",
+  "editConversation": "Upravit konverzaci",
+  "conversationLinkCopiedToClipboard": "Odkaz na konverzaci zkopírován do schránky",
+  "conversationTranscriptCopiedToClipboard": "Přepis konverzace zkopírován do schránky",
+  "editConversationDialogTitle": "Upravit konverzaci",
+  "changeTheConversationTitle": "Změnit název konverzace",
+  "conversationTitle": "Název konverzace",
+  "enterConversationTitle": "Zadejte název konverzace...",
+  "conversationTitleUpdatedSuccessfully": "Název konverzace úspěšně aktualizován",
+  "failedToUpdateConversationTitle": "Nepodařilo se aktualizovat název konverzace",
+  "errorUpdatingConversationTitle": "Chyba při aktualizaci názvu konverzace",
+  "clickTheButtonToCaptureAudio": "Klikněte na tlačítko pro záznam zvuku pro živé přepisy, poznatky AI a automatické ukládání.",
+  "resumingInCountdown": "Pokračování za {countdown}s...",
+  "translated": "přeloženo",
+  "segmentsSingular": "{count} segment",
+  "segmentsPlural": "{count} segmentů",
+  "microphoneChangedResumingIn": "Mikrofon změněn. Pokračování za {countdown}s",
+  "clickPlayToResumeOrStop": "Klikněte na přehrát pro pokračování nebo zastavit pro dokončení",
+  "settingUpSystemAudioCapture": "Nastavení záznamu systémového zvuku",
+  "capturingAudioAndGeneratingTranscript": "Záznam zvuku a generování přepisu",
+  "clickToBeginRecordingSystemAudio": "Klikněte pro zahájení záznamu systémového zvuku",
+  "you": "Vy",
+  "speakerWithId": "Mluvčí {speakerId}",
+  "translatedByOmi": "přeloženo pomocí omi",
+  "backToConversations": "Zpět na Konverzace",
+  "systemAudio": "Systém",
+  "mic": "Mikrofon",
+  "audioInputSetTo": "Vstup zvuku nastaven na {deviceName}",
+  "errorSwitchingAudioDevice": "Chyba při přepínání zvukového zařízení: {error}",
+  "selectAudioInput": "Vyberte vstup zvuku",
+  "loadingDevices": "Načítání zařízení...",
+  "settingsHeader": "NASTAVENÍ",
+  "plansAndBilling": "Plány a Fakturace",
+  "calendarIntegration": "Integrace Kalendáře",
+  "dailySummary": "Denní Souhrn",
+  "developer": "Vývojář",
+  "about": "O aplikaci",
+  "selectTime": "Vybrat Čas",
+  "accountGroup": "Účet",
+  "signOutQuestion": "Odhlásit Se?",
+  "signOutConfirmation": "Opravdu se chcete odhlásit?",
+  "customVocabularyHeader": "VLASTNÍ SLOVNÍK",
+  "addWordsDescription": "Přidejte slova, která má Omi rozpoznávat během přepisu.",
+  "enterWordsHint": "Zadejte slova (oddělená čárkami)",
+  "dailySummaryHeader": "DENNÍ SOUHRN",
+  "dailySummaryTitle": "Denní Souhrn",
+  "dailySummaryDescription": "Získejte personalizovaný souhrn svých konverzací",
+  "deliveryTime": "Čas Doručení",
+  "deliveryTimeDescription": "Kdy přijímat denní souhrn",
+  "subscription": "Předplatné",
+  "viewPlansAndUsage": "Zobrazit Plány a Využití",
+  "viewPlansDescription": "Spravujte své předplatné a prohlédněte si statistiky využití",
+  "addOrChangePaymentMethod": "Přidejte nebo změňte svou platební metodu",
+  "displayOptions": "Možnosti zobrazení",
+  "showMeetingsInMenuBar": "Zobrazit schůzky v řádku nabídek",
+  "displayUpcomingMeetingsDescription": "Zobrazit nadcházející schůzky v řádku nabídek",
+  "showEventsWithoutParticipants": "Zobrazit události bez účastníků",
+  "includePersonalEventsDescription": "Zahrnout osobní události bez účastníků",
+  "upcomingMeetings": "NADCHÁZEJÍCÍ SCHŮZKY",
+  "checkingNext7Days": "Kontrola následujících 7 dní",
+  "shortcuts": "Klávesové zkratky",
+  "shortcutChangeInstruction": "Klikněte na zkratku a změňte ji. Stisknutím Escape zrušíte.",
+  "configurePersonaDescription": "Nakonfigurujte svou AI personu",
+  "configureSTTProvider": "Nakonfigurovat poskytovatele STT",
+  "setConversationEndDescription": "Nastavte, kdy konverzace automaticky končí",
+  "importDataDescription": "Importovat data z jiných zdrojů",
+  "debugAndDiagnostics": "Ladění a diagnostika",
+  "autoDeletesAfter3Days": "Automatické smazání po 3 dnech",
+  "helpsDiagnoseIssues": "Pomáhá diagnostikovat problémy",
+  "exportConversationsDescription": "Exportovat konverzace do JSON",
+  "exportingConversations": "Exportování konverzací...",
+  "clearNodesDescription": "Vymazat všechny uzly a připojení",
+  "deleteKnowledgeGraphQuestion": "Smazat graf znalostí?",
+  "deleteKnowledgeGraphWarning": "Tím se smažou všechna odvozená data grafu znalostí. Vaše původní vzpomínky zůstanou v bezpečí.",
+  "connectOmiWithAI": "Připojte Omi k AI asistentům",
+  "noAPIKeys": "Žádné klíče API. Vytvořte jeden, abyste mohli začít.",
+  "realTimeTranscript": "Přepis v reálném čase",
+  "transcriptionDiagnostics": "Diagnostika přepisu",
+  "detailedDiagnosticMessages": "Podrobné diagnostické zprávy",
+  "autoCreateSpeakers": "Automaticky vytvářet řečníky",
+  "autoCreateWhenDetected": "Automaticky vytvořit při detekci jména",
+  "followUpQuestions": "Následné otázky",
+  "suggestQuestionsAfterConversations": "Navrhovat otázky po konverzacích",
+  "goalTracker": "Sledování cílů",
+  "trackPersonalGoals": "Sledovat osobní cíle na domovské stránce",
+  "dailyReflection": "Denní reflexe",
+  "dailyReflectionDescription": "Připomínka ve 21:00 k zamyšlení nad vaším dnem",
+  "endpointURL": "URL koncového bodu",
+  "links": "Odkazy",
+  "discordMemberCount": "Více než 8000 členů na Discordu",
+  "userInformation": "Informace o uživateli",
+  "capabilities": "Schopnosti",
+  "previewScreenshots": "Náhled snímků obrazovky",
+  "holdOnPreparingForm": "Počkejte, připravujeme pro vás formulář",
+  "bySubmittingYouAgreeToOmi": "Odesláním souhlasíte s Omi ",
+  "termsAndPrivacyPolicy": "Podmínky a Zásady ochrany osobních údajů",
+  "manageYourApp": "Správa vaší aplikace",
+  "updatingYourApp": "Aktualizace vaší aplikace",
+  "fetchingYourAppDetails": "Načítání podrobností vaší aplikace",
+  "updateAppQuestion": "Aktualizovat aplikaci?",
+  "updateAppConfirmation": "Opravdu chcete aktualizovat svou aplikaci? Změny se projeví po kontrole naším týmem.",
+  "updateApp": "Aktualizovat aplikaci",
+  "createAndSubmitNewApp": "Vytvořte a odešlete novou aplikaci",
+  "appsCount": "Aplikace ({count})",
+  "privateAppsCount": "Soukromé aplikace ({count})",
+  "publicAppsCount": "Veřejné aplikace ({count})",
+  "newVersionAvailable": "K dispozici je nová verze  🎉",
+  "no": "Ne",
+  "subscriptionCancelledSuccessfully": "Předplatné bylo úspěšně zrušeno. Zůstane aktivní do konce aktuálního fakturačního období.",
+  "failedToCancelSubscription": "Zrušení předplatného se nezdařilo. Zkuste to prosím znovu.",
+  "invalidPaymentUrl": "Neplatná adresa URL platby",
+  "permissionsAndTriggers": "Oprávnění a spouštěče",
+  "chatFeatures": "Funkce chatu",
+  "uninstall": "Odinstalovat",
+  "installs": "INSTALACE",
+  "priceLabel": "CENA",
+  "updatedLabel": "AKTUALIZOVÁNO",
+  "createdLabel": "VYTVOŘENO",
+  "featuredLabel": "DOPORUČENÉ",
+  "cancelSubscriptionQuestion": "Zrušit předplatné?",
+  "cancelSubscriptionConfirmation": "Opravdu chcete zrušit předplatné? Budete mít přístup do konce aktuálního fakturačního období.",
+  "cancelSubscriptionButton": "Zrušit předplatné",
+  "cancelling": "Rušení...",
+  "betaTesterMessage": "Jste beta tester této aplikace. Zatím není veřejná. Bude veřejná po schválení.",
+  "appUnderReviewMessage": "Vaše aplikace je v procesu kontroly a viditelná pouze pro vás. Bude veřejná po schválení.",
+  "appRejectedMessage": "Vaše aplikace byla zamítnuta. Aktualizujte údaje a znovu odešlete ke kontrole.",
+  "invalidIntegrationUrl": "Neplatná adresa URL integrace",
+  "tapToComplete": "Klepněte pro dokončení",
+  "invalidSetupInstructionsUrl": "Neplatná adresa URL pokynů k nastavení",
+  "pushToTalk": "Stiskni pro mluvení",
+  "summaryPrompt": "Výzva k shrnutí",
+  "pleaseSelectARating": "Vyberte prosím hodnocení",
+  "reviewAddedSuccessfully": "Recenze úspěšně přidána 🚀",
+  "reviewUpdatedSuccessfully": "Recenze úspěšně aktualizována 🚀",
+  "failedToSubmitReview": "Odeslání recenze se nezdařilo. Zkuste to prosím znovu.",
+  "addYourReview": "Přidejte svou recenzi",
+  "editYourReview": "Upravte svou recenzi",
+  "writeAReviewOptional": "Napište recenzi (volitelné)",
+  "submitReview": "Odeslat recenzi",
+  "updateReview": "Aktualizovat recenzi",
+  "yourReview": "Vaše recenze",
+  "anonymousUser": "Anonymní uživatel",
+  "issueActivatingApp": "Při aktivaci této aplikace došlo k problému. Zkuste to prosím znovu.",
+  "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
+  "copyUrl": "Kopírovat URL",
+  "txtFormat": "TXT",
+  "pdfFormat": "PDF",
+  "weekdayMon": "Po",
+  "weekdayTue": "Út",
+  "weekdayWed": "St",
+  "weekdayThu": "Čt",
+  "weekdayFri": "Pá",
+  "weekdaySat": "So",
+  "weekdaySun": "Ne",
+  "serviceIntegrationComingSoon": "Integrace s {serviceName} již brzy",
+  "alreadyExportedTo": "Již exportováno do {platform}",
+  "anotherPlatform": "jinou platformu",
+  "pleaseAuthenticateWithService": "Prosím ověřte se pomocí {serviceName} v Nastavení > Integrace úkolů",
+  "addingToService": "Přidávání do {serviceName}...",
+  "addedToService": "Přidáno do {serviceName}",
+  "failedToAddToService": "Nepodařilo se přidat do {serviceName}",
+  "permissionDeniedForAppleReminders": "Oprávnění pro Apple Reminders bylo zamítnuto",
+  "failedToCreateApiKey": "Nepodařilo se vytvořit API klíč poskytovatele: {error}",
+  "createAKey": "Vytvořit klíč",
+  "apiKeyRevokedSuccessfully": "API klíč byl úspěšně odvolán",
+  "failedToRevokeApiKey": "Nepodařilo se odvolat API klíč: {error}",
+  "omiApiKeys": "Omi API klíče",
+  "apiKeysDescription": "API klíče se používají pro ověření, když vaše aplikace komunikuje se serverem OMI. Umožňují vaší aplikaci vytvářet vzpomínky a bezpečně přistupovat k dalším službám OMI.",
+  "aboutOmiApiKeys": "O Omi API klíčích",
+  "noApiKeysYet": "Zatím žádné API klíče. Vytvořte jeden pro integraci s vaší aplikací.",
+  "yourNewKey": "Váš nový klíč:",
+  "copyToClipboard": "Kopírovat do schránky",
+  "pleaseCopyKeyNow": "Prosím zkopírujte si ho nyní a zapište si ho na bezpečné místo. ",
+  "willNotSeeAgain": "Nebudete jej moci znovu zobrazit.",
+  "revokeKey": "Odvolat klíč",
+  "revokeApiKeyQuestion": "Odvolat API klíč?",
+  "revokeApiKeyWarning": "Tuto akci nelze vrátit zpět. Všechny aplikace používající tento klíč již nebudou mít přístup k API.",
+  "revoke": "Odvolat",
+  "whatWouldYouLikeToCreate": "Co byste chtěli vytvořit?",
+  "createAnApp": "Vytvořit aplikaci",
+  "createAndShareYourApp": "Vytvořte a sdílejte svou aplikaci",
+  "createMyClone": "Vytvořit můj klon",
+  "createYourDigitalClone": "Vytvořte svůj digitální klon",
+  "itemApp": "Aplikace",
+  "itemPersona": "Persona",
+  "keepItemPublic": "Ponechat {item} veřejnou",
+  "makeItemPublicQuestion": "Zveřejnit {item}?",
+  "makeItemPrivateQuestion": "Zneveřejnit {item}?",
+  "makeItemPublicExplanation": "Pokud zveřejníte {item}, může ji používat kdokoli",
+  "makeItemPrivateExplanation": "Pokud nyní zneveřejníte {item}, přestane fungovat pro všechny a bude viditelná pouze pro vás",
+  "manageApp": "Spravovat aplikaci",
+  "updatePersonaDetails": "Aktualizovat detaily persony",
+  "deleteItemTitle": "Smazat {item}",
+  "deleteItemQuestion": "Smazat {item}?",
+  "deleteItemConfirmation": "Opravdu chcete smazat tuto {item}? Tuto akci nelze vrátit zpět.",
+  "revokeKeyQuestion": "Odvolat klíč?",
+  "revokeKeyConfirmation": "Opravdu chcete odvolat klíč \"{keyName}\"? Tuto akci nelze vrátit zpět.",
+  "createNewKey": "Vytvořit nový klíč",
+  "keyNameHint": "např. Claude Desktop",
+  "pleaseEnterAName": "Prosím zadejte název.",
+  "failedToCreateKeyWithError": "Nepodařilo se vytvořit klíč: {error}",
+  "failedToCreateKeyTryAgain": "Nepodařilo se vytvořit klíč. Zkuste to prosím znovu.",
+  "keyCreated": "Klíč vytvořen",
+  "keyCreatedMessage": "Váš nový klíč byl vytvořen. Prosím zkopírujte si ho nyní. Již ho neuvidíte.",
+  "keyWord": "Klíč",
+  "externalAppAccess": "Přístup externích aplikací",
+  "externalAppAccessDescription": "Následující nainstalované aplikace mají externí integrace a mohou přistupovat k vašim datům, jako jsou konverzace a vzpomínky.",
+  "noExternalAppsHaveAccess": "Žádné externí aplikace nemají přístup k vašim datům.",
+  "maximumSecurityE2ee": "Maximální zabezpečení (E2EE)",
+  "e2eeDescription": "End-to-end šifrování je zlatý standard ochrany soukromí. Když je povoleno, vaše data jsou šifrována na vašem zařízení před odesláním na naše servery. To znamená, že nikdo, ani Omi, nemůže přistupovat k vašemu obsahu.",
+  "importantTradeoffs": "Důležité kompromisy:",
+  "e2eeTradeoff1": "• Některé funkce jako integrace externích aplikací mohou být zakázány.",
+  "e2eeTradeoff2": "• Pokud ztratíte heslo, vaše data nelze obnovit.",
+  "featureComingSoon": "Tato funkce bude brzy k dispozici!",
+  "migrationInProgressMessage": "Migrace probíhá. Úroveň ochrany nelze změnit, dokud nebude dokončena.",
+  "migrationFailed": "Migrace selhala",
+  "migratingFromTo": "Migrace z {source} na {target}",
+  "objectsCount": "{processed} / {total} objektů",
+  "secureEncryption": "Bezpečné šifrování",
+  "secureEncryptionDescription": "Vaše data jsou šifrována klíčem jedinečným pro vás na našich serverech hostovaných v Google Cloud. To znamená, že váš surový obsah je nepřístupný nikomu, včetně zaměstnanců Omi nebo Google, přímo z databáze.",
+  "endToEndEncryption": "End-to-end šifrování",
+  "e2eeCardDescription": "Povolte pro maximální zabezpečení, kde pouze vy máte přístup k vašim datům. Klepnutím se dozvíte více.",
+  "dataAlwaysEncrypted": "Bez ohledu na úroveň jsou vaše data vždy šifrována v klidu i při přenosu.",
+  "readOnlyScope": "Pouze pro čtení",
+  "fullAccessScope": "Plný přístup",
+  "readScope": "Čtení",
+  "writeScope": "Zápis",
+  "apiKeyCreated": "API klíč vytvořen!",
+  "saveKeyWarning": "Uložte si tento klíč nyní! Znovu ho neuvidíte.",
+  "yourApiKey": "VÁŠ API KLÍČ",
+  "tapToCopy": "Klepnutím zkopírujete",
+  "copyKey": "Kopírovat klíč",
+  "createApiKey": "Vytvořit API klíč",
+  "accessDataProgrammatically": "Programově přistupujte ke svým datům",
+  "keyNameLabel": "NÁZEV KLÍČE",
+  "keyNamePlaceholder": "např. Moje integrace aplikace",
+  "permissionsLabel": "OPRÁVNĚNÍ",
+  "permissionsInfoNote": "R = Čtení, W = Zápis. Výchozí je pouze pro čtení, pokud není nic vybráno.",
+  "developerApi": "Vývojářské API",
+  "createAKeyToGetStarted": "Vytvořte klíč pro začátek",
+  "errorWithMessage": "Chyba: {error}",
+  "omiTraining": "Trénink Omi",
+  "trainingDataProgram": "Program trénovacích dat",
+  "getOmiUnlimitedFree": "Získejte Omi Unlimited zdarma přispěním vašich dat k trénování AI modelů.",
+  "trainingDataBullets": "• Vaše data pomáhají vylepšovat AI modely\n• Sdílena jsou pouze necitlivá data\n• Plně transparentní proces",
+  "learnMoreAtOmiTraining": "Zjistěte více na omi.me/training",
+  "agreeToContributeData": "Rozumím a souhlasím s přispěním mých dat pro trénování AI",
+  "submitRequest": "Odeslat žádost",
+  "thankYouRequestUnderReview": "Děkujeme! Vaše žádost se posuzuje. Budeme vás informovat po schválení.",
+  "planRemainsActiveUntil": "Váš plán zůstane aktivní do {date}. Poté ztratíte přístup k neomezeným funkcím. Jste si jisti?",
+  "confirmCancellation": "Potvrdit zrušení",
+  "keepMyPlan": "Ponechat můj plán",
+  "subscriptionSetToCancel": "Vaše předplatné je nastaveno na zrušení na konci období.",
+  "switchedToOnDevice": "Přepnuto na přepis na zařízení",
+  "couldNotSwitchToFreePlan": "Nelze přepnout na bezplatný plán. Zkuste to prosím znovu.",
+  "couldNotLoadPlans": "Nelze načíst dostupné plány. Zkuste to prosím znovu.",
+  "selectedPlanNotAvailable": "Vybraný plán není k dispozici. Zkuste to prosím znovu.",
+  "upgradeToAnnualPlan": "Upgradovat na roční plán",
+  "importantBillingInfo": "Důležité informace o fakturaci:",
+  "monthlyPlanContinues": "Váš aktuální měsíční plán bude pokračovat do konce fakturačního období",
+  "paymentMethodCharged": "Vaše stávající platební metoda bude automaticky účtována po skončení měsíčního plánu",
+  "annualSubscriptionStarts": "Vaše 12měsíční roční předplatné začne automaticky po zaúčtování",
+  "thirteenMonthsCoverage": "Získáte celkem 13 měsíců pokrytí (aktuální měsíc + 12 měsíců ročně)",
+  "confirmUpgrade": "Potvrdit upgrade",
+  "confirmPlanChange": "Potvrdit změnu plánu",
+  "confirmAndProceed": "Potvrdit a pokračovat",
+  "upgradeScheduled": "Upgrade naplánován",
+  "changePlan": "Změnit plán",
+  "upgradeAlreadyScheduled": "Váš upgrade na roční plán je již naplánován",
+  "youAreOnUnlimitedPlan": "Jste na plánu Unlimited.",
+  "yourOmiUnleashed": "Váš Omi, uvolněný. Přejděte na neomezený pro nekonečné možnosti.",
+  "planEndedOn": "Váš plán skončil {date}.\\nZnovu se přihlaste nyní - budete okamžitě účtováni za nové fakturační období.",
+  "planSetToCancelOn": "Váš plán je nastaven na zrušení {date}.\\nZnovu se přihlaste nyní, abyste si zachovali výhody - bez poplatku do {date}.",
+  "annualPlanStartsAutomatically": "Váš roční plán začne automaticky, když skončí váš měsíční plán.",
+  "planRenewsOn": "Váš plán se obnovuje {date}.",
+  "unlimitedConversations": "Neomezené konverzace",
+  "askOmiAnything": "Zeptejte se Omi na cokoli o svém životě",
+  "unlockOmiInfiniteMemory": "Odemkněte nekonečnou paměť Omi",
+  "youreOnAnnualPlan": "Jste na ročním plánu",
+  "alreadyBestValuePlan": "Již máte plán s nejlepší hodnotou. Nejsou potřeba žádné změny.",
+  "unableToLoadPlans": "Nelze načíst plány",
+  "checkConnectionTryAgain": "Zkontrolujte připojení a zkuste to znovu",
+  "useFreePlan": "Použít bezplatný plán",
+  "continueText": "Pokračovat",
+  "resubscribe": "Znovu se přihlásit",
+  "couldNotOpenPaymentSettings": "Nelze otevřít nastavení platby. Zkuste to prosím znovu.",
+  "managePaymentMethod": "Spravovat platební metodu",
+  "cancelSubscription": "Zrušit předplatné",
+  "endsOnDate": "Končí {date}",
+  "active": "Aktivní",
+  "freePlan": "Bezplatný plán",
+  "configure": "Konfigurovat",
+  "privacyInformation": "Informace o soukromí",
+  "@privacyInformation": {
+    "description": "Privacy page - privacyInformation"
+  },
+  "yourPrivacyMattersToUs": "Na vašem soukromí nám záleží",
+  "@yourPrivacyMattersToUs": {
+    "description": "Privacy page - yourPrivacyMattersToUs"
+  },
+  "privacyIntroText": "V Omi bereme vaše soukromí velmi vážně. Chceme být transparentní ohledně dat, která shromažďujeme a jak je používáme ke zlepšení produktu. Zde je to, co potřebujete vědět:",
+  "@privacyIntroText": {
+    "description": "Privacy page - privacyIntroText"
+  },
+  "whatWeTrack": "Co sledujeme",
+  "@whatWeTrack": {
+    "description": "Privacy page - whatWeTrack"
+  },
+  "anonymityAndPrivacy": "Anonymita a soukromí",
+  "@anonymityAndPrivacy": {
+    "description": "Privacy page - anonymityAndPrivacy"
+  },
+  "optInAndOptOutOptions": "Možnosti přihlášení a odhlášení",
+  "@optInAndOptOutOptions": {
+    "description": "Privacy page - optInAndOptOutOptions"
+  },
+  "ourCommitment": "Náš závazek",
+  "@ourCommitment": {
+    "description": "Privacy page - ourCommitment"
+  },
+  "commitmentText": "Zavazujeme se používat shromážděná data pouze k tomu, abychom z Omi udělali lepší produkt. Vaše soukromí a důvěra jsou pro nás prvořadé.",
+  "@commitmentText": {
+    "description": "Privacy page - commitmentText"
+  },
+  "thankYouText": "Děkujeme, že jste váženým uživatelem Omi. Máte-li jakékoli dotazy nebo obavy, neváhejte nás kontaktovat na team@basedhardware.com.",
+  "@thankYouText": {
+    "description": "Privacy page - thankYouText"
+  },
+  "wifiSyncSettings": "Nastavení WiFi synchronizace",
+  "@wifiSyncSettings": {
+    "description": "WiFi sync settings - wifiSyncSettings"
+  },
+  "enterHotspotCredentials": "Zadejte přihlašovací údaje hotspotu telefonu",
+  "@enterHotspotCredentials": {
+    "description": "WiFi sync settings - enterHotspotCredentials"
+  },
+  "wifiSyncUsesHotspot": "WiFi synchronizace používá váš telefon jako hotspot. Název a heslo najdete v Nastavení > Osobní hotspot.",
+  "@wifiSyncUsesHotspot": {
+    "description": "WiFi sync settings - wifiSyncUsesHotspot"
+  },
+  "hotspotNameSsid": "Název hotspotu (SSID)",
+  "@hotspotNameSsid": {
+    "description": "WiFi sync settings - hotspotNameSsid"
+  },
+  "exampleIphoneHotspot": "např. iPhone Hotspot",
+  "@exampleIphoneHotspot": {
+    "description": "WiFi sync settings - exampleIphoneHotspot"
+  },
+  "password": "Heslo",
+  "@password": {
+    "description": "WiFi sync settings - password"
+  },
+  "enterHotspotPassword": "Zadejte heslo hotspotu",
+  "@enterHotspotPassword": {
+    "description": "WiFi sync settings - enterHotspotPassword"
+  },
+  "saveCredentials": "Uložit přihlašovací údaje",
+  "@saveCredentials": {
+    "description": "WiFi sync settings - saveCredentials"
+  },
+  "clearCredentials": "Vymazat přihlašovací údaje",
+  "@clearCredentials": {
+    "description": "WiFi sync settings - clearCredentials"
+  },
+  "pleaseEnterHotspotName": "Prosím zadejte název hotspotu",
+  "@pleaseEnterHotspotName": {
+    "description": "WiFi sync settings - pleaseEnterHotspotName"
+  },
+  "wifiCredentialsSaved": "WiFi přihlašovací údaje uloženy",
+  "@wifiCredentialsSaved": {
+    "description": "WiFi sync settings - wifiCredentialsSaved"
+  },
+  "wifiCredentialsCleared": "WiFi přihlašovací údaje vymazány",
+  "@wifiCredentialsCleared": {
+    "description": "WiFi sync settings - wifiCredentialsCleared"
+  },
+  "summaryGeneratedForDate": "Shrnutí vygenerováno pro {date}",
+  "@summaryGeneratedForDate": {
+    "description": "Daily summary settings - summaryGeneratedForDate",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "1/15/2026"
+      }
+    }
+  },
+  "failedToGenerateSummaryCheckConversations": "Nepodařilo se vygenerovat shrnutí. Ujistěte se, že máte konverzace pro daný den.",
+  "@failedToGenerateSummaryCheckConversations": {
+    "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Shrnutí nenalezeno",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "Vaše denní cesta",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "Zajímavosti",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Nevyřešené otázky",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Rozhodnutí",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Poznatky",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
+  },
+  "autoDeletesAfterThreeDays": "Automaticky smazáno po 3 dnech.",
+  "@autoDeletesAfterThreeDays": {
+    "description": "Developer settings - autoDeletesAfterThreeDays"
+  },
+  "knowledgeGraphDeletedSuccessfully": "Graf znalostí úspěšně smazán",
+  "@knowledgeGraphDeletedSuccessfully": {
+    "description": "Developer settings - knowledgeGraphDeletedSuccessfully"
+  },
+  "exportStartedMayTakeFewSeconds": "Export zahájen. Může to trvat několik sekund...",
+  "@exportStartedMayTakeFewSeconds": {
+    "description": "Developer settings - exportStartedMayTakeFewSeconds"
+  },
+  "knowledgeGraphDeleteDescription": "Tímto se odstraní všechna odvozená data grafu znalostí (uzly a spojení). Vaše původní vzpomínky zůstanou v bezpečí. Graf bude postupně obnoven nebo při dalším požadavku.",
+  "@knowledgeGraphDeleteDescription": {
+    "description": "Developer settings - knowledgeGraphDeleteDescription"
+  },
+  "configureDailySummaryDigest": "Nastavte si denní přehled úkolů",
+  "accessesDataTypes": "Přistupuje k {dataTypes}",
+  "triggeredByType": "spuštěno {triggerType}",
+  "accessesAndTriggeredBy": "{accessDescription} a je {triggerDescription}.",
+  "isTriggeredBy": "Je {triggerDescription}.",
+  "noSpecificDataAccessConfigured": "Není nakonfigurován žádný specifický přístup k datům."
 }

@@ -57,7 +57,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get clear => 'Temizle';
 
   @override
-  String get copyTranscript => 'Transkripti Kopyala';
+  String get copyTranscript => 'Transkripti kopyala';
 
   @override
   String get copySummary => 'Özeti Kopyala';
@@ -69,7 +69,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get reprocessConversation => 'Konuşmayı Yeniden İşle';
 
   @override
-  String get deleteConversation => 'Konuşmayı Sil';
+  String get deleteConversation => 'Sohbeti Sil';
 
   @override
   String get contentCopied => 'İçerik panoya kopyalandı';
@@ -224,7 +224,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get noConversationsYet => 'Henüz görüşme yok';
 
   @override
-  String get noStarredConversations => 'Henüz favorilere eklenmiş konuşma yok.';
+  String get noStarredConversations => 'Yıldızlı konuşma yok';
 
   @override
   String get starConversationHint =>
@@ -265,7 +265,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get deletingMessages => 'Mesajlarınız Omi\'nin hafızasından siliniyor...';
 
   @override
-  String get messageCopied => 'Mesaj panoya kopyalandı.';
+  String get messageCopied => '✨ Mesaj panoya kopyalandı';
 
   @override
   String get cannotReportOwnMessage => 'Kendi mesajlarınızı bildiremezsiniz.';
@@ -329,16 +329,16 @@ class AppLocalizationsTr extends AppLocalizations {
   String get privacyPolicy => 'Gizlilik Politikası';
 
   @override
-  String get visitWebsite => 'Web Sitesini Ziyaret Et';
+  String get visitWebsite => 'Web sitesini ziyaret edin';
 
   @override
-  String get helpOrInquiries => 'Yardım veya Sorular?';
+  String get helpOrInquiries => 'Yardım veya sorularınız mı var?';
 
   @override
   String get joinCommunity => 'Topluluğa katılın!';
 
   @override
-  String get membersAndCounting => '8000+ üye ve artıyor.';
+  String get membersAndCounting => '8000+ üye ve sayı artıyor.';
 
   @override
   String get deleteAccountTitle => 'Hesabı Sil';
@@ -384,13 +384,13 @@ class AppLocalizationsTr extends AppLocalizations {
   String get profile => 'Profil';
 
   @override
-  String get name => 'İsim';
+  String get name => 'Ad';
 
   @override
   String get email => 'E-posta';
 
   @override
-  String get customVocabulary => 'Özel Kelime Hazinesi';
+  String get customVocabulary => 'Özel Kelime Dağarcığı';
 
   @override
   String get identifyingOthers => 'Diğerlerini Tanımlama';
@@ -399,16 +399,16 @@ class AppLocalizationsTr extends AppLocalizations {
   String get paymentMethods => 'Ödeme Yöntemleri';
 
   @override
-  String get conversationDisplay => 'Konuşma Görünümü';
+  String get conversationDisplay => 'Konuşma Görüntüleme';
 
   @override
-  String get dataPrivacy => 'Veri ve Gizlilik';
+  String get dataPrivacy => 'Veri Gizliliği';
 
   @override
   String get userId => 'Kullanıcı Kimliği';
 
   @override
-  String get notSet => 'Ayarlanmadı';
+  String get notSet => 'Ayarlanmamış';
 
   @override
   String get userIdCopied => 'Kullanıcı kimliği panoya kopyalandı';
@@ -663,7 +663,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get debugDiagnostics => 'Hata Ayıklama ve Teşhis';
 
   @override
-  String get endpointUrl => 'Uç Nokta URL\'si';
+  String get endpointUrl => 'Uç nokta URL\'si';
 
   @override
   String get noApiKeys => 'Henüz API anahtarı yok';
@@ -675,7 +675,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get createKey => 'Anahtar Oluştur';
 
   @override
-  String get docs => 'Dokümanlar';
+  String get docs => 'Dokümantasyon';
 
   @override
   String get yourOmiInsights => 'Omi İçgörüleriniz';
@@ -794,7 +794,7 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get debugLogs => 'Hata Ayıklama Günlükleri';
+  String get debugLogs => 'Hata ayıklama günlükleri';
 
   @override
   String get debugLogsAutoDelete => '3 gün sonra otomatik olarak silinir.';
@@ -815,7 +815,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get selectLogFile => 'Günlük Dosyası Seç';
 
   @override
-  String get shareLogs => 'Günlükleri Paylaş';
+  String get shareLogs => 'Günlükleri paylaş';
 
   @override
   String get debugLogCleared => 'Hata ayıklama günlüğü temizlendi';
@@ -843,7 +843,7 @@ class AppLocalizationsTr extends AppLocalizations {
       'Bu, tüm türetilmiş bilgi grafiği verilerini (düğümler ve bağlantılar) silecektir. Orijinal anılarınız güvende kalacaktır. Grafik zamanla veya bir sonraki istekte yeniden oluşturulacaktır.';
 
   @override
-  String get knowledgeGraphDeleted => 'Bilgi Grafiği başarıyla silindi';
+  String get knowledgeGraphDeleted => 'Bilgi grafiği silindi';
 
   @override
   String deleteGraphFailed(String error) {
@@ -893,7 +893,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get useMcpApiKey => 'MCP API anahtarınızı kullanın';
 
   @override
-  String get webhooks => 'Web Hook\'ları';
+  String get webhooks => 'Webhook\'lar';
 
   @override
   String get conversationEvents => 'Konuşma Olayları';
@@ -902,7 +902,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get newConversationCreated => 'Yeni konuşma oluşturuldu';
 
   @override
-  String get realtimeTranscript => 'Gerçek Zamanlı Transkript';
+  String get realtimeTranscript => 'Gerçek zamanlı transkript';
 
   @override
   String get transcriptReceived => 'Transkript alındı';
@@ -917,7 +917,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get intervalSeconds => 'Aralık (saniye)';
 
   @override
-  String get daySummary => 'Gün Özeti';
+  String get daySummary => 'Günlük Özet';
 
   @override
   String get summaryGenerated => 'Özet oluşturuldu';
@@ -1066,7 +1066,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get languageTitle => 'Dil';
 
   @override
-  String get primaryLanguage => 'Ana Dil';
+  String get primaryLanguage => 'Birincil Dil';
 
   @override
   String get automaticTranslation => 'Otomatik Çeviri';
@@ -1155,7 +1155,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get howShouldOmiCallYou => 'Omi size nasıl hitap etmeli?';
 
   @override
-  String get enterYourName => 'İsminizi girin';
+  String get enterYourName => 'Adınızı girin';
 
   @override
   String get nameCannotBeEmpty => 'İsim boş olamaz';
@@ -1430,7 +1430,7 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get continueButton => 'Devam Et';
+  String get continueButton => 'Devam et';
 
   @override
   String appIntegration(String appName) {
@@ -1613,7 +1613,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get privacyFirst => 'Önce gizlilik';
 
   @override
-  String get saveChanges => 'Değişiklikleri Kaydet';
+  String get saveChanges => 'Değişiklikleri kaydet';
 
   @override
   String get resetToDefault => 'Varsayılana sıfırla';
@@ -1879,7 +1879,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get wantDifferentName => 'Farklı bir isimle mi anılmak istiyorsunuz?';
 
   @override
-  String get whatsYourName => 'Adınız nedir?';
+  String get whatsYourName => 'Adın ne?';
 
   @override
   String get speakTranscribeSummarize => 'Konuş. Transkripsiyonu Oluştur. Özetle.';
@@ -2053,9 +2053,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get deleteSelected => 'Seçilenleri sil';
 
   @override
-  String searchMemories(int count) {
-    return '$count Anıda Ara';
-  }
+  String get searchMemories => 'Anı ara...';
 
   @override
   String get memoryDeleted => 'Anı Silindi.';
@@ -2064,7 +2062,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get undo => 'Geri Al';
 
   @override
-  String get noMemoriesYet => 'Henüz anı yok';
+  String get noMemoriesYet => '🧠 Henüz anı yok';
 
   @override
   String get noAutoMemories => 'Henüz otomatik çıkarılan anı yok';
@@ -2076,7 +2074,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get noMemoriesInCategories => 'Bu kategorilerde anı yok';
 
   @override
-  String get noMemoriesFound => 'Anı bulunamadı';
+  String get noMemoriesFound => '🔍 Anı bulunamadı';
 
   @override
   String get addFirstMemory => 'İlk anınızı ekleyin';
@@ -2089,7 +2087,7 @@ class AppLocalizationsTr extends AppLocalizations {
       'Omi\'nin hafızasını temizlemek istediğinizden emin misiniz? Bu işlem geri alınamaz.';
 
   @override
-  String get clearMemoryButton => 'Hafızayı Temizle';
+  String get clearMemoryButton => 'Belleği Temizle';
 
   @override
   String get memoryClearedSuccess => 'Omi\'nin sizinle ilgili hafızası temizlendi';
@@ -2104,7 +2102,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get createActionItemTooltip => 'Yeni eylem öğesi oluştur';
 
   @override
-  String get memoryManagement => 'Anı Yönetimi';
+  String get memoryManagement => 'Bellek Yönetimi';
 
   @override
   String get filterMemories => 'Anıları Filtrele';
@@ -2136,10 +2134,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get allMemoriesPublicResult => 'Tüm anılar artık genel';
 
   @override
-  String get newMemory => 'Yeni Anı';
+  String get newMemory => '✨ Yeni hafıza';
 
   @override
-  String get editMemory => 'Anıyı Düzenle';
+  String get editMemory => '✏️ Hafızayı düzenle';
 
   @override
   String get memoryContentHint => 'Dondurma yemeyi severim...';
@@ -2151,7 +2149,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get saveMemory => 'Anıyı Kaydet';
 
   @override
-  String get retry => 'Tekrar Dene';
+  String get retry => 'Tekrar dene';
 
   @override
   String get createActionItem => 'Eylem öğesi oluştur';
@@ -2252,7 +2250,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get tellUsMoreWhatWentWrong => 'Neyin yanlış gittiğini bize daha fazla anlatın...';
 
   @override
-  String get selectText => 'Metni seç';
+  String get selectText => 'Metin Seç';
 
   @override
   String maximumGoalsAllowed(int count) {
@@ -2293,7 +2291,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get summaryCopiedToClipboard => 'Özet panoya kopyalandı';
 
   @override
-  String get conversationUrlCouldNotBeShared => 'Konuşma URL\'si paylaşılamadı.';
+  String get conversationUrlCouldNotBeShared => 'Sohbet URL\'si paylaşılamadı.';
 
   @override
   String get urlCopiedToClipboard => 'URL panoya kopyalandı';
@@ -2314,13 +2312,13 @@ class AppLocalizationsTr extends AppLocalizations {
   String get summarize => 'Özetle';
 
   @override
-  String get generateSummary => 'Özet oluştur';
+  String get generateSummary => 'Özet Oluştur';
 
   @override
   String get conversationNotFoundOrDeleted => 'Konuşma bulunamadı veya silindi';
 
   @override
-  String get deleteMemory => 'Bellek silinsin mi?';
+  String get deleteMemory => 'Hafızayı sil';
 
   @override
   String get thisActionCannotBeUndone => 'Bu işlem geri alınamaz.';
@@ -2428,7 +2426,7 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get noApiKeysYet => 'No API keys yet';
+  String get noApiKeysYet => 'Henüz API anahtarı yok. Uygulamanızla entegre etmek için bir tane oluşturun.';
 
   @override
   String get createKeyToGetStarted => 'Create a key to get started';
@@ -2449,13 +2447,13 @@ class AppLocalizationsTr extends AppLocalizations {
   String get importDataFromOtherSources => 'Import data from other sources';
 
   @override
-  String get debugAndDiagnostics => 'Debug & Diagnostics';
+  String get debugAndDiagnostics => 'Hata Ayıklama ve Tanılama';
 
   @override
-  String get autoDeletesAfter3Days => 'Auto-deletes after 3 days.';
+  String get autoDeletesAfter3Days => '3 gün sonra otomatik olarak silinir';
 
   @override
-  String get helpsDiagnoseIssues => 'Helps diagnose issues';
+  String get helpsDiagnoseIssues => 'Sorunları teşhis etmeye yardımcı olur';
 
   @override
   String get exportStartedMessage => 'Export started. This may take a few seconds...';
@@ -2484,37 +2482,37 @@ class AppLocalizationsTr extends AppLocalizations {
   String get useYourMcpApiKey => 'Use your MCP API key';
 
   @override
-  String get realTimeTranscript => 'Real-time Transcript';
+  String get realTimeTranscript => 'Gerçek Zamanlı Transkript';
 
   @override
-  String get experimental => 'Experimental';
+  String get experimental => 'Deneysel';
 
   @override
-  String get transcriptionDiagnostics => 'Transcription Diagnostics';
+  String get transcriptionDiagnostics => 'Transkripsiyon Tanılaması';
 
   @override
-  String get detailedDiagnosticMessages => 'Detailed diagnostic messages';
+  String get detailedDiagnosticMessages => 'Ayrıntılı tanılama mesajları';
 
   @override
-  String get autoCreateSpeakers => 'Auto-create Speakers';
+  String get autoCreateSpeakers => 'Konuşmacıları Otomatik Oluştur';
 
   @override
   String get autoCreateWhenNameDetected => 'Auto-create when name detected';
 
   @override
-  String get followUpQuestions => 'Follow-up Questions';
+  String get followUpQuestions => 'Takip Soruları';
 
   @override
-  String get suggestQuestionsAfterConversations => 'Suggest questions after conversations';
+  String get suggestQuestionsAfterConversations => 'Konuşmalardan sonra sorular önerin';
 
   @override
-  String get goalTracker => 'Goal Tracker';
+  String get goalTracker => 'Hedef İzleyici';
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Track your personal goals on homepage';
 
   @override
-  String get dailyReflection => 'Daily Reflection';
+  String get dailyReflection => 'Günlük Yansıma';
 
   @override
   String get get9PmReminderToReflect => 'Get a 9 PM reminder to reflect on your day';
@@ -2620,7 +2618,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get searchPlaceholder => 'Ara...';
 
   @override
-  String get untitledConversation => 'Başlıksız konuşma';
+  String get untitledConversation => 'Başlıksız Sohbet';
 
   @override
   String countRemaining(String count) {
@@ -2655,7 +2653,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get tapToAddGoal => 'Hedef eklemek için dokunun';
 
   @override
-  String get welcomeBack => 'Tekrar hoş geldiniz';
+  String welcomeBack(String name) {
+    return 'Tekrar hoş geldiniz, $name';
+  }
 
   @override
   String get yourConversations => 'Görüşmeleriniz';
@@ -2859,7 +2859,7 @@ class AppLocalizationsTr extends AppLocalizations {
       'Harika bir uygulamasınız, işiniz kullanıcı sorgularına yanıt vermek ve onları iyi hissettirmek...';
 
   @override
-  String get conversationPrompt => 'Konuşma Yönlendirmesi';
+  String get conversationPrompt => 'Konuşma İstemi';
 
   @override
   String get conversationPromptPlaceholder =>
@@ -2906,4 +2906,1870 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get connectNow => 'Şimdi Bağlan';
+
+  @override
+  String installsCount(String count) {
+    return '$count+ yükleme';
+  }
+
+  @override
+  String get uninstallApp => 'Uygulamayı kaldır';
+
+  @override
+  String get subscribe => 'Abone ol';
+
+  @override
+  String get dataAccessNotice => 'Veri Erişim Bildirimi';
+
+  @override
+  String get dataAccessWarning =>
+      'Bu uygulama verilerinize erişecek. Omi AI, bu uygulama tarafından verilerinizin nasıl kullanıldığı, değiştirildiği veya silindiğinden sorumlu değildir';
+
+  @override
+  String get installApp => 'Uygulamayı yükle';
+
+  @override
+  String get betaTesterNotice =>
+      'Bu uygulamanın beta test kullanıcısısınız. Henüz herkese açık değil. Onaylandıktan sonra herkese açık olacak.';
+
+  @override
+  String get appUnderReviewOwner =>
+      'Uygulamanız inceleniyor ve yalnızca size görünür. Onaylandıktan sonra herkese açık olacak.';
+
+  @override
+  String get appRejectedNotice =>
+      'Uygulamanız reddedildi. Lütfen uygulama ayrıntılarını güncelleyin ve inceleme için yeniden gönderin.';
+
+  @override
+  String get setupSteps => 'Kurulum Adımları';
+
+  @override
+  String get setupInstructions => 'Kurulum Talimatları';
+
+  @override
+  String get integrationInstructions => 'Entegrasyon Talimatları';
+
+  @override
+  String get preview => 'Önizleme';
+
+  @override
+  String get aboutTheApp => 'Uygulama Hakkında';
+
+  @override
+  String get aboutThePersona => 'Kişilik Hakkında';
+
+  @override
+  String get chatPersonality => 'Sohbet Kişiliği';
+
+  @override
+  String get ratingsAndReviews => 'Puanlar ve Yorumlar';
+
+  @override
+  String get noRatings => 'puan yok';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+ puan';
+  }
+
+  @override
+  String get errorActivatingApp => 'Uygulamayı etkinleştirme hatası';
+
+  @override
+  String get integrationSetupRequired => 'Bu bir entegrasyon uygulamasıysa, kurulumun tamamlandığından emin olun.';
+
+  @override
+  String get installed => 'Yüklendi';
+
+  @override
+  String get appIdLabel => 'Uygulama Kimliği';
+
+  @override
+  String get appNameLabel => 'Uygulama Adı';
+
+  @override
+  String get appNamePlaceholder => 'Harika Uygulamam';
+
+  @override
+  String get pleaseEnterAppName => 'Lütfen uygulama adını girin';
+
+  @override
+  String get categoryLabel => 'Kategori';
+
+  @override
+  String get selectCategory => 'Kategori Seçin';
+
+  @override
+  String get descriptionLabel => 'Açıklama';
+
+  @override
+  String get appDescriptionPlaceholder =>
+      'Harika Uygulamam harika şeyler yapan harika bir uygulamadır. En iyi uygulama!';
+
+  @override
+  String get pleaseProvideValidDescription => 'Lütfen geçerli bir açıklama sağlayın';
+
+  @override
+  String get appPricingLabel => 'Uygulama Fiyatlandırması';
+
+  @override
+  String get noneSelected => 'Seçilmedi';
+
+  @override
+  String get appIdCopiedToClipboard => 'Uygulama Kimliği panoya kopyalandı';
+
+  @override
+  String get appCategoryModalTitle => 'Uygulama Kategorisi';
+
+  @override
+  String get pricingFree => 'Ücretsiz';
+
+  @override
+  String get pricingPaid => 'Ücretli';
+
+  @override
+  String get loadingCapabilities => 'Yetenekler yükleniyor...';
+
+  @override
+  String get filterInstalled => 'Yüklü';
+
+  @override
+  String get filterMyApps => 'Uygulamalarım';
+
+  @override
+  String get clearSelection => 'Seçimi temizle';
+
+  @override
+  String get filterCategory => 'Kategori';
+
+  @override
+  String get rating4PlusStars => '4+ yıldız';
+
+  @override
+  String get rating3PlusStars => '3+ yıldız';
+
+  @override
+  String get rating2PlusStars => '2+ yıldız';
+
+  @override
+  String get rating1PlusStars => '1+ yıldız';
+
+  @override
+  String get filterRating => 'Değerlendirme';
+
+  @override
+  String get filterCapabilities => 'Yetenekler';
+
+  @override
+  String get noNotificationScopesAvailable => 'Kullanılabilir bildirim kapsamı yok';
+
+  @override
+  String get popularApps => 'Popüler Uygulamalar';
+
+  @override
+  String get pleaseProvidePrompt => 'Lütfen bir istem sağlayın';
+
+  @override
+  String chatWithAppName(String appName) {
+    return '$appName ile sohbet';
+  }
+
+  @override
+  String get defaultAiAssistant => 'Varsayılan AI Asistanı';
+
+  @override
+  String get readyToChat => '✨ Sohbete hazır!';
+
+  @override
+  String get connectionNeeded => '🌐 Bağlantı gerekli';
+
+  @override
+  String get startConversation => 'Bir sohbet başlatın ve büyünün başlamasına izin verin';
+
+  @override
+  String get checkInternetConnection => 'Lütfen internet bağlantınızı kontrol edin';
+
+  @override
+  String get wasThisHelpful => 'Bu yardımcı oldu mu?';
+
+  @override
+  String get thankYouForFeedback => 'Geri bildiriminiz için teşekkürler!';
+
+  @override
+  String get maxFilesUploadError => 'Aynı anda yalnızca 4 dosya yükleyebilirsiniz';
+
+  @override
+  String get attachedFiles => '📎 Ekli Dosyalar';
+
+  @override
+  String get takePhoto => 'Fotoğraf Çek';
+
+  @override
+  String get captureWithCamera => 'Kamera ile yakala';
+
+  @override
+  String get selectImages => 'Görsel Seç';
+
+  @override
+  String get chooseFromGallery => 'Galeriden seç';
+
+  @override
+  String get selectFile => 'Dosya Seç';
+
+  @override
+  String get chooseAnyFileType => 'Herhangi bir dosya türü seçin';
+
+  @override
+  String get cannotReportOwnMessages => 'Kendi mesajlarınızı bildiremezsiniz';
+
+  @override
+  String get messageReportedSuccessfully => '✅ Mesaj başarıyla bildirildi';
+
+  @override
+  String get confirmReportMessage => 'Bu mesajı bildirmek istediğinizden emin misiniz?';
+
+  @override
+  String get selectChatAssistant => 'Sohbet Asistanı Seç';
+
+  @override
+  String get enableMoreApps => 'Daha Fazla Uygulama Etkinleştir';
+
+  @override
+  String get chatCleared => 'Sohbet temizlendi';
+
+  @override
+  String get clearChatTitle => 'Sohbeti Temizle?';
+
+  @override
+  String get confirmClearChat => 'Sohbeti temizlemek istediğinizden emin misiniz? Bu işlem geri alınamaz.';
+
+  @override
+  String get copy => 'Kopyala';
+
+  @override
+  String get share => 'Paylaş';
+
+  @override
+  String get report => 'Bildir';
+
+  @override
+  String get microphonePermissionRequired => 'Ses kaydı için mikrofon izni gereklidir.';
+
+  @override
+  String get microphonePermissionDenied =>
+      'Mikrofon izni reddedildi. Lütfen Sistem Tercihleri > Gizlilik ve Güvenlik > Mikrofon\'da izin verin.';
+
+  @override
+  String failedToCheckMicrophonePermission(String error) {
+    return 'Mikrofon izni kontrol edilemedi: $error';
+  }
+
+  @override
+  String get failedToTranscribeAudio => 'Ses transkribe edilemedi';
+
+  @override
+  String get transcribing => 'Transkribe ediliyor...';
+
+  @override
+  String get transcriptionFailed => 'Transkripsiyon başarısız';
+
+  @override
+  String get discardedConversation => 'İptal Edilen Sohbet';
+
+  @override
+  String get at => 'saat';
+
+  @override
+  String get from => 'itibaren';
+
+  @override
+  String get copied => 'Kopyalandı!';
+
+  @override
+  String get copyLink => 'Bağlantıyı kopyala';
+
+  @override
+  String get hideTranscript => 'Transkripti Gizle';
+
+  @override
+  String get viewTranscript => 'Transkripti Görüntüle';
+
+  @override
+  String get conversationDetails => 'Sohbet Detayları';
+
+  @override
+  String get transcript => 'Transkript';
+
+  @override
+  String segmentsCount(int count) {
+    return '$count segment';
+  }
+
+  @override
+  String get noTranscriptAvailable => 'Transkript Mevcut Değil';
+
+  @override
+  String get noTranscriptMessage => 'Bu sohbetin transkripti yok.';
+
+  @override
+  String get conversationUrlCouldNotBeGenerated => 'Sohbet URL\'si oluşturulamadı.';
+
+  @override
+  String get failedToGenerateConversationLink => 'Sohbet bağlantısı oluşturulamadı';
+
+  @override
+  String get failedToGenerateShareLink => 'Paylaşım bağlantısı oluşturulamadı';
+
+  @override
+  String get reloadingConversations => 'Konuşmalar yeniden yükleniyor...';
+
+  @override
+  String get user => 'Kullanıcı';
+
+  @override
+  String get starred => 'Yıldızlı';
+
+  @override
+  String get date => 'Tarih';
+
+  @override
+  String get noResultsFound => 'Sonuç bulunamadı';
+
+  @override
+  String get tryAdjustingSearchTerms => 'Arama terimlerinizi ayarlamayı deneyin';
+
+  @override
+  String get starConversationsToFindQuickly => 'Konuşmaları burada hızlıca bulmak için yıldızlayın';
+
+  @override
+  String noConversationsOnDate(String date) {
+    return '$date tarihinde konuşma yok';
+  }
+
+  @override
+  String get trySelectingDifferentDate => 'Farklı bir tarih seçmeyi deneyin';
+
+  @override
+  String get conversations => 'Konuşmalar';
+
+  @override
+  String get chat => 'Sohbet';
+
+  @override
+  String get actions => 'Eylemler';
+
+  @override
+  String get syncAvailable => 'Senkronizasyon Mevcut';
+
+  @override
+  String get referAFriend => 'Arkadaş Öner';
+
+  @override
+  String get help => 'Yardım';
+
+  @override
+  String get pro => 'Pro';
+
+  @override
+  String get upgradeToPro => 'Pro\'ya Yükselt';
+
+  @override
+  String get getOmiDevice => 'Omi Cihazı Al';
+
+  @override
+  String get wearableAiCompanion => 'Giyilebilir AI arkadaşı';
+
+  @override
+  String get loadingMemories => 'Anılar yükleniyor...';
+
+  @override
+  String get allMemories => 'Tüm anılar';
+
+  @override
+  String get aboutYou => 'Hakkınızda';
+
+  @override
+  String get manual => 'Manuel';
+
+  @override
+  String get loadingYourMemories => 'Anılarınız yükleniyor...';
+
+  @override
+  String get createYourFirstMemory => 'Başlamak için ilk anınızı oluşturun';
+
+  @override
+  String get tryAdjustingFilter => 'Aramanızı veya filtrenizi ayarlamayı deneyin';
+
+  @override
+  String get whatWouldYouLikeToRemember => 'Ne hatırlamak istersiniz?';
+
+  @override
+  String get category => 'Kategori';
+
+  @override
+  String get public => 'Herkese açık';
+
+  @override
+  String get failedToSaveCheckConnection => 'Kaydetme başarısız. Lütfen bağlantınızı kontrol edin.';
+
+  @override
+  String get createMemory => 'Hafıza oluştur';
+
+  @override
+  String get deleteMemoryConfirmation => 'Bu hafızayı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.';
+
+  @override
+  String get makePrivate => 'Özel yap';
+
+  @override
+  String get organizeAndControlMemories => 'Anılarınızı düzenleyin ve kontrol edin';
+
+  @override
+  String get total => 'Toplam';
+
+  @override
+  String get makeAllMemoriesPrivate => 'Tüm Anıları Özel Yap';
+
+  @override
+  String get setAllMemoriesToPrivate => 'Tüm anıları özel görünürlüğe ayarla';
+
+  @override
+  String get makeAllMemoriesPublic => 'Tüm Anıları Herkese Açık Yap';
+
+  @override
+  String get setAllMemoriesToPublic => 'Tüm anıları herkese açık görünürlüğe ayarla';
+
+  @override
+  String get permanentlyRemoveAllMemories => 'Omi\'den tüm anıları kalıcı olarak kaldır';
+
+  @override
+  String get allMemoriesAreNowPrivate => 'Tüm anılar artık özel';
+
+  @override
+  String get allMemoriesAreNowPublic => 'Tüm anılar artık herkese açık';
+
+  @override
+  String get clearOmisMemory => 'Omi\'nin Belleğini Temizle';
+
+  @override
+  String clearMemoryConfirmation(int count) {
+    return 'Omi\'nin belleğini temizlemek istediğinizden emin misiniz? Bu işlem geri alınamaz ve tüm $count anıyı kalıcı olarak siler.';
+  }
+
+  @override
+  String get omisMemoryCleared => 'Omi\'nin senin hakkındaki belleği temizlendi';
+
+  @override
+  String get welcomeToOmi => 'Omi\'ye hoş geldiniz';
+
+  @override
+  String get continueWithApple => 'Apple ile devam et';
+
+  @override
+  String get continueWithGoogle => 'Google ile devam et';
+
+  @override
+  String get byContinuingYouAgree => 'Devam ederek ';
+
+  @override
+  String get termsOfService => 'Hizmet Koşullarını';
+
+  @override
+  String get and => ' ve ';
+
+  @override
+  String get dataAndPrivacy => 'Veri ve Gizlilik';
+
+  @override
+  String get secureAuthViaAppleId => 'Apple ID üzerinden güvenli kimlik doğrulama';
+
+  @override
+  String get secureAuthViaGoogleAccount => 'Google Hesabı üzerinden güvenli kimlik doğrulama';
+
+  @override
+  String get whatWeCollect => 'Topladıklarımız';
+
+  @override
+  String get dataCollectionMessage =>
+      'Devam ederek, konuşmalarınız, kayıtlarınız ve kişisel bilgileriniz AI destekli içgörüler sağlamak ve tüm uygulama özelliklerini etkinleştirmek için sunucularımızda güvenli bir şekilde saklanacaktır.';
+
+  @override
+  String get dataProtection => 'Veri Koruması';
+
+  @override
+  String get yourDataIsProtected => 'Verileriniz korunmaktadır ve ';
+
+  @override
+  String get pleaseSelectYourPrimaryLanguage => 'Lütfen birincil dilinizi seçin';
+
+  @override
+  String get chooseYourLanguage => 'Dilinizi seçin';
+
+  @override
+  String get selectPreferredLanguageForBestExperience => 'En iyi Omi deneyimi için tercih ettiğiniz dili seçin';
+
+  @override
+  String get searchLanguages => 'Dil ara...';
+
+  @override
+  String get selectALanguage => 'Bir dil seçin';
+
+  @override
+  String get tryDifferentSearchTerm => 'Farklı bir arama terimi deneyin';
+
+  @override
+  String get pleaseEnterYourName => 'Lütfen adınızı girin';
+
+  @override
+  String get nameMustBeAtLeast2Characters => 'İsim en az 2 karakter olmalıdır';
+
+  @override
+  String get tellUsHowYouWouldLikeToBeAddressed =>
+      'Nasıl hitap edilmesini istediğinizi bize söyleyin. Bu, Omi deneyiminizi kişiselleştirmeye yardımcı olur.';
+
+  @override
+  String charactersCount(int count) {
+    return '$count karakter';
+  }
+
+  @override
+  String get enableFeaturesForBestExperience => 'Cihazınızda en iyi Omi deneyimi için özellikleri etkinleştirin.';
+
+  @override
+  String get microphoneAccess => 'Mikrofon Erişimi';
+
+  @override
+  String get recordAudioConversations => 'Sesli konuşmaları kaydet';
+
+  @override
+  String get microphoneAccessDescription =>
+      'Omi, konuşmalarınızı kaydetmek ve transkript sağlamak için mikrofon erişimine ihtiyaç duyar.';
+
+  @override
+  String get screenRecording => 'Ekran Kaydı';
+
+  @override
+  String get captureSystemAudioFromMeetings => 'Toplantılardan sistem sesini yakala';
+
+  @override
+  String get screenRecordingDescription =>
+      'Omi, tarayıcı tabanlı toplantılarınızdan sistem sesini yakalamak için ekran kaydı izni gerektirir.';
+
+  @override
+  String get accessibility => 'Erişilebilirlik';
+
+  @override
+  String get detectBrowserBasedMeetings => 'Tarayıcı tabanlı toplantıları algıla';
+
+  @override
+  String get accessibilityDescription =>
+      'Omi, tarayıcınızda Zoom, Meet veya Teams toplantılarına katıldığınızı algılamak için erişilebilirlik izni gerektirir.';
+
+  @override
+  String get pleaseWait => 'Lütfen bekleyin...';
+
+  @override
+  String get joinTheCommunity => 'Topluluğa katılın!';
+
+  @override
+  String get loadingProfile => 'Profil yükleniyor...';
+
+  @override
+  String get profileSettings => 'Profil Ayarları';
+
+  @override
+  String get noEmailSet => 'E-posta ayarlanmadı';
+
+  @override
+  String get userIdCopiedToClipboard => 'Kullanıcı kimliği kopyalandı';
+
+  @override
+  String get yourInformation => 'Bilgileriniz';
+
+  @override
+  String get setYourName => 'Adınızı belirleyin';
+
+  @override
+  String get changeYourName => 'Adınızı değiştirin';
+
+  @override
+  String get manageYourOmiPersona => 'Omi personanızı yönetin';
+
+  @override
+  String get voiceAndPeople => 'Ses ve İnsanlar';
+
+  @override
+  String get teachOmiYourVoice => 'Omi\'ye sesinizi öğretin';
+
+  @override
+  String get tellOmiWhoSaidIt => 'Omi\'ye kimin söylediğini söyleyin 🗣️';
+
+  @override
+  String get payment => 'Ödeme';
+
+  @override
+  String get addOrChangeYourPaymentMethod => 'Ödeme yöntemi ekleyin veya değiştirin';
+
+  @override
+  String get preferences => 'Tercihler';
+
+  @override
+  String get helpImproveOmiBySharing =>
+      'Anonimleştirilmiş analitik verileri paylaşarak Omi\'yi geliştirmeye yardımcı olun';
+
+  @override
+  String get deleteAccount => 'Hesabı Sil';
+
+  @override
+  String get deleteYourAccountAndAllData => 'Hesabınızı ve tüm verilerinizi silin';
+
+  @override
+  String get clearLogs => 'Günlükleri temizle';
+
+  @override
+  String get debugLogsCleared => 'Hata ayıklama günlükleri temizlendi';
+
+  @override
+  String get exportConversations => 'Konuşmaları dışa aktar';
+
+  @override
+  String get exportAllConversationsToJson => 'Tüm konuşmalarınızı bir JSON dosyasına aktarın.';
+
+  @override
+  String get conversationsExportStarted =>
+      'Konuşma dışa aktarımı başlatıldı. Bu birkaç saniye sürebilir, lütfen bekleyin.';
+
+  @override
+  String get mcpDescription =>
+      'Anılarınızı ve konuşmalarınızı okumak, aramak ve yönetmek için Omi\'yi diğer uygulamalarla bağlamak için. Başlamak için bir anahtar oluşturun.';
+
+  @override
+  String get apiKeys => 'API Anahtarları';
+
+  @override
+  String errorLabel(String error) {
+    return 'Hata: $error';
+  }
+
+  @override
+  String get noApiKeysFound => 'API anahtarı bulunamadı. Başlamak için bir tane oluşturun.';
+
+  @override
+  String get advancedSettings => 'Gelişmiş Ayarlar';
+
+  @override
+  String get triggersWhenNewConversationCreated => 'Yeni bir konuşma oluşturulduğunda tetiklenir.';
+
+  @override
+  String get triggersWhenNewTranscriptReceived => 'Yeni bir transkript alındığında tetiklenir.';
+
+  @override
+  String get realtimeAudioBytes => 'Gerçek zamanlı ses baytları';
+
+  @override
+  String get triggersWhenAudioBytesReceived => 'Ses baytları alındığında tetiklenir.';
+
+  @override
+  String get everyXSeconds => 'Her x saniyede';
+
+  @override
+  String get triggersWhenDaySummaryGenerated => 'Günlük özet oluşturulduğunda tetiklenir.';
+
+  @override
+  String get tryLatestExperimentalFeatures => 'Omi Ekibinin en son deneysel özelliklerini deneyin.';
+
+  @override
+  String get transcriptionServiceDiagnosticStatus => 'Transkripsiyon hizmeti tanı durumu';
+
+  @override
+  String get enableDetailedDiagnosticMessages => 'Transkripsiyon hizmetinden ayrıntılı tanı mesajlarını etkinleştir';
+
+  @override
+  String get autoCreateAndTagNewSpeakers => 'Yeni konuşmacıları otomatik olarak oluştur ve etiketle';
+
+  @override
+  String get automaticallyCreateNewPerson =>
+      'Transkriptte bir ad algılandığında otomatik olarak yeni bir kişi oluştur.';
+
+  @override
+  String get pilotFeatures => 'Pilot Özellikler';
+
+  @override
+  String get pilotFeaturesDescription => 'Bu özellikler testlerdir ve destek garanti edilmez.';
+
+  @override
+  String get suggestFollowUpQuestion => 'Takip sorusu öner';
+
+  @override
+  String get saveSettings => 'Ayarları Kaydet';
+
+  @override
+  String get syncingDeveloperSettings => 'Geliştirici ayarları senkronize ediliyor...';
+
+  @override
+  String get summary => 'Özet';
+
+  @override
+  String get auto => 'Otomatik';
+
+  @override
+  String get noSummaryForApp =>
+      'Bu uygulama için özet mevcut değil. Daha iyi sonuçlar için başka bir uygulama deneyin.';
+
+  @override
+  String get tryAnotherApp => 'Başka Bir Uygulama Deneyin';
+
+  @override
+  String generatedBy(String appName) {
+    return '$appName tarafından oluşturuldu';
+  }
+
+  @override
+  String get overview => 'Genel Bakış';
+
+  @override
+  String get otherAppResults => 'Diğer Uygulama Sonuçları';
+
+  @override
+  String get unknownApp => 'Bilinmeyen Uygulama';
+
+  @override
+  String get noSummaryAvailable => 'Özet Mevcut Değil';
+
+  @override
+  String get conversationNoSummaryYet => 'Bu konuşmanın henüz bir özeti yok.';
+
+  @override
+  String get chooseSummarizationApp => 'Özet Uygulaması Seçin';
+
+  @override
+  String setAsDefaultSummarizationApp(String appName) {
+    return '$appName varsayılan özet uygulaması olarak ayarlandı';
+  }
+
+  @override
+  String get letOmiChooseAutomatically => 'Omi\'nin en iyi uygulamayı otomatik olarak seçmesine izin verin';
+
+  @override
+  String get deleteConversationConfirmation => 'Bu sohbeti silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.';
+
+  @override
+  String get conversationDeleted => 'Sohbet silindi';
+
+  @override
+  String get generatingLink => 'Bağlantı oluşturuluyor...';
+
+  @override
+  String get editConversation => 'Sohbeti düzenle';
+
+  @override
+  String get conversationLinkCopiedToClipboard => 'Sohbet bağlantısı panoya kopyalandı';
+
+  @override
+  String get conversationTranscriptCopiedToClipboard => 'Sohbet transkripti panoya kopyalandı';
+
+  @override
+  String get editConversationDialogTitle => 'Sohbeti Düzenle';
+
+  @override
+  String get changeTheConversationTitle => 'Sohbet başlığını değiştir';
+
+  @override
+  String get conversationTitle => 'Sohbet Başlığı';
+
+  @override
+  String get enterConversationTitle => 'Sohbet başlığı girin...';
+
+  @override
+  String get conversationTitleUpdatedSuccessfully => 'Sohbet başlığı başarıyla güncellendi';
+
+  @override
+  String get failedToUpdateConversationTitle => 'Sohbet başlığı güncellenemedi';
+
+  @override
+  String get errorUpdatingConversationTitle => 'Sohbet başlığı güncellenirken hata oluştu';
+
+  @override
+  String get settingUp => 'Kuruluyor...';
+
+  @override
+  String get startYourFirstRecording => 'İlk kaydınızı başlatın';
+
+  @override
+  String get preparingSystemAudioCapture => 'Sistem ses kaydı hazırlanıyor';
+
+  @override
+  String get clickTheButtonToCaptureAudio =>
+      'Canlı transkriptler, AI içgörüleri ve otomatik kaydetme için ses kaydetmek üzere düğmeye tıklayın.';
+
+  @override
+  String get reconnecting => 'Yeniden bağlanıyor...';
+
+  @override
+  String get recordingPaused => 'Kayıt duraklatıldı';
+
+  @override
+  String get recordingActive => 'Kayıt aktif';
+
+  @override
+  String get startRecording => 'Kaydı başlat';
+
+  @override
+  String resumingInCountdown(String countdown) {
+    return '$countdown saniye içinde devam ediliyor...';
+  }
+
+  @override
+  String get tapPlayToResume => 'Devam etmek için oynat\'a dokunun';
+
+  @override
+  String get listeningForAudio => 'Ses dinleniyor...';
+
+  @override
+  String get preparingAudioCapture => 'Ses kaydı hazırlanıyor';
+
+  @override
+  String get clickToBeginRecording => 'Kaydı başlatmak için tıklayın';
+
+  @override
+  String get translated => 'çevrildi';
+
+  @override
+  String get liveTranscript => 'Canlı Transkript';
+
+  @override
+  String segmentsSingular(String count) {
+    return '$count segment';
+  }
+
+  @override
+  String segmentsPlural(String count) {
+    return '$count segment';
+  }
+
+  @override
+  String get startRecordingToSeeTranscript => 'Canlı transkripti görmek için kaydı başlatın';
+
+  @override
+  String get paused => 'Duraklatıldı';
+
+  @override
+  String get initializing => 'Başlatılıyor...';
+
+  @override
+  String get recording => 'Kaydediliyor';
+
+  @override
+  String microphoneChangedResumingIn(String countdown) {
+    return 'Mikrofon değiştirildi. $countdown saniye içinde devam ediliyor';
+  }
+
+  @override
+  String get clickPlayToResumeOrStop => 'Devam etmek için oynat\'a veya bitirmek için durdur\'a tıklayın';
+
+  @override
+  String get settingUpSystemAudioCapture => 'Sistem ses kaydı kuruluyor';
+
+  @override
+  String get capturingAudioAndGeneratingTranscript => 'Ses kaydediliyor ve transkript oluşturuluyor';
+
+  @override
+  String get clickToBeginRecordingSystemAudio => 'Sistem ses kaydını başlatmak için tıklayın';
+
+  @override
+  String get you => 'Siz';
+
+  @override
+  String speakerWithId(String speakerId) {
+    return 'Konuşmacı $speakerId';
+  }
+
+  @override
+  String get translatedByOmi => 'omi tarafından çevrildi';
+
+  @override
+  String get backToConversations => 'Konuşmalara dön';
+
+  @override
+  String get systemAudio => 'Sistem';
+
+  @override
+  String get mic => 'Mikrofon';
+
+  @override
+  String audioInputSetTo(String deviceName) {
+    return 'Ses girişi $deviceName olarak ayarlandı';
+  }
+
+  @override
+  String errorSwitchingAudioDevice(String error) {
+    return 'Ses cihazı değiştirilirken hata: $error';
+  }
+
+  @override
+  String get selectAudioInput => 'Ses girişini seç';
+
+  @override
+  String get loadingDevices => 'Cihazlar yükleniyor...';
+
+  @override
+  String get settingsHeader => 'AYARLAR';
+
+  @override
+  String get plansAndBilling => 'Planlar ve Faturalama';
+
+  @override
+  String get calendarIntegration => 'Takvim Entegrasyonu';
+
+  @override
+  String get dailySummary => 'Günlük Özet';
+
+  @override
+  String get developer => 'Geliştirici';
+
+  @override
+  String get about => 'Hakkında';
+
+  @override
+  String get selectTime => 'Zaman Seç';
+
+  @override
+  String get accountGroup => 'Hesap';
+
+  @override
+  String get signOutQuestion => 'Çıkış Yapılsın mı?';
+
+  @override
+  String get signOutConfirmation => 'Çıkış yapmak istediğinizden emin misiniz?';
+
+  @override
+  String get customVocabularyHeader => 'ÖZEL KELIME DAĞARCIĞI';
+
+  @override
+  String get addWordsDescription => 'Omin transkripsiyon sırasında tanıması gereken kelimeleri ekleyin.';
+
+  @override
+  String get enterWordsHint => 'Kelimeleri girin (virgülle ayrılmış)';
+
+  @override
+  String get dailySummaryHeader => 'GÜNLÜK ÖZET';
+
+  @override
+  String get dailySummaryTitle => 'Günlük Özet';
+
+  @override
+  String get dailySummaryDescription => 'Konuşmalarınızın kişiselleştirilmiş özetini alın';
+
+  @override
+  String get deliveryTime => 'Teslimat Zamanı';
+
+  @override
+  String get deliveryTimeDescription => 'Günlük özetinizi ne zaman alacağınız';
+
+  @override
+  String get subscription => 'Abonelik';
+
+  @override
+  String get viewPlansAndUsage => 'Planları ve Kullanımı Görüntüle';
+
+  @override
+  String get viewPlansDescription => 'Aboneliğinizi yönetin ve kullanım istatistiklerini görün';
+
+  @override
+  String get addOrChangePaymentMethod => 'Ödeme yönteminizi ekleyin veya değiştirin';
+
+  @override
+  String get displayOptions => 'Görüntüleme Seçenekleri';
+
+  @override
+  String get showMeetingsInMenuBar => 'Menü Çubuğunda Toplantıları Göster';
+
+  @override
+  String get displayUpcomingMeetingsDescription => 'Yaklaşan toplantıları menü çubuğunda göster';
+
+  @override
+  String get showEventsWithoutParticipants => 'Katılımcısız Etkinlikleri Göster';
+
+  @override
+  String get includePersonalEventsDescription => 'Katılımcı olmayan kişisel etkinlikleri dahil et';
+
+  @override
+  String get upcomingMeetings => 'YAKLAŞAN TOPLANTILAR';
+
+  @override
+  String get checkingNext7Days => 'Sonraki 7 gün kontrol ediliyor';
+
+  @override
+  String get shortcuts => 'Kısayollar';
+
+  @override
+  String get shortcutChangeInstruction => 'Değiştirmek için bir kısayola tıklayın. İptal etmek için Escape\'e basın.';
+
+  @override
+  String get configurePersonaDescription => 'Yapay zeka kişiliğinizi yapılandırın';
+
+  @override
+  String get configureSTTProvider => 'STT sağlayıcısını yapılandır';
+
+  @override
+  String get setConversationEndDescription => 'Konuşmaların otomatik olarak ne zaman sona ereceğini ayarlayın';
+
+  @override
+  String get importDataDescription => 'Diğer kaynaklardan veri içe aktar';
+
+  @override
+  String get exportConversationsDescription => 'Konuşmaları JSON\'a aktar';
+
+  @override
+  String get exportingConversations => 'Konuşmalar aktarılıyor...';
+
+  @override
+  String get clearNodesDescription => 'Tüm düğümleri ve bağlantıları temizle';
+
+  @override
+  String get deleteKnowledgeGraphQuestion => 'Bilgi Grafiği Silinsin mi?';
+
+  @override
+  String get deleteKnowledgeGraphWarning =>
+      'Bu, türetilmiş tüm bilgi grafiği verilerini silecektir. Orijinal anılarınız güvende kalır.';
+
+  @override
+  String get connectOmiWithAI => 'Omi\'yi yapay zeka asistanlarıyla bağlayın';
+
+  @override
+  String get noAPIKeys => 'API anahtarı yok. Başlamak için bir tane oluşturun.';
+
+  @override
+  String get autoCreateWhenDetected => 'İsim algılandığında otomatik oluştur';
+
+  @override
+  String get trackPersonalGoals => 'Ana sayfada kişisel hedefleri izleyin';
+
+  @override
+  String get dailyReflectionDescription => 'Gününüzü yansıtmak için 21:00 hatırlatıcısı';
+
+  @override
+  String get endpointURL => 'Uç Nokta URL\'si';
+
+  @override
+  String get links => 'Bağlantılar';
+
+  @override
+  String get discordMemberCount => 'Discord\'da 8000\'den fazla üye';
+
+  @override
+  String get userInformation => 'Kullanıcı Bilgileri';
+
+  @override
+  String get capabilities => 'Yetenekler';
+
+  @override
+  String get previewScreenshots => 'Ekran görüntüsü önizlemesi';
+
+  @override
+  String get holdOnPreparingForm => 'Bekleyin, formu sizin için hazırlıyoruz';
+
+  @override
+  String get bySubmittingYouAgreeToOmi => 'Göndererek, Omi ';
+
+  @override
+  String get termsAndPrivacyPolicy => 'Şartlar ve Gizlilik Politikası';
+
+  @override
+  String get helpsDiagnoseIssuesAutoDeletes =>
+      'Sorunların teşhisine yardımcı olur. 3 gün sonra otomatik olarak silinir.';
+
+  @override
+  String get manageYourApp => 'Uygulamanızı Yönetin';
+
+  @override
+  String get updatingYourApp => 'Uygulamanız güncelleniyor';
+
+  @override
+  String get fetchingYourAppDetails => 'Uygulama bilgileri alınıyor';
+
+  @override
+  String get updateAppQuestion => 'Uygulama güncellensin mi?';
+
+  @override
+  String get updateAppConfirmation =>
+      'Uygulamanızı güncellemek istediğinizden emin misiniz? Değişiklikler ekibimiz tarafından incelendikten sonra yansıtılacaktır.';
+
+  @override
+  String get updateApp => 'Uygulamayı Güncelle';
+
+  @override
+  String get createAndSubmitNewApp => 'Yeni bir uygulama oluştur ve gönder';
+
+  @override
+  String appsCount(String count) {
+    return 'Uygulamalar ($count)';
+  }
+
+  @override
+  String privateAppsCount(String count) {
+    return 'Özel Uygulamalar ($count)';
+  }
+
+  @override
+  String publicAppsCount(String count) {
+    return 'Herkese Açık Uygulamalar ($count)';
+  }
+
+  @override
+  String get newVersionAvailable => 'Yeni Sürüm Mevcut  🎉';
+
+  @override
+  String get no => 'Hayır';
+
+  @override
+  String get subscriptionCancelledSuccessfully =>
+      'Abonelik başarıyla iptal edildi. Mevcut fatura döneminin sonuna kadar aktif kalacaktır.';
+
+  @override
+  String get failedToCancelSubscription => 'Abonelik iptal edilemedi. Lütfen tekrar deneyin.';
+
+  @override
+  String get invalidPaymentUrl => 'Geçersiz ödeme URL\'si';
+
+  @override
+  String get permissionsAndTriggers => 'İzinler ve Tetikleyiciler';
+
+  @override
+  String get chatFeatures => 'Sohbet Özellikleri';
+
+  @override
+  String get uninstall => 'Kaldır';
+
+  @override
+  String get installs => 'YÜKLEMELER';
+
+  @override
+  String get priceLabel => 'FİYAT';
+
+  @override
+  String get updatedLabel => 'GÜNCELLENDİ';
+
+  @override
+  String get createdLabel => 'OLUŞTURULDU';
+
+  @override
+  String get featuredLabel => 'ÖNE ÇIKAN';
+
+  @override
+  String get cancelSubscriptionQuestion => 'Aboneliği iptal et?';
+
+  @override
+  String get cancelSubscriptionConfirmation =>
+      'Aboneliğinizi iptal etmek istediğinizden emin misiniz? Mevcut fatura döneminin sonuna kadar erişiminiz devam edecektir.';
+
+  @override
+  String get cancelSubscriptionButton => 'Aboneliği İptal Et';
+
+  @override
+  String get cancelling => 'İptal ediliyor...';
+
+  @override
+  String get betaTesterMessage =>
+      'Bu uygulamanın beta test kullanıcısısınız. Henüz herkese açık değil. Onaylandıktan sonra herkese açık olacak.';
+
+  @override
+  String get appUnderReviewMessage =>
+      'Uygulamanız inceleniyor ve yalnızca size görünür. Onaylandıktan sonra herkese açık olacak.';
+
+  @override
+  String get appRejectedMessage => 'Uygulamanız reddedildi. Lütfen detayları güncelleyip tekrar gönderin.';
+
+  @override
+  String get invalidIntegrationUrl => 'Geçersiz entegrasyon URL\'si';
+
+  @override
+  String get tapToComplete => 'Tamamlamak için dokunun';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Geçersiz kurulum talimatları URL\'si';
+
+  @override
+  String get pushToTalk => 'Konuşmak için Basın';
+
+  @override
+  String get summaryPrompt => 'Özet İstemi';
+
+  @override
+  String get pleaseSelectARating => 'Lütfen bir puan seçin';
+
+  @override
+  String get reviewAddedSuccessfully => 'Değerlendirme başarıyla eklendi 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Değerlendirme başarıyla güncellendi 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Değerlendirme gönderilemedi. Lütfen tekrar deneyin.';
+
+  @override
+  String get addYourReview => 'Değerlendirmenizi Ekleyin';
+
+  @override
+  String get editYourReview => 'Değerlendirmenizi Düzenleyin';
+
+  @override
+  String get writeAReviewOptional => 'Bir değerlendirme yazın (isteğe bağlı)';
+
+  @override
+  String get submitReview => 'Değerlendirmeyi Gönder';
+
+  @override
+  String get updateReview => 'Değerlendirmeyi Güncelle';
+
+  @override
+  String get yourReview => 'Değerlendirmeniz';
+
+  @override
+  String get anonymousUser => 'Anonim Kullanıcı';
+
+  @override
+  String get issueActivatingApp => 'Bu uygulamayı etkinleştirirken bir sorun oluştu. Lütfen tekrar deneyin.';
+
+  @override
+  String get dataAccessNoticeDescription =>
+      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
+
+  @override
+  String get copyUrl => 'URL\'yi Kopyala';
+
+  @override
+  String get txtFormat => 'TXT';
+
+  @override
+  String get pdfFormat => 'PDF';
+
+  @override
+  String get weekdayMon => 'Pzt';
+
+  @override
+  String get weekdayTue => 'Sal';
+
+  @override
+  String get weekdayWed => 'Çar';
+
+  @override
+  String get weekdayThu => 'Per';
+
+  @override
+  String get weekdayFri => 'Cum';
+
+  @override
+  String get weekdaySat => 'Cmt';
+
+  @override
+  String get weekdaySun => 'Paz';
+
+  @override
+  String serviceIntegrationComingSoon(String serviceName) {
+    return '$serviceName entegrasyonu yakında';
+  }
+
+  @override
+  String alreadyExportedTo(String platform) {
+    return '$platform platformuna zaten aktarıldı';
+  }
+
+  @override
+  String get anotherPlatform => 'başka bir platform';
+
+  @override
+  String pleaseAuthenticateWithService(String serviceName) {
+    return 'Lütfen Ayarlar > Görev Entegrasyonları bölümünden $serviceName ile kimlik doğrulaması yapın';
+  }
+
+  @override
+  String addingToService(String serviceName) {
+    return '$serviceName platformuna ekleniyor...';
+  }
+
+  @override
+  String addedToService(String serviceName) {
+    return '$serviceName platformuna eklendi';
+  }
+
+  @override
+  String failedToAddToService(String serviceName) {
+    return '$serviceName platformuna eklenemedi';
+  }
+
+  @override
+  String get permissionDeniedForAppleReminders => 'Apple Hatırlatıcılar için izin reddedildi';
+
+  @override
+  String failedToCreateApiKey(String error) {
+    return 'Sağlayıcı API anahtarı oluşturulamadı: $error';
+  }
+
+  @override
+  String get createAKey => 'Anahtar Oluştur';
+
+  @override
+  String get apiKeyRevokedSuccessfully => 'API anahtarı başarıyla iptal edildi';
+
+  @override
+  String failedToRevokeApiKey(String error) {
+    return 'API anahtarı iptal edilemedi: $error';
+  }
+
+  @override
+  String get omiApiKeys => 'Omi API Anahtarları';
+
+  @override
+  String get apiKeysDescription =>
+      'API anahtarları, uygulamanız OMI sunucusuyla iletişim kurarken kimlik doğrulama için kullanılır. Uygulamanızın anılar oluşturmasına ve diğer OMI hizmetlerine güvenli bir şekilde erişmesine olanak tanır.';
+
+  @override
+  String get aboutOmiApiKeys => 'Omi API Anahtarları Hakkında';
+
+  @override
+  String get yourNewKey => 'Yeni anahtarınız:';
+
+  @override
+  String get copyToClipboard => 'Panoya kopyala';
+
+  @override
+  String get pleaseCopyKeyNow => 'Lütfen şimdi kopyalayın ve güvenli bir yere yazın. ';
+
+  @override
+  String get willNotSeeAgain => 'Tekrar göremeyeceksiniz.';
+
+  @override
+  String get revokeKey => 'Anahtarı iptal et';
+
+  @override
+  String get revokeApiKeyQuestion => 'API Anahtarını İptal Et?';
+
+  @override
+  String get revokeApiKeyWarning =>
+      'Bu işlem geri alınamaz. Bu anahtarı kullanan uygulamalar artık API\'ye erişemeyecektir.';
+
+  @override
+  String get revoke => 'İptal Et';
+
+  @override
+  String get whatWouldYouLikeToCreate => 'Ne oluşturmak istersiniz?';
+
+  @override
+  String get createAnApp => 'Uygulama Oluştur';
+
+  @override
+  String get createAndShareYourApp => 'Uygulamanızı oluşturun ve paylaşın';
+
+  @override
+  String get createMyClone => 'Klonumu Oluştur';
+
+  @override
+  String get createYourDigitalClone => 'Dijital klonunuzu oluşturun';
+
+  @override
+  String get itemApp => 'Uygulama';
+
+  @override
+  String get itemPersona => 'Persona';
+
+  @override
+  String keepItemPublic(String item) {
+    return '$item Herkese Açık Tut';
+  }
+
+  @override
+  String makeItemPublicQuestion(String item) {
+    return '$item Herkese Açık Yap?';
+  }
+
+  @override
+  String makeItemPrivateQuestion(String item) {
+    return '$item Özel Yap?';
+  }
+
+  @override
+  String makeItemPublicExplanation(String item) {
+    return '$item herkese açık yaparsanız, herkes kullanabilir';
+  }
+
+  @override
+  String makeItemPrivateExplanation(String item) {
+    return '$item şimdi özel yaparsanız, herkes için çalışmayı durduracak ve yalnızca size görünür olacak';
+  }
+
+  @override
+  String get manageApp => 'Uygulamayı Yönet';
+
+  @override
+  String get updatePersonaDetails => 'Persona Ayrıntılarını Güncelle';
+
+  @override
+  String deleteItemTitle(String item) {
+    return '$item Sil';
+  }
+
+  @override
+  String deleteItemQuestion(String item) {
+    return '$item Silinsin mi?';
+  }
+
+  @override
+  String deleteItemConfirmation(String item) {
+    return 'Bu $item silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.';
+  }
+
+  @override
+  String get revokeKeyQuestion => 'Anahtar İptal Edilsin mi?';
+
+  @override
+  String revokeKeyConfirmation(String keyName) {
+    return '\"$keyName\" anahtarını iptal etmek istediğinizden emin misiniz? Bu işlem geri alınamaz.';
+  }
+
+  @override
+  String get createNewKey => 'Yeni Anahtar Oluştur';
+
+  @override
+  String get keyNameHint => 'örn. Claude Desktop';
+
+  @override
+  String get pleaseEnterAName => 'Lütfen bir ad girin.';
+
+  @override
+  String failedToCreateKeyWithError(String error) {
+    return 'Anahtar oluşturulamadı: $error';
+  }
+
+  @override
+  String get failedToCreateKeyTryAgain => 'Anahtar oluşturulamadı. Lütfen tekrar deneyin.';
+
+  @override
+  String get keyCreated => 'Anahtar Oluşturuldu';
+
+  @override
+  String get keyCreatedMessage => 'Yeni anahtarınız oluşturuldu. Lütfen şimdi kopyalayın. Tekrar göremeyeceksiniz.';
+
+  @override
+  String get keyWord => 'Anahtar';
+
+  @override
+  String get externalAppAccess => 'Harici Uygulama Erişimi';
+
+  @override
+  String get externalAppAccessDescription =>
+      'Aşağıdaki yüklü uygulamalar harici entegrasyonlara sahiptir ve sohbetler ve anılar gibi verilerinize erişebilir.';
+
+  @override
+  String get noExternalAppsHaveAccess => 'Hiçbir harici uygulama verilerinize erişemiyor.';
+
+  @override
+  String get maximumSecurityE2ee => 'Maksimum Güvenlik (E2EE)';
+
+  @override
+  String get e2eeDescription =>
+      'Uçtan uca şifreleme, gizlilik için altın standarttır. Etkinleştirildiğinde, verileriniz sunucularımıza gönderilmeden önce cihazınızda şifrelenir. Bu, Omi dahil hiç kimsenin içeriğinize erişemeyeceği anlamına gelir.';
+
+  @override
+  String get importantTradeoffs => 'Önemli Ödünler:';
+
+  @override
+  String get e2eeTradeoff1 => '• Harici uygulama entegrasyonları gibi bazı özellikler devre dışı bırakılabilir.';
+
+  @override
+  String get e2eeTradeoff2 => '• Parolanızı kaybederseniz, verileriniz kurtarılamaz.';
+
+  @override
+  String get featureComingSoon => 'Bu özellik yakında geliyor!';
+
+  @override
+  String get migrationInProgressMessage => 'Geçiş devam ediyor. Tamamlanana kadar koruma seviyesini değiştiremezsiniz.';
+
+  @override
+  String get migrationFailed => 'Geçiş Başarısız';
+
+  @override
+  String migratingFromTo(String source, String target) {
+    return '$source konumundan $target konumuna geçiş yapılıyor';
+  }
+
+  @override
+  String objectsCount(String processed, String total) {
+    return '$processed / $total nesne';
+  }
+
+  @override
+  String get secureEncryption => 'Güvenli Şifreleme';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Verileriniz, Google Cloud\'da barındırılan sunucularımızda size özgü bir anahtarla şifrelenir. Bu, ham içeriğinizin Omi personeli veya Google dahil hiç kimse tarafından doğrudan veritabanından erişilemez olduğu anlamına gelir.';
+
+  @override
+  String get endToEndEncryption => 'Uçtan Uca Şifreleme';
+
+  @override
+  String get e2eeCardDescription =>
+      'Yalnızca sizin verilerinize erişebildiğiniz maksimum güvenlik için etkinleştirin. Daha fazla bilgi için dokunun.';
+
+  @override
+  String get dataAlwaysEncrypted =>
+      'Seviyeden bağımsız olarak, verileriniz her zaman dinlenme halinde ve aktarım sırasında şifrelenir.';
+
+  @override
+  String get readOnlyScope => 'Yalnızca Okuma';
+
+  @override
+  String get fullAccessScope => 'Tam Erişim';
+
+  @override
+  String get readScope => 'Okuma';
+
+  @override
+  String get writeScope => 'Yazma';
+
+  @override
+  String get apiKeyCreated => 'API Anahtarı Oluşturuldu!';
+
+  @override
+  String get saveKeyWarning => 'Bu anahtarı şimdi kaydedin! Tekrar göremeyeceksiniz.';
+
+  @override
+  String get yourApiKey => 'API ANAHTARINIZ';
+
+  @override
+  String get tapToCopy => 'Kopyalamak için dokunun';
+
+  @override
+  String get copyKey => 'Anahtarı Kopyala';
+
+  @override
+  String get createApiKey => 'API Anahtarı Oluştur';
+
+  @override
+  String get accessDataProgrammatically => 'Verilerinize programatik olarak erişin';
+
+  @override
+  String get keyNameLabel => 'ANAHTAR ADI';
+
+  @override
+  String get keyNamePlaceholder => 'ör., Uygulama Entegrasyonum';
+
+  @override
+  String get permissionsLabel => 'İZİNLER';
+
+  @override
+  String get permissionsInfoNote => 'R = Okuma, W = Yazma. Hiçbir şey seçilmezse varsayılan salt okunur.';
+
+  @override
+  String get developerApi => 'Geliştirici API\'si';
+
+  @override
+  String get createAKeyToGetStarted => 'Başlamak için bir anahtar oluşturun';
+
+  @override
+  String errorWithMessage(String error) {
+    return 'Hata: $error';
+  }
+
+  @override
+  String get omiTraining => 'Omi Eğitimi';
+
+  @override
+  String get trainingDataProgram => 'Eğitim Verisi Programı';
+
+  @override
+  String get getOmiUnlimitedFree =>
+      'Verilerinizi AI modellerini eğitmek için katkıda bulunarak Omi Unlimited\'ı ücretsiz alın.';
+
+  @override
+  String get trainingDataBullets =>
+      '• Verileriniz AI modellerini geliştirmeye yardımcı olur\n• Yalnızca hassas olmayan veriler paylaşılır\n• Tamamen şeffaf süreç';
+
+  @override
+  String get learnMoreAtOmiTraining => 'omi.me/training adresinde daha fazla bilgi edinin';
+
+  @override
+  String get agreeToContributeData => 'AI eğitimi için verilerimi katkıda bulunmayı anlıyorum ve kabul ediyorum';
+
+  @override
+  String get submitRequest => 'İstek Gönder';
+
+  @override
+  String get thankYouRequestUnderReview =>
+      'Teşekkürler! İsteğiniz inceleniyor. Onaylandıktan sonra sizi bilgilendireceğiz.';
+
+  @override
+  String planRemainsActiveUntil(String date) {
+    return 'Planınız $date tarihine kadar aktif kalacak. Bundan sonra sınırsız özelliklerinize erişiminizi kaybedeceksiniz. Emin misiniz?';
+  }
+
+  @override
+  String get confirmCancellation => 'İptali Onayla';
+
+  @override
+  String get keepMyPlan => 'Planımı Koru';
+
+  @override
+  String get subscriptionSetToCancel => 'Aboneliğiniz dönem sonunda iptal edilecek şekilde ayarlandı.';
+
+  @override
+  String get switchedToOnDevice => 'Cihaz üzerinde transkripsiyona geçildi';
+
+  @override
+  String get couldNotSwitchToFreePlan => 'Ücretsiz plana geçilemedi. Lütfen tekrar deneyin.';
+
+  @override
+  String get couldNotLoadPlans => 'Mevcut planlar yüklenemedi. Lütfen tekrar deneyin.';
+
+  @override
+  String get selectedPlanNotAvailable => 'Seçilen plan mevcut değil. Lütfen tekrar deneyin.';
+
+  @override
+  String get upgradeToAnnualPlan => 'Yıllık Plana Yükseltin';
+
+  @override
+  String get importantBillingInfo => 'Önemli Fatura Bilgileri:';
+
+  @override
+  String get monthlyPlanContinues => 'Mevcut aylık planınız fatura döneminizin sonuna kadar devam edecek';
+
+  @override
+  String get paymentMethodCharged =>
+      'Aylık planınız sona erdiğinde mevcut ödeme yönteminiz otomatik olarak tahsil edilecek';
+
+  @override
+  String get annualSubscriptionStarts => '12 aylık yıllık aboneliğiniz ödeme sonrasında otomatik olarak başlayacak';
+
+  @override
+  String get thirteenMonthsCoverage => 'Toplamda 13 aylık kapsam alacaksınız (mevcut ay + 12 ay yıllık)';
+
+  @override
+  String get confirmUpgrade => 'Yükseltmeyi Onayla';
+
+  @override
+  String get confirmPlanChange => 'Plan Değişikliğini Onayla';
+
+  @override
+  String get confirmAndProceed => 'Onayla ve Devam Et';
+
+  @override
+  String get upgradeScheduled => 'Yükseltme Planlandı';
+
+  @override
+  String get changePlan => 'Planı Değiştir';
+
+  @override
+  String get upgradeAlreadyScheduled => 'Yıllık plana yükseltmeniz zaten planlandı';
+
+  @override
+  String get youAreOnUnlimitedPlan => 'Sınırsız Plan\'dasınız.';
+
+  @override
+  String get yourOmiUnleashed => 'Omi\'niz, serbest bırakıldı. Sonsuz olasılıklar için sınırsız olun.';
+
+  @override
+  String planEndedOn(String date) {
+    return 'Planınız $date tarihinde sona erdi.\\nŞimdi yeniden abone olun - yeni fatura dönemi için hemen ücretlendirileceksiniz.';
+  }
+
+  @override
+  String planSetToCancelOn(String date) {
+    return 'Planınız $date tarihinde iptal edilecek şekilde ayarlandı.\\nAvantajlarınızı korumak için şimdi yeniden abone olun - $date tarihine kadar ücret yok.';
+  }
+
+  @override
+  String get annualPlanStartsAutomatically =>
+      'Aylık planınız sona erdiğinde yıllık planınız otomatik olarak başlayacak.';
+
+  @override
+  String planRenewsOn(String date) {
+    return 'Planınız $date tarihinde yenilenir.';
+  }
+
+  @override
+  String get unlimitedConversations => 'Sınırsız konuşmalar';
+
+  @override
+  String get askOmiAnything => 'Hayatınız hakkında Omi\'ye her şeyi sorun';
+
+  @override
+  String get unlockOmiInfiniteMemory => 'Omi\'nin sonsuz hafızasını açın';
+
+  @override
+  String get youreOnAnnualPlan => 'Yıllık Plan\'dasınız';
+
+  @override
+  String get alreadyBestValuePlan => 'Zaten en iyi değerli plana sahipsiniz. Değişiklik gerekmiyor.';
+
+  @override
+  String get unableToLoadPlans => 'Planlar yüklenemiyor';
+
+  @override
+  String get checkConnectionTryAgain => 'Lütfen bağlantınızı kontrol edin ve tekrar deneyin';
+
+  @override
+  String get useFreePlan => 'Ücretsiz Planı Kullan';
+
+  @override
+  String get continueText => 'Devam Et';
+
+  @override
+  String get resubscribe => 'Yeniden Abone Ol';
+
+  @override
+  String get couldNotOpenPaymentSettings => 'Ödeme ayarları açılamadı. Lütfen tekrar deneyin.';
+
+  @override
+  String get managePaymentMethod => 'Ödeme Yöntemini Yönet';
+
+  @override
+  String get cancelSubscription => 'Aboneliği İptal Et';
+
+  @override
+  String endsOnDate(String date) {
+    return '$date tarihinde sona erer';
+  }
+
+  @override
+  String get active => 'Aktif';
+
+  @override
+  String get freePlan => 'Ücretsiz Plan';
+
+  @override
+  String get configure => 'Yapılandır';
+
+  @override
+  String get privacyInformation => 'Gizlilik Bilgileri';
+
+  @override
+  String get yourPrivacyMattersToUs => 'Gizliliğiniz Bizim İçin Önemli';
+
+  @override
+  String get privacyIntroText =>
+      'Omi\'de gizliliğinizi çok ciddiye alıyoruz. Topladığımız veriler ve bunları nasıl kullandığımız konusunda şeffaf olmak istiyoruz. İşte bilmeniz gerekenler:';
+
+  @override
+  String get whatWeTrack => 'Ne Takip Ediyoruz';
+
+  @override
+  String get anonymityAndPrivacy => 'Anonimlik ve Gizlilik';
+
+  @override
+  String get optInAndOptOutOptions => 'Katılma ve Ayrılma Seçenekleri';
+
+  @override
+  String get ourCommitment => 'Taahhüdümüz';
+
+  @override
+  String get commitmentText =>
+      'Topladığımız verileri yalnızca Omi\'yi sizin için daha iyi bir ürün haline getirmek için kullanmayı taahhüt ediyoruz. Gizliliğiniz ve güveniniz bizim için çok önemlidir.';
+
+  @override
+  String get thankYouText =>
+      'Omi\'nin değerli bir kullanıcısı olduğunuz için teşekkür ederiz. Herhangi bir sorunuz veya endişeniz varsa, team@basedhardware.com adresinden bize ulaşmaktan çekinmeyin.';
+
+  @override
+  String get wifiSyncSettings => 'WiFi Senkronizasyon Ayarları';
+
+  @override
+  String get enterHotspotCredentials => 'Telefonunuzun hotspot kimlik bilgilerini girin';
+
+  @override
+  String get wifiSyncUsesHotspot =>
+      'WiFi senkronizasyonu telefonunuzu hotspot olarak kullanır. Adı ve şifreyi Ayarlar > Kişisel Erişim Noktası\'nda bulun.';
+
+  @override
+  String get hotspotNameSsid => 'Hotspot Adı (SSID)';
+
+  @override
+  String get exampleIphoneHotspot => 'örn. iPhone Hotspot';
+
+  @override
+  String get password => 'Şifre';
+
+  @override
+  String get enterHotspotPassword => 'Hotspot şifresini girin';
+
+  @override
+  String get saveCredentials => 'Kimlik Bilgilerini Kaydet';
+
+  @override
+  String get clearCredentials => 'Kimlik Bilgilerini Temizle';
+
+  @override
+  String get pleaseEnterHotspotName => 'Lütfen bir hotspot adı girin';
+
+  @override
+  String get wifiCredentialsSaved => 'WiFi kimlik bilgileri kaydedildi';
+
+  @override
+  String get wifiCredentialsCleared => 'WiFi kimlik bilgileri temizlendi';
+
+  @override
+  String summaryGeneratedForDate(String date) {
+    return '$date için özet oluşturuldu';
+  }
+
+  @override
+  String get failedToGenerateSummaryCheckConversations =>
+      'Özet oluşturulamadı. O gün için konuşmalarınız olduğundan emin olun.';
+
+  @override
+  String get summaryNotFound => 'Özet bulunamadı';
+
+  @override
+  String get yourDaysJourney => 'Günün Yolculuğu';
+
+  @override
+  String get highlights => 'Öne Çıkanlar';
+
+  @override
+  String get unresolvedQuestions => 'Çözülmemiş Sorular';
+
+  @override
+  String get decisions => 'Kararlar';
+
+  @override
+  String get learnings => 'Öğrenilenler';
+
+  @override
+  String get autoDeletesAfterThreeDays => '3 gün sonra otomatik silinir.';
+
+  @override
+  String get knowledgeGraphDeletedSuccessfully => 'Bilgi Grafiği başarıyla silindi';
+
+  @override
+  String get exportStartedMayTakeFewSeconds => 'Dışa aktarma başladı. Bu birkaç saniye sürebilir...';
+
+  @override
+  String get knowledgeGraphDeleteDescription =>
+      'Bu, tüm türetilmiş bilgi grafiği verilerini (düğümler ve bağlantılar) silecektir. Orijinal anılarınız güvende kalacaktır. Grafik zamanla veya bir sonraki istekte yeniden oluşturulacaktır.';
+
+  @override
+  String get configureDailySummaryDigest => 'Günlük görev özetinizi yapılandırın';
+
+  @override
+  String accessesDataTypes(String dataTypes) {
+    return '$dataTypes erişimi';
+  }
+
+  @override
+  String triggeredByType(String triggerType) {
+    return '$triggerType tarafından tetiklendi';
+  }
+
+  @override
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+    return '$accessDescription ve $triggerDescription.';
+  }
+
+  @override
+  String isTriggeredBy(String triggerDescription) {
+    return '$triggerDescription.';
+  }
+
+  @override
+  String get noSpecificDataAccessConfigured => 'Belirli veri erişimi yapılandırılmamış.';
 }

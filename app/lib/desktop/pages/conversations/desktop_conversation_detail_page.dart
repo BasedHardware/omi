@@ -19,6 +19,7 @@ import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/ui/molecules/omi_empty_state.dart';
 import 'package:omi/ui/molecules/omi_panel_header.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/extensions/string.dart';
@@ -269,10 +270,10 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
               children: [
                 Text(
                   widget.conversation.discarded
-                      ? 'Discarded Conversation'
+                      ? context.l10n.discardedConversation
                       : (widget.conversation.structured.title.isNotEmpty
                           ? widget.conversation.structured.title.decodeString
-                          : 'Untitled Conversation'),
+                          : context.l10n.untitledConversation),
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w600,
@@ -283,7 +284,7 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${dateTimeFormat('MMM d, yyyy', widget.conversation.startedAt ?? widget.conversation.createdAt)} ${widget.conversation.startedAt == null ? 'at' : 'from'} ${setTime(widget.conversation.startedAt, widget.conversation.createdAt, widget.conversation.finishedAt)}',
+                  '${dateTimeFormat('MMM d, yyyy', widget.conversation.startedAt ?? widget.conversation.createdAt)} ${widget.conversation.startedAt == null ? context.l10n.at : context.l10n.from} ${setTime(widget.conversation.startedAt, widget.conversation.createdAt, widget.conversation.finishedAt)}',
                   style: const TextStyle(
                     fontSize: 14,
                     color: ResponsiveHelper.textSecondary,
@@ -295,7 +296,7 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
 
           // Share button
           OmiButton(
-            label: _isSharing ? 'Copied!' : 'Copy Link',
+            label: _isSharing ? context.l10n.copied : context.l10n.copyLink,
             icon: _isSharing ? null : FontAwesomeIcons.link,
             type: OmiButtonType.neutral,
             enabled: !_isSharing,
@@ -306,7 +307,7 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
 
           // Transcript button
           OmiButton(
-            label: _showTranscript ? 'Hide Transcript' : 'View Transcript',
+            label: _showTranscript ? context.l10n.hideTranscript : context.l10n.viewTranscript,
             icon: _showTranscript ? FontAwesomeIcons.eye : FontAwesomeIcons.fileLines,
             type: _showTranscript ? OmiButtonType.primary : OmiButtonType.neutral,
             onPressed: () {
@@ -360,9 +361,9 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
                     ),
                   ),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    OmiIconButton(
+                    const OmiIconButton(
                       icon: FontAwesomeIcons.fileLines,
                       style: OmiIconButtonStyle.neutral,
                       size: 24,
@@ -370,10 +371,10 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
                       borderRadius: 6,
                       onPressed: null,
                     ),
-                    SizedBox(width: 8),
+                    const SizedBox(width: 8),
                     Text(
-                      'Conversation Details',
-                      style: TextStyle(
+                      context.l10n.conversationDetails,
+                      style: const TextStyle(
                         color: ResponsiveHelper.textPrimary,
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -463,9 +464,9 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
                   // Transcript header (replaced with OmiPanelHeader)
                   OmiPanelHeader(
                     icon: FontAwesomeIcons.fileLines,
-                    title: 'Transcript',
+                    title: context.l10n.transcript,
                     badgeLabel: widget.conversation.transcriptSegments.isNotEmpty
-                        ? '${widget.conversation.transcriptSegments.length} segments'
+                        ? context.l10n.segmentsCount(widget.conversation.transcriptSegments.length)
                         : null,
                     onClose: () {
                       _transcriptAnimationController.reverse().then((_) {
@@ -500,10 +501,10 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
   }
 
   Widget _buildEmptyTranscript() {
-    return const OmiEmptyState(
+    return OmiEmptyState(
       icon: FontAwesomeIcons.fileLines,
-      title: 'No Transcript Available',
-      message: 'This conversation doesn\'t have a transcript.',
+      title: context.l10n.noTranscriptAvailable,
+      message: context.l10n.noTranscriptMessage,
     );
   }
 
@@ -514,7 +515,7 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
     try {
       bool shared = await setConversationVisibility(widget.conversation.id);
       if (!shared) {
-        _showSnackBar('Conversation URL could not be generated.');
+        _showSnackBar(context.l10n.conversationUrlCouldNotBeGenerated);
         setState(() => _isSharing = false);
         return;
       }
@@ -522,7 +523,7 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
       String content = 'https://h.omi.me/conversations/${widget.conversation.id}';
       await Clipboard.setData(ClipboardData(text: content));
     } catch (e) {
-      _showSnackBar('Failed to generate conversation link');
+      _showSnackBar(context.l10n.failedToGenerateConversationLink);
     } finally {
       setState(() => _isSharing = false);
     }
@@ -535,7 +536,7 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
     try {
       bool shared = await setConversationVisibility(widget.conversation.id);
       if (!shared) {
-        _showSnackBar('Conversation URL could not be shared.');
+        _showSnackBar(context.l10n.conversationUrlCouldNotBeShared);
         setState(() => _isSharing = false);
         return;
       }
@@ -543,7 +544,7 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
       String content = 'https://h.omi.me/conversations/${widget.conversation.id}';
       await Share.share(content);
     } catch (e) {
-      _showSnackBar('Failed to generate share link');
+      _showSnackBar(context.l10n.failedToGenerateShareLink);
     } finally {
       setState(() => _isSharing = false);
     }

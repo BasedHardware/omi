@@ -65,7 +65,7 @@
   "@clear": {
     "description": "Clear button label"
   },
-  "copyTranscript": "Αντιγραφή Απομαγνητοφώνησης",
+  "copyTranscript": "Αντιγραφή απομαγνητοφώνησης",
   "@copyTranscript": {
     "description": "Menu item to copy transcript"
   },
@@ -81,7 +81,7 @@
   "@reprocessConversation": {
     "description": "Menu item to reprocess a conversation"
   },
-  "deleteConversation": "Διαγραφή Συνομιλίας",
+  "deleteConversation": "Διαγραφή συνομιλίας",
   "@deleteConversation": {
     "description": "Menu item to delete a conversation"
   },
@@ -175,7 +175,7 @@
   },
   "settings": "Ρυθμίσεις",
   "@settings": {
-    "description": "Settings page title"
+    "description": "Bottom navigation label for settings"
   },
   "language": "Γλώσσα",
   "@language": {
@@ -293,9 +293,9 @@
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
-  "noStarredConversations": "Δεν υπάρχουν αγαπημένες συνομιλίες ακόμα.",
+  "noStarredConversations": "Δεν υπάρχουν συνομιλίες με αστέρι",
   "@noStarredConversations": {
-    "description": "Empty state for starred filter"
+    "description": "Empty state title when no starred conversations"
   },
   "starConversationHint": "Για να προσθέσετε μια συνομιλία στα αγαπημένα, ανοίξτε τη και πατήστε το εικονίδιο αστεριού στην κεφαλίδα.",
   "@starConversationHint": {
@@ -351,7 +351,7 @@
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Το μήνυμα αντιγράφηκε στο πρόχειρο.",
+  "messageCopied": "✨ Μήνυμα αντιγράφηκε στο πρόχειρο",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -359,7 +359,7 @@
   "@cannotReportOwnMessage": {
     "description": "Error when trying to report own message"
   },
-  "reportMessage": "Αναφορά Μηνύματος",
+  "reportMessage": "Αναφορά μηνύματος",
   "@reportMessage": {
     "description": "Report message dialog title"
   },
@@ -393,7 +393,7 @@
   },
   "apps": "Εφαρμογές",
   "@apps": {
-    "description": "Apps page title"
+    "description": "Navigation label for apps page"
   },
   "noAppsFound": "Δεν βρέθηκαν εφαρμογές",
   "@noAppsFound": {
@@ -435,11 +435,11 @@
   "@privacyPolicy": {
     "description": "Link text for Privacy Policy"
   },
-  "visitWebsite": "Επισκεφτείτε τον Ιστότοπο",
+  "visitWebsite": "Επισκεφθείτε τον ιστότοπο",
   "@visitWebsite": {
     "description": "Visit website link"
   },
-  "helpOrInquiries": "Βοήθεια ή Ερωτήσεις;",
+  "helpOrInquiries": "Βοήθεια ή ερωτήσεις;",
   "@helpOrInquiries": {
     "description": "Help link title"
   },
@@ -447,7 +447,7 @@
   "@joinCommunity": {
     "description": "Discord community link"
   },
-  "membersAndCounting": "8000+ μέλη και συνεχίζουν.",
+  "membersAndCounting": "8000+ μέλη και συνεχίζουν να αυξάνονται.",
   "@membersAndCounting": {
     "description": "Discord member count"
   },
@@ -523,15 +523,15 @@
   "@paymentMethods": {
     "description": "Payment methods setting"
   },
-  "conversationDisplay": "Εμφάνιση Συνομιλίας",
+  "conversationDisplay": "Εμφάνιση Συνομιλιών",
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "Δεδομένα & Απόρρητο",
+  "dataPrivacy": "Απόρρητο Δεδομένων",
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
-  "userId": "Αναγνωριστικό Χρήστη",
+  "userId": "ID Χρήστη",
   "@userId": {
     "description": "User ID label"
   },
@@ -571,7 +571,7 @@
   "@helpCenter": {
     "description": "Help center menu item"
   },
-  "developerSettings": "Ρυθμίσεις Προγραμματιστή",
+  "developerSettings": "Ρυθμίσεις προγραμματιστή",
   "@developerSettings": {
     "description": "Developer settings menu item"
   },
@@ -867,7 +867,7 @@
   "@debugDiagnostics": {
     "description": "Debug & Diagnostics section header"
   },
-  "endpointUrl": "URL Τελικού Σημείου",
+  "endpointUrl": "URL τελικού σημείου",
   "@endpointUrl": {
     "description": "Endpoint URL label"
   },
@@ -1071,14 +1071,14 @@
       }
     }
   },
-  "debugLogs": "Αρχεία Εντοπισμού Σφαλμάτων",
+  "debugLogs": "Αρχεία καταγραφής αποσφαλμάτωσης",
   "debugLogsAutoDelete": "Αυτόματη διαγραφή μετά από 3 ημέρες.",
   "debugLogsDesc": "Βοηθά στη διάγνωση προβλημάτων",
   "noLogFilesFound": "Δεν βρέθηκαν αρχεία καταγραφής.",
   "omiDebugLog": "Αρχείο εντοπισμού σφαλμάτων Omi",
   "logShared": "Το αρχείο καταγραφής κοινοποιήθηκε",
   "selectLogFile": "Επιλογή Αρχείου Καταγραφής",
-  "shareLogs": "Κοινοποίηση Αρχείων Καταγραφής",
+  "shareLogs": "Κοινή χρήση αρχείων καταγραφής",
   "debugLogCleared": "Το αρχείο εντοπισμού σφαλμάτων εκκαθαρίστηκε",
   "exportStarted": "Η εξαγωγή ξεκίνησε. Μπορεί να διαρκέσει μερικά δευτερόλεπτα...",
   "exportAllData": "Εξαγωγή Όλων των Δεδομένων",
@@ -1087,7 +1087,7 @@
   "exportShared": "Η εξαγωγή κοινοποιήθηκε",
   "deleteKnowledgeGraphTitle": "Διαγραφή Γραφήματος Γνώσης;",
   "deleteKnowledgeGraphMessage": "Αυτό θα διαγράψει όλα τα παράγωγα δεδομένα του γραφήματος γνώσης (κόμβοι και συνδέσεις). Οι αρχικές αναμνήσεις σας θα παραμείνουν ασφαλείς. Το γράφημα θα ξαναδημιουργηθεί με το χρόνο ή στο επόμενο αίτημα.",
-  "knowledgeGraphDeleted": "Το Γράφημα Γνώσης διαγράφηκε επιτυχώς",
+  "knowledgeGraphDeleted": "Γράφημα γνώσης διαγράφηκε",
   "deleteGraphFailed": "Αποτυχία διαγραφής γραφήματος: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -1103,7 +1103,7 @@
   "mcpServer": "Διακομιστής MCP",
   "mcpServerDesc": "Συνδέστε βοηθούς AI στα δεδομένα σας",
   "serverUrl": "URL Διακομιστή",
-  "urlCopied": "Το URL αντιγράφηκε",
+  "urlCopied": "URL αντιγράφηκε",
   "apiKeyAuth": "Πιστοποίηση Κλειδιού API",
   "header": "Κεφαλίδα",
   "authorizationBearer": "Authorization: Bearer <key>",
@@ -1112,14 +1112,14 @@
   "clientSecret": "Μυστικό Πελάτη",
   "useMcpApiKey": "Χρησιμοποιήστε το κλειδί MCP API σας",
   "webhooks": "Webhooks",
-  "conversationEvents": "Συμβάντα Συνομιλίας",
+  "conversationEvents": "Συμβάντα συνομιλίας",
   "newConversationCreated": "Δημιουργήθηκε νέα συνομιλία",
-  "realtimeTranscript": "Απομαγνητοφώνηση σε Πραγματικό Χρόνο",
+  "realtimeTranscript": "Μεταγραφή σε πραγματικό χρόνο",
   "transcriptReceived": "Λήφθηκε απομαγνητοφώνηση",
   "audioBytes": "Bytes Ήχου",
   "audioDataReceived": "Λήφθηκαν δεδομένα ήχου",
   "intervalSeconds": "Διάστημα (δευτερόλεπτα)",
-  "daySummary": "Περίληψη Ημέρας",
+  "daySummary": "Περίληψη ημέρας",
   "summaryGenerated": "Δημιουργήθηκε περίληψη",
   "claudeDesktop": "Claude Desktop",
   "addToClaudeConfig": "Προσθήκη στο claude_desktop_config.json",
@@ -1127,7 +1127,7 @@
   "configCopied": "Η διαμόρφωση αντιγράφηκε στο πρόχειρο",
   "listeningMins": "Ακρόαση (λεπτά)",
   "understandingWords": "Κατανόηση (λέξεις)",
-  "insights": "Πληροφορίες",
+  "insights": "Ιδέες",
   "memories": "Αναμνήσεις",
   "minsUsedThisMonth": "{used} από {limit} λεπτά χρησιμοποιήθηκαν αυτόν τον μήνα",
   "@minsUsedThisMonth": {
@@ -1250,7 +1250,7 @@
   },
   "continueAction": "Συνέχεια",
   "languageTitle": "Γλώσσα",
-  "primaryLanguage": "Κύρια Γλώσσα",
+  "primaryLanguage": "Κύρια γλώσσα",
   "automaticTranslation": "Αυτόματη Μετάφραση",
   "detectLanguages": "Ανίχνευση 10+ γλωσσών",
   "authorizeSavingRecordings": "Εξουσιοδότηση Αποθήκευσης Εγγραφών",
@@ -1571,7 +1571,7 @@
   "autoLanguageDetection": "Αυτόματη ανίχνευση γλώσσας",
   "highAccuracy": "Υψηλή ακρίβεια",
   "privacyFirst": "Πρώτα το απόρρητο",
-  "saveChanges": "Αποθήκευση Αλλαγών",
+  "saveChanges": "Αποθήκευση αλλαγών",
   "resetToDefault": "Επαναφορά στην προεπιλογή",
   "viewTemplate": "Προβολή Προτύπου",
   "trySomethingLike": "Δοκιμάστε κάτι σαν...",
@@ -1820,7 +1820,7 @@
   "@wantDifferentName": {
     "description": "Question asking if user wants to change their display name"
   },
-  "whatsYourName": "Ποιο είναι το όνομά σας;",
+  "whatsYourName": "Πώς σε λένε;",
   "@whatsYourName": {
     "description": "Question asking for user's name"
   },
@@ -1938,7 +1938,7 @@
   "@selectYourLanguage": {
     "description": "Placeholder for selected language name"
   },
-  "personalGrowthJourney": "Το προσωπικό σας ταξίδι ανάπτυξης με AI που ακούει κάθε σας λέξη.",
+  "personalGrowthJourney": "Το ταξίδι προσωπικής σας ανάπτυξης με AI που ακούει κάθε σας λέξη.",
   "@personalGrowthJourney": {
     "description": "Tagline on onboarding wrapper"
   },
@@ -2077,14 +2077,9 @@
   "@deleteSelected": {
     "description": "Tooltip for delete selected"
   },
-  "searchMemories": "Αναζήτηση {count} Αναμνήσεων",
+  "searchMemories": "Αναζήτηση αναμνήσεων...",
   "@searchMemories": {
-    "description": "Hint text for memories search bar",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
+    "description": "Search input hint text"
   },
   "memoryDeleted": "Η ανάμνηση διαγράφηκε.",
   "@memoryDeleted": {
@@ -2094,9 +2089,9 @@
   "@undo": {
     "description": "Undo button text"
   },
-  "noMemoriesYet": "Δεν υπάρχουν αναμνήσεις ακόμα",
+  "noMemoriesYet": "🧠 Δεν υπάρχουν αναμνήσεις ακόμα",
   "@noMemoriesYet": {
-    "description": "Empty state text"
+    "description": "Empty state title when no memories"
   },
   "noAutoMemories": "Δεν υπάρχουν αυτόματα εξαγόμενες αναμνήσεις ακόμα",
   "@noAutoMemories": {
@@ -2110,9 +2105,9 @@
   "@noMemoriesInCategories": {
     "description": "Empty state text for filtered categories"
   },
-  "noMemoriesFound": "Δεν βρέθηκαν αναμνήσεις",
+  "noMemoriesFound": "🔍 Δεν βρέθηκαν αναμνήσεις",
   "@noMemoriesFound": {
-    "description": "Empty state text for search results"
+    "description": "Empty state title when search/filter has no results"
   },
   "addFirstMemory": "Προσθέστε την πρώτη σας ανάμνηση",
   "@addFirstMemory": {
@@ -2126,7 +2121,7 @@
   "@clearMemoryMessage": {
     "description": "Dialog content for clearing memory"
   },
-  "clearMemoryButton": "Εκκαθάριση Μνήμης",
+  "clearMemoryButton": "Εκκαθάριση μνήμης",
   "@clearMemoryButton": {
     "description": "Button text to confirm clear"
   },
@@ -2134,7 +2129,7 @@
   "@memoryClearedSuccess": {
     "description": "Snackbar success message"
   },
-  "noMemoriesToDelete": "Δεν υπάρχουν αναμνήσεις προς διαγραφή",
+  "noMemoriesToDelete": "Δεν υπάρχουν μνήμες για διαγραφή",
   "@noMemoriesToDelete": {
     "description": "Snackbar message"
   },
@@ -2146,7 +2141,7 @@
   "@createActionItemTooltip": {
     "description": "Tooltip for create action item FAB"
   },
-  "memoryManagement": "Διαχείριση Μνήμης",
+  "memoryManagement": "Διαχείριση μνήμης",
   "@memoryManagement": {
     "description": "Title for memory management sheet"
   },
@@ -2179,7 +2174,7 @@
   "@makeAllPublic": {
     "description": "Button label"
   },
-  "deleteAllMemories": "Διαγραφή Όλων των Αναμνήσεων",
+  "deleteAllMemories": "Διαγραφή όλων των μνημών",
   "@deleteAllMemories": {
     "description": "Button label"
   },
@@ -2191,11 +2186,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "Νέα Ανάμνηση",
+  "newMemory": "✨ Νέα μνήμη",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "Επεξεργασία Ανάμνησης",
+  "editMemory": "✏️ Επεξεργασία μνήμης",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2332,7 +2327,7 @@
   "deleteFolder": "Διαγραφή φακέλου",
   "transcriptCopiedToClipboard": "Το αντίγραφο αντιγράφηκε στο πρόχειρο",
   "summaryCopiedToClipboard": "Η περίληψη αντιγράφηκε στο πρόχειρο",
-  "conversationUrlCouldNotBeShared": "Δεν ήταν δυνατή η κοινή χρήση της διεύθυνσης URL της συνομιλίας.",
+  "conversationUrlCouldNotBeShared": "Η διεύθυνση URL της συνομιλίας δεν μπόρεσε να κοινοποιηθεί.",
   "urlCopiedToClipboard": "Η διεύθυνση URL αντιγράφηκε στο πρόχειρο",
   "exportTranscript": "Εξαγωγή αντιγράφου",
   "exportSummary": "Εξαγωγή περίληψης",
@@ -2341,11 +2336,11 @@
   "summarize": "Περίληψη",
   "generateSummary": "Δημιουργία περίληψης",
   "conversationNotFoundOrDeleted": "Η συνομιλία δεν βρέθηκε ή έχει διαγραφεί",
-  "deleteMemory": "Διαγραφή μνήμης;",
+  "deleteMemory": "Διαγραφή μνήμης",
   "thisActionCannotBeUndone": "Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.",
   "memoriesCount": "{count} μνήμες",
   "noMemoriesInCategory": "Δεν υπάρχουν ακόμη μνήμες σε αυτήν την κατηγορία",
-  "addYourFirstMemory": "Προσθέστε την πρώτη σας μνήμη",
+  "addYourFirstMemory": "Προσθέστε την πρώτη σας ανάμνηση",
   "firmwareDisconnectUsb": "Αποσυνδέστε το USB",
   "firmwareUsbWarning": "Η σύνδεση USB κατά τη διάρκεια ενημερώσεων μπορεί να βλάψει τη συσκευή σας.",
   "firmwareBatteryAbove15": "Μπαταρία πάνω από 15%",
@@ -2397,7 +2392,7 @@
   "welcomeToOmiDescription": "Καλώς ήρθατε στο Omi! Ο AI σύντροφός σας είναι έτοιμος να σας βοηθήσει με συνομιλίες, εργασίες και πολλά άλλα.",
   "startUsingOmi": "Ξεκινήστε να χρησιμοποιείτε το Omi",
   "back": "Πίσω",
-  "keyboardShortcuts": "Συντομεύσεις πληκτρολογίου",
+  "keyboardShortcuts": "Συντομεύσεις Πληκτρολογίου",
   "toggleControlBar": "Εναλλαγή γραμμής ελέγχου",
   "pressKeys": "Πατήστε πλήκτρα...",
   "cmdRequired": "⌘ απαιτείται",
@@ -2405,7 +2400,7 @@
   "space": "Διάστημα",
   "search": "Αναζήτηση",
   "searchPlaceholder": "Αναζήτηση...",
-  "untitledConversation": "Ανώνυμη συνομιλία",
+  "untitledConversation": "Συνομιλία χωρίς τίτλο",
   "countRemaining": "{count} απομένουν",
   "addGoal": "Προσθήκη στόχου",
   "editGoal": "Επεξεργασία στόχου",
@@ -2416,7 +2411,7 @@
   "saveGoal": "Αποθήκευση",
   "goals": "Στόχοι",
   "tapToAddGoal": "Πατήστε για να προσθέσετε στόχο",
-  "welcomeBack": "Καλώς ήρθες πίσω",
+  "welcomeBack": "Καλώς ήρθες πάλι, {name}",
   "yourConversations": "Οι συνομιλίες σου",
   "reviewAndManageConversations": "Ελέγξτε και διαχειριστείτε τις καταγεγραμμένες συνομιλίες σας",
   "startCapturingConversations": "Ξεκινήστε να καταγράφετε συνομιλίες με τη συσκευή Omi για να τις δείτε εδώ.",
@@ -2519,5 +2514,785 @@
   "ratingsCount": "{count}+ αξιολογήσεις",
   "errorActivatingApp": "Σφάλμα ενεργοποίησης εφαρμογής",
   "integrationSetupRequired": "Εάν αυτή είναι μια εφαρμογή ενσωμάτωσης, βεβαιωθείτε ότι η εγκατάσταση έχει ολοκληρωθεί.",
-  "installed": "Εγκατεστημένο"
+  "installed": "Εγκατεστημένο",
+  "appIdLabel": "Αναγνωριστικό εφαρμογής",
+  "appNameLabel": "Όνομα εφαρμογής",
+  "appNamePlaceholder": "Η υπέροχη εφαρμογή μου",
+  "pleaseEnterAppName": "Παρακαλώ εισάγετε το όνομα της εφαρμογής",
+  "categoryLabel": "Κατηγορία",
+  "selectCategory": "Επιλέξτε κατηγορία",
+  "descriptionLabel": "Περιγραφή",
+  "appDescriptionPlaceholder": "Η υπέροχη εφαρμογή μου είναι μια υπέροχη εφαρμογή που κάνει καταπληκτικά πράγματα. Είναι η καλύτερη εφαρμογή!",
+  "pleaseProvideValidDescription": "Παρακαλώ δώστε μια έγκυρη περιγραφή",
+  "appPricingLabel": "Τιμολόγηση εφαρμογής",
+  "noneSelected": "Δεν επιλέχθηκε κανένα",
+  "appIdCopiedToClipboard": "Το αναγνωριστικό εφαρμογής αντιγράφηκε στο πρόχειρο",
+  "appCategoryModalTitle": "Κατηγορία εφαρμογής",
+  "pricingFree": "Δωρεάν",
+  "pricingPaid": "Επί πληρωμή",
+  "loadingCapabilities": "Φόρτωση δυνατοτήτων...",
+  "filterInstalled": "Εγκατεστημένα",
+  "filterMyApps": "Οι εφαρμογές μου",
+  "clearSelection": "Εκκαθάριση επιλογής",
+  "filterCategory": "Κατηγορία",
+  "rating4PlusStars": "4+ αστέρια",
+  "rating3PlusStars": "3+ αστέρια",
+  "rating2PlusStars": "2+ αστέρια",
+  "rating1PlusStars": "1+ αστέρι",
+  "filterRating": "Αξιολόγηση",
+  "filterCapabilities": "Δυνατότητες",
+  "noNotificationScopesAvailable": "Δεν υπάρχουν διαθέσιμα πεδία ειδοποιήσεων",
+  "popularApps": "Δημοφιλείς εφαρμογές",
+  "pleaseProvidePrompt": "Παρακαλώ δώστε μια προτροπή",
+  "chatWithAppName": "Συνομιλία με {appName}",
+  "defaultAiAssistant": "Προεπιλεγμένος βοηθός AI",
+  "readyToChat": "✨ Έτοιμος για συνομιλία!",
+  "connectionNeeded": "🌐 Απαιτείται σύνδεση",
+  "startConversation": "Ξεκινήστε μια συνομιλία και αφήστε τη μαγεία να ξεκινήσει",
+  "checkInternetConnection": "Παρακαλώ ελέγξτε τη σύνδεσή σας στο Internet",
+  "wasThisHelpful": "Ήταν αυτό χρήσιμο;",
+  "thankYouForFeedback": "Ευχαριστούμε για τα σχόλιά σας!",
+  "maxFilesUploadError": "Μπορείτε να ανεβάσετε μόνο 4 αρχεία τη φορά",
+  "attachedFiles": "📎 Συνημμένα αρχεία",
+  "takePhoto": "Τραβήξτε φωτογραφία",
+  "captureWithCamera": "Λήψη με κάμερα",
+  "selectImages": "Επιλέξτε εικόνες",
+  "chooseFromGallery": "Επιλογή από τη συλλογή",
+  "selectFile": "Επιλέξτε αρχείο",
+  "chooseAnyFileType": "Επιλέξτε οποιονδήποτε τύπο αρχείου",
+  "cannotReportOwnMessages": "Δεν μπορείτε να αναφέρετε τα δικά σας μηνύματα",
+  "messageReportedSuccessfully": "✅ Το μήνυμα αναφέρθηκε επιτυχώς",
+  "confirmReportMessage": "Είστε βέβαιοι ότι θέλετε να αναφέρετε αυτό το μήνυμα;",
+  "selectChatAssistant": "Επιλογή βοηθού συνομιλίας",
+  "enableMoreApps": "Ενεργοποίηση περισσότερων εφαρμογών",
+  "chatCleared": "Η συνομιλία διαγράφηκε",
+  "clearChatTitle": "Διαγραφή συνομιλίας;",
+  "confirmClearChat": "Είστε βέβαιοι ότι θέλετε να διαγράψετε τη συνομιλία; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.",
+  "copy": "Αντιγραφή",
+  "share": "Κοινοποίηση",
+  "report": "Αναφορά",
+  "microphonePermissionRequired": "Απαιτείται άδεια μικροφώνου για ηχογράφηση φωνής.",
+  "microphonePermissionDenied": "Άρνηση άδειας μικροφώνου. Παρακαλώ δώστε άδεια στις Προτιμήσεις Συστήματος > Απόρρητο & Ασφάλεια > Μικρόφωνο.",
+  "failedToCheckMicrophonePermission": "Αποτυχία ελέγχου άδειας μικροφώνου: {error}",
+  "failedToTranscribeAudio": "Αποτυχία μεταγραφής ήχου",
+  "transcribing": "Μεταγραφή...",
+  "transcriptionFailed": "Η μεταγραφή απέτυχε",
+  "discardedConversation": "Απορριφθείσα συνομιλία",
+  "at": "στις",
+  "from": "από",
+  "copied": "Αντιγράφηκε!",
+  "copyLink": "Αντιγραφή συνδέσμου",
+  "hideTranscript": "Απόκρυψη μεταγραφής",
+  "viewTranscript": "Προβολή μεταγραφής",
+  "conversationDetails": "Λεπτομέρειες συνομιλίας",
+  "transcript": "Μεταγραφή",
+  "segmentsCount": "{count} τμήματα",
+  "noTranscriptAvailable": "Δεν υπάρχει διαθέσιμη μεταγραφή",
+  "noTranscriptMessage": "Αυτή η συνομιλία δεν έχει μεταγραφή.",
+  "conversationUrlCouldNotBeGenerated": "Η διεύθυνση URL της συνομιλίας δεν μπόρεσε να δημιουργηθεί.",
+  "failedToGenerateConversationLink": "Αποτυχία δημιουργίας συνδέσμου συνομιλίας",
+  "failedToGenerateShareLink": "Αποτυχία δημιουργίας συνδέσμου κοινής χρήσης",
+  "reloadingConversations": "Επαναφόρτωση συνομιλιών...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "@welcomeBack": {
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "user": "Χρήστης",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "Με αστέρι",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "Ημερομηνία",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "Δεν βρέθηκαν αποτελέσματα",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "Δοκιμάστε να προσαρμόσετε τους όρους αναζήτησης",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "starConversationsToFindQuickly": "Βάλτε αστέρι στις συνομιλίες για να τις βρίσκετε γρήγορα εδώ",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "Δεν υπάρχουν συνομιλίες στις {date}",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "Δοκιμάστε να επιλέξετε διαφορετική ημερομηνία",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  },
+  "conversations": "Συνομιλίες",
+  "@conversations": {
+    "description": "Navigation label for conversations page"
+  },
+  "chat": "Συνομιλία",
+  "@chat": {
+    "description": "Navigation label for chat page"
+  },
+  "@memories": {
+    "description": "Navigation label for memories page"
+  },
+  "actions": "Ενέργειες",
+  "@actions": {
+    "description": "Navigation label for actions page"
+  },
+  "syncAvailable": "Συγχρονισμός διαθέσιμος",
+  "@syncAvailable": {
+    "description": "Label for sync notification"
+  },
+  "referAFriend": "Πρότεινε έναν φίλο",
+  "@referAFriend": {
+    "description": "Bottom navigation label for referral program"
+  },
+  "help": "Βοήθεια",
+  "@help": {
+    "description": "Bottom navigation label for help"
+  },
+  "pro": "Pro",
+  "@pro": {
+    "description": "Badge label for pro/unlimited users"
+  },
+  "upgradeToPro": "Αναβάθμιση σε Pro",
+  "@upgradeToPro": {
+    "description": "Subscription banner button text"
+  },
+  "getOmiDevice": "Αποκτήστε συσκευή Omi",
+  "@getOmiDevice": {
+    "description": "Widget title for device promotion"
+  },
+  "wearableAiCompanion": "Φορετός σύντροφος AI",
+  "@wearableAiCompanion": {
+    "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "Φόρτωση αναμνήσεων...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "allMemories": "Όλες οι αναμνήσεις",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "Σχετικά με εσάς",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "Χειροκίνητο",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "Φόρτωση των αναμνήσεών σας...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "createYourFirstMemory": "Δημιουργήστε την πρώτη σας ανάμνηση για να ξεκινήσετε",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "Δοκιμάστε να προσαρμόσετε την αναζήτηση ή το φίλτρο σας",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
+  },
+  "whatWouldYouLikeToRemember": "Τι θα θέλατε να θυμάστε;",
+  "category": "Κατηγορία",
+  "public": "Δημόσιο",
+  "failedToSaveCheckConnection": "Αποτυχία αποθήκευσης. Ελέγξτε τη σύνδεσή σας.",
+  "createMemory": "Δημιουργία μνήμης",
+  "deleteMemoryConfirmation": "Είστε σίγουροι ότι θέλετε να διαγράψετε αυτήν τη μνήμη; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.",
+  "makePrivate": "Κάντε ιδιωτική",
+  "organizeAndControlMemories": "Οργανώστε και ελέγξτε τις μνήμες σας",
+  "total": "Σύνολο",
+  "makeAllMemoriesPrivate": "Κάντε όλες τις μνήμες ιδιωτικές",
+  "setAllMemoriesToPrivate": "Ορίστε όλες τις μνήμες σε ιδιωτική ορατότητα",
+  "makeAllMemoriesPublic": "Κάντε όλες τις μνήμες δημόσιες",
+  "setAllMemoriesToPublic": "Ορίστε όλες τις μνήμες σε δημόσια ορατότητα",
+  "permanentlyRemoveAllMemories": "Μόνιμη αφαίρεση όλων των μνημών από το Omi",
+  "allMemoriesAreNowPrivate": "Όλες οι μνήμες είναι πλέον ιδιωτικές",
+  "allMemoriesAreNowPublic": "Όλες οι μνήμες είναι πλέον δημόσιες",
+  "clearOmisMemory": "Εκκαθάριση μνήμης του Omi",
+  "clearMemoryConfirmation": "Είστε σίγουροι ότι θέλετε να διαγράψετε τη μνήμη του Omi; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί και θα διαγράψει μόνιμα όλες τις {count} μνήμες.",
+  "omisMemoryCleared": "Η μνήμη του Omi για εσάς έχει διαγραφεί",
+  "welcomeToOmi": "Καλώς ήρθατε στο Omi",
+  "continueWithApple": "Συνέχεια με Apple",
+  "continueWithGoogle": "Συνέχεια με Google",
+  "byContinuingYouAgree": "Συνεχίζοντας, συμφωνείτε με τους ",
+  "termsOfService": "Όρους Υπηρεσίας",
+  "and": " και ",
+  "dataAndPrivacy": "Δεδομένα & Απόρρητο",
+  "secureAuthViaAppleId": "Ασφαλής ταυτοποίηση μέσω Apple ID",
+  "secureAuthViaGoogleAccount": "Ασφαλής ταυτοποίηση μέσω λογαριασμού Google",
+  "whatWeCollect": "Τι συλλέγουμε",
+  "dataCollectionMessage": "Συνεχίζοντας, οι συνομιλίες, οι ηχογραφήσεις και οι προσωπικές σας πληροφορίες θα αποθηκευτούν με ασφάλεια στους διακομιστές μας για να παρέχουμε πληροφορίες που υποστηρίζονται από AI και να ενεργοποιήσουμε όλες τις λειτουργίες της εφαρμογής.",
+  "dataProtection": "Προστασία Δεδομένων",
+  "yourDataIsProtected": "Τα δεδομένα σας προστατεύονται και διέπονται από την ",
+  "pleaseSelectYourPrimaryLanguage": "Παρακαλώ επιλέξτε την κύρια γλώσσα σας",
+  "chooseYourLanguage": "Επιλέξτε τη γλώσσα σας",
+  "selectPreferredLanguageForBestExperience": "Επιλέξτε την προτιμώμενη γλώσσα σας για την καλύτερη εμπειρία Omi",
+  "searchLanguages": "Αναζήτηση γλωσσών...",
+  "selectALanguage": "Επιλέξτε μια γλώσσα",
+  "tryDifferentSearchTerm": "Δοκιμάστε έναν διαφορετικό όρο αναζήτησης",
+  "pleaseEnterYourName": "Παρακαλώ εισάγετε το όνομά σας",
+  "nameMustBeAtLeast2Characters": "Το όνομα πρέπει να έχει τουλάχιστον 2 χαρακτήρες",
+  "tellUsHowYouWouldLikeToBeAddressed": "Πείτε μας πώς θα θέλατε να σας αποκαλούμε. Αυτό βοηθά στην εξατομίκευση της εμπειρίας Omi.",
+  "charactersCount": "{count} χαρακτήρες",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "enableFeaturesForBestExperience": "Ενεργοποιήστε λειτουργίες για την καλύτερη εμπειρία Omi στη συσκευή σας.",
+  "microphoneAccess": "Πρόσβαση στο μικρόφωνο",
+  "recordAudioConversations": "Εγγραφή ηχητικών συνομιλιών",
+  "microphoneAccessDescription": "Το Omi χρειάζεται πρόσβαση στο μικρόφωνο για να εγγράφει τις συνομιλίες σας και να παρέχει μεταγραφές.",
+  "screenRecording": "Εγγραφή οθόνης",
+  "captureSystemAudioFromMeetings": "Καταγραφή ήχου συστήματος από συναντήσεις",
+  "screenRecordingDescription": "Το Omi χρειάζεται άδεια εγγραφής οθόνης για να καταγράφει τον ήχο συστήματος από τις συναντήσεις σας που βασίζονται στον περιηγητή.",
+  "accessibility": "Προσβασιμότητα",
+  "detectBrowserBasedMeetings": "Ανίχνευση συναντήσεων που βασίζονται στον περιηγητή",
+  "accessibilityDescription": "Το Omi χρειάζεται άδεια προσβασιμότητας για να ανιχνεύει πότε συμμετέχετε σε συναντήσεις Zoom, Meet ή Teams στον περιηγητή σας.",
+  "pleaseWait": "Παρακαλώ περιμένετε...",
+  "joinTheCommunity": "Γίνετε μέλος της κοινότητας!",
+  "loadingProfile": "Φόρτωση προφίλ...",
+  "profileSettings": "Ρυθμίσεις προφίλ",
+  "noEmailSet": "Δεν έχει οριστεί email",
+  "userIdCopiedToClipboard": "ID χρήστη αντιγράφηκε",
+  "yourInformation": "Οι Πληροφορίες Σας",
+  "setYourName": "Ορίστε το όνομά σας",
+  "changeYourName": "Αλλάξτε το όνομά σας",
+  "persona": "Persona",
+  "manageYourOmiPersona": "Διαχειριστείτε την Omi persona σας",
+  "voiceAndPeople": "Φωνή & Άνθρωποι",
+  "teachOmiYourVoice": "Μάθετε στο Omi τη φωνή σας",
+  "tellOmiWhoSaidIt": "Πείτε στο Omi ποιος το είπε 🗣️",
+  "payment": "Πληρωμή",
+  "addOrChangeYourPaymentMethod": "Προσθέστε ή αλλάξτε μέθοδο πληρωμής",
+  "preferences": "Προτιμήσεις",
+  "helpImproveOmiBySharing": "Βοηθήστε στη βελτίωση του Omi μοιράζοντας ανώνυμα δεδομένα ανάλυσης",
+  "deleteAccount": "Διαγραφή Λογαριασμού",
+  "deleteYourAccountAndAllData": "Διαγράψτε τον λογαριασμό και όλα τα δεδομένα σας",
+  "helpsDiagnoseIssuesAutoDeletes": "Βοηθά στη διάγνωση προβλημάτων. Διαγράφεται αυτόματα μετά από 3 ημέρες.",
+  "clearLogs": "Εκκαθάριση αρχείων καταγραφής",
+  "debugLogsCleared": "Αρχεία καταγραφής εντοπισμού σφαλμάτων διαγράφηκαν",
+  "exportConversations": "Εξαγωγή συνομιλιών",
+  "exportAllConversationsToJson": "Εξάγετε όλες τις συνομιλίες σας σε αρχείο JSON.",
+  "conversationsExportStarted": "Η εξαγωγή συνομιλιών ξεκίνησε. Αυτό μπορεί να διαρκέσει μερικά δευτερόλεπτα, παρακαλώ περιμένετε.",
+  "mcpDescription": "Για να συνδέσετε το Omi με άλλες εφαρμογές για να διαβάσετε, να αναζητήσετε και να διαχειριστείτε τις αναμνήσεις και τις συνομιλίες σας. Δημιουργήστε ένα κλειδί για να ξεκινήσετε.",
+  "apiKeys": "Κλειδιά API",
+  "errorLabel": "Σφάλμα: {error}",
+  "noApiKeysFound": "Δεν βρέθηκαν κλειδιά API. Δημιουργήστε ένα για να ξεκινήσετε.",
+  "advancedSettings": "Προηγμένες ρυθμίσεις",
+  "triggersWhenNewConversationCreated": "Ενεργοποιείται όταν δημιουργείται μια νέα συνομιλία.",
+  "triggersWhenNewTranscriptReceived": "Ενεργοποιείται όταν λαμβάνεται μια νέα μεταγραφή.",
+  "realtimeAudioBytes": "Bytes ήχου σε πραγματικό χρόνο",
+  "triggersWhenAudioBytesReceived": "Ενεργοποιείται όταν λαμβάνονται bytes ήχου.",
+  "everyXSeconds": "Κάθε x δευτερόλεπτα",
+  "triggersWhenDaySummaryGenerated": "Ενεργοποιείται όταν δημιουργείται η περίληψη της ημέρας.",
+  "experimental": "Πειραματικό",
+  "tryLatestExperimentalFeatures": "Δοκιμάστε τις πιο πρόσφατες πειραματικές λειτουργίες από την ομάδα Omi.",
+  "transcriptionServiceDiagnosticStatus": "Κατάσταση διαγνωστικών υπηρεσίας μεταγραφής",
+  "enableDetailedDiagnosticMessages": "Ενεργοποίηση λεπτομερών διαγνωστικών μηνυμάτων από την υπηρεσία μεταγραφής",
+  "autoCreateAndTagNewSpeakers": "Αυτόματη δημιουργία και επισήμανση νέων ομιλητών",
+  "automaticallyCreateNewPerson": "Αυτόματη δημιουργία νέου ατόμου όταν ανιχνεύεται όνομα στη μεταγραφή.",
+  "pilotFeatures": "Πιλοτικές λειτουργίες",
+  "pilotFeaturesDescription": "Αυτές οι λειτουργίες είναι δοκιμές και δεν εγγυάται η υποστήριξη.",
+  "suggestFollowUpQuestion": "Προτείνετε ερώτηση παρακολούθησης",
+  "saveSettings": "Αποθήκευση Ρυθμίσεων",
+  "syncingDeveloperSettings": "Συγχρονισμός ρυθμίσεων προγραμματιστή...",
+  "summary": "Περίληψη",
+  "auto": "Αυτόματα",
+  "noSummaryForApp": "Δεν υπάρχει διαθέσιμη περίληψη για αυτήν την εφαρμογή. Δοκιμάστε άλλη εφαρμογή για καλύτερα αποτελέσματα.",
+  "tryAnotherApp": "Δοκιμάστε άλλη εφαρμογή",
+  "generatedBy": "Δημιουργήθηκε από {appName}",
+  "overview": "Επισκόπηση",
+  "otherAppResults": "Αποτελέσματα άλλων εφαρμογών",
+  "unknownApp": "Άγνωστη εφαρμογή",
+  "noSummaryAvailable": "Δεν υπάρχει διαθέσιμη περίληψη",
+  "conversationNoSummaryYet": "Αυτή η συνομιλία δεν έχει ακόμη περίληψη.",
+  "chooseSummarizationApp": "Επιλέξτε εφαρμογή περίληψης",
+  "setAsDefaultSummarizationApp": "Η {appName} ορίστηκε ως προεπιλεγμένη εφαρμογή περίληψης",
+  "letOmiChooseAutomatically": "Αφήστε το Omi να επιλέξει αυτόματα την καλύτερη εφαρμογή",
+  "deleteConversationConfirmation": "Είστε σίγουροι ότι θέλετε να διαγράψετε αυτή τη συνομιλία; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.",
+  "conversationDeleted": "Η συνομιλία διαγράφηκε",
+  "generatingLink": "Δημιουργία συνδέσμου...",
+  "editConversation": "Επεξεργασία συνομιλίας",
+  "conversationLinkCopiedToClipboard": "Ο σύνδεσμος συνομιλίας αντιγράφηκε στο πρόχειρο",
+  "conversationTranscriptCopiedToClipboard": "Η απομαγνητοφώνηση της συνομιλίας αντιγράφηκε στο πρόχειρο",
+  "editConversationDialogTitle": "Επεξεργασία συνομιλίας",
+  "changeTheConversationTitle": "Αλλαγή τίτλου συνομιλίας",
+  "conversationTitle": "Τίτλος συνομιλίας",
+  "enterConversationTitle": "Εισαγάγετε τίτλο συνομιλίας...",
+  "conversationTitleUpdatedSuccessfully": "Ο τίτλος της συνομιλίας ενημερώθηκε επιτυχώς",
+  "failedToUpdateConversationTitle": "Αποτυχία ενημέρωσης τίτλου συνομιλίας",
+  "errorUpdatingConversationTitle": "Σφάλμα κατά την ενημέρωση του τίτλου της συνομιλίας",
+  "settingUp": "Ρύθμιση...",
+  "preparingSystemAudioCapture": "Προετοιμασία καταγραφής ήχου συστήματος",
+  "clickTheButtonToCaptureAudio": "Κάντε κλικ στο κουμπί για να καταγράψετε ήχο για ζωντανές μεταγραφές, πληροφορίες AI και αυτόματη αποθήκευση.",
+  "startYourFirstRecording": "Ξεκινήστε την πρώτη σας καταγραφή",
+  "reconnecting": "Επανασύνδεση...",
+  "recordingPaused": "Καταγραφή σε παύση",
+  "recordingActive": "Καταγραφή ενεργή",
+  "startRecording": "Έναρξη καταγραφής",
+  "resumingInCountdown": "Συνέχεια σε {countdown}s...",
+  "tapPlayToResume": "Πατήστε αναπαραγωγή για συνέχεια",
+  "listeningForAudio": "Ακρόαση για ήχο...",
+  "preparingAudioCapture": "Προετοιμασία καταγραφής ήχου",
+  "clickToBeginRecording": "Κάντε κλικ για να ξεκινήσετε την καταγραφή",
+  "translated": "μεταφρασμένο",
+  "liveTranscript": "Ζωντανή μεταγραφή",
+  "segmentsSingular": "{count} τμήμα",
+  "segmentsPlural": "{count} τμήματα",
+  "startRecordingToSeeTranscript": "Ξεκινήστε την καταγραφή για να δείτε τη ζωντανή μεταγραφή",
+  "paused": "Σε παύση",
+  "initializing": "Αρχικοποίηση...",
+  "recording": "Καταγραφή",
+  "microphoneChangedResumingIn": "Το μικρόφωνο άλλαξε. Συνέχεια σε {countdown}s",
+  "clickPlayToResumeOrStop": "Κάντε κλικ στην αναπαραγωγή για συνέχεια ή στάση για ολοκλήρωση",
+  "settingUpSystemAudioCapture": "Ρύθμιση καταγραφής ήχου συστήματος",
+  "capturingAudioAndGeneratingTranscript": "Καταγραφή ήχου και δημιουργία μεταγραφής",
+  "clickToBeginRecordingSystemAudio": "Κάντε κλικ για να ξεκινήσετε την καταγραφή ήχου συστήματος",
+  "you": "Εσείς",
+  "speakerWithId": "Ομιλητής {speakerId}",
+  "translatedByOmi": "μεταφρασμένο από omi",
+  "backToConversations": "Επιστροφή στις συνομιλίες",
+  "systemAudio": "Σύστημα",
+  "mic": "Μικρόφωνο",
+  "audioInputSetTo": "Είσοδος ήχου ορίστηκε σε {deviceName}",
+  "errorSwitchingAudioDevice": "Σφάλμα εναλλαγής συσκευής ήχου: {error}",
+  "selectAudioInput": "Επιλέξτε είσοδο ήχου",
+  "loadingDevices": "Φόρτωση συσκευών...",
+  "settingsHeader": "ΡΥΘΜΙΣΕΙΣ",
+  "plansAndBilling": "Πλάνα & Χρέωση",
+  "calendarIntegration": "Ενσωμάτωση Ημερολογίου",
+  "dailySummary": "Ημερήσια Περίληψη",
+  "developer": "Προγραμματιστής",
+  "about": "Σχετικά",
+  "selectTime": "Επιλογή Ώρας",
+  "accountGroup": "Λογαριασμός",
+  "signOutQuestion": "Αποσύνδεση;",
+  "signOutConfirmation": "Είστε σίγουροι ότι θέλετε να αποσυνδεθείτε;",
+  "customVocabularyHeader": "ΠΡΟΣΑΡΜΟΣΜΕΝΟ ΛΕΞΙΛΟΓΙΟ",
+  "addWordsDescription": "Προσθέστε λέξεις που θα πρέπει να αναγνωρίζει το Omi κατά τη μεταγραφή.",
+  "enterWordsHint": "Εισαγάγετε λέξεις (χωρισμένες με κόμματα)",
+  "dailySummaryHeader": "ΗΜΕΡΗΣΙΑ ΠΕΡΙΛΗΨΗ",
+  "dailySummaryTitle": "Ημερήσια Περίληψη",
+  "dailySummaryDescription": "Λάβετε μια εξατομικευμένη περίληψη των συνομιλιών σας",
+  "deliveryTime": "Ώρα Παράδοσης",
+  "deliveryTimeDescription": "Πότε να λαμβάνετε την ημερήσια περίληψή σας",
+  "subscription": "Συνδρομή",
+  "viewPlansAndUsage": "Προβολή Πλάνων & Χρήσης",
+  "viewPlansDescription": "Διαχειριστείτε τη συνδρομή σας και δείτε στατιστικά χρήσης",
+  "addOrChangePaymentMethod": "Προσθέστε ή αλλάξτε τον τρόπο πληρωμής σας",
+  "displayOptions": "Επιλογές εμφάνισης",
+  "showMeetingsInMenuBar": "Εμφάνιση συναντήσεων στη γραμμή μενού",
+  "displayUpcomingMeetingsDescription": "Εμφάνιση επερχόμενων συναντήσεων στη γραμμή μενού",
+  "showEventsWithoutParticipants": "Εμφάνιση γεγονότων χωρίς συμμετέχοντες",
+  "includePersonalEventsDescription": "Συμπερίληψη προσωπικών γεγονότων χωρίς συμμετέχοντες",
+  "upcomingMeetings": "ΕΠΕΡΧΌΜΕΝΕΣ ΣΥΝΑΝΤΉΣΕΙΣ",
+  "checkingNext7Days": "Έλεγχος των επόμενων 7 ημερών",
+  "shortcuts": "Συντομεύσεις",
+  "shortcutChangeInstruction": "Κάντε κλικ σε μια συντόμευση για να την αλλάξετε. Πατήστε Escape για ακύρωση.",
+  "configurePersonaDescription": "Διαμορφώστε την προσωπικότητα AI σας",
+  "configureSTTProvider": "Διαμόρφωση παρόχου STT",
+  "setConversationEndDescription": "Ορίστε πότε τερματίζονται αυτόματα οι συνομιλίες",
+  "importDataDescription": "Εισαγωγή δεδομένων από άλλες πηγές",
+  "debugAndDiagnostics": "Αποσφαλμάτωση και διαγνωστικά",
+  "autoDeletesAfter3Days": "Αυτόματη διαγραφή μετά από 3 ημέρες",
+  "helpsDiagnoseIssues": "Βοηθά στη διάγνωση προβλημάτων",
+  "exportConversationsDescription": "Εξαγωγή συνομιλιών σε JSON",
+  "exportingConversations": "Εξαγωγή συνομιλιών...",
+  "clearNodesDescription": "Διαγραφή όλων των κόμβων και συνδέσεων",
+  "deleteKnowledgeGraphQuestion": "Διαγραφή γράφου γνώσης;",
+  "deleteKnowledgeGraphWarning": "Αυτό θα διαγράψει όλα τα παράγωγα δεδομένα γράφου γνώσης. Οι αρχικές σας αναμνήσεις παραμένουν ασφαλείς.",
+  "connectOmiWithAI": "Συνδέστε το Omi με βοηθούς AI",
+  "noAPIKeys": "Χωρίς κλειδιά API. Δημιουργήστε ένα για να ξεκινήσετε.",
+  "realTimeTranscript": "Μεταγραφή σε πραγματικό χρόνο",
+  "transcriptionDiagnostics": "Διαγνωστικά μεταγραφής",
+  "detailedDiagnosticMessages": "Λεπτομερή διαγνωστικά μηνύματα",
+  "autoCreateSpeakers": "Αυτόματη δημιουργία ομιλητών",
+  "autoCreateWhenDetected": "Αυτόματη δημιουργία όταν ανιχνευθεί όνομα",
+  "followUpQuestions": "Συμπληρωματικές ερωτήσεις",
+  "suggestQuestionsAfterConversations": "Προτείνετε ερωτήσεις μετά τις συνομιλίες",
+  "goalTracker": "Παρακολούθηση στόχων",
+  "trackPersonalGoals": "Παρακολουθήστε προσωπικούς στόχους στην αρχική σελίδα",
+  "dailyReflection": "Ημερήσιος στοχασμός",
+  "dailyReflectionDescription": "Υπενθύμιση στις 9 μ.μ. για στοχασμό στην ημέρα σας",
+  "endpointURL": "URL τελικού σημείου",
+  "links": "Σύνδεσμοι",
+  "discordMemberCount": "Πάνω από 8000 μέλη στο Discord",
+  "userInformation": "Πληροφορίες χρήστη",
+  "capabilities": "Δυνατότητες",
+  "previewScreenshots": "Προεπισκόπηση στιγμιότυπων",
+  "holdOnPreparingForm": "Περιμένετε, ετοιμάζουμε τη φόρμα για εσάς",
+  "bySubmittingYouAgreeToOmi": "Με την υποβολή, συμφωνείτε με το Omi ",
+  "termsAndPrivacyPolicy": "Όροι & Πολιτική Απορρήτου",
+  "manageYourApp": "Διαχείριση της εφαρμογής σας",
+  "updatingYourApp": "Ενημέρωση της εφαρμογής σας",
+  "fetchingYourAppDetails": "Ανάκτηση λεπτομερειών εφαρμογής",
+  "updateAppQuestion": "Ενημέρωση εφαρμογής;",
+  "updateAppConfirmation": "Είστε σίγουροι ότι θέλετε να ενημερώσετε την εφαρμογή σας; Οι αλλαγές θα εμφανιστούν μετά τον έλεγχο από την ομάδα μας.",
+  "updateApp": "Ενημέρωση εφαρμογής",
+  "createAndSubmitNewApp": "Δημιουργήστε και υποβάλετε μια νέα εφαρμογή",
+  "appsCount": "Εφαρμογές ({count})",
+  "privateAppsCount": "Ιδιωτικές εφαρμογές ({count})",
+  "publicAppsCount": "Δημόσιες εφαρμογές ({count})",
+  "newVersionAvailable": "Νέα έκδοση διαθέσιμη  🎉",
+  "no": "Όχι",
+  "subscriptionCancelledSuccessfully": "Η συνδρομή ακυρώθηκε επιτυχώς. Θα παραμείνει ενεργή μέχρι το τέλος της τρέχουσας περιόδου χρέωσης.",
+  "failedToCancelSubscription": "Αποτυχία ακύρωσης συνδρομής. Παρακαλώ δοκιμάστε ξανά.",
+  "invalidPaymentUrl": "Μη έγκυρο URL πληρωμής",
+  "permissionsAndTriggers": "Δικαιώματα & Ενεργοποιητές",
+  "chatFeatures": "Λειτουργίες συνομιλίας",
+  "uninstall": "Απεγκατάσταση",
+  "installs": "ΕΓΚΑΤΑΣΤΑΣΕΙΣ",
+  "priceLabel": "ΤΙΜΗ",
+  "updatedLabel": "ΕΝΗΜΕΡΩΜΕΝΟ",
+  "createdLabel": "ΔΗΜΙΟΥΡΓΗΘΗΚΕ",
+  "featuredLabel": "ΠΡΟΤΕΙΝΟΜΕΝΟ",
+  "cancelSubscriptionQuestion": "Ακύρωση συνδρομής;",
+  "cancelSubscriptionConfirmation": "Είστε σίγουροι ότι θέλετε να ακυρώσετε τη συνδρομή σας; Θα συνεχίσετε να έχετε πρόσβαση μέχρι το τέλος της τρέχουσας περιόδου χρέωσης.",
+  "cancelSubscriptionButton": "Ακύρωση συνδρομής",
+  "cancelling": "Ακύρωση...",
+  "betaTesterMessage": "Είστε δοκιμαστής beta για αυτήν την εφαρμογή. Δεν είναι ακόμα δημόσια. Θα γίνει δημόσια μετά την έγκριση.",
+  "appUnderReviewMessage": "Η εφαρμογή σας είναι υπό αξιολόγηση και ορατή μόνο σε εσάς. Θα γίνει δημόσια μετά την έγκριση.",
+  "appRejectedMessage": "Η εφαρμογή σας απορρίφθηκε. Ενημερώστε τα στοιχεία και υποβάλετε ξανά για αξιολόγηση.",
+  "invalidIntegrationUrl": "Μη έγκυρο URL ενσωμάτωσης",
+  "tapToComplete": "Πατήστε για ολοκλήρωση",
+  "invalidSetupInstructionsUrl": "Μη έγκυρο URL οδηγιών εγκατάστασης",
+  "pushToTalk": "Πατήστε για ομιλία",
+  "summaryPrompt": "Προτροπή σύνοψης",
+  "pleaseSelectARating": "Παρακαλώ επιλέξτε βαθμολογία",
+  "reviewAddedSuccessfully": "Η κριτική προστέθηκε επιτυχώς 🚀",
+  "reviewUpdatedSuccessfully": "Η κριτική ενημερώθηκε επιτυχώς 🚀",
+  "failedToSubmitReview": "Αποτυχία υποβολής κριτικής. Παρακαλώ δοκιμάστε ξανά.",
+  "addYourReview": "Προσθέστε την κριτική σας",
+  "editYourReview": "Επεξεργαστείτε την κριτική σας",
+  "writeAReviewOptional": "Γράψτε μια κριτική (προαιρετικό)",
+  "submitReview": "Υποβολή κριτικής",
+  "updateReview": "Ενημέρωση κριτικής",
+  "yourReview": "Η κριτική σας",
+  "anonymousUser": "Ανώνυμος χρήστης",
+  "issueActivatingApp": "Υπήρξε πρόβλημα κατά την ενεργοποίηση αυτής της εφαρμογής. Παρακαλώ δοκιμάστε ξανά.",
+  "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
+  "copyUrl": "Αντιγραφή URL",
+  "txtFormat": "TXT",
+  "pdfFormat": "PDF",
+  "weekdayMon": "Δευ",
+  "weekdayTue": "Τρί",
+  "weekdayWed": "Τετ",
+  "weekdayThu": "Πέμ",
+  "weekdayFri": "Παρ",
+  "weekdaySat": "Σάβ",
+  "weekdaySun": "Κυρ",
+  "serviceIntegrationComingSoon": "Ενσωμάτωση {serviceName} σύντομα",
+  "alreadyExportedTo": "Ήδη εξαγωγή σε {platform}",
+  "anotherPlatform": "άλλη πλατφόρμα",
+  "pleaseAuthenticateWithService": "Παρακαλώ συνδεθείτε με {serviceName} στις Ρυθμίσεις > Ενσωματώσεις εργασιών",
+  "addingToService": "Προσθήκη σε {serviceName}...",
+  "addedToService": "Προστέθηκε στο {serviceName}",
+  "failedToAddToService": "Αποτυχία προσθήκης στο {serviceName}",
+  "permissionDeniedForAppleReminders": "Η άδεια για τις Υπενθυμίσεις Apple απορρίφθηκε",
+  "failedToCreateApiKey": "Αποτυχία δημιουργίας κλειδιού API παρόχου: {error}",
+  "createAKey": "Δημιουργία κλειδιού",
+  "apiKeyRevokedSuccessfully": "Το κλειδί API ανακλήθηκε επιτυχώς",
+  "failedToRevokeApiKey": "Αποτυχία ανάκλησης κλειδιού API: {error}",
+  "omiApiKeys": "Κλειδιά API Omi",
+  "apiKeysDescription": "Τα κλειδιά API χρησιμοποιούνται για έλεγχο ταυτότητας όταν η εφαρμογή σας επικοινωνεί με τον διακομιστή OMI. Επιτρέπουν στην εφαρμογή σας να δημιουργεί αναμνήσεις και να έχει ασφαλή πρόσβαση σε άλλες υπηρεσίες OMI.",
+  "aboutOmiApiKeys": "Σχετικά με τα κλειδιά API Omi",
+  "noApiKeysYet": "Δεν υπάρχουν ακόμα κλειδιά API. Δημιουργήστε ένα για ενσωμάτωση με την εφαρμογή σας.",
+  "yourNewKey": "Το νέο σας κλειδί:",
+  "copyToClipboard": "Αντιγραφή στο πρόχειρο",
+  "pleaseCopyKeyNow": "Παρακαλούμε αντιγράψτε το τώρα και σημειώστε το κάπου ασφαλές. ",
+  "willNotSeeAgain": "Δεν θα μπορείτε να το δείτε ξανά.",
+  "revokeKey": "Ανάκληση κλειδιού",
+  "revokeApiKeyQuestion": "Ανάκληση κλειδιού API;",
+  "revokeApiKeyWarning": "Αυτή η ενέργεια δεν μπορεί να αναιρεθεί. Οι εφαρμογές που χρησιμοποιούν αυτό το κλειδί δεν θα έχουν πλέον πρόσβαση στο API.",
+  "revoke": "Ανάκληση",
+  "whatWouldYouLikeToCreate": "Τι θα θέλατε να δημιουργήσετε;",
+  "createAnApp": "Δημιουργία εφαρμογής",
+  "createAndShareYourApp": "Δημιουργήστε και μοιραστείτε την εφαρμογή σας",
+  "createMyClone": "Δημιουργία του κλώνου μου",
+  "createYourDigitalClone": "Δημιουργήστε τον ψηφιακό σας κλώνο",
+  "itemApp": "Εφαρμογή",
+  "itemPersona": "Περσόνα",
+  "keepItemPublic": "Διατήρηση {item} δημόσιο",
+  "makeItemPublicQuestion": "Δημοσιοποίηση {item};",
+  "makeItemPrivateQuestion": "Ιδιωτικοποίηση {item};",
+  "makeItemPublicExplanation": "Αν κάνετε το {item} δημόσιο, μπορεί να χρησιμοποιηθεί από όλους",
+  "makeItemPrivateExplanation": "Αν κάνετε το {item} ιδιωτικό τώρα, θα σταματήσει να λειτουργεί για όλους και θα είναι ορατό μόνο σε εσάς",
+  "manageApp": "Διαχείριση εφαρμογής",
+  "updatePersonaDetails": "Ενημέρωση στοιχείων περσόνας",
+  "deleteItemTitle": "Διαγραφή {item}",
+  "deleteItemQuestion": "Διαγραφή {item};",
+  "deleteItemConfirmation": "Είστε βέβαιοι ότι θέλετε να διαγράψετε αυτό το {item}; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.",
+  "revokeKeyQuestion": "Ανάκληση κλειδιού;",
+  "revokeKeyConfirmation": "Είστε βέβαιοι ότι θέλετε να ανακαλέσετε το κλειδί \"{keyName}\"; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.",
+  "createNewKey": "Δημιουργία νέου κλειδιού",
+  "keyNameHint": "π.χ. Claude Desktop",
+  "pleaseEnterAName": "Παρακαλώ εισάγετε ένα όνομα.",
+  "failedToCreateKeyWithError": "Αποτυχία δημιουργίας κλειδιού: {error}",
+  "failedToCreateKeyTryAgain": "Αποτυχία δημιουργίας κλειδιού. Παρακαλώ δοκιμάστε ξανά.",
+  "keyCreated": "Το κλειδί δημιουργήθηκε",
+  "keyCreatedMessage": "Το νέο σας κλειδί δημιουργήθηκε. Παρακαλώ αντιγράψτε το τώρα. Δεν θα μπορείτε να το δείτε ξανά.",
+  "keyWord": "Κλειδί",
+  "externalAppAccess": "Πρόσβαση εξωτερικών εφαρμογών",
+  "externalAppAccessDescription": "Οι παρακάτω εγκατεστημένες εφαρμογές έχουν εξωτερικές ενσωματώσεις και μπορούν να έχουν πρόσβαση στα δεδομένα σας, όπως συνομιλίες και αναμνήσεις.",
+  "noExternalAppsHaveAccess": "Καμία εξωτερική εφαρμογή δεν έχει πρόσβαση στα δεδομένα σας.",
+  "maximumSecurityE2ee": "Μέγιστη ασφάλεια (E2EE)",
+  "e2eeDescription": "Η κρυπτογράφηση από άκρο σε άκρο είναι το χρυσό πρότυπο για την ιδιωτικότητα. Όταν είναι ενεργοποιημένη, τα δεδομένα σας κρυπτογραφούνται στη συσκευή σας πριν σταλούν στους διακομιστές μας. Αυτό σημαίνει ότι κανείς, ούτε καν η Omi, δεν μπορεί να έχει πρόσβαση στο περιεχόμενό σας.",
+  "importantTradeoffs": "Σημαντικοί συμβιβασμοί:",
+  "e2eeTradeoff1": "• Ορισμένες λειτουργίες όπως οι ενσωματώσεις εξωτερικών εφαρμογών ενδέχεται να απενεργοποιηθούν.",
+  "e2eeTradeoff2": "• Εάν χάσετε τον κωδικό πρόσβασής σας, τα δεδομένα σας δεν μπορούν να ανακτηθούν.",
+  "featureComingSoon": "Αυτή η λειτουργία έρχεται σύντομα!",
+  "migrationInProgressMessage": "Μετανάστευση σε εξέλιξη. Δεν μπορείτε να αλλάξετε το επίπεδο προστασίας μέχρι να ολοκληρωθεί.",
+  "migrationFailed": "Η μετανάστευση απέτυχε",
+  "migratingFromTo": "Μετανάστευση από {source} σε {target}",
+  "objectsCount": "{processed} / {total} αντικείμενα",
+  "secureEncryption": "Ασφαλής κρυπτογράφηση",
+  "secureEncryptionDescription": "Τα δεδομένα σας κρυπτογραφούνται με ένα μοναδικό κλειδί για εσάς στους διακομιστές μας, που φιλοξενούνται στο Google Cloud. Αυτό σημαίνει ότι το ακατέργαστο περιεχόμενό σας είναι απρόσιτο σε οποιονδήποτε, συμπεριλαμβανομένου του προσωπικού της Omi ή της Google, απευθείας από τη βάση δεδομένων.",
+  "endToEndEncryption": "Κρυπτογράφηση από άκρο σε άκρο",
+  "e2eeCardDescription": "Ενεργοποιήστε για μέγιστη ασφάλεια όπου μόνο εσείς έχετε πρόσβαση στα δεδομένα σας. Πατήστε για να μάθετε περισσότερα.",
+  "dataAlwaysEncrypted": "Ανεξάρτητα από το επίπεδο, τα δεδομένα σας είναι πάντα κρυπτογραφημένα σε κατάσταση ηρεμίας και κατά τη μεταφορά.",
+  "readOnlyScope": "Μόνο ανάγνωση",
+  "fullAccessScope": "Πλήρης πρόσβαση",
+  "readScope": "Ανάγνωση",
+  "writeScope": "Εγγραφή",
+  "apiKeyCreated": "Το κλειδί API δημιουργήθηκε!",
+  "saveKeyWarning": "Αποθηκεύστε αυτό το κλειδί τώρα! Δεν θα μπορείτε να το δείτε ξανά.",
+  "yourApiKey": "ΤΟ ΚΛΕΙΔΙ API ΣΑΣ",
+  "tapToCopy": "Πατήστε για αντιγραφή",
+  "copyKey": "Αντιγραφή κλειδιού",
+  "createApiKey": "Δημιουργία κλειδιού API",
+  "accessDataProgrammatically": "Πρόσβαση στα δεδομένα σας μέσω προγραμματισμού",
+  "keyNameLabel": "ΟΝΟΜΑ ΚΛΕΙΔΙΟΥ",
+  "keyNamePlaceholder": "π.χ., Η ενσωμάτωσή μου",
+  "permissionsLabel": "ΔΙΚΑΙΩΜΑΤΑ",
+  "permissionsInfoNote": "R = Ανάγνωση, W = Εγγραφή. Προεπιλογή μόνο ανάγνωση αν δεν επιλεγεί τίποτα.",
+  "developerApi": "API προγραμματιστών",
+  "createAKeyToGetStarted": "Δημιουργήστε ένα κλειδί για να ξεκινήσετε",
+  "errorWithMessage": "Σφάλμα: {error}",
+  "omiTraining": "Εκπαίδευση Omi",
+  "trainingDataProgram": "Πρόγραμμα δεδομένων εκπαίδευσης",
+  "getOmiUnlimitedFree": "Αποκτήστε το Omi Unlimited δωρεάν συνεισφέροντας τα δεδομένα σας για την εκπαίδευση μοντέλων AI.",
+  "trainingDataBullets": "• Τα δεδομένα σας βοηθούν στη βελτίωση των μοντέλων AI\n• Μοιράζονται μόνο μη ευαίσθητα δεδομένα\n• Πλήρως διαφανής διαδικασία",
+  "learnMoreAtOmiTraining": "Μάθετε περισσότερα στο omi.me/training",
+  "agreeToContributeData": "Κατανοώ και συμφωνώ να συνεισφέρω τα δεδομένα μου για εκπαίδευση AI",
+  "submitRequest": "Υποβολή αιτήματος",
+  "thankYouRequestUnderReview": "Ευχαριστούμε! Το αίτημά σας εξετάζεται. Θα σας ειδοποιήσουμε μόλις εγκριθεί.",
+  "planRemainsActiveUntil": "Το πρόγραμμά σας θα παραμείνει ενεργό μέχρι {date}. Μετά από αυτό, θα χάσετε την πρόσβαση στις απεριόριστες λειτουργίες. Είστε σίγουροι;",
+  "confirmCancellation": "Επιβεβαίωση ακύρωσης",
+  "keepMyPlan": "Διατήρηση του προγράμματός μου",
+  "subscriptionSetToCancel": "Η συνδρομή σας έχει ρυθμιστεί να ακυρωθεί στο τέλος της περιόδου.",
+  "switchedToOnDevice": "Αλλαγή σε μεταγραφή στη συσκευή",
+  "couldNotSwitchToFreePlan": "Δεν ήταν δυνατή η αλλαγή σε δωρεάν πρόγραμμα. Παρακαλώ δοκιμάστε ξανά.",
+  "couldNotLoadPlans": "Δεν ήταν δυνατή η φόρτωση διαθέσιμων προγραμμάτων. Παρακαλώ δοκιμάστε ξανά.",
+  "selectedPlanNotAvailable": "Το επιλεγμένο πρόγραμμα δεν είναι διαθέσιμο. Παρακαλώ δοκιμάστε ξανά.",
+  "upgradeToAnnualPlan": "Αναβάθμιση σε ετήσιο πρόγραμμα",
+  "importantBillingInfo": "Σημαντικές πληροφορίες χρέωσης:",
+  "monthlyPlanContinues": "Το τρέχον μηνιαίο σας πρόγραμμα θα συνεχιστεί μέχρι το τέλος της περιόδου χρέωσης",
+  "paymentMethodCharged": "Ο υπάρχων τρόπος πληρωμής σας θα χρεωθεί αυτόματα όταν λήξει το μηνιαίο σας πρόγραμμα",
+  "annualSubscriptionStarts": "Η 12μηνη ετήσια συνδρομή σας θα ξεκινήσει αυτόματα μετά τη χρέωση",
+  "thirteenMonthsCoverage": "Θα λάβετε συνολικά 13 μήνες κάλυψης (τρέχων μήνας + 12 μήνες ετησίως)",
+  "confirmUpgrade": "Επιβεβαίωση αναβάθμισης",
+  "confirmPlanChange": "Επιβεβαίωση αλλαγής προγράμματος",
+  "confirmAndProceed": "Επιβεβαίωση και συνέχεια",
+  "upgradeScheduled": "Η αναβάθμιση προγραμματίστηκε",
+  "changePlan": "Αλλαγή προγράμματος",
+  "upgradeAlreadyScheduled": "Η αναβάθμισή σας στο ετήσιο πρόγραμμα έχει ήδη προγραμματιστεί",
+  "youAreOnUnlimitedPlan": "Είστε στο Απεριόριστο Πρόγραμμα.",
+  "yourOmiUnleashed": "Το Omi σας, απελευθερωμένο. Γίνετε απεριόριστοι για ατελείωτες δυνατότητες.",
+  "planEndedOn": "Το πρόγραμμά σας έληξε στις {date}.\\nΕπανεγγραφείτε τώρα - θα χρεωθείτε αμέσως για μια νέα περίοδο χρέωσης.",
+  "planSetToCancelOn": "Το πρόγραμμά σας έχει ρυθμιστεί να ακυρωθεί στις {date}.\\nΕπανεγγραφείτε τώρα για να διατηρήσετε τα οφέλη σας - χωρίς χρέωση μέχρι {date}.",
+  "annualPlanStartsAutomatically": "Το ετήσιο πρόγραμμά σας θα ξεκινήσει αυτόματα όταν λήξει το μηνιαίο σας πρόγραμμα.",
+  "planRenewsOn": "Το πρόγραμμά σας ανανεώνεται στις {date}.",
+  "unlimitedConversations": "Απεριόριστες συνομιλίες",
+  "askOmiAnything": "Ρωτήστε το Omi οτιδήποτε για τη ζωή σας",
+  "unlockOmiInfiniteMemory": "Ξεκλειδώστε την άπειρη μνήμη του Omi",
+  "youreOnAnnualPlan": "Είστε στο ετήσιο πρόγραμμα",
+  "alreadyBestValuePlan": "Έχετε ήδη το πρόγραμμα με την καλύτερη αξία. Δεν χρειάζονται αλλαγές.",
+  "unableToLoadPlans": "Αδυναμία φόρτωσης προγραμμάτων",
+  "checkConnectionTryAgain": "Ελέγξτε τη σύνδεσή σας και δοκιμάστε ξανά",
+  "useFreePlan": "Χρήση δωρεάν προγράμματος",
+  "continueText": "Συνέχεια",
+  "resubscribe": "Επανεγγραφή",
+  "couldNotOpenPaymentSettings": "Δεν ήταν δυνατό το άνοιγμα των ρυθμίσεων πληρωμής. Παρακαλώ δοκιμάστε ξανά.",
+  "managePaymentMethod": "Διαχείριση μεθόδου πληρωμής",
+  "cancelSubscription": "Ακύρωση συνδρομής",
+  "endsOnDate": "Λήγει στις {date}",
+  "active": "Ενεργό",
+  "freePlan": "Δωρεάν πρόγραμμα",
+  "configure": "Ρύθμιση",
+  "privacyInformation": "Πληροφορίες απορρήτου",
+  "@privacyInformation": {
+    "description": "Privacy page - privacyInformation"
+  },
+  "yourPrivacyMattersToUs": "Το απόρρητό σας μας ενδιαφέρει",
+  "@yourPrivacyMattersToUs": {
+    "description": "Privacy page - yourPrivacyMattersToUs"
+  },
+  "privacyIntroText": "Στην Omi, λαμβάνουμε πολύ σοβαρά το απόρρητό σας. Θέλουμε να είμαστε διαφανείς σχετικά με τα δεδομένα που συλλέγουμε και πώς τα χρησιμοποιούμε. Ορίστε τι πρέπει να γνωρίζετε:",
+  "@privacyIntroText": {
+    "description": "Privacy page - privacyIntroText"
+  },
+  "whatWeTrack": "Τι παρακολουθούμε",
+  "@whatWeTrack": {
+    "description": "Privacy page - whatWeTrack"
+  },
+  "anonymityAndPrivacy": "Ανωνυμία και απόρρητο",
+  "@anonymityAndPrivacy": {
+    "description": "Privacy page - anonymityAndPrivacy"
+  },
+  "optInAndOptOutOptions": "Επιλογές συμμετοχής και εξαίρεσης",
+  "@optInAndOptOutOptions": {
+    "description": "Privacy page - optInAndOptOutOptions"
+  },
+  "ourCommitment": "Η δέσμευσή μας",
+  "@ourCommitment": {
+    "description": "Privacy page - ourCommitment"
+  },
+  "commitmentText": "Δεσμευόμαστε να χρησιμοποιούμε τα δεδομένα που συλλέγουμε μόνο για να κάνουμε το Omi καλύτερο προϊόν για εσάς. Το απόρρητο και η εμπιστοσύνη σας είναι υψίστης σημασίας για εμάς.",
+  "@commitmentText": {
+    "description": "Privacy page - commitmentText"
+  },
+  "thankYouText": "Σας ευχαριστούμε που είστε πολύτιμος χρήστης του Omi. Εάν έχετε ερωτήσεις ή ανησυχίες, μη διστάσετε να επικοινωνήσετε μαζί μας στο team@basedhardware.com.",
+  "@thankYouText": {
+    "description": "Privacy page - thankYouText"
+  },
+  "wifiSyncSettings": "Ρυθμίσεις συγχρονισμού WiFi",
+  "@wifiSyncSettings": {
+    "description": "WiFi sync settings - wifiSyncSettings"
+  },
+  "enterHotspotCredentials": "Εισάγετε τα διαπιστευτήρια hotspot του τηλεφώνου σας",
+  "@enterHotspotCredentials": {
+    "description": "WiFi sync settings - enterHotspotCredentials"
+  },
+  "wifiSyncUsesHotspot": "Ο συγχρονισμός WiFi χρησιμοποιεί το τηλέφωνό σας ως hotspot. Βρείτε το όνομα και τον κωδικό στις Ρυθμίσεις > Προσωπικό Hotspot.",
+  "@wifiSyncUsesHotspot": {
+    "description": "WiFi sync settings - wifiSyncUsesHotspot"
+  },
+  "hotspotNameSsid": "Όνομα Hotspot (SSID)",
+  "@hotspotNameSsid": {
+    "description": "WiFi sync settings - hotspotNameSsid"
+  },
+  "exampleIphoneHotspot": "π.χ. iPhone Hotspot",
+  "@exampleIphoneHotspot": {
+    "description": "WiFi sync settings - exampleIphoneHotspot"
+  },
+  "password": "Κωδικός",
+  "@password": {
+    "description": "WiFi sync settings - password"
+  },
+  "enterHotspotPassword": "Εισάγετε κωδικό hotspot",
+  "@enterHotspotPassword": {
+    "description": "WiFi sync settings - enterHotspotPassword"
+  },
+  "saveCredentials": "Αποθήκευση διαπιστευτηρίων",
+  "@saveCredentials": {
+    "description": "WiFi sync settings - saveCredentials"
+  },
+  "clearCredentials": "Εκκαθάριση διαπιστευτηρίων",
+  "@clearCredentials": {
+    "description": "WiFi sync settings - clearCredentials"
+  },
+  "pleaseEnterHotspotName": "Παρακαλώ εισάγετε ένα όνομα hotspot",
+  "@pleaseEnterHotspotName": {
+    "description": "WiFi sync settings - pleaseEnterHotspotName"
+  },
+  "wifiCredentialsSaved": "Τα διαπιστευτήρια WiFi αποθηκεύτηκαν",
+  "@wifiCredentialsSaved": {
+    "description": "WiFi sync settings - wifiCredentialsSaved"
+  },
+  "wifiCredentialsCleared": "Τα διαπιστευτήρια WiFi διαγράφηκαν",
+  "@wifiCredentialsCleared": {
+    "description": "WiFi sync settings - wifiCredentialsCleared"
+  },
+  "summaryGeneratedForDate": "Δημιουργήθηκε σύνοψη για {date}",
+  "@summaryGeneratedForDate": {
+    "description": "Daily summary settings - summaryGeneratedForDate",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "1/15/2026"
+      }
+    }
+  },
+  "failedToGenerateSummaryCheckConversations": "Αποτυχία δημιουργίας σύνοψης. Βεβαιωθείτε ότι έχετε συνομιλίες για εκείνη την ημέρα.",
+  "@failedToGenerateSummaryCheckConversations": {
+    "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Η σύνοψη δεν βρέθηκε",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "Η διαδρομή της ημέρας σας",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "Κυριότερα σημεία",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Ανεπίλυτες ερωτήσεις",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Αποφάσεις",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Διδάγματα",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
+  },
+  "autoDeletesAfterThreeDays": "Αυτόματη διαγραφή μετά από 3 ημέρες.",
+  "@autoDeletesAfterThreeDays": {
+    "description": "Developer settings - autoDeletesAfterThreeDays"
+  },
+  "knowledgeGraphDeletedSuccessfully": "Ο γράφος γνώσεων διαγράφηκε επιτυχώς",
+  "@knowledgeGraphDeletedSuccessfully": {
+    "description": "Developer settings - knowledgeGraphDeletedSuccessfully"
+  },
+  "exportStartedMayTakeFewSeconds": "Η εξαγωγή ξεκίνησε. Αυτό μπορεί να διαρκέσει λίγα δευτερόλεπτα...",
+  "@exportStartedMayTakeFewSeconds": {
+    "description": "Developer settings - exportStartedMayTakeFewSeconds"
+  },
+  "knowledgeGraphDeleteDescription": "Αυτό θα διαγράψει όλα τα παράγωγα δεδομένα του γράφου γνώσεων (κόμβους και συνδέσεις). Οι αρχικές σας αναμνήσεις θα παραμείνουν ασφαλείς. Ο γράφος θα ανακατασκευαστεί σταδιακά ή κατόπιν αιτήματος.",
+  "@knowledgeGraphDeleteDescription": {
+    "description": "Developer settings - knowledgeGraphDeleteDescription"
+  },
+  "configureDailySummaryDigest": "Διαμορφώστε την καθημερινή σύνοψη εργασιών σας",
+  "accessesDataTypes": "Πρόσβαση σε {dataTypes}",
+  "triggeredByType": "ενεργοποιείται από {triggerType}",
+  "accessesAndTriggeredBy": "{accessDescription} και είναι {triggerDescription}.",
+  "isTriggeredBy": "Είναι {triggerDescription}.",
+  "noSpecificDataAccessConfigured": "Δεν έχει ρυθμιστεί συγκεκριμένη πρόσβαση δεδομένων."
 }

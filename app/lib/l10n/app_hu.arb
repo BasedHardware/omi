@@ -65,7 +65,7 @@
   "@clear": {
     "description": "Clear button label"
   },
-  "copyTranscript": "Átirat másolása",
+  "copyTranscript": "Átírás másolása",
   "@copyTranscript": {
     "description": "Menu item to copy transcript"
   },
@@ -175,7 +175,7 @@
   },
   "settings": "Beállítások",
   "@settings": {
-    "description": "Settings page title"
+    "description": "Bottom navigation label for settings"
   },
   "language": "Nyelv",
   "@language": {
@@ -293,9 +293,9 @@
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
-  "noStarredConversations": "Még nincsenek csillagozott beszélgetések.",
+  "noStarredConversations": "Nincsenek csillagozott beszélgetések",
   "@noStarredConversations": {
-    "description": "Empty state for starred filter"
+    "description": "Empty state title when no starred conversations"
   },
   "starConversationHint": "Beszélgetés csillagozásához nyisd meg, és érintsd meg a csillag ikont a fejlécben.",
   "@starConversationHint": {
@@ -351,7 +351,7 @@
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Üzenet vágólapra másolva.",
+  "messageCopied": "✨ Üzenet vágólapra másolva",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -359,7 +359,7 @@
   "@cannotReportOwnMessage": {
     "description": "Error when trying to report own message"
   },
-  "reportMessage": "Üzenet bejelentése",
+  "reportMessage": "Üzenet jelentése",
   "@reportMessage": {
     "description": "Report message dialog title"
   },
@@ -393,7 +393,7 @@
   },
   "apps": "Alkalmazások",
   "@apps": {
-    "description": "Apps page title"
+    "description": "Navigation label for apps page"
   },
   "noAppsFound": "Nem található alkalmazás",
   "@noAppsFound": {
@@ -435,7 +435,7 @@
   "@privacyPolicy": {
     "description": "Link text for Privacy Policy"
   },
-  "visitWebsite": "Weboldal meglátogatása",
+  "visitWebsite": "Weboldal megtekintése",
   "@visitWebsite": {
     "description": "Visit website link"
   },
@@ -447,7 +447,7 @@
   "@joinCommunity": {
     "description": "Discord community link"
   },
-  "membersAndCounting": "8000+ tag és még mindig nő.",
+  "membersAndCounting": "8000+ tag és számuk folyamatosan nő.",
   "@membersAndCounting": {
     "description": "Discord member count"
   },
@@ -511,27 +511,27 @@
   "@email": {
     "description": "Email field label"
   },
-  "customVocabulary": "Egyedi szókincs",
+  "customVocabulary": "Egyéni Szókincs",
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Mások azonosítása",
+  "identifyingOthers": "Mások Azonosítása",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
-  "paymentMethods": "Fizetési módok",
+  "paymentMethods": "Fizetési Módok",
   "@paymentMethods": {
     "description": "Payment methods setting"
   },
-  "conversationDisplay": "Beszélgetés megjelenítése",
+  "conversationDisplay": "Beszélgetések Megjelenítése",
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "Adatok és adatvédelem",
+  "dataPrivacy": "Adatvédelem",
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
-  "userId": "Felhasználói azonosító",
+  "userId": "Felhasználói Azonosító",
   "@userId": {
     "description": "User ID label"
   },
@@ -879,7 +879,7 @@
   "@createKeyToStart": {
     "description": "Create key instruction"
   },
-  "createKey": "Kulcs létrehozása",
+  "createKey": "Kulcs Létrehozása",
   "@createKey": {
     "description": "Create Key button"
   },
@@ -1087,7 +1087,7 @@
   "exportShared": "Exportálás megosztva",
   "deleteKnowledgeGraphTitle": "Tudásgráf törlése?",
   "deleteKnowledgeGraphMessage": "Ez törli az összes származtatott tudásgráf adatot (csomópontok és kapcsolatok). Az eredeti emlékeid biztonságban maradnak. A gráf idővel vagy a következő kérésre újjáépül.",
-  "knowledgeGraphDeleted": "Tudásgráf sikeresen törölve",
+  "knowledgeGraphDeleted": "Tudásgráf törölve",
   "deleteGraphFailed": "Gráf törlése sikertelen: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -1278,7 +1278,7 @@
   "yes": "Igen",
   "editName": "Név szerkesztése",
   "howShouldOmiCallYou": "Hogyan szólítson az Omi?",
-  "enterYourName": "Add meg a neved",
+  "enterYourName": "Adja meg a nevét",
   "nameCannotBeEmpty": "A név nem lehet üres",
   "nameUpdatedSuccessfully": "Név sikeresen frissítve!",
   "calendarSettings": "Naptár beállítások",
@@ -1334,7 +1334,7 @@
   "languageForTranscription": "Állítsd be a nyelvedet a pontosabb átíráshoz és személyre szabott élményhez.",
   "singleLanguageModeInfo": "Egynyelvű mód engedélyezve. A fordítás ki van kapcsolva a nagyobb pontosság érdekében.",
   "searchLanguageHint": "Keress nyelvet név vagy kód alapján",
-  "noLanguagesFound": "Nem találhatók nyelvek",
+  "noLanguagesFound": "Nem található nyelv",
   "skip": "Kihagyás",
   "languageSetTo": "Nyelv beállítva: {language}",
   "@languageSetTo": {
@@ -1938,7 +1938,7 @@
   "@selectYourLanguage": {
     "description": "Placeholder for selected language name"
   },
-  "personalGrowthJourney": "Személyes fejlődési utad egy AI-val, amely minden szavadat figyeli.",
+  "personalGrowthJourney": "Személyes növekedési utazásod AI-val, amely minden szavadra figyel.",
   "@personalGrowthJourney": {
     "description": "Tagline on onboarding wrapper"
   },
@@ -2077,14 +2077,9 @@
   "@deleteSelected": {
     "description": "Tooltip for delete selected"
   },
-  "searchMemories": "{count} emlék keresése",
+  "searchMemories": "Emlékek keresése...",
   "@searchMemories": {
-    "description": "Hint text for memories search bar",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
+    "description": "Search input hint text"
   },
   "memoryDeleted": "Emlék törölve.",
   "@memoryDeleted": {
@@ -2094,9 +2089,9 @@
   "@undo": {
     "description": "Undo button text"
   },
-  "noMemoriesYet": "Még nincsenek emlékek",
+  "noMemoriesYet": "🧠 Még nincsenek emlékek",
   "@noMemoriesYet": {
-    "description": "Empty state text"
+    "description": "Empty state title when no memories"
   },
   "noAutoMemories": "Még nincsenek automatikusan kinyert emlékek",
   "@noAutoMemories": {
@@ -2110,9 +2105,9 @@
   "@noMemoriesInCategories": {
     "description": "Empty state text for filtered categories"
   },
-  "noMemoriesFound": "Nem találhatók emlékek",
+  "noMemoriesFound": "🔍 Nem találhatók emlékek",
   "@noMemoriesFound": {
-    "description": "Empty state text for search results"
+    "description": "Empty state title when search/filter has no results"
   },
   "addFirstMemory": "Add hozzá az első emlékedet",
   "@addFirstMemory": {
@@ -2126,7 +2121,7 @@
   "@clearMemoryMessage": {
     "description": "Dialog content for clearing memory"
   },
-  "clearMemoryButton": "Emlék törlése",
+  "clearMemoryButton": "Memória törlése",
   "@clearMemoryButton": {
     "description": "Button text to confirm clear"
   },
@@ -2134,7 +2129,7 @@
   "@memoryClearedSuccess": {
     "description": "Snackbar success message"
   },
-  "noMemoriesToDelete": "Nincsenek törlendő emlékek",
+  "noMemoriesToDelete": "Nincs törlendő emlékezet",
   "@noMemoriesToDelete": {
     "description": "Snackbar message"
   },
@@ -2146,7 +2141,7 @@
   "@createActionItemTooltip": {
     "description": "Tooltip for create action item FAB"
   },
-  "memoryManagement": "Emlékkezelés",
+  "memoryManagement": "Memória kezelés",
   "@memoryManagement": {
     "description": "Title for memory management sheet"
   },
@@ -2179,7 +2174,7 @@
   "@makeAllPublic": {
     "description": "Button label"
   },
-  "deleteAllMemories": "Minden emlék törlése",
+  "deleteAllMemories": "Minden emlékezet törlése",
   "@deleteAllMemories": {
     "description": "Button label"
   },
@@ -2191,11 +2186,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "Új emlék",
+  "newMemory": "✨ Új emlékezet",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "Emlék szerkesztése",
+  "editMemory": "✏️ Emlékezet szerkesztése",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2211,7 +2206,7 @@
   "@saveMemory": {
     "description": "Button label"
   },
-  "retry": "Újrapróbálkozás",
+  "retry": "Újrapróbálás",
   "@retry": {
     "description": "Button label"
   },
@@ -2339,13 +2334,13 @@
   "exportButton": "Exportálás",
   "actionItemsCopiedToClipboard": "Műveletpontok vágólapra másolva",
   "summarize": "Összefoglalás",
-  "generateSummary": "Összefoglalás generálása",
+  "generateSummary": "Összefoglaló létrehozása",
   "conversationNotFoundOrDeleted": "A beszélgetés nem található vagy törölve lett",
-  "deleteMemory": "Emléket törölni?",
+  "deleteMemory": "Emlékezet törlése",
   "thisActionCannotBeUndone": "Ez a művelet nem vonható vissza.",
   "memoriesCount": "{count} emlék",
   "noMemoriesInCategory": "Ebben a kategóriában még nincsenek emlékek",
-  "addYourFirstMemory": "Adja hozzá első emlékét",
+  "addYourFirstMemory": "Add hozzá az első emlékedet",
   "firmwareDisconnectUsb": "USB leválasztása",
   "firmwareUsbWarning": "Az USB-kapcsolat a frissítések során károsíthatja az eszközt.",
   "firmwareBatteryAbove15": "Akkumulátor 15% felett",
@@ -2416,7 +2411,7 @@
   "saveGoal": "Mentés",
   "goals": "Célok",
   "tapToAddGoal": "Érintse meg cél hozzáadásához",
-  "welcomeBack": "Üdvözöljük újra",
+  "welcomeBack": "Üdvözöljük vissza, {name}",
   "yourConversations": "A beszélgetéseid",
   "reviewAndManageConversations": "Tekintse át és kezelje rögzített beszélgetéseit",
   "startCapturingConversations": "Kezdje el rögzíteni a beszélgetéseket Omi eszközével, hogy itt láthassa őket.",
@@ -2519,5 +2514,785 @@
   "ratingsCount": "{count}+ értékelés",
   "errorActivatingApp": "Hiba az alkalmazás aktiválása során",
   "integrationSetupRequired": "Ha ez egy integrációs alkalmazás, győződjön meg róla, hogy a beállítás befejeződött.",
-  "installed": "Telepítve"
+  "installed": "Telepítve",
+  "appIdLabel": "Alkalmazás azonosító",
+  "appNameLabel": "Alkalmazás neve",
+  "appNamePlaceholder": "Nagyszerű alkalmazásom",
+  "pleaseEnterAppName": "Kérjük, adja meg az alkalmazás nevét",
+  "categoryLabel": "Kategória",
+  "selectCategory": "Kategória kiválasztása",
+  "descriptionLabel": "Leírás",
+  "appDescriptionPlaceholder": "Nagyszerű alkalmazásom egy remek alkalmazás, amely csodálatos dolgokat tesz. Ez a legjobb alkalmazás!",
+  "pleaseProvideValidDescription": "Kérjük, adjon meg érvényes leírást",
+  "appPricingLabel": "Alkalmazás árazása",
+  "noneSelected": "Nincs kiválasztva",
+  "appIdCopiedToClipboard": "Alkalmazás azonosító vágólapra másolva",
+  "appCategoryModalTitle": "Alkalmazás kategória",
+  "pricingFree": "Ingyenes",
+  "pricingPaid": "Fizetős",
+  "loadingCapabilities": "Képességek betöltése...",
+  "filterInstalled": "Telepítve",
+  "filterMyApps": "Saját alkalmazásaim",
+  "clearSelection": "Kijelölés törlése",
+  "filterCategory": "Kategória",
+  "rating4PlusStars": "4+ csillag",
+  "rating3PlusStars": "3+ csillag",
+  "rating2PlusStars": "2+ csillag",
+  "rating1PlusStars": "1+ csillag",
+  "filterRating": "Értékelés",
+  "filterCapabilities": "Képességek",
+  "noNotificationScopesAvailable": "Nincsenek elérhető értesítési hatókörök",
+  "popularApps": "Népszerű alkalmazások",
+  "pleaseProvidePrompt": "Kérjük, adjon meg egy promptot",
+  "chatWithAppName": "Chat {appName} alkalmazással",
+  "defaultAiAssistant": "Alapértelmezett AI asszisztens",
+  "readyToChat": "✨ Készen áll a csevegésre!",
+  "connectionNeeded": "🌐 Kapcsolat szükséges",
+  "startConversation": "Kezdjen el beszélgetni, és hagyja, hogy a varázslat kezdetét vegye",
+  "checkInternetConnection": "Kérjük, ellenőrizze az internetkapcsolatot",
+  "wasThisHelpful": "Hasznos volt ez?",
+  "thankYouForFeedback": "Köszönjük a visszajelzést!",
+  "maxFilesUploadError": "Egyszerre csak 4 fájlt tölthet fel",
+  "attachedFiles": "📎 Csatolt fájlok",
+  "takePhoto": "Fénykép készítése",
+  "captureWithCamera": "Felvétel kamerával",
+  "selectImages": "Képek kiválasztása",
+  "chooseFromGallery": "Válasszon a galériából",
+  "selectFile": "Fájl kiválasztása",
+  "chooseAnyFileType": "Bármilyen fájltípus választása",
+  "cannotReportOwnMessages": "Nem jelentheti saját üzeneteit",
+  "messageReportedSuccessfully": "✅ Üzenet sikeresen jelentve",
+  "confirmReportMessage": "Biztosan jelenteni szeretné ezt az üzenetet?",
+  "selectChatAssistant": "Chat asszisztens kiválasztása",
+  "enableMoreApps": "További alkalmazások engedélyezése",
+  "chatCleared": "Chat törölve",
+  "clearChatTitle": "Chat törlése?",
+  "confirmClearChat": "Biztosan törölni szeretné a chatet? Ez a művelet nem vonható vissza.",
+  "copy": "Másolás",
+  "share": "Megosztás",
+  "report": "Jelentés",
+  "microphonePermissionRequired": "Mikrofon engedély szükséges a hangfelvételhez.",
+  "microphonePermissionDenied": "Mikrofon engedély megtagadva. Kérjük, adjon engedélyt a Rendszerbeállítások > Adatvédelem és biztonság > Mikrofon alatt.",
+  "failedToCheckMicrophonePermission": "Nem sikerült ellenőrizni a mikrofon engedélyt: {error}",
+  "failedToTranscribeAudio": "Nem sikerült átírni a hangot",
+  "transcribing": "Átírás...",
+  "transcriptionFailed": "Átírás sikertelen",
+  "discardedConversation": "Elvetett beszélgetés",
+  "at": "ekkor:",
+  "from": "ettől:",
+  "copied": "Másolva!",
+  "copyLink": "Link másolása",
+  "hideTranscript": "Átirat elrejtése",
+  "viewTranscript": "Átirat megtekintése",
+  "conversationDetails": "Beszélgetés részletei",
+  "transcript": "Átirat",
+  "segmentsCount": "{count} szegmens",
+  "noTranscriptAvailable": "Nincs elérhető átirat",
+  "noTranscriptMessage": "Ehhez a beszélgetéshez nincs átirat.",
+  "conversationUrlCouldNotBeGenerated": "A beszélgetés URL-je nem generálható.",
+  "failedToGenerateConversationLink": "Beszélgetés link generálása sikertelen",
+  "failedToGenerateShareLink": "Megosztási link generálása sikertelen",
+  "reloadingConversations": "Beszélgetések újratöltése...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "@welcomeBack": {
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "user": "Felhasználó",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "Csillagozott",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "Dátum",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "Nem található eredmény",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "Próbálja meg módosítani a keresési kifejezéseket",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "starConversationsToFindQuickly": "Csillagozza meg a beszélgetéseket, hogy gyorsan megtalálja őket itt",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "Nincsenek beszélgetések {date}-kor",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "Próbáljon meg egy másik dátumot kiválasztani",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  },
+  "conversations": "Beszélgetések",
+  "@conversations": {
+    "description": "Navigation label for conversations page"
+  },
+  "chat": "Csevegés",
+  "@chat": {
+    "description": "Navigation label for chat page"
+  },
+  "@memories": {
+    "description": "Navigation label for memories page"
+  },
+  "actions": "Műveletek",
+  "@actions": {
+    "description": "Navigation label for actions page"
+  },
+  "syncAvailable": "Szinkronizálás elérhető",
+  "@syncAvailable": {
+    "description": "Label for sync notification"
+  },
+  "referAFriend": "Ajánljon egy barátnak",
+  "@referAFriend": {
+    "description": "Bottom navigation label for referral program"
+  },
+  "help": "Súgó",
+  "@help": {
+    "description": "Bottom navigation label for help"
+  },
+  "pro": "Pro",
+  "@pro": {
+    "description": "Badge label for pro/unlimited users"
+  },
+  "upgradeToPro": "Frissítés Pro-ra",
+  "@upgradeToPro": {
+    "description": "Subscription banner button text"
+  },
+  "getOmiDevice": "Szerezzen be Omi eszközt",
+  "@getOmiDevice": {
+    "description": "Widget title for device promotion"
+  },
+  "wearableAiCompanion": "Hordható AI társ",
+  "@wearableAiCompanion": {
+    "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "Emlékek betöltése...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "allMemories": "Összes emlék",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "Rólad",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "Kézi",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "Emlékeid betöltése...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "createYourFirstMemory": "Hozd létre az első emlékedet a kezdéshez",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "Próbáld meg módosítani a keresést vagy a szűrőt",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
+  },
+  "whatWouldYouLikeToRemember": "Mire szeretnél emlékezni?",
+  "category": "Kategória",
+  "public": "Nyilvános",
+  "failedToSaveCheckConnection": "Sikertelen mentés. Ellenőrizd a kapcsolatot.",
+  "createMemory": "Emlékezet létrehozása",
+  "deleteMemoryConfirmation": "Biztosan törölni szeretnéd ezt az emlékezetet? Ez a művelet nem vonható vissza.",
+  "makePrivate": "Priváttá tétel",
+  "organizeAndControlMemories": "Szervezd és irányítsd az emlékezetedet",
+  "total": "Összesen",
+  "makeAllMemoriesPrivate": "Minden emlékezet priváttá tétele",
+  "setAllMemoriesToPrivate": "Minden emlékezet beállítása privát láthatóságra",
+  "makeAllMemoriesPublic": "Minden emlékezet nyilvánossá tétele",
+  "setAllMemoriesToPublic": "Minden emlékezet beállítása nyilvános láthatóságra",
+  "permanentlyRemoveAllMemories": "Minden emlékezet végleges eltávolítása az Omiból",
+  "allMemoriesAreNowPrivate": "Minden emlékezet most privát",
+  "allMemoriesAreNowPublic": "Minden emlékezet most nyilvános",
+  "clearOmisMemory": "Omi memóriájának törlése",
+  "clearMemoryConfirmation": "Biztosan törölni szeretnéd az Omi memóriáját? Ez a művelet nem vonható vissza és véglegesen törli mind a(z) {count} emlékezetet.",
+  "omisMemoryCleared": "Az Omi rólad szóló memóriája törölve lett",
+  "welcomeToOmi": "Üdvözöljük az Omiban",
+  "continueWithApple": "Folytatás Apple-lel",
+  "continueWithGoogle": "Folytatás Google-lel",
+  "byContinuingYouAgree": "A folytatással elfogadod ",
+  "termsOfService": "Szolgáltatási feltételeinket",
+  "and": " és ",
+  "dataAndPrivacy": "Adatok és adatvédelem",
+  "secureAuthViaAppleId": "Biztonságos hitelesítés Apple ID-n keresztül",
+  "secureAuthViaGoogleAccount": "Biztonságos hitelesítés Google fiókon keresztül",
+  "whatWeCollect": "Mit gyűjtünk",
+  "dataCollectionMessage": "A folytatással beszélgetéseid, felvételeid és személyes adataid biztonságosan tárolódnak szervereiken, hogy AI-alapú betekintéseket nyújtsunk és engedélyezzük az összes app funkciót.",
+  "dataProtection": "Adatvédelem",
+  "yourDataIsProtected": "Adataid védettek és ",
+  "pleaseSelectYourPrimaryLanguage": "Kérjük, válassza ki az elsődleges nyelvét",
+  "chooseYourLanguage": "Válassza ki a nyelvét",
+  "selectPreferredLanguageForBestExperience": "Válassza ki a preferált nyelvét a legjobb Omi élményért",
+  "searchLanguages": "Nyelvek keresése...",
+  "selectALanguage": "Válasszon egy nyelvet",
+  "tryDifferentSearchTerm": "Próbáljon ki egy másik keresési kifejezést",
+  "pleaseEnterYourName": "Kérjük, adja meg a nevét",
+  "nameMustBeAtLeast2Characters": "A névnek legalább 2 karakterből kell állnia",
+  "tellUsHowYouWouldLikeToBeAddressed": "Mondja el nekünk, hogyan szeretné, ha megszólítanánk. Ez segít személyre szabni az Omi élményt.",
+  "charactersCount": "{count} karakter",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "enableFeaturesForBestExperience": "Engedélyezze a funkciókat a legjobb Omi élményért az eszközén.",
+  "microphoneAccess": "Mikrofon hozzáférés",
+  "recordAudioConversations": "Hangbeszélgetések rögzítése",
+  "microphoneAccessDescription": "Az Omi-nak mikrofon hozzáférésre van szüksége a beszélgetések rögzítéséhez és átirat készítéséhez.",
+  "screenRecording": "Képernyőrögzítés",
+  "captureSystemAudioFromMeetings": "Rendszerhang rögzítése találkozókból",
+  "screenRecordingDescription": "Az Omi-nak képernyőrögzítési engedélyre van szüksége a rendszerhang rögzítéséhez a böngésző alapú találkozókból.",
+  "accessibility": "Akadálymentesség",
+  "detectBrowserBasedMeetings": "Böngésző alapú találkozók észlelése",
+  "accessibilityDescription": "Az Omi-nak akadálymentesítési engedélyre van szüksége annak észleléséhez, amikor csatlakozik Zoom, Meet vagy Teams találkozókhoz a böngészőjében.",
+  "pleaseWait": "Kérem várjon...",
+  "joinTheCommunity": "Csatlakozz a közösséghez!",
+  "loadingProfile": "Profil betöltése...",
+  "profileSettings": "Profil beállításai",
+  "noEmailSet": "Nincs beállított e-mail",
+  "userIdCopiedToClipboard": "Felhasználói azonosító másolva",
+  "yourInformation": "Az Ön Adatai",
+  "setYourName": "Név beállítása",
+  "changeYourName": "Név módosítása",
+  "persona": "Persona",
+  "manageYourOmiPersona": "Az Omi persona kezelése",
+  "voiceAndPeople": "Hang és Emberek",
+  "teachOmiYourVoice": "Tanítsa meg az Omi-nak a hangját",
+  "tellOmiWhoSaidIt": "Mondja meg az Omi-nak, ki mondta 🗣️",
+  "payment": "Fizetés",
+  "addOrChangeYourPaymentMethod": "Fizetési mód hozzáadása vagy módosítása",
+  "preferences": "Beállítások",
+  "helpImproveOmiBySharing": "Segítsen az Omi fejlesztésében anonim elemzési adatok megosztásával",
+  "deleteAccount": "Fiók Törlése",
+  "deleteYourAccountAndAllData": "Fiók és minden adat törlése",
+  "helpsDiagnoseIssuesAutoDeletes": "Segít a problémák diagnosztizálásában. 3 nap után automatikusan törlődik.",
+  "clearLogs": "Naplók törlése",
+  "debugLogsCleared": "Hibakeresési naplók törölve",
+  "exportConversations": "Beszélgetések exportálása",
+  "exportAllConversationsToJson": "Exportálja az összes beszélgetését JSON fájlba.",
+  "conversationsExportStarted": "Beszélgetések exportálása elindult. Ez eltarthat néhány másodpercig, kérem várjon.",
+  "mcpDescription": "Az Omi más alkalmazásokhoz való csatlakoztatásához, hogy olvassa, keresse és kezelje az emlékeit és beszélgetéseit. Hozzon létre egy kulcsot az induláshoz.",
+  "apiKeys": "API kulcsok",
+  "errorLabel": "Hiba: {error}",
+  "noApiKeysFound": "Nem találhatók API kulcsok. Hozzon létre egyet az induláshoz.",
+  "advancedSettings": "Speciális beállítások",
+  "triggersWhenNewConversationCreated": "Aktiválódik, amikor új beszélgetés jön létre.",
+  "triggersWhenNewTranscriptReceived": "Aktiválódik, amikor új átirat érkezik.",
+  "realtimeAudioBytes": "Valós idejű audio bájtok",
+  "triggersWhenAudioBytesReceived": "Aktiválódik, amikor audio bájtok érkeznek.",
+  "everyXSeconds": "Minden x másodperc",
+  "triggersWhenDaySummaryGenerated": "Aktiválódik, amikor a napi összefoglaló generálódik.",
+  "experimental": "Kísérleti",
+  "tryLatestExperimentalFeatures": "Próbálja ki az Omi csapat legújabb kísérleti funkcióit.",
+  "transcriptionServiceDiagnosticStatus": "Átírási szolgáltatás diagnosztikai állapota",
+  "enableDetailedDiagnosticMessages": "Részletes diagnosztikai üzenetek engedélyezése az átírási szolgáltatástól",
+  "autoCreateAndTagNewSpeakers": "Új beszélők automatikus létrehozása és címkézése",
+  "automaticallyCreateNewPerson": "Új személy automatikus létrehozása, amikor nevet észlel az átiratban.",
+  "pilotFeatures": "Pilot funkciók",
+  "pilotFeaturesDescription": "Ezek a funkciók tesztek, és nem garantált a támogatás.",
+  "suggestFollowUpQuestion": "Utánkövetési kérdés javaslása",
+  "saveSettings": "Beállítások Mentése",
+  "syncingDeveloperSettings": "Fejlesztői beállítások szinkronizálása...",
+  "summary": "Összefoglaló",
+  "auto": "Automatikus",
+  "noSummaryForApp": "Ehhez az alkalmazáshoz nincs elérhető összefoglaló. Jobb eredményekért próbáljon ki egy másik alkalmazást.",
+  "tryAnotherApp": "Próbáljon ki egy másik alkalmazást",
+  "generatedBy": "Létrehozta: {appName}",
+  "overview": "Áttekintés",
+  "otherAppResults": "Más alkalmazások eredményei",
+  "unknownApp": "Ismeretlen alkalmazás",
+  "noSummaryAvailable": "Nincs elérhető összefoglaló",
+  "conversationNoSummaryYet": "Ennek a beszélgetésnek még nincs összefoglalója.",
+  "chooseSummarizationApp": "Összefoglaló alkalmazás kiválasztása",
+  "setAsDefaultSummarizationApp": "{appName} beállítva alapértelmezett összefoglaló alkalmazásként",
+  "letOmiChooseAutomatically": "Hagyja, hogy az Omi automatikusan válassza ki a legjobb alkalmazást",
+  "deleteConversationConfirmation": "Biztosan törli ezt a beszélgetést? Ez a művelet nem vonható vissza.",
+  "conversationDeleted": "Beszélgetés törölve",
+  "generatingLink": "Link generálása...",
+  "editConversation": "Beszélgetés szerkesztése",
+  "conversationLinkCopiedToClipboard": "Beszélgetés link vágólapra másolva",
+  "conversationTranscriptCopiedToClipboard": "Beszélgetés átírása vágólapra másolva",
+  "editConversationDialogTitle": "Beszélgetés szerkesztése",
+  "changeTheConversationTitle": "Beszélgetés címének módosítása",
+  "conversationTitle": "Beszélgetés címe",
+  "enterConversationTitle": "Adja meg a beszélgetés címét...",
+  "conversationTitleUpdatedSuccessfully": "Beszélgetés címe sikeresen frissítve",
+  "failedToUpdateConversationTitle": "Beszélgetés címének frissítése sikertelen",
+  "errorUpdatingConversationTitle": "Hiba a beszélgetés címének frissítése során",
+  "settingUp": "Beállítás...",
+  "preparingSystemAudioCapture": "Rendszer hangfelvétel előkészítése",
+  "clickTheButtonToCaptureAudio": "Kattintson a gombra hangfelvétel készítéséhez élő átiratok, AI betekintések és automatikus mentés céljából.",
+  "startYourFirstRecording": "Indítsa el első felvételét",
+  "reconnecting": "Újracsatlakozás...",
+  "recordingPaused": "Felvétel szüneteltetve",
+  "recordingActive": "Felvétel aktív",
+  "startRecording": "Felvétel indítása",
+  "resumingInCountdown": "Folytatás {countdown}mp múlva...",
+  "tapPlayToResume": "Koppintson a lejátszásra a folytatáshoz",
+  "listeningForAudio": "Hang figyelése...",
+  "preparingAudioCapture": "Hangfelvétel előkészítése",
+  "clickToBeginRecording": "Kattintson a felvétel indításához",
+  "translated": "lefordítva",
+  "liveTranscript": "Élő átirat",
+  "segmentsSingular": "{count} szegmens",
+  "segmentsPlural": "{count} szegmens",
+  "startRecordingToSeeTranscript": "Indítsa el a felvételt az élő átirat megtekintéséhez",
+  "paused": "Szüneteltetve",
+  "initializing": "Inicializálás...",
+  "recording": "Felvétel",
+  "microphoneChangedResumingIn": "Mikrofon megváltoztatva. Folytatás {countdown}mp múlva",
+  "clickPlayToResumeOrStop": "Kattintson a lejátszásra a folytatáshoz vagy a megállításra a befejezéshez",
+  "settingUpSystemAudioCapture": "Rendszer hangfelvétel beállítása",
+  "capturingAudioAndGeneratingTranscript": "Hangfelvétel és átirat generálása",
+  "clickToBeginRecordingSystemAudio": "Kattintson a rendszer hangfelvétel indításához",
+  "you": "Ön",
+  "speakerWithId": "Beszélő {speakerId}",
+  "translatedByOmi": "fordította az omi",
+  "backToConversations": "Vissza a beszélgetésekhez",
+  "systemAudio": "Rendszer",
+  "mic": "Mikrofon",
+  "audioInputSetTo": "Hangbemenet beállítva: {deviceName}",
+  "errorSwitchingAudioDevice": "Hiba a hangeszköz váltásakor: {error}",
+  "selectAudioInput": "Válasszon hangbemenetet",
+  "loadingDevices": "Eszközök betöltése...",
+  "settingsHeader": "BEÁLLÍTÁSOK",
+  "plansAndBilling": "Csomagok és Számlázás",
+  "calendarIntegration": "Naptár Integráció",
+  "dailySummary": "Napi Összefoglaló",
+  "developer": "Fejlesztő",
+  "about": "Névjegy",
+  "selectTime": "Idő Kiválasztása",
+  "accountGroup": "Fiók",
+  "signOutQuestion": "Kijelentkezés?",
+  "signOutConfirmation": "Biztosan ki szeretne jelentkezni?",
+  "customVocabularyHeader": "EGYÉNI SZÓKINCS",
+  "addWordsDescription": "Adjon hozzá szavakat, amelyeket az Ominek fel kell ismernie az átírás során.",
+  "enterWordsHint": "Adjon meg szavakat (vesszővel elválasztva)",
+  "dailySummaryHeader": "NAPI ÖSSZEFOGLALÓ",
+  "dailySummaryTitle": "Napi Összefoglaló",
+  "dailySummaryDescription": "Kapjon személyre szabott összefoglalót a beszélgetéseiről",
+  "deliveryTime": "Kézbesítési Idő",
+  "deliveryTimeDescription": "Mikor kapja meg a napi összefoglalót",
+  "subscription": "Előfizetés",
+  "viewPlansAndUsage": "Csomagok és Használat Megtekintése",
+  "viewPlansDescription": "Kezelje előfizetését és tekintse meg a használati statisztikákat",
+  "addOrChangePaymentMethod": "Adjon hozzá vagy módosítsa fizetési módját",
+  "displayOptions": "Megjelenítési beállítások",
+  "showMeetingsInMenuBar": "Találkozók megjelenítése a menüsorban",
+  "displayUpcomingMeetingsDescription": "Közelgő találkozók megjelenítése a menüsorban",
+  "showEventsWithoutParticipants": "Résztvevők nélküli események megjelenítése",
+  "includePersonalEventsDescription": "Résztvevők nélküli személyes események befoglalása",
+  "upcomingMeetings": "KÖZELGŐ TALÁLKOZÓK",
+  "checkingNext7Days": "A következő 7 nap ellenőrzése",
+  "shortcuts": "Gyorsbillentyűk",
+  "shortcutChangeInstruction": "Kattintson egy gyorsbillentyűre a módosításához. Nyomja meg az Escape gombot a megszakításhoz.",
+  "configurePersonaDescription": "Konfigurálja AI personáját",
+  "configureSTTProvider": "STT szolgáltató konfigurálása",
+  "setConversationEndDescription": "Állítsa be, mikor érjenek véget automatikusan a beszélgetések",
+  "importDataDescription": "Adatok importálása más forrásokból",
+  "debugAndDiagnostics": "Hibakeresés és diagnosztika",
+  "autoDeletesAfter3Days": "Automatikus törlés 3 nap után",
+  "helpsDiagnoseIssues": "Segít a problémák diagnosztizálásában",
+  "exportConversationsDescription": "Beszélgetések exportálása JSON-ba",
+  "exportingConversations": "Beszélgetések exportálása...",
+  "clearNodesDescription": "Összes csomópont és kapcsolat törlése",
+  "deleteKnowledgeGraphQuestion": "Törölni a tudásgráfot?",
+  "deleteKnowledgeGraphWarning": "Ez törli az összes származtatott tudásgráf adatot. Az eredeti emlékei biztonságban maradnak.",
+  "connectOmiWithAI": "Csatlakoztassa az Omi-t AI asszisztensekhez",
+  "noAPIKeys": "Nincsenek API kulcsok. Hozzon létre egyet a kezdéshez.",
+  "realTimeTranscript": "Valós idejű átirat",
+  "transcriptionDiagnostics": "Átírási diagnosztika",
+  "detailedDiagnosticMessages": "Részletes diagnosztikai üzenetek",
+  "autoCreateSpeakers": "Beszélők automatikus létrehozása",
+  "autoCreateWhenDetected": "Automatikus létrehozás név észlelésekor",
+  "followUpQuestions": "Követő kérdések",
+  "suggestQuestionsAfterConversations": "Kérdések javaslása beszélgetések után",
+  "goalTracker": "Célkövetés",
+  "trackPersonalGoals": "Személyes célok követése a főoldalon",
+  "dailyReflection": "Napi elmélkedés",
+  "dailyReflectionDescription": "21:00 emlékeztető a napod átgondolására",
+  "endpointURL": "Végpont URL",
+  "links": "Linkek",
+  "discordMemberCount": "Több mint 8000 tag a Discordon",
+  "userInformation": "Felhasználói információk",
+  "capabilities": "Képességek",
+  "previewScreenshots": "Képernyőkép előnézet",
+  "holdOnPreparingForm": "Várjon, előkészítjük az űrlapot",
+  "bySubmittingYouAgreeToOmi": "Beküldéssel elfogadja az Omi ",
+  "termsAndPrivacyPolicy": "Feltételek és Adatvédelmi Irányelvek",
+  "manageYourApp": "Alkalmazás kezelése",
+  "updatingYourApp": "Alkalmazás frissítése",
+  "fetchingYourAppDetails": "Alkalmazás részleteinek lekérése",
+  "updateAppQuestion": "Alkalmazás frissítése?",
+  "updateAppConfirmation": "Biztosan frissíteni szeretné az alkalmazást? A változtatások a csapatunk általi felülvizsgálat után lépnek érvénybe.",
+  "updateApp": "Alkalmazás frissítése",
+  "createAndSubmitNewApp": "Új alkalmazás létrehozása és beküldése",
+  "appsCount": "Alkalmazások ({count})",
+  "privateAppsCount": "Privát alkalmazások ({count})",
+  "publicAppsCount": "Nyilvános alkalmazások ({count})",
+  "newVersionAvailable": "Új verzió elérhető  🎉",
+  "no": "Nem",
+  "subscriptionCancelledSuccessfully": "Előfizetés sikeresen lemondva. Az aktuális számlázási időszak végéig aktív marad.",
+  "failedToCancelSubscription": "Az előfizetés lemondása sikertelen. Kérjük, próbálja újra.",
+  "invalidPaymentUrl": "Érvénytelen fizetési URL",
+  "permissionsAndTriggers": "Engedélyek és triggerek",
+  "chatFeatures": "Chat funkciók",
+  "uninstall": "Eltávolítás",
+  "installs": "TELEPÍTÉSEK",
+  "priceLabel": "ÁR",
+  "updatedLabel": "FRISSÍTVE",
+  "createdLabel": "LÉTREHOZVA",
+  "featuredLabel": "KIEMELT",
+  "cancelSubscriptionQuestion": "Előfizetés lemondása?",
+  "cancelSubscriptionConfirmation": "Biztosan le szeretné mondani az előfizetését? Az aktuális számlázási időszak végéig továbbra is hozzáférhet.",
+  "cancelSubscriptionButton": "Előfizetés lemondása",
+  "cancelling": "Lemondás...",
+  "betaTesterMessage": "Ön ennek az alkalmazásnak a béta tesztelője. Még nem nyilvános. A jóváhagyás után lesz nyilvános.",
+  "appUnderReviewMessage": "Az alkalmazása felülvizsgálat alatt áll és csak Ön láthatja. A jóváhagyás után lesz nyilvános.",
+  "appRejectedMessage": "Az alkalmazása el lett utasítva. Kérjük, frissítse az adatokat és küldje el újra.",
+  "invalidIntegrationUrl": "Érvénytelen integrációs URL",
+  "tapToComplete": "Koppintson a befejezéshez",
+  "invalidSetupInstructionsUrl": "Érvénytelen beállítási útmutató URL",
+  "pushToTalk": "Nyomja meg a beszédhez",
+  "summaryPrompt": "Összefoglaló prompt",
+  "pleaseSelectARating": "Kérjük, válasszon értékelést",
+  "reviewAddedSuccessfully": "Értékelés sikeresen hozzáadva 🚀",
+  "reviewUpdatedSuccessfully": "Értékelés sikeresen frissítve 🚀",
+  "failedToSubmitReview": "Az értékelés elküldése sikertelen. Kérjük, próbálja újra.",
+  "addYourReview": "Értékelés hozzáadása",
+  "editYourReview": "Értékelés szerkesztése",
+  "writeAReviewOptional": "Írjon értékelést (opcionális)",
+  "submitReview": "Értékelés küldése",
+  "updateReview": "Értékelés frissítése",
+  "yourReview": "Az Ön értékelése",
+  "anonymousUser": "Névtelen felhasználó",
+  "issueActivatingApp": "Probléma merült fel az alkalmazás aktiválásakor. Kérjük, próbálja újra.",
+  "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
+  "copyUrl": "URL másolása",
+  "txtFormat": "TXT",
+  "pdfFormat": "PDF",
+  "weekdayMon": "Hét",
+  "weekdayTue": "Kedd",
+  "weekdayWed": "Szer",
+  "weekdayThu": "Csüt",
+  "weekdayFri": "Pén",
+  "weekdaySat": "Szo",
+  "weekdaySun": "Vas",
+  "serviceIntegrationComingSoon": "{serviceName} integráció hamarosan",
+  "alreadyExportedTo": "Már exportálva ide: {platform}",
+  "anotherPlatform": "másik platform",
+  "pleaseAuthenticateWithService": "Kérjük, jelentkezzen be a {serviceName} szolgáltatásba a Beállítások > Feladatintegrációk menüben",
+  "addingToService": "Hozzáadás a {serviceName} szolgáltatáshoz...",
+  "addedToService": "Hozzáadva a {serviceName} szolgáltatáshoz",
+  "failedToAddToService": "Nem sikerült hozzáadni a {serviceName} szolgáltatáshoz",
+  "permissionDeniedForAppleReminders": "Engedély megtagadva az Apple Emlékeztetők számára",
+  "failedToCreateApiKey": "Nem sikerült létrehozni a szolgáltató API-kulcsát: {error}",
+  "createAKey": "Kulcs létrehozása",
+  "apiKeyRevokedSuccessfully": "API-kulcs sikeresen visszavonva",
+  "failedToRevokeApiKey": "Nem sikerült visszavonni az API-kulcsot: {error}",
+  "omiApiKeys": "Omi API-kulcsok",
+  "apiKeysDescription": "Az API-kulcsokat hitelesítésre használják, amikor az alkalmazásod kommunikál az OMI szerverrel. Lehetővé teszik az alkalmazásod számára, hogy emlékeket hozzon létre és biztonságosan hozzáférjen más OMI szolgáltatásokhoz.",
+  "aboutOmiApiKeys": "Az Omi API-kulcsokról",
+  "noApiKeysYet": "Még nincsenek API-kulcsok. Hozzon létre egyet az alkalmazásával való integrációhoz.",
+  "yourNewKey": "Az új kulcsod:",
+  "copyToClipboard": "Másolás a vágólapra",
+  "pleaseCopyKeyNow": "Kérjük, másold le most és írd le valahova biztonságos helyre. ",
+  "willNotSeeAgain": "Nem fogod tudni újra látni.",
+  "revokeKey": "Kulcs visszavonása",
+  "revokeApiKeyQuestion": "API-kulcs visszavonása?",
+  "revokeApiKeyWarning": "Ez a művelet nem vonható vissza. Az ezt a kulcsot használó alkalmazások többé nem férhetnek hozzá az API-hoz.",
+  "revoke": "Visszavonás",
+  "whatWouldYouLikeToCreate": "Mit szeretne létrehozni?",
+  "createAnApp": "Alkalmazás létrehozása",
+  "createAndShareYourApp": "Hozza létre és ossza meg alkalmazását",
+  "createMyClone": "Klónom létrehozása",
+  "createYourDigitalClone": "Hozza létre digitális klónját",
+  "itemApp": "Alkalmazás",
+  "itemPersona": "Persona",
+  "keepItemPublic": "{item} nyilvános tartása",
+  "makeItemPublicQuestion": "{item} nyilvánossá tétele?",
+  "makeItemPrivateQuestion": "{item} priváttá tétele?",
+  "makeItemPublicExplanation": "Ha nyilvánossá teszi a(z) {item}-t, mindenki használhatja",
+  "makeItemPrivateExplanation": "Ha most priváttá teszi a(z) {item}-t, az mindenki számára leáll és csak ön láthatja",
+  "manageApp": "Alkalmazás kezelése",
+  "updatePersonaDetails": "Persona részleteinek frissítése",
+  "deleteItemTitle": "{item} törlése",
+  "deleteItemQuestion": "{item} törlése?",
+  "deleteItemConfirmation": "Biztosan törölni szeretné ezt a(z) {item}-t? Ez a művelet nem vonható vissza.",
+  "revokeKeyQuestion": "Kulcs visszavonása?",
+  "revokeKeyConfirmation": "Biztosan vissza szeretné vonni a(z) \"{keyName}\" kulcsot? Ez a művelet nem vonható vissza.",
+  "createNewKey": "Új kulcs létrehozása",
+  "keyNameHint": "pl. Claude Desktop",
+  "pleaseEnterAName": "Kérjük, adjon meg egy nevet.",
+  "failedToCreateKeyWithError": "Nem sikerült létrehozni a kulcsot: {error}",
+  "failedToCreateKeyTryAgain": "Nem sikerült létrehozni a kulcsot. Kérjük, próbálja újra.",
+  "keyCreated": "Kulcs létrehozva",
+  "keyCreatedMessage": "Az új kulcsa létrejött. Kérjük, másolja most. Nem fogja tudni újra megtekinteni.",
+  "keyWord": "Kulcs",
+  "externalAppAccess": "Külső alkalmazás hozzáférés",
+  "externalAppAccessDescription": "A következő telepített alkalmazásoknak külső integrációi vannak, és hozzáférhetnek az adataihoz, például beszélgetésekhez és emlékekhez.",
+  "noExternalAppsHaveAccess": "Egyetlen külső alkalmazásnak sincs hozzáférése az adataihoz.",
+  "maximumSecurityE2ee": "Maximális biztonság (E2EE)",
+  "e2eeDescription": "A végpontok közötti titkosítás a magánélet aranystandardja. Ha engedélyezve van, az adatait az eszközén titkosítjuk, mielőtt elküldenénk a szervereinkre. Ez azt jelenti, hogy senki, még az Omi sem férhet hozzá a tartalmához.",
+  "importantTradeoffs": "Fontos kompromisszumok:",
+  "e2eeTradeoff1": "• Egyes funkciók, mint például a külső alkalmazás-integrációk, letilthatók.",
+  "e2eeTradeoff2": "• Ha elveszíti jelszavát, az adatai nem állíthatók helyre.",
+  "featureComingSoon": "Ez a funkció hamarosan érkezik!",
+  "migrationInProgressMessage": "Migráció folyamatban. A védelmi szintet nem módosíthatja, amíg be nem fejeződik.",
+  "migrationFailed": "A migráció sikertelen",
+  "migratingFromTo": "Migráció {source} típusról {target} típusra",
+  "objectsCount": "{processed} / {total} objektum",
+  "secureEncryption": "Biztonságos titkosítás",
+  "secureEncryptionDescription": "Az adatait egy Önnek egyedi kulccsal titkosítjuk a szervereink, amelyek a Google Cloudon vannak. Ez azt jelenti, hogy a nyers tartalma senkinek sem hozzáférhető, beleértve az Omi személyzetét vagy a Google-t, közvetlenül az adatbázisból.",
+  "endToEndEncryption": "Végpontok közötti titkosítás",
+  "e2eeCardDescription": "Engedélyezze a maximális biztonságot, ahol csak ön férhet hozzá adataihoz. Érintse meg a további információkért.",
+  "dataAlwaysEncrypted": "A szinttől függetlenül az adatai mindig titkosítva vannak nyugalmi állapotban és átvitel közben.",
+  "readOnlyScope": "Csak olvasható",
+  "fullAccessScope": "Teljes hozzáférés",
+  "readScope": "Olvasás",
+  "writeScope": "Írás",
+  "apiKeyCreated": "API kulcs létrehozva!",
+  "saveKeyWarning": "Mentse el ezt a kulcsot most! Nem fogja tudni újra megtekinteni.",
+  "yourApiKey": "AZ ÖN API KULCSA",
+  "tapToCopy": "Másoláshoz érintse meg",
+  "copyKey": "Kulcs másolása",
+  "createApiKey": "API kulcs létrehozása",
+  "accessDataProgrammatically": "Programozott hozzáférés az adataihoz",
+  "keyNameLabel": "KULCS NEVE",
+  "keyNamePlaceholder": "pl. Az én integrációm",
+  "permissionsLabel": "ENGEDÉLYEK",
+  "permissionsInfoNote": "R = Olvasás, W = Írás. Alapértelmezés szerint csak olvasható, ha nincs semmi kiválasztva.",
+  "developerApi": "Fejlesztői API",
+  "createAKeyToGetStarted": "Hozzon létre egy kulcsot a kezdéshez",
+  "errorWithMessage": "Hiba: {error}",
+  "omiTraining": "Omi képzés",
+  "trainingDataProgram": "Képzési adatprogram",
+  "getOmiUnlimitedFree": "Szerezze meg az Omi Unlimited-et ingyen, ha hozzájárul adataival az AI modellek képzéséhez.",
+  "trainingDataBullets": "• Az adatai segítenek az AI modellek fejlesztésében\n• Csak nem érzékeny adatok kerülnek megosztásra\n• Teljesen átlátható folyamat",
+  "learnMoreAtOmiTraining": "További információ: omi.me/training",
+  "agreeToContributeData": "Megértem és beleegyezem, hogy hozzájáruljak adataimmal az AI képzéséhez",
+  "submitRequest": "Kérelem beküldése",
+  "thankYouRequestUnderReview": "Köszönjük! Kérelme felülvizsgálat alatt áll. Értesítjük a jóváhagyás után.",
+  "planRemainsActiveUntil": "A csomagja {date}-ig aktív marad. Ezután elveszíti a korlátlan funkciókhoz való hozzáférést. Biztos benne?",
+  "confirmCancellation": "Lemondás megerősítése",
+  "keepMyPlan": "Csomagom megtartása",
+  "subscriptionSetToCancel": "Az előfizetése az időszak végén törlésre van beállítva.",
+  "switchedToOnDevice": "Eszközön történő átírásra váltva",
+  "couldNotSwitchToFreePlan": "Nem sikerült váltani az ingyenes csomagra. Kérjük, próbálja újra.",
+  "couldNotLoadPlans": "Nem sikerült betölteni az elérhető csomagokat. Kérjük, próbálja újra.",
+  "selectedPlanNotAvailable": "A kiválasztott csomag nem érhető el. Kérjük, próbálja újra.",
+  "upgradeToAnnualPlan": "Frissítés éves csomagra",
+  "importantBillingInfo": "Fontos számlázási információk:",
+  "monthlyPlanContinues": "Jelenlegi havi csomagja a számlázási időszak végéig folytatódik",
+  "paymentMethodCharged": "A meglévő fizetési módja automatikusan terhelésre kerül, amikor a havi csomagja lejár",
+  "annualSubscriptionStarts": "12 hónapos éves előfizetése automatikusan elindul a terhelés után",
+  "thirteenMonthsCoverage": "Összesen 13 hónap lefedettséget kap (jelenlegi hónap + 12 hónap éves)",
+  "confirmUpgrade": "Frissítés megerősítése",
+  "confirmPlanChange": "Csomagváltás megerősítése",
+  "confirmAndProceed": "Megerősítés és folytatás",
+  "upgradeScheduled": "Frissítés ütemezve",
+  "changePlan": "Csomag váltás",
+  "upgradeAlreadyScheduled": "Az éves csomagra való frissítése már ütemezve van",
+  "youAreOnUnlimitedPlan": "Ön a Korlátlan csomagban van.",
+  "yourOmiUnleashed": "Az Omi-ja, szabadjára engedve. Váljon korlátlanná a végtelen lehetőségekért.",
+  "planEndedOn": "A csomagja {date}-án lejárt.\\nIratkozzon fel újra most - azonnal felszámítjuk az új számlázási időszakot.",
+  "planSetToCancelOn": "A csomagja {date}-án törlésre van beállítva.\\nIratkozzon fel újra most, hogy megtartsa előnyeit - nincs díj {date}-ig.",
+  "annualPlanStartsAutomatically": "Az éves csomagja automatikusan elindul, amikor a havi csomagja lejár.",
+  "planRenewsOn": "A csomagja {date}-án megújul.",
+  "unlimitedConversations": "Korlátlan beszélgetések",
+  "askOmiAnything": "Kérdezzen Omi-tól bármit az életéről",
+  "unlockOmiInfiniteMemory": "Oldja fel Omi végtelen memóriáját",
+  "youreOnAnnualPlan": "Ön az éves csomagon van",
+  "alreadyBestValuePlan": "Már a legjobb értékű csomagja van. Nincs szükség változtatásra.",
+  "unableToLoadPlans": "Nem sikerült betölteni a csomagokat",
+  "checkConnectionTryAgain": "Ellenőrizze a kapcsolatot és próbálja újra",
+  "useFreePlan": "Ingyenes csomag használata",
+  "continueText": "Folytatás",
+  "resubscribe": "Újra feliratkozás",
+  "couldNotOpenPaymentSettings": "Nem sikerült megnyitni a fizetési beállításokat. Kérjük, próbálja újra.",
+  "managePaymentMethod": "Fizetési mód kezelése",
+  "cancelSubscription": "Előfizetés lemondása",
+  "endsOnDate": "Lejár: {date}",
+  "active": "Aktív",
+  "freePlan": "Ingyenes csomag",
+  "configure": "Beállítás",
+  "privacyInformation": "Adatvédelmi információk",
+  "@privacyInformation": {
+    "description": "Privacy page - privacyInformation"
+  },
+  "yourPrivacyMattersToUs": "Adatai védelme fontos számunkra",
+  "@yourPrivacyMattersToUs": {
+    "description": "Privacy page - yourPrivacyMattersToUs"
+  },
+  "privacyIntroText": "Az Ominál nagyon komolyan vesszük az adatvédelmet. Átláthatóak szeretnénk lenni az általunk gyűjtött adatokról és azok felhasználásáról. Íme, amit tudnia kell:",
+  "@privacyIntroText": {
+    "description": "Privacy page - privacyIntroText"
+  },
+  "whatWeTrack": "Mit követünk nyomon",
+  "@whatWeTrack": {
+    "description": "Privacy page - whatWeTrack"
+  },
+  "anonymityAndPrivacy": "Anonimitás és adatvédelem",
+  "@anonymityAndPrivacy": {
+    "description": "Privacy page - anonymityAndPrivacy"
+  },
+  "optInAndOptOutOptions": "Feliratkozási és leiratkozási lehetőségek",
+  "@optInAndOptOutOptions": {
+    "description": "Privacy page - optInAndOptOutOptions"
+  },
+  "ourCommitment": "Elkötelezettségünk",
+  "@ourCommitment": {
+    "description": "Privacy page - ourCommitment"
+  },
+  "commitmentText": "Elkötelezettek vagyunk amellett, hogy az általunk gyűjtött adatokat csak arra használjuk, hogy az Omi jobb termék legyen az Ön számára. Adatainak védelme és bizalma kiemelten fontos számunkra.",
+  "@commitmentText": {
+    "description": "Privacy page - commitmentText"
+  },
+  "thankYouText": "Köszönjük, hogy az Omi értékes felhasználója. Ha kérdése vagy aggálya van, forduljon hozzánk a team@basedhardware.com címen.",
+  "@thankYouText": {
+    "description": "Privacy page - thankYouText"
+  },
+  "wifiSyncSettings": "WiFi szinkronizálás beállításai",
+  "@wifiSyncSettings": {
+    "description": "WiFi sync settings - wifiSyncSettings"
+  },
+  "enterHotspotCredentials": "Adja meg telefonja hotspot hitelesítő adatait",
+  "@enterHotspotCredentials": {
+    "description": "WiFi sync settings - enterHotspotCredentials"
+  },
+  "wifiSyncUsesHotspot": "A WiFi szinkronizálás a telefont hotspotként használja. A nevet és jelszót a Beállítások > Személyes hotspot menüben találja.",
+  "@wifiSyncUsesHotspot": {
+    "description": "WiFi sync settings - wifiSyncUsesHotspot"
+  },
+  "hotspotNameSsid": "Hotspot neve (SSID)",
+  "@hotspotNameSsid": {
+    "description": "WiFi sync settings - hotspotNameSsid"
+  },
+  "exampleIphoneHotspot": "pl. iPhone Hotspot",
+  "@exampleIphoneHotspot": {
+    "description": "WiFi sync settings - exampleIphoneHotspot"
+  },
+  "password": "Jelszó",
+  "@password": {
+    "description": "WiFi sync settings - password"
+  },
+  "enterHotspotPassword": "Adja meg a hotspot jelszavát",
+  "@enterHotspotPassword": {
+    "description": "WiFi sync settings - enterHotspotPassword"
+  },
+  "saveCredentials": "Hitelesítő adatok mentése",
+  "@saveCredentials": {
+    "description": "WiFi sync settings - saveCredentials"
+  },
+  "clearCredentials": "Hitelesítő adatok törlése",
+  "@clearCredentials": {
+    "description": "WiFi sync settings - clearCredentials"
+  },
+  "pleaseEnterHotspotName": "Kérjük, adjon meg egy hotspot nevet",
+  "@pleaseEnterHotspotName": {
+    "description": "WiFi sync settings - pleaseEnterHotspotName"
+  },
+  "wifiCredentialsSaved": "WiFi hitelesítő adatok mentve",
+  "@wifiCredentialsSaved": {
+    "description": "WiFi sync settings - wifiCredentialsSaved"
+  },
+  "wifiCredentialsCleared": "WiFi hitelesítő adatok törölve",
+  "@wifiCredentialsCleared": {
+    "description": "WiFi sync settings - wifiCredentialsCleared"
+  },
+  "summaryGeneratedForDate": "Összefoglaló létrehozva: {date}",
+  "@summaryGeneratedForDate": {
+    "description": "Daily summary settings - summaryGeneratedForDate",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "1/15/2026"
+      }
+    }
+  },
+  "failedToGenerateSummaryCheckConversations": "Nem sikerült létrehozni az összefoglalót. Győződjön meg róla, hogy vannak beszélgetései aznap.",
+  "@failedToGenerateSummaryCheckConversations": {
+    "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Összefoglaló nem található",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "A napod útja",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "Kiemelések",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Megoldatlan kérdések",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Döntések",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Tanulságok",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
+  },
+  "autoDeletesAfterThreeDays": "Automatikusan törlődik 3 nap után.",
+  "@autoDeletesAfterThreeDays": {
+    "description": "Developer settings - autoDeletesAfterThreeDays"
+  },
+  "knowledgeGraphDeletedSuccessfully": "Tudásgráf sikeresen törölve",
+  "@knowledgeGraphDeletedSuccessfully": {
+    "description": "Developer settings - knowledgeGraphDeletedSuccessfully"
+  },
+  "exportStartedMayTakeFewSeconds": "Exportálás elindítva. Ez eltarthat néhány másodpercig...",
+  "@exportStartedMayTakeFewSeconds": {
+    "description": "Developer settings - exportStartedMayTakeFewSeconds"
+  },
+  "knowledgeGraphDeleteDescription": "Ez törli az összes származtatott tudásgráf adatot (csomópontokat és kapcsolatokat). Az eredeti emlékei biztonságban maradnak. A gráf idővel vagy a következő kérésnél újraépül.",
+  "@knowledgeGraphDeleteDescription": {
+    "description": "Developer settings - knowledgeGraphDeleteDescription"
+  },
+  "configureDailySummaryDigest": "Állítsa be a napi feladatösszesítőt",
+  "accessesDataTypes": "Hozzáfér: {dataTypes}",
+  "triggeredByType": "{triggerType} által kiváltva",
+  "accessesAndTriggeredBy": "{accessDescription} és {triggerDescription}.",
+  "isTriggeredBy": "{triggerDescription}.",
+  "noSpecificDataAccessConfigured": "Nincs beállítva specifikus adathozzáférés."
 }

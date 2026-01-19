@@ -175,7 +175,7 @@
   },
   "settings": "Seaded",
   "@settings": {
-    "description": "Settings page title"
+    "description": "Bottom navigation label for settings"
   },
   "language": "Keel",
   "@language": {
@@ -293,9 +293,9 @@
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
-  "noStarredConversations": "Tärniga märgitud vestlusi pole veel.",
+  "noStarredConversations": "Tärniga vestlusi pole",
   "@noStarredConversations": {
-    "description": "Empty state for starred filter"
+    "description": "Empty state title when no starred conversations"
   },
   "starConversationHint": "Vestluse tärniga märkimiseks avage see ja puudutage päises tärni ikooni.",
   "@starConversationHint": {
@@ -351,7 +351,7 @@
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Sõnum kopeeritud lõikelauale.",
+  "messageCopied": "✨ Sõnum kopeeritud lõikelauale",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -393,7 +393,7 @@
   },
   "apps": "Rakendused",
   "@apps": {
-    "description": "Apps page title"
+    "description": "Navigation label for apps page"
   },
   "noAppsFound": "Rakendusi ei leitud",
   "@noAppsFound": {
@@ -427,7 +427,7 @@
   "@unableToFetchApps": {
     "description": "Error when apps fail to load"
   },
-  "aboutOmi": "Omi teave",
+  "aboutOmi": "Omi kohta",
   "@aboutOmi": {
     "description": "About page title"
   },
@@ -435,7 +435,7 @@
   "@privacyPolicy": {
     "description": "Link text for Privacy Policy"
   },
-  "visitWebsite": "Külasta veebilehte",
+  "visitWebsite": "Külasta veebisaiti",
   "@visitWebsite": {
     "description": "Visit website link"
   },
@@ -447,7 +447,7 @@
   "@joinCommunity": {
     "description": "Discord community link"
   },
-  "membersAndCounting": "8000+ liiget ja kasvab.",
+  "membersAndCounting": "8000+ liiget ja arv kasvab.",
   "@membersAndCounting": {
     "description": "Discord member count"
   },
@@ -511,11 +511,11 @@
   "@email": {
     "description": "Email field label"
   },
-  "customVocabulary": "Kohandatud sõnavara",
+  "customVocabulary": "Kohandatud Sõnavara",
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Teiste tuvastamine",
+  "identifyingOthers": "Teiste Tuvastamine",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
@@ -523,11 +523,11 @@
   "@paymentMethods": {
     "description": "Payment methods setting"
   },
-  "conversationDisplay": "Vestluse kuvamine",
+  "conversationDisplay": "Vestluste Kuvamine",
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "Andmed ja privaatsus",
+  "dataPrivacy": "Andmete Privaatsus",
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
@@ -535,7 +535,7 @@
   "@userId": {
     "description": "User ID label"
   },
-  "notSet": "Pole määratud",
+  "notSet": "Määramata",
   "@notSet": {
     "description": "Default value when not set"
   },
@@ -583,7 +583,7 @@
   "@referralProgram": {
     "description": "Referral program menu item"
   },
-  "signOut": "Logi välja",
+  "signOut": "Logi Välja",
   "@signOut": {
     "description": "Sign out button"
   },
@@ -867,7 +867,7 @@
   "@debugDiagnostics": {
     "description": "Debug & Diagnostics section header"
   },
-  "endpointUrl": "Otspunkti URL",
+  "endpointUrl": "Lõpp-punkti URL",
   "@endpointUrl": {
     "description": "Endpoint URL label"
   },
@@ -879,11 +879,11 @@
   "@createKeyToStart": {
     "description": "Create key instruction"
   },
-  "createKey": "Loo võti",
+  "createKey": "Loo Võti",
   "@createKey": {
     "description": "Create Key button"
   },
-  "docs": "Dokumendid",
+  "docs": "Dokumentatsioon",
   "@docs": {
     "description": "Documentation link"
   },
@@ -1087,7 +1087,7 @@
   "exportShared": "Eksport jagatud",
   "deleteKnowledgeGraphTitle": "Kustuta teadmiste graaf?",
   "deleteKnowledgeGraphMessage": "See kustutab kõik tuletatud teadmiste graafi andmed (sõlmed ja ühendused). Teie algsed mälestused jäävad turvaliseks. Graaf taastatakse aja jooksul või järgmise päringu korral.",
-  "knowledgeGraphDeleted": "Teadmiste graaf kustutati edukalt",
+  "knowledgeGraphDeleted": "Teadmiste graaf kustutatud",
   "deleteGraphFailed": "Graafi kustutamine ebaõnnestus: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -1111,8 +1111,8 @@
   "clientId": "Kliendi ID",
   "clientSecret": "Kliendi saladus",
   "useMcpApiKey": "Kasutage oma MCP API võtit",
-  "webhooks": "Veebipoogid",
-  "conversationEvents": "Vestluse sündmused",
+  "webhooks": "Veebikongid",
+  "conversationEvents": "Vestlussündmused",
   "newConversationCreated": "Uus vestlus loodud",
   "realtimeTranscript": "Reaalajas transkriptsioon",
   "transcriptReceived": "Transkriptsioon vastu võetud",
@@ -1938,7 +1938,7 @@
   "@selectYourLanguage": {
     "description": "Placeholder for selected language name"
   },
-  "personalGrowthJourney": "Teie isiklik kasvuteekond AI-ga, mis kuulab iga teie sõna.",
+  "personalGrowthJourney": "Teie isikliku arengu teekond AI-ga, mis kuulab iga teie sõna.",
   "@personalGrowthJourney": {
     "description": "Tagline on onboarding wrapper"
   },
@@ -2077,14 +2077,9 @@
   "@deleteSelected": {
     "description": "Tooltip for delete selected"
   },
-  "searchMemories": "Otsi {count} mälestust",
+  "searchMemories": "Otsi mälestusi...",
   "@searchMemories": {
-    "description": "Hint text for memories search bar",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
+    "description": "Search input hint text"
   },
   "memoryDeleted": "Mälestus kustutatud.",
   "@memoryDeleted": {
@@ -2094,9 +2089,9 @@
   "@undo": {
     "description": "Undo button text"
   },
-  "noMemoriesYet": "Mälestusi pole veel",
+  "noMemoriesYet": "🧠 Mälestusi pole veel",
   "@noMemoriesYet": {
-    "description": "Empty state text"
+    "description": "Empty state title when no memories"
   },
   "noAutoMemories": "Automaatselt eraldatud mälestusi pole veel",
   "@noAutoMemories": {
@@ -2110,9 +2105,9 @@
   "@noMemoriesInCategories": {
     "description": "Empty state text for filtered categories"
   },
-  "noMemoriesFound": "Mälestusi ei leitud",
+  "noMemoriesFound": "🔍 Mälestusi ei leitud",
   "@noMemoriesFound": {
-    "description": "Empty state text for search results"
+    "description": "Empty state title when search/filter has no results"
   },
   "addFirstMemory": "Lisa oma esimene mälestus",
   "@addFirstMemory": {
@@ -2134,7 +2129,7 @@
   "@memoryClearedSuccess": {
     "description": "Snackbar success message"
   },
-  "noMemoriesToDelete": "Kustutatavaid mälestusi pole",
+  "noMemoriesToDelete": "Pole mälestusi kustutamiseks",
   "@noMemoriesToDelete": {
     "description": "Snackbar message"
   },
@@ -2146,7 +2141,7 @@
   "@createActionItemTooltip": {
     "description": "Tooltip for create action item FAB"
   },
-  "memoryManagement": "Mälu haldamine",
+  "memoryManagement": "Mäluhaldus",
   "@memoryManagement": {
     "description": "Title for memory management sheet"
   },
@@ -2191,11 +2186,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "Uus mälestus",
+  "newMemory": "✨ Uus mälestus",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "Muuda mälestust",
+  "editMemory": "✏️ Muuda mälestust",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2341,11 +2336,11 @@
   "summarize": "Kokkuvõte",
   "generateSummary": "Loo kokkuvõte",
   "conversationNotFoundOrDeleted": "Vestlust ei leitud või see on kustutatud",
-  "deleteMemory": "Kustuta mälu?",
+  "deleteMemory": "Kustuta mälestus",
   "thisActionCannotBeUndone": "Seda toimingut ei saa tagasi võtta.",
   "memoriesCount": "{count} mälu",
   "noMemoriesInCategory": "Selles kategoorias pole veel mälestusi",
-  "addYourFirstMemory": "Lisa oma esimene mälu",
+  "addYourFirstMemory": "Lisa oma esimene mälestus",
   "firmwareDisconnectUsb": "Eemaldage USB",
   "firmwareUsbWarning": "USB-ühendus värskenduste ajal võib teie seadet kahjustada.",
   "firmwareBatteryAbove15": "Aku üle 15%",
@@ -2397,7 +2392,7 @@
   "welcomeToOmiDescription": "Tere tulemast Omi juurde! Teie AI kaaslane on valmis aitama vestluste, ülesannete ja muuga.",
   "startUsingOmi": "Alusta Omi kasutamist",
   "back": "Tagasi",
-  "keyboardShortcuts": "Klaviatuuri otseteed",
+  "keyboardShortcuts": "Kiirklahvid",
   "toggleControlBar": "Lülita juhtpaneeli",
   "pressKeys": "Vajuta klahve...",
   "cmdRequired": "⌘ on nõutud",
@@ -2416,7 +2411,7 @@
   "saveGoal": "Salvesta",
   "goals": "Eesmärgid",
   "tapToAddGoal": "Puuduta eesmärgi lisamiseks",
-  "welcomeBack": "Tere tulemast tagasi",
+  "welcomeBack": "Tere tulemast tagasi, {name}",
   "yourConversations": "Teie vestlused",
   "reviewAndManageConversations": "Vaadake üle ja hallake oma salvestatud vestlusi",
   "startCapturingConversations": "Alustage vestluste salvestamist oma Omi seadmega, et neid siin näha.",
@@ -2519,5 +2514,785 @@
   "ratingsCount": "{count}+ hinnangut",
   "errorActivatingApp": "Viga rakenduse aktiveerimisel",
   "integrationSetupRequired": "Kui see on integratsioonirakendus, veenduge, et seadistamine on lõpetatud.",
-  "installed": "Paigaldatud"
+  "installed": "Paigaldatud",
+  "appIdLabel": "Rakenduse ID",
+  "appNameLabel": "Rakenduse nimi",
+  "appNamePlaceholder": "Minu suurepärane rakendus",
+  "pleaseEnterAppName": "Palun sisestage rakenduse nimi",
+  "categoryLabel": "Kategooria",
+  "selectCategory": "Valige kategooria",
+  "descriptionLabel": "Kirjeldus",
+  "appDescriptionPlaceholder": "Minu suurepärane rakendus on suurepärane rakendus, mis teeb hämmastav asju. See on parim rakendus!",
+  "pleaseProvideValidDescription": "Palun esitage kehtiv kirjeldus",
+  "appPricingLabel": "Rakenduse hinnakujundus",
+  "noneSelected": "Valimata",
+  "appIdCopiedToClipboard": "Rakenduse ID kopeeritud lõikelauale",
+  "appCategoryModalTitle": "Rakenduse kategooria",
+  "pricingFree": "Tasuta",
+  "pricingPaid": "Tasuline",
+  "loadingCapabilities": "Võimete laadimine...",
+  "filterInstalled": "Paigaldatud",
+  "filterMyApps": "Minu rakendused",
+  "clearSelection": "Tühista valik",
+  "filterCategory": "Kategooria",
+  "rating4PlusStars": "4+ tärni",
+  "rating3PlusStars": "3+ tärni",
+  "rating2PlusStars": "2+ tärni",
+  "rating1PlusStars": "1+ täht",
+  "filterRating": "Hinnang",
+  "filterCapabilities": "Võimed",
+  "noNotificationScopesAvailable": "Teatiste ulatusi pole saadaval",
+  "popularApps": "Populaarsed rakendused",
+  "pleaseProvidePrompt": "Palun esitage viip",
+  "chatWithAppName": "Vestle rakendusega {appName}",
+  "defaultAiAssistant": "Vaikimisi AI abiline",
+  "readyToChat": "✨ Valmis vestluseks!",
+  "connectionNeeded": "🌐 Vajalik ühendus",
+  "startConversation": "Alustage vestlust ja laske maagia alata",
+  "checkInternetConnection": "Palun kontrollige oma internetiühendust",
+  "wasThisHelpful": "Kas see oli kasulik?",
+  "thankYouForFeedback": "Täname tagasiside eest!",
+  "maxFilesUploadError": "Saate üles laadida ainult 4 faili korraga",
+  "attachedFiles": "📎 Lisatud failid",
+  "takePhoto": "Tee foto",
+  "captureWithCamera": "Jäädvusta kaameraga",
+  "selectImages": "Vali pildid",
+  "chooseFromGallery": "Vali galeriist",
+  "selectFile": "Vali fail",
+  "chooseAnyFileType": "Vali mis tahes failitüüp",
+  "cannotReportOwnMessages": "Te ei saa oma sõnumeid teatada",
+  "messageReportedSuccessfully": "✅ Sõnum edukalt teatatud",
+  "confirmReportMessage": "Kas olete kindel, et soovite seda sõnumit teatada?",
+  "selectChatAssistant": "Vali vestlusabiline",
+  "enableMoreApps": "Luba rohkem rakendusi",
+  "chatCleared": "Vestlus kustutatud",
+  "clearChatTitle": "Kustuta vestlus?",
+  "confirmClearChat": "Kas olete kindel, et soovite vestlust kustutada? Seda tegevust ei saa tagasi võtta.",
+  "copy": "Kopeeri",
+  "share": "Jaga",
+  "report": "Teata",
+  "microphonePermissionRequired": "Helisalvestuse jaoks on vajalik mikrofoni luba.",
+  "microphonePermissionDenied": "Mikrofoni luba keelatud. Palun andke luba Süsteemieelistused > Privaatsus ja turvalisus > Mikrofon.",
+  "failedToCheckMicrophonePermission": "Mikrofoni loa kontrollimine ebaõnnestus: {error}",
+  "failedToTranscribeAudio": "Heli transkribeerimine ebaõnnestus",
+  "transcribing": "Transkribeerimine...",
+  "transcriptionFailed": "Transkribeerimine ebaõnnestus",
+  "discardedConversation": "Visatud vestlus",
+  "at": "kell",
+  "from": "alates",
+  "copied": "Kopeeritud!",
+  "copyLink": "Kopeeri link",
+  "hideTranscript": "Peida transkriptsioon",
+  "viewTranscript": "Vaata transkriptsiooni",
+  "conversationDetails": "Vestluse üksikasjad",
+  "transcript": "Transkriptsioon",
+  "segmentsCount": "{count} segmenti",
+  "noTranscriptAvailable": "Transkriptsioon pole saadaval",
+  "noTranscriptMessage": "Sellel vestlusel pole transkriptsiooni.",
+  "conversationUrlCouldNotBeGenerated": "Vestluse URL-i ei saanud genereerida.",
+  "failedToGenerateConversationLink": "Vestluse lingi genereerimine ebaõnnestus",
+  "failedToGenerateShareLink": "Jagamislingi genereerimine ebaõnnestus",
+  "reloadingConversations": "Vestluste ümberlaadimine...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "@welcomeBack": {
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "user": "Kasutaja",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "Tärniga",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "Kuupäev",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "Tulemusi ei leitud",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "Proovige kohandada otsingusõnu",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "starConversationsToFindQuickly": "Märkige vestlused tärniga, et neid siit kiiresti leida",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "Vestlusi pole kuupäeval {date}",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "Proovige valida teine kuupäev",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  },
+  "conversations": "Vestlused",
+  "@conversations": {
+    "description": "Navigation label for conversations page"
+  },
+  "chat": "Vestlus",
+  "@chat": {
+    "description": "Navigation label for chat page"
+  },
+  "@memories": {
+    "description": "Navigation label for memories page"
+  },
+  "actions": "Toimingud",
+  "@actions": {
+    "description": "Navigation label for actions page"
+  },
+  "syncAvailable": "Sünkroonimine saadaval",
+  "@syncAvailable": {
+    "description": "Label for sync notification"
+  },
+  "referAFriend": "Soovita sõbrale",
+  "@referAFriend": {
+    "description": "Bottom navigation label for referral program"
+  },
+  "help": "Abi",
+  "@help": {
+    "description": "Bottom navigation label for help"
+  },
+  "pro": "Pro",
+  "@pro": {
+    "description": "Badge label for pro/unlimited users"
+  },
+  "upgradeToPro": "Uuenda Pro-le",
+  "@upgradeToPro": {
+    "description": "Subscription banner button text"
+  },
+  "getOmiDevice": "Hangi Omi seade",
+  "@getOmiDevice": {
+    "description": "Widget title for device promotion"
+  },
+  "wearableAiCompanion": "Kantav AI kaaslane",
+  "@wearableAiCompanion": {
+    "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "Mälestuste laadimine...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "allMemories": "Kõik mälestused",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "Sinu kohta",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "Käsitsi",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "Teie mälestuste laadimine...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "createYourFirstMemory": "Loo alustamiseks oma esimene mälestus",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "Proovige kohandada otsingut või filtrit",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
+  },
+  "whatWouldYouLikeToRemember": "Mida soovid meeles pidada?",
+  "category": "Kategooria",
+  "public": "Avalik",
+  "failedToSaveCheckConnection": "Salvestamine ebaõnnestus. Kontrolli ühendust.",
+  "createMemory": "Loo mälestus",
+  "deleteMemoryConfirmation": "Kas oled kindel, et soovid selle mälestuse kustutada? Seda toimingut ei saa tagasi võtta.",
+  "makePrivate": "Tee privaatseks",
+  "organizeAndControlMemories": "Korraldage ja kontrollige oma mälestusi",
+  "total": "Kokku",
+  "makeAllMemoriesPrivate": "Tee kõik mälestused privaatseks",
+  "setAllMemoriesToPrivate": "Määra kõik mälestused privaatseks",
+  "makeAllMemoriesPublic": "Tee kõik mälestused avalikuks",
+  "setAllMemoriesToPublic": "Määra kõik mälestused avalikuks",
+  "permanentlyRemoveAllMemories": "Eemalda püsivalt kõik mälestused Omist",
+  "allMemoriesAreNowPrivate": "Kõik mälestused on nüüd privaatsed",
+  "allMemoriesAreNowPublic": "Kõik mälestused on nüüd avalikud",
+  "clearOmisMemory": "Tühjenda Omi mälu",
+  "clearMemoryConfirmation": "Kas oled kindel, et soovid tühjendada Omi mälu? Seda toimingut ei saa tagasi võtta ja see kustutab püsivalt kõik {count} mälestust.",
+  "omisMemoryCleared": "Omi mälu sinu kohta on tühjendatud",
+  "welcomeToOmi": "Tere tulemast Omi",
+  "continueWithApple": "Jätka Apple'iga",
+  "continueWithGoogle": "Jätka Google'iga",
+  "byContinuingYouAgree": "Jätkates nõustute meie ",
+  "termsOfService": "Teenusetingimustega",
+  "and": " ja ",
+  "dataAndPrivacy": "Andmed ja privaatsus",
+  "secureAuthViaAppleId": "Turvaline autentimine Apple ID kaudu",
+  "secureAuthViaGoogleAccount": "Turvaline autentimine Google'i konto kaudu",
+  "whatWeCollect": "Mida me kogume",
+  "dataCollectionMessage": "Jätkates salvestatakse teie vestlused, salvestused ja isikuandmed turvaliselt meie serveritesse, et pakkuda AI-põhiseid ülevaateid ja võimaldada kõiki rakenduse funktsioone.",
+  "dataProtection": "Andmekaitse",
+  "yourDataIsProtected": "Teie andmed on kaitstud ja neid reguleerib meie ",
+  "pleaseSelectYourPrimaryLanguage": "Palun valige oma põhikeel",
+  "chooseYourLanguage": "Valige oma keel",
+  "selectPreferredLanguageForBestExperience": "Valige oma eelistatud keel parima Omi kogemuse jaoks",
+  "searchLanguages": "Otsi keeli...",
+  "selectALanguage": "Valige keel",
+  "tryDifferentSearchTerm": "Proovige teist otsingusõna",
+  "pleaseEnterYourName": "Palun sisestage oma nimi",
+  "nameMustBeAtLeast2Characters": "Nimi peab olema vähemalt 2 tähemärki",
+  "tellUsHowYouWouldLikeToBeAddressed": "Öelge meile, kuidas te soovite, et teid pöördutaks. See aitab isikupärastada teie Omi kogemust.",
+  "charactersCount": "{count} tähemärki",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "enableFeaturesForBestExperience": "Lubage funktsioonid parima Omi kogemuse jaoks oma seadmes.",
+  "microphoneAccess": "Mikrofoni juurdepääs",
+  "recordAudioConversations": "Helisalvestiste salvestamine",
+  "microphoneAccessDescription": "Omi vajab mikrofoni juurdepääsu, et salvestada teie vestlusi ja pakkuda transkriptsioone.",
+  "screenRecording": "Ekraanisalvestus",
+  "captureSystemAudioFromMeetings": "Süsteemiheli jäädvustamine koosolekutest",
+  "screenRecordingDescription": "Omi vajab ekraanisalvestuse luba, et jäädvustada süsteemiheli teie brauseripõhistest koosolekutest.",
+  "accessibility": "Juurdepääsetavus",
+  "detectBrowserBasedMeetings": "Tuvastage brauseripõhised koosolekud",
+  "accessibilityDescription": "Omi vajab juurdepääsetavuse luba, et tuvastada, millal te liitute Zoom, Meet või Teams koosolekutega oma brauseris.",
+  "pleaseWait": "Palun oodake...",
+  "joinTheCommunity": "Liitu kogukonnaga!",
+  "loadingProfile": "Profiili laadimine...",
+  "profileSettings": "Profiili seaded",
+  "noEmailSet": "E-posti ei ole seatud",
+  "userIdCopiedToClipboard": "Kasutaja ID kopeeritud",
+  "yourInformation": "Teie Andmed",
+  "setYourName": "Määra oma nimi",
+  "changeYourName": "Muuda oma nime",
+  "persona": "Persona",
+  "manageYourOmiPersona": "Halda oma Omi personat",
+  "voiceAndPeople": "Hääl ja Inimesed",
+  "teachOmiYourVoice": "Õpeta Omi-le oma häält",
+  "tellOmiWhoSaidIt": "Ütle Omi-le, kes seda ütles 🗣️",
+  "payment": "Makse",
+  "addOrChangeYourPaymentMethod": "Lisa või muuda makseviisi",
+  "preferences": "Eelistused",
+  "helpImproveOmiBySharing": "Aita Omi-d parandada, jagades anonümiseeritud analüüsandmeid",
+  "deleteAccount": "Kustuta Konto",
+  "deleteYourAccountAndAllData": "Kustuta oma konto ja kõik andmed",
+  "helpsDiagnoseIssuesAutoDeletes": "Aitab diagnoosida probleeme. Kustutatakse automaatselt 3 päeva pärast.",
+  "clearLogs": "Kustuta logid",
+  "debugLogsCleared": "Silumislogid kustutatud",
+  "exportConversations": "Ekspordi vestlused",
+  "exportAllConversationsToJson": "Eksportige kõik oma vestlused JSON-faili.",
+  "conversationsExportStarted": "Vestluste eksport algas. See võib võtta mõned sekundid, palun oodake.",
+  "mcpDescription": "Omi ühendamiseks teiste rakendustega, et lugeda, otsida ja hallata oma mälestusi ja vestlusi. Alustamiseks looge võti.",
+  "apiKeys": "API võtmed",
+  "errorLabel": "Viga: {error}",
+  "noApiKeysFound": "API võtmeid ei leitud. Alustamiseks looge üks.",
+  "advancedSettings": "Täpsemad seaded",
+  "triggersWhenNewConversationCreated": "Käivitatakse, kui luuakse uus vestlus.",
+  "triggersWhenNewTranscriptReceived": "Käivitatakse, kui saadakse uus transkriptsioon.",
+  "realtimeAudioBytes": "Reaalajas helibaidid",
+  "triggersWhenAudioBytesReceived": "Käivitatakse, kui saadakse helibaidid.",
+  "everyXSeconds": "Iga x sekundi järel",
+  "triggersWhenDaySummaryGenerated": "Käivitatakse, kui luuakse päeva kokkuvõte.",
+  "experimental": "Eksperimentaalne",
+  "tryLatestExperimentalFeatures": "Proovige Omi meeskonna uusimaid eksperimentaalseid funktsioone.",
+  "transcriptionServiceDiagnosticStatus": "Transkriptsiooni teenuse diagnostika olek",
+  "enableDetailedDiagnosticMessages": "Luba üksikasjalikud diagnostikateated transkriptsiooni teenusest",
+  "autoCreateAndTagNewSpeakers": "Loo ja märgista uued kõnelejad automaatselt",
+  "automaticallyCreateNewPerson": "Loo automaatselt uus inimene, kui transkriptsioonis tuvastatakse nimi.",
+  "pilotFeatures": "Pilootfunktsioonid",
+  "pilotFeaturesDescription": "Need funktsioonid on testid ja toe pakkumist ei garanteerita.",
+  "suggestFollowUpQuestion": "Soovita jätkuküsimust",
+  "saveSettings": "Salvesta Seaded",
+  "syncingDeveloperSettings": "Arendaja seadete sünkroonimine...",
+  "summary": "Kokkuvõte",
+  "auto": "Automaatne",
+  "noSummaryForApp": "Selle rakenduse jaoks pole kokkuvõtet saadaval. Parema tulemuse saamiseks proovige teist rakendust.",
+  "tryAnotherApp": "Proovi teist rakendust",
+  "generatedBy": "Loonud {appName}",
+  "overview": "Ülevaade",
+  "otherAppResults": "Teiste rakenduste tulemused",
+  "unknownApp": "Tundmatu rakendus",
+  "noSummaryAvailable": "Kokkuvõte pole saadaval",
+  "conversationNoSummaryYet": "Sellel vestlusel pole veel kokkuvõtet.",
+  "chooseSummarizationApp": "Vali kokkuvõtte rakendus",
+  "setAsDefaultSummarizationApp": "{appName} määratud vaikerakenduseks kokkuvõtte jaoks",
+  "letOmiChooseAutomatically": "Lase Omil automaatselt parim rakendus valida",
+  "deleteConversationConfirmation": "Kas olete kindel, et soovite selle vestluse kustutada? Seda toimingut ei saa tagasi võtta.",
+  "conversationDeleted": "Vestlus kustutatud",
+  "generatingLink": "Lingi genereerimine...",
+  "editConversation": "Muuda vestlust",
+  "conversationLinkCopiedToClipboard": "Vestluse link kopeeritud lõikelauale",
+  "conversationTranscriptCopiedToClipboard": "Vestluse transkriptsioon kopeeritud lõikelauale",
+  "editConversationDialogTitle": "Muuda vestlust",
+  "changeTheConversationTitle": "Muuda vestluse pealkirja",
+  "conversationTitle": "Vestluse pealkiri",
+  "enterConversationTitle": "Sisesta vestluse pealkiri...",
+  "conversationTitleUpdatedSuccessfully": "Vestluse pealkiri edukalt uuendatud",
+  "failedToUpdateConversationTitle": "Vestluse pealkirja uuendamine ebaõnnestus",
+  "errorUpdatingConversationTitle": "Viga vestluse pealkirja uuendamisel",
+  "settingUp": "Seadistamine...",
+  "preparingSystemAudioCapture": "Süsteemiheli salvestamise ettevalmistamine",
+  "clickTheButtonToCaptureAudio": "Klõpsake nupul, et salvestada heli reaalajas transkriptsioonide, AI-teadmiste ja automaatse salvestamise jaoks.",
+  "startYourFirstRecording": "Alustage oma esimest salvestust",
+  "reconnecting": "Taasühendamine...",
+  "recordingPaused": "Salvestamine peatatud",
+  "recordingActive": "Salvestamine aktiivne",
+  "startRecording": "Alusta salvestamist",
+  "resumingInCountdown": "Jätkamine {countdown}s pärast...",
+  "tapPlayToResume": "Puudutage esitamist jätkamiseks",
+  "listeningForAudio": "Heli kuulamine...",
+  "preparingAudioCapture": "Helisalvestuse ettevalmistamine",
+  "clickToBeginRecording": "Klõpsake salvestamise alustamiseks",
+  "translated": "tõlgitud",
+  "liveTranscript": "Reaalajas transkriptsioon",
+  "segmentsSingular": "{count} segment",
+  "segmentsPlural": "{count} segmenti",
+  "startRecordingToSeeTranscript": "Alustage salvestamist, et näha reaalajas transkriptsiooni",
+  "paused": "Peatatud",
+  "initializing": "Algseadistamine...",
+  "recording": "Salvestamine",
+  "microphoneChangedResumingIn": "Mikrofon on vahetatud. Jätkamine {countdown}s pärast",
+  "clickPlayToResumeOrStop": "Klõpsake esitamisel jätkamiseks või stopp lõpetamiseks",
+  "settingUpSystemAudioCapture": "Süsteemiheli salvestamise seadistamine",
+  "capturingAudioAndGeneratingTranscript": "Heli salvestamine ja transkriptsiooni loomine",
+  "clickToBeginRecordingSystemAudio": "Klõpsake süsteemiheli salvestamise alustamiseks",
+  "you": "Sina",
+  "speakerWithId": "Kõneleja {speakerId}",
+  "translatedByOmi": "tõlgitud omi poolt",
+  "backToConversations": "Tagasi vestluste juurde",
+  "systemAudio": "Süsteem",
+  "mic": "Mikrofon",
+  "audioInputSetTo": "Helisisend määratud: {deviceName}",
+  "errorSwitchingAudioDevice": "Viga heliseadme vahetamisel: {error}",
+  "selectAudioInput": "Valige helisisend",
+  "loadingDevices": "Seadmete laadimine...",
+  "settingsHeader": "SEADED",
+  "plansAndBilling": "Plaanid ja Arveldus",
+  "calendarIntegration": "Kalendri Integratsioon",
+  "dailySummary": "Päevane Kokkuvõte",
+  "developer": "Arendaja",
+  "about": "Teave",
+  "selectTime": "Vali Aeg",
+  "accountGroup": "Konto",
+  "signOutQuestion": "Logi Välja?",
+  "signOutConfirmation": "Kas olete kindel, et soovite välja logida?",
+  "customVocabularyHeader": "KOHANDATUD SÕNAVARA",
+  "addWordsDescription": "Lisage sõnad, mida Omi peaks transkribeerimisel ära tundma.",
+  "enterWordsHint": "Sisestage sõnad (komaga eraldatud)",
+  "dailySummaryHeader": "PÄEVANE KOKKUVÕTE",
+  "dailySummaryTitle": "Päevane Kokkuvõte",
+  "dailySummaryDescription": "Saa isikupärastatud kokkuvõte oma vestlustest",
+  "deliveryTime": "Kohaletoimetamise Aeg",
+  "deliveryTimeDescription": "Millal saada päevast kokkuvõtet",
+  "subscription": "Tellimus",
+  "viewPlansAndUsage": "Vaata Plaane ja Kasutust",
+  "viewPlansDescription": "Halda oma tellimust ja vaata kasutusstatistikat",
+  "addOrChangePaymentMethod": "Lisa või muuda oma makseviisi",
+  "displayOptions": "Kuvamisvalikud",
+  "showMeetingsInMenuBar": "Näita kohtumisi menüüribal",
+  "displayUpcomingMeetingsDescription": "Kuva tulevasi kohtumisi menüüribal",
+  "showEventsWithoutParticipants": "Näita sündmusi ilma osalejateta",
+  "includePersonalEventsDescription": "Kaasa isiklikud sündmused ilma osalejateta",
+  "upcomingMeetings": "TULEVASED KOHTUMISED",
+  "checkingNext7Days": "Järgmise 7 päeva kontrollimine",
+  "shortcuts": "Kiirklahvid",
+  "shortcutChangeInstruction": "Klõpsake kiirklahvil, et seda muuta. Tühistamiseks vajutage Escape.",
+  "configurePersonaDescription": "Konfigureerige oma AI isikut",
+  "configureSTTProvider": "Konfigureerige STT pakkuja",
+  "setConversationEndDescription": "Määrake, millal vestlused automaatselt lõpevad",
+  "importDataDescription": "Impordi andmed teistest allikatest",
+  "debugAndDiagnostics": "Silumine ja diagnostika",
+  "autoDeletesAfter3Days": "Automaatne kustutamine 3 päeva pärast",
+  "helpsDiagnoseIssues": "Aitab probleeme diagnoosida",
+  "exportConversationsDescription": "Ekspordi vestlused JSON-vormingus",
+  "exportingConversations": "Vestluste eksportimine...",
+  "clearNodesDescription": "Kustuta kõik sõlmed ja ühendused",
+  "deleteKnowledgeGraphQuestion": "Kustutada teadmiste graafik?",
+  "deleteKnowledgeGraphWarning": "See kustutab kõik tuletatud teadmiste graafiku andmed. Teie algse mälestused jäävad turvaliseks.",
+  "connectOmiWithAI": "Ühenda Omi AI-assistentidega",
+  "noAPIKeys": "API võtmed puuduvad. Looge üks alustamiseks.",
+  "realTimeTranscript": "Reaalajas transkriptsioon",
+  "transcriptionDiagnostics": "Transkriptsiooni diagnostika",
+  "detailedDiagnosticMessages": "Üksikasjalikud diagnostikasõnumid",
+  "autoCreateSpeakers": "Loo kõnelejad automaatselt",
+  "autoCreateWhenDetected": "Loo automaatselt, kui nimi tuvastatakse",
+  "followUpQuestions": "Järgmised küsimused",
+  "suggestQuestionsAfterConversations": "Soovita küsimusi pärast vestlusi",
+  "goalTracker": "Eesmärkide jälgija",
+  "trackPersonalGoals": "Jälgi isiklikke eesmärke avalehel",
+  "dailyReflection": "Igapäevane mõtisklus",
+  "dailyReflectionDescription": "21:00 meeldetuletus mõtisklemiseks oma päeva üle",
+  "endpointURL": "Lõpp-punkti URL",
+  "links": "Lingid",
+  "discordMemberCount": "Üle 8000 liikme Discordis",
+  "userInformation": "Kasutajateave",
+  "capabilities": "Võimalused",
+  "previewScreenshots": "Ekraanipiltide eelvaade",
+  "holdOnPreparingForm": "Oota, valmistame vormi teile ette",
+  "bySubmittingYouAgreeToOmi": "Esitades nõustute Omi ",
+  "termsAndPrivacyPolicy": "Tingimused ja Privaatsuspoliitika",
+  "manageYourApp": "Halda oma rakendust",
+  "updatingYourApp": "Rakenduse värskendamine",
+  "fetchingYourAppDetails": "Rakenduse üksikasjade hankimine",
+  "updateAppQuestion": "Värskenda rakendust?",
+  "updateAppConfirmation": "Kas olete kindel, et soovite oma rakendust värskendada? Muudatused jõustuvad pärast meie meeskonna ülevaatust.",
+  "updateApp": "Värskenda rakendust",
+  "createAndSubmitNewApp": "Loo ja esita uus rakendus",
+  "appsCount": "Rakendused ({count})",
+  "privateAppsCount": "Privaatsed rakendused ({count})",
+  "publicAppsCount": "Avalikud rakendused ({count})",
+  "newVersionAvailable": "Uus versioon saadaval  🎉",
+  "no": "Ei",
+  "subscriptionCancelledSuccessfully": "Tellimus tühistatud edukalt. See jääb aktiivseks kuni praeguse arveldusperioodi lõpuni.",
+  "failedToCancelSubscription": "Tellimuse tühistamine ebaõnnestus. Palun proovi uuesti.",
+  "invalidPaymentUrl": "Vigane makse URL",
+  "permissionsAndTriggers": "Load ja päästikud",
+  "chatFeatures": "Vestluse funktsioonid",
+  "uninstall": "Desinstalli",
+  "installs": "PAIGALDUSED",
+  "priceLabel": "HIND",
+  "updatedLabel": "UUENDATUD",
+  "createdLabel": "LOODUD",
+  "featuredLabel": "ESILETÕSTETUD",
+  "cancelSubscriptionQuestion": "Tühista tellimus?",
+  "cancelSubscriptionConfirmation": "Kas olete kindel, et soovite tellimuse tühistada? Teil on juurdepääs praeguse arveldusperioodi lõpuni.",
+  "cancelSubscriptionButton": "Tühista tellimus",
+  "cancelling": "Tühistamine...",
+  "betaTesterMessage": "Olete selle rakenduse beetatestija. See ei ole veel avalik. See muutub avalikuks pärast heakskiitu.",
+  "appUnderReviewMessage": "Teie rakendus on läbivaatamisel ja nähtav ainult teile. See muutub avalikuks pärast heakskiitu.",
+  "appRejectedMessage": "Teie rakendus lükati tagasi. Palun uuendage andmeid ja esitage uuesti läbivaatamiseks.",
+  "invalidIntegrationUrl": "Vigane integratsiooni URL",
+  "tapToComplete": "Puuduta lõpetamiseks",
+  "invalidSetupInstructionsUrl": "Vigane seadistusjuhiste URL",
+  "pushToTalk": "Vajuta rääkimiseks",
+  "summaryPrompt": "Kokkuvõtte viip",
+  "pleaseSelectARating": "Palun valige hinnang",
+  "reviewAddedSuccessfully": "Arvustus lisatud edukalt 🚀",
+  "reviewUpdatedSuccessfully": "Arvustus uuendatud edukalt 🚀",
+  "failedToSubmitReview": "Arvustuse esitamine ebaõnnestus. Palun proovi uuesti.",
+  "addYourReview": "Lisa oma arvustus",
+  "editYourReview": "Muuda oma arvustust",
+  "writeAReviewOptional": "Kirjuta arvustus (valikuline)",
+  "submitReview": "Esita arvustus",
+  "updateReview": "Uuenda arvustust",
+  "yourReview": "Teie arvustus",
+  "anonymousUser": "Anonüümne kasutaja",
+  "issueActivatingApp": "Selle rakenduse aktiveerimisel tekkis probleem. Palun proovi uuesti.",
+  "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
+  "copyUrl": "Kopeeri URL",
+  "txtFormat": "TXT",
+  "pdfFormat": "PDF",
+  "weekdayMon": "Esm",
+  "weekdayTue": "Tei",
+  "weekdayWed": "Kol",
+  "weekdayThu": "Nel",
+  "weekdayFri": "Ree",
+  "weekdaySat": "Lau",
+  "weekdaySun": "Püh",
+  "serviceIntegrationComingSoon": "{serviceName} integratsioon tuleb peagi",
+  "alreadyExportedTo": "Juba eksporditud {platform}",
+  "anotherPlatform": "teise platvormiga",
+  "pleaseAuthenticateWithService": "Palun autentimige {serviceName} kaudu Seaded > Ülesannete integratsioonid",
+  "addingToService": "Lisamine {serviceName}...",
+  "addedToService": "Lisatud {serviceName}",
+  "failedToAddToService": "Lisamine {serviceName} ebaõnnestus",
+  "permissionDeniedForAppleReminders": "Apple Reminders luba keelatud",
+  "failedToCreateApiKey": "Teenusepakkuja API võtme loomine ebaõnnestus: {error}",
+  "createAKey": "Loo võti",
+  "apiKeyRevokedSuccessfully": "API võti tühistatud edukalt",
+  "failedToRevokeApiKey": "API võtme tühistamine ebaõnnestus: {error}",
+  "omiApiKeys": "Omi API võtmed",
+  "apiKeysDescription": "API võtmeid kasutatakse autentimiseks, kui teie rakendus suhtleb OMI serveriga. Need võimaldavad teie rakendusel luua mälestusi ja turvaliselt juurde pääseda teistele OMI teenustele.",
+  "aboutOmiApiKeys": "Omi API võtmete kohta",
+  "noApiKeysYet": "API võtmeid pole veel. Looge üks oma rakendusega integreerimiseks.",
+  "yourNewKey": "Teie uus võti:",
+  "copyToClipboard": "Kopeeri lõikelauale",
+  "pleaseCopyKeyNow": "Palun kopeerige see nüüd ja kirjutage kuhugi turvalisesse kohta. ",
+  "willNotSeeAgain": "Te ei saa seda enam näha.",
+  "revokeKey": "Tühista võti",
+  "revokeApiKeyQuestion": "Tühistada API võti?",
+  "revokeApiKeyWarning": "Seda toimingut ei saa tagasi võtta. Ükski rakendus, mis kasutab seda võtit, ei pääse enam API-le ligi.",
+  "revoke": "Tühista",
+  "whatWouldYouLikeToCreate": "Mida soovite luua?",
+  "createAnApp": "Loo rakendus",
+  "createAndShareYourApp": "Loo ja jaga oma rakendust",
+  "createMyClone": "Loo minu kloon",
+  "createYourDigitalClone": "Loo oma digitaalne kloon",
+  "itemApp": "Rakendus",
+  "itemPersona": "Persona",
+  "keepItemPublic": "Hoia {item} avalik",
+  "makeItemPublicQuestion": "Muuta {item} avalikuks?",
+  "makeItemPrivateQuestion": "Muuta {item} privaatseks?",
+  "makeItemPublicExplanation": "Kui muudate {item} avalikuks, saavad kõik seda kasutada",
+  "makeItemPrivateExplanation": "Kui muudate {item} nüüd privaatseks, lakkab see töötamast kõigil ja on nähtav ainult teile",
+  "manageApp": "Halda rakendust",
+  "updatePersonaDetails": "Uuenda persona üksikasju",
+  "deleteItemTitle": "Kustuta {item}",
+  "deleteItemQuestion": "Kustuta {item}?",
+  "deleteItemConfirmation": "Kas olete kindel, et soovite seda {item} kustutada? Seda toimingut ei saa tagasi võtta.",
+  "revokeKeyQuestion": "Tühista võti?",
+  "revokeKeyConfirmation": "Kas olete kindel, et soovite võtme \"{keyName}\" tühistada? Seda toimingut ei saa tagasi võtta.",
+  "createNewKey": "Loo uus võti",
+  "keyNameHint": "nt Claude Desktop",
+  "pleaseEnterAName": "Palun sisestage nimi.",
+  "failedToCreateKeyWithError": "Võtme loomine ebaõnnestus: {error}",
+  "failedToCreateKeyTryAgain": "Võtme loomine ebaõnnestus. Palun proovige uuesti.",
+  "keyCreated": "Võti loodud",
+  "keyCreatedMessage": "Teie uus võti on loodud. Palun kopeerige see nüüd. Te ei näe seda enam.",
+  "keyWord": "Võti",
+  "externalAppAccess": "Väliste rakenduste juurdepääs",
+  "externalAppAccessDescription": "Järgmistel installitud rakendustel on välised integratsioonid ja need saavad juurdepääsu teie andmetele, nagu vestlused ja mälestused.",
+  "noExternalAppsHaveAccess": "Ühelgi välisel rakendusel pole juurdepääsu teie andmetele.",
+  "maximumSecurityE2ee": "Maksimaalne turvalisus (E2EE)",
+  "e2eeDescription": "Otsast otsani krüpteerimine on privaatsuse kuldstandard. Kui see on lubatud, krüpteeritakse teie andmed teie seadmes enne nende saatmist meie serveritesse. See tähendab, et keegi, isegi mitte Omi, ei saa teie sisule juurde pääseda.",
+  "importantTradeoffs": "Olulised kompromissid:",
+  "e2eeTradeoff1": "• Mõned funktsioonid, nagu väliste rakenduste integratsioonid, võivad olla keelatud.",
+  "e2eeTradeoff2": "• Kui kaotate oma parooli, ei saa teie andmeid taastada.",
+  "featureComingSoon": "See funktsioon on peagi tulemas!",
+  "migrationInProgressMessage": "Migreerimine käimas. Te ei saa kaitsetaset muuta enne selle lõpetamist.",
+  "migrationFailed": "Migreerimine ebaõnnestus",
+  "migratingFromTo": "Migreerimine {source} kaudu {target}",
+  "objectsCount": "{processed} / {total} objekti",
+  "secureEncryption": "Turvaline krüpteerimine",
+  "secureEncryptionDescription": "Teie andmed on krüpteeritud teile ainulaadse võtmega meie serverites, mis asuvad Google Cloudis. See tähendab, et teie toorandmed pole kellelegi kättesaadavad, sealhulgas Omi töötajatele või Google'ile, otse andmebaasist.",
+  "endToEndEncryption": "Otsast otsani krüpteerimine",
+  "e2eeCardDescription": "Lubab maksimaalse turvalisuse, kus ainult teie saate oma andmetele juurde pääseda. Puudutage, et rohkem teada saada.",
+  "dataAlwaysEncrypted": "Olenemata tasemest on teie andmed alati krüpteeritud puhkeolekus ja edastamisel.",
+  "readOnlyScope": "Ainult lugemine",
+  "fullAccessScope": "Täielik juurdepääs",
+  "readScope": "Lugemine",
+  "writeScope": "Kirjutamine",
+  "apiKeyCreated": "API võti loodud!",
+  "saveKeyWarning": "Salvesta see võti kohe! Sa ei näe seda enam kunagi.",
+  "yourApiKey": "TEIE API VÕTI",
+  "tapToCopy": "Puudutage kopeerimiseks",
+  "copyKey": "Kopeeri võti",
+  "createApiKey": "Loo API võti",
+  "accessDataProgrammatically": "Pääsete oma andmetele programmiliselt juurde",
+  "keyNameLabel": "VÕTME NIMI",
+  "keyNamePlaceholder": "nt. Minu rakenduse integratsioon",
+  "permissionsLabel": "ÕIGUSED",
+  "permissionsInfoNote": "R = Lugemine, W = Kirjutamine. Vaikimisi ainult lugemine, kui midagi pole valitud.",
+  "developerApi": "Arendaja API",
+  "createAKeyToGetStarted": "Alustamiseks loo võti",
+  "errorWithMessage": "Viga: {error}",
+  "omiTraining": "Omi koolitus",
+  "trainingDataProgram": "Treeningandmete programm",
+  "getOmiUnlimitedFree": "Saage Omi Unlimited tasuta, panustades oma andmetega AI mudelite treenimisse.",
+  "trainingDataBullets": "• Teie andmed aitavad parandada AI mudeleid\n• Jagatakse ainult mittetundlikke andmeid\n• Täiesti läbipaistev protsess",
+  "learnMoreAtOmiTraining": "Lisateave omi.me/training",
+  "agreeToContributeData": "Ma mõistan ja nõustun panustama oma andmetega AI treenimisse",
+  "submitRequest": "Esita taotlus",
+  "thankYouRequestUnderReview": "Aitäh! Teie taotlus on läbivaatamisel. Teavitame teid pärast kinnitamist.",
+  "planRemainsActiveUntil": "Teie plaan jääb aktiivseks kuni {date}. Pärast seda kaotate juurdepääsu piiramatutele funktsioonidele. Kas olete kindel?",
+  "confirmCancellation": "Kinnita tühistamine",
+  "keepMyPlan": "Säilita minu plaan",
+  "subscriptionSetToCancel": "Teie tellimus on seatud tühistuma perioodi lõpus.",
+  "switchedToOnDevice": "Lülitatud seadme transkriptsioonile",
+  "couldNotSwitchToFreePlan": "Tasuta plaanile lülitumine ebaõnnestus. Palun proovi uuesti.",
+  "couldNotLoadPlans": "Saadaolevaid plaane ei õnnestunud laadida. Palun proovi uuesti.",
+  "selectedPlanNotAvailable": "Valitud plaan pole saadaval. Palun proovi uuesti.",
+  "upgradeToAnnualPlan": "Täienda aastasele plaanile",
+  "importantBillingInfo": "Oluline arvelduse teave:",
+  "monthlyPlanContinues": "Teie praegune kuuplaan jätkub kuni arveldusperioodi lõpuni",
+  "paymentMethodCharged": "Teie olemasolev makseviis debiteeritakse automaatselt, kui teie kuuplaan lõpeb",
+  "annualSubscriptionStarts": "Teie 12-kuuline aastatellimus algab automaatselt pärast makse tegemist",
+  "thirteenMonthsCoverage": "Saate kokku 13 kuud katvust (praegune kuu + 12 kuud aastas)",
+  "confirmUpgrade": "Kinnita täiendus",
+  "confirmPlanChange": "Kinnita plaani muutmine",
+  "confirmAndProceed": "Kinnita ja jätka",
+  "upgradeScheduled": "Täiendus planeeritud",
+  "changePlan": "Muuda plaani",
+  "upgradeAlreadyScheduled": "Teie täiendus aastasele plaanile on juba planeeritud",
+  "youAreOnUnlimitedPlan": "Olete Piiramatul plaanil.",
+  "yourOmiUnleashed": "Teie Omi, vabastatud. Minge piiramatu juurde lõputute võimaluste jaoks.",
+  "planEndedOn": "Teie plaan lõppes {date}.\\nTellige uuesti kohe - teilt võetakse kohe tasu uue arveldusperioodi eest.",
+  "planSetToCancelOn": "Teie plaan on seatud tühistuma {date}.\\nTellige uuesti kohe, et säilitada oma eelised - tasu ei võeta kuni {date}.",
+  "annualPlanStartsAutomatically": "Teie aastane plaan algab automaatselt, kui teie kuuplaan lõpeb.",
+  "planRenewsOn": "Teie plaan uueneb {date}.",
+  "unlimitedConversations": "Piiramatult vestlusi",
+  "askOmiAnything": "Küsige Omilt kõike oma elu kohta",
+  "unlockOmiInfiniteMemory": "Avage Omi lõpmatu mälu",
+  "youreOnAnnualPlan": "Olete aastasel plaanil",
+  "alreadyBestValuePlan": "Teil on juba parima väärtusega plaan. Muudatusi pole vaja.",
+  "unableToLoadPlans": "Plaane ei saa laadida",
+  "checkConnectionTryAgain": "Palun kontrollige ühendust ja proovige uuesti",
+  "useFreePlan": "Kasuta tasuta plaani",
+  "continueText": "Jätka",
+  "resubscribe": "Telli uuesti",
+  "couldNotOpenPaymentSettings": "Makseseadeid ei saanud avada. Palun proovi uuesti.",
+  "managePaymentMethod": "Halda makseviisi",
+  "cancelSubscription": "Tühista tellimus",
+  "endsOnDate": "Lõpeb {date}",
+  "active": "Aktiivne",
+  "freePlan": "Tasuta plaan",
+  "configure": "Seadista",
+  "privacyInformation": "Privaatsusinfo",
+  "@privacyInformation": {
+    "description": "Privacy page - privacyInformation"
+  },
+  "yourPrivacyMattersToUs": "Teie privaatsus on meile oluline",
+  "@yourPrivacyMattersToUs": {
+    "description": "Privacy page - yourPrivacyMattersToUs"
+  },
+  "privacyIntroText": "Omis võtame teie privaatsust väga tõsiselt. Tahame olla läbipaistvad andmete osas, mida kogume ja kuidas neid kasutame. Siin on see, mida peate teadma:",
+  "@privacyIntroText": {
+    "description": "Privacy page - privacyIntroText"
+  },
+  "whatWeTrack": "Mida jälgime",
+  "@whatWeTrack": {
+    "description": "Privacy page - whatWeTrack"
+  },
+  "anonymityAndPrivacy": "Anonüümsus ja privaatsus",
+  "@anonymityAndPrivacy": {
+    "description": "Privacy page - anonymityAndPrivacy"
+  },
+  "optInAndOptOutOptions": "Nõustumise ja keeldumise valikud",
+  "@optInAndOptOutOptions": {
+    "description": "Privacy page - optInAndOptOutOptions"
+  },
+  "ourCommitment": "Meie kohustus",
+  "@ourCommitment": {
+    "description": "Privacy page - ourCommitment"
+  },
+  "commitmentText": "Oleme pühendunud kasutama kogutud andmeid ainult Omi paremaks muutmiseks. Teie privaatsus ja usaldus on meile ülimalt olulised.",
+  "@commitmentText": {
+    "description": "Privacy page - commitmentText"
+  },
+  "thankYouText": "Täname, et olete Omi väärtuslik kasutaja. Kui teil on küsimusi või muresid, võtke meiega ühendust aadressil team@basedhardware.com.",
+  "@thankYouText": {
+    "description": "Privacy page - thankYouText"
+  },
+  "wifiSyncSettings": "WiFi sünkroonimise seaded",
+  "@wifiSyncSettings": {
+    "description": "WiFi sync settings - wifiSyncSettings"
+  },
+  "enterHotspotCredentials": "Sisestage oma telefoni leviala mandaadid",
+  "@enterHotspotCredentials": {
+    "description": "WiFi sync settings - enterHotspotCredentials"
+  },
+  "wifiSyncUsesHotspot": "WiFi sünkroonimine kasutab teie telefoni levialana. Leidke nimi ja parool menüüst Seaded > Isiklik leviala.",
+  "@wifiSyncUsesHotspot": {
+    "description": "WiFi sync settings - wifiSyncUsesHotspot"
+  },
+  "hotspotNameSsid": "Leviala nimi (SSID)",
+  "@hotspotNameSsid": {
+    "description": "WiFi sync settings - hotspotNameSsid"
+  },
+  "exampleIphoneHotspot": "nt iPhone Hotspot",
+  "@exampleIphoneHotspot": {
+    "description": "WiFi sync settings - exampleIphoneHotspot"
+  },
+  "password": "Parool",
+  "@password": {
+    "description": "WiFi sync settings - password"
+  },
+  "enterHotspotPassword": "Sisestage leviala parool",
+  "@enterHotspotPassword": {
+    "description": "WiFi sync settings - enterHotspotPassword"
+  },
+  "saveCredentials": "Salvesta mandaadid",
+  "@saveCredentials": {
+    "description": "WiFi sync settings - saveCredentials"
+  },
+  "clearCredentials": "Kustuta mandaadid",
+  "@clearCredentials": {
+    "description": "WiFi sync settings - clearCredentials"
+  },
+  "pleaseEnterHotspotName": "Palun sisestage leviala nimi",
+  "@pleaseEnterHotspotName": {
+    "description": "WiFi sync settings - pleaseEnterHotspotName"
+  },
+  "wifiCredentialsSaved": "WiFi mandaadid salvestatud",
+  "@wifiCredentialsSaved": {
+    "description": "WiFi sync settings - wifiCredentialsSaved"
+  },
+  "wifiCredentialsCleared": "WiFi mandaadid kustutatud",
+  "@wifiCredentialsCleared": {
+    "description": "WiFi sync settings - wifiCredentialsCleared"
+  },
+  "summaryGeneratedForDate": "Kokkuvõte loodud kuupäevaks {date}",
+  "@summaryGeneratedForDate": {
+    "description": "Daily summary settings - summaryGeneratedForDate",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "1/15/2026"
+      }
+    }
+  },
+  "failedToGenerateSummaryCheckConversations": "Kokkuvõtte loomine ebaõnnestus. Veenduge, et teil on selle päeva vestlusi.",
+  "@failedToGenerateSummaryCheckConversations": {
+    "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Kokkuvõtet ei leitud",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "Teie päeva teekond",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "Esiletõstetud",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Lahendamata küsimused",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Otsused",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Õpitu",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
+  },
+  "autoDeletesAfterThreeDays": "Kustutatakse automaatselt 3 päeva pärast.",
+  "@autoDeletesAfterThreeDays": {
+    "description": "Developer settings - autoDeletesAfterThreeDays"
+  },
+  "knowledgeGraphDeletedSuccessfully": "Teadmusgraaf edukalt kustutatud",
+  "@knowledgeGraphDeletedSuccessfully": {
+    "description": "Developer settings - knowledgeGraphDeletedSuccessfully"
+  },
+  "exportStartedMayTakeFewSeconds": "Eksport alustatud. See võib võtta mõne sekundi...",
+  "@exportStartedMayTakeFewSeconds": {
+    "description": "Developer settings - exportStartedMayTakeFewSeconds"
+  },
+  "knowledgeGraphDeleteDescription": "See kustutab kõik tuletatud teadmusgraafi andmed (sõlmed ja ühendused). Teie algsed mälestused jäävad turvaliseks. Graaf ehitatakse aja jooksul või järgmise päringu korral uuesti üles.",
+  "@knowledgeGraphDeleteDescription": {
+    "description": "Developer settings - knowledgeGraphDeleteDescription"
+  },
+  "configureDailySummaryDigest": "Seadista oma igapäevane ülesannete kokkuvõte",
+  "accessesDataTypes": "Juurdepääs: {dataTypes}",
+  "triggeredByType": "käivitab {triggerType}",
+  "accessesAndTriggeredBy": "{accessDescription} ja on {triggerDescription}.",
+  "isTriggeredBy": "On {triggerDescription}.",
+  "noSpecificDataAccessConfigured": "Konkreetset andmetele juurdepääsu pole seadistatud."
 }

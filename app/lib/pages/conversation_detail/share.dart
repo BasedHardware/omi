@@ -172,7 +172,7 @@ void showShareBottomSheet(
                 if (currentView == BottomSheetView.share) ...[
                   ListTile(
                     title: Text(
-                      conversation.discarded ? 'Discarded Conversation' : conversation.structured.title,
+                      conversation.discarded ? context.l10n.discardedConversation : conversation.structured.title,
                       style: Theme.of(context).textTheme.labelLarge,
                     ),
                     leading: const Icon(Icons.description),
@@ -188,7 +188,7 @@ void showShareBottomSheet(
                       children: [
                         _buildListTile(
                           context,
-                          title: 'Copy URL',
+                          title: context.l10n.copyUrl,
                           icon: Icons.link,
                           onTap: () async {
                             // TODO: include loading indicator
@@ -217,7 +217,7 @@ void showShareBottomSheet(
                       children: [
                         _buildListTile(
                           context,
-                          title: 'Copy Transcript',
+                          title: context.l10n.copyTranscript,
                           icon: Icons.copy,
                           onTap: () => {Navigator.pop(ctx), _copyTranscript(context, conversation)},
                         ),
@@ -225,7 +225,7 @@ void showShareBottomSheet(
                             ? const SizedBox.shrink()
                             : _buildListTile(
                                 context,
-                                title: 'Copy Summary',
+                                title: context.l10n.copySummary,
                                 icon: Icons.file_copy,
                                 onTap: () => {Navigator.pop(ctx), _copySummary(context, conversation)},
                               ),
@@ -279,7 +279,7 @@ void showShareBottomSheet(
                       children: [
                         ListTile(
                           leading: const Icon(Icons.text_snippet),
-                          title: const Text('TXT'),
+                          title: Text(context.l10n.txtFormat),
                           trailing: SizedBox(
                               width: 60,
                               child: exportType == ExportType.txt ? const Icon(Icons.check_outlined) : Container()),
@@ -345,7 +345,7 @@ void showShareBottomSheet(
                       children: [
                         ListTile(
                           leading: const Icon(Icons.text_snippet),
-                          title: const Text('TXT'),
+                          title: Text(context.l10n.txtFormat),
                           onTap: () => setExportType(ExportType.txt),
                           trailing: SizedBox(
                             width: 60,
@@ -364,7 +364,7 @@ void showShareBottomSheet(
                         // ),
                         ListTile(
                           leading: const Icon(Icons.picture_as_pdf),
-                          title: const Text('PDF'),
+                          title: Text(context.l10n.pdfFormat),
                           onTap: () => setExportType(ExportType.pdf),
                           trailing: SizedBox(
                             width: 60,

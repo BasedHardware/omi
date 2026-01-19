@@ -224,7 +224,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get noConversationsYet => 'Nog geen gesprekken';
 
   @override
-  String get noStarredConversations => 'Nog geen favoriete gesprekken.';
+  String get noStarredConversations => 'Geen gesprekken met ster';
 
   @override
   String get starConversationHint =>
@@ -262,16 +262,16 @@ class AppLocalizationsNl extends AppLocalizations {
   String get noMessagesYet => 'Nog geen berichten!\nWaarom begin je geen gesprek?';
 
   @override
-  String get deletingMessages => 'Je berichten verwijderen uit Omi\'s geheugen...';
+  String get deletingMessages => 'Uw berichten verwijderen uit het geheugen van Omi...';
 
   @override
-  String get messageCopied => 'Bericht gekopieerd naar klembord.';
+  String get messageCopied => '✨ Bericht gekopieerd naar klembord';
 
   @override
   String get cannotReportOwnMessage => 'Je kunt je eigen berichten niet rapporteren.';
 
   @override
-  String get reportMessage => 'Bericht rapporteren';
+  String get reportMessage => 'Bericht melden';
 
   @override
   String get reportMessageConfirm => 'Weet je zeker dat je dit bericht wilt rapporteren?';
@@ -330,7 +330,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get privacyPolicy => 'Privacybeleid';
 
   @override
-  String get visitWebsite => 'Website bezoeken';
+  String get visitWebsite => 'Bezoek website';
 
   @override
   String get helpOrInquiries => 'Hulp of vragen?';
@@ -339,7 +339,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get joinCommunity => 'Word lid van de community!';
 
   @override
-  String get membersAndCounting => '8000+ leden en groeiende.';
+  String get membersAndCounting => '8000+ leden en groeiend.';
 
   @override
   String get deleteAccountTitle => 'Account verwijderen';
@@ -391,10 +391,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String get email => 'E-mail';
 
   @override
-  String get customVocabulary => 'Aangepaste woordenlijst';
+  String get customVocabulary => 'Aangepaste Woordenschat';
 
   @override
-  String get identifyingOthers => 'Anderen identificeren';
+  String get identifyingOthers => 'Identificatie van Anderen';
 
   @override
   String get paymentMethods => 'Betaalmethoden';
@@ -403,7 +403,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get conversationDisplay => 'Gespreksweergave';
 
   @override
-  String get dataPrivacy => 'Gegevens en privacy';
+  String get dataPrivacy => 'Gegevensprivacy';
 
   @override
   String get userId => 'Gebruikers-ID';
@@ -665,7 +665,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get debugDiagnostics => 'Debug en diagnostiek';
 
   @override
-  String get endpointUrl => 'Endpoint-URL';
+  String get endpointUrl => 'Eindpunt-URL';
 
   @override
   String get noApiKeys => 'Nog geen API-sleutels';
@@ -674,7 +674,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get createKeyToStart => 'Maak een sleutel aan om te beginnen';
 
   @override
-  String get createKey => 'Sleutel aanmaken';
+  String get createKey => 'Sleutel Maken';
 
   @override
   String get docs => 'Documentatie';
@@ -795,7 +795,7 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String get debugLogs => 'Debug-logboeken';
+  String get debugLogs => 'Debuglogboeken';
 
   @override
   String get debugLogsAutoDelete => 'Automatisch verwijderd na 3 dagen.';
@@ -844,7 +844,7 @@ class AppLocalizationsNl extends AppLocalizations {
       'Dit verwijdert alle afgeleide kennisgraafgegevens (knooppunten en verbindingen). Je originele herinneringen blijven veilig. De graaf wordt na verloop van tijd of bij het volgende verzoek opnieuw opgebouwd.';
 
   @override
-  String get knowledgeGraphDeleted => 'Kennisgraaf succesvol verwijderd';
+  String get knowledgeGraphDeleted => 'Kennisgraaf verwijderd';
 
   @override
   String deleteGraphFailed(String error) {
@@ -903,7 +903,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get newConversationCreated => 'Nieuw gesprek aangemaakt';
 
   @override
-  String get realtimeTranscript => 'Realtime transcript';
+  String get realtimeTranscript => 'Realtime transcriptie';
 
   @override
   String get transcriptReceived => 'Transcript ontvangen';
@@ -1156,7 +1156,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get howShouldOmiCallYou => 'Hoe moet Omi je noemen?';
 
   @override
-  String get enterYourName => 'Voer je naam in';
+  String get enterYourName => 'Voer uw naam in';
 
   @override
   String get nameCannotBeEmpty => 'Naam mag niet leeg zijn';
@@ -1879,7 +1879,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get wantDifferentName => 'Wil je een andere naam gebruiken?';
 
   @override
-  String get whatsYourName => 'Hoe heet je?';
+  String get whatsYourName => 'Wat is je naam?';
 
   @override
   String get speakTranscribeSummarize => 'Spreek. Transcribeer. Vat samen.';
@@ -1960,7 +1960,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get selectYourLanguage => 'Selecteer je taal';
 
   @override
-  String get personalGrowthJourney => 'Je persoonlijke groeireis met AI die naar elk woord luistert.';
+  String get personalGrowthJourney => 'Jouw persoonlijke groeireis met AI die naar elk woord luistert.';
 
   @override
   String get actionItemsTitle => 'Taken';
@@ -2053,9 +2053,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get deleteSelected => 'Geselecteerde verwijderen';
 
   @override
-  String searchMemories(int count) {
-    return 'Zoek in $count herinneringen';
-  }
+  String get searchMemories => 'Herinneringen zoeken...';
 
   @override
   String get memoryDeleted => 'Herinnering verwijderd.';
@@ -2064,7 +2062,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get undo => 'Ongedaan maken';
 
   @override
-  String get noMemoriesYet => 'Nog geen herinneringen';
+  String get noMemoriesYet => '🧠 Nog geen herinneringen';
 
   @override
   String get noAutoMemories => 'Nog geen automatisch geëxtraheerde herinneringen';
@@ -2076,7 +2074,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get noMemoriesInCategories => 'Geen herinneringen in deze categorieën';
 
   @override
-  String get noMemoriesFound => 'Geen herinneringen gevonden';
+  String get noMemoriesFound => '🔍 Geen herinneringen gevonden';
 
   @override
   String get addFirstMemory => 'Voeg je eerste herinnering toe';
@@ -2136,10 +2134,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String get allMemoriesPublicResult => 'Alle herinneringen zijn nu openbaar';
 
   @override
-  String get newMemory => 'Nieuwe herinnering';
+  String get newMemory => '✨ Nieuw geheugen';
 
   @override
-  String get editMemory => 'Herinnering bewerken';
+  String get editMemory => '✏️ Geheugen bewerken';
 
   @override
   String get memoryContentHint => 'Ik hou van ijs eten...';
@@ -2321,7 +2319,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get conversationNotFoundOrDeleted => 'Gesprek niet gevonden of is verwijderd';
 
   @override
-  String get deleteMemory => 'Herinnering verwijderen?';
+  String get deleteMemory => 'Geheugen verwijderen';
 
   @override
   String get thisActionCannotBeUndone => 'Deze actie kan niet ongedaan worden gemaakt.';
@@ -2335,7 +2333,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get noMemoriesInCategory => 'Nog geen herinneringen in deze categorie';
 
   @override
-  String get addYourFirstMemory => 'Voeg uw eerste herinnering toe';
+  String get addYourFirstMemory => 'Voeg je eerste herinnering toe';
 
   @override
   String get firmwareDisconnectUsb => 'USB ontkoppelen';
@@ -2429,7 +2427,7 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String get noApiKeysYet => 'No API keys yet';
+  String get noApiKeysYet => 'Nog geen API-sleutels. Maak er een aan om te integreren met uw app.';
 
   @override
   String get createKeyToGetStarted => 'Create a key to get started';
@@ -2453,10 +2451,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String get debugAndDiagnostics => 'Debug & Diagnostics';
 
   @override
-  String get autoDeletesAfter3Days => 'Auto-deletes after 3 days.';
+  String get autoDeletesAfter3Days => 'Wordt automatisch verwijderd na 3 dagen';
 
   @override
-  String get helpsDiagnoseIssues => 'Helps diagnose issues';
+  String get helpsDiagnoseIssues => 'Helpt problemen diagnosticeren';
 
   @override
   String get exportStartedMessage => 'Export started. This may take a few seconds...';
@@ -2485,37 +2483,37 @@ class AppLocalizationsNl extends AppLocalizations {
   String get useYourMcpApiKey => 'Use your MCP API key';
 
   @override
-  String get realTimeTranscript => 'Real-time Transcript';
+  String get realTimeTranscript => 'Realtime transcriptie';
 
   @override
-  String get experimental => 'Experimental';
+  String get experimental => 'Experimenteel';
 
   @override
-  String get transcriptionDiagnostics => 'Transcription Diagnostics';
+  String get transcriptionDiagnostics => 'Transcriptie-diagnostics';
 
   @override
-  String get detailedDiagnosticMessages => 'Detailed diagnostic messages';
+  String get detailedDiagnosticMessages => 'Gedetailleerde diagnostische berichten';
 
   @override
-  String get autoCreateSpeakers => 'Auto-create Speakers';
+  String get autoCreateSpeakers => 'Sprekers automatisch aanmaken';
 
   @override
   String get autoCreateWhenNameDetected => 'Auto-create when name detected';
 
   @override
-  String get followUpQuestions => 'Follow-up Questions';
+  String get followUpQuestions => 'Vervolgvragen';
 
   @override
-  String get suggestQuestionsAfterConversations => 'Suggest questions after conversations';
+  String get suggestQuestionsAfterConversations => 'Vragen voorstellen na gesprekken';
 
   @override
-  String get goalTracker => 'Goal Tracker';
+  String get goalTracker => 'Doel-tracker';
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Track your personal goals on homepage';
 
   @override
-  String get dailyReflection => 'Daily Reflection';
+  String get dailyReflection => 'Dagelijkse reflectie';
 
   @override
   String get get9PmReminderToReflect => 'Get a 9 PM reminder to reflect on your day';
@@ -2656,7 +2654,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get tapToAddGoal => 'Tik om een doel toe te voegen';
 
   @override
-  String get welcomeBack => 'Welkom terug';
+  String welcomeBack(String name) {
+    return 'Welkom terug, $name';
+  }
 
   @override
   String get yourConversations => 'Je gesprekken';
@@ -2802,7 +2802,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get browseInstallCreateApps => 'Blader, installeer en maak apps';
 
   @override
-  String get all => 'Alle';
+  String get all => 'Alles';
 
   @override
   String get open => 'Openen';
@@ -2907,4 +2907,1872 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get connectNow => 'Nu verbinden';
+
+  @override
+  String installsCount(String count) {
+    return '$count+ installaties';
+  }
+
+  @override
+  String get uninstallApp => 'App verwijderen';
+
+  @override
+  String get subscribe => 'Abonneren';
+
+  @override
+  String get dataAccessNotice => 'Melding gegevenstoegang';
+
+  @override
+  String get dataAccessWarning =>
+      'Deze app heeft toegang tot uw gegevens. Omi AI is niet verantwoordelijk voor hoe uw gegevens worden gebruikt, gewijzigd of verwijderd door deze app';
+
+  @override
+  String get installApp => 'App installeren';
+
+  @override
+  String get betaTesterNotice =>
+      'U bent een bètatester voor deze app. Het is nog niet openbaar. Het wordt openbaar zodra het is goedgekeurd.';
+
+  @override
+  String get appUnderReviewOwner =>
+      'Uw app wordt beoordeeld en is alleen zichtbaar voor u. Het wordt openbaar zodra het is goedgekeurd.';
+
+  @override
+  String get appRejectedNotice =>
+      'Uw app is afgewezen. Werk de app-details bij en dien deze opnieuw in ter beoordeling.';
+
+  @override
+  String get setupSteps => 'Installatiestappen';
+
+  @override
+  String get setupInstructions => 'Installatie-instructies';
+
+  @override
+  String get integrationInstructions => 'Integratie-instructies';
+
+  @override
+  String get preview => 'Voorbeeld';
+
+  @override
+  String get aboutTheApp => 'Over de app';
+
+  @override
+  String get aboutThePersona => 'Over de persona';
+
+  @override
+  String get chatPersonality => 'Chatpersoonlijkheid';
+
+  @override
+  String get ratingsAndReviews => 'Beoordelingen en recensies';
+
+  @override
+  String get noRatings => 'geen beoordelingen';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+ beoordelingen';
+  }
+
+  @override
+  String get errorActivatingApp => 'Fout bij activeren van de app';
+
+  @override
+  String get integrationSetupRequired =>
+      'Als dit een integratie-app is, zorg er dan voor dat de installatie is voltooid.';
+
+  @override
+  String get installed => 'Geïnstalleerd';
+
+  @override
+  String get appIdLabel => 'App-ID';
+
+  @override
+  String get appNameLabel => 'App-naam';
+
+  @override
+  String get appNamePlaceholder => 'Mijn geweldige app';
+
+  @override
+  String get pleaseEnterAppName => 'Voer de app-naam in';
+
+  @override
+  String get categoryLabel => 'Categorie';
+
+  @override
+  String get selectCategory => 'Selecteer categorie';
+
+  @override
+  String get descriptionLabel => 'Beschrijving';
+
+  @override
+  String get appDescriptionPlaceholder =>
+      'Mijn geweldige app is een geweldige app die geweldige dingen doet. Het is de beste app ooit!';
+
+  @override
+  String get pleaseProvideValidDescription => 'Geef een geldige beschrijving op';
+
+  @override
+  String get appPricingLabel => 'App-prijzen';
+
+  @override
+  String get noneSelected => 'Geen geselecteerd';
+
+  @override
+  String get appIdCopiedToClipboard => 'App-ID gekopieerd naar klembord';
+
+  @override
+  String get appCategoryModalTitle => 'App-categorie';
+
+  @override
+  String get pricingFree => 'Gratis';
+
+  @override
+  String get pricingPaid => 'Betaald';
+
+  @override
+  String get loadingCapabilities => 'Functies laden...';
+
+  @override
+  String get filterInstalled => 'Geïnstalleerd';
+
+  @override
+  String get filterMyApps => 'Mijn apps';
+
+  @override
+  String get clearSelection => 'Selectie wissen';
+
+  @override
+  String get filterCategory => 'Categorie';
+
+  @override
+  String get rating4PlusStars => '4+ sterren';
+
+  @override
+  String get rating3PlusStars => '3+ sterren';
+
+  @override
+  String get rating2PlusStars => '2+ sterren';
+
+  @override
+  String get rating1PlusStars => '1+ ster';
+
+  @override
+  String get filterRating => 'Beoordeling';
+
+  @override
+  String get filterCapabilities => 'Functies';
+
+  @override
+  String get noNotificationScopesAvailable => 'Geen meldingsbereiken beschikbaar';
+
+  @override
+  String get popularApps => 'Populaire apps';
+
+  @override
+  String get pleaseProvidePrompt => 'Geef een prompt op';
+
+  @override
+  String chatWithAppName(String appName) {
+    return 'Chat met $appName';
+  }
+
+  @override
+  String get defaultAiAssistant => 'Standaard AI-assistent';
+
+  @override
+  String get readyToChat => '✨ Klaar om te chatten!';
+
+  @override
+  String get connectionNeeded => '🌐 Verbinding nodig';
+
+  @override
+  String get startConversation => 'Begin een gesprek en laat de magie beginnen';
+
+  @override
+  String get checkInternetConnection => 'Controleer uw internetverbinding';
+
+  @override
+  String get wasThisHelpful => 'Was dit nuttig?';
+
+  @override
+  String get thankYouForFeedback => 'Bedankt voor uw feedback!';
+
+  @override
+  String get maxFilesUploadError => 'U kunt slechts 4 bestanden tegelijk uploaden';
+
+  @override
+  String get attachedFiles => '📎 Bijgevoegde bestanden';
+
+  @override
+  String get takePhoto => 'Maak een foto';
+
+  @override
+  String get captureWithCamera => 'Opnemen met camera';
+
+  @override
+  String get selectImages => 'Selecteer afbeeldingen';
+
+  @override
+  String get chooseFromGallery => 'Kies uit galerij';
+
+  @override
+  String get selectFile => 'Selecteer een bestand';
+
+  @override
+  String get chooseAnyFileType => 'Kies elk bestandstype';
+
+  @override
+  String get cannotReportOwnMessages => 'U kunt uw eigen berichten niet melden';
+
+  @override
+  String get messageReportedSuccessfully => '✅ Bericht succesvol gemeld';
+
+  @override
+  String get confirmReportMessage => 'Weet u zeker dat u dit bericht wilt melden?';
+
+  @override
+  String get selectChatAssistant => 'Selecteer chat-assistent';
+
+  @override
+  String get enableMoreApps => 'Meer apps inschakelen';
+
+  @override
+  String get chatCleared => 'Chat gewist';
+
+  @override
+  String get clearChatTitle => 'Chat wissen?';
+
+  @override
+  String get confirmClearChat => 'Weet u zeker dat u de chat wilt wissen? Deze actie kan niet ongedaan worden gemaakt.';
+
+  @override
+  String get copy => 'Kopiëren';
+
+  @override
+  String get share => 'Delen';
+
+  @override
+  String get report => 'Melden';
+
+  @override
+  String get microphonePermissionRequired => 'Microfoontoegang is vereist voor spraakopname.';
+
+  @override
+  String get microphonePermissionDenied =>
+      'Microfoontoegang geweigerd. Verleen toestemming in Systeemvoorkeuren > Privacy & beveiliging > Microfoon.';
+
+  @override
+  String failedToCheckMicrophonePermission(String error) {
+    return 'Controleren microfoontoegang mislukt: $error';
+  }
+
+  @override
+  String get failedToTranscribeAudio => 'Audio transcriberen mislukt';
+
+  @override
+  String get transcribing => 'Transcriberen...';
+
+  @override
+  String get transcriptionFailed => 'Transcriptie mislukt';
+
+  @override
+  String get discardedConversation => 'Verworpen gesprek';
+
+  @override
+  String get at => 'om';
+
+  @override
+  String get from => 'van';
+
+  @override
+  String get copied => 'Gekopieerd!';
+
+  @override
+  String get copyLink => 'Link kopiëren';
+
+  @override
+  String get hideTranscript => 'Transcript verbergen';
+
+  @override
+  String get viewTranscript => 'Transcript bekijken';
+
+  @override
+  String get conversationDetails => 'Gespreksdetails';
+
+  @override
+  String get transcript => 'Transcript';
+
+  @override
+  String segmentsCount(int count) {
+    return '$count segmenten';
+  }
+
+  @override
+  String get noTranscriptAvailable => 'Geen transcript beschikbaar';
+
+  @override
+  String get noTranscriptMessage => 'Dit gesprek heeft geen transcript.';
+
+  @override
+  String get conversationUrlCouldNotBeGenerated => 'Gesprek-URL kon niet worden gegenereerd.';
+
+  @override
+  String get failedToGenerateConversationLink => 'Kan geen gesprekslink genereren';
+
+  @override
+  String get failedToGenerateShareLink => 'Kan geen deellink genereren';
+
+  @override
+  String get reloadingConversations => 'Gesprekken opnieuw laden...';
+
+  @override
+  String get user => 'Gebruiker';
+
+  @override
+  String get starred => 'Met ster';
+
+  @override
+  String get date => 'Datum';
+
+  @override
+  String get noResultsFound => 'Geen resultaten gevonden';
+
+  @override
+  String get tryAdjustingSearchTerms => 'Probeer je zoektermen aan te passen';
+
+  @override
+  String get starConversationsToFindQuickly => 'Geef gesprekken een ster om ze hier snel te vinden';
+
+  @override
+  String noConversationsOnDate(String date) {
+    return 'Geen gesprekken op $date';
+  }
+
+  @override
+  String get trySelectingDifferentDate => 'Probeer een andere datum te selecteren';
+
+  @override
+  String get conversations => 'Gesprekken';
+
+  @override
+  String get chat => 'Chat';
+
+  @override
+  String get actions => 'Acties';
+
+  @override
+  String get syncAvailable => 'Synchronisatie beschikbaar';
+
+  @override
+  String get referAFriend => 'Verwijs een vriend';
+
+  @override
+  String get help => 'Hulp';
+
+  @override
+  String get pro => 'Pro';
+
+  @override
+  String get upgradeToPro => 'Upgraden naar Pro';
+
+  @override
+  String get getOmiDevice => 'Ontvang Omi-apparaat';
+
+  @override
+  String get wearableAiCompanion => 'Draagbare AI-metgezel';
+
+  @override
+  String get loadingMemories => 'Herinneringen laden...';
+
+  @override
+  String get allMemories => 'Alle herinneringen';
+
+  @override
+  String get aboutYou => 'Over jou';
+
+  @override
+  String get manual => 'Handmatig';
+
+  @override
+  String get loadingYourMemories => 'Je herinneringen laden...';
+
+  @override
+  String get createYourFirstMemory => 'Maak je eerste herinnering om te beginnen';
+
+  @override
+  String get tryAdjustingFilter => 'Probeer je zoekopdracht of filter aan te passen';
+
+  @override
+  String get whatWouldYouLikeToRemember => 'Wat wil je onthouden?';
+
+  @override
+  String get category => 'Categorie';
+
+  @override
+  String get public => 'Openbaar';
+
+  @override
+  String get failedToSaveCheckConnection => 'Opslaan mislukt. Controleer je verbinding.';
+
+  @override
+  String get createMemory => 'Geheugen maken';
+
+  @override
+  String get deleteMemoryConfirmation =>
+      'Weet je zeker dat je dit geheugen wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.';
+
+  @override
+  String get makePrivate => 'Privé maken';
+
+  @override
+  String get organizeAndControlMemories => 'Organiseer en beheer je herinneringen';
+
+  @override
+  String get total => 'Totaal';
+
+  @override
+  String get makeAllMemoriesPrivate => 'Alle herinneringen privé maken';
+
+  @override
+  String get setAllMemoriesToPrivate => 'Alle herinneringen op privé zetten';
+
+  @override
+  String get makeAllMemoriesPublic => 'Alle herinneringen openbaar maken';
+
+  @override
+  String get setAllMemoriesToPublic => 'Alle herinneringen op openbaar zetten';
+
+  @override
+  String get permanentlyRemoveAllMemories => 'Alle herinneringen permanent verwijderen uit Omi';
+
+  @override
+  String get allMemoriesAreNowPrivate => 'Alle herinneringen zijn nu privé';
+
+  @override
+  String get allMemoriesAreNowPublic => 'Alle herinneringen zijn nu openbaar';
+
+  @override
+  String get clearOmisMemory => 'Omi\'s geheugen wissen';
+
+  @override
+  String clearMemoryConfirmation(int count) {
+    return 'Weet je zeker dat je Omi\'s geheugen wilt wissen? Deze actie kan niet ongedaan worden gemaakt en zal alle $count herinneringen permanent verwijderen.';
+  }
+
+  @override
+  String get omisMemoryCleared => 'Omi\'s geheugen over jou is gewist';
+
+  @override
+  String get welcomeToOmi => 'Welkom bij Omi';
+
+  @override
+  String get continueWithApple => 'Doorgaan met Apple';
+
+  @override
+  String get continueWithGoogle => 'Doorgaan met Google';
+
+  @override
+  String get byContinuingYouAgree => 'Door door te gaan, ga je akkoord met onze ';
+
+  @override
+  String get termsOfService => 'Servicevoorwaarden';
+
+  @override
+  String get and => ' en ';
+
+  @override
+  String get dataAndPrivacy => 'Data en privacy';
+
+  @override
+  String get secureAuthViaAppleId => 'Veilige authenticatie via Apple ID';
+
+  @override
+  String get secureAuthViaGoogleAccount => 'Veilige authenticatie via Google-account';
+
+  @override
+  String get whatWeCollect => 'Wat we verzamelen';
+
+  @override
+  String get dataCollectionMessage =>
+      'Door door te gaan, worden je gesprekken, opnames en persoonlijke informatie veilig opgeslagen op onze servers om AI-gedreven inzichten te bieden en alle app-functies mogelijk te maken.';
+
+  @override
+  String get dataProtection => 'Gegevensbescherming';
+
+  @override
+  String get yourDataIsProtected => 'Je gegevens zijn beschermd en worden beheerst door ons ';
+
+  @override
+  String get pleaseSelectYourPrimaryLanguage => 'Selecteer uw primaire taal';
+
+  @override
+  String get chooseYourLanguage => 'Kies uw taal';
+
+  @override
+  String get selectPreferredLanguageForBestExperience => 'Selecteer uw voorkeurstaal voor de beste Omi-ervaring';
+
+  @override
+  String get searchLanguages => 'Zoek talen...';
+
+  @override
+  String get selectALanguage => 'Selecteer een taal';
+
+  @override
+  String get tryDifferentSearchTerm => 'Probeer een andere zoekterm';
+
+  @override
+  String get pleaseEnterYourName => 'Voer uw naam in';
+
+  @override
+  String get nameMustBeAtLeast2Characters => 'Naam moet minstens 2 tekens bevatten';
+
+  @override
+  String get tellUsHowYouWouldLikeToBeAddressed =>
+      'Vertel ons hoe u aangesproken wilt worden. Dit helpt uw Omi-ervaring te personaliseren.';
+
+  @override
+  String charactersCount(int count) {
+    return '$count tekens';
+  }
+
+  @override
+  String get enableFeaturesForBestExperience => 'Schakel functies in voor de beste Omi-ervaring op uw apparaat.';
+
+  @override
+  String get microphoneAccess => 'Microfoontoegang';
+
+  @override
+  String get recordAudioConversations => 'Audiogesprekken opnemen';
+
+  @override
+  String get microphoneAccessDescription =>
+      'Omi heeft microfoontoegang nodig om uw gesprekken op te nemen en transcripties te leveren.';
+
+  @override
+  String get screenRecording => 'Schermopname';
+
+  @override
+  String get captureSystemAudioFromMeetings => 'Systeemaudio van vergaderingen vastleggen';
+
+  @override
+  String get screenRecordingDescription =>
+      'Omi heeft toestemming voor schermopname nodig om systeemaudio van uw browsergebaseerde vergaderingen vast te leggen.';
+
+  @override
+  String get accessibility => 'Toegankelijkheid';
+
+  @override
+  String get detectBrowserBasedMeetings => 'Browsergebaseerde vergaderingen detecteren';
+
+  @override
+  String get accessibilityDescription =>
+      'Omi heeft toegankelijkheidstoestemming nodig om te detecteren wanneer u deelneemt aan Zoom-, Meet- of Teams-vergaderingen in uw browser.';
+
+  @override
+  String get pleaseWait => 'Even geduld...';
+
+  @override
+  String get joinTheCommunity => 'Word lid van de community!';
+
+  @override
+  String get loadingProfile => 'Profiel laden...';
+
+  @override
+  String get profileSettings => 'Profielinstellingen';
+
+  @override
+  String get noEmailSet => 'Geen e-mail ingesteld';
+
+  @override
+  String get userIdCopiedToClipboard => 'Gebruikers-ID gekopieerd';
+
+  @override
+  String get yourInformation => 'Uw Informatie';
+
+  @override
+  String get setYourName => 'Stel uw naam in';
+
+  @override
+  String get changeYourName => 'Wijzig uw naam';
+
+  @override
+  String get manageYourOmiPersona => 'Beheer uw Omi-persona';
+
+  @override
+  String get voiceAndPeople => 'Stem & Mensen';
+
+  @override
+  String get teachOmiYourVoice => 'Leer Omi uw stem';
+
+  @override
+  String get tellOmiWhoSaidIt => 'Vertel Omi wie het zei 🗣️';
+
+  @override
+  String get payment => 'Betaling';
+
+  @override
+  String get addOrChangeYourPaymentMethod => 'Betalingsmethode toevoegen of wijzigen';
+
+  @override
+  String get preferences => 'Voorkeuren';
+
+  @override
+  String get helpImproveOmiBySharing => 'Help Omi te verbeteren door geanonimiseerde analysegegevens te delen';
+
+  @override
+  String get deleteAccount => 'Account Verwijderen';
+
+  @override
+  String get deleteYourAccountAndAllData => 'Verwijder uw account en alle gegevens';
+
+  @override
+  String get clearLogs => 'Logboeken wissen';
+
+  @override
+  String get debugLogsCleared => 'Debuglogboeken gewist';
+
+  @override
+  String get exportConversations => 'Gesprekken exporteren';
+
+  @override
+  String get exportAllConversationsToJson => 'Exporteer al uw gesprekken naar een JSON-bestand.';
+
+  @override
+  String get conversationsExportStarted => 'Export van gesprekken gestart. Dit kan enkele seconden duren, even geduld.';
+
+  @override
+  String get mcpDescription =>
+      'Om Omi te verbinden met andere applicaties om uw herinneringen en gesprekken te lezen, te zoeken en te beheren. Maak een sleutel om te beginnen.';
+
+  @override
+  String get apiKeys => 'API-sleutels';
+
+  @override
+  String errorLabel(String error) {
+    return 'Fout: $error';
+  }
+
+  @override
+  String get noApiKeysFound => 'Geen API-sleutels gevonden. Maak er een om te beginnen.';
+
+  @override
+  String get advancedSettings => 'Geavanceerde instellingen';
+
+  @override
+  String get triggersWhenNewConversationCreated => 'Wordt geactiveerd wanneer een nieuw gesprek wordt aangemaakt.';
+
+  @override
+  String get triggersWhenNewTranscriptReceived => 'Wordt geactiveerd wanneer een nieuwe transcriptie wordt ontvangen.';
+
+  @override
+  String get realtimeAudioBytes => 'Realtime audiobytes';
+
+  @override
+  String get triggersWhenAudioBytesReceived => 'Wordt geactiveerd wanneer audiobytes worden ontvangen.';
+
+  @override
+  String get everyXSeconds => 'Elke x seconden';
+
+  @override
+  String get triggersWhenDaySummaryGenerated => 'Wordt geactiveerd wanneer de dagsamenvatting wordt gegenereerd.';
+
+  @override
+  String get tryLatestExperimentalFeatures => 'Probeer de nieuwste experimentele functies van het Omi-team.';
+
+  @override
+  String get transcriptionServiceDiagnosticStatus => 'Diagnostische status van transcriptieservice';
+
+  @override
+  String get enableDetailedDiagnosticMessages =>
+      'Gedetailleerde diagnostische berichten van de transcriptieservice inschakelen';
+
+  @override
+  String get autoCreateAndTagNewSpeakers => 'Nieuwe sprekers automatisch aanmaken en taggen';
+
+  @override
+  String get automaticallyCreateNewPerson =>
+      'Maak automatisch een nieuwe persoon aan wanneer een naam wordt gedetecteerd in de transcriptie.';
+
+  @override
+  String get pilotFeatures => 'Pilotfuncties';
+
+  @override
+  String get pilotFeaturesDescription => 'Deze functies zijn tests en er wordt geen ondersteuning gegarandeerd.';
+
+  @override
+  String get suggestFollowUpQuestion => 'Vervolgvraag voorstellen';
+
+  @override
+  String get saveSettings => 'Instellingen Opslaan';
+
+  @override
+  String get syncingDeveloperSettings => 'Ontwikkelaarsinstellingen synchroniseren...';
+
+  @override
+  String get summary => 'Samenvatting';
+
+  @override
+  String get auto => 'Automatisch';
+
+  @override
+  String get noSummaryForApp =>
+      'Geen samenvatting beschikbaar voor deze app. Probeer een andere app voor betere resultaten.';
+
+  @override
+  String get tryAnotherApp => 'Probeer een andere app';
+
+  @override
+  String generatedBy(String appName) {
+    return 'Gegenereerd door $appName';
+  }
+
+  @override
+  String get overview => 'Overzicht';
+
+  @override
+  String get otherAppResults => 'Resultaten van andere apps';
+
+  @override
+  String get unknownApp => 'Onbekende app';
+
+  @override
+  String get noSummaryAvailable => 'Geen samenvatting beschikbaar';
+
+  @override
+  String get conversationNoSummaryYet => 'Dit gesprek heeft nog geen samenvatting.';
+
+  @override
+  String get chooseSummarizationApp => 'Kies samenvattingsapp';
+
+  @override
+  String setAsDefaultSummarizationApp(String appName) {
+    return '$appName ingesteld als standaard samenvattingsapp';
+  }
+
+  @override
+  String get letOmiChooseAutomatically => 'Laat Omi automatisch de beste app kiezen';
+
+  @override
+  String get deleteConversationConfirmation =>
+      'Weet u zeker dat u dit gesprek wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.';
+
+  @override
+  String get conversationDeleted => 'Gesprek verwijderd';
+
+  @override
+  String get generatingLink => 'Link wordt gegenereerd...';
+
+  @override
+  String get editConversation => 'Gesprek bewerken';
+
+  @override
+  String get conversationLinkCopiedToClipboard => 'Gesprekslink gekopieerd naar klembord';
+
+  @override
+  String get conversationTranscriptCopiedToClipboard => 'Gesprekstranscript gekopieerd naar klembord';
+
+  @override
+  String get editConversationDialogTitle => 'Gesprek bewerken';
+
+  @override
+  String get changeTheConversationTitle => 'Gesprekstitel wijzigen';
+
+  @override
+  String get conversationTitle => 'Gesprekstitel';
+
+  @override
+  String get enterConversationTitle => 'Voer gesprekstitel in...';
+
+  @override
+  String get conversationTitleUpdatedSuccessfully => 'Gesprekstitel succesvol bijgewerkt';
+
+  @override
+  String get failedToUpdateConversationTitle => 'Kan gesprekstitel niet bijwerken';
+
+  @override
+  String get errorUpdatingConversationTitle => 'Fout bij bijwerken van gesprekstitel';
+
+  @override
+  String get settingUp => 'Instellen...';
+
+  @override
+  String get startYourFirstRecording => 'Start uw eerste opname';
+
+  @override
+  String get preparingSystemAudioCapture => 'Systeemaudio-opname voorbereiden';
+
+  @override
+  String get clickTheButtonToCaptureAudio =>
+      'Klik op de knop om audio vast te leggen voor live transcripties, AI-inzichten en automatisch opslaan.';
+
+  @override
+  String get reconnecting => 'Opnieuw verbinden...';
+
+  @override
+  String get recordingPaused => 'Opname gepauzeerd';
+
+  @override
+  String get recordingActive => 'Opname actief';
+
+  @override
+  String get startRecording => 'Opname starten';
+
+  @override
+  String resumingInCountdown(String countdown) {
+    return 'Hervatten over ${countdown}s...';
+  }
+
+  @override
+  String get tapPlayToResume => 'Tik op afspelen om te hervatten';
+
+  @override
+  String get listeningForAudio => 'Luisteren naar audio...';
+
+  @override
+  String get preparingAudioCapture => 'Audio-opname voorbereiden';
+
+  @override
+  String get clickToBeginRecording => 'Klik om opname te starten';
+
+  @override
+  String get translated => 'vertaald';
+
+  @override
+  String get liveTranscript => 'Live transcriptie';
+
+  @override
+  String segmentsSingular(String count) {
+    return '$count segment';
+  }
+
+  @override
+  String segmentsPlural(String count) {
+    return '$count segmenten';
+  }
+
+  @override
+  String get startRecordingToSeeTranscript => 'Start opname om live transcriptie te zien';
+
+  @override
+  String get paused => 'Gepauzeerd';
+
+  @override
+  String get initializing => 'Initialiseren...';
+
+  @override
+  String get recording => 'Opnemen';
+
+  @override
+  String microphoneChangedResumingIn(String countdown) {
+    return 'Microfoon gewijzigd. Hervatten over ${countdown}s';
+  }
+
+  @override
+  String get clickPlayToResumeOrStop => 'Klik op afspelen om te hervatten of stop om te voltooien';
+
+  @override
+  String get settingUpSystemAudioCapture => 'Systeemaudio-opname instellen';
+
+  @override
+  String get capturingAudioAndGeneratingTranscript => 'Audio vastleggen en transcriptie genereren';
+
+  @override
+  String get clickToBeginRecordingSystemAudio => 'Klik om systeemaudio-opname te starten';
+
+  @override
+  String get you => 'Jij';
+
+  @override
+  String speakerWithId(String speakerId) {
+    return 'Spreker $speakerId';
+  }
+
+  @override
+  String get translatedByOmi => 'vertaald door omi';
+
+  @override
+  String get backToConversations => 'Terug naar gesprekken';
+
+  @override
+  String get systemAudio => 'Systeem';
+
+  @override
+  String get mic => 'Microfoon';
+
+  @override
+  String audioInputSetTo(String deviceName) {
+    return 'Audio-ingang ingesteld op $deviceName';
+  }
+
+  @override
+  String errorSwitchingAudioDevice(String error) {
+    return 'Fout bij wisselen van audio-apparaat: $error';
+  }
+
+  @override
+  String get selectAudioInput => 'Selecteer audio-ingang';
+
+  @override
+  String get loadingDevices => 'Apparaten laden...';
+
+  @override
+  String get settingsHeader => 'INSTELLINGEN';
+
+  @override
+  String get plansAndBilling => 'Plannen & Facturering';
+
+  @override
+  String get calendarIntegration => 'Agenda-integratie';
+
+  @override
+  String get dailySummary => 'Dagelijkse Samenvatting';
+
+  @override
+  String get developer => 'Ontwikkelaar';
+
+  @override
+  String get about => 'Over';
+
+  @override
+  String get selectTime => 'Tijd Selecteren';
+
+  @override
+  String get accountGroup => 'Account';
+
+  @override
+  String get signOutQuestion => 'Uitloggen?';
+
+  @override
+  String get signOutConfirmation => 'Weet je zeker dat je wilt uitloggen?';
+
+  @override
+  String get customVocabularyHeader => 'AANGEPASTE WOORDENSCHAT';
+
+  @override
+  String get addWordsDescription => 'Voeg woorden toe die Omi moet herkennen tijdens transcriptie.';
+
+  @override
+  String get enterWordsHint => 'Voer woorden in (kommagescheiden)';
+
+  @override
+  String get dailySummaryHeader => 'DAGELIJKSE SAMENVATTING';
+
+  @override
+  String get dailySummaryTitle => 'Dagelijkse Samenvatting';
+
+  @override
+  String get dailySummaryDescription => 'Ontvang een gepersonaliseerde samenvatting van je gesprekken';
+
+  @override
+  String get deliveryTime => 'Bezorgtijd';
+
+  @override
+  String get deliveryTimeDescription => 'Wanneer je dagelijkse samenvatting ontvangen';
+
+  @override
+  String get subscription => 'Abonnement';
+
+  @override
+  String get viewPlansAndUsage => 'Bekijk Plannen & Gebruik';
+
+  @override
+  String get viewPlansDescription => 'Beheer je abonnement en bekijk gebruiksstatistieken';
+
+  @override
+  String get addOrChangePaymentMethod => 'Voeg toe of wijzig je betaalmethode';
+
+  @override
+  String get displayOptions => 'Weergaveopties';
+
+  @override
+  String get showMeetingsInMenuBar => 'Vergaderingen weergeven in menubalk';
+
+  @override
+  String get displayUpcomingMeetingsDescription => 'Aankomende vergaderingen weergeven in menubalk';
+
+  @override
+  String get showEventsWithoutParticipants => 'Evenementen zonder deelnemers weergeven';
+
+  @override
+  String get includePersonalEventsDescription => 'Persoonlijke evenementen zonder deelnemers opnemen';
+
+  @override
+  String get upcomingMeetings => 'AANKOMENDE VERGADERINGEN';
+
+  @override
+  String get checkingNext7Days => 'Controleren van de komende 7 dagen';
+
+  @override
+  String get shortcuts => 'Sneltoetsen';
+
+  @override
+  String get shortcutChangeInstruction => 'Klik op een sneltoets om deze te wijzigen. Druk op Escape om te annuleren.';
+
+  @override
+  String get configurePersonaDescription => 'Configureer je AI-persona';
+
+  @override
+  String get configureSTTProvider => 'STT-provider configureren';
+
+  @override
+  String get setConversationEndDescription => 'Instellen wanneer gesprekken automatisch eindigen';
+
+  @override
+  String get importDataDescription => 'Gegevens importeren uit andere bronnen';
+
+  @override
+  String get exportConversationsDescription => 'Gesprekken exporteren naar JSON';
+
+  @override
+  String get exportingConversations => 'Gesprekken exporteren...';
+
+  @override
+  String get clearNodesDescription => 'Wis alle knooppunten en verbindingen';
+
+  @override
+  String get deleteKnowledgeGraphQuestion => 'Kennisgrafiek verwijderen?';
+
+  @override
+  String get deleteKnowledgeGraphWarning =>
+      'Dit verwijdert alle afgeleide kennisgrafiekgegevens. Uw originele herinneringen blijven veilig.';
+
+  @override
+  String get connectOmiWithAI => 'Verbind Omi met AI-assistenten';
+
+  @override
+  String get noAPIKeys => 'Geen API-sleutels. Maak er een aan om te beginnen.';
+
+  @override
+  String get autoCreateWhenDetected => 'Automatisch aanmaken wanneer naam wordt gedetecteerd';
+
+  @override
+  String get trackPersonalGoals => 'Persoonlijke doelen volgen op de homepage';
+
+  @override
+  String get dailyReflectionDescription => '21:00 herinnering om na te denken over je dag';
+
+  @override
+  String get endpointURL => 'Eindpunt-URL';
+
+  @override
+  String get links => 'Links';
+
+  @override
+  String get discordMemberCount => 'Meer dan 8000 leden op Discord';
+
+  @override
+  String get userInformation => 'Gebruikersinformatie';
+
+  @override
+  String get capabilities => 'Mogelijkheden';
+
+  @override
+  String get previewScreenshots => 'Voorbeeld schermafbeeldingen';
+
+  @override
+  String get holdOnPreparingForm => 'Even geduld, we bereiden het formulier voor u voor';
+
+  @override
+  String get bySubmittingYouAgreeToOmi => 'Door in te dienen, gaat u akkoord met Omi ';
+
+  @override
+  String get termsAndPrivacyPolicy => 'Voorwaarden en Privacybeleid';
+
+  @override
+  String get helpsDiagnoseIssuesAutoDeletes =>
+      'Helpt bij het diagnosticeren van problemen. Wordt na 3 dagen automatisch verwijderd.';
+
+  @override
+  String get manageYourApp => 'Beheer uw app';
+
+  @override
+  String get updatingYourApp => 'Uw app bijwerken';
+
+  @override
+  String get fetchingYourAppDetails => 'App-details ophalen';
+
+  @override
+  String get updateAppQuestion => 'App bijwerken?';
+
+  @override
+  String get updateAppConfirmation =>
+      'Weet u zeker dat u uw app wilt bijwerken? De wijzigingen worden doorgevoerd na beoordeling door ons team.';
+
+  @override
+  String get updateApp => 'App bijwerken';
+
+  @override
+  String get createAndSubmitNewApp => 'Maak en dien een nieuwe app in';
+
+  @override
+  String appsCount(String count) {
+    return 'Apps ($count)';
+  }
+
+  @override
+  String privateAppsCount(String count) {
+    return 'Privé-apps ($count)';
+  }
+
+  @override
+  String publicAppsCount(String count) {
+    return 'Openbare apps ($count)';
+  }
+
+  @override
+  String get newVersionAvailable => 'Nieuwe versie beschikbaar  🎉';
+
+  @override
+  String get no => 'Nee';
+
+  @override
+  String get subscriptionCancelledSuccessfully =>
+      'Abonnement succesvol geannuleerd. Het blijft actief tot het einde van de huidige factureringsperiode.';
+
+  @override
+  String get failedToCancelSubscription => 'Annuleren van abonnement mislukt. Probeer het opnieuw.';
+
+  @override
+  String get invalidPaymentUrl => 'Ongeldige betalings-URL';
+
+  @override
+  String get permissionsAndTriggers => 'Machtigingen & triggers';
+
+  @override
+  String get chatFeatures => 'Chat-functies';
+
+  @override
+  String get uninstall => 'Verwijderen';
+
+  @override
+  String get installs => 'INSTALLATIES';
+
+  @override
+  String get priceLabel => 'PRIJS';
+
+  @override
+  String get updatedLabel => 'BIJGEWERKT';
+
+  @override
+  String get createdLabel => 'AANGEMAAKT';
+
+  @override
+  String get featuredLabel => 'UITGELICHT';
+
+  @override
+  String get cancelSubscriptionQuestion => 'Abonnement annuleren?';
+
+  @override
+  String get cancelSubscriptionConfirmation =>
+      'Weet u zeker dat u uw abonnement wilt annuleren? U behoudt toegang tot het einde van uw huidige factureringsperiode.';
+
+  @override
+  String get cancelSubscriptionButton => 'Abonnement annuleren';
+
+  @override
+  String get cancelling => 'Annuleren...';
+
+  @override
+  String get betaTesterMessage =>
+      'U bent een bètatester voor deze app. Deze is nog niet openbaar. Deze wordt openbaar na goedkeuring.';
+
+  @override
+  String get appUnderReviewMessage =>
+      'Uw app wordt beoordeeld en is alleen voor u zichtbaar. Deze wordt openbaar na goedkeuring.';
+
+  @override
+  String get appRejectedMessage => 'Uw app is afgewezen. Werk de gegevens bij en dien opnieuw in ter beoordeling.';
+
+  @override
+  String get invalidIntegrationUrl => 'Ongeldige integratie-URL';
+
+  @override
+  String get tapToComplete => 'Tik om te voltooien';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Ongeldige URL voor installatie-instructies';
+
+  @override
+  String get pushToTalk => 'Druk om te praten';
+
+  @override
+  String get summaryPrompt => 'Samenvattingsprompt';
+
+  @override
+  String get pleaseSelectARating => 'Selecteer een beoordeling';
+
+  @override
+  String get reviewAddedSuccessfully => 'Beoordeling succesvol toegevoegd 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Beoordeling succesvol bijgewerkt 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Beoordeling verzenden mislukt. Probeer het opnieuw.';
+
+  @override
+  String get addYourReview => 'Voeg uw beoordeling toe';
+
+  @override
+  String get editYourReview => 'Bewerk uw beoordeling';
+
+  @override
+  String get writeAReviewOptional => 'Schrijf een beoordeling (optioneel)';
+
+  @override
+  String get submitReview => 'Beoordeling verzenden';
+
+  @override
+  String get updateReview => 'Beoordeling bijwerken';
+
+  @override
+  String get yourReview => 'Uw beoordeling';
+
+  @override
+  String get anonymousUser => 'Anonieme gebruiker';
+
+  @override
+  String get issueActivatingApp => 'Er is een probleem opgetreden bij het activeren van deze app. Probeer het opnieuw.';
+
+  @override
+  String get dataAccessNoticeDescription =>
+      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
+
+  @override
+  String get copyUrl => 'URL kopiëren';
+
+  @override
+  String get txtFormat => 'TXT';
+
+  @override
+  String get pdfFormat => 'PDF';
+
+  @override
+  String get weekdayMon => 'Ma';
+
+  @override
+  String get weekdayTue => 'Di';
+
+  @override
+  String get weekdayWed => 'Wo';
+
+  @override
+  String get weekdayThu => 'Do';
+
+  @override
+  String get weekdayFri => 'Vr';
+
+  @override
+  String get weekdaySat => 'Za';
+
+  @override
+  String get weekdaySun => 'Zo';
+
+  @override
+  String serviceIntegrationComingSoon(String serviceName) {
+    return '$serviceName-integratie binnenkort beschikbaar';
+  }
+
+  @override
+  String alreadyExportedTo(String platform) {
+    return 'Al geëxporteerd naar $platform';
+  }
+
+  @override
+  String get anotherPlatform => 'een ander platform';
+
+  @override
+  String pleaseAuthenticateWithService(String serviceName) {
+    return 'Authenticeer a.u.b. met $serviceName in Instellingen > Taakintegraties';
+  }
+
+  @override
+  String addingToService(String serviceName) {
+    return 'Toevoegen aan $serviceName...';
+  }
+
+  @override
+  String addedToService(String serviceName) {
+    return 'Toegevoegd aan $serviceName';
+  }
+
+  @override
+  String failedToAddToService(String serviceName) {
+    return 'Toevoegen aan $serviceName mislukt';
+  }
+
+  @override
+  String get permissionDeniedForAppleReminders => 'Toestemming geweigerd voor Apple Herinneringen';
+
+  @override
+  String failedToCreateApiKey(String error) {
+    return 'Kan provider API-sleutel niet maken: $error';
+  }
+
+  @override
+  String get createAKey => 'Sleutel maken';
+
+  @override
+  String get apiKeyRevokedSuccessfully => 'API-sleutel succesvol ingetrokken';
+
+  @override
+  String failedToRevokeApiKey(String error) {
+    return 'Kan API-sleutel niet intrekken: $error';
+  }
+
+  @override
+  String get omiApiKeys => 'Omi API-sleutels';
+
+  @override
+  String get apiKeysDescription =>
+      'API-sleutels worden gebruikt voor authenticatie wanneer uw app communiceert met de OMI-server. Ze stellen uw applicatie in staat om herinneringen te maken en veilig toegang te krijgen tot andere OMI-services.';
+
+  @override
+  String get aboutOmiApiKeys => 'Over Omi API-sleutels';
+
+  @override
+  String get yourNewKey => 'Uw nieuwe sleutel:';
+
+  @override
+  String get copyToClipboard => 'Kopiëren naar klembord';
+
+  @override
+  String get pleaseCopyKeyNow => 'Kopieer het nu en schrijf het ergens veilig op. ';
+
+  @override
+  String get willNotSeeAgain => 'U zult het niet meer kunnen zien.';
+
+  @override
+  String get revokeKey => 'Sleutel intrekken';
+
+  @override
+  String get revokeApiKeyQuestion => 'API-sleutel intrekken?';
+
+  @override
+  String get revokeApiKeyWarning =>
+      'Deze actie kan niet ongedaan worden gemaakt. Applicaties die deze sleutel gebruiken, hebben geen toegang meer tot de API.';
+
+  @override
+  String get revoke => 'Intrekken';
+
+  @override
+  String get whatWouldYouLikeToCreate => 'Wat wilt u maken?';
+
+  @override
+  String get createAnApp => 'Een app maken';
+
+  @override
+  String get createAndShareYourApp => 'Maak en deel uw app';
+
+  @override
+  String get createMyClone => 'Mijn kloon maken';
+
+  @override
+  String get createYourDigitalClone => 'Maak uw digitale kloon';
+
+  @override
+  String get itemApp => 'App';
+
+  @override
+  String get itemPersona => 'Persona';
+
+  @override
+  String keepItemPublic(String item) {
+    return '$item openbaar houden';
+  }
+
+  @override
+  String makeItemPublicQuestion(String item) {
+    return '$item openbaar maken?';
+  }
+
+  @override
+  String makeItemPrivateQuestion(String item) {
+    return '$item privé maken?';
+  }
+
+  @override
+  String makeItemPublicExplanation(String item) {
+    return 'Als u $item openbaar maakt, kan het door iedereen worden gebruikt';
+  }
+
+  @override
+  String makeItemPrivateExplanation(String item) {
+    return 'Als u $item nu privé maakt, werkt het voor niemand meer en is het alleen voor u zichtbaar';
+  }
+
+  @override
+  String get manageApp => 'App beheren';
+
+  @override
+  String get updatePersonaDetails => 'Persona-details bijwerken';
+
+  @override
+  String deleteItemTitle(String item) {
+    return '$item verwijderen';
+  }
+
+  @override
+  String deleteItemQuestion(String item) {
+    return '$item verwijderen?';
+  }
+
+  @override
+  String deleteItemConfirmation(String item) {
+    return 'Weet u zeker dat u deze $item wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.';
+  }
+
+  @override
+  String get revokeKeyQuestion => 'Sleutel intrekken?';
+
+  @override
+  String revokeKeyConfirmation(String keyName) {
+    return 'Weet u zeker dat u de sleutel \"$keyName\" wilt intrekken? Deze actie kan niet ongedaan worden gemaakt.';
+  }
+
+  @override
+  String get createNewKey => 'Nieuwe sleutel maken';
+
+  @override
+  String get keyNameHint => 'bijv. Claude Desktop';
+
+  @override
+  String get pleaseEnterAName => 'Voer een naam in.';
+
+  @override
+  String failedToCreateKeyWithError(String error) {
+    return 'Sleutel maken mislukt: $error';
+  }
+
+  @override
+  String get failedToCreateKeyTryAgain => 'Sleutel maken mislukt. Probeer het opnieuw.';
+
+  @override
+  String get keyCreated => 'Sleutel aangemaakt';
+
+  @override
+  String get keyCreatedMessage => 'Uw nieuwe sleutel is aangemaakt. Kopieer deze nu. U kunt deze niet meer zien.';
+
+  @override
+  String get keyWord => 'Sleutel';
+
+  @override
+  String get externalAppAccess => 'Externe app-toegang';
+
+  @override
+  String get externalAppAccessDescription =>
+      'De volgende geïnstalleerde apps hebben externe integraties en kunnen toegang krijgen tot uw gegevens, zoals gesprekken en herinneringen.';
+
+  @override
+  String get noExternalAppsHaveAccess => 'Geen externe apps hebben toegang tot uw gegevens.';
+
+  @override
+  String get maximumSecurityE2ee => 'Maximale beveiliging (E2EE)';
+
+  @override
+  String get e2eeDescription =>
+      'End-to-end-encryptie is de gouden standaard voor privacy. Wanneer ingeschakeld, worden uw gegevens op uw apparaat versleuteld voordat ze naar onze servers worden verzonden. Dit betekent dat niemand, zelfs Omi niet, toegang heeft tot uw inhoud.';
+
+  @override
+  String get importantTradeoffs => 'Belangrijke afwegingen:';
+
+  @override
+  String get e2eeTradeoff1 => '• Sommige functies zoals externe app-integraties kunnen worden uitgeschakeld.';
+
+  @override
+  String get e2eeTradeoff2 => '• Als u uw wachtwoord verliest, kunnen uw gegevens niet worden hersteld.';
+
+  @override
+  String get featureComingSoon => 'Deze functie komt binnenkort!';
+
+  @override
+  String get migrationInProgressMessage =>
+      'Migratie bezig. U kunt het beveiligingsniveau niet wijzigen totdat deze is voltooid.';
+
+  @override
+  String get migrationFailed => 'Migratie mislukt';
+
+  @override
+  String migratingFromTo(String source, String target) {
+    return 'Migreren van $source naar $target';
+  }
+
+  @override
+  String objectsCount(String processed, String total) {
+    return '$processed / $total objecten';
+  }
+
+  @override
+  String get secureEncryption => 'Veilige versleuteling';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Uw gegevens worden versleuteld met een voor u unieke sleutel op onze servers, gehost op Google Cloud. Dit betekent dat uw ruwe inhoud ontoegankelijk is voor iedereen, inclusief Omi-medewerkers of Google, rechtstreeks vanuit de database.';
+
+  @override
+  String get endToEndEncryption => 'End-to-end-encryptie';
+
+  @override
+  String get e2eeCardDescription =>
+      'Schakel in voor maximale beveiliging waarbij alleen u toegang heeft tot uw gegevens. Tik om meer te weten te komen.';
+
+  @override
+  String get dataAlwaysEncrypted =>
+      'Ongeacht het niveau zijn uw gegevens altijd versleuteld in rust en tijdens overdracht.';
+
+  @override
+  String get readOnlyScope => 'Alleen lezen';
+
+  @override
+  String get fullAccessScope => 'Volledige toegang';
+
+  @override
+  String get readScope => 'Lezen';
+
+  @override
+  String get writeScope => 'Schrijven';
+
+  @override
+  String get apiKeyCreated => 'API-sleutel aangemaakt!';
+
+  @override
+  String get saveKeyWarning => 'Sla deze sleutel nu op! U kunt hem niet meer zien.';
+
+  @override
+  String get yourApiKey => 'UW API-SLEUTEL';
+
+  @override
+  String get tapToCopy => 'Tik om te kopiëren';
+
+  @override
+  String get copyKey => 'Sleutel kopiëren';
+
+  @override
+  String get createApiKey => 'API-sleutel maken';
+
+  @override
+  String get accessDataProgrammatically => 'Toegang tot uw gegevens via programmering';
+
+  @override
+  String get keyNameLabel => 'SLEUTELNAAM';
+
+  @override
+  String get keyNamePlaceholder => 'bijv., Mijn app-integratie';
+
+  @override
+  String get permissionsLabel => 'MACHTIGINGEN';
+
+  @override
+  String get permissionsInfoNote => 'R = Lezen, W = Schrijven. Standaard alleen lezen als niets is geselecteerd.';
+
+  @override
+  String get developerApi => 'Ontwikkelaar-API';
+
+  @override
+  String get createAKeyToGetStarted => 'Maak een sleutel om te beginnen';
+
+  @override
+  String errorWithMessage(String error) {
+    return 'Fout: $error';
+  }
+
+  @override
+  String get omiTraining => 'Omi Training';
+
+  @override
+  String get trainingDataProgram => 'Trainingsdataprogramma';
+
+  @override
+  String get getOmiUnlimitedFree =>
+      'Krijg Omi Unlimited gratis door uw gegevens bij te dragen voor het trainen van AI-modellen.';
+
+  @override
+  String get trainingDataBullets =>
+      '• Uw gegevens helpen AI-modellen te verbeteren\n• Alleen niet-gevoelige gegevens worden gedeeld\n• Volledig transparant proces';
+
+  @override
+  String get learnMoreAtOmiTraining => 'Meer informatie op omi.me/training';
+
+  @override
+  String get agreeToContributeData => 'Ik begrijp en ga akkoord met het bijdragen van mijn gegevens voor AI-training';
+
+  @override
+  String get submitRequest => 'Verzoek indienen';
+
+  @override
+  String get thankYouRequestUnderReview =>
+      'Bedankt! Uw verzoek wordt beoordeeld. We laten u weten wanneer het is goedgekeurd.';
+
+  @override
+  String planRemainsActiveUntil(String date) {
+    return 'Uw plan blijft actief tot $date. Daarna verliest u de toegang tot uw onbeperkte functies. Weet u het zeker?';
+  }
+
+  @override
+  String get confirmCancellation => 'Annulering bevestigen';
+
+  @override
+  String get keepMyPlan => 'Mijn plan behouden';
+
+  @override
+  String get subscriptionSetToCancel => 'Uw abonnement wordt aan het einde van de periode geannuleerd.';
+
+  @override
+  String get switchedToOnDevice => 'Overgeschakeld naar transcriptie op apparaat';
+
+  @override
+  String get couldNotSwitchToFreePlan => 'Kon niet overschakelen naar gratis abonnement. Probeer het opnieuw.';
+
+  @override
+  String get couldNotLoadPlans => 'Kon beschikbare abonnementen niet laden. Probeer het opnieuw.';
+
+  @override
+  String get selectedPlanNotAvailable => 'Geselecteerd abonnement is niet beschikbaar. Probeer het opnieuw.';
+
+  @override
+  String get upgradeToAnnualPlan => 'Upgraden naar jaarabonnement';
+
+  @override
+  String get importantBillingInfo => 'Belangrijke factureringsinformatie:';
+
+  @override
+  String get monthlyPlanContinues => 'Uw huidige maandabonnement loopt door tot het einde van uw factureringsperiode';
+
+  @override
+  String get paymentMethodCharged =>
+      'Uw bestaande betaalmethode wordt automatisch belast wanneer uw maandabonnement eindigt';
+
+  @override
+  String get annualSubscriptionStarts => 'Uw 12-maanden jaarabonnement start automatisch na de betaling';
+
+  @override
+  String get thirteenMonthsCoverage => 'U krijgt in totaal 13 maanden dekking (huidige maand + 12 maanden jaarlijks)';
+
+  @override
+  String get confirmUpgrade => 'Upgrade bevestigen';
+
+  @override
+  String get confirmPlanChange => 'Planwijziging bevestigen';
+
+  @override
+  String get confirmAndProceed => 'Bevestigen en doorgaan';
+
+  @override
+  String get upgradeScheduled => 'Upgrade gepland';
+
+  @override
+  String get changePlan => 'Plan wijzigen';
+
+  @override
+  String get upgradeAlreadyScheduled => 'Uw upgrade naar het jaarabonnement is al gepland';
+
+  @override
+  String get youAreOnUnlimitedPlan => 'U bent op het Unlimited-abonnement.';
+
+  @override
+  String get yourOmiUnleashed => 'Uw Omi, ontketend. Ga unlimited voor eindeloze mogelijkheden.';
+
+  @override
+  String planEndedOn(String date) {
+    return 'Uw plan eindigde op $date.\\nAbonneer nu opnieuw - u wordt direct belast voor een nieuwe factureringsperiode.';
+  }
+
+  @override
+  String planSetToCancelOn(String date) {
+    return 'Uw plan wordt geannuleerd op $date.\\nAbonneer nu opnieuw om uw voordelen te behouden - geen kosten tot $date.';
+  }
+
+  @override
+  String get annualPlanStartsAutomatically => 'Uw jaarabonnement start automatisch wanneer uw maandabonnement eindigt.';
+
+  @override
+  String planRenewsOn(String date) {
+    return 'Uw plan wordt verlengd op $date.';
+  }
+
+  @override
+  String get unlimitedConversations => 'Onbeperkte gesprekken';
+
+  @override
+  String get askOmiAnything => 'Vraag Omi alles over uw leven';
+
+  @override
+  String get unlockOmiInfiniteMemory => 'Ontgrendel Omi\'s oneindige geheugen';
+
+  @override
+  String get youreOnAnnualPlan => 'U bent op het jaarabonnement';
+
+  @override
+  String get alreadyBestValuePlan => 'U heeft al het beste abonnement qua waarde. Geen wijzigingen nodig.';
+
+  @override
+  String get unableToLoadPlans => 'Kan abonnementen niet laden';
+
+  @override
+  String get checkConnectionTryAgain => 'Controleer uw verbinding en probeer het opnieuw';
+
+  @override
+  String get useFreePlan => 'Gratis abonnement gebruiken';
+
+  @override
+  String get continueText => 'Doorgaan';
+
+  @override
+  String get resubscribe => 'Opnieuw abonneren';
+
+  @override
+  String get couldNotOpenPaymentSettings => 'Kon betalingsinstellingen niet openen. Probeer het opnieuw.';
+
+  @override
+  String get managePaymentMethod => 'Betalingsmethode beheren';
+
+  @override
+  String get cancelSubscription => 'Abonnement annuleren';
+
+  @override
+  String endsOnDate(String date) {
+    return 'Eindigt op $date';
+  }
+
+  @override
+  String get active => 'Actief';
+
+  @override
+  String get freePlan => 'Gratis abonnement';
+
+  @override
+  String get configure => 'Configureren';
+
+  @override
+  String get privacyInformation => 'Privacyinformatie';
+
+  @override
+  String get yourPrivacyMattersToUs => 'Uw privacy is belangrijk voor ons';
+
+  @override
+  String get privacyIntroText =>
+      'Bij Omi nemen we uw privacy zeer serieus. We willen transparant zijn over de gegevens die we verzamelen en hoe we deze gebruiken. Dit moet u weten:';
+
+  @override
+  String get whatWeTrack => 'Wat we bijhouden';
+
+  @override
+  String get anonymityAndPrivacy => 'Anonimiteit en privacy';
+
+  @override
+  String get optInAndOptOutOptions => 'Opt-in en opt-out opties';
+
+  @override
+  String get ourCommitment => 'Onze toezegging';
+
+  @override
+  String get commitmentText =>
+      'We zijn toegewijd om de verzamelde gegevens alleen te gebruiken om Omi een beter product voor u te maken. Uw privacy en vertrouwen zijn van het grootste belang voor ons.';
+
+  @override
+  String get thankYouText =>
+      'Bedankt dat u een gewaardeerde gebruiker van Omi bent. Als u vragen of zorgen heeft, neem dan gerust contact met ons op via team@basedhardware.com.';
+
+  @override
+  String get wifiSyncSettings => 'WiFi-synchronisatie-instellingen';
+
+  @override
+  String get enterHotspotCredentials => 'Voer de hotspot-inloggegevens van uw telefoon in';
+
+  @override
+  String get wifiSyncUsesHotspot =>
+      'WiFi-sync gebruikt uw telefoon als hotspot. Vind de naam en het wachtwoord in Instellingen > Persoonlijke hotspot.';
+
+  @override
+  String get hotspotNameSsid => 'Hotspotnaam (SSID)';
+
+  @override
+  String get exampleIphoneHotspot => 'bijv. iPhone Hotspot';
+
+  @override
+  String get password => 'Wachtwoord';
+
+  @override
+  String get enterHotspotPassword => 'Voer hotspot-wachtwoord in';
+
+  @override
+  String get saveCredentials => 'Inloggegevens opslaan';
+
+  @override
+  String get clearCredentials => 'Inloggegevens wissen';
+
+  @override
+  String get pleaseEnterHotspotName => 'Voer een hotspotnaam in';
+
+  @override
+  String get wifiCredentialsSaved => 'WiFi-inloggegevens opgeslagen';
+
+  @override
+  String get wifiCredentialsCleared => 'WiFi-inloggegevens gewist';
+
+  @override
+  String summaryGeneratedForDate(String date) {
+    return 'Samenvatting gegenereerd voor $date';
+  }
+
+  @override
+  String get failedToGenerateSummaryCheckConversations =>
+      'Kon samenvatting niet genereren. Zorg ervoor dat u gesprekken heeft voor die dag.';
+
+  @override
+  String get summaryNotFound => 'Samenvatting niet gevonden';
+
+  @override
+  String get yourDaysJourney => 'Uw dagreis';
+
+  @override
+  String get highlights => 'Hoogtepunten';
+
+  @override
+  String get unresolvedQuestions => 'Onopgeloste vragen';
+
+  @override
+  String get decisions => 'Beslissingen';
+
+  @override
+  String get learnings => 'Inzichten';
+
+  @override
+  String get autoDeletesAfterThreeDays => 'Automatisch verwijderd na 3 dagen.';
+
+  @override
+  String get knowledgeGraphDeletedSuccessfully => 'Kennisgrafiek succesvol verwijderd';
+
+  @override
+  String get exportStartedMayTakeFewSeconds => 'Export gestart. Dit kan enkele seconden duren...';
+
+  @override
+  String get knowledgeGraphDeleteDescription =>
+      'Dit verwijdert alle afgeleide kennisgraafgegevens (knooppunten en verbindingen). Uw originele herinneringen blijven veilig. De grafiek wordt in de loop van de tijd of bij het volgende verzoek opnieuw opgebouwd.';
+
+  @override
+  String get configureDailySummaryDigest => 'Configureer je dagelijkse taaknoverzicht';
+
+  @override
+  String accessesDataTypes(String dataTypes) {
+    return 'Toegang tot $dataTypes';
+  }
+
+  @override
+  String triggeredByType(String triggerType) {
+    return 'getriggerd door $triggerType';
+  }
+
+  @override
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+    return '$accessDescription en is $triggerDescription.';
+  }
+
+  @override
+  String isTriggeredBy(String triggerDescription) {
+    return 'Is $triggerDescription.';
+  }
+
+  @override
+  String get noSpecificDataAccessConfigured => 'Geen specifieke gegevenstoegang geconfigureerd.';
 }

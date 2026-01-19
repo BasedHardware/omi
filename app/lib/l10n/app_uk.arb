@@ -159,7 +159,7 @@
   "@createPersonHint": {
     "description": "Hint text for creating a person"
   },
-  "speechProfile": "Мовний профіль",
+  "speechProfile": "Мовний Профіль",
   "@speechProfile": {
     "description": "Speech profile label"
   },
@@ -175,7 +175,7 @@
   },
   "settings": "Налаштування",
   "@settings": {
-    "description": "Settings page title"
+    "description": "Bottom navigation label for settings"
   },
   "language": "Мова",
   "@language": {
@@ -293,9 +293,9 @@
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
-  "noStarredConversations": "Обраних розмов поки немає.",
+  "noStarredConversations": "Немає обраних бесід",
   "@noStarredConversations": {
-    "description": "Empty state for starred filter"
+    "description": "Empty state title when no starred conversations"
   },
   "starConversationHint": "Щоб позначити розмову зірочкою, відкрийте її та натисніть іконку зірки в заголовку.",
   "@starConversationHint": {
@@ -351,7 +351,7 @@
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Повідомлення скопійовано до буфера обміну.",
+  "messageCopied": "✨ Повідомлення скопійовано в буфер обміну",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -359,7 +359,7 @@
   "@cannotReportOwnMessage": {
     "description": "Error when trying to report own message"
   },
-  "reportMessage": "Поскаржитись на повідомлення",
+  "reportMessage": "Повідомити про повідомлення",
   "@reportMessage": {
     "description": "Report message dialog title"
   },
@@ -393,7 +393,7 @@
   },
   "apps": "Додатки",
   "@apps": {
-    "description": "Apps page title"
+    "description": "Navigation label for apps page"
   },
   "noAppsFound": "Додатків не знайдено",
   "@noAppsFound": {
@@ -439,7 +439,7 @@
   "@visitWebsite": {
     "description": "Visit website link"
   },
-  "helpOrInquiries": "Допомога або запитання?",
+  "helpOrInquiries": "Допомога чи запитання?",
   "@helpOrInquiries": {
     "description": "Help link title"
   },
@@ -447,7 +447,7 @@
   "@joinCommunity": {
     "description": "Discord community link"
   },
-  "membersAndCounting": "Понад 8000 учасників.",
+  "membersAndCounting": "8000+ учасників і їх кількість зростає.",
   "@membersAndCounting": {
     "description": "Discord member count"
   },
@@ -511,31 +511,31 @@
   "@email": {
     "description": "Email field label"
   },
-  "customVocabulary": "Власний словник",
+  "customVocabulary": "Користувацький Словник",
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Ідентифікація інших",
+  "identifyingOthers": "Ідентифікація Інших",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
-  "paymentMethods": "Способи оплати",
+  "paymentMethods": "Способи Оплати",
   "@paymentMethods": {
     "description": "Payment methods setting"
   },
-  "conversationDisplay": "Відображення розмов",
+  "conversationDisplay": "Відображення Розмов",
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "Дані та конфіденційність",
+  "dataPrivacy": "Конфіденційність Даних",
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
-  "userId": "ID користувача",
+  "userId": "ID Користувача",
   "@userId": {
     "description": "User ID label"
   },
-  "notSet": "Не встановлено",
+  "notSet": "Не задано",
   "@notSet": {
     "description": "Default value when not set"
   },
@@ -879,7 +879,7 @@
   "@createKeyToStart": {
     "description": "Create key instruction"
   },
-  "createKey": "Створити ключ",
+  "createKey": "Створити Ключ",
   "@createKey": {
     "description": "Create Key button"
   },
@@ -997,7 +997,7 @@
   "@upgrade": {
     "description": "Upgrade button"
   },
-  "upgradeToUnlimited": "Оновити до необмеженого",
+  "upgradeToUnlimited": "Оновити до безлімітного",
   "@upgradeToUnlimited": {
     "description": "Upgrade to unlimited button"
   },
@@ -1087,7 +1087,7 @@
   "exportShared": "Експорт надіслано",
   "deleteKnowledgeGraphTitle": "Видалити граф знань?",
   "deleteKnowledgeGraphMessage": "Це видалить всі похідні дані графа знань (вузли та з'єднання). Ваші оригінальні спогади залишаться в безпеці. Граф буде перебудовано з часом або за наступним запитом.",
-  "knowledgeGraphDeleted": "Граф знань успішно видалено",
+  "knowledgeGraphDeleted": "Граф знань видалено",
   "deleteGraphFailed": "Не вдалося видалити граф: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -1114,7 +1114,7 @@
   "webhooks": "Вебхуки",
   "conversationEvents": "Події розмови",
   "newConversationCreated": "Створено нову розмову",
-  "realtimeTranscript": "Транскрипція в реальному часі",
+  "realtimeTranscript": "Транскрипт у реальному часі",
   "transcriptReceived": "Транскрипцію отримано",
   "audioBytes": "Аудіо байти",
   "audioDataReceived": "Аудіо дані отримано",
@@ -1127,7 +1127,7 @@
   "configCopied": "Конфігурацію скопійовано до буфера обміну",
   "listeningMins": "Прослуховування (хв)",
   "understandingWords": "Розуміння (слів)",
-  "insights": "Insights",
+  "insights": "Ідеї",
   "memories": "Спогади",
   "minsUsedThisMonth": "{used} з {limit} хв використано цього місяця",
   "@minsUsedThisMonth": {
@@ -1278,7 +1278,7 @@
   "yes": "Так",
   "editName": "Редагувати ім'я",
   "howShouldOmiCallYou": "Як Omi має до вас звертатися?",
-  "enterYourName": "Введіть своє ім'я",
+  "enterYourName": "Введіть ваше ім'я",
   "nameCannotBeEmpty": "Ім'я не може бути порожнім",
   "nameUpdatedSuccessfully": "Ім'я успішно оновлено!",
   "calendarSettings": "Налаштування календаря",
@@ -1334,7 +1334,7 @@
   "languageForTranscription": "Встановіть свою мову для точнішої транскрипції та персоналізованого досвіду.",
   "singleLanguageModeInfo": "Режим однієї мови увімкнено. Переклад вимкнено для вищої точності.",
   "searchLanguageHint": "Шукайте мову за назвою або кодом",
-  "noLanguagesFound": "Мов не знайдено",
+  "noLanguagesFound": "Мови не знайдені",
   "skip": "Пропустити",
   "languageSetTo": "Мову встановлено на {language}",
   "@languageSetTo": {
@@ -1405,7 +1405,7 @@
   "defaultRepository": "Репозиторій за замовчуванням",
   "selectDefaultRepoDesc": "Виберіть репозиторій за замовчуванням для створення issues. Ви все ще можете вказати інший репозиторій під час створення issues.",
   "noReposFound": "Репозиторіїв не знайдено",
-  "private": "Приватний",
+  "private": "Приватна",
   "updatedDate": "Оновлено {date}",
   "@updatedDate": {
     "placeholders": {
@@ -1538,7 +1538,7 @@
   "enterSttHttpEndpoint": "Введіть свою HTTP кінцеву точку STT",
   "websocketUrl": "WebSocket URL",
   "enterLiveSttWebsocket": "Введіть свою WebSocket кінцеву точку STT в реальному часі",
-  "apiKey": "API-ключ",
+  "apiKey": "API ключ",
   "enterApiKey": "Введіть свій API-ключ",
   "storedLocallyNeverShared": "Зберігається локально, ніколи не передається",
   "host": "Хост",
@@ -1594,7 +1594,7 @@
   "perMonth": "/ Місяць",
   "tailoredConversationSummaries": "Персоналізовані підсумки розмов",
   "customChatbotPersonality": "Налаштована особистість чат-бота",
-  "makePublic": "Зробити публічним",
+  "makePublic": "Зробити публічною",
   "anyoneCanDiscover": "Будь-хто може знайти ваш додаток",
   "onlyYouCanUse": "Лише ви можете використовувати цей додаток",
   "paidApp": "Платний додаток",
@@ -1938,7 +1938,7 @@
   "@selectYourLanguage": {
     "description": "Placeholder for selected language name"
   },
-  "personalGrowthJourney": "Ваша подорож особистого зростання з AI, який слухає кожне ваше слово.",
+  "personalGrowthJourney": "Ваша подорож особистісного зростання зі штучним інтелектом, який слухає кожне ваше слово.",
   "@personalGrowthJourney": {
     "description": "Tagline on onboarding wrapper"
   },
@@ -2077,14 +2077,9 @@
   "@deleteSelected": {
     "description": "Tooltip for delete selected"
   },
-  "searchMemories": "Пошук серед {count} спогадів",
+  "searchMemories": "Пошук спогадів...",
   "@searchMemories": {
-    "description": "Hint text for memories search bar",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
+    "description": "Search input hint text"
   },
   "memoryDeleted": "Спогад видалено.",
   "@memoryDeleted": {
@@ -2094,9 +2089,9 @@
   "@undo": {
     "description": "Undo button text"
   },
-  "noMemoriesYet": "Спогадів поки немає",
+  "noMemoriesYet": "🧠 Поки що немає спогадів",
   "@noMemoriesYet": {
-    "description": "Empty state text"
+    "description": "Empty state title when no memories"
   },
   "noAutoMemories": "Автоматично витягнутих спогадів поки немає",
   "@noAutoMemories": {
@@ -2110,9 +2105,9 @@
   "@noMemoriesInCategories": {
     "description": "Empty state text for filtered categories"
   },
-  "noMemoriesFound": "Спогадів не знайдено",
+  "noMemoriesFound": "🔍 Спогади не знайдено",
   "@noMemoriesFound": {
-    "description": "Empty state text for search results"
+    "description": "Empty state title when search/filter has no results"
   },
   "addFirstMemory": "Додати перший спогад",
   "@addFirstMemory": {
@@ -2146,7 +2141,7 @@
   "@createActionItemTooltip": {
     "description": "Tooltip for create action item FAB"
   },
-  "memoryManagement": "Управління спогадами",
+  "memoryManagement": "Керування пам'яттю",
   "@memoryManagement": {
     "description": "Title for memory management sheet"
   },
@@ -2191,11 +2186,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "Новий спогад",
+  "newMemory": "✨ Нова пам'ять",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "Редагувати спогад",
+  "editMemory": "✏️ Редагувати пам'ять",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2211,7 +2206,7 @@
   "@saveMemory": {
     "description": "Button label"
   },
-  "retry": "Спробувати ще раз",
+  "retry": "Повторити",
   "@retry": {
     "description": "Button label"
   },
@@ -2332,7 +2327,7 @@
   "deleteFolder": "Видалити папку",
   "transcriptCopiedToClipboard": "Транскрипт скопійовано в буфер обміну",
   "summaryCopiedToClipboard": "Резюме скопійовано в буфер обміну",
-  "conversationUrlCouldNotBeShared": "URL-адресу розмови не вдалося поділитися.",
+  "conversationUrlCouldNotBeShared": "URL-адресу розмови не вдалося поширити.",
   "urlCopiedToClipboard": "URL скопійовано в буфер обміну",
   "exportTranscript": "Експортувати транскрипт",
   "exportSummary": "Експортувати резюме",
@@ -2341,11 +2336,11 @@
   "summarize": "Резюмувати",
   "generateSummary": "Створити резюме",
   "conversationNotFoundOrDeleted": "Розмову не знайдено або вона була видалена",
-  "deleteMemory": "Видалити пам'ять?",
+  "deleteMemory": "Видалити пам'ять",
   "thisActionCannotBeUndone": "Цю дію не можна скасувати.",
   "memoriesCount": "{count} спогадів",
   "noMemoriesInCategory": "У цій категорії поки немає спогадів",
-  "addYourFirstMemory": "Додайте свій перший спогад",
+  "addYourFirstMemory": "Додайте перший спогад",
   "firmwareDisconnectUsb": "Від'єднайте USB",
   "firmwareUsbWarning": "USB-з'єднання під час оновлень може пошкодити ваш пристрій.",
   "firmwareBatteryAbove15": "Батарея вище 15%",
@@ -2397,7 +2392,7 @@
   "welcomeToOmiDescription": "Ласкаво просимо до Omi! Ваш AI-компаньйон готовий допомогти вам із розмовами, завданнями та багато іншим.",
   "startUsingOmi": "Почати використання Omi",
   "back": "Назад",
-  "keyboardShortcuts": "Гарячі клавіші",
+  "keyboardShortcuts": "Гарячі Клавіші",
   "toggleControlBar": "Перемкнути панель керування",
   "pressKeys": "Натисніть клавіші...",
   "cmdRequired": "⌘ потрібно",
@@ -2405,7 +2400,7 @@
   "space": "Пробіл",
   "search": "Пошук",
   "searchPlaceholder": "Пошук...",
-  "untitledConversation": "Бесіда без назви",
+  "untitledConversation": "Розмова без назви",
   "countRemaining": "{count} залишилось",
   "addGoal": "Додати ціль",
   "editGoal": "Редагувати ціль",
@@ -2416,7 +2411,7 @@
   "saveGoal": "Зберегти",
   "goals": "Цілі",
   "tapToAddGoal": "Натисніть, щоб додати ціль",
-  "welcomeBack": "Ласкаво просимо назад",
+  "welcomeBack": "З поверненням, {name}",
   "yourConversations": "Ваші розмови",
   "reviewAndManageConversations": "Переглядайте та керуйте записаними розмовами",
   "startCapturingConversations": "Почніть записувати розмови за допомогою пристрою Omi, щоб побачити їх тут.",
@@ -2464,7 +2459,7 @@
   "reloadingApps": "Перезавантаження додатків...",
   "loadingApps": "Завантаження додатків...",
   "browseInstallCreateApps": "Переглядайте, встановлюйте та створюйте додатки",
-  "all": "Усі",
+  "all": "Всі",
   "open": "Відкрити",
   "install": "Встановити",
   "noAppsAvailable": "Немає доступних додатків",
@@ -2519,5 +2514,785 @@
   "ratingsCount": "{count}+ оцінок",
   "errorActivatingApp": "Помилка активації додатка",
   "integrationSetupRequired": "Якщо це додаток інтеграції, переконайтеся, що налаштування завершено.",
-  "installed": "Встановлено"
+  "installed": "Встановлено",
+  "appIdLabel": "ID додатку",
+  "appNameLabel": "Назва додатку",
+  "appNamePlaceholder": "Мій чудовий додаток",
+  "pleaseEnterAppName": "Будь ласка, введіть назву додатку",
+  "categoryLabel": "Категорія",
+  "selectCategory": "Виберіть категорію",
+  "descriptionLabel": "Опис",
+  "appDescriptionPlaceholder": "Мій чудовий додаток — це чудовий додаток, який робить дивовижні речі. Це найкращий додаток!",
+  "pleaseProvideValidDescription": "Будь ласка, надайте дійсний опис",
+  "appPricingLabel": "Ціноутворення додатку",
+  "noneSelected": "Нічого не вибрано",
+  "appIdCopiedToClipboard": "ID додатку скопійовано в буфер обміну",
+  "appCategoryModalTitle": "Категорія додатку",
+  "pricingFree": "Безкоштовно",
+  "pricingPaid": "Платно",
+  "loadingCapabilities": "Завантаження можливостей...",
+  "filterInstalled": "Встановлено",
+  "filterMyApps": "Мої додатки",
+  "clearSelection": "Очистити вибір",
+  "filterCategory": "Категорія",
+  "rating4PlusStars": "4+ зірки",
+  "rating3PlusStars": "3+ зірки",
+  "rating2PlusStars": "2+ зірки",
+  "rating1PlusStars": "1+ зірка",
+  "filterRating": "Рейтинг",
+  "filterCapabilities": "Можливості",
+  "noNotificationScopesAvailable": "Немає доступних областей сповіщень",
+  "popularApps": "Популярні додатки",
+  "pleaseProvidePrompt": "Будь ласка, надайте запит",
+  "chatWithAppName": "Чат з {appName}",
+  "defaultAiAssistant": "AI-асистент за замовчуванням",
+  "readyToChat": "✨ Готовий до чату!",
+  "connectionNeeded": "🌐 Потрібне підключення",
+  "startConversation": "Почніть розмову і дозвольте магії розпочатися",
+  "checkInternetConnection": "Будь ласка, перевірте підключення до Інтернету",
+  "wasThisHelpful": "Чи було це корисно?",
+  "thankYouForFeedback": "Дякуємо за ваш відгук!",
+  "maxFilesUploadError": "Ви можете завантажити лише 4 файли за раз",
+  "attachedFiles": "📎 Прикріплені файли",
+  "takePhoto": "Зробити фото",
+  "captureWithCamera": "Зняти камерою",
+  "selectImages": "Вибрати зображення",
+  "chooseFromGallery": "Вибрати з галереї",
+  "selectFile": "Вибрати файл",
+  "chooseAnyFileType": "Вибрати будь-який тип файлу",
+  "cannotReportOwnMessages": "Ви не можете повідомити про власні повідомлення",
+  "messageReportedSuccessfully": "✅ Повідомлення успішно надіслано",
+  "confirmReportMessage": "Ви впевнені, що хочете повідомити про це повідомлення?",
+  "selectChatAssistant": "Вибрати чат-асистента",
+  "enableMoreApps": "Увімкнути більше додатків",
+  "chatCleared": "Чат очищено",
+  "clearChatTitle": "Очистити чат?",
+  "confirmClearChat": "Ви впевнені, що хочете очистити чат? Цю дію не можна скасувати.",
+  "copy": "Копіювати",
+  "share": "Поділитися",
+  "report": "Повідомити",
+  "microphonePermissionRequired": "Для запису голосу потрібен дозвіл мікрофона.",
+  "microphonePermissionDenied": "Доступ до мікрофона заборонено. Будь ласка, надайте дозвіл у Системні налаштування > Конфіденційність та безпека > Мікрофон.",
+  "failedToCheckMicrophonePermission": "Не вдалося перевірити дозвіл мікрофона: {error}",
+  "failedToTranscribeAudio": "Не вдалося розшифрувати аудіо",
+  "transcribing": "Розшифровка...",
+  "transcriptionFailed": "Розшифровка не вдалася",
+  "discardedConversation": "Відхилена розмова",
+  "at": "о",
+  "from": "з",
+  "copied": "Скопійовано!",
+  "copyLink": "Копіювати посилання",
+  "hideTranscript": "Сховати розшифровку",
+  "viewTranscript": "Показати розшифровку",
+  "conversationDetails": "Деталі розмови",
+  "transcript": "Розшифровка",
+  "segmentsCount": "{count} сегментів",
+  "noTranscriptAvailable": "Розшифровка недоступна",
+  "noTranscriptMessage": "Ця розмова не має розшифровки.",
+  "conversationUrlCouldNotBeGenerated": "URL-адресу розмови не вдалося створити.",
+  "failedToGenerateConversationLink": "Не вдалося створити посилання на розмову",
+  "failedToGenerateShareLink": "Не вдалося створити посилання для спільного доступу",
+  "reloadingConversations": "Перезавантаження бесід...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "@welcomeBack": {
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "user": "Користувач",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "Обране",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "Дата",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "Результатів не знайдено",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "Спробуйте змінити умови пошуку",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "starConversationsToFindQuickly": "Позначте бесіди зіркою, щоб швидко знаходити їх тут",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "Немає бесід {date}",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "Спробуйте вибрати іншу дату",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  },
+  "conversations": "Бесіди",
+  "@conversations": {
+    "description": "Navigation label for conversations page"
+  },
+  "chat": "Чат",
+  "@chat": {
+    "description": "Navigation label for chat page"
+  },
+  "@memories": {
+    "description": "Navigation label for memories page"
+  },
+  "actions": "Дії",
+  "@actions": {
+    "description": "Navigation label for actions page"
+  },
+  "syncAvailable": "Синхронізація доступна",
+  "@syncAvailable": {
+    "description": "Label for sync notification"
+  },
+  "referAFriend": "Порекомендувати друга",
+  "@referAFriend": {
+    "description": "Bottom navigation label for referral program"
+  },
+  "help": "Допомога",
+  "@help": {
+    "description": "Bottom navigation label for help"
+  },
+  "pro": "Pro",
+  "@pro": {
+    "description": "Badge label for pro/unlimited users"
+  },
+  "upgradeToPro": "Оновити до Pro",
+  "@upgradeToPro": {
+    "description": "Subscription banner button text"
+  },
+  "getOmiDevice": "Отримати пристрій Omi",
+  "@getOmiDevice": {
+    "description": "Widget title for device promotion"
+  },
+  "wearableAiCompanion": "Носимий AI-компаньйон",
+  "@wearableAiCompanion": {
+    "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "Завантаження спогадів...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "allMemories": "Всі спогади",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "Про вас",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "Ручні",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "Завантаження ваших спогадів...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "createYourFirstMemory": "Створіть перший спогад, щоб почати",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "Спробуйте змінити параметри пошуку або фільтр",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
+  },
+  "whatWouldYouLikeToRemember": "Що ви хочете запам'ятати?",
+  "category": "Категорія",
+  "public": "Публічна",
+  "failedToSaveCheckConnection": "Не вдалося зберегти. Перевірте підключення.",
+  "createMemory": "Створити пам'ять",
+  "deleteMemoryConfirmation": "Ви впевнені, що хочете видалити цю пам'ять? Цю дію не можна скасувати.",
+  "makePrivate": "Зробити приватною",
+  "organizeAndControlMemories": "Організуйте та керуйте своїми спогадами",
+  "total": "Всього",
+  "makeAllMemoriesPrivate": "Зробити всі спогади приватними",
+  "setAllMemoriesToPrivate": "Встановити всі спогади як приватні",
+  "makeAllMemoriesPublic": "Зробити всі спогади публічними",
+  "setAllMemoriesToPublic": "Встановити всі спогади як публічні",
+  "permanentlyRemoveAllMemories": "Назавжди видалити всі спогади з Omi",
+  "allMemoriesAreNowPrivate": "Всі спогади тепер приватні",
+  "allMemoriesAreNowPublic": "Всі спогади тепер публічні",
+  "clearOmisMemory": "Очистити пам'ять Omi",
+  "clearMemoryConfirmation": "Ви впевнені, що хочете очистити пам'ять Omi? Цю дію не можна скасувати, і вона назавжди видалить всі {count} спогадів.",
+  "omisMemoryCleared": "Пам'ять Omi про вас очищено",
+  "welcomeToOmi": "Ласкаво просимо до Omi",
+  "continueWithApple": "Продовжити з Apple",
+  "continueWithGoogle": "Продовжити з Google",
+  "byContinuingYouAgree": "Продовжуючи, ви погоджуєтесь з нашими ",
+  "termsOfService": "Умовами надання послуг",
+  "and": " та ",
+  "dataAndPrivacy": "Дані та конфіденційність",
+  "secureAuthViaAppleId": "Безпечна автентифікація через Apple ID",
+  "secureAuthViaGoogleAccount": "Безпечна автентифікація через обліковий запис Google",
+  "whatWeCollect": "Що ми збираємо",
+  "dataCollectionMessage": "Продовжуючи, ваші розмови, записи та особиста інформація будуть безпечно зберігатися на наших серверах для надання аналітики на основі ШІ та увімкнення всіх функцій додатку.",
+  "dataProtection": "Захист даних",
+  "yourDataIsProtected": "Ваші дані захищені та регулюються нашою ",
+  "pleaseSelectYourPrimaryLanguage": "Будь ласка, оберіть вашу основну мову",
+  "chooseYourLanguage": "Оберіть вашу мову",
+  "selectPreferredLanguageForBestExperience": "Оберіть бажану мову для найкращого досвіду Omi",
+  "searchLanguages": "Пошук мов...",
+  "selectALanguage": "Оберіть мову",
+  "tryDifferentSearchTerm": "Спробуйте інший пошуковий запит",
+  "pleaseEnterYourName": "Будь ласка, введіть ваше ім'я",
+  "nameMustBeAtLeast2Characters": "Ім'я повинно містити принаймні 2 символи",
+  "tellUsHowYouWouldLikeToBeAddressed": "Розкажіть нам, як ви хотіли б, щоб до вас зверталися. Це допомагає персоналізувати ваш досвід Omi.",
+  "charactersCount": "{count} символів",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "enableFeaturesForBestExperience": "Увімкніть функції для найкращого досвіду Omi на вашому пристрої.",
+  "microphoneAccess": "Доступ до мікрофона",
+  "recordAudioConversations": "Записувати аудіо розмови",
+  "microphoneAccessDescription": "Omi потребує доступу до мікрофона для запису ваших розмов і надання транскрипцій.",
+  "screenRecording": "Запис екрана",
+  "captureSystemAudioFromMeetings": "Захоплення системного звуку зі зустрічей",
+  "screenRecordingDescription": "Omi потребує дозволу на запис екрана для захоплення системного звуку з ваших зустрічей на основі браузера.",
+  "accessibility": "Доступність",
+  "detectBrowserBasedMeetings": "Виявлення зустрічей на основі браузера",
+  "accessibilityDescription": "Omi потребує дозволу доступності для виявлення, коли ви приєднуєтесь до зустрічей Zoom, Meet або Teams у вашому браузері.",
+  "pleaseWait": "Будь ласка, зачекайте...",
+  "joinTheCommunity": "Приєднуйтесь до спільноти!",
+  "loadingProfile": "Завантаження профілю...",
+  "profileSettings": "Налаштування профілю",
+  "noEmailSet": "Електронну пошту не встановлено",
+  "userIdCopiedToClipboard": "ID користувача скопійовано",
+  "yourInformation": "Ваша Інформація",
+  "setYourName": "Встановити ваше ім'я",
+  "changeYourName": "Змінити ваше ім'я",
+  "persona": "Персона",
+  "manageYourOmiPersona": "Керування вашою персоною Omi",
+  "voiceAndPeople": "Голос і Люди",
+  "teachOmiYourVoice": "Навчіть Omi вашому голосу",
+  "tellOmiWhoSaidIt": "Скажіть Omi, хто це сказав 🗣️",
+  "payment": "Оплата",
+  "addOrChangeYourPaymentMethod": "Додати або змінити спосіб оплати",
+  "preferences": "Налаштування",
+  "helpImproveOmiBySharing": "Допоможіть покращити Omi, діліться анонімними аналітичними даними",
+  "deleteAccount": "Видалити Обліковий запис",
+  "deleteYourAccountAndAllData": "Видалити обліковий запис та всі дані",
+  "helpsDiagnoseIssuesAutoDeletes": "Допомагає діагностувати проблеми. Автоматично видаляється через 3 дні.",
+  "clearLogs": "Очистити журнали",
+  "debugLogsCleared": "Журнали відлагодження очищено",
+  "exportConversations": "Експорт розмов",
+  "exportAllConversationsToJson": "Експортуйте всі свої розмови до файлу JSON.",
+  "conversationsExportStarted": "Експорт розмов розпочато. Це може зайняти кілька секунд, будь ласка, зачекайте.",
+  "mcpDescription": "Для підключення Omi до інших додатків для читання, пошуку та керування вашими спогадами та розмовами. Створіть ключ для початку.",
+  "apiKeys": "Ключі API",
+  "errorLabel": "Помилка: {error}",
+  "noApiKeysFound": "Ключі API не знайдено. Створіть один для початку.",
+  "advancedSettings": "Розширені налаштування",
+  "triggersWhenNewConversationCreated": "Спрацьовує при створенні нової розмови.",
+  "triggersWhenNewTranscriptReceived": "Спрацьовує при отриманні нового транскрипту.",
+  "realtimeAudioBytes": "Байти аудіо в реальному часі",
+  "triggersWhenAudioBytesReceived": "Спрацьовує при отриманні байтів аудіо.",
+  "everyXSeconds": "Кожні x секунд",
+  "triggersWhenDaySummaryGenerated": "Спрацьовує при генерації підсумку дня.",
+  "experimental": "Експериментальний",
+  "tryLatestExperimentalFeatures": "Спробуйте найновіші експериментальні функції від команди Omi.",
+  "transcriptionServiceDiagnosticStatus": "Діагностичний статус служби транскрипції",
+  "enableDetailedDiagnosticMessages": "Увімкнути детальні діагностичні повідомлення від служби транскрипції",
+  "autoCreateAndTagNewSpeakers": "Автоматично створювати та позначати нових мовців",
+  "automaticallyCreateNewPerson": "Автоматично створювати нову особу, коли ім'я виявлено в транскрипті.",
+  "pilotFeatures": "Пілотні функції",
+  "pilotFeaturesDescription": "Ці функції є тестами, і підтримка не гарантується.",
+  "suggestFollowUpQuestion": "Запропонувати додаткове запитання",
+  "saveSettings": "Зберегти Налаштування",
+  "syncingDeveloperSettings": "Синхронізація налаштувань розробника...",
+  "summary": "Резюме",
+  "auto": "Автоматично",
+  "noSummaryForApp": "Для цього додатка резюме недоступне. Спробуйте інший додаток для кращих результатів.",
+  "tryAnotherApp": "Спробувати інший додаток",
+  "generatedBy": "Створено {appName}",
+  "overview": "Огляд",
+  "otherAppResults": "Результати інших додатків",
+  "unknownApp": "Невідомий додаток",
+  "noSummaryAvailable": "Резюме недоступне",
+  "conversationNoSummaryYet": "Ця розмова ще не має резюме.",
+  "chooseSummarizationApp": "Виберіть додаток для резюме",
+  "setAsDefaultSummarizationApp": "{appName} встановлено як додаток для резюме за замовчуванням",
+  "letOmiChooseAutomatically": "Дозвольте Omi автоматично вибрати найкращий додаток",
+  "deleteConversationConfirmation": "Ви впевнені, що хочете видалити цю розмову? Цю дію не можна скасувати.",
+  "conversationDeleted": "Розмову видалено",
+  "generatingLink": "Генерація посилання...",
+  "editConversation": "Редагувати розмову",
+  "conversationLinkCopiedToClipboard": "Посилання на розмову скопійовано в буфер обміну",
+  "conversationTranscriptCopiedToClipboard": "Транскрипцію розмови скопійовано в буфер обміну",
+  "editConversationDialogTitle": "Редагувати розмову",
+  "changeTheConversationTitle": "Змінити назву розмови",
+  "conversationTitle": "Назва розмови",
+  "enterConversationTitle": "Введіть назву розмови...",
+  "conversationTitleUpdatedSuccessfully": "Назву розмови успішно оновлено",
+  "failedToUpdateConversationTitle": "Не вдалося оновити назву розмови",
+  "errorUpdatingConversationTitle": "Помилка при оновленні назви розмови",
+  "settingUp": "Налаштування...",
+  "preparingSystemAudioCapture": "Підготовка запису системного аудіо",
+  "clickTheButtonToCaptureAudio": "Натисніть кнопку, щоб записати аудіо для живих транскриптів, AI-інсайтів та автоматичного збереження.",
+  "startYourFirstRecording": "Розпочніть свій перший запис",
+  "reconnecting": "Перепідключення...",
+  "recordingPaused": "Запис призупинено",
+  "recordingActive": "Запис активний",
+  "startRecording": "Почати запис",
+  "resumingInCountdown": "Відновлення через {countdown}с...",
+  "tapPlayToResume": "Натисніть відтворення, щоб продовжити",
+  "listeningForAudio": "Прослуховування аудіо...",
+  "preparingAudioCapture": "Підготовка запису аудіо",
+  "clickToBeginRecording": "Натисніть, щоб почати запис",
+  "translated": "перекладено",
+  "liveTranscript": "Живий транскрипт",
+  "segmentsSingular": "{count} сегмент",
+  "segmentsPlural": "{count} сегментів",
+  "startRecordingToSeeTranscript": "Розпочніть запис, щоб побачити живий транскрипт",
+  "paused": "Призупинено",
+  "initializing": "Ініціалізація...",
+  "recording": "Запис",
+  "microphoneChangedResumingIn": "Мікрофон змінено. Відновлення через {countdown}с",
+  "clickPlayToResumeOrStop": "Натисніть відтворення для продовження або зупинку для завершення",
+  "settingUpSystemAudioCapture": "Налаштування запису системного аудіо",
+  "capturingAudioAndGeneratingTranscript": "Запис аудіо та створення транскрипту",
+  "clickToBeginRecordingSystemAudio": "Натисніть, щоб почати запис системного аудіо",
+  "you": "Ви",
+  "speakerWithId": "Доповідач {speakerId}",
+  "translatedByOmi": "перекладено omi",
+  "backToConversations": "Повернутися до розмов",
+  "systemAudio": "Система",
+  "mic": "Мікрофон",
+  "audioInputSetTo": "Аудіовхід встановлено на {deviceName}",
+  "errorSwitchingAudioDevice": "Помилка перемикання аудіопристрою: {error}",
+  "selectAudioInput": "Виберіть аудіовхід",
+  "loadingDevices": "Завантаження пристроїв...",
+  "settingsHeader": "НАЛАШТУВАННЯ",
+  "plansAndBilling": "Плани та Оплата",
+  "calendarIntegration": "Інтеграція Календаря",
+  "dailySummary": "Щоденна Зведення",
+  "developer": "Розробник",
+  "about": "Про програму",
+  "selectTime": "Вибрати Час",
+  "accountGroup": "Обліковий запис",
+  "signOutQuestion": "Вийти?",
+  "signOutConfirmation": "Ви впевнені, що хочете вийти?",
+  "customVocabularyHeader": "КОРИСТУВАЦЬКИЙ СЛОВНИК",
+  "addWordsDescription": "Додайте слова, які Omi має розпізнавати під час транскрипції.",
+  "enterWordsHint": "Введіть слова (через кому)",
+  "dailySummaryHeader": "ЩОДЕННА ЗВЕДЕННЯ",
+  "dailySummaryTitle": "Щоденна Зведення",
+  "dailySummaryDescription": "Отримуйте персоналізовану зведення ваших розмов",
+  "deliveryTime": "Час Доставки",
+  "deliveryTimeDescription": "Коли отримувати щоденну зведення",
+  "subscription": "Підписка",
+  "viewPlansAndUsage": "Перегляд Планів та Використання",
+  "viewPlansDescription": "Керуйте підпискою та переглядайте статистику використання",
+  "addOrChangePaymentMethod": "Додати або змінити спосіб оплати",
+  "displayOptions": "Параметри відображення",
+  "showMeetingsInMenuBar": "Показувати зустрічі в рядку меню",
+  "displayUpcomingMeetingsDescription": "Відображати майбутні зустрічі в рядку меню",
+  "showEventsWithoutParticipants": "Показувати події без учасників",
+  "includePersonalEventsDescription": "Включити особисті події без учасників",
+  "upcomingMeetings": "МАЙБУТНІ ЗУСТРІЧІ",
+  "checkingNext7Days": "Перевірка наступних 7 днів",
+  "shortcuts": "Комбінації клавіш",
+  "shortcutChangeInstruction": "Натисніть на комбінацію клавіш, щоб змінити її. Натисніть Escape для скасування.",
+  "configurePersonaDescription": "Налаштуйте свою персону ШІ",
+  "configureSTTProvider": "Налаштувати постачальника STT",
+  "setConversationEndDescription": "Встановіть, коли розмови автоматично завершуються",
+  "importDataDescription": "Імпортувати дані з інших джерел",
+  "debugAndDiagnostics": "Налагодження та діагностика",
+  "autoDeletesAfter3Days": "Автоматичне видалення через 3 дні",
+  "helpsDiagnoseIssues": "Допомагає діагностувати проблеми",
+  "exportConversationsDescription": "Експортувати розмови в JSON",
+  "exportingConversations": "Експорт розмов...",
+  "clearNodesDescription": "Очистити всі вузли та з'єднання",
+  "deleteKnowledgeGraphQuestion": "Видалити граф знань?",
+  "deleteKnowledgeGraphWarning": "Це видалить усі похідні дані графа знань. Ваші оригінальні спогади залишаться в безпеці.",
+  "connectOmiWithAI": "Підключіть Omi до ШІ-асистентів",
+  "noAPIKeys": "Немає ключів API. Створіть один, щоб почати.",
+  "realTimeTranscript": "Транскрипція в реальному часі",
+  "transcriptionDiagnostics": "Діагностика транскрипції",
+  "detailedDiagnosticMessages": "Детальні діагностичні повідомлення",
+  "autoCreateSpeakers": "Автоматично створювати спікерів",
+  "autoCreateWhenDetected": "Автоматично створювати при виявленні імені",
+  "followUpQuestions": "Додаткові питання",
+  "suggestQuestionsAfterConversations": "Пропонувати питання після розмов",
+  "goalTracker": "Відстеження цілей",
+  "trackPersonalGoals": "Відстежувати особисті цілі на головній сторінці",
+  "dailyReflection": "Щоденна рефлексія",
+  "dailyReflectionDescription": "Нагадування о 21:00 для роздумів про ваш день",
+  "endpointURL": "URL кінцевої точки",
+  "links": "Посилання",
+  "discordMemberCount": "Понад 8000 учасників у Discord",
+  "userInformation": "Інформація про користувача",
+  "capabilities": "Можливості",
+  "previewScreenshots": "Попередній перегляд знімків",
+  "holdOnPreparingForm": "Зачекайте, ми готуємо форму для вас",
+  "bySubmittingYouAgreeToOmi": "Надсилаючи, ви погоджуєтеся з Omi ",
+  "termsAndPrivacyPolicy": "Умови та Політика конфіденційності",
+  "manageYourApp": "Керуйте своїм додатком",
+  "updatingYourApp": "Оновлення вашого додатка",
+  "fetchingYourAppDetails": "Отримання даних додатка",
+  "updateAppQuestion": "Оновити додаток?",
+  "updateAppConfirmation": "Ви впевнені, що хочете оновити свій додаток? Зміни набудуть чинності після перевірки нашою командою.",
+  "updateApp": "Оновити додаток",
+  "createAndSubmitNewApp": "Створіть і надішліть новий додаток",
+  "appsCount": "Додатки ({count})",
+  "privateAppsCount": "Приватні додатки ({count})",
+  "publicAppsCount": "Публічні додатки ({count})",
+  "newVersionAvailable": "Доступна нова версія  🎉",
+  "no": "Ні",
+  "subscriptionCancelledSuccessfully": "Підписку успішно скасовано. Вона залишиться активною до кінця поточного розрахункового періоду.",
+  "failedToCancelSubscription": "Не вдалося скасувати підписку. Будь ласка, спробуйте ще раз.",
+  "invalidPaymentUrl": "Недійсний URL оплати",
+  "permissionsAndTriggers": "Дозволи та тригери",
+  "chatFeatures": "Функції чату",
+  "uninstall": "Видалити",
+  "installs": "ВСТАНОВЛЕННЯ",
+  "priceLabel": "ЦІНА",
+  "updatedLabel": "ОНОВЛЕНО",
+  "createdLabel": "СТВОРЕНО",
+  "featuredLabel": "РЕКОМЕНДОВАНО",
+  "cancelSubscriptionQuestion": "Скасувати підписку?",
+  "cancelSubscriptionConfirmation": "Ви впевнені, що хочете скасувати підписку? Ви матимете доступ до кінця поточного розрахункового періоду.",
+  "cancelSubscriptionButton": "Скасувати підписку",
+  "cancelling": "Скасування...",
+  "betaTesterMessage": "Ви бета-тестер цього додатка. Він ще не публічний. Стане публічним після схвалення.",
+  "appUnderReviewMessage": "Ваш додаток на розгляді і видимий тільки вам. Стане публічним після схвалення.",
+  "appRejectedMessage": "Ваш додаток відхилено. Оновіть дані та надішліть повторно на розгляд.",
+  "invalidIntegrationUrl": "Недійсний URL інтеграції",
+  "tapToComplete": "Торкніться для завершення",
+  "invalidSetupInstructionsUrl": "Недійсний URL інструкцій з налаштування",
+  "pushToTalk": "Натисніть, щоб говорити",
+  "summaryPrompt": "Промпт резюме",
+  "pleaseSelectARating": "Будь ласка, виберіть оцінку",
+  "reviewAddedSuccessfully": "Відгук успішно додано 🚀",
+  "reviewUpdatedSuccessfully": "Відгук успішно оновлено 🚀",
+  "failedToSubmitReview": "Не вдалося надіслати відгук. Будь ласка, спробуйте ще раз.",
+  "addYourReview": "Додайте свій відгук",
+  "editYourReview": "Редагувати свій відгук",
+  "writeAReviewOptional": "Написати відгук (необов'язково)",
+  "submitReview": "Надіслати відгук",
+  "updateReview": "Оновити відгук",
+  "yourReview": "Ваш відгук",
+  "anonymousUser": "Анонімний користувач",
+  "issueActivatingApp": "Виникла проблема з активацією цього додатка. Будь ласка, спробуйте ще раз.",
+  "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
+  "copyUrl": "Копіювати URL",
+  "txtFormat": "TXT",
+  "pdfFormat": "PDF",
+  "weekdayMon": "Пн",
+  "weekdayTue": "Вт",
+  "weekdayWed": "Ср",
+  "weekdayThu": "Чт",
+  "weekdayFri": "Пт",
+  "weekdaySat": "Сб",
+  "weekdaySun": "Нд",
+  "serviceIntegrationComingSoon": "Інтеграція з {serviceName} незабаром",
+  "alreadyExportedTo": "Вже експортовано до {platform}",
+  "anotherPlatform": "іншу платформу",
+  "pleaseAuthenticateWithService": "Будь ласка, авторизуйтесь в {serviceName} у Налаштування > Інтеграції завдань",
+  "addingToService": "Додавання до {serviceName}...",
+  "addedToService": "Додано до {serviceName}",
+  "failedToAddToService": "Не вдалося додати до {serviceName}",
+  "permissionDeniedForAppleReminders": "Дозвіл для Apple Reminders відхилено",
+  "failedToCreateApiKey": "Не вдалося створити API-ключ провайдера: {error}",
+  "createAKey": "Створити ключ",
+  "apiKeyRevokedSuccessfully": "API-ключ успішно відкликано",
+  "failedToRevokeApiKey": "Не вдалося відкликати API-ключ: {error}",
+  "omiApiKeys": "API-ключі Omi",
+  "apiKeysDescription": "API-ключі використовуються для автентифікації, коли ваш додаток взаємодіє з сервером OMI. Вони дозволяють вашому додатку створювати спогади та безпечно отримувати доступ до інших сервісів OMI.",
+  "aboutOmiApiKeys": "Про API-ключі Omi",
+  "noApiKeysYet": "API-ключів поки немає. Створіть один для інтеграції з вашим додатком.",
+  "yourNewKey": "Ваш новий ключ:",
+  "copyToClipboard": "Копіювати в буфер обміну",
+  "pleaseCopyKeyNow": "Будь ласка, скопіюйте його зараз і запишіть у безпечному місці. ",
+  "willNotSeeAgain": "Ви не зможете побачити його знову.",
+  "revokeKey": "Відкликати ключ",
+  "revokeApiKeyQuestion": "Відкликати API-ключ?",
+  "revokeApiKeyWarning": "Цю дію не можна скасувати. Будь-які додатки, що використовують цей ключ, більше не зможуть отримати доступ до API.",
+  "revoke": "Відкликати",
+  "whatWouldYouLikeToCreate": "Що ви хочете створити?",
+  "createAnApp": "Створити додаток",
+  "createAndShareYourApp": "Створіть і поділіться своїм додатком",
+  "createMyClone": "Створити мій клон",
+  "createYourDigitalClone": "Створіть свій цифровий клон",
+  "itemApp": "Додаток",
+  "itemPersona": "Персона",
+  "keepItemPublic": "Залишити {item} публічним",
+  "makeItemPublicQuestion": "Зробити {item} публічним?",
+  "makeItemPrivateQuestion": "Зробити {item} приватним?",
+  "makeItemPublicExplanation": "Якщо ви зробите {item} публічним, ним зможуть користуватися всі",
+  "makeItemPrivateExplanation": "Якщо ви зараз зробите {item} приватним, він перестане працювати для всіх і буде видимий тільки вам",
+  "manageApp": "Керувати додатком",
+  "updatePersonaDetails": "Оновити деталі персони",
+  "deleteItemTitle": "Видалити {item}",
+  "deleteItemQuestion": "Видалити {item}?",
+  "deleteItemConfirmation": "Ви впевнені, що хочете видалити цей {item}? Цю дію неможливо скасувати.",
+  "revokeKeyQuestion": "Відкликати ключ?",
+  "revokeKeyConfirmation": "Ви впевнені, що хочете відкликати ключ \"{keyName}\"? Цю дію неможливо скасувати.",
+  "createNewKey": "Створити новий ключ",
+  "keyNameHint": "напр., Claude Desktop",
+  "pleaseEnterAName": "Будь ласка, введіть назву.",
+  "failedToCreateKeyWithError": "Не вдалося створити ключ: {error}",
+  "failedToCreateKeyTryAgain": "Не вдалося створити ключ. Будь ласка, спробуйте ще раз.",
+  "keyCreated": "Ключ створено",
+  "keyCreatedMessage": "Ваш новий ключ створено. Будь ласка, скопіюйте його зараз. Ви більше не зможете його побачити.",
+  "keyWord": "Ключ",
+  "externalAppAccess": "Доступ зовнішніх додатків",
+  "externalAppAccessDescription": "Наступні встановлені додатки мають зовнішні інтеграції та можуть отримати доступ до ваших даних, таких як розмови та спогади.",
+  "noExternalAppsHaveAccess": "Жоден зовнішній додаток не має доступу до ваших даних.",
+  "maximumSecurityE2ee": "Максимальна безпека (E2EE)",
+  "e2eeDescription": "Наскрізне шифрування є золотим стандартом конфіденційності. Коли ввімкнено, ваші дані шифруються на вашому пристрої перед відправленням на наші сервери. Це означає, що ніхто, навіть Omi, не може отримати доступ до вашого вмісту.",
+  "importantTradeoffs": "Важливі компроміси:",
+  "e2eeTradeoff1": "• Деякі функції, такі як інтеграції із зовнішніми додатками, можуть бути вимкнені.",
+  "e2eeTradeoff2": "• Якщо ви втратите пароль, ваші дані не можуть бути відновлені.",
+  "featureComingSoon": "Ця функція незабаром зявиться!",
+  "migrationInProgressMessage": "Міграція виконується. Ви не можете змінити рівень захисту, поки вона не завершиться.",
+  "migrationFailed": "Міграція не вдалася",
+  "migratingFromTo": "Міграція з {source} до {target}",
+  "objectsCount": "{processed} / {total} обєктів",
+  "secureEncryption": "Безпечне шифрування",
+  "secureEncryptionDescription": "Ваші дані зашифровані унікальним для вас ключем на наших серверах, розміщених у Google Cloud. Це означає, що ваш необроблений вміст недоступний нікому, включаючи співробітників Omi або Google, безпосередньо з бази даних.",
+  "endToEndEncryption": "Наскрізне шифрування",
+  "e2eeCardDescription": "Увімкніть для максимальної безпеки, де тільки ви можете отримати доступ до своїх даних. Торкніться, щоб дізнатися більше.",
+  "dataAlwaysEncrypted": "Незалежно від рівня, ваші дані завжди зашифровані в стані спокою та під час передачі.",
+  "readOnlyScope": "Лише читання",
+  "fullAccessScope": "Повний доступ",
+  "readScope": "Читання",
+  "writeScope": "Запис",
+  "apiKeyCreated": "API ключ створено!",
+  "saveKeyWarning": "Збережіть цей ключ зараз! Ви більше не зможете його побачити.",
+  "yourApiKey": "ВАШ API КЛЮЧ",
+  "tapToCopy": "Торкніться, щоб скопіювати",
+  "copyKey": "Копіювати ключ",
+  "createApiKey": "Створити API ключ",
+  "accessDataProgrammatically": "Програмний доступ до ваших даних",
+  "keyNameLabel": "НАЗВА КЛЮЧА",
+  "keyNamePlaceholder": "напр., Моя інтеграція",
+  "permissionsLabel": "ДОЗВОЛИ",
+  "permissionsInfoNote": "R = Читання, W = Запис. За замовчуванням лише читання, якщо нічого не вибрано.",
+  "developerApi": "API розробника",
+  "createAKeyToGetStarted": "Створіть ключ, щоб почати",
+  "errorWithMessage": "Помилка: {error}",
+  "omiTraining": "Навчання Omi",
+  "trainingDataProgram": "Програма даних для навчання",
+  "getOmiUnlimitedFree": "Отримайте Omi Unlimited безкоштовно, надавши свої дані для навчання моделей ШІ.",
+  "trainingDataBullets": "• Ваші дані допомагають покращувати моделі ШІ\n• Передаються лише нечутливі дані\n• Повністю прозорий процес",
+  "learnMoreAtOmiTraining": "Дізнайтеся більше на omi.me/training",
+  "agreeToContributeData": "Я розумію і погоджуюсь надати свої дані для навчання ШІ",
+  "submitRequest": "Надіслати запит",
+  "thankYouRequestUnderReview": "Дякуємо! Ваш запит розглядається. Ми повідомимо вас після схвалення.",
+  "planRemainsActiveUntil": "Ваш план залишиться активним до {date}. Після цього ви втратите доступ до необмежених функцій. Ви впевнені?",
+  "confirmCancellation": "Підтвердити скасування",
+  "keepMyPlan": "Зберегти мій план",
+  "subscriptionSetToCancel": "Вашу підписку встановлено для скасування в кінці періоду.",
+  "switchedToOnDevice": "Переключено на транскрипцію на пристрої",
+  "couldNotSwitchToFreePlan": "Не вдалося перейти на безкоштовний план. Будь ласка, спробуйте ще раз.",
+  "couldNotLoadPlans": "Не вдалося завантажити доступні плани. Будь ласка, спробуйте ще раз.",
+  "selectedPlanNotAvailable": "Вибраний план недоступний. Будь ласка, спробуйте ще раз.",
+  "upgradeToAnnualPlan": "Оновити до річного плану",
+  "importantBillingInfo": "Важлива інформація про виставлення рахунків:",
+  "monthlyPlanContinues": "Ваш поточний місячний план продовжуватиметься до кінця розрахункового періоду",
+  "paymentMethodCharged": "Ваш існуючий спосіб оплати буде автоматично списано, коли закінчиться ваш місячний план",
+  "annualSubscriptionStarts": "Ваша 12-місячна річна підписка розпочнеться автоматично після списання",
+  "thirteenMonthsCoverage": "Ви отримаєте 13 місяців покриття загалом (поточний місяць + 12 місяців річної підписки)",
+  "confirmUpgrade": "Підтвердити оновлення",
+  "confirmPlanChange": "Підтвердити зміну плану",
+  "confirmAndProceed": "Підтвердити і продовжити",
+  "upgradeScheduled": "Оновлення заплановано",
+  "changePlan": "Змінити план",
+  "upgradeAlreadyScheduled": "Ваше оновлення до річного плану вже заплановано",
+  "youAreOnUnlimitedPlan": "Ви на плані Безлімітний.",
+  "yourOmiUnleashed": "Ваш Omi, розкритий. Перейдіть на безлімітний для безмежних можливостей.",
+  "planEndedOn": "Ваш план закінчився {date}.\\nПідпишіться знову зараз - з вас буде негайно списано за новий розрахунковий період.",
+  "planSetToCancelOn": "Ваш план налаштовано на скасування {date}.\\nПідпишіться знову, щоб зберегти переваги - без оплати до {date}.",
+  "annualPlanStartsAutomatically": "Ваш річний план розпочнеться автоматично, коли закінчиться ваш місячний план.",
+  "planRenewsOn": "Ваш план поновлюється {date}.",
+  "unlimitedConversations": "Необмежені розмови",
+  "askOmiAnything": "Запитайте Omi будь-що про своє життя",
+  "unlockOmiInfiniteMemory": "Розблокуйте безмежну пам'ять Omi",
+  "youreOnAnnualPlan": "Ви на річному плані",
+  "alreadyBestValuePlan": "У вас вже найвигідніший план. Зміни не потрібні.",
+  "unableToLoadPlans": "Не вдається завантажити плани",
+  "checkConnectionTryAgain": "Перевірте з'єднання і спробуйте ще раз",
+  "useFreePlan": "Використати безкоштовний план",
+  "continueText": "Продовжити",
+  "resubscribe": "Підписатися знову",
+  "couldNotOpenPaymentSettings": "Не вдалося відкрити налаштування оплати. Будь ласка, спробуйте ще раз.",
+  "managePaymentMethod": "Керування способом оплати",
+  "cancelSubscription": "Скасувати підписку",
+  "endsOnDate": "Закінчується {date}",
+  "active": "Активний",
+  "freePlan": "Безкоштовний план",
+  "configure": "Налаштувати",
+  "privacyInformation": "Інформація про конфіденційність",
+  "@privacyInformation": {
+    "description": "Privacy page - privacyInformation"
+  },
+  "yourPrivacyMattersToUs": "Ваша конфіденційність важлива для нас",
+  "@yourPrivacyMattersToUs": {
+    "description": "Privacy page - yourPrivacyMattersToUs"
+  },
+  "privacyIntroText": "В Omi ми дуже серйозно ставимося до вашої конфіденційності. Ми хочемо бути прозорими щодо даних, які збираємо, і як їх використовуємо. Ось що вам потрібно знати:",
+  "@privacyIntroText": {
+    "description": "Privacy page - privacyIntroText"
+  },
+  "whatWeTrack": "Що ми відстежуємо",
+  "@whatWeTrack": {
+    "description": "Privacy page - whatWeTrack"
+  },
+  "anonymityAndPrivacy": "Анонімність і конфіденційність",
+  "@anonymityAndPrivacy": {
+    "description": "Privacy page - anonymityAndPrivacy"
+  },
+  "optInAndOptOutOptions": "Опції згоди та відмови",
+  "@optInAndOptOutOptions": {
+    "description": "Privacy page - optInAndOptOutOptions"
+  },
+  "ourCommitment": "Наше зобов'язання",
+  "@ourCommitment": {
+    "description": "Privacy page - ourCommitment"
+  },
+  "commitmentText": "Ми зобов'язуємося використовувати зібрані дані лише для того, щоб зробити Omi кращим продуктом для вас. Ваша конфіденційність і довіра є для нас найважливішими.",
+  "@commitmentText": {
+    "description": "Privacy page - commitmentText"
+  },
+  "thankYouText": "Дякуємо, що ви цінний користувач Omi. Якщо у вас є запитання чи занепокоєння, зв'яжіться з нами за адресою team@basedhardware.com.",
+  "@thankYouText": {
+    "description": "Privacy page - thankYouText"
+  },
+  "wifiSyncSettings": "Налаштування синхронізації WiFi",
+  "@wifiSyncSettings": {
+    "description": "WiFi sync settings - wifiSyncSettings"
+  },
+  "enterHotspotCredentials": "Введіть облікові дані точки доступу телефону",
+  "@enterHotspotCredentials": {
+    "description": "WiFi sync settings - enterHotspotCredentials"
+  },
+  "wifiSyncUsesHotspot": "WiFi синхронізація використовує телефон як точку доступу. Знайдіть ім'я та пароль у Налаштування > Режим модема.",
+  "@wifiSyncUsesHotspot": {
+    "description": "WiFi sync settings - wifiSyncUsesHotspot"
+  },
+  "hotspotNameSsid": "Ім'я точки доступу (SSID)",
+  "@hotspotNameSsid": {
+    "description": "WiFi sync settings - hotspotNameSsid"
+  },
+  "exampleIphoneHotspot": "напр. iPhone Hotspot",
+  "@exampleIphoneHotspot": {
+    "description": "WiFi sync settings - exampleIphoneHotspot"
+  },
+  "password": "Пароль",
+  "@password": {
+    "description": "WiFi sync settings - password"
+  },
+  "enterHotspotPassword": "Введіть пароль точки доступу",
+  "@enterHotspotPassword": {
+    "description": "WiFi sync settings - enterHotspotPassword"
+  },
+  "saveCredentials": "Зберегти облікові дані",
+  "@saveCredentials": {
+    "description": "WiFi sync settings - saveCredentials"
+  },
+  "clearCredentials": "Очистити облікові дані",
+  "@clearCredentials": {
+    "description": "WiFi sync settings - clearCredentials"
+  },
+  "pleaseEnterHotspotName": "Будь ласка, введіть ім'я точки доступу",
+  "@pleaseEnterHotspotName": {
+    "description": "WiFi sync settings - pleaseEnterHotspotName"
+  },
+  "wifiCredentialsSaved": "Облікові дані WiFi збережено",
+  "@wifiCredentialsSaved": {
+    "description": "WiFi sync settings - wifiCredentialsSaved"
+  },
+  "wifiCredentialsCleared": "Облікові дані WiFi очищено",
+  "@wifiCredentialsCleared": {
+    "description": "WiFi sync settings - wifiCredentialsCleared"
+  },
+  "summaryGeneratedForDate": "Підсумок створено для {date}",
+  "@summaryGeneratedForDate": {
+    "description": "Daily summary settings - summaryGeneratedForDate",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "1/15/2026"
+      }
+    }
+  },
+  "failedToGenerateSummaryCheckConversations": "Не вдалося створити підсумок. Переконайтеся, що у вас є розмови за цей день.",
+  "@failedToGenerateSummaryCheckConversations": {
+    "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Підсумок не знайдено",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "Ваша подорож за день",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "Основні моменти",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Невирішені питання",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Рішення",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Висновки",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
+  },
+  "autoDeletesAfterThreeDays": "Автоматично видаляється через 3 дні.",
+  "@autoDeletesAfterThreeDays": {
+    "description": "Developer settings - autoDeletesAfterThreeDays"
+  },
+  "knowledgeGraphDeletedSuccessfully": "Граф знань успішно видалено",
+  "@knowledgeGraphDeletedSuccessfully": {
+    "description": "Developer settings - knowledgeGraphDeletedSuccessfully"
+  },
+  "exportStartedMayTakeFewSeconds": "Експорт розпочато. Це може зайняти кілька секунд...",
+  "@exportStartedMayTakeFewSeconds": {
+    "description": "Developer settings - exportStartedMayTakeFewSeconds"
+  },
+  "knowledgeGraphDeleteDescription": "Це видалить усі похідні дані графа знань (вузли та з'єднання). Ваші оригінальні спогади залишаться в безпеці. Граф буде відновлено з часом або за наступним запитом.",
+  "@knowledgeGraphDeleteDescription": {
+    "description": "Developer settings - knowledgeGraphDeleteDescription"
+  },
+  "configureDailySummaryDigest": "Налаштуйте щоденний підсумок завдань",
+  "accessesDataTypes": "Доступ до {dataTypes}",
+  "triggeredByType": "запускається {triggerType}",
+  "accessesAndTriggeredBy": "{accessDescription} і {triggerDescription}.",
+  "isTriggeredBy": "{triggerDescription}.",
+  "noSpecificDataAccessConfigured": "Конкретний доступ до даних не налаштовано."
 }

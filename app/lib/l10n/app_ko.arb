@@ -65,7 +65,7 @@
   "@clear": {
     "description": "Clear button label"
   },
-  "copyTranscript": "녹취록 복사",
+  "copyTranscript": "대화록 복사",
   "@copyTranscript": {
     "description": "Menu item to copy transcript"
   },
@@ -175,7 +175,7 @@
   },
   "settings": "설정",
   "@settings": {
-    "description": "Settings page title"
+    "description": "Bottom navigation label for settings"
   },
   "language": "언어",
   "@language": {
@@ -293,9 +293,9 @@
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
-  "noStarredConversations": "아직 즐겨찾기한 대화가 없습니다.",
+  "noStarredConversations": "즐겨찾기한 대화가 없습니다",
   "@noStarredConversations": {
-    "description": "Empty state for starred filter"
+    "description": "Empty state title when no starred conversations"
   },
   "starConversationHint": "대화를 즐겨찾기하려면 대화를 열고 헤더의 별 아이콘을 탭하세요.",
   "@starConversationHint": {
@@ -351,7 +351,7 @@
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "메시지가 클립보드에 복사되었습니다.",
+  "messageCopied": "✨ 메시지가 클립보드에 복사되었습니다",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -393,7 +393,7 @@
   },
   "apps": "앱",
   "@apps": {
-    "description": "Apps page title"
+    "description": "Navigation label for apps page"
   },
   "noAppsFound": "앱을 찾을 수 없습니다",
   "@noAppsFound": {
@@ -427,7 +427,7 @@
   "@unableToFetchApps": {
     "description": "Error when apps fail to load"
   },
-  "aboutOmi": "Omi 정보",
+  "aboutOmi": "Omi 소개",
   "@aboutOmi": {
     "description": "About page title"
   },
@@ -439,7 +439,7 @@
   "@visitWebsite": {
     "description": "Visit website link"
   },
-  "helpOrInquiries": "도움말 또는 문의사항이 있으신가요?",
+  "helpOrInquiries": "도움말 또는 문의?",
   "@helpOrInquiries": {
     "description": "Help link title"
   },
@@ -447,7 +447,7 @@
   "@joinCommunity": {
     "description": "Discord community link"
   },
-  "membersAndCounting": "8000명 이상의 멤버가 함께하고 있습니다.",
+  "membersAndCounting": "8000+명의 회원이 있으며 계속 증가하고 있습니다.",
   "@membersAndCounting": {
     "description": "Discord member count"
   },
@@ -511,7 +511,7 @@
   "@email": {
     "description": "Email field label"
   },
-  "customVocabulary": "사용자 지정 어휘",
+  "customVocabulary": "사용자 정의 어휘",
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
@@ -519,7 +519,7 @@
   "@identifyingOthers": {
     "description": "People identification setting"
   },
-  "paymentMethods": "결제 수단",
+  "paymentMethods": "결제 방법",
   "@paymentMethods": {
     "description": "Payment methods setting"
   },
@@ -527,7 +527,7 @@
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "데이터 및 개인정보",
+  "dataPrivacy": "데이터 개인정보 보호",
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
@@ -879,7 +879,7 @@
   "@createKeyToStart": {
     "description": "Create key instruction"
   },
-  "createKey": "키 만들기",
+  "createKey": "키 생성",
   "@createKey": {
     "description": "Create Key button"
   },
@@ -1087,7 +1087,7 @@
   "exportShared": "내보내기가 공유되었습니다",
   "deleteKnowledgeGraphTitle": "지식 그래프를 삭제하시겠습니까?",
   "deleteKnowledgeGraphMessage": "파생된 모든 지식 그래프 데이터(노드 및 연결)가 삭제됩니다. 원본 기억은 안전하게 유지됩니다. 그래프는 시간이 지나면 다시 구축되거나 다음 요청 시 재구축됩니다.",
-  "knowledgeGraphDeleted": "지식 그래프가 성공적으로 삭제되었습니다",
+  "knowledgeGraphDeleted": "지식 그래프가 삭제되었습니다",
   "deleteGraphFailed": "그래프 삭제 실패: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -1128,7 +1128,7 @@
   "listeningMins": "청취(분)",
   "understandingWords": "이해(단어)",
   "insights": "인사이트",
-  "memories": "기억",
+  "memories": "추억",
   "minsUsedThisMonth": "이번 달 {limit}분 중 {used}분 사용",
   "@minsUsedThisMonth": {
     "placeholders": {
@@ -1173,7 +1173,7 @@
       }
     }
   },
-  "visibility": "가시성",
+  "visibility": "공개 설정",
   "visibilitySubtitle": "목록에 표시할 대화 제어",
   "showShortConversations": "짧은 대화 표시",
   "showShortConversationsDesc": "임계값보다 짧은 대화 표시",
@@ -1571,7 +1571,7 @@
   "autoLanguageDetection": "자동 언어 감지",
   "highAccuracy": "높은 정확도",
   "privacyFirst": "개인정보 보호 우선",
-  "saveChanges": "변경 사항 저장",
+  "saveChanges": "변경사항 저장",
   "resetToDefault": "기본값으로 재설정",
   "viewTemplate": "템플릿 보기",
   "trySomethingLike": "다음과 같이 시도해 보세요...",
@@ -1594,7 +1594,7 @@
   "perMonth": "/ 월",
   "tailoredConversationSummaries": "맞춤형 대화 요약",
   "customChatbotPersonality": "사용자 지정 챗봇 성격",
-  "makePublic": "공개하기",
+  "makePublic": "공개로 변경",
   "anyoneCanDiscover": "누구나 앱을 찾을 수 있습니다",
   "onlyYouCanUse": "본인만 이 앱을 사용할 수 있습니다",
   "paidApp": "유료 앱",
@@ -1938,7 +1938,7 @@
   "@selectYourLanguage": {
     "description": "Placeholder for selected language name"
   },
-  "personalGrowthJourney": "당신의 모든 말을 듣는 AI와 함께하는 개인 성장 여정.",
+  "personalGrowthJourney": "모든 말을 듣는 AI와 함께하는 개인 성장 여정.",
   "@personalGrowthJourney": {
     "description": "Tagline on onboarding wrapper"
   },
@@ -2077,14 +2077,9 @@
   "@deleteSelected": {
     "description": "Tooltip for delete selected"
   },
-  "searchMemories": "{count}개의 기억 검색",
+  "searchMemories": "추억 검색...",
   "@searchMemories": {
-    "description": "Hint text for memories search bar",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
+    "description": "Search input hint text"
   },
   "memoryDeleted": "기억이 삭제되었습니다.",
   "@memoryDeleted": {
@@ -2094,9 +2089,9 @@
   "@undo": {
     "description": "Undo button text"
   },
-  "noMemoriesYet": "아직 기억이 없습니다",
+  "noMemoriesYet": "🧠 아직 추억이 없습니다",
   "@noMemoriesYet": {
-    "description": "Empty state text"
+    "description": "Empty state title when no memories"
   },
   "noAutoMemories": "아직 자동 추출된 기억이 없습니다",
   "@noAutoMemories": {
@@ -2110,9 +2105,9 @@
   "@noMemoriesInCategories": {
     "description": "Empty state text for filtered categories"
   },
-  "noMemoriesFound": "기억을 찾을 수 없습니다",
+  "noMemoriesFound": "🔍 추억을 찾을 수 없습니다",
   "@noMemoriesFound": {
-    "description": "Empty state text for search results"
+    "description": "Empty state title when search/filter has no results"
   },
   "addFirstMemory": "첫 번째 기억 추가",
   "@addFirstMemory": {
@@ -2126,7 +2121,7 @@
   "@clearMemoryMessage": {
     "description": "Dialog content for clearing memory"
   },
-  "clearMemoryButton": "기억 지우기",
+  "clearMemoryButton": "메모리 지우기",
   "@clearMemoryButton": {
     "description": "Button text to confirm clear"
   },
@@ -2134,7 +2129,7 @@
   "@memoryClearedSuccess": {
     "description": "Snackbar success message"
   },
-  "noMemoriesToDelete": "삭제할 기억이 없습니다",
+  "noMemoriesToDelete": "삭제할 메모리가 없습니다",
   "@noMemoriesToDelete": {
     "description": "Snackbar message"
   },
@@ -2146,7 +2141,7 @@
   "@createActionItemTooltip": {
     "description": "Tooltip for create action item FAB"
   },
-  "memoryManagement": "기억 관리",
+  "memoryManagement": "메모리 관리",
   "@memoryManagement": {
     "description": "Title for memory management sheet"
   },
@@ -2179,7 +2174,7 @@
   "@makeAllPublic": {
     "description": "Button label"
   },
-  "deleteAllMemories": "모든 기억 삭제",
+  "deleteAllMemories": "모든 메모리 삭제",
   "@deleteAllMemories": {
     "description": "Button label"
   },
@@ -2191,11 +2186,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "새 기억",
+  "newMemory": "✨ 새 메모리",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "기억 편집",
+  "editMemory": "✏️ 메모리 편집",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2341,11 +2336,11 @@
   "summarize": "요약",
   "generateSummary": "요약 생성",
   "conversationNotFoundOrDeleted": "대화를 찾을 수 없거나 삭제되었습니다",
-  "deleteMemory": "메모리를 삭제하시겠습니까?",
+  "deleteMemory": "메모리 삭제",
   "thisActionCannotBeUndone": "이 작업은 취소할 수 없습니다.",
   "memoriesCount": "{count}개의 추억",
   "noMemoriesInCategory": "이 카테고리에는 아직 메모리가 없습니다",
-  "addYourFirstMemory": "첫 번째 메모리 추가",
+  "addYourFirstMemory": "첫 추억 추가",
   "firmwareDisconnectUsb": "USB 연결 해제",
   "firmwareUsbWarning": "업데이트 중 USB 연결은 기기를 손상시킬 수 있습니다.",
   "firmwareBatteryAbove15": "배터리 15% 이상",
@@ -2366,7 +2361,7 @@
   "unpairDeviceDialogMessage": "기기 페어링을 해제하여 다른 전화기에 연결할 수 있도록 합니다. 설정 > Bluetooth로 이동하여 기기를 삭제하여 프로세스를 완료해야 합니다.",
   "unpair": "페어링 해제",
   "unpairAndForgetDevice": "페어링 해제 및 기기 삭제",
-  "unknownDevice": "알 수 없는 기기",
+  "unknownDevice": "알 수 없는 장치",
   "unknown": "알 수 없음",
   "productName": "제품명",
   "serialNumber": "일련번호",
@@ -2416,7 +2411,7 @@
   "saveGoal": "저장",
   "goals": "목표",
   "tapToAddGoal": "탭하여 목표 추가",
-  "welcomeBack": "다시 오신 것을 환영합니다",
+  "welcomeBack": "환영합니다, {name}님",
   "yourConversations": "대화 내역",
   "reviewAndManageConversations": "녹음된 대화를 검토하고 관리하세요",
   "startCapturingConversations": "Omi 장치로 대화를 캡처하여 여기에서 보세요.",
@@ -2519,5 +2514,785 @@
   "ratingsCount": "{count}+개의 평점",
   "errorActivatingApp": "앱 활성화 오류",
   "integrationSetupRequired": "이것이 통합 앱인 경우 설정이 완료되었는지 확인하세요.",
-  "installed": "설치됨"
+  "installed": "설치됨",
+  "appIdLabel": "앱 ID",
+  "appNameLabel": "앱 이름",
+  "appNamePlaceholder": "나의 멋진 앱",
+  "pleaseEnterAppName": "앱 이름을 입력하세요",
+  "categoryLabel": "카테고리",
+  "selectCategory": "카테고리 선택",
+  "descriptionLabel": "설명",
+  "appDescriptionPlaceholder": "나의 멋진 앱은 놀라운 일을 하는 훌륭한 앱입니다. 최고의 앱입니다!",
+  "pleaseProvideValidDescription": "유효한 설명을 입력하세요",
+  "appPricingLabel": "앱 가격",
+  "noneSelected": "선택 안 함",
+  "appIdCopiedToClipboard": "앱 ID가 클립보드에 복사되었습니다",
+  "appCategoryModalTitle": "앱 카테고리",
+  "pricingFree": "무료",
+  "pricingPaid": "유료",
+  "loadingCapabilities": "기능 로드 중...",
+  "filterInstalled": "설치됨",
+  "filterMyApps": "내 앱",
+  "clearSelection": "선택 해제",
+  "filterCategory": "카테고리",
+  "rating4PlusStars": "4+별",
+  "rating3PlusStars": "3+별",
+  "rating2PlusStars": "2+별",
+  "rating1PlusStars": "1+별",
+  "filterRating": "평점",
+  "filterCapabilities": "기능",
+  "noNotificationScopesAvailable": "사용 가능한 알림 범위 없음",
+  "popularApps": "인기 앱",
+  "pleaseProvidePrompt": "프롬프트를 입력하세요",
+  "chatWithAppName": "{appName}와 채팅",
+  "defaultAiAssistant": "기본 AI 어시스턴트",
+  "readyToChat": "✨ 채팅 준비 완료!",
+  "connectionNeeded": "🌐 연결 필요",
+  "startConversation": "대화를 시작하고 마법을 시작하세요",
+  "checkInternetConnection": "인터넷 연결을 확인하세요",
+  "wasThisHelpful": "도움이 되었나요?",
+  "thankYouForFeedback": "피드백 감사합니다!",
+  "maxFilesUploadError": "한 번에 4개의 파일만 업로드할 수 있습니다",
+  "attachedFiles": "📎 첨부 파일",
+  "takePhoto": "사진 찍기",
+  "captureWithCamera": "카메라로 촬영",
+  "selectImages": "이미지 선택",
+  "chooseFromGallery": "갤러리에서 선택",
+  "selectFile": "파일 선택",
+  "chooseAnyFileType": "모든 파일 유형 선택",
+  "cannotReportOwnMessages": "자신의 메시지는 신고할 수 없습니다",
+  "messageReportedSuccessfully": "✅ 메시지가 성공적으로 신고되었습니다",
+  "confirmReportMessage": "이 메시지를 신고하시겠습니까?",
+  "selectChatAssistant": "채팅 어시스턴트 선택",
+  "enableMoreApps": "더 많은 앱 활성화",
+  "chatCleared": "채팅이 삭제되었습니다",
+  "clearChatTitle": "채팅 삭제?",
+  "confirmClearChat": "채팅을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
+  "copy": "복사",
+  "share": "공유",
+  "report": "신고",
+  "microphonePermissionRequired": "음성 녹음을 위해 마이크 권한이 필요합니다.",
+  "microphonePermissionDenied": "마이크 권한이 거부되었습니다. 시스템 환경설정 > 개인정보 보호 및 보안 > 마이크에서 권한을 부여하세요.",
+  "failedToCheckMicrophonePermission": "마이크 권한 확인 실패: {error}",
+  "failedToTranscribeAudio": "오디오 텍스트 변환 실패",
+  "transcribing": "텍스트 변환 중...",
+  "transcriptionFailed": "텍스트 변환 실패",
+  "discardedConversation": "폐기된 대화",
+  "at": "시각",
+  "from": "부터",
+  "copied": "복사됨!",
+  "copyLink": "링크 복사",
+  "hideTranscript": "텍스트 숨기기",
+  "viewTranscript": "텍스트 보기",
+  "conversationDetails": "대화 세부정보",
+  "transcript": "텍스트",
+  "segmentsCount": "{count}개 세그먼트",
+  "noTranscriptAvailable": "사용 가능한 텍스트가 없습니다",
+  "noTranscriptMessage": "이 대화에는 텍스트가 없습니다.",
+  "conversationUrlCouldNotBeGenerated": "대화 URL을 생성할 수 없습니다.",
+  "failedToGenerateConversationLink": "대화 링크 생성 실패",
+  "failedToGenerateShareLink": "공유 링크 생성 실패",
+  "reloadingConversations": "대화 다시 로드 중...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "@welcomeBack": {
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "user": "사용자",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "즐겨찾기",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "날짜",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "결과를 찾을 수 없습니다",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "검색어를 조정해 보세요",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "starConversationsToFindQuickly": "대화를 즐겨찾기에 추가하면 여기에서 빠르게 찾을 수 있습니다",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "{date}에 대화가 없습니다",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "다른 날짜를 선택해 보세요",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  },
+  "conversations": "대화",
+  "@conversations": {
+    "description": "Navigation label for conversations page"
+  },
+  "chat": "채팅",
+  "@chat": {
+    "description": "Navigation label for chat page"
+  },
+  "@memories": {
+    "description": "Navigation label for memories page"
+  },
+  "actions": "액션",
+  "@actions": {
+    "description": "Navigation label for actions page"
+  },
+  "syncAvailable": "동기화 가능",
+  "@syncAvailable": {
+    "description": "Label for sync notification"
+  },
+  "referAFriend": "친구 추천",
+  "@referAFriend": {
+    "description": "Bottom navigation label for referral program"
+  },
+  "help": "도움말",
+  "@help": {
+    "description": "Bottom navigation label for help"
+  },
+  "pro": "Pro",
+  "@pro": {
+    "description": "Badge label for pro/unlimited users"
+  },
+  "upgradeToPro": "Pro로 업그레이드",
+  "@upgradeToPro": {
+    "description": "Subscription banner button text"
+  },
+  "getOmiDevice": "Omi 기기 받기",
+  "@getOmiDevice": {
+    "description": "Widget title for device promotion"
+  },
+  "wearableAiCompanion": "웨어러블 AI 컴패니언",
+  "@wearableAiCompanion": {
+    "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "추억 로드 중...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "allMemories": "모든 추억",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "당신에 대해",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "수동",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "추억을 로드하는 중...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "createYourFirstMemory": "첫 추억을 만들어 시작하세요",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "검색어나 필터를 조정해 보세요",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
+  },
+  "whatWouldYouLikeToRemember": "무엇을 기억하고 싶으세요?",
+  "category": "카테고리",
+  "public": "공개",
+  "failedToSaveCheckConnection": "저장 실패. 연결을 확인하세요.",
+  "createMemory": "메모리 만들기",
+  "deleteMemoryConfirmation": "이 메모리를 삭제하시겠습니까? 이 작업은 취소할 수 없습니다.",
+  "makePrivate": "비공개로 변경",
+  "organizeAndControlMemories": "메모리를 정리하고 관리하세요",
+  "total": "전체",
+  "makeAllMemoriesPrivate": "모든 메모리를 비공개로 설정",
+  "setAllMemoriesToPrivate": "모든 메모리를 비공개로 설정",
+  "makeAllMemoriesPublic": "모든 메모리를 공개로 설정",
+  "setAllMemoriesToPublic": "모든 메모리를 공개로 설정",
+  "permanentlyRemoveAllMemories": "Omi에서 모든 메모리를 영구적으로 제거",
+  "allMemoriesAreNowPrivate": "모든 메모리가 비공개로 설정되었습니다",
+  "allMemoriesAreNowPublic": "모든 메모리가 공개로 설정되었습니다",
+  "clearOmisMemory": "Omi의 메모리 지우기",
+  "clearMemoryConfirmation": "Omi의 메모리를 지우시겠습니까? 이 작업은 취소할 수 없으며 모든 {count}개의 메모리를 영구적으로 삭제합니다.",
+  "omisMemoryCleared": "당신에 대한 Omi의 메모리가 지워졌습니다",
+  "welcomeToOmi": "Omi에 오신 것을 환영합니다",
+  "continueWithApple": "Apple로 계속하기",
+  "continueWithGoogle": "Google로 계속하기",
+  "byContinuingYouAgree": "계속하면 ",
+  "termsOfService": "서비스 약관",
+  "and": " 및 ",
+  "dataAndPrivacy": "데이터 및 개인정보",
+  "secureAuthViaAppleId": "Apple ID를 통한 안전한 인증",
+  "secureAuthViaGoogleAccount": "Google 계정을 통한 안전한 인증",
+  "whatWeCollect": "수집하는 정보",
+  "dataCollectionMessage": "계속하면 대화, 녹음 및 개인 정보가 AI 기반 인사이트를 제공하고 모든 앱 기능을 활성화하기 위해 서버에 안전하게 저장됩니다.",
+  "dataProtection": "데이터 보호",
+  "yourDataIsProtected": "귀하의 데이터는 보호되며 ",
+  "pleaseSelectYourPrimaryLanguage": "기본 언어를 선택하세요",
+  "chooseYourLanguage": "언어를 선택하세요",
+  "selectPreferredLanguageForBestExperience": "최고의 Omi 경험을 위해 선호하는 언어를 선택하세요",
+  "searchLanguages": "언어 검색...",
+  "selectALanguage": "언어 선택",
+  "tryDifferentSearchTerm": "다른 검색어를 시도해보세요",
+  "pleaseEnterYourName": "이름을 입력하세요",
+  "nameMustBeAtLeast2Characters": "이름은 최소 2자 이상이어야 합니다",
+  "tellUsHowYouWouldLikeToBeAddressed": "어떻게 불리기를 원하시는지 알려주세요. 이는 Omi 경험을 개인화하는 데 도움이 됩니다.",
+  "charactersCount": "{count}자",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "enableFeaturesForBestExperience": "기기에서 최고의 Omi 경험을 위해 기능을 활성화하세요.",
+  "microphoneAccess": "마이크 액세스",
+  "recordAudioConversations": "오디오 대화 녹음",
+  "microphoneAccessDescription": "Omi는 대화를 녹음하고 전사를 제공하기 위해 마이크 액세스가 필요합니다.",
+  "screenRecording": "화면 녹화",
+  "captureSystemAudioFromMeetings": "회의에서 시스템 오디오 캡처",
+  "screenRecordingDescription": "Omi는 브라우저 기반 회의에서 시스템 오디오를 캡처하기 위해 화면 녹화 권한이 필요합니다.",
+  "accessibility": "접근성",
+  "detectBrowserBasedMeetings": "브라우저 기반 회의 감지",
+  "accessibilityDescription": "Omi는 브라우저에서 Zoom, Meet 또는 Teams 회의에 참여할 때를 감지하기 위해 접근성 권한이 필요합니다.",
+  "pleaseWait": "잠시만 기다려 주세요...",
+  "joinTheCommunity": "커뮤니티에 참여하세요!",
+  "loadingProfile": "프로필 로딩 중...",
+  "profileSettings": "프로필 설정",
+  "noEmailSet": "이메일이 설정되지 않음",
+  "userIdCopiedToClipboard": "사용자 ID가 복사되었습니다",
+  "yourInformation": "귀하의 정보",
+  "setYourName": "이름 설정",
+  "changeYourName": "이름 변경",
+  "persona": "페르소나",
+  "manageYourOmiPersona": "Omi 페르소나 관리",
+  "voiceAndPeople": "음성 및 사람",
+  "teachOmiYourVoice": "Omi에게 목소리 가르치기",
+  "tellOmiWhoSaidIt": "누가 말했는지 Omi에게 알려주기 🗣️",
+  "payment": "결제",
+  "addOrChangeYourPaymentMethod": "결제 방법 추가 또는 변경",
+  "preferences": "환경설정",
+  "helpImproveOmiBySharing": "익명화된 분석 데이터를 공유하여 Omi 개선 돕기",
+  "deleteAccount": "계정 삭제",
+  "deleteYourAccountAndAllData": "계정 및 모든 데이터 삭제",
+  "helpsDiagnoseIssuesAutoDeletes": "문제 진단에 도움이 됩니다. 3일 후 자동 삭제됩니다.",
+  "clearLogs": "로그 지우기",
+  "debugLogsCleared": "디버그 로그가 지워졌습니다",
+  "exportConversations": "대화 내보내기",
+  "exportAllConversationsToJson": "모든 대화를 JSON 파일로 내보냅니다.",
+  "conversationsExportStarted": "대화 내보내기가 시작되었습니다. 몇 초 정도 걸릴 수 있으니 기다려 주세요.",
+  "mcpDescription": "Omi를 다른 애플리케이션과 연결하여 기억과 대화를 읽고, 검색하고, 관리합니다. 시작하려면 키를 생성하세요.",
+  "apiKeys": "API 키",
+  "errorLabel": "오류: {error}",
+  "noApiKeysFound": "API 키를 찾을 수 없습니다. 시작하려면 하나를 생성하세요.",
+  "advancedSettings": "고급 설정",
+  "triggersWhenNewConversationCreated": "새 대화가 생성되면 트리거됩니다.",
+  "triggersWhenNewTranscriptReceived": "새 녹취록을 받으면 트리거됩니다.",
+  "realtimeAudioBytes": "실시간 오디오 바이트",
+  "triggersWhenAudioBytesReceived": "오디오 바이트를 받으면 트리거됩니다.",
+  "everyXSeconds": "x초마다",
+  "triggersWhenDaySummaryGenerated": "일일 요약이 생성되면 트리거됩니다.",
+  "experimental": "실험적",
+  "tryLatestExperimentalFeatures": "Omi 팀의 최신 실험적 기능을 사용해 보세요.",
+  "transcriptionServiceDiagnosticStatus": "녹취 서비스 진단 상태",
+  "enableDetailedDiagnosticMessages": "녹취 서비스의 상세한 진단 메시지 활성화",
+  "autoCreateAndTagNewSpeakers": "새 화자 자동 생성 및 태그 지정",
+  "automaticallyCreateNewPerson": "녹취록에서 이름이 감지되면 자동으로 새 사람을 생성합니다.",
+  "pilotFeatures": "파일럿 기능",
+  "pilotFeaturesDescription": "이러한 기능은 테스트이며 지원이 보장되지 않습니다.",
+  "suggestFollowUpQuestion": "후속 질문 제안",
+  "saveSettings": "설정 저장",
+  "syncingDeveloperSettings": "개발자 설정 동기화 중...",
+  "summary": "요약",
+  "auto": "자동",
+  "noSummaryForApp": "이 앱에 사용할 수 있는 요약이 없습니다. 더 나은 결과를 얻으려면 다른 앱을 시도하세요.",
+  "tryAnotherApp": "다른 앱 시도",
+  "generatedBy": "{appName}에서 생성",
+  "overview": "개요",
+  "otherAppResults": "다른 앱 결과",
+  "unknownApp": "알 수 없는 앱",
+  "noSummaryAvailable": "사용 가능한 요약 없음",
+  "conversationNoSummaryYet": "이 대화에는 아직 요약이 없습니다.",
+  "chooseSummarizationApp": "요약 앱 선택",
+  "setAsDefaultSummarizationApp": "{appName}이(가) 기본 요약 앱으로 설정되었습니다",
+  "letOmiChooseAutomatically": "Omi가 자동으로 최적의 앱을 선택하도록 허용",
+  "deleteConversationConfirmation": "이 대화를 삭제하시겠습니까? 이 작업은 취소할 수 없습니다.",
+  "conversationDeleted": "대화가 삭제되었습니다",
+  "generatingLink": "링크 생성 중...",
+  "editConversation": "대화 편집",
+  "conversationLinkCopiedToClipboard": "대화 링크가 클립보드에 복사되었습니다",
+  "conversationTranscriptCopiedToClipboard": "대화록이 클립보드에 복사되었습니다",
+  "editConversationDialogTitle": "대화 편집",
+  "changeTheConversationTitle": "대화 제목 변경",
+  "conversationTitle": "대화 제목",
+  "enterConversationTitle": "대화 제목 입력...",
+  "conversationTitleUpdatedSuccessfully": "대화 제목이 성공적으로 업데이트되었습니다",
+  "failedToUpdateConversationTitle": "대화 제목 업데이트 실패",
+  "errorUpdatingConversationTitle": "대화 제목 업데이트 중 오류 발생",
+  "settingUp": "설정 중...",
+  "preparingSystemAudioCapture": "시스템 오디오 캡처 준비 중",
+  "clickTheButtonToCaptureAudio": "라이브 자막, AI 인사이트 및 자동 저장을 위해 오디오를 캡처하려면 버튼을 클릭하세요.",
+  "startYourFirstRecording": "첫 번째 녹음 시작",
+  "reconnecting": "재연결 중...",
+  "recordingPaused": "녹음 일시중지됨",
+  "recordingActive": "녹음 중",
+  "startRecording": "녹음 시작",
+  "resumingInCountdown": "{countdown}초 후 재개...",
+  "tapPlayToResume": "재개하려면 재생을 탭하세요",
+  "listeningForAudio": "오디오 듣는 중...",
+  "preparingAudioCapture": "오디오 캡처 준비 중",
+  "clickToBeginRecording": "녹음을 시작하려면 클릭하세요",
+  "translated": "번역됨",
+  "liveTranscript": "라이브 자막",
+  "segmentsSingular": "{count}개 세그먼트",
+  "segmentsPlural": "{count}개 세그먼트",
+  "startRecordingToSeeTranscript": "라이브 자막을 보려면 녹음을 시작하세요",
+  "paused": "일시중지됨",
+  "initializing": "초기화 중...",
+  "recording": "녹음 중",
+  "microphoneChangedResumingIn": "마이크가 변경되었습니다. {countdown}초 후 재개",
+  "clickPlayToResumeOrStop": "재개하려면 재생, 종료하려면 중지를 클릭하세요",
+  "settingUpSystemAudioCapture": "시스템 오디오 캡처 설정 중",
+  "capturingAudioAndGeneratingTranscript": "오디오 캡처 및 자막 생성 중",
+  "clickToBeginRecordingSystemAudio": "시스템 오디오 녹음을 시작하려면 클릭하세요",
+  "you": "나",
+  "speakerWithId": "화자 {speakerId}",
+  "translatedByOmi": "omi가 번역함",
+  "backToConversations": "대화로 돌아가기",
+  "systemAudio": "시스템",
+  "mic": "마이크",
+  "audioInputSetTo": "오디오 입력이 {deviceName}(으)로 설정됨",
+  "errorSwitchingAudioDevice": "오디오 장치 전환 오류: {error}",
+  "selectAudioInput": "오디오 입력 선택",
+  "loadingDevices": "장치 로드 중...",
+  "settingsHeader": "설정",
+  "plansAndBilling": "플랜 및 결제",
+  "calendarIntegration": "캘린더 통합",
+  "dailySummary": "일일 요약",
+  "developer": "개발자",
+  "about": "정보",
+  "selectTime": "시간 선택",
+  "accountGroup": "계정",
+  "signOutQuestion": "로그아웃하시겠습니까?",
+  "signOutConfirmation": "정말 로그아웃하시겠습니까?",
+  "customVocabularyHeader": "사용자 정의 어휘",
+  "addWordsDescription": "전사 중에 Omi가 인식해야 하는 단어를 추가하세요.",
+  "enterWordsHint": "단어 입력 (쉼표로 구분)",
+  "dailySummaryHeader": "일일 요약",
+  "dailySummaryTitle": "일일 요약",
+  "dailySummaryDescription": "대화의 맞춤형 요약을 받으세요",
+  "deliveryTime": "배달 시간",
+  "deliveryTimeDescription": "일일 요약을 받을 시간",
+  "subscription": "구독",
+  "viewPlansAndUsage": "플랜 및 사용량 보기",
+  "viewPlansDescription": "구독을 관리하고 사용 통계를 확인하세요",
+  "addOrChangePaymentMethod": "결제 방법 추가 또는 변경",
+  "displayOptions": "표시 옵션",
+  "showMeetingsInMenuBar": "메뉴 바에 회의 표시",
+  "displayUpcomingMeetingsDescription": "메뉴 바에 예정된 회의 표시",
+  "showEventsWithoutParticipants": "참가자가 없는 이벤트 표시",
+  "includePersonalEventsDescription": "참석자가 없는 개인 이벤트 포함",
+  "upcomingMeetings": "예정된 회의",
+  "checkingNext7Days": "다음 7일 확인 중",
+  "shortcuts": "단축키",
+  "shortcutChangeInstruction": "단축키를 클릭하여 변경합니다. Escape를 눌러 취소합니다.",
+  "configurePersonaDescription": "AI 페르소나 구성",
+  "configureSTTProvider": "STT 제공업체 구성",
+  "setConversationEndDescription": "대화가 자동으로 종료되는 시기 설정",
+  "importDataDescription": "다른 소스에서 데이터 가져오기",
+  "debugAndDiagnostics": "디버그 및 진단",
+  "autoDeletesAfter3Days": "3일 후 자동 삭제",
+  "helpsDiagnoseIssues": "문제 진단에 도움",
+  "exportConversationsDescription": "대화를 JSON으로 내보내기",
+  "exportingConversations": "대화 내보내는 중...",
+  "clearNodesDescription": "모든 노드와 연결 지우기",
+  "deleteKnowledgeGraphQuestion": "지식 그래프를 삭제하시겠습니까?",
+  "deleteKnowledgeGraphWarning": "파생된 모든 지식 그래프 데이터가 삭제됩니다. 원래 메모리는 안전하게 유지됩니다.",
+  "connectOmiWithAI": "Omi를 AI 어시스턴트와 연결",
+  "noAPIKeys": "API 키가 없습니다. 시작하려면 하나를 만드세요.",
+  "realTimeTranscript": "실시간 대화 내용",
+  "transcriptionDiagnostics": "전사 진단",
+  "detailedDiagnosticMessages": "자세한 진단 메시지",
+  "autoCreateSpeakers": "발화자 자동 생성",
+  "autoCreateWhenDetected": "이름이 감지되면 자동 생성",
+  "followUpQuestions": "후속 질문",
+  "suggestQuestionsAfterConversations": "대화 후 질문 제안",
+  "goalTracker": "목표 추적기",
+  "trackPersonalGoals": "홈페이지에서 개인 목표 추적",
+  "dailyReflection": "일일 성찰",
+  "dailyReflectionDescription": "오후 9시에 하루를 돌아보는 알림",
+  "endpointURL": "엔드포인트 URL",
+  "links": "링크",
+  "discordMemberCount": "Discord에 8000명 이상의 회원",
+  "userInformation": "사용자 정보",
+  "capabilities": "기능",
+  "previewScreenshots": "스크린샷 미리보기",
+  "holdOnPreparingForm": "잠시만요, 양식을 준비하고 있습니다",
+  "bySubmittingYouAgreeToOmi": "제출하면 Omi ",
+  "termsAndPrivacyPolicy": "이용약관 및 개인정보 처리방침",
+  "manageYourApp": "앱 관리",
+  "updatingYourApp": "앱 업데이트 중",
+  "fetchingYourAppDetails": "앱 세부정보 가져오는 중",
+  "updateAppQuestion": "앱을 업데이트하시겠습니까?",
+  "updateAppConfirmation": "앱을 업데이트하시겠습니까? 변경 사항은 팀 검토 후 반영됩니다.",
+  "updateApp": "앱 업데이트",
+  "createAndSubmitNewApp": "새 앱 만들기 및 제출",
+  "appsCount": "앱 ({count})",
+  "privateAppsCount": "비공개 앱 ({count})",
+  "publicAppsCount": "공개 앱 ({count})",
+  "newVersionAvailable": "새 버전 사용 가능  🎉",
+  "no": "아니요",
+  "subscriptionCancelledSuccessfully": "구독이 성공적으로 취소되었습니다. 현재 결제 기간이 끝날 때까지 유효합니다.",
+  "failedToCancelSubscription": "구독 취소에 실패했습니다. 다시 시도해 주세요.",
+  "invalidPaymentUrl": "잘못된 결제 URL",
+  "permissionsAndTriggers": "권한 및 트리거",
+  "chatFeatures": "채팅 기능",
+  "uninstall": "제거",
+  "installs": "설치 수",
+  "priceLabel": "가격",
+  "updatedLabel": "업데이트됨",
+  "createdLabel": "생성됨",
+  "featuredLabel": "추천",
+  "cancelSubscriptionQuestion": "구독을 취소하시겠습니까?",
+  "cancelSubscriptionConfirmation": "구독을 취소하시겠습니까? 현재 결제 기간이 끝날 때까지 계속 이용할 수 있습니다.",
+  "cancelSubscriptionButton": "구독 취소",
+  "cancelling": "취소 중...",
+  "betaTesterMessage": "이 앱의 베타 테스터입니다. 아직 공개되지 않았습니다. 승인 후 공개됩니다.",
+  "appUnderReviewMessage": "앱이 검토 중이며 본인에게만 표시됩니다. 승인 후 공개됩니다.",
+  "appRejectedMessage": "앱이 거부되었습니다. 세부 정보를 업데이트하고 다시 제출해 주세요.",
+  "invalidIntegrationUrl": "잘못된 통합 URL",
+  "tapToComplete": "탭하여 완료",
+  "invalidSetupInstructionsUrl": "잘못된 설정 안내 URL",
+  "pushToTalk": "말하려면 누르기",
+  "summaryPrompt": "요약 프롬프트",
+  "pleaseSelectARating": "평점을 선택해 주세요",
+  "reviewAddedSuccessfully": "리뷰가 성공적으로 추가되었습니다 🚀",
+  "reviewUpdatedSuccessfully": "리뷰가 성공적으로 업데이트되었습니다 🚀",
+  "failedToSubmitReview": "리뷰 제출에 실패했습니다. 다시 시도해 주세요.",
+  "addYourReview": "리뷰 추가",
+  "editYourReview": "리뷰 수정",
+  "writeAReviewOptional": "리뷰 작성 (선택사항)",
+  "submitReview": "리뷰 제출",
+  "updateReview": "리뷰 업데이트",
+  "yourReview": "내 리뷰",
+  "anonymousUser": "익명 사용자",
+  "issueActivatingApp": "이 앱을 활성화하는 데 문제가 발생했습니다. 다시 시도해 주세요.",
+  "dataAccessNoticeDescription": "이 앱은 귀하의 데이터에 액세스합니다. Omi AI는 이 앱에 의한 데이터 사용, 수정 또는 삭제에 대해 책임지지 않습니다",
+  "copyUrl": "URL 복사",
+  "txtFormat": "TXT",
+  "pdfFormat": "PDF",
+  "weekdayMon": "월",
+  "weekdayTue": "화",
+  "weekdayWed": "수",
+  "weekdayThu": "목",
+  "weekdayFri": "금",
+  "weekdaySat": "토",
+  "weekdaySun": "일",
+  "serviceIntegrationComingSoon": "{serviceName} 연동 곧 출시 예정",
+  "alreadyExportedTo": "{platform}에 이미 내보냄",
+  "anotherPlatform": "다른 플랫폼",
+  "pleaseAuthenticateWithService": "설정 > 작업 통합에서 {serviceName}으로 인증해 주세요",
+  "addingToService": "{serviceName}에 추가 중...",
+  "addedToService": "{serviceName}에 추가됨",
+  "failedToAddToService": "{serviceName}에 추가 실패",
+  "permissionDeniedForAppleReminders": "Apple 미리 알림 권한이 거부됨",
+  "failedToCreateApiKey": "공급자 API 키 생성 실패: {error}",
+  "createAKey": "키 생성",
+  "apiKeyRevokedSuccessfully": "API 키가 성공적으로 취소됨",
+  "failedToRevokeApiKey": "API 키 취소 실패: {error}",
+  "omiApiKeys": "Omi API 키",
+  "apiKeysDescription": "API 키는 앱이 OMI 서버와 통신할 때 인증에 사용됩니다. 애플리케이션이 메모리를 생성하고 다른 OMI 서비스에 안전하게 접근할 수 있게 합니다.",
+  "aboutOmiApiKeys": "Omi API 키 정보",
+  "noApiKeysYet": "아직 API 키가 없습니다. 앱과 통합하려면 하나를 만드세요.",
+  "yourNewKey": "새 키:",
+  "copyToClipboard": "클립보드에 복사",
+  "pleaseCopyKeyNow": "지금 복사하여 안전한 곳에 적어두세요. ",
+  "willNotSeeAgain": "다시 볼 수 없습니다.",
+  "revokeKey": "키 취소",
+  "revokeApiKeyQuestion": "API 키를 취소하시겠습니까?",
+  "revokeApiKeyWarning": "이 작업은 취소할 수 없습니다. 이 키를 사용하는 애플리케이션은 더 이상 API에 접근할 수 없습니다.",
+  "revoke": "취소",
+  "whatWouldYouLikeToCreate": "무엇을 만들고 싶으신가요?",
+  "createAnApp": "앱 만들기",
+  "createAndShareYourApp": "앱을 만들고 공유하세요",
+  "createMyClone": "내 클론 만들기",
+  "createYourDigitalClone": "디지털 클론을 만드세요",
+  "itemApp": "앱",
+  "itemPersona": "페르소나",
+  "keepItemPublic": "{item}을 공개로 유지",
+  "makeItemPublicQuestion": "{item}을 공개로 설정하시겠습니까?",
+  "makeItemPrivateQuestion": "{item}을 비공개로 설정하시겠습니까?",
+  "makeItemPublicExplanation": "{item}을 공개로 설정하면 모든 사람이 사용할 수 있습니다",
+  "makeItemPrivateExplanation": "{item}을 비공개로 설정하면 모든 사람에게 작동이 중지되고 본인만 볼 수 있습니다",
+  "manageApp": "앱 관리",
+  "updatePersonaDetails": "페르소나 세부 정보 업데이트",
+  "deleteItemTitle": "{item} 삭제",
+  "deleteItemQuestion": "{item}을 삭제하시겠습니까?",
+  "deleteItemConfirmation": "이 {item}을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
+  "revokeKeyQuestion": "키를 취소하시겠습니까?",
+  "revokeKeyConfirmation": "\"{keyName}\" 키를 취소하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
+  "createNewKey": "새 키 만들기",
+  "keyNameHint": "예: Claude Desktop",
+  "pleaseEnterAName": "이름을 입력하세요.",
+  "failedToCreateKeyWithError": "키 생성 실패: {error}",
+  "failedToCreateKeyTryAgain": "키 생성에 실패했습니다. 다시 시도해 주세요.",
+  "keyCreated": "키가 생성되었습니다",
+  "keyCreatedMessage": "새 키가 생성되었습니다. 지금 복사하세요. 다시 볼 수 없습니다.",
+  "keyWord": "키",
+  "externalAppAccess": "외부 앱 접근",
+  "externalAppAccessDescription": "다음 설치된 앱은 외부 통합이 있으며 대화 및 기억과 같은 데이터에 접근할 수 있습니다.",
+  "noExternalAppsHaveAccess": "외부 앱이 데이터에 접근할 수 없습니다.",
+  "maximumSecurityE2ee": "최대 보안 (E2EE)",
+  "e2eeDescription": "엔드투엔드 암호화는 개인정보 보호의 최고 기준입니다. 활성화되면 데이터가 서버로 전송되기 전에 기기에서 암호화됩니다. 이는 Omi를 포함한 그 누구도 귀하의 콘텐츠에 접근할 수 없음을 의미합니다.",
+  "importantTradeoffs": "중요한 절충 사항:",
+  "e2eeTradeoff1": "• 외부 앱 통합과 같은 일부 기능이 비활성화될 수 있습니다.",
+  "e2eeTradeoff2": "• 비밀번호를 분실하면 데이터를 복구할 수 없습니다.",
+  "featureComingSoon": "이 기능은 곧 제공됩니다!",
+  "migrationInProgressMessage": "마이그레이션이 진행 중입니다. 완료될 때까지 보호 수준을 변경할 수 없습니다.",
+  "migrationFailed": "마이그레이션 실패",
+  "migratingFromTo": "{source}에서 {target}으로 마이그레이션 중",
+  "objectsCount": "{processed} / {total} 개체",
+  "secureEncryption": "안전한 암호화",
+  "secureEncryptionDescription": "귀하의 데이터는 Google Cloud에서 호스팅되는 당사 서버에서 귀하만의 고유한 키로 암호화됩니다. 이는 Omi 직원이나 Google을 포함한 누구도 데이터베이스에서 직접 귀하의 원시 콘텐츠에 접근할 수 없음을 의미합니다.",
+  "endToEndEncryption": "엔드투엔드 암호화",
+  "e2eeCardDescription": "최대 보안을 위해 활성화하면 본인만 데이터에 접근할 수 있습니다. 자세히 알아보려면 탭하세요.",
+  "dataAlwaysEncrypted": "레벨에 관계없이 데이터는 항상 저장 시 및 전송 중에 암호화됩니다.",
+  "readOnlyScope": "읽기 전용",
+  "fullAccessScope": "전체 액세스",
+  "readScope": "읽기",
+  "writeScope": "쓰기",
+  "apiKeyCreated": "API 키가 생성되었습니다!",
+  "saveKeyWarning": "지금 이 키를 저장하세요! 다시 볼 수 없습니다.",
+  "yourApiKey": "귀하의 API 키",
+  "tapToCopy": "탭하여 복사",
+  "copyKey": "키 복사",
+  "createApiKey": "API 키 생성",
+  "accessDataProgrammatically": "프로그래밍 방식으로 데이터 액세스",
+  "keyNameLabel": "키 이름",
+  "keyNamePlaceholder": "예: 내 앱 연동",
+  "permissionsLabel": "권한",
+  "permissionsInfoNote": "R = 읽기, W = 쓰기. 선택하지 않으면 기본적으로 읽기 전용.",
+  "developerApi": "개발자 API",
+  "createAKeyToGetStarted": "시작하려면 키를 만드세요",
+  "errorWithMessage": "오류: {error}",
+  "omiTraining": "Omi 훈련",
+  "trainingDataProgram": "훈련 데이터 프로그램",
+  "getOmiUnlimitedFree": "데이터를 제공하여 AI 모델 훈련에 기여하면 Omi Unlimited를 무료로 받으세요.",
+  "trainingDataBullets": "• 귀하의 데이터가 AI 모델 개선에 도움이 됩니다\n• 민감하지 않은 데이터만 공유됩니다\n• 완전히 투명한 프로세스",
+  "learnMoreAtOmiTraining": "omi.me/training에서 자세히 알아보기",
+  "agreeToContributeData": "AI 훈련을 위해 데이터를 제공하는 것에 대해 이해하고 동의합니다",
+  "submitRequest": "요청 제출",
+  "thankYouRequestUnderReview": "감사합니다! 요청이 검토 중입니다. 승인 후 알려드리겠습니다.",
+  "planRemainsActiveUntil": "플랜은 {date}까지 활성 상태로 유지됩니다. 그 이후에는 무제한 기능에 대한 액세스 권한을 잃게 됩니다. 확실합니까?",
+  "confirmCancellation": "취소 확인",
+  "keepMyPlan": "내 플랜 유지",
+  "subscriptionSetToCancel": "구독이 기간 종료 시 취소되도록 설정되었습니다.",
+  "switchedToOnDevice": "기기 내 전사로 전환됨",
+  "couldNotSwitchToFreePlan": "무료 플랜으로 전환할 수 없습니다. 다시 시도해 주세요.",
+  "couldNotLoadPlans": "사용 가능한 플랜을 로드할 수 없습니다. 다시 시도해 주세요.",
+  "selectedPlanNotAvailable": "선택한 플랜을 사용할 수 없습니다. 다시 시도해 주세요.",
+  "upgradeToAnnualPlan": "연간 플랜으로 업그레이드",
+  "importantBillingInfo": "중요한 결제 정보:",
+  "monthlyPlanContinues": "현재 월간 플랜은 결제 기간이 끝날 때까지 계속됩니다",
+  "paymentMethodCharged": "월간 플랜이 종료되면 기존 결제 수단으로 자동 청구됩니다",
+  "annualSubscriptionStarts": "12개월 연간 구독은 결제 후 자동으로 시작됩니다",
+  "thirteenMonthsCoverage": "총 13개월의 혜택을 받게 됩니다 (현재 월 + 연간 12개월)",
+  "confirmUpgrade": "업그레이드 확인",
+  "confirmPlanChange": "플랜 변경 확인",
+  "confirmAndProceed": "확인 및 진행",
+  "upgradeScheduled": "업그레이드 예정됨",
+  "changePlan": "플랜 변경",
+  "upgradeAlreadyScheduled": "연간 플랜으로의 업그레이드가 이미 예정되어 있습니다",
+  "youAreOnUnlimitedPlan": "현재 Unlimited 플랜을 사용 중입니다.",
+  "yourOmiUnleashed": "당신의 Omi, 해방되다. 무한한 가능성을 위해 Unlimited로.",
+  "planEndedOn": "플랜이 {date}에 종료되었습니다.\\n지금 재구독하세요 - 새 청구 기간에 대해 즉시 청구됩니다.",
+  "planSetToCancelOn": "플랜이 {date}에 취소될 예정입니다.\\n혜택을 유지하려면 지금 재구독하세요 - {date}까지 요금이 청구되지 않습니다.",
+  "annualPlanStartsAutomatically": "월간 플랜이 종료되면 연간 플랜이 자동으로 시작됩니다.",
+  "planRenewsOn": "플랜이 {date}에 갱신됩니다.",
+  "unlimitedConversations": "무제한 대화",
+  "askOmiAnything": "Omi에게 당신의 삶에 대해 무엇이든 물어보세요",
+  "unlockOmiInfiniteMemory": "Omi의 무한 메모리 잠금 해제",
+  "youreOnAnnualPlan": "연간 플랜을 사용 중입니다",
+  "alreadyBestValuePlan": "이미 가장 가성비 좋은 플랜을 사용 중입니다. 변경이 필요하지 않습니다.",
+  "unableToLoadPlans": "플랜을 로드할 수 없습니다",
+  "checkConnectionTryAgain": "연결을 확인하고 다시 시도해 주세요",
+  "useFreePlan": "무료 플랜 사용",
+  "continueText": "계속",
+  "resubscribe": "재구독",
+  "couldNotOpenPaymentSettings": "결제 설정을 열 수 없습니다. 다시 시도해 주세요.",
+  "managePaymentMethod": "결제 수단 관리",
+  "cancelSubscription": "구독 취소",
+  "endsOnDate": "{date}에 종료",
+  "active": "활성",
+  "freePlan": "무료 플랜",
+  "configure": "구성",
+  "privacyInformation": "개인정보 안내",
+  "@privacyInformation": {
+    "description": "Privacy page - privacyInformation"
+  },
+  "yourPrivacyMattersToUs": "당신의 개인정보는 우리에게 중요합니다",
+  "@yourPrivacyMattersToUs": {
+    "description": "Privacy page - yourPrivacyMattersToUs"
+  },
+  "privacyIntroText": "Omi에서는 귀하의 개인정보를 매우 중요하게 생각합니다. 수집하는 데이터와 사용 방법에 대해 투명하게 알려드리고자 합니다. 알아야 할 사항은 다음과 같습니다:",
+  "@privacyIntroText": {
+    "description": "Privacy page - privacyIntroText"
+  },
+  "whatWeTrack": "추적 항목",
+  "@whatWeTrack": {
+    "description": "Privacy page - whatWeTrack"
+  },
+  "anonymityAndPrivacy": "익명성과 개인정보",
+  "@anonymityAndPrivacy": {
+    "description": "Privacy page - anonymityAndPrivacy"
+  },
+  "optInAndOptOutOptions": "수신 동의 및 거부 옵션",
+  "@optInAndOptOutOptions": {
+    "description": "Privacy page - optInAndOptOutOptions"
+  },
+  "ourCommitment": "우리의 약속",
+  "@ourCommitment": {
+    "description": "Privacy page - ourCommitment"
+  },
+  "commitmentText": "우리는 수집한 데이터를 Omi를 더 나은 제품으로 만드는 데만 사용할 것을 약속합니다. 귀하의 개인정보와 신뢰는 우리에게 가장 중요합니다.",
+  "@commitmentText": {
+    "description": "Privacy page - commitmentText"
+  },
+  "thankYouText": "Omi의 소중한 사용자가 되어 주셔서 감사합니다. 질문이나 우려 사항이 있으시면 team@basedhardware.com으로 연락해 주세요.",
+  "@thankYouText": {
+    "description": "Privacy page - thankYouText"
+  },
+  "wifiSyncSettings": "WiFi 동기화 설정",
+  "@wifiSyncSettings": {
+    "description": "WiFi sync settings - wifiSyncSettings"
+  },
+  "enterHotspotCredentials": "휴대폰 핫스팟 자격 증명 입력",
+  "@enterHotspotCredentials": {
+    "description": "WiFi sync settings - enterHotspotCredentials"
+  },
+  "wifiSyncUsesHotspot": "WiFi 동기화는 휴대폰을 핫스팟으로 사용합니다. 설정 > 개인용 핫스팟에서 이름과 비밀번호를 찾으세요.",
+  "@wifiSyncUsesHotspot": {
+    "description": "WiFi sync settings - wifiSyncUsesHotspot"
+  },
+  "hotspotNameSsid": "핫스팟 이름 (SSID)",
+  "@hotspotNameSsid": {
+    "description": "WiFi sync settings - hotspotNameSsid"
+  },
+  "exampleIphoneHotspot": "예: iPhone 핫스팟",
+  "@exampleIphoneHotspot": {
+    "description": "WiFi sync settings - exampleIphoneHotspot"
+  },
+  "password": "비밀번호",
+  "@password": {
+    "description": "WiFi sync settings - password"
+  },
+  "enterHotspotPassword": "핫스팟 비밀번호 입력",
+  "@enterHotspotPassword": {
+    "description": "WiFi sync settings - enterHotspotPassword"
+  },
+  "saveCredentials": "자격 증명 저장",
+  "@saveCredentials": {
+    "description": "WiFi sync settings - saveCredentials"
+  },
+  "clearCredentials": "자격 증명 지우기",
+  "@clearCredentials": {
+    "description": "WiFi sync settings - clearCredentials"
+  },
+  "pleaseEnterHotspotName": "핫스팟 이름을 입력하세요",
+  "@pleaseEnterHotspotName": {
+    "description": "WiFi sync settings - pleaseEnterHotspotName"
+  },
+  "wifiCredentialsSaved": "WiFi 자격 증명이 저장됨",
+  "@wifiCredentialsSaved": {
+    "description": "WiFi sync settings - wifiCredentialsSaved"
+  },
+  "wifiCredentialsCleared": "WiFi 자격 증명이 지워짐",
+  "@wifiCredentialsCleared": {
+    "description": "WiFi sync settings - wifiCredentialsCleared"
+  },
+  "summaryGeneratedForDate": "{date} 요약이 생성되었습니다",
+  "@summaryGeneratedForDate": {
+    "description": "Daily summary settings - summaryGeneratedForDate",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "1/15/2026"
+      }
+    }
+  },
+  "failedToGenerateSummaryCheckConversations": "요약 생성에 실패했습니다. 해당 날짜의 대화가 있는지 확인하세요.",
+  "@failedToGenerateSummaryCheckConversations": {
+    "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "요약을 찾을 수 없습니다",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "오늘의 여정",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "하이라이트",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "미해결 질문",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "결정",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "배움",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
+  },
+  "autoDeletesAfterThreeDays": "3일 후 자동 삭제됩니다.",
+  "@autoDeletesAfterThreeDays": {
+    "description": "Developer settings - autoDeletesAfterThreeDays"
+  },
+  "knowledgeGraphDeletedSuccessfully": "지식 그래프가 성공적으로 삭제됨",
+  "@knowledgeGraphDeletedSuccessfully": {
+    "description": "Developer settings - knowledgeGraphDeletedSuccessfully"
+  },
+  "exportStartedMayTakeFewSeconds": "내보내기가 시작되었습니다. 몇 초 정도 걸릴 수 있습니다...",
+  "@exportStartedMayTakeFewSeconds": {
+    "description": "Developer settings - exportStartedMayTakeFewSeconds"
+  },
+  "knowledgeGraphDeleteDescription": "이렇게 하면 모든 파생 지식 그래프 데이터(노드 및 연결)가 삭제됩니다. 원본 기억은 안전하게 유지됩니다. 그래프는 시간이 지나면서 또는 다음 요청 시 다시 구축됩니다.",
+  "@knowledgeGraphDeleteDescription": {
+    "description": "Developer settings - knowledgeGraphDeleteDescription"
+  },
+  "configureDailySummaryDigest": "일일 작업 요약 구성",
+  "accessesDataTypes": "{dataTypes} 접근",
+  "triggeredByType": "{triggerType}에 의해 트리거됨",
+  "accessesAndTriggeredBy": "{accessDescription} 및 {triggerDescription}.",
+  "isTriggeredBy": "{triggerDescription}.",
+  "noSpecificDataAccessConfigured": "특정 데이터 액세스가 구성되지 않았습니다."
 }

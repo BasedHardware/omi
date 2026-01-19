@@ -29,7 +29,7 @@
   "@confirm": {
     "description": "Confirm button label"
   },
-  "cancel": "Отмени",
+  "cancel": "Отказ",
   "@cancel": {
     "description": "Button label"
   },
@@ -53,7 +53,7 @@
   "@save": {
     "description": "Save button label"
   },
-  "edit": "Редактирай",
+  "edit": "Редактиране",
   "@edit": {
     "description": "Edit button/action label"
   },
@@ -65,7 +65,7 @@
   "@clear": {
     "description": "Clear button label"
   },
-  "copyTranscript": "Копирай транскрипт",
+  "copyTranscript": "Копиране на текст",
   "@copyTranscript": {
     "description": "Menu item to copy transcript"
   },
@@ -81,7 +81,7 @@
   "@reprocessConversation": {
     "description": "Menu item to reprocess a conversation"
   },
-  "deleteConversation": "Изтрий разговор",
+  "deleteConversation": "Изтриване на разговор",
   "@deleteConversation": {
     "description": "Menu item to delete a conversation"
   },
@@ -159,7 +159,7 @@
   "@createPersonHint": {
     "description": "Hint text for creating a person"
   },
-  "speechProfile": "Гласов профил",
+  "speechProfile": "Речеви Профил",
   "@speechProfile": {
     "description": "Speech profile label"
   },
@@ -175,7 +175,7 @@
   },
   "settings": "Настройки",
   "@settings": {
-    "description": "Settings page title"
+    "description": "Bottom navigation label for settings"
   },
   "language": "Език",
   "@language": {
@@ -293,9 +293,9 @@
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
-  "noStarredConversations": "Все още няма отбелязани разговори.",
+  "noStarredConversations": "Няма отбелязани разговори",
   "@noStarredConversations": {
-    "description": "Empty state for starred filter"
+    "description": "Empty state title when no starred conversations"
   },
   "starConversationHint": "За да отбележите разговор, отворете го и натиснете иконката със звезда в заглавието.",
   "@starConversationHint": {
@@ -347,11 +347,11 @@
   "@noMessagesYet": {
     "description": "Empty chat state message"
   },
-  "deletingMessages": "Изтриване на съобщенията ви от паметта на Omi...",
+  "deletingMessages": "Изтриване на вашите съобщения от паметта на Omi...",
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Съобщението е копирано в клипборда.",
+  "messageCopied": "✨ Съобщението е копирано в клипборда",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -359,7 +359,7 @@
   "@cannotReportOwnMessage": {
     "description": "Error when trying to report own message"
   },
-  "reportMessage": "Докладвай съобщение",
+  "reportMessage": "Докладване на съобщение",
   "@reportMessage": {
     "description": "Report message dialog title"
   },
@@ -393,7 +393,7 @@
   },
   "apps": "Приложения",
   "@apps": {
-    "description": "Apps page title"
+    "description": "Navigation label for apps page"
   },
   "noAppsFound": "Не са намерени приложения",
   "@noAppsFound": {
@@ -427,7 +427,7 @@
   "@unableToFetchApps": {
     "description": "Error when apps fail to load"
   },
-  "aboutOmi": "Относно Omi",
+  "aboutOmi": "За Omi",
   "@aboutOmi": {
     "description": "About page title"
   },
@@ -447,7 +447,7 @@
   "@joinCommunity": {
     "description": "Discord community link"
   },
-  "membersAndCounting": "8000+ членове и продължават да се увеличават.",
+  "membersAndCounting": "8000+ членове и броят продължава да расте.",
   "@membersAndCounting": {
     "description": "Discord member count"
   },
@@ -511,27 +511,27 @@
   "@email": {
     "description": "Email field label"
   },
-  "customVocabulary": "Персонализиран речник",
+  "customVocabulary": "Персонализиран Речник",
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Идентифициране на други",
+  "identifyingOthers": "Идентифициране на Други",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
-  "paymentMethods": "Методи на плащане",
+  "paymentMethods": "Методи за Плащане",
   "@paymentMethods": {
     "description": "Payment methods setting"
   },
-  "conversationDisplay": "Показване на разговор",
+  "conversationDisplay": "Показване на Разговори",
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "Данни и поверителност",
+  "dataPrivacy": "Поверителност на Данните",
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
-  "userId": "ID на потребител",
+  "userId": "Потребителски ID",
   "@userId": {
     "description": "User ID label"
   },
@@ -583,7 +583,7 @@
   "@referralProgram": {
     "description": "Referral program menu item"
   },
-  "signOut": "Излез",
+  "signOut": "Изход",
   "@signOut": {
     "description": "Sign out button"
   },
@@ -879,7 +879,7 @@
   "@createKeyToStart": {
     "description": "Create key instruction"
   },
-  "createKey": "Създай ключ",
+  "createKey": "Създай Ключ",
   "@createKey": {
     "description": "Create Key button"
   },
@@ -997,7 +997,7 @@
   "@upgrade": {
     "description": "Upgrade button"
   },
-  "upgradeToUnlimited": "Надстрой до неограничено",
+  "upgradeToUnlimited": "Надградете до неограничено",
   "@upgradeToUnlimited": {
     "description": "Upgrade to unlimited button"
   },
@@ -1071,14 +1071,14 @@
       }
     }
   },
-  "debugLogs": "Дневници за отстраняване на грешки",
+  "debugLogs": "Регистрационни файлове за отстраняване на грешки",
   "debugLogsAutoDelete": "Автоматично се изтриват след 3 дни.",
   "debugLogsDesc": "Помага за диагностициране на проблеми",
-  "noLogFilesFound": "Не са намерени файлове с дневници.",
+  "noLogFilesFound": "Не са намерени регистрационни файлове.",
   "omiDebugLog": "Omi дневник за отстраняване на грешки",
   "logShared": "Дневникът е споделен",
   "selectLogFile": "Изберете файл с дневник",
-  "shareLogs": "Споделете дневници",
+  "shareLogs": "Споделяне на регистрационни файлове",
   "debugLogCleared": "Дневникът за отстраняване на грешки е изчистен",
   "exportStarted": "Експортирането започна. Може да отнеме няколко секунди...",
   "exportAllData": "Експортирай всички данни",
@@ -1087,7 +1087,7 @@
   "exportShared": "Експортът е споделен",
   "deleteKnowledgeGraphTitle": "Изтриване на граф на знанията?",
   "deleteKnowledgeGraphMessage": "Това ще изтрие всички производни данни от графа на знанията (възли и връзки). Вашите оригинални спомени ще останат в безопасност. Графът ще бъде възстановен с течение на времето или при следващо запитване.",
-  "knowledgeGraphDeleted": "Графът на знанията е изтрит успешно",
+  "knowledgeGraphDeleted": "Графът на знанията е изтрит",
   "deleteGraphFailed": "Неуспешно изтриване на граф: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -1103,7 +1103,7 @@
   "mcpServer": "MCP сървър",
   "mcpServerDesc": "Свържете AI асистенти с вашите данни",
   "serverUrl": "URL на сървър",
-  "urlCopied": "URL е копиран",
+  "urlCopied": "URL копиран",
   "apiKeyAuth": "Удостоверяване с API ключ",
   "header": "Заглавка",
   "authorizationBearer": "Authorization: Bearer <key>",
@@ -1112,7 +1112,7 @@
   "clientSecret": "Тайна на клиент",
   "useMcpApiKey": "Използвайте вашия MCP API ключ",
   "webhooks": "Webhooks",
-  "conversationEvents": "События на разговор",
+  "conversationEvents": "Събития на разговори",
   "newConversationCreated": "Създаден нов разговор",
   "realtimeTranscript": "Транскрипт в реално време",
   "transcriptReceived": "Получен транскрипт",
@@ -1292,7 +1292,7 @@
   "showEventsNoParticipants": "Показвай събития без участници",
   "showEventsNoParticipantsDesc": "Когато е активирано, показва събития без участници или видео връзка.",
   "yourMeetings": "Вашите срещи",
-  "refresh": "Обнови",
+  "refresh": "Опресни",
   "noUpcomingMeetings": "Няма намерени предстоящи срещи",
   "checkingNextDays": "Проверка на следващите 30 дни",
   "tomorrow": "Утре",
@@ -1334,7 +1334,7 @@
   "languageForTranscription": "Задайте вашия език за по-точни транскрипции и персонализирано изживяване.",
   "singleLanguageModeInfo": "Режимът с един език е активиран. Преводът е деактивиран за по-висока точност.",
   "searchLanguageHint": "Търсете език по име или код",
-  "noLanguagesFound": "Не са намерени езици",
+  "noLanguagesFound": "Няма намерени езици",
   "skip": "Пропусни",
   "languageSetTo": "Езикът е зададен на {language}",
   "@languageSetTo": {
@@ -1405,7 +1405,7 @@
   "defaultRepository": "Хранилище по подразбиране",
   "selectDefaultRepoDesc": "Изберете хранилище по подразбиране за създаване на проблеми. Все още можете да посочите различно хранилище при създаване на проблеми.",
   "noReposFound": "Не са намерени хранилища",
-  "private": "Частно",
+  "private": "Частен",
   "updatedDate": "Актуализиран {date}",
   "@updatedDate": {
     "placeholders": {
@@ -1571,7 +1571,7 @@
   "autoLanguageDetection": "Автоматично разпознаване на език",
   "highAccuracy": "Висока точност",
   "privacyFirst": "Поверителност на първо място",
-  "saveChanges": "Запази промени",
+  "saveChanges": "Запази промените",
   "resetToDefault": "Нулиране до стандартно",
   "viewTemplate": "Виж шаблон",
   "trySomethingLike": "Опитайте нещо като...",
@@ -1594,7 +1594,7 @@
   "perMonth": "/ Месец",
   "tailoredConversationSummaries": "Персонализирани резюмета на разговори",
   "customChatbotPersonality": "Персонализирана личност на чатбот",
-  "makePublic": "Направи публично",
+  "makePublic": "Направи публична",
   "anyoneCanDiscover": "Всеки може да открие вашето приложение",
   "onlyYouCanUse": "Само вие можете да използвате това приложение",
   "paidApp": "Платено приложение",
@@ -1657,7 +1657,7 @@
   "@connectLater": {
     "description": "Button text to skip immediate device connection"
   },
-  "grantPermissions": "Дайте разрешения",
+  "grantPermissions": "Предоставяне на разрешения",
   "@grantPermissions": {
     "description": "Title for the permissions request page"
   },
@@ -2077,14 +2077,9 @@
   "@deleteSelected": {
     "description": "Tooltip for delete selected"
   },
-  "searchMemories": "Търсене в {count} спомени",
+  "searchMemories": "Търсене на спомени...",
   "@searchMemories": {
-    "description": "Hint text for memories search bar",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
+    "description": "Search input hint text"
   },
   "memoryDeleted": "Споменът е изтрит.",
   "@memoryDeleted": {
@@ -2094,9 +2089,9 @@
   "@undo": {
     "description": "Undo button text"
   },
-  "noMemoriesYet": "Все още няма спомени",
+  "noMemoriesYet": "🧠 Все още няма спомени",
   "@noMemoriesYet": {
-    "description": "Empty state text"
+    "description": "Empty state title when no memories"
   },
   "noAutoMemories": "Все още няма автоматично извлечени спомени",
   "@noAutoMemories": {
@@ -2110,9 +2105,9 @@
   "@noMemoriesInCategories": {
     "description": "Empty state text for filtered categories"
   },
-  "noMemoriesFound": "Не са намерени спомени",
+  "noMemoriesFound": "🔍 Не са намерени спомени",
   "@noMemoriesFound": {
-    "description": "Empty state text for search results"
+    "description": "Empty state title when search/filter has no results"
   },
   "addFirstMemory": "Добавете вашия първи спомен",
   "@addFirstMemory": {
@@ -2146,7 +2141,7 @@
   "@createActionItemTooltip": {
     "description": "Tooltip for create action item FAB"
   },
-  "memoryManagement": "Управление на паметта",
+  "memoryManagement": "Управление на спомените",
   "@memoryManagement": {
     "description": "Title for memory management sheet"
   },
@@ -2191,11 +2186,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "Нов спомен",
+  "newMemory": "✨ Нов спомен",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "Редактирай спомен",
+  "editMemory": "✏️ Редактирай спомен",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2319,7 +2314,7 @@
   "pleaseCheckInternetConnection": "Моля, проверете интернет връзката си и опитайте отново",
   "pleaseSelectReason": "Моля, изберете причина",
   "tellUsMoreWhatWentWrong": "Разкажете ни повече за това, което се обърка...",
-  "selectText": "Избери текст",
+  "selectText": "Избор на текст",
   "maximumGoalsAllowed": "Максимум {count} цели са позволени",
   "conversationCannotBeMerged": "Този разговор не може да бъде обединен (заключен или вече се обединява)",
   "pleaseEnterFolderName": "Моля, въведете име на папка",
@@ -2341,7 +2336,7 @@
   "summarize": "Резюмиране",
   "generateSummary": "Генериране на резюме",
   "conversationNotFoundOrDeleted": "Разговорът не е намерен или е изтрит",
-  "deleteMemory": "Изтриване на спомен?",
+  "deleteMemory": "Изтрий спомен",
   "thisActionCannotBeUndone": "Това действие не може да бъде отменено.",
   "memoriesCount": "{count} спомени",
   "noMemoriesInCategory": "Все още няма спомени в тази категория",
@@ -2397,7 +2392,7 @@
   "welcomeToOmiDescription": "Добре дошли в Omi! Вашият AI спътник е готов да ви помогне с разговори, задачи и още.",
   "startUsingOmi": "Започнете да използвате Omi",
   "back": "Назад",
-  "keyboardShortcuts": "Клавишни комбинации",
+  "keyboardShortcuts": "Клавишни Комбинации",
   "toggleControlBar": "Превключване на контролната лента",
   "pressKeys": "Натиснете клавиши...",
   "cmdRequired": "⌘ е задължителен",
@@ -2405,25 +2400,25 @@
   "space": "Интервал",
   "search": "Търсене",
   "searchPlaceholder": "Търсене...",
-  "settingUp": "Настройка...",
+  "settingUp": "Настройване...",
   "startYourFirstRecording": "Започнете първия си запис",
-  "preparingSystemAudioCapture": "Подготовка на системно аудио записване",
+  "preparingSystemAudioCapture": "Подготовка на системното аудио заснемане",
   "recordingInstructions": "Натиснете бутона, за да заснемете аудио за живи транскрипции, AI прозрения и автоматично запазване.",
   "reconnecting": "Повторно свързване...",
   "recordingPaused": "Записът е на пауза",
   "recordingActive": "Записът е активен",
-  "startRecording": "Започни запис",
+  "startRecording": "Започнете запис",
   "resumingInSeconds": "Възобновяване след {seconds} сек...",
-  "tapPlayToResume": "Докоснете възпроизвеждане, за да възобновите",
-  "listeningForAudio": "Слуша за аудио...",
-  "preparingAudioCapture": "Подготовка на аудио записване",
-  "clickToBeginRecording": "Щракнете, за да започнете записа",
-  "liveTranscript": "Жив транскрипт",
-  "startRecordingToSeeTranscript": "Започнете запис, за да видите жив транскрипт",
+  "tapPlayToResume": "Натиснете възпроизвеждане за възобновяване",
+  "listeningForAudio": "Слушане за аудио...",
+  "preparingAudioCapture": "Подготовка на аудио заснемане",
+  "clickToBeginRecording": "Щракнете, за да започнете запис",
+  "liveTranscript": "Реален транскрипт",
+  "startRecordingToSeeTranscript": "Започнете запис, за да видите реален транскрипт",
   "paused": "На пауза",
   "initializing": "Инициализиране...",
-  "recording": "Записва",
-  "untitledConversation": "Неозаглавен разговор",
+  "recording": "Записване",
+  "untitledConversation": "Разговор без заглавие",
   "countRemaining": "{count} оставащи",
   "addGoal": "Добави цел",
   "editGoal": "Редактирай цел",
@@ -2434,7 +2429,7 @@
   "saveGoal": "Запази",
   "goals": "Цели",
   "tapToAddGoal": "Докоснете, за да добавите цел",
-  "welcomeBack": "Добре дошли отново",
+  "welcomeBack": "Добре дошъл обратно, {name}",
   "yourConversations": "Вашите разговори",
   "reviewAndManageConversations": "Прегледайте и управлявайте записаните си разговори",
   "startCapturingConversations": "Започнете да записвате разговори с вашето устройство Omi, за да ги видите тук.",
@@ -2537,5 +2532,769 @@
   "ratingsCount": "{count}+ оценки",
   "errorActivatingApp": "Грешка при активиране на приложението",
   "integrationSetupRequired": "Ако това е интеграционно приложение, уверете се, че настройката е завършена.",
-  "installed": "Инсталирано"
+  "installed": "Инсталирано",
+  "appIdLabel": "ID на приложението",
+  "appNameLabel": "Име на приложението",
+  "appNamePlaceholder": "Моето страхотно приложение",
+  "pleaseEnterAppName": "Моля, въведете име на приложението",
+  "categoryLabel": "Категория",
+  "selectCategory": "Изберете категория",
+  "descriptionLabel": "Описание",
+  "appDescriptionPlaceholder": "Моето страхотно приложение е страхотно приложение, което прави невероятни неща. То е най-доброто приложение!",
+  "pleaseProvideValidDescription": "Моля, предоставете валидно описание",
+  "appPricingLabel": "Ценообразуване на приложението",
+  "noneSelected": "Няма избрано",
+  "appIdCopiedToClipboard": "ID на приложението е копирано в клипборда",
+  "appCategoryModalTitle": "Категория на приложението",
+  "pricingFree": "Безплатно",
+  "pricingPaid": "Платено",
+  "loadingCapabilities": "Зареждане на възможностите...",
+  "filterInstalled": "Инсталирани",
+  "filterMyApps": "Моите приложения",
+  "clearSelection": "Изчистване на избора",
+  "filterCategory": "Категория",
+  "rating4PlusStars": "4+ звезди",
+  "rating3PlusStars": "3+ звезди",
+  "rating2PlusStars": "2+ звезди",
+  "rating1PlusStars": "1+ звезди",
+  "filterRating": "Оценка",
+  "filterCapabilities": "Възможности",
+  "noNotificationScopesAvailable": "Няма налични области за уведомления",
+  "popularApps": "Популярни приложения",
+  "pleaseProvidePrompt": "Моля, предоставете подсказка",
+  "chatWithAppName": "Чат с {appName}",
+  "defaultAiAssistant": "AI асистент по подразбиране",
+  "readyToChat": "✨ Готов за чат!",
+  "connectionNeeded": "🌐 Необходима връзка",
+  "startConversation": "Започнете разговор и нека магията започне",
+  "checkInternetConnection": "Моля, проверете интернет връзката си",
+  "wasThisHelpful": "Беше ли това полезно?",
+  "thankYouForFeedback": "Благодарим за отзива!",
+  "maxFilesUploadError": "Можете да качите само 4 файла наведнъж",
+  "attachedFiles": "📎 Прикачени файлове",
+  "takePhoto": "Направете снимка",
+  "captureWithCamera": "Заснемане с камера",
+  "selectImages": "Изберете изображения",
+  "chooseFromGallery": "Изберете от галерията",
+  "selectFile": "Изберете файл",
+  "chooseAnyFileType": "Изберете всякакъв тип файл",
+  "cannotReportOwnMessages": "Не можете да докладвате собствените си съобщения",
+  "messageReportedSuccessfully": "✅ Съобщението е докладвано успешно",
+  "confirmReportMessage": "Сигурни ли сте, че искате да докладвате това съобщение?",
+  "selectChatAssistant": "Изберете чат асистент",
+  "enableMoreApps": "Активиране на повече приложения",
+  "chatCleared": "Чатът е изчистен",
+  "clearChatTitle": "Изчистване на чата?",
+  "confirmClearChat": "Сигурни ли сте, че искате да изчистите чата? Това действие не може да бъде отменено.",
+  "copy": "Копиране",
+  "share": "Споделяне",
+  "report": "Докладване",
+  "microphonePermissionRequired": "Разрешение за микрофон е необходимо за гласов запис.",
+  "microphonePermissionDenied": "Разрешението за микрофон е отказано. Моля, предоставете разрешение в Системни настройки > Поверителност и сигурност > Микрофон.",
+  "failedToCheckMicrophonePermission": "Неуспешна проверка на разрешението за микрофон: {error}",
+  "failedToTranscribeAudio": "Неуспешно транскрибиране на аудио",
+  "transcribing": "Транскрибиране...",
+  "transcriptionFailed": "Транскрибирането не успя",
+  "discardedConversation": "Отхвърлен разговор",
+  "at": "в",
+  "from": "от",
+  "copied": "Копирано!",
+  "copyLink": "Копиране на връзка",
+  "hideTranscript": "Скриване на транскрипт",
+  "viewTranscript": "Показване на транскрипт",
+  "conversationDetails": "Детайли за разговора",
+  "transcript": "Транскрипт",
+  "segmentsCount": "{count} сегмента",
+  "noTranscriptAvailable": "Няма наличен транскрипт",
+  "noTranscriptMessage": "Този разговор няма транскрипт.",
+  "conversationUrlCouldNotBeGenerated": "URL адресът на разговора не можа да бъде генериран.",
+  "failedToGenerateConversationLink": "Неуспешно генериране на връзка към разговора",
+  "failedToGenerateShareLink": "Неуспешно генериране на връзка за споделяне",
+  "reloadingConversations": "Презареждане на разговори...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "@welcomeBack": {
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "user": "Потребител",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "Звездичка",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "Дата",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "Не са намерени резултати",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "Опитайте да промените условията за търсене",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "starConversationsToFindQuickly": "Отбележете разговори, за да ги намирате бързо тук",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "Няма разговори на {date}",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "Опитайте да изберете друга дата",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  },
+  "conversations": "Разговори",
+  "@conversations": {
+    "description": "Navigation label for conversations page"
+  },
+  "chat": "Чат",
+  "@chat": {
+    "description": "Navigation label for chat page"
+  },
+  "@memories": {
+    "description": "Navigation label for memories page"
+  },
+  "actions": "Действия",
+  "@actions": {
+    "description": "Navigation label for actions page"
+  },
+  "syncAvailable": "Налична синхронизация",
+  "@syncAvailable": {
+    "description": "Label for sync notification"
+  },
+  "referAFriend": "Препоръчай на приятел",
+  "@referAFriend": {
+    "description": "Bottom navigation label for referral program"
+  },
+  "help": "Помощ",
+  "@help": {
+    "description": "Bottom navigation label for help"
+  },
+  "pro": "Pro",
+  "@pro": {
+    "description": "Badge label for pro/unlimited users"
+  },
+  "upgradeToPro": "Надграждане до Pro",
+  "@upgradeToPro": {
+    "description": "Subscription banner button text"
+  },
+  "getOmiDevice": "Получете устройство Omi",
+  "@getOmiDevice": {
+    "description": "Widget title for device promotion"
+  },
+  "wearableAiCompanion": "Носим AI спътник",
+  "@wearableAiCompanion": {
+    "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "Зареждане на спомени...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "allMemories": "Всички спомени",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "За теб",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "Ръчни",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "Зареждане на вашите спомени...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "createYourFirstMemory": "Създайте първия си спомен, за да започнете",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "Опитайте да промените търсенето или филтъра",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
+  },
+  "whatWouldYouLikeToRemember": "Какво искате да запомните?",
+  "category": "Категория",
+  "public": "Публичен",
+  "failedToSaveCheckConnection": "Неуспешно запазване. Проверете връзката си.",
+  "createMemory": "Създай спомен",
+  "deleteMemoryConfirmation": "Сигурни ли сте, че искате да изтриете този спомен? Това действие не може да бъде отменено.",
+  "makePrivate": "Направи частна",
+  "organizeAndControlMemories": "Организирайте и контролирайте спомените си",
+  "total": "Общо",
+  "makeAllMemoriesPrivate": "Направи всички спомени частни",
+  "setAllMemoriesToPrivate": "Задай всички спомени като частни",
+  "makeAllMemoriesPublic": "Направи всички спомени публични",
+  "setAllMemoriesToPublic": "Задай всички спомени като публични",
+  "permanentlyRemoveAllMemories": "Премахни трайно всички спомени от Omi",
+  "allMemoriesAreNowPrivate": "Всички спомени са вече частни",
+  "allMemoriesAreNowPublic": "Всички спомени са вече публични",
+  "clearOmisMemory": "Изчисти паметта на Omi",
+  "clearMemoryConfirmation": "Сигурни ли сте, че искате да изчистите паметта на Omi? Това действие не може да бъде отменено и ще изтрие трайно всички {count} спомена.",
+  "omisMemoryCleared": "Паметта на Omi за вас е изчистена",
+  "welcomeToOmi": "Добре дошли в Omi",
+  "continueWithApple": "Продължи с Apple",
+  "continueWithGoogle": "Продължи с Google",
+  "byContinuingYouAgree": "Продължавайки, вие се съгласявате с нашите ",
+  "termsOfService": "Общи условия",
+  "and": " и ",
+  "dataAndPrivacy": "Данни и поверителност",
+  "secureAuthViaAppleId": "Сигурна автентикация чрез Apple ID",
+  "secureAuthViaGoogleAccount": "Сигурна автентикация чрез Google акаунт",
+  "whatWeCollect": "Какво събираме",
+  "dataCollectionMessage": "Продължавайки, вашите разговори, записи и лична информация ще бъдат съхранявани сигурно на нашите сървъри, за да предоставим прозрения, задвижвани от AI, и да активираме всички функции на приложението.",
+  "dataProtection": "Защита на данните",
+  "yourDataIsProtected": "Вашите данни са защитени и регулирани от нашата ",
+  "pleaseSelectYourPrimaryLanguage": "Моля, изберете основния си език",
+  "chooseYourLanguage": "Изберете вашия език",
+  "selectPreferredLanguageForBestExperience": "Изберете предпочитания език за най-добро Omi изживяване",
+  "searchLanguages": "Търсене на езици...",
+  "selectALanguage": "Изберете език",
+  "tryDifferentSearchTerm": "Опитайте с различен термин за търсене",
+  "pleaseEnterYourName": "Моля, въведете вашето име",
+  "nameMustBeAtLeast2Characters": "Името трябва да съдържа поне 2 знака",
+  "tellUsHowYouWouldLikeToBeAddressed": "Кажете ни как бихте искали да се обръщаме към вас. Това помага за персонализиране на вашето Omi изживяване.",
+  "charactersCount": "{count} знака",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "enableFeaturesForBestExperience": "Активирайте функции за най-доброто Omi изживяване на вашето устройство.",
+  "microphoneAccess": "Достъп до микрофон",
+  "recordAudioConversations": "Записване на аудио разговори",
+  "microphoneAccessDescription": "Omi се нуждае от достъп до микрофона, за да записва вашите разговори и да предоставя транскрипции.",
+  "screenRecording": "Запис на екрана",
+  "captureSystemAudioFromMeetings": "Заснемане на системен звук от срещи",
+  "screenRecordingDescription": "Omi се нуждае от разрешение за запис на екрана, за да заснема системен звук от вашите срещи в браузъра.",
+  "accessibility": "Достъпност",
+  "detectBrowserBasedMeetings": "Откриване на срещи в браузъра",
+  "accessibilityDescription": "Omi се нуждае от разрешение за достъпност, за да открива кога се присъединявате към срещи в Zoom, Meet или Teams във вашия браузър.",
+  "pleaseWait": "Моля, изчакайте...",
+  "joinTheCommunity": "Присъединете се към общността!",
+  "loadingProfile": "Зареждане на профила...",
+  "profileSettings": "Настройки на профила",
+  "noEmailSet": "Няма зададен имейл",
+  "userIdCopiedToClipboard": "Потребителски ID копиран",
+  "yourInformation": "Вашата информация",
+  "setYourName": "Задайте вашето име",
+  "changeYourName": "Променете вашето име",
+  "persona": "Персона",
+  "manageYourOmiPersona": "Управлявайте вашата Omi персона",
+  "voiceAndPeople": "Глас и Хора",
+  "teachOmiYourVoice": "Научете Omi на вашия глас",
+  "tellOmiWhoSaidIt": "Кажете на Omi кой го каза 🗣️",
+  "payment": "Плащане",
+  "addOrChangeYourPaymentMethod": "Добавете или променете метод на плащане",
+  "preferences": "Предпочитания",
+  "helpImproveOmiBySharing": "Помогнете за подобряването на Omi чрез споделяне на анонимизирани данни за анализ",
+  "deleteAccount": "Изтриване на Акаунт",
+  "deleteYourAccountAndAllData": "Изтрийте вашия акаунт и всички данни",
+  "helpsDiagnoseIssuesAutoDeletes": "Помага за диагностициране на проблеми. Автоматично изтрива след 3 дни.",
+  "clearLogs": "Изчистване на регистрационни файлове",
+  "debugLogsCleared": "Логовете за отстраняване на грешки са изчистени",
+  "exportConversations": "Експортиране на разговори",
+  "exportAllConversationsToJson": "Експортирайте всички свои разговори в JSON файл.",
+  "conversationsExportStarted": "Експортирането на разговори започна. Това може да отнеме няколко секунди, моля, изчакайте.",
+  "mcpDescription": "За свързване на Omi с други приложения за четене, търсене и управление на вашите спомени и разговори. Създайте ключ, за да започнете.",
+  "apiKeys": "API ключове",
+  "errorLabel": "Грешка: {error}",
+  "noApiKeysFound": "Не са намерени API ключове. Създайте един, за да започнете.",
+  "advancedSettings": "Разширени настройки",
+  "triggersWhenNewConversationCreated": "Активира се при създаване на нов разговор.",
+  "triggersWhenNewTranscriptReceived": "Активира се при получаване на нов транскрипт.",
+  "realtimeAudioBytes": "Аудио байтове в реално време",
+  "triggersWhenAudioBytesReceived": "Активира се при получаване на аудио байтове.",
+  "everyXSeconds": "На всеки x секунди",
+  "triggersWhenDaySummaryGenerated": "Активира се при генериране на дневно резюме.",
+  "experimental": "Експериментални",
+  "tryLatestExperimentalFeatures": "Опитайте най-новите експериментални функции от екипа на Omi.",
+  "transcriptionServiceDiagnosticStatus": "Диагностично състояние на услугата за транскрипция",
+  "enableDetailedDiagnosticMessages": "Активирайте подробни диагностични съобщения от услугата за транскрипция",
+  "autoCreateAndTagNewSpeakers": "Автоматично създаване и маркиране на нови говорители",
+  "automaticallyCreateNewPerson": "Автоматично създаване на нов човек при откриване на име в транскрипта.",
+  "pilotFeatures": "Пилотни функции",
+  "pilotFeaturesDescription": "Тези функции са тестове и не се гарантира поддръжка.",
+  "suggestFollowUpQuestion": "Предложете последващ въпрос",
+  "saveSettings": "Запази Настройки",
+  "syncingDeveloperSettings": "Синхронизиране на настройките за разработчици...",
+  "summary": "Резюме",
+  "auto": "Автоматично",
+  "noSummaryForApp": "Няма налично резюме за това приложение. Опитайте друго приложение за по-добри резултати.",
+  "tryAnotherApp": "Опитайте друго приложение",
+  "generatedBy": "Генерирано от {appName}",
+  "overview": "Общ преглед",
+  "otherAppResults": "Резултати от други приложения",
+  "unknownApp": "Неизвестно приложение",
+  "noSummaryAvailable": "Няма налично резюме",
+  "conversationNoSummaryYet": "Този разговор все още няма резюме.",
+  "chooseSummarizationApp": "Изберете приложение за резюме",
+  "setAsDefaultSummarizationApp": "{appName} е зададено като приложение за резюме по подразбиране",
+  "letOmiChooseAutomatically": "Нека Omi избере най-доброто приложение автоматично",
+  "deleteConversationConfirmation": "Сигурни ли сте, че искате да изтриете този разговор? Това действие не може да бъде отменено.",
+  "conversationDeleted": "Разговорът е изтрит",
+  "generatingLink": "Генериране на връзка...",
+  "editConversation": "Редактиране на разговор",
+  "conversationLinkCopiedToClipboard": "Връзката към разговора е копирана в клипборда",
+  "conversationTranscriptCopiedToClipboard": "Текстът на разговора е копиран в клипборда",
+  "editConversationDialogTitle": "Редактиране на разговор",
+  "changeTheConversationTitle": "Промяна на заглавието на разговора",
+  "conversationTitle": "Заглавие на разговора",
+  "enterConversationTitle": "Въведете заглавие на разговора...",
+  "conversationTitleUpdatedSuccessfully": "Заглавието на разговора е актуализирано успешно",
+  "failedToUpdateConversationTitle": "Неуспешна актуализация на заглавието на разговора",
+  "errorUpdatingConversationTitle": "Грешка при актуализиране на заглавието на разговора",
+  "clickTheButtonToCaptureAudio": "Щракнете върху бутона, за да заснемете аудио за реални транскрипции, AI прозрения и автоматично запазване.",
+  "resumingInCountdown": "Възобновяване след {countdown}s...",
+  "translated": "преведено",
+  "segmentsSingular": "{count} сегмент",
+  "segmentsPlural": "{count} сегмента",
+  "microphoneChangedResumingIn": "Микрофонът е сменен. Възобновяване след {countdown}s",
+  "clickPlayToResumeOrStop": "Натиснете възпроизвеждане за възобновяване или стоп за завършване",
+  "settingUpSystemAudioCapture": "Настройване на системното аудио заснемане",
+  "capturingAudioAndGeneratingTranscript": "Заснемане на аудио и генериране на транскрипт",
+  "clickToBeginRecordingSystemAudio": "Щракнете, за да започнете запис на системно аудио",
+  "you": "Вие",
+  "speakerWithId": "Говорител {speakerId}",
+  "translatedByOmi": "преведено от omi",
+  "backToConversations": "Обратно към разговорите",
+  "systemAudio": "Система",
+  "mic": "Микрофон",
+  "audioInputSetTo": "Аудио входът е зададен на {deviceName}",
+  "errorSwitchingAudioDevice": "Грешка при превключване на аудио устройство: {error}",
+  "selectAudioInput": "Изберете аудио вход",
+  "loadingDevices": "Зареждане на устройства...",
+  "settingsHeader": "НАСТРОЙКИ",
+  "plansAndBilling": "Планове и Фактуриране",
+  "calendarIntegration": "Интеграция на Календар",
+  "dailySummary": "Дневно Резюме",
+  "developer": "Разработчик",
+  "about": "За",
+  "selectTime": "Избери Час",
+  "accountGroup": "Акаунт",
+  "signOutQuestion": "Изход?",
+  "signOutConfirmation": "Сигурни ли сте, че искате да излезете?",
+  "customVocabularyHeader": "ПЕРСОНАЛИЗИРАН РЕЧНИК",
+  "addWordsDescription": "Добавете думи, които Omi трябва да разпознава по време на транскрипция.",
+  "enterWordsHint": "Въведете думи (разделени със запетая)",
+  "dailySummaryHeader": "ДНЕВНО РЕЗЮМЕ",
+  "dailySummaryTitle": "Дневно Резюме",
+  "dailySummaryDescription": "Получете персонализирано резюме на разговорите си",
+  "deliveryTime": "Време на Доставка",
+  "deliveryTimeDescription": "Кога да получавате дневното си резюме",
+  "subscription": "Абонамент",
+  "viewPlansAndUsage": "Преглед на Планове и Използване",
+  "viewPlansDescription": "Управлявайте абонамента си и вижте статистика за използването",
+  "addOrChangePaymentMethod": "Добавете или променете метода си за плащане",
+  "displayOptions": "Опции за показване",
+  "showMeetingsInMenuBar": "Показване на срещи в лентата с менюта",
+  "displayUpcomingMeetingsDescription": "Показване на предстоящи срещи в лентата с менюта",
+  "showEventsWithoutParticipants": "Показване на събития без участници",
+  "includePersonalEventsDescription": "Включване на лични събития без участници",
+  "upcomingMeetings": "ПРЕДСТОЯЩИ СРЕЩИ",
+  "checkingNext7Days": "Проверка на следващите 7 дни",
+  "shortcuts": "Клавишни комбинации",
+  "shortcutChangeInstruction": "Щракнете върху пряк път, за да го промените. Натиснете Escape, за да отмените.",
+  "configurePersonaDescription": "Конфигурирайте вашата AI персона",
+  "configureSTTProvider": "Конфигуриране на доставчик на STT",
+  "setConversationEndDescription": "Задайте кога разговорите приключват автоматично",
+  "importDataDescription": "Импортиране на данни от други източници",
+  "debugAndDiagnostics": "Отстраняване на грешки и диагностика",
+  "autoDeletesAfter3Days": "Автоматично изтриване след 3 дни",
+  "helpsDiagnoseIssues": "Помага при диагностицирането на проблеми",
+  "exportConversationsDescription": "Експортиране на разговори в JSON",
+  "exportingConversations": "Експортиране на разговори...",
+  "clearNodesDescription": "Изчистване на всички възли и връзки",
+  "deleteKnowledgeGraphQuestion": "Изтриване на графа на знанието?",
+  "deleteKnowledgeGraphWarning": "Това ще изтрие всички производни данни от графа на знанието. Вашите оригинални спомени остават в безопасност.",
+  "connectOmiWithAI": "Свържете Omi с AI асистенти",
+  "noAPIKeys": "Няма API ключове. Създайте един, за да започнете.",
+  "realTimeTranscript": "Транскрипция в реално време",
+  "transcriptionDiagnostics": "Диагностика на транскрипция",
+  "detailedDiagnosticMessages": "Подробни диагностични съобщения",
+  "autoCreateSpeakers": "Автоматично създаване на говорители",
+  "autoCreateWhenDetected": "Автоматично създаване при откриване на име",
+  "followUpQuestions": "Последващи въпроси",
+  "suggestQuestionsAfterConversations": "Предложете въпроси след разговори",
+  "goalTracker": "Проследяване на цели",
+  "trackPersonalGoals": "Проследяване на лични цели на началната страница",
+  "dailyReflection": "Ежедневно размисъл",
+  "dailyReflectionDescription": "Напомняне в 21:00 за размисъл над деня ви",
+  "endpointURL": "URL на крайна точка",
+  "links": "Връзки",
+  "discordMemberCount": "Над 8000 членове в Discord",
+  "userInformation": "Информация за потребителя",
+  "capabilities": "Възможности",
+  "previewScreenshots": "Преглед на екранни снимки",
+  "holdOnPreparingForm": "Моля, изчакайте, подготвяме формуляра за вас",
+  "bySubmittingYouAgreeToOmi": "С изпращането се съгласявате с Omi ",
+  "termsAndPrivacyPolicy": "Условия и Политика за поверителност",
+  "manageYourApp": "Управление на приложението ви",
+  "updatingYourApp": "Актуализиране на приложението ви",
+  "fetchingYourAppDetails": "Извличане на детайлите на приложението",
+  "updateAppQuestion": "Актуализиране на приложението?",
+  "updateAppConfirmation": "Сигурни ли сте, че искате да актуализирате приложението си? Промените ще бъдат отразени след преглед от нашия екип.",
+  "updateApp": "Актуализиране на приложението",
+  "createAndSubmitNewApp": "Създайте и изпратете ново приложение",
+  "appsCount": "Приложения ({count})",
+  "privateAppsCount": "Лични приложения ({count})",
+  "publicAppsCount": "Публични приложения ({count})",
+  "newVersionAvailable": "Налична е нова версия  🎉",
+  "no": "Не",
+  "subscriptionCancelledSuccessfully": "Абонаментът е отменен успешно. Той ще остане активен до края на текущия период на фактуриране.",
+  "failedToCancelSubscription": "Неуспешно отменяне на абонамента. Моля, опитайте отново.",
+  "invalidPaymentUrl": "Невалиден URL за плащане",
+  "permissionsAndTriggers": "Разрешения и тригери",
+  "chatFeatures": "Функции за чат",
+  "uninstall": "Деинсталиране",
+  "installs": "ИНСТАЛАЦИИ",
+  "priceLabel": "ЦЕНА",
+  "updatedLabel": "АКТУАЛИЗИРАНО",
+  "createdLabel": "СЪЗДАДЕНО",
+  "featuredLabel": "ПРЕПОРЪЧАНО",
+  "cancelSubscriptionQuestion": "Отмяна на абонамента?",
+  "cancelSubscriptionConfirmation": "Сигурни ли сте, че искате да отмените абонамента си? Ще имате достъп до края на текущия период на фактуриране.",
+  "cancelSubscriptionButton": "Отмяна на абонамента",
+  "cancelling": "Отменяне...",
+  "betaTesterMessage": "Вие сте бета тестер за това приложение. То все още не е публично. Ще стане публично след одобрение.",
+  "appUnderReviewMessage": "Вашето приложение е в процес на преглед и е видимо само за вас. Ще стане публично след одобрение.",
+  "appRejectedMessage": "Вашето приложение беше отхвърлено. Моля, актуализирайте детайлите и изпратете отново за преглед.",
+  "invalidIntegrationUrl": "Невалиден URL за интеграция",
+  "tapToComplete": "Докоснете за завършване",
+  "invalidSetupInstructionsUrl": "Невалиден URL за инструкции за настройка",
+  "pushToTalk": "Натисни за говорене",
+  "summaryPrompt": "Подкана за обобщение",
+  "pleaseSelectARating": "Моля, изберете оценка",
+  "reviewAddedSuccessfully": "Отзивът е добавен успешно 🚀",
+  "reviewUpdatedSuccessfully": "Отзивът е актуализиран успешно 🚀",
+  "failedToSubmitReview": "Неуспешно изпращане на отзив. Моля, опитайте отново.",
+  "addYourReview": "Добавете вашия отзив",
+  "editYourReview": "Редактирайте вашия отзив",
+  "writeAReviewOptional": "Напишете отзив (по избор)",
+  "submitReview": "Изпрати отзив",
+  "updateReview": "Актуализиране на отзива",
+  "yourReview": "Вашият отзив",
+  "anonymousUser": "Анонимен потребител",
+  "issueActivatingApp": "Възникна проблем при активирането на това приложение. Моля, опитайте отново.",
+  "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
+  "copyUrl": "Копиране на URL",
+  "txtFormat": "TXT",
+  "pdfFormat": "PDF",
+  "weekdayMon": "Пон",
+  "weekdayTue": "Вт",
+  "weekdayWed": "Ср",
+  "weekdayThu": "Чет",
+  "weekdayFri": "Пет",
+  "weekdaySat": "Съб",
+  "weekdaySun": "Нед",
+  "serviceIntegrationComingSoon": "Интеграцията с {serviceName} предстои",
+  "alreadyExportedTo": "Вече експортирано към {platform}",
+  "anotherPlatform": "друга платформа",
+  "pleaseAuthenticateWithService": "Моля, удостоверете се с {serviceName} в Настройки > Интеграции на задачи",
+  "addingToService": "Добавяне към {serviceName}...",
+  "addedToService": "Добавено в {serviceName}",
+  "failedToAddToService": "Неуспешно добавяне към {serviceName}",
+  "permissionDeniedForAppleReminders": "Разрешението за Apple Reminders е отказано",
+  "failedToCreateApiKey": "Неуспешно създаване на API ключ на доставчика: {error}",
+  "createAKey": "Създаване на ключ",
+  "apiKeyRevokedSuccessfully": "API ключът е отменен успешно",
+  "failedToRevokeApiKey": "Неуспешно отменяне на API ключ: {error}",
+  "omiApiKeys": "Omi API ключове",
+  "apiKeysDescription": "API ключовете се използват за удостоверяване, когато приложението ви комуникира със сървъра на OMI. Те позволяват на приложението ви да създава спомени и да получава достъп до други услуги на OMI по сигурен начин.",
+  "aboutOmiApiKeys": "Относно Omi API ключове",
+  "noApiKeysYet": "Все още няма API ключове. Създайте един за интеграция с приложението си.",
+  "yourNewKey": "Вашият нов ключ:",
+  "copyToClipboard": "Копиране в клипборда",
+  "pleaseCopyKeyNow": "Моля, копирайте го сега и го запишете на сигурно място. ",
+  "willNotSeeAgain": "Няма да можете да го видите отново.",
+  "revokeKey": "Отмяна на ключ",
+  "revokeApiKeyQuestion": "Отмяна на API ключ?",
+  "revokeApiKeyWarning": "Това действие не може да бъде отменено. Всички приложения, използващи този ключ, вече няма да имат достъп до API.",
+  "revoke": "Отмяна",
+  "whatWouldYouLikeToCreate": "Какво искате да създадете?",
+  "createAnApp": "Създаване на приложение",
+  "createAndShareYourApp": "Създайте и споделете вашето приложение",
+  "createMyClone": "Създай моя клонинг",
+  "createYourDigitalClone": "Създайте вашия цифров клонинг",
+  "itemApp": "Приложение",
+  "itemPersona": "Персона",
+  "keepItemPublic": "Запази {item} публично",
+  "makeItemPublicQuestion": "Да се направи {item} публично?",
+  "makeItemPrivateQuestion": "Да се направи {item} частно?",
+  "makeItemPublicExplanation": "Ако направите {item} публично, то може да се използва от всички",
+  "makeItemPrivateExplanation": "Ако направите {item} частно сега, то ще спре да работи за всички и ще бъде видимо само за вас",
+  "manageApp": "Управление на приложението",
+  "updatePersonaDetails": "Актуализиране на детайлите на персоната",
+  "deleteItemTitle": "Изтриване на {item}",
+  "deleteItemQuestion": "Изтриване на {item}?",
+  "deleteItemConfirmation": "Сигурни ли сте, че искате да изтриете това {item}? Това действие не може да бъде отменено.",
+  "revokeKeyQuestion": "Отмяна на ключа?",
+  "revokeKeyConfirmation": "Сигурни ли сте, че искате да отмените ключа \"{keyName}\"? Това действие не може да бъде отменено.",
+  "createNewKey": "Създаване на нов ключ",
+  "keyNameHint": "напр. Claude Desktop",
+  "pleaseEnterAName": "Моля, въведете име.",
+  "failedToCreateKeyWithError": "Неуспешно създаване на ключ: {error}",
+  "failedToCreateKeyTryAgain": "Неуспешно създаване на ключ. Моля, опитайте отново.",
+  "keyCreated": "Ключът е създаден",
+  "keyCreatedMessage": "Вашият нов ключ е създаден. Моля, копирайте го сега. Няма да можете да го видите отново.",
+  "keyWord": "Ключ",
+  "externalAppAccess": "Достъп на външни приложения",
+  "externalAppAccessDescription": "Следните инсталирани приложения имат външни интеграции и могат да достъпват данните ви, като разговори и спомени.",
+  "noExternalAppsHaveAccess": "Няма външни приложения с достъп до вашите данни.",
+  "maximumSecurityE2ee": "Максимална сигурност (E2EE)",
+  "e2eeDescription": "Криптирането от край до край е златният стандарт за поверителност. Когато е активирано, вашите данни се криптират на вашето устройство, преди да бъдат изпратени до нашите сървъри. Това означава, че никой, дори Omi, не може да получи достъп до вашето съдържание.",
+  "importantTradeoffs": "Важни компромиси:",
+  "e2eeTradeoff1": "• Някои функции като интеграции с външни приложения може да бъдат деактивирани.",
+  "e2eeTradeoff2": "• Ако загубите паролата си, данните ви не могат да бъдат възстановени.",
+  "featureComingSoon": "Тази функция идва скоро!",
+  "migrationInProgressMessage": "Миграцията е в ход. Не можете да промените нивото на защита, докато не приключи.",
+  "migrationFailed": "Миграцията неуспешна",
+  "migratingFromTo": "Мигриране от {source} към {target}",
+  "objectsCount": "{processed} / {total} обекта",
+  "secureEncryption": "Сигурно криптиране",
+  "secureEncryptionDescription": "Вашите данни са криптирани с ключ, уникален за вас, на нашите сървъри, хоствани в Google Cloud. Това означава, че вашето сурово съдържание е недостъпно за никого, включително персонала на Omi или Google, директно от базата данни.",
+  "endToEndEncryption": "Криптиране от край до край",
+  "e2eeCardDescription": "Активирайте за максимална сигурност, при която само вие имате достъп до данните си. Докоснете, за да научите повече.",
+  "dataAlwaysEncrypted": "Независимо от нивото, вашите данни винаги са криптирани в покой и при пренос.",
+  "readOnlyScope": "Само за четене",
+  "fullAccessScope": "Пълен достъп",
+  "readScope": "Четене",
+  "writeScope": "Запис",
+  "apiKeyCreated": "API ключът е създаден!",
+  "saveKeyWarning": "Запазете този ключ сега! Няма да можете да го видите отново.",
+  "yourApiKey": "ВАШИЯТ API КЛЮЧ",
+  "tapToCopy": "Докоснете за копиране",
+  "copyKey": "Копиране на ключа",
+  "createApiKey": "Създаване на API ключ",
+  "accessDataProgrammatically": "Достъп до данните ви програмно",
+  "keyNameLabel": "ИМЕ НА КЛЮЧА",
+  "keyNamePlaceholder": "напр., Моята интеграция",
+  "permissionsLabel": "РАЗРЕШЕНИЯ",
+  "permissionsInfoNote": "R = Четене, W = Запис. По подразбиране само за четене, ако не е избрано нищо.",
+  "developerApi": "API за разработчици",
+  "createAKeyToGetStarted": "Създайте ключ, за да започнете",
+  "errorWithMessage": "Грешка: {error}",
+  "omiTraining": "Обучение на Omi",
+  "trainingDataProgram": "Програма за данни за обучение",
+  "getOmiUnlimitedFree": "Получете Omi Unlimited безплатно, като допринесете данните си за обучение на AI модели.",
+  "trainingDataBullets": "• Вашите данни помагат за подобряване на AI модели\n• Споделят се само нечувствителни данни\n• Напълно прозрачен процес",
+  "learnMoreAtOmiTraining": "Научете повече на omi.me/training",
+  "agreeToContributeData": "Разбирам и се съгласявам да допринеса с данните си за обучение на AI",
+  "submitRequest": "Изпрати заявка",
+  "thankYouRequestUnderReview": "Благодарим ви! Вашата заявка се разглежда. Ще ви уведомим след одобрение.",
+  "planRemainsActiveUntil": "Планът ви ще остане активен до {date}. След това ще загубите достъп до неограничените функции. Сигурни ли сте?",
+  "confirmCancellation": "Потвърдете отказа",
+  "keepMyPlan": "Запази плана ми",
+  "subscriptionSetToCancel": "Абонаментът ви е настроен да бъде отказан в края на периода.",
+  "switchedToOnDevice": "Превключено към транскрипция на устройството",
+  "couldNotSwitchToFreePlan": "Не може да се премине към безплатен план. Моля, опитайте отново.",
+  "couldNotLoadPlans": "Не може да се заредят наличните планове. Моля, опитайте отново.",
+  "selectedPlanNotAvailable": "Избраният план не е наличен. Моля, опитайте отново.",
+  "upgradeToAnnualPlan": "Надграждане до годишен план",
+  "importantBillingInfo": "Важна информация за фактуриране:",
+  "monthlyPlanContinues": "Текущият ви месечен план ще продължи до края на периода на фактуриране",
+  "paymentMethodCharged": "Съществуващият ви метод на плащане ще бъде таксуван автоматично, когато месечният ви план приключи",
+  "annualSubscriptionStarts": "Вашият 12-месечен годишен абонамент ще започне автоматично след таксуването",
+  "thirteenMonthsCoverage": "Ще получите общо 13 месеца покритие (текущ месец + 12 месеца годишно)",
+  "confirmUpgrade": "Потвърдете надграждането",
+  "confirmPlanChange": "Потвърдете промяната на плана",
+  "confirmAndProceed": "Потвърди и продължи",
+  "upgradeScheduled": "Надграждането е планирано",
+  "changePlan": "Промяна на плана",
+  "upgradeAlreadyScheduled": "Вашето надграждане до годишен план вече е планирано",
+  "youAreOnUnlimitedPlan": "Вие сте на план Неограничен.",
+  "yourOmiUnleashed": "Вашият Omi, освободен. Станете неограничени за безкрайни възможности.",
+  "planEndedOn": "Планът ви приключи на {date}.\\nАбонирайте се отново сега - ще бъдете таксувани незабавно за нов период на фактуриране.",
+  "planSetToCancelOn": "Планът ви е настроен да се отмени на {date}.\\nАбонирайте се отново сега, за да запазите предимствата си - без такса до {date}.",
+  "annualPlanStartsAutomatically": "Годишният ви план ще започне автоматично, когато месечният ви план приключи.",
+  "planRenewsOn": "Планът ви се подновява на {date}.",
+  "unlimitedConversations": "Неограничени разговори",
+  "askOmiAnything": "Попитайте Omi каквото и да е за живота си",
+  "unlockOmiInfiniteMemory": "Отключете безкрайната памет на Omi",
+  "youreOnAnnualPlan": "Вие сте на годишен план",
+  "alreadyBestValuePlan": "Вече имате плана с най-добра стойност. Не са необходими промени.",
+  "unableToLoadPlans": "Не може да се заредят планове",
+  "checkConnectionTryAgain": "Моля, проверете връзката си и опитайте отново",
+  "useFreePlan": "Използвай безплатен план",
+  "continueText": "Продължи",
+  "resubscribe": "Повторен абонамент",
+  "couldNotOpenPaymentSettings": "Не може да се отворят настройките за плащане. Моля, опитайте отново.",
+  "managePaymentMethod": "Управление на метод на плащане",
+  "cancelSubscription": "Отказ от абонамент",
+  "endsOnDate": "Изтича на {date}",
+  "active": "Активен",
+  "freePlan": "Безплатен план",
+  "configure": "Конфигуриране",
+  "privacyInformation": "Информация за поверителност",
+  "@privacyInformation": {
+    "description": "Privacy page - privacyInformation"
+  },
+  "yourPrivacyMattersToUs": "Вашата поверителност е важна за нас",
+  "@yourPrivacyMattersToUs": {
+    "description": "Privacy page - yourPrivacyMattersToUs"
+  },
+  "privacyIntroText": "В Omi приемаме поверителността ви много сериозно. Искаме да бъдем прозрачни относно данните, които събираме и как ги използваме за подобряване на продукта. Ето какво трябва да знаете:",
+  "@privacyIntroText": {
+    "description": "Privacy page - privacyIntroText"
+  },
+  "whatWeTrack": "Какво проследяваме",
+  "@whatWeTrack": {
+    "description": "Privacy page - whatWeTrack"
+  },
+  "anonymityAndPrivacy": "Анонимност и поверителност",
+  "@anonymityAndPrivacy": {
+    "description": "Privacy page - anonymityAndPrivacy"
+  },
+  "optInAndOptOutOptions": "Опции за включване и изключване",
+  "@optInAndOptOutOptions": {
+    "description": "Privacy page - optInAndOptOutOptions"
+  },
+  "ourCommitment": "Нашият ангажимент",
+  "@ourCommitment": {
+    "description": "Privacy page - ourCommitment"
+  },
+  "commitmentText": "Ние сме ангажирани да използваме събраните данни само за да направим Omi по-добър продукт за вас. Вашата поверителност и доверие са от първостепенно значение за нас.",
+  "@commitmentText": {
+    "description": "Privacy page - commitmentText"
+  },
+  "thankYouText": "Благодарим ви, че сте ценен потребител на Omi. Ако имате въпроси или притеснения, не се колебайте да се свържете с нас на team@basedhardware.com.",
+  "@thankYouText": {
+    "description": "Privacy page - thankYouText"
+  },
+  "wifiSyncSettings": "Настройки за WiFi синхронизация",
+  "@wifiSyncSettings": {
+    "description": "WiFi sync settings - wifiSyncSettings"
+  },
+  "enterHotspotCredentials": "Въведете данните за гореща точка на телефона",
+  "@enterHotspotCredentials": {
+    "description": "WiFi sync settings - enterHotspotCredentials"
+  },
+  "wifiSyncUsesHotspot": "WiFi синхронизацията използва телефона ви като гореща точка. Намерете името и паролата в Настройки > Лична гореща точка.",
+  "@wifiSyncUsesHotspot": {
+    "description": "WiFi sync settings - wifiSyncUsesHotspot"
+  },
+  "hotspotNameSsid": "Име на гореща точка (SSID)",
+  "@hotspotNameSsid": {
+    "description": "WiFi sync settings - hotspotNameSsid"
+  },
+  "exampleIphoneHotspot": "напр. iPhone Hotspot",
+  "@exampleIphoneHotspot": {
+    "description": "WiFi sync settings - exampleIphoneHotspot"
+  },
+  "password": "Парола",
+  "@password": {
+    "description": "WiFi sync settings - password"
+  },
+  "enterHotspotPassword": "Въведете парола за гореща точка",
+  "@enterHotspotPassword": {
+    "description": "WiFi sync settings - enterHotspotPassword"
+  },
+  "saveCredentials": "Запазване на данните",
+  "@saveCredentials": {
+    "description": "WiFi sync settings - saveCredentials"
+  },
+  "clearCredentials": "Изчистване на данните",
+  "@clearCredentials": {
+    "description": "WiFi sync settings - clearCredentials"
+  },
+  "pleaseEnterHotspotName": "Моля, въведете име на гореща точка",
+  "@pleaseEnterHotspotName": {
+    "description": "WiFi sync settings - pleaseEnterHotspotName"
+  },
+  "wifiCredentialsSaved": "WiFi данните са запазени",
+  "@wifiCredentialsSaved": {
+    "description": "WiFi sync settings - wifiCredentialsSaved"
+  },
+  "wifiCredentialsCleared": "WiFi данните са изчистени",
+  "@wifiCredentialsCleared": {
+    "description": "WiFi sync settings - wifiCredentialsCleared"
+  },
+  "summaryGeneratedForDate": "Резюмето е генерирано за {date}",
+  "@summaryGeneratedForDate": {
+    "description": "Daily summary settings - summaryGeneratedForDate",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "1/15/2026"
+      }
+    }
+  },
+  "failedToGenerateSummaryCheckConversations": "Неуспешно генериране на резюме. Уверете се, че имате разговори за този ден.",
+  "@failedToGenerateSummaryCheckConversations": {
+    "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Резюмето не е намерено",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "Пътуването ви за деня",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "Акценти",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Нерешени въпроси",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Решения",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Научено",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
+  },
+  "autoDeletesAfterThreeDays": "Автоматично се изтрива след 3 дни.",
+  "@autoDeletesAfterThreeDays": {
+    "description": "Developer settings - autoDeletesAfterThreeDays"
+  },
+  "knowledgeGraphDeletedSuccessfully": "Графът на знанията е изтрит успешно",
+  "@knowledgeGraphDeletedSuccessfully": {
+    "description": "Developer settings - knowledgeGraphDeletedSuccessfully"
+  },
+  "exportStartedMayTakeFewSeconds": "Експортирането започна. Това може да отнеме няколко секунди...",
+  "@exportStartedMayTakeFewSeconds": {
+    "description": "Developer settings - exportStartedMayTakeFewSeconds"
+  },
+  "knowledgeGraphDeleteDescription": "Това ще изтрие всички производни данни от графа на знанията (възли и връзки). Оригиналните ви спомени ще останат в безопасност. Графът ще бъде възстановен с времето или при следваща заявка.",
+  "@knowledgeGraphDeleteDescription": {
+    "description": "Developer settings - knowledgeGraphDeleteDescription"
+  },
+  "configureDailySummaryDigest": "Конфигурирайте вашия дневен дайджест на задачите",
+  "accessesDataTypes": "Достъп до {dataTypes}",
+  "triggeredByType": "задействано от {triggerType}",
+  "accessesAndTriggeredBy": "{accessDescription} и е {triggerDescription}.",
+  "isTriggeredBy": "Е {triggerDescription}.",
+  "noSpecificDataAccessConfigured": "Няма конфигуриран специфичен достъп до данни."
 }

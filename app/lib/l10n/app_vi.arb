@@ -61,7 +61,7 @@
   "@close": {
     "description": "Close button label"
   },
-  "clear": "Xóa",
+  "clear": "Xóa sạch",
   "@clear": {
     "description": "Clear button label"
   },
@@ -159,7 +159,7 @@
   "@createPersonHint": {
     "description": "Hint text for creating a person"
   },
-  "speechProfile": "Hồ sơ giọng nói",
+  "speechProfile": "Hồ sơ Giọng nói",
   "@speechProfile": {
     "description": "Speech profile label"
   },
@@ -175,7 +175,7 @@
   },
   "settings": "Cài đặt",
   "@settings": {
-    "description": "Settings page title"
+    "description": "Bottom navigation label for settings"
   },
   "language": "Ngôn ngữ",
   "@language": {
@@ -293,9 +293,9 @@
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
-  "noStarredConversations": "Chưa có cuộc trò chuyện được gắn sao.",
+  "noStarredConversations": "Không có cuộc trò chuyện đã gắn sao",
   "@noStarredConversations": {
-    "description": "Empty state for starred filter"
+    "description": "Empty state title when no starred conversations"
   },
   "starConversationHint": "Để gắn sao cuộc trò chuyện, hãy mở nó và nhấn vào biểu tượng ngôi sao ở phần đầu.",
   "@starConversationHint": {
@@ -351,7 +351,7 @@
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Đã sao chép tin nhắn vào clipboard.",
+  "messageCopied": "✨ Tin nhắn đã được sao chép vào clipboard",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -393,7 +393,7 @@
   },
   "apps": "Ứng dụng",
   "@apps": {
-    "description": "Apps page title"
+    "description": "Navigation label for apps page"
   },
   "noAppsFound": "Không tìm thấy ứng dụng",
   "@noAppsFound": {
@@ -427,7 +427,7 @@
   "@unableToFetchApps": {
     "description": "Error when apps fail to load"
   },
-  "aboutOmi": "Về Omi",
+  "aboutOmi": "Giới thiệu về Omi",
   "@aboutOmi": {
     "description": "About page title"
   },
@@ -435,7 +435,7 @@
   "@privacyPolicy": {
     "description": "Link text for Privacy Policy"
   },
-  "visitWebsite": "Truy cập website",
+  "visitWebsite": "Truy cập trang web",
   "@visitWebsite": {
     "description": "Visit website link"
   },
@@ -447,7 +447,7 @@
   "@joinCommunity": {
     "description": "Discord community link"
   },
-  "membersAndCounting": "Hơn 8000 thành viên và đang tăng.",
+  "membersAndCounting": "8000+ thành viên và tiếp tục tăng.",
   "@membersAndCounting": {
     "description": "Discord member count"
   },
@@ -511,27 +511,27 @@
   "@email": {
     "description": "Email field label"
   },
-  "customVocabulary": "Từ vựng tùy chỉnh",
+  "customVocabulary": "Từ vựng Tùy chỉnh",
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Nhận diện người khác",
+  "identifyingOthers": "Nhận dạng Người khác",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
-  "paymentMethods": "Phương thức thanh toán",
+  "paymentMethods": "Phương thức Thanh toán",
   "@paymentMethods": {
     "description": "Payment methods setting"
   },
-  "conversationDisplay": "Hiển thị cuộc trò chuyện",
+  "conversationDisplay": "Hiển thị Cuộc trò chuyện",
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "Dữ liệu & Bảo mật",
+  "dataPrivacy": "Quyền riêng tư Dữ liệu",
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
-  "userId": "ID người dùng",
+  "userId": "ID Người dùng",
   "@userId": {
     "description": "User ID label"
   },
@@ -879,7 +879,7 @@
   "@createKeyToStart": {
     "description": "Create key instruction"
   },
-  "createKey": "Tạo Key",
+  "createKey": "Tạo Khóa",
   "@createKey": {
     "description": "Create Key button"
   },
@@ -1087,7 +1087,7 @@
   "exportShared": "Đã chia sẻ bản xuất",
   "deleteKnowledgeGraphTitle": "Xóa biểu đồ tri thức?",
   "deleteKnowledgeGraphMessage": "Thao tác này sẽ xóa tất cả dữ liệu biểu đồ tri thức được tạo ra (nút và kết nối). Ký ức gốc của bạn sẽ vẫn an toàn. Biểu đồ sẽ được xây dựng lại theo thời gian hoặc khi có yêu cầu tiếp theo.",
-  "knowledgeGraphDeleted": "Đã xóa biểu đồ tri thức thành công",
+  "knowledgeGraphDeleted": "Đã xóa đồ thị kiến thức",
   "deleteGraphFailed": "Không thể xóa biểu đồ: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -1128,7 +1128,7 @@
   "listeningMins": "Lắng nghe (phút)",
   "understandingWords": "Hiểu biết (từ)",
   "insights": "Thông tin chi tiết",
-  "memories": "Ký ức",
+  "memories": "Kỷ niệm",
   "minsUsedThisMonth": "Đã sử dụng {used} trong số {limit} phút trong tháng này",
   "@minsUsedThisMonth": {
     "placeholders": {
@@ -1538,7 +1538,7 @@
   "enterSttHttpEndpoint": "Nhập điểm cuối HTTP STT của bạn",
   "websocketUrl": "URL WebSocket",
   "enterLiveSttWebsocket": "Nhập điểm cuối WebSocket STT trực tiếp của bạn",
-  "apiKey": "API Key",
+  "apiKey": "Khóa API",
   "enterApiKey": "Nhập API key của bạn",
   "storedLocallyNeverShared": "Lưu trữ cục bộ, không bao giờ chia sẻ",
   "host": "Host",
@@ -1820,7 +1820,7 @@
   "@wantDifferentName": {
     "description": "Question asking if user wants to change their display name"
   },
-  "whatsYourName": "Bạn tên gì?",
+  "whatsYourName": "Tên bạn là gì?",
   "@whatsYourName": {
     "description": "Question asking for user's name"
   },
@@ -1938,7 +1938,7 @@
   "@selectYourLanguage": {
     "description": "Placeholder for selected language name"
   },
-  "personalGrowthJourney": "Hành trình phát triển cá nhân của bạn với AI lắng nghe mọi lời nói của bạn.",
+  "personalGrowthJourney": "Hành trình phát triển cá nhân của bạn với AI lắng nghe từng lời nói.",
   "@personalGrowthJourney": {
     "description": "Tagline on onboarding wrapper"
   },
@@ -2077,14 +2077,9 @@
   "@deleteSelected": {
     "description": "Tooltip for delete selected"
   },
-  "searchMemories": "Tìm kiếm {count} ký ức",
+  "searchMemories": "Tìm kiếm ký ức...",
   "@searchMemories": {
-    "description": "Hint text for memories search bar",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
+    "description": "Search input hint text"
   },
   "memoryDeleted": "Đã xóa ký ức.",
   "@memoryDeleted": {
@@ -2094,9 +2089,9 @@
   "@undo": {
     "description": "Undo button text"
   },
-  "noMemoriesYet": "Chưa có ký ức",
+  "noMemoriesYet": "🧠 Chưa có ký ức",
   "@noMemoriesYet": {
-    "description": "Empty state text"
+    "description": "Empty state title when no memories"
   },
   "noAutoMemories": "Chưa có ký ức tự động trích xuất",
   "@noAutoMemories": {
@@ -2110,9 +2105,9 @@
   "@noMemoriesInCategories": {
     "description": "Empty state text for filtered categories"
   },
-  "noMemoriesFound": "Không tìm thấy ký ức",
+  "noMemoriesFound": "🔍 Không tìm thấy ký ức",
   "@noMemoriesFound": {
-    "description": "Empty state text for search results"
+    "description": "Empty state title when search/filter has no results"
   },
   "addFirstMemory": "Thêm ký ức đầu tiên của bạn",
   "@addFirstMemory": {
@@ -2134,7 +2129,7 @@
   "@memoryClearedSuccess": {
     "description": "Snackbar success message"
   },
-  "noMemoriesToDelete": "Không có ký ức để xóa",
+  "noMemoriesToDelete": "Không có ký ức nào để xóa",
   "@noMemoriesToDelete": {
     "description": "Snackbar message"
   },
@@ -2146,7 +2141,7 @@
   "@createActionItemTooltip": {
     "description": "Tooltip for create action item FAB"
   },
-  "memoryManagement": "Quản lý ký ức",
+  "memoryManagement": "Quản lý bộ nhớ",
   "@memoryManagement": {
     "description": "Title for memory management sheet"
   },
@@ -2191,11 +2186,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "Ký ức mới",
+  "newMemory": "✨ Bộ nhớ mới",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "Chỉnh sửa ký ức",
+  "editMemory": "✏️ Chỉnh sửa bộ nhớ",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2331,7 +2326,7 @@
   "editFolder": "Chỉnh sửa thư mục",
   "deleteFolder": "Xóa thư mục",
   "transcriptCopiedToClipboard": "Đã sao chép bản ghi vào clipboard",
-  "summaryCopiedToClipboard": "Đã sao chép tóm tắt vào clipboard",
+  "summaryCopiedToClipboard": "Đã sao chép bản tóm tắt vào clipboard",
   "conversationUrlCouldNotBeShared": "Không thể chia sẻ URL cuộc trò chuyện.",
   "urlCopiedToClipboard": "Đã sao chép URL vào clipboard",
   "exportTranscript": "Xuất bản ghi",
@@ -2341,11 +2336,11 @@
   "summarize": "Tóm tắt",
   "generateSummary": "Tạo bản tóm tắt",
   "conversationNotFoundOrDeleted": "Không tìm thấy cuộc trò chuyện hoặc đã bị xóa",
-  "deleteMemory": "Xóa bộ nhớ?",
+  "deleteMemory": "Xóa bộ nhớ",
   "thisActionCannotBeUndone": "Hành động này không thể hoàn tác.",
   "memoriesCount": "{count} kỷ niệm",
   "noMemoriesInCategory": "Chưa có kỷ niệm nào trong danh mục này",
-  "addYourFirstMemory": "Thêm kỷ niệm đầu tiên của bạn",
+  "addYourFirstMemory": "Thêm ký ức đầu tiên của bạn",
   "firmwareDisconnectUsb": "Ngắt kết nối USB",
   "firmwareUsbWarning": "Kết nối USB trong khi cập nhật có thể làm hỏng thiết bị của bạn.",
   "firmwareBatteryAbove15": "Pin trên 15%",
@@ -2402,7 +2397,7 @@
   "pressKeys": "Nhấn phím...",
   "cmdRequired": "⌘ bắt buộc",
   "invalidKey": "Phím không hợp lệ",
-  "space": "Khoảng trắng",
+  "space": "Dấu cách",
   "search": "Tìm kiếm",
   "searchPlaceholder": "Tìm kiếm...",
   "untitledConversation": "Cuộc trò chuyện không có tiêu đề",
@@ -2416,7 +2411,7 @@
   "saveGoal": "Lưu",
   "goals": "Mục tiêu",
   "tapToAddGoal": "Nhấn để thêm mục tiêu",
-  "welcomeBack": "Chào mừng trở lại",
+  "welcomeBack": "Chào mừng trở lại, {name}",
   "yourConversations": "Cuộc trò chuyện của bạn",
   "reviewAndManageConversations": "Xem xét và quản lý các cuộc trò chuyện đã ghi âm",
   "startCapturingConversations": "Bắt đầu ghi lại các cuộc trò chuyện bằng thiết bị Omi của bạn để xem chúng ở đây.",
@@ -2519,5 +2514,785 @@
   "ratingsCount": "{count}+ đánh giá",
   "errorActivatingApp": "Lỗi kích hoạt ứng dụng",
   "integrationSetupRequired": "Nếu đây là ứng dụng tích hợp, hãy đảm bảo thiết lập đã hoàn tất.",
-  "installed": "Đã cài đặt"
+  "installed": "Đã cài đặt",
+  "appIdLabel": "ID ứng dụng",
+  "appNameLabel": "Tên ứng dụng",
+  "appNamePlaceholder": "Ứng dụng tuyệt vời của tôi",
+  "pleaseEnterAppName": "Vui lòng nhập tên ứng dụng",
+  "categoryLabel": "Danh mục",
+  "selectCategory": "Chọn danh mục",
+  "descriptionLabel": "Mô tả",
+  "appDescriptionPlaceholder": "Ứng dụng tuyệt vời của tôi là một ứng dụng tuyệt vời làm những điều tuyệt vời. Đây là ứng dụng tốt nhất!",
+  "pleaseProvideValidDescription": "Vui lòng cung cấp mô tả hợp lệ",
+  "appPricingLabel": "Giá ứng dụng",
+  "noneSelected": "Không có lựa chọn",
+  "appIdCopiedToClipboard": "Đã sao chép ID ứng dụng vào clipboard",
+  "appCategoryModalTitle": "Danh mục ứng dụng",
+  "pricingFree": "Miễn phí",
+  "pricingPaid": "Trả phí",
+  "loadingCapabilities": "Đang tải khả năng...",
+  "filterInstalled": "Đã cài đặt",
+  "filterMyApps": "Ứng dụng của tôi",
+  "clearSelection": "Xóa lựa chọn",
+  "filterCategory": "Danh mục",
+  "rating4PlusStars": "4+ sao",
+  "rating3PlusStars": "3+ sao",
+  "rating2PlusStars": "2+ sao",
+  "rating1PlusStars": "1+ sao",
+  "filterRating": "Đánh giá",
+  "filterCapabilities": "Khả năng",
+  "noNotificationScopesAvailable": "Không có phạm vi thông báo nào",
+  "popularApps": "Ứng dụng phổ biến",
+  "pleaseProvidePrompt": "Vui lòng cung cấp lời nhắc",
+  "chatWithAppName": "Trò chuyện với {appName}",
+  "defaultAiAssistant": "Trợ lý AI mặc định",
+  "readyToChat": "✨ Sẵn sàng trò chuyện!",
+  "connectionNeeded": "🌐 Cần kết nối",
+  "startConversation": "Bắt đầu cuộc trò chuyện và để phép màu bắt đầu",
+  "checkInternetConnection": "Vui lòng kiểm tra kết nối internet của bạn",
+  "wasThisHelpful": "Điều này có hữu ích không?",
+  "thankYouForFeedback": "Cảm ơn phản hồi của bạn!",
+  "maxFilesUploadError": "Bạn chỉ có thể tải lên 4 tệp cùng một lúc",
+  "attachedFiles": "📎 Tệp đính kèm",
+  "takePhoto": "Chụp ảnh",
+  "captureWithCamera": "Chụp bằng máy ảnh",
+  "selectImages": "Chọn hình ảnh",
+  "chooseFromGallery": "Chọn từ thư viện",
+  "selectFile": "Chọn tệp",
+  "chooseAnyFileType": "Chọn bất kỳ loại tệp nào",
+  "cannotReportOwnMessages": "Bạn không thể báo cáo tin nhắn của chính mình",
+  "messageReportedSuccessfully": "✅ Tin nhắn đã được báo cáo thành công",
+  "confirmReportMessage": "Bạn có chắc chắn muốn báo cáo tin nhắn này không?",
+  "selectChatAssistant": "Chọn trợ lý trò chuyện",
+  "enableMoreApps": "Kích hoạt thêm ứng dụng",
+  "chatCleared": "Đã xóa cuộc trò chuyện",
+  "clearChatTitle": "Xóa cuộc trò chuyện?",
+  "confirmClearChat": "Bạn có chắc chắn muốn xóa cuộc trò chuyện không? Hành động này không thể hoàn tác.",
+  "copy": "Sao chép",
+  "share": "Chia sẻ",
+  "report": "Báo cáo",
+  "microphonePermissionRequired": "Cần quyền microphone để ghi âm giọng nói.",
+  "microphonePermissionDenied": "Quyền microphone bị từ chối. Vui lòng cấp quyền trong Tùy chọn Hệ thống > Quyền riêng tư & Bảo mật > Microphone.",
+  "failedToCheckMicrophonePermission": "Không thể kiểm tra quyền microphone: {error}",
+  "failedToTranscribeAudio": "Không thể phiên âm audio",
+  "transcribing": "Đang phiên âm...",
+  "transcriptionFailed": "Phiên âm thất bại",
+  "discardedConversation": "Cuộc trò chuyện bị loại bỏ",
+  "at": "lúc",
+  "from": "từ",
+  "copied": "Đã sao chép!",
+  "copyLink": "Sao chép liên kết",
+  "hideTranscript": "Ẩn Bản ghi",
+  "viewTranscript": "Xem Bản ghi",
+  "conversationDetails": "Chi tiết Cuộc trò chuyện",
+  "transcript": "Bản ghi",
+  "segmentsCount": "{count} đoạn",
+  "noTranscriptAvailable": "Không có Bản ghi",
+  "noTranscriptMessage": "Cuộc trò chuyện này không có bản ghi.",
+  "conversationUrlCouldNotBeGenerated": "Không thể tạo URL cuộc trò chuyện.",
+  "failedToGenerateConversationLink": "Không tạo được liên kết cuộc trò chuyện",
+  "failedToGenerateShareLink": "Không tạo được liên kết chia sẻ",
+  "reloadingConversations": "Đang tải lại cuộc trò chuyện...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "@welcomeBack": {
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "user": "Người dùng",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "Đã gắn sao",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "Ngày",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "Không tìm thấy kết quả",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "Thử điều chỉnh các từ khóa tìm kiếm của bạn",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "starConversationsToFindQuickly": "Gắn sao cuộc trò chuyện để tìm chúng nhanh chóng ở đây",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "Không có cuộc trò chuyện vào ngày {date}",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "Thử chọn ngày khác",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  },
+  "conversations": "Cuộc trò chuyện",
+  "@conversations": {
+    "description": "Navigation label for conversations page"
+  },
+  "chat": "Trò chuyện",
+  "@chat": {
+    "description": "Navigation label for chat page"
+  },
+  "@memories": {
+    "description": "Navigation label for memories page"
+  },
+  "actions": "Hành động",
+  "@actions": {
+    "description": "Navigation label for actions page"
+  },
+  "syncAvailable": "Đồng bộ có sẵn",
+  "@syncAvailable": {
+    "description": "Label for sync notification"
+  },
+  "referAFriend": "Giới thiệu bạn bè",
+  "@referAFriend": {
+    "description": "Bottom navigation label for referral program"
+  },
+  "help": "Trợ giúp",
+  "@help": {
+    "description": "Bottom navigation label for help"
+  },
+  "pro": "Pro",
+  "@pro": {
+    "description": "Badge label for pro/unlimited users"
+  },
+  "upgradeToPro": "Nâng cấp lên Pro",
+  "@upgradeToPro": {
+    "description": "Subscription banner button text"
+  },
+  "getOmiDevice": "Nhận thiết bị Omi",
+  "@getOmiDevice": {
+    "description": "Widget title for device promotion"
+  },
+  "wearableAiCompanion": "Trợ lý AI đeo được",
+  "@wearableAiCompanion": {
+    "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "Đang tải ký ức...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "allMemories": "Tất cả ký ức",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "Về bạn",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "Thủ công",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "Đang tải ký ức của bạn...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "createYourFirstMemory": "Tạo ký ức đầu tiên để bắt đầu",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "Thử điều chỉnh tìm kiếm hoặc bộ lọc của bạn",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
+  },
+  "whatWouldYouLikeToRemember": "Bạn muốn nhớ điều gì?",
+  "category": "Danh mục",
+  "public": "Công khai",
+  "failedToSaveCheckConnection": "Lưu thất bại. Vui lòng kiểm tra kết nối của bạn.",
+  "createMemory": "Tạo bộ nhớ",
+  "deleteMemoryConfirmation": "Bạn có chắc chắn muốn xóa bộ nhớ này không? Hành động này không thể hoàn tác.",
+  "makePrivate": "Riêng tư",
+  "organizeAndControlMemories": "Tổ chức và kiểm soát ký ức của bạn",
+  "total": "Tổng cộng",
+  "makeAllMemoriesPrivate": "Đặt tất cả ký ức thành riêng tư",
+  "setAllMemoriesToPrivate": "Đặt tất cả ký ức thành riêng tư",
+  "makeAllMemoriesPublic": "Đặt tất cả ký ức thành công khai",
+  "setAllMemoriesToPublic": "Đặt tất cả ký ức thành công khai",
+  "permanentlyRemoveAllMemories": "Xóa vĩnh viễn tất cả ký ức khỏi Omi",
+  "allMemoriesAreNowPrivate": "Tất cả ký ức hiện đã ở chế độ riêng tư",
+  "allMemoriesAreNowPublic": "Tất cả ký ức hiện đã ở chế độ công khai",
+  "clearOmisMemory": "Xóa bộ nhớ của Omi",
+  "clearMemoryConfirmation": "Bạn có chắc chắn muốn xóa bộ nhớ của Omi không? Hành động này không thể hoàn tác và sẽ xóa vĩnh viễn tất cả {count} ký ức.",
+  "omisMemoryCleared": "Bộ nhớ của Omi về bạn đã được xóa",
+  "welcomeToOmi": "Chào mừng đến với Omi",
+  "continueWithApple": "Tiếp tục với Apple",
+  "continueWithGoogle": "Tiếp tục với Google",
+  "byContinuingYouAgree": "Bằng cách tiếp tục, bạn đồng ý với ",
+  "termsOfService": "Điều khoản dịch vụ",
+  "and": " và ",
+  "dataAndPrivacy": "Dữ liệu & Quyền riêng tư",
+  "secureAuthViaAppleId": "Xác thực an toàn qua Apple ID",
+  "secureAuthViaGoogleAccount": "Xác thực an toàn qua tài khoản Google",
+  "whatWeCollect": "Những gì chúng tôi thu thập",
+  "dataCollectionMessage": "Bằng cách tiếp tục, các cuộc trò chuyện, bản ghi và thông tin cá nhân của bạn sẽ được lưu trữ an toàn trên máy chủ của chúng tôi để cung cấp thông tin chi tiết được hỗ trợ bởi AI và kích hoạt tất cả các tính năng ứng dụng.",
+  "dataProtection": "Bảo vệ dữ liệu",
+  "yourDataIsProtected": "Dữ liệu của bạn được bảo vệ và quản lý bởi ",
+  "pleaseSelectYourPrimaryLanguage": "Vui lòng chọn ngôn ngữ chính của bạn",
+  "chooseYourLanguage": "Chọn ngôn ngữ của bạn",
+  "selectPreferredLanguageForBestExperience": "Chọn ngôn ngữ ưu tiên của bạn để có trải nghiệm Omi tốt nhất",
+  "searchLanguages": "Tìm kiếm ngôn ngữ...",
+  "selectALanguage": "Chọn một ngôn ngữ",
+  "tryDifferentSearchTerm": "Thử một từ khóa tìm kiếm khác",
+  "pleaseEnterYourName": "Vui lòng nhập tên của bạn",
+  "nameMustBeAtLeast2Characters": "Tên phải có ít nhất 2 ký tự",
+  "tellUsHowYouWouldLikeToBeAddressed": "Cho chúng tôi biết bạn muốn được gọi như thế nào. Điều này giúp cá nhân hóa trải nghiệm Omi của bạn.",
+  "charactersCount": "{count} ký tự",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "enableFeaturesForBestExperience": "Bật các tính năng để có trải nghiệm Omi tốt nhất trên thiết bị của bạn.",
+  "microphoneAccess": "Quyền truy cập micrô",
+  "recordAudioConversations": "Ghi âm cuộc trò chuyện",
+  "microphoneAccessDescription": "Omi cần quyền truy cập micrô để ghi lại các cuộc trò chuyện của bạn và cung cấp bản ghi âm.",
+  "screenRecording": "Ghi màn hình",
+  "captureSystemAudioFromMeetings": "Ghi âm hệ thống từ các cuộc họp",
+  "screenRecordingDescription": "Omi cần quyền ghi màn hình để ghi âm hệ thống từ các cuộc họp dựa trên trình duyệt của bạn.",
+  "accessibility": "Khả năng truy cập",
+  "detectBrowserBasedMeetings": "Phát hiện các cuộc họp dựa trên trình duyệt",
+  "accessibilityDescription": "Omi cần quyền truy cập để phát hiện khi bạn tham gia các cuộc họp Zoom, Meet hoặc Teams trong trình duyệt của bạn.",
+  "pleaseWait": "Vui lòng đợi...",
+  "joinTheCommunity": "Tham gia cộng đồng!",
+  "loadingProfile": "Đang tải hồ sơ...",
+  "profileSettings": "Cài đặt hồ sơ",
+  "noEmailSet": "Chưa đặt email",
+  "userIdCopiedToClipboard": "Đã sao chép ID người dùng",
+  "yourInformation": "Thông tin của Bạn",
+  "setYourName": "Đặt tên của bạn",
+  "changeYourName": "Thay đổi tên của bạn",
+  "persona": "Persona",
+  "manageYourOmiPersona": "Quản lý persona Omi của bạn",
+  "voiceAndPeople": "Giọng nói & Con người",
+  "teachOmiYourVoice": "Dạy Omi giọng nói của bạn",
+  "tellOmiWhoSaidIt": "Cho Omi biết ai đã nói điều đó 🗣️",
+  "payment": "Thanh toán",
+  "addOrChangeYourPaymentMethod": "Thêm hoặc thay đổi phương thức thanh toán",
+  "preferences": "Tùy chọn",
+  "helpImproveOmiBySharing": "Giúp cải thiện Omi bằng cách chia sẻ dữ liệu phân tích ẩn danh",
+  "deleteAccount": "Xóa Tài khoản",
+  "deleteYourAccountAndAllData": "Xóa tài khoản và tất cả dữ liệu của bạn",
+  "helpsDiagnoseIssuesAutoDeletes": "Giúp chẩn đoán sự cố. Tự động xóa sau 3 ngày.",
+  "clearLogs": "Xóa nhật ký",
+  "debugLogsCleared": "Đã xóa nhật ký gỡ lỗi",
+  "exportConversations": "Xuất cuộc trò chuyện",
+  "exportAllConversationsToJson": "Xuất tất cả cuộc trò chuyện của bạn vào tệp JSON.",
+  "conversationsExportStarted": "Đã bắt đầu xuất cuộc trò chuyện. Điều này có thể mất vài giây, vui lòng đợi.",
+  "mcpDescription": "Để kết nối Omi với các ứng dụng khác để đọc, tìm kiếm và quản lý ký ức và cuộc trò chuyện của bạn. Tạo khóa để bắt đầu.",
+  "apiKeys": "Khóa API",
+  "errorLabel": "Lỗi: {error}",
+  "noApiKeysFound": "Không tìm thấy khóa API. Tạo một khóa để bắt đầu.",
+  "advancedSettings": "Cài đặt nâng cao",
+  "triggersWhenNewConversationCreated": "Kích hoạt khi tạo cuộc trò chuyện mới.",
+  "triggersWhenNewTranscriptReceived": "Kích hoạt khi nhận được bản ghi mới.",
+  "realtimeAudioBytes": "Byte âm thanh thời gian thực",
+  "triggersWhenAudioBytesReceived": "Kích hoạt khi nhận được byte âm thanh.",
+  "everyXSeconds": "Mỗi x giây",
+  "triggersWhenDaySummaryGenerated": "Kích hoạt khi tạo tóm tắt ngày.",
+  "experimental": "Thử nghiệm",
+  "tryLatestExperimentalFeatures": "Dùng thử các tính năng thử nghiệm mới nhất từ ​​Nhóm Omi.",
+  "transcriptionServiceDiagnosticStatus": "Trạng thái chẩn đoán dịch vụ phiên âm",
+  "enableDetailedDiagnosticMessages": "Bật thông báo chẩn đoán chi tiết từ dịch vụ phiên âm",
+  "autoCreateAndTagNewSpeakers": "Tự động tạo và gắn thẻ người nói mới",
+  "automaticallyCreateNewPerson": "Tự động tạo người mới khi phát hiện tên trong bản ghi.",
+  "pilotFeatures": "Tính năng thử nghiệm",
+  "pilotFeaturesDescription": "Các tính năng này là thử nghiệm và không đảm bảo hỗ trợ.",
+  "suggestFollowUpQuestion": "Đề xuất câu hỏi tiếp theo",
+  "saveSettings": "Lưu Cài đặt",
+  "syncingDeveloperSettings": "Đang đồng bộ cài đặt nhà phát triển...",
+  "summary": "Tóm tắt",
+  "auto": "Tự động",
+  "noSummaryForApp": "Không có bản tóm tắt nào cho ứng dụng này. Hãy thử ứng dụng khác để có kết quả tốt hơn.",
+  "tryAnotherApp": "Thử ứng dụng khác",
+  "generatedBy": "Được tạo bởi {appName}",
+  "overview": "Tổng quan",
+  "otherAppResults": "Kết quả từ các ứng dụng khác",
+  "unknownApp": "Ứng dụng không xác định",
+  "noSummaryAvailable": "Không có bản tóm tắt",
+  "conversationNoSummaryYet": "Cuộc trò chuyện này chưa có bản tóm tắt.",
+  "chooseSummarizationApp": "Chọn ứng dụng tóm tắt",
+  "setAsDefaultSummarizationApp": "Đã đặt {appName} làm ứng dụng tóm tắt mặc định",
+  "letOmiChooseAutomatically": "Để Omi tự động chọn ứng dụng tốt nhất",
+  "deleteConversationConfirmation": "Bạn có chắc chắn muốn xóa cuộc trò chuyện này không? Hành động này không thể hoàn tác.",
+  "conversationDeleted": "Đã xóa cuộc trò chuyện",
+  "generatingLink": "Đang tạo liên kết...",
+  "editConversation": "Chỉnh sửa cuộc trò chuyện",
+  "conversationLinkCopiedToClipboard": "Đã sao chép liên kết cuộc trò chuyện vào clipboard",
+  "conversationTranscriptCopiedToClipboard": "Đã sao chép bản ghi cuộc trò chuyện vào clipboard",
+  "editConversationDialogTitle": "Chỉnh sửa cuộc trò chuyện",
+  "changeTheConversationTitle": "Thay đổi tiêu đề cuộc trò chuyện",
+  "conversationTitle": "Tiêu đề cuộc trò chuyện",
+  "enterConversationTitle": "Nhập tiêu đề cuộc trò chuyện...",
+  "conversationTitleUpdatedSuccessfully": "Đã cập nhật tiêu đề cuộc trò chuyện thành công",
+  "failedToUpdateConversationTitle": "Không cập nhật được tiêu đề cuộc trò chuyện",
+  "errorUpdatingConversationTitle": "Lỗi khi cập nhật tiêu đề cuộc trò chuyện",
+  "settingUp": "Đang thiết lập...",
+  "preparingSystemAudioCapture": "Đang chuẩn bị ghi âm hệ thống",
+  "clickTheButtonToCaptureAudio": "Nhấp vào nút để ghi âm cho bản ghi trực tiếp, thông tin chi tiết AI và lưu tự động.",
+  "startYourFirstRecording": "Bắt đầu bản ghi đầu tiên của bạn",
+  "reconnecting": "Đang kết nối lại...",
+  "recordingPaused": "Ghi âm đã tạm dừng",
+  "recordingActive": "Ghi âm đang hoạt động",
+  "startRecording": "Bắt đầu ghi âm",
+  "resumingInCountdown": "Tiếp tục trong {countdown}s...",
+  "tapPlayToResume": "Nhấn phát để tiếp tục",
+  "listeningForAudio": "Đang lắng nghe âm thanh...",
+  "preparingAudioCapture": "Đang chuẩn bị ghi âm",
+  "clickToBeginRecording": "Nhấp để bắt đầu ghi âm",
+  "translated": "đã dịch",
+  "liveTranscript": "Bản ghi trực tiếp",
+  "segmentsSingular": "{count} đoạn",
+  "segmentsPlural": "{count} đoạn",
+  "startRecordingToSeeTranscript": "Bắt đầu ghi âm để xem bản ghi trực tiếp",
+  "paused": "Đã tạm dừng",
+  "initializing": "Đang khởi tạo...",
+  "recording": "Đang ghi âm",
+  "microphoneChangedResumingIn": "Micro đã thay đổi. Tiếp tục trong {countdown}s",
+  "clickPlayToResumeOrStop": "Nhấp phát để tiếp tục hoặc dừng để kết thúc",
+  "settingUpSystemAudioCapture": "Đang thiết lập ghi âm hệ thống",
+  "capturingAudioAndGeneratingTranscript": "Đang ghi âm và tạo bản ghi",
+  "clickToBeginRecordingSystemAudio": "Nhấp để bắt đầu ghi âm hệ thống",
+  "you": "Bạn",
+  "speakerWithId": "Người nói {speakerId}",
+  "translatedByOmi": "dịch bởi omi",
+  "backToConversations": "Quay lại cuộc trò chuyện",
+  "systemAudio": "Hệ thống",
+  "mic": "Micro",
+  "audioInputSetTo": "Đầu vào âm thanh đã đặt thành {deviceName}",
+  "errorSwitchingAudioDevice": "Lỗi chuyển đổi thiết bị âm thanh: {error}",
+  "selectAudioInput": "Chọn đầu vào âm thanh",
+  "loadingDevices": "Đang tải thiết bị...",
+  "settingsHeader": "CÀI ĐẶT",
+  "plansAndBilling": "Gói và Thanh toán",
+  "calendarIntegration": "Tích hợp Lịch",
+  "dailySummary": "Tóm tắt Hàng ngày",
+  "developer": "Nhà phát triển",
+  "about": "Giới thiệu",
+  "selectTime": "Chọn Thời gian",
+  "accountGroup": "Tài khoản",
+  "signOutQuestion": "Đăng xuất?",
+  "signOutConfirmation": "Bạn có chắc chắn muốn đăng xuất không?",
+  "customVocabularyHeader": "TỪ VỰNG TÙY CHỈNH",
+  "addWordsDescription": "Thêm từ mà Omi nên nhận biết trong quá trình phiên âm.",
+  "enterWordsHint": "Nhập từ (phân tách bằng dấu phẩy)",
+  "dailySummaryHeader": "TÓM TẮT HÀNG NGÀY",
+  "dailySummaryTitle": "Tóm tắt Hàng ngày",
+  "dailySummaryDescription": "Nhận tóm tắt cá nhân hóa về các cuộc trò chuyện của bạn",
+  "deliveryTime": "Thời gian Giao hàng",
+  "deliveryTimeDescription": "Khi nào nhận tóm tắt hàng ngày của bạn",
+  "subscription": "Đăng ký",
+  "viewPlansAndUsage": "Xem Gói & Sử dụng",
+  "viewPlansDescription": "Quản lý đăng ký và xem thống kê sử dụng",
+  "addOrChangePaymentMethod": "Thêm hoặc thay đổi phương thức thanh toán của bạn",
+  "displayOptions": "Tùy chọn Hiển thị",
+  "showMeetingsInMenuBar": "Hiển thị Cuộc họp trong Thanh Menu",
+  "displayUpcomingMeetingsDescription": "Hiển thị các cuộc họp sắp tới trong thanh menu",
+  "showEventsWithoutParticipants": "Hiển thị Sự kiện Không có Người tham gia",
+  "includePersonalEventsDescription": "Bao gồm các sự kiện cá nhân không có người tham dự",
+  "upcomingMeetings": "CÁC CUỘC HỌP SẮP TỚI",
+  "checkingNext7Days": "Kiểm tra 7 ngày tiếp theo",
+  "shortcuts": "Phím tắt",
+  "shortcutChangeInstruction": "Nhấp vào phím tắt để thay đổi. Nhấn Escape để hủy.",
+  "configurePersonaDescription": "Cấu hình nhân vật AI của bạn",
+  "configureSTTProvider": "Cấu hình nhà cung cấp STT",
+  "setConversationEndDescription": "Đặt khi nào cuộc trò chuyện tự động kết thúc",
+  "importDataDescription": "Nhập dữ liệu từ các nguồn khác",
+  "debugAndDiagnostics": "Gỡ lỗi và Chẩn đoán",
+  "autoDeletesAfter3Days": "Tự động xóa sau 3 ngày",
+  "helpsDiagnoseIssues": "Giúp chẩn đoán vấn đề",
+  "exportConversationsDescription": "Xuất cuộc trò chuyện sang JSON",
+  "exportingConversations": "Đang xuất cuộc trò chuyện...",
+  "clearNodesDescription": "Xóa tất cả các nút và kết nối",
+  "deleteKnowledgeGraphQuestion": "Xóa Đồ thị Tri thức?",
+  "deleteKnowledgeGraphWarning": "Điều này sẽ xóa tất cả dữ liệu đồ thị tri thức dẫn xuất. Ký ức gốc của bạn vẫn an toàn.",
+  "connectOmiWithAI": "Kết nối Omi với trợ lý AI",
+  "noAPIKeys": "Không có khóa API. Tạo một khóa để bắt đầu.",
+  "realTimeTranscript": "Bản ghi âm Thời gian thực",
+  "transcriptionDiagnostics": "Chẩn đoán Ghi âm",
+  "detailedDiagnosticMessages": "Thông báo chẩn đoán chi tiết",
+  "autoCreateSpeakers": "Tự động tạo Người nói",
+  "autoCreateWhenDetected": "Tự động tạo khi phát hiện tên",
+  "followUpQuestions": "Câu hỏi Theo dõi",
+  "suggestQuestionsAfterConversations": "Đề xuất câu hỏi sau cuộc trò chuyện",
+  "goalTracker": "Theo dõi Mục tiêu",
+  "trackPersonalGoals": "Theo dõi mục tiêu cá nhân trên trang chủ",
+  "dailyReflection": "Suy ngẫm Hàng ngày",
+  "dailyReflectionDescription": "Nhắc nhở lúc 9 giờ tối để suy ngẫm về ngày của bạn",
+  "endpointURL": "URL Điểm cuối",
+  "links": "Liên kết",
+  "discordMemberCount": "Hơn 8000 thành viên trên Discord",
+  "userInformation": "Thông tin Người dùng",
+  "capabilities": "Khả năng",
+  "previewScreenshots": "Xem trước ảnh chụp màn hình",
+  "holdOnPreparingForm": "Vui lòng đợi, chúng tôi đang chuẩn bị biểu mẫu cho bạn",
+  "bySubmittingYouAgreeToOmi": "Bằng việc gửi, bạn đồng ý với ",
+  "termsAndPrivacyPolicy": "Điều khoản và Chính sách Bảo mật",
+  "manageYourApp": "Quản lý ứng dụng của bạn",
+  "updatingYourApp": "Đang cập nhật ứng dụng của bạn",
+  "fetchingYourAppDetails": "Đang tải thông tin ứng dụng",
+  "updateAppQuestion": "Cập nhật ứng dụng?",
+  "updateAppConfirmation": "Bạn có chắc chắn muốn cập nhật ứng dụng? Các thay đổi sẽ được phản ánh sau khi được đội ngũ của chúng tôi xem xét.",
+  "updateApp": "Cập nhật ứng dụng",
+  "createAndSubmitNewApp": "Tạo và gửi ứng dụng mới",
+  "appsCount": "Ứng dụng ({count})",
+  "privateAppsCount": "Ứng dụng riêng tư ({count})",
+  "publicAppsCount": "Ứng dụng công khai ({count})",
+  "newVersionAvailable": "Có phiên bản mới  🎉",
+  "no": "Không",
+  "subscriptionCancelledSuccessfully": "Đã hủy đăng ký thành công. Nó sẽ vẫn hoạt động cho đến cuối kỳ thanh toán hiện tại.",
+  "failedToCancelSubscription": "Không thể hủy đăng ký. Vui lòng thử lại.",
+  "invalidPaymentUrl": "URL thanh toán không hợp lệ",
+  "permissionsAndTriggers": "Quyền và trình kích hoạt",
+  "chatFeatures": "Tính năng trò chuyện",
+  "uninstall": "Gỡ cài đặt",
+  "installs": "LƯỢT CÀI ĐẶT",
+  "priceLabel": "GIÁ",
+  "updatedLabel": "CẬP NHẬT",
+  "createdLabel": "TẠO LÚC",
+  "featuredLabel": "NỔI BẬT",
+  "cancelSubscriptionQuestion": "Hủy đăng ký?",
+  "cancelSubscriptionConfirmation": "Bạn có chắc chắn muốn hủy đăng ký? Bạn sẽ tiếp tục có quyền truy cập cho đến cuối kỳ thanh toán hiện tại.",
+  "cancelSubscriptionButton": "Hủy đăng ký",
+  "cancelling": "Đang hủy...",
+  "betaTesterMessage": "Bạn là người thử nghiệm beta cho ứng dụng này. Nó chưa được công khai. Sẽ được công khai sau khi được phê duyệt.",
+  "appUnderReviewMessage": "Ứng dụng của bạn đang được xem xét và chỉ hiển thị với bạn. Sẽ được công khai sau khi được phê duyệt.",
+  "appRejectedMessage": "Ứng dụng của bạn đã bị từ chối. Vui lòng cập nhật thông tin và gửi lại để xem xét.",
+  "invalidIntegrationUrl": "URL tích hợp không hợp lệ",
+  "tapToComplete": "Nhấn để hoàn thành",
+  "invalidSetupInstructionsUrl": "URL hướng dẫn cài đặt không hợp lệ",
+  "pushToTalk": "Nhấn để nói",
+  "summaryPrompt": "Gợi ý tóm tắt",
+  "pleaseSelectARating": "Vui lòng chọn đánh giá",
+  "reviewAddedSuccessfully": "Đã thêm đánh giá thành công 🚀",
+  "reviewUpdatedSuccessfully": "Đã cập nhật đánh giá thành công 🚀",
+  "failedToSubmitReview": "Không thể gửi đánh giá. Vui lòng thử lại.",
+  "addYourReview": "Thêm đánh giá của bạn",
+  "editYourReview": "Chỉnh sửa đánh giá của bạn",
+  "writeAReviewOptional": "Viết đánh giá (tùy chọn)",
+  "submitReview": "Gửi đánh giá",
+  "updateReview": "Cập nhật đánh giá",
+  "yourReview": "Đánh giá của bạn",
+  "anonymousUser": "Người dùng ẩn danh",
+  "issueActivatingApp": "Đã xảy ra sự cố khi kích hoạt ứng dụng này. Vui lòng thử lại.",
+  "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
+  "copyUrl": "Sao chép URL",
+  "txtFormat": "TXT",
+  "pdfFormat": "PDF",
+  "weekdayMon": "T2",
+  "weekdayTue": "T3",
+  "weekdayWed": "T4",
+  "weekdayThu": "T5",
+  "weekdayFri": "T6",
+  "weekdaySat": "T7",
+  "weekdaySun": "CN",
+  "serviceIntegrationComingSoon": "Tích hợp {serviceName} sắp ra mắt",
+  "alreadyExportedTo": "Đã xuất sang {platform}",
+  "anotherPlatform": "nền tảng khác",
+  "pleaseAuthenticateWithService": "Vui lòng xác thực với {serviceName} trong Cài đặt > Tích hợp tác vụ",
+  "addingToService": "Đang thêm vào {serviceName}...",
+  "addedToService": "Đã thêm vào {serviceName}",
+  "failedToAddToService": "Không thể thêm vào {serviceName}",
+  "permissionDeniedForAppleReminders": "Quyền truy cập Apple Reminders bị từ chối",
+  "failedToCreateApiKey": "Không thể tạo khóa API nhà cung cấp: {error}",
+  "createAKey": "Tạo khóa",
+  "apiKeyRevokedSuccessfully": "Khóa API đã được thu hồi thành công",
+  "failedToRevokeApiKey": "Không thể thu hồi khóa API: {error}",
+  "omiApiKeys": "Khóa API Omi",
+  "apiKeysDescription": "Khóa API được sử dụng để xác thực khi ứng dụng của bạn giao tiếp với máy chủ OMI. Chúng cho phép ứng dụng của bạn tạo kỷ niệm và truy cập an toàn vào các dịch vụ OMI khác.",
+  "aboutOmiApiKeys": "Về khóa API Omi",
+  "noApiKeysYet": "Chưa có khóa API. Tạo một khóa để tích hợp với ứng dụng của bạn.",
+  "yourNewKey": "Khóa mới của bạn:",
+  "copyToClipboard": "Sao chép vào bộ nhớ tạm",
+  "pleaseCopyKeyNow": "Vui lòng sao chép ngay và ghi lại ở nơi an toàn. ",
+  "willNotSeeAgain": "Bạn sẽ không thể xem lại được.",
+  "revokeKey": "Thu hồi khóa",
+  "revokeApiKeyQuestion": "Thu hồi khóa API?",
+  "revokeApiKeyWarning": "Hành động này không thể hoàn tác. Bất kỳ ứng dụng nào sử dụng khóa này sẽ không thể truy cập API nữa.",
+  "revoke": "Thu hồi",
+  "whatWouldYouLikeToCreate": "Bạn muốn tạo gì?",
+  "createAnApp": "Tạo ứng dụng",
+  "createAndShareYourApp": "Tạo và chia sẻ ứng dụng của bạn",
+  "createMyClone": "Tạo bản sao của tôi",
+  "createYourDigitalClone": "Tạo bản sao kỹ thuật số của bạn",
+  "itemApp": "Ứng dụng",
+  "itemPersona": "Persona",
+  "keepItemPublic": "Giữ {item} công khai",
+  "makeItemPublicQuestion": "Đặt {item} thành công khai?",
+  "makeItemPrivateQuestion": "Đặt {item} thành riêng tư?",
+  "makeItemPublicExplanation": "Nếu bạn đặt {item} thành công khai, mọi người đều có thể sử dụng",
+  "makeItemPrivateExplanation": "Nếu bạn đặt {item} thành riêng tư ngay bây giờ, nó sẽ ngừng hoạt động cho mọi người và chỉ hiển thị với bạn",
+  "manageApp": "Quản lý ứng dụng",
+  "updatePersonaDetails": "Cập nhật chi tiết persona",
+  "deleteItemTitle": "Xóa {item}",
+  "deleteItemQuestion": "Xóa {item}?",
+  "deleteItemConfirmation": "Bạn có chắc chắn muốn xóa {item} này? Hành động này không thể hoàn tác.",
+  "revokeKeyQuestion": "Thu hồi khóa?",
+  "revokeKeyConfirmation": "Bạn có chắc chắn muốn thu hồi khóa \"{keyName}\"? Hành động này không thể hoàn tác.",
+  "createNewKey": "Tạo khóa mới",
+  "keyNameHint": "vd: Claude Desktop",
+  "pleaseEnterAName": "Vui lòng nhập tên.",
+  "failedToCreateKeyWithError": "Không thể tạo khóa: {error}",
+  "failedToCreateKeyTryAgain": "Không thể tạo khóa. Vui lòng thử lại.",
+  "keyCreated": "Đã tạo khóa",
+  "keyCreatedMessage": "Khóa mới của bạn đã được tạo. Vui lòng sao chép ngay bây giờ. Bạn sẽ không thể xem lại.",
+  "keyWord": "Khóa",
+  "externalAppAccess": "Truy cập ứng dụng bên ngoài",
+  "externalAppAccessDescription": "Các ứng dụng đã cài đặt sau có tích hợp bên ngoài và có thể truy cập dữ liệu của bạn, chẳng hạn như cuộc trò chuyện và kỷ niệm.",
+  "noExternalAppsHaveAccess": "Không có ứng dụng bên ngoài nào có quyền truy cập vào dữ liệu của bạn.",
+  "maximumSecurityE2ee": "Bảo mật tối đa (E2EE)",
+  "e2eeDescription": "Mã hóa đầu cuối là tiêu chuẩn vàng cho quyền riêng tư. Khi được bật, dữ liệu của bạn được mã hóa trên thiết bị của bạn trước khi gửi đến máy chủ của chúng tôi. Điều này có nghĩa là không ai, kể cả Omi, có thể truy cập nội dung của bạn.",
+  "importantTradeoffs": "Đánh đổi quan trọng:",
+  "e2eeTradeoff1": "• Một số tính năng như tích hợp ứng dụng bên ngoài có thể bị tắt.",
+  "e2eeTradeoff2": "• Nếu bạn mất mật khẩu, dữ liệu của bạn không thể được khôi phục.",
+  "featureComingSoon": "Tính năng này sắp ra mắt!",
+  "migrationInProgressMessage": "Đang di chuyển. Bạn không thể thay đổi mức bảo vệ cho đến khi hoàn tất.",
+  "migrationFailed": "Di chuyển thất bại",
+  "migratingFromTo": "Đang di chuyển từ {source} sang {target}",
+  "objectsCount": "{processed} / {total} đối tượng",
+  "secureEncryption": "Mã hóa an toàn",
+  "secureEncryptionDescription": "Dữ liệu của bạn được mã hóa bằng một khóa duy nhất cho bạn trên các máy chủ của chúng tôi, được lưu trữ trên Google Cloud. Điều này có nghĩa là nội dung thô của bạn không thể truy cập được bởi bất kỳ ai, bao gồm nhân viên Omi hoặc Google, trực tiếp từ cơ sở dữ liệu.",
+  "endToEndEncryption": "Mã hóa đầu cuối",
+  "e2eeCardDescription": "Bật để bảo mật tối đa, nơi chỉ bạn mới có thể truy cập dữ liệu của mình. Nhấn để tìm hiểu thêm.",
+  "dataAlwaysEncrypted": "Bất kể mức nào, dữ liệu của bạn luôn được mã hóa khi lưu trữ và khi truyền tải.",
+  "readOnlyScope": "Chỉ đọc",
+  "fullAccessScope": "Truy cập đầy đủ",
+  "readScope": "Đọc",
+  "writeScope": "Ghi",
+  "apiKeyCreated": "Đã tạo khóa API!",
+  "saveKeyWarning": "Lưu khóa này ngay bây giờ! Bạn sẽ không thể xem lại nó.",
+  "yourApiKey": "KHÓA API CỦA BẠN",
+  "tapToCopy": "Nhấn để sao chép",
+  "copyKey": "Sao chép khóa",
+  "createApiKey": "Tạo khóa API",
+  "accessDataProgrammatically": "Truy cập dữ liệu của bạn theo chương trình",
+  "keyNameLabel": "TÊN KHÓA",
+  "keyNamePlaceholder": "vd: Tích hợp ứng dụng của tôi",
+  "permissionsLabel": "QUYỀN",
+  "permissionsInfoNote": "R = Đọc, W = Ghi. Mặc định chỉ đọc nếu không chọn gì.",
+  "developerApi": "API nhà phát triển",
+  "createAKeyToGetStarted": "Tạo khóa để bắt đầu",
+  "errorWithMessage": "Lỗi: {error}",
+  "omiTraining": "Huấn luyện Omi",
+  "trainingDataProgram": "Chương trình dữ liệu huấn luyện",
+  "getOmiUnlimitedFree": "Nhận Omi Unlimited miễn phí bằng cách đóng góp dữ liệu của bạn để huấn luyện các mô hình AI.",
+  "trainingDataBullets": "• Dữ liệu của bạn giúp cải thiện các mô hình AI\n• Chỉ chia sẻ dữ liệu không nhạy cảm\n• Quy trình hoàn toàn minh bạch",
+  "learnMoreAtOmiTraining": "Tìm hiểu thêm tại omi.me/training",
+  "agreeToContributeData": "Tôi hiểu và đồng ý đóng góp dữ liệu của mình để huấn luyện AI",
+  "submitRequest": "Gửi yêu cầu",
+  "thankYouRequestUnderReview": "Cảm ơn bạn! Yêu cầu của bạn đang được xem xét. Chúng tôi sẽ thông báo cho bạn sau khi được phê duyệt.",
+  "planRemainsActiveUntil": "Gói của bạn sẽ vẫn hoạt động cho đến {date}. Sau đó, bạn sẽ mất quyền truy cập vào các tính năng không giới hạn. Bạn có chắc không?",
+  "confirmCancellation": "Xác nhận hủy",
+  "keepMyPlan": "Giữ gói của tôi",
+  "subscriptionSetToCancel": "Đăng ký của bạn được đặt để hủy vào cuối kỳ.",
+  "switchedToOnDevice": "Đã chuyển sang phiên âm trên thiết bị",
+  "couldNotSwitchToFreePlan": "Không thể chuyển sang gói miễn phí. Vui lòng thử lại.",
+  "couldNotLoadPlans": "Không thể tải các gói có sẵn. Vui lòng thử lại.",
+  "selectedPlanNotAvailable": "Gói đã chọn không khả dụng. Vui lòng thử lại.",
+  "upgradeToAnnualPlan": "Nâng cấp lên gói năm",
+  "importantBillingInfo": "Thông tin thanh toán quan trọng:",
+  "monthlyPlanContinues": "Gói hàng tháng hiện tại của bạn sẽ tiếp tục cho đến cuối kỳ thanh toán",
+  "paymentMethodCharged": "Phương thức thanh toán hiện tại của bạn sẽ được tính phí tự động khi gói hàng tháng kết thúc",
+  "annualSubscriptionStarts": "Đăng ký năm 12 tháng của bạn sẽ tự động bắt đầu sau khi thanh toán",
+  "thirteenMonthsCoverage": "Bạn sẽ nhận được tổng cộng 13 tháng bảo hiểm (tháng hiện tại + 12 tháng hàng năm)",
+  "confirmUpgrade": "Xác nhận nâng cấp",
+  "confirmPlanChange": "Xác nhận thay đổi gói",
+  "confirmAndProceed": "Xác nhận và tiếp tục",
+  "upgradeScheduled": "Đã lên lịch nâng cấp",
+  "changePlan": "Thay đổi gói",
+  "upgradeAlreadyScheduled": "Việc nâng cấp của bạn lên gói năm đã được lên lịch",
+  "youAreOnUnlimitedPlan": "Bạn đang sử dụng gói Unlimited.",
+  "yourOmiUnleashed": "Omi của bạn, được giải phóng. Trở nên unlimited cho khả năng vô tận.",
+  "planEndedOn": "Gói của bạn đã kết thúc vào {date}.\\nĐăng ký lại ngay - bạn sẽ bị tính phí ngay lập tức cho kỳ thanh toán mới.",
+  "planSetToCancelOn": "Gói của bạn được đặt để hủy vào {date}.\\nĐăng ký lại ngay để giữ quyền lợi - không tính phí cho đến {date}.",
+  "annualPlanStartsAutomatically": "Gói năm của bạn sẽ tự động bắt đầu khi gói tháng kết thúc.",
+  "planRenewsOn": "Gói của bạn được gia hạn vào {date}.",
+  "unlimitedConversations": "Cuộc trò chuyện không giới hạn",
+  "askOmiAnything": "Hỏi Omi bất cứ điều gì về cuộc sống của bạn",
+  "unlockOmiInfiniteMemory": "Mở khóa bộ nhớ vô hạn của Omi",
+  "youreOnAnnualPlan": "Bạn đang sử dụng gói năm",
+  "alreadyBestValuePlan": "Bạn đã có gói giá trị tốt nhất rồi. Không cần thay đổi.",
+  "unableToLoadPlans": "Không thể tải các gói",
+  "checkConnectionTryAgain": "Vui lòng kiểm tra kết nối và thử lại",
+  "useFreePlan": "Sử dụng gói miễn phí",
+  "continueText": "Tiếp tục",
+  "resubscribe": "Đăng ký lại",
+  "couldNotOpenPaymentSettings": "Không thể mở cài đặt thanh toán. Vui lòng thử lại.",
+  "managePaymentMethod": "Quản lý phương thức thanh toán",
+  "cancelSubscription": "Hủy đăng ký",
+  "endsOnDate": "Kết thúc vào {date}",
+  "active": "Đang hoạt động",
+  "freePlan": "Gói miễn phí",
+  "configure": "Cấu hình",
+  "privacyInformation": "Thông tin quyền riêng tư",
+  "@privacyInformation": {
+    "description": "Privacy page - privacyInformation"
+  },
+  "yourPrivacyMattersToUs": "Quyền riêng tư của bạn quan trọng với chúng tôi",
+  "@yourPrivacyMattersToUs": {
+    "description": "Privacy page - yourPrivacyMattersToUs"
+  },
+  "privacyIntroText": "Tại Omi, chúng tôi rất coi trọng quyền riêng tư của bạn. Chúng tôi muốn minh bạch về dữ liệu thu thập và cách sử dụng. Đây là những gì bạn cần biết:",
+  "@privacyIntroText": {
+    "description": "Privacy page - privacyIntroText"
+  },
+  "whatWeTrack": "Chúng tôi theo dõi gì",
+  "@whatWeTrack": {
+    "description": "Privacy page - whatWeTrack"
+  },
+  "anonymityAndPrivacy": "Ẩn danh và quyền riêng tư",
+  "@anonymityAndPrivacy": {
+    "description": "Privacy page - anonymityAndPrivacy"
+  },
+  "optInAndOptOutOptions": "Tùy chọn đồng ý và từ chối",
+  "@optInAndOptOutOptions": {
+    "description": "Privacy page - optInAndOptOutOptions"
+  },
+  "ourCommitment": "Cam kết của chúng tôi",
+  "@ourCommitment": {
+    "description": "Privacy page - ourCommitment"
+  },
+  "commitmentText": "Chúng tôi cam kết sử dụng dữ liệu thu thập chỉ để làm cho Omi trở thành sản phẩm tốt hơn cho bạn. Quyền riêng tư và sự tin tưởng của bạn là điều quan trọng nhất đối với chúng tôi.",
+  "@commitmentText": {
+    "description": "Privacy page - commitmentText"
+  },
+  "thankYouText": "Cảm ơn bạn đã là người dùng quý giá của Omi. Nếu bạn có bất kỳ câu hỏi hoặc lo ngại nào, hãy liên hệ với chúng tôi tại team@basedhardware.com.",
+  "@thankYouText": {
+    "description": "Privacy page - thankYouText"
+  },
+  "wifiSyncSettings": "Cài đặt đồng bộ WiFi",
+  "@wifiSyncSettings": {
+    "description": "WiFi sync settings - wifiSyncSettings"
+  },
+  "enterHotspotCredentials": "Nhập thông tin đăng nhập điểm phát sóng điện thoại",
+  "@enterHotspotCredentials": {
+    "description": "WiFi sync settings - enterHotspotCredentials"
+  },
+  "wifiSyncUsesHotspot": "Đồng bộ WiFi sử dụng điện thoại của bạn làm điểm phát sóng. Tìm tên và mật khẩu trong Cài đặt > Điểm truy cập cá nhân.",
+  "@wifiSyncUsesHotspot": {
+    "description": "WiFi sync settings - wifiSyncUsesHotspot"
+  },
+  "hotspotNameSsid": "Tên điểm phát sóng (SSID)",
+  "@hotspotNameSsid": {
+    "description": "WiFi sync settings - hotspotNameSsid"
+  },
+  "exampleIphoneHotspot": "vd: iPhone Hotspot",
+  "@exampleIphoneHotspot": {
+    "description": "WiFi sync settings - exampleIphoneHotspot"
+  },
+  "password": "Mật khẩu",
+  "@password": {
+    "description": "WiFi sync settings - password"
+  },
+  "enterHotspotPassword": "Nhập mật khẩu điểm phát sóng",
+  "@enterHotspotPassword": {
+    "description": "WiFi sync settings - enterHotspotPassword"
+  },
+  "saveCredentials": "Lưu thông tin đăng nhập",
+  "@saveCredentials": {
+    "description": "WiFi sync settings - saveCredentials"
+  },
+  "clearCredentials": "Xóa thông tin đăng nhập",
+  "@clearCredentials": {
+    "description": "WiFi sync settings - clearCredentials"
+  },
+  "pleaseEnterHotspotName": "Vui lòng nhập tên điểm phát sóng",
+  "@pleaseEnterHotspotName": {
+    "description": "WiFi sync settings - pleaseEnterHotspotName"
+  },
+  "wifiCredentialsSaved": "Đã lưu thông tin WiFi",
+  "@wifiCredentialsSaved": {
+    "description": "WiFi sync settings - wifiCredentialsSaved"
+  },
+  "wifiCredentialsCleared": "Đã xóa thông tin WiFi",
+  "@wifiCredentialsCleared": {
+    "description": "WiFi sync settings - wifiCredentialsCleared"
+  },
+  "summaryGeneratedForDate": "Đã tạo tóm tắt cho {date}",
+  "@summaryGeneratedForDate": {
+    "description": "Daily summary settings - summaryGeneratedForDate",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "1/15/2026"
+      }
+    }
+  },
+  "failedToGenerateSummaryCheckConversations": "Không thể tạo tóm tắt. Hãy đảm bảo bạn có cuộc trò chuyện cho ngày đó.",
+  "@failedToGenerateSummaryCheckConversations": {
+    "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Không tìm thấy tóm tắt",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "Hành trình trong ngày",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "Điểm nổi bật",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Câu hỏi chưa giải quyết",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Quyết định",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Bài học",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
+  },
+  "autoDeletesAfterThreeDays": "Tự động xóa sau 3 ngày.",
+  "@autoDeletesAfterThreeDays": {
+    "description": "Developer settings - autoDeletesAfterThreeDays"
+  },
+  "knowledgeGraphDeletedSuccessfully": "Đã xóa Biểu đồ tri thức thành công",
+  "@knowledgeGraphDeletedSuccessfully": {
+    "description": "Developer settings - knowledgeGraphDeletedSuccessfully"
+  },
+  "exportStartedMayTakeFewSeconds": "Đã bắt đầu xuất. Quá trình này có thể mất vài giây...",
+  "@exportStartedMayTakeFewSeconds": {
+    "description": "Developer settings - exportStartedMayTakeFewSeconds"
+  },
+  "knowledgeGraphDeleteDescription": "Thao tác này sẽ xóa tất cả dữ liệu biểu đồ tri thức phái sinh (các nút và kết nối). Ký ức gốc của bạn sẽ vẫn an toàn. Biểu đồ sẽ được xây dựng lại theo thời gian hoặc khi có yêu cầu tiếp theo.",
+  "@knowledgeGraphDeleteDescription": {
+    "description": "Developer settings - knowledgeGraphDeleteDescription"
+  },
+  "configureDailySummaryDigest": "Cấu hình bản tóm tắt công việc hàng ngày của bạn",
+  "accessesDataTypes": "Truy cập {dataTypes}",
+  "triggeredByType": "được kích hoạt bởi {triggerType}",
+  "accessesAndTriggeredBy": "{accessDescription} và {triggerDescription}.",
+  "isTriggeredBy": "{triggerDescription}.",
+  "noSpecificDataAccessConfigured": "Không có quyền truy cập dữ liệu cụ thể nào được cấu hình."
 }

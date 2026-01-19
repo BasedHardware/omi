@@ -28,6 +28,7 @@ import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/debug_log_manager.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
 class DeveloperSettingsPage extends StatefulWidget {
@@ -812,8 +813,8 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                   const SizedBox(height: 2),
                                   Text(
                                     SharedPreferencesUtil().devLogsToFileEnabled
-                                        ? 'Auto-deletes after 3 days.'
-                                        : 'Helps diagnose issues',
+                                        ? context.l10n.autoDeletesAfterThreeDays
+                                        : context.l10n.helpsDiagnoseIssues,
                                     style: TextStyle(
                                       color: Colors.grey.shade500,
                                       fontSize: 13,
@@ -959,9 +960,9 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                     children: [
                                       const FaIcon(FontAwesomeIcons.trash, color: Colors.redAccent, size: 14),
                                       const SizedBox(width: 6),
-                                      const Text(
-                                        'Clear',
-                                        style: TextStyle(
+                                      Text(
+                                        context.l10n.clear,
+                                        style: const TextStyle(
                                           color: Colors.redAccent,
                                           fontSize: 14,
                                           fontWeight: FontWeight.w500,
@@ -985,9 +986,9 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                             if (provider.loadingExportMemories) return;
                             setState(() => provider.loadingExportMemories = true);
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Export started. This may take a few seconds...'),
-                                duration: Duration(seconds: 3),
+                              SnackBar(
+                                content: Text(context.l10n.exportStartedMayTakeFewSeconds),
+                                duration: const Duration(seconds: 3),
                               ),
                             );
                             List<ServerConversation> memories = await getConversations(limit: 10000, offset: 0);
@@ -1080,15 +1081,15 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                         context: context,
                         builder: (ctx) => AlertDialog(
                           backgroundColor: const Color(0xFF1C1C1E),
-                          title: const Text('Delete Knowledge Graph?', style: TextStyle(color: Colors.white)),
-                          content: const Text(
-                            'This will delete all derived knowledge graph data (nodes and connections). Your original memories will remain safe. The graph will be rebuilt over time or upon next request.',
-                            style: TextStyle(color: Colors.white70),
+                          title: Text(context.l10n.deleteKnowledgeGraphQuestion, style: const TextStyle(color: Colors.white)),
+                          content: Text(
+                            context.l10n.knowledgeGraphDeleteDescription,
+                            style: const TextStyle(color: Colors.white70),
                           ),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.of(ctx).pop(),
-                              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                              child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.grey)),
                             ),
                             TextButton(
                               onPressed: () async {
@@ -1096,12 +1097,12 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                 try {
                                   // Call delete endpoint
                                   await KnowledgeGraphApi.deleteKnowledgeGraph();
-                                  AppSnackbar.showSnackbar('Knowledge Graph deleted successfully');
+                                  AppSnackbar.showSnackbar(context.l10n.knowledgeGraphDeletedSuccessfully);
                                 } catch (e) {
-                                  AppSnackbar.showSnackbarError('Failed to delete graph: $e');
+                                  AppSnackbar.showSnackbarError(context.l10n.failedToDeleteGraph(e.toString()));
                                 }
                               },
-                              child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
+                              child: Text(context.l10n.delete, style: const TextStyle(color: Colors.redAccent)),
                             ),
                           ],
                         ),

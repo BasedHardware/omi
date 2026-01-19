@@ -65,7 +65,7 @@
   "@clear": {
     "description": "Clear button label"
   },
-  "copyTranscript": "Copia Trascrizione",
+  "copyTranscript": "Copia trascrizione",
   "@copyTranscript": {
     "description": "Menu item to copy transcript"
   },
@@ -81,7 +81,7 @@
   "@reprocessConversation": {
     "description": "Menu item to reprocess a conversation"
   },
-  "deleteConversation": "Elimina Conversazione",
+  "deleteConversation": "Elimina conversazione",
   "@deleteConversation": {
     "description": "Menu item to delete a conversation"
   },
@@ -175,7 +175,7 @@
   },
   "settings": "Impostazioni",
   "@settings": {
-    "description": "Settings page title"
+    "description": "Bottom navigation label for settings"
   },
   "language": "Lingua",
   "@language": {
@@ -293,9 +293,9 @@
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
-  "noStarredConversations": "Nessuna conversazione preferita ancora.",
+  "noStarredConversations": "Nessuna conversazione con stella",
   "@noStarredConversations": {
-    "description": "Empty state for starred filter"
+    "description": "Empty state title when no starred conversations"
   },
   "starConversationHint": "Per aggiungere una conversazione ai preferiti, aprila e tocca l'icona stella nell'intestazione.",
   "@starConversationHint": {
@@ -351,7 +351,7 @@
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Messaggio copiato negli appunti.",
+  "messageCopied": "✨ Messaggio copiato negli appunti",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -359,7 +359,7 @@
   "@cannotReportOwnMessage": {
     "description": "Error when trying to report own message"
   },
-  "reportMessage": "Segnala Messaggio",
+  "reportMessage": "Segnala messaggio",
   "@reportMessage": {
     "description": "Report message dialog title"
   },
@@ -393,7 +393,7 @@
   },
   "apps": "App",
   "@apps": {
-    "description": "Apps page title"
+    "description": "Navigation label for apps page"
   },
   "noAppsFound": "Nessuna app trovata",
   "@noAppsFound": {
@@ -435,11 +435,11 @@
   "@privacyPolicy": {
     "description": "Privacy policy link"
   },
-  "visitWebsite": "Visita il Sito Web",
+  "visitWebsite": "Visita il sito web",
   "@visitWebsite": {
     "description": "Visit website link"
   },
-  "helpOrInquiries": "Aiuto o Richieste?",
+  "helpOrInquiries": "Aiuto o domande?",
   "@helpOrInquiries": {
     "description": "Help link title"
   },
@@ -515,7 +515,7 @@
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Identificazione Altri",
+  "identifyingOthers": "Identificazione di Altri",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
@@ -527,7 +527,7 @@
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "Dati e Privacy",
+  "dataPrivacy": "Privacy dei Dati",
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
@@ -571,7 +571,7 @@
   "@helpCenter": {
     "description": "Help center menu item"
   },
-  "developerSettings": "Impostazioni Sviluppatore",
+  "developerSettings": "Impostazioni sviluppatore",
   "@developerSettings": {
     "description": "Developer settings menu item"
   },
@@ -867,7 +867,7 @@
   "@debugDiagnostics": {
     "description": "Debug & Diagnostics section header"
   },
-  "endpointUrl": "URL Endpoint",
+  "endpointUrl": "URL endpoint",
   "@endpointUrl": {
     "description": "Endpoint URL label"
   },
@@ -883,7 +883,7 @@
   "@createKey": {
     "description": "Create Key button"
   },
-  "docs": "Documenti",
+  "docs": "Documentazione",
   "@docs": {
     "description": "Documentation link"
   },
@@ -997,7 +997,7 @@
   "@upgrade": {
     "description": "Upgrade button"
   },
-  "upgradeToUnlimited": "Passa a illimitato",
+  "upgradeToUnlimited": "Aggiorna a illimitato",
   "@upgradeToUnlimited": {
     "description": "Upgrade to unlimited button"
   },
@@ -1071,14 +1071,14 @@
       }
     }
   },
-  "debugLogs": "Log di Debug",
+  "debugLogs": "Log di debug",
   "debugLogsAutoDelete": "Eliminazione automatica dopo 3 giorni.",
   "debugLogsDesc": "Aiuta a diagnosticare i problemi",
   "noLogFilesFound": "Nessun file di log trovato.",
   "omiDebugLog": "Log di debug Omi",
   "logShared": "Log condiviso",
   "selectLogFile": "Seleziona File di Log",
-  "shareLogs": "Condividi Log",
+  "shareLogs": "Condividi log",
   "debugLogCleared": "Log di debug cancellato",
   "exportStarted": "Esportazione avviata. Potrebbe richiedere alcuni secondi...",
   "exportAllData": "Esporta Tutti i Dati",
@@ -1087,7 +1087,7 @@
   "exportShared": "Esportazione condivisa",
   "deleteKnowledgeGraphTitle": "Eliminare Grafo di Conoscenza?",
   "deleteKnowledgeGraphMessage": "Questo eliminerà tutti i dati del grafo di conoscenza derivato (nodi e connessioni). I tuoi ricordi originali rimarranno al sicuro. Il grafo sarà ricostruito nel tempo o alla prossima richiesta.",
-  "knowledgeGraphDeleted": "Grafo di Conoscenza eliminato con successo",
+  "knowledgeGraphDeleted": "Grafico della conoscenza eliminato",
   "deleteGraphFailed": "Impossibile eliminare il grafo: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -1112,14 +1112,14 @@
   "clientSecret": "Segreto Cliente",
   "useMcpApiKey": "Usa la tua chiave API MCP",
   "webhooks": "Webhook",
-  "conversationEvents": "Eventi Conversazione",
+  "conversationEvents": "Eventi conversazione",
   "newConversationCreated": "Nuova conversazione creata",
-  "realtimeTranscript": "Trascrizione in Tempo Reale",
+  "realtimeTranscript": "Trascrizione in tempo reale",
   "transcriptReceived": "Trascrizione ricevuta",
   "audioBytes": "Byte Audio",
   "audioDataReceived": "Dati audio ricevuti",
   "intervalSeconds": "Intervallo (secondi)",
-  "daySummary": "Riepilogo Giornaliero",
+  "daySummary": "Riepilogo giornaliero",
   "summaryGenerated": "Riepilogo generato",
   "claudeDesktop": "Claude Desktop",
   "addToClaudeConfig": "Aggiungi a claude_desktop_config.json",
@@ -1127,7 +1127,7 @@
   "configCopied": "Configurazione copiata negli appunti",
   "listeningMins": "Ascolto (min)",
   "understandingWords": "Comprensione (parole)",
-  "insights": "Insight",
+  "insights": "Approfondimenti",
   "memories": "Ricordi",
   "minsUsedThisMonth": "{used} di {limit} min utilizzati questo mese",
   "@minsUsedThisMonth": {
@@ -1250,7 +1250,7 @@
   },
   "continueAction": "Continua",
   "languageTitle": "Lingua",
-  "primaryLanguage": "Lingua Principale",
+  "primaryLanguage": "Lingua principale",
   "automaticTranslation": "Traduzione Automatica",
   "detectLanguages": "Rileva oltre 10 lingue",
   "authorizeSavingRecordings": "Autorizza Salvataggio Registrazioni",
@@ -1571,7 +1571,7 @@
   "autoLanguageDetection": "Rilevamento automatico della lingua",
   "highAccuracy": "Alta precisione",
   "privacyFirst": "Privacy al primo posto",
-  "saveChanges": "Salva Modifiche",
+  "saveChanges": "Salva modifiche",
   "resetToDefault": "Ripristina predefinito",
   "viewTemplate": "Visualizza Template",
   "trySomethingLike": "Prova qualcosa come...",
@@ -1654,7 +1654,7 @@
   "@connectLater": {
     "description": "Button text to skip immediate device connection"
   },
-  "grantPermissions": "Concedi permessi",
+  "grantPermissions": "Concedi autorizzazioni",
   "@grantPermissions": {
     "description": "Title for the permissions request page"
   },
@@ -1920,7 +1920,7 @@
   "@selectYourLanguage": {
     "description": "Placeholder for selected language name"
   },
-  "personalGrowthJourney": "Il tuo percorso di crescita personale con un'AI che ascolta ogni tua parola.",
+  "personalGrowthJourney": "Il tuo viaggio di crescita personale con l'IA che ascolta ogni tua parola.",
   "@personalGrowthJourney": {
     "description": "Tagline on onboarding wrapper"
   },
@@ -2059,14 +2059,9 @@
   "@deleteSelected": {
     "description": "Tooltip for delete selected"
   },
-  "searchMemories": "Cerca {count} Ricordi",
+  "searchMemories": "Cerca ricordi...",
   "@searchMemories": {
-    "description": "Hint text for memories search bar",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
+    "description": "Search input hint text"
   },
   "memoryDeleted": "Ricordo Eliminato.",
   "@memoryDeleted": {
@@ -2076,9 +2071,9 @@
   "@undo": {
     "description": "Undo button text"
   },
-  "noMemoriesYet": "Nessun ricordo ancora",
+  "noMemoriesYet": "🧠 Nessun ricordo ancora",
   "@noMemoriesYet": {
-    "description": "Empty state text"
+    "description": "Empty state title when no memories"
   },
   "noAutoMemories": "Nessun ricordo auto-estratto ancora",
   "@noAutoMemories": {
@@ -2092,9 +2087,9 @@
   "@noMemoriesInCategories": {
     "description": "Empty state text for filtered categories"
   },
-  "noMemoriesFound": "Nessun ricordo trovato",
+  "noMemoriesFound": "🔍 Nessun ricordo trovato",
   "@noMemoriesFound": {
-    "description": "Empty state text for search results"
+    "description": "Empty state title when search/filter has no results"
   },
   "addFirstMemory": "Aggiungi il tuo primo ricordo",
   "@addFirstMemory": {
@@ -2108,7 +2103,7 @@
   "@clearMemoryMessage": {
     "description": "Dialog content for clearing memory"
   },
-  "clearMemoryButton": "Cancella Memoria",
+  "clearMemoryButton": "Cancella memoria",
   "@clearMemoryButton": {
     "description": "Button text to confirm clear"
   },
@@ -2128,7 +2123,7 @@
   "@createActionItemTooltip": {
     "description": "Tooltip for create action item FAB"
   },
-  "memoryManagement": "Gestione Ricordi",
+  "memoryManagement": "Gestione memoria",
   "@memoryManagement": {
     "description": "Title for memory management sheet"
   },
@@ -2161,7 +2156,7 @@
   "@makeAllPublic": {
     "description": "Button label"
   },
-  "deleteAllMemories": "Elimina Tutti i Ricordi",
+  "deleteAllMemories": "Elimina tutti i ricordi",
   "@deleteAllMemories": {
     "description": "Button label"
   },
@@ -2173,11 +2168,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "Nuovo Ricordo",
+  "newMemory": "✨ Nuova memoria",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "Modifica Ricordo",
+  "editMemory": "✏️ Modifica memoria",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2323,11 +2318,11 @@
   "summarize": "Riassumi",
   "generateSummary": "Genera riepilogo",
   "conversationNotFoundOrDeleted": "Conversazione non trovata o è stata eliminata",
-  "deleteMemory": "Eliminare memoria?",
+  "deleteMemory": "Elimina memoria",
   "thisActionCannotBeUndone": "Questa azione non può essere annullata.",
   "memoriesCount": "{count} memorie",
   "noMemoriesInCategory": "Nessuna memoria in questa categoria ancora",
-  "addYourFirstMemory": "Aggiungi la tua prima memoria",
+  "addYourFirstMemory": "Aggiungi il tuo primo ricordo",
   "firmwareDisconnectUsb": "Disconnetti USB",
   "firmwareUsbWarning": "La connessione USB durante gli aggiornamenti può danneggiare il dispositivo.",
   "firmwareBatteryAbove15": "Batteria sopra il 15%",
@@ -2379,7 +2374,7 @@
   "welcomeToOmiDescription": "Benvenuto in Omi! Il tuo compagno AI è pronto ad aiutarti con conversazioni, attività e molto altro.",
   "startUsingOmi": "Inizia a usare Omi",
   "back": "Indietro",
-  "keyboardShortcuts": "Scorciatoie da tastiera",
+  "keyboardShortcuts": "Scorciatoie da Tastiera",
   "toggleControlBar": "Attiva/Disattiva barra di controllo",
   "pressKeys": "Premi i tasti...",
   "cmdRequired": "⌘ richiesto",
@@ -2398,7 +2393,7 @@
   "saveGoal": "Salva",
   "goals": "Obiettivi",
   "tapToAddGoal": "Tocca per aggiungere un obiettivo",
-  "welcomeBack": "Bentornato",
+  "welcomeBack": "Bentornato, {name}",
   "yourConversations": "Le tue conversazioni",
   "reviewAndManageConversations": "Rivedi e gestisci le tue conversazioni registrate",
   "startCapturingConversations": "Inizia a catturare conversazioni con il tuo dispositivo Omi per vederle qui.",
@@ -2446,7 +2441,7 @@
   "reloadingApps": "Ricaricamento app...",
   "loadingApps": "Caricamento app...",
   "browseInstallCreateApps": "Sfoglia, installa e crea app",
-  "all": "Tutte",
+  "all": "Tutti",
   "open": "Apri",
   "install": "Installa",
   "noAppsAvailable": "Nessuna app disponibile",
@@ -2501,5 +2496,785 @@
   "ratingsCount": "{count}+ valutazioni",
   "errorActivatingApp": "Errore nell'attivazione dell'app",
   "integrationSetupRequired": "Se questa è un'app di integrazione, assicurati che la configurazione sia completata.",
-  "installed": "Installato"
+  "installed": "Installato",
+  "appIdLabel": "ID dell'app",
+  "appNameLabel": "Nome dell'app",
+  "appNamePlaceholder": "La mia fantastica app",
+  "pleaseEnterAppName": "Inserisci il nome dell'app",
+  "categoryLabel": "Categoria",
+  "selectCategory": "Seleziona categoria",
+  "descriptionLabel": "Descrizione",
+  "appDescriptionPlaceholder": "La mia fantastica app è un'app fantastica che fa cose incredibili. È la migliore app di sempre!",
+  "pleaseProvideValidDescription": "Fornisci una descrizione valida",
+  "appPricingLabel": "Prezzo dell'app",
+  "noneSelected": "Nessuna selezionata",
+  "appIdCopiedToClipboard": "ID dell'app copiato negli appunti",
+  "appCategoryModalTitle": "Categoria dell'app",
+  "pricingFree": "Gratuita",
+  "pricingPaid": "A pagamento",
+  "loadingCapabilities": "Caricamento delle funzionalità...",
+  "filterInstalled": "Installate",
+  "filterMyApps": "Le mie app",
+  "clearSelection": "Cancella selezione",
+  "filterCategory": "Categoria",
+  "rating4PlusStars": "4+ stelle",
+  "rating3PlusStars": "3+ stelle",
+  "rating2PlusStars": "2+ stelle",
+  "rating1PlusStars": "1+ stella",
+  "filterRating": "Valutazione",
+  "filterCapabilities": "Funzionalità",
+  "noNotificationScopesAvailable": "Nessun ambito di notifica disponibile",
+  "popularApps": "App popolari",
+  "pleaseProvidePrompt": "Si prega di fornire un prompt",
+  "chatWithAppName": "Chat con {appName}",
+  "defaultAiAssistant": "Assistente AI predefinito",
+  "readyToChat": "✨ Pronto per chattare!",
+  "connectionNeeded": "🌐 Connessione necessaria",
+  "startConversation": "Inizia una conversazione e lascia che la magia inizi",
+  "checkInternetConnection": "Controlla la tua connessione Internet",
+  "wasThisHelpful": "È stato utile?",
+  "thankYouForFeedback": "Grazie per il tuo feedback!",
+  "maxFilesUploadError": "Puoi caricare solo 4 file alla volta",
+  "attachedFiles": "📎 File allegati",
+  "takePhoto": "Scatta una foto",
+  "captureWithCamera": "Cattura con la fotocamera",
+  "selectImages": "Seleziona immagini",
+  "chooseFromGallery": "Scegli dalla galleria",
+  "selectFile": "Seleziona un file",
+  "chooseAnyFileType": "Scegli qualsiasi tipo di file",
+  "cannotReportOwnMessages": "Non puoi segnalare i tuoi messaggi",
+  "messageReportedSuccessfully": "✅ Messaggio segnalato con successo",
+  "confirmReportMessage": "Sei sicuro di voler segnalare questo messaggio?",
+  "selectChatAssistant": "Seleziona assistente chat",
+  "enableMoreApps": "Abilita più app",
+  "chatCleared": "Chat cancellata",
+  "clearChatTitle": "Cancellare la chat?",
+  "confirmClearChat": "Sei sicuro di voler cancellare la chat? Questa azione non può essere annullata.",
+  "copy": "Copia",
+  "share": "Condividi",
+  "report": "Segnala",
+  "microphonePermissionRequired": "È richiesta l'autorizzazione del microfono per la registrazione vocale.",
+  "microphonePermissionDenied": "Autorizzazione microfono negata. Concedi l'autorizzazione in Preferenze di Sistema > Privacy e sicurezza > Microfono.",
+  "failedToCheckMicrophonePermission": "Verifica autorizzazione microfono fallita: {error}",
+  "failedToTranscribeAudio": "Trascrizione audio fallita",
+  "transcribing": "Trascrizione...",
+  "transcriptionFailed": "Trascrizione fallita",
+  "discardedConversation": "Conversazione scartata",
+  "at": "alle",
+  "from": "dalle",
+  "copied": "Copiato!",
+  "copyLink": "Copia link",
+  "hideTranscript": "Nascondi trascrizione",
+  "viewTranscript": "Visualizza trascrizione",
+  "conversationDetails": "Dettagli conversazione",
+  "transcript": "Trascrizione",
+  "segmentsCount": "{count} segmenti",
+  "noTranscriptAvailable": "Nessuna trascrizione disponibile",
+  "noTranscriptMessage": "Questa conversazione non ha una trascrizione.",
+  "conversationUrlCouldNotBeGenerated": "L'URL della conversazione non può essere generato.",
+  "failedToGenerateConversationLink": "Generazione del link della conversazione non riuscita",
+  "failedToGenerateShareLink": "Generazione del link di condivisione non riuscita",
+  "reloadingConversations": "Ricaricamento conversazioni...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "@welcomeBack": {
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "user": "Utente",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "Con stella",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "Data",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "Nessun risultato trovato",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "Prova a modificare i termini di ricerca",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "starConversationsToFindQuickly": "Aggiungi la stella alle conversazioni per trovarle rapidamente qui",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "Nessuna conversazione il {date}",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "Prova a selezionare una data diversa",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  },
+  "conversations": "Conversazioni",
+  "@conversations": {
+    "description": "Navigation label for conversations page"
+  },
+  "chat": "Chat",
+  "@chat": {
+    "description": "Navigation label for chat page"
+  },
+  "@memories": {
+    "description": "Navigation label for memories page"
+  },
+  "actions": "Azioni",
+  "@actions": {
+    "description": "Navigation label for actions page"
+  },
+  "syncAvailable": "Sincronizzazione disponibile",
+  "@syncAvailable": {
+    "description": "Label for sync notification"
+  },
+  "referAFriend": "Consiglia a un amico",
+  "@referAFriend": {
+    "description": "Bottom navigation label for referral program"
+  },
+  "help": "Aiuto",
+  "@help": {
+    "description": "Bottom navigation label for help"
+  },
+  "pro": "Pro",
+  "@pro": {
+    "description": "Badge label for pro/unlimited users"
+  },
+  "upgradeToPro": "Passa a Pro",
+  "@upgradeToPro": {
+    "description": "Subscription banner button text"
+  },
+  "getOmiDevice": "Ottieni il dispositivo Omi",
+  "@getOmiDevice": {
+    "description": "Widget title for device promotion"
+  },
+  "wearableAiCompanion": "Compagno AI indossabile",
+  "@wearableAiCompanion": {
+    "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "Caricamento ricordi...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "allMemories": "Tutti i ricordi",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "Su di te",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "Manuale",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "Caricamento dei tuoi ricordi...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "createYourFirstMemory": "Crea il tuo primo ricordo per iniziare",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "Prova a modificare la ricerca o il filtro",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
+  },
+  "whatWouldYouLikeToRemember": "Cosa vorresti ricordare?",
+  "category": "Categoria",
+  "public": "Pubblico",
+  "failedToSaveCheckConnection": "Salvataggio fallito. Controlla la tua connessione.",
+  "createMemory": "Crea memoria",
+  "deleteMemoryConfirmation": "Sei sicuro di voler eliminare questa memoria? Questa azione non può essere annullata.",
+  "makePrivate": "Rendi privato",
+  "organizeAndControlMemories": "Organizza e controlla i tuoi ricordi",
+  "total": "Totale",
+  "makeAllMemoriesPrivate": "Rendi tutti i ricordi privati",
+  "setAllMemoriesToPrivate": "Imposta tutti i ricordi come privati",
+  "makeAllMemoriesPublic": "Rendi tutti i ricordi pubblici",
+  "setAllMemoriesToPublic": "Imposta tutti i ricordi come pubblici",
+  "permanentlyRemoveAllMemories": "Rimuovi permanentemente tutti i ricordi da Omi",
+  "allMemoriesAreNowPrivate": "Tutti i ricordi sono ora privati",
+  "allMemoriesAreNowPublic": "Tutti i ricordi sono ora pubblici",
+  "clearOmisMemory": "Cancella la memoria di Omi",
+  "clearMemoryConfirmation": "Sei sicuro di voler cancellare la memoria di Omi? Questa azione non può essere annullata e eliminerà permanentemente tutti i {count} ricordi.",
+  "omisMemoryCleared": "La memoria di Omi su di te è stata cancellata",
+  "welcomeToOmi": "Benvenuto in Omi",
+  "continueWithApple": "Continua con Apple",
+  "continueWithGoogle": "Continua con Google",
+  "byContinuingYouAgree": "Continuando, accetti i nostri ",
+  "termsOfService": "Termini di servizio",
+  "and": " e ",
+  "dataAndPrivacy": "Dati e privacy",
+  "secureAuthViaAppleId": "Autenticazione sicura tramite Apple ID",
+  "secureAuthViaGoogleAccount": "Autenticazione sicura tramite account Google",
+  "whatWeCollect": "Cosa raccogliamo",
+  "dataCollectionMessage": "Continuando, le tue conversazioni, registrazioni e informazioni personali verranno archiviate in modo sicuro sui nostri server per fornire informazioni basate sull'IA e abilitare tutte le funzionalità dell'app.",
+  "dataProtection": "Protezione dei dati",
+  "yourDataIsProtected": "I tuoi dati sono protetti e regolati dalla nostra ",
+  "pleaseSelectYourPrimaryLanguage": "Seleziona la tua lingua principale",
+  "chooseYourLanguage": "Scegli la tua lingua",
+  "selectPreferredLanguageForBestExperience": "Seleziona la tua lingua preferita per la migliore esperienza Omi",
+  "searchLanguages": "Cerca lingue...",
+  "selectALanguage": "Seleziona una lingua",
+  "tryDifferentSearchTerm": "Prova un termine di ricerca diverso",
+  "pleaseEnterYourName": "Inserisci il tuo nome",
+  "nameMustBeAtLeast2Characters": "Il nome deve contenere almeno 2 caratteri",
+  "tellUsHowYouWouldLikeToBeAddressed": "Dicci come vorresti essere chiamato. Questo aiuta a personalizzare la tua esperienza Omi.",
+  "charactersCount": "{count} caratteri",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "enableFeaturesForBestExperience": "Abilita le funzionalità per la migliore esperienza Omi sul tuo dispositivo.",
+  "microphoneAccess": "Accesso al microfono",
+  "recordAudioConversations": "Registra conversazioni audio",
+  "microphoneAccessDescription": "Omi ha bisogno dell'accesso al microfono per registrare le tue conversazioni e fornire trascrizioni.",
+  "screenRecording": "Registrazione schermo",
+  "captureSystemAudioFromMeetings": "Cattura l'audio di sistema dalle riunioni",
+  "screenRecordingDescription": "Omi ha bisogno dell'autorizzazione per la registrazione dello schermo per catturare l'audio di sistema dalle tue riunioni basate sul browser.",
+  "accessibility": "Accessibilità",
+  "detectBrowserBasedMeetings": "Rileva riunioni basate sul browser",
+  "accessibilityDescription": "Omi ha bisogno dell'autorizzazione di accessibilità per rilevare quando partecipi a riunioni Zoom, Meet o Teams nel tuo browser.",
+  "pleaseWait": "Attendere prego...",
+  "joinTheCommunity": "Unisciti alla comunità!",
+  "loadingProfile": "Caricamento del profilo...",
+  "profileSettings": "Impostazioni del profilo",
+  "noEmailSet": "Nessuna email impostata",
+  "userIdCopiedToClipboard": "ID utente copiato",
+  "yourInformation": "Le Tue Informazioni",
+  "setYourName": "Imposta il tuo nome",
+  "changeYourName": "Cambia il tuo nome",
+  "persona": "Persona",
+  "manageYourOmiPersona": "Gestisci la tua persona Omi",
+  "voiceAndPeople": "Voce e Persone",
+  "teachOmiYourVoice": "Insegna a Omi la tua voce",
+  "tellOmiWhoSaidIt": "Dì a Omi chi l'ha detto 🗣️",
+  "payment": "Pagamento",
+  "addOrChangeYourPaymentMethod": "Aggiungi o modifica metodo di pagamento",
+  "preferences": "Preferenze",
+  "helpImproveOmiBySharing": "Aiuta a migliorare Omi condividendo dati analitici anonimi",
+  "deleteAccount": "Elimina Account",
+  "deleteYourAccountAndAllData": "Elimina account e tutti i dati",
+  "helpsDiagnoseIssuesAutoDeletes": "Aiuta a diagnosticare i problemi. Eliminato automaticamente dopo 3 giorni.",
+  "clearLogs": "Cancella log",
+  "debugLogsCleared": "Log di debug cancellati",
+  "exportConversations": "Esporta conversazioni",
+  "exportAllConversationsToJson": "Esporta tutte le tue conversazioni in un file JSON.",
+  "conversationsExportStarted": "Esportazione conversazioni avviata. Questo potrebbe richiedere alcuni secondi, attendere prego.",
+  "mcpDescription": "Per connettere Omi ad altre applicazioni per leggere, cercare e gestire i tuoi ricordi e conversazioni. Crea una chiave per iniziare.",
+  "apiKeys": "Chiavi API",
+  "errorLabel": "Errore: {error}",
+  "noApiKeysFound": "Nessuna chiave API trovata. Creane una per iniziare.",
+  "advancedSettings": "Impostazioni avanzate",
+  "triggersWhenNewConversationCreated": "Si attiva quando viene creata una nuova conversazione.",
+  "triggersWhenNewTranscriptReceived": "Si attiva quando viene ricevuta una nuova trascrizione.",
+  "realtimeAudioBytes": "Byte audio in tempo reale",
+  "triggersWhenAudioBytesReceived": "Si attiva quando vengono ricevuti byte audio.",
+  "everyXSeconds": "Ogni x secondi",
+  "triggersWhenDaySummaryGenerated": "Si attiva quando viene generato il riepilogo giornaliero.",
+  "experimental": "Sperimentale",
+  "tryLatestExperimentalFeatures": "Prova le ultime funzionalità sperimentali dal team Omi.",
+  "transcriptionServiceDiagnosticStatus": "Stato diagnostico del servizio di trascrizione",
+  "enableDetailedDiagnosticMessages": "Abilita messaggi diagnostici dettagliati dal servizio di trascrizione",
+  "autoCreateAndTagNewSpeakers": "Crea e etichetta automaticamente nuovi parlanti",
+  "automaticallyCreateNewPerson": "Crea automaticamente una nuova persona quando viene rilevato un nome nella trascrizione.",
+  "pilotFeatures": "Funzionalità pilota",
+  "pilotFeaturesDescription": "Queste funzionalità sono test e non è garantito il supporto.",
+  "suggestFollowUpQuestion": "Suggerisci domanda di follow-up",
+  "saveSettings": "Salva Impostazioni",
+  "syncingDeveloperSettings": "Sincronizzazione impostazioni sviluppatore...",
+  "summary": "Riepilogo",
+  "auto": "Automatico",
+  "noSummaryForApp": "Nessun riepilogo disponibile per questa app. Prova un'altra app per risultati migliori.",
+  "tryAnotherApp": "Prova un'altra app",
+  "generatedBy": "Generato da {appName}",
+  "overview": "Panoramica",
+  "otherAppResults": "Risultati di altre app",
+  "unknownApp": "App sconosciuta",
+  "noSummaryAvailable": "Nessun riepilogo disponibile",
+  "conversationNoSummaryYet": "Questa conversazione non ha ancora un riepilogo.",
+  "chooseSummarizationApp": "Scegli app di riepilogo",
+  "setAsDefaultSummarizationApp": "{appName} impostata come app di riepilogo predefinita",
+  "letOmiChooseAutomatically": "Lascia che Omi scelga automaticamente l'app migliore",
+  "deleteConversationConfirmation": "Sei sicuro di voler eliminare questa conversazione? Questa azione non può essere annullata.",
+  "conversationDeleted": "Conversazione eliminata",
+  "generatingLink": "Generazione link...",
+  "editConversation": "Modifica conversazione",
+  "conversationLinkCopiedToClipboard": "Link della conversazione copiato negli appunti",
+  "conversationTranscriptCopiedToClipboard": "Trascrizione della conversazione copiata negli appunti",
+  "editConversationDialogTitle": "Modifica conversazione",
+  "changeTheConversationTitle": "Cambia il titolo della conversazione",
+  "conversationTitle": "Titolo della conversazione",
+  "enterConversationTitle": "Inserisci il titolo della conversazione...",
+  "conversationTitleUpdatedSuccessfully": "Titolo della conversazione aggiornato con successo",
+  "failedToUpdateConversationTitle": "Aggiornamento del titolo della conversazione non riuscito",
+  "errorUpdatingConversationTitle": "Errore nell'aggiornamento del titolo della conversazione",
+  "settingUp": "Configurazione...",
+  "preparingSystemAudioCapture": "Preparazione della cattura audio di sistema",
+  "clickTheButtonToCaptureAudio": "Fai clic sul pulsante per catturare audio per trascrizioni dal vivo, informazioni AI e salvataggio automatico.",
+  "startYourFirstRecording": "Inizia la tua prima registrazione",
+  "reconnecting": "Riconnessione...",
+  "recordingPaused": "Registrazione in pausa",
+  "recordingActive": "Registrazione attiva",
+  "startRecording": "Avvia registrazione",
+  "resumingInCountdown": "Ripresa tra {countdown}s...",
+  "tapPlayToResume": "Tocca riproduci per riprendere",
+  "listeningForAudio": "Ascolto audio...",
+  "preparingAudioCapture": "Preparazione cattura audio",
+  "clickToBeginRecording": "Fai clic per iniziare la registrazione",
+  "translated": "tradotto",
+  "liveTranscript": "Trascrizione dal vivo",
+  "segmentsSingular": "{count} segmento",
+  "segmentsPlural": "{count} segmenti",
+  "startRecordingToSeeTranscript": "Avvia la registrazione per vedere la trascrizione dal vivo",
+  "paused": "In pausa",
+  "initializing": "Inizializzazione...",
+  "recording": "Registrazione",
+  "microphoneChangedResumingIn": "Microfono cambiato. Ripresa tra {countdown}s",
+  "clickPlayToResumeOrStop": "Fai clic su riproduci per riprendere o ferma per terminare",
+  "settingUpSystemAudioCapture": "Configurazione della cattura audio di sistema",
+  "capturingAudioAndGeneratingTranscript": "Cattura audio e generazione trascrizione",
+  "clickToBeginRecordingSystemAudio": "Fai clic per iniziare la registrazione audio di sistema",
+  "you": "Tu",
+  "speakerWithId": "Relatore {speakerId}",
+  "translatedByOmi": "tradotto da omi",
+  "backToConversations": "Torna alle conversazioni",
+  "systemAudio": "Sistema",
+  "mic": "Microfono",
+  "audioInputSetTo": "Ingresso audio impostato su {deviceName}",
+  "errorSwitchingAudioDevice": "Errore durante il cambio del dispositivo audio: {error}",
+  "selectAudioInput": "Seleziona ingresso audio",
+  "loadingDevices": "Caricamento dispositivi...",
+  "settingsHeader": "IMPOSTAZIONI",
+  "plansAndBilling": "Piani e Fatturazione",
+  "calendarIntegration": "Integrazione Calendario",
+  "dailySummary": "Riepilogo Giornaliero",
+  "developer": "Sviluppatore",
+  "about": "Informazioni",
+  "selectTime": "Seleziona Ora",
+  "accountGroup": "Account",
+  "signOutQuestion": "Disconnetti?",
+  "signOutConfirmation": "Sei sicuro di volerti disconnettere?",
+  "customVocabularyHeader": "VOCABOLARIO PERSONALIZZATO",
+  "addWordsDescription": "Aggiungi parole che Omi dovrebbe riconoscere durante la trascrizione.",
+  "enterWordsHint": "Inserisci parole (separate da virgole)",
+  "dailySummaryHeader": "RIEPILOGO GIORNALIERO",
+  "dailySummaryTitle": "Riepilogo Giornaliero",
+  "dailySummaryDescription": "Ricevi un riepilogo personalizzato delle tue conversazioni",
+  "deliveryTime": "Ora di Consegna",
+  "deliveryTimeDescription": "Quando ricevere il riepilogo giornaliero",
+  "subscription": "Abbonamento",
+  "viewPlansAndUsage": "Visualizza Piani e Utilizzo",
+  "viewPlansDescription": "Gestisci il tuo abbonamento e visualizza le statistiche di utilizzo",
+  "addOrChangePaymentMethod": "Aggiungi o modifica il tuo metodo di pagamento",
+  "displayOptions": "Opzioni di Visualizzazione",
+  "showMeetingsInMenuBar": "Mostra Riunioni nella Barra dei Menu",
+  "displayUpcomingMeetingsDescription": "Mostra le riunioni imminenti nella barra dei menu",
+  "showEventsWithoutParticipants": "Mostra Eventi Senza Partecipanti",
+  "includePersonalEventsDescription": "Includi eventi personali senza partecipanti",
+  "upcomingMeetings": "RIUNIONI IMMINENTI",
+  "checkingNext7Days": "Controllo dei prossimi 7 giorni",
+  "shortcuts": "Scorciatoie",
+  "shortcutChangeInstruction": "Fai clic su una scorciatoia per modificarla. Premi Escape per annullare.",
+  "configurePersonaDescription": "Configura la tua persona IA",
+  "configureSTTProvider": "Configura provider STT",
+  "setConversationEndDescription": "Imposta quando le conversazioni terminano automaticamente",
+  "importDataDescription": "Importa dati da altre fonti",
+  "debugAndDiagnostics": "Debug e Diagnostica",
+  "autoDeletesAfter3Days": "Eliminazione automatica dopo 3 giorni",
+  "helpsDiagnoseIssues": "Aiuta a diagnosticare i problemi",
+  "exportConversationsDescription": "Esporta conversazioni in JSON",
+  "exportingConversations": "Esportazione conversazioni...",
+  "clearNodesDescription": "Cancella tutti i nodi e le connessioni",
+  "deleteKnowledgeGraphQuestion": "Eliminare Grafico della Conoscenza?",
+  "deleteKnowledgeGraphWarning": "Questo eliminerà tutti i dati derivati del grafico della conoscenza. I tuoi ricordi originali rimangono al sicuro.",
+  "connectOmiWithAI": "Collega Omi con assistenti IA",
+  "noAPIKeys": "Nessuna chiave API. Creane una per iniziare.",
+  "realTimeTranscript": "Trascrizione in Tempo Reale",
+  "transcriptionDiagnostics": "Diagnostica Trascrizione",
+  "detailedDiagnosticMessages": "Messaggi diagnostici dettagliati",
+  "autoCreateSpeakers": "Crea Automaticamente Relatori",
+  "autoCreateWhenDetected": "Crea automaticamente quando viene rilevato il nome",
+  "followUpQuestions": "Domande di Follow-up",
+  "suggestQuestionsAfterConversations": "Suggerisci domande dopo le conversazioni",
+  "goalTracker": "Tracker degli Obiettivi",
+  "trackPersonalGoals": "Tieni traccia degli obiettivi personali sulla homepage",
+  "dailyReflection": "Riflessione Giornaliera",
+  "dailyReflectionDescription": "Promemoria alle 21:00 per riflettere sulla tua giornata",
+  "endpointURL": "URL dell'Endpoint",
+  "links": "Link",
+  "discordMemberCount": "Oltre 8000 membri su Discord",
+  "userInformation": "Informazioni Utente",
+  "capabilities": "Capacità",
+  "previewScreenshots": "Anteprima schermate",
+  "holdOnPreparingForm": "Attendi, stiamo preparando il modulo per te",
+  "bySubmittingYouAgreeToOmi": "Inviando, accetti i ",
+  "termsAndPrivacyPolicy": "Termini e Informativa sulla Privacy",
+  "manageYourApp": "Gestisci la tua app",
+  "updatingYourApp": "Aggiornamento della tua app",
+  "fetchingYourAppDetails": "Recupero dei dettagli della tua app",
+  "updateAppQuestion": "Aggiornare l'app?",
+  "updateAppConfirmation": "Sei sicuro di voler aggiornare la tua app? Le modifiche saranno visibili dopo la revisione del nostro team.",
+  "updateApp": "Aggiorna app",
+  "createAndSubmitNewApp": "Crea e invia una nuova app",
+  "appsCount": "App ({count})",
+  "privateAppsCount": "App private ({count})",
+  "publicAppsCount": "App pubbliche ({count})",
+  "newVersionAvailable": "Nuova versione disponibile  🎉",
+  "no": "No",
+  "subscriptionCancelledSuccessfully": "Abbonamento annullato con successo. Rimarrà attivo fino alla fine del periodo di fatturazione corrente.",
+  "failedToCancelSubscription": "Impossibile annullare l'abbonamento. Riprova.",
+  "invalidPaymentUrl": "URL di pagamento non valido",
+  "permissionsAndTriggers": "Permessi e trigger",
+  "chatFeatures": "Funzioni chat",
+  "uninstall": "Disinstalla",
+  "installs": "INSTALLAZIONI",
+  "priceLabel": "PREZZO",
+  "updatedLabel": "AGGIORNATO",
+  "createdLabel": "CREATO",
+  "featuredLabel": "IN EVIDENZA",
+  "cancelSubscriptionQuestion": "Annullare l'abbonamento?",
+  "cancelSubscriptionConfirmation": "Sei sicuro di voler annullare l'abbonamento? Continuerai ad avere accesso fino alla fine del periodo di fatturazione corrente.",
+  "cancelSubscriptionButton": "Annulla abbonamento",
+  "cancelling": "Annullamento...",
+  "betaTesterMessage": "Sei un beta tester per questa app. Non è ancora pubblica. Sarà pubblica dopo l'approvazione.",
+  "appUnderReviewMessage": "La tua app è in revisione e visibile solo a te. Sarà pubblica dopo l'approvazione.",
+  "appRejectedMessage": "La tua app è stata rifiutata. Aggiorna i dettagli e invia nuovamente per la revisione.",
+  "invalidIntegrationUrl": "URL di integrazione non valido",
+  "tapToComplete": "Tocca per completare",
+  "invalidSetupInstructionsUrl": "URL delle istruzioni di configurazione non valido",
+  "pushToTalk": "Premi per parlare",
+  "summaryPrompt": "Prompt di riepilogo",
+  "pleaseSelectARating": "Seleziona una valutazione",
+  "reviewAddedSuccessfully": "Recensione aggiunta con successo 🚀",
+  "reviewUpdatedSuccessfully": "Recensione aggiornata con successo 🚀",
+  "failedToSubmitReview": "Invio recensione fallito. Riprova.",
+  "addYourReview": "Aggiungi la tua recensione",
+  "editYourReview": "Modifica la tua recensione",
+  "writeAReviewOptional": "Scrivi una recensione (opzionale)",
+  "submitReview": "Invia recensione",
+  "updateReview": "Aggiorna recensione",
+  "yourReview": "La tua recensione",
+  "anonymousUser": "Utente anonimo",
+  "issueActivatingApp": "Si è verificato un problema nell'attivazione di questa app. Riprova.",
+  "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
+  "copyUrl": "Copia URL",
+  "txtFormat": "TXT",
+  "pdfFormat": "PDF",
+  "weekdayMon": "Lun",
+  "weekdayTue": "Mar",
+  "weekdayWed": "Mer",
+  "weekdayThu": "Gio",
+  "weekdayFri": "Ven",
+  "weekdaySat": "Sab",
+  "weekdaySun": "Dom",
+  "serviceIntegrationComingSoon": "Integrazione {serviceName} in arrivo",
+  "alreadyExportedTo": "Già esportato in {platform}",
+  "anotherPlatform": "un'altra piattaforma",
+  "pleaseAuthenticateWithService": "Per favore autenticati con {serviceName} in Impostazioni > Integrazioni attività",
+  "addingToService": "Aggiunta a {serviceName}...",
+  "addedToService": "Aggiunto a {serviceName}",
+  "failedToAddToService": "Impossibile aggiungere a {serviceName}",
+  "permissionDeniedForAppleReminders": "Permesso negato per Apple Reminders",
+  "failedToCreateApiKey": "Impossibile creare la chiave API del provider: {error}",
+  "createAKey": "Crea una chiave",
+  "apiKeyRevokedSuccessfully": "Chiave API revocata con successo",
+  "failedToRevokeApiKey": "Impossibile revocare la chiave API: {error}",
+  "omiApiKeys": "Chiavi API Omi",
+  "apiKeysDescription": "Le chiavi API vengono utilizzate per l'autenticazione quando la tua app comunica con il server OMI. Consentono alla tua applicazione di creare ricordi e accedere ad altri servizi OMI in modo sicuro.",
+  "aboutOmiApiKeys": "Informazioni sulle chiavi API Omi",
+  "noApiKeysYet": "Nessuna chiave API ancora. Creane una per integrare con la tua app.",
+  "yourNewKey": "La tua nuova chiave:",
+  "copyToClipboard": "Copia negli appunti",
+  "pleaseCopyKeyNow": "Per favore copiala ora e annotala in un posto sicuro. ",
+  "willNotSeeAgain": "Non potrai vederla di nuovo.",
+  "revokeKey": "Revoca chiave",
+  "revokeApiKeyQuestion": "Revocare la chiave API?",
+  "revokeApiKeyWarning": "Questa azione non può essere annullata. Le applicazioni che utilizzano questa chiave non potranno più accedere all'API.",
+  "revoke": "Revoca",
+  "whatWouldYouLikeToCreate": "Cosa vorresti creare?",
+  "createAnApp": "Crea un'app",
+  "createAndShareYourApp": "Crea e condividi la tua app",
+  "createMyClone": "Crea il mio clone",
+  "createYourDigitalClone": "Crea il tuo clone digitale",
+  "itemApp": "App",
+  "itemPersona": "Persona",
+  "keepItemPublic": "Mantieni {item} pubblico",
+  "makeItemPublicQuestion": "Rendere {item} pubblico?",
+  "makeItemPrivateQuestion": "Rendere {item} privato?",
+  "makeItemPublicExplanation": "Se rendi {item} pubblico, può essere usato da tutti",
+  "makeItemPrivateExplanation": "Se rendi {item} privato ora, smetterà di funzionare per tutti e sarà visibile solo a te",
+  "manageApp": "Gestisci app",
+  "updatePersonaDetails": "Aggiorna dettagli persona",
+  "deleteItemTitle": "Elimina {item}",
+  "deleteItemQuestion": "Eliminare {item}?",
+  "deleteItemConfirmation": "Sei sicuro di voler eliminare questo {item}? Questa azione non può essere annullata.",
+  "revokeKeyQuestion": "Revocare la chiave?",
+  "revokeKeyConfirmation": "Sei sicuro di voler revocare la chiave \"{keyName}\"? Questa azione non può essere annullata.",
+  "createNewKey": "Crea nuova chiave",
+  "keyNameHint": "es. Claude Desktop",
+  "pleaseEnterAName": "Inserisci un nome.",
+  "failedToCreateKeyWithError": "Impossibile creare la chiave: {error}",
+  "failedToCreateKeyTryAgain": "Impossibile creare la chiave. Riprova.",
+  "keyCreated": "Chiave creata",
+  "keyCreatedMessage": "La tua nuova chiave è stata creata. Copiala ora. Non potrai vederla di nuovo.",
+  "keyWord": "Chiave",
+  "externalAppAccess": "Accesso app esterne",
+  "externalAppAccessDescription": "Le seguenti app installate hanno integrazioni esterne e possono accedere ai tuoi dati, come conversazioni e ricordi.",
+  "noExternalAppsHaveAccess": "Nessuna app esterna ha accesso ai tuoi dati.",
+  "maximumSecurityE2ee": "Sicurezza massima (E2EE)",
+  "e2eeDescription": "La crittografia end-to-end è lo standard d'oro per la privacy. Quando abilitata, i tuoi dati vengono crittografati sul tuo dispositivo prima di essere inviati ai nostri server. Ciò significa che nessuno, nemmeno Omi, può accedere ai tuoi contenuti.",
+  "importantTradeoffs": "Compromessi importanti:",
+  "e2eeTradeoff1": "• Alcune funzionalità come le integrazioni di app esterne potrebbero essere disabilitate.",
+  "e2eeTradeoff2": "• Se perdi la password, i tuoi dati non possono essere recuperati.",
+  "featureComingSoon": "Questa funzionalità sarà disponibile presto!",
+  "migrationInProgressMessage": "Migrazione in corso. Non puoi cambiare il livello di protezione finché non è completata.",
+  "migrationFailed": "Migrazione fallita",
+  "migratingFromTo": "Migrazione da {source} a {target}",
+  "objectsCount": "{processed} / {total} oggetti",
+  "secureEncryption": "Crittografia sicura",
+  "secureEncryptionDescription": "I tuoi dati sono crittografati con una chiave unica per te sui nostri server, ospitati su Google Cloud. Ciò significa che i tuoi contenuti grezzi sono inaccessibili a chiunque, incluso il personale di Omi o Google, direttamente dal database.",
+  "endToEndEncryption": "Crittografia end-to-end",
+  "e2eeCardDescription": "Abilita per la massima sicurezza dove solo tu puoi accedere ai tuoi dati. Tocca per saperne di più.",
+  "dataAlwaysEncrypted": "Indipendentemente dal livello, i tuoi dati sono sempre crittografati a riposo e in transito.",
+  "readOnlyScope": "Solo lettura",
+  "fullAccessScope": "Accesso completo",
+  "readScope": "Lettura",
+  "writeScope": "Scrittura",
+  "apiKeyCreated": "Chiave API creata!",
+  "saveKeyWarning": "Salva questa chiave ora! Non potrai vederla di nuovo.",
+  "yourApiKey": "LA TUA CHIAVE API",
+  "tapToCopy": "Tocca per copiare",
+  "copyKey": "Copia chiave",
+  "createApiKey": "Crea chiave API",
+  "accessDataProgrammatically": "Accedi ai tuoi dati in modo programmatico",
+  "keyNameLabel": "NOME CHIAVE",
+  "keyNamePlaceholder": "es., La mia integrazione",
+  "permissionsLabel": "PERMESSI",
+  "permissionsInfoNote": "R = Lettura, W = Scrittura. Solo lettura di default se non viene selezionato nulla.",
+  "developerApi": "API sviluppatore",
+  "createAKeyToGetStarted": "Crea una chiave per iniziare",
+  "errorWithMessage": "Errore: {error}",
+  "omiTraining": "Formazione Omi",
+  "trainingDataProgram": "Programma dati di formazione",
+  "getOmiUnlimitedFree": "Ottieni Omi Unlimited gratis contribuendo con i tuoi dati per addestrare modelli AI.",
+  "trainingDataBullets": "• I tuoi dati aiutano a migliorare i modelli AI\n• Vengono condivisi solo dati non sensibili\n• Processo completamente trasparente",
+  "learnMoreAtOmiTraining": "Scopri di più su omi.me/training",
+  "agreeToContributeData": "Comprendo e accetto di contribuire con i miei dati per l'addestramento dell'IA",
+  "submitRequest": "Invia richiesta",
+  "thankYouRequestUnderReview": "Grazie! La tua richiesta è in revisione. Ti avviseremo una volta approvata.",
+  "planRemainsActiveUntil": "Il tuo piano rimarrà attivo fino al {date}. Dopo, perderai l'accesso alle funzionalità illimitate. Sei sicuro?",
+  "confirmCancellation": "Conferma annullamento",
+  "keepMyPlan": "Mantieni il mio piano",
+  "subscriptionSetToCancel": "Il tuo abbonamento è impostato per essere annullato alla fine del periodo.",
+  "switchedToOnDevice": "Passato alla trascrizione sul dispositivo",
+  "couldNotSwitchToFreePlan": "Impossibile passare al piano gratuito. Riprova.",
+  "couldNotLoadPlans": "Impossibile caricare i piani disponibili. Riprova.",
+  "selectedPlanNotAvailable": "Il piano selezionato non è disponibile. Riprova.",
+  "upgradeToAnnualPlan": "Passa al piano annuale",
+  "importantBillingInfo": "Informazioni di fatturazione importanti:",
+  "monthlyPlanContinues": "Il tuo attuale piano mensile continuerà fino alla fine del periodo di fatturazione",
+  "paymentMethodCharged": "Il tuo metodo di pagamento esistente verrà addebitato automaticamente al termine del piano mensile",
+  "annualSubscriptionStarts": "Il tuo abbonamento annuale di 12 mesi inizierà automaticamente dopo l'addebito",
+  "thirteenMonthsCoverage": "Avrai 13 mesi di copertura totale (mese corrente + 12 mesi annuali)",
+  "confirmUpgrade": "Conferma aggiornamento",
+  "confirmPlanChange": "Conferma cambio piano",
+  "confirmAndProceed": "Conferma e procedi",
+  "upgradeScheduled": "Aggiornamento programmato",
+  "changePlan": "Cambia piano",
+  "upgradeAlreadyScheduled": "Il tuo aggiornamento al piano annuale è già programmato",
+  "youAreOnUnlimitedPlan": "Sei sul piano Illimitato.",
+  "yourOmiUnleashed": "Il tuo Omi, liberato. Passa a illimitato per possibilità infinite.",
+  "planEndedOn": "Il tuo piano è terminato il {date}.\\nRiabbonati ora - ti verrà addebitato immediatamente per un nuovo periodo di fatturazione.",
+  "planSetToCancelOn": "Il tuo piano è impostato per essere annullato il {date}.\\nRiabbonati ora per mantenere i tuoi benefici - nessun addebito fino al {date}.",
+  "annualPlanStartsAutomatically": "Il tuo piano annuale inizierà automaticamente al termine del piano mensile.",
+  "planRenewsOn": "Il tuo piano si rinnova il {date}.",
+  "unlimitedConversations": "Conversazioni illimitate",
+  "askOmiAnything": "Chiedi a Omi qualsiasi cosa sulla tua vita",
+  "unlockOmiInfiniteMemory": "Sblocca la memoria infinita di Omi",
+  "youreOnAnnualPlan": "Sei sul piano annuale",
+  "alreadyBestValuePlan": "Hai già il piano dal miglior rapporto qualità-prezzo. Non sono necessarie modifiche.",
+  "unableToLoadPlans": "Impossibile caricare i piani",
+  "checkConnectionTryAgain": "Controlla la connessione e riprova",
+  "useFreePlan": "Usa piano gratuito",
+  "continueText": "Continua",
+  "resubscribe": "Riabbonati",
+  "couldNotOpenPaymentSettings": "Impossibile aprire le impostazioni di pagamento. Riprova.",
+  "managePaymentMethod": "Gestisci metodo di pagamento",
+  "cancelSubscription": "Annulla abbonamento",
+  "endsOnDate": "Termina il {date}",
+  "active": "Attivo",
+  "freePlan": "Piano gratuito",
+  "configure": "Configura",
+  "privacyInformation": "Informazioni sulla privacy",
+  "@privacyInformation": {
+    "description": "Privacy page - privacyInformation"
+  },
+  "yourPrivacyMattersToUs": "La tua privacy è importante per noi",
+  "@yourPrivacyMattersToUs": {
+    "description": "Privacy page - yourPrivacyMattersToUs"
+  },
+  "privacyIntroText": "In Omi, prendiamo molto sul serio la tua privacy. Vogliamo essere trasparenti sui dati che raccogliamo e come li utilizziamo per migliorare il prodotto. Ecco cosa devi sapere:",
+  "@privacyIntroText": {
+    "description": "Privacy page - privacyIntroText"
+  },
+  "whatWeTrack": "Cosa monitoriamo",
+  "@whatWeTrack": {
+    "description": "Privacy page - whatWeTrack"
+  },
+  "anonymityAndPrivacy": "Anonimato e privacy",
+  "@anonymityAndPrivacy": {
+    "description": "Privacy page - anonymityAndPrivacy"
+  },
+  "optInAndOptOutOptions": "Opzioni di adesione e rinuncia",
+  "@optInAndOptOutOptions": {
+    "description": "Privacy page - optInAndOptOutOptions"
+  },
+  "ourCommitment": "Il nostro impegno",
+  "@ourCommitment": {
+    "description": "Privacy page - ourCommitment"
+  },
+  "commitmentText": "Ci impegniamo a utilizzare i dati raccolti solo per rendere Omi un prodotto migliore per te. La tua privacy e la tua fiducia sono fondamentali per noi.",
+  "@commitmentText": {
+    "description": "Privacy page - commitmentText"
+  },
+  "thankYouText": "Grazie per essere un utente prezioso di Omi. Se hai domande o dubbi, non esitare a contattarci a team@basedhardware.com.",
+  "@thankYouText": {
+    "description": "Privacy page - thankYouText"
+  },
+  "wifiSyncSettings": "Impostazioni sincronizzazione WiFi",
+  "@wifiSyncSettings": {
+    "description": "WiFi sync settings - wifiSyncSettings"
+  },
+  "enterHotspotCredentials": "Inserisci le credenziali hotspot del tuo telefono",
+  "@enterHotspotCredentials": {
+    "description": "WiFi sync settings - enterHotspotCredentials"
+  },
+  "wifiSyncUsesHotspot": "La sincronizzazione WiFi usa il telefono come hotspot. Trova nome e password in Impostazioni > Hotspot personale.",
+  "@wifiSyncUsesHotspot": {
+    "description": "WiFi sync settings - wifiSyncUsesHotspot"
+  },
+  "hotspotNameSsid": "Nome hotspot (SSID)",
+  "@hotspotNameSsid": {
+    "description": "WiFi sync settings - hotspotNameSsid"
+  },
+  "exampleIphoneHotspot": "es. Hotspot iPhone",
+  "@exampleIphoneHotspot": {
+    "description": "WiFi sync settings - exampleIphoneHotspot"
+  },
+  "password": "Password",
+  "@password": {
+    "description": "WiFi sync settings - password"
+  },
+  "enterHotspotPassword": "Inserisci la password dell'hotspot",
+  "@enterHotspotPassword": {
+    "description": "WiFi sync settings - enterHotspotPassword"
+  },
+  "saveCredentials": "Salva credenziali",
+  "@saveCredentials": {
+    "description": "WiFi sync settings - saveCredentials"
+  },
+  "clearCredentials": "Cancella credenziali",
+  "@clearCredentials": {
+    "description": "WiFi sync settings - clearCredentials"
+  },
+  "pleaseEnterHotspotName": "Inserisci un nome hotspot",
+  "@pleaseEnterHotspotName": {
+    "description": "WiFi sync settings - pleaseEnterHotspotName"
+  },
+  "wifiCredentialsSaved": "Credenziali WiFi salvate",
+  "@wifiCredentialsSaved": {
+    "description": "WiFi sync settings - wifiCredentialsSaved"
+  },
+  "wifiCredentialsCleared": "Credenziali WiFi cancellate",
+  "@wifiCredentialsCleared": {
+    "description": "WiFi sync settings - wifiCredentialsCleared"
+  },
+  "summaryGeneratedForDate": "Riepilogo generato per {date}",
+  "@summaryGeneratedForDate": {
+    "description": "Daily summary settings - summaryGeneratedForDate",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "1/15/2026"
+      }
+    }
+  },
+  "failedToGenerateSummaryCheckConversations": "Impossibile generare il riepilogo. Assicurati di avere conversazioni per quel giorno.",
+  "@failedToGenerateSummaryCheckConversations": {
+    "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Riepilogo non trovato",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "Il viaggio della tua giornata",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "In evidenza",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Domande irrisolte",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Decisioni",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Apprendimenti",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
+  },
+  "autoDeletesAfterThreeDays": "Eliminato automaticamente dopo 3 giorni.",
+  "@autoDeletesAfterThreeDays": {
+    "description": "Developer settings - autoDeletesAfterThreeDays"
+  },
+  "knowledgeGraphDeletedSuccessfully": "Grafo della conoscenza eliminato con successo",
+  "@knowledgeGraphDeletedSuccessfully": {
+    "description": "Developer settings - knowledgeGraphDeletedSuccessfully"
+  },
+  "exportStartedMayTakeFewSeconds": "Esportazione avviata. Potrebbe richiedere qualche secondo...",
+  "@exportStartedMayTakeFewSeconds": {
+    "description": "Developer settings - exportStartedMayTakeFewSeconds"
+  },
+  "knowledgeGraphDeleteDescription": "Questo eliminerà tutti i dati derivati del grafo della conoscenza (nodi e connessioni). I tuoi ricordi originali rimarranno al sicuro. Il grafo verrà ricostruito nel tempo o alla prossima richiesta.",
+  "@knowledgeGraphDeleteDescription": {
+    "description": "Developer settings - knowledgeGraphDeleteDescription"
+  },
+  "configureDailySummaryDigest": "Configura il tuo riepilogo giornaliero delle attività",
+  "accessesDataTypes": "Accede a {dataTypes}",
+  "triggeredByType": "attivato da {triggerType}",
+  "accessesAndTriggeredBy": "{accessDescription} ed è {triggerDescription}.",
+  "isTriggeredBy": "È {triggerDescription}.",
+  "noSpecificDataAccessConfigured": "Nessun accesso ai dati specifico configurato."
 }

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'package:omi/backend/schema/dev_api_key.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class DevApiKeyCreatedSheet extends StatefulWidget {
   final DevApiKeyCreated apiKey;
@@ -16,10 +17,10 @@ class DevApiKeyCreatedSheet extends StatefulWidget {
 class _DevApiKeyCreatedSheetState extends State<DevApiKeyCreatedSheet> {
   bool _copied = false;
 
-  void _copyKey() {
+  void _copyKey(BuildContext context) {
     Clipboard.setData(ClipboardData(text: widget.apiKey.key));
     setState(() => _copied = true);
-    AppSnackbar.showSnackbar('API key copied to clipboard');
+    AppSnackbar.showSnackbar(context.l10n.copiedToClipboard(context.l10n.apiKey));
   }
 
   @override
@@ -63,9 +64,9 @@ class _DevApiKeyCreatedSheetState extends State<DevApiKeyCreatedSheet> {
                   child: const Icon(Icons.check_circle, color: Color(0xFF10B981), size: 40),
                 ),
                 const SizedBox(height: 16),
-                const Text(
-                  'API Key Created!',
-                  style: TextStyle(
+                Text(
+                  context.l10n.apiKeyCreated,
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 22,
                     fontWeight: FontWeight.w600,
@@ -97,10 +98,10 @@ class _DevApiKeyCreatedSheetState extends State<DevApiKeyCreatedSheet> {
                 children: [
                   Icon(Icons.warning_amber_rounded, color: Colors.amber.shade600, size: 20),
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'Save this key now! You won\'t be able to see it again.',
-                      style: TextStyle(
+                      context.l10n.saveKeyWarning,
+                      style: const TextStyle(
                         color: Color(0xFFF59E0B),
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
@@ -116,7 +117,7 @@ class _DevApiKeyCreatedSheetState extends State<DevApiKeyCreatedSheet> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: GestureDetector(
-              onTap: _copyKey,
+              onTap: () => _copyKey(context),
               child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -132,9 +133,9 @@ class _DevApiKeyCreatedSheetState extends State<DevApiKeyCreatedSheet> {
                   children: [
                     Row(
                       children: [
-                        const Text(
-                          'YOUR API KEY',
-                          style: TextStyle(
+                        Text(
+                          context.l10n.yourApiKey,
+                          style: const TextStyle(
                             color: Color(0xFF8E8E93),
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
@@ -159,7 +160,7 @@ class _DevApiKeyCreatedSheetState extends State<DevApiKeyCreatedSheet> {
                               ),
                               const SizedBox(width: 4),
                               Text(
-                                _copied ? 'Copied!' : 'Tap to copy',
+                                _copied ? context.l10n.copied : context.l10n.tapToCopy,
                                 style: TextStyle(
                                   color: _copied ? const Color(0xFF10B981) : const Color(0xFF8E8E93),
                                   fontSize: 11,
@@ -195,7 +196,7 @@ class _DevApiKeyCreatedSheetState extends State<DevApiKeyCreatedSheet> {
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: _copyKey,
+                    onPressed: () => _copyKey(context),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: _copied ? const Color(0xFF10B981) : const Color(0xFF8B5CF6),
                       side: BorderSide(
@@ -213,7 +214,7 @@ class _DevApiKeyCreatedSheetState extends State<DevApiKeyCreatedSheet> {
                         Icon(_copied ? Icons.check : Icons.copy, size: 18),
                         const SizedBox(width: 8),
                         Text(
-                          _copied ? 'Copied!' : 'Copy Key',
+                          _copied ? context.l10n.copied : context.l10n.copyKey,
                           style: const TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w600,
@@ -236,9 +237,9 @@ class _DevApiKeyCreatedSheetState extends State<DevApiKeyCreatedSheet> {
                       ),
                       elevation: 0,
                     ),
-                    child: const Text(
-                      'Done',
-                      style: TextStyle(
+                    child: Text(
+                      context.l10n.done,
+                      style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
                       ),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 extension StringExtension on String {
   String capitalize() {
@@ -32,29 +33,27 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF2c2c2e),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.lock_person_outlined, color: Colors.white),
-            SizedBox(width: 10),
-            Text('Maximum Security (E2EE)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            const Icon(Icons.lock_person_outlined, color: Colors.white),
+            const SizedBox(width: 10),
+            Text(context.l10n.maximumSecurityE2ee, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ],
         ),
         content: RichText(
           text: TextSpan(
             style: TextStyle(color: Colors.white.withOpacity(0.8), height: 1.5, fontSize: 15),
-            children: const [
+            children: [
+              TextSpan(text: '${context.l10n.e2eeDescription}\n\n'),
               TextSpan(
-                  text:
-                      'End-to-end encryption is the gold standard for privacy. When enabled, your data is encrypted on your device before it\'s sent to our servers. This means no one, not even Omi, can access your content.\n\n'),
-              TextSpan(
-                text: 'Important Trade-offs:\n',
-                style: TextStyle(fontWeight: FontWeight.bold),
+                text: '${context.l10n.importantTradeoffs}\n',
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
-              TextSpan(text: '• Some features like external app integrations may be disabled.\n'),
-              TextSpan(text: '• If you lose your password, your data cannot be recovered.\n\n'),
+              TextSpan(text: '${context.l10n.e2eeTradeoff1}\n'),
+              TextSpan(text: '${context.l10n.e2eeTradeoff2}\n\n'),
               TextSpan(
-                text: 'This feature is coming soon!',
-                style: TextStyle(fontStyle: FontStyle.italic),
+                text: context.l10n.featureComingSoon,
+                style: const TextStyle(fontStyle: FontStyle.italic),
               ),
             ],
           ),
@@ -62,7 +61,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('OK', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            child: Text(context.l10n.ok, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -85,7 +84,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
                 width: double.infinity,
                 padding: const EdgeInsets.only(bottom: 16, left: 8, right: 8),
                 child: Text(
-                  'Migration in progress. You cannot change the protection level until it is complete.',
+                  context.l10n.migrationInProgressMessage,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.secondary.withOpacity(0.9),
@@ -98,7 +97,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
             const SizedBox(height: 12),
             _buildInfoRow(
               Icons.shield_outlined,
-              'Regardless of the level, your data is always encrypted at rest and in transit.',
+              context.l10n.dataAlwaysEncrypted,
             ),
           ],
         );
@@ -124,9 +123,9 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
               children: [
                 Icon(Icons.error_outline, color: Colors.red.shade300, size: 20),
                 const SizedBox(width: 8),
-                const Text(
-                  'Migration Failed',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                Text(
+                  context.l10n.migrationFailed,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
                 ),
               ],
             ),
@@ -142,7 +141,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
                 provider.updateDataProtectionLevel(provider.targetLevel);
               },
               icon: const Icon(Icons.refresh),
-              label: const Text('Retry'),
+              label: Text(context.l10n.retry),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Theme.of(context).colorScheme.secondary,
                 foregroundColor: Colors.white,
@@ -164,22 +163,9 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          RichText(
-            text: TextSpan(
-              style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.4),
-              children: [
-                const TextSpan(text: 'Migrating from '),
-                TextSpan(
-                  text: provider.sourceLevel.capitalize(),
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const TextSpan(text: ' to '),
-                TextSpan(
-                  text: provider.targetLevel.capitalize(),
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
+          Text(
+            context.l10n.migratingFromTo(provider.sourceLevel.capitalize(), provider.targetLevel.capitalize()),
+            style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.4),
           ),
           const SizedBox(height: 16),
           Row(
@@ -213,7 +199,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
                 style: const TextStyle(color: Colors.grey, fontSize: 12),
               ),
               Text(
-                '${provider.migrationProcessedCount} / ${provider.migrationTotalCount} objects',
+                context.l10n.objectsCount(provider.migrationProcessedCount.toString(), provider.migrationTotalCount.toString()),
                 style: const TextStyle(color: Colors.grey, fontSize: 12),
               ),
             ],
@@ -247,9 +233,9 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Secure Encryption',
-                  style: TextStyle(
+                Text(
+                  context.l10n.secureEncryption,
+                  style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                     fontSize: 16,
@@ -257,7 +243,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Your data is encrypted with a key unique to you on our servers, hosted on Google Cloud. This means your raw content is inaccessible to anyone, including Omi staff or Google, directly from the database.',
+                  context.l10n.secureEncryptionDescription,
                   style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.4),
                 ),
               ],
@@ -290,9 +276,9 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
                 children: [
                   Row(
                     children: [
-                      const Text(
-                        'End-to-End Encryption',
-                        style: TextStyle(
+                      Text(
+                        context.l10n.endToEndEncryption,
+                        style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
                           fontSize: 16,
@@ -305,9 +291,9 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
                           color: Colors.grey.shade700,
                           borderRadius: BorderRadius.circular(16),
                         ),
-                        child: const Text(
-                          'Coming Soon',
-                          style: TextStyle(
+                        child: Text(
+                          context.l10n.comingSoon,
+                          style: const TextStyle(
                             fontSize: 10,
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
@@ -318,7 +304,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Enable for maximum security where only you can access your data. Tap to learn more.',
+                    context.l10n.e2eeCardDescription,
                     style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.4),
                   ),
                 ],

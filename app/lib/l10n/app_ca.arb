@@ -61,7 +61,7 @@
   "@close": {
     "description": "Close button label"
   },
-  "clear": "Netejar",
+  "clear": "Neteja",
   "@clear": {
     "description": "Clear button label"
   },
@@ -81,7 +81,7 @@
   "@reprocessConversation": {
     "description": "Menu item to reprocess a conversation"
   },
-  "deleteConversation": "Eliminar conversa",
+  "deleteConversation": "Suprimir conversa",
   "@deleteConversation": {
     "description": "Menu item to delete a conversation"
   },
@@ -159,7 +159,7 @@
   "@createPersonHint": {
     "description": "Hint text for creating a person"
   },
-  "speechProfile": "Perfil de veu",
+  "speechProfile": "Perfil de Veu",
   "@speechProfile": {
     "description": "Speech profile label"
   },
@@ -175,7 +175,7 @@
   },
   "settings": "Configuració",
   "@settings": {
-    "description": "Settings page title"
+    "description": "Bottom navigation label for settings"
   },
   "language": "Idioma",
   "@language": {
@@ -293,9 +293,9 @@
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
-  "noStarredConversations": "Encara no hi ha converses destacades.",
+  "noStarredConversations": "No hi ha converses destacades",
   "@noStarredConversations": {
-    "description": "Empty state for starred filter"
+    "description": "Empty state title when no starred conversations"
   },
   "starConversationHint": "Per destacar una conversa, obriu-la i toqueu la icona d'estrella a la capçalera.",
   "@starConversationHint": {
@@ -347,11 +347,11 @@
   "@noMessagesYet": {
     "description": "Empty chat state message"
   },
-  "deletingMessages": "Eliminant els vostres missatges de la memòria d'Omi...",
+  "deletingMessages": "Suprimint els teus missatges de la memòria d'Omi...",
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Missatge copiat al porta-retalls.",
+  "messageCopied": "✨ Missatge copiat al porta-retalls",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -359,7 +359,7 @@
   "@cannotReportOwnMessage": {
     "description": "Error when trying to report own message"
   },
-  "reportMessage": "Denunciar missatge",
+  "reportMessage": "Informar del missatge",
   "@reportMessage": {
     "description": "Report message dialog title"
   },
@@ -393,7 +393,7 @@
   },
   "apps": "Aplicacions",
   "@apps": {
-    "description": "Apps page title"
+    "description": "Navigation label for apps page"
   },
   "noAppsFound": "No s'han trobat aplicacions",
   "@noAppsFound": {
@@ -435,7 +435,7 @@
   "@privacyPolicy": {
     "description": "Link text for Privacy Policy"
   },
-  "visitWebsite": "Visitar lloc web",
+  "visitWebsite": "Visitar el lloc web",
   "@visitWebsite": {
     "description": "Visit website link"
   },
@@ -447,7 +447,7 @@
   "@joinCommunity": {
     "description": "Discord community link"
   },
-  "membersAndCounting": "Més de 8000 membres i sumant.",
+  "membersAndCounting": "8000+ membres i sumant.",
   "@membersAndCounting": {
     "description": "Discord member count"
   },
@@ -511,27 +511,27 @@
   "@email": {
     "description": "Email field label"
   },
-  "customVocabulary": "Vocabulari personalitzat",
+  "customVocabulary": "Vocabulari Personalitzat",
   "@customVocabulary": {
     "description": "Custom vocabulary setting"
   },
-  "identifyingOthers": "Identificar altres",
+  "identifyingOthers": "Identificació d'Altres",
   "@identifyingOthers": {
     "description": "People identification setting"
   },
-  "paymentMethods": "Mètodes de pagament",
+  "paymentMethods": "Mètodes de Pagament",
   "@paymentMethods": {
     "description": "Payment methods setting"
   },
-  "conversationDisplay": "Visualització de converses",
+  "conversationDisplay": "Visualització de Converses",
   "@conversationDisplay": {
     "description": "Conversation display setting"
   },
-  "dataPrivacy": "Dades i privadesa",
+  "dataPrivacy": "Privadesa de Dades",
   "@dataPrivacy": {
     "description": "Data and privacy setting"
   },
-  "userId": "ID d'usuari",
+  "userId": "ID d'Usuari",
   "@userId": {
     "description": "User ID label"
   },
@@ -583,7 +583,7 @@
   "@referralProgram": {
     "description": "Referral program menu item"
   },
-  "signOut": "Tancar sessió",
+  "signOut": "Tancar Sessió",
   "@signOut": {
     "description": "Sign out button"
   },
@@ -879,7 +879,7 @@
   "@createKeyToStart": {
     "description": "Create key instruction"
   },
-  "createKey": "Crear clau",
+  "createKey": "Crea Clau",
   "@createKey": {
     "description": "Create Key button"
   },
@@ -1087,7 +1087,7 @@
   "exportShared": "Exportació compartida",
   "deleteKnowledgeGraphTitle": "Eliminar graf de coneixement?",
   "deleteKnowledgeGraphMessage": "Això eliminarà totes les dades derivades del graf de coneixement (nodes i connexions). Els vostres records originals restaran segurs. El graf es reconstruirà amb el temps o a la propera sol·licitud.",
-  "knowledgeGraphDeleted": "Graf de coneixement eliminat correctament",
+  "knowledgeGraphDeleted": "Graf de coneixement eliminat",
   "deleteGraphFailed": "No s'ha pogut eliminar el graf: {error}",
   "@deleteGraphFailed": {
     "description": "Error message when deleting graph fails",
@@ -1103,7 +1103,7 @@
   "mcpServer": "Servidor MCP",
   "mcpServerDesc": "Connectar assistents d'IA a les vostres dades",
   "serverUrl": "URL del servidor",
-  "urlCopied": "URL copiada",
+  "urlCopied": "URL copiat",
   "apiKeyAuth": "Autenticació amb clau API",
   "header": "Capçalera",
   "authorizationBearer": "Authorization: Bearer <key>",
@@ -1127,7 +1127,7 @@
   "configCopied": "Configuració copiada al porta-retalls",
   "listeningMins": "Escoltant (min)",
   "understandingWords": "Entenent (paraules)",
-  "insights": "Informacions",
+  "insights": "Informació",
   "memories": "Records",
   "minsUsedThisMonth": "{used} de {limit} min utilitzats aquest mes",
   "@minsUsedThisMonth": {
@@ -1292,7 +1292,7 @@
   "showEventsNoParticipants": "Mostrar esdeveniments sense participants",
   "showEventsNoParticipantsDesc": "Quan s'activa, Properament mostra esdeveniments sense participants o enllaç de vídeo.",
   "yourMeetings": "Les vostres reunions",
-  "refresh": "Actualitzar",
+  "refresh": "Actualitza",
   "noUpcomingMeetings": "No s'han trobat reunions properes",
   "checkingNextDays": "Comprovant els propers 30 dies",
   "tomorrow": "Demà",
@@ -1335,7 +1335,7 @@
   "singleLanguageModeInfo": "El mode d'idioma únic està activat. La traducció està desactivada per a una major precisió.",
   "searchLanguageHint": "Cercar idioma per nom o codi",
   "noLanguagesFound": "No s'han trobat idiomes",
-  "skip": "Ometre",
+  "skip": "Saltar",
   "languageSetTo": "Idioma establert a {language}",
   "@languageSetTo": {
     "placeholders": {
@@ -1571,7 +1571,7 @@
   "autoLanguageDetection": "Detecció automàtica d'idioma",
   "highAccuracy": "Alta precisió",
   "privacyFirst": "Privadesa primer",
-  "saveChanges": "Desar canvis",
+  "saveChanges": "Desa els canvis",
   "resetToDefault": "Restableix per defecte",
   "viewTemplate": "Veure plantilla",
   "trySomethingLike": "Proveu quelcom com...",
@@ -1594,7 +1594,7 @@
   "perMonth": "/ Mes",
   "tailoredConversationSummaries": "Resums de converses personalitzats",
   "customChatbotPersonality": "Personalitat de xatbot personalitzada",
-  "makePublic": "Fer pública",
+  "makePublic": "Fer públic",
   "anyoneCanDiscover": "Qualsevol pot descobrir la vostra aplicació",
   "onlyYouCanUse": "Només vós podeu utilitzar aquesta aplicació",
   "paidApp": "Aplicació de pagament",
@@ -1657,7 +1657,7 @@
   "@connectLater": {
     "description": "Button text to skip immediate device connection"
   },
-  "grantPermissions": "Atorgar permisos",
+  "grantPermissions": "Concedir permisos",
   "@grantPermissions": {
     "description": "Title for the permissions request page"
   },
@@ -1820,7 +1820,7 @@
   "@wantDifferentName": {
     "description": "Question asking if user wants to change their display name"
   },
-  "whatsYourName": "Com us dieu?",
+  "whatsYourName": "Com et dius?",
   "@whatsYourName": {
     "description": "Question asking for user's name"
   },
@@ -1938,7 +1938,7 @@
   "@selectYourLanguage": {
     "description": "Placeholder for selected language name"
   },
-  "personalGrowthJourney": "El vostre viatge de creixement personal amb IA que escolta cada paraula vostra.",
+  "personalGrowthJourney": "El teu viatge de creixement personal amb IA que escolta cada paraula teva.",
   "@personalGrowthJourney": {
     "description": "Tagline on onboarding wrapper"
   },
@@ -2077,14 +2077,9 @@
   "@deleteSelected": {
     "description": "Tooltip for delete selected"
   },
-  "searchMemories": "Cercar {count} records",
+  "searchMemories": "Cerca records...",
   "@searchMemories": {
-    "description": "Hint text for memories search bar",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
+    "description": "Search input hint text"
   },
   "memoryDeleted": "Record eliminat.",
   "@memoryDeleted": {
@@ -2094,9 +2089,9 @@
   "@undo": {
     "description": "Undo button text"
   },
-  "noMemoriesYet": "Encara no hi ha records",
+  "noMemoriesYet": "🧠 Encara no hi ha records",
   "@noMemoriesYet": {
-    "description": "Empty state text"
+    "description": "Empty state title when no memories"
   },
   "noAutoMemories": "Encara no hi ha records extrets automàticament",
   "@noAutoMemories": {
@@ -2110,9 +2105,9 @@
   "@noMemoriesInCategories": {
     "description": "Empty state text for filtered categories"
   },
-  "noMemoriesFound": "No s'han trobat records",
+  "noMemoriesFound": "🔍 No s'han trobat records",
   "@noMemoriesFound": {
-    "description": "Empty state text for search results"
+    "description": "Empty state title when search/filter has no results"
   },
   "addFirstMemory": "Afegiu el vostre primer record",
   "@addFirstMemory": {
@@ -2146,7 +2141,7 @@
   "@createActionItemTooltip": {
     "description": "Tooltip for create action item FAB"
   },
-  "memoryManagement": "Gestió de records",
+  "memoryManagement": "Gestió de memòria",
   "@memoryManagement": {
     "description": "Title for memory management sheet"
   },
@@ -2191,11 +2186,11 @@
   "@allMemoriesPublicResult": {
     "description": "Snackbar"
   },
-  "newMemory": "Nou record",
+  "newMemory": "✨ Nova memòria",
   "@newMemory": {
     "description": "Dialog title"
   },
-  "editMemory": "Editar record",
+  "editMemory": "✏️ Edita memòria",
   "@editMemory": {
     "description": "Dialog title"
   },
@@ -2211,7 +2206,7 @@
   "@saveMemory": {
     "description": "Button label"
   },
-  "retry": "Tornar a provar",
+  "retry": "Tornar a intentar",
   "@retry": {
     "description": "Button label"
   },
@@ -2319,7 +2314,7 @@
   "pleaseCheckInternetConnection": "Si us plau, comprova la teva connexió a Internet i torna-ho a intentar",
   "pleaseSelectReason": "Si us plau, selecciona un motiu",
   "tellUsMoreWhatWentWrong": "Explica'ns més sobre què va anar malament...",
-  "selectText": "Selecciona text",
+  "selectText": "Seleccionar text",
   "maximumGoalsAllowed": "Màxim {count} objectius permesos",
   "conversationCannotBeMerged": "Aquesta conversa no es pot fusionar (bloquejada o ja en procés de fusió)",
   "pleaseEnterFolderName": "Si us plau, introdueix un nom de carpeta",
@@ -2341,11 +2336,11 @@
   "summarize": "Resumir",
   "generateSummary": "Generar resum",
   "conversationNotFoundOrDeleted": "Conversa no trobada o ha estat eliminada",
-  "deleteMemory": "Eliminar memòria?",
+  "deleteMemory": "Eliminar memòria",
   "thisActionCannotBeUndone": "Aquesta acció no es pot desfer.",
   "memoriesCount": "{count} memòries",
   "noMemoriesInCategory": "Encara no hi ha memòries en aquesta categoria",
-  "addYourFirstMemory": "Afegeix la teva primera memòria",
+  "addYourFirstMemory": "Afegeix el teu primer record",
   "firmwareDisconnectUsb": "Desconnecta USB",
   "firmwareUsbWarning": "La connexió USB durant les actualitzacions pot fer malbé el teu dispositiu.",
   "firmwareBatteryAbove15": "Bateria superior al 15%",
@@ -2397,7 +2392,7 @@
   "welcomeToOmiDescription": "Benvingut a Omi! El teu company d'IA està preparat per ajudar-te amb converses, tasques i molt més.",
   "startUsingOmi": "Comença a utilitzar Omi",
   "back": "Enrere",
-  "keyboardShortcuts": "Dreceres de teclat",
+  "keyboardShortcuts": "Dreceres de Teclat",
   "toggleControlBar": "Commuta la barra de control",
   "pressKeys": "Prem les tecles...",
   "cmdRequired": "⌘ necessari",
@@ -2406,21 +2401,21 @@
   "search": "Cerca",
   "searchPlaceholder": "Cerca...",
   "settingUp": "Configurant...",
-  "startYourFirstRecording": "Comença la teva primera gravació",
-  "preparingSystemAudioCapture": "Preparant captura d'àudio del sistema",
+  "startYourFirstRecording": "Comenceu la vostra primera gravació",
+  "preparingSystemAudioCapture": "Preparant la captura d'àudio del sistema",
   "recordingInstructions": "Fes clic al botó per capturar àudio per a transcripcions en directe, informació d'IA i desament automàtic.",
   "reconnecting": "Reconnectant...",
-  "recordingPaused": "Gravació pausada",
+  "recordingPaused": "Gravació en pausa",
   "recordingActive": "Gravació activa",
-  "startRecording": "Inicia gravació",
+  "startRecording": "Comença la gravació",
   "resumingInSeconds": "Reprenent en {seconds}s...",
-  "tapPlayToResume": "Toca reproduir per reprendre",
+  "tapPlayToResume": "Toqueu reproducció per reprendre",
   "listeningForAudio": "Escoltant àudio...",
-  "preparingAudioCapture": "Preparant captura d'àudio",
-  "clickToBeginRecording": "Fes clic per començar a gravar",
+  "preparingAudioCapture": "Preparant la captura d'àudio",
+  "clickToBeginRecording": "Feu clic per començar la gravació",
   "liveTranscript": "Transcripció en directe",
-  "startRecordingToSeeTranscript": "Inicia gravació per veure transcripció en directe",
-  "paused": "Pausat",
+  "startRecordingToSeeTranscript": "Comenceu la gravació per veure la transcripció en directe",
+  "paused": "En pausa",
   "initializing": "Inicialitzant...",
   "recording": "Gravant",
   "untitledConversation": "Conversa sense títol",
@@ -2434,7 +2429,7 @@
   "saveGoal": "Desa",
   "goals": "Objectius",
   "tapToAddGoal": "Toca per afegir un objectiu",
-  "welcomeBack": "Benvingut de nou",
+  "welcomeBack": "Benvingut de nou, {name}",
   "yourConversations": "Les teves converses",
   "reviewAndManageConversations": "Revisa i gestiona les teves converses capturades",
   "startCapturingConversations": "Comença a capturar converses amb el teu dispositiu Omi per veure-les aquí.",
@@ -2482,7 +2477,7 @@
   "reloadingApps": "Recarregant aplicacions...",
   "loadingApps": "Carregant aplicacions...",
   "browseInstallCreateApps": "Explora, instal·la i crea aplicacions",
-  "all": "Tot",
+  "all": "Tots",
   "open": "Obrir",
   "install": "Instal·la",
   "noAppsAvailable": "No hi ha aplicacions disponibles",
@@ -2537,5 +2532,769 @@
   "ratingsCount": "{count}+ valoracions",
   "errorActivatingApp": "Error en activar l'aplicació",
   "integrationSetupRequired": "Si aquesta és una aplicació d'integració, assegura't que la configuració està completada.",
-  "installed": "Instal·lat"
+  "installed": "Instal·lat",
+  "appIdLabel": "ID de l'aplicació",
+  "appNameLabel": "Nom de l'aplicació",
+  "appNamePlaceholder": "La meva aplicació fantàstica",
+  "pleaseEnterAppName": "Si us plau, introduïu el nom de l'aplicació",
+  "categoryLabel": "Categoria",
+  "selectCategory": "Seleccioneu categoria",
+  "descriptionLabel": "Descripció",
+  "appDescriptionPlaceholder": "La meva aplicació fantàstica és una aplicació genial que fa coses increïbles. És la millor aplicació!",
+  "pleaseProvideValidDescription": "Si us plau, proporcioneu una descripció vàlida",
+  "appPricingLabel": "Preu de l'aplicació",
+  "noneSelected": "Cap seleccionat",
+  "appIdCopiedToClipboard": "ID de l'aplicació copiat al porta-retalls",
+  "appCategoryModalTitle": "Categoria de l'aplicació",
+  "pricingFree": "Gratuït",
+  "pricingPaid": "De pagament",
+  "loadingCapabilities": "Carregant capacitats...",
+  "filterInstalled": "Instal·lades",
+  "filterMyApps": "Les meves aplicacions",
+  "clearSelection": "Esborrar selecció",
+  "filterCategory": "Categoria",
+  "rating4PlusStars": "4+ estrelles",
+  "rating3PlusStars": "3+ estrelles",
+  "rating2PlusStars": "2+ estrelles",
+  "rating1PlusStars": "1+ estrelles",
+  "filterRating": "Valoració",
+  "filterCapabilities": "Capacitats",
+  "noNotificationScopesAvailable": "No hi ha àmbits de notificació disponibles",
+  "popularApps": "Aplicacions populars",
+  "pleaseProvidePrompt": "Si us plau, proporcioneu una indicació",
+  "chatWithAppName": "Xat amb {appName}",
+  "defaultAiAssistant": "Assistent d'IA per defecte",
+  "readyToChat": "✨ Llest per xatejar!",
+  "connectionNeeded": "🌐 Connexió necessària",
+  "startConversation": "Comença una conversa i deixa que la màgia comenci",
+  "checkInternetConnection": "Si us plau, comprova la teva connexió a Internet",
+  "wasThisHelpful": "Ha estat útil?",
+  "thankYouForFeedback": "Gràcies pels teus comentaris!",
+  "maxFilesUploadError": "Només pots pujar 4 fitxers a la vegada",
+  "attachedFiles": "📎 Fitxers adjunts",
+  "takePhoto": "Fer una foto",
+  "captureWithCamera": "Capturar amb la càmera",
+  "selectImages": "Seleccionar imatges",
+  "chooseFromGallery": "Triar de la galeria",
+  "selectFile": "Seleccionar un fitxer",
+  "chooseAnyFileType": "Triar qualsevol tipus de fitxer",
+  "cannotReportOwnMessages": "No pots informar dels teus propis missatges",
+  "messageReportedSuccessfully": "✅ Missatge informat correctament",
+  "confirmReportMessage": "Estàs segur que vols informar d'aquest missatge?",
+  "selectChatAssistant": "Seleccionar assistent de xat",
+  "enableMoreApps": "Activar més aplicacions",
+  "chatCleared": "Xat esborrat",
+  "clearChatTitle": "Esborrar el xat?",
+  "confirmClearChat": "Estàs segur que vols esborrar el xat? Aquesta acció no es pot desfer.",
+  "copy": "Copiar",
+  "share": "Compartir",
+  "report": "Informar",
+  "microphonePermissionRequired": "Es requereix permís de micròfon per a l'enregistrament de veu.",
+  "microphonePermissionDenied": "Permís de micròfon denegat. Si us plau, concediu permís a Preferències del Sistema > Privacitat i Seguretat > Micròfon.",
+  "failedToCheckMicrophonePermission": "Error en comprovar el permís del micròfon: {error}",
+  "failedToTranscribeAudio": "Error en transcriure l'àudio",
+  "transcribing": "Transcrivint...",
+  "transcriptionFailed": "Transcripció fallida",
+  "discardedConversation": "Conversa descartada",
+  "at": "a",
+  "from": "des de",
+  "copied": "Copiat!",
+  "copyLink": "Copiar enllaç",
+  "hideTranscript": "Amagar transcripció",
+  "viewTranscript": "Veure transcripció",
+  "conversationDetails": "Detalls de la conversa",
+  "transcript": "Transcripció",
+  "segmentsCount": "{count} segments",
+  "noTranscriptAvailable": "No hi ha transcripció disponible",
+  "noTranscriptMessage": "Aquesta conversa no té transcripció.",
+  "conversationUrlCouldNotBeGenerated": "No s'ha pogut generar l'URL de la conversa.",
+  "failedToGenerateConversationLink": "No s'ha pogut generar l'enllaç de la conversa",
+  "failedToGenerateShareLink": "No s'ha pogut generar l'enllaç per compartir",
+  "reloadingConversations": "Recarregant converses...",
+  "@reloadingConversations": {
+    "description": "Loading message when refreshing conversations"
+  },
+  "@welcomeBack": {
+    "description": "Welcome message with user name",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "user": "Usuari",
+  "@user": {
+    "description": "Default fallback name when user name is empty"
+  },
+  "starred": "Destacades",
+  "@starred": {
+    "description": "Label for starred filter button"
+  },
+  "date": "Data",
+  "@date": {
+    "description": "Label for date filter button"
+  },
+  "noResultsFound": "No s'han trobat resultats",
+  "@noResultsFound": {
+    "description": "Empty state title when search has no results"
+  },
+  "tryAdjustingSearchTerms": "Prova d'ajustar els termes de cerca",
+  "@tryAdjustingSearchTerms": {
+    "description": "Empty state message for search with no results"
+  },
+  "starConversationsToFindQuickly": "Destaca converses per trobar-les ràpidament aquí",
+  "@starConversationsToFindQuickly": {
+    "description": "Empty state message for starred filter"
+  },
+  "noConversationsOnDate": "No hi ha converses el {date}",
+  "@noConversationsOnDate": {
+    "description": "Empty state title when no conversations on selected date",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trySelectingDifferentDate": "Prova de seleccionar una altra data",
+  "@trySelectingDifferentDate": {
+    "description": "Empty state message for date filter"
+  },
+  "conversations": "Converses",
+  "@conversations": {
+    "description": "Navigation label for conversations page"
+  },
+  "chat": "Xat",
+  "@chat": {
+    "description": "Navigation label for chat page"
+  },
+  "@memories": {
+    "description": "Navigation label for memories page"
+  },
+  "actions": "Accions",
+  "@actions": {
+    "description": "Navigation label for actions page"
+  },
+  "syncAvailable": "Sincronització disponible",
+  "@syncAvailable": {
+    "description": "Label for sync notification"
+  },
+  "referAFriend": "Recomana a un amic",
+  "@referAFriend": {
+    "description": "Bottom navigation label for referral program"
+  },
+  "help": "Ajuda",
+  "@help": {
+    "description": "Bottom navigation label for help"
+  },
+  "pro": "Pro",
+  "@pro": {
+    "description": "Badge label for pro/unlimited users"
+  },
+  "upgradeToPro": "Actualitza a Pro",
+  "@upgradeToPro": {
+    "description": "Subscription banner button text"
+  },
+  "getOmiDevice": "Aconsegueix el dispositiu Omi",
+  "@getOmiDevice": {
+    "description": "Widget title for device promotion"
+  },
+  "wearableAiCompanion": "Company d'IA portàtil",
+  "@wearableAiCompanion": {
+    "description": "Widget subtitle for device promotion"
+  },
+  "loadingMemories": "Carregant records...",
+  "@loadingMemories": {
+    "description": "Loading overlay message when reloading memories"
+  },
+  "allMemories": "Tots els records",
+  "@allMemories": {
+    "description": "Filter option to show all memories"
+  },
+  "aboutYou": "Sobre tu",
+  "@aboutYou": {
+    "description": "Filter option for system memories"
+  },
+  "@insights": {
+    "description": "Filter option for interesting memories"
+  },
+  "manual": "Manual",
+  "@manual": {
+    "description": "Filter option for manual memories"
+  },
+  "@all": {
+    "description": "Short filter label for all memories"
+  },
+  "loadingYourMemories": "Carregant els teus records...",
+  "@loadingYourMemories": {
+    "description": "Loading state message"
+  },
+  "createYourFirstMemory": "Crea el teu primer record per començar",
+  "@createYourFirstMemory": {
+    "description": "Empty state message when no memories"
+  },
+  "tryAdjustingFilter": "Prova d'ajustar la cerca o el filtre",
+  "@tryAdjustingFilter": {
+    "description": "Empty state message when filter has no results"
+  },
+  "@addYourFirstMemory": {
+    "description": "Button text in empty state"
+  },
+  "whatWouldYouLikeToRemember": "Què vols recordar?",
+  "category": "Categoria",
+  "public": "Públic",
+  "failedToSaveCheckConnection": "Error en desar. Comprova la connexió.",
+  "createMemory": "Crear memòria",
+  "deleteMemoryConfirmation": "Estàs segur que vols eliminar aquesta memòria? Aquesta acció no es pot desfer.",
+  "makePrivate": "Fer privat",
+  "organizeAndControlMemories": "Organitza i controla els teus records",
+  "total": "Total",
+  "makeAllMemoriesPrivate": "Fer privats tots els records",
+  "setAllMemoriesToPrivate": "Establir tots els records com a privats",
+  "makeAllMemoriesPublic": "Fer públics tots els records",
+  "setAllMemoriesToPublic": "Establir tots els records com a públics",
+  "permanentlyRemoveAllMemories": "Eliminar permanentment tots els records d'Omi",
+  "allMemoriesAreNowPrivate": "Tots els records són ara privats",
+  "allMemoriesAreNowPublic": "Tots els records són ara públics",
+  "clearOmisMemory": "Esborrar la memòria d'Omi",
+  "clearMemoryConfirmation": "Estàs segur que vols esborrar la memòria d'Omi? Aquesta acció no es pot desfer i eliminarà permanentment tots els {count} records.",
+  "omisMemoryCleared": "S'ha esborrat la memòria d'Omi sobre tu",
+  "welcomeToOmi": "Benvingut a Omi",
+  "continueWithApple": "Continua amb Apple",
+  "continueWithGoogle": "Continua amb Google",
+  "byContinuingYouAgree": "En continuar, acceptes els nostres ",
+  "termsOfService": "Termes del servei",
+  "and": " i ",
+  "dataAndPrivacy": "Dades i privadesa",
+  "secureAuthViaAppleId": "Autenticació segura via Apple ID",
+  "secureAuthViaGoogleAccount": "Autenticació segura via compte de Google",
+  "whatWeCollect": "Què recopilem",
+  "dataCollectionMessage": "En continuar, les teves converses, enregistraments i informació personal s'emmagatzemaran de manera segura als nostres servidors per proporcionar informació impulsada per IA i habilitar totes les funcions de l'aplicació.",
+  "dataProtection": "Protecció de dades",
+  "yourDataIsProtected": "Les teves dades estan protegides i regides per la nostra ",
+  "pleaseSelectYourPrimaryLanguage": "Si us plau, seleccioneu la vostra llengua principal",
+  "chooseYourLanguage": "Trieu el vostre idioma",
+  "selectPreferredLanguageForBestExperience": "Seleccioneu el vostre idioma preferit per a la millor experiència Omi",
+  "searchLanguages": "Cerca idiomes...",
+  "selectALanguage": "Seleccioneu un idioma",
+  "tryDifferentSearchTerm": "Proveu un terme de cerca diferent",
+  "pleaseEnterYourName": "Si us plau, introduïu el vostre nom",
+  "nameMustBeAtLeast2Characters": "El nom ha de tenir almenys 2 caràcters",
+  "tellUsHowYouWouldLikeToBeAddressed": "Digueu-nos com us agradaria que us adrecem. Això ajuda a personalitzar la vostra experiència Omi.",
+  "charactersCount": "{count} caràcters",
+  "@charactersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "enableFeaturesForBestExperience": "Activeu les funcions per a la millor experiència Omi al vostre dispositiu.",
+  "microphoneAccess": "Accés al micròfon",
+  "recordAudioConversations": "Enregistrar converses d'àudio",
+  "microphoneAccessDescription": "Omi necessita accés al micròfon per enregistrar les vostres converses i proporcionar transcripcions.",
+  "screenRecording": "Gravació de pantalla",
+  "captureSystemAudioFromMeetings": "Capturar àudio del sistema de reunions",
+  "screenRecordingDescription": "Omi necessita permís de gravació de pantalla per capturar l'àudio del sistema de les vostres reunions basades en el navegador.",
+  "accessibility": "Accessibilitat",
+  "detectBrowserBasedMeetings": "Detectar reunions basades en el navegador",
+  "accessibilityDescription": "Omi necessita permís d'accessibilitat per detectar quan us uniu a reunions de Zoom, Meet o Teams al vostre navegador.",
+  "pleaseWait": "Si us plau, espereu...",
+  "joinTheCommunity": "Uneix-te a la comunitat!",
+  "loadingProfile": "Carregant perfil...",
+  "profileSettings": "Configuració del perfil",
+  "noEmailSet": "No hi ha correu electrònic configurat",
+  "userIdCopiedToClipboard": "ID d'usuari copiat",
+  "yourInformation": "La Teva Informació",
+  "setYourName": "Estableix el vostre nom",
+  "changeYourName": "Canvia el vostre nom",
+  "persona": "Persona",
+  "manageYourOmiPersona": "Gestiona la teva persona Omi",
+  "voiceAndPeople": "Veu i Persones",
+  "teachOmiYourVoice": "Ensenya a Omi la teva veu",
+  "tellOmiWhoSaidIt": "Digues a Omi qui ho va dir 🗣️",
+  "payment": "Pagament",
+  "addOrChangeYourPaymentMethod": "Afegeix o canvia el mètode de pagament",
+  "preferences": "Preferències",
+  "helpImproveOmiBySharing": "Ajuda a millorar Omi compartint dades d'anàlisi anonimitzades",
+  "deleteAccount": "Eliminar Compte",
+  "deleteYourAccountAndAllData": "Elimina el compte i totes les dades",
+  "helpsDiagnoseIssuesAutoDeletes": "Ajuda a diagnosticar problemes. S'elimina automàticament després de 3 dies.",
+  "clearLogs": "Esborrar registres",
+  "debugLogsCleared": "Registres de depuració esborrats",
+  "exportConversations": "Exportar converses",
+  "exportAllConversationsToJson": "Exporteu totes les vostres converses a un fitxer JSON.",
+  "conversationsExportStarted": "S'ha iniciat l'exportació de converses. Això pot trigar uns segons, espereu.",
+  "mcpDescription": "Per connectar Omi amb altres aplicacions per llegir, cercar i gestionar els vostres records i converses. Creeu una clau per començar.",
+  "apiKeys": "Claus API",
+  "errorLabel": "Error: {error}",
+  "noApiKeysFound": "No s'han trobat claus API. Creeu-ne una per començar.",
+  "advancedSettings": "Configuració avançada",
+  "triggersWhenNewConversationCreated": "S'activa quan es crea una conversa nova.",
+  "triggersWhenNewTranscriptReceived": "S'activa quan es rep una transcripció nova.",
+  "realtimeAudioBytes": "Bytes d'àudio en temps real",
+  "triggersWhenAudioBytesReceived": "S'activa quan es reben bytes d'àudio.",
+  "everyXSeconds": "Cada x segons",
+  "triggersWhenDaySummaryGenerated": "S'activa quan es genera un resum del dia.",
+  "experimental": "Experimental",
+  "tryLatestExperimentalFeatures": "Proveu les últimes funcions experimentals de l'equip d'Omi.",
+  "transcriptionServiceDiagnosticStatus": "Estat de diagnòstic del servei de transcripció",
+  "enableDetailedDiagnosticMessages": "Activeu missatges de diagnòstic detallats del servei de transcripció",
+  "autoCreateAndTagNewSpeakers": "Creació i etiquetatge automàtic de parlants nous",
+  "automaticallyCreateNewPerson": "Crear automàticament una persona nova quan es detecti un nom a la transcripció.",
+  "pilotFeatures": "Funcions pilot",
+  "pilotFeaturesDescription": "Aquestes funcions són proves i no se'n garanteix el suport.",
+  "suggestFollowUpQuestion": "Suggerir una pregunta de seguiment",
+  "saveSettings": "Desa la Configuració",
+  "syncingDeveloperSettings": "S'està sincronitzant la configuració de desenvolupador...",
+  "summary": "Resum",
+  "auto": "Automàtic",
+  "noSummaryForApp": "No hi ha cap resum disponible per a aquesta aplicació. Proveu una altra aplicació per obtenir millors resultats.",
+  "tryAnotherApp": "Provar una altra aplicació",
+  "generatedBy": "Generat per {appName}",
+  "overview": "Visió general",
+  "otherAppResults": "Resultats d'altres aplicacions",
+  "unknownApp": "Aplicació desconeguda",
+  "noSummaryAvailable": "No hi ha cap resum disponible",
+  "conversationNoSummaryYet": "Aquesta conversa encara no té resum.",
+  "chooseSummarizationApp": "Trieu l'aplicació de resum",
+  "setAsDefaultSummarizationApp": "{appName} s'ha establert com a aplicació de resum predeterminada",
+  "letOmiChooseAutomatically": "Deixeu que Omi esculli automàticament la millor aplicació",
+  "deleteConversationConfirmation": "Esteu segur que voleu suprimir aquesta conversa? Aquesta acció no es pot desfer.",
+  "conversationDeleted": "Conversa suprimida",
+  "generatingLink": "Generant enllaç...",
+  "editConversation": "Editar conversa",
+  "conversationLinkCopiedToClipboard": "Enllaç de la conversa copiat al porta-retalls",
+  "conversationTranscriptCopiedToClipboard": "Transcripció de la conversa copiada al porta-retalls",
+  "editConversationDialogTitle": "Editar conversa",
+  "changeTheConversationTitle": "Canviar el títol de la conversa",
+  "conversationTitle": "Títol de la conversa",
+  "enterConversationTitle": "Introduïu el títol de la conversa...",
+  "conversationTitleUpdatedSuccessfully": "Títol de la conversa actualitzat correctament",
+  "failedToUpdateConversationTitle": "No s'ha pogut actualitzar el títol de la conversa",
+  "errorUpdatingConversationTitle": "Error en actualitzar el títol de la conversa",
+  "clickTheButtonToCaptureAudio": "Feu clic al botó per capturar àudio per a transcripcions en directe, informació d'IA i desament automàtic.",
+  "resumingInCountdown": "Reprenent en {countdown}s...",
+  "translated": "traduït",
+  "segmentsSingular": "{count} segment",
+  "segmentsPlural": "{count} segments",
+  "microphoneChangedResumingIn": "El micròfon ha canviat. Reprenent en {countdown}s",
+  "clickPlayToResumeOrStop": "Feu clic a reproducció per reprendre o atura per acabar",
+  "settingUpSystemAudioCapture": "Configurant la captura d'àudio del sistema",
+  "capturingAudioAndGeneratingTranscript": "Capturant àudio i generant transcripció",
+  "clickToBeginRecordingSystemAudio": "Feu clic per començar a gravar àudio del sistema",
+  "you": "Tu",
+  "speakerWithId": "Parlant {speakerId}",
+  "translatedByOmi": "traduït per omi",
+  "backToConversations": "Tornar a Converses",
+  "systemAudio": "Sistema",
+  "mic": "Micròfon",
+  "audioInputSetTo": "Entrada d'àudio establerta a {deviceName}",
+  "errorSwitchingAudioDevice": "Error en canviar el dispositiu d'àudio: {error}",
+  "selectAudioInput": "Seleccioneu l'entrada d'àudio",
+  "loadingDevices": "Carregant dispositius...",
+  "settingsHeader": "CONFIGURACIÓ",
+  "plansAndBilling": "Plans i Facturació",
+  "calendarIntegration": "Integració de Calendari",
+  "dailySummary": "Resum Diari",
+  "developer": "Desenvolupador",
+  "about": "Quant a",
+  "selectTime": "Selecciona l'Hora",
+  "accountGroup": "Compte",
+  "signOutQuestion": "Tancar Sessió?",
+  "signOutConfirmation": "Estàs segur que vols tancar la sessió?",
+  "customVocabularyHeader": "VOCABULARI PERSONALITZAT",
+  "addWordsDescription": "Afegeix paraules que Omi hauria de reconèixer durant la transcripció.",
+  "enterWordsHint": "Introdueix paraules (separades per comes)",
+  "dailySummaryHeader": "RESUM DIARI",
+  "dailySummaryTitle": "Resum Diari",
+  "dailySummaryDescription": "Obtén un resum personalitzat de les teves converses",
+  "deliveryTime": "Hora de Lliurament",
+  "deliveryTimeDescription": "Quan rebre el teu resum diari",
+  "subscription": "Subscripció",
+  "viewPlansAndUsage": "Veure Plans i Ús",
+  "viewPlansDescription": "Gestiona la teva subscripció i consulta estadístiques d'ús",
+  "addOrChangePaymentMethod": "Afegeix o canvia el teu mètode de pagament",
+  "displayOptions": "Opcions de Visualització",
+  "showMeetingsInMenuBar": "Mostra Reunions a la Barra de Menú",
+  "displayUpcomingMeetingsDescription": "Mostra les reunions properes a la barra de menú",
+  "showEventsWithoutParticipants": "Mostra Esdeveniments Sense Participants",
+  "includePersonalEventsDescription": "Inclou esdeveniments personals sense assistents",
+  "upcomingMeetings": "REUNIONS PROPERES",
+  "checkingNext7Days": "Comprovant els propers 7 dies",
+  "shortcuts": "Dreceres",
+  "shortcutChangeInstruction": "Feu clic en una drecera per canviar-la. Premeu Escape per cancel·lar.",
+  "configurePersonaDescription": "Configura la teva persona d'IA",
+  "configureSTTProvider": "Configura el proveïdor STT",
+  "setConversationEndDescription": "Estableix quan finalitzen automàticament les converses",
+  "importDataDescription": "Importa dades d'altres fonts",
+  "debugAndDiagnostics": "Depuració i Diagnòstics",
+  "autoDeletesAfter3Days": "S'elimina automàticament després de 3 dies",
+  "helpsDiagnoseIssues": "Ajuda a diagnosticar problemes",
+  "exportConversationsDescription": "Exporta converses a JSON",
+  "exportingConversations": "Exportant converses...",
+  "clearNodesDescription": "Esborra tots els nodes i connexions",
+  "deleteKnowledgeGraphQuestion": "Eliminar Gràfic de Coneixement?",
+  "deleteKnowledgeGraphWarning": "Això eliminarà totes les dades derivades del gràfic de coneixement. Els teus records originals romanen segurs.",
+  "connectOmiWithAI": "Connecta Omi amb assistents d'IA",
+  "noAPIKeys": "No hi ha claus API. Crea'n una per començar.",
+  "realTimeTranscript": "Transcripció en Temps Real",
+  "transcriptionDiagnostics": "Diagnòstics de Transcripció",
+  "detailedDiagnosticMessages": "Missatges de diagnòstic detallats",
+  "autoCreateSpeakers": "Crea Parlants Automàticament",
+  "autoCreateWhenDetected": "Crea automàticament quan es detecti el nom",
+  "followUpQuestions": "Preguntes de Seguiment",
+  "suggestQuestionsAfterConversations": "Suggerir preguntes després de les converses",
+  "goalTracker": "Seguidor d'Objectius",
+  "trackPersonalGoals": "Fes el seguiment d'objectius personals a la pàgina d'inici",
+  "dailyReflection": "Reflexió Diària",
+  "dailyReflectionDescription": "Recordatori a les 9 PM per reflexionar sobre el teu dia",
+  "endpointURL": "URL del Punt Final",
+  "links": "Enllaços",
+  "discordMemberCount": "Més de 8000 membres a Discord",
+  "userInformation": "Informació de l'Usuari",
+  "capabilities": "Capacitats",
+  "previewScreenshots": "Vista prèvia de captures",
+  "holdOnPreparingForm": "Espera, estem preparant el formulari per a tu",
+  "bySubmittingYouAgreeToOmi": "En enviar, acceptes Omi ",
+  "termsAndPrivacyPolicy": "Termes i Política de Privacitat",
+  "manageYourApp": "Gestiona la teva aplicació",
+  "updatingYourApp": "Actualitzant la teva aplicació",
+  "fetchingYourAppDetails": "Obtenint els detalls de la teva aplicació",
+  "updateAppQuestion": "Actualitzar l'aplicació?",
+  "updateAppConfirmation": "Estàs segur que vols actualitzar la teva aplicació? Els canvis es reflectiran un cop revisats pel nostre equip.",
+  "updateApp": "Actualitzar aplicació",
+  "createAndSubmitNewApp": "Crea i envia una nova aplicació",
+  "appsCount": "Aplicacions ({count})",
+  "privateAppsCount": "Aplicacions privades ({count})",
+  "publicAppsCount": "Aplicacions públiques ({count})",
+  "newVersionAvailable": "Nova versió disponible  🎉",
+  "no": "No",
+  "subscriptionCancelledSuccessfully": "Subscripció cancel·lada amb èxit. Romandrà activa fins al final del període de facturació actual.",
+  "failedToCancelSubscription": "No s'ha pogut cancel·lar la subscripció. Torna-ho a provar.",
+  "invalidPaymentUrl": "URL de pagament no vàlid",
+  "permissionsAndTriggers": "Permisos i activadors",
+  "chatFeatures": "Funcions de xat",
+  "uninstall": "Desinstal·lar",
+  "installs": "INSTAL·LACIONS",
+  "priceLabel": "PREU",
+  "updatedLabel": "ACTUALITZAT",
+  "createdLabel": "CREAT",
+  "featuredLabel": "DESTACAT",
+  "cancelSubscriptionQuestion": "Cancel·lar subscripció?",
+  "cancelSubscriptionConfirmation": "Estàs segur que vols cancel·lar la subscripció? Continuaràs tenint accés fins al final del període de facturació actual.",
+  "cancelSubscriptionButton": "Cancel·lar subscripció",
+  "cancelling": "Cancel·lant...",
+  "betaTesterMessage": "Ets un provador beta d'aquesta aplicació. Encara no és pública. Serà pública un cop aprovada.",
+  "appUnderReviewMessage": "La teva aplicació està en revisió i només és visible per a tu. Serà pública un cop aprovada.",
+  "appRejectedMessage": "La teva aplicació ha estat rebutjada. Actualitza els detalls i torna a enviar-la per a revisió.",
+  "invalidIntegrationUrl": "URL d'integració no vàlid",
+  "tapToComplete": "Toca per completar",
+  "invalidSetupInstructionsUrl": "URL d'instruccions de configuració no vàlid",
+  "pushToTalk": "Prem per parlar",
+  "summaryPrompt": "Indicació de resum",
+  "pleaseSelectARating": "Si us plau, selecciona una valoració",
+  "reviewAddedSuccessfully": "Ressenya afegida amb èxit 🚀",
+  "reviewUpdatedSuccessfully": "Ressenya actualitzada amb èxit 🚀",
+  "failedToSubmitReview": "No s'ha pogut enviar la ressenya. Torna-ho a provar.",
+  "addYourReview": "Afegeix la teva ressenya",
+  "editYourReview": "Edita la teva ressenya",
+  "writeAReviewOptional": "Escriu una ressenya (opcional)",
+  "submitReview": "Enviar ressenya",
+  "updateReview": "Actualitzar ressenya",
+  "yourReview": "La teva ressenya",
+  "anonymousUser": "Usuari anònim",
+  "issueActivatingApp": "Hi ha hagut un problema en activar aquesta aplicació. Torna-ho a provar.",
+  "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
+  "copyUrl": "Copia l'URL",
+  "txtFormat": "TXT",
+  "pdfFormat": "PDF",
+  "weekdayMon": "Dl",
+  "weekdayTue": "Dt",
+  "weekdayWed": "Dc",
+  "weekdayThu": "Dj",
+  "weekdayFri": "Dv",
+  "weekdaySat": "Ds",
+  "weekdaySun": "Dg",
+  "serviceIntegrationComingSoon": "Integració amb {serviceName} properament",
+  "alreadyExportedTo": "Ja exportat a {platform}",
+  "anotherPlatform": "una altra plataforma",
+  "pleaseAuthenticateWithService": "Si us plau, autentiqueu-vos amb {serviceName} a Configuració > Integracions de tasques",
+  "addingToService": "Afegint a {serviceName}...",
+  "addedToService": "Afegit a {serviceName}",
+  "failedToAddToService": "Error en afegir a {serviceName}",
+  "permissionDeniedForAppleReminders": "Permís denegat per a Apple Reminders",
+  "failedToCreateApiKey": "Error en crear la clau API del proveïdor: {error}",
+  "createAKey": "Crear una clau",
+  "apiKeyRevokedSuccessfully": "Clau API revocada correctament",
+  "failedToRevokeApiKey": "Error en revocar la clau API: {error}",
+  "omiApiKeys": "Claus API d'Omi",
+  "apiKeysDescription": "Les claus API s'utilitzen per a l'autenticació quan la teva aplicació es comunica amb el servidor OMI. Permeten que la teva aplicació creï records i accedeixi a altres serveis d'OMI de manera segura.",
+  "aboutOmiApiKeys": "Sobre les claus API d'Omi",
+  "noApiKeysYet": "Encara no hi ha claus API. Crea'n una per integrar-la amb la teva aplicació.",
+  "yourNewKey": "La teva nova clau:",
+  "copyToClipboard": "Copia al porta-retalls",
+  "pleaseCopyKeyNow": "Si us plau, copia'l ara i escriu-lo en un lloc segur. ",
+  "willNotSeeAgain": "No podràs veure'l de nou.",
+  "revokeKey": "Revocar clau",
+  "revokeApiKeyQuestion": "Revocar clau API?",
+  "revokeApiKeyWarning": "Aquesta acció no es pot desfer. Les aplicacions que utilitzin aquesta clau ja no podran accedir a l'API.",
+  "revoke": "Revocar",
+  "whatWouldYouLikeToCreate": "Què voldries crear?",
+  "createAnApp": "Crear una aplicació",
+  "createAndShareYourApp": "Crea i comparteix la teva aplicació",
+  "createMyClone": "Crear el meu clon",
+  "createYourDigitalClone": "Crea el teu clon digital",
+  "itemApp": "Aplicació",
+  "itemPersona": "Persona",
+  "keepItemPublic": "Mantenir {item} públic",
+  "makeItemPublicQuestion": "Fer {item} públic?",
+  "makeItemPrivateQuestion": "Fer {item} privat?",
+  "makeItemPublicExplanation": "Si fas {item} públic, pot ser utilitzat per tothom",
+  "makeItemPrivateExplanation": "Si fas {item} privat ara, deixarà de funcionar per a tothom i només serà visible per a tu",
+  "manageApp": "Gestionar aplicació",
+  "updatePersonaDetails": "Actualitzar detalls de la persona",
+  "deleteItemTitle": "Eliminar {item}",
+  "deleteItemQuestion": "Eliminar {item}?",
+  "deleteItemConfirmation": "Estàs segur que vols eliminar aquest {item}? Aquesta acció no es pot desfer.",
+  "revokeKeyQuestion": "Revocar la clau?",
+  "revokeKeyConfirmation": "Estàs segur que vols revocar la clau \"{keyName}\"? Aquesta acció no es pot desfer.",
+  "createNewKey": "Crear una nova clau",
+  "keyNameHint": "p. ex., Claude Desktop",
+  "pleaseEnterAName": "Si us plau, introdueix un nom.",
+  "failedToCreateKeyWithError": "Error en crear la clau: {error}",
+  "failedToCreateKeyTryAgain": "Error en crear la clau. Si us plau, torna-ho a provar.",
+  "keyCreated": "Clau creada",
+  "keyCreatedMessage": "La teva nova clau ha estat creada. Si us plau, copia-la ara. No la podràs veure de nou.",
+  "keyWord": "Clau",
+  "externalAppAccess": "Accés d'aplicacions externes",
+  "externalAppAccessDescription": "Les següents aplicacions instal·lades tenen integracions externes i poden accedir a les teves dades, com ara converses i records.",
+  "noExternalAppsHaveAccess": "Cap aplicació externa té accés a les teves dades.",
+  "maximumSecurityE2ee": "Seguretat màxima (E2EE)",
+  "e2eeDescription": "El xifratge d'extrem a extrem és l'estàndard d'or per a la privacitat. Quan està activat, les teves dades es xifren al teu dispositiu abans d'enviar-se als nostres servidors. Això significa que ningú, ni tan sols Omi, pot accedir al teu contingut.",
+  "importantTradeoffs": "Compensacions importants:",
+  "e2eeTradeoff1": "• Algunes funcions com les integracions d'aplicacions externes poden estar desactivades.",
+  "e2eeTradeoff2": "• Si perds la teva contrasenya, les teves dades no es poden recuperar.",
+  "featureComingSoon": "Aquesta funció arribarà aviat!",
+  "migrationInProgressMessage": "Migració en curs. No pots canviar el nivell de protecció fins que s'hagi completat.",
+  "migrationFailed": "La migració ha fallat",
+  "migratingFromTo": "Migrant de {source} a {target}",
+  "objectsCount": "{processed} / {total} objectes",
+  "secureEncryption": "Xifratge segur",
+  "secureEncryptionDescription": "Les teves dades es xifren amb una clau única per a tu als nostres servidors, allotjats a Google Cloud. Això significa que el teu contingut en brut és inaccessible per a qualsevol, inclòs el personal d'Omi o Google, directament des de la base de dades.",
+  "endToEndEncryption": "Xifratge d'extrem a extrem",
+  "e2eeCardDescription": "Activa per a la màxima seguretat on només tu pots accedir a les teves dades. Toca per saber-ne més.",
+  "dataAlwaysEncrypted": "Independentment del nivell, les teves dades sempre estan xifrades en repòs i en trànsit.",
+  "readOnlyScope": "Només lectura",
+  "fullAccessScope": "Accés complet",
+  "readScope": "Lectura",
+  "writeScope": "Escriptura",
+  "apiKeyCreated": "Clau API creada!",
+  "saveKeyWarning": "Desa aquesta clau ara! No la podràs veure de nou.",
+  "yourApiKey": "LA TEVA CLAU API",
+  "tapToCopy": "Toca per copiar",
+  "copyKey": "Copia la clau",
+  "createApiKey": "Crear clau API",
+  "accessDataProgrammatically": "Accedeix a les teves dades programàticament",
+  "keyNameLabel": "NOM DE LA CLAU",
+  "keyNamePlaceholder": "p. ex., La meva integració",
+  "permissionsLabel": "PERMISOS",
+  "permissionsInfoNote": "R = Lectura, W = Escriptura. Per defecte només lectura si no es selecciona res.",
+  "developerApi": "API per a desenvolupadors",
+  "createAKeyToGetStarted": "Crea una clau per començar",
+  "errorWithMessage": "Error: {error}",
+  "omiTraining": "Entrenament d'Omi",
+  "trainingDataProgram": "Programa de dades d'entrenament",
+  "getOmiUnlimitedFree": "Obtén Omi Il·limitat gratis contribuint les teves dades per entrenar models d'IA.",
+  "trainingDataBullets": "• Les teves dades ajuden a millorar els models d'IA\n• Només es comparteixen dades no sensibles\n• Procés totalment transparent",
+  "learnMoreAtOmiTraining": "Aprèn més a omi.me/training",
+  "agreeToContributeData": "Entenc i accepto contribuir amb les meves dades per a l'entrenament d'IA",
+  "submitRequest": "Enviar sol·licitud",
+  "thankYouRequestUnderReview": "Gràcies! La teva sol·licitud està en revisió. T'avisarem quan sigui aprovada.",
+  "planRemainsActiveUntil": "El teu pla romandrà actiu fins {date}. Després, perdràs l'accés a les funcions il·limitades. Estàs segur?",
+  "confirmCancellation": "Confirmar cancel·lació",
+  "keepMyPlan": "Conservar el meu pla",
+  "subscriptionSetToCancel": "La teva subscripció està configurada per cancel·lar-se al final del període.",
+  "switchedToOnDevice": "Canviat a transcripció al dispositiu",
+  "couldNotSwitchToFreePlan": "No s'ha pogut canviar al pla gratuït. Si us plau, torna-ho a provar.",
+  "couldNotLoadPlans": "No s'han pogut carregar els plans disponibles. Si us plau, torna-ho a provar.",
+  "selectedPlanNotAvailable": "El pla seleccionat no està disponible. Si us plau, torna-ho a provar.",
+  "upgradeToAnnualPlan": "Actualitzar al pla anual",
+  "importantBillingInfo": "Informació de facturació important:",
+  "monthlyPlanContinues": "El teu pla mensual actual continuarà fins al final del període de facturació",
+  "paymentMethodCharged": "El teu mètode de pagament existent es cobrarà automàticament quan acabi el teu pla mensual",
+  "annualSubscriptionStarts": "La teva subscripció anual de 12 mesos començarà automàticament després del cobrament",
+  "thirteenMonthsCoverage": "Obtindràs 13 mesos de cobertura en total (mes actual + 12 mesos anuals)",
+  "confirmUpgrade": "Confirmar actualització",
+  "confirmPlanChange": "Confirmar canvi de pla",
+  "confirmAndProceed": "Confirmar i continuar",
+  "upgradeScheduled": "Actualització programada",
+  "changePlan": "Canviar pla",
+  "upgradeAlreadyScheduled": "La teva actualització al pla anual ja està programada",
+  "youAreOnUnlimitedPlan": "Estàs al pla Il·limitat.",
+  "yourOmiUnleashed": "El teu Omi, deslliurat. Fes-te il·limitat per a possibilitats infinites.",
+  "planEndedOn": "El teu pla va acabar el {date}.\\nTorna a subscriure't ara - se't cobrarà immediatament per un nou període de facturació.",
+  "planSetToCancelOn": "El teu pla està configurat per cancel·lar-se el {date}.\\nTorna a subscriure't ara per mantenir els teus beneficis - sense càrrec fins {date}.",
+  "annualPlanStartsAutomatically": "El teu pla anual començarà automàticament quan acabi el teu pla mensual.",
+  "planRenewsOn": "El teu pla es renova el {date}.",
+  "unlimitedConversations": "Converses il·limitades",
+  "askOmiAnything": "Pregunta a Omi qualsevol cosa sobre la teva vida",
+  "unlockOmiInfiniteMemory": "Desbloqueja la memòria infinita d'Omi",
+  "youreOnAnnualPlan": "Estàs al pla anual",
+  "alreadyBestValuePlan": "Ja tens el pla amb millor valor. No cal fer canvis.",
+  "unableToLoadPlans": "No es poden carregar els plans",
+  "checkConnectionTryAgain": "Comprova la connexió i torna-ho a provar",
+  "useFreePlan": "Utilitzar pla gratuït",
+  "continueText": "Continuar",
+  "resubscribe": "Tornar a subscriure",
+  "couldNotOpenPaymentSettings": "No s'han pogut obrir els ajustos de pagament. Si us plau, torna-ho a provar.",
+  "managePaymentMethod": "Gestionar mètode de pagament",
+  "cancelSubscription": "Cancel·lar subscripció",
+  "endsOnDate": "Acaba el {date}",
+  "active": "Actiu",
+  "freePlan": "Pla gratuït",
+  "configure": "Configurar",
+  "privacyInformation": "Informació de privadesa",
+  "@privacyInformation": {
+    "description": "Privacy page - privacyInformation"
+  },
+  "yourPrivacyMattersToUs": "La teva privadesa ens importa",
+  "@yourPrivacyMattersToUs": {
+    "description": "Privacy page - yourPrivacyMattersToUs"
+  },
+  "privacyIntroText": "A Omi, ens prenem molt seriosament la teva privadesa. Volem ser transparents sobre les dades que recollim i com les utilitzem per millorar el producte. Això és el que has de saber:",
+  "@privacyIntroText": {
+    "description": "Privacy page - privacyIntroText"
+  },
+  "whatWeTrack": "Què fem seguiment",
+  "@whatWeTrack": {
+    "description": "Privacy page - whatWeTrack"
+  },
+  "anonymityAndPrivacy": "Anonimat i privadesa",
+  "@anonymityAndPrivacy": {
+    "description": "Privacy page - anonymityAndPrivacy"
+  },
+  "optInAndOptOutOptions": "Opcions d'acceptació i rebuig",
+  "@optInAndOptOutOptions": {
+    "description": "Privacy page - optInAndOptOutOptions"
+  },
+  "ourCommitment": "El nostre compromís",
+  "@ourCommitment": {
+    "description": "Privacy page - ourCommitment"
+  },
+  "commitmentText": "Estem compromesos a utilitzar les dades que recollim només per fer d'Omi un producte millor per a tu. La teva privadesa i confiança són primordials per a nosaltres.",
+  "@commitmentText": {
+    "description": "Privacy page - commitmentText"
+  },
+  "thankYouText": "Gràcies per ser un usuari valorat d'Omi. Si tens alguna pregunta o preocupació, no dubtis a contactar-nos a team@basedhardware.com.",
+  "@thankYouText": {
+    "description": "Privacy page - thankYouText"
+  },
+  "wifiSyncSettings": "Configuració de sincronització WiFi",
+  "@wifiSyncSettings": {
+    "description": "WiFi sync settings - wifiSyncSettings"
+  },
+  "enterHotspotCredentials": "Introdueix les credencials del punt d'accés del telèfon",
+  "@enterHotspotCredentials": {
+    "description": "WiFi sync settings - enterHotspotCredentials"
+  },
+  "wifiSyncUsesHotspot": "La sincronització WiFi utilitza el telèfon com a punt d'accés. Troba el nom i la contrasenya a Configuració > Punt d'accés personal.",
+  "@wifiSyncUsesHotspot": {
+    "description": "WiFi sync settings - wifiSyncUsesHotspot"
+  },
+  "hotspotNameSsid": "Nom del punt d'accés (SSID)",
+  "@hotspotNameSsid": {
+    "description": "WiFi sync settings - hotspotNameSsid"
+  },
+  "exampleIphoneHotspot": "p. ex. Punt d'accés iPhone",
+  "@exampleIphoneHotspot": {
+    "description": "WiFi sync settings - exampleIphoneHotspot"
+  },
+  "password": "Contrasenya",
+  "@password": {
+    "description": "WiFi sync settings - password"
+  },
+  "enterHotspotPassword": "Introdueix la contrasenya del punt d'accés",
+  "@enterHotspotPassword": {
+    "description": "WiFi sync settings - enterHotspotPassword"
+  },
+  "saveCredentials": "Desa les credencials",
+  "@saveCredentials": {
+    "description": "WiFi sync settings - saveCredentials"
+  },
+  "clearCredentials": "Esborra les credencials",
+  "@clearCredentials": {
+    "description": "WiFi sync settings - clearCredentials"
+  },
+  "pleaseEnterHotspotName": "Si us plau, introdueix un nom de punt d'accés",
+  "@pleaseEnterHotspotName": {
+    "description": "WiFi sync settings - pleaseEnterHotspotName"
+  },
+  "wifiCredentialsSaved": "Credencials WiFi desades",
+  "@wifiCredentialsSaved": {
+    "description": "WiFi sync settings - wifiCredentialsSaved"
+  },
+  "wifiCredentialsCleared": "Credencials WiFi esborrades",
+  "@wifiCredentialsCleared": {
+    "description": "WiFi sync settings - wifiCredentialsCleared"
+  },
+  "summaryGeneratedForDate": "Resum generat per a {date}",
+  "@summaryGeneratedForDate": {
+    "description": "Daily summary settings - summaryGeneratedForDate",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "1/15/2026"
+      }
+    }
+  },
+  "failedToGenerateSummaryCheckConversations": "No s'ha pogut generar el resum. Assegura't que tens converses per a aquell dia.",
+  "@failedToGenerateSummaryCheckConversations": {
+    "description": "Daily summary settings - failedToGenerateSummaryCheckConversations"
+  },
+  "summaryNotFound": "Resum no trobat",
+  "@summaryNotFound": {
+    "description": "Daily summary detail - summaryNotFound"
+  },
+  "yourDaysJourney": "El viatge del teu dia",
+  "@yourDaysJourney": {
+    "description": "Daily summary detail - yourDaysJourney"
+  },
+  "highlights": "Punts destacats",
+  "@highlights": {
+    "description": "Daily summary detail - highlights"
+  },
+  "unresolvedQuestions": "Preguntes no resoltes",
+  "@unresolvedQuestions": {
+    "description": "Daily summary detail - unresolvedQuestions"
+  },
+  "decisions": "Decisions",
+  "@decisions": {
+    "description": "Daily summary detail - decisions"
+  },
+  "learnings": "Aprenentatges",
+  "@learnings": {
+    "description": "Daily summary detail - learnings"
+  },
+  "autoDeletesAfterThreeDays": "S'elimina automàticament després de 3 dies.",
+  "@autoDeletesAfterThreeDays": {
+    "description": "Developer settings - autoDeletesAfterThreeDays"
+  },
+  "knowledgeGraphDeletedSuccessfully": "Graf de coneixement eliminat correctament",
+  "@knowledgeGraphDeletedSuccessfully": {
+    "description": "Developer settings - knowledgeGraphDeletedSuccessfully"
+  },
+  "exportStartedMayTakeFewSeconds": "Exportació iniciada. Això pot trigar uns segons...",
+  "@exportStartedMayTakeFewSeconds": {
+    "description": "Developer settings - exportStartedMayTakeFewSeconds"
+  },
+  "knowledgeGraphDeleteDescription": "Això eliminarà totes les dades derivades del graf de coneixement (nodes i connexions). Els teus records originals romandran segurs. El graf es reconstruirà amb el temps o a la propera sol·licitud.",
+  "@knowledgeGraphDeleteDescription": {
+    "description": "Developer settings - knowledgeGraphDeleteDescription"
+  },
+  "configureDailySummaryDigest": "Configura el resum diari de les teves tasques",
+  "accessesDataTypes": "Accedeix a {dataTypes}",
+  "triggeredByType": "activat per {triggerType}",
+  "accessesAndTriggeredBy": "{accessDescription} i és {triggerDescription}.",
+  "isTriggeredBy": "És {triggerDescription}.",
+  "noSpecificDataAccessConfigured": "No hi ha accés a dades específic configurat."
 }

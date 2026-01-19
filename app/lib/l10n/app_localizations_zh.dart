@@ -57,7 +57,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get clear => '清除';
 
   @override
-  String get copyTranscript => '复制转录';
+  String get copyTranscript => '复制记录';
 
   @override
   String get copySummary => '复制摘要';
@@ -125,7 +125,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get createPersonHint => '创建一个新人员并训练 Omi 识别他们的声音！';
 
   @override
-  String get speechProfile => '语音档案';
+  String get speechProfile => '语音配置文件';
 
   @override
   String sampleNumber(int number) {
@@ -223,7 +223,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noConversationsYet => '还没有对话';
 
   @override
-  String get noStarredConversations => '暂无星标对话。';
+  String get noStarredConversations => '没有加星标的对话';
 
   @override
   String get starConversationHint => '要加星标，请打开对话并点击顶部的星星图标。';
@@ -260,10 +260,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noMessagesYet => '还没有消息！\n为什么不开始一段对话呢？';
 
   @override
-  String get deletingMessages => '正在从 Omi 的记忆中删除您的消息...';
+  String get deletingMessages => '正在从 Omi 的内存中删除您的消息...';
 
   @override
-  String get messageCopied => '消息已复制。';
+  String get messageCopied => '✨ 消息已复制到剪贴板';
 
   @override
   String get cannotReportOwnMessage => '您不能举报自己的消息。';
@@ -335,7 +335,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get joinCommunity => '加入社区！';
 
   @override
-  String get membersAndCounting => '8000+ 成员，持续增加中。';
+  String get membersAndCounting => '8000+名成员并且还在增加。';
 
   @override
   String get deleteAccountTitle => '删除账户';
@@ -380,7 +380,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get name => '姓名';
 
   @override
-  String get email => '邮箱';
+  String get email => '电子邮件';
 
   @override
   String get customVocabulary => '自定义词汇';
@@ -395,7 +395,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get conversationDisplay => '对话显示';
 
   @override
-  String get dataPrivacy => '数据与隐私';
+  String get dataPrivacy => '数据隐私';
 
   @override
   String get userId => '用户 ID';
@@ -437,7 +437,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get referralProgram => '推荐计划';
 
   @override
-  String get signOut => '登出';
+  String get signOut => '退出登录';
 
   @override
   String get appAndDeviceCopied => '应用和设备详情已复制';
@@ -620,7 +620,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get developerSettingsTitle => '开发者设置';
 
   @override
-  String get saving => '保存中...';
+  String get saving => '正在保存...';
 
   @override
   String get personaConfig => '配置您的 AI 人格';
@@ -650,7 +650,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get debugDiagnostics => '调试与诊断';
 
   @override
-  String get endpointUrl => '端点 URL';
+  String get endpointUrl => '端点URL';
 
   @override
   String get noApiKeys => '暂无 API 密钥';
@@ -828,7 +828,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deleteKnowledgeGraphMessage => '这将删除所有导出的图谱数据（节点和连接）。您的原始记忆保持安全。';
 
   @override
-  String get knowledgeGraphDeleted => '知识图谱删除成功';
+  String get knowledgeGraphDeleted => '知识图谱已删除';
 
   @override
   String deleteGraphFailed(String error) {
@@ -929,7 +929,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get insights => '见解';
 
   @override
-  String get memories => '记忆';
+  String get memories => '回忆';
 
   @override
   String minsUsedThisMonth(String used, int limit) {
@@ -1134,7 +1134,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get howShouldOmiCallYou => 'Omi 应该怎么称呼您？';
 
   @override
-  String get enterYourName => '输入您的名字';
+  String get enterYourName => '输入您的姓名';
 
   @override
   String get nameCannotBeEmpty => '姓名不能为空';
@@ -1344,7 +1344,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noReposFound => '未找到仓库';
 
   @override
-  String get private => '私有';
+  String get private => '私密';
 
   @override
   String updatedDate(String date) {
@@ -1515,7 +1515,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get enterLiveSttWebsocket => '输入您的实时 STT WebSocket 端点';
 
   @override
-  String get apiKey => 'API 密钥';
+  String get apiKey => 'API密钥';
 
   @override
   String get enterApiKey => '输入您的 API 密钥';
@@ -1912,7 +1912,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get selectYourLanguage => '选择您的语言';
 
   @override
-  String get personalGrowthJourney => '在 AI 聆听下开启个人成长之旅。';
+  String get personalGrowthJourney => '您的个人成长之旅，AI 倾听您的每一句话。';
 
   @override
   String get actionItemsTitle => '行动项';
@@ -2004,9 +2004,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deleteSelected => '删除选中';
 
   @override
-  String searchMemories(int count) {
-    return '搜索 $count 条记忆';
-  }
+  String get searchMemories => '搜索回忆...';
 
   @override
   String get memoryDeleted => '记忆已删除。';
@@ -2015,7 +2013,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get undo => '撤销';
 
   @override
-  String get noMemoriesYet => '暂无记忆';
+  String get noMemoriesYet => '🧠 还没有回忆';
 
   @override
   String get noAutoMemories => '暂无自动记忆';
@@ -2027,7 +2025,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noMemoriesInCategories => '此类目无记忆';
 
   @override
-  String get noMemoriesFound => '未找到记忆';
+  String get noMemoriesFound => '🔍 未找到回忆';
 
   @override
   String get addFirstMemory => '添加您的第一条记忆';
@@ -2045,7 +2043,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get memoryClearedSuccess => '记忆已清除';
 
   @override
-  String get noMemoriesToDelete => '无可删除记忆';
+  String get noMemoriesToDelete => '没有要删除的记忆';
 
   @override
   String get createMemoryTooltip => '创建新记忆';
@@ -2077,7 +2075,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get makeAllPublic => '全部设为公开';
 
   @override
-  String get deleteAllMemories => '全部删除';
+  String get deleteAllMemories => '删除所有记忆';
 
   @override
   String get allMemoriesPrivateResult => '所有记忆现已私有';
@@ -2086,10 +2084,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get allMemoriesPublicResult => '所有记忆现已公开';
 
   @override
-  String get newMemory => '新记忆';
+  String get newMemory => '✨ 新记忆';
 
   @override
-  String get editMemory => '编辑记忆';
+  String get editMemory => '✏️ 编辑记忆';
 
   @override
   String get memoryContentHint => '我喜欢冰淇淋...';
@@ -2241,7 +2239,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get summaryCopiedToClipboard => '摘要已复制到剪贴板';
 
   @override
-  String get conversationUrlCouldNotBeShared => '无法分享对话网址。';
+  String get conversationUrlCouldNotBeShared => '无法分享对话URL。';
 
   @override
   String get urlCopiedToClipboard => '网址已复制到剪贴板';
@@ -2268,7 +2266,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get conversationNotFoundOrDeleted => '未找到对话或已被删除';
 
   @override
-  String get deleteMemory => '删除记忆？';
+  String get deleteMemory => '删除记忆';
 
   @override
   String get thisActionCannotBeUndone => '此操作无法撤消。';
@@ -2375,13 +2373,13 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get noApiKeysYet => 'No API keys yet';
+  String get noApiKeysYet => '还没有API密钥。创建一个以与您的应用集成。';
 
   @override
   String get createKeyToGetStarted => 'Create a key to get started';
 
   @override
-  String get persona => 'Persona';
+  String get persona => '人格';
 
   @override
   String get configureYourAiPersona => 'Configure your AI persona';
@@ -2396,13 +2394,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get importDataFromOtherSources => 'Import data from other sources';
 
   @override
-  String get debugAndDiagnostics => 'Debug & Diagnostics';
+  String get debugAndDiagnostics => '调试和诊断';
 
   @override
-  String get autoDeletesAfter3Days => 'Auto-deletes after 3 days.';
+  String get autoDeletesAfter3Days => '3 天后自动删除';
 
   @override
-  String get helpsDiagnoseIssues => 'Helps diagnose issues';
+  String get helpsDiagnoseIssues => '帮助诊断问题';
 
   @override
   String get exportStartedMessage => 'Export started. This may take a few seconds...';
@@ -2431,37 +2429,37 @@ class AppLocalizationsZh extends AppLocalizations {
   String get useYourMcpApiKey => 'Use your MCP API key';
 
   @override
-  String get realTimeTranscript => 'Real-time Transcript';
+  String get realTimeTranscript => '实时转录';
 
   @override
-  String get experimental => 'Experimental';
+  String get experimental => '实验性';
 
   @override
-  String get transcriptionDiagnostics => 'Transcription Diagnostics';
+  String get transcriptionDiagnostics => '转录诊断';
 
   @override
-  String get detailedDiagnosticMessages => 'Detailed diagnostic messages';
+  String get detailedDiagnosticMessages => '详细诊断消息';
 
   @override
-  String get autoCreateSpeakers => 'Auto-create Speakers';
+  String get autoCreateSpeakers => '自动创建说话者';
 
   @override
   String get autoCreateWhenNameDetected => 'Auto-create when name detected';
 
   @override
-  String get followUpQuestions => 'Follow-up Questions';
+  String get followUpQuestions => '后续问题';
 
   @override
-  String get suggestQuestionsAfterConversations => 'Suggest questions after conversations';
+  String get suggestQuestionsAfterConversations => '对话后建议问题';
 
   @override
-  String get goalTracker => 'Goal Tracker';
+  String get goalTracker => '目标追踪器';
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Track your personal goals on homepage';
 
   @override
-  String get dailyReflection => 'Daily Reflection';
+  String get dailyReflection => '每日反思';
 
   @override
   String get get9PmReminderToReflect => 'Get a 9 PM reminder to reflect on your day';
@@ -2601,7 +2599,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get tapToAddGoal => '点击添加目标';
 
   @override
-  String get welcomeBack => '欢迎回来';
+  String welcomeBack(String name) {
+    return '欢迎回来，$name';
+  }
 
   @override
   String get yourConversations => '你的对话';
@@ -2845,4 +2845,1828 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get connectNow => '立即连接';
+
+  @override
+  String installsCount(String count) {
+    return '$count+次安装';
+  }
+
+  @override
+  String get uninstallApp => '卸载应用';
+
+  @override
+  String get subscribe => '订阅';
+
+  @override
+  String get dataAccessNotice => '数据访问通知';
+
+  @override
+  String get dataAccessWarning => '此应用将访问您的数据。Omi AI 不对此应用如何使用、修改或删除您的数据负责';
+
+  @override
+  String get installApp => '安装应用';
+
+  @override
+  String get betaTesterNotice => '您是此应用的测试版测试者。它尚未公开。获得批准后将公开。';
+
+  @override
+  String get appUnderReviewOwner => '您的应用正在审核中,仅对您可见。获得批准后将公开。';
+
+  @override
+  String get appRejectedNotice => '您的应用已被拒绝。请更新应用详情并重新提交审核。';
+
+  @override
+  String get setupSteps => '设置步骤';
+
+  @override
+  String get setupInstructions => '设置说明';
+
+  @override
+  String get integrationInstructions => '集成说明';
+
+  @override
+  String get preview => '预览';
+
+  @override
+  String get aboutTheApp => '关于应用';
+
+  @override
+  String get aboutThePersona => '关于角色';
+
+  @override
+  String get chatPersonality => '聊天个性';
+
+  @override
+  String get ratingsAndReviews => '评分和评论';
+
+  @override
+  String get noRatings => '暂无评分';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+条评分';
+  }
+
+  @override
+  String get errorActivatingApp => '激活应用时出错';
+
+  @override
+  String get integrationSetupRequired => '如果这是集成应用,请确保设置已完成。';
+
+  @override
+  String get installed => '已安装';
+
+  @override
+  String get appIdLabel => '应用ID';
+
+  @override
+  String get appNameLabel => '应用名称';
+
+  @override
+  String get appNamePlaceholder => '我的出色应用';
+
+  @override
+  String get pleaseEnterAppName => '请输入应用名称';
+
+  @override
+  String get categoryLabel => '类别';
+
+  @override
+  String get selectCategory => '选择类别';
+
+  @override
+  String get descriptionLabel => '描述';
+
+  @override
+  String get appDescriptionPlaceholder => '我的出色应用是一个做出惊人事情的出色应用。这是最好的应用！';
+
+  @override
+  String get pleaseProvideValidDescription => '请提供有效描述';
+
+  @override
+  String get appPricingLabel => '应用定价';
+
+  @override
+  String get noneSelected => '未选择';
+
+  @override
+  String get appIdCopiedToClipboard => '应用ID已复制到剪贴板';
+
+  @override
+  String get appCategoryModalTitle => '应用类别';
+
+  @override
+  String get pricingFree => '免费';
+
+  @override
+  String get pricingPaid => '付费';
+
+  @override
+  String get loadingCapabilities => '正在加载功能...';
+
+  @override
+  String get filterInstalled => '已安装';
+
+  @override
+  String get filterMyApps => '我的应用';
+
+  @override
+  String get clearSelection => '清除选择';
+
+  @override
+  String get filterCategory => '类别';
+
+  @override
+  String get rating4PlusStars => '4+星';
+
+  @override
+  String get rating3PlusStars => '3+星';
+
+  @override
+  String get rating2PlusStars => '2+星';
+
+  @override
+  String get rating1PlusStars => '1+星';
+
+  @override
+  String get filterRating => '评分';
+
+  @override
+  String get filterCapabilities => '功能';
+
+  @override
+  String get noNotificationScopesAvailable => '没有可用的通知范围';
+
+  @override
+  String get popularApps => '热门应用';
+
+  @override
+  String get pleaseProvidePrompt => '请提供提示';
+
+  @override
+  String chatWithAppName(String appName) {
+    return '与 $appName 聊天';
+  }
+
+  @override
+  String get defaultAiAssistant => '默认 AI 助手';
+
+  @override
+  String get readyToChat => '✨ 准备好聊天！';
+
+  @override
+  String get connectionNeeded => '🌐 需要连接';
+
+  @override
+  String get startConversation => '开始对话，让魔法开始';
+
+  @override
+  String get checkInternetConnection => '请检查您的互联网连接';
+
+  @override
+  String get wasThisHelpful => '这有帮助吗？';
+
+  @override
+  String get thankYouForFeedback => '感谢您的反馈！';
+
+  @override
+  String get maxFilesUploadError => '一次只能上传 4 个文件';
+
+  @override
+  String get attachedFiles => '📎 附件';
+
+  @override
+  String get takePhoto => '拍照';
+
+  @override
+  String get captureWithCamera => '用相机捕获';
+
+  @override
+  String get selectImages => '选择图像';
+
+  @override
+  String get chooseFromGallery => '从图库选择';
+
+  @override
+  String get selectFile => '选择文件';
+
+  @override
+  String get chooseAnyFileType => '选择任何文件类型';
+
+  @override
+  String get cannotReportOwnMessages => '您不能举报自己的消息';
+
+  @override
+  String get messageReportedSuccessfully => '✅ 消息举报成功';
+
+  @override
+  String get confirmReportMessage => '您确定要举报此消息吗？';
+
+  @override
+  String get selectChatAssistant => '选择聊天助手';
+
+  @override
+  String get enableMoreApps => '启用更多应用';
+
+  @override
+  String get chatCleared => '聊天已清除';
+
+  @override
+  String get clearChatTitle => '清除聊天？';
+
+  @override
+  String get confirmClearChat => '您确定要清除聊天吗？此操作无法撤销。';
+
+  @override
+  String get copy => '复制';
+
+  @override
+  String get share => '分享';
+
+  @override
+  String get report => '举报';
+
+  @override
+  String get microphonePermissionRequired => '录音需要麦克风权限。';
+
+  @override
+  String get microphonePermissionDenied => '麦克风权限被拒绝。请在系统偏好设置 > 隐私与安全 > 麦克风 中授予权限。';
+
+  @override
+  String failedToCheckMicrophonePermission(String error) {
+    return '检查麦克风权限失败：$error';
+  }
+
+  @override
+  String get failedToTranscribeAudio => '音频转录失败';
+
+  @override
+  String get transcribing => '正在转录...';
+
+  @override
+  String get transcriptionFailed => '转录失败';
+
+  @override
+  String get discardedConversation => '已丢弃的对话';
+
+  @override
+  String get at => '于';
+
+  @override
+  String get from => '从';
+
+  @override
+  String get copied => '已复制！';
+
+  @override
+  String get copyLink => '复制链接';
+
+  @override
+  String get hideTranscript => '隐藏文字记录';
+
+  @override
+  String get viewTranscript => '查看文字记录';
+
+  @override
+  String get conversationDetails => '对话详情';
+
+  @override
+  String get transcript => '文字记录';
+
+  @override
+  String segmentsCount(int count) {
+    return '$count个片段';
+  }
+
+  @override
+  String get noTranscriptAvailable => '没有可用的文字记录';
+
+  @override
+  String get noTranscriptMessage => '此对话没有文字记录。';
+
+  @override
+  String get conversationUrlCouldNotBeGenerated => '无法生成对话URL。';
+
+  @override
+  String get failedToGenerateConversationLink => '生成对话链接失败';
+
+  @override
+  String get failedToGenerateShareLink => '生成分享链接失败';
+
+  @override
+  String get reloadingConversations => '重新加载对话...';
+
+  @override
+  String get user => '用户';
+
+  @override
+  String get starred => '已加星标';
+
+  @override
+  String get date => '日期';
+
+  @override
+  String get noResultsFound => '未找到结果';
+
+  @override
+  String get tryAdjustingSearchTerms => '尝试调整您的搜索词';
+
+  @override
+  String get starConversationsToFindQuickly => '为对话加星标以便在此快速找到它们';
+
+  @override
+  String noConversationsOnDate(String date) {
+    return '$date没有对话';
+  }
+
+  @override
+  String get trySelectingDifferentDate => '尝试选择其他日期';
+
+  @override
+  String get conversations => '对话';
+
+  @override
+  String get chat => '聊天';
+
+  @override
+  String get actions => '操作';
+
+  @override
+  String get syncAvailable => '可同步';
+
+  @override
+  String get referAFriend => '推荐好友';
+
+  @override
+  String get help => '帮助';
+
+  @override
+  String get pro => 'Pro';
+
+  @override
+  String get upgradeToPro => '升级至Pro';
+
+  @override
+  String get getOmiDevice => '获取Omi设备';
+
+  @override
+  String get wearableAiCompanion => '可穿戴AI伴侣';
+
+  @override
+  String get loadingMemories => '加载回忆中...';
+
+  @override
+  String get allMemories => '所有回忆';
+
+  @override
+  String get aboutYou => '关于你';
+
+  @override
+  String get manual => '手动';
+
+  @override
+  String get loadingYourMemories => '正在加载您的回忆...';
+
+  @override
+  String get createYourFirstMemory => '创建您的第一个回忆以开始';
+
+  @override
+  String get tryAdjustingFilter => '尝试调整您的搜索或筛选条件';
+
+  @override
+  String get whatWouldYouLikeToRemember => '您想记住什么？';
+
+  @override
+  String get category => '类别';
+
+  @override
+  String get public => '公开';
+
+  @override
+  String get failedToSaveCheckConnection => '保存失败。请检查您的连接。';
+
+  @override
+  String get createMemory => '创建记忆';
+
+  @override
+  String get deleteMemoryConfirmation => '您确定要删除此记忆吗？此操作无法撤消。';
+
+  @override
+  String get makePrivate => '私密';
+
+  @override
+  String get organizeAndControlMemories => '整理和控制您的记忆';
+
+  @override
+  String get total => '总计';
+
+  @override
+  String get makeAllMemoriesPrivate => '将所有记忆设为私密';
+
+  @override
+  String get setAllMemoriesToPrivate => '将所有记忆设置为私密可见性';
+
+  @override
+  String get makeAllMemoriesPublic => '将所有记忆设为公开';
+
+  @override
+  String get setAllMemoriesToPublic => '将所有记忆设置为公开可见性';
+
+  @override
+  String get permanentlyRemoveAllMemories => '从 Omi 永久删除所有记忆';
+
+  @override
+  String get allMemoriesAreNowPrivate => '所有记忆现已私密';
+
+  @override
+  String get allMemoriesAreNowPublic => '所有记忆现已公开';
+
+  @override
+  String get clearOmisMemory => '清除 Omi 的记忆';
+
+  @override
+  String clearMemoryConfirmation(int count) {
+    return '您确定要清除 Omi 的记忆吗？此操作无法撤消，将永久删除所有 $count 条记忆。';
+  }
+
+  @override
+  String get omisMemoryCleared => 'Omi 关于您的记忆已被清除';
+
+  @override
+  String get welcomeToOmi => '欢迎来到 Omi';
+
+  @override
+  String get continueWithApple => '使用 Apple 继续';
+
+  @override
+  String get continueWithGoogle => '使用 Google 继续';
+
+  @override
+  String get byContinuingYouAgree => '继续即表示您同意我们的';
+
+  @override
+  String get termsOfService => '服务条款';
+
+  @override
+  String get and => '和';
+
+  @override
+  String get dataAndPrivacy => '数据与隐私';
+
+  @override
+  String get secureAuthViaAppleId => '通过 Apple ID 安全认证';
+
+  @override
+  String get secureAuthViaGoogleAccount => '通过 Google 账户安全认证';
+
+  @override
+  String get whatWeCollect => '我们收集的信息';
+
+  @override
+  String get dataCollectionMessage => '继续即表示您的对话、录音和个人信息将安全地存储在我们的服务器上，以提供 AI 驱动的见解并启用所有应用功能。';
+
+  @override
+  String get dataProtection => '数据保护';
+
+  @override
+  String get yourDataIsProtected => '您的数据受保护并受我们的';
+
+  @override
+  String get pleaseSelectYourPrimaryLanguage => '请选择您的主要语言';
+
+  @override
+  String get chooseYourLanguage => '选择您的语言';
+
+  @override
+  String get selectPreferredLanguageForBestExperience => '选择您的首选语言以获得最佳 Omi 体验';
+
+  @override
+  String get searchLanguages => '搜索语言...';
+
+  @override
+  String get selectALanguage => '选择语言';
+
+  @override
+  String get tryDifferentSearchTerm => '尝试不同的搜索词';
+
+  @override
+  String get pleaseEnterYourName => '请输入您的姓名';
+
+  @override
+  String get nameMustBeAtLeast2Characters => '姓名必须至少包含2个字符';
+
+  @override
+  String get tellUsHowYouWouldLikeToBeAddressed => '告诉我们您希望如何称呼您。这有助于个性化您的 Omi 体验。';
+
+  @override
+  String charactersCount(int count) {
+    return '$count个字符';
+  }
+
+  @override
+  String get enableFeaturesForBestExperience => '启用功能以在您的设备上获得最佳 Omi 体验。';
+
+  @override
+  String get microphoneAccess => '麦克风访问';
+
+  @override
+  String get recordAudioConversations => '录制音频对话';
+
+  @override
+  String get microphoneAccessDescription => 'Omi 需要麦克风访问权限来录制您的对话并提供转录。';
+
+  @override
+  String get screenRecording => '屏幕录制';
+
+  @override
+  String get captureSystemAudioFromMeetings => '从会议中捕获系统音频';
+
+  @override
+  String get screenRecordingDescription => 'Omi 需要屏幕录制权限来从基于浏览器的会议中捕获系统音频。';
+
+  @override
+  String get accessibility => '辅助功能';
+
+  @override
+  String get detectBrowserBasedMeetings => '检测基于浏览器的会议';
+
+  @override
+  String get accessibilityDescription => 'Omi 需要辅助功能权限来检测您何时在浏览器中加入 Zoom、Meet 或 Teams 会议。';
+
+  @override
+  String get pleaseWait => '请稍候...';
+
+  @override
+  String get joinTheCommunity => '加入社区！';
+
+  @override
+  String get loadingProfile => '正在加载个人资料...';
+
+  @override
+  String get profileSettings => '个人资料设置';
+
+  @override
+  String get noEmailSet => '未设置电子邮件';
+
+  @override
+  String get userIdCopiedToClipboard => '用户 ID 已复制';
+
+  @override
+  String get yourInformation => '您的信息';
+
+  @override
+  String get setYourName => '设置您的姓名';
+
+  @override
+  String get changeYourName => '更改您的姓名';
+
+  @override
+  String get manageYourOmiPersona => '管理您的 Omi 人格';
+
+  @override
+  String get voiceAndPeople => '语音与人物';
+
+  @override
+  String get teachOmiYourVoice => '教 Omi 您的声音';
+
+  @override
+  String get tellOmiWhoSaidIt => '告诉 Omi 谁说的 🗣️';
+
+  @override
+  String get payment => '付款';
+
+  @override
+  String get addOrChangeYourPaymentMethod => '添加或更改付款方式';
+
+  @override
+  String get preferences => '偏好设置';
+
+  @override
+  String get helpImproveOmiBySharing => '通过分享匿名分析数据帮助改进 Omi';
+
+  @override
+  String get deleteAccount => '删除账户';
+
+  @override
+  String get deleteYourAccountAndAllData => '删除您的账户和所有数据';
+
+  @override
+  String get clearLogs => '清除日志';
+
+  @override
+  String get debugLogsCleared => '调试日志已清除';
+
+  @override
+  String get exportConversations => '导出对话';
+
+  @override
+  String get exportAllConversationsToJson => '将所有对话导出到JSON文件。';
+
+  @override
+  String get conversationsExportStarted => '对话导出已开始。这可能需要几秒钟，请稍候。';
+
+  @override
+  String get mcpDescription => '将Omi与其他应用程序连接以读取、搜索和管理您的记忆和对话。创建密钥以开始。';
+
+  @override
+  String get apiKeys => 'API密钥';
+
+  @override
+  String errorLabel(String error) {
+    return '错误：$error';
+  }
+
+  @override
+  String get noApiKeysFound => '未找到API密钥。创建一个以开始。';
+
+  @override
+  String get advancedSettings => '高级设置';
+
+  @override
+  String get triggersWhenNewConversationCreated => '创建新对话时触发。';
+
+  @override
+  String get triggersWhenNewTranscriptReceived => '收到新转录时触发。';
+
+  @override
+  String get realtimeAudioBytes => '实时音频字节';
+
+  @override
+  String get triggersWhenAudioBytesReceived => '收到音频字节时触发。';
+
+  @override
+  String get everyXSeconds => '每x秒';
+
+  @override
+  String get triggersWhenDaySummaryGenerated => '生成每日摘要时触发。';
+
+  @override
+  String get tryLatestExperimentalFeatures => '尝试Omi团队的最新实验性功能。';
+
+  @override
+  String get transcriptionServiceDiagnosticStatus => '转录服务诊断状态';
+
+  @override
+  String get enableDetailedDiagnosticMessages => '启用来自转录服务的详细诊断消息';
+
+  @override
+  String get autoCreateAndTagNewSpeakers => '自动创建和标记新发言人';
+
+  @override
+  String get automaticallyCreateNewPerson => '在转录中检测到姓名时自动创建新人员。';
+
+  @override
+  String get pilotFeatures => '试点功能';
+
+  @override
+  String get pilotFeaturesDescription => '这些功能是测试版本，不保证支持。';
+
+  @override
+  String get suggestFollowUpQuestion => '建议后续问题';
+
+  @override
+  String get saveSettings => '保存设置';
+
+  @override
+  String get syncingDeveloperSettings => '正在同步开发者设置...';
+
+  @override
+  String get summary => '摘要';
+
+  @override
+  String get auto => '自动';
+
+  @override
+  String get noSummaryForApp => '此应用没有可用的摘要。尝试其他应用以获得更好的结果。';
+
+  @override
+  String get tryAnotherApp => '尝试其他应用';
+
+  @override
+  String generatedBy(String appName) {
+    return '由 $appName 生成';
+  }
+
+  @override
+  String get overview => '概述';
+
+  @override
+  String get otherAppResults => '其他应用结果';
+
+  @override
+  String get unknownApp => '未知应用';
+
+  @override
+  String get noSummaryAvailable => '没有可用的摘要';
+
+  @override
+  String get conversationNoSummaryYet => '此对话还没有摘要。';
+
+  @override
+  String get chooseSummarizationApp => '选择摘要应用';
+
+  @override
+  String setAsDefaultSummarizationApp(String appName) {
+    return '$appName 已设置为默认摘要应用';
+  }
+
+  @override
+  String get letOmiChooseAutomatically => '让 Omi 自动选择最佳应用';
+
+  @override
+  String get deleteConversationConfirmation => '您确定要删除此对话吗？此操作无法撤销。';
+
+  @override
+  String get conversationDeleted => '对话已删除';
+
+  @override
+  String get generatingLink => '正在生成链接...';
+
+  @override
+  String get editConversation => '编辑对话';
+
+  @override
+  String get conversationLinkCopiedToClipboard => '对话链接已复制到剪贴板';
+
+  @override
+  String get conversationTranscriptCopiedToClipboard => '对话记录已复制到剪贴板';
+
+  @override
+  String get editConversationDialogTitle => '编辑对话';
+
+  @override
+  String get changeTheConversationTitle => '更改对话标题';
+
+  @override
+  String get conversationTitle => '对话标题';
+
+  @override
+  String get enterConversationTitle => '输入对话标题...';
+
+  @override
+  String get conversationTitleUpdatedSuccessfully => '对话标题更新成功';
+
+  @override
+  String get failedToUpdateConversationTitle => '对话标题更新失败';
+
+  @override
+  String get errorUpdatingConversationTitle => '更新对话标题时出错';
+
+  @override
+  String get settingUp => '设置中...';
+
+  @override
+  String get startYourFirstRecording => '开始您的第一次录音';
+
+  @override
+  String get preparingSystemAudioCapture => '正在准备系统音频捕获';
+
+  @override
+  String get clickTheButtonToCaptureAudio => '点击按钮以捕获音频，用于实时转录、AI 洞察和自动保存。';
+
+  @override
+  String get reconnecting => '重新连接中...';
+
+  @override
+  String get recordingPaused => '录音已暂停';
+
+  @override
+  String get recordingActive => '录音活跃';
+
+  @override
+  String get startRecording => '开始录音';
+
+  @override
+  String resumingInCountdown(String countdown) {
+    return '将在 $countdown 秒后恢复...';
+  }
+
+  @override
+  String get tapPlayToResume => '点击播放以恢复';
+
+  @override
+  String get listeningForAudio => '正在监听音频...';
+
+  @override
+  String get preparingAudioCapture => '正在准备音频捕获';
+
+  @override
+  String get clickToBeginRecording => '点击开始录音';
+
+  @override
+  String get translated => '已翻译';
+
+  @override
+  String get liveTranscript => '实时转录';
+
+  @override
+  String segmentsSingular(String count) {
+    return '$count 个片段';
+  }
+
+  @override
+  String segmentsPlural(String count) {
+    return '$count 个片段';
+  }
+
+  @override
+  String get startRecordingToSeeTranscript => '开始录音以查看实时转录';
+
+  @override
+  String get paused => '已暂停';
+
+  @override
+  String get initializing => '初始化中...';
+
+  @override
+  String get recording => '录音中';
+
+  @override
+  String microphoneChangedResumingIn(String countdown) {
+    return '麦克风已更改。将在 $countdown 秒后恢复';
+  }
+
+  @override
+  String get clickPlayToResumeOrStop => '点击播放以恢复或停止以完成';
+
+  @override
+  String get settingUpSystemAudioCapture => '正在设置系统音频捕获';
+
+  @override
+  String get capturingAudioAndGeneratingTranscript => '正在捕获音频并生成转录';
+
+  @override
+  String get clickToBeginRecordingSystemAudio => '点击开始录制系统音频';
+
+  @override
+  String get you => '您';
+
+  @override
+  String speakerWithId(String speakerId) {
+    return '发言者 $speakerId';
+  }
+
+  @override
+  String get translatedByOmi => '由 omi 翻译';
+
+  @override
+  String get backToConversations => '返回对话';
+
+  @override
+  String get systemAudio => '系统';
+
+  @override
+  String get mic => '麦克风';
+
+  @override
+  String audioInputSetTo(String deviceName) {
+    return '音频输入已设置为 $deviceName';
+  }
+
+  @override
+  String errorSwitchingAudioDevice(String error) {
+    return '切换音频设备时出错：$error';
+  }
+
+  @override
+  String get selectAudioInput => '选择音频输入';
+
+  @override
+  String get loadingDevices => '正在加载设备...';
+
+  @override
+  String get settingsHeader => '设置';
+
+  @override
+  String get plansAndBilling => '计划与账单';
+
+  @override
+  String get calendarIntegration => '日历集成';
+
+  @override
+  String get dailySummary => '每日摘要';
+
+  @override
+  String get developer => '开发者';
+
+  @override
+  String get about => '关于';
+
+  @override
+  String get selectTime => '选择时间';
+
+  @override
+  String get accountGroup => '账户';
+
+  @override
+  String get signOutQuestion => '退出登录？';
+
+  @override
+  String get signOutConfirmation => '您确定要退出登录吗？';
+
+  @override
+  String get customVocabularyHeader => '自定义词汇';
+
+  @override
+  String get addWordsDescription => '添加 Omi 在转录期间应识别的词汇。';
+
+  @override
+  String get enterWordsHint => '输入词汇（逗号分隔）';
+
+  @override
+  String get dailySummaryHeader => '每日摘要';
+
+  @override
+  String get dailySummaryTitle => '每日摘要';
+
+  @override
+  String get dailySummaryDescription => '获取您对话的个性化摘要';
+
+  @override
+  String get deliveryTime => '发送时间';
+
+  @override
+  String get deliveryTimeDescription => '何时接收您的每日摘要';
+
+  @override
+  String get subscription => '订阅';
+
+  @override
+  String get viewPlansAndUsage => '查看计划和使用情况';
+
+  @override
+  String get viewPlansDescription => '管理您的订阅并查看使用统计';
+
+  @override
+  String get addOrChangePaymentMethod => '添加或更改您的支付方式';
+
+  @override
+  String get displayOptions => '显示选项';
+
+  @override
+  String get showMeetingsInMenuBar => '在菜单栏中显示会议';
+
+  @override
+  String get displayUpcomingMeetingsDescription => '在菜单栏中显示即将到来的会议';
+
+  @override
+  String get showEventsWithoutParticipants => '显示无参与者的事件';
+
+  @override
+  String get includePersonalEventsDescription => '包括没有参与者的个人事件';
+
+  @override
+  String get upcomingMeetings => '即将到来的会议';
+
+  @override
+  String get checkingNext7Days => '检查接下来的 7 天';
+
+  @override
+  String get shortcuts => '快捷键';
+
+  @override
+  String get shortcutChangeInstruction => '点击快捷键进行更改。按 Escape 取消。';
+
+  @override
+  String get configurePersonaDescription => '配置您的 AI 人设';
+
+  @override
+  String get configureSTTProvider => '配置 STT 提供商';
+
+  @override
+  String get setConversationEndDescription => '设置对话何时自动结束';
+
+  @override
+  String get importDataDescription => '从其他来源导入数据';
+
+  @override
+  String get exportConversationsDescription => '将对话导出为 JSON';
+
+  @override
+  String get exportingConversations => '正在导出对话...';
+
+  @override
+  String get clearNodesDescription => '清除所有节点和连接';
+
+  @override
+  String get deleteKnowledgeGraphQuestion => '删除知识图谱？';
+
+  @override
+  String get deleteKnowledgeGraphWarning => '这将删除所有派生的知识图谱数据。您的原始记忆仍然安全。';
+
+  @override
+  String get connectOmiWithAI => '将 Omi 连接到 AI 助手';
+
+  @override
+  String get noAPIKeys => '没有 API 密钥。创建一个以开始使用。';
+
+  @override
+  String get autoCreateWhenDetected => '检测到名称时自动创建';
+
+  @override
+  String get trackPersonalGoals => '在主页上跟踪个人目标';
+
+  @override
+  String get dailyReflectionDescription => '晚上 9 点提醒反思您的一天';
+
+  @override
+  String get endpointURL => '端点 URL';
+
+  @override
+  String get links => '链接';
+
+  @override
+  String get discordMemberCount => 'Discord 上超过 8000 名成员';
+
+  @override
+  String get userInformation => '用户信息';
+
+  @override
+  String get capabilities => '功能';
+
+  @override
+  String get previewScreenshots => '预览截图';
+
+  @override
+  String get holdOnPreparingForm => '请稍候，我们正在为您准备表单';
+
+  @override
+  String get bySubmittingYouAgreeToOmi => '提交即表示您同意Omi ';
+
+  @override
+  String get termsAndPrivacyPolicy => '条款与隐私政策';
+
+  @override
+  String get helpsDiagnoseIssuesAutoDeletes => '帮助诊断问题。3天后自动删除。';
+
+  @override
+  String get manageYourApp => '管理您的应用';
+
+  @override
+  String get updatingYourApp => '正在更新您的应用';
+
+  @override
+  String get fetchingYourAppDetails => '正在获取应用详情';
+
+  @override
+  String get updateAppQuestion => '更新应用？';
+
+  @override
+  String get updateAppConfirmation => '确定要更新您的应用吗？更改将在我们团队审核后生效。';
+
+  @override
+  String get updateApp => '更新应用';
+
+  @override
+  String get createAndSubmitNewApp => '创建并提交新应用';
+
+  @override
+  String appsCount(String count) {
+    return '应用 ($count)';
+  }
+
+  @override
+  String privateAppsCount(String count) {
+    return '私有应用 ($count)';
+  }
+
+  @override
+  String publicAppsCount(String count) {
+    return '公开应用 ($count)';
+  }
+
+  @override
+  String get newVersionAvailable => '新版本可用  🎉';
+
+  @override
+  String get no => '否';
+
+  @override
+  String get subscriptionCancelledSuccessfully => '订阅已成功取消。它将保持有效直到当前计费周期结束。';
+
+  @override
+  String get failedToCancelSubscription => '取消订阅失败。请重试。';
+
+  @override
+  String get invalidPaymentUrl => '无效的支付链接';
+
+  @override
+  String get permissionsAndTriggers => '权限和触发器';
+
+  @override
+  String get chatFeatures => '聊天功能';
+
+  @override
+  String get uninstall => '卸载';
+
+  @override
+  String get installs => '安装量';
+
+  @override
+  String get priceLabel => '价格';
+
+  @override
+  String get updatedLabel => '更新于';
+
+  @override
+  String get createdLabel => '创建于';
+
+  @override
+  String get featuredLabel => '精选';
+
+  @override
+  String get cancelSubscriptionQuestion => '取消订阅？';
+
+  @override
+  String get cancelSubscriptionConfirmation => '确定要取消订阅吗？您将继续享有访问权限直到当前计费周期结束。';
+
+  @override
+  String get cancelSubscriptionButton => '取消订阅';
+
+  @override
+  String get cancelling => '正在取消...';
+
+  @override
+  String get betaTesterMessage => '您是此应用的测试用户。目前尚未公开。批准后将公开。';
+
+  @override
+  String get appUnderReviewMessage => '您的应用正在审核中，仅对您可见。批准后将公开。';
+
+  @override
+  String get appRejectedMessage => '您的应用已被拒绝。请更新应用详情并重新提交审核。';
+
+  @override
+  String get invalidIntegrationUrl => '无效的集成链接';
+
+  @override
+  String get tapToComplete => '点击完成';
+
+  @override
+  String get invalidSetupInstructionsUrl => '无效的设置说明链接';
+
+  @override
+  String get pushToTalk => '按住说话';
+
+  @override
+  String get summaryPrompt => '摘要提示';
+
+  @override
+  String get pleaseSelectARating => '请选择评分';
+
+  @override
+  String get reviewAddedSuccessfully => '评论添加成功 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => '评论更新成功 🚀';
+
+  @override
+  String get failedToSubmitReview => '提交评论失败。请重试。';
+
+  @override
+  String get addYourReview => '添加您的评论';
+
+  @override
+  String get editYourReview => '编辑您的评论';
+
+  @override
+  String get writeAReviewOptional => '写评论（可选）';
+
+  @override
+  String get submitReview => '提交评论';
+
+  @override
+  String get updateReview => '更新评论';
+
+  @override
+  String get yourReview => '您的评论';
+
+  @override
+  String get anonymousUser => '匿名用户';
+
+  @override
+  String get issueActivatingApp => '激活此应用时出现问题。请重试。';
+
+  @override
+  String get dataAccessNoticeDescription => '此应用将访问您的数据。Omi AI不对此应用如何使用、修改或删除您的数据负责';
+
+  @override
+  String get copyUrl => '复制链接';
+
+  @override
+  String get txtFormat => 'TXT';
+
+  @override
+  String get pdfFormat => 'PDF';
+
+  @override
+  String get weekdayMon => '周一';
+
+  @override
+  String get weekdayTue => '周二';
+
+  @override
+  String get weekdayWed => '周三';
+
+  @override
+  String get weekdayThu => '周四';
+
+  @override
+  String get weekdayFri => '周五';
+
+  @override
+  String get weekdaySat => '周六';
+
+  @override
+  String get weekdaySun => '周日';
+
+  @override
+  String serviceIntegrationComingSoon(String serviceName) {
+    return '$serviceName集成即将推出';
+  }
+
+  @override
+  String alreadyExportedTo(String platform) {
+    return '已导出到$platform';
+  }
+
+  @override
+  String get anotherPlatform => '其他平台';
+
+  @override
+  String pleaseAuthenticateWithService(String serviceName) {
+    return '请在设置 > 任务集成中验证$serviceName';
+  }
+
+  @override
+  String addingToService(String serviceName) {
+    return '正在添加到$serviceName...';
+  }
+
+  @override
+  String addedToService(String serviceName) {
+    return '已添加到$serviceName';
+  }
+
+  @override
+  String failedToAddToService(String serviceName) {
+    return '添加到$serviceName失败';
+  }
+
+  @override
+  String get permissionDeniedForAppleReminders => 'Apple提醒事项权限被拒绝';
+
+  @override
+  String failedToCreateApiKey(String error) {
+    return '创建提供商API密钥失败: $error';
+  }
+
+  @override
+  String get createAKey => '创建密钥';
+
+  @override
+  String get apiKeyRevokedSuccessfully => 'API密钥已成功撤销';
+
+  @override
+  String failedToRevokeApiKey(String error) {
+    return '撤销API密钥失败: $error';
+  }
+
+  @override
+  String get omiApiKeys => 'Omi API密钥';
+
+  @override
+  String get apiKeysDescription => 'API密钥用于在您的应用程序与OMI服务器通信时进行身份验证。它们允许您的应用程序创建记忆并安全地访问其他OMI服务。';
+
+  @override
+  String get aboutOmiApiKeys => '关于Omi API密钥';
+
+  @override
+  String get yourNewKey => '您的新密钥:';
+
+  @override
+  String get copyToClipboard => '复制到剪贴板';
+
+  @override
+  String get pleaseCopyKeyNow => '请立即复制并保存在安全的地方。';
+
+  @override
+  String get willNotSeeAgain => '您将无法再次查看。';
+
+  @override
+  String get revokeKey => '撤销密钥';
+
+  @override
+  String get revokeApiKeyQuestion => '撤销API密钥?';
+
+  @override
+  String get revokeApiKeyWarning => '此操作无法撤消。使用此密钥的任何应用程序将无法再访问API。';
+
+  @override
+  String get revoke => '撤销';
+
+  @override
+  String get whatWouldYouLikeToCreate => '您想创建什么？';
+
+  @override
+  String get createAnApp => '创建应用';
+
+  @override
+  String get createAndShareYourApp => '创建并分享您的应用';
+
+  @override
+  String get createMyClone => '创建我的克隆';
+
+  @override
+  String get createYourDigitalClone => '创建您的数字克隆';
+
+  @override
+  String get itemApp => '应用';
+
+  @override
+  String get itemPersona => '角色';
+
+  @override
+  String keepItemPublic(String item) {
+    return '保持$item公开';
+  }
+
+  @override
+  String makeItemPublicQuestion(String item) {
+    return '公开$item？';
+  }
+
+  @override
+  String makeItemPrivateQuestion(String item) {
+    return '设为私密$item？';
+  }
+
+  @override
+  String makeItemPublicExplanation(String item) {
+    return '如果您将$item设为公开，所有人都可以使用';
+  }
+
+  @override
+  String makeItemPrivateExplanation(String item) {
+    return '如果您现在将$item设为私密，它将停止为所有人工作，只有您可以看到';
+  }
+
+  @override
+  String get manageApp => '管理应用';
+
+  @override
+  String get updatePersonaDetails => '更新角色详情';
+
+  @override
+  String deleteItemTitle(String item) {
+    return '删除$item';
+  }
+
+  @override
+  String deleteItemQuestion(String item) {
+    return '删除$item？';
+  }
+
+  @override
+  String deleteItemConfirmation(String item) {
+    return '您确定要删除此$item吗？此操作无法撤消。';
+  }
+
+  @override
+  String get revokeKeyQuestion => '撤销密钥？';
+
+  @override
+  String revokeKeyConfirmation(String keyName) {
+    return '您确定要撤销密钥\"$keyName\"吗？此操作无法撤消。';
+  }
+
+  @override
+  String get createNewKey => '创建新密钥';
+
+  @override
+  String get keyNameHint => '例如：Claude Desktop';
+
+  @override
+  String get pleaseEnterAName => '请输入名称。';
+
+  @override
+  String failedToCreateKeyWithError(String error) {
+    return '创建密钥失败：$error';
+  }
+
+  @override
+  String get failedToCreateKeyTryAgain => '创建密钥失败。请重试。';
+
+  @override
+  String get keyCreated => '密钥已创建';
+
+  @override
+  String get keyCreatedMessage => '您的新密钥已创建。请立即复制。您将无法再次查看。';
+
+  @override
+  String get keyWord => '密钥';
+
+  @override
+  String get externalAppAccess => '外部应用访问';
+
+  @override
+  String get externalAppAccessDescription => '以下已安装的应用具有外部集成，可以访问您的数据，例如对话和记忆。';
+
+  @override
+  String get noExternalAppsHaveAccess => '没有外部应用可以访问您的数据。';
+
+  @override
+  String get maximumSecurityE2ee => '最高安全级别（E2EE）';
+
+  @override
+  String get e2eeDescription => '端到端加密是隐私保护的黄金标准。启用后，您的数据在发送到我们的服务器之前会在您的设备上加密。这意味着没有人，包括Omi，可以访问您的内容。';
+
+  @override
+  String get importantTradeoffs => '重要权衡：';
+
+  @override
+  String get e2eeTradeoff1 => '• 某些功能（如外部应用集成）可能会被禁用。';
+
+  @override
+  String get e2eeTradeoff2 => '• 如果您丢失密码，您的数据将无法恢复。';
+
+  @override
+  String get featureComingSoon => '此功能即将推出！';
+
+  @override
+  String get migrationInProgressMessage => '迁移进行中。在完成之前，您无法更改保护级别。';
+
+  @override
+  String get migrationFailed => '迁移失败';
+
+  @override
+  String migratingFromTo(String source, String target) {
+    return '正在从 $source 迁移到 $target';
+  }
+
+  @override
+  String objectsCount(String processed, String total) {
+    return '$processed / $total 个对象';
+  }
+
+  @override
+  String get secureEncryption => '安全加密';
+
+  @override
+  String get secureEncryptionDescription =>
+      '您的数据使用您独有的密钥在我们托管于Google Cloud的服务器上加密。这意味着包括Omi员工或Google在内的任何人都无法直接从数据库访问您的原始内容。';
+
+  @override
+  String get endToEndEncryption => '端到端加密';
+
+  @override
+  String get e2eeCardDescription => '启用以获得最大安全性，只有您可以访问您的数据。点击了解更多。';
+
+  @override
+  String get dataAlwaysEncrypted => '无论级别如何，您的数据始终在静态和传输中加密。';
+
+  @override
+  String get readOnlyScope => '只读';
+
+  @override
+  String get fullAccessScope => '完全访问';
+
+  @override
+  String get readScope => '读取';
+
+  @override
+  String get writeScope => '写入';
+
+  @override
+  String get apiKeyCreated => 'API密钥已创建！';
+
+  @override
+  String get saveKeyWarning => '立即保存此密钥！您将无法再次查看。';
+
+  @override
+  String get yourApiKey => '您的API密钥';
+
+  @override
+  String get tapToCopy => '点击复制';
+
+  @override
+  String get copyKey => '复制密钥';
+
+  @override
+  String get createApiKey => '创建API密钥';
+
+  @override
+  String get accessDataProgrammatically => '以编程方式访问您的数据';
+
+  @override
+  String get keyNameLabel => '密钥名称';
+
+  @override
+  String get keyNamePlaceholder => '例如：我的应用集成';
+
+  @override
+  String get permissionsLabel => '权限';
+
+  @override
+  String get permissionsInfoNote => 'R = 读取，W = 写入。未选择时默认为只读。';
+
+  @override
+  String get developerApi => '开发者API';
+
+  @override
+  String get createAKeyToGetStarted => '创建密钥以开始';
+
+  @override
+  String errorWithMessage(String error) {
+    return '错误：$error';
+  }
+
+  @override
+  String get omiTraining => 'Omi训练';
+
+  @override
+  String get trainingDataProgram => '训练数据计划';
+
+  @override
+  String get getOmiUnlimitedFree => '通过贡献数据来训练AI模型，免费获得Omi无限版。';
+
+  @override
+  String get trainingDataBullets => '• 您的数据有助于改进AI模型\n• 仅共享非敏感数据\n• 完全透明的流程';
+
+  @override
+  String get learnMoreAtOmiTraining => '在omi.me/training了解更多';
+
+  @override
+  String get agreeToContributeData => '我理解并同意为AI训练贡献我的数据';
+
+  @override
+  String get submitRequest => '提交请求';
+
+  @override
+  String get thankYouRequestUnderReview => '谢谢！您的请求正在审核中。批准后我们将通知您。';
+
+  @override
+  String planRemainsActiveUntil(String date) {
+    return '您的计划将在$date之前保持有效。之后，您将失去无限功能的访问权限。您确定吗？';
+  }
+
+  @override
+  String get confirmCancellation => '确认取消';
+
+  @override
+  String get keepMyPlan => '保留我的计划';
+
+  @override
+  String get subscriptionSetToCancel => '您的订阅将在期限结束时取消。';
+
+  @override
+  String get switchedToOnDevice => '已切换到设备端转录';
+
+  @override
+  String get couldNotSwitchToFreePlan => '无法切换到免费计划。请重试。';
+
+  @override
+  String get couldNotLoadPlans => '无法加载可用计划。请重试。';
+
+  @override
+  String get selectedPlanNotAvailable => '所选计划不可用。请重试。';
+
+  @override
+  String get upgradeToAnnualPlan => '升级到年度计划';
+
+  @override
+  String get importantBillingInfo => '重要计费信息：';
+
+  @override
+  String get monthlyPlanContinues => '您当前的月度计划将持续到计费周期结束';
+
+  @override
+  String get paymentMethodCharged => '您的现有付款方式将在月度计划结束时自动扣费';
+
+  @override
+  String get annualSubscriptionStarts => '您的12个月年度订阅将在扣费后自动开始';
+
+  @override
+  String get thirteenMonthsCoverage => '您将获得总共13个月的保障（当前月份 + 12个月年度）';
+
+  @override
+  String get confirmUpgrade => '确认升级';
+
+  @override
+  String get confirmPlanChange => '确认计划变更';
+
+  @override
+  String get confirmAndProceed => '确认并继续';
+
+  @override
+  String get upgradeScheduled => '升级已安排';
+
+  @override
+  String get changePlan => '更改计划';
+
+  @override
+  String get upgradeAlreadyScheduled => '您升级到年度计划的安排已确定';
+
+  @override
+  String get youAreOnUnlimitedPlan => '您正在使用无限版计划。';
+
+  @override
+  String get yourOmiUnleashed => '您的Omi，解放了。选择无限版，开启无限可能。';
+
+  @override
+  String planEndedOn(String date) {
+    return '您的计划于$date结束。\\n立即重新订阅 - 您将立即被收取新计费周期的费用。';
+  }
+
+  @override
+  String planSetToCancelOn(String date) {
+    return '您的计划将于$date取消。\\n立即重新订阅以保留您的权益 - $date之前不收费。';
+  }
+
+  @override
+  String get annualPlanStartsAutomatically => '您的年度计划将在月度计划结束时自动开始。';
+
+  @override
+  String planRenewsOn(String date) {
+    return '您的计划将于$date续订。';
+  }
+
+  @override
+  String get unlimitedConversations => '无限对话';
+
+  @override
+  String get askOmiAnything => '向Omi询问关于您生活的任何事情';
+
+  @override
+  String get unlockOmiInfiniteMemory => '解锁Omi的无限记忆';
+
+  @override
+  String get youreOnAnnualPlan => '您正在使用年度计划';
+
+  @override
+  String get alreadyBestValuePlan => '您已经拥有最超值的计划。无需更改。';
+
+  @override
+  String get unableToLoadPlans => '无法加载计划';
+
+  @override
+  String get checkConnectionTryAgain => '请检查您的连接并重试';
+
+  @override
+  String get useFreePlan => '使用免费计划';
+
+  @override
+  String get continueText => '继续';
+
+  @override
+  String get resubscribe => '重新订阅';
+
+  @override
+  String get couldNotOpenPaymentSettings => '无法打开支付设置。请重试。';
+
+  @override
+  String get managePaymentMethod => '管理支付方式';
+
+  @override
+  String get cancelSubscription => '取消订阅';
+
+  @override
+  String endsOnDate(String date) {
+    return '于$date结束';
+  }
+
+  @override
+  String get active => '活跃';
+
+  @override
+  String get freePlan => '免费计划';
+
+  @override
+  String get configure => '配置';
+
+  @override
+  String get privacyInformation => '隐私信息';
+
+  @override
+  String get yourPrivacyMattersToUs => '您的隐私对我们很重要';
+
+  @override
+  String get privacyIntroText => '在Omi，我们非常重视您的隐私。我们希望透明地说明我们收集的数据以及如何使用它们来改进产品。以下是您需要了解的内容：';
+
+  @override
+  String get whatWeTrack => '我们追踪什么';
+
+  @override
+  String get anonymityAndPrivacy => '匿名性和隐私';
+
+  @override
+  String get optInAndOptOutOptions => '加入和退出选项';
+
+  @override
+  String get ourCommitment => '我们的承诺';
+
+  @override
+  String get commitmentText => '我们承诺仅使用收集的数据来为您改进Omi产品。您的隐私和信任对我们至关重要。';
+
+  @override
+  String get thankYouText => '感谢您成为Omi的尊贵用户。如果您有任何问题或疑虑，请随时通过team@basedhardware.com与我们联系。';
+
+  @override
+  String get wifiSyncSettings => 'WiFi同步设置';
+
+  @override
+  String get enterHotspotCredentials => '输入您手机的热点凭据';
+
+  @override
+  String get wifiSyncUsesHotspot => 'WiFi同步使用您的手机作为热点。在设置 > 个人热点中找到热点名称和密码。';
+
+  @override
+  String get hotspotNameSsid => '热点名称 (SSID)';
+
+  @override
+  String get exampleIphoneHotspot => '例如 iPhone热点';
+
+  @override
+  String get password => '密码';
+
+  @override
+  String get enterHotspotPassword => '输入热点密码';
+
+  @override
+  String get saveCredentials => '保存凭据';
+
+  @override
+  String get clearCredentials => '清除凭据';
+
+  @override
+  String get pleaseEnterHotspotName => '请输入热点名称';
+
+  @override
+  String get wifiCredentialsSaved => 'WiFi凭据已保存';
+
+  @override
+  String get wifiCredentialsCleared => 'WiFi凭据已清除';
+
+  @override
+  String summaryGeneratedForDate(String date) {
+    return '已为 $date 生成摘要';
+  }
+
+  @override
+  String get failedToGenerateSummaryCheckConversations => '无法生成摘要。请确保您当天有对话记录。';
+
+  @override
+  String get summaryNotFound => '未找到摘要';
+
+  @override
+  String get yourDaysJourney => '您的一天旅程';
+
+  @override
+  String get highlights => '亮点';
+
+  @override
+  String get unresolvedQuestions => '未解决的问题';
+
+  @override
+  String get decisions => '决定';
+
+  @override
+  String get learnings => '收获';
+
+  @override
+  String get autoDeletesAfterThreeDays => '3天后自动删除。';
+
+  @override
+  String get knowledgeGraphDeletedSuccessfully => '知识图谱已成功删除';
+
+  @override
+  String get exportStartedMayTakeFewSeconds => '导出已开始。这可能需要几秒钟...';
+
+  @override
+  String get knowledgeGraphDeleteDescription => '这将删除所有派生的知识图谱数据（节点和连接）。您的原始记忆将保持安全。图谱将随时间推移或在下次请求时重建。';
+
+  @override
+  String get configureDailySummaryDigest => '配置您的每日任务摘要';
+
+  @override
+  String accessesDataTypes(String dataTypes) {
+    return '访问 $dataTypes';
+  }
+
+  @override
+  String triggeredByType(String triggerType) {
+    return '由 $triggerType 触发';
+  }
+
+  @override
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+    return '$accessDescription，$triggerDescription。';
+  }
+
+  @override
+  String isTriggeredBy(String triggerDescription) {
+    return '$triggerDescription。';
+  }
+
+  @override
+  String get noSpecificDataAccessConfigured => '未配置特定数据访问。';
 }
