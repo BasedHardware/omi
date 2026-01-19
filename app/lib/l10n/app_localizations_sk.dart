@@ -2637,7 +2637,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get goalTitle => 'Názov cieľa';
 
   @override
-  String get current => 'Aktuálny';
+  String get current => 'Aktuálne';
 
   @override
   String get target => 'Cieľ';

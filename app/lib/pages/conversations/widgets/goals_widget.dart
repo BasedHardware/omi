@@ -303,7 +303,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                   ),
                 ),
                 Text(
-                  isNew ? 'Add Goal' : 'Edit Goal',
+                  isNew ? context.l10n.addGoal : context.l10n.editGoal,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 18,
@@ -317,7 +317,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Icon',
+                        context.l10n.icon,
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.5),
                           fontSize: 12,
@@ -364,7 +364,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Goal title',
+                      context.l10n.goalTitle,
                       style: TextStyle(
                         color: Colors.white.withOpacity(0.5),
                         fontSize: 12,
@@ -396,7 +396,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Current',
+                            context.l10n.current,
                             style: TextStyle(
                               color: Colors.white.withOpacity(0.5),
                               fontSize: 12,
@@ -426,7 +426,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Target',
+                            context.l10n.target,
                             style: TextStyle(
                               color: Colors.white.withOpacity(0.5),
                               fontSize: 12,
@@ -487,7 +487,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        child: Text(isNew ? 'Add Goal' : 'Save'),
+                        child: Text(isNew ? context.l10n.addGoal : context.l10n.save),
                       ),
                     ),
                   ],
@@ -637,9 +637,9 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Goals',
-                  style: TextStyle(
+                Text(
+                  context.l10n.goals,
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
@@ -670,7 +670,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                       Icon(Icons.add_rounded, size: 18, color: Colors.white.withOpacity(0.4)),
                       const SizedBox(width: 8),
                       Text(
-                        'Tap to add a goal',
+                        context.l10n.tapToAddGoal,
                         style: TextStyle(
                           fontSize: 14,
                           color: Colors.white.withOpacity(0.4),

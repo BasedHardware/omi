@@ -2635,7 +2635,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get goalTitle => 'Назва цілі';
 
   @override
-  String get current => 'Поточний';
+  String get current => 'Поточне';
 
   @override
   String get target => 'Ціль';

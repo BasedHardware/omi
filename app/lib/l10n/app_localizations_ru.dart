@@ -2639,7 +2639,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get goalTitle => 'Название цели';
 
   @override
-  String get current => 'Текущий';
+  String get current => 'Текущее';
 
   @override
   String get target => 'Цель';

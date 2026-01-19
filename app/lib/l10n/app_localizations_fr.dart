@@ -2654,7 +2654,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get current => 'Actuel';
 
   @override
-  String get target => 'Objectif';
+  String get target => 'Cible';
 
   @override
   String get saveGoal => 'Enregistrer';

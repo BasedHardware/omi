@@ -2625,10 +2625,10 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get addGoal => 'Hedef ekle';
+  String get addGoal => 'Hedef Ekle';
 
   @override
-  String get editGoal => 'Hedefi düzenle';
+  String get editGoal => 'Hedefi Düzenle';
 
   @override
   String get icon => 'Simge';

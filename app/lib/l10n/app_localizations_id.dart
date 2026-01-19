@@ -2626,10 +2626,10 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get addGoal => 'Tambah tujuan';
+  String get addGoal => 'Tambah Sasaran';
 
   @override
-  String get editGoal => 'Edit tujuan';
+  String get editGoal => 'Edit Sasaran';
 
   @override
   String get icon => 'Ikon';
@@ -2647,7 +2647,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get saveGoal => 'Simpan';
 
   @override
-  String get goals => 'Tujuan';
+  String get goals => 'Sasaran';
 
   @override
   String get tapToAddGoal => 'Ketuk untuk menambahkan sasaran';

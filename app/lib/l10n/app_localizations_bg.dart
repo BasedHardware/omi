@@ -2627,7 +2627,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get addGoal => 'Добави цел';
 
   @override
-  String get editGoal => 'Редактирай цел';
+  String get editGoal => 'Редактиране на цел';
 
   @override
   String get icon => 'Икона';

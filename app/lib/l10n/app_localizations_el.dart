@@ -2651,7 +2651,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get goalTitle => 'Τίτλος στόχου';
 
   @override
-  String get current => 'Τρέχων';
+  String get current => 'Τρέχον';
 
   @override
   String get target => 'Στόχος';

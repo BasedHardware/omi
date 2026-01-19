@@ -2626,7 +2626,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get addGoal => 'Thêm mục tiêu';
 
   @override
-  String get editGoal => 'Chỉnh sửa mục tiêu';
+  String get editGoal => 'Sửa mục tiêu';
 
   @override
   String get icon => 'Biểu tượng';

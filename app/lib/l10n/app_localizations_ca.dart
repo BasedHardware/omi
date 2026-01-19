@@ -2632,10 +2632,10 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String get addGoal => 'Afegeix objectiu';
+  String get addGoal => 'Afegir objectiu';
 
   @override
-  String get editGoal => 'Edita objectiu';
+  String get editGoal => 'Editar objectiu';
 
   @override
   String get icon => 'Icona';

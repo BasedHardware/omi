@@ -2635,7 +2635,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get goalTitle => 'Tytuł celu';
 
   @override
-  String get current => 'Bieżący';
+  String get current => 'Obecny';
 
   @override
   String get target => 'Cel';

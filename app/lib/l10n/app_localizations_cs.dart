@@ -2633,7 +2633,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get goalTitle => 'Název cíle';
 
   @override
-  String get current => 'Současný';
+  String get current => 'Aktuální';
 
   @override
   String get target => 'Cíl';

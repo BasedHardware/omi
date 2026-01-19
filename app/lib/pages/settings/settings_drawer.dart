@@ -333,7 +333,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               ),
               const Divider(height: 1, color: Color(0xFF3C3C43)),
               _buildSettingsItem(
-                title: 'Notifications',
+                title: context.l10n.notifications,
                 icon: const FaIcon(FontAwesomeIcons.solidBell, color: Color(0xFF8E8E93), size: 20),
                 onTap: () {
                   routeToPage(context, const NotificationsSettingsPage());

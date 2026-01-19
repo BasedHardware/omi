@@ -2595,10 +2595,10 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String get addGoal => 'Adicionar objetivo';
+  String get addGoal => 'Adicionar meta';
 
   @override
-  String get editGoal => 'Editar objetivo';
+  String get editGoal => 'Editar meta';
 
   @override
   String get icon => 'Ícone';
@@ -2616,7 +2616,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get saveGoal => 'Salvar';
 
   @override
-  String get goals => 'Objetivos';
+  String get goals => 'Metas';
 
   @override
   String get tapToAddGoal => 'Toque para adicionar uma meta';

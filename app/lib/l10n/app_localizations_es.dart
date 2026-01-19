@@ -2603,7 +2603,7 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get addGoal => 'Agregar objetivo';
+  String get addGoal => 'Añadir objetivo';
 
   @override
   String get editGoal => 'Editar objetivo';

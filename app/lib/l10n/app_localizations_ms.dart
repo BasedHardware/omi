@@ -2628,10 +2628,10 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String get addGoal => 'Tambah matlamat';
+  String get addGoal => 'Tambah Matlamat';
 
   @override
-  String get editGoal => 'Edit matlamat';
+  String get editGoal => 'Edit Matlamat';
 
   @override
   String get icon => 'Ikon';

@@ -2635,7 +2635,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get current => 'Praegune';
 
   @override
-  String get target => 'Eesmärk';
+  String get target => 'Sihtmärk';
 
   @override
   String get saveGoal => 'Salvesta';

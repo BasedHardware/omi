@@ -5037,13 +5037,13 @@ abstract class AppLocalizations {
   /// **'{count} remaining'**
   String countRemaining(String count);
 
-  /// Button to add new goal
+  /// Button/title for adding a new goal
   ///
   /// In en, this message translates to:
   /// **'Add Goal'**
   String get addGoal;
 
-  /// Title for editing goal
+  /// Title for editing an existing goal
   ///
   /// In en, this message translates to:
   /// **'Edit Goal'**
@@ -5061,13 +5061,13 @@ abstract class AppLocalizations {
   /// **'Goal title'**
   String get goalTitle;
 
-  /// Label for current value
+  /// Label for current value field
   ///
   /// In en, this message translates to:
   /// **'Current'**
   String get current;
 
-  /// Label for target value
+  /// Label for target value field
   ///
   /// In en, this message translates to:
   /// **'Target'**
@@ -5079,7 +5079,7 @@ abstract class AppLocalizations {
   /// **'Save'**
   String get saveGoal;
 
-  /// Goals section title
+  /// Header for goals section
   ///
   /// In en, this message translates to:
   /// **'Goals'**

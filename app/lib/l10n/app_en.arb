@@ -2954,11 +2954,11 @@
   },
   "addGoal": "Add Goal",
   "@addGoal": {
-    "description": "Button to add new goal"
+    "description": "Button/title for adding a new goal"
   },
   "editGoal": "Edit Goal",
   "@editGoal": {
-    "description": "Title for editing goal"
+    "description": "Title for editing an existing goal"
   },
   "icon": "Icon",
   "@icon": {
@@ -2970,11 +2970,11 @@
   },
   "current": "Current",
   "@current": {
-    "description": "Label for current value"
+    "description": "Label for current value field"
   },
   "target": "Target",
   "@target": {
-    "description": "Label for target value"
+    "description": "Label for target value field"
   },
   "saveGoal": "Save",
   "@saveGoal": {
@@ -2982,7 +2982,7 @@
   },
   "goals": "Goals",
   "@goals": {
-    "description": "Goals section title"
+    "description": "Header for goals section"
   },
   "tapToAddGoal": "Tap to add a goal",
   "@tapToAddGoal": {

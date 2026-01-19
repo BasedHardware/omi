@@ -2646,7 +2646,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get current => 'Curent';
 
   @override
-  String get target => 'Obiectiv';
+  String get target => 'Țintă';
 
   @override
   String get saveGoal => 'Salvează';
