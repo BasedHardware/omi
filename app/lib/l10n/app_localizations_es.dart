@@ -2663,7 +2663,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get dailyScore => 'PUNTUACIÓN DIARIA';
 
   @override
-  String get dailyScoreDescription => 'Una puntuación para ayudarte a concentrarte mejor en la ejecución.';
+  String get dailyScoreDescription => 'Una puntuación para ayudarte\na enfocarte mejor en la ejecución.';
 
   @override
   String get searchResults => 'Resultados de búsqueda';
@@ -5685,4 +5685,26 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get controlNotificationFrequency => 'Controla con qué frecuencia Omi te envía notificaciones proactivas.';
+
+  @override
+  String get yourScore => 'Tu puntuación';
+
+  @override
+  String get dailyScoreBreakdown => 'Desglose de puntuación diaria';
+
+  @override
+  String get todaysScore => 'Puntuación de hoy';
+
+  @override
+  String get tasksCompleted => 'Tareas completadas';
+
+  @override
+  String get completionRate => 'Tasa de completado';
+
+  @override
+  String get howItWorks => 'Cómo funciona';
+
+  @override
+  String get dailyScoreExplanation =>
+      'Tu puntuación diaria se basa en completar tareas. ¡Completa tus tareas para mejorar tu puntuación!';
 }

@@ -2420,8 +2420,8 @@
   "getInsightsInstantly": "Получайте информацию и резюме мгновенно",
   "showAll": "Показать все →",
   "noTasksForToday": "Нет задач на сегодня.\\nСпросите Omi о дополнительных задачах или создайте вручную.",
-  "dailyScore": "ЕЖЕДНЕВНЫЙ БАЛЛ",
-  "dailyScoreDescription": "Балл, который помогает лучше сосредоточиться на выполнении.",
+  "dailyScore": "ДНЕВНОЙ СЧЁТ",
+  "dailyScoreDescription": "Счёт, помогающий лучше\nсосредоточиться на выполнении.",
   "searchResults": "Результаты поиска",
   "actionItems": "Элементы действий",
   "tasksToday": "Сегодня",
@@ -3603,5 +3603,12 @@
   "greatJobAlmostThere": "Отличная работа, почти готово",
   "soCloseJustLittleMore": "Так близко, ещё немного",
   "notificationFrequency": "Частота уведомлений",
-  "controlNotificationFrequency": "Управляйте частотой отправки проактивных уведомлений от Omi."
+  "controlNotificationFrequency": "Управляйте частотой отправки проактивных уведомлений от Omi.",
+  "yourScore": "Ваш счёт",
+  "dailyScoreBreakdown": "Разбивка дневного счёта",
+  "todaysScore": "Сегодняшний счёт",
+  "tasksCompleted": "Задачи выполнены",
+  "completionRate": "Процент выполнения",
+  "howItWorks": "Как это работает",
+  "dailyScoreExplanation": "Ваш дневной счёт основан на выполнении задач. Выполняйте задачи, чтобы улучшить свой счёт!"
 }

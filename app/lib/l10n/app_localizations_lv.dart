@@ -2681,10 +2681,10 @@ class AppLocalizationsLv extends AppLocalizations {
       'Šodien nav uzdevumu.\\nJautājiet Omi par vairāk uzdevumiem vai izveidojiet tos manuāli.';
 
   @override
-  String get dailyScore => 'DIENAS VĒRTĒJUMS';
+  String get dailyScore => 'DIENAS REZULTĀTS';
 
   @override
-  String get dailyScoreDescription => 'Vērtējums, kas palīdz labāk koncentrēties uz izpildi.';
+  String get dailyScoreDescription => 'Rezultāts, kas palīdz labāk\nkoncentrēties uz izpildi.';
 
   @override
   String get searchResults => 'Meklēšanas rezultāti';
@@ -5695,4 +5695,26 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get controlNotificationFrequency => 'Kontrolējiet, cik bieži Omi sūta jums proaktīvus paziņojumus.';
+
+  @override
+  String get yourScore => 'Jūsu rezultāts';
+
+  @override
+  String get dailyScoreBreakdown => 'Dienas rezultāta sadalījums';
+
+  @override
+  String get todaysScore => 'Šodienas rezultāts';
+
+  @override
+  String get tasksCompleted => 'Uzdevumi pabeigti';
+
+  @override
+  String get completionRate => 'Izpildes rādītājs';
+
+  @override
+  String get howItWorks => 'Kā tas darbojas';
+
+  @override
+  String get dailyScoreExplanation =>
+      'Jūsu dienas rezultāts balstās uz uzdevumu izpildi. Pabeidziet uzdevumus, lai uzlabotu rezultātu!';
 }

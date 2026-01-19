@@ -2681,10 +2681,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get noTasksForToday => 'Bugün için görev yok.\\nDaha fazla görev için Omi\'ye sorun veya manuel oluşturun.';
 
   @override
-  String get dailyScore => 'GÜNLÜK PUAN';
+  String get dailyScore => 'GÜNLÜK SKOR';
 
   @override
-  String get dailyScoreDescription => 'Uygulamaya daha iyi odaklanmanıza yardımcı olan bir puan.';
+  String get dailyScoreDescription => 'Yürütmeye daha iyi odaklanmanıza\nyardımcı olacak bir skor.';
 
   @override
   String get searchResults => 'Arama sonuçları';
@@ -5697,4 +5697,26 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get controlNotificationFrequency =>
       'Omi\'nin size ne sıklıkta proaktif bildirimler göndereceğini kontrol edin.';
+
+  @override
+  String get yourScore => 'Skorunuz';
+
+  @override
+  String get dailyScoreBreakdown => 'Günlük Skor Detayı';
+
+  @override
+  String get todaysScore => 'Bugünün Skoru';
+
+  @override
+  String get tasksCompleted => 'Tamamlanan Görevler';
+
+  @override
+  String get completionRate => 'Tamamlanma Oranı';
+
+  @override
+  String get howItWorks => 'Nasıl çalışır';
+
+  @override
+  String get dailyScoreExplanation =>
+      'Günlük skorunuz görev tamamlamaya dayanır. Skorunuzu artırmak için görevlerinizi tamamlayın!';
 }

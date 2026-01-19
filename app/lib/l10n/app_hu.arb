@@ -2421,7 +2421,7 @@
   "showAll": "Összes megjelenítése →",
   "noTasksForToday": "Nincs feladat mára.\\nKérdezzen Omit több feladatért, vagy hozzon létre manuálisan.",
   "dailyScore": "NAPI PONTSZÁM",
-  "dailyScoreDescription": "Egy pontszám, amely segít jobban összpontosítani a végrehajtásra.",
+  "dailyScoreDescription": "Egy pontszám, amely segít jobban\na végrehajtásra összpontosítani.",
   "searchResults": "Keresési eredmények",
   "actionItems": "Teendők",
   "tasksToday": "Ma",
@@ -3603,5 +3603,12 @@
   "greatJobAlmostThere": "Remek munka, már majdnem kész",
   "soCloseJustLittleMore": "Olyan közel, már csak egy kicsit",
   "notificationFrequency": "Értesítések gyakorisága",
-  "controlNotificationFrequency": "Szabályozza, milyen gyakran küld Önnek proaktív értesítéseket az Omi."
+  "controlNotificationFrequency": "Szabályozza, milyen gyakran küld Önnek proaktív értesítéseket az Omi.",
+  "yourScore": "Az Ön pontszáma",
+  "dailyScoreBreakdown": "Napi pontszám részletei",
+  "todaysScore": "Mai pontszám",
+  "tasksCompleted": "Befejezett feladatok",
+  "completionRate": "Befejezési arány",
+  "howItWorks": "Hogyan működik",
+  "dailyScoreExplanation": "A napi pontszáma a feladatok befejezésén alapul. Fejezze be feladatait a pontszám javításához!"
 }

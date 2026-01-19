@@ -849,8 +849,8 @@
   "getInsightsInstantly": "Erhalte sofort Einblicke und Zusammenfassungen",
   "showAll": "Alle anzeigen →",
   "noTasksForToday": "Keine Aufgaben für heute.\\nFrage Omi nach mehr Aufgaben oder erstelle sie manuell.",
-  "dailyScore": "TAGESBEWERTUNG",
-  "dailyScoreDescription": "Ein Wert, der Ihnen hilft, sich besser auf die Ausführung zu konzentrieren.",
+  "dailyScore": "TAGES-SCORE",
+  "dailyScoreDescription": "Ein Score, der Ihnen hilft,\nsich besser auf die Ausführung zu konzentrieren.",
   "searchResults": "Suchergebnisse",
   "actionItems": "Aktionspunkte",
   "tasksToday": "Heute",
@@ -2050,5 +2050,12 @@
   "greatJobAlmostThere": "Toll gemacht, Sie sind fast fertig",
   "soCloseJustLittleMore": "So nah dran, nur noch ein bisschen",
   "notificationFrequency": "Benachrichtigungshäufigkeit",
-  "controlNotificationFrequency": "Steuern Sie, wie oft Omi Ihnen proaktive Benachrichtigungen sendet."
+  "controlNotificationFrequency": "Steuern Sie, wie oft Omi Ihnen proaktive Benachrichtigungen sendet.",
+  "yourScore": "Ihr Score",
+  "dailyScoreBreakdown": "Tages-Score Aufschlüsselung",
+  "todaysScore": "Heutiger Score",
+  "tasksCompleted": "Aufgaben erledigt",
+  "completionRate": "Abschlussrate",
+  "howItWorks": "So funktioniert es",
+  "dailyScoreExplanation": "Ihr täglicher Score basiert auf der Aufgabenerledigung. Erledigen Sie Ihre Aufgaben, um Ihren Score zu verbessern!"
 }

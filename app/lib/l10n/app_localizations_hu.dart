@@ -2695,7 +2695,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get dailyScore => 'NAPI PONTSZÁM';
 
   @override
-  String get dailyScoreDescription => 'Egy pontszám, amely segít jobban összpontosítani a végrehajtásra.';
+  String get dailyScoreDescription => 'Egy pontszám, amely segít jobban\na végrehajtásra összpontosítani.';
 
   @override
   String get searchResults => 'Keresési eredmények';
@@ -5716,4 +5716,26 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get controlNotificationFrequency => 'Szabályozza, milyen gyakran küld Önnek proaktív értesítéseket az Omi.';
+
+  @override
+  String get yourScore => 'Az Ön pontszáma';
+
+  @override
+  String get dailyScoreBreakdown => 'Napi pontszám részletei';
+
+  @override
+  String get todaysScore => 'Mai pontszám';
+
+  @override
+  String get tasksCompleted => 'Befejezett feladatok';
+
+  @override
+  String get completionRate => 'Befejezési arány';
+
+  @override
+  String get howItWorks => 'Hogyan működik';
+
+  @override
+  String get dailyScoreExplanation =>
+      'A napi pontszáma a feladatok befejezésén alapul. Fejezze be feladatait a pontszám javításához!';
 }

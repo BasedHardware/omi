@@ -2683,7 +2683,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get dailyScore => 'ĐIỂM HÀNG NGÀY';
 
   @override
-  String get dailyScoreDescription => 'Điểm giúp bạn tập trung tốt hơn vào việc thực hiện.';
+  String get dailyScoreDescription => 'Điểm số giúp bạn tập trung\ntốt hơn vào việc thực hiện.';
 
   @override
   String get searchResults => 'Kết quả tìm kiếm';
@@ -5696,4 +5696,26 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get controlNotificationFrequency => 'Kiểm soát tần suất Omi gửi thông báo chủ động cho bạn.';
+
+  @override
+  String get yourScore => 'Điểm của bạn';
+
+  @override
+  String get dailyScoreBreakdown => 'Chi tiết điểm hàng ngày';
+
+  @override
+  String get todaysScore => 'Điểm hôm nay';
+
+  @override
+  String get tasksCompleted => 'Nhiệm vụ hoàn thành';
+
+  @override
+  String get completionRate => 'Tỷ lệ hoàn thành';
+
+  @override
+  String get howItWorks => 'Cách hoạt động';
+
+  @override
+  String get dailyScoreExplanation =>
+      'Điểm hàng ngày dựa trên việc hoàn thành nhiệm vụ. Hoàn thành nhiệm vụ để cải thiện điểm!';
 }

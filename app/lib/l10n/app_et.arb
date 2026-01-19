@@ -1486,7 +1486,7 @@
       }
     }
   },
-  "gotIt": "Sain aru",
+  "gotIt": "Selge",
   "tasksExportedOneApp": "Ülesandeid saab eksportida korraga ühte rakendusse.",
   "completeYourUpgrade": "Viige oma uuendamine lõpule",
   "importConfiguration": "Impordi konfiguratsioon",
@@ -2420,8 +2420,8 @@
   "getInsightsInstantly": "Saate kohe ülevaateid ja kokkuvõtteid",
   "showAll": "Kuva kõik →",
   "noTasksForToday": "Täna pole ülesandeid.\\nKüsi Omi käest rohkem ülesandeid või loo need käsitsi.",
-  "dailyScore": "PÄEVASKOOR",
-  "dailyScoreDescription": "Skoor, mis aitab teil täitmisele paremini keskenduda.",
+  "dailyScore": "PÄEVA SKOOR",
+  "dailyScoreDescription": "Skoor, mis aitab teil paremini\nkeskenduda täitmisele.",
   "searchResults": "Otsingutulemused",
   "actionItems": "Tegevuspunktid",
   "tasksToday": "Täna",
@@ -3603,5 +3603,12 @@
   "greatJobAlmostThere": "Suurepärane töö, olete peaaegu kohal",
   "soCloseJustLittleMore": "Nii lähedal, veel natuke",
   "notificationFrequency": "Teavituste sagedus",
-  "controlNotificationFrequency": "Määrake, kui sageli Omi saadab teile ennetavaid teavitusi."
+  "controlNotificationFrequency": "Määrake, kui sageli Omi saadab teile ennetavaid teavitusi.",
+  "yourScore": "Teie skoor",
+  "dailyScoreBreakdown": "Päeva skoori ülevaade",
+  "todaysScore": "Tänane skoor",
+  "tasksCompleted": "Ülesanded täidetud",
+  "completionRate": "Täitmise määr",
+  "howItWorks": "Kuidas see töötab",
+  "dailyScoreExplanation": "Teie päeva skoor põhineb ülesannete täitmisel. Täitke oma ülesanded skoori parandamiseks!"
 }

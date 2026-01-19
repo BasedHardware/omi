@@ -2421,7 +2421,7 @@
   "showAll": "แสดงทั้งหมด →",
   "noTasksForToday": "ไม่มีงานสำหรับวันนี้\\nถาม Omi เพื่อรับงานเพิ่มเติมหรือสร้างด้วยตนเอง",
   "dailyScore": "คะแนนประจำวัน",
-  "dailyScoreDescription": "คะแนนที่ช่วยให้คุณโฟกัสกับการดำเนินการได้ดีขึ้น",
+  "dailyScoreDescription": "คะแนนที่ช่วยให้คุณ\nโฟกัสกับการปฏิบัติงานได้ดีขึ้น",
   "searchResults": "ผลการค้นหา",
   "actionItems": "รายการดำเนินการ",
   "tasksToday": "วันนี้",
@@ -3603,5 +3603,12 @@
   "greatJobAlmostThere": "ทำได้ดีมาก ใกล้เสร็จแล้ว",
   "soCloseJustLittleMore": "ใกล้มากแล้ว อีกนิดเดียว",
   "notificationFrequency": "ความถี่การแจ้งเตือน",
-  "controlNotificationFrequency": "ควบคุมความถี่ที่ Omi ส่งการแจ้งเตือนเชิงรุกให้คุณ"
+  "controlNotificationFrequency": "ควบคุมความถี่ที่ Omi ส่งการแจ้งเตือนเชิงรุกให้คุณ",
+  "yourScore": "คะแนนของคุณ",
+  "dailyScoreBreakdown": "รายละเอียดคะแนนประจำวัน",
+  "todaysScore": "คะแนนวันนี้",
+  "tasksCompleted": "งานที่เสร็จแล้ว",
+  "completionRate": "อัตราความสำเร็จ",
+  "howItWorks": "วิธีการทำงาน",
+  "dailyScoreExplanation": "คะแนนประจำวันของคุณขึ้นอยู่กับการทำงานเสร็จ ทำงานให้เสร็จเพื่อเพิ่มคะแนน!"
 }

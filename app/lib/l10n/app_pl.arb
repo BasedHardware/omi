@@ -2421,7 +2421,7 @@
   "showAll": "Pokaż wszystko →",
   "noTasksForToday": "Brak zadań na dziś.\\nZapytaj Omi o więcej zadań lub utwórz je ręcznie.",
   "dailyScore": "DZIENNY WYNIK",
-  "dailyScoreDescription": "Wynik, który pomaga lepiej skupić się na realizacji.",
+  "dailyScoreDescription": "Wynik, który pomoże Ci lepiej\nskupić się na realizacji.",
   "searchResults": "Wyniki wyszukiwania",
   "actionItems": "Zadania do wykonania",
   "tasksToday": "Dzisiaj",
@@ -3603,5 +3603,12 @@
   "greatJobAlmostThere": "Świetna robota, prawie gotowe",
   "soCloseJustLittleMore": "Tak blisko, jeszcze trochę",
   "notificationFrequency": "Częstotliwość powiadomień",
-  "controlNotificationFrequency": "Kontroluj, jak często Omi wysyła Ci proaktywne powiadomienia."
+  "controlNotificationFrequency": "Kontroluj, jak często Omi wysyła Ci proaktywne powiadomienia.",
+  "yourScore": "Twój wynik",
+  "dailyScoreBreakdown": "Szczegóły dziennego wyniku",
+  "todaysScore": "Dzisiejszy wynik",
+  "tasksCompleted": "Ukończone zadania",
+  "completionRate": "Wskaźnik ukończenia",
+  "howItWorks": "Jak to działa",
+  "dailyScoreExplanation": "Twój dzienny wynik opiera się na ukończeniu zadań. Ukończ zadania, aby poprawić wynik!"
 }

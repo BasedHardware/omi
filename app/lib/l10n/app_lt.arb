@@ -2402,8 +2402,8 @@
   "getInsightsInstantly": "Gaukite įžvalgas ir santraukas akimirksniu",
   "showAll": "Rodyti viską →",
   "noTasksForToday": "Šiandien nėra užduočių.\\nPaprašykite Omi daugiau užduočių arba sukurkite rankiniu būdu.",
-  "dailyScore": "DIENOS ĮVERTINIMAS",
-  "dailyScoreDescription": "Įvertinimas, padedantis geriau sutelkti dėmesį į vykdymą.",
+  "dailyScore": "DIENOS BALAS",
+  "dailyScoreDescription": "Balas, padedantis geriau\nsutelkti dėmesį į vykdymą.",
   "searchResults": "Paieškos rezultatai",
   "actionItems": "Veiksmų punktai",
   "tasksToday": "Šiandien",
@@ -3585,5 +3585,12 @@
   "greatJobAlmostThere": "Puikus darbas, beveik baigėte",
   "soCloseJustLittleMore": "Taip arti, dar truputį",
   "notificationFrequency": "Pranešimų dažnumas",
-  "controlNotificationFrequency": "Valdykite, kaip dažnai Omi siunčia jums aktyvius pranešimus."
+  "controlNotificationFrequency": "Valdykite, kaip dažnai Omi siunčia jums aktyvius pranešimus.",
+  "yourScore": "Jūsų balas",
+  "dailyScoreBreakdown": "Dienos balo suvestinė",
+  "todaysScore": "Šiandienos balas",
+  "tasksCompleted": "Užduotys atliktos",
+  "completionRate": "Užbaigimo rodiklis",
+  "howItWorks": "Kaip tai veikia",
+  "dailyScoreExplanation": "Jūsų dienos balas pagrįstas užduočių atlikimu. Atlikite užduotis, kad pagerintumėte balą!"
 }

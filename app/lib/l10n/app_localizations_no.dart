@@ -2676,7 +2676,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get dailyScore => 'DAGLIG POENGSUM';
 
   @override
-  String get dailyScoreDescription => 'En poengsum som hjelper deg med å fokusere bedre på gjennomføring.';
+  String get dailyScoreDescription => 'En poengsum for å hjelpe deg\nå fokusere bedre på utførelse.';
 
   @override
   String get searchResults => 'Søkeresultater';
@@ -5686,4 +5686,26 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get controlNotificationFrequency => 'Kontroller hvor ofte Omi sender deg proaktive varsler.';
+
+  @override
+  String get yourScore => 'Din poengsum';
+
+  @override
+  String get dailyScoreBreakdown => 'Daglig poengsum oversikt';
+
+  @override
+  String get todaysScore => 'Dagens poengsum';
+
+  @override
+  String get tasksCompleted => 'Oppgaver fullført';
+
+  @override
+  String get completionRate => 'Fullføringsgrad';
+
+  @override
+  String get howItWorks => 'Slik fungerer det';
+
+  @override
+  String get dailyScoreExplanation =>
+      'Din daglige poengsum er basert på oppgavefullføring. Fullfør oppgavene dine for å forbedre poengsummen!';
 }

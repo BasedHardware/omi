@@ -2665,7 +2665,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get dailyScore => 'คะแนนประจำวัน';
 
   @override
-  String get dailyScoreDescription => 'คะแนนที่ช่วยให้คุณโฟกัสกับการดำเนินการได้ดีขึ้น';
+  String get dailyScoreDescription => 'คะแนนที่ช่วยให้คุณ\nโฟกัสกับการปฏิบัติงานได้ดีขึ้น';
 
   @override
   String get searchResults => 'ผลการค้นหา';
@@ -5659,4 +5659,25 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get controlNotificationFrequency => 'ควบคุมความถี่ที่ Omi ส่งการแจ้งเตือนเชิงรุกให้คุณ';
+
+  @override
+  String get yourScore => 'คะแนนของคุณ';
+
+  @override
+  String get dailyScoreBreakdown => 'รายละเอียดคะแนนประจำวัน';
+
+  @override
+  String get todaysScore => 'คะแนนวันนี้';
+
+  @override
+  String get tasksCompleted => 'งานที่เสร็จแล้ว';
+
+  @override
+  String get completionRate => 'อัตราความสำเร็จ';
+
+  @override
+  String get howItWorks => 'วิธีการทำงาน';
+
+  @override
+  String get dailyScoreExplanation => 'คะแนนประจำวันของคุณขึ้นอยู่กับการทำงานเสร็จ ทำงานให้เสร็จเพื่อเพิ่มคะแนน!';
 }

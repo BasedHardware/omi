@@ -850,7 +850,7 @@
   "showAll": "Mostrar tudo →",
   "noTasksForToday": "Nenhuma tarefa para hoje.\\nPergunte ao Omi por mais tarefas ou crie manualmente.",
   "dailyScore": "PONTUAÇÃO DIÁRIA",
-  "dailyScoreDescription": "Uma pontuação para ajudá-lo a se concentrar melhor na execução.",
+  "dailyScoreDescription": "Uma pontuação para ajudá-lo\na focar melhor na execução.",
   "searchResults": "Resultados da pesquisa",
   "actionItems": "Itens de ação",
   "tasksToday": "Hoje",
@@ -2050,5 +2050,12 @@
   "greatJobAlmostThere": "Ótimo trabalho, está quase lá",
   "soCloseJustLittleMore": "Tão perto, só mais um pouco",
   "notificationFrequency": "Frequência de notificações",
-  "controlNotificationFrequency": "Controle com que frequência o Omi envia notificações proativas."
+  "controlNotificationFrequency": "Controle com que frequência o Omi envia notificações proativas.",
+  "yourScore": "Sua pontuação",
+  "dailyScoreBreakdown": "Detalhes da pontuação diária",
+  "todaysScore": "Pontuação de hoje",
+  "tasksCompleted": "Tarefas concluídas",
+  "completionRate": "Taxa de conclusão",
+  "howItWorks": "Como funciona",
+  "dailyScoreExplanation": "Sua pontuação diária é baseada na conclusão de tarefas. Conclua suas tarefas para melhorar sua pontuação!"
 }

@@ -2692,7 +2692,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get dailyScore => 'PUNTUACIÓ DIÀRIA';
 
   @override
-  String get dailyScoreDescription => 'Una puntuació per ajudar-te a centrar-te millor en l\'execució.';
+  String get dailyScoreDescription => 'Una puntuació per ajudar-te\na centrar-te en l\'execució.';
 
   @override
   String get searchResults => 'Resultats de la cerca';
@@ -5719,4 +5719,26 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get controlNotificationFrequency => 'Controla amb quina freqüència Omi t\'envia notificacions proactives.';
+
+  @override
+  String get yourScore => 'La teva puntuació';
+
+  @override
+  String get dailyScoreBreakdown => 'Desglossament de la puntuació diària';
+
+  @override
+  String get todaysScore => 'Puntuació d\'avui';
+
+  @override
+  String get tasksCompleted => 'Tasques completades';
+
+  @override
+  String get completionRate => 'Taxa de compleció';
+
+  @override
+  String get howItWorks => 'Com funciona';
+
+  @override
+  String get dailyScoreExplanation =>
+      'La teva puntuació diària es basa en completar tasques. Completa les teves tasques per millorar la puntuació!';
 }

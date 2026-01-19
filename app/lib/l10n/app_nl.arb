@@ -1224,7 +1224,7 @@
   "showAll": "Alles tonen →",
   "noTasksForToday": "Geen taken voor vandaag.\\nVraag Omi om meer taken of maak ze handmatig aan.",
   "dailyScore": "DAGELIJKSE SCORE",
-  "dailyScoreDescription": "Een score om je te helpen beter te focussen op uitvoering.",
+  "dailyScoreDescription": "Een score om je te helpen\nbeter te focussen op uitvoering.",
   "searchResults": "Zoekresultaten",
   "actionItems": "Actiepunten",
   "tasksToday": "Vandaag",
@@ -2421,5 +2421,12 @@
   "greatJobAlmostThere": "Goed bezig, je bent er bijna",
   "soCloseJustLittleMore": "Zo dichtbij, nog even",
   "notificationFrequency": "Meldingsfrequentie",
-  "controlNotificationFrequency": "Bepaal hoe vaak Omi u proactieve meldingen stuurt."
+  "controlNotificationFrequency": "Bepaal hoe vaak Omi u proactieve meldingen stuurt.",
+  "yourScore": "Jouw score",
+  "dailyScoreBreakdown": "Dagelijkse score overzicht",
+  "todaysScore": "Score van vandaag",
+  "tasksCompleted": "Taken voltooid",
+  "completionRate": "Voltooiingspercentage",
+  "howItWorks": "Hoe het werkt",
+  "dailyScoreExplanation": "Je dagelijkse score is gebaseerd op taakvoltooiing. Voltooi je taken om je score te verbeteren!"
 }

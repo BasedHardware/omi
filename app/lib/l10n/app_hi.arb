@@ -850,7 +850,7 @@
   "showAll": "सभी दिखाएं →",
   "noTasksForToday": "आज के लिए कोई कार्य नहीं।\\nअधिक कार्यों के लिए Omi से पूछें या मैन्युअल रूप से बनाएं।",
   "dailyScore": "दैनिक स्कोर",
-  "dailyScoreDescription": "एक स्कोर जो आपको निष्पादन पर बेहतर ध्यान केंद्रित करने में मदद करता है।",
+  "dailyScoreDescription": "एक स्कोर जो आपको बेहतर तरीके से\nनिष्पादन पर ध्यान केंद्रित करने में मदद करता है।",
   "searchResults": "खोज परिणाम",
   "actionItems": "कार्रवाई के मुद्दे",
   "tasksToday": "आज",
@@ -2050,5 +2050,12 @@
   "greatJobAlmostThere": "शानदार काम, आप लगभग वहां हैं",
   "soCloseJustLittleMore": "बस थोड़ा और",
   "notificationFrequency": "सूचना आवृत्ति",
-  "controlNotificationFrequency": "नियंत्रित करें कि Omi आपको कितनी बार सक्रिय सूचनाएं भेजता है।"
+  "controlNotificationFrequency": "नियंत्रित करें कि Omi आपको कितनी बार सक्रिय सूचनाएं भेजता है।",
+  "yourScore": "आपका स्कोर",
+  "dailyScoreBreakdown": "दैनिक स्कोर विवरण",
+  "todaysScore": "आज का स्कोर",
+  "tasksCompleted": "कार्य पूर्ण",
+  "completionRate": "पूर्णता दर",
+  "howItWorks": "यह कैसे काम करता है",
+  "dailyScoreExplanation": "आपका दैनिक स्कोर कार्य पूर्णता पर आधारित है। अपना स्कोर सुधारने के लिए अपने कार्य पूरे करें!"
 }

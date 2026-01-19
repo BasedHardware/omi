@@ -2421,7 +2421,7 @@
   "showAll": "Tampilkan semua →",
   "noTasksForToday": "Tidak ada tugas untuk hari ini.\\nTanyakan Omi untuk lebih banyak tugas atau buat secara manual.",
   "dailyScore": "SKOR HARIAN",
-  "dailyScoreDescription": "Skor untuk membantu Anda lebih fokus pada pelaksanaan.",
+  "dailyScoreDescription": "Skor untuk membantu Anda\nlebih fokus pada eksekusi.",
   "searchResults": "Hasil pencarian",
   "actionItems": "Item tindakan",
   "tasksToday": "Hari ini",
@@ -3603,5 +3603,12 @@
   "greatJobAlmostThere": "Kerja bagus, hampir selesai",
   "soCloseJustLittleMore": "Sangat dekat, sedikit lagi",
   "notificationFrequency": "Frekuensi Notifikasi",
-  "controlNotificationFrequency": "Kontrol seberapa sering Omi mengirimkan notifikasi proaktif kepada Anda."
+  "controlNotificationFrequency": "Kontrol seberapa sering Omi mengirimkan notifikasi proaktif kepada Anda.",
+  "yourScore": "Skor Anda",
+  "dailyScoreBreakdown": "Rincian Skor Harian",
+  "todaysScore": "Skor Hari Ini",
+  "tasksCompleted": "Tugas Selesai",
+  "completionRate": "Tingkat Penyelesaian",
+  "howItWorks": "Cara kerjanya",
+  "dailyScoreExplanation": "Skor harian Anda berdasarkan penyelesaian tugas. Selesaikan tugas Anda untuk meningkatkan skor!"
 }

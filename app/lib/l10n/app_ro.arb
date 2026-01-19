@@ -1486,7 +1486,7 @@
       }
     }
   },
-  "gotIt": "Got it",
+  "gotIt": "Am înțeles",
   "tasksExportedOneApp": "Sarcinile pot fi exportate către o singură aplicație odată.",
   "completeYourUpgrade": "Finalizează upgrade-ul",
   "importConfiguration": "Importă configurația",
@@ -2421,7 +2421,7 @@
   "showAll": "Arată tot →",
   "noTasksForToday": "Nicio sarcină pentru astăzi.\\nÎntrebați Omi pentru mai multe sarcini sau creați manual.",
   "dailyScore": "SCOR ZILNIC",
-  "dailyScoreDescription": "Un scor pentru a vă ajuta să vă concentrați mai bine asupra execuției.",
+  "dailyScoreDescription": "Un scor care te ajută să te\nconcentrezi mai bine pe execuție.",
   "searchResults": "Rezultate căutare",
   "actionItems": "Elemente de acțiune",
   "tasksToday": "Azi",
@@ -3603,5 +3603,12 @@
   "greatJobAlmostThere": "Treabă excelentă, ești aproape gata",
   "soCloseJustLittleMore": "Atât de aproape, doar puțin mai mult",
   "notificationFrequency": "Frecvența notificărilor",
-  "controlNotificationFrequency": "Controlați cât de des Omi vă trimite notificări proactive."
+  "controlNotificationFrequency": "Controlați cât de des Omi vă trimite notificări proactive.",
+  "yourScore": "Scorul tău",
+  "dailyScoreBreakdown": "Detalii scor zilnic",
+  "todaysScore": "Scorul de azi",
+  "tasksCompleted": "Sarcini finalizate",
+  "completionRate": "Rata de finalizare",
+  "howItWorks": "Cum funcționează",
+  "dailyScoreExplanation": "Scorul tău zilnic se bazează pe finalizarea sarcinilor. Finalizează sarcinile pentru a-ți îmbunătăți scorul!"
 }

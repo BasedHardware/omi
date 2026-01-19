@@ -1438,7 +1438,7 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get gotIt => 'Sain aru';
+  String get gotIt => 'Selge';
 
   @override
   String get tasksExportedOneApp => 'Ülesandeid saab eksportida korraga ühte rakendusse.';
@@ -2676,10 +2676,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get noTasksForToday => 'Täna pole ülesandeid.\\nKüsi Omi käest rohkem ülesandeid või loo need käsitsi.';
 
   @override
-  String get dailyScore => 'PÄEVASKOOR';
+  String get dailyScore => 'PÄEVA SKOOR';
 
   @override
-  String get dailyScoreDescription => 'Skoor, mis aitab teil täitmisele paremini keskenduda.';
+  String get dailyScoreDescription => 'Skoor, mis aitab teil paremini\nkeskenduda täitmisele.';
 
   @override
   String get searchResults => 'Otsingutulemused';
@@ -5686,4 +5686,26 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get controlNotificationFrequency => 'Määrake, kui sageli Omi saadab teile ennetavaid teavitusi.';
+
+  @override
+  String get yourScore => 'Teie skoor';
+
+  @override
+  String get dailyScoreBreakdown => 'Päeva skoori ülevaade';
+
+  @override
+  String get todaysScore => 'Tänane skoor';
+
+  @override
+  String get tasksCompleted => 'Ülesanded täidetud';
+
+  @override
+  String get completionRate => 'Täitmise määr';
+
+  @override
+  String get howItWorks => 'Kuidas see töötab';
+
+  @override
+  String get dailyScoreExplanation =>
+      'Teie päeva skoor põhineb ülesannete täitmisel. Täitke oma ülesanded skoori parandamiseks!';
 }

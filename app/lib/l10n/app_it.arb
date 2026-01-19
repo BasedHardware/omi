@@ -2403,7 +2403,7 @@
   "showAll": "Mostra tutto →",
   "noTasksForToday": "Nessuna attività per oggi.\\nChiedi a Omi più attività o creale manualmente.",
   "dailyScore": "PUNTEGGIO GIORNALIERO",
-  "dailyScoreDescription": "Un punteggio per aiutarti a concentrarti meglio sull'esecuzione.",
+  "dailyScoreDescription": "Un punteggio per aiutarti a\nconcentrarti meglio sull'esecuzione.",
   "searchResults": "Risultati di ricerca",
   "actionItems": "Elementi d'azione",
   "tasksToday": "Oggi",
@@ -3585,5 +3585,12 @@
   "greatJobAlmostThere": "Ottimo lavoro, ci sei quasi",
   "soCloseJustLittleMore": "Così vicino, ancora un po'",
   "notificationFrequency": "Frequenza notifiche",
-  "controlNotificationFrequency": "Controlla quanto spesso Omi ti invia notifiche proattive."
+  "controlNotificationFrequency": "Controlla quanto spesso Omi ti invia notifiche proattive.",
+  "yourScore": "Il tuo punteggio",
+  "dailyScoreBreakdown": "Dettaglio punteggio giornaliero",
+  "todaysScore": "Punteggio di oggi",
+  "tasksCompleted": "Attività completate",
+  "completionRate": "Tasso di completamento",
+  "howItWorks": "Come funziona",
+  "dailyScoreExplanation": "Il tuo punteggio giornaliero si basa sul completamento delle attività. Completa le tue attività per migliorare il punteggio!"
 }

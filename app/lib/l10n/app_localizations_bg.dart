@@ -2681,10 +2681,10 @@ class AppLocalizationsBg extends AppLocalizations {
   String get noTasksForToday => 'Няма задачи за днес.\\nПопитайте Omi за повече задачи или създайте ръчно.';
 
   @override
-  String get dailyScore => 'ДНЕВНА ОЦЕНКА';
+  String get dailyScore => 'ДНЕВЕН РЕЗУЛТАТ';
 
   @override
-  String get dailyScoreDescription => 'Оценка, която ви помага да се фокусирате по-добре върху изпълнението.';
+  String get dailyScoreDescription => 'Резултат, който ви помага\nда се фокусирате върху изпълнението.';
 
   @override
   String get searchResults => 'Резултати от търсенето';
@@ -5704,4 +5704,26 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get controlNotificationFrequency => 'Контролирайте колко често Omi ви изпраща проактивни известия.';
+
+  @override
+  String get yourScore => 'Вашият резултат';
+
+  @override
+  String get dailyScoreBreakdown => 'Разбивка на дневния резултат';
+
+  @override
+  String get todaysScore => 'Днешен резултат';
+
+  @override
+  String get tasksCompleted => 'Завършени задачи';
+
+  @override
+  String get completionRate => 'Процент на завършване';
+
+  @override
+  String get howItWorks => 'Как работи';
+
+  @override
+  String get dailyScoreExplanation =>
+      'Дневният ви резултат се базира на завършените задачи. Завършете задачите си, за да подобрите резултата!';
 }

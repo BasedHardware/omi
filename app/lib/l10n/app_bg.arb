@@ -2438,8 +2438,8 @@
   "getInsightsInstantly": "Получавайте прозрения и обобщения моментално",
   "showAll": "Покажи всички →",
   "noTasksForToday": "Няма задачи за днес.\\nПопитайте Omi за повече задачи или създайте ръчно.",
-  "dailyScore": "ДНЕВНА ОЦЕНКА",
-  "dailyScoreDescription": "Оценка, която ви помага да се фокусирате по-добре върху изпълнението.",
+  "dailyScore": "ДНЕВЕН РЕЗУЛТАТ",
+  "dailyScoreDescription": "Резултат, който ви помага\nда се фокусирате върху изпълнението.",
   "searchResults": "Резултати от търсенето",
   "actionItems": "Задачи за действие",
   "tasksToday": "Днес",
@@ -3605,5 +3605,12 @@
   "greatJobAlmostThere": "Страхотна работа, почти сте готови",
   "soCloseJustLittleMore": "Съвсем малко остава",
   "notificationFrequency": "Честота на известията",
-  "controlNotificationFrequency": "Контролирайте колко често Omi ви изпраща проактивни известия."
+  "controlNotificationFrequency": "Контролирайте колко често Omi ви изпраща проактивни известия.",
+  "yourScore": "Вашият резултат",
+  "dailyScoreBreakdown": "Разбивка на дневния резултат",
+  "todaysScore": "Днешен резултат",
+  "tasksCompleted": "Завършени задачи",
+  "completionRate": "Процент на завършване",
+  "howItWorks": "Как работи",
+  "dailyScoreExplanation": "Дневният ви резултат се базира на завършените задачи. Завършете задачите си, за да подобрите резултата!"
 }

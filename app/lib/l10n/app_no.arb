@@ -2421,7 +2421,7 @@
   "showAll": "Vis alle →",
   "noTasksForToday": "Ingen oppgaver for i dag.\\nSpør Omi om flere oppgaver eller opprett manuelt.",
   "dailyScore": "DAGLIG POENGSUM",
-  "dailyScoreDescription": "En poengsum som hjelper deg med å fokusere bedre på gjennomføring.",
+  "dailyScoreDescription": "En poengsum for å hjelpe deg\nå fokusere bedre på utførelse.",
   "searchResults": "Søkeresultater",
   "actionItems": "Handlingspunkter",
   "tasksToday": "I dag",
@@ -3603,5 +3603,12 @@
   "greatJobAlmostThere": "Flott jobbet, du er nesten der",
   "soCloseJustLittleMore": "Så nærme, bare litt til",
   "notificationFrequency": "Varslingsfrekvens",
-  "controlNotificationFrequency": "Kontroller hvor ofte Omi sender deg proaktive varsler."
+  "controlNotificationFrequency": "Kontroller hvor ofte Omi sender deg proaktive varsler.",
+  "yourScore": "Din poengsum",
+  "dailyScoreBreakdown": "Daglig poengsum oversikt",
+  "todaysScore": "Dagens poengsum",
+  "tasksCompleted": "Oppgaver fullført",
+  "completionRate": "Fullføringsgrad",
+  "howItWorks": "Slik fungerer det",
+  "dailyScoreExplanation": "Din daglige poengsum er basert på oppgavefullføring. Fullfør oppgavene dine for å forbedre poengsummen!"
 }

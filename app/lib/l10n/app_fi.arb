@@ -2420,8 +2420,8 @@
   "getInsightsInstantly": "Saat oivalluksia ja yhteenvetoja välittömästi",
   "showAll": "Näytä kaikki →",
   "noTasksForToday": "Ei tehtäviä tänään.\\nKysy Omilta lisää tehtäviä tai luo ne manuaalisesti.",
-  "dailyScore": "PÄIVITTÄINEN PISTEET",
-  "dailyScoreDescription": "Pisteet, jotka auttavat keskittymään paremmin toteutukseen.",
+  "dailyScore": "PÄIVITTÄINEN PISTEMÄÄRÄ",
+  "dailyScoreDescription": "Pistemäärä, joka auttaa sinua\nkeskittymään paremmin suorittamiseen.",
   "searchResults": "Hakutulokset",
   "actionItems": "Toimintakohdat",
   "tasksToday": "Tänään",
@@ -3603,5 +3603,12 @@
   "greatJobAlmostThere": "Hienoa työtä, olet melkein valmis",
   "soCloseJustLittleMore": "Niin lähellä, vielä vähän",
   "notificationFrequency": "Ilmoitusten tiheys",
-  "controlNotificationFrequency": "Hallitse kuinka usein Omi lähettää sinulle ennakoivia ilmoituksia."
+  "controlNotificationFrequency": "Hallitse kuinka usein Omi lähettää sinulle ennakoivia ilmoituksia.",
+  "yourScore": "Pistemääräsi",
+  "dailyScoreBreakdown": "Päivittäisen pistemäärän erittely",
+  "todaysScore": "Tämän päivän pisteet",
+  "tasksCompleted": "Tehtäviä suoritettu",
+  "completionRate": "Suoritusaste",
+  "howItWorks": "Miten se toimii",
+  "dailyScoreExplanation": "Päivittäinen pistemääräsi perustuu tehtävien suorittamiseen. Suorita tehtäväsi parantaaksesi pistemäärääsi!"
 }

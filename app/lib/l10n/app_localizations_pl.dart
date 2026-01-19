@@ -2683,7 +2683,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get dailyScore => 'DZIENNY WYNIK';
 
   @override
-  String get dailyScoreDescription => 'Wynik, który pomaga lepiej skupić się na realizacji.';
+  String get dailyScoreDescription => 'Wynik, który pomoże Ci lepiej\nskupić się na realizacji.';
 
   @override
   String get searchResults => 'Wyniki wyszukiwania';
@@ -5698,4 +5698,26 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get controlNotificationFrequency => 'Kontroluj, jak często Omi wysyła Ci proaktywne powiadomienia.';
+
+  @override
+  String get yourScore => 'Twój wynik';
+
+  @override
+  String get dailyScoreBreakdown => 'Szczegóły dziennego wyniku';
+
+  @override
+  String get todaysScore => 'Dzisiejszy wynik';
+
+  @override
+  String get tasksCompleted => 'Ukończone zadania';
+
+  @override
+  String get completionRate => 'Wskaźnik ukończenia';
+
+  @override
+  String get howItWorks => 'Jak to działa';
+
+  @override
+  String get dailyScoreExplanation =>
+      'Twój dzienny wynik opiera się na ukończeniu zadań. Ukończ zadania, aby poprawić wynik!';
 }

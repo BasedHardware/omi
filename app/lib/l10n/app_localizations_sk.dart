@@ -2684,7 +2684,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get dailyScore => 'DENNÉ SKÓRE';
 
   @override
-  String get dailyScoreDescription => 'Skóre, ktoré vám pomôže lepšie sa sústrediť na plnenie.';
+  String get dailyScoreDescription => 'Skóre, ktoré vám pomôže lepšie\nsa sústrediť na plnenie.';
 
   @override
   String get searchResults => 'Výsledky vyhľadávania';
@@ -5685,4 +5685,26 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get controlNotificationFrequency => 'Ovládajte, ako často vám Omi posiela proaktívne oznámenia.';
+
+  @override
+  String get yourScore => 'Vaše skóre';
+
+  @override
+  String get dailyScoreBreakdown => 'Rozpis denného skóre';
+
+  @override
+  String get todaysScore => 'Dnešné skóre';
+
+  @override
+  String get tasksCompleted => 'Dokončené úlohy';
+
+  @override
+  String get completionRate => 'Miera dokončenia';
+
+  @override
+  String get howItWorks => 'Ako to funguje';
+
+  @override
+  String get dailyScoreExplanation =>
+      'Vaše denné skóre je založené na plnení úloh. Dokončite svoje úlohy pre zlepšenie skóre!';
 }

@@ -1447,7 +1447,7 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get gotIt => 'Got it';
+  String get gotIt => 'Am înțeles';
 
   @override
   String get tasksExportedOneApp => 'Sarcinile pot fi exportate către o singură aplicație odată.';
@@ -2692,7 +2692,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get dailyScore => 'SCOR ZILNIC';
 
   @override
-  String get dailyScoreDescription => 'Un scor pentru a vă ajuta să vă concentrați mai bine asupra execuției.';
+  String get dailyScoreDescription => 'Un scor care te ajută să te\nconcentrezi mai bine pe execuție.';
 
   @override
   String get searchResults => 'Rezultate căutare';
@@ -5714,4 +5714,26 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get controlNotificationFrequency => 'Controlați cât de des Omi vă trimite notificări proactive.';
+
+  @override
+  String get yourScore => 'Scorul tău';
+
+  @override
+  String get dailyScoreBreakdown => 'Detalii scor zilnic';
+
+  @override
+  String get todaysScore => 'Scorul de azi';
+
+  @override
+  String get tasksCompleted => 'Sarcini finalizate';
+
+  @override
+  String get completionRate => 'Rata de finalizare';
+
+  @override
+  String get howItWorks => 'Cum funcționează';
+
+  @override
+  String get dailyScoreExplanation =>
+      'Scorul tău zilnic se bazează pe finalizarea sarcinilor. Finalizează sarcinile pentru a-ți îmbunătăți scorul!';
 }

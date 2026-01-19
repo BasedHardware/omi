@@ -2439,7 +2439,7 @@
   "showAll": "Mostra-ho tot →",
   "noTasksForToday": "No hi ha tasques per avui.\\nDemana a Omi més tasques o crea-les manualment.",
   "dailyScore": "PUNTUACIÓ DIÀRIA",
-  "dailyScoreDescription": "Una puntuació per ajudar-te a centrar-te millor en l'execució.",
+  "dailyScoreDescription": "Una puntuació per ajudar-te\na centrar-te en l'execució.",
   "searchResults": "Resultats de la cerca",
   "actionItems": "Elements d'acció",
   "tasksToday": "Avui",
@@ -3605,5 +3605,12 @@
   "greatJobAlmostThere": "Molt bé, gairebé hi ets",
   "soCloseJustLittleMore": "Tan a prop, només una mica més",
   "notificationFrequency": "Freqüència de notificacions",
-  "controlNotificationFrequency": "Controla amb quina freqüència Omi t'envia notificacions proactives."
+  "controlNotificationFrequency": "Controla amb quina freqüència Omi t'envia notificacions proactives.",
+  "yourScore": "La teva puntuació",
+  "dailyScoreBreakdown": "Desglossament de la puntuació diària",
+  "todaysScore": "Puntuació d'avui",
+  "tasksCompleted": "Tasques completades",
+  "completionRate": "Taxa de compleció",
+  "howItWorks": "Com funciona",
+  "dailyScoreExplanation": "La teva puntuació diària es basa en completar tasques. Completa les teves tasques per millorar la puntuació!"
 }

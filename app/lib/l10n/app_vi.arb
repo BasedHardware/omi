@@ -2421,7 +2421,7 @@
   "showAll": "Hiển thị tất cả →",
   "noTasksForToday": "Không có nhiệm vụ cho hôm nay.\\nHỏi Omi để có thêm nhiệm vụ hoặc tạo thủ công.",
   "dailyScore": "ĐIỂM HÀNG NGÀY",
-  "dailyScoreDescription": "Điểm giúp bạn tập trung tốt hơn vào việc thực hiện.",
+  "dailyScoreDescription": "Điểm số giúp bạn tập trung\ntốt hơn vào việc thực hiện.",
   "searchResults": "Kết quả tìm kiếm",
   "actionItems": "Mục hành động",
   "tasksToday": "Hôm nay",
@@ -3603,5 +3603,12 @@
   "greatJobAlmostThere": "Tuyệt vời, bạn sắp hoàn thành rồi",
   "soCloseJustLittleMore": "Gần lắm rồi, thêm một chút nữa",
   "notificationFrequency": "Tần suất thông báo",
-  "controlNotificationFrequency": "Kiểm soát tần suất Omi gửi thông báo chủ động cho bạn."
+  "controlNotificationFrequency": "Kiểm soát tần suất Omi gửi thông báo chủ động cho bạn.",
+  "yourScore": "Điểm của bạn",
+  "dailyScoreBreakdown": "Chi tiết điểm hàng ngày",
+  "todaysScore": "Điểm hôm nay",
+  "tasksCompleted": "Nhiệm vụ hoàn thành",
+  "completionRate": "Tỷ lệ hoàn thành",
+  "howItWorks": "Cách hoạt động",
+  "dailyScoreExplanation": "Điểm hàng ngày dựa trên việc hoàn thành nhiệm vụ. Hoàn thành nhiệm vụ để cải thiện điểm!"
 }

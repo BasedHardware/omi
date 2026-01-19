@@ -2687,7 +2687,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get dailyScore => 'SKOR HARIAN';
 
   @override
-  String get dailyScoreDescription => 'Skor untuk membantu Anda lebih fokus pada pelaksanaan.';
+  String get dailyScoreDescription => 'Skor untuk membantu Anda\nlebih fokus pada eksekusi.';
 
   @override
   String get searchResults => 'Hasil pencarian';
@@ -5703,4 +5703,26 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get controlNotificationFrequency => 'Kontrol seberapa sering Omi mengirimkan notifikasi proaktif kepada Anda.';
+
+  @override
+  String get yourScore => 'Skor Anda';
+
+  @override
+  String get dailyScoreBreakdown => 'Rincian Skor Harian';
+
+  @override
+  String get todaysScore => 'Skor Hari Ini';
+
+  @override
+  String get tasksCompleted => 'Tugas Selesai';
+
+  @override
+  String get completionRate => 'Tingkat Penyelesaian';
+
+  @override
+  String get howItWorks => 'Cara kerjanya';
+
+  @override
+  String get dailyScoreExplanation =>
+      'Skor harian Anda berdasarkan penyelesaian tugas. Selesaikan tugas Anda untuk meningkatkan skor!';
 }

@@ -2700,7 +2700,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get dailyScore => 'SCORE QUOTIDIEN';
 
   @override
-  String get dailyScoreDescription => 'Un score pour vous aider à mieux vous concentrer sur l\'exécution.';
+  String get dailyScoreDescription => 'Un score pour vous aider\nà mieux vous concentrer sur l\'exécution.';
 
   @override
   String get searchResults => 'Résultats de recherche';
@@ -5737,4 +5737,26 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get controlNotificationFrequency =>
       'Contrôlez la fréquence à laquelle Omi vous envoie des notifications proactives.';
+
+  @override
+  String get yourScore => 'Votre score';
+
+  @override
+  String get dailyScoreBreakdown => 'Détail du score quotidien';
+
+  @override
+  String get todaysScore => 'Score du jour';
+
+  @override
+  String get tasksCompleted => 'Tâches terminées';
+
+  @override
+  String get completionRate => 'Taux de complétion';
+
+  @override
+  String get howItWorks => 'Comment ça marche';
+
+  @override
+  String get dailyScoreExplanation =>
+      'Votre score quotidien est basé sur l\'achèvement des tâches. Terminez vos tâches pour améliorer votre score!';
 }

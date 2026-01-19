@@ -829,7 +829,7 @@
   "showAll": "すべて表示 →",
   "noTasksForToday": "今日のタスクはありません。\\nOmiに他のタスクを尋ねるか、手動で作成してください。",
   "dailyScore": "デイリースコア",
-  "dailyScoreDescription": "実行により集中できるようにするためのスコアです。",
+  "dailyScoreDescription": "実行に集中するための\nスコアです。",
   "searchResults": "検索結果",
   "actionItems": "アクションアイテム",
   "tasksToday": "今日",
@@ -2029,5 +2029,12 @@
   "greatJobAlmostThere": "素晴らしい、もう少しです",
   "soCloseJustLittleMore": "あと少し",
   "notificationFrequency": "通知頻度",
-  "controlNotificationFrequency": "Omiがプロアクティブ通知を送信する頻度を制御します。"
+  "controlNotificationFrequency": "Omiがプロアクティブ通知を送信する頻度を制御します。",
+  "yourScore": "あなたのスコア",
+  "dailyScoreBreakdown": "デイリースコアの内訳",
+  "todaysScore": "今日のスコア",
+  "tasksCompleted": "完了したタスク",
+  "completionRate": "完了率",
+  "howItWorks": "仕組み",
+  "dailyScoreExplanation": "デイリースコアはタスクの完了に基づいています。タスクを完了してスコアを向上させましょう！"
 }

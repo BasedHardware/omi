@@ -1888,7 +1888,7 @@
     "description": "Troubleshooting instructions for watch setup"
   },
   "@gotIt": {
-    "description": "Button to dismiss dialog"
+    "description": "Button to dismiss explanation"
   },
   "recordingStartedSuccessfully": "Recording started successfully!",
   "@recordingStartedSuccessfully": {
@@ -3031,11 +3031,11 @@
   },
   "dailyScore": "DAILY SCORE",
   "@dailyScore": {
-    "description": "Header title for daily score widget"
+    "description": "Header for daily score widget"
   },
-  "dailyScoreDescription": "A score to help you better focus on execution.",
+  "dailyScoreDescription": "A score to help you better\nfocus on execution.",
   "@dailyScoreDescription": {
-    "description": "Description explaining the daily score feature"
+    "description": "Description text for daily score widget"
   },
   "searchResults": "Search results",
   "@searchResults": {
@@ -6846,5 +6846,33 @@
   "controlNotificationFrequency": "Control how often Omi sends you proactive notifications.",
   "@controlNotificationFrequency": {
     "description": "Description for notification frequency control"
+  },
+  "yourScore": "Your score",
+  "@yourScore": {
+    "description": "Label for your score button"
+  },
+  "dailyScoreBreakdown": "Daily Score Breakdown",
+  "@dailyScoreBreakdown": {
+    "description": "Title for score breakdown modal"
+  },
+  "todaysScore": "Today's Score",
+  "@todaysScore": {
+    "description": "Label for today score in breakdown"
+  },
+  "tasksCompleted": "Tasks Completed",
+  "@tasksCompleted": {
+    "description": "Label for tasks completed count"
+  },
+  "completionRate": "Completion Rate",
+  "@completionRate": {
+    "description": "Label for completion percentage"
+  },
+  "howItWorks": "How it works",
+  "@howItWorks": {
+    "description": "Section title explaining how scoring works"
+  },
+  "dailyScoreExplanation": "Your daily score is based on task completion. Complete your tasks to improve your score!",
+  "@dailyScoreExplanation": {
+    "description": "Explanation of how daily score is calculated"
   }
 }

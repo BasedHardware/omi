@@ -849,8 +849,8 @@
   "getInsightsInstantly": "立即获取见解和摘要",
   "showAll": "显示全部 →",
   "noTasksForToday": "今天没有任务。\\n向Omi询问更多任务或手动创建。",
-  "dailyScore": "每日得分",
-  "dailyScoreDescription": "一个帮助您更好地专注于执行的分数。",
+  "dailyScore": "每日评分",
+  "dailyScoreDescription": "帮助您更好地专注于\n执行的评分。",
   "searchResults": "搜索结果",
   "actionItems": "行动项目",
   "tasksToday": "今天",
@@ -2050,5 +2050,12 @@
   "greatJobAlmostThere": "做得好，就快完成了",
   "soCloseJustLittleMore": "很接近了，再说一点",
   "notificationFrequency": "通知频率",
-  "controlNotificationFrequency": "控制Omi向您发送主动通知的频率。"
+  "controlNotificationFrequency": "控制Omi向您发送主动通知的频率。",
+  "yourScore": "您的评分",
+  "dailyScoreBreakdown": "每日评分详情",
+  "todaysScore": "今日评分",
+  "tasksCompleted": "已完成任务",
+  "completionRate": "完成率",
+  "howItWorks": "运作方式",
+  "dailyScoreExplanation": "您的每日评分基于任务完成情况。完成任务以提高评分！"
 }

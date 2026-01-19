@@ -2421,7 +2421,7 @@
   "showAll": "Zobraziť všetko →",
   "noTasksForToday": "Žiadne úlohy na dnes.\\nSpýtajte sa Omi na ďalšie úlohy alebo ich vytvorte manuálne.",
   "dailyScore": "DENNÉ SKÓRE",
-  "dailyScoreDescription": "Skóre, ktoré vám pomôže lepšie sa sústrediť na plnenie.",
+  "dailyScoreDescription": "Skóre, ktoré vám pomôže lepšie\nsa sústrediť na plnenie.",
   "searchResults": "Výsledky vyhľadávania",
   "actionItems": "Úlohy",
   "tasksToday": "Dnes",
@@ -3603,5 +3603,12 @@
   "greatJobAlmostThere": "Skvelá práca, už ste skoro tam",
   "soCloseJustLittleMore": "Tak blízko, len ešte trochu",
   "notificationFrequency": "Frekvencia oznámení",
-  "controlNotificationFrequency": "Ovládajte, ako často vám Omi posiela proaktívne oznámenia."
+  "controlNotificationFrequency": "Ovládajte, ako často vám Omi posiela proaktívne oznámenia.",
+  "yourScore": "Vaše skóre",
+  "dailyScoreBreakdown": "Rozpis denného skóre",
+  "todaysScore": "Dnešné skóre",
+  "tasksCompleted": "Dokončené úlohy",
+  "completionRate": "Miera dokončenia",
+  "howItWorks": "Ako to funguje",
+  "dailyScoreExplanation": "Vaše denné skóre je založené na plnení úloh. Dokončite svoje úlohy pre zlepšenie skóre!"
 }

@@ -2421,7 +2421,7 @@
   "showAll": "모두 표시 →",
   "noTasksForToday": "오늘의 작업이 없습니다.\\nOmi에게 더 많은 작업을 요청하거나 수동으로 생성하세요.",
   "dailyScore": "일일 점수",
-  "dailyScoreDescription": "실행에 더 잘 집중할 수 있도록 도와주는 점수입니다.",
+  "dailyScoreDescription": "실행에 더 잘 집중할 수 있도록\n도와주는 점수입니다.",
   "searchResults": "검색 결과",
   "actionItems": "실행 항목",
   "tasksToday": "오늘",
@@ -3603,5 +3603,12 @@
   "greatJobAlmostThere": "잘하고 있어요, 거의 다 됐어요",
   "soCloseJustLittleMore": "거의 다 왔어요, 조금만 더",
   "notificationFrequency": "알림 빈도",
-  "controlNotificationFrequency": "Omi가 사전 알림을 보내는 빈도를 제어합니다."
+  "controlNotificationFrequency": "Omi가 사전 알림을 보내는 빈도를 제어합니다.",
+  "yourScore": "내 점수",
+  "dailyScoreBreakdown": "일일 점수 세부 정보",
+  "todaysScore": "오늘의 점수",
+  "tasksCompleted": "완료된 작업",
+  "completionRate": "완료율",
+  "howItWorks": "작동 방식",
+  "dailyScoreExplanation": "일일 점수는 작업 완료를 기반으로 합니다. 작업을 완료하여 점수를 높이세요!"
 }

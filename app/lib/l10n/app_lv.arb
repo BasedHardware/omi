@@ -2420,8 +2420,8 @@
   "getInsightsInstantly": "Iegūstiet ieskatus un kopsavilkumus nekavējoties",
   "showAll": "Rādīt visu →",
   "noTasksForToday": "Šodien nav uzdevumu.\\nJautājiet Omi par vairāk uzdevumiem vai izveidojiet tos manuāli.",
-  "dailyScore": "DIENAS VĒRTĒJUMS",
-  "dailyScoreDescription": "Vērtējums, kas palīdz labāk koncentrēties uz izpildi.",
+  "dailyScore": "DIENAS REZULTĀTS",
+  "dailyScoreDescription": "Rezultāts, kas palīdz labāk\nkoncentrēties uz izpildi.",
   "searchResults": "Meklēšanas rezultāti",
   "actionItems": "Darbības punkti",
   "tasksToday": "Šodien",
@@ -3603,5 +3603,12 @@
   "greatJobAlmostThere": "Lielisks darbs, gandrīz pabeigts",
   "soCloseJustLittleMore": "Tik tuvu, vēl nedaudz",
   "notificationFrequency": "Paziņojumu biežums",
-  "controlNotificationFrequency": "Kontrolējiet, cik bieži Omi sūta jums proaktīvus paziņojumus."
+  "controlNotificationFrequency": "Kontrolējiet, cik bieži Omi sūta jums proaktīvus paziņojumus.",
+  "yourScore": "Jūsu rezultāts",
+  "dailyScoreBreakdown": "Dienas rezultāta sadalījums",
+  "todaysScore": "Šodienas rezultāts",
+  "tasksCompleted": "Uzdevumi pabeigti",
+  "completionRate": "Izpildes rādītājs",
+  "howItWorks": "Kā tas darbojas",
+  "dailyScoreExplanation": "Jūsu dienas rezultāts balstās uz uzdevumu izpildi. Pabeidziet uzdevumus, lai uzlabotu rezultātu!"
 }

@@ -2805,7 +2805,7 @@ abstract class AppLocalizations {
   /// **'Integration with {appName} is coming soon! We\'re working hard to bring you more task management options.'**
   String integrationComingSoon(String appName);
 
-  /// Button to dismiss dialog
+  /// Button to dismiss explanation
   ///
   /// In en, this message translates to:
   /// **'Got it'**
@@ -5145,16 +5145,16 @@ abstract class AppLocalizations {
   /// **'No tasks for today.\\nAsk Omi for more tasks or create manually.'**
   String get noTasksForToday;
 
-  /// Header title for daily score widget
+  /// Header for daily score widget
   ///
   /// In en, this message translates to:
   /// **'DAILY SCORE'**
   String get dailyScore;
 
-  /// Description explaining the daily score feature
+  /// Description text for daily score widget
   ///
   /// In en, this message translates to:
-  /// **'A score to help you better focus on execution.'**
+  /// **'A score to help you better\nfocus on execution.'**
   String get dailyScoreDescription;
 
   /// Badge label for search results section
@@ -10766,6 +10766,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Control how often Omi sends you proactive notifications.'**
   String get controlNotificationFrequency;
+
+  /// Label for your score button
+  ///
+  /// In en, this message translates to:
+  /// **'Your score'**
+  String get yourScore;
+
+  /// Title for score breakdown modal
+  ///
+  /// In en, this message translates to:
+  /// **'Daily Score Breakdown'**
+  String get dailyScoreBreakdown;
+
+  /// Label for today score in breakdown
+  ///
+  /// In en, this message translates to:
+  /// **'Today\'s Score'**
+  String get todaysScore;
+
+  /// Label for tasks completed count
+  ///
+  /// In en, this message translates to:
+  /// **'Tasks Completed'**
+  String get tasksCompleted;
+
+  /// Label for completion percentage
+  ///
+  /// In en, this message translates to:
+  /// **'Completion Rate'**
+  String get completionRate;
+
+  /// Section title explaining how scoring works
+  ///
+  /// In en, this message translates to:
+  /// **'How it works'**
+  String get howItWorks;
+
+  /// Explanation of how daily score is calculated
+  ///
+  /// In en, this message translates to:
+  /// **'Your daily score is based on task completion. Complete your tasks to improve your score!'**
+  String get dailyScoreExplanation;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -2686,7 +2686,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get dailyScore => 'DAGELIJKSE SCORE';
 
   @override
-  String get dailyScoreDescription => 'Een score om je te helpen beter te focussen op uitvoering.';
+  String get dailyScoreDescription => 'Een score om je te helpen\nbeter te focussen op uitvoering.';
 
   @override
   String get searchResults => 'Zoekresultaten';
@@ -5703,4 +5703,26 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get controlNotificationFrequency => 'Bepaal hoe vaak Omi u proactieve meldingen stuurt.';
+
+  @override
+  String get yourScore => 'Jouw score';
+
+  @override
+  String get dailyScoreBreakdown => 'Dagelijkse score overzicht';
+
+  @override
+  String get todaysScore => 'Score van vandaag';
+
+  @override
+  String get tasksCompleted => 'Taken voltooid';
+
+  @override
+  String get completionRate => 'Voltooiingspercentage';
+
+  @override
+  String get howItWorks => 'Hoe het werkt';
+
+  @override
+  String get dailyScoreExplanation =>
+      'Je dagelijkse score is gebaseerd op taakvoltooiing. Voltooi je taken om je score te verbeteren!';
 }

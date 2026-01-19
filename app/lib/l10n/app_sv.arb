@@ -1486,7 +1486,7 @@
       }
     }
   },
-  "gotIt": "Förstår",
+  "gotIt": "Uppfattat",
   "tasksExportedOneApp": "Uppgifter kan exporteras till en app åt gången.",
   "completeYourUpgrade": "Slutför din uppgradering",
   "importConfiguration": "Importera konfiguration",
@@ -2421,7 +2421,7 @@
   "showAll": "Visa alla →",
   "noTasksForToday": "Inga uppgifter för idag.\\nFråga Omi om fler uppgifter eller skapa manuellt.",
   "dailyScore": "DAGLIG POÄNG",
-  "dailyScoreDescription": "Ett poäng som hjälper dig att fokusera bättre på genomförande.",
+  "dailyScoreDescription": "En poäng för att hjälpa dig\nfokusera bättre på utförande.",
   "searchResults": "Sökresultat",
   "actionItems": "Åtgärdspunkter",
   "tasksToday": "Idag",
@@ -3603,5 +3603,12 @@
   "greatJobAlmostThere": "Bra jobbat, du är nästan klar",
   "soCloseJustLittleMore": "Så nära, bara lite till",
   "notificationFrequency": "Aviseringsfrekvens",
-  "controlNotificationFrequency": "Kontrollera hur ofta Omi skickar proaktiva aviseringar till dig."
+  "controlNotificationFrequency": "Kontrollera hur ofta Omi skickar proaktiva aviseringar till dig.",
+  "yourScore": "Din poäng",
+  "dailyScoreBreakdown": "Daglig poängöversikt",
+  "todaysScore": "Dagens poäng",
+  "tasksCompleted": "Uppgifter slutförda",
+  "completionRate": "Slutförandegrad",
+  "howItWorks": "Så fungerar det",
+  "dailyScoreExplanation": "Din dagliga poäng baseras på uppgiftsslutförande. Slutför dina uppgifter för att förbättra din poäng!"
 }

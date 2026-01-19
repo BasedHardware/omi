@@ -1486,7 +1486,7 @@
       }
     }
   },
-  "gotIt": "Got it",
+  "gotIt": "Forstået",
   "tasksExportedOneApp": "Tasks can be exported to one app at a time.",
   "completeYourUpgrade": "Complete Your Upgrade",
   "importConfiguration": "Import Configuration",
@@ -2421,7 +2421,7 @@
   "showAll": "Vis alle →",
   "noTasksForToday": "Ingen opgaver for i dag.\\nSpørg Omi om flere opgaver eller opret manuelt.",
   "dailyScore": "DAGLIG SCORE",
-  "dailyScoreDescription": "En score der hjælper dig med at fokusere bedre på udførelse.",
+  "dailyScoreDescription": "En score til at hjælpe dig\nmed at fokusere på udførelse.",
   "searchResults": "Søgeresultater",
   "actionItems": "Handlingspunkter",
   "tasksToday": "I dag",
@@ -3603,5 +3603,12 @@
   "greatJobAlmostThere": "Godt arbejde, du er næsten i mål",
   "soCloseJustLittleMore": "Så tæt på, bare lidt mere",
   "notificationFrequency": "Notifikationsfrekvens",
-  "controlNotificationFrequency": "Kontroller, hvor ofte Omi sender dig proaktive notifikationer."
+  "controlNotificationFrequency": "Kontroller, hvor ofte Omi sender dig proaktive notifikationer.",
+  "yourScore": "Din score",
+  "dailyScoreBreakdown": "Daglig score oversigt",
+  "todaysScore": "Dagens score",
+  "tasksCompleted": "Opgaver fuldført",
+  "completionRate": "Fuldførelsesrate",
+  "howItWorks": "Sådan fungerer det",
+  "dailyScoreExplanation": "Din daglige score er baseret på opgavefuldførelse. Fuldfør dine opgaver for at forbedre din score!"
 }

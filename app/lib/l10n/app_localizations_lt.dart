@@ -2676,10 +2676,10 @@ class AppLocalizationsLt extends AppLocalizations {
       'Šiandien nėra užduočių.\\nPaprašykite Omi daugiau užduočių arba sukurkite rankiniu būdu.';
 
   @override
-  String get dailyScore => 'DIENOS ĮVERTINIMAS';
+  String get dailyScore => 'DIENOS BALAS';
 
   @override
-  String get dailyScoreDescription => 'Įvertinimas, padedantis geriau sutelkti dėmesį į vykdymą.';
+  String get dailyScoreDescription => 'Balas, padedantis geriau\nsutelkti dėmesį į vykdymą.';
 
   @override
   String get searchResults => 'Paieškos rezultatai';
@@ -5688,4 +5688,26 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get controlNotificationFrequency => 'Valdykite, kaip dažnai Omi siunčia jums aktyvius pranešimus.';
+
+  @override
+  String get yourScore => 'Jūsų balas';
+
+  @override
+  String get dailyScoreBreakdown => 'Dienos balo suvestinė';
+
+  @override
+  String get todaysScore => 'Šiandienos balas';
+
+  @override
+  String get tasksCompleted => 'Užduotys atliktos';
+
+  @override
+  String get completionRate => 'Užbaigimo rodiklis';
+
+  @override
+  String get howItWorks => 'Kaip tai veikia';
+
+  @override
+  String get dailyScoreExplanation =>
+      'Jūsų dienos balas pagrįstas užduočių atlikimu. Atlikite užduotis, kad pagerintumėte balą!';
 }

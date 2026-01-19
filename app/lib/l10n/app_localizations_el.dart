@@ -1450,7 +1450,7 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get gotIt => 'Το κατάλαβα';
+  String get gotIt => 'Κατάλαβα';
 
   @override
   String get tasksExportedOneApp => 'Οι εργασίες μπορούν να εξαχθούν σε μία εφαρμογή τη φορά.';
@@ -2697,10 +2697,10 @@ class AppLocalizationsEl extends AppLocalizations {
       'Δεν υπάρχουν εργασίες για σήμερα.\\nΡωτήστε το Omi για περισσότερες εργασίες ή δημιουργήστε χειροκίνητα.';
 
   @override
-  String get dailyScore => 'ΗΜΕΡΗΣΙΑ ΒΑΘΜΟΛΟΓΙΑ';
+  String get dailyScore => 'ΗΜΕΡΗΣΙΟ ΣΚΟΡ';
 
   @override
-  String get dailyScoreDescription => 'Μια βαθμολογία που σας βοηθά να εστιάσετε καλύτερα στην εκτέλεση.';
+  String get dailyScoreDescription => 'Ένα σκορ για να σας βοηθήσει\nνα εστιάσετε καλύτερα στην εκτέλεση.';
 
   @override
   String get searchResults => 'Αποτελέσματα αναζήτησης';
@@ -5730,4 +5730,26 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get controlNotificationFrequency => 'Ελέγξτε πόσο συχνά το Omi σας στέλνει προληπτικές ειδοποιήσεις.';
+
+  @override
+  String get yourScore => 'Το σκορ σας';
+
+  @override
+  String get dailyScoreBreakdown => 'Ανάλυση ημερήσιου σκορ';
+
+  @override
+  String get todaysScore => 'Σημερινό σκορ';
+
+  @override
+  String get tasksCompleted => 'Εργασίες ολοκληρώθηκαν';
+
+  @override
+  String get completionRate => 'Ποσοστό ολοκλήρωσης';
+
+  @override
+  String get howItWorks => 'Πώς λειτουργεί';
+
+  @override
+  String get dailyScoreExplanation =>
+      'Το ημερήσιο σκορ σας βασίζεται στην ολοκλήρωση εργασιών. Ολοκληρώστε τις εργασίες σας για να βελτιώσετε το σκορ!';
 }

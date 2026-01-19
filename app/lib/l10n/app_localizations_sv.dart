@@ -1441,7 +1441,7 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get gotIt => 'Förstår';
+  String get gotIt => 'Uppfattat';
 
   @override
   String get tasksExportedOneApp => 'Uppgifter kan exporteras till en app åt gången.';
@@ -2682,7 +2682,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get dailyScore => 'DAGLIG POÄNG';
 
   @override
-  String get dailyScoreDescription => 'Ett poäng som hjälper dig att fokusera bättre på genomförande.';
+  String get dailyScoreDescription => 'En poäng för att hjälpa dig\nfokusera bättre på utförande.';
 
   @override
   String get searchResults => 'Sökresultat';
@@ -5689,4 +5689,26 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get controlNotificationFrequency => 'Kontrollera hur ofta Omi skickar proaktiva aviseringar till dig.';
+
+  @override
+  String get yourScore => 'Din poäng';
+
+  @override
+  String get dailyScoreBreakdown => 'Daglig poängöversikt';
+
+  @override
+  String get todaysScore => 'Dagens poäng';
+
+  @override
+  String get tasksCompleted => 'Uppgifter slutförda';
+
+  @override
+  String get completionRate => 'Slutförandegrad';
+
+  @override
+  String get howItWorks => 'Så fungerar det';
+
+  @override
+  String get dailyScoreExplanation =>
+      'Din dagliga poäng baseras på uppgiftsslutförande. Slutför dina uppgifter för att förbättra din poäng!';
 }

@@ -2402,8 +2402,8 @@
   "getInsightsInstantly": "Anında içgörüler ve özetler alın",
   "showAll": "Hepsini göster →",
   "noTasksForToday": "Bugün için görev yok.\\nDaha fazla görev için Omi'ye sorun veya manuel oluşturun.",
-  "dailyScore": "GÜNLÜK PUAN",
-  "dailyScoreDescription": "Uygulamaya daha iyi odaklanmanıza yardımcı olan bir puan.",
+  "dailyScore": "GÜNLÜK SKOR",
+  "dailyScoreDescription": "Yürütmeye daha iyi odaklanmanıza\nyardımcı olacak bir skor.",
   "searchResults": "Arama sonuçları",
   "actionItems": "Eylem öğeleri",
   "tasksToday": "Bugün",
@@ -3585,5 +3585,12 @@
   "greatJobAlmostThere": "Harika iş, neredeyse bitti",
   "soCloseJustLittleMore": "Çok yakın, biraz daha",
   "notificationFrequency": "Bildirim Sıklığı",
-  "controlNotificationFrequency": "Omi'nin size ne sıklıkta proaktif bildirimler göndereceğini kontrol edin."
+  "controlNotificationFrequency": "Omi'nin size ne sıklıkta proaktif bildirimler göndereceğini kontrol edin.",
+  "yourScore": "Skorunuz",
+  "dailyScoreBreakdown": "Günlük Skor Detayı",
+  "todaysScore": "Bugünün Skoru",
+  "tasksCompleted": "Tamamlanan Görevler",
+  "completionRate": "Tamamlanma Oranı",
+  "howItWorks": "Nasıl çalışır",
+  "dailyScoreExplanation": "Günlük skorunuz görev tamamlamaya dayanır. Skorunuzu artırmak için görevlerinizi tamamlayın!"
 }

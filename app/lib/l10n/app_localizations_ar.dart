@@ -2657,10 +2657,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String get noTasksForToday => 'لا توجد مهام لليوم.\\nاسأل Omi عن المزيد من المهام أو أنشئها يدويًا.';
 
   @override
-  String get dailyScore => 'الدرجة اليومية';
+  String get dailyScore => 'النتيجة اليومية';
 
   @override
-  String get dailyScoreDescription => 'درجة لمساعدتك على التركيز بشكل أفضل على التنفيذ.';
+  String get dailyScoreDescription => 'نتيجة تساعدك على التركيز\nبشكل أفضل على التنفيذ.';
 
   @override
   String get searchResults => 'نتائج البحث';
@@ -5645,4 +5645,25 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get controlNotificationFrequency => 'تحكم في عدد مرات إرسال Omi للإشعارات الاستباقية.';
+
+  @override
+  String get yourScore => 'نتيجتك';
+
+  @override
+  String get dailyScoreBreakdown => 'تفاصيل النتيجة اليومية';
+
+  @override
+  String get todaysScore => 'نتيجة اليوم';
+
+  @override
+  String get tasksCompleted => 'المهام المكتملة';
+
+  @override
+  String get completionRate => 'نسبة الإنجاز';
+
+  @override
+  String get howItWorks => 'كيف يعمل';
+
+  @override
+  String get dailyScoreExplanation => 'نتيجتك اليومية تعتمد على إكمال المهام. أكمل مهامك لتحسين نتيجتك!';
 }

@@ -2452,8 +2452,8 @@
   "getInsightsInstantly": "احصل على الرؤى والملخصات على الفور",
   "showAll": "عرض الكل ←",
   "noTasksForToday": "لا توجد مهام لليوم.\\nاسأل Omi عن المزيد من المهام أو أنشئها يدويًا.",
-  "dailyScore": "الدرجة اليومية",
-  "dailyScoreDescription": "درجة لمساعدتك على التركيز بشكل أفضل على التنفيذ.",
+  "dailyScore": "النتيجة اليومية",
+  "dailyScoreDescription": "نتيجة تساعدك على التركيز\nبشكل أفضل على التنفيذ.",
   "searchResults": "نتائج البحث",
   "actionItems": "عناصر العمل",
   "tasksToday": "اليوم",
@@ -3603,5 +3603,12 @@
   "greatJobAlmostThere": "عمل رائع، أنت على وشك الانتهاء",
   "soCloseJustLittleMore": "قريب جداً، فقط القليل",
   "notificationFrequency": "تكرار الإشعارات",
-  "controlNotificationFrequency": "تحكم في عدد مرات إرسال Omi للإشعارات الاستباقية."
+  "controlNotificationFrequency": "تحكم في عدد مرات إرسال Omi للإشعارات الاستباقية.",
+  "yourScore": "نتيجتك",
+  "dailyScoreBreakdown": "تفاصيل النتيجة اليومية",
+  "todaysScore": "نتيجة اليوم",
+  "tasksCompleted": "المهام المكتملة",
+  "completionRate": "نسبة الإنجاز",
+  "howItWorks": "كيف يعمل",
+  "dailyScoreExplanation": "نتيجتك اليومية تعتمد على إكمال المهام. أكمل مهامك لتحسين نتيجتك!"
 }

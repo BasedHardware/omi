@@ -2673,10 +2673,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get noTasksForToday => 'Ei tehtäviä tänään.\\nKysy Omilta lisää tehtäviä tai luo ne manuaalisesti.';
 
   @override
-  String get dailyScore => 'PÄIVITTÄINEN PISTEET';
+  String get dailyScore => 'PÄIVITTÄINEN PISTEMÄÄRÄ';
 
   @override
-  String get dailyScoreDescription => 'Pisteet, jotka auttavat keskittymään paremmin toteutukseen.';
+  String get dailyScoreDescription => 'Pistemäärä, joka auttaa sinua\nkeskittymään paremmin suorittamiseen.';
 
   @override
   String get searchResults => 'Hakutulokset';
@@ -5686,4 +5686,26 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get controlNotificationFrequency => 'Hallitse kuinka usein Omi lähettää sinulle ennakoivia ilmoituksia.';
+
+  @override
+  String get yourScore => 'Pistemääräsi';
+
+  @override
+  String get dailyScoreBreakdown => 'Päivittäisen pistemäärän erittely';
+
+  @override
+  String get todaysScore => 'Tämän päivän pisteet';
+
+  @override
+  String get tasksCompleted => 'Tehtäviä suoritettu';
+
+  @override
+  String get completionRate => 'Suoritusaste';
+
+  @override
+  String get howItWorks => 'Miten se toimii';
+
+  @override
+  String get dailyScoreExplanation =>
+      'Päivittäinen pistemääräsi perustuu tehtävien suorittamiseen. Suorita tehtäväsi parantaaksesi pistemäärääsi!';
 }

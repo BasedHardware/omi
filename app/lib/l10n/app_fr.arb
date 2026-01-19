@@ -1224,7 +1224,7 @@
   "showAll": "Tout afficher →",
   "noTasksForToday": "Aucune tâche pour aujourd'hui.\\nDemandez à Omi plus de tâches ou créez-les manuellement.",
   "dailyScore": "SCORE QUOTIDIEN",
-  "dailyScoreDescription": "Un score pour vous aider à mieux vous concentrer sur l'exécution.",
+  "dailyScoreDescription": "Un score pour vous aider\nà mieux vous concentrer sur l'exécution.",
   "searchResults": "Résultats de recherche",
   "actionItems": "Éléments d'action",
   "tasksToday": "Aujourd'hui",
@@ -2421,5 +2421,12 @@
   "greatJobAlmostThere": "Excellent travail, vous y êtes presque",
   "soCloseJustLittleMore": "Si proche, encore un peu",
   "notificationFrequency": "Fréquence des notifications",
-  "controlNotificationFrequency": "Contrôlez la fréquence à laquelle Omi vous envoie des notifications proactives."
+  "controlNotificationFrequency": "Contrôlez la fréquence à laquelle Omi vous envoie des notifications proactives.",
+  "yourScore": "Votre score",
+  "dailyScoreBreakdown": "Détail du score quotidien",
+  "todaysScore": "Score du jour",
+  "tasksCompleted": "Tâches terminées",
+  "completionRate": "Taux de complétion",
+  "howItWorks": "Comment ça marche",
+  "dailyScoreExplanation": "Votre score quotidien est basé sur l'achèvement des tâches. Terminez vos tâches pour améliorer votre score!"
 }

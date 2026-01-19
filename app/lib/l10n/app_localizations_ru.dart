@@ -2684,10 +2684,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get noTasksForToday => 'Нет задач на сегодня.\\nСпросите Omi о дополнительных задачах или создайте вручную.';
 
   @override
-  String get dailyScore => 'ЕЖЕДНЕВНЫЙ БАЛЛ';
+  String get dailyScore => 'ДНЕВНОЙ СЧЁТ';
 
   @override
-  String get dailyScoreDescription => 'Балл, который помогает лучше сосредоточиться на выполнении.';
+  String get dailyScoreDescription => 'Счёт, помогающий лучше\nсосредоточиться на выполнении.';
 
   @override
   String get searchResults => 'Результаты поиска';
@@ -5701,4 +5701,26 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get controlNotificationFrequency => 'Управляйте частотой отправки проактивных уведомлений от Omi.';
+
+  @override
+  String get yourScore => 'Ваш счёт';
+
+  @override
+  String get dailyScoreBreakdown => 'Разбивка дневного счёта';
+
+  @override
+  String get todaysScore => 'Сегодняшний счёт';
+
+  @override
+  String get tasksCompleted => 'Задачи выполнены';
+
+  @override
+  String get completionRate => 'Процент выполнения';
+
+  @override
+  String get howItWorks => 'Как это работает';
+
+  @override
+  String get dailyScoreExplanation =>
+      'Ваш дневной счёт основан на выполнении задач. Выполняйте задачи, чтобы улучшить свой счёт!';
 }

@@ -2628,10 +2628,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noTasksForToday => '今天没有任务。\\n向Omi询问更多任务或手动创建。';
 
   @override
-  String get dailyScore => '每日得分';
+  String get dailyScore => '每日评分';
 
   @override
-  String get dailyScoreDescription => '一个帮助您更好地专注于执行的分数。';
+  String get dailyScoreDescription => '帮助您更好地专注于\n执行的评分。';
 
   @override
   String get searchResults => '搜索结果';
@@ -5574,4 +5574,25 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get controlNotificationFrequency => '控制Omi向您发送主动通知的频率。';
+
+  @override
+  String get yourScore => '您的评分';
+
+  @override
+  String get dailyScoreBreakdown => '每日评分详情';
+
+  @override
+  String get todaysScore => '今日评分';
+
+  @override
+  String get tasksCompleted => '已完成任务';
+
+  @override
+  String get completionRate => '完成率';
+
+  @override
+  String get howItWorks => '运作方式';
+
+  @override
+  String get dailyScoreExplanation => '您的每日评分基于任务完成情况。完成任务以提高评分！';
 }

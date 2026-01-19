@@ -2636,7 +2636,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get dailyScore => '일일 점수';
 
   @override
-  String get dailyScoreDescription => '실행에 더 잘 집중할 수 있도록 도와주는 점수입니다.';
+  String get dailyScoreDescription => '실행에 더 잘 집중할 수 있도록\n도와주는 점수입니다.';
 
   @override
   String get searchResults => '검색 결과';
@@ -5586,4 +5586,25 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get controlNotificationFrequency => 'Omi가 사전 알림을 보내는 빈도를 제어합니다.';
+
+  @override
+  String get yourScore => '내 점수';
+
+  @override
+  String get dailyScoreBreakdown => '일일 점수 세부 정보';
+
+  @override
+  String get todaysScore => '오늘의 점수';
+
+  @override
+  String get tasksCompleted => '완료된 작업';
+
+  @override
+  String get completionRate => '완료율';
+
+  @override
+  String get howItWorks => '작동 방식';
+
+  @override
+  String get dailyScoreExplanation => '일일 점수는 작업 완료를 기반으로 합니다. 작업을 완료하여 점수를 높이세요!';
 }

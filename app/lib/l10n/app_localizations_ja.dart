@@ -2636,7 +2636,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get dailyScore => 'デイリースコア';
 
   @override
-  String get dailyScoreDescription => '実行により集中できるようにするためのスコアです。';
+  String get dailyScoreDescription => '実行に集中するための\nスコアです。';
 
   @override
   String get searchResults => '検索結果';
@@ -5584,4 +5584,25 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get controlNotificationFrequency => 'Omiがプロアクティブ通知を送信する頻度を制御します。';
+
+  @override
+  String get yourScore => 'あなたのスコア';
+
+  @override
+  String get dailyScoreBreakdown => 'デイリースコアの内訳';
+
+  @override
+  String get todaysScore => '今日のスコア';
+
+  @override
+  String get tasksCompleted => '完了したタスク';
+
+  @override
+  String get completionRate => '完了率';
+
+  @override
+  String get howItWorks => '仕組み';
+
+  @override
+  String get dailyScoreExplanation => 'デイリースコアはタスクの完了に基づいています。タスクを完了してスコアを向上させましょう！';
 }

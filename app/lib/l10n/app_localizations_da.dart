@@ -1442,7 +1442,7 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String get gotIt => 'Got it';
+  String get gotIt => 'Forstået';
 
   @override
   String get tasksExportedOneApp => 'Tasks can be exported to one app at a time.';
@@ -2682,7 +2682,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get dailyScore => 'DAGLIG SCORE';
 
   @override
-  String get dailyScoreDescription => 'En score der hjælper dig med at fokusere bedre på udførelse.';
+  String get dailyScoreDescription => 'En score til at hjælpe dig\nmed at fokusere på udførelse.';
 
   @override
   String get searchResults => 'Søgeresultater';
@@ -5694,4 +5694,26 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get controlNotificationFrequency => 'Kontroller, hvor ofte Omi sender dig proaktive notifikationer.';
+
+  @override
+  String get yourScore => 'Din score';
+
+  @override
+  String get dailyScoreBreakdown => 'Daglig score oversigt';
+
+  @override
+  String get todaysScore => 'Dagens score';
+
+  @override
+  String get tasksCompleted => 'Opgaver fuldført';
+
+  @override
+  String get completionRate => 'Fuldførelsesrate';
+
+  @override
+  String get howItWorks => 'Sådan fungerer det';
+
+  @override
+  String get dailyScoreExplanation =>
+      'Din daglige score er baseret på opgavefuldførelse. Fuldfør dine opgaver for at forbedre din score!';
 }
