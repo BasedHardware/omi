@@ -45,6 +45,14 @@ PRIVATE_CLOUD_SYNC_MAX_RETRIES = 3
 PRIVATE_CLOUD_QUEUE_WARN_SIZE = 50
 SPEAKER_SAMPLE_QUEUE_WARN_SIZE = 100
 
+# Constants for transcript queue batching
+TRANSCRIPT_QUEUE_FLUSH_INTERVAL = 1.0  # seconds
+TRANSCRIPT_QUEUE_WARN_SIZE = 50
+
+# Constants for audio bytes queue batching
+AUDIO_BYTES_QUEUE_FLUSH_INTERVAL = 1.0  # seconds
+AUDIO_BYTES_QUEUE_WARN_SIZE = 20
+
 
 async def _process_conversation_task(uid: str, conversation_id: str, language: str, websocket: WebSocket):
     """Process a conversation and send result back to _listen via websocket."""
@@ -128,6 +136,12 @@ async def _websocket_util_trigger(
 
     # Queue for pending private cloud sync chunks
     private_cloud_queue: List[dict] = []
+
+    # Queue for pending transcript events (batched for realtime integrations + webhooks)
+    transcript_queue: List[dict] = []
+
+    # Queue for pending audio bytes triggers (batched for app integrations + webhooks)
+    audio_bytes_queue: List[dict] = []
 
     async def process_private_cloud_queue():
         """Background task that processes private cloud sync uploads with retry logic."""
@@ -223,10 +237,58 @@ async def _websocket_util_trigger(
                 except Exception as e:
                     print(f"Error extracting speaker samples: {e}", uid, conv_id)
 
+    async def process_transcript_queue():
+        """Batched consumer for transcript events (realtime integrations + webhooks)."""
+        nonlocal websocket_active, transcript_queue
+
+        while websocket_active or len(transcript_queue) > 0:
+            await asyncio.sleep(TRANSCRIPT_QUEUE_FLUSH_INTERVAL)
+
+            if not transcript_queue:
+                continue
+
+            # Process batch
+            batch = transcript_queue.copy()
+            transcript_queue = []
+
+            for item in batch:
+                segments = item['segments']
+                memory_id = item['memory_id']
+                try:
+                    await trigger_realtime_integrations(uid, segments, memory_id)
+                    await realtime_transcript_webhook(uid, segments)
+                except Exception as e:
+                    print(f"Error processing transcript batch: {e}", uid)
+
+    async def process_audio_bytes_queue():
+        """Batched consumer for audio bytes triggers (app integrations + webhooks)."""
+        nonlocal websocket_active, audio_bytes_queue
+
+        while websocket_active or len(audio_bytes_queue) > 0:
+            await asyncio.sleep(AUDIO_BYTES_QUEUE_FLUSH_INTERVAL)
+
+            if not audio_bytes_queue:
+                continue
+
+            # Process batch
+            batch = audio_bytes_queue.copy()
+            audio_bytes_queue = []
+
+            for item in batch:
+                try:
+                    if item['type'] == 'app':
+                        await trigger_realtime_audio_bytes(uid, item['sample_rate'], item['data'])
+                    elif item['type'] == 'webhook':
+                        await send_audio_bytes_developer_webhook(uid, item['sample_rate'], item['data'])
+                except Exception as e:
+                    print(f"Error processing audio bytes: {e}", uid)
+
     async def receive_tasks():
         nonlocal websocket_active
         nonlocal websocket_close_code
         nonlocal speaker_sample_queue
+        nonlocal transcript_queue
+        nonlocal audio_bytes_queue
 
         audiobuffer = bytearray()
         trigger_audiobuffer = bytearray()
@@ -245,7 +307,7 @@ async def _websocket_util_trigger(
                     print(f"Pusher received conversation_id: {current_conversation_id}", uid)
                     continue
 
-                # Transcript
+                # Transcript - queue for batched processing
                 if header_type == 102:
                     res = json.loads(bytes(data[4:]).decode("utf-8"))
                     segments = res.get('segments')
@@ -253,8 +315,9 @@ async def _websocket_util_trigger(
                     # Update conversation_id from transcript if provided
                     if memory_id:
                         current_conversation_id = memory_id
-                    safe_create_task(trigger_realtime_integrations(uid, segments, memory_id))
-                    safe_create_task(realtime_transcript_webhook(uid, segments))
+                    if len(transcript_queue) >= TRANSCRIPT_QUEUE_WARN_SIZE:
+                        print(f"Warning: transcript_queue size {len(transcript_queue)}", uid)
+                    transcript_queue.append({'segments': segments, 'memory_id': memory_id})
                     continue
 
                 # Process conversation request
@@ -318,17 +381,30 @@ async def _websocket_util_trigger(
                             private_cloud_sync_buffer = bytearray()
                             private_cloud_chunk_start_time = None
 
+                    # Queue audio bytes triggers for batched processing
                     if (
                         has_audio_apps_enabled
                         and len(trigger_audiobuffer) > sample_rate * audio_bytes_trigger_delay_seconds * 2
                     ):
-                        safe_create_task(trigger_realtime_audio_bytes(uid, sample_rate, trigger_audiobuffer.copy()))
+                        if len(audio_bytes_queue) >= AUDIO_BYTES_QUEUE_WARN_SIZE:
+                            print(f"Warning: audio_bytes_queue size {len(audio_bytes_queue)}", uid)
+                        audio_bytes_queue.append({
+                            'type': 'app',
+                            'sample_rate': sample_rate,
+                            'data': trigger_audiobuffer.copy(),
+                        })
                         trigger_audiobuffer = bytearray()
                     if (
                         audio_bytes_webhook_delay_seconds
                         and len(audiobuffer) > sample_rate * audio_bytes_webhook_delay_seconds * 2
                     ):
-                        safe_create_task(send_audio_bytes_developer_webhook(uid, sample_rate, audiobuffer.copy()))
+                        if len(audio_bytes_queue) >= AUDIO_BYTES_QUEUE_WARN_SIZE:
+                            print(f"Warning: audio_bytes_queue size {len(audio_bytes_queue)}", uid)
+                        audio_bytes_queue.append({
+                            'type': 'webhook',
+                            'sample_rate': sample_rate,
+                            'data': audiobuffer.copy(),
+                        })
                         audiobuffer = bytearray()
                     continue
 
@@ -355,7 +431,15 @@ async def _websocket_util_trigger(
         receive_task = asyncio.create_task(receive_tasks())
         speaker_sample_task = asyncio.create_task(process_speaker_sample_queue())
         private_cloud_task = asyncio.create_task(process_private_cloud_queue())
-        await asyncio.gather(receive_task, speaker_sample_task, private_cloud_task)
+        transcript_task = asyncio.create_task(process_transcript_queue())
+        audio_bytes_task = asyncio.create_task(process_audio_bytes_queue())
+        await asyncio.gather(
+            receive_task,
+            speaker_sample_task,
+            private_cloud_task,
+            transcript_task,
+            audio_bytes_task,
+        )
 
     except Exception as e:
         print(f"Error during WebSocket operation: {e}")
