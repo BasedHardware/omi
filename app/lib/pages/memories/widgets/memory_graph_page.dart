@@ -8,13 +8,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart' show rootBundle;
-import 'package:omi/backend/http/api/knowledge_graph_api.dart';
+
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
 
+import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/logger.dart';
 
 class GraphNode3D {
   final String id;
@@ -118,10 +120,10 @@ class ForceDirectedSimulation3D {
 
         var forceVal = (repulsion * skipFactor) / distSq;
         final dist = sqrt(distSq);
-        
+
         // Collision prevention
         if (dist < 100.0) {
-           forceVal += (100.0 - dist) * 50.0; 
+          forceVal += (100.0 - dist) * 50.0;
         }
 
         final fx = (dx / dist) * forceVal;
@@ -186,7 +188,7 @@ class ForceDirectedSimulation3D {
         node.position.setZero(); // Force to center
         continue;
       }
-      
+
       node.velocity.x = (node.velocity.x + node.force.x * dt) * damping;
       node.velocity.y = (node.velocity.y + node.force.y * dt) * damping;
       node.velocity.z = (node.velocity.z + node.force.z * dt) * damping;
@@ -264,7 +266,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
         _ticker.stop();
       }
     });
-    
+
     MixpanelManager().brainMapOpened();
     _loadGraph();
   }
@@ -283,7 +285,6 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       _loadGraph(silent: true);
     }
   }
-
 
   void _runLayoutSync() {
     for (int i = 0; i < 200 && !simulation.isStable; i++) {
@@ -310,7 +311,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       if (_isSameGraph(newNodes, newEdges)) {
         if (!silent) {
           setState(() {
-             _isLoading = false; 
+            _isLoading = false;
           });
         }
         return;
@@ -339,7 +340,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     // If we expect N+1 nodes (content + user), we should account for that
     if (newNodes.length + (hasUserNode ? 0 : 1) != simulation.nodes.length) return false;
     if (newEdges.length != simulation.edges.length) return false;
-    
+
     final currentIds = simulation.nodes.map((n) => n.id).toSet();
     for (var n in newNodes) {
       if (!currentIds.contains(n['id'])) return false;
@@ -363,7 +364,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
       _populateGraph(data);
       _runLayoutSync();
-      
+
       simulation.wake();
     } catch (e) {
       if (!mounted) return;
@@ -394,7 +395,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     for (var nodeData in nodes) {
       final label = nodeData['label'] as String? ?? '';
       final isUser = label.trim().toLowerCase() == userLabel.toLowerCase();
-      
+
       if (isUser) userNodeFound = true;
 
       final node = GraphNode3D(
@@ -405,9 +406,9 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
         initialPosition: isUser ? v.Vector3.zero() : _randomPos3D(),
         isFixed: isUser,
       );
-      
+
       if (isUser) node.position.setZero();
-      
+
       simulation.addNode(node);
     }
 
@@ -471,15 +472,15 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       final image = await boundary.toImage(pixelRatio: 3.0);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       if (byteData == null) return;
-      
+
       // Load branding requirements manually for the share image
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder);
       final paint = Paint();
-      
+
       // Draw graph image
       canvas.drawImage(image, Offset.zero, paint);
-      
+
       // Draw minimal branding "omi.me" at top center
       final textSpan = TextSpan(
         text: 'omi.me',
@@ -495,11 +496,11 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
         textDirection: TextDirection.ltr,
       );
       textPainter.layout();
-      
+
       // Center horizontally, near top
       final xPos = (image.width - textPainter.width) / 2;
       final yPos = 140.0; // Margin from top (increased to avoid notch/edge feeling)
-      
+
       textPainter.paint(canvas, Offset(xPos, yPos));
 
       final finalImage = await recorder.endRecording().toImage(image.width, image.height);
@@ -512,7 +513,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
       await Share.shareXFiles([XFile(file.path)], text: 'Check out my memory graph!');
     } catch (e) {
-      debugPrint('Error sharing graph: $e');
+      Logger.debug('Error sharing graph: $e');
     }
   }
 
@@ -580,8 +581,8 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     }
 
     // Check if graph is effectively empty (only has user node or truly empty)
-    final bool isEmpty = simulation.nodes.isEmpty || 
-        (simulation.nodes.length == 1 && simulation.nodes.first.id == 'user-node');
+    final bool isEmpty =
+        simulation.nodes.isEmpty || (simulation.nodes.length == 1 && simulation.nodes.first.id == 'user-node');
 
     if (isEmpty) {
       return Center(
@@ -595,9 +596,9 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
               const Text('No knowledge graph yet', style: TextStyle(color: Colors.white70, fontSize: 18)),
               const SizedBox(height: 12),
               Text(
-                _isRebuilding 
-                  ? 'Building your knowledge graph from memories...'
-                  : 'Your knowledge graph will be built automatically as you create new memories.',
+                _isRebuilding
+                    ? 'Building your knowledge graph from memories...'
+                    : 'Your knowledge graph will be built automatically as you create new memories.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.white38, fontSize: 14),
               ),
@@ -685,11 +686,11 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       );
     });
   }
-  
+
   void _handleTap(TapUpDetails details, Size size) {
     // 1. CLEAR SELECTION if background tapped (default)
     String? hitNodeId;
-    
+
     // 2. HIT TEST
     final centerX = size.width / 2;
     final centerY = size.height / 2;
@@ -700,7 +701,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
     // Sort nodes by depth (z) to hit the front-most one, similar to painter
     // Actually painter sorts by Z, but for hit test we can just check distance in 2D
-    // But front nodes should block back nodes? 
+    // But front nodes should block back nodes?
     // For simplicity, we just find the closest node to the tap within a radius.
     // If overlapping, maybe closest Z wins? Let's just do simple radius check.
 
@@ -708,36 +709,34 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     _ProjectedNode? closestHit;
 
     for (var node in simulation.nodes) {
-       // Manual Projection
-       final px = node.position.x;
-       final py = node.position.y;
-       final pz = node.position.z;
-       final x1 = px * cosY - pz * sinY;
-       final z1 = px * sinY + pz * cosY;
-       final y2 = py * cosX - z1 * sinX;
-       final z2 = py * sinX + z1 * cosX;
-       const cameraZ = 1500.0;
-       
-       if (cameraZ - z2 <= 0) continue; // Behind camera
+      // Manual Projection
+      final px = node.position.x;
+      final py = node.position.y;
+      final pz = node.position.z;
+      final x1 = px * cosY - pz * sinY;
+      final z1 = px * sinY + pz * cosY;
+      final y2 = py * cosX - z1 * sinX;
+      final z2 = py * sinX + z1 * cosX;
+      const cameraZ = 1500.0;
 
-       final perspective = (cameraZ / (cameraZ - z2)) * _zoom;
-       final projX = centerX + x1 * perspective + _panX;
-       final projY = centerY + y2 * perspective + _panY;
-       
-       final dist = (Offset(projX, projY) - details.localPosition).distance;
-       
-       // Dynamic radius based on scale
-       final radius = 12.0 * perspective; 
-       // Give it a bit of padding for easier tapping
-       final hitThreshold = max(radius * 1.5, 20.0);
+      if (cameraZ - z2 <= 0) continue; // Behind camera
 
-       if (dist < hitThreshold && dist < minDist) {
-         minDist = dist;
-         // Store simplified projected info for z-check if needed, but simple min dist is okay for sparse graphs
-         closestHit = _ProjectedNode(
-            node: node, x: projX, y: projY, z: z2, scale: perspective, alpha: 1.0
-         );
-       }
+      final perspective = (cameraZ / (cameraZ - z2)) * _zoom;
+      final projX = centerX + x1 * perspective + _panX;
+      final projY = centerY + y2 * perspective + _panY;
+
+      final dist = (Offset(projX, projY) - details.localPosition).distance;
+
+      // Dynamic radius based on scale
+      final radius = 12.0 * perspective;
+      // Give it a bit of padding for easier tapping
+      final hitThreshold = max(radius * 1.5, 20.0);
+
+      if (dist < hitThreshold && dist < minDist) {
+        minDist = dist;
+        // Store simplified projected info for z-check if needed, but simple min dist is okay for sparse graphs
+        closestHit = _ProjectedNode(node: node, x: projX, y: projY, z: z2, scale: perspective, alpha: 1.0);
+      }
     }
 
     if (closestHit != null) {
@@ -745,18 +744,18 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     }
 
     if (hitNodeId == _selectedNodeId && hitNodeId != null) {
-      // Toggle off if tapping same node? Or maybe keep it? 
+      // Toggle off if tapping same node? Or maybe keep it?
       // User might want to deselect. Let's allowing toggling off.
-       hitNodeId = null;
+      hitNodeId = null;
     }
 
     setState(() {
       _selectedNodeId = hitNodeId;
       _highlightedNodeIds.clear();
-      
+
       if (hitNodeId != null) {
         _highlightedNodeIds.add(hitNodeId!);
-        
+
         final node = simulation.nodeMap[hitNodeId];
         if (node != null) {
           MixpanelManager().brainMapNodeClicked(node.id, node.label, node.nodeType);
@@ -768,22 +767,22 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
           if (edge.sourceId == hitNodeId) neighbors.add(edge.targetId);
           if (edge.targetId == hitNodeId) neighbors.add(edge.sourceId);
         }
-        
+
         // "Closest 4" - sorting by 3D distance
         // We need the GraphNode3D objects
         final centerNode = simulation.nodeMap[hitNodeId];
         if (centerNode != null) {
-             neighbors.sort((a, b) {
-                final na = simulation.nodeMap[a];
-                final nb = simulation.nodeMap[b];
-                if (na == null || nb == null) return 0;
-                // distSq
-                final da = _distSq(centerNode.position, na.position);
-                final db = _distSq(centerNode.position, nb.position);
-                return da.compareTo(db);
-             });
+          neighbors.sort((a, b) {
+            final na = simulation.nodeMap[a];
+            final nb = simulation.nodeMap[b];
+            if (na == null || nb == null) return 0;
+            // distSq
+            final da = _distSq(centerNode.position, na.position);
+            final db = _distSq(centerNode.position, nb.position);
+            return da.compareTo(db);
+          });
         }
-        
+
         // Take top 4 and add them
         _highlightedNodeIds.addAll(neighbors.take(4));
       }
@@ -858,7 +857,7 @@ class GraphPainter3D extends CustomPainter {
       final projectedY = centerY + y2 * perspective + panY;
 
       final alpha = (1.0 + (z2 / 2500.0)).clamp(0.0, 1.0);
-      
+
       // Dimming logic
       double finalAlpha = alpha;
       if (highlightedNodeIds.isNotEmpty && !highlightedNodeIds.contains(node.id)) {
@@ -893,17 +892,17 @@ class GraphPainter3D extends CustomPainter {
 
       // Drawn above with logic
 
-
       final avgScale = (p1.scale + p2.scale) / 2;
-      
+
       // Highlight edge if BOTH nodes are in the highlighted set
-      final isHighlightedEdge = highlightedNodeIds.contains(edge.sourceId) && highlightedNodeIds.contains(edge.targetId);
+      final isHighlightedEdge =
+          highlightedNodeIds.contains(edge.sourceId) && highlightedNodeIds.contains(edge.targetId);
       final isDimmed = highlightedNodeIds.isNotEmpty && !isHighlightedEdge;
-      
+
       if (isDimmed) {
-         _edgePaint.color = _edgePaint.color.withOpacity(alpha * 0.1);
+        _edgePaint.color = _edgePaint.color.withOpacity(alpha * 0.1);
       } else if (isHighlightedEdge) {
-         _edgePaint.color = Colors.white.withOpacity(max(alpha, 0.8)); // Pop
+        _edgePaint.color = Colors.white.withOpacity(max(alpha, 0.8)); // Pop
       }
 
       canvas.drawLine(Offset(p1.x, p1.y), Offset(p2.x, p2.y), _edgePaint);
@@ -935,7 +934,7 @@ class GraphPainter3D extends CustomPainter {
         _ringPaint.color = node.baseColor.withOpacity(p.alpha * 0.3);
         _ringPaint.strokeWidth = 1.5 * p.scale;
         canvas.drawCircle(centerOffset, radius * 1.8, _ringPaint);
-        
+
         _ringPaint.color = node.baseColor.withOpacity(p.alpha * 0.15);
         _ringPaint.strokeWidth = 1.0 * p.scale;
         canvas.drawCircle(centerOffset, radius * 2.5, _ringPaint);

@@ -1,5 +1,7 @@
 import 'dart:io';
+
 import 'package:auto_updater/auto_updater.dart';
+
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';

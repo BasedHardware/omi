@@ -62,7 +62,12 @@ def deepgram_prerecorded(
 
         dg_words = alternatives[0].get('words', [])
         if not dg_words:
-            raise Exception('No words found in response')
+            if return_language:
+                detected_lang = channels[0].get('detected_language', 'en')
+                if detected_lang and '-' in detected_lang:
+                    detected_lang = detected_lang.split('-')[0]
+                return [], detected_lang or 'en'
+            return []
 
         # Convert Deepgram format to fal_whisperx compatible format
         # Deepgram: {word, start, end, confidence, punctuated_word, speaker (int)}

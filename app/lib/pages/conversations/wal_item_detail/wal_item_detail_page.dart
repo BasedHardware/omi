@@ -1,19 +1,22 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/models/playback_state.dart';
+import 'package:omi/pages/conversations/sync_widgets/fast_transfer_suggestion_dialog.dart';
+import 'package:omi/pages/conversations/sync_widgets/location_permission_dialog.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
+import 'package:omi/pages/conversations/sync_widgets/wifi_connection_sheet.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/widgets/waveform_section.dart';
-import 'package:omi/pages/settings/wifi_sync_settings_page.dart';
-import 'package:provider/provider.dart';
 
 class WalItemDetailPage extends StatefulWidget {
   final Wal wal;
@@ -527,37 +530,62 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
   }
 
   Future<void> _handleTransferToPhone() async {
-    // Check if device supports WiFi but no credentials configured (only for SD card)
-    if (widget.wal.storage == WalStorage.sdcard) {
-      final walService = ServiceManager.instance().wal;
-      final syncs = walService.getSyncs();
-      final deviceId = SharedPreferencesUtil().btDevice.id;
+    final preferredMethod = SharedPreferencesUtil().preferredSyncMethod;
+    final wifiSupported = await ServiceManager.instance().wal.getSyncs().sdcard.isWifiSyncSupported();
 
-      if (deviceId.isNotEmpty) {
-        final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-        if (connection != null) {
-          final wifiSupported = await connection.isWifiSyncSupported();
-          final wifiConfigured = await syncs.sdcard.isWifiSyncSupported();
+    if (preferredMethod == 'ble' && wifiSupported && widget.wal.storage == WalStorage.sdcard) {
+      if (!mounted) return;
+      final result = await FastTransferSuggestionDialog.show(context);
+      if (result == null) return;
 
-          if (wifiSupported && !wifiConfigured && mounted) {
-            final shouldConfigure = await _showWifiSyncPromptDialog();
-            if (shouldConfigure == null) {
-              return;
-            }
-            if (shouldConfigure == true && mounted) {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (context) => const WifiSyncSettingsPage()),
-              );
-              return;
-            }
-          }
+      if (result == 'switch') {
+        // User wants to switch to Fast Transfer
+        SharedPreferencesUtil().preferredSyncMethod = 'wifi';
+        if (!mounted) return;
+        _showSnackBar('Switched to Fast Transfer', Colors.green);
+      }
+    }
+
+    final currentMethod = SharedPreferencesUtil().preferredSyncMethod;
+    if (Platform.isIOS && widget.wal.storage == WalStorage.sdcard) {
+      if (currentMethod == 'wifi' && wifiSupported) {
+        if (!mounted) return;
+        final hasPermission = await LocationPermissionHelper.checkAndRequest(context);
+        if (!hasPermission) {
+          return;
         }
       }
     }
 
+    if (!mounted) return;
+
     try {
       final syncProvider = context.read<SyncProvider>();
-      await syncProvider.transferWalToPhone(widget.wal);
+      final currentMethod = SharedPreferencesUtil().preferredSyncMethod;
+      final wifiSupported = await ServiceManager.instance().wal.getSyncs().sdcard.isWifiSyncSupported();
+
+      // Show WiFi connection sheet if using WiFi for SD card transfer
+      if (currentMethod == 'wifi' && wifiSupported && widget.wal.storage == WalStorage.sdcard && mounted) {
+        WifiConnectionListenerBridge? listener;
+
+        final controller = await WifiConnectionSheet.show(
+          context,
+          deviceName: 'Omi',
+          onCancel: () {
+            syncProvider.cancelSync();
+          },
+          onRetry: () {
+            if (listener != null) {
+              syncProvider.transferWalToPhone(widget.wal, connectionListener: listener);
+            }
+          },
+        );
+
+        listener = WifiConnectionListenerBridge(controller);
+        await syncProvider.transferWalToPhone(widget.wal, connectionListener: listener);
+      } else {
+        await syncProvider.transferWalToPhone(widget.wal);
+      }
 
       if (mounted) {
         _showSnackBar('Transfer complete! You can now play this recording.', Colors.green);
@@ -568,39 +596,6 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
         _showSnackBar('Transfer failed: ${e.toString()}', Colors.red);
       }
     }
-  }
-
-  Future<bool?> _showWifiSyncPromptDialog() {
-    return showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1C1C1E),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            Icon(Icons.wifi, size: 24, color: Colors.blue.shade300),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Text('WiFi Sync Available', style: TextStyle(color: Colors.white, fontSize: 18)),
-            ),
-          ],
-        ),
-        content: Text(
-          'Your device supports WiFi sync which is ~10x faster than Bluetooth. Would you like to set it up?',
-          style: TextStyle(color: Colors.grey.shade300, fontSize: 14),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text('Continue with Bluetooth', style: TextStyle(color: Colors.grey.shade400)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text('Setup WiFi', style: TextStyle(color: Colors.blue.shade300, fontWeight: FontWeight.w600)),
-          ),
-        ],
-      ),
-    );
   }
 
   void _handleCancelTransfer() {

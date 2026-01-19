@@ -2,8 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/logger.dart';
 
 Future<bool> userHasSpeakerProfile() async {
   var response = await makeApiCall(
@@ -13,7 +15,7 @@ Future<bool> userHasSpeakerProfile() async {
     body: '',
   );
   if (response == null) return true;
-  debugPrint('userHasSpeakerProfile: ${response.body}');
+  Logger.debug('userHasSpeakerProfile: ${response.body}');
   if (response.statusCode == 200) {
     return jsonDecode(response.body)['has_profile'] ?? false;
   }
@@ -28,7 +30,7 @@ Future<String?> getUserSpeechProfile() async {
     body: '',
   );
   if (response == null) return null;
-  debugPrint('userHasSpeakerProfile: ${response.body}');
+  Logger.debug('userHasSpeakerProfile: ${response.body}');
   if (response.statusCode == 200) return jsonDecode(response.body)['url'];
   return null;
 }
@@ -42,14 +44,14 @@ Future<bool> uploadProfile(File file) async {
     );
 
     if (response.statusCode == 200) {
-      debugPrint('uploadProfile Response body: ${jsonDecode(response.body)}');
+      Logger.debug('uploadProfile Response body: ${jsonDecode(response.body)}');
       return true;
     } else {
-      debugPrint('Failed to upload sample. Status code: ${response.statusCode}');
+      Logger.debug('Failed to upload sample. Status code: ${response.statusCode}');
       throw Exception('Failed to upload sample. Status code: ${response.statusCode}');
     }
   } catch (e) {
-    debugPrint('An error occurred uploadSample: $e');
+    Logger.debug('An error occurred uploadSample: $e');
     throw Exception('An error occurred uploadSample: $e');
   }
 }
@@ -62,7 +64,7 @@ Future<List<String>> getExpandedProfileSamples() async {
     body: '',
   );
   if (response == null) return [];
-  debugPrint('getExpandedProfileSamples: ${response.body}');
+  Logger.debug('getExpandedProfileSamples: ${response.body}');
   if (response.statusCode == 200) {
     var data = jsonDecode(response.body);
     if (data != null) {
@@ -85,7 +87,7 @@ Future<bool> deleteProfileSample(
     body: '',
   );
   if (response == null) return false;
-  debugPrint('deleteProfileSample: ${response.body}');
+  Logger.debug('deleteProfileSample: ${response.body}');
   if (response.statusCode == 200) return true;
   return false;
 }

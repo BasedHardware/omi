@@ -1,8 +1,10 @@
 import 'dart:io';
+
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:version/version.dart';
+
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/assets.gen.dart';
-import 'package:version/version.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 
 class DeviceUtils {
   static Future<(String, bool, String)> shouldUpdateFirmware({
@@ -83,6 +85,10 @@ class DeviceUtils {
             if (upperModel.contains('DEVKIT') || (upperModel.contains('FRIEND'))) {
               return Assets.images.omiDevkitWithoutRope.path;
             }
+
+            if (upperModel.contains('NEO')) {
+              return Assets.images.neoOne.path;
+            }
           }
           if (deviceName != null && deviceName.isNotEmpty) {
             final upperName = deviceName.toUpperCase();
@@ -93,6 +99,10 @@ class DeviceUtils {
 
             if (upperName.contains('DEVKIT') || upperName.contains('DEV') || (upperName.contains('FRIEND'))) {
               return Assets.images.omiDevkitWithoutRope.path;
+            }
+
+            if (upperName.contains('NEO')) {
+              return Assets.images.neoOne.path;
             }
           }
           // Default omi image

@@ -4,7 +4,16 @@ import Flutter
 
 class AppleRemindersService {
     private let eventStore = EKEventStore()
-    
+
+    private func hasRemindersAccess() -> Bool {
+        let status = EKEventStore.authorizationStatus(for: .reminder)
+        if #available(iOS 17.0, *) {
+            return status == .fullAccess || status == .writeOnly
+        } else {
+            return status == .authorized
+        }
+    }
+
     func handleMethodCall(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         switch call.method {
         case "hasPermission":
@@ -23,32 +32,44 @@ class AppleRemindersService {
     }
     
     private func hasRemindersPermission(result: @escaping FlutterResult) {
-        let status = EKEventStore.authorizationStatus(for: .reminder)
-        result(status == .authorized)
+        result(hasRemindersAccess())
     }
-    
+
     private func requestRemindersPermission(result: @escaping FlutterResult) {
-        let status = EKEventStore.authorizationStatus(for: .reminder)
-        
-        if status == .authorized {
+        // Check if already authorized
+        if hasRemindersAccess() {
             result(true)
             return
         }
-        
+
+        let status = EKEventStore.authorizationStatus(for: .reminder)
         if status == .denied || status == .restricted {
             result(false)
             return
         }
-        
+
         // Request permission
-        eventStore.requestAccess(to: .reminder) { granted, error in
-            DispatchQueue.main.async {
-                if let error = error {
-                    print("Error requesting reminders permission: \(error.localizedDescription)")
-                    result(false)
-                    return
+        if #available(iOS 17.0, *) {
+            eventStore.requestFullAccessToReminders { granted, error in
+                DispatchQueue.main.async {
+                    if let error = error {
+                        print("Error requesting reminders permission: \(error.localizedDescription)")
+                        result(false)
+                        return
+                    }
+                    result(granted)
                 }
-                result(granted)
+            }
+        } else {
+            eventStore.requestAccess(to: .reminder) { granted, error in
+                DispatchQueue.main.async {
+                    if let error = error {
+                        print("Error requesting reminders permission: \(error.localizedDescription)")
+                        result(false)
+                        return
+                    }
+                    result(granted)
+                }
             }
         }
     }
@@ -74,12 +95,11 @@ class AppleRemindersService {
         }()
         
         // Check permission
-        let status = EKEventStore.authorizationStatus(for: .reminder)
-        guard status == .authorized else {
+        guard hasRemindersAccess() else {
             result(FlutterError(code: "PERMISSION_DENIED", message: "Reminders permission not granted", details: nil))
             return
         }
-        
+
         // Find or create the calendar
         var targetCalendar: EKCalendar?
         
@@ -142,14 +162,13 @@ class AppleRemindersService {
         }
         
         let listName = args["listName"] as? String ?? "Reminders"
-        
+
         // Check permission
-        let status = EKEventStore.authorizationStatus(for: .reminder)
-        guard status == .authorized else {
+        guard hasRemindersAccess() else {
             result([]) // Return empty array if no permission
             return
         }
-        
+
         // Find the calendar
         let calendars = eventStore.calendars(for: .reminder)
         guard let targetCalendar = calendars.first(where: { $0.title == listName }) else {
@@ -180,14 +199,13 @@ class AppleRemindersService {
         }
         
         let listName = args["listName"] as? String ?? "Reminders"
-        
+
         // Check permission
-        let status = EKEventStore.authorizationStatus(for: .reminder)
-        guard status == .authorized else {
+        guard hasRemindersAccess() else {
             result(false) // Return false if no permission
             return
         }
-        
+
         // Find the calendar
         let calendars = eventStore.calendars(for: .reminder)
         guard let targetCalendar = calendars.first(where: { $0.title == listName }) else {

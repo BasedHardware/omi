@@ -1,7 +1,12 @@
-import 'package:flutter/cupertino.dart';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:pull_down_button/pull_down_button.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
@@ -9,16 +14,16 @@ import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
+import 'package:omi/pages/conversations/sync_widgets/wifi_connection_sheet.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
-import 'package:provider/provider.dart';
-import 'package:pull_down_button/pull_down_button.dart';
-
+import 'fast_transfer_settings_page.dart';
 import 'local_storage_page.dart';
 import 'private_cloud_sync_page.dart';
+import 'sync_widgets/fast_transfer_suggestion_dialog.dart';
+import 'sync_widgets/location_permission_dialog.dart';
 import 'synced_conversations_page.dart';
-import 'package:omi/pages/settings/wifi_sync_settings_page.dart';
 import 'wal_item_detail/wal_item_detail_page.dart';
 
 Widget _buildFaIcon(IconData icon, {double size = 18, Color color = const Color(0xFF8E8E93)}) {
@@ -249,7 +254,10 @@ class WalListItem extends StatelessWidget {
                             ),
                           ),
                           if (wal.isSyncing)
-                            _buildStatusChip('Processing', Colors.orange)
+                            _buildStatusChip(
+                              wal.syncMethod == SyncMethod.wifi ? 'Fast Transfer' : 'Syncing',
+                              wal.syncMethod == SyncMethod.wifi ? Colors.blue : Colors.orange,
+                            )
                           else if (hasError)
                             _buildStatusChip('Failed', Colors.red)
                           else if (wal.status == WalStatus.miss)
@@ -269,7 +277,7 @@ class WalListItem extends StatelessWidget {
                                 child: LinearProgressIndicator(
                                   value: calculateProgress(wal.syncStartedAt, wal.syncEtaSeconds ?? 0),
                                   backgroundColor: const Color(0xFF3C3C43),
-                                  color: Colors.white70,
+                                  color: wal.syncMethod == SyncMethod.wifi ? Colors.blue : Colors.orange,
                                   minHeight: 3,
                                 ),
                               ),
@@ -379,8 +387,10 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildSettingsCard() {
+  Widget _buildSettingsCard({required bool showTransferMethod}) {
     final isPhoneStorageOn = SharedPreferencesUtil().unlimitedLocalStorageEnabled;
+    final preferredSyncMethod = SharedPreferencesUtil().preferredSyncMethod;
+    final isFastTransfer = preferredSyncMethod == 'wifi';
 
     return Container(
       decoration: BoxDecoration(
@@ -389,6 +399,36 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
       ),
       child: Column(
         children: [
+          if (showTransferMethod) ...[
+            _buildSettingsItem(
+              icon: FontAwesomeIcons.bolt,
+              title: 'Transfer Method',
+              trailing: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: isFastTransfer ? Colors.blue.withOpacity(0.2) : const Color(0xFF2A2A2E),
+                  borderRadius: BorderRadius.circular(100),
+                ),
+                child: Text(
+                  isFastTransfer ? 'Fast' : 'BLE',
+                  style: TextStyle(
+                    color: isFastTransfer ? Colors.blue : Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              showChevron: true,
+              onTap: () {
+                Navigator.of(context)
+                    .push(
+                      MaterialPageRoute(builder: (context) => const FastTransferSettingsPage()),
+                    )
+                    .then((_) => setState(() {}));
+              },
+            ),
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+          ],
           _buildSettingsItem(
             icon: FontAwesomeIcons.mobile,
             title: 'Store Audio on Phone',
@@ -569,37 +609,34 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
   void _handleSyncWals(BuildContext context, SyncProvider syncProvider) async {
     final sdCardWals = syncProvider.missingWals.where((wal) => wal.storage == WalStorage.sdcard).toList();
 
-    // Check if device supports WiFi but no credentials configured
-    if (sdCardWals.isNotEmpty) {
-      final walService = ServiceManager.instance().wal;
-      final syncs = walService.getSyncs();
-      final deviceId = SharedPreferencesUtil().btDevice.id;
+    if (Platform.isIOS && sdCardWals.isNotEmpty) {
+      var preferredMethod = SharedPreferencesUtil().preferredSyncMethod;
+      final wifiSupported = await ServiceManager.instance().wal.getSyncs().sdcard.isWifiSyncSupported();
 
-      if (deviceId.isNotEmpty) {
-        final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-        if (connection != null) {
-          final wifiSupported = await connection.isWifiSyncSupported();
-          final wifiConfigured = await syncs.sdcard.isWifiSyncSupported(); // This checks both support AND credentials
-
-          // If firmware supports WiFi but credentials not set
-          if (wifiSupported && !wifiConfigured) {
-            if (context.mounted) {
-              final shouldConfigure = await _showWifiSyncPromptDialog(context);
-              if (shouldConfigure == null) {
-                return; // Dialog dismissed, do nothing
-              }
-              if (shouldConfigure == true && context.mounted) {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (context) => const WifiSyncSettingsPage()),
-                );
-                return;
-              }
-              // User chose "Continue with Bluetooth" (false)
-            }
+      if (preferredMethod == 'ble' && wifiSupported) {
+        if (!context.mounted) return;
+        final result = await FastTransferSuggestionDialog.show(context);
+        if (result == null) {
+          return;
+        } else if (result == 'switch') {
+          SharedPreferencesUtil().preferredSyncMethod = 'wifi';
+          preferredMethod = 'wifi';
+          if (context.mounted) {
+            setState(() {});
           }
         }
       }
 
+      if (preferredMethod == 'wifi' && wifiSupported) {
+        if (!context.mounted) return;
+        final hasPermission = await LocationPermissionHelper.checkAndRequest(context);
+        if (!hasPermission) {
+          return;
+        }
+      }
+    }
+
+    if (sdCardWals.isNotEmpty) {
       // Show SD card warning dialog
       if (context.mounted) {
         _showSdCardWarningDialog(context, syncProvider, sdCardWals.length);
@@ -609,37 +646,58 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
     }
   }
 
-  Future<bool?> _showWifiSyncPromptDialog(BuildContext context) {
-    return showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1C1C1E),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            Icon(Icons.wifi, size: 24, color: Colors.blue.shade300),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Text('WiFi Sync Available', style: TextStyle(color: Colors.white, fontSize: 18)),
-            ),
-          ],
-        ),
-        content: Text(
-          'Your device supports WiFi sync which is ~10x faster than Bluetooth. Would you like to set it up?',
-          style: TextStyle(color: Colors.grey.shade300, fontSize: 14),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text('Continue with Bluetooth', style: TextStyle(color: Colors.grey.shade400)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text('Setup WiFi', style: TextStyle(color: Colors.blue.shade300, fontWeight: FontWeight.w600)),
-          ),
-        ],
-      ),
-    );
+  bool _isWifiSyncError(String errorMessage) {
+    final lowerMessage = errorMessage.toLowerCase();
+    return lowerMessage.contains('wifi') ||
+        lowerMessage.contains('hotspot') ||
+        lowerMessage.contains('ssid') ||
+        lowerMessage.contains('password') ||
+        lowerMessage.contains('tcp');
+  }
+
+  String _formatErrorMessage(String errorMessage) {
+    // Clean up exception prefixes
+    if (errorMessage.startsWith('WifiSyncException: ')) {
+      errorMessage = errorMessage.substring('WifiSyncException: '.length);
+    }
+    if (errorMessage.startsWith('Exception: ')) {
+      errorMessage = errorMessage.substring('Exception: '.length);
+    }
+
+    final lowerMessage = errorMessage.toLowerCase();
+
+    // Map known error patterns to user-friendly messages
+    if (lowerMessage.contains('internal error') ||
+        lowerMessage.contains('invalidpacketlength') ||
+        lowerMessage.contains('packet length')) {
+      return 'Failed to enable WiFi on device. Please try again.';
+    }
+    if (lowerMessage.contains('does not support wifi')) {
+      return 'Your device does not support Fast Transfer. Use Bluetooth instead.';
+    }
+    if (errorMessage.contains('Hotspot name must be') || errorMessage.contains('Password must be')) {
+      return errorMessage;
+    }
+    if (lowerMessage.contains('hotspot') && lowerMessage.contains('enable')) {
+      return 'Please enable your phone\'s hotspot and try again.';
+    }
+    if (lowerMessage.contains('tcp server') || lowerMessage.contains('network server')) {
+      return 'Failed to start transfer. Please try again.';
+    }
+    if (lowerMessage.contains('timeout') || lowerMessage.contains('did not respond')) {
+      return 'Device did not respond. Please try again.';
+    }
+    if (lowerMessage.contains('credentials')) {
+      return 'Invalid WiFi credentials. Check your hotspot settings.';
+    }
+    if (lowerMessage.contains('connection') && lowerMessage.contains('fail')) {
+      return 'WiFi connection failed. Please try again.';
+    }
+    if (lowerMessage.contains('wifi') && lowerMessage.contains('fail')) {
+      return 'WiFi connection failed. Please try again.';
+    }
+
+    return errorMessage;
   }
 
   void _showSdCardWarningDialog(BuildContext context, SyncProvider syncProvider, int sdCardCount) {
@@ -666,7 +724,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
-              syncProvider.syncWals();
+              _startSyncWithWifiSheet(context, syncProvider);
             },
             child: const Text('Process', style: TextStyle(color: Colors.deepPurpleAccent, fontWeight: FontWeight.w600)),
           ),
@@ -675,47 +733,104 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
     );
   }
 
+  /// Start sync and show WiFi connection sheet if using WiFi sync
+  Future<void> _startSyncWithWifiSheet(BuildContext context, SyncProvider syncProvider) async {
+    final preferredMethod = SharedPreferencesUtil().preferredSyncMethod;
+    final wifiSupported = await ServiceManager.instance().wal.getSyncs().sdcard.isWifiSyncSupported();
+    final hasSDCardWals = syncProvider.missingWals.any((w) => w.storage == WalStorage.sdcard);
+
+    if (preferredMethod == 'wifi' && wifiSupported && hasSDCardWals && context.mounted) {
+      WifiConnectionListenerBridge? listener;
+
+      final controller = await WifiConnectionSheet.show(
+        context,
+        deviceName: 'Omi',
+        onCancel: () {
+          syncProvider.cancelSync();
+        },
+        onRetry: () {
+          if (listener != null) {
+            syncProvider.syncWals(connectionListener: listener);
+          }
+        },
+      );
+
+      listener = WifiConnectionListenerBridge(controller);
+      syncProvider.syncWals(connectionListener: listener);
+    } else {
+      syncProvider.syncWals();
+    }
+  }
+
   Widget _buildProcessCard(SyncProvider syncProvider) {
     // Error state
     if (syncProvider.syncError != null && syncProvider.failedWal == null) {
+      final errorMessage = syncProvider.syncError!;
+      final isWifiError = _isWifiSyncError(errorMessage);
+
       return Container(
         decoration: BoxDecoration(
           color: const Color(0xFF1C1C1E),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Row(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(
-                  width: 24, height: 24, child: _buildFaIcon(FontAwesomeIcons.circleExclamation, color: Colors.red)),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Processing Failed',
-                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500)),
-                    const SizedBox(height: 2),
-                    Text(syncProvider.syncError!,
-                        style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              GestureDetector(
-                onTap: () => syncProvider.retrySync(),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2A2A2E),
-                    borderRadius: BorderRadius.circular(100),
+              Row(
+                children: [
+                  SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: _buildFaIcon(
+                      isWifiError ? FontAwesomeIcons.wifi : FontAwesomeIcons.circleExclamation,
+                      color: Colors.red,
+                    ),
                   ),
-                  child: const Text('Retry',
-                      style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
-                ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isWifiError ? 'WiFi Sync Failed' : 'Processing Failed',
+                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _formatErrorMessage(errorMessage),
+                          style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => syncProvider.retrySync(),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2A2A2E),
+                          borderRadius: BorderRadius.circular(100),
+                        ),
+                        child: const Center(
+                          child: Text(
+                            'Retry',
+                            style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -730,6 +845,10 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
       final speedKBps = syncProvider.syncSpeedKBps;
       final isSdCardSyncing = syncProvider.isSdCardSyncing;
 
+      // Get sync method from the currently syncing WAL
+      final syncingWal = syncProvider.allWals.where((w) => w.isSyncing).firstOrNull;
+      final isWifiSync = syncingWal?.syncMethod == SyncMethod.wifi;
+
       return Container(
         decoration: BoxDecoration(
           color: const Color(0xFF1C1C1E),
@@ -741,27 +860,42 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
             children: [
               Row(
                 children: [
-                  const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: isWifiSync ? Colors.blue.withOpacity(0.2) : Colors.deepPurple.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      isWifiSync ? Icons.bolt : Icons.bluetooth,
+                      color: isWifiSync ? Colors.blue : Colors.deepPurpleAccent,
+                      size: 20,
+                    ),
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          isSdCardSyncing
-                              ? 'Downloading from SD Card'
-                              : 'Processing ${syncProvider.processedWalsCount}/${syncProvider.initialMissingWalsCount}',
-                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                isSdCardSyncing
+                                    ? 'Downloading from SD Card'
+                                    : 'Processing ${syncProvider.processedWalsCount}/${syncProvider.initialMissingWalsCount}',
+                                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
                         ),
                         if (speedKBps != null && speedKBps > 0) ...[
-                          const SizedBox(height: 2),
+                          const SizedBox(height: 4),
                           Text(
                             '${speedKBps.toStringAsFixed(1)} KB/s',
-                            style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                            style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
                           ),
                         ],
                       ],
@@ -793,7 +927,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                 child: LinearProgressIndicator(
                   value: progress,
                   backgroundColor: const Color(0xFF3C3C43),
-                  color: Colors.white,
+                  color: isWifiSync ? Colors.blue : Colors.deepPurpleAccent,
                   minHeight: 4,
                 ),
               ),
@@ -994,7 +1128,13 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                           const SizedBox(height: 16),
                           _buildProcessCard(syncProvider),
                           const SizedBox(height: 16),
-                          _buildSettingsCard(),
+                          FutureBuilder<bool>(
+                            future: ServiceManager.instance().wal.getSyncs().sdcard.isWifiSyncSupported(),
+                            builder: (context, wifiSnapshot) {
+                              final wifiSupported = wifiSnapshot.data ?? false;
+                              return _buildSettingsCard(showTransferMethod: wifiSupported);
+                            },
+                          ),
                           const SizedBox(height: 20),
                           _buildSectionHeader('Recordings'),
                           _buildFilterChips(statsSnapshot.data),

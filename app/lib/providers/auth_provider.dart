@@ -1,16 +1,19 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import 'package:omi/backend/http/api/apps.dart' as apps_api;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/providers/base_provider.dart';
-import 'package:omi/services/notifications.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:omi/backend/http/api/apps.dart' as apps_api;
 
 class AuthenticationProvider extends BaseProvider {
   FirebaseAuth get _auth => FirebaseAuth.instance;
@@ -35,11 +38,11 @@ class AuthenticationProvider extends BaseProvider {
       });
       _auth.idTokenChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) async {
         if (user == null) {
-          debugPrint('User is currently signed out or the token has been revoked! ${user == null}');
+          Logger.debug('User is currently signed out or the token has been revoked! ${user == null}');
           SharedPreferencesUtil().authToken = '';
           authToken = null;
         } else {
-          debugPrint('User is signed in at ${DateTime.now()} with user ${user.uid}');
+          Logger.debug('User is signed in at ${DateTime.now()} with user ${user.uid}');
           try {
             if (SharedPreferencesUtil().authToken.isEmpty ||
                 DateTime.now().millisecondsSinceEpoch > SharedPreferencesUtil().tokenExpirationTime) {
@@ -47,7 +50,7 @@ class AuthenticationProvider extends BaseProvider {
             }
           } catch (e) {
             authToken = null;
-            debugPrint('Failed to get token: $e');
+            Logger.debug('Failed to get token: $e');
           }
         }
         notifyListeners();
@@ -79,7 +82,7 @@ class AuthenticationProvider extends BaseProvider {
           AppSnackbar.showSnackbarError('Failed to sign in with Google, please try again.');
         }
       } catch (e) {
-        debugPrint('OAuth Google sign in error: $e');
+        Logger.debug('OAuth Google sign in error: $e');
         AppSnackbar.showSnackbarError('Authentication failed. Please try again.');
       }
       setLoadingState(false);
@@ -103,7 +106,7 @@ class AuthenticationProvider extends BaseProvider {
           AppSnackbar.showSnackbarError('Failed to sign in with Apple, please try again.');
         }
       } catch (e) {
-        debugPrint('OAuth Apple sign in error: $e');
+        Logger.debug('OAuth Apple sign in error: $e');
         AppSnackbar.showSnackbarError('Authentication failed. Please try again.');
       }
       setLoadingState(false);
@@ -115,7 +118,7 @@ class AuthenticationProvider extends BaseProvider {
       final token = await AuthService.instance.getIdToken();
       NotificationService.instance.saveNotificationToken();
 
-      debugPrint('Token: $token');
+      Logger.debug('Token: $token');
       return token;
     } catch (e, stackTrace) {
       AppSnackbar.showSnackbarError('Failed to retrieve firebase token, please try again.');
@@ -158,7 +161,7 @@ class AuthenticationProvider extends BaseProvider {
   void _launchUrl(String url) async {
     final uri = Uri.tryParse(url);
     if (uri == null) {
-      debugPrint('Invalid URL');
+      Logger.debug('Invalid URL');
       return;
     }
 

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:omi/desktop/pages/onboarding/desktop_onboarding_wrapper.dart';
-import 'package:omi/desktop/pages/desktop_home_wrapper.dart';
+
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/desktop/pages/desktop_home_wrapper.dart';
+import 'package:omi/desktop/pages/onboarding/desktop_onboarding_wrapper.dart';
 import 'package:omi/pages/persona/persona_profile.dart';
 import 'package:omi/providers/auth_provider.dart';
-import 'package:provider/provider.dart';
 
 class DesktopApp extends StatelessWidget {
   const DesktopApp({super.key});

@@ -1,11 +1,17 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'package:calendar_date_picker2/calendar_date_picker2.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:upgrader/upgrader.dart';
 
+import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
@@ -15,15 +21,16 @@ import 'package:omi/pages/action_items/action_items_page.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/apps/page.dart';
 import 'package:omi/pages/chat/page.dart';
-import 'package:omi/pages/conversations/conversations_page.dart';
+import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/pages/conversations/conversations_page.dart';
+import 'package:omi/pages/conversations/sync_page.dart';
+import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
 import 'package:omi/pages/memories/page.dart';
-import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
-import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/wrapped_2025_page.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/app_provider.dart';
@@ -33,27 +40,20 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
+import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/notifications/daily_reflection_notification.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/audio/foreground.dart';
+import 'package:omi/utils/enums.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:omi/widgets/upgrade_alert.dart';
-import 'package:omi/utils/l10n_extensions.dart';
-import 'package:provider/provider.dart';
-import 'package:upgrader/upgrader.dart';
-import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:omi/utils/enums.dart';
-import 'package:omi/providers/sync_provider.dart';
-import 'package:omi/pages/conversations/sync_page.dart';
-import 'package:flutter/cupertino.dart';
-import 'package:calendar_date_picker2/calendar_date_picker2.dart';
-
-import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/widgets/calendar_date_picker_sheet.dart';
-import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
-
+import 'package:omi/widgets/freemium_switch_dialog.dart';
+import 'package:omi/widgets/upgrade_alert.dart';
 import 'widgets/battery_info_widget.dart';
 
 class HomePageWrapper extends StatefulWidget {
@@ -119,8 +119,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   final GlobalKey<AppsPageState> _appsPageKey = GlobalKey<AppsPageState>();
   late final List<Widget> _pages;
 
-  // Track if freemium threshold dialog has been shown this session
-  bool _freemiumDialogShown = false;
+  // Freemium switch handler for auto-switch dialogs
+  final FreemiumSwitchHandler _freemiumHandler = FreemiumSwitchHandler();
 
   void _initiateApps() {
     context.read<AppProvider>().getApps();
@@ -177,7 +177,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     } else {
       return;
     }
-    debugPrint(event);
+    Logger.debug(event);
     PlatformManager.instance.crashReporter.logInfo(event);
   }
 
@@ -219,7 +219,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
     if (widget.navigateToRoute != null && widget.navigateToRoute!.isNotEmpty) {
       navigateToUri = Uri.tryParse("http://localhost.com${widget.navigateToRoute!}");
-      debugPrint("initState ${navigateToUri?.pathSegments.join("...")}");
+      Logger.debug("initState ${navigateToUri?.pathSegments.join("...")}");
       var segments = navigateToUri?.pathSegments ?? [];
       if (segments.isNotEmpty) {
         pageAlias = segments[0];
@@ -247,8 +247,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
       // ForegroundUtil.requestPermissions();
       if (!PlatformService.isDesktop) {
-        await ForegroundUtil.initializeForegroundService();
-        await ForegroundUtil.startForegroundTask();
+        if (SharedPreferencesUtil().locationEnabled) {
+          await ForegroundUtil.initializeForegroundService();
+          await ForegroundUtil.startForegroundTask();
+        } else {
+          Logger.debug('Skipping foreground service: location is not enabled');
+        }
       }
       if (mounted) {
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
@@ -357,12 +361,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   ),
                 );
               } else {
-                debugPrint('Conversation not found: $conversationId');
+                Logger.debug('Conversation not found: $conversationId');
               }
             });
           }
           break;
-                  case "daily-summary":
+        case "daily-summary":
           if (detailPageId != null && detailPageId.isNotEmpty) {
             // Track notification opened
             MixpanelManager().dailySummaryNotificationOpened(
@@ -381,7 +385,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               }
             });
           }
-break;
+          break;
         case "wrapped":
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
@@ -413,112 +417,20 @@ break;
 
       final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
       captureProvider.addListener(_onCaptureProviderChanged);
+      // Connect freemium session reset callback
+      captureProvider.onFreemiumSessionReset = () {
+        _freemiumHandler.resetDialogFlag();
+      };
     });
   }
 
   void _onCaptureProviderChanged() {
-    if (!mounted || _freemiumDialogShown) return;
+    if (!mounted) return;
 
     final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
-
-    if (captureProvider.freemiumThresholdReached && captureProvider.freemiumRequiresUserAction) {
-      _freemiumDialogShown = true;
-      _showFreemiumThresholdDialog(captureProvider.freemiumRemainingSeconds);
-    }
-  }
-
-  void _showFreemiumThresholdDialog(int remainingSeconds) {
-    final minutes = (remainingSeconds / 60).ceil();
-    final timeText = minutes > 0 ? '$minutes minute${minutes != 1 ? 's' : ''}' : 'less than a minute';
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) => Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: const EdgeInsets.all(24),
-        child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 24),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade700,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const Text(
-                'Premium Minutes Running Low',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'You have $timeText of premium minutes left. Omi is free forever—setup on-device transcription for unlimited minutes.',
-                style: TextStyle(
-                  color: Colors.grey.shade400,
-                  fontSize: 14,
-                  height: 1.5,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const TranscriptionSettingsPage(),
-                      ),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: const Text(
-                    'Get Unlimited Free',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text(
-                  'Later',
-                  style: TextStyle(
-                    color: Colors.grey.shade500,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    _freemiumHandler.checkAndShowDialog(context, captureProvider).catchError((e) {
+      Logger.debug('[Freemium] Error checking dialog: $e');
+    });
   }
 
   void _listenToMessagesFromNotification() {
@@ -629,6 +541,7 @@ break;
           builder: (context, homeProvider, _) {
             return Scaffold(
               backgroundColor: Theme.of(context).colorScheme.primary,
+              resizeToAvoidBottomInset: false,
               appBar: homeProvider.selectedIndex == 5 ? null : _buildAppBar(context),
               body: DefaultTabController(
                 length: 4,
@@ -912,7 +825,7 @@ break;
       MixpanelManager().phoneMicRecordingStopped();
     } else if (recordingState == RecordingState.initialising) {
       // Already initializing, do nothing
-      debugPrint('initialising, have to wait');
+      Logger.debug('initialising, have to wait');
     } else {
       // Start recording directly without dialog
       await captureProvider.streamRecording();
@@ -1264,7 +1177,10 @@ break;
     try {
       final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
       captureProvider.removeListener(_onCaptureProviderChanged);
+      captureProvider.onFreemiumSessionReset = null;
     } catch (_) {}
+    // Clean up freemium handler
+    _freemiumHandler.dispose();
     // Remove foreground task callback to prevent memory leak
     FlutterForegroundTask.removeTaskDataCallback(_onReceiveTaskData);
     ForegroundUtil.stopForegroundTask();

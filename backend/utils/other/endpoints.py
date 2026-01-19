@@ -13,10 +13,36 @@ def get_user(uid: str):
     return user
 
 
-def get_current_user_uid(authorization: str = Header(None)):
-    if authorization and os.getenv('ADMIN_KEY') in authorization:
-        return authorization.split(os.getenv('ADMIN_KEY'))[1]
+def verify_token(token: str) -> str:
+    """
+    Verify a Firebase token or ADMIN_KEY and return the uid.
 
+    Args:
+        token: The token to verify (Firebase ID token or ADMIN_KEY format)
+
+    Returns:
+        The user's uid
+
+    Raises:
+        InvalidIdTokenError: If the token is invalid
+    """
+    # Check for ADMIN_KEY format
+    admin_key = os.getenv('ADMIN_KEY')
+    if admin_key and admin_key in token:
+        return token.split(admin_key)[1]
+
+    # Verify Firebase token
+    try:
+        decoded_token = auth.verify_id_token(token)
+        return decoded_token['uid']
+    except InvalidIdTokenError:
+        if os.getenv('LOCAL_DEVELOPMENT') == 'true':
+            return '123'
+        raise
+
+
+def get_current_user_uid(authorization: str = Header(None)):
+    """FastAPI dependency for HTTP endpoints with Authorization header."""
     if not authorization:
         raise HTTPException(status_code=401, detail="Authorization header not found")
     elif len(str(authorization).split(' ')) != 2:
@@ -24,14 +50,45 @@ def get_current_user_uid(authorization: str = Header(None)):
 
     try:
         token = authorization.split(' ')[1]
-        decoded_token = auth.verify_id_token(token)
-        # print('get_current_user_uid', decoded_token['uid'])
-        return decoded_token['uid']
+        return verify_token(token)
     except InvalidIdTokenError as e:
-        if os.getenv('LOCAL_DEVELOPMENT') == 'true':
-            return '123'
         print(e)
         raise HTTPException(status_code=401, detail="Invalid authorization token")
+
+
+def get_current_user_uid_from_ws_message(message: dict) -> str:
+    """
+    Get user uid from WebSocket first-message auth.
+
+    Expected message format: {"type": "auth", "token": "<token>"}
+
+    Returns:
+        The user's uid
+
+    Raises:
+        ValueError: If message format is invalid
+        InvalidIdTokenError: If token is invalid
+    """
+    if message.get("type") == "websocket.disconnect":
+        raise ValueError("Client disconnected")
+
+    text = message.get("text")
+    if text is None:
+        raise ValueError("Expected JSON auth message")
+
+    try:
+        auth_data = json.loads(text)
+    except json.JSONDecodeError:
+        raise ValueError("Invalid JSON")
+
+    if auth_data.get("type") != "auth":
+        raise ValueError("First message must be auth")
+
+    token = auth_data.get("token")
+    if not token:
+        raise ValueError("Missing token")
+
+    return verify_token(token)
 
 
 cached = {}

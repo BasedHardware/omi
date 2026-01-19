@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/memories_provider.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/extensions/string.dart';
-
 import 'delete_confirmation.dart';
 
 class MemoryEditSheet extends StatefulWidget {
@@ -177,7 +178,7 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
       );
     } catch (e) {
       success = false;
-      debugPrint('Error saving memory: $e');
+      Logger.debug('Error saving memory: $e');
     }
 
     if (!mounted) return;

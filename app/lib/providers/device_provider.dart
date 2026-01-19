@@ -1,9 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
+import 'package:omi/backend/http/api/device.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/backend/http/api/device.dart';
 import 'package:omi/main.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -28,8 +29,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
   int batteryLevel = -1;
   bool _hasLowBatteryAlerted = false;
+  Timer? _reconnectionTimer;
   DateTime? _reconnectAt;
-  bool _isAutoConnecting = false; // Track if autoConnect is in progress
+  final int _connectionCheckSeconds = 15; // 10s periods, 5s for each scan
 
   bool _havingNewFirmware = false;
   bool get havingNewFirmware => _havingNewFirmware && pairedDevice != null && isConnected;
@@ -153,72 +155,36 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     notifyListeners();
   }
 
-  /// autoConnect leverages platform-native BLE reconnection:
-  /// - iOS: Connection request doesn't time out, reconnects when device is available
-  /// - Android: Uses connectGatt with autoConnect=true for efficient background scanning
-  Future startAutoConnect(String caller, {bool boundDeviceOnly = false}) async {
-    if (_reconnectAt != null && _reconnectAt!.isAfter(DateTime.now())) {
-      Logger.debug('startAutoConnect: Skipping, reconnect delayed until $_reconnectAt');
-      return;
+  Future periodicConnect(String printer, {bool boundDeviceOnly = false}) async {
+    _reconnectionTimer?.cancel();
+    scan(t) async {
+      debugPrint("Period connect seconds: $_connectionCheckSeconds, triggered timer at ${DateTime.now()}");
+
+      final deviceService = ServiceManager.instance().device;
+      if (deviceService is DeviceService && deviceService.isWifiSyncInProgress) {
+        debugPrint("Skipping BLE reconnect - WiFi sync in progress");
+        return;
+      }
+      if (_reconnectAt != null && _reconnectAt!.isAfter(DateTime.now())) {
+        return;
+      }
+      if (boundDeviceOnly && SharedPreferencesUtil().btDevice.id.isEmpty) {
+        t.cancel();
+        return;
+      }
+      Logger.debug("isConnected: $isConnected, isConnecting: $isConnecting, connectedDevice: $connectedDevice");
+      if ((!isConnected && connectedDevice == null)) {
+        if (isConnecting) {
+          return;
+        }
+        await scanAndConnectToDevice();
+      } else {
+        t.cancel();
+      }
     }
 
-    if (boundDeviceOnly && SharedPreferencesUtil().btDevice.id.isEmpty) {
-      Logger.debug('startAutoConnect: No bound device, skipping');
-      return;
-    }
-
-    Logger.debug("startAutoConnect ($caller): isConnected=$isConnected, isConnecting=$isConnecting");
-
-    if (isConnected || isConnecting) {
-      Logger.debug('startAutoConnect: Already connected or connecting, skipping');
-      return;
-    }
-
-    final pairedDeviceId = SharedPreferencesUtil().btDevice.id;
-    if (pairedDeviceId.isEmpty) {
-      Logger.debug('startAutoConnect: No paired device ID');
-      return;
-    }
-
-    _isAutoConnecting = true;
-    updateConnectingStatus(true);
-
-    try {
-      Logger.debug('startAutoConnect: Using autoConnect for device $pairedDeviceId');
-      await ServiceManager.instance().device.ensureConnection(
-            pairedDeviceId,
-            force: true,
-            autoConnect: true,
-          );
-    } catch (e) {
-      Logger.debug('startAutoConnect: Connection failed: $e');
-    } finally {
-      _isAutoConnecting = false;
-      updateConnectingStatus(false);
-    }
-  }
-
-  /// Scans for devices and connects. Used for initial pairing and manual reconnection.
-  /// For background reconnection after disconnect, use startAutoConnect instead.
-  Future periodicConnect(String caller, {bool boundDeviceOnly = false}) async {
-    if (_reconnectAt != null && _reconnectAt!.isAfter(DateTime.now())) {
-      Logger.debug('periodicConnect: Skipping, reconnect delayed until $_reconnectAt');
-      return;
-    }
-
-    if (boundDeviceOnly && SharedPreferencesUtil().btDevice.id.isEmpty) {
-      Logger.debug('periodicConnect: No bound device, skipping');
-      return;
-    }
-
-    Logger.debug("periodicConnect ($caller): isConnected=$isConnected, isConnecting=$isConnecting");
-
-    if (isConnected || isConnecting) {
-      Logger.debug('periodicConnect: Already connected or connecting, skipping');
-      return;
-    }
-
-    await scanAndConnectToDevice();
+    _reconnectionTimer = Timer.periodic(Duration(seconds: _connectionCheckSeconds), scan);
+    scan(_reconnectionTimer);
   }
 
   Future<BtDevice?> _scanConnectDevice() async {
@@ -296,12 +262,16 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   void setIsConnected(bool value) {
     isConnected = value;
+    if (isConnected) {
+      _reconnectionTimer?.cancel();
+    }
     notifyListeners();
   }
 
   @override
   void dispose() {
     _bleBatteryLevelListener?.cancel();
+    _reconnectionTimer?.cancel();
     _disconnectDebouncer.cancel();
     _connectDebouncer.cancel();
     ServiceManager.instance().device.unsubscribe(this);
@@ -333,10 +303,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     MixpanelManager().deviceDisconnected();
 
     // Retired 1s to prevent the race condition made by standby power of ble device
-    // Use startAutoConnect for reconnection - as it uses platform-native autoConnect
-    // that doesn't require active scanning
     Future.delayed(const Duration(seconds: 1), () {
-      startAutoConnect('coming from onDisconnect');
+      periodicConnect('coming from onDisconnect');
     });
   }
 

@@ -892,26 +892,26 @@ packages:
     dependency: "direct main"
     description:
       name: flutter_sound
-      sha256: "77f0252a2f08449d621f68b8fd617c3b391e7f862eaa94bb32f53cc2dc3bbe85"
+      sha256: ac0bee62b9255014aa1ce629dbbc8e8bab40337403ec405213c0d7848ff9ad49
       url: "https://pub.dev"
     source: hosted
-    version: "9.30.0"
+    version: "9.25.1"
   flutter_sound_platform_interface:
     dependency: transitive
     description:
       name: flutter_sound_platform_interface
-      sha256: "5ffc858fd96c6fa277e3bb25eecc100849d75a8792b1f9674d1ba817aea9f861"
+      sha256: c57f996bd8049c71ac744b84439a951ea0bf495f6a229f3981dceb4dde0176a1
       url: "https://pub.dev"
     source: hosted
-    version: "9.30.0"
+    version: "9.25.1"
   flutter_sound_web:
     dependency: transitive
     description:
       name: flutter_sound_web
-      sha256: "3af46f45f44768c01c83ba260855c956d0963673664947926d942aa6fbf6f6fb"
+      sha256: "2fcedb2291a465e3bebc1f3dd680ffeb4efe2a3d5fedd06d2f75701ede5de722"
       url: "https://pub.dev"
     source: hosted
-    version: "9.30.0"
+    version: "9.25.1"
   flutter_svg:
     dependency: "direct main"
     description:
@@ -1497,10 +1497,10 @@ packages:
     dependency: transitive
     description:
       name: meta
-      sha256: e3641ec5d63ebf0d9b41bd43201a66e3fc79a65db5f61fc181f04cd27aab950c
+      sha256: "23f08335362185a5ea2ad3a4e597f1375e78bce8a040df5c600c8d3552ef2394"
       url: "https://pub.dev"
     source: hosted
-    version: "1.16.0"
+    version: "1.17.0"
   mgrs_dart:
     dependency: transitive
     description:
@@ -2235,10 +2235,10 @@ packages:
     dependency: transitive
     description:
       name: test_api
-      sha256: "522f00f556e73044315fa4585ec3270f1808a4b186c936e612cab0b565ff1e00"
+      sha256: ab2726c1a94d3176a45960b6234466ec367179b87dd74f1611adb1f3b5fb9d55
       url: "https://pub.dev"
     source: hosted
-    version: "0.7.6"
+    version: "0.7.7"
   time:
     dependency: transitive
     description:
@@ -2570,10 +2570,11 @@ packages:
   whisper_flutter_new:
     dependency: "direct main"
     description:
-      name: whisper_flutter_new
-      sha256: "56f5449cd459ed9bbb9d3641aae6a72ed594e1a200f56b1939891996fbd7dd4d"
-      url: "https://pub.dev"
-    source: hosted
+      path: "."
+      ref: "684fb43710dd4de5538ac2da7d0b1fa405363212"
+      resolved-ref: "684fb43710dd4de5538ac2da7d0b1fa405363212"
+      url: "https://github.com/BasedHardware/whisper_flutter_new.git"
+    source: git
     version: "1.0.1"
   win32:
     dependency: transitive

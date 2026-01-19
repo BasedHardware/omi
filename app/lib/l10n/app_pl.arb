@@ -1,0 +1,2317 @@
+{
+  "@@locale": "pl",
+  "@@last_modified": "2026-01-13",
+  "appTitle": "Omi",
+  "@appTitle": {
+    "description": "The app title displayed in various places"
+  },
+  "conversationTab": "Rozmowa",
+  "@conversationTab": {
+    "description": "Tab label for conversation summary"
+  },
+  "transcriptTab": "Transkrypcja",
+  "@transcriptTab": {
+    "description": "Tab label for transcript view"
+  },
+  "actionItemsTab": "Zadania",
+  "@actionItemsTab": {
+    "description": "Tab label for action items"
+  },
+  "deleteConversationTitle": "Usunąć rozmowę?",
+  "@deleteConversationTitle": {
+    "description": "Title for delete confirmation dialog"
+  },
+  "deleteConversationMessage": "Czy na pewno chcesz usunąć tę rozmowę? Ta czynność nie może zostać cofnięta.",
+  "@deleteConversationMessage": {
+    "description": "Message for delete confirmation dialog"
+  },
+  "confirm": "Potwierdź",
+  "@confirm": {
+    "description": "Confirm button label"
+  },
+  "cancel": "Anuluj",
+  "@cancel": {
+    "description": "Button label"
+  },
+  "ok": "OK",
+  "@ok": {
+    "description": "Generic OK button text"
+  },
+  "delete": "Usuń",
+  "@delete": {
+    "description": "Button label"
+  },
+  "add": "Dodaj",
+  "@add": {
+    "description": "Add button label"
+  },
+  "update": "Aktualizuj",
+  "@update": {
+    "description": "Update button label"
+  },
+  "save": "Zapisz",
+  "@save": {
+    "description": "Save button label"
+  },
+  "edit": "Edytuj",
+  "@edit": {
+    "description": "Edit button/action label"
+  },
+  "close": "Zamknij",
+  "@close": {
+    "description": "Close button label"
+  },
+  "clear": "Wyczyść",
+  "@clear": {
+    "description": "Clear button label"
+  },
+  "copyTranscript": "Kopiuj transkrypcję",
+  "@copyTranscript": {
+    "description": "Menu item to copy transcript"
+  },
+  "copySummary": "Kopiuj podsumowanie",
+  "@copySummary": {
+    "description": "Menu item to copy summary"
+  },
+  "testPrompt": "Testuj prompt",
+  "@testPrompt": {
+    "description": "Menu item for testing prompts"
+  },
+  "reprocessConversation": "Przetwórz ponownie rozmowę",
+  "@reprocessConversation": {
+    "description": "Menu item to reprocess a conversation"
+  },
+  "deleteConversation": "Usuń rozmowę",
+  "@deleteConversation": {
+    "description": "Menu item to delete a conversation"
+  },
+  "contentCopied": "Zawartość skopiowana do schowka",
+  "@contentCopied": {
+    "description": "Snackbar message when content is copied"
+  },
+  "failedToUpdateStarred": "Nie udało się zaktualizować statusu ulubionego.",
+  "@failedToUpdateStarred": {
+    "description": "Error message when starring fails"
+  },
+  "conversationUrlNotShared": "Nie można udostępnić adresu URL rozmowy.",
+  "@conversationUrlNotShared": {
+    "description": "Error message when sharing fails"
+  },
+  "errorProcessingConversation": "Błąd podczas przetwarzania rozmowy. Spróbuj ponownie później.",
+  "@errorProcessingConversation": {
+    "description": "Error message for conversation processing failure"
+  },
+  "noInternetConnection": "Sprawdź połączenie internetowe i spróbuj ponownie.",
+  "@noInternetConnection": {
+    "description": "Message shown when there's no internet"
+  },
+  "unableToDeleteConversation": "Nie można usunąć rozmowy",
+  "@unableToDeleteConversation": {
+    "description": "Title for delete error dialog"
+  },
+  "somethingWentWrong": "Coś poszło nie tak! Spróbuj ponownie później.",
+  "@somethingWentWrong": {
+    "description": "Generic error message"
+  },
+  "copyErrorMessage": "Kopiuj komunikat błędu",
+  "@copyErrorMessage": {
+    "description": "Button to copy error details"
+  },
+  "errorCopied": "Komunikat błędu skopiowany do schowka",
+  "@errorCopied": {
+    "description": "Snackbar message after copying error"
+  },
+  "remaining": "Pozostało",
+  "@remaining": {
+    "description": "Label for remaining time/items"
+  },
+  "loading": "Ładowanie...",
+  "@loading": {
+    "description": "Loading indicator text"
+  },
+  "loadingDuration": "Ładowanie czasu trwania...",
+  "@loadingDuration": {
+    "description": "Loading duration indicator"
+  },
+  "secondsCount": "{count} sekund",
+  "@secondsCount": {
+    "description": "Duration in seconds",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "30"
+      }
+    }
+  },
+  "people": "Osoby",
+  "@people": {
+    "description": "People section title"
+  },
+  "addNewPerson": "Dodaj nową osobę",
+  "@addNewPerson": {
+    "description": "Title for add person dialog"
+  },
+  "editPerson": "Edytuj osobę",
+  "@editPerson": {
+    "description": "Title for edit person dialog"
+  },
+  "createPersonHint": "Utwórz nową osobę i naucz Omi rozpoznawać jej głos!",
+  "@createPersonHint": {
+    "description": "Hint text for creating a person"
+  },
+  "speechProfile": "Profil głosu",
+  "@speechProfile": {
+    "description": "Speech profile label"
+  },
+  "sampleNumber": "Próbka {number}",
+  "@sampleNumber": {
+    "description": "Label for speech sample",
+    "placeholders": {
+      "number": {
+        "type": "int",
+        "example": "1"
+      }
+    }
+  },
+  "settings": "Ustawienia",
+  "@settings": {
+    "description": "Settings page title"
+  },
+  "language": "Język",
+  "@language": {
+    "description": "Language setting label"
+  },
+  "selectLanguage": "Wybierz język",
+  "@selectLanguage": {
+    "description": "Title for language selection"
+  },
+  "deleting": "Usuwanie...",
+  "@deleting": {
+    "description": "Deleting in progress indicator"
+  },
+  "pleaseCompleteAuthentication": "Ukończ uwierzytelnianie w przeglądarce. Po zakończeniu wróć do aplikacji.",
+  "@pleaseCompleteAuthentication": {
+    "description": "Message shown during OAuth flow"
+  },
+  "failedToStartAuthentication": "Nie udało się rozpocząć uwierzytelniania",
+  "@failedToStartAuthentication": {
+    "description": "Error when OAuth fails to start"
+  },
+  "importStarted": "Import rozpoczęty! Otrzymasz powiadomienie po zakończeniu.",
+  "@importStarted": {
+    "description": "Success message when import begins"
+  },
+  "failedToStartImport": "Nie udało się rozpocząć importu. Spróbuj ponownie.",
+  "@failedToStartImport": {
+    "description": "Error when import fails to start"
+  },
+  "couldNotAccessFile": "Nie można uzyskać dostępu do wybranego pliku",
+  "@couldNotAccessFile": {
+    "description": "Error when file access fails"
+  },
+  "askOmi": "Zapytaj Omi",
+  "@askOmi": {
+    "description": "Chat button label"
+  },
+  "done": "Gotowe",
+  "@done": {
+    "description": "Button label"
+  },
+  "disconnected": "Rozłączono",
+  "@disconnected": {
+    "description": "Device disconnected status"
+  },
+  "searching": "Wyszukiwanie",
+  "@searching": {
+    "description": "Searching for device status"
+  },
+  "connectDevice": "Połącz urządzenie",
+  "@connectDevice": {
+    "description": "Button to connect a device"
+  },
+  "monthlyLimitReached": "Osiągnięto miesięczny limit.",
+  "@monthlyLimitReached": {
+    "description": "Message when usage limit is reached"
+  },
+  "checkUsage": "Sprawdź wykorzystanie",
+  "@checkUsage": {
+    "description": "Button to check usage details"
+  },
+  "syncingRecordings": "Synchronizacja nagrań",
+  "@syncingRecordings": {
+    "description": "Title when sync is in progress"
+  },
+  "recordingsToSync": "Nagrania do synchronizacji",
+  "@recordingsToSync": {
+    "description": "Title when there are recordings to sync"
+  },
+  "allCaughtUp": "Wszystko na bieżąco",
+  "@allCaughtUp": {
+    "description": "Title when everything is synced"
+  },
+  "sync": "Synchronizuj",
+  "@sync": {
+    "description": "Sync button label"
+  },
+  "pendantUpToDate": "Pendant jest aktualny",
+  "@pendantUpToDate": {
+    "description": "Status when pendant is synced"
+  },
+  "allRecordingsSynced": "Wszystkie nagrania są zsynchronizowane",
+  "@allRecordingsSynced": {
+    "description": "Status text when sync is complete"
+  },
+  "syncingInProgress": "Trwa synchronizacja",
+  "@syncingInProgress": {
+    "description": "Status when sync is happening"
+  },
+  "readyToSync": "Gotowe do synchronizacji",
+  "@readyToSync": {
+    "description": "Status when ready to sync"
+  },
+  "tapSyncToStart": "Dotknij Synchronizuj, aby rozpocząć",
+  "@tapSyncToStart": {
+    "description": "Hint to start sync"
+  },
+  "pendantNotConnected": "Pendant nie jest podłączony. Podłącz, aby zsynchronizować.",
+  "@pendantNotConnected": {
+    "description": "Warning when pendant is not connected"
+  },
+  "everythingSynced": "Wszystko jest już zsynchronizowane.",
+  "@everythingSynced": {
+    "description": "Message when all is synced"
+  },
+  "recordingsNotSynced": "Masz nagrania, które nie zostały jeszcze zsynchronizowane.",
+  "@recordingsNotSynced": {
+    "description": "Message when there are unsynced recordings"
+  },
+  "syncingBackground": "Będziemy synchronizować Twoje nagrania w tle.",
+  "@syncingBackground": {
+    "description": "Message during background sync"
+  },
+  "noConversationsYet": "Brak rozmów.",
+  "@noConversationsYet": {
+    "description": "Empty state when no conversations exist"
+  },
+  "noStarredConversations": "Brak ulubionych rozmów.",
+  "@noStarredConversations": {
+    "description": "Empty state for starred filter"
+  },
+  "starConversationHint": "Aby oznaczyć rozmowę gwiazdką, otwórz ją i dotknij ikony gwiazdki w nagłówku.",
+  "@starConversationHint": {
+    "description": "Hint explaining how to star conversations"
+  },
+  "searchConversations": "Szukaj rozmów",
+  "@searchConversations": {
+    "description": "Search field placeholder"
+  },
+  "selectedCount": "Wybrano: {count}",
+  "@selectedCount": {
+    "description": "Selection count label",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "merge": "Scal",
+  "@merge": {
+    "description": "Merge button label"
+  },
+  "mergeConversations": "Scal rozmowy",
+  "@mergeConversations": {
+    "description": "Merge dialog title"
+  },
+  "mergeConversationsMessage": "Spowoduje to połączenie {count} rozmów w jedną. Cała zawartość zostanie scalone i wygenerowana ponownie.",
+  "@mergeConversationsMessage": {
+    "description": "Merge confirmation message",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mergingInBackground": "Scalanie w tle. To może chwilę potrwać.",
+  "@mergingInBackground": {
+    "description": "Snackbar message during merge"
+  },
+  "failedToStartMerge": "Nie udało się rozpocząć scalania",
+  "@failedToStartMerge": {
+    "description": "Error message when merge fails"
+  },
+  "askAnything": "Zapytaj o cokolwiek",
+  "@askAnything": {
+    "description": "Chat input placeholder"
+  },
+  "noMessagesYet": "Brak wiadomości!\nCzemu nie rozpoczniesz rozmowy?",
+  "@noMessagesYet": {
+    "description": "Empty chat state message"
+  },
+  "deletingMessages": "Usuwanie Twoich wiadomości z pamięci Omi...",
+  "@deletingMessages": {
+    "description": "Loading text while clearing chat"
+  },
+  "messageCopied": "Wiadomość skopiowana do schowka.",
+  "@messageCopied": {
+    "description": "Snackbar after copying message"
+  },
+  "cannotReportOwnMessage": "Nie możesz zgłosić własnych wiadomości.",
+  "@cannotReportOwnMessage": {
+    "description": "Error when trying to report own message"
+  },
+  "reportMessage": "Zgłoś wiadomość",
+  "@reportMessage": {
+    "description": "Report message dialog title"
+  },
+  "reportMessageConfirm": "Czy na pewno chcesz zgłosić tę wiadomość?",
+  "@reportMessageConfirm": {
+    "description": "Report message confirmation"
+  },
+  "messageReported": "Wiadomość zgłoszona pomyślnie.",
+  "@messageReported": {
+    "description": "Confirmation after reporting message"
+  },
+  "thankYouFeedback": "Dziękujemy za opinię!",
+  "@thankYouFeedback": {
+    "description": "After thumbs up/down feedback"
+  },
+  "clearChat": "Wyczyścić czat?",
+  "@clearChat": {
+    "description": "Clear chat dialog title"
+  },
+  "clearChatConfirm": "Czy na pewno chcesz wyczyścić czat? Ta czynność nie może zostać cofnięta.",
+  "@clearChatConfirm": {
+    "description": "Clear chat confirmation message"
+  },
+  "maxFilesLimit": "Możesz przesłać maksymalnie 4 pliki naraz",
+  "@maxFilesLimit": {
+    "description": "Max files upload warning"
+  },
+  "chatWithOmi": "Czat z Omi",
+  "@chatWithOmi": {
+    "description": "Chat share subject"
+  },
+  "apps": "Aplikacje",
+  "@apps": {
+    "description": "Apps page title"
+  },
+  "noAppsFound": "Nie znaleziono aplikacji",
+  "@noAppsFound": {
+    "description": "Empty state when no apps match"
+  },
+  "tryAdjustingSearch": "Spróbuj dostosować wyszukiwanie lub filtry",
+  "@tryAdjustingSearch": {
+    "description": "Hint when no apps found"
+  },
+  "createYourOwnApp": "Stwórz własną aplikację",
+  "@createYourOwnApp": {
+    "description": "Create app button title"
+  },
+  "buildAndShareApp": "Zbuduj i udostępnij swoją własną aplikację",
+  "@buildAndShareApp": {
+    "description": "Create app button subtitle"
+  },
+  "searchApps": "Przeszukaj ponad 1500 aplikacji",
+  "@searchApps": {
+    "description": "Apps search placeholder"
+  },
+  "myApps": "Moje aplikacje",
+  "@myApps": {
+    "description": "My Apps filter button"
+  },
+  "installedApps": "Zainstalowane aplikacje",
+  "@installedApps": {
+    "description": "Installed Apps filter button"
+  },
+  "unableToFetchApps": "Nie można pobrać aplikacji :(\n\nSprawdź połączenie internetowe i spróbuj ponownie.",
+  "@unableToFetchApps": {
+    "description": "Error when apps fail to load"
+  },
+  "aboutOmi": "O Omi",
+  "@aboutOmi": {
+    "description": "About page title"
+  },
+  "privacyPolicy": "Polityką prywatności",
+  "@privacyPolicy": {
+    "description": "Link text for Privacy Policy"
+  },
+  "visitWebsite": "Odwiedź stronę",
+  "@visitWebsite": {
+    "description": "Visit website link"
+  },
+  "helpOrInquiries": "Pomoc lub pytania?",
+  "@helpOrInquiries": {
+    "description": "Help link title"
+  },
+  "joinCommunity": "Dołącz do społeczności!",
+  "@joinCommunity": {
+    "description": "Discord community link"
+  },
+  "membersAndCounting": "Ponad 8000 członków i wciąż przybywa.",
+  "@membersAndCounting": {
+    "description": "Discord member count"
+  },
+  "deleteAccountTitle": "Usuń konto",
+  "@deleteAccountTitle": {
+    "description": "Delete account page title"
+  },
+  "deleteAccountConfirm": "Czy na pewno chcesz usunąć swoje konto?",
+  "@deleteAccountConfirm": {
+    "description": "Delete account confirmation"
+  },
+  "cannotBeUndone": "Tej operacji nie można cofnąć.",
+  "@cannotBeUndone": {
+    "description": "Warning that action is permanent"
+  },
+  "allDataErased": "Wszystkie Twoje wspomnienia i rozmowy zostaną trwale usunięte.",
+  "@allDataErased": {
+    "description": "Delete account warning 1"
+  },
+  "appsDisconnected": "Twoje aplikacje i integracje zostaną natychmiast rozłączone.",
+  "@appsDisconnected": {
+    "description": "Delete account warning 2"
+  },
+  "exportBeforeDelete": "Możesz wyeksportować swoje dane przed usunięciem konta, ale po usunięciu nie można ich odzyskać.",
+  "@exportBeforeDelete": {
+    "description": "Delete account warning 3"
+  },
+  "deleteAccountCheckbox": "Rozumiem, że usunięcie mojego konta jest trwałe i wszystkie dane, w tym wspomnienia i rozmowy, zostaną utracone bez możliwości odzyskania.",
+  "@deleteAccountCheckbox": {
+    "description": "Delete account checkbox confirmation"
+  },
+  "areYouSure": "Czy jesteś pewien?",
+  "@areYouSure": {
+    "description": "Final confirmation title"
+  },
+  "deleteAccountFinal": "Ta czynność jest nieodwracalna i trwale usunie Twoje konto oraz wszystkie powiązane dane. Czy na pewno chcesz kontynuować?",
+  "@deleteAccountFinal": {
+    "description": "Final delete confirmation message"
+  },
+  "deleteNow": "Usuń teraz",
+  "@deleteNow": {
+    "description": "Delete now button"
+  },
+  "goBack": "Wróć",
+  "@goBack": {
+    "description": "Go back button"
+  },
+  "checkBoxToConfirm": "Zaznacz pole, aby potwierdzić, że rozumiesz, iż usunięcie konta jest trwałe i nieodwracalne.",
+  "@checkBoxToConfirm": {
+    "description": "Checkbox validation error"
+  },
+  "profile": "Profil",
+  "@profile": {
+    "description": "Profile page title"
+  },
+  "name": "Imię",
+  "@name": {
+    "description": "Name field label"
+  },
+  "email": "Email",
+  "@email": {
+    "description": "Email field label"
+  },
+  "customVocabulary": "Własny słownik",
+  "@customVocabulary": {
+    "description": "Custom vocabulary setting"
+  },
+  "identifyingOthers": "Identyfikacja innych osób",
+  "@identifyingOthers": {
+    "description": "People identification setting"
+  },
+  "paymentMethods": "Metody płatności",
+  "@paymentMethods": {
+    "description": "Payment methods setting"
+  },
+  "conversationDisplay": "Wyświetlanie rozmów",
+  "@conversationDisplay": {
+    "description": "Conversation display setting"
+  },
+  "dataPrivacy": "Dane i prywatność",
+  "@dataPrivacy": {
+    "description": "Data and privacy setting"
+  },
+  "userId": "ID użytkownika",
+  "@userId": {
+    "description": "User ID label"
+  },
+  "notSet": "Nie ustawiono",
+  "@notSet": {
+    "description": "Default value when not set"
+  },
+  "userIdCopied": "ID użytkownika skopiowane do schowka",
+  "@userIdCopied": {
+    "description": "Confirmation when user ID is copied"
+  },
+  "systemDefault": "Domyślny systemowy",
+  "@systemDefault": {
+    "description": "System language option"
+  },
+  "planAndUsage": "Plan i wykorzystanie",
+  "@planAndUsage": {
+    "description": "Plan and usage menu item"
+  },
+  "offlineSync": "Synchronizacja offline",
+  "@offlineSync": {
+    "description": "Offline sync menu item"
+  },
+  "deviceSettings": "Ustawienia urządzenia",
+  "@deviceSettings": {
+    "description": "Device settings menu item"
+  },
+  "chatTools": "Narzędzia czatu",
+  "@chatTools": {
+    "description": "Chat tools menu item"
+  },
+  "feedbackBug": "Opinia / Błąd",
+  "@feedbackBug": {
+    "description": "Feedback menu item"
+  },
+  "helpCenter": "Centrum pomocy",
+  "@helpCenter": {
+    "description": "Help center menu item"
+  },
+  "developerSettings": "Ustawienia programisty",
+  "@developerSettings": {
+    "description": "Developer settings menu item"
+  },
+  "getOmiForMac": "Pobierz Omi dla Mac",
+  "@getOmiForMac": {
+    "description": "Mac app download link"
+  },
+  "referralProgram": "Program poleceń",
+  "@referralProgram": {
+    "description": "Referral program menu item"
+  },
+  "signOut": "Wyloguj się",
+  "@signOut": {
+    "description": "Sign out button"
+  },
+  "appAndDeviceCopied": "Szczegóły aplikacji i urządzenia skopiowane",
+  "@appAndDeviceCopied": {
+    "description": "Confirmation when version info is copied"
+  },
+  "wrapped2025": "Podsumowanie 2025",
+  "@wrapped2025": {
+    "description": "Wrapped 2025 menu item"
+  },
+  "yourPrivacyYourControl": "Twoja prywatność, Twoja kontrola",
+  "@yourPrivacyYourControl": {
+    "description": "Data privacy page heading"
+  },
+  "privacyIntro": "W Omi dbamy o Twoją prywatność. Ta strona pozwala kontrolować sposób przechowywania i wykorzystywania Twoich danych.",
+  "@privacyIntro": {
+    "description": "Data privacy page introduction"
+  },
+  "learnMore": "Dowiedz się więcej...",
+  "@learnMore": {
+    "description": "Learn more link"
+  },
+  "dataProtectionLevel": "Poziom ochrony danych",
+  "@dataProtectionLevel": {
+    "description": "Data protection section title"
+  },
+  "dataProtectionDesc": "Twoje dane są domyślnie zabezpieczone silnym szyfrowaniem. Przejrzyj swoje ustawienia i przyszłe opcje prywatności poniżej.",
+  "@dataProtectionDesc": {
+    "description": "Data protection section description"
+  },
+  "appAccess": "Dostęp aplikacji",
+  "@appAccess": {
+    "description": "App access section title"
+  },
+  "appAccessDesc": "Następujące aplikacje mogą uzyskać dostęp do Twoich danych. Dotknij aplikacji, aby zarządzać jej uprawnieniami.",
+  "@appAccessDesc": {
+    "description": "App access section description"
+  },
+  "noAppsExternalAccess": "Żadne zainstalowane aplikacje nie mają zewnętrznego dostępu do Twoich danych.",
+  "@noAppsExternalAccess": {
+    "description": "Empty state for app access"
+  },
+  "deviceName": "Nazwa urządzenia",
+  "@deviceName": {
+    "description": "Device name label"
+  },
+  "deviceId": "ID urządzenia",
+  "@deviceId": {
+    "description": "Device ID label"
+  },
+  "firmware": "Oprogramowanie",
+  "@firmware": {
+    "description": "Firmware label"
+  },
+  "sdCardSync": "Synchronizacja karty SD",
+  "@sdCardSync": {
+    "description": "SD Card sync label"
+  },
+  "hardwareRevision": "Wersja sprzętu",
+  "@hardwareRevision": {
+    "description": "Hardware revision label"
+  },
+  "modelNumber": "Numer modelu",
+  "@modelNumber": {
+    "description": "Model number label"
+  },
+  "manufacturer": "Producent",
+  "@manufacturer": {
+    "description": "Manufacturer label"
+  },
+  "doubleTap": "Podwójne dotknięcie",
+  "@doubleTap": {
+    "description": "Double tap action label"
+  },
+  "ledBrightness": "Jasność LED",
+  "@ledBrightness": {
+    "description": "LED brightness setting"
+  },
+  "micGain": "Wzmocnienie mikrofonu",
+  "@micGain": {
+    "description": "Microphone gain setting"
+  },
+  "disconnect": "Rozłącz",
+  "@disconnect": {
+    "description": "Disconnect device button"
+  },
+  "forgetDevice": "Zapomnij urządzenie",
+  "@forgetDevice": {
+    "description": "Forget device button"
+  },
+  "chargingIssues": "Problemy z ładowaniem",
+  "@chargingIssues": {
+    "description": "Charging issues help item"
+  },
+  "disconnectDevice": "Rozłącz urządzenie",
+  "@disconnectDevice": {
+    "description": "Disconnect device button"
+  },
+  "unpairDevice": "Rozparuj urządzenie",
+  "@unpairDevice": {
+    "description": "Unpair device button"
+  },
+  "unpairAndForget": "Rozparuj i zapomnij urządzenie",
+  "@unpairAndForget": {
+    "description": "Unpair and forget device button"
+  },
+  "deviceDisconnectedMessage": "Twoje Omi zostało rozłączone 😔",
+  "@deviceDisconnectedMessage": {
+    "description": "Message shown when device is disconnected"
+  },
+  "deviceUnpairedMessage": "Urządzenie rozparowane. Przejdź do Ustawienia > Bluetooth i zapomnij urządzenie, aby zakończyć parowanie.",
+  "@deviceUnpairedMessage": {
+    "description": "Message shown when device is unpaired"
+  },
+  "unpairDialogTitle": "Rozparuj urządzenie",
+  "@unpairDialogTitle": {
+    "description": "Unpair dialog title"
+  },
+  "unpairDialogMessage": "Spowoduje to rozparowanie urządzenia, aby można je było podłączyć do innego telefonu. Musisz przejść do Ustawienia > Bluetooth i zapomnieć urządzenie, aby zakończyć proces.",
+  "@unpairDialogMessage": {
+    "description": "Unpair dialog message"
+  },
+  "deviceNotConnected": "Urządzenie nie jest podłączone",
+  "@deviceNotConnected": {
+    "description": "Device not connected header"
+  },
+  "connectDeviceMessage": "Podłącz swoje urządzenie Omi, aby uzyskać dostęp\ndo ustawień urządzenia i personalizacji",
+  "@connectDeviceMessage": {
+    "description": "Message encouraging user to connect device"
+  },
+  "deviceInfoSection": "Informacje o urządzeniu",
+  "@deviceInfoSection": {
+    "description": "Device information section header"
+  },
+  "customizationSection": "Personalizacja",
+  "@customizationSection": {
+    "description": "Customization section header"
+  },
+  "hardwareSection": "Sprzęt",
+  "@hardwareSection": {
+    "description": "Hardware section header"
+  },
+  "v2Undetected": "Nie wykryto V2",
+  "@v2Undetected": {
+    "description": "V2 device undeteced dialog title"
+  },
+  "v2UndetectedMessage": "Widzimy, że masz urządzenie V1 lub Twoje urządzenie nie jest podłączone. Funkcja karty SD jest dostępna tylko dla urządzeń V2.",
+  "@v2UndetectedMessage": {
+    "description": "V2 device undeteced dialog message"
+  },
+  "endConversation": "Zakończ rozmowę",
+  "@endConversation": {
+    "description": "End conversation action"
+  },
+  "pauseResume": "Wstrzymaj/Wznów",
+  "@pauseResume": {
+    "description": "Pause/Resume action"
+  },
+  "starConversation": "Oznacz rozmowę gwiazdką",
+  "@starConversation": {
+    "description": "Star conversation action"
+  },
+  "doubleTapAction": "Akcja podwójnego dotknięcia",
+  "@doubleTapAction": {
+    "description": "Double tap action setting"
+  },
+  "endAndProcess": "Zakończ i przetwórz rozmowę",
+  "@endAndProcess": {
+    "description": "End and process action"
+  },
+  "pauseResumeRecording": "Wstrzymaj/wznów nagrywanie",
+  "@pauseResumeRecording": {
+    "description": "Pause/Resume recording action"
+  },
+  "starOngoing": "Oznacz bieżącą rozmowę gwiazdką",
+  "@starOngoing": {
+    "description": "Star ongoing conversation action"
+  },
+  "off": "Wył.",
+  "@off": {
+    "description": "Off state"
+  },
+  "max": "Maks.",
+  "@max": {
+    "description": "Max state"
+  },
+  "mute": "Wycisz",
+  "@mute": {
+    "description": "Mute state"
+  },
+  "quiet": "Cicho",
+  "@quiet": {
+    "description": "Quiet preset"
+  },
+  "normal": "Normalnie",
+  "@normal": {
+    "description": "Normal preset"
+  },
+  "high": "Wysoko",
+  "@high": {
+    "description": "High preset"
+  },
+  "micGainDescMuted": "Mikrofon jest wyciszony",
+  "@micGainDescMuted": {
+    "description": "Mic gain description: Muted"
+  },
+  "micGainDescLow": "Bardzo cicho - do głośnych środowisk",
+  "@micGainDescLow": {
+    "description": "Mic gain description: Low"
+  },
+  "micGainDescModerate": "Cicho - do umiarkowanego hałasu",
+  "@micGainDescModerate": {
+    "description": "Mic gain description: Moderate"
+  },
+  "micGainDescNeutral": "Neutralnie - zrównoważone nagrywanie",
+  "@micGainDescNeutral": {
+    "description": "Mic gain description: Neutral"
+  },
+  "micGainDescSlightlyBoosted": "Lekko wzmocnione - normalne użycie",
+  "@micGainDescSlightlyBoosted": {
+    "description": "Mic gain description: Slightly Boosted"
+  },
+  "micGainDescBoosted": "Wzmocnione - do cichych środowisk",
+  "@micGainDescBoosted": {
+    "description": "Mic gain description: Boosted"
+  },
+  "micGainDescHigh": "Wysokie - do odległych lub cichych głosów",
+  "@micGainDescHigh": {
+    "description": "Mic gain description: High"
+  },
+  "micGainDescVeryHigh": "Bardzo wysokie - do bardzo cichych źródeł",
+  "@micGainDescVeryHigh": {
+    "description": "Mic gain description: Very High"
+  },
+  "micGainDescMax": "Maksymalne - używaj z ostrożnością",
+  "@micGainDescMax": {
+    "description": "Mic gain description: Max"
+  },
+  "developerSettingsTitle": "Ustawienia programisty",
+  "@developerSettingsTitle": {
+    "description": "Developer settings page title"
+  },
+  "saving": "Zapisywanie...",
+  "@saving": {
+    "description": "Saving state text"
+  },
+  "personaConfig": "Skonfiguruj swoją osobowość AI",
+  "@personaConfig": {
+    "description": "Persona configuration subtitle"
+  },
+  "beta": "BETA",
+  "@beta": {
+    "description": "Beta tag"
+  },
+  "transcription": "Transkrypcja",
+  "@transcription": {
+    "description": "Transcription settings title"
+  },
+  "transcriptionConfig": "Skonfiguruj dostawcę STT",
+  "@transcriptionConfig": {
+    "description": "Transcription configuration subtitle"
+  },
+  "conversationTimeout": "Limit czasu rozmowy",
+  "@conversationTimeout": {
+    "description": "Conversation timeout settings title"
+  },
+  "conversationTimeoutConfig": "Ustaw, kiedy rozmowy kończą się automatycznie",
+  "@conversationTimeoutConfig": {
+    "description": "Conversation timeout configuration subtitle"
+  },
+  "importData": "Importuj dane",
+  "@importData": {
+    "description": "Import data details title"
+  },
+  "importDataConfig": "Importuj dane z innych źródeł",
+  "@importDataConfig": {
+    "description": "Import data details subtitle"
+  },
+  "debugDiagnostics": "Debugowanie i diagnostyka",
+  "@debugDiagnostics": {
+    "description": "Debug & Diagnostics section header"
+  },
+  "endpointUrl": "Adres URL punktu końcowego",
+  "@endpointUrl": {
+    "description": "Endpoint URL label"
+  },
+  "noApiKeys": "Brak kluczy API",
+  "@noApiKeys": {
+    "description": "No API keys message"
+  },
+  "createKeyToStart": "Utwórz klucz, aby rozpocząć",
+  "@createKeyToStart": {
+    "description": "Create key instruction"
+  },
+  "createKey": "Utwórz klucz",
+  "@createKey": {
+    "description": "Create Key button"
+  },
+  "docs": "Dokumentacja",
+  "@docs": {
+    "description": "Documentation link"
+  },
+  "yourOmiInsights": "Twoje statystyki Omi",
+  "@yourOmiInsights": {
+    "description": "Usage page title"
+  },
+  "today": "Dzisiaj",
+  "@today": {
+    "description": "Time period: Today"
+  },
+  "thisMonth": "W tym miesiącu",
+  "@thisMonth": {
+    "description": "Time period: This Month"
+  },
+  "thisYear": "W tym roku",
+  "@thisYear": {
+    "description": "Time period: This Year"
+  },
+  "allTime": "Cały czas",
+  "@allTime": {
+    "description": "Time period: All Time"
+  },
+  "noActivityYet": "Brak aktywności",
+  "@noActivityYet": {
+    "description": "Empty state title"
+  },
+  "startConversationToSeeInsights": "Rozpocznij rozmowę z Omi,\naby zobaczyć tutaj statystyki wykorzystania.",
+  "@startConversationToSeeInsights": {
+    "description": "Empty state description"
+  },
+  "listening": "Słuchanie",
+  "@listening": {
+    "description": "Listening stat title"
+  },
+  "listeningSubtitle": "Całkowity czas, przez który Omi aktywnie słuchało.",
+  "@listeningSubtitle": {
+    "description": "Listening stat subtitle"
+  },
+  "understanding": "Rozumienie",
+  "@understanding": {
+    "description": "Understanding stat title"
+  },
+  "understandingSubtitle": "Słowa zrozumiane z Twoich rozmów.",
+  "@understandingSubtitle": {
+    "description": "Understanding stat subtitle"
+  },
+  "providing": "Dostarczanie",
+  "@providing": {
+    "description": "Providing stat title"
+  },
+  "providingSubtitle": "Zadania i notatki automatycznie zarejestrowane.",
+  "@providingSubtitle": {
+    "description": "Providing stat subtitle"
+  },
+  "remembering": "Zapamiętywanie",
+  "@remembering": {
+    "description": "Remembering stat title"
+  },
+  "rememberingSubtitle": "Fakty i szczegóły zapamiętane dla Ciebie.",
+  "@rememberingSubtitle": {
+    "description": "Remembering stat subtitle"
+  },
+  "unlimitedPlan": "Plan nieograniczony",
+  "@unlimitedPlan": {
+    "description": "Unlimited plan name"
+  },
+  "managePlan": "Zarządzaj planem",
+  "@managePlan": {
+    "description": "Manage plan button"
+  },
+  "cancelAtPeriodEnd": "Twój plan zostanie anulowany {date}.",
+  "@cancelAtPeriodEnd": {
+    "description": "Cancellation message",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Jan 1, 2026"
+      }
+    }
+  },
+  "renewsOn": "Twój plan odnawia się {date}.",
+  "@renewsOn": {
+    "description": "Renewal message",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Jan 1, 2026"
+      }
+    }
+  },
+  "basicPlan": "Plan darmowy",
+  "@basicPlan": {
+    "description": "Basic plan name"
+  },
+  "usageLimitMessage": "Wykorzystano {used} z {limit} min",
+  "@usageLimitMessage": {
+    "description": "Usage limit message",
+    "placeholders": {
+      "used": {
+        "type": "String",
+        "example": "100"
+      },
+      "limit": {
+        "type": "int",
+        "example": "60"
+      }
+    }
+  },
+  "upgrade": "Ulepsz",
+  "@upgrade": {
+    "description": "Upgrade button"
+  },
+  "upgradeToUnlimited": "Ulepsz do nieograniczonego",
+  "@upgradeToUnlimited": {
+    "description": "Upgrade to unlimited button"
+  },
+  "basicPlanDesc": "Twój plan obejmuje {limit} darmowych minut miesięcznie. Ulepsz, aby uzyskać nielimitowany dostęp.",
+  "@basicPlanDesc": {
+    "description": "Basic plan description",
+    "placeholders": {
+      "limit": {
+        "type": "int",
+        "example": "60"
+      }
+    }
+  },
+  "shareStatsMessage": "Udostępniam moje statystyki Omi! (omi.me - Twój asystent AI zawsze dostępny)",
+  "@shareStatsMessage": {
+    "description": "Share stats base message"
+  },
+  "sharePeriodToday": "Dzisiaj Omi:",
+  "@sharePeriodToday": {
+    "description": "Share stats period: Today"
+  },
+  "sharePeriodMonth": "W tym miesiącu Omi:",
+  "@sharePeriodMonth": {
+    "description": "Share stats period: Month"
+  },
+  "sharePeriodYear": "W tym roku Omi:",
+  "@sharePeriodYear": {
+    "description": "Share stats period: Year"
+  },
+  "sharePeriodAllTime": "Do tej pory Omi:",
+  "@sharePeriodAllTime": {
+    "description": "Share stats period: All Time"
+  },
+  "shareStatsListened": "🎧 Słuchało przez {minutes} minut",
+  "@shareStatsListened": {
+    "description": "Share stats: listened",
+    "placeholders": {
+      "minutes": {
+        "type": "String",
+        "example": "120"
+      }
+    }
+  },
+  "shareStatsWords": "🧠 Zrozumiało {words} słów",
+  "@shareStatsWords": {
+    "description": "Share stats: words",
+    "placeholders": {
+      "words": {
+        "type": "String",
+        "example": "5000"
+      }
+    }
+  },
+  "shareStatsInsights": "✨ Dostarczyło {count} spostrzeżeń",
+  "@shareStatsInsights": {
+    "description": "Share stats: insights",
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "10"
+      }
+    }
+  },
+  "shareStatsMemories": "📚 Zapamiętało {count} wspomnień",
+  "@shareStatsMemories": {
+    "description": "Share stats: memories",
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "5"
+      }
+    }
+  },
+  "debugLogs": "Logi debugowania",
+  "debugLogsAutoDelete": "Automatyczne usuwanie po 3 dniach.",
+  "debugLogsDesc": "Pomaga diagnozować problemy",
+  "noLogFilesFound": "Nie znaleziono plików logów.",
+  "omiDebugLog": "Log debugowania Omi",
+  "logShared": "Log udostępniony",
+  "selectLogFile": "Wybierz plik logu",
+  "shareLogs": "Udostępnij logi",
+  "debugLogCleared": "Log debugowania wyczyszczony",
+  "exportStarted": "Eksport rozpoczęty. To może potrwać kilka sekund...",
+  "exportAllData": "Eksportuj wszystkie dane",
+  "exportDataDesc": "Eksportuj rozmowy do pliku JSON",
+  "exportedConversations": "Wyeksportowane rozmowy z Omi",
+  "exportShared": "Eksport udostępniony",
+  "deleteKnowledgeGraphTitle": "Usunąć graf wiedzy?",
+  "deleteKnowledgeGraphMessage": "Spowoduje to usunięcie wszystkich danych grafu wiedzy (węzłów i połączeń). Twoje oryginalne wspomnienia pozostaną bezpieczne. Graf zostanie odbudowany z czasem lub na następne żądanie.",
+  "knowledgeGraphDeleted": "Graf wiedzy usunięty pomyślnie",
+  "deleteGraphFailed": "Nie udało się usunąć grafu: {error}",
+  "@deleteGraphFailed": {
+    "description": "Error message when deleting graph fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteKnowledgeGraph": "Usuń graf wiedzy",
+  "deleteKnowledgeGraphDesc": "Wyczyść wszystkie węzły i połączenia",
+  "mcp": "MCP",
+  "mcpServer": "Serwer MCP",
+  "mcpServerDesc": "Połącz asystentów AI z Twoimi danymi",
+  "serverUrl": "Adres URL serwera",
+  "urlCopied": "Adres URL skopiowany",
+  "apiKeyAuth": "Uwierzytelnianie kluczem API",
+  "header": "Nagłówek",
+  "authorizationBearer": "Authorization: Bearer <klucz>",
+  "oauth": "OAuth",
+  "clientId": "ID klienta",
+  "clientSecret": "Sekret klienta",
+  "useMcpApiKey": "Użyj swojego klucza API MCP",
+  "webhooks": "Webhooki",
+  "conversationEvents": "Zdarzenia rozmowy",
+  "newConversationCreated": "Utworzono nową rozmowę",
+  "realtimeTranscript": "Transkrypcja w czasie rzeczywistym",
+  "transcriptReceived": "Otrzymano transkrypcję",
+  "audioBytes": "Bajty audio",
+  "audioDataReceived": "Otrzymano dane audio",
+  "intervalSeconds": "Interwał (sekundy)",
+  "daySummary": "Podsumowanie dnia",
+  "summaryGenerated": "Wygenerowano podsumowanie",
+  "claudeDesktop": "Claude Desktop",
+  "addToClaudeConfig": "Dodaj do claude_desktop_config.json",
+  "copyConfig": "Kopiuj konfigurację",
+  "configCopied": "Konfiguracja skopiowana do schowka",
+  "listeningMins": "Słuchanie (min)",
+  "understandingWords": "Rozumienie (słowa)",
+  "insights": "Spostrzeżenia",
+  "memories": "Wspomnienia",
+  "minsUsedThisMonth": "Wykorzystano {used} z {limit} min w tym miesiącu",
+  "@minsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "wordsUsedThisMonth": "Wykorzystano {used} z {limit} słów w tym miesiącu",
+  "@wordsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "insightsUsedThisMonth": "Uzyskano {used} z {limit} spostrzeżeń w tym miesiącu",
+  "@insightsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "memoriesUsedThisMonth": "Utworzono {used} z {limit} wspomnień w tym miesiącu",
+  "@memoriesUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "visibility": "Widoczność",
+  "visibilitySubtitle": "Kontroluj, które rozmowy pojawiają się na Twojej liście",
+  "showShortConversations": "Pokaż krótkie rozmowy",
+  "showShortConversationsDesc": "Wyświetl rozmowy krótsze niż próg",
+  "showDiscardedConversations": "Pokaż odrzucone rozmowy",
+  "showDiscardedConversationsDesc": "Uwzględnij rozmowy oznaczone jako odrzucone",
+  "shortConversationThreshold": "Próg krótkiej rozmowy",
+  "shortConversationThresholdSubtitle": "Rozmowy krótsze niż ten próg będą ukryte, chyba że włączysz powyższą opcję",
+  "durationThreshold": "Próg czasu trwania",
+  "durationThresholdDesc": "Ukryj rozmowy krótsze niż ten próg",
+  "minLabel": "{count} min",
+  "@minLabel": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "customVocabularyTitle": "Własny słownik",
+  "addWords": "Dodaj słowa",
+  "addWordsDesc": "Imiona, terminy lub rzadkie słowa",
+  "vocabularyHint": "Omi, Callie, OpenAI",
+  "connect": "Połącz",
+  "comingSoon": "Wkrótce",
+  "chatToolsFooter": "Połącz swoje aplikacje, aby wyświetlać dane i metryki w czacie.",
+  "completeAuthInBrowser": "Ukończ uwierzytelnianie w przeglądarce. Po zakończeniu wróć do aplikacji.",
+  "failedToStartAuth": "Nie udało się rozpocząć uwierzytelniania {appName}",
+  "@failedToStartAuth": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectAppTitle": "Rozłączyć {appName}?",
+  "@disconnectAppTitle": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectAppMessage": "Czy na pewno chcesz rozłączyć się z {appName}? Możesz ponownie połączyć w dowolnym momencie.",
+  "@disconnectAppMessage": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectedFrom": "Rozłączono z {appName}",
+  "@disconnectedFrom": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToDisconnect": "Nie udało się rozłączyć",
+  "connectTo": "Połącz z {appName}",
+  "@connectTo": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "authAccessMessage": "Musisz upoważnić Omi do dostępu do Twoich danych {appName}. Otworzy to przeglądarkę w celu uwierzytelnienia.",
+  "@authAccessMessage": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "continueAction": "Kontynuuj",
+  "languageTitle": "Język",
+  "primaryLanguage": "Język podstawowy",
+  "automaticTranslation": "Automatyczne tłumaczenie",
+  "detectLanguages": "Wykryj ponad 10 języków",
+  "authorizeSavingRecordings": "Autoryzuj zapisywanie nagrań",
+  "thanksForAuthorizing": "Dziękujemy za autoryzację!",
+  "needYourPermission": "Potrzebujemy Twojego pozwolenia",
+  "alreadyGavePermission": "Już udzieliłeś nam zgody na zapisywanie nagrań. Oto przypomnienie, dlaczego tego potrzebujemy:",
+  "wouldLikePermission": "Chcielibyśmy uzyskać Twoją zgodę na zapisywanie nagrań głosowych. Oto dlaczego:",
+  "improveSpeechProfile": "Popraw swój profil głosu",
+  "improveSpeechProfileDesc": "Używamy nagrań do dalszego szkolenia i ulepszania Twojego osobistego profilu głosu.",
+  "trainFamilyProfiles": "Trenuj profile dla przyjaciół i rodziny",
+  "trainFamilyProfilesDesc": "Twoje nagrania pomagają nam rozpoznawać i tworzyć profile dla Twoich przyjaciół i rodziny.",
+  "enhanceTranscriptAccuracy": "Zwiększ dokładność transkrypcji",
+  "enhanceTranscriptAccuracyDesc": "W miarę jak nasz model się poprawia, możemy zapewnić lepsze wyniki transkrypcji Twoich nagrań.",
+  "legalNotice": "Uwaga prawna: Legalność nagrywania i przechowywania danych głosowych może się różnić w zależności od lokalizacji i sposobu korzystania z tej funkcji. Twoim obowiązkiem jest zapewnienie zgodności z lokalnymi przepisami i regulacjami.",
+  "alreadyAuthorized": "Już autoryzowano",
+  "authorize": "Autoryzuj",
+  "revokeAuthorization": "Cofnij autoryzację",
+  "authorizationSuccessful": "Autoryzacja pomyślna!",
+  "failedToAuthorize": "Nie udało się autoryzować. Spróbuj ponownie.",
+  "authorizationRevoked": "Autoryzacja cofnięta.",
+  "recordingsDeleted": "Nagrania usunięte.",
+  "failedToRevoke": "Nie udało się cofnąć autoryzacji. Spróbuj ponownie.",
+  "permissionRevokedTitle": "Cofnięto pozwolenie",
+  "permissionRevokedMessage": "Czy chcesz, abyśmy usunęli również wszystkie Twoje istniejące nagrania?",
+  "yes": "Tak",
+  "editName": "Edytuj imię",
+  "howShouldOmiCallYou": "Jak Omi powinno Cię nazywać?",
+  "enterYourName": "Wprowadź swoje imię",
+  "nameCannotBeEmpty": "Imię nie może być puste",
+  "nameUpdatedSuccessfully": "Imię zaktualizowane pomyślnie!",
+  "calendarSettings": "Ustawienia kalendarza",
+  "calendarProviders": "Dostawcy kalendarza",
+  "macOsCalendar": "Kalendarz macOS",
+  "connectMacOsCalendar": "Połącz swój lokalny kalendarz macOS",
+  "googleCalendar": "Kalendarz Google",
+  "syncGoogleAccount": "Synchronizuj z kontem Google",
+  "showMeetingsMenuBar": "Pokaż nadchodzące spotkania w pasku menu",
+  "showMeetingsMenuBarDesc": "Wyświetl następne spotkanie i czas do jego rozpoczęcia w pasku menu macOS",
+  "showEventsNoParticipants": "Pokaż wydarzenia bez uczestników",
+  "showEventsNoParticipantsDesc": "Po włączeniu, Nadchodzące pokazuje wydarzenia bez uczestników lub linku wideo.",
+  "yourMeetings": "Twoje spotkania",
+  "refresh": "Odśwież",
+  "noUpcomingMeetings": "Nie znaleziono nadchodzących spotkań",
+  "checkingNextDays": "Sprawdzanie następnych 30 dni",
+  "tomorrow": "Jutro",
+  "googleCalendarComingSoon": "Integracja z Kalendarzem Google wkrótce!",
+  "connectedAsUser": "Połączono jako użytkownik: {userId}",
+  "@connectedAsUser": {
+    "placeholders": {
+      "userId": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultWorkspace": "Domyślny obszar roboczy",
+  "tasksCreatedInWorkspace": "Zadania będą tworzone w tym obszarze roboczym",
+  "defaultProjectOptional": "Domyślny projekt (opcjonalnie)",
+  "leaveUnselectedTasks": "Pozostaw niezaznaczone, aby tworzyć zadania bez projektu",
+  "noProjectsInWorkspace": "Nie znaleziono projektów w tym obszarze roboczym",
+  "conversationTimeoutDesc": "Wybierz, jak długo czekać w ciszy przed automatycznym zakończeniem rozmowy:",
+  "timeout2Minutes": "2 minuty",
+  "timeout2MinutesDesc": "Zakończ rozmowę po 2 minutach ciszy",
+  "timeout5Minutes": "5 minut",
+  "timeout5MinutesDesc": "Zakończ rozmowę po 5 minutach ciszy",
+  "timeout10Minutes": "10 minut",
+  "timeout10MinutesDesc": "Zakończ rozmowę po 10 minutach ciszy",
+  "timeout30Minutes": "30 minut",
+  "timeout30MinutesDesc": "Zakończ rozmowę po 30 minutach ciszy",
+  "timeout4Hours": "4 godziny",
+  "timeout4HoursDesc": "Zakończ rozmowę po 4 godzinach ciszy",
+  "conversationEndAfterHours": "Rozmowy będą teraz kończyć się po 4 godzinach ciszy",
+  "conversationEndAfterMinutes": "Rozmowy będą teraz kończyć się po {minutes} minutach ciszy",
+  "@conversationEndAfterMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "tellUsPrimaryLanguage": "Podaj nam swój język podstawowy",
+  "languageForTranscription": "Ustaw swój język dla ostrzejszych transkrypcji i spersonalizowanego doświadczenia.",
+  "singleLanguageModeInfo": "Tryb pojedynczego języka jest włączony. Tłumaczenie jest wyłączone dla większej dokładności.",
+  "searchLanguageHint": "Szukaj języka według nazwy lub kodu",
+  "noLanguagesFound": "Nie znaleziono języków",
+  "skip": "Pomiń",
+  "languageSetTo": "Język ustawiony na {language}",
+  "@languageSetTo": {
+    "placeholders": {
+      "language": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToSetLanguage": "Nie udało się ustawić języka",
+  "appSettings": "Ustawienia {appName}",
+  "@appSettings": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectFromApp": "Rozłączyć z {appName}?",
+  "@disconnectFromApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectFromAppDesc": "Spowoduje to usunięcie uwierzytelnienia {appName}. Będziesz musiał ponownie połączyć, aby użyć go ponownie.",
+  "@disconnectFromAppDesc": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "connectedToApp": "Połączono z {appName}",
+  "@connectedToApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "account": "Konto",
+  "actionItemsSyncedTo": "Twoje zadania będą synchronizowane z Twoim kontem {appName}",
+  "@actionItemsSyncedTo": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultSpace": "Domyślna przestrzeń",
+  "selectSpaceInWorkspace": "Wybierz przestrzeń w swoim obszarze roboczym",
+  "noSpacesInWorkspace": "Nie znaleziono przestrzeni w tym obszarze roboczym",
+  "defaultList": "Domyślna lista",
+  "tasksAddedToList": "Zadania będą dodawane do tej listy",
+  "noListsInSpace": "Nie znaleziono list w tej przestrzeni",
+  "failedToLoadRepos": "Nie udało się załadować repozytoriów: {error}",
+  "@failedToLoadRepos": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultRepoSaved": "Domyślne repozytorium zapisane",
+  "failedToSaveDefaultRepo": "Nie udało się zapisać domyślnego repozytorium",
+  "defaultRepository": "Domyślne repozytorium",
+  "selectDefaultRepoDesc": "Wybierz domyślne repozytorium do tworzenia problemów. Nadal możesz określić inne repozytorium podczas tworzenia problemów.",
+  "noReposFound": "Nie znaleziono repozytoriów",
+  "private": "Prywatne",
+  "updatedDate": "Zaktualizowano {date}",
+  "@updatedDate": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "yesterday": "wczoraj",
+  "daysAgo": "{count} dni temu",
+  "@daysAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "oneWeekAgo": "1 tydzień temu",
+  "weeksAgo": "{count} tygodni temu",
+  "@weeksAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "oneMonthAgo": "1 miesiąc temu",
+  "monthsAgo": "{count} miesięcy temu",
+  "@monthsAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "issuesCreatedInRepo": "Problemy będą tworzone w Twoim domyślnym repozytorium",
+  "taskIntegrations": "Integracje zadań",
+  "configureSettings": "Konfiguruj ustawienia",
+  "completeAuthBrowser": "Ukończ uwierzytelnianie w przeglądarce. Po zakończeniu wróć do aplikacji.",
+  "failedToStartAppAuth": "Nie udało się rozpocząć uwierzytelniania {appName}",
+  "@failedToStartAppAuth": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "connectToAppTitle": "Połącz z {appName}",
+  "@connectToAppTitle": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "authorizeOmiForTasks": "Musisz upoważnić Omi do tworzenia zadań w Twoim koncie {appName}. Otworzy to przeglądarkę w celu uwierzytelnienia.",
+  "@authorizeOmiForTasks": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "continueButton": "Kontynuuj",
+  "appIntegration": "Integracja z {appName}",
+  "@appIntegration": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "integrationComingSoon": "Integracja z {appName} wkrótce! Ciężko pracujemy, aby przynieść Ci więcej opcji zarządzania zadaniami.",
+  "@integrationComingSoon": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "gotIt": "Rozumiem",
+  "tasksExportedOneApp": "Zadania mogą być eksportowane do jednej aplikacji naraz.",
+  "completeYourUpgrade": "Ukończ aktualizację",
+  "importConfiguration": "Importuj konfigurację",
+  "exportConfiguration": "Eksportuj konfigurację",
+  "bringYourOwn": "Przynieś własny",
+  "payYourSttProvider": "Swobodnie korzystaj z Omi. Płacisz tylko swojemu dostawcy STT bezpośrednio.",
+  "freeMinutesMonth": "1200 darmowych minut/miesiąc w zestawie. Nieograniczone z ",
+  "omiUnlimited": "Omi Unlimited",
+  "hostRequired": "Host jest wymagany",
+  "validPortRequired": "Wymagany jest prawidłowy port",
+  "validWebsocketUrlRequired": "Wymagany jest prawidłowy adres URL WebSocket (wss://)",
+  "apiUrlRequired": "Adres URL API jest wymagany",
+  "apiKeyRequired": "Klucz API jest wymagany",
+  "invalidJsonConfig": "Nieprawidłowa konfiguracja JSON",
+  "errorSaving": "Błąd zapisu: {error}",
+  "@errorSaving": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "configCopiedToClipboard": "Konfiguracja skopiowana do schowka",
+  "pasteJsonConfig": "Wklej swoją konfigurację JSON poniżej:",
+  "addApiKeyAfterImport": "Musisz dodać własny klucz API po zaimportowaniu",
+  "paste": "Wklej",
+  "import": "Importuj",
+  "invalidProviderInConfig": "Nieprawidłowy dostawca w konfiguracji",
+  "importedConfig": "Zaimportowano konfigurację {providerName}",
+  "@importedConfig": {
+    "placeholders": {
+      "providerName": {
+        "type": "String"
+      }
+    }
+  },
+  "invalidJson": "Nieprawidłowy JSON: {error}",
+  "@invalidJson": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "provider": "Dostawca",
+  "live": "Na żywo",
+  "onDevice": "Na urządzeniu",
+  "apiUrl": "Adres URL API",
+  "enterSttHttpEndpoint": "Wprowadź swój punkt końcowy HTTP STT",
+  "websocketUrl": "Adres URL WebSocket",
+  "enterLiveSttWebsocket": "Wprowadź swój punkt końcowy WebSocket STT na żywo",
+  "apiKey": "Klucz API",
+  "enterApiKey": "Wprowadź swój klucz API",
+  "storedLocallyNeverShared": "Przechowywane lokalnie, nigdy nie udostępniane",
+  "host": "Host",
+  "port": "Port",
+  "advanced": "Zaawansowane",
+  "configuration": "Konfiguracja",
+  "requestConfiguration": "Konfiguracja żądania",
+  "responseSchema": "Schemat odpowiedzi",
+  "modified": "Zmodyfikowano",
+  "resetRequestConfig": "Zresetuj konfigurację żądania do domyślnej",
+  "logs": "Logi",
+  "logsCopied": "Logi skopiowane",
+  "noLogsYet": "Brak logów. Rozpocznij nagrywanie, aby zobaczyć aktywność niestandardowego STT.",
+  "deviceUsesCodec": "{deviceName} używa {codecReason}. Będzie używane Omi.",
+  "@deviceUsesCodec": {
+    "placeholders": {
+      "deviceName": {
+        "type": "String"
+      },
+      "codecReason": {
+        "type": "String"
+      }
+    }
+  },
+  "omiTranscription": "Transkrypcja Omi",
+  "bestInClassTranscription": "Najlepsza w klasie transkrypcja bez konfiguracji",
+  "instantSpeakerLabels": "Natychmiastowe etykiety mówców",
+  "languageTranslation": "Tłumaczenie na ponad 100 języków",
+  "optimizedForConversation": "Zoptymalizowane pod kątem rozmów",
+  "autoLanguageDetection": "Automatyczne wykrywanie języka",
+  "highAccuracy": "Wysoka dokładność",
+  "privacyFirst": "Prywatność na pierwszym miejscu",
+  "saveChanges": "Zapisz zmiany",
+  "resetToDefault": "Zresetuj do domyślnego",
+  "viewTemplate": "Zobacz szablon",
+  "trySomethingLike": "Spróbuj czegoś takiego...",
+  "tryIt": "Wypróbuj",
+  "creatingPlan": "Tworzenie planu",
+  "developingLogic": "Rozwijanie logiki",
+  "designingApp": "Projektowanie aplikacji",
+  "generatingIconStep": "Generowanie ikony",
+  "finalTouches": "Końcowe poprawki",
+  "processing": "Przetwarzanie...",
+  "features": "Funkcje",
+  "creatingYourApp": "Tworzenie Twojej aplikacji...",
+  "generatingIcon": "Generowanie ikony...",
+  "whatShouldWeMake": "Co powinniśmy stworzyć?",
+  "appName": "Nazwa aplikacji",
+  "description": "Opis",
+  "publicLabel": "Publiczne",
+  "privateLabel": "Prywatne",
+  "free": "Darmowe",
+  "perMonth": "/ miesiąc",
+  "tailoredConversationSummaries": "Dostosowane podsumowania rozmów",
+  "customChatbotPersonality": "Niestandardowa osobowość chatbota",
+  "makePublic": "Upublicznij",
+  "anyoneCanDiscover": "Każdy może odkryć Twoją aplikację",
+  "onlyYouCanUse": "Tylko Ty możesz korzystać z tej aplikacji",
+  "paidApp": "Płatna aplikacja",
+  "usersPayToUse": "Użytkownicy płacą za korzystanie z Twojej aplikacji",
+  "freeForEveryone": "Darmowa dla wszystkich",
+  "perMonthLabel": "/ miesiąc",
+  "creating": "Tworzenie...",
+  "@creating": {
+    "description": "Loading state text when app generation is in progress"
+  },
+  "createApp": "Utwórz aplikację",
+  "@createApp": {
+    "description": "Button text to initiate app creation"
+  },
+  "@connect": {
+    "description": "Title for device connection page"
+  },
+  "searchingForDevices": "Wyszukiwanie urządzeń...",
+  "@searchingForDevices": {
+    "description": "Status text while scanning for Bluetooth devices"
+  },
+  "devicesFoundNearby": "ZNALEZIONO {count} {count, plural, =1{URZĄDZENIE} few{URZĄDZENIA} other{URZĄDZEŃ}} W POBLIŻU",
+  "@devicesFoundNearby": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pairingSuccessful": "PAROWANIE UDANE",
+  "errorConnectingAppleWatch": "Błąd połączenia z Apple Watch: {error}",
+  "@errorConnectingAppleWatch": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "dontShowAgain": "Nie pokazuj ponownie",
+  "@dontShowAgain": {
+    "description": "Checkbox text to suppress future connection confirmations"
+  },
+  "iUnderstand": "Rozumiem",
+  "@iUnderstand": {
+    "description": "Button text to acknowledge connection warnings"
+  },
+  "enableBluetooth": "Włącz Bluetooth",
+  "@enableBluetooth": {
+    "description": "Title for dialog prompting user to enable Bluetooth"
+  },
+  "bluetoothNeeded": "Omi potrzebuje Bluetooth, aby połączyć się z Twoim urządzeniem noszonym. Włącz Bluetooth i spróbuj ponownie.",
+  "@bluetoothNeeded": {
+    "description": "Explanation text for why Bluetooth is required"
+  },
+  "contactSupport": "Skontaktuj się z pomocą techniczną?",
+  "@contactSupport": {
+    "description": "Link text to contact support"
+  },
+  "connectLater": "Połącz później",
+  "@connectLater": {
+    "description": "Button text to skip immediate device connection"
+  },
+  "grantPermissions": "Przyznaj uprawnienia",
+  "@grantPermissions": {
+    "description": "Title for the permissions request page"
+  },
+  "backgroundActivity": "Aktywność w tle",
+  "@backgroundActivity": {
+    "description": "Title for background activity permission"
+  },
+  "backgroundActivityDesc": "Pozwól Omi działać w tle dla lepszej stabilności",
+  "@backgroundActivityDesc": {
+    "description": "Description for background activity permission"
+  },
+  "locationAccess": "Dostęp do lokalizacji",
+  "@locationAccess": {
+    "description": "Title for location access permission"
+  },
+  "locationAccessDesc": "Włącz lokalizację w tle dla pełnego doświadczenia",
+  "@locationAccessDesc": {
+    "description": "Description for location access permission"
+  },
+  "notifications": "Powiadomienia",
+  "@notifications": {
+    "description": "Title for notifications permission"
+  },
+  "notificationsDesc": "Włącz powiadomienia, aby być na bieżąco",
+  "@notificationsDesc": {
+    "description": "Description for notifications permission"
+  },
+  "@continueButton": {
+    "description": "Generic continue button text"
+  },
+  "locationServiceDisabled": "Usługa lokalizacji wyłączona",
+  "@locationServiceDisabled": {
+    "description": "Title for dialog when location services are off"
+  },
+  "locationServiceDisabledDesc": "Usługa lokalizacji jest wyłączona. Przejdź do Ustawienia > Prywatność i bezpieczeństwo > Usługi lokalizacji i włącz ją",
+  "@locationServiceDisabledDesc": {
+    "description": "Instructions to enable location services"
+  },
+  "backgroundLocationDenied": "Odmowa dostępu do lokalizacji w tle",
+  "@backgroundLocationDenied": {
+    "description": "Title for dialog when background location is denied"
+  },
+  "backgroundLocationDeniedDesc": "Przejdź do ustawień urządzenia i ustaw uprawnienie lokalizacji na \"Zawsze zezwalaj\"",
+  "@backgroundLocationDeniedDesc": {
+    "description": "Instructions to grant background location permission"
+  },
+  "lovingOmi": "Podoba Ci się Omi?",
+  "@lovingOmi": {
+    "description": "Title for the app review prompt"
+  },
+  "leaveReviewIos": "Pomóż nam dotrzeć do większej liczby osób, zostawiając recenzję w App Store. Twoja opinia wiele dla nas znaczy!",
+  "@leaveReviewIos": {
+    "description": "App review prompt text for iOS users"
+  },
+  "leaveReviewAndroid": "Pomóż nam dotrzeć do większej liczby osób, zostawiając recenzję w Google Play Store. Twoja opinia wiele dla nas znaczy!",
+  "@leaveReviewAndroid": {
+    "description": "App review prompt text for Android users"
+  },
+  "rateOnAppStore": "Oceń w App Store",
+  "@rateOnAppStore": {
+    "description": "Button text to rate on Apple App Store"
+  },
+  "rateOnGooglePlay": "Oceń w Google Play",
+  "@rateOnGooglePlay": {
+    "description": "Button text to rate on Google Play Store"
+  },
+  "maybeLater": "Może później",
+  "@maybeLater": {
+    "description": "Button text to dismiss the review prompt"
+  },
+  "speechProfileIntro": "Omi musi poznać Twoje cele i Twój głos. Będziesz mógł to później zmodyfikować.",
+  "@speechProfileIntro": {
+    "description": "Introduction text for speech profile creation"
+  },
+  "getStarted": "Rozpocznij",
+  "@getStarted": {
+    "description": "Button text to begin a process"
+  },
+  "allDone": "Wszystko gotowe!",
+  "@allDone": {
+    "description": "Success message after completing a task"
+  },
+  "keepGoing": "Dalej tak trzymaj, świetnie Ci idzie",
+  "@keepGoing": {
+    "description": "Encouragement text during a multi-step process"
+  },
+  "skipThisQuestion": "Pomiń to pytanie",
+  "@skipThisQuestion": {
+    "description": "Button text to skip the current question"
+  },
+  "skipForNow": "Pomiń na razie",
+  "@skipForNow": {
+    "description": "Button text to skip the entire process temporarily"
+  },
+  "connectionError": "Błąd połączenia",
+  "@connectionError": {
+    "description": "Title for connection error dialog"
+  },
+  "connectionErrorDesc": "Nie udało się połączyć z serwerem. Sprawdź połączenie internetowe i spróbuj ponownie.",
+  "@connectionErrorDesc": {
+    "description": "Description of connection error"
+  },
+  "invalidRecordingMultipleSpeakers": "Wykryto nieprawidłowe nagranie",
+  "@invalidRecordingMultipleSpeakers": {
+    "description": "Error title when multiple speakers are detected"
+  },
+  "multipleSpeakersDesc": "Wygląda na to, że w nagraniu jest wielu mówców. Upewnij się, że jesteś w cichym miejscu i spróbuj ponownie.",
+  "@multipleSpeakersDesc": {
+    "description": "Error description for multiple speakers"
+  },
+  "tooShortDesc": "Nie wykryto wystarczającej ilości mowy. Mów więcej i spróbuj ponownie.",
+  "@tooShortDesc": {
+    "description": "Error description for recording being too short"
+  },
+  "invalidRecordingDesc": "Upewnij się, że mówisz przez co najmniej 5 sekund i nie więcej niż 90.",
+  "@invalidRecordingDesc": {
+    "description": "Error description for invalid recording duration"
+  },
+  "areYouThere": "Jesteś tam?",
+  "@areYouThere": {
+    "description": "Timeout warning title"
+  },
+  "noSpeechDesc": "Nie udało się wykryć żadnej mowy. Upewnij się, że mówisz przez co najmniej 10 sekund i nie więcej niż 3 minuty.",
+  "@noSpeechDesc": {
+    "description": "Error description when no speech is detected"
+  },
+  "connectionLost": "Utracono połączenie",
+  "@connectionLost": {
+    "description": "Title for lost connection dialog"
+  },
+  "connectionLostDesc": "Połączenie zostało przerwane. Sprawdź połączenie internetowe i spróbuj ponownie.",
+  "@connectionLostDesc": {
+    "description": "Description for lost connection"
+  },
+  "tryAgain": "Spróbuj ponownie",
+  "@tryAgain": {
+    "description": "Button text to retry an action"
+  },
+  "connectOmiOmiGlass": "Połącz Omi / OmiGlass",
+  "@connectOmiOmiGlass": {
+    "description": "Button text to connect specific device models"
+  },
+  "continueWithoutDevice": "Kontynuuj bez urządzenia",
+  "@continueWithoutDevice": {
+    "description": "Button text to proceed without connecting a hardware device"
+  },
+  "permissionsRequired": "Wymagane uprawnienia",
+  "@permissionsRequired": {
+    "description": "Title for permissions required dialog"
+  },
+  "permissionsRequiredDesc": "Ta aplikacja wymaga uprawnień Bluetooth i lokalizacji, aby działać prawidłowo. Włącz je w ustawieniach.",
+  "@permissionsRequiredDesc": {
+    "description": "Explanation of why permissions are needed"
+  },
+  "openSettings": "Otwórz ustawienia",
+  "@openSettings": {
+    "description": "Button text to open app settings"
+  },
+  "wantDifferentName": "Chcesz być nazywany inaczej?",
+  "@wantDifferentName": {
+    "description": "Question asking if user wants to change their display name"
+  },
+  "whatsYourName": "Jak masz na imię?",
+  "@whatsYourName": {
+    "description": "Question asking for user's name"
+  },
+  "@enterYourName": {
+    "description": "Hint text for name input field"
+  },
+  "speakTranscribeSummarize": "Mów. Transkrybuj. Podsumuj.",
+  "@speakTranscribeSummarize": {
+    "description": "Tagline or slogan on the welcome/auth screen"
+  },
+  "signInWithApple": "Zaloguj się przez Apple",
+  "@signInWithApple": {
+    "description": "Button text for Apple Sign In"
+  },
+  "signInWithGoogle": "Zaloguj się przez Google",
+  "@signInWithGoogle": {
+    "description": "Button text for Google Sign In"
+  },
+  "byContinuingAgree": "Kontynuując, zgadzasz się z naszą ",
+  "@byContinuingAgree": {
+    "description": "Legal disclaimer prefix text"
+  },
+  "termsOfUse": "Warunkami korzystania",
+  "@termsOfUse": {
+    "description": "Link text for Terms of Use"
+  },
+  "omiYourAiCompanion": "Omi – Twój kompan AI",
+  "@omiYourAiCompanion": {
+    "description": "App title or branding on onboarding screen"
+  },
+  "captureEveryMoment": "Uchwycaj każdą chwilę. Otrzymuj podsumowania\nnapędzane przez AI. Nigdy więcej nie rób notatek.",
+  "@captureEveryMoment": {
+    "description": "App value proposition or description"
+  },
+  "appleWatchSetup": "Konfiguracja Apple Watch",
+  "@appleWatchSetup": {
+    "description": "Title for Apple Watch setup page"
+  },
+  "permissionRequestedExclaim": "Zażądano uprawnień!",
+  "@permissionRequestedExclaim": {
+    "description": "Title when permission has been requested"
+  },
+  "microphonePermission": "Uprawnienie mikrofonu",
+  "@microphonePermission": {
+    "description": "Title for microphone permission section"
+  },
+  "permissionGrantedNow": "Uprawnienie przyznane! Teraz:\n\nOtwórz aplikację Omi na zegarku i dotknij \"Kontynuuj\" poniżej",
+  "@permissionGrantedNow": {
+    "description": "Instructions after permission is granted"
+  },
+  "needMicrophonePermission": "Potrzebujemy uprawnienia do mikrofonu.\n\n1. Dotknij \"Przyznaj uprawnienie\"\n2. Zezwól na iPhone\n3. Aplikacja na zegarku zostanie zamknięta\n4. Otwórz ponownie i dotknij \"Kontynuuj\"",
+  "@needMicrophonePermission": {
+    "description": "Instructions for granting microphone permission"
+  },
+  "grantPermissionButton": "Przyznaj uprawnienie",
+  "@grantPermissionButton": {
+    "description": "Button to request permission"
+  },
+  "needHelp": "Potrzebujesz pomocy?",
+  "@needHelp": {
+    "description": "Link to help dialog"
+  },
+  "troubleshootingSteps": "Rozwiązywanie problemów:\n\n1. Upewnij się, że Omi jest zainstalowane na Twoim zegarku\n2. Otwórz aplikację Omi na zegarku\n3. Poszukaj okna z prośbą o uprawnienie\n4. Dotknij \"Zezwól\" po wyświetleniu monitu\n5. Aplikacja na zegarku zostanie zamknięta - otwórz ją ponownie\n6. Wróć i dotknij \"Kontynuuj\" na iPhone",
+  "@troubleshootingSteps": {
+    "description": "Troubleshooting instructions for watch setup"
+  },
+  "@gotIt": {
+    "description": "Button to dismiss dialog"
+  },
+  "recordingStartedSuccessfully": "Nagrywanie rozpoczęte pomyślnie!",
+  "@recordingStartedSuccessfully": {
+    "description": "Success message"
+  },
+  "permissionNotGrantedYet": "Uprawnienie nie zostało jeszcze przyznane. Upewnij się, że zezwoliłeś na dostęp do mikrofonu i ponownie otworzyłeś aplikację na zegarku.",
+  "@permissionNotGrantedYet": {
+    "description": "Error message when permission is missing"
+  },
+  "errorRequestingPermission": "Błąd żądania uprawnień: {error}",
+  "@errorRequestingPermission": {
+    "description": "Error message for permission request failure",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "errorStartingRecording": "Błąd rozpoczęcia nagrywania: {error}",
+  "@errorStartingRecording": {
+    "description": "Error message for recording start failure",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "selectPrimaryLanguage": "Wybierz swój język podstawowy",
+  "@selectPrimaryLanguage": {
+    "description": "Title for language selection dialog"
+  },
+  "languageBenefits": "Ustaw swój język dla ostrzejszych transkrypcji i spersonalizowanego doświadczenia",
+  "@languageBenefits": {
+    "description": "Explanation of why language selection matters"
+  },
+  "@searchLanguageHint": {
+    "description": "Hint text for language search"
+  },
+  "@noLanguagesFound": {
+    "description": "Text when search returns no results"
+  },
+  "whatsYourPrimaryLanguage": "Jaki jest Twój język podstawowy?",
+  "@whatsYourPrimaryLanguage": {
+    "description": "Question asking for primary language"
+  },
+  "selectYourLanguage": "Wybierz swój język",
+  "@selectYourLanguage": {
+    "description": "Placeholder for selected language name"
+  },
+  "personalGrowthJourney": "Twoja osobista podróż rozwoju z AI, który słucha każdego Twojego słowa.",
+  "@personalGrowthJourney": {
+    "description": "Tagline on onboarding wrapper"
+  },
+  "actionItemsTitle": "Zadania",
+  "@actionItemsTitle": {
+    "description": "Title for the Action Items page"
+  },
+  "actionItemsDescription": "Dotknij, aby edytować • Przytrzymaj, aby wybrać • Przesuń, aby wykonać akcje",
+  "@actionItemsDescription": {
+    "description": "Instruction text for Action Items interactions"
+  },
+  "tabToDo": "Do zrobienia",
+  "@tabToDo": {
+    "description": "Label for To Do tab"
+  },
+  "tabDone": "Zrobione",
+  "@tabDone": {
+    "description": "Label for Done tab"
+  },
+  "tabOld": "Stare",
+  "@tabOld": {
+    "description": "Label for Old tab"
+  },
+  "emptyTodoMessage": "🎉 Wszystko na bieżąco!\nBrak oczekujących zadań",
+  "@emptyTodoMessage": {
+    "description": "Message when To Do list is empty"
+  },
+  "emptyDoneMessage": "Brak ukończonych zadań",
+  "@emptyDoneMessage": {
+    "description": "Message when Done list is empty"
+  },
+  "emptyOldMessage": "✅ Brak starych zadań",
+  "@emptyOldMessage": {
+    "description": "Message when Old list is empty"
+  },
+  "noItems": "Brak elementów",
+  "@noItems": {
+    "description": "Generic no items message"
+  },
+  "actionItemMarkedIncomplete": "Zadanie oznaczone jako nieukończone",
+  "@actionItemMarkedIncomplete": {
+    "description": "Snackbar message when item marked incomplete"
+  },
+  "actionItemCompleted": "Zadanie ukończone",
+  "@actionItemCompleted": {
+    "description": "Snackbar message when item completed"
+  },
+  "deleteActionItemTitle": "Usuń zadanie",
+  "@deleteActionItemTitle": {
+    "description": "Title for delete item dialog"
+  },
+  "deleteActionItemMessage": "Czy na pewno chcesz usunąć to zadanie?",
+  "@deleteActionItemMessage": {
+    "description": "Confirmation message for deleting single item"
+  },
+  "deleteSelectedItemsTitle": "Usuń wybrane elementy",
+  "@deleteSelectedItemsTitle": {
+    "description": "Title for bulk delete dialog"
+  },
+  "deleteSelectedItemsMessage": "Czy na pewno chcesz usunąć {count} wybrane zadani{s}?",
+  "@deleteSelectedItemsMessage": {
+    "description": "Confirmation message for bulk delete",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "s": {
+        "type": "String",
+        "description": "Plural suffix (s) if needed, handled by logic or just append 's' for simplicity if count > 1"
+      }
+    }
+  },
+  "actionItemDeletedResult": "Zadanie \"{description}\" usunięte",
+  "@actionItemDeletedResult": {
+    "description": "Snackbar message after deleting single item",
+    "placeholders": {
+      "description": {
+        "type": "String"
+      }
+    }
+  },
+  "itemsDeletedResult": "Usunięto {count} zadani{s}",
+  "@itemsDeletedResult": {
+    "description": "Snackbar message after bulk delete",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "s": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToDeleteItem": "Nie udało się usunąć zadania",
+  "@failedToDeleteItem": {
+    "description": "Error message when deletion fails"
+  },
+  "failedToDeleteItems": "Nie udało się usunąć zadań",
+  "@failedToDeleteItems": {
+    "description": "Error message when bulk deletion fails"
+  },
+  "failedToDeleteSomeItems": "Nie udało się usunąć niektórych zadań",
+  "@failedToDeleteSomeItems": {
+    "description": "Error message when partial deletion failure"
+  },
+  "welcomeActionItemsTitle": "Gotowe na zadania",
+  "@welcomeActionItemsTitle": {
+    "description": "Heading for empty state welcome"
+  },
+  "welcomeActionItemsDescription": "Twoje AI automatycznie wyodrębni zadania z Twoich rozmów. Pojawią się tutaj, gdy zostaną utworzone.",
+  "@welcomeActionItemsDescription": {
+    "description": "Description for empty state welcome"
+  },
+  "autoExtractionFeature": "Automatycznie wyodrębniane z rozmów",
+  "@autoExtractionFeature": {
+    "description": "Feature point description"
+  },
+  "editSwipeFeature": "Dotknij, aby edytować, przesuń, aby ukończyć lub usunąć",
+  "@editSwipeFeature": {
+    "description": "Feature point description"
+  },
+  "itemsSelected": "Wybrano: {count}",
+  "@itemsSelected": {
+    "description": "Selection count in app bar",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "selectAll": "Zaznacz wszystko",
+  "@selectAll": {
+    "description": "Tooltip for select all"
+  },
+  "deleteSelected": "Usuń zaznaczone",
+  "@deleteSelected": {
+    "description": "Tooltip for delete selected"
+  },
+  "searchMemories": "Przeszukaj {count} wspomnień",
+  "@searchMemories": {
+    "description": "Hint text for memories search bar",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "memoryDeleted": "Wspomnienie usunięte.",
+  "@memoryDeleted": {
+    "description": "Notification when memory deleted"
+  },
+  "undo": "Cofnij",
+  "@undo": {
+    "description": "Undo button text"
+  },
+  "noMemoriesYet": "Brak wspomnień",
+  "@noMemoriesYet": {
+    "description": "Empty state text"
+  },
+  "noAutoMemories": "Brak automatycznie wyodrębnionych wspomnień",
+  "@noAutoMemories": {
+    "description": "Empty state text for auto category"
+  },
+  "noManualMemories": "Brak ręcznych wspomnień",
+  "@noManualMemories": {
+    "description": "Empty state text for manual category"
+  },
+  "noMemoriesInCategories": "Brak wspomnień w tych kategoriach",
+  "@noMemoriesInCategories": {
+    "description": "Empty state text for filtered categories"
+  },
+  "noMemoriesFound": "Nie znaleziono wspomnień",
+  "@noMemoriesFound": {
+    "description": "Empty state text for search results"
+  },
+  "addFirstMemory": "Dodaj swoje pierwsze wspomnienie",
+  "@addFirstMemory": {
+    "description": "Button to add first memory"
+  },
+  "clearMemoryTitle": "Wyczyść pamięć Omi",
+  "@clearMemoryTitle": {
+    "description": "Dialog title for clearing memory"
+  },
+  "clearMemoryMessage": "Czy na pewno chcesz wyczyścić pamięć Omi? Tej czynności nie można cofnąć.",
+  "@clearMemoryMessage": {
+    "description": "Dialog content for clearing memory"
+  },
+  "clearMemoryButton": "Wyczyść pamięć",
+  "@clearMemoryButton": {
+    "description": "Button text to confirm clear"
+  },
+  "memoryClearedSuccess": "Pamięć Omi o Tobie została wyczyszczona",
+  "@memoryClearedSuccess": {
+    "description": "Snackbar success message"
+  },
+  "noMemoriesToDelete": "Brak wspomnień do usunięcia",
+  "@noMemoriesToDelete": {
+    "description": "Snackbar message"
+  },
+  "createMemoryTooltip": "Utwórz nowe wspomnienie",
+  "@createMemoryTooltip": {
+    "description": "Tooltip for create memory FAB"
+  },
+  "createActionItemTooltip": "Utwórz nowe zadanie",
+  "@createActionItemTooltip": {
+    "description": "Tooltip for create action item FAB"
+  },
+  "memoryManagement": "Zarządzanie wspomnieniami",
+  "@memoryManagement": {
+    "description": "Title for memory management sheet"
+  },
+  "filterMemories": "Filtruj wspomnienia",
+  "@filterMemories": {
+    "description": "Section header"
+  },
+  "totalMemoriesCount": "Masz {count} wspomnień łącznie",
+  "@totalMemoriesCount": {
+    "description": "Count display",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "publicMemories": "Publiczne wspomnienia",
+  "@publicMemories": {
+    "description": "Label"
+  },
+  "privateMemories": "Prywatne wspomnienia",
+  "@privateMemories": {
+    "description": "Label"
+  },
+  "makeAllPrivate": "Ustaw wszystkie wspomnienia jako prywatne",
+  "@makeAllPrivate": {
+    "description": "Button label"
+  },
+  "makeAllPublic": "Ustaw wszystkie wspomnienia jako publiczne",
+  "@makeAllPublic": {
+    "description": "Button label"
+  },
+  "deleteAllMemories": "Usuń wszystkie wspomnienia",
+  "@deleteAllMemories": {
+    "description": "Button label"
+  },
+  "allMemoriesPrivateResult": "Wszystkie wspomnienia są teraz prywatne",
+  "@allMemoriesPrivateResult": {
+    "description": "Snackbar"
+  },
+  "allMemoriesPublicResult": "Wszystkie wspomnienia są teraz publiczne",
+  "@allMemoriesPublicResult": {
+    "description": "Snackbar"
+  },
+  "newMemory": "Nowe wspomnienie",
+  "@newMemory": {
+    "description": "Dialog title"
+  },
+  "editMemory": "Edytuj wspomnienie",
+  "@editMemory": {
+    "description": "Dialog title"
+  },
+  "memoryContentHint": "Lubię jeść lody...",
+  "@memoryContentHint": {
+    "description": "Input hint"
+  },
+  "failedToSaveMemory": "Nie udało się zapisać. Sprawdź połączenie.",
+  "@failedToSaveMemory": {
+    "description": "Error message"
+  },
+  "saveMemory": "Zapisz wspomnienie",
+  "@saveMemory": {
+    "description": "Button label"
+  },
+  "retry": "Spróbuj ponownie",
+  "@retry": {
+    "description": "Button label"
+  },
+  "createActionItem": "Utwórz zadanie",
+  "@createActionItem": {
+    "description": "Sheet title"
+  },
+  "editActionItem": "Edytuj zadanie",
+  "@editActionItem": {
+    "description": "Sheet title"
+  },
+  "actionItemDescriptionHint": "Co trzeba zrobić?",
+  "@actionItemDescriptionHint": {
+    "description": "Input hint"
+  },
+  "actionItemDescriptionEmpty": "Opis zadania nie może być pusty.",
+  "@actionItemDescriptionEmpty": {
+    "description": "Error message"
+  },
+  "actionItemUpdated": "Zadanie zaktualizowane",
+  "@actionItemUpdated": {
+    "description": "Snackbar"
+  },
+  "failedToUpdateActionItem": "Nie udało się zaktualizować zadania",
+  "@failedToUpdateActionItem": {
+    "description": "Snackbar"
+  },
+  "actionItemCreated": "Zadanie utworzone",
+  "@actionItemCreated": {
+    "description": "Snackbar"
+  },
+  "failedToCreateActionItem": "Nie udało się utworzyć zadania",
+  "@failedToCreateActionItem": {
+    "description": "Snackbar"
+  },
+  "dueDate": "Termin",
+  "@dueDate": {
+    "description": "Label"
+  },
+  "time": "Czas",
+  "@time": {
+    "description": "Label"
+  },
+  "addDueDate": "Dodaj termin",
+  "@addDueDate": {
+    "description": "Placeholder"
+  },
+  "pressDoneToSave": "Naciśnij Gotowe, aby zapisać",
+  "@pressDoneToSave": {
+    "description": "Instruction"
+  },
+  "pressDoneToCreate": "Naciśnij Gotowe, aby utworzyć",
+  "@pressDoneToCreate": {
+    "description": "Instruction"
+  },
+  "filterAll": "Wszystkie",
+  "@filterAll": {
+    "description": "Filter option"
+  },
+  "filterSystem": "O Tobie",
+  "@filterSystem": {
+    "description": "Filter option for facts about the user"
+  },
+  "filterInteresting": "Spostrzeżenia",
+  "@filterInteresting": {
+    "description": "Filter option for external wisdom/advice"
+  },
+  "filterManual": "Ręczne",
+  "@filterManual": {
+    "description": "Filter option"
+  },
+  "completed": "Ukończone",
+  "@completed": {
+    "description": "Status label"
+  },
+  "markComplete": "Oznacz jako ukończone",
+  "@markComplete": {
+    "description": "Action label"
+  },
+  "actionItemDeleted": "Zadanie usunięte",
+  "@actionItemDeleted": {
+    "description": "Snackbar"
+  },
+  "failedToDeleteActionItem": "Nie udało się usunąć zadania",
+  "@failedToDeleteActionItem": {
+    "description": "Snackbar"
+  },
+  "deleteActionItemConfirmTitle": "Usuń zadanie",
+  "@deleteActionItemConfirmTitle": {
+    "description": "Dialog title"
+  },
+  "deleteActionItemConfirmMessage": "Czy na pewno chcesz usunąć to zadanie?",
+  "@deleteActionItemConfirmMessage": {
+    "description": "Dialog message"
+  },
+  "appLanguage": "Język aplikacji",
+  "@appLanguage": {
+    "description": "Label for app language selector"
+  },
+  "appInterfaceSectionTitle": "INTERFEJS APLIKACJI",
+  "speechTranscriptionSectionTitle": "MOWA I TRANSKRYPCJA",
+  "languageSettingsHelperText": "Język aplikacji zmienia menu i przyciski. Język mowy wpływa na sposób transkrypcji nagrań."
+}

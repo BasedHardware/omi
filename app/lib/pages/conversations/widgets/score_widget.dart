@@ -1,11 +1,15 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+
+import 'package:intl/intl.dart';
+
+import 'package:omi/backend/http/api/action_items.dart';
 import 'package:omi/backend/http/api/conversations.dart' hide getActionItems;
 import 'package:omi/backend/http/api/memories.dart';
-import 'package:omi/backend/http/api/action_items.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:intl/intl.dart';
+import 'package:omi/utils/logger.dart';
 
 /// Daily grade record for history tracking
 class DailyGrade {
@@ -116,7 +120,7 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
 
       // Fetch all memories
       final allMemories = await getMemories(limit: 500, offset: 0);
-      
+
       // Fetch conversations from last 7 days
       final allConversations = await getConversations(
         limit: 500,
@@ -136,7 +140,7 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
       // Count today's tasks from standalone action items
       int todayTasksDone = 0;
       int todayTasksTotal = 0;
-      
+
       for (var item in todayActionItems.actionItems) {
         todayTasksTotal++;
         if (item.completed) {
@@ -168,7 +172,7 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
       // Calculate today's score
       final todayL = todayMemories.length;
       final todayLearnScore = todayL >= 5 ? 5.0 : 5 * (1 - math.exp(-todayL / 3));
-      
+
       double todayExecScore;
       if (todayTasksTotal == 0) {
         todayExecScore = 2.5; // Neutral when no tasks
@@ -176,7 +180,7 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
         final p = todayTasksDone / todayTasksTotal;
         todayExecScore = 5 * _clamp(0, 1, 1.5 * p - 0.5);
       }
-      
+
       final todayRawScore = 0.4 * todayLearnScore + 0.6 * todayExecScore;
       final todayRating = _clamp(0, 5, (todayRawScore * 2).roundToDouble() / 2);
 
@@ -185,7 +189,7 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
       for (int i = 6; i >= 0; i--) {
         final dayStart = today.subtract(Duration(days: i));
         final dayEnd = dayStart.add(const Duration(days: 1));
-        
+
         // Count memories for this day
         final dayMemories = allMemories.where((m) {
           final createdAt = m.createdAt;
@@ -262,7 +266,7 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
         _isLoading = false;
       });
     } catch (e) {
-      debugPrint('Error calculating grade: $e');
+      Logger.debug('Error calculating grade: $e');
       setState(() => _isLoading = false);
     }
   }
@@ -501,8 +505,7 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
                             color: Colors.white.withOpacity(0.5),
                           ),
                         ),
-                        if (_history.length >= 2)
-                          _buildTrendIndicator(),
+                        if (_history.length >= 2) _buildTrendIndicator(),
                       ],
                     ),
                     const SizedBox(height: 10),
@@ -639,18 +642,18 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
 
   Widget _buildTrendIndicator() {
     if (_history.length < 2) return const SizedBox.shrink();
-    
+
     // Get last 3 days average vs previous 3 days
     final sorted = List<DailyGrade>.from(_history)..sort((a, b) => b.date.compareTo(a.date));
     final recent = sorted.take(3).map((e) => e.rating).toList();
     final recentAvg = recent.reduce((a, b) => a + b) / recent.length;
-    
+
     if (sorted.length > 3) {
       final older = sorted.skip(3).take(3).map((e) => e.rating).toList();
       if (older.isNotEmpty) {
         final olderAvg = older.reduce((a, b) => a + b) / older.length;
         final diff = recentAvg - olderAvg;
-        
+
         if (diff.abs() >= 0.3) {
           final isUp = diff > 0;
           return Row(
@@ -674,7 +677,7 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
         }
       }
     }
-    
+
     return const SizedBox.shrink();
   }
 
@@ -690,10 +693,7 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
     for (int i = 0; i < days.length; i++) {
       final day = days[i];
       final grade = _history.cast<DailyGrade?>().firstWhere(
-            (g) => g != null &&
-                g.date.year == day.year &&
-                g.date.month == day.month &&
-                g.date.day == day.day,
+            (g) => g != null && g.date.year == day.year && g.date.month == day.month && g.date.day == day.day,
             orElse: () => null,
           );
       final isToday = day.day == now.day && day.month == now.month && day.year == now.year;
@@ -724,9 +724,7 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: point.isToday ? FontWeight.w600 : FontWeight.w400,
-                      color: point.isToday
-                          ? Colors.white.withOpacity(0.8)
-                          : Colors.white.withOpacity(0.4),
+                      color: point.isToday ? Colors.white.withOpacity(0.8) : Colors.white.withOpacity(0.4),
                     ),
                   ),
                 ],
@@ -810,7 +808,7 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
 
   Widget _buildImprovementTips(double learnScore, double execScore, int tasksTotal, int tasksDone) {
     final tips = <String>[];
-    
+
     if (learnScore < 3.0) {
       tips.add('📚 Learn: Save insights from podcasts, books, or conversations');
     }
@@ -820,24 +818,26 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
       final pending = tasksTotal - tasksDone;
       tips.add('✅ Execute: Mark your $pending pending task${pending > 1 ? 's' : ''} as done');
     }
-    
+
     if (tips.isEmpty) {
       tips.add('🔄 Consistency: Keep up your routine to maintain high scores');
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: tips.map((tip) => Padding(
-        padding: const EdgeInsets.only(bottom: 4),
-        child: Text(
-          tip,
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.white.withOpacity(0.7),
-            height: 1.4,
-          ),
-        ),
-      )).toList(),
+      children: tips
+          .map((tip) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  tip,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.white.withOpacity(0.7),
+                    height: 1.4,
+                  ),
+                ),
+              ))
+          .toList(),
     );
   }
 
@@ -953,7 +953,7 @@ class _LineChartPainter extends CustomPainter {
     final chartHeight = size.height - 20; // Leave space for labels at bottom
     final chartWidth = size.width;
     final pointSpacing = chartWidth / (dataPoints.length);
-    
+
     // Calculate Y position for a rating (0-5 scale)
     double getY(double rating) {
       // Invert Y because canvas Y increases downward
@@ -966,7 +966,7 @@ class _LineChartPainter extends CustomPainter {
     // Collect valid points for drawing lines
     final validPoints = <Offset>[];
     final validRatings = <double>[];
-    
+
     for (int i = 0; i < dataPoints.length; i++) {
       final point = dataPoints[i];
       if (point.rating != null) {
@@ -987,11 +987,11 @@ class _LineChartPainter extends CustomPainter {
 
       final path = Path();
       path.moveTo(validPoints[0].dx, validPoints[0].dy);
-      
+
       for (int i = 1; i < validPoints.length; i++) {
         path.lineTo(validPoints[i].dx, validPoints[i].dy);
       }
-      
+
       canvas.drawPath(path, linePaint);
     }
 
@@ -999,11 +999,11 @@ class _LineChartPainter extends CustomPainter {
     for (int i = 0; i < dataPoints.length; i++) {
       final point = dataPoints[i];
       final x = pointSpacing * i + pointSpacing / 2;
-      
+
       if (point.rating != null) {
         final y = getY(point.rating!);
         final color = point.isToday ? accentColor : getStatusColor(point.rating!);
-        
+
         // Outer glow for today
         if (point.isToday) {
           final glowPaint = Paint()
@@ -1011,20 +1011,20 @@ class _LineChartPainter extends CustomPainter {
             ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
           canvas.drawCircle(Offset(x, y), 8, glowPaint);
         }
-        
+
         // Dot fill
         final dotPaint = Paint()
           ..color = color
           ..style = PaintingStyle.fill;
         canvas.drawCircle(Offset(x, y), point.isToday ? 6 : 5, dotPaint);
-        
+
         // White border
         final borderPaint = Paint()
           ..color = const Color(0xFF1F1F25)
           ..strokeWidth = 2
           ..style = PaintingStyle.stroke;
         canvas.drawCircle(Offset(x, y), point.isToday ? 6 : 5, borderPaint);
-        
+
         // Rating label above dot
         final textPainter = TextPainter(
           text: TextSpan(
@@ -1054,7 +1054,6 @@ class _LineChartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_LineChartPainter oldDelegate) {
-    return oldDelegate.dataPoints != dataPoints ||
-        oldDelegate.accentColor != accentColor;
+    return oldDelegate.dataPoints != dataPoints || oldDelegate.accentColor != accentColor;
   }
 }

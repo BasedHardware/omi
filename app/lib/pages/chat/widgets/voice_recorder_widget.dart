@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:omi/providers/voice_recorder_provider.dart';
+
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
+
+import 'package:omi/providers/voice_recorder_provider.dart';
 
 class VoiceRecorderWidget extends StatefulWidget {
   final Function(String) onTranscriptReady;
@@ -38,7 +40,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
         onTranscriptReady: widget.onTranscriptReady,
         onClose: widget.onClose,
       );
-      
+
       // Only start recording if not already recording
       if (!provider.isRecording) {
         provider.startRecording();

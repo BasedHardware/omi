@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/wals/flash_page_wal_sync.dart';
@@ -6,6 +6,7 @@ import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/sdcard_wal_sync.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+import 'package:omi/utils/logger.dart';
 
 class WalSyncs implements IWalSync {
   late LocalWalSyncImpl _phoneSync;
@@ -145,30 +146,34 @@ class WalSyncs implements IWalSync {
   }
 
   @override
-  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
+  Future<SyncLocalFilesResponse?> syncAll({
+    IWalSyncProgressListener? progress,
+    IWifiConnectionListener? connectionListener,
+  }) async {
     var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
 
     // Phase 1a: Download SD card data to phone
     // Try WiFi sync first if credentials are configured
-    debugPrint("WalSyncs: Phase 1a - Downloading SD card data to phone");
+    Logger.debug("WalSyncs: Phase 1a - Downloading SD card data to phone");
     final missingSDCardWals = (await _sdcardSync.getMissingWals()).where((w) => w.status == WalStatus.miss).toList();
 
     if (missingSDCardWals.isNotEmpty) {
+      final preferredMethod = SharedPreferencesUtil().preferredSyncMethod;
       final wifiSupported = await _sdcardSync.isWifiSyncSupported();
 
-      if (wifiSupported) {
-        await _sdcardSync.syncWithWifi(progress: progress);
+      if (preferredMethod == 'wifi' && wifiSupported) {
+        await _sdcardSync.syncWithWifi(progress: progress, connectionListener: connectionListener);
       } else {
         await _sdcardSync.syncAll(progress: progress);
       }
     }
 
     // Phase 1b: Download flash page data to phone
-    debugPrint("WalSyncs: Phase 1b - Downloading flash page data to phone");
+    Logger.debug("WalSyncs: Phase 1b - Downloading flash page data to phone");
     await _flashPageSync.syncAll(progress: progress);
 
     // Phase 2: Upload all phone files to cloud (includes SD card and flash page downloads)
-    debugPrint("WalSyncs: Phase 2 - Uploading phone files to cloud");
+    Logger.debug("WalSyncs: Phase 2 - Uploading phone files to cloud");
     var partialRes = await _phoneSync.syncAll(progress: progress);
     if (partialRes != null) {
       resp.newConversationIds
@@ -181,14 +186,18 @@ class WalSyncs implements IWalSync {
   }
 
   @override
-  Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
+  Future<SyncLocalFilesResponse?> syncWal({
+    required Wal wal,
+    IWalSyncProgressListener? progress,
+    IWifiConnectionListener? connectionListener,
+  }) async {
     if (wal.storage == WalStorage.sdcard) {
+      final preferredMethod = SharedPreferencesUtil().preferredSyncMethod;
       final wifiSupported = await _sdcardSync.isWifiSyncSupported();
 
-      if (wifiSupported) {
-        return await _sdcardSync.syncWithWifi(progress: progress);
+      if (preferredMethod == 'wifi' && wifiSupported) {
+        return await _sdcardSync.syncWithWifi(progress: progress, connectionListener: connectionListener);
       } else {
-        debugPrint("WalSyncs.syncWal: WiFi not available, using BLE sync");
         return _sdcardSync.syncWal(wal: wal, progress: progress);
       }
     } else if (wal.storage == WalStorage.flashPage) {

@@ -10,6 +10,7 @@ import {
   deleteActionItem,
   type CreateActionItemParams,
 } from '@/lib/api';
+import { onCacheInvalidation, invalidationPatterns } from '@/lib/cache';
 import type { ActionItem, GroupedActionItems } from '@/types/conversation';
 
 /**
@@ -252,6 +253,16 @@ export function useActionItems(): UseActionItemsReturn {
   // Initial fetch
   useEffect(() => {
     fetchItems();
+  }, [fetchItems]);
+
+  // Subscribe to cache invalidation - refetch when action items are modified elsewhere
+  useEffect(() => {
+    const unsubscribe = onCacheInvalidation((pattern) => {
+      if (pattern === invalidationPatterns.actionItems) {
+        fetchItems();
+      }
+    });
+    return unsubscribe;
   }, [fetchItems]);
 
   // Group items

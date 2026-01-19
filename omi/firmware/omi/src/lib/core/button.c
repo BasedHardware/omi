@@ -18,6 +18,7 @@
 #include "speaker.h"
 #include "transport.h"
 #include "wdog_facade.h"
+#include "spi_flash.h"
 #ifdef CONFIG_OMI_ENABLE_WIFI
 #include "wifi.h"
 #endif
@@ -384,6 +385,11 @@ void turnoff_all()
     accel_off();
     k_msleep(100);
 #endif
+
+    rc = flash_off();
+    if (rc) {
+        LOG_ERR("Can not suspend the spi flash module: %d", rc);
+    }
 
     if (is_sd_on()) {
         app_sd_off();

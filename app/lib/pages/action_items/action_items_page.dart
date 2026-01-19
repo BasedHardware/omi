@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
-import 'widgets/action_item_form_sheet.dart';
 
+import 'package:provider/provider.dart';
+
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/services/app_review_service.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'widgets/action_item_form_sheet.dart';
 
 enum TaskCategory { today, tomorrow, noDeadline, later }
 
@@ -34,10 +36,21 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   @override
   bool get wantKeepAlive => true;
 
+  void scrollToTop() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    _loadCategoryOrder();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       MixpanelManager().actionItemsPageOpened();
@@ -46,6 +59,29 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         provider.fetchActionItems(showShimmer: true);
       }
     });
+  }
+
+  void _loadCategoryOrder() {
+    final savedOrder = SharedPreferencesUtil().taskCategoryOrder;
+    setState(() {
+      for (final entry in savedOrder.entries) {
+        try {
+          final category = TaskCategory.values.firstWhere(
+            (c) => c.name == entry.key,
+            orElse: () => TaskCategory.noDeadline,
+          );
+          _categoryOrder[category] = entry.value;
+        } catch (_) {}
+      }
+    });
+  }
+
+  void _saveCategoryOrder() {
+    final Map<String, List<String>> toSave = {};
+    for (final entry in _categoryOrder.entries) {
+      toSave[entry.key.name] = entry.value;
+    }
+    SharedPreferencesUtil().taskCategoryOrder = toSave;
   }
 
   @override
@@ -88,7 +124,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   // Categorize items by deadline
-  Map<TaskCategory, List<ActionItemWithMetadata>> _categorizeItems(List<ActionItemWithMetadata> items, bool showCompleted) {
+  Map<TaskCategory, List<ActionItemWithMetadata>> _categorizeItems(
+      List<ActionItemWithMetadata> items, bool showCompleted) {
     final now = DateTime.now();
     final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
     final startOfDayAfterTomorrow = DateTime(now.year, now.month, now.day + 2);
@@ -253,6 +290,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       // Clear hover state
       _hoveredItemId = null;
     });
+    _saveCategoryOrder();
     HapticFeedback.mediumImpact();
   }
 
@@ -855,9 +893,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         ),
         color: isCompleted ? Colors.amber : Colors.transparent,
       ),
-      child: isCompleted
-          ? const Icon(Icons.check, size: 14, color: Colors.black)
-          : null,
+      child: isCompleted ? const Icon(Icons.check, size: 14, color: Colors.black) : null,
     );
   }
 

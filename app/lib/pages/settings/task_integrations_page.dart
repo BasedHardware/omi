@@ -1,20 +1,24 @@
 import 'package:flutter/material.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:shimmer/shimmer.dart';
+
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/settings/asana_settings_page.dart';
 import 'package:omi/pages/settings/clickup_settings_page.dart';
 import 'package:omi/pages/settings/google_tasks_settings_page.dart';
 import 'package:omi/pages/settings/todoist_settings_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
+import 'package:omi/services/apple_reminders_service.dart';
 import 'package:omi/services/asana_service.dart';
 import 'package:omi/services/clickup_service.dart';
 import 'package:omi/services/google_tasks_service.dart';
 import 'package:omi/services/todoist_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
-import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
 
 enum TaskIntegrationApp {
   appleReminders,
@@ -220,6 +224,36 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
       return;
     }
 
+    // Check if Apple Reminders requires permission
+    if (app == TaskIntegrationApp.appleReminders) {
+      final provider = context.read<TaskIntegrationProvider>();
+      final scaffoldMessenger = ScaffoldMessenger.of(context);
+      final remindersService = AppleRemindersService();
+      final hasPermission = await remindersService.hasPermission();
+      if (!hasPermission) {
+        final granted = await remindersService.requestPermission();
+        if (granted) {
+          // Update the provider's cached permission status with the granted result
+          await provider.updateAppleRemindersPermission(granted: true);
+          await provider.setSelectedApp(app);
+          Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key})');
+        } else {
+          if (mounted) {
+            scaffoldMessenger.showSnackBar(
+              const SnackBar(
+                content: Text('Please enable Reminders access in Settings to use Apple Reminders'),
+                backgroundColor: Colors.orange,
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
+        }
+        return;
+      }
+      await provider.setSelectedApp(app);
+      return;
+    }
+
     // Check if Todoist requires authentication
     if (app == TaskIntegrationApp.todoist) {
       final todoistService = TodoistService();
@@ -239,7 +273,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
             await context.read<TaskIntegrationProvider>().setSelectedApp(app);
             // Note: OAuth callback will save connection to Firebase
             // Provider will refresh when user returns to this page
-            debugPrint('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
+            Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
             // Track authentication failure
             MixpanelManager().taskIntegrationAuthFailed(
@@ -278,7 +312,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
               );
             }
             await context.read<TaskIntegrationProvider>().setSelectedApp(app);
-            debugPrint('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
+            Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
             // Track authentication failure
             MixpanelManager().taskIntegrationAuthFailed(
@@ -317,7 +351,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
               );
             }
             await context.read<TaskIntegrationProvider>().setSelectedApp(app);
-            debugPrint('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
+            Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
             // Track authentication failure
             MixpanelManager().taskIntegrationAuthFailed(
@@ -356,7 +390,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
               );
             }
             await context.read<TaskIntegrationProvider>().setSelectedApp(app);
-            debugPrint('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
+            Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
             // Track authentication failure
             MixpanelManager().taskIntegrationAuthFailed(
@@ -382,7 +416,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
     await context.read<TaskIntegrationProvider>().setSelectedApp(app);
 
     // Log app selection
-    debugPrint('✓ Task integration selected: ${app.displayName} (${app.key})');
+    Logger.debug('✓ Task integration selected: ${app.displayName} (${app.key})');
   }
 
   Future<bool?> _showAuthDialog(TaskIntegrationApp app) {

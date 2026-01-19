@@ -3,23 +3,24 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:omi/utils/other/temp.dart';
-import 'package:omi/widgets/extensions/string.dart';
-import 'package:omi/widgets/transcript.dart';
-import 'package:provider/provider.dart';
-import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/ui/atoms/omi_avatar.dart';
 import 'package:omi/ui/atoms/omi_button.dart';
-import 'package:omi/ui/molecules/omi_panel_header.dart';
+import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/ui/molecules/omi_empty_state.dart';
-
+import 'package:omi/ui/molecules/omi_panel_header.dart';
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/widgets/extensions/string.dart';
+import 'package:omi/widgets/transcript.dart';
 import 'widgets/desktop_action_items_section.dart';
 import 'widgets/desktop_conversation_summary.dart';
 
@@ -344,41 +345,6 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
           borderRadius: BorderRadius.circular(16),
           child: Column(
             children: [
-              // Section header
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
-                  border: Border(
-                    bottom: BorderSide(
-                      color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
-                      width: 1,
-                    ),
-                  ),
-                ),
-                child: const Row(
-                  children: [
-                    OmiIconButton(
-                      icon: FontAwesomeIcons.fileLines,
-                      style: OmiIconButtonStyle.neutral,
-                      size: 24,
-                      iconSize: 12,
-                      borderRadius: 6,
-                      onPressed: null,
-                    ),
-                    SizedBox(width: 8),
-                    Text(
-                      'Conversation Details',
-                      style: TextStyle(
-                        color: ResponsiveHelper.textPrimary,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
               // Content
               Expanded(
                 child: SingleChildScrollView(

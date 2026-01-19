@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
@@ -112,9 +113,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       );
     }
     // Always modulo by speakerImagePath.length to prevent index out of bounds
-    final imageIndex = person != null
-        ? person.colorIdx! % speakerImagePath.length
-        : speakerId % speakerImagePath.length;
+    final imageIndex =
+        person != null ? person.colorIdx! % speakerImagePath.length : speakerId % speakerImagePath.length;
     return Image.asset(
       speakerImagePath[imageIndex],
       width: 24,
@@ -508,7 +508,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
               Expanded(
                 child: Column(
                   crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                    children: [
+                  children: [
                     if (!isUser) ...[
                       Padding(
                         padding: const EdgeInsets.only(left: 4, bottom: 2),
