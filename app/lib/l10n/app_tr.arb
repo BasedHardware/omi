@@ -101,7 +101,7 @@
   "@errorProcessingConversation": {
     "description": "Error message for conversation processing failure"
   },
-  "noInternetConnection": "Lütfen internet bağlantınızı kontrol edin ve tekrar deneyin.",
+  "noInternetConnection": "İnternet bağlantısı yok",
   "@noInternetConnection": {
     "description": "Message shown when there's no internet"
   },
@@ -213,15 +213,15 @@
   "@askOmi": {
     "description": "Chat button label"
   },
-  "done": "Bitti",
+  "done": "Tamam",
   "@done": {
     "description": "Done button label"
   },
-  "disconnected": "Bağlantı Kesildi",
+  "disconnected": "Bağlantı kesildi",
   "@disconnected": {
     "description": "Device disconnected status"
   },
-  "searching": "Aranıyor",
+  "searching": "Aranıyor...",
   "@searching": {
     "description": "Searching for device status"
   },
@@ -289,7 +289,7 @@
   "@syncingBackground": {
     "description": "Message during background sync"
   },
-  "noConversationsYet": "Henüz konuşma yok.",
+  "noConversationsYet": "Henüz görüşme yok",
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
@@ -301,7 +301,7 @@
   "@starConversationHint": {
     "description": "Hint explaining how to star conversations"
   },
-  "searchConversations": "Konuşmalarda Ara",
+  "searchConversations": "Konuşmaları ara...",
   "@searchConversations": {
     "description": "Search field placeholder"
   },
@@ -411,7 +411,7 @@
   "@buildAndShareApp": {
     "description": "Create app button subtitle"
   },
-  "searchApps": "1500+ Uygulama Ara",
+  "searchApps": "Uygulama ara...",
   "@searchApps": {
     "description": "Apps search placeholder"
   },
@@ -679,11 +679,11 @@
   "@chargingIssues": {
     "description": "Charging issues help item"
   },
-  "disconnectDevice": "Cihazın Bağlantısını Kes",
+  "disconnectDevice": "Cihaz Bağlantısını Kes",
   "@disconnectDevice": {
     "description": "Disconnect device button"
   },
-  "unpairDevice": "Cihazı Eşleştirmeyi Kaldır",
+  "unpairDevice": "Cihaz Eşleştirmesini Kaldır",
   "@unpairDevice": {
     "description": "Unpair device button"
   },
@@ -695,7 +695,7 @@
   "@deviceDisconnectedMessage": {
     "description": "Message shown when device is disconnected"
   },
-  "deviceUnpairedMessage": "Cihazın eşleştirilmesi kaldırıldı. Eşleştirmeyi tamamlamak için Ayarlar > Bluetooth'a gidin ve cihazı unutun.",
+  "deviceUnpairedMessage": "Cihaz eşleştirmesi kaldırıldı. Eşleştirme kaldırmayı tamamlamak için Ayarlar > Bluetooth'a gidin ve cihazı unutun.",
   "@deviceUnpairedMessage": {
     "description": "Message shown when device is unpaired"
   },
@@ -997,7 +997,7 @@
   "@upgrade": {
     "description": "Upgrade button"
   },
-  "upgradeToUnlimited": "Sınırsız'a Yükselt",
+  "upgradeToUnlimited": "Sınırsıza yükselt",
   "@upgradeToUnlimited": {
     "description": "Upgrade to unlimited button"
   },
@@ -1414,7 +1414,7 @@
       }
     }
   },
-  "yesterday": "dün",
+  "yesterday": "Dün",
   "daysAgo": "{count} gün önce",
   "@daysAgo": {
     "placeholders": {
@@ -1572,7 +1572,7 @@
   "highAccuracy": "Yüksek doğruluk",
   "privacyFirst": "Önce gizlilik",
   "saveChanges": "Değişiklikleri Kaydet",
-  "resetToDefault": "Varsayılana Sıfırla",
+  "resetToDefault": "Varsayılana sıfırla",
   "viewTemplate": "Şablonu Görüntüle",
   "trySomethingLike": "Şöyle bir şey deneyin...",
   "tryIt": "Dene",
@@ -1718,7 +1718,7 @@
   "@rateOnGooglePlay": {
     "description": "Button text to rate on Google Play Store"
   },
-  "maybeLater": "Belki sonra",
+  "maybeLater": "Belki Sonra",
   "@maybeLater": {
     "description": "Button text to dismiss the review prompt"
   },
@@ -1968,7 +1968,7 @@
   "@actionItemCompleted": {
     "description": "Snackbar message when item completed"
   },
-  "deleteActionItemTitle": "Eylem Öğesini Sil",
+  "deleteActionItemTitle": "Eylem öğesini sil",
   "@deleteActionItemTitle": {
     "description": "Title for delete item dialog"
   },
@@ -2197,11 +2197,11 @@
   "@retry": {
     "description": "Button label"
   },
-  "createActionItem": "Eylem Öğesi Oluştur",
+  "createActionItem": "Eylem öğesi oluştur",
   "@createActionItem": {
     "description": "Sheet title"
   },
-  "editActionItem": "Eylem Öğesini Düzenle",
+  "editActionItem": "Eylem öğesini düzenle",
   "@editActionItem": {
     "description": "Sheet title"
   },
@@ -2229,7 +2229,7 @@
   "@failedToCreateActionItem": {
     "description": "Snackbar"
   },
-  "dueDate": "Teslim Tarihi",
+  "dueDate": "Bitiş tarihi",
   "@dueDate": {
     "description": "Label"
   },
@@ -2295,5 +2295,211 @@
   },
   "appInterfaceSectionTitle": "UYGULAMA ARAYÜZÜ",
   "speechTranscriptionSectionTitle": "KONUŞMA VE TRANSKRİPSİYON",
-  "languageSettingsHelperText": "Uygulama Dili menüleri ve düğmeleri değiştirir. Konuşma Dili, kayıtlarınızın nasıl transkribe edildiğini etkiler."
+  "languageSettingsHelperText": "Uygulama Dili menüleri ve düğmeleri değiştirir. Konuşma Dili, kayıtlarınızın nasıl transkribe edildiğini etkiler.",
+  "translationNotice": "Çeviri Bildirimi",
+  "translationNoticeMessage": "Omi konuşmaları birincil dilinize çevirir. İstediğiniz zaman Ayarlar → Profiller'de güncelleyin.",
+  "pleaseCheckInternetConnection": "Lütfen internet bağlantınızı kontrol edin ve tekrar deneyin",
+  "pleaseSelectReason": "Lütfen bir neden seçin",
+  "tellUsMoreWhatWentWrong": "Neyin yanlış gittiğini bize daha fazla anlatın...",
+  "selectText": "Metni seç",
+  "maximumGoalsAllowed": "Maksimum {count} hedef izin verildi",
+  "conversationCannotBeMerged": "Bu konuşma birleştirilemez (kilitli veya zaten birleştiriliyor)",
+  "pleaseEnterFolderName": "Lütfen bir klasör adı girin",
+  "failedToCreateFolder": "Klasör oluşturulamadı",
+  "failedToUpdateFolder": "Klasör güncellenemedi",
+  "folderName": "Klasör adı",
+  "descriptionOptional": "Açıklama (isteğe bağlı)",
+  "failedToDeleteFolder": "Klasör silinemedi",
+  "editFolder": "Klasörü düzenle",
+  "deleteFolder": "Klasörü sil",
+  "transcriptCopiedToClipboard": "Transkript panoya kopyalandı",
+  "summaryCopiedToClipboard": "Özet panoya kopyalandı",
+  "conversationUrlCouldNotBeShared": "Konuşma URL'si paylaşılamadı.",
+  "urlCopiedToClipboard": "URL panoya kopyalandı",
+  "exportTranscript": "Transkripti dışa aktar",
+  "exportSummary": "Özeti dışa aktar",
+  "exportButton": "Dışa aktar",
+  "actionItemsCopiedToClipboard": "Eylem öğeleri panoya kopyalandı",
+  "summarize": "Özetle",
+  "generateSummary": "Özet oluştur",
+  "conversationNotFoundOrDeleted": "Konuşma bulunamadı veya silindi",
+  "deleteMemory": "Bellek silinsin mi?",
+  "thisActionCannotBeUndone": "Bu işlem geri alınamaz.",
+  "memoriesCount": "{count} anı",
+  "noMemoriesInCategory": "Bu kategoride henüz anı yok",
+  "addYourFirstMemory": "İlk anınızı ekleyin",
+  "firmwareDisconnectUsb": "USB'yi çıkarın",
+  "firmwareUsbWarning": "Güncellemeler sırasında USB bağlantısı cihazınıza zarar verebilir.",
+  "firmwareBatteryAbove15": "Pil %15'in üzerinde",
+  "firmwareEnsureBattery": "Cihazınızın %15 pili olduğundan emin olun.",
+  "firmwareStableConnection": "Kararlı bağlantı",
+  "firmwareConnectWifi": "WiFi veya hücresel veriye bağlanın.",
+  "failedToStartUpdate": "Güncelleme başlatılamadı: {error}",
+  "beforeUpdateMakeSure": "Güncellemeden önce emin olun:",
+  "confirmed": "Onaylandı!",
+  "release": "Bırak",
+  "slideToUpdate": "Güncellemek için kaydırın",
+  "copiedToClipboard": "{title} panoya kopyalandı",
+  "batteryLevel": "Pil Seviyesi",
+  "productUpdate": "Ürün Güncellemesi",
+  "offline": "Çevrimdışı",
+  "available": "Mevcut",
+  "unpairDeviceDialogTitle": "Cihaz Eşleştirmesini Kaldır",
+  "unpairDeviceDialogMessage": "Bu, cihazın başka bir telefona bağlanabilmesi için eşleştirmesini kaldıracaktır. İşlemi tamamlamak için Ayarlar > Bluetooth'a gitmeniz ve cihazı unutmanız gerekecek.",
+  "unpair": "Eşleştirmeyi Kaldır",
+  "unpairAndForgetDevice": "Eşleştirmeyi Kaldır ve Cihazı Unut",
+  "unknownDevice": "Bilinmeyen Cihaz",
+  "unknown": "Bilinmeyen",
+  "productName": "Ürün Adı",
+  "serialNumber": "Seri Numarası",
+  "connected": "Bağlı",
+  "privacyPolicyTitle": "Gizlilik Politikası",
+  "actionItemDescriptionCannotBeEmpty": "Eylem öğesi açıklaması boş olamaz",
+  "saved": "Kaydedildi",
+  "overdue": "Gecikmiş",
+  "markIncomplete": "Tamamlanmadı olarak işaretle",
+  "editDueDate": "Son tarihi düzenle",
+  "setDueDate": "Bitiş tarihini ayarla",
+  "clearDueDate": "Son tarihi temizle",
+  "mondayAbbr": "Pzt",
+  "tuesdayAbbr": "Sal",
+  "wednesdayAbbr": "Çar",
+  "thursdayAbbr": "Per",
+  "fridayAbbr": "Cum",
+  "saturdayAbbr": "Cmt",
+  "sundayAbbr": "Paz",
+  "failedToUpdateDueDate": "Son tarih güncellenemedi",
+  "failedToClearDueDate": "Son tarih temizlenemedi",
+  "howDoesItWork": "Nasıl çalışır?",
+  "sdCardSyncDescription": "SD Kart Senkronizasyonu, anılarınızı SD Karttan uygulamaya aktaracak",
+  "checksForAudioFiles": "SD Karttaki ses dosyalarını kontrol eder",
+  "omiSyncsAudioFiles": "Omi daha sonra ses dosyalarını sunucu ile senkronize eder",
+  "serverProcessesAudio": "Sunucu ses dosyalarını işler ve anılar oluşturur",
+  "youreAllSet": "Hazırsınız!",
+  "welcomeToOmiDescription": "Omi'ye hoş geldiniz! AI yardımcınız konuşmalar, görevler ve daha fazlasında size yardımcı olmaya hazır.",
+  "startUsingOmi": "Omi'yi Kullanmaya Başla",
+  "back": "Geri",
+  "keyboardShortcuts": "Klavye Kısayolları",
+  "toggleControlBar": "Kontrol Çubuğunu Değiştir",
+  "pressKeys": "Tuşlara basın...",
+  "cmdRequired": "⌘ gerekli",
+  "invalidKey": "Geçersiz tuş",
+  "space": "Boşluk",
+  "search": "Ara",
+  "searchPlaceholder": "Ara...",
+  "untitledConversation": "Başlıksız konuşma",
+  "countRemaining": "{count} kalan",
+  "addGoal": "Hedef ekle",
+  "editGoal": "Hedefi düzenle",
+  "icon": "Simge",
+  "goalTitle": "Hedef başlığı",
+  "current": "Mevcut",
+  "target": "Hedef",
+  "saveGoal": "Kaydet",
+  "goals": "Hedefler",
+  "tapToAddGoal": "Hedef eklemek için dokunun",
+  "welcomeBack": "Tekrar hoş geldiniz",
+  "yourConversations": "Görüşmeleriniz",
+  "reviewAndManageConversations": "Kaydedilen görüşmelerinizi inceleyin ve yönetin",
+  "startCapturingConversations": "Görüşmeleri burada görmek için Omi cihazınızla yakalamaya başlayın.",
+  "useMobileAppToCapture": "Ses kaydetmek için mobil uygulamanızı kullanın",
+  "conversationsProcessedAutomatically": "Görüşmeler otomatik olarak işlenir",
+  "getInsightsInstantly": "Anında içgörüler ve özetler alın",
+  "showAll": "Hepsini göster →",
+  "noTasksForToday": "Bugün için görev yok.\\nDaha fazla görev için Omi'ye sorun veya manuel oluşturun.",
+  "dailyScore": "GÜNLÜK PUAN",
+  "dailyScoreDescription": "Uygulamaya daha iyi odaklanmanıza yardımcı olan bir puan.",
+  "searchResults": "Arama sonuçları",
+  "actionItems": "Eylem öğeleri",
+  "tasksToday": "Bugün",
+  "tasksTomorrow": "Yarın",
+  "tasksNoDeadline": "Son tarih yok",
+  "tasksLater": "Daha sonra",
+  "loadingTasks": "Görevler yükleniyor...",
+  "tasks": "Görevler",
+  "swipeTasksToIndent": "Görevleri girintili hale getirmek için kaydırın, kategoriler arasında sürükleyin",
+  "create": "Oluştur",
+  "noTasksYet": "Henüz görev yok",
+  "tasksFromConversationsWillAppear": "Konuşmalarınızdaki görevler burada görünecek.\nManuel olarak eklemek için Oluştur'a tıklayın.",
+  "monthJan": "Oca",
+  "monthFeb": "Şub",
+  "monthMar": "Mar",
+  "monthApr": "Nis",
+  "monthMay": "May",
+  "monthJun": "Haz",
+  "monthJul": "Tem",
+  "monthAug": "Ağu",
+  "monthSep": "Eyl",
+  "monthOct": "Eki",
+  "monthNov": "Kas",
+  "monthDec": "Ara",
+  "timePM": "ÖS",
+  "timeAM": "ÖÖ",
+  "actionItemUpdatedSuccessfully": "Eylem öğesi başarıyla güncellendi",
+  "actionItemCreatedSuccessfully": "Eylem öğesi başarıyla oluşturuldu",
+  "actionItemDeletedSuccessfully": "Eylem öğesi başarıyla silindi",
+  "deleteActionItem": "Eylem öğesini sil",
+  "deleteActionItemConfirmation": "Bu eylem öğesini silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.",
+  "enterActionItemDescription": "Eylem öğesi açıklamasını girin...",
+  "markAsCompleted": "Tamamlandı olarak işaretle",
+  "setDueDateAndTime": "Bitiş tarihini ve saatini ayarla",
+  "reloadingApps": "Uygulamalar yeniden yükleniyor...",
+  "loadingApps": "Uygulamalar yükleniyor...",
+  "browseInstallCreateApps": "Uygulamalara göz atın, yükleyin ve oluşturun",
+  "all": "Tümü",
+  "open": "Aç",
+  "install": "Yükle",
+  "noAppsAvailable": "Kullanılabilir uygulama yok",
+  "unableToLoadApps": "Uygulamalar yüklenemiyor",
+  "tryAdjustingSearchTermsOrFilters": "Arama terimlerinizi veya filtrelerinizi ayarlamayı deneyin",
+  "checkBackLaterForNewApps": "Yeni uygulamalar için daha sonra tekrar kontrol edin",
+  "pleaseCheckInternetConnectionAndTryAgain": "Lütfen internet bağlantınızı kontrol edin ve tekrar deneyin",
+  "createNewApp": "Yeni Uygulama Oluştur",
+  "buildSubmitCustomOmiApp": "Özel Omi uygulamanızı oluşturun ve gönderin",
+  "submittingYourApp": "Uygulamanız gönderiliyor...",
+  "preparingFormForYou": "Form sizin için hazırlanıyor...",
+  "appDetails": "Uygulama Detayları",
+  "paymentDetails": "Ödeme Detayları",
+  "previewAndScreenshots": "Önizleme ve Ekran Görüntüleri",
+  "appCapabilities": "Uygulama Yetenekleri",
+  "aiPrompts": "Yapay Zeka Yönlendirmeleri",
+  "chatPrompt": "Sohbet Yönlendirmesi",
+  "chatPromptPlaceholder": "Harika bir uygulamasınız, işiniz kullanıcı sorgularına yanıt vermek ve onları iyi hissettirmek...",
+  "conversationPrompt": "Konuşma İstemi",
+  "conversationPromptPlaceholder": "Harika bir uygulamasınız, size bir konuşmanın transkripti ve özeti verilecek...",
+  "notificationScopes": "Bildirim Kapsamları",
+  "appPrivacyAndTerms": "Uygulama Gizliliği ve Şartları",
+  "makeMyAppPublic": "Uygulamamı herkese açık yap",
+  "submitAppTermsAgreement": "Bu uygulamayı göndererek, Omi AI Hizmet Koşullarını ve Gizlilik Politikasını kabul ediyorum",
+  "submitApp": "Uygulamayı Gönder",
+  "needHelpGettingStarted": "Başlamak için yardıma mı ihtiyacınız var?",
+  "clickHereForAppBuildingGuides": "Uygulama oluşturma kılavuzları ve belgeleri için buraya tıklayın",
+  "submitAppQuestion": "Uygulama Gönderilsin mi?",
+  "submitAppPublicDescription": "Uygulamanız incelenecek ve herkese açık hale getirilecek. İnceleme sırasında bile hemen kullanmaya başlayabilirsiniz!",
+  "submitAppPrivateDescription": "Uygulamanız incelenecek ve size özel olarak sunulacak. İnceleme sırasında bile hemen kullanmaya başlayabilirsiniz!",
+  "startEarning": "Kazanmaya Başlayın! 💰",
+  "connectStripeOrPayPal": "Uygulamanız için ödeme almak üzere Stripe veya PayPal'ı bağlayın.",
+  "connectNow": "Şimdi Bağlan",
+  "installsCount": "{count}+ yükleme",
+  "uninstallApp": "Uygulamayı kaldır",
+  "subscribe": "Abone ol",
+  "dataAccessNotice": "Veri Erişim Bildirimi",
+  "dataAccessWarning": "Bu uygulama verilerinize erişecek. Omi AI, bu uygulama tarafından verilerinizin nasıl kullanıldığı, değiştirildiği veya silindiğinden sorumlu değildir",
+  "installApp": "Uygulamayı yükle",
+  "betaTesterNotice": "Bu uygulamanın beta test kullanıcısısınız. Henüz herkese açık değil. Onaylandıktan sonra herkese açık olacak.",
+  "appUnderReviewOwner": "Uygulamanız inceleniyor ve yalnızca size görünür. Onaylandıktan sonra herkese açık olacak.",
+  "appRejectedNotice": "Uygulamanız reddedildi. Lütfen uygulama ayrıntılarını güncelleyin ve inceleme için yeniden gönderin.",
+  "setupSteps": "Kurulum Adımları",
+  "setupInstructions": "Kurulum Talimatları",
+  "integrationInstructions": "Entegrasyon Talimatları",
+  "preview": "Önizleme",
+  "aboutTheApp": "Uygulama Hakkında",
+  "aboutThePersona": "Kişilik Hakkında",
+  "chatPersonality": "Sohbet Kişiliği",
+  "ratingsAndReviews": "Puanlar ve Yorumlar",
+  "noRatings": "puan yok",
+  "ratingsCount": "{count}+ puan",
+  "errorActivatingApp": "Uygulamayı etkinleştirme hatası",
+  "integrationSetupRequired": "Bu bir entegrasyon uygulamasıysa, kurulumun tamamlandığından emin olun.",
+  "installed": "Yüklendi"
 }

@@ -37,7 +37,7 @@
   "@ok": {
     "description": "Generic OK button text"
   },
-  "delete": "Ta bort",
+  "delete": "Radera",
   "@delete": {
     "description": "Button label"
   },
@@ -101,7 +101,7 @@
   "@errorProcessingConversation": {
     "description": "Error message for conversation processing failure"
   },
-  "noInternetConnection": "Kontrollera din internetanslutning och försök igen.",
+  "noInternetConnection": "Ingen internetanslutning",
   "@noInternetConnection": {
     "description": "Message shown when there's no internet"
   },
@@ -121,7 +121,7 @@
   "@errorCopied": {
     "description": "Snackbar message after copying error"
   },
-  "remaining": "Återstående",
+  "remaining": "Återstår",
   "@remaining": {
     "description": "Label for remaining time/items"
   },
@@ -221,7 +221,7 @@
   "@disconnected": {
     "description": "Device disconnected status"
   },
-  "searching": "Söker",
+  "searching": "Söker...",
   "@searching": {
     "description": "Searching for device status"
   },
@@ -289,7 +289,7 @@
   "@syncingBackground": {
     "description": "Message during background sync"
   },
-  "noConversationsYet": "Inga konversationer ännu.",
+  "noConversationsYet": "Inga konversationer än",
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
@@ -301,7 +301,7 @@
   "@starConversationHint": {
     "description": "Hint explaining how to star conversations"
   },
-  "searchConversations": "Sök konversationer",
+  "searchConversations": "Sök konversationer...",
   "@searchConversations": {
     "description": "Search field placeholder"
   },
@@ -411,15 +411,15 @@
   "@buildAndShareApp": {
     "description": "Create app button subtitle"
   },
-  "searchApps": "Sök bland 1500+ appar",
+  "searchApps": "Sök appar...",
   "@searchApps": {
     "description": "Apps search placeholder"
   },
-  "myApps": "Mina appar",
+  "myApps": "Mina Appar",
   "@myApps": {
     "description": "My Apps filter button"
   },
-  "installedApps": "Installerade appar",
+  "installedApps": "Installerade Appar",
   "@installedApps": {
     "description": "Installed Apps filter button"
   },
@@ -639,7 +639,7 @@
   "@firmware": {
     "description": "Firmware label"
   },
-  "sdCardSync": "SD-kortssynkronisering",
+  "sdCardSync": "SD-kort synkronisering",
   "@sdCardSync": {
     "description": "SD Card sync label"
   },
@@ -695,7 +695,7 @@
   "@deviceDisconnectedMessage": {
     "description": "Message shown when device is disconnected"
   },
-  "deviceUnpairedMessage": "Enhet bortkopplad. Gå till Inställningar > Bluetooth och glöm enheten för att slutföra.",
+  "deviceUnpairedMessage": "Enhet bortkopplad. Gå till Inställningar > Bluetooth och glöm enheten för att slutföra bortkopplingen.",
   "@deviceUnpairedMessage": {
     "description": "Message shown when device is unpaired"
   },
@@ -1414,7 +1414,7 @@
       }
     }
   },
-  "yesterday": "igår",
+  "yesterday": "Igår",
   "daysAgo": "{count} dagar sedan",
   "@daysAgo": {
     "placeholders": {
@@ -1605,7 +1605,7 @@
   "@creating": {
     "description": "Loading state text when app generation is in progress"
   },
-  "createApp": "Skapa app",
+  "createApp": "Skapa App",
   "@createApp": {
     "description": "Button text to initiate app creation"
   },
@@ -1986,11 +1986,11 @@
   "@actionItemCompleted": {
     "description": "Snackbar message when item completed"
   },
-  "deleteActionItemTitle": "Ta bort åtgärd",
+  "deleteActionItemTitle": "Ta bort åtgärdspost",
   "@deleteActionItemTitle": {
     "description": "Title for delete item dialog"
   },
-  "deleteActionItemMessage": "Är du säker på att du vill ta bort denna åtgärd?",
+  "deleteActionItemMessage": "Är du säker på att du vill ta bort denna åtgärdspost?",
   "@deleteActionItemMessage": {
     "description": "Confirmation message for deleting single item"
   },
@@ -2235,7 +2235,7 @@
   "@actionItemUpdated": {
     "description": "Snackbar"
   },
-  "failedToUpdateActionItem": "Det gick inte att uppdatera åtgärd",
+  "failedToUpdateActionItem": "Misslyckades med att uppdatera åtgärd",
   "@failedToUpdateActionItem": {
     "description": "Snackbar"
   },
@@ -2243,7 +2243,7 @@
   "@actionItemCreated": {
     "description": "Snackbar"
   },
-  "failedToCreateActionItem": "Det gick inte att skapa åtgärd",
+  "failedToCreateActionItem": "Misslyckades med att skapa åtgärd",
   "@failedToCreateActionItem": {
     "description": "Snackbar"
   },
@@ -2283,7 +2283,7 @@
   "@filterManual": {
     "description": "Filter option"
   },
-  "completed": "Slutförd",
+  "completed": "Klar",
   "@completed": {
     "description": "Status label"
   },
@@ -2291,11 +2291,11 @@
   "@markComplete": {
     "description": "Action label"
   },
-  "actionItemDeleted": "Åtgärd borttagen",
+  "actionItemDeleted": "Åtgärdspost borttagen",
   "@actionItemDeleted": {
     "description": "Snackbar"
   },
-  "failedToDeleteActionItem": "Det gick inte att ta bort åtgärd",
+  "failedToDeleteActionItem": "Misslyckades med att radera åtgärd",
   "@failedToDeleteActionItem": {
     "description": "Snackbar"
   },
@@ -2313,5 +2313,211 @@
   },
   "appInterfaceSectionTitle": "APPGRÄNSSNITT",
   "speechTranscriptionSectionTitle": "TAL OCH TRANSKRIPTION",
-  "languageSettingsHelperText": "Appspråk ändrar menyer och knappar. Talspråk påverkar hur dina inspelningar transkriberas."
+  "languageSettingsHelperText": "Appspråk ändrar menyer och knappar. Talspråk påverkar hur dina inspelningar transkriberas.",
+  "translationNotice": "Översättningsmeddelande",
+  "translationNoticeMessage": "Omi översätter konversationer till ditt primära språk. Uppdatera det när som helst i Inställningar → Profiler.",
+  "pleaseCheckInternetConnection": "Kontrollera din internetanslutning och försök igen",
+  "pleaseSelectReason": "Vänligen välj en anledning",
+  "tellUsMoreWhatWentWrong": "Berätta mer om vad som gick fel...",
+  "selectText": "Välj text",
+  "maximumGoalsAllowed": "Maximalt {count} mål tillåtna",
+  "conversationCannotBeMerged": "Denna konversation kan inte slås samman (låst eller redan sammanfogas)",
+  "pleaseEnterFolderName": "Ange ett mappnamn",
+  "failedToCreateFolder": "Det gick inte att skapa mappen",
+  "failedToUpdateFolder": "Det gick inte att uppdatera mappen",
+  "folderName": "Mappnamn",
+  "descriptionOptional": "Beskrivning (valfritt)",
+  "failedToDeleteFolder": "Det gick inte att ta bort mappen",
+  "editFolder": "Redigera mapp",
+  "deleteFolder": "Ta bort mapp",
+  "transcriptCopiedToClipboard": "Transkription kopierad till urklipp",
+  "summaryCopiedToClipboard": "Sammanfattning kopierad till urklipp",
+  "conversationUrlCouldNotBeShared": "Konversations-URL kunde inte delas.",
+  "urlCopiedToClipboard": "URL kopierad till urklipp",
+  "exportTranscript": "Exportera transkription",
+  "exportSummary": "Exportera sammanfattning",
+  "exportButton": "Exportera",
+  "actionItemsCopiedToClipboard": "Åtgärdspunkter kopierade till urklipp",
+  "summarize": "Sammanfatta",
+  "generateSummary": "Generera sammanfattning",
+  "conversationNotFoundOrDeleted": "Konversation hittades inte eller har raderats",
+  "deleteMemory": "Ta bort minne?",
+  "thisActionCannotBeUndone": "Denna åtgärd kan inte ångras.",
+  "memoriesCount": "{count} minnen",
+  "noMemoriesInCategory": "Inga minnen i denna kategori ännu",
+  "addYourFirstMemory": "Lägg till ditt första minne",
+  "firmwareDisconnectUsb": "Koppla från USB",
+  "firmwareUsbWarning": "USB-anslutning under uppdateringar kan skada din enhet.",
+  "firmwareBatteryAbove15": "Batteri över 15%",
+  "firmwareEnsureBattery": "Se till att din enhet har 15% batteri.",
+  "firmwareStableConnection": "Stabil anslutning",
+  "firmwareConnectWifi": "Anslut till WiFi eller mobildata.",
+  "failedToStartUpdate": "Misslyckades med att starta uppdatering: {error}",
+  "beforeUpdateMakeSure": "Innan uppdatering, se till att:",
+  "confirmed": "Bekräftad!",
+  "release": "Släpp",
+  "slideToUpdate": "Dra för att uppdatera",
+  "copiedToClipboard": "{title} kopierat till urklipp",
+  "batteryLevel": "Batterinivå",
+  "productUpdate": "Produktuppdatering",
+  "offline": "Offline",
+  "available": "Tillgänglig",
+  "unpairDeviceDialogTitle": "Koppla bort enhet",
+  "unpairDeviceDialogMessage": "Detta kommer att koppla bort enheten så att den kan anslutas till en annan telefon. Du måste gå till Inställningar > Bluetooth och glömma enheten för att slutföra processen.",
+  "unpair": "Koppla bort",
+  "unpairAndForgetDevice": "Koppla bort och glöm enhet",
+  "unknownDevice": "Okänd enhet",
+  "unknown": "Okänd",
+  "productName": "Produktnamn",
+  "serialNumber": "Serienummer",
+  "connected": "Ansluten",
+  "privacyPolicyTitle": "Sekretesspolicy",
+  "actionItemDescriptionCannotBeEmpty": "Åtgärdspostbeskrivning kan inte vara tom",
+  "saved": "Sparad",
+  "overdue": "Försenad",
+  "markIncomplete": "Markera som ofullständig",
+  "editDueDate": "Redigera förfallodatum",
+  "setDueDate": "Ange förfallodatum",
+  "clearDueDate": "Rensa förfallodatum",
+  "mondayAbbr": "Mån",
+  "tuesdayAbbr": "Tis",
+  "wednesdayAbbr": "Ons",
+  "thursdayAbbr": "Tor",
+  "fridayAbbr": "Fre",
+  "saturdayAbbr": "Lör",
+  "sundayAbbr": "Sön",
+  "failedToUpdateDueDate": "Det gick inte att uppdatera förfallodatumet",
+  "failedToClearDueDate": "Det gick inte att rensa förfallodatumet",
+  "howDoesItWork": "Hur fungerar det?",
+  "sdCardSyncDescription": "SD-kortssynkronisering kommer att importera dina minnen från SD-kortet till appen",
+  "checksForAudioFiles": "Kontrollerar ljudfiler på SD-kortet",
+  "omiSyncsAudioFiles": "Omi synkroniserar sedan ljudfilerna med servern",
+  "serverProcessesAudio": "Servern bearbetar ljudfilerna och skapar minnen",
+  "youreAllSet": "Du är redo!",
+  "welcomeToOmiDescription": "Välkommen till Omi! Din AI-följeslagare är redo att hjälpa dig med samtal, uppgifter och mer.",
+  "startUsingOmi": "Börja använda Omi",
+  "back": "Tillbaka",
+  "keyboardShortcuts": "Tangentbordsgenvägar",
+  "toggleControlBar": "Växla kontrollfält",
+  "pressKeys": "Tryck på tangenter...",
+  "cmdRequired": "⌘ krävs",
+  "invalidKey": "Ogiltig tangent",
+  "space": "Mellanslag",
+  "search": "Sök",
+  "searchPlaceholder": "Sök...",
+  "untitledConversation": "Namnlös konversation",
+  "countRemaining": "{count} återstår",
+  "addGoal": "Lägg till mål",
+  "editGoal": "Redigera mål",
+  "icon": "Ikon",
+  "goalTitle": "Måltitel",
+  "current": "Nuvarande",
+  "target": "Mål",
+  "saveGoal": "Spara",
+  "goals": "Mål",
+  "tapToAddGoal": "Tryck för att lägga till ett mål",
+  "welcomeBack": "Välkommen tillbaka",
+  "yourConversations": "Dina konversationer",
+  "reviewAndManageConversations": "Granska och hantera dina inspelade konversationer",
+  "startCapturingConversations": "Börja fånga konversationer med din Omi-enhet för att se dem här.",
+  "useMobileAppToCapture": "Använd din mobilapp för att spela in ljud",
+  "conversationsProcessedAutomatically": "Konversationer bearbetas automatiskt",
+  "getInsightsInstantly": "Få insikter och sammanfattningar omedelbart",
+  "showAll": "Visa alla →",
+  "noTasksForToday": "Inga uppgifter för idag.\\nFråga Omi om fler uppgifter eller skapa manuellt.",
+  "dailyScore": "DAGLIG POÄNG",
+  "dailyScoreDescription": "Ett poäng som hjälper dig att fokusera bättre på genomförande.",
+  "searchResults": "Sökresultat",
+  "actionItems": "Åtgärdspunkter",
+  "tasksToday": "Idag",
+  "tasksTomorrow": "Imorgon",
+  "tasksNoDeadline": "Ingen deadline",
+  "tasksLater": "Senare",
+  "loadingTasks": "Laddar uppgifter...",
+  "tasks": "Uppgifter",
+  "swipeTasksToIndent": "Svep uppgifter för indentering, dra mellan kategorier",
+  "create": "Skapa",
+  "noTasksYet": "Inga uppgifter ännu",
+  "tasksFromConversationsWillAppear": "Uppgifter från dina konversationer visas här.\nKlicka på Skapa för att lägga till en manuellt.",
+  "monthJan": "Jan",
+  "monthFeb": "Feb",
+  "monthMar": "Mar",
+  "monthApr": "Apr",
+  "monthMay": "Maj",
+  "monthJun": "Jun",
+  "monthJul": "Jul",
+  "monthAug": "Aug",
+  "monthSep": "Sep",
+  "monthOct": "Okt",
+  "monthNov": "Nov",
+  "monthDec": "Dec",
+  "timePM": "PM",
+  "timeAM": "FM",
+  "actionItemUpdatedSuccessfully": "Åtgärd uppdaterades framgångsrikt",
+  "actionItemCreatedSuccessfully": "Åtgärd skapades framgångsrikt",
+  "actionItemDeletedSuccessfully": "Åtgärd raderades framgångsrikt",
+  "deleteActionItem": "Radera åtgärd",
+  "deleteActionItemConfirmation": "Är du säker på att du vill radera denna åtgärd? Denna handling kan inte ångras.",
+  "enterActionItemDescription": "Ange beskrivning av åtgärd...",
+  "markAsCompleted": "Markera som slutförd",
+  "setDueDateAndTime": "Ange förfallodatum och tid",
+  "reloadingApps": "Laddar om appar...",
+  "loadingApps": "Laddar appar...",
+  "browseInstallCreateApps": "Bläddra, installera och skapa appar",
+  "all": "Alla",
+  "open": "Öppna",
+  "install": "Installera",
+  "noAppsAvailable": "Inga appar tillgängliga",
+  "unableToLoadApps": "Kunde inte ladda appar",
+  "tryAdjustingSearchTermsOrFilters": "Försök justera dina söktermer eller filter",
+  "checkBackLaterForNewApps": "Kom tillbaka senare för nya appar",
+  "pleaseCheckInternetConnectionAndTryAgain": "Kontrollera din internetanslutning och försök igen",
+  "createNewApp": "Skapa ny app",
+  "buildSubmitCustomOmiApp": "Bygg och skicka in din anpassade Omi-app",
+  "submittingYourApp": "Skickar in din app...",
+  "preparingFormForYou": "Förbereder formuläret för dig...",
+  "appDetails": "Appdetaljer",
+  "paymentDetails": "Betalningsdetaljer",
+  "previewAndScreenshots": "Förhandsvisning och skärmdumpar",
+  "appCapabilities": "App-funktioner",
+  "aiPrompts": "AI-uppmaningar",
+  "chatPrompt": "Chattuppmaning",
+  "chatPromptPlaceholder": "Du är en fantastisk app, ditt jobb är att svara på användarfrågor och få dem att må bra...",
+  "conversationPrompt": "Samtalsprompt",
+  "conversationPromptPlaceholder": "Du är en fantastisk app, du kommer att få en transkription och sammanfattning av ett samtal...",
+  "notificationScopes": "Aviseringsomfång",
+  "appPrivacyAndTerms": "App-integritet och -villkor",
+  "makeMyAppPublic": "Gör min app offentlig",
+  "submitAppTermsAgreement": "Genom att skicka in denna app godkänner jag Omi AI:s användarvillkor och sekretesspolicy",
+  "submitApp": "Skicka in app",
+  "needHelpGettingStarted": "Behöver du hjälp att komma igång?",
+  "clickHereForAppBuildingGuides": "Klicka här för appbyggguider och dokumentation",
+  "submitAppQuestion": "Skicka in app?",
+  "submitAppPublicDescription": "Din app kommer att granskas och göras offentlig. Du kan börja använda den omedelbart, även under granskningen!",
+  "submitAppPrivateDescription": "Din app kommer att granskas och göras tillgänglig för dig privat. Du kan börja använda den omedelbart, även under granskningen!",
+  "startEarning": "Börja tjäna! 💰",
+  "connectStripeOrPayPal": "Anslut Stripe eller PayPal för att ta emot betalningar för din app.",
+  "connectNow": "Anslut nu",
+  "installsCount": "{count}+ installationer",
+  "uninstallApp": "Avinstallera app",
+  "subscribe": "Prenumerera",
+  "dataAccessNotice": "Meddelande om dataåtkomst",
+  "dataAccessWarning": "Denna app kommer att få åtkomst till dina data. Omi AI är inte ansvarig för hur dina data används, modifieras eller raderas av denna app",
+  "installApp": "Installera app",
+  "betaTesterNotice": "Du är betatestare för denna app. Den är inte offentlig ännu. Den blir offentlig när den godkänns.",
+  "appUnderReviewOwner": "Din app granskas och är bara synlig för dig. Den blir offentlig när den godkänns.",
+  "appRejectedNotice": "Din app har avvisats. Uppdatera appens detaljer och skicka in den igen för granskning.",
+  "setupSteps": "Installationssteg",
+  "setupInstructions": "Installationsinstruktioner",
+  "integrationInstructions": "Integrationsinstruktioner",
+  "preview": "Förhandsvisning",
+  "aboutTheApp": "Om appen",
+  "aboutThePersona": "Om personan",
+  "chatPersonality": "Chattpersonlighet",
+  "ratingsAndReviews": "Betyg och recensioner",
+  "noRatings": "inga betyg",
+  "ratingsCount": "{count}+ betyg",
+  "errorActivatingApp": "Fel vid aktivering av app",
+  "integrationSetupRequired": "Om detta är en integrationsapp, se till att installationen är klar.",
+  "installed": "Installerad"
 }

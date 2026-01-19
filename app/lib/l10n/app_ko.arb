@@ -101,7 +101,7 @@
   "@errorProcessingConversation": {
     "description": "Error message for conversation processing failure"
   },
-  "noInternetConnection": "인터넷 연결을 확인하고 다시 시도해 주세요.",
+  "noInternetConnection": "인터넷 연결 없음",
   "@noInternetConnection": {
     "description": "Message shown when there's no internet"
   },
@@ -121,7 +121,7 @@
   "@errorCopied": {
     "description": "Snackbar message after copying error"
   },
-  "remaining": "남은",
+  "remaining": "남음",
   "@remaining": {
     "description": "Label for remaining time/items"
   },
@@ -209,7 +209,7 @@
   "@couldNotAccessFile": {
     "description": "Error when file access fails"
   },
-  "askOmi": "Omi에게 질문하기",
+  "askOmi": "Omi에게 질문",
   "@askOmi": {
     "description": "Chat button label"
   },
@@ -221,7 +221,7 @@
   "@disconnected": {
     "description": "Device disconnected status"
   },
-  "searching": "검색 중",
+  "searching": "검색 중...",
   "@searching": {
     "description": "Searching for device status"
   },
@@ -289,7 +289,7 @@
   "@syncingBackground": {
     "description": "Message during background sync"
   },
-  "noConversationsYet": "아직 대화가 없습니다.",
+  "noConversationsYet": "아직 대화가 없습니다",
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
@@ -301,7 +301,7 @@
   "@starConversationHint": {
     "description": "Hint explaining how to star conversations"
   },
-  "searchConversations": "대화 검색",
+  "searchConversations": "대화 검색...",
   "@searchConversations": {
     "description": "Search field placeholder"
   },
@@ -411,7 +411,7 @@
   "@buildAndShareApp": {
     "description": "Create app button subtitle"
   },
-  "searchApps": "1500개 이상의 앱 검색",
+  "searchApps": "앱 검색...",
   "@searchApps": {
     "description": "Apps search placeholder"
   },
@@ -651,7 +651,7 @@
   "@modelNumber": {
     "description": "Model number label"
   },
-  "manufacturer": "제조사",
+  "manufacturer": "제조업체",
   "@manufacturer": {
     "description": "Manufacturer label"
   },
@@ -695,7 +695,7 @@
   "@deviceDisconnectedMessage": {
     "description": "Message shown when device is disconnected"
   },
-  "deviceUnpairedMessage": "기기 페어링이 해제되었습니다. 페어링 해제를 완료하려면 설정 > 블루투스로 이동하여 기기를 삭제하세요.",
+  "deviceUnpairedMessage": "기기 페어링이 해제되었습니다. 설정 > Bluetooth로 이동하여 기기를 삭제하면 페어링 해제가 완료됩니다.",
   "@deviceUnpairedMessage": {
     "description": "Message shown when device is unpaired"
   },
@@ -1633,7 +1633,7 @@
       }
     }
   },
-  "dontShowAgain": "다시 표시하지 않기",
+  "dontShowAgain": "다시 표시하지 않음",
   "@dontShowAgain": {
     "description": "Checkbox text to suppress future connection confirmations"
   },
@@ -1986,11 +1986,11 @@
   "@actionItemCompleted": {
     "description": "Snackbar message when item completed"
   },
-  "deleteActionItemTitle": "작업 항목 삭제",
+  "deleteActionItemTitle": "실행 항목 삭제",
   "@deleteActionItemTitle": {
     "description": "Title for delete item dialog"
   },
-  "deleteActionItemMessage": "이 작업 항목을 삭제하시겠습니까?",
+  "deleteActionItemMessage": "이 실행 항목을 삭제하시겠습니까?",
   "@deleteActionItemMessage": {
     "description": "Confirmation message for deleting single item"
   },
@@ -2215,7 +2215,7 @@
   "@retry": {
     "description": "Button label"
   },
-  "createActionItem": "작업 항목 만들기",
+  "createActionItem": "작업 항목 생성",
   "@createActionItem": {
     "description": "Sheet title"
   },
@@ -2283,7 +2283,7 @@
   "@filterManual": {
     "description": "Filter option"
   },
-  "completed": "완료됨",
+  "completed": "완료",
   "@completed": {
     "description": "Status label"
   },
@@ -2291,7 +2291,7 @@
   "@markComplete": {
     "description": "Action label"
   },
-  "actionItemDeleted": "작업 항목이 삭제되었습니다",
+  "actionItemDeleted": "실행 항목이 삭제되었습니다",
   "@actionItemDeleted": {
     "description": "Snackbar"
   },
@@ -2313,5 +2313,211 @@
   },
   "appInterfaceSectionTitle": "앱 인터페이스",
   "speechTranscriptionSectionTitle": "음성 및 전사",
-  "languageSettingsHelperText": "앱 언어는 메뉴와 버튼을 변경합니다. 음성 언어는 녹음이 전사되는 방식에 영향을 줍니다."
+  "languageSettingsHelperText": "앱 언어는 메뉴와 버튼을 변경합니다. 음성 언어는 녹음이 전사되는 방식에 영향을 줍니다.",
+  "translationNotice": "번역 안내",
+  "translationNoticeMessage": "Omi는 대화를 기본 언어로 번역합니다. 설정 → 프로필에서 언제든지 업데이트할 수 있습니다.",
+  "pleaseCheckInternetConnection": "인터넷 연결을 확인하고 다시 시도해주세요",
+  "pleaseSelectReason": "이유를 선택해주세요",
+  "tellUsMoreWhatWentWrong": "무엇이 잘못되었는지 자세히 알려주세요...",
+  "selectText": "텍스트 선택",
+  "maximumGoalsAllowed": "최대 {count}개의 목표 허용",
+  "conversationCannotBeMerged": "이 대화는 병합할 수 없습니다(잠김 또는 이미 병합 중)",
+  "pleaseEnterFolderName": "폴더 이름을 입력하세요",
+  "failedToCreateFolder": "폴더 생성 실패",
+  "failedToUpdateFolder": "폴더 업데이트 실패",
+  "folderName": "폴더 이름",
+  "descriptionOptional": "설명 (선택사항)",
+  "failedToDeleteFolder": "폴더 삭제 실패",
+  "editFolder": "폴더 편집",
+  "deleteFolder": "폴더 삭제",
+  "transcriptCopiedToClipboard": "스크립트가 클립보드에 복사되었습니다",
+  "summaryCopiedToClipboard": "요약이 클립보드에 복사되었습니다",
+  "conversationUrlCouldNotBeShared": "대화 URL을 공유할 수 없습니다.",
+  "urlCopiedToClipboard": "URL이 클립보드에 복사되었습니다",
+  "exportTranscript": "스크립트 내보내기",
+  "exportSummary": "요약 내보내기",
+  "exportButton": "내보내기",
+  "actionItemsCopiedToClipboard": "작업 항목이 클립보드에 복사되었습니다",
+  "summarize": "요약",
+  "generateSummary": "요약 생성",
+  "conversationNotFoundOrDeleted": "대화를 찾을 수 없거나 삭제되었습니다",
+  "deleteMemory": "메모리를 삭제하시겠습니까?",
+  "thisActionCannotBeUndone": "이 작업은 취소할 수 없습니다.",
+  "memoriesCount": "{count}개의 추억",
+  "noMemoriesInCategory": "이 카테고리에는 아직 메모리가 없습니다",
+  "addYourFirstMemory": "첫 번째 메모리 추가",
+  "firmwareDisconnectUsb": "USB 연결 해제",
+  "firmwareUsbWarning": "업데이트 중 USB 연결은 기기를 손상시킬 수 있습니다.",
+  "firmwareBatteryAbove15": "배터리 15% 이상",
+  "firmwareEnsureBattery": "기기 배터리가 15%인지 확인하세요.",
+  "firmwareStableConnection": "안정적인 연결",
+  "firmwareConnectWifi": "WiFi 또는 모바일 데이터에 연결하세요.",
+  "failedToStartUpdate": "업데이트 시작 실패: {error}",
+  "beforeUpdateMakeSure": "업데이트 전에 확인하세요:",
+  "confirmed": "확인됨!",
+  "release": "놓기",
+  "slideToUpdate": "업데이트하려면 밀기",
+  "copiedToClipboard": "{title}이(가) 클립보드에 복사되었습니다",
+  "batteryLevel": "배터리 수준",
+  "productUpdate": "제품 업데이트",
+  "offline": "오프라인",
+  "available": "사용 가능",
+  "unpairDeviceDialogTitle": "기기 페어링 해제",
+  "unpairDeviceDialogMessage": "기기 페어링을 해제하여 다른 전화기에 연결할 수 있도록 합니다. 설정 > Bluetooth로 이동하여 기기를 삭제하여 프로세스를 완료해야 합니다.",
+  "unpair": "페어링 해제",
+  "unpairAndForgetDevice": "페어링 해제 및 기기 삭제",
+  "unknownDevice": "알 수 없는 기기",
+  "unknown": "알 수 없음",
+  "productName": "제품명",
+  "serialNumber": "일련번호",
+  "connected": "연결됨",
+  "privacyPolicyTitle": "개인정보 보호정책",
+  "actionItemDescriptionCannotBeEmpty": "실행 항목 설명은 비워둘 수 없습니다",
+  "saved": "저장됨",
+  "overdue": "기한 초과",
+  "markIncomplete": "미완료로 표시",
+  "editDueDate": "마감일 편집",
+  "setDueDate": "마감일 설정",
+  "clearDueDate": "마감일 지우기",
+  "mondayAbbr": "월",
+  "tuesdayAbbr": "화",
+  "wednesdayAbbr": "수",
+  "thursdayAbbr": "목",
+  "fridayAbbr": "금",
+  "saturdayAbbr": "토",
+  "sundayAbbr": "일",
+  "failedToUpdateDueDate": "마감일 업데이트 실패",
+  "failedToClearDueDate": "마감일 지우기 실패",
+  "howDoesItWork": "어떻게 작동하나요?",
+  "sdCardSyncDescription": "SD 카드 동기화는 SD 카드에서 앱으로 추억을 가져옵니다",
+  "checksForAudioFiles": "SD 카드에서 오디오 파일 확인",
+  "omiSyncsAudioFiles": "Omi는 그런 다음 오디오 파일을 서버와 동기화합니다",
+  "serverProcessesAudio": "서버가 오디오 파일을 처리하고 추억을 만듭니다",
+  "youreAllSet": "준비 완료!",
+  "welcomeToOmiDescription": "Omi에 오신 것을 환영합니다! AI 동반자가 대화, 작업 등을 도와드릴 준비가 되었습니다.",
+  "startUsingOmi": "Omi 사용 시작",
+  "back": "뒤로",
+  "keyboardShortcuts": "키보드 단축키",
+  "toggleControlBar": "제어 표시줄 전환",
+  "pressKeys": "키를 누르세요...",
+  "cmdRequired": "⌘ 필요",
+  "invalidKey": "잘못된 키",
+  "space": "스페이스",
+  "search": "검색",
+  "searchPlaceholder": "검색...",
+  "untitledConversation": "제목 없는 대화",
+  "countRemaining": "{count} 남음",
+  "addGoal": "목표 추가",
+  "editGoal": "목표 편집",
+  "icon": "아이콘",
+  "goalTitle": "목표 제목",
+  "current": "현재",
+  "target": "목표",
+  "saveGoal": "저장",
+  "goals": "목표",
+  "tapToAddGoal": "탭하여 목표 추가",
+  "welcomeBack": "다시 오신 것을 환영합니다",
+  "yourConversations": "대화 내역",
+  "reviewAndManageConversations": "녹음된 대화를 검토하고 관리하세요",
+  "startCapturingConversations": "Omi 장치로 대화를 캡처하여 여기에서 보세요.",
+  "useMobileAppToCapture": "모바일 앱을 사용하여 오디오를 캡처하세요",
+  "conversationsProcessedAutomatically": "대화는 자동으로 처리됩니다",
+  "getInsightsInstantly": "즉시 인사이트와 요약을 얻으세요",
+  "showAll": "모두 표시 →",
+  "noTasksForToday": "오늘의 작업이 없습니다.\\nOmi에게 더 많은 작업을 요청하거나 수동으로 생성하세요.",
+  "dailyScore": "일일 점수",
+  "dailyScoreDescription": "실행에 더 잘 집중할 수 있도록 도와주는 점수입니다.",
+  "searchResults": "검색 결과",
+  "actionItems": "실행 항목",
+  "tasksToday": "오늘",
+  "tasksTomorrow": "내일",
+  "tasksNoDeadline": "마감일 없음",
+  "tasksLater": "나중에",
+  "loadingTasks": "작업 로드 중...",
+  "tasks": "작업",
+  "swipeTasksToIndent": "작업을 스와이프하여 들여쓰기, 카테고리 간 드래그",
+  "create": "만들기",
+  "noTasksYet": "아직 작업이 없습니다",
+  "tasksFromConversationsWillAppear": "대화의 작업이 여기에 표시됩니다.\n수동으로 추가하려면 만들기를 클릭하세요.",
+  "monthJan": "1월",
+  "monthFeb": "2월",
+  "monthMar": "3월",
+  "monthApr": "4월",
+  "monthMay": "5월",
+  "monthJun": "6월",
+  "monthJul": "7월",
+  "monthAug": "8월",
+  "monthSep": "9월",
+  "monthOct": "10월",
+  "monthNov": "11월",
+  "monthDec": "12월",
+  "timePM": "오후",
+  "timeAM": "오전",
+  "actionItemUpdatedSuccessfully": "작업 항목이 성공적으로 업데이트되었습니다",
+  "actionItemCreatedSuccessfully": "작업 항목이 성공적으로 생성되었습니다",
+  "actionItemDeletedSuccessfully": "작업 항목이 성공적으로 삭제되었습니다",
+  "deleteActionItem": "작업 항목 삭제",
+  "deleteActionItemConfirmation": "이 작업 항목을 삭제하시겠습니까? 이 작업은 취소할 수 없습니다.",
+  "enterActionItemDescription": "작업 항목 설명 입력...",
+  "markAsCompleted": "완료로 표시",
+  "setDueDateAndTime": "마감일 및 시간 설정",
+  "reloadingApps": "앱 다시 로드 중...",
+  "loadingApps": "앱 로드 중...",
+  "browseInstallCreateApps": "앱 탐색, 설치 및 생성",
+  "all": "전체",
+  "open": "열기",
+  "install": "설치",
+  "noAppsAvailable": "사용 가능한 앱이 없습니다",
+  "unableToLoadApps": "앱을 로드할 수 없습니다",
+  "tryAdjustingSearchTermsOrFilters": "검색어나 필터를 조정해 보세요",
+  "checkBackLaterForNewApps": "나중에 새로운 앱을 확인하세요",
+  "pleaseCheckInternetConnectionAndTryAgain": "인터넷 연결을 확인하고 다시 시도하세요",
+  "createNewApp": "새 앱 만들기",
+  "buildSubmitCustomOmiApp": "사용자 정의 Omi 앱을 빌드하고 제출하세요",
+  "submittingYourApp": "앱을 제출하는 중...",
+  "preparingFormForYou": "양식을 준비하는 중...",
+  "appDetails": "앱 세부정보",
+  "paymentDetails": "결제 세부정보",
+  "previewAndScreenshots": "미리보기 및 스크린샷",
+  "appCapabilities": "앱 기능",
+  "aiPrompts": "AI 프롬프트",
+  "chatPrompt": "채팅 프롬프트",
+  "chatPromptPlaceholder": "당신은 멋진 앱입니다. 사용자 질문에 응답하고 기분 좋게 만드는 것이 당신의 일입니다...",
+  "conversationPrompt": "대화 프롬프트",
+  "conversationPromptPlaceholder": "당신은 멋진 앱입니다. 대화의 전사 및 요약이 제공됩니다...",
+  "notificationScopes": "알림 범위",
+  "appPrivacyAndTerms": "앱 개인정보 보호 및 약관",
+  "makeMyAppPublic": "내 앱을 공개로 만들기",
+  "submitAppTermsAgreement": "이 앱을 제출함으로써 Omi AI의 서비스 약관 및 개인정보 보호정책에 동의합니다",
+  "submitApp": "앱 제출",
+  "needHelpGettingStarted": "시작하는 데 도움이 필요하신가요?",
+  "clickHereForAppBuildingGuides": "앱 빌드 가이드 및 문서를 보려면 여기를 클릭하세요",
+  "submitAppQuestion": "앱을 제출하시겠습니까?",
+  "submitAppPublicDescription": "앱이 검토되어 공개됩니다. 검토 중에도 즉시 사용을 시작할 수 있습니다!",
+  "submitAppPrivateDescription": "앱이 검토되어 비공개로 제공됩니다. 검토 중에도 즉시 사용을 시작할 수 있습니다!",
+  "startEarning": "수익 시작! 💰",
+  "connectStripeOrPayPal": "Stripe 또는 PayPal을 연결하여 앱에 대한 결제를 받으세요.",
+  "connectNow": "지금 연결",
+  "installsCount": "{count}+회 설치",
+  "uninstallApp": "앱 제거",
+  "subscribe": "구독",
+  "dataAccessNotice": "데이터 접근 알림",
+  "dataAccessWarning": "이 앱은 귀하의 데이터에 접근합니다. Omi AI는 이 앱이 귀하의 데이터를 사용, 수정 또는 삭제하는 방법에 대해 책임지지 않습니다",
+  "installApp": "앱 설치",
+  "betaTesterNotice": "귀하는 이 앱의 베타 테스터입니다. 아직 공개되지 않았습니다. 승인되면 공개됩니다.",
+  "appUnderReviewOwner": "귀하의 앱이 검토 중이며 귀하만 볼 수 있습니다. 승인되면 공개됩니다.",
+  "appRejectedNotice": "귀하의 앱이 거부되었습니다. 앱 세부정보를 업데이트하고 검토를 위해 다시 제출하세요.",
+  "setupSteps": "설정 단계",
+  "setupInstructions": "설정 지침",
+  "integrationInstructions": "통합 지침",
+  "preview": "미리보기",
+  "aboutTheApp": "앱 정보",
+  "aboutThePersona": "페르소나 정보",
+  "chatPersonality": "채팅 성격",
+  "ratingsAndReviews": "평점 및 리뷰",
+  "noRatings": "평점 없음",
+  "ratingsCount": "{count}+개의 평점",
+  "errorActivatingApp": "앱 활성화 오류",
+  "integrationSetupRequired": "이것이 통합 앱인 경우 설정이 완료되었는지 확인하세요.",
+  "installed": "설치됨"
 }

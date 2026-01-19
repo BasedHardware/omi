@@ -101,7 +101,7 @@
   "@errorProcessingConversation": {
     "description": "Error message for conversation processing failure"
   },
-  "noInternetConnection": "Tarkista internet-yhteytesi ja yritä uudelleen.",
+  "noInternetConnection": "Ei internet-yhteyttä",
   "@noInternetConnection": {
     "description": "Message shown when there's no internet"
   },
@@ -221,7 +221,7 @@
   "@disconnected": {
     "description": "Device disconnected status"
   },
-  "searching": "Etsitään",
+  "searching": "Haetaan...",
   "@searching": {
     "description": "Searching for device status"
   },
@@ -289,7 +289,7 @@
   "@syncingBackground": {
     "description": "Message during background sync"
   },
-  "noConversationsYet": "Ei vielä keskusteluja.",
+  "noConversationsYet": "Ei vielä keskusteluja",
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
@@ -301,7 +301,7 @@
   "@starConversationHint": {
     "description": "Hint explaining how to star conversations"
   },
-  "searchConversations": "Etsi keskusteluja",
+  "searchConversations": "Etsi keskusteluja...",
   "@searchConversations": {
     "description": "Search field placeholder"
   },
@@ -411,7 +411,7 @@
   "@buildAndShareApp": {
     "description": "Create app button subtitle"
   },
-  "searchApps": "Etsi yli 1500 sovelluksesta",
+  "searchApps": "Etsi sovelluksia...",
   "@searchApps": {
     "description": "Apps search placeholder"
   },
@@ -631,7 +631,7 @@
   "@deviceName": {
     "description": "Device name label"
   },
-  "deviceId": "Laitetunnus",
+  "deviceId": "Laitteen tunnus",
   "@deviceId": {
     "description": "Device ID label"
   },
@@ -683,7 +683,7 @@
   "@disconnectDevice": {
     "description": "Disconnect device button"
   },
-  "unpairDevice": "Pura laitepari",
+  "unpairDevice": "Poista laitteen pariliitos",
   "@unpairDevice": {
     "description": "Unpair device button"
   },
@@ -695,7 +695,7 @@
   "@deviceDisconnectedMessage": {
     "description": "Message shown when device is disconnected"
   },
-  "deviceUnpairedMessage": "Laitepari purettu. Siirry kohtaan Asetukset > Bluetooth ja unohda laite viimeistelläksesi purkamisen.",
+  "deviceUnpairedMessage": "Laitteen pariliitos poistettu. Siirry Asetukset > Bluetooth ja unohda laite pariliitoksen poistamisen viimeistelemiseksi.",
   "@deviceUnpairedMessage": {
     "description": "Message shown when device is unpaired"
   },
@@ -997,7 +997,7 @@
   "@upgrade": {
     "description": "Upgrade button"
   },
-  "upgradeToUnlimited": "Päivitä rajoittamattomaan",
+  "upgradeToUnlimited": "Päivitä rajattomaksi",
   "@upgradeToUnlimited": {
     "description": "Upgrade to unlimited button"
   },
@@ -1414,7 +1414,7 @@
       }
     }
   },
-  "yesterday": "eilen",
+  "yesterday": "Eilen",
   "daysAgo": "{count} päivää sitten",
   "@daysAgo": {
     "placeholders": {
@@ -1572,7 +1572,7 @@
   "highAccuracy": "Korkea tarkkuus",
   "privacyFirst": "Yksityisyys ensin",
   "saveChanges": "Tallenna muutokset",
-  "resetToDefault": "Palauta oletuksiin",
+  "resetToDefault": "Palauta oletusarvoon",
   "viewTemplate": "Näytä malli",
   "trySomethingLike": "Kokeile jotain tällaista...",
   "tryIt": "Kokeile",
@@ -1986,11 +1986,11 @@
   "@actionItemCompleted": {
     "description": "Snackbar message when item completed"
   },
-  "deleteActionItemTitle": "Poista tehtävä",
+  "deleteActionItemTitle": "Poista toimintokohde",
   "@deleteActionItemTitle": {
     "description": "Title for delete item dialog"
   },
-  "deleteActionItemMessage": "Haluatko varmasti poistaa tämän tehtävän?",
+  "deleteActionItemMessage": "Haluatko varmasti poistaa tämän toimintokohteen?",
   "@deleteActionItemMessage": {
     "description": "Confirmation message for deleting single item"
   },
@@ -2247,7 +2247,7 @@
   "@failedToCreateActionItem": {
     "description": "Snackbar"
   },
-  "dueDate": "Eräpäivä",
+  "dueDate": "Määräpäivä",
   "@dueDate": {
     "description": "Label"
   },
@@ -2283,15 +2283,15 @@
   "@filterManual": {
     "description": "Filter option"
   },
-  "completed": "Suoritettu",
+  "completed": "Valmis",
   "@completed": {
     "description": "Status label"
   },
-  "markComplete": "Merkitse suoritetuksi",
+  "markComplete": "Merkitse valmiiksi",
   "@markComplete": {
     "description": "Action label"
   },
-  "actionItemDeleted": "Tehtävä poistettu",
+  "actionItemDeleted": "Toimintokohde poistettu",
   "@actionItemDeleted": {
     "description": "Snackbar"
   },
@@ -2313,5 +2313,211 @@
   },
   "appInterfaceSectionTitle": "SOVELLUKSEN KÄYTTÖLIITTYMÄ",
   "speechTranscriptionSectionTitle": "PUHE JA LITTEROINTI",
-  "languageSettingsHelperText": "Sovelluksen kieli muuttaa valikkoja ja painikkeita. Puheen kieli vaikuttaa siihen, miten tallenteet litteroidaan."
+  "languageSettingsHelperText": "Sovelluksen kieli muuttaa valikkoja ja painikkeita. Puheen kieli vaikuttaa siihen, miten tallenteet litteroidaan.",
+  "translationNotice": "Käännösilmoitus",
+  "translationNoticeMessage": "Omi kääntää keskustelut ensisijaiselle kielellesi. Päivitä se milloin tahansa kohdassa Asetukset → Profiilit.",
+  "pleaseCheckInternetConnection": "Tarkista internet-yhteytesi ja yritä uudelleen",
+  "pleaseSelectReason": "Valitse syy",
+  "tellUsMoreWhatWentWrong": "Kerro meille lisää siitä, mikä meni pieleen...",
+  "selectText": "Valitse teksti",
+  "maximumGoalsAllowed": "Enintään {count} tavoitetta sallittu",
+  "conversationCannotBeMerged": "Tätä keskustelua ei voi yhdistää (lukittu tai jo yhdistämässä)",
+  "pleaseEnterFolderName": "Anna kansion nimi",
+  "failedToCreateFolder": "Kansion luominen epäonnistui",
+  "failedToUpdateFolder": "Kansion päivittäminen epäonnistui",
+  "folderName": "Kansion nimi",
+  "descriptionOptional": "Kuvaus (valinnainen)",
+  "failedToDeleteFolder": "Kansion poistaminen epäonnistui",
+  "editFolder": "Muokkaa kansiota",
+  "deleteFolder": "Poista kansio",
+  "transcriptCopiedToClipboard": "Litterointi kopioitu leikepöydälle",
+  "summaryCopiedToClipboard": "Yhteenveto kopioitu leikepöydälle",
+  "conversationUrlCouldNotBeShared": "Keskustelun URL-osoitetta ei voitu jakaa.",
+  "urlCopiedToClipboard": "URL kopioitu leikepöydälle",
+  "exportTranscript": "Vie litterointi",
+  "exportSummary": "Vie yhteenveto",
+  "exportButton": "Vie",
+  "actionItemsCopiedToClipboard": "Toimintakohteet kopioitu leikepöydälle",
+  "summarize": "Tiivistä",
+  "generateSummary": "Luo yhteenveto",
+  "conversationNotFoundOrDeleted": "Keskustelua ei löytynyt tai se on poistettu",
+  "deleteMemory": "Poista muisto?",
+  "thisActionCannotBeUndone": "Tätä toimintoa ei voi peruuttaa.",
+  "memoriesCount": "{count} muistoa",
+  "noMemoriesInCategory": "Tässä kategoriassa ei ole vielä muistoja",
+  "addYourFirstMemory": "Lisää ensimmäinen muistosi",
+  "firmwareDisconnectUsb": "Irrota USB",
+  "firmwareUsbWarning": "USB-yhteys päivitysten aikana voi vahingoittaa laitettasi.",
+  "firmwareBatteryAbove15": "Akku yli 15%",
+  "firmwareEnsureBattery": "Varmista, että laitteessasi on 15% akkua.",
+  "firmwareStableConnection": "Vakaa yhteys",
+  "firmwareConnectWifi": "Yhdistä WiFi:iin tai mobiiliverkkoon.",
+  "failedToStartUpdate": "Päivityksen aloitus epäonnistui: {error}",
+  "beforeUpdateMakeSure": "Ennen päivitystä varmista:",
+  "confirmed": "Vahvistettu!",
+  "release": "Vapauta",
+  "slideToUpdate": "Liu'uta päivittääksesi",
+  "copiedToClipboard": "{title} kopioitu leikepöydälle",
+  "batteryLevel": "Akun taso",
+  "productUpdate": "Tuotepäivitys",
+  "offline": "Offline-tilassa",
+  "available": "Saatavilla",
+  "unpairDeviceDialogTitle": "Poista laitteen pariliitos",
+  "unpairDeviceDialogMessage": "Tämä poistaa laitteen pariliitoksen, jotta se voidaan yhdistää toiseen puhelimeen. Sinun on siirryttävä Asetukset > Bluetooth ja unohdettava laite prosessin viimeistelemiseksi.",
+  "unpair": "Poista pariliitos",
+  "unpairAndForgetDevice": "Poista pariliitos ja unohda laite",
+  "unknownDevice": "Tuntematon laite",
+  "unknown": "Tuntematon",
+  "productName": "Tuotteen nimi",
+  "serialNumber": "Sarjanumero",
+  "connected": "Yhdistetty",
+  "privacyPolicyTitle": "Tietosuojakäytäntö",
+  "actionItemDescriptionCannotBeEmpty": "Toimintokohteen kuvaus ei voi olla tyhjä",
+  "saved": "Tallennettu",
+  "overdue": "Myöhässä",
+  "markIncomplete": "Merkitse keskeneräiseksi",
+  "editDueDate": "Muokkaa eräpäivää",
+  "setDueDate": "Aseta määräpäivä",
+  "clearDueDate": "Tyhjennä eräpäivä",
+  "mondayAbbr": "Ma",
+  "tuesdayAbbr": "Ti",
+  "wednesdayAbbr": "Ke",
+  "thursdayAbbr": "To",
+  "fridayAbbr": "Pe",
+  "saturdayAbbr": "La",
+  "sundayAbbr": "Su",
+  "failedToUpdateDueDate": "Eräpäivän päivittäminen epäonnistui",
+  "failedToClearDueDate": "Eräpäivän tyhjentäminen epäonnistui",
+  "howDoesItWork": "Miten se toimii?",
+  "sdCardSyncDescription": "SD-kortin synkronointi tuo muistosi SD-kortilta sovellukseen",
+  "checksForAudioFiles": "Tarkistaa äänitiedostot SD-kortilla",
+  "omiSyncsAudioFiles": "Omi synkronoi sitten äänitiedostot palvelimen kanssa",
+  "serverProcessesAudio": "Palvelin käsittelee äänitiedostot ja luo muistoja",
+  "youreAllSet": "Olet valmis!",
+  "welcomeToOmiDescription": "Tervetuloa Omiin! AI-kumppanisi on valmis auttamaan sinua keskusteluissa, tehtävissä ja muussa.",
+  "startUsingOmi": "Aloita Omin käyttö",
+  "back": "Takaisin",
+  "keyboardShortcuts": "Pikanäppäimet",
+  "toggleControlBar": "Vaihda ohjausp alkki",
+  "pressKeys": "Paina näppäimiä...",
+  "cmdRequired": "⌘ vaaditaan",
+  "invalidKey": "Virheellinen näppäin",
+  "space": "Välilyönti",
+  "search": "Etsi",
+  "searchPlaceholder": "Etsi...",
+  "untitledConversation": "Nimeämätön keskustelu",
+  "countRemaining": "{count} jäljellä",
+  "addGoal": "Lisää tavoite",
+  "editGoal": "Muokkaa tavoitetta",
+  "icon": "Kuvake",
+  "goalTitle": "Tavoitteen otsikko",
+  "current": "Nykyinen",
+  "target": "Tavoite",
+  "saveGoal": "Tallenna",
+  "goals": "Tavoitteet",
+  "tapToAddGoal": "Napauta lisätäksesi tavoitteen",
+  "welcomeBack": "Tervetuloa takaisin",
+  "yourConversations": "Keskustelusi",
+  "reviewAndManageConversations": "Tarkista ja hallitse tallennettuja keskustelujasi",
+  "startCapturingConversations": "Aloita keskustelujen tallentaminen Omi-laitteellasi nähdäksesi ne täällä.",
+  "useMobileAppToCapture": "Käytä mobiilisovellusta äänen tallentamiseen",
+  "conversationsProcessedAutomatically": "Keskustelut käsitellään automaattisesti",
+  "getInsightsInstantly": "Saat oivalluksia ja yhteenvetoja välittömästi",
+  "showAll": "Näytä kaikki →",
+  "noTasksForToday": "Ei tehtäviä tänään.\\nKysy Omilta lisää tehtäviä tai luo ne manuaalisesti.",
+  "dailyScore": "PÄIVITTÄINEN PISTEET",
+  "dailyScoreDescription": "Pisteet, jotka auttavat keskittymään paremmin toteutukseen.",
+  "searchResults": "Hakutulokset",
+  "actionItems": "Toimintakohdat",
+  "tasksToday": "Tänään",
+  "tasksTomorrow": "Huomenna",
+  "tasksNoDeadline": "Ei määräaikaa",
+  "tasksLater": "Myöhemmin",
+  "loadingTasks": "Ladataan tehtäviä...",
+  "tasks": "Tehtävät",
+  "swipeTasksToIndent": "Pyyhkäise tehtäviä sisennykseen, vedä kategorioiden välillä",
+  "create": "Luo",
+  "noTasksYet": "Ei tehtäviä vielä",
+  "tasksFromConversationsWillAppear": "Keskusteluistasi tulevat tehtävät näkyvät tässä.\nNapsauta Luo lisätäksesi yhden manuaalisesti.",
+  "monthJan": "Tammi",
+  "monthFeb": "Helmi",
+  "monthMar": "Maalis",
+  "monthApr": "Huhti",
+  "monthMay": "Touko",
+  "monthJun": "Kesä",
+  "monthJul": "Heinä",
+  "monthAug": "Elo",
+  "monthSep": "Syys",
+  "monthOct": "Loka",
+  "monthNov": "Marras",
+  "monthDec": "Joulu",
+  "timePM": "IP",
+  "timeAM": "AP",
+  "actionItemUpdatedSuccessfully": "Tehtävä päivitetty onnistuneesti",
+  "actionItemCreatedSuccessfully": "Tehtävä luotu onnistuneesti",
+  "actionItemDeletedSuccessfully": "Tehtävä poistettu onnistuneesti",
+  "deleteActionItem": "Poista tehtävä",
+  "deleteActionItemConfirmation": "Haluatko varmasti poistaa tämän tehtävän? Tätä toimintoa ei voi perua.",
+  "enterActionItemDescription": "Anna tehtävän kuvaus...",
+  "markAsCompleted": "Merkitse valmiiksi",
+  "setDueDateAndTime": "Aseta määräpäivä ja aika",
+  "reloadingApps": "Ladataan sovelluksia uudelleen...",
+  "loadingApps": "Ladataan sovelluksia...",
+  "browseInstallCreateApps": "Selaa, asenna ja luo sovelluksia",
+  "all": "Kaikki",
+  "open": "Avaa",
+  "install": "Asenna",
+  "noAppsAvailable": "Ei saatavilla olevia sovelluksia",
+  "unableToLoadApps": "Sovellusten lataus epäonnistui",
+  "tryAdjustingSearchTermsOrFilters": "Kokeile hakuehtojen tai suodattimien muuttamista",
+  "checkBackLaterForNewApps": "Tarkista myöhemmin uudet sovellukset",
+  "pleaseCheckInternetConnectionAndTryAgain": "Tarkista internet-yhteytesi ja yritä uudelleen",
+  "createNewApp": "Luo uusi sovellus",
+  "buildSubmitCustomOmiApp": "Rakenna ja lähetä mukautettu Omi-sovelluksesi",
+  "submittingYourApp": "Lähetetään sovellustasi...",
+  "preparingFormForYou": "Valmistellaan lomaketta sinulle...",
+  "appDetails": "Sovelluksen tiedot",
+  "paymentDetails": "Maksutiedot",
+  "previewAndScreenshots": "Esikatselu ja kuvakaappaukset",
+  "appCapabilities": "Sovelluksen ominaisuudet",
+  "aiPrompts": "Tekoälykehotukset",
+  "chatPrompt": "Chat-kehote",
+  "chatPromptPlaceholder": "Olet mahtava sovellus, tehtäväsi on vastata käyttäjien kyselyihin ja saada heidät tuntemaan olonsa hyväksi...",
+  "conversationPrompt": "Keskustelukehote",
+  "conversationPromptPlaceholder": "Olet mahtava sovellus, saat keskustelun litteroinnin ja yhteenvedon...",
+  "notificationScopes": "Ilmoitusalueet",
+  "appPrivacyAndTerms": "Sovelluksen tietosuoja ja ehdot",
+  "makeMyAppPublic": "Tee sovelluksestani julkinen",
+  "submitAppTermsAgreement": "Lähettämällä tämän sovelluksen hyväksyn Omi AI:n käyttöehdot ja tietosuojakäytännön",
+  "submitApp": "Lähetä sovellus",
+  "needHelpGettingStarted": "Tarvitsetko apua aloittamiseen?",
+  "clickHereForAppBuildingGuides": "Napsauta tästä sovelluksen rakentamisohjeiden ja dokumentaation saamiseksi",
+  "submitAppQuestion": "Lähetetäänkö sovellus?",
+  "submitAppPublicDescription": "Sovelluksesi tarkistetaan ja julkaistaan. Voit alkaa käyttää sitä heti, jopa tarkistuksen aikana!",
+  "submitAppPrivateDescription": "Sovelluksesi tarkistetaan ja asetetaan saatavillesi yksityisesti. Voit alkaa käyttää sitä heti, jopa tarkistuksen aikana!",
+  "startEarning": "Aloita ansaitseminen! 💰",
+  "connectStripeOrPayPal": "Yhdistä Stripe tai PayPal vastaanottaaksesi maksuja sovelluksestasi.",
+  "connectNow": "Yhdistä nyt",
+  "installsCount": "{count}+ asennusta",
+  "uninstallApp": "Poista sovellus",
+  "subscribe": "Tilaa",
+  "dataAccessNotice": "Tietojen käyttöilmoitus",
+  "dataAccessWarning": "Tämä sovellus käyttää tietojasi. Omi AI ei ole vastuussa siitä, miten tietojasi käytetään, muokataan tai poistetaan tällä sovelluksella",
+  "installApp": "Asenna sovellus",
+  "betaTesterNotice": "Olet tämän sovelluksen beta-testaaja. Se ei ole vielä julkinen. Se tulee julkiseksi hyväksynnän jälkeen.",
+  "appUnderReviewOwner": "Sovelluksesi on tarkistettavana ja näkyvissä vain sinulle. Se tulee julkiseksi hyväksynnän jälkeen.",
+  "appRejectedNotice": "Sovelluksesi on hylätty. Päivitä sovelluksen tiedot ja lähetä se uudelleen tarkistettavaksi.",
+  "setupSteps": "Asennusvaiheet",
+  "setupInstructions": "Asennusohjeet",
+  "integrationInstructions": "Integrointiohjeet",
+  "preview": "Esikatselu",
+  "aboutTheApp": "Tietoja sovelluksesta",
+  "aboutThePersona": "Tietoja persoonasta",
+  "chatPersonality": "Chatin persoonallisuus",
+  "ratingsAndReviews": "Arviot ja arvostelut",
+  "noRatings": "ei arvioita",
+  "ratingsCount": "{count}+ arvioita",
+  "errorActivatingApp": "Virhe sovelluksen aktivoinnissa",
+  "integrationSetupRequired": "Jos tämä on integraatiosovellus, varmista että asennus on valmis.",
+  "installed": "Asennettu"
 }

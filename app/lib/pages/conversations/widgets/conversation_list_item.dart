@@ -15,6 +15,7 @@ import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -81,9 +82,9 @@ class _ConversationListItemState extends State<ConversationListItem> {
               // Show feedback that this conversation cannot be merged
               HapticFeedback.lightImpact();
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('This conversation cannot be merged (locked or already merging)'),
-                  duration: Duration(seconds: 2),
+                SnackBar(
+                  content: Text(context.l10n.conversationCannotBeMerged),
+                  duration: const Duration(seconds: 2),
                 ),
               );
               return;

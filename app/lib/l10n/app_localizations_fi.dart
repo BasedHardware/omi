@@ -84,7 +84,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get errorProcessingConversation => 'Virhe keskustelun käsittelyssä. Yritä myöhemmin uudelleen.';
 
   @override
-  String get noInternetConnection => 'Tarkista internet-yhteytesi ja yritä uudelleen.';
+  String get noInternetConnection => 'Ei internet-yhteyttä';
 
   @override
   String get unableToDeleteConversation => 'Keskustelun poisto ei onnistu';
@@ -169,7 +169,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get disconnected => 'Yhteys katkaistu';
 
   @override
-  String get searching => 'Etsitään';
+  String get searching => 'Haetaan...';
 
   @override
   String get connectDevice => 'Yhdistä laite';
@@ -220,7 +220,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get syncingBackground => 'Jatkamme nauhoitusten synkronointia taustalla.';
 
   @override
-  String get noConversationsYet => 'Ei vielä keskusteluja.';
+  String get noConversationsYet => 'Ei vielä keskusteluja';
 
   @override
   String get noStarredConversations => 'Ei vielä tähdellä merkittyjä keskusteluja.';
@@ -229,7 +229,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get starConversationHint => 'Merkitäksesi keskustelun tähdellä, avaa se ja napauta tähti-kuvaketta otsikossa.';
 
   @override
-  String get searchConversations => 'Etsi keskusteluja';
+  String get searchConversations => 'Etsi keskusteluja...';
 
   @override
   String selectedCount(int count, Object s) {
@@ -308,7 +308,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get buildAndShareApp => 'Rakenna ja jaa oma sovelluksesi';
 
   @override
-  String get searchApps => 'Etsi yli 1500 sovelluksesta';
+  String get searchApps => 'Etsi sovelluksia...';
 
   @override
   String get myApps => 'Omat sovellukset';
@@ -480,7 +480,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deviceName => 'Laitteen nimi';
 
   @override
-  String get deviceId => 'Laitetunnus';
+  String get deviceId => 'Laitteen tunnus';
 
   @override
   String get firmware => 'Laiteohjelmisto';
@@ -519,7 +519,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get disconnectDevice => 'Katkaise laitteen yhteys';
 
   @override
-  String get unpairDevice => 'Pura laitepari';
+  String get unpairDevice => 'Poista laitteen pariliitos';
 
   @override
   String get unpairAndForget => 'Pura laitepari ja unohda laite';
@@ -529,7 +529,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get deviceUnpairedMessage =>
-      'Laitepari purettu. Siirry kohtaan Asetukset > Bluetooth ja unohda laite viimeistelläksesi purkamisen.';
+      'Laitteen pariliitos poistettu. Siirry Asetukset > Bluetooth ja unohda laite pariliitoksen poistamisen viimeistelemiseksi.';
 
   @override
   String get unpairDialogTitle => 'Pura laitepari';
@@ -747,7 +747,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get upgrade => 'Päivitä';
 
   @override
-  String get upgradeToUnlimited => 'Päivitä rajoittamattomaan';
+  String get upgradeToUnlimited => 'Päivitä rajattomaksi';
 
   @override
   String basicPlanDesc(int limit) {
@@ -1373,7 +1373,7 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get yesterday => 'eilen';
+  String get yesterday => 'Eilen';
 
   @override
   String daysAgo(int count) {
@@ -1610,7 +1610,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get saveChanges => 'Tallenna muutokset';
 
   @override
-  String get resetToDefault => 'Palauta oletuksiin';
+  String get resetToDefault => 'Palauta oletusarvoon';
 
   @override
   String get viewTemplate => 'Näytä malli';
@@ -1988,10 +1988,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get actionItemCompleted => 'Tehtävä suoritettu';
 
   @override
-  String get deleteActionItemTitle => 'Poista tehtävä';
+  String get deleteActionItemTitle => 'Poista toimintokohde';
 
   @override
-  String get deleteActionItemMessage => 'Haluatko varmasti poistaa tämän tehtävän?';
+  String get deleteActionItemMessage => 'Haluatko varmasti poistaa tämän toimintokohteen?';
 
   @override
   String get deleteSelectedItemsTitle => 'Poista valitut kohteet';
@@ -2169,7 +2169,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get failedToCreateActionItem => 'Tehtävän luonti epäonnistui';
 
   @override
-  String get dueDate => 'Eräpäivä';
+  String get dueDate => 'Määräpäivä';
 
   @override
   String get time => 'Aika';
@@ -2199,10 +2199,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get completed => 'Suoritettu';
 
   @override
-  String get markComplete => 'Merkitse suoritetuksi';
+  String get markComplete => 'Merkitse valmiiksi';
 
   @override
-  String get actionItemDeleted => 'Tehtävä poistettu';
+  String get actionItemDeleted => 'Toimintokohde poistettu';
 
   @override
   String get failedToDeleteActionItem => 'Tehtävän poisto epäonnistui';
@@ -2225,4 +2225,675 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get languageSettingsHelperText =>
       'Sovelluksen kieli muuttaa valikkoja ja painikkeita. Puheen kieli vaikuttaa siihen, miten tallenteet litteroidaan.';
+
+  @override
+  String get translationNotice => 'Käännösilmoitus';
+
+  @override
+  String get translationNoticeMessage =>
+      'Omi kääntää keskustelut ensisijaiselle kielellesi. Päivitä se milloin tahansa kohdassa Asetukset → Profiilit.';
+
+  @override
+  String get pleaseCheckInternetConnection => 'Tarkista internet-yhteytesi ja yritä uudelleen';
+
+  @override
+  String get pleaseSelectReason => 'Valitse syy';
+
+  @override
+  String get tellUsMoreWhatWentWrong => 'Kerro meille lisää siitä, mikä meni pieleen...';
+
+  @override
+  String get selectText => 'Valitse teksti';
+
+  @override
+  String maximumGoalsAllowed(int count) {
+    return 'Enintään $count tavoitetta sallittu';
+  }
+
+  @override
+  String get conversationCannotBeMerged => 'Tätä keskustelua ei voi yhdistää (lukittu tai jo yhdistämässä)';
+
+  @override
+  String get pleaseEnterFolderName => 'Anna kansion nimi';
+
+  @override
+  String get failedToCreateFolder => 'Kansion luominen epäonnistui';
+
+  @override
+  String get failedToUpdateFolder => 'Kansion päivittäminen epäonnistui';
+
+  @override
+  String get folderName => 'Kansion nimi';
+
+  @override
+  String get descriptionOptional => 'Kuvaus (valinnainen)';
+
+  @override
+  String get failedToDeleteFolder => 'Kansion poistaminen epäonnistui';
+
+  @override
+  String get editFolder => 'Muokkaa kansiota';
+
+  @override
+  String get deleteFolder => 'Poista kansio';
+
+  @override
+  String get transcriptCopiedToClipboard => 'Litterointi kopioitu leikepöydälle';
+
+  @override
+  String get summaryCopiedToClipboard => 'Yhteenveto kopioitu leikepöydälle';
+
+  @override
+  String get conversationUrlCouldNotBeShared => 'Keskustelun URL-osoitetta ei voitu jakaa.';
+
+  @override
+  String get urlCopiedToClipboard => 'URL kopioitu leikepöydälle';
+
+  @override
+  String get exportTranscript => 'Vie litterointi';
+
+  @override
+  String get exportSummary => 'Vie yhteenveto';
+
+  @override
+  String get exportButton => 'Vie';
+
+  @override
+  String get actionItemsCopiedToClipboard => 'Toimintakohteet kopioitu leikepöydälle';
+
+  @override
+  String get summarize => 'Tiivistä';
+
+  @override
+  String get generateSummary => 'Luo yhteenveto';
+
+  @override
+  String get conversationNotFoundOrDeleted => 'Keskustelua ei löytynyt tai se on poistettu';
+
+  @override
+  String get deleteMemory => 'Poista muisto?';
+
+  @override
+  String get thisActionCannotBeUndone => 'Tätä toimintoa ei voi peruuttaa.';
+
+  @override
+  String memoriesCount(int count) {
+    return '$count muistoa';
+  }
+
+  @override
+  String get noMemoriesInCategory => 'Tässä kategoriassa ei ole vielä muistoja';
+
+  @override
+  String get addYourFirstMemory => 'Lisää ensimmäinen muistosi';
+
+  @override
+  String get firmwareDisconnectUsb => 'Irrota USB';
+
+  @override
+  String get firmwareUsbWarning => 'USB-yhteys päivitysten aikana voi vahingoittaa laitettasi.';
+
+  @override
+  String get firmwareBatteryAbove15 => 'Akku yli 15%';
+
+  @override
+  String get firmwareEnsureBattery => 'Varmista, että laitteessasi on 15% akkua.';
+
+  @override
+  String get firmwareStableConnection => 'Vakaa yhteys';
+
+  @override
+  String get firmwareConnectWifi => 'Yhdistä WiFi:iin tai mobiiliverkkoon.';
+
+  @override
+  String failedToStartUpdate(String error) {
+    return 'Päivityksen aloitus epäonnistui: $error';
+  }
+
+  @override
+  String get beforeUpdateMakeSure => 'Ennen päivitystä varmista:';
+
+  @override
+  String get confirmed => 'Vahvistettu!';
+
+  @override
+  String get release => 'Vapauta';
+
+  @override
+  String get slideToUpdate => 'Liu\'uta päivittääksesi';
+
+  @override
+  String copiedToClipboard(String title) {
+    return '$title kopioitu leikepöydälle';
+  }
+
+  @override
+  String get batteryLevel => 'Akun taso';
+
+  @override
+  String get productUpdate => 'Tuotepäivitys';
+
+  @override
+  String get offline => 'Offline-tilassa';
+
+  @override
+  String get available => 'Saatavilla';
+
+  @override
+  String get unpairDeviceDialogTitle => 'Poista laitteen pariliitos';
+
+  @override
+  String get unpairDeviceDialogMessage =>
+      'Tämä poistaa laitteen pariliitoksen, jotta se voidaan yhdistää toiseen puhelimeen. Sinun on siirryttävä Asetukset > Bluetooth ja unohdettava laite prosessin viimeistelemiseksi.';
+
+  @override
+  String get unpair => 'Poista pariliitos';
+
+  @override
+  String get unpairAndForgetDevice => 'Poista pariliitos ja unohda laite';
+
+  @override
+  String get unknownDevice => 'Tuntematon laite';
+
+  @override
+  String get unknown => 'Tuntematon';
+
+  @override
+  String get productName => 'Tuotteen nimi';
+
+  @override
+  String get serialNumber => 'Sarjanumero';
+
+  @override
+  String get connected => 'Yhdistetty';
+
+  @override
+  String get privacyPolicyTitle => 'Tietosuojakäytäntö';
+
+  @override
+  String get omiSttProvider => 'Omi';
+
+  @override
+  String labelCopied(String label) {
+    return '$label copied';
+  }
+
+  @override
+  String get noApiKeysYet => 'No API keys yet';
+
+  @override
+  String get createKeyToGetStarted => 'Create a key to get started';
+
+  @override
+  String get persona => 'Persona';
+
+  @override
+  String get configureYourAiPersona => 'Configure your AI persona';
+
+  @override
+  String get configureSttProvider => 'Configure STT provider';
+
+  @override
+  String get setWhenConversationsAutoEnd => 'Set when conversations auto-end';
+
+  @override
+  String get importDataFromOtherSources => 'Import data from other sources';
+
+  @override
+  String get debugAndDiagnostics => 'Debug & Diagnostics';
+
+  @override
+  String get autoDeletesAfter3Days => 'Auto-deletes after 3 days.';
+
+  @override
+  String get helpsDiagnoseIssues => 'Helps diagnose issues';
+
+  @override
+  String get exportStartedMessage => 'Export started. This may take a few seconds...';
+
+  @override
+  String get exportConversationsToJson => 'Export conversations to a JSON file';
+
+  @override
+  String get knowledgeGraphDeletedSuccess => 'Knowledge Graph deleted successfully';
+
+  @override
+  String failedToDeleteGraph(String error) {
+    return 'Failed to delete graph: $error';
+  }
+
+  @override
+  String get clearAllNodesAndConnections => 'Clear all nodes and connections';
+
+  @override
+  String get addToClaudeDesktopConfig => 'Add to claude_desktop_config.json';
+
+  @override
+  String get connectAiAssistantsToData => 'Connect AI assistants to your data';
+
+  @override
+  String get useYourMcpApiKey => 'Use your MCP API key';
+
+  @override
+  String get realTimeTranscript => 'Real-time Transcript';
+
+  @override
+  String get experimental => 'Experimental';
+
+  @override
+  String get transcriptionDiagnostics => 'Transcription Diagnostics';
+
+  @override
+  String get detailedDiagnosticMessages => 'Detailed diagnostic messages';
+
+  @override
+  String get autoCreateSpeakers => 'Auto-create Speakers';
+
+  @override
+  String get autoCreateWhenNameDetected => 'Auto-create when name detected';
+
+  @override
+  String get followUpQuestions => 'Follow-up Questions';
+
+  @override
+  String get suggestQuestionsAfterConversations => 'Suggest questions after conversations';
+
+  @override
+  String get goalTracker => 'Goal Tracker';
+
+  @override
+  String get trackPersonalGoalsOnHomepage => 'Track your personal goals on homepage';
+
+  @override
+  String get dailyReflection => 'Daily Reflection';
+
+  @override
+  String get get9PmReminderToReflect => 'Get a 9 PM reminder to reflect on your day';
+
+  @override
+  String get actionItemDescriptionCannotBeEmpty => 'Toimintokohteen kuvaus ei voi olla tyhjä';
+
+  @override
+  String get saved => 'Tallennettu';
+
+  @override
+  String get overdue => 'Myöhässä';
+
+  @override
+  String get failedToUpdateDueDate => 'Eräpäivän päivittäminen epäonnistui';
+
+  @override
+  String get markIncomplete => 'Merkitse keskeneräiseksi';
+
+  @override
+  String get editDueDate => 'Muokkaa eräpäivää';
+
+  @override
+  String get setDueDate => 'Aseta määräpäivä';
+
+  @override
+  String get clearDueDate => 'Tyhjennä eräpäivä';
+
+  @override
+  String get failedToClearDueDate => 'Eräpäivän tyhjentäminen epäonnistui';
+
+  @override
+  String get mondayAbbr => 'Ma';
+
+  @override
+  String get tuesdayAbbr => 'Ti';
+
+  @override
+  String get wednesdayAbbr => 'Ke';
+
+  @override
+  String get thursdayAbbr => 'To';
+
+  @override
+  String get fridayAbbr => 'Pe';
+
+  @override
+  String get saturdayAbbr => 'La';
+
+  @override
+  String get sundayAbbr => 'Su';
+
+  @override
+  String get howDoesItWork => 'Miten se toimii?';
+
+  @override
+  String get sdCardSyncDescription => 'SD-kortin synkronointi tuo muistosi SD-kortilta sovellukseen';
+
+  @override
+  String get checksForAudioFiles => 'Tarkistaa äänitiedostot SD-kortilla';
+
+  @override
+  String get omiSyncsAudioFiles => 'Omi synkronoi sitten äänitiedostot palvelimen kanssa';
+
+  @override
+  String get serverProcessesAudio => 'Palvelin käsittelee äänitiedostot ja luo muistoja';
+
+  @override
+  String get youreAllSet => 'Olet valmis!';
+
+  @override
+  String get welcomeToOmiDescription =>
+      'Tervetuloa Omiin! AI-kumppanisi on valmis auttamaan sinua keskusteluissa, tehtävissä ja muussa.';
+
+  @override
+  String get startUsingOmi => 'Aloita Omin käyttö';
+
+  @override
+  String get back => 'Takaisin';
+
+  @override
+  String get keyboardShortcuts => 'Pikanäppäimet';
+
+  @override
+  String get toggleControlBar => 'Vaihda ohjausp alkki';
+
+  @override
+  String get pressKeys => 'Paina näppäimiä...';
+
+  @override
+  String get cmdRequired => '⌘ vaaditaan';
+
+  @override
+  String get invalidKey => 'Virheellinen näppäin';
+
+  @override
+  String get space => 'Välilyönti';
+
+  @override
+  String get search => 'Etsi';
+
+  @override
+  String get searchPlaceholder => 'Etsi...';
+
+  @override
+  String get untitledConversation => 'Nimeämätön keskustelu';
+
+  @override
+  String countRemaining(String count) {
+    return '$count jäljellä';
+  }
+
+  @override
+  String get addGoal => 'Lisää tavoite';
+
+  @override
+  String get editGoal => 'Muokkaa tavoitetta';
+
+  @override
+  String get icon => 'Kuvake';
+
+  @override
+  String get goalTitle => 'Tavoitteen otsikko';
+
+  @override
+  String get current => 'Nykyinen';
+
+  @override
+  String get target => 'Tavoite';
+
+  @override
+  String get saveGoal => 'Tallenna';
+
+  @override
+  String get goals => 'Tavoitteet';
+
+  @override
+  String get tapToAddGoal => 'Napauta lisätäksesi tavoitteen';
+
+  @override
+  String get welcomeBack => 'Tervetuloa takaisin';
+
+  @override
+  String get yourConversations => 'Keskustelusi';
+
+  @override
+  String get reviewAndManageConversations => 'Tarkista ja hallitse tallennettuja keskustelujasi';
+
+  @override
+  String get startCapturingConversations => 'Aloita keskustelujen tallentaminen Omi-laitteellasi nähdäksesi ne täällä.';
+
+  @override
+  String get useMobileAppToCapture => 'Käytä mobiilisovellusta äänen tallentamiseen';
+
+  @override
+  String get conversationsProcessedAutomatically => 'Keskustelut käsitellään automaattisesti';
+
+  @override
+  String get getInsightsInstantly => 'Saat oivalluksia ja yhteenvetoja välittömästi';
+
+  @override
+  String get showAll => 'Näytä kaikki →';
+
+  @override
+  String get noTasksForToday => 'Ei tehtäviä tänään.\\nKysy Omilta lisää tehtäviä tai luo ne manuaalisesti.';
+
+  @override
+  String get dailyScore => 'PÄIVITTÄINEN PISTEET';
+
+  @override
+  String get dailyScoreDescription => 'Pisteet, jotka auttavat keskittymään paremmin toteutukseen.';
+
+  @override
+  String get searchResults => 'Hakutulokset';
+
+  @override
+  String get actionItems => 'Toimintakohdat';
+
+  @override
+  String get tasksToday => 'Tänään';
+
+  @override
+  String get tasksTomorrow => 'Huomenna';
+
+  @override
+  String get tasksNoDeadline => 'Ei määräaikaa';
+
+  @override
+  String get tasksLater => 'Myöhemmin';
+
+  @override
+  String get loadingTasks => 'Ladataan tehtäviä...';
+
+  @override
+  String get tasks => 'Tehtävät';
+
+  @override
+  String get swipeTasksToIndent => 'Pyyhkäise tehtäviä sisennykseen, vedä kategorioiden välillä';
+
+  @override
+  String get create => 'Luo';
+
+  @override
+  String get noTasksYet => 'Ei tehtäviä vielä';
+
+  @override
+  String get tasksFromConversationsWillAppear =>
+      'Keskusteluistasi tulevat tehtävät näkyvät tässä.\nNapsauta Luo lisätäksesi yhden manuaalisesti.';
+
+  @override
+  String get monthJan => 'Tammi';
+
+  @override
+  String get monthFeb => 'Helmi';
+
+  @override
+  String get monthMar => 'Maalis';
+
+  @override
+  String get monthApr => 'Huhti';
+
+  @override
+  String get monthMay => 'Touko';
+
+  @override
+  String get monthJun => 'Kesä';
+
+  @override
+  String get monthJul => 'Heinä';
+
+  @override
+  String get monthAug => 'Elo';
+
+  @override
+  String get monthSep => 'Syys';
+
+  @override
+  String get monthOct => 'Loka';
+
+  @override
+  String get monthNov => 'Marras';
+
+  @override
+  String get monthDec => 'Joulu';
+
+  @override
+  String get timePM => 'IP';
+
+  @override
+  String get timeAM => 'AP';
+
+  @override
+  String get actionItemUpdatedSuccessfully => 'Tehtävä päivitetty onnistuneesti';
+
+  @override
+  String get actionItemCreatedSuccessfully => 'Tehtävä luotu onnistuneesti';
+
+  @override
+  String get actionItemDeletedSuccessfully => 'Tehtävä poistettu onnistuneesti';
+
+  @override
+  String get deleteActionItem => 'Poista tehtävä';
+
+  @override
+  String get deleteActionItemConfirmation => 'Haluatko varmasti poistaa tämän tehtävän? Tätä toimintoa ei voi perua.';
+
+  @override
+  String get enterActionItemDescription => 'Anna tehtävän kuvaus...';
+
+  @override
+  String get markAsCompleted => 'Merkitse valmiiksi';
+
+  @override
+  String get setDueDateAndTime => 'Aseta määräpäivä ja aika';
+
+  @override
+  String get reloadingApps => 'Ladataan sovelluksia uudelleen...';
+
+  @override
+  String get loadingApps => 'Ladataan sovelluksia...';
+
+  @override
+  String get browseInstallCreateApps => 'Selaa, asenna ja luo sovelluksia';
+
+  @override
+  String get all => 'Kaikki';
+
+  @override
+  String get open => 'Avaa';
+
+  @override
+  String get install => 'Asenna';
+
+  @override
+  String get noAppsAvailable => 'Ei saatavilla olevia sovelluksia';
+
+  @override
+  String get unableToLoadApps => 'Sovellusten lataus epäonnistui';
+
+  @override
+  String get tryAdjustingSearchTermsOrFilters => 'Kokeile hakuehtojen tai suodattimien muuttamista';
+
+  @override
+  String get checkBackLaterForNewApps => 'Tarkista myöhemmin uudet sovellukset';
+
+  @override
+  String get pleaseCheckInternetConnectionAndTryAgain => 'Tarkista internet-yhteytesi ja yritä uudelleen';
+
+  @override
+  String get createNewApp => 'Luo uusi sovellus';
+
+  @override
+  String get buildSubmitCustomOmiApp => 'Rakenna ja lähetä mukautettu Omi-sovelluksesi';
+
+  @override
+  String get submittingYourApp => 'Lähetetään sovellustasi...';
+
+  @override
+  String get preparingFormForYou => 'Valmistellaan lomaketta sinulle...';
+
+  @override
+  String get appDetails => 'Sovelluksen tiedot';
+
+  @override
+  String get paymentDetails => 'Maksutiedot';
+
+  @override
+  String get previewAndScreenshots => 'Esikatselu ja kuvakaappaukset';
+
+  @override
+  String get appCapabilities => 'Sovelluksen ominaisuudet';
+
+  @override
+  String get aiPrompts => 'Tekoälykehotukset';
+
+  @override
+  String get chatPrompt => 'Chat-kehote';
+
+  @override
+  String get chatPromptPlaceholder =>
+      'Olet mahtava sovellus, tehtäväsi on vastata käyttäjien kyselyihin ja saada heidät tuntemaan olonsa hyväksi...';
+
+  @override
+  String get conversationPrompt => 'Keskustelukehote';
+
+  @override
+  String get conversationPromptPlaceholder => 'Olet mahtava sovellus, saat keskustelun litteroinnin ja yhteenvedon...';
+
+  @override
+  String get notificationScopes => 'Ilmoitusalueet';
+
+  @override
+  String get appPrivacyAndTerms => 'Sovelluksen tietosuoja ja ehdot';
+
+  @override
+  String get makeMyAppPublic => 'Tee sovelluksestani julkinen';
+
+  @override
+  String get submitAppTermsAgreement =>
+      'Lähettämällä tämän sovelluksen hyväksyn Omi AI:n käyttöehdot ja tietosuojakäytännön';
+
+  @override
+  String get submitApp => 'Lähetä sovellus';
+
+  @override
+  String get needHelpGettingStarted => 'Tarvitsetko apua aloittamiseen?';
+
+  @override
+  String get clickHereForAppBuildingGuides =>
+      'Napsauta tästä sovelluksen rakentamisohjeiden ja dokumentaation saamiseksi';
+
+  @override
+  String get submitAppQuestion => 'Lähetetäänkö sovellus?';
+
+  @override
+  String get submitAppPublicDescription =>
+      'Sovelluksesi tarkistetaan ja julkaistaan. Voit alkaa käyttää sitä heti, jopa tarkistuksen aikana!';
+
+  @override
+  String get submitAppPrivateDescription =>
+      'Sovelluksesi tarkistetaan ja asetetaan saatavillesi yksityisesti. Voit alkaa käyttää sitä heti, jopa tarkistuksen aikana!';
+
+  @override
+  String get startEarning => 'Aloita ansaitseminen! 💰';
+
+  @override
+  String get connectStripeOrPayPal => 'Yhdistä Stripe tai PayPal vastaanottaaksesi maksuja sovelluksestasi.';
+
+  @override
+  String get connectNow => 'Yhdistä nyt';
 }

@@ -86,7 +86,7 @@ class AppLocalizationsHu extends AppLocalizations {
       'Hiba történt a beszélgetés feldolgozása során. Kérlek, próbáld újra később.';
 
   @override
-  String get noInternetConnection => 'Kérlek, ellenőrizd az internetkapcsolatot, és próbáld újra.';
+  String get noInternetConnection => 'Nincs internetkapcsolat';
 
   @override
   String get unableToDeleteConversation => 'Nem lehet törölni a beszélgetést';
@@ -101,7 +101,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get errorCopied => 'Hibaüzenet vágólapra másolva';
 
   @override
-  String get remaining => 'Hátralévő';
+  String get remaining => 'Hátralevő';
 
   @override
   String get loading => 'Betöltés...';
@@ -163,16 +163,16 @@ class AppLocalizationsHu extends AppLocalizations {
   String get couldNotAccessFile => 'Nem sikerült hozzáférni a kiválasztott fájlhoz';
 
   @override
-  String get askOmi => 'Kérdezd Omi-t';
+  String get askOmi => 'Kérdezd meg Omit';
 
   @override
   String get done => 'Kész';
 
   @override
-  String get disconnected => 'Leválasztva';
+  String get disconnected => 'Megszakítva';
 
   @override
-  String get searching => 'Keresés';
+  String get searching => 'Keresés...';
 
   @override
   String get connectDevice => 'Eszköz csatlakoztatása';
@@ -223,7 +223,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get syncingBackground => 'Folytatjuk a felvételek szinkronizálását a háttérben.';
 
   @override
-  String get noConversationsYet => 'Még nincsenek beszélgetések.';
+  String get noConversationsYet => 'Még nincsenek beszélgetések';
 
   @override
   String get noStarredConversations => 'Még nincsenek csillagozott beszélgetések.';
@@ -233,7 +233,7 @@ class AppLocalizationsHu extends AppLocalizations {
       'Beszélgetés csillagozásához nyisd meg, és érintsd meg a csillag ikont a fejlécben.';
 
   @override
-  String get searchConversations => 'Beszélgetések keresése';
+  String get searchConversations => 'Beszélgetések keresése...';
 
   @override
   String selectedCount(int count, Object s) {
@@ -300,7 +300,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get apps => 'Alkalmazások';
 
   @override
-  String get noAppsFound => 'Nem találhatók alkalmazások';
+  String get noAppsFound => 'Nem található alkalmazás';
 
   @override
   String get tryAdjustingSearch => 'Próbáld módosítani a keresést vagy a szűrőket';
@@ -312,10 +312,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get buildAndShareApp => 'Építsd meg és oszd meg egyedi alkalmazásodat';
 
   @override
-  String get searchApps => 'Keresés 1500+ alkalmazás között';
+  String get searchApps => 'Alkalmazások keresése...';
 
   @override
-  String get myApps => 'Saját alkalmazások';
+  String get myApps => 'Alkalmazásaim';
 
   @override
   String get installedApps => 'Telepített alkalmazások';
@@ -524,7 +524,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get disconnectDevice => 'Eszköz leválasztása';
 
   @override
-  String get unpairDevice => 'Eszköz párosításának megszüntetése';
+  String get unpairDevice => 'Eszköz párosítás megszüntetése';
 
   @override
   String get unpairAndForget => 'Párosítás megszüntetése és elfelejtés';
@@ -534,7 +534,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get deviceUnpairedMessage =>
-      'Eszköz párosítása megszüntetve. Menj a Beállítások > Bluetooth menübe, és felejtsd el az eszközt a folyamat befejezéséhez.';
+      'Eszköz párosítása megszüntetve. Menjen a Beállítások > Bluetooth menüpontba, és felejtse el az eszközt a párosítás megszüntetésének befejezéséhez.';
 
   @override
   String get unpairDialogTitle => 'Eszköz párosításának megszüntetése';
@@ -1385,7 +1385,7 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get yesterday => 'tegnap';
+  String get yesterday => 'Tegnap';
 
   @override
   String daysAgo(int count) {
@@ -1623,7 +1623,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get saveChanges => 'Változtatások mentése';
 
   @override
-  String get resetToDefault => 'Alaphelyzetbe állítás';
+  String get resetToDefault => 'Visszaállítás alapértelmezettre';
 
   @override
   String get viewTemplate => 'Sablon megtekintése';
@@ -1738,7 +1738,7 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get dontShowAgain => 'Ne mutasd újra';
+  String get dontShowAgain => 'Ne jelenjen meg újra';
 
   @override
   String get iUnderstand => 'Megértettem';
@@ -2005,10 +2005,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get actionItemCompleted => 'Teendő befejezve';
 
   @override
-  String get deleteActionItemTitle => 'Teendő törlése';
+  String get deleteActionItemTitle => 'Műveleti elem törlése';
 
   @override
-  String get deleteActionItemMessage => 'Biztosan törölni szeretnéd ezt a teendőt?';
+  String get deleteActionItemMessage => 'Biztosan törölni szeretné ezt a műveleti elemet?';
 
   @override
   String get deleteSelectedItemsTitle => 'Kiválasztott elemek törlése';
@@ -2162,10 +2162,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get retry => 'Újrapróbálkozás';
 
   @override
-  String get createActionItem => 'Teendő létrehozása';
+  String get createActionItem => 'Feladat létrehozása';
 
   @override
-  String get editActionItem => 'Teendő szerkesztése';
+  String get editActionItem => 'Feladat szerkesztése';
 
   @override
   String get actionItemDescriptionHint => 'Mit kell elvégezni?';
@@ -2177,13 +2177,13 @@ class AppLocalizationsHu extends AppLocalizations {
   String get actionItemUpdated => 'Teendő frissítve';
 
   @override
-  String get failedToUpdateActionItem => 'Teendő frissítése sikertelen';
+  String get failedToUpdateActionItem => 'A feladat frissítése sikertelen';
 
   @override
   String get actionItemCreated => 'Teendő létrehozva';
 
   @override
-  String get failedToCreateActionItem => 'Teendő létrehozása sikertelen';
+  String get failedToCreateActionItem => 'A feladat létrehozása sikertelen';
 
   @override
   String get dueDate => 'Határidő';
@@ -2216,13 +2216,13 @@ class AppLocalizationsHu extends AppLocalizations {
   String get completed => 'Befejezve';
 
   @override
-  String get markComplete => 'Befejezettként megjelölés';
+  String get markComplete => 'Megjelölés befejezettként';
 
   @override
-  String get actionItemDeleted => 'Teendő törölve';
+  String get actionItemDeleted => 'Műveleti elem törölve';
 
   @override
-  String get failedToDeleteActionItem => 'Teendő törlése sikertelen';
+  String get failedToDeleteActionItem => 'A feladat törlése sikertelen';
 
   @override
   String get deleteActionItemConfirmTitle => 'Teendő törlése';
@@ -2242,4 +2242,679 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get languageSettingsHelperText =>
       'Az alkalmazás nyelve megváltoztatja a menüket és gombokat. A beszéd nyelve befolyásolja, hogyan íródnak át a felvételei.';
+
+  @override
+  String get translationNotice => 'Fordítási értesítés';
+
+  @override
+  String get translationNoticeMessage =>
+      'Az Omi az elsődleges nyelvedre fordítja a beszélgetéseket. Bármikor frissítheted a Beállítások → Profilok menüpontban.';
+
+  @override
+  String get pleaseCheckInternetConnection => 'Kérjük, ellenőrizd az internetkapcsolatot, és próbáld újra';
+
+  @override
+  String get pleaseSelectReason => 'Kérjük, válassz egy okot';
+
+  @override
+  String get tellUsMoreWhatWentWrong => 'Mondj el többet arról, mi ment rosszul...';
+
+  @override
+  String get selectText => 'Szöveg kijelölése';
+
+  @override
+  String maximumGoalsAllowed(int count) {
+    return 'Maximum $count cél engedélyezett';
+  }
+
+  @override
+  String get conversationCannotBeMerged => 'Ez a beszélgetés nem egyesíthető (zárolva vagy már egyesítés alatt)';
+
+  @override
+  String get pleaseEnterFolderName => 'Kérjük, adj meg egy mappanevet';
+
+  @override
+  String get failedToCreateFolder => 'A mappa létrehozása sikertelen';
+
+  @override
+  String get failedToUpdateFolder => 'A mappa frissítése sikertelen';
+
+  @override
+  String get folderName => 'Mappa neve';
+
+  @override
+  String get descriptionOptional => 'Leírás (opcionális)';
+
+  @override
+  String get failedToDeleteFolder => 'A mappa törlése sikertelen';
+
+  @override
+  String get editFolder => 'Mappa szerkesztése';
+
+  @override
+  String get deleteFolder => 'Mappa törlése';
+
+  @override
+  String get transcriptCopiedToClipboard => 'Átirat vágólapra másolva';
+
+  @override
+  String get summaryCopiedToClipboard => 'Összefoglaló vágólapra másolva';
+
+  @override
+  String get conversationUrlCouldNotBeShared => 'A beszélgetés URL-je nem osztható meg.';
+
+  @override
+  String get urlCopiedToClipboard => 'URL vágólapra másolva';
+
+  @override
+  String get exportTranscript => 'Átirat exportálása';
+
+  @override
+  String get exportSummary => 'Összefoglaló exportálása';
+
+  @override
+  String get exportButton => 'Exportálás';
+
+  @override
+  String get actionItemsCopiedToClipboard => 'Műveletpontok vágólapra másolva';
+
+  @override
+  String get summarize => 'Összefoglalás';
+
+  @override
+  String get generateSummary => 'Összefoglalás generálása';
+
+  @override
+  String get conversationNotFoundOrDeleted => 'A beszélgetés nem található vagy törölve lett';
+
+  @override
+  String get deleteMemory => 'Emléket törölni?';
+
+  @override
+  String get thisActionCannotBeUndone => 'Ez a művelet nem vonható vissza.';
+
+  @override
+  String memoriesCount(int count) {
+    return '$count emlék';
+  }
+
+  @override
+  String get noMemoriesInCategory => 'Ebben a kategóriában még nincsenek emlékek';
+
+  @override
+  String get addYourFirstMemory => 'Adja hozzá első emlékét';
+
+  @override
+  String get firmwareDisconnectUsb => 'USB leválasztása';
+
+  @override
+  String get firmwareUsbWarning => 'Az USB-kapcsolat a frissítések során károsíthatja az eszközt.';
+
+  @override
+  String get firmwareBatteryAbove15 => 'Akkumulátor 15% felett';
+
+  @override
+  String get firmwareEnsureBattery => 'Győződjön meg róla, hogy az eszköz akkumulátora 15%.';
+
+  @override
+  String get firmwareStableConnection => 'Stabil kapcsolat';
+
+  @override
+  String get firmwareConnectWifi => 'Csatlakozzon WiFi-hez vagy mobilhálózathoz.';
+
+  @override
+  String failedToStartUpdate(String error) {
+    return 'Nem sikerült elindítani a frissítést: $error';
+  }
+
+  @override
+  String get beforeUpdateMakeSure => 'Frissítés előtt győződjön meg:';
+
+  @override
+  String get confirmed => 'Megerősítve!';
+
+  @override
+  String get release => 'Elenged';
+
+  @override
+  String get slideToUpdate => 'Csúsztassa a frissítéshez';
+
+  @override
+  String copiedToClipboard(String title) {
+    return '$title a vágólapra másolva';
+  }
+
+  @override
+  String get batteryLevel => 'Akkumulátor szint';
+
+  @override
+  String get productUpdate => 'Termékfrissítés';
+
+  @override
+  String get offline => 'Offline';
+
+  @override
+  String get available => 'Elérhető';
+
+  @override
+  String get unpairDeviceDialogTitle => 'Eszköz párosítás megszüntetése';
+
+  @override
+  String get unpairDeviceDialogMessage =>
+      'Ez megszünteti az eszköz párosítását, hogy egy másik telefonhoz csatlakozhasson. A Beállítások > Bluetooth menüpontba kell mennie, és el kell felejtenie az eszközt a folyamat befejezéséhez.';
+
+  @override
+  String get unpair => 'Párosítás megszüntetése';
+
+  @override
+  String get unpairAndForgetDevice => 'Párosítás megszüntetése és eszköz elfelejtése';
+
+  @override
+  String get unknownDevice => 'Ismeretlen eszköz';
+
+  @override
+  String get unknown => 'Ismeretlen';
+
+  @override
+  String get productName => 'Termék neve';
+
+  @override
+  String get serialNumber => 'Sorozatszám';
+
+  @override
+  String get connected => 'Csatlakoztatva';
+
+  @override
+  String get privacyPolicyTitle => 'Adatvédelmi irányelvek';
+
+  @override
+  String get omiSttProvider => 'Omi';
+
+  @override
+  String labelCopied(String label) {
+    return '$label copied';
+  }
+
+  @override
+  String get noApiKeysYet => 'No API keys yet';
+
+  @override
+  String get createKeyToGetStarted => 'Create a key to get started';
+
+  @override
+  String get persona => 'Persona';
+
+  @override
+  String get configureYourAiPersona => 'Configure your AI persona';
+
+  @override
+  String get configureSttProvider => 'Configure STT provider';
+
+  @override
+  String get setWhenConversationsAutoEnd => 'Set when conversations auto-end';
+
+  @override
+  String get importDataFromOtherSources => 'Import data from other sources';
+
+  @override
+  String get debugAndDiagnostics => 'Debug & Diagnostics';
+
+  @override
+  String get autoDeletesAfter3Days => 'Auto-deletes after 3 days.';
+
+  @override
+  String get helpsDiagnoseIssues => 'Helps diagnose issues';
+
+  @override
+  String get exportStartedMessage => 'Export started. This may take a few seconds...';
+
+  @override
+  String get exportConversationsToJson => 'Export conversations to a JSON file';
+
+  @override
+  String get knowledgeGraphDeletedSuccess => 'Knowledge Graph deleted successfully';
+
+  @override
+  String failedToDeleteGraph(String error) {
+    return 'Failed to delete graph: $error';
+  }
+
+  @override
+  String get clearAllNodesAndConnections => 'Clear all nodes and connections';
+
+  @override
+  String get addToClaudeDesktopConfig => 'Add to claude_desktop_config.json';
+
+  @override
+  String get connectAiAssistantsToData => 'Connect AI assistants to your data';
+
+  @override
+  String get useYourMcpApiKey => 'Use your MCP API key';
+
+  @override
+  String get realTimeTranscript => 'Real-time Transcript';
+
+  @override
+  String get experimental => 'Experimental';
+
+  @override
+  String get transcriptionDiagnostics => 'Transcription Diagnostics';
+
+  @override
+  String get detailedDiagnosticMessages => 'Detailed diagnostic messages';
+
+  @override
+  String get autoCreateSpeakers => 'Auto-create Speakers';
+
+  @override
+  String get autoCreateWhenNameDetected => 'Auto-create when name detected';
+
+  @override
+  String get followUpQuestions => 'Follow-up Questions';
+
+  @override
+  String get suggestQuestionsAfterConversations => 'Suggest questions after conversations';
+
+  @override
+  String get goalTracker => 'Goal Tracker';
+
+  @override
+  String get trackPersonalGoalsOnHomepage => 'Track your personal goals on homepage';
+
+  @override
+  String get dailyReflection => 'Daily Reflection';
+
+  @override
+  String get get9PmReminderToReflect => 'Get a 9 PM reminder to reflect on your day';
+
+  @override
+  String get actionItemDescriptionCannotBeEmpty => 'A műveleti elem leírása nem lehet üres';
+
+  @override
+  String get saved => 'Mentve';
+
+  @override
+  String get overdue => 'Lejárt határidejű';
+
+  @override
+  String get failedToUpdateDueDate => 'Nem sikerült frissíteni a határidőt';
+
+  @override
+  String get markIncomplete => 'Megjelölés befejezetlen ként';
+
+  @override
+  String get editDueDate => 'Határidő szerkesztése';
+
+  @override
+  String get setDueDate => 'Határidő beállítása';
+
+  @override
+  String get clearDueDate => 'Határidő törlése';
+
+  @override
+  String get failedToClearDueDate => 'Nem sikerült törölni a határidőt';
+
+  @override
+  String get mondayAbbr => 'H';
+
+  @override
+  String get tuesdayAbbr => 'K';
+
+  @override
+  String get wednesdayAbbr => 'Sze';
+
+  @override
+  String get thursdayAbbr => 'Cs';
+
+  @override
+  String get fridayAbbr => 'P';
+
+  @override
+  String get saturdayAbbr => 'Szo';
+
+  @override
+  String get sundayAbbr => 'V';
+
+  @override
+  String get howDoesItWork => 'Hogyan működik?';
+
+  @override
+  String get sdCardSyncDescription =>
+      'Az SD kártya szinkronizálás importálja az emlékeidet az SD kártyáról az alkalmazásba';
+
+  @override
+  String get checksForAudioFiles => 'Ellenőrzi a hangfájlokat az SD kártyán';
+
+  @override
+  String get omiSyncsAudioFiles => 'Az Omi ezután szinkronizálja a hangfájlokat a szerverrel';
+
+  @override
+  String get serverProcessesAudio => 'A szerver feldolgozza a hangfájlokat és emlékeket hoz létre';
+
+  @override
+  String get youreAllSet => 'Készen állsz!';
+
+  @override
+  String get welcomeToOmiDescription =>
+      'Üdvözöljük az Omi-ban! Az AI társad készen áll, hogy segítsen a beszélgetésekben, feladatokban és még sok másban.';
+
+  @override
+  String get startUsingOmi => 'Omi használatának megkezdése';
+
+  @override
+  String get back => 'Vissza';
+
+  @override
+  String get keyboardShortcuts => 'Billentyűparancsok';
+
+  @override
+  String get toggleControlBar => 'Vezérlősáv váltása';
+
+  @override
+  String get pressKeys => 'Nyomj meg billentyűket...';
+
+  @override
+  String get cmdRequired => '⌘ szükséges';
+
+  @override
+  String get invalidKey => 'Érvénytelen billentyű';
+
+  @override
+  String get space => 'Szóköz';
+
+  @override
+  String get search => 'Keresés';
+
+  @override
+  String get searchPlaceholder => 'Keresés...';
+
+  @override
+  String get untitledConversation => 'Névtelen beszélgetés';
+
+  @override
+  String countRemaining(String count) {
+    return '$count hátra';
+  }
+
+  @override
+  String get addGoal => 'Cél hozzáadása';
+
+  @override
+  String get editGoal => 'Cél szerkesztése';
+
+  @override
+  String get icon => 'Ikon';
+
+  @override
+  String get goalTitle => 'Cél címe';
+
+  @override
+  String get current => 'Jelenlegi';
+
+  @override
+  String get target => 'Cél';
+
+  @override
+  String get saveGoal => 'Mentés';
+
+  @override
+  String get goals => 'Célok';
+
+  @override
+  String get tapToAddGoal => 'Érintse meg cél hozzáadásához';
+
+  @override
+  String get welcomeBack => 'Üdvözöljük újra';
+
+  @override
+  String get yourConversations => 'A beszélgetéseid';
+
+  @override
+  String get reviewAndManageConversations => 'Tekintse át és kezelje rögzített beszélgetéseit';
+
+  @override
+  String get startCapturingConversations =>
+      'Kezdje el rögzíteni a beszélgetéseket Omi eszközével, hogy itt láthassa őket.';
+
+  @override
+  String get useMobileAppToCapture => 'Használja mobilalkalmazását hang rögzítéséhez';
+
+  @override
+  String get conversationsProcessedAutomatically => 'A beszélgetések automatikusan feldolgozásra kerülnek';
+
+  @override
+  String get getInsightsInstantly => 'Szerezzen betekintéseket és összefoglalókat azonnal';
+
+  @override
+  String get showAll => 'Összes megjelenítése →';
+
+  @override
+  String get noTasksForToday => 'Nincs feladat mára.\\nKérdezzen Omit több feladatért, vagy hozzon létre manuálisan.';
+
+  @override
+  String get dailyScore => 'NAPI PONTSZÁM';
+
+  @override
+  String get dailyScoreDescription => 'Egy pontszám, amely segít jobban összpontosítani a végrehajtásra.';
+
+  @override
+  String get searchResults => 'Keresési eredmények';
+
+  @override
+  String get actionItems => 'Teendők';
+
+  @override
+  String get tasksToday => 'Ma';
+
+  @override
+  String get tasksTomorrow => 'Holnap';
+
+  @override
+  String get tasksNoDeadline => 'Nincs határidő';
+
+  @override
+  String get tasksLater => 'Később';
+
+  @override
+  String get loadingTasks => 'Feladatok betöltése...';
+
+  @override
+  String get tasks => 'Feladatok';
+
+  @override
+  String get swipeTasksToIndent => 'Húzza el a feladatokat a behúzáshoz, húzza a kategóriák között';
+
+  @override
+  String get create => 'Létrehozás';
+
+  @override
+  String get noTasksYet => 'Még nincsenek feladatok';
+
+  @override
+  String get tasksFromConversationsWillAppear =>
+      'A beszélgetésekből származó feladatok itt jelennek meg.\nKattintson a Létrehozás gombra egy manuális hozzáadásához.';
+
+  @override
+  String get monthJan => 'Jan';
+
+  @override
+  String get monthFeb => 'Feb';
+
+  @override
+  String get monthMar => 'Már';
+
+  @override
+  String get monthApr => 'Ápr';
+
+  @override
+  String get monthMay => 'Máj';
+
+  @override
+  String get monthJun => 'Jún';
+
+  @override
+  String get monthJul => 'Júl';
+
+  @override
+  String get monthAug => 'Aug';
+
+  @override
+  String get monthSep => 'Szep';
+
+  @override
+  String get monthOct => 'Okt';
+
+  @override
+  String get monthNov => 'Nov';
+
+  @override
+  String get monthDec => 'Dec';
+
+  @override
+  String get timePM => 'DU';
+
+  @override
+  String get timeAM => 'DE';
+
+  @override
+  String get actionItemUpdatedSuccessfully => 'Feladat sikeresen frissítve';
+
+  @override
+  String get actionItemCreatedSuccessfully => 'Feladat sikeresen létrehozva';
+
+  @override
+  String get actionItemDeletedSuccessfully => 'Feladat sikeresen törölve';
+
+  @override
+  String get deleteActionItem => 'Feladat törlése';
+
+  @override
+  String get deleteActionItemConfirmation =>
+      'Biztosan törölni szeretné ezt a feladatot? Ez a művelet nem vonható vissza.';
+
+  @override
+  String get enterActionItemDescription => 'Adja meg a feladat leírását...';
+
+  @override
+  String get markAsCompleted => 'Megjelölés befejezettként';
+
+  @override
+  String get setDueDateAndTime => 'Határidő és időpont beállítása';
+
+  @override
+  String get reloadingApps => 'Alkalmazások újratöltése...';
+
+  @override
+  String get loadingApps => 'Alkalmazások betöltése...';
+
+  @override
+  String get browseInstallCreateApps => 'Böngésszen, telepítsen és hozzon létre alkalmazásokat';
+
+  @override
+  String get all => 'Összes';
+
+  @override
+  String get open => 'Megnyitás';
+
+  @override
+  String get install => 'Telepítés';
+
+  @override
+  String get noAppsAvailable => 'Nincsenek elérhető alkalmazások';
+
+  @override
+  String get unableToLoadApps => 'Nem sikerült betölteni az alkalmazásokat';
+
+  @override
+  String get tryAdjustingSearchTermsOrFilters => 'Próbálja meg módosítani a keresési kifejezéseket vagy szűrőket';
+
+  @override
+  String get checkBackLaterForNewApps => 'Nézzen vissza később új alkalmazásokért';
+
+  @override
+  String get pleaseCheckInternetConnectionAndTryAgain => 'Kérjük, ellenőrizze az internetkapcsolatát és próbálja újra';
+
+  @override
+  String get createNewApp => 'Új alkalmazás létrehozása';
+
+  @override
+  String get buildSubmitCustomOmiApp => 'Készítsd el és nyújtsd be egyedi Omi alkalmazásodat';
+
+  @override
+  String get submittingYourApp => 'Alkalmazásod beküldése...';
+
+  @override
+  String get preparingFormForYou => 'Az űrlap előkészítése számodra...';
+
+  @override
+  String get appDetails => 'Alkalmazás részletei';
+
+  @override
+  String get paymentDetails => 'Fizetési részletek';
+
+  @override
+  String get previewAndScreenshots => 'Előnézet és képernyőképek';
+
+  @override
+  String get appCapabilities => 'Alkalmazás képességei';
+
+  @override
+  String get aiPrompts => 'MI utasítások';
+
+  @override
+  String get chatPrompt => 'Chat utasítás';
+
+  @override
+  String get chatPromptPlaceholder =>
+      'Egy fantasztikus alkalmazás vagy, a feladatod, hogy válaszolj a felhasználói kérdésekre és jól éreztess velük...';
+
+  @override
+  String get conversationPrompt => 'Beszélgetési utasítás';
+
+  @override
+  String get conversationPromptPlaceholder =>
+      'Egy fantasztikus alkalmazás vagy, kapsz egy beszélgetés átírását és összefoglalóját...';
+
+  @override
+  String get notificationScopes => 'Értesítési körök';
+
+  @override
+  String get appPrivacyAndTerms => 'Alkalmazás adatvédelem és feltételek';
+
+  @override
+  String get makeMyAppPublic => 'Tedd nyilvánossá az alkalmazásomat';
+
+  @override
+  String get submitAppTermsAgreement =>
+      'Az alkalmazás beküldésével elfogadom az Omi AI Szolgáltatási Feltételeit és Adatvédelmi Irányelveit';
+
+  @override
+  String get submitApp => 'Alkalmazás beküldése';
+
+  @override
+  String get needHelpGettingStarted => 'Segítségre van szükséged az induláshoz?';
+
+  @override
+  String get clickHereForAppBuildingGuides => 'Kattints ide az alkalmazáskészítési útmutatókért és dokumentációért';
+
+  @override
+  String get submitAppQuestion => 'Alkalmazás beküldése?';
+
+  @override
+  String get submitAppPublicDescription =>
+      'Alkalmazásod felülvizsgálásra kerül és nyilvánossá válik. Azonnal elkezdheted használni, még a felülvizsgálat alatt is!';
+
+  @override
+  String get submitAppPrivateDescription =>
+      'Alkalmazásod felülvizsgálásra kerül és privát módon elérhetővé válik számodra. Azonnal elkezdheted használni, még a felülvizsgálat alatt is!';
+
+  @override
+  String get startEarning => 'Kezdj el keresni! 💰';
+
+  @override
+  String get connectStripeOrPayPal =>
+      'Csatlakoztasd a Stripe-ot vagy PayPalt, hogy fizetéseket fogadhass az alkalmazásodért.';
+
+  @override
+  String get connectNow => 'Csatlakoztatás most';
 }

@@ -30,6 +30,7 @@ import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import '../../../../backend/schema/app.dart';
 import '../../../../pages/apps/widgets/show_app_options_sheet.dart';
 
@@ -323,7 +324,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                       ),
                       SizedBox(width: responsive.spacing(baseSpacing: 8)),
                       Text(
-                        '${(app.installs / 10).round() * 10}+ installs',
+                        context.l10n.installsCount('${(app.installs / 10).round() * 10}'),
                         style: responsive.bodyMedium.copyWith(
                           color: ResponsiveHelper.textTertiary,
                         ),
@@ -450,10 +451,10 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
 
             // Conversation prompt
             if (app.conversationPrompt != null)
-              _buildPromptSection(responsive, 'Conversation Prompt', app.conversationPrompt!),
+              _buildPromptSection(responsive, context.l10n.conversationPrompt, app.conversationPrompt!),
 
             // Chat prompt
-            if (app.chatPrompt != null) _buildPromptSection(responsive, 'Chat Personality', app.chatPrompt!),
+            if (app.chatPrompt != null) _buildPromptSection(responsive, context.l10n.chatPersonality, app.chatPrompt!),
 
             // Reviews section
             _buildReviewsSection(responsive),
@@ -489,7 +490,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
           onPressed: () => _toggleApp(app.id, false),
           icon: const Icon(Icons.delete_outline, size: 18),
           label: Text(
-            'Uninstall App',
+            context.l10n.uninstallApp,
             style: responsive.labelLarge.copyWith(
               fontWeight: FontWeight.w500,
             ),
@@ -531,7 +532,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
           },
           icon: const Icon(Icons.payment, size: 18),
           label: Text(
-            'Subscribe',
+            context.l10n.subscribe,
             style: responsive.labelLarge.copyWith(
               fontWeight: FontWeight.w500,
             ),
@@ -565,9 +566,8 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
               builder: (ctx) {
                 return StatefulBuilder(builder: (ctx, setState) {
                   return ConfirmationDialog(
-                    title: 'Data Access Notice',
-                    description:
-                        'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app',
+                    title: context.l10n.dataAccessNotice,
+                    description: context.l10n.dataAccessWarning,
                     onConfirm: () {
                       _toggleApp(app.id, true);
                       Navigator.pop(context);
@@ -585,7 +585,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
         },
         icon: const Icon(Icons.download, size: 18),
         label: Text(
-          'Install App',
+          context.l10n.installApp,
           style: responsive.labelLarge.copyWith(
             fontWeight: FontWeight.w500,
           ),
@@ -618,7 +618,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
       notifications.add(_buildNotification(
         responsive,
         icon: Icons.info_outline,
-        text: 'You are a beta tester for this app. It is not public yet. It will be public once approved.',
+        text: context.l10n.betaTesterNotice,
         color: ResponsiveHelper.infoColor,
       ));
     }
@@ -627,7 +627,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
       notifications.add(_buildNotification(
         responsive,
         icon: Icons.info_outline,
-        text: 'Your app is under review and visible only to you. It will be public once approved.',
+        text: context.l10n.appUnderReviewOwner,
         color: ResponsiveHelper.infoColor,
       ));
     }
@@ -636,7 +636,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
       notifications.add(_buildNotification(
         responsive,
         icon: Icons.error_outline,
-        text: 'Your app has been rejected. Please update the app details and resubmit for review.',
+        text: context.l10n.appRejectedNotice,
         color: ResponsiveHelper.errorColor,
       ));
     }
@@ -689,7 +689,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
         Row(
           children: [
             Text(
-              'Setup Steps',
+              context.l10n.setupSteps,
               style: responsive.titleLarge.copyWith(
                 color: ResponsiveHelper.textPrimary,
                 fontWeight: FontWeight.w600,
@@ -707,7 +707,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  'Completed',
+                  context.l10n.completed,
                   style: responsive.bodySmall.copyWith(
                     color: ResponsiveHelper.successColor,
                     fontWeight: FontWeight.w500,
@@ -779,14 +779,14 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                 if (app.externalIntegration!.setupInstructionsFilePath?.contains('raw.githubusercontent.com') == true) {
                   await routeToPage(
                     context,
-                    MarkdownViewer(title: 'Setup Instructions', markdown: instructionsMarkdown ?? ''),
+                    MarkdownViewer(title: context.l10n.setupInstructions, markdown: instructionsMarkdown ?? ''),
                   );
                 } else {
                   if (app.externalIntegration!.isInstructionsUrl == true) {
                     await launchUrl(Uri.parse(app.externalIntegration!.setupInstructionsFilePath ?? ''));
                   } else {
                     var m = app.externalIntegration!.setupInstructionsFilePath;
-                    routeToPage(context, MarkdownViewer(title: 'Setup Instructions', markdown: m ?? ''));
+                    routeToPage(context, MarkdownViewer(title: context.l10n.setupInstructions, markdown: m ?? ''));
                   }
                 }
               }
@@ -807,7 +807,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                 children: [
                   Expanded(
                     child: Text(
-                      'Integration Instructions',
+                      context.l10n.integrationInstructions,
                       style: responsive.bodyLarge.copyWith(
                         color: ResponsiveHelper.textPrimary,
                         fontWeight: FontWeight.w500,
@@ -834,7 +834,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Preview',
+          context.l10n.preview,
           style: responsive.titleLarge.copyWith(
             color: ResponsiveHelper.textPrimary,
             fontWeight: FontWeight.w600,
@@ -920,7 +920,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                 routeToPage(
                   context,
                   MarkdownViewer(
-                    title: 'About the ${app.isNotPersona() ? 'App' : 'Persona'}',
+                    title: app.isNotPersona() ? context.l10n.aboutTheApp : context.l10n.aboutThePersona,
                     markdown: app.description.decodeString,
                   ),
                 );
@@ -944,7 +944,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                   Row(
                     children: [
                       Text(
-                        'About the ${app.isNotPersona() ? 'App' : 'Persona'}',
+                        app.isNotPersona() ? context.l10n.aboutTheApp : context.l10n.aboutThePersona,
                         style: responsive.titleMedium.copyWith(
                           color: ResponsiveHelper.textPrimary,
                           fontWeight: FontWeight.w600,
@@ -1110,7 +1110,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                   Row(
                     children: [
                       Text(
-                        'Ratings & Reviews',
+                        context.l10n.ratingsAndReviews,
                         style: responsive.titleMedium.copyWith(
                           color: ResponsiveHelper.textPrimary,
                           fontWeight: FontWeight.w600,
@@ -1158,7 +1158,9 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                           ),
                           SizedBox(height: responsive.spacing(baseSpacing: 4)),
                           Text(
-                            app.ratingCount <= 0 ? "no ratings" : "${app.ratingCount}+ ratings",
+                            app.ratingCount <= 0
+                                ? context.l10n.noRatings
+                                : context.l10n.ratingsCount('${app.ratingCount}'),
                             style: responsive.bodySmall.copyWith(
                               color: ResponsiveHelper.textTertiary,
                             ),
@@ -1323,8 +1325,8 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
               context,
               () => Navigator.pop(context),
               () => Navigator.pop(context),
-              'Error activating the app',
-              'If this is an integration app, make sure the setup is completed.',
+              context.l10n.errorActivatingApp,
+              context.l10n.integrationSetupRequired,
               singleButton: true,
             ),
           );

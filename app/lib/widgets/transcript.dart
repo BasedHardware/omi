@@ -11,6 +11,7 @@ import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/constants.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 
 // Use speaker colors from person.dart for bubble colors
@@ -737,14 +738,14 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
           context: context,
           builder: (BuildContext context) {
             return AlertDialog(
-              title: const Text('Translation Notice'),
-              content: const Text(
-                'Omi translates conversations into your primary language. Update it anytime in Settings →  Profiles.',
-                style: TextStyle(fontSize: 14),
+              title: Text(context.l10n.translationNotice),
+              content: Text(
+                context.l10n.translationNoticeMessage,
+                style: const TextStyle(fontSize: 14),
               ),
               actions: [
                 TextButton(
-                  child: const Text('OK'),
+                  child: Text(context.l10n.ok),
                   onPressed: () {
                     Navigator.of(context).pop();
                   },

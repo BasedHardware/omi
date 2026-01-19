@@ -29,7 +29,7 @@
   "@confirm": {
     "description": "Confirm button label"
   },
-  "cancel": "Cancel·lar",
+  "cancel": "Cancel·la",
   "@cancel": {
     "description": "Button label"
   },
@@ -37,7 +37,7 @@
   "@ok": {
     "description": "Generic OK button text"
   },
-  "delete": "Eliminar",
+  "delete": "Elimina",
   "@delete": {
     "description": "Button label"
   },
@@ -53,7 +53,7 @@
   "@save": {
     "description": "Save button label"
   },
-  "edit": "Editar",
+  "edit": "Edita",
   "@edit": {
     "description": "Edit button/action label"
   },
@@ -101,7 +101,7 @@
   "@errorProcessingConversation": {
     "description": "Error message for conversation processing failure"
   },
-  "noInternetConnection": "Comproveu la vostra connexió a internet i torneu-ho a provar.",
+  "noInternetConnection": "Sense connexió a Internet",
   "@noInternetConnection": {
     "description": "Message shown when there's no internet"
   },
@@ -121,7 +121,7 @@
   "@errorCopied": {
     "description": "Snackbar message after copying error"
   },
-  "remaining": "Restants",
+  "remaining": "Restant",
   "@remaining": {
     "description": "Label for remaining time/items"
   },
@@ -209,7 +209,7 @@
   "@couldNotAccessFile": {
     "description": "Error when file access fails"
   },
-  "askOmi": "Preguntar a Omi",
+  "askOmi": "Pregunta a Omi",
   "@askOmi": {
     "description": "Chat button label"
   },
@@ -221,7 +221,7 @@
   "@disconnected": {
     "description": "Device disconnected status"
   },
-  "searching": "Cercant",
+  "searching": "Cercant...",
   "@searching": {
     "description": "Searching for device status"
   },
@@ -289,7 +289,7 @@
   "@syncingBackground": {
     "description": "Message during background sync"
   },
-  "noConversationsYet": "Encara no hi ha converses.",
+  "noConversationsYet": "Encara no hi ha converses",
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
@@ -301,7 +301,7 @@
   "@starConversationHint": {
     "description": "Hint explaining how to star conversations"
   },
-  "searchConversations": "Cercar converses",
+  "searchConversations": "Cercar converses...",
   "@searchConversations": {
     "description": "Search field placeholder"
   },
@@ -411,7 +411,7 @@
   "@buildAndShareApp": {
     "description": "Create app button subtitle"
   },
-  "searchApps": "Cercar més de 1500 aplicacions",
+  "searchApps": "Cerca aplicacions...",
   "@searchApps": {
     "description": "Apps search placeholder"
   },
@@ -679,11 +679,11 @@
   "@chargingIssues": {
     "description": "Charging issues help item"
   },
-  "disconnectDevice": "Desconnectar dispositiu",
+  "disconnectDevice": "Desconnecta el dispositiu",
   "@disconnectDevice": {
     "description": "Disconnect device button"
   },
-  "unpairDevice": "Desvincular dispositiu",
+  "unpairDevice": "Desvincula el dispositiu",
   "@unpairDevice": {
     "description": "Unpair device button"
   },
@@ -695,7 +695,7 @@
   "@deviceDisconnectedMessage": {
     "description": "Message shown when device is disconnected"
   },
-  "deviceUnpairedMessage": "Dispositiu desvinculat. Aneu a Configuració > Bluetooth i oblideu el dispositiu per completar la desvinculació.",
+  "deviceUnpairedMessage": "Dispositiu desvinculat. Vés a Configuració > Bluetooth i oblida el dispositiu per completar la desvinculació.",
   "@deviceUnpairedMessage": {
     "description": "Message shown when device is unpaired"
   },
@@ -997,7 +997,7 @@
   "@upgrade": {
     "description": "Upgrade button"
   },
-  "upgradeToUnlimited": "Actualitzar a il·limitat",
+  "upgradeToUnlimited": "Actualitza a il·limitat",
   "@upgradeToUnlimited": {
     "description": "Upgrade to unlimited button"
   },
@@ -1414,7 +1414,7 @@
       }
     }
   },
-  "yesterday": "ahir",
+  "yesterday": "Ahir",
   "daysAgo": "fa {count} dies",
   "@daysAgo": {
     "placeholders": {
@@ -1572,7 +1572,7 @@
   "highAccuracy": "Alta precisió",
   "privacyFirst": "Privadesa primer",
   "saveChanges": "Desar canvis",
-  "resetToDefault": "Restablir per defecte",
+  "resetToDefault": "Restableix per defecte",
   "viewTemplate": "Veure plantilla",
   "trySomethingLike": "Proveu quelcom com...",
   "tryIt": "Provar-ho",
@@ -1986,11 +1986,11 @@
   "@actionItemCompleted": {
     "description": "Snackbar message when item completed"
   },
-  "deleteActionItemTitle": "Eliminar tasca",
+  "deleteActionItemTitle": "Elimina element d'acció",
   "@deleteActionItemTitle": {
     "description": "Title for delete item dialog"
   },
-  "deleteActionItemMessage": "Esteu segur que voleu eliminar aquesta tasca?",
+  "deleteActionItemMessage": "Estàs segur que vols eliminar aquest element d'acció?",
   "@deleteActionItemMessage": {
     "description": "Confirmation message for deleting single item"
   },
@@ -2235,7 +2235,7 @@
   "@actionItemUpdated": {
     "description": "Snackbar"
   },
-  "failedToUpdateActionItem": "No s'ha pogut actualitzar la tasca",
+  "failedToUpdateActionItem": "Error en actualitzar la tasca",
   "@failedToUpdateActionItem": {
     "description": "Snackbar"
   },
@@ -2243,7 +2243,7 @@
   "@actionItemCreated": {
     "description": "Snackbar"
   },
-  "failedToCreateActionItem": "No s'ha pogut crear la tasca",
+  "failedToCreateActionItem": "Error en crear la tasca",
   "@failedToCreateActionItem": {
     "description": "Snackbar"
   },
@@ -2287,15 +2287,15 @@
   "@completed": {
     "description": "Status label"
   },
-  "markComplete": "Marcar com a complet",
+  "markComplete": "Marca com a completat",
   "@markComplete": {
     "description": "Action label"
   },
-  "actionItemDeleted": "Tasca eliminada",
+  "actionItemDeleted": "Element d'acció eliminat",
   "@actionItemDeleted": {
     "description": "Snackbar"
   },
-  "failedToDeleteActionItem": "No s'ha pogut eliminar la tasca",
+  "failedToDeleteActionItem": "Error en eliminar la tasca",
   "@failedToDeleteActionItem": {
     "description": "Snackbar"
   },
@@ -2313,5 +2313,229 @@
   },
   "appInterfaceSectionTitle": "INTERFÍCIE DE L'APLICACIÓ",
   "speechTranscriptionSectionTitle": "VEU I TRANSCRIPCIÓ",
-  "languageSettingsHelperText": "L'idioma de l'aplicació canvia els menús i els botons. L'idioma de la veu afecta com es transcriuen les teves gravacions."
+  "languageSettingsHelperText": "L'idioma de l'aplicació canvia els menús i els botons. L'idioma de la veu afecta com es transcriuen les teves gravacions.",
+  "translationNotice": "Avís de traducció",
+  "translationNoticeMessage": "Omi tradueix les converses al teu idioma principal. Actualitza-ho en qualsevol moment a Configuració → Perfils.",
+  "pleaseCheckInternetConnection": "Si us plau, comprova la teva connexió a Internet i torna-ho a intentar",
+  "pleaseSelectReason": "Si us plau, selecciona un motiu",
+  "tellUsMoreWhatWentWrong": "Explica'ns més sobre què va anar malament...",
+  "selectText": "Selecciona text",
+  "maximumGoalsAllowed": "Màxim {count} objectius permesos",
+  "conversationCannotBeMerged": "Aquesta conversa no es pot fusionar (bloquejada o ja en procés de fusió)",
+  "pleaseEnterFolderName": "Si us plau, introdueix un nom de carpeta",
+  "failedToCreateFolder": "No s'ha pogut crear la carpeta",
+  "failedToUpdateFolder": "No s'ha pogut actualitzar la carpeta",
+  "folderName": "Nom de la carpeta",
+  "descriptionOptional": "Descripció (opcional)",
+  "failedToDeleteFolder": "No s'ha pogut eliminar la carpeta",
+  "editFolder": "Edita la carpeta",
+  "deleteFolder": "Elimina la carpeta",
+  "transcriptCopiedToClipboard": "Transcripció copiada al porta-retalls",
+  "summaryCopiedToClipboard": "Resum copiat al porta-retalls",
+  "conversationUrlCouldNotBeShared": "No s'ha pogut compartir l'URL de la conversa.",
+  "urlCopiedToClipboard": "URL copiat al porta-retalls",
+  "exportTranscript": "Exportar transcripció",
+  "exportSummary": "Exportar resum",
+  "exportButton": "Exportar",
+  "actionItemsCopiedToClipboard": "Elements d'acció copiats al porta-retalls",
+  "summarize": "Resumir",
+  "generateSummary": "Generar resum",
+  "conversationNotFoundOrDeleted": "Conversa no trobada o ha estat eliminada",
+  "deleteMemory": "Eliminar memòria?",
+  "thisActionCannotBeUndone": "Aquesta acció no es pot desfer.",
+  "memoriesCount": "{count} memòries",
+  "noMemoriesInCategory": "Encara no hi ha memòries en aquesta categoria",
+  "addYourFirstMemory": "Afegeix la teva primera memòria",
+  "firmwareDisconnectUsb": "Desconnecta USB",
+  "firmwareUsbWarning": "La connexió USB durant les actualitzacions pot fer malbé el teu dispositiu.",
+  "firmwareBatteryAbove15": "Bateria superior al 15%",
+  "firmwareEnsureBattery": "Assegura't que el teu dispositiu té un 15% de bateria.",
+  "firmwareStableConnection": "Connexió estable",
+  "firmwareConnectWifi": "Connecta't a WiFi o dades mòbils.",
+  "failedToStartUpdate": "Error en iniciar l'actualització: {error}",
+  "beforeUpdateMakeSure": "Abans d'actualitzar, assegura't:",
+  "confirmed": "Confirmat!",
+  "release": "Allibera",
+  "slideToUpdate": "Llisca per actualitzar",
+  "copiedToClipboard": "{title} copiat al portapapers",
+  "batteryLevel": "Nivell de bateria",
+  "productUpdate": "Actualització del producte",
+  "offline": "Fora de línia",
+  "available": "Disponible",
+  "unpairDeviceDialogTitle": "Desvincula el dispositiu",
+  "unpairDeviceDialogMessage": "Això desvinculará el dispositiu perquè pugui connectar-se a un altre telèfon. Hauràs d'anar a Configuració > Bluetooth i oblidar el dispositiu per completar el procés.",
+  "unpair": "Desvincula",
+  "unpairAndForgetDevice": "Desvincula i oblida el dispositiu",
+  "unknownDevice": "Dispositiu desconegut",
+  "unknown": "Desconegut",
+  "productName": "Nom del producte",
+  "serialNumber": "Número de sèrie",
+  "connected": "Connectat",
+  "privacyPolicyTitle": "Política de privadesa",
+  "actionItemDescriptionCannotBeEmpty": "La descripció de l'element d'acció no pot estar buida",
+  "saved": "Desat",
+  "overdue": "Endarrerit",
+  "markIncomplete": "Marca com a incomplet",
+  "editDueDate": "Edita data de venciment",
+  "setDueDate": "Establir data de venciment",
+  "clearDueDate": "Esborra data de venciment",
+  "mondayAbbr": "Dl",
+  "tuesdayAbbr": "Dt",
+  "wednesdayAbbr": "Dc",
+  "thursdayAbbr": "Dj",
+  "fridayAbbr": "Dv",
+  "saturdayAbbr": "Ds",
+  "sundayAbbr": "Dg",
+  "failedToUpdateDueDate": "No s'ha pogut actualitzar la data de venciment",
+  "failedToClearDueDate": "No s'ha pogut esborrar la data de venciment",
+  "howDoesItWork": "Com funciona?",
+  "sdCardSyncDescription": "SD Card Sync importarà els teus records de la targeta SD a l'aplicació",
+  "checksForAudioFiles": "Comprova els fitxers d'àudio a la targeta SD",
+  "omiSyncsAudioFiles": "Omi després sincronitza els fitxers d'àudio amb el servidor",
+  "serverProcessesAudio": "El servidor processa els fitxers d'àudio i crea records",
+  "youreAllSet": "Estàs a punt!",
+  "welcomeToOmiDescription": "Benvingut a Omi! El teu company d'IA està preparat per ajudar-te amb converses, tasques i molt més.",
+  "startUsingOmi": "Comença a utilitzar Omi",
+  "back": "Enrere",
+  "keyboardShortcuts": "Dreceres de teclat",
+  "toggleControlBar": "Commuta la barra de control",
+  "pressKeys": "Prem les tecles...",
+  "cmdRequired": "⌘ necessari",
+  "invalidKey": "Tecla no vàlida",
+  "space": "Espai",
+  "search": "Cerca",
+  "searchPlaceholder": "Cerca...",
+  "settingUp": "Configurant...",
+  "startYourFirstRecording": "Comença la teva primera gravació",
+  "preparingSystemAudioCapture": "Preparant captura d'àudio del sistema",
+  "recordingInstructions": "Fes clic al botó per capturar àudio per a transcripcions en directe, informació d'IA i desament automàtic.",
+  "reconnecting": "Reconnectant...",
+  "recordingPaused": "Gravació pausada",
+  "recordingActive": "Gravació activa",
+  "startRecording": "Inicia gravació",
+  "resumingInSeconds": "Reprenent en {seconds}s...",
+  "tapPlayToResume": "Toca reproduir per reprendre",
+  "listeningForAudio": "Escoltant àudio...",
+  "preparingAudioCapture": "Preparant captura d'àudio",
+  "clickToBeginRecording": "Fes clic per començar a gravar",
+  "liveTranscript": "Transcripció en directe",
+  "startRecordingToSeeTranscript": "Inicia gravació per veure transcripció en directe",
+  "paused": "Pausat",
+  "initializing": "Inicialitzant...",
+  "recording": "Gravant",
+  "untitledConversation": "Conversa sense títol",
+  "countRemaining": "{count} restants",
+  "addGoal": "Afegeix objectiu",
+  "editGoal": "Edita objectiu",
+  "icon": "Icona",
+  "goalTitle": "Títol de l'objectiu",
+  "current": "Actual",
+  "target": "Objectiu",
+  "saveGoal": "Desa",
+  "goals": "Objectius",
+  "tapToAddGoal": "Toca per afegir un objectiu",
+  "welcomeBack": "Benvingut de nou",
+  "yourConversations": "Les teves converses",
+  "reviewAndManageConversations": "Revisa i gestiona les teves converses capturades",
+  "startCapturingConversations": "Comença a capturar converses amb el teu dispositiu Omi per veure-les aquí.",
+  "useMobileAppToCapture": "Utilitza la teva aplicació mòbil per capturar àudio",
+  "conversationsProcessedAutomatically": "Les converses es processen automàticament",
+  "getInsightsInstantly": "Obtén informació i resums a l'instant",
+  "showAll": "Mostra-ho tot →",
+  "noTasksForToday": "No hi ha tasques per avui.\\nDemana a Omi més tasques o crea-les manualment.",
+  "dailyScore": "PUNTUACIÓ DIÀRIA",
+  "dailyScoreDescription": "Una puntuació per ajudar-te a centrar-te millor en l'execució.",
+  "searchResults": "Resultats de la cerca",
+  "actionItems": "Elements d'acció",
+  "tasksToday": "Avui",
+  "tasksTomorrow": "Demà",
+  "tasksNoDeadline": "Sense termini",
+  "tasksLater": "Més tard",
+  "loadingTasks": "Carregant tasques...",
+  "tasks": "Tasques",
+  "swipeTasksToIndent": "Llisqueu les tasques per sagnar, arrossegueu entre categories",
+  "create": "Crear",
+  "noTasksYet": "Encara no hi ha tasques",
+  "tasksFromConversationsWillAppear": "Les tasques de les vostres converses apareixeran aquí.\nFeu clic a Crear per afegir-ne una manualment.",
+  "monthJan": "Gen",
+  "monthFeb": "Febr",
+  "monthMar": "Març",
+  "monthApr": "Abr",
+  "monthMay": "Maig",
+  "monthJun": "Juny",
+  "monthJul": "Jul",
+  "monthAug": "Ag",
+  "monthSep": "Set",
+  "monthOct": "Oct",
+  "monthNov": "Nov",
+  "monthDec": "Des",
+  "timePM": "PM",
+  "timeAM": "AM",
+  "actionItemUpdatedSuccessfully": "Tasca actualitzada correctament",
+  "actionItemCreatedSuccessfully": "Tasca creada correctament",
+  "actionItemDeletedSuccessfully": "Tasca eliminada correctament",
+  "deleteActionItem": "Eliminar tasca",
+  "deleteActionItemConfirmation": "Esteu segur que voleu eliminar aquesta tasca? Aquesta acció no es pot desfer.",
+  "enterActionItemDescription": "Introduïu la descripció de la tasca...",
+  "markAsCompleted": "Marcar com a completada",
+  "setDueDateAndTime": "Establir data i hora de venciment",
+  "reloadingApps": "Recarregant aplicacions...",
+  "loadingApps": "Carregant aplicacions...",
+  "browseInstallCreateApps": "Explora, instal·la i crea aplicacions",
+  "all": "Tot",
+  "open": "Obrir",
+  "install": "Instal·la",
+  "noAppsAvailable": "No hi ha aplicacions disponibles",
+  "unableToLoadApps": "No es poden carregar les aplicacions",
+  "tryAdjustingSearchTermsOrFilters": "Prova d'ajustar els termes de cerca o els filtres",
+  "checkBackLaterForNewApps": "Torna més tard per veure aplicacions noves",
+  "pleaseCheckInternetConnectionAndTryAgain": "Si us plau, comprova la connexió a Internet i torna-ho a provar",
+  "createNewApp": "Crear nova aplicació",
+  "buildSubmitCustomOmiApp": "Construeix i envia la teva aplicació Omi personalitzada",
+  "submittingYourApp": "Enviant la teva aplicació...",
+  "preparingFormForYou": "Preparant el formulari per a tu...",
+  "appDetails": "Detalls de l'aplicació",
+  "paymentDetails": "Detalls de pagament",
+  "previewAndScreenshots": "Vista prèvia i captures de pantalla",
+  "appCapabilities": "Capacitats de l'aplicació",
+  "aiPrompts": "Indicacions d'IA",
+  "chatPrompt": "Indicació de xat",
+  "chatPromptPlaceholder": "Ets una aplicació increïble, la teva feina és respondre a les consultes de l'usuari i fer que se sentin bé...",
+  "conversationPrompt": "Indicació de conversa",
+  "conversationPromptPlaceholder": "Ets una aplicació increïble, rebràs una transcripció i resum d'una conversa...",
+  "notificationScopes": "Àmbits de notificació",
+  "appPrivacyAndTerms": "Privadesa i condicions de l'aplicació",
+  "makeMyAppPublic": "Fes pública la meva aplicació",
+  "submitAppTermsAgreement": "En enviar aquesta aplicació, accepto les Condicions de Servei i la Política de Privadesa d'Omi AI",
+  "submitApp": "Enviar aplicació",
+  "needHelpGettingStarted": "Necessites ajuda per començar?",
+  "clickHereForAppBuildingGuides": "Fes clic aquí per a guies de creació d'aplicacions i documentació",
+  "submitAppQuestion": "Enviar aplicació?",
+  "submitAppPublicDescription": "La teva aplicació serà revisada i feta pública. Pots començar a utilitzar-la immediatament, fins i tot durant la revisió!",
+  "submitAppPrivateDescription": "La teva aplicació serà revisada i feta disponible per a tu de manera privada. Pots començar a utilitzar-la immediatament, fins i tot durant la revisió!",
+  "startEarning": "Comença a guanyar! 💰",
+  "connectStripeOrPayPal": "Connecta Stripe o PayPal per rebre pagaments per la teva aplicació.",
+  "connectNow": "Connecta ara",
+  "installsCount": "{count}+ instal·lacions",
+  "uninstallApp": "Desinstal·la l'aplicació",
+  "subscribe": "Subscriu-te",
+  "dataAccessNotice": "Avís d'accés a dades",
+  "dataAccessWarning": "Aquesta aplicació accedirà a les teves dades. Omi AI no és responsable de com s'utilitzen, modifiquen o eliminen les teves dades per aquesta aplicació",
+  "installApp": "Instal·la l'aplicació",
+  "betaTesterNotice": "Ets provador beta d'aquesta aplicació. Encara no és pública. Serà pública un cop aprovada.",
+  "appUnderReviewOwner": "La teva aplicació està en revisió i només visible per a tu. Serà pública un cop aprovada.",
+  "appRejectedNotice": "La teva aplicació ha estat rebutjada. Si us plau, actualitza els detalls de l'aplicació i torna-la a enviar per a revisió.",
+  "setupSteps": "Passos de configuració",
+  "setupInstructions": "Instruccions de configuració",
+  "integrationInstructions": "Instruccions d'integració",
+  "preview": "Previsualització",
+  "aboutTheApp": "Sobre l'aplicació",
+  "aboutThePersona": "Sobre la persona",
+  "chatPersonality": "Personalitat del xat",
+  "ratingsAndReviews": "Valoracions i ressenyes",
+  "noRatings": "sense valoracions",
+  "ratingsCount": "{count}+ valoracions",
+  "errorActivatingApp": "Error en activar l'aplicació",
+  "integrationSetupRequired": "Si aquesta és una aplicació d'integració, assegura't que la configuració està completada.",
+  "installed": "Instal·lat"
 }

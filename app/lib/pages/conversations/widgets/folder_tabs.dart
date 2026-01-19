@@ -11,6 +11,7 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/folders/folder_icon_mapper.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class FolderTabs extends StatefulWidget {
@@ -383,7 +384,7 @@ class _FolderContextMenu extends StatelessWidget {
               conversationProvider.filterByFolder(moveToFolderId);
             } else {
               scaffoldMessenger.showSnackBar(
-                const SnackBar(content: Text('Failed to delete folder')),
+                SnackBar(content: Text(context.l10n.failedToDeleteFolder)),
               );
             }
           });
@@ -443,7 +444,7 @@ class _FolderContextMenu extends StatelessWidget {
             // Edit option
             ListTile(
               leading: const Icon(Icons.edit_outlined, color: Colors.white),
-              title: const Text('Edit Folder', style: TextStyle(color: Colors.white)),
+              title: Text(context.l10n.editFolder, style: const TextStyle(color: Colors.white)),
               onTap: () => _handleEdit(context),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
@@ -452,7 +453,7 @@ class _FolderContextMenu extends StatelessWidget {
             if (!folder.isSystem)
               ListTile(
                 leading: const Icon(Icons.delete_outline, color: Colors.red),
-                title: const Text('Delete Folder', style: TextStyle(color: Colors.red)),
+                title: Text(context.l10n.deleteFolder, style: const TextStyle(color: Colors.red)),
                 onTap: () => _handleDelete(context),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),

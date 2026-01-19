@@ -8,6 +8,7 @@ import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/folders/folder_icon_mapper.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
 /// Available folder colors for selection.
@@ -72,8 +73,8 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a folder name'),
+        SnackBar(
+          content: Text(context.l10n.pleaseEnterFolderName),
           backgroundColor: Colors.red,
         ),
       );
@@ -127,7 +128,7 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to ${isEditing ? 'update' : 'create'} folder'),
+            content: Text(isEditing ? context.l10n.failedToUpdateFolder : context.l10n.failedToCreateFolder),
             backgroundColor: Colors.red,
           ),
         );
@@ -208,12 +209,12 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
                   fontSize: 16,
                   height: 1.3,
                 ),
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   border: InputBorder.none,
                   contentPadding: EdgeInsets.zero,
                   isDense: true,
-                  hintText: 'Folder name',
-                  hintStyle: TextStyle(
+                  hintText: context.l10n.folderName,
+                  hintStyle: const TextStyle(
                     color: ResponsiveHelper.textTertiary,
                     fontSize: 16,
                   ),
@@ -240,12 +241,12 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
                   fontSize: 14,
                   height: 1.4,
                 ),
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   border: InputBorder.none,
                   contentPadding: EdgeInsets.zero,
                   isDense: true,
-                  hintText: 'Description (optional)',
-                  hintStyle: TextStyle(
+                  hintText: context.l10n.descriptionOptional,
+                  hintStyle: const TextStyle(
                     color: ResponsiveHelper.textTertiary,
                     fontSize: 14,
                   ),

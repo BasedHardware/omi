@@ -101,7 +101,7 @@
   "@errorProcessingConversation": {
     "description": "Error message for conversation processing failure"
   },
-  "noInternetConnection": "Sprawdź połączenie internetowe i spróbuj ponownie.",
+  "noInternetConnection": "Brak połączenia z internetem",
   "@noInternetConnection": {
     "description": "Message shown when there's no internet"
   },
@@ -221,7 +221,7 @@
   "@disconnected": {
     "description": "Device disconnected status"
   },
-  "searching": "Wyszukiwanie",
+  "searching": "Wyszukiwanie...",
   "@searching": {
     "description": "Searching for device status"
   },
@@ -289,7 +289,7 @@
   "@syncingBackground": {
     "description": "Message during background sync"
   },
-  "noConversationsYet": "Brak rozmów.",
+  "noConversationsYet": "Jeszcze brak rozmów",
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
@@ -301,7 +301,7 @@
   "@starConversationHint": {
     "description": "Hint explaining how to star conversations"
   },
-  "searchConversations": "Szukaj rozmów",
+  "searchConversations": "Szukaj rozmów...",
   "@searchConversations": {
     "description": "Search field placeholder"
   },
@@ -411,15 +411,15 @@
   "@buildAndShareApp": {
     "description": "Create app button subtitle"
   },
-  "searchApps": "Przeszukaj ponad 1500 aplikacji",
+  "searchApps": "Szukaj aplikacji...",
   "@searchApps": {
     "description": "Apps search placeholder"
   },
-  "myApps": "Moje aplikacje",
+  "myApps": "Moje Aplikacje",
   "@myApps": {
     "description": "My Apps filter button"
   },
-  "installedApps": "Zainstalowane aplikacje",
+  "installedApps": "Zainstalowane Aplikacje",
   "@installedApps": {
     "description": "Installed Apps filter button"
   },
@@ -635,7 +635,7 @@
   "@deviceId": {
     "description": "Device ID label"
   },
-  "firmware": "Oprogramowanie",
+  "firmware": "Oprogramowanie sprzętowe",
   "@firmware": {
     "description": "Firmware label"
   },
@@ -679,11 +679,11 @@
   "@chargingIssues": {
     "description": "Charging issues help item"
   },
-  "disconnectDevice": "Rozłącz urządzenie",
+  "disconnectDevice": "Odłącz urządzenie",
   "@disconnectDevice": {
     "description": "Disconnect device button"
   },
-  "unpairDevice": "Rozparuj urządzenie",
+  "unpairDevice": "Rozłącz urządzenie",
   "@unpairDevice": {
     "description": "Unpair device button"
   },
@@ -695,7 +695,7 @@
   "@deviceDisconnectedMessage": {
     "description": "Message shown when device is disconnected"
   },
-  "deviceUnpairedMessage": "Urządzenie rozparowane. Przejdź do Ustawienia > Bluetooth i zapomnij urządzenie, aby zakończyć parowanie.",
+  "deviceUnpairedMessage": "Urządzenie rozłączone. Przejdź do Ustawienia > Bluetooth i zapomnij urządzenie, aby zakończyć rozłączanie.",
   "@deviceUnpairedMessage": {
     "description": "Message shown when device is unpaired"
   },
@@ -997,7 +997,7 @@
   "@upgrade": {
     "description": "Upgrade button"
   },
-  "upgradeToUnlimited": "Ulepsz do nieograniczonego",
+  "upgradeToUnlimited": "Uaktualnij do nielimitowanego",
   "@upgradeToUnlimited": {
     "description": "Upgrade to unlimited button"
   },
@@ -1414,7 +1414,7 @@
       }
     }
   },
-  "yesterday": "wczoraj",
+  "yesterday": "Wczoraj",
   "daysAgo": "{count} dni temu",
   "@daysAgo": {
     "placeholders": {
@@ -1572,7 +1572,7 @@
   "highAccuracy": "Wysoka dokładność",
   "privacyFirst": "Prywatność na pierwszym miejscu",
   "saveChanges": "Zapisz zmiany",
-  "resetToDefault": "Zresetuj do domyślnego",
+  "resetToDefault": "Przywróć domyślne",
   "viewTemplate": "Zobacz szablon",
   "trySomethingLike": "Spróbuj czegoś takiego...",
   "tryIt": "Wypróbuj",
@@ -1986,11 +1986,11 @@
   "@actionItemCompleted": {
     "description": "Snackbar message when item completed"
   },
-  "deleteActionItemTitle": "Usuń zadanie",
+  "deleteActionItemTitle": "Usuń element działania",
   "@deleteActionItemTitle": {
     "description": "Title for delete item dialog"
   },
-  "deleteActionItemMessage": "Czy na pewno chcesz usunąć to zadanie?",
+  "deleteActionItemMessage": "Czy na pewno chcesz usunąć ten element działania?",
   "@deleteActionItemMessage": {
     "description": "Confirmation message for deleting single item"
   },
@@ -2291,7 +2291,7 @@
   "@markComplete": {
     "description": "Action label"
   },
-  "actionItemDeleted": "Zadanie usunięte",
+  "actionItemDeleted": "Element działania usunięty",
   "@actionItemDeleted": {
     "description": "Snackbar"
   },
@@ -2313,5 +2313,211 @@
   },
   "appInterfaceSectionTitle": "INTERFEJS APLIKACJI",
   "speechTranscriptionSectionTitle": "MOWA I TRANSKRYPCJA",
-  "languageSettingsHelperText": "Język aplikacji zmienia menu i przyciski. Język mowy wpływa na sposób transkrypcji nagrań."
+  "languageSettingsHelperText": "Język aplikacji zmienia menu i przyciski. Język mowy wpływa na sposób transkrypcji nagrań.",
+  "translationNotice": "Powiadomienie o tłumaczeniu",
+  "translationNoticeMessage": "Omi tłumaczy rozmowy na Twój główny język. Zaktualizuj to w dowolnym momencie w Ustawienia → Profile.",
+  "pleaseCheckInternetConnection": "Sprawdź połączenie internetowe i spróbuj ponownie",
+  "pleaseSelectReason": "Wybierz przyczynę",
+  "tellUsMoreWhatWentWrong": "Powiedz nam więcej o tym, co poszło nie tak...",
+  "selectText": "Zaznacz tekst",
+  "maximumGoalsAllowed": "Maksymalnie {count} celów dozwolonych",
+  "conversationCannotBeMerged": "Ta rozmowa nie może zostać scalona (zablokowana lub już scalana)",
+  "pleaseEnterFolderName": "Wprowadź nazwę folderu",
+  "failedToCreateFolder": "Nie udało się utworzyć folderu",
+  "failedToUpdateFolder": "Nie udało się zaktualizować folderu",
+  "folderName": "Nazwa folderu",
+  "descriptionOptional": "Opis (opcjonalnie)",
+  "failedToDeleteFolder": "Nie udało się usunąć folderu",
+  "editFolder": "Edytuj folder",
+  "deleteFolder": "Usuń folder",
+  "transcriptCopiedToClipboard": "Transkrypcja skopiowana do schowka",
+  "summaryCopiedToClipboard": "Podsumowanie skopiowane do schowka",
+  "conversationUrlCouldNotBeShared": "Nie można było udostępnić adresu URL rozmowy.",
+  "urlCopiedToClipboard": "URL skopiowany do schowka",
+  "exportTranscript": "Eksportuj transkrypcję",
+  "exportSummary": "Eksportuj podsumowanie",
+  "exportButton": "Eksportuj",
+  "actionItemsCopiedToClipboard": "Elementy działań skopiowane do schowka",
+  "summarize": "Podsumuj",
+  "generateSummary": "Wygeneruj podsumowanie",
+  "conversationNotFoundOrDeleted": "Rozmowa nie została znaleziona lub została usunięta",
+  "deleteMemory": "Usunąć pamięć?",
+  "thisActionCannotBeUndone": "Ta czynność nie może być cofnięta.",
+  "memoriesCount": "{count} wspomnień",
+  "noMemoriesInCategory": "Brak wspomnień w tej kategorii",
+  "addYourFirstMemory": "Dodaj swoje pierwsze wspomnienie",
+  "firmwareDisconnectUsb": "Odłącz USB",
+  "firmwareUsbWarning": "Połączenie USB podczas aktualizacji może uszkodzić urządzenie.",
+  "firmwareBatteryAbove15": "Bateria powyżej 15%",
+  "firmwareEnsureBattery": "Upewnij się, że urządzenie ma 15% baterii.",
+  "firmwareStableConnection": "Stabilne połączenie",
+  "firmwareConnectWifi": "Połącz się z WiFi lub siecią komórkową.",
+  "failedToStartUpdate": "Nie udało się rozpocząć aktualizacji: {error}",
+  "beforeUpdateMakeSure": "Przed aktualizacją upewnij się:",
+  "confirmed": "Potwierdzone!",
+  "release": "Zwolnij",
+  "slideToUpdate": "Przesuń, aby zaktualizować",
+  "copiedToClipboard": "{title} skopiowano do schowka",
+  "batteryLevel": "Poziom baterii",
+  "productUpdate": "Aktualizacja produktu",
+  "offline": "Offline",
+  "available": "Dostępne",
+  "unpairDeviceDialogTitle": "Rozłącz urządzenie",
+  "unpairDeviceDialogMessage": "To rozłączy urządzenie, aby mogło zostać połączone z innym telefonem. Będziesz musiał przejść do Ustawienia > Bluetooth i zapomnieć urządzenie, aby zakończyć proces.",
+  "unpair": "Rozłącz",
+  "unpairAndForgetDevice": "Rozłącz i zapomnij urządzenie",
+  "unknownDevice": "Nieznane urządzenie",
+  "unknown": "Nieznane",
+  "productName": "Nazwa produktu",
+  "serialNumber": "Numer seryjny",
+  "connected": "Połączono",
+  "privacyPolicyTitle": "Polityka prywatności",
+  "actionItemDescriptionCannotBeEmpty": "Opis elementu działania nie może być pusty",
+  "saved": "Zapisano",
+  "overdue": "Zaległe",
+  "markIncomplete": "Oznacz jako nieukończone",
+  "editDueDate": "Edytuj termin",
+  "setDueDate": "Ustaw termin",
+  "clearDueDate": "Wyczyść termin",
+  "mondayAbbr": "Pon",
+  "tuesdayAbbr": "Wt",
+  "wednesdayAbbr": "Śr",
+  "thursdayAbbr": "Czw",
+  "fridayAbbr": "Pt",
+  "saturdayAbbr": "Sob",
+  "sundayAbbr": "Niedz",
+  "failedToUpdateDueDate": "Nie udało się zaktualizować terminu",
+  "failedToClearDueDate": "Nie udało się wyczyścić terminu",
+  "howDoesItWork": "Jak to działa?",
+  "sdCardSyncDescription": "Synchronizacja karty SD zaimportuje twoje wspomnienia z karty SD do aplikacji",
+  "checksForAudioFiles": "Sprawdza pliki audio na karcie SD",
+  "omiSyncsAudioFiles": "Omi następnie synchronizuje pliki audio z serwerem",
+  "serverProcessesAudio": "Serwer przetwarza pliki audio i tworzy wspomnienia",
+  "youreAllSet": "Gotowe!",
+  "welcomeToOmiDescription": "Witamy w Omi! Twój towarzysz AI jest gotowy, aby pomóc ci w rozmowach, zadaniach i nie tylko.",
+  "startUsingOmi": "Zacznij korzystać z Omi",
+  "back": "Wstecz",
+  "keyboardShortcuts": "Skróty klawiszowe",
+  "toggleControlBar": "Przełącz pasek sterowania",
+  "pressKeys": "Naciśnij klawisze...",
+  "cmdRequired": "⌘ wymagane",
+  "invalidKey": "Nieprawidłowy klawisz",
+  "space": "Spacja",
+  "search": "Szukaj",
+  "searchPlaceholder": "Szukaj...",
+  "untitledConversation": "Rozmowa bez tytułu",
+  "countRemaining": "{count} pozostało",
+  "addGoal": "Dodaj cel",
+  "editGoal": "Edytuj cel",
+  "icon": "Ikona",
+  "goalTitle": "Tytuł celu",
+  "current": "Bieżący",
+  "target": "Cel",
+  "saveGoal": "Zapisz",
+  "goals": "Cele",
+  "tapToAddGoal": "Dotknij, aby dodać cel",
+  "welcomeBack": "Witaj ponownie",
+  "yourConversations": "Twoje rozmowy",
+  "reviewAndManageConversations": "Przeglądaj i zarządzaj zapisanymi rozmowami",
+  "startCapturingConversations": "Zacznij przechwytywać rozmowy za pomocą urządzenia Omi, aby je tutaj zobaczyć.",
+  "useMobileAppToCapture": "Użyj aplikacji mobilnej, aby nagrać dźwięk",
+  "conversationsProcessedAutomatically": "Rozmowy są przetwarzane automatycznie",
+  "getInsightsInstantly": "Uzyskaj natychmiastowe spostrzeżenia i podsumowania",
+  "showAll": "Pokaż wszystko →",
+  "noTasksForToday": "Brak zadań na dziś.\\nZapytaj Omi o więcej zadań lub utwórz je ręcznie.",
+  "dailyScore": "DZIENNY WYNIK",
+  "dailyScoreDescription": "Wynik, który pomaga lepiej skupić się na realizacji.",
+  "searchResults": "Wyniki wyszukiwania",
+  "actionItems": "Zadania do wykonania",
+  "tasksToday": "Dzisiaj",
+  "tasksTomorrow": "Jutro",
+  "tasksNoDeadline": "Bez terminu",
+  "tasksLater": "Później",
+  "loadingTasks": "Ładowanie zadań...",
+  "tasks": "Zadania",
+  "swipeTasksToIndent": "Przesuń zadania, aby wcięcia, przeciągnij między kategoriami",
+  "create": "Utwórz",
+  "noTasksYet": "Jeszcze nie ma zadań",
+  "tasksFromConversationsWillAppear": "Zadania z Twoich rozmów pojawią się tutaj.\nKliknij Utwórz, aby dodać jedno ręcznie.",
+  "monthJan": "Sty",
+  "monthFeb": "Lut",
+  "monthMar": "Mar",
+  "monthApr": "Kwi",
+  "monthMay": "Maj",
+  "monthJun": "Cze",
+  "monthJul": "Lip",
+  "monthAug": "Sie",
+  "monthSep": "Wrz",
+  "monthOct": "Paź",
+  "monthNov": "Lis",
+  "monthDec": "Gru",
+  "timePM": "PM",
+  "timeAM": "AM",
+  "actionItemUpdatedSuccessfully": "Zadanie zaktualizowane pomyślnie",
+  "actionItemCreatedSuccessfully": "Zadanie utworzone pomyślnie",
+  "actionItemDeletedSuccessfully": "Zadanie usunięte pomyślnie",
+  "deleteActionItem": "Usuń zadanie",
+  "deleteActionItemConfirmation": "Czy na pewno chcesz usunąć to zadanie? Tej operacji nie można cofnąć.",
+  "enterActionItemDescription": "Wprowadź opis zadania...",
+  "markAsCompleted": "Oznacz jako ukończone",
+  "setDueDateAndTime": "Ustaw termin i godzinę",
+  "reloadingApps": "Ponowne ładowanie aplikacji...",
+  "loadingApps": "Ładowanie aplikacji...",
+  "browseInstallCreateApps": "Przeglądaj, instaluj i twórz aplikacje",
+  "all": "Wszystkie",
+  "open": "Otwórz",
+  "install": "Zainstaluj",
+  "noAppsAvailable": "Brak dostępnych aplikacji",
+  "unableToLoadApps": "Nie można załadować aplikacji",
+  "tryAdjustingSearchTermsOrFilters": "Spróbuj dostosować wyszukiwane hasła lub filtry",
+  "checkBackLaterForNewApps": "Sprawdź później, czy są nowe aplikacje",
+  "pleaseCheckInternetConnectionAndTryAgain": "Sprawdź połączenie internetowe i spróbuj ponownie",
+  "createNewApp": "Utwórz nową aplikację",
+  "buildSubmitCustomOmiApp": "Zbuduj i prześlij swoją niestandardową aplikację Omi",
+  "submittingYourApp": "Przesyłanie aplikacji...",
+  "preparingFormForYou": "Przygotowywanie formularza...",
+  "appDetails": "Szczegóły aplikacji",
+  "paymentDetails": "Szczegóły płatności",
+  "previewAndScreenshots": "Podgląd i zrzuty ekranu",
+  "appCapabilities": "Możliwości aplikacji",
+  "aiPrompts": "Podpowiedzi AI",
+  "chatPrompt": "Podpowiedź czatu",
+  "chatPromptPlaceholder": "Jesteś wspaniałą aplikacją, Twoim zadaniem jest odpowiadanie na zapytania użytkowników i sprawianie, by czuli się dobrze...",
+  "conversationPrompt": "Podpowiedź konwersacji",
+  "conversationPromptPlaceholder": "Jesteś wspaniałą aplikacją, otrzymasz transkrypcję i podsumowanie rozmowy...",
+  "notificationScopes": "Zakresy powiadomień",
+  "appPrivacyAndTerms": "Prywatność i warunki aplikacji",
+  "makeMyAppPublic": "Upublicznij moją aplikację",
+  "submitAppTermsAgreement": "Przesyłając tę aplikację, akceptuję Warunki korzystania z usługi i Politykę prywatności Omi AI",
+  "submitApp": "Prześlij aplikację",
+  "needHelpGettingStarted": "Potrzebujesz pomocy na start?",
+  "clickHereForAppBuildingGuides": "Kliknij tutaj, aby uzyskać przewodniki tworzenia aplikacji i dokumentację",
+  "submitAppQuestion": "Przesłać aplikację?",
+  "submitAppPublicDescription": "Twoja aplikacja zostanie sprawdzona i upubliczniona. Możesz zacząć z niej korzystać natychmiast, nawet podczas sprawdzania!",
+  "submitAppPrivateDescription": "Twoja aplikacja zostanie sprawdzona i udostępniona Tobie prywatnie. Możesz zacząć z niej korzystać natychmiast, nawet podczas sprawdzania!",
+  "startEarning": "Zacznij zarabiać! 💰",
+  "connectStripeOrPayPal": "Połącz Stripe lub PayPal, aby otrzymywać płatności za swoją aplikację.",
+  "connectNow": "Połącz teraz",
+  "installsCount": "{count}+ instalacji",
+  "uninstallApp": "Odinstaluj aplikację",
+  "subscribe": "Subskrybuj",
+  "dataAccessNotice": "Powiadomienie o dostępie do danych",
+  "dataAccessWarning": "Ta aplikacja będzie miała dostęp do Twoich danych. Omi AI nie ponosi odpowiedzialności za sposób, w jaki Twoje dane są wykorzystywane, modyfikowane lub usuwane przez tę aplikację",
+  "installApp": "Zainstaluj aplikację",
+  "betaTesterNotice": "Jesteś testerem beta tej aplikacji. Nie jest jeszcze publiczna. Stanie się publiczna po zatwierdzeniu.",
+  "appUnderReviewOwner": "Twoja aplikacja jest w trakcie przeglądu i widoczna tylko dla Ciebie. Stanie się publiczna po zatwierdzeniu.",
+  "appRejectedNotice": "Twoja aplikacja została odrzucona. Zaktualizuj szczegóły aplikacji i prześlij ją ponownie do przeglądu.",
+  "setupSteps": "Kroki konfiguracji",
+  "setupInstructions": "Instrukcje konfiguracji",
+  "integrationInstructions": "Instrukcje integracji",
+  "preview": "Podgląd",
+  "aboutTheApp": "O aplikacji",
+  "aboutThePersona": "O personie",
+  "chatPersonality": "Osobowość czatu",
+  "ratingsAndReviews": "Oceny i recenzje",
+  "noRatings": "brak ocen",
+  "ratingsCount": "{count}+ ocen",
+  "errorActivatingApp": "Błąd aktywacji aplikacji",
+  "integrationSetupRequired": "Jeśli to aplikacja integracyjna, upewnij się, że konfiguracja jest zakończona.",
+  "installed": "Zainstalowano"
 }

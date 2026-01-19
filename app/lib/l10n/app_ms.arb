@@ -45,7 +45,7 @@
   "@add": {
     "description": "Add button label"
   },
-  "update": "Kemas Kini",
+  "update": "Kemas kini",
   "@update": {
     "description": "Update button label"
   },
@@ -101,7 +101,7 @@
   "@errorProcessingConversation": {
     "description": "Error message for conversation processing failure"
   },
-  "noInternetConnection": "Sila semak sambungan internet anda dan cuba lagi.",
+  "noInternetConnection": "Tiada sambungan internet",
   "@noInternetConnection": {
     "description": "Message shown when there's no internet"
   },
@@ -217,11 +217,11 @@
   "@done": {
     "description": "Button label"
   },
-  "disconnected": "Terputus Sambungan",
+  "disconnected": "Terputus sambungan",
   "@disconnected": {
     "description": "Device disconnected status"
   },
-  "searching": "Mencari",
+  "searching": "Mencari...",
   "@searching": {
     "description": "Searching for device status"
   },
@@ -289,7 +289,7 @@
   "@syncingBackground": {
     "description": "Message during background sync"
   },
-  "noConversationsYet": "Tiada perbualan lagi.",
+  "noConversationsYet": "Belum ada perbualan lagi",
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
@@ -301,7 +301,7 @@
   "@starConversationHint": {
     "description": "Hint explaining how to star conversations"
   },
-  "searchConversations": "Cari Perbualan",
+  "searchConversations": "Cari perbualan...",
   "@searchConversations": {
     "description": "Search field placeholder"
   },
@@ -391,11 +391,11 @@
   "@chatWithOmi": {
     "description": "Chat share subject"
   },
-  "apps": "Aplikasi",
+  "apps": "Apl",
   "@apps": {
     "description": "Apps page title"
   },
-  "noAppsFound": "Tiada aplikasi dijumpai",
+  "noAppsFound": "Tiada apl ditemui",
   "@noAppsFound": {
     "description": "Empty state when no apps match"
   },
@@ -411,15 +411,15 @@
   "@buildAndShareApp": {
     "description": "Create app button subtitle"
   },
-  "searchApps": "Cari 1500+ Aplikasi",
+  "searchApps": "Cari apl...",
   "@searchApps": {
     "description": "Apps search placeholder"
   },
-  "myApps": "Aplikasi Saya",
+  "myApps": "Apl Saya",
   "@myApps": {
     "description": "My Apps filter button"
   },
-  "installedApps": "Aplikasi Dipasang",
+  "installedApps": "Apl Dipasang",
   "@installedApps": {
     "description": "Installed Apps filter button"
   },
@@ -639,7 +639,7 @@
   "@firmware": {
     "description": "Firmware label"
   },
-  "sdCardSync": "Segerak Kad SD",
+  "sdCardSync": "Sinkronisasi Kad SD",
   "@sdCardSync": {
     "description": "SD Card sync label"
   },
@@ -683,7 +683,7 @@
   "@disconnectDevice": {
     "description": "Disconnect device button"
   },
-  "unpairDevice": "Nyahpasang Peranti",
+  "unpairDevice": "Nyahpasangkan Peranti",
   "@unpairDevice": {
     "description": "Unpair device button"
   },
@@ -695,7 +695,7 @@
   "@deviceDisconnectedMessage": {
     "description": "Message shown when device is disconnected"
   },
-  "deviceUnpairedMessage": "Peranti dinyahpasangkan. Pergi ke Tetapan > Bluetooth dan lupakan peranti untuk melengkapkan nyahpasangan.",
+  "deviceUnpairedMessage": "Peranti dinyahpasangkan. Pergi ke Tetapan > Bluetooth dan lupakan peranti untuk melengkapkan penyahpasangan.",
   "@deviceUnpairedMessage": {
     "description": "Message shown when device is unpaired"
   },
@@ -891,7 +891,7 @@
   "@yourOmiInsights": {
     "description": "Usage page title"
   },
-  "today": "Hari Ini",
+  "today": "Hari ini",
   "@today": {
     "description": "Time period: Today"
   },
@@ -997,7 +997,7 @@
   "@upgrade": {
     "description": "Upgrade button"
   },
-  "upgradeToUnlimited": "Naik Taraf ke Tanpa Had",
+  "upgradeToUnlimited": "Naik taraf ke tanpa had",
   "@upgradeToUnlimited": {
     "description": "Upgrade to unlimited button"
   },
@@ -1414,7 +1414,7 @@
       }
     }
   },
-  "yesterday": "semalam",
+  "yesterday": "Semalam",
   "daysAgo": "{count} hari yang lalu",
   "@daysAgo": {
     "placeholders": {
@@ -1572,7 +1572,7 @@
   "highAccuracy": "Ketepatan tinggi",
   "privacyFirst": "Privasi utama",
   "saveChanges": "Simpan Perubahan",
-  "resetToDefault": "Tetapkan Semula ke Lalai",
+  "resetToDefault": "Tetapkan semula ke lalai",
   "viewTemplate": "Lihat Templat",
   "trySomethingLike": "Cuba sesuatu seperti...",
   "tryIt": "Cuba",
@@ -1605,7 +1605,7 @@
   "@creating": {
     "description": "Loading state text when app generation is in progress"
   },
-  "createApp": "Cipta Aplikasi",
+  "createApp": "Cipta Apl",
   "@createApp": {
     "description": "Button text to initiate app creation"
   },
@@ -1724,7 +1724,7 @@
   "@rateOnGooglePlay": {
     "description": "Button text to rate on Google Play Store"
   },
-  "maybeLater": "Mungkin kemudian",
+  "maybeLater": "Mungkin Kemudian",
   "@maybeLater": {
     "description": "Button text to dismiss the review prompt"
   },
@@ -1986,11 +1986,11 @@
   "@actionItemCompleted": {
     "description": "Snackbar message when item completed"
   },
-  "deleteActionItemTitle": "Padam Item Tindakan",
+  "deleteActionItemTitle": "Padam item tindakan",
   "@deleteActionItemTitle": {
     "description": "Title for delete item dialog"
   },
-  "deleteActionItemMessage": "Adakah anda pasti mahu memadam item tindakan ini?",
+  "deleteActionItemMessage": "Adakah anda pasti mahu memadamkan item tindakan ini?",
   "@deleteActionItemMessage": {
     "description": "Confirmation message for deleting single item"
   },
@@ -2215,11 +2215,11 @@
   "@retry": {
     "description": "Button label"
   },
-  "createActionItem": "Cipta Item Tindakan",
+  "createActionItem": "Buat item tindakan",
   "@createActionItem": {
     "description": "Sheet title"
   },
-  "editActionItem": "Edit Item Tindakan",
+  "editActionItem": "Edit item tindakan",
   "@editActionItem": {
     "description": "Sheet title"
   },
@@ -2243,11 +2243,11 @@
   "@actionItemCreated": {
     "description": "Snackbar"
   },
-  "failedToCreateActionItem": "Gagal mencipta item tindakan",
+  "failedToCreateActionItem": "Gagal membuat item tindakan",
   "@failedToCreateActionItem": {
     "description": "Snackbar"
   },
-  "dueDate": "Tarikh Akhir",
+  "dueDate": "Tarikh akhir",
   "@dueDate": {
     "description": "Label"
   },
@@ -2287,7 +2287,7 @@
   "@completed": {
     "description": "Status label"
   },
-  "markComplete": "Tandakan selesai",
+  "markComplete": "Tandai selesai",
   "@markComplete": {
     "description": "Action label"
   },
@@ -2313,5 +2313,211 @@
   },
   "appInterfaceSectionTitle": "ANTARA MUKA APLIKASI",
   "speechTranscriptionSectionTitle": "PERTUTURAN & TRANSKRIPSI",
-  "languageSettingsHelperText": "Bahasa Aplikasi menukar menu dan butang. Bahasa Pertuturan mempengaruhi cara rakaman anda ditranskripsi."
+  "languageSettingsHelperText": "Bahasa Aplikasi menukar menu dan butang. Bahasa Pertuturan mempengaruhi cara rakaman anda ditranskripsi.",
+  "translationNotice": "Notis Terjemahan",
+  "translationNoticeMessage": "Omi menterjemah perbualan ke bahasa utama anda. Kemas kini pada bila-bila masa di Tetapan → Profil.",
+  "pleaseCheckInternetConnection": "Sila semak sambungan internet anda dan cuba lagi",
+  "pleaseSelectReason": "Sila pilih sebab",
+  "tellUsMoreWhatWentWrong": "Beritahu kami lebih lanjut tentang apa yang salah...",
+  "selectText": "Pilih teks",
+  "maximumGoalsAllowed": "Maksimum {count} matlamat dibenarkan",
+  "conversationCannotBeMerged": "Perbualan ini tidak boleh digabungkan (dikunci atau sudah digabungkan)",
+  "pleaseEnterFolderName": "Sila masukkan nama folder",
+  "failedToCreateFolder": "Gagal mencipta folder",
+  "failedToUpdateFolder": "Gagal mengemas kini folder",
+  "folderName": "Nama folder",
+  "descriptionOptional": "Penerangan (pilihan)",
+  "failedToDeleteFolder": "Gagal memadam folder",
+  "editFolder": "Edit folder",
+  "deleteFolder": "Padam folder",
+  "transcriptCopiedToClipboard": "Transkrip disalin ke papan keratan",
+  "summaryCopiedToClipboard": "Ringkasan disalin ke papan keratan",
+  "conversationUrlCouldNotBeShared": "URL perbualan tidak dapat dikongsi.",
+  "urlCopiedToClipboard": "URL disalin ke papan keratan",
+  "exportTranscript": "Eksport transkrip",
+  "exportSummary": "Eksport ringkasan",
+  "exportButton": "Eksport",
+  "actionItemsCopiedToClipboard": "Item tindakan disalin ke papan keratan",
+  "summarize": "Ringkaskan",
+  "generateSummary": "Jana ringkasan",
+  "conversationNotFoundOrDeleted": "Perbualan tidak ditemui atau telah dipadam",
+  "deleteMemory": "Padam memori?",
+  "thisActionCannotBeUndone": "Tindakan ini tidak boleh dibuat asal.",
+  "memoriesCount": "{count} kenangan",
+  "noMemoriesInCategory": "Tiada kenangan dalam kategori ini lagi",
+  "addYourFirstMemory": "Tambah kenangan pertama anda",
+  "firmwareDisconnectUsb": "Putuskan USB",
+  "firmwareUsbWarning": "Sambungan USB semasa kemas kini boleh merosakkan peranti anda.",
+  "firmwareBatteryAbove15": "Bateri melebihi 15%",
+  "firmwareEnsureBattery": "Pastikan peranti anda mempunyai 15% bateri.",
+  "firmwareStableConnection": "Sambungan stabil",
+  "firmwareConnectWifi": "Sambung ke WiFi atau data selular.",
+  "failedToStartUpdate": "Gagal memulakan kemas kini: {error}",
+  "beforeUpdateMakeSure": "Sebelum kemas kini, pastikan:",
+  "confirmed": "Disahkan!",
+  "release": "Lepaskan",
+  "slideToUpdate": "Luncurkan untuk kemas kini",
+  "copiedToClipboard": "{title} disalin ke papan keratan",
+  "batteryLevel": "Tahap Bateri",
+  "productUpdate": "Kemas Kini Produk",
+  "offline": "Luar Talian",
+  "available": "Tersedia",
+  "unpairDeviceDialogTitle": "Nyahpasangkan Peranti",
+  "unpairDeviceDialogMessage": "Ini akan menyahpasangkan peranti supaya ia boleh disambungkan ke telefon lain. Anda perlu pergi ke Tetapan > Bluetooth dan melupakan peranti untuk melengkapkan prosesnya.",
+  "unpair": "Nyahpasangkan",
+  "unpairAndForgetDevice": "Nyahpasangkan dan Lupakan Peranti",
+  "unknownDevice": "Peranti Tidak Dikenali",
+  "unknown": "Tidak Dikenali",
+  "productName": "Nama Produk",
+  "serialNumber": "Nombor Siri",
+  "connected": "Disambungkan",
+  "privacyPolicyTitle": "Dasar Privasi",
+  "actionItemDescriptionCannotBeEmpty": "Penerangan item tindakan tidak boleh kosong",
+  "saved": "Disimpan",
+  "overdue": "Lewat",
+  "markIncomplete": "Tandai belum selesai",
+  "editDueDate": "Edit tarikh akhir",
+  "setDueDate": "Tetapkan tarikh akhir",
+  "clearDueDate": "Kosongkan tarikh akhir",
+  "mondayAbbr": "Isn",
+  "tuesdayAbbr": "Sel",
+  "wednesdayAbbr": "Rab",
+  "thursdayAbbr": "Kha",
+  "fridayAbbr": "Jum",
+  "saturdayAbbr": "Sab",
+  "sundayAbbr": "Ahd",
+  "failedToUpdateDueDate": "Gagal mengemas kini tarikh akhir",
+  "failedToClearDueDate": "Gagal mengosongkan tarikh akhir",
+  "howDoesItWork": "Bagaimana ia berfungsi?",
+  "sdCardSyncDescription": "Penyegerakan Kad SD akan mengimport kenangan anda dari Kad SD ke aplikasi",
+  "checksForAudioFiles": "Memeriksa fail audio pada Kad SD",
+  "omiSyncsAudioFiles": "Omi kemudian menyegerakkan fail audio dengan pelayan",
+  "serverProcessesAudio": "Pelayan memproses fail audio dan mencipta kenangan",
+  "youreAllSet": "Anda sudah bersedia!",
+  "welcomeToOmiDescription": "Selamat datang ke Omi! Pendamping AI anda bersedia membantu anda dengan perbualan, tugasan, dan banyak lagi.",
+  "startUsingOmi": "Mula Menggunakan Omi",
+  "back": "Kembali",
+  "keyboardShortcuts": "Pintasan Papan Kekunci",
+  "toggleControlBar": "Togol Bar Kawalan",
+  "pressKeys": "Tekan kekunci...",
+  "cmdRequired": "⌘ diperlukan",
+  "invalidKey": "Kekunci tidak sah",
+  "space": "Ruang",
+  "search": "Cari",
+  "searchPlaceholder": "Cari...",
+  "untitledConversation": "Perbualan tanpa tajuk",
+  "countRemaining": "{count} baki",
+  "addGoal": "Tambah matlamat",
+  "editGoal": "Edit matlamat",
+  "icon": "Ikon",
+  "goalTitle": "Tajuk matlamat",
+  "current": "Semasa",
+  "target": "Sasaran",
+  "saveGoal": "Simpan",
+  "goals": "Matlamat",
+  "tapToAddGoal": "Ketik untuk menambah matlamat",
+  "welcomeBack": "Selamat kembali",
+  "yourConversations": "Perbualan Anda",
+  "reviewAndManageConversations": "Semak dan urus perbualan yang dirakam",
+  "startCapturingConversations": "Mula tangkap perbualan dengan peranti Omi anda untuk melihatnya di sini.",
+  "useMobileAppToCapture": "Gunakan aplikasi mudah alih anda untuk merakam audio",
+  "conversationsProcessedAutomatically": "Perbualan diproses secara automatik",
+  "getInsightsInstantly": "Dapatkan pandangan dan ringkasan dengan segera",
+  "showAll": "Tunjukkan semua →",
+  "noTasksForToday": "Tiada tugasan untuk hari ini.\\nTanya Omi untuk lebih banyak tugasan atau cipta secara manual.",
+  "dailyScore": "SKOR HARIAN",
+  "dailyScoreDescription": "Skor untuk membantu anda fokus lebih baik pada pelaksanaan.",
+  "searchResults": "Hasil carian",
+  "actionItems": "Item tindakan",
+  "tasksToday": "Hari ini",
+  "tasksTomorrow": "Esok",
+  "tasksNoDeadline": "Tiada tarikh akhir",
+  "tasksLater": "Kemudian",
+  "loadingTasks": "Memuatkan tugas...",
+  "tasks": "Tugas",
+  "swipeTasksToIndent": "Leret tugas untuk indent, seret antara kategori",
+  "create": "Cipta",
+  "noTasksYet": "Belum ada tugas",
+  "tasksFromConversationsWillAppear": "Tugas daripada perbualan anda akan muncul di sini.\nKlik Cipta untuk menambah satu secara manual.",
+  "monthJan": "Jan",
+  "monthFeb": "Feb",
+  "monthMar": "Mac",
+  "monthApr": "Apr",
+  "monthMay": "Mei",
+  "monthJun": "Jun",
+  "monthJul": "Jul",
+  "monthAug": "Ogos",
+  "monthSep": "Sept",
+  "monthOct": "Okt",
+  "monthNov": "Nov",
+  "monthDec": "Dis",
+  "timePM": "PTG",
+  "timeAM": "PG",
+  "actionItemUpdatedSuccessfully": "Item tindakan berjaya dikemas kini",
+  "actionItemCreatedSuccessfully": "Item tindakan berjaya dibuat",
+  "actionItemDeletedSuccessfully": "Item tindakan berjaya dipadamkan",
+  "deleteActionItem": "Padam item tindakan",
+  "deleteActionItemConfirmation": "Adakah anda pasti mahu memadam item tindakan ini? Tindakan ini tidak boleh dibatalkan.",
+  "enterActionItemDescription": "Masukkan penerangan item tindakan...",
+  "markAsCompleted": "Tandakan sebagai selesai",
+  "setDueDateAndTime": "Tetapkan tarikh dan masa akhir",
+  "reloadingApps": "Memuatkan semula apl...",
+  "loadingApps": "Memuatkan apl...",
+  "browseInstallCreateApps": "Layari, pasang dan cipta apl",
+  "all": "Semua",
+  "open": "Buka",
+  "install": "Pasang",
+  "noAppsAvailable": "Tiada apl tersedia",
+  "unableToLoadApps": "Tidak dapat memuatkan apl",
+  "tryAdjustingSearchTermsOrFilters": "Cuba laraskan istilah carian atau penapis anda",
+  "checkBackLaterForNewApps": "Semak kemudian untuk apl baharu",
+  "pleaseCheckInternetConnectionAndTryAgain": "Sila semak sambungan internet anda dan cuba lagi",
+  "createNewApp": "Cipta Aplikasi Baharu",
+  "buildSubmitCustomOmiApp": "Bina dan hantar aplikasi Omi tersuai anda",
+  "submittingYourApp": "Menghantar aplikasi anda...",
+  "preparingFormForYou": "Menyediakan borang untuk anda...",
+  "appDetails": "Butiran Aplikasi",
+  "paymentDetails": "Butiran Pembayaran",
+  "previewAndScreenshots": "Pratonton dan Tangkapan Skrin",
+  "appCapabilities": "Keupayaan Aplikasi",
+  "aiPrompts": "Gesaan AI",
+  "chatPrompt": "Gesaan Sembang",
+  "chatPromptPlaceholder": "Anda adalah aplikasi yang hebat, tugas anda adalah untuk menjawab pertanyaan pengguna dan membuat mereka berasa baik...",
+  "conversationPrompt": "Gesaan Perbualan",
+  "conversationPromptPlaceholder": "Anda adalah aplikasi yang hebat, anda akan diberikan transkrip dan ringkasan perbualan...",
+  "notificationScopes": "Skop Pemberitahuan",
+  "appPrivacyAndTerms": "Privasi & Terma Aplikasi",
+  "makeMyAppPublic": "Jadikan aplikasi saya awam",
+  "submitAppTermsAgreement": "Dengan menghantar aplikasi ini, saya bersetuju dengan Terma Perkhidmatan dan Dasar Privasi Omi AI",
+  "submitApp": "Hantar Aplikasi",
+  "needHelpGettingStarted": "Perlukan bantuan untuk bermula?",
+  "clickHereForAppBuildingGuides": "Klik di sini untuk panduan pembinaan aplikasi dan dokumentasi",
+  "submitAppQuestion": "Hantar Aplikasi?",
+  "submitAppPublicDescription": "Aplikasi anda akan disemak dan dijadikan awam. Anda boleh mula menggunakannya dengan serta-merta, walaupun semasa semakan!",
+  "submitAppPrivateDescription": "Aplikasi anda akan disemak dan disediakan untuk anda secara peribadi. Anda boleh mula menggunakannya dengan serta-merta, walaupun semasa semakan!",
+  "startEarning": "Mula Memperoleh! 💰",
+  "connectStripeOrPayPal": "Sambungkan Stripe atau PayPal untuk menerima pembayaran untuk aplikasi anda.",
+  "connectNow": "Sambung Sekarang",
+  "installsCount": "{count}+ pemasangan",
+  "uninstallApp": "Nyahpasang Apl",
+  "subscribe": "Langgan",
+  "dataAccessNotice": "Notis Akses Data",
+  "dataAccessWarning": "Apl ini akan mengakses data anda. Omi AI tidak bertanggungjawab terhadap bagaimana data anda digunakan, diubah suai, atau dipadamkan oleh apl ini",
+  "installApp": "Pasang Apl",
+  "betaTesterNotice": "Anda adalah penguji beta untuk apl ini. Ia belum lagi awam. Ia akan menjadi awam setelah diluluskan.",
+  "appUnderReviewOwner": "Apl anda sedang dalam semakan dan hanya kelihatan kepada anda. Ia akan menjadi awam setelah diluluskan.",
+  "appRejectedNotice": "Apl anda telah ditolak. Sila kemas kini butiran apl dan hantar semula untuk semakan.",
+  "setupSteps": "Langkah Persediaan",
+  "setupInstructions": "Arahan Persediaan",
+  "integrationInstructions": "Arahan Integrasi",
+  "preview": "Pratonton",
+  "aboutTheApp": "Tentang Apl",
+  "aboutThePersona": "Tentang Persona",
+  "chatPersonality": "Keperibadian Sembang",
+  "ratingsAndReviews": "Penilaian & Ulasan",
+  "noRatings": "tiada penilaian",
+  "ratingsCount": "{count}+ penilaian",
+  "errorActivatingApp": "Ralat mengaktifkan apl",
+  "integrationSetupRequired": "Jika ini adalah apl integrasi, pastikan persediaan telah selesai.",
+  "installed": "Dipasang"
 }

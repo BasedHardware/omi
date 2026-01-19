@@ -29,7 +29,7 @@
   "@confirm": {
     "description": "Confirm button label"
   },
-  "cancel": "Cancel",
+  "cancel": "Anulează",
   "@cancel": {
     "description": "Button label"
   },
@@ -37,7 +37,7 @@
   "@ok": {
     "description": "Generic OK button text"
   },
-  "delete": "Delete",
+  "delete": "Șterge",
   "@delete": {
     "description": "Button label"
   },
@@ -45,7 +45,7 @@
   "@add": {
     "description": "Add button label"
   },
-  "update": "Actualizează",
+  "update": "Actualizați",
   "@update": {
     "description": "Update button label"
   },
@@ -101,7 +101,7 @@
   "@errorProcessingConversation": {
     "description": "Error message for conversation processing failure"
   },
-  "noInternetConnection": "Te rugăm să verifici conexiunea la internet și să încerci din nou.",
+  "noInternetConnection": "Fără conexiune la internet",
   "@noInternetConnection": {
     "description": "Message shown when there's no internet"
   },
@@ -209,11 +209,11 @@
   "@couldNotAccessFile": {
     "description": "Error when file access fails"
   },
-  "askOmi": "Întreabă Omi",
+  "askOmi": "Întreabă pe Omi",
   "@askOmi": {
     "description": "Chat button label"
   },
-  "done": "Done",
+  "done": "Gata",
   "@done": {
     "description": "Button label"
   },
@@ -221,7 +221,7 @@
   "@disconnected": {
     "description": "Device disconnected status"
   },
-  "searching": "Se caută",
+  "searching": "Se caută...",
   "@searching": {
     "description": "Searching for device status"
   },
@@ -289,7 +289,7 @@
   "@syncingBackground": {
     "description": "Message during background sync"
   },
-  "noConversationsYet": "Încă nu există conversații.",
+  "noConversationsYet": "Încă nu există conversații",
   "@noConversationsYet": {
     "description": "Empty state when no conversations exist"
   },
@@ -301,7 +301,7 @@
   "@starConversationHint": {
     "description": "Hint explaining how to star conversations"
   },
-  "searchConversations": "Caută conversații",
+  "searchConversations": "Căutare conversații...",
   "@searchConversations": {
     "description": "Search field placeholder"
   },
@@ -411,15 +411,15 @@
   "@buildAndShareApp": {
     "description": "Create app button subtitle"
   },
-  "searchApps": "Caută peste 1500 de aplicații",
+  "searchApps": "Căutați aplicații...",
   "@searchApps": {
     "description": "Apps search placeholder"
   },
-  "myApps": "Aplicațiile mele",
+  "myApps": "Aplicațiile Mele",
   "@myApps": {
     "description": "My Apps filter button"
   },
-  "installedApps": "Aplicații instalate",
+  "installedApps": "Aplicații Instalate",
   "@installedApps": {
     "description": "Installed Apps filter button"
   },
@@ -675,7 +675,7 @@
   "@forgetDevice": {
     "description": "Forget device button"
   },
-  "chargingIssues": "Probleme la încărcare",
+  "chargingIssues": "Probleme de încărcare",
   "@chargingIssues": {
     "description": "Charging issues help item"
   },
@@ -683,7 +683,7 @@
   "@disconnectDevice": {
     "description": "Disconnect device button"
   },
-  "unpairDevice": "Deperechează dispozitivul",
+  "unpairDevice": "Deconectează dispozitivul",
   "@unpairDevice": {
     "description": "Unpair device button"
   },
@@ -695,7 +695,7 @@
   "@deviceDisconnectedMessage": {
     "description": "Message shown when device is disconnected"
   },
-  "deviceUnpairedMessage": "Dispozitiv depereche. Mergi la Setări > Bluetooth și uită dispozitivul pentru a finaliza deperecherea.",
+  "deviceUnpairedMessage": "Dispozitiv deconectat. Mergeți la Setări > Bluetooth și uitați dispozitivul pentru a finaliza deconectarea.",
   "@deviceUnpairedMessage": {
     "description": "Message shown when device is unpaired"
   },
@@ -997,7 +997,7 @@
   "@upgrade": {
     "description": "Upgrade button"
   },
-  "upgradeToUnlimited": "Upgrade la Nelimitat",
+  "upgradeToUnlimited": "Actualizați la nelimitat",
   "@upgradeToUnlimited": {
     "description": "Upgrade to unlimited button"
   },
@@ -1414,7 +1414,7 @@
       }
     }
   },
-  "yesterday": "ieri",
+  "yesterday": "Ieri",
   "daysAgo": "acum {count} zile",
   "@daysAgo": {
     "placeholders": {
@@ -1605,7 +1605,7 @@
   "@creating": {
     "description": "Loading state text when app generation is in progress"
   },
-  "createApp": "Creează aplicație",
+  "createApp": "Creează Aplicație",
   "@createApp": {
     "description": "Button text to initiate app creation"
   },
@@ -1633,7 +1633,7 @@
       }
     }
   },
-  "dontShowAgain": "Don't show it again",
+  "dontShowAgain": "Nu mai afișa",
   "@dontShowAgain": {
     "description": "Checkbox text to suppress future connection confirmations"
   },
@@ -1724,7 +1724,7 @@
   "@rateOnGooglePlay": {
     "description": "Button text to rate on Google Play Store"
   },
-  "maybeLater": "Maybe later",
+  "maybeLater": "Poate Mai Târziu",
   "@maybeLater": {
     "description": "Button text to dismiss the review prompt"
   },
@@ -1986,11 +1986,11 @@
   "@actionItemCompleted": {
     "description": "Snackbar message when item completed"
   },
-  "deleteActionItemTitle": "Delete Action Item",
+  "deleteActionItemTitle": "Șterge elementul de acțiune",
   "@deleteActionItemTitle": {
     "description": "Title for delete item dialog"
   },
-  "deleteActionItemMessage": "Are you sure you want to delete this action item?",
+  "deleteActionItemMessage": "Sunteți sigur că doriți să ștergeți acest element de acțiune?",
   "@deleteActionItemMessage": {
     "description": "Confirmation message for deleting single item"
   },
@@ -2215,11 +2215,11 @@
   "@retry": {
     "description": "Button label"
   },
-  "createActionItem": "Create Action Item",
+  "createActionItem": "Creează element de acțiune",
   "@createActionItem": {
     "description": "Sheet title"
   },
-  "editActionItem": "Edit Action Item",
+  "editActionItem": "Editează elementul de acțiune",
   "@editActionItem": {
     "description": "Sheet title"
   },
@@ -2235,7 +2235,7 @@
   "@actionItemUpdated": {
     "description": "Snackbar"
   },
-  "failedToUpdateActionItem": "Failed to update action item",
+  "failedToUpdateActionItem": "Actualizarea elementului de acțiune a eșuat",
   "@failedToUpdateActionItem": {
     "description": "Snackbar"
   },
@@ -2243,11 +2243,11 @@
   "@actionItemCreated": {
     "description": "Snackbar"
   },
-  "failedToCreateActionItem": "Failed to create action item",
+  "failedToCreateActionItem": "Crearea elementului de acțiune a eșuat",
   "@failedToCreateActionItem": {
     "description": "Snackbar"
   },
-  "dueDate": "Due Date",
+  "dueDate": "Data scadentă",
   "@dueDate": {
     "description": "Label"
   },
@@ -2283,19 +2283,19 @@
   "@filterManual": {
     "description": "Filter option"
   },
-  "completed": "Completed",
+  "completed": "Finalizat",
   "@completed": {
     "description": "Status label"
   },
-  "markComplete": "Mark complete",
+  "markComplete": "Marchează ca finalizat",
   "@markComplete": {
     "description": "Action label"
   },
-  "actionItemDeleted": "Action item deleted",
+  "actionItemDeleted": "Element de acțiune șters",
   "@actionItemDeleted": {
     "description": "Snackbar"
   },
-  "failedToDeleteActionItem": "Failed to delete action item",
+  "failedToDeleteActionItem": "Ștergerea elementului de acțiune a eșuat",
   "@failedToDeleteActionItem": {
     "description": "Snackbar"
   },
@@ -2313,5 +2313,211 @@
   },
   "appInterfaceSectionTitle": "INTERFAȚĂ APLICAȚIE",
   "speechTranscriptionSectionTitle": "VORBIRE ȘI TRANSCRIERE",
-  "languageSettingsHelperText": "Limba aplicației schimbă meniurile și butoanele. Limba vorbirii afectează modul în care sunt transcrise înregistrările."
+  "languageSettingsHelperText": "Limba aplicației schimbă meniurile și butoanele. Limba vorbirii afectează modul în care sunt transcrise înregistrările.",
+  "translationNotice": "Notificare de traducere",
+  "translationNoticeMessage": "Omi traduce conversațiile în limba ta principală. Actualizează-o oricând în Setări → Profiluri.",
+  "pleaseCheckInternetConnection": "Verifică conexiunea la internet și încearcă din nou",
+  "pleaseSelectReason": "Te rugăm să selectezi un motiv",
+  "tellUsMoreWhatWentWrong": "Spune-ne mai multe despre ce nu a mers bine...",
+  "selectText": "Selectează text",
+  "maximumGoalsAllowed": "Maxim {count} obiective permise",
+  "conversationCannotBeMerged": "Această conversație nu poate fi fuzionată (blocată sau deja în curs de fuzionare)",
+  "pleaseEnterFolderName": "Te rugăm să introduci un nume de dosar",
+  "failedToCreateFolder": "Nu s-a putut crea dosarul",
+  "failedToUpdateFolder": "Nu s-a putut actualiza dosarul",
+  "folderName": "Nume dosar",
+  "descriptionOptional": "Descriere (opțional)",
+  "failedToDeleteFolder": "Nu s-a putut șterge dosarul",
+  "editFolder": "Editează dosarul",
+  "deleteFolder": "Șterge dosarul",
+  "transcriptCopiedToClipboard": "Transcrierea a fost copiată în clipboard",
+  "summaryCopiedToClipboard": "Rezumatul a fost copiat în clipboard",
+  "conversationUrlCouldNotBeShared": "URL-ul conversației nu a putut fi partajat.",
+  "urlCopiedToClipboard": "URL copiat în clipboard",
+  "exportTranscript": "Exportă transcrierea",
+  "exportSummary": "Exportă rezumatul",
+  "exportButton": "Exportă",
+  "actionItemsCopiedToClipboard": "Elementele de acțiune au fost copiate în clipboard",
+  "summarize": "Rezumă",
+  "generateSummary": "Generează rezumat",
+  "conversationNotFoundOrDeleted": "Conversația nu a fost găsită sau a fost ștearsă",
+  "deleteMemory": "Șterge memoria?",
+  "thisActionCannotBeUndone": "Această acțiune nu poate fi anulată.",
+  "memoriesCount": "{count} amintiri",
+  "noMemoriesInCategory": "Nu există încă amintiri în această categorie",
+  "addYourFirstMemory": "Adăugați prima dvs. amintire",
+  "firmwareDisconnectUsb": "Deconectați USB",
+  "firmwareUsbWarning": "Conexiunea USB în timpul actualizărilor poate deteriora dispozitivul.",
+  "firmwareBatteryAbove15": "Baterie peste 15%",
+  "firmwareEnsureBattery": "Asigurați-vă că dispozitivul are 15% baterie.",
+  "firmwareStableConnection": "Conexiune stabilă",
+  "firmwareConnectWifi": "Conectați-vă la WiFi sau date mobile.",
+  "failedToStartUpdate": "Eșec la pornirea actualizării: {error}",
+  "beforeUpdateMakeSure": "Înainte de actualizare, asigurați-vă:",
+  "confirmed": "Confirmat!",
+  "release": "Eliberați",
+  "slideToUpdate": "Glisați pentru a actualiza",
+  "copiedToClipboard": "{title} copiat în clipboard",
+  "batteryLevel": "Nivel baterie",
+  "productUpdate": "Actualizare produs",
+  "offline": "Offline",
+  "available": "Disponibil",
+  "unpairDeviceDialogTitle": "Deconectează dispozitivul",
+  "unpairDeviceDialogMessage": "Aceasta va deconecta dispozitivul astfel încât să poată fi conectat la un alt telefon. Va trebui să mergeți la Setări > Bluetooth și să uitați dispozitivul pentru a finaliza procesul.",
+  "unpair": "Deconectează",
+  "unpairAndForgetDevice": "Deconectează și uită dispozitivul",
+  "unknownDevice": "Dispozitiv necunoscut",
+  "unknown": "Necunoscut",
+  "productName": "Nume produs",
+  "serialNumber": "Număr de serie",
+  "connected": "Conectat",
+  "privacyPolicyTitle": "Politica de confidențialitate",
+  "actionItemDescriptionCannotBeEmpty": "Descrierea elementului de acțiune nu poate fi goală",
+  "saved": "Salvat",
+  "overdue": "Întârziat",
+  "markIncomplete": "Marchează ca nefinalizat",
+  "editDueDate": "Editează data scadentă",
+  "setDueDate": "Setați data scadentă",
+  "clearDueDate": "Șterge data scadentă",
+  "mondayAbbr": "Lun",
+  "tuesdayAbbr": "Mar",
+  "wednesdayAbbr": "Mie",
+  "thursdayAbbr": "Joi",
+  "fridayAbbr": "Vin",
+  "saturdayAbbr": "Sâm",
+  "sundayAbbr": "Dum",
+  "failedToUpdateDueDate": "Actualizarea datei scadente a eșuat",
+  "failedToClearDueDate": "Ștergerea datei scadente a eșuat",
+  "howDoesItWork": "Cum funcționează?",
+  "sdCardSyncDescription": "Sincronizarea cardului SD va importa amintirile tale de pe cardul SD în aplicație",
+  "checksForAudioFiles": "Verifică fișierele audio de pe cardul SD",
+  "omiSyncsAudioFiles": "Omi apoi sincronizează fișierele audio cu serverul",
+  "serverProcessesAudio": "Serverul procesează fișierele audio și creează amintiri",
+  "youreAllSet": "Sunteți gata!",
+  "welcomeToOmiDescription": "Bun venit la Omi! Companionul tău AI este gata să te ajute cu conversații, sarcini și multe altele.",
+  "startUsingOmi": "Începeți să folosiți Omi",
+  "back": "Înapoi",
+  "keyboardShortcuts": "Comenzi rapide de la tastatură",
+  "toggleControlBar": "Comută bara de control",
+  "pressKeys": "Apasă tastele...",
+  "cmdRequired": "⌘ necesar",
+  "invalidKey": "Tastă invalidă",
+  "space": "Spațiu",
+  "search": "Căutare",
+  "searchPlaceholder": "Căutare...",
+  "untitledConversation": "Conversație fără titlu",
+  "countRemaining": "{count} rămase",
+  "addGoal": "Adaugă obiectiv",
+  "editGoal": "Editează obiectiv",
+  "icon": "Pictogramă",
+  "goalTitle": "Titlu obiectiv",
+  "current": "Curent",
+  "target": "Obiectiv",
+  "saveGoal": "Salvează",
+  "goals": "Obiective",
+  "tapToAddGoal": "Atingeți pentru a adăuga un obiectiv",
+  "welcomeBack": "Bun venit înapoi",
+  "yourConversations": "Conversațiile tale",
+  "reviewAndManageConversations": "Revizuiește și gestionează conversațiile înregistrate",
+  "startCapturingConversations": "Începe să capturezi conversații cu dispozitivul Omi pentru a le vedea aici.",
+  "useMobileAppToCapture": "Folosește aplicația mobilă pentru a captura audio",
+  "conversationsProcessedAutomatically": "Conversațiile sunt procesate automat",
+  "getInsightsInstantly": "Obține informații și rezumate instantaneu",
+  "showAll": "Arată tot →",
+  "noTasksForToday": "Nicio sarcină pentru astăzi.\\nÎntrebați Omi pentru mai multe sarcini sau creați manual.",
+  "dailyScore": "SCOR ZILNIC",
+  "dailyScoreDescription": "Un scor pentru a vă ajuta să vă concentrați mai bine asupra execuției.",
+  "searchResults": "Rezultate căutare",
+  "actionItems": "Elemente de acțiune",
+  "tasksToday": "Azi",
+  "tasksTomorrow": "Mâine",
+  "tasksNoDeadline": "Fără termen limită",
+  "tasksLater": "Mai târziu",
+  "loadingTasks": "Se încarcă sarcinile...",
+  "tasks": "Sarcini",
+  "swipeTasksToIndent": "Glisați sarcinile pentru a indenta, trageți între categorii",
+  "create": "Creați",
+  "noTasksYet": "Încă nu există sarcini",
+  "tasksFromConversationsWillAppear": "Sarcinile din conversațiile dvs. vor apărea aici.\nFaceți clic pe Creați pentru a adăuga una manual.",
+  "monthJan": "Ian",
+  "monthFeb": "Feb",
+  "monthMar": "Mar",
+  "monthApr": "Apr",
+  "monthMay": "Mai",
+  "monthJun": "Iun",
+  "monthJul": "Iul",
+  "monthAug": "Aug",
+  "monthSep": "Sep",
+  "monthOct": "Oct",
+  "monthNov": "Noie",
+  "monthDec": "Dec",
+  "timePM": "PM",
+  "timeAM": "AM",
+  "actionItemUpdatedSuccessfully": "Elementul de acțiune a fost actualizat cu succes",
+  "actionItemCreatedSuccessfully": "Elementul de acțiune a fost creat cu succes",
+  "actionItemDeletedSuccessfully": "Elementul de acțiune a fost șters cu succes",
+  "deleteActionItem": "Șterge elementul de acțiune",
+  "deleteActionItemConfirmation": "Sigur doriți să ștergeți acest element de acțiune? Această acțiune nu poate fi anulată.",
+  "enterActionItemDescription": "Introduceți descrierea elementului de acțiune...",
+  "markAsCompleted": "Marcați ca finalizat",
+  "setDueDateAndTime": "Setați data și ora scadentă",
+  "reloadingApps": "Reîncărcare aplicații...",
+  "loadingApps": "Încărcare aplicații...",
+  "browseInstallCreateApps": "Răsfoiți, instalați și creați aplicații",
+  "all": "Toate",
+  "open": "Deschide",
+  "install": "Instalează",
+  "noAppsAvailable": "Nicio aplicație disponibilă",
+  "unableToLoadApps": "Nu se pot încărca aplicațiile",
+  "tryAdjustingSearchTermsOrFilters": "Încercați să ajustați termenii de căutare sau filtrele",
+  "checkBackLaterForNewApps": "Reveniți mai târziu pentru aplicații noi",
+  "pleaseCheckInternetConnectionAndTryAgain": "Vă rugăm să verificați conexiunea la internet și să încercați din nou",
+  "createNewApp": "Creează Aplicație Nouă",
+  "buildSubmitCustomOmiApp": "Construiește și trimite aplicația ta Omi personalizată",
+  "submittingYourApp": "Se trimite aplicația ta...",
+  "preparingFormForYou": "Se pregătește formularul pentru tine...",
+  "appDetails": "Detalii Aplicație",
+  "paymentDetails": "Detalii Plată",
+  "previewAndScreenshots": "Previzualizare și Capturi de Ecran",
+  "appCapabilities": "Capacități Aplicație",
+  "aiPrompts": "Solicitări AI",
+  "chatPrompt": "Solicitare Chat",
+  "chatPromptPlaceholder": "Ești o aplicație grozavă, treaba ta este să răspunzi la întrebările utilizatorilor și să-i faci să se simtă bine...",
+  "conversationPrompt": "Prompt de conversație",
+  "conversationPromptPlaceholder": "Ești o aplicație grozavă, vei primi o transcriere și un rezumat al unei conversații...",
+  "notificationScopes": "Domenii de Notificare",
+  "appPrivacyAndTerms": "Confidențialitate și Termeni Aplicație",
+  "makeMyAppPublic": "Fă aplicația mea publică",
+  "submitAppTermsAgreement": "Prin trimiterea acestei aplicații, sunt de acord cu Termenii de Serviciu și Politica de Confidențialitate Omi AI",
+  "submitApp": "Trimite Aplicația",
+  "needHelpGettingStarted": "Ai nevoie de ajutor pentru a începe?",
+  "clickHereForAppBuildingGuides": "Dă clic aici pentru ghiduri de creare aplicații și documentație",
+  "submitAppQuestion": "Trimite Aplicația?",
+  "submitAppPublicDescription": "Aplicația ta va fi revizuită și făcută publică. Poți începe să o folosești imediat, chiar și în timpul reviziei!",
+  "submitAppPrivateDescription": "Aplicația ta va fi revizuită și pusă la dispoziția ta în mod privat. Poți începe să o folosești imediat, chiar și în timpul reviziei!",
+  "startEarning": "Începe să Câștigi! 💰",
+  "connectStripeOrPayPal": "Conectează Stripe sau PayPal pentru a primi plăți pentru aplicația ta.",
+  "connectNow": "Conectează Acum",
+  "installsCount": "{count}+ instalări",
+  "uninstallApp": "Dezinstalează aplicația",
+  "subscribe": "Abonează-te",
+  "dataAccessNotice": "Notificare acces la date",
+  "dataAccessWarning": "Această aplicație va accesa datele dvs. Omi AI nu este responsabil pentru modul în care datele dvs. sunt utilizate, modificate sau șterse de această aplicație",
+  "installApp": "Instalează aplicația",
+  "betaTesterNotice": "Ești tester beta pentru această aplicație. Nu este încă publică. Va fi publică odată ce va fi aprobată.",
+  "appUnderReviewOwner": "Aplicația ta este în curs de revizuire și vizibilă doar pentru tine. Va fi publică odată ce va fi aprobată.",
+  "appRejectedNotice": "Aplicația ta a fost respinsă. Te rugăm să actualizezi detaliile aplicației și să o trimiți din nou pentru revizuire.",
+  "setupSteps": "Pași de configurare",
+  "setupInstructions": "Instrucțiuni de configurare",
+  "integrationInstructions": "Instrucțiuni de integrare",
+  "preview": "Previzualizare",
+  "aboutTheApp": "Despre aplicație",
+  "aboutThePersona": "Despre persoană",
+  "chatPersonality": "Personalitatea chat-ului",
+  "ratingsAndReviews": "Evaluări și recenzii",
+  "noRatings": "fără evaluări",
+  "ratingsCount": "{count}+ evaluări",
+  "errorActivatingApp": "Eroare la activarea aplicației",
+  "integrationSetupRequired": "Dacă aceasta este o aplicație de integrare, asigurați-vă că configurarea este completă.",
+  "installed": "Instalat"
 }
