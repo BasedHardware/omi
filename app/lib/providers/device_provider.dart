@@ -280,6 +280,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   void onDeviceDisconnected() async {
     Logger.debug('onDisconnected inside: $connectedDevice');
+
+    final String trackFirmware = connectedDevice?.firmwareRevision ??
+        pairedDevice?.firmwareRevision ??
+        SharedPreferencesUtil().btDevice.firmwareRevision;
+
     _havingNewFirmware = false;
     setConnectedDevice(null);
     setisDeviceStorageSupport();
@@ -300,7 +305,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         body: 'Please reconnect to continue using your Omi.',
       );
     });
-    MixpanelManager().deviceDisconnected();
+    MixpanelManager().deviceDisconnected(firmwareRevision: trackFirmware);
 
     // Retired 1s to prevent the race condition made by standby power of ble device
     Future.delayed(const Duration(seconds: 1), () {

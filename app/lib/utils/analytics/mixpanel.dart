@@ -252,7 +252,9 @@ class MixpanelManager {
         ..._preferences.btDevice.toJson(),
       });
 
-  void deviceDisconnected() => track('Device Disconnected');
+  void deviceDisconnected({String? firmwareRevision}) => track('Device Disconnected', properties: {
+        if (firmwareRevision != null) 'firmware_revision': firmwareRevision,
+      });
 
   void memoriesPageCategoryOpened(MemoryCategory category) =>
       track('Fact Page Category Opened', properties: {'category': category.toString().split('.').last});
