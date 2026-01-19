@@ -1,5 +1,6 @@
 import os
 from collections import defaultdict
+from io import BytesIO
 from typing import List, Tuple, Union
 
 import fal_client
@@ -99,6 +100,80 @@ def deepgram_prerecorded(
             return deepgram_prerecorded(audio_url, speakers_count, attempts + 1, return_language, diarize)
         if return_language:
             return [], 'en'
+        return []
+
+
+@timeit
+def deepgram_prerecorded_from_bytes(
+    audio_bytes: bytes,
+    sample_rate: int = 16000,
+    diarize: bool = True,
+    attempts: int = 0,
+) -> List[dict]:
+    """
+    Transcribe audio bytes using Deepgram's pre-recorded API.
+    Returns words with speaker labels when diarize=True.
+
+    Args:
+        audio_bytes: WAV format audio bytes
+        sample_rate: Audio sample rate in Hz (used for logging only, format detected from bytes)
+        diarize: If True, enable speaker diarization
+        attempts: Current retry attempt number
+
+    Returns:
+        List of word dicts with format: {'timestamp': [start, end], 'speaker': 'SPEAKER_XX', 'text': 'word'}
+    """
+    print('deepgram_prerecorded_from_bytes', f'bytes_len={len(audio_bytes)}', sample_rate, diarize, attempts)
+
+    try:
+        options = {
+            "model": "nova-3",
+            "smart_format": True,
+            "punctuate": True,
+            "diarize": diarize,
+            "utterances": True,
+        }
+
+        # Wrap bytes in BytesIO for Deepgram client
+        audio_buffer = BytesIO(audio_bytes)
+        source = {"buffer": audio_buffer, "mimetype": "audio/wav"}
+
+        response = _deepgram_client.listen.rest.v("1").transcribe_file(source, options)
+
+        # Extract words from response
+        result = response.to_dict()
+        channels = result.get('results', {}).get('channels', [])
+        if not channels:
+            raise Exception('No channels found in response')
+
+        alternatives = channels[0].get('alternatives', [])
+        if not alternatives:
+            raise Exception('No alternatives found in response')
+
+        dg_words = alternatives[0].get('words', [])
+        if not dg_words:
+            return []
+
+        # Convert Deepgram format to standard format
+        # Deepgram: {word, start, end, confidence, punctuated_word, speaker (int)}
+        # Expected: {timestamp: [start, end], speaker: 'SPEAKER_XX', text: 'word'}
+        words = []
+        for w in dg_words:
+            speaker_id = w.get('speaker', 0)
+            words.append(
+                {
+                    'timestamp': [w['start'], w['end']],
+                    'speaker': f"SPEAKER_{speaker_id:02d}" if speaker_id is not None else None,
+                    'text': w.get('punctuated_word', w['word']),
+                }
+            )
+
+        return words
+
+    except Exception as e:
+        print(f'Deepgram prerecorded from bytes error: {e}')
+        if attempts < 2:
+            return deepgram_prerecorded_from_bytes(audio_bytes, sample_rate, diarize, attempts + 1)
         return []
 
 
