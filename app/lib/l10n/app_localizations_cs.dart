@@ -283,7 +283,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get thankYouFeedback => 'Děkujeme za vaši zpětnou vazbu!';
 
   @override
-  String get clearChat => 'Vymazat chat?';
+  String get clearChat => 'Vymazat chat';
 
   @override
   String get clearChatConfirm => 'Opravdu chcete vymazat chat? Tuto akci nelze vrátit zpět.';
@@ -5785,4 +5785,28 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get frequencyDescMaximum => 'Zůstaňte neustále zapojeni';
+
+  @override
+  String get clearChatQuestion => 'Vymazat chat?';
+
+  @override
+  String get syncingMessages => 'Synchronizace zpráv se serverem...';
+
+  @override
+  String get chatAppsTitle => 'Chat aplikace';
+
+  @override
+  String get selectApp => 'Vybrat aplikaci';
+
+  @override
+  String get noChatAppsEnabled => 'Žádné chat aplikace nejsou povoleny.\nKlepněte na \"Povolit aplikace\" pro přidání.';
+
+  @override
+  String get disable => 'Zakázat';
+
+  @override
+  String get photoLibrary => 'Knihovna fotek';
+
+  @override
+  String get chooseFile => 'Vybrat soubor';
 }

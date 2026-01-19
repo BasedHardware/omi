@@ -375,7 +375,7 @@
   "@thankYouFeedback": {
     "description": "After thumbs up/down feedback"
   },
-  "clearChat": "Išvalyti pokalbį?",
+  "clearChat": "Išvalyti pokalbį",
   "@clearChat": {
     "description": "Clear chat dialog title"
   },
@@ -3617,5 +3617,13 @@
   "frequencyDescLow": "Tik svarbūs atnaujinimai",
   "frequencyDescBalanced": "Reguliarūs naudingi priminimai",
   "frequencyDescHigh": "Dažni patikrinimai",
-  "frequencyDescMaximum": "Likite nuolat įsitraukę"
+  "frequencyDescMaximum": "Likite nuolat įsitraukę",
+  "clearChatQuestion": "Išvalyti pokalbį?",
+  "syncingMessages": "Sinchronizuojami pranešimai su serveriu...",
+  "chatAppsTitle": "Pokalbių programos",
+  "selectApp": "Pasirinkti programą",
+  "noChatAppsEnabled": "Nėra įjungtų pokalbių programų.\nBakstelėkite \"Įjungti programas\", kad pridėtumėte.",
+  "disable": "Išjungti",
+  "photoLibrary": "Nuotraukų biblioteka",
+  "chooseFile": "Pasirinkti failą"
 }

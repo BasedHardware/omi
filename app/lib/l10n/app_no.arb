@@ -375,7 +375,7 @@
   "@thankYouFeedback": {
     "description": "After thumbs up/down feedback"
   },
-  "clearChat": "Tøm chat?",
+  "clearChat": "Tøm chat",
   "@clearChat": {
     "description": "Clear chat dialog title"
   },
@@ -2554,7 +2554,7 @@
   "thankYouForFeedback": "Takk for tilbakemeldingen!",
   "maxFilesUploadError": "Du kan bare laste opp 4 filer om gangen",
   "attachedFiles": "📎 Vedlagte filer",
-  "takePhoto": "Ta et bilde",
+  "takePhoto": "Ta bilde",
   "captureWithCamera": "Ta opp med kamera",
   "selectImages": "Velg bilder",
   "chooseFromGallery": "Velg fra galleri",
@@ -3635,5 +3635,13 @@
   "frequencyDescLow": "Kun viktige oppdateringer",
   "frequencyDescBalanced": "Regelmessige nyttige påminnelser",
   "frequencyDescHigh": "Hyppige sjekker",
-  "frequencyDescMaximum": "Hold deg konstant engasjert"
+  "frequencyDescMaximum": "Hold deg konstant engasjert",
+  "clearChatQuestion": "Tøm chat?",
+  "syncingMessages": "Synkroniserer meldinger med serveren...",
+  "chatAppsTitle": "Chat-apper",
+  "selectApp": "Velg app",
+  "noChatAppsEnabled": "Ingen chat-apper aktivert.\nTrykk på \"Aktiver apper\" for å legge til.",
+  "disable": "Deaktiver",
+  "photoLibrary": "Bildebibliotek",
+  "chooseFile": "Velg fil"
 }

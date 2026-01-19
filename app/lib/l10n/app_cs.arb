@@ -375,7 +375,7 @@
   "@thankYouFeedback": {
     "description": "After thumbs up/down feedback"
   },
-  "clearChat": "Vymazat chat?",
+  "clearChat": "Vymazat chat",
   "@clearChat": {
     "description": "Clear chat dialog title"
   },
@@ -3637,5 +3637,13 @@
   "frequencyDescLow": "Pouze důležité aktualizace",
   "frequencyDescBalanced": "Pravidelné užitečné připomínky",
   "frequencyDescHigh": "Časté kontroly",
-  "frequencyDescMaximum": "Zůstaňte neustále zapojeni"
+  "frequencyDescMaximum": "Zůstaňte neustále zapojeni",
+  "clearChatQuestion": "Vymazat chat?",
+  "syncingMessages": "Synchronizace zpráv se serverem...",
+  "chatAppsTitle": "Chat aplikace",
+  "selectApp": "Vybrat aplikaci",
+  "noChatAppsEnabled": "Žádné chat aplikace nejsou povoleny.\nKlepněte na \"Povolit aplikace\" pro přidání.",
+  "disable": "Zakázat",
+  "photoLibrary": "Knihovna fotek",
+  "chooseFile": "Vybrat soubor"
 }

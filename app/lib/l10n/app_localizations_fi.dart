@@ -281,7 +281,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get thankYouFeedback => 'Kiitos palautteestasi!';
 
   @override
-  String get clearChat => 'Tyhjennä keskustelu?';
+  String get clearChat => 'Tyhjennä keskustelu';
 
   @override
   String get clearChatConfirm => 'Haluatko varmasti tyhjentää keskustelun? Tätä toimintoa ei voi perua.';
@@ -3092,7 +3092,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get attachedFiles => '📎 Liitetyt tiedostot';
 
   @override
-  String get takePhoto => 'Ota valokuva';
+  String get takePhoto => 'Ota kuva';
 
   @override
   String get captureWithCamera => 'Ota kameralla';
@@ -5792,4 +5792,28 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get frequencyDescMaximum => 'Pysy jatkuvasti mukana';
+
+  @override
+  String get clearChatQuestion => 'Tyhjennä keskustelu?';
+
+  @override
+  String get syncingMessages => 'Synkronoidaan viestejä palvelimen kanssa...';
+
+  @override
+  String get chatAppsTitle => 'Chat-sovellukset';
+
+  @override
+  String get selectApp => 'Valitse sovellus';
+
+  @override
+  String get noChatAppsEnabled => 'Chat-sovelluksia ei ole käytössä.\nNapauta \"Ota käyttöön\" lisätäksesi.';
+
+  @override
+  String get disable => 'Poista käytöstä';
+
+  @override
+  String get photoLibrary => 'Kuvakirjasto';
+
+  @override
+  String get chooseFile => 'Valitse tiedosto';
 }

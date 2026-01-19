@@ -119,7 +119,7 @@
   "reportMessageConfirm": "Weet je zeker dat je dit bericht wilt rapporteren?",
   "messageReported": "Bericht succesvol gerapporteerd.",
   "thankYouFeedback": "Bedankt voor je feedback!",
-  "clearChat": "Chat wissen?",
+  "clearChat": "Chat wissen",
   "clearChatConfirm": "Weet je zeker dat je de chat wilt wissen? Deze actie kan niet ongedaan worden gemaakt.",
   "maxFilesLimit": "Je kunt maximaal 4 bestanden tegelijk uploaden",
   "chatWithOmi": "Chat met Omi",
@@ -1357,7 +1357,7 @@
   "thankYouForFeedback": "Bedankt voor uw feedback!",
   "maxFilesUploadError": "U kunt slechts 4 bestanden tegelijk uploaden",
   "attachedFiles": "📎 Bijgevoegde bestanden",
-  "takePhoto": "Maak een foto",
+  "takePhoto": "Foto maken",
   "captureWithCamera": "Opnemen met camera",
   "selectImages": "Selecteer afbeeldingen",
   "chooseFromGallery": "Kies uit galerij",
@@ -2453,5 +2453,13 @@
   "frequencyDescLow": "Alleen belangrijke updates",
   "frequencyDescBalanced": "Regelmatige nuttige herinneringen",
   "frequencyDescHigh": "Frequente check-ins",
-  "frequencyDescMaximum": "Blijf constant betrokken"
+  "frequencyDescMaximum": "Blijf constant betrokken",
+  "clearChatQuestion": "Chat wissen?",
+  "syncingMessages": "Berichten synchroniseren met de server...",
+  "chatAppsTitle": "Chat-apps",
+  "selectApp": "App selecteren",
+  "noChatAppsEnabled": "Geen chat-apps ingeschakeld.\nTik op \"Apps inschakelen\" om toe te voegen.",
+  "disable": "Uitschakelen",
+  "photoLibrary": "Fotobibliotheek",
+  "chooseFile": "Bestand kiezen"
 }

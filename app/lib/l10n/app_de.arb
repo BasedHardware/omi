@@ -116,7 +116,7 @@
   "reportMessageConfirm": "Sind Sie sicher, dass Sie diese Nachricht melden möchten?",
   "messageReported": "Nachricht erfolgreich gemeldet.",
   "thankYouFeedback": "Danke für Ihr Feedback!",
-  "clearChat": "Chat löschen?",
+  "clearChat": "Chat löschen",
   "clearChatConfirm": "Sind Sie sicher, dass Sie den Chat löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.",
   "maxFilesLimit": "Sie können nur 4 Dateien gleichzeitig hochladen",
   "chatWithOmi": "Chat mit Omi",
@@ -2082,5 +2082,13 @@
   "frequencyDescLow": "Nur wichtige Updates",
   "frequencyDescBalanced": "Regelmäßige hilfreiche Hinweise",
   "frequencyDescHigh": "Häufige Check-ins",
-  "frequencyDescMaximum": "Bleiben Sie ständig engagiert"
+  "frequencyDescMaximum": "Bleiben Sie ständig engagiert",
+  "clearChatQuestion": "Chat löschen?",
+  "syncingMessages": "Nachrichten werden mit dem Server synchronisiert...",
+  "chatAppsTitle": "Chat-Apps",
+  "selectApp": "App auswählen",
+  "noChatAppsEnabled": "Keine Chat-Apps aktiviert.\nTippen Sie auf \"Apps aktivieren\" um welche hinzuzufügen.",
+  "disable": "Deaktivieren",
+  "photoLibrary": "Fotomediathek",
+  "chooseFile": "Datei auswählen"
 }

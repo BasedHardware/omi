@@ -283,7 +283,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get thankYouFeedback => 'Thank you for your feedback!';
 
   @override
-  String get clearChat => 'Clear Chat?';
+  String get clearChat => 'Clear Chat';
 
   @override
   String get clearChatConfirm => 'Are you sure you want to clear the chat? This action cannot be undone.';
@@ -3099,7 +3099,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get attachedFiles => '📎 Attached Files';
 
   @override
-  String get takePhoto => 'Take a Photo';
+  String get takePhoto => 'Take Photo';
 
   @override
   String get captureWithCamera => 'Capture with camera';
@@ -5792,4 +5792,28 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get frequencyDescMaximum => 'Stay constantly engaged';
+
+  @override
+  String get clearChatQuestion => 'Clear Chat?';
+
+  @override
+  String get syncingMessages => 'Syncing messages with server...';
+
+  @override
+  String get chatAppsTitle => 'Chat Apps';
+
+  @override
+  String get selectApp => 'Select App';
+
+  @override
+  String get noChatAppsEnabled => 'No chat apps enabled.\nTap \"Enable Apps\" to add some.';
+
+  @override
+  String get disable => 'Disable';
+
+  @override
+  String get photoLibrary => 'Photo Library';
+
+  @override
+  String get chooseFile => 'Choose File';
 }

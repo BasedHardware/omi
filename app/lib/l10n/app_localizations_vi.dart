@@ -284,7 +284,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get thankYouFeedback => 'Cảm ơn phản hồi của bạn!';
 
   @override
-  String get clearChat => 'Xóa trò chuyện?';
+  String get clearChat => 'Xóa cuộc trò chuyện';
 
   @override
   String get clearChatConfirm => 'Bạn có chắc chắn muốn xóa trò chuyện? Hành động này không thể hoàn tác.';
@@ -5801,4 +5801,28 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get frequencyDescMaximum => 'Luôn kết nối liên tục';
+
+  @override
+  String get clearChatQuestion => 'Xóa cuộc trò chuyện?';
+
+  @override
+  String get syncingMessages => 'Đang đồng bộ tin nhắn với máy chủ...';
+
+  @override
+  String get chatAppsTitle => 'Ứng dụng chat';
+
+  @override
+  String get selectApp => 'Chọn ứng dụng';
+
+  @override
+  String get noChatAppsEnabled => 'Không có ứng dụng chat nào được bật.\nNhấn \"Bật ứng dụng\" để thêm.';
+
+  @override
+  String get disable => 'Vô hiệu hóa';
+
+  @override
+  String get photoLibrary => 'Thư viện ảnh';
+
+  @override
+  String get chooseFile => 'Chọn tệp';
 }

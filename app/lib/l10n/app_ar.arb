@@ -375,7 +375,7 @@
   "@thankYouFeedback": {
     "description": "After thumbs up/down feedback"
   },
-  "clearChat": "مسح المحادثة؟",
+  "clearChat": "مسح المحادثة",
   "@clearChat": {
     "description": "Clear chat dialog title"
   },
@@ -2586,7 +2586,7 @@
   "thankYouForFeedback": "شكرًا لك على ملاحظاتك!",
   "maxFilesUploadError": "يمكنك تحميل 4 ملفات فقط في المرة الواحدة",
   "attachedFiles": "📎 الملفات المرفقة",
-  "takePhoto": "التقط صورة",
+  "takePhoto": "التقاط صورة",
   "captureWithCamera": "التقط بالكاميرا",
   "selectImages": "اختر الصور",
   "chooseFromGallery": "اختر من المعرض",
@@ -3635,5 +3635,13 @@
   "frequencyDescLow": "التحديثات المهمة فقط",
   "frequencyDescBalanced": "تنبيهات مفيدة منتظمة",
   "frequencyDescHigh": "متابعات متكررة",
-  "frequencyDescMaximum": "ابق على تواصل دائم"
+  "frequencyDescMaximum": "ابق على تواصل دائم",
+  "clearChatQuestion": "مسح المحادثة؟",
+  "syncingMessages": "جاري مزامنة الرسائل مع الخادم...",
+  "chatAppsTitle": "تطبيقات الدردشة",
+  "selectApp": "اختر التطبيق",
+  "noChatAppsEnabled": "لا توجد تطبيقات دردشة مفعلة.\nاضغط على \"تمكين التطبيقات\" لإضافة بعضها.",
+  "disable": "تعطيل",
+  "photoLibrary": "مكتبة الصور",
+  "chooseFile": "اختر ملف"
 }

@@ -284,7 +284,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get thankYouFeedback => 'Tack för din återkoppling!';
 
   @override
-  String get clearChat => 'Rensa chatt?';
+  String get clearChat => 'Rensa chatt';
 
   @override
   String get clearChatConfirm => 'Är du säker på att du vill rensa chatten? Detta kan inte ångras.';
@@ -3098,7 +3098,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get attachedFiles => '📎 Bifogade filer';
 
   @override
-  String get takePhoto => 'Ta ett foto';
+  String get takePhoto => 'Ta foto';
 
   @override
   String get captureWithCamera => 'Fånga med kamera';
@@ -5795,4 +5795,28 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get frequencyDescMaximum => 'Håll dig ständigt engagerad';
+
+  @override
+  String get clearChatQuestion => 'Rensa chatt?';
+
+  @override
+  String get syncingMessages => 'Synkroniserar meddelanden med servern...';
+
+  @override
+  String get chatAppsTitle => 'Chattappar';
+
+  @override
+  String get selectApp => 'Välj app';
+
+  @override
+  String get noChatAppsEnabled => 'Inga chattappar aktiverade.\nTryck på \"Aktivera appar\" för att lägga till.';
+
+  @override
+  String get disable => 'Inaktivera';
+
+  @override
+  String get photoLibrary => 'Bildbibliotek';
+
+  @override
+  String get chooseFile => 'Välj fil';
 }

@@ -281,7 +281,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get thankYouFeedback => '피드백 감사합니다!';
 
   @override
-  String get clearChat => '채팅을 지우시겠습니까?';
+  String get clearChat => '채팅 삭제';
 
   @override
   String get clearChatConfirm => '채팅을 지우시겠습니까? 이 작업은 되돌릴 수 없습니다.';
@@ -3041,7 +3041,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get attachedFiles => '📎 첨부 파일';
 
   @override
-  String get takePhoto => '사진 찍기';
+  String get takePhoto => '사진 촬영';
 
   @override
   String get captureWithCamera => '카메라로 촬영';
@@ -5688,4 +5688,28 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get frequencyDescMaximum => '항상 연결 상태 유지';
+
+  @override
+  String get clearChatQuestion => '채팅을 삭제하시겠습니까?';
+
+  @override
+  String get syncingMessages => '서버와 메시지 동기화 중...';
+
+  @override
+  String get chatAppsTitle => '채팅 앱';
+
+  @override
+  String get selectApp => '앱 선택';
+
+  @override
+  String get noChatAppsEnabled => '활성화된 채팅 앱이 없습니다.\n\"앱 활성화\"를 탭하여 추가하세요.';
+
+  @override
+  String get disable => '비활성화';
+
+  @override
+  String get photoLibrary => '사진 라이브러리';
+
+  @override
+  String get chooseFile => '파일 선택';
 }

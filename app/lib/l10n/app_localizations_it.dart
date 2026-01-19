@@ -284,7 +284,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get thankYouFeedback => 'Grazie per il tuo feedback!';
 
   @override
-  String get clearChat => 'Cancellare Chat?';
+  String get clearChat => 'Cancella chat';
 
   @override
   String get clearChatConfirm => 'Sei sicuro di voler cancellare la chat? Questa azione non può essere annullata.';
@@ -3108,7 +3108,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get attachedFiles => '📎 File allegati';
 
   @override
-  String get takePhoto => 'Scatta una foto';
+  String get takePhoto => 'Scatta foto';
 
   @override
   String get captureWithCamera => 'Cattura con la fotocamera';
@@ -5826,4 +5826,28 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get frequencyDescMaximum => 'Rimani costantemente coinvolto';
+
+  @override
+  String get clearChatQuestion => 'Cancellare la chat?';
+
+  @override
+  String get syncingMessages => 'Sincronizzazione messaggi con il server...';
+
+  @override
+  String get chatAppsTitle => 'App di chat';
+
+  @override
+  String get selectApp => 'Seleziona app';
+
+  @override
+  String get noChatAppsEnabled => 'Nessuna app di chat abilitata.\nTocca \"Abilita app\" per aggiungerne.';
+
+  @override
+  String get disable => 'Disabilita';
+
+  @override
+  String get photoLibrary => 'Libreria foto';
+
+  @override
+  String get chooseFile => 'Scegli file';
 }

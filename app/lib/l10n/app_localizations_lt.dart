@@ -282,7 +282,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get thankYouFeedback => 'Ačiū už jūsų atsiliepimą!';
 
   @override
-  String get clearChat => 'Išvalyti pokalbį?';
+  String get clearChat => 'Išvalyti pokalbį';
 
   @override
   String get clearChatConfirm => 'Ar tikrai norite išvalyti pokalbį? Šio veiksmo negalima atšaukti.';
@@ -5792,4 +5792,29 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get frequencyDescMaximum => 'Likite nuolat įsitraukę';
+
+  @override
+  String get clearChatQuestion => 'Išvalyti pokalbį?';
+
+  @override
+  String get syncingMessages => 'Sinchronizuojami pranešimai su serveriu...';
+
+  @override
+  String get chatAppsTitle => 'Pokalbių programos';
+
+  @override
+  String get selectApp => 'Pasirinkti programą';
+
+  @override
+  String get noChatAppsEnabled =>
+      'Nėra įjungtų pokalbių programų.\nBakstelėkite \"Įjungti programas\", kad pridėtumėte.';
+
+  @override
+  String get disable => 'Išjungti';
+
+  @override
+  String get photoLibrary => 'Nuotraukų biblioteka';
+
+  @override
+  String get chooseFile => 'Pasirinkti failą';
 }

@@ -283,7 +283,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get thankYouFeedback => 'Bedankt voor je feedback!';
 
   @override
-  String get clearChat => 'Chat wissen?';
+  String get clearChat => 'Chat wissen';
 
   @override
   String get clearChatConfirm =>
@@ -3104,7 +3104,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get attachedFiles => '📎 Bijgevoegde bestanden';
 
   @override
-  String get takePhoto => 'Maak een foto';
+  String get takePhoto => 'Foto maken';
 
   @override
   String get captureWithCamera => 'Opnemen met camera';
@@ -5809,4 +5809,28 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get frequencyDescMaximum => 'Blijf constant betrokken';
+
+  @override
+  String get clearChatQuestion => 'Chat wissen?';
+
+  @override
+  String get syncingMessages => 'Berichten synchroniseren met de server...';
+
+  @override
+  String get chatAppsTitle => 'Chat-apps';
+
+  @override
+  String get selectApp => 'App selecteren';
+
+  @override
+  String get noChatAppsEnabled => 'Geen chat-apps ingeschakeld.\nTik op \"Apps inschakelen\" om toe te voegen.';
+
+  @override
+  String get disable => 'Uitschakelen';
+
+  @override
+  String get photoLibrary => 'Fotobibliotheek';
+
+  @override
+  String get chooseFile => 'Bestand kiezen';
 }

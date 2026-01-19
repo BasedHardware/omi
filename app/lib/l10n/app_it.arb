@@ -375,7 +375,7 @@
   "@thankYouFeedback": {
     "description": "After thumbs up/down feedback"
   },
-  "clearChat": "Cancellare Chat?",
+  "clearChat": "Cancella chat",
   "@clearChat": {
     "description": "Clear chat dialog title"
   },
@@ -2536,7 +2536,7 @@
   "thankYouForFeedback": "Grazie per il tuo feedback!",
   "maxFilesUploadError": "Puoi caricare solo 4 file alla volta",
   "attachedFiles": "📎 File allegati",
-  "takePhoto": "Scatta una foto",
+  "takePhoto": "Scatta foto",
   "captureWithCamera": "Cattura con la fotocamera",
   "selectImages": "Seleziona immagini",
   "chooseFromGallery": "Scegli dalla galleria",
@@ -3617,5 +3617,13 @@
   "frequencyDescLow": "Solo aggiornamenti importanti",
   "frequencyDescBalanced": "Promemoria utili regolari",
   "frequencyDescHigh": "Controlli frequenti",
-  "frequencyDescMaximum": "Rimani costantemente coinvolto"
+  "frequencyDescMaximum": "Rimani costantemente coinvolto",
+  "clearChatQuestion": "Cancellare la chat?",
+  "syncingMessages": "Sincronizzazione messaggi con il server...",
+  "chatAppsTitle": "App di chat",
+  "selectApp": "Seleziona app",
+  "noChatAppsEnabled": "Nessuna app di chat abilitata.\nTocca \"Abilita app\" per aggiungerne.",
+  "disable": "Disabilita",
+  "photoLibrary": "Libreria foto",
+  "chooseFile": "Scegli file"
 }

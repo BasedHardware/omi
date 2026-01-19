@@ -375,7 +375,7 @@
   "@thankYouFeedback": {
     "description": "After thumbs up/down feedback"
   },
-  "clearChat": "Очистити чат?",
+  "clearChat": "Очистити чат",
   "@clearChat": {
     "description": "Clear chat dialog title"
   },
@@ -3635,5 +3635,13 @@
   "frequencyDescLow": "Лише важливі оновлення",
   "frequencyDescBalanced": "Регулярні корисні нагадування",
   "frequencyDescHigh": "Часті перевірки",
-  "frequencyDescMaximum": "Залишайтеся постійно залученими"
+  "frequencyDescMaximum": "Залишайтеся постійно залученими",
+  "clearChatQuestion": "Очистити чат?",
+  "syncingMessages": "Синхронізація повідомлень з сервером...",
+  "chatAppsTitle": "Чат-застосунки",
+  "selectApp": "Обрати застосунок",
+  "noChatAppsEnabled": "Чат-застосунки не ввімкнено.\nНатисніть \"Увімкнути застосунки\", щоб додати.",
+  "disable": "Вимкнути",
+  "photoLibrary": "Бібліотека фото",
+  "chooseFile": "Обрати файл"
 }

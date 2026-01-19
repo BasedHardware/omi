@@ -283,7 +283,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get thankYouFeedback => 'Täname tagasiside eest!';
 
   @override
-  String get clearChat => 'Tühjenda vestlus?';
+  String get clearChat => 'Kustuta vestlus';
 
   @override
   String get clearChatConfirm =>
@@ -5792,4 +5792,29 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get frequencyDescMaximum => 'Püsi pidevalt kaasatud';
+
+  @override
+  String get clearChatQuestion => 'Kustuta vestlus?';
+
+  @override
+  String get syncingMessages => 'Sõnumite sünkroonimine serveriga...';
+
+  @override
+  String get chatAppsTitle => 'Vestlusrakendused';
+
+  @override
+  String get selectApp => 'Vali rakendus';
+
+  @override
+  String get noChatAppsEnabled =>
+      'Vestlusrakendusi pole lubatud.\nPuudutage rakenduste lisamiseks \"Luba rakendused\".';
+
+  @override
+  String get disable => 'Keela';
+
+  @override
+  String get photoLibrary => 'Fotokogu';
+
+  @override
+  String get chooseFile => 'Vali fail';
 }

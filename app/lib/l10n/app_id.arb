@@ -375,7 +375,7 @@
   "@thankYouFeedback": {
     "description": "After thumbs up/down feedback"
   },
-  "clearChat": "Bersihkan Obrolan?",
+  "clearChat": "Hapus Obrolan",
   "@clearChat": {
     "description": "Clear chat dialog title"
   },
@@ -3635,5 +3635,13 @@
   "frequencyDescLow": "Hanya pembaruan penting",
   "frequencyDescBalanced": "Pengingat reguler yang bermanfaat",
   "frequencyDescHigh": "Pengecekan sering",
-  "frequencyDescMaximum": "Tetap terus terlibat"
+  "frequencyDescMaximum": "Tetap terus terlibat",
+  "clearChatQuestion": "Hapus obrolan?",
+  "syncingMessages": "Menyinkronkan pesan dengan server...",
+  "chatAppsTitle": "Aplikasi Obrolan",
+  "selectApp": "Pilih Aplikasi",
+  "noChatAppsEnabled": "Tidak ada aplikasi obrolan yang diaktifkan.\nKetuk \"Aktifkan Aplikasi\" untuk menambahkan.",
+  "disable": "Nonaktifkan",
+  "photoLibrary": "Galeri Foto",
+  "chooseFile": "Pilih File"
 }

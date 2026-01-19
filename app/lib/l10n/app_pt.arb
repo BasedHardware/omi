@@ -116,7 +116,7 @@
   "reportMessageConfirm": "Tem certeza de que deseja reportar esta mensagem?",
   "messageReported": "Mensagem reportada com sucesso.",
   "thankYouFeedback": "Obrigado pelo feedback!",
-  "clearChat": "Limpar chat?",
+  "clearChat": "Limpar conversa",
   "clearChatConfirm": "Tem certeza de que deseja limpar o chat? Esta ação não pode ser desfeita.",
   "maxFilesLimit": "Você só pode enviar 4 arquivos por vez",
   "chatWithOmi": "Converse com Omi",
@@ -983,7 +983,7 @@
   "thankYouForFeedback": "Obrigado pelo seu feedback!",
   "maxFilesUploadError": "Você só pode fazer upload de 4 arquivos por vez",
   "attachedFiles": "📎 Arquivos anexados",
-  "takePhoto": "Tirar uma foto",
+  "takePhoto": "Tirar foto",
   "captureWithCamera": "Capturar com câmera",
   "selectImages": "Selecionar imagens",
   "chooseFromGallery": "Escolher da galeria",
@@ -2082,5 +2082,13 @@
   "frequencyDescLow": "Apenas atualizações importantes",
   "frequencyDescBalanced": "Lembretes úteis regulares",
   "frequencyDescHigh": "Verificações frequentes",
-  "frequencyDescMaximum": "Mantenha-se constantemente engajado"
+  "frequencyDescMaximum": "Mantenha-se constantemente engajado",
+  "clearChatQuestion": "Limpar conversa?",
+  "syncingMessages": "Sincronizando mensagens com o servidor...",
+  "chatAppsTitle": "Apps de chat",
+  "selectApp": "Selecionar app",
+  "noChatAppsEnabled": "Nenhum app de chat ativado.\nToque em \"Ativar apps\" para adicionar.",
+  "disable": "Desativar",
+  "photoLibrary": "Biblioteca de fotos",
+  "chooseFile": "Escolher arquivo"
 }

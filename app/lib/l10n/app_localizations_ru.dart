@@ -284,7 +284,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get thankYouFeedback => 'Спасибо за ваш отзыв!';
 
   @override
-  String get clearChat => 'Очистить чат?';
+  String get clearChat => 'Очистить чат';
 
   @override
   String get clearChatConfirm => 'Вы уверены, что хотите очистить чат? Это действие нельзя будет отменить.';
@@ -5806,4 +5806,28 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get frequencyDescMaximum => 'Оставайтесь постоянно вовлеченными';
+
+  @override
+  String get clearChatQuestion => 'Очистить чат?';
+
+  @override
+  String get syncingMessages => 'Синхронизация сообщений с сервером...';
+
+  @override
+  String get chatAppsTitle => 'Чат-приложения';
+
+  @override
+  String get selectApp => 'Выбрать приложение';
+
+  @override
+  String get noChatAppsEnabled => 'Чат-приложения не включены.\nНажмите \"Включить приложения\", чтобы добавить.';
+
+  @override
+  String get disable => 'Отключить';
+
+  @override
+  String get photoLibrary => 'Фотогалерея';
+
+  @override
+  String get chooseFile => 'Выбрать файл';
 }

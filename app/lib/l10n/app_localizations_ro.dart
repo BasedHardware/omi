@@ -285,7 +285,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get thankYouFeedback => 'Mulțumim pentru feedback!';
 
   @override
-  String get clearChat => 'Ștergi chat-ul?';
+  String get clearChat => 'Șterge conversația';
 
   @override
   String get clearChatConfirm => 'Ești sigur că vrei să ștergi chat-ul? Această acțiune nu poate fi anulată.';
@@ -3111,7 +3111,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get attachedFiles => '📎 Fișiere atașate';
 
   @override
-  String get takePhoto => 'Faceți o fotografie';
+  String get takePhoto => 'Fă o poză';
 
   @override
   String get captureWithCamera => 'Capturați cu camera';
@@ -5819,4 +5819,29 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get frequencyDescMaximum => 'Rămâneți constant implicat';
+
+  @override
+  String get clearChatQuestion => 'Ștergi conversația?';
+
+  @override
+  String get syncingMessages => 'Sincronizare mesaje cu serverul...';
+
+  @override
+  String get chatAppsTitle => 'Aplicații de chat';
+
+  @override
+  String get selectApp => 'Selectează aplicația';
+
+  @override
+  String get noChatAppsEnabled =>
+      'Nicio aplicație de chat activată.\nApasă pe \"Activează aplicații\" pentru a adăuga.';
+
+  @override
+  String get disable => 'Dezactivează';
+
+  @override
+  String get photoLibrary => 'Bibliotecă foto';
+
+  @override
+  String get chooseFile => 'Alege fișier';
 }

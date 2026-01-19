@@ -375,7 +375,7 @@
   "@thankYouFeedback": {
     "description": "After thumbs up/down feedback"
   },
-  "clearChat": "Очистить чат?",
+  "clearChat": "Очистить чат",
   "@clearChat": {
     "description": "Clear chat dialog title"
   },
@@ -3635,5 +3635,13 @@
   "frequencyDescLow": "Только важные обновления",
   "frequencyDescBalanced": "Регулярные полезные напоминания",
   "frequencyDescHigh": "Частые проверки",
-  "frequencyDescMaximum": "Оставайтесь постоянно вовлеченными"
+  "frequencyDescMaximum": "Оставайтесь постоянно вовлеченными",
+  "clearChatQuestion": "Очистить чат?",
+  "syncingMessages": "Синхронизация сообщений с сервером...",
+  "chatAppsTitle": "Чат-приложения",
+  "selectApp": "Выбрать приложение",
+  "noChatAppsEnabled": "Чат-приложения не включены.\nНажмите \"Включить приложения\", чтобы добавить.",
+  "disable": "Отключить",
+  "photoLibrary": "Фотогалерея",
+  "chooseFile": "Выбрать файл"
 }

@@ -284,7 +284,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get thankYouFeedback => 'Gràcies pels vostres comentaris!';
 
   @override
-  String get clearChat => 'Netejar xat?';
+  String get clearChat => 'Esborrar xat';
 
   @override
   String get clearChatConfirm => 'Esteu segur que voleu netejar el xat? Aquesta acció no es pot desfer.';
@@ -3111,7 +3111,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get attachedFiles => '📎 Fitxers adjunts';
 
   @override
-  String get takePhoto => 'Fer una foto';
+  String get takePhoto => 'Fer foto';
 
   @override
   String get captureWithCamera => 'Capturar amb la càmera';
@@ -5825,4 +5825,28 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get frequencyDescMaximum => 'Mantén-te sempre connectat';
+
+  @override
+  String get clearChatQuestion => 'Esborrar el xat?';
+
+  @override
+  String get syncingMessages => 'Sincronitzant missatges amb el servidor...';
+
+  @override
+  String get chatAppsTitle => 'Aplicacions de xat';
+
+  @override
+  String get selectApp => 'Selecciona aplicació';
+
+  @override
+  String get noChatAppsEnabled => 'No hi ha aplicacions de xat activades.\nToca \"Activar aplicacions\" per afegir-ne.';
+
+  @override
+  String get disable => 'Desactivar';
+
+  @override
+  String get photoLibrary => 'Biblioteca de fotos';
+
+  @override
+  String get chooseFile => 'Triar fitxer';
 }

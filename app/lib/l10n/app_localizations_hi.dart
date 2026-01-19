@@ -282,7 +282,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get thankYouFeedback => 'आपकी प्रतिक्रिया के लिए धन्यवाद!';
 
   @override
-  String get clearChat => 'चैट साफ़ करें?';
+  String get clearChat => 'चैट साफ करें';
 
   @override
   String get clearChatConfirm => 'क्या आप वाकई चैट साफ़ करना चाहते हैं? यह पूर्ववत नहीं किया जा सकता।';
@@ -5770,4 +5770,28 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get frequencyDescMaximum => 'लगातार जुड़े रहें';
+
+  @override
+  String get clearChatQuestion => 'चैट साफ करें?';
+
+  @override
+  String get syncingMessages => 'सर्वर के साथ संदेश सिंक हो रहे हैं...';
+
+  @override
+  String get chatAppsTitle => 'चैट ऐप्स';
+
+  @override
+  String get selectApp => 'ऐप चुनें';
+
+  @override
+  String get noChatAppsEnabled => 'कोई चैट ऐप सक्षम नहीं है।\nकुछ जोड़ने के लिए \"ऐप्स सक्षम करें\" पर टैप करें।';
+
+  @override
+  String get disable => 'अक्षम करें';
+
+  @override
+  String get photoLibrary => 'फोटो लाइब्रेरी';
+
+  @override
+  String get chooseFile => 'फ़ाइल चुनें';
 }

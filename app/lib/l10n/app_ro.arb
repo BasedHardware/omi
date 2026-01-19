@@ -375,7 +375,7 @@
   "@thankYouFeedback": {
     "description": "After thumbs up/down feedback"
   },
-  "clearChat": "Ștergi chat-ul?",
+  "clearChat": "Șterge conversația",
   "@clearChat": {
     "description": "Clear chat dialog title"
   },
@@ -2554,7 +2554,7 @@
   "thankYouForFeedback": "Mulțumim pentru feedback!",
   "maxFilesUploadError": "Puteți încărca doar 4 fișiere o dată",
   "attachedFiles": "📎 Fișiere atașate",
-  "takePhoto": "Faceți o fotografie",
+  "takePhoto": "Fă o poză",
   "captureWithCamera": "Capturați cu camera",
   "selectImages": "Selectați imagini",
   "chooseFromGallery": "Alegeți din galerie",
@@ -3635,5 +3635,13 @@
   "frequencyDescLow": "Doar actualizări importante",
   "frequencyDescBalanced": "Memento-uri utile regulate",
   "frequencyDescHigh": "Verificări frecvente",
-  "frequencyDescMaximum": "Rămâneți constant implicat"
+  "frequencyDescMaximum": "Rămâneți constant implicat",
+  "clearChatQuestion": "Ștergi conversația?",
+  "syncingMessages": "Sincronizare mesaje cu serverul...",
+  "chatAppsTitle": "Aplicații de chat",
+  "selectApp": "Selectează aplicația",
+  "noChatAppsEnabled": "Nicio aplicație de chat activată.\nApasă pe \"Activează aplicații\" pentru a adăuga.",
+  "disable": "Dezactivează",
+  "photoLibrary": "Bibliotecă foto",
+  "chooseFile": "Alege fișier"
 }

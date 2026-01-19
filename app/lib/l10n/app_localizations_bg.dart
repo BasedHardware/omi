@@ -284,7 +284,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get thankYouFeedback => 'Благодарим за обратната връзка!';
 
   @override
-  String get clearChat => 'Изчисти чат?';
+  String get clearChat => 'Изчисти чата';
 
   @override
   String get clearChatConfirm => 'Сигурни ли сте, че искате да изчистите чата? Това действие не може да бъде отменено.';
@@ -3101,7 +3101,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get attachedFiles => '📎 Прикачени файлове';
 
   @override
-  String get takePhoto => 'Направете снимка';
+  String get takePhoto => 'Снимай';
 
   @override
   String get captureWithCamera => 'Заснемане с камера';
@@ -5811,4 +5811,29 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get frequencyDescMaximum => 'Поддържайте постоянна ангажираност';
+
+  @override
+  String get clearChatQuestion => 'Изчисти чата?';
+
+  @override
+  String get syncingMessages => 'Синхронизиране на съобщенията със сървъра...';
+
+  @override
+  String get chatAppsTitle => 'Чат приложения';
+
+  @override
+  String get selectApp => 'Избери приложение';
+
+  @override
+  String get noChatAppsEnabled =>
+      'Няма активирани чат приложения.\nДокоснете \"Активиране на приложения\" за добавяне.';
+
+  @override
+  String get disable => 'Деактивирай';
+
+  @override
+  String get photoLibrary => 'Фотогалерия';
+
+  @override
+  String get chooseFile => 'Избери файл';
 }

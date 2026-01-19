@@ -281,7 +281,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get thankYouFeedback => 'フィードバックありがとうございます！';
 
   @override
-  String get clearChat => 'チャットを消去しますか？';
+  String get clearChat => 'チャットを削除';
 
   @override
   String get clearChatConfirm => 'チャットを消去してもよろしいですか？この操作は元に戻せません。';
@@ -5686,4 +5686,28 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get frequencyDescMaximum => '常に関与し続ける';
+
+  @override
+  String get clearChatQuestion => 'チャットを削除しますか？';
+
+  @override
+  String get syncingMessages => 'サーバーとメッセージを同期中...';
+
+  @override
+  String get chatAppsTitle => 'チャットアプリ';
+
+  @override
+  String get selectApp => 'アプリを選択';
+
+  @override
+  String get noChatAppsEnabled => 'チャットアプリが有効になっていません。\n「アプリを有効化」をタップして追加してください。';
+
+  @override
+  String get disable => '無効化';
+
+  @override
+  String get photoLibrary => 'フォトライブラリ';
+
+  @override
+  String get chooseFile => 'ファイルを選択';
 }

@@ -281,7 +281,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get thankYouFeedback => 'ขอบคุณสำหรับคำติชมของคุณ!';
 
   @override
-  String get clearChat => 'ล้างแชท?';
+  String get clearChat => 'ล้างแชท';
 
   @override
   String get clearChatConfirm => 'คุณแน่ใจหรือไม่ว่าต้องการล้างแชท? การดำเนินการนี้ไม่สามารถยกเลิกได้';
@@ -3077,7 +3077,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get attachedFiles => '📎 ไฟล์ที่แนบมา';
 
   @override
-  String get takePhoto => 'ถ่ายภาพ';
+  String get takePhoto => 'ถ่ายรูป';
 
   @override
   String get captureWithCamera => 'จับภาพด้วยกล้อง';
@@ -5761,4 +5761,28 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get frequencyDescMaximum => 'ติดต่ออยู่เสมอ';
+
+  @override
+  String get clearChatQuestion => 'ล้างแชท?';
+
+  @override
+  String get syncingMessages => 'กำลังซิงค์ข้อความกับเซิร์ฟเวอร์...';
+
+  @override
+  String get chatAppsTitle => 'แอปแชท';
+
+  @override
+  String get selectApp => 'เลือกแอป';
+
+  @override
+  String get noChatAppsEnabled => 'ไม่มีแอปแชทที่เปิดใช้งาน\nแตะ \"เปิดใช้งานแอป\" เพื่อเพิ่ม';
+
+  @override
+  String get disable => 'ปิดใช้งาน';
+
+  @override
+  String get photoLibrary => 'คลังภาพ';
+
+  @override
+  String get chooseFile => 'เลือกไฟล์';
 }

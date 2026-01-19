@@ -285,7 +285,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get thankYouFeedback => 'Köszönjük a visszajelzést!';
 
   @override
-  String get clearChat => 'Csevegés törlése?';
+  String get clearChat => 'Csevegés törlése';
 
   @override
   String get clearChatConfirm => 'Biztosan törölni szeretnéd a csevegést? Ez a művelet nem vonható vissza.';
@@ -5822,4 +5822,29 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get frequencyDescMaximum => 'Maradjon folyamatosan elkötelezett';
+
+  @override
+  String get clearChatQuestion => 'Csevegés törlése?';
+
+  @override
+  String get syncingMessages => 'Üzenetek szinkronizálása a szerverrel...';
+
+  @override
+  String get chatAppsTitle => 'Chat alkalmazások';
+
+  @override
+  String get selectApp => 'Alkalmazás kiválasztása';
+
+  @override
+  String get noChatAppsEnabled =>
+      'Nincs engedélyezett chat alkalmazás.\nKoppintson az \"Alkalmazások engedélyezése\" gombra a hozzáadáshoz.';
+
+  @override
+  String get disable => 'Letiltás';
+
+  @override
+  String get photoLibrary => 'Fotótár';
+
+  @override
+  String get chooseFile => 'Fájl kiválasztása';
 }

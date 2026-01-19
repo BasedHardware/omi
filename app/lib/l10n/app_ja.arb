@@ -115,7 +115,7 @@
   "reportMessageConfirm": "このメッセージを報告してもよろしいですか？",
   "messageReported": "メッセージを報告しました。",
   "thankYouFeedback": "フィードバックありがとうございます！",
-  "clearChat": "チャットを消去しますか？",
+  "clearChat": "チャットを削除",
   "clearChatConfirm": "チャットを消去してもよろしいですか？この操作は元に戻せません。",
   "maxFilesLimit": "一度にアップロードできるファイルは4つまでです",
   "chatWithOmi": "Omiとチャット",
@@ -2061,5 +2061,13 @@
   "frequencyDescLow": "重要な更新のみ",
   "frequencyDescBalanced": "定期的な役立つリマインダー",
   "frequencyDescHigh": "頻繁なチェックイン",
-  "frequencyDescMaximum": "常に関与し続ける"
+  "frequencyDescMaximum": "常に関与し続ける",
+  "clearChatQuestion": "チャットを削除しますか？",
+  "syncingMessages": "サーバーとメッセージを同期中...",
+  "chatAppsTitle": "チャットアプリ",
+  "selectApp": "アプリを選択",
+  "noChatAppsEnabled": "チャットアプリが有効になっていません。\n「アプリを有効化」をタップして追加してください。",
+  "disable": "無効化",
+  "photoLibrary": "フォトライブラリ",
+  "chooseFile": "ファイルを選択"
 }

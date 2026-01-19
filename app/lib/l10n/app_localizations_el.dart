@@ -285,7 +285,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get thankYouFeedback => 'Ευχαριστούμε για τα σχόλιά σας!';
 
   @override
-  String get clearChat => 'Εκκαθάριση Συνομιλίας;';
+  String get clearChat => 'Διαγραφή συνομιλίας';
 
   @override
   String get clearChatConfirm =>
@@ -3118,7 +3118,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get attachedFiles => '📎 Συνημμένα αρχεία';
 
   @override
-  String get takePhoto => 'Τραβήξτε φωτογραφία';
+  String get takePhoto => 'Λήψη φωτογραφίας';
 
   @override
   String get captureWithCamera => 'Λήψη με κάμερα';
@@ -5836,4 +5836,29 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get frequencyDescMaximum => 'Μείνετε συνεχώς ενεργοί';
+
+  @override
+  String get clearChatQuestion => 'Διαγραφή συνομιλίας;';
+
+  @override
+  String get syncingMessages => 'Συγχρονισμός μηνυμάτων με τον διακομιστή...';
+
+  @override
+  String get chatAppsTitle => 'Εφαρμογές συνομιλίας';
+
+  @override
+  String get selectApp => 'Επιλογή εφαρμογής';
+
+  @override
+  String get noChatAppsEnabled =>
+      'Δεν έχουν ενεργοποιηθεί εφαρμογές συνομιλίας.\nΠατήστε \"Ενεργοποίηση εφαρμογών\" για προσθήκη.';
+
+  @override
+  String get disable => 'Απενεργοποίηση';
+
+  @override
+  String get photoLibrary => 'Βιβλιοθήκη φωτογραφιών';
+
+  @override
+  String get chooseFile => 'Επιλογή αρχείου';
 }

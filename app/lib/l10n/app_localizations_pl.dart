@@ -283,7 +283,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get thankYouFeedback => 'Dziękujemy za opinię!';
 
   @override
-  String get clearChat => 'Wyczyścić czat?';
+  String get clearChat => 'Wyczyść czat';
 
   @override
   String get clearChatConfirm => 'Czy na pewno chcesz wyczyścić czat? Ta czynność nie może zostać cofnięta.';
@@ -5804,4 +5804,28 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get frequencyDescMaximum => 'Bądź stale zaangażowany';
+
+  @override
+  String get clearChatQuestion => 'Wyczyścić czat?';
+
+  @override
+  String get syncingMessages => 'Synchronizowanie wiadomości z serwerem...';
+
+  @override
+  String get chatAppsTitle => 'Aplikacje czatu';
+
+  @override
+  String get selectApp => 'Wybierz aplikację';
+
+  @override
+  String get noChatAppsEnabled => 'Brak włączonych aplikacji czatu.\nDotknij \"Włącz aplikacje\", aby dodać.';
+
+  @override
+  String get disable => 'Wyłącz';
+
+  @override
+  String get photoLibrary => 'Biblioteka zdjęć';
+
+  @override
+  String get chooseFile => 'Wybierz plik';
 }

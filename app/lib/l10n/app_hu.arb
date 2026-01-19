@@ -375,7 +375,7 @@
   "@thankYouFeedback": {
     "description": "After thumbs up/down feedback"
   },
-  "clearChat": "Csevegés törlése?",
+  "clearChat": "Csevegés törlése",
   "@clearChat": {
     "description": "Clear chat dialog title"
   },
@@ -3635,5 +3635,13 @@
   "frequencyDescLow": "Csak fontos frissítések",
   "frequencyDescBalanced": "Rendszeres hasznos emlékeztetők",
   "frequencyDescHigh": "Gyakori ellenőrzések",
-  "frequencyDescMaximum": "Maradjon folyamatosan elkötelezett"
+  "frequencyDescMaximum": "Maradjon folyamatosan elkötelezett",
+  "clearChatQuestion": "Csevegés törlése?",
+  "syncingMessages": "Üzenetek szinkronizálása a szerverrel...",
+  "chatAppsTitle": "Chat alkalmazások",
+  "selectApp": "Alkalmazás kiválasztása",
+  "noChatAppsEnabled": "Nincs engedélyezett chat alkalmazás.\nKoppintson az \"Alkalmazások engedélyezése\" gombra a hozzáadáshoz.",
+  "disable": "Letiltás",
+  "photoLibrary": "Fotótár",
+  "chooseFile": "Fájl kiválasztása"
 }

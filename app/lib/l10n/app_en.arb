@@ -375,9 +375,9 @@
   "@thankYouFeedback": {
     "description": "After thumbs up/down feedback"
   },
-  "clearChat": "Clear Chat?",
+  "clearChat": "Clear Chat",
   "@clearChat": {
-    "description": "Clear chat dialog title"
+    "description": "Button/menu item to clear chat"
   },
   "clearChatConfirm": "Are you sure you want to clear the chat? This action cannot be undone.",
   "@clearChatConfirm": {
@@ -3583,9 +3583,9 @@
   "@attachedFiles": {
     "description": "Label for attached files section"
   },
-  "takePhoto": "Take a Photo",
+  "takePhoto": "Take Photo",
   "@takePhoto": {
-    "description": "File option: take photo"
+    "description": "Action sheet option to take a photo"
   },
   "captureWithCamera": "Capture with camera",
   "@captureWithCamera": {
@@ -6992,5 +6992,37 @@
   "frequencyDescMaximum": "Stay constantly engaged",
   "@frequencyDescMaximum": {
     "description": "Description for maximum notification frequency"
+  },
+  "clearChatQuestion": "Clear Chat?",
+  "@clearChatQuestion": {
+    "description": "Dialog title asking to clear chat"
+  },
+  "syncingMessages": "Syncing messages with server...",
+  "@syncingMessages": {
+    "description": "Loading text when syncing messages"
+  },
+  "chatAppsTitle": "Chat Apps",
+  "@chatAppsTitle": {
+    "description": "Title for chat apps drawer/section"
+  },
+  "selectApp": "Select App",
+  "@selectApp": {
+    "description": "Section header for selecting an app"
+  },
+  "noChatAppsEnabled": "No chat apps enabled.\nTap \"Enable Apps\" to add some.",
+  "@noChatAppsEnabled": {
+    "description": "Empty state message when no chat apps are enabled"
+  },
+  "disable": "Disable",
+  "@disable": {
+    "description": "Button to disable/remove an app"
+  },
+  "photoLibrary": "Photo Library",
+  "@photoLibrary": {
+    "description": "Action sheet option to select from photo library"
+  },
+  "chooseFile": "Choose File",
+  "@chooseFile": {
+    "description": "Action sheet option to choose a file"
   }
 }

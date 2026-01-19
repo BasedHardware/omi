@@ -687,10 +687,10 @@ abstract class AppLocalizations {
   /// **'Thank you for your feedback!'**
   String get thankYouFeedback;
 
-  /// Clear chat dialog title
+  /// Button/menu item to clear chat
   ///
   /// In en, this message translates to:
-  /// **'Clear Chat?'**
+  /// **'Clear Chat'**
   String get clearChat;
 
   /// Clear chat confirmation message
@@ -5949,10 +5949,10 @@ abstract class AppLocalizations {
   /// **'📎 Attached Files'**
   String get attachedFiles;
 
-  /// File option: take photo
+  /// Action sheet option to take a photo
   ///
   /// In en, this message translates to:
-  /// **'Take a Photo'**
+  /// **'Take Photo'**
   String get takePhoto;
 
   /// File option: capture with camera subtitle
@@ -10958,6 +10958,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Stay constantly engaged'**
   String get frequencyDescMaximum;
+
+  /// Dialog title asking to clear chat
+  ///
+  /// In en, this message translates to:
+  /// **'Clear Chat?'**
+  String get clearChatQuestion;
+
+  /// Loading text when syncing messages
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing messages with server...'**
+  String get syncingMessages;
+
+  /// Title for chat apps drawer/section
+  ///
+  /// In en, this message translates to:
+  /// **'Chat Apps'**
+  String get chatAppsTitle;
+
+  /// Section header for selecting an app
+  ///
+  /// In en, this message translates to:
+  /// **'Select App'**
+  String get selectApp;
+
+  /// Empty state message when no chat apps are enabled
+  ///
+  /// In en, this message translates to:
+  /// **'No chat apps enabled.\nTap \"Enable Apps\" to add some.'**
+  String get noChatAppsEnabled;
+
+  /// Button to disable/remove an app
+  ///
+  /// In en, this message translates to:
+  /// **'Disable'**
+  String get disable;
+
+  /// Action sheet option to select from photo library
+  ///
+  /// In en, this message translates to:
+  /// **'Photo Library'**
+  String get photoLibrary;
+
+  /// Action sheet option to choose a file
+  ///
+  /// In en, this message translates to:
+  /// **'Choose File'**
+  String get chooseFile;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

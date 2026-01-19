@@ -283,7 +283,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get thankYouFeedback => 'Geri bildiriminiz için teşekkürler!';
 
   @override
-  String get clearChat => 'Sohbet Temizlensin mi?';
+  String get clearChat => 'Sohbeti Temizle';
 
   @override
   String get clearChatConfirm => 'Sohbeti temizlemek istediğinizden emin misiniz? Bu işlem geri alınamaz.';
@@ -5802,4 +5802,28 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get frequencyDescMaximum => 'Sürekli bağlı kalın';
+
+  @override
+  String get clearChatQuestion => 'Sohbeti temizle?';
+
+  @override
+  String get syncingMessages => 'Mesajlar sunucuyla senkronize ediliyor...';
+
+  @override
+  String get chatAppsTitle => 'Sohbet Uygulamaları';
+
+  @override
+  String get selectApp => 'Uygulama Seç';
+
+  @override
+  String get noChatAppsEnabled => 'Etkin sohbet uygulaması yok.\nEklemek için \"Uygulamaları Etkinleştir\"e dokunun.';
+
+  @override
+  String get disable => 'Devre Dışı Bırak';
+
+  @override
+  String get photoLibrary => 'Fotoğraf Kütüphanesi';
+
+  @override
+  String get chooseFile => 'Dosya Seç';
 }

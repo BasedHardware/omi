@@ -283,7 +283,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get thankYouFeedback => 'Paldies par jūsu atsauksmēm!';
 
   @override
-  String get clearChat => 'Notīrīt tērzēšanu?';
+  String get clearChat => 'Notīrīt sarunu';
 
   @override
   String get clearChatConfirm => 'Vai tiešām vēlaties notīrīt tērzēšanu? Šo darbību nevar atsaukt.';
@@ -5801,4 +5801,29 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get frequencyDescMaximum => 'Palieciet pastāvīgi iesaistīts';
+
+  @override
+  String get clearChatQuestion => 'Notīrīt sarunu?';
+
+  @override
+  String get syncingMessages => 'Sinhronizē ziņojumus ar serveri...';
+
+  @override
+  String get chatAppsTitle => 'Tērzēšanas lietotnes';
+
+  @override
+  String get selectApp => 'Izvēlēties lietotni';
+
+  @override
+  String get noChatAppsEnabled =>
+      'Nav iespējotas tērzēšanas lietotnes.\nPieskarieties \"Iespējot lietotnes\", lai pievienotu.';
+
+  @override
+  String get disable => 'Atspējot';
+
+  @override
+  String get photoLibrary => 'Fotoattēlu bibliotēka';
+
+  @override
+  String get chooseFile => 'Izvēlēties failu';
 }

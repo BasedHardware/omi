@@ -281,7 +281,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get thankYouFeedback => 'شكراً لك على ملاحظاتك!';
 
   @override
-  String get clearChat => 'مسح المحادثة؟';
+  String get clearChat => 'مسح المحادثة';
 
   @override
   String get clearChatConfirm => 'هل أنت متأكد من رغبتك في مسح المحادثة؟ لا يمكن التراجع عن هذا الإجراء.';
@@ -3069,7 +3069,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get attachedFiles => '📎 الملفات المرفقة';
 
   @override
-  String get takePhoto => 'التقط صورة';
+  String get takePhoto => 'التقاط صورة';
 
   @override
   String get captureWithCamera => 'التقط بالكاميرا';
@@ -5747,4 +5747,28 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get frequencyDescMaximum => 'ابق على تواصل دائم';
+
+  @override
+  String get clearChatQuestion => 'مسح المحادثة؟';
+
+  @override
+  String get syncingMessages => 'جاري مزامنة الرسائل مع الخادم...';
+
+  @override
+  String get chatAppsTitle => 'تطبيقات الدردشة';
+
+  @override
+  String get selectApp => 'اختر التطبيق';
+
+  @override
+  String get noChatAppsEnabled => 'لا توجد تطبيقات دردشة مفعلة.\nاضغط على \"تمكين التطبيقات\" لإضافة بعضها.';
+
+  @override
+  String get disable => 'تعطيل';
+
+  @override
+  String get photoLibrary => 'مكتبة الصور';
+
+  @override
+  String get chooseFile => 'اختر ملف';
 }

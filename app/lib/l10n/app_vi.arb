@@ -375,7 +375,7 @@
   "@thankYouFeedback": {
     "description": "After thumbs up/down feedback"
   },
-  "clearChat": "Xóa trò chuyện?",
+  "clearChat": "Xóa cuộc trò chuyện",
   "@clearChat": {
     "description": "Clear chat dialog title"
   },
@@ -3635,5 +3635,13 @@
   "frequencyDescLow": "Chỉ cập nhật quan trọng",
   "frequencyDescBalanced": "Nhắc nhở hữu ích thường xuyên",
   "frequencyDescHigh": "Kiểm tra thường xuyên",
-  "frequencyDescMaximum": "Luôn kết nối liên tục"
+  "frequencyDescMaximum": "Luôn kết nối liên tục",
+  "clearChatQuestion": "Xóa cuộc trò chuyện?",
+  "syncingMessages": "Đang đồng bộ tin nhắn với máy chủ...",
+  "chatAppsTitle": "Ứng dụng chat",
+  "selectApp": "Chọn ứng dụng",
+  "noChatAppsEnabled": "Không có ứng dụng chat nào được bật.\nNhấn \"Bật ứng dụng\" để thêm.",
+  "disable": "Vô hiệu hóa",
+  "photoLibrary": "Thư viện ảnh",
+  "chooseFile": "Chọn tệp"
 }

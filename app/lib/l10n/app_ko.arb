@@ -375,7 +375,7 @@
   "@thankYouFeedback": {
     "description": "After thumbs up/down feedback"
   },
-  "clearChat": "채팅을 지우시겠습니까?",
+  "clearChat": "채팅 삭제",
   "@clearChat": {
     "description": "Clear chat dialog title"
   },
@@ -2554,7 +2554,7 @@
   "thankYouForFeedback": "피드백 감사합니다!",
   "maxFilesUploadError": "한 번에 4개의 파일만 업로드할 수 있습니다",
   "attachedFiles": "📎 첨부 파일",
-  "takePhoto": "사진 찍기",
+  "takePhoto": "사진 촬영",
   "captureWithCamera": "카메라로 촬영",
   "selectImages": "이미지 선택",
   "chooseFromGallery": "갤러리에서 선택",
@@ -3635,5 +3635,13 @@
   "frequencyDescLow": "중요한 업데이트만",
   "frequencyDescBalanced": "정기적인 유용한 알림",
   "frequencyDescHigh": "잦은 확인",
-  "frequencyDescMaximum": "항상 연결 상태 유지"
+  "frequencyDescMaximum": "항상 연결 상태 유지",
+  "clearChatQuestion": "채팅을 삭제하시겠습니까?",
+  "syncingMessages": "서버와 메시지 동기화 중...",
+  "chatAppsTitle": "채팅 앱",
+  "selectApp": "앱 선택",
+  "noChatAppsEnabled": "활성화된 채팅 앱이 없습니다.\n\"앱 활성화\"를 탭하여 추가하세요.",
+  "disable": "비활성화",
+  "photoLibrary": "사진 라이브러리",
+  "chooseFile": "파일 선택"
 }

@@ -375,7 +375,7 @@
   "@thankYouFeedback": {
     "description": "After thumbs up/down feedback"
   },
-  "clearChat": "Rensa chatt?",
+  "clearChat": "Rensa chatt",
   "@clearChat": {
     "description": "Clear chat dialog title"
   },
@@ -2554,7 +2554,7 @@
   "thankYouForFeedback": "Tack för din feedback!",
   "maxFilesUploadError": "Du kan bara ladda upp 4 filer åt gången",
   "attachedFiles": "📎 Bifogade filer",
-  "takePhoto": "Ta ett foto",
+  "takePhoto": "Ta foto",
   "captureWithCamera": "Fånga med kamera",
   "selectImages": "Välj bilder",
   "chooseFromGallery": "Välj från galleri",
@@ -3635,5 +3635,13 @@
   "frequencyDescLow": "Endast viktiga uppdateringar",
   "frequencyDescBalanced": "Regelbundna hjälpsamma påminnelser",
   "frequencyDescHigh": "Frekventa kontroller",
-  "frequencyDescMaximum": "Håll dig ständigt engagerad"
+  "frequencyDescMaximum": "Håll dig ständigt engagerad",
+  "clearChatQuestion": "Rensa chatt?",
+  "syncingMessages": "Synkroniserar meddelanden med servern...",
+  "chatAppsTitle": "Chattappar",
+  "selectApp": "Välj app",
+  "noChatAppsEnabled": "Inga chattappar aktiverade.\nTryck på \"Aktivera appar\" för att lägga till.",
+  "disable": "Inaktivera",
+  "photoLibrary": "Bildbibliotek",
+  "chooseFile": "Välj fil"
 }

@@ -375,7 +375,7 @@
   "@thankYouFeedback": {
     "description": "After thumbs up/down feedback"
   },
-  "clearChat": "Netejar xat?",
+  "clearChat": "Esborrar xat",
   "@clearChat": {
     "description": "Clear chat dialog title"
   },
@@ -2572,7 +2572,7 @@
   "thankYouForFeedback": "Gràcies pels teus comentaris!",
   "maxFilesUploadError": "Només pots pujar 4 fitxers a la vegada",
   "attachedFiles": "📎 Fitxers adjunts",
-  "takePhoto": "Fer una foto",
+  "takePhoto": "Fer foto",
   "captureWithCamera": "Capturar amb la càmera",
   "selectImages": "Seleccionar imatges",
   "chooseFromGallery": "Triar de la galeria",
@@ -3637,5 +3637,13 @@
   "frequencyDescLow": "Només actualitzacions importants",
   "frequencyDescBalanced": "Avisos útils regulars",
   "frequencyDescHigh": "Seguiments freqüents",
-  "frequencyDescMaximum": "Mantén-te sempre connectat"
+  "frequencyDescMaximum": "Mantén-te sempre connectat",
+  "clearChatQuestion": "Esborrar el xat?",
+  "syncingMessages": "Sincronitzant missatges amb el servidor...",
+  "chatAppsTitle": "Aplicacions de xat",
+  "selectApp": "Selecciona aplicació",
+  "noChatAppsEnabled": "No hi ha aplicacions de xat activades.\nToca \"Activar aplicacions\" per afegir-ne.",
+  "disable": "Desactivar",
+  "photoLibrary": "Biblioteca de fotos",
+  "chooseFile": "Triar fitxer"
 }

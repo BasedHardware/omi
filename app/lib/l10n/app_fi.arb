@@ -375,7 +375,7 @@
   "@thankYouFeedback": {
     "description": "After thumbs up/down feedback"
   },
-  "clearChat": "Tyhjennä keskustelu?",
+  "clearChat": "Tyhjennä keskustelu",
   "@clearChat": {
     "description": "Clear chat dialog title"
   },
@@ -2554,7 +2554,7 @@
   "thankYouForFeedback": "Kiitos palautteestasi!",
   "maxFilesUploadError": "Voit ladata vain 4 tiedostoa kerralla",
   "attachedFiles": "📎 Liitetyt tiedostot",
-  "takePhoto": "Ota valokuva",
+  "takePhoto": "Ota kuva",
   "captureWithCamera": "Ota kameralla",
   "selectImages": "Valitse kuvia",
   "chooseFromGallery": "Valitse galleriasta",
@@ -3635,5 +3635,13 @@
   "frequencyDescLow": "Vain tärkeät päivitykset",
   "frequencyDescBalanced": "Säännölliset hyödylliset muistutukset",
   "frequencyDescHigh": "Usein tarkistukset",
-  "frequencyDescMaximum": "Pysy jatkuvasti mukana"
+  "frequencyDescMaximum": "Pysy jatkuvasti mukana",
+  "clearChatQuestion": "Tyhjennä keskustelu?",
+  "syncingMessages": "Synkronoidaan viestejä palvelimen kanssa...",
+  "chatAppsTitle": "Chat-sovellukset",
+  "selectApp": "Valitse sovellus",
+  "noChatAppsEnabled": "Chat-sovelluksia ei ole käytössä.\nNapauta \"Ota käyttöön\" lisätäksesi.",
+  "disable": "Poista käytöstä",
+  "photoLibrary": "Kuvakirjasto",
+  "chooseFile": "Valitse tiedosto"
 }

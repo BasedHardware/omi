@@ -286,7 +286,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get thankYouFeedback => 'Danke für Ihr Feedback!';
 
   @override
-  String get clearChat => 'Chat löschen?';
+  String get clearChat => 'Chat löschen';
 
   @override
   String get clearChatConfirm =>
@@ -5836,4 +5836,29 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get frequencyDescMaximum => 'Bleiben Sie ständig engagiert';
+
+  @override
+  String get clearChatQuestion => 'Chat löschen?';
+
+  @override
+  String get syncingMessages => 'Nachrichten werden mit dem Server synchronisiert...';
+
+  @override
+  String get chatAppsTitle => 'Chat-Apps';
+
+  @override
+  String get selectApp => 'App auswählen';
+
+  @override
+  String get noChatAppsEnabled =>
+      'Keine Chat-Apps aktiviert.\nTippen Sie auf \"Apps aktivieren\" um welche hinzuzufügen.';
+
+  @override
+  String get disable => 'Deaktivieren';
+
+  @override
+  String get photoLibrary => 'Fotomediathek';
+
+  @override
+  String get chooseFile => 'Datei auswählen';
 }

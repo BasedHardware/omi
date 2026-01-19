@@ -283,7 +283,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get thankYouFeedback => 'Terima kasih atas maklum balas anda!';
 
   @override
-  String get clearChat => 'Kosongkan Sembang?';
+  String get clearChat => 'Padam Sembang';
 
   @override
   String get clearChatConfirm => 'Adakah anda pasti mahu mengosongkan sembang? Tindakan ini tidak boleh dibatalkan.';
@@ -3105,7 +3105,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get attachedFiles => '📎 Fail Dilampirkan';
 
   @override
-  String get takePhoto => 'Ambil Foto';
+  String get takePhoto => 'Ambil Gambar';
 
   @override
   String get captureWithCamera => 'Tangkap dengan kamera';
@@ -5814,4 +5814,28 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get frequencyDescMaximum => 'Kekal sentiasa terlibat';
+
+  @override
+  String get clearChatQuestion => 'Padam sembang?';
+
+  @override
+  String get syncingMessages => 'Menyegerakkan mesej dengan pelayan...';
+
+  @override
+  String get chatAppsTitle => 'Aplikasi Sembang';
+
+  @override
+  String get selectApp => 'Pilih Aplikasi';
+
+  @override
+  String get noChatAppsEnabled => 'Tiada aplikasi sembang diaktifkan.\nKetik \"Aktifkan Aplikasi\" untuk menambah.';
+
+  @override
+  String get disable => 'Nyahaktif';
+
+  @override
+  String get photoLibrary => 'Pustaka Foto';
+
+  @override
+  String get chooseFile => 'Pilih Fail';
 }

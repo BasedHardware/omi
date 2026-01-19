@@ -375,7 +375,7 @@
   "@thankYouFeedback": {
     "description": "After thumbs up/down feedback"
   },
-  "clearChat": "Sohbet Temizlensin mi?",
+  "clearChat": "Sohbeti Temizle",
   "@clearChat": {
     "description": "Clear chat dialog title"
   },
@@ -3617,5 +3617,13 @@
   "frequencyDescLow": "Sadece önemli güncellemeler",
   "frequencyDescBalanced": "Düzenli yararlı hatırlatıcılar",
   "frequencyDescHigh": "Sık kontroller",
-  "frequencyDescMaximum": "Sürekli bağlı kalın"
+  "frequencyDescMaximum": "Sürekli bağlı kalın",
+  "clearChatQuestion": "Sohbeti temizle?",
+  "syncingMessages": "Mesajlar sunucuyla senkronize ediliyor...",
+  "chatAppsTitle": "Sohbet Uygulamaları",
+  "selectApp": "Uygulama Seç",
+  "noChatAppsEnabled": "Etkin sohbet uygulaması yok.\nEklemek için \"Uygulamaları Etkinleştir\"e dokunun.",
+  "disable": "Devre Dışı Bırak",
+  "photoLibrary": "Fotoğraf Kütüphanesi",
+  "chooseFile": "Dosya Seç"
 }

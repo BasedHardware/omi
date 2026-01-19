@@ -375,7 +375,7 @@
   "@thankYouFeedback": {
     "description": "After thumbs up/down feedback"
   },
-  "clearChat": "Kosongkan Sembang?",
+  "clearChat": "Padam Sembang",
   "@clearChat": {
     "description": "Clear chat dialog title"
   },
@@ -2554,7 +2554,7 @@
   "thankYouForFeedback": "Terima kasih atas maklum balas anda!",
   "maxFilesUploadError": "Anda hanya boleh memuat naik 4 fail pada satu masa",
   "attachedFiles": "📎 Fail Dilampirkan",
-  "takePhoto": "Ambil Foto",
+  "takePhoto": "Ambil Gambar",
   "captureWithCamera": "Tangkap dengan kamera",
   "selectImages": "Pilih Imej",
   "chooseFromGallery": "Pilih dari galeri",
@@ -3635,5 +3635,13 @@
   "frequencyDescLow": "Hanya kemas kini penting",
   "frequencyDescBalanced": "Peringatan berguna biasa",
   "frequencyDescHigh": "Pemeriksaan kerap",
-  "frequencyDescMaximum": "Kekal sentiasa terlibat"
+  "frequencyDescMaximum": "Kekal sentiasa terlibat",
+  "clearChatQuestion": "Padam sembang?",
+  "syncingMessages": "Menyegerakkan mesej dengan pelayan...",
+  "chatAppsTitle": "Aplikasi Sembang",
+  "selectApp": "Pilih Aplikasi",
+  "noChatAppsEnabled": "Tiada aplikasi sembang diaktifkan.\nKetik \"Aktifkan Aplikasi\" untuk menambah.",
+  "disable": "Nyahaktif",
+  "photoLibrary": "Pustaka Foto",
+  "chooseFile": "Pilih Fail"
 }

@@ -375,7 +375,7 @@
   "@thankYouFeedback": {
     "description": "After thumbs up/down feedback"
   },
-  "clearChat": "Ryd chat?",
+  "clearChat": "Ryd chat",
   "@clearChat": {
     "description": "Clear chat dialog title"
   },
@@ -2554,7 +2554,7 @@
   "thankYouForFeedback": "Tak for din feedback!",
   "maxFilesUploadError": "Du kan kun uploade 4 filer ad gangen",
   "attachedFiles": "📎 Vedhæftede filer",
-  "takePhoto": "Tag et foto",
+  "takePhoto": "Tag billede",
   "captureWithCamera": "Optag med kamera",
   "selectImages": "Vælg billeder",
   "chooseFromGallery": "Vælg fra galleri",
@@ -3635,5 +3635,13 @@
   "frequencyDescLow": "Kun vigtige opdateringer",
   "frequencyDescBalanced": "Regelmæssige nyttige påmindelser",
   "frequencyDescHigh": "Hyppige tjek",
-  "frequencyDescMaximum": "Forbliv konstant engageret"
+  "frequencyDescMaximum": "Forbliv konstant engageret",
+  "clearChatQuestion": "Ryd chat?",
+  "syncingMessages": "Synkroniserer beskeder med serveren...",
+  "chatAppsTitle": "Chat apps",
+  "selectApp": "Vælg app",
+  "noChatAppsEnabled": "Ingen chat apps aktiveret.\nTryk på \"Aktiver apps\" for at tilføje.",
+  "disable": "Deaktiver",
+  "photoLibrary": "Billedbibliotek",
+  "chooseFile": "Vælg fil"
 }

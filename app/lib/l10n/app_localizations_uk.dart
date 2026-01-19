@@ -283,7 +283,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get thankYouFeedback => 'Дякуємо за ваш відгук!';
 
   @override
-  String get clearChat => 'Очистити чат?';
+  String get clearChat => 'Очистити чат';
 
   @override
   String get clearChatConfirm => 'Ви впевнені, що хочете очистити чат? Цю дію не можна скасувати.';
@@ -5796,4 +5796,28 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get frequencyDescMaximum => 'Залишайтеся постійно залученими';
+
+  @override
+  String get clearChatQuestion => 'Очистити чат?';
+
+  @override
+  String get syncingMessages => 'Синхронізація повідомлень з сервером...';
+
+  @override
+  String get chatAppsTitle => 'Чат-застосунки';
+
+  @override
+  String get selectApp => 'Обрати застосунок';
+
+  @override
+  String get noChatAppsEnabled => 'Чат-застосунки не ввімкнено.\nНатисніть \"Увімкнути застосунки\", щоб додати.';
+
+  @override
+  String get disable => 'Вимкнути';
+
+  @override
+  String get photoLibrary => 'Бібліотека фото';
+
+  @override
+  String get chooseFile => 'Обрати файл';
 }

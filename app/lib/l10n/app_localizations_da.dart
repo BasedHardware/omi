@@ -284,7 +284,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get thankYouFeedback => 'Tak for din feedback!';
 
   @override
-  String get clearChat => 'Ryd chat?';
+  String get clearChat => 'Ryd chat';
 
   @override
   String get clearChatConfirm => 'Er du sikker på, at du vil rydde chatten? Denne handling kan ikke fortrydes.';
@@ -3100,7 +3100,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get attachedFiles => '📎 Vedhæftede filer';
 
   @override
-  String get takePhoto => 'Tag et foto';
+  String get takePhoto => 'Tag billede';
 
   @override
   String get captureWithCamera => 'Optag med kamera';
@@ -5799,4 +5799,28 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get frequencyDescMaximum => 'Forbliv konstant engageret';
+
+  @override
+  String get clearChatQuestion => 'Ryd chat?';
+
+  @override
+  String get syncingMessages => 'Synkroniserer beskeder med serveren...';
+
+  @override
+  String get chatAppsTitle => 'Chat apps';
+
+  @override
+  String get selectApp => 'Vælg app';
+
+  @override
+  String get noChatAppsEnabled => 'Ingen chat apps aktiveret.\nTryk på \"Aktiver apps\" for at tilføje.';
+
+  @override
+  String get disable => 'Deaktiver';
+
+  @override
+  String get photoLibrary => 'Billedbibliotek';
+
+  @override
+  String get chooseFile => 'Vælg fil';
 }

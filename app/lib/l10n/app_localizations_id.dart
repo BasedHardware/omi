@@ -283,7 +283,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get thankYouFeedback => 'Terima kasih atas masukan Anda!';
 
   @override
-  String get clearChat => 'Bersihkan Obrolan?';
+  String get clearChat => 'Hapus Obrolan';
 
   @override
   String get clearChatConfirm => 'Apakah Anda yakin ingin menghapus obrolan? Tindakan ini tidak dapat dibatalkan.';
@@ -5808,4 +5808,29 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get frequencyDescMaximum => 'Tetap terus terlibat';
+
+  @override
+  String get clearChatQuestion => 'Hapus obrolan?';
+
+  @override
+  String get syncingMessages => 'Menyinkronkan pesan dengan server...';
+
+  @override
+  String get chatAppsTitle => 'Aplikasi Obrolan';
+
+  @override
+  String get selectApp => 'Pilih Aplikasi';
+
+  @override
+  String get noChatAppsEnabled =>
+      'Tidak ada aplikasi obrolan yang diaktifkan.\nKetuk \"Aktifkan Aplikasi\" untuk menambahkan.';
+
+  @override
+  String get disable => 'Nonaktifkan';
+
+  @override
+  String get photoLibrary => 'Galeri Foto';
+
+  @override
+  String get chooseFile => 'Pilih File';
 }

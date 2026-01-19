@@ -119,7 +119,7 @@
   "reportMessageConfirm": "Êtes-vous sûr de vouloir signaler ce message ?",
   "messageReported": "Message signalé avec succès.",
   "thankYouFeedback": "Merci pour votre retour !",
-  "clearChat": "Effacer la discussion ?",
+  "clearChat": "Effacer la conversation",
   "clearChatConfirm": "Êtes-vous sûr de vouloir effacer la discussion ? Cette action est irréversible.",
   "maxFilesLimit": "Vous ne pouvez télécharger que 4 fichiers à la fois",
   "chatWithOmi": "Discuter avec Omi",
@@ -2453,5 +2453,13 @@
   "frequencyDescLow": "Mises à jour importantes uniquement",
   "frequencyDescBalanced": "Rappels utiles réguliers",
   "frequencyDescHigh": "Vérifications fréquentes",
-  "frequencyDescMaximum": "Restez constamment engagé"
+  "frequencyDescMaximum": "Restez constamment engagé",
+  "clearChatQuestion": "Effacer la conversation ?",
+  "syncingMessages": "Synchronisation des messages avec le serveur...",
+  "chatAppsTitle": "Applications de chat",
+  "selectApp": "Sélectionner une application",
+  "noChatAppsEnabled": "Aucune application de chat activée.\nAppuyez sur \"Activer les applications\" pour en ajouter.",
+  "disable": "Désactiver",
+  "photoLibrary": "Photothèque",
+  "chooseFile": "Choisir un fichier"
 }

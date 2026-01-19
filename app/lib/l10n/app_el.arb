@@ -375,7 +375,7 @@
   "@thankYouFeedback": {
     "description": "After thumbs up/down feedback"
   },
-  "clearChat": "Εκκαθάριση Συνομιλίας;",
+  "clearChat": "Διαγραφή συνομιλίας",
   "@clearChat": {
     "description": "Clear chat dialog title"
   },
@@ -2554,7 +2554,7 @@
   "thankYouForFeedback": "Ευχαριστούμε για τα σχόλιά σας!",
   "maxFilesUploadError": "Μπορείτε να ανεβάσετε μόνο 4 αρχεία τη φορά",
   "attachedFiles": "📎 Συνημμένα αρχεία",
-  "takePhoto": "Τραβήξτε φωτογραφία",
+  "takePhoto": "Λήψη φωτογραφίας",
   "captureWithCamera": "Λήψη με κάμερα",
   "selectImages": "Επιλέξτε εικόνες",
   "chooseFromGallery": "Επιλογή από τη συλλογή",
@@ -3635,5 +3635,13 @@
   "frequencyDescLow": "Μόνο σημαντικές ενημερώσεις",
   "frequencyDescBalanced": "Τακτικές χρήσιμες υπενθυμίσεις",
   "frequencyDescHigh": "Συχνοί έλεγχοι",
-  "frequencyDescMaximum": "Μείνετε συνεχώς ενεργοί"
+  "frequencyDescMaximum": "Μείνετε συνεχώς ενεργοί",
+  "clearChatQuestion": "Διαγραφή συνομιλίας;",
+  "syncingMessages": "Συγχρονισμός μηνυμάτων με τον διακομιστή...",
+  "chatAppsTitle": "Εφαρμογές συνομιλίας",
+  "selectApp": "Επιλογή εφαρμογής",
+  "noChatAppsEnabled": "Δεν έχουν ενεργοποιηθεί εφαρμογές συνομιλίας.\nΠατήστε \"Ενεργοποίηση εφαρμογών\" για προσθήκη.",
+  "disable": "Απενεργοποίηση",
+  "photoLibrary": "Βιβλιοθήκη φωτογραφιών",
+  "chooseFile": "Επιλογή αρχείου"
 }

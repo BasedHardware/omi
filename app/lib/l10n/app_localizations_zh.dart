@@ -281,7 +281,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get thankYouFeedback => '感谢您的反馈！';
 
   @override
-  String get clearChat => '清除聊天？';
+  String get clearChat => '清除聊天';
 
   @override
   String get clearChatConfirm => '您确定要清除聊天记录吗？此操作无法撤消。';
@@ -5676,4 +5676,28 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get frequencyDescMaximum => '保持持续参与';
+
+  @override
+  String get clearChatQuestion => '清除聊天？';
+
+  @override
+  String get syncingMessages => '正在与服务器同步消息...';
+
+  @override
+  String get chatAppsTitle => '聊天应用';
+
+  @override
+  String get selectApp => '选择应用';
+
+  @override
+  String get noChatAppsEnabled => '没有启用的聊天应用。\n点击\"启用应用\"添加。';
+
+  @override
+  String get disable => '禁用';
+
+  @override
+  String get photoLibrary => '照片库';
+
+  @override
+  String get chooseFile => '选择文件';
 }

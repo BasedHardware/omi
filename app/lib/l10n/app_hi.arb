@@ -116,7 +116,7 @@
   "reportMessageConfirm": "क्या आप वाकई इस संदेश की रिपोर्ट करना चाहते हैं?",
   "messageReported": "संदेश सफलतापूर्वक रिपोर्ट किया गया।",
   "thankYouFeedback": "आपकी प्रतिक्रिया के लिए धन्यवाद!",
-  "clearChat": "चैट साफ़ करें?",
+  "clearChat": "चैट साफ करें",
   "clearChatConfirm": "क्या आप वाकई चैट साफ़ करना चाहते हैं? यह पूर्ववत नहीं किया जा सकता।",
   "maxFilesLimit": "आप एक बार में केवल 4 फ़ाइलें अपलोड कर सकते हैं",
   "chatWithOmi": "Omi के साथ चैट करें",
@@ -2082,5 +2082,13 @@
   "frequencyDescLow": "केवल महत्वपूर्ण अपडेट",
   "frequencyDescBalanced": "नियमित सहायक रिमाइंडर",
   "frequencyDescHigh": "बार-बार जांच",
-  "frequencyDescMaximum": "लगातार जुड़े रहें"
+  "frequencyDescMaximum": "लगातार जुड़े रहें",
+  "clearChatQuestion": "चैट साफ करें?",
+  "syncingMessages": "सर्वर के साथ संदेश सिंक हो रहे हैं...",
+  "chatAppsTitle": "चैट ऐप्स",
+  "selectApp": "ऐप चुनें",
+  "noChatAppsEnabled": "कोई चैट ऐप सक्षम नहीं है।\nकुछ जोड़ने के लिए \"ऐप्स सक्षम करें\" पर टैप करें।",
+  "disable": "अक्षम करें",
+  "photoLibrary": "फोटो लाइब्रेरी",
+  "chooseFile": "फ़ाइल चुनें"
 }

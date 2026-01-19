@@ -116,7 +116,7 @@
   "reportMessageConfirm": "您确定要举报此消息吗？",
   "messageReported": "消息举报成功。",
   "thankYouFeedback": "感谢您的反馈！",
-  "clearChat": "清除聊天？",
+  "clearChat": "清除聊天",
   "clearChatConfirm": "您确定要清除聊天记录吗？此操作无法撤消。",
   "maxFilesLimit": "您一次只能上传 4 个文件",
   "chatWithOmi": "与 Omi 聊天",
@@ -2082,5 +2082,13 @@
   "frequencyDescLow": "仅重要更新",
   "frequencyDescBalanced": "定期有用提醒",
   "frequencyDescHigh": "频繁检查",
-  "frequencyDescMaximum": "保持持续参与"
+  "frequencyDescMaximum": "保持持续参与",
+  "clearChatQuestion": "清除聊天？",
+  "syncingMessages": "正在与服务器同步消息...",
+  "chatAppsTitle": "聊天应用",
+  "selectApp": "选择应用",
+  "noChatAppsEnabled": "没有启用的聊天应用。\n点击\"启用应用\"添加。",
+  "disable": "禁用",
+  "photoLibrary": "照片库",
+  "chooseFile": "选择文件"
 }
