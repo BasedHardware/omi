@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 
 export default function HomePage() {
-  // Redirect to the apps marketplace as the new landing page
-  redirect('/apps');
+  // Redirect to the login page as the home page
+  redirect('/login');
 }
