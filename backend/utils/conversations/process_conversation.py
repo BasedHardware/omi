@@ -696,11 +696,12 @@ def process_conversation(
         # Update persona prompts with new conversation
         threading.Thread(target=update_personas_async, args=(uid,)).start()
 
+        # Disable important conversation for now
         # Send important conversation notification for long conversations (>30 minutes)
-        threading.Thread(
-            target=_send_important_conversation_notification_if_needed,
-            args=(uid, conversation),
-        ).start()
+        # threading.Thread(
+        #     target=_send_important_conversation_notification_if_needed,
+        #     args=(uid, conversation),
+        # ).start()
 
     # TODO: trigger external integrations here too
 
