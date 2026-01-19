@@ -3605,5 +3605,17 @@
   "removeFromAllFolders": "Pašalinti iš visų aplankų",
   "buildAndShareYourCustomApp": "Sukurkite ir dalinkitės savo pritaikyta programėle",
   "searchAppsPlaceholder": "Ieškoti 1500+ programėlių",
-  "filters": "Filtrai"
+  "filters": "Filtrai",
+  "frequencyOff": "Išjungta",
+  "frequencyMinimal": "Minimalus",
+  "frequencyLow": "Žemas",
+  "frequencyBalanced": "Subalansuotas",
+  "frequencyHigh": "Aukštas",
+  "frequencyMaximum": "Maksimalus",
+  "frequencyDescOff": "Jokių proaktyvių pranešimų",
+  "frequencyDescMinimal": "Tik kritiniai priminimai",
+  "frequencyDescLow": "Tik svarbūs atnaujinimai",
+  "frequencyDescBalanced": "Reguliarūs naudingi priminimai",
+  "frequencyDescHigh": "Dažni patikrinimai",
+  "frequencyDescMaximum": "Likite nuolat įsitraukę"
 }

@@ -3623,5 +3623,17 @@
   "removeFromAllFolders": "Ta bort från alla mappar",
   "buildAndShareYourCustomApp": "Bygg och dela din anpassade app",
   "searchAppsPlaceholder": "Sök bland 1500+ appar",
-  "filters": "Filter"
+  "filters": "Filter",
+  "frequencyOff": "Av",
+  "frequencyMinimal": "Minimal",
+  "frequencyLow": "Låg",
+  "frequencyBalanced": "Balanserad",
+  "frequencyHigh": "Hög",
+  "frequencyMaximum": "Maximal",
+  "frequencyDescOff": "Inga proaktiva aviseringar",
+  "frequencyDescMinimal": "Endast kritiska påminnelser",
+  "frequencyDescLow": "Endast viktiga uppdateringar",
+  "frequencyDescBalanced": "Regelbundna hjälpsamma påminnelser",
+  "frequencyDescHigh": "Frekventa kontroller",
+  "frequencyDescMaximum": "Håll dig ständigt engagerad"
 }

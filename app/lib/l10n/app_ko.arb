@@ -3623,5 +3623,17 @@
   "removeFromAllFolders": "모든 폴더에서 제거",
   "buildAndShareYourCustomApp": "맞춤 앱을 만들고 공유하세요",
   "searchAppsPlaceholder": "1500개 이상의 앱 검색",
-  "filters": "필터"
+  "filters": "필터",
+  "frequencyOff": "끄기",
+  "frequencyMinimal": "최소",
+  "frequencyLow": "낮음",
+  "frequencyBalanced": "균형",
+  "frequencyHigh": "높음",
+  "frequencyMaximum": "최대",
+  "frequencyDescOff": "사전 알림 없음",
+  "frequencyDescMinimal": "중요한 알림만",
+  "frequencyDescLow": "중요한 업데이트만",
+  "frequencyDescBalanced": "정기적인 유용한 알림",
+  "frequencyDescHigh": "잦은 확인",
+  "frequencyDescMaximum": "항상 연결 상태 유지"
 }

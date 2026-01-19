@@ -5756,4 +5756,40 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get filters => 'Filtrid';
+
+  @override
+  String get frequencyOff => 'Väljas';
+
+  @override
+  String get frequencyMinimal => 'Minimaalne';
+
+  @override
+  String get frequencyLow => 'Madal';
+
+  @override
+  String get frequencyBalanced => 'Tasakaalustatud';
+
+  @override
+  String get frequencyHigh => 'Kõrge';
+
+  @override
+  String get frequencyMaximum => 'Maksimaalne';
+
+  @override
+  String get frequencyDescOff => 'Pole proaktiivseid teateid';
+
+  @override
+  String get frequencyDescMinimal => 'Ainult kriitilised meeldetuletused';
+
+  @override
+  String get frequencyDescLow => 'Ainult olulised uuendused';
+
+  @override
+  String get frequencyDescBalanced => 'Regulaarsed kasulikud meeldetuletused';
+
+  @override
+  String get frequencyDescHigh => 'Sagedased kontrollid';
+
+  @override
+  String get frequencyDescMaximum => 'Püsi pidevalt kaasatud';
 }

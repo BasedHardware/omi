@@ -5790,4 +5790,40 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get filters => 'Filtri';
+
+  @override
+  String get frequencyOff => 'Disattivato';
+
+  @override
+  String get frequencyMinimal => 'Minimo';
+
+  @override
+  String get frequencyLow => 'Basso';
+
+  @override
+  String get frequencyBalanced => 'Bilanciato';
+
+  @override
+  String get frequencyHigh => 'Alto';
+
+  @override
+  String get frequencyMaximum => 'Massimo';
+
+  @override
+  String get frequencyDescOff => 'Nessuna notifica proattiva';
+
+  @override
+  String get frequencyDescMinimal => 'Solo promemoria critici';
+
+  @override
+  String get frequencyDescLow => 'Solo aggiornamenti importanti';
+
+  @override
+  String get frequencyDescBalanced => 'Promemoria utili regolari';
+
+  @override
+  String get frequencyDescHigh => 'Controlli frequenti';
+
+  @override
+  String get frequencyDescMaximum => 'Rimani costantemente coinvolto';
 }

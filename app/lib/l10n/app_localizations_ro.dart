@@ -5783,4 +5783,40 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get filters => 'Filtre';
+
+  @override
+  String get frequencyOff => 'Oprit';
+
+  @override
+  String get frequencyMinimal => 'Minim';
+
+  @override
+  String get frequencyLow => 'Scăzut';
+
+  @override
+  String get frequencyBalanced => 'Echilibrat';
+
+  @override
+  String get frequencyHigh => 'Ridicat';
+
+  @override
+  String get frequencyMaximum => 'Maxim';
+
+  @override
+  String get frequencyDescOff => 'Fără notificări proactive';
+
+  @override
+  String get frequencyDescMinimal => 'Doar memento-uri critice';
+
+  @override
+  String get frequencyDescLow => 'Doar actualizări importante';
+
+  @override
+  String get frequencyDescBalanced => 'Memento-uri utile regulate';
+
+  @override
+  String get frequencyDescHigh => 'Verificări frecvente';
+
+  @override
+  String get frequencyDescMaximum => 'Rămâneți constant implicat';
 }

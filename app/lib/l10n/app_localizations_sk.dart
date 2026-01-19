@@ -5755,4 +5755,40 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get filters => 'Filtre';
+
+  @override
+  String get frequencyOff => 'Vypnuté';
+
+  @override
+  String get frequencyMinimal => 'Minimálna';
+
+  @override
+  String get frequencyLow => 'Nízka';
+
+  @override
+  String get frequencyBalanced => 'Vyvážená';
+
+  @override
+  String get frequencyHigh => 'Vysoká';
+
+  @override
+  String get frequencyMaximum => 'Maximálna';
+
+  @override
+  String get frequencyDescOff => 'Žiadne proaktívne upozornenia';
+
+  @override
+  String get frequencyDescMinimal => 'Len kritické pripomienky';
+
+  @override
+  String get frequencyDescLow => 'Len dôležité aktualizácie';
+
+  @override
+  String get frequencyDescBalanced => 'Pravidelné užitočné pripomienky';
+
+  @override
+  String get frequencyDescHigh => 'Časté kontroly';
+
+  @override
+  String get frequencyDescMaximum => 'Zostaňte neustále zapojený';
 }

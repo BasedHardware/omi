@@ -2070,5 +2070,17 @@
   "removeFromAllFolders": "Eliminar de todas las carpetas",
   "buildAndShareYourCustomApp": "Crea y comparte tu aplicación personalizada",
   "searchAppsPlaceholder": "Buscar en 1500+ aplicaciones",
-  "filters": "Filtros"
+  "filters": "Filtros",
+  "frequencyOff": "Desactivado",
+  "frequencyMinimal": "Mínimo",
+  "frequencyLow": "Bajo",
+  "frequencyBalanced": "Equilibrado",
+  "frequencyHigh": "Alto",
+  "frequencyMaximum": "Máximo",
+  "frequencyDescOff": "Sin notificaciones proactivas",
+  "frequencyDescMinimal": "Solo recordatorios críticos",
+  "frequencyDescLow": "Solo actualizaciones importantes",
+  "frequencyDescBalanced": "Avisos útiles regulares",
+  "frequencyDescHigh": "Seguimientos frecuentes",
+  "frequencyDescMaximum": "Mantente constantemente conectado"
 }

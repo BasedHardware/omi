@@ -5640,4 +5640,40 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get filters => '筛选';
+
+  @override
+  String get frequencyOff => '关闭';
+
+  @override
+  String get frequencyMinimal => '最少';
+
+  @override
+  String get frequencyLow => '低';
+
+  @override
+  String get frequencyBalanced => '平衡';
+
+  @override
+  String get frequencyHigh => '高';
+
+  @override
+  String get frequencyMaximum => '最大';
+
+  @override
+  String get frequencyDescOff => '无主动通知';
+
+  @override
+  String get frequencyDescMinimal => '仅关键提醒';
+
+  @override
+  String get frequencyDescLow => '仅重要更新';
+
+  @override
+  String get frequencyDescBalanced => '定期有用提醒';
+
+  @override
+  String get frequencyDescHigh => '频繁检查';
+
+  @override
+  String get frequencyDescMaximum => '保持持续参与';
 }

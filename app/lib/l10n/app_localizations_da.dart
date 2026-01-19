@@ -5763,4 +5763,40 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get filters => 'Filtre';
+
+  @override
+  String get frequencyOff => 'Fra';
+
+  @override
+  String get frequencyMinimal => 'Minimal';
+
+  @override
+  String get frequencyLow => 'Lav';
+
+  @override
+  String get frequencyBalanced => 'Balanceret';
+
+  @override
+  String get frequencyHigh => 'Høj';
+
+  @override
+  String get frequencyMaximum => 'Maksimal';
+
+  @override
+  String get frequencyDescOff => 'Ingen proaktive notifikationer';
+
+  @override
+  String get frequencyDescMinimal => 'Kun kritiske påmindelser';
+
+  @override
+  String get frequencyDescLow => 'Kun vigtige opdateringer';
+
+  @override
+  String get frequencyDescBalanced => 'Regelmæssige nyttige påmindelser';
+
+  @override
+  String get frequencyDescHigh => 'Hyppige tjek';
+
+  @override
+  String get frequencyDescMaximum => 'Forbliv konstant engageret';
 }

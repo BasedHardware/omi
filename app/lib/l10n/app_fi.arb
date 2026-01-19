@@ -3623,5 +3623,17 @@
   "removeFromAllFolders": "Poista kaikista kansioista",
   "buildAndShareYourCustomApp": "Rakenna ja jaa mukautettu sovelluksesi",
   "searchAppsPlaceholder": "Hae yli 1500 sovelluksesta",
-  "filters": "Suodattimet"
+  "filters": "Suodattimet",
+  "frequencyOff": "Pois",
+  "frequencyMinimal": "Minimaalinen",
+  "frequencyLow": "Matala",
+  "frequencyBalanced": "Tasapainotettu",
+  "frequencyHigh": "Korkea",
+  "frequencyMaximum": "Maksimi",
+  "frequencyDescOff": "Ei proaktiivisia ilmoituksia",
+  "frequencyDescMinimal": "Vain kriittiset muistutukset",
+  "frequencyDescLow": "Vain tärkeät päivitykset",
+  "frequencyDescBalanced": "Säännölliset hyödylliset muistutukset",
+  "frequencyDescHigh": "Usein tarkistukset",
+  "frequencyDescMaximum": "Pysy jatkuvasti mukana"
 }

@@ -3623,5 +3623,17 @@
   "removeFromAllFolders": "Hapus dari semua folder",
   "buildAndShareYourCustomApp": "Buat dan bagikan aplikasi kustom Anda",
   "searchAppsPlaceholder": "Cari 1500+ Aplikasi",
-  "filters": "Filter"
+  "filters": "Filter",
+  "frequencyOff": "Mati",
+  "frequencyMinimal": "Minimal",
+  "frequencyLow": "Rendah",
+  "frequencyBalanced": "Seimbang",
+  "frequencyHigh": "Tinggi",
+  "frequencyMaximum": "Maksimal",
+  "frequencyDescOff": "Tidak ada notifikasi proaktif",
+  "frequencyDescMinimal": "Hanya pengingat penting",
+  "frequencyDescLow": "Hanya pembaruan penting",
+  "frequencyDescBalanced": "Pengingat reguler yang bermanfaat",
+  "frequencyDescHigh": "Pengecekan sering",
+  "frequencyDescMaximum": "Tetap terus terlibat"
 }

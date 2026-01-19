@@ -5789,4 +5789,40 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get filters => 'Filtres';
+
+  @override
+  String get frequencyOff => 'Desactivat';
+
+  @override
+  String get frequencyMinimal => 'Mínim';
+
+  @override
+  String get frequencyLow => 'Baix';
+
+  @override
+  String get frequencyBalanced => 'Equilibrat';
+
+  @override
+  String get frequencyHigh => 'Alt';
+
+  @override
+  String get frequencyMaximum => 'Màxim';
+
+  @override
+  String get frequencyDescOff => 'Sense notificacions proactives';
+
+  @override
+  String get frequencyDescMinimal => 'Només recordatoris crítics';
+
+  @override
+  String get frequencyDescLow => 'Només actualitzacions importants';
+
+  @override
+  String get frequencyDescBalanced => 'Avisos útils regulars';
+
+  @override
+  String get frequencyDescHigh => 'Seguiments freqüents';
+
+  @override
+  String get frequencyDescMaximum => 'Mantén-te sempre connectat';
 }

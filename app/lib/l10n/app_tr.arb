@@ -3605,5 +3605,17 @@
   "removeFromAllFolders": "Tüm klasörlerden kaldır",
   "buildAndShareYourCustomApp": "Özel uygulamanızı oluşturun ve paylaşın",
   "searchAppsPlaceholder": "1500+ Uygulamada Ara",
-  "filters": "Filtreler"
+  "filters": "Filtreler",
+  "frequencyOff": "Kapalı",
+  "frequencyMinimal": "Minimum",
+  "frequencyLow": "Düşük",
+  "frequencyBalanced": "Dengeli",
+  "frequencyHigh": "Yüksek",
+  "frequencyMaximum": "Maksimum",
+  "frequencyDescOff": "Proaktif bildirim yok",
+  "frequencyDescMinimal": "Sadece kritik hatırlatıcılar",
+  "frequencyDescLow": "Sadece önemli güncellemeler",
+  "frequencyDescBalanced": "Düzenli yararlı hatırlatıcılar",
+  "frequencyDescHigh": "Sık kontroller",
+  "frequencyDescMaximum": "Sürekli bağlı kalın"
 }

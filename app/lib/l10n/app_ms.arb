@@ -3623,5 +3623,17 @@
   "removeFromAllFolders": "Alih keluar dari semua folder",
   "buildAndShareYourCustomApp": "Bina dan kongsi aplikasi tersuai anda",
   "searchAppsPlaceholder": "Cari 1500+ Aplikasi",
-  "filters": "Penapis"
+  "filters": "Penapis",
+  "frequencyOff": "Mati",
+  "frequencyMinimal": "Minimum",
+  "frequencyLow": "Rendah",
+  "frequencyBalanced": "Seimbang",
+  "frequencyHigh": "Tinggi",
+  "frequencyMaximum": "Maksimum",
+  "frequencyDescOff": "Tiada pemberitahuan proaktif",
+  "frequencyDescMinimal": "Hanya peringatan kritikal",
+  "frequencyDescLow": "Hanya kemas kini penting",
+  "frequencyDescBalanced": "Peringatan berguna biasa",
+  "frequencyDescHigh": "Pemeriksaan kerap",
+  "frequencyDescMaximum": "Kekal sentiasa terlibat"
 }

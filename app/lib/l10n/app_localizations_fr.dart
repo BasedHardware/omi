@@ -5808,4 +5808,40 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get filters => 'Filtres';
+
+  @override
+  String get frequencyOff => 'Désactivé';
+
+  @override
+  String get frequencyMinimal => 'Minimal';
+
+  @override
+  String get frequencyLow => 'Faible';
+
+  @override
+  String get frequencyBalanced => 'Équilibré';
+
+  @override
+  String get frequencyHigh => 'Élevé';
+
+  @override
+  String get frequencyMaximum => 'Maximum';
+
+  @override
+  String get frequencyDescOff => 'Pas de notifications proactives';
+
+  @override
+  String get frequencyDescMinimal => 'Rappels critiques uniquement';
+
+  @override
+  String get frequencyDescLow => 'Mises à jour importantes uniquement';
+
+  @override
+  String get frequencyDescBalanced => 'Rappels utiles réguliers';
+
+  @override
+  String get frequencyDescHigh => 'Vérifications fréquentes';
+
+  @override
+  String get frequencyDescMaximum => 'Restez constamment engagé';
 }

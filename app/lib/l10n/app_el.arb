@@ -3623,5 +3623,17 @@
   "removeFromAllFolders": "Αφαίρεση από όλους τους φακέλους",
   "buildAndShareYourCustomApp": "Δημιουργήστε και μοιραστείτε την προσαρμοσμένη σας εφαρμογή",
   "searchAppsPlaceholder": "Αναζήτηση σε 1500+ εφαρμογές",
-  "filters": "Φίλτρα"
+  "filters": "Φίλτρα",
+  "frequencyOff": "Απενεργοποιημένο",
+  "frequencyMinimal": "Ελάχιστο",
+  "frequencyLow": "Χαμηλό",
+  "frequencyBalanced": "Ισορροπημένο",
+  "frequencyHigh": "Υψηλό",
+  "frequencyMaximum": "Μέγιστο",
+  "frequencyDescOff": "Χωρίς προληπτικές ειδοποιήσεις",
+  "frequencyDescMinimal": "Μόνο κρίσιμες υπενθυμίσεις",
+  "frequencyDescLow": "Μόνο σημαντικές ενημερώσεις",
+  "frequencyDescBalanced": "Τακτικές χρήσιμες υπενθυμίσεις",
+  "frequencyDescHigh": "Συχνοί έλεγχοι",
+  "frequencyDescMaximum": "Μείνετε συνεχώς ενεργοί"
 }

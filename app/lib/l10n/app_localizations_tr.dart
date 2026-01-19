@@ -5766,4 +5766,40 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get filters => 'Filtreler';
+
+  @override
+  String get frequencyOff => 'Kapalı';
+
+  @override
+  String get frequencyMinimal => 'Minimum';
+
+  @override
+  String get frequencyLow => 'Düşük';
+
+  @override
+  String get frequencyBalanced => 'Dengeli';
+
+  @override
+  String get frequencyHigh => 'Yüksek';
+
+  @override
+  String get frequencyMaximum => 'Maksimum';
+
+  @override
+  String get frequencyDescOff => 'Proaktif bildirim yok';
+
+  @override
+  String get frequencyDescMinimal => 'Sadece kritik hatırlatıcılar';
+
+  @override
+  String get frequencyDescLow => 'Sadece önemli güncellemeler';
+
+  @override
+  String get frequencyDescBalanced => 'Düzenli yararlı hatırlatıcılar';
+
+  @override
+  String get frequencyDescHigh => 'Sık kontroller';
+
+  @override
+  String get frequencyDescMaximum => 'Sürekli bağlı kalın';
 }

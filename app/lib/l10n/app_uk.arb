@@ -3623,5 +3623,17 @@
   "removeFromAllFolders": "Видалити з усіх папок",
   "buildAndShareYourCustomApp": "Створюйте та діліться своїм додатком",
   "searchAppsPlaceholder": "Шукати серед 1500+ додатків",
-  "filters": "Фільтри"
+  "filters": "Фільтри",
+  "frequencyOff": "Вимкнено",
+  "frequencyMinimal": "Мінімальна",
+  "frequencyLow": "Низька",
+  "frequencyBalanced": "Збалансована",
+  "frequencyHigh": "Висока",
+  "frequencyMaximum": "Максимальна",
+  "frequencyDescOff": "Без проактивних сповіщень",
+  "frequencyDescMinimal": "Лише критичні нагадування",
+  "frequencyDescLow": "Лише важливі оновлення",
+  "frequencyDescBalanced": "Регулярні корисні нагадування",
+  "frequencyDescHigh": "Часті перевірки",
+  "frequencyDescMaximum": "Залишайтеся постійно залученими"
 }

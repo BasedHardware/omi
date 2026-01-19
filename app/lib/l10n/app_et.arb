@@ -3623,5 +3623,17 @@
   "removeFromAllFolders": "Eemalda kõigist kaustadest",
   "buildAndShareYourCustomApp": "Ehita ja jaga oma kohandatud rakendust",
   "searchAppsPlaceholder": "Otsi 1500+ rakendust",
-  "filters": "Filtrid"
+  "filters": "Filtrid",
+  "frequencyOff": "Väljas",
+  "frequencyMinimal": "Minimaalne",
+  "frequencyLow": "Madal",
+  "frequencyBalanced": "Tasakaalustatud",
+  "frequencyHigh": "Kõrge",
+  "frequencyMaximum": "Maksimaalne",
+  "frequencyDescOff": "Pole proaktiivseid teateid",
+  "frequencyDescMinimal": "Ainult kriitilised meeldetuletused",
+  "frequencyDescLow": "Ainult olulised uuendused",
+  "frequencyDescBalanced": "Regulaarsed kasulikud meeldetuletused",
+  "frequencyDescHigh": "Sagedased kontrollid",
+  "frequencyDescMaximum": "Püsi pidevalt kaasatud"
 }

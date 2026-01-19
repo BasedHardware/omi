@@ -3623,5 +3623,17 @@
   "removeFromAllFolders": "Xóa khỏi tất cả thư mục",
   "buildAndShareYourCustomApp": "Xây dựng và chia sẻ ứng dụng tùy chỉnh của bạn",
   "searchAppsPlaceholder": "Tìm kiếm 1500+ ứng dụng",
-  "filters": "Bộ lọc"
+  "filters": "Bộ lọc",
+  "frequencyOff": "Tắt",
+  "frequencyMinimal": "Tối thiểu",
+  "frequencyLow": "Thấp",
+  "frequencyBalanced": "Cân bằng",
+  "frequencyHigh": "Cao",
+  "frequencyMaximum": "Tối đa",
+  "frequencyDescOff": "Không có thông báo chủ động",
+  "frequencyDescMinimal": "Chỉ nhắc nhở quan trọng",
+  "frequencyDescLow": "Chỉ cập nhật quan trọng",
+  "frequencyDescBalanced": "Nhắc nhở hữu ích thường xuyên",
+  "frequencyDescHigh": "Kiểm tra thường xuyên",
+  "frequencyDescMaximum": "Luôn kết nối liên tục"
 }

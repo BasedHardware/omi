@@ -5765,4 +5765,40 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get filters => 'Bộ lọc';
+
+  @override
+  String get frequencyOff => 'Tắt';
+
+  @override
+  String get frequencyMinimal => 'Tối thiểu';
+
+  @override
+  String get frequencyLow => 'Thấp';
+
+  @override
+  String get frequencyBalanced => 'Cân bằng';
+
+  @override
+  String get frequencyHigh => 'Cao';
+
+  @override
+  String get frequencyMaximum => 'Tối đa';
+
+  @override
+  String get frequencyDescOff => 'Không có thông báo chủ động';
+
+  @override
+  String get frequencyDescMinimal => 'Chỉ nhắc nhở quan trọng';
+
+  @override
+  String get frequencyDescLow => 'Chỉ cập nhật quan trọng';
+
+  @override
+  String get frequencyDescBalanced => 'Nhắc nhở hữu ích thường xuyên';
+
+  @override
+  String get frequencyDescHigh => 'Kiểm tra thường xuyên';
+
+  @override
+  String get frequencyDescMaximum => 'Luôn kết nối liên tục';
 }

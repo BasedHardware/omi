@@ -3623,5 +3623,17 @@
   "removeFromAllFolders": "ลบออกจากทุกโฟลเดอร์",
   "buildAndShareYourCustomApp": "สร้างและแชร์แอปที่กำหนดเอง",
   "searchAppsPlaceholder": "ค้นหาใน 1500+ แอป",
-  "filters": "ตัวกรอง"
+  "filters": "ตัวกรอง",
+  "frequencyOff": "ปิด",
+  "frequencyMinimal": "น้อยที่สุด",
+  "frequencyLow": "ต่ำ",
+  "frequencyBalanced": "สมดุล",
+  "frequencyHigh": "สูง",
+  "frequencyMaximum": "สูงสุด",
+  "frequencyDescOff": "ไม่มีการแจ้งเตือนเชิงรุก",
+  "frequencyDescMinimal": "เฉพาะการเตือนที่สำคัญ",
+  "frequencyDescLow": "เฉพาะการอัปเดตที่สำคัญ",
+  "frequencyDescBalanced": "การเตือนที่มีประโยชน์เป็นประจำ",
+  "frequencyDescHigh": "การตรวจสอบบ่อยครั้ง",
+  "frequencyDescMaximum": "ติดต่ออยู่เสมอ"
 }

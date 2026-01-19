@@ -5800,4 +5800,40 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get filters => 'Φίλτρα';
+
+  @override
+  String get frequencyOff => 'Απενεργοποιημένο';
+
+  @override
+  String get frequencyMinimal => 'Ελάχιστο';
+
+  @override
+  String get frequencyLow => 'Χαμηλό';
+
+  @override
+  String get frequencyBalanced => 'Ισορροπημένο';
+
+  @override
+  String get frequencyHigh => 'Υψηλό';
+
+  @override
+  String get frequencyMaximum => 'Μέγιστο';
+
+  @override
+  String get frequencyDescOff => 'Χωρίς προληπτικές ειδοποιήσεις';
+
+  @override
+  String get frequencyDescMinimal => 'Μόνο κρίσιμες υπενθυμίσεις';
+
+  @override
+  String get frequencyDescLow => 'Μόνο σημαντικές ενημερώσεις';
+
+  @override
+  String get frequencyDescBalanced => 'Τακτικές χρήσιμες υπενθυμίσεις';
+
+  @override
+  String get frequencyDescHigh => 'Συχνοί έλεγχοι';
+
+  @override
+  String get frequencyDescMaximum => 'Μείνετε συνεχώς ενεργοί';
 }

@@ -3625,5 +3625,17 @@
   "removeFromAllFolders": "Премахване от всички папки",
   "buildAndShareYourCustomApp": "Създайте и споделете персонализирано приложение",
   "searchAppsPlaceholder": "Търсене в 1500+ приложения",
-  "filters": "Филтри"
+  "filters": "Филтри",
+  "frequencyOff": "Изключено",
+  "frequencyMinimal": "Минимално",
+  "frequencyLow": "Ниско",
+  "frequencyBalanced": "Балансирано",
+  "frequencyHigh": "Високо",
+  "frequencyMaximum": "Максимално",
+  "frequencyDescOff": "Без проактивни известия",
+  "frequencyDescMinimal": "Само критични напомняния",
+  "frequencyDescLow": "Само важни актуализации",
+  "frequencyDescBalanced": "Редовни полезни напомняния",
+  "frequencyDescHigh": "Чести проверки",
+  "frequencyDescMaximum": "Поддържайте постоянна ангажираност"
 }

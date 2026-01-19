@@ -3623,5 +3623,17 @@
   "removeFromAllFolders": "إزالة من جميع المجلدات",
   "buildAndShareYourCustomApp": "قم ببناء ومشاركة تطبيقك المخصص",
   "searchAppsPlaceholder": "ابحث في أكثر من 1500 تطبيق",
-  "filters": "التصفيات"
+  "filters": "التصفيات",
+  "frequencyOff": "إيقاف",
+  "frequencyMinimal": "الحد الأدنى",
+  "frequencyLow": "منخفض",
+  "frequencyBalanced": "متوازن",
+  "frequencyHigh": "عالي",
+  "frequencyMaximum": "الحد الأقصى",
+  "frequencyDescOff": "لا توجد إشعارات استباقية",
+  "frequencyDescMinimal": "تذكيرات حرجة فقط",
+  "frequencyDescLow": "التحديثات المهمة فقط",
+  "frequencyDescBalanced": "تنبيهات مفيدة منتظمة",
+  "frequencyDescHigh": "متابعات متكررة",
+  "frequencyDescMaximum": "ابق على تواصل دائم"
 }

@@ -5650,4 +5650,40 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get filters => 'フィルター';
+
+  @override
+  String get frequencyOff => 'オフ';
+
+  @override
+  String get frequencyMinimal => '最小限';
+
+  @override
+  String get frequencyLow => '低';
+
+  @override
+  String get frequencyBalanced => 'バランス';
+
+  @override
+  String get frequencyHigh => '高';
+
+  @override
+  String get frequencyMaximum => '最大';
+
+  @override
+  String get frequencyDescOff => 'プロアクティブな通知なし';
+
+  @override
+  String get frequencyDescMinimal => '重要なリマインダーのみ';
+
+  @override
+  String get frequencyDescLow => '重要な更新のみ';
+
+  @override
+  String get frequencyDescBalanced => '定期的な役立つリマインダー';
+
+  @override
+  String get frequencyDescHigh => '頻繁なチェックイン';
+
+  @override
+  String get frequencyDescMaximum => '常に関与し続ける';
 }

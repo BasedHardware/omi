@@ -3623,5 +3623,17 @@
   "removeFromAllFolders": "Odstrániť zo všetkých priečinkov",
   "buildAndShareYourCustomApp": "Vytvorte a zdieľajte svoju vlastnú aplikáciu",
   "searchAppsPlaceholder": "Hľadať v 1500+ aplikáciách",
-  "filters": "Filtre"
+  "filters": "Filtre",
+  "frequencyOff": "Vypnuté",
+  "frequencyMinimal": "Minimálna",
+  "frequencyLow": "Nízka",
+  "frequencyBalanced": "Vyvážená",
+  "frequencyHigh": "Vysoká",
+  "frequencyMaximum": "Maximálna",
+  "frequencyDescOff": "Žiadne proaktívne upozornenia",
+  "frequencyDescMinimal": "Len kritické pripomienky",
+  "frequencyDescLow": "Len dôležité aktualizácie",
+  "frequencyDescBalanced": "Pravidelné užitočné pripomienky",
+  "frequencyDescHigh": "Časté kontroly",
+  "frequencyDescMaximum": "Zostaňte neustále zapojený"
 }

@@ -3623,5 +3623,17 @@
   "removeFromAllFolders": "Fjern fra alle mapper",
   "buildAndShareYourCustomApp": "Bygg og del din tilpassede app",
   "searchAppsPlaceholder": "Søk i 1500+ apper",
-  "filters": "Filtre"
+  "filters": "Filtre",
+  "frequencyOff": "Av",
+  "frequencyMinimal": "Minimal",
+  "frequencyLow": "Lav",
+  "frequencyBalanced": "Balansert",
+  "frequencyHigh": "Høy",
+  "frequencyMaximum": "Maksimal",
+  "frequencyDescOff": "Ingen proaktive varsler",
+  "frequencyDescMinimal": "Kun kritiske påminnelser",
+  "frequencyDescLow": "Kun viktige oppdateringer",
+  "frequencyDescBalanced": "Regelmessige nyttige påminnelser",
+  "frequencyDescHigh": "Hyppige sjekker",
+  "frequencyDescMaximum": "Hold deg konstant engasjert"
 }

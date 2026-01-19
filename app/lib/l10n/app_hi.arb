@@ -2070,5 +2070,17 @@
   "removeFromAllFolders": "सभी फ़ोल्डरों से हटाएं",
   "buildAndShareYourCustomApp": "अपना कस्टम ऐप बनाएं और साझा करें",
   "searchAppsPlaceholder": "1500+ ऐप्स में खोजें",
-  "filters": "फ़िल्टर"
+  "filters": "फ़िल्टर",
+  "frequencyOff": "बंद",
+  "frequencyMinimal": "न्यूनतम",
+  "frequencyLow": "कम",
+  "frequencyBalanced": "संतुलित",
+  "frequencyHigh": "उच्च",
+  "frequencyMaximum": "अधिकतम",
+  "frequencyDescOff": "कोई सक्रिय सूचनाएं नहीं",
+  "frequencyDescMinimal": "केवल महत्वपूर्ण रिमाइंडर",
+  "frequencyDescLow": "केवल महत्वपूर्ण अपडेट",
+  "frequencyDescBalanced": "नियमित सहायक रिमाइंडर",
+  "frequencyDescHigh": "बार-बार जांच",
+  "frequencyDescMaximum": "लगातार जुड़े रहें"
 }

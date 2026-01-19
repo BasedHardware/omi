@@ -5734,4 +5734,40 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get filters => 'फ़िल्टर';
+
+  @override
+  String get frequencyOff => 'बंद';
+
+  @override
+  String get frequencyMinimal => 'न्यूनतम';
+
+  @override
+  String get frequencyLow => 'कम';
+
+  @override
+  String get frequencyBalanced => 'संतुलित';
+
+  @override
+  String get frequencyHigh => 'उच्च';
+
+  @override
+  String get frequencyMaximum => 'अधिकतम';
+
+  @override
+  String get frequencyDescOff => 'कोई सक्रिय सूचनाएं नहीं';
+
+  @override
+  String get frequencyDescMinimal => 'केवल महत्वपूर्ण रिमाइंडर';
+
+  @override
+  String get frequencyDescLow => 'केवल महत्वपूर्ण अपडेट';
+
+  @override
+  String get frequencyDescBalanced => 'नियमित सहायक रिमाइंडर';
+
+  @override
+  String get frequencyDescHigh => 'बार-बार जांच';
+
+  @override
+  String get frequencyDescMaximum => 'लगातार जुड़े रहें';
 }

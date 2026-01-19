@@ -5755,4 +5755,40 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get filters => 'Filtre';
+
+  @override
+  String get frequencyOff => 'Av';
+
+  @override
+  String get frequencyMinimal => 'Minimal';
+
+  @override
+  String get frequencyLow => 'Lav';
+
+  @override
+  String get frequencyBalanced => 'Balansert';
+
+  @override
+  String get frequencyHigh => 'Høy';
+
+  @override
+  String get frequencyMaximum => 'Maksimal';
+
+  @override
+  String get frequencyDescOff => 'Ingen proaktive varsler';
+
+  @override
+  String get frequencyDescMinimal => 'Kun kritiske påminnelser';
+
+  @override
+  String get frequencyDescLow => 'Kun viktige oppdateringer';
+
+  @override
+  String get frequencyDescBalanced => 'Regelmessige nyttige påminnelser';
+
+  @override
+  String get frequencyDescHigh => 'Hyppige sjekker';
+
+  @override
+  String get frequencyDescMaximum => 'Hold deg konstant engasjert';
 }

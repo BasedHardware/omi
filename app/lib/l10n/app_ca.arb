@@ -3625,5 +3625,17 @@
   "removeFromAllFolders": "Eliminar de totes les carpetes",
   "buildAndShareYourCustomApp": "Crea i comparteix la teva aplicació personalitzada",
   "searchAppsPlaceholder": "Cerca entre 1500+ aplicacions",
-  "filters": "Filtres"
+  "filters": "Filtres",
+  "frequencyOff": "Desactivat",
+  "frequencyMinimal": "Mínim",
+  "frequencyLow": "Baix",
+  "frequencyBalanced": "Equilibrat",
+  "frequencyHigh": "Alt",
+  "frequencyMaximum": "Màxim",
+  "frequencyDescOff": "Sense notificacions proactives",
+  "frequencyDescMinimal": "Només recordatoris crítics",
+  "frequencyDescLow": "Només actualitzacions importants",
+  "frequencyDescBalanced": "Avisos útils regulars",
+  "frequencyDescHigh": "Seguiments freqüents",
+  "frequencyDescMaximum": "Mantén-te sempre connectat"
 }

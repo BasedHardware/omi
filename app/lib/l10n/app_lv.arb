@@ -3623,5 +3623,17 @@
   "removeFromAllFolders": "Noņemt no visām mapēm",
   "buildAndShareYourCustomApp": "Izveidojiet un kopīgojiet savu pielāgoto lietotni",
   "searchAppsPlaceholder": "Meklēt 1500+ lietotnēs",
-  "filters": "Filtri"
+  "filters": "Filtri",
+  "frequencyOff": "Izslēgts",
+  "frequencyMinimal": "Minimāls",
+  "frequencyLow": "Zems",
+  "frequencyBalanced": "Līdzsvarots",
+  "frequencyHigh": "Augsts",
+  "frequencyMaximum": "Maksimāls",
+  "frequencyDescOff": "Nav proaktīvu paziņojumu",
+  "frequencyDescMinimal": "Tikai kritiski atgādinājumi",
+  "frequencyDescLow": "Tikai svarīgi atjauninājumi",
+  "frequencyDescBalanced": "Regulāri noderīgi atgādinājumi",
+  "frequencyDescHigh": "Bieži pārbaudes",
+  "frequencyDescMaximum": "Palieciet pastāvīgi iesaistīts"
 }

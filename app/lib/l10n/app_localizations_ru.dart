@@ -5770,4 +5770,40 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get filters => 'Фильтры';
+
+  @override
+  String get frequencyOff => 'Выкл';
+
+  @override
+  String get frequencyMinimal => 'Минимальная';
+
+  @override
+  String get frequencyLow => 'Низкая';
+
+  @override
+  String get frequencyBalanced => 'Сбалансированная';
+
+  @override
+  String get frequencyHigh => 'Высокая';
+
+  @override
+  String get frequencyMaximum => 'Максимальная';
+
+  @override
+  String get frequencyDescOff => 'Без проактивных уведомлений';
+
+  @override
+  String get frequencyDescMinimal => 'Только критические напоминания';
+
+  @override
+  String get frequencyDescLow => 'Только важные обновления';
+
+  @override
+  String get frequencyDescBalanced => 'Регулярные полезные напоминания';
+
+  @override
+  String get frequencyDescHigh => 'Частые проверки';
+
+  @override
+  String get frequencyDescMaximum => 'Оставайтесь постоянно вовлеченными';
 }

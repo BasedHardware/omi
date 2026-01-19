@@ -5765,4 +5765,40 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get filters => 'Filtri';
+
+  @override
+  String get frequencyOff => 'Izslēgts';
+
+  @override
+  String get frequencyMinimal => 'Minimāls';
+
+  @override
+  String get frequencyLow => 'Zems';
+
+  @override
+  String get frequencyBalanced => 'Līdzsvarots';
+
+  @override
+  String get frequencyHigh => 'Augsts';
+
+  @override
+  String get frequencyMaximum => 'Maksimāls';
+
+  @override
+  String get frequencyDescOff => 'Nav proaktīvu paziņojumu';
+
+  @override
+  String get frequencyDescMinimal => 'Tikai kritiski atgādinājumi';
+
+  @override
+  String get frequencyDescLow => 'Tikai svarīgi atjauninājumi';
+
+  @override
+  String get frequencyDescBalanced => 'Regulāri noderīgi atgādinājumi';
+
+  @override
+  String get frequencyDescHigh => 'Bieži pārbaudes';
+
+  @override
+  String get frequencyDescMaximum => 'Palieciet pastāvīgi iesaistīts';
 }

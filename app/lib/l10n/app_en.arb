@@ -6944,5 +6944,53 @@
   "filters": "Filters",
   "@filters": {
     "description": "Filter button label"
+  },
+  "frequencyOff": "Off",
+  "@frequencyOff": {
+    "description": "Notification frequency level - off"
+  },
+  "frequencyMinimal": "Minimal",
+  "@frequencyMinimal": {
+    "description": "Notification frequency level - minimal"
+  },
+  "frequencyLow": "Low",
+  "@frequencyLow": {
+    "description": "Notification frequency level - low"
+  },
+  "frequencyBalanced": "Balanced",
+  "@frequencyBalanced": {
+    "description": "Notification frequency level - balanced"
+  },
+  "frequencyHigh": "High",
+  "@frequencyHigh": {
+    "description": "Notification frequency level - high"
+  },
+  "frequencyMaximum": "Maximum",
+  "@frequencyMaximum": {
+    "description": "Notification frequency level - maximum"
+  },
+  "frequencyDescOff": "No proactive notifications",
+  "@frequencyDescOff": {
+    "description": "Description for off notification frequency"
+  },
+  "frequencyDescMinimal": "Only critical reminders",
+  "@frequencyDescMinimal": {
+    "description": "Description for minimal notification frequency"
+  },
+  "frequencyDescLow": "Important updates only",
+  "@frequencyDescLow": {
+    "description": "Description for low notification frequency"
+  },
+  "frequencyDescBalanced": "Regular helpful nudges",
+  "@frequencyDescBalanced": {
+    "description": "Description for balanced notification frequency"
+  },
+  "frequencyDescHigh": "Frequent check-ins",
+  "@frequencyDescHigh": {
+    "description": "Description for high notification frequency"
+  },
+  "frequencyDescMaximum": "Stay constantly engaged",
+  "@frequencyDescMaximum": {
+    "description": "Description for maximum notification frequency"
   }
 }

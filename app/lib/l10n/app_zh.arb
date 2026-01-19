@@ -2070,5 +2070,17 @@
   "removeFromAllFolders": "从所有文件夹中移除",
   "buildAndShareYourCustomApp": "构建并分享您的自定义应用",
   "searchAppsPlaceholder": "搜索 1500+ 应用",
-  "filters": "筛选"
+  "filters": "筛选",
+  "frequencyOff": "关闭",
+  "frequencyMinimal": "最少",
+  "frequencyLow": "低",
+  "frequencyBalanced": "平衡",
+  "frequencyHigh": "高",
+  "frequencyMaximum": "最大",
+  "frequencyDescOff": "无主动通知",
+  "frequencyDescMinimal": "仅关键提醒",
+  "frequencyDescLow": "仅重要更新",
+  "frequencyDescBalanced": "定期有用提醒",
+  "frequencyDescHigh": "频繁检查",
+  "frequencyDescMaximum": "保持持续参与"
 }

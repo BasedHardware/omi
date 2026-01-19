@@ -2441,5 +2441,17 @@
   "removeFromAllFolders": "Uit alle mappen verwijderen",
   "buildAndShareYourCustomApp": "Bouw en deel je aangepaste app",
   "searchAppsPlaceholder": "Zoek in 1500+ apps",
-  "filters": "Filters"
+  "filters": "Filters",
+  "frequencyOff": "Uit",
+  "frequencyMinimal": "Minimaal",
+  "frequencyLow": "Laag",
+  "frequencyBalanced": "Gebalanceerd",
+  "frequencyHigh": "Hoog",
+  "frequencyMaximum": "Maximum",
+  "frequencyDescOff": "Geen proactieve meldingen",
+  "frequencyDescMinimal": "Alleen kritieke herinneringen",
+  "frequencyDescLow": "Alleen belangrijke updates",
+  "frequencyDescBalanced": "Regelmatige nuttige herinneringen",
+  "frequencyDescHigh": "Frequente check-ins",
+  "frequencyDescMaximum": "Blijf constant betrokken"
 }

@@ -5786,4 +5786,40 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get filters => 'Szűrők';
+
+  @override
+  String get frequencyOff => 'Ki';
+
+  @override
+  String get frequencyMinimal => 'Minimális';
+
+  @override
+  String get frequencyLow => 'Alacsony';
+
+  @override
+  String get frequencyBalanced => 'Kiegyensúlyozott';
+
+  @override
+  String get frequencyHigh => 'Magas';
+
+  @override
+  String get frequencyMaximum => 'Maximális';
+
+  @override
+  String get frequencyDescOff => 'Nincsenek proaktív értesítések';
+
+  @override
+  String get frequencyDescMinimal => 'Csak kritikus emlékeztetők';
+
+  @override
+  String get frequencyDescLow => 'Csak fontos frissítések';
+
+  @override
+  String get frequencyDescBalanced => 'Rendszeres hasznos emlékeztetők';
+
+  @override
+  String get frequencyDescHigh => 'Gyakori ellenőrzések';
+
+  @override
+  String get frequencyDescMaximum => 'Maradjon folyamatosan elkötelezett';
 }

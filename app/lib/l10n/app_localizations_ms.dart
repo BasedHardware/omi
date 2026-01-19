@@ -5778,4 +5778,40 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get filters => 'Penapis';
+
+  @override
+  String get frequencyOff => 'Mati';
+
+  @override
+  String get frequencyMinimal => 'Minimum';
+
+  @override
+  String get frequencyLow => 'Rendah';
+
+  @override
+  String get frequencyBalanced => 'Seimbang';
+
+  @override
+  String get frequencyHigh => 'Tinggi';
+
+  @override
+  String get frequencyMaximum => 'Maksimum';
+
+  @override
+  String get frequencyDescOff => 'Tiada pemberitahuan proaktif';
+
+  @override
+  String get frequencyDescMinimal => 'Hanya peringatan kritikal';
+
+  @override
+  String get frequencyDescLow => 'Hanya kemas kini penting';
+
+  @override
+  String get frequencyDescBalanced => 'Peringatan berguna biasa';
+
+  @override
+  String get frequencyDescHigh => 'Pemeriksaan kerap';
+
+  @override
+  String get frequencyDescMaximum => 'Kekal sentiasa terlibat';
 }

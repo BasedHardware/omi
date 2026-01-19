@@ -5775,4 +5775,40 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get filters => 'Филтри';
+
+  @override
+  String get frequencyOff => 'Изключено';
+
+  @override
+  String get frequencyMinimal => 'Минимално';
+
+  @override
+  String get frequencyLow => 'Ниско';
+
+  @override
+  String get frequencyBalanced => 'Балансирано';
+
+  @override
+  String get frequencyHigh => 'Високо';
+
+  @override
+  String get frequencyMaximum => 'Максимално';
+
+  @override
+  String get frequencyDescOff => 'Без проактивни известия';
+
+  @override
+  String get frequencyDescMinimal => 'Само критични напомняния';
+
+  @override
+  String get frequencyDescLow => 'Само важни актуализации';
+
+  @override
+  String get frequencyDescBalanced => 'Редовни полезни напомняния';
+
+  @override
+  String get frequencyDescHigh => 'Чести проверки';
+
+  @override
+  String get frequencyDescMaximum => 'Поддържайте постоянна ангажираност';
 }

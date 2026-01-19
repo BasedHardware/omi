@@ -3623,5 +3623,17 @@
   "removeFromAllFolders": "Elimină din toate folderele",
   "buildAndShareYourCustomApp": "Construiește și partajează aplicația ta personalizată",
   "searchAppsPlaceholder": "Caută în 1500+ aplicații",
-  "filters": "Filtre"
+  "filters": "Filtre",
+  "frequencyOff": "Oprit",
+  "frequencyMinimal": "Minim",
+  "frequencyLow": "Scăzut",
+  "frequencyBalanced": "Echilibrat",
+  "frequencyHigh": "Ridicat",
+  "frequencyMaximum": "Maxim",
+  "frequencyDescOff": "Fără notificări proactive",
+  "frequencyDescMinimal": "Doar memento-uri critice",
+  "frequencyDescLow": "Doar actualizări importante",
+  "frequencyDescBalanced": "Memento-uri utile regulate",
+  "frequencyDescHigh": "Verificări frecvente",
+  "frequencyDescMaximum": "Rămâneți constant implicat"
 }

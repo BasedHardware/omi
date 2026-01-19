@@ -5756,4 +5756,40 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get filters => 'Suodattimet';
+
+  @override
+  String get frequencyOff => 'Pois';
+
+  @override
+  String get frequencyMinimal => 'Minimaalinen';
+
+  @override
+  String get frequencyLow => 'Matala';
+
+  @override
+  String get frequencyBalanced => 'Tasapainotettu';
+
+  @override
+  String get frequencyHigh => 'Korkea';
+
+  @override
+  String get frequencyMaximum => 'Maksimi';
+
+  @override
+  String get frequencyDescOff => 'Ei proaktiivisia ilmoituksia';
+
+  @override
+  String get frequencyDescMinimal => 'Vain kriittiset muistutukset';
+
+  @override
+  String get frequencyDescLow => 'Vain tärkeät päivitykset';
+
+  @override
+  String get frequencyDescBalanced => 'Säännölliset hyödylliset muistutukset';
+
+  @override
+  String get frequencyDescHigh => 'Usein tarkistukset';
+
+  @override
+  String get frequencyDescMaximum => 'Pysy jatkuvasti mukana';
 }

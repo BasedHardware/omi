@@ -5711,4 +5711,40 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get filters => 'التصفيات';
+
+  @override
+  String get frequencyOff => 'إيقاف';
+
+  @override
+  String get frequencyMinimal => 'الحد الأدنى';
+
+  @override
+  String get frequencyLow => 'منخفض';
+
+  @override
+  String get frequencyBalanced => 'متوازن';
+
+  @override
+  String get frequencyHigh => 'عالي';
+
+  @override
+  String get frequencyMaximum => 'الحد الأقصى';
+
+  @override
+  String get frequencyDescOff => 'لا توجد إشعارات استباقية';
+
+  @override
+  String get frequencyDescMinimal => 'تذكيرات حرجة فقط';
+
+  @override
+  String get frequencyDescLow => 'التحديثات المهمة فقط';
+
+  @override
+  String get frequencyDescBalanced => 'تنبيهات مفيدة منتظمة';
+
+  @override
+  String get frequencyDescHigh => 'متابعات متكررة';
+
+  @override
+  String get frequencyDescMaximum => 'ابق على تواصل دائم';
 }

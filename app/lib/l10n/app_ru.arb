@@ -3623,5 +3623,17 @@
   "removeFromAllFolders": "Удалить из всех папок",
   "buildAndShareYourCustomApp": "Создайте и поделитесь своим приложением",
   "searchAppsPlaceholder": "Поиск среди 1500+ приложений",
-  "filters": "Фильтры"
+  "filters": "Фильтры",
+  "frequencyOff": "Выкл",
+  "frequencyMinimal": "Минимальная",
+  "frequencyLow": "Низкая",
+  "frequencyBalanced": "Сбалансированная",
+  "frequencyHigh": "Высокая",
+  "frequencyMaximum": "Максимальная",
+  "frequencyDescOff": "Без проактивных уведомлений",
+  "frequencyDescMinimal": "Только критические напоминания",
+  "frequencyDescLow": "Только важные обновления",
+  "frequencyDescBalanced": "Регулярные полезные напоминания",
+  "frequencyDescHigh": "Частые проверки",
+  "frequencyDescMaximum": "Оставайтесь постоянно вовлеченными"
 }

@@ -2049,5 +2049,17 @@
   "removeFromAllFolders": "すべてのフォルダから削除",
   "buildAndShareYourCustomApp": "カスタムアプリを作成して共有",
   "searchAppsPlaceholder": "1500以上のアプリを検索",
-  "filters": "フィルター"
+  "filters": "フィルター",
+  "frequencyOff": "オフ",
+  "frequencyMinimal": "最小限",
+  "frequencyLow": "低",
+  "frequencyBalanced": "バランス",
+  "frequencyHigh": "高",
+  "frequencyMaximum": "最大",
+  "frequencyDescOff": "プロアクティブな通知なし",
+  "frequencyDescMinimal": "重要なリマインダーのみ",
+  "frequencyDescLow": "重要な更新のみ",
+  "frequencyDescBalanced": "定期的な役立つリマインダー",
+  "frequencyDescHigh": "頻繁なチェックイン",
+  "frequencyDescMaximum": "常に関与し続ける"
 }

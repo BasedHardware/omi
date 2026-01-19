@@ -5725,4 +5725,40 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get filters => 'ตัวกรอง';
+
+  @override
+  String get frequencyOff => 'ปิด';
+
+  @override
+  String get frequencyMinimal => 'น้อยที่สุด';
+
+  @override
+  String get frequencyLow => 'ต่ำ';
+
+  @override
+  String get frequencyBalanced => 'สมดุล';
+
+  @override
+  String get frequencyHigh => 'สูง';
+
+  @override
+  String get frequencyMaximum => 'สูงสุด';
+
+  @override
+  String get frequencyDescOff => 'ไม่มีการแจ้งเตือนเชิงรุก';
+
+  @override
+  String get frequencyDescMinimal => 'เฉพาะการเตือนที่สำคัญ';
+
+  @override
+  String get frequencyDescLow => 'เฉพาะการอัปเดตที่สำคัญ';
+
+  @override
+  String get frequencyDescBalanced => 'การเตือนที่มีประโยชน์เป็นประจำ';
+
+  @override
+  String get frequencyDescHigh => 'การตรวจสอบบ่อยครั้ง';
+
+  @override
+  String get frequencyDescMaximum => 'ติดต่ออยู่เสมอ';
 }

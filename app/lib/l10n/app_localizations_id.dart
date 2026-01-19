@@ -5772,4 +5772,40 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get filters => 'Filter';
+
+  @override
+  String get frequencyOff => 'Mati';
+
+  @override
+  String get frequencyMinimal => 'Minimal';
+
+  @override
+  String get frequencyLow => 'Rendah';
+
+  @override
+  String get frequencyBalanced => 'Seimbang';
+
+  @override
+  String get frequencyHigh => 'Tinggi';
+
+  @override
+  String get frequencyMaximum => 'Maksimal';
+
+  @override
+  String get frequencyDescOff => 'Tidak ada notifikasi proaktif';
+
+  @override
+  String get frequencyDescMinimal => 'Hanya pengingat penting';
+
+  @override
+  String get frequencyDescLow => 'Hanya pembaruan penting';
+
+  @override
+  String get frequencyDescBalanced => 'Pengingat reguler yang bermanfaat';
+
+  @override
+  String get frequencyDescHigh => 'Pengecekan sering';
+
+  @override
+  String get frequencyDescMaximum => 'Tetap terus terlibat';
 }

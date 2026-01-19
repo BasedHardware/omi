@@ -3623,5 +3623,17 @@
   "removeFromAllFolders": "Eltávolítás az összes mappából",
   "buildAndShareYourCustomApp": "Építsd és oszd meg egyedi alkalmazásod",
   "searchAppsPlaceholder": "Keresés 1500+ alkalmazásban",
-  "filters": "Szűrők"
+  "filters": "Szűrők",
+  "frequencyOff": "Ki",
+  "frequencyMinimal": "Minimális",
+  "frequencyLow": "Alacsony",
+  "frequencyBalanced": "Kiegyensúlyozott",
+  "frequencyHigh": "Magas",
+  "frequencyMaximum": "Maximális",
+  "frequencyDescOff": "Nincsenek proaktív értesítések",
+  "frequencyDescMinimal": "Csak kritikus emlékeztetők",
+  "frequencyDescLow": "Csak fontos frissítések",
+  "frequencyDescBalanced": "Rendszeres hasznos emlékeztetők",
+  "frequencyDescHigh": "Gyakori ellenőrzések",
+  "frequencyDescMaximum": "Maradjon folyamatosan elkötelezett"
 }

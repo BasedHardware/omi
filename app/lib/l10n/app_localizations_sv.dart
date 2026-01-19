@@ -5759,4 +5759,40 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get filters => 'Filter';
+
+  @override
+  String get frequencyOff => 'Av';
+
+  @override
+  String get frequencyMinimal => 'Minimal';
+
+  @override
+  String get frequencyLow => 'Låg';
+
+  @override
+  String get frequencyBalanced => 'Balanserad';
+
+  @override
+  String get frequencyHigh => 'Hög';
+
+  @override
+  String get frequencyMaximum => 'Maximal';
+
+  @override
+  String get frequencyDescOff => 'Inga proaktiva aviseringar';
+
+  @override
+  String get frequencyDescMinimal => 'Endast kritiska påminnelser';
+
+  @override
+  String get frequencyDescLow => 'Endast viktiga uppdateringar';
+
+  @override
+  String get frequencyDescBalanced => 'Regelbundna hjälpsamma påminnelser';
+
+  @override
+  String get frequencyDescHigh => 'Frekventa kontroller';
+
+  @override
+  String get frequencyDescMaximum => 'Håll dig ständigt engagerad';
 }

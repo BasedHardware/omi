@@ -5749,4 +5749,40 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get filters => 'Filtry';
+
+  @override
+  String get frequencyOff => 'Vypnuto';
+
+  @override
+  String get frequencyMinimal => 'Minimální';
+
+  @override
+  String get frequencyLow => 'Nízká';
+
+  @override
+  String get frequencyBalanced => 'Vyvážená';
+
+  @override
+  String get frequencyHigh => 'Vysoká';
+
+  @override
+  String get frequencyMaximum => 'Maximální';
+
+  @override
+  String get frequencyDescOff => 'Žádná proaktivní upozornění';
+
+  @override
+  String get frequencyDescMinimal => 'Pouze kritická připomenutí';
+
+  @override
+  String get frequencyDescLow => 'Pouze důležité aktualizace';
+
+  @override
+  String get frequencyDescBalanced => 'Pravidelné užitečné připomínky';
+
+  @override
+  String get frequencyDescHigh => 'Časté kontroly';
+
+  @override
+  String get frequencyDescMaximum => 'Zůstaňte neustále zapojeni';
 }

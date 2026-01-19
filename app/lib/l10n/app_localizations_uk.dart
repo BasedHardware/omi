@@ -5760,4 +5760,40 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get filters => 'Фільтри';
+
+  @override
+  String get frequencyOff => 'Вимкнено';
+
+  @override
+  String get frequencyMinimal => 'Мінімальна';
+
+  @override
+  String get frequencyLow => 'Низька';
+
+  @override
+  String get frequencyBalanced => 'Збалансована';
+
+  @override
+  String get frequencyHigh => 'Висока';
+
+  @override
+  String get frequencyMaximum => 'Максимальна';
+
+  @override
+  String get frequencyDescOff => 'Без проактивних сповіщень';
+
+  @override
+  String get frequencyDescMinimal => 'Лише критичні нагадування';
+
+  @override
+  String get frequencyDescLow => 'Лише важливі оновлення';
+
+  @override
+  String get frequencyDescBalanced => 'Регулярні корисні нагадування';
+
+  @override
+  String get frequencyDescHigh => 'Часті перевірки';
+
+  @override
+  String get frequencyDescMaximum => 'Залишайтеся постійно залученими';
 }

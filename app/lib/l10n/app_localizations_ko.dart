@@ -5652,4 +5652,40 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get filters => '필터';
+
+  @override
+  String get frequencyOff => '끄기';
+
+  @override
+  String get frequencyMinimal => '최소';
+
+  @override
+  String get frequencyLow => '낮음';
+
+  @override
+  String get frequencyBalanced => '균형';
+
+  @override
+  String get frequencyHigh => '높음';
+
+  @override
+  String get frequencyMaximum => '최대';
+
+  @override
+  String get frequencyDescOff => '사전 알림 없음';
+
+  @override
+  String get frequencyDescMinimal => '중요한 알림만';
+
+  @override
+  String get frequencyDescLow => '중요한 업데이트만';
+
+  @override
+  String get frequencyDescBalanced => '정기적인 유용한 알림';
+
+  @override
+  String get frequencyDescHigh => '잦은 확인';
+
+  @override
+  String get frequencyDescMaximum => '항상 연결 상태 유지';
 }

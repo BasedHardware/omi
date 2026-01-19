@@ -5773,4 +5773,40 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get filters => 'Filters';
+
+  @override
+  String get frequencyOff => 'Uit';
+
+  @override
+  String get frequencyMinimal => 'Minimaal';
+
+  @override
+  String get frequencyLow => 'Laag';
+
+  @override
+  String get frequencyBalanced => 'Gebalanceerd';
+
+  @override
+  String get frequencyHigh => 'Hoog';
+
+  @override
+  String get frequencyMaximum => 'Maximum';
+
+  @override
+  String get frequencyDescOff => 'Geen proactieve meldingen';
+
+  @override
+  String get frequencyDescMinimal => 'Alleen kritieke herinneringen';
+
+  @override
+  String get frequencyDescLow => 'Alleen belangrijke updates';
+
+  @override
+  String get frequencyDescBalanced => 'Regelmatige nuttige herinneringen';
+
+  @override
+  String get frequencyDescHigh => 'Frequente check-ins';
+
+  @override
+  String get frequencyDescMaximum => 'Blijf constant betrokken';
 }

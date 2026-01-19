@@ -10886,6 +10886,78 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Filters'**
   String get filters;
+
+  /// Notification frequency level - off
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get frequencyOff;
+
+  /// Notification frequency level - minimal
+  ///
+  /// In en, this message translates to:
+  /// **'Minimal'**
+  String get frequencyMinimal;
+
+  /// Notification frequency level - low
+  ///
+  /// In en, this message translates to:
+  /// **'Low'**
+  String get frequencyLow;
+
+  /// Notification frequency level - balanced
+  ///
+  /// In en, this message translates to:
+  /// **'Balanced'**
+  String get frequencyBalanced;
+
+  /// Notification frequency level - high
+  ///
+  /// In en, this message translates to:
+  /// **'High'**
+  String get frequencyHigh;
+
+  /// Notification frequency level - maximum
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum'**
+  String get frequencyMaximum;
+
+  /// Description for off notification frequency
+  ///
+  /// In en, this message translates to:
+  /// **'No proactive notifications'**
+  String get frequencyDescOff;
+
+  /// Description for minimal notification frequency
+  ///
+  /// In en, this message translates to:
+  /// **'Only critical reminders'**
+  String get frequencyDescMinimal;
+
+  /// Description for low notification frequency
+  ///
+  /// In en, this message translates to:
+  /// **'Important updates only'**
+  String get frequencyDescLow;
+
+  /// Description for balanced notification frequency
+  ///
+  /// In en, this message translates to:
+  /// **'Regular helpful nudges'**
+  String get frequencyDescBalanced;
+
+  /// Description for high notification frequency
+  ///
+  /// In en, this message translates to:
+  /// **'Frequent check-ins'**
+  String get frequencyDescHigh;
+
+  /// Description for maximum notification frequency
+  ///
+  /// In en, this message translates to:
+  /// **'Stay constantly engaged'**
+  String get frequencyDescMaximum;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
