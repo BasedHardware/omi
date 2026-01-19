@@ -17,6 +17,19 @@ Module hierarchy (lowest to highest):
 
 - Memory management: free large objects immediately after use. E.g., `del` for byte arrays after processing, `.clear()` for dicts/lists holding data.
 
+### App (Flutter)
+
+- After modifying ARB files in `app/lib/l10n/`, regenerate localizations: `cd app && flutter gen-l10n`
+
+## Formatting
+
+Always format code after making changes. The pre-commit hook handles this automatically, but you can also run manually:
+
+- **Dart (app/)**: `dart format --line-length 120 <files>`
+  - Files ending in `.gen.dart` or `.g.dart` are auto-generated and should not be formatted manually.
+- **Python (backend/)**: `black --line-length 120 --skip-string-normalization <files>`
+- **C/C++ (firmware: omi/, omiGlass/)**: `clang-format -i <files>`
+
 ## Testing
 
 - Always run tests before committing:
