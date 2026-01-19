@@ -3,7 +3,7 @@ import { FeaturedPluginCard } from '@/components/marketplace/plugin-card/Feature
 import { ScrollableCategoryNav } from '@/components/marketplace/ScrollableCategoryNav';
 import { CategoryBreadcrumb } from '@/components/marketplace/CategoryBreadcrumb';
 import { CategoryHeader } from '@/components/marketplace/CategoryHeader';
-import { getApprovedApps, transformToPlugin } from '@/lib/api/public';
+import { getAllAppsV2, transformToPlugin } from '@/lib/api/public';
 import { getCategoryMetadata, categoryMetadata } from '@/components/marketplace/category';
 import { BreadcrumbJsonLd, CollectionPageJsonLd } from '@/components/seo/JsonLd';
 import type { Metadata } from 'next';
@@ -12,8 +12,21 @@ type Props = {
   params: Promise<{ category: string }>;
 };
 
+// ISR configuration
+export const revalidate = 300; // Revalidate every 5 minutes
+export const dynamicParams = true; // Allow non-pre-rendered categories
+
+// Pre-generate top categories from v2 (by app count)
 export async function generateStaticParams() {
-  return Object.keys(categoryMetadata).map((category) => ({ category }));
+  const topCategories = [
+    'conversation-analysis',        // 22 apps
+    'utilities-and-tools',           // 18 apps
+    'productivity-and-organization', // 14 apps
+    'entertainment-and-fun',         // 7 apps
+    'communication-improvement',     // 5 apps
+    'education-and-learning'         // 3 apps
+  ];
+  return topCategories.map((category) => ({ category }));
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -65,9 +78,11 @@ export default async function CategoryPage({ params }: Props) {
   const { category } = await params;
   const categoryMeta = getCategoryMetadata(category);
 
-  // Fetch all apps and filter by category
-  const { plugins: rawPlugins, stats } = await getApprovedApps();
-  const allPlugins = rawPlugins.map(transformToPlugin);
+  // Fetch ALL v2 apps by paginating through all capability groups
+  // This makes multiple requests during build time but ensures all 600+ apps are available
+  const rawApps = await getAllAppsV2(true); // include_reviews=true to get ratings
+
+  const allPlugins = rawApps.map(transformToPlugin);
 
   // Filter plugins by category
   const categoryPlugins = allPlugins.filter((p) => p.category === category);

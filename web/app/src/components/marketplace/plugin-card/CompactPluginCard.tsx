@@ -61,13 +61,11 @@ export const CompactPluginCard = memo(function CompactPluginCard({
         <div className="flex items-center justify-between gap-2">
           <span className="truncate text-xs text-gray-400">by {plugin.author}</span>
           <div className="flex shrink-0 items-center gap-2.5 text-xs text-gray-400">
-            {plugin.rating_count > 0 ? (
+            {plugin.rating_count > 0 && (
               <div className="flex items-center">
                 <Star className="mr-1 h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
                 <span>{plugin.rating_avg?.toFixed(1)}</span>
               </div>
-            ) : (
-              <span className="text-xs text-[#6C8EEF]">New</span>
             )}
             <div className="flex items-center">
               <Download className="mr-1 h-3 w-3" />

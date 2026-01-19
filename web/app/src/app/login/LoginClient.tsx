@@ -231,6 +231,35 @@ export function LoginClient() {
             </button>
           </motion.div>
 
+          {/* App download message - for users without accounts */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3, delay: 0.4 }}
+            className="mt-6 text-center"
+          >
+            <p className="text-sm text-text-tertiary">
+              New to Omi?{' '}
+              <a
+                href="https://apps.apple.com/us/app/friend-ai-wearable/id6502156163"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-text-secondary hover:text-text-primary transition-colors underline decoration-text-secondary/40 hover:decoration-text-primary/60"
+              >
+                iOS
+              </a>
+              {' · '}
+              <a
+                href="https://play.google.com/store/apps/details?id=com.friend.ios"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-text-secondary hover:text-text-primary transition-colors underline decoration-text-secondary/40 hover:decoration-text-primary/60"
+              >
+                Android
+              </a>
+            </p>
+          </motion.div>
+
           {/* Error message */}
           {error && (
             <motion.p

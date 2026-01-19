@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic';
 import { Sidebar, MobileMenuButton } from './Sidebar';
 import { ChatProvider, useChat as useChatContext } from '@/components/chat/ChatContext';
 import { ChatBubble } from '@/components/chat/ChatBubble';
+import { BottomNavigation } from './BottomNavigation';
 import { NotificationProvider, useNotificationContext } from '@/components/notifications/NotificationContext';
 import { HeaderRecordingIndicator } from '@/components/recording';
 import { getChatApps } from '@/lib/api';
@@ -82,7 +83,7 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
       <NotificationProvider>
         {/* Handle notification routing from chatApp query param */}
         <ChatAppRouter />
-        <div className="h-screen bg-bg-primary flex overflow-hidden">
+        <div className="h-screen w-screen bg-bg-primary flex overflow-hidden">
           {/* Sidebar */}
           <Sidebar
             isOpen={sidebarOpen}
@@ -92,7 +93,7 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
           {/* Main content area - flex row to support push/slide panels */}
           <div className="flex-1 flex min-w-0 h-full overflow-hidden">
             {/* Main content */}
-            <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+            <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden pb-16 lg:pb-0">
               {/* Header - conditionally shown */}
               {!hideHeader && (
                 <header
@@ -135,6 +136,9 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
 
           {/* Chat bubble - floating button */}
           <ChatBubble />
+
+          {/* Bottom navigation - mobile only */}
+          <BottomNavigation onOpenSidebar={() => setSidebarOpen(true)} />
 
           {/* Recording indicator - handles its own fixed positioning and animates with panels */}
           <HeaderRecordingIndicator />

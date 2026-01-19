@@ -4,56 +4,62 @@ import { memo, useCallback, useState, useEffect, useMemo } from 'react';
 import { Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import debounce from 'lodash/debounce';
-import Fuse from 'fuse.js';
 import type { Plugin } from './types';
 import { CompactPluginCard } from './plugin-card/CompactPluginCard';
 
 interface SearchBarProps {
   className?: string;
-  allApps: Plugin[];
   onSearching?: (searching: boolean) => void;
 }
 
 export const SearchBar = memo(function SearchBar({
   className,
-  allApps,
   onSearching,
 }: SearchBarProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [searchResults, setSearchResults] = useState<Plugin[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-
-  // Memoize Fuse.js instance to prevent recreation on every parent render
-  const fuse = useMemo(
-    () =>
-      new Fuse(allApps, {
-        keys: ['name', 'description', 'author', 'category', 'capabilities'],
-        threshold: 0.3,
-        includeMatches: true,
-      }),
-    [allApps],
-  );
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSearch = useCallback(
-    (query: string) => {
+    async (query: string) => {
       setSearchQuery(query);
       const searchContent = query.toLowerCase().trim();
 
       if (!searchContent) {
         setIsSearching(false);
         setSearchResults([]);
+        setIsLoading(false);
         onSearching?.(false);
         return;
       }
 
-      // Get search results
-      const results = fuse.search(searchContent);
-      setSearchResults(results.map((result) => result.item));
+      // Show searching state
       setIsSearching(true);
+      setIsLoading(true);
       onSearching?.(true);
+
+      try {
+        // Call server-side search API
+        const response = await fetch(`/api/apps/search?q=${encodeURIComponent(searchContent)}`);
+        const data = await response.json();
+
+        // Transform results to have capabilities as Set
+        const transformedResults = (data.results || []).map((app: any) => ({
+          ...app,
+          capabilities: new Set(app.capabilities || []),
+        }));
+
+        setSearchResults(transformedResults);
+      } catch (error) {
+        console.error('Search failed:', error);
+        setSearchResults([]);
+      } finally {
+        setIsLoading(false);
+      }
     },
-    [fuse, onSearching],
+    [onSearching],
   );
 
   const debouncedSearch = useMemo(

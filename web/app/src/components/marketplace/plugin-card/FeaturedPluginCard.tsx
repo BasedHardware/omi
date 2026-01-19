@@ -61,13 +61,11 @@ export const FeaturedPluginCard = memo(function FeaturedPluginCard({
           </span>
           {!hideStats && (
             <div className="flex shrink-0 items-center gap-3 text-xs text-gray-400 sm:gap-4 sm:text-sm">
-              {plugin.rating_count > 0 ? (
+              {plugin.rating_count > 0 && (
                 <div className="flex items-center">
                   <Star className="mr-1 h-3.5 w-3.5 fill-yellow-400 text-yellow-400 sm:h-4 sm:w-4" />
                   <span>{plugin.rating_avg?.toFixed(1)}</span>
                 </div>
-              ) : (
-                <span className="text-xs text-[#6C8EEF]">New</span>
               )}
               <div className="flex items-center">
                 <Download className="mr-1 h-3.5 w-3.5 sm:h-4 sm:w-4" />

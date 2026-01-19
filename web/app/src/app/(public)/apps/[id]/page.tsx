@@ -1,4 +1,4 @@
-import { getAppById, getApprovedApps, transformToPlugin } from '@/lib/api/public';
+import { findAppById, getAppsV2, transformToPlugin, type V2AppData } from '@/lib/api/public';
 import { CompactPluginCard } from '@/components/marketplace/plugin-card/CompactPluginCard';
 import { CategoryBreadcrumb } from '@/components/marketplace/CategoryBreadcrumb';
 import { BreadcrumbJsonLd, SoftwareAppJsonLd } from '@/components/seo/JsonLd';
@@ -11,6 +11,10 @@ import { notFound } from 'next/navigation';
 type Props = {
   params: Promise<{ id: string }>;
 };
+
+// ISR configuration
+export const revalidate = 300; // Revalidate every 5 minutes
+export const dynamicParams = true; // Allow non-pre-rendered app pages
 
 // Helper function to format category name
 const formatCategoryName = (category: string): string => {
@@ -33,14 +37,16 @@ function formatDate(dateString: string | null | undefined): string | null {
   });
 }
 
+// Pre-render only popular apps at build time
 export async function generateStaticParams() {
-  const { plugins } = await getApprovedApps();
-  return plugins.map((app) => ({ id: app.id }));
+  const { groups } = await getAppsV2();
+  const popularGroup = groups.find((g) => g.capability.id === 'popular');
+  return popularGroup?.data.map((app) => ({ id: app.id })) || [];
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  const plugin = await getAppById(id);
+  const plugin = await findAppById(id);
 
   if (!plugin) {
     return {
@@ -78,14 +84,21 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function PluginDetailPage({ params }: Props) {
   const { id } = await params;
-  const plugin = await getAppById(id);
+  const plugin = await findAppById(id);
 
   if (!plugin) {
     notFound();
   }
 
-  // Get all apps to find related ones
-  const { plugins: rawPlugins, stats } = await getApprovedApps();
+  // Get v2 apps to find related ones
+  const { groups } = await getAppsV2(true); // include_reviews=true to get ratings for related apps
+
+  // Flatten all apps from groups
+  const rawPlugins: V2AppData[] = [];
+  for (const group of groups) {
+    rawPlugins.push(...group.data);
+  }
+
   const allPlugins = rawPlugins.map(transformToPlugin);
 
   // Get related apps based on category

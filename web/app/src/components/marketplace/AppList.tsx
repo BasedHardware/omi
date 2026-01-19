@@ -12,7 +12,6 @@ import { DeveloperBanner } from './DeveloperBanner';
 
 interface MarketplaceHeaderProps {
   minimized: boolean;
-  plugins: Plugin[];
   onSearching: (searching: boolean) => void;
 }
 
@@ -22,7 +21,6 @@ interface MarketplaceHeaderProps {
  */
 const MarketplaceHeader = memo(function MarketplaceHeader({
   minimized,
-  plugins,
   onSearching,
 }: MarketplaceHeaderProps) {
   return (
@@ -64,7 +62,7 @@ const MarketplaceHeader = memo(function MarketplaceHeader({
                 minimized ? 'mt-0' : 'mt-4 sm:mt-0'
               }`}
             >
-              <SearchBar allApps={plugins} onSearching={onSearching} />
+              <SearchBar onSearching={onSearching} />
             </div>
           </div>
         </div>
@@ -108,37 +106,14 @@ export default function AppList({ initialPlugins, initialStats }: AppListProps) 
 
   // Use useMemo to ensure consistent results between renders
   const { featuredApps, mostPopular, integrationApps, sortedCategories } = useMemo(() => {
-    // Get featured apps: must have ratings, prioritize high ratings + recency + installs
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    // Get featured apps from API's is_popular field, sorted by installs
+    // Take top 3 for the featured section
+    const featured = [...initialPlugins]
+      .filter((plugin) => plugin.is_popular)
+      .sort((a, b) => b.installs - a.installs)
+      .slice(0, 3);
 
-    // Filter: must have ratings (>5 reviews), installs > 50, and valid created_at date
-    const ratedApps = initialPlugins.filter((plugin) => {
-      const hasEnoughReviews = plugin.rating_count > 5;
-      const hasEnoughInstalls = plugin.installs > 50;
-      const hasValidDate = plugin.created_at && new Date(plugin.created_at).getTime() > 0;
-      return hasEnoughReviews && hasEnoughInstalls && hasValidDate;
-    });
-
-    // Sort by: high rating first, then recency bonus, then installs
-    const sortedRated = [...ratedApps].sort((a, b) => {
-      // Primary: rating average (high ratings first)
-      if (a.rating_avg !== b.rating_avg) return b.rating_avg - a.rating_avg;
-
-      // Secondary: prefer recent apps (created within 30 days)
-      const aIsRecent = new Date(a.created_at) >= thirtyDaysAgo;
-      const bIsRecent = new Date(b.created_at) >= thirtyDaysAgo;
-      if (aIsRecent && !bIsRecent) return -1;
-      if (bIsRecent && !aIsRecent) return 1;
-
-      // Tertiary: installs
-      return b.installs - a.installs;
-    });
-
-    // Take top 3 rated apps
-    const featured = sortedRated.slice(0, 3);
-
-    // Get popular apps from API's is_popular field, sorted by installs
+    // Get all popular apps from API's is_popular field, sorted by installs
     const mostPopular = [...initialPlugins]
       .filter((plugin) => plugin.is_popular)
       .sort((a, b) => b.installs - a.installs);
@@ -200,7 +175,6 @@ export default function AppList({ initialPlugins, initialStats }: AppListProps) 
       >
         <MarketplaceHeader
           minimized={headerMinimized}
-          plugins={initialPlugins}
           onSearching={handleSearching}
         />
       </div>

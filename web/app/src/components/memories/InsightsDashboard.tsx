@@ -64,8 +64,8 @@ export function InsightsDashboard({ memories, onTagSelect }: InsightsDashboardPr
   }
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="max-w-5xl mx-auto p-6 space-y-6">
+    <div className="h-full overflow-y-auto w-full max-w-full">
+      <div className="max-w-full lg:max-w-5xl mx-auto p-6 space-y-6 w-full">
         {/* Activity Calendar */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
