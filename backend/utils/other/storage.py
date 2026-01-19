@@ -190,10 +190,10 @@ def get_speech_sample_signed_urls(paths: List[str]) -> List[str]:
     """
     Generate signed URLs for speech samples given their GCS paths.
     Uses the paths stored in Firestore instead of listing GCS blobs.
-    
+
     Args:
         paths: List of GCS paths (e.g., '{uid}/people_profiles/{person_id}/{filename}')
-    
+
     Returns:
         List of signed URLs
     """
@@ -684,7 +684,7 @@ def precache_conversation_audio(
             except Exception as e:
                 print(f"[PRECACHE] Error caching audio file {af.get('id')}: {e}")
 
-        with ThreadPoolExecutor(max_workers=2) as executor:
+        with ThreadPoolExecutor(max_workers=4) as executor:
             list(executor.map(_cache_single, audio_files))
 
     thread = threading.Thread(target=_precache_all, daemon=True)
