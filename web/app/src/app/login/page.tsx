@@ -263,6 +263,10 @@ export default function LoginPage() {
         <a href="https://help.omi.me/" target="_blank" rel="noopener noreferrer" className="hover:text-text-primary transition-colors">
           Help
         </a>
+        <span>·</span>
+        <a href="/apps" className="hover:text-text-primary transition-colors">
+          Apps
+        </a>
       </motion.div>
     </div>
   );
