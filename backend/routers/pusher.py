@@ -49,8 +49,7 @@ SPEAKER_SAMPLE_QUEUE_WARN_SIZE = 100
 TRANSCRIPT_QUEUE_FLUSH_INTERVAL = 1.0  # seconds
 TRANSCRIPT_QUEUE_WARN_SIZE = 50
 
-# Constants for audio bytes queue batching
-AUDIO_BYTES_QUEUE_FLUSH_INTERVAL = 1.0  # seconds
+# Constants for audio bytes queue
 AUDIO_BYTES_QUEUE_WARN_SIZE = 20
 
 
@@ -142,6 +141,7 @@ async def _websocket_util_trigger(
 
     # Queue for pending audio bytes triggers (batched for app integrations + webhooks)
     audio_bytes_queue: List[dict] = []
+    audio_bytes_event = asyncio.Event()  # Signals when items are added for instant wake
 
     async def process_private_cloud_queue():
         """Background task that processes private cloud sync uploads with retry logic."""
@@ -261,16 +261,22 @@ async def _websocket_util_trigger(
                     print(f"Error processing transcript batch: {e}", uid)
 
     async def process_audio_bytes_queue():
-        """Batched consumer for audio bytes triggers (app integrations + webhooks)."""
+        """Event-driven consumer for audio bytes triggers (app integrations + webhooks)."""
         nonlocal websocket_active, audio_bytes_queue
 
         while websocket_active or len(audio_bytes_queue) > 0:
-            await asyncio.sleep(AUDIO_BYTES_QUEUE_FLUSH_INTERVAL)
+            # Wait for signal or check periodically for shutdown
+            try:
+                await asyncio.wait_for(audio_bytes_event.wait(), timeout=1.0)
+            except asyncio.TimeoutError:
+                continue  # Check websocket_active and queue on timeout
+
+            audio_bytes_event.clear()
 
             if not audio_bytes_queue:
                 continue
 
-            # Process batch
+            # Process all queued items
             batch = audio_bytes_queue.copy()
             audio_bytes_queue = []
 
@@ -393,6 +399,7 @@ async def _websocket_util_trigger(
                             'sample_rate': sample_rate,
                             'data': trigger_audiobuffer.copy(),
                         })
+                        audio_bytes_event.set()  # Wake consumer immediately
                         trigger_audiobuffer = bytearray()
                     if (
                         audio_bytes_webhook_delay_seconds
@@ -405,6 +412,7 @@ async def _websocket_util_trigger(
                             'sample_rate': sample_rate,
                             'data': audiobuffer.copy(),
                         })
+                        audio_bytes_event.set()  # Wake consumer immediately
                         audiobuffer = bytearray()
                     continue
 
