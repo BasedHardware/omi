@@ -2090,5 +2090,9 @@
   "noChatAppsEnabled": "没有启用的聊天应用。\n点击\"启用应用\"添加。",
   "disable": "禁用",
   "photoLibrary": "照片库",
-  "chooseFile": "选择文件"
+  "chooseFile": "选择文件",
+  "configureAiPersona": "Configure your AI persona",
+  "connectAiAssistantsToYourData": "Connect AI assistants to your data",
+  "oAuth": "OAuth",
+  "trackYourGoalsOnHomepage": "Track your personal goals on homepage"
 }

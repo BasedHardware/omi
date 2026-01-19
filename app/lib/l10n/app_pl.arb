@@ -3643,5 +3643,9 @@
   "noChatAppsEnabled": "Brak włączonych aplikacji czatu.\nDotknij \"Włącz aplikacje\", aby dodać.",
   "disable": "Wyłącz",
   "photoLibrary": "Biblioteka zdjęć",
-  "chooseFile": "Wybierz plik"
+  "chooseFile": "Wybierz plik",
+  "configureAiPersona": "Configure your AI persona",
+  "connectAiAssistantsToYourData": "Connect AI assistants to your data",
+  "oAuth": "OAuth",
+  "trackYourGoalsOnHomepage": "Track your personal goals on homepage"
 }

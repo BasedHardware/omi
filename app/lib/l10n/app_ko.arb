@@ -3643,5 +3643,9 @@
   "noChatAppsEnabled": "활성화된 채팅 앱이 없습니다.\n\"앱 활성화\"를 탭하여 추가하세요.",
   "disable": "비활성화",
   "photoLibrary": "사진 라이브러리",
-  "chooseFile": "파일 선택"
+  "chooseFile": "파일 선택",
+  "configureAiPersona": "Configure your AI persona",
+  "connectAiAssistantsToYourData": "Connect AI assistants to your data",
+  "oAuth": "OAuth",
+  "trackYourGoalsOnHomepage": "Track your personal goals on homepage"
 }

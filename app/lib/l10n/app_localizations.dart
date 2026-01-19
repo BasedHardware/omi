@@ -231,7 +231,7 @@ abstract class AppLocalizations {
   /// **'Update'**
   String get update;
 
-  /// Button text to save changes
+  /// Save button text
   ///
   /// In en, this message translates to:
   /// **'Save'**
@@ -1365,7 +1365,7 @@ abstract class AppLocalizations {
   /// **'Developer Settings'**
   String get developerSettingsTitle;
 
-  /// Button text while saving is in progress
+  /// Text shown while saving settings
   ///
   /// In en, this message translates to:
   /// **'Saving...'**
@@ -1377,13 +1377,13 @@ abstract class AppLocalizations {
   /// **'Configure your AI persona'**
   String get personaConfig;
 
-  /// Beta badge text
+  /// Beta label for experimental features
   ///
   /// In en, this message translates to:
   /// **'BETA'**
   String get beta;
 
-  /// Transcription section title
+  /// Transcription feature name
   ///
   /// In en, this message translates to:
   /// **'Transcription'**
@@ -1395,7 +1395,7 @@ abstract class AppLocalizations {
   /// **'Configure STT provider'**
   String get transcriptionConfig;
 
-  /// Conversation timeout section title
+  /// Conversation timeout feature name
   ///
   /// In en, this message translates to:
   /// **'Conversation Timeout'**
@@ -1407,7 +1407,7 @@ abstract class AppLocalizations {
   /// **'Set when conversations auto-end'**
   String get conversationTimeoutConfig;
 
-  /// Import data section title
+  /// Import data feature name
   ///
   /// In en, this message translates to:
   /// **'Import Data'**
@@ -1443,13 +1443,13 @@ abstract class AppLocalizations {
   /// **'Create a key to get started'**
   String get createKeyToStart;
 
-  /// Create API key button
+  /// Button text to create API key
   ///
   /// In en, this message translates to:
   /// **'Create Key'**
   String get createKey;
 
-  /// Documentation link
+  /// Documentation button text
   ///
   /// In en, this message translates to:
   /// **'Docs'**
@@ -1653,10 +1653,10 @@ abstract class AppLocalizations {
   /// **'📚 Remembered {count} memories'**
   String shareStatsMemories(String count);
 
-  /// Debug logs section title
+  /// Debug logs feature name
   ///
   /// In en, this message translates to:
-  /// **'Debug logs'**
+  /// **'Debug Logs'**
   String get debugLogs;
 
   /// No description provided for @debugLogsAutoDelete.
@@ -1671,7 +1671,7 @@ abstract class AppLocalizations {
   /// **'Helps diagnose issues'**
   String get debugLogsDesc;
 
-  /// Error message when no debug log files exist
+  /// Message when no debug log files exist
   ///
   /// In en, this message translates to:
   /// **'No log files found.'**
@@ -1689,7 +1689,7 @@ abstract class AppLocalizations {
   /// **'Log shared'**
   String get logShared;
 
-  /// Dialog title for selecting log file
+  /// Title for log file selection dialog
   ///
   /// In en, this message translates to:
   /// **'Select Log File'**
@@ -1701,7 +1701,7 @@ abstract class AppLocalizations {
   /// **'Share Logs'**
   String get shareLogs;
 
-  /// Snackbar message after clearing debug logs
+  /// Confirmation message after clearing debug logs
   ///
   /// In en, this message translates to:
   /// **'Debug log cleared'**
@@ -1713,7 +1713,7 @@ abstract class AppLocalizations {
   /// **'Export started. This may take a few seconds...'**
   String get exportStarted;
 
-  /// Export data section title
+  /// Export all data feature name
   ///
   /// In en, this message translates to:
   /// **'Export All Data'**
@@ -1761,7 +1761,7 @@ abstract class AppLocalizations {
   /// **'Failed to delete graph: {error}'**
   String deleteGraphFailed(String error);
 
-  /// Delete knowledge graph section title
+  /// Delete knowledge graph feature name
   ///
   /// In en, this message translates to:
   /// **'Delete Knowledge Graph'**
@@ -1773,13 +1773,13 @@ abstract class AppLocalizations {
   /// **'Clear all nodes and connections'**
   String get deleteKnowledgeGraphDesc;
 
-  /// MCP section title
+  /// MCP (Model Context Protocol) section header
   ///
   /// In en, this message translates to:
   /// **'MCP'**
   String get mcp;
 
-  /// MCP Server section title
+  /// MCP Server section header
   ///
   /// In en, this message translates to:
   /// **'MCP Server'**
@@ -1791,25 +1791,25 @@ abstract class AppLocalizations {
   /// **'Connect AI assistants to your data'**
   String get mcpServerDesc;
 
-  /// Label for server URL
+  /// Server URL label
   ///
   /// In en, this message translates to:
   /// **'Server URL'**
   String get serverUrl;
 
-  /// Snackbar message when URL is copied to clipboard
+  /// Confirmation when URL is copied
   ///
   /// In en, this message translates to:
   /// **'URL copied'**
   String get urlCopied;
 
-  /// Label for API key authentication section
+  /// API Key authentication section header
   ///
   /// In en, this message translates to:
   /// **'API Key Auth'**
   String get apiKeyAuth;
 
-  /// Label for header field
+  /// HTTP header label
   ///
   /// In en, this message translates to:
   /// **'Header'**
@@ -1827,13 +1827,13 @@ abstract class AppLocalizations {
   /// **'OAuth'**
   String get oauth;
 
-  /// Label for client ID field
+  /// OAuth client ID label
   ///
   /// In en, this message translates to:
   /// **'Client ID'**
   String get clientId;
 
-  /// Label for client secret field
+  /// OAuth client secret label
   ///
   /// In en, this message translates to:
   /// **'Client Secret'**
@@ -1845,19 +1845,19 @@ abstract class AppLocalizations {
   /// **'Use your MCP API key'**
   String get useMcpApiKey;
 
-  /// Webhooks section title
+  /// Webhooks section header
   ///
   /// In en, this message translates to:
   /// **'Webhooks'**
   String get webhooks;
 
-  /// Webhook title for conversation events
+  /// Webhook type for conversation events
   ///
   /// In en, this message translates to:
   /// **'Conversation Events'**
   String get conversationEvents;
 
-  /// Webhook description for conversation events
+  /// Description for conversation webhook
   ///
   /// In en, this message translates to:
   /// **'New conversation created'**
@@ -1869,43 +1869,43 @@ abstract class AppLocalizations {
   /// **'Real-time Transcript'**
   String get realtimeTranscript;
 
-  /// Webhook description for transcript
+  /// Description for transcript webhook
   ///
   /// In en, this message translates to:
   /// **'Transcript received'**
   String get transcriptReceived;
 
-  /// Webhook title for audio bytes
+  /// Webhook type for audio bytes
   ///
   /// In en, this message translates to:
   /// **'Audio Bytes'**
   String get audioBytes;
 
-  /// Webhook description for audio data
+  /// Description for audio bytes webhook
   ///
   /// In en, this message translates to:
   /// **'Audio data received'**
   String get audioDataReceived;
 
-  /// Label for webhook interval field
+  /// Label for interval input in seconds
   ///
   /// In en, this message translates to:
   /// **'Interval (seconds)'**
   String get intervalSeconds;
 
-  /// Webhook title for day summary
+  /// Webhook type for day summary
   ///
   /// In en, this message translates to:
   /// **'Day Summary'**
   String get daySummary;
 
-  /// Webhook description for summary
+  /// Description for day summary webhook
   ///
   /// In en, this message translates to:
   /// **'Summary generated'**
   String get summaryGenerated;
 
-  /// Claude Desktop section title
+  /// Claude Desktop integration section
   ///
   /// In en, this message translates to:
   /// **'Claude Desktop'**
@@ -2901,7 +2901,7 @@ abstract class AppLocalizations {
   /// **'Error saving: {error}'**
   String errorSaving(String error);
 
-  /// Snackbar message when config is copied
+  /// Confirmation when config is copied
   ///
   /// In en, this message translates to:
   /// **'Config copied to clipboard'**
@@ -4641,25 +4641,25 @@ abstract class AppLocalizations {
   /// **'Omi'**
   String get omiSttProvider;
 
-  /// Snackbar message when a label is copied
+  /// Message shown when a value is copied
   ///
   /// In en, this message translates to:
   /// **'{label} copied'**
   String labelCopied(String label);
 
-  /// Empty state message when no API keys exist
+  /// Message when no API keys exist
   ///
   /// In en, this message translates to:
   /// **'No API keys yet'**
   String get noApiKeysYet;
 
-  /// Empty state hint to create first API key
+  /// Hint to create first API key
   ///
   /// In en, this message translates to:
   /// **'Create a key to get started'**
   String get createKeyToGetStarted;
 
-  /// Persona section title
+  /// Persona feature name
   ///
   /// In en, this message translates to:
   /// **'Persona'**
@@ -4677,7 +4677,7 @@ abstract class AppLocalizations {
   /// **'Configure STT provider'**
   String get configureSttProvider;
 
-  /// Description for conversation timeout settings
+  /// Description for conversation timeout setting
   ///
   /// In en, this message translates to:
   /// **'Set when conversations auto-end'**
@@ -4731,13 +4731,13 @@ abstract class AppLocalizations {
   /// **'Failed to delete graph: {error}'**
   String failedToDeleteGraph(String error);
 
-  /// Description for delete knowledge graph action
+  /// Description for delete knowledge graph
   ///
   /// In en, this message translates to:
   /// **'Clear all nodes and connections'**
   String get clearAllNodesAndConnections;
 
-  /// Description for Claude Desktop configuration
+  /// Description for Claude Desktop config
   ///
   /// In en, this message translates to:
   /// **'Add to claude_desktop_config.json'**
@@ -4749,25 +4749,25 @@ abstract class AppLocalizations {
   /// **'Connect AI assistants to your data'**
   String get connectAiAssistantsToData;
 
-  /// Hint text for client secret
+  /// Hint for client secret value
   ///
   /// In en, this message translates to:
   /// **'Use your MCP API key'**
   String get useYourMcpApiKey;
 
-  /// Webhook title for real-time transcript
+  /// Webhook type for real-time transcript
   ///
   /// In en, this message translates to:
   /// **'Real-time Transcript'**
   String get realTimeTranscript;
 
-  /// Experimental section title
+  /// Section header for experimental features
   ///
   /// In en, this message translates to:
   /// **'Experimental'**
   String get experimental;
 
-  /// Experimental feature title for transcription diagnostics
+  /// Experimental feature name
   ///
   /// In en, this message translates to:
   /// **'Transcription Diagnostics'**
@@ -4779,7 +4779,7 @@ abstract class AppLocalizations {
   /// **'Detailed diagnostic messages'**
   String get detailedDiagnosticMessages;
 
-  /// Experimental feature title for auto-creating speakers
+  /// Experimental feature name
   ///
   /// In en, this message translates to:
   /// **'Auto-create Speakers'**
@@ -4791,7 +4791,7 @@ abstract class AppLocalizations {
   /// **'Auto-create when name detected'**
   String get autoCreateWhenNameDetected;
 
-  /// Experimental feature title for follow-up questions
+  /// Experimental feature name
   ///
   /// In en, this message translates to:
   /// **'Follow-up Questions'**
@@ -4803,7 +4803,7 @@ abstract class AppLocalizations {
   /// **'Suggest questions after conversations'**
   String get suggestQuestionsAfterConversations;
 
-  /// Experimental feature title for goal tracker
+  /// Experimental feature name
   ///
   /// In en, this message translates to:
   /// **'Goal Tracker'**
@@ -11006,6 +11006,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Choose File'**
   String get chooseFile;
+
+  /// Description for persona settings
+  ///
+  /// In en, this message translates to:
+  /// **'Configure your AI persona'**
+  String get configureAiPersona;
+
+  /// Description for MCP server feature
+  ///
+  /// In en, this message translates to:
+  /// **'Connect AI assistants to your data'**
+  String get connectAiAssistantsToYourData;
+
+  /// OAuth section header
+  ///
+  /// In en, this message translates to:
+  /// **'OAuth'**
+  String get oAuth;
+
+  /// Description for goal tracker feature
+  ///
+  /// In en, this message translates to:
+  /// **'Track your personal goals on homepage'**
+  String get trackYourGoalsOnHomepage;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

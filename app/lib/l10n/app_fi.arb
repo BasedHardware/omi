@@ -3643,5 +3643,9 @@
   "noChatAppsEnabled": "Chat-sovelluksia ei ole käytössä.\nNapauta \"Ota käyttöön\" lisätäksesi.",
   "disable": "Poista käytöstä",
   "photoLibrary": "Kuvakirjasto",
-  "chooseFile": "Valitse tiedosto"
+  "chooseFile": "Valitse tiedosto",
+  "configureAiPersona": "Configure your AI persona",
+  "connectAiAssistantsToYourData": "Connect AI assistants to your data",
+  "oAuth": "OAuth",
+  "trackYourGoalsOnHomepage": "Track your personal goals on homepage"
 }

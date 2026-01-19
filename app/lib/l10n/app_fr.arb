@@ -2461,5 +2461,9 @@
   "noChatAppsEnabled": "Aucune application de chat activée.\nAppuyez sur \"Activer les applications\" pour en ajouter.",
   "disable": "Désactiver",
   "photoLibrary": "Photothèque",
-  "chooseFile": "Choisir un fichier"
+  "chooseFile": "Choisir un fichier",
+  "configureAiPersona": "Configure your AI persona",
+  "connectAiAssistantsToYourData": "Connect AI assistants to your data",
+  "oAuth": "OAuth",
+  "trackYourGoalsOnHomepage": "Track your personal goals on homepage"
 }

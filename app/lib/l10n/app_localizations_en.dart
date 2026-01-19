@@ -791,7 +791,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get debugLogs => 'Debug logs';
+  String get debugLogs => 'Debug Logs';
 
   @override
   String get debugLogsAutoDelete => 'Auto-deletes after 3 days.';
@@ -5816,4 +5816,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chooseFile => 'Choose File';
+
+  @override
+  String get configureAiPersona => 'Configure your AI persona';
+
+  @override
+  String get connectAiAssistantsToYourData => 'Connect AI assistants to your data';
+
+  @override
+  String get oAuth => 'OAuth';
+
+  @override
+  String get trackYourGoalsOnHomepage => 'Track your personal goals on homepage';
 }

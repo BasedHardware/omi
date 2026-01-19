@@ -3643,5 +3643,9 @@
   "noChatAppsEnabled": "Không có ứng dụng chat nào được bật.\nNhấn \"Bật ứng dụng\" để thêm.",
   "disable": "Vô hiệu hóa",
   "photoLibrary": "Thư viện ảnh",
-  "chooseFile": "Chọn tệp"
+  "chooseFile": "Chọn tệp",
+  "configureAiPersona": "Configure your AI persona",
+  "connectAiAssistantsToYourData": "Connect AI assistants to your data",
+  "oAuth": "OAuth",
+  "trackYourGoalsOnHomepage": "Track your personal goals on homepage"
 }

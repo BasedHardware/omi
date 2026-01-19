@@ -3643,5 +3643,9 @@
   "noChatAppsEnabled": "Чат-застосунки не ввімкнено.\nНатисніть \"Увімкнути застосунки\", щоб додати.",
   "disable": "Вимкнути",
   "photoLibrary": "Бібліотека фото",
-  "chooseFile": "Обрати файл"
+  "chooseFile": "Обрати файл",
+  "configureAiPersona": "Configure your AI persona",
+  "connectAiAssistantsToYourData": "Connect AI assistants to your data",
+  "oAuth": "OAuth",
+  "trackYourGoalsOnHomepage": "Track your personal goals on homepage"
 }

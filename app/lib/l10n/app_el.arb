@@ -3643,5 +3643,9 @@
   "noChatAppsEnabled": "Δεν έχουν ενεργοποιηθεί εφαρμογές συνομιλίας.\nΠατήστε \"Ενεργοποίηση εφαρμογών\" για προσθήκη.",
   "disable": "Απενεργοποίηση",
   "photoLibrary": "Βιβλιοθήκη φωτογραφιών",
-  "chooseFile": "Επιλογή αρχείου"
+  "chooseFile": "Επιλογή αρχείου",
+  "configureAiPersona": "Configure your AI persona",
+  "connectAiAssistantsToYourData": "Connect AI assistants to your data",
+  "oAuth": "OAuth",
+  "trackYourGoalsOnHomepage": "Track your personal goals on homepage"
 }

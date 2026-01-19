@@ -51,7 +51,7 @@
   },
   "save": "Save",
   "@save": {
-    "description": "Button text to save changes"
+    "description": "Save button text"
   },
   "edit": "Edit",
   "@edit": {
@@ -829,7 +829,7 @@
   },
   "saving": "Saving...",
   "@saving": {
-    "description": "Button text while saving is in progress"
+    "description": "Text shown while saving settings"
   },
   "personaConfig": "Configure your AI persona",
   "@personaConfig": {
@@ -837,11 +837,11 @@
   },
   "beta": "BETA",
   "@beta": {
-    "description": "Beta badge text"
+    "description": "Beta label for experimental features"
   },
   "transcription": "Transcription",
   "@transcription": {
-    "description": "Transcription section title"
+    "description": "Transcription feature name"
   },
   "transcriptionConfig": "Configure STT provider",
   "@transcriptionConfig": {
@@ -849,7 +849,7 @@
   },
   "conversationTimeout": "Conversation Timeout",
   "@conversationTimeout": {
-    "description": "Conversation timeout section title"
+    "description": "Conversation timeout feature name"
   },
   "conversationTimeoutConfig": "Set when conversations auto-end",
   "@conversationTimeoutConfig": {
@@ -857,7 +857,7 @@
   },
   "importData": "Import Data",
   "@importData": {
-    "description": "Import data section title"
+    "description": "Import data feature name"
   },
   "importDataConfig": "Import data from other sources",
   "@importDataConfig": {
@@ -881,11 +881,11 @@
   },
   "createKey": "Create Key",
   "@createKey": {
-    "description": "Create API key button"
+    "description": "Button text to create API key"
   },
   "docs": "Docs",
   "@docs": {
-    "description": "Documentation link"
+    "description": "Documentation button text"
   },
   "yourOmiInsights": "Your Omi Insights",
   "@yourOmiInsights": {
@@ -1071,7 +1071,7 @@
       }
     }
   },
-  "debugLogs": "Debug logs",
+  "debugLogs": "Debug Logs",
   "debugLogsAutoDelete": "Auto-deletes after 3 days.",
   "debugLogsDesc": "Helps diagnose issues",
   "noLogFilesFound": "No log files found.",
@@ -2576,7 +2576,7 @@
   },
   "labelCopied": "{label} copied",
   "@labelCopied": {
-    "description": "Snackbar message when a label is copied",
+    "description": "Message shown when a value is copied",
     "placeholders": {
       "label": {
         "type": "String"
@@ -2585,15 +2585,15 @@
   },
   "noApiKeysYet": "No API keys yet",
   "@noApiKeysYet": {
-    "description": "Empty state message when no API keys exist"
+    "description": "Message when no API keys exist"
   },
   "createKeyToGetStarted": "Create a key to get started",
   "@createKeyToGetStarted": {
-    "description": "Empty state hint to create first API key"
+    "description": "Hint to create first API key"
   },
   "persona": "Persona",
   "@persona": {
-    "description": "Persona section title"
+    "description": "Persona feature name"
   },
   "configureYourAiPersona": "Configure your AI persona",
   "@configureYourAiPersona": {
@@ -2605,7 +2605,7 @@
   },
   "setWhenConversationsAutoEnd": "Set when conversations auto-end",
   "@setWhenConversationsAutoEnd": {
-    "description": "Description for conversation timeout settings"
+    "description": "Description for conversation timeout setting"
   },
   "importDataFromOtherSources": "Import data from other sources",
   "@importDataFromOtherSources": {
@@ -2616,7 +2616,7 @@
     "description": "Section header for debug features"
   },
   "@debugLogs": {
-    "description": "Debug logs section title"
+    "description": "Debug logs feature name"
   },
   "autoDeletesAfter3Days": "Auto-deletes after 3 days.",
   "@autoDeletesAfter3Days": {
@@ -2627,23 +2627,23 @@
     "description": "Description for debug logs purpose"
   },
   "@noLogFilesFound": {
-    "description": "Error message when no debug log files exist"
+    "description": "Message when no debug log files exist"
   },
   "@selectLogFile": {
-    "description": "Dialog title for selecting log file"
+    "description": "Title for log file selection dialog"
   },
   "@shareLogs": {
     "description": "Button text to share debug logs"
   },
   "@debugLogCleared": {
-    "description": "Snackbar message after clearing debug logs"
+    "description": "Confirmation message after clearing debug logs"
   },
   "exportStartedMessage": "Export started. This may take a few seconds...",
   "@exportStartedMessage": {
     "description": "Snackbar message when export starts"
   },
   "@exportAllData": {
-    "description": "Export data section title"
+    "description": "Export all data feature name"
   },
   "exportConversationsToJson": "Export conversations to a JSON file",
   "@exportConversationsToJson": {
@@ -2669,98 +2669,98 @@
     }
   },
   "@deleteKnowledgeGraph": {
-    "description": "Delete knowledge graph section title"
+    "description": "Delete knowledge graph feature name"
   },
   "clearAllNodesAndConnections": "Clear all nodes and connections",
   "@clearAllNodesAndConnections": {
-    "description": "Description for delete knowledge graph action"
+    "description": "Description for delete knowledge graph"
   },
   "@mcp": {
-    "description": "MCP section title"
+    "description": "MCP (Model Context Protocol) section header"
   },
   "@claudeDesktop": {
-    "description": "Claude Desktop section title"
+    "description": "Claude Desktop integration section"
   },
   "addToClaudeDesktopConfig": "Add to claude_desktop_config.json",
   "@addToClaudeDesktopConfig": {
-    "description": "Description for Claude Desktop configuration"
+    "description": "Description for Claude Desktop config"
   },
   "@configCopiedToClipboard": {
-    "description": "Snackbar message when config is copied"
+    "description": "Confirmation when config is copied"
   },
   "@copyConfig": {
     "description": "Button text to copy configuration"
   },
   "@mcpServer": {
-    "description": "MCP Server section title"
+    "description": "MCP Server section header"
   },
   "connectAiAssistantsToData": "Connect AI assistants to your data",
   "@connectAiAssistantsToData": {
     "description": "Description for MCP Server feature"
   },
   "@serverUrl": {
-    "description": "Label for server URL"
+    "description": "Server URL label"
   },
   "@urlCopied": {
-    "description": "Snackbar message when URL is copied to clipboard"
+    "description": "Confirmation when URL is copied"
   },
   "@apiKeyAuth": {
-    "description": "Label for API key authentication section"
+    "description": "API Key authentication section header"
   },
   "@header": {
-    "description": "Label for header field"
+    "description": "HTTP header label"
   },
   "@oauth": {
     "description": "Label for OAuth section"
   },
   "@clientId": {
-    "description": "Label for client ID field"
+    "description": "OAuth client ID label"
   },
   "@clientSecret": {
-    "description": "Label for client secret field"
+    "description": "OAuth client secret label"
   },
   "useYourMcpApiKey": "Use your MCP API key",
   "@useYourMcpApiKey": {
-    "description": "Hint text for client secret"
+    "description": "Hint for client secret value"
   },
   "@webhooks": {
-    "description": "Webhooks section title"
+    "description": "Webhooks section header"
   },
   "@conversationEvents": {
-    "description": "Webhook title for conversation events"
+    "description": "Webhook type for conversation events"
   },
   "@newConversationCreated": {
-    "description": "Webhook description for conversation events"
+    "description": "Description for conversation webhook"
   },
   "realTimeTranscript": "Real-time Transcript",
   "@realTimeTranscript": {
-    "description": "Webhook title for real-time transcript"
+    "description": "Webhook type for real-time transcript"
   },
   "@transcriptReceived": {
-    "description": "Webhook description for transcript"
+    "description": "Description for transcript webhook"
   },
   "@audioBytes": {
-    "description": "Webhook title for audio bytes"
+    "description": "Webhook type for audio bytes"
   },
   "@audioDataReceived": {
-    "description": "Webhook description for audio data"
+    "description": "Description for audio bytes webhook"
   },
   "@intervalSeconds": {
-    "description": "Label for webhook interval field"
+    "description": "Label for interval input in seconds"
   },
   "@daySummary": {
-    "description": "Webhook title for day summary"
+    "description": "Webhook type for day summary"
   },
   "@summaryGenerated": {
-    "description": "Webhook description for summary"
+    "description": "Description for day summary webhook"
   },
   "experimental": "Experimental",
   "@experimental": {
-    "description": "Experimental section title"
+    "description": "Section header for experimental features"
   },
   "transcriptionDiagnostics": "Transcription Diagnostics",
   "@transcriptionDiagnostics": {
-    "description": "Experimental feature title for transcription diagnostics"
+    "description": "Experimental feature name"
   },
   "detailedDiagnosticMessages": "Detailed diagnostic messages",
   "@detailedDiagnosticMessages": {
@@ -2768,7 +2768,7 @@
   },
   "autoCreateSpeakers": "Auto-create Speakers",
   "@autoCreateSpeakers": {
-    "description": "Experimental feature title for auto-creating speakers"
+    "description": "Experimental feature name"
   },
   "autoCreateWhenNameDetected": "Auto-create when name detected",
   "@autoCreateWhenNameDetected": {
@@ -2776,7 +2776,7 @@
   },
   "followUpQuestions": "Follow-up Questions",
   "@followUpQuestions": {
-    "description": "Experimental feature title for follow-up questions"
+    "description": "Experimental feature name"
   },
   "suggestQuestionsAfterConversations": "Suggest questions after conversations",
   "@suggestQuestionsAfterConversations": {
@@ -2784,7 +2784,7 @@
   },
   "goalTracker": "Goal Tracker",
   "@goalTracker": {
-    "description": "Experimental feature title for goal tracker"
+    "description": "Experimental feature name"
   },
   "trackPersonalGoalsOnHomepage": "Track your personal goals on homepage",
   "@trackPersonalGoalsOnHomepage": {
@@ -7024,5 +7024,21 @@
   "chooseFile": "Choose File",
   "@chooseFile": {
     "description": "Action sheet option to choose a file"
+  },
+  "configureAiPersona": "Configure your AI persona",
+  "@configureAiPersona": {
+    "description": "Description for persona settings"
+  },
+  "connectAiAssistantsToYourData": "Connect AI assistants to your data",
+  "@connectAiAssistantsToYourData": {
+    "description": "Description for MCP server feature"
+  },
+  "oAuth": "OAuth",
+  "@oAuth": {
+    "description": "OAuth section header"
+  },
+  "trackYourGoalsOnHomepage": "Track your personal goals on homepage",
+  "@trackYourGoalsOnHomepage": {
+    "description": "Description for goal tracker feature"
   }
 }

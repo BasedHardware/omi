@@ -3643,5 +3643,9 @@
   "noChatAppsEnabled": "Tidak ada aplikasi obrolan yang diaktifkan.\nKetuk \"Aktifkan Aplikasi\" untuk menambahkan.",
   "disable": "Nonaktifkan",
   "photoLibrary": "Galeri Foto",
-  "chooseFile": "Pilih File"
+  "chooseFile": "Pilih File",
+  "configureAiPersona": "Configure your AI persona",
+  "connectAiAssistantsToYourData": "Connect AI assistants to your data",
+  "oAuth": "OAuth",
+  "trackYourGoalsOnHomepage": "Track your personal goals on homepage"
 }

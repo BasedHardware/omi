@@ -3645,5 +3645,9 @@
   "noChatAppsEnabled": "Žádné chat aplikace nejsou povoleny.\nKlepněte na \"Povolit aplikace\" pro přidání.",
   "disable": "Zakázat",
   "photoLibrary": "Knihovna fotek",
-  "chooseFile": "Vybrat soubor"
+  "chooseFile": "Vybrat soubor",
+  "configureAiPersona": "Configure your AI persona",
+  "connectAiAssistantsToYourData": "Connect AI assistants to your data",
+  "oAuth": "OAuth",
+  "trackYourGoalsOnHomepage": "Track your personal goals on homepage"
 }

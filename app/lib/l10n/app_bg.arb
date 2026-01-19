@@ -3645,5 +3645,9 @@
   "noChatAppsEnabled": "Няма активирани чат приложения.\nДокоснете \"Активиране на приложения\" за добавяне.",
   "disable": "Деактивирай",
   "photoLibrary": "Фотогалерия",
-  "chooseFile": "Избери файл"
+  "chooseFile": "Избери файл",
+  "configureAiPersona": "Configure your AI persona",
+  "connectAiAssistantsToYourData": "Connect AI assistants to your data",
+  "oAuth": "OAuth",
+  "trackYourGoalsOnHomepage": "Track your personal goals on homepage"
 }

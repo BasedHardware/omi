@@ -3643,5 +3643,9 @@
   "noChatAppsEnabled": "Ingen chat apps aktiveret.\nTryk på \"Aktiver apps\" for at tilføje.",
   "disable": "Deaktiver",
   "photoLibrary": "Billedbibliotek",
-  "chooseFile": "Vælg fil"
+  "chooseFile": "Vælg fil",
+  "configureAiPersona": "Configure your AI persona",
+  "connectAiAssistantsToYourData": "Connect AI assistants to your data",
+  "oAuth": "OAuth",
+  "trackYourGoalsOnHomepage": "Track your personal goals on homepage"
 }

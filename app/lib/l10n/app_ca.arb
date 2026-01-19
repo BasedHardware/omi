@@ -3645,5 +3645,9 @@
   "noChatAppsEnabled": "No hi ha aplicacions de xat activades.\nToca \"Activar aplicacions\" per afegir-ne.",
   "disable": "Desactivar",
   "photoLibrary": "Biblioteca de fotos",
-  "chooseFile": "Triar fitxer"
+  "chooseFile": "Triar fitxer",
+  "configureAiPersona": "Configure your AI persona",
+  "connectAiAssistantsToYourData": "Connect AI assistants to your data",
+  "oAuth": "OAuth",
+  "trackYourGoalsOnHomepage": "Track your personal goals on homepage"
 }

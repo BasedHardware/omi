@@ -2090,5 +2090,9 @@
   "noChatAppsEnabled": "Keine Chat-Apps aktiviert.\nTippen Sie auf \"Apps aktivieren\" um welche hinzuzufügen.",
   "disable": "Deaktivieren",
   "photoLibrary": "Fotomediathek",
-  "chooseFile": "Datei auswählen"
+  "chooseFile": "Datei auswählen",
+  "configureAiPersona": "Configure your AI persona",
+  "connectAiAssistantsToYourData": "Connect AI assistants to your data",
+  "oAuth": "OAuth",
+  "trackYourGoalsOnHomepage": "Track your personal goals on homepage"
 }

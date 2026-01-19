@@ -5815,4 +5815,16 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get chooseFile => 'Velg fil';
+
+  @override
+  String get configureAiPersona => 'Configure your AI persona';
+
+  @override
+  String get connectAiAssistantsToYourData => 'Connect AI assistants to your data';
+
+  @override
+  String get oAuth => 'OAuth';
+
+  @override
+  String get trackYourGoalsOnHomepage => 'Track your personal goals on homepage';
 }

@@ -3625,5 +3625,9 @@
   "noChatAppsEnabled": "Nessuna app di chat abilitata.\nTocca \"Abilita app\" per aggiungerne.",
   "disable": "Disabilita",
   "photoLibrary": "Libreria foto",
-  "chooseFile": "Scegli file"
+  "chooseFile": "Scegli file",
+  "configureAiPersona": "Configure your AI persona",
+  "connectAiAssistantsToYourData": "Connect AI assistants to your data",
+  "oAuth": "OAuth",
+  "trackYourGoalsOnHomepage": "Track your personal goals on homepage"
 }

@@ -5823,4 +5823,16 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get chooseFile => 'Vælg fil';
+
+  @override
+  String get configureAiPersona => 'Configure your AI persona';
+
+  @override
+  String get connectAiAssistantsToYourData => 'Connect AI assistants to your data';
+
+  @override
+  String get oAuth => 'OAuth';
+
+  @override
+  String get trackYourGoalsOnHomepage => 'Track your personal goals on homepage';
 }

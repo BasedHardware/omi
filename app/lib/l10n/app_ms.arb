@@ -3643,5 +3643,9 @@
   "noChatAppsEnabled": "Tiada aplikasi sembang diaktifkan.\nKetik \"Aktifkan Aplikasi\" untuk menambah.",
   "disable": "Nyahaktif",
   "photoLibrary": "Pustaka Foto",
-  "chooseFile": "Pilih Fail"
+  "chooseFile": "Pilih Fail",
+  "configureAiPersona": "Configure your AI persona",
+  "connectAiAssistantsToYourData": "Connect AI assistants to your data",
+  "oAuth": "OAuth",
+  "trackYourGoalsOnHomepage": "Track your personal goals on homepage"
 }

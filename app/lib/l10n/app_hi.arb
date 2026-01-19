@@ -2090,5 +2090,9 @@
   "noChatAppsEnabled": "कोई चैट ऐप सक्षम नहीं है।\nकुछ जोड़ने के लिए \"ऐप्स सक्षम करें\" पर टैप करें।",
   "disable": "अक्षम करें",
   "photoLibrary": "फोटो लाइब्रेरी",
-  "chooseFile": "फ़ाइल चुनें"
+  "chooseFile": "फ़ाइल चुनें",
+  "configureAiPersona": "Configure your AI persona",
+  "connectAiAssistantsToYourData": "Connect AI assistants to your data",
+  "oAuth": "OAuth",
+  "trackYourGoalsOnHomepage": "Track your personal goals on homepage"
 }
