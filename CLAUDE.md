@@ -49,3 +49,11 @@ After making changes, always run the appropriate test script to verify your chan
 
 - **Backend changes**: Run `backend/test.sh`
 - **App changes**: Run `app/test.sh`
+
+## Setup
+
+### Install Pre-commit Hook
+Run once to enable auto-formatting on commit:
+```bash
+ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
+```

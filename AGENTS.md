@@ -22,3 +22,7 @@ Module hierarchy (lowest to highest):
 - Always run tests before committing:
   - Backend changes: run `backend/test.sh`
   - App changes: run `app/test.sh`
+
+## Setup
+
+- Install pre-commit hook: `ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit`
