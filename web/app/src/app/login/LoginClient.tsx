@@ -103,7 +103,7 @@ export function LoginClient() {
 
       {/* Vignette effect - darkens edges */}
       <div
-        className="absolute inset-0 z-5 pointer-events-none"
+        className="absolute inset-0 z-[5] pointer-events-none"
         style={{
           background: 'radial-gradient(ellipse at 50% 50%, transparent 0%, rgba(0, 0, 0, 0.4) 70%, rgba(0, 0, 0, 0.7) 100%)',
         }}
