@@ -146,7 +146,7 @@
                 <data
                     android:host="h.omi.me"
                     android:scheme="https"
-                    android:path="/upgrade" />
+                    android:path="/unlimited" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />

@@ -81,7 +81,7 @@ class _AppShellState extends State<AppShell> {
           ),
         );
       }
-    } else if (uri.pathSegments.first == 'upgrade') {
+    } else if (uri.pathSegments.first == 'unlimited') {
       if (mounted) {
         PlatformManager.instance.mixpanel.track('Plans Opened From DeepLink');
         Navigator.of(context).push(
