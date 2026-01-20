@@ -18,7 +18,7 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:omi/extensions/context.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class PersonaProfilePage extends StatefulWidget {
   final double? bottomMargin;

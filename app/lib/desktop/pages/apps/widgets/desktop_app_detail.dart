@@ -324,7 +324,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                       ),
                       SizedBox(width: responsive.spacing(baseSpacing: 8)),
                       Text(
-                        context.l10n.installsCount('${(app.installs / 10).round() * 10}'),
+                        '${(app.installs / 10).round() * 10}+ ${context.l10n.installsCount}',
                         style: responsive.bodyMedium.copyWith(
                           color: ResponsiveHelper.textTertiary,
                         ),

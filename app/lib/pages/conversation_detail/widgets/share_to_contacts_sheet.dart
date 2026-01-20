@@ -8,8 +8,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/extensions/string.dart';
+import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 /// Contact with phone number for sharing
 class ShareableContact {
@@ -475,7 +476,9 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
             Icon(Icons.search_off, size: 64, color: Colors.grey.shade600),
             const SizedBox(height: 16),
             Text(
-              _searchController.text.isEmpty ? context.l10n.noContactsWithPhoneNumbers : context.l10n.noContactsMatchSearch,
+              _searchController.text.isEmpty
+                  ? context.l10n.noContactsWithPhoneNumbers
+                  : context.l10n.noContactsMatchSearch,
               style: TextStyle(
                 fontSize: 16,
                 color: Colors.grey.shade400,

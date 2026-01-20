@@ -9,8 +9,8 @@ import 'package:shimmer/shimmer.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
-import 'package:omi/generated/l10n.dart';
 import 'package:omi/pages/apps/widgets/capability_apps_page.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/create_template_bottom_sheet.dart';
 import 'package:omi/providers/app_provider.dart';
