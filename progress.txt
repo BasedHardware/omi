@@ -1,187 +1,259 @@
 # Localization Progress Tracker
 
+**Project:** Omi Flutter App - Hardcoded String Localization
+**Created:** 2026-01-20
+**Status:** IN PROGRESS
+
 ## Summary
-Total Files to Localize: 38
-Completed: 38
-In Progress: 0
-Pending: 0
 
-## Progress by File
+| Metric | Value |
+|--------|-------|
+| Total Files | 27 |
+| Total Strings | ~125 |
+| Completed | 1 |
+| In Progress | 0 |
+| Pending | 26 |
+| Progress | 4% |
 
-### High Priority
-[x] pages/settings/developer.dart (~55 strings) - DONE
-[x] pages/conversations/sync_page.dart (~45 strings) - DONE
-[x] pages/conversation_detail/widgets.dart (~25 strings) - DONE (22 strings localized)
-[x] pages/onboarding/speech_profile_widget.dart (~10 strings) - ALREADY LOCALIZED
-[x] pages/settings/transcription_settings_page.dart (~15 strings) - DONE (50+ strings localized)
+================================================================================
+## PRIORITY 1: HIGH IMPACT - User-Facing Features (~65 strings)
+================================================================================
 
-### Medium Priority
-[x] pages/settings/task_integrations_page.dart (~10 strings) - DONE (1 string localized)
-[x] pages/settings/import_history_page.dart (~10 strings) - DONE (6 strings localized)
-[x] pages/chat/page.dart (~8 strings) - DONE (1 string localized, rest already done)
-[x] pages/conversation_detail/share.dart (~8 strings) - ALREADY LOCALIZED (UI strings done, export content is non-UI)
-[x] pages/apps/app_detail/app_detail.dart (~12 strings) - DONE (30 strings localized)
-[x] pages/settings/about.dart (~10 strings) - ALREADY LOCALIZED
-[x] pages/home/page.dart (~8 strings) - ALREADY LOCALIZED
-[x] pages/onboarding/setup/setup_questions.dart (~10 strings) - DONE (18 strings localized)
-[x] pages/onboarding/custom_auth/backend_url.dart (~8 strings) - DONE (7 strings localized)
-[x] pages/onboarding/custom_auth/signin.dart (~8 strings) - DONE (10 strings localized)
-[x] pages/onboarding/custom_auth/signup.dart (~8 strings) - DONE (7 new + 6 reused keys)
-[x] pages/memories/widgets/memory_graph_page.dart (~6 strings) - DONE (6 keys + reuses retry)
-[x] pages/apps/widgets/popular_apps_section.dart (~5 strings) - DONE (2 new + 2 reused keys)
-[x] pages/apps/app_detail/widgets/app_owner_review_card.dart (~5 strings) - DONE (4 keys + reuses cancel)
-[x] pages/apps/app_detail/widgets/add_review_widget.dart (~6 strings) - DONE (3 new + 5 reused keys)
-[x] pages/apps/app_detail/widgets/app_analytics_widget.dart (~8 strings) - DONE (4 keys)
-[x] pages/apps/app_detail/reviews_list_page.dart (~5 strings) - DONE (1 new + 12 reused keys)
-[x] pages/persona/persona_profile.dart (~10 strings) - DONE (12 new + 7 reused keys)
+### [x] pages/conversation_detail/widgets/create_template_bottom_sheet.dart (~20 strings)
+Status: COMPLETED (was already localized)
+Note: File was found to be already fully localized using S.of(context) and S.current patterns.
+All 20 strings use existing l10n keys: createCustomTemplate, templateName, templateNameHint,
+pleaseEnterAppName, nameMustBeAtLeast3Characters, conversationPrompt, conversationPromptHint,
+pleaseEnterAppPrompt, promptMustBeAtLeast10Characters, makePublic, anyoneCanDiscoverTemplate,
+onlyYouCanUseTemplate, createApp, generatingDescription, creatingAppIcon, creatingYourApp,
+installingApp, appCreatedAndInstalled, appCreatedSuccessfully, failedToCreateApp
 
-### Lower Priority
-[x] pages/conversations/widgets/goal_tracker_widget.dart (~5 strings) - DONE (3 new + 4 reused keys)
-[x] pages/conversations/synced_conversations_page.dart (~6 strings) - DONE (3 new keys)
-[x] pages/conversation_detail/widgets/summarized_apps_sheet.dart (~4 strings) - DONE (15 new keys)
-[x] pages/conversation_detail/widgets/name_speaker_sheet.dart (~4 strings) - DONE (8 new keys)
-[x] pages/conversation_detail/widgets/share_to_contacts_sheet.dart (~4 strings) - DONE (16 new keys + 2 reused keys)
-[x] pages/settings/device_settings.dart (~8 strings) - DONE (1 key, reuses existing unpair key)
-[x] pages/conversations/sync_widgets/wifi_connection_sheet.dart (~6 strings) - DONE (reuses 5 existing keys)
-[x] pages/conversations/wal_item_detail/wal_item_detail_page.dart (~5 strings) - DONE (33 new keys + 2 reused keys)
-[x] pages/conversations/fast_transfer_settings_page.dart (~6 strings) - DONE (16 new keys + 2 reused keys)
+### [ ] pages/apps/providers/add_app_provider.dart (~20 strings)
+Status: PENDING
+Strings:
+- [ ] Line 451: 'Please select one more core capability...' (validation)
+- [ ] Line 456: 'Please select a payment plan and enter a price...' (validation)
+- [ ] Line 460: 'Please select at least one capability...' (validation)
+- [ ] Line 464: 'Please select a logo for your app' (validation)
+- [ ] Line 470: 'Please enter a chat prompt...' (validation)
+- [ ] Line 476: 'Please enter a conversation prompt...' (validation)
+- [ ] Line 482: 'Please select a trigger event...' (validation)
+- [ ] Line 486: 'Please enter a webhook URL...' (validation)
+- [ ] Line 493: 'Please select a category...' (validation)
+- [ ] Line 498: 'Please fill in all the required fields correctly' (validation)
+- [ ] Line 564: 'App updated successfully' (success)
+- [ ] Line 568: 'Failed to update app...' (error)
+- [ ] Line 633: 'App submitted successfully' (success)
+- [ ] Line 671/733: 'Error opening file picker: ...' (error)
+- [ ] Line 674/737: 'Error selecting image: ...' (error)
+- [ ] Line 693/772/833: 'Photos permission denied...' (error)
+- [ ] Line 695/774: 'Error selecting image: ...' (error)
+- [ ] Line 699/779: 'Error selecting image/thumbnail. Please try again.' (error)
+- [ ] Line 719: 'Select a thumbnail image' (dialog title)
 
-### Service/Provider Files
-[x] providers/device_provider.dart (~5 strings) - DONE (7 new keys + 1 reused key)
-[x] providers/app_provider.dart (~4 strings) - DONE (5 new keys + 1 reused key)
-[x] providers/user_provider.dart (~3 strings) - DONE (15 new keys + 2 reused keys)
-[x] services/notifications.dart (~6 strings) - DONE (2 new keys)
-[x] services/notifications/important_conversation_notification_handler.dart (~4 strings) - DONE (2 new keys)
-[x] main.dart (~3 strings) - ALREADY LOCALIZED (UI strings localized, notification channel strings cannot use context.l10n in background isolate)
+### [ ] pages/persona/persona_provider.dart (~15 strings)
+Status: PENDING
+Strings:
+- [ ] Line 82: 'Twitter handle not found' (error)
+- [ ] Line 86: 'Twitter handle is suspended' (error)
+- [ ] Line 103: 'Failed to verify Twitter handle' (error)
+- [ ] Line 124: 'Failed to fetch your persona' (error)
+- [ ] Line 142: 'Failed to create your persona' (error)
+- [ ] Line 151: 'Failed to fetch your persona' (error)
+- [ ] Line 298: 'Please connect at least one knowledge data source...' (error)
+- [ ] Line 345: 'Persona updated successfully' (success)
+- [ ] Line 356: 'Failed to update persona' (error)
+- [ ] Line 362: 'Failed to update persona' (error)
+- [ ] Line 373: 'Please select an image' (error)
+- [ ] Line 379: 'Please connect at least one knowledge data source...' (error)
+- [ ] Line 420: 'Failed to create your persona. Please try again later.' (error)
+- [ ] Line 424: 'Failed to create persona: $e' (error with param)
+- [ ] Line 460: 'Failed to enable persona' (error)
+- [ ] Line 465: 'Error enabling persona: $e' (error with param)
 
-## Changelog
+### [ ] pages/payments/payment_method_provider.dart (3 strings)
+Status: PENDING
+Strings:
+- [ ] Line 64: 'Failed to fetch supported countries...' (error)
+- [ ] Line 88: 'Failed to set default payment method...' (error)
+- [ ] Line 167: 'Failed to save PayPal details...' (error)
 
-### 2026-01-20
-- Verified main.dart is already fully localized
-  - CustomErrorWidget UI uses existing l10n keys: somethingWentWrong, errorCopied, copyErrorMessage
-  - Notification channel strings ('Omi Notifications', 'Notification channel for Omi') cannot use context.l10n
-    because they run in a background isolate without BuildContext (system-level Android notification channel names)
-  - 'FlutterError' is a debug log category, not user-facing text
-- **ALL 38 FILES COMPLETE** - Localization project finished!
-- Localized services/notifications/important_conversation_notification_handler.dart with 2 l10n keys for 34 languages
-  - importantConversationTitle, importantConversationBody (for important conversation completion notification)
-- Localized services/notifications.dart with 2 l10n keys for 34 languages
-  - fallNotificationTitle, fallNotificationBody (for fall detection notification)
-- Localized providers/user_provider.dart with 15 l10n keys for 34 languages
-  - calculatingETA, aboutMinutesRemaining (parameterized with minutes), aboutAMinuteRemaining, almostDone (for migration ETA)
-  - omiSays (notification title)
-  - analyzingYourData, migratingToProtection (parameterized with level), noDataToMigrateFinalizing (for migration start messages)
-  - migratingItemsProgress (parameterized with itemType and percentage), allObjectsMigratedFinalizing (for migration progress)
-  - migrationErrorOccurred, migrationComplete, dataProtectedWithSettings (parameterized with level) (for migration completion/errors)
-  - chatsLowercase, dataLowercase (for migration item types)
-  - Reuses: conversations, memories
-- Localized providers/app_provider.dart with 5 l10n keys for 34 languages
-  - appDeletedSuccessfully, appDeleteFailed (for delete app operations)
-  - appVisibilityChangedSuccessfully (for visibility toggle)
-  - errorActivatingAppIntegration, errorUpdatingAppStatus (for app activation errors)
-  - Reuses: error
-- Localized providers/device_provider.dart with 7 l10n keys for 34 languages
-  - lowBatteryAlertTitle, lowBatteryAlertBody (for low battery notification)
-  - deviceDisconnectedNotificationTitle, deviceDisconnectedNotificationBody (for disconnect notification)
-  - firmwareUpdateAvailable, firmwareUpdateAvailableDescription (parameterized with version), later
-  - Reuses: update
-- Localized pages/conversations/fast_transfer_settings_page.dart with 16 l10n keys for 34 languages
-  - fastTransferEnabled, bluetoothSyncEnabled, enableFastTransfer, fastTransferDescription
-  - internetAccessPausedDuringTransfer, transferMethod, chooseTransferMethodDescription
-  - fastTransfer, wifiSpeed, fiveTimesFaster, fastTransferMethodDescription
-  - bluetooth, bleSpeed, bluetoothMethodDescription, selected, selectOption
-  - Reuses: cancel, enable
-- Localized pages/conversations/wal_item_detail/wal_item_detail_page.dart with 33 l10n keys for 34 languages
-  - recordingDetails, storageLocationSdCard, storageLocationLimitlessPendant, storageLocationPhone, storageLocationPhoneMemory
-  - storedOnDevice (parameterized), transferring, transferRequired, downloadingAudioFromSdCard, transferRequiredDescription
-  - cancelTransfer, transferToPhone, privateAndSecureOnDevice, recordingInfo, transferInProgress
-  - shareRecording, deleteRecording, deleteRecordingConfirmation
-  - recordingIdLabel, dateTimeLabel, durationLabel, audioFormatLabel, storageLocationLabel
-  - estimatedSizeLabel, deviceModelLabel, unknownDevice, deviceIdLabel, statusLabel
-  - statusProcessed, statusUnprocessed, switchedToFastTransfer, transferCompleteMessage
-  - transferFailedMessage (parameterized), transferCancelled
-  - Reuses: delete, close
-- Localized pages/conversations/sync_widgets/wifi_connection_sheet.dart (reuses 5 existing keys)
-  - wifiConnectionFailedTitle, connectingToDeviceName (parameterized), enableDeviceWifi (parameterized)
-  - connectToDeviceName (parameterized), retry
-  - Fixed incorrect l10n_extensions import path (core -> utils)
-- Localized pages/settings/device_settings.dart (1 key reused)
-  - Replaced hardcoded 'Unpair' button text with existing context.l10n.unpair key
-  - File was already mostly localized; only the okButtonText parameter was hardcoded
-  - Also fixed missing l10n_extensions.dart imports in 7 previously localized files
-- Localized pages/conversation_detail/widgets/share_to_contacts_sheet.dart with 16 l10n keys for 34 languages
-  - shareViaSms, selectContactsToShareSummary, searchContactsHint, contactsSelectedCount (parameterized)
-  - clearAllSelection, selectContactsToShare, shareWithContactCount, shareWithContactsCount (both parameterized)
-  - contactsPermissionRequired, contactsPermissionRequiredForSms, grantContactsPermissionForSms
-  - noContactsWithPhoneNumbers, noContactsMatchSearch, failedToLoadContacts, failedToPrepareConversationForSharing
-  - couldNotOpenSmsApp, heresWhatWeDiscussed (parameterized with link)
-  - Reuses: openSettings, error
-- Localized pages/conversation_detail/widgets/name_speaker_sheet.dart with 8 l10n keys for 34 languages
-  - tagSpeaker (parameterized with speakerId), personNameAlreadyExists, selectYouFromList, enterPersonsName
-  - addPerson, tagOtherSegmentsFromSpeaker (parameterized with selected/total), tagOtherSegments, managePeople
-  - Reuses: cancel, save
-- Localized pages/conversation_detail/widgets/summarized_apps_sheet.dart with 15 l10n keys for 34 languages
-  - summaryTemplate, suggestedTemplates, otherTemplates, availableTemplates, getCreative
-  - defaultLabel, lastUsedLabel, setDefaultApp, setDefaultAppContent, setDefaultButton
-  - setAsDefaultSuccess, createCustomTemplate, allTemplates, failedToInstallApp, errorInstallingApp
-  - Reuses: cancel, summary
-- Localized pages/conversations/synced_conversations_page.dart with 3 l10n keys for 34 languages
-  - processedConversations, updatedConversations, newConversations
-- Localized pages/conversations/widgets/goal_tracker_widget.dart with 3 l10n keys for 34 languages
-  - goal, tapToTrackThisGoal, tapToSetAGoal
-  - Reuses: current, target, save, cancel
-- Localized pages/persona/persona_profile.dart with 12 l10n keys for 34 languages
-  - sharePublicLink, makePersonaPublic, connectedKnowledgeData, editName, enterName
-  - disconnectTwitter, disconnectTwitterConfirmation, signOutConfirmation
-  - getOmiDevice, getOmiDeviceDescription, getOmi, iHaveOmiDevice
-  - Reuses: persona, cancel, save, signOut, disconnect, connect, connected, comingSoon
-- Localized pages/apps/app_detail/reviews_list_page.dart with 1 l10n key for 34 languages
-  - starFilterLabel (parameterized with count)
-  - Reuses: replyToReview, writeYourReply, cancel, replySentSuccessfully, failedToSendReply, send, ratingsAndReviews, all, noReviewsFound, anonymousUser, editReply, reply
-- Localized pages/apps/app_detail/widgets/app_analytics_widget.dart with 4 l10n keys for 34 languages
-  - appAnalytics, learnMoreLink, installsCount, moneyEarned
-- Localized pages/apps/app_detail/widgets/add_review_widget.dart with 3 l10n keys for 34 languages
-  - rateAndReviewThisApp, noChangesInReview, cantRateWithoutInternet
-  - Reuses: yourReview, submitReview, updateReview, writeReviewOptional, reviewAddedSuccessfully, failedToSubmitReview
-- Localized pages/apps/app_detail/widgets/app_owner_review_card.dart with 4 l10n keys for 34 languages
-  - writeSomething, submitReply, editYourReply, replyToReview (reuses cancel)
-- Localized pages/apps/widgets/popular_apps_section.dart with 2 l10n keys for 34 languages
-  - getButton, openingApp (parameterized), reuses popularApps and open
-- Localized pages/memories/widgets/memory_graph_page.dart with 6 l10n keys for 34 languages
-  - Loading text, empty state title/messages, build graph button, share text
-- Localized pages/onboarding/custom_auth/signup.dart with 7 l10n keys for 34 languages
-  - Create Account title, name/repeat password labels, Sign Up button
-  - Reuses 6 keys from signin.dart for email/password validation
-- Localized pages/onboarding/custom_auth/signin.dart with 10 l10n keys for 34 languages
-  - Sign In title, button, email/password labels, validation errors, success message
-- Localized pages/onboarding/custom_auth/backend_url.dart with 7 l10n keys for 34 languages
-  - Custom Backend URL title, Backend URL label, Save URL button
-  - Validation error messages, success message
-- Localized pages/onboarding/setup/setup_questions.dart with 18 l10n keys for 34 languages
-  - Setup questions, profession and usage options, buttons
-- Verified pages/settings/about.dart and pages/home/page.dart are already localized
-- Localized pages/apps/app_detail/app_detail.dart with 30 l10n keys for 34 languages
-  - Permissions, setup instructions, review messages, section titles
-- Verified pages/conversation_detail/share.dart is already fully localized (UI strings)
-- Localized pages/chat/page.dart with 1 l10n key (chatAssistantsTitle) for 34 languages
-  - File was mostly already localized, only "Chat Assistants" string remained
-- Localized pages/conversation_detail/widgets.dart with 22 l10n keys for 34 languages
-- Localized pages/settings/task_integrations_page.dart with 1 l10n key for 34 languages
-- Localized pages/settings/import_history_page.dart with 6 l10n keys for 34 languages
-- Verified pages/onboarding/speech_profile_widget.dart is already fully localized
-- Localized pages/settings/transcription_settings_page.dart with 50+ l10n keys for 34 languages
-  - Source selector descriptions, download dialogs, iOS native speech, model ready status
-  - Template selector, error messages, Save/Reset buttons, etc.
+### [ ] pages/payments/paypal_setup_page.dart (2 strings)
+Status: PENDING
+Strings:
+- [ ] Line 186: 'nik@example.com' (hintText placeholder)
+- [ ] Line 215: 'paypal.me/nik' (hintText placeholder)
 
-### 2026-01-19
-- Initial assessment completed
-- Identified 38 files with hardcoded strings
-- Created PRD and progress tracker
-- Estimated ~300+ strings need localization
-- Localized pages/settings/developer.dart with 55 l10n keys for 34 languages
-- Localized pages/conversations/sync_page.dart with 45 l10n keys for 34 languages
+### [ ] pages/payments/models/payment_method_config.dart (4 strings)
+Status: PENDING
+Strings:
+- [ ] Line 35: 'Stripe' (payment method title)
+- [ ] Line 56: 'PayPal' (payment method title)
+- [ ] Line 26: 'Active' / 'Connected' / 'Not Connected' (status labels)
 
----
+================================================================================
+## PRIORITY 2: MEDIUM IMPACT - Settings & Configuration (~30 strings)
+================================================================================
+
+### [ ] pages/apps/widgets/payment_details_widget.dart (8 strings)
+Status: PENDING
+Strings:
+- [ ] Line 33: 'App Cost' (label)
+- [ ] Line 50: 'Please enter a valid amount' (validation)
+- [ ] Line 53: 'Please enter an amount greater than 0' (validation)
+- [ ] Line 76: '20' (hintText placeholder)
+- [ ] Line 86: 'Payment Plan' (label)
+- [ ] Line 112: 'Payment Plan' (modal title)
+- [ ] Line 184: 'None Selected' (placeholder text)
+
+### [ ] pages/settings/ai_app_generator_provider.dart (6 strings)
+Status: PENDING
+Strings:
+- [ ] Line 151: 'Please enter a description for your app' (validation)
+- [ ] Line 192: 'Creating app icon...' (status)
+- [ ] Line 214: 'An error occurred: ...' (error with param)
+- [ ] Line 306: 'App created successfully!' (success)
+- [ ] Line 315: 'Failed to create app' (error)
+- [ ] Line 322: 'An error occurred while creating the app' (error)
+
+### [ ] pages/persona/twitter/social_profile.dart (3 strings)
+Status: PENDING
+Strings:
+- [ ] Line 144: '@nikshevchenko' (hintText placeholder)
+- [ ] Line 166: 'Please enter your X handle' (validation)
+- [ ] Line 169: 'Please enter a valid X handle' (validation)
+
+### [ ] pages/settings/widgets/plans_sheet.dart (3 strings)
+Status: PENDING
+Strings:
+- [ ] Line 616: 'Confirm Plan Change' (dialog title)
+- [ ] Line 683: 'An error occurred. Please try again.' (error)
+- [ ] Line 1686/1695: 'Manage Payment Method' (dialog/button)
+
+### [ ] pages/settings/transcription_settings_page.dart (2 strings)
+Status: PENDING
+Strings:
+- [ ] Line 662: JSON placeholder hintText
+- [ ] Line 1079: 'Omi' (title)
+
+### [ ] pages/settings/ai_app_generator_page.dart (1 string)
+Status: PENDING
+Strings:
+- [ ] Line 1171: '0.00' (hintText placeholder)
+
+### [ ] pages/settings/import_history_page.dart (2 strings)
+Status: PENDING
+Strings:
+- [ ] Line 185: 'Error opening file picker: ...' (error with param)
+- [ ] Line 197: 'Error: $e' (error with param)
+
+### [ ] pages/apps/app_detail/app_detail.dart (1 string)
+Status: PENDING
+Strings:
+- [ ] Line 227: 'Error: ...' (error with param)
+
+================================================================================
+## PRIORITY 3: NOTIFICATIONS & SERVICES (~10 strings)
+================================================================================
+
+### [ ] services/notifications/merge_notification_handler.dart (2 strings)
+Status: PENDING
+Strings:
+- [ ] Line 85: 'Conversations Merged Successfully' (notification title)
+- [ ] Line 86: '... conversations have been merged successfully' (notification body with param)
+
+### [ ] services/notifications/daily_reflection_notification.dart (2 strings)
+Status: PENDING
+Strings:
+- [ ] Line 40: 'Time for Daily Reflection' (notification title)
+- [ ] Line 41: 'Tell me about your day' (notification body)
+
+### [ ] services/notifications/action_item_notification_handler.dart (1 string)
+Status: PENDING
+Strings:
+- [ ] Line 42: 'Omi Reminder' (notification title)
+
+### [ ] services/devices/device_connection.dart (2 strings)
+Status: PENDING
+Strings:
+- [ ] Line 535: '... Disconnected' (notification title with param)
+- [ ] Line 536: 'Please reconnect to continue using your ...' (notification body with param)
+
+### [ ] services/devices/models.dart (1 string)
+Status: PENDING
+Strings:
+- [ ] Line 72: 'Looks like the device is not connected...' (error message)
+
+================================================================================
+## PRIORITY 4: DESKTOP APP (~15 strings)
+================================================================================
+
+### [ ] desktop/pages/onboarding/desktop_onboarding_wrapper.dart (5 strings)
+Status: PENDING
+Strings:
+- [ ] Line 37: 'Sign In' (step title)
+- [ ] Line 43: 'Your Name' (step title)
+- [ ] Line 49: 'Language' (step title)
+- [ ] Line 55: 'Permissions' (step title)
+- [ ] Line 61: 'Complete' (step title)
+
+### [ ] desktop/pages/settings/desktop_settings_modal.dart (2 strings)
+Status: PENDING
+Strings:
+- [ ] Line 2286: 'https://omi.me' (website - may be intentional)
+- [ ] Line 2294: 'team@basedhardware.com' (email - may be intentional)
+
+### [ ] desktop/pages/conversations/widgets/desktop_name_speaker_dialog.dart (3 strings)
+Status: PENDING
+Strings:
+- [ ] Line 251: 'Enter Person\'s Name' (hintText)
+- [ ] Line 272: 'Cancel' (button)
+- [ ] Line 476: 'Save' (button)
+
+================================================================================
+## PRIORITY 5: LOWER IMPACT (~5 strings)
+================================================================================
+
+### [ ] pages/conversation_detail/page.dart (1 string)
+Status: PENDING
+Strings:
+- [ ] Line 991: 'Search transcript or summary...' (hintText)
+
+### [ ] pages/conversations/widgets/goal_tracker_widget.dart (1 string)
+Status: PENDING
+Strings:
+- [ ] Line 381: 'My goal' (default title)
+
+### [ ] main.dart (1 string)
+Status: PENDING
+Strings:
+- [ ] Line 209: 'Omi' (desktop window title)
+
+================================================================================
+## CHANGELOG
+================================================================================
+
+[2026-01-20] Verified create_template_bottom_sheet.dart
+- File was already fully localized (no changes needed)
+- All 20 strings already use l10n via S.of(context) and S.current patterns
+
+[2026-01-20] Initial audit completed
+- Identified 27 files with hardcoded strings
+- Found ~125 strings needing localization
+- Created PRD.MD and progress.txt
+- Previous progress.txt was inaccurate (claimed 100% complete)
+
+================================================================================
+## NOTES
+================================================================================
+
+- Use `jq` CLI to add keys to ARB files (never read full files)
+- Run `cd app && flutter gen-l10n` after ARB updates
+- Run `app/test.sh` to verify changes
+- Supported languages: 34
+- Some notification strings may not have BuildContext access
+
+================================================================================
 Legend:
 [ ] = Pending
 [~] = In Progress
