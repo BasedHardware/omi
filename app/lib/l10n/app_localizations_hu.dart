@@ -7375,4 +7375,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get searchTranscriptOrSummary => 'Keresés az átiratban vagy összefoglalóban...';
+
+  @override
+  String get myGoal => 'Célom';
 }

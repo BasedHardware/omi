@@ -7342,4 +7342,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get searchTranscriptOrSummary => 'Hľadať v prepise alebo zhrnutí...';
+
+  @override
+  String get myGoal => 'Môj cieľ';
 }

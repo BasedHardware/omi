@@ -7354,4 +7354,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get searchTranscriptOrSummary => 'Meklēt transkripcijā vai kopsavilkumā...';
+
+  @override
+  String get myGoal => 'Mans mērķis';
 }

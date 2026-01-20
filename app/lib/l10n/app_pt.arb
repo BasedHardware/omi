@@ -2339,5 +2339,6 @@
   "onboardingChooseYourPreference": "Escolha sua preferência",
   "onboardingGrantRequiredAccess": "Conceder acesso necessário",
   "onboardingYoureAllSet": "Você está pronto",
-  "searchTranscriptOrSummary": "Pesquisar na transcrição ou resumo..."
+  "searchTranscriptOrSummary": "Pesquisar na transcrição ou resumo...",
+  "myGoal": "Minha meta"
 }

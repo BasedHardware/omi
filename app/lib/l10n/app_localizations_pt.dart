@@ -7335,4 +7335,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get searchTranscriptOrSummary => 'Pesquisar na transcrição ou resumo...';
+
+  @override
+  String get myGoal => 'Minha meta';
 }

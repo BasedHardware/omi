@@ -7352,4 +7352,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get searchTranscriptOrSummary => 'Transkript veya özette ara...';
+
+  @override
+  String get myGoal => 'Hedefim';
 }

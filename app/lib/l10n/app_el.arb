@@ -2338,5 +2338,6 @@
   "onboardingChooseYourPreference": "Επίλεξε την προτίμησή σου",
   "onboardingGrantRequiredAccess": "Παραχώρησε την απαιτούμενη πρόσβαση",
   "onboardingYoureAllSet": "Είσαι έτοιμος",
-  "searchTranscriptOrSummary": "Αναζήτηση σε απομαγνητοφώνηση ή περίληψη..."
+  "searchTranscriptOrSummary": "Αναζήτηση σε απομαγνητοφώνηση ή περίληψη...",
+  "myGoal": "Ο στόχος μου"
 }

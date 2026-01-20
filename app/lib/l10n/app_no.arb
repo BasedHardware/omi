@@ -2338,5 +2338,6 @@
   "onboardingChooseYourPreference": "Velg dine preferanser",
   "onboardingGrantRequiredAccess": "Gi nødvendig tilgang",
   "onboardingYoureAllSet": "Du er klar",
-  "searchTranscriptOrSummary": "Søk i transkripsjon eller sammendrag..."
+  "searchTranscriptOrSummary": "Søk i transkripsjon eller sammendrag...",
+  "myGoal": "Mitt mål"
 }

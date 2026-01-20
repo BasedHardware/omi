@@ -7213,4 +7213,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get searchTranscriptOrSummary => '搜索转录或摘要...';
+
+  @override
+  String get myGoal => '我的目标';
 }

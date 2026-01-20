@@ -378,7 +378,7 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget> with WidgetsBindi
     HapticFeedback.lightImpact();
     final newGoal = Goal(
       id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
-      title: 'My goal',
+      title: context.l10n.myGoal,
       goalType: 'numeric',
       currentValue: 0,
       targetValue: 100,
@@ -390,7 +390,7 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget> with WidgetsBindi
     );
     setState(() {
       _goal = newGoal;
-      _goalTitleController.text = 'My goal';
+      _goalTitleController.text = context.l10n.myGoal;
       _currentValueController.text = '0';
       _targetValueController.text = '100';
       _isEditingGoal = true;

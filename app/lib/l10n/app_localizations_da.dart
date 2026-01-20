@@ -7348,4 +7348,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get searchTranscriptOrSummary => 'Søg i transskription eller resumé...';
+
+  @override
+  String get myGoal => 'Mit mål';
 }

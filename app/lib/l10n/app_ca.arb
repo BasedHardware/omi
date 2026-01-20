@@ -2321,5 +2321,6 @@
   "onboardingChooseYourPreference": "Tria la teva preferència",
   "onboardingGrantRequiredAccess": "Concedeix l'accés requerit",
   "onboardingYoureAllSet": "Ja estàs llest",
-  "searchTranscriptOrSummary": "Cerca a la transcripció o el resum..."
+  "searchTranscriptOrSummary": "Cerca a la transcripció o el resum...",
+  "myGoal": "El meu objectiu"
 }

@@ -2338,5 +2338,6 @@
   "onboardingChooseYourPreference": "Välj dina inställningar",
   "onboardingGrantRequiredAccess": "Bevilja nödvändig åtkomst",
   "onboardingYoureAllSet": "Du är redo",
-  "searchTranscriptOrSummary": "Sök i transkription eller sammanfattning..."
+  "searchTranscriptOrSummary": "Sök i transkription eller sammanfattning...",
+  "myGoal": "Mitt mål"
 }

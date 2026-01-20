@@ -7225,4 +7225,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get searchTranscriptOrSummary => '대본 또는 요약 검색...';
+
+  @override
+  String get myGoal => '내 목표';
 }

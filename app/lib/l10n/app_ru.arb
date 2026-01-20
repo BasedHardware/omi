@@ -2338,5 +2338,6 @@
   "onboardingChooseYourPreference": "Выберите предпочтения",
   "onboardingGrantRequiredAccess": "Предоставить необходимый доступ",
   "onboardingYoureAllSet": "Всё готово",
-  "searchTranscriptOrSummary": "Поиск в транскрипции или резюме..."
+  "searchTranscriptOrSummary": "Поиск в транскрипции или резюме...",
+  "myGoal": "Моя цель"
 }

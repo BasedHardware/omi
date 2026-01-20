@@ -7223,4 +7223,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get searchTranscriptOrSummary => '文字起こしまたは要約を検索...';
+
+  @override
+  String get myGoal => '私の目標';
 }

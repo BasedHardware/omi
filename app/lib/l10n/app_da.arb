@@ -2296,5 +2296,6 @@
   "onboardingChooseYourPreference": "Vælg din præference",
   "onboardingGrantRequiredAccess": "Giv den nødvendige adgang",
   "onboardingYoureAllSet": "Du er klar",
-  "searchTranscriptOrSummary": "Søg i transskription eller resumé..."
+  "searchTranscriptOrSummary": "Søg i transskription eller resumé...",
+  "myGoal": "Mit mål"
 }

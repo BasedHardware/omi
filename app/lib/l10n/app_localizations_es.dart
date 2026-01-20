@@ -7347,4 +7347,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get searchTranscriptOrSummary => 'Buscar en transcripción o resumen...';
+
+  @override
+  String get myGoal => 'Mi objetivo';
 }

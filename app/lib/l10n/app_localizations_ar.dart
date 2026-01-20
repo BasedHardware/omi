@@ -7292,4 +7292,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get searchTranscriptOrSummary => 'ابحث في النص أو الملخص...';
+
+  @override
+  String get myGoal => 'هدفي';
 }

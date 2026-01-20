@@ -2338,5 +2338,6 @@
   "onboardingChooseYourPreference": "Vyberte si preferencie",
   "onboardingGrantRequiredAccess": "Udeliť požadovaný prístup",
   "onboardingYoureAllSet": "Všetko je pripravené",
-  "searchTranscriptOrSummary": "Hľadať v prepise alebo zhrnutí..."
+  "searchTranscriptOrSummary": "Hľadať v prepise alebo zhrnutí...",
+  "myGoal": "Môj cieľ"
 }

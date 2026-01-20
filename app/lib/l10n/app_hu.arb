@@ -2338,5 +2338,6 @@
   "onboardingChooseYourPreference": "Válaszd ki a preferenciádat",
   "onboardingGrantRequiredAccess": "Szükséges hozzáférés megadása",
   "onboardingYoureAllSet": "Készen állsz",
-  "searchTranscriptOrSummary": "Keresés az átiratban vagy összefoglalóban..."
+  "searchTranscriptOrSummary": "Keresés az átiratban vagy összefoglalóban...",
+  "myGoal": "Célom"
 }

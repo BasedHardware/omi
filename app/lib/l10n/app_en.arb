@@ -9100,5 +9100,9 @@
   "searchTranscriptOrSummary": "Search transcript or summary...",
   "@searchTranscriptOrSummary": {
     "description": "Placeholder text for search field in conversation detail page"
+  },
+  "myGoal": "My goal",
+  "@myGoal": {
+    "description": "Default title for a new goal in the goal tracker widget"
   }
 }

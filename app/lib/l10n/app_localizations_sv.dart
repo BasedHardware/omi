@@ -7345,4 +7345,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get searchTranscriptOrSummary => 'Sök i transkription eller sammanfattning...';
+
+  @override
+  String get myGoal => 'Mitt mål';
 }

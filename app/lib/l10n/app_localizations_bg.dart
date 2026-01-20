@@ -7370,4 +7370,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get searchTranscriptOrSummary => 'Търсене в транскрипция или резюме...';
+
+  @override
+  String get myGoal => 'Моята цел';
 }

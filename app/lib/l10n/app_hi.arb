@@ -2339,5 +2339,6 @@
   "onboardingChooseYourPreference": "अपनी पसंद चुनें",
   "onboardingGrantRequiredAccess": "आवश्यक पहुँच प्रदान करें",
   "onboardingYoureAllSet": "आप तैयार हैं",
-  "searchTranscriptOrSummary": "ट्रांसक्रिप्ट या सारांश में खोजें..."
+  "searchTranscriptOrSummary": "ट्रांसक्रिप्ट या सारांश में खोजें...",
+  "myGoal": "मेरा लक्ष्य"
 }

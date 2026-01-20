@@ -7382,4 +7382,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get searchTranscriptOrSummary => 'Cerca a la transcripció o el resum...';
+
+  @override
+  String get myGoal => 'El meu objectiu';
 }

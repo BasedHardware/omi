@@ -7374,4 +7374,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get searchTranscriptOrSummary => 'Căutare în transcriere sau rezumat...';
+
+  @override
+  String get myGoal => 'Obiectivul meu';
 }

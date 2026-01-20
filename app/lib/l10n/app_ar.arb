@@ -2319,5 +2319,6 @@
   "onboardingChooseYourPreference": "اختر تفضيلاتك",
   "onboardingGrantRequiredAccess": "منح الوصول المطلوب",
   "onboardingYoureAllSet": "أنت جاهز",
-  "searchTranscriptOrSummary": "ابحث في النص أو الملخص..."
+  "searchTranscriptOrSummary": "ابحث في النص أو الملخص...",
+  "myGoal": "هدفي"
 }

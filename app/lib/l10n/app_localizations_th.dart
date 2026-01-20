@@ -7306,4 +7306,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get searchTranscriptOrSummary => 'ค้นหาในข้อความถอดเสียงหรือสรุป...';
+
+  @override
+  String get myGoal => 'เป้าหมายของฉัน';
 }

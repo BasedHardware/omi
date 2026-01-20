@@ -2338,5 +2338,6 @@
   "onboardingChooseYourPreference": "Choisissez vos préférences",
   "onboardingGrantRequiredAccess": "Accorder l'accès requis",
   "onboardingYoureAllSet": "Vous êtes prêt",
-  "searchTranscriptOrSummary": "Rechercher dans la transcription ou le résumé..."
+  "searchTranscriptOrSummary": "Rechercher dans la transcription ou le résumé...",
+  "myGoal": "Mon objectif"
 }

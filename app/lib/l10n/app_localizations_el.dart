@@ -7389,4 +7389,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get searchTranscriptOrSummary => 'Αναζήτηση σε απομαγνητοφώνηση ή περίληψη...';
+
+  @override
+  String get myGoal => 'Ο στόχος μου';
 }

@@ -7341,4 +7341,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get searchTranscriptOrSummary => 'Hae transkriptiosta tai yhteenvedosta...';
+
+  @override
+  String get myGoal => 'Tavoitteeni';
 }

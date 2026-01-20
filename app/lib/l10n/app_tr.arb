@@ -2338,5 +2338,6 @@
   "onboardingChooseYourPreference": "Tercihinizi seçin",
   "onboardingGrantRequiredAccess": "Gerekli erişimi verin",
   "onboardingYoureAllSet": "Hazırsınız",
-  "searchTranscriptOrSummary": "Transkript veya özette ara..."
+  "searchTranscriptOrSummary": "Transkript veya özette ara...",
+  "myGoal": "Hedefim"
 }

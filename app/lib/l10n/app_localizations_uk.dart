@@ -7349,4 +7349,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get searchTranscriptOrSummary => 'Пошук у транскрипції або резюме...';
+
+  @override
+  String get myGoal => 'Моя ціль';
 }

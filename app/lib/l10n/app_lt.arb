@@ -2338,5 +2338,6 @@
   "onboardingChooseYourPreference": "Pasirinkite savo nuostatą",
   "onboardingGrantRequiredAccess": "Suteikti reikiamą prieigą",
   "onboardingYoureAllSet": "Viskas paruošta",
-  "searchTranscriptOrSummary": "Ieškoti transkripcijoje ar santraukoje..."
+  "searchTranscriptOrSummary": "Ieškoti transkripcijoje ar santraukoje...",
+  "myGoal": "Mano tikslas"
 }

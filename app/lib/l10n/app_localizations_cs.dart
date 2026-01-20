@@ -7334,4 +7334,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get searchTranscriptOrSummary => 'Hledat v přepisu nebo shrnutí...';
+
+  @override
+  String get myGoal => 'Můj cíl';
 }

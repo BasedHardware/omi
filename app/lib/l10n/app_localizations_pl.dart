@@ -7353,4 +7353,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get searchTranscriptOrSummary => 'Szukaj w transkrypcji lub podsumowaniu...';
+
+  @override
+  String get myGoal => 'Mój cel';
 }

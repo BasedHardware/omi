@@ -7363,4 +7363,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get searchTranscriptOrSummary => 'Cari dalam transkrip atau ringkasan...';
+
+  @override
+  String get myGoal => 'Matlamat saya';
 }

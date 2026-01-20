@@ -7343,4 +7343,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get searchTranscriptOrSummary => 'Ieškoti transkripcijoje ar santraukoje...';
+
+  @override
+  String get myGoal => 'Mano tikslas';
 }

@@ -2338,5 +2338,6 @@
   "onboardingChooseYourPreference": "Alege preferința ta",
   "onboardingGrantRequiredAccess": "Acordă accesul necesar",
   "onboardingYoureAllSet": "Ești pregătit",
-  "searchTranscriptOrSummary": "Căutare în transcriere sau rezumat..."
+  "searchTranscriptOrSummary": "Căutare în transcriere sau rezumat...",
+  "myGoal": "Obiectivul meu"
 }

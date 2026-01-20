@@ -7361,4 +7361,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get searchTranscriptOrSummary => 'Zoeken in transcript of samenvatting...';
+
+  @override
+  String get myGoal => 'Mijn doel';
 }

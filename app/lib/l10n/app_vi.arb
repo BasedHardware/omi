@@ -2338,5 +2338,6 @@
   "onboardingChooseYourPreference": "Chọn tùy chọn của bạn",
   "onboardingGrantRequiredAccess": "Cấp quyền truy cập cần thiết",
   "onboardingYoureAllSet": "Bạn đã sẵn sàng",
-  "searchTranscriptOrSummary": "Tìm kiếm trong bản ghi hoặc tóm tắt..."
+  "searchTranscriptOrSummary": "Tìm kiếm trong bản ghi hoặc tóm tắt...",
+  "myGoal": "Mục tiêu của tôi"
 }

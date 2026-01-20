@@ -7351,4 +7351,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get searchTranscriptOrSummary => 'Tìm kiếm trong bản ghi hoặc tóm tắt...';
+
+  @override
+  String get myGoal => 'Mục tiêu của tôi';
 }

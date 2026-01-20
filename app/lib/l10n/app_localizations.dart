@@ -13790,6 +13790,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Search transcript or summary...'**
   String get searchTranscriptOrSummary;
+
+  /// Default title for a new goal in the goal tracker widget
+  ///
+  /// In en, this message translates to:
+  /// **'My goal'**
+  String get myGoal;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

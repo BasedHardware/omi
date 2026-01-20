@@ -7359,4 +7359,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get searchTranscriptOrSummary => 'Cari di transkrip atau ringkasan...';
+
+  @override
+  String get myGoal => 'Tujuan saya';
 }

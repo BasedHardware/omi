@@ -7340,4 +7340,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get searchTranscriptOrSummary => 'Search transcript or summary...';
+
+  @override
+  String get myGoal => 'My goal';
 }

@@ -2298,5 +2298,6 @@
   "onboardingChooseYourPreference": "Vyberte si preference",
   "onboardingGrantRequiredAccess": "Udělit požadovaný přístup",
   "onboardingYoureAllSet": "Vše je připraveno",
-  "searchTranscriptOrSummary": "Hledat v přepisu nebo shrnutí..."
+  "searchTranscriptOrSummary": "Hledat v přepisu nebo shrnutí...",
+  "myGoal": "Můj cíl"
 }

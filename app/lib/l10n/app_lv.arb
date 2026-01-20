@@ -2338,5 +2338,6 @@
   "onboardingChooseYourPreference": "Izvēlieties savu preferenci",
   "onboardingGrantRequiredAccess": "Piešķirt nepieciešamo piekļuvi",
   "onboardingYoureAllSet": "Viss ir gatavs",
-  "searchTranscriptOrSummary": "Meklēt transkripcijā vai kopsavilkumā..."
+  "searchTranscriptOrSummary": "Meklēt transkripcijā vai kopsavilkumā...",
+  "myGoal": "Mans mērķis"
 }

@@ -2338,5 +2338,6 @@
   "onboardingChooseYourPreference": "เลือกการตั้งค่าของคุณ",
   "onboardingGrantRequiredAccess": "ให้สิทธิ์การเข้าถึงที่จำเป็น",
   "onboardingYoureAllSet": "คุณพร้อมแล้ว",
-  "searchTranscriptOrSummary": "ค้นหาในข้อความถอดเสียงหรือสรุป..."
+  "searchTranscriptOrSummary": "ค้นหาในข้อความถอดเสียงหรือสรุป...",
+  "myGoal": "เป้าหมายของฉัน"
 }

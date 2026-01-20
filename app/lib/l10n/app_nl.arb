@@ -2338,5 +2338,6 @@
   "onboardingChooseYourPreference": "Kies je voorkeur",
   "onboardingGrantRequiredAccess": "Verleen de vereiste toegang",
   "onboardingYoureAllSet": "Je bent klaar",
-  "searchTranscriptOrSummary": "Zoeken in transcript of samenvatting..."
+  "searchTranscriptOrSummary": "Zoeken in transcript of samenvatting...",
+  "myGoal": "Mijn doel"
 }

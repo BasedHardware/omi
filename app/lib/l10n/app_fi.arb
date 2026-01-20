@@ -2338,5 +2338,6 @@
   "onboardingChooseYourPreference": "Valitse asetuksesi",
   "onboardingGrantRequiredAccess": "Myönnä tarvittava käyttöoikeus",
   "onboardingYoureAllSet": "Olet valmis",
-  "searchTranscriptOrSummary": "Hae transkriptiosta tai yhteenvedosta..."
+  "searchTranscriptOrSummary": "Hae transkriptiosta tai yhteenvedosta...",
+  "myGoal": "Tavoitteeni"
 }

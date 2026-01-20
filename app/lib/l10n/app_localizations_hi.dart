@@ -7320,4 +7320,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get searchTranscriptOrSummary => 'ट्रांसक्रिप्ट या सारांश में खोजें...';
+
+  @override
+  String get myGoal => 'मेरा लक्ष्य';
 }

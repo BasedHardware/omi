@@ -2321,5 +2321,6 @@
   "onboardingChooseYourPreference": "Изберете предпочитанието си",
   "onboardingGrantRequiredAccess": "Дайте необходимия достъп",
   "onboardingYoureAllSet": "Всичко е готово",
-  "searchTranscriptOrSummary": "Търсене в транскрипция или резюме..."
+  "searchTranscriptOrSummary": "Търсене в транскрипция или резюме...",
+  "myGoal": "Моята цел"
 }
