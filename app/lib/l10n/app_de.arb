@@ -2297,5 +2297,7 @@
   "subscriptionReactivatedDefault": "Your subscription has been reactivated! No charge now - you'll be billed at the end of your current period.",
   "subscriptionSuccessfulCharged": "Subscription successful! You've been charged for the new billing period.",
   "couldNotProcessSubscription": "Could not process subscription. Please try again.",
-  "couldNotLaunchUpgradePage": "Could not launch upgrade page. Please try again."
+  "couldNotLaunchUpgradePage": "Could not launch upgrade page. Please try again.",
+  "transcriptionJsonPlaceholder": "{\n  \"provider\": \"deepgramLive\",\n  ...\n}",
+  "transcriptionSourceOmi": "Omi"
 }

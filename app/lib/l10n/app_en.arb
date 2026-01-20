@@ -8978,5 +8978,13 @@
   "couldNotLaunchUpgradePage": "Could not launch upgrade page. Please try again.",
   "@couldNotLaunchUpgradePage": {
     "description": "Error when upgrade page cannot be launched"
+  },
+  "transcriptionJsonPlaceholder": "{\n  \"provider\": \"deepgramLive\",\n  ...\n}",
+  "@transcriptionJsonPlaceholder": {
+    "description": "JSON configuration placeholder hint text in transcription settings"
+  },
+  "transcriptionSourceOmi": "Omi",
+  "@transcriptionSourceOmi": {
+    "description": "Tab title for Omi transcription source option"
   }
 }
