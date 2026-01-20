@@ -10,10 +10,10 @@
 |--------|-------|
 | Total Files | 27 |
 | Total Strings | ~125 |
-| Completed | 18 |
+| Completed | 19 |
 | In Progress | 0 |
-| Pending | 9 |
-| Progress | 67% |
+| Pending | 8 |
+| Progress | 70% |
 
 **CRITICAL ISSUE**: ~162 pre-existing l10n keys in non-English ARB files still contain
 English text instead of proper translations. See PRIORITY 0 section below.
@@ -168,10 +168,11 @@ MyApp.navigatorKey.currentContext?.l10n pattern with fallback. Keys added: devic
 (with {deviceName} placeholder), deviceDisconnectedBody (with {deviceName} placeholder).
 Ran flutter gen-l10n and verified with test.sh.
 
-### [ ] services/devices/models.dart (1 string)
-Status: PENDING
-Strings:
-- [ ] Line 72: 'Looks like the device is not connected...' (error message)
+### [x] services/devices/models.dart (1 string)
+Status: COMPLETED (N/A)
+Note: The string at line 72 is a Logger.handle() debug/logging message sent to Crashlytics for error
+tracking, not a user-facing string. Per PRD scope ("Out of Scope: Technical strings, debug messages"),
+this does not require localization.
 
 ================================================================================
 ## PRIORITY 4: DESKTOP APP (~15 strings)
@@ -221,6 +222,11 @@ Strings:
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-20] Marked models.dart as N/A (debug message)
+- The string at line 72 is a Logger.handle() debug/logging message for Crashlytics
+- Not user-facing, falls under "Out of Scope: Technical strings, debug messages"
+- No code changes required
 
 [2026-01-20] Localized device_connection.dart
 - Added 2 new l10n keys to all 34 language ARB files

@@ -65,7 +65,7 @@ The app uses Flutter's ARB-based localization system (`context.l10n.keyName`). W
 | `services/notifications/daily_reflection_notification.dart` | 2 | Daily reflection notification - **DONE** |
 | `services/notifications/action_item_notification_handler.dart` | 1 | Reminder notification - **DONE** |
 | `services/devices/device_connection.dart` | 2 | Device disconnect notification - **DONE** |
-| `services/devices/models.dart` | 1 | Device error message |
+| `services/devices/models.dart` | 1 | Device error message - **N/A (debug log)** |
 
 ### Priority 4: Desktop App (3 files, ~15 strings)
 
