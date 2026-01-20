@@ -415,6 +415,7 @@ void storage_write(void)
             if (err) {
                 LOG_PRINTK("error clearing\n");
             } else {
+                offset = 0;
                 uint8_t result_buffer[1] = {200};
                 if (conn) {
                     bt_gatt_notify(get_current_connection(), &storage_service.attrs[1], &result_buffer, 1);
@@ -425,6 +426,7 @@ void storage_write(void)
         }
         if (nuke_started) {
             clear_audio_directory();
+            offset = 0;
             nuke_started = 0;
         }
         if (stop_started) {
