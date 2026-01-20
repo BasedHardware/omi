@@ -2022,5 +2022,7 @@
   "buildingKnowledgeGraphFromMemories": "Costruzione del grafo della conoscenza dai ricordi...",
   "knowledgeGraphWillBuildAutomatically": "Il tuo grafo della conoscenza verrà costruito automaticamente quando creerai nuovi ricordi.",
   "buildGraphButton": "Costruisci grafo",
-  "checkOutMyMemoryGraph": "Guarda il mio grafo della memoria!"
+  "checkOutMyMemoryGraph": "Guarda il mio grafo della memoria!",
+  "getButton": "Ottieni",
+  "openingApp": "Apertura di {appName}..."
 }

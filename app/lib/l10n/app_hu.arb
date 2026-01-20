@@ -2022,5 +2022,7 @@
   "buildingKnowledgeGraphFromMemories": "Tudásgráf építése az emlékekből...",
   "knowledgeGraphWillBuildAutomatically": "A tudásgráfja automatikusan felépül, amikor új emlékeket hoz létre.",
   "buildGraphButton": "Gráf építése",
-  "checkOutMyMemoryGraph": "Nézd meg a memória gráfomat!"
+  "checkOutMyMemoryGraph": "Nézd meg a memória gráfomat!",
+  "getButton": "Letöltés",
+  "openingApp": "{appName} megnyitása..."
 }

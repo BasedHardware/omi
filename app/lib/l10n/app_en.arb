@@ -7929,5 +7929,19 @@
   "checkOutMyMemoryGraph": "Check out my memory graph!",
   "@checkOutMyMemoryGraph": {
     "description": "Share text for memory graph"
+  },
+  "getButton": "Get",
+  "@getButton": {
+    "description": "Button text to get/install an app"
+  },
+  "openingApp": "Opening {appName}...",
+  "@openingApp": {
+    "description": "Snackbar message when opening an app",
+    "placeholders": {
+      "appName": {
+        "type": "String",
+        "example": "My App"
+      }
+    }
   }
 }

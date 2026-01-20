@@ -6383,4 +6383,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get checkOutMyMemoryGraph => '私のメモリーグラフをご覧ください！';
+
+  @override
+  String get getButton => '入手';
+
+  @override
+  String openingApp(String appName) {
+    return '$appNameを開いています...';
+  }
 }

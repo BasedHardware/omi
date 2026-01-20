@@ -2023,5 +2023,7 @@
   "buildingKnowledgeGraphFromMemories": "思い出からナレッジグラフを構築中...",
   "knowledgeGraphWillBuildAutomatically": "新しい思い出を作成すると、ナレッジグラフが自動的に構築されます。",
   "buildGraphButton": "グラフを構築",
-  "checkOutMyMemoryGraph": "私のメモリーグラフをご覧ください！"
+  "checkOutMyMemoryGraph": "私のメモリーグラフをご覧ください！",
+  "getButton": "入手",
+  "openingApp": "{appName}を開いています..."
 }

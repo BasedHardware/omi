@@ -2022,5 +2022,7 @@
   "buildingKnowledgeGraphFromMemories": "Teadmisgraafiku loomine mälestustest...",
   "knowledgeGraphWillBuildAutomatically": "Teie teadmisgraafik luuakse automaatselt, kui loote uusi mälestusi.",
   "buildGraphButton": "Loo graafik",
-  "checkOutMyMemoryGraph": "Vaata minu mälugraafikut!"
+  "checkOutMyMemoryGraph": "Vaata minu mälugraafikut!",
+  "getButton": "Hangi",
+  "openingApp": "Avan {appName}..."
 }

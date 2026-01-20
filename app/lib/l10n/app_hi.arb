@@ -2023,5 +2023,7 @@
   "buildingKnowledgeGraphFromMemories": "यादों से ज्ञान ग्राफ़ बनाया जा रहा है...",
   "knowledgeGraphWillBuildAutomatically": "जब आप नई यादें बनाएंगे तो आपका ज्ञान ग्राफ़ स्वचालित रूप से बनेगा।",
   "buildGraphButton": "ग्राफ़ बनाएं",
-  "checkOutMyMemoryGraph": "मेरा मेमोरी ग्राफ़ देखें!"
+  "checkOutMyMemoryGraph": "मेरा मेमोरी ग्राफ़ देखें!",
+  "getButton": "प्राप्त करें",
+  "openingApp": "{appName} खुल रहा है..."
 }

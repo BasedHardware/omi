@@ -2022,5 +2022,7 @@
   "buildingKnowledgeGraphFromMemories": "Kuriamas žinių grafas iš prisiminimų...",
   "knowledgeGraphWillBuildAutomatically": "Jūsų žinių grafas bus sukurtas automatiškai, kai sukursite naujų prisiminimų.",
   "buildGraphButton": "Sukurti grafą",
-  "checkOutMyMemoryGraph": "Pažiūrėkite mano atminties grafą!"
+  "checkOutMyMemoryGraph": "Pažiūrėkite mano atminties grafą!",
+  "getButton": "Gauti",
+  "openingApp": "Atidaroma {appName}..."
 }

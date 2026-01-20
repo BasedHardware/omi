@@ -2022,5 +2022,7 @@
   "buildingKnowledgeGraphFromMemories": "Đang xây dựng biểu đồ tri thức từ ký ức...",
   "knowledgeGraphWillBuildAutomatically": "Biểu đồ tri thức của bạn sẽ được xây dựng tự động khi bạn tạo ký ức mới.",
   "buildGraphButton": "Xây dựng biểu đồ",
-  "checkOutMyMemoryGraph": "Xem biểu đồ ký ức của tôi!"
+  "checkOutMyMemoryGraph": "Xem biểu đồ ký ức của tôi!",
+  "getButton": "Tải",
+  "openingApp": "Đang mở {appName}..."
 }

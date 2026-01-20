@@ -2022,5 +2022,7 @@
   "buildingKnowledgeGraphFromMemories": "Построение графа знаний из воспоминаний...",
   "knowledgeGraphWillBuildAutomatically": "Ваш граф знаний будет построен автоматически при создании новых воспоминаний.",
   "buildGraphButton": "Построить граф",
-  "checkOutMyMemoryGraph": "Посмотрите мой граф памяти!"
+  "checkOutMyMemoryGraph": "Посмотрите мой граф памяти!",
+  "getButton": "Загрузить",
+  "openingApp": "Открытие {appName}..."
 }

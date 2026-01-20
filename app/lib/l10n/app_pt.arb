@@ -2023,5 +2023,7 @@
   "buildingKnowledgeGraphFromMemories": "Construindo grafo de conhecimento a partir de memórias...",
   "knowledgeGraphWillBuildAutomatically": "Seu grafo de conhecimento será construído automaticamente quando você criar novas memórias.",
   "buildGraphButton": "Construir grafo",
-  "checkOutMyMemoryGraph": "Confira meu grafo de memória!"
+  "checkOutMyMemoryGraph": "Confira meu grafo de memória!",
+  "getButton": "Obter",
+  "openingApp": "Abrindo {appName}..."
 }

@@ -2022,5 +2022,7 @@
   "buildingKnowledgeGraphFromMemories": "Vytvára sa znalostný graf zo spomienok...",
   "knowledgeGraphWillBuildAutomatically": "Váš znalostný graf sa vytvorí automaticky, keď vytvoríte nové spomienky.",
   "buildGraphButton": "Vytvoriť graf",
-  "checkOutMyMemoryGraph": "Pozrite sa na môj graf pamäte!"
+  "checkOutMyMemoryGraph": "Pozrite sa na môj graf pamäte!",
+  "getButton": "Získať",
+  "openingApp": "Otvára sa {appName}..."
 }

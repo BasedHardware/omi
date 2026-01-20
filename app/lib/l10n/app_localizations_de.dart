@@ -6545,4 +6545,12 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get checkOutMyMemoryGraph => 'Schau dir meinen Erinnerungsgraphen an!';
+
+  @override
+  String get getButton => 'Laden';
+
+  @override
+  String openingApp(String appName) {
+    return 'Öffne $appName...';
+  }
 }

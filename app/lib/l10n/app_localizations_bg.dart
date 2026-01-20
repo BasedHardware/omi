@@ -6520,4 +6520,12 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get checkOutMyMemoryGraph => 'Вижте моя граф на паметта!';
+
+  @override
+  String get getButton => 'Вземи';
+
+  @override
+  String openingApp(String appName) {
+    return 'Отваряне на $appName...';
+  }
 }

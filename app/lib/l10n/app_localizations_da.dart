@@ -6502,4 +6502,12 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get checkOutMyMemoryGraph => 'Se min hukommelsesgraf!';
+
+  @override
+  String get getButton => 'Hent';
+
+  @override
+  String openingApp(String appName) {
+    return 'Åbner $appName...';
+  }
 }

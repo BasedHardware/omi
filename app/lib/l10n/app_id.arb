@@ -2022,5 +2022,7 @@
   "buildingKnowledgeGraphFromMemories": "Membangun graf pengetahuan dari kenangan...",
   "knowledgeGraphWillBuildAutomatically": "Graf pengetahuan Anda akan dibangun secara otomatis saat Anda membuat kenangan baru.",
   "buildGraphButton": "Bangun Graf",
-  "checkOutMyMemoryGraph": "Lihat graf memori saya!"
+  "checkOutMyMemoryGraph": "Lihat graf memori saya!",
+  "getButton": "Dapatkan",
+  "openingApp": "Membuka {appName}..."
 }

@@ -2023,5 +2023,7 @@
   "buildingKnowledgeGraphFromMemories": "正在从记忆构建知识图谱...",
   "knowledgeGraphWillBuildAutomatically": "当您创建新记忆时，知识图谱将自动构建。",
   "buildGraphButton": "构建图谱",
-  "checkOutMyMemoryGraph": "看看我的记忆图谱！"
+  "checkOutMyMemoryGraph": "看看我的记忆图谱！",
+  "getButton": "获取",
+  "openingApp": "正在打开 {appName}..."
 }

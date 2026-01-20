@@ -6492,4 +6492,12 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get checkOutMyMemoryGraph => 'Se på minnegrafen min!';
+
+  @override
+  String get getButton => 'Hent';
+
+  @override
+  String openingApp(String appName) {
+    return 'Åpner $appName...';
+  }
 }

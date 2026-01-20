@@ -2005,5 +2005,7 @@
   "buildingKnowledgeGraphFromMemories": "Изграждане на графа на знанията от спомени...",
   "knowledgeGraphWillBuildAutomatically": "Графът на знанията ще се изгради автоматично, когато създавате нови спомени.",
   "buildGraphButton": "Изграждане на граф",
-  "checkOutMyMemoryGraph": "Вижте моя граф на паметта!"
+  "checkOutMyMemoryGraph": "Вижте моя граф на паметта!",
+  "getButton": "Вземи",
+  "openingApp": "Отваряне на {appName}..."
 }

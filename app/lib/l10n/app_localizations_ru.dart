@@ -6510,4 +6510,12 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get checkOutMyMemoryGraph => 'Посмотрите мой граф памяти!';
+
+  @override
+  String get getButton => 'Загрузить';
+
+  @override
+  String openingApp(String appName) {
+    return 'Открытие $appName...';
+  }
 }

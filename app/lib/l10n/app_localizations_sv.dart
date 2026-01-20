@@ -6498,4 +6498,12 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get checkOutMyMemoryGraph => 'Kolla in min minnesgraf!';
+
+  @override
+  String get getButton => 'Hämta';
+
+  @override
+  String openingApp(String appName) {
+    return 'Öppnar $appName...';
+  }
 }

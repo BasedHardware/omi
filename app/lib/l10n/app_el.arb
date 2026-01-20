@@ -2022,5 +2022,7 @@
   "buildingKnowledgeGraphFromMemories": "Δημιουργία γραφήματος γνώσης από αναμνήσεις...",
   "knowledgeGraphWillBuildAutomatically": "Το γράφημα γνώσης θα δημιουργηθεί αυτόματα καθώς δημιουργείτε νέες αναμνήσεις.",
   "buildGraphButton": "Δημιουργία γραφήματος",
-  "checkOutMyMemoryGraph": "Δείτε το γράφημα μνήμης μου!"
+  "checkOutMyMemoryGraph": "Δείτε το γράφημα μνήμης μου!",
+  "getButton": "Λήψη",
+  "openingApp": "Άνοιγμα {appName}..."
 }

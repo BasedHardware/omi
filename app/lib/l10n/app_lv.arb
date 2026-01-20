@@ -2022,5 +2022,7 @@
   "buildingKnowledgeGraphFromMemories": "Veido zināšanu grafu no atmiņām...",
   "knowledgeGraphWillBuildAutomatically": "Jūsu zināšanu grafs tiks izveidots automātiski, kad veidosiet jaunas atmiņas.",
   "buildGraphButton": "Izveidot grafu",
-  "checkOutMyMemoryGraph": "Apskatiet manu atmiņas grafu!"
+  "checkOutMyMemoryGraph": "Apskatiet manu atmiņas grafu!",
+  "getButton": "Iegūt",
+  "openingApp": "Atver {appName}..."
 }

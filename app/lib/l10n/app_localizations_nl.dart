@@ -6513,4 +6513,12 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get checkOutMyMemoryGraph => 'Bekijk mijn geheugengrafiek!';
+
+  @override
+  String get getButton => 'Download';
+
+  @override
+  String openingApp(String appName) {
+    return '$appName openen...';
+  }
 }

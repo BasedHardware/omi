@@ -6494,4 +6494,12 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get checkOutMyMemoryGraph => 'Pozrite sa na môj graf pamäte!';
+
+  @override
+  String get getButton => 'Získať';
+
+  @override
+  String openingApp(String appName) {
+    return 'Otvára sa $appName...';
+  }
 }

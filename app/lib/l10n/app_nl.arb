@@ -2022,5 +2022,7 @@
   "buildingKnowledgeGraphFromMemories": "Kennisgrafiek opbouwen vanuit herinneringen...",
   "knowledgeGraphWillBuildAutomatically": "Uw kennisgrafiek wordt automatisch opgebouwd wanneer u nieuwe herinneringen maakt.",
   "buildGraphButton": "Grafiek bouwen",
-  "checkOutMyMemoryGraph": "Bekijk mijn geheugengrafiek!"
+  "checkOutMyMemoryGraph": "Bekijk mijn geheugengrafiek!",
+  "getButton": "Download",
+  "openingApp": "{appName} openen..."
 }

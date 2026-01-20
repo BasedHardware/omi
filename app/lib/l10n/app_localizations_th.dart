@@ -6461,4 +6461,12 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get checkOutMyMemoryGraph => 'ดูกราฟความจำของฉัน!';
+
+  @override
+  String get getButton => 'รับ';
+
+  @override
+  String openingApp(String appName) {
+    return 'กำลังเปิด $appName...';
+  }
 }

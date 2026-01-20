@@ -2022,5 +2022,7 @@
   "buildingKnowledgeGraphFromMemories": "Bygger kunnskapsgraf fra minner...",
   "knowledgeGraphWillBuildAutomatically": "Kunnskapsgrafen din vil bli bygget automatisk når du oppretter nye minner.",
   "buildGraphButton": "Bygg graf",
-  "checkOutMyMemoryGraph": "Se på minnegrafen min!"
+  "checkOutMyMemoryGraph": "Se på minnegrafen min!",
+  "getButton": "Hent",
+  "openingApp": "Åpner {appName}..."
 }

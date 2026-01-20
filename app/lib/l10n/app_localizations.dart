@@ -12122,6 +12122,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Check out my memory graph!'**
   String get checkOutMyMemoryGraph;
+
+  /// Button text to get/install an app
+  ///
+  /// In en, this message translates to:
+  /// **'Get'**
+  String get getButton;
+
+  /// Snackbar message when opening an app
+  ///
+  /// In en, this message translates to:
+  /// **'Opening {appName}...'**
+  String openingApp(String appName);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

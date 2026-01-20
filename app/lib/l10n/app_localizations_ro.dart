@@ -6524,4 +6524,12 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get checkOutMyMemoryGraph => 'Vezi graficul meu de memorie!';
+
+  @override
+  String get getButton => 'Obține';
+
+  @override
+  String openingApp(String appName) {
+    return 'Se deschide $appName...';
+  }
 }

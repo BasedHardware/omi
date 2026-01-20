@@ -2022,5 +2022,7 @@
   "buildingKnowledgeGraphFromMemories": "กำลังสร้างกราฟความรู้จากความทรงจำ...",
   "knowledgeGraphWillBuildAutomatically": "กราฟความรู้ของคุณจะถูกสร้างโดยอัตโนมัติเมื่อคุณสร้างความทรงจำใหม่",
   "buildGraphButton": "สร้างกราฟ",
-  "checkOutMyMemoryGraph": "ดูกราฟความจำของฉัน!"
+  "checkOutMyMemoryGraph": "ดูกราฟความจำของฉัน!",
+  "getButton": "รับ",
+  "openingApp": "กำลังเปิด {appName}..."
 }

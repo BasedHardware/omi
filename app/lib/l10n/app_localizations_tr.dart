@@ -6505,4 +6505,12 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get checkOutMyMemoryGraph => 'Hafıza grafiğime göz atın!';
+
+  @override
+  String get getButton => 'Al';
+
+  @override
+  String openingApp(String appName) {
+    return '$appName açılıyor...';
+  }
 }

@@ -2022,5 +2022,7 @@
   "buildingKnowledgeGraphFromMemories": "Rakennetaan tietograafia muistoista...",
   "knowledgeGraphWillBuildAutomatically": "Tietograafisi rakennetaan automaattisesti, kun luot uusia muistoja.",
   "buildGraphButton": "Rakenna graafi",
-  "checkOutMyMemoryGraph": "Katso muistigraafikani!"
+  "checkOutMyMemoryGraph": "Katso muistigraafikani!",
+  "getButton": "Hae",
+  "openingApp": "Avataan {appName}..."
 }

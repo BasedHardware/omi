@@ -6485,4 +6485,12 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get checkOutMyMemoryGraph => 'Podívejte se na můj graf paměti!';
+
+  @override
+  String get getButton => 'Získat';
+
+  @override
+  String openingApp(String appName) {
+    return 'Otevírám $appName...';
+  }
 }

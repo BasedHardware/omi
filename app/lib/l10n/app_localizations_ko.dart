@@ -6385,4 +6385,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get checkOutMyMemoryGraph => '내 메모리 그래프를 확인하세요!';
+
+  @override
+  String get getButton => '받기';
+
+  @override
+  String openingApp(String appName) {
+    return '$appName 열는 중...';
+  }
 }

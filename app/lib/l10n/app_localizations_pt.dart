@@ -6485,4 +6485,12 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get checkOutMyMemoryGraph => 'Confira meu grafo de memória!';
+
+  @override
+  String get getButton => 'Obter';
+
+  @override
+  String openingApp(String appName) {
+    return 'Abrindo $appName...';
+  }
 }

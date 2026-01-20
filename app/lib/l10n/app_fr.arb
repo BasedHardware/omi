@@ -2022,5 +2022,7 @@
   "buildingKnowledgeGraphFromMemories": "Construction du graphe de connaissances à partir des souvenirs...",
   "knowledgeGraphWillBuildAutomatically": "Votre graphe de connaissances sera construit automatiquement lorsque vous créerez de nouveaux souvenirs.",
   "buildGraphButton": "Construire le graphe",
-  "checkOutMyMemoryGraph": "Découvrez mon graphe de mémoire !"
+  "checkOutMyMemoryGraph": "Découvrez mon graphe de mémoire !",
+  "getButton": "Obtenir",
+  "openingApp": "Ouverture de {appName}..."
 }

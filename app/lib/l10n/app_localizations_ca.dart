@@ -6532,4 +6532,12 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get checkOutMyMemoryGraph => 'Mira el meu graf de memòria!';
+
+  @override
+  String get getButton => 'Obtenir';
+
+  @override
+  String openingApp(String appName) {
+    return 'Obrint $appName...';
+  }
 }

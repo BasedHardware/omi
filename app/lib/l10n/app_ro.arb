@@ -2022,5 +2022,7 @@
   "buildingKnowledgeGraphFromMemories": "Se construiește graficul cunoștințelor din amintiri...",
   "knowledgeGraphWillBuildAutomatically": "Graficul cunoștințelor va fi construit automat când creați amintiri noi.",
   "buildGraphButton": "Construiește grafic",
-  "checkOutMyMemoryGraph": "Vezi graficul meu de memorie!"
+  "checkOutMyMemoryGraph": "Vezi graficul meu de memorie!",
+  "getButton": "Obține",
+  "openingApp": "Se deschide {appName}..."
 }

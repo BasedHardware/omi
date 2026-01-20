@@ -1982,5 +1982,7 @@
   "buildingKnowledgeGraphFromMemories": "Vytváření znalostního grafu ze vzpomínek...",
   "knowledgeGraphWillBuildAutomatically": "Váš znalostní graf se vytvoří automaticky, jakmile vytvoříte nové vzpomínky.",
   "buildGraphButton": "Vytvořit graf",
-  "checkOutMyMemoryGraph": "Podívejte se na můj graf paměti!"
+  "checkOutMyMemoryGraph": "Podívejte se na můj graf paměti!",
+  "getButton": "Získat",
+  "openingApp": "Otevírám {appName}..."
 }

@@ -2003,5 +2003,7 @@
   "buildingKnowledgeGraphFromMemories": "جارٍ بناء رسم المعرفة من الذكريات...",
   "knowledgeGraphWillBuildAutomatically": "سيتم بناء رسم المعرفة تلقائياً عند إنشاء ذكريات جديدة.",
   "buildGraphButton": "بناء الرسم",
-  "checkOutMyMemoryGraph": "شاهد رسم الذاكرة الخاص بي!"
+  "checkOutMyMemoryGraph": "شاهد رسم الذاكرة الخاص بي!",
+  "getButton": "تحميل",
+  "openingApp": "جارٍ فتح {appName}..."
 }

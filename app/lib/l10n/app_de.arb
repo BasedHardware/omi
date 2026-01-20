@@ -2004,5 +2004,7 @@
   "buildingKnowledgeGraphFromMemories": "Wissensgraph wird aus Erinnerungen erstellt...",
   "knowledgeGraphWillBuildAutomatically": "Ihr Wissensgraph wird automatisch erstellt, wenn Sie neue Erinnerungen anlegen.",
   "buildGraphButton": "Graph erstellen",
-  "checkOutMyMemoryGraph": "Schau dir meinen Erinnerungsgraphen an!"
+  "checkOutMyMemoryGraph": "Schau dir meinen Erinnerungsgraphen an!",
+  "getButton": "Laden",
+  "openingApp": "Öffne {appName}..."
 }

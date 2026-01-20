@@ -6373,4 +6373,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get checkOutMyMemoryGraph => '看看我的记忆图谱！';
+
+  @override
+  String get getButton => '获取';
+
+  @override
+  String openingApp(String appName) {
+    return '正在打开 $appName...';
+  }
 }

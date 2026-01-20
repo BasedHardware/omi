@@ -6506,4 +6506,12 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get checkOutMyMemoryGraph => 'Apskatiet manu atmiņas grafu!';
+
+  @override
+  String get getButton => 'Iegūt';
+
+  @override
+  String openingApp(String appName) {
+    return 'Atver $appName...';
+  }
 }

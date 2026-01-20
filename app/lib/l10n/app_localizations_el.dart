@@ -6540,4 +6540,12 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get checkOutMyMemoryGraph => 'Δείτε το γράφημα μνήμης μου!';
+
+  @override
+  String get getButton => 'Λήψη';
+
+  @override
+  String openingApp(String appName) {
+    return 'Άνοιγμα $appName...';
+  }
 }

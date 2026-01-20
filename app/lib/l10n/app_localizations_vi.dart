@@ -6503,4 +6503,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get checkOutMyMemoryGraph => 'Xem biểu đồ ký ức của tôi!';
+
+  @override
+  String get getButton => 'Tải';
+
+  @override
+  String openingApp(String appName) {
+    return 'Đang mở $appName...';
+  }
 }

@@ -2005,5 +2005,7 @@
   "buildingKnowledgeGraphFromMemories": "Construint el graf de coneixement a partir de records...",
   "knowledgeGraphWillBuildAutomatically": "El graf de coneixement es construirà automàticament quan creïs nous records.",
   "buildGraphButton": "Construir graf",
-  "checkOutMyMemoryGraph": "Mira el meu graf de memòria!"
+  "checkOutMyMemoryGraph": "Mira el meu graf de memòria!",
+  "getButton": "Obtenir",
+  "openingApp": "Obrint {appName}..."
 }

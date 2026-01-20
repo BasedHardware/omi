@@ -6525,4 +6525,12 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get checkOutMyMemoryGraph => 'Nézd meg a memória gráfomat!';
+
+  @override
+  String get getButton => 'Letöltés';
+
+  @override
+  String openingApp(String appName) {
+    return '$appName megnyitása...';
+  }
 }

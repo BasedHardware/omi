@@ -6494,4 +6494,12 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get checkOutMyMemoryGraph => 'Katso muistigraafikani!';
+
+  @override
+  String get getButton => 'Hae';
+
+  @override
+  String openingApp(String appName) {
+    return 'Avataan $appName...';
+  }
 }

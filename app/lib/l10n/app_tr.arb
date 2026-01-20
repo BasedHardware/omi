@@ -2022,5 +2022,7 @@
   "buildingKnowledgeGraphFromMemories": "Anılardan bilgi grafiği oluşturuluyor...",
   "knowledgeGraphWillBuildAutomatically": "Yeni anılar oluşturdukça bilgi grafiğiniz otomatik olarak oluşturulacak.",
   "buildGraphButton": "Grafik Oluştur",
-  "checkOutMyMemoryGraph": "Hafıza grafiğime göz atın!"
+  "checkOutMyMemoryGraph": "Hafıza grafiğime göz atın!",
+  "getButton": "Al",
+  "openingApp": "{appName} açılıyor..."
 }

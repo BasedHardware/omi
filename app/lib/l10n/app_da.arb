@@ -1980,5 +1980,7 @@
   "buildingKnowledgeGraphFromMemories": "Opbygger vidensgraf fra minder...",
   "knowledgeGraphWillBuildAutomatically": "Din vidensgraf vil blive opbygget automatisk, når du opretter nye minder.",
   "buildGraphButton": "Opbyg graf",
-  "checkOutMyMemoryGraph": "Se min hukommelsesgraf!"
+  "checkOutMyMemoryGraph": "Se min hukommelsesgraf!",
+  "getButton": "Hent",
+  "openingApp": "Åbner {appName}..."
 }

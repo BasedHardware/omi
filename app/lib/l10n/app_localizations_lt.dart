@@ -6495,4 +6495,12 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get checkOutMyMemoryGraph => 'Pažiūrėkite mano atminties grafą!';
+
+  @override
+  String get getButton => 'Gauti';
+
+  @override
+  String openingApp(String appName) {
+    return 'Atidaroma $appName...';
+  }
 }

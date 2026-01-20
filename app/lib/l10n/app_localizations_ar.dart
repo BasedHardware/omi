@@ -6447,4 +6447,12 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get checkOutMyMemoryGraph => 'شاهد رسم الذاكرة الخاص بي!';
+
+  @override
+  String get getButton => 'تحميل';
+
+  @override
+  String openingApp(String appName) {
+    return 'جارٍ فتح $appName...';
+  }
 }
