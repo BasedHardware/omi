@@ -224,6 +224,13 @@ Strings:
 - Updated Dart file to use context.l10n.errorWithMessage(e.toString())
 - Ran flutter gen-l10n and verified with test.sh
 
+[2026-01-20] Identified pre-existing untranslated keys
+- Audited app_ar.arb to find keys with English values in non-English ARB files
+- Found ~162 keys that were never properly translated
+- Added PRIORITY 0 task to translate these keys
+- Updated PRD.md to explicitly require proper translations (FR-3)
+- Added CRITICAL notice in progress.txt NOTES section
+
 [2026-01-20] Localized import_history_page.dart
 - Added 2 new l10n keys to all 34 language ARB files
 - Updated Dart file to use context.l10n pattern
