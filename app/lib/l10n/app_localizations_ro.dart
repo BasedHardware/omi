@@ -7024,7 +7024,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get templateName => 'Nume șablon';
 
   @override
-  String get templateNameHint => 'ex., Extractor de acțiuni pentru întâlniri';
+  String get templateNameHint => 'ex. Extractor acțiuni întâlnire';
 
   @override
   String get nameMustBeAtLeast3Characters => 'Numele trebuie să aibă cel puțin 3 caractere';
@@ -7064,126 +7064,125 @@ class AppLocalizationsRo extends AppLocalizations {
   String get failedToCreateApp => 'Nu s-a putut crea aplicația. Vă rugăm să încercați din nou.';
 
   @override
-  String get addAppSelectCoreCapability => 'Please select one more core capability for your app to proceed';
+  String get addAppSelectCoreCapability => 'Selectați încă o capacitate de bază pentru aplicația dvs.';
 
   @override
-  String get addAppSelectPaymentPlan => 'Please select a payment plan and enter a price for your app';
+  String get addAppSelectPaymentPlan => 'Selectați un plan de plată și introduceți un preț pentru aplicație';
 
   @override
-  String get addAppSelectCapability => 'Please select at least one capability for your app';
+  String get addAppSelectCapability => 'Selectați cel puțin o capacitate pentru aplicația dvs.';
 
   @override
-  String get addAppSelectLogo => 'Please select a logo for your app';
+  String get addAppSelectLogo => 'Selectați un logo pentru aplicația dvs.';
 
   @override
-  String get addAppEnterChatPrompt => 'Please enter a chat prompt for your app';
+  String get addAppEnterChatPrompt => 'Introduceți un prompt de chat pentru aplicația dvs.';
 
   @override
-  String get addAppEnterConversationPrompt => 'Please enter a conversation prompt for your app';
+  String get addAppEnterConversationPrompt => 'Introduceți un prompt de conversație pentru aplicația dvs.';
 
   @override
-  String get addAppSelectTriggerEvent => 'Please select a trigger event for your app';
+  String get addAppSelectTriggerEvent => 'Selectați un eveniment declanșator pentru aplicația dvs.';
 
   @override
-  String get addAppEnterWebhookUrl => 'Please enter a webhook URL for your app';
+  String get addAppEnterWebhookUrl => 'Introduceți un URL webhook pentru aplicația dvs.';
 
   @override
-  String get addAppSelectCategory => 'Please select a category for your app';
+  String get addAppSelectCategory => 'Selectați o categorie pentru aplicația dvs.';
 
   @override
-  String get addAppFillRequiredFields => 'Please fill in all the required fields correctly';
+  String get addAppFillRequiredFields => 'Completați corect toate câmpurile obligatorii';
 
   @override
-  String get addAppUpdatedSuccess => 'App updated successfully 🚀';
+  String get addAppUpdatedSuccess => 'Aplicație actualizată cu succes 🚀';
 
   @override
-  String get addAppUpdateFailed => 'Failed to update app. Please try again later';
+  String get addAppUpdateFailed => 'Actualizare eșuată. Încercați mai târziu';
 
   @override
-  String get addAppSubmittedSuccess => 'App submitted successfully 🚀';
+  String get addAppSubmittedSuccess => 'Aplicație trimisă cu succes 🚀';
 
   @override
   String addAppErrorOpeningFilePicker(String message) {
-    return 'Error opening file picker: $message';
+    return 'Eroare la deschiderea selectorului de fișiere: $message';
   }
 
   @override
   String addAppErrorSelectingImage(String error) {
-    return 'Error selecting image: $error';
+    return 'Eroare la selectarea imaginii: $error';
   }
 
   @override
-  String get addAppPhotosPermissionDenied =>
-      'Photos permission denied. Please allow access to photos to select an image';
+  String get addAppPhotosPermissionDenied => 'Permisiune foto refuzată. Permiteți accesul la fotografii';
 
   @override
-  String get addAppErrorSelectingImageRetry => 'Error selecting image. Please try again.';
+  String get addAppErrorSelectingImageRetry => 'Eroare la selectarea imaginii. Încercați din nou.';
 
   @override
   String addAppErrorSelectingThumbnail(String error) {
-    return 'Error selecting thumbnail: $error';
+    return 'Eroare la selectarea miniaturii: $error';
   }
 
   @override
-  String get addAppErrorSelectingThumbnailRetry => 'Error selecting thumbnail. Please try again.';
+  String get addAppErrorSelectingThumbnailRetry => 'Eroare la selectarea miniaturii. Încercați din nou.';
 
   @override
-  String get addAppCapabilityConflictWithPersona => 'Other capabilities cannot be selected with Persona';
+  String get addAppCapabilityConflictWithPersona => 'Alte capacități nu pot fi selectate cu Persona';
 
   @override
-  String get addAppPersonaConflictWithCapabilities => 'Persona cannot be selected with other capabilities';
+  String get addAppPersonaConflictWithCapabilities => 'Persona nu poate fi selectată cu alte capacități';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitter handle not found';
+  String get personaTwitterHandleNotFound => 'Cont Twitter negăsit';
 
   @override
-  String get personaTwitterHandleSuspended => 'Twitter handle is suspended';
+  String get personaTwitterHandleSuspended => 'Cont Twitter suspendat';
 
   @override
-  String get personaFailedToVerifyTwitter => 'Failed to verify Twitter handle';
+  String get personaFailedToVerifyTwitter => 'Verificarea contului Twitter a eșuat';
 
   @override
-  String get personaFailedToFetch => 'Failed to fetch your persona';
+  String get personaFailedToFetch => 'Nu s-a putut obține persona dvs.';
 
   @override
-  String get personaFailedToCreate => 'Failed to create your persona';
+  String get personaFailedToCreate => 'Nu s-a putut crea persona';
 
   @override
-  String get personaConnectKnowledgeSource => 'Please connect at least one knowledge data source (Omi or Twitter)';
+  String get personaConnectKnowledgeSource => 'Conectați cel puțin o sursă de date (Omi sau Twitter)';
 
   @override
-  String get personaUpdatedSuccessfully => 'Persona updated successfully';
+  String get personaUpdatedSuccessfully => 'Persona actualizată cu succes';
 
   @override
-  String get personaFailedToUpdate => 'Failed to update persona';
+  String get personaFailedToUpdate => 'Actualizarea personei a eșuat';
 
   @override
-  String get personaPleaseSelectImage => 'Please select an image';
+  String get personaPleaseSelectImage => 'Selectați o imagine';
 
   @override
-  String get personaFailedToCreateTryLater => 'Failed to create your persona. Please try again later.';
+  String get personaFailedToCreateTryLater => 'Crearea personei a eșuat. Încercați mai târziu.';
 
   @override
   String personaFailedToCreateWithError(String error) {
-    return 'Failed to create persona: $error';
+    return 'Crearea personei a eșuat: $error';
   }
 
   @override
-  String get personaFailedToEnable => 'Failed to enable persona';
+  String get personaFailedToEnable => 'Activarea personei a eșuat';
 
   @override
   String personaErrorEnablingWithError(String error) {
-    return 'Error enabling persona: $error';
+    return 'Eroare la activarea personei: $error';
   }
 
   @override
-  String get paymentFailedToFetchCountries => 'Failed to fetch supported countries. Please try again later.';
+  String get paymentFailedToFetchCountries => 'Nu s-au putut obține țările acceptate. Încercați mai târziu.';
 
   @override
-  String get paymentFailedToSetDefault => 'Failed to set default payment method. Please try again later.';
+  String get paymentFailedToSetDefault => 'Nu s-a putut seta metoda de plată implicită. Încercați mai târziu.';
 
   @override
-  String get paymentFailedToSavePaypal => 'Failed to save PayPal details. Please try again later.';
+  String get paymentFailedToSavePaypal => 'Nu s-au putut salva detaliile PayPal. Încercați mai târziu.';
 
   @override
   String get paypalEmailHint => 'nik@example.com';
@@ -7198,28 +7197,28 @@ class AppLocalizationsRo extends AppLocalizations {
   String get paymentMethodPayPal => 'PayPal';
 
   @override
-  String get paymentStatusActive => 'Active';
+  String get paymentStatusActive => 'Activ';
 
   @override
-  String get paymentStatusConnected => 'Connected';
+  String get paymentStatusConnected => 'Conectat';
 
   @override
-  String get paymentStatusNotConnected => 'Not Connected';
+  String get paymentStatusNotConnected => 'Neconectat';
 
   @override
-  String get paymentAppCost => 'App Cost';
+  String get paymentAppCost => 'Cost aplicație';
 
   @override
-  String get paymentEnterValidAmount => 'Please enter a valid amount';
+  String get paymentEnterValidAmount => 'Introduceți o sumă validă';
 
   @override
-  String get paymentEnterAmountGreaterThanZero => 'Please enter an amount greater than 0';
+  String get paymentEnterAmountGreaterThanZero => 'Introduceți o sumă mai mare de 0';
 
   @override
-  String get paymentPlan => 'Payment Plan';
+  String get paymentPlan => 'Plan de plată';
 
   @override
-  String get paymentNoneSelected => 'None Selected';
+  String get paymentNoneSelected => 'Nimic selectat';
 
   @override
   String get aiGenPleaseEnterDescription => 'Vă rugăm să introduceți o descriere pentru aplicația dvs.';
@@ -7270,4 +7269,30 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get connectOmiDevice => 'Connect Omi Device';
+
+  @override
+  String planSwitchingDescriptionWithTitle(String title) {
+    return 'You\'re switching your Unlimited Plan to the $title. Are you sure you want to proceed?';
+  }
+
+  @override
+  String get planUpgradeScheduledMessage =>
+      'Upgrade scheduled! Your monthly plan continues until the end of your billing period, then automatically switches to annual.';
+
+  @override
+  String get couldNotSchedulePlanChange => 'Could not schedule plan change. Please try again.';
+
+  @override
+  String get subscriptionReactivatedDefault =>
+      'Your subscription has been reactivated! No charge now - you\'ll be billed at the end of your current period.';
+
+  @override
+  String get subscriptionSuccessfulCharged =>
+      'Subscription successful! You\'ve been charged for the new billing period.';
+
+  @override
+  String get couldNotProcessSubscription => 'Could not process subscription. Please try again.';
+
+  @override
+  String get couldNotLaunchUpgradePage => 'Could not launch upgrade page. Please try again.';
 }

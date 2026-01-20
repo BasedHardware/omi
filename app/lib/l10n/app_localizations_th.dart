@@ -6957,7 +6957,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get templateName => 'ชื่อเทมเพลต';
 
   @override
-  String get templateNameHint => 'เช่น ตัวดึงรายการการดำเนินการจากการประชุม';
+  String get templateNameHint => 'เช่น ตัวดึงรายการการดำเนินการประชุม';
 
   @override
   String get nameMustBeAtLeast3Characters => 'ชื่อต้องมีอย่างน้อย 3 ตัวอักษร';
@@ -6996,126 +6996,125 @@ class AppLocalizationsTh extends AppLocalizations {
   String get failedToCreateApp => 'ไม่สามารถสร้างแอปได้ กรุณาลองอีกครั้ง';
 
   @override
-  String get addAppSelectCoreCapability => 'Please select one more core capability for your app to proceed';
+  String get addAppSelectCoreCapability => 'โปรดเลือกความสามารถหลักอีกหนึ่งอย่างสำหรับแอปของคุณ';
 
   @override
-  String get addAppSelectPaymentPlan => 'Please select a payment plan and enter a price for your app';
+  String get addAppSelectPaymentPlan => 'โปรดเลือกแผนการชำระเงินและใส่ราคาสำหรับแอปของคุณ';
 
   @override
-  String get addAppSelectCapability => 'Please select at least one capability for your app';
+  String get addAppSelectCapability => 'โปรดเลือกความสามารถอย่างน้อยหนึ่งอย่างสำหรับแอปของคุณ';
 
   @override
-  String get addAppSelectLogo => 'Please select a logo for your app';
+  String get addAppSelectLogo => 'โปรดเลือกโลโก้สำหรับแอปของคุณ';
 
   @override
-  String get addAppEnterChatPrompt => 'Please enter a chat prompt for your app';
+  String get addAppEnterChatPrompt => 'โปรดใส่ข้อความแชทสำหรับแอปของคุณ';
 
   @override
-  String get addAppEnterConversationPrompt => 'Please enter a conversation prompt for your app';
+  String get addAppEnterConversationPrompt => 'โปรดใส่ข้อความสนทนาสำหรับแอปของคุณ';
 
   @override
-  String get addAppSelectTriggerEvent => 'Please select a trigger event for your app';
+  String get addAppSelectTriggerEvent => 'โปรดเลือกเหตุการณ์ทริกเกอร์สำหรับแอปของคุณ';
 
   @override
-  String get addAppEnterWebhookUrl => 'Please enter a webhook URL for your app';
+  String get addAppEnterWebhookUrl => 'โปรดใส่ URL webhook สำหรับแอปของคุณ';
 
   @override
-  String get addAppSelectCategory => 'Please select a category for your app';
+  String get addAppSelectCategory => 'โปรดเลือกหมวดหมู่สำหรับแอปของคุณ';
 
   @override
-  String get addAppFillRequiredFields => 'Please fill in all the required fields correctly';
+  String get addAppFillRequiredFields => 'โปรดกรอกข้อมูลที่จำเป็นทั้งหมดให้ถูกต้อง';
 
   @override
-  String get addAppUpdatedSuccess => 'App updated successfully 🚀';
+  String get addAppUpdatedSuccess => 'อัปเดตแอปสำเร็จ 🚀';
 
   @override
-  String get addAppUpdateFailed => 'Failed to update app. Please try again later';
+  String get addAppUpdateFailed => 'อัปเดตล้มเหลว โปรดลองอีกครั้งภายหลัง';
 
   @override
-  String get addAppSubmittedSuccess => 'App submitted successfully 🚀';
+  String get addAppSubmittedSuccess => 'ส่งแอปสำเร็จ 🚀';
 
   @override
   String addAppErrorOpeningFilePicker(String message) {
-    return 'Error opening file picker: $message';
+    return 'เกิดข้อผิดพลาดในการเปิดตัวเลือกไฟล์: $message';
   }
 
   @override
   String addAppErrorSelectingImage(String error) {
-    return 'Error selecting image: $error';
+    return 'เกิดข้อผิดพลาดในการเลือกรูปภาพ: $error';
   }
 
   @override
-  String get addAppPhotosPermissionDenied =>
-      'Photos permission denied. Please allow access to photos to select an image';
+  String get addAppPhotosPermissionDenied => 'การอนุญาตเข้าถึงรูปภาพถูกปฏิเสธ โปรดอนุญาตการเข้าถึงรูปภาพ';
 
   @override
-  String get addAppErrorSelectingImageRetry => 'Error selecting image. Please try again.';
+  String get addAppErrorSelectingImageRetry => 'เกิดข้อผิดพลาดในการเลือกรูปภาพ โปรดลองอีกครั้ง';
 
   @override
   String addAppErrorSelectingThumbnail(String error) {
-    return 'Error selecting thumbnail: $error';
+    return 'เกิดข้อผิดพลาดในการเลือกรูปขนาดย่อ: $error';
   }
 
   @override
-  String get addAppErrorSelectingThumbnailRetry => 'Error selecting thumbnail. Please try again.';
+  String get addAppErrorSelectingThumbnailRetry => 'เกิดข้อผิดพลาดในการเลือกรูปขนาดย่อ โปรดลองอีกครั้ง';
 
   @override
-  String get addAppCapabilityConflictWithPersona => 'Other capabilities cannot be selected with Persona';
+  String get addAppCapabilityConflictWithPersona => 'ไม่สามารถเลือกความสามารถอื่นพร้อมกับ Persona ได้';
 
   @override
-  String get addAppPersonaConflictWithCapabilities => 'Persona cannot be selected with other capabilities';
+  String get addAppPersonaConflictWithCapabilities => 'ไม่สามารถเลือก Persona พร้อมกับความสามารถอื่นได้';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitter handle not found';
+  String get personaTwitterHandleNotFound => 'ไม่พบบัญชี Twitter';
 
   @override
-  String get personaTwitterHandleSuspended => 'Twitter handle is suspended';
+  String get personaTwitterHandleSuspended => 'บัญชี Twitter ถูกระงับ';
 
   @override
-  String get personaFailedToVerifyTwitter => 'Failed to verify Twitter handle';
+  String get personaFailedToVerifyTwitter => 'ไม่สามารถยืนยันบัญชี Twitter ได้';
 
   @override
-  String get personaFailedToFetch => 'Failed to fetch your persona';
+  String get personaFailedToFetch => 'ไม่สามารถดึงข้อมูล Persona ของคุณได้';
 
   @override
-  String get personaFailedToCreate => 'Failed to create your persona';
+  String get personaFailedToCreate => 'ไม่สามารถสร้าง Persona ของคุณได้';
 
   @override
-  String get personaConnectKnowledgeSource => 'Please connect at least one knowledge data source (Omi or Twitter)';
+  String get personaConnectKnowledgeSource => 'โปรดเชื่อมต่อแหล่งข้อมูลอย่างน้อยหนึ่งแหล่ง (Omi หรือ Twitter)';
 
   @override
-  String get personaUpdatedSuccessfully => 'Persona updated successfully';
+  String get personaUpdatedSuccessfully => 'อัปเดต Persona สำเร็จ';
 
   @override
-  String get personaFailedToUpdate => 'Failed to update persona';
+  String get personaFailedToUpdate => 'อัปเดต Persona ล้มเหลว';
 
   @override
-  String get personaPleaseSelectImage => 'Please select an image';
+  String get personaPleaseSelectImage => 'โปรดเลือกรูปภาพ';
 
   @override
-  String get personaFailedToCreateTryLater => 'Failed to create your persona. Please try again later.';
+  String get personaFailedToCreateTryLater => 'ไม่สามารถสร้าง Persona ได้ โปรดลองอีกครั้งภายหลัง';
 
   @override
   String personaFailedToCreateWithError(String error) {
-    return 'Failed to create persona: $error';
+    return 'สร้าง Persona ล้มเหลว: $error';
   }
 
   @override
-  String get personaFailedToEnable => 'Failed to enable persona';
+  String get personaFailedToEnable => 'ไม่สามารถเปิดใช้งาน Persona ได้';
 
   @override
   String personaErrorEnablingWithError(String error) {
-    return 'Error enabling persona: $error';
+    return 'เกิดข้อผิดพลาดในการเปิดใช้งาน Persona: $error';
   }
 
   @override
-  String get paymentFailedToFetchCountries => 'Failed to fetch supported countries. Please try again later.';
+  String get paymentFailedToFetchCountries => 'ไม่สามารถดึงรายชื่อประเทศที่รองรับได้ โปรดลองอีกครั้งภายหลัง';
 
   @override
-  String get paymentFailedToSetDefault => 'Failed to set default payment method. Please try again later.';
+  String get paymentFailedToSetDefault => 'ไม่สามารถตั้งค่าวิธีการชำระเงินเริ่มต้นได้ โปรดลองอีกครั้งภายหลัง';
 
   @override
-  String get paymentFailedToSavePaypal => 'Failed to save PayPal details. Please try again later.';
+  String get paymentFailedToSavePaypal => 'ไม่สามารถบันทึกข้อมูล PayPal ได้ โปรดลองอีกครั้งภายหลัง';
 
   @override
   String get paypalEmailHint => 'nik@example.com';
@@ -7130,28 +7129,28 @@ class AppLocalizationsTh extends AppLocalizations {
   String get paymentMethodPayPal => 'PayPal';
 
   @override
-  String get paymentStatusActive => 'Active';
+  String get paymentStatusActive => 'ใช้งานอยู่';
 
   @override
-  String get paymentStatusConnected => 'Connected';
+  String get paymentStatusConnected => 'เชื่อมต่อแล้ว';
 
   @override
-  String get paymentStatusNotConnected => 'Not Connected';
+  String get paymentStatusNotConnected => 'ไม่ได้เชื่อมต่อ';
 
   @override
-  String get paymentAppCost => 'App Cost';
+  String get paymentAppCost => 'ค่าใช้จ่ายแอป';
 
   @override
-  String get paymentEnterValidAmount => 'Please enter a valid amount';
+  String get paymentEnterValidAmount => 'โปรดใส่จำนวนเงินที่ถูกต้อง';
 
   @override
-  String get paymentEnterAmountGreaterThanZero => 'Please enter an amount greater than 0';
+  String get paymentEnterAmountGreaterThanZero => 'โปรดใส่จำนวนเงินมากกว่า 0';
 
   @override
-  String get paymentPlan => 'Payment Plan';
+  String get paymentPlan => 'แผนการชำระเงิน';
 
   @override
-  String get paymentNoneSelected => 'None Selected';
+  String get paymentNoneSelected => 'ไม่ได้เลือก';
 
   @override
   String get aiGenPleaseEnterDescription => 'กรุณาใส่คำอธิบายสำหรับแอปของคุณ';
@@ -7202,4 +7201,30 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get connectOmiDevice => 'Connect Omi Device';
+
+  @override
+  String planSwitchingDescriptionWithTitle(String title) {
+    return 'You\'re switching your Unlimited Plan to the $title. Are you sure you want to proceed?';
+  }
+
+  @override
+  String get planUpgradeScheduledMessage =>
+      'Upgrade scheduled! Your monthly plan continues until the end of your billing period, then automatically switches to annual.';
+
+  @override
+  String get couldNotSchedulePlanChange => 'Could not schedule plan change. Please try again.';
+
+  @override
+  String get subscriptionReactivatedDefault =>
+      'Your subscription has been reactivated! No charge now - you\'ll be billed at the end of your current period.';
+
+  @override
+  String get subscriptionSuccessfulCharged =>
+      'Subscription successful! You\'ve been charged for the new billing period.';
+
+  @override
+  String get couldNotProcessSubscription => 'Could not process subscription. Please try again.';
+
+  @override
+  String get couldNotLaunchUpgradePage => 'Could not launch upgrade page. Please try again.';
 }

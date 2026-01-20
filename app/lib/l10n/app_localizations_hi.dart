@@ -6971,7 +6971,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get templateName => 'टेम्पलेट नाम';
 
   @override
-  String get templateNameHint => 'उदा., मीटिंग एक्शन आइटम एक्सट्रैक्टर';
+  String get templateNameHint => 'उदा. मीटिंग एक्शन आइटम एक्सट्रैक्टर';
 
   @override
   String get nameMustBeAtLeast3Characters => 'नाम कम से कम 3 अक्षर का होना चाहिए';
@@ -7010,126 +7010,125 @@ class AppLocalizationsHi extends AppLocalizations {
   String get failedToCreateApp => 'ऐप बनाने में विफल। कृपया पुनः प्रयास करें।';
 
   @override
-  String get addAppSelectCoreCapability => 'Please select one more core capability for your app to proceed';
+  String get addAppSelectCoreCapability => 'कृपया अपने ऐप के लिए एक और मुख्य क्षमता चुनें';
 
   @override
-  String get addAppSelectPaymentPlan => 'Please select a payment plan and enter a price for your app';
+  String get addAppSelectPaymentPlan => 'कृपया भुगतान योजना चुनें और अपने ऐप के लिए कीमत दर्ज करें';
 
   @override
-  String get addAppSelectCapability => 'Please select at least one capability for your app';
+  String get addAppSelectCapability => 'कृपया अपने ऐप के लिए कम से कम एक क्षमता चुनें';
 
   @override
-  String get addAppSelectLogo => 'Please select a logo for your app';
+  String get addAppSelectLogo => 'कृपया अपने ऐप के लिए एक लोगो चुनें';
 
   @override
-  String get addAppEnterChatPrompt => 'Please enter a chat prompt for your app';
+  String get addAppEnterChatPrompt => 'कृपया अपने ऐप के लिए चैट प्रॉम्प्ट दर्ज करें';
 
   @override
-  String get addAppEnterConversationPrompt => 'Please enter a conversation prompt for your app';
+  String get addAppEnterConversationPrompt => 'कृपया अपने ऐप के लिए वार्तालाप प्रॉम्प्ट दर्ज करें';
 
   @override
-  String get addAppSelectTriggerEvent => 'Please select a trigger event for your app';
+  String get addAppSelectTriggerEvent => 'कृपया अपने ऐप के लिए ट्रिगर इवेंट चुनें';
 
   @override
-  String get addAppEnterWebhookUrl => 'Please enter a webhook URL for your app';
+  String get addAppEnterWebhookUrl => 'कृपया अपने ऐप के लिए वेबहुक URL दर्ज करें';
 
   @override
-  String get addAppSelectCategory => 'Please select a category for your app';
+  String get addAppSelectCategory => 'कृपया अपने ऐप के लिए एक श्रेणी चुनें';
 
   @override
-  String get addAppFillRequiredFields => 'Please fill in all the required fields correctly';
+  String get addAppFillRequiredFields => 'कृपया सभी आवश्यक फ़ील्ड सही ढंग से भरें';
 
   @override
-  String get addAppUpdatedSuccess => 'App updated successfully 🚀';
+  String get addAppUpdatedSuccess => 'ऐप सफलतापूर्वक अपडेट हुआ 🚀';
 
   @override
-  String get addAppUpdateFailed => 'Failed to update app. Please try again later';
+  String get addAppUpdateFailed => 'अपडेट विफल। कृपया बाद में पुनः प्रयास करें';
 
   @override
-  String get addAppSubmittedSuccess => 'App submitted successfully 🚀';
+  String get addAppSubmittedSuccess => 'ऐप सफलतापूर्वक सबमिट हुआ 🚀';
 
   @override
   String addAppErrorOpeningFilePicker(String message) {
-    return 'Error opening file picker: $message';
+    return 'फ़ाइल पिकर खोलने में त्रुटि: $message';
   }
 
   @override
   String addAppErrorSelectingImage(String error) {
-    return 'Error selecting image: $error';
+    return 'छवि चुनने में त्रुटि: $error';
   }
 
   @override
-  String get addAppPhotosPermissionDenied =>
-      'Photos permission denied. Please allow access to photos to select an image';
+  String get addAppPhotosPermissionDenied => 'फ़ोटो अनुमति अस्वीकृत। कृपया फ़ोटो एक्सेस की अनुमति दें';
 
   @override
-  String get addAppErrorSelectingImageRetry => 'Error selecting image. Please try again.';
+  String get addAppErrorSelectingImageRetry => 'छवि चुनने में त्रुटि। कृपया पुनः प्रयास करें।';
 
   @override
   String addAppErrorSelectingThumbnail(String error) {
-    return 'Error selecting thumbnail: $error';
+    return 'थंबनेल चुनने में त्रुटि: $error';
   }
 
   @override
-  String get addAppErrorSelectingThumbnailRetry => 'Error selecting thumbnail. Please try again.';
+  String get addAppErrorSelectingThumbnailRetry => 'थंबनेल चुनने में त्रुटि। कृपया पुनः प्रयास करें।';
 
   @override
-  String get addAppCapabilityConflictWithPersona => 'Other capabilities cannot be selected with Persona';
+  String get addAppCapabilityConflictWithPersona => 'पर्सोना के साथ अन्य क्षमताएं नहीं चुनी जा सकतीं';
 
   @override
-  String get addAppPersonaConflictWithCapabilities => 'Persona cannot be selected with other capabilities';
+  String get addAppPersonaConflictWithCapabilities => 'पर्सोना को अन्य क्षमताओं के साथ नहीं चुना जा सकता';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitter handle not found';
+  String get personaTwitterHandleNotFound => 'Twitter हैंडल नहीं मिला';
 
   @override
-  String get personaTwitterHandleSuspended => 'Twitter handle is suspended';
+  String get personaTwitterHandleSuspended => 'Twitter हैंडल निलंबित है';
 
   @override
-  String get personaFailedToVerifyTwitter => 'Failed to verify Twitter handle';
+  String get personaFailedToVerifyTwitter => 'Twitter हैंडल सत्यापन विफल';
 
   @override
-  String get personaFailedToFetch => 'Failed to fetch your persona';
+  String get personaFailedToFetch => 'आपका पर्सोना प्राप्त करने में विफल';
 
   @override
-  String get personaFailedToCreate => 'Failed to create your persona';
+  String get personaFailedToCreate => 'पर्सोना बनाने में विफल';
 
   @override
-  String get personaConnectKnowledgeSource => 'Please connect at least one knowledge data source (Omi or Twitter)';
+  String get personaConnectKnowledgeSource => 'कृपया कम से कम एक डेटा स्रोत कनेक्ट करें (Omi या Twitter)';
 
   @override
-  String get personaUpdatedSuccessfully => 'Persona updated successfully';
+  String get personaUpdatedSuccessfully => 'पर्सोना सफलतापूर्वक अपडेट हुआ';
 
   @override
-  String get personaFailedToUpdate => 'Failed to update persona';
+  String get personaFailedToUpdate => 'पर्सोना अपडेट विफल';
 
   @override
-  String get personaPleaseSelectImage => 'Please select an image';
+  String get personaPleaseSelectImage => 'कृपया एक छवि चुनें';
 
   @override
-  String get personaFailedToCreateTryLater => 'Failed to create your persona. Please try again later.';
+  String get personaFailedToCreateTryLater => 'पर्सोना बनाने में विफल। कृपया बाद में पुनः प्रयास करें।';
 
   @override
   String personaFailedToCreateWithError(String error) {
-    return 'Failed to create persona: $error';
+    return 'पर्सोना बनाने में विफल: $error';
   }
 
   @override
-  String get personaFailedToEnable => 'Failed to enable persona';
+  String get personaFailedToEnable => 'पर्सोना सक्षम करने में विफल';
 
   @override
   String personaErrorEnablingWithError(String error) {
-    return 'Error enabling persona: $error';
+    return 'पर्सोना सक्षम करने में त्रुटि: $error';
   }
 
   @override
-  String get paymentFailedToFetchCountries => 'Failed to fetch supported countries. Please try again later.';
+  String get paymentFailedToFetchCountries => 'समर्थित देश प्राप्त करने में विफल। कृपया बाद में पुनः प्रयास करें।';
 
   @override
-  String get paymentFailedToSetDefault => 'Failed to set default payment method. Please try again later.';
+  String get paymentFailedToSetDefault => 'डिफ़ॉल्ट भुगतान विधि सेट करने में विफल। कृपया बाद में पुनः प्रयास करें।';
 
   @override
-  String get paymentFailedToSavePaypal => 'Failed to save PayPal details. Please try again later.';
+  String get paymentFailedToSavePaypal => 'PayPal विवरण सहेजने में विफल। कृपया बाद में पुनः प्रयास करें।';
 
   @override
   String get paypalEmailHint => 'nik@example.com';
@@ -7144,28 +7143,28 @@ class AppLocalizationsHi extends AppLocalizations {
   String get paymentMethodPayPal => 'PayPal';
 
   @override
-  String get paymentStatusActive => 'Active';
+  String get paymentStatusActive => 'सक्रिय';
 
   @override
-  String get paymentStatusConnected => 'Connected';
+  String get paymentStatusConnected => 'कनेक्टेड';
 
   @override
-  String get paymentStatusNotConnected => 'Not Connected';
+  String get paymentStatusNotConnected => 'कनेक्ट नहीं';
 
   @override
-  String get paymentAppCost => 'App Cost';
+  String get paymentAppCost => 'ऐप लागत';
 
   @override
-  String get paymentEnterValidAmount => 'Please enter a valid amount';
+  String get paymentEnterValidAmount => 'कृपया एक वैध राशि दर्ज करें';
 
   @override
-  String get paymentEnterAmountGreaterThanZero => 'Please enter an amount greater than 0';
+  String get paymentEnterAmountGreaterThanZero => 'कृपया 0 से अधिक राशि दर्ज करें';
 
   @override
-  String get paymentPlan => 'Payment Plan';
+  String get paymentPlan => 'भुगतान योजना';
 
   @override
-  String get paymentNoneSelected => 'None Selected';
+  String get paymentNoneSelected => 'कोई नहीं चुना';
 
   @override
   String get aiGenPleaseEnterDescription => 'कृपया अपने ऐप के लिए विवरण दर्ज करें';
@@ -7216,4 +7215,30 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get connectOmiDevice => 'Connect Omi Device';
+
+  @override
+  String planSwitchingDescriptionWithTitle(String title) {
+    return 'You\'re switching your Unlimited Plan to the $title. Are you sure you want to proceed?';
+  }
+
+  @override
+  String get planUpgradeScheduledMessage =>
+      'Upgrade scheduled! Your monthly plan continues until the end of your billing period, then automatically switches to annual.';
+
+  @override
+  String get couldNotSchedulePlanChange => 'Could not schedule plan change. Please try again.';
+
+  @override
+  String get subscriptionReactivatedDefault =>
+      'Your subscription has been reactivated! No charge now - you\'ll be billed at the end of your current period.';
+
+  @override
+  String get subscriptionSuccessfulCharged =>
+      'Subscription successful! You\'ve been charged for the new billing period.';
+
+  @override
+  String get couldNotProcessSubscription => 'Could not process subscription. Please try again.';
+
+  @override
+  String get couldNotLaunchUpgradePage => 'Could not launch upgrade page. Please try again.';
 }

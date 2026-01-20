@@ -13610,6 +13610,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Connect Omi Device'**
   String get connectOmiDevice;
+
+  /// Dialog description when switching from unlimited plan
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re switching your Unlimited Plan to the {title}. Are you sure you want to proceed?'**
+  String planSwitchingDescriptionWithTitle(String title);
+
+  /// Success message when plan upgrade is scheduled
+  ///
+  /// In en, this message translates to:
+  /// **'Upgrade scheduled! Your monthly plan continues until the end of your billing period, then automatically switches to annual.'**
+  String get planUpgradeScheduledMessage;
+
+  /// Error when plan change cannot be scheduled
+  ///
+  /// In en, this message translates to:
+  /// **'Could not schedule plan change. Please try again.'**
+  String get couldNotSchedulePlanChange;
+
+  /// Default message when subscription is reactivated
+  ///
+  /// In en, this message translates to:
+  /// **'Your subscription has been reactivated! No charge now - you\'ll be billed at the end of your current period.'**
+  String get subscriptionReactivatedDefault;
+
+  /// Success message after subscription checkout
+  ///
+  /// In en, this message translates to:
+  /// **'Subscription successful! You\'ve been charged for the new billing period.'**
+  String get subscriptionSuccessfulCharged;
+
+  /// Error when subscription cannot be processed
+  ///
+  /// In en, this message translates to:
+  /// **'Could not process subscription. Please try again.'**
+  String get couldNotProcessSubscription;
+
+  /// Error when upgrade page cannot be launched
+  ///
+  /// In en, this message translates to:
+  /// **'Could not launch upgrade page. Please try again.'**
+  String get couldNotLaunchUpgradePage;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

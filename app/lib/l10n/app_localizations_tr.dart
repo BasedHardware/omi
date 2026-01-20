@@ -7002,7 +7002,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get templateName => 'Şablon Adı';
 
   @override
-  String get templateNameHint => 'örn., Toplantı Eylem Maddesi Çıkarıcı';
+  String get templateNameHint => 'örn. Toplantı Eylem Maddeleri Çıkarıcı';
 
   @override
   String get nameMustBeAtLeast3Characters => 'Ad en az 3 karakter olmalıdır';
@@ -7042,126 +7042,125 @@ class AppLocalizationsTr extends AppLocalizations {
   String get failedToCreateApp => 'Uygulama oluşturulamadı. Lütfen tekrar deneyin.';
 
   @override
-  String get addAppSelectCoreCapability => 'Please select one more core capability for your app to proceed';
+  String get addAppSelectCoreCapability => 'Uygulamanız için bir temel yetenek daha seçin';
 
   @override
-  String get addAppSelectPaymentPlan => 'Please select a payment plan and enter a price for your app';
+  String get addAppSelectPaymentPlan => 'Bir ödeme planı seçin ve uygulamanız için fiyat girin';
 
   @override
-  String get addAppSelectCapability => 'Please select at least one capability for your app';
+  String get addAppSelectCapability => 'Uygulamanız için en az bir yetenek seçin';
 
   @override
-  String get addAppSelectLogo => 'Please select a logo for your app';
+  String get addAppSelectLogo => 'Uygulamanız için bir logo seçin';
 
   @override
-  String get addAppEnterChatPrompt => 'Please enter a chat prompt for your app';
+  String get addAppEnterChatPrompt => 'Uygulamanız için bir sohbet istemi girin';
 
   @override
-  String get addAppEnterConversationPrompt => 'Please enter a conversation prompt for your app';
+  String get addAppEnterConversationPrompt => 'Uygulamanız için bir konuşma istemi girin';
 
   @override
-  String get addAppSelectTriggerEvent => 'Please select a trigger event for your app';
+  String get addAppSelectTriggerEvent => 'Uygulamanız için bir tetikleyici olay seçin';
 
   @override
-  String get addAppEnterWebhookUrl => 'Please enter a webhook URL for your app';
+  String get addAppEnterWebhookUrl => 'Uygulamanız için bir webhook URL\'si girin';
 
   @override
-  String get addAppSelectCategory => 'Please select a category for your app';
+  String get addAppSelectCategory => 'Uygulamanız için bir kategori seçin';
 
   @override
-  String get addAppFillRequiredFields => 'Please fill in all the required fields correctly';
+  String get addAppFillRequiredFields => 'Tüm gerekli alanları doğru şekilde doldurun';
 
   @override
-  String get addAppUpdatedSuccess => 'App updated successfully 🚀';
+  String get addAppUpdatedSuccess => 'Uygulama başarıyla güncellendi 🚀';
 
   @override
-  String get addAppUpdateFailed => 'Failed to update app. Please try again later';
+  String get addAppUpdateFailed => 'Güncelleme başarısız. Daha sonra tekrar deneyin';
 
   @override
-  String get addAppSubmittedSuccess => 'App submitted successfully 🚀';
+  String get addAppSubmittedSuccess => 'Uygulama başarıyla gönderildi 🚀';
 
   @override
   String addAppErrorOpeningFilePicker(String message) {
-    return 'Error opening file picker: $message';
+    return 'Dosya seçici açılırken hata: $message';
   }
 
   @override
   String addAppErrorSelectingImage(String error) {
-    return 'Error selecting image: $error';
+    return 'Görsel seçilirken hata: $error';
   }
 
   @override
-  String get addAppPhotosPermissionDenied =>
-      'Photos permission denied. Please allow access to photos to select an image';
+  String get addAppPhotosPermissionDenied => 'Fotoğraf izni reddedildi. Fotoğraflara erişime izin verin';
 
   @override
-  String get addAppErrorSelectingImageRetry => 'Error selecting image. Please try again.';
+  String get addAppErrorSelectingImageRetry => 'Görsel seçilirken hata. Tekrar deneyin.';
 
   @override
   String addAppErrorSelectingThumbnail(String error) {
-    return 'Error selecting thumbnail: $error';
+    return 'Küçük resim seçilirken hata: $error';
   }
 
   @override
-  String get addAppErrorSelectingThumbnailRetry => 'Error selecting thumbnail. Please try again.';
+  String get addAppErrorSelectingThumbnailRetry => 'Küçük resim seçilirken hata. Tekrar deneyin.';
 
   @override
-  String get addAppCapabilityConflictWithPersona => 'Other capabilities cannot be selected with Persona';
+  String get addAppCapabilityConflictWithPersona => 'Diğer yetenekler Persona ile birlikte seçilemez';
 
   @override
-  String get addAppPersonaConflictWithCapabilities => 'Persona cannot be selected with other capabilities';
+  String get addAppPersonaConflictWithCapabilities => 'Persona diğer yeteneklerle birlikte seçilemez';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitter handle not found';
+  String get personaTwitterHandleNotFound => 'Twitter hesabı bulunamadı';
 
   @override
-  String get personaTwitterHandleSuspended => 'Twitter handle is suspended';
+  String get personaTwitterHandleSuspended => 'Twitter hesabı askıya alındı';
 
   @override
-  String get personaFailedToVerifyTwitter => 'Failed to verify Twitter handle';
+  String get personaFailedToVerifyTwitter => 'Twitter hesabı doğrulanamadı';
 
   @override
-  String get personaFailedToFetch => 'Failed to fetch your persona';
+  String get personaFailedToFetch => 'Persona alınamadı';
 
   @override
-  String get personaFailedToCreate => 'Failed to create your persona';
+  String get personaFailedToCreate => 'Persona oluşturulamadı';
 
   @override
-  String get personaConnectKnowledgeSource => 'Please connect at least one knowledge data source (Omi or Twitter)';
+  String get personaConnectKnowledgeSource => 'En az bir veri kaynağı bağlayın (Omi veya Twitter)';
 
   @override
-  String get personaUpdatedSuccessfully => 'Persona updated successfully';
+  String get personaUpdatedSuccessfully => 'Persona başarıyla güncellendi';
 
   @override
-  String get personaFailedToUpdate => 'Failed to update persona';
+  String get personaFailedToUpdate => 'Persona güncellenemedi';
 
   @override
-  String get personaPleaseSelectImage => 'Please select an image';
+  String get personaPleaseSelectImage => 'Bir görsel seçin';
 
   @override
-  String get personaFailedToCreateTryLater => 'Failed to create your persona. Please try again later.';
+  String get personaFailedToCreateTryLater => 'Persona oluşturulamadı. Daha sonra tekrar deneyin.';
 
   @override
   String personaFailedToCreateWithError(String error) {
-    return 'Failed to create persona: $error';
+    return 'Persona oluşturulamadı: $error';
   }
 
   @override
-  String get personaFailedToEnable => 'Failed to enable persona';
+  String get personaFailedToEnable => 'Persona etkinleştirilemedi';
 
   @override
   String personaErrorEnablingWithError(String error) {
-    return 'Error enabling persona: $error';
+    return 'Persona etkinleştirilirken hata: $error';
   }
 
   @override
-  String get paymentFailedToFetchCountries => 'Failed to fetch supported countries. Please try again later.';
+  String get paymentFailedToFetchCountries => 'Desteklenen ülkeler alınamadı. Daha sonra tekrar deneyin.';
 
   @override
-  String get paymentFailedToSetDefault => 'Failed to set default payment method. Please try again later.';
+  String get paymentFailedToSetDefault => 'Varsayılan ödeme yöntemi ayarlanamadı. Daha sonra tekrar deneyin.';
 
   @override
-  String get paymentFailedToSavePaypal => 'Failed to save PayPal details. Please try again later.';
+  String get paymentFailedToSavePaypal => 'PayPal bilgileri kaydedilemedi. Daha sonra tekrar deneyin.';
 
   @override
   String get paypalEmailHint => 'nik@example.com';
@@ -7176,28 +7175,28 @@ class AppLocalizationsTr extends AppLocalizations {
   String get paymentMethodPayPal => 'PayPal';
 
   @override
-  String get paymentStatusActive => 'Active';
+  String get paymentStatusActive => 'Aktif';
 
   @override
-  String get paymentStatusConnected => 'Connected';
+  String get paymentStatusConnected => 'Bağlı';
 
   @override
-  String get paymentStatusNotConnected => 'Not Connected';
+  String get paymentStatusNotConnected => 'Bağlı Değil';
 
   @override
-  String get paymentAppCost => 'App Cost';
+  String get paymentAppCost => 'Uygulama Maliyeti';
 
   @override
-  String get paymentEnterValidAmount => 'Please enter a valid amount';
+  String get paymentEnterValidAmount => 'Geçerli bir tutar girin';
 
   @override
-  String get paymentEnterAmountGreaterThanZero => 'Please enter an amount greater than 0';
+  String get paymentEnterAmountGreaterThanZero => '0\'dan büyük bir tutar girin';
 
   @override
-  String get paymentPlan => 'Payment Plan';
+  String get paymentPlan => 'Ödeme Planı';
 
   @override
-  String get paymentNoneSelected => 'None Selected';
+  String get paymentNoneSelected => 'Seçilmedi';
 
   @override
   String get aiGenPleaseEnterDescription => 'Lütfen uygulamanız için bir açıklama girin';
@@ -7248,4 +7247,30 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get connectOmiDevice => 'Connect Omi Device';
+
+  @override
+  String planSwitchingDescriptionWithTitle(String title) {
+    return 'You\'re switching your Unlimited Plan to the $title. Are you sure you want to proceed?';
+  }
+
+  @override
+  String get planUpgradeScheduledMessage =>
+      'Upgrade scheduled! Your monthly plan continues until the end of your billing period, then automatically switches to annual.';
+
+  @override
+  String get couldNotSchedulePlanChange => 'Could not schedule plan change. Please try again.';
+
+  @override
+  String get subscriptionReactivatedDefault =>
+      'Your subscription has been reactivated! No charge now - you\'ll be billed at the end of your current period.';
+
+  @override
+  String get subscriptionSuccessfulCharged =>
+      'Subscription successful! You\'ve been charged for the new billing period.';
+
+  @override
+  String get couldNotProcessSubscription => 'Could not process subscription. Please try again.';
+
+  @override
+  String get couldNotLaunchUpgradePage => 'Could not launch upgrade page. Please try again.';
 }

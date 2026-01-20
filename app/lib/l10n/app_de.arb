@@ -2290,5 +2290,12 @@
   "xHandlePleaseEnter": "Please enter your X handle",
   "xHandlePleaseEnterValid": "Please enter a valid X handle",
   "nextButton": "Next",
-  "connectOmiDevice": "Connect Omi Device"
+  "connectOmiDevice": "Connect Omi Device",
+  "planSwitchingDescriptionWithTitle": "You're switching your Unlimited Plan to the {title}. Are you sure you want to proceed?",
+  "planUpgradeScheduledMessage": "Upgrade scheduled! Your monthly plan continues until the end of your billing period, then automatically switches to annual.",
+  "couldNotSchedulePlanChange": "Could not schedule plan change. Please try again.",
+  "subscriptionReactivatedDefault": "Your subscription has been reactivated! No charge now - you'll be billed at the end of your current period.",
+  "subscriptionSuccessfulCharged": "Subscription successful! You've been charged for the new billing period.",
+  "couldNotProcessSubscription": "Could not process subscription. Please try again.",
+  "couldNotLaunchUpgradePage": "Could not launch upgrade page. Please try again."
 }

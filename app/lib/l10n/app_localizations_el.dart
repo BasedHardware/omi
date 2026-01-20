@@ -7040,7 +7040,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get templateName => 'Όνομα προτύπου';
 
   @override
-  String get templateNameHint => 'π.χ., Εξαγωγέας ενεργειών συναντήσεων';
+  String get templateNameHint => 'π.χ. Εξαγωγέας ενεργειών συνάντησης';
 
   @override
   String get nameMustBeAtLeast3Characters => 'Το όνομα πρέπει να έχει τουλάχιστον 3 χαρακτήρες';
@@ -7079,126 +7079,125 @@ class AppLocalizationsEl extends AppLocalizations {
   String get failedToCreateApp => 'Αποτυχία δημιουργίας. Παρακαλώ δοκιμάστε ξανά.';
 
   @override
-  String get addAppSelectCoreCapability => 'Please select one more core capability for your app to proceed';
+  String get addAppSelectCoreCapability => 'Επιλέξτε μία ακόμη βασική δυνατότητα για την εφαρμογή σας';
 
   @override
-  String get addAppSelectPaymentPlan => 'Please select a payment plan and enter a price for your app';
+  String get addAppSelectPaymentPlan => 'Επιλέξτε ένα πρόγραμμα πληρωμής και εισάγετε μια τιμή για την εφαρμογή σας';
 
   @override
-  String get addAppSelectCapability => 'Please select at least one capability for your app';
+  String get addAppSelectCapability => 'Επιλέξτε τουλάχιστον μία δυνατότητα για την εφαρμογή σας';
 
   @override
-  String get addAppSelectLogo => 'Please select a logo for your app';
+  String get addAppSelectLogo => 'Επιλέξτε ένα λογότυπο για την εφαρμογή σας';
 
   @override
-  String get addAppEnterChatPrompt => 'Please enter a chat prompt for your app';
+  String get addAppEnterChatPrompt => 'Εισάγετε μια προτροπή συνομιλίας για την εφαρμογή σας';
 
   @override
-  String get addAppEnterConversationPrompt => 'Please enter a conversation prompt for your app';
+  String get addAppEnterConversationPrompt => 'Εισάγετε μια προτροπή συζήτησης για την εφαρμογή σας';
 
   @override
-  String get addAppSelectTriggerEvent => 'Please select a trigger event for your app';
+  String get addAppSelectTriggerEvent => 'Επιλέξτε ένα συμβάν ενεργοποίησης για την εφαρμογή σας';
 
   @override
-  String get addAppEnterWebhookUrl => 'Please enter a webhook URL for your app';
+  String get addAppEnterWebhookUrl => 'Εισάγετε ένα URL webhook για την εφαρμογή σας';
 
   @override
-  String get addAppSelectCategory => 'Please select a category for your app';
+  String get addAppSelectCategory => 'Επιλέξτε μια κατηγορία για την εφαρμογή σας';
 
   @override
-  String get addAppFillRequiredFields => 'Please fill in all the required fields correctly';
+  String get addAppFillRequiredFields => 'Συμπληρώστε σωστά όλα τα απαιτούμενα πεδία';
 
   @override
-  String get addAppUpdatedSuccess => 'App updated successfully 🚀';
+  String get addAppUpdatedSuccess => 'Η εφαρμογή ενημερώθηκε επιτυχώς 🚀';
 
   @override
-  String get addAppUpdateFailed => 'Failed to update app. Please try again later';
+  String get addAppUpdateFailed => 'Η ενημέρωση απέτυχε. Δοκιμάστε ξανά αργότερα';
 
   @override
-  String get addAppSubmittedSuccess => 'App submitted successfully 🚀';
+  String get addAppSubmittedSuccess => 'Η εφαρμογή υποβλήθηκε επιτυχώς 🚀';
 
   @override
   String addAppErrorOpeningFilePicker(String message) {
-    return 'Error opening file picker: $message';
+    return 'Σφάλμα κατά το άνοιγμα του επιλογέα αρχείων: $message';
   }
 
   @override
   String addAppErrorSelectingImage(String error) {
-    return 'Error selecting image: $error';
+    return 'Σφάλμα κατά την επιλογή εικόνας: $error';
   }
 
   @override
-  String get addAppPhotosPermissionDenied =>
-      'Photos permission denied. Please allow access to photos to select an image';
+  String get addAppPhotosPermissionDenied => 'Η άδεια φωτογραφιών απορρίφθηκε. Επιτρέψτε την πρόσβαση σε φωτογραφίες';
 
   @override
-  String get addAppErrorSelectingImageRetry => 'Error selecting image. Please try again.';
+  String get addAppErrorSelectingImageRetry => 'Σφάλμα κατά την επιλογή εικόνας. Δοκιμάστε ξανά.';
 
   @override
   String addAppErrorSelectingThumbnail(String error) {
-    return 'Error selecting thumbnail: $error';
+    return 'Σφάλμα κατά την επιλογή μικρογραφίας: $error';
   }
 
   @override
-  String get addAppErrorSelectingThumbnailRetry => 'Error selecting thumbnail. Please try again.';
+  String get addAppErrorSelectingThumbnailRetry => 'Σφάλμα κατά την επιλογή μικρογραφίας. Δοκιμάστε ξανά.';
 
   @override
-  String get addAppCapabilityConflictWithPersona => 'Other capabilities cannot be selected with Persona';
+  String get addAppCapabilityConflictWithPersona => 'Άλλες δυνατότητες δεν μπορούν να επιλεγούν με την Persona';
 
   @override
-  String get addAppPersonaConflictWithCapabilities => 'Persona cannot be selected with other capabilities';
+  String get addAppPersonaConflictWithCapabilities => 'Η Persona δεν μπορεί να επιλεγεί με άλλες δυνατότητες';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitter handle not found';
+  String get personaTwitterHandleNotFound => 'Ο λογαριασμός Twitter δεν βρέθηκε';
 
   @override
-  String get personaTwitterHandleSuspended => 'Twitter handle is suspended';
+  String get personaTwitterHandleSuspended => 'Ο λογαριασμός Twitter έχει ανασταλεί';
 
   @override
-  String get personaFailedToVerifyTwitter => 'Failed to verify Twitter handle';
+  String get personaFailedToVerifyTwitter => 'Αποτυχία επαλήθευσης λογαριασμού Twitter';
 
   @override
-  String get personaFailedToFetch => 'Failed to fetch your persona';
+  String get personaFailedToFetch => 'Αποτυχία ανάκτησης της persona σας';
 
   @override
-  String get personaFailedToCreate => 'Failed to create your persona';
+  String get personaFailedToCreate => 'Αποτυχία δημιουργίας persona';
 
   @override
-  String get personaConnectKnowledgeSource => 'Please connect at least one knowledge data source (Omi or Twitter)';
+  String get personaConnectKnowledgeSource => 'Συνδέστε τουλάχιστον μία πηγή δεδομένων (Omi ή Twitter)';
 
   @override
-  String get personaUpdatedSuccessfully => 'Persona updated successfully';
+  String get personaUpdatedSuccessfully => 'Η persona ενημερώθηκε επιτυχώς';
 
   @override
-  String get personaFailedToUpdate => 'Failed to update persona';
+  String get personaFailedToUpdate => 'Αποτυχία ενημέρωσης persona';
 
   @override
-  String get personaPleaseSelectImage => 'Please select an image';
+  String get personaPleaseSelectImage => 'Επιλέξτε μια εικόνα';
 
   @override
-  String get personaFailedToCreateTryLater => 'Failed to create your persona. Please try again later.';
+  String get personaFailedToCreateTryLater => 'Αποτυχία δημιουργίας persona. Δοκιμάστε ξανά αργότερα.';
 
   @override
   String personaFailedToCreateWithError(String error) {
-    return 'Failed to create persona: $error';
+    return 'Αποτυχία δημιουργίας persona: $error';
   }
 
   @override
-  String get personaFailedToEnable => 'Failed to enable persona';
+  String get personaFailedToEnable => 'Αποτυχία ενεργοποίησης persona';
 
   @override
   String personaErrorEnablingWithError(String error) {
-    return 'Error enabling persona: $error';
+    return 'Σφάλμα κατά την ενεργοποίηση persona: $error';
   }
 
   @override
-  String get paymentFailedToFetchCountries => 'Failed to fetch supported countries. Please try again later.';
+  String get paymentFailedToFetchCountries => 'Αποτυχία ανάκτησης υποστηριζόμενων χωρών. Δοκιμάστε ξανά αργότερα.';
 
   @override
-  String get paymentFailedToSetDefault => 'Failed to set default payment method. Please try again later.';
+  String get paymentFailedToSetDefault => 'Αποτυχία ορισμού προεπιλεγμένης μεθόδου πληρωμής. Δοκιμάστε ξανά αργότερα.';
 
   @override
-  String get paymentFailedToSavePaypal => 'Failed to save PayPal details. Please try again later.';
+  String get paymentFailedToSavePaypal => 'Αποτυχία αποθήκευσης στοιχείων PayPal. Δοκιμάστε ξανά αργότερα.';
 
   @override
   String get paypalEmailHint => 'nik@example.com';
@@ -7213,28 +7212,28 @@ class AppLocalizationsEl extends AppLocalizations {
   String get paymentMethodPayPal => 'PayPal';
 
   @override
-  String get paymentStatusActive => 'Active';
+  String get paymentStatusActive => 'Ενεργό';
 
   @override
-  String get paymentStatusConnected => 'Connected';
+  String get paymentStatusConnected => 'Συνδεδεμένο';
 
   @override
-  String get paymentStatusNotConnected => 'Not Connected';
+  String get paymentStatusNotConnected => 'Μη συνδεδεμένο';
 
   @override
-  String get paymentAppCost => 'App Cost';
+  String get paymentAppCost => 'Κόστος εφαρμογής';
 
   @override
-  String get paymentEnterValidAmount => 'Please enter a valid amount';
+  String get paymentEnterValidAmount => 'Εισάγετε ένα έγκυρο ποσό';
 
   @override
-  String get paymentEnterAmountGreaterThanZero => 'Please enter an amount greater than 0';
+  String get paymentEnterAmountGreaterThanZero => 'Εισάγετε ποσό μεγαλύτερο από 0';
 
   @override
-  String get paymentPlan => 'Payment Plan';
+  String get paymentPlan => 'Πρόγραμμα πληρωμής';
 
   @override
-  String get paymentNoneSelected => 'None Selected';
+  String get paymentNoneSelected => 'Κανένα επιλεγμένο';
 
   @override
   String get aiGenPleaseEnterDescription => 'Εισάγετε μια περιγραφή για την εφαρμογή σας';
@@ -7285,4 +7284,30 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get connectOmiDevice => 'Connect Omi Device';
+
+  @override
+  String planSwitchingDescriptionWithTitle(String title) {
+    return 'You\'re switching your Unlimited Plan to the $title. Are you sure you want to proceed?';
+  }
+
+  @override
+  String get planUpgradeScheduledMessage =>
+      'Upgrade scheduled! Your monthly plan continues until the end of your billing period, then automatically switches to annual.';
+
+  @override
+  String get couldNotSchedulePlanChange => 'Could not schedule plan change. Please try again.';
+
+  @override
+  String get subscriptionReactivatedDefault =>
+      'Your subscription has been reactivated! No charge now - you\'ll be billed at the end of your current period.';
+
+  @override
+  String get subscriptionSuccessfulCharged =>
+      'Subscription successful! You\'ve been charged for the new billing period.';
+
+  @override
+  String get couldNotProcessSubscription => 'Could not process subscription. Please try again.';
+
+  @override
+  String get couldNotLaunchUpgradePage => 'Could not launch upgrade page. Please try again.';
 }

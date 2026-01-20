@@ -608,15 +608,13 @@ class _PlansSheetState extends State<PlansSheet> {
     final currentSub = provider.subscription!.subscription;
 
     if (currentSub.plan == PlanType.unlimited) {
-      final description = "You're switching your Unlimited Plan to the ${selectedPrice.title}.";
-
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (ctx) => ConfirmationDialog(
-          title: 'Confirm Plan Change',
-          description: '$description Are you sure you want to proceed?',
-          confirmText: 'Confirm & Proceed',
-          cancelText: 'Cancel',
+          title: context.l10n.confirmPlanChange,
+          description: context.l10n.planSwitchingDescriptionWithTitle(selectedPrice!.title),
+          confirmText: context.l10n.confirmAndProceed,
+          cancelText: context.l10n.cancel,
           onCancel: () => Navigator.of(ctx).pop(false),
           onConfirm: () => Navigator.of(ctx).pop(true),
         ),
@@ -638,10 +636,9 @@ class _PlansSheetState extends State<PlansSheet> {
         result = await provider.upgradeUserSubscription(priceId: priceId);
         if (result != null) {
           final daysRemaining = result['days_remaining'] as int? ?? 0;
-          AppSnackbar.showSnackbar(
-              'Upgrade scheduled! Your monthly plan continues until the end of your billing period, then automatically switches to annual.');
+          AppSnackbar.showSnackbar(context.l10n.planUpgradeScheduledMessage);
         } else {
-          AppSnackbar.showSnackbarError('Could not schedule plan change. Please try again.');
+          AppSnackbar.showSnackbarError(context.l10n.couldNotSchedulePlanChange);
         }
       } else {
         // New subscription (for basic users or canceled subscriptions)
@@ -650,8 +647,7 @@ class _PlansSheetState extends State<PlansSheet> {
           // Check if this was a reactivation
           if (sessionData.containsKey('status') && sessionData['status'] == 'reactivated') {
             // Quick reactivation - no charge now
-            final message = sessionData['message'] as String? ??
-                'Your subscription has been reactivated! No charge now - you\'ll be billed at the end of your current period.';
+            final message = sessionData['message'] as String? ?? context.l10n.subscriptionReactivatedDefault;
             AppSnackbar.showSnackbar(message);
             MixpanelManager().upgradeSucceeded();
             await provider.fetchSubscription();
@@ -667,20 +663,20 @@ class _PlansSheetState extends State<PlansSheet> {
             );
 
             if (checkoutResult == true) {
-              AppSnackbar.showSnackbar('Subscription successful! You\'ve been charged for the new billing period.');
+              AppSnackbar.showSnackbar(context.l10n.subscriptionSuccessfulCharged);
               MixpanelManager().upgradeSucceeded();
             } else {
               MixpanelManager().upgradeCancelled();
             }
           } else {
-            AppSnackbar.showSnackbarError('Could not process subscription. Please try again.');
+            AppSnackbar.showSnackbarError(context.l10n.couldNotProcessSubscription);
           }
         } else {
-          AppSnackbar.showSnackbarError('Could not launch upgrade page. Please try again.');
+          AppSnackbar.showSnackbarError(context.l10n.couldNotLaunchUpgradePage);
         }
       }
     } catch (e) {
-      AppSnackbar.showSnackbarError('An error occurred. Please try again.');
+      AppSnackbar.showSnackbarError(context.l10n.anErrorOccurredTryAgain);
     } finally {
       _loadAvailablePlans();
       if (mounted) setState(() => _isUpgrading = false);
@@ -1683,16 +1679,16 @@ class _PlansSheetState extends State<PlansSheet> {
                                   MaterialPageRoute(
                                     builder: (context) => PaymentWebViewPage(
                                       checkoutUrl: portalData['url']!,
-                                      title: "Manage Payment Method",
+                                      title: context.l10n.managePaymentMethod,
                                     ),
                                   ),
                                 );
                               } else {
-                                AppSnackbar.showSnackbarError('Could not open payment settings. Please try again.');
+                                AppSnackbar.showSnackbarError(context.l10n.couldNotOpenPaymentSettings);
                               }
                             },
                             icon: const Icon(Icons.credit_card, size: 20),
-                            label: const Text('Manage Payment Method'),
+                            label: Text(context.l10n.managePaymentMethod),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: Colors.white,
                               side: const BorderSide(color: Colors.white, width: 1),

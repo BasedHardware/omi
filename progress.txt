@@ -10,10 +10,10 @@
 |--------|-------|
 | Total Files | 27 |
 | Total Strings | ~125 |
-| Completed | 9 |
+| Completed | 10 |
 | In Progress | 0 |
-| Pending | 18 |
-| Progress | 33% |
+| Pending | 17 |
+| Progress | 37% |
 
 ================================================================================
 ## PRIORITY 1: HIGH IMPACT - User-Facing Features (~65 strings)
@@ -95,12 +95,15 @@ context.l10n pattern. Keys added: xHandleTitle, xHandleDescription, xHandleHint,
 xHandlePleaseEnter, xHandlePleaseEnterValid, nextButton, connectOmiDevice.
 The original audit identified only 3 strings but 7 were actually found upon closer inspection.
 
-### [ ] pages/settings/widgets/plans_sheet.dart (3 strings)
-Status: PENDING
-Strings:
-- [ ] Line 616: 'Confirm Plan Change' (dialog title)
-- [ ] Line 683: 'An error occurred. Please try again.' (error)
-- [ ] Line 1686/1695: 'Manage Payment Method' (dialog/button)
+### [x] pages/settings/widgets/plans_sheet.dart (3 strings)
+Status: COMPLETED
+Note: Added 7 new l10n keys to all 34 language ARB files and updated the Dart file to use
+context.l10n pattern. Keys added: planSwitchingDescriptionWithTitle (with placeholder),
+planUpgradeScheduledMessage, couldNotSchedulePlanChange, subscriptionReactivatedDefault,
+subscriptionSuccessfulCharged, couldNotProcessSubscription, couldNotLaunchUpgradePage.
+Reused existing keys: confirmPlanChange, confirmAndProceed, cancel, anErrorOccurredTryAgain,
+couldNotOpenPaymentSettings, managePaymentMethod.
+The original audit identified 3 strings but the file had 13+ hardcoded strings requiring localization.
 
 ### [ ] pages/settings/transcription_settings_page.dart (2 strings)
 Status: PENDING
@@ -204,6 +207,17 @@ Strings:
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-20] Localized plans_sheet.dart
+- Added 7 new l10n keys to all 34 language ARB files
+- Updated Dart file to use context.l10n pattern
+- Keys: planSwitchingDescriptionWithTitle (with placeholder), planUpgradeScheduledMessage,
+  couldNotSchedulePlanChange, subscriptionReactivatedDefault, subscriptionSuccessfulCharged,
+  couldNotProcessSubscription, couldNotLaunchUpgradePage
+- Reused 6 existing keys: confirmPlanChange, confirmAndProceed, cancel, anErrorOccurredTryAgain,
+  couldNotOpenPaymentSettings, managePaymentMethod
+- Fixed null safety issue with selectedPrice!.title
+- Ran flutter gen-l10n and verified with test.sh
 
 [2026-01-20] Localized social_profile.dart
 - Added 7 new l10n keys to all 34 language ARB files

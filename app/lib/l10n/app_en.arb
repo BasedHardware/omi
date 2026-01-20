@@ -8945,5 +8945,38 @@
   "connectOmiDevice": "Connect Omi Device",
   "@connectOmiDevice": {
     "description": "Button text to connect Omi device"
+  },
+  "planSwitchingDescriptionWithTitle": "You're switching your Unlimited Plan to the {title}. Are you sure you want to proceed?",
+  "@planSwitchingDescriptionWithTitle": {
+    "description": "Dialog description when switching from unlimited plan",
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "planUpgradeScheduledMessage": "Upgrade scheduled! Your monthly plan continues until the end of your billing period, then automatically switches to annual.",
+  "@planUpgradeScheduledMessage": {
+    "description": "Success message when plan upgrade is scheduled"
+  },
+  "couldNotSchedulePlanChange": "Could not schedule plan change. Please try again.",
+  "@couldNotSchedulePlanChange": {
+    "description": "Error when plan change cannot be scheduled"
+  },
+  "subscriptionReactivatedDefault": "Your subscription has been reactivated! No charge now - you'll be billed at the end of your current period.",
+  "@subscriptionReactivatedDefault": {
+    "description": "Default message when subscription is reactivated"
+  },
+  "subscriptionSuccessfulCharged": "Subscription successful! You've been charged for the new billing period.",
+  "@subscriptionSuccessfulCharged": {
+    "description": "Success message after subscription checkout"
+  },
+  "couldNotProcessSubscription": "Could not process subscription. Please try again.",
+  "@couldNotProcessSubscription": {
+    "description": "Error when subscription cannot be processed"
+  },
+  "couldNotLaunchUpgradePage": "Could not launch upgrade page. Please try again.",
+  "@couldNotLaunchUpgradePage": {
+    "description": "Error when upgrade page cannot be launched"
   }
 }
