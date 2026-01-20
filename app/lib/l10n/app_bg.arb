@@ -2007,5 +2007,9 @@
   "buildGraphButton": "Изграждане на граф",
   "checkOutMyMemoryGraph": "Вижте моя граф на паметта!",
   "getButton": "Вземи",
-  "openingApp": "Отваряне на {appName}..."
+  "openingApp": "Отваряне на {appName}...",
+  "writeSomething": "Напишете нещо",
+  "submitReply": "Изпрати отговор",
+  "editYourReply": "Редактирай отговора",
+  "replyToReview": "Отговори на ревюто"
 }

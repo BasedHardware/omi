@@ -6514,4 +6514,16 @@ class AppLocalizationsLv extends AppLocalizations {
   String openingApp(String appName) {
     return 'Atver $appName...';
   }
+
+  @override
+  String get writeSomething => 'Uzrakstiet kaut ko';
+
+  @override
+  String get submitReply => 'Iesniegt atbildi';
+
+  @override
+  String get editYourReply => 'Rediģēt atbildi';
+
+  @override
+  String get replyToReview => 'Atbildēt uz atsauksmi';
 }

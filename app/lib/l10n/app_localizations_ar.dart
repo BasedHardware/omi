@@ -6455,4 +6455,16 @@ class AppLocalizationsAr extends AppLocalizations {
   String openingApp(String appName) {
     return 'جارٍ فتح $appName...';
   }
+
+  @override
+  String get writeSomething => 'اكتب شيئاً';
+
+  @override
+  String get submitReply => 'إرسال الرد';
+
+  @override
+  String get editYourReply => 'تعديل ردك';
+
+  @override
+  String get replyToReview => 'الرد على المراجعة';
 }

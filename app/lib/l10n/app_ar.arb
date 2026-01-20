@@ -2005,5 +2005,9 @@
   "buildGraphButton": "بناء الرسم",
   "checkOutMyMemoryGraph": "شاهد رسم الذاكرة الخاص بي!",
   "getButton": "تحميل",
-  "openingApp": "جارٍ فتح {appName}..."
+  "openingApp": "جارٍ فتح {appName}...",
+  "writeSomething": "اكتب شيئاً",
+  "submitReply": "إرسال الرد",
+  "editYourReply": "تعديل ردك",
+  "replyToReview": "الرد على التقييم"
 }

@@ -12134,6 +12134,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Opening {appName}...'**
   String openingApp(String appName);
+
+  /// Hint text for reply text field
+  ///
+  /// In en, this message translates to:
+  /// **'Write something'**
+  String get writeSomething;
+
+  /// Button text to submit a reply
+  ///
+  /// In en, this message translates to:
+  /// **'Submit Reply'**
+  String get submitReply;
+
+  /// Button text to edit an existing reply
+  ///
+  /// In en, this message translates to:
+  /// **'Edit Your Reply'**
+  String get editYourReply;
+
+  /// Button text to reply to a review
+  ///
+  /// In en, this message translates to:
+  /// **'Reply To Review'**
+  String get replyToReview;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

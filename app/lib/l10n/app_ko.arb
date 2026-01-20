@@ -2024,5 +2024,9 @@
   "buildGraphButton": "그래프 구축",
   "checkOutMyMemoryGraph": "내 메모리 그래프를 확인하세요!",
   "getButton": "받기",
-  "openingApp": "{appName} 열는 중..."
+  "openingApp": "{appName} 열는 중...",
+  "writeSomething": "내용을 입력하세요",
+  "submitReply": "답글 제출",
+  "editYourReply": "답글 수정",
+  "replyToReview": "리뷰에 답글"
 }

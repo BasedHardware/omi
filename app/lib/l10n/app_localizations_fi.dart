@@ -6502,4 +6502,16 @@ class AppLocalizationsFi extends AppLocalizations {
   String openingApp(String appName) {
     return 'Avataan $appName...';
   }
+
+  @override
+  String get writeSomething => 'Kirjoita jotain';
+
+  @override
+  String get submitReply => 'Lähetä vastaus';
+
+  @override
+  String get editYourReply => 'Muokkaa vastaustasi';
+
+  @override
+  String get replyToReview => 'Vastaa arvosteluun';
 }

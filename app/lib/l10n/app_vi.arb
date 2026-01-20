@@ -2024,5 +2024,9 @@
   "buildGraphButton": "Xây dựng biểu đồ",
   "checkOutMyMemoryGraph": "Xem biểu đồ ký ức của tôi!",
   "getButton": "Tải",
-  "openingApp": "Đang mở {appName}..."
+  "openingApp": "Đang mở {appName}...",
+  "writeSomething": "Viết gì đó",
+  "submitReply": "Gửi phản hồi",
+  "editYourReply": "Sửa phản hồi",
+  "replyToReview": "Trả lời đánh giá"
 }

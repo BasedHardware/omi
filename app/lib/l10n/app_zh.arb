@@ -2025,5 +2025,9 @@
   "buildGraphButton": "构建图谱",
   "checkOutMyMemoryGraph": "看看我的记忆图谱！",
   "getButton": "获取",
-  "openingApp": "正在打开 {appName}..."
+  "openingApp": "正在打开 {appName}...",
+  "writeSomething": "写点什么",
+  "submitReply": "提交回复",
+  "editYourReply": "编辑回复",
+  "replyToReview": "回复评价"
 }

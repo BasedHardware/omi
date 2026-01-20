@@ -2024,5 +2024,9 @@
   "buildGraphButton": "Grafik Oluştur",
   "checkOutMyMemoryGraph": "Hafıza grafiğime göz atın!",
   "getButton": "Al",
-  "openingApp": "{appName} açılıyor..."
+  "openingApp": "{appName} açılıyor...",
+  "writeSomething": "Bir şeyler yazın",
+  "submitReply": "Yanıt Gönder",
+  "editYourReply": "Yanıtını Düzenle",
+  "replyToReview": "Yoruma Yanıt Ver"
 }

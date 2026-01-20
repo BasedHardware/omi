@@ -1982,5 +1982,9 @@
   "buildGraphButton": "Opbyg graf",
   "checkOutMyMemoryGraph": "Se min hukommelsesgraf!",
   "getButton": "Hent",
-  "openingApp": "Åbner {appName}..."
+  "openingApp": "Åbner {appName}...",
+  "writeSomething": "Skriv noget",
+  "submitReply": "Send svar",
+  "editYourReply": "Rediger dit svar",
+  "replyToReview": "Svar på anmeldelse"
 }

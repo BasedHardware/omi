@@ -2024,5 +2024,9 @@
   "buildGraphButton": "Bygg graf",
   "checkOutMyMemoryGraph": "Kolla in min minnesgraf!",
   "getButton": "Hämta",
-  "openingApp": "Öppnar {appName}..."
+  "openingApp": "Öppnar {appName}...",
+  "writeSomething": "Skriv något",
+  "submitReply": "Skicka svar",
+  "editYourReply": "Redigera ditt svar",
+  "replyToReview": "Svara på recension"
 }

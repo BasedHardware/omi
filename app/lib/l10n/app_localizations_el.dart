@@ -6548,4 +6548,16 @@ class AppLocalizationsEl extends AppLocalizations {
   String openingApp(String appName) {
     return 'Άνοιγμα $appName...';
   }
+
+  @override
+  String get writeSomething => 'Γράψε κάτι';
+
+  @override
+  String get submitReply => 'Υποβολή απάντησης';
+
+  @override
+  String get editYourReply => 'Επεξεργασία απάντησης';
+
+  @override
+  String get replyToReview => 'Απάντηση στην κριτική';
 }

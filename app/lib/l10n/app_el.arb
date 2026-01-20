@@ -2024,5 +2024,9 @@
   "buildGraphButton": "Δημιουργία γραφήματος",
   "checkOutMyMemoryGraph": "Δείτε το γράφημα μνήμης μου!",
   "getButton": "Λήψη",
-  "openingApp": "Άνοιγμα {appName}..."
+  "openingApp": "Άνοιγμα {appName}...",
+  "writeSomething": "Γράψτε κάτι",
+  "submitReply": "Υποβολή απάντησης",
+  "editYourReply": "Επεξεργασία απάντησης",
+  "replyToReview": "Απάντηση στην κριτική"
 }

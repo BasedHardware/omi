@@ -6510,4 +6510,16 @@ class AppLocalizationsDa extends AppLocalizations {
   String openingApp(String appName) {
     return 'Åbner $appName...';
   }
+
+  @override
+  String get writeSomething => 'Skriv noget';
+
+  @override
+  String get submitReply => 'Indsend svar';
+
+  @override
+  String get editYourReply => 'Rediger dit svar';
+
+  @override
+  String get replyToReview => 'Svar på anmeldelse';
 }

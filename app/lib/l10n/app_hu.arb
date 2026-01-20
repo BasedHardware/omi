@@ -2024,5 +2024,9 @@
   "buildGraphButton": "Gráf építése",
   "checkOutMyMemoryGraph": "Nézd meg a memória gráfomat!",
   "getButton": "Letöltés",
-  "openingApp": "{appName} megnyitása..."
+  "openingApp": "{appName} megnyitása...",
+  "writeSomething": "Írjon valamit",
+  "submitReply": "Válasz küldése",
+  "editYourReply": "Válasz szerkesztése",
+  "replyToReview": "Válasz az értékelésre"
 }

@@ -2024,5 +2024,9 @@
   "buildGraphButton": "Побудувати граф",
   "checkOutMyMemoryGraph": "Подивіться мій граф пам'яті!",
   "getButton": "Отримати",
-  "openingApp": "Відкриваємо {appName}..."
+  "openingApp": "Відкриваємо {appName}...",
+  "writeSomething": "Напишіть щось",
+  "submitReply": "Надіслати відповідь",
+  "editYourReply": "Редагувати відповідь",
+  "replyToReview": "Відповісти на відгук"
 }

@@ -2024,5 +2024,9 @@
   "buildGraphButton": "Grafiek bouwen",
   "checkOutMyMemoryGraph": "Bekijk mijn geheugengrafiek!",
   "getButton": "Download",
-  "openingApp": "{appName} openen..."
+  "openingApp": "{appName} openen...",
+  "writeSomething": "Schrijf iets",
+  "submitReply": "Antwoord verzenden",
+  "editYourReply": "Antwoord bewerken",
+  "replyToReview": "Reageer op review"
 }

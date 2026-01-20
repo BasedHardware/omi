@@ -6480,4 +6480,16 @@ class AppLocalizationsHi extends AppLocalizations {
   String openingApp(String appName) {
     return '$appName खुल रहा है...';
   }
+
+  @override
+  String get writeSomething => 'कुछ लिखें';
+
+  @override
+  String get submitReply => 'उत्तर सबमिट करें';
+
+  @override
+  String get editYourReply => 'अपना उत्तर संपादित करें';
+
+  @override
+  String get replyToReview => 'समीक्षा का उत्तर दें';
 }

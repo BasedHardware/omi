@@ -6493,4 +6493,16 @@ class AppLocalizationsCs extends AppLocalizations {
   String openingApp(String appName) {
     return 'Otevírám $appName...';
   }
+
+  @override
+  String get writeSomething => 'Napište něco';
+
+  @override
+  String get submitReply => 'Odeslat odpověď';
+
+  @override
+  String get editYourReply => 'Upravit odpověď';
+
+  @override
+  String get replyToReview => 'Odpovědět na recenzi';
 }

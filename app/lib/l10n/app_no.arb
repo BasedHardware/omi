@@ -2024,5 +2024,9 @@
   "buildGraphButton": "Bygg graf",
   "checkOutMyMemoryGraph": "Se på minnegrafen min!",
   "getButton": "Hent",
-  "openingApp": "Åpner {appName}..."
+  "openingApp": "Åpner {appName}...",
+  "writeSomething": "Skriv noe",
+  "submitReply": "Send svar",
+  "editYourReply": "Rediger svaret ditt",
+  "replyToReview": "Svar på anmeldelse"
 }

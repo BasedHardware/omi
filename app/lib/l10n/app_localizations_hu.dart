@@ -6533,4 +6533,16 @@ class AppLocalizationsHu extends AppLocalizations {
   String openingApp(String appName) {
     return '$appName megnyitása...';
   }
+
+  @override
+  String get writeSomething => 'Írj valamit';
+
+  @override
+  String get submitReply => 'Válasz küldése';
+
+  @override
+  String get editYourReply => 'Válasz szerkesztése';
+
+  @override
+  String get replyToReview => 'Válasz az értékelésre';
 }

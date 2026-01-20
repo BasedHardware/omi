@@ -6381,4 +6381,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String openingApp(String appName) {
     return '正在打开 $appName...';
   }
+
+  @override
+  String get writeSomething => '写点什么';
+
+  @override
+  String get submitReply => '提交回复';
+
+  @override
+  String get editYourReply => '编辑您的回复';
+
+  @override
+  String get replyToReview => '回复评价';
 }

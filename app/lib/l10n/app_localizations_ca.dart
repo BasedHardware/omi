@@ -6540,4 +6540,16 @@ class AppLocalizationsCa extends AppLocalizations {
   String openingApp(String appName) {
     return 'Obrint $appName...';
   }
+
+  @override
+  String get writeSomething => 'Escriu alguna cosa';
+
+  @override
+  String get submitReply => 'Enviar resposta';
+
+  @override
+  String get editYourReply => 'Editar la teva resposta';
+
+  @override
+  String get replyToReview => 'Respondre a la ressenya';
 }

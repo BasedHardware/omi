@@ -2024,5 +2024,9 @@
   "buildGraphButton": "Loo graafik",
   "checkOutMyMemoryGraph": "Vaata minu mälugraafikut!",
   "getButton": "Hangi",
-  "openingApp": "Avan {appName}..."
+  "openingApp": "Avan {appName}...",
+  "writeSomething": "Kirjuta midagi",
+  "submitReply": "Saada vastus",
+  "editYourReply": "Muuda vastust",
+  "replyToReview": "Vasta arvustusele"
 }

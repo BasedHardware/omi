@@ -6446,5 +6446,17 @@ class AppLocalizationsUk extends AppLocalizations {
   String get buildGraphButton => 'Побудувати граф';
 
   @override
-  String get checkOutMyMemoryGraph => 'Подивіться мій граф пам'яті!';
+  String get checkOutMyMemoryGraph => 'Подивіться мій граф пам\'яті!';
+
+  @override
+  String get writeSomething => 'Напишіть щось';
+
+  @override
+  String get submitReply => 'Надіслати відповідь';
+
+  @override
+  String get editYourReply => 'Редагувати відповідь';
+
+  @override
+  String get replyToReview => 'Відповісти на відгук';
 }

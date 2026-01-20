@@ -6528,4 +6528,16 @@ class AppLocalizationsBg extends AppLocalizations {
   String openingApp(String appName) {
     return 'Отваряне на $appName...';
   }
+
+  @override
+  String get writeSomething => 'Напишете нещо';
+
+  @override
+  String get submitReply => 'Изпрати отговор';
+
+  @override
+  String get editYourReply => 'Редактирай отговора си';
+
+  @override
+  String get replyToReview => 'Отговори на отзива';
 }

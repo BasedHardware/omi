@@ -6503,4 +6503,16 @@ class AppLocalizationsEt extends AppLocalizations {
   String openingApp(String appName) {
     return 'Avan $appName...';
   }
+
+  @override
+  String get writeSomething => 'Kirjuta midagi';
+
+  @override
+  String get submitReply => 'Esita vastus';
+
+  @override
+  String get editYourReply => 'Muuda oma vastust';
+
+  @override
+  String get replyToReview => 'Vasta arvustusele';
 }

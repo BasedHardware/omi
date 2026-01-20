@@ -2025,5 +2025,9 @@
   "buildGraphButton": "Construir gráfico",
   "checkOutMyMemoryGraph": "¡Mira mi gráfico de memoria!",
   "getButton": "Obtener",
-  "openingApp": "Abriendo {appName}..."
+  "openingApp": "Abriendo {appName}...",
+  "writeSomething": "Escribe algo",
+  "submitReply": "Enviar respuesta",
+  "editYourReply": "Editar tu respuesta",
+  "replyToReview": "Responder a la reseña"
 }

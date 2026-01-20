@@ -2025,5 +2025,9 @@
   "buildGraphButton": "グラフを構築",
   "checkOutMyMemoryGraph": "私のメモリーグラフをご覧ください！",
   "getButton": "入手",
-  "openingApp": "{appName}を開いています..."
+  "openingApp": "{appName}を開いています...",
+  "writeSomething": "何か書いてください",
+  "submitReply": "返信を送信",
+  "editYourReply": "返信を編集",
+  "replyToReview": "レビューに返信"
 }

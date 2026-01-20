@@ -6557,4 +6557,16 @@ class AppLocalizationsFr extends AppLocalizations {
   String openingApp(String appName) {
     return 'Ouverture de $appName...';
   }
+
+  @override
+  String get writeSomething => 'Écrivez quelque chose';
+
+  @override
+  String get submitReply => 'Envoyer la réponse';
+
+  @override
+  String get editYourReply => 'Modifier votre réponse';
+
+  @override
+  String get replyToReview => 'Répondre à l\'avis';
 }

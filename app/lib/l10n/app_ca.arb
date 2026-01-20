@@ -2007,5 +2007,9 @@
   "buildGraphButton": "Construir graf",
   "checkOutMyMemoryGraph": "Mira el meu graf de memòria!",
   "getButton": "Obtenir",
-  "openingApp": "Obrint {appName}..."
+  "openingApp": "Obrint {appName}...",
+  "writeSomething": "Escriu alguna cosa",
+  "submitReply": "Enviar resposta",
+  "editYourReply": "Editar resposta",
+  "replyToReview": "Respondre a la ressenya"
 }

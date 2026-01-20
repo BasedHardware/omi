@@ -6514,4 +6514,16 @@ class AppLocalizationsPl extends AppLocalizations {
   String openingApp(String appName) {
     return 'Otwieranie $appName...';
   }
+
+  @override
+  String get writeSomething => 'Napisz coś';
+
+  @override
+  String get submitReply => 'Wyślij odpowiedź';
+
+  @override
+  String get editYourReply => 'Edytuj odpowiedź';
+
+  @override
+  String get replyToReview => 'Odpowiedz na recenzję';
 }

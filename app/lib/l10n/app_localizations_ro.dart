@@ -6532,4 +6532,16 @@ class AppLocalizationsRo extends AppLocalizations {
   String openingApp(String appName) {
     return 'Se deschide $appName...';
   }
+
+  @override
+  String get writeSomething => 'Scrie ceva';
+
+  @override
+  String get submitReply => 'Trimite răspunsul';
+
+  @override
+  String get editYourReply => 'Editează răspunsul';
+
+  @override
+  String get replyToReview => 'Răspunde la recenzie';
 }

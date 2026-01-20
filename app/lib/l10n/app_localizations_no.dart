@@ -6500,4 +6500,16 @@ class AppLocalizationsNo extends AppLocalizations {
   String openingApp(String appName) {
     return 'Åpner $appName...';
   }
+
+  @override
+  String get writeSomething => 'Skriv noe';
+
+  @override
+  String get submitReply => 'Send svar';
+
+  @override
+  String get editYourReply => 'Rediger svaret ditt';
+
+  @override
+  String get replyToReview => 'Svar på anmeldelse';
 }

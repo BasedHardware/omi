@@ -1984,5 +1984,9 @@
   "buildGraphButton": "Vytvořit graf",
   "checkOutMyMemoryGraph": "Podívejte se na můj graf paměti!",
   "getButton": "Získat",
-  "openingApp": "Otevírám {appName}..."
+  "openingApp": "Otevírám {appName}...",
+  "writeSomething": "Napište něco",
+  "submitReply": "Odeslat odpověď",
+  "editYourReply": "Upravit odpověď",
+  "replyToReview": "Odpovědět na recenzi"
 }

@@ -2024,5 +2024,9 @@
   "buildGraphButton": "Vytvoriť graf",
   "checkOutMyMemoryGraph": "Pozrite sa na môj graf pamäte!",
   "getButton": "Získať",
-  "openingApp": "Otvára sa {appName}..."
+  "openingApp": "Otvára sa {appName}...",
+  "writeSomething": "Napíšte niečo",
+  "submitReply": "Odoslať odpoveď",
+  "editYourReply": "Upraviť odpoveď",
+  "replyToReview": "Odpovedať na recenziu"
 }

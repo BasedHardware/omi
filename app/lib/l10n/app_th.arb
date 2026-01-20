@@ -2024,5 +2024,9 @@
   "buildGraphButton": "สร้างกราฟ",
   "checkOutMyMemoryGraph": "ดูกราฟความจำของฉัน!",
   "getButton": "รับ",
-  "openingApp": "กำลังเปิด {appName}..."
+  "openingApp": "กำลังเปิด {appName}...",
+  "writeSomething": "เขียนบางอย่าง",
+  "submitReply": "ส่งคำตอบ",
+  "editYourReply": "แก้ไขคำตอบ",
+  "replyToReview": "ตอบกลับรีวิว"
 }

@@ -2024,5 +2024,9 @@
   "buildGraphButton": "Izveidot grafu",
   "checkOutMyMemoryGraph": "Apskatiet manu atmiņas grafu!",
   "getButton": "Iegūt",
-  "openingApp": "Atver {appName}..."
+  "openingApp": "Atver {appName}...",
+  "writeSomething": "Uzrakstiet kaut ko",
+  "submitReply": "Iesniegt atbildi",
+  "editYourReply": "Rediģēt atbildi",
+  "replyToReview": "Atbildēt uz atsauksmi"
 }

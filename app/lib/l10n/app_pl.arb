@@ -2024,5 +2024,9 @@
   "buildGraphButton": "Utwórz graf",
   "checkOutMyMemoryGraph": "Zobacz mój graf pamięci!",
   "getButton": "Pobierz",
-  "openingApp": "Otwieranie {appName}..."
+  "openingApp": "Otwieranie {appName}...",
+  "writeSomething": "Napisz coś",
+  "submitReply": "Wyślij odpowiedź",
+  "editYourReply": "Edytuj odpowiedź",
+  "replyToReview": "Odpowiedz na recenzję"
 }

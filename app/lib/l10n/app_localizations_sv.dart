@@ -6506,4 +6506,16 @@ class AppLocalizationsSv extends AppLocalizations {
   String openingApp(String appName) {
     return 'Öppnar $appName...';
   }
+
+  @override
+  String get writeSomething => 'Skriv något';
+
+  @override
+  String get submitReply => 'Skicka svar';
+
+  @override
+  String get editYourReply => 'Redigera ditt svar';
+
+  @override
+  String get replyToReview => 'Svara på recension';
 }

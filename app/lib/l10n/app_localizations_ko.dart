@@ -6393,4 +6393,16 @@ class AppLocalizationsKo extends AppLocalizations {
   String openingApp(String appName) {
     return '$appName 열는 중...';
   }
+
+  @override
+  String get writeSomething => '무언가 작성하세요';
+
+  @override
+  String get submitReply => '답변 제출';
+
+  @override
+  String get editYourReply => '답변 수정';
+
+  @override
+  String get replyToReview => '리뷰에 답변';
 }

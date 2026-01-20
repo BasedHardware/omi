@@ -2024,5 +2024,9 @@
   "buildGraphButton": "Construiește grafic",
   "checkOutMyMemoryGraph": "Vezi graficul meu de memorie!",
   "getButton": "Obține",
-  "openingApp": "Se deschide {appName}..."
+  "openingApp": "Se deschide {appName}...",
+  "writeSomething": "Scrie ceva",
+  "submitReply": "Trimite răspuns",
+  "editYourReply": "Editează răspunsul",
+  "replyToReview": "Răspunde la recenzie"
 }

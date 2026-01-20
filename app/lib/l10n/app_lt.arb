@@ -2024,5 +2024,9 @@
   "buildGraphButton": "Sukurti grafą",
   "checkOutMyMemoryGraph": "Pažiūrėkite mano atminties grafą!",
   "getButton": "Gauti",
-  "openingApp": "Atidaroma {appName}..."
+  "openingApp": "Atidaroma {appName}...",
+  "writeSomething": "Parašykite ką nors",
+  "submitReply": "Siųsti atsakymą",
+  "editYourReply": "Redaguoti atsakymą",
+  "replyToReview": "Atsakyti į atsiliepimą"
 }

@@ -2025,5 +2025,9 @@
   "buildGraphButton": "ग्राफ़ बनाएं",
   "checkOutMyMemoryGraph": "मेरा मेमोरी ग्राफ़ देखें!",
   "getButton": "प्राप्त करें",
-  "openingApp": "{appName} खुल रहा है..."
+  "openingApp": "{appName} खुल रहा है...",
+  "writeSomething": "कुछ लिखें",
+  "submitReply": "जवाब भेजें",
+  "editYourReply": "अपना जवाब संपादित करें",
+  "replyToReview": "समीक्षा का जवाब दें"
 }

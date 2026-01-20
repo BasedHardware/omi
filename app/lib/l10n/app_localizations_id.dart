@@ -6519,4 +6519,16 @@ class AppLocalizationsId extends AppLocalizations {
   String openingApp(String appName) {
     return 'Membuka $appName...';
   }
+
+  @override
+  String get writeSomething => 'Tulis sesuatu';
+
+  @override
+  String get submitReply => 'Kirim balasan';
+
+  @override
+  String get editYourReply => 'Edit balasan Anda';
+
+  @override
+  String get replyToReview => 'Balas ulasan';
 }

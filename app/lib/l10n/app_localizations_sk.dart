@@ -6502,4 +6502,16 @@ class AppLocalizationsSk extends AppLocalizations {
   String openingApp(String appName) {
     return 'Otvára sa $appName...';
   }
+
+  @override
+  String get writeSomething => 'Napíšte niečo';
+
+  @override
+  String get submitReply => 'Odoslať odpoveď';
+
+  @override
+  String get editYourReply => 'Upraviť odpoveď';
+
+  @override
+  String get replyToReview => 'Odpovedať na recenziu';
 }

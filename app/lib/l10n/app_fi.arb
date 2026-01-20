@@ -2024,5 +2024,9 @@
   "buildGraphButton": "Rakenna graafi",
   "checkOutMyMemoryGraph": "Katso muistigraafikani!",
   "getButton": "Hae",
-  "openingApp": "Avataan {appName}..."
+  "openingApp": "Avataan {appName}...",
+  "writeSomething": "Kirjoita jotain",
+  "submitReply": "Lähetä vastaus",
+  "editYourReply": "Muokkaa vastaustasi",
+  "replyToReview": "Vastaa arvosteluun"
 }

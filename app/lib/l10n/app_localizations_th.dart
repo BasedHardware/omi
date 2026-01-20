@@ -6469,4 +6469,16 @@ class AppLocalizationsTh extends AppLocalizations {
   String openingApp(String appName) {
     return 'กำลังเปิด $appName...';
   }
+
+  @override
+  String get writeSomething => 'เขียนบางอย่าง';
+
+  @override
+  String get submitReply => 'ส่งคำตอบ';
+
+  @override
+  String get editYourReply => 'แก้ไขคำตอบของคุณ';
+
+  @override
+  String get replyToReview => 'ตอบกลับรีวิว';
 }

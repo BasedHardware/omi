@@ -6521,4 +6521,16 @@ class AppLocalizationsNl extends AppLocalizations {
   String openingApp(String appName) {
     return '$appName openen...';
   }
+
+  @override
+  String get writeSomething => 'Schrijf iets';
+
+  @override
+  String get submitReply => 'Reactie verzenden';
+
+  @override
+  String get editYourReply => 'Je reactie bewerken';
+
+  @override
+  String get replyToReview => 'Reageer op recensie';
 }

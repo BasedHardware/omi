@@ -6511,4 +6511,16 @@ class AppLocalizationsVi extends AppLocalizations {
   String openingApp(String appName) {
     return 'Đang mở $appName...';
   }
+
+  @override
+  String get writeSomething => 'Viết gì đó';
+
+  @override
+  String get submitReply => 'Gửi phản hồi';
+
+  @override
+  String get editYourReply => 'Chỉnh sửa phản hồi';
+
+  @override
+  String get replyToReview => 'Trả lời đánh giá';
 }

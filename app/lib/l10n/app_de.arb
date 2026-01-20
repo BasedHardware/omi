@@ -2006,5 +2006,9 @@
   "buildGraphButton": "Graph erstellen",
   "checkOutMyMemoryGraph": "Schau dir meinen Erinnerungsgraphen an!",
   "getButton": "Laden",
-  "openingApp": "Öffne {appName}..."
+  "openingApp": "Öffne {appName}...",
+  "writeSomething": "Schreiben Sie etwas",
+  "submitReply": "Antwort senden",
+  "editYourReply": "Antwort bearbeiten",
+  "replyToReview": "Auf Bewertung antworten"
 }

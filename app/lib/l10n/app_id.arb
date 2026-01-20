@@ -2024,5 +2024,9 @@
   "buildGraphButton": "Bangun Graf",
   "checkOutMyMemoryGraph": "Lihat graf memori saya!",
   "getButton": "Dapatkan",
-  "openingApp": "Membuka {appName}..."
+  "openingApp": "Membuka {appName}...",
+  "writeSomething": "Tulis sesuatu",
+  "submitReply": "Kirim Balasan",
+  "editYourReply": "Edit Balasan Anda",
+  "replyToReview": "Balas Ulasan"
 }

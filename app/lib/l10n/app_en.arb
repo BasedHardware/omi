@@ -7943,5 +7943,21 @@
         "example": "My App"
       }
     }
+  },
+  "writeSomething": "Write something",
+  "@writeSomething": {
+    "description": "Hint text for reply text field"
+  },
+  "submitReply": "Submit Reply",
+  "@submitReply": {
+    "description": "Button text to submit a reply"
+  },
+  "editYourReply": "Edit Your Reply",
+  "@editYourReply": {
+    "description": "Button text to edit an existing reply"
+  },
+  "replyToReview": "Reply To Review",
+  "@replyToReview": {
+    "description": "Button text to reply to a review"
   }
 }

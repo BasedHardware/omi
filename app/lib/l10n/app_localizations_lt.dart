@@ -6503,4 +6503,16 @@ class AppLocalizationsLt extends AppLocalizations {
   String openingApp(String appName) {
     return 'Atidaroma $appName...';
   }
+
+  @override
+  String get writeSomething => 'Parašykite ką nors';
+
+  @override
+  String get submitReply => 'Pateikti atsakymą';
+
+  @override
+  String get editYourReply => 'Redaguoti atsakymą';
+
+  @override
+  String get replyToReview => 'Atsakyti į atsiliepimą';
 }

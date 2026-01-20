@@ -6513,4 +6513,16 @@ class AppLocalizationsTr extends AppLocalizations {
   String openingApp(String appName) {
     return '$appName açılıyor...';
   }
+
+  @override
+  String get writeSomething => 'Bir şeyler yaz';
+
+  @override
+  String get submitReply => 'Yanıt gönder';
+
+  @override
+  String get editYourReply => 'Yanıtınızı düzenleyin';
+
+  @override
+  String get replyToReview => 'Yoruma yanıt ver';
 }

@@ -6499,4 +6499,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String openingApp(String appName) {
     return 'Opening $appName...';
   }
+
+  @override
+  String get writeSomething => 'Write something';
+
+  @override
+  String get submitReply => 'Submit Reply';
+
+  @override
+  String get editYourReply => 'Edit Your Reply';
+
+  @override
+  String get replyToReview => 'Reply To Review';
 }

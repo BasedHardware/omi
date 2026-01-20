@@ -6391,4 +6391,16 @@ class AppLocalizationsJa extends AppLocalizations {
   String openingApp(String appName) {
     return '$appNameを開いています...';
   }
+
+  @override
+  String get writeSomething => '何か書いてください';
+
+  @override
+  String get submitReply => '返信を送信';
+
+  @override
+  String get editYourReply => '返信を編集';
+
+  @override
+  String get replyToReview => 'レビューに返信';
 }

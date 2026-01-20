@@ -6518,4 +6518,16 @@ class AppLocalizationsRu extends AppLocalizations {
   String openingApp(String appName) {
     return 'Открытие $appName...';
   }
+
+  @override
+  String get writeSomething => 'Напишите что-нибудь';
+
+  @override
+  String get submitReply => 'Отправить ответ';
+
+  @override
+  String get editYourReply => 'Редактировать ответ';
+
+  @override
+  String get replyToReview => 'Ответить на отзыв';
 }
