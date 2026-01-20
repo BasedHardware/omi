@@ -7445,4 +7445,90 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get authFailedToLinkApple => 'Не вдалося зв\'язати з Apple, спробуйте ще раз.';
+
+  @override
+  String get onboardingBluetoothRequired => 'Для підключення до пристрою потрібен дозвіл Bluetooth.';
+
+  @override
+  String get onboardingBluetoothDeniedSystemPrefs =>
+      'Дозвіл Bluetooth відхилено. Надайте дозвіл у Системних налаштуваннях.';
+
+  @override
+  String onboardingBluetoothStatusCheckPrefs(String status) {
+    return 'Статус дозволу Bluetooth: $status. Перевірте Системні налаштування.';
+  }
+
+  @override
+  String onboardingFailedCheckBluetooth(String error) {
+    return 'Не вдалося перевірити дозвіл Bluetooth: $error';
+  }
+
+  @override
+  String get onboardingNotificationDeniedSystemPrefs =>
+      'Дозвіл на сповіщення відхилено. Надайте дозвіл у Системних налаштуваннях.';
+
+  @override
+  String get onboardingNotificationDeniedNotifications =>
+      'Дозвіл на сповіщення відхилено. Надайте дозвіл у Системні налаштування > Сповіщення.';
+
+  @override
+  String onboardingNotificationStatusCheckPrefs(String status) {
+    return 'Статус дозволу на сповіщення: $status. Перевірте Системні налаштування.';
+  }
+
+  @override
+  String onboardingFailedCheckNotification(String error) {
+    return 'Не вдалося перевірити дозвіл на сповіщення: $error';
+  }
+
+  @override
+  String get onboardingLocationGrantInSettings =>
+      'Надайте дозвіл на місцезнаходження в Налаштування > Конфіденційність і безпека > Служби геолокації';
+
+  @override
+  String get onboardingMicrophoneRequired => 'Для запису потрібен дозвіл мікрофона.';
+
+  @override
+  String get onboardingMicrophoneDenied =>
+      'Дозвіл мікрофона відхилено. Надайте дозвіл у Системні налаштування > Конфіденційність і безпека > Мікрофон.';
+
+  @override
+  String onboardingMicrophoneStatusCheckPrefs(String status) {
+    return 'Статус дозволу мікрофона: $status. Перевірте Системні налаштування.';
+  }
+
+  @override
+  String onboardingFailedCheckMicrophone(String error) {
+    return 'Не вдалося перевірити дозвіл мікрофона: $error';
+  }
+
+  @override
+  String get onboardingScreenCaptureRequired => 'Для запису системного звуку потрібен дозвіл на захоплення екрана.';
+
+  @override
+  String get onboardingScreenCaptureDenied =>
+      'Дозвіл на захоплення екрана відхилено. Надайте дозвіл у Системні налаштування > Конфіденційність і безпека > Запис екрана.';
+
+  @override
+  String onboardingScreenCaptureStatusCheckPrefs(String status) {
+    return 'Статус дозволу на захоплення екрана: $status. Перевірте Системні налаштування.';
+  }
+
+  @override
+  String onboardingFailedCheckScreenCapture(String error) {
+    return 'Не вдалося перевірити дозвіл на захоплення екрана: $error';
+  }
+
+  @override
+  String get onboardingAccessibilityRequired => 'Для виявлення зустрічей у браузері потрібен дозвіл на доступність.';
+
+  @override
+  String onboardingAccessibilityStatusCheckPrefs(String status) {
+    return 'Статус дозволу на доступність: $status. Перевірте Системні налаштування.';
+  }
+
+  @override
+  String onboardingFailedCheckAccessibility(String error) {
+    return 'Не вдалося перевірити дозвіл на доступність: $error';
+  }
 }

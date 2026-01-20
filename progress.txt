@@ -11,10 +11,10 @@
 |--------|-------|
 | Total Files | ~48 |
 | Total Strings | ~405 |
-| Completed Files | 27 |
+| Completed Files | 28 |
 | In Progress | 0 |
-| Pending Files | ~21 |
-| Progress | ~67% |
+| Pending Files | ~20 |
+| Progress | ~70% |
 
 **CRITICAL ISSUE**: ~162 pre-existing l10n keys in non-English ARB files still contain
 English text instead of proper translations. See PRIORITY 0 section below.
@@ -205,20 +205,17 @@ Keys: authFailedToSignInWithGoogle, authenticationFailed, authFailedToSignInWith
       authFailedToRetrieveToken, authUnexpectedErrorFirebase, authUnexpectedError,
       authFailedToLinkGoogle, authFailedToLinkApple
 
-### [ ] providers/onboarding_provider.dart (~10 strings)
-Status: PENDING
+### [x] providers/onboarding_provider.dart (~20 strings)
+Status: COMPLETED
 Description: Permission error messages
-Strings found:
-- "Bluetooth permission is required to connect to your device."
-- "Bluetooth permission denied. Please grant permission in System Preferences."
-- "Failed to check Bluetooth permission: $e"
-- "Failed to check Notification permission: $e"
-- "Microphone permission is required for recording."
-- "Failed to check Microphone permission: $e"
-- "Screen capture permission is required for system audio recording."
-- "Failed to check Screen Capture permission: $e"
-- "Accessibility permission is required for detecting browser meetings."
-- "Failed to check Accessibility permission: $e"
+Keys added:
+- onboardingBluetoothRequired, onboardingBluetoothDeniedSystemPrefs, onboardingBluetoothStatusCheckPrefs,
+  onboardingFailedCheckBluetooth, onboardingNotificationDeniedSystemPrefs, onboardingNotificationDeniedNotifications,
+  onboardingNotificationStatusCheckPrefs, onboardingFailedCheckNotification, onboardingLocationGrantInSettings,
+  onboardingMicrophoneRequired, onboardingMicrophoneDenied, onboardingMicrophoneStatusCheckPrefs,
+  onboardingFailedCheckMicrophone, onboardingScreenCaptureRequired, onboardingScreenCaptureDenied,
+  onboardingScreenCaptureStatusCheckPrefs, onboardingFailedCheckScreenCapture, onboardingAccessibilityRequired,
+  onboardingAccessibilityStatusCheckPrefs, onboardingFailedCheckAccessibility
 
 ### [ ] providers/message_provider.dart (~12 strings)
 Status: PENDING
@@ -379,6 +376,14 @@ Fix requires either:
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-20] Localized providers/onboarding_provider.dart with 20 l10n keys for 34 languages
+- Added 20 new localization keys for permission error messages (Bluetooth, Notification, Location, Microphone, Screen Capture, Accessibility)
+- Keys with placeholders: onboardingBluetoothStatusCheckPrefs, onboardingNotificationStatusCheckPrefs,
+  onboardingMicrophoneStatusCheckPrefs, onboardingScreenCaptureStatusCheckPrefs, onboardingAccessibilityStatusCheckPrefs,
+  onboardingFailedCheckBluetooth, onboardingFailedCheckNotification, onboardingFailedCheckMicrophone,
+  onboardingFailedCheckScreenCapture, onboardingFailedCheckAccessibility
+- Updated Dart code to use MyApp.navigatorKey.currentContext?.l10n pattern with fallbacks
 
 [2026-01-20] Localized providers/auth_provider.dart with 8 l10n keys for 34 languages
 - Added 8 new localization keys for authentication error messages

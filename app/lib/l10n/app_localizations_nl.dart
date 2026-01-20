@@ -7456,4 +7456,91 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get authFailedToLinkApple => 'Koppelen met Apple mislukt, probeer het opnieuw.';
+
+  @override
+  String get onboardingBluetoothRequired => 'Bluetooth-toestemming is vereist om verbinding te maken met uw apparaat.';
+
+  @override
+  String get onboardingBluetoothDeniedSystemPrefs =>
+      'Bluetooth-toestemming geweigerd. Verleen toestemming in Systeemvoorkeuren.';
+
+  @override
+  String onboardingBluetoothStatusCheckPrefs(String status) {
+    return 'Bluetooth-toestemmingsstatus: $status. Controleer Systeemvoorkeuren.';
+  }
+
+  @override
+  String onboardingFailedCheckBluetooth(String error) {
+    return 'Kan Bluetooth-toestemming niet controleren: $error';
+  }
+
+  @override
+  String get onboardingNotificationDeniedSystemPrefs =>
+      'Meldingstoestemming geweigerd. Verleen toestemming in Systeemvoorkeuren.';
+
+  @override
+  String get onboardingNotificationDeniedNotifications =>
+      'Meldingstoestemming geweigerd. Verleen toestemming in Systeemvoorkeuren > Meldingen.';
+
+  @override
+  String onboardingNotificationStatusCheckPrefs(String status) {
+    return 'Meldingstoestemmingsstatus: $status. Controleer Systeemvoorkeuren.';
+  }
+
+  @override
+  String onboardingFailedCheckNotification(String error) {
+    return 'Kan meldingstoestemming niet controleren: $error';
+  }
+
+  @override
+  String get onboardingLocationGrantInSettings =>
+      'Verleen locatietoestemming in Instellingen > Privacy en beveiliging > Locatievoorzieningen';
+
+  @override
+  String get onboardingMicrophoneRequired => 'Microfoontoestemming is vereist voor opname.';
+
+  @override
+  String get onboardingMicrophoneDenied =>
+      'Microfoontoestemming geweigerd. Verleen toestemming in Systeemvoorkeuren > Privacy en beveiliging > Microfoon.';
+
+  @override
+  String onboardingMicrophoneStatusCheckPrefs(String status) {
+    return 'Microfoontoestemmingsstatus: $status. Controleer Systeemvoorkeuren.';
+  }
+
+  @override
+  String onboardingFailedCheckMicrophone(String error) {
+    return 'Kan microfoontoestemming niet controleren: $error';
+  }
+
+  @override
+  String get onboardingScreenCaptureRequired => 'Schermopnametoestemming is vereist voor systeemaudio-opname.';
+
+  @override
+  String get onboardingScreenCaptureDenied =>
+      'Schermopnametoestemming geweigerd. Verleen toestemming in Systeemvoorkeuren > Privacy en beveiliging > Schermopname.';
+
+  @override
+  String onboardingScreenCaptureStatusCheckPrefs(String status) {
+    return 'Schermopnametoestemmingsstatus: $status. Controleer Systeemvoorkeuren.';
+  }
+
+  @override
+  String onboardingFailedCheckScreenCapture(String error) {
+    return 'Kan schermopnametoestemming niet controleren: $error';
+  }
+
+  @override
+  String get onboardingAccessibilityRequired =>
+      'Toegankelijkheidstoestemming is vereist voor het detecteren van browservergaderingen.';
+
+  @override
+  String onboardingAccessibilityStatusCheckPrefs(String status) {
+    return 'Toegankelijkheidstoestemmingsstatus: $status. Controleer Systeemvoorkeuren.';
+  }
+
+  @override
+  String onboardingFailedCheckAccessibility(String error) {
+    return 'Kan toegankelijkheidstoestemming niet controleren: $error';
+  }
 }

@@ -7438,4 +7438,91 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get authFailedToLinkApple => 'Prepojenie s Apple zlyhalo, skúste to prosím znova.';
+
+  @override
+  String get onboardingBluetoothRequired => 'Na pripojenie k zariadeniu je potrebné povolenie Bluetooth.';
+
+  @override
+  String get onboardingBluetoothDeniedSystemPrefs =>
+      'Povolenie Bluetooth bolo zamietnuté. Udeľte povolenie v Systémových nastaveniach.';
+
+  @override
+  String onboardingBluetoothStatusCheckPrefs(String status) {
+    return 'Stav povolenia Bluetooth: $status. Skontrolujte Systémové nastavenia.';
+  }
+
+  @override
+  String onboardingFailedCheckBluetooth(String error) {
+    return 'Nepodarilo sa skontrolovať povolenie Bluetooth: $error';
+  }
+
+  @override
+  String get onboardingNotificationDeniedSystemPrefs =>
+      'Povolenie pre oznámenia bolo zamietnuté. Udeľte povolenie v Systémových nastaveniach.';
+
+  @override
+  String get onboardingNotificationDeniedNotifications =>
+      'Povolenie pre oznámenia bolo zamietnuté. Udeľte povolenie v Systémové nastavenia > Oznámenia.';
+
+  @override
+  String onboardingNotificationStatusCheckPrefs(String status) {
+    return 'Stav povolenia pre oznámenia: $status. Skontrolujte Systémové nastavenia.';
+  }
+
+  @override
+  String onboardingFailedCheckNotification(String error) {
+    return 'Nepodarilo sa skontrolovať povolenie pre oznámenia: $error';
+  }
+
+  @override
+  String get onboardingLocationGrantInSettings =>
+      'Udeľte povolenie polohy v Nastavenia > Súkromie a bezpečnosť > Lokalizačné služby';
+
+  @override
+  String get onboardingMicrophoneRequired => 'Na nahrávanie je potrebné povolenie mikrofónu.';
+
+  @override
+  String get onboardingMicrophoneDenied =>
+      'Povolenie mikrofónu bolo zamietnuté. Udeľte povolenie v Systémové nastavenia > Súkromie a bezpečnosť > Mikrofón.';
+
+  @override
+  String onboardingMicrophoneStatusCheckPrefs(String status) {
+    return 'Stav povolenia mikrofónu: $status. Skontrolujte Systémové nastavenia.';
+  }
+
+  @override
+  String onboardingFailedCheckMicrophone(String error) {
+    return 'Nepodarilo sa skontrolovať povolenie mikrofónu: $error';
+  }
+
+  @override
+  String get onboardingScreenCaptureRequired =>
+      'Na nahrávanie systémového zvuku je potrebné povolenie snímania obrazovky.';
+
+  @override
+  String get onboardingScreenCaptureDenied =>
+      'Povolenie snímania obrazovky bolo zamietnuté. Udeľte povolenie v Systémové nastavenia > Súkromie a bezpečnosť > Nahrávanie obrazovky.';
+
+  @override
+  String onboardingScreenCaptureStatusCheckPrefs(String status) {
+    return 'Stav povolenia snímania obrazovky: $status. Skontrolujte Systémové nastavenia.';
+  }
+
+  @override
+  String onboardingFailedCheckScreenCapture(String error) {
+    return 'Nepodarilo sa skontrolovať povolenie snímania obrazovky: $error';
+  }
+
+  @override
+  String get onboardingAccessibilityRequired => 'Na detekciu stretnutí prehliadača je potrebné povolenie prístupnosti.';
+
+  @override
+  String onboardingAccessibilityStatusCheckPrefs(String status) {
+    return 'Stav povolenia prístupnosti: $status. Skontrolujte Systémové nastavenia.';
+  }
+
+  @override
+  String onboardingFailedCheckAccessibility(String error) {
+    return 'Nepodarilo sa skontrolovať povolenie prístupnosti: $error';
+  }
 }

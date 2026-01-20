@@ -13976,6 +13976,126 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Failed to link with Apple, please try again.'**
   String get authFailedToLinkApple;
+
+  /// Error message when Bluetooth permission is needed
+  ///
+  /// In en, this message translates to:
+  /// **'Bluetooth permission is required to connect to your device.'**
+  String get onboardingBluetoothRequired;
+
+  /// Error when Bluetooth permission is denied on macOS
+  ///
+  /// In en, this message translates to:
+  /// **'Bluetooth permission denied. Please grant permission in System Preferences.'**
+  String get onboardingBluetoothDeniedSystemPrefs;
+
+  /// Error showing Bluetooth permission status
+  ///
+  /// In en, this message translates to:
+  /// **'Bluetooth permission status: {status}. Please check System Preferences.'**
+  String onboardingBluetoothStatusCheckPrefs(String status);
+
+  /// Error when checking Bluetooth permission fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to check Bluetooth permission: {error}'**
+  String onboardingFailedCheckBluetooth(String error);
+
+  /// Error when notification permission is denied
+  ///
+  /// In en, this message translates to:
+  /// **'Notification permission denied. Please grant permission in System Preferences.'**
+  String get onboardingNotificationDeniedSystemPrefs;
+
+  /// Error when notification permission is denied with specific path
+  ///
+  /// In en, this message translates to:
+  /// **'Notification permission denied. Please grant permission in System Preferences > Notifications.'**
+  String get onboardingNotificationDeniedNotifications;
+
+  /// Error showing notification permission status
+  ///
+  /// In en, this message translates to:
+  /// **'Notification permission status: {status}. Please check System Preferences.'**
+  String onboardingNotificationStatusCheckPrefs(String status);
+
+  /// Error when checking notification permission fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to check Notification permission: {error}'**
+  String onboardingFailedCheckNotification(String error);
+
+  /// Instructions to grant location permission
+  ///
+  /// In en, this message translates to:
+  /// **'Please grant location permission in Settings > Privacy & Security > Location Services'**
+  String get onboardingLocationGrantInSettings;
+
+  /// Error when microphone permission is needed
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone permission is required for recording.'**
+  String get onboardingMicrophoneRequired;
+
+  /// Error when microphone permission is denied
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone permission denied. Please grant permission in System Preferences > Privacy & Security > Microphone.'**
+  String get onboardingMicrophoneDenied;
+
+  /// Error showing microphone permission status
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone permission status: {status}. Please check System Preferences.'**
+  String onboardingMicrophoneStatusCheckPrefs(String status);
+
+  /// Error when checking microphone permission fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to check Microphone permission: {error}'**
+  String onboardingFailedCheckMicrophone(String error);
+
+  /// Error when screen capture permission is needed
+  ///
+  /// In en, this message translates to:
+  /// **'Screen capture permission is required for system audio recording.'**
+  String get onboardingScreenCaptureRequired;
+
+  /// Error when screen capture permission is denied
+  ///
+  /// In en, this message translates to:
+  /// **'Screen capture permission denied. Please grant permission in System Preferences > Privacy & Security > Screen Recording.'**
+  String get onboardingScreenCaptureDenied;
+
+  /// Error showing screen capture permission status
+  ///
+  /// In en, this message translates to:
+  /// **'Screen capture permission status: {status}. Please check System Preferences.'**
+  String onboardingScreenCaptureStatusCheckPrefs(String status);
+
+  /// Error when checking screen capture permission fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to check Screen Capture permission: {error}'**
+  String onboardingFailedCheckScreenCapture(String error);
+
+  /// Error when accessibility permission is needed
+  ///
+  /// In en, this message translates to:
+  /// **'Accessibility permission is required for detecting browser meetings.'**
+  String get onboardingAccessibilityRequired;
+
+  /// Error showing accessibility permission status
+  ///
+  /// In en, this message translates to:
+  /// **'Accessibility permission status: {status}. Please check System Preferences.'**
+  String onboardingAccessibilityStatusCheckPrefs(String status);
+
+  /// Error when checking accessibility permission fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to check Accessibility permission: {error}'**
+  String onboardingFailedCheckAccessibility(String error);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

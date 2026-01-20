@@ -7465,4 +7465,92 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get authFailedToLinkApple => 'Неуспешно свързване с Apple, моля опитайте отново.';
+
+  @override
+  String get onboardingBluetoothRequired => 'За свързване с вашето устройство е необходимо разрешение за Bluetooth.';
+
+  @override
+  String get onboardingBluetoothDeniedSystemPrefs =>
+      'Разрешението за Bluetooth е отказано. Моля, дайте разрешение в Системни настройки.';
+
+  @override
+  String onboardingBluetoothStatusCheckPrefs(String status) {
+    return 'Състояние на разрешението за Bluetooth: $status. Моля, проверете Системни настройки.';
+  }
+
+  @override
+  String onboardingFailedCheckBluetooth(String error) {
+    return 'Неуспешна проверка на разрешението за Bluetooth: $error';
+  }
+
+  @override
+  String get onboardingNotificationDeniedSystemPrefs =>
+      'Разрешението за известия е отказано. Моля, дайте разрешение в Системни настройки.';
+
+  @override
+  String get onboardingNotificationDeniedNotifications =>
+      'Разрешението за известия е отказано. Моля, дайте разрешение в Системни настройки > Известия.';
+
+  @override
+  String onboardingNotificationStatusCheckPrefs(String status) {
+    return 'Състояние на разрешението за известия: $status. Моля, проверете Системни настройки.';
+  }
+
+  @override
+  String onboardingFailedCheckNotification(String error) {
+    return 'Неуспешна проверка на разрешението за известия: $error';
+  }
+
+  @override
+  String get onboardingLocationGrantInSettings =>
+      'Моля, дайте разрешение за местоположение в Настройки > Поверителност и сигурност > Услуги за местоположение';
+
+  @override
+  String get onboardingMicrophoneRequired => 'За запис е необходимо разрешение за микрофон.';
+
+  @override
+  String get onboardingMicrophoneDenied =>
+      'Разрешението за микрофон е отказано. Моля, дайте разрешение в Системни настройки > Поверителност и сигурност > Микрофон.';
+
+  @override
+  String onboardingMicrophoneStatusCheckPrefs(String status) {
+    return 'Състояние на разрешението за микрофон: $status. Моля, проверете Системни настройки.';
+  }
+
+  @override
+  String onboardingFailedCheckMicrophone(String error) {
+    return 'Неуспешна проверка на разрешението за микрофон: $error';
+  }
+
+  @override
+  String get onboardingScreenCaptureRequired =>
+      'За запис на системен звук е необходимо разрешение за заснемане на екран.';
+
+  @override
+  String get onboardingScreenCaptureDenied =>
+      'Разрешението за заснемане на екран е отказано. Моля, дайте разрешение в Системни настройки > Поверителност и сигурност > Запис на екран.';
+
+  @override
+  String onboardingScreenCaptureStatusCheckPrefs(String status) {
+    return 'Състояние на разрешението за заснемане на екран: $status. Моля, проверете Системни настройки.';
+  }
+
+  @override
+  String onboardingFailedCheckScreenCapture(String error) {
+    return 'Неуспешна проверка на разрешението за заснемане на екран: $error';
+  }
+
+  @override
+  String get onboardingAccessibilityRequired =>
+      'За откриване на срещи в браузъра е необходимо разрешение за достъпност.';
+
+  @override
+  String onboardingAccessibilityStatusCheckPrefs(String status) {
+    return 'Състояние на разрешението за достъпност: $status. Моля, проверете Системни настройки.';
+  }
+
+  @override
+  String onboardingFailedCheckAccessibility(String error) {
+    return 'Неуспешна проверка на разрешението за достъпност: $error';
+  }
 }

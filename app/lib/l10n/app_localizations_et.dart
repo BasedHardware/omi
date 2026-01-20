@@ -7437,4 +7437,89 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get authFailedToLinkApple => 'Apple\'iga sidumine ebaõnnestus, palun proovige uuesti.';
+
+  @override
+  String get onboardingBluetoothRequired => 'Seadmega ühenduse loomiseks on vajalik Bluetoothi luba.';
+
+  @override
+  String get onboardingBluetoothDeniedSystemPrefs => 'Bluetoothi luba keelatud. Palun andke luba Süsteemieelistustes.';
+
+  @override
+  String onboardingBluetoothStatusCheckPrefs(String status) {
+    return 'Bluetoothi loa olek: $status. Palun kontrollige Süsteemieelistusi.';
+  }
+
+  @override
+  String onboardingFailedCheckBluetooth(String error) {
+    return 'Bluetoothi loa kontrollimine ebaõnnestus: $error';
+  }
+
+  @override
+  String get onboardingNotificationDeniedSystemPrefs =>
+      'Teavituste luba keelatud. Palun andke luba Süsteemieelistustes.';
+
+  @override
+  String get onboardingNotificationDeniedNotifications =>
+      'Teavituste luba keelatud. Palun andke luba Süsteemieelistused > Teavitused.';
+
+  @override
+  String onboardingNotificationStatusCheckPrefs(String status) {
+    return 'Teavituste loa olek: $status. Palun kontrollige Süsteemieelistusi.';
+  }
+
+  @override
+  String onboardingFailedCheckNotification(String error) {
+    return 'Teavituste loa kontrollimine ebaõnnestus: $error';
+  }
+
+  @override
+  String get onboardingLocationGrantInSettings =>
+      'Palun andke asukohaluba Seaded > Privaatsus ja turvalisus > Asukohateenused';
+
+  @override
+  String get onboardingMicrophoneRequired => 'Salvestamiseks on vajalik mikrofoni luba.';
+
+  @override
+  String get onboardingMicrophoneDenied =>
+      'Mikrofoni luba keelatud. Palun andke luba Süsteemieelistused > Privaatsus ja turvalisus > Mikrofon.';
+
+  @override
+  String onboardingMicrophoneStatusCheckPrefs(String status) {
+    return 'Mikrofoni loa olek: $status. Palun kontrollige Süsteemieelistusi.';
+  }
+
+  @override
+  String onboardingFailedCheckMicrophone(String error) {
+    return 'Mikrofoni loa kontrollimine ebaõnnestus: $error';
+  }
+
+  @override
+  String get onboardingScreenCaptureRequired => 'Süsteemiheli salvestamiseks on vajalik ekraanipildi luba.';
+
+  @override
+  String get onboardingScreenCaptureDenied =>
+      'Ekraanipildi luba keelatud. Palun andke luba Süsteemieelistused > Privaatsus ja turvalisus > Ekraani salvestamine.';
+
+  @override
+  String onboardingScreenCaptureStatusCheckPrefs(String status) {
+    return 'Ekraanipildi loa olek: $status. Palun kontrollige Süsteemieelistusi.';
+  }
+
+  @override
+  String onboardingFailedCheckScreenCapture(String error) {
+    return 'Ekraanipildi loa kontrollimine ebaõnnestus: $error';
+  }
+
+  @override
+  String get onboardingAccessibilityRequired => 'Brauseri koosolekute tuvastamiseks on vajalik ligipääsetavuse luba.';
+
+  @override
+  String onboardingAccessibilityStatusCheckPrefs(String status) {
+    return 'Ligipääsetavuse loa olek: $status. Palun kontrollige Süsteemieelistusi.';
+  }
+
+  @override
+  String onboardingFailedCheckAccessibility(String error) {
+    return 'Ligipääsetavuse loa kontrollimine ebaõnnestus: $error';
+  }
 }

@@ -7477,4 +7477,92 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get authFailedToLinkApple => 'Collegamento con Apple non riuscito, riprova.';
+
+  @override
+  String get onboardingBluetoothRequired => 'È necessaria l\'autorizzazione Bluetooth per connettersi al dispositivo.';
+
+  @override
+  String get onboardingBluetoothDeniedSystemPrefs =>
+      'Autorizzazione Bluetooth negata. Concedi l\'autorizzazione in Preferenze di Sistema.';
+
+  @override
+  String onboardingBluetoothStatusCheckPrefs(String status) {
+    return 'Stato autorizzazione Bluetooth: $status. Controlla Preferenze di Sistema.';
+  }
+
+  @override
+  String onboardingFailedCheckBluetooth(String error) {
+    return 'Impossibile verificare l\'autorizzazione Bluetooth: $error';
+  }
+
+  @override
+  String get onboardingNotificationDeniedSystemPrefs =>
+      'Autorizzazione notifiche negata. Concedi l\'autorizzazione in Preferenze di Sistema.';
+
+  @override
+  String get onboardingNotificationDeniedNotifications =>
+      'Autorizzazione notifiche negata. Concedi l\'autorizzazione in Preferenze di Sistema > Notifiche.';
+
+  @override
+  String onboardingNotificationStatusCheckPrefs(String status) {
+    return 'Stato autorizzazione notifiche: $status. Controlla Preferenze di Sistema.';
+  }
+
+  @override
+  String onboardingFailedCheckNotification(String error) {
+    return 'Impossibile verificare l\'autorizzazione notifiche: $error';
+  }
+
+  @override
+  String get onboardingLocationGrantInSettings =>
+      'Concedi l\'autorizzazione alla posizione in Impostazioni > Privacy e sicurezza > Servizi di localizzazione';
+
+  @override
+  String get onboardingMicrophoneRequired => 'È necessaria l\'autorizzazione microfono per registrare.';
+
+  @override
+  String get onboardingMicrophoneDenied =>
+      'Autorizzazione microfono negata. Concedi l\'autorizzazione in Preferenze di Sistema > Privacy e sicurezza > Microfono.';
+
+  @override
+  String onboardingMicrophoneStatusCheckPrefs(String status) {
+    return 'Stato autorizzazione microfono: $status. Controlla Preferenze di Sistema.';
+  }
+
+  @override
+  String onboardingFailedCheckMicrophone(String error) {
+    return 'Impossibile verificare l\'autorizzazione microfono: $error';
+  }
+
+  @override
+  String get onboardingScreenCaptureRequired =>
+      'È necessaria l\'autorizzazione di cattura schermo per la registrazione audio di sistema.';
+
+  @override
+  String get onboardingScreenCaptureDenied =>
+      'Autorizzazione cattura schermo negata. Concedi l\'autorizzazione in Preferenze di Sistema > Privacy e sicurezza > Registrazione schermo.';
+
+  @override
+  String onboardingScreenCaptureStatusCheckPrefs(String status) {
+    return 'Stato autorizzazione cattura schermo: $status. Controlla Preferenze di Sistema.';
+  }
+
+  @override
+  String onboardingFailedCheckScreenCapture(String error) {
+    return 'Impossibile verificare l\'autorizzazione cattura schermo: $error';
+  }
+
+  @override
+  String get onboardingAccessibilityRequired =>
+      'È necessaria l\'autorizzazione accessibilità per rilevare riunioni del browser.';
+
+  @override
+  String onboardingAccessibilityStatusCheckPrefs(String status) {
+    return 'Stato autorizzazione accessibilità: $status. Controlla Preferenze di Sistema.';
+  }
+
+  @override
+  String onboardingFailedCheckAccessibility(String error) {
+    return 'Impossibile verificare l\'autorizzazione accessibilità: $error';
+  }
 }

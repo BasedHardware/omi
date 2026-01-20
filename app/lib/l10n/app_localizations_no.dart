@@ -7433,4 +7433,88 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get authFailedToLinkApple => 'Kunne ikke koble til Apple, vennligst prøv igjen.';
+
+  @override
+  String get onboardingBluetoothRequired => 'Bluetooth-tillatelse kreves for å koble til enheten din.';
+
+  @override
+  String get onboardingBluetoothDeniedSystemPrefs => 'Bluetooth-tillatelse avvist. Gi tillatelse i Systemvalg.';
+
+  @override
+  String onboardingBluetoothStatusCheckPrefs(String status) {
+    return 'Bluetooth-tillatelsestatus: $status. Sjekk Systemvalg.';
+  }
+
+  @override
+  String onboardingFailedCheckBluetooth(String error) {
+    return 'Kunne ikke sjekke Bluetooth-tillatelse: $error';
+  }
+
+  @override
+  String get onboardingNotificationDeniedSystemPrefs => 'Varslingstillatelse avvist. Gi tillatelse i Systemvalg.';
+
+  @override
+  String get onboardingNotificationDeniedNotifications =>
+      'Varslingstillatelse avvist. Gi tillatelse i Systemvalg > Varsler.';
+
+  @override
+  String onboardingNotificationStatusCheckPrefs(String status) {
+    return 'Varslingstillatelsestatus: $status. Sjekk Systemvalg.';
+  }
+
+  @override
+  String onboardingFailedCheckNotification(String error) {
+    return 'Kunne ikke sjekke varslingstillatelse: $error';
+  }
+
+  @override
+  String get onboardingLocationGrantInSettings =>
+      'Gi posisjonstillatelse i Innstillinger > Personvern og sikkerhet > Posisjonstjenester';
+
+  @override
+  String get onboardingMicrophoneRequired => 'Mikrofontillatelse kreves for opptak.';
+
+  @override
+  String get onboardingMicrophoneDenied =>
+      'Mikrofontillatelse avvist. Gi tillatelse i Systemvalg > Personvern og sikkerhet > Mikrofon.';
+
+  @override
+  String onboardingMicrophoneStatusCheckPrefs(String status) {
+    return 'Mikrofontillatelsestatus: $status. Sjekk Systemvalg.';
+  }
+
+  @override
+  String onboardingFailedCheckMicrophone(String error) {
+    return 'Kunne ikke sjekke mikrofontillatelse: $error';
+  }
+
+  @override
+  String get onboardingScreenCaptureRequired => 'Skjermopptakstillatelse kreves for opptak av systemlyd.';
+
+  @override
+  String get onboardingScreenCaptureDenied =>
+      'Skjermopptakstillatelse avvist. Gi tillatelse i Systemvalg > Personvern og sikkerhet > Skjermopptak.';
+
+  @override
+  String onboardingScreenCaptureStatusCheckPrefs(String status) {
+    return 'Skjermopptakstillatelsestatus: $status. Sjekk Systemvalg.';
+  }
+
+  @override
+  String onboardingFailedCheckScreenCapture(String error) {
+    return 'Kunne ikke sjekke skjermopptakstillatelse: $error';
+  }
+
+  @override
+  String get onboardingAccessibilityRequired => 'Tilgjengelighetstillatelse kreves for å oppdage nettlesermøter.';
+
+  @override
+  String onboardingAccessibilityStatusCheckPrefs(String status) {
+    return 'Tilgjengelighetstillatelsestatus: $status. Sjekk Systemvalg.';
+  }
+
+  @override
+  String onboardingFailedCheckAccessibility(String error) {
+    return 'Kunne ikke sjekke tilgjengelighetstillatelse: $error';
+  }
 }

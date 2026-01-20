@@ -7448,4 +7448,92 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get authFailedToLinkApple => 'Nie udało się połączyć z Apple, spróbuj ponownie.';
+
+  @override
+  String get onboardingBluetoothRequired => 'Uprawnienie Bluetooth jest wymagane do połączenia z urządzeniem.';
+
+  @override
+  String get onboardingBluetoothDeniedSystemPrefs =>
+      'Uprawnienie Bluetooth odrzucone. Przyznaj uprawnienie w Preferencjach systemowych.';
+
+  @override
+  String onboardingBluetoothStatusCheckPrefs(String status) {
+    return 'Status uprawnienia Bluetooth: $status. Sprawdź Preferencje systemowe.';
+  }
+
+  @override
+  String onboardingFailedCheckBluetooth(String error) {
+    return 'Nie udało się sprawdzić uprawnienia Bluetooth: $error';
+  }
+
+  @override
+  String get onboardingNotificationDeniedSystemPrefs =>
+      'Uprawnienie powiadomień odrzucone. Przyznaj uprawnienie w Preferencjach systemowych.';
+
+  @override
+  String get onboardingNotificationDeniedNotifications =>
+      'Uprawnienie powiadomień odrzucone. Przyznaj uprawnienie w Preferencje systemowe > Powiadomienia.';
+
+  @override
+  String onboardingNotificationStatusCheckPrefs(String status) {
+    return 'Status uprawnienia powiadomień: $status. Sprawdź Preferencje systemowe.';
+  }
+
+  @override
+  String onboardingFailedCheckNotification(String error) {
+    return 'Nie udało się sprawdzić uprawnienia powiadomień: $error';
+  }
+
+  @override
+  String get onboardingLocationGrantInSettings =>
+      'Przyznaj uprawnienie lokalizacji w Ustawienia > Prywatność i bezpieczeństwo > Usługi lokalizacyjne';
+
+  @override
+  String get onboardingMicrophoneRequired => 'Uprawnienie mikrofonu jest wymagane do nagrywania.';
+
+  @override
+  String get onboardingMicrophoneDenied =>
+      'Uprawnienie mikrofonu odrzucone. Przyznaj uprawnienie w Preferencje systemowe > Prywatność i bezpieczeństwo > Mikrofon.';
+
+  @override
+  String onboardingMicrophoneStatusCheckPrefs(String status) {
+    return 'Status uprawnienia mikrofonu: $status. Sprawdź Preferencje systemowe.';
+  }
+
+  @override
+  String onboardingFailedCheckMicrophone(String error) {
+    return 'Nie udało się sprawdzić uprawnienia mikrofonu: $error';
+  }
+
+  @override
+  String get onboardingScreenCaptureRequired =>
+      'Uprawnienie przechwytywania ekranu jest wymagane do nagrywania dźwięku systemowego.';
+
+  @override
+  String get onboardingScreenCaptureDenied =>
+      'Uprawnienie przechwytywania ekranu odrzucone. Przyznaj uprawnienie w Preferencje systemowe > Prywatność i bezpieczeństwo > Nagrywanie ekranu.';
+
+  @override
+  String onboardingScreenCaptureStatusCheckPrefs(String status) {
+    return 'Status uprawnienia przechwytywania ekranu: $status. Sprawdź Preferencje systemowe.';
+  }
+
+  @override
+  String onboardingFailedCheckScreenCapture(String error) {
+    return 'Nie udało się sprawdzić uprawnienia przechwytywania ekranu: $error';
+  }
+
+  @override
+  String get onboardingAccessibilityRequired =>
+      'Uprawnienie dostępności jest wymagane do wykrywania spotkań przeglądarki.';
+
+  @override
+  String onboardingAccessibilityStatusCheckPrefs(String status) {
+    return 'Status uprawnienia dostępności: $status. Sprawdź Preferencje systemowe.';
+  }
+
+  @override
+  String onboardingFailedCheckAccessibility(String error) {
+    return 'Nie udało się sprawdzić uprawnienia dostępności: $error';
+  }
 }

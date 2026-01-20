@@ -7440,4 +7440,90 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get authFailedToLinkApple => 'Kunde inte koppla till Apple, försök igen.';
+
+  @override
+  String get onboardingBluetoothRequired => 'Bluetooth-behörighet krävs för att ansluta till din enhet.';
+
+  @override
+  String get onboardingBluetoothDeniedSystemPrefs =>
+      'Bluetooth-behörighet nekad. Bevilja behörighet i Systeminställningar.';
+
+  @override
+  String onboardingBluetoothStatusCheckPrefs(String status) {
+    return 'Bluetooth-behörighetsstatus: $status. Kontrollera Systeminställningar.';
+  }
+
+  @override
+  String onboardingFailedCheckBluetooth(String error) {
+    return 'Kunde inte kontrollera Bluetooth-behörighet: $error';
+  }
+
+  @override
+  String get onboardingNotificationDeniedSystemPrefs =>
+      'Aviseringsbehörighet nekad. Bevilja behörighet i Systeminställningar.';
+
+  @override
+  String get onboardingNotificationDeniedNotifications =>
+      'Aviseringsbehörighet nekad. Bevilja behörighet i Systeminställningar > Aviseringar.';
+
+  @override
+  String onboardingNotificationStatusCheckPrefs(String status) {
+    return 'Aviseringsbehörighetsstatus: $status. Kontrollera Systeminställningar.';
+  }
+
+  @override
+  String onboardingFailedCheckNotification(String error) {
+    return 'Kunde inte kontrollera aviseringsbehörighet: $error';
+  }
+
+  @override
+  String get onboardingLocationGrantInSettings =>
+      'Bevilja platsbehörighet i Inställningar > Integritet och säkerhet > Platstjänster';
+
+  @override
+  String get onboardingMicrophoneRequired => 'Mikrofonbehörighet krävs för inspelning.';
+
+  @override
+  String get onboardingMicrophoneDenied =>
+      'Mikrofonbehörighet nekad. Bevilja behörighet i Systeminställningar > Integritet och säkerhet > Mikrofon.';
+
+  @override
+  String onboardingMicrophoneStatusCheckPrefs(String status) {
+    return 'Mikrofonbehörighetsstatus: $status. Kontrollera Systeminställningar.';
+  }
+
+  @override
+  String onboardingFailedCheckMicrophone(String error) {
+    return 'Kunde inte kontrollera mikrofonbehörighet: $error';
+  }
+
+  @override
+  String get onboardingScreenCaptureRequired => 'Skärminspelningsbehörighet krävs för systemljudinspelning.';
+
+  @override
+  String get onboardingScreenCaptureDenied =>
+      'Skärminspelningsbehörighet nekad. Bevilja behörighet i Systeminställningar > Integritet och säkerhet > Skärminspelning.';
+
+  @override
+  String onboardingScreenCaptureStatusCheckPrefs(String status) {
+    return 'Skärminspelningsbehörighetsstatus: $status. Kontrollera Systeminställningar.';
+  }
+
+  @override
+  String onboardingFailedCheckScreenCapture(String error) {
+    return 'Kunde inte kontrollera skärminspelningsbehörighet: $error';
+  }
+
+  @override
+  String get onboardingAccessibilityRequired => 'Tillgänglighetsbehörighet krävs för att upptäcka webbläsarmöten.';
+
+  @override
+  String onboardingAccessibilityStatusCheckPrefs(String status) {
+    return 'Tillgänglighetsbehörighetsstatus: $status. Kontrollera Systeminställningar.';
+  }
+
+  @override
+  String onboardingFailedCheckAccessibility(String error) {
+    return 'Kunde inte kontrollera tillgänglighetsbehörighet: $error';
+  }
 }

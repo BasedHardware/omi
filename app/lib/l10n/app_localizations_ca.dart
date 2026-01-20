@@ -7480,4 +7480,92 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get authFailedToLinkApple => 'No s\'ha pogut vincular amb Apple, si us plau torneu-ho a provar.';
+
+  @override
+  String get onboardingBluetoothRequired => 'Es requereix permís de Bluetooth per connectar al dispositiu.';
+
+  @override
+  String get onboardingBluetoothDeniedSystemPrefs =>
+      'Permís de Bluetooth denegat. Si us plau, concediu permís a Preferències del Sistema.';
+
+  @override
+  String onboardingBluetoothStatusCheckPrefs(String status) {
+    return 'Estat del permís de Bluetooth: $status. Si us plau, comproveu Preferències del Sistema.';
+  }
+
+  @override
+  String onboardingFailedCheckBluetooth(String error) {
+    return 'Error en comprovar el permís de Bluetooth: $error';
+  }
+
+  @override
+  String get onboardingNotificationDeniedSystemPrefs =>
+      'Permís de notificacions denegat. Si us plau, concediu permís a Preferències del Sistema.';
+
+  @override
+  String get onboardingNotificationDeniedNotifications =>
+      'Permís de notificacions denegat. Si us plau, concediu permís a Preferències del Sistema > Notificacions.';
+
+  @override
+  String onboardingNotificationStatusCheckPrefs(String status) {
+    return 'Estat del permís de notificacions: $status. Si us plau, comproveu Preferències del Sistema.';
+  }
+
+  @override
+  String onboardingFailedCheckNotification(String error) {
+    return 'Error en comprovar el permís de notificacions: $error';
+  }
+
+  @override
+  String get onboardingLocationGrantInSettings =>
+      'Si us plau, concediu permís d\'ubicació a Configuració > Privacitat i Seguretat > Serveis d\'ubicació';
+
+  @override
+  String get onboardingMicrophoneRequired => 'Es requereix permís de micròfon per gravar.';
+
+  @override
+  String get onboardingMicrophoneDenied =>
+      'Permís de micròfon denegat. Si us plau, concediu permís a Preferències del Sistema > Privacitat i Seguretat > Micròfon.';
+
+  @override
+  String onboardingMicrophoneStatusCheckPrefs(String status) {
+    return 'Estat del permís de micròfon: $status. Si us plau, comproveu Preferències del Sistema.';
+  }
+
+  @override
+  String onboardingFailedCheckMicrophone(String error) {
+    return 'Error en comprovar el permís de micròfon: $error';
+  }
+
+  @override
+  String get onboardingScreenCaptureRequired =>
+      'Es requereix permís de captura de pantalla per gravar àudio del sistema.';
+
+  @override
+  String get onboardingScreenCaptureDenied =>
+      'Permís de captura de pantalla denegat. Si us plau, concediu permís a Preferències del Sistema > Privacitat i Seguretat > Gravació de pantalla.';
+
+  @override
+  String onboardingScreenCaptureStatusCheckPrefs(String status) {
+    return 'Estat del permís de captura de pantalla: $status. Si us plau, comproveu Preferències del Sistema.';
+  }
+
+  @override
+  String onboardingFailedCheckScreenCapture(String error) {
+    return 'Error en comprovar el permís de captura de pantalla: $error';
+  }
+
+  @override
+  String get onboardingAccessibilityRequired =>
+      'Es requereix permís d\'accessibilitat per detectar reunions del navegador.';
+
+  @override
+  String onboardingAccessibilityStatusCheckPrefs(String status) {
+    return 'Estat del permís d\'accessibilitat: $status. Si us plau, comproveu Preferències del Sistema.';
+  }
+
+  @override
+  String onboardingFailedCheckAccessibility(String error) {
+    return 'Error en comprovar el permís d\'accessibilitat: $error';
+  }
 }

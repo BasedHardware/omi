@@ -7470,4 +7470,91 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get authFailedToLinkApple => 'Nem sikerült az Apple-lel összekapcsolni, kérjük próbálja újra.';
+
+  @override
+  String get onboardingBluetoothRequired => 'Bluetooth-engedély szükséges az eszközhöz való csatlakozáshoz.';
+
+  @override
+  String get onboardingBluetoothDeniedSystemPrefs =>
+      'Bluetooth-engedély megtagadva. Kérjük, adja meg az engedélyt a Rendszerbeállításokban.';
+
+  @override
+  String onboardingBluetoothStatusCheckPrefs(String status) {
+    return 'Bluetooth-engedély állapota: $status. Kérjük, ellenőrizze a Rendszerbeállításokat.';
+  }
+
+  @override
+  String onboardingFailedCheckBluetooth(String error) {
+    return 'Bluetooth-engedély ellenőrzése sikertelen: $error';
+  }
+
+  @override
+  String get onboardingNotificationDeniedSystemPrefs =>
+      'Értesítési engedély megtagadva. Kérjük, adja meg az engedélyt a Rendszerbeállításokban.';
+
+  @override
+  String get onboardingNotificationDeniedNotifications =>
+      'Értesítési engedély megtagadva. Kérjük, adja meg az engedélyt a Rendszerbeállítások > Értesítések menüpontban.';
+
+  @override
+  String onboardingNotificationStatusCheckPrefs(String status) {
+    return 'Értesítési engedély állapota: $status. Kérjük, ellenőrizze a Rendszerbeállításokat.';
+  }
+
+  @override
+  String onboardingFailedCheckNotification(String error) {
+    return 'Értesítési engedély ellenőrzése sikertelen: $error';
+  }
+
+  @override
+  String get onboardingLocationGrantInSettings =>
+      'Kérjük, adja meg a helymeghatározási engedélyt a Beállítások > Adatvédelem és biztonság > Helyszolgáltatások menüpontban';
+
+  @override
+  String get onboardingMicrophoneRequired => 'Mikrofon-engedély szükséges a felvételhez.';
+
+  @override
+  String get onboardingMicrophoneDenied =>
+      'Mikrofon-engedély megtagadva. Kérjük, adja meg az engedélyt a Rendszerbeállítások > Adatvédelem és biztonság > Mikrofon menüpontban.';
+
+  @override
+  String onboardingMicrophoneStatusCheckPrefs(String status) {
+    return 'Mikrofon-engedély állapota: $status. Kérjük, ellenőrizze a Rendszerbeállításokat.';
+  }
+
+  @override
+  String onboardingFailedCheckMicrophone(String error) {
+    return 'Mikrofon-engedély ellenőrzése sikertelen: $error';
+  }
+
+  @override
+  String get onboardingScreenCaptureRequired => 'Képernyőrögzítési engedély szükséges a rendszerhang rögzítéséhez.';
+
+  @override
+  String get onboardingScreenCaptureDenied =>
+      'Képernyőrögzítési engedély megtagadva. Kérjük, adja meg az engedélyt a Rendszerbeállítások > Adatvédelem és biztonság > Képernyőfelvétel menüpontban.';
+
+  @override
+  String onboardingScreenCaptureStatusCheckPrefs(String status) {
+    return 'Képernyőrögzítési engedély állapota: $status. Kérjük, ellenőrizze a Rendszerbeállításokat.';
+  }
+
+  @override
+  String onboardingFailedCheckScreenCapture(String error) {
+    return 'Képernyőrögzítési engedély ellenőrzése sikertelen: $error';
+  }
+
+  @override
+  String get onboardingAccessibilityRequired =>
+      'Akadálymentesítési engedély szükséges a böngészőtalálkozók észleléséhez.';
+
+  @override
+  String onboardingAccessibilityStatusCheckPrefs(String status) {
+    return 'Akadálymentesítési engedély állapota: $status. Kérjük, ellenőrizze a Rendszerbeállításokat.';
+  }
+
+  @override
+  String onboardingFailedCheckAccessibility(String error) {
+    return 'Akadálymentesítési engedély ellenőrzése sikertelen: $error';
+  }
 }

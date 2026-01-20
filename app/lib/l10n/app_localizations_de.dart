@@ -7500,4 +7500,93 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get authFailedToLinkApple => 'Verknüpfung mit Apple fehlgeschlagen, bitte versuchen Sie es erneut.';
+
+  @override
+  String get onboardingBluetoothRequired =>
+      'Bluetooth-Berechtigung ist erforderlich, um sich mit Ihrem Gerät zu verbinden.';
+
+  @override
+  String get onboardingBluetoothDeniedSystemPrefs =>
+      'Bluetooth-Berechtigung verweigert. Bitte erteilen Sie die Berechtigung in den Systemeinstellungen.';
+
+  @override
+  String onboardingBluetoothStatusCheckPrefs(String status) {
+    return 'Bluetooth-Berechtigungsstatus: $status. Bitte überprüfen Sie die Systemeinstellungen.';
+  }
+
+  @override
+  String onboardingFailedCheckBluetooth(String error) {
+    return 'Bluetooth-Berechtigung konnte nicht überprüft werden: $error';
+  }
+
+  @override
+  String get onboardingNotificationDeniedSystemPrefs =>
+      'Benachrichtigungsberechtigung verweigert. Bitte erteilen Sie die Berechtigung in den Systemeinstellungen.';
+
+  @override
+  String get onboardingNotificationDeniedNotifications =>
+      'Benachrichtigungsberechtigung verweigert. Bitte erteilen Sie die Berechtigung in Systemeinstellungen > Mitteilungen.';
+
+  @override
+  String onboardingNotificationStatusCheckPrefs(String status) {
+    return 'Benachrichtigungsberechtigungsstatus: $status. Bitte überprüfen Sie die Systemeinstellungen.';
+  }
+
+  @override
+  String onboardingFailedCheckNotification(String error) {
+    return 'Benachrichtigungsberechtigung konnte nicht überprüft werden: $error';
+  }
+
+  @override
+  String get onboardingLocationGrantInSettings =>
+      'Bitte erteilen Sie die Standortberechtigung in Einstellungen > Datenschutz & Sicherheit > Ortungsdienste';
+
+  @override
+  String get onboardingMicrophoneRequired => 'Mikrofonberechtigung ist für die Aufnahme erforderlich.';
+
+  @override
+  String get onboardingMicrophoneDenied =>
+      'Mikrofonberechtigung verweigert. Bitte erteilen Sie die Berechtigung in Systemeinstellungen > Datenschutz & Sicherheit > Mikrofon.';
+
+  @override
+  String onboardingMicrophoneStatusCheckPrefs(String status) {
+    return 'Mikrofonberechtigungsstatus: $status. Bitte überprüfen Sie die Systemeinstellungen.';
+  }
+
+  @override
+  String onboardingFailedCheckMicrophone(String error) {
+    return 'Mikrofonberechtigung konnte nicht überprüft werden: $error';
+  }
+
+  @override
+  String get onboardingScreenCaptureRequired =>
+      'Bildschirmaufnahme-Berechtigung ist für die Systemtonaufnahme erforderlich.';
+
+  @override
+  String get onboardingScreenCaptureDenied =>
+      'Bildschirmaufnahme-Berechtigung verweigert. Bitte erteilen Sie die Berechtigung in Systemeinstellungen > Datenschutz & Sicherheit > Bildschirmaufnahme.';
+
+  @override
+  String onboardingScreenCaptureStatusCheckPrefs(String status) {
+    return 'Bildschirmaufnahme-Berechtigungsstatus: $status. Bitte überprüfen Sie die Systemeinstellungen.';
+  }
+
+  @override
+  String onboardingFailedCheckScreenCapture(String error) {
+    return 'Bildschirmaufnahme-Berechtigung konnte nicht überprüft werden: $error';
+  }
+
+  @override
+  String get onboardingAccessibilityRequired =>
+      'Bedienungshilfen-Berechtigung ist erforderlich, um Browser-Meetings zu erkennen.';
+
+  @override
+  String onboardingAccessibilityStatusCheckPrefs(String status) {
+    return 'Bedienungshilfen-Berechtigungsstatus: $status. Bitte überprüfen Sie die Systemeinstellungen.';
+  }
+
+  @override
+  String onboardingFailedCheckAccessibility(String error) {
+    return 'Bedienungshilfen-Berechtigung konnte nicht überprüft werden: $error';
+  }
 }

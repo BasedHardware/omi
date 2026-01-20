@@ -7443,4 +7443,92 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get authFailedToLinkApple => 'Error al vincular con Apple, por favor inténtalo de nuevo.';
+
+  @override
+  String get onboardingBluetoothRequired => 'Se requiere permiso de Bluetooth para conectarse a su dispositivo.';
+
+  @override
+  String get onboardingBluetoothDeniedSystemPrefs =>
+      'Permiso de Bluetooth denegado. Por favor, conceda el permiso en Preferencias del Sistema.';
+
+  @override
+  String onboardingBluetoothStatusCheckPrefs(String status) {
+    return 'Estado del permiso de Bluetooth: $status. Por favor, compruebe Preferencias del Sistema.';
+  }
+
+  @override
+  String onboardingFailedCheckBluetooth(String error) {
+    return 'Error al comprobar el permiso de Bluetooth: $error';
+  }
+
+  @override
+  String get onboardingNotificationDeniedSystemPrefs =>
+      'Permiso de notificaciones denegado. Por favor, conceda el permiso en Preferencias del Sistema.';
+
+  @override
+  String get onboardingNotificationDeniedNotifications =>
+      'Permiso de notificaciones denegado. Por favor, conceda el permiso en Preferencias del Sistema > Notificaciones.';
+
+  @override
+  String onboardingNotificationStatusCheckPrefs(String status) {
+    return 'Estado del permiso de notificaciones: $status. Por favor, compruebe Preferencias del Sistema.';
+  }
+
+  @override
+  String onboardingFailedCheckNotification(String error) {
+    return 'Error al comprobar el permiso de notificaciones: $error';
+  }
+
+  @override
+  String get onboardingLocationGrantInSettings =>
+      'Por favor, conceda permiso de ubicación en Ajustes > Privacidad y Seguridad > Servicios de ubicación';
+
+  @override
+  String get onboardingMicrophoneRequired => 'Se requiere permiso de micrófono para grabar.';
+
+  @override
+  String get onboardingMicrophoneDenied =>
+      'Permiso de micrófono denegado. Por favor, conceda el permiso en Preferencias del Sistema > Privacidad y Seguridad > Micrófono.';
+
+  @override
+  String onboardingMicrophoneStatusCheckPrefs(String status) {
+    return 'Estado del permiso de micrófono: $status. Por favor, compruebe Preferencias del Sistema.';
+  }
+
+  @override
+  String onboardingFailedCheckMicrophone(String error) {
+    return 'Error al comprobar el permiso de micrófono: $error';
+  }
+
+  @override
+  String get onboardingScreenCaptureRequired =>
+      'Se requiere permiso de captura de pantalla para grabar audio del sistema.';
+
+  @override
+  String get onboardingScreenCaptureDenied =>
+      'Permiso de captura de pantalla denegado. Por favor, conceda el permiso en Preferencias del Sistema > Privacidad y Seguridad > Grabación de pantalla.';
+
+  @override
+  String onboardingScreenCaptureStatusCheckPrefs(String status) {
+    return 'Estado del permiso de captura de pantalla: $status. Por favor, compruebe Preferencias del Sistema.';
+  }
+
+  @override
+  String onboardingFailedCheckScreenCapture(String error) {
+    return 'Error al comprobar el permiso de captura de pantalla: $error';
+  }
+
+  @override
+  String get onboardingAccessibilityRequired =>
+      'Se requiere permiso de accesibilidad para detectar reuniones del navegador.';
+
+  @override
+  String onboardingAccessibilityStatusCheckPrefs(String status) {
+    return 'Estado del permiso de accesibilidad: $status. Por favor, compruebe Preferencias del Sistema.';
+  }
+
+  @override
+  String onboardingFailedCheckAccessibility(String error) {
+    return 'Error al comprobar el permiso de accesibilidad: $error';
+  }
 }

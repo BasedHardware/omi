@@ -9232,5 +9232,135 @@
   "authFailedToLinkApple": "Failed to link with Apple, please try again.",
   "@authFailedToLinkApple": {
     "description": "Error message when linking Apple account fails"
+  },
+  "onboardingBluetoothRequired": "Bluetooth permission is required to connect to your device.",
+  "@onboardingBluetoothRequired": {
+    "description": "Error message when Bluetooth permission is needed"
+  },
+  "onboardingBluetoothDeniedSystemPrefs": "Bluetooth permission denied. Please grant permission in System Preferences.",
+  "@onboardingBluetoothDeniedSystemPrefs": {
+    "description": "Error when Bluetooth permission is denied on macOS"
+  },
+  "onboardingBluetoothStatusCheckPrefs": "Bluetooth permission status: {status}. Please check System Preferences.",
+  "@onboardingBluetoothStatusCheckPrefs": {
+    "description": "Error showing Bluetooth permission status",
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "onboardingFailedCheckBluetooth": "Failed to check Bluetooth permission: {error}",
+  "@onboardingFailedCheckBluetooth": {
+    "description": "Error when checking Bluetooth permission fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "onboardingNotificationDeniedSystemPrefs": "Notification permission denied. Please grant permission in System Preferences.",
+  "@onboardingNotificationDeniedSystemPrefs": {
+    "description": "Error when notification permission is denied"
+  },
+  "onboardingNotificationDeniedNotifications": "Notification permission denied. Please grant permission in System Preferences > Notifications.",
+  "@onboardingNotificationDeniedNotifications": {
+    "description": "Error when notification permission is denied with specific path"
+  },
+  "onboardingNotificationStatusCheckPrefs": "Notification permission status: {status}. Please check System Preferences.",
+  "@onboardingNotificationStatusCheckPrefs": {
+    "description": "Error showing notification permission status",
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "onboardingFailedCheckNotification": "Failed to check Notification permission: {error}",
+  "@onboardingFailedCheckNotification": {
+    "description": "Error when checking notification permission fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "onboardingLocationGrantInSettings": "Please grant location permission in Settings > Privacy & Security > Location Services",
+  "@onboardingLocationGrantInSettings": {
+    "description": "Instructions to grant location permission"
+  },
+  "onboardingMicrophoneRequired": "Microphone permission is required for recording.",
+  "@onboardingMicrophoneRequired": {
+    "description": "Error when microphone permission is needed"
+  },
+  "onboardingMicrophoneDenied": "Microphone permission denied. Please grant permission in System Preferences > Privacy & Security > Microphone.",
+  "@onboardingMicrophoneDenied": {
+    "description": "Error when microphone permission is denied"
+  },
+  "onboardingMicrophoneStatusCheckPrefs": "Microphone permission status: {status}. Please check System Preferences.",
+  "@onboardingMicrophoneStatusCheckPrefs": {
+    "description": "Error showing microphone permission status",
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "onboardingFailedCheckMicrophone": "Failed to check Microphone permission: {error}",
+  "@onboardingFailedCheckMicrophone": {
+    "description": "Error when checking microphone permission fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "onboardingScreenCaptureRequired": "Screen capture permission is required for system audio recording.",
+  "@onboardingScreenCaptureRequired": {
+    "description": "Error when screen capture permission is needed"
+  },
+  "onboardingScreenCaptureDenied": "Screen capture permission denied. Please grant permission in System Preferences > Privacy & Security > Screen Recording.",
+  "@onboardingScreenCaptureDenied": {
+    "description": "Error when screen capture permission is denied"
+  },
+  "onboardingScreenCaptureStatusCheckPrefs": "Screen capture permission status: {status}. Please check System Preferences.",
+  "@onboardingScreenCaptureStatusCheckPrefs": {
+    "description": "Error showing screen capture permission status",
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "onboardingFailedCheckScreenCapture": "Failed to check Screen Capture permission: {error}",
+  "@onboardingFailedCheckScreenCapture": {
+    "description": "Error when checking screen capture permission fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "onboardingAccessibilityRequired": "Accessibility permission is required for detecting browser meetings.",
+  "@onboardingAccessibilityRequired": {
+    "description": "Error when accessibility permission is needed"
+  },
+  "onboardingAccessibilityStatusCheckPrefs": "Accessibility permission status: {status}. Please check System Preferences.",
+  "@onboardingAccessibilityStatusCheckPrefs": {
+    "description": "Error showing accessibility permission status",
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "onboardingFailedCheckAccessibility": "Failed to check Accessibility permission: {error}",
+  "@onboardingFailedCheckAccessibility": {
+    "description": "Error when checking accessibility permission fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
   }
 }

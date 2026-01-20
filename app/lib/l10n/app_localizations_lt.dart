@@ -7438,4 +7438,90 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get authFailedToLinkApple => 'Nepavyko susieti su Apple, bandykite dar kartą.';
+
+  @override
+  String get onboardingBluetoothRequired => 'Norint prisijungti prie įrenginio, reikalingas Bluetooth leidimas.';
+
+  @override
+  String get onboardingBluetoothDeniedSystemPrefs =>
+      'Bluetooth leidimas atmestas. Suteikite leidimą Sistemos nuostatose.';
+
+  @override
+  String onboardingBluetoothStatusCheckPrefs(String status) {
+    return 'Bluetooth leidimo būsena: $status. Patikrinkite Sistemos nuostatas.';
+  }
+
+  @override
+  String onboardingFailedCheckBluetooth(String error) {
+    return 'Nepavyko patikrinti Bluetooth leidimo: $error';
+  }
+
+  @override
+  String get onboardingNotificationDeniedSystemPrefs =>
+      'Pranešimų leidimas atmestas. Suteikite leidimą Sistemos nuostatose.';
+
+  @override
+  String get onboardingNotificationDeniedNotifications =>
+      'Pranešimų leidimas atmestas. Suteikite leidimą Sistemos nuostatos > Pranešimai.';
+
+  @override
+  String onboardingNotificationStatusCheckPrefs(String status) {
+    return 'Pranešimų leidimo būsena: $status. Patikrinkite Sistemos nuostatas.';
+  }
+
+  @override
+  String onboardingFailedCheckNotification(String error) {
+    return 'Nepavyko patikrinti pranešimų leidimo: $error';
+  }
+
+  @override
+  String get onboardingLocationGrantInSettings =>
+      'Suteikite vietos leidimą Nustatymai > Privatumas ir sauga > Vietos paslaugos';
+
+  @override
+  String get onboardingMicrophoneRequired => 'Įrašymui reikalingas mikrofono leidimas.';
+
+  @override
+  String get onboardingMicrophoneDenied =>
+      'Mikrofono leidimas atmestas. Suteikite leidimą Sistemos nuostatos > Privatumas ir sauga > Mikrofonas.';
+
+  @override
+  String onboardingMicrophoneStatusCheckPrefs(String status) {
+    return 'Mikrofono leidimo būsena: $status. Patikrinkite Sistemos nuostatas.';
+  }
+
+  @override
+  String onboardingFailedCheckMicrophone(String error) {
+    return 'Nepavyko patikrinti mikrofono leidimo: $error';
+  }
+
+  @override
+  String get onboardingScreenCaptureRequired => 'Sistemos garso įrašymui reikalingas ekrano fiksavimo leidimas.';
+
+  @override
+  String get onboardingScreenCaptureDenied =>
+      'Ekrano fiksavimo leidimas atmestas. Suteikite leidimą Sistemos nuostatos > Privatumas ir sauga > Ekrano įrašymas.';
+
+  @override
+  String onboardingScreenCaptureStatusCheckPrefs(String status) {
+    return 'Ekrano fiksavimo leidimo būsena: $status. Patikrinkite Sistemos nuostatas.';
+  }
+
+  @override
+  String onboardingFailedCheckScreenCapture(String error) {
+    return 'Nepavyko patikrinti ekrano fiksavimo leidimo: $error';
+  }
+
+  @override
+  String get onboardingAccessibilityRequired => 'Naršyklės susitikimų aptikimui reikalingas prieinamumo leidimas.';
+
+  @override
+  String onboardingAccessibilityStatusCheckPrefs(String status) {
+    return 'Prieinamumo leidimo būsena: $status. Patikrinkite Sistemos nuostatas.';
+  }
+
+  @override
+  String onboardingFailedCheckAccessibility(String error) {
+    return 'Nepavyko patikrinti prieinamumo leidimo: $error';
+  }
 }

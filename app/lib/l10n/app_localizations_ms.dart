@@ -7458,4 +7458,90 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get authFailedToLinkApple => 'Gagal memautkan dengan Apple, sila cuba lagi.';
+
+  @override
+  String get onboardingBluetoothRequired => 'Kebenaran Bluetooth diperlukan untuk menyambung ke peranti anda.';
+
+  @override
+  String get onboardingBluetoothDeniedSystemPrefs =>
+      'Kebenaran Bluetooth ditolak. Sila berikan kebenaran dalam Keutamaan Sistem.';
+
+  @override
+  String onboardingBluetoothStatusCheckPrefs(String status) {
+    return 'Status kebenaran Bluetooth: $status. Sila semak Keutamaan Sistem.';
+  }
+
+  @override
+  String onboardingFailedCheckBluetooth(String error) {
+    return 'Gagal menyemak kebenaran Bluetooth: $error';
+  }
+
+  @override
+  String get onboardingNotificationDeniedSystemPrefs =>
+      'Kebenaran pemberitahuan ditolak. Sila berikan kebenaran dalam Keutamaan Sistem.';
+
+  @override
+  String get onboardingNotificationDeniedNotifications =>
+      'Kebenaran pemberitahuan ditolak. Sila berikan kebenaran dalam Keutamaan Sistem > Pemberitahuan.';
+
+  @override
+  String onboardingNotificationStatusCheckPrefs(String status) {
+    return 'Status kebenaran pemberitahuan: $status. Sila semak Keutamaan Sistem.';
+  }
+
+  @override
+  String onboardingFailedCheckNotification(String error) {
+    return 'Gagal menyemak kebenaran pemberitahuan: $error';
+  }
+
+  @override
+  String get onboardingLocationGrantInSettings =>
+      'Sila berikan kebenaran lokasi dalam Tetapan > Privasi & Keselamatan > Perkhidmatan Lokasi';
+
+  @override
+  String get onboardingMicrophoneRequired => 'Kebenaran mikrofon diperlukan untuk merakam.';
+
+  @override
+  String get onboardingMicrophoneDenied =>
+      'Kebenaran mikrofon ditolak. Sila berikan kebenaran dalam Keutamaan Sistem > Privasi & Keselamatan > Mikrofon.';
+
+  @override
+  String onboardingMicrophoneStatusCheckPrefs(String status) {
+    return 'Status kebenaran mikrofon: $status. Sila semak Keutamaan Sistem.';
+  }
+
+  @override
+  String onboardingFailedCheckMicrophone(String error) {
+    return 'Gagal menyemak kebenaran mikrofon: $error';
+  }
+
+  @override
+  String get onboardingScreenCaptureRequired => 'Kebenaran tangkapan skrin diperlukan untuk merakam audio sistem.';
+
+  @override
+  String get onboardingScreenCaptureDenied =>
+      'Kebenaran tangkapan skrin ditolak. Sila berikan kebenaran dalam Keutamaan Sistem > Privasi & Keselamatan > Rakaman Skrin.';
+
+  @override
+  String onboardingScreenCaptureStatusCheckPrefs(String status) {
+    return 'Status kebenaran tangkapan skrin: $status. Sila semak Keutamaan Sistem.';
+  }
+
+  @override
+  String onboardingFailedCheckScreenCapture(String error) {
+    return 'Gagal menyemak kebenaran tangkapan skrin: $error';
+  }
+
+  @override
+  String get onboardingAccessibilityRequired => 'Kebenaran kebolehcapaian diperlukan untuk mengesan mesyuarat pelayar.';
+
+  @override
+  String onboardingAccessibilityStatusCheckPrefs(String status) {
+    return 'Status kebenaran kebolehcapaian: $status. Sila semak Keutamaan Sistem.';
+  }
+
+  @override
+  String onboardingFailedCheckAccessibility(String error) {
+    return 'Gagal menyemak kebenaran kebolehcapaian: $error';
+  }
 }

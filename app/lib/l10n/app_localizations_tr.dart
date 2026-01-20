@@ -7447,4 +7447,91 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get authFailedToLinkApple => 'Apple ile bağlantı kurulamadı, lütfen tekrar deneyin.';
+
+  @override
+  String get onboardingBluetoothRequired => 'Cihazınıza bağlanmak için Bluetooth izni gereklidir.';
+
+  @override
+  String get onboardingBluetoothDeniedSystemPrefs =>
+      'Bluetooth izni reddedildi. Lütfen Sistem Tercihleri\'nde izin verin.';
+
+  @override
+  String onboardingBluetoothStatusCheckPrefs(String status) {
+    return 'Bluetooth izin durumu: $status. Lütfen Sistem Tercihleri\'ni kontrol edin.';
+  }
+
+  @override
+  String onboardingFailedCheckBluetooth(String error) {
+    return 'Bluetooth izni kontrol edilemedi: $error';
+  }
+
+  @override
+  String get onboardingNotificationDeniedSystemPrefs =>
+      'Bildirim izni reddedildi. Lütfen Sistem Tercihleri\'nde izin verin.';
+
+  @override
+  String get onboardingNotificationDeniedNotifications =>
+      'Bildirim izni reddedildi. Lütfen Sistem Tercihleri > Bildirimler\'de izin verin.';
+
+  @override
+  String onboardingNotificationStatusCheckPrefs(String status) {
+    return 'Bildirim izin durumu: $status. Lütfen Sistem Tercihleri\'ni kontrol edin.';
+  }
+
+  @override
+  String onboardingFailedCheckNotification(String error) {
+    return 'Bildirim izni kontrol edilemedi: $error';
+  }
+
+  @override
+  String get onboardingLocationGrantInSettings =>
+      'Lütfen Ayarlar > Gizlilik ve Güvenlik > Konum Servisleri\'nde konum izni verin';
+
+  @override
+  String get onboardingMicrophoneRequired => 'Kayıt için mikrofon izni gereklidir.';
+
+  @override
+  String get onboardingMicrophoneDenied =>
+      'Mikrofon izni reddedildi. Lütfen Sistem Tercihleri > Gizlilik ve Güvenlik > Mikrofon\'da izin verin.';
+
+  @override
+  String onboardingMicrophoneStatusCheckPrefs(String status) {
+    return 'Mikrofon izin durumu: $status. Lütfen Sistem Tercihleri\'ni kontrol edin.';
+  }
+
+  @override
+  String onboardingFailedCheckMicrophone(String error) {
+    return 'Mikrofon izni kontrol edilemedi: $error';
+  }
+
+  @override
+  String get onboardingScreenCaptureRequired => 'Sistem ses kaydı için ekran yakalama izni gereklidir.';
+
+  @override
+  String get onboardingScreenCaptureDenied =>
+      'Ekran yakalama izni reddedildi. Lütfen Sistem Tercihleri > Gizlilik ve Güvenlik > Ekran Kaydı\'nda izin verin.';
+
+  @override
+  String onboardingScreenCaptureStatusCheckPrefs(String status) {
+    return 'Ekran yakalama izin durumu: $status. Lütfen Sistem Tercihleri\'ni kontrol edin.';
+  }
+
+  @override
+  String onboardingFailedCheckScreenCapture(String error) {
+    return 'Ekran yakalama izni kontrol edilemedi: $error';
+  }
+
+  @override
+  String get onboardingAccessibilityRequired =>
+      'Tarayıcı toplantılarını algılamak için erişilebilirlik izni gereklidir.';
+
+  @override
+  String onboardingAccessibilityStatusCheckPrefs(String status) {
+    return 'Erişilebilirlik izin durumu: $status. Lütfen Sistem Tercihleri\'ni kontrol edin.';
+  }
+
+  @override
+  String onboardingFailedCheckAccessibility(String error) {
+    return 'Erişilebilirlik izni kontrol edilemedi: $error';
+  }
 }

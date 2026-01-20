@@ -7318,4 +7318,84 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get authFailedToLinkApple => 'Appleとの連携に失敗しました。もう一度お試しください。';
+
+  @override
+  String get onboardingBluetoothRequired => 'デバイスに接続するにはBluetooth権限が必要です。';
+
+  @override
+  String get onboardingBluetoothDeniedSystemPrefs => 'Bluetooth権限が拒否されました。システム環境設定で権限を許可してください。';
+
+  @override
+  String onboardingBluetoothStatusCheckPrefs(String status) {
+    return 'Bluetooth権限の状態：$status。システム環境設定を確認してください。';
+  }
+
+  @override
+  String onboardingFailedCheckBluetooth(String error) {
+    return 'Bluetooth権限の確認に失敗しました：$error';
+  }
+
+  @override
+  String get onboardingNotificationDeniedSystemPrefs => '通知権限が拒否されました。システム環境設定で権限を許可してください。';
+
+  @override
+  String get onboardingNotificationDeniedNotifications => '通知権限が拒否されました。システム環境設定 > 通知で権限を許可してください。';
+
+  @override
+  String onboardingNotificationStatusCheckPrefs(String status) {
+    return '通知権限の状態：$status。システム環境設定を確認してください。';
+  }
+
+  @override
+  String onboardingFailedCheckNotification(String error) {
+    return '通知権限の確認に失敗しました：$error';
+  }
+
+  @override
+  String get onboardingLocationGrantInSettings => '設定 > プライバシーとセキュリティ > 位置情報サービスで位置情報の権限を許可してください';
+
+  @override
+  String get onboardingMicrophoneRequired => '録音にはマイク権限が必要です。';
+
+  @override
+  String get onboardingMicrophoneDenied => 'マイク権限が拒否されました。システム環境設定 > プライバシーとセキュリティ > マイクで権限を許可してください。';
+
+  @override
+  String onboardingMicrophoneStatusCheckPrefs(String status) {
+    return 'マイク権限の状態：$status。システム環境設定を確認してください。';
+  }
+
+  @override
+  String onboardingFailedCheckMicrophone(String error) {
+    return 'マイク権限の確認に失敗しました：$error';
+  }
+
+  @override
+  String get onboardingScreenCaptureRequired => 'システムオーディオの録音には画面キャプチャ権限が必要です。';
+
+  @override
+  String get onboardingScreenCaptureDenied => '画面キャプチャ権限が拒否されました。システム環境設定 > プライバシーとセキュリティ > 画面収録で権限を許可してください。';
+
+  @override
+  String onboardingScreenCaptureStatusCheckPrefs(String status) {
+    return '画面キャプチャ権限の状態：$status。システム環境設定を確認してください。';
+  }
+
+  @override
+  String onboardingFailedCheckScreenCapture(String error) {
+    return '画面キャプチャ権限の確認に失敗しました：$error';
+  }
+
+  @override
+  String get onboardingAccessibilityRequired => 'ブラウザミーティングを検出するにはアクセシビリティ権限が必要です。';
+
+  @override
+  String onboardingAccessibilityStatusCheckPrefs(String status) {
+    return 'アクセシビリティ権限の状態：$status。システム環境設定を確認してください。';
+  }
+
+  @override
+  String onboardingFailedCheckAccessibility(String error) {
+    return 'アクセシビリティ権限の確認に失敗しました：$error';
+  }
 }

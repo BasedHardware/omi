@@ -7416,4 +7416,90 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get authFailedToLinkApple => 'Apple से लिंक करने में विफल, कृपया पुनः प्रयास करें।';
+
+  @override
+  String get onboardingBluetoothRequired => 'आपके डिवाइस से कनेक्ट करने के लिए ब्लूटूथ अनुमति आवश्यक है।';
+
+  @override
+  String get onboardingBluetoothDeniedSystemPrefs =>
+      'ब्लूटूथ अनुमति अस्वीकृत। कृपया सिस्टम प्राथमिकताओं में अनुमति प्रदान करें।';
+
+  @override
+  String onboardingBluetoothStatusCheckPrefs(String status) {
+    return 'ब्लूटूथ अनुमति स्थिति: $status। कृपया सिस्टम प्राथमिकताएं जांचें।';
+  }
+
+  @override
+  String onboardingFailedCheckBluetooth(String error) {
+    return 'ब्लूटूथ अनुमति जांचने में विफल: $error';
+  }
+
+  @override
+  String get onboardingNotificationDeniedSystemPrefs =>
+      'सूचना अनुमति अस्वीकृत। कृपया सिस्टम प्राथमिकताओं में अनुमति प्रदान करें।';
+
+  @override
+  String get onboardingNotificationDeniedNotifications =>
+      'सूचना अनुमति अस्वीकृत। कृपया सिस्टम प्राथमिकताएं > सूचनाएं में अनुमति प्रदान करें।';
+
+  @override
+  String onboardingNotificationStatusCheckPrefs(String status) {
+    return 'सूचना अनुमति स्थिति: $status। कृपया सिस्टम प्राथमिकताएं जांचें।';
+  }
+
+  @override
+  String onboardingFailedCheckNotification(String error) {
+    return 'सूचना अनुमति जांचने में विफल: $error';
+  }
+
+  @override
+  String get onboardingLocationGrantInSettings =>
+      'कृपया सेटिंग्स > गोपनीयता और सुरक्षा > स्थान सेवाओं में स्थान अनुमति प्रदान करें';
+
+  @override
+  String get onboardingMicrophoneRequired => 'रिकॉर्डिंग के लिए माइक्रोफ़ोन अनुमति आवश्यक है।';
+
+  @override
+  String get onboardingMicrophoneDenied =>
+      'माइक्रोफ़ोन अनुमति अस्वीकृत। कृपया सिस्टम प्राथमिकताएं > गोपनीयता और सुरक्षा > माइक्रोफ़ोन में अनुमति प्रदान करें।';
+
+  @override
+  String onboardingMicrophoneStatusCheckPrefs(String status) {
+    return 'माइक्रोफ़ोन अनुमति स्थिति: $status। कृपया सिस्टम प्राथमिकताएं जांचें।';
+  }
+
+  @override
+  String onboardingFailedCheckMicrophone(String error) {
+    return 'माइक्रोफ़ोन अनुमति जांचने में विफल: $error';
+  }
+
+  @override
+  String get onboardingScreenCaptureRequired => 'सिस्टम ऑडियो रिकॉर्डिंग के लिए स्क्रीन कैप्चर अनुमति आवश्यक है।';
+
+  @override
+  String get onboardingScreenCaptureDenied =>
+      'स्क्रीन कैप्चर अनुमति अस्वीकृत। कृपया सिस्टम प्राथमिकताएं > गोपनीयता और सुरक्षा > स्क्रीन रिकॉर्डिंग में अनुमति प्रदान करें।';
+
+  @override
+  String onboardingScreenCaptureStatusCheckPrefs(String status) {
+    return 'स्क्रीन कैप्चर अनुमति स्थिति: $status। कृपया सिस्टम प्राथमिकताएं जांचें।';
+  }
+
+  @override
+  String onboardingFailedCheckScreenCapture(String error) {
+    return 'स्क्रीन कैप्चर अनुमति जांचने में विफल: $error';
+  }
+
+  @override
+  String get onboardingAccessibilityRequired => 'ब्राउज़र मीटिंग का पता लगाने के लिए एक्सेसिबिलिटी अनुमति आवश्यक है।';
+
+  @override
+  String onboardingAccessibilityStatusCheckPrefs(String status) {
+    return 'एक्सेसिबिलिटी अनुमति स्थिति: $status। कृपया सिस्टम प्राथमिकताएं जांचें।';
+  }
+
+  @override
+  String onboardingFailedCheckAccessibility(String error) {
+    return 'एक्सेसिबिलिटी अनुमति जांचने में विफल: $error';
+  }
 }

@@ -7308,4 +7308,84 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get authFailedToLinkApple => '与Apple关联失败，请重试。';
+
+  @override
+  String get onboardingBluetoothRequired => '需要蓝牙权限才能连接到您的设备。';
+
+  @override
+  String get onboardingBluetoothDeniedSystemPrefs => '蓝牙权限被拒绝。请在系统偏好设置中授予权限。';
+
+  @override
+  String onboardingBluetoothStatusCheckPrefs(String status) {
+    return '蓝牙权限状态：$status。请检查系统偏好设置。';
+  }
+
+  @override
+  String onboardingFailedCheckBluetooth(String error) {
+    return '无法检查蓝牙权限：$error';
+  }
+
+  @override
+  String get onboardingNotificationDeniedSystemPrefs => '通知权限被拒绝。请在系统偏好设置中授予权限。';
+
+  @override
+  String get onboardingNotificationDeniedNotifications => '通知权限被拒绝。请在系统偏好设置 > 通知中授予权限。';
+
+  @override
+  String onboardingNotificationStatusCheckPrefs(String status) {
+    return '通知权限状态：$status。请检查系统偏好设置。';
+  }
+
+  @override
+  String onboardingFailedCheckNotification(String error) {
+    return '无法检查通知权限：$error';
+  }
+
+  @override
+  String get onboardingLocationGrantInSettings => '请在设置 > 隐私与安全 > 定位服务中授予位置权限';
+
+  @override
+  String get onboardingMicrophoneRequired => '录音需要麦克风权限。';
+
+  @override
+  String get onboardingMicrophoneDenied => '麦克风权限被拒绝。请在系统偏好设置 > 隐私与安全 > 麦克风中授予权限。';
+
+  @override
+  String onboardingMicrophoneStatusCheckPrefs(String status) {
+    return '麦克风权限状态：$status。请检查系统偏好设置。';
+  }
+
+  @override
+  String onboardingFailedCheckMicrophone(String error) {
+    return '无法检查麦克风权限：$error';
+  }
+
+  @override
+  String get onboardingScreenCaptureRequired => '录制系统音频需要屏幕捕获权限。';
+
+  @override
+  String get onboardingScreenCaptureDenied => '屏幕捕获权限被拒绝。请在系统偏好设置 > 隐私与安全 > 屏幕录制中授予权限。';
+
+  @override
+  String onboardingScreenCaptureStatusCheckPrefs(String status) {
+    return '屏幕捕获权限状态：$status。请检查系统偏好设置。';
+  }
+
+  @override
+  String onboardingFailedCheckScreenCapture(String error) {
+    return '无法检查屏幕捕获权限：$error';
+  }
+
+  @override
+  String get onboardingAccessibilityRequired => '检测浏览器会议需要辅助功能权限。';
+
+  @override
+  String onboardingAccessibilityStatusCheckPrefs(String status) {
+    return '辅助功能权限状态：$status。请检查系统偏好设置。';
+  }
+
+  @override
+  String onboardingFailedCheckAccessibility(String error) {
+    return '无法检查辅助功能权限：$error';
+  }
 }

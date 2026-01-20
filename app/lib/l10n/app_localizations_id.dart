@@ -7454,4 +7454,90 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get authFailedToLinkApple => 'Gagal menautkan dengan Apple, silakan coba lagi.';
+
+  @override
+  String get onboardingBluetoothRequired => 'Izin Bluetooth diperlukan untuk menghubungkan ke perangkat Anda.';
+
+  @override
+  String get onboardingBluetoothDeniedSystemPrefs =>
+      'Izin Bluetooth ditolak. Silakan berikan izin di Preferensi Sistem.';
+
+  @override
+  String onboardingBluetoothStatusCheckPrefs(String status) {
+    return 'Status izin Bluetooth: $status. Silakan periksa Preferensi Sistem.';
+  }
+
+  @override
+  String onboardingFailedCheckBluetooth(String error) {
+    return 'Gagal memeriksa izin Bluetooth: $error';
+  }
+
+  @override
+  String get onboardingNotificationDeniedSystemPrefs =>
+      'Izin notifikasi ditolak. Silakan berikan izin di Preferensi Sistem.';
+
+  @override
+  String get onboardingNotificationDeniedNotifications =>
+      'Izin notifikasi ditolak. Silakan berikan izin di Preferensi Sistem > Notifikasi.';
+
+  @override
+  String onboardingNotificationStatusCheckPrefs(String status) {
+    return 'Status izin notifikasi: $status. Silakan periksa Preferensi Sistem.';
+  }
+
+  @override
+  String onboardingFailedCheckNotification(String error) {
+    return 'Gagal memeriksa izin notifikasi: $error';
+  }
+
+  @override
+  String get onboardingLocationGrantInSettings =>
+      'Silakan berikan izin lokasi di Pengaturan > Privasi & Keamanan > Layanan Lokasi';
+
+  @override
+  String get onboardingMicrophoneRequired => 'Izin mikrofon diperlukan untuk merekam.';
+
+  @override
+  String get onboardingMicrophoneDenied =>
+      'Izin mikrofon ditolak. Silakan berikan izin di Preferensi Sistem > Privasi & Keamanan > Mikrofon.';
+
+  @override
+  String onboardingMicrophoneStatusCheckPrefs(String status) {
+    return 'Status izin mikrofon: $status. Silakan periksa Preferensi Sistem.';
+  }
+
+  @override
+  String onboardingFailedCheckMicrophone(String error) {
+    return 'Gagal memeriksa izin mikrofon: $error';
+  }
+
+  @override
+  String get onboardingScreenCaptureRequired => 'Izin tangkapan layar diperlukan untuk merekam audio sistem.';
+
+  @override
+  String get onboardingScreenCaptureDenied =>
+      'Izin tangkapan layar ditolak. Silakan berikan izin di Preferensi Sistem > Privasi & Keamanan > Perekaman Layar.';
+
+  @override
+  String onboardingScreenCaptureStatusCheckPrefs(String status) {
+    return 'Status izin tangkapan layar: $status. Silakan periksa Preferensi Sistem.';
+  }
+
+  @override
+  String onboardingFailedCheckScreenCapture(String error) {
+    return 'Gagal memeriksa izin tangkapan layar: $error';
+  }
+
+  @override
+  String get onboardingAccessibilityRequired => 'Izin aksesibilitas diperlukan untuk mendeteksi rapat browser.';
+
+  @override
+  String onboardingAccessibilityStatusCheckPrefs(String status) {
+    return 'Status izin aksesibilitas: $status. Silakan periksa Preferensi Sistem.';
+  }
+
+  @override
+  String onboardingFailedCheckAccessibility(String error) {
+    return 'Gagal memeriksa izin aksesibilitas: $error';
+  }
 }

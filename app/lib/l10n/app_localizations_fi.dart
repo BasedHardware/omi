@@ -7436,4 +7436,88 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get authFailedToLinkApple => 'Appleen linkittäminen epäonnistui, yritä uudelleen.';
+
+  @override
+  String get onboardingBluetoothRequired => 'Bluetooth-lupa vaaditaan laitteeseen yhdistämiseen.';
+
+  @override
+  String get onboardingBluetoothDeniedSystemPrefs => 'Bluetooth-lupa evätty. Myönnä lupa Järjestelmäasetuksissa.';
+
+  @override
+  String onboardingBluetoothStatusCheckPrefs(String status) {
+    return 'Bluetooth-luvan tila: $status. Tarkista Järjestelmäasetukset.';
+  }
+
+  @override
+  String onboardingFailedCheckBluetooth(String error) {
+    return 'Bluetooth-luvan tarkistus epäonnistui: $error';
+  }
+
+  @override
+  String get onboardingNotificationDeniedSystemPrefs => 'Ilmoituslupa evätty. Myönnä lupa Järjestelmäasetuksissa.';
+
+  @override
+  String get onboardingNotificationDeniedNotifications =>
+      'Ilmoituslupa evätty. Myönnä lupa kohdassa Järjestelmäasetukset > Ilmoitukset.';
+
+  @override
+  String onboardingNotificationStatusCheckPrefs(String status) {
+    return 'Ilmoitusluvan tila: $status. Tarkista Järjestelmäasetukset.';
+  }
+
+  @override
+  String onboardingFailedCheckNotification(String error) {
+    return 'Ilmoitusluvan tarkistus epäonnistui: $error';
+  }
+
+  @override
+  String get onboardingLocationGrantInSettings =>
+      'Myönnä sijaintilupa kohdassa Asetukset > Tietosuoja ja turvallisuus > Sijaintipalvelut';
+
+  @override
+  String get onboardingMicrophoneRequired => 'Mikrofonilupa vaaditaan tallennukseen.';
+
+  @override
+  String get onboardingMicrophoneDenied =>
+      'Mikrofonilupa evätty. Myönnä lupa kohdassa Järjestelmäasetukset > Tietosuoja ja turvallisuus > Mikrofoni.';
+
+  @override
+  String onboardingMicrophoneStatusCheckPrefs(String status) {
+    return 'Mikrofoniluvam tila: $status. Tarkista Järjestelmäasetukset.';
+  }
+
+  @override
+  String onboardingFailedCheckMicrophone(String error) {
+    return 'Mikrofoniluvam tarkistus epäonnistui: $error';
+  }
+
+  @override
+  String get onboardingScreenCaptureRequired => 'Näytönkaappauslupa vaaditaan järjestelmä-äänen tallennukseen.';
+
+  @override
+  String get onboardingScreenCaptureDenied =>
+      'Näytönkaappauslupa evätty. Myönnä lupa kohdassa Järjestelmäasetukset > Tietosuoja ja turvallisuus > Näytön tallennus.';
+
+  @override
+  String onboardingScreenCaptureStatusCheckPrefs(String status) {
+    return 'Näytönkaappausluvan tila: $status. Tarkista Järjestelmäasetukset.';
+  }
+
+  @override
+  String onboardingFailedCheckScreenCapture(String error) {
+    return 'Näytönkaappausluvan tarkistus epäonnistui: $error';
+  }
+
+  @override
+  String get onboardingAccessibilityRequired => 'Esteettömyyslupa vaaditaan selainkokouksten havaitsemiseen.';
+
+  @override
+  String onboardingAccessibilityStatusCheckPrefs(String status) {
+    return 'Esteettömyysluvan tila: $status. Tarkista Järjestelmäasetukset.';
+  }
+
+  @override
+  String onboardingFailedCheckAccessibility(String error) {
+    return 'Esteettömyysluvan tarkistus epäonnistui: $error';
+  }
 }

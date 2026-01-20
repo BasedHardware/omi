@@ -7435,4 +7435,90 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get authFailedToLinkApple => 'Failed to link with Apple, please try again.';
+
+  @override
+  String get onboardingBluetoothRequired => 'Bluetooth permission is required to connect to your device.';
+
+  @override
+  String get onboardingBluetoothDeniedSystemPrefs =>
+      'Bluetooth permission denied. Please grant permission in System Preferences.';
+
+  @override
+  String onboardingBluetoothStatusCheckPrefs(String status) {
+    return 'Bluetooth permission status: $status. Please check System Preferences.';
+  }
+
+  @override
+  String onboardingFailedCheckBluetooth(String error) {
+    return 'Failed to check Bluetooth permission: $error';
+  }
+
+  @override
+  String get onboardingNotificationDeniedSystemPrefs =>
+      'Notification permission denied. Please grant permission in System Preferences.';
+
+  @override
+  String get onboardingNotificationDeniedNotifications =>
+      'Notification permission denied. Please grant permission in System Preferences > Notifications.';
+
+  @override
+  String onboardingNotificationStatusCheckPrefs(String status) {
+    return 'Notification permission status: $status. Please check System Preferences.';
+  }
+
+  @override
+  String onboardingFailedCheckNotification(String error) {
+    return 'Failed to check Notification permission: $error';
+  }
+
+  @override
+  String get onboardingLocationGrantInSettings =>
+      'Please grant location permission in Settings > Privacy & Security > Location Services';
+
+  @override
+  String get onboardingMicrophoneRequired => 'Microphone permission is required for recording.';
+
+  @override
+  String get onboardingMicrophoneDenied =>
+      'Microphone permission denied. Please grant permission in System Preferences > Privacy & Security > Microphone.';
+
+  @override
+  String onboardingMicrophoneStatusCheckPrefs(String status) {
+    return 'Microphone permission status: $status. Please check System Preferences.';
+  }
+
+  @override
+  String onboardingFailedCheckMicrophone(String error) {
+    return 'Failed to check Microphone permission: $error';
+  }
+
+  @override
+  String get onboardingScreenCaptureRequired => 'Screen capture permission is required for system audio recording.';
+
+  @override
+  String get onboardingScreenCaptureDenied =>
+      'Screen capture permission denied. Please grant permission in System Preferences > Privacy & Security > Screen Recording.';
+
+  @override
+  String onboardingScreenCaptureStatusCheckPrefs(String status) {
+    return 'Screen capture permission status: $status. Please check System Preferences.';
+  }
+
+  @override
+  String onboardingFailedCheckScreenCapture(String error) {
+    return 'Failed to check Screen Capture permission: $error';
+  }
+
+  @override
+  String get onboardingAccessibilityRequired => 'Accessibility permission is required for detecting browser meetings.';
+
+  @override
+  String onboardingAccessibilityStatusCheckPrefs(String status) {
+    return 'Accessibility permission status: $status. Please check System Preferences.';
+  }
+
+  @override
+  String onboardingFailedCheckAccessibility(String error) {
+    return 'Failed to check Accessibility permission: $error';
+  }
 }

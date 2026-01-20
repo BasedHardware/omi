@@ -7402,4 +7402,88 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get authFailedToLinkApple => 'ไม่สามารถเชื่อมต่อกับ Apple ได้ กรุณาลองอีกครั้ง';
+
+  @override
+  String get onboardingBluetoothRequired => 'ต้องมีสิทธิ์ Bluetooth เพื่อเชื่อมต่อกับอุปกรณ์ของคุณ';
+
+  @override
+  String get onboardingBluetoothDeniedSystemPrefs => 'สิทธิ์ Bluetooth ถูกปฏิเสธ กรุณาให้สิทธิ์ในการตั้งค่าระบบ';
+
+  @override
+  String onboardingBluetoothStatusCheckPrefs(String status) {
+    return 'สถานะสิทธิ์ Bluetooth: $status กรุณาตรวจสอบการตั้งค่าระบบ';
+  }
+
+  @override
+  String onboardingFailedCheckBluetooth(String error) {
+    return 'ไม่สามารถตรวจสอบสิทธิ์ Bluetooth: $error';
+  }
+
+  @override
+  String get onboardingNotificationDeniedSystemPrefs => 'สิทธิ์การแจ้งเตือนถูกปฏิเสธ กรุณาให้สิทธิ์ในการตั้งค่าระบบ';
+
+  @override
+  String get onboardingNotificationDeniedNotifications =>
+      'สิทธิ์การแจ้งเตือนถูกปฏิเสธ กรุณาให้สิทธิ์ในการตั้งค่าระบบ > การแจ้งเตือน';
+
+  @override
+  String onboardingNotificationStatusCheckPrefs(String status) {
+    return 'สถานะสิทธิ์การแจ้งเตือน: $status กรุณาตรวจสอบการตั้งค่าระบบ';
+  }
+
+  @override
+  String onboardingFailedCheckNotification(String error) {
+    return 'ไม่สามารถตรวจสอบสิทธิ์การแจ้งเตือน: $error';
+  }
+
+  @override
+  String get onboardingLocationGrantInSettings =>
+      'กรุณาให้สิทธิ์ตำแหน่งที่ตั้งในการตั้งค่า > ความเป็นส่วนตัวและความปลอดภัย > บริการตำแหน่งที่ตั้ง';
+
+  @override
+  String get onboardingMicrophoneRequired => 'ต้องมีสิทธิ์ไมโครโฟนสำหรับการบันทึก';
+
+  @override
+  String get onboardingMicrophoneDenied =>
+      'สิทธิ์ไมโครโฟนถูกปฏิเสธ กรุณาให้สิทธิ์ในการตั้งค่าระบบ > ความเป็นส่วนตัวและความปลอดภัย > ไมโครโฟน';
+
+  @override
+  String onboardingMicrophoneStatusCheckPrefs(String status) {
+    return 'สถานะสิทธิ์ไมโครโฟน: $status กรุณาตรวจสอบการตั้งค่าระบบ';
+  }
+
+  @override
+  String onboardingFailedCheckMicrophone(String error) {
+    return 'ไม่สามารถตรวจสอบสิทธิ์ไมโครโฟน: $error';
+  }
+
+  @override
+  String get onboardingScreenCaptureRequired => 'ต้องมีสิทธิ์จับภาพหน้าจอสำหรับการบันทึกเสียงระบบ';
+
+  @override
+  String get onboardingScreenCaptureDenied =>
+      'สิทธิ์จับภาพหน้าจอถูกปฏิเสธ กรุณาให้สิทธิ์ในการตั้งค่าระบบ > ความเป็นส่วนตัวและความปลอดภัย > การบันทึกหน้าจอ';
+
+  @override
+  String onboardingScreenCaptureStatusCheckPrefs(String status) {
+    return 'สถานะสิทธิ์จับภาพหน้าจอ: $status กรุณาตรวจสอบการตั้งค่าระบบ';
+  }
+
+  @override
+  String onboardingFailedCheckScreenCapture(String error) {
+    return 'ไม่สามารถตรวจสอบสิทธิ์จับภาพหน้าจอ: $error';
+  }
+
+  @override
+  String get onboardingAccessibilityRequired => 'ต้องมีสิทธิ์การเข้าถึงสำหรับการตรวจจับการประชุมในเบราว์เซอร์';
+
+  @override
+  String onboardingAccessibilityStatusCheckPrefs(String status) {
+    return 'สถานะสิทธิ์การเข้าถึง: $status กรุณาตรวจสอบการตั้งค่าระบบ';
+  }
+
+  @override
+  String onboardingFailedCheckAccessibility(String error) {
+    return 'ไม่สามารถตรวจสอบสิทธิ์การเข้าถึง: $error';
+  }
 }

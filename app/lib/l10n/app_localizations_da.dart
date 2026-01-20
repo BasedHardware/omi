@@ -7443,4 +7443,91 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get authFailedToLinkApple => 'Kunne ikke forbinde med Apple, prøv venligst igen.';
+
+  @override
+  String get onboardingBluetoothRequired =>
+      'Bluetooth-tilladelse er påkrævet for at oprette forbindelse til din enhed.';
+
+  @override
+  String get onboardingBluetoothDeniedSystemPrefs =>
+      'Bluetooth-tilladelse afvist. Giv venligst tilladelse i Systemindstillinger.';
+
+  @override
+  String onboardingBluetoothStatusCheckPrefs(String status) {
+    return 'Bluetooth-tilladelsestatus: $status. Tjek venligst Systemindstillinger.';
+  }
+
+  @override
+  String onboardingFailedCheckBluetooth(String error) {
+    return 'Kunne ikke kontrollere Bluetooth-tilladelse: $error';
+  }
+
+  @override
+  String get onboardingNotificationDeniedSystemPrefs =>
+      'Notifikationstilladelse afvist. Giv venligst tilladelse i Systemindstillinger.';
+
+  @override
+  String get onboardingNotificationDeniedNotifications =>
+      'Notifikationstilladelse afvist. Giv venligst tilladelse i Systemindstillinger > Notifikationer.';
+
+  @override
+  String onboardingNotificationStatusCheckPrefs(String status) {
+    return 'Notifikationstilladelsestatus: $status. Tjek venligst Systemindstillinger.';
+  }
+
+  @override
+  String onboardingFailedCheckNotification(String error) {
+    return 'Kunne ikke kontrollere notifikationstilladelse: $error';
+  }
+
+  @override
+  String get onboardingLocationGrantInSettings =>
+      'Giv venligst placeringstilladelse i Indstillinger > Privatliv og sikkerhed > Placeringstjenester';
+
+  @override
+  String get onboardingMicrophoneRequired => 'Mikrofontilladelse er påkrævet for optagelse.';
+
+  @override
+  String get onboardingMicrophoneDenied =>
+      'Mikrofontilladelse afvist. Giv venligst tilladelse i Systemindstillinger > Privatliv og sikkerhed > Mikrofon.';
+
+  @override
+  String onboardingMicrophoneStatusCheckPrefs(String status) {
+    return 'Mikrofontilladelsestatus: $status. Tjek venligst Systemindstillinger.';
+  }
+
+  @override
+  String onboardingFailedCheckMicrophone(String error) {
+    return 'Kunne ikke kontrollere mikrofontilladelse: $error';
+  }
+
+  @override
+  String get onboardingScreenCaptureRequired => 'Skærmoptagelsestilladelse er påkrævet for systemlydoptagelse.';
+
+  @override
+  String get onboardingScreenCaptureDenied =>
+      'Skærmoptagelsestilladelse afvist. Giv venligst tilladelse i Systemindstillinger > Privatliv og sikkerhed > Skærmoptagelse.';
+
+  @override
+  String onboardingScreenCaptureStatusCheckPrefs(String status) {
+    return 'Skærmoptagelsestilladelsestatus: $status. Tjek venligst Systemindstillinger.';
+  }
+
+  @override
+  String onboardingFailedCheckScreenCapture(String error) {
+    return 'Kunne ikke kontrollere skærmoptagelsestilladelse: $error';
+  }
+
+  @override
+  String get onboardingAccessibilityRequired => 'Tilgængelighedstilladelse er påkrævet for at registrere browsermøder.';
+
+  @override
+  String onboardingAccessibilityStatusCheckPrefs(String status) {
+    return 'Tilgængelighedstilladelsestatus: $status. Tjek venligst Systemindstillinger.';
+  }
+
+  @override
+  String onboardingFailedCheckAccessibility(String error) {
+    return 'Kunne ikke kontrollere tilgængelighedstilladelse: $error';
+  }
 }

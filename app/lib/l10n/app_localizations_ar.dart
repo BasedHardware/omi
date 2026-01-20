@@ -7388,4 +7388,87 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get authFailedToLinkApple => 'فشل الربط بحساب Apple، يرجى المحاولة مرة أخرى.';
+
+  @override
+  String get onboardingBluetoothRequired => 'يتطلب إذن البلوتوث للاتصال بجهازك.';
+
+  @override
+  String get onboardingBluetoothDeniedSystemPrefs => 'تم رفض إذن البلوتوث. يرجى منح الإذن في تفضيلات النظام.';
+
+  @override
+  String onboardingBluetoothStatusCheckPrefs(String status) {
+    return 'حالة إذن البلوتوث: $status. يرجى التحقق من تفضيلات النظام.';
+  }
+
+  @override
+  String onboardingFailedCheckBluetooth(String error) {
+    return 'فشل التحقق من إذن البلوتوث: $error';
+  }
+
+  @override
+  String get onboardingNotificationDeniedSystemPrefs => 'تم رفض إذن الإشعارات. يرجى منح الإذن في تفضيلات النظام.';
+
+  @override
+  String get onboardingNotificationDeniedNotifications =>
+      'تم رفض إذن الإشعارات. يرجى منح الإذن في تفضيلات النظام > الإشعارات.';
+
+  @override
+  String onboardingNotificationStatusCheckPrefs(String status) {
+    return 'حالة إذن الإشعارات: $status. يرجى التحقق من تفضيلات النظام.';
+  }
+
+  @override
+  String onboardingFailedCheckNotification(String error) {
+    return 'فشل التحقق من إذن الإشعارات: $error';
+  }
+
+  @override
+  String get onboardingLocationGrantInSettings => 'يرجى منح إذن الموقع في الإعدادات > الخصوصية والأمان > خدمات الموقع';
+
+  @override
+  String get onboardingMicrophoneRequired => 'يتطلب إذن الميكروفون للتسجيل.';
+
+  @override
+  String get onboardingMicrophoneDenied =>
+      'تم رفض إذن الميكروفون. يرجى منح الإذن في تفضيلات النظام > الخصوصية والأمان > الميكروفون.';
+
+  @override
+  String onboardingMicrophoneStatusCheckPrefs(String status) {
+    return 'حالة إذن الميكروفون: $status. يرجى التحقق من تفضيلات النظام.';
+  }
+
+  @override
+  String onboardingFailedCheckMicrophone(String error) {
+    return 'فشل التحقق من إذن الميكروفون: $error';
+  }
+
+  @override
+  String get onboardingScreenCaptureRequired => 'يتطلب إذن التقاط الشاشة لتسجيل صوت النظام.';
+
+  @override
+  String get onboardingScreenCaptureDenied =>
+      'تم رفض إذن التقاط الشاشة. يرجى منح الإذن في تفضيلات النظام > الخصوصية والأمان > تسجيل الشاشة.';
+
+  @override
+  String onboardingScreenCaptureStatusCheckPrefs(String status) {
+    return 'حالة إذن التقاط الشاشة: $status. يرجى التحقق من تفضيلات النظام.';
+  }
+
+  @override
+  String onboardingFailedCheckScreenCapture(String error) {
+    return 'فشل التحقق من إذن التقاط الشاشة: $error';
+  }
+
+  @override
+  String get onboardingAccessibilityRequired => 'يتطلب إذن إمكانية الوصول لاكتشاف اجتماعات المتصفح.';
+
+  @override
+  String onboardingAccessibilityStatusCheckPrefs(String status) {
+    return 'حالة إذن إمكانية الوصول: $status. يرجى التحقق من تفضيلات النظام.';
+  }
+
+  @override
+  String onboardingFailedCheckAccessibility(String error) {
+    return 'فشل التحقق من إذن إمكانية الوصول: $error';
+  }
 }

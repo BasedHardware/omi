@@ -7485,4 +7485,91 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get authFailedToLinkApple => 'Αποτυχία σύνδεσης με Apple, παρακαλώ δοκιμάστε ξανά.';
+
+  @override
+  String get onboardingBluetoothRequired => 'Απαιτείται άδεια Bluetooth για σύνδεση με τη συσκευή σας.';
+
+  @override
+  String get onboardingBluetoothDeniedSystemPrefs =>
+      'Η άδεια Bluetooth απορρίφθηκε. Παρακαλώ χορηγήστε άδεια στις Προτιμήσεις Συστήματος.';
+
+  @override
+  String onboardingBluetoothStatusCheckPrefs(String status) {
+    return 'Κατάσταση άδειας Bluetooth: $status. Παρακαλώ ελέγξτε τις Προτιμήσεις Συστήματος.';
+  }
+
+  @override
+  String onboardingFailedCheckBluetooth(String error) {
+    return 'Αποτυχία ελέγχου άδειας Bluetooth: $error';
+  }
+
+  @override
+  String get onboardingNotificationDeniedSystemPrefs =>
+      'Η άδεια ειδοποιήσεων απορρίφθηκε. Παρακαλώ χορηγήστε άδεια στις Προτιμήσεις Συστήματος.';
+
+  @override
+  String get onboardingNotificationDeniedNotifications =>
+      'Η άδεια ειδοποιήσεων απορρίφθηκε. Παρακαλώ χορηγήστε άδεια στις Προτιμήσεις Συστήματος > Ειδοποιήσεις.';
+
+  @override
+  String onboardingNotificationStatusCheckPrefs(String status) {
+    return 'Κατάσταση άδειας ειδοποιήσεων: $status. Παρακαλώ ελέγξτε τις Προτιμήσεις Συστήματος.';
+  }
+
+  @override
+  String onboardingFailedCheckNotification(String error) {
+    return 'Αποτυχία ελέγχου άδειας ειδοποιήσεων: $error';
+  }
+
+  @override
+  String get onboardingLocationGrantInSettings =>
+      'Παρακαλώ χορηγήστε άδεια τοποθεσίας στις Ρυθμίσεις > Απόρρητο και Ασφάλεια > Υπηρεσίες Τοποθεσίας';
+
+  @override
+  String get onboardingMicrophoneRequired => 'Απαιτείται άδεια μικροφώνου για εγγραφή.';
+
+  @override
+  String get onboardingMicrophoneDenied =>
+      'Η άδεια μικροφώνου απορρίφθηκε. Παρακαλώ χορηγήστε άδεια στις Προτιμήσεις Συστήματος > Απόρρητο και Ασφάλεια > Μικρόφωνο.';
+
+  @override
+  String onboardingMicrophoneStatusCheckPrefs(String status) {
+    return 'Κατάσταση άδειας μικροφώνου: $status. Παρακαλώ ελέγξτε τις Προτιμήσεις Συστήματος.';
+  }
+
+  @override
+  String onboardingFailedCheckMicrophone(String error) {
+    return 'Αποτυχία ελέγχου άδειας μικροφώνου: $error';
+  }
+
+  @override
+  String get onboardingScreenCaptureRequired => 'Απαιτείται άδεια καταγραφής οθόνης για εγγραφή ήχου συστήματος.';
+
+  @override
+  String get onboardingScreenCaptureDenied =>
+      'Η άδεια καταγραφής οθόνης απορρίφθηκε. Παρακαλώ χορηγήστε άδεια στις Προτιμήσεις Συστήματος > Απόρρητο και Ασφάλεια > Εγγραφή Οθόνης.';
+
+  @override
+  String onboardingScreenCaptureStatusCheckPrefs(String status) {
+    return 'Κατάσταση άδειας καταγραφής οθόνης: $status. Παρακαλώ ελέγξτε τις Προτιμήσεις Συστήματος.';
+  }
+
+  @override
+  String onboardingFailedCheckScreenCapture(String error) {
+    return 'Αποτυχία ελέγχου άδειας καταγραφής οθόνης: $error';
+  }
+
+  @override
+  String get onboardingAccessibilityRequired =>
+      'Απαιτείται άδεια προσβασιμότητας για ανίχνευση συναντήσεων προγράμματος περιήγησης.';
+
+  @override
+  String onboardingAccessibilityStatusCheckPrefs(String status) {
+    return 'Κατάσταση άδειας προσβασιμότητας: $status. Παρακαλώ ελέγξτε τις Προτιμήσεις Συστήματος.';
+  }
+
+  @override
+  String onboardingFailedCheckAccessibility(String error) {
+    return 'Αποτυχία ελέγχου άδειας προσβασιμότητας: $error';
+  }
 }

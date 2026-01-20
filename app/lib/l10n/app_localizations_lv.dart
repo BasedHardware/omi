@@ -7451,4 +7451,91 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get authFailedToLinkApple => 'Neizdevās savienot ar Apple, lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get onboardingBluetoothRequired => 'Bluetooth atļauja ir nepieciešama, lai izveidotu savienojumu ar ierīci.';
+
+  @override
+  String get onboardingBluetoothDeniedSystemPrefs =>
+      'Bluetooth atļauja noraidīta. Lūdzu, piešķiriet atļauju Sistēmas iestatījumos.';
+
+  @override
+  String onboardingBluetoothStatusCheckPrefs(String status) {
+    return 'Bluetooth atļaujas statuss: $status. Lūdzu, pārbaudiet Sistēmas iestatījumus.';
+  }
+
+  @override
+  String onboardingFailedCheckBluetooth(String error) {
+    return 'Neizdevās pārbaudīt Bluetooth atļauju: $error';
+  }
+
+  @override
+  String get onboardingNotificationDeniedSystemPrefs =>
+      'Paziņojumu atļauja noraidīta. Lūdzu, piešķiriet atļauju Sistēmas iestatījumos.';
+
+  @override
+  String get onboardingNotificationDeniedNotifications =>
+      'Paziņojumu atļauja noraidīta. Lūdzu, piešķiriet atļauju Sistēmas iestatījumi > Paziņojumi.';
+
+  @override
+  String onboardingNotificationStatusCheckPrefs(String status) {
+    return 'Paziņojumu atļaujas statuss: $status. Lūdzu, pārbaudiet Sistēmas iestatījumus.';
+  }
+
+  @override
+  String onboardingFailedCheckNotification(String error) {
+    return 'Neizdevās pārbaudīt paziņojumu atļauju: $error';
+  }
+
+  @override
+  String get onboardingLocationGrantInSettings =>
+      'Lūdzu, piešķiriet atrašanās vietas atļauju Iestatījumi > Privātums un drošība > Atrašanās vietas pakalpojumi';
+
+  @override
+  String get onboardingMicrophoneRequired => 'Ierakstīšanai ir nepieciešama mikrofona atļauja.';
+
+  @override
+  String get onboardingMicrophoneDenied =>
+      'Mikrofona atļauja noraidīta. Lūdzu, piešķiriet atļauju Sistēmas iestatījumi > Privātums un drošība > Mikrofons.';
+
+  @override
+  String onboardingMicrophoneStatusCheckPrefs(String status) {
+    return 'Mikrofona atļaujas statuss: $status. Lūdzu, pārbaudiet Sistēmas iestatījumus.';
+  }
+
+  @override
+  String onboardingFailedCheckMicrophone(String error) {
+    return 'Neizdevās pārbaudīt mikrofona atļauju: $error';
+  }
+
+  @override
+  String get onboardingScreenCaptureRequired =>
+      'Sistēmas audio ierakstīšanai ir nepieciešama ekrāna tveršanas atļauja.';
+
+  @override
+  String get onboardingScreenCaptureDenied =>
+      'Ekrāna tveršanas atļauja noraidīta. Lūdzu, piešķiriet atļauju Sistēmas iestatījumi > Privātums un drošība > Ekrāna ierakstīšana.';
+
+  @override
+  String onboardingScreenCaptureStatusCheckPrefs(String status) {
+    return 'Ekrāna tveršanas atļaujas statuss: $status. Lūdzu, pārbaudiet Sistēmas iestatījumus.';
+  }
+
+  @override
+  String onboardingFailedCheckScreenCapture(String error) {
+    return 'Neizdevās pārbaudīt ekrāna tveršanas atļauju: $error';
+  }
+
+  @override
+  String get onboardingAccessibilityRequired => 'Pārlūka sapulču noteikšanai ir nepieciešama pieejamības atļauja.';
+
+  @override
+  String onboardingAccessibilityStatusCheckPrefs(String status) {
+    return 'Pieejamības atļaujas statuss: $status. Lūdzu, pārbaudiet Sistēmas iestatījumus.';
+  }
+
+  @override
+  String onboardingFailedCheckAccessibility(String error) {
+    return 'Neizdevās pārbaudīt pieejamības atļauju: $error';
+  }
 }

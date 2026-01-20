@@ -7320,4 +7320,84 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get authFailedToLinkApple => 'Apple 연결에 실패했습니다. 다시 시도해 주세요.';
+
+  @override
+  String get onboardingBluetoothRequired => '기기에 연결하려면 Bluetooth 권한이 필요합니다.';
+
+  @override
+  String get onboardingBluetoothDeniedSystemPrefs => 'Bluetooth 권한이 거부되었습니다. 시스템 환경설정에서 권한을 허용해 주세요.';
+
+  @override
+  String onboardingBluetoothStatusCheckPrefs(String status) {
+    return 'Bluetooth 권한 상태: $status. 시스템 환경설정을 확인해 주세요.';
+  }
+
+  @override
+  String onboardingFailedCheckBluetooth(String error) {
+    return 'Bluetooth 권한 확인 실패: $error';
+  }
+
+  @override
+  String get onboardingNotificationDeniedSystemPrefs => '알림 권한이 거부되었습니다. 시스템 환경설정에서 권한을 허용해 주세요.';
+
+  @override
+  String get onboardingNotificationDeniedNotifications => '알림 권한이 거부되었습니다. 시스템 환경설정 > 알림에서 권한을 허용해 주세요.';
+
+  @override
+  String onboardingNotificationStatusCheckPrefs(String status) {
+    return '알림 권한 상태: $status. 시스템 환경설정을 확인해 주세요.';
+  }
+
+  @override
+  String onboardingFailedCheckNotification(String error) {
+    return '알림 권한 확인 실패: $error';
+  }
+
+  @override
+  String get onboardingLocationGrantInSettings => '설정 > 개인 정보 보호 및 보안 > 위치 서비스에서 위치 권한을 허용해 주세요';
+
+  @override
+  String get onboardingMicrophoneRequired => '녹음하려면 마이크 권한이 필요합니다.';
+
+  @override
+  String get onboardingMicrophoneDenied => '마이크 권한이 거부되었습니다. 시스템 환경설정 > 개인 정보 보호 및 보안 > 마이크에서 권한을 허용해 주세요.';
+
+  @override
+  String onboardingMicrophoneStatusCheckPrefs(String status) {
+    return '마이크 권한 상태: $status. 시스템 환경설정을 확인해 주세요.';
+  }
+
+  @override
+  String onboardingFailedCheckMicrophone(String error) {
+    return '마이크 권한 확인 실패: $error';
+  }
+
+  @override
+  String get onboardingScreenCaptureRequired => '시스템 오디오 녹음에는 화면 캡처 권한이 필요합니다.';
+
+  @override
+  String get onboardingScreenCaptureDenied => '화면 캡처 권한이 거부되었습니다. 시스템 환경설정 > 개인 정보 보호 및 보안 > 화면 녹화에서 권한을 허용해 주세요.';
+
+  @override
+  String onboardingScreenCaptureStatusCheckPrefs(String status) {
+    return '화면 캡처 권한 상태: $status. 시스템 환경설정을 확인해 주세요.';
+  }
+
+  @override
+  String onboardingFailedCheckScreenCapture(String error) {
+    return '화면 캡처 권한 확인 실패: $error';
+  }
+
+  @override
+  String get onboardingAccessibilityRequired => '브라우저 회의를 감지하려면 손쉬운 사용 권한이 필요합니다.';
+
+  @override
+  String onboardingAccessibilityStatusCheckPrefs(String status) {
+    return '손쉬운 사용 권한 상태: $status. 시스템 환경설정을 확인해 주세요.';
+  }
+
+  @override
+  String onboardingFailedCheckAccessibility(String error) {
+    return '손쉬운 사용 권한 확인 실패: $error';
+  }
 }

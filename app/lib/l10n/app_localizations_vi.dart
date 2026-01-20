@@ -7446,4 +7446,90 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get authFailedToLinkApple => 'Liên kết với Apple không thành công, vui lòng thử lại.';
+
+  @override
+  String get onboardingBluetoothRequired => 'Cần quyền Bluetooth để kết nối với thiết bị của bạn.';
+
+  @override
+  String get onboardingBluetoothDeniedSystemPrefs =>
+      'Quyền Bluetooth bị từ chối. Vui lòng cấp quyền trong Tùy chọn Hệ thống.';
+
+  @override
+  String onboardingBluetoothStatusCheckPrefs(String status) {
+    return 'Trạng thái quyền Bluetooth: $status. Vui lòng kiểm tra Tùy chọn Hệ thống.';
+  }
+
+  @override
+  String onboardingFailedCheckBluetooth(String error) {
+    return 'Không thể kiểm tra quyền Bluetooth: $error';
+  }
+
+  @override
+  String get onboardingNotificationDeniedSystemPrefs =>
+      'Quyền thông báo bị từ chối. Vui lòng cấp quyền trong Tùy chọn Hệ thống.';
+
+  @override
+  String get onboardingNotificationDeniedNotifications =>
+      'Quyền thông báo bị từ chối. Vui lòng cấp quyền trong Tùy chọn Hệ thống > Thông báo.';
+
+  @override
+  String onboardingNotificationStatusCheckPrefs(String status) {
+    return 'Trạng thái quyền thông báo: $status. Vui lòng kiểm tra Tùy chọn Hệ thống.';
+  }
+
+  @override
+  String onboardingFailedCheckNotification(String error) {
+    return 'Không thể kiểm tra quyền thông báo: $error';
+  }
+
+  @override
+  String get onboardingLocationGrantInSettings =>
+      'Vui lòng cấp quyền vị trí trong Cài đặt > Quyền riêng tư & Bảo mật > Dịch vụ Vị trí';
+
+  @override
+  String get onboardingMicrophoneRequired => 'Cần quyền microphone để ghi âm.';
+
+  @override
+  String get onboardingMicrophoneDenied =>
+      'Quyền microphone bị từ chối. Vui lòng cấp quyền trong Tùy chọn Hệ thống > Quyền riêng tư & Bảo mật > Microphone.';
+
+  @override
+  String onboardingMicrophoneStatusCheckPrefs(String status) {
+    return 'Trạng thái quyền microphone: $status. Vui lòng kiểm tra Tùy chọn Hệ thống.';
+  }
+
+  @override
+  String onboardingFailedCheckMicrophone(String error) {
+    return 'Không thể kiểm tra quyền microphone: $error';
+  }
+
+  @override
+  String get onboardingScreenCaptureRequired => 'Cần quyền chụp màn hình để ghi âm thanh hệ thống.';
+
+  @override
+  String get onboardingScreenCaptureDenied =>
+      'Quyền chụp màn hình bị từ chối. Vui lòng cấp quyền trong Tùy chọn Hệ thống > Quyền riêng tư & Bảo mật > Ghi màn hình.';
+
+  @override
+  String onboardingScreenCaptureStatusCheckPrefs(String status) {
+    return 'Trạng thái quyền chụp màn hình: $status. Vui lòng kiểm tra Tùy chọn Hệ thống.';
+  }
+
+  @override
+  String onboardingFailedCheckScreenCapture(String error) {
+    return 'Không thể kiểm tra quyền chụp màn hình: $error';
+  }
+
+  @override
+  String get onboardingAccessibilityRequired => 'Cần quyền trợ năng để phát hiện cuộc họp trình duyệt.';
+
+  @override
+  String onboardingAccessibilityStatusCheckPrefs(String status) {
+    return 'Trạng thái quyền trợ năng: $status. Vui lòng kiểm tra Tùy chọn Hệ thống.';
+  }
+
+  @override
+  String onboardingFailedCheckAccessibility(String error) {
+    return 'Không thể kiểm tra quyền trợ năng: $error';
+  }
 }

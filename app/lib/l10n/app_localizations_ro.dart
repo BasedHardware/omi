@@ -7470,4 +7470,92 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get authFailedToLinkApple => 'Nu s-a putut conecta cu Apple, vă rugăm încercați din nou.';
+
+  @override
+  String get onboardingBluetoothRequired => 'Este necesară permisiunea Bluetooth pentru a vă conecta la dispozitiv.';
+
+  @override
+  String get onboardingBluetoothDeniedSystemPrefs =>
+      'Permisiunea Bluetooth a fost refuzată. Acordați permisiunea în Preferințe Sistem.';
+
+  @override
+  String onboardingBluetoothStatusCheckPrefs(String status) {
+    return 'Starea permisiunii Bluetooth: $status. Verificați Preferințele Sistem.';
+  }
+
+  @override
+  String onboardingFailedCheckBluetooth(String error) {
+    return 'Nu s-a putut verifica permisiunea Bluetooth: $error';
+  }
+
+  @override
+  String get onboardingNotificationDeniedSystemPrefs =>
+      'Permisiunea pentru notificări a fost refuzată. Acordați permisiunea în Preferințe Sistem.';
+
+  @override
+  String get onboardingNotificationDeniedNotifications =>
+      'Permisiunea pentru notificări a fost refuzată. Acordați permisiunea în Preferințe Sistem > Notificări.';
+
+  @override
+  String onboardingNotificationStatusCheckPrefs(String status) {
+    return 'Starea permisiunii pentru notificări: $status. Verificați Preferințele Sistem.';
+  }
+
+  @override
+  String onboardingFailedCheckNotification(String error) {
+    return 'Nu s-a putut verifica permisiunea pentru notificări: $error';
+  }
+
+  @override
+  String get onboardingLocationGrantInSettings =>
+      'Acordați permisiunea pentru locație în Setări > Confidențialitate și securitate > Servicii de localizare';
+
+  @override
+  String get onboardingMicrophoneRequired => 'Este necesară permisiunea pentru microfon pentru înregistrare.';
+
+  @override
+  String get onboardingMicrophoneDenied =>
+      'Permisiunea pentru microfon a fost refuzată. Acordați permisiunea în Preferințe Sistem > Confidențialitate și securitate > Microfon.';
+
+  @override
+  String onboardingMicrophoneStatusCheckPrefs(String status) {
+    return 'Starea permisiunii pentru microfon: $status. Verificați Preferințele Sistem.';
+  }
+
+  @override
+  String onboardingFailedCheckMicrophone(String error) {
+    return 'Nu s-a putut verifica permisiunea pentru microfon: $error';
+  }
+
+  @override
+  String get onboardingScreenCaptureRequired =>
+      'Este necesară permisiunea de captură a ecranului pentru înregistrarea audio a sistemului.';
+
+  @override
+  String get onboardingScreenCaptureDenied =>
+      'Permisiunea de captură a ecranului a fost refuzată. Acordați permisiunea în Preferințe Sistem > Confidențialitate și securitate > Înregistrare ecran.';
+
+  @override
+  String onboardingScreenCaptureStatusCheckPrefs(String status) {
+    return 'Starea permisiunii de captură a ecranului: $status. Verificați Preferințele Sistem.';
+  }
+
+  @override
+  String onboardingFailedCheckScreenCapture(String error) {
+    return 'Nu s-a putut verifica permisiunea de captură a ecranului: $error';
+  }
+
+  @override
+  String get onboardingAccessibilityRequired =>
+      'Este necesară permisiunea de accesibilitate pentru detectarea întâlnirilor din browser.';
+
+  @override
+  String onboardingAccessibilityStatusCheckPrefs(String status) {
+    return 'Starea permisiunii de accesibilitate: $status. Verificați Preferințele Sistem.';
+  }
+
+  @override
+  String onboardingFailedCheckAccessibility(String error) {
+    return 'Nu s-a putut verifica permisiunea de accesibilitate: $error';
+  }
 }
