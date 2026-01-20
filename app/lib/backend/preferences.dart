@@ -577,16 +577,18 @@ class SharedPreferencesUtil {
 
   set lastKnownFirmwareVersion(String value) => saveString('lastKnownFirmwareVersion', value);
 
-  // IDs of general announcements the user has seen
-  List<String> get seenAnnouncementIds => getStringList('seenAnnouncementIds');
+  // Last time general announcements were checked
+  DateTime? get lastAnnouncementCheckTime {
+    final str = getString('lastAnnouncementCheckTime');
+    if (str.isEmpty) return null;
+    return DateTime.tryParse(str);
+  }
 
-  set seenAnnouncementIds(List<String> value) => saveStringList('seenAnnouncementIds', value);
-
-  void addSeenAnnouncementId(String id) {
-    final List<String> ids = List<String>.from(seenAnnouncementIds);
-    if (!ids.contains(id)) {
-      ids.add(id);
-      seenAnnouncementIds = ids;
+  set lastAnnouncementCheckTime(DateTime? value) {
+    if (value == null) {
+      remove('lastAnnouncementCheckTime');
+    } else {
+      saveString('lastAnnouncementCheckTime', value.toUtc().toIso8601String());
     }
   }
 

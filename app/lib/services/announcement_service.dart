@@ -131,18 +131,10 @@ class AnnouncementService {
     try {
       for (final announcement in List.from(provider.generalAnnouncements)) {
         if (!context.mounted) break;
-
-        await AnnouncementDialog.show(
-          context,
-          announcement,
-          onDismiss: () {
-            provider.markAnnouncementAsSeen(announcement.id);
-          },
-          onCTAPressed: () {
-            provider.markAnnouncementAsSeen(announcement.id);
-          },
-        );
+        await AnnouncementDialog.show(context, announcement);
       }
+
+      provider.markAnnouncementsAsSeen();
     } finally {
       _isShowingAnnouncement = false;
     }

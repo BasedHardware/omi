@@ -116,10 +116,10 @@ def get_app_features(app_version: str) -> List[Announcement]:
     return [Announcement.from_dict(doc.to_dict()) for doc in docs]
 
 
-def get_general_announcements(exclude_ids: Optional[List[str]] = None) -> List[Announcement]:
+def get_general_announcements(last_checked_at: Optional[datetime] = None) -> List[Announcement]:
     """
     Get active, non-expired general announcements.
-    Excludes announcements with IDs in exclude_ids (already seen by user).
+    If last_checked_at is provided, only returns announcements created after that time.
     """
     now = datetime.now(timezone.utc)
     announcements_ref = db.collection("announcements")
@@ -134,8 +134,8 @@ def get_general_announcements(exclude_ids: Optional[List[str]] = None) -> List[A
         data = doc.to_dict()
         announcement = Announcement.from_dict(data)
 
-        # Skip if already seen
-        if exclude_ids and announcement.id in exclude_ids:
+        # Skip if created before last check
+        if last_checked_at and announcement.created_at <= last_checked_at:
             continue
 
         # Skip if expired

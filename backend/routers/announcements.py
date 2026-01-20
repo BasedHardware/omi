@@ -70,19 +70,24 @@ async def get_features(
 
 @router.get("/v1/announcements/general", response_model=List[Announcement])
 async def get_announcements(
-    exclude_ids: Optional[str] = Query(None, description="Comma-separated list of already-seen announcement IDs"),
+    last_checked_at: Optional[str] = Query(
+        None, description="ISO timestamp of last check (only returns newer announcements)"
+    ),
 ):
     """
     Get active, non-expired general announcements.
-    Excludes announcements with IDs in exclude_ids (already seen by user).
+    If last_checked_at is provided, only returns announcements created after that time.
 
     These are time-based announcements (promotions, notices) not tied to versions.
     """
-    exclude_list = None
-    if exclude_ids:
-        exclude_list = [id.strip() for id in exclude_ids.split(",") if id.strip()]
+    checked_at = None
+    if last_checked_at:
+        try:
+            checked_at = datetime.fromisoformat(last_checked_at.replace("Z", "+00:00"))
+        except ValueError:
+            pass
 
-    announcements = get_general_announcements(exclude_list)
+    announcements = get_general_announcements(checked_at)
     return announcements
 
 

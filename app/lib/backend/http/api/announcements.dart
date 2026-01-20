@@ -62,13 +62,13 @@ Future<List<Announcement>> getFeatureAnnouncements({
 }
 
 /// Get active, non-expired general announcements.
-/// Excludes announcements with IDs in excludeIds (already seen by user).
+/// If lastCheckedAt is provided, only returns announcements created after that time.
 Future<List<Announcement>> getGeneralAnnouncements({
-  List<String>? excludeIds,
+  DateTime? lastCheckedAt,
 }) async {
   var url = "${Env.apiBaseUrl}v1/announcements/general";
-  if (excludeIds != null && excludeIds.isNotEmpty) {
-    url += "?exclude_ids=${excludeIds.join(',')}";
+  if (lastCheckedAt != null) {
+    url += "?last_checked_at=${Uri.encodeComponent(lastCheckedAt.toUtc().toIso8601String())}";
   }
 
   var res = await makeApiCall(

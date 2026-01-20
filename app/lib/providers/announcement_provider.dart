@@ -116,8 +116,8 @@ class AnnouncementProvider extends BaseProvider {
   /// Check for general announcements (time-based, not version-gated).
   Future<bool> checkForGeneralAnnouncements() async {
     try {
-      final seenIds = SharedPreferencesUtil().seenAnnouncementIds;
-      _generalAnnouncements = await getGeneralAnnouncements(excludeIds: seenIds);
+      final lastChecked = SharedPreferencesUtil().lastAnnouncementCheckTime;
+      _generalAnnouncements = await getGeneralAnnouncements(lastCheckedAt: lastChecked);
       notifyListeners();
       return _generalAnnouncements.isNotEmpty;
     } catch (e) {
@@ -126,10 +126,9 @@ class AnnouncementProvider extends BaseProvider {
     }
   }
 
-  /// Mark a general announcement as seen.
-  void markAnnouncementAsSeen(String announcementId) {
-    SharedPreferencesUtil().addSeenAnnouncementId(announcementId);
-    _generalAnnouncements.removeWhere((a) => a.id == announcementId);
+  void markAnnouncementsAsSeen() {
+    SharedPreferencesUtil().lastAnnouncementCheckTime = DateTime.now().toUtc();
+    _generalAnnouncements.clear();
     notifyListeners();
   }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/models/announcement.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
@@ -254,14 +255,17 @@ class AnnouncementDialog extends StatelessWidget {
     );
   }
 
-  void _handleCTAAction(BuildContext context, String action) {
-    // Handle different action types
-    // Format: "navigate:/path" or "url:https://example.com"
-    if (action.startsWith('navigate:')) {
-      final path = action.substring('navigate:'.length);
-      Navigator.pushNamed(context, path);
-    } else if (action.startsWith('url:')) {
-      debugPrint('Opening URL: ${action.substring('url:'.length)}');
+  void _handleCTAAction(BuildContext context, String action) async {
+    final uri = Uri.tryParse(action);
+    if (uri == null) {
+      debugPrint('Invalid URL: $action');
+      return;
+    }
+
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      debugPrint('Failed to open URL: $e');
     }
   }
 }
