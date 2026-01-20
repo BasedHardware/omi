@@ -467,6 +467,14 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
                     badgeLabel: widget.conversation.transcriptSegments.isNotEmpty
                         ? '${widget.conversation.transcriptSegments.length} segments'
                         : null,
+                    action: OmiIconButton(
+                      icon: FontAwesomeIcons.copy,
+                      style: OmiIconButtonStyle.neutral,
+                      size: 28,
+                      iconSize: 12,
+                      borderRadius: 8,
+                      onPressed: _handleCopyTranscript,
+                    ),
                     onClose: () {
                       _transcriptAnimationController.reverse().then((_) {
                         setState(() {
@@ -505,6 +513,12 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
       title: 'No Transcript Available',
       message: 'This conversation doesn\'t have a transcript.',
     );
+  }
+
+  Future<void> _handleCopyTranscript() async {
+    String content = widget.conversation.getTranscript(generate: true);
+    await Clipboard.setData(ClipboardData(text: content));
+    _showSnackBar('Transcript copied to clipboard');
   }
 
   Future<void> _handleCopyConversationLink() async {
