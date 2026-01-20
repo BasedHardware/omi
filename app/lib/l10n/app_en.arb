@@ -8582,5 +8582,13 @@
   "dataLowercase": "data",
   "@dataLowercase": {
     "description": "Lowercase word for data in migration context"
+  },
+  "fallNotificationTitle": "Ouch",
+  "@fallNotificationTitle": {
+    "description": "Title for notification shown when device detects a fall"
+  },
+  "fallNotificationBody": "Did you fall?",
+  "@fallNotificationBody": {
+    "description": "Body text for notification shown when device detects a fall"
   }
 }

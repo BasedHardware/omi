@@ -2185,5 +2185,7 @@
   "migrationComplete": "Migration complete!",
   "dataProtectedWithSettings": "Your data is now protected with the new {level} settings.",
   "chatsLowercase": "chats",
-  "dataLowercase": "data"
+  "dataLowercase": "data",
+  "fallNotificationTitle": "Ouch",
+  "fallNotificationBody": "Did you fall?"
 }

@@ -13112,6 +13112,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'data'**
   String get dataLowercase;
+
+  /// Title for notification shown when device detects a fall
+  ///
+  /// In en, this message translates to:
+  /// **'Ouch'**
+  String get fallNotificationTitle;
+
+  /// Body text for notification shown when device detects a fall
+  ///
+  /// In en, this message translates to:
+  /// **'Did you fall?'**
+  String get fallNotificationBody;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

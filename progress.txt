@@ -2,9 +2,9 @@
 
 ## Summary
 Total Files to Localize: 38
-Completed: 35
+Completed: 36
 In Progress: 0
-Pending: 3
+Pending: 2
 
 ## Progress by File
 
@@ -50,13 +50,15 @@ Pending: 3
 [x] providers/device_provider.dart (~5 strings) - DONE (7 new keys + 1 reused key)
 [x] providers/app_provider.dart (~4 strings) - DONE (5 new keys + 1 reused key)
 [x] providers/user_provider.dart (~3 strings) - DONE (15 new keys + 2 reused keys)
-[ ] services/notifications.dart (~6 strings)
+[x] services/notifications.dart (~6 strings) - DONE (2 new keys)
 [ ] services/notifications/important_conversation_notification_handler.dart (~4 strings)
 [ ] main.dart (~3 strings)
 
 ## Changelog
 
 ### 2026-01-20
+- Localized services/notifications.dart with 2 l10n keys for 34 languages
+  - fallNotificationTitle, fallNotificationBody (for fall detection notification)
 - Localized providers/user_provider.dart with 15 l10n keys for 34 languages
   - calculatingETA, aboutMinutesRemaining (parameterized with minutes), aboutAMinuteRemaining, almostDone (for migration ETA)
   - omiSays (notification title)

@@ -7014,4 +7014,10 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get dataLowercase => 'data';
+
+  @override
+  String get fallNotificationTitle => 'Ouch';
+
+  @override
+  String get fallNotificationBody => 'Did you fall?';
 }
