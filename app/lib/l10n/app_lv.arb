@@ -1999,5 +1999,15 @@
   "enterBackendUrlError": "Lūdzu, ievadiet servera URL",
   "urlMustEndWithSlashError": "URL jābeidzas ar \"/\"",
   "invalidUrlError": "Lūdzu, ievadiet derīgu URL",
-  "backendUrlSavedSuccess": "Servera URL saglabāts!"
+  "backendUrlSavedSuccess": "Servera URL saglabāts!",
+  "signInTitle": "Pieteikties",
+  "signInButton": "Pieteikties",
+  "enterEmailError": "Lūdzu, ievadiet savu e-pastu",
+  "invalidEmailError": "Lūdzu, ievadiet derīgu e-pastu",
+  "enterPasswordError": "Lūdzu, ievadiet savu paroli",
+  "passwordMinLengthError": "Parolei jābūt vismaz 8 rakstzīmēm",
+  "signInSuccess": "Pieteikšanās veiksmīga!",
+  "alreadyHaveAccountLogin": "Jau ir konts? Piesakieties",
+  "emailLabel": "E-pasts",
+  "passwordLabel": "Parole"
 }

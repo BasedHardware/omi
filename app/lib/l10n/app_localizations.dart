@@ -11984,6 +11984,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Backend URL saved successfully!'**
   String get backendUrlSavedSuccess;
+
+  /// Title for sign in page
+  ///
+  /// In en, this message translates to:
+  /// **'Sign In'**
+  String get signInTitle;
+
+  /// Sign in button text
+  ///
+  /// In en, this message translates to:
+  /// **'Sign In'**
+  String get signInButton;
+
+  /// Error when email field is empty
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter your email'**
+  String get enterEmailError;
+
+  /// Error when email format is invalid
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a valid email'**
+  String get invalidEmailError;
+
+  /// Error when password field is empty
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter your password'**
+  String get enterPasswordError;
+
+  /// Error when password is too short
+  ///
+  /// In en, this message translates to:
+  /// **'Password must be at least 8 characters long'**
+  String get passwordMinLengthError;
+
+  /// Success message after signing in
+  ///
+  /// In en, this message translates to:
+  /// **'Sign In Successful!'**
+  String get signInSuccess;
+
+  /// Link text to go to login page
+  ///
+  /// In en, this message translates to:
+  /// **'Already have an account? Log In'**
+  String get alreadyHaveAccountLogin;
+
+  /// Label for email input field
+  ///
+  /// In en, this message translates to:
+  /// **'Email'**
+  String get emailLabel;
+
+  /// Label for password input field
+  ///
+  /// In en, this message translates to:
+  /// **'Password'**
+  String get passwordLabel;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

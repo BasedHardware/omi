@@ -2000,5 +2000,15 @@
   "enterBackendUrlError": "バックエンドURLを入力してください",
   "urlMustEndWithSlashError": "URLは「/」で終わる必要があります",
   "invalidUrlError": "有効なURLを入力してください",
-  "backendUrlSavedSuccess": "バックエンドURLが保存されました！"
+  "backendUrlSavedSuccess": "バックエンドURLが保存されました！",
+  "signInTitle": "サインイン",
+  "signInButton": "サインイン",
+  "enterEmailError": "メールアドレスを入力してください",
+  "invalidEmailError": "有効なメールアドレスを入力してください",
+  "enterPasswordError": "パスワードを入力してください",
+  "passwordMinLengthError": "パスワードは8文字以上である必要があります",
+  "signInSuccess": "サインイン成功！",
+  "alreadyHaveAccountLogin": "アカウントをお持ちですか？ログイン",
+  "emailLabel": "メール",
+  "passwordLabel": "パスワード"
 }

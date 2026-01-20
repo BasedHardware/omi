@@ -6378,4 +6378,34 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get backendUrlSavedSuccess => 'تم حفظ عنوان URL للخادم بنجاح!';
+
+  @override
+  String get signInTitle => 'تسجيل الدخول';
+
+  @override
+  String get signInButton => 'تسجيل الدخول';
+
+  @override
+  String get enterEmailError => 'يرجى إدخال بريدك الإلكتروني';
+
+  @override
+  String get invalidEmailError => 'يرجى إدخال بريد إلكتروني صالح';
+
+  @override
+  String get enterPasswordError => 'يرجى إدخال كلمة المرور';
+
+  @override
+  String get passwordMinLengthError => 'يجب أن تتكون كلمة المرور من 8 أحرف على الأقل';
+
+  @override
+  String get signInSuccess => 'تم تسجيل الدخول بنجاح!';
+
+  @override
+  String get alreadyHaveAccountLogin => 'لديك حساب بالفعل؟ سجل الدخول';
+
+  @override
+  String get emailLabel => 'البريد الإلكتروني';
+
+  @override
+  String get passwordLabel => 'كلمة المرور';
 }

@@ -1999,5 +1999,15 @@
   "enterBackendUrlError": "Wprowadź URL serwera",
   "urlMustEndWithSlashError": "URL musi kończyć się na \"/\"",
   "invalidUrlError": "Wprowadź prawidłowy URL",
-  "backendUrlSavedSuccess": "URL serwera zapisany pomyślnie!"
+  "backendUrlSavedSuccess": "URL serwera zapisany pomyślnie!",
+  "signInTitle": "Zaloguj się",
+  "signInButton": "Zaloguj się",
+  "enterEmailError": "Wprowadź swój e-mail",
+  "invalidEmailError": "Wprowadź prawidłowy e-mail",
+  "enterPasswordError": "Wprowadź swoje hasło",
+  "passwordMinLengthError": "Hasło musi mieć co najmniej 8 znaków",
+  "signInSuccess": "Logowanie pomyślne!",
+  "alreadyHaveAccountLogin": "Masz już konto? Zaloguj się",
+  "emailLabel": "E-mail",
+  "passwordLabel": "Hasło"
 }

@@ -1999,5 +1999,15 @@
   "enterBackendUrlError": "Vui lòng nhập URL máy chủ",
   "urlMustEndWithSlashError": "URL phải kết thúc bằng \"/\"",
   "invalidUrlError": "Vui lòng nhập URL hợp lệ",
-  "backendUrlSavedSuccess": "URL máy chủ đã được lưu!"
+  "backendUrlSavedSuccess": "URL máy chủ đã được lưu!",
+  "signInTitle": "Đăng nhập",
+  "signInButton": "Đăng nhập",
+  "enterEmailError": "Vui lòng nhập email của bạn",
+  "invalidEmailError": "Vui lòng nhập email hợp lệ",
+  "enterPasswordError": "Vui lòng nhập mật khẩu của bạn",
+  "passwordMinLengthError": "Mật khẩu phải có ít nhất 8 ký tự",
+  "signInSuccess": "Đăng nhập thành công!",
+  "alreadyHaveAccountLogin": "Đã có tài khoản? Đăng nhập",
+  "emailLabel": "Email",
+  "passwordLabel": "Mật khẩu"
 }

@@ -6426,4 +6426,34 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get backendUrlSavedSuccess => 'Serveri URL salvestatud!';
+
+  @override
+  String get signInTitle => 'Logi sisse';
+
+  @override
+  String get signInButton => 'Logi sisse';
+
+  @override
+  String get enterEmailError => 'Palun sisestage oma e-post';
+
+  @override
+  String get invalidEmailError => 'Palun sisestage kehtiv e-post';
+
+  @override
+  String get enterPasswordError => 'Palun sisestage oma parool';
+
+  @override
+  String get passwordMinLengthError => 'Parool peab olema vähemalt 8 tähemärki';
+
+  @override
+  String get signInSuccess => 'Sisselogimine õnnestus!';
+
+  @override
+  String get alreadyHaveAccountLogin => 'Kas teil on juba konto? Logige sisse';
+
+  @override
+  String get emailLabel => 'E-post';
+
+  @override
+  String get passwordLabel => 'Parool';
 }

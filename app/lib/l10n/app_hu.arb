@@ -1999,5 +1999,15 @@
   "enterBackendUrlError": "Kérjük, adja meg a háttérszerver URL-jét",
   "urlMustEndWithSlashError": "Az URL-nek \"/\" karakterrel kell végződnie",
   "invalidUrlError": "Kérjük, adjon meg érvényes URL-t",
-  "backendUrlSavedSuccess": "Háttérszerver URL sikeresen mentve!"
+  "backendUrlSavedSuccess": "Háttérszerver URL sikeresen mentve!",
+  "signInTitle": "Bejelentkezés",
+  "signInButton": "Bejelentkezés",
+  "enterEmailError": "Kérjük, adja meg e-mail címét",
+  "invalidEmailError": "Kérjük, adjon meg érvényes e-mail címet",
+  "enterPasswordError": "Kérjük, adja meg jelszavát",
+  "passwordMinLengthError": "A jelszónak legalább 8 karakternek kell lennie",
+  "signInSuccess": "Sikeres bejelentkezés!",
+  "alreadyHaveAccountLogin": "Már van fiókja? Jelentkezzen be",
+  "emailLabel": "E-mail",
+  "passwordLabel": "Jelszó"
 }

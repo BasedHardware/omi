@@ -1999,5 +1999,15 @@
   "enterBackendUrlError": "Vennligst skriv inn backend-URL",
   "urlMustEndWithSlashError": "URL må ende med \"/\"",
   "invalidUrlError": "Vennligst skriv inn en gyldig URL",
-  "backendUrlSavedSuccess": "Backend-URL lagret!"
+  "backendUrlSavedSuccess": "Backend-URL lagret!",
+  "signInTitle": "Logg inn",
+  "signInButton": "Logg inn",
+  "enterEmailError": "Vennligst skriv inn e-posten din",
+  "invalidEmailError": "Vennligst skriv inn en gyldig e-post",
+  "enterPasswordError": "Vennligst skriv inn passordet ditt",
+  "passwordMinLengthError": "Passordet må være minst 8 tegn",
+  "signInSuccess": "Innlogging vellykket!",
+  "alreadyHaveAccountLogin": "Har du allerede en konto? Logg inn",
+  "emailLabel": "E-post",
+  "passwordLabel": "Passord"
 }

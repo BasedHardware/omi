@@ -7837,5 +7837,45 @@
   "backendUrlSavedSuccess": "Backend URL saved successfully!",
   "@backendUrlSavedSuccess": {
     "description": "Success message when backend URL is saved"
+  },
+  "signInTitle": "Sign In",
+  "@signInTitle": {
+    "description": "Title for sign in page"
+  },
+  "signInButton": "Sign In",
+  "@signInButton": {
+    "description": "Sign in button text"
+  },
+  "enterEmailError": "Please enter your email",
+  "@enterEmailError": {
+    "description": "Error when email field is empty"
+  },
+  "invalidEmailError": "Please enter a valid email",
+  "@invalidEmailError": {
+    "description": "Error when email format is invalid"
+  },
+  "enterPasswordError": "Please enter your password",
+  "@enterPasswordError": {
+    "description": "Error when password field is empty"
+  },
+  "passwordMinLengthError": "Password must be at least 8 characters long",
+  "@passwordMinLengthError": {
+    "description": "Error when password is too short"
+  },
+  "signInSuccess": "Sign In Successful!",
+  "@signInSuccess": {
+    "description": "Success message after signing in"
+  },
+  "alreadyHaveAccountLogin": "Already have an account? Log In",
+  "@alreadyHaveAccountLogin": {
+    "description": "Link text to go to login page"
+  },
+  "emailLabel": "Email",
+  "@emailLabel": {
+    "description": "Label for email input field"
+  },
+  "passwordLabel": "Password",
+  "@passwordLabel": {
+    "description": "Label for password input field"
   }
 }

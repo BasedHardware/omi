@@ -6434,4 +6434,34 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get backendUrlSavedSuccess => 'URL máy chủ đã được lưu!';
+
+  @override
+  String get signInTitle => 'Đăng nhập';
+
+  @override
+  String get signInButton => 'Đăng nhập';
+
+  @override
+  String get enterEmailError => 'Vui lòng nhập email của bạn';
+
+  @override
+  String get invalidEmailError => 'Vui lòng nhập email hợp lệ';
+
+  @override
+  String get enterPasswordError => 'Vui lòng nhập mật khẩu của bạn';
+
+  @override
+  String get passwordMinLengthError => 'Mật khẩu phải có ít nhất 8 ký tự';
+
+  @override
+  String get signInSuccess => 'Đăng nhập thành công!';
+
+  @override
+  String get alreadyHaveAccountLogin => 'Đã có tài khoản? Đăng nhập';
+
+  @override
+  String get emailLabel => 'Email';
+
+  @override
+  String get passwordLabel => 'Mật khẩu';
 }

@@ -6423,4 +6423,34 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get backendUrlSavedSuccess => 'Backend-URL lagret!';
+
+  @override
+  String get signInTitle => 'Logg inn';
+
+  @override
+  String get signInButton => 'Logg inn';
+
+  @override
+  String get enterEmailError => 'Vennligst skriv inn e-posten din';
+
+  @override
+  String get invalidEmailError => 'Vennligst skriv inn en gyldig e-post';
+
+  @override
+  String get enterPasswordError => 'Vennligst skriv inn passordet ditt';
+
+  @override
+  String get passwordMinLengthError => 'Passordet må være minst 8 tegn';
+
+  @override
+  String get signInSuccess => 'Innlogging vellykket!';
+
+  @override
+  String get alreadyHaveAccountLogin => 'Har du allerede en konto? Logg inn';
+
+  @override
+  String get emailLabel => 'E-post';
+
+  @override
+  String get passwordLabel => 'Passord';
 }

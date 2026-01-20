@@ -6455,4 +6455,34 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get backendUrlSavedSuccess => 'URL-ul serverului a fost salvat!';
+
+  @override
+  String get signInTitle => 'Autentificare';
+
+  @override
+  String get signInButton => 'Autentificare';
+
+  @override
+  String get enterEmailError => 'Introduceți adresa de e-mail';
+
+  @override
+  String get invalidEmailError => 'Introduceți o adresă de e-mail validă';
+
+  @override
+  String get enterPasswordError => 'Introduceți parola';
+
+  @override
+  String get passwordMinLengthError => 'Parola trebuie să aibă cel puțin 8 caractere';
+
+  @override
+  String get signInSuccess => 'Autentificare reușită!';
+
+  @override
+  String get alreadyHaveAccountLogin => 'Aveți deja un cont? Conectați-vă';
+
+  @override
+  String get emailLabel => 'E-mail';
+
+  @override
+  String get passwordLabel => 'Parolă';
 }

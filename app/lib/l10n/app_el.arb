@@ -1999,5 +1999,15 @@
   "enterBackendUrlError": "Εισάγετε το URL του διακομιστή",
   "urlMustEndWithSlashError": "Το URL πρέπει να τελειώνει με \"/\"",
   "invalidUrlError": "Εισάγετε ένα έγκυρο URL",
-  "backendUrlSavedSuccess": "Το URL του διακομιστή αποθηκεύτηκε!"
+  "backendUrlSavedSuccess": "Το URL του διακομιστή αποθηκεύτηκε!",
+  "signInTitle": "Σύνδεση",
+  "signInButton": "Σύνδεση",
+  "enterEmailError": "Εισάγετε το email σας",
+  "invalidEmailError": "Εισάγετε ένα έγκυρο email",
+  "enterPasswordError": "Εισάγετε τον κωδικό σας",
+  "passwordMinLengthError": "Ο κωδικός πρέπει να έχει τουλάχιστον 8 χαρακτήρες",
+  "signInSuccess": "Επιτυχής σύνδεση!",
+  "alreadyHaveAccountLogin": "Έχετε ήδη λογαριασμό; Συνδεθείτε",
+  "emailLabel": "Email",
+  "passwordLabel": "Κωδικός"
 }

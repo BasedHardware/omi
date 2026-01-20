@@ -2000,5 +2000,15 @@
   "enterBackendUrlError": "Por favor, insira a URL do servidor",
   "urlMustEndWithSlashError": "A URL deve terminar com \"/\"",
   "invalidUrlError": "Por favor, insira uma URL válida",
-  "backendUrlSavedSuccess": "URL do servidor salva com sucesso!"
+  "backendUrlSavedSuccess": "URL do servidor salva com sucesso!",
+  "signInTitle": "Entrar",
+  "signInButton": "Entrar",
+  "enterEmailError": "Por favor, insira seu e-mail",
+  "invalidEmailError": "Por favor, insira um e-mail válido",
+  "enterPasswordError": "Por favor, insira sua senha",
+  "passwordMinLengthError": "A senha deve ter pelo menos 8 caracteres",
+  "signInSuccess": "Login realizado com sucesso!",
+  "alreadyHaveAccountLogin": "Já tem uma conta? Entre",
+  "emailLabel": "E-mail",
+  "passwordLabel": "Senha"
 }

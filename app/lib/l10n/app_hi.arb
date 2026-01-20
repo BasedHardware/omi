@@ -2000,5 +2000,15 @@
   "enterBackendUrlError": "कृपया बैकएंड URL दर्ज करें",
   "urlMustEndWithSlashError": "URL \"/\" से समाप्त होना चाहिए",
   "invalidUrlError": "कृपया एक वैध URL दर्ज करें",
-  "backendUrlSavedSuccess": "बैकएंड URL सफलतापूर्वक सहेजा गया!"
+  "backendUrlSavedSuccess": "बैकएंड URL सफलतापूर्वक सहेजा गया!",
+  "signInTitle": "साइन इन करें",
+  "signInButton": "साइन इन करें",
+  "enterEmailError": "कृपया अपना ईमेल दर्ज करें",
+  "invalidEmailError": "कृपया एक वैध ईमेल दर्ज करें",
+  "enterPasswordError": "कृपया अपना पासवर्ड दर्ज करें",
+  "passwordMinLengthError": "पासवर्ड कम से कम 8 अक्षरों का होना चाहिए",
+  "signInSuccess": "साइन इन सफल!",
+  "alreadyHaveAccountLogin": "पहले से खाता है? लॉग इन करें",
+  "emailLabel": "ईमेल",
+  "passwordLabel": "पासवर्ड"
 }

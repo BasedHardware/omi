@@ -6441,4 +6441,34 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get backendUrlSavedSuccess => 'URL сервера успешно сохранён!';
+
+  @override
+  String get signInTitle => 'Войти';
+
+  @override
+  String get signInButton => 'Войти';
+
+  @override
+  String get enterEmailError => 'Введите ваш email';
+
+  @override
+  String get invalidEmailError => 'Введите корректный email';
+
+  @override
+  String get enterPasswordError => 'Введите ваш пароль';
+
+  @override
+  String get passwordMinLengthError => 'Пароль должен быть не менее 8 символов';
+
+  @override
+  String get signInSuccess => 'Вход выполнен успешно!';
+
+  @override
+  String get alreadyHaveAccountLogin => 'Уже есть аккаунт? Войдите';
+
+  @override
+  String get emailLabel => 'Email';
+
+  @override
+  String get passwordLabel => 'Пароль';
 }

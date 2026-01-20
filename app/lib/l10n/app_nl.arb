@@ -1999,5 +1999,15 @@
   "enterBackendUrlError": "Voer de backend-URL in",
   "urlMustEndWithSlashError": "URL moet eindigen met \"/\"",
   "invalidUrlError": "Voer een geldige URL in",
-  "backendUrlSavedSuccess": "Backend-URL succesvol opgeslagen!"
+  "backendUrlSavedSuccess": "Backend-URL succesvol opgeslagen!",
+  "signInTitle": "Inloggen",
+  "signInButton": "Inloggen",
+  "enterEmailError": "Voer uw e-mailadres in",
+  "invalidEmailError": "Voer een geldig e-mailadres in",
+  "enterPasswordError": "Voer uw wachtwoord in",
+  "passwordMinLengthError": "Wachtwoord moet minimaal 8 tekens zijn",
+  "signInSuccess": "Inloggen gelukt!",
+  "alreadyHaveAccountLogin": "Heeft u al een account? Log in",
+  "emailLabel": "E-mail",
+  "passwordLabel": "Wachtwoord"
 }

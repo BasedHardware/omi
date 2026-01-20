@@ -6425,4 +6425,34 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get backendUrlSavedSuccess => 'URL servera bola úspešne uložená!';
+
+  @override
+  String get signInTitle => 'Prihlásiť sa';
+
+  @override
+  String get signInButton => 'Prihlásiť sa';
+
+  @override
+  String get enterEmailError => 'Zadajte svoj e-mail';
+
+  @override
+  String get invalidEmailError => 'Zadajte platný e-mail';
+
+  @override
+  String get enterPasswordError => 'Zadajte svoje heslo';
+
+  @override
+  String get passwordMinLengthError => 'Heslo musí mať aspoň 8 znakov';
+
+  @override
+  String get signInSuccess => 'Prihlásenie úspešné!';
+
+  @override
+  String get alreadyHaveAccountLogin => 'Máte už účet? Prihláste sa';
+
+  @override
+  String get emailLabel => 'E-mail';
+
+  @override
+  String get passwordLabel => 'Heslo';
 }

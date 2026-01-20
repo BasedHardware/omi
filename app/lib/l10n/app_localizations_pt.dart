@@ -6416,4 +6416,34 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get backendUrlSavedSuccess => 'URL do servidor salva com sucesso!';
+
+  @override
+  String get signInTitle => 'Entrar';
+
+  @override
+  String get signInButton => 'Entrar';
+
+  @override
+  String get enterEmailError => 'Por favor, insira seu e-mail';
+
+  @override
+  String get invalidEmailError => 'Por favor, insira um e-mail válido';
+
+  @override
+  String get enterPasswordError => 'Por favor, insira sua senha';
+
+  @override
+  String get passwordMinLengthError => 'A senha deve ter pelo menos 8 caracteres';
+
+  @override
+  String get signInSuccess => 'Login realizado com sucesso!';
+
+  @override
+  String get alreadyHaveAccountLogin => 'Já tem uma conta? Entre';
+
+  @override
+  String get emailLabel => 'E-mail';
+
+  @override
+  String get passwordLabel => 'Senha';
 }

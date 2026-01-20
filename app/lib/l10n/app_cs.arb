@@ -1959,5 +1959,15 @@
   "enterBackendUrlError": "Zadejte prosím URL serveru",
   "urlMustEndWithSlashError": "URL musí končit \"/\"",
   "invalidUrlError": "Zadejte prosím platnou URL",
-  "backendUrlSavedSuccess": "URL serveru byla úspěšně uložena!"
+  "backendUrlSavedSuccess": "URL serveru byla úspěšně uložena!",
+  "signInTitle": "Přihlásit se",
+  "signInButton": "Přihlásit se",
+  "enterEmailError": "Zadejte prosím svůj e-mail",
+  "invalidEmailError": "Zadejte prosím platný e-mail",
+  "enterPasswordError": "Zadejte prosím své heslo",
+  "passwordMinLengthError": "Heslo musí mít alespoň 8 znaků",
+  "signInSuccess": "Přihlášení úspěšné!",
+  "alreadyHaveAccountLogin": "Máte již účet? Přihlaste se",
+  "emailLabel": "E-mail",
+  "passwordLabel": "Heslo"
 }

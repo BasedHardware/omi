@@ -6451,4 +6451,34 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get backendUrlSavedSuccess => 'URL на сървъра е запазен успешно!';
+
+  @override
+  String get signInTitle => 'Вход';
+
+  @override
+  String get signInButton => 'Вход';
+
+  @override
+  String get enterEmailError => 'Моля, въведете вашия имейл';
+
+  @override
+  String get invalidEmailError => 'Моля, въведете валиден имейл';
+
+  @override
+  String get enterPasswordError => 'Моля, въведете вашата парола';
+
+  @override
+  String get passwordMinLengthError => 'Паролата трябва да е поне 8 символа';
+
+  @override
+  String get signInSuccess => 'Успешен вход!';
+
+  @override
+  String get alreadyHaveAccountLogin => 'Вече имате акаунт? Влезте';
+
+  @override
+  String get emailLabel => 'Имейл';
+
+  @override
+  String get passwordLabel => 'Парола';
 }

@@ -6442,4 +6442,34 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get backendUrlSavedSuccess => 'URL backend berhasil disimpan!';
+
+  @override
+  String get signInTitle => 'Masuk';
+
+  @override
+  String get signInButton => 'Masuk';
+
+  @override
+  String get enterEmailError => 'Masukkan email Anda';
+
+  @override
+  String get invalidEmailError => 'Masukkan email yang valid';
+
+  @override
+  String get enterPasswordError => 'Masukkan kata sandi Anda';
+
+  @override
+  String get passwordMinLengthError => 'Kata sandi harus minimal 8 karakter';
+
+  @override
+  String get signInSuccess => 'Berhasil masuk!';
+
+  @override
+  String get alreadyHaveAccountLogin => 'Sudah punya akun? Masuk';
+
+  @override
+  String get emailLabel => 'Email';
+
+  @override
+  String get passwordLabel => 'Kata sandi';
 }

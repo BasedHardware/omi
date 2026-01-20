@@ -6426,4 +6426,34 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get backendUrlSavedSuccess => 'Serverio URL išsaugotas!';
+
+  @override
+  String get signInTitle => 'Prisijungti';
+
+  @override
+  String get signInButton => 'Prisijungti';
+
+  @override
+  String get enterEmailError => 'Įveskite savo el. paštą';
+
+  @override
+  String get invalidEmailError => 'Įveskite tinkamą el. paštą';
+
+  @override
+  String get enterPasswordError => 'Įveskite savo slaptažodį';
+
+  @override
+  String get passwordMinLengthError => 'Slaptažodis turi būti bent 8 simbolių';
+
+  @override
+  String get signInSuccess => 'Prisijungimas sėkmingas!';
+
+  @override
+  String get alreadyHaveAccountLogin => 'Jau turite paskyrą? Prisijunkite';
+
+  @override
+  String get emailLabel => 'El. paštas';
+
+  @override
+  String get passwordLabel => 'Slaptažodis';
 }

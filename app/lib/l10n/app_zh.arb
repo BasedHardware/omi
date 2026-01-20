@@ -2000,5 +2000,15 @@
   "enterBackendUrlError": "请输入后端URL",
   "urlMustEndWithSlashError": "URL必须以\"/\"结尾",
   "invalidUrlError": "请输入有效的URL",
-  "backendUrlSavedSuccess": "后端URL保存成功！"
+  "backendUrlSavedSuccess": "后端URL保存成功！",
+  "signInTitle": "登录",
+  "signInButton": "登录",
+  "enterEmailError": "请输入您的电子邮件",
+  "invalidEmailError": "请输入有效的电子邮件",
+  "enterPasswordError": "请输入您的密码",
+  "passwordMinLengthError": "密码必须至少8个字符",
+  "signInSuccess": "登录成功！",
+  "alreadyHaveAccountLogin": "已有账户？登录",
+  "emailLabel": "电子邮件",
+  "passwordLabel": "密码"
 }

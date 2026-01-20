@@ -6436,4 +6436,34 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get backendUrlSavedSuccess => 'Sunucu URL başarıyla kaydedildi!';
+
+  @override
+  String get signInTitle => 'Giriş Yap';
+
+  @override
+  String get signInButton => 'Giriş Yap';
+
+  @override
+  String get enterEmailError => 'Lütfen e-postanızı girin';
+
+  @override
+  String get invalidEmailError => 'Lütfen geçerli bir e-posta girin';
+
+  @override
+  String get enterPasswordError => 'Lütfen şifrenizi girin';
+
+  @override
+  String get passwordMinLengthError => 'Şifre en az 8 karakter olmalıdır';
+
+  @override
+  String get signInSuccess => 'Giriş başarılı!';
+
+  @override
+  String get alreadyHaveAccountLogin => 'Zaten hesabınız var mı? Giriş yapın';
+
+  @override
+  String get emailLabel => 'E-posta';
+
+  @override
+  String get passwordLabel => 'Şifre';
 }

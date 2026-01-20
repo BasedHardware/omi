@@ -1999,5 +1999,15 @@
   "enterBackendUrlError": "Introduceți URL-ul serverului",
   "urlMustEndWithSlashError": "URL-ul trebuie să se termine cu \"/\"",
   "invalidUrlError": "Introduceți un URL valid",
-  "backendUrlSavedSuccess": "URL-ul serverului a fost salvat!"
+  "backendUrlSavedSuccess": "URL-ul serverului a fost salvat!",
+  "signInTitle": "Autentificare",
+  "signInButton": "Autentificare",
+  "enterEmailError": "Introduceți adresa de e-mail",
+  "invalidEmailError": "Introduceți o adresă de e-mail validă",
+  "enterPasswordError": "Introduceți parola",
+  "passwordMinLengthError": "Parola trebuie să aibă cel puțin 8 caractere",
+  "signInSuccess": "Autentificare reușită!",
+  "alreadyHaveAccountLogin": "Aveți deja un cont? Conectați-vă",
+  "emailLabel": "E-mail",
+  "passwordLabel": "Parolă"
 }

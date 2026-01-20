@@ -1999,5 +1999,15 @@
   "enterBackendUrlError": "Veuillez entrer l'URL du serveur",
   "urlMustEndWithSlashError": "L'URL doit se terminer par \"/\"",
   "invalidUrlError": "Veuillez entrer une URL valide",
-  "backendUrlSavedSuccess": "URL du serveur enregistrée !"
+  "backendUrlSavedSuccess": "URL du serveur enregistrée !",
+  "signInTitle": "Se connecter",
+  "signInButton": "Se connecter",
+  "enterEmailError": "Veuillez entrer votre e-mail",
+  "invalidEmailError": "Veuillez entrer un e-mail valide",
+  "enterPasswordError": "Veuillez entrer votre mot de passe",
+  "passwordMinLengthError": "Le mot de passe doit contenir au moins 8 caractères",
+  "signInSuccess": "Connexion réussie !",
+  "alreadyHaveAccountLogin": "Vous avez déjà un compte ? Connectez-vous",
+  "emailLabel": "E-mail",
+  "passwordLabel": "Mot de passe"
 }

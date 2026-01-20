@@ -6463,4 +6463,34 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get backendUrlSavedSuccess => 'URL del servidor desat correctament!';
+
+  @override
+  String get signInTitle => 'Inicia la sessió';
+
+  @override
+  String get signInButton => 'Inicia la sessió';
+
+  @override
+  String get enterEmailError => 'Introduïu el vostre correu electrònic';
+
+  @override
+  String get invalidEmailError => 'Introduïu un correu electrònic vàlid';
+
+  @override
+  String get enterPasswordError => 'Introduïu la vostra contrasenya';
+
+  @override
+  String get passwordMinLengthError => 'La contrasenya ha de tenir almenys 8 caràcters';
+
+  @override
+  String get signInSuccess => 'Inici de sessió correcte!';
+
+  @override
+  String get alreadyHaveAccountLogin => 'Ja tens un compte? Inicia sessió';
+
+  @override
+  String get emailLabel => 'Correu electrònic';
+
+  @override
+  String get passwordLabel => 'Contrasenya';
 }

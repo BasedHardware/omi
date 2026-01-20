@@ -6446,4 +6446,34 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get backendUrlSavedSuccess => 'URL backend berjaya disimpan!';
+
+  @override
+  String get signInTitle => 'Log Masuk';
+
+  @override
+  String get signInButton => 'Log Masuk';
+
+  @override
+  String get enterEmailError => 'Sila masukkan e-mel anda';
+
+  @override
+  String get invalidEmailError => 'Sila masukkan e-mel yang sah';
+
+  @override
+  String get enterPasswordError => 'Sila masukkan kata laluan anda';
+
+  @override
+  String get passwordMinLengthError => 'Kata laluan mestilah sekurang-kurangnya 8 aksara';
+
+  @override
+  String get signInSuccess => 'Log masuk berjaya!';
+
+  @override
+  String get alreadyHaveAccountLogin => 'Sudah mempunyai akaun? Log masuk';
+
+  @override
+  String get emailLabel => 'E-mel';
+
+  @override
+  String get passwordLabel => 'Kata laluan';
 }

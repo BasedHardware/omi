@@ -6463,4 +6463,34 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get backendUrlSavedSuccess => 'URL del server salvato con successo!';
+
+  @override
+  String get signInTitle => 'Accedi';
+
+  @override
+  String get signInButton => 'Accedi';
+
+  @override
+  String get enterEmailError => 'Inserisci la tua email';
+
+  @override
+  String get invalidEmailError => 'Inserisci un'email valida';
+
+  @override
+  String get enterPasswordError => 'Inserisci la tua password';
+
+  @override
+  String get passwordMinLengthError => 'La password deve essere di almeno 8 caratteri';
+
+  @override
+  String get signInSuccess => 'Accesso riuscito!';
+
+  @override
+  String get alreadyHaveAccountLogin => 'Hai già un account? Accedi';
+
+  @override
+  String get emailLabel => 'Email';
+
+  @override
+  String get passwordLabel => 'Password';
 }

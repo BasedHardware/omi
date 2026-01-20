@@ -1999,5 +1999,15 @@
   "enterBackendUrlError": "Введите URL сервера",
   "urlMustEndWithSlashError": "URL должен заканчиваться на \"/\"",
   "invalidUrlError": "Введите корректный URL",
-  "backendUrlSavedSuccess": "URL сервера успешно сохранён!"
+  "backendUrlSavedSuccess": "URL сервера успешно сохранён!",
+  "signInTitle": "Войти",
+  "signInButton": "Войти",
+  "enterEmailError": "Введите ваш email",
+  "invalidEmailError": "Введите корректный email",
+  "enterPasswordError": "Введите ваш пароль",
+  "passwordMinLengthError": "Пароль должен быть не менее 8 символов",
+  "signInSuccess": "Вход выполнен успешно!",
+  "alreadyHaveAccountLogin": "Уже есть аккаунт? Войдите",
+  "emailLabel": "Email",
+  "passwordLabel": "Пароль"
 }

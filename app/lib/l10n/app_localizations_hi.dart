@@ -6403,4 +6403,34 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get backendUrlSavedSuccess => 'बैकएंड URL सफलतापूर्वक सहेजा गया!';
+
+  @override
+  String get signInTitle => 'साइन इन करें';
+
+  @override
+  String get signInButton => 'साइन इन करें';
+
+  @override
+  String get enterEmailError => 'कृपया अपना ईमेल दर्ज करें';
+
+  @override
+  String get invalidEmailError => 'कृपया एक वैध ईमेल दर्ज करें';
+
+  @override
+  String get enterPasswordError => 'कृपया अपना पासवर्ड दर्ज करें';
+
+  @override
+  String get passwordMinLengthError => 'पासवर्ड कम से कम 8 अक्षरों का होना चाहिए';
+
+  @override
+  String get signInSuccess => 'साइन इन सफल!';
+
+  @override
+  String get alreadyHaveAccountLogin => 'पहले से खाता है? लॉग इन करें';
+
+  @override
+  String get emailLabel => 'ईमेल';
+
+  @override
+  String get passwordLabel => 'पासवर्ड';
 }

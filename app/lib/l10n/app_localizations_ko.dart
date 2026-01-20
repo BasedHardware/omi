@@ -6316,4 +6316,34 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get backendUrlSavedSuccess => '백엔드 URL이 저장되었습니다!';
+
+  @override
+  String get signInTitle => '로그인';
+
+  @override
+  String get signInButton => '로그인';
+
+  @override
+  String get enterEmailError => '이메일을 입력하세요';
+
+  @override
+  String get invalidEmailError => '유효한 이메일을 입력하세요';
+
+  @override
+  String get enterPasswordError => '비밀번호를 입력하세요';
+
+  @override
+  String get passwordMinLengthError => '비밀번호는 최소 8자 이상이어야 합니다';
+
+  @override
+  String get signInSuccess => '로그인 성공!';
+
+  @override
+  String get alreadyHaveAccountLogin => '이미 계정이 있으신가요? 로그인';
+
+  @override
+  String get emailLabel => '이메일';
+
+  @override
+  String get passwordLabel => '비밀번호';
 }

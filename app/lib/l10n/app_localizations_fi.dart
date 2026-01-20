@@ -6425,4 +6425,34 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get backendUrlSavedSuccess => 'Palvelimen URL tallennettu!';
+
+  @override
+  String get signInTitle => 'Kirjaudu sisään';
+
+  @override
+  String get signInButton => 'Kirjaudu sisään';
+
+  @override
+  String get enterEmailError => 'Anna sähköpostiosoitteesi';
+
+  @override
+  String get invalidEmailError => 'Anna kelvollinen sähköpostiosoite';
+
+  @override
+  String get enterPasswordError => 'Anna salasanasi';
+
+  @override
+  String get passwordMinLengthError => 'Salasanan on oltava vähintään 8 merkkiä';
+
+  @override
+  String get signInSuccess => 'Kirjautuminen onnistui!';
+
+  @override
+  String get alreadyHaveAccountLogin => 'Onko sinulla jo tili? Kirjaudu sisään';
+
+  @override
+  String get emailLabel => 'Sähköposti';
+
+  @override
+  String get passwordLabel => 'Salasana';
 }

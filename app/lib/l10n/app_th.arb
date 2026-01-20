@@ -1999,5 +1999,15 @@
   "enterBackendUrlError": "กรุณาป้อน URL เซิร์ฟเวอร์",
   "urlMustEndWithSlashError": "URL ต้องลงท้ายด้วย \"/\"",
   "invalidUrlError": "กรุณาป้อน URL ที่ถูกต้อง",
-  "backendUrlSavedSuccess": "บันทึก URL เซิร์ฟเวอร์แล้ว!"
+  "backendUrlSavedSuccess": "บันทึก URL เซิร์ฟเวอร์แล้ว!",
+  "signInTitle": "เข้าสู่ระบบ",
+  "signInButton": "เข้าสู่ระบบ",
+  "enterEmailError": "กรุณากรอกอีเมลของคุณ",
+  "invalidEmailError": "กรุณากรอกอีเมลที่ถูกต้อง",
+  "enterPasswordError": "กรุณากรอกรหัสผ่านของคุณ",
+  "passwordMinLengthError": "รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร",
+  "signInSuccess": "เข้าสู่ระบบสำเร็จ!",
+  "alreadyHaveAccountLogin": "มีบัญชีอยู่แล้ว? เข้าสู่ระบบ",
+  "emailLabel": "อีเมล",
+  "passwordLabel": "รหัสผ่าน"
 }

@@ -1982,5 +1982,15 @@
   "enterBackendUrlError": "Introduïu l'URL del servidor",
   "urlMustEndWithSlashError": "L'URL ha d'acabar amb \"/\"",
   "invalidUrlError": "Introduïu un URL vàlid",
-  "backendUrlSavedSuccess": "URL del servidor desat correctament!"
+  "backendUrlSavedSuccess": "URL del servidor desat correctament!",
+  "signInTitle": "Inicia la sessió",
+  "signInButton": "Inicia la sessió",
+  "enterEmailError": "Introduïu el vostre correu electrònic",
+  "invalidEmailError": "Introduïu un correu electrònic vàlid",
+  "enterPasswordError": "Introduïu la vostra contrasenya",
+  "passwordMinLengthError": "La contrasenya ha de tenir almenys 8 caràcters",
+  "signInSuccess": "Inici de sessió correcte!",
+  "alreadyHaveAccountLogin": "Ja tens un compte? Inicia sessió",
+  "emailLabel": "Correu electrònic",
+  "passwordLabel": "Contrasenya"
 }

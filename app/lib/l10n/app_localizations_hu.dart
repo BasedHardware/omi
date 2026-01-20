@@ -6456,4 +6456,34 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get backendUrlSavedSuccess => 'Háttérszerver URL sikeresen mentve!';
+
+  @override
+  String get signInTitle => 'Bejelentkezés';
+
+  @override
+  String get signInButton => 'Bejelentkezés';
+
+  @override
+  String get enterEmailError => 'Kérjük, adja meg e-mail címét';
+
+  @override
+  String get invalidEmailError => 'Kérjük, adjon meg érvényes e-mail címet';
+
+  @override
+  String get enterPasswordError => 'Kérjük, adja meg jelszavát';
+
+  @override
+  String get passwordMinLengthError => 'A jelszónak legalább 8 karakternek kell lennie';
+
+  @override
+  String get signInSuccess => 'Sikeres bejelentkezés!';
+
+  @override
+  String get alreadyHaveAccountLogin => 'Már van fiókja? Jelentkezzen be';
+
+  @override
+  String get emailLabel => 'E-mail';
+
+  @override
+  String get passwordLabel => 'Jelszó';
 }

@@ -1982,5 +1982,15 @@
   "enterBackendUrlError": "Моля, въведете URL на сървъра",
   "urlMustEndWithSlashError": "URL трябва да завършва с \"/\"",
   "invalidUrlError": "Моля, въведете валиден URL",
-  "backendUrlSavedSuccess": "URL на сървъра е запазен успешно!"
+  "backendUrlSavedSuccess": "URL на сървъра е запазен успешно!",
+  "signInTitle": "Вход",
+  "signInButton": "Вход",
+  "enterEmailError": "Моля, въведете вашия имейл",
+  "invalidEmailError": "Моля, въведете валиден имейл",
+  "enterPasswordError": "Моля, въведете вашата парола",
+  "passwordMinLengthError": "Паролата трябва да е поне 8 символа",
+  "signInSuccess": "Успешен вход!",
+  "alreadyHaveAccountLogin": "Вече имате акаунт? Влезте",
+  "emailLabel": "Имейл",
+  "passwordLabel": "Парола"
 }

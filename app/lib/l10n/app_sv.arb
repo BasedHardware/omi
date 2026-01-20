@@ -1999,5 +1999,15 @@
   "enterBackendUrlError": "Ange server-URL",
   "urlMustEndWithSlashError": "URL måste sluta med \"/\"",
   "invalidUrlError": "Ange en giltig URL",
-  "backendUrlSavedSuccess": "Server-URL sparad!"
+  "backendUrlSavedSuccess": "Server-URL sparad!",
+  "signInTitle": "Logga in",
+  "signInButton": "Logga in",
+  "enterEmailError": "Ange din e-postadress",
+  "invalidEmailError": "Ange en giltig e-postadress",
+  "enterPasswordError": "Ange ditt lösenord",
+  "passwordMinLengthError": "Lösenordet måste vara minst 8 tecken",
+  "signInSuccess": "Inloggning lyckades!",
+  "alreadyHaveAccountLogin": "Har du redan ett konto? Logga in",
+  "emailLabel": "E-post",
+  "passwordLabel": "Lösenord"
 }

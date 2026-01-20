@@ -6437,4 +6437,34 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get backendUrlSavedSuccess => 'URL serwera zapisany pomyślnie!';
+
+  @override
+  String get signInTitle => 'Zaloguj się';
+
+  @override
+  String get signInButton => 'Zaloguj się';
+
+  @override
+  String get enterEmailError => 'Wprowadź swój e-mail';
+
+  @override
+  String get invalidEmailError => 'Wprowadź prawidłowy e-mail';
+
+  @override
+  String get enterPasswordError => 'Wprowadź swoje hasło';
+
+  @override
+  String get passwordMinLengthError => 'Hasło musi mieć co najmniej 8 znaków';
+
+  @override
+  String get signInSuccess => 'Logowanie pomyślne!';
+
+  @override
+  String get alreadyHaveAccountLogin => 'Masz już konto? Zaloguj się';
+
+  @override
+  String get emailLabel => 'E-mail';
+
+  @override
+  String get passwordLabel => 'Hasło';
 }

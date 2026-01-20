@@ -6429,4 +6429,34 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get backendUrlSavedSuccess => 'Server-URL sparad!';
+
+  @override
+  String get signInTitle => 'Logga in';
+
+  @override
+  String get signInButton => 'Logga in';
+
+  @override
+  String get enterEmailError => 'Ange din e-postadress';
+
+  @override
+  String get invalidEmailError => 'Ange en giltig e-postadress';
+
+  @override
+  String get enterPasswordError => 'Ange ditt lösenord';
+
+  @override
+  String get passwordMinLengthError => 'Lösenordet måste vara minst 8 tecken';
+
+  @override
+  String get signInSuccess => 'Inloggning lyckades!';
+
+  @override
+  String get alreadyHaveAccountLogin => 'Har du redan ett konto? Logga in';
+
+  @override
+  String get emailLabel => 'E-post';
+
+  @override
+  String get passwordLabel => 'Lösenord';
 }

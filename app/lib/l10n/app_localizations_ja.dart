@@ -6314,4 +6314,34 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get backendUrlSavedSuccess => 'バックエンドURLが保存されました！';
+
+  @override
+  String get signInTitle => 'サインイン';
+
+  @override
+  String get signInButton => 'サインイン';
+
+  @override
+  String get enterEmailError => 'メールアドレスを入力してください';
+
+  @override
+  String get invalidEmailError => '有効なメールアドレスを入力してください';
+
+  @override
+  String get enterPasswordError => 'パスワードを入力してください';
+
+  @override
+  String get passwordMinLengthError => 'パスワードは8文字以上である必要があります';
+
+  @override
+  String get signInSuccess => 'サインイン成功！';
+
+  @override
+  String get alreadyHaveAccountLogin => 'アカウントをお持ちですか？ログイン';
+
+  @override
+  String get emailLabel => 'メール';
+
+  @override
+  String get passwordLabel => 'パスワード';
 }

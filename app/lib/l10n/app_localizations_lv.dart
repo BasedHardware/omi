@@ -6437,4 +6437,34 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get backendUrlSavedSuccess => 'Servera URL saglabāts!';
+
+  @override
+  String get signInTitle => 'Pieteikties';
+
+  @override
+  String get signInButton => 'Pieteikties';
+
+  @override
+  String get enterEmailError => 'Lūdzu, ievadiet savu e-pastu';
+
+  @override
+  String get invalidEmailError => 'Lūdzu, ievadiet derīgu e-pastu';
+
+  @override
+  String get enterPasswordError => 'Lūdzu, ievadiet savu paroli';
+
+  @override
+  String get passwordMinLengthError => 'Parolei jābūt vismaz 8 rakstzīmēm';
+
+  @override
+  String get signInSuccess => 'Pieteikšanās veiksmīga!';
+
+  @override
+  String get alreadyHaveAccountLogin => 'Jau ir konts? Piesakieties';
+
+  @override
+  String get emailLabel => 'E-pasts';
+
+  @override
+  String get passwordLabel => 'Parole';
 }

@@ -1957,5 +1957,15 @@
   "enterBackendUrlError": "Indtast venligst backend-URL",
   "urlMustEndWithSlashError": "URL skal ende med \"/\"",
   "invalidUrlError": "Indtast venligst en gyldig URL",
-  "backendUrlSavedSuccess": "Backend-URL gemt!"
+  "backendUrlSavedSuccess": "Backend-URL gemt!",
+  "signInTitle": "Log ind",
+  "signInButton": "Log ind",
+  "enterEmailError": "Indtast venligst din e-mail",
+  "invalidEmailError": "Indtast venligst en gyldig e-mail",
+  "enterPasswordError": "Indtast venligst din adgangskode",
+  "passwordMinLengthError": "Adgangskoden skal være mindst 8 tegn",
+  "signInSuccess": "Login lykkedes!",
+  "alreadyHaveAccountLogin": "Har du allerede en konto? Log ind",
+  "emailLabel": "E-mail",
+  "passwordLabel": "Adgangskode"
 }

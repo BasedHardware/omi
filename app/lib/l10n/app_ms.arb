@@ -1999,5 +1999,15 @@
   "enterBackendUrlError": "Sila masukkan URL backend",
   "urlMustEndWithSlashError": "URL mesti berakhir dengan \"/\"",
   "invalidUrlError": "Sila masukkan URL yang sah",
-  "backendUrlSavedSuccess": "URL backend berjaya disimpan!"
+  "backendUrlSavedSuccess": "URL backend berjaya disimpan!",
+  "signInTitle": "Log Masuk",
+  "signInButton": "Log Masuk",
+  "enterEmailError": "Sila masukkan e-mel anda",
+  "invalidEmailError": "Sila masukkan e-mel yang sah",
+  "enterPasswordError": "Sila masukkan kata laluan anda",
+  "passwordMinLengthError": "Kata laluan mestilah sekurang-kurangnya 8 aksara",
+  "signInSuccess": "Log masuk berjaya!",
+  "alreadyHaveAccountLogin": "Sudah mempunyai akaun? Log masuk",
+  "emailLabel": "E-mel",
+  "passwordLabel": "Kata laluan"
 }

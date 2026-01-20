@@ -6471,4 +6471,34 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get backendUrlSavedSuccess => 'Το URL του διακομιστή αποθηκεύτηκε!';
+
+  @override
+  String get signInTitle => 'Σύνδεση';
+
+  @override
+  String get signInButton => 'Σύνδεση';
+
+  @override
+  String get enterEmailError => 'Εισάγετε το email σας';
+
+  @override
+  String get invalidEmailError => 'Εισάγετε ένα έγκυρο email';
+
+  @override
+  String get enterPasswordError => 'Εισάγετε τον κωδικό σας';
+
+  @override
+  String get passwordMinLengthError => 'Ο κωδικός πρέπει να έχει τουλάχιστον 8 χαρακτήρες';
+
+  @override
+  String get signInSuccess => 'Επιτυχής σύνδεση!';
+
+  @override
+  String get alreadyHaveAccountLogin => 'Έχετε ήδη λογαριασμό; Συνδεθείτε';
+
+  @override
+  String get emailLabel => 'Email';
+
+  @override
+  String get passwordLabel => 'Κωδικός';
 }

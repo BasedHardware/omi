@@ -6378,4 +6378,34 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get backendUrlSavedSuccess => 'URL сервера успішно збережено!';
+
+  @override
+  String get signInTitle => 'Увійти';
+
+  @override
+  String get signInButton => 'Увійти';
+
+  @override
+  String get enterEmailError => 'Будь ласка, введіть вашу електронну пошту';
+
+  @override
+  String get invalidEmailError => 'Будь ласка, введіть дійсну електронну пошту';
+
+  @override
+  String get enterPasswordError => 'Будь ласка, введіть ваш пароль';
+
+  @override
+  String get passwordMinLengthError => 'Пароль повинен містити не менше 8 символів';
+
+  @override
+  String get signInSuccess => 'Вхід успішний!';
+
+  @override
+  String get alreadyHaveAccountLogin => 'Вже маєте обліковий запис? Увійдіть';
+
+  @override
+  String get emailLabel => 'Електронна пошта';
+
+  @override
+  String get passwordLabel => 'Пароль';
 }

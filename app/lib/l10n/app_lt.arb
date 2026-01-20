@@ -1999,5 +1999,15 @@
   "enterBackendUrlError": "Įveskite serverio URL",
   "urlMustEndWithSlashError": "URL turi baigtis \"/\"",
   "invalidUrlError": "Įveskite tinkamą URL",
-  "backendUrlSavedSuccess": "Serverio URL išsaugotas!"
+  "backendUrlSavedSuccess": "Serverio URL išsaugotas!",
+  "signInTitle": "Prisijungti",
+  "signInButton": "Prisijungti",
+  "enterEmailError": "Įveskite savo el. paštą",
+  "invalidEmailError": "Įveskite tinkamą el. paštą",
+  "enterPasswordError": "Įveskite savo slaptažodį",
+  "passwordMinLengthError": "Slaptažodis turi būti bent 8 simbolių",
+  "signInSuccess": "Prisijungimas sėkmingas!",
+  "alreadyHaveAccountLogin": "Jau turite paskyrą? Prisijunkite",
+  "emailLabel": "El. paštas",
+  "passwordLabel": "Slaptažodis"
 }

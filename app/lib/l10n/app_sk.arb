@@ -1999,5 +1999,15 @@
   "enterBackendUrlError": "Zadajte URL servera",
   "urlMustEndWithSlashError": "URL musí končiť na \"/\"",
   "invalidUrlError": "Zadajte platnú URL",
-  "backendUrlSavedSuccess": "URL servera bola úspešne uložená!"
+  "backendUrlSavedSuccess": "URL servera bola úspešne uložená!",
+  "signInTitle": "Prihlásiť sa",
+  "signInButton": "Prihlásiť sa",
+  "enterEmailError": "Zadajte svoj e-mail",
+  "invalidEmailError": "Zadajte platný e-mail",
+  "enterPasswordError": "Zadajte svoje heslo",
+  "passwordMinLengthError": "Heslo musí mať aspoň 8 znakov",
+  "signInSuccess": "Prihlásenie úspešné!",
+  "alreadyHaveAccountLogin": "Máte už účet? Prihláste sa",
+  "emailLabel": "E-mail",
+  "passwordLabel": "Heslo"
 }

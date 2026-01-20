@@ -1999,5 +1999,15 @@
   "enterBackendUrlError": "Palun sisestage serveri URL",
   "urlMustEndWithSlashError": "URL peab lõppema \"/\"",
   "invalidUrlError": "Palun sisestage kehtiv URL",
-  "backendUrlSavedSuccess": "Serveri URL salvestatud!"
+  "backendUrlSavedSuccess": "Serveri URL salvestatud!",
+  "signInTitle": "Logi sisse",
+  "signInButton": "Logi sisse",
+  "enterEmailError": "Palun sisestage oma e-post",
+  "invalidEmailError": "Palun sisestage kehtiv e-post",
+  "enterPasswordError": "Palun sisestage oma parool",
+  "passwordMinLengthError": "Parool peab olema vähemalt 8 tähemärki",
+  "signInSuccess": "Sisselogimine õnnestus!",
+  "alreadyHaveAccountLogin": "Kas teil on juba konto? Logige sisse",
+  "emailLabel": "E-post",
+  "passwordLabel": "Parool"
 }

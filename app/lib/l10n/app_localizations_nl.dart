@@ -6444,4 +6444,34 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get backendUrlSavedSuccess => 'Backend-URL succesvol opgeslagen!';
+
+  @override
+  String get signInTitle => 'Inloggen';
+
+  @override
+  String get signInButton => 'Inloggen';
+
+  @override
+  String get enterEmailError => 'Voer uw e-mailadres in';
+
+  @override
+  String get invalidEmailError => 'Voer een geldig e-mailadres in';
+
+  @override
+  String get enterPasswordError => 'Voer uw wachtwoord in';
+
+  @override
+  String get passwordMinLengthError => 'Wachtwoord moet minimaal 8 tekens zijn';
+
+  @override
+  String get signInSuccess => 'Inloggen gelukt!';
+
+  @override
+  String get alreadyHaveAccountLogin => 'Heeft u al een account? Log in';
+
+  @override
+  String get emailLabel => 'E-mail';
+
+  @override
+  String get passwordLabel => 'Wachtwoord';
 }

@@ -6480,4 +6480,34 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get backendUrlSavedSuccess => 'URL du serveur enregistrée !';
+
+  @override
+  String get signInTitle => 'Se connecter';
+
+  @override
+  String get signInButton => 'Se connecter';
+
+  @override
+  String get enterEmailError => 'Veuillez entrer votre e-mail';
+
+  @override
+  String get invalidEmailError => 'Veuillez entrer un e-mail valide';
+
+  @override
+  String get enterPasswordError => 'Veuillez entrer votre mot de passe';
+
+  @override
+  String get passwordMinLengthError => 'Le mot de passe doit contenir au moins 8 caractères';
+
+  @override
+  String get signInSuccess => 'Connexion réussie !';
+
+  @override
+  String get alreadyHaveAccountLogin => 'Vous avez déjà un compte ? Connectez-vous';
+
+  @override
+  String get emailLabel => 'E-mail';
+
+  @override
+  String get passwordLabel => 'Mot de passe';
 }

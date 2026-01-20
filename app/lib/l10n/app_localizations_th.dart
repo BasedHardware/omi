@@ -6392,4 +6392,34 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get backendUrlSavedSuccess => 'บันทึก URL เซิร์ฟเวอร์แล้ว!';
+
+  @override
+  String get signInTitle => 'เข้าสู่ระบบ';
+
+  @override
+  String get signInButton => 'เข้าสู่ระบบ';
+
+  @override
+  String get enterEmailError => 'กรุณากรอกอีเมลของคุณ';
+
+  @override
+  String get invalidEmailError => 'กรุณากรอกอีเมลที่ถูกต้อง';
+
+  @override
+  String get enterPasswordError => 'กรุณากรอกรหัสผ่านของคุณ';
+
+  @override
+  String get passwordMinLengthError => 'รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร';
+
+  @override
+  String get signInSuccess => 'เข้าสู่ระบบสำเร็จ!';
+
+  @override
+  String get alreadyHaveAccountLogin => 'มีบัญชีอยู่แล้ว? เข้าสู่ระบบ';
+
+  @override
+  String get emailLabel => 'อีเมล';
+
+  @override
+  String get passwordLabel => 'รหัสผ่าน';
 }

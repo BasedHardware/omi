@@ -1980,5 +1980,15 @@
   "enterBackendUrlError": "يرجى إدخال عنوان URL للخادم",
   "urlMustEndWithSlashError": "يجب أن ينتهي URL بـ \"/\"",
   "invalidUrlError": "يرجى إدخال عنوان URL صالح",
-  "backendUrlSavedSuccess": "تم حفظ عنوان URL للخادم بنجاح!"
+  "backendUrlSavedSuccess": "تم حفظ عنوان URL للخادم بنجاح!",
+  "signInTitle": "تسجيل الدخول",
+  "signInButton": "تسجيل الدخول",
+  "enterEmailError": "يرجى إدخال بريدك الإلكتروني",
+  "invalidEmailError": "يرجى إدخال بريد إلكتروني صالح",
+  "enterPasswordError": "يرجى إدخال كلمة المرور",
+  "passwordMinLengthError": "يجب أن تتكون كلمة المرور من 8 أحرف على الأقل",
+  "signInSuccess": "تم تسجيل الدخول بنجاح!",
+  "alreadyHaveAccountLogin": "لديك حساب بالفعل؟ سجل الدخول",
+  "emailLabel": "البريد الإلكتروني",
+  "passwordLabel": "كلمة المرور"
 }

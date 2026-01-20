@@ -1999,5 +1999,15 @@
   "enterBackendUrlError": "Введіть URL сервера",
   "urlMustEndWithSlashError": "URL повинен закінчуватися на \"/\"",
   "invalidUrlError": "Введіть дійсну URL",
-  "backendUrlSavedSuccess": "URL сервера успішно збережено!"
+  "backendUrlSavedSuccess": "URL сервера успішно збережено!",
+  "signInTitle": "Увійти",
+  "signInButton": "Увійти",
+  "enterEmailError": "Будь ласка, введіть вашу електронну пошту",
+  "invalidEmailError": "Будь ласка, введіть дійсну електронну пошту",
+  "enterPasswordError": "Будь ласка, введіть ваш пароль",
+  "passwordMinLengthError": "Пароль повинен містити не менше 8 символів",
+  "signInSuccess": "Вхід успішний!",
+  "alreadyHaveAccountLogin": "Вже маєте обліковий запис? Увійдіть",
+  "emailLabel": "Електронна пошта",
+  "passwordLabel": "Пароль"
 }

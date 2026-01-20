@@ -6416,4 +6416,34 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get backendUrlSavedSuccess => 'URL serveru byla úspěšně uložena!';
+
+  @override
+  String get signInTitle => 'Přihlásit se';
+
+  @override
+  String get signInButton => 'Přihlásit se';
+
+  @override
+  String get enterEmailError => 'Zadejte prosím svůj e-mail';
+
+  @override
+  String get invalidEmailError => 'Zadejte prosím platný e-mail';
+
+  @override
+  String get enterPasswordError => 'Zadejte prosím své heslo';
+
+  @override
+  String get passwordMinLengthError => 'Heslo musí mít alespoň 8 znaků';
+
+  @override
+  String get signInSuccess => 'Přihlášení úspěšné!';
+
+  @override
+  String get alreadyHaveAccountLogin => 'Máte již účet? Přihlaste se';
+
+  @override
+  String get emailLabel => 'E-mail';
+
+  @override
+  String get passwordLabel => 'Heslo';
 }

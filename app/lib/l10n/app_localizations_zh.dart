@@ -6304,4 +6304,34 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get backendUrlSavedSuccess => '后端URL保存成功！';
+
+  @override
+  String get signInTitle => '登录';
+
+  @override
+  String get signInButton => '登录';
+
+  @override
+  String get enterEmailError => '请输入您的电子邮件';
+
+  @override
+  String get invalidEmailError => '请输入有效的电子邮件';
+
+  @override
+  String get enterPasswordError => '请输入您的密码';
+
+  @override
+  String get passwordMinLengthError => '密码必须至少8个字符';
+
+  @override
+  String get signInSuccess => '登录成功！';
+
+  @override
+  String get alreadyHaveAccountLogin => '已有账户？登录';
+
+  @override
+  String get emailLabel => '电子邮件';
+
+  @override
+  String get passwordLabel => '密码';
 }

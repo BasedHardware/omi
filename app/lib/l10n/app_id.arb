@@ -1999,5 +1999,15 @@
   "enterBackendUrlError": "Masukkan URL backend",
   "urlMustEndWithSlashError": "URL harus diakhiri dengan \"/\"",
   "invalidUrlError": "Masukkan URL yang valid",
-  "backendUrlSavedSuccess": "URL backend berhasil disimpan!"
+  "backendUrlSavedSuccess": "URL backend berhasil disimpan!",
+  "signInTitle": "Masuk",
+  "signInButton": "Masuk",
+  "enterEmailError": "Masukkan email Anda",
+  "invalidEmailError": "Masukkan email yang valid",
+  "enterPasswordError": "Masukkan kata sandi Anda",
+  "passwordMinLengthError": "Kata sandi harus minimal 8 karakter",
+  "signInSuccess": "Berhasil masuk!",
+  "alreadyHaveAccountLogin": "Sudah punya akun? Masuk",
+  "emailLabel": "Email",
+  "passwordLabel": "Kata sandi"
 }
