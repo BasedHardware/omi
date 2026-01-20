@@ -7035,4 +7035,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get paymentFailedToSavePaypal => 'Failed to save PayPal details. Please try again later.';
+
+  @override
+  String get paypalEmailHint => 'nik@example.com';
+
+  @override
+  String get paypalMeLinkHint => 'paypal.me/nik';
 }

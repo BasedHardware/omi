@@ -13442,6 +13442,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Failed to save PayPal details. Please try again later.'**
   String get paymentFailedToSavePaypal;
+
+  /// Placeholder example email for PayPal email input field
+  ///
+  /// In en, this message translates to:
+  /// **'nik@example.com'**
+  String get paypalEmailHint;
+
+  /// Placeholder example PayPal.me link for input field
+  ///
+  /// In en, this message translates to:
+  /// **'paypal.me/nik'**
+  String get paypalMeLinkHint;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
