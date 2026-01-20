@@ -7306,4 +7306,14 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get actionItemReminderTitle => 'Нагадування Omi';
+
+  @override
+  String deviceDisconnectedTitle(String deviceName) {
+    return '$deviceName відключено';
+  }
+
+  @override
+  String deviceDisconnectedBody(String deviceName) {
+    return 'Будь ласка, підключіться знову, щоб продовжити використання вашого $deviceName.';
+  }
 }

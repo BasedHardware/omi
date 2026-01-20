@@ -10,10 +10,10 @@
 |--------|-------|
 | Total Files | 27 |
 | Total Strings | ~125 |
-| Completed | 17 |
+| Completed | 18 |
 | In Progress | 0 |
-| Pending | 10 |
-| Progress | 63% |
+| Pending | 9 |
+| Progress | 67% |
 
 **CRITICAL ISSUE**: ~162 pre-existing l10n keys in non-English ARB files still contain
 English text instead of proper translations. See PRIORITY 0 section below.
@@ -161,11 +161,12 @@ Note: Added 1 new l10n key to all 34 language ARB files and updated the Dart fil
 MyApp.navigatorKey.currentContext?.l10n pattern with fallback. Key added: actionItemReminderTitle.
 Ran flutter gen-l10n and verified with test.sh.
 
-### [ ] services/devices/device_connection.dart (2 strings)
-Status: PENDING
-Strings:
-- [ ] Line 535: '... Disconnected' (notification title with param)
-- [ ] Line 536: 'Please reconnect to continue using your ...' (notification body with param)
+### [x] services/devices/device_connection.dart (2 strings)
+Status: COMPLETED
+Note: Added 2 new l10n keys to all 34 language ARB files and updated the Dart file to use
+MyApp.navigatorKey.currentContext?.l10n pattern with fallback. Keys added: deviceDisconnectedTitle
+(with {deviceName} placeholder), deviceDisconnectedBody (with {deviceName} placeholder).
+Ran flutter gen-l10n and verified with test.sh.
 
 ### [ ] services/devices/models.dart (1 string)
 Status: PENDING
@@ -220,6 +221,12 @@ Strings:
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-20] Localized device_connection.dart
+- Added 2 new l10n keys to all 34 language ARB files
+- Updated Dart file to use MyApp.navigatorKey.currentContext?.l10n pattern with fallback
+- Keys: deviceDisconnectedTitle (with {deviceName} placeholder), deviceDisconnectedBody (with {deviceName} placeholder)
+- Ran flutter gen-l10n and verified with test.sh
 
 [2026-01-20] Localized action_item_notification_handler.dart
 - Added 1 new l10n key to all 34 language ARB files

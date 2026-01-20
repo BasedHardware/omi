@@ -2325,5 +2325,7 @@
   "mergeConversationsSuccessBody": "{count} hội thoại đã được hợp nhất thành công",
   "dailyReflectionNotificationTitle": "Đến giờ suy ngẫm hàng ngày",
   "dailyReflectionNotificationBody": "Kể cho tôi nghe về ngày của bạn",
-  "actionItemReminderTitle": "Nhắc nhở Omi"
+  "actionItemReminderTitle": "Nhắc nhở Omi",
+  "deviceDisconnectedTitle": "{deviceName} đã ngắt kết nối",
+  "deviceDisconnectedBody": "Vui lòng kết nối lại để tiếp tục sử dụng {deviceName} của bạn."
 }

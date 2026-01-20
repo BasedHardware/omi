@@ -2325,5 +2325,7 @@
   "mergeConversationsSuccessBody": "{count} gesprekken zijn succesvol samengevoegd",
   "dailyReflectionNotificationTitle": "Tijd voor dagelijkse reflectie",
   "dailyReflectionNotificationBody": "Vertel me over je dag",
-  "actionItemReminderTitle": "Omi-herinnering"
+  "actionItemReminderTitle": "Omi-herinnering",
+  "deviceDisconnectedTitle": "{deviceName} losgekoppeld",
+  "deviceDisconnectedBody": "Maak opnieuw verbinding om uw {deviceName} te blijven gebruiken."
 }

@@ -7331,4 +7331,14 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get actionItemReminderTitle => 'Memento Omi';
+
+  @override
+  String deviceDisconnectedTitle(String deviceName) {
+    return '$deviceName deconectat';
+  }
+
+  @override
+  String deviceDisconnectedBody(String deviceName) {
+    return 'Vă rugăm să vă reconectați pentru a continua să utilizați $deviceName.';
+  }
 }

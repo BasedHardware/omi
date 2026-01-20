@@ -7339,4 +7339,14 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get actionItemReminderTitle => 'Recordatori d\'Omi';
+
+  @override
+  String deviceDisconnectedTitle(String deviceName) {
+    return '$deviceName desconnectat';
+  }
+
+  @override
+  String deviceDisconnectedBody(String deviceName) {
+    return 'Si us plau, torneu a connectar per continuar utilitzant el vostre $deviceName.';
+  }
 }

@@ -7302,4 +7302,14 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get actionItemReminderTitle => 'Omi-påminnelse';
+
+  @override
+  String deviceDisconnectedTitle(String deviceName) {
+    return '$deviceName frånkopplad';
+  }
+
+  @override
+  String deviceDisconnectedBody(String deviceName) {
+    return 'Anslut igen för att fortsätta använda din $deviceName.';
+  }
 }

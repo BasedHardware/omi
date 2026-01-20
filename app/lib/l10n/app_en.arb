@@ -9036,5 +9036,25 @@
   "actionItemReminderTitle": "Omi Reminder",
   "@actionItemReminderTitle": {
     "description": "Title for action item reminder notifications"
+  },
+  "deviceDisconnectedTitle": "{deviceName} Disconnected",
+  "@deviceDisconnectedTitle": {
+    "description": "Notification title when a device disconnects",
+    "placeholders": {
+      "deviceName": {
+        "type": "String",
+        "example": "Omi"
+      }
+    }
+  },
+  "deviceDisconnectedBody": "Please reconnect to continue using your {deviceName}.",
+  "@deviceDisconnectedBody": {
+    "description": "Notification body when a device disconnects",
+    "placeholders": {
+      "deviceName": {
+        "type": "String",
+        "example": "Omi"
+      }
+    }
   }
 }

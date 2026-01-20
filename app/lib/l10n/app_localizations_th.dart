@@ -7263,4 +7263,14 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get actionItemReminderTitle => 'การแจ้งเตือน Omi';
+
+  @override
+  String deviceDisconnectedTitle(String deviceName) {
+    return '$deviceName ตัดการเชื่อมต่อ';
+  }
+
+  @override
+  String deviceDisconnectedBody(String deviceName) {
+    return 'กรุณาเชื่อมต่อใหม่เพื่อใช้งาน $deviceName ของคุณต่อไป';
+  }
 }

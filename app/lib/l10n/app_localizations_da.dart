@@ -7305,4 +7305,14 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get actionItemReminderTitle => 'Omi-påmindelse';
+
+  @override
+  String deviceDisconnectedTitle(String deviceName) {
+    return '$deviceName frakoblet';
+  }
+
+  @override
+  String deviceDisconnectedBody(String deviceName) {
+    return 'Tilslut venligst igen for at fortsætte med at bruge din $deviceName.';
+  }
 }

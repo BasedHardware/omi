@@ -7311,4 +7311,14 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get actionItemReminderTitle => 'Omi atgādinājums';
+
+  @override
+  String deviceDisconnectedTitle(String deviceName) {
+    return '$deviceName atvienots';
+  }
+
+  @override
+  String deviceDisconnectedBody(String deviceName) {
+    return 'Lūdzu, pievienojieties atkārtoti, lai turpinātu izmantot savu $deviceName.';
+  }
 }

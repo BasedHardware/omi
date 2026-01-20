@@ -7316,4 +7316,14 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get actionItemReminderTitle => 'Pengingat Omi';
+
+  @override
+  String deviceDisconnectedTitle(String deviceName) {
+    return '$deviceName terputus';
+  }
+
+  @override
+  String deviceDisconnectedBody(String deviceName) {
+    return 'Silakan hubungkan kembali untuk melanjutkan penggunaan $deviceName Anda.';
+  }
 }

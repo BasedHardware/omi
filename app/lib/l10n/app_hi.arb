@@ -2326,5 +2326,7 @@
   "mergeConversationsSuccessBody": "{count} वार्तालाप सफलतापूर्वक मर्ज किए गए",
   "dailyReflectionNotificationTitle": "दैनिक चिंतन का समय",
   "dailyReflectionNotificationBody": "मुझे अपने दिन के बारे में बताओ",
-  "actionItemReminderTitle": "Omi अनुस्मारक"
+  "actionItemReminderTitle": "Omi अनुस्मारक",
+  "deviceDisconnectedTitle": "{deviceName} डिस्कनेक्ट हो गया",
+  "deviceDisconnectedBody": "कृपया अपने {deviceName} का उपयोग जारी रखने के लिए फिर से कनेक्ट करें।"
 }

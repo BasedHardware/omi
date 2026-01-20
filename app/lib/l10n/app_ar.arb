@@ -2306,5 +2306,7 @@
   "mergeConversationsSuccessBody": "تم دمج {count} محادثات بنجاح",
   "dailyReflectionNotificationTitle": "حان وقت التأمل اليومي",
   "dailyReflectionNotificationBody": "أخبرني عن يومك",
-  "actionItemReminderTitle": "تذكير Omi"
+  "actionItemReminderTitle": "تذكير Omi",
+  "deviceDisconnectedTitle": "{deviceName} غير متصل",
+  "deviceDisconnectedBody": "يرجى إعادة الاتصال لمواصلة استخدام {deviceName} الخاص بك."
 }

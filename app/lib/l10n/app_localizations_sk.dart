@@ -7299,4 +7299,14 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get actionItemReminderTitle => 'Pripomienka Omi';
+
+  @override
+  String deviceDisconnectedTitle(String deviceName) {
+    return '$deviceName odpojené';
+  }
+
+  @override
+  String deviceDisconnectedBody(String deviceName) {
+    return 'Prosím, znova sa pripojte, aby ste mohli pokračovať v používaní vášho $deviceName.';
+  }
 }

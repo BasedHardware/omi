@@ -7299,4 +7299,14 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get actionItemReminderTitle => 'Omi meeldetuletus';
+
+  @override
+  String deviceDisconnectedTitle(String deviceName) {
+    return '$deviceName ühendus katkestatud';
+  }
+
+  @override
+  String deviceDisconnectedBody(String deviceName) {
+    return 'Palun ühenda uuesti, et jätkata oma $deviceName kasutamist.';
+  }
 }

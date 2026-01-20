@@ -2325,5 +2325,7 @@
   "mergeConversationsSuccessBody": "{count} vestlust ühendati edukalt",
   "dailyReflectionNotificationTitle": "Aeg igapäevaseks refleksiooniks",
   "dailyReflectionNotificationBody": "Räägi mulle oma päevast",
-  "actionItemReminderTitle": "Omi meeldetuletus"
+  "actionItemReminderTitle": "Omi meeldetuletus",
+  "deviceDisconnectedTitle": "{deviceName} ühendus katkestatud",
+  "deviceDisconnectedBody": "Palun ühenda uuesti, et jätkata oma {deviceName} kasutamist."
 }

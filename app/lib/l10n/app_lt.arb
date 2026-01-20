@@ -2325,5 +2325,7 @@
   "mergeConversationsSuccessBody": "{count} pokalbiai sėkmingai sujungti",
   "dailyReflectionNotificationTitle": "Laikas dienos refleksijai",
   "dailyReflectionNotificationBody": "Papasakok apie savo dieną",
-  "actionItemReminderTitle": "Omi priminimas"
+  "actionItemReminderTitle": "Omi priminimas",
+  "deviceDisconnectedTitle": "{deviceName} atjungtas",
+  "deviceDisconnectedBody": "Prašome prisijungti iš naujo, kad galėtumėte toliau naudoti savo {deviceName}."
 }

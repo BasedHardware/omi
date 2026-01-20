@@ -2326,5 +2326,7 @@
   "mergeConversationsSuccessBody": "{count}件の会話が正常にマージされました",
   "dailyReflectionNotificationTitle": "デイリー振り返りの時間です",
   "dailyReflectionNotificationBody": "今日のことを教えてください",
-  "actionItemReminderTitle": "Omiリマインダー"
+  "actionItemReminderTitle": "Omiリマインダー",
+  "deviceDisconnectedTitle": "{deviceName}が切断されました",
+  "deviceDisconnectedBody": "{deviceName}を引き続きご使用いただくには、再接続してください。"
 }

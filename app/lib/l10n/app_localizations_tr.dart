@@ -7309,4 +7309,14 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get actionItemReminderTitle => 'Omi Hatırlatıcı';
+
+  @override
+  String deviceDisconnectedTitle(String deviceName) {
+    return '$deviceName bağlantısı kesildi';
+  }
+
+  @override
+  String deviceDisconnectedBody(String deviceName) {
+    return 'Lütfen $deviceName cihazınızı kullanmaya devam etmek için yeniden bağlanın.';
+  }
 }

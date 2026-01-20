@@ -7346,4 +7346,14 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get actionItemReminderTitle => 'Υπενθύμιση Omi';
+
+  @override
+  String deviceDisconnectedTitle(String deviceName) {
+    return '$deviceName αποσυνδέθηκε';
+  }
+
+  @override
+  String deviceDisconnectedBody(String deviceName) {
+    return 'Παρακαλώ επανασυνδεθείτε για να συνεχίσετε να χρησιμοποιείτε το $deviceName σας.';
+  }
 }

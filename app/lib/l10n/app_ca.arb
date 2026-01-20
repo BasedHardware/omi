@@ -2308,5 +2308,7 @@
   "mergeConversationsSuccessBody": "{count} converses s'han fusionat amb èxit",
   "dailyReflectionNotificationTitle": "Hora de la reflexió diària",
   "dailyReflectionNotificationBody": "Explica'm el teu dia",
-  "actionItemReminderTitle": "Recordatori d'Omi"
+  "actionItemReminderTitle": "Recordatori d'Omi",
+  "deviceDisconnectedTitle": "{deviceName} desconnectat",
+  "deviceDisconnectedBody": "Si us plau, torneu a connectar per continuar utilitzant el vostre {deviceName}."
 }

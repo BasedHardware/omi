@@ -7318,4 +7318,14 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get actionItemReminderTitle => 'Omi-herinnering';
+
+  @override
+  String deviceDisconnectedTitle(String deviceName) {
+    return '$deviceName losgekoppeld';
+  }
+
+  @override
+  String deviceDisconnectedBody(String deviceName) {
+    return 'Maak opnieuw verbinding om uw $deviceName te blijven gebruiken.';
+  }
 }

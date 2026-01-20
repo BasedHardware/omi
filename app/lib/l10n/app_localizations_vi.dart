@@ -7308,4 +7308,14 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get actionItemReminderTitle => 'Nhắc nhở Omi';
+
+  @override
+  String deviceDisconnectedTitle(String deviceName) {
+    return '$deviceName đã ngắt kết nối';
+  }
+
+  @override
+  String deviceDisconnectedBody(String deviceName) {
+    return 'Vui lòng kết nối lại để tiếp tục sử dụng $deviceName của bạn.';
+  }
 }

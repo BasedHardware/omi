@@ -2325,5 +2325,7 @@
   "mergeConversationsSuccessBody": "{count}개의 대화가 성공적으로 병합되었습니다",
   "dailyReflectionNotificationTitle": "일일 성찰 시간입니다",
   "dailyReflectionNotificationBody": "오늘 하루에 대해 말해주세요",
-  "actionItemReminderTitle": "Omi 알림"
+  "actionItemReminderTitle": "Omi 알림",
+  "deviceDisconnectedTitle": "{deviceName} 연결 해제됨",
+  "deviceDisconnectedBody": "{deviceName}을(를) 계속 사용하려면 다시 연결하세요."
 }

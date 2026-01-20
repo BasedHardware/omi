@@ -2325,5 +2325,7 @@
   "mergeConversationsSuccessBody": "{count} konuşma başarıyla birleştirildi",
   "dailyReflectionNotificationTitle": "Günlük düşünce zamanı",
   "dailyReflectionNotificationBody": "Bana gününü anlat",
-  "actionItemReminderTitle": "Omi Hatırlatıcı"
+  "actionItemReminderTitle": "Omi Hatırlatıcı",
+  "deviceDisconnectedTitle": "{deviceName} bağlantısı kesildi",
+  "deviceDisconnectedBody": "Lütfen {deviceName} cihazınızı kullanmaya devam etmek için yeniden bağlanın."
 }

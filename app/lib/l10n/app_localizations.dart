@@ -13712,6 +13712,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Omi Reminder'**
   String get actionItemReminderTitle;
+
+  /// Notification title when a device disconnects
+  ///
+  /// In en, this message translates to:
+  /// **'{deviceName} Disconnected'**
+  String deviceDisconnectedTitle(String deviceName);
+
+  /// Notification body when a device disconnects
+  ///
+  /// In en, this message translates to:
+  /// **'Please reconnect to continue using your {deviceName}.'**
+  String deviceDisconnectedBody(String deviceName);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -7277,4 +7277,14 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get actionItemReminderTitle => 'Omi अनुस्मारक';
+
+  @override
+  String deviceDisconnectedTitle(String deviceName) {
+    return '$deviceName डिस्कनेक्ट हो गया';
+  }
+
+  @override
+  String deviceDisconnectedBody(String deviceName) {
+    return 'कृपया अपने $deviceName का उपयोग जारी रखने के लिए फिर से कनेक्ट करें।';
+  }
 }

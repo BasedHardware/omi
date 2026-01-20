@@ -7180,4 +7180,14 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get actionItemReminderTitle => 'Omiリマインダー';
+
+  @override
+  String deviceDisconnectedTitle(String deviceName) {
+    return '$deviceNameが切断されました';
+  }
+
+  @override
+  String deviceDisconnectedBody(String deviceName) {
+    return '$deviceNameを引き続きご使用いただくには、再接続してください。';
+  }
 }

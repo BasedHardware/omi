@@ -2325,5 +2325,7 @@
   "mergeConversationsSuccessBody": "{count} percakapan berhasil digabungkan",
   "dailyReflectionNotificationTitle": "Waktunya Refleksi Harian",
   "dailyReflectionNotificationBody": "Ceritakan tentang harimu",
-  "actionItemReminderTitle": "Pengingat Omi"
+  "actionItemReminderTitle": "Pengingat Omi",
+  "deviceDisconnectedTitle": "{deviceName} terputus",
+  "deviceDisconnectedBody": "Silakan hubungkan kembali untuk melanjutkan penggunaan {deviceName} Anda."
 }

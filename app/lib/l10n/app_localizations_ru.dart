@@ -7316,4 +7316,14 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get actionItemReminderTitle => 'Напоминание Omi';
+
+  @override
+  String deviceDisconnectedTitle(String deviceName) {
+    return '$deviceName отключено';
+  }
+
+  @override
+  String deviceDisconnectedBody(String deviceName) {
+    return 'Пожалуйста, переподключитесь, чтобы продолжить использование вашего $deviceName.';
+  }
 }

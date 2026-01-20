@@ -7332,4 +7332,14 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get actionItemReminderTitle => 'Omi emlékeztető';
+
+  @override
+  String deviceDisconnectedTitle(String deviceName) {
+    return '$deviceName lecsatlakoztatva';
+  }
+
+  @override
+  String deviceDisconnectedBody(String deviceName) {
+    return 'Kérjük, csatlakozzon újra a $deviceName további használatához.';
+  }
 }

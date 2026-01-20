@@ -7298,4 +7298,14 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get actionItemReminderTitle => 'Omi-muistutus';
+
+  @override
+  String deviceDisconnectedTitle(String deviceName) {
+    return '$deviceName yhteys katkaistu';
+  }
+
+  @override
+  String deviceDisconnectedBody(String deviceName) {
+    return 'Yhdistä uudelleen jatkaaksesi $deviceName käyttöä.';
+  }
 }

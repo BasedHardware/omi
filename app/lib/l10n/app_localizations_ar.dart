@@ -7249,4 +7249,14 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get actionItemReminderTitle => 'تذكير Omi';
+
+  @override
+  String deviceDisconnectedTitle(String deviceName) {
+    return '$deviceName غير متصل';
+  }
+
+  @override
+  String deviceDisconnectedBody(String deviceName) {
+    return 'يرجى إعادة الاتصال لمواصلة استخدام $deviceName الخاص بك.';
+  }
 }

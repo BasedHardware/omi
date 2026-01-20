@@ -7170,4 +7170,14 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get actionItemReminderTitle => 'Omi提醒';
+
+  @override
+  String deviceDisconnectedTitle(String deviceName) {
+    return '$deviceName 已断开连接';
+  }
+
+  @override
+  String deviceDisconnectedBody(String deviceName) {
+    return '请重新连接以继续使用您的 $deviceName。';
+  }
 }

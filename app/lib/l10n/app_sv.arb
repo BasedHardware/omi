@@ -2325,5 +2325,7 @@
   "mergeConversationsSuccessBody": "{count} konversationer har sammanfogats",
   "dailyReflectionNotificationTitle": "Dags för daglig reflektion",
   "dailyReflectionNotificationBody": "Berätta om din dag",
-  "actionItemReminderTitle": "Omi-påminnelse"
+  "actionItemReminderTitle": "Omi-påminnelse",
+  "deviceDisconnectedTitle": "{deviceName} frånkopplad",
+  "deviceDisconnectedBody": "Anslut igen för att fortsätta använda din {deviceName}."
 }

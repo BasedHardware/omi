@@ -2326,5 +2326,7 @@
   "mergeConversationsSuccessBody": "{count}个会话已成功合并",
   "dailyReflectionNotificationTitle": "每日反思时间",
   "dailyReflectionNotificationBody": "告诉我你今天过得怎么样",
-  "actionItemReminderTitle": "Omi提醒"
+  "actionItemReminderTitle": "Omi提醒",
+  "deviceDisconnectedTitle": "{deviceName} 已断开连接",
+  "deviceDisconnectedBody": "请重新连接以继续使用您的 {deviceName}。"
 }

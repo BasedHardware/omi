@@ -2325,5 +2325,7 @@
   "mergeConversationsSuccessBody": "{count} keskustelua yhdistettiin onnistuneesti",
   "dailyReflectionNotificationTitle": "Aika päivittäiselle reflektiolle",
   "dailyReflectionNotificationBody": "Kerro minulle päivästäsi",
-  "actionItemReminderTitle": "Omi-muistutus"
+  "actionItemReminderTitle": "Omi-muistutus",
+  "deviceDisconnectedTitle": "{deviceName} yhteys katkaistu",
+  "deviceDisconnectedBody": "Yhdistä uudelleen jatkaaksesi {deviceName} käyttöä."
 }

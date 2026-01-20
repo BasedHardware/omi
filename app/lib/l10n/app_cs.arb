@@ -2285,5 +2285,7 @@
   "mergeConversationsSuccessBody": "{count} konverzací bylo úspěšně sloučeno",
   "dailyReflectionNotificationTitle": "Čas na denní reflexi",
   "dailyReflectionNotificationBody": "Pověz mi o svém dni",
-  "actionItemReminderTitle": "Připomínka Omi"
+  "actionItemReminderTitle": "Připomínka Omi",
+  "deviceDisconnectedTitle": "{deviceName} odpojeno",
+  "deviceDisconnectedBody": "Prosím, znovu se připojte, abyste mohli pokračovat v používání vašeho {deviceName}."
 }

@@ -2325,5 +2325,7 @@
   "mergeConversationsSuccessBody": "รวม {count} การสนทนาสำเร็จแล้ว",
   "dailyReflectionNotificationTitle": "ถึงเวลาทบทวนรายวัน",
   "dailyReflectionNotificationBody": "เล่าให้ฟังเกี่ยวกับวันของคุณ",
-  "actionItemReminderTitle": "การแจ้งเตือน Omi"
+  "actionItemReminderTitle": "การแจ้งเตือน Omi",
+  "deviceDisconnectedTitle": "{deviceName} ตัดการเชื่อมต่อ",
+  "deviceDisconnectedBody": "กรุณาเชื่อมต่อใหม่เพื่อใช้งาน {deviceName} ของคุณต่อไป"
 }

@@ -2325,5 +2325,7 @@
   "mergeConversationsSuccessBody": "{count} συνομιλίες συγχωνεύθηκαν επιτυχώς",
   "dailyReflectionNotificationTitle": "Ώρα για ημερήσιο αναστοχασμό",
   "dailyReflectionNotificationBody": "Πες μου για την ημέρα σου",
-  "actionItemReminderTitle": "Υπενθύμιση Omi"
+  "actionItemReminderTitle": "Υπενθύμιση Omi",
+  "deviceDisconnectedTitle": "{deviceName} αποσυνδέθηκε",
+  "deviceDisconnectedBody": "Παρακαλώ επανασυνδεθείτε για να συνεχίσετε να χρησιμοποιείτε το {deviceName} σας."
 }

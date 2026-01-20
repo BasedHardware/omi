@@ -2325,5 +2325,7 @@
   "mergeConversationsSuccessBody": "{count} beszélgetés sikeresen összevonva",
   "dailyReflectionNotificationTitle": "Ideje a napi reflexiónak",
   "dailyReflectionNotificationBody": "Mesélj a napodról",
-  "actionItemReminderTitle": "Omi emlékeztető"
+  "actionItemReminderTitle": "Omi emlékeztető",
+  "deviceDisconnectedTitle": "{deviceName} lecsatlakoztatva",
+  "deviceDisconnectedBody": "Kérjük, csatlakozzon újra a {deviceName} további használatához."
 }

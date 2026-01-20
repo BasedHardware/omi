@@ -7182,4 +7182,14 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get actionItemReminderTitle => 'Omi 알림';
+
+  @override
+  String deviceDisconnectedTitle(String deviceName) {
+    return '$deviceName 연결 해제됨';
+  }
+
+  @override
+  String deviceDisconnectedBody(String deviceName) {
+    return '$deviceName을(를) 계속 사용하려면 다시 연결하세요.';
+  }
 }

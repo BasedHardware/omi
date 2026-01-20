@@ -2325,5 +2325,7 @@
   "mergeConversationsSuccessBody": "{count} sarunas veiksmīgi apvienotas",
   "dailyReflectionNotificationTitle": "Laiks ikdienas pārdomām",
   "dailyReflectionNotificationBody": "Pastāsti man par savu dienu",
-  "actionItemReminderTitle": "Omi atgādinājums"
+  "actionItemReminderTitle": "Omi atgādinājums",
+  "deviceDisconnectedTitle": "{deviceName} atvienots",
+  "deviceDisconnectedBody": "Lūdzu, pievienojieties atkārtoti, lai turpinātu izmantot savu {deviceName}."
 }

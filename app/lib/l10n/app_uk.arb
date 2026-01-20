@@ -2325,5 +2325,7 @@
   "mergeConversationsSuccessBody": "{count} розмов успішно об'єднано",
   "dailyReflectionNotificationTitle": "Час для щоденної рефлексії",
   "dailyReflectionNotificationBody": "Розкажи мені про свій день",
-  "actionItemReminderTitle": "Нагадування Omi"
+  "actionItemReminderTitle": "Нагадування Omi",
+  "deviceDisconnectedTitle": "{deviceName} відключено",
+  "deviceDisconnectedBody": "Будь ласка, підключіться знову, щоб продовжити використання вашого {deviceName}."
 }

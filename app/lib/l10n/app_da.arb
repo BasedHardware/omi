@@ -2283,5 +2283,7 @@
   "mergeConversationsSuccessBody": "{count} samtaler er blevet flettet",
   "dailyReflectionNotificationTitle": "Tid til daglig refleksion",
   "dailyReflectionNotificationBody": "Fortæl mig om din dag",
-  "actionItemReminderTitle": "Omi-påmindelse"
+  "actionItemReminderTitle": "Omi-påmindelse",
+  "deviceDisconnectedTitle": "{deviceName} frakoblet",
+  "deviceDisconnectedBody": "Tilslut venligst igen for at fortsætte med at bruge din {deviceName}."
 }

@@ -2325,5 +2325,7 @@
   "mergeConversationsSuccessBody": "{count} rozmów zostało pomyślnie połączonych",
   "dailyReflectionNotificationTitle": "Czas na codzienną refleksję",
   "dailyReflectionNotificationBody": "Opowiedz mi o swoim dniu",
-  "actionItemReminderTitle": "Przypomnienie Omi"
+  "actionItemReminderTitle": "Przypomnienie Omi",
+  "deviceDisconnectedTitle": "{deviceName} odłączono",
+  "deviceDisconnectedBody": "Połącz ponownie, aby kontynuować korzystanie z urządzenia {deviceName}."
 }

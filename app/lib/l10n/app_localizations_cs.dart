@@ -7291,4 +7291,14 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get actionItemReminderTitle => 'Připomínka Omi';
+
+  @override
+  String deviceDisconnectedTitle(String deviceName) {
+    return '$deviceName odpojeno';
+  }
+
+  @override
+  String deviceDisconnectedBody(String deviceName) {
+    return 'Prosím, znovu se připojte, abyste mohli pokračovat v používání vašeho $deviceName.';
+  }
 }
