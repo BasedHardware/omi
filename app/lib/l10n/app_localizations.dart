@@ -4599,10 +4599,10 @@ abstract class AppLocalizations {
   /// **'Unpair and Forget Device'**
   String get unpairAndForgetDevice;
 
-  /// Fallback name for audio device
+  /// Default text for unknown device model
   ///
   /// In en, this message translates to:
-  /// **'Unknown Device'**
+  /// **'Unknown'**
   String get unknownDevice;
 
   /// Placeholder for unknown value
@@ -11031,7 +11031,7 @@ abstract class AppLocalizations {
   /// **'Track your personal goals on homepage'**
   String get trackYourGoalsOnHomepage;
 
-  /// Dialog title when deleting a recording
+  /// Menu item and dialog title for deleting recording
   ///
   /// In en, this message translates to:
   /// **'Delete Recording'**
@@ -12650,6 +12650,222 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{item} copied to clipboard'**
   String itemCopiedToClipboard(String item);
+
+  /// Title shown when WiFi connection to device fails
+  ///
+  /// In en, this message translates to:
+  /// **'Connection Failed'**
+  String get wifiConnectionFailedTitle;
+
+  /// Title shown while connecting to device WiFi
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting to {deviceName}'**
+  String connectingToDeviceName(String deviceName);
+
+  /// Step text for enabling device WiFi
+  ///
+  /// In en, this message translates to:
+  /// **'Enable {deviceName}\'s WiFi'**
+  String enableDeviceWifi(String deviceName);
+
+  /// Step text for connecting to device
+  ///
+  /// In en, this message translates to:
+  /// **'Connect to {deviceName}'**
+  String connectToDeviceName(String deviceName);
+
+  /// AppBar title for recording detail page
+  ///
+  /// In en, this message translates to:
+  /// **'Recording Details'**
+  String get recordingDetails;
+
+  /// Storage location label for SD card
+  ///
+  /// In en, this message translates to:
+  /// **'SD Card'**
+  String get storageLocationSdCard;
+
+  /// Storage location label for Limitless Pendant
+  ///
+  /// In en, this message translates to:
+  /// **'Limitless Pendant'**
+  String get storageLocationLimitlessPendant;
+
+  /// Storage location label for phone
+  ///
+  /// In en, this message translates to:
+  /// **'Phone'**
+  String get storageLocationPhone;
+
+  /// Storage location label for phone memory
+  ///
+  /// In en, this message translates to:
+  /// **'Phone (Memory)'**
+  String get storageLocationPhoneMemory;
+
+  /// Storage notice showing where recording is stored
+  ///
+  /// In en, this message translates to:
+  /// **'Stored on {deviceName}'**
+  String storedOnDevice(String deviceName);
+
+  /// Status text shown during file transfer
+  ///
+  /// In en, this message translates to:
+  /// **'Transferring...'**
+  String get transferring;
+
+  /// Title when transfer is needed
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer Required'**
+  String get transferRequired;
+
+  /// Description shown during SD card transfer
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading audio from your device\'s SD card'**
+  String get downloadingAudioFromSdCard;
+
+  /// Description explaining why transfer is needed
+  ///
+  /// In en, this message translates to:
+  /// **'This recording is stored on your device\'s SD card. Transfer it to your phone to play or share.'**
+  String get transferRequiredDescription;
+
+  /// Button to cancel ongoing transfer
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel Transfer'**
+  String get cancelTransfer;
+
+  /// Button to start transfer to phone
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer to Phone'**
+  String get transferToPhone;
+
+  /// Privacy notice for local recordings
+  ///
+  /// In en, this message translates to:
+  /// **'Private & secure on your device'**
+  String get privateAndSecureOnDevice;
+
+  /// Menu item to view recording information
+  ///
+  /// In en, this message translates to:
+  /// **'Recording Info'**
+  String get recordingInfo;
+
+  /// Menu item text when transfer is ongoing
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer in progress...'**
+  String get transferInProgress;
+
+  /// Menu item to share a recording
+  ///
+  /// In en, this message translates to:
+  /// **'Share Recording'**
+  String get shareRecording;
+
+  /// Confirmation message for deleting a recording
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to permanently delete this recording? This can\'t be undone.'**
+  String get deleteRecordingConfirmation;
+
+  /// Label for recording ID in details
+  ///
+  /// In en, this message translates to:
+  /// **'Recording ID'**
+  String get recordingIdLabel;
+
+  /// Label for date and time in details
+  ///
+  /// In en, this message translates to:
+  /// **'Date & Time'**
+  String get dateTimeLabel;
+
+  /// Label for duration in details
+  ///
+  /// In en, this message translates to:
+  /// **'Duration'**
+  String get durationLabel;
+
+  /// Label for audio format in details
+  ///
+  /// In en, this message translates to:
+  /// **'Audio Format'**
+  String get audioFormatLabel;
+
+  /// Label for storage location in details
+  ///
+  /// In en, this message translates to:
+  /// **'Storage Location'**
+  String get storageLocationLabel;
+
+  /// Label for estimated file size
+  ///
+  /// In en, this message translates to:
+  /// **'Estimated Size'**
+  String get estimatedSizeLabel;
+
+  /// Label for device model in details
+  ///
+  /// In en, this message translates to:
+  /// **'Device Model'**
+  String get deviceModelLabel;
+
+  /// Label for device ID in details
+  ///
+  /// In en, this message translates to:
+  /// **'Device ID'**
+  String get deviceIdLabel;
+
+  /// Label for status in details
+  ///
+  /// In en, this message translates to:
+  /// **'Status'**
+  String get statusLabel;
+
+  /// Status value for processed recording
+  ///
+  /// In en, this message translates to:
+  /// **'Processed'**
+  String get statusProcessed;
+
+  /// Status value for unprocessed recording
+  ///
+  /// In en, this message translates to:
+  /// **'Unprocessed'**
+  String get statusUnprocessed;
+
+  /// Snackbar message when switching to fast transfer mode
+  ///
+  /// In en, this message translates to:
+  /// **'Switched to Fast Transfer'**
+  String get switchedToFastTransfer;
+
+  /// Success message when transfer completes
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer complete! You can now play this recording.'**
+  String get transferCompleteMessage;
+
+  /// Error message when transfer fails
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer failed: {error}'**
+  String transferFailedMessage(String error);
+
+  /// Snackbar message when transfer is cancelled
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer cancelled'**
+  String get transferCancelled;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
@@ -12661,122 +12877,57 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
   }
 
   @override
-  bool isSupported(Locale locale) => <String>[
-        'ar',
-        'bg',
-        'ca',
-        'cs',
-        'da',
-        'de',
-        'el',
-        'en',
-        'es',
-        'et',
-        'fi',
-        'fr',
-        'hi',
-        'hu',
-        'id',
-        'it',
-        'ja',
-        'ko',
-        'lt',
-        'lv',
-        'ms',
-        'nl',
-        'no',
-        'pl',
-        'pt',
-        'ro',
-        'ru',
-        'sk',
-        'sv',
-        'th',
-        'tr',
-        'uk',
-        'vi',
-        'zh'
-      ].contains(locale.languageCode);
+  bool isSupported(Locale locale) => <String>['ar', 'bg', 'ca', 'cs', 'da', 'de', 'el', 'en', 'es', 'et', 'fi', 'fr', 'hi', 'hu', 'id', 'it', 'ja', 'ko', 'lt', 'lv', 'ms', 'nl', 'no', 'pl', 'pt', 'ro', 'ru', 'sk', 'sv', 'th', 'tr', 'uk', 'vi', 'zh'].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
 }
 
 AppLocalizations lookupAppLocalizations(Locale locale) {
+
+
   // Lookup logic when only language code is specified.
   switch (locale.languageCode) {
-    case 'ar':
-      return AppLocalizationsAr();
-    case 'bg':
-      return AppLocalizationsBg();
-    case 'ca':
-      return AppLocalizationsCa();
-    case 'cs':
-      return AppLocalizationsCs();
-    case 'da':
-      return AppLocalizationsDa();
-    case 'de':
-      return AppLocalizationsDe();
-    case 'el':
-      return AppLocalizationsEl();
-    case 'en':
-      return AppLocalizationsEn();
-    case 'es':
-      return AppLocalizationsEs();
-    case 'et':
-      return AppLocalizationsEt();
-    case 'fi':
-      return AppLocalizationsFi();
-    case 'fr':
-      return AppLocalizationsFr();
-    case 'hi':
-      return AppLocalizationsHi();
-    case 'hu':
-      return AppLocalizationsHu();
-    case 'id':
-      return AppLocalizationsId();
-    case 'it':
-      return AppLocalizationsIt();
-    case 'ja':
-      return AppLocalizationsJa();
-    case 'ko':
-      return AppLocalizationsKo();
-    case 'lt':
-      return AppLocalizationsLt();
-    case 'lv':
-      return AppLocalizationsLv();
-    case 'ms':
-      return AppLocalizationsMs();
-    case 'nl':
-      return AppLocalizationsNl();
-    case 'no':
-      return AppLocalizationsNo();
-    case 'pl':
-      return AppLocalizationsPl();
-    case 'pt':
-      return AppLocalizationsPt();
-    case 'ro':
-      return AppLocalizationsRo();
-    case 'ru':
-      return AppLocalizationsRu();
-    case 'sk':
-      return AppLocalizationsSk();
-    case 'sv':
-      return AppLocalizationsSv();
-    case 'th':
-      return AppLocalizationsTh();
-    case 'tr':
-      return AppLocalizationsTr();
-    case 'uk':
-      return AppLocalizationsUk();
-    case 'vi':
-      return AppLocalizationsVi();
-    case 'zh':
-      return AppLocalizationsZh();
+    case 'ar': return AppLocalizationsAr();
+    case 'bg': return AppLocalizationsBg();
+    case 'ca': return AppLocalizationsCa();
+    case 'cs': return AppLocalizationsCs();
+    case 'da': return AppLocalizationsDa();
+    case 'de': return AppLocalizationsDe();
+    case 'el': return AppLocalizationsEl();
+    case 'en': return AppLocalizationsEn();
+    case 'es': return AppLocalizationsEs();
+    case 'et': return AppLocalizationsEt();
+    case 'fi': return AppLocalizationsFi();
+    case 'fr': return AppLocalizationsFr();
+    case 'hi': return AppLocalizationsHi();
+    case 'hu': return AppLocalizationsHu();
+    case 'id': return AppLocalizationsId();
+    case 'it': return AppLocalizationsIt();
+    case 'ja': return AppLocalizationsJa();
+    case 'ko': return AppLocalizationsKo();
+    case 'lt': return AppLocalizationsLt();
+    case 'lv': return AppLocalizationsLv();
+    case 'ms': return AppLocalizationsMs();
+    case 'nl': return AppLocalizationsNl();
+    case 'no': return AppLocalizationsNo();
+    case 'pl': return AppLocalizationsPl();
+    case 'pt': return AppLocalizationsPt();
+    case 'ro': return AppLocalizationsRo();
+    case 'ru': return AppLocalizationsRu();
+    case 'sk': return AppLocalizationsSk();
+    case 'sv': return AppLocalizationsSv();
+    case 'th': return AppLocalizationsTh();
+    case 'tr': return AppLocalizationsTr();
+    case 'uk': return AppLocalizationsUk();
+    case 'vi': return AppLocalizationsVi();
+    case 'zh': return AppLocalizationsZh();
   }
 
-  throw FlutterError('AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
-      'an issue with the localizations generation tool. Please file an issue '
-      'on GitHub with a reproducible sample app and the gen-l10n configuration '
-      'that was used.');
+  throw FlutterError(
+    'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+    'an issue with the localizations generation tool. Please file an issue '
+    'on GitHub with a reproducible sample app and the gen-l10n configuration '
+    'that was used.'
+  );
 }

@@ -24,8 +24,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get deleteConversationTitle => 'Kustuta vestlus?';
 
   @override
-  String get deleteConversationMessage =>
-      'Kas olete kindel, et soovite selle vestluse kustutada? Seda toimingut ei saa tagasi võtta.';
+  String get deleteConversationMessage => 'Kas olete kindel, et soovite selle vestluse kustutada? Seda toimingut ei saa tagasi võtta.';
 
   @override
   String get confirm => 'Kinnita';
@@ -146,8 +145,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get deleting => 'Kustutamine...';
 
   @override
-  String get pleaseCompleteAuthentication =>
-      'Palun lõpetage autentimine oma brauseris. Kui olete valmis, naasake rakendusse.';
+  String get pleaseCompleteAuthentication => 'Palun lõpetage autentimine oma brauseris. Kui olete valmis, naasake rakendusse.';
 
   @override
   String get failedToStartAuthentication => 'Autentimise alustamine ebaõnnestus';
@@ -286,8 +284,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get clearChat => 'Kustuta vestlus';
 
   @override
-  String get clearChatConfirm =>
-      'Kas olete kindel, et soovite vestluse tühjendada? Seda toimingut ei saa tagasi võtta.';
+  String get clearChatConfirm => 'Kas olete kindel, et soovite vestluse tühjendada? Seda toimingut ei saa tagasi võtta.';
 
   @override
   String get maxFilesLimit => 'Korraga saate üles laadida ainult 4 faili';
@@ -320,8 +317,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get installedApps => 'Paigaldatud rakendused';
 
   @override
-  String get unableToFetchApps =>
-      'Rakenduste laadimine ebaõnnestus :(\n\nPalun kontrollige oma internetiühendust ja proovige uuesti.';
+  String get unableToFetchApps => 'Rakenduste laadimine ebaõnnestus :(\n\nPalun kontrollige oma internetiühendust ja proovige uuesti.';
 
   @override
   String get aboutOmi => 'Omi kohta';
@@ -357,19 +353,16 @@ class AppLocalizationsEt extends AppLocalizations {
   String get appsDisconnected => 'Teie rakendused ja integratsioonid katkestatakse viivitamatult.';
 
   @override
-  String get exportBeforeDelete =>
-      'Saate oma andmed enne konto kustutamist eksportida, kuid pärast kustutamist ei saa neid taastada.';
+  String get exportBeforeDelete => 'Saate oma andmed enne konto kustutamist eksportida, kuid pärast kustutamist ei saa neid taastada.';
 
   @override
-  String get deleteAccountCheckbox =>
-      'Mõistan, et minu konto kustutamine on püsiv ja kõik andmed, sealhulgas mälestused ja vestlused, lähevad kaotsi ega ole taastatavad.';
+  String get deleteAccountCheckbox => 'Mõistan, et minu konto kustutamine on püsiv ja kõik andmed, sealhulgas mälestused ja vestlused, lähevad kaotsi ega ole taastatavad.';
 
   @override
   String get areYouSure => 'Kas olete kindel?';
 
   @override
-  String get deleteAccountFinal =>
-      'See toiming on pöördumatu ja kustutab jäädavalt teie konto ja kõik sellega seotud andmed. Kas olete kindel, et soovite jätkata?';
+  String get deleteAccountFinal => 'See toiming on pöördumatu ja kustutab jäädavalt teie konto ja kõik sellega seotud andmed. Kas olete kindel, et soovite jätkata?';
 
   @override
   String get deleteNow => 'Kustuta kohe';
@@ -378,8 +371,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get goBack => 'Mine tagasi';
 
   @override
-  String get checkBoxToConfirm =>
-      'Märkige ruut, et kinnitada, et mõistate, et teie konto kustutamine on püsiv ja pöördumatu.';
+  String get checkBoxToConfirm => 'Märkige ruut, et kinnitada, et mõistate, et teie konto kustutamine on püsiv ja pöördumatu.';
 
   @override
   String get profile => 'Profiil';
@@ -457,8 +449,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get yourPrivacyYourControl => 'Teie privaatsus, teie kontroll';
 
   @override
-  String get privacyIntro =>
-      'Omi-s oleme pühendunud teie privaatsuse kaitsmisele. See leht võimaldab teil kontrollida, kuidas teie andmeid säilitatakse ja kasutatakse.';
+  String get privacyIntro => 'Omi-s oleme pühendunud teie privaatsuse kaitsmisele. See leht võimaldab teil kontrollida, kuidas teie andmeid säilitatakse ja kasutatakse.';
 
   @override
   String get learnMore => 'Loe lähemalt...';
@@ -467,15 +458,13 @@ class AppLocalizationsEt extends AppLocalizations {
   String get dataProtectionLevel => 'Andmekaitse tase';
 
   @override
-  String get dataProtectionDesc =>
-      'Teie andmed on vaikimisi kaitstud tugeva krüpteerimisega. Vaadake allpool oma seadeid ja tulevasi privaatsusvalikuid.';
+  String get dataProtectionDesc => 'Teie andmed on vaikimisi kaitstud tugeva krüpteerimisega. Vaadake allpool oma seadeid ja tulevasi privaatsusvalikuid.';
 
   @override
   String get appAccess => 'Rakenduse juurdepääs';
 
   @override
-  String get appAccessDesc =>
-      'Järgmised rakendused pääsevad juurde teie andmetele. Puudutage rakendust selle õiguste haldamiseks.';
+  String get appAccessDesc => 'Järgmised rakendused pääsevad juurde teie andmetele. Puudutage rakendust selle õiguste haldamiseks.';
 
   @override
   String get noAppsExternalAccess => 'Ühelgi paigaldatud rakendusel pole välise juurdepääsu teie andmetele.';
@@ -532,15 +521,13 @@ class AppLocalizationsEt extends AppLocalizations {
   String get deviceDisconnectedMessage => 'Teie Omi on ühendus katkestatud 😔';
 
   @override
-  String get deviceUnpairedMessage =>
-      'Seadme sidumine tühistatud. Minge Seaded > Bluetooth ja unustage seade sidumise tühistamise lõpetamiseks.';
+  String get deviceUnpairedMessage => 'Seadme sidumine tühistatud. Minge Seaded > Bluetooth ja unustage seade sidumise tühistamise lõpetamiseks.';
 
   @override
   String get unpairDialogTitle => 'Tühista seadme sidumine';
 
   @override
-  String get unpairDialogMessage =>
-      'See tühistab seadme sidumise, et seda saaks ühendada teise telefoniga. Protsessi lõpetamiseks peate minema Seaded > Bluetooth ja unustama seadme.';
+  String get unpairDialogMessage => 'See tühistab seadme sidumise, et seda saaks ühendada teise telefoniga. Protsessi lõpetamiseks peate minema Seaded > Bluetooth ja unustama seadme.';
 
   @override
   String get deviceNotConnected => 'Seade pole ühendatud';
@@ -561,8 +548,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get v2Undetected => 'V2 tuvastamata';
 
   @override
-  String get v2UndetectedMessage =>
-      'Näeme, et teil on kas V1 seade või teie seade pole ühendatud. SD-kaardi funktsioon on saadaval ainult V2 seadmetele.';
+  String get v2UndetectedMessage => 'Näeme, et teil on kas V1 seade või teie seade pole ühendatud. SD-kaardi funktsioon on saadaval ainult V2 seadmetele.';
 
   @override
   String get endConversation => 'Lõpeta vestlus';
@@ -839,8 +825,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get deleteKnowledgeGraphTitle => 'Kustuta teadmiste graaf?';
 
   @override
-  String get deleteKnowledgeGraphMessage =>
-      'See kustutab kõik tuletatud teadmiste graafi andmed (sõlmed ja ühendused). Teie algsed mälestused jäävad turvaliseks. Graaf taastatakse aja jooksul või järgmise päringu korral.';
+  String get deleteKnowledgeGraphMessage => 'See kustutab kõik tuletatud teadmiste graafi andmed (sõlmed ja ühendused). Teie algsed mälestused jäävad turvaliseks. Graaf taastatakse aja jooksul või järgmise päringu korral.';
 
   @override
   String get knowledgeGraphDeleted => 'Teadmiste graaf kustutatud';
@@ -1083,8 +1068,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get needYourPermission => 'Vajame teie luba';
 
   @override
-  String get alreadyGavePermission =>
-      'Olete juba andnud meile loa teie salvestiste salvestamiseks. Siin on meeldetuletus, miks me seda vajame:';
+  String get alreadyGavePermission => 'Olete juba andnud meile loa teie salvestiste salvestamiseks. Siin on meeldetuletus, miks me seda vajame:';
 
   @override
   String get wouldLikePermission => 'Sooviksime teie luba teie helisalvestiste salvestamiseks. Siin on põhjus:';
@@ -1093,26 +1077,22 @@ class AppLocalizationsEt extends AppLocalizations {
   String get improveSpeechProfile => 'Parandage oma kõneprofiili';
 
   @override
-  String get improveSpeechProfileDesc =>
-      'Kasutame salvestisi, et edasi treenida ja parandada teie isiklikku kõneprofiili.';
+  String get improveSpeechProfileDesc => 'Kasutame salvestisi, et edasi treenida ja parandada teie isiklikku kõneprofiili.';
 
   @override
   String get trainFamilyProfiles => 'Treenige profiile sõprade ja pere jaoks';
 
   @override
-  String get trainFamilyProfilesDesc =>
-      'Teie salvestised aitavad meil ära tunda ja luua profiile teie sõprade ja pere jaoks.';
+  String get trainFamilyProfilesDesc => 'Teie salvestised aitavad meil ära tunda ja luua profiile teie sõprade ja pere jaoks.';
 
   @override
   String get enhanceTranscriptAccuracy => 'Parandage transkriptsiooni täpsust';
 
   @override
-  String get enhanceTranscriptAccuracyDesc =>
-      'Kui meie mudel paraneb, saame pakkuda teie salvestiste jaoks paremaid transkriptsioone.';
+  String get enhanceTranscriptAccuracyDesc => 'Kui meie mudel paraneb, saame pakkuda teie salvestiste jaoks paremaid transkriptsioone.';
 
   @override
-  String get legalNotice =>
-      'Õiguslik teade: Häälsalvestuste salvestamise ja salvestamise seaduslikkus võib sõltuvalt teie asukohast ja selle funktsiooni kasutamisest erineda. Teie kohustus on tagada kohalike seaduste ja määruste järgimine.';
+  String get legalNotice => 'Õiguslik teade: Häälsalvestuste salvestamise ja salvestamise seaduslikkus võib sõltuvalt teie asukohast ja selle funktsiooni kasutamisest erineda. Teie kohustus on tagada kohalike seaduste ja määruste järgimine.';
 
   @override
   String get alreadyAuthorized => 'Juba autoriseeritud';
@@ -1275,8 +1255,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get tellUsPrimaryLanguage => 'Öelge meile oma põhikeel';
 
   @override
-  String get languageForTranscription =>
-      'Määrake oma keel täpsemate transkriptsioonide ja isikupärastatud kogemuse saamiseks.';
+  String get languageForTranscription => 'Määrake oma keel täpsemate transkriptsioonide ja isikupärastatud kogemuse saamiseks.';
 
   @override
   String get singleLanguageModeInfo => 'Ühe keele režiim on lubatud. Tõlge on keelatud suurema täpsuse jaoks.';
@@ -1359,8 +1338,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get defaultRepository => 'Vaikimisi hoidla';
 
   @override
-  String get selectDefaultRepoDesc =>
-      'Valige vaikimisi hoidla probleemide loomiseks. Probleemide loomisel saate siiski määrata teise hoidla.';
+  String get selectDefaultRepoDesc => 'Valige vaikimisi hoidla probleemide loomiseks. Probleemide loomisel saate siiski määrata teise hoidla.';
 
   @override
   String get noReposFound => 'Hoidlaid ei leitud';
@@ -1735,8 +1713,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get enableBluetooth => 'Luba Bluetooth';
 
   @override
-  String get bluetoothNeeded =>
-      'Omi vajab Bluetoothi, et ühenduda teie kantava seadmega. Palun lubage Bluetooth ja proovige uuesti.';
+  String get bluetoothNeeded => 'Omi vajab Bluetoothi, et ühenduda teie kantava seadmega. Palun lubage Bluetooth ja proovige uuesti.';
 
   @override
   String get contactSupport => 'Võta ühendust toega?';
@@ -1769,26 +1746,22 @@ class AppLocalizationsEt extends AppLocalizations {
   String get locationServiceDisabled => 'Asukohateenused keelatud';
 
   @override
-  String get locationServiceDisabledDesc =>
-      'Asukohateenused on keelatud. Palun minge Seaded > Privaatsus ja turvalisus > Asukohateenused ja lubage see';
+  String get locationServiceDisabledDesc => 'Asukohateenused on keelatud. Palun minge Seaded > Privaatsus ja turvalisus > Asukohateenused ja lubage see';
 
   @override
   String get backgroundLocationDenied => 'Tausta asukoha juurdepääs keelatud';
 
   @override
-  String get backgroundLocationDeniedDesc =>
-      'Palun minge seadme seadetesse ja määrake asukoha luba väärtusele \"Luba alati\"';
+  String get backgroundLocationDeniedDesc => 'Palun minge seadme seadetesse ja määrake asukoha luba väärtusele \"Luba alati\"';
 
   @override
   String get lovingOmi => 'Meeldib Omi?';
 
   @override
-  String get leaveReviewIos =>
-      'Aidake meil jõuda rohkemate inimesteni, jättes arvustuse App Store\'i. Teie tagasiside on meile ülimalt oluline!';
+  String get leaveReviewIos => 'Aidake meil jõuda rohkemate inimesteni, jättes arvustuse App Store\'i. Teie tagasiside on meile ülimalt oluline!';
 
   @override
-  String get leaveReviewAndroid =>
-      'Aidake meil jõuda rohkemate inimesteni, jättes arvustuse Google Play poodi. Teie tagasiside on meile ülimalt oluline!';
+  String get leaveReviewAndroid => 'Aidake meil jõuda rohkemate inimesteni, jättes arvustuse Google Play poodi. Teie tagasiside on meile ülimalt oluline!';
 
   @override
   String get rateOnAppStore => 'Hinda App Store\'is';
@@ -1821,15 +1794,13 @@ class AppLocalizationsEt extends AppLocalizations {
   String get connectionError => 'Ühenduse viga';
 
   @override
-  String get connectionErrorDesc =>
-      'Serveriga ühendamine ebaõnnestus. Palun kontrollige oma internetiühendust ja proovige uuesti.';
+  String get connectionErrorDesc => 'Serveriga ühendamine ebaõnnestus. Palun kontrollige oma internetiühendust ja proovige uuesti.';
 
   @override
   String get invalidRecordingMultipleSpeakers => 'Vigane salvestis tuvastatud';
 
   @override
-  String get multipleSpeakersDesc =>
-      'Tundub, et salvestises on mitu kõnelejat. Palun veenduge, et olete vaikses kohas ja proovige uuesti.';
+  String get multipleSpeakersDesc => 'Tundub, et salvestises on mitu kõnelejat. Palun veenduge, et olete vaikses kohas ja proovige uuesti.';
 
   @override
   String get tooShortDesc => 'Kõnet ei tuvastatud piisavalt. Palun rääkige rohkem ja proovige uuesti.';
@@ -1841,8 +1812,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get areYouThere => 'Kas olete seal?';
 
   @override
-  String get noSpeechDesc =>
-      'Me ei suutnud kõnet tuvastada. Palun veenduge, et räägite vähemalt 10 sekundit ja mitte rohkem kui 3 minutit.';
+  String get noSpeechDesc => 'Me ei suutnud kõnet tuvastada. Palun veenduge, et räägite vähemalt 10 sekundit ja mitte rohkem kui 3 minutit.';
 
   @override
   String get connectionLost => 'Ühendus kadus';
@@ -1863,8 +1833,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get permissionsRequired => 'Load on nõutud';
 
   @override
-  String get permissionsRequiredDesc =>
-      'See rakendus vajab nõuetekohaseks toimimiseks Bluetoothi ja asukoha lube. Palun lubage need seadetes.';
+  String get permissionsRequiredDesc => 'See rakendus vajab nõuetekohaseks toimimiseks Bluetoothi ja asukoha lube. Palun lubage need seadetes.';
 
   @override
   String get openSettings => 'Ava seaded';
@@ -1894,8 +1863,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get omiYourAiCompanion => 'Omi – teie AI kaaslane';
 
   @override
-  String get captureEveryMoment =>
-      'Jäädvustage iga hetk. Saage AI-põhiseid\nkokkuvõtteid. Ärge tehke enam kunagi märkmeid.';
+  String get captureEveryMoment => 'Jäädvustage iga hetk. Saage AI-põhiseid\nkokkuvõtteid. Ärge tehke enam kunagi märkmeid.';
 
   @override
   String get appleWatchSetup => 'Apple Watch\'i seadistamine';
@@ -1907,12 +1875,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get microphonePermission => 'Mikrofoni luba';
 
   @override
-  String get permissionGrantedNow =>
-      'Luba antud! Nüüd:\n\nAvage Omi rakendus oma kellal ja puudutage allpool \"Jätka\"';
+  String get permissionGrantedNow => 'Luba antud! Nüüd:\n\nAvage Omi rakendus oma kellal ja puudutage allpool \"Jätka\"';
 
   @override
-  String get needMicrophonePermission =>
-      'Vajame mikrofoni luba.\n\n1. Puudutage \"Anna luba\"\n2. Lubage oma iPhone\'is\n3. Kella rakendus sulgub\n4. Avage uuesti ja puudutage \"Jätka\"';
+  String get needMicrophonePermission => 'Vajame mikrofoni luba.\n\n1. Puudutage \"Anna luba\"\n2. Lubage oma iPhone\'is\n3. Kella rakendus sulgub\n4. Avage uuesti ja puudutage \"Jätka\"';
 
   @override
   String get grantPermissionButton => 'Anna luba';
@@ -1921,15 +1887,13 @@ class AppLocalizationsEt extends AppLocalizations {
   String get needHelp => 'Vajate abi?';
 
   @override
-  String get troubleshootingSteps =>
-      'Tõrkeotsing:\n\n1. Veenduge, et Omi on teie kellale installitud\n2. Avage Omi rakendus oma kellal\n3. Otsige loa hüpikakent\n4. Puudutage \"Luba\", kui küsitakse\n5. Rakendus teie kellal sulgub - avage see uuesti\n6. Tulge tagasi ja puudutage \"Jätka\" oma iPhone\'is';
+  String get troubleshootingSteps => 'Tõrkeotsing:\n\n1. Veenduge, et Omi on teie kellale installitud\n2. Avage Omi rakendus oma kellal\n3. Otsige loa hüpikakent\n4. Puudutage \"Luba\", kui küsitakse\n5. Rakendus teie kellal sulgub - avage see uuesti\n6. Tulge tagasi ja puudutage \"Jätka\" oma iPhone\'is';
 
   @override
   String get recordingStartedSuccessfully => 'Salvestamine algas edukalt!';
 
   @override
-  String get permissionNotGrantedYet =>
-      'Luba pole veel antud. Palun veenduge, et lubate mikrofoni juurdepääsu ja avasid rakenduse oma kellal uuesti.';
+  String get permissionNotGrantedYet => 'Luba pole veel antud. Palun veenduge, et lubate mikrofoni juurdepääsu ja avasid rakenduse oma kellal uuesti.';
 
   @override
   String errorRequestingPermission(String error) {
@@ -2026,8 +1990,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get welcomeActionItemsTitle => 'Valmis tegevuspunktide jaoks';
 
   @override
-  String get welcomeActionItemsDescription =>
-      'Teie AI eraldab automaatselt ülesanded ja tegevused teie vestlustest. Need ilmuvad siia, kui need luuakse.';
+  String get welcomeActionItemsDescription => 'Teie AI eraldab automaatselt ülesanded ja tegevused teie vestlustest. Need ilmuvad siia, kui need luuakse.';
 
   @override
   String get autoExtractionFeature => 'Automaatselt vestlustest eraldatud';
@@ -2077,8 +2040,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get clearMemoryTitle => 'Tühjenda Omi mälu';
 
   @override
-  String get clearMemoryMessage =>
-      'Kas olete kindel, et soovite Omi mälu tühjendada? Seda tegevust ei saa tagasi võtta.';
+  String get clearMemoryMessage => 'Kas olete kindel, et soovite Omi mälu tühjendada? Seda tegevust ei saa tagasi võtta.';
 
   @override
   String get clearMemoryButton => 'Tühjenda mälu';
@@ -2224,15 +2186,13 @@ class AppLocalizationsEt extends AppLocalizations {
   String get speechTranscriptionSectionTitle => 'KÕNE JA TRANSKRIPTSIOON';
 
   @override
-  String get languageSettingsHelperText =>
-      'Rakenduse keel muudab menüüsid ja nuppe. Kõne keel mõjutab, kuidas teie salvestisi transkribeeritakse.';
+  String get languageSettingsHelperText => 'Rakenduse keel muudab menüüsid ja nuppe. Kõne keel mõjutab, kuidas teie salvestisi transkribeeritakse.';
 
   @override
   String get translationNotice => 'Tõlke teatis';
 
   @override
-  String get translationNoticeMessage =>
-      'Omi tõlgib vestlused teie põhikeelde. Värskendage seda igal ajal jaotises Seaded → Profiilid.';
+  String get translationNoticeMessage => 'Omi tõlgib vestlused teie põhikeelde. Värskendage seda igal ajal jaotises Seaded → Profiilid.';
 
   @override
   String get pleaseCheckInternetConnection => 'Palun kontrollige oma internetiühendust ja proovige uuesti';
@@ -2384,8 +2344,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get unpairDeviceDialogTitle => 'Tühista seadme sidumine';
 
   @override
-  String get unpairDeviceDialogMessage =>
-      'See tühistab seadme sidumise, et seda saaks ühendada teise telefoniga. Peate minema Seaded > Bluetooth ja unustama seadme protsessi lõpetamiseks.';
+  String get unpairDeviceDialogMessage => 'See tühistab seadme sidumise, et seda saaks ühendada teise telefoniga. Peate minema Seaded > Bluetooth ja unustama seadme protsessi lõpetamiseks.';
 
   @override
   String get unpair => 'Tühista sidumine';
@@ -2394,7 +2353,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get unpairAndForgetDevice => 'Tühista sidumine ja unusta seade';
 
   @override
-  String get unknownDevice => 'Tundmatu seade';
+  String get unknownDevice => 'Unknown';
 
   @override
   String get unknown => 'Tundmatu';
@@ -2578,8 +2537,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get youreAllSet => 'Oled valmis!';
 
   @override
-  String get welcomeToOmiDescription =>
-      'Tere tulemast Omi juurde! Teie AI kaaslane on valmis aitama vestluste, ülesannete ja muuga.';
+  String get welcomeToOmiDescription => 'Tere tulemast Omi juurde! Teie AI kaaslane on valmis aitama vestluste, ülesannete ja muuga.';
 
   @override
   String get startUsingOmi => 'Alusta Omi kasutamist';
@@ -2715,8 +2673,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get noTasksYet => 'Ülesandeid pole veel';
 
   @override
-  String get tasksFromConversationsWillAppear =>
-      'Teie vestlustest pärit ülesanded ilmuvad siia.\nKlõpsake ülesande käsitsi lisamiseks nuppu Loo.';
+  String get tasksFromConversationsWillAppear => 'Teie vestlustest pärit ülesanded ilmuvad siia.\nKlõpsake ülesande käsitsi lisamiseks nuppu Loo.';
 
   @override
   String get monthJan => 'Jaan';
@@ -2773,8 +2730,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get deleteActionItem => 'Kustuta ülesanne';
 
   @override
-  String get deleteActionItemConfirmation =>
-      'Kas olete kindel, et soovite selle ülesande kustutada? Seda tegevust ei saa tagasi võtta.';
+  String get deleteActionItemConfirmation => 'Kas olete kindel, et soovite selle ülesande kustutada? Seda tegevust ei saa tagasi võtta.';
 
   @override
   String get enterActionItemDescription => 'Sisesta ülesande kirjeldus...';
@@ -2849,15 +2805,13 @@ class AppLocalizationsEt extends AppLocalizations {
   String get chatPrompt => 'Vestluse viip';
 
   @override
-  String get chatPromptPlaceholder =>
-      'Sa oled suurepärane rakendus, sinu töö on vastata kasutajate küsimustele ja panna nad end hästi tundma...';
+  String get chatPromptPlaceholder => 'Sa oled suurepärane rakendus, sinu töö on vastata kasutajate küsimustele ja panna nad end hästi tundma...';
 
   @override
   String get conversationPrompt => 'Vestluse viip';
 
   @override
-  String get conversationPromptPlaceholder =>
-      'Sa oled suurepärane rakendus, sulle antakse vestluse transkriptsioon ja kokkuvõte...';
+  String get conversationPromptPlaceholder => 'Sa oled suurepärane rakendus, sulle antakse vestluse transkriptsioon ja kokkuvõte...';
 
   @override
   String get notificationScopes => 'Teavituste ulatused';
@@ -2869,8 +2823,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get makeMyAppPublic => 'Tee minu rakendus avalikuks';
 
   @override
-  String get submitAppTermsAgreement =>
-      'Selle rakenduse esitamisega nõustun Omi AI teenuse tingimuste ja privaatsuspoliitikaga';
+  String get submitAppTermsAgreement => 'Selle rakenduse esitamisega nõustun Omi AI teenuse tingimuste ja privaatsuspoliitikaga';
 
   @override
   String get submitApp => 'Esita rakendus';
@@ -2885,12 +2838,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get submitAppQuestion => 'Esita rakendus?';
 
   @override
-  String get submitAppPublicDescription =>
-      'Sinu rakendust vaadatakse üle ja tehakse avalikuks. Võid seda kohe kasutada, isegi ülevaatuse ajal!';
+  String get submitAppPublicDescription => 'Sinu rakendust vaadatakse üle ja tehakse avalikuks. Võid seda kohe kasutada, isegi ülevaatuse ajal!';
 
   @override
-  String get submitAppPrivateDescription =>
-      'Sinu rakendust vaadatakse üle ja tehakse sulle privaatselt kättesaadavaks. Võid seda kohe kasutada, isegi ülevaatuse ajal!';
+  String get submitAppPrivateDescription => 'Sinu rakendust vaadatakse üle ja tehakse sulle privaatselt kättesaadavaks. Võid seda kohe kasutada, isegi ülevaatuse ajal!';
 
   @override
   String get startEarning => 'Alusta teenimist! 💰';
@@ -2914,23 +2865,19 @@ class AppLocalizationsEt extends AppLocalizations {
   String get dataAccessNotice => 'Andmetele juurdepääsu teatis';
 
   @override
-  String get dataAccessWarning =>
-      'See rakendus pääseb ligi teie andmetele. Omi AI ei vastuta selle eest, kuidas see rakendus teie andmeid kasutab, muudab või kustutab';
+  String get dataAccessWarning => 'See rakendus pääseb ligi teie andmetele. Omi AI ei vastuta selle eest, kuidas see rakendus teie andmeid kasutab, muudab või kustutab';
 
   @override
   String get installApp => 'Installi rakendus';
 
   @override
-  String get betaTesterNotice =>
-      'Olete selle rakenduse beeta-testija. See ei ole veel avalik. See muutub avalikuks pärast kinnitamist.';
+  String get betaTesterNotice => 'Olete selle rakenduse beeta-testija. See ei ole veel avalik. See muutub avalikuks pärast kinnitamist.';
 
   @override
-  String get appUnderReviewOwner =>
-      'Teie rakendus on ülevaatamisel ja nähtav ainult teile. See muutub avalikuks pärast kinnitamist.';
+  String get appUnderReviewOwner => 'Teie rakendus on ülevaatamisel ja nähtav ainult teile. See muutub avalikuks pärast kinnitamist.';
 
   @override
-  String get appRejectedNotice =>
-      'Teie rakendus on tagasi lükatud. Palun värskendage rakenduse üksikasju ja esitage see uuesti ülevaatamiseks.';
+  String get appRejectedNotice => 'Teie rakendus on tagasi lükatud. Palun värskendage rakenduse üksikasju ja esitage see uuesti ülevaatamiseks.';
 
   @override
   String get setupSteps => 'Seadistamise sammud';
@@ -2995,8 +2942,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get descriptionLabel => 'Kirjeldus';
 
   @override
-  String get appDescriptionPlaceholder =>
-      'Minu suurepärane rakendus on suurepärane rakendus, mis teeb hämmastav asju. See on parim rakendus!';
+  String get appDescriptionPlaceholder => 'Minu suurepärane rakendus on suurepärane rakendus, mis teeb hämmastav asju. See on parim rakendus!';
 
   @override
   String get pleaseProvideValidDescription => 'Palun esitage kehtiv kirjeldus';
@@ -3148,8 +3094,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get microphonePermissionRequired => 'Helisalvestuse jaoks on vajalik mikrofoni luba.';
 
   @override
-  String get microphonePermissionDenied =>
-      'Mikrofoni luba keelatud. Palun andke luba Süsteemieelistused > Privaatsus ja turvalisus > Mikrofon.';
+  String get microphonePermissionDenied => 'Mikrofoni luba keelatud. Palun andke luba Süsteemieelistused > Privaatsus ja turvalisus > Mikrofon.';
 
   @override
   String failedToCheckMicrophonePermission(String error) {
@@ -3308,8 +3253,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get createMemory => 'Loo mälestus';
 
   @override
-  String get deleteMemoryConfirmation =>
-      'Kas oled kindel, et soovid selle mälestuse kustutada? Seda toimingut ei saa tagasi võtta.';
+  String get deleteMemoryConfirmation => 'Kas oled kindel, et soovid selle mälestuse kustutada? Seda toimingut ei saa tagasi võtta.';
 
   @override
   String get makePrivate => 'Tee privaatseks';
@@ -3383,8 +3327,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get whatWeCollect => 'Mida me kogume';
 
   @override
-  String get dataCollectionMessage =>
-      'Jätkates salvestatakse teie vestlused, salvestused ja isikuandmed turvaliselt meie serveritesse, et pakkuda AI-põhiseid ülevaateid ja võimaldada kõiki rakenduse funktsioone.';
+  String get dataCollectionMessage => 'Jätkates salvestatakse teie vestlused, salvestused ja isikuandmed turvaliselt meie serveritesse, et pakkuda AI-põhiseid ülevaateid ja võimaldada kõiki rakenduse funktsioone.';
 
   @override
   String get dataProtection => 'Andmekaitse';
@@ -3417,8 +3360,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get nameMustBeAtLeast2Characters => 'Nimi peab olema vähemalt 2 tähemärki';
 
   @override
-  String get tellUsHowYouWouldLikeToBeAddressed =>
-      'Öelge meile, kuidas te soovite, et teid pöördutaks. See aitab isikupärastada teie Omi kogemust.';
+  String get tellUsHowYouWouldLikeToBeAddressed => 'Öelge meile, kuidas te soovite, et teid pöördutaks. See aitab isikupärastada teie Omi kogemust.';
 
   @override
   String charactersCount(int count) {
@@ -3435,8 +3377,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get recordAudioConversations => 'Helisalvestiste salvestamine';
 
   @override
-  String get microphoneAccessDescription =>
-      'Omi vajab mikrofoni juurdepääsu, et salvestada teie vestlusi ja pakkuda transkriptsioone.';
+  String get microphoneAccessDescription => 'Omi vajab mikrofoni juurdepääsu, et salvestada teie vestlusi ja pakkuda transkriptsioone.';
 
   @override
   String get screenRecording => 'Ekraanisalvestus';
@@ -3445,8 +3386,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get captureSystemAudioFromMeetings => 'Süsteemiheli jäädvustamine koosolekutest';
 
   @override
-  String get screenRecordingDescription =>
-      'Omi vajab ekraanisalvestuse luba, et jäädvustada süsteemiheli teie brauseripõhistest koosolekutest.';
+  String get screenRecordingDescription => 'Omi vajab ekraanisalvestuse luba, et jäädvustada süsteemiheli teie brauseripõhistest koosolekutest.';
 
   @override
   String get accessibility => 'Juurdepääsetavus';
@@ -3455,8 +3395,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get detectBrowserBasedMeetings => 'Tuvastage brauseripõhised koosolekud';
 
   @override
-  String get accessibilityDescription =>
-      'Omi vajab juurdepääsetavuse luba, et tuvastada, millal te liitute Zoom, Meet või Teams koosolekutega oma brauseris.';
+  String get accessibilityDescription => 'Omi vajab juurdepääsetavuse luba, et tuvastada, millal te liitute Zoom, Meet või Teams koosolekutega oma brauseris.';
 
   @override
   String get pleaseWait => 'Palun oodake...';
@@ -3531,8 +3470,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get conversationsExportStarted => 'Vestluste eksport algas. See võib võtta mõned sekundid, palun oodake.';
 
   @override
-  String get mcpDescription =>
-      'Omi ühendamiseks teiste rakendustega, et lugeda, otsida ja hallata oma mälestusi ja vestlusi. Alustamiseks looge võti.';
+  String get mcpDescription => 'Omi ühendamiseks teiste rakendustega, et lugeda, otsida ja hallata oma mälestusi ja vestlusi. Alustamiseks looge võti.';
 
   @override
   String get apiKeys => 'API võtmed';
@@ -3603,8 +3541,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get auto => 'Automaatne';
 
   @override
-  String get noSummaryForApp =>
-      'Selle rakenduse jaoks pole kokkuvõtet saadaval. Proovi teist rakendust paremate tulemuste saamiseks.';
+  String get noSummaryForApp => 'Selle rakenduse jaoks pole kokkuvõtet saadaval. Proovi teist rakendust paremate tulemuste saamiseks.';
 
   @override
   String get tryAnotherApp => 'Proovi teist rakendust';
@@ -3641,8 +3578,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get letOmiChooseAutomatically => 'Lase Omil automaatselt parim rakendus valida';
 
   @override
-  String get deleteConversationConfirmation =>
-      'Kas olete kindel, et soovite selle vestluse kustutada? Seda toimingut ei saa tagasi võtta.';
+  String get deleteConversationConfirmation => 'Kas olete kindel, et soovite selle vestluse kustutada? Seda toimingut ei saa tagasi võtta.';
 
   @override
   String get conversationDeleted => 'Vestlus kustutatud';
@@ -3690,8 +3626,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get preparingSystemAudioCapture => 'Süsteemiheli salvestamise ettevalmistamine';
 
   @override
-  String get clickTheButtonToCaptureAudio =>
-      'Klõpsake nupul, et salvestada heli reaalajas transkriptsioonide, AI-teadmiste ja automaatse salvestamise jaoks.';
+  String get clickTheButtonToCaptureAudio => 'Klõpsake nupul, et salvestada heli reaalajas transkriptsioonide, AI-teadmiste ja automaatse salvestamise jaoks.';
 
   @override
   String get reconnecting => 'Taasühendamine...';
@@ -3921,8 +3856,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get deleteKnowledgeGraphQuestion => 'Kustutada teadmiste graafik?';
 
   @override
-  String get deleteKnowledgeGraphWarning =>
-      'See kustutab kõik tuletatud teadmiste graafiku andmed. Teie algse mälestused jäävad turvaliseks.';
+  String get deleteKnowledgeGraphWarning => 'See kustutab kõik tuletatud teadmiste graafiku andmed. Teie algse mälestused jäävad turvaliseks.';
 
   @override
   String get connectOmiWithAI => 'Ühenda Omi AI-assistentidega';
@@ -3937,8 +3871,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get trackPersonalGoals => 'Jälgi isiklikke eesmärke avalehel';
 
   @override
-  String get dailyReflectionDescription =>
-      'Saa meeldetuletus kell 21, et mõtiskleda oma päeva üle ja jäädvustada oma mõtted.';
+  String get dailyReflectionDescription => 'Saa meeldetuletus kell 21, et mõtiskleda oma päeva üle ja jäädvustada oma mõtted.';
 
   @override
   String get endpointURL => 'Lõpp-punkti URL';
@@ -3983,8 +3916,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get updateAppQuestion => 'Värskenda rakendust?';
 
   @override
-  String get updateAppConfirmation =>
-      'Kas olete kindel, et soovite oma rakendust värskendada? Muudatused jõustuvad pärast meie meeskonna ülevaatust.';
+  String get updateAppConfirmation => 'Kas olete kindel, et soovite oma rakendust värskendada? Muudatused jõustuvad pärast meie meeskonna ülevaatust.';
 
   @override
   String get updateApp => 'Värskenda rakendust';
@@ -4014,8 +3946,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get no => 'Ei';
 
   @override
-  String get subscriptionCancelledSuccessfully =>
-      'Tellimus tühistatud edukalt. See jääb aktiivseks kuni praeguse arveldusperioodi lõpuni.';
+  String get subscriptionCancelledSuccessfully => 'Tellimus tühistatud edukalt. See jääb aktiivseks kuni praeguse arveldusperioodi lõpuni.';
 
   @override
   String get failedToCancelSubscription => 'Tellimuse tühistamine ebaõnnestus. Palun proovi uuesti.';
@@ -4051,8 +3982,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get cancelSubscriptionQuestion => 'Tühista tellimus?';
 
   @override
-  String get cancelSubscriptionConfirmation =>
-      'Kas olete kindel, et soovite tellimuse tühistada? Teil on juurdepääs praeguse arveldusperioodi lõpuni.';
+  String get cancelSubscriptionConfirmation => 'Kas olete kindel, et soovite tellimuse tühistada? Teil on juurdepääs praeguse arveldusperioodi lõpuni.';
 
   @override
   String get cancelSubscriptionButton => 'Tühista tellimus';
@@ -4061,16 +3991,13 @@ class AppLocalizationsEt extends AppLocalizations {
   String get cancelling => 'Tühistamine...';
 
   @override
-  String get betaTesterMessage =>
-      'Olete selle rakenduse beetatestija. See ei ole veel avalik. See muutub avalikuks pärast heakskiitu.';
+  String get betaTesterMessage => 'Olete selle rakenduse beetatestija. See ei ole veel avalik. See muutub avalikuks pärast heakskiitu.';
 
   @override
-  String get appUnderReviewMessage =>
-      'Teie rakendus on läbivaatamisel ja nähtav ainult teile. See muutub avalikuks pärast heakskiitu.';
+  String get appUnderReviewMessage => 'Teie rakendus on läbivaatamisel ja nähtav ainult teile. See muutub avalikuks pärast heakskiitu.';
 
   @override
-  String get appRejectedMessage =>
-      'Teie rakendus lükati tagasi. Palun uuendage andmeid ja esitage uuesti läbivaatamiseks.';
+  String get appRejectedMessage => 'Teie rakendus lükati tagasi. Palun uuendage andmeid ja esitage uuesti läbivaatamiseks.';
 
   @override
   String get invalidIntegrationUrl => 'Vigane integratsiooni URL';
@@ -4124,8 +4051,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get issueActivatingApp => 'Selle rakenduse aktiveerimisel tekkis probleem. Palun proovi uuesti.';
 
   @override
-  String get dataAccessNoticeDescription =>
-      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
+  String get dataAccessNoticeDescription => 'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
 
   @override
   String get copyUrl => 'Kopeeri URL';
@@ -4213,8 +4139,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get omiApiKeys => 'Omi API võtmed';
 
   @override
-  String get apiKeysDescription =>
-      'API võtmeid kasutatakse autentimiseks, kui teie rakendus suhtleb OMI serveriga. Need võimaldavad teie rakendusel luua mälestusi ja turvaliselt juurde pääseda teistele OMI teenustele.';
+  String get apiKeysDescription => 'API võtmeid kasutatakse autentimiseks, kui teie rakendus suhtleb OMI serveriga. Need võimaldavad teie rakendusel luua mälestusi ja turvaliselt juurde pääseda teistele OMI teenustele.';
 
   @override
   String get aboutOmiApiKeys => 'Omi API võtmete kohta';
@@ -4238,8 +4163,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get revokeApiKeyQuestion => 'Tühistada API võti?';
 
   @override
-  String get revokeApiKeyWarning =>
-      'Seda toimingut ei saa tagasi võtta. Ükski rakendus, mis kasutab seda võtit, ei pääse enam API-le ligi.';
+  String get revokeApiKeyWarning => 'Seda toimingut ei saa tagasi võtta. Ükski rakendus, mis kasutab seda võtit, ei pääse enam API-le ligi.';
 
   @override
   String get revoke => 'Tühista';
@@ -4349,8 +4273,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get externalAppAccess => 'Väliste rakenduste juurdepääs';
 
   @override
-  String get externalAppAccessDescription =>
-      'Järgmistel installitud rakendustel on välised integratsioonid ja need saavad juurdepääsu teie andmetele, nagu vestlused ja mälestused.';
+  String get externalAppAccessDescription => 'Järgmistel installitud rakendustel on välised integratsioonid ja need saavad juurdepääsu teie andmetele, nagu vestlused ja mälestused.';
 
   @override
   String get noExternalAppsHaveAccess => 'Ühelgi välisel rakendusel pole juurdepääsu teie andmetele.';
@@ -4359,8 +4282,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get maximumSecurityE2ee => 'Maksimaalne turvalisus (E2EE)';
 
   @override
-  String get e2eeDescription =>
-      'Otsast otsani krüpteerimine on privaatsuse kuldstandard. Kui see on lubatud, krüpteeritakse teie andmed teie seadmes enne nende saatmist meie serveritesse. See tähendab, et keegi, isegi mitte Omi, ei saa teie sisule juurde pääseda.';
+  String get e2eeDescription => 'Otsast otsani krüpteerimine on privaatsuse kuldstandard. Kui see on lubatud, krüpteeritakse teie andmed teie seadmes enne nende saatmist meie serveritesse. See tähendab, et keegi, isegi mitte Omi, ei saa teie sisule juurde pääseda.';
 
   @override
   String get importantTradeoffs => 'Olulised kompromissid:';
@@ -4394,15 +4316,13 @@ class AppLocalizationsEt extends AppLocalizations {
   String get secureEncryption => 'Turvaline krüpteerimine';
 
   @override
-  String get secureEncryptionDescription =>
-      'Teie andmed on krüpteeritud teile ainulaadse võtmega meie serverites, mis asuvad Google Cloudis. See tähendab, et teie toorandmed pole kellelegi kättesaadavad, sealhulgas Omi töötajatele või Google\'ile, otse andmebaasist.';
+  String get secureEncryptionDescription => 'Teie andmed on krüpteeritud teile ainulaadse võtmega meie serverites, mis asuvad Google Cloudis. See tähendab, et teie toorandmed pole kellelegi kättesaadavad, sealhulgas Omi töötajatele või Google\'ile, otse andmebaasist.';
 
   @override
   String get endToEndEncryption => 'Otsast otsani krüpteerimine';
 
   @override
-  String get e2eeCardDescription =>
-      'Lubab maksimaalse turvalisuse, kus ainult teie saate oma andmetele juurde pääseda. Puudutage, et rohkem teada saada.';
+  String get e2eeCardDescription => 'Lubab maksimaalse turvalisuse, kus ainult teie saate oma andmetele juurde pääseda. Puudutage, et rohkem teada saada.';
 
   @override
   String get dataAlwaysEncrypted => 'Olenemata tasemest on teie andmed alati krüpteeritud puhkeolekus ja edastamisel.';
@@ -4450,8 +4370,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get permissionsLabel => 'ÕIGUSED';
 
   @override
-  String get permissionsInfoNote =>
-      'R = Lugemine, W = Kirjutamine. Vaikimisi ainult lugemine, kui midagi pole valitud.';
+  String get permissionsInfoNote => 'R = Lugemine, W = Kirjutamine. Vaikimisi ainult lugemine, kui midagi pole valitud.';
 
   @override
   String get developerApi => 'Arendaja API';
@@ -4474,8 +4393,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get getOmiUnlimitedFree => 'Saage Omi Unlimited tasuta, panustades oma andmetega AI mudelite treenimisse.';
 
   @override
-  String get trainingDataBullets =>
-      '• Teie andmed aitavad parandada AI mudeleid\n• Jagatakse ainult mittetundlikke andmeid\n• Täiesti läbipaistev protsess';
+  String get trainingDataBullets => '• Teie andmed aitavad parandada AI mudeleid\n• Jagatakse ainult mittetundlikke andmeid\n• Täiesti läbipaistev protsess';
 
   @override
   String get learnMoreAtOmiTraining => 'Lisateave omi.me/training';
@@ -4635,8 +4553,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get yourPrivacyMattersToUs => 'Teie privaatsus on meile oluline';
 
   @override
-  String get privacyIntroText =>
-      'Omis võtame teie privaatsust väga tõsiselt. Tahame olla läbipaistvad andmete osas, mida kogume ja kuidas neid kasutame. Siin on see, mida peate teadma:';
+  String get privacyIntroText => 'Omis võtame teie privaatsust väga tõsiselt. Tahame olla läbipaistvad andmete osas, mida kogume ja kuidas neid kasutame. Siin on see, mida peate teadma:';
 
   @override
   String get whatWeTrack => 'Mida jälgime';
@@ -4651,12 +4568,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get ourCommitment => 'Meie kohustus';
 
   @override
-  String get commitmentText =>
-      'Oleme pühendunud kasutama kogutud andmeid ainult Omi paremaks muutmiseks. Teie privaatsus ja usaldus on meile ülimalt olulised.';
+  String get commitmentText => 'Oleme pühendunud kasutama kogutud andmeid ainult Omi paremaks muutmiseks. Teie privaatsus ja usaldus on meile ülimalt olulised.';
 
   @override
-  String get thankYouText =>
-      'Täname, et olete Omi väärtuslik kasutaja. Kui teil on küsimusi või muresid, võtke meiega ühendust aadressil team@basedhardware.com.';
+  String get thankYouText => 'Täname, et olete Omi väärtuslik kasutaja. Kui teil on küsimusi või muresid, võtke meiega ühendust aadressil team@basedhardware.com.';
 
   @override
   String get wifiSyncSettings => 'WiFi sünkroonimise seaded';
@@ -4665,8 +4580,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get enterHotspotCredentials => 'Sisestage oma telefoni leviala mandaadid';
 
   @override
-  String get wifiSyncUsesHotspot =>
-      'WiFi sünkroonimine kasutab teie telefoni levialana. Leidke nimi ja parool menüüst Seaded > Isiklik leviala.';
+  String get wifiSyncUsesHotspot => 'WiFi sünkroonimine kasutab teie telefoni levialana. Leidke nimi ja parool menüüst Seaded > Isiklik leviala.';
 
   @override
   String get hotspotNameSsid => 'Leviala nimi (SSID)';
@@ -4701,8 +4615,7 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get failedToGenerateSummaryCheckConversations =>
-      'Kokkuvõtte loomine ebaõnnestus. Veenduge, et teil on selle päeva vestlusi.';
+  String get failedToGenerateSummaryCheckConversations => 'Kokkuvõtte loomine ebaõnnestus. Veenduge, et teil on selle päeva vestlusi.';
 
   @override
   String get summaryNotFound => 'Kokkuvõtet ei leitud';
@@ -4732,8 +4645,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get exportStartedMayTakeFewSeconds => 'Eksport alustatud. See võib võtta mõne sekundi...';
 
   @override
-  String get knowledgeGraphDeleteDescription =>
-      'See kustutab kõik tuletatud teadmusgraafi andmed (sõlmed ja ühendused). Teie algsed mälestused jäävad turvaliseks. Graaf ehitatakse aja jooksul või järgmise päringu korral uuesti üles.';
+  String get knowledgeGraphDeleteDescription => 'See kustutab kõik tuletatud teadmusgraafi andmed (sõlmed ja ühendused). Teie algsed mälestused jäävad turvaliseks. Graaf ehitatakse aja jooksul või järgmise päringu korral uuesti üles.';
 
   @override
   String get configureDailySummaryDigest => 'Seadista oma igapäevane ülesannete kokkuvõte';
@@ -4803,8 +4715,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get deleteAllLimitlessConversations => 'Kustuta kõik Limitless vestlused?';
 
   @override
-  String get deleteAllLimitlessWarning =>
-      'See kustutab jäädavalt kõik Limitlessist imporditud vestlused. Seda toimingut ei saa tagasi võtta.';
+  String get deleteAllLimitlessWarning => 'See kustutab jäädavalt kõik Limitlessist imporditud vestlused. Seda toimingut ei saa tagasi võtta.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4860,8 +4771,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get howItWorksTitle => 'Kuidas see töötab?';
 
   @override
-  String get howPeopleWorks =>
-      'Kui inimene on loodud, võite minna vestluse transkriptsiooni juurde ja määrata talle vastavad segmendid, nii saab Omi ka tema kõnet tuvastada!';
+  String get howPeopleWorks => 'Kui inimene on loodud, võite minna vestluse transkriptsiooni juurde ja määrata talle vastavad segmendid, nii saab Omi ka tema kõnet tuvastada!';
 
   @override
   String get tapToDelete => 'Puuduta kustutamiseks';
@@ -4887,8 +4797,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get privacyNotice => 'Privaatsusteade';
 
   @override
-  String get recordingsMayCaptureOthers =>
-      'Salvestised võivad jäädvustada teiste inimeste hääli. Enne lubamist veenduge, et teil on kõigi osalejate nõusolek.';
+  String get recordingsMayCaptureOthers => 'Salvestised võivad jäädvustada teiste inimeste hääli. Enne lubamist veenduge, et teil on kõigi osalejate nõusolek.';
 
   @override
   String get enable => 'Luba';
@@ -4900,8 +4809,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get on => 'On';
 
   @override
-  String get storeAudioDescription =>
-      'Hoidke kõik helisalvestised telefonis lokaalselt. Kui on keelatud, salvestatakse ainult ebaõnnestunud üleslaadimised ruumi säästmiseks.';
+  String get storeAudioDescription => 'Hoidke kõik helisalvestised telefonis lokaalselt. Kui on keelatud, salvestatakse ainult ebaõnnestunud üleslaadimised ruumi säästmiseks.';
 
   @override
   String get enableLocalStorage => 'Luba kohalik salvestus';
@@ -4919,12 +4827,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get storeAudioOnCloud => 'Store Audio on Cloud';
 
   @override
-  String get cloudStorageDialogMessage =>
-      'Teie reaalajas salvestised salvestatakse privaatsesse pilvesalvestusse, kui räägite.';
+  String get cloudStorageDialogMessage => 'Teie reaalajas salvestised salvestatakse privaatsesse pilvesalvestusse, kui räägite.';
 
   @override
-  String get storeAudioCloudDescription =>
-      'Salvestage oma reaalajas salvestised privaatsesse pilvesalvestusse, kui räägite. Heli salvestatakse turvaliselt reaalajas.';
+  String get storeAudioCloudDescription => 'Salvestage oma reaalajas salvestised privaatsesse pilvesalvestusse, kui räägite. Heli salvestatakse turvaliselt reaalajas.';
 
   @override
   String get downloadingFirmware => 'Püsivara allalaadimine';
@@ -4933,8 +4839,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get installingFirmware => 'Püsivara paigaldamine';
 
   @override
-  String get firmwareUpdateWarning =>
-      'Ärge sulgege rakendust ega lülitage seadet välja. See võib teie seadet kahjustada.';
+  String get firmwareUpdateWarning => 'Ärge sulgege rakendust ega lülitage seadet välja. See võib teie seadet kahjustada.';
 
   @override
   String get firmwareUpdated => 'Püsivara uuendatud';
@@ -4978,8 +4883,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get payments => 'Maksed';
 
   @override
-  String get connectPaymentMethodInfo =>
-      'Ühendage allpool maksemeetod, et alustada oma rakenduste eest maksete saamist.';
+  String get connectPaymentMethodInfo => 'Ühendage allpool maksemeetod, et alustada oma rakenduste eest maksete saamist.';
 
   @override
   String get selectedPaymentMethod => 'Valitud maksemeetod';
@@ -5033,8 +4937,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get connectingYourStripeAccount => 'Teie Stripe konto ühendamine';
 
   @override
-  String get stripeOnboardingInstructions =>
-      'Palun viige Stripe\'i registreerimisprotsess lõpule oma brauseris. See leht värskendatakse automaatselt pärast lõpetamist.';
+  String get stripeOnboardingInstructions => 'Palun viige Stripe\'i registreerimisprotsess lõpule oma brauseris. See leht värskendatakse automaatselt pärast lõpetamist.';
 
   @override
   String get failedTryAgain => 'Ebaõnnestus? Proovi uuesti';
@@ -5046,8 +4949,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get successfullyConnected => 'Edukalt ühendatud!';
 
   @override
-  String get stripeReadyForPayments =>
-      'Teie Stripe konto on nüüd valmis makseid vastu võtma. Saate kohe alustada oma rakenduste müügist teenimist.';
+  String get stripeReadyForPayments => 'Teie Stripe konto on nüüd valmis makseid vastu võtma. Saate kohe alustada oma rakenduste müügist teenimist.';
 
   @override
   String get updateStripeDetails => 'Värskenda Stripe andmeid';
@@ -5065,8 +4967,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get updatePayPalAccountDetails => 'Värskendage oma PayPali konto andmeid';
 
   @override
-  String get connectPayPalToReceivePayments =>
-      'Ühendage oma PayPali konto, et alustada oma rakenduste eest maksete saamist';
+  String get connectPayPalToReceivePayments => 'Ühendage oma PayPali konto, et alustada oma rakenduste eest maksete saamist';
 
   @override
   String get paypalEmail => 'PayPali e-post';
@@ -5075,8 +4976,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get paypalMeLink => 'PayPal.me link';
 
   @override
-  String get stripeRecommendation =>
-      'Kui Stripe on teie riigis saadaval, soovitame tungivalt seda kasutada kiiremate ja lihtsamate väljamaksete jaoks.';
+  String get stripeRecommendation => 'Kui Stripe on teie riigis saadaval, soovitame tungivalt seda kasutada kiiremate ja lihtsamate väljamaksete jaoks.';
 
   @override
   String get updatePayPalDetails => 'Värskenda PayPali andmeid';
@@ -5128,8 +5028,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get additionalSpeechSampleRemoved => 'Lisakõnenäidis eemaldatud';
 
   @override
-  String get consentDataMessage =>
-      'Jätkates salvestatakse kõik selle rakendusega jagatud andmed (sealhulgas teie vestlused, salvestised ja isiklikud andmed) turvaliselt meie serverites, et pakkuda teile tehisintellektil põhinevaid teadmisi ja võimaldada kõiki rakenduse funktsioone.';
+  String get consentDataMessage => 'Jätkates salvestatakse kõik selle rakendusega jagatud andmed (sealhulgas teie vestlused, salvestised ja isiklikud andmed) turvaliselt meie serverites, et pakkuda teile tehisintellektil põhinevaid teadmisi ja võimaldada kõiki rakenduse funktsioone.';
 
   @override
   String get tasksEmptyStateMessage => 'Teie vestlustest pärit ülesanded ilmuvad siia.\nPuudutage + käsitsi loomiseks.';
@@ -5168,15 +5067,13 @@ class AppLocalizationsEt extends AppLocalizations {
   String get installOmiOnAppleWatch => 'Installige Omi oma\nApple Watchi';
 
   @override
-  String get installOmiOnAppleWatchDescription =>
-      'Apple Watchi kasutamiseks Omiga peate esmalt installima Omi rakenduse oma kellale.';
+  String get installOmiOnAppleWatchDescription => 'Apple Watchi kasutamiseks Omiga peate esmalt installima Omi rakenduse oma kellale.';
 
   @override
   String get openOmiOnAppleWatch => 'Avage Omi oma\nApple Watchis';
 
   @override
-  String get openOmiOnAppleWatchDescription =>
-      'Omi rakendus on teie Apple Watchile installitud. Avage see ja puudutage käivitamiseks Start.';
+  String get openOmiOnAppleWatchDescription => 'Omi rakendus on teie Apple Watchile installitud. Avage see ja puudutage käivitamiseks Start.';
 
   @override
   String get openWatchApp => 'Ava Watchi rakendus';
@@ -5185,15 +5082,13 @@ class AppLocalizationsEt extends AppLocalizations {
   String get iveInstalledAndOpenedTheApp => 'Olen rakenduse installinud ja avanud';
 
   @override
-  String get unableToOpenWatchApp =>
-      'Apple Watchi rakendust ei saa avada. Avage Watchi rakendus käsitsi oma Apple Watchis ja installige Omi jaotisest \"Saadaolevad rakendused\".';
+  String get unableToOpenWatchApp => 'Apple Watchi rakendust ei saa avada. Avage Watchi rakendus käsitsi oma Apple Watchis ja installige Omi jaotisest \"Saadaolevad rakendused\".';
 
   @override
   String get appleWatchConnectedSuccessfully => 'Apple Watch ühendatud!';
 
   @override
-  String get appleWatchNotReachable =>
-      'Apple Watch pole veel kättesaadav. Veenduge, et Omi rakendus oleks teie kellas avatud.';
+  String get appleWatchNotReachable => 'Apple Watch pole veel kättesaadav. Veenduge, et Omi rakendus oleks teie kellas avatud.';
 
   @override
   String errorCheckingConnection(String error) {
@@ -5210,8 +5105,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get finishedConversation => 'Vestlus lõppenud?';
 
   @override
-  String get stopRecordingConfirmation =>
-      'Kas olete kindel, et soovite salvestamise peatada ja vestluse kohe kokku võtta?';
+  String get stopRecordingConfirmation => 'Kas olete kindel, et soovite salvestamise peatada ja vestluse kohe kokku võtta?';
 
   @override
   String get conversationEndsManually => 'Vestlus lõpeb ainult käsitsi.';
@@ -5622,8 +5516,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get multipleSpeakersDetected => 'Tuvastati mitu kõnelejat';
 
   @override
-  String get multipleSpeakersDescription =>
-      'Tundub, et salvestises on mitu kõnelejat. Veenduge, et olete vaikses kohas ja proovige uuesti.';
+  String get multipleSpeakersDescription => 'Tundub, et salvestises on mitu kõnelejat. Veenduge, et olete vaikses kohas ja proovige uuesti.';
 
   @override
   String get invalidRecordingDetected => 'Tuvastati kehtetu salvestis';
@@ -5641,8 +5534,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get howToTakeGoodSample => 'Kuidas teha head proovi?';
 
   @override
-  String get goodSampleInstructions =>
-      '1. Veenduge, et olete vaikses kohas.\n2. Rääkige selgelt ja loomulikult.\n3. Veenduge, et teie seade on oma loomulikus asendis kaelal.\n\nKui see on loodud, saate seda alati parandada või uuesti teha.';
+  String get goodSampleInstructions => '1. Veenduge, et olete vaikses kohas.\n2. Rääkige selgelt ja loomulikult.\n3. Veenduge, et teie seade on oma loomulikus asendis kaelal.\n\nKui see on loodud, saate seda alati parandada või uuesti teha.';
 
   @override
   String get noDeviceConnectedUseMic => 'Ühendatud seadet pole. Kasutatakse telefoni mikrofoni.';
@@ -5705,12 +5597,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get howItWorks => 'Kuidas see töötab';
 
   @override
-  String get dailyScoreExplanation =>
-      'Teie päeva skoor põhineb ülesannete täitmisel. Täitke oma ülesanded skoori parandamiseks!';
+  String get dailyScoreExplanation => 'Teie päeva skoor põhineb ülesannete täitmisel. Täitke oma ülesanded skoori parandamiseks!';
 
   @override
-  String get notificationFrequencyDescription =>
-      'Kontrolli, kui sageli Omi saadab sulle proaktiivseid teavitusi ja meeldetuletusi.';
+  String get notificationFrequencyDescription => 'Kontrolli, kui sageli Omi saadab sulle proaktiivseid teavitusi ja meeldetuletusi.';
 
   @override
   String get sliderOff => 'Väljas';
@@ -5724,8 +5614,7 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get failedToGenerateSummary =>
-      'Kokkuvõtte genereerimine ebaõnnestus. Veendu, et sul on vestlusi sellel päeval.';
+  String get failedToGenerateSummary => 'Kokkuvõtte genereerimine ebaõnnestus. Veendu, et sul on vestlusi sellel päeval.';
 
   @override
   String get recap => 'Kokkuvõte';
@@ -5804,8 +5693,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get selectApp => 'Vali rakendus';
 
   @override
-  String get noChatAppsEnabled =>
-      'Vestlusrakendusi pole lubatud.\nPuudutage rakenduste lisamiseks \"Luba rakendused\".';
+  String get noChatAppsEnabled => 'Vestlusrakendusi pole lubatud.\nPuudutage rakenduste lisamiseks \"Luba rakendused\".';
 
   @override
   String get disable => 'Keela';
@@ -6104,8 +5992,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get performanceWarning => 'Jõudluse hoiatus';
 
   @override
-  String get largeModelWarning =>
-      'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
+  String get largeModelWarning => 'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
 
   @override
   String get usingNativeIosSpeech => 'Kasutatakse iOS-i natiivset kõnetuvastust';
@@ -6168,12 +6055,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get batteryDrainSignificantly => 'Aku tühjenemine suureneb märkimisväärselt.';
 
   @override
-  String get premiumMinutesMonth =>
-      '1200 premium minutit/kuus. Seadmes vahekaart pakub piiramatut tasuta transkriptsiooni. ';
+  String get premiumMinutesMonth => '1200 premium minutit/kuus. Seadmes vahekaart pakub piiramatut tasuta transkriptsiooni. ';
 
   @override
-  String get audioProcessedLocally =>
-      'Heli töödeldakse kohapeal. Töötab võrguühenduseta, privaatsem, kuid kasutab rohkem akut.';
+  String get audioProcessedLocally => 'Heli töödeldakse kohapeal. Töötab võrguühenduseta, privaatsem, kuid kasutab rohkem akut.';
 
   @override
   String get languageLabel => 'Keel';
@@ -6182,12 +6067,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get modelLabel => 'Mudel';
 
   @override
-  String get modelTooLargeWarning =>
-      'See mudel on suur ja võib põhjustada rakenduse krahhi või väga aeglase töö mobiilseadmetes.\n\nSoovitatav on small või base.';
+  String get modelTooLargeWarning => 'See mudel on suur ja võib põhjustada rakenduse krahhi või väga aeglase töö mobiilseadmetes.\n\nSoovitatav on small või base.';
 
   @override
-  String get nativeEngineNoDownload =>
-      'Kasutatakse teie seadme natiivset kõnemootorit. Mudeli allalaadimine pole vajalik.';
+  String get nativeEngineNoDownload => 'Kasutatakse teie seadme natiivset kõnemootorit. Mudeli allalaadimine pole vajalik.';
 
   @override
   String modelReadyWithName(String model) {
@@ -6223,8 +6106,7 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get omiTranscriptionOptimized =>
-      'Omi sisseehitatud reaalajas transkriptsioon on optimeeritud reaalajas vestluste jaoks automaatse kõneleja tuvastamise ja diariseerimisega.';
+  String get omiTranscriptionOptimized => 'Omi sisseehitatud reaalajas transkriptsioon on optimeeritud reaalajas vestluste jaoks automaatse kõneleja tuvastamise ja diariseerimisega.';
 
   @override
   String get reset => 'Lähtesta';
@@ -6444,8 +6326,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get buildingKnowledgeGraphFromMemories => 'Teadmisgraafiku loomine mälestustest...';
 
   @override
-  String get knowledgeGraphWillBuildAutomatically =>
-      'Teie teadmisgraafik luuakse automaatselt, kui loote uusi mälestusi.';
+  String get knowledgeGraphWillBuildAutomatically => 'Teie teadmisgraafik luuakse automaatselt, kui loote uusi mälestusi.';
 
   @override
   String get buildGraphButton => 'Loo graafik';
@@ -6540,8 +6421,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get disconnectTwitter => 'Disconnect Twitter';
 
   @override
-  String get disconnectTwitterConfirmation =>
-      'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
+  String get disconnectTwitterConfirmation => 'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
 
   @override
   String get getOmiDeviceDescription => 'Create a more accurate clone with your personal conversations';
@@ -6700,8 +6580,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get failedToLoadContacts => 'Kontaktide laadimine ebaõnnestus';
 
   @override
-  String get failedToPrepareConversationForSharing =>
-      'Vestluse jagamiseks ettevalmistamine ebaõnnestus. Palun proovige uuesti.';
+  String get failedToPrepareConversationForSharing => 'Vestluse jagamiseks ettevalmistamine ebaõnnestus. Palun proovige uuesti.';
 
   @override
   String get couldNotOpenSmsApp => 'SMS-i rakendust ei saanud avada. Palun proovige uuesti.';
@@ -6718,4 +6597,122 @@ class AppLocalizationsEt extends AppLocalizations {
   String itemCopiedToClipboard(String item) {
     return '$item kopeeritud lõikelauale';
   }
+
+  @override
+  String get wifiConnectionFailedTitle => 'Connection Failed';
+
+  @override
+  String connectingToDeviceName(String deviceName) {
+    return 'Connecting to $deviceName';
+  }
+
+  @override
+  String enableDeviceWifi(String deviceName) {
+    return 'Enable $deviceName\'s WiFi';
+  }
+
+  @override
+  String connectToDeviceName(String deviceName) {
+    return 'Connect to $deviceName';
+  }
+
+  @override
+  String get recordingDetails => 'Recording Details';
+
+  @override
+  String get storageLocationSdCard => 'SD Card';
+
+  @override
+  String get storageLocationLimitlessPendant => 'Limitless Pendant';
+
+  @override
+  String get storageLocationPhone => 'Phone';
+
+  @override
+  String get storageLocationPhoneMemory => 'Phone (Memory)';
+
+  @override
+  String storedOnDevice(String deviceName) {
+    return 'Stored on $deviceName';
+  }
+
+  @override
+  String get transferring => 'Transferring...';
+
+  @override
+  String get transferRequired => 'Transfer Required';
+
+  @override
+  String get downloadingAudioFromSdCard => 'Downloading audio from your device\'s SD card';
+
+  @override
+  String get transferRequiredDescription => 'This recording is stored on your device\'s SD card. Transfer it to your phone to play or share.';
+
+  @override
+  String get cancelTransfer => 'Cancel Transfer';
+
+  @override
+  String get transferToPhone => 'Transfer to Phone';
+
+  @override
+  String get privateAndSecureOnDevice => 'Private & secure on your device';
+
+  @override
+  String get recordingInfo => 'Recording Info';
+
+  @override
+  String get transferInProgress => 'Transfer in progress...';
+
+  @override
+  String get shareRecording => 'Share Recording';
+
+  @override
+  String get deleteRecordingConfirmation => 'Are you sure you want to permanently delete this recording? This can\'t be undone.';
+
+  @override
+  String get recordingIdLabel => 'Recording ID';
+
+  @override
+  String get dateTimeLabel => 'Date & Time';
+
+  @override
+  String get durationLabel => 'Duration';
+
+  @override
+  String get audioFormatLabel => 'Audio Format';
+
+  @override
+  String get storageLocationLabel => 'Storage Location';
+
+  @override
+  String get estimatedSizeLabel => 'Estimated Size';
+
+  @override
+  String get deviceModelLabel => 'Device Model';
+
+  @override
+  String get deviceIdLabel => 'Device ID';
+
+  @override
+  String get statusLabel => 'Status';
+
+  @override
+  String get statusProcessed => 'Processed';
+
+  @override
+  String get statusUnprocessed => 'Unprocessed';
+
+  @override
+  String get switchedToFastTransfer => 'Switched to Fast Transfer';
+
+  @override
+  String get transferCompleteMessage => 'Transfer complete! You can now play this recording.';
+
+  @override
+  String transferFailedMessage(String error) {
+    return 'Transfer failed: $error';
+  }
+
+  @override
+  String get transferCancelled => 'Transfer cancelled';
 }

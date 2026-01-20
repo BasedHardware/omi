@@ -2547,9 +2547,9 @@
   "@unpairAndForgetDevice": {
     "description": "Action to unpair and forget device"
   },
-  "unknownDevice": "Unknown Device",
+  "unknownDevice": "Unknown",
   "@unknownDevice": {
-    "description": "Fallback name for audio device"
+    "description": "Default text for unknown device model"
   },
   "unknown": "Unknown",
   "@unknown": {
@@ -7039,7 +7039,7 @@
   },
   "deleteRecording": "Delete Recording",
   "@deleteRecording": {
-    "description": "Dialog title when deleting a recording"
+    "description": "Menu item and dialog title for deleting recording"
   },
   "thisCannotBeUndone": "This cannot be undone.",
   "@thisCannotBeUndone": {
@@ -8217,5 +8217,177 @@
         "example": "Device Name"
       }
     }
+  },
+  "wifiConnectionFailedTitle": "Connection Failed",
+  "@wifiConnectionFailedTitle": {
+    "description": "Title shown when WiFi connection to device fails"
+  },
+  "connectingToDeviceName": "Connecting to {deviceName}",
+  "@connectingToDeviceName": {
+    "description": "Title shown while connecting to device WiFi",
+    "placeholders": {
+      "deviceName": {
+        "type": "String",
+        "example": "Omi"
+      }
+    }
+  },
+  "enableDeviceWifi": "Enable {deviceName}'s WiFi",
+  "@enableDeviceWifi": {
+    "description": "Step text for enabling device WiFi",
+    "placeholders": {
+      "deviceName": {
+        "type": "String",
+        "example": "Omi"
+      }
+    }
+  },
+  "connectToDeviceName": "Connect to {deviceName}",
+  "@connectToDeviceName": {
+    "description": "Step text for connecting to device",
+    "placeholders": {
+      "deviceName": {
+        "type": "String",
+        "example": "Omi"
+      }
+    }
+  },
+  "recordingDetails": "Recording Details",
+  "@recordingDetails": {
+    "description": "AppBar title for recording detail page"
+  },
+  "storageLocationSdCard": "SD Card",
+  "@storageLocationSdCard": {
+    "description": "Storage location label for SD card"
+  },
+  "storageLocationLimitlessPendant": "Limitless Pendant",
+  "@storageLocationLimitlessPendant": {
+    "description": "Storage location label for Limitless Pendant"
+  },
+  "storageLocationPhone": "Phone",
+  "@storageLocationPhone": {
+    "description": "Storage location label for phone"
+  },
+  "storageLocationPhoneMemory": "Phone (Memory)",
+  "@storageLocationPhoneMemory": {
+    "description": "Storage location label for phone memory"
+  },
+  "storedOnDevice": "Stored on {deviceName}",
+  "@storedOnDevice": {
+    "description": "Storage notice showing where recording is stored",
+    "placeholders": {
+      "deviceName": {
+        "type": "String"
+      }
+    }
+  },
+  "transferring": "Transferring...",
+  "@transferring": {
+    "description": "Status text shown during file transfer"
+  },
+  "transferRequired": "Transfer Required",
+  "@transferRequired": {
+    "description": "Title when transfer is needed"
+  },
+  "downloadingAudioFromSdCard": "Downloading audio from your device's SD card",
+  "@downloadingAudioFromSdCard": {
+    "description": "Description shown during SD card transfer"
+  },
+  "transferRequiredDescription": "This recording is stored on your device's SD card. Transfer it to your phone to play or share.",
+  "@transferRequiredDescription": {
+    "description": "Description explaining why transfer is needed"
+  },
+  "cancelTransfer": "Cancel Transfer",
+  "@cancelTransfer": {
+    "description": "Button to cancel ongoing transfer"
+  },
+  "transferToPhone": "Transfer to Phone",
+  "@transferToPhone": {
+    "description": "Button to start transfer to phone"
+  },
+  "privateAndSecureOnDevice": "Private & secure on your device",
+  "@privateAndSecureOnDevice": {
+    "description": "Privacy notice for local recordings"
+  },
+  "recordingInfo": "Recording Info",
+  "@recordingInfo": {
+    "description": "Menu item to view recording information"
+  },
+  "transferInProgress": "Transfer in progress...",
+  "@transferInProgress": {
+    "description": "Menu item text when transfer is ongoing"
+  },
+  "shareRecording": "Share Recording",
+  "@shareRecording": {
+    "description": "Menu item to share a recording"
+  },
+  "deleteRecordingConfirmation": "Are you sure you want to permanently delete this recording? This can't be undone.",
+  "@deleteRecordingConfirmation": {
+    "description": "Confirmation message for deleting a recording"
+  },
+  "recordingIdLabel": "Recording ID",
+  "@recordingIdLabel": {
+    "description": "Label for recording ID in details"
+  },
+  "dateTimeLabel": "Date & Time",
+  "@dateTimeLabel": {
+    "description": "Label for date and time in details"
+  },
+  "durationLabel": "Duration",
+  "@durationLabel": {
+    "description": "Label for duration in details"
+  },
+  "audioFormatLabel": "Audio Format",
+  "@audioFormatLabel": {
+    "description": "Label for audio format in details"
+  },
+  "storageLocationLabel": "Storage Location",
+  "@storageLocationLabel": {
+    "description": "Label for storage location in details"
+  },
+  "estimatedSizeLabel": "Estimated Size",
+  "@estimatedSizeLabel": {
+    "description": "Label for estimated file size"
+  },
+  "deviceModelLabel": "Device Model",
+  "@deviceModelLabel": {
+    "description": "Label for device model in details"
+  },
+  "deviceIdLabel": "Device ID",
+  "@deviceIdLabel": {
+    "description": "Label for device ID in details"
+  },
+  "statusLabel": "Status",
+  "@statusLabel": {
+    "description": "Label for status in details"
+  },
+  "statusProcessed": "Processed",
+  "@statusProcessed": {
+    "description": "Status value for processed recording"
+  },
+  "statusUnprocessed": "Unprocessed",
+  "@statusUnprocessed": {
+    "description": "Status value for unprocessed recording"
+  },
+  "switchedToFastTransfer": "Switched to Fast Transfer",
+  "@switchedToFastTransfer": {
+    "description": "Snackbar message when switching to fast transfer mode"
+  },
+  "transferCompleteMessage": "Transfer complete! You can now play this recording.",
+  "@transferCompleteMessage": {
+    "description": "Success message when transfer completes"
+  },
+  "transferFailedMessage": "Transfer failed: {error}",
+  "@transferFailedMessage": {
+    "description": "Error message when transfer fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "transferCancelled": "Transfer cancelled",
+  "@transferCancelled": {
+    "description": "Snackbar message when transfer is cancelled"
   }
 }

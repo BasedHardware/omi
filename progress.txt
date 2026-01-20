@@ -2,9 +2,9 @@
 
 ## Summary
 Total Files to Localize: 38
-Completed: 30
+Completed: 31
 In Progress: 0
-Pending: 8
+Pending: 7
 
 ## Progress by File
 
@@ -43,7 +43,7 @@ Pending: 8
 [x] pages/conversation_detail/widgets/share_to_contacts_sheet.dart (~4 strings) - DONE (16 new keys + 2 reused keys)
 [x] pages/settings/device_settings.dart (~8 strings) - DONE (1 key, reuses existing unpair key)
 [x] pages/conversations/sync_widgets/wifi_connection_sheet.dart (~6 strings) - DONE (reuses 5 existing keys)
-[ ] pages/conversations/wal_item_detail/wal_item_detail_page.dart (~5 strings)
+[x] pages/conversations/wal_item_detail/wal_item_detail_page.dart (~5 strings) - DONE (33 new keys + 2 reused keys)
 [ ] pages/conversations/fast_transfer_settings_page.dart (~6 strings)
 
 ### Service/Provider Files
@@ -57,6 +57,16 @@ Pending: 8
 ## Changelog
 
 ### 2026-01-20
+- Localized pages/conversations/wal_item_detail/wal_item_detail_page.dart with 33 l10n keys for 34 languages
+  - recordingDetails, storageLocationSdCard, storageLocationLimitlessPendant, storageLocationPhone, storageLocationPhoneMemory
+  - storedOnDevice (parameterized), transferring, transferRequired, downloadingAudioFromSdCard, transferRequiredDescription
+  - cancelTransfer, transferToPhone, privateAndSecureOnDevice, recordingInfo, transferInProgress
+  - shareRecording, deleteRecording, deleteRecordingConfirmation
+  - recordingIdLabel, dateTimeLabel, durationLabel, audioFormatLabel, storageLocationLabel
+  - estimatedSizeLabel, deviceModelLabel, unknownDevice, deviceIdLabel, statusLabel
+  - statusProcessed, statusUnprocessed, switchedToFastTransfer, transferCompleteMessage
+  - transferFailedMessage (parameterized), transferCancelled
+  - Reuses: delete, close
 - Localized pages/conversations/sync_widgets/wifi_connection_sheet.dart (reuses 5 existing keys)
   - wifiConnectionFailedTitle, connectingToDeviceName (parameterized), enableDeviceWifi (parameterized)
   - connectToDeviceName (parameterized), retry
