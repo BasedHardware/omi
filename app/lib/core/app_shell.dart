@@ -12,6 +12,7 @@ import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/settings/asana_settings_page.dart';
 import 'package:omi/pages/settings/clickup_settings_page.dart';
 import 'package:omi/pages/settings/github_settings_page.dart';
+import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/pages/settings/wrapped_2025_page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
@@ -77,6 +78,15 @@ class _AppShellState extends State<AppShell> {
         Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => const Wrapped2025Page(),
+          ),
+        );
+      }
+    } else if (uri.pathSegments.first == 'unlimited') {
+      if (mounted) {
+        PlatformManager.instance.mixpanel.track('Plans Opened From DeepLink');
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => const UsagePage(showUpgradeDialog: true),
           ),
         );
       }
