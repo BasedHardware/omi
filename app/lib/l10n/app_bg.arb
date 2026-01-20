@@ -1975,5 +1975,12 @@
   "usageIrlEvents": "IRL Events",
   "usageOnline": "Online",
   "usageSocialSettings": "In Social Settings",
-  "usageEverywhere": "Everywhere"
+  "usageEverywhere": "Everywhere",
+  "customBackendUrlTitle": "Персонализиран URL на сървъра",
+  "backendUrlLabel": "URL на сървъра",
+  "saveUrlButton": "Запази URL",
+  "enterBackendUrlError": "Моля, въведете URL на сървъра",
+  "urlMustEndWithSlashError": "URL трябва да завършва с \"/\"",
+  "invalidUrlError": "Моля, въведете валиден URL",
+  "backendUrlSavedSuccess": "URL на сървъра е запазен успешно!"
 }

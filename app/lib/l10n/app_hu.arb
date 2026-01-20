@@ -1992,5 +1992,12 @@
   "usageIrlEvents": "IRL Events",
   "usageOnline": "Online",
   "usageSocialSettings": "In Social Settings",
-  "usageEverywhere": "Everywhere"
+  "usageEverywhere": "Everywhere",
+  "customBackendUrlTitle": "Egyéni háttérszerver URL",
+  "backendUrlLabel": "Háttérszerver URL",
+  "saveUrlButton": "URL mentése",
+  "enterBackendUrlError": "Kérjük, adja meg a háttérszerver URL-jét",
+  "urlMustEndWithSlashError": "Az URL-nek \"/\" karakterrel kell végződnie",
+  "invalidUrlError": "Kérjük, adjon meg érvényes URL-t",
+  "backendUrlSavedSuccess": "Háttérszerver URL sikeresen mentve!"
 }

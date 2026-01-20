@@ -6395,4 +6395,25 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get device => 'Device';
+
+  @override
+  String get customBackendUrlTitle => 'Vlastní URL serveru';
+
+  @override
+  String get backendUrlLabel => 'URL serveru';
+
+  @override
+  String get saveUrlButton => 'Uložit URL';
+
+  @override
+  String get enterBackendUrlError => 'Zadejte prosím URL serveru';
+
+  @override
+  String get urlMustEndWithSlashError => 'URL musí končit "/"';
+
+  @override
+  String get invalidUrlError => 'Zadejte prosím platnou URL';
+
+  @override
+  String get backendUrlSavedSuccess => 'URL serveru byla úspěšně uložena!';
 }

@@ -1992,5 +1992,12 @@
   "usageIrlEvents": "IRL Events",
   "usageOnline": "Online",
   "usageSocialSettings": "In Social Settings",
-  "usageEverywhere": "Everywhere"
+  "usageEverywhere": "Everywhere",
+  "customBackendUrlTitle": "Aangepaste backend-URL",
+  "backendUrlLabel": "Backend-URL",
+  "saveUrlButton": "URL opslaan",
+  "enterBackendUrlError": "Voer de backend-URL in",
+  "urlMustEndWithSlashError": "URL moet eindigen met \"/\"",
+  "invalidUrlError": "Voer een geldige URL in",
+  "backendUrlSavedSuccess": "Backend-URL succesvol opgeslagen!"
 }

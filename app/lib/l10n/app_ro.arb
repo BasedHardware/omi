@@ -1992,5 +1992,12 @@
   "usageIrlEvents": "IRL Events",
   "usageOnline": "Online",
   "usageSocialSettings": "In Social Settings",
-  "usageEverywhere": "Everywhere"
+  "usageEverywhere": "Everywhere",
+  "customBackendUrlTitle": "URL server personalizat",
+  "backendUrlLabel": "URL server",
+  "saveUrlButton": "Salvează URL",
+  "enterBackendUrlError": "Introduceți URL-ul serverului",
+  "urlMustEndWithSlashError": "URL-ul trebuie să se termine cu \"/\"",
+  "invalidUrlError": "Introduceți un URL valid",
+  "backendUrlSavedSuccess": "URL-ul serverului a fost salvat!"
 }

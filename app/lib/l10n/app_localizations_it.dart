@@ -6442,4 +6442,25 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get device => 'Device';
+
+  @override
+  String get customBackendUrlTitle => 'URL del server personalizzato';
+
+  @override
+  String get backendUrlLabel => 'URL del server';
+
+  @override
+  String get saveUrlButton => 'Salva URL';
+
+  @override
+  String get enterBackendUrlError => 'Inserisci l'URL del server';
+
+  @override
+  String get urlMustEndWithSlashError => 'L'URL deve terminare con "/"';
+
+  @override
+  String get invalidUrlError => 'Inserisci un URL valido';
+
+  @override
+  String get backendUrlSavedSuccess => 'URL del server salvato con successo!';
 }

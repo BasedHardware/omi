@@ -6283,4 +6283,25 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get device => 'Device';
+
+  @override
+  String get customBackendUrlTitle => '自定义后端URL';
+
+  @override
+  String get backendUrlLabel => '后端URL';
+
+  @override
+  String get saveUrlButton => '保存URL';
+
+  @override
+  String get enterBackendUrlError => '请输入后端URL';
+
+  @override
+  String get urlMustEndWithSlashError => 'URL必须以"/"结尾';
+
+  @override
+  String get invalidUrlError => '请输入有效的URL';
+
+  @override
+  String get backendUrlSavedSuccess => '后端URL保存成功！';
 }

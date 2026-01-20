@@ -1992,5 +1992,12 @@
   "usageIrlEvents": "IRL Events",
   "usageOnline": "Online",
   "usageSocialSettings": "In Social Settings",
-  "usageEverywhere": "Everywhere"
+  "usageEverywhere": "Everywhere",
+  "customBackendUrlTitle": "Kohandatud serveri URL",
+  "backendUrlLabel": "Serveri URL",
+  "saveUrlButton": "Salvesta URL",
+  "enterBackendUrlError": "Palun sisestage serveri URL",
+  "urlMustEndWithSlashError": "URL peab lõppema \"/\"",
+  "invalidUrlError": "Palun sisestage kehtiv URL",
+  "backendUrlSavedSuccess": "Serveri URL salvestatud!"
 }

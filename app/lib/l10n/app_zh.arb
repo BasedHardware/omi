@@ -1993,5 +1993,12 @@
   "usageIrlEvents": "线下活动",
   "usageOnline": "在线",
   "usageSocialSettings": "社交场合",
-  "usageEverywhere": "到处"
+  "usageEverywhere": "到处",
+  "customBackendUrlTitle": "自定义后端URL",
+  "backendUrlLabel": "后端URL",
+  "saveUrlButton": "保存URL",
+  "enterBackendUrlError": "请输入后端URL",
+  "urlMustEndWithSlashError": "URL必须以\"/\"结尾",
+  "invalidUrlError": "请输入有效的URL",
+  "backendUrlSavedSuccess": "后端URL保存成功！"
 }

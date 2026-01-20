@@ -6450,4 +6450,25 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get device => 'Device';
+
+  @override
+  String get customBackendUrlTitle => 'Προσαρμοσμένο URL διακομιστή';
+
+  @override
+  String get backendUrlLabel => 'URL διακομιστή';
+
+  @override
+  String get saveUrlButton => 'Αποθήκευση URL';
+
+  @override
+  String get enterBackendUrlError => 'Εισάγετε το URL του διακομιστή';
+
+  @override
+  String get urlMustEndWithSlashError => 'Το URL πρέπει να τελειώνει με "/"';
+
+  @override
+  String get invalidUrlError => 'Εισάγετε ένα έγκυρο URL';
+
+  @override
+  String get backendUrlSavedSuccess => 'Το URL του διακομιστή αποθηκεύτηκε!';
 }

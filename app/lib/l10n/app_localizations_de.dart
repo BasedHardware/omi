@@ -6455,4 +6455,25 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get device => 'Device';
+
+  @override
+  String get customBackendUrlTitle => 'Benutzerdefinierte Backend-URL';
+
+  @override
+  String get backendUrlLabel => 'Backend-URL';
+
+  @override
+  String get saveUrlButton => 'URL speichern';
+
+  @override
+  String get enterBackendUrlError => 'Bitte geben Sie die Backend-URL ein';
+
+  @override
+  String get urlMustEndWithSlashError => 'URL muss mit "/" enden';
+
+  @override
+  String get invalidUrlError => 'Bitte geben Sie eine gültige URL ein';
+
+  @override
+  String get backendUrlSavedSuccess => 'Backend-URL erfolgreich gespeichert!';
 }

@@ -6412,4 +6412,25 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get device => 'Device';
+
+  @override
+  String get customBackendUrlTitle => 'Tilpasset backend-URL';
+
+  @override
+  String get backendUrlLabel => 'Backend-URL';
+
+  @override
+  String get saveUrlButton => 'Gem URL';
+
+  @override
+  String get enterBackendUrlError => 'Indtast venligst backend-URL';
+
+  @override
+  String get urlMustEndWithSlashError => 'URL skal ende med "/"';
+
+  @override
+  String get invalidUrlError => 'Indtast venligst en gyldig URL';
+
+  @override
+  String get backendUrlSavedSuccess => 'Backend-URL gemt!';
 }

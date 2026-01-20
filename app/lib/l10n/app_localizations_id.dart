@@ -6421,4 +6421,25 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get device => 'Device';
+
+  @override
+  String get customBackendUrlTitle => 'URL Backend Kustom';
+
+  @override
+  String get backendUrlLabel => 'URL Backend';
+
+  @override
+  String get saveUrlButton => 'Simpan URL';
+
+  @override
+  String get enterBackendUrlError => 'Masukkan URL backend';
+
+  @override
+  String get urlMustEndWithSlashError => 'URL harus diakhiri dengan "/"';
+
+  @override
+  String get invalidUrlError => 'Masukkan URL yang valid';
+
+  @override
+  String get backendUrlSavedSuccess => 'URL backend berhasil disimpan!';
 }

@@ -6405,4 +6405,25 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get device => 'Device';
+
+  @override
+  String get customBackendUrlTitle => 'Pasirinktinis serverio URL';
+
+  @override
+  String get backendUrlLabel => 'Serverio URL';
+
+  @override
+  String get saveUrlButton => 'Išsaugoti URL';
+
+  @override
+  String get enterBackendUrlError => 'Įveskite serverio URL';
+
+  @override
+  String get urlMustEndWithSlashError => 'URL turi baigtis "/"';
+
+  @override
+  String get invalidUrlError => 'Įveskite tinkamą URL';
+
+  @override
+  String get backendUrlSavedSuccess => 'Serverio URL išsaugotas!';
 }

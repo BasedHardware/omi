@@ -1992,5 +1992,12 @@
   "usageIrlEvents": "Événements IRL",
   "usageOnline": "En ligne",
   "usageSocialSettings": "Dans des contextes sociaux",
-  "usageEverywhere": "Partout"
+  "usageEverywhere": "Partout",
+  "customBackendUrlTitle": "URL du serveur personnalisée",
+  "backendUrlLabel": "URL du serveur",
+  "saveUrlButton": "Enregistrer l'URL",
+  "enterBackendUrlError": "Veuillez entrer l'URL du serveur",
+  "urlMustEndWithSlashError": "L'URL doit se terminer par \"/\"",
+  "invalidUrlError": "Veuillez entrer une URL valide",
+  "backendUrlSavedSuccess": "URL du serveur enregistrée !"
 }

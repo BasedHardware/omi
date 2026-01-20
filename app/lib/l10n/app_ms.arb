@@ -1992,5 +1992,12 @@
   "usageIrlEvents": "IRL Events",
   "usageOnline": "Online",
   "usageSocialSettings": "In Social Settings",
-  "usageEverywhere": "Everywhere"
+  "usageEverywhere": "Everywhere",
+  "customBackendUrlTitle": "URL Backend Tersuai",
+  "backendUrlLabel": "URL Backend",
+  "saveUrlButton": "Simpan URL",
+  "enterBackendUrlError": "Sila masukkan URL backend",
+  "urlMustEndWithSlashError": "URL mesti berakhir dengan \"/\"",
+  "invalidUrlError": "Sila masukkan URL yang sah",
+  "backendUrlSavedSuccess": "URL backend berjaya disimpan!"
 }

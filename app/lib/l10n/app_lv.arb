@@ -1992,5 +1992,12 @@
   "usageIrlEvents": "IRL Events",
   "usageOnline": "Online",
   "usageSocialSettings": "In Social Settings",
-  "usageEverywhere": "Everywhere"
+  "usageEverywhere": "Everywhere",
+  "customBackendUrlTitle": "Pielāgots servera URL",
+  "backendUrlLabel": "Servera URL",
+  "saveUrlButton": "Saglabāt URL",
+  "enterBackendUrlError": "Lūdzu, ievadiet servera URL",
+  "urlMustEndWithSlashError": "URL jābeidzas ar \"/\"",
+  "invalidUrlError": "Lūdzu, ievadiet derīgu URL",
+  "backendUrlSavedSuccess": "Servera URL saglabāts!"
 }

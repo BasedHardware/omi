@@ -1992,5 +1992,12 @@
   "usageIrlEvents": "IRL Events",
   "usageOnline": "Online",
   "usageSocialSettings": "In Social Settings",
-  "usageEverywhere": "Everywhere"
+  "usageEverywhere": "Everywhere",
+  "customBackendUrlTitle": "Niestandardowy URL serwera",
+  "backendUrlLabel": "URL serwera",
+  "saveUrlButton": "Zapisz URL",
+  "enterBackendUrlError": "Wprowadź URL serwera",
+  "urlMustEndWithSlashError": "URL musi kończyć się na \"/\"",
+  "invalidUrlError": "Wprowadź prawidłowy URL",
+  "backendUrlSavedSuccess": "URL serwera zapisany pomyślnie!"
 }

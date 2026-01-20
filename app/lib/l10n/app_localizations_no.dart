@@ -6402,4 +6402,25 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get device => 'Device';
+
+  @override
+  String get customBackendUrlTitle => 'Egendefinert backend-URL';
+
+  @override
+  String get backendUrlLabel => 'Backend-URL';
+
+  @override
+  String get saveUrlButton => 'Lagre URL';
+
+  @override
+  String get enterBackendUrlError => 'Vennligst skriv inn backend-URL';
+
+  @override
+  String get urlMustEndWithSlashError => 'URL må ende med "/"';
+
+  @override
+  String get invalidUrlError => 'Vennligst skriv inn en gyldig URL';
+
+  @override
+  String get backendUrlSavedSuccess => 'Backend-URL lagret!';
 }

@@ -1992,5 +1992,12 @@
   "usageIrlEvents": "IRL Events",
   "usageOnline": "Online",
   "usageSocialSettings": "In Social Settings",
-  "usageEverywhere": "Everywhere"
+  "usageEverywhere": "Everywhere",
+  "customBackendUrlTitle": "URL เซิร์ฟเวอร์ที่กำหนดเอง",
+  "backendUrlLabel": "URL เซิร์ฟเวอร์",
+  "saveUrlButton": "บันทึก URL",
+  "enterBackendUrlError": "กรุณาป้อน URL เซิร์ฟเวอร์",
+  "urlMustEndWithSlashError": "URL ต้องลงท้ายด้วย \"/\"",
+  "invalidUrlError": "กรุณาป้อน URL ที่ถูกต้อง",
+  "backendUrlSavedSuccess": "บันทึก URL เซิร์ฟเวอร์แล้ว!"
 }

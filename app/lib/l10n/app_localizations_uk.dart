@@ -6357,4 +6357,25 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get device => 'Device';
+
+  @override
+  String get customBackendUrlTitle => 'Користувацька URL сервера';
+
+  @override
+  String get backendUrlLabel => 'URL сервера';
+
+  @override
+  String get saveUrlButton => 'Зберегти URL';
+
+  @override
+  String get enterBackendUrlError => 'Введіть URL сервера';
+
+  @override
+  String get urlMustEndWithSlashError => 'URL повинен закінчуватися на "/"';
+
+  @override
+  String get invalidUrlError => 'Введіть дійсну URL';
+
+  @override
+  String get backendUrlSavedSuccess => 'URL сервера успішно збережено!';
 }

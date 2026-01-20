@@ -1973,5 +1973,12 @@
   "usageIrlEvents": "أحداث واقعية",
   "usageOnline": "عبر الإنترنت",
   "usageSocialSettings": "في المناسبات الاجتماعية",
-  "usageEverywhere": "في كل مكان"
+  "usageEverywhere": "في كل مكان",
+  "customBackendUrlTitle": "عنوان URL للخادم المخصص",
+  "backendUrlLabel": "عنوان URL للخادم",
+  "saveUrlButton": "حفظ URL",
+  "enterBackendUrlError": "يرجى إدخال عنوان URL للخادم",
+  "urlMustEndWithSlashError": "يجب أن ينتهي URL بـ \"/\"",
+  "invalidUrlError": "يرجى إدخال عنوان URL صالح",
+  "backendUrlSavedSuccess": "تم حفظ عنوان URL للخادم بنجاح!"
 }

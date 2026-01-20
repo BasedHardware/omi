@@ -6405,4 +6405,25 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get device => 'Device';
+
+  @override
+  String get customBackendUrlTitle => 'Kohandatud serveri URL';
+
+  @override
+  String get backendUrlLabel => 'Serveri URL';
+
+  @override
+  String get saveUrlButton => 'Salvesta URL';
+
+  @override
+  String get enterBackendUrlError => 'Palun sisestage serveri URL';
+
+  @override
+  String get urlMustEndWithSlashError => 'URL peab lõppema "/"';
+
+  @override
+  String get invalidUrlError => 'Palun sisestage kehtiv URL';
+
+  @override
+  String get backendUrlSavedSuccess => 'Serveri URL salvestatud!';
 }

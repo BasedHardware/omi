@@ -1975,5 +1975,12 @@
   "usageIrlEvents": "IRL Events",
   "usageOnline": "Online",
   "usageSocialSettings": "In Social Settings",
-  "usageEverywhere": "Everywhere"
+  "usageEverywhere": "Everywhere",
+  "customBackendUrlTitle": "URL del servidor personalitzat",
+  "backendUrlLabel": "URL del servidor",
+  "saveUrlButton": "Desar URL",
+  "enterBackendUrlError": "Introduïu l'URL del servidor",
+  "urlMustEndWithSlashError": "L'URL ha d'acabar amb \"/\"",
+  "invalidUrlError": "Introduïu un URL vàlid",
+  "backendUrlSavedSuccess": "URL del servidor desat correctament!"
 }

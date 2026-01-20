@@ -6404,4 +6404,25 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get device => 'Device';
+
+  @override
+  String get customBackendUrlTitle => 'Mukautettu palvelimen URL';
+
+  @override
+  String get backendUrlLabel => 'Palvelimen URL';
+
+  @override
+  String get saveUrlButton => 'Tallenna URL';
+
+  @override
+  String get enterBackendUrlError => 'Anna palvelimen URL';
+
+  @override
+  String get urlMustEndWithSlashError => 'URL:n on päätyttävä "/"';
+
+  @override
+  String get invalidUrlError => 'Anna kelvollinen URL';
+
+  @override
+  String get backendUrlSavedSuccess => 'Palvelimen URL tallennettu!';
 }

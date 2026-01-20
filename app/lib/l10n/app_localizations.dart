@@ -11942,6 +11942,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Device'**
   String get device;
+
+  /// Title for custom backend URL page
+  ///
+  /// In en, this message translates to:
+  /// **'Custom Backend URL'**
+  String get customBackendUrlTitle;
+
+  /// Label for backend URL input field
+  ///
+  /// In en, this message translates to:
+  /// **'Backend URL'**
+  String get backendUrlLabel;
+
+  /// Button text to save the backend URL
+  ///
+  /// In en, this message translates to:
+  /// **'Save URL'**
+  String get saveUrlButton;
+
+  /// Error when backend URL is empty
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter the backend URL'**
+  String get enterBackendUrlError;
+
+  /// Error when URL does not end with slash
+  ///
+  /// In en, this message translates to:
+  /// **'URL must end with "/"'**
+  String get urlMustEndWithSlashError;
+
+  /// Error when URL format is invalid
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a valid URL'**
+  String get invalidUrlError;
+
+  /// Success message when backend URL is saved
+  ///
+  /// In en, this message translates to:
+  /// **'Backend URL saved successfully!'**
+  String get backendUrlSavedSuccess;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

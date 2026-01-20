@@ -6425,4 +6425,25 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get device => 'Device';
+
+  @override
+  String get customBackendUrlTitle => 'URL Backend Tersuai';
+
+  @override
+  String get backendUrlLabel => 'URL Backend';
+
+  @override
+  String get saveUrlButton => 'Simpan URL';
+
+  @override
+  String get enterBackendUrlError => 'Sila masukkan URL backend';
+
+  @override
+  String get urlMustEndWithSlashError => 'URL mesti berakhir dengan "/"';
+
+  @override
+  String get invalidUrlError => 'Sila masukkan URL yang sah';
+
+  @override
+  String get backendUrlSavedSuccess => 'URL backend berjaya disimpan!';
 }

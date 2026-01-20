@@ -6404,4 +6404,25 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get device => 'Device';
+
+  @override
+  String get customBackendUrlTitle => 'Vlastná URL servera';
+
+  @override
+  String get backendUrlLabel => 'URL servera';
+
+  @override
+  String get saveUrlButton => 'Uložiť URL';
+
+  @override
+  String get enterBackendUrlError => 'Zadajte URL servera';
+
+  @override
+  String get urlMustEndWithSlashError => 'URL musí končiť na "/"';
+
+  @override
+  String get invalidUrlError => 'Zadajte platnú URL';
+
+  @override
+  String get backendUrlSavedSuccess => 'URL servera bola úspešne uložená!';
 }

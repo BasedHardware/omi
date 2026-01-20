@@ -6408,4 +6408,25 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get device => 'Device';
+
+  @override
+  String get customBackendUrlTitle => 'Anpassad server-URL';
+
+  @override
+  String get backendUrlLabel => 'Server-URL';
+
+  @override
+  String get saveUrlButton => 'Spara URL';
+
+  @override
+  String get enterBackendUrlError => 'Ange server-URL';
+
+  @override
+  String get urlMustEndWithSlashError => 'URL måste sluta med "/"';
+
+  @override
+  String get invalidUrlError => 'Ange en giltig URL';
+
+  @override
+  String get backendUrlSavedSuccess => 'Server-URL sparad!';
 }

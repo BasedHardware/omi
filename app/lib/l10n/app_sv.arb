@@ -1992,5 +1992,12 @@
   "usageIrlEvents": "IRL Events",
   "usageOnline": "Online",
   "usageSocialSettings": "In Social Settings",
-  "usageEverywhere": "Everywhere"
+  "usageEverywhere": "Everywhere",
+  "customBackendUrlTitle": "Anpassad server-URL",
+  "backendUrlLabel": "Server-URL",
+  "saveUrlButton": "Spara URL",
+  "enterBackendUrlError": "Ange server-URL",
+  "urlMustEndWithSlashError": "URL måste sluta med \"/\"",
+  "invalidUrlError": "Ange en giltig URL",
+  "backendUrlSavedSuccess": "Server-URL sparad!"
 }

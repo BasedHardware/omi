@@ -6401,4 +6401,25 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get device => 'Device';
+
+  @override
+  String get customBackendUrlTitle => 'Custom Backend URL';
+
+  @override
+  String get backendUrlLabel => 'Backend URL';
+
+  @override
+  String get saveUrlButton => 'Save URL';
+
+  @override
+  String get enterBackendUrlError => 'Please enter the backend URL';
+
+  @override
+  String get urlMustEndWithSlashError => 'URL must end with "/"';
+
+  @override
+  String get invalidUrlError => 'Please enter a valid URL';
+
+  @override
+  String get backendUrlSavedSuccess => 'Backend URL saved successfully!';
 }

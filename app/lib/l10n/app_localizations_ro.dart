@@ -6434,4 +6434,25 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get device => 'Device';
+
+  @override
+  String get customBackendUrlTitle => 'URL server personalizat';
+
+  @override
+  String get backendUrlLabel => 'URL server';
+
+  @override
+  String get saveUrlButton => 'Salvează URL';
+
+  @override
+  String get enterBackendUrlError => 'Introduceți URL-ul serverului';
+
+  @override
+  String get urlMustEndWithSlashError => 'URL-ul trebuie să se termine cu "/"';
+
+  @override
+  String get invalidUrlError => 'Introduceți un URL valid';
+
+  @override
+  String get backendUrlSavedSuccess => 'URL-ul serverului a fost salvat!';
 }

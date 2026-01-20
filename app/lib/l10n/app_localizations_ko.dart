@@ -6295,4 +6295,25 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get device => 'Device';
+
+  @override
+  String get customBackendUrlTitle => '사용자 정의 백엔드 URL';
+
+  @override
+  String get backendUrlLabel => '백엔드 URL';
+
+  @override
+  String get saveUrlButton => 'URL 저장';
+
+  @override
+  String get enterBackendUrlError => '백엔드 URL을 입력하세요';
+
+  @override
+  String get urlMustEndWithSlashError => 'URL은 "/"로 끝나야 합니다';
+
+  @override
+  String get invalidUrlError => '유효한 URL을 입력하세요';
+
+  @override
+  String get backendUrlSavedSuccess => '백엔드 URL이 저장되었습니다!';
 }

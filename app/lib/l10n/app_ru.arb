@@ -1992,5 +1992,12 @@
   "usageIrlEvents": "IRL Events",
   "usageOnline": "Online",
   "usageSocialSettings": "In Social Settings",
-  "usageEverywhere": "Everywhere"
+  "usageEverywhere": "Everywhere",
+  "customBackendUrlTitle": "Пользовательский URL сервера",
+  "backendUrlLabel": "URL сервера",
+  "saveUrlButton": "Сохранить URL",
+  "enterBackendUrlError": "Введите URL сервера",
+  "urlMustEndWithSlashError": "URL должен заканчиваться на \"/\"",
+  "invalidUrlError": "Введите корректный URL",
+  "backendUrlSavedSuccess": "URL сервера успешно сохранён!"
 }

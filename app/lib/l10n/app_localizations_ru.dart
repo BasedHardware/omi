@@ -6420,4 +6420,25 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get device => 'Device';
+
+  @override
+  String get customBackendUrlTitle => 'Пользовательский URL сервера';
+
+  @override
+  String get backendUrlLabel => 'URL сервера';
+
+  @override
+  String get saveUrlButton => 'Сохранить URL';
+
+  @override
+  String get enterBackendUrlError => 'Введите URL сервера';
+
+  @override
+  String get urlMustEndWithSlashError => 'URL должен заканчиваться на "/"';
+
+  @override
+  String get invalidUrlError => 'Введите корректный URL';
+
+  @override
+  String get backendUrlSavedSuccess => 'URL сервера успешно сохранён!';
 }

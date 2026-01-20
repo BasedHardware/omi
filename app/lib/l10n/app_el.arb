@@ -1992,5 +1992,12 @@
   "usageIrlEvents": "IRL Events",
   "usageOnline": "Online",
   "usageSocialSettings": "In Social Settings",
-  "usageEverywhere": "Everywhere"
+  "usageEverywhere": "Everywhere",
+  "customBackendUrlTitle": "Προσαρμοσμένο URL διακομιστή",
+  "backendUrlLabel": "URL διακομιστή",
+  "saveUrlButton": "Αποθήκευση URL",
+  "enterBackendUrlError": "Εισάγετε το URL του διακομιστή",
+  "urlMustEndWithSlashError": "Το URL πρέπει να τελειώνει με \"/\"",
+  "invalidUrlError": "Εισάγετε ένα έγκυρο URL",
+  "backendUrlSavedSuccess": "Το URL του διακομιστή αποθηκεύτηκε!"
 }

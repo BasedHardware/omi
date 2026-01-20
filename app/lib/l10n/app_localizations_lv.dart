@@ -6416,4 +6416,25 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get device => 'Device';
+
+  @override
+  String get customBackendUrlTitle => 'Pielāgots servera URL';
+
+  @override
+  String get backendUrlLabel => 'Servera URL';
+
+  @override
+  String get saveUrlButton => 'Saglabāt URL';
+
+  @override
+  String get enterBackendUrlError => 'Lūdzu, ievadiet servera URL';
+
+  @override
+  String get urlMustEndWithSlashError => 'URL jābeidzas ar "/"';
+
+  @override
+  String get invalidUrlError => 'Lūdzu, ievadiet derīgu URL';
+
+  @override
+  String get backendUrlSavedSuccess => 'Servera URL saglabāts!';
 }

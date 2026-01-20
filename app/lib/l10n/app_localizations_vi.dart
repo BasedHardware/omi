@@ -6413,4 +6413,25 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get device => 'Device';
+
+  @override
+  String get customBackendUrlTitle => 'URL máy chủ tùy chỉnh';
+
+  @override
+  String get backendUrlLabel => 'URL máy chủ';
+
+  @override
+  String get saveUrlButton => 'Lưu URL';
+
+  @override
+  String get enterBackendUrlError => 'Vui lòng nhập URL máy chủ';
+
+  @override
+  String get urlMustEndWithSlashError => 'URL phải kết thúc bằng "/"';
+
+  @override
+  String get invalidUrlError => 'Vui lòng nhập URL hợp lệ';
+
+  @override
+  String get backendUrlSavedSuccess => 'URL máy chủ đã được lưu!';
 }

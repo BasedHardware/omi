@@ -1993,5 +1993,12 @@
   "usageIrlEvents": "Eventos presenciales",
   "usageOnline": "En línea",
   "usageSocialSettings": "En entornos sociales",
-  "usageEverywhere": "En todas partes"
+  "usageEverywhere": "En todas partes",
+  "customBackendUrlTitle": "URL del servidor personalizado",
+  "backendUrlLabel": "URL del servidor",
+  "saveUrlButton": "Guardar URL",
+  "enterBackendUrlError": "Por favor, introduce la URL del servidor",
+  "urlMustEndWithSlashError": "La URL debe terminar con \"/\"",
+  "invalidUrlError": "Por favor, introduce una URL válida",
+  "backendUrlSavedSuccess": "¡URL del servidor guardada correctamente!"
 }

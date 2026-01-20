@@ -6415,4 +6415,25 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get device => 'Device';
+
+  @override
+  String get customBackendUrlTitle => 'Özel Sunucu URL';
+
+  @override
+  String get backendUrlLabel => 'Sunucu URL';
+
+  @override
+  String get saveUrlButton => 'URL'yi Kaydet';
+
+  @override
+  String get enterBackendUrlError => 'Lütfen sunucu URL'sini girin';
+
+  @override
+  String get urlMustEndWithSlashError => 'URL "/" ile bitmelidir';
+
+  @override
+  String get invalidUrlError => 'Lütfen geçerli bir URL girin';
+
+  @override
+  String get backendUrlSavedSuccess => 'Sunucu URL başarıyla kaydedildi!';
 }

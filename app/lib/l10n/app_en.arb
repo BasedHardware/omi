@@ -7809,5 +7809,33 @@
   "usageEverywhere": "Everywhere",
   "@usageEverywhere": {
     "description": "Usage location option: Everywhere"
+  },
+  "customBackendUrlTitle": "Custom Backend URL",
+  "@customBackendUrlTitle": {
+    "description": "Title for custom backend URL page"
+  },
+  "backendUrlLabel": "Backend URL",
+  "@backendUrlLabel": {
+    "description": "Label for backend URL input field"
+  },
+  "saveUrlButton": "Save URL",
+  "@saveUrlButton": {
+    "description": "Button text to save the backend URL"
+  },
+  "enterBackendUrlError": "Please enter the backend URL",
+  "@enterBackendUrlError": {
+    "description": "Error when backend URL is empty"
+  },
+  "urlMustEndWithSlashError": "URL must end with \"/\"",
+  "@urlMustEndWithSlashError": {
+    "description": "Error when URL does not end with slash"
+  },
+  "invalidUrlError": "Please enter a valid URL",
+  "@invalidUrlError": {
+    "description": "Error when URL format is invalid"
+  },
+  "backendUrlSavedSuccess": "Backend URL saved successfully!",
+  "@backendUrlSavedSuccess": {
+    "description": "Success message when backend URL is saved"
   }
 }

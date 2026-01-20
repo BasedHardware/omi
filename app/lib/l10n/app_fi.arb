@@ -1992,5 +1992,12 @@
   "usageIrlEvents": "IRL Events",
   "usageOnline": "Online",
   "usageSocialSettings": "In Social Settings",
-  "usageEverywhere": "Everywhere"
+  "usageEverywhere": "Everywhere",
+  "customBackendUrlTitle": "Mukautettu palvelimen URL",
+  "backendUrlLabel": "Palvelimen URL",
+  "saveUrlButton": "Tallenna URL",
+  "enterBackendUrlError": "Anna palvelimen URL",
+  "urlMustEndWithSlashError": "URL:n on päätyttävä \"/\"",
+  "invalidUrlError": "Anna kelvollinen URL",
+  "backendUrlSavedSuccess": "Palvelimen URL tallennettu!"
 }

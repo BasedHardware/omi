@@ -1950,5 +1950,12 @@
   "usageIrlEvents": "IRL Events",
   "usageOnline": "Online",
   "usageSocialSettings": "In Social Settings",
-  "usageEverywhere": "Everywhere"
+  "usageEverywhere": "Everywhere",
+  "customBackendUrlTitle": "Tilpasset backend-URL",
+  "backendUrlLabel": "Backend-URL",
+  "saveUrlButton": "Gem URL",
+  "enterBackendUrlError": "Indtast venligst backend-URL",
+  "urlMustEndWithSlashError": "URL skal ende med \"/\"",
+  "invalidUrlError": "Indtast venligst en gyldig URL",
+  "backendUrlSavedSuccess": "Backend-URL gemt!"
 }

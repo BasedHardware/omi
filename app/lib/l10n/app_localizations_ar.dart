@@ -6357,4 +6357,25 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get device => 'Device';
+
+  @override
+  String get customBackendUrlTitle => 'عنوان URL للخادم المخصص';
+
+  @override
+  String get backendUrlLabel => 'عنوان URL للخادم';
+
+  @override
+  String get saveUrlButton => 'حفظ URL';
+
+  @override
+  String get enterBackendUrlError => 'يرجى إدخال عنوان URL للخادم';
+
+  @override
+  String get urlMustEndWithSlashError => 'يجب أن ينتهي URL بـ "/"';
+
+  @override
+  String get invalidUrlError => 'يرجى إدخال عنوان URL صالح';
+
+  @override
+  String get backendUrlSavedSuccess => 'تم حفظ عنوان URL للخادم بنجاح!';
 }

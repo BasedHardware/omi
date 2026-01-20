@@ -6395,4 +6395,25 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get device => 'Device';
+
+  @override
+  String get customBackendUrlTitle => 'URL do servidor personalizada';
+
+  @override
+  String get backendUrlLabel => 'URL do servidor';
+
+  @override
+  String get saveUrlButton => 'Salvar URL';
+
+  @override
+  String get enterBackendUrlError => 'Por favor, insira a URL do servidor';
+
+  @override
+  String get urlMustEndWithSlashError => 'A URL deve terminar com "/"';
+
+  @override
+  String get invalidUrlError => 'Por favor, insira uma URL válida';
+
+  @override
+  String get backendUrlSavedSuccess => 'URL do servidor salva com sucesso!';
 }

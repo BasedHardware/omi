@@ -1992,5 +1992,12 @@
   "usageIrlEvents": "IRL Events",
   "usageOnline": "Online",
   "usageSocialSettings": "In Social Settings",
-  "usageEverywhere": "Everywhere"
+  "usageEverywhere": "Everywhere",
+  "customBackendUrlTitle": "URL máy chủ tùy chỉnh",
+  "backendUrlLabel": "URL máy chủ",
+  "saveUrlButton": "Lưu URL",
+  "enterBackendUrlError": "Vui lòng nhập URL máy chủ",
+  "urlMustEndWithSlashError": "URL phải kết thúc bằng \"/\"",
+  "invalidUrlError": "Vui lòng nhập URL hợp lệ",
+  "backendUrlSavedSuccess": "URL máy chủ đã được lưu!"
 }

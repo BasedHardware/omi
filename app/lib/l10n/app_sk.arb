@@ -1992,5 +1992,12 @@
   "usageIrlEvents": "IRL Events",
   "usageOnline": "Online",
   "usageSocialSettings": "In Social Settings",
-  "usageEverywhere": "Everywhere"
+  "usageEverywhere": "Everywhere",
+  "customBackendUrlTitle": "Vlastná URL servera",
+  "backendUrlLabel": "URL servera",
+  "saveUrlButton": "Uložiť URL",
+  "enterBackendUrlError": "Zadajte URL servera",
+  "urlMustEndWithSlashError": "URL musí končiť na \"/\"",
+  "invalidUrlError": "Zadajte platnú URL",
+  "backendUrlSavedSuccess": "URL servera bola úspešne uložená!"
 }

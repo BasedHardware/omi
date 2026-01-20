@@ -6442,4 +6442,25 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get device => 'Device';
+
+  @override
+  String get customBackendUrlTitle => 'URL del servidor personalitzat';
+
+  @override
+  String get backendUrlLabel => 'URL del servidor';
+
+  @override
+  String get saveUrlButton => 'Desar URL';
+
+  @override
+  String get enterBackendUrlError => 'Introduïu l'URL del servidor';
+
+  @override
+  String get urlMustEndWithSlashError => 'L'URL ha d'acabar amb "/"';
+
+  @override
+  String get invalidUrlError => 'Introduïu un URL vàlid';
+
+  @override
+  String get backendUrlSavedSuccess => 'URL del servidor desat correctament!';
 }

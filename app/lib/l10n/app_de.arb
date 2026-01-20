@@ -1974,5 +1974,12 @@
   "usageIrlEvents": "Bei Veranstaltungen",
   "usageOnline": "Online",
   "usageSocialSettings": "In sozialen Umgebungen",
-  "usageEverywhere": "Überall"
+  "usageEverywhere": "Überall",
+  "customBackendUrlTitle": "Benutzerdefinierte Backend-URL",
+  "backendUrlLabel": "Backend-URL",
+  "saveUrlButton": "URL speichern",
+  "enterBackendUrlError": "Bitte geben Sie die Backend-URL ein",
+  "urlMustEndWithSlashError": "URL muss mit \"/\" enden",
+  "invalidUrlError": "Bitte geben Sie eine gültige URL ein",
+  "backendUrlSavedSuccess": "Backend-URL erfolgreich gespeichert!"
 }

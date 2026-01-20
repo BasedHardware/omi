@@ -6423,4 +6423,25 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get device => 'Device';
+
+  @override
+  String get customBackendUrlTitle => 'Aangepaste backend-URL';
+
+  @override
+  String get backendUrlLabel => 'Backend-URL';
+
+  @override
+  String get saveUrlButton => 'URL opslaan';
+
+  @override
+  String get enterBackendUrlError => 'Voer de backend-URL in';
+
+  @override
+  String get urlMustEndWithSlashError => 'URL moet eindigen met "/"';
+
+  @override
+  String get invalidUrlError => 'Voer een geldige URL in';
+
+  @override
+  String get backendUrlSavedSuccess => 'Backend-URL succesvol opgeslagen!';
 }

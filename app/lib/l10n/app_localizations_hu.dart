@@ -6435,4 +6435,25 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get device => 'Device';
+
+  @override
+  String get customBackendUrlTitle => 'Egyéni háttérszerver URL';
+
+  @override
+  String get backendUrlLabel => 'Háttérszerver URL';
+
+  @override
+  String get saveUrlButton => 'URL mentése';
+
+  @override
+  String get enterBackendUrlError => 'Kérjük, adja meg a háttérszerver URL-jét';
+
+  @override
+  String get urlMustEndWithSlashError => 'Az URL-nek "/" karakterrel kell végződnie';
+
+  @override
+  String get invalidUrlError => 'Kérjük, adjon meg érvényes URL-t';
+
+  @override
+  String get backendUrlSavedSuccess => 'Háttérszerver URL sikeresen mentve!';
 }

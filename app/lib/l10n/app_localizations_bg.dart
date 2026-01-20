@@ -6430,4 +6430,25 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get device => 'Device';
+
+  @override
+  String get customBackendUrlTitle => 'Персонализиран URL на сървъра';
+
+  @override
+  String get backendUrlLabel => 'URL на сървъра';
+
+  @override
+  String get saveUrlButton => 'Запази URL';
+
+  @override
+  String get enterBackendUrlError => 'Моля, въведете URL на сървъра';
+
+  @override
+  String get urlMustEndWithSlashError => 'URL трябва да завършва с "/"';
+
+  @override
+  String get invalidUrlError => 'Моля, въведете валиден URL';
+
+  @override
+  String get backendUrlSavedSuccess => 'URL на сървъра е запазен успешно!';
 }

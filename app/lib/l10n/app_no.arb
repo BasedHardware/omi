@@ -1992,5 +1992,12 @@
   "usageIrlEvents": "IRL Events",
   "usageOnline": "Online",
   "usageSocialSettings": "In Social Settings",
-  "usageEverywhere": "Everywhere"
+  "usageEverywhere": "Everywhere",
+  "customBackendUrlTitle": "Egendefinert backend-URL",
+  "backendUrlLabel": "Backend-URL",
+  "saveUrlButton": "Lagre URL",
+  "enterBackendUrlError": "Vennligst skriv inn backend-URL",
+  "urlMustEndWithSlashError": "URL må ende med \"/\"",
+  "invalidUrlError": "Vennligst skriv inn en gyldig URL",
+  "backendUrlSavedSuccess": "Backend-URL lagret!"
 }

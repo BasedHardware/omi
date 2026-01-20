@@ -6371,4 +6371,25 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get device => 'Device';
+
+  @override
+  String get customBackendUrlTitle => 'URL เซิร์ฟเวอร์ที่กำหนดเอง';
+
+  @override
+  String get backendUrlLabel => 'URL เซิร์ฟเวอร์';
+
+  @override
+  String get saveUrlButton => 'บันทึก URL';
+
+  @override
+  String get enterBackendUrlError => 'กรุณาป้อน URL เซิร์ฟเวอร์';
+
+  @override
+  String get urlMustEndWithSlashError => 'URL ต้องลงท้ายด้วย "/"';
+
+  @override
+  String get invalidUrlError => 'กรุณาป้อน URL ที่ถูกต้อง';
+
+  @override
+  String get backendUrlSavedSuccess => 'บันทึก URL เซิร์ฟเวอร์แล้ว!';
 }

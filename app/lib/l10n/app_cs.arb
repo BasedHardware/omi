@@ -1952,5 +1952,12 @@
   "usageIrlEvents": "IRL Events",
   "usageOnline": "Online",
   "usageSocialSettings": "In Social Settings",
-  "usageEverywhere": "Everywhere"
+  "usageEverywhere": "Everywhere",
+  "customBackendUrlTitle": "Vlastní URL serveru",
+  "backendUrlLabel": "URL serveru",
+  "saveUrlButton": "Uložit URL",
+  "enterBackendUrlError": "Zadejte prosím URL serveru",
+  "urlMustEndWithSlashError": "URL musí končit \"/\"",
+  "invalidUrlError": "Zadejte prosím platnou URL",
+  "backendUrlSavedSuccess": "URL serveru byla úspěšně uložena!"
 }

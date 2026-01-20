@@ -1992,5 +1992,12 @@
   "usageIrlEvents": "IRL Events",
   "usageOnline": "Online",
   "usageSocialSettings": "In Social Settings",
-  "usageEverywhere": "Everywhere"
+  "usageEverywhere": "Everywhere",
+  "customBackendUrlTitle": "사용자 정의 백엔드 URL",
+  "backendUrlLabel": "백엔드 URL",
+  "saveUrlButton": "URL 저장",
+  "enterBackendUrlError": "백엔드 URL을 입력하세요",
+  "urlMustEndWithSlashError": "URL은 \"/\"로 끝나야 합니다",
+  "invalidUrlError": "유효한 URL을 입력하세요",
+  "backendUrlSavedSuccess": "백엔드 URL이 저장되었습니다!"
 }

@@ -1992,5 +1992,12 @@
   "usageIrlEvents": "IRL Events",
   "usageOnline": "Online",
   "usageSocialSettings": "In Social Settings",
-  "usageEverywhere": "Everywhere"
+  "usageEverywhere": "Everywhere",
+  "customBackendUrlTitle": "Pasirinktinis serverio URL",
+  "backendUrlLabel": "Serverio URL",
+  "saveUrlButton": "Išsaugoti URL",
+  "enterBackendUrlError": "Įveskite serverio URL",
+  "urlMustEndWithSlashError": "URL turi baigtis \"/\"",
+  "invalidUrlError": "Įveskite tinkamą URL",
+  "backendUrlSavedSuccess": "Serverio URL išsaugotas!"
 }

@@ -6293,4 +6293,25 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get device => 'Device';
+
+  @override
+  String get customBackendUrlTitle => 'カスタムバックエンドURL';
+
+  @override
+  String get backendUrlLabel => 'バックエンドURL';
+
+  @override
+  String get saveUrlButton => 'URLを保存';
+
+  @override
+  String get enterBackendUrlError => 'バックエンドURLを入力してください';
+
+  @override
+  String get urlMustEndWithSlashError => 'URLは「/」で終わる必要があります';
+
+  @override
+  String get invalidUrlError => '有効なURLを入力してください';
+
+  @override
+  String get backendUrlSavedSuccess => 'バックエンドURLが保存されました！';
 }

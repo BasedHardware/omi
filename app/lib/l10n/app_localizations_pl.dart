@@ -6416,4 +6416,25 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get device => 'Device';
+
+  @override
+  String get customBackendUrlTitle => 'Niestandardowy URL serwera';
+
+  @override
+  String get backendUrlLabel => 'URL serwera';
+
+  @override
+  String get saveUrlButton => 'Zapisz URL';
+
+  @override
+  String get enterBackendUrlError => 'Wprowadź URL serwera';
+
+  @override
+  String get urlMustEndWithSlashError => 'URL musi kończyć się na "/"';
+
+  @override
+  String get invalidUrlError => 'Wprowadź prawidłowy URL';
+
+  @override
+  String get backendUrlSavedSuccess => 'URL serwera zapisany pomyślnie!';
 }

@@ -1993,5 +1993,12 @@
   "usageIrlEvents": "リアルイベントで",
   "usageOnline": "オンラインで",
   "usageSocialSettings": "社交の場で",
-  "usageEverywhere": "どこでも"
+  "usageEverywhere": "どこでも",
+  "customBackendUrlTitle": "カスタムバックエンドURL",
+  "backendUrlLabel": "バックエンドURL",
+  "saveUrlButton": "URLを保存",
+  "enterBackendUrlError": "バックエンドURLを入力してください",
+  "urlMustEndWithSlashError": "URLは「/」で終わる必要があります",
+  "invalidUrlError": "有効なURLを入力してください",
+  "backendUrlSavedSuccess": "バックエンドURLが保存されました！"
 }

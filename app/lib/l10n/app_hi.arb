@@ -1993,5 +1993,12 @@
   "usageIrlEvents": "IRL Events",
   "usageOnline": "Online",
   "usageSocialSettings": "In Social Settings",
-  "usageEverywhere": "Everywhere"
+  "usageEverywhere": "Everywhere",
+  "customBackendUrlTitle": "कस्टम बैकएंड URL",
+  "backendUrlLabel": "बैकएंड URL",
+  "saveUrlButton": "URL सहेजें",
+  "enterBackendUrlError": "कृपया बैकएंड URL दर्ज करें",
+  "urlMustEndWithSlashError": "URL \"/\" से समाप्त होना चाहिए",
+  "invalidUrlError": "कृपया एक वैध URL दर्ज करें",
+  "backendUrlSavedSuccess": "बैकएंड URL सफलतापूर्वक सहेजा गया!"
 }

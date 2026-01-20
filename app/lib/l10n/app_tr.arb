@@ -1992,5 +1992,12 @@
   "usageIrlEvents": "IRL Events",
   "usageOnline": "Online",
   "usageSocialSettings": "In Social Settings",
-  "usageEverywhere": "Everywhere"
+  "usageEverywhere": "Everywhere",
+  "customBackendUrlTitle": "Özel Sunucu URL",
+  "backendUrlLabel": "Sunucu URL",
+  "saveUrlButton": "URL'yi Kaydet",
+  "enterBackendUrlError": "Lütfen sunucu URL'sini girin",
+  "urlMustEndWithSlashError": "URL \"/\" ile bitmelidir",
+  "invalidUrlError": "Lütfen geçerli bir URL girin",
+  "backendUrlSavedSuccess": "Sunucu URL başarıyla kaydedildi!"
 }

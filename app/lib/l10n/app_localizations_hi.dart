@@ -6382,4 +6382,25 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get device => 'Device';
+
+  @override
+  String get customBackendUrlTitle => 'कस्टम बैकएंड URL';
+
+  @override
+  String get backendUrlLabel => 'बैकएंड URL';
+
+  @override
+  String get saveUrlButton => 'URL सहेजें';
+
+  @override
+  String get enterBackendUrlError => 'कृपया बैकएंड URL दर्ज करें';
+
+  @override
+  String get urlMustEndWithSlashError => 'URL "/" से समाप्त होना चाहिए';
+
+  @override
+  String get invalidUrlError => 'कृपया एक वैध URL दर्ज करें';
+
+  @override
+  String get backendUrlSavedSuccess => 'बैकएंड URL सफलतापूर्वक सहेजा गया!';
 }
