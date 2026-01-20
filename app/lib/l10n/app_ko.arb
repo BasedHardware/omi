@@ -2301,5 +2301,12 @@
   "aiGenErrorWhileCreatingApp": "앱 생성 중 오류가 발생했습니다",
   "aiGenFailedToGenerateApp": "앱 생성에 실패했습니다. 다시 시도해 주세요.",
   "aiGenFailedToRegenerateIcon": "아이콘 재생성에 실패했습니다",
-  "aiGenPleaseGenerateAppFirst": "먼저 앱을 생성해 주세요"
+  "aiGenPleaseGenerateAppFirst": "먼저 앱을 생성해 주세요",
+  "xHandleTitle": "What's your X handle?",
+  "xHandleDescription": "We will pre-train your Omi clone\nbased on your account's activity",
+  "xHandleHint": "@nikshevchenko",
+  "xHandlePleaseEnter": "Please enter your X handle",
+  "xHandlePleaseEnterValid": "Please enter a valid X handle",
+  "nextButton": "Next",
+  "connectOmiDevice": "Connect Omi Device"
 }

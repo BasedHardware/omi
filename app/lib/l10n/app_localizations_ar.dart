@@ -6942,7 +6942,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get templateName => 'اسم القالب';
 
   @override
-  String get templateNameHint => 'مثال: مستخرج عناصر إجراءات الاجتماع';
+  String get templateNameHint => 'مثال: مستخرج إجراءات الاجتماع';
 
   @override
   String get nameMustBeAtLeast3Characters => 'يجب أن يكون الاسم 3 أحرف على الأقل';
@@ -6982,126 +6982,125 @@ class AppLocalizationsAr extends AppLocalizations {
   String get failedToCreateApp => 'فشل إنشاء التطبيق. يرجى المحاولة مرة أخرى.';
 
   @override
-  String get addAppSelectCoreCapability => 'Please select one more core capability for your app to proceed';
+  String get addAppSelectCoreCapability => 'يرجى تحديد قدرة أساسية أخرى لتطبيقك';
 
   @override
-  String get addAppSelectPaymentPlan => 'Please select a payment plan and enter a price for your app';
+  String get addAppSelectPaymentPlan => 'يرجى تحديد خطة الدفع وإدخال سعر لتطبيقك';
 
   @override
-  String get addAppSelectCapability => 'Please select at least one capability for your app';
+  String get addAppSelectCapability => 'يرجى تحديد قدرة واحدة على الأقل لتطبيقك';
 
   @override
-  String get addAppSelectLogo => 'Please select a logo for your app';
+  String get addAppSelectLogo => 'يرجى تحديد شعار لتطبيقك';
 
   @override
-  String get addAppEnterChatPrompt => 'Please enter a chat prompt for your app';
+  String get addAppEnterChatPrompt => 'يرجى إدخال موجه المحادثة لتطبيقك';
 
   @override
-  String get addAppEnterConversationPrompt => 'Please enter a conversation prompt for your app';
+  String get addAppEnterConversationPrompt => 'يرجى إدخال موجه المحادثة لتطبيقك';
 
   @override
-  String get addAppSelectTriggerEvent => 'Please select a trigger event for your app';
+  String get addAppSelectTriggerEvent => 'يرجى تحديد حدث التشغيل لتطبيقك';
 
   @override
-  String get addAppEnterWebhookUrl => 'Please enter a webhook URL for your app';
+  String get addAppEnterWebhookUrl => 'يرجى إدخال عنوان URL للويب هوك لتطبيقك';
 
   @override
-  String get addAppSelectCategory => 'Please select a category for your app';
+  String get addAppSelectCategory => 'يرجى تحديد فئة لتطبيقك';
 
   @override
-  String get addAppFillRequiredFields => 'Please fill in all the required fields correctly';
+  String get addAppFillRequiredFields => 'يرجى ملء جميع الحقول المطلوبة بشكل صحيح';
 
   @override
-  String get addAppUpdatedSuccess => 'App updated successfully 🚀';
+  String get addAppUpdatedSuccess => 'تم تحديث التطبيق بنجاح 🚀';
 
   @override
-  String get addAppUpdateFailed => 'Failed to update app. Please try again later';
+  String get addAppUpdateFailed => 'فشل التحديث. يرجى المحاولة لاحقاً';
 
   @override
-  String get addAppSubmittedSuccess => 'App submitted successfully 🚀';
+  String get addAppSubmittedSuccess => 'تم إرسال التطبيق بنجاح 🚀';
 
   @override
   String addAppErrorOpeningFilePicker(String message) {
-    return 'Error opening file picker: $message';
+    return 'خطأ في فتح منتقي الملفات: $message';
   }
 
   @override
   String addAppErrorSelectingImage(String error) {
-    return 'Error selecting image: $error';
+    return 'خطأ في اختيار الصورة: $error';
   }
 
   @override
-  String get addAppPhotosPermissionDenied =>
-      'Photos permission denied. Please allow access to photos to select an image';
+  String get addAppPhotosPermissionDenied => 'تم رفض إذن الصور. يرجى السماح بالوصول إلى الصور';
 
   @override
-  String get addAppErrorSelectingImageRetry => 'Error selecting image. Please try again.';
+  String get addAppErrorSelectingImageRetry => 'خطأ في اختيار الصورة. يرجى المحاولة مرة أخرى.';
 
   @override
   String addAppErrorSelectingThumbnail(String error) {
-    return 'Error selecting thumbnail: $error';
+    return 'خطأ في اختيار الصورة المصغرة: $error';
   }
 
   @override
-  String get addAppErrorSelectingThumbnailRetry => 'Error selecting thumbnail. Please try again.';
+  String get addAppErrorSelectingThumbnailRetry => 'خطأ في اختيار الصورة المصغرة. يرجى المحاولة مرة أخرى.';
 
   @override
-  String get addAppCapabilityConflictWithPersona => 'Other capabilities cannot be selected with Persona';
+  String get addAppCapabilityConflictWithPersona => 'لا يمكن تحديد قدرات أخرى مع الشخصية';
 
   @override
-  String get addAppPersonaConflictWithCapabilities => 'Persona cannot be selected with other capabilities';
+  String get addAppPersonaConflictWithCapabilities => 'لا يمكن تحديد الشخصية مع قدرات أخرى';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitter handle not found';
+  String get personaTwitterHandleNotFound => 'لم يتم العثور على حساب تويتر';
 
   @override
-  String get personaTwitterHandleSuspended => 'Twitter handle is suspended';
+  String get personaTwitterHandleSuspended => 'حساب تويتر معلق';
 
   @override
-  String get personaFailedToVerifyTwitter => 'Failed to verify Twitter handle';
+  String get personaFailedToVerifyTwitter => 'فشل التحقق من حساب تويتر';
 
   @override
-  String get personaFailedToFetch => 'Failed to fetch your persona';
+  String get personaFailedToFetch => 'فشل في جلب شخصيتك';
 
   @override
-  String get personaFailedToCreate => 'Failed to create your persona';
+  String get personaFailedToCreate => 'فشل في إنشاء شخصيتك';
 
   @override
-  String get personaConnectKnowledgeSource => 'Please connect at least one knowledge data source (Omi or Twitter)';
+  String get personaConnectKnowledgeSource => 'يرجى ربط مصدر بيانات واحد على الأقل (Omi أو Twitter)';
 
   @override
-  String get personaUpdatedSuccessfully => 'Persona updated successfully';
+  String get personaUpdatedSuccessfully => 'تم تحديث الشخصية بنجاح';
 
   @override
-  String get personaFailedToUpdate => 'Failed to update persona';
+  String get personaFailedToUpdate => 'فشل تحديث الشخصية';
 
   @override
-  String get personaPleaseSelectImage => 'Please select an image';
+  String get personaPleaseSelectImage => 'يرجى اختيار صورة';
 
   @override
-  String get personaFailedToCreateTryLater => 'Failed to create your persona. Please try again later.';
+  String get personaFailedToCreateTryLater => 'فشل إنشاء الشخصية. يرجى المحاولة لاحقاً.';
 
   @override
   String personaFailedToCreateWithError(String error) {
-    return 'Failed to create persona: $error';
+    return 'فشل إنشاء الشخصية: $error';
   }
 
   @override
-  String get personaFailedToEnable => 'Failed to enable persona';
+  String get personaFailedToEnable => 'فشل تفعيل الشخصية';
 
   @override
   String personaErrorEnablingWithError(String error) {
-    return 'Error enabling persona: $error';
+    return 'خطأ في تفعيل الشخصية: $error';
   }
 
   @override
-  String get paymentFailedToFetchCountries => 'Failed to fetch supported countries. Please try again later.';
+  String get paymentFailedToFetchCountries => 'فشل في جلب البلدان المدعومة. يرجى المحاولة لاحقاً.';
 
   @override
-  String get paymentFailedToSetDefault => 'Failed to set default payment method. Please try again later.';
+  String get paymentFailedToSetDefault => 'فشل في تعيين طريقة الدفع الافتراضية. يرجى المحاولة لاحقاً.';
 
   @override
-  String get paymentFailedToSavePaypal => 'Failed to save PayPal details. Please try again later.';
+  String get paymentFailedToSavePaypal => 'فشل في حفظ تفاصيل PayPal. يرجى المحاولة لاحقاً.';
 
   @override
   String get paypalEmailHint => 'nik@example.com';
@@ -7116,28 +7115,28 @@ class AppLocalizationsAr extends AppLocalizations {
   String get paymentMethodPayPal => 'PayPal';
 
   @override
-  String get paymentStatusActive => 'Active';
+  String get paymentStatusActive => 'نشط';
 
   @override
-  String get paymentStatusConnected => 'Connected';
+  String get paymentStatusConnected => 'متصل';
 
   @override
-  String get paymentStatusNotConnected => 'Not Connected';
+  String get paymentStatusNotConnected => 'غير متصل';
 
   @override
-  String get paymentAppCost => 'App Cost';
+  String get paymentAppCost => 'تكلفة التطبيق';
 
   @override
-  String get paymentEnterValidAmount => 'Please enter a valid amount';
+  String get paymentEnterValidAmount => 'يرجى إدخال مبلغ صالح';
 
   @override
-  String get paymentEnterAmountGreaterThanZero => 'Please enter an amount greater than 0';
+  String get paymentEnterAmountGreaterThanZero => 'يرجى إدخال مبلغ أكبر من 0';
 
   @override
-  String get paymentPlan => 'Payment Plan';
+  String get paymentPlan => 'خطة الدفع';
 
   @override
-  String get paymentNoneSelected => 'None Selected';
+  String get paymentNoneSelected => 'لم يتم التحديد';
 
   @override
   String get aiGenPleaseEnterDescription => 'يرجى إدخال وصف لتطبيقك';
@@ -7167,4 +7166,25 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'يرجى إنشاء تطبيق أولاً';
+
+  @override
+  String get xHandleTitle => 'What\'s your X handle?';
+
+  @override
+  String get xHandleDescription => 'We will pre-train your Omi clone\nbased on your account\'s activity';
+
+  @override
+  String get xHandleHint => '@nikshevchenko';
+
+  @override
+  String get xHandlePleaseEnter => 'Please enter your X handle';
+
+  @override
+  String get xHandlePleaseEnterValid => 'Please enter a valid X handle';
+
+  @override
+  String get nextButton => 'Next';
+
+  @override
+  String get connectOmiDevice => 'Connect Omi Device';
 }

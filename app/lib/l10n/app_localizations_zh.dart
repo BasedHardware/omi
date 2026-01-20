@@ -6864,7 +6864,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get templateName => '模板名称';
 
   @override
-  String get templateNameHint => '例如，会议行动项提取器';
+  String get templateNameHint => '例如：会议行动项提取器';
 
   @override
   String get nameMustBeAtLeast3Characters => '名称必须至少3个字符';
@@ -6903,126 +6903,125 @@ class AppLocalizationsZh extends AppLocalizations {
   String get failedToCreateApp => '创建应用失败。请重试。';
 
   @override
-  String get addAppSelectCoreCapability => 'Please select one more core capability for your app to proceed';
+  String get addAppSelectCoreCapability => '请为您的应用选择一个核心功能';
 
   @override
-  String get addAppSelectPaymentPlan => 'Please select a payment plan and enter a price for your app';
+  String get addAppSelectPaymentPlan => '请选择付款计划并输入应用价格';
 
   @override
-  String get addAppSelectCapability => 'Please select at least one capability for your app';
+  String get addAppSelectCapability => '请为您的应用选择至少一项功能';
 
   @override
-  String get addAppSelectLogo => 'Please select a logo for your app';
+  String get addAppSelectLogo => '请为您的应用选择一个标志';
 
   @override
-  String get addAppEnterChatPrompt => 'Please enter a chat prompt for your app';
+  String get addAppEnterChatPrompt => '请输入应用的聊天提示';
 
   @override
-  String get addAppEnterConversationPrompt => 'Please enter a conversation prompt for your app';
+  String get addAppEnterConversationPrompt => '请输入应用的对话提示';
 
   @override
-  String get addAppSelectTriggerEvent => 'Please select a trigger event for your app';
+  String get addAppSelectTriggerEvent => '请为您的应用选择一个触发事件';
 
   @override
-  String get addAppEnterWebhookUrl => 'Please enter a webhook URL for your app';
+  String get addAppEnterWebhookUrl => '请输入应用的Webhook URL';
 
   @override
-  String get addAppSelectCategory => 'Please select a category for your app';
+  String get addAppSelectCategory => '请为您的应用选择一个类别';
 
   @override
-  String get addAppFillRequiredFields => 'Please fill in all the required fields correctly';
+  String get addAppFillRequiredFields => '请正确填写所有必填字段';
 
   @override
-  String get addAppUpdatedSuccess => 'App updated successfully 🚀';
+  String get addAppUpdatedSuccess => '应用更新成功 🚀';
 
   @override
-  String get addAppUpdateFailed => 'Failed to update app. Please try again later';
+  String get addAppUpdateFailed => '更新失败，请稍后重试';
 
   @override
-  String get addAppSubmittedSuccess => 'App submitted successfully 🚀';
+  String get addAppSubmittedSuccess => '应用提交成功 🚀';
 
   @override
   String addAppErrorOpeningFilePicker(String message) {
-    return 'Error opening file picker: $message';
+    return '打开文件选择器时出错：$message';
   }
 
   @override
   String addAppErrorSelectingImage(String error) {
-    return 'Error selecting image: $error';
+    return '选择图片时出错：$error';
   }
 
   @override
-  String get addAppPhotosPermissionDenied =>
-      'Photos permission denied. Please allow access to photos to select an image';
+  String get addAppPhotosPermissionDenied => '照片权限被拒绝，请允许访问照片';
 
   @override
-  String get addAppErrorSelectingImageRetry => 'Error selecting image. Please try again.';
+  String get addAppErrorSelectingImageRetry => '选择图片时出错，请重试。';
 
   @override
   String addAppErrorSelectingThumbnail(String error) {
-    return 'Error selecting thumbnail: $error';
+    return '选择缩略图时出错：$error';
   }
 
   @override
-  String get addAppErrorSelectingThumbnailRetry => 'Error selecting thumbnail. Please try again.';
+  String get addAppErrorSelectingThumbnailRetry => '选择缩略图时出错，请重试。';
 
   @override
-  String get addAppCapabilityConflictWithPersona => 'Other capabilities cannot be selected with Persona';
+  String get addAppCapabilityConflictWithPersona => '无法同时选择其他功能和角色';
 
   @override
-  String get addAppPersonaConflictWithCapabilities => 'Persona cannot be selected with other capabilities';
+  String get addAppPersonaConflictWithCapabilities => '角色无法与其他功能一起选择';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitter handle not found';
+  String get personaTwitterHandleNotFound => '未找到Twitter用户名';
 
   @override
-  String get personaTwitterHandleSuspended => 'Twitter handle is suspended';
+  String get personaTwitterHandleSuspended => 'Twitter用户名已被暂停';
 
   @override
-  String get personaFailedToVerifyTwitter => 'Failed to verify Twitter handle';
+  String get personaFailedToVerifyTwitter => '验证Twitter用户名失败';
 
   @override
-  String get personaFailedToFetch => 'Failed to fetch your persona';
+  String get personaFailedToFetch => '获取角色失败';
 
   @override
-  String get personaFailedToCreate => 'Failed to create your persona';
+  String get personaFailedToCreate => '创建角色失败';
 
   @override
-  String get personaConnectKnowledgeSource => 'Please connect at least one knowledge data source (Omi or Twitter)';
+  String get personaConnectKnowledgeSource => '请至少连接一个数据源（Omi或Twitter）';
 
   @override
-  String get personaUpdatedSuccessfully => 'Persona updated successfully';
+  String get personaUpdatedSuccessfully => '角色更新成功';
 
   @override
-  String get personaFailedToUpdate => 'Failed to update persona';
+  String get personaFailedToUpdate => '角色更新失败';
 
   @override
-  String get personaPleaseSelectImage => 'Please select an image';
+  String get personaPleaseSelectImage => '请选择一张图片';
 
   @override
-  String get personaFailedToCreateTryLater => 'Failed to create your persona. Please try again later.';
+  String get personaFailedToCreateTryLater => '创建角色失败，请稍后重试。';
 
   @override
   String personaFailedToCreateWithError(String error) {
-    return 'Failed to create persona: $error';
+    return '创建角色失败：$error';
   }
 
   @override
-  String get personaFailedToEnable => 'Failed to enable persona';
+  String get personaFailedToEnable => '启用角色失败';
 
   @override
   String personaErrorEnablingWithError(String error) {
-    return 'Error enabling persona: $error';
+    return '启用角色时出错：$error';
   }
 
   @override
-  String get paymentFailedToFetchCountries => 'Failed to fetch supported countries. Please try again later.';
+  String get paymentFailedToFetchCountries => '获取支持的国家失败，请稍后重试。';
 
   @override
-  String get paymentFailedToSetDefault => 'Failed to set default payment method. Please try again later.';
+  String get paymentFailedToSetDefault => '设置默认付款方式失败，请稍后重试。';
 
   @override
-  String get paymentFailedToSavePaypal => 'Failed to save PayPal details. Please try again later.';
+  String get paymentFailedToSavePaypal => '保存PayPal详细信息失败，请稍后重试。';
 
   @override
   String get paypalEmailHint => 'nik@example.com';
@@ -7037,28 +7036,28 @@ class AppLocalizationsZh extends AppLocalizations {
   String get paymentMethodPayPal => 'PayPal';
 
   @override
-  String get paymentStatusActive => 'Active';
+  String get paymentStatusActive => '已激活';
 
   @override
-  String get paymentStatusConnected => 'Connected';
+  String get paymentStatusConnected => '已连接';
 
   @override
-  String get paymentStatusNotConnected => 'Not Connected';
+  String get paymentStatusNotConnected => '未连接';
 
   @override
-  String get paymentAppCost => 'App Cost';
+  String get paymentAppCost => '应用费用';
 
   @override
-  String get paymentEnterValidAmount => 'Please enter a valid amount';
+  String get paymentEnterValidAmount => '请输入有效金额';
 
   @override
-  String get paymentEnterAmountGreaterThanZero => 'Please enter an amount greater than 0';
+  String get paymentEnterAmountGreaterThanZero => '请输入大于0的金额';
 
   @override
-  String get paymentPlan => 'Payment Plan';
+  String get paymentPlan => '付款计划';
 
   @override
-  String get paymentNoneSelected => 'None Selected';
+  String get paymentNoneSelected => '未选择';
 
   @override
   String get aiGenPleaseEnterDescription => '请输入应用描述';
@@ -7088,4 +7087,25 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => '请先生成一个应用';
+
+  @override
+  String get xHandleTitle => 'What\'s your X handle?';
+
+  @override
+  String get xHandleDescription => 'We will pre-train your Omi clone\nbased on your account\'s activity';
+
+  @override
+  String get xHandleHint => '@nikshevchenko';
+
+  @override
+  String get xHandlePleaseEnter => 'Please enter your X handle';
+
+  @override
+  String get xHandlePleaseEnterValid => 'Please enter a valid X handle';
+
+  @override
+  String get nextButton => 'Next';
+
+  @override
+  String get connectOmiDevice => 'Connect Omi Device';
 }

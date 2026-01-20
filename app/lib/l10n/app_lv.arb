@@ -2301,5 +2301,12 @@
   "aiGenErrorWhileCreatingApp": "Veidojot lietotni, radās kļūda",
   "aiGenFailedToGenerateApp": "Neizdevās ģenerēt lietotni. Lūdzu, mēģiniet vēlreiz.",
   "aiGenFailedToRegenerateIcon": "Neizdevās atjaunot ikonu",
-  "aiGenPleaseGenerateAppFirst": "Lūdzu, vispirms ģenerējiet lietotni"
+  "aiGenPleaseGenerateAppFirst": "Lūdzu, vispirms ģenerējiet lietotni",
+  "xHandleTitle": "What's your X handle?",
+  "xHandleDescription": "We will pre-train your Omi clone\nbased on your account's activity",
+  "xHandleHint": "@nikshevchenko",
+  "xHandlePleaseEnter": "Please enter your X handle",
+  "xHandlePleaseEnterValid": "Please enter a valid X handle",
+  "nextButton": "Next",
+  "connectOmiDevice": "Connect Omi Device"
 }

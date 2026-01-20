@@ -7011,7 +7011,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get templateName => 'Sjabloonnaam';
 
   @override
-  String get templateNameHint => 'bijv., Vergadering actiepunten extractor';
+  String get templateNameHint => 'bijv. Vergaderactiepunten Extractor';
 
   @override
   String get nameMustBeAtLeast3Characters => 'Naam moet minimaal 3 tekens zijn';
@@ -7051,126 +7051,125 @@ class AppLocalizationsNl extends AppLocalizations {
   String get failedToCreateApp => 'Kan app niet maken. Probeer het opnieuw.';
 
   @override
-  String get addAppSelectCoreCapability => 'Please select one more core capability for your app to proceed';
+  String get addAppSelectCoreCapability => 'Selecteer nog een kernfunctie voor uw app';
 
   @override
-  String get addAppSelectPaymentPlan => 'Please select a payment plan and enter a price for your app';
+  String get addAppSelectPaymentPlan => 'Selecteer een betalingsplan en voer een prijs in voor uw app';
 
   @override
-  String get addAppSelectCapability => 'Please select at least one capability for your app';
+  String get addAppSelectCapability => 'Selecteer minstens één functie voor uw app';
 
   @override
-  String get addAppSelectLogo => 'Please select a logo for your app';
+  String get addAppSelectLogo => 'Selecteer een logo voor uw app';
 
   @override
-  String get addAppEnterChatPrompt => 'Please enter a chat prompt for your app';
+  String get addAppEnterChatPrompt => 'Voer een chatprompt in voor uw app';
 
   @override
-  String get addAppEnterConversationPrompt => 'Please enter a conversation prompt for your app';
+  String get addAppEnterConversationPrompt => 'Voer een gespreksprompt in voor uw app';
 
   @override
-  String get addAppSelectTriggerEvent => 'Please select a trigger event for your app';
+  String get addAppSelectTriggerEvent => 'Selecteer een triggergebeurtenis voor uw app';
 
   @override
-  String get addAppEnterWebhookUrl => 'Please enter a webhook URL for your app';
+  String get addAppEnterWebhookUrl => 'Voer een webhook-URL in voor uw app';
 
   @override
-  String get addAppSelectCategory => 'Please select a category for your app';
+  String get addAppSelectCategory => 'Selecteer een categorie voor uw app';
 
   @override
-  String get addAppFillRequiredFields => 'Please fill in all the required fields correctly';
+  String get addAppFillRequiredFields => 'Vul alle verplichte velden correct in';
 
   @override
-  String get addAppUpdatedSuccess => 'App updated successfully 🚀';
+  String get addAppUpdatedSuccess => 'App succesvol bijgewerkt 🚀';
 
   @override
-  String get addAppUpdateFailed => 'Failed to update app. Please try again later';
+  String get addAppUpdateFailed => 'Bijwerken mislukt. Probeer het later opnieuw';
 
   @override
-  String get addAppSubmittedSuccess => 'App submitted successfully 🚀';
+  String get addAppSubmittedSuccess => 'App succesvol ingediend 🚀';
 
   @override
   String addAppErrorOpeningFilePicker(String message) {
-    return 'Error opening file picker: $message';
+    return 'Fout bij openen bestandskiezer: $message';
   }
 
   @override
   String addAppErrorSelectingImage(String error) {
-    return 'Error selecting image: $error';
+    return 'Fout bij selecteren afbeelding: $error';
   }
 
   @override
-  String get addAppPhotosPermissionDenied =>
-      'Photos permission denied. Please allow access to photos to select an image';
+  String get addAppPhotosPermissionDenied => 'Fototoegang geweigerd. Geef toegang tot foto\'s';
 
   @override
-  String get addAppErrorSelectingImageRetry => 'Error selecting image. Please try again.';
+  String get addAppErrorSelectingImageRetry => 'Fout bij selecteren afbeelding. Probeer opnieuw.';
 
   @override
   String addAppErrorSelectingThumbnail(String error) {
-    return 'Error selecting thumbnail: $error';
+    return 'Fout bij selecteren miniatuur: $error';
   }
 
   @override
-  String get addAppErrorSelectingThumbnailRetry => 'Error selecting thumbnail. Please try again.';
+  String get addAppErrorSelectingThumbnailRetry => 'Fout bij selecteren miniatuur. Probeer opnieuw.';
 
   @override
-  String get addAppCapabilityConflictWithPersona => 'Other capabilities cannot be selected with Persona';
+  String get addAppCapabilityConflictWithPersona => 'Andere functies kunnen niet worden geselecteerd met Persona';
 
   @override
-  String get addAppPersonaConflictWithCapabilities => 'Persona cannot be selected with other capabilities';
+  String get addAppPersonaConflictWithCapabilities => 'Persona kan niet worden geselecteerd met andere functies';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitter handle not found';
+  String get personaTwitterHandleNotFound => 'Twitter-handle niet gevonden';
 
   @override
-  String get personaTwitterHandleSuspended => 'Twitter handle is suspended';
+  String get personaTwitterHandleSuspended => 'Twitter-handle is geschorst';
 
   @override
-  String get personaFailedToVerifyTwitter => 'Failed to verify Twitter handle';
+  String get personaFailedToVerifyTwitter => 'Twitter-handle verificatie mislukt';
 
   @override
-  String get personaFailedToFetch => 'Failed to fetch your persona';
+  String get personaFailedToFetch => 'Ophalen van persona mislukt';
 
   @override
-  String get personaFailedToCreate => 'Failed to create your persona';
+  String get personaFailedToCreate => 'Aanmaken van persona mislukt';
 
   @override
-  String get personaConnectKnowledgeSource => 'Please connect at least one knowledge data source (Omi or Twitter)';
+  String get personaConnectKnowledgeSource => 'Verbind minstens één gegevensbron (Omi of Twitter)';
 
   @override
-  String get personaUpdatedSuccessfully => 'Persona updated successfully';
+  String get personaUpdatedSuccessfully => 'Persona succesvol bijgewerkt';
 
   @override
-  String get personaFailedToUpdate => 'Failed to update persona';
+  String get personaFailedToUpdate => 'Bijwerken van persona mislukt';
 
   @override
-  String get personaPleaseSelectImage => 'Please select an image';
+  String get personaPleaseSelectImage => 'Selecteer een afbeelding';
 
   @override
-  String get personaFailedToCreateTryLater => 'Failed to create your persona. Please try again later.';
+  String get personaFailedToCreateTryLater => 'Aanmaken van persona mislukt. Probeer het later opnieuw.';
 
   @override
   String personaFailedToCreateWithError(String error) {
-    return 'Failed to create persona: $error';
+    return 'Aanmaken van persona mislukt: $error';
   }
 
   @override
-  String get personaFailedToEnable => 'Failed to enable persona';
+  String get personaFailedToEnable => 'Activeren van persona mislukt';
 
   @override
   String personaErrorEnablingWithError(String error) {
-    return 'Error enabling persona: $error';
+    return 'Fout bij activeren persona: $error';
   }
 
   @override
-  String get paymentFailedToFetchCountries => 'Failed to fetch supported countries. Please try again later.';
+  String get paymentFailedToFetchCountries => 'Ophalen van ondersteunde landen mislukt. Probeer het later opnieuw.';
 
   @override
-  String get paymentFailedToSetDefault => 'Failed to set default payment method. Please try again later.';
+  String get paymentFailedToSetDefault => 'Instellen standaard betaalmethode mislukt. Probeer het later opnieuw.';
 
   @override
-  String get paymentFailedToSavePaypal => 'Failed to save PayPal details. Please try again later.';
+  String get paymentFailedToSavePaypal => 'Opslaan PayPal-gegevens mislukt. Probeer het later opnieuw.';
 
   @override
   String get paypalEmailHint => 'nik@example.com';
@@ -7185,28 +7184,28 @@ class AppLocalizationsNl extends AppLocalizations {
   String get paymentMethodPayPal => 'PayPal';
 
   @override
-  String get paymentStatusActive => 'Active';
+  String get paymentStatusActive => 'Actief';
 
   @override
-  String get paymentStatusConnected => 'Connected';
+  String get paymentStatusConnected => 'Verbonden';
 
   @override
-  String get paymentStatusNotConnected => 'Not Connected';
+  String get paymentStatusNotConnected => 'Niet verbonden';
 
   @override
-  String get paymentAppCost => 'App Cost';
+  String get paymentAppCost => 'App-kosten';
 
   @override
-  String get paymentEnterValidAmount => 'Please enter a valid amount';
+  String get paymentEnterValidAmount => 'Voer een geldig bedrag in';
 
   @override
-  String get paymentEnterAmountGreaterThanZero => 'Please enter an amount greater than 0';
+  String get paymentEnterAmountGreaterThanZero => 'Voer een bedrag groter dan 0 in';
 
   @override
-  String get paymentPlan => 'Payment Plan';
+  String get paymentPlan => 'Betalingsplan';
 
   @override
-  String get paymentNoneSelected => 'None Selected';
+  String get paymentNoneSelected => 'Geen geselecteerd';
 
   @override
   String get aiGenPleaseEnterDescription => 'Voer een beschrijving in voor je app';
@@ -7236,4 +7235,25 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'Genereer eerst een app';
+
+  @override
+  String get xHandleTitle => 'What\'s your X handle?';
+
+  @override
+  String get xHandleDescription => 'We will pre-train your Omi clone\nbased on your account\'s activity';
+
+  @override
+  String get xHandleHint => '@nikshevchenko';
+
+  @override
+  String get xHandlePleaseEnter => 'Please enter your X handle';
+
+  @override
+  String get xHandlePleaseEnterValid => 'Please enter a valid X handle';
+
+  @override
+  String get nextButton => 'Next';
+
+  @override
+  String get connectOmiDevice => 'Connect Omi Device';
 }

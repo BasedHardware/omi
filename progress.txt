@@ -10,10 +10,10 @@
 |--------|-------|
 | Total Files | 27 |
 | Total Strings | ~125 |
-| Completed | 8 |
+| Completed | 9 |
 | In Progress | 0 |
-| Pending | 19 |
-| Progress | 30% |
+| Pending | 18 |
+| Progress | 33% |
 
 ================================================================================
 ## PRIORITY 1: HIGH IMPACT - User-Facing Features (~65 strings)
@@ -88,12 +88,12 @@ aiGenCreatingAppIcon, aiGenErrorOccurredWithDetails (with placeholder), aiGenApp
 aiGenFailedToCreateApp, aiGenErrorWhileCreatingApp, aiGenFailedToGenerateApp, aiGenFailedToRegenerateIcon,
 aiGenPleaseGenerateAppFirst.
 
-### [ ] pages/persona/twitter/social_profile.dart (3 strings)
-Status: PENDING
-Strings:
-- [ ] Line 144: '@nikshevchenko' (hintText placeholder)
-- [ ] Line 166: 'Please enter your X handle' (validation)
-- [ ] Line 169: 'Please enter a valid X handle' (validation)
+### [x] pages/persona/twitter/social_profile.dart (7 strings)
+Status: COMPLETED
+Note: Added 7 new l10n keys to all 34 language ARB files and updated the Dart file to use
+context.l10n pattern. Keys added: xHandleTitle, xHandleDescription, xHandleHint,
+xHandlePleaseEnter, xHandlePleaseEnterValid, nextButton, connectOmiDevice.
+The original audit identified only 3 strings but 7 were actually found upon closer inspection.
 
 ### [ ] pages/settings/widgets/plans_sheet.dart (3 strings)
 Status: PENDING
@@ -204,6 +204,14 @@ Strings:
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-20] Localized social_profile.dart
+- Added 7 new l10n keys to all 34 language ARB files
+- Updated Dart file to use context.l10n pattern
+- Keys: xHandleTitle, xHandleDescription, xHandleHint, xHandlePleaseEnter, xHandlePleaseEnterValid,
+  nextButton, connectOmiDevice
+- Original audit found 3 strings, but 7 were actually in the file
+- Ran flutter gen-l10n and verified with test.sh
 
 [2026-01-20] Localized ai_app_generator_provider.dart
 - Added 9 new l10n keys to all 34 language ARB files

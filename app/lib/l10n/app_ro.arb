@@ -2301,5 +2301,12 @@
   "aiGenErrorWhileCreatingApp": "A apărut o eroare la crearea aplicației",
   "aiGenFailedToGenerateApp": "Nu s-a putut genera aplicația. Vă rugăm să încercați din nou.",
   "aiGenFailedToRegenerateIcon": "Nu s-a putut regenera pictograma",
-  "aiGenPleaseGenerateAppFirst": "Vă rugăm să generați mai întâi o aplicație"
+  "aiGenPleaseGenerateAppFirst": "Vă rugăm să generați mai întâi o aplicație",
+  "xHandleTitle": "What's your X handle?",
+  "xHandleDescription": "We will pre-train your Omi clone\nbased on your account's activity",
+  "xHandleHint": "@nikshevchenko",
+  "xHandlePleaseEnter": "Please enter your X handle",
+  "xHandlePleaseEnterValid": "Please enter a valid X handle",
+  "nextButton": "Next",
+  "connectOmiDevice": "Connect Omi Device"
 }

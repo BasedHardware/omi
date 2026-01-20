@@ -6874,7 +6874,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get templateName => 'テンプレート名';
 
   @override
-  String get templateNameHint => '例：会議アクションアイテム抽出';
+  String get templateNameHint => '例: 会議アクション項目抽出';
 
   @override
   String get nameMustBeAtLeast3Characters => '名前は3文字以上である必要があります';
@@ -6913,126 +6913,125 @@ class AppLocalizationsJa extends AppLocalizations {
   String get failedToCreateApp => 'アプリの作成に失敗しました。もう一度お試しください。';
 
   @override
-  String get addAppSelectCoreCapability => 'Please select one more core capability for your app to proceed';
+  String get addAppSelectCoreCapability => 'アプリのコア機能をもう1つ選択してください';
 
   @override
-  String get addAppSelectPaymentPlan => 'Please select a payment plan and enter a price for your app';
+  String get addAppSelectPaymentPlan => '支払いプランを選択し、アプリの価格を入力してください';
 
   @override
-  String get addAppSelectCapability => 'Please select at least one capability for your app';
+  String get addAppSelectCapability => 'アプリの機能を少なくとも1つ選択してください';
 
   @override
-  String get addAppSelectLogo => 'Please select a logo for your app';
+  String get addAppSelectLogo => 'アプリのロゴを選択してください';
 
   @override
-  String get addAppEnterChatPrompt => 'Please enter a chat prompt for your app';
+  String get addAppEnterChatPrompt => 'アプリのチャットプロンプトを入力してください';
 
   @override
-  String get addAppEnterConversationPrompt => 'Please enter a conversation prompt for your app';
+  String get addAppEnterConversationPrompt => 'アプリの会話プロンプトを入力してください';
 
   @override
-  String get addAppSelectTriggerEvent => 'Please select a trigger event for your app';
+  String get addAppSelectTriggerEvent => 'アプリのトリガーイベントを選択してください';
 
   @override
-  String get addAppEnterWebhookUrl => 'Please enter a webhook URL for your app';
+  String get addAppEnterWebhookUrl => 'アプリのWebhook URLを入力してください';
 
   @override
-  String get addAppSelectCategory => 'Please select a category for your app';
+  String get addAppSelectCategory => 'アプリのカテゴリを選択してください';
 
   @override
-  String get addAppFillRequiredFields => 'Please fill in all the required fields correctly';
+  String get addAppFillRequiredFields => '必須項目をすべて正しく入力してください';
 
   @override
-  String get addAppUpdatedSuccess => 'App updated successfully 🚀';
+  String get addAppUpdatedSuccess => 'アプリが正常に更新されました 🚀';
 
   @override
-  String get addAppUpdateFailed => 'Failed to update app. Please try again later';
+  String get addAppUpdateFailed => '更新に失敗しました。後でもう一度お試しください';
 
   @override
-  String get addAppSubmittedSuccess => 'App submitted successfully 🚀';
+  String get addAppSubmittedSuccess => 'アプリが正常に送信されました 🚀';
 
   @override
   String addAppErrorOpeningFilePicker(String message) {
-    return 'Error opening file picker: $message';
+    return 'ファイル選択エラー: $message';
   }
 
   @override
   String addAppErrorSelectingImage(String error) {
-    return 'Error selecting image: $error';
+    return '画像選択エラー: $error';
   }
 
   @override
-  String get addAppPhotosPermissionDenied =>
-      'Photos permission denied. Please allow access to photos to select an image';
+  String get addAppPhotosPermissionDenied => '写真へのアクセスが拒否されました。写真へのアクセスを許可してください';
 
   @override
-  String get addAppErrorSelectingImageRetry => 'Error selecting image. Please try again.';
+  String get addAppErrorSelectingImageRetry => '画像選択エラー。もう一度お試しください。';
 
   @override
   String addAppErrorSelectingThumbnail(String error) {
-    return 'Error selecting thumbnail: $error';
+    return 'サムネイル選択エラー: $error';
   }
 
   @override
-  String get addAppErrorSelectingThumbnailRetry => 'Error selecting thumbnail. Please try again.';
+  String get addAppErrorSelectingThumbnailRetry => 'サムネイル選択エラー。もう一度お試しください。';
 
   @override
-  String get addAppCapabilityConflictWithPersona => 'Other capabilities cannot be selected with Persona';
+  String get addAppCapabilityConflictWithPersona => 'ペルソナと他の機能を同時に選択することはできません';
 
   @override
-  String get addAppPersonaConflictWithCapabilities => 'Persona cannot be selected with other capabilities';
+  String get addAppPersonaConflictWithCapabilities => 'ペルソナは他の機能と同時に選択できません';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitter handle not found';
+  String get personaTwitterHandleNotFound => 'Twitterハンドルが見つかりません';
 
   @override
-  String get personaTwitterHandleSuspended => 'Twitter handle is suspended';
+  String get personaTwitterHandleSuspended => 'Twitterハンドルは停止されています';
 
   @override
-  String get personaFailedToVerifyTwitter => 'Failed to verify Twitter handle';
+  String get personaFailedToVerifyTwitter => 'Twitterハンドルの確認に失敗しました';
 
   @override
-  String get personaFailedToFetch => 'Failed to fetch your persona';
+  String get personaFailedToFetch => 'ペルソナの取得に失敗しました';
 
   @override
-  String get personaFailedToCreate => 'Failed to create your persona';
+  String get personaFailedToCreate => 'ペルソナの作成に失敗しました';
 
   @override
-  String get personaConnectKnowledgeSource => 'Please connect at least one knowledge data source (Omi or Twitter)';
+  String get personaConnectKnowledgeSource => '少なくとも1つのデータソース（OmiまたはTwitter）を接続してください';
 
   @override
-  String get personaUpdatedSuccessfully => 'Persona updated successfully';
+  String get personaUpdatedSuccessfully => 'ペルソナが正常に更新されました';
 
   @override
-  String get personaFailedToUpdate => 'Failed to update persona';
+  String get personaFailedToUpdate => 'ペルソナの更新に失敗しました';
 
   @override
-  String get personaPleaseSelectImage => 'Please select an image';
+  String get personaPleaseSelectImage => '画像を選択してください';
 
   @override
-  String get personaFailedToCreateTryLater => 'Failed to create your persona. Please try again later.';
+  String get personaFailedToCreateTryLater => 'ペルソナの作成に失敗しました。後でもう一度お試しください。';
 
   @override
   String personaFailedToCreateWithError(String error) {
-    return 'Failed to create persona: $error';
+    return 'ペルソナの作成に失敗: $error';
   }
 
   @override
-  String get personaFailedToEnable => 'Failed to enable persona';
+  String get personaFailedToEnable => 'ペルソナの有効化に失敗しました';
 
   @override
   String personaErrorEnablingWithError(String error) {
-    return 'Error enabling persona: $error';
+    return 'ペルソナの有効化エラー: $error';
   }
 
   @override
-  String get paymentFailedToFetchCountries => 'Failed to fetch supported countries. Please try again later.';
+  String get paymentFailedToFetchCountries => '対応国の取得に失敗しました。後でもう一度お試しください。';
 
   @override
-  String get paymentFailedToSetDefault => 'Failed to set default payment method. Please try again later.';
+  String get paymentFailedToSetDefault => 'デフォルトの支払い方法の設定に失敗しました。後でもう一度お試しください。';
 
   @override
-  String get paymentFailedToSavePaypal => 'Failed to save PayPal details. Please try again later.';
+  String get paymentFailedToSavePaypal => 'PayPal詳細の保存に失敗しました。後でもう一度お試しください。';
 
   @override
   String get paypalEmailHint => 'nik@example.com';
@@ -7047,28 +7046,28 @@ class AppLocalizationsJa extends AppLocalizations {
   String get paymentMethodPayPal => 'PayPal';
 
   @override
-  String get paymentStatusActive => 'Active';
+  String get paymentStatusActive => 'アクティブ';
 
   @override
-  String get paymentStatusConnected => 'Connected';
+  String get paymentStatusConnected => '接続済み';
 
   @override
-  String get paymentStatusNotConnected => 'Not Connected';
+  String get paymentStatusNotConnected => '未接続';
 
   @override
-  String get paymentAppCost => 'App Cost';
+  String get paymentAppCost => 'アプリ料金';
 
   @override
-  String get paymentEnterValidAmount => 'Please enter a valid amount';
+  String get paymentEnterValidAmount => '有効な金額を入力してください';
 
   @override
-  String get paymentEnterAmountGreaterThanZero => 'Please enter an amount greater than 0';
+  String get paymentEnterAmountGreaterThanZero => '0より大きい金額を入力してください';
 
   @override
-  String get paymentPlan => 'Payment Plan';
+  String get paymentPlan => '支払いプラン';
 
   @override
-  String get paymentNoneSelected => 'None Selected';
+  String get paymentNoneSelected => '未選択';
 
   @override
   String get aiGenPleaseEnterDescription => 'アプリの説明を入力してください';
@@ -7098,4 +7097,25 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get aiGenPleaseGenerateAppFirst => '先にアプリを生成してください';
+
+  @override
+  String get xHandleTitle => 'What\'s your X handle?';
+
+  @override
+  String get xHandleDescription => 'We will pre-train your Omi clone\nbased on your account\'s activity';
+
+  @override
+  String get xHandleHint => '@nikshevchenko';
+
+  @override
+  String get xHandlePleaseEnter => 'Please enter your X handle';
+
+  @override
+  String get xHandlePleaseEnterValid => 'Please enter a valid X handle';
+
+  @override
+  String get nextButton => 'Next';
+
+  @override
+  String get connectOmiDevice => 'Connect Omi Device';
 }

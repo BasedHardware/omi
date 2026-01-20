@@ -8917,5 +8917,33 @@
   "aiGenPleaseGenerateAppFirst": "Please generate an app first",
   "@aiGenPleaseGenerateAppFirst": {
     "description": "Validation error when trying to submit without generating app first"
+  },
+  "xHandleTitle": "What's your X handle?",
+  "@xHandleTitle": {
+    "description": "Title asking user for their X (Twitter) handle"
+  },
+  "xHandleDescription": "We will pre-train your Omi clone\nbased on your account's activity",
+  "@xHandleDescription": {
+    "description": "Description explaining why X handle is needed"
+  },
+  "xHandleHint": "@nikshevchenko",
+  "@xHandleHint": {
+    "description": "Placeholder hint for X handle input field"
+  },
+  "xHandlePleaseEnter": "Please enter your X handle",
+  "@xHandlePleaseEnter": {
+    "description": "Validation error when X handle is empty"
+  },
+  "xHandlePleaseEnterValid": "Please enter a valid X handle",
+  "@xHandlePleaseEnterValid": {
+    "description": "Validation error when X handle is invalid"
+  },
+  "nextButton": "Next",
+  "@nextButton": {
+    "description": "Button text to proceed to next step"
+  },
+  "connectOmiDevice": "Connect Omi Device",
+  "@connectOmiDevice": {
+    "description": "Button text to connect Omi device"
   }
 }

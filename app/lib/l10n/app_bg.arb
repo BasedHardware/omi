@@ -2284,5 +2284,12 @@
   "aiGenErrorWhileCreatingApp": "Възникна грешка при създаването на приложението",
   "aiGenFailedToGenerateApp": "Неуспешно генериране на приложение. Моля, опитайте отново.",
   "aiGenFailedToRegenerateIcon": "Неуспешно регенериране на иконата",
-  "aiGenPleaseGenerateAppFirst": "Моля, първо генерирайте приложение"
+  "aiGenPleaseGenerateAppFirst": "Моля, първо генерирайте приложение",
+  "xHandleTitle": "What's your X handle?",
+  "xHandleDescription": "We will pre-train your Omi clone\nbased on your account's activity",
+  "xHandleHint": "@nikshevchenko",
+  "xHandlePleaseEnter": "Please enter your X handle",
+  "xHandlePleaseEnterValid": "Please enter a valid X handle",
+  "nextButton": "Next",
+  "connectOmiDevice": "Connect Omi Device"
 }

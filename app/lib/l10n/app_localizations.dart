@@ -13568,6 +13568,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Please generate an app first'**
   String get aiGenPleaseGenerateAppFirst;
+
+  /// Title asking user for their X (Twitter) handle
+  ///
+  /// In en, this message translates to:
+  /// **'What\'s your X handle?'**
+  String get xHandleTitle;
+
+  /// Description explaining why X handle is needed
+  ///
+  /// In en, this message translates to:
+  /// **'We will pre-train your Omi clone\nbased on your account\'s activity'**
+  String get xHandleDescription;
+
+  /// Placeholder hint for X handle input field
+  ///
+  /// In en, this message translates to:
+  /// **'@nikshevchenko'**
+  String get xHandleHint;
+
+  /// Validation error when X handle is empty
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter your X handle'**
+  String get xHandlePleaseEnter;
+
+  /// Validation error when X handle is invalid
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a valid X handle'**
+  String get xHandlePleaseEnterValid;
+
+  /// Button text to proceed to next step
+  ///
+  /// In en, this message translates to:
+  /// **'Next'**
+  String get nextButton;
+
+  /// Button text to connect Omi device
+  ///
+  /// In en, this message translates to:
+  /// **'Connect Omi Device'**
+  String get connectOmiDevice;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

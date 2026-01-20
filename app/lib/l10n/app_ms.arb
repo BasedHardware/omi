@@ -2301,5 +2301,12 @@
   "aiGenErrorWhileCreatingApp": "Ralat berlaku semasa mencipta aplikasi",
   "aiGenFailedToGenerateApp": "Gagal menjana aplikasi. Sila cuba lagi.",
   "aiGenFailedToRegenerateIcon": "Gagal menjana semula ikon",
-  "aiGenPleaseGenerateAppFirst": "Sila jana aplikasi terlebih dahulu"
+  "aiGenPleaseGenerateAppFirst": "Sila jana aplikasi terlebih dahulu",
+  "xHandleTitle": "What's your X handle?",
+  "xHandleDescription": "We will pre-train your Omi clone\nbased on your account's activity",
+  "xHandleHint": "@nikshevchenko",
+  "xHandlePleaseEnter": "Please enter your X handle",
+  "xHandlePleaseEnterValid": "Please enter a valid X handle",
+  "nextButton": "Next",
+  "connectOmiDevice": "Connect Omi Device"
 }

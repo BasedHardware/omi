@@ -2302,5 +2302,12 @@
   "aiGenErrorWhileCreatingApp": "アプリの作成中にエラーが発生しました",
   "aiGenFailedToGenerateApp": "アプリの生成に失敗しました。もう一度お試しください。",
   "aiGenFailedToRegenerateIcon": "アイコンの再生成に失敗しました",
-  "aiGenPleaseGenerateAppFirst": "先にアプリを生成してください"
+  "aiGenPleaseGenerateAppFirst": "先にアプリを生成してください",
+  "xHandleTitle": "What's your X handle?",
+  "xHandleDescription": "We will pre-train your Omi clone\nbased on your account's activity",
+  "xHandleHint": "@nikshevchenko",
+  "xHandlePleaseEnter": "Please enter your X handle",
+  "xHandlePleaseEnterValid": "Please enter a valid X handle",
+  "nextButton": "Next",
+  "connectOmiDevice": "Connect Omi Device"
 }
