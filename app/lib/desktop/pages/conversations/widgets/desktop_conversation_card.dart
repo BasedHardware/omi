@@ -95,6 +95,7 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
     final isStarred = widget.conversation.starred;
 
     return MouseRegion(
+      cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
       child: GestureDetector(
