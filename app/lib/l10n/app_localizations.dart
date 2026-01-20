@@ -13514,6 +13514,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'None Selected'**
   String get paymentNoneSelected;
+
+  /// Validation error when app description is empty in AI app generator
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a description for your app'**
+  String get aiGenPleaseEnterDescription;
+
+  /// Status message shown while generating app icon
+  ///
+  /// In en, this message translates to:
+  /// **'Creating app icon...'**
+  String get aiGenCreatingAppIcon;
+
+  /// Error message with details in AI app generator
+  ///
+  /// In en, this message translates to:
+  /// **'An error occurred: {message}'**
+  String aiGenErrorOccurredWithDetails(String message);
+
+  /// Success message when AI-generated app is created
+  ///
+  /// In en, this message translates to:
+  /// **'App created successfully!'**
+  String get aiGenAppCreatedSuccessfully;
+
+  /// Error message when app creation fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to create app'**
+  String get aiGenFailedToCreateApp;
+
+  /// Error message when exception occurs during app creation
+  ///
+  /// In en, this message translates to:
+  /// **'An error occurred while creating the app'**
+  String get aiGenErrorWhileCreatingApp;
+
+  /// Error message when AI app generation fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to generate app. Please try again.'**
+  String get aiGenFailedToGenerateApp;
+
+  /// Error message when icon regeneration fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to regenerate icon'**
+  String get aiGenFailedToRegenerateIcon;
+
+  /// Validation error when trying to submit without generating app first
+  ///
+  /// In en, this message translates to:
+  /// **'Please generate an app first'**
+  String get aiGenPleaseGenerateAppFirst;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

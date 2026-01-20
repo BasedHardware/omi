@@ -7198,4 +7198,33 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get paymentNoneSelected => 'None Selected';
+
+  @override
+  String get aiGenPleaseEnterDescription => 'Lütfen uygulamanız için bir açıklama girin';
+
+  @override
+  String get aiGenCreatingAppIcon => 'Uygulama simgesi oluşturuluyor...';
+
+  @override
+  String aiGenErrorOccurredWithDetails(String message) {
+    return 'Bir hata oluştu: $message';
+  }
+
+  @override
+  String get aiGenAppCreatedSuccessfully => 'Uygulama başarıyla oluşturuldu!';
+
+  @override
+  String get aiGenFailedToCreateApp => 'Uygulama oluşturulamadı';
+
+  @override
+  String get aiGenErrorWhileCreatingApp => 'Uygulama oluşturulurken bir hata oluştu';
+
+  @override
+  String get aiGenFailedToGenerateApp => 'Uygulama oluşturulamadı. Lütfen tekrar deneyin.';
+
+  @override
+  String get aiGenFailedToRegenerateIcon => 'Simge yeniden oluşturulamadı';
+
+  @override
+  String get aiGenPleaseGenerateAppFirst => 'Lütfen önce bir uygulama oluşturun';
 }

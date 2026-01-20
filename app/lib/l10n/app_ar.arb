@@ -2273,5 +2273,14 @@
   "paymentEnterValidAmount": "Please enter a valid amount",
   "paymentEnterAmountGreaterThanZero": "Please enter an amount greater than 0",
   "paymentPlan": "Payment Plan",
-  "paymentNoneSelected": "None Selected"
+  "paymentNoneSelected": "None Selected",
+  "aiGenPleaseEnterDescription": "يرجى إدخال وصف لتطبيقك",
+  "aiGenCreatingAppIcon": "جارٍ إنشاء أيقونة التطبيق...",
+  "aiGenErrorOccurredWithDetails": "حدث خطأ: {message}",
+  "aiGenAppCreatedSuccessfully": "تم إنشاء التطبيق بنجاح!",
+  "aiGenFailedToCreateApp": "فشل في إنشاء التطبيق",
+  "aiGenErrorWhileCreatingApp": "حدث خطأ أثناء إنشاء التطبيق",
+  "aiGenFailedToGenerateApp": "فشل في إنشاء التطبيق. يرجى المحاولة مرة أخرى.",
+  "aiGenFailedToRegenerateIcon": "فشل في إعادة إنشاء الأيقونة",
+  "aiGenPleaseGenerateAppFirst": "يرجى إنشاء تطبيق أولاً"
 }

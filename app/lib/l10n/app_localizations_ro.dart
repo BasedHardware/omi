@@ -7220,4 +7220,33 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get paymentNoneSelected => 'None Selected';
+
+  @override
+  String get aiGenPleaseEnterDescription => 'Vă rugăm să introduceți o descriere pentru aplicația dvs.';
+
+  @override
+  String get aiGenCreatingAppIcon => 'Se creează pictograma aplicației...';
+
+  @override
+  String aiGenErrorOccurredWithDetails(String message) {
+    return 'A apărut o eroare: $message';
+  }
+
+  @override
+  String get aiGenAppCreatedSuccessfully => 'Aplicația a fost creată cu succes!';
+
+  @override
+  String get aiGenFailedToCreateApp => 'Nu s-a putut crea aplicația';
+
+  @override
+  String get aiGenErrorWhileCreatingApp => 'A apărut o eroare la crearea aplicației';
+
+  @override
+  String get aiGenFailedToGenerateApp => 'Nu s-a putut genera aplicația. Vă rugăm să încercați din nou.';
+
+  @override
+  String get aiGenFailedToRegenerateIcon => 'Nu s-a putut regenera pictograma';
+
+  @override
+  String get aiGenPleaseGenerateAppFirst => 'Vă rugăm să generați mai întâi o aplicație';
 }

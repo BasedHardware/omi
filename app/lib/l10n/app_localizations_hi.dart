@@ -7166,4 +7166,33 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get paymentNoneSelected => 'None Selected';
+
+  @override
+  String get aiGenPleaseEnterDescription => 'कृपया अपने ऐप के लिए विवरण दर्ज करें';
+
+  @override
+  String get aiGenCreatingAppIcon => 'ऐप आइकन बनाया जा रहा है...';
+
+  @override
+  String aiGenErrorOccurredWithDetails(String message) {
+    return 'एक त्रुटि हुई: $message';
+  }
+
+  @override
+  String get aiGenAppCreatedSuccessfully => 'ऐप सफलतापूर्वक बनाया गया!';
+
+  @override
+  String get aiGenFailedToCreateApp => 'ऐप बनाने में विफल';
+
+  @override
+  String get aiGenErrorWhileCreatingApp => 'ऐप बनाते समय एक त्रुटि हुई';
+
+  @override
+  String get aiGenFailedToGenerateApp => 'ऐप जनरेट करने में विफल। कृपया पुनः प्रयास करें।';
+
+  @override
+  String get aiGenFailedToRegenerateIcon => 'आइकन पुनः जनरेट करने में विफल';
+
+  @override
+  String get aiGenPleaseGenerateAppFirst => 'कृपया पहले एक ऐप जनरेट करें';
 }

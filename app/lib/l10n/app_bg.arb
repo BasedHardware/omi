@@ -2275,5 +2275,14 @@
   "paymentEnterValidAmount": "Please enter a valid amount",
   "paymentEnterAmountGreaterThanZero": "Please enter an amount greater than 0",
   "paymentPlan": "Payment Plan",
-  "paymentNoneSelected": "None Selected"
+  "paymentNoneSelected": "None Selected",
+  "aiGenPleaseEnterDescription": "Моля, въведете описание за вашето приложение",
+  "aiGenCreatingAppIcon": "Създаване на икона на приложението...",
+  "aiGenErrorOccurredWithDetails": "Възникна грешка: {message}",
+  "aiGenAppCreatedSuccessfully": "Приложението е създадено успешно!",
+  "aiGenFailedToCreateApp": "Неуспешно създаване на приложение",
+  "aiGenErrorWhileCreatingApp": "Възникна грешка при създаването на приложението",
+  "aiGenFailedToGenerateApp": "Неуспешно генериране на приложение. Моля, опитайте отново.",
+  "aiGenFailedToRegenerateIcon": "Неуспешно регенериране на иконата",
+  "aiGenPleaseGenerateAppFirst": "Моля, първо генерирайте приложение"
 }

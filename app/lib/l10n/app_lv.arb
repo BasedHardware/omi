@@ -2292,5 +2292,14 @@
   "paymentEnterValidAmount": "Please enter a valid amount",
   "paymentEnterAmountGreaterThanZero": "Please enter an amount greater than 0",
   "paymentPlan": "Payment Plan",
-  "paymentNoneSelected": "None Selected"
+  "paymentNoneSelected": "None Selected",
+  "aiGenPleaseEnterDescription": "Lūdzu, ievadiet savas lietotnes aprakstu",
+  "aiGenCreatingAppIcon": "Izveido lietotnes ikonu...",
+  "aiGenErrorOccurredWithDetails": "Radās kļūda: {message}",
+  "aiGenAppCreatedSuccessfully": "Lietotne veiksmīgi izveidota!",
+  "aiGenFailedToCreateApp": "Neizdevās izveidot lietotni",
+  "aiGenErrorWhileCreatingApp": "Veidojot lietotni, radās kļūda",
+  "aiGenFailedToGenerateApp": "Neizdevās ģenerēt lietotni. Lūdzu, mēģiniet vēlreiz.",
+  "aiGenFailedToRegenerateIcon": "Neizdevās atjaunot ikonu",
+  "aiGenPleaseGenerateAppFirst": "Lūdzu, vispirms ģenerējiet lietotni"
 }

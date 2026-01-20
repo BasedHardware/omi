@@ -2252,5 +2252,14 @@
   "paymentEnterValidAmount": "Please enter a valid amount",
   "paymentEnterAmountGreaterThanZero": "Please enter an amount greater than 0",
   "paymentPlan": "Payment Plan",
-  "paymentNoneSelected": "None Selected"
+  "paymentNoneSelected": "None Selected",
+  "aiGenPleaseEnterDescription": "Zadejte prosím popis vaší aplikace",
+  "aiGenCreatingAppIcon": "Vytvářím ikonu aplikace...",
+  "aiGenErrorOccurredWithDetails": "Došlo k chybě: {message}",
+  "aiGenAppCreatedSuccessfully": "Aplikace byla úspěšně vytvořena!",
+  "aiGenFailedToCreateApp": "Nepodařilo se vytvořit aplikaci",
+  "aiGenErrorWhileCreatingApp": "Při vytváření aplikace došlo k chybě",
+  "aiGenFailedToGenerateApp": "Nepodařilo se vygenerovat aplikaci. Zkuste to prosím znovu.",
+  "aiGenFailedToRegenerateIcon": "Nepodařilo se znovu vygenerovat ikonu",
+  "aiGenPleaseGenerateAppFirst": "Nejprve prosím vygenerujte aplikaci"
 }

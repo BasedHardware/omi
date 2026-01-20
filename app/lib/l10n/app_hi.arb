@@ -2293,5 +2293,14 @@
   "paymentEnterValidAmount": "Please enter a valid amount",
   "paymentEnterAmountGreaterThanZero": "Please enter an amount greater than 0",
   "paymentPlan": "Payment Plan",
-  "paymentNoneSelected": "None Selected"
+  "paymentNoneSelected": "None Selected",
+  "aiGenPleaseEnterDescription": "कृपया अपने ऐप के लिए विवरण दर्ज करें",
+  "aiGenCreatingAppIcon": "ऐप आइकन बनाया जा रहा है...",
+  "aiGenErrorOccurredWithDetails": "एक त्रुटि हुई: {message}",
+  "aiGenAppCreatedSuccessfully": "ऐप सफलतापूर्वक बनाया गया!",
+  "aiGenFailedToCreateApp": "ऐप बनाने में विफल",
+  "aiGenErrorWhileCreatingApp": "ऐप बनाते समय एक त्रुटि हुई",
+  "aiGenFailedToGenerateApp": "ऐप जनरेट करने में विफल। कृपया पुनः प्रयास करें।",
+  "aiGenFailedToRegenerateIcon": "आइकन पुनः जनरेट करने में विफल",
+  "aiGenPleaseGenerateAppFirst": "कृपया पहले एक ऐप जनरेट करें"
 }

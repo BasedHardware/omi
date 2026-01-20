@@ -7200,4 +7200,33 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get paymentNoneSelected => 'None Selected';
+
+  @override
+  String get aiGenPleaseEnterDescription => 'Lūdzu, ievadiet savas lietotnes aprakstu';
+
+  @override
+  String get aiGenCreatingAppIcon => 'Izveido lietotnes ikonu...';
+
+  @override
+  String aiGenErrorOccurredWithDetails(String message) {
+    return 'Radās kļūda: $message';
+  }
+
+  @override
+  String get aiGenAppCreatedSuccessfully => 'Lietotne veiksmīgi izveidota!';
+
+  @override
+  String get aiGenFailedToCreateApp => 'Neizdevās izveidot lietotni';
+
+  @override
+  String get aiGenErrorWhileCreatingApp => 'Veidojot lietotni, radās kļūda';
+
+  @override
+  String get aiGenFailedToGenerateApp => 'Neizdevās ģenerēt lietotni. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get aiGenFailedToRegenerateIcon => 'Neizdevās atjaunot ikonu';
+
+  @override
+  String get aiGenPleaseGenerateAppFirst => 'Lūdzu, vispirms ģenerējiet lietotni';
 }

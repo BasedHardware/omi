@@ -2292,5 +2292,14 @@
   "paymentEnterValidAmount": "Please enter a valid amount",
   "paymentEnterAmountGreaterThanZero": "Please enter an amount greater than 0",
   "paymentPlan": "Payment Plan",
-  "paymentNoneSelected": "None Selected"
+  "paymentNoneSelected": "None Selected",
+  "aiGenPleaseEnterDescription": "Vui lòng nhập mô tả cho ứng dụng của bạn",
+  "aiGenCreatingAppIcon": "Đang tạo biểu tượng ứng dụng...",
+  "aiGenErrorOccurredWithDetails": "Đã xảy ra lỗi: {message}",
+  "aiGenAppCreatedSuccessfully": "Ứng dụng đã được tạo thành công!",
+  "aiGenFailedToCreateApp": "Không thể tạo ứng dụng",
+  "aiGenErrorWhileCreatingApp": "Đã xảy ra lỗi khi tạo ứng dụng",
+  "aiGenFailedToGenerateApp": "Không thể tạo ứng dụng. Vui lòng thử lại.",
+  "aiGenFailedToRegenerateIcon": "Không thể tạo lại biểu tượng",
+  "aiGenPleaseGenerateAppFirst": "Vui lòng tạo ứng dụng trước"
 }

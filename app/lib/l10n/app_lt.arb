@@ -2292,5 +2292,14 @@
   "paymentEnterValidAmount": "Please enter a valid amount",
   "paymentEnterAmountGreaterThanZero": "Please enter an amount greater than 0",
   "paymentPlan": "Payment Plan",
-  "paymentNoneSelected": "None Selected"
+  "paymentNoneSelected": "None Selected",
+  "aiGenPleaseEnterDescription": "Įveskite programėlės aprašymą",
+  "aiGenCreatingAppIcon": "Kuriama programėlės piktograma...",
+  "aiGenErrorOccurredWithDetails": "Įvyko klaida: {message}",
+  "aiGenAppCreatedSuccessfully": "Programėlė sėkmingai sukurta!",
+  "aiGenFailedToCreateApp": "Nepavyko sukurti programėlės",
+  "aiGenErrorWhileCreatingApp": "Kuriant programėlę įvyko klaida",
+  "aiGenFailedToGenerateApp": "Nepavyko sugeneruoti programėlės. Bandykite dar kartą.",
+  "aiGenFailedToRegenerateIcon": "Nepavyko iš naujo sugeneruoti piktogramos",
+  "aiGenPleaseGenerateAppFirst": "Pirmiausia sugeneruokite programėlę"
 }

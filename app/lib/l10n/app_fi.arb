@@ -2292,5 +2292,14 @@
   "paymentEnterValidAmount": "Please enter a valid amount",
   "paymentEnterAmountGreaterThanZero": "Please enter an amount greater than 0",
   "paymentPlan": "Payment Plan",
-  "paymentNoneSelected": "None Selected"
+  "paymentNoneSelected": "None Selected",
+  "aiGenPleaseEnterDescription": "Anna sovelluksellesi kuvaus",
+  "aiGenCreatingAppIcon": "Luodaan sovelluskuvaketta...",
+  "aiGenErrorOccurredWithDetails": "Tapahtui virhe: {message}",
+  "aiGenAppCreatedSuccessfully": "Sovellus luotu onnistuneesti!",
+  "aiGenFailedToCreateApp": "Sovelluksen luominen epäonnistui",
+  "aiGenErrorWhileCreatingApp": "Sovelluksen luomisessa tapahtui virhe",
+  "aiGenFailedToGenerateApp": "Sovelluksen luominen epäonnistui. Yritä uudelleen.",
+  "aiGenFailedToRegenerateIcon": "Kuvakkeen uudelleenluominen epäonnistui",
+  "aiGenPleaseGenerateAppFirst": "Luo ensin sovellus"
 }

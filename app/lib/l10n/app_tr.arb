@@ -2292,5 +2292,14 @@
   "paymentEnterValidAmount": "Please enter a valid amount",
   "paymentEnterAmountGreaterThanZero": "Please enter an amount greater than 0",
   "paymentPlan": "Payment Plan",
-  "paymentNoneSelected": "None Selected"
+  "paymentNoneSelected": "None Selected",
+  "aiGenPleaseEnterDescription": "Lütfen uygulamanız için bir açıklama girin",
+  "aiGenCreatingAppIcon": "Uygulama simgesi oluşturuluyor...",
+  "aiGenErrorOccurredWithDetails": "Bir hata oluştu: {message}",
+  "aiGenAppCreatedSuccessfully": "Uygulama başarıyla oluşturuldu!",
+  "aiGenFailedToCreateApp": "Uygulama oluşturulamadı",
+  "aiGenErrorWhileCreatingApp": "Uygulama oluşturulurken bir hata oluştu",
+  "aiGenFailedToGenerateApp": "Uygulama oluşturulamadı. Lütfen tekrar deneyin.",
+  "aiGenFailedToRegenerateIcon": "Simge yeniden oluşturulamadı",
+  "aiGenPleaseGenerateAppFirst": "Lütfen önce bir uygulama oluşturun"
 }

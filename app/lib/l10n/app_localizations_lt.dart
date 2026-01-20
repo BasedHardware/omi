@@ -7189,4 +7189,33 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get paymentNoneSelected => 'None Selected';
+
+  @override
+  String get aiGenPleaseEnterDescription => 'Įveskite programėlės aprašymą';
+
+  @override
+  String get aiGenCreatingAppIcon => 'Kuriama programėlės piktograma...';
+
+  @override
+  String aiGenErrorOccurredWithDetails(String message) {
+    return 'Įvyko klaida: $message';
+  }
+
+  @override
+  String get aiGenAppCreatedSuccessfully => 'Programėlė sėkmingai sukurta!';
+
+  @override
+  String get aiGenFailedToCreateApp => 'Nepavyko sukurti programėlės';
+
+  @override
+  String get aiGenErrorWhileCreatingApp => 'Kuriant programėlę įvyko klaida';
+
+  @override
+  String get aiGenFailedToGenerateApp => 'Nepavyko sugeneruoti programėlės. Bandykite dar kartą.';
+
+  @override
+  String get aiGenFailedToRegenerateIcon => 'Nepavyko iš naujo sugeneruoti piktogramos';
+
+  @override
+  String get aiGenPleaseGenerateAppFirst => 'Pirmiausia sugeneruokite programėlę';
 }

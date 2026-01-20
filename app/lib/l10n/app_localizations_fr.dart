@@ -7245,4 +7245,33 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get paymentNoneSelected => 'None Selected';
+
+  @override
+  String get aiGenPleaseEnterDescription => 'Veuillez entrer une description pour votre application';
+
+  @override
+  String get aiGenCreatingAppIcon => 'Création de l\'icône de l\'application...';
+
+  @override
+  String aiGenErrorOccurredWithDetails(String message) {
+    return 'Une erreur s\'est produite : $message';
+  }
+
+  @override
+  String get aiGenAppCreatedSuccessfully => 'Application créée avec succès !';
+
+  @override
+  String get aiGenFailedToCreateApp => 'Échec de la création de l\'application';
+
+  @override
+  String get aiGenErrorWhileCreatingApp => 'Une erreur s\'est produite lors de la création de l\'application';
+
+  @override
+  String get aiGenFailedToGenerateApp => 'Échec de la génération de l\'application. Veuillez réessayer.';
+
+  @override
+  String get aiGenFailedToRegenerateIcon => 'Échec de la régénération de l\'icône';
+
+  @override
+  String get aiGenPleaseGenerateAppFirst => 'Veuillez d\'abord générer une application';
 }

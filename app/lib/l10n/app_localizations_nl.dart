@@ -7207,4 +7207,33 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get paymentNoneSelected => 'None Selected';
+
+  @override
+  String get aiGenPleaseEnterDescription => 'Voer een beschrijving in voor je app';
+
+  @override
+  String get aiGenCreatingAppIcon => 'App-pictogram maken...';
+
+  @override
+  String aiGenErrorOccurredWithDetails(String message) {
+    return 'Er is een fout opgetreden: $message';
+  }
+
+  @override
+  String get aiGenAppCreatedSuccessfully => 'App succesvol aangemaakt!';
+
+  @override
+  String get aiGenFailedToCreateApp => 'Kan app niet aanmaken';
+
+  @override
+  String get aiGenErrorWhileCreatingApp => 'Er is een fout opgetreden bij het aanmaken van de app';
+
+  @override
+  String get aiGenFailedToGenerateApp => 'Kan app niet genereren. Probeer het opnieuw.';
+
+  @override
+  String get aiGenFailedToRegenerateIcon => 'Kan pictogram niet opnieuw genereren';
+
+  @override
+  String get aiGenPleaseGenerateAppFirst => 'Genereer eerst een app';
 }

@@ -7188,4 +7188,33 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get paymentNoneSelected => 'None Selected';
+
+  @override
+  String get aiGenPleaseEnterDescription => 'Palun sisesta oma rakenduse kirjeldus';
+
+  @override
+  String get aiGenCreatingAppIcon => 'Rakenduse ikooni loomine...';
+
+  @override
+  String aiGenErrorOccurredWithDetails(String message) {
+    return 'Tekkis viga: $message';
+  }
+
+  @override
+  String get aiGenAppCreatedSuccessfully => 'Rakendus edukalt loodud!';
+
+  @override
+  String get aiGenFailedToCreateApp => 'Rakenduse loomine ebaõnnestus';
+
+  @override
+  String get aiGenErrorWhileCreatingApp => 'Rakenduse loomisel tekkis viga';
+
+  @override
+  String get aiGenFailedToGenerateApp => 'Rakenduse genereerimine ebaõnnestus. Palun proovi uuesti.';
+
+  @override
+  String get aiGenFailedToRegenerateIcon => 'Ikooni uuesti genereerimine ebaõnnestus';
+
+  @override
+  String get aiGenPleaseGenerateAppFirst => 'Palun genereeri kõigepealt rakendus';
 }

@@ -2292,5 +2292,14 @@
   "paymentEnterValidAmount": "Please enter a valid amount",
   "paymentEnterAmountGreaterThanZero": "Please enter an amount greater than 0",
   "paymentPlan": "Payment Plan",
-  "paymentNoneSelected": "None Selected"
+  "paymentNoneSelected": "None Selected",
+  "aiGenPleaseEnterDescription": "Εισάγετε μια περιγραφή για την εφαρμογή σας",
+  "aiGenCreatingAppIcon": "Δημιουργία εικονιδίου εφαρμογής...",
+  "aiGenErrorOccurredWithDetails": "Παρουσιάστηκε σφάλμα: {message}",
+  "aiGenAppCreatedSuccessfully": "Η εφαρμογή δημιουργήθηκε επιτυχώς!",
+  "aiGenFailedToCreateApp": "Αποτυχία δημιουργίας εφαρμογής",
+  "aiGenErrorWhileCreatingApp": "Παρουσιάστηκε σφάλμα κατά τη δημιουργία της εφαρμογής",
+  "aiGenFailedToGenerateApp": "Αποτυχία δημιουργίας εφαρμογής. Παρακαλώ δοκιμάστε ξανά.",
+  "aiGenFailedToRegenerateIcon": "Αποτυχία αναδημιουργίας εικονιδίου",
+  "aiGenPleaseGenerateAppFirst": "Παρακαλώ δημιουργήστε πρώτα μια εφαρμογή"
 }

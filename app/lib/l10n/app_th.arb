@@ -2292,5 +2292,14 @@
   "paymentEnterValidAmount": "Please enter a valid amount",
   "paymentEnterAmountGreaterThanZero": "Please enter an amount greater than 0",
   "paymentPlan": "Payment Plan",
-  "paymentNoneSelected": "None Selected"
+  "paymentNoneSelected": "None Selected",
+  "aiGenPleaseEnterDescription": "กรุณาใส่คำอธิบายสำหรับแอปของคุณ",
+  "aiGenCreatingAppIcon": "กำลังสร้างไอคอนแอป...",
+  "aiGenErrorOccurredWithDetails": "เกิดข้อผิดพลาด: {message}",
+  "aiGenAppCreatedSuccessfully": "สร้างแอปสำเร็จแล้ว!",
+  "aiGenFailedToCreateApp": "ไม่สามารถสร้างแอปได้",
+  "aiGenErrorWhileCreatingApp": "เกิดข้อผิดพลาดขณะสร้างแอป",
+  "aiGenFailedToGenerateApp": "ไม่สามารถสร้างแอปได้ กรุณาลองอีกครั้ง",
+  "aiGenFailedToRegenerateIcon": "ไม่สามารถสร้างไอคอนใหม่ได้",
+  "aiGenPleaseGenerateAppFirst": "กรุณาสร้างแอปก่อน"
 }

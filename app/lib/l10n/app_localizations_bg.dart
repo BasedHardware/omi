@@ -7216,4 +7216,33 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get paymentNoneSelected => 'None Selected';
+
+  @override
+  String get aiGenPleaseEnterDescription => 'Моля, въведете описание за вашето приложение';
+
+  @override
+  String get aiGenCreatingAppIcon => 'Създаване на икона на приложението...';
+
+  @override
+  String aiGenErrorOccurredWithDetails(String message) {
+    return 'Възникна грешка: $message';
+  }
+
+  @override
+  String get aiGenAppCreatedSuccessfully => 'Приложението е създадено успешно!';
+
+  @override
+  String get aiGenFailedToCreateApp => 'Неуспешно създаване на приложение';
+
+  @override
+  String get aiGenErrorWhileCreatingApp => 'Възникна грешка при създаването на приложението';
+
+  @override
+  String get aiGenFailedToGenerateApp => 'Неуспешно генериране на приложение. Моля, опитайте отново.';
+
+  @override
+  String get aiGenFailedToRegenerateIcon => 'Неуспешно регенериране на иконата';
+
+  @override
+  String get aiGenPleaseGenerateAppFirst => 'Моля, първо генерирайте приложение';
 }

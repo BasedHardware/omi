@@ -2292,5 +2292,14 @@
   "paymentEnterValidAmount": "Please enter a valid amount",
   "paymentEnterAmountGreaterThanZero": "Please enter an amount greater than 0",
   "paymentPlan": "Payment Plan",
-  "paymentNoneSelected": "None Selected"
+  "paymentNoneSelected": "None Selected",
+  "aiGenPleaseEnterDescription": "Vă rugăm să introduceți o descriere pentru aplicația dvs.",
+  "aiGenCreatingAppIcon": "Se creează pictograma aplicației...",
+  "aiGenErrorOccurredWithDetails": "A apărut o eroare: {message}",
+  "aiGenAppCreatedSuccessfully": "Aplicația a fost creată cu succes!",
+  "aiGenFailedToCreateApp": "Nu s-a putut crea aplicația",
+  "aiGenErrorWhileCreatingApp": "A apărut o eroare la crearea aplicației",
+  "aiGenFailedToGenerateApp": "Nu s-a putut genera aplicația. Vă rugăm să încercați din nou.",
+  "aiGenFailedToRegenerateIcon": "Nu s-a putut regenera pictograma",
+  "aiGenPleaseGenerateAppFirst": "Vă rugăm să generați mai întâi o aplicație"
 }

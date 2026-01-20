@@ -7069,4 +7069,33 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get paymentNoneSelected => 'None Selected';
+
+  @override
+  String get aiGenPleaseEnterDescription => 'アプリの説明を入力してください';
+
+  @override
+  String get aiGenCreatingAppIcon => 'アプリアイコンを作成中...';
+
+  @override
+  String aiGenErrorOccurredWithDetails(String message) {
+    return 'エラーが発生しました: $message';
+  }
+
+  @override
+  String get aiGenAppCreatedSuccessfully => 'アプリが正常に作成されました！';
+
+  @override
+  String get aiGenFailedToCreateApp => 'アプリの作成に失敗しました';
+
+  @override
+  String get aiGenErrorWhileCreatingApp => 'アプリの作成中にエラーが発生しました';
+
+  @override
+  String get aiGenFailedToGenerateApp => 'アプリの生成に失敗しました。もう一度お試しください。';
+
+  @override
+  String get aiGenFailedToRegenerateIcon => 'アイコンの再生成に失敗しました';
+
+  @override
+  String get aiGenPleaseGenerateAppFirst => '先にアプリを生成してください';
 }

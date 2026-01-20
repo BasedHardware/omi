@@ -7152,4 +7152,33 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get paymentNoneSelected => 'None Selected';
+
+  @override
+  String get aiGenPleaseEnterDescription => 'กรุณาใส่คำอธิบายสำหรับแอปของคุณ';
+
+  @override
+  String get aiGenCreatingAppIcon => 'กำลังสร้างไอคอนแอป...';
+
+  @override
+  String aiGenErrorOccurredWithDetails(String message) {
+    return 'เกิดข้อผิดพลาด: $message';
+  }
+
+  @override
+  String get aiGenAppCreatedSuccessfully => 'สร้างแอปสำเร็จแล้ว!';
+
+  @override
+  String get aiGenFailedToCreateApp => 'ไม่สามารถสร้างแอปได้';
+
+  @override
+  String get aiGenErrorWhileCreatingApp => 'เกิดข้อผิดพลาดขณะสร้างแอป';
+
+  @override
+  String get aiGenFailedToGenerateApp => 'ไม่สามารถสร้างแอปได้ กรุณาลองอีกครั้ง';
+
+  @override
+  String get aiGenFailedToRegenerateIcon => 'ไม่สามารถสร้างไอคอนใหม่ได้';
+
+  @override
+  String get aiGenPleaseGenerateAppFirst => 'กรุณาสร้างแอปก่อน';
 }

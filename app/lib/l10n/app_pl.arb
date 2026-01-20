@@ -2292,5 +2292,14 @@
   "paymentEnterValidAmount": "Please enter a valid amount",
   "paymentEnterAmountGreaterThanZero": "Please enter an amount greater than 0",
   "paymentPlan": "Payment Plan",
-  "paymentNoneSelected": "None Selected"
+  "paymentNoneSelected": "None Selected",
+  "aiGenPleaseEnterDescription": "Wprowadź opis swojej aplikacji",
+  "aiGenCreatingAppIcon": "Tworzenie ikony aplikacji...",
+  "aiGenErrorOccurredWithDetails": "Wystąpił błąd: {message}",
+  "aiGenAppCreatedSuccessfully": "Aplikacja została utworzona!",
+  "aiGenFailedToCreateApp": "Nie udało się utworzyć aplikacji",
+  "aiGenErrorWhileCreatingApp": "Wystąpił błąd podczas tworzenia aplikacji",
+  "aiGenFailedToGenerateApp": "Nie udało się wygenerować aplikacji. Spróbuj ponownie.",
+  "aiGenFailedToRegenerateIcon": "Nie udało się ponownie wygenerować ikony",
+  "aiGenPleaseGenerateAppFirst": "Najpierw wygeneruj aplikację"
 }

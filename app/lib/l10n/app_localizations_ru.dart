@@ -7205,4 +7205,33 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get paymentNoneSelected => 'None Selected';
+
+  @override
+  String get aiGenPleaseEnterDescription => 'Пожалуйста, введите описание вашего приложения';
+
+  @override
+  String get aiGenCreatingAppIcon => 'Создание иконки приложения...';
+
+  @override
+  String aiGenErrorOccurredWithDetails(String message) {
+    return 'Произошла ошибка: $message';
+  }
+
+  @override
+  String get aiGenAppCreatedSuccessfully => 'Приложение успешно создано!';
+
+  @override
+  String get aiGenFailedToCreateApp => 'Не удалось создать приложение';
+
+  @override
+  String get aiGenErrorWhileCreatingApp => 'При создании приложения произошла ошибка';
+
+  @override
+  String get aiGenFailedToGenerateApp => 'Не удалось сгенерировать приложение. Пожалуйста, попробуйте снова.';
+
+  @override
+  String get aiGenFailedToRegenerateIcon => 'Не удалось повторно сгенерировать иконку';
+
+  @override
+  String get aiGenPleaseGenerateAppFirst => 'Пожалуйста, сначала сгенерируйте приложение';
 }

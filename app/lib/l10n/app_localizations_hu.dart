@@ -7221,4 +7221,33 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get paymentNoneSelected => 'None Selected';
+
+  @override
+  String get aiGenPleaseEnterDescription => 'Kérjük, adj meg egy leírást az alkalmazásodhoz';
+
+  @override
+  String get aiGenCreatingAppIcon => 'Alkalmazás ikon létrehozása...';
+
+  @override
+  String aiGenErrorOccurredWithDetails(String message) {
+    return 'Hiba történt: $message';
+  }
+
+  @override
+  String get aiGenAppCreatedSuccessfully => 'Alkalmazás sikeresen létrehozva!';
+
+  @override
+  String get aiGenFailedToCreateApp => 'Nem sikerült létrehozni az alkalmazást';
+
+  @override
+  String get aiGenErrorWhileCreatingApp => 'Hiba történt az alkalmazás létrehozása közben';
+
+  @override
+  String get aiGenFailedToGenerateApp => 'Nem sikerült generálni az alkalmazást. Kérjük, próbáld újra.';
+
+  @override
+  String get aiGenFailedToRegenerateIcon => 'Nem sikerült újragenerálni az ikont';
+
+  @override
+  String get aiGenPleaseGenerateAppFirst => 'Kérjük, először generálj egy alkalmazást';
 }

@@ -2292,5 +2292,14 @@
   "paymentEnterValidAmount": "Please enter a valid amount",
   "paymentEnterAmountGreaterThanZero": "Please enter an amount greater than 0",
   "paymentPlan": "Payment Plan",
-  "paymentNoneSelected": "None Selected"
+  "paymentNoneSelected": "None Selected",
+  "aiGenPleaseEnterDescription": "Будь ласка, введіть опис вашого додатку",
+  "aiGenCreatingAppIcon": "Створення іконки додатку...",
+  "aiGenErrorOccurredWithDetails": "Сталася помилка: {message}",
+  "aiGenAppCreatedSuccessfully": "Додаток успішно створено!",
+  "aiGenFailedToCreateApp": "Не вдалося створити додаток",
+  "aiGenErrorWhileCreatingApp": "Під час створення додатку сталася помилка",
+  "aiGenFailedToGenerateApp": "Не вдалося згенерувати додаток. Будь ласка, спробуйте ще раз.",
+  "aiGenFailedToRegenerateIcon": "Не вдалося повторно згенерувати іконку",
+  "aiGenPleaseGenerateAppFirst": "Будь ласка, спочатку згенеруйте додаток"
 }

@@ -7180,4 +7180,33 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get paymentNoneSelected => 'None Selected';
+
+  @override
+  String get aiGenPleaseEnterDescription => 'Zadejte prosím popis vaší aplikace';
+
+  @override
+  String get aiGenCreatingAppIcon => 'Vytvářím ikonu aplikace...';
+
+  @override
+  String aiGenErrorOccurredWithDetails(String message) {
+    return 'Došlo k chybě: $message';
+  }
+
+  @override
+  String get aiGenAppCreatedSuccessfully => 'Aplikace byla úspěšně vytvořena!';
+
+  @override
+  String get aiGenFailedToCreateApp => 'Nepodařilo se vytvořit aplikaci';
+
+  @override
+  String get aiGenErrorWhileCreatingApp => 'Při vytváření aplikace došlo k chybě';
+
+  @override
+  String get aiGenFailedToGenerateApp => 'Nepodařilo se vygenerovat aplikaci. Zkuste to prosím znovu.';
+
+  @override
+  String get aiGenFailedToRegenerateIcon => 'Nepodařilo se znovu vygenerovat ikonu';
+
+  @override
+  String get aiGenPleaseGenerateAppFirst => 'Nejprve prosím vygenerujte aplikaci';
 }

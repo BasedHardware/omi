@@ -7059,4 +7059,33 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get paymentNoneSelected => 'None Selected';
+
+  @override
+  String get aiGenPleaseEnterDescription => '请输入应用描述';
+
+  @override
+  String get aiGenCreatingAppIcon => '正在创建应用图标...';
+
+  @override
+  String aiGenErrorOccurredWithDetails(String message) {
+    return '发生错误：$message';
+  }
+
+  @override
+  String get aiGenAppCreatedSuccessfully => '应用创建成功！';
+
+  @override
+  String get aiGenFailedToCreateApp => '创建应用失败';
+
+  @override
+  String get aiGenErrorWhileCreatingApp => '创建应用时发生错误';
+
+  @override
+  String get aiGenFailedToGenerateApp => '生成应用失败，请重试。';
+
+  @override
+  String get aiGenFailedToRegenerateIcon => '重新生成图标失败';
+
+  @override
+  String get aiGenPleaseGenerateAppFirst => '请先生成一个应用';
 }

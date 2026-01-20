@@ -2292,5 +2292,14 @@
   "paymentEnterValidAmount": "Please enter a valid amount",
   "paymentEnterAmountGreaterThanZero": "Please enter an amount greater than 0",
   "paymentPlan": "Payment Plan",
-  "paymentNoneSelected": "None Selected"
+  "paymentNoneSelected": "None Selected",
+  "aiGenPleaseEnterDescription": "Sila masukkan penerangan untuk aplikasi anda",
+  "aiGenCreatingAppIcon": "Mencipta ikon aplikasi...",
+  "aiGenErrorOccurredWithDetails": "Ralat berlaku: {message}",
+  "aiGenAppCreatedSuccessfully": "Aplikasi berjaya dicipta!",
+  "aiGenFailedToCreateApp": "Gagal mencipta aplikasi",
+  "aiGenErrorWhileCreatingApp": "Ralat berlaku semasa mencipta aplikasi",
+  "aiGenFailedToGenerateApp": "Gagal menjana aplikasi. Sila cuba lagi.",
+  "aiGenFailedToRegenerateIcon": "Gagal menjana semula ikon",
+  "aiGenPleaseGenerateAppFirst": "Sila jana aplikasi terlebih dahulu"
 }

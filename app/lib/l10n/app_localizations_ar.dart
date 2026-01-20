@@ -7138,4 +7138,33 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get paymentNoneSelected => 'None Selected';
+
+  @override
+  String get aiGenPleaseEnterDescription => 'يرجى إدخال وصف لتطبيقك';
+
+  @override
+  String get aiGenCreatingAppIcon => 'جارٍ إنشاء أيقونة التطبيق...';
+
+  @override
+  String aiGenErrorOccurredWithDetails(String message) {
+    return 'حدث خطأ: $message';
+  }
+
+  @override
+  String get aiGenAppCreatedSuccessfully => 'تم إنشاء التطبيق بنجاح!';
+
+  @override
+  String get aiGenFailedToCreateApp => 'فشل في إنشاء التطبيق';
+
+  @override
+  String get aiGenErrorWhileCreatingApp => 'حدث خطأ أثناء إنشاء التطبيق';
+
+  @override
+  String get aiGenFailedToGenerateApp => 'فشل في إنشاء التطبيق. يرجى المحاولة مرة أخرى.';
+
+  @override
+  String get aiGenFailedToRegenerateIcon => 'فشل في إعادة إنشاء الأيقونة';
+
+  @override
+  String get aiGenPleaseGenerateAppFirst => 'يرجى إنشاء تطبيق أولاً';
 }

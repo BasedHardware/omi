@@ -7195,4 +7195,33 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get paymentNoneSelected => 'None Selected';
+
+  @override
+  String get aiGenPleaseEnterDescription => 'Будь ласка, введіть опис вашого додатку';
+
+  @override
+  String get aiGenCreatingAppIcon => 'Створення іконки додатку...';
+
+  @override
+  String aiGenErrorOccurredWithDetails(String message) {
+    return 'Сталася помилка: $message';
+  }
+
+  @override
+  String get aiGenAppCreatedSuccessfully => 'Додаток успішно створено!';
+
+  @override
+  String get aiGenFailedToCreateApp => 'Не вдалося створити додаток';
+
+  @override
+  String get aiGenErrorWhileCreatingApp => 'Під час створення додатку сталася помилка';
+
+  @override
+  String get aiGenFailedToGenerateApp => 'Не вдалося згенерувати додаток. Будь ласка, спробуйте ще раз.';
+
+  @override
+  String get aiGenFailedToRegenerateIcon => 'Не вдалося повторно згенерувати іконку';
+
+  @override
+  String get aiGenPleaseGenerateAppFirst => 'Будь ласка, спочатку згенеруйте додаток';
 }

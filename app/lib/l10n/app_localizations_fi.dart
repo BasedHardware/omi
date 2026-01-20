@@ -7187,4 +7187,33 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get paymentNoneSelected => 'None Selected';
+
+  @override
+  String get aiGenPleaseEnterDescription => 'Anna sovelluksellesi kuvaus';
+
+  @override
+  String get aiGenCreatingAppIcon => 'Luodaan sovelluskuvaketta...';
+
+  @override
+  String aiGenErrorOccurredWithDetails(String message) {
+    return 'Tapahtui virhe: $message';
+  }
+
+  @override
+  String get aiGenAppCreatedSuccessfully => 'Sovellus luotu onnistuneesti!';
+
+  @override
+  String get aiGenFailedToCreateApp => 'Sovelluksen luominen epäonnistui';
+
+  @override
+  String get aiGenErrorWhileCreatingApp => 'Sovelluksen luomisessa tapahtui virhe';
+
+  @override
+  String get aiGenFailedToGenerateApp => 'Sovelluksen luominen epäonnistui. Yritä uudelleen.';
+
+  @override
+  String get aiGenFailedToRegenerateIcon => 'Kuvakkeen uudelleenluominen epäonnistui';
+
+  @override
+  String get aiGenPleaseGenerateAppFirst => 'Luo ensin sovellus';
 }

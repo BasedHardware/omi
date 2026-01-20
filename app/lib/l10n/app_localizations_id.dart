@@ -7205,4 +7205,33 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get paymentNoneSelected => 'None Selected';
+
+  @override
+  String get aiGenPleaseEnterDescription => 'Silakan masukkan deskripsi untuk aplikasi Anda';
+
+  @override
+  String get aiGenCreatingAppIcon => 'Membuat ikon aplikasi...';
+
+  @override
+  String aiGenErrorOccurredWithDetails(String message) {
+    return 'Terjadi kesalahan: $message';
+  }
+
+  @override
+  String get aiGenAppCreatedSuccessfully => 'Aplikasi berhasil dibuat!';
+
+  @override
+  String get aiGenFailedToCreateApp => 'Gagal membuat aplikasi';
+
+  @override
+  String get aiGenErrorWhileCreatingApp => 'Terjadi kesalahan saat membuat aplikasi';
+
+  @override
+  String get aiGenFailedToGenerateApp => 'Gagal membuat aplikasi. Silakan coba lagi.';
+
+  @override
+  String get aiGenFailedToRegenerateIcon => 'Gagal membuat ulang ikon';
+
+  @override
+  String get aiGenPleaseGenerateAppFirst => 'Silakan buat aplikasi terlebih dahulu';
 }

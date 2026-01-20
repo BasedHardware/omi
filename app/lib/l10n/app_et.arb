@@ -2292,5 +2292,14 @@
   "paymentEnterValidAmount": "Please enter a valid amount",
   "paymentEnterAmountGreaterThanZero": "Please enter an amount greater than 0",
   "paymentPlan": "Payment Plan",
-  "paymentNoneSelected": "None Selected"
+  "paymentNoneSelected": "None Selected",
+  "aiGenPleaseEnterDescription": "Palun sisesta oma rakenduse kirjeldus",
+  "aiGenCreatingAppIcon": "Rakenduse ikooni loomine...",
+  "aiGenErrorOccurredWithDetails": "Tekkis viga: {message}",
+  "aiGenAppCreatedSuccessfully": "Rakendus edukalt loodud!",
+  "aiGenFailedToCreateApp": "Rakenduse loomine ebaõnnestus",
+  "aiGenErrorWhileCreatingApp": "Rakenduse loomisel tekkis viga",
+  "aiGenFailedToGenerateApp": "Rakenduse genereerimine ebaõnnestus. Palun proovi uuesti.",
+  "aiGenFailedToRegenerateIcon": "Ikooni uuesti genereerimine ebaõnnestus",
+  "aiGenPleaseGenerateAppFirst": "Palun genereeri kõigepealt rakendus"
 }

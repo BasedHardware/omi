@@ -7188,4 +7188,33 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get paymentNoneSelected => 'None Selected';
+
+  @override
+  String get aiGenPleaseEnterDescription => 'Zadajte prosím popis vašej aplikácie';
+
+  @override
+  String get aiGenCreatingAppIcon => 'Vytváranie ikony aplikácie...';
+
+  @override
+  String aiGenErrorOccurredWithDetails(String message) {
+    return 'Vyskytla sa chyba: $message';
+  }
+
+  @override
+  String get aiGenAppCreatedSuccessfully => 'Aplikácia bola úspešne vytvorená!';
+
+  @override
+  String get aiGenFailedToCreateApp => 'Nepodarilo sa vytvoriť aplikáciu';
+
+  @override
+  String get aiGenErrorWhileCreatingApp => 'Pri vytváraní aplikácie sa vyskytla chyba';
+
+  @override
+  String get aiGenFailedToGenerateApp => 'Nepodarilo sa vygenerovať aplikáciu. Skúste to prosím znova.';
+
+  @override
+  String get aiGenFailedToRegenerateIcon => 'Nepodarilo sa znovu vygenerovať ikonu';
+
+  @override
+  String get aiGenPleaseGenerateAppFirst => 'Najprv prosím vygenerujte aplikáciu';
 }

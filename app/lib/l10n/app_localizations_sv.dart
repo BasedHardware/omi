@@ -7191,4 +7191,33 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get paymentNoneSelected => 'None Selected';
+
+  @override
+  String get aiGenPleaseEnterDescription => 'Ange en beskrivning för din app';
+
+  @override
+  String get aiGenCreatingAppIcon => 'Skapar appikon...';
+
+  @override
+  String aiGenErrorOccurredWithDetails(String message) {
+    return 'Ett fel uppstod: $message';
+  }
+
+  @override
+  String get aiGenAppCreatedSuccessfully => 'Appen har skapats!';
+
+  @override
+  String get aiGenFailedToCreateApp => 'Kunde inte skapa appen';
+
+  @override
+  String get aiGenErrorWhileCreatingApp => 'Ett fel uppstod när appen skapades';
+
+  @override
+  String get aiGenFailedToGenerateApp => 'Kunde inte generera appen. Försök igen.';
+
+  @override
+  String get aiGenFailedToRegenerateIcon => 'Kunde inte återskapa ikonen';
+
+  @override
+  String get aiGenPleaseGenerateAppFirst => 'Generera en app först';
 }

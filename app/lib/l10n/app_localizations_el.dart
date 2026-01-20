@@ -7235,4 +7235,33 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get paymentNoneSelected => 'None Selected';
+
+  @override
+  String get aiGenPleaseEnterDescription => 'Εισάγετε μια περιγραφή για την εφαρμογή σας';
+
+  @override
+  String get aiGenCreatingAppIcon => 'Δημιουργία εικονιδίου εφαρμογής...';
+
+  @override
+  String aiGenErrorOccurredWithDetails(String message) {
+    return 'Παρουσιάστηκε σφάλμα: $message';
+  }
+
+  @override
+  String get aiGenAppCreatedSuccessfully => 'Η εφαρμογή δημιουργήθηκε επιτυχώς!';
+
+  @override
+  String get aiGenFailedToCreateApp => 'Αποτυχία δημιουργίας εφαρμογής';
+
+  @override
+  String get aiGenErrorWhileCreatingApp => 'Παρουσιάστηκε σφάλμα κατά τη δημιουργία της εφαρμογής';
+
+  @override
+  String get aiGenFailedToGenerateApp => 'Αποτυχία δημιουργίας εφαρμογής. Παρακαλώ δοκιμάστε ξανά.';
+
+  @override
+  String get aiGenFailedToRegenerateIcon => 'Αποτυχία αναδημιουργίας εικονιδίου';
+
+  @override
+  String get aiGenPleaseGenerateAppFirst => 'Παρακαλώ δημιουργήστε πρώτα μια εφαρμογή';
 }

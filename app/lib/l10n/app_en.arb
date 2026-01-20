@@ -8875,5 +8875,47 @@
   "paymentNoneSelected": "None Selected",
   "@paymentNoneSelected": {
     "description": "Placeholder when no payment plan is selected"
+  },
+  "aiGenPleaseEnterDescription": "Please enter a description for your app",
+  "@aiGenPleaseEnterDescription": {
+    "description": "Validation error when app description is empty in AI app generator"
+  },
+  "aiGenCreatingAppIcon": "Creating app icon...",
+  "@aiGenCreatingAppIcon": {
+    "description": "Status message shown while generating app icon"
+  },
+  "aiGenErrorOccurredWithDetails": "An error occurred: {message}",
+  "@aiGenErrorOccurredWithDetails": {
+    "description": "Error message with details in AI app generator",
+    "placeholders": {
+      "message": {
+        "type": "String",
+        "example": "Network error"
+      }
+    }
+  },
+  "aiGenAppCreatedSuccessfully": "App created successfully!",
+  "@aiGenAppCreatedSuccessfully": {
+    "description": "Success message when AI-generated app is created"
+  },
+  "aiGenFailedToCreateApp": "Failed to create app",
+  "@aiGenFailedToCreateApp": {
+    "description": "Error message when app creation fails"
+  },
+  "aiGenErrorWhileCreatingApp": "An error occurred while creating the app",
+  "@aiGenErrorWhileCreatingApp": {
+    "description": "Error message when exception occurs during app creation"
+  },
+  "aiGenFailedToGenerateApp": "Failed to generate app. Please try again.",
+  "@aiGenFailedToGenerateApp": {
+    "description": "Error message when AI app generation fails"
+  },
+  "aiGenFailedToRegenerateIcon": "Failed to regenerate icon",
+  "@aiGenFailedToRegenerateIcon": {
+    "description": "Error message when icon regeneration fails"
+  },
+  "aiGenPleaseGenerateAppFirst": "Please generate an app first",
+  "@aiGenPleaseGenerateAppFirst": {
+    "description": "Validation error when trying to submit without generating app first"
   }
 }

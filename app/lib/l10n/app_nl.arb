@@ -2292,5 +2292,14 @@
   "paymentEnterValidAmount": "Please enter a valid amount",
   "paymentEnterAmountGreaterThanZero": "Please enter an amount greater than 0",
   "paymentPlan": "Payment Plan",
-  "paymentNoneSelected": "None Selected"
+  "paymentNoneSelected": "None Selected",
+  "aiGenPleaseEnterDescription": "Voer een beschrijving in voor je app",
+  "aiGenCreatingAppIcon": "App-pictogram maken...",
+  "aiGenErrorOccurredWithDetails": "Er is een fout opgetreden: {message}",
+  "aiGenAppCreatedSuccessfully": "App succesvol aangemaakt!",
+  "aiGenFailedToCreateApp": "Kan app niet aanmaken",
+  "aiGenErrorWhileCreatingApp": "Er is een fout opgetreden bij het aanmaken van de app",
+  "aiGenFailedToGenerateApp": "Kan app niet genereren. Probeer het opnieuw.",
+  "aiGenFailedToRegenerateIcon": "Kan pictogram niet opnieuw genereren",
+  "aiGenPleaseGenerateAppFirst": "Genereer eerst een app"
 }

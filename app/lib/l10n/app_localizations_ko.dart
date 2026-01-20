@@ -7071,4 +7071,33 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get paymentNoneSelected => 'None Selected';
+
+  @override
+  String get aiGenPleaseEnterDescription => '앱에 대한 설명을 입력해 주세요';
+
+  @override
+  String get aiGenCreatingAppIcon => '앱 아이콘 생성 중...';
+
+  @override
+  String aiGenErrorOccurredWithDetails(String message) {
+    return '오류가 발생했습니다: $message';
+  }
+
+  @override
+  String get aiGenAppCreatedSuccessfully => '앱이 성공적으로 생성되었습니다!';
+
+  @override
+  String get aiGenFailedToCreateApp => '앱 생성에 실패했습니다';
+
+  @override
+  String get aiGenErrorWhileCreatingApp => '앱 생성 중 오류가 발생했습니다';
+
+  @override
+  String get aiGenFailedToGenerateApp => '앱 생성에 실패했습니다. 다시 시도해 주세요.';
+
+  @override
+  String get aiGenFailedToRegenerateIcon => '아이콘 재생성에 실패했습니다';
+
+  @override
+  String get aiGenPleaseGenerateAppFirst => '먼저 앱을 생성해 주세요';
 }

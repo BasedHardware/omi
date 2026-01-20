@@ -2292,5 +2292,14 @@
   "paymentEnterValidAmount": "Please enter a valid amount",
   "paymentEnterAmountGreaterThanZero": "Please enter an amount greater than 0",
   "paymentPlan": "Payment Plan",
-  "paymentNoneSelected": "None Selected"
+  "paymentNoneSelected": "None Selected",
+  "aiGenPleaseEnterDescription": "Kérjük, adj meg egy leírást az alkalmazásodhoz",
+  "aiGenCreatingAppIcon": "Alkalmazás ikon létrehozása...",
+  "aiGenErrorOccurredWithDetails": "Hiba történt: {message}",
+  "aiGenAppCreatedSuccessfully": "Alkalmazás sikeresen létrehozva!",
+  "aiGenFailedToCreateApp": "Nem sikerült létrehozni az alkalmazást",
+  "aiGenErrorWhileCreatingApp": "Hiba történt az alkalmazás létrehozása közben",
+  "aiGenFailedToGenerateApp": "Nem sikerült generálni az alkalmazást. Kérjük, próbáld újra.",
+  "aiGenFailedToRegenerateIcon": "Nem sikerült újragenerálni az ikont",
+  "aiGenPleaseGenerateAppFirst": "Kérjük, először generálj egy alkalmazást"
 }

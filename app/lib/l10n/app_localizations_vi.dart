@@ -7197,4 +7197,33 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get paymentNoneSelected => 'None Selected';
+
+  @override
+  String get aiGenPleaseEnterDescription => 'Vui lòng nhập mô tả cho ứng dụng của bạn';
+
+  @override
+  String get aiGenCreatingAppIcon => 'Đang tạo biểu tượng ứng dụng...';
+
+  @override
+  String aiGenErrorOccurredWithDetails(String message) {
+    return 'Đã xảy ra lỗi: $message';
+  }
+
+  @override
+  String get aiGenAppCreatedSuccessfully => 'Ứng dụng đã được tạo thành công!';
+
+  @override
+  String get aiGenFailedToCreateApp => 'Không thể tạo ứng dụng';
+
+  @override
+  String get aiGenErrorWhileCreatingApp => 'Đã xảy ra lỗi khi tạo ứng dụng';
+
+  @override
+  String get aiGenFailedToGenerateApp => 'Không thể tạo ứng dụng. Vui lòng thử lại.';
+
+  @override
+  String get aiGenFailedToRegenerateIcon => 'Không thể tạo lại biểu tượng';
+
+  @override
+  String get aiGenPleaseGenerateAppFirst => 'Vui lòng tạo ứng dụng trước';
 }

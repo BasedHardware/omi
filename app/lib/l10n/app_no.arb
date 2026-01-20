@@ -2292,5 +2292,14 @@
   "paymentEnterValidAmount": "Please enter a valid amount",
   "paymentEnterAmountGreaterThanZero": "Please enter an amount greater than 0",
   "paymentPlan": "Payment Plan",
-  "paymentNoneSelected": "None Selected"
+  "paymentNoneSelected": "None Selected",
+  "aiGenPleaseEnterDescription": "Vennligst skriv inn en beskrivelse for appen din",
+  "aiGenCreatingAppIcon": "Oppretter app-ikon...",
+  "aiGenErrorOccurredWithDetails": "Det oppstod en feil: {message}",
+  "aiGenAppCreatedSuccessfully": "App opprettet!",
+  "aiGenFailedToCreateApp": "Kunne ikke opprette app",
+  "aiGenErrorWhileCreatingApp": "Det oppstod en feil under opprettelse av appen",
+  "aiGenFailedToGenerateApp": "Kunne ikke generere app. Vennligst prøv igjen.",
+  "aiGenFailedToRegenerateIcon": "Kunne ikke regenerere ikonet",
+  "aiGenPleaseGenerateAppFirst": "Vennligst generer en app først"
 }
