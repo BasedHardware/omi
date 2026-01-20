@@ -5855,4 +5855,35 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get recordings => 'Recordings';
+
+  @override
+  String get enableRemindersAccess => 'Apple 미리 알림을 사용하려면 설정에서 미리 알림 접근을 허용해 주세요';
+
+  @override
+  String todayAtTime(String time) {
+    return '오늘 $time';
+  }
+
+  @override
+  String yesterdayAtTime(String time) {
+    return '어제 $time';
+  }
+
+  @override
+  String get lessThanAMinute => '1분 미만';
+
+  @override
+  String estimatedMinutes(int count) {
+    return '약 $count분';
+  }
+
+  @override
+  String estimatedHours(int count) {
+    return '약 $count시간';
+  }
+
+  @override
+  String estimatedTimeRemaining(String time) {
+    return '예상: $time 남음';
+  }
 }

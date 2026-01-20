@@ -5959,4 +5959,36 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get recordings => 'Recordings';
+
+  @override
+  String get enableRemindersAccess =>
+      'Ota käyttöön muistutusten käyttöoikeus asetuksissa käyttääksesi Apple Muistutuksia';
+
+  @override
+  String todayAtTime(String time) {
+    return 'Tänään klo $time';
+  }
+
+  @override
+  String yesterdayAtTime(String time) {
+    return 'Eilen klo $time';
+  }
+
+  @override
+  String get lessThanAMinute => 'Alle minuutti';
+
+  @override
+  String estimatedMinutes(int count) {
+    return '~$count minuutti(a)';
+  }
+
+  @override
+  String estimatedHours(int count) {
+    return '~$count tunti(a)';
+  }
+
+  @override
+  String estimatedTimeRemaining(String time) {
+    return 'Arvio: $time jäljellä';
+  }
 }

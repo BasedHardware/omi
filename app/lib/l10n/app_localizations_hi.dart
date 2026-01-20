@@ -5937,4 +5937,36 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get recordings => 'Recordings';
+
+  @override
+  String get enableRemindersAccess =>
+      'Apple रिमाइंडर का उपयोग करने के लिए कृपया सेटिंग्स में रिमाइंडर एक्सेस सक्षम करें';
+
+  @override
+  String todayAtTime(String time) {
+    return 'आज $time पर';
+  }
+
+  @override
+  String yesterdayAtTime(String time) {
+    return 'कल $time पर';
+  }
+
+  @override
+  String get lessThanAMinute => 'एक मिनट से कम';
+
+  @override
+  String estimatedMinutes(int count) {
+    return '~$count मिनट';
+  }
+
+  @override
+  String estimatedHours(int count) {
+    return '~$count घंटे';
+  }
+
+  @override
+  String estimatedTimeRemaining(String time) {
+    return 'अनुमानित: $time शेष';
+  }
 }

@@ -1852,5 +1852,12 @@
   "audioFromOmiWillAppearHere": "Audio from your Omi device will appear here",
   "deleteProcessed": "Delete Processed",
   "tryDifferentFilter": "Try a different filter",
-  "recordings": "Recordings"
+  "recordings": "Recordings",
+  "enableRemindersAccess": "Apple 미리 알림을 사용하려면 설정에서 미리 알림 접근을 허용해 주세요",
+  "todayAtTime": "오늘 {time}",
+  "yesterdayAtTime": "어제 {time}",
+  "lessThanAMinute": "1분 미만",
+  "estimatedMinutes": "약 {count}분",
+  "estimatedHours": "약 {count}시간",
+  "estimatedTimeRemaining": "예상: {time} 남음"
 }

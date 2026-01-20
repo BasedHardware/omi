@@ -5992,4 +5992,36 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get recordings => 'Recordings';
+
+  @override
+  String get enableRemindersAccess =>
+      'Si us plau, activeu l\'accés als Recordatoris a Configuració per utilitzar els Recordatoris d\'Apple';
+
+  @override
+  String todayAtTime(String time) {
+    return 'Avui a les $time';
+  }
+
+  @override
+  String yesterdayAtTime(String time) {
+    return 'Ahir a les $time';
+  }
+
+  @override
+  String get lessThanAMinute => 'Menys d\'un minut';
+
+  @override
+  String estimatedMinutes(int count) {
+    return '~$count minut(s)';
+  }
+
+  @override
+  String estimatedHours(int count) {
+    return '~$count hora/hores';
+  }
+
+  @override
+  String estimatedTimeRemaining(String time) {
+    return 'Estimat: $time restants';
+  }
 }

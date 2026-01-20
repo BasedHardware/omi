@@ -1852,5 +1852,12 @@
   "audioFromOmiWillAppearHere": "Audio from your Omi device will appear here",
   "deleteProcessed": "Delete Processed",
   "tryDifferentFilter": "Try a different filter",
-  "recordings": "Recordings"
+  "recordings": "Recordings",
+  "enableRemindersAccess": "Lūdzu, iespējojiet piekļuvi atgādinājumiem Iestatījumos, lai izmantotu Apple Atgādinājumus",
+  "todayAtTime": "Šodien {time}",
+  "yesterdayAtTime": "Vakar {time}",
+  "lessThanAMinute": "Mazāk par minūti",
+  "estimatedMinutes": "~{count} min.",
+  "estimatedHours": "~{count} st.",
+  "estimatedTimeRemaining": "Aplēsts: atlikušais laiks {time}"
 }

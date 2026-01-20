@@ -5969,4 +5969,36 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get recordings => 'Recordings';
+
+  @override
+  String get enableRemindersAccess =>
+      'Apple Hatırlatıcılar\'ı kullanmak için lütfen Ayarlar\'da Hatırlatıcılar erişimini etkinleştirin';
+
+  @override
+  String todayAtTime(String time) {
+    return 'Bugün saat $time';
+  }
+
+  @override
+  String yesterdayAtTime(String time) {
+    return 'Dün saat $time';
+  }
+
+  @override
+  String get lessThanAMinute => 'Bir dakikadan az';
+
+  @override
+  String estimatedMinutes(int count) {
+    return '~$count dakika';
+  }
+
+  @override
+  String estimatedHours(int count) {
+    return '~$count saat';
+  }
+
+  @override
+  String estimatedTimeRemaining(String time) {
+    return 'Tahmini: $time kaldı';
+  }
 }

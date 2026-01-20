@@ -240,10 +240,10 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
         } else {
           if (mounted) {
             scaffoldMessenger.showSnackBar(
-              const SnackBar(
-                content: Text('Please enable Reminders access in Settings to use Apple Reminders'),
+              SnackBar(
+                content: Text(context.l10n.enableRemindersAccess),
                 backgroundColor: Colors.orange,
-                duration: Duration(seconds: 3),
+                duration: const Duration(seconds: 3),
               ),
             );
           }

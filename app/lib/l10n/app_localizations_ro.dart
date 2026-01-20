@@ -5987,4 +5987,35 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get recordings => 'Recordings';
+
+  @override
+  String get enableRemindersAccess => 'Activați accesul la Memento-uri în Setări pentru a utiliza Memento-urile Apple';
+
+  @override
+  String todayAtTime(String time) {
+    return 'Astăzi la $time';
+  }
+
+  @override
+  String yesterdayAtTime(String time) {
+    return 'Ieri la $time';
+  }
+
+  @override
+  String get lessThanAMinute => 'Mai puțin de un minut';
+
+  @override
+  String estimatedMinutes(int count) {
+    return '~$count minut(e)';
+  }
+
+  @override
+  String estimatedHours(int count) {
+    return '~$count oră/ore';
+  }
+
+  @override
+  String estimatedTimeRemaining(String time) {
+    return 'Estimat: $time rămas';
+  }
 }

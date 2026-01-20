@@ -7227,5 +7227,58 @@
   "recordings": "Recordings",
   "@recordings": {
     "description": "Section header for recordings list"
+  },
+  "enableRemindersAccess": "Please enable Reminders access in Settings to use Apple Reminders",
+  "@enableRemindersAccess": {
+    "description": "Message shown when Apple Reminders permission is denied"
+  },
+  "todayAtTime": "Today at {time}",
+  "@todayAtTime": {
+    "description": "Date format showing today with time",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "yesterdayAtTime": "Yesterday at {time}",
+  "@yesterdayAtTime": {
+    "description": "Date format showing yesterday with time",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "lessThanAMinute": "Less than a minute",
+  "@lessThanAMinute": {
+    "description": "Time estimate for very short durations"
+  },
+  "estimatedMinutes": "~{count} minute(s)",
+  "@estimatedMinutes": {
+    "description": "Estimated time in minutes",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "estimatedHours": "~{count} hour(s)",
+  "@estimatedHours": {
+    "description": "Estimated time in hours",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "estimatedTimeRemaining": "Estimated: {time} remaining",
+  "@estimatedTimeRemaining": {
+    "description": "Shows estimated remaining time for processing",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
   }
 }

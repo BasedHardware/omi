@@ -1853,5 +1853,12 @@
   "audioFromOmiWillAppearHere": "Audio from your Omi device will appear here",
   "deleteProcessed": "Delete Processed",
   "tryDifferentFilter": "Try a different filter",
-  "recordings": "Recordings"
+  "recordings": "Recordings",
+  "enableRemindersAccess": "Bitte aktivieren Sie den Zugriff auf Erinnerungen in den Einstellungen, um Apple Erinnerungen zu verwenden",
+  "todayAtTime": "Heute um {time}",
+  "yesterdayAtTime": "Gestern um {time}",
+  "lessThanAMinute": "Weniger als eine Minute",
+  "estimatedMinutes": "~{count} Minute(n)",
+  "estimatedHours": "~{count} Stunde(n)",
+  "estimatedTimeRemaining": "Geschätzt: {time} verbleibend"
 }

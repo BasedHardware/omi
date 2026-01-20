@@ -5843,4 +5843,35 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get recordings => 'Recordings';
+
+  @override
+  String get enableRemindersAccess => '请在设置中启用提醒事项访问权限以使用 Apple 提醒事项';
+
+  @override
+  String todayAtTime(String time) {
+    return '今天 $time';
+  }
+
+  @override
+  String yesterdayAtTime(String time) {
+    return '昨天 $time';
+  }
+
+  @override
+  String get lessThanAMinute => '不到一分钟';
+
+  @override
+  String estimatedMinutes(int count) {
+    return '约 $count 分钟';
+  }
+
+  @override
+  String estimatedHours(int count) {
+    return '约 $count 小时';
+  }
+
+  @override
+  String estimatedTimeRemaining(String time) {
+    return '预计剩余：$time';
+  }
 }

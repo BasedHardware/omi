@@ -5960,4 +5960,35 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get recordings => 'Recordings';
+
+  @override
+  String get enableRemindersAccess => 'Apple meeldetuletuste kasutamiseks lubage meeldetuletuste juurdepääs seadetes';
+
+  @override
+  String todayAtTime(String time) {
+    return 'Täna kell $time';
+  }
+
+  @override
+  String yesterdayAtTime(String time) {
+    return 'Eile kell $time';
+  }
+
+  @override
+  String get lessThanAMinute => 'Vähem kui minut';
+
+  @override
+  String estimatedMinutes(int count) {
+    return '~$count minut(it)';
+  }
+
+  @override
+  String estimatedHours(int count) {
+    return '~$count tund(i)';
+  }
+
+  @override
+  String estimatedTimeRemaining(String time) {
+    return 'Hinnanguline: $time jäänud';
+  }
 }

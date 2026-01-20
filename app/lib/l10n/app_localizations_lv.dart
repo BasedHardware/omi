@@ -5969,4 +5969,36 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get recordings => 'Recordings';
+
+  @override
+  String get enableRemindersAccess =>
+      'Lūdzu, iespējojiet piekļuvi atgādinājumiem Iestatījumos, lai izmantotu Apple Atgādinājumus';
+
+  @override
+  String todayAtTime(String time) {
+    return 'Šodien $time';
+  }
+
+  @override
+  String yesterdayAtTime(String time) {
+    return 'Vakar $time';
+  }
+
+  @override
+  String get lessThanAMinute => 'Mazāk par minūti';
+
+  @override
+  String estimatedMinutes(int count) {
+    return '~$count min.';
+  }
+
+  @override
+  String estimatedHours(int count) {
+    return '~$count st.';
+  }
+
+  @override
+  String estimatedTimeRemaining(String time) {
+    return 'Aplēsts: atlikušais laiks $time';
+  }
 }

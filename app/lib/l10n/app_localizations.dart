@@ -11276,6 +11276,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Recordings'**
   String get recordings;
+
+  /// Message shown when Apple Reminders permission is denied
+  ///
+  /// In en, this message translates to:
+  /// **'Please enable Reminders access in Settings to use Apple Reminders'**
+  String get enableRemindersAccess;
+
+  /// Date format showing today with time
+  ///
+  /// In en, this message translates to:
+  /// **'Today at {time}'**
+  String todayAtTime(String time);
+
+  /// Date format showing yesterday with time
+  ///
+  /// In en, this message translates to:
+  /// **'Yesterday at {time}'**
+  String yesterdayAtTime(String time);
+
+  /// Time estimate for very short durations
+  ///
+  /// In en, this message translates to:
+  /// **'Less than a minute'**
+  String get lessThanAMinute;
+
+  /// Estimated time in minutes
+  ///
+  /// In en, this message translates to:
+  /// **'~{count} minute(s)'**
+  String estimatedMinutes(int count);
+
+  /// Estimated time in hours
+  ///
+  /// In en, this message translates to:
+  /// **'~{count} hour(s)'**
+  String estimatedHours(int count);
+
+  /// Shows estimated remaining time for processing
+  ///
+  /// In en, this message translates to:
+  /// **'Estimated: {time} remaining'**
+  String estimatedTimeRemaining(String time);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

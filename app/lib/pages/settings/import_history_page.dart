@@ -495,11 +495,11 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       final jobDate = DateTime(job.createdAt!.year, job.createdAt!.month, job.createdAt!.day);
 
       if (jobDate == today) {
-        dateTimeStr =
-            'Today at ${job.createdAt!.hour.toString().padLeft(2, '0')}:${job.createdAt!.minute.toString().padLeft(2, '0')}';
+        dateTimeStr = context.l10n.todayAtTime(
+            '${job.createdAt!.hour.toString().padLeft(2, '0')}:${job.createdAt!.minute.toString().padLeft(2, '0')}');
       } else if (jobDate == today.subtract(const Duration(days: 1))) {
-        dateTimeStr =
-            'Yesterday at ${job.createdAt!.hour.toString().padLeft(2, '0')}:${job.createdAt!.minute.toString().padLeft(2, '0')}';
+        dateTimeStr = context.l10n.yesterdayAtTime(
+            '${job.createdAt!.hour.toString().padLeft(2, '0')}:${job.createdAt!.minute.toString().padLeft(2, '0')}');
       } else {
         dateTimeStr =
             '${job.createdAt!.day}/${job.createdAt!.month}/${job.createdAt!.year} at ${job.createdAt!.hour.toString().padLeft(2, '0')}:${job.createdAt!.minute.toString().padLeft(2, '0')}';
@@ -592,13 +592,13 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
               final estimatedSeconds = (remainingFiles * 0.5).ceil(); // ~0.5 seconds per file (light import)
               String estimatedTime;
               if (estimatedSeconds < 60) {
-                estimatedTime = 'Less than a minute';
+                estimatedTime = context.l10n.lessThanAMinute;
               } else if (estimatedSeconds < 3600) {
                 final minutes = (estimatedSeconds / 60).ceil();
-                estimatedTime = '~$minutes minute${minutes == 1 ? '' : 's'}';
+                estimatedTime = context.l10n.estimatedMinutes(minutes);
               } else {
                 final hours = (estimatedSeconds / 3600).ceil();
-                estimatedTime = '~$hours hour${hours == 1 ? '' : 's'}';
+                estimatedTime = context.l10n.estimatedHours(hours);
               }
 
               return Column(
@@ -608,7 +608,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'Estimated: $estimatedTime remaining',
+                        context.l10n.estimatedTimeRemaining(estimatedTime),
                         style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
                       ),
                       Text(

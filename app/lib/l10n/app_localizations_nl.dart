@@ -5976,4 +5976,36 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get recordings => 'Recordings';
+
+  @override
+  String get enableRemindersAccess =>
+      'Schakel toegang tot Herinneringen in via Instellingen om Apple Herinneringen te gebruiken';
+
+  @override
+  String todayAtTime(String time) {
+    return 'Vandaag om $time';
+  }
+
+  @override
+  String yesterdayAtTime(String time) {
+    return 'Gisteren om $time';
+  }
+
+  @override
+  String get lessThanAMinute => 'Minder dan een minuut';
+
+  @override
+  String estimatedMinutes(int count) {
+    return '~$count minuut/minuten';
+  }
+
+  @override
+  String estimatedHours(int count) {
+    return '~$count uur';
+  }
+
+  @override
+  String estimatedTimeRemaining(String time) {
+    return 'Geschat: $time resterend';
+  }
 }

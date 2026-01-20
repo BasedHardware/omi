@@ -5958,4 +5958,36 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get recordings => 'Recordings';
+
+  @override
+  String get enableRemindersAccess =>
+      'Por favor, habilite el acceso a Recordatorios en Ajustes para usar los Recordatorios de Apple';
+
+  @override
+  String todayAtTime(String time) {
+    return 'Hoy a las $time';
+  }
+
+  @override
+  String yesterdayAtTime(String time) {
+    return 'Ayer a las $time';
+  }
+
+  @override
+  String get lessThanAMinute => 'Menos de un minuto';
+
+  @override
+  String estimatedMinutes(int count) {
+    return '~$count minuto(s)';
+  }
+
+  @override
+  String estimatedHours(int count) {
+    return '~$count hora(s)';
+  }
+
+  @override
+  String estimatedTimeRemaining(String time) {
+    return 'Estimado: $time restante';
+  }
 }

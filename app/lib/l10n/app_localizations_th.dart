@@ -5928,4 +5928,35 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get recordings => 'Recordings';
+
+  @override
+  String get enableRemindersAccess => 'กรุณาเปิดใช้งานการเข้าถึงการเตือนในการตั้งค่าเพื่อใช้การเตือนของ Apple';
+
+  @override
+  String todayAtTime(String time) {
+    return 'วันนี้ เวลา $time';
+  }
+
+  @override
+  String yesterdayAtTime(String time) {
+    return 'เมื่อวาน เวลา $time';
+  }
+
+  @override
+  String get lessThanAMinute => 'น้อยกว่าหนึ่งนาที';
+
+  @override
+  String estimatedMinutes(int count) {
+    return '~$count นาที';
+  }
+
+  @override
+  String estimatedHours(int count) {
+    return '~$count ชั่วโมง';
+  }
+
+  @override
+  String estimatedTimeRemaining(String time) {
+    return 'โดยประมาณ: เหลือ $time';
+  }
 }

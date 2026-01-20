@@ -5971,4 +5971,35 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get recordings => 'Recordings';
+
+  @override
+  String get enableRemindersAccess => 'Włącz dostęp do Przypomnień w Ustawieniach, aby korzystać z Przypomnień Apple';
+
+  @override
+  String todayAtTime(String time) {
+    return 'Dziś o $time';
+  }
+
+  @override
+  String yesterdayAtTime(String time) {
+    return 'Wczoraj o $time';
+  }
+
+  @override
+  String get lessThanAMinute => 'Mniej niż minuta';
+
+  @override
+  String estimatedMinutes(int count) {
+    return '~$count min.';
+  }
+
+  @override
+  String estimatedHours(int count) {
+    return '~$count godz.';
+  }
+
+  @override
+  String estimatedTimeRemaining(String time) {
+    return 'Szacunkowo: $time pozostało';
+  }
 }

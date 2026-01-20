@@ -5979,4 +5979,36 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get recordings => 'Recordings';
+
+  @override
+  String get enableRemindersAccess =>
+      'Моля, активирайте достъпа до Напомняния в Настройки, за да използвате Apple Напомняния';
+
+  @override
+  String todayAtTime(String time) {
+    return 'Днес в $time';
+  }
+
+  @override
+  String yesterdayAtTime(String time) {
+    return 'Вчера в $time';
+  }
+
+  @override
+  String get lessThanAMinute => 'По-малко от минута';
+
+  @override
+  String estimatedMinutes(int count) {
+    return '~$count минута/минути';
+  }
+
+  @override
+  String estimatedHours(int count) {
+    return '~$count час/часа';
+  }
+
+  @override
+  String estimatedTimeRemaining(String time) {
+    return 'Оставащо време: $time';
+  }
 }

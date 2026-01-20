@@ -1854,5 +1854,12 @@
   "audioFromOmiWillAppearHere": "Audio from your Omi device will appear here",
   "deleteProcessed": "Delete Processed",
   "tryDifferentFilter": "Try a different filter",
-  "recordings": "Recordings"
+  "recordings": "Recordings",
+  "enableRemindersAccess": "Pro použití Apple Připomínek povolte přístup k Připomínkám v Nastavení",
+  "todayAtTime": "Dnes v {time}",
+  "yesterdayAtTime": "Včera v {time}",
+  "lessThanAMinute": "Méně než minuta",
+  "estimatedMinutes": "~{count} minut(a)",
+  "estimatedHours": "~{count} hodin(a)",
+  "estimatedTimeRemaining": "Odhad: zbývá {time}"
 }

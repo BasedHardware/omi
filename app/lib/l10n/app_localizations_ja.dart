@@ -5853,4 +5853,35 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get recordings => 'Recordings';
+
+  @override
+  String get enableRemindersAccess => 'Apple リマインダーを使用するには、設定でリマインダーへのアクセスを有効にしてください';
+
+  @override
+  String todayAtTime(String time) {
+    return '今日 $time';
+  }
+
+  @override
+  String yesterdayAtTime(String time) {
+    return '昨日 $time';
+  }
+
+  @override
+  String get lessThanAMinute => '1分未満';
+
+  @override
+  String estimatedMinutes(int count) {
+    return '約$count分';
+  }
+
+  @override
+  String estimatedHours(int count) {
+    return '約$count時間';
+  }
+
+  @override
+  String estimatedTimeRemaining(String time) {
+    return '推定残り時間: $time';
+  }
 }

@@ -5968,4 +5968,35 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get recordings => 'Recordings';
+
+  @override
+  String get enableRemindersAccess => 'Vui lòng bật quyền truy cập Nhắc nhở trong Cài đặt để sử dụng Nhắc nhở Apple';
+
+  @override
+  String todayAtTime(String time) {
+    return 'Hôm nay lúc $time';
+  }
+
+  @override
+  String yesterdayAtTime(String time) {
+    return 'Hôm qua lúc $time';
+  }
+
+  @override
+  String get lessThanAMinute => 'Ít hơn một phút';
+
+  @override
+  String estimatedMinutes(int count) {
+    return '~$count phút';
+  }
+
+  @override
+  String estimatedHours(int count) {
+    return '~$count giờ';
+  }
+
+  @override
+  String estimatedTimeRemaining(String time) {
+    return 'Ước tính: còn $time';
+  }
 }

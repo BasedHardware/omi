@@ -1853,5 +1853,12 @@
   "audioFromOmiWillAppearHere": "Audio from your Omi device will appear here",
   "deleteProcessed": "Delete Processed",
   "tryDifferentFilter": "Try a different filter",
-  "recordings": "Recordings"
+  "recordings": "Recordings",
+  "enableRemindersAccess": "Apple リマインダーを使用するには、設定でリマインダーへのアクセスを有効にしてください",
+  "todayAtTime": "今日 {time}",
+  "yesterdayAtTime": "昨日 {time}",
+  "lessThanAMinute": "1分未満",
+  "estimatedMinutes": "約{count}分",
+  "estimatedHours": "約{count}時間",
+  "estimatedTimeRemaining": "推定残り時間: {time}"
 }

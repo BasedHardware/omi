@@ -5990,4 +5990,36 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get recordings => 'Recordings';
+
+  @override
+  String get enableRemindersAccess =>
+      'Kérjük, engedélyezze az Emlékeztetők hozzáférést a Beállításokban az Apple Emlékeztetők használatához';
+
+  @override
+  String todayAtTime(String time) {
+    return 'Ma $time-kor';
+  }
+
+  @override
+  String yesterdayAtTime(String time) {
+    return 'Tegnap $time-kor';
+  }
+
+  @override
+  String get lessThanAMinute => 'Kevesebb mint egy perc';
+
+  @override
+  String estimatedMinutes(int count) {
+    return '~$count perc';
+  }
+
+  @override
+  String estimatedHours(int count) {
+    return '~$count óra';
+  }
+
+  @override
+  String estimatedTimeRemaining(String time) {
+    return 'Becsült: $time hátralévő';
+  }
 }

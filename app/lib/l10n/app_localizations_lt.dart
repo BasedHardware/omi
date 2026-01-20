@@ -5960,4 +5960,36 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get recordings => 'Recordings';
+
+  @override
+  String get enableRemindersAccess =>
+      'Norėdami naudoti Apple Priminimus, įgalinkite prieigą prie Priminimų Nustatymuose';
+
+  @override
+  String todayAtTime(String time) {
+    return 'Šiandien $time';
+  }
+
+  @override
+  String yesterdayAtTime(String time) {
+    return 'Vakar $time';
+  }
+
+  @override
+  String get lessThanAMinute => 'Mažiau nei minutė';
+
+  @override
+  String estimatedMinutes(int count) {
+    return '~$count min.';
+  }
+
+  @override
+  String estimatedHours(int count) {
+    return '~$count val.';
+  }
+
+  @override
+  String estimatedTimeRemaining(String time) {
+    return 'Apytikriai liko: $time';
+  }
 }

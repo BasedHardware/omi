@@ -5976,4 +5976,35 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get recordings => 'Recordings';
+
+  @override
+  String get enableRemindersAccess => 'Aktifkan akses Pengingat di Pengaturan untuk menggunakan Pengingat Apple';
+
+  @override
+  String todayAtTime(String time) {
+    return 'Hari ini pukul $time';
+  }
+
+  @override
+  String yesterdayAtTime(String time) {
+    return 'Kemarin pukul $time';
+  }
+
+  @override
+  String get lessThanAMinute => 'Kurang dari satu menit';
+
+  @override
+  String estimatedMinutes(int count) {
+    return '~$count menit';
+  }
+
+  @override
+  String estimatedHours(int count) {
+    return '~$count jam';
+  }
+
+  @override
+  String estimatedTimeRemaining(String time) {
+    return 'Perkiraan: $time tersisa';
+  }
 }

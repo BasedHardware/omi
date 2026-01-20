@@ -1852,5 +1852,12 @@
   "audioFromOmiWillAppearHere": "Audio from your Omi device will appear here",
   "deleteProcessed": "Delete Processed",
   "tryDifferentFilter": "Try a different filter",
-  "recordings": "Recordings"
+  "recordings": "Recordings",
+  "enableRemindersAccess": "Παρακαλώ ενεργοποιήστε την πρόσβαση στις Υπενθυμίσεις στις Ρυθμίσεις για να χρησιμοποιήσετε τις Υπενθυμίσεις Apple",
+  "todayAtTime": "Σήμερα στις {time}",
+  "yesterdayAtTime": "Χθες στις {time}",
+  "lessThanAMinute": "Λιγότερο από ένα λεπτό",
+  "estimatedMinutes": "~{count} λεπτό/λεπτά",
+  "estimatedHours": "~{count} ώρα/ώρες",
+  "estimatedTimeRemaining": "Εκτίμηση: απομένει {time}"
 }

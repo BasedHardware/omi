@@ -5958,4 +5958,35 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get recordings => 'Recordings';
+
+  @override
+  String get enableRemindersAccess => 'Aktiver tilgang til Påminnelser i Innstillinger for å bruke Apple Påminnelser';
+
+  @override
+  String todayAtTime(String time) {
+    return 'I dag kl. $time';
+  }
+
+  @override
+  String yesterdayAtTime(String time) {
+    return 'I går kl. $time';
+  }
+
+  @override
+  String get lessThanAMinute => 'Mindre enn ett minutt';
+
+  @override
+  String estimatedMinutes(int count) {
+    return '~$count minutt(er)';
+  }
+
+  @override
+  String estimatedHours(int count) {
+    return '~$count time(r)';
+  }
+
+  @override
+  String estimatedTimeRemaining(String time) {
+    return 'Estimert: $time gjenstår';
+  }
 }

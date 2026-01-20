@@ -1854,5 +1854,12 @@
   "audioFromOmiWillAppearHere": "Audio from your Omi device will appear here",
   "deleteProcessed": "Delete Processed",
   "tryDifferentFilter": "Try a different filter",
-  "recordings": "Recordings"
+  "recordings": "Recordings",
+  "enableRemindersAccess": "Si us plau, activeu l'accés als Recordatoris a Configuració per utilitzar els Recordatoris d'Apple",
+  "todayAtTime": "Avui a les {time}",
+  "yesterdayAtTime": "Ahir a les {time}",
+  "lessThanAMinute": "Menys d'un minut",
+  "estimatedMinutes": "~{count} minut(s)",
+  "estimatedHours": "~{count} hora/hores",
+  "estimatedTimeRemaining": "Estimat: {time} restants"
 }

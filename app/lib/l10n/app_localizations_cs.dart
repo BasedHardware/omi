@@ -5952,4 +5952,35 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get recordings => 'Recordings';
+
+  @override
+  String get enableRemindersAccess => 'Pro použití Apple Připomínek povolte přístup k Připomínkám v Nastavení';
+
+  @override
+  String todayAtTime(String time) {
+    return 'Dnes v $time';
+  }
+
+  @override
+  String yesterdayAtTime(String time) {
+    return 'Včera v $time';
+  }
+
+  @override
+  String get lessThanAMinute => 'Méně než minuta';
+
+  @override
+  String estimatedMinutes(int count) {
+    return '~$count minut(a)';
+  }
+
+  @override
+  String estimatedHours(int count) {
+    return '~$count hodin(a)';
+  }
+
+  @override
+  String estimatedTimeRemaining(String time) {
+    return 'Odhad: zbývá $time';
+  }
 }

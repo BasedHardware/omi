@@ -1853,5 +1853,12 @@
   "audioFromOmiWillAppearHere": "Audio from your Omi device will appear here",
   "deleteProcessed": "Delete Processed",
   "tryDifferentFilter": "Try a different filter",
-  "recordings": "Recordings"
+  "recordings": "Recordings",
+  "enableRemindersAccess": "Apple रिमाइंडर का उपयोग करने के लिए कृपया सेटिंग्स में रिमाइंडर एक्सेस सक्षम करें",
+  "todayAtTime": "आज {time} पर",
+  "yesterdayAtTime": "कल {time} पर",
+  "lessThanAMinute": "एक मिनट से कम",
+  "estimatedMinutes": "~{count} मिनट",
+  "estimatedHours": "~{count} घंटे",
+  "estimatedTimeRemaining": "अनुमानित: {time} शेष"
 }

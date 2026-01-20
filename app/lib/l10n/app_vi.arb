@@ -1852,5 +1852,12 @@
   "audioFromOmiWillAppearHere": "Audio from your Omi device will appear here",
   "deleteProcessed": "Delete Processed",
   "tryDifferentFilter": "Try a different filter",
-  "recordings": "Recordings"
+  "recordings": "Recordings",
+  "enableRemindersAccess": "Vui lòng bật quyền truy cập Nhắc nhở trong Cài đặt để sử dụng Nhắc nhở Apple",
+  "todayAtTime": "Hôm nay lúc {time}",
+  "yesterdayAtTime": "Hôm qua lúc {time}",
+  "lessThanAMinute": "Ít hơn một phút",
+  "estimatedMinutes": "~{count} phút",
+  "estimatedHours": "~{count} giờ",
+  "estimatedTimeRemaining": "Ước tính: còn {time}"
 }

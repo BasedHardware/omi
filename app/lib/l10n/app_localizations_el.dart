@@ -6004,4 +6004,36 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get recordings => 'Recordings';
+
+  @override
+  String get enableRemindersAccess =>
+      'Παρακαλώ ενεργοποιήστε την πρόσβαση στις Υπενθυμίσεις στις Ρυθμίσεις για να χρησιμοποιήσετε τις Υπενθυμίσεις Apple';
+
+  @override
+  String todayAtTime(String time) {
+    return 'Σήμερα στις $time';
+  }
+
+  @override
+  String yesterdayAtTime(String time) {
+    return 'Χθες στις $time';
+  }
+
+  @override
+  String get lessThanAMinute => 'Λιγότερο από ένα λεπτό';
+
+  @override
+  String estimatedMinutes(int count) {
+    return '~$count λεπτό/λεπτά';
+  }
+
+  @override
+  String estimatedHours(int count) {
+    return '~$count ώρα/ώρες';
+  }
+
+  @override
+  String estimatedTimeRemaining(String time) {
+    return 'Εκτίμηση: απομένει $time';
+  }
 }
