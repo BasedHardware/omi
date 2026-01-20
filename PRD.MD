@@ -72,7 +72,7 @@ The app uses Flutter's ARB-based localization system (`context.l10n.keyName`). W
 | File | Strings | Description |
 |------|---------|-------------|
 | `desktop/pages/onboarding/desktop_onboarding_wrapper.dart` | 10 | Onboarding step titles and descriptions - **DONE** |
-| `desktop/pages/settings/desktop_settings_modal.dart` | 2 | About section |
+| `desktop/pages/settings/desktop_settings_modal.dart` | 2 | About section - **N/A (URLs/emails as data)** |
 | `desktop/pages/conversations/widgets/desktop_name_speaker_dialog.dart` | 3 | Speaker dialog buttons - **DONE** |
 
 ### Priority 5: Lower Impact (3 files, ~5 strings)
@@ -81,7 +81,7 @@ The app uses Flutter's ARB-based localization system (`context.l10n.keyName`). W
 |------|---------|-------------|
 | `pages/conversation_detail/page.dart` | 1 | Search placeholder - **DONE** |
 | `pages/conversations/widgets/goal_tracker_widget.dart` | 1 | Default goal title - **DONE** |
-| `main.dart` | 1 | Desktop window title |
+| `main.dart` | 1 | Desktop window title - **N/A (const before app init)** |
 
 ## Requirements
 

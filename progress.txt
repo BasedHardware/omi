@@ -10,10 +10,10 @@
 |--------|-------|
 | Total Files | 27 |
 | Total Strings | ~125 |
-| Completed | 23 |
+| Completed | 25 |
 | In Progress | 0 |
-| Pending | 4 |
-| Progress | 85% |
+| Pending | 2 |
+| Progress | 93% |
 
 **CRITICAL ISSUE**: ~162 pre-existing l10n keys in non-English ARB files still contain
 English text instead of proper translations. See PRIORITY 0 section below.
@@ -188,11 +188,12 @@ onboardingTellUsAboutYourself, onboardingChooseYourPreference, onboardingGrantRe
 onboardingYoureAllSet (5 step descriptions).
 Ran flutter gen-l10n and verified with test.sh.
 
-### [ ] desktop/pages/settings/desktop_settings_modal.dart (2 strings)
-Status: PENDING
-Strings:
-- [ ] Line 2286: 'https://omi.me' (website - may be intentional)
-- [ ] Line 2294: 'team@basedhardware.com' (email - may be intentional)
+### [x] desktop/pages/settings/desktop_settings_modal.dart (2 strings)
+Status: COMPLETED (N/A)
+Note: Both strings are URLs/emails displayed as data (not labels). Per PRD Out of Scope:
+"URLs and emails displayed as data (not labels)" - these do not require localization.
+- Line 2286: 'https://omi.me' - URL displayed as subtitle
+- Line 2294: 'team@basedhardware.com' - Email displayed as subtitle
 
 ### [x] desktop/pages/conversations/widgets/desktop_name_speaker_dialog.dart (3 strings)
 Status: COMPLETED
@@ -219,14 +220,21 @@ Note: Added 1 new l10n key to all 34 language ARB files and updated the Dart fil
 context.l10n pattern. Key added: myGoal.
 Ran flutter gen-l10n and verified with test.sh.
 
-### [ ] main.dart (1 string)
-Status: PENDING
-Strings:
-- [ ] Line 209: 'Omi' (desktop window title)
+### [x] main.dart (1 string)
+Status: COMPLETED (N/A)
+Note: The desktop window title at line 209 is inside a `const WindowOptions` constructor
+which runs before the app is initialized and before any BuildContext is available.
+This is a technical constraint - Flutter's l10n system requires BuildContext which
+doesn't exist at this point in the app lifecycle. The brand name "Omi" remains hardcoded.
 
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-20] Marked desktop_settings_modal.dart and main.dart as N/A
+- desktop_settings_modal.dart: URLs/emails displayed as data are out of scope per PRD
+- main.dart: Desktop window title is in const WindowOptions before app init (no BuildContext)
+- Both are technical/scope exclusions, not actual localization failures
 
 [2026-01-20] Localized goal_tracker_widget.dart
 - Added 1 new l10n key to all 34 language ARB files with proper translations
