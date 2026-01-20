@@ -2,9 +2,9 @@
 
 ## Summary
 Total Files to Localize: 38
-Completed: 28
+Completed: 30
 In Progress: 0
-Pending: 10
+Pending: 8
 
 ## Progress by File
 
@@ -41,8 +41,8 @@ Pending: 10
 [x] pages/conversation_detail/widgets/summarized_apps_sheet.dart (~4 strings) - DONE (15 new keys)
 [x] pages/conversation_detail/widgets/name_speaker_sheet.dart (~4 strings) - DONE (8 new keys)
 [x] pages/conversation_detail/widgets/share_to_contacts_sheet.dart (~4 strings) - DONE (16 new keys + 2 reused keys)
-[ ] pages/settings/device_settings.dart (~8 strings)
-[ ] pages/conversations/sync_widgets/wifi_connection_sheet.dart (~6 strings)
+[x] pages/settings/device_settings.dart (~8 strings) - DONE (1 key, reuses existing unpair key)
+[x] pages/conversations/sync_widgets/wifi_connection_sheet.dart (~6 strings) - DONE (reuses 5 existing keys)
 [ ] pages/conversations/wal_item_detail/wal_item_detail_page.dart (~5 strings)
 [ ] pages/conversations/fast_transfer_settings_page.dart (~6 strings)
 
@@ -57,6 +57,14 @@ Pending: 10
 ## Changelog
 
 ### 2026-01-20
+- Localized pages/conversations/sync_widgets/wifi_connection_sheet.dart (reuses 5 existing keys)
+  - wifiConnectionFailedTitle, connectingToDeviceName (parameterized), enableDeviceWifi (parameterized)
+  - connectToDeviceName (parameterized), retry
+  - Fixed incorrect l10n_extensions import path (core -> utils)
+- Localized pages/settings/device_settings.dart (1 key reused)
+  - Replaced hardcoded 'Unpair' button text with existing context.l10n.unpair key
+  - File was already mostly localized; only the okButtonText parameter was hardcoded
+  - Also fixed missing l10n_extensions.dart imports in 7 previously localized files
 - Localized pages/conversation_detail/widgets/share_to_contacts_sheet.dart with 16 l10n keys for 34 languages
   - shareViaSms, selectContactsToShareSummary, searchContactsHint, contactsSelectedCount (parameterized)
   - clearAllSelection, selectContactsToShare, shareWithContactCount, shareWithContactsCount (both parameterized)
