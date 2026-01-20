@@ -6966,4 +6966,46 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get importantConversationBody => 'आपकी अभी एक महत्वपूर्ण बातचीत हुई। सारांश साझा करने के लिए टैप करें।';
+
+  @override
+  String get templateName => 'टेम्पलेट नाम';
+
+  @override
+  String get templateNameHint => 'उदा., मीटिंग एक्शन आइटम एक्सट्रैक्टर';
+
+  @override
+  String get nameMustBeAtLeast3Characters => 'नाम कम से कम 3 अक्षर का होना चाहिए';
+
+  @override
+  String get conversationPromptHint => 'उदा., दी गई बातचीत से एक्शन आइटम, लिए गए निर्णय और मुख्य बिंदु निकालें।';
+
+  @override
+  String get pleaseEnterAppPrompt => 'कृपया अपने ऐप के लिए एक प्रॉम्प्ट दर्ज करें';
+
+  @override
+  String get promptMustBeAtLeast10Characters => 'प्रॉम्प्ट कम से कम 10 अक्षर का होना चाहिए';
+
+  @override
+  String get anyoneCanDiscoverTemplate => 'कोई भी आपका टेम्पलेट खोज सकता है';
+
+  @override
+  String get onlyYouCanUseTemplate => 'केवल आप इस टेम्पलेट का उपयोग कर सकते हैं';
+
+  @override
+  String get generatingDescription => 'विवरण जनरेट हो रहा है...';
+
+  @override
+  String get creatingAppIcon => 'ऐप आइकन बनाया जा रहा है...';
+
+  @override
+  String get installingApp => 'ऐप इंस्टॉल हो रहा है...';
+
+  @override
+  String get appCreatedAndInstalled => 'ऐप बनाया और इंस्टॉल किया गया!';
+
+  @override
+  String get appCreatedSuccessfully => 'ऐप सफलतापूर्वक बनाया गया!';
+
+  @override
+  String get failedToCreateApp => 'ऐप बनाने में विफल। कृपया पुनः प्रयास करें।';
 }

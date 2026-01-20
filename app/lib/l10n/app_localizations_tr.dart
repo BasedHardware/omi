@@ -6997,4 +6997,47 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get importantConversationBody => 'Az önce önemli bir konuşma yaptınız. Özeti paylaşmak için dokunun.';
+
+  @override
+  String get templateName => 'Şablon Adı';
+
+  @override
+  String get templateNameHint => 'örn., Toplantı Eylem Maddesi Çıkarıcı';
+
+  @override
+  String get nameMustBeAtLeast3Characters => 'Ad en az 3 karakter olmalıdır';
+
+  @override
+  String get conversationPromptHint =>
+      'örn., Verilen konuşmadan eylem maddeleri, alınan kararlar ve önemli çıkarımları çıkarın.';
+
+  @override
+  String get pleaseEnterAppPrompt => 'Lütfen uygulamanız için bir istem girin';
+
+  @override
+  String get promptMustBeAtLeast10Characters => 'İstem en az 10 karakter olmalıdır';
+
+  @override
+  String get anyoneCanDiscoverTemplate => 'Herkes şablonunuzu keşfedebilir';
+
+  @override
+  String get onlyYouCanUseTemplate => 'Bu şablonu yalnızca siz kullanabilirsiniz';
+
+  @override
+  String get generatingDescription => 'Açıklama oluşturuluyor...';
+
+  @override
+  String get creatingAppIcon => 'Uygulama simgesi oluşturuluyor...';
+
+  @override
+  String get installingApp => 'Uygulama yükleniyor...';
+
+  @override
+  String get appCreatedAndInstalled => 'Uygulama oluşturuldu ve yüklendi!';
+
+  @override
+  String get appCreatedSuccessfully => 'Uygulama başarıyla oluşturuldu!';
+
+  @override
+  String get failedToCreateApp => 'Uygulama oluşturulamadı. Lütfen tekrar deneyin.';
 }

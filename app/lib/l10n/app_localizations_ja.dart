@@ -6869,4 +6869,46 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get importantConversationBody => '重要な会話がありました。タップして要約を共有しましょう。';
+
+  @override
+  String get templateName => 'テンプレート名';
+
+  @override
+  String get templateNameHint => '例：会議アクションアイテム抽出';
+
+  @override
+  String get nameMustBeAtLeast3Characters => '名前は3文字以上である必要があります';
+
+  @override
+  String get conversationPromptHint => '例：会話からアクションアイテム、決定事項、重要なポイントを抽出します。';
+
+  @override
+  String get pleaseEnterAppPrompt => 'アプリのプロンプトを入力してください';
+
+  @override
+  String get promptMustBeAtLeast10Characters => 'プロンプトは10文字以上である必要があります';
+
+  @override
+  String get anyoneCanDiscoverTemplate => '誰でもテンプレートを見つけられます';
+
+  @override
+  String get onlyYouCanUseTemplate => 'このテンプレートを使用できるのはあなただけです';
+
+  @override
+  String get generatingDescription => '説明を生成中...';
+
+  @override
+  String get creatingAppIcon => 'アプリアイコンを作成中...';
+
+  @override
+  String get installingApp => 'アプリをインストール中...';
+
+  @override
+  String get appCreatedAndInstalled => 'アプリが作成・インストールされました！';
+
+  @override
+  String get appCreatedSuccessfully => 'アプリが正常に作成されました！';
+
+  @override
+  String get failedToCreateApp => 'アプリの作成に失敗しました。もう一度お試しください。';
 }

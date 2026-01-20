@@ -7020,4 +7020,47 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get importantConversationBody =>
       'Most volt egy fontos beszélgetésed. Érintsd meg az összefoglaló megosztásához.';
+
+  @override
+  String get templateName => 'Sablon neve';
+
+  @override
+  String get templateNameHint => 'pl. Értekezlet feladatpont kinyerő';
+
+  @override
+  String get nameMustBeAtLeast3Characters => 'A névnek legalább 3 karakterből kell állnia';
+
+  @override
+  String get conversationPromptHint =>
+      'pl. Nyerje ki a feladatpontokat, döntéseket és fő tanulságokat a beszélgetésből.';
+
+  @override
+  String get pleaseEnterAppPrompt => 'Kérjük, adjon meg egy promptot az alkalmazásához';
+
+  @override
+  String get promptMustBeAtLeast10Characters => 'A promptnak legalább 10 karakterből kell állnia';
+
+  @override
+  String get anyoneCanDiscoverTemplate => 'Bárki felfedezheti a sablonját';
+
+  @override
+  String get onlyYouCanUseTemplate => 'Csak Ön használhatja ezt a sablont';
+
+  @override
+  String get generatingDescription => 'Leírás generálása...';
+
+  @override
+  String get creatingAppIcon => 'Alkalmazás ikon létrehozása...';
+
+  @override
+  String get installingApp => 'Alkalmazás telepítése...';
+
+  @override
+  String get appCreatedAndInstalled => 'Alkalmazás létrehozva és telepítve!';
+
+  @override
+  String get appCreatedSuccessfully => 'Alkalmazás sikeresen létrehozva!';
+
+  @override
+  String get failedToCreateApp => 'Nem sikerült létrehozni az alkalmazást. Kérjük, próbálja újra.';
 }

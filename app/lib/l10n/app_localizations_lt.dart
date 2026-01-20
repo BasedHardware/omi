@@ -6988,4 +6988,47 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get importantConversationBody =>
       'Ką tik turėjote svarbų pokalbį. Bakstelėkite, kad pasidalintumėte santrauka.';
+
+  @override
+  String get templateName => 'Šablono pavadinimas';
+
+  @override
+  String get templateNameHint => 'pvz., Susitikimo veiksmų punktų ištraukiklis';
+
+  @override
+  String get nameMustBeAtLeast3Characters => 'Pavadinimas turi būti bent 3 simbolių';
+
+  @override
+  String get conversationPromptHint =>
+      'pvz., Ištraukite veiksmų punktus, priimtus sprendimus ir pagrindinius dalykus iš pokalbio.';
+
+  @override
+  String get pleaseEnterAppPrompt => 'Įveskite programėlės užuominą';
+
+  @override
+  String get promptMustBeAtLeast10Characters => 'Užuomina turi būti bent 10 simbolių';
+
+  @override
+  String get anyoneCanDiscoverTemplate => 'Bet kas gali atrasti jūsų šabloną';
+
+  @override
+  String get onlyYouCanUseTemplate => 'Tik jūs galite naudoti šį šabloną';
+
+  @override
+  String get generatingDescription => 'Generuojamas aprašymas...';
+
+  @override
+  String get creatingAppIcon => 'Kuriama programėlės piktograma...';
+
+  @override
+  String get installingApp => 'Diegiama programėlė...';
+
+  @override
+  String get appCreatedAndInstalled => 'Programėlė sukurta ir įdiegta!';
+
+  @override
+  String get appCreatedSuccessfully => 'Programėlė sėkmingai sukurta!';
+
+  @override
+  String get failedToCreateApp => 'Nepavyko sukurti programėlės. Bandykite dar kartą.';
 }

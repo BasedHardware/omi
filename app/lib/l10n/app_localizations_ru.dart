@@ -7005,4 +7005,46 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get importantConversationBody => 'У вас только что был важный разговор. Нажмите, чтобы поделиться сводкой.';
+
+  @override
+  String get templateName => 'Название шаблона';
+
+  @override
+  String get templateNameHint => 'напр., Извлечение задач из совещаний';
+
+  @override
+  String get nameMustBeAtLeast3Characters => 'Название должно содержать не менее 3 символов';
+
+  @override
+  String get conversationPromptHint => 'напр., Извлеките задачи, принятые решения и ключевые выводы из разговора.';
+
+  @override
+  String get pleaseEnterAppPrompt => 'Пожалуйста, введите подсказку для приложения';
+
+  @override
+  String get promptMustBeAtLeast10Characters => 'Подсказка должна содержать не менее 10 символов';
+
+  @override
+  String get anyoneCanDiscoverTemplate => 'Любой может найти ваш шаблон';
+
+  @override
+  String get onlyYouCanUseTemplate => 'Только вы можете использовать этот шаблон';
+
+  @override
+  String get generatingDescription => 'Создание описания...';
+
+  @override
+  String get creatingAppIcon => 'Создание значка приложения...';
+
+  @override
+  String get installingApp => 'Установка приложения...';
+
+  @override
+  String get appCreatedAndInstalled => 'Приложение создано и установлено!';
+
+  @override
+  String get appCreatedSuccessfully => 'Приложение успешно создано!';
+
+  @override
+  String get failedToCreateApp => 'Не удалось создать приложение. Попробуйте снова.';
 }

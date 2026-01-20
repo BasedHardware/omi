@@ -6871,4 +6871,46 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get importantConversationBody => '방금 중요한 대화를 나눴습니다. 탭하여 요약을 공유하세요.';
+
+  @override
+  String get templateName => '템플릿 이름';
+
+  @override
+  String get templateNameHint => '예: 회의 실행 항목 추출기';
+
+  @override
+  String get nameMustBeAtLeast3Characters => '이름은 최소 3자 이상이어야 합니다';
+
+  @override
+  String get conversationPromptHint => '예: 제공된 대화에서 실행 항목, 결정 사항 및 주요 내용을 추출합니다.';
+
+  @override
+  String get pleaseEnterAppPrompt => '앱의 프롬프트를 입력하세요';
+
+  @override
+  String get promptMustBeAtLeast10Characters => '프롬프트는 최소 10자 이상이어야 합니다';
+
+  @override
+  String get anyoneCanDiscoverTemplate => '누구나 템플릿을 찾을 수 있습니다';
+
+  @override
+  String get onlyYouCanUseTemplate => '이 템플릿은 본인만 사용할 수 있습니다';
+
+  @override
+  String get generatingDescription => '설명 생성 중...';
+
+  @override
+  String get creatingAppIcon => '앱 아이콘 생성 중...';
+
+  @override
+  String get installingApp => '앱 설치 중...';
+
+  @override
+  String get appCreatedAndInstalled => '앱이 생성되고 설치되었습니다!';
+
+  @override
+  String get appCreatedSuccessfully => '앱이 성공적으로 생성되었습니다!';
+
+  @override
+  String get failedToCreateApp => '앱 생성에 실패했습니다. 다시 시도하세요.';
 }

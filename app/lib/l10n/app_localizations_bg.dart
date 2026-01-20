@@ -7015,4 +7015,47 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get importantConversationBody =>
       'Току-що проведохте важен разговор. Докоснете, за да споделите резюмето с други.';
+
+  @override
+  String get templateName => 'Име на шаблона';
+
+  @override
+  String get templateNameHint => 'напр. Извличане на действия от срещи';
+
+  @override
+  String get nameMustBeAtLeast3Characters => 'Името трябва да е поне 3 символа';
+
+  @override
+  String get conversationPromptHint =>
+      'напр. Извлечете действия, взети решения и ключови изводи от предоставения разговор.';
+
+  @override
+  String get pleaseEnterAppPrompt => 'Моля, въведете подсказка за вашето приложение';
+
+  @override
+  String get promptMustBeAtLeast10Characters => 'Подсказката трябва да е поне 10 символа';
+
+  @override
+  String get anyoneCanDiscoverTemplate => 'Всеки може да открие вашия шаблон';
+
+  @override
+  String get onlyYouCanUseTemplate => 'Само вие можете да използвате този шаблон';
+
+  @override
+  String get generatingDescription => 'Генериране на описание...';
+
+  @override
+  String get creatingAppIcon => 'Създаване на икона...';
+
+  @override
+  String get installingApp => 'Инсталиране на приложението...';
+
+  @override
+  String get appCreatedAndInstalled => 'Приложението е създадено и инсталирано!';
+
+  @override
+  String get appCreatedSuccessfully => 'Приложението е създадено успешно!';
+
+  @override
+  String get failedToCreateApp => 'Неуспешно създаване. Моля, опитайте отново.';
 }

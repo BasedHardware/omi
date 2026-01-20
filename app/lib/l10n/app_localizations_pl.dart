@@ -6999,4 +6999,46 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get importantConversationBody => 'Właśnie odbyłeś ważną rozmowę. Dotknij, aby udostępnić podsumowanie.';
+
+  @override
+  String get templateName => 'Nazwa szablonu';
+
+  @override
+  String get templateNameHint => 'np. Ekstraktor zadań ze spotkań';
+
+  @override
+  String get nameMustBeAtLeast3Characters => 'Nazwa musi mieć co najmniej 3 znaki';
+
+  @override
+  String get conversationPromptHint => 'np. Wyodrębnij zadania, podjęte decyzje i kluczowe wnioski z rozmowy.';
+
+  @override
+  String get pleaseEnterAppPrompt => 'Wprowadź podpowiedź dla aplikacji';
+
+  @override
+  String get promptMustBeAtLeast10Characters => 'Podpowiedź musi mieć co najmniej 10 znaków';
+
+  @override
+  String get anyoneCanDiscoverTemplate => 'Każdy może odkryć Twój szablon';
+
+  @override
+  String get onlyYouCanUseTemplate => 'Tylko Ty możesz używać tego szablonu';
+
+  @override
+  String get generatingDescription => 'Generowanie opisu...';
+
+  @override
+  String get creatingAppIcon => 'Tworzenie ikony aplikacji...';
+
+  @override
+  String get installingApp => 'Instalowanie aplikacji...';
+
+  @override
+  String get appCreatedAndInstalled => 'Aplikacja utworzona i zainstalowana!';
+
+  @override
+  String get appCreatedSuccessfully => 'Aplikacja utworzona pomyślnie!';
+
+  @override
+  String get failedToCreateApp => 'Nie udało się utworzyć aplikacji. Spróbuj ponownie.';
 }

@@ -6990,4 +6990,47 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get importantConversationBody => 'Du hade precis ett viktigt samtal. Tryck för att dela sammanfattningen.';
+
+  @override
+  String get templateName => 'Mallnamn';
+
+  @override
+  String get templateNameHint => 't.ex., Mötesåtgärdspunkter extraktor';
+
+  @override
+  String get nameMustBeAtLeast3Characters => 'Namnet måste vara minst 3 tecken';
+
+  @override
+  String get conversationPromptHint =>
+      't.ex., Extrahera åtgärdspunkter, fattade beslut och viktiga slutsatser från samtalet.';
+
+  @override
+  String get pleaseEnterAppPrompt => 'Ange en prompt för din app';
+
+  @override
+  String get promptMustBeAtLeast10Characters => 'Prompten måste vara minst 10 tecken';
+
+  @override
+  String get anyoneCanDiscoverTemplate => 'Vem som helst kan upptäcka din mall';
+
+  @override
+  String get onlyYouCanUseTemplate => 'Endast du kan använda denna mall';
+
+  @override
+  String get generatingDescription => 'Genererar beskrivning...';
+
+  @override
+  String get creatingAppIcon => 'Skapar appikon...';
+
+  @override
+  String get installingApp => 'Installerar app...';
+
+  @override
+  String get appCreatedAndInstalled => 'App skapad och installerad!';
+
+  @override
+  String get appCreatedSuccessfully => 'App skapad!';
+
+  @override
+  String get failedToCreateApp => 'Kunde inte skapa app. Försök igen.';
 }

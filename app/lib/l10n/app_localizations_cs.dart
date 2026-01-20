@@ -6979,4 +6979,47 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get importantConversationBody => 'Právě jste měli důležitý rozhovor. Klepnutím sdílejte shrnutí s ostatními.';
+
+  @override
+  String get templateName => 'Název šablony';
+
+  @override
+  String get templateNameHint => 'např. Extraktor úkolů ze schůzek';
+
+  @override
+  String get nameMustBeAtLeast3Characters => 'Název musí mít alespoň 3 znaky';
+
+  @override
+  String get conversationPromptHint =>
+      'např. Extrahujte úkoly, přijatá rozhodnutí a klíčové poznatky z poskytnuté konverzace.';
+
+  @override
+  String get pleaseEnterAppPrompt => 'Zadejte prosím výzvu pro vaši aplikaci';
+
+  @override
+  String get promptMustBeAtLeast10Characters => 'Výzva musí mít alespoň 10 znaků';
+
+  @override
+  String get anyoneCanDiscoverTemplate => 'Kdokoli může objevit vaši šablonu';
+
+  @override
+  String get onlyYouCanUseTemplate => 'Pouze vy můžete používat tuto šablonu';
+
+  @override
+  String get generatingDescription => 'Generování popisu...';
+
+  @override
+  String get creatingAppIcon => 'Vytváření ikony aplikace...';
+
+  @override
+  String get installingApp => 'Instalace aplikace...';
+
+  @override
+  String get appCreatedAndInstalled => 'Aplikace vytvořena a nainstalována!';
+
+  @override
+  String get appCreatedSuccessfully => 'Aplikace úspěšně vytvořena!';
+
+  @override
+  String get failedToCreateApp => 'Nepodařilo se vytvořit aplikaci. Zkuste to prosím znovu.';
 }

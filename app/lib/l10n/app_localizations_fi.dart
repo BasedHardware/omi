@@ -6987,4 +6987,46 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get importantConversationBody => 'Sinulla oli juuri tärkeä keskustelu. Napauta jakaaksesi yhteenvedon muille.';
+
+  @override
+  String get templateName => 'Mallin nimi';
+
+  @override
+  String get templateNameHint => 'esim. Kokouksen toimenpiteiden poimija';
+
+  @override
+  String get nameMustBeAtLeast3Characters => 'Nimen on oltava vähintään 3 merkkiä';
+
+  @override
+  String get conversationPromptHint => 'esim. Poimi toimenpiteet, päätökset ja keskeiset havainnot keskustelusta.';
+
+  @override
+  String get pleaseEnterAppPrompt => 'Anna sovelluksellesi kehote';
+
+  @override
+  String get promptMustBeAtLeast10Characters => 'Kehotteen on oltava vähintään 10 merkkiä';
+
+  @override
+  String get anyoneCanDiscoverTemplate => 'Kuka tahansa voi löytää mallisi';
+
+  @override
+  String get onlyYouCanUseTemplate => 'Vain sinä voit käyttää tätä mallia';
+
+  @override
+  String get generatingDescription => 'Luodaan kuvausta...';
+
+  @override
+  String get creatingAppIcon => 'Luodaan sovelluskuvaketta...';
+
+  @override
+  String get installingApp => 'Asennetaan sovellusta...';
+
+  @override
+  String get appCreatedAndInstalled => 'Sovellus luotu ja asennettu!';
+
+  @override
+  String get appCreatedSuccessfully => 'Sovellus luotu onnistuneesti!';
+
+  @override
+  String get failedToCreateApp => 'Sovelluksen luonti epäonnistui. Yritä uudelleen.';
 }

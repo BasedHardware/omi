@@ -7027,4 +7027,47 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get importantConversationBody =>
       'Hai appena avuto una conversazione importante. Tocca per condividere il riepilogo.';
+
+  @override
+  String get templateName => 'Nome del modello';
+
+  @override
+  String get templateNameHint => 'es., Estrattore di azioni riunioni';
+
+  @override
+  String get nameMustBeAtLeast3Characters => 'Il nome deve essere di almeno 3 caratteri';
+
+  @override
+  String get conversationPromptHint =>
+      'es., Estrai azioni, decisioni prese e punti chiave dalla conversazione fornita.';
+
+  @override
+  String get pleaseEnterAppPrompt => 'Inserisci un prompt per la tua app';
+
+  @override
+  String get promptMustBeAtLeast10Characters => 'Il prompt deve essere di almeno 10 caratteri';
+
+  @override
+  String get anyoneCanDiscoverTemplate => 'Chiunque può scoprire il tuo modello';
+
+  @override
+  String get onlyYouCanUseTemplate => 'Solo tu puoi usare questo modello';
+
+  @override
+  String get generatingDescription => 'Generazione descrizione...';
+
+  @override
+  String get creatingAppIcon => 'Creazione icona app...';
+
+  @override
+  String get installingApp => 'Installazione app...';
+
+  @override
+  String get appCreatedAndInstalled => 'App creata e installata!';
+
+  @override
+  String get appCreatedSuccessfully => 'App creata con successo!';
+
+  @override
+  String get failedToCreateApp => 'Impossibile creare l\'app. Riprova.';
 }

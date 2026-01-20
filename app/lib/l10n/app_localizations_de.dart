@@ -7040,4 +7040,47 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get importantConversationBody =>
       'Du hattest gerade ein wichtiges Gespräch. Tippe, um die Zusammenfassung zu teilen.';
+
+  @override
+  String get templateName => 'Vorlagenname';
+
+  @override
+  String get templateNameHint => 'z.B. Meeting-Aktionspunkte-Extraktor';
+
+  @override
+  String get nameMustBeAtLeast3Characters => 'Der Name muss mindestens 3 Zeichen haben';
+
+  @override
+  String get conversationPromptHint =>
+      'z.B. Extrahieren Sie Aktionspunkte, getroffene Entscheidungen und wichtige Erkenntnisse aus dem Gespräch.';
+
+  @override
+  String get pleaseEnterAppPrompt => 'Bitte geben Sie eine Aufforderung für Ihre App ein';
+
+  @override
+  String get promptMustBeAtLeast10Characters => 'Die Aufforderung muss mindestens 10 Zeichen haben';
+
+  @override
+  String get anyoneCanDiscoverTemplate => 'Jeder kann Ihre Vorlage entdecken';
+
+  @override
+  String get onlyYouCanUseTemplate => 'Nur Sie können diese Vorlage verwenden';
+
+  @override
+  String get generatingDescription => 'Beschreibung wird generiert...';
+
+  @override
+  String get creatingAppIcon => 'App-Symbol wird erstellt...';
+
+  @override
+  String get installingApp => 'App wird installiert...';
+
+  @override
+  String get appCreatedAndInstalled => 'App erstellt und installiert!';
+
+  @override
+  String get appCreatedSuccessfully => 'App erfolgreich erstellt!';
+
+  @override
+  String get failedToCreateApp => 'App konnte nicht erstellt werden. Bitte versuchen Sie es erneut.';
 }

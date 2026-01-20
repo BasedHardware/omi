@@ -7019,4 +7019,47 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get importantConversationBody => 'Tocmai ai avut o conversație importantă. Atinge pentru a partaja rezumatul.';
+
+  @override
+  String get templateName => 'Nume șablon';
+
+  @override
+  String get templateNameHint => 'ex., Extractor de acțiuni pentru întâlniri';
+
+  @override
+  String get nameMustBeAtLeast3Characters => 'Numele trebuie să aibă cel puțin 3 caractere';
+
+  @override
+  String get conversationPromptHint =>
+      'ex., Extrageți acțiuni, decizii luate și concluzii cheie din conversația furnizată.';
+
+  @override
+  String get pleaseEnterAppPrompt => 'Vă rugăm să introduceți un prompt pentru aplicația dvs.';
+
+  @override
+  String get promptMustBeAtLeast10Characters => 'Promptul trebuie să aibă cel puțin 10 caractere';
+
+  @override
+  String get anyoneCanDiscoverTemplate => 'Oricine poate descoperi șablonul dvs.';
+
+  @override
+  String get onlyYouCanUseTemplate => 'Doar dvs. puteți folosi acest șablon';
+
+  @override
+  String get generatingDescription => 'Se generează descrierea...';
+
+  @override
+  String get creatingAppIcon => 'Se creează pictograma aplicației...';
+
+  @override
+  String get installingApp => 'Se instalează aplicația...';
+
+  @override
+  String get appCreatedAndInstalled => 'Aplicație creată și instalată!';
+
+  @override
+  String get appCreatedSuccessfully => 'Aplicație creată cu succes!';
+
+  @override
+  String get failedToCreateApp => 'Nu s-a putut crea aplicația. Vă rugăm să încercați din nou.';
 }

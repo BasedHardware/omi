@@ -7006,4 +7006,47 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get importantConversationBody => 'Je hebt net een belangrijk gesprek gehad. Tik om de samenvatting te delen.';
+
+  @override
+  String get templateName => 'Sjabloonnaam';
+
+  @override
+  String get templateNameHint => 'bijv., Vergadering actiepunten extractor';
+
+  @override
+  String get nameMustBeAtLeast3Characters => 'Naam moet minimaal 3 tekens zijn';
+
+  @override
+  String get conversationPromptHint =>
+      'bijv., Haal actiepunten, genomen beslissingen en belangrijke punten uit het gesprek.';
+
+  @override
+  String get pleaseEnterAppPrompt => 'Voer een prompt in voor uw app';
+
+  @override
+  String get promptMustBeAtLeast10Characters => 'Prompt moet minimaal 10 tekens zijn';
+
+  @override
+  String get anyoneCanDiscoverTemplate => 'Iedereen kan uw sjabloon ontdekken';
+
+  @override
+  String get onlyYouCanUseTemplate => 'Alleen u kunt deze sjabloon gebruiken';
+
+  @override
+  String get generatingDescription => 'Beschrijving genereren...';
+
+  @override
+  String get creatingAppIcon => 'App-pictogram maken...';
+
+  @override
+  String get installingApp => 'App installeren...';
+
+  @override
+  String get appCreatedAndInstalled => 'App gemaakt en geïnstalleerd!';
+
+  @override
+  String get appCreatedSuccessfully => 'App succesvol gemaakt!';
+
+  @override
+  String get failedToCreateApp => 'Kan app niet maken. Probeer het opnieuw.';
 }

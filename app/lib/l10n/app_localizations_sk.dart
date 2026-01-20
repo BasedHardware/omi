@@ -6988,4 +6988,46 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get importantConversationBody => 'Práve ste mali dôležitý rozhovor. Klepnutím zdieľajte zhrnutie.';
+
+  @override
+  String get templateName => 'Názov šablóny';
+
+  @override
+  String get templateNameHint => 'napr. Extraktor úloh zo stretnutí';
+
+  @override
+  String get nameMustBeAtLeast3Characters => 'Názov musí mať aspoň 3 znaky';
+
+  @override
+  String get conversationPromptHint => 'napr. Extrahujte úlohy, prijaté rozhodnutia a kľúčové poznatky z konverzácie.';
+
+  @override
+  String get pleaseEnterAppPrompt => 'Zadajte prosím výzvu pre aplikáciu';
+
+  @override
+  String get promptMustBeAtLeast10Characters => 'Výzva musí mať aspoň 10 znakov';
+
+  @override
+  String get anyoneCanDiscoverTemplate => 'Ktokoľvek môže objaviť vašu šablónu';
+
+  @override
+  String get onlyYouCanUseTemplate => 'Iba vy môžete používať túto šablónu';
+
+  @override
+  String get generatingDescription => 'Generovanie popisu...';
+
+  @override
+  String get creatingAppIcon => 'Vytváranie ikony aplikácie...';
+
+  @override
+  String get installingApp => 'Inštalácia aplikácie...';
+
+  @override
+  String get appCreatedAndInstalled => 'Aplikácia vytvorená a nainštalovaná!';
+
+  @override
+  String get appCreatedSuccessfully => 'Aplikácia úspešne vytvorená!';
+
+  @override
+  String get failedToCreateApp => 'Nepodarilo sa vytvoriť aplikáciu. Skúste to znova.';
 }

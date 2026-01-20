@@ -6994,4 +6994,46 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get importantConversationBody => 'Du har lige haft en vigtig samtale. Tryk for at dele resuméet med andre.';
+
+  @override
+  String get templateName => 'Skabelonnavn';
+
+  @override
+  String get templateNameHint => 'f.eks. Møde handlingspunkt udtræk';
+
+  @override
+  String get nameMustBeAtLeast3Characters => 'Navnet skal være mindst 3 tegn';
+
+  @override
+  String get conversationPromptHint => 'f.eks. Udtræk handlingspunkter, beslutninger og vigtige pointer fra samtalen.';
+
+  @override
+  String get pleaseEnterAppPrompt => 'Indtast venligst en prompt til din app';
+
+  @override
+  String get promptMustBeAtLeast10Characters => 'Prompten skal være mindst 10 tegn';
+
+  @override
+  String get anyoneCanDiscoverTemplate => 'Alle kan finde din skabelon';
+
+  @override
+  String get onlyYouCanUseTemplate => 'Kun du kan bruge denne skabelon';
+
+  @override
+  String get generatingDescription => 'Genererer beskrivelse...';
+
+  @override
+  String get creatingAppIcon => 'Opretter app-ikon...';
+
+  @override
+  String get installingApp => 'Installerer app...';
+
+  @override
+  String get appCreatedAndInstalled => 'App oprettet og installeret!';
+
+  @override
+  String get appCreatedSuccessfully => 'App oprettet!';
+
+  @override
+  String get failedToCreateApp => 'Kunne ikke oprette app. Prøv venligst igen.';
 }

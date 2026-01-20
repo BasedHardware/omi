@@ -6999,4 +6999,47 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get importantConversationBody => 'Jums tikko bija svarīga saruna. Pieskarieties, lai kopīgotu kopsavilkumu.';
+
+  @override
+  String get templateName => 'Veidnes nosaukums';
+
+  @override
+  String get templateNameHint => 'piem., Sanāksmes darbību punktu izvilcējs';
+
+  @override
+  String get nameMustBeAtLeast3Characters => 'Nosaukumam jābūt vismaz 3 rakstzīmēm';
+
+  @override
+  String get conversationPromptHint =>
+      'piem., Izvelciet darbību punktus, pieņemtos lēmumus un galvenos secinājumus no sarunas.';
+
+  @override
+  String get pleaseEnterAppPrompt => 'Lūdzu, ievadiet uzvedni savai lietotnei';
+
+  @override
+  String get promptMustBeAtLeast10Characters => 'Uzvednei jābūt vismaz 10 rakstzīmēm';
+
+  @override
+  String get anyoneCanDiscoverTemplate => 'Ikviens var atrast jūsu veidni';
+
+  @override
+  String get onlyYouCanUseTemplate => 'Tikai jūs varat izmantot šo veidni';
+
+  @override
+  String get generatingDescription => 'Ģenerē aprakstu...';
+
+  @override
+  String get creatingAppIcon => 'Veido lietotnes ikonu...';
+
+  @override
+  String get installingApp => 'Instalē lietotni...';
+
+  @override
+  String get appCreatedAndInstalled => 'Lietotne izveidota un instalēta!';
+
+  @override
+  String get appCreatedSuccessfully => 'Lietotne veiksmīgi izveidota!';
+
+  @override
+  String get failedToCreateApp => 'Neizdevās izveidot lietotni. Lūdzu, mēģiniet vēlreiz.';
 }

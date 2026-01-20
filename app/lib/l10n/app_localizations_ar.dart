@@ -6937,4 +6937,47 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get importantConversationBody => 'لقد أجريت للتو محادثة مهمة. انقر لمشاركة الملخص مع الآخرين.';
+
+  @override
+  String get templateName => 'اسم القالب';
+
+  @override
+  String get templateNameHint => 'مثال: مستخرج عناصر إجراءات الاجتماع';
+
+  @override
+  String get nameMustBeAtLeast3Characters => 'يجب أن يكون الاسم 3 أحرف على الأقل';
+
+  @override
+  String get conversationPromptHint =>
+      'مثال: استخراج عناصر الإجراءات والقرارات المتخذة والنقاط الرئيسية من المحادثة المقدمة.';
+
+  @override
+  String get pleaseEnterAppPrompt => 'يرجى إدخال موجه لتطبيقك';
+
+  @override
+  String get promptMustBeAtLeast10Characters => 'يجب أن يكون الموجه 10 أحرف على الأقل';
+
+  @override
+  String get anyoneCanDiscoverTemplate => 'يمكن لأي شخص اكتشاف قالبك';
+
+  @override
+  String get onlyYouCanUseTemplate => 'أنت فقط يمكنك استخدام هذا القالب';
+
+  @override
+  String get generatingDescription => 'جارٍ إنشاء الوصف...';
+
+  @override
+  String get creatingAppIcon => 'جارٍ إنشاء أيقونة التطبيق...';
+
+  @override
+  String get installingApp => 'جارٍ تثبيت التطبيق...';
+
+  @override
+  String get appCreatedAndInstalled => 'تم إنشاء التطبيق وتثبيته!';
+
+  @override
+  String get appCreatedSuccessfully => 'تم إنشاء التطبيق بنجاح!';
+
+  @override
+  String get failedToCreateApp => 'فشل إنشاء التطبيق. يرجى المحاولة مرة أخرى.';
 }

@@ -6996,4 +6996,47 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get importantConversationBody => 'Bạn vừa có một cuộc trò chuyện quan trọng. Nhấn để chia sẻ bản tóm tắt.';
+
+  @override
+  String get templateName => 'Tên mẫu';
+
+  @override
+  String get templateNameHint => 'VD: Trích xuất hành động từ cuộc họp';
+
+  @override
+  String get nameMustBeAtLeast3Characters => 'Tên phải có ít nhất 3 ký tự';
+
+  @override
+  String get conversationPromptHint =>
+      'VD: Trích xuất các hành động, quyết định và điểm chính từ cuộc hội thoại được cung cấp.';
+
+  @override
+  String get pleaseEnterAppPrompt => 'Vui lòng nhập lời nhắc cho ứng dụng của bạn';
+
+  @override
+  String get promptMustBeAtLeast10Characters => 'Lời nhắc phải có ít nhất 10 ký tự';
+
+  @override
+  String get anyoneCanDiscoverTemplate => 'Bất kỳ ai cũng có thể khám phá mẫu của bạn';
+
+  @override
+  String get onlyYouCanUseTemplate => 'Chỉ bạn mới có thể sử dụng mẫu này';
+
+  @override
+  String get generatingDescription => 'Đang tạo mô tả...';
+
+  @override
+  String get creatingAppIcon => 'Đang tạo biểu tượng ứng dụng...';
+
+  @override
+  String get installingApp => 'Đang cài đặt ứng dụng...';
+
+  @override
+  String get appCreatedAndInstalled => 'Ứng dụng đã được tạo và cài đặt!';
+
+  @override
+  String get appCreatedSuccessfully => 'Ứng dụng đã được tạo thành công!';
+
+  @override
+  String get failedToCreateApp => 'Không thể tạo ứng dụng. Vui lòng thử lại.';
 }

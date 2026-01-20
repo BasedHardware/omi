@@ -6988,4 +6988,46 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get importantConversationBody => 'Teil oli just oluline vestlus. Puudutage kokkuvõtte jagamiseks.';
+
+  @override
+  String get templateName => 'Malli nimi';
+
+  @override
+  String get templateNameHint => 'nt Koosoleku tegevuspunktide ekstraktor';
+
+  @override
+  String get nameMustBeAtLeast3Characters => 'Nimi peab olema vähemalt 3 tähemärki';
+
+  @override
+  String get conversationPromptHint => 'nt Eraldage tegevuspunktid, otsused ja põhipunktid vestlusest.';
+
+  @override
+  String get pleaseEnterAppPrompt => 'Palun sisestage oma rakenduse viip';
+
+  @override
+  String get promptMustBeAtLeast10Characters => 'Viip peab olema vähemalt 10 tähemärki';
+
+  @override
+  String get anyoneCanDiscoverTemplate => 'Igaüks saab teie malli avastada';
+
+  @override
+  String get onlyYouCanUseTemplate => 'Ainult teie saate seda malli kasutada';
+
+  @override
+  String get generatingDescription => 'Kirjelduse genereerimine...';
+
+  @override
+  String get creatingAppIcon => 'Rakenduse ikooni loomine...';
+
+  @override
+  String get installingApp => 'Rakenduse installimine...';
+
+  @override
+  String get appCreatedAndInstalled => 'Rakendus loodud ja installitud!';
+
+  @override
+  String get appCreatedSuccessfully => 'Rakendus edukalt loodud!';
+
+  @override
+  String get failedToCreateApp => 'Rakenduse loomine ebaõnnestus. Palun proovige uuesti.';
 }

@@ -7026,4 +7026,47 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get importantConversationBody => 'Acabes de tenir una conversa important. Toca per compartir el resum.';
+
+  @override
+  String get templateName => 'Nom de la plantilla';
+
+  @override
+  String get templateNameHint => 'p. ex., Extractor d\'elements d\'acció de reunions';
+
+  @override
+  String get nameMustBeAtLeast3Characters => 'El nom ha de tenir almenys 3 caràcters';
+
+  @override
+  String get conversationPromptHint =>
+      'p. ex., Extreu elements d\'acció, decisions preses i punts clau de la conversa proporcionada.';
+
+  @override
+  String get pleaseEnterAppPrompt => 'Si us plau, introduïu una indicació per a la vostra aplicació';
+
+  @override
+  String get promptMustBeAtLeast10Characters => 'La indicació ha de tenir almenys 10 caràcters';
+
+  @override
+  String get anyoneCanDiscoverTemplate => 'Qualsevol pot descobrir la vostra plantilla';
+
+  @override
+  String get onlyYouCanUseTemplate => 'Només vós podeu utilitzar aquesta plantilla';
+
+  @override
+  String get generatingDescription => 'Generant descripció...';
+
+  @override
+  String get creatingAppIcon => 'Creant icona de l\'aplicació...';
+
+  @override
+  String get installingApp => 'Instal·lant aplicació...';
+
+  @override
+  String get appCreatedAndInstalled => 'Aplicació creada i instal·lada!';
+
+  @override
+  String get appCreatedSuccessfully => 'Aplicació creada amb èxit!';
+
+  @override
+  String get failedToCreateApp => 'No s\'ha pogut crear l\'aplicació. Si us plau, torneu-ho a provar.';
 }

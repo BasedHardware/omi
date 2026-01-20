@@ -8598,5 +8598,160 @@
   "importantConversationBody": "You just had an important convo. Tap to share the summary with others.",
   "@importantConversationBody": {
     "description": "Notification body prompting user to share conversation summary"
+  },
+  "templateName": "Template Name",
+  "@templateName": {
+    "description": "Label for template name field"
+  },
+  "templateNameHint": "e.g., Meeting Action Items Extractor",
+  "@templateNameHint": {
+    "description": "Hint text for template name field"
+  },
+  "nameMustBeAtLeast3Characters": "Name must be at least 3 characters",
+  "@nameMustBeAtLeast3Characters": {
+    "description": "Validation error when name is too short"
+  },
+  "conversationPromptHint": "e.g., Extract action items, decisions made, and key takeaways from the provided conversation.",
+  "@conversationPromptHint": {
+    "description": "Hint text for conversation prompt field"
+  },
+  "pleaseEnterAppPrompt": "Please enter a prompt for your app",
+  "@pleaseEnterAppPrompt": {
+    "description": "Validation error when prompt is empty"
+  },
+  "promptMustBeAtLeast10Characters": "Prompt must be at least 10 characters",
+  "@promptMustBeAtLeast10Characters": {
+    "description": "Validation error when prompt is too short"
+  },
+  "anyoneCanDiscoverTemplate": "Anyone can discover your template",
+  "@anyoneCanDiscoverTemplate": {
+    "description": "Description when template is public"
+  },
+  "onlyYouCanUseTemplate": "Only you can use this template",
+  "@onlyYouCanUseTemplate": {
+    "description": "Description when template is private"
+  },
+  "generatingDescription": "Generating description...",
+  "@generatingDescription": {
+    "description": "Status message during app creation"
+  },
+  "creatingAppIcon": "Creating app icon...",
+  "@creatingAppIcon": {
+    "description": "Status message during app creation"
+  },
+  "installingApp": "Installing app...",
+  "@installingApp": {
+    "description": "Status message during app creation"
+  },
+  "appCreatedAndInstalled": "App created and installed!",
+  "@appCreatedAndInstalled": {
+    "description": "Success message after app is created and installed"
+  },
+  "appCreatedSuccessfully": "App created successfully!",
+  "@appCreatedSuccessfully": {
+    "description": "Success message after app is created"
+  },
+  "failedToCreateApp": "Failed to create app. Please try again.",
+  "@failedToCreateApp": {
+    "description": "Error message when app creation fails"
+  },
+  "addAppSelectCoreCapability": "Please select one more core capability for your app to proceed",
+  "@addAppSelectCoreCapability": {
+    "description": "Validation error when only proactive notification capability is selected"
+  },
+  "addAppSelectPaymentPlan": "Please select a payment plan and enter a price for your app",
+  "@addAppSelectPaymentPlan": {
+    "description": "Validation error when paid app has no payment plan or price"
+  },
+  "addAppSelectCapability": "Please select at least one capability for your app",
+  "@addAppSelectCapability": {
+    "description": "Validation error when no capability is selected"
+  },
+  "addAppSelectLogo": "Please select a logo for your app",
+  "@addAppSelectLogo": {
+    "description": "Validation error when no app logo is selected"
+  },
+  "addAppEnterChatPrompt": "Please enter a chat prompt for your app",
+  "@addAppEnterChatPrompt": {
+    "description": "Validation error when chat capability selected but no prompt entered"
+  },
+  "addAppEnterConversationPrompt": "Please enter a conversation prompt for your app",
+  "@addAppEnterConversationPrompt": {
+    "description": "Validation error when memories capability selected but no prompt entered"
+  },
+  "addAppSelectTriggerEvent": "Please select a trigger event for your app",
+  "@addAppSelectTriggerEvent": {
+    "description": "Validation error when external integration selected but no trigger event"
+  },
+  "addAppEnterWebhookUrl": "Please enter a webhook URL for your app",
+  "@addAppEnterWebhookUrl": {
+    "description": "Validation error when external integration selected but no webhook URL"
+  },
+  "addAppSelectCategory": "Please select a category for your app",
+  "@addAppSelectCategory": {
+    "description": "Validation error when no app category selected"
+  },
+  "addAppFillRequiredFields": "Please fill in all the required fields correctly",
+  "@addAppFillRequiredFields": {
+    "description": "Generic validation error for incomplete form"
+  },
+  "addAppUpdatedSuccess": "App updated successfully 🚀",
+  "@addAppUpdatedSuccess": {
+    "description": "Success message after app update"
+  },
+  "addAppUpdateFailed": "Failed to update app. Please try again later",
+  "@addAppUpdateFailed": {
+    "description": "Error message when app update fails"
+  },
+  "addAppSubmittedSuccess": "App submitted successfully 🚀",
+  "@addAppSubmittedSuccess": {
+    "description": "Success message after app submission"
+  },
+  "addAppErrorOpeningFilePicker": "Error opening file picker: {message}",
+  "@addAppErrorOpeningFilePicker": {
+    "description": "Error when file picker fails to open",
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "addAppErrorSelectingImage": "Error selecting image: {error}",
+  "@addAppErrorSelectingImage": {
+    "description": "Error when image selection fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "addAppPhotosPermissionDenied": "Photos permission denied. Please allow access to photos to select an image",
+  "@addAppPhotosPermissionDenied": {
+    "description": "Error when photos permission is denied"
+  },
+  "addAppErrorSelectingImageRetry": "Error selecting image. Please try again.",
+  "@addAppErrorSelectingImageRetry": {
+    "description": "Generic error when image selection fails"
+  },
+  "addAppErrorSelectingThumbnail": "Error selecting thumbnail: {error}",
+  "@addAppErrorSelectingThumbnail": {
+    "description": "Error when thumbnail selection fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "addAppErrorSelectingThumbnailRetry": "Error selecting thumbnail. Please try again.",
+  "@addAppErrorSelectingThumbnailRetry": {
+    "description": "Generic error when thumbnail selection fails"
+  },
+  "addAppCapabilityConflictWithPersona": "Other capabilities cannot be selected with Persona",
+  "@addAppCapabilityConflictWithPersona": {
+    "description": "Error when trying to select capabilities alongside Persona"
+  },
+  "addAppPersonaConflictWithCapabilities": "Persona cannot be selected with other capabilities",
+  "@addAppPersonaConflictWithCapabilities": {
+    "description": "Error when trying to select Persona alongside other capabilities"
   }
 }

@@ -6995,4 +6995,46 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get importantConversationBody => 'Ви щойно провели важливу розмову. Торкніться, щоб поділитися резюме.';
+
+  @override
+  String get templateName => 'Назва шаблону';
+
+  @override
+  String get templateNameHint => 'напр., Витягувач завдань зі зустрічей';
+
+  @override
+  String get nameMustBeAtLeast3Characters => 'Назва повинна містити щонайменше 3 символи';
+
+  @override
+  String get conversationPromptHint => 'напр., Витягніть завдання, прийняті рішення та ключові висновки з розмови.';
+
+  @override
+  String get pleaseEnterAppPrompt => 'Будь ласка, введіть підказку для програми';
+
+  @override
+  String get promptMustBeAtLeast10Characters => 'Підказка повинна містити щонайменше 10 символів';
+
+  @override
+  String get anyoneCanDiscoverTemplate => 'Будь-хто може знайти ваш шаблон';
+
+  @override
+  String get onlyYouCanUseTemplate => 'Тільки ви можете використовувати цей шаблон';
+
+  @override
+  String get generatingDescription => 'Створення опису...';
+
+  @override
+  String get creatingAppIcon => 'Створення значка програми...';
+
+  @override
+  String get installingApp => 'Встановлення програми...';
+
+  @override
+  String get appCreatedAndInstalled => 'Програму створено та встановлено!';
+
+  @override
+  String get appCreatedSuccessfully => 'Програму успішно створено!';
+
+  @override
+  String get failedToCreateApp => 'Не вдалося створити програму. Спробуйте ще раз.';
 }

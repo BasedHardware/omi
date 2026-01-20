@@ -6984,4 +6984,46 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get importantConversationBody => 'Du hadde nettopp en viktig samtale. Trykk for å dele sammendraget.';
+
+  @override
+  String get templateName => 'Malnavn';
+
+  @override
+  String get templateNameHint => 'f.eks., Møte handlingspunkt uttrekker';
+
+  @override
+  String get nameMustBeAtLeast3Characters => 'Navnet må være minst 3 tegn';
+
+  @override
+  String get conversationPromptHint => 'f.eks., Trekk ut handlingspunkter, beslutninger og hovedpunkter fra samtalen.';
+
+  @override
+  String get pleaseEnterAppPrompt => 'Vennligst skriv inn en prompt for appen din';
+
+  @override
+  String get promptMustBeAtLeast10Characters => 'Prompten må være minst 10 tegn';
+
+  @override
+  String get anyoneCanDiscoverTemplate => 'Hvem som helst kan oppdage malen din';
+
+  @override
+  String get onlyYouCanUseTemplate => 'Bare du kan bruke denne malen';
+
+  @override
+  String get generatingDescription => 'Genererer beskrivelse...';
+
+  @override
+  String get creatingAppIcon => 'Oppretter app-ikon...';
+
+  @override
+  String get installingApp => 'Installerer app...';
+
+  @override
+  String get appCreatedAndInstalled => 'App opprettet og installert!';
+
+  @override
+  String get appCreatedSuccessfully => 'App opprettet!';
+
+  @override
+  String get failedToCreateApp => 'Kunne ikke opprette app. Vennligst prøv igjen.';
 }

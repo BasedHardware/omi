@@ -13136,6 +13136,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'You just had an important convo. Tap to share the summary with others.'**
   String get importantConversationBody;
+
+  /// Label for template name field
+  ///
+  /// In en, this message translates to:
+  /// **'Template Name'**
+  String get templateName;
+
+  /// Hint text for template name field
+  ///
+  /// In en, this message translates to:
+  /// **'e.g., Meeting Action Items Extractor'**
+  String get templateNameHint;
+
+  /// Validation error when name is too short
+  ///
+  /// In en, this message translates to:
+  /// **'Name must be at least 3 characters'**
+  String get nameMustBeAtLeast3Characters;
+
+  /// Hint text for conversation prompt field
+  ///
+  /// In en, this message translates to:
+  /// **'e.g., Extract action items, decisions made, and key takeaways from the provided conversation.'**
+  String get conversationPromptHint;
+
+  /// Validation error when prompt is empty
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a prompt for your app'**
+  String get pleaseEnterAppPrompt;
+
+  /// Validation error when prompt is too short
+  ///
+  /// In en, this message translates to:
+  /// **'Prompt must be at least 10 characters'**
+  String get promptMustBeAtLeast10Characters;
+
+  /// Description when template is public
+  ///
+  /// In en, this message translates to:
+  /// **'Anyone can discover your template'**
+  String get anyoneCanDiscoverTemplate;
+
+  /// Description when template is private
+  ///
+  /// In en, this message translates to:
+  /// **'Only you can use this template'**
+  String get onlyYouCanUseTemplate;
+
+  /// Status message during app creation
+  ///
+  /// In en, this message translates to:
+  /// **'Generating description...'**
+  String get generatingDescription;
+
+  /// Status message during app creation
+  ///
+  /// In en, this message translates to:
+  /// **'Creating app icon...'**
+  String get creatingAppIcon;
+
+  /// Status message during app creation
+  ///
+  /// In en, this message translates to:
+  /// **'Installing app...'**
+  String get installingApp;
+
+  /// Success message after app is created and installed
+  ///
+  /// In en, this message translates to:
+  /// **'App created and installed!'**
+  String get appCreatedAndInstalled;
+
+  /// Success message after app is created
+  ///
+  /// In en, this message translates to:
+  /// **'App created successfully!'**
+  String get appCreatedSuccessfully;
+
+  /// Error message when app creation fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to create app. Please try again.'**
+  String get failedToCreateApp;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

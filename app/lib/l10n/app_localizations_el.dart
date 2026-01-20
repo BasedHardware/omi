@@ -7035,4 +7035,46 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get importantConversationBody => 'Μόλις είχατε μια σημαντική συνομιλία. Πατήστε για να μοιραστείτε τη σύνοψη.';
+
+  @override
+  String get templateName => 'Όνομα προτύπου';
+
+  @override
+  String get templateNameHint => 'π.χ., Εξαγωγέας ενεργειών συναντήσεων';
+
+  @override
+  String get nameMustBeAtLeast3Characters => 'Το όνομα πρέπει να έχει τουλάχιστον 3 χαρακτήρες';
+
+  @override
+  String get conversationPromptHint => 'π.χ., Εξάγετε ενέργειες, αποφάσεις και βασικά συμπεράσματα από τη συνομιλία.';
+
+  @override
+  String get pleaseEnterAppPrompt => 'Παρακαλώ εισάγετε μια προτροπή για την εφαρμογή σας';
+
+  @override
+  String get promptMustBeAtLeast10Characters => 'Η προτροπή πρέπει να έχει τουλάχιστον 10 χαρακτήρες';
+
+  @override
+  String get anyoneCanDiscoverTemplate => 'Ο καθένας μπορεί να ανακαλύψει το πρότυπό σας';
+
+  @override
+  String get onlyYouCanUseTemplate => 'Μόνο εσείς μπορείτε να χρησιμοποιήσετε αυτό το πρότυπο';
+
+  @override
+  String get generatingDescription => 'Δημιουργία περιγραφής...';
+
+  @override
+  String get creatingAppIcon => 'Δημιουργία εικονιδίου...';
+
+  @override
+  String get installingApp => 'Εγκατάσταση εφαρμογής...';
+
+  @override
+  String get appCreatedAndInstalled => 'Η εφαρμογή δημιουργήθηκε και εγκαταστάθηκε!';
+
+  @override
+  String get appCreatedSuccessfully => 'Η εφαρμογή δημιουργήθηκε επιτυχώς!';
+
+  @override
+  String get failedToCreateApp => 'Αποτυχία δημιουργίας. Παρακαλώ δοκιμάστε ξανά.';
 }

@@ -6952,4 +6952,46 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get importantConversationBody => 'คุณเพิ่งมีการสนทนาสำคัญ แตะเพื่อแชร์สรุปกับผู้อื่น';
+
+  @override
+  String get templateName => 'ชื่อเทมเพลต';
+
+  @override
+  String get templateNameHint => 'เช่น ตัวดึงรายการการดำเนินการจากการประชุม';
+
+  @override
+  String get nameMustBeAtLeast3Characters => 'ชื่อต้องมีอย่างน้อย 3 ตัวอักษร';
+
+  @override
+  String get conversationPromptHint => 'เช่น ดึงรายการการดำเนินการ การตัดสินใจ และประเด็นสำคัญจากการสนทนาที่ให้มา';
+
+  @override
+  String get pleaseEnterAppPrompt => 'กรุณากรอกพรอมต์สำหรับแอปของคุณ';
+
+  @override
+  String get promptMustBeAtLeast10Characters => 'พรอมต์ต้องมีอย่างน้อย 10 ตัวอักษร';
+
+  @override
+  String get anyoneCanDiscoverTemplate => 'ใครก็สามารถค้นพบเทมเพลตของคุณได้';
+
+  @override
+  String get onlyYouCanUseTemplate => 'เฉพาะคุณเท่านั้นที่สามารถใช้เทมเพลตนี้ได้';
+
+  @override
+  String get generatingDescription => 'กำลังสร้างคำอธิบาย...';
+
+  @override
+  String get creatingAppIcon => 'กำลังสร้างไอคอนแอป...';
+
+  @override
+  String get installingApp => 'กำลังติดตั้งแอป...';
+
+  @override
+  String get appCreatedAndInstalled => 'สร้างและติดตั้งแอปแล้ว!';
+
+  @override
+  String get appCreatedSuccessfully => 'สร้างแอปสำเร็จ!';
+
+  @override
+  String get failedToCreateApp => 'ไม่สามารถสร้างแอปได้ กรุณาลองอีกครั้ง';
 }

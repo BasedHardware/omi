@@ -6984,4 +6984,47 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get importantConversationBody => 'You just had an important convo. Tap to share the summary with others.';
+
+  @override
+  String get templateName => 'Template Name';
+
+  @override
+  String get templateNameHint => 'e.g., Meeting Action Items Extractor';
+
+  @override
+  String get nameMustBeAtLeast3Characters => 'Name must be at least 3 characters';
+
+  @override
+  String get conversationPromptHint =>
+      'e.g., Extract action items, decisions made, and key takeaways from the provided conversation.';
+
+  @override
+  String get pleaseEnterAppPrompt => 'Please enter a prompt for your app';
+
+  @override
+  String get promptMustBeAtLeast10Characters => 'Prompt must be at least 10 characters';
+
+  @override
+  String get anyoneCanDiscoverTemplate => 'Anyone can discover your template';
+
+  @override
+  String get onlyYouCanUseTemplate => 'Only you can use this template';
+
+  @override
+  String get generatingDescription => 'Generating description...';
+
+  @override
+  String get creatingAppIcon => 'Creating app icon...';
+
+  @override
+  String get installingApp => 'Installing app...';
+
+  @override
+  String get appCreatedAndInstalled => 'App created and installed!';
+
+  @override
+  String get appCreatedSuccessfully => 'App created successfully!';
+
+  @override
+  String get failedToCreateApp => 'Failed to create app. Please try again.';
 }

@@ -7008,4 +7008,47 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get importantConversationBody =>
       'Anda baru sahaja melakukan perbualan penting. Ketik untuk berkongsi ringkasan.';
+
+  @override
+  String get templateName => 'Nama Templat';
+
+  @override
+  String get templateNameHint => 'cth., Pengekstrak Item Tindakan Mesyuarat';
+
+  @override
+  String get nameMustBeAtLeast3Characters => 'Nama mesti sekurang-kurangnya 3 aksara';
+
+  @override
+  String get conversationPromptHint =>
+      'cth., Ekstrak item tindakan, keputusan yang dibuat, dan perkara utama dari perbualan yang diberikan.';
+
+  @override
+  String get pleaseEnterAppPrompt => 'Sila masukkan prompt untuk aplikasi anda';
+
+  @override
+  String get promptMustBeAtLeast10Characters => 'Prompt mesti sekurang-kurangnya 10 aksara';
+
+  @override
+  String get anyoneCanDiscoverTemplate => 'Sesiapa sahaja boleh menemui templat anda';
+
+  @override
+  String get onlyYouCanUseTemplate => 'Hanya anda boleh menggunakan templat ini';
+
+  @override
+  String get generatingDescription => 'Menjana penerangan...';
+
+  @override
+  String get creatingAppIcon => 'Mencipta ikon aplikasi...';
+
+  @override
+  String get installingApp => 'Memasang aplikasi...';
+
+  @override
+  String get appCreatedAndInstalled => 'Aplikasi dicipta dan dipasang!';
+
+  @override
+  String get appCreatedSuccessfully => 'Aplikasi berjaya dicipta!';
+
+  @override
+  String get failedToCreateApp => 'Gagal mencipta aplikasi. Sila cuba lagi.';
 }

@@ -6859,4 +6859,46 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get importantConversationBody => '您刚刚进行了一次重要对话。点击分享摘要。';
+
+  @override
+  String get templateName => '模板名称';
+
+  @override
+  String get templateNameHint => '例如，会议行动项提取器';
+
+  @override
+  String get nameMustBeAtLeast3Characters => '名称必须至少3个字符';
+
+  @override
+  String get conversationPromptHint => '例如，从提供的对话中提取行动项、决策和关键要点。';
+
+  @override
+  String get pleaseEnterAppPrompt => '请输入应用提示';
+
+  @override
+  String get promptMustBeAtLeast10Characters => '提示必须至少10个字符';
+
+  @override
+  String get anyoneCanDiscoverTemplate => '任何人都可以发现您的模板';
+
+  @override
+  String get onlyYouCanUseTemplate => '只有您可以使用此模板';
+
+  @override
+  String get generatingDescription => '正在生成描述...';
+
+  @override
+  String get creatingAppIcon => '正在创建应用图标...';
+
+  @override
+  String get installingApp => '正在安装应用...';
+
+  @override
+  String get appCreatedAndInstalled => '应用已创建并安装！';
+
+  @override
+  String get appCreatedSuccessfully => '应用创建成功！';
+
+  @override
+  String get failedToCreateApp => '创建应用失败。请重试。';
 }

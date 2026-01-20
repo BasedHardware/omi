@@ -7004,4 +7004,47 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get importantConversationBody =>
       'Anda baru saja melakukan percakapan penting. Ketuk untuk membagikan ringkasan.';
+
+  @override
+  String get templateName => 'Nama Template';
+
+  @override
+  String get templateNameHint => 'mis., Pengekstrak Item Tindakan Rapat';
+
+  @override
+  String get nameMustBeAtLeast3Characters => 'Nama harus minimal 3 karakter';
+
+  @override
+  String get conversationPromptHint =>
+      'mis., Ekstrak item tindakan, keputusan yang diambil, dan poin-poin penting dari percakapan yang diberikan.';
+
+  @override
+  String get pleaseEnterAppPrompt => 'Silakan masukkan prompt untuk aplikasi Anda';
+
+  @override
+  String get promptMustBeAtLeast10Characters => 'Prompt harus minimal 10 karakter';
+
+  @override
+  String get anyoneCanDiscoverTemplate => 'Siapa pun dapat menemukan template Anda';
+
+  @override
+  String get onlyYouCanUseTemplate => 'Hanya Anda yang dapat menggunakan template ini';
+
+  @override
+  String get generatingDescription => 'Membuat deskripsi...';
+
+  @override
+  String get creatingAppIcon => 'Membuat ikon aplikasi...';
+
+  @override
+  String get installingApp => 'Menginstal aplikasi...';
+
+  @override
+  String get appCreatedAndInstalled => 'Aplikasi dibuat dan diinstal!';
+
+  @override
+  String get appCreatedSuccessfully => 'Aplikasi berhasil dibuat!';
+
+  @override
+  String get failedToCreateApp => 'Gagal membuat aplikasi. Silakan coba lagi.';
 }
