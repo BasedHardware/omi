@@ -178,12 +178,12 @@ class _PaypalSetupPageState extends State<PaypalSetupPage> {
                                 controller: _emailController,
                                 validator: (v) => _validateEmail(v, context),
                                 enabled: !_isLoading,
-                                decoration: const InputDecoration(
+                                decoration: InputDecoration(
                                   error: null,
                                   errorText: null,
                                   isDense: true,
                                   border: InputBorder.none,
-                                  hintText: 'nik@example.com',
+                                  hintText: context.l10n.paypalEmailHint,
                                 ),
                               ),
                             ),
@@ -207,12 +207,12 @@ class _PaypalSetupPageState extends State<PaypalSetupPage> {
                                 controller: _paypalMeLinkController,
                                 validator: (v) => _validatePaypalMeLink(v, context),
                                 enabled: !_isLoading,
-                                decoration: const InputDecoration(
+                                decoration: InputDecoration(
                                   error: null,
                                   errorText: null,
                                   isDense: true,
                                   border: InputBorder.none,
-                                  hintText: 'paypal.me/nik',
+                                  hintText: context.l10n.paypalMeLinkHint,
                                 ),
                               ),
                             ),
