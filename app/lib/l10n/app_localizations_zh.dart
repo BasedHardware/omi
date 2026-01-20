@@ -57,7 +57,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get clear => '清除';
 
   @override
-  String get copyTranscript => '复制记录';
+  String get copyTranscript => '复制文字记录';
 
   @override
   String get copySummary => '复制摘要';
@@ -2239,7 +2239,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get summaryCopiedToClipboard => '摘要已复制到剪贴板';
 
   @override
-  String get conversationUrlCouldNotBeShared => '无法分享对话URL。';
+  String get conversationUrlCouldNotBeShared => '无法分享对话链接。';
 
   @override
   String get urlCopiedToClipboard => '网址已复制到剪贴板';
@@ -2637,7 +2637,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get searchResults => '搜索结果';
 
   @override
-  String get actionItems => '行动项目';
+  String get actionItems => '待办事项';
 
   @override
   String get tasksToday => '今天';
@@ -3537,7 +3537,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get auto => '自动';
 
   @override
-  String get noSummaryForApp => '此应用没有可用的摘要。尝试其他应用以获得更好的结果。';
+  String get noSummaryForApp => '此应用没有可用的摘要。请尝试其他应用以获得更好的结果。';
 
   @override
   String get tryAnotherApp => '尝试其他应用';
@@ -5133,7 +5133,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get prompt => '提示';
 
   @override
-  String get result => '结果';
+  String get result => '结果：';
 
   @override
   String get compareTranscripts => '比较转录';
@@ -5874,4 +5874,40 @@ class AppLocalizationsZh extends AppLocalizations {
   String estimatedTimeRemaining(String time) {
     return '预计剩余：$time';
   }
+
+  @override
+  String get summarizingConversation => '正在总结对话...\n这可能需要几秒钟';
+
+  @override
+  String get resummarizingConversation => '正在重新总结对话...\n这可能需要几秒钟';
+
+  @override
+  String get nothingInterestingRetry => '没有发现有趣的内容，\n要重试吗？';
+
+  @override
+  String get noSummaryForConversation => '此对话\n没有可用的摘要。';
+
+  @override
+  String get unknownLocation => '未知位置';
+
+  @override
+  String get couldNotLoadMap => '无法加载地图';
+
+  @override
+  String get triggerConversationIntegration => '触发对话创建集成';
+
+  @override
+  String get webhookUrlNotSet => 'Webhook URL 未设置';
+
+  @override
+  String get setWebhookUrlInSettings => '请在开发者设置中设置 webhook URL 以使用此功能。';
+
+  @override
+  String get sendWebUrl => '发送网页链接';
+
+  @override
+  String get sendTranscript => '发送文字记录';
+
+  @override
+  String get sendSummary => '发送摘要';
 }

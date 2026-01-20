@@ -57,7 +57,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get clear => '지우기';
 
   @override
-  String get copyTranscript => '대화록 복사';
+  String get copyTranscript => '스크립트 복사';
 
   @override
   String get copySummary => '요약 복사';
@@ -2642,7 +2642,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get searchResults => '검색 결과';
 
   @override
-  String get actionItems => '실행 항목';
+  String get actionItems => '작업 항목';
 
   @override
   String get tasksToday => '오늘';
@@ -3112,7 +3112,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get transcriptionFailed => '텍스트 변환 실패';
 
   @override
-  String get discardedConversation => '폐기된 대화';
+  String get discardedConversation => '삭제된 대화';
 
   @override
   String get at => '시각';
@@ -3542,7 +3542,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get auto => '자동';
 
   @override
-  String get noSummaryForApp => '이 앱에 사용할 수 있는 요약이 없습니다. 더 나은 결과를 얻으려면 다른 앱을 시도하세요.';
+  String get noSummaryForApp => '이 앱에 대한 요약이 없습니다. 더 나은 결과를 위해 다른 앱을 시도해 보세요.';
 
   @override
   String get tryAnotherApp => '다른 앱 시도';
@@ -5144,7 +5144,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get prompt => '프롬프트';
 
   @override
-  String get result => '결과';
+  String get result => '결과:';
 
   @override
   String get compareTranscripts => '녹취록 비교';
@@ -5886,4 +5886,40 @@ class AppLocalizationsKo extends AppLocalizations {
   String estimatedTimeRemaining(String time) {
     return '예상: $time 남음';
   }
+
+  @override
+  String get summarizingConversation => '대화 요약 중...\n몇 초 정도 걸릴 수 있습니다';
+
+  @override
+  String get resummarizingConversation => '대화 재요약 중...\n몇 초 정도 걸릴 수 있습니다';
+
+  @override
+  String get nothingInterestingRetry => '흥미로운 내용을 찾지 못했습니다.\n다시 시도하시겠습니까?';
+
+  @override
+  String get noSummaryForConversation => '이 대화에 대한\n요약이 없습니다.';
+
+  @override
+  String get unknownLocation => '알 수 없는 위치';
+
+  @override
+  String get couldNotLoadMap => '지도를 불러올 수 없습니다';
+
+  @override
+  String get triggerConversationIntegration => '대화 생성 통합 트리거';
+
+  @override
+  String get webhookUrlNotSet => 'Webhook URL이 설정되지 않음';
+
+  @override
+  String get setWebhookUrlInSettings => '이 기능을 사용하려면 개발자 설정에서 webhook URL을 설정하세요.';
+
+  @override
+  String get sendWebUrl => '웹 URL 보내기';
+
+  @override
+  String get sendTranscript => '스크립트 보내기';
+
+  @override
+  String get sendSummary => '요약 보내기';
 }

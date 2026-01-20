@@ -58,10 +58,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String get clear => 'Wissen';
 
   @override
-  String get copyTranscript => 'Transcript kopiëren';
+  String get copyTranscript => 'Kopieer transcript';
 
   @override
-  String get copySummary => 'Samenvatting kopiëren';
+  String get copySummary => 'Kopieer samenvatting';
 
   @override
   String get testPrompt => 'Prompt testen';
@@ -3176,7 +3176,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get transcriptionFailed => 'Transcriptie mislukt';
 
   @override
-  String get discardedConversation => 'Verworpen gesprek';
+  String get discardedConversation => 'Verwijderd gesprek';
 
   @override
   String get at => 'om';
@@ -5254,13 +5254,13 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String get testConversationPrompt => 'Test gespreksprompt';
+  String get testConversationPrompt => 'Test een gespreks-prompt';
 
   @override
   String get prompt => 'Prompt';
 
   @override
-  String get result => 'Resultaat';
+  String get result => 'Resultaat:';
 
   @override
   String get compareTranscripts => 'Transcripties vergelijken';
@@ -6008,4 +6008,41 @@ class AppLocalizationsNl extends AppLocalizations {
   String estimatedTimeRemaining(String time) {
     return 'Geschat: $time resterend';
   }
+
+  @override
+  String get summarizingConversation => 'Gesprek samenvatten...\nDit kan enkele seconden duren';
+
+  @override
+  String get resummarizingConversation => 'Gesprek opnieuw samenvatten...\nDit kan enkele seconden duren';
+
+  @override
+  String get nothingInterestingRetry => 'Niets interessants gevonden,\nwil je het opnieuw proberen?';
+
+  @override
+  String get noSummaryForConversation => 'Geen samenvatting beschikbaar\nvoor dit gesprek.';
+
+  @override
+  String get unknownLocation => 'Onbekende locatie';
+
+  @override
+  String get couldNotLoadMap => 'Kaart kon niet worden geladen';
+
+  @override
+  String get triggerConversationIntegration => 'Gesprek aanmaak-integratie activeren';
+
+  @override
+  String get webhookUrlNotSet => 'Webhook URL niet ingesteld';
+
+  @override
+  String get setWebhookUrlInSettings =>
+      'Stel de webhook URL in bij ontwikkelaarsinstellingen om deze functie te gebruiken.';
+
+  @override
+  String get sendWebUrl => 'Verstuur web-URL';
+
+  @override
+  String get sendTranscript => 'Verstuur transcript';
+
+  @override
+  String get sendSummary => 'Verstuur samenvatting';
 }

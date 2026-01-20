@@ -57,7 +57,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get clear => 'ล้าง';
 
   @override
-  String get copyTranscript => 'คัดลอกบันทึก';
+  String get copyTranscript => 'คัดลอกบทถอดความ';
 
   @override
   String get copySummary => 'คัดลอกสรุป';
@@ -3149,7 +3149,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get transcriptionFailed => 'การแปลงล้มเหลว';
 
   @override
-  String get discardedConversation => 'การสนทนาที่ถูกทิ้ง';
+  String get discardedConversation => 'การสนทนาที่ถูกยกเลิก';
 
   @override
   String get at => 'เวลา';
@@ -3584,7 +3584,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get auto => 'อัตโนมัติ';
 
   @override
-  String get noSummaryForApp => 'ไม่มีสรุปสำหรับแอปนี้ ลองแอปอื่นเพื่อผลลัพธ์ที่ดีขึ้น';
+  String get noSummaryForApp => 'ไม่มีสรุปสำหรับแอปนี้ ลองแอปอื่นเพื่อผลลัพธ์ที่ดีกว่า';
 
   @override
   String get tryAnotherApp => 'ลองแอปอื่น';
@@ -5215,7 +5215,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get prompt => 'พรอมต์';
 
   @override
-  String get result => 'ผลลัพธ์';
+  String get result => 'ผลลัพธ์:';
 
   @override
   String get compareTranscripts => 'เปรียบเทียบการถอดเสียง';
@@ -5959,4 +5959,40 @@ class AppLocalizationsTh extends AppLocalizations {
   String estimatedTimeRemaining(String time) {
     return 'โดยประมาณ: เหลือ $time';
   }
+
+  @override
+  String get summarizingConversation => 'กำลังสรุปการสนทนา...\nอาจใช้เวลาสักครู่';
+
+  @override
+  String get resummarizingConversation => 'กำลังสรุปการสนทนาใหม่...\nอาจใช้เวลาสักครู่';
+
+  @override
+  String get nothingInterestingRetry => 'ไม่พบสิ่งที่น่าสนใจ\nต้องการลองอีกครั้งไหม?';
+
+  @override
+  String get noSummaryForConversation => 'ไม่มีสรุป\nสำหรับการสนทนานี้';
+
+  @override
+  String get unknownLocation => 'ตำแหน่งที่ไม่รู้จัก';
+
+  @override
+  String get couldNotLoadMap => 'ไม่สามารถโหลดแผนที่ได้';
+
+  @override
+  String get triggerConversationIntegration => 'เรียกใช้การผสานการสร้างการสนทนา';
+
+  @override
+  String get webhookUrlNotSet => 'ยังไม่ได้ตั้งค่า Webhook URL';
+
+  @override
+  String get setWebhookUrlInSettings => 'กรุณาตั้งค่า webhook URL ในการตั้งค่านักพัฒนาเพื่อใช้ฟีเจอร์นี้';
+
+  @override
+  String get sendWebUrl => 'ส่ง URL เว็บ';
+
+  @override
+  String get sendTranscript => 'ส่งบทถอดความ';
+
+  @override
+  String get sendSummary => 'ส่งสรุป';
 }

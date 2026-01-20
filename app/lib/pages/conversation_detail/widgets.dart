@@ -101,16 +101,16 @@ class GetSummaryWidgets extends StatelessWidget {
     return secondsToHumanReadable(durationSeconds);
   }
 
-  String _getDateFormat(DateTime date) {
+  String _getDateFormat(BuildContext context, DateTime date) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final yesterday = today.subtract(const Duration(days: 1));
     final dateOnly = DateTime(date.year, date.month, date.day);
 
     if (dateOnly == today) {
-      return 'Today';
+      return context.l10n.today;
     } else if (dateOnly == yesterday) {
-      return 'Yesterday';
+      return context.l10n.yesterday;
     } else if (date.year == now.year) {
       return dateTimeFormat('MMM d', date);
     } else {
@@ -129,7 +129,7 @@ class GetSummaryWidgets extends StatelessWidget {
           children: [
             // Date chip
             _buildChip(
-              label: _getDateFormat(conversation.startedAt ?? conversation.createdAt),
+              label: _getDateFormat(context, conversation.startedAt ?? conversation.createdAt),
               icon: Icons.calendar_today,
             ),
             // Time chip
@@ -215,7 +215,7 @@ class GetSummaryWidgets extends StatelessWidget {
             ),
             const SizedBox(width: 6),
             Text(
-              folder?.name ?? 'No Folder',
+              folder?.name ?? context.l10n.noFolder,
               style: TextStyle(
                 color: folder != null ? folder.colorValue : Colors.grey.shade300,
                 fontSize: 13,
@@ -276,7 +276,7 @@ class GetSummaryWidgets extends StatelessWidget {
             const SizedBox(height: 8),
             conversation.discarded
                 ? Text(
-                    'Discarded Conversation',
+                    context.l10n.discardedConversation,
                     style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 32),
                   )
                 : GetEditTextField(
@@ -311,7 +311,7 @@ class ActionItemsListWidget extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Action Items',
+                      context.l10n.actionItems,
                       style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
                     ),
                     IconButton(
@@ -480,7 +480,7 @@ class ReprocessDiscardedWidget extends StatelessWidget {
                 ),
                 const SizedBox(width: 16),
                 Text(
-                  '${provider.conversation.discarded ? 'Summarizing' : 'Re-summarizing'} conversation...\nThis may take a few seconds',
+                  provider.conversation.discarded ? context.l10n.summarizingConversation : context.l10n.resummarizingConversation,
                   style: const TextStyle(color: Colors.white, fontSize: 16),
                 ),
               ],
@@ -493,7 +493,7 @@ class ReprocessDiscardedWidget extends StatelessWidget {
         children: [
           const SizedBox(height: 32),
           Text(
-            'Nothing interesting found,\nwant to retry?',
+            context.l10n.nothingInterestingRetry,
             style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
             textAlign: TextAlign.center,
           ),
@@ -576,9 +576,9 @@ class AppResultDetailWidget extends StatelessWidget {
                             );
                           },
                           child: RichText(
-                            text: const TextSpan(
-                                style: TextStyle(color: Colors.grey),
-                                text: "No summary available for this app. Try another app for better results."),
+                            text: TextSpan(
+                                style: const TextStyle(color: Colors.grey),
+                                text: context.l10n.noSummaryForApp),
                           ),
                         ),
                       ),
@@ -665,7 +665,7 @@ class AppResultDetailWidget extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  app != null ? app!.name.decodeString : 'Unknown App',
+                                  app != null ? app!.name.decodeString : context.l10n.unknownApp,
                                   maxLines: 1,
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w500,
@@ -737,7 +737,7 @@ class GetAppsWidgets extends StatelessWidget {
         children: [
           const SizedBox(height: 32),
           Text(
-            'No summary available\nfor this conversation.',
+            context.l10n.noSummaryForConversation,
             style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
             textAlign: TextAlign.center,
           ),
@@ -787,9 +787,9 @@ class GetGeolocationWidgets extends StatelessWidget {
   const GetGeolocationWidgets({super.key});
 
   // Helper function to shorten address - show only neighborhood/area and city
-  String _getShortAddress(String? fullAddress) {
+  String _getShortAddress(BuildContext context, String? fullAddress) {
     if (fullAddress == null || fullAddress.isEmpty) {
-      return 'Unknown location';
+      return context.l10n.unknownLocation;
     }
 
     // Split address by commas
@@ -845,16 +845,16 @@ class GetGeolocationWidgets extends StatelessWidget {
                               return Container(
                                 height: 200,
                                 color: const Color(0xFF2A2A2A),
-                                child: const Center(
+                                child: Center(
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      Icon(Icons.location_off, size: 40, color: Colors.grey),
-                                      SizedBox(height: 8),
+                                      const Icon(Icons.location_off, size: 40, color: Colors.grey),
+                                      const SizedBox(height: 8),
                                       Text(
-                                        'Could not load map',
+                                        context.l10n.couldNotLoadMap,
                                         textAlign: TextAlign.center,
-                                        style: TextStyle(color: Colors.grey),
+                                        style: const TextStyle(color: Colors.grey),
                                       ),
                                     ],
                                   ),
@@ -891,7 +891,7 @@ class GetGeolocationWidgets extends StatelessWidget {
                             left: 16,
                             right: 16,
                             child: Text(
-                              _getShortAddress(geolocation.address?.decodeString),
+                              _getShortAddress(context, geolocation.address?.decodeString),
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 15,
@@ -934,7 +934,7 @@ class GetSheetTitle extends StatelessWidget {
         children: [
           ListTile(
             title: Text(
-              provider.conversation.discarded ? 'Discarded Conversation' : provider.conversation.structured.title,
+              provider.conversation.discarded ? context.l10n.discardedConversation : provider.conversation.structured.title,
               style: Theme.of(context).textTheme.labelLarge,
             ),
             leading: const Icon(Icons.description),
@@ -979,7 +979,7 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
       Card(
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
         child: ListTile(
-          title: const Text('Trigger Conversation Created Integration'),
+          title: Text(context.l10n.triggerConversationIntegration),
           leading: loadingAppIntegrationTest
               ? const SizedBox(
                   height: 24,
@@ -1003,9 +1003,9 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
                     Navigator.pop(context);
                     routeToPage(context, const DeveloperSettingsPage());
                   },
-                  'Webhook URL not set',
-                  'Please set the webhook URL in developer settings to use this feature.',
-                  okButtonText: 'Settings',
+                  context.l10n.webhookUrlNotSet,
+                  context.l10n.setWebhookUrlInSettings,
+                  okButtonText: context.l10n.settings,
                 ),
               );
               changeLoadingAppIntegrationTest(false);
@@ -1018,9 +1018,9 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
                     context,
                     () => Navigator.pop(context),
                     () => Navigator.pop(context),
-                    'Result:',
+                    context.l10n.result,
                     response,
-                    okButtonText: 'Ok',
+                    okButtonText: context.l10n.ok,
                     singleButton: true,
                   ),
                 );
@@ -1033,7 +1033,7 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
       Card(
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
         child: ListTile(
-          title: const Text('Test a Conversation Prompt'),
+          title: Text(context.l10n.testConversationPrompt),
           leading: const Icon(Icons.chat),
           trailing: const Icon(Icons.arrow_forward_ios, size: 20),
           onTap: () {
@@ -1124,7 +1124,7 @@ class _GetShareOptionsState extends State<GetShareOptions> {
           shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
           child: ListTile(
             key: _shareUrlKey,
-            title: const Text('Send web url'),
+            title: Text(context.l10n.sendWebUrl),
             leading: loadingShareConversationViaURL ? _getLoadingIndicator() : const Icon(Icons.link),
             onTap: () async {
               if (loadingShareConversationViaURL) return;
@@ -1132,7 +1132,7 @@ class _GetShareOptionsState extends State<GetShareOptions> {
               bool shared = await setConversationVisibility(widget.conversation.id);
               if (!shared) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Conversation URL could not be shared.')),
+                  SnackBar(content: Text(context.l10n.conversationUrlCouldNotBeShared)),
                 );
                 return;
               }
@@ -1161,7 +1161,7 @@ class _GetShareOptionsState extends State<GetShareOptions> {
             children: [
               ListTile(
                 key: _shareTranscriptKey,
-                title: const Text('Send Transcript'),
+                title: Text(context.l10n.sendTranscript),
                 leading: loadingShareTranscript ? _getLoadingIndicator() : const Icon(Icons.description),
                 onTap: () async {
                   if (loadingShareTranscript) return;
@@ -1192,7 +1192,7 @@ class _GetShareOptionsState extends State<GetShareOptions> {
                   ? const SizedBox()
                   : ListTile(
                       key: _shareSummaryKey,
-                      title: const Text('Send Summary'),
+                      title: Text(context.l10n.sendSummary),
                       leading: loadingShareSummary ? _getLoadingIndicator() : const Icon(Icons.summarize),
                       onTap: () async {
                         if (loadingShareSummary) return;
@@ -1227,14 +1227,14 @@ class _GetShareOptionsState extends State<GetShareOptions> {
           child: Column(
             children: [
               ListTile(
-                title: const Text('Copy Transcript'),
+                title: Text(context.l10n.copyTranscript),
                 leading: const Icon(Icons.copy),
                 onTap: () => _copyContent(context, widget.conversation.getTranscript(generate: true)),
               ),
               widget.conversation.discarded
                   ? const SizedBox()
                   : ListTile(
-                      title: const Text('Copy Summary'),
+                      title: Text(context.l10n.copySummary),
                       leading: const Icon(Icons.file_copy),
                       onTap: () => _copyContent(
                         context,

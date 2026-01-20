@@ -61,7 +61,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get copyTranscript => 'Αντιγραφή απομαγνητοφώνησης';
 
   @override
-  String get copySummary => 'Αντιγραφή Περίληψης';
+  String get copySummary => 'Αντιγραφή σύνοψης';
 
   @override
   String get testPrompt => 'Δοκιμή Εντολής';
@@ -2303,7 +2303,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get summaryCopiedToClipboard => 'Η περίληψη αντιγράφηκε στο πρόχειρο';
 
   @override
-  String get conversationUrlCouldNotBeShared => 'Η διεύθυνση URL της συνομιλίας δεν μπόρεσε να κοινοποιηθεί.';
+  String get conversationUrlCouldNotBeShared => 'Δεν ήταν δυνατή η κοινοποίηση του URL συνομιλίας.';
 
   @override
   String get urlCopiedToClipboard => 'Η διεύθυνση URL αντιγράφηκε στο πρόχειρο';
@@ -3633,7 +3633,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get noSummaryForApp =>
-      'Δεν υπάρχει διαθέσιμη περίληψη για αυτήν την εφαρμογή. Δοκιμάστε άλλη εφαρμογή για καλύτερα αποτελέσματα.';
+      'Δεν υπάρχει διαθέσιμη σύνοψη για αυτήν την εφαρμογή. Δοκιμάστε μια άλλη εφαρμογή για καλύτερα αποτελέσματα.';
 
   @override
   String get tryAnotherApp => 'Δοκιμάστε άλλη εφαρμογή';
@@ -5286,7 +5286,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get prompt => 'Προτροπή';
 
   @override
-  String get result => 'Αποτέλεσμα';
+  String get result => 'Αποτέλεσμα:';
 
   @override
   String get compareTranscripts => 'Σύγκριση μεταγραφών';
@@ -6036,4 +6036,40 @@ class AppLocalizationsEl extends AppLocalizations {
   String estimatedTimeRemaining(String time) {
     return 'Εκτίμηση: απομένει $time';
   }
+
+  @override
+  String get summarizingConversation => 'Σύνοψη συνομιλίας...\nΑυτό μπορεί να διαρκέσει μερικά δευτερόλεπτα';
+
+  @override
+  String get resummarizingConversation => 'Εκ νέου σύνοψη συνομιλίας...\nΑυτό μπορεί να διαρκέσει μερικά δευτερόλεπτα';
+
+  @override
+  String get nothingInterestingRetry => 'Δεν βρέθηκε τίποτα ενδιαφέρον,\nθέλετε να δοκιμάσετε ξανά;';
+
+  @override
+  String get noSummaryForConversation => 'Δεν υπάρχει διαθέσιμη σύνοψη\nγια αυτήν τη συνομιλία.';
+
+  @override
+  String get unknownLocation => 'Άγνωστη τοποθεσία';
+
+  @override
+  String get couldNotLoadMap => 'Δεν ήταν δυνατή η φόρτωση του χάρτη';
+
+  @override
+  String get triggerConversationIntegration => 'Ενεργοποίηση ολοκλήρωσης δημιουργίας συνομιλίας';
+
+  @override
+  String get webhookUrlNotSet => 'URL Webhook δεν έχει οριστεί';
+
+  @override
+  String get setWebhookUrlInSettings => 'Ορίστε το URL webhook στις ρυθμίσεις προγραμματιστή.';
+
+  @override
+  String get sendWebUrl => 'Αποστολή web URL';
+
+  @override
+  String get sendTranscript => 'Αποστολή απομαγνητοφώνησης';
+
+  @override
+  String get sendSummary => 'Αποστολή σύνοψης';
 }

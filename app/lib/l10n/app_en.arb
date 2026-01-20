@@ -65,13 +65,13 @@
   "@clear": {
     "description": "Clear button"
   },
-  "copyTranscript": "Copy transcript",
+  "copyTranscript": "Copy Transcript",
   "@copyTranscript": {
-    "description": "Menu item to copy transcript"
+    "description": "Option to copy transcript to clipboard"
   },
   "copySummary": "Copy Summary",
   "@copySummary": {
-    "description": "Menu item to copy summary"
+    "description": "Option to copy summary to clipboard"
   },
   "testPrompt": "Test Prompt",
   "@testPrompt": {
@@ -893,7 +893,7 @@
   },
   "today": "Today",
   "@today": {
-    "description": "Label for today in date headers"
+    "description": "Label for today date"
   },
   "thisMonth": "This Month",
   "@thisMonth": {
@@ -2397,7 +2397,7 @@
   },
   "conversationUrlCouldNotBeShared": "Conversation URL could not be shared.",
   "@conversationUrlCouldNotBeShared": {
-    "description": "Error when URL sharing fails"
+    "description": "Error when sharing URL fails"
   },
   "urlCopiedToClipboard": "URL Copied to Clipboard",
   "@urlCopiedToClipboard": {
@@ -2814,7 +2814,7 @@
     "description": "Label for tomorrow in date headers"
   },
   "@yesterday": {
-    "description": "Label for yesterday"
+    "description": "Label for yesterday date"
   },
   "failedToUpdateDueDate": "Failed to update due date",
   "@failedToUpdateDueDate": {
@@ -3043,7 +3043,7 @@
   },
   "actionItems": "Action Items",
   "@actionItems": {
-    "description": "Section header for tasks extracted from conversation"
+    "description": "Section header for action items"
   },
   "tasksToday": "Today",
   "@tasksToday": {
@@ -3682,7 +3682,7 @@
   },
   "discardedConversation": "Discarded Conversation",
   "@discardedConversation": {
-    "description": "Title for a discarded conversation"
+    "description": "Label for a discarded conversation"
   },
   "at": "at",
   "@at": {
@@ -6230,17 +6230,17 @@
       }
     }
   },
-  "testConversationPrompt": "Test Conversation Prompt",
+  "testConversationPrompt": "Test a Conversation Prompt",
   "@testConversationPrompt": {
-    "description": "App bar title for testing conversation prompts page"
+    "description": "Developer option to test prompts"
   },
   "prompt": "Prompt",
   "@prompt": {
     "description": "Label for prompt input field"
   },
-  "result": "Result",
+  "result": "Result:",
   "@result": {
-    "description": "Label for result section showing prompt output"
+    "description": "Label for result output"
   },
   "compareTranscripts": "Compare Transcripts",
   "@compareTranscripts": {
@@ -6925,9 +6925,9 @@
       }
     }
   },
-  "noFolder": "No folder",
+  "noFolder": "No Folder",
   "@noFolder": {
-    "description": "Option to remove from all folders"
+    "description": "Label when no folder is assigned"
   },
   "removeFromAllFolders": "Remove from all folders",
   "@removeFromAllFolders": {
@@ -7280,5 +7280,59 @@
         "type": "String"
       }
     }
+  },
+  "summarizingConversation": "Summarizing conversation...\nThis may take a few seconds",
+  "@summarizingConversation": {
+    "description": "Loading text while summarizing a conversation"
+  },
+  "resummarizingConversation": "Re-summarizing conversation...\nThis may take a few seconds",
+  "@resummarizingConversation": {
+    "description": "Loading text while re-summarizing a conversation"
+  },
+  "nothingInterestingRetry": "Nothing interesting found,\nwant to retry?",
+  "@nothingInterestingRetry": {
+    "description": "Message when no interesting content found"
+  },
+  "@noSummaryForApp": {
+    "description": "Message when app has no summary"
+  },
+  "@unknownApp": {
+    "description": "Fallback name for unknown app"
+  },
+  "noSummaryForConversation": "No summary available\nfor this conversation.",
+  "@noSummaryForConversation": {
+    "description": "Message when conversation has no summary"
+  },
+  "unknownLocation": "Unknown location",
+  "@unknownLocation": {
+    "description": "Fallback for unknown location"
+  },
+  "couldNotLoadMap": "Could not load map",
+  "@couldNotLoadMap": {
+    "description": "Error message when map fails to load"
+  },
+  "triggerConversationIntegration": "Trigger Conversation Created Integration",
+  "@triggerConversationIntegration": {
+    "description": "Developer option to trigger webhook"
+  },
+  "webhookUrlNotSet": "Webhook URL not set",
+  "@webhookUrlNotSet": {
+    "description": "Dialog title when webhook URL is missing"
+  },
+  "setWebhookUrlInSettings": "Please set the webhook URL in developer settings to use this feature.",
+  "@setWebhookUrlInSettings": {
+    "description": "Dialog message prompting to set webhook URL"
+  },
+  "sendWebUrl": "Send web url",
+  "@sendWebUrl": {
+    "description": "Option to share conversation via web URL"
+  },
+  "sendTranscript": "Send Transcript",
+  "@sendTranscript": {
+    "description": "Option to share transcript"
+  },
+  "sendSummary": "Send Summary",
+  "@sendSummary": {
+    "description": "Option to share summary"
   }
 }

@@ -2,16 +2,16 @@
 
 ## Summary
 Total Files to Localize: 38
-Completed: 5
+Completed: 6
 In Progress: 0
-Pending: 33
+Pending: 32
 
 ## Progress by File
 
 ### High Priority
 [x] pages/settings/developer.dart (~55 strings) - DONE
 [x] pages/conversations/sync_page.dart (~45 strings) - DONE
-[ ] pages/conversation_detail/widgets.dart (~25 strings)
+[x] pages/conversation_detail/widgets.dart (~25 strings) - DONE (22 strings localized)
 [x] pages/onboarding/speech_profile_widget.dart (~10 strings) - ALREADY LOCALIZED
 [ ] pages/settings/transcription_settings_page.dart (~15 strings)
 
@@ -57,6 +57,7 @@ Pending: 33
 ## Changelog
 
 ### 2026-01-20
+- Localized pages/conversation_detail/widgets.dart with 22 l10n keys for 34 languages
 - Localized pages/settings/task_integrations_page.dart with 1 l10n key for 34 languages
 - Localized pages/settings/import_history_page.dart with 6 l10n keys for 34 languages
 - Verified pages/onboarding/speech_profile_widget.dart is already fully localized

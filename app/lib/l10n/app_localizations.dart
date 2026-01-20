@@ -255,13 +255,13 @@ abstract class AppLocalizations {
   /// **'Clear'**
   String get clear;
 
-  /// Menu item to copy transcript
+  /// Option to copy transcript to clipboard
   ///
   /// In en, this message translates to:
-  /// **'Copy transcript'**
+  /// **'Copy Transcript'**
   String get copyTranscript;
 
-  /// Menu item to copy summary
+  /// Option to copy summary to clipboard
   ///
   /// In en, this message translates to:
   /// **'Copy Summary'**
@@ -1461,7 +1461,7 @@ abstract class AppLocalizations {
   /// **'Your Omi Insights'**
   String get yourOmiInsights;
 
-  /// Label for today in date headers
+  /// Label for today date
   ///
   /// In en, this message translates to:
   /// **'Today'**
@@ -2709,7 +2709,7 @@ abstract class AppLocalizations {
   /// **'Updated {date}'**
   String updatedDate(String date);
 
-  /// Label for yesterday
+  /// Label for yesterday date
   ///
   /// In en, this message translates to:
   /// **'Yesterday'**
@@ -4395,7 +4395,7 @@ abstract class AppLocalizations {
   /// **'Summary copied to clipboard'**
   String get summaryCopiedToClipboard;
 
-  /// Error when URL sharing fails
+  /// Error when sharing URL fails
   ///
   /// In en, this message translates to:
   /// **'Conversation URL could not be shared.'**
@@ -5163,7 +5163,7 @@ abstract class AppLocalizations {
   /// **'Search results'**
   String get searchResults;
 
-  /// Section header for tasks extracted from conversation
+  /// Section header for action items
   ///
   /// In en, this message translates to:
   /// **'Action Items'**
@@ -6087,7 +6087,7 @@ abstract class AppLocalizations {
   /// **'Transcription failed'**
   String get transcriptionFailed;
 
-  /// Title for a discarded conversation
+  /// Label for a discarded conversation
   ///
   /// In en, this message translates to:
   /// **'Discarded Conversation'**
@@ -6927,7 +6927,7 @@ abstract class AppLocalizations {
   /// **'Auto'**
   String get auto;
 
-  /// No description provided for @noSummaryForApp.
+  /// Message when app has no summary
   ///
   /// In en, this message translates to:
   /// **'No summary available for this app. Try another app for better results.'**
@@ -6957,7 +6957,7 @@ abstract class AppLocalizations {
   /// **'Other App Results'**
   String get otherAppResults;
 
-  /// No description provided for @unknownApp.
+  /// Fallback name for unknown app
   ///
   /// In en, this message translates to:
   /// **'Unknown App'**
@@ -9885,10 +9885,10 @@ abstract class AppLocalizations {
   /// **'Hints: {text}'**
   String hints(String text);
 
-  /// App bar title for testing conversation prompts page
+  /// Developer option to test prompts
   ///
   /// In en, this message translates to:
-  /// **'Test Conversation Prompt'**
+  /// **'Test a Conversation Prompt'**
   String get testConversationPrompt;
 
   /// Label for prompt input field
@@ -9897,10 +9897,10 @@ abstract class AppLocalizations {
   /// **'Prompt'**
   String get prompt;
 
-  /// Label for result section showing prompt output
+  /// Label for result output
   ///
   /// In en, this message translates to:
-  /// **'Result'**
+  /// **'Result:'**
   String get result;
 
   /// App bar title for comparing transcripts from different services
@@ -10857,10 +10857,10 @@ abstract class AppLocalizations {
   /// **'Move {count} conversations to:'**
   String moveConversationsTo(int count);
 
-  /// Option to remove from all folders
+  /// Label when no folder is assigned
   ///
   /// In en, this message translates to:
-  /// **'No folder'**
+  /// **'No Folder'**
   String get noFolder;
 
   /// Description for no folder option
@@ -11318,6 +11318,78 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Estimated: {time} remaining'**
   String estimatedTimeRemaining(String time);
+
+  /// Loading text while summarizing a conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Summarizing conversation...\nThis may take a few seconds'**
+  String get summarizingConversation;
+
+  /// Loading text while re-summarizing a conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Re-summarizing conversation...\nThis may take a few seconds'**
+  String get resummarizingConversation;
+
+  /// Message when no interesting content found
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing interesting found,\nwant to retry?'**
+  String get nothingInterestingRetry;
+
+  /// Message when conversation has no summary
+  ///
+  /// In en, this message translates to:
+  /// **'No summary available\nfor this conversation.'**
+  String get noSummaryForConversation;
+
+  /// Fallback for unknown location
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown location'**
+  String get unknownLocation;
+
+  /// Error message when map fails to load
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load map'**
+  String get couldNotLoadMap;
+
+  /// Developer option to trigger webhook
+  ///
+  /// In en, this message translates to:
+  /// **'Trigger Conversation Created Integration'**
+  String get triggerConversationIntegration;
+
+  /// Dialog title when webhook URL is missing
+  ///
+  /// In en, this message translates to:
+  /// **'Webhook URL not set'**
+  String get webhookUrlNotSet;
+
+  /// Dialog message prompting to set webhook URL
+  ///
+  /// In en, this message translates to:
+  /// **'Please set the webhook URL in developer settings to use this feature.'**
+  String get setWebhookUrlInSettings;
+
+  /// Option to share conversation via web URL
+  ///
+  /// In en, this message translates to:
+  /// **'Send web url'**
+  String get sendWebUrl;
+
+  /// Option to share transcript
+  ///
+  /// In en, this message translates to:
+  /// **'Send Transcript'**
+  String get sendTranscript;
+
+  /// Option to share summary
+  ///
+  /// In en, this message translates to:
+  /// **'Send Summary'**
+  String get sendSummary;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

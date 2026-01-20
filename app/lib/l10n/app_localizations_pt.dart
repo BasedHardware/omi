@@ -2259,7 +2259,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get summaryCopiedToClipboard => 'Resumo copiado para a área de transferência';
 
   @override
-  String get conversationUrlCouldNotBeShared => 'O URL da conversa não pôde ser compartilhado.';
+  String get conversationUrlCouldNotBeShared => 'A URL da conversa não pôde ser compartilhada.';
 
   @override
   String get urlCopiedToClipboard => 'URL copiado para a área de transferência';
@@ -3145,7 +3145,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get transcriptionFailed => 'Transcrição falhou';
 
   @override
-  String get discardedConversation => 'Conversa Descartada';
+  String get discardedConversation => 'Conversa descartada';
 
   @override
   String get at => 'às';
@@ -3586,8 +3586,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get auto => 'Automático';
 
   @override
-  String get noSummaryForApp =>
-      'Nenhum resumo disponível para este aplicativo. Experimente outro aplicativo para obter melhores resultados.';
+  String get noSummaryForApp => 'Nenhum resumo disponível para este app. Tente outro app para melhores resultados.';
 
   @override
   String get tryAnotherApp => 'Experimentar outro aplicativo';
@@ -3604,7 +3603,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get otherAppResults => 'Resultados de outros aplicativos';
 
   @override
-  String get unknownApp => 'Aplicativo desconhecido';
+  String get unknownApp => 'App desconhecido';
 
   @override
   String get noSummaryAvailable => 'Nenhum resumo disponível';
@@ -5234,7 +5233,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get prompt => 'Prompt';
 
   @override
-  String get result => 'Resultado';
+  String get result => 'Resultado:';
 
   @override
   String get compareTranscripts => 'Comparar transcrições';
@@ -5981,4 +5980,41 @@ class AppLocalizationsPt extends AppLocalizations {
   String estimatedTimeRemaining(String time) {
     return 'Estimado: $time restante';
   }
+
+  @override
+  String get summarizingConversation => 'Resumindo conversa...\nIsso pode levar alguns segundos';
+
+  @override
+  String get resummarizingConversation => 'Resumindo conversa novamente...\nIsso pode levar alguns segundos';
+
+  @override
+  String get nothingInterestingRetry => 'Nada interessante encontrado,\nquer tentar novamente?';
+
+  @override
+  String get noSummaryForConversation => 'Nenhum resumo disponível\npara esta conversa.';
+
+  @override
+  String get unknownLocation => 'Localização desconhecida';
+
+  @override
+  String get couldNotLoadMap => 'Não foi possível carregar o mapa';
+
+  @override
+  String get triggerConversationIntegration => 'Acionar integração de criação de conversa';
+
+  @override
+  String get webhookUrlNotSet => 'URL do webhook não definida';
+
+  @override
+  String get setWebhookUrlInSettings =>
+      'Por favor, defina a URL do webhook nas configurações de desenvolvedor para usar este recurso.';
+
+  @override
+  String get sendWebUrl => 'Enviar URL da web';
+
+  @override
+  String get sendTranscript => 'Enviar transcrição';
+
+  @override
+  String get sendSummary => 'Enviar resumo';
 }

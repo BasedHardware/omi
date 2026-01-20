@@ -2295,7 +2295,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get summaryCopiedToClipboard => 'Rezumat copiat în clipboard';
 
   @override
-  String get conversationUrlCouldNotBeShared => 'URL-ul conversației nu a putut fi partajat.';
+  String get conversationUrlCouldNotBeShared => 'URL-ul conversației nu a putut fi distribuit.';
 
   @override
   String get urlCopiedToClipboard => 'URL copiat în clipboard';
@@ -3183,7 +3183,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get transcriptionFailed => 'Transcrierea a eșuat';
 
   @override
-  String get discardedConversation => 'Conversație respinsă';
+  String get discardedConversation => 'Conversație eliminată';
 
   @override
   String get at => 'la';
@@ -3625,7 +3625,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get noSummaryForApp =>
-      'Niciun rezumat disponibil pentru această aplicație. Încercați o altă aplicație pentru rezultate mai bune.';
+      'Nu există rezumat disponibil pentru această aplicație. Încearcă altă aplicație pentru rezultate mai bune.';
 
   @override
   String get tryAnotherApp => 'Încercați o altă aplicație';
@@ -5263,13 +5263,13 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get testConversationPrompt => 'Testează promptul conversației';
+  String get testConversationPrompt => 'Testează un prompt de conversație';
 
   @override
   String get prompt => 'Prompt';
 
   @override
-  String get result => 'Rezultat';
+  String get result => 'Rezultat:';
 
   @override
   String get compareTranscripts => 'Compară transcrierile';
@@ -5770,7 +5770,7 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get noFolder => 'Fără folder';
+  String get noFolder => 'Fără dosar';
 
   @override
   String get removeFromAllFolders => 'Elimină din toate folderele';
@@ -6018,4 +6018,41 @@ class AppLocalizationsRo extends AppLocalizations {
   String estimatedTimeRemaining(String time) {
     return 'Estimat: $time rămas';
   }
+
+  @override
+  String get summarizingConversation => 'Se rezumă conversația...\nAceasta poate dura câteva secunde';
+
+  @override
+  String get resummarizingConversation => 'Se rezumă din nou conversația...\nAceasta poate dura câteva secunde';
+
+  @override
+  String get nothingInterestingRetry => 'Nu s-a găsit nimic interesant,\nvrei să încerci din nou?';
+
+  @override
+  String get noSummaryForConversation => 'Nu există rezumat disponibil\npentru această conversație.';
+
+  @override
+  String get unknownLocation => 'Locație necunoscută';
+
+  @override
+  String get couldNotLoadMap => 'Nu s-a putut încărca harta';
+
+  @override
+  String get triggerConversationIntegration => 'Declanșează integrarea creării conversației';
+
+  @override
+  String get webhookUrlNotSet => 'URL-ul webhook nu este setat';
+
+  @override
+  String get setWebhookUrlInSettings =>
+      'Te rugăm să setezi URL-ul webhook în setările pentru dezvoltatori pentru a folosi această funcție.';
+
+  @override
+  String get sendWebUrl => 'Trimite URL web';
+
+  @override
+  String get sendTranscript => 'Trimite transcrierea';
+
+  @override
+  String get sendSummary => 'Trimite rezumatul';
 }

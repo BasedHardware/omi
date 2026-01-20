@@ -57,7 +57,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get clear => 'Notīrīt';
 
   @override
-  String get copyTranscript => 'Kopēt transkriptu';
+  String get copyTranscript => 'Kopēt transkripciju';
 
   @override
   String get copySummary => 'Kopēt kopsavilkumu';
@@ -2690,7 +2690,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get searchResults => 'Meklēšanas rezultāti';
 
   @override
-  String get actionItems => 'Darbības punkti';
+  String get actionItems => 'Darbības elementi';
 
   @override
   String get tasksToday => 'Šodien';
@@ -3611,7 +3611,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get noSummaryForApp =>
-      'Šai lietotnei nav pieejams kopsavilkums. Labākiem rezultātiem izmēģiniet citu lietotni.';
+      'Šai lietotnei kopsavilkums nav pieejams. Izmēģiniet citu lietotni labākiem rezultātiem.';
 
   @override
   String get tryAnotherApp => 'Izmēģiniet citu lietotni';
@@ -5251,7 +5251,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get prompt => 'Uzvedne';
 
   @override
-  String get result => 'Rezultāts';
+  String get result => 'Rezultāts:';
 
   @override
   String get compareTranscripts => 'Salīdzināt transkripcijas';
@@ -5752,7 +5752,7 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get noFolder => 'Bez mapes';
+  String get noFolder => 'Nav mapes';
 
   @override
   String get removeFromAllFolders => 'Noņemt no visām mapēm';
@@ -6001,4 +6001,41 @@ class AppLocalizationsLv extends AppLocalizations {
   String estimatedTimeRemaining(String time) {
     return 'Aplēsts: atlikušais laiks $time';
   }
+
+  @override
+  String get summarizingConversation => 'Apkopo sarunu...\nTas var aizņemt dažas sekundes';
+
+  @override
+  String get resummarizingConversation => 'Atkārtoti apkopo sarunu...\nTas var aizņemt dažas sekundes';
+
+  @override
+  String get nothingInterestingRetry => 'Nekas interesants netika atrasts,\nvai vēlaties mēģināt vēlreiz?';
+
+  @override
+  String get noSummaryForConversation => 'Šai sarunai\nkopsavilkums nav pieejams.';
+
+  @override
+  String get unknownLocation => 'Nezināma atrašanās vieta';
+
+  @override
+  String get couldNotLoadMap => 'Nevarēja ielādēt karti';
+
+  @override
+  String get triggerConversationIntegration => 'Aktivizēt sarunas izveides integrāciju';
+
+  @override
+  String get webhookUrlNotSet => 'Webhook URL nav iestatīts';
+
+  @override
+  String get setWebhookUrlInSettings =>
+      'Lūdzu, iestatiet webhook URL izstrādātāja iestatījumos, lai izmantotu šo funkciju.';
+
+  @override
+  String get sendWebUrl => 'Sūtīt tīmekļa URL';
+
+  @override
+  String get sendTranscript => 'Sūtīt transkripciju';
+
+  @override
+  String get sendSummary => 'Sūtīt kopsavilkumu';
 }

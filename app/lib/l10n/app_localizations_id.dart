@@ -61,7 +61,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get copyTranscript => 'Salin transkrip';
 
   @override
-  String get copySummary => 'Salin Ringkasan';
+  String get copySummary => 'Salin ringkasan';
 
   @override
   String get testPrompt => 'Uji Prompt';
@@ -3176,7 +3176,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get transcriptionFailed => 'Transkripsi gagal';
 
   @override
-  String get discardedConversation => 'Percakapan Dibuang';
+  String get discardedConversation => 'Percakapan dibuang';
 
   @override
   String get at => 'pada';
@@ -3632,7 +3632,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get otherAppResults => 'Hasil Aplikasi Lain';
 
   @override
-  String get unknownApp => 'Aplikasi Tidak Dikenal';
+  String get unknownApp => 'Aplikasi tidak dikenal';
 
   @override
   String get noSummaryAvailable => 'Tidak Ada Ringkasan Tersedia';
@@ -5260,7 +5260,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get prompt => 'Prompt';
 
   @override
-  String get result => 'Hasil';
+  String get result => 'Hasil:';
 
   @override
   String get compareTranscripts => 'Bandingkan transkrip';
@@ -6007,4 +6007,41 @@ class AppLocalizationsId extends AppLocalizations {
   String estimatedTimeRemaining(String time) {
     return 'Perkiraan: $time tersisa';
   }
+
+  @override
+  String get summarizingConversation => 'Meringkas percakapan...\nIni mungkin memerlukan beberapa detik';
+
+  @override
+  String get resummarizingConversation => 'Meringkas ulang percakapan...\nIni mungkin memerlukan beberapa detik';
+
+  @override
+  String get nothingInterestingRetry => 'Tidak ada yang menarik ditemukan,\ningin mencoba lagi?';
+
+  @override
+  String get noSummaryForConversation => 'Tidak ada ringkasan tersedia\nuntuk percakapan ini.';
+
+  @override
+  String get unknownLocation => 'Lokasi tidak dikenal';
+
+  @override
+  String get couldNotLoadMap => 'Tidak dapat memuat peta';
+
+  @override
+  String get triggerConversationIntegration => 'Picu integrasi pembuatan percakapan';
+
+  @override
+  String get webhookUrlNotSet => 'URL Webhook belum diatur';
+
+  @override
+  String get setWebhookUrlInSettings =>
+      'Silakan atur URL webhook di pengaturan pengembang untuk menggunakan fitur ini.';
+
+  @override
+  String get sendWebUrl => 'Kirim URL web';
+
+  @override
+  String get sendTranscript => 'Kirim transkrip';
+
+  @override
+  String get sendSummary => 'Kirim ringkasan';
 }

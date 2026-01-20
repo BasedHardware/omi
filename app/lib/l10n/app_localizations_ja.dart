@@ -57,10 +57,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get clear => 'クリア';
 
   @override
-  String get copyTranscript => 'トランスクリプトをコピー';
+  String get copyTranscript => '文字起こしをコピー';
 
   @override
-  String get copySummary => 'サマリーをコピー';
+  String get copySummary => '要約をコピー';
 
   @override
   String get testPrompt => 'プロンプトをテスト';
@@ -2243,7 +2243,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get summaryCopiedToClipboard => '概要をクリップボードにコピーしました';
 
   @override
-  String get conversationUrlCouldNotBeShared => '会話のURLを共有できませんでした。';
+  String get conversationUrlCouldNotBeShared => '会話URLを共有できませんでした。';
 
   @override
   String get urlCopiedToClipboard => 'URLをクリップボードにコピーしました';
@@ -3542,7 +3542,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get auto => '自動';
 
   @override
-  String get noSummaryForApp => 'このアプリの概要は利用できません。より良い結果を得るには別のアプリを試してください。';
+  String get noSummaryForApp => 'このアプリの要約はありません。より良い結果を得るために別のアプリをお試しください。';
 
   @override
   String get tryAnotherApp => '別のアプリを試す';
@@ -5142,7 +5142,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get prompt => 'プロンプト';
 
   @override
-  String get result => '結果';
+  String get result => '結果:';
 
   @override
   String get compareTranscripts => '文字起こしを比較';
@@ -5884,4 +5884,40 @@ class AppLocalizationsJa extends AppLocalizations {
   String estimatedTimeRemaining(String time) {
     return '推定残り時間: $time';
   }
+
+  @override
+  String get summarizingConversation => '会話を要約中...\n数秒かかる場合があります';
+
+  @override
+  String get resummarizingConversation => '会話を再要約中...\n数秒かかる場合があります';
+
+  @override
+  String get nothingInterestingRetry => '興味深い内容が見つかりませんでした。\n再試行しますか？';
+
+  @override
+  String get noSummaryForConversation => 'この会話の要約は\nありません。';
+
+  @override
+  String get unknownLocation => '不明な場所';
+
+  @override
+  String get couldNotLoadMap => 'マップを読み込めませんでした';
+
+  @override
+  String get triggerConversationIntegration => '会話作成統合をトリガー';
+
+  @override
+  String get webhookUrlNotSet => 'Webhook URLが設定されていません';
+
+  @override
+  String get setWebhookUrlInSettings => 'この機能を使用するには、開発者設定でwebhook URLを設定してください。';
+
+  @override
+  String get sendWebUrl => 'Web URLを送信';
+
+  @override
+  String get sendTranscript => '文字起こしを送信';
+
+  @override
+  String get sendSummary => '要約を送信';
 }

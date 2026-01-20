@@ -58,10 +58,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get clear => 'Очистить';
 
   @override
-  String get copyTranscript => 'Копировать расшифровку';
+  String get copyTranscript => 'Копировать транскрипт';
 
   @override
-  String get copySummary => 'Копировать резюме';
+  String get copySummary => 'Копировать сводку';
 
   @override
   String get testPrompt => 'Тестовый запрос';
@@ -2292,7 +2292,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get summaryCopiedToClipboard => 'Резюме скопировано в буфер обмена';
 
   @override
-  String get conversationUrlCouldNotBeShared => 'URL-адрес разговора не может быть передан.';
+  String get conversationUrlCouldNotBeShared => 'Не удалось поделиться ссылкой на разговор.';
 
   @override
   String get urlCopiedToClipboard => 'URL скопирован в буфер обмена';
@@ -2693,7 +2693,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get searchResults => 'Результаты поиска';
 
   @override
-  String get actionItems => 'Элементы действий';
+  String get actionItems => 'Задачи';
 
   @override
   String get tasksToday => 'Сегодня';
@@ -3176,7 +3176,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get transcriptionFailed => 'Расшифровка не удалась';
 
   @override
-  String get discardedConversation => 'Отклоненный разговор';
+  String get discardedConversation => 'Отклонённый разговор';
 
   @override
   String get at => 'в';
@@ -3614,8 +3614,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get auto => 'Автоматически';
 
   @override
-  String get noSummaryForApp =>
-      'Для этого приложения резюме недоступно. Попробуйте другое приложение для лучших результатов.';
+  String get noSummaryForApp => 'Для этого приложения нет сводки. Попробуйте другое приложение для лучших результатов.';
 
   @override
   String get tryAnotherApp => 'Попробовать другое приложение';
@@ -5257,7 +5256,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get prompt => 'Запрос';
 
   @override
-  String get result => 'Результат';
+  String get result => 'Результат:';
 
   @override
   String get compareTranscripts => 'Сравнить транскрипции';
@@ -6005,4 +6004,41 @@ class AppLocalizationsRu extends AppLocalizations {
   String estimatedTimeRemaining(String time) {
     return 'Примерно: осталось $time';
   }
+
+  @override
+  String get summarizingConversation => 'Создание сводки разговора...\nЭто может занять несколько секунд';
+
+  @override
+  String get resummarizingConversation => 'Повторное создание сводки...\nЭто может занять несколько секунд';
+
+  @override
+  String get nothingInterestingRetry => 'Ничего интересного не найдено,\nхотите попробовать снова?';
+
+  @override
+  String get noSummaryForConversation => 'Для этого разговора\nнет сводки.';
+
+  @override
+  String get unknownLocation => 'Неизвестное местоположение';
+
+  @override
+  String get couldNotLoadMap => 'Не удалось загрузить карту';
+
+  @override
+  String get triggerConversationIntegration => 'Запустить интеграцию создания разговора';
+
+  @override
+  String get webhookUrlNotSet => 'URL вебхука не установлен';
+
+  @override
+  String get setWebhookUrlInSettings =>
+      'Установите URL вебхука в настройках разработчика для использования этой функции.';
+
+  @override
+  String get sendWebUrl => 'Отправить веб-ссылку';
+
+  @override
+  String get sendTranscript => 'Отправить транскрипт';
+
+  @override
+  String get sendSummary => 'Отправить сводку';
 }

@@ -58,7 +58,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get clear => 'Clear';
 
   @override
-  String get copyTranscript => 'Copy transcript';
+  String get copyTranscript => 'Copy Transcript';
 
   @override
   String get copySummary => 'Copy Summary';
@@ -5238,13 +5238,13 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get testConversationPrompt => 'Test Conversation Prompt';
+  String get testConversationPrompt => 'Test a Conversation Prompt';
 
   @override
   String get prompt => 'Prompt';
 
   @override
-  String get result => 'Result';
+  String get result => 'Result:';
 
   @override
   String get compareTranscripts => 'Compare Transcripts';
@@ -5743,7 +5743,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get noFolder => 'No folder';
+  String get noFolder => 'No Folder';
 
   @override
   String get removeFromAllFolders => 'Remove from all folders';
@@ -5990,4 +5990,40 @@ class AppLocalizationsEn extends AppLocalizations {
   String estimatedTimeRemaining(String time) {
     return 'Estimated: $time remaining';
   }
+
+  @override
+  String get summarizingConversation => 'Summarizing conversation...\nThis may take a few seconds';
+
+  @override
+  String get resummarizingConversation => 'Re-summarizing conversation...\nThis may take a few seconds';
+
+  @override
+  String get nothingInterestingRetry => 'Nothing interesting found,\nwant to retry?';
+
+  @override
+  String get noSummaryForConversation => 'No summary available\nfor this conversation.';
+
+  @override
+  String get unknownLocation => 'Unknown location';
+
+  @override
+  String get couldNotLoadMap => 'Could not load map';
+
+  @override
+  String get triggerConversationIntegration => 'Trigger Conversation Created Integration';
+
+  @override
+  String get webhookUrlNotSet => 'Webhook URL not set';
+
+  @override
+  String get setWebhookUrlInSettings => 'Please set the webhook URL in developer settings to use this feature.';
+
+  @override
+  String get sendWebUrl => 'Send web url';
+
+  @override
+  String get sendTranscript => 'Send Transcript';
+
+  @override
+  String get sendSummary => 'Send Summary';
 }

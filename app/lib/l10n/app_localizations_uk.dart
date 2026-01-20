@@ -57,7 +57,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get clear => 'Очистити';
 
   @override
-  String get copyTranscript => 'Копіювати транскрипцію';
+  String get copyTranscript => 'Копіювати транскрипт';
 
   @override
   String get copySummary => 'Копіювати підсумок';
@@ -2288,7 +2288,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get summaryCopiedToClipboard => 'Резюме скопійовано в буфер обміну';
 
   @override
-  String get conversationUrlCouldNotBeShared => 'URL-адресу розмови не вдалося поширити.';
+  String get conversationUrlCouldNotBeShared => 'Не вдалося поділитися посиланням на розмову.';
 
   @override
   String get urlCopiedToClipboard => 'URL скопійовано в буфер обміну';
@@ -2689,7 +2689,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get searchResults => 'Результати пошуку';
 
   @override
-  String get actionItems => 'Елементи дій';
+  String get actionItems => 'Завдання';
 
   @override
   String get tasksToday => 'Сьогодні';
@@ -3609,7 +3609,8 @@ class AppLocalizationsUk extends AppLocalizations {
   String get auto => 'Автоматично';
 
   @override
-  String get noSummaryForApp => 'Для цього додатка резюме недоступне. Спробуйте інший додаток для кращих результатів.';
+  String get noSummaryForApp =>
+      'Для цього застосунку немає підсумку. Спробуйте інший застосунок для кращих результатів.';
 
   @override
   String get tryAnotherApp => 'Спробувати інший додаток';
@@ -3626,7 +3627,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get otherAppResults => 'Результати інших додатків';
 
   @override
-  String get unknownApp => 'Невідомий додаток';
+  String get unknownApp => 'Невідомий застосунок';
 
   @override
   String get noSummaryAvailable => 'Резюме недоступне';
@@ -5247,7 +5248,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get prompt => 'Запит';
 
   @override
-  String get result => 'Результат';
+  String get result => 'Результат:';
 
   @override
   String get compareTranscripts => 'Порівняти транскрипції';
@@ -5995,4 +5996,41 @@ class AppLocalizationsUk extends AppLocalizations {
   String estimatedTimeRemaining(String time) {
     return 'Приблизно: залишилось $time';
   }
+
+  @override
+  String get summarizingConversation => 'Підсумовування розмови...\nЦе може зайняти кілька секунд';
+
+  @override
+  String get resummarizingConversation => 'Повторне підсумовування розмови...\nЦе може зайняти кілька секунд';
+
+  @override
+  String get nothingInterestingRetry => 'Нічого цікавого не знайдено,\nхочете спробувати ще раз?';
+
+  @override
+  String get noSummaryForConversation => 'Для цієї розмови\nнемає підсумку.';
+
+  @override
+  String get unknownLocation => 'Невідоме місцезнаходження';
+
+  @override
+  String get couldNotLoadMap => 'Не вдалося завантажити карту';
+
+  @override
+  String get triggerConversationIntegration => 'Запустити інтеграцію створення розмови';
+
+  @override
+  String get webhookUrlNotSet => 'URL вебхука не встановлено';
+
+  @override
+  String get setWebhookUrlInSettings =>
+      'Встановіть URL вебхука в налаштуваннях розробника для використання цієї функції.';
+
+  @override
+  String get sendWebUrl => 'Надіслати веб-посилання';
+
+  @override
+  String get sendTranscript => 'Надіслати транскрипт';
+
+  @override
+  String get sendSummary => 'Надіслати підсумок';
 }

@@ -60,7 +60,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get copyTranscript => 'Transkripti kopyala';
 
   @override
-  String get copySummary => 'Özeti Kopyala';
+  String get copySummary => 'Özeti kopyala';
 
   @override
   String get testPrompt => 'İstemi Test Et';
@@ -2290,7 +2290,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get summaryCopiedToClipboard => 'Özet panoya kopyalandı';
 
   @override
-  String get conversationUrlCouldNotBeShared => 'Sohbet URL\'si paylaşılamadı.';
+  String get conversationUrlCouldNotBeShared => 'Konuşma URL\'si paylaşılamadı.';
 
   @override
   String get urlCopiedToClipboard => 'URL panoya kopyalandı';
@@ -3173,7 +3173,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get transcriptionFailed => 'Transkripsiyon başarısız';
 
   @override
-  String get discardedConversation => 'İptal Edilen Sohbet';
+  String get discardedConversation => 'Atılan konuşma';
 
   @override
   String get at => 'saat';
@@ -3630,7 +3630,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get otherAppResults => 'Diğer Uygulama Sonuçları';
 
   @override
-  String get unknownApp => 'Bilinmeyen Uygulama';
+  String get unknownApp => 'Bilinmeyen uygulama';
 
   @override
   String get noSummaryAvailable => 'Özet Mevcut Değil';
@@ -5253,7 +5253,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get prompt => 'İstem';
 
   @override
-  String get result => 'Sonuç';
+  String get result => 'Sonuç:';
 
   @override
   String get compareTranscripts => 'Transkriptleri karşılaştır';
@@ -6001,4 +6001,40 @@ class AppLocalizationsTr extends AppLocalizations {
   String estimatedTimeRemaining(String time) {
     return 'Tahmini: $time kaldı';
   }
+
+  @override
+  String get summarizingConversation => 'Konuşma özetleniyor...\nBu birkaç saniye sürebilir';
+
+  @override
+  String get resummarizingConversation => 'Konuşma yeniden özetleniyor...\nBu birkaç saniye sürebilir';
+
+  @override
+  String get nothingInterestingRetry => 'İlginç bir şey bulunamadı,\ntekrar denemek ister misiniz?';
+
+  @override
+  String get noSummaryForConversation => 'Bu konuşma için\nözet mevcut değil.';
+
+  @override
+  String get unknownLocation => 'Bilinmeyen konum';
+
+  @override
+  String get couldNotLoadMap => 'Harita yüklenemedi';
+
+  @override
+  String get triggerConversationIntegration => 'Konuşma oluşturma entegrasyonunu tetikle';
+
+  @override
+  String get webhookUrlNotSet => 'Webhook URL ayarlanmadı';
+
+  @override
+  String get setWebhookUrlInSettings => 'Bu özelliği kullanmak için geliştirici ayarlarında webhook URL\'yi ayarlayın.';
+
+  @override
+  String get sendWebUrl => 'Web URL gönder';
+
+  @override
+  String get sendTranscript => 'Transkript gönder';
+
+  @override
+  String get sendSummary => 'Özet gönder';
 }

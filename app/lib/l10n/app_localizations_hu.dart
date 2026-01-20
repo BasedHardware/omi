@@ -58,7 +58,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get clear => 'Törlés';
 
   @override
-  String get copyTranscript => 'Átírás másolása';
+  String get copyTranscript => 'Átirat másolása';
 
   @override
   String get copySummary => 'Összefoglaló másolása';
@@ -3626,7 +3626,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get noSummaryForApp =>
-      'Ehhez az alkalmazáshoz nincs elérhető összefoglaló. Jobb eredményekért próbáljon ki egy másik alkalmazást.';
+      'Nincs elérhető összefoglaló ehhez az alkalmazáshoz. Próbálj ki egy másik alkalmazást a jobb eredmények érdekében.';
 
   @override
   String get tryAnotherApp => 'Próbáljon ki egy másik alkalmazást';
@@ -5271,7 +5271,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get prompt => 'Prompt';
 
   @override
-  String get result => 'Eredmény';
+  String get result => 'Eredmény:';
 
   @override
   String get compareTranscripts => 'Átiratok összehasonlítása';
@@ -6022,4 +6022,40 @@ class AppLocalizationsHu extends AppLocalizations {
   String estimatedTimeRemaining(String time) {
     return 'Becsült: $time hátralévő';
   }
+
+  @override
+  String get summarizingConversation => 'Beszélgetés összefoglalása...\nEz néhány másodpercig tarthat';
+
+  @override
+  String get resummarizingConversation => 'Beszélgetés újraösszefoglalása...\nEz néhány másodpercig tarthat';
+
+  @override
+  String get nothingInterestingRetry => 'Nem találtunk semmi érdekeset,\nszeretnéd újra próbálni?';
+
+  @override
+  String get noSummaryForConversation => 'Nincs elérhető összefoglaló\nehhez a beszélgetéshez.';
+
+  @override
+  String get unknownLocation => 'Ismeretlen hely';
+
+  @override
+  String get couldNotLoadMap => 'A térkép nem tölthető be';
+
+  @override
+  String get triggerConversationIntegration => 'Beszélgetés-létrehozási integráció indítása';
+
+  @override
+  String get webhookUrlNotSet => 'Webhook URL nincs beállítva';
+
+  @override
+  String get setWebhookUrlInSettings => 'Kérjük, állítsd be a webhook URL-t a fejlesztői beállításokban.';
+
+  @override
+  String get sendWebUrl => 'Web URL küldése';
+
+  @override
+  String get sendTranscript => 'Átirat küldése';
+
+  @override
+  String get sendSummary => 'Összefoglaló küldése';
 }

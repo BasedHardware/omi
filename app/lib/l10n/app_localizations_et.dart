@@ -2685,7 +2685,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get searchResults => 'Otsingutulemused';
 
   @override
-  String get actionItems => 'Tegevuspunktid';
+  String get actionItems => 'Tegevused';
 
   @override
   String get tasksToday => 'Täna';
@@ -3168,7 +3168,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get transcriptionFailed => 'Transkribeerimine ebaõnnestus';
 
   @override
-  String get discardedConversation => 'Visatud vestlus';
+  String get discardedConversation => 'Kustutatud vestlus';
 
   @override
   String get at => 'kell';
@@ -3606,7 +3606,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get noSummaryForApp =>
-      'Selle rakenduse jaoks pole kokkuvõtet saadaval. Parema tulemuse saamiseks proovige teist rakendust.';
+      'Selle rakenduse jaoks pole kokkuvõtet saadaval. Proovi teist rakendust paremate tulemuste saamiseks.';
 
   @override
   String get tryAnotherApp => 'Proovi teist rakendust';
@@ -5244,7 +5244,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get prompt => 'Viip';
 
   @override
-  String get result => 'Tulemus';
+  String get result => 'Tulemus:';
 
   @override
   String get compareTranscripts => 'Võrdle transkriptsioone';
@@ -5743,7 +5743,7 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get noFolder => 'Kaustata';
+  String get noFolder => 'Kausta pole';
 
   @override
   String get removeFromAllFolders => 'Eemalda kõigist kaustadest';
@@ -5991,4 +5991,40 @@ class AppLocalizationsEt extends AppLocalizations {
   String estimatedTimeRemaining(String time) {
     return 'Hinnanguline: $time jäänud';
   }
+
+  @override
+  String get summarizingConversation => 'Vestluse kokkuvõtte tegemine...\nSee võib võtta mõne sekundi';
+
+  @override
+  String get resummarizingConversation => 'Vestluse uuesti kokkuvõtte tegemine...\nSee võib võtta mõne sekundi';
+
+  @override
+  String get nothingInterestingRetry => 'Midagi huvitavat ei leitud,\nkas soovid uuesti proovida?';
+
+  @override
+  String get noSummaryForConversation => 'Selle vestluse jaoks\npole kokkuvõtet saadaval.';
+
+  @override
+  String get unknownLocation => 'Tundmatu asukoht';
+
+  @override
+  String get couldNotLoadMap => 'Kaarti ei õnnestunud laadida';
+
+  @override
+  String get triggerConversationIntegration => 'Käivita vestluse loomise integratsioon';
+
+  @override
+  String get webhookUrlNotSet => 'Webhooki URL pole määratud';
+
+  @override
+  String get setWebhookUrlInSettings => 'Selle funktsiooni kasutamiseks määra webhooki URL arendaja seadetes.';
+
+  @override
+  String get sendWebUrl => 'Saada veebi URL';
+
+  @override
+  String get sendTranscript => 'Saada transkriptsioon';
+
+  @override
+  String get sendSummary => 'Saada kokkuvõte';
 }

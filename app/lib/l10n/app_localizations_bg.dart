@@ -58,10 +58,10 @@ class AppLocalizationsBg extends AppLocalizations {
   String get clear => 'Изчисти';
 
   @override
-  String get copyTranscript => 'Копиране на текст';
+  String get copyTranscript => 'Копирай стенограма';
 
   @override
-  String get copySummary => 'Копирай резюме';
+  String get copySummary => 'Копирай обобщение';
 
   @override
   String get testPrompt => 'Тествай подсказка';
@@ -2289,7 +2289,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get summaryCopiedToClipboard => 'Резюмето е копирано в клипборда';
 
   @override
-  String get conversationUrlCouldNotBeShared => 'URL адресът на разговора не можа да бъде споделен.';
+  String get conversationUrlCouldNotBeShared => 'URL на разговора не може да бъде споделен.';
 
   @override
   String get urlCopiedToClipboard => 'URL адресът е копиран в клипборда';
@@ -2690,7 +2690,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get searchResults => 'Резултати от търсенето';
 
   @override
-  String get actionItems => 'Задачи за действие';
+  String get actionItems => 'Действия';
 
   @override
   String get tasksToday => 'Днес';
@@ -3173,7 +3173,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get transcriptionFailed => 'Транскрибирането не успя';
 
   @override
-  String get discardedConversation => 'Отхвърлен разговор';
+  String get discardedConversation => 'Изхвърлен разговор';
 
   @override
   String get at => 'в';
@@ -3615,7 +3615,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get noSummaryForApp =>
-      'Няма налично резюме за това приложение. Опитайте друго приложение за по-добри резултати.';
+      'Няма налично обобщение за това приложение. Опитайте друго приложение за по-добри резултати.';
 
   @override
   String get tryAnotherApp => 'Опитайте друго приложение';
@@ -5256,13 +5256,13 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
-  String get testConversationPrompt => 'Тест на подкана за разговор';
+  String get testConversationPrompt => 'Тест на подсказка за разговор';
 
   @override
   String get prompt => 'Подкана';
 
   @override
-  String get result => 'Резултат';
+  String get result => 'Резултат:';
 
   @override
   String get compareTranscripts => 'Сравни транскрипции';
@@ -6011,4 +6011,41 @@ class AppLocalizationsBg extends AppLocalizations {
   String estimatedTimeRemaining(String time) {
     return 'Оставащо време: $time';
   }
+
+  @override
+  String get summarizingConversation => 'Обобщаване на разговора...\nТова може да отнеме няколко секунди';
+
+  @override
+  String get resummarizingConversation => 'Преобобщаване на разговора...\nТова може да отнеме няколко секунди';
+
+  @override
+  String get nothingInterestingRetry => 'Не е намерено нищо интересно,\nискате ли да опитате отново?';
+
+  @override
+  String get noSummaryForConversation => 'Няма налично обобщение\nза този разговор.';
+
+  @override
+  String get unknownLocation => 'Неизвестно местоположение';
+
+  @override
+  String get couldNotLoadMap => 'Картата не може да се зареди';
+
+  @override
+  String get triggerConversationIntegration => 'Стартиране на интеграция при създаване на разговор';
+
+  @override
+  String get webhookUrlNotSet => 'Webhook URL не е зададен';
+
+  @override
+  String get setWebhookUrlInSettings =>
+      'Моля, задайте Webhook URL в настройките за разработчици, за да използвате тази функция.';
+
+  @override
+  String get sendWebUrl => 'Изпрати уеб връзка';
+
+  @override
+  String get sendTranscript => 'Изпрати стенограма';
+
+  @override
+  String get sendSummary => 'Изпрати обобщение';
 }

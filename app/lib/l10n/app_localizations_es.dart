@@ -3595,7 +3595,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get noSummaryForApp =>
-      'No hay resumen disponible para esta aplicación. Prueba otra aplicación para obtener mejores resultados.';
+      'No hay resumen disponible para esta aplicación. Prueba otra aplicación para mejores resultados.';
 
   @override
   String get tryAnotherApp => 'Probar otra aplicación';
@@ -5237,13 +5237,13 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get testConversationPrompt => 'Probar prompt de conversación';
+  String get testConversationPrompt => 'Probar un prompt de conversación';
 
   @override
   String get prompt => 'Prompt';
 
   @override
-  String get result => 'Resultado';
+  String get result => 'Resultado:';
 
   @override
   String get compareTranscripts => 'Comparar transcripciones';
@@ -5990,4 +5990,40 @@ class AppLocalizationsEs extends AppLocalizations {
   String estimatedTimeRemaining(String time) {
     return 'Estimado: $time restante';
   }
+
+  @override
+  String get summarizingConversation => 'Resumiendo conversación...\nEsto puede tardar unos segundos';
+
+  @override
+  String get resummarizingConversation => 'Re-resumiendo conversación...\nEsto puede tardar unos segundos';
+
+  @override
+  String get nothingInterestingRetry => 'No se encontró nada interesante,\n¿quieres intentarlo de nuevo?';
+
+  @override
+  String get noSummaryForConversation => 'No hay resumen disponible\npara esta conversación.';
+
+  @override
+  String get unknownLocation => 'Ubicación desconocida';
+
+  @override
+  String get couldNotLoadMap => 'No se pudo cargar el mapa';
+
+  @override
+  String get triggerConversationIntegration => 'Activar integración de creación de conversación';
+
+  @override
+  String get webhookUrlNotSet => 'URL de webhook no configurada';
+
+  @override
+  String get setWebhookUrlInSettings => 'Por favor, configura la URL del webhook en ajustes de desarrollador.';
+
+  @override
+  String get sendWebUrl => 'Enviar URL web';
+
+  @override
+  String get sendTranscript => 'Enviar transcripción';
+
+  @override
+  String get sendSummary => 'Enviar resumen';
 }

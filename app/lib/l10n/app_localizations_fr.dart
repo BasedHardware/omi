@@ -2706,7 +2706,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get searchResults => 'Résultats de recherche';
 
   @override
-  String get actionItems => 'Éléments d\'action';
+  String get actionItems => 'Actions à faire';
 
   @override
   String get tasksToday => 'Aujourd\'hui';
@@ -3191,7 +3191,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get transcriptionFailed => 'Transcription échouée';
 
   @override
-  String get discardedConversation => 'Conversation rejetée';
+  String get discardedConversation => 'Conversation abandonnée';
 
   @override
   String get at => 'à';
@@ -5288,13 +5288,13 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String get testConversationPrompt => 'Tester le prompt de conversation';
+  String get testConversationPrompt => 'Tester un prompt de conversation';
 
   @override
   String get prompt => 'Prompt';
 
   @override
-  String get result => 'Résultat';
+  String get result => 'Résultat :';
 
   @override
   String get compareTranscripts => 'Comparer les transcriptions';
@@ -5795,7 +5795,7 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String get noFolder => 'Aucun dossier';
+  String get noFolder => 'Sans dossier';
 
   @override
   String get removeFromAllFolders => 'Retirer de tous les dossiers';
@@ -6044,4 +6044,40 @@ class AppLocalizationsFr extends AppLocalizations {
   String estimatedTimeRemaining(String time) {
     return 'Estimation : $time restant';
   }
+
+  @override
+  String get summarizingConversation => 'Résumé de la conversation...\nCela peut prendre quelques secondes';
+
+  @override
+  String get resummarizingConversation => 'Nouveau résumé de la conversation...\nCela peut prendre quelques secondes';
+
+  @override
+  String get nothingInterestingRetry => 'Rien d\'intéressant trouvé,\nvoulez-vous réessayer ?';
+
+  @override
+  String get noSummaryForConversation => 'Aucun résumé disponible\npour cette conversation.';
+
+  @override
+  String get unknownLocation => 'Lieu inconnu';
+
+  @override
+  String get couldNotLoadMap => 'Impossible de charger la carte';
+
+  @override
+  String get triggerConversationIntegration => 'Déclencher l\'intégration de création de conversation';
+
+  @override
+  String get webhookUrlNotSet => 'URL du webhook non définie';
+
+  @override
+  String get setWebhookUrlInSettings => 'Veuillez définir l\'URL du webhook dans les paramètres développeur.';
+
+  @override
+  String get sendWebUrl => 'Envoyer l\'URL web';
+
+  @override
+  String get sendTranscript => 'Envoyer la transcription';
+
+  @override
+  String get sendSummary => 'Envoyer le résumé';
 }

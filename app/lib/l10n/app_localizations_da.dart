@@ -58,10 +58,10 @@ class AppLocalizationsDa extends AppLocalizations {
   String get clear => 'Ryd';
 
   @override
-  String get copyTranscript => 'Kopier udskrift';
+  String get copyTranscript => 'Kopier transskription';
 
   @override
-  String get copySummary => 'Kopier sammenfatning';
+  String get copySummary => 'Kopier opsummering';
 
   @override
   String get testPrompt => 'Test prompt';
@@ -2288,7 +2288,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get summaryCopiedToClipboard => 'Resumé kopieret til udklipsholder';
 
   @override
-  String get conversationUrlCouldNotBeShared => 'Samtale-URL kunne ikke deles.';
+  String get conversationUrlCouldNotBeShared => 'Samtale URL kunne ikke deles.';
 
   @override
   String get urlCopiedToClipboard => 'URL kopieret til udklipsholder';
@@ -3611,7 +3611,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get auto => 'Automatisk';
 
   @override
-  String get noSummaryForApp => 'Intet resumé tilgængeligt for denne app. Prøv en anden app for bedre resultater.';
+  String get noSummaryForApp => 'Ingen opsummering tilgængelig for denne app. Prøv en anden app for bedre resultater.';
 
   @override
   String get tryAnotherApp => 'Prøv en anden app';
@@ -5246,13 +5246,13 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String get testConversationPrompt => 'Test samtaleprompt';
+  String get testConversationPrompt => 'Test en samtale prompt';
 
   @override
   String get prompt => 'Prompt';
 
   @override
-  String get result => 'Resultat';
+  String get result => 'Resultat:';
 
   @override
   String get compareTranscripts => 'Sammenlign transskriptioner';
@@ -5998,4 +5998,41 @@ class AppLocalizationsDa extends AppLocalizations {
   String estimatedTimeRemaining(String time) {
     return 'Anslået: $time tilbage';
   }
+
+  @override
+  String get summarizingConversation => 'Opsummerer samtale...\nDette kan tage et par sekunder';
+
+  @override
+  String get resummarizingConversation => 'Gen-opsummerer samtale...\nDette kan tage et par sekunder';
+
+  @override
+  String get nothingInterestingRetry => 'Intet interessant fundet,\nvil du prøve igen?';
+
+  @override
+  String get noSummaryForConversation => 'Ingen opsummering tilgængelig\nfor denne samtale.';
+
+  @override
+  String get unknownLocation => 'Ukendt placering';
+
+  @override
+  String get couldNotLoadMap => 'Kunne ikke indlæse kort';
+
+  @override
+  String get triggerConversationIntegration => 'Udløs samtale oprettet integration';
+
+  @override
+  String get webhookUrlNotSet => 'Webhook URL ikke angivet';
+
+  @override
+  String get setWebhookUrlInSettings =>
+      'Angiv venligst webhook URL i udviklerindstillinger for at bruge denne funktion.';
+
+  @override
+  String get sendWebUrl => 'Send web URL';
+
+  @override
+  String get sendTranscript => 'Send transskription';
+
+  @override
+  String get sendSummary => 'Send opsummering';
 }

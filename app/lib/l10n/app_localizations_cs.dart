@@ -2286,7 +2286,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get summaryCopiedToClipboard => 'Souhrn zkopírován do schránky';
 
   @override
-  String get conversationUrlCouldNotBeShared => 'URL konverzace nelze sdílet.';
+  String get conversationUrlCouldNotBeShared => 'URL konverzace se nepodařilo sdílet.';
 
   @override
   String get urlCopiedToClipboard => 'URL zkopírována do schránky';
@@ -3603,8 +3603,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get auto => 'Automaticky';
 
   @override
-  String get noSummaryForApp =>
-      'Pro tuto aplikaci není k dispozici žádný souhrn. Zkuste jinou aplikaci pro lepší výsledky.';
+  String get noSummaryForApp => 'Pro tuto aplikaci není k dispozici shrnutí. Zkuste jinou aplikaci pro lepší výsledky.';
 
   @override
   String get tryAnotherApp => 'Zkusit jinou aplikaci';
@@ -5236,7 +5235,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get prompt => 'Výzva';
 
   @override
-  String get result => 'Výsledek';
+  String get result => 'Výsledek:';
 
   @override
   String get compareTranscripts => 'Porovnat přepisy';
@@ -5736,7 +5735,7 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get noFolder => 'Žádná složka';
+  String get noFolder => 'Bez složky';
 
   @override
   String get removeFromAllFolders => 'Odebrat ze všech složek';
@@ -5983,4 +5982,40 @@ class AppLocalizationsCs extends AppLocalizations {
   String estimatedTimeRemaining(String time) {
     return 'Odhad: zbývá $time';
   }
+
+  @override
+  String get summarizingConversation => 'Shrnutí konverzace...\nMůže to trvat několik sekund';
+
+  @override
+  String get resummarizingConversation => 'Opětovné shrnutí konverzace...\nMůže to trvat několik sekund';
+
+  @override
+  String get nothingInterestingRetry => 'Nic zajímavého nenalezeno,\nchcete to zkusit znovu?';
+
+  @override
+  String get noSummaryForConversation => 'Pro tuto konverzaci\nnení k dispozici shrnutí.';
+
+  @override
+  String get unknownLocation => 'Neznámá poloha';
+
+  @override
+  String get couldNotLoadMap => 'Mapu se nepodařilo načíst';
+
+  @override
+  String get triggerConversationIntegration => 'Spustit integraci vytvoření konverzace';
+
+  @override
+  String get webhookUrlNotSet => 'URL webhooku není nastavena';
+
+  @override
+  String get setWebhookUrlInSettings => 'Pro použití této funkce nastavte URL webhooku v nastavení vývojáře.';
+
+  @override
+  String get sendWebUrl => 'Odeslat webovou URL';
+
+  @override
+  String get sendTranscript => 'Odeslat přepis';
+
+  @override
+  String get sendSummary => 'Odeslat shrnutí';
 }

@@ -3141,7 +3141,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get transcriptionFailed => 'فشل التحويل';
 
   @override
-  String get discardedConversation => 'محادثة مهملة';
+  String get discardedConversation => 'محادثة محذوفة';
 
   @override
   String get at => 'في';
@@ -3576,7 +3576,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get auto => 'تلقائي';
 
   @override
-  String get noSummaryForApp => 'لا يوجد ملخص متاح لهذا التطبيق. جرب تطبيقًا آخر للحصول على نتائج أفضل.';
+  String get noSummaryForApp => 'لا يوجد ملخص لهذا التطبيق. جرب تطبيقاً آخر للحصول على نتائج أفضل.';
 
   @override
   String get tryAnotherApp => 'جرب تطبيقًا آخر';
@@ -5202,7 +5202,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get prompt => 'موجه';
 
   @override
-  String get result => 'النتيجة';
+  String get result => 'النتيجة:';
 
   @override
   String get compareTranscripts => 'مقارنة النصوص';
@@ -5945,4 +5945,40 @@ class AppLocalizationsAr extends AppLocalizations {
   String estimatedTimeRemaining(String time) {
     return 'المتبقي: $time تقريباً';
   }
+
+  @override
+  String get summarizingConversation => 'جاري تلخيص المحادثة...\nقد يستغرق هذا بضع ثوانٍ';
+
+  @override
+  String get resummarizingConversation => 'إعادة تلخيص المحادثة...\nقد يستغرق هذا بضع ثوانٍ';
+
+  @override
+  String get nothingInterestingRetry => 'لم يتم العثور على شيء مثير،\nهل تريد المحاولة مرة أخرى؟';
+
+  @override
+  String get noSummaryForConversation => 'لا يوجد ملخص\nلهذه المحادثة.';
+
+  @override
+  String get unknownLocation => 'موقع غير معروف';
+
+  @override
+  String get couldNotLoadMap => 'تعذر تحميل الخريطة';
+
+  @override
+  String get triggerConversationIntegration => 'تشغيل تكامل إنشاء المحادثة';
+
+  @override
+  String get webhookUrlNotSet => 'عنوان Webhook غير محدد';
+
+  @override
+  String get setWebhookUrlInSettings => 'يرجى تعيين عنوان Webhook في إعدادات المطور لاستخدام هذه الميزة.';
+
+  @override
+  String get sendWebUrl => 'إرسال رابط الويب';
+
+  @override
+  String get sendTranscript => 'إرسال النص';
+
+  @override
+  String get sendSummary => 'إرسال الملخص';
 }

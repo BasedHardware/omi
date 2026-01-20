@@ -58,7 +58,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get clear => 'साफ़ करें';
 
   @override
-  String get copyTranscript => 'प्रतिलेख कॉपी करें';
+  String get copyTranscript => 'प्रतिलिपि कॉपी करें';
 
   @override
   String get copySummary => 'सारांश कॉपी करें';
@@ -2660,7 +2660,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get searchResults => 'खोज परिणाम';
 
   @override
-  String get actionItems => 'कार्रवाई के मुद्दे';
+  String get actionItems => 'कार्य आइटम';
 
   @override
   String get tasksToday => 'आज';
@@ -3142,7 +3142,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get transcriptionFailed => 'ट्रांसक्रिप्शन विफल';
 
   @override
-  String get discardedConversation => 'अस्वीकृत बातचीत';
+  String get discardedConversation => 'रद्द की गई बातचीत';
 
   @override
   String get at => 'पर';
@@ -3581,8 +3581,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get auto => 'स्वचालित';
 
   @override
-  String get noSummaryForApp =>
-      'इस ऐप के लिए कोई सारांश उपलब्ध नहीं है। बेहतर परिणामों के लिए किसी अन्य ऐप का प्रयास करें।';
+  String get noSummaryForApp => 'इस ऐप के लिए कोई सारांश उपलब्ध नहीं है। बेहतर परिणामों के लिए कोई अन्य ऐप आज़माएं।';
 
   @override
   String get tryAnotherApp => 'दूसरा ऐप आज़माएं';
@@ -5216,13 +5215,13 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
-  String get testConversationPrompt => 'वार्तालाप प्रॉम्प्ट का परीक्षण करें';
+  String get testConversationPrompt => 'बातचीत प्रॉम्प्ट टेस्ट करें';
 
   @override
   String get prompt => 'प्रॉम्प्ट';
 
   @override
-  String get result => 'परिणाम';
+  String get result => 'परिणाम:';
 
   @override
   String get compareTranscripts => 'ट्रांसक्रिप्ट की तुलना करें';
@@ -5969,4 +5968,41 @@ class AppLocalizationsHi extends AppLocalizations {
   String estimatedTimeRemaining(String time) {
     return 'अनुमानित: $time शेष';
   }
+
+  @override
+  String get summarizingConversation => 'बातचीत का सारांश...\nइसमें कुछ सेकंड लग सकते हैं';
+
+  @override
+  String get resummarizingConversation => 'बातचीत का पुनः सारांश...\nइसमें कुछ सेकंड लग सकते हैं';
+
+  @override
+  String get nothingInterestingRetry => 'कुछ दिलचस्प नहीं मिला,\nक्या आप फिर से कोशिश करना चाहते हैं?';
+
+  @override
+  String get noSummaryForConversation => 'इस बातचीत के लिए\nकोई सारांश उपलब्ध नहीं है।';
+
+  @override
+  String get unknownLocation => 'अज्ञात स्थान';
+
+  @override
+  String get couldNotLoadMap => 'मानचित्र लोड नहीं हो सका';
+
+  @override
+  String get triggerConversationIntegration => 'बातचीत निर्माण एकीकरण ट्रिगर करें';
+
+  @override
+  String get webhookUrlNotSet => 'Webhook URL सेट नहीं है';
+
+  @override
+  String get setWebhookUrlInSettings =>
+      'इस सुविधा का उपयोग करने के लिए कृपया डेवलपर सेटिंग्स में webhook URL सेट करें।';
+
+  @override
+  String get sendWebUrl => 'वेब URL भेजें';
+
+  @override
+  String get sendTranscript => 'प्रतिलिपि भेजें';
+
+  @override
+  String get sendSummary => 'सारांश भेजें';
 }

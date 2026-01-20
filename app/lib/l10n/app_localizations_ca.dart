@@ -3625,7 +3625,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get noSummaryForApp =>
-      'No hi ha cap resum disponible per a aquesta aplicació. Proveu una altra aplicació per obtenir millors resultats.';
+      'No hi ha resum disponible per a aquesta aplicació. Prova una altra aplicació per obtenir millors resultats.';
 
   @override
   String get tryAnotherApp => 'Provar una altra aplicació';
@@ -5270,13 +5270,13 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String get testConversationPrompt => 'Prova de prompt de conversa';
+  String get testConversationPrompt => 'Provar un indicador de conversa';
 
   @override
   String get prompt => 'Prompt';
 
   @override
-  String get result => 'Resultat';
+  String get result => 'Resultat:';
 
   @override
   String get compareTranscripts => 'Comparar transcripcions';
@@ -6024,4 +6024,41 @@ class AppLocalizationsCa extends AppLocalizations {
   String estimatedTimeRemaining(String time) {
     return 'Estimat: $time restants';
   }
+
+  @override
+  String get summarizingConversation => 'Resumint la conversa...\nAixò pot trigar uns segons';
+
+  @override
+  String get resummarizingConversation => 'Tornant a resumir la conversa...\nAixò pot trigar uns segons';
+
+  @override
+  String get nothingInterestingRetry => 'No s\'ha trobat res interessant,\nvols tornar-ho a provar?';
+
+  @override
+  String get noSummaryForConversation => 'No hi ha resum disponible\nper a aquesta conversa.';
+
+  @override
+  String get unknownLocation => 'Ubicació desconeguda';
+
+  @override
+  String get couldNotLoadMap => 'No s\'ha pogut carregar el mapa';
+
+  @override
+  String get triggerConversationIntegration => 'Activar integració de creació de conversa';
+
+  @override
+  String get webhookUrlNotSet => 'URL de Webhook no configurada';
+
+  @override
+  String get setWebhookUrlInSettings =>
+      'Si us plau, configura l\'URL de Webhook a la configuració de desenvolupador per utilitzar aquesta funció.';
+
+  @override
+  String get sendWebUrl => 'Enviar URL web';
+
+  @override
+  String get sendTranscript => 'Enviar transcripció';
+
+  @override
+  String get sendSummary => 'Enviar resum';
 }

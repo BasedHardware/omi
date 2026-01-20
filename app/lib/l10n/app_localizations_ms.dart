@@ -61,7 +61,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get copyTranscript => 'Salin transkrip';
 
   @override
-  String get copySummary => 'Salin Ringkasan';
+  String get copySummary => 'Salin ringkasan';
 
   @override
   String get testPrompt => 'Uji Gesaan';
@@ -3177,7 +3177,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get transcriptionFailed => 'Penyalinan gagal';
 
   @override
-  String get discardedConversation => 'Perbualan Dibuang';
+  String get discardedConversation => 'Perbualan dibuang';
 
   @override
   String get at => 'pada';
@@ -3617,8 +3617,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get auto => 'Auto';
 
   @override
-  String get noSummaryForApp =>
-      'Tiada ringkasan tersedia untuk aplikasi ini. Cuba aplikasi lain untuk hasil yang lebih baik.';
+  String get noSummaryForApp => 'Tiada ringkasan untuk aplikasi ini. Cuba aplikasi lain untuk hasil yang lebih baik.';
 
   @override
   String get tryAnotherApp => 'Cuba Aplikasi Lain';
@@ -3635,7 +3634,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get otherAppResults => 'Hasil Aplikasi Lain';
 
   @override
-  String get unknownApp => 'Aplikasi Tidak Diketahui';
+  String get unknownApp => 'Aplikasi tidak diketahui';
 
   @override
   String get noSummaryAvailable => 'Tiada Ringkasan Tersedia';
@@ -5265,7 +5264,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get prompt => 'Prompt';
 
   @override
-  String get result => 'Hasil';
+  String get result => 'Hasil:';
 
   @override
   String get compareTranscripts => 'Bandingkan transkrip';
@@ -6012,4 +6011,40 @@ class AppLocalizationsMs extends AppLocalizations {
   String estimatedTimeRemaining(String time) {
     return 'Anggaran: $time berbaki';
   }
+
+  @override
+  String get summarizingConversation => 'Meringkaskan perbualan...\nIni mungkin mengambil beberapa saat';
+
+  @override
+  String get resummarizingConversation => 'Meringkaskan semula perbualan...\nIni mungkin mengambil beberapa saat';
+
+  @override
+  String get nothingInterestingRetry => 'Tiada yang menarik ditemui,\nmahu cuba lagi?';
+
+  @override
+  String get noSummaryForConversation => 'Tiada ringkasan\nuntuk perbualan ini.';
+
+  @override
+  String get unknownLocation => 'Lokasi tidak diketahui';
+
+  @override
+  String get couldNotLoadMap => 'Tidak dapat memuatkan peta';
+
+  @override
+  String get triggerConversationIntegration => 'Cetuskan integrasi penciptaan perbualan';
+
+  @override
+  String get webhookUrlNotSet => 'URL Webhook tidak ditetapkan';
+
+  @override
+  String get setWebhookUrlInSettings => 'Sila tetapkan URL webhook dalam tetapan pembangun untuk menggunakan ciri ini.';
+
+  @override
+  String get sendWebUrl => 'Hantar URL web';
+
+  @override
+  String get sendTranscript => 'Hantar transkrip';
+
+  @override
+  String get sendSummary => 'Hantar ringkasan';
 }

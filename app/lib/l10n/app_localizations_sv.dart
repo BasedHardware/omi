@@ -2287,7 +2287,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get summaryCopiedToClipboard => 'Sammanfattning kopierad till urklipp';
 
   @override
-  String get conversationUrlCouldNotBeShared => 'Konversations-URL kunde inte delas.';
+  String get conversationUrlCouldNotBeShared => 'Samtals-URL kunde inte delas.';
 
   @override
   String get urlCopiedToClipboard => 'URL kopierad till urklipp';
@@ -3170,7 +3170,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get transcriptionFailed => 'Transkription misslyckades';
 
   @override
-  String get discardedConversation => 'Kasserad konversation';
+  String get discardedConversation => 'Kasserat samtal';
 
   @override
   String get at => 'kl.';
@@ -3610,7 +3610,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get noSummaryForApp =>
-      'Ingen sammanfattning tillgänglig för den här appen. Prova en annan app för bättre resultat.';
+      'Ingen sammanfattning tillgänglig för denna app. Prova en annan app för bättre resultat.';
 
   @override
   String get tryAnotherApp => 'Prova en annan app';
@@ -5241,13 +5241,13 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get testConversationPrompt => 'Testa konversationsprompt';
+  String get testConversationPrompt => 'Testa en samtalsprompt';
 
   @override
   String get prompt => 'Prompt';
 
   @override
-  String get result => 'Resultat';
+  String get result => 'Resultat:';
 
   @override
   String get compareTranscripts => 'Jämför transkriptioner';
@@ -5994,4 +5994,41 @@ class AppLocalizationsSv extends AppLocalizations {
   String estimatedTimeRemaining(String time) {
     return 'Beräknat: $time kvar';
   }
+
+  @override
+  String get summarizingConversation => 'Sammanfattar samtal...\nDetta kan ta några sekunder';
+
+  @override
+  String get resummarizingConversation => 'Sammanfattar samtal igen...\nDetta kan ta några sekunder';
+
+  @override
+  String get nothingInterestingRetry => 'Inget intressant hittades,\nvill du försöka igen?';
+
+  @override
+  String get noSummaryForConversation => 'Ingen sammanfattning tillgänglig\nför detta samtal.';
+
+  @override
+  String get unknownLocation => 'Okänd plats';
+
+  @override
+  String get couldNotLoadMap => 'Kunde inte ladda kartan';
+
+  @override
+  String get triggerConversationIntegration => 'Utlös samtal skapad-integration';
+
+  @override
+  String get webhookUrlNotSet => 'Webhook URL inte inställd';
+
+  @override
+  String get setWebhookUrlInSettings =>
+      'Vänligen ställ in webhook URL i utvecklarinställningar för att använda denna funktion.';
+
+  @override
+  String get sendWebUrl => 'Skicka webb-URL';
+
+  @override
+  String get sendTranscript => 'Skicka transkription';
+
+  @override
+  String get sendSummary => 'Skicka sammanfattning';
 }

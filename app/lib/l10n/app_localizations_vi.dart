@@ -3172,7 +3172,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get transcriptionFailed => 'Phiên âm thất bại';
 
   @override
-  String get discardedConversation => 'Cuộc trò chuyện bị loại bỏ';
+  String get discardedConversation => 'Cuộc trò chuyện đã loại bỏ';
 
   @override
   String get at => 'lúc';
@@ -3611,8 +3611,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get auto => 'Tự động';
 
   @override
-  String get noSummaryForApp =>
-      'Không có bản tóm tắt nào cho ứng dụng này. Hãy thử ứng dụng khác để có kết quả tốt hơn.';
+  String get noSummaryForApp => 'Không có tóm tắt cho ứng dụng này. Hãy thử ứng dụng khác để có kết quả tốt hơn.';
 
   @override
   String get tryAnotherApp => 'Thử ứng dụng khác';
@@ -5254,7 +5253,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get prompt => 'Lời nhắc';
 
   @override
-  String get result => 'Kết quả';
+  String get result => 'Kết quả:';
 
   @override
   String get compareTranscripts => 'So sánh bản ghi';
@@ -5999,4 +5998,41 @@ class AppLocalizationsVi extends AppLocalizations {
   String estimatedTimeRemaining(String time) {
     return 'Ước tính: còn $time';
   }
+
+  @override
+  String get summarizingConversation => 'Đang tóm tắt cuộc trò chuyện...\nĐiều này có thể mất vài giây';
+
+  @override
+  String get resummarizingConversation => 'Đang tóm tắt lại cuộc trò chuyện...\nĐiều này có thể mất vài giây';
+
+  @override
+  String get nothingInterestingRetry => 'Không tìm thấy gì thú vị,\nbạn có muốn thử lại không?';
+
+  @override
+  String get noSummaryForConversation => 'Không có tóm tắt\ncho cuộc trò chuyện này.';
+
+  @override
+  String get unknownLocation => 'Vị trí không xác định';
+
+  @override
+  String get couldNotLoadMap => 'Không thể tải bản đồ';
+
+  @override
+  String get triggerConversationIntegration => 'Kích hoạt tích hợp tạo cuộc trò chuyện';
+
+  @override
+  String get webhookUrlNotSet => 'URL Webhook chưa được đặt';
+
+  @override
+  String get setWebhookUrlInSettings =>
+      'Vui lòng đặt URL webhook trong cài đặt nhà phát triển để sử dụng tính năng này.';
+
+  @override
+  String get sendWebUrl => 'Gửi URL web';
+
+  @override
+  String get sendTranscript => 'Gửi bản ghi';
+
+  @override
+  String get sendSummary => 'Gửi tóm tắt';
 }

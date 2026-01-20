@@ -2305,7 +2305,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get summaryCopiedToClipboard => 'Zusammenfassung in Zwischenablage kopiert';
 
   @override
-  String get conversationUrlCouldNotBeShared => 'Gesprächs-URL konnte nicht geteilt werden.';
+  String get conversationUrlCouldNotBeShared => 'Konversations-URL konnte nicht geteilt werden.';
 
   @override
   String get urlCopiedToClipboard => 'URL in Zwischenablage kopiert';
@@ -2707,7 +2707,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get searchResults => 'Suchergebnisse';
 
   @override
-  String get actionItems => 'Aktionspunkte';
+  String get actionItems => 'Aufgaben';
 
   @override
   String get tasksToday => 'Heute';
@@ -3193,7 +3193,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get transcriptionFailed => 'Transkription fehlgeschlagen';
 
   @override
-  String get discardedConversation => 'Verworfenes Gespräch';
+  String get discardedConversation => 'Verworfene Unterhaltung';
 
   @override
   String get at => 'um';
@@ -3634,7 +3634,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get noSummaryForApp =>
-      'Für diese App ist keine Zusammenfassung verfügbar. Versuchen Sie eine andere App für bessere Ergebnisse.';
+      'Keine Zusammenfassung für diese App verfügbar. Probieren Sie eine andere App für bessere Ergebnisse.';
 
   @override
   String get tryAnotherApp => 'Andere App ausprobieren';
@@ -5279,13 +5279,13 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get testConversationPrompt => 'Gesprächs-Prompt testen';
+  String get testConversationPrompt => 'Konversations-Prompt testen';
 
   @override
   String get prompt => 'Prompt';
 
   @override
-  String get result => 'Ergebnis';
+  String get result => 'Ergebnis:';
 
   @override
   String get compareTranscripts => 'Transkripte vergleichen';
@@ -6036,4 +6036,41 @@ class AppLocalizationsDe extends AppLocalizations {
   String estimatedTimeRemaining(String time) {
     return 'Geschätzt: $time verbleibend';
   }
+
+  @override
+  String get summarizingConversation => 'Unterhaltung wird zusammengefasst...\nDies kann einige Sekunden dauern';
+
+  @override
+  String get resummarizingConversation =>
+      'Unterhaltung wird erneut zusammengefasst...\nDies kann einige Sekunden dauern';
+
+  @override
+  String get nothingInterestingRetry => 'Nichts Interessantes gefunden,\nmöchten Sie es erneut versuchen?';
+
+  @override
+  String get noSummaryForConversation => 'Keine Zusammenfassung\nfür diese Unterhaltung verfügbar.';
+
+  @override
+  String get unknownLocation => 'Unbekannter Standort';
+
+  @override
+  String get couldNotLoadMap => 'Karte konnte nicht geladen werden';
+
+  @override
+  String get triggerConversationIntegration => 'Unterhaltungs-Integration auslösen';
+
+  @override
+  String get webhookUrlNotSet => 'Webhook-URL nicht festgelegt';
+
+  @override
+  String get setWebhookUrlInSettings => 'Bitte legen Sie die Webhook-URL in den Entwicklereinstellungen fest.';
+
+  @override
+  String get sendWebUrl => 'Web-URL senden';
+
+  @override
+  String get sendTranscript => 'Transkript senden';
+
+  @override
+  String get sendSummary => 'Zusammenfassung senden';
 }

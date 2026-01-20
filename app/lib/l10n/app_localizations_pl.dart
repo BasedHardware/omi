@@ -681,7 +681,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get yourOmiInsights => 'Twoje statystyki Omi';
 
   @override
-  String get today => 'Dziś';
+  String get today => 'Dzisiaj';
 
   @override
   String get thisMonth => 'W tym miesiącu';
@@ -2288,7 +2288,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get summaryCopiedToClipboard => 'Podsumowanie skopiowane do schowka';
 
   @override
-  String get conversationUrlCouldNotBeShared => 'Adres URL rozmowy nie może być udostępniony.';
+  String get conversationUrlCouldNotBeShared => 'Nie udało się udostępnić URL rozmowy.';
 
   @override
   String get urlCopiedToClipboard => 'URL skopiowany do schowka';
@@ -2689,7 +2689,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get searchResults => 'Wyniki wyszukiwania';
 
   @override
-  String get actionItems => 'Zadania do wykonania';
+  String get actionItems => 'Elementy do działania';
 
   @override
   String get tasksToday => 'Dzisiaj';
@@ -3610,7 +3610,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get noSummaryForApp =>
-      'Brak dostępnego podsumowania dla tej aplikacji. Wypróbuj inną aplikację, aby uzyskać lepsze wyniki.';
+      'Brak podsumowania dla tej aplikacji. Wypróbuj inną aplikację, aby uzyskać lepsze wyniki.';
 
   @override
   String get tryAnotherApp => 'Wypróbuj inną aplikację';
@@ -5248,13 +5248,13 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
-  String get testConversationPrompt => 'Testuj polecenie rozmowy';
+  String get testConversationPrompt => 'Testuj prompt rozmowy';
 
   @override
   String get prompt => 'Polecenie';
 
   @override
-  String get result => 'Wynik';
+  String get result => 'Wynik:';
 
   @override
   String get compareTranscripts => 'Porównaj transkrypcje';
@@ -5755,7 +5755,7 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
-  String get noFolder => 'Bez folderu';
+  String get noFolder => 'Brak folderu';
 
   @override
   String get removeFromAllFolders => 'Usuń ze wszystkich folderów';
@@ -6002,4 +6002,40 @@ class AppLocalizationsPl extends AppLocalizations {
   String estimatedTimeRemaining(String time) {
     return 'Szacunkowo: $time pozostało';
   }
+
+  @override
+  String get summarizingConversation => 'Podsumowywanie rozmowy...\nMoże to potrwać kilka sekund';
+
+  @override
+  String get resummarizingConversation => 'Ponowne podsumowywanie rozmowy...\nMoże to potrwać kilka sekund';
+
+  @override
+  String get nothingInterestingRetry => 'Nie znaleziono nic interesującego,\nchcesz spróbować ponownie?';
+
+  @override
+  String get noSummaryForConversation => 'Brak podsumowania\ndla tej rozmowy.';
+
+  @override
+  String get unknownLocation => 'Nieznana lokalizacja';
+
+  @override
+  String get couldNotLoadMap => 'Nie udało się załadować mapy';
+
+  @override
+  String get triggerConversationIntegration => 'Uruchom integrację tworzenia rozmowy';
+
+  @override
+  String get webhookUrlNotSet => 'URL webhooka nie ustawiony';
+
+  @override
+  String get setWebhookUrlInSettings => 'Ustaw URL webhooka w ustawieniach programisty, aby korzystać z tej funkcji.';
+
+  @override
+  String get sendWebUrl => 'Wyślij URL strony';
+
+  @override
+  String get sendTranscript => 'Wyślij transkrypcję';
+
+  @override
+  String get sendSummary => 'Wyślij podsumowanie';
 }

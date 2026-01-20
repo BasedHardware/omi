@@ -60,7 +60,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get copyTranscript => 'Kopier transkripsjon';
 
   @override
-  String get copySummary => 'Kopier sammendrag';
+  String get copySummary => 'Kopier oppsummering';
 
   @override
   String get testPrompt => 'Test prompt';
@@ -3604,7 +3604,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get noSummaryForApp =>
-      'Ingen sammendrag tilgjengelig for denne appen. Prøv en annen app for bedre resultater.';
+      'Ingen oppsummering tilgjengelig for denne appen. Prøv en annen app for bedre resultater.';
 
   @override
   String get tryAnotherApp => 'Prøv en annen app';
@@ -5238,13 +5238,13 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String get testConversationPrompt => 'Test samtaleprompt';
+  String get testConversationPrompt => 'Test en samtaleprompt';
 
   @override
   String get prompt => 'Prompt';
 
   @override
-  String get result => 'Resultat';
+  String get result => 'Resultat:';
 
   @override
   String get compareTranscripts => 'Sammenlign transkripsjoner';
@@ -5989,4 +5989,41 @@ class AppLocalizationsNo extends AppLocalizations {
   String estimatedTimeRemaining(String time) {
     return 'Estimert: $time gjenstår';
   }
+
+  @override
+  String get summarizingConversation => 'Oppsummerer samtale...\nDette kan ta noen sekunder';
+
+  @override
+  String get resummarizingConversation => 'Oppsummerer samtale på nytt...\nDette kan ta noen sekunder';
+
+  @override
+  String get nothingInterestingRetry => 'Fant ingenting interessant,\nvil du prøve igjen?';
+
+  @override
+  String get noSummaryForConversation => 'Ingen oppsummering tilgjengelig\nfor denne samtalen.';
+
+  @override
+  String get unknownLocation => 'Ukjent plassering';
+
+  @override
+  String get couldNotLoadMap => 'Kunne ikke laste kart';
+
+  @override
+  String get triggerConversationIntegration => 'Utløs samtale opprettet-integrasjon';
+
+  @override
+  String get webhookUrlNotSet => 'Webhook URL ikke satt';
+
+  @override
+  String get setWebhookUrlInSettings =>
+      'Vennligst angi webhook URL i utviklerinnstillinger for å bruke denne funksjonen.';
+
+  @override
+  String get sendWebUrl => 'Send web-URL';
+
+  @override
+  String get sendTranscript => 'Send transkripsjon';
+
+  @override
+  String get sendSummary => 'Send oppsummering';
 }

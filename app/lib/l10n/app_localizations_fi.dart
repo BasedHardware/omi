@@ -60,7 +60,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get copyTranscript => 'Kopioi litterointi';
 
   @override
-  String get copySummary => 'Kopioi yhteenveto';
+  String get copySummary => 'Kopioi tiivistelmä';
 
   @override
   String get testPrompt => 'Testaa kehotetta';
@@ -3603,7 +3603,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get noSummaryForApp =>
-      'Tälle sovellukselle ei ole saatavilla yhteenvetoa. Kokeile toista sovellusta parempien tulosten saamiseksi.';
+      'Tälle sovellukselle ei ole tiivistelmää. Kokeile toista sovellusta parempien tulosten saamiseksi.';
 
   @override
   String get tryAnotherApp => 'Kokeile toista sovellusta';
@@ -5244,7 +5244,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get prompt => 'Kehote';
 
   @override
-  String get result => 'Tulos';
+  String get result => 'Tulos:';
 
   @override
   String get compareTranscripts => 'Vertaa litterointeja';
@@ -5991,4 +5991,40 @@ class AppLocalizationsFi extends AppLocalizations {
   String estimatedTimeRemaining(String time) {
     return 'Arvio: $time jäljellä';
   }
+
+  @override
+  String get summarizingConversation => 'Tiivistetään keskustelua...\nTämä voi kestää muutaman sekunnin';
+
+  @override
+  String get resummarizingConversation => 'Tiivistetään keskustelua uudelleen...\nTämä voi kestää muutaman sekunnin';
+
+  @override
+  String get nothingInterestingRetry => 'Mitään mielenkiintoista ei löytynyt,\nhaluatko yrittää uudelleen?';
+
+  @override
+  String get noSummaryForConversation => 'Tälle keskustelulle\nei ole tiivistelmää.';
+
+  @override
+  String get unknownLocation => 'Tuntematon sijainti';
+
+  @override
+  String get couldNotLoadMap => 'Karttaa ei voitu ladata';
+
+  @override
+  String get triggerConversationIntegration => 'Käynnistä keskustelun luonti-integraatio';
+
+  @override
+  String get webhookUrlNotSet => 'Webhook-URL-osoitetta ei ole asetettu';
+
+  @override
+  String get setWebhookUrlInSettings => 'Aseta webhook-URL kehittäjäasetuksissa käyttääksesi tätä ominaisuutta.';
+
+  @override
+  String get sendWebUrl => 'Lähetä web-URL';
+
+  @override
+  String get sendTranscript => 'Lähetä litterointi';
+
+  @override
+  String get sendSummary => 'Lähetä tiivistelmä';
 }

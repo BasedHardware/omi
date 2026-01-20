@@ -57,7 +57,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get clear => 'Išvalyti';
 
   @override
-  String get copyTranscript => 'Kopijuoti transkripcijos tekstą';
+  String get copyTranscript => 'Kopijuoti transkripciją';
 
   @override
   String get copySummary => 'Kopijuoti santrauką';
@@ -2283,7 +2283,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get summaryCopiedToClipboard => 'Santrauka nukopijuota į iškarpinę';
 
   @override
-  String get conversationUrlCouldNotBeShared => 'Pokalbio URL negalima bendrinti.';
+  String get conversationUrlCouldNotBeShared => 'Pokalbio URL nepavyko bendrinti.';
 
   @override
   String get urlCopiedToClipboard => 'URL nukopijuotas į iškarpinę';
@@ -2685,7 +2685,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get searchResults => 'Paieškos rezultatai';
 
   @override
-  String get actionItems => 'Veiksmų punktai';
+  String get actionItems => 'Veiksmo elementai';
 
   @override
   String get tasksToday => 'Šiandien';
@@ -3604,8 +3604,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get auto => 'Automatinis';
 
   @override
-  String get noSummaryForApp =>
-      'Šiai programėlei santrauka nepasiekiama. Geresnių rezultatų rasite išbandę kitą programėlę.';
+  String get noSummaryForApp => 'Šiai programai santraukos nėra. Išbandykite kitą programą geresniems rezultatams.';
 
   @override
   String get tryAnotherApp => 'Išbandykite kitą programėlę';
@@ -3622,7 +3621,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get otherAppResults => 'Kitų programėlių rezultatai';
 
   @override
-  String get unknownApp => 'Nežinoma programėlė';
+  String get unknownApp => 'Nežinoma programa';
 
   @override
   String get noSummaryAvailable => 'Santrauka nepasiekiama';
@@ -5239,13 +5238,13 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get testConversationPrompt => 'Testuoti pokalbio raginimą';
+  String get testConversationPrompt => 'Išbandyti pokalbio raginimą';
 
   @override
   String get prompt => 'Raginimas';
 
   @override
-  String get result => 'Rezultatas';
+  String get result => 'Rezultatas:';
 
   @override
   String get compareTranscripts => 'Palyginti transkripcijas';
@@ -5992,4 +5991,40 @@ class AppLocalizationsLt extends AppLocalizations {
   String estimatedTimeRemaining(String time) {
     return 'Apytikriai liko: $time';
   }
+
+  @override
+  String get summarizingConversation => 'Sumuojamas pokalbis...\nTai gali užtrukti kelias sekundes';
+
+  @override
+  String get resummarizingConversation => 'Iš naujo sumuojamas pokalbis...\nTai gali užtrukti kelias sekundes';
+
+  @override
+  String get nothingInterestingRetry => 'Nieko įdomaus nerasta,\nar norite bandyti dar kartą?';
+
+  @override
+  String get noSummaryForConversation => 'Šiam pokalbiui\nsantraukos nėra.';
+
+  @override
+  String get unknownLocation => 'Nežinoma vieta';
+
+  @override
+  String get couldNotLoadMap => 'Nepavyko įkelti žemėlapio';
+
+  @override
+  String get triggerConversationIntegration => 'Paleisti pokalbio kūrimo integraciją';
+
+  @override
+  String get webhookUrlNotSet => 'Webhook URL nenustatytas';
+
+  @override
+  String get setWebhookUrlInSettings => 'Norėdami naudoti šią funkciją, nustatykite webhook URL kūrėjo nustatymuose.';
+
+  @override
+  String get sendWebUrl => 'Siųsti žiniatinklio URL';
+
+  @override
+  String get sendTranscript => 'Siųsti transkripciją';
+
+  @override
+  String get sendSummary => 'Siųsti santrauką';
 }

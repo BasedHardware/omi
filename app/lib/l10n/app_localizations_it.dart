@@ -61,7 +61,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get copyTranscript => 'Copia trascrizione';
 
   @override
-  String get copySummary => 'Copia Riepilogo';
+  String get copySummary => 'Copia riepilogo';
 
   @override
   String get testPrompt => 'Prova Prompt';
@@ -2294,7 +2294,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get summaryCopiedToClipboard => 'Riepilogo copiato negli appunti';
 
   @override
-  String get conversationUrlCouldNotBeShared => 'L\'URL della conversazione non può essere condiviso.';
+  String get conversationUrlCouldNotBeShared => 'Impossibile condividere l\'URL della conversazione.';
 
   @override
   String get urlCopiedToClipboard => 'URL copiato negli appunti';
@@ -2696,7 +2696,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get searchResults => 'Risultati di ricerca';
 
   @override
-  String get actionItems => 'Elementi d\'azione';
+  String get actionItems => 'Azioni da fare';
 
   @override
   String get tasksToday => 'Oggi';
@@ -5270,13 +5270,13 @@ class AppLocalizationsIt extends AppLocalizations {
   }
 
   @override
-  String get testConversationPrompt => 'Testa prompt conversazione';
+  String get testConversationPrompt => 'Testa un prompt di conversazione';
 
   @override
   String get prompt => 'Prompt';
 
   @override
-  String get result => 'Risultato';
+  String get result => 'Risultato:';
 
   @override
   String get compareTranscripts => 'Confronta trascrizioni';
@@ -6025,4 +6025,41 @@ class AppLocalizationsIt extends AppLocalizations {
   String estimatedTimeRemaining(String time) {
     return 'Stimato: $time rimanenti';
   }
+
+  @override
+  String get summarizingConversation => 'Riepilogo della conversazione...\nPotrebbe richiedere alcuni secondi';
+
+  @override
+  String get resummarizingConversation => 'Nuovo riepilogo della conversazione...\nPotrebbe richiedere alcuni secondi';
+
+  @override
+  String get nothingInterestingRetry => 'Niente di interessante trovato,\nvuoi riprovare?';
+
+  @override
+  String get noSummaryForConversation => 'Nessun riepilogo disponibile\nper questa conversazione.';
+
+  @override
+  String get unknownLocation => 'Posizione sconosciuta';
+
+  @override
+  String get couldNotLoadMap => 'Impossibile caricare la mappa';
+
+  @override
+  String get triggerConversationIntegration => 'Attiva integrazione creazione conversazione';
+
+  @override
+  String get webhookUrlNotSet => 'URL webhook non impostato';
+
+  @override
+  String get setWebhookUrlInSettings =>
+      'Imposta l\'URL del webhook nelle impostazioni sviluppatore per usare questa funzione.';
+
+  @override
+  String get sendWebUrl => 'Invia URL web';
+
+  @override
+  String get sendTranscript => 'Invia trascrizione';
+
+  @override
+  String get sendSummary => 'Invia riepilogo';
 }
