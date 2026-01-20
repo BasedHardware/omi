@@ -796,7 +796,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     await routeToPage(
       context,
       CapabilityAppsPage(
-        capability: AppCapability(id: 'chat', title: 'Chat Assistants'),
+        capability: AppCapability(id: 'chat', title: context.l10n.chatAssistantsTitle),
         apps: const [],
       ),
     );

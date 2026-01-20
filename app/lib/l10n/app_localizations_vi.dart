@@ -165,7 +165,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get askOmi => 'Hỏi Omi';
 
   @override
-  String get done => 'Xong';
+  String get done => 'Hoàn tất';
 
   @override
   String get disconnected => 'Đã ngắt kết nối';
@@ -1585,8 +1585,8 @@ class AppLocalizationsVi extends AppLocalizations {
   String get noLogsYet => 'Chưa có nhật ký. Bắt đầu ghi âm để xem hoạt động STT tùy chỉnh.';
 
   @override
-  String deviceUsesCodec(String deviceName, String codecReason) {
-    return '$deviceName sử dụng $codecReason. Omi sẽ được sử dụng.';
+  String deviceUsesCodec(String device, String reason) {
+    return '$device sử dụng $reason. Omi sẽ được sử dụng.';
   }
 
   @override
@@ -5811,6 +5811,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get chatAppsTitle => 'Ứng dụng chat';
 
   @override
+  String get chatAssistantsTitle => 'Trợ lý trò chuyện';
+
+  @override
   String get selectApp => 'Chọn ứng dụng';
 
   @override
@@ -6035,4 +6038,235 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get sendSummary => 'Gửi tóm tắt';
+
+  @override
+  String get debugModeDetected => 'Đã phát hiện chế độ gỡ lỗi';
+
+  @override
+  String get performanceReduced => 'Hiệu suất có thể bị giảm';
+
+  @override
+  String autoClosingInSeconds(int seconds) {
+    return 'Tự động đóng sau $seconds giây';
+  }
+
+  @override
+  String get modelRequired => 'Yêu cầu mô hình';
+
+  @override
+  String get downloadWhisperModel => 'Tải xuống mô hình whisper để sử dụng phiên âm trên thiết bị';
+
+  @override
+  String get deviceNotCompatible => 'Thiết bị của bạn không tương thích với phiên âm trên thiết bị';
+
+  @override
+  String get deviceRequirements => 'Your device does not meet the requirements for On-Device transcription.';
+
+  @override
+  String get willLikelyCrash => 'Kích hoạt điều này có thể khiến ứng dụng bị treo hoặc đóng băng.';
+
+  @override
+  String get transcriptionSlowerLessAccurate => 'Phiên âm sẽ chậm hơn đáng kể và kém chính xác hơn.';
+
+  @override
+  String get proceedAnyway => 'Vẫn tiếp tục';
+
+  @override
+  String get olderDeviceDetected => 'Phát hiện thiết bị cũ';
+
+  @override
+  String get onDeviceSlower => 'On-device transcription may be slower on this device.';
+
+  @override
+  String get batteryUsageHigher => 'Mức sử dụng pin sẽ cao hơn phiên âm đám mây.';
+
+  @override
+  String get considerOmiCloud => 'Cân nhắc sử dụng Omi Cloud để có hiệu suất tốt hơn.';
+
+  @override
+  String get highResourceUsage => 'Sử dụng tài nguyên cao';
+
+  @override
+  String get onDeviceIntensive => 'On-Device transcription is computationally intensive.';
+
+  @override
+  String get batteryDrainIncrease => 'Battery drain will increase significantly.';
+
+  @override
+  String get deviceMayWarmUp => 'Thiết bị có thể nóng lên khi sử dụng lâu.';
+
+  @override
+  String get speedAccuracyLower => 'Tốc độ và độ chính xác có thể thấp hơn so với các mô hình đám mây.';
+
+  @override
+  String get cloudProvider => 'Nhà cung cấp đám mây';
+
+  @override
+  String get premiumMinutesInfo => '1,200 premium minutes/month. On-Device tab offers unlimited free transcription.';
+
+  @override
+  String get viewUsage => 'Xem mức sử dụng';
+
+  @override
+  String get localProcessingInfo => 'Audio is processed locally. Works offline, more private, but uses more battery.';
+
+  @override
+  String get model => 'Model';
+
+  @override
+  String get performanceWarning => 'Cảnh báo hiệu suất';
+
+  @override
+  String get largeModelWarning =>
+      'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
+
+  @override
+  String get usingNativeIosSpeech => 'Sử dụng Nhận dạng giọng nói iOS gốc';
+
+  @override
+  String get noModelDownloadRequired => 'Your device\'s native speech engine will be used. No model download required.';
+
+  @override
+  String get modelReady => 'Model Ready';
+
+  @override
+  String get redownload => 'Re-download';
+
+  @override
+  String get doNotCloseApp => 'Vui lòng không đóng ứng dụng.';
+
+  @override
+  String get downloading => 'Đang tải xuống...';
+
+  @override
+  String get downloadModel => 'Tải xuống mô hình';
+
+  @override
+  String estimatedSize(String size) {
+    return 'Estimated Size: ~$size MB';
+  }
+
+  @override
+  String availableSpace(String space) {
+    return 'Available Space: $space';
+  }
+
+  @override
+  String get notEnoughSpace => 'Cảnh báo: Không đủ dung lượng!';
+
+  @override
+  String get download => 'Tải xuống';
+
+  @override
+  String downloadError(String error) {
+    return 'Download error: $error';
+  }
+
+  @override
+  String get cancelled => 'Đã hủy';
+
+  @override
+  String get deviceNotCompatibleTitle => 'Thiết bị không tương thích';
+
+  @override
+  String get deviceNotMeetRequirements => 'Thiết bị của bạn không đáp ứng yêu cầu cho phiên âm trên thiết bị.';
+
+  @override
+  String get transcriptionSlowerOnDevice => 'Phiên âm trên thiết bị có thể chậm hơn trên thiết bị này.';
+
+  @override
+  String get computationallyIntensive => 'Phiên âm trên thiết bị đòi hỏi nhiều tính toán.';
+
+  @override
+  String get batteryDrainSignificantly => 'Tiêu hao pin sẽ tăng đáng kể.';
+
+  @override
+  String get premiumMinutesMonth =>
+      '1.200 phút premium/tháng. Tab Trên thiết bị cung cấp phiên âm miễn phí không giới hạn. ';
+
+  @override
+  String get audioProcessedLocally =>
+      'Âm thanh được xử lý cục bộ. Hoạt động ngoại tuyến, riêng tư hơn, nhưng sử dụng nhiều pin hơn.';
+
+  @override
+  String get languageLabel => 'Ngôn ngữ';
+
+  @override
+  String get modelLabel => 'Mô hình';
+
+  @override
+  String get modelTooLargeWarning =>
+      'Mô hình này lớn và có thể khiến ứng dụng bị treo hoặc chạy rất chậm trên thiết bị di động.\n\nKhuyến nghị sử dụng small hoặc base.';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'Công cụ giọng nói gốc của thiết bị sẽ được sử dụng. Không cần tải xuống mô hình.';
+
+  @override
+  String modelReadyWithName(String model) {
+    return 'Mô hình sẵn sàng ($model)';
+  }
+
+  @override
+  String get reDownload => 'Tải xuống lại';
+
+  @override
+  String downloadingModelProgress(String model, String received, String total) {
+    return 'Đang tải xuống $model: $received / $total MB';
+  }
+
+  @override
+  String preparingModel(String model) {
+    return 'Đang chuẩn bị $model...';
+  }
+
+  @override
+  String downloadErrorWithMessage(String error) {
+    return 'Lỗi tải xuống: $error';
+  }
+
+  @override
+  String estimatedSizeWithValue(String size) {
+    return 'Kích thước ước tính: ~$size MB';
+  }
+
+  @override
+  String availableSpaceWithValue(String space) {
+    return 'Dung lượng có sẵn: $space';
+  }
+
+  @override
+  String get omiTranscriptionOptimized =>
+      'Phiên âm trực tiếp tích hợp của Omi được tối ưu hóa cho các cuộc hội thoại thời gian thực với phát hiện người nói tự động và phân tách người nói.';
+
+  @override
+  String get reset => 'Đặt lại';
+
+  @override
+  String get useTemplateFrom => 'Sử dụng mẫu từ';
+
+  @override
+  String get selectProviderTemplate => 'Chọn mẫu nhà cung cấp...';
+
+  @override
+  String get quicklyPopulateResponse => 'Điền nhanh với định dạng phản hồi nhà cung cấp đã biết';
+
+  @override
+  String get quicklyPopulateRequest => 'Điền nhanh với định dạng yêu cầu nhà cung cấp đã biết';
+
+  @override
+  String get invalidJsonError => 'JSON không hợp lệ';
+
+  @override
+  String downloadModelWithName(String model) {
+    return 'Tải xuống mô hình ($model)';
+  }
+
+  @override
+  String modelNameWithFile(String model) {
+    return 'Mô hình: $model';
+  }
+
+  @override
+  String get device => 'Device';
 }

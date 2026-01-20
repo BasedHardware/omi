@@ -1559,8 +1559,8 @@ class AppLocalizationsKo extends AppLocalizations {
   String get noLogsYet => '아직 로그가 없습니다. 녹음을 시작하여 사용자 지정 STT 활동을 확인하세요.';
 
   @override
-  String deviceUsesCodec(String deviceName, String codecReason) {
-    return '$deviceName은(는) $codecReason을(를) 사용합니다. Omi가 사용됩니다.';
+  String deviceUsesCodec(String device, String reason) {
+    return '$device이(가) $reason을(를) 사용합니다. Omi가 사용됩니다.';
   }
 
   @override
@@ -5699,6 +5699,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get chatAppsTitle => '채팅 앱';
 
   @override
+  String get chatAssistantsTitle => '채팅 어시스턴트';
+
+  @override
   String get selectApp => '앱 선택';
 
   @override
@@ -5922,4 +5925,230 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get sendSummary => '요약 보내기';
+
+  @override
+  String get debugModeDetected => '디버그 모드 감지됨';
+
+  @override
+  String get performanceReduced => '성능이 저하될 수 있습니다';
+
+  @override
+  String autoClosingInSeconds(int seconds) {
+    return '$seconds초 후 자동 닫힘';
+  }
+
+  @override
+  String get modelRequired => '모델 필요';
+
+  @override
+  String get downloadWhisperModel => '온디바이스 전사를 사용하려면 whisper 모델을 다운로드하세요';
+
+  @override
+  String get deviceNotCompatible => '귀하의 기기는 온디바이스 전사와 호환되지 않습니다';
+
+  @override
+  String get deviceRequirements => 'Your device does not meet the requirements for On-Device transcription.';
+
+  @override
+  String get willLikelyCrash => '활성화하면 앱이 충돌하거나 멈출 수 있습니다.';
+
+  @override
+  String get transcriptionSlowerLessAccurate => '전사가 상당히 느리고 덜 정확해집니다.';
+
+  @override
+  String get proceedAnyway => '그래도 진행';
+
+  @override
+  String get olderDeviceDetected => '구형 기기 감지됨';
+
+  @override
+  String get onDeviceSlower => 'On-device transcription may be slower on this device.';
+
+  @override
+  String get batteryUsageHigher => '배터리 사용량이 클라우드 전사보다 높아집니다.';
+
+  @override
+  String get considerOmiCloud => '더 나은 성능을 위해 Omi Cloud 사용을 고려하세요.';
+
+  @override
+  String get highResourceUsage => '높은 리소스 사용량';
+
+  @override
+  String get onDeviceIntensive => 'On-Device transcription is computationally intensive.';
+
+  @override
+  String get batteryDrainIncrease => 'Battery drain will increase significantly.';
+
+  @override
+  String get deviceMayWarmUp => '장시간 사용 시 기기가 뜨거워질 수 있습니다.';
+
+  @override
+  String get speedAccuracyLower => '속도와 정확도가 클라우드 모델보다 낮을 수 있습니다.';
+
+  @override
+  String get cloudProvider => '클라우드 제공자';
+
+  @override
+  String get premiumMinutesInfo => '1,200 premium minutes/month. On-Device tab offers unlimited free transcription.';
+
+  @override
+  String get viewUsage => '사용량 보기';
+
+  @override
+  String get localProcessingInfo => 'Audio is processed locally. Works offline, more private, but uses more battery.';
+
+  @override
+  String get model => 'Model';
+
+  @override
+  String get performanceWarning => '성능 경고';
+
+  @override
+  String get largeModelWarning =>
+      'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
+
+  @override
+  String get usingNativeIosSpeech => '기본 iOS 음성 인식 사용';
+
+  @override
+  String get noModelDownloadRequired => 'Your device\'s native speech engine will be used. No model download required.';
+
+  @override
+  String get modelReady => 'Model Ready';
+
+  @override
+  String get redownload => 'Re-download';
+
+  @override
+  String get doNotCloseApp => '앱을 닫지 마세요.';
+
+  @override
+  String get downloading => '다운로드 중...';
+
+  @override
+  String get downloadModel => '모델 다운로드';
+
+  @override
+  String estimatedSize(String size) {
+    return 'Estimated Size: ~$size MB';
+  }
+
+  @override
+  String availableSpace(String space) {
+    return 'Available Space: $space';
+  }
+
+  @override
+  String get notEnoughSpace => '경고: 공간이 부족합니다!';
+
+  @override
+  String get download => '다운로드';
+
+  @override
+  String downloadError(String error) {
+    return 'Download error: $error';
+  }
+
+  @override
+  String get cancelled => '취소됨';
+
+  @override
+  String get deviceNotCompatibleTitle => '기기 호환 불가';
+
+  @override
+  String get deviceNotMeetRequirements => '기기가 온디바이스 전사 요구 사항을 충족하지 않습니다.';
+
+  @override
+  String get transcriptionSlowerOnDevice => '이 기기에서 온디바이스 전사가 더 느릴 수 있습니다.';
+
+  @override
+  String get computationallyIntensive => '온디바이스 전사는 계산 집약적입니다.';
+
+  @override
+  String get batteryDrainSignificantly => '배터리 소모가 크게 증가합니다.';
+
+  @override
+  String get premiumMinutesMonth => '월 1,200 프리미엄 분. 온디바이스 탭은 무제한 무료 전사를 제공합니다. ';
+
+  @override
+  String get audioProcessedLocally => '오디오가 로컬에서 처리됩니다. 오프라인 작동, 더 프라이빗하지만 배터리 사용량이 더 많습니다.';
+
+  @override
+  String get languageLabel => '언어';
+
+  @override
+  String get modelLabel => '모델';
+
+  @override
+  String get modelTooLargeWarning => '이 모델은 크고 모바일 기기에서 앱이 충돌하거나 매우 느리게 실행될 수 있습니다.\n\nsmall 또는 base를 권장합니다.';
+
+  @override
+  String get nativeEngineNoDownload => '기기의 기본 음성 엔진이 사용됩니다. 모델 다운로드가 필요 없습니다.';
+
+  @override
+  String modelReadyWithName(String model) {
+    return '모델 준비됨 ($model)';
+  }
+
+  @override
+  String get reDownload => '다시 다운로드';
+
+  @override
+  String downloadingModelProgress(String model, String received, String total) {
+    return '$model 다운로드 중: $received / $total MB';
+  }
+
+  @override
+  String preparingModel(String model) {
+    return '$model 준비 중...';
+  }
+
+  @override
+  String downloadErrorWithMessage(String error) {
+    return '다운로드 오류: $error';
+  }
+
+  @override
+  String estimatedSizeWithValue(String size) {
+    return '예상 크기: ~$size MB';
+  }
+
+  @override
+  String availableSpaceWithValue(String space) {
+    return '사용 가능한 공간: $space';
+  }
+
+  @override
+  String get omiTranscriptionOptimized => 'Omi의 내장 라이브 전사는 자동 화자 감지 및 화자 분리로 실시간 대화에 최적화되어 있습니다.';
+
+  @override
+  String get reset => '초기화';
+
+  @override
+  String get useTemplateFrom => '템플릿 사용';
+
+  @override
+  String get selectProviderTemplate => '제공자 템플릿 선택...';
+
+  @override
+  String get quicklyPopulateResponse => '알려진 제공자 응답 형식으로 빠르게 채우기';
+
+  @override
+  String get quicklyPopulateRequest => '알려진 제공자 요청 형식으로 빠르게 채우기';
+
+  @override
+  String get invalidJsonError => '잘못된 JSON';
+
+  @override
+  String downloadModelWithName(String model) {
+    return '모델 다운로드 ($model)';
+  }
+
+  @override
+  String modelNameWithFile(String model) {
+    return '모델: $model';
+  }
+
+  @override
+  String get device => 'Device';
 }

@@ -231,7 +231,7 @@ abstract class AppLocalizations {
   /// **'Update'**
   String get update;
 
-  /// Save button text
+  /// Save button label
   ///
   /// In en, this message translates to:
   /// **'Save'**
@@ -405,7 +405,7 @@ abstract class AppLocalizations {
   /// **'Settings'**
   String get settings;
 
-  /// Language setting
+  /// Label for language selector
   ///
   /// In en, this message translates to:
   /// **'Language'**
@@ -459,7 +459,7 @@ abstract class AppLocalizations {
   /// **'Ask Omi'**
   String get askOmi;
 
-  /// Button text to confirm action
+  /// Status when download is done
   ///
   /// In en, this message translates to:
   /// **'Done'**
@@ -3075,11 +3075,11 @@ abstract class AppLocalizations {
   /// **'No logs yet. Start recording to see custom STT activity.'**
   String get noLogsYet;
 
-  /// No description provided for @deviceUsesCodec.
+  /// Warning about device codec compatibility
   ///
   /// In en, this message translates to:
-  /// **'{deviceName} uses {codecReason}. Omi will be used.'**
-  String deviceUsesCodec(String deviceName, String codecReason);
+  /// **'{device} uses {reason}. Omi will be used.'**
+  String deviceUsesCodec(String device, String reason);
 
   /// No description provided for @omiTranscription.
   ///
@@ -3351,7 +3351,7 @@ abstract class AppLocalizations {
   /// **'Don\'t show it again'**
   String get dontShowAgain;
 
-  /// Button text to acknowledge connection warnings
+  /// Button to acknowledge warning
   ///
   /// In en, this message translates to:
   /// **'I Understand'**
@@ -10977,6 +10977,12 @@ abstract class AppLocalizations {
   /// **'Chat Apps'**
   String get chatAppsTitle;
 
+  /// Title for chat assistants capability page
+  ///
+  /// In en, this message translates to:
+  /// **'Chat Assistants'**
+  String get chatAssistantsTitle;
+
   /// Section header for selecting an app
   ///
   /// In en, this message translates to:
@@ -11390,6 +11396,408 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Send Summary'**
   String get sendSummary;
+
+  /// Warning title for debug mode
+  ///
+  /// In en, this message translates to:
+  /// **'Debug Mode Detected'**
+  String get debugModeDetected;
+
+  /// Warning about debug mode performance
+  ///
+  /// In en, this message translates to:
+  /// **'Performance reduced 5-10x. Use Release mode.'**
+  String get performanceReduced;
+
+  /// Countdown for auto-closing snackbar
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-closing in {seconds}s'**
+  String autoClosingInSeconds(int seconds);
+
+  /// Dialog title when model is not downloaded
+  ///
+  /// In en, this message translates to:
+  /// **'Model Required'**
+  String get modelRequired;
+
+  /// Message prompting to download Whisper model
+  ///
+  /// In en, this message translates to:
+  /// **'Please download a Whisper model before saving.'**
+  String get downloadWhisperModel;
+
+  /// Dialog title for incompatible device
+  ///
+  /// In en, this message translates to:
+  /// **'Device Not Compatible'**
+  String get deviceNotCompatible;
+
+  /// Message about device requirements
+  ///
+  /// In en, this message translates to:
+  /// **'Your device does not meet the requirements for On-Device transcription.'**
+  String get deviceRequirements;
+
+  /// Warning about enabling on incompatible device
+  ///
+  /// In en, this message translates to:
+  /// **'Enabling this will likely cause the app to crash or freeze.'**
+  String get willLikelyCrash;
+
+  /// Warning about transcription quality
+  ///
+  /// In en, this message translates to:
+  /// **'Transcription will be significantly slower and less accurate.'**
+  String get transcriptionSlowerLessAccurate;
+
+  /// Button to proceed despite warnings
+  ///
+  /// In en, this message translates to:
+  /// **'Proceed anyway'**
+  String get proceedAnyway;
+
+  /// Title for older device warning dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Older Device Detected'**
+  String get olderDeviceDetected;
+
+  /// Warning about slower transcription
+  ///
+  /// In en, this message translates to:
+  /// **'On-device transcription may be slower on this device.'**
+  String get onDeviceSlower;
+
+  /// Warning about battery usage
+  ///
+  /// In en, this message translates to:
+  /// **'Battery usage will be higher than cloud transcription.'**
+  String get batteryUsageHigher;
+
+  /// Suggestion to use cloud transcription
+  ///
+  /// In en, this message translates to:
+  /// **'Consider using Omi Cloud for better performance.'**
+  String get considerOmiCloud;
+
+  /// Title for high resource usage dialog
+  ///
+  /// In en, this message translates to:
+  /// **'High Resource Usage'**
+  String get highResourceUsage;
+
+  /// Message about computational intensity
+  ///
+  /// In en, this message translates to:
+  /// **'On-Device transcription is computationally intensive.'**
+  String get onDeviceIntensive;
+
+  /// Warning about battery drain
+  ///
+  /// In en, this message translates to:
+  /// **'Battery drain will increase significantly.'**
+  String get batteryDrainIncrease;
+
+  /// Warning about device temperature
+  ///
+  /// In en, this message translates to:
+  /// **'Device may warm up during extended use.'**
+  String get deviceMayWarmUp;
+
+  /// Warning about on-device vs cloud quality
+  ///
+  /// In en, this message translates to:
+  /// **'Speed and accuracy may be lower than Cloud models.'**
+  String get speedAccuracyLower;
+
+  /// Tab label for cloud provider option
+  ///
+  /// In en, this message translates to:
+  /// **'Cloud Provider'**
+  String get cloudProvider;
+
+  /// Info about premium minutes
+  ///
+  /// In en, this message translates to:
+  /// **'1,200 premium minutes/month. On-Device tab offers unlimited free transcription.'**
+  String get premiumMinutesInfo;
+
+  /// Link to view usage
+  ///
+  /// In en, this message translates to:
+  /// **'View usage'**
+  String get viewUsage;
+
+  /// Info about local processing
+  ///
+  /// In en, this message translates to:
+  /// **'Audio is processed locally. Works offline, more private, but uses more battery.'**
+  String get localProcessingInfo;
+
+  /// Label for model selector
+  ///
+  /// In en, this message translates to:
+  /// **'Model'**
+  String get model;
+
+  /// Title for performance warning dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Performance Warning'**
+  String get performanceWarning;
+
+  /// Warning about large model sizes
+  ///
+  /// In en, this message translates to:
+  /// **'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.'**
+  String get largeModelWarning;
+
+  /// Label for iOS native speech recognition
+  ///
+  /// In en, this message translates to:
+  /// **'Using Native iOS Speech Recognition'**
+  String get usingNativeIosSpeech;
+
+  /// Info about iOS native speech
+  ///
+  /// In en, this message translates to:
+  /// **'Your device\'s native speech engine will be used. No model download required.'**
+  String get noModelDownloadRequired;
+
+  /// Status when model is downloaded
+  ///
+  /// In en, this message translates to:
+  /// **'Model Ready'**
+  String get modelReady;
+
+  /// Button to re-download model
+  ///
+  /// In en, this message translates to:
+  /// **'Re-download'**
+  String get redownload;
+
+  /// Warning during download
+  ///
+  /// In en, this message translates to:
+  /// **'Please do not close the app.'**
+  String get doNotCloseApp;
+
+  /// Status during download
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading...'**
+  String get downloading;
+
+  /// Dialog title for model download
+  ///
+  /// In en, this message translates to:
+  /// **'Download Model'**
+  String get downloadModel;
+
+  /// Shows estimated file size
+  ///
+  /// In en, this message translates to:
+  /// **'Estimated Size: ~{size} MB'**
+  String estimatedSize(String size);
+
+  /// Shows available disk space
+  ///
+  /// In en, this message translates to:
+  /// **'Available Space: {space}'**
+  String availableSpace(String space);
+
+  /// Warning when not enough disk space
+  ///
+  /// In en, this message translates to:
+  /// **'Warning: Not enough space!'**
+  String get notEnoughSpace;
+
+  /// Download button
+  ///
+  /// In en, this message translates to:
+  /// **'Download'**
+  String get download;
+
+  /// Error message during download
+  ///
+  /// In en, this message translates to:
+  /// **'Download error: {error}'**
+  String downloadError(String error);
+
+  /// Status when download is cancelled
+  ///
+  /// In en, this message translates to:
+  /// **'Cancelled'**
+  String get cancelled;
+
+  /// Title for device compatibility error dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Device Not Compatible'**
+  String get deviceNotCompatibleTitle;
+
+  /// Message when device does not meet requirements
+  ///
+  /// In en, this message translates to:
+  /// **'Your device does not meet the requirements for On-Device transcription.'**
+  String get deviceNotMeetRequirements;
+
+  /// Warning about transcription speed on older devices
+  ///
+  /// In en, this message translates to:
+  /// **'On-device transcription may be slower on this device.'**
+  String get transcriptionSlowerOnDevice;
+
+  /// Description of on-device transcription resource usage
+  ///
+  /// In en, this message translates to:
+  /// **'On-Device transcription is computationally intensive.'**
+  String get computationallyIntensive;
+
+  /// Warning about battery drain
+  ///
+  /// In en, this message translates to:
+  /// **'Battery drain will increase significantly.'**
+  String get batteryDrainSignificantly;
+
+  /// Description of premium minutes quota
+  ///
+  /// In en, this message translates to:
+  /// **'1,200 premium minutes/month. On-Device tab offers unlimited free transcription. '**
+  String get premiumMinutesMonth;
+
+  /// Description of on-device processing
+  ///
+  /// In en, this message translates to:
+  /// **'Audio is processed locally. Works offline, more private, but uses more battery.'**
+  String get audioProcessedLocally;
+
+  /// Label for language selector
+  ///
+  /// In en, this message translates to:
+  /// **'Language'**
+  String get languageLabel;
+
+  /// Label for model selector
+  ///
+  /// In en, this message translates to:
+  /// **'Model'**
+  String get modelLabel;
+
+  /// Warning about large model sizes
+  ///
+  /// In en, this message translates to:
+  /// **'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.'**
+  String get modelTooLargeWarning;
+
+  /// Description of iOS native speech recognition
+  ///
+  /// In en, this message translates to:
+  /// **'Your devices native speech engine will be used. No model download required.'**
+  String get nativeEngineNoDownload;
+
+  /// Status when model is ready
+  ///
+  /// In en, this message translates to:
+  /// **'Model Ready ({model})'**
+  String modelReadyWithName(String model);
+
+  /// Button to re-download model
+  ///
+  /// In en, this message translates to:
+  /// **'Re-download'**
+  String get reDownload;
+
+  /// Download progress status
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading {model}: {received} / {total} MB'**
+  String downloadingModelProgress(String model, String received, String total);
+
+  /// Status when preparing model
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing {model}...'**
+  String preparingModel(String model);
+
+  /// Download error message
+  ///
+  /// In en, this message translates to:
+  /// **'Download error: {error}'**
+  String downloadErrorWithMessage(String error);
+
+  /// Estimated model size
+  ///
+  /// In en, this message translates to:
+  /// **'Estimated Size: ~{size} MB'**
+  String estimatedSizeWithValue(String size);
+
+  /// Available disk space
+  ///
+  /// In en, this message translates to:
+  /// **'Available Space: {space}'**
+  String availableSpaceWithValue(String space);
+
+  /// Description of Omi transcription features
+  ///
+  /// In en, this message translates to:
+  /// **'Omis built-in live transcription is optimized for real-time conversations with automatic speaker detection and diarization.'**
+  String get omiTranscriptionOptimized;
+
+  /// Reset button label
+  ///
+  /// In en, this message translates to:
+  /// **'Reset'**
+  String get reset;
+
+  /// Label for template selector
+  ///
+  /// In en, this message translates to:
+  /// **'Use template from'**
+  String get useTemplateFrom;
+
+  /// Placeholder for template dropdown
+  ///
+  /// In en, this message translates to:
+  /// **'Select a provider template...'**
+  String get selectProviderTemplate;
+
+  /// Description for response template selector
+  ///
+  /// In en, this message translates to:
+  /// **'Quickly populate with a known providers response format'**
+  String get quicklyPopulateResponse;
+
+  /// Description for request template selector
+  ///
+  /// In en, this message translates to:
+  /// **'Quickly populate with a known providers request format'**
+  String get quicklyPopulateRequest;
+
+  /// Error message for invalid JSON
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid JSON'**
+  String get invalidJsonError;
+
+  /// Button to download model
+  ///
+  /// In en, this message translates to:
+  /// **'Download Model ({model})'**
+  String downloadModelWithName(String model);
+
+  /// Model filename label
+  ///
+  /// In en, this message translates to:
+  /// **'Model: {model}'**
+  String modelNameWithFile(String model);
+
+  /// Fallback text for device name
+  ///
+  /// In en, this message translates to:
+  /// **'Device'**
+  String get device;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

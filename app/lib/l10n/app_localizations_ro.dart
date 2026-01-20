@@ -1589,8 +1589,8 @@ class AppLocalizationsRo extends AppLocalizations {
       'Încă nu există jurnale. Începe să înregistrezi pentru a vedea activitatea STT personalizată.';
 
   @override
-  String deviceUsesCodec(String deviceName, String codecReason) {
-    return '$deviceName folosește $codecReason. Omi va fi folosit.';
+  String deviceUsesCodec(String device, String reason) {
+    return '$device folosește $reason. Omi va fi folosit.';
   }
 
   @override
@@ -1739,7 +1739,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get dontShowAgain => 'Nu mai afișa';
 
   @override
-  String get iUnderstand => 'I Understand';
+  String get iUnderstand => 'Înțeleg';
 
   @override
   String get enableBluetooth => 'Enable Bluetooth';
@@ -5830,6 +5830,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get chatAppsTitle => 'Aplicații de chat';
 
   @override
+  String get chatAssistantsTitle => 'Asistenți de chat';
+
+  @override
   String get selectApp => 'Selectează aplicația';
 
   @override
@@ -6055,4 +6058,236 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get sendSummary => 'Trimite rezumatul';
+
+  @override
+  String get debugModeDetected => 'Mod depanare detectat';
+
+  @override
+  String get performanceReduced => 'Performanța poate fi redusă';
+
+  @override
+  String autoClosingInSeconds(int seconds) {
+    return 'Se închide automat în $seconds secunde';
+  }
+
+  @override
+  String get modelRequired => 'Model necesar';
+
+  @override
+  String get downloadWhisperModel => 'Descărcați un model whisper pentru a utiliza transcrierea pe dispozitiv';
+
+  @override
+  String get deviceNotCompatible => 'Dispozitivul dvs. nu este compatibil cu transcrierea pe dispozitiv';
+
+  @override
+  String get deviceRequirements => 'Your device does not meet the requirements for On-Device transcription.';
+
+  @override
+  String get willLikelyCrash => 'Activarea va cauza probabil blocarea sau înghețarea aplicației.';
+
+  @override
+  String get transcriptionSlowerLessAccurate => 'Transcrierea va fi semnificativ mai lentă și mai puțin precisă.';
+
+  @override
+  String get proceedAnyway => 'Continuă oricum';
+
+  @override
+  String get olderDeviceDetected => 'Dispozitiv mai vechi detectat';
+
+  @override
+  String get onDeviceSlower => 'On-device transcription may be slower on this device.';
+
+  @override
+  String get batteryUsageHigher => 'Consumul de baterie va fi mai mare decât transcrierea în cloud.';
+
+  @override
+  String get considerOmiCloud => 'Luați în considerare utilizarea Omi Cloud pentru performanță mai bună.';
+
+  @override
+  String get highResourceUsage => 'Utilizare ridicată a resurselor';
+
+  @override
+  String get onDeviceIntensive => 'On-Device transcription is computationally intensive.';
+
+  @override
+  String get batteryDrainIncrease => 'Battery drain will increase significantly.';
+
+  @override
+  String get deviceMayWarmUp => 'Dispozitivul se poate încălzi în timpul utilizării prelungite.';
+
+  @override
+  String get speedAccuracyLower => 'Viteza și precizia pot fi mai mici decât modelele Cloud.';
+
+  @override
+  String get cloudProvider => 'Furnizor cloud';
+
+  @override
+  String get premiumMinutesInfo => '1,200 premium minutes/month. On-Device tab offers unlimited free transcription.';
+
+  @override
+  String get viewUsage => 'Vizualizați utilizarea';
+
+  @override
+  String get localProcessingInfo => 'Audio is processed locally. Works offline, more private, but uses more battery.';
+
+  @override
+  String get model => 'Model';
+
+  @override
+  String get performanceWarning => 'Avertisment de performanță';
+
+  @override
+  String get largeModelWarning =>
+      'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
+
+  @override
+  String get usingNativeIosSpeech => 'Utilizarea recunoașterii vocale native iOS';
+
+  @override
+  String get noModelDownloadRequired => 'Your device\'s native speech engine will be used. No model download required.';
+
+  @override
+  String get modelReady => 'Model Ready';
+
+  @override
+  String get redownload => 'Re-download';
+
+  @override
+  String get doNotCloseApp => 'Vă rugăm să nu închideți aplicația.';
+
+  @override
+  String get downloading => 'Se descarcă...';
+
+  @override
+  String get downloadModel => 'Descărcare model';
+
+  @override
+  String estimatedSize(String size) {
+    return 'Estimated Size: ~$size MB';
+  }
+
+  @override
+  String availableSpace(String space) {
+    return 'Available Space: $space';
+  }
+
+  @override
+  String get notEnoughSpace => 'Avertisment: Spațiu insuficient!';
+
+  @override
+  String get download => 'Descărcare';
+
+  @override
+  String downloadError(String error) {
+    return 'Download error: $error';
+  }
+
+  @override
+  String get cancelled => 'Anulat';
+
+  @override
+  String get deviceNotCompatibleTitle => 'Dispozitiv incompatibil';
+
+  @override
+  String get deviceNotMeetRequirements =>
+      'Dispozitivul dvs. nu îndeplinește cerințele pentru transcrierea pe dispozitiv.';
+
+  @override
+  String get transcriptionSlowerOnDevice => 'Transcrierea pe dispozitiv poate fi mai lentă pe acest dispozitiv.';
+
+  @override
+  String get computationallyIntensive => 'Transcrierea pe dispozitiv este intensivă din punct de vedere computațional.';
+
+  @override
+  String get batteryDrainSignificantly => 'Descărcarea bateriei va crește semnificativ.';
+
+  @override
+  String get premiumMinutesMonth =>
+      '1.200 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată. ';
+
+  @override
+  String get audioProcessedLocally =>
+      'Audio este procesat local. Funcționează offline, mai privat, dar consumă mai multă baterie.';
+
+  @override
+  String get languageLabel => 'Limbă';
+
+  @override
+  String get modelLabel => 'Model';
+
+  @override
+  String get modelTooLargeWarning =>
+      'Acest model este mare și poate cauza blocarea aplicației sau rulare foarte lentă pe dispozitivele mobile.\n\nsmall sau base este recomandat.';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'Motorul vocal nativ al dispozitivului va fi folosit. Nu este necesară descărcarea modelului.';
+
+  @override
+  String modelReadyWithName(String model) {
+    return 'Model pregătit ($model)';
+  }
+
+  @override
+  String get reDownload => 'Descarcă din nou';
+
+  @override
+  String downloadingModelProgress(String model, String received, String total) {
+    return 'Se descarcă $model: $received / $total MB';
+  }
+
+  @override
+  String preparingModel(String model) {
+    return 'Se pregătește $model...';
+  }
+
+  @override
+  String downloadErrorWithMessage(String error) {
+    return 'Eroare de descărcare: $error';
+  }
+
+  @override
+  String estimatedSizeWithValue(String size) {
+    return 'Dimensiune estimată: ~$size MB';
+  }
+
+  @override
+  String availableSpaceWithValue(String space) {
+    return 'Spațiu disponibil: $space';
+  }
+
+  @override
+  String get omiTranscriptionOptimized =>
+      'Transcrierea live integrată a Omi este optimizată pentru conversații în timp real cu detectarea automată a vorbitorului și diarizare.';
+
+  @override
+  String get reset => 'Resetează';
+
+  @override
+  String get useTemplateFrom => 'Folosește șablon de la';
+
+  @override
+  String get selectProviderTemplate => 'Selectați un șablon de furnizor...';
+
+  @override
+  String get quicklyPopulateResponse => 'Completați rapid cu formatul de răspuns al furnizorului cunoscut';
+
+  @override
+  String get quicklyPopulateRequest => 'Completați rapid cu formatul de cerere al furnizorului cunoscut';
+
+  @override
+  String get invalidJsonError => 'JSON invalid';
+
+  @override
+  String downloadModelWithName(String model) {
+    return 'Descarcă model ($model)';
+  }
+
+  @override
+  String modelNameWithFile(String model) {
+    return 'Model: $model';
+  }
+
+  @override
+  String get device => 'Device';
 }

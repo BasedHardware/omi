@@ -1573,8 +1573,8 @@ class AppLocalizationsHi extends AppLocalizations {
   String get noLogsYet => 'अभी तक कोई लॉग नहीं। गतिविधि देखने के लिए रिकॉर्ड करें।';
 
   @override
-  String deviceUsesCodec(String deviceName, String codecReason) {
-    return '$deviceName $codecReason का उपयोग करता है। Omi का उपयोग किया जाएगा।';
+  String deviceUsesCodec(String device, String reason) {
+    return '$device $reason का उपयोग करता है। Omi का उपयोग किया जाएगा।';
   }
 
   @override
@@ -5780,6 +5780,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get chatAppsTitle => 'चैट ऐप्स';
 
   @override
+  String get chatAssistantsTitle => 'चैट सहायक';
+
+  @override
   String get selectApp => 'ऐप चुनें';
 
   @override
@@ -6005,4 +6008,234 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get sendSummary => 'सारांश भेजें';
+
+  @override
+  String get debugModeDetected => 'डीबग मोड का पता चला';
+
+  @override
+  String get performanceReduced => 'प्रदर्शन कम हो सकता है';
+
+  @override
+  String autoClosingInSeconds(int seconds) {
+    return '$seconds सेकंड में स्वचालित रूप से बंद हो रहा है';
+  }
+
+  @override
+  String get modelRequired => 'मॉडल आवश्यक';
+
+  @override
+  String get downloadWhisperModel => 'डिवाइस पर ट्रांसक्रिप्शन का उपयोग करने के लिए व्हिस्पर मॉडल डाउनलोड करें';
+
+  @override
+  String get deviceNotCompatible => 'आपका डिवाइस ऑन-डिवाइस ट्रांसक्रिप्शन के साथ संगत नहीं है';
+
+  @override
+  String get deviceRequirements => 'Your device does not meet the requirements for On-Device transcription.';
+
+  @override
+  String get willLikelyCrash => 'इसे सक्षम करने से ऐप क्रैश या फ्रीज हो सकता है।';
+
+  @override
+  String get transcriptionSlowerLessAccurate => 'ट्रांसक्रिप्शन काफी धीमा और कम सटीक होगा।';
+
+  @override
+  String get proceedAnyway => 'फिर भी जारी रखें';
+
+  @override
+  String get olderDeviceDetected => 'पुराना डिवाइस पाया गया';
+
+  @override
+  String get onDeviceSlower => 'On-device transcription may be slower on this device.';
+
+  @override
+  String get batteryUsageHigher => 'बैटरी उपयोग क्लाउड ट्रांसक्रिप्शन से अधिक होगा।';
+
+  @override
+  String get considerOmiCloud => 'बेहतर प्रदर्शन के लिए Omi Cloud का उपयोग करने पर विचार करें।';
+
+  @override
+  String get highResourceUsage => 'उच्च संसाधन उपयोग';
+
+  @override
+  String get onDeviceIntensive => 'On-Device transcription is computationally intensive.';
+
+  @override
+  String get batteryDrainIncrease => 'Battery drain will increase significantly.';
+
+  @override
+  String get deviceMayWarmUp => 'लंबे समय तक उपयोग के दौरान डिवाइस गर्म हो सकता है।';
+
+  @override
+  String get speedAccuracyLower => 'गति और सटीकता क्लाउड मॉडल से कम हो सकती है।';
+
+  @override
+  String get cloudProvider => 'क्लाउड प्रदाता';
+
+  @override
+  String get premiumMinutesInfo => '1,200 premium minutes/month. On-Device tab offers unlimited free transcription.';
+
+  @override
+  String get viewUsage => 'उपयोग देखें';
+
+  @override
+  String get localProcessingInfo => 'Audio is processed locally. Works offline, more private, but uses more battery.';
+
+  @override
+  String get model => 'Model';
+
+  @override
+  String get performanceWarning => 'प्रदर्शन चेतावनी';
+
+  @override
+  String get largeModelWarning =>
+      'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
+
+  @override
+  String get usingNativeIosSpeech => 'मूल iOS स्पीच रिकग्निशन का उपयोग';
+
+  @override
+  String get noModelDownloadRequired => 'Your device\'s native speech engine will be used. No model download required.';
+
+  @override
+  String get modelReady => 'Model Ready';
+
+  @override
+  String get redownload => 'Re-download';
+
+  @override
+  String get doNotCloseApp => 'कृपया ऐप बंद न करें।';
+
+  @override
+  String get downloading => 'डाउनलोड हो रहा है...';
+
+  @override
+  String get downloadModel => 'मॉडल डाउनलोड करें';
+
+  @override
+  String estimatedSize(String size) {
+    return 'Estimated Size: ~$size MB';
+  }
+
+  @override
+  String availableSpace(String space) {
+    return 'Available Space: $space';
+  }
+
+  @override
+  String get notEnoughSpace => 'चेतावनी: पर्याप्त स्थान नहीं!';
+
+  @override
+  String get download => 'डाउनलोड';
+
+  @override
+  String downloadError(String error) {
+    return 'Download error: $error';
+  }
+
+  @override
+  String get cancelled => 'रद्द';
+
+  @override
+  String get deviceNotCompatibleTitle => 'डिवाइस संगत नहीं है';
+
+  @override
+  String get deviceNotMeetRequirements => 'आपका डिवाइस ऑन-डिवाइस ट्रांसक्रिप्शन की आवश्यकताओं को पूरा नहीं करता।';
+
+  @override
+  String get transcriptionSlowerOnDevice => 'इस डिवाइस पर ऑन-डिवाइस ट्रांसक्रिप्शन धीमा हो सकता है।';
+
+  @override
+  String get computationallyIntensive => 'ऑन-डिवाइस ट्रांसक्रिप्शन कम्प्यूटेशनली गहन है।';
+
+  @override
+  String get batteryDrainSignificantly => 'बैटरी की खपत काफी बढ़ जाएगी।';
+
+  @override
+  String get premiumMinutesMonth =>
+      '1,200 प्रीमियम मिनट/माह। ऑन-डिवाइस टैब असीमित मुफ्त ट्रांसक्रिप्शन प्रदान करता है। ';
+
+  @override
+  String get audioProcessedLocally =>
+      'ऑडियो स्थानीय रूप से संसाधित होता है। ऑफ़लाइन काम करता है, अधिक निजी, लेकिन अधिक बैटरी उपयोग करता है।';
+
+  @override
+  String get languageLabel => 'भाषा';
+
+  @override
+  String get modelLabel => 'मॉडल';
+
+  @override
+  String get modelTooLargeWarning =>
+      'यह मॉडल बड़ा है और मोबाइल डिवाइस पर ऐप क्रैश या बहुत धीमा हो सकता है।\n\nsmall या base की सिफारिश की जाती है।';
+
+  @override
+  String get nativeEngineNoDownload => 'आपके डिवाइस का मूल स्पीच इंजन उपयोग किया जाएगा। मॉडल डाउनलोड की आवश्यकता नहीं।';
+
+  @override
+  String modelReadyWithName(String model) {
+    return 'मॉडल तैयार ($model)';
+  }
+
+  @override
+  String get reDownload => 'पुनः डाउनलोड';
+
+  @override
+  String downloadingModelProgress(String model, String received, String total) {
+    return '$model डाउनलोड हो रहा है: $received / $total MB';
+  }
+
+  @override
+  String preparingModel(String model) {
+    return '$model तैयार हो रहा है...';
+  }
+
+  @override
+  String downloadErrorWithMessage(String error) {
+    return 'डाउनलोड त्रुटि: $error';
+  }
+
+  @override
+  String estimatedSizeWithValue(String size) {
+    return 'अनुमानित आकार: ~$size MB';
+  }
+
+  @override
+  String availableSpaceWithValue(String space) {
+    return 'उपलब्ध स्थान: $space';
+  }
+
+  @override
+  String get omiTranscriptionOptimized =>
+      'Omi की अंतर्निहित लाइव ट्रांसक्रिप्शन स्वचालित स्पीकर डिटेक्शन और डायराइज़ेशन के साथ रियल-टाइम वार्तालाप के लिए अनुकूलित है।';
+
+  @override
+  String get reset => 'रीसेट';
+
+  @override
+  String get useTemplateFrom => 'टेम्पलेट का उपयोग करें';
+
+  @override
+  String get selectProviderTemplate => 'प्रदाता टेम्पलेट चुनें...';
+
+  @override
+  String get quicklyPopulateResponse => 'ज्ञात प्रदाता प्रतिक्रिया प्रारूप से जल्दी भरें';
+
+  @override
+  String get quicklyPopulateRequest => 'ज्ञात प्रदाता अनुरोध प्रारूप से जल्दी भरें';
+
+  @override
+  String get invalidJsonError => 'अमान्य JSON';
+
+  @override
+  String downloadModelWithName(String model) {
+    return 'मॉडल डाउनलोड करें ($model)';
+  }
+
+  @override
+  String modelNameWithFile(String model) {
+    return 'मॉडल: $model';
+  }
+
+  @override
+  String get device => 'Device';
 }

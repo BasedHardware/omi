@@ -1581,8 +1581,8 @@ class AppLocalizationsUk extends AppLocalizations {
   String get noLogsYet => 'Журналів поки немає. Почніть запис, щоб побачити активність власного STT.';
 
   @override
-  String deviceUsesCodec(String deviceName, String codecReason) {
-    return '$deviceName використовує $codecReason. Буде використано Omi.';
+  String deviceUsesCodec(String device, String reason) {
+    return '$device використовує $reason. Буде використано Omi.';
   }
 
   @override
@@ -5808,6 +5808,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get chatAppsTitle => 'Чат-застосунки';
 
   @override
+  String get chatAssistantsTitle => 'Чат-асистенти';
+
+  @override
   String get selectApp => 'Обрати застосунок';
 
   @override
@@ -6033,4 +6036,235 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get sendSummary => 'Надіслати підсумок';
+
+  @override
+  String get debugModeDetected => 'Виявлено режим налагодження';
+
+  @override
+  String get performanceReduced => 'Продуктивність може бути знижена';
+
+  @override
+  String autoClosingInSeconds(int seconds) {
+    return 'Автоматичне закриття через $seconds секунд';
+  }
+
+  @override
+  String get modelRequired => 'Потрібна модель';
+
+  @override
+  String get downloadWhisperModel => 'Завантажте модель whisper для використання транскрипції на пристрої';
+
+  @override
+  String get deviceNotCompatible => 'Ваш пристрій несумісний з транскрипцією на пристрої';
+
+  @override
+  String get deviceRequirements => 'Your device does not meet the requirements for On-Device transcription.';
+
+  @override
+  String get willLikelyCrash => 'Увімкнення, ймовірно, призведе до збою або зависання програми.';
+
+  @override
+  String get transcriptionSlowerLessAccurate => 'Транскрипція буде значно повільнішою та менш точною.';
+
+  @override
+  String get proceedAnyway => 'Все одно продовжити';
+
+  @override
+  String get olderDeviceDetected => 'Виявлено старіший пристрій';
+
+  @override
+  String get onDeviceSlower => 'On-device transcription may be slower on this device.';
+
+  @override
+  String get batteryUsageHigher => 'Використання батареї буде вищим, ніж при хмарній транскрипції.';
+
+  @override
+  String get considerOmiCloud => 'Розгляньте можливість використання Omi Cloud для кращої продуктивності.';
+
+  @override
+  String get highResourceUsage => 'Високе використання ресурсів';
+
+  @override
+  String get onDeviceIntensive => 'On-Device transcription is computationally intensive.';
+
+  @override
+  String get batteryDrainIncrease => 'Battery drain will increase significantly.';
+
+  @override
+  String get deviceMayWarmUp => 'Пристрій може нагрітися під час тривалого використання.';
+
+  @override
+  String get speedAccuracyLower => 'Швидкість і точність можуть бути нижчими, ніж у хмарних моделей.';
+
+  @override
+  String get cloudProvider => 'Хмарний провайдер';
+
+  @override
+  String get premiumMinutesInfo => '1,200 premium minutes/month. On-Device tab offers unlimited free transcription.';
+
+  @override
+  String get viewUsage => 'Переглянути використання';
+
+  @override
+  String get localProcessingInfo => 'Audio is processed locally. Works offline, more private, but uses more battery.';
+
+  @override
+  String get model => 'Model';
+
+  @override
+  String get performanceWarning => 'Попередження про продуктивність';
+
+  @override
+  String get largeModelWarning =>
+      'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
+
+  @override
+  String get usingNativeIosSpeech => 'Використання вбудованого розпізнавання мовлення iOS';
+
+  @override
+  String get noModelDownloadRequired => 'Your device\'s native speech engine will be used. No model download required.';
+
+  @override
+  String get modelReady => 'Model Ready';
+
+  @override
+  String get redownload => 'Re-download';
+
+  @override
+  String get doNotCloseApp => 'Будь ласка, не закривайте програму.';
+
+  @override
+  String get downloading => 'Завантаження...';
+
+  @override
+  String get downloadModel => 'Завантажити модель';
+
+  @override
+  String estimatedSize(String size) {
+    return 'Estimated Size: ~$size MB';
+  }
+
+  @override
+  String availableSpace(String space) {
+    return 'Available Space: $space';
+  }
+
+  @override
+  String get notEnoughSpace => 'Попередження: Недостатньо місця!';
+
+  @override
+  String get download => 'Завантажити';
+
+  @override
+  String downloadError(String error) {
+    return 'Download error: $error';
+  }
+
+  @override
+  String get cancelled => 'Скасовано';
+
+  @override
+  String get deviceNotCompatibleTitle => 'Пристрій несумісний';
+
+  @override
+  String get deviceNotMeetRequirements => 'Ваш пристрій не відповідає вимогам для транскрипції на пристрої.';
+
+  @override
+  String get transcriptionSlowerOnDevice => 'Транскрипція на пристрої може бути повільнішою на цьому пристрої.';
+
+  @override
+  String get computationallyIntensive => 'Транскрипція на пристрої потребує значних обчислювальних ресурсів.';
+
+  @override
+  String get batteryDrainSignificantly => 'Розряд батареї значно збільшиться.';
+
+  @override
+  String get premiumMinutesMonth =>
+      '1200 преміум-хвилин/місяць. Вкладка На пристрої пропонує необмежену безкоштовну транскрипцію. ';
+
+  @override
+  String get audioProcessedLocally =>
+      'Аудіо обробляється локально. Працює офлайн, більш приватно, але споживає більше батареї.';
+
+  @override
+  String get languageLabel => 'Мова';
+
+  @override
+  String get modelLabel => 'Модель';
+
+  @override
+  String get modelTooLargeWarning =>
+      'Ця модель велика і може спричинити збій програми або дуже повільну роботу на мобільних пристроях.\n\nРекомендується small або base.';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'Буде використано вбудований мовленнєвий рушій вашого пристрою. Завантаження моделі не потрібне.';
+
+  @override
+  String modelReadyWithName(String model) {
+    return 'Модель готова ($model)';
+  }
+
+  @override
+  String get reDownload => 'Завантажити знову';
+
+  @override
+  String downloadingModelProgress(String model, String received, String total) {
+    return 'Завантаження $model: $received / $total МБ';
+  }
+
+  @override
+  String preparingModel(String model) {
+    return 'Підготовка $model...';
+  }
+
+  @override
+  String downloadErrorWithMessage(String error) {
+    return 'Помилка завантаження: $error';
+  }
+
+  @override
+  String estimatedSizeWithValue(String size) {
+    return 'Орієнтовний розмір: ~$size МБ';
+  }
+
+  @override
+  String availableSpaceWithValue(String space) {
+    return 'Доступний простір: $space';
+  }
+
+  @override
+  String get omiTranscriptionOptimized =>
+      'Вбудована жива транскрипція Omi оптимізована для розмов у реальному часі з автоматичним визначенням мовця та діаризацією.';
+
+  @override
+  String get reset => 'Скинути';
+
+  @override
+  String get useTemplateFrom => 'Використати шаблон від';
+
+  @override
+  String get selectProviderTemplate => 'Виберіть шаблон провайдера...';
+
+  @override
+  String get quicklyPopulateResponse => 'Швидко заповнити відомим форматом відповіді провайдера';
+
+  @override
+  String get quicklyPopulateRequest => 'Швидко заповнити відомим форматом запиту провайдера';
+
+  @override
+  String get invalidJsonError => 'Недійсний JSON';
+
+  @override
+  String downloadModelWithName(String model) {
+    return 'Завантажити модель ($model)';
+  }
+
+  @override
+  String modelNameWithFile(String model) {
+    return 'Модель: $model';
+  }
+
+  @override
+  String get device => 'Device';
 }

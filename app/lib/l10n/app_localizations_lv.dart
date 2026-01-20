@@ -164,7 +164,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get askOmi => 'Jautāt Omi';
 
   @override
-  String get done => 'Gatavs';
+  String get done => 'Pabeigts';
 
   @override
   String get disconnected => 'Atvienots';
@@ -1582,8 +1582,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get noLogsYet => 'Vēl nav žurnālu. Sāciet ierakstīšanu, lai redzētu pielāgoto STT aktivitāti.';
 
   @override
-  String deviceUsesCodec(String deviceName, String codecReason) {
-    return '$deviceName izmanto $codecReason. Tiks izmantots Omi.';
+  String deviceUsesCodec(String device, String reason) {
+    return '$device izmanto $reason. Tiks izmantots Omi.';
   }
 
   @override
@@ -5812,6 +5812,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get chatAppsTitle => 'Tērzēšanas lietotnes';
 
   @override
+  String get chatAssistantsTitle => 'Čata asistenti';
+
+  @override
   String get selectApp => 'Izvēlēties lietotni';
 
   @override
@@ -6038,4 +6041,235 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get sendSummary => 'Sūtīt kopsavilkumu';
+
+  @override
+  String get debugModeDetected => 'Atkļūdošanas režīms konstatēts';
+
+  @override
+  String get performanceReduced => 'Veiktspēja var būt samazināta';
+
+  @override
+  String autoClosingInSeconds(int seconds) {
+    return 'Automātiski aizveras pēc $seconds sekundēm';
+  }
+
+  @override
+  String get modelRequired => 'Nepieciešams modelis';
+
+  @override
+  String get downloadWhisperModel => 'Lejupielādējiet whisper modeli, lai izmantotu ierīces transkripciju';
+
+  @override
+  String get deviceNotCompatible => 'Jūsu ierīce nav saderīga ar ierīces transkripciju';
+
+  @override
+  String get deviceRequirements => 'Your device does not meet the requirements for On-Device transcription.';
+
+  @override
+  String get willLikelyCrash => 'Iespējošana, visticamāk, izraisīs lietotnes avāriju vai sasalšanu.';
+
+  @override
+  String get transcriptionSlowerLessAccurate => 'Transkripcija būs ievērojami lēnāka un mazāk precīza.';
+
+  @override
+  String get proceedAnyway => 'Turpināt jebkurā gadījumā';
+
+  @override
+  String get olderDeviceDetected => 'Konstatēta vecāka ierīce';
+
+  @override
+  String get onDeviceSlower => 'On-device transcription may be slower on this device.';
+
+  @override
+  String get batteryUsageHigher => 'Akumulatora patēriņš būs lielāks nekā mākoņa transkripcijā.';
+
+  @override
+  String get considerOmiCloud => 'Apsveriet Omi Cloud izmantošanu labākai veiktspējai.';
+
+  @override
+  String get highResourceUsage => 'Augsts resursu patēriņš';
+
+  @override
+  String get onDeviceIntensive => 'On-Device transcription is computationally intensive.';
+
+  @override
+  String get batteryDrainIncrease => 'Battery drain will increase significantly.';
+
+  @override
+  String get deviceMayWarmUp => 'Ierīce var uzkarst ilgstošas lietošanas laikā.';
+
+  @override
+  String get speedAccuracyLower => 'Ātrums un precizitāte var būt zemāki nekā mākoņa modeļiem.';
+
+  @override
+  String get cloudProvider => 'Mākoņa nodrošinātājs';
+
+  @override
+  String get premiumMinutesInfo => '1,200 premium minutes/month. On-Device tab offers unlimited free transcription.';
+
+  @override
+  String get viewUsage => 'Skatīt lietojumu';
+
+  @override
+  String get localProcessingInfo => 'Audio is processed locally. Works offline, more private, but uses more battery.';
+
+  @override
+  String get model => 'Model';
+
+  @override
+  String get performanceWarning => 'Veiktspējas brīdinājums';
+
+  @override
+  String get largeModelWarning =>
+      'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
+
+  @override
+  String get usingNativeIosSpeech => 'Tiek izmantota vietējā iOS runas atpazīšana';
+
+  @override
+  String get noModelDownloadRequired => 'Your device\'s native speech engine will be used. No model download required.';
+
+  @override
+  String get modelReady => 'Model Ready';
+
+  @override
+  String get redownload => 'Re-download';
+
+  @override
+  String get doNotCloseApp => 'Lūdzu, neaizveriet lietotni.';
+
+  @override
+  String get downloading => 'Lejupielādē...';
+
+  @override
+  String get downloadModel => 'Lejupielādēt modeli';
+
+  @override
+  String estimatedSize(String size) {
+    return 'Estimated Size: ~$size MB';
+  }
+
+  @override
+  String availableSpace(String space) {
+    return 'Available Space: $space';
+  }
+
+  @override
+  String get notEnoughSpace => 'Brīdinājums: Nepietiek vietas!';
+
+  @override
+  String get download => 'Lejupielādēt';
+
+  @override
+  String downloadError(String error) {
+    return 'Download error: $error';
+  }
+
+  @override
+  String get cancelled => 'Atcelts';
+
+  @override
+  String get deviceNotCompatibleTitle => 'Ierīce nav saderīga';
+
+  @override
+  String get deviceNotMeetRequirements => 'Jūsu ierīce neatbilst ierīces transkripcijas prasībām.';
+
+  @override
+  String get transcriptionSlowerOnDevice => 'Ierīces transkripcija šajā ierīcē var būt lēnāka.';
+
+  @override
+  String get computationallyIntensive => 'Ierīces transkripcija ir skaitļošanas ziņā intensīva.';
+
+  @override
+  String get batteryDrainSignificantly => 'Akumulatora izlāde ievērojami palielināsies.';
+
+  @override
+  String get premiumMinutesMonth =>
+      '1200 premium minūtes/mēnesī. Cilnē Ierīcē piedāvā neierobežotu bezmaksas transkripciju. ';
+
+  @override
+  String get audioProcessedLocally =>
+      'Audio tiek apstrādāts lokāli. Darbojas bezsaistē, privātāk, bet patērē vairāk akumulatora.';
+
+  @override
+  String get languageLabel => 'Valoda';
+
+  @override
+  String get modelLabel => 'Modelis';
+
+  @override
+  String get modelTooLargeWarning =>
+      'Šis modelis ir liels un var izraisīt lietotnes avāriju vai ļoti lēnu darbību mobilajās ierīcēs.\n\nIeteicams small vai base.';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'Tiks izmantots jūsu ierīces vietējais runas dzinējs. Modeļa lejupielāde nav nepieciešama.';
+
+  @override
+  String modelReadyWithName(String model) {
+    return 'Modelis gatavs ($model)';
+  }
+
+  @override
+  String get reDownload => 'Lejupielādēt atkārtoti';
+
+  @override
+  String downloadingModelProgress(String model, String received, String total) {
+    return 'Lejupielādē $model: $received / $total MB';
+  }
+
+  @override
+  String preparingModel(String model) {
+    return 'Sagatavo $model...';
+  }
+
+  @override
+  String downloadErrorWithMessage(String error) {
+    return 'Lejupielādes kļūda: $error';
+  }
+
+  @override
+  String estimatedSizeWithValue(String size) {
+    return 'Aptuvenais izmērs: ~$size MB';
+  }
+
+  @override
+  String availableSpaceWithValue(String space) {
+    return 'Pieejamā vieta: $space';
+  }
+
+  @override
+  String get omiTranscriptionOptimized =>
+      'Omi iebūvētā tiešraides transkripcija ir optimizēta reāllaika sarunām ar automātisku runātāju noteikšanu un diarizāciju.';
+
+  @override
+  String get reset => 'Atiestatīt';
+
+  @override
+  String get useTemplateFrom => 'Izmantot veidni no';
+
+  @override
+  String get selectProviderTemplate => 'Izvēlieties nodrošinātāja veidni...';
+
+  @override
+  String get quicklyPopulateResponse => 'Ātri aizpildīt ar zināmu nodrošinātāja atbildes formātu';
+
+  @override
+  String get quicklyPopulateRequest => 'Ātri aizpildīt ar zināmu nodrošinātāja pieprasījuma formātu';
+
+  @override
+  String get invalidJsonError => 'Nederīgs JSON';
+
+  @override
+  String downloadModelWithName(String model) {
+    return 'Lejupielādēt modeli ($model)';
+  }
+
+  @override
+  String modelNameWithFile(String model) {
+    return 'Modelis: $model';
+  }
+
+  @override
+  String get device => 'Device';
 }

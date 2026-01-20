@@ -1571,8 +1571,8 @@ class AppLocalizationsTh extends AppLocalizations {
   String get noLogsYet => 'ยังไม่มีบันทึก เริ่มบันทึกเพื่อดูกิจกรรม STT แบบกำหนดเอง';
 
   @override
-  String deviceUsesCodec(String deviceName, String codecReason) {
-    return '$deviceName ใช้ $codecReason จะใช้ Omi แทน';
+  String deviceUsesCodec(String device, String reason) {
+    return '$device ใช้ $reason จะใช้ Omi แทน';
   }
 
   @override
@@ -1721,7 +1721,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get dontShowAgain => 'ไม่ต้องแสดงอีก';
 
   @override
-  String get iUnderstand => 'ฉันเข้าใจ';
+  String get iUnderstand => 'เข้าใจแล้ว';
 
   @override
   String get enableBluetooth => 'เปิดใช้งาน Bluetooth';
@@ -5772,6 +5772,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get chatAppsTitle => 'แอปแชท';
 
   @override
+  String get chatAssistantsTitle => 'ผู้ช่วยแชท';
+
+  @override
   String get selectApp => 'เลือกแอป';
 
   @override
@@ -5995,4 +5998,233 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get sendSummary => 'ส่งสรุป';
+
+  @override
+  String get debugModeDetected => 'ตรวจพบโหมดดีบัก';
+
+  @override
+  String get performanceReduced => 'ประสิทธิภาพอาจลดลง';
+
+  @override
+  String autoClosingInSeconds(int seconds) {
+    return 'ปิดอัตโนมัติใน $seconds วินาที';
+  }
+
+  @override
+  String get modelRequired => 'ต้องการโมเดล';
+
+  @override
+  String get downloadWhisperModel => 'ดาวน์โหลดโมเดล whisper เพื่อใช้การถอดความบนอุปกรณ์';
+
+  @override
+  String get deviceNotCompatible => 'อุปกรณ์ของคุณไม่รองรับการถอดความบนอุปกรณ์';
+
+  @override
+  String get deviceRequirements => 'Your device does not meet the requirements for On-Device transcription.';
+
+  @override
+  String get willLikelyCrash => 'การเปิดใช้งานนี้อาจทำให้แอปหยุดทำงานหรือค้าง';
+
+  @override
+  String get transcriptionSlowerLessAccurate => 'การถอดความจะช้าลงอย่างมากและแม่นยำน้อยลง';
+
+  @override
+  String get proceedAnyway => 'ดำเนินการต่อ';
+
+  @override
+  String get olderDeviceDetected => 'ตรวจพบอุปกรณ์รุ่นเก่า';
+
+  @override
+  String get onDeviceSlower => 'On-device transcription may be slower on this device.';
+
+  @override
+  String get batteryUsageHigher => 'การใช้แบตเตอรี่จะสูงกว่าการถอดความบนคลาวด์';
+
+  @override
+  String get considerOmiCloud => 'พิจารณาใช้ Omi Cloud เพื่อประสิทธิภาพที่ดีขึ้น';
+
+  @override
+  String get highResourceUsage => 'การใช้ทรัพยากรสูง';
+
+  @override
+  String get onDeviceIntensive => 'On-Device transcription is computationally intensive.';
+
+  @override
+  String get batteryDrainIncrease => 'Battery drain will increase significantly.';
+
+  @override
+  String get deviceMayWarmUp => 'อุปกรณ์อาจร้อนขึ้นระหว่างการใช้งานเป็นเวลานาน';
+
+  @override
+  String get speedAccuracyLower => 'ความเร็วและความแม่นยำอาจต่ำกว่าโมเดลคลาวด์';
+
+  @override
+  String get cloudProvider => 'ผู้ให้บริการคลาวด์';
+
+  @override
+  String get premiumMinutesInfo => '1,200 premium minutes/month. On-Device tab offers unlimited free transcription.';
+
+  @override
+  String get viewUsage => 'ดูการใช้งาน';
+
+  @override
+  String get localProcessingInfo => 'Audio is processed locally. Works offline, more private, but uses more battery.';
+
+  @override
+  String get model => 'Model';
+
+  @override
+  String get performanceWarning => 'คำเตือนเกี่ยวกับประสิทธิภาพ';
+
+  @override
+  String get largeModelWarning =>
+      'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
+
+  @override
+  String get usingNativeIosSpeech => 'ใช้การรู้จำเสียง iOS แบบเนทีฟ';
+
+  @override
+  String get noModelDownloadRequired => 'Your device\'s native speech engine will be used. No model download required.';
+
+  @override
+  String get modelReady => 'Model Ready';
+
+  @override
+  String get redownload => 'Re-download';
+
+  @override
+  String get doNotCloseApp => 'กรุณาอย่าปิดแอป';
+
+  @override
+  String get downloading => 'กำลังดาวน์โหลด...';
+
+  @override
+  String get downloadModel => 'ดาวน์โหลดโมเดล';
+
+  @override
+  String estimatedSize(String size) {
+    return 'Estimated Size: ~$size MB';
+  }
+
+  @override
+  String availableSpace(String space) {
+    return 'Available Space: $space';
+  }
+
+  @override
+  String get notEnoughSpace => 'คำเตือน: พื้นที่ไม่เพียงพอ!';
+
+  @override
+  String get download => 'ดาวน์โหลด';
+
+  @override
+  String downloadError(String error) {
+    return 'Download error: $error';
+  }
+
+  @override
+  String get cancelled => 'ยกเลิกแล้ว';
+
+  @override
+  String get deviceNotCompatibleTitle => 'อุปกรณ์ไม่รองรับ';
+
+  @override
+  String get deviceNotMeetRequirements => 'อุปกรณ์ของคุณไม่ตรงตามข้อกำหนดสำหรับการถอดความบนอุปกรณ์';
+
+  @override
+  String get transcriptionSlowerOnDevice => 'การถอดความบนอุปกรณ์อาจช้ากว่าบนอุปกรณ์นี้';
+
+  @override
+  String get computationallyIntensive => 'การถอดความบนอุปกรณ์ต้องการการประมวลผลสูง';
+
+  @override
+  String get batteryDrainSignificantly => 'การใช้แบตเตอรี่จะเพิ่มขึ้นอย่างมาก';
+
+  @override
+  String get premiumMinutesMonth => '1,200 นาทีพรีเมียม/เดือน แท็บบนอุปกรณ์ให้การถอดความฟรีไม่จำกัด ';
+
+  @override
+  String get audioProcessedLocally =>
+      'เสียงถูกประมวลผลในเครื่อง ใช้งานแบบออฟไลน์ได้ มีความเป็นส่วนตัวมากขึ้น แต่ใช้แบตเตอรี่มากขึ้น';
+
+  @override
+  String get languageLabel => 'ภาษา';
+
+  @override
+  String get modelLabel => 'โมเดล';
+
+  @override
+  String get modelTooLargeWarning =>
+      'โมเดลนี้มีขนาดใหญ่และอาจทำให้แอปหยุดทำงานหรือทำงานช้ามากบนอุปกรณ์มือถือ\n\nแนะนำให้ใช้ small หรือ base';
+
+  @override
+  String get nativeEngineNoDownload => 'จะใช้เอนจินเสียงแบบเนทีฟของอุปกรณ์ ไม่ต้องดาวน์โหลดโมเดล';
+
+  @override
+  String modelReadyWithName(String model) {
+    return 'โมเดลพร้อม ($model)';
+  }
+
+  @override
+  String get reDownload => 'ดาวน์โหลดอีกครั้ง';
+
+  @override
+  String downloadingModelProgress(String model, String received, String total) {
+    return 'กำลังดาวน์โหลด $model: $received / $total MB';
+  }
+
+  @override
+  String preparingModel(String model) {
+    return 'กำลังเตรียม $model...';
+  }
+
+  @override
+  String downloadErrorWithMessage(String error) {
+    return 'ข้อผิดพลาดในการดาวน์โหลด: $error';
+  }
+
+  @override
+  String estimatedSizeWithValue(String size) {
+    return 'ขนาดโดยประมาณ: ~$size MB';
+  }
+
+  @override
+  String availableSpaceWithValue(String space) {
+    return 'พื้นที่ว่าง: $space';
+  }
+
+  @override
+  String get omiTranscriptionOptimized =>
+      'การถอดความสดในตัวของ Omi ถูกปรับให้เหมาะสมสำหรับการสนทนาแบบเรียลไทม์พร้อมการตรวจจับผู้พูดอัตโนมัติและการแยกผู้พูด';
+
+  @override
+  String get reset => 'รีเซ็ต';
+
+  @override
+  String get useTemplateFrom => 'ใช้เทมเพลตจาก';
+
+  @override
+  String get selectProviderTemplate => 'เลือกเทมเพลตผู้ให้บริการ...';
+
+  @override
+  String get quicklyPopulateResponse => 'เติมอย่างรวดเร็วด้วยรูปแบบการตอบกลับของผู้ให้บริการที่รู้จัก';
+
+  @override
+  String get quicklyPopulateRequest => 'เติมอย่างรวดเร็วด้วยรูปแบบคำขอของผู้ให้บริการที่รู้จัก';
+
+  @override
+  String get invalidJsonError => 'JSON ไม่ถูกต้อง';
+
+  @override
+  String downloadModelWithName(String model) {
+    return 'ดาวน์โหลดโมเดล ($model)';
+  }
+
+  @override
+  String modelNameWithFile(String model) {
+    return 'โมเดล: $model';
+  }
+
+  @override
+  String get device => 'Device';
 }

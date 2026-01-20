@@ -51,7 +51,7 @@
   },
   "save": "Save",
   "@save": {
-    "description": "Save button text"
+    "description": "Save button label"
   },
   "edit": "Edit",
   "@edit": {
@@ -179,7 +179,7 @@
   },
   "language": "Language",
   "@language": {
-    "description": "Language setting"
+    "description": "Label for language selector"
   },
   "selectLanguage": "Select Language",
   "@selectLanguage": {
@@ -215,7 +215,7 @@
   },
   "done": "Done",
   "@done": {
-    "description": "Button text to confirm action"
+    "description": "Status when download is done"
   },
   "disconnected": "Disconnected",
   "@disconnected": {
@@ -1552,13 +1552,14 @@
   "logs": "Logs",
   "logsCopied": "Logs copied",
   "noLogsYet": "No logs yet. Start recording to see custom STT activity.",
-  "deviceUsesCodec": "{deviceName} uses {codecReason}. Omi will be used.",
+  "deviceUsesCodec": "{device} uses {reason}. Omi will be used.",
   "@deviceUsesCodec": {
+    "description": "Warning about device codec compatibility",
     "placeholders": {
-      "deviceName": {
+      "device": {
         "type": "String"
       },
-      "codecReason": {
+      "reason": {
         "type": "String"
       }
     }
@@ -1639,7 +1640,7 @@
   },
   "iUnderstand": "I Understand",
   "@iUnderstand": {
-    "description": "Button text to acknowledge connection warnings"
+    "description": "Button to acknowledge warning"
   },
   "enableBluetooth": "Enable Bluetooth",
   "@enableBluetooth": {
@@ -7334,5 +7335,343 @@
   "sendSummary": "Send Summary",
   "@sendSummary": {
     "description": "Option to share summary"
+  },
+  "debugModeDetected": "Debug Mode Detected",
+  "@debugModeDetected": {
+    "description": "Warning title for debug mode"
+  },
+  "performanceReduced": "Performance reduced 5-10x. Use Release mode.",
+  "@performanceReduced": {
+    "description": "Warning about debug mode performance"
+  },
+  "autoClosingInSeconds": "Auto-closing in {seconds}s",
+  "@autoClosingInSeconds": {
+    "description": "Countdown for auto-closing snackbar",
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "modelRequired": "Model Required",
+  "@modelRequired": {
+    "description": "Dialog title when model is not downloaded"
+  },
+  "downloadWhisperModel": "Please download a Whisper model before saving.",
+  "@downloadWhisperModel": {
+    "description": "Message prompting to download Whisper model"
+  },
+  "deviceNotCompatible": "Device Not Compatible",
+  "@deviceNotCompatible": {
+    "description": "Dialog title for incompatible device"
+  },
+  "deviceRequirements": "Your device does not meet the requirements for On-Device transcription.",
+  "@deviceRequirements": {
+    "description": "Message about device requirements"
+  },
+  "willLikelyCrash": "Enabling this will likely cause the app to crash or freeze.",
+  "@willLikelyCrash": {
+    "description": "Warning about enabling on incompatible device"
+  },
+  "transcriptionSlowerLessAccurate": "Transcription will be significantly slower and less accurate.",
+  "@transcriptionSlowerLessAccurate": {
+    "description": "Warning about transcription quality"
+  },
+  "proceedAnyway": "Proceed anyway",
+  "@proceedAnyway": {
+    "description": "Button to proceed despite warnings"
+  },
+  "olderDeviceDetected": "Older Device Detected",
+  "@olderDeviceDetected": {
+    "description": "Title for older device warning dialog"
+  },
+  "onDeviceSlower": "On-device transcription may be slower on this device.",
+  "@onDeviceSlower": {
+    "description": "Warning about slower transcription"
+  },
+  "batteryUsageHigher": "Battery usage will be higher than cloud transcription.",
+  "@batteryUsageHigher": {
+    "description": "Warning about battery usage"
+  },
+  "considerOmiCloud": "Consider using Omi Cloud for better performance.",
+  "@considerOmiCloud": {
+    "description": "Suggestion to use cloud transcription"
+  },
+  "highResourceUsage": "High Resource Usage",
+  "@highResourceUsage": {
+    "description": "Title for high resource usage dialog"
+  },
+  "onDeviceIntensive": "On-Device transcription is computationally intensive.",
+  "@onDeviceIntensive": {
+    "description": "Message about computational intensity"
+  },
+  "batteryDrainIncrease": "Battery drain will increase significantly.",
+  "@batteryDrainIncrease": {
+    "description": "Warning about battery drain"
+  },
+  "deviceMayWarmUp": "Device may warm up during extended use.",
+  "@deviceMayWarmUp": {
+    "description": "Warning about device temperature"
+  },
+  "speedAccuracyLower": "Speed and accuracy may be lower than Cloud models.",
+  "@speedAccuracyLower": {
+    "description": "Warning about on-device vs cloud quality"
+  },
+  "cloudProvider": "Cloud Provider",
+  "@cloudProvider": {
+    "description": "Tab label for cloud provider option"
+  },
+  "premiumMinutesInfo": "1,200 premium minutes/month. On-Device tab offers unlimited free transcription.",
+  "@premiumMinutesInfo": {
+    "description": "Info about premium minutes"
+  },
+  "viewUsage": "View usage",
+  "@viewUsage": {
+    "description": "Link to view usage"
+  },
+  "localProcessingInfo": "Audio is processed locally. Works offline, more private, but uses more battery.",
+  "@localProcessingInfo": {
+    "description": "Info about local processing"
+  },
+  "model": "Model",
+  "@model": {
+    "description": "Label for model selector"
+  },
+  "performanceWarning": "Performance Warning",
+  "@performanceWarning": {
+    "description": "Title for performance warning dialog"
+  },
+  "largeModelWarning": "This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.",
+  "@largeModelWarning": {
+    "description": "Warning about large model sizes"
+  },
+  "usingNativeIosSpeech": "Using Native iOS Speech Recognition",
+  "@usingNativeIosSpeech": {
+    "description": "Label for iOS native speech recognition"
+  },
+  "noModelDownloadRequired": "Your device's native speech engine will be used. No model download required.",
+  "@noModelDownloadRequired": {
+    "description": "Info about iOS native speech"
+  },
+  "modelReady": "Model Ready",
+  "@modelReady": {
+    "description": "Status when model is downloaded"
+  },
+  "redownload": "Re-download",
+  "@redownload": {
+    "description": "Button to re-download model"
+  },
+  "doNotCloseApp": "Please do not close the app.",
+  "@doNotCloseApp": {
+    "description": "Warning during download"
+  },
+  "downloading": "Downloading...",
+  "@downloading": {
+    "description": "Status during download"
+  },
+  "downloadModel": "Download Model",
+  "@downloadModel": {
+    "description": "Dialog title for model download"
+  },
+  "estimatedSize": "Estimated Size: ~{size} MB",
+  "@estimatedSize": {
+    "description": "Shows estimated file size",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "availableSpace": "Available Space: {space}",
+  "@availableSpace": {
+    "description": "Shows available disk space",
+    "placeholders": {
+      "space": {
+        "type": "String"
+      }
+    }
+  },
+  "notEnoughSpace": "Warning: Not enough space!",
+  "@notEnoughSpace": {
+    "description": "Warning when not enough disk space"
+  },
+  "download": "Download",
+  "@download": {
+    "description": "Download button"
+  },
+  "downloadError": "Download error: {error}",
+  "@downloadError": {
+    "description": "Error message during download",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "cancelled": "Cancelled",
+  "@cancelled": {
+    "description": "Status when download is cancelled"
+  },
+  "deviceNotCompatibleTitle": "Device Not Compatible",
+  "@deviceNotCompatibleTitle": {
+    "description": "Title for device compatibility error dialog"
+  },
+  "deviceNotMeetRequirements": "Your device does not meet the requirements for On-Device transcription.",
+  "@deviceNotMeetRequirements": {
+    "description": "Message when device does not meet requirements"
+  },
+  "transcriptionSlowerOnDevice": "On-device transcription may be slower on this device.",
+  "@transcriptionSlowerOnDevice": {
+    "description": "Warning about transcription speed on older devices"
+  },
+  "computationallyIntensive": "On-Device transcription is computationally intensive.",
+  "@computationallyIntensive": {
+    "description": "Description of on-device transcription resource usage"
+  },
+  "batteryDrainSignificantly": "Battery drain will increase significantly.",
+  "@batteryDrainSignificantly": {
+    "description": "Warning about battery drain"
+  },
+  "premiumMinutesMonth": "1,200 premium minutes/month. On-Device tab offers unlimited free transcription. ",
+  "@premiumMinutesMonth": {
+    "description": "Description of premium minutes quota"
+  },
+  "audioProcessedLocally": "Audio is processed locally. Works offline, more private, but uses more battery.",
+  "@audioProcessedLocally": {
+    "description": "Description of on-device processing"
+  },
+  "languageLabel": "Language",
+  "@languageLabel": {
+    "description": "Label for language selector"
+  },
+  "modelLabel": "Model",
+  "@modelLabel": {
+    "description": "Label for model selector"
+  },
+  "modelTooLargeWarning": "This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.",
+  "@modelTooLargeWarning": {
+    "description": "Warning about large model sizes"
+  },
+  "nativeEngineNoDownload": "Your devices native speech engine will be used. No model download required.",
+  "@nativeEngineNoDownload": {
+    "description": "Description of iOS native speech recognition"
+  },
+  "modelReadyWithName": "Model Ready ({model})",
+  "@modelReadyWithName": {
+    "description": "Status when model is ready",
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
+  "reDownload": "Re-download",
+  "@reDownload": {
+    "description": "Button to re-download model"
+  },
+  "downloadingModelProgress": "Downloading {model}: {received} / {total} MB",
+  "@downloadingModelProgress": {
+    "description": "Download progress status",
+    "placeholders": {
+      "model": {
+        "type": "String"
+      },
+      "received": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "preparingModel": "Preparing {model}...",
+  "@preparingModel": {
+    "description": "Status when preparing model",
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
+  "downloadErrorWithMessage": "Download error: {error}",
+  "@downloadErrorWithMessage": {
+    "description": "Download error message",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "estimatedSizeWithValue": "Estimated Size: ~{size} MB",
+  "@estimatedSizeWithValue": {
+    "description": "Estimated model size",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "availableSpaceWithValue": "Available Space: {space}",
+  "@availableSpaceWithValue": {
+    "description": "Available disk space",
+    "placeholders": {
+      "space": {
+        "type": "String"
+      }
+    }
+  },
+  "omiTranscriptionOptimized": "Omis built-in live transcription is optimized for real-time conversations with automatic speaker detection and diarization.",
+  "@omiTranscriptionOptimized": {
+    "description": "Description of Omi transcription features"
+  },
+  "reset": "Reset",
+  "@reset": {
+    "description": "Reset button label"
+  },
+  "useTemplateFrom": "Use template from",
+  "@useTemplateFrom": {
+    "description": "Label for template selector"
+  },
+  "selectProviderTemplate": "Select a provider template...",
+  "@selectProviderTemplate": {
+    "description": "Placeholder for template dropdown"
+  },
+  "quicklyPopulateResponse": "Quickly populate with a known providers response format",
+  "@quicklyPopulateResponse": {
+    "description": "Description for response template selector"
+  },
+  "quicklyPopulateRequest": "Quickly populate with a known providers request format",
+  "@quicklyPopulateRequest": {
+    "description": "Description for request template selector"
+  },
+  "invalidJsonError": "Invalid JSON",
+  "@invalidJsonError": {
+    "description": "Error message for invalid JSON"
+  },
+  "downloadModelWithName": "Download Model ({model})",
+  "@downloadModelWithName": {
+    "description": "Button to download model",
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
+  "modelNameWithFile": "Model: {model}",
+  "@modelNameWithFile": {
+    "description": "Model filename label",
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
+  "device": "Device",
+  "@device": {
+    "description": "Fallback text for device name"
+  },
+  "chatAssistantsTitle": "Chat Assistants",
+  "@chatAssistantsTitle": {
+    "description": "Title for chat assistants capability page"
   }
 }

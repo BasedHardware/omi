@@ -164,7 +164,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get askOmi => 'Omi\'ye Sor';
 
   @override
-  String get done => 'Tamam';
+  String get done => 'Tamamlandı';
 
   @override
   String get disconnected => 'Bağlantı kesildi';
@@ -1584,8 +1584,8 @@ class AppLocalizationsTr extends AppLocalizations {
   String get noLogsYet => 'Henüz günlük yok. Özel STT etkinliğini görmek için kayda başlayın.';
 
   @override
-  String deviceUsesCodec(String deviceName, String codecReason) {
-    return '$deviceName $codecReason kullanıyor. Omi kullanılacak.';
+  String deviceUsesCodec(String device, String reason) {
+    return '$device $reason kullanıyor. Omi kullanılacak.';
   }
 
   @override
@@ -1734,7 +1734,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get dontShowAgain => 'Bir daha gösterme';
 
   @override
-  String get iUnderstand => 'Anladım';
+  String get iUnderstand => 'Anlıyorum';
 
   @override
   String get enableBluetooth => 'Bluetooth\'u Etkinleştir';
@@ -5813,6 +5813,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get chatAppsTitle => 'Sohbet Uygulamaları';
 
   @override
+  String get chatAssistantsTitle => 'Sohbet Asistanları';
+
+  @override
   String get selectApp => 'Uygulama Seç';
 
   @override
@@ -6037,4 +6040,235 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get sendSummary => 'Özet gönder';
+
+  @override
+  String get debugModeDetected => 'Hata ayıklama modu algılandı';
+
+  @override
+  String get performanceReduced => 'Performans düşük olabilir';
+
+  @override
+  String autoClosingInSeconds(int seconds) {
+    return '$seconds saniye içinde otomatik kapanıyor';
+  }
+
+  @override
+  String get modelRequired => 'Model gerekli';
+
+  @override
+  String get downloadWhisperModel => 'Cihaz üzerinde transkripsiyonu kullanmak için bir whisper modeli indirin';
+
+  @override
+  String get deviceNotCompatible => 'Cihazınız cihaz üzerinde transkripsiyon ile uyumlu değil';
+
+  @override
+  String get deviceRequirements => 'Your device does not meet the requirements for On-Device transcription.';
+
+  @override
+  String get willLikelyCrash =>
+      'Bu özelliği etkinleştirmek muhtemelen uygulamanın çökmesine veya donmasına neden olacaktır.';
+
+  @override
+  String get transcriptionSlowerLessAccurate => 'Transkripsiyon önemli ölçüde daha yavaş ve daha az doğru olacaktır.';
+
+  @override
+  String get proceedAnyway => 'Yine de devam et';
+
+  @override
+  String get olderDeviceDetected => 'Eski Cihaz Algılandı';
+
+  @override
+  String get onDeviceSlower => 'On-device transcription may be slower on this device.';
+
+  @override
+  String get batteryUsageHigher => 'Pil kullanımı bulut transkripsiyonundan daha yüksek olacaktır.';
+
+  @override
+  String get considerOmiCloud => 'Daha iyi performans için Omi Cloud kullanmayı düşünün.';
+
+  @override
+  String get highResourceUsage => 'Yüksek Kaynak Kullanımı';
+
+  @override
+  String get onDeviceIntensive => 'On-Device transcription is computationally intensive.';
+
+  @override
+  String get batteryDrainIncrease => 'Battery drain will increase significantly.';
+
+  @override
+  String get deviceMayWarmUp => 'Cihaz uzun süreli kullanımda ısınabilir.';
+
+  @override
+  String get speedAccuracyLower => 'Hız ve doğruluk Bulut modellerinden daha düşük olabilir.';
+
+  @override
+  String get cloudProvider => 'Bulut Sağlayıcı';
+
+  @override
+  String get premiumMinutesInfo => '1,200 premium minutes/month. On-Device tab offers unlimited free transcription.';
+
+  @override
+  String get viewUsage => 'Kullanımı görüntüle';
+
+  @override
+  String get localProcessingInfo => 'Audio is processed locally. Works offline, more private, but uses more battery.';
+
+  @override
+  String get model => 'Model';
+
+  @override
+  String get performanceWarning => 'Performans Uyarısı';
+
+  @override
+  String get largeModelWarning =>
+      'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
+
+  @override
+  String get usingNativeIosSpeech => 'Yerel iOS Konuşma Tanıma Kullanılıyor';
+
+  @override
+  String get noModelDownloadRequired => 'Your device\'s native speech engine will be used. No model download required.';
+
+  @override
+  String get modelReady => 'Model Ready';
+
+  @override
+  String get redownload => 'Re-download';
+
+  @override
+  String get doNotCloseApp => 'Lütfen uygulamayı kapatmayın.';
+
+  @override
+  String get downloading => 'İndiriliyor...';
+
+  @override
+  String get downloadModel => 'Modeli indir';
+
+  @override
+  String estimatedSize(String size) {
+    return 'Estimated Size: ~$size MB';
+  }
+
+  @override
+  String availableSpace(String space) {
+    return 'Available Space: $space';
+  }
+
+  @override
+  String get notEnoughSpace => 'Uyarı: Yeterli alan yok!';
+
+  @override
+  String get download => 'İndir';
+
+  @override
+  String downloadError(String error) {
+    return 'Download error: $error';
+  }
+
+  @override
+  String get cancelled => 'İptal edildi';
+
+  @override
+  String get deviceNotCompatibleTitle => 'Cihaz Uyumlu Değil';
+
+  @override
+  String get deviceNotMeetRequirements => 'Cihazınız cihaz üzerinde transkripsiyon gereksinimlerini karşılamıyor.';
+
+  @override
+  String get transcriptionSlowerOnDevice => 'Bu cihazda cihaz üzerinde transkripsiyon daha yavaş olabilir.';
+
+  @override
+  String get computationallyIntensive => 'Cihaz üzerinde transkripsiyon hesaplama açısından yoğundur.';
+
+  @override
+  String get batteryDrainSignificantly => 'Pil tüketimi önemli ölçüde artacaktır.';
+
+  @override
+  String get premiumMinutesMonth =>
+      'Ayda 1.200 premium dakika. Cihaz Üzerinde sekmesi sınırsız ücretsiz transkripsiyon sunar. ';
+
+  @override
+  String get audioProcessedLocally =>
+      'Ses yerel olarak işlenir. Çevrimdışı çalışır, daha özel, ancak daha fazla pil kullanır.';
+
+  @override
+  String get languageLabel => 'Dil';
+
+  @override
+  String get modelLabel => 'Model';
+
+  @override
+  String get modelTooLargeWarning =>
+      'Bu model büyük ve mobil cihazlarda uygulamanın çökmesine veya çok yavaş çalışmasına neden olabilir.\n\nsmall veya base önerilir.';
+
+  @override
+  String get nativeEngineNoDownload => 'Cihazınızın yerel konuşma motoru kullanılacak. Model indirmesi gerekli değil.';
+
+  @override
+  String modelReadyWithName(String model) {
+    return 'Model Hazır ($model)';
+  }
+
+  @override
+  String get reDownload => 'Yeniden indir';
+
+  @override
+  String downloadingModelProgress(String model, String received, String total) {
+    return '$model indiriliyor: $received / $total MB';
+  }
+
+  @override
+  String preparingModel(String model) {
+    return '$model hazırlanıyor...';
+  }
+
+  @override
+  String downloadErrorWithMessage(String error) {
+    return 'İndirme hatası: $error';
+  }
+
+  @override
+  String estimatedSizeWithValue(String size) {
+    return 'Tahmini Boyut: ~$size MB';
+  }
+
+  @override
+  String availableSpaceWithValue(String space) {
+    return 'Kullanılabilir Alan: $space';
+  }
+
+  @override
+  String get omiTranscriptionOptimized =>
+      'Ominin yerleşik canlı transkripsiyonu, otomatik konuşmacı algılama ve diarizasyon ile gerçek zamanlı konuşmalar için optimize edilmiştir.';
+
+  @override
+  String get reset => 'Sıfırla';
+
+  @override
+  String get useTemplateFrom => 'Şablonu kullan';
+
+  @override
+  String get selectProviderTemplate => 'Bir sağlayıcı şablonu seçin...';
+
+  @override
+  String get quicklyPopulateResponse => 'Bilinen sağlayıcı yanıt formatıyla hızlıca doldur';
+
+  @override
+  String get quicklyPopulateRequest => 'Bilinen sağlayıcı istek formatıyla hızlıca doldur';
+
+  @override
+  String get invalidJsonError => 'Geçersiz JSON';
+
+  @override
+  String downloadModelWithName(String model) {
+    return 'Model İndir ($model)';
+  }
+
+  @override
+  String modelNameWithFile(String model) {
+    return 'Model: $model';
+  }
+
+  @override
+  String get device => 'Device';
 }

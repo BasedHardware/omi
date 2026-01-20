@@ -1557,8 +1557,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noLogsYet => '暂无日志。录音以查看活动。';
 
   @override
-  String deviceUsesCodec(String deviceName, String codecReason) {
-    return '$deviceName 使用 $codecReason。将使用 Omi。';
+  String deviceUsesCodec(String device, String reason) {
+    return '$device 使用 $reason。将使用 Omi。';
   }
 
   @override
@@ -1701,7 +1701,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get dontShowAgain => '不再显示';
 
   @override
-  String get iUnderstand => '我明白了';
+  String get iUnderstand => '我理解';
 
   @override
   String get enableBluetooth => '启用蓝牙';
@@ -5687,6 +5687,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chatAppsTitle => '聊天应用';
 
   @override
+  String get chatAssistantsTitle => '聊天助手';
+
+  @override
   String get selectApp => '选择应用';
 
   @override
@@ -5910,4 +5913,230 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get sendSummary => '发送摘要';
+
+  @override
+  String get debugModeDetected => '检测到调试模式';
+
+  @override
+  String get performanceReduced => '性能可能会降低';
+
+  @override
+  String autoClosingInSeconds(int seconds) {
+    return '$seconds秒后自动关闭';
+  }
+
+  @override
+  String get modelRequired => '需要模型';
+
+  @override
+  String get downloadWhisperModel => '下载whisper模型以使用设备端转录';
+
+  @override
+  String get deviceNotCompatible => '您的设备不兼容设备端转录';
+
+  @override
+  String get deviceRequirements => 'Your device does not meet the requirements for On-Device transcription.';
+
+  @override
+  String get willLikelyCrash => '启用此功能可能会导致应用崩溃或冻结。';
+
+  @override
+  String get transcriptionSlowerLessAccurate => '转录将明显变慢且准确度降低。';
+
+  @override
+  String get proceedAnyway => '仍然继续';
+
+  @override
+  String get olderDeviceDetected => '检测到较旧设备';
+
+  @override
+  String get onDeviceSlower => 'On-device transcription may be slower on this device.';
+
+  @override
+  String get batteryUsageHigher => '电池使用量将高于云端转录。';
+
+  @override
+  String get considerOmiCloud => '考虑使用 Omi Cloud 以获得更好的性能。';
+
+  @override
+  String get highResourceUsage => '高资源使用';
+
+  @override
+  String get onDeviceIntensive => 'On-Device transcription is computationally intensive.';
+
+  @override
+  String get batteryDrainIncrease => 'Battery drain will increase significantly.';
+
+  @override
+  String get deviceMayWarmUp => '长时间使用时设备可能会发热。';
+
+  @override
+  String get speedAccuracyLower => '速度和准确度可能低于云端模型。';
+
+  @override
+  String get cloudProvider => '云服务提供商';
+
+  @override
+  String get premiumMinutesInfo => '1,200 premium minutes/month. On-Device tab offers unlimited free transcription.';
+
+  @override
+  String get viewUsage => '查看使用量';
+
+  @override
+  String get localProcessingInfo => 'Audio is processed locally. Works offline, more private, but uses more battery.';
+
+  @override
+  String get model => 'Model';
+
+  @override
+  String get performanceWarning => '性能警告';
+
+  @override
+  String get largeModelWarning =>
+      'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
+
+  @override
+  String get usingNativeIosSpeech => '使用原生 iOS 语音识别';
+
+  @override
+  String get noModelDownloadRequired => 'Your device\'s native speech engine will be used. No model download required.';
+
+  @override
+  String get modelReady => 'Model Ready';
+
+  @override
+  String get redownload => 'Re-download';
+
+  @override
+  String get doNotCloseApp => '请不要关闭应用。';
+
+  @override
+  String get downloading => '下载中...';
+
+  @override
+  String get downloadModel => '下载模型';
+
+  @override
+  String estimatedSize(String size) {
+    return 'Estimated Size: ~$size MB';
+  }
+
+  @override
+  String availableSpace(String space) {
+    return 'Available Space: $space';
+  }
+
+  @override
+  String get notEnoughSpace => '警告: 空间不足!';
+
+  @override
+  String get download => '下载';
+
+  @override
+  String downloadError(String error) {
+    return 'Download error: $error';
+  }
+
+  @override
+  String get cancelled => '已取消';
+
+  @override
+  String get deviceNotCompatibleTitle => '设备不兼容';
+
+  @override
+  String get deviceNotMeetRequirements => '您的设备不满足设备端转录的要求。';
+
+  @override
+  String get transcriptionSlowerOnDevice => '在此设备上，设备端转录可能会更慢。';
+
+  @override
+  String get computationallyIntensive => '设备端转录是计算密集型的。';
+
+  @override
+  String get batteryDrainSignificantly => '电池消耗将显著增加。';
+
+  @override
+  String get premiumMinutesMonth => '每月1,200分钟高级配额。设备端选项卡提供无限免费转录。';
+
+  @override
+  String get audioProcessedLocally => '音频在本地处理。可离线使用，更私密，但消耗更多电量。';
+
+  @override
+  String get languageLabel => '语言';
+
+  @override
+  String get modelLabel => '模型';
+
+  @override
+  String get modelTooLargeWarning => '此模型较大，可能导致应用在移动设备上崩溃或运行非常缓慢。\n\n建议使用 small 或 base。';
+
+  @override
+  String get nativeEngineNoDownload => '将使用您设备的原生语音引擎。无需下载模型。';
+
+  @override
+  String modelReadyWithName(String model) {
+    return '模型就绪 ($model)';
+  }
+
+  @override
+  String get reDownload => '重新下载';
+
+  @override
+  String downloadingModelProgress(String model, String received, String total) {
+    return '正在下载 $model: $received / $total MB';
+  }
+
+  @override
+  String preparingModel(String model) {
+    return '正在准备 $model...';
+  }
+
+  @override
+  String downloadErrorWithMessage(String error) {
+    return '下载错误: $error';
+  }
+
+  @override
+  String estimatedSizeWithValue(String size) {
+    return '预计大小: ~$size MB';
+  }
+
+  @override
+  String availableSpaceWithValue(String space) {
+    return '可用空间: $space';
+  }
+
+  @override
+  String get omiTranscriptionOptimized => 'Omi 的内置实时转录针对实时对话进行了优化，具有自动说话人检测和说话人分离功能。';
+
+  @override
+  String get reset => '重置';
+
+  @override
+  String get useTemplateFrom => '使用模板来自';
+
+  @override
+  String get selectProviderTemplate => '选择提供商模板...';
+
+  @override
+  String get quicklyPopulateResponse => '快速填充已知提供商响应格式';
+
+  @override
+  String get quicklyPopulateRequest => '快速填充已知提供商请求格式';
+
+  @override
+  String get invalidJsonError => '无效的 JSON';
+
+  @override
+  String downloadModelWithName(String model) {
+    return '下载模型 ($model)';
+  }
+
+  @override
+  String modelNameWithFile(String model) {
+    return '模型: $model';
+  }
+
+  @override
+  String get device => 'Device';
 }

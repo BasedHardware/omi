@@ -1577,8 +1577,8 @@ class AppLocalizationsLt extends AppLocalizations {
   String get noLogsYet => 'Kol kas nėra žurnalų. Pradėkite įrašinėti, kad matytumėte pasirinktinio STT veiklą.';
 
   @override
-  String deviceUsesCodec(String deviceName, String codecReason) {
-    return '$deviceName naudoja $codecReason. Bus naudojamas Omi.';
+  String deviceUsesCodec(String device, String reason) {
+    return '$device naudoja $reason. Bus naudojamas Omi.';
   }
 
   @override
@@ -5802,6 +5802,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get chatAppsTitle => 'Pokalbių programos';
 
   @override
+  String get chatAssistantsTitle => 'Pokalbių asistentai';
+
+  @override
   String get selectApp => 'Pasirinkti programą';
 
   @override
@@ -6027,4 +6030,235 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get sendSummary => 'Siųsti santrauką';
+
+  @override
+  String get debugModeDetected => 'Aptiktas derinimo režimas';
+
+  @override
+  String get performanceReduced => 'Našumas gali būti sumažėjęs';
+
+  @override
+  String autoClosingInSeconds(int seconds) {
+    return 'Automatiškai užsidaro po $seconds sekundžių';
+  }
+
+  @override
+  String get modelRequired => 'Reikalingas modelis';
+
+  @override
+  String get downloadWhisperModel => 'Atsisiųskite whisper modelį, kad galėtumėte naudoti transkripcija įrenginyje';
+
+  @override
+  String get deviceNotCompatible => 'Jūsų įrenginys nesuderinamas su transkripcija įrenginyje';
+
+  @override
+  String get deviceRequirements => 'Your device does not meet the requirements for On-Device transcription.';
+
+  @override
+  String get willLikelyCrash => 'Įjungus tai tikriausiai programa užstrigs arba sustings.';
+
+  @override
+  String get transcriptionSlowerLessAccurate => 'Transkripcija bus žymiai lėtesnė ir mažiau tiksli.';
+
+  @override
+  String get proceedAnyway => 'Vis tiek tęsti';
+
+  @override
+  String get olderDeviceDetected => 'Aptiktas senesnis įrenginys';
+
+  @override
+  String get onDeviceSlower => 'On-device transcription may be slower on this device.';
+
+  @override
+  String get batteryUsageHigher => 'Baterijos naudojimas bus didesnis nei debesies transkripcijos.';
+
+  @override
+  String get considerOmiCloud => 'Apsvarstykite Omi Cloud naudojimą geresniam veikimui.';
+
+  @override
+  String get highResourceUsage => 'Didelis išteklių naudojimas';
+
+  @override
+  String get onDeviceIntensive => 'On-Device transcription is computationally intensive.';
+
+  @override
+  String get batteryDrainIncrease => 'Battery drain will increase significantly.';
+
+  @override
+  String get deviceMayWarmUp => 'Įrenginys gali įkaisti ilgesnio naudojimo metu.';
+
+  @override
+  String get speedAccuracyLower => 'Greitis ir tikslumas gali būti mažesni nei debesies modelių.';
+
+  @override
+  String get cloudProvider => 'Debesies tiekėjas';
+
+  @override
+  String get premiumMinutesInfo => '1,200 premium minutes/month. On-Device tab offers unlimited free transcription.';
+
+  @override
+  String get viewUsage => 'Peržiūrėti naudojimą';
+
+  @override
+  String get localProcessingInfo => 'Audio is processed locally. Works offline, more private, but uses more battery.';
+
+  @override
+  String get model => 'Model';
+
+  @override
+  String get performanceWarning => 'Veikimo įspėjimas';
+
+  @override
+  String get largeModelWarning =>
+      'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
+
+  @override
+  String get usingNativeIosSpeech => 'Naudojamas vietinis iOS kalbos atpažinimas';
+
+  @override
+  String get noModelDownloadRequired => 'Your device\'s native speech engine will be used. No model download required.';
+
+  @override
+  String get modelReady => 'Model Ready';
+
+  @override
+  String get redownload => 'Re-download';
+
+  @override
+  String get doNotCloseApp => 'Prašome neuždaryti programos.';
+
+  @override
+  String get downloading => 'Atsisiunčiama...';
+
+  @override
+  String get downloadModel => 'Atsisiųsti modelį';
+
+  @override
+  String estimatedSize(String size) {
+    return 'Estimated Size: ~$size MB';
+  }
+
+  @override
+  String availableSpace(String space) {
+    return 'Available Space: $space';
+  }
+
+  @override
+  String get notEnoughSpace => 'Įspėjimas: Nepakanka vietos!';
+
+  @override
+  String get download => 'Atsisiųsti';
+
+  @override
+  String downloadError(String error) {
+    return 'Download error: $error';
+  }
+
+  @override
+  String get cancelled => 'Atšaukta';
+
+  @override
+  String get deviceNotCompatibleTitle => 'Įrenginys nesuderinamas';
+
+  @override
+  String get deviceNotMeetRequirements => 'Jūsų įrenginys neatitinka transkripcijos įrenginyje reikalavimų.';
+
+  @override
+  String get transcriptionSlowerOnDevice => 'Transkripcija įrenginyje gali būti lėtesnė šiame įrenginyje.';
+
+  @override
+  String get computationallyIntensive => 'Transkripcija įrenginyje reikalauja daug skaičiavimo resursų.';
+
+  @override
+  String get batteryDrainSignificantly => 'Baterijos išsikrovimas žymiai padidės.';
+
+  @override
+  String get premiumMinutesMonth =>
+      '1200 premium minučių/mėn. Įrenginyje skirtukas siūlo neribotą nemokamą transkripciją. ';
+
+  @override
+  String get audioProcessedLocally =>
+      'Garsas apdorojamas vietoje. Veikia neprisijungus, privatiau, bet naudoja daugiau baterijos.';
+
+  @override
+  String get languageLabel => 'Kalba';
+
+  @override
+  String get modelLabel => 'Modelis';
+
+  @override
+  String get modelTooLargeWarning =>
+      'Šis modelis yra didelis ir gali sukelti programos užstrigimą arba labai lėtą veikimą mobiliuosiuose įrenginiuose.\n\nRekomenduojama small arba base.';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'Bus naudojamas jūsų įrenginio vietinis kalbos variklis. Modelio atsisiuntimas nereikalingas.';
+
+  @override
+  String modelReadyWithName(String model) {
+    return 'Modelis paruoštas ($model)';
+  }
+
+  @override
+  String get reDownload => 'Atsisiųsti iš naujo';
+
+  @override
+  String downloadingModelProgress(String model, String received, String total) {
+    return 'Atsisiunčiamas $model: $received / $total MB';
+  }
+
+  @override
+  String preparingModel(String model) {
+    return 'Ruošiamas $model...';
+  }
+
+  @override
+  String downloadErrorWithMessage(String error) {
+    return 'Atsisiuntimo klaida: $error';
+  }
+
+  @override
+  String estimatedSizeWithValue(String size) {
+    return 'Numatomas dydis: ~$size MB';
+  }
+
+  @override
+  String availableSpaceWithValue(String space) {
+    return 'Laisva vieta: $space';
+  }
+
+  @override
+  String get omiTranscriptionOptimized =>
+      'Omi integruota tiesioginė transkripcija optimizuota realaus laiko pokalbiams su automatiniu kalbėtojų aptikimu ir diarizacija.';
+
+  @override
+  String get reset => 'Atstatyti';
+
+  @override
+  String get useTemplateFrom => 'Naudoti šabloną iš';
+
+  @override
+  String get selectProviderTemplate => 'Pasirinkite tiekėjo šabloną...';
+
+  @override
+  String get quicklyPopulateResponse => 'Greitai užpildyti žinomu tiekėjo atsakymo formatu';
+
+  @override
+  String get quicklyPopulateRequest => 'Greitai užpildyti žinomu tiekėjo užklausos formatu';
+
+  @override
+  String get invalidJsonError => 'Netinkamas JSON';
+
+  @override
+  String downloadModelWithName(String model) {
+    return 'Atsisiųsti modelį ($model)';
+  }
+
+  @override
+  String modelNameWithFile(String model) {
+    return 'Modelis: $model';
+  }
+
+  @override
+  String get device => 'Device';
 }

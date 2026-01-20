@@ -1566,8 +1566,8 @@ class AppLocalizationsAr extends AppLocalizations {
   String get noLogsYet => 'لا توجد سجلات بعد. ابدأ التسجيل لرؤية نشاط STT المخصص.';
 
   @override
-  String deviceUsesCodec(String deviceName, String codecReason) {
-    return '$deviceName يستخدم $codecReason. سيتم استخدام Omi.';
+  String deviceUsesCodec(String device, String reason) {
+    return '$device يستخدم $reason. سيتم استخدام Omi.';
   }
 
   @override
@@ -5758,6 +5758,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get chatAppsTitle => 'تطبيقات الدردشة';
 
   @override
+  String get chatAssistantsTitle => 'مساعدو الدردشة';
+
+  @override
   String get selectApp => 'اختر التطبيق';
 
   @override
@@ -5981,4 +5984,233 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get sendSummary => 'إرسال الملخص';
+
+  @override
+  String get debugModeDetected => 'تم اكتشاف وضع التصحيح';
+
+  @override
+  String get performanceReduced => 'الأداء منخفض 5-10 أضعاف. استخدم وضع الإصدار.';
+
+  @override
+  String autoClosingInSeconds(int seconds) {
+    return 'يُغلق تلقائياً خلال $seconds ثانية';
+  }
+
+  @override
+  String get modelRequired => 'النموذج مطلوب';
+
+  @override
+  String get downloadWhisperModel => 'يرجى تنزيل نموذج Whisper قبل الحفظ.';
+
+  @override
+  String get deviceNotCompatible => 'الجهاز غير متوافق';
+
+  @override
+  String get deviceRequirements => 'جهازك لا يستوفي متطلبات النسخ على الجهاز.';
+
+  @override
+  String get willLikelyCrash => 'من المحتمل أن يؤدي تمكين هذا إلى تعطل التطبيق أو تجمده.';
+
+  @override
+  String get transcriptionSlowerLessAccurate => 'سيكون النسخ أبطأ وأقل دقة بشكل ملحوظ.';
+
+  @override
+  String get proceedAnyway => 'المتابعة على أي حال';
+
+  @override
+  String get olderDeviceDetected => 'تم اكتشاف جهاز قديم';
+
+  @override
+  String get onDeviceSlower => 'قد يكون النسخ على الجهاز أبطأ.';
+
+  @override
+  String get batteryUsageHigher => 'استهلاك البطارية سيكون أعلى من النسخ السحابي.';
+
+  @override
+  String get considerOmiCloud => 'فكر في استخدام Omi Cloud للحصول على أداء أفضل.';
+
+  @override
+  String get highResourceUsage => 'استخدام مرتفع للموارد';
+
+  @override
+  String get onDeviceIntensive => 'النسخ على الجهاز يستهلك موارد حسابية كثيرة.';
+
+  @override
+  String get batteryDrainIncrease => 'سيزداد استنزاف البطارية بشكل كبير.';
+
+  @override
+  String get deviceMayWarmUp => 'قد يسخن الجهاز أثناء الاستخدام المطول.';
+
+  @override
+  String get speedAccuracyLower => 'قد تكون السرعة والدقة أقل من النماذج السحابية.';
+
+  @override
+  String get cloudProvider => 'مزود سحابي';
+
+  @override
+  String get premiumMinutesInfo => '1,200 دقيقة مميزة/شهر. علامة التبويب على الجهاز توفر نسخاً مجانياً غير محدود.';
+
+  @override
+  String get viewUsage => 'عرض الاستخدام';
+
+  @override
+  String get localProcessingInfo => 'تتم معالجة الصوت محلياً. يعمل دون اتصال، أكثر خصوصية، لكنه يستهلك بطارية أكثر.';
+
+  @override
+  String get model => 'النموذج';
+
+  @override
+  String get performanceWarning => 'تحذير الأداء';
+
+  @override
+  String get largeModelWarning =>
+      'هذا النموذج كبير وقد يتسبب في تعطل التطبيق أو بطئه الشديد.\n\nيُنصح باستخدام \"small\" أو \"base\".';
+
+  @override
+  String get usingNativeIosSpeech => 'استخدام التعرف على الكلام الأصلي لـ iOS';
+
+  @override
+  String get noModelDownloadRequired => 'سيتم استخدام محرك الكلام الأصلي لجهازك. لا حاجة لتنزيل نموذج.';
+
+  @override
+  String get modelReady => 'النموذج جاهز';
+
+  @override
+  String get redownload => 'إعادة التنزيل';
+
+  @override
+  String get doNotCloseApp => 'يرجى عدم إغلاق التطبيق.';
+
+  @override
+  String get downloading => 'جاري التنزيل...';
+
+  @override
+  String get downloadModel => 'تنزيل النموذج';
+
+  @override
+  String estimatedSize(String size) {
+    return 'الحجم التقديري: ~$size ميجابايت';
+  }
+
+  @override
+  String availableSpace(String space) {
+    return 'المساحة المتاحة: $space';
+  }
+
+  @override
+  String get notEnoughSpace => 'تحذير: مساحة غير كافية!';
+
+  @override
+  String get download => 'تنزيل';
+
+  @override
+  String downloadError(String error) {
+    return 'خطأ في التنزيل: $error';
+  }
+
+  @override
+  String get cancelled => 'ملغى';
+
+  @override
+  String get deviceNotCompatibleTitle => 'الجهاز غير متوافق';
+
+  @override
+  String get deviceNotMeetRequirements => 'جهازك لا يستوفي متطلبات النسخ على الجهاز.';
+
+  @override
+  String get transcriptionSlowerOnDevice => 'قد يكون النسخ على الجهاز أبطأ على هذا الجهاز.';
+
+  @override
+  String get computationallyIntensive => 'النسخ على الجهاز يستهلك الكثير من الموارد الحسابية.';
+
+  @override
+  String get batteryDrainSignificantly => 'سيزداد استنزاف البطارية بشكل كبير.';
+
+  @override
+  String get premiumMinutesMonth => '1,200 دقيقة مميزة/شهر. علامة التبويب على الجهاز توفر نسخاً مجانياً غير محدود. ';
+
+  @override
+  String get audioProcessedLocally =>
+      'تتم معالجة الصوت محلياً. يعمل بدون اتصال، أكثر خصوصية، لكنه يستهلك المزيد من البطارية.';
+
+  @override
+  String get languageLabel => 'اللغة';
+
+  @override
+  String get modelLabel => 'النموذج';
+
+  @override
+  String get modelTooLargeWarning =>
+      'هذا النموذج كبير وقد يتسبب في تعطل التطبيق أو تشغيله ببطء شديد على الأجهزة المحمولة.\n\nيُوصى باستخدام small أو base.';
+
+  @override
+  String get nativeEngineNoDownload => 'سيتم استخدام محرك الكلام الأصلي لجهازك. لا يلزم تنزيل نموذج.';
+
+  @override
+  String modelReadyWithName(String model) {
+    return 'النموذج جاهز ($model)';
+  }
+
+  @override
+  String get reDownload => 'إعادة التنزيل';
+
+  @override
+  String downloadingModelProgress(String model, String received, String total) {
+    return 'جارِ تنزيل $model: $received / $total ميجابايت';
+  }
+
+  @override
+  String preparingModel(String model) {
+    return 'جارِ تحضير $model...';
+  }
+
+  @override
+  String downloadErrorWithMessage(String error) {
+    return 'خطأ في التنزيل: $error';
+  }
+
+  @override
+  String estimatedSizeWithValue(String size) {
+    return 'الحجم التقريبي: ~$size ميجابايت';
+  }
+
+  @override
+  String availableSpaceWithValue(String space) {
+    return 'المساحة المتاحة: $space';
+  }
+
+  @override
+  String get omiTranscriptionOptimized =>
+      'النسخ المباشر المدمج في Omi مُحسّن للمحادثات في الوقت الفعلي مع الكشف التلقائي عن المتحدثين والفصل بينهم.';
+
+  @override
+  String get reset => 'إعادة تعيين';
+
+  @override
+  String get useTemplateFrom => 'استخدام قالب من';
+
+  @override
+  String get selectProviderTemplate => 'اختر قالب مزود...';
+
+  @override
+  String get quicklyPopulateResponse => 'ملء سريع بتنسيق استجابة مزود معروف';
+
+  @override
+  String get quicklyPopulateRequest => 'ملء سريع بتنسيق طلب مزود معروف';
+
+  @override
+  String get invalidJsonError => 'JSON غير صالح';
+
+  @override
+  String downloadModelWithName(String model) {
+    return 'تنزيل النموذج ($model)';
+  }
+
+  @override
+  String modelNameWithFile(String model) {
+    return 'النموذج: $model';
+  }
+
+  @override
+  String get device => 'Device';
 }

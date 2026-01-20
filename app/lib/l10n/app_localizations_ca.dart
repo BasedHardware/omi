@@ -1590,8 +1590,8 @@ class AppLocalizationsCa extends AppLocalizations {
       'Encara no hi ha registres. Comenceu a enregistrar per veure l\'activitat STT personalitzada.';
 
   @override
-  String deviceUsesCodec(String deviceName, String codecReason) {
-    return '$deviceName utilitza $codecReason. S\'utilitzarà Omi.';
+  String deviceUsesCodec(String device, String reason) {
+    return '$device utilitza $reason. Sutilitzarà Omi.';
   }
 
   @override
@@ -5836,6 +5836,9 @@ class AppLocalizationsCa extends AppLocalizations {
   String get chatAppsTitle => 'Aplicacions de xat';
 
   @override
+  String get chatAssistantsTitle => 'Assistents de xat';
+
+  @override
   String get selectApp => 'Selecciona aplicació';
 
   @override
@@ -6061,4 +6064,238 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get sendSummary => 'Enviar resum';
+
+  @override
+  String get debugModeDetected => 'Mode de depuració detectat';
+
+  @override
+  String get performanceReduced => 'Rendiment reduït 5-10x. Usa el mode Release.';
+
+  @override
+  String autoClosingInSeconds(int seconds) {
+    return 'Tancant automàticament en ${seconds}s';
+  }
+
+  @override
+  String get modelRequired => 'Model requerit';
+
+  @override
+  String get downloadWhisperModel => 'Si us plau, descarrega un model Whisper abans de desar.';
+
+  @override
+  String get deviceNotCompatible => 'Dispositiu no compatible';
+
+  @override
+  String get deviceRequirements => 'El teu dispositiu no compleix els requisits per a la transcripció al dispositiu.';
+
+  @override
+  String get willLikelyCrash => 'Activar això probablement farà que laplicació es bloquegi o es congeli.';
+
+  @override
+  String get transcriptionSlowerLessAccurate => 'La transcripció serà significativament més lenta i menys precisa.';
+
+  @override
+  String get proceedAnyway => 'Continuar igualment';
+
+  @override
+  String get olderDeviceDetected => 'Detectat dispositiu antic';
+
+  @override
+  String get onDeviceSlower => 'La transcripció al dispositiu pot ser més lenta.';
+
+  @override
+  String get batteryUsageHigher => 'El consum de bateria serà més alt que la transcripció al núvol.';
+
+  @override
+  String get considerOmiCloud => 'Considera utilitzar Omi Cloud per a un millor rendiment.';
+
+  @override
+  String get highResourceUsage => 'Alt ús de recursos';
+
+  @override
+  String get onDeviceIntensive => 'La transcripció al dispositiu és computacionalment intensiva.';
+
+  @override
+  String get batteryDrainIncrease => 'El consum de bateria augmentarà significativament.';
+
+  @override
+  String get deviceMayWarmUp => 'El dispositiu pot escalfar-se durant lús prolongat.';
+
+  @override
+  String get speedAccuracyLower => 'La velocitat i la precisió poden ser inferiors als models al núvol.';
+
+  @override
+  String get cloudProvider => 'Proveïdor al núvol';
+
+  @override
+  String get premiumMinutesInfo =>
+      '1.200 minuts premium/mes. La pestanya Al dispositiu ofereix transcripció gratuïta il·limitada.';
+
+  @override
+  String get viewUsage => 'Veure ús';
+
+  @override
+  String get localProcessingInfo =>
+      'L\'àudio es processa localment. Funciona sense connexió, més privat, però usa més bateria.';
+
+  @override
+  String get model => 'Model';
+
+  @override
+  String get performanceWarning => 'Advertència de rendiment';
+
+  @override
+  String get largeModelWarning =>
+      'Aquest model és gran i pot bloquejar l\'app o funcionar molt lentament.\n\nEs recomana \"small\" o \"base\".';
+
+  @override
+  String get usingNativeIosSpeech => 'Utilitzant el reconeixement de veu natiu diOS';
+
+  @override
+  String get noModelDownloadRequired => 'S\'usarà el motor de veu natiu del dispositiu. No cal descarregar cap model.';
+
+  @override
+  String get modelReady => 'Model llest';
+
+  @override
+  String get redownload => 'Tornar a descarregar';
+
+  @override
+  String get doNotCloseApp => 'Si us plau, no tanqueu laplicació.';
+
+  @override
+  String get downloading => 'Descarregant...';
+
+  @override
+  String get downloadModel => 'Descarregar model';
+
+  @override
+  String estimatedSize(String size) {
+    return 'Mida estimada: ~$size MB';
+  }
+
+  @override
+  String availableSpace(String space) {
+    return 'Espai disponible: $space';
+  }
+
+  @override
+  String get notEnoughSpace => 'Advertència: No hi ha prou espai!';
+
+  @override
+  String get download => 'Descarregar';
+
+  @override
+  String downloadError(String error) {
+    return 'Error de descàrrega: $error';
+  }
+
+  @override
+  String get cancelled => 'Cancel·lat';
+
+  @override
+  String get deviceNotCompatibleTitle => 'Dispositiu no compatible';
+
+  @override
+  String get deviceNotMeetRequirements =>
+      'El teu dispositiu no compleix els requisits per a la transcripció al dispositiu.';
+
+  @override
+  String get transcriptionSlowerOnDevice => 'La transcripció al dispositiu pot ser més lenta en aquest dispositiu.';
+
+  @override
+  String get computationallyIntensive => 'La transcripció al dispositiu és computacionalment intensiva.';
+
+  @override
+  String get batteryDrainSignificantly => 'El consum de bateria augmentarà significativament.';
+
+  @override
+  String get premiumMinutesMonth =>
+      '1.200 minuts premium/mes. La pestanya Al dispositiu ofereix transcripció gratuïta il·limitada. ';
+
+  @override
+  String get audioProcessedLocally =>
+      'Laudio es processa localment. Funciona sense connexió, més privat, però consumeix més bateria.';
+
+  @override
+  String get languageLabel => 'Idioma';
+
+  @override
+  String get modelLabel => 'Model';
+
+  @override
+  String get modelTooLargeWarning =>
+      'Aquest model és gran i pot fer que laplicació es bloquegi o funcioni molt lentament en dispositius mòbils.\n\nEs recomana small o base.';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'Sutilitzarà el motor de veu natiu del teu dispositiu. No cal descarregar cap model.';
+
+  @override
+  String modelReadyWithName(String model) {
+    return 'Model llest ($model)';
+  }
+
+  @override
+  String get reDownload => 'Tornar a descarregar';
+
+  @override
+  String downloadingModelProgress(String model, String received, String total) {
+    return 'Descarregant $model: $received / $total MB';
+  }
+
+  @override
+  String preparingModel(String model) {
+    return 'Preparant $model...';
+  }
+
+  @override
+  String downloadErrorWithMessage(String error) {
+    return 'Error de descàrrega: $error';
+  }
+
+  @override
+  String estimatedSizeWithValue(String size) {
+    return 'Mida estimada: ~$size MB';
+  }
+
+  @override
+  String availableSpaceWithValue(String space) {
+    return 'Espai disponible: $space';
+  }
+
+  @override
+  String get omiTranscriptionOptimized =>
+      'La transcripció en directe integrada dOmi està optimitzada per a converses en temps real amb detecció automàtica de parlants i diarització.';
+
+  @override
+  String get reset => 'Restablir';
+
+  @override
+  String get useTemplateFrom => 'Utilitzar plantilla de';
+
+  @override
+  String get selectProviderTemplate => 'Selecciona una plantilla de proveïdor...';
+
+  @override
+  String get quicklyPopulateResponse => 'Emplenar ràpidament amb un format de resposta de proveïdor conegut';
+
+  @override
+  String get quicklyPopulateRequest => 'Emplenar ràpidament amb un format de sol·licitud de proveïdor conegut';
+
+  @override
+  String get invalidJsonError => 'JSON no vàlid';
+
+  @override
+  String downloadModelWithName(String model) {
+    return 'Descarregar model ($model)';
+  }
+
+  @override
+  String modelNameWithFile(String model) {
+    return 'Model: $model';
+  }
+
+  @override
+  String get device => 'Device';
 }

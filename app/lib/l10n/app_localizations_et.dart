@@ -1579,8 +1579,8 @@ class AppLocalizationsEt extends AppLocalizations {
   String get noLogsYet => 'Logisid pole veel. Alustage salvestamist, et näha kohandatud STT tegevust.';
 
   @override
-  String deviceUsesCodec(String deviceName, String codecReason) {
-    return '$deviceName kasutab $codecReason. Kasutatakse Omi-d.';
+  String deviceUsesCodec(String device, String reason) {
+    return '$device kasutab $reason. Kasutatakse Omi.';
   }
 
   @override
@@ -1729,7 +1729,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get dontShowAgain => 'Ära näita uuesti';
 
   @override
-  String get iUnderstand => 'Sain aru';
+  String get iUnderstand => 'Ma mõistan';
 
   @override
   String get enableBluetooth => 'Luba Bluetooth';
@@ -5803,6 +5803,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get chatAppsTitle => 'Vestlusrakendused';
 
   @override
+  String get chatAssistantsTitle => 'Vestlusassistendid';
+
+  @override
   String get selectApp => 'Vali rakendus';
 
   @override
@@ -6027,4 +6030,235 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get sendSummary => 'Saada kokkuvõte';
+
+  @override
+  String get debugModeDetected => 'Silumisrežiim tuvastatud';
+
+  @override
+  String get performanceReduced => 'Jõudlus võib olla vähenenud';
+
+  @override
+  String autoClosingInSeconds(int seconds) {
+    return 'Automaatne sulgemine $seconds sekundi pärast';
+  }
+
+  @override
+  String get modelRequired => 'Mudel nõutav';
+
+  @override
+  String get downloadWhisperModel => 'Laadi alla whisper mudel, et kasutada seadmes transkriptsiooni';
+
+  @override
+  String get deviceNotCompatible => 'Sinu seade ei ühildu seadmes transkriptsiooniga';
+
+  @override
+  String get deviceRequirements => 'Your device does not meet the requirements for On-Device transcription.';
+
+  @override
+  String get willLikelyCrash => 'Selle lubamine põhjustab tõenäoliselt rakenduse krahhi või hangumise.';
+
+  @override
+  String get transcriptionSlowerLessAccurate => 'Transkriptsioon on oluliselt aeglasem ja vähem täpne.';
+
+  @override
+  String get proceedAnyway => 'Jätka siiski';
+
+  @override
+  String get olderDeviceDetected => 'Tuvastati vanem seade';
+
+  @override
+  String get onDeviceSlower => 'On-device transcription may be slower on this device.';
+
+  @override
+  String get batteryUsageHigher => 'Akukasutus on suurem kui pilves transkriptsiooni puhul.';
+
+  @override
+  String get considerOmiCloud => 'Kaaluge parema jõudluse saavutamiseks Omi Cloudi kasutamist.';
+
+  @override
+  String get highResourceUsage => 'Suur ressursikasutus';
+
+  @override
+  String get onDeviceIntensive => 'On-Device transcription is computationally intensive.';
+
+  @override
+  String get batteryDrainIncrease => 'Battery drain will increase significantly.';
+
+  @override
+  String get deviceMayWarmUp => 'Seade võib pikaajalisel kasutamisel soojeneda.';
+
+  @override
+  String get speedAccuracyLower => 'Kiirus ja täpsus võivad olla pilvemudeli omadest madalamad.';
+
+  @override
+  String get cloudProvider => 'Pilveteenuse pakkuja';
+
+  @override
+  String get premiumMinutesInfo => '1,200 premium minutes/month. On-Device tab offers unlimited free transcription.';
+
+  @override
+  String get viewUsage => 'Vaata kasutust';
+
+  @override
+  String get localProcessingInfo => 'Audio is processed locally. Works offline, more private, but uses more battery.';
+
+  @override
+  String get model => 'Model';
+
+  @override
+  String get performanceWarning => 'Jõudluse hoiatus';
+
+  @override
+  String get largeModelWarning =>
+      'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
+
+  @override
+  String get usingNativeIosSpeech => 'Kasutatakse iOS-i natiivset kõnetuvastust';
+
+  @override
+  String get noModelDownloadRequired => 'Your device\'s native speech engine will be used. No model download required.';
+
+  @override
+  String get modelReady => 'Model Ready';
+
+  @override
+  String get redownload => 'Re-download';
+
+  @override
+  String get doNotCloseApp => 'Palun ärge sulgege rakendust.';
+
+  @override
+  String get downloading => 'Allalaadimine...';
+
+  @override
+  String get downloadModel => 'Laadi mudel alla';
+
+  @override
+  String estimatedSize(String size) {
+    return 'Estimated Size: ~$size MB';
+  }
+
+  @override
+  String availableSpace(String space) {
+    return 'Available Space: $space';
+  }
+
+  @override
+  String get notEnoughSpace => 'Hoiatus: Pole piisavalt ruumi!';
+
+  @override
+  String get download => 'Laadi alla';
+
+  @override
+  String downloadError(String error) {
+    return 'Download error: $error';
+  }
+
+  @override
+  String get cancelled => 'Tühistatud';
+
+  @override
+  String get deviceNotCompatibleTitle => 'Seade ei ühildu';
+
+  @override
+  String get deviceNotMeetRequirements => 'Teie seade ei vasta seadmes transkriptsiooni nõuetele.';
+
+  @override
+  String get transcriptionSlowerOnDevice => 'Seadmes transkriptsioon võib sellel seadmel olla aeglasem.';
+
+  @override
+  String get computationallyIntensive => 'Seadmes transkriptsioon on arvutuslikult intensiivne.';
+
+  @override
+  String get batteryDrainSignificantly => 'Aku tühjenemine suureneb märkimisväärselt.';
+
+  @override
+  String get premiumMinutesMonth =>
+      '1200 premium minutit/kuus. Seadmes vahekaart pakub piiramatut tasuta transkriptsiooni. ';
+
+  @override
+  String get audioProcessedLocally =>
+      'Heli töödeldakse kohapeal. Töötab võrguühenduseta, privaatsem, kuid kasutab rohkem akut.';
+
+  @override
+  String get languageLabel => 'Keel';
+
+  @override
+  String get modelLabel => 'Mudel';
+
+  @override
+  String get modelTooLargeWarning =>
+      'See mudel on suur ja võib põhjustada rakenduse krahhi või väga aeglase töö mobiilseadmetes.\n\nSoovitatav on small või base.';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'Kasutatakse teie seadme natiivset kõnemootorit. Mudeli allalaadimine pole vajalik.';
+
+  @override
+  String modelReadyWithName(String model) {
+    return 'Mudel valmis ($model)';
+  }
+
+  @override
+  String get reDownload => 'Laadi uuesti alla';
+
+  @override
+  String downloadingModelProgress(String model, String received, String total) {
+    return 'Laadin alla $model: $received / $total MB';
+  }
+
+  @override
+  String preparingModel(String model) {
+    return 'Valmistan ette $model...';
+  }
+
+  @override
+  String downloadErrorWithMessage(String error) {
+    return 'Allalaadimise viga: $error';
+  }
+
+  @override
+  String estimatedSizeWithValue(String size) {
+    return 'Eeldatav suurus: ~$size MB';
+  }
+
+  @override
+  String availableSpaceWithValue(String space) {
+    return 'Saadaolev ruum: $space';
+  }
+
+  @override
+  String get omiTranscriptionOptimized =>
+      'Omi sisseehitatud reaalajas transkriptsioon on optimeeritud reaalajas vestluste jaoks automaatse kõneleja tuvastamise ja diariseerimisega.';
+
+  @override
+  String get reset => 'Lähtesta';
+
+  @override
+  String get useTemplateFrom => 'Kasuta malli allikast';
+
+  @override
+  String get selectProviderTemplate => 'Valige teenusepakkuja mall...';
+
+  @override
+  String get quicklyPopulateResponse => 'Täida kiiresti tuntud teenusepakkuja vastuse vorminguga';
+
+  @override
+  String get quicklyPopulateRequest => 'Täida kiiresti tuntud teenusepakkuja päringu vorminguga';
+
+  @override
+  String get invalidJsonError => 'Vigane JSON';
+
+  @override
+  String downloadModelWithName(String model) {
+    return 'Laadi mudel alla ($model)';
+  }
+
+  @override
+  String modelNameWithFile(String model) {
+    return 'Mudel: $model';
+  }
+
+  @override
+  String get device => 'Device';
 }

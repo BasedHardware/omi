@@ -1580,8 +1580,8 @@ class AppLocalizationsCs extends AppLocalizations {
   String get noLogsYet => 'Zatím žádné protokoly. Začněte nahrávat, abyste viděli aktivitu vlastního STT.';
 
   @override
-  String deviceUsesCodec(String deviceName, String codecReason) {
-    return '$deviceName používá $codecReason. Bude použito Omi.';
+  String deviceUsesCodec(String device, String reason) {
+    return '$device používá $reason. Bude použito Omi.';
   }
 
   @override
@@ -5795,6 +5795,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get chatAppsTitle => 'Chat aplikace';
 
   @override
+  String get chatAssistantsTitle => 'Chat asistenti';
+
+  @override
   String get selectApp => 'Vybrat aplikaci';
 
   @override
@@ -6018,4 +6021,234 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get sendSummary => 'Odeslat shrnutí';
+
+  @override
+  String get debugModeDetected => 'Debug Mode Detected';
+
+  @override
+  String get performanceReduced => 'Performance reduced 5-10x. Use Release mode.';
+
+  @override
+  String autoClosingInSeconds(int seconds) {
+    return 'Auto-closing in ${seconds}s';
+  }
+
+  @override
+  String get modelRequired => 'Model Required';
+
+  @override
+  String get downloadWhisperModel => 'Please download a Whisper model before saving.';
+
+  @override
+  String get deviceNotCompatible => 'Device Not Compatible';
+
+  @override
+  String get deviceRequirements => 'Your device does not meet the requirements for On-Device transcription.';
+
+  @override
+  String get willLikelyCrash => 'Povolení pravděpodobně způsobí pád nebo zamrznutí aplikace.';
+
+  @override
+  String get transcriptionSlowerLessAccurate => 'Přepis bude výrazně pomalejší a méně přesný.';
+
+  @override
+  String get proceedAnyway => 'Přesto pokračovat';
+
+  @override
+  String get olderDeviceDetected => 'Zjištěno starší zařízení';
+
+  @override
+  String get onDeviceSlower => 'On-device transcription may be slower on this device.';
+
+  @override
+  String get batteryUsageHigher => 'Spotřeba baterie bude vyšší než u cloudového přepisu.';
+
+  @override
+  String get considerOmiCloud => 'Zvažte použití Omi Cloud pro lepší výkon.';
+
+  @override
+  String get highResourceUsage => 'Vysoká spotřeba prostředků';
+
+  @override
+  String get onDeviceIntensive => 'On-Device transcription is computationally intensive.';
+
+  @override
+  String get batteryDrainIncrease => 'Battery drain will increase significantly.';
+
+  @override
+  String get deviceMayWarmUp => 'Zařízení se může při delším používání zahřát.';
+
+  @override
+  String get speedAccuracyLower => 'Rychlost a přesnost mohou být nižší než u cloudových modelů.';
+
+  @override
+  String get cloudProvider => 'Cloudový poskytovatel';
+
+  @override
+  String get premiumMinutesInfo => '1,200 premium minutes/month. On-Device tab offers unlimited free transcription.';
+
+  @override
+  String get viewUsage => 'Zobrazit využití';
+
+  @override
+  String get localProcessingInfo => 'Audio is processed locally. Works offline, more private, but uses more battery.';
+
+  @override
+  String get model => 'Model';
+
+  @override
+  String get performanceWarning => 'Varování o výkonu';
+
+  @override
+  String get largeModelWarning =>
+      'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
+
+  @override
+  String get usingNativeIosSpeech => 'Používání nativního rozpoznávání řeči iOS';
+
+  @override
+  String get noModelDownloadRequired => 'Your device\'s native speech engine will be used. No model download required.';
+
+  @override
+  String get modelReady => 'Model Ready';
+
+  @override
+  String get redownload => 'Re-download';
+
+  @override
+  String get doNotCloseApp => 'Prosím nezavírejte aplikaci.';
+
+  @override
+  String get downloading => 'Downloading...';
+
+  @override
+  String get downloadModel => 'Download Model';
+
+  @override
+  String estimatedSize(String size) {
+    return 'Estimated Size: ~$size MB';
+  }
+
+  @override
+  String availableSpace(String space) {
+    return 'Available Space: $space';
+  }
+
+  @override
+  String get notEnoughSpace => 'Varování: Nedostatek místa!';
+
+  @override
+  String get download => 'Download';
+
+  @override
+  String downloadError(String error) {
+    return 'Download error: $error';
+  }
+
+  @override
+  String get cancelled => 'Zrušeno';
+
+  @override
+  String get deviceNotCompatibleTitle => 'Zařízení není kompatibilní';
+
+  @override
+  String get deviceNotMeetRequirements => 'Vaše zařízení nesplňuje požadavky pro přepis na zařízení.';
+
+  @override
+  String get transcriptionSlowerOnDevice => 'Přepis na zařízení může být na tomto zařízení pomalejší.';
+
+  @override
+  String get computationallyIntensive => 'Přepis na zařízení je výpočetně náročný.';
+
+  @override
+  String get batteryDrainSignificantly => 'Vybíjení baterie se výrazně zvýší.';
+
+  @override
+  String get premiumMinutesMonth =>
+      '1 200 prémiových minut/měsíc. Karta Na zařízení nabízí neomezený bezplatný přepis. ';
+
+  @override
+  String get audioProcessedLocally =>
+      'Zvuk je zpracováván lokálně. Funguje offline, je soukromější, ale spotřebovává více baterie.';
+
+  @override
+  String get languageLabel => 'Jazyk';
+
+  @override
+  String get modelLabel => 'Model';
+
+  @override
+  String get modelTooLargeWarning =>
+      'Tento model je velký a může způsobit pád aplikace nebo velmi pomalý běh na mobilních zařízeních.\n\nDoporučuje se small nebo base.';
+
+  @override
+  String get nativeEngineNoDownload => 'Bude použit nativní hlasový engine vašeho zařízení. Není nutné stahovat model.';
+
+  @override
+  String modelReadyWithName(String model) {
+    return 'Model připraven ($model)';
+  }
+
+  @override
+  String get reDownload => 'Znovu stáhnout';
+
+  @override
+  String downloadingModelProgress(String model, String received, String total) {
+    return 'Stahování $model: $received / $total MB';
+  }
+
+  @override
+  String preparingModel(String model) {
+    return 'Příprava $model...';
+  }
+
+  @override
+  String downloadErrorWithMessage(String error) {
+    return 'Chyba stahování: $error';
+  }
+
+  @override
+  String estimatedSizeWithValue(String size) {
+    return 'Odhadovaná velikost: ~$size MB';
+  }
+
+  @override
+  String availableSpaceWithValue(String space) {
+    return 'Dostupné místo: $space';
+  }
+
+  @override
+  String get omiTranscriptionOptimized =>
+      'Vestavěný živý přepis Omi je optimalizován pro konverzace v reálném čase s automatickou detekcí mluvčích a diarizací.';
+
+  @override
+  String get reset => 'Resetovat';
+
+  @override
+  String get useTemplateFrom => 'Použít šablonu od';
+
+  @override
+  String get selectProviderTemplate => 'Vyberte šablonu poskytovatele...';
+
+  @override
+  String get quicklyPopulateResponse => 'Rychle vyplnit známým formátem odpovědi poskytovatele';
+
+  @override
+  String get quicklyPopulateRequest => 'Rychle vyplnit známým formátem požadavku poskytovatele';
+
+  @override
+  String get invalidJsonError => 'Neplatný JSON';
+
+  @override
+  String downloadModelWithName(String model) {
+    return 'Stáhnout model ($model)';
+  }
+
+  @override
+  String modelNameWithFile(String model) {
+    return 'Model: $model';
+  }
+
+  @override
+  String get device => 'Device';
 }

@@ -1586,8 +1586,8 @@ class AppLocalizationsMs extends AppLocalizations {
   String get noLogsYet => 'Tiada log lagi. Mulakan rakaman untuk melihat aktiviti STT tersuai.';
 
   @override
-  String deviceUsesCodec(String deviceName, String codecReason) {
-    return '$deviceName menggunakan $codecReason. Omi akan digunakan.';
+  String deviceUsesCodec(String device, String reason) {
+    return '$device menggunakan $reason. Omi akan digunakan.';
   }
 
   @override
@@ -5824,6 +5824,9 @@ class AppLocalizationsMs extends AppLocalizations {
   String get chatAppsTitle => 'Aplikasi Sembang';
 
   @override
+  String get chatAssistantsTitle => 'Pembantu Sembang';
+
+  @override
   String get selectApp => 'Pilih Aplikasi';
 
   @override
@@ -6047,4 +6050,235 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get sendSummary => 'Hantar ringkasan';
+
+  @override
+  String get debugModeDetected => 'Mod nyahpepijat dikesan';
+
+  @override
+  String get performanceReduced => 'Prestasi mungkin berkurang';
+
+  @override
+  String autoClosingInSeconds(int seconds) {
+    return 'Menutup secara automatik dalam $seconds saat';
+  }
+
+  @override
+  String get modelRequired => 'Model diperlukan';
+
+  @override
+  String get downloadWhisperModel => 'Muat turun model whisper untuk menggunakan transkripsi pada peranti';
+
+  @override
+  String get deviceNotCompatible => 'Peranti anda tidak serasi dengan transkripsi pada peranti';
+
+  @override
+  String get deviceRequirements => 'Your device does not meet the requirements for On-Device transcription.';
+
+  @override
+  String get willLikelyCrash => 'Mengaktifkan ini kemungkinan akan menyebabkan aplikasi ranap atau beku.';
+
+  @override
+  String get transcriptionSlowerLessAccurate => 'Transkripsi akan menjadi lebih perlahan dan kurang tepat.';
+
+  @override
+  String get proceedAnyway => 'Teruskan juga';
+
+  @override
+  String get olderDeviceDetected => 'Peranti Lama Dikesan';
+
+  @override
+  String get onDeviceSlower => 'On-device transcription may be slower on this device.';
+
+  @override
+  String get batteryUsageHigher => 'Penggunaan bateri akan lebih tinggi daripada transkripsi awan.';
+
+  @override
+  String get considerOmiCloud => 'Pertimbangkan menggunakan Omi Cloud untuk prestasi yang lebih baik.';
+
+  @override
+  String get highResourceUsage => 'Penggunaan Sumber Tinggi';
+
+  @override
+  String get onDeviceIntensive => 'On-Device transcription is computationally intensive.';
+
+  @override
+  String get batteryDrainIncrease => 'Battery drain will increase significantly.';
+
+  @override
+  String get deviceMayWarmUp => 'Peranti mungkin menjadi panas semasa penggunaan berpanjangan.';
+
+  @override
+  String get speedAccuracyLower => 'Kelajuan dan ketepatan mungkin lebih rendah daripada model Awan.';
+
+  @override
+  String get cloudProvider => 'Pembekal Awan';
+
+  @override
+  String get premiumMinutesInfo => '1,200 premium minutes/month. On-Device tab offers unlimited free transcription.';
+
+  @override
+  String get viewUsage => 'Lihat penggunaan';
+
+  @override
+  String get localProcessingInfo => 'Audio is processed locally. Works offline, more private, but uses more battery.';
+
+  @override
+  String get model => 'Model';
+
+  @override
+  String get performanceWarning => 'Amaran Prestasi';
+
+  @override
+  String get largeModelWarning =>
+      'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
+
+  @override
+  String get usingNativeIosSpeech => 'Menggunakan Pengecaman Pertuturan iOS Asli';
+
+  @override
+  String get noModelDownloadRequired => 'Your device\'s native speech engine will be used. No model download required.';
+
+  @override
+  String get modelReady => 'Model Ready';
+
+  @override
+  String get redownload => 'Re-download';
+
+  @override
+  String get doNotCloseApp => 'Sila jangan tutup aplikasi.';
+
+  @override
+  String get downloading => 'Memuat turun...';
+
+  @override
+  String get downloadModel => 'Muat turun model';
+
+  @override
+  String estimatedSize(String size) {
+    return 'Estimated Size: ~$size MB';
+  }
+
+  @override
+  String availableSpace(String space) {
+    return 'Available Space: $space';
+  }
+
+  @override
+  String get notEnoughSpace => 'Amaran: Ruang tidak mencukupi!';
+
+  @override
+  String get download => 'Muat turun';
+
+  @override
+  String downloadError(String error) {
+    return 'Download error: $error';
+  }
+
+  @override
+  String get cancelled => 'Dibatalkan';
+
+  @override
+  String get deviceNotCompatibleTitle => 'Peranti Tidak Serasi';
+
+  @override
+  String get deviceNotMeetRequirements => 'Peranti anda tidak memenuhi keperluan untuk transkripsi pada peranti.';
+
+  @override
+  String get transcriptionSlowerOnDevice => 'Transkripsi pada peranti mungkin lebih perlahan pada peranti ini.';
+
+  @override
+  String get computationallyIntensive => 'Transkripsi pada peranti adalah intensif dari segi pengiraan.';
+
+  @override
+  String get batteryDrainSignificantly => 'Pengurasan bateri akan meningkat dengan ketara.';
+
+  @override
+  String get premiumMinutesMonth =>
+      '1,200 minit premium/bulan. Tab Pada Peranti menawarkan transkripsi percuma tanpa had. ';
+
+  @override
+  String get audioProcessedLocally =>
+      'Audio diproses secara tempatan. Berfungsi luar talian, lebih peribadi, tetapi menggunakan lebih banyak bateri.';
+
+  @override
+  String get languageLabel => 'Bahasa';
+
+  @override
+  String get modelLabel => 'Model';
+
+  @override
+  String get modelTooLargeWarning =>
+      'Model ini besar dan mungkin menyebabkan aplikasi ranap atau berjalan sangat perlahan pada peranti mudah alih.\n\nsmall atau base disyorkan.';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'Enjin pertuturan asli peranti anda akan digunakan. Tiada muat turun model diperlukan.';
+
+  @override
+  String modelReadyWithName(String model) {
+    return 'Model Sedia ($model)';
+  }
+
+  @override
+  String get reDownload => 'Muat turun semula';
+
+  @override
+  String downloadingModelProgress(String model, String received, String total) {
+    return 'Memuat turun $model: $received / $total MB';
+  }
+
+  @override
+  String preparingModel(String model) {
+    return 'Menyediakan $model...';
+  }
+
+  @override
+  String downloadErrorWithMessage(String error) {
+    return 'Ralat muat turun: $error';
+  }
+
+  @override
+  String estimatedSizeWithValue(String size) {
+    return 'Anggaran Saiz: ~$size MB';
+  }
+
+  @override
+  String availableSpaceWithValue(String space) {
+    return 'Ruang Tersedia: $space';
+  }
+
+  @override
+  String get omiTranscriptionOptimized =>
+      'Transkripsi langsung terbina dalam Omi dioptimumkan untuk perbualan masa nyata dengan pengesanan penutur automatik dan diarisasi.';
+
+  @override
+  String get reset => 'Set semula';
+
+  @override
+  String get useTemplateFrom => 'Gunakan templat dari';
+
+  @override
+  String get selectProviderTemplate => 'Pilih templat pembekal...';
+
+  @override
+  String get quicklyPopulateResponse => 'Isi dengan cepat dengan format respons pembekal yang diketahui';
+
+  @override
+  String get quicklyPopulateRequest => 'Isi dengan cepat dengan format permintaan pembekal yang diketahui';
+
+  @override
+  String get invalidJsonError => 'JSON Tidak Sah';
+
+  @override
+  String downloadModelWithName(String model) {
+    return 'Muat turun Model ($model)';
+  }
+
+  @override
+  String modelNameWithFile(String model) {
+    return 'Model: $model';
+  }
+
+  @override
+  String get device => 'Device';
 }

@@ -1584,8 +1584,8 @@ class AppLocalizationsBg extends AppLocalizations {
       'Все още няма дневници. Започнете записване, за да видите активността на персонализирания STT.';
 
   @override
-  String deviceUsesCodec(String deviceName, String codecReason) {
-    return '$deviceName използва $codecReason. Ще се използва Omi.';
+  String deviceUsesCodec(String device, String reason) {
+    return '$device използва $reason. Ще се използва Omi.';
   }
 
   @override
@@ -5822,6 +5822,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get chatAppsTitle => 'Чат приложения';
 
   @override
+  String get chatAssistantsTitle => 'Чат асистенти';
+
+  @override
   String get selectApp => 'Избери приложение';
 
   @override
@@ -6048,4 +6051,239 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get sendSummary => 'Изпрати обобщение';
+
+  @override
+  String get debugModeDetected => 'Открит е режим за отстраняване на грешки';
+
+  @override
+  String get performanceReduced => 'Производителността е намалена 5-10 пъти. Използвайте Release режим.';
+
+  @override
+  String autoClosingInSeconds(int seconds) {
+    return 'Автоматично затваряне след $secondsс';
+  }
+
+  @override
+  String get modelRequired => 'Необходим е модел';
+
+  @override
+  String get downloadWhisperModel => 'Моля, изтеглете Whisper модел преди запазване.';
+
+  @override
+  String get deviceNotCompatible => 'Устройството не е съвместимо';
+
+  @override
+  String get deviceRequirements => 'Вашето устройство не отговаря на изискванията за транскрипция на устройството.';
+
+  @override
+  String get willLikelyCrash => 'Активирането вероятно ще причини срив или замръзване на приложението.';
+
+  @override
+  String get transcriptionSlowerLessAccurate => 'Транскрипцията ще бъде значително по-бавна и по-малко точна.';
+
+  @override
+  String get proceedAnyway => 'Продължи въпреки това';
+
+  @override
+  String get olderDeviceDetected => 'Открито е по-старо устройство';
+
+  @override
+  String get onDeviceSlower => 'Транскрипцията на устройството може да е по-бавна.';
+
+  @override
+  String get batteryUsageHigher => 'Консумацията на батерия ще бъде по-висока от облачната транскрипция.';
+
+  @override
+  String get considerOmiCloud => 'Помислете за използване на Omi Cloud за по-добра производителност.';
+
+  @override
+  String get highResourceUsage => 'Висока консумация на ресурси';
+
+  @override
+  String get onDeviceIntensive => 'Транскрипцията на устройството е изчислително интензивна.';
+
+  @override
+  String get batteryDrainIncrease => 'Изтощаването на батерията ще се увеличи значително.';
+
+  @override
+  String get deviceMayWarmUp => 'Устройството може да се нагрее при продължителна употреба.';
+
+  @override
+  String get speedAccuracyLower => 'Скоростта и точността може да бъдат по-ниски от облачните модели.';
+
+  @override
+  String get cloudProvider => 'Облачен доставчик';
+
+  @override
+  String get premiumMinutesInfo =>
+      '1200 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция.';
+
+  @override
+  String get viewUsage => 'Преглед на използването';
+
+  @override
+  String get localProcessingInfo =>
+      'Аудиото се обработва локално. Работи офлайн, по-поверително, но използва повече батерия.';
+
+  @override
+  String get model => 'Модел';
+
+  @override
+  String get performanceWarning => 'Предупреждение за производителност';
+
+  @override
+  String get largeModelWarning =>
+      'Този модел е голям и може да срине приложението или да работи много бавно.\n\nПрепоръчва се \"small\" или \"base\".';
+
+  @override
+  String get usingNativeIosSpeech => 'Използване на вградено iOS разпознаване на реч';
+
+  @override
+  String get noModelDownloadRequired =>
+      'Ще се използва вграденият речеви двигател на устройството. Не е необходимо изтегляне на модел.';
+
+  @override
+  String get modelReady => 'Моделът е готов';
+
+  @override
+  String get redownload => 'Изтегли отново';
+
+  @override
+  String get doNotCloseApp => 'Моля, не затваряйте приложението.';
+
+  @override
+  String get downloading => 'Изтегляне...';
+
+  @override
+  String get downloadModel => 'Изтегляне на модел';
+
+  @override
+  String estimatedSize(String size) {
+    return 'Прогнозен размер: ~$size MB';
+  }
+
+  @override
+  String availableSpace(String space) {
+    return 'Налично място: $space';
+  }
+
+  @override
+  String get notEnoughSpace => 'Предупреждение: Няма достатъчно място!';
+
+  @override
+  String get download => 'Изтегли';
+
+  @override
+  String downloadError(String error) {
+    return 'Грешка при изтегляне: $error';
+  }
+
+  @override
+  String get cancelled => 'Отменено';
+
+  @override
+  String get deviceNotCompatibleTitle => 'Устройството не е съвместимо';
+
+  @override
+  String get deviceNotMeetRequirements =>
+      'Вашето устройство не отговаря на изискванията за транскрипция на устройството.';
+
+  @override
+  String get transcriptionSlowerOnDevice => 'Транскрипцията на устройството може да бъде по-бавна на това устройство.';
+
+  @override
+  String get computationallyIntensive => 'Транскрипцията на устройството изисква интензивни изчисления.';
+
+  @override
+  String get batteryDrainSignificantly => 'Изтощаването на батерията ще се увеличи значително.';
+
+  @override
+  String get premiumMinutesMonth =>
+      '1200 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция. ';
+
+  @override
+  String get audioProcessedLocally =>
+      'Аудиото се обработва локално. Работи офлайн, по-поверително, но консумира повече батерия.';
+
+  @override
+  String get languageLabel => 'Език';
+
+  @override
+  String get modelLabel => 'Модел';
+
+  @override
+  String get modelTooLargeWarning =>
+      'Този модел е голям и може да причини срив на приложението или много бавна работа на мобилни устройства.\n\nПрепоръчва се small или base.';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'Ще се използва вграденият речеви механизъм на устройството. Не е необходимо изтегляне на модел.';
+
+  @override
+  String modelReadyWithName(String model) {
+    return 'Моделът е готов ($model)';
+  }
+
+  @override
+  String get reDownload => 'Изтегли отново';
+
+  @override
+  String downloadingModelProgress(String model, String received, String total) {
+    return 'Изтегляне на $model: $received / $total MB';
+  }
+
+  @override
+  String preparingModel(String model) {
+    return 'Подготовка на $model...';
+  }
+
+  @override
+  String downloadErrorWithMessage(String error) {
+    return 'Грешка при изтегляне: $error';
+  }
+
+  @override
+  String estimatedSizeWithValue(String size) {
+    return 'Прогнозен размер: ~$size MB';
+  }
+
+  @override
+  String availableSpaceWithValue(String space) {
+    return 'Налично място: $space';
+  }
+
+  @override
+  String get omiTranscriptionOptimized =>
+      'Вградената транскрипция на живо на Omi е оптимизирана за разговори в реално време с автоматично разпознаване и разделяне на говорителите.';
+
+  @override
+  String get reset => 'Нулиране';
+
+  @override
+  String get useTemplateFrom => 'Използвай шаблон от';
+
+  @override
+  String get selectProviderTemplate => 'Изберете шаблон на доставчик...';
+
+  @override
+  String get quicklyPopulateResponse => 'Бързо попълване с познат формат на отговор на доставчик';
+
+  @override
+  String get quicklyPopulateRequest => 'Бързо попълване с познат формат на заявка на доставчик';
+
+  @override
+  String get invalidJsonError => 'Невалиден JSON';
+
+  @override
+  String downloadModelWithName(String model) {
+    return 'Изтегли модел ($model)';
+  }
+
+  @override
+  String modelNameWithFile(String model) {
+    return 'Модел: $model';
+  }
+
+  @override
+  String get device => 'Device';
 }

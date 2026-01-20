@@ -1559,8 +1559,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get noLogsYet => 'ログはまだありません。録音を開始するとカスタムSTTアクティビティが表示されます。';
 
   @override
-  String deviceUsesCodec(String deviceName, String codecReason) {
-    return '$deviceNameは$codecReasonを使用しています。Omiが使用されます。';
+  String deviceUsesCodec(String device, String reason) {
+    return '$deviceは$reasonを使用しています。Omiが使用されます。';
   }
 
   @override
@@ -5697,6 +5697,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get chatAppsTitle => 'チャットアプリ';
 
   @override
+  String get chatAssistantsTitle => 'チャットアシスタント';
+
+  @override
   String get selectApp => 'アプリを選択';
 
   @override
@@ -5920,4 +5923,230 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get sendSummary => '要約を送信';
+
+  @override
+  String get debugModeDetected => 'デバッグモードが検出されました';
+
+  @override
+  String get performanceReduced => 'パフォーマンスが低下する可能性があります';
+
+  @override
+  String autoClosingInSeconds(int seconds) {
+    return '$seconds秒後に自動的に閉じます';
+  }
+
+  @override
+  String get modelRequired => 'モデルが必要です';
+
+  @override
+  String get downloadWhisperModel => 'オンデバイス文字起こしを使用するにはwhisperモデルをダウンロードしてください';
+
+  @override
+  String get deviceNotCompatible => 'お使いのデバイスはオンデバイス文字起こしに対応していません';
+
+  @override
+  String get deviceRequirements => 'Your device does not meet the requirements for On-Device transcription.';
+
+  @override
+  String get willLikelyCrash => '有効にすると、アプリがクラッシュまたはフリーズする可能性があります。';
+
+  @override
+  String get transcriptionSlowerLessAccurate => '文字起こしは大幅に遅くなり、精度も低下します。';
+
+  @override
+  String get proceedAnyway => 'それでも続行';
+
+  @override
+  String get olderDeviceDetected => '古いデバイスが検出されました';
+
+  @override
+  String get onDeviceSlower => 'On-device transcription may be slower on this device.';
+
+  @override
+  String get batteryUsageHigher => 'バッテリー使用量はクラウド文字起こしより多くなります。';
+
+  @override
+  String get considerOmiCloud => 'パフォーマンス向上のためOmi Cloudの使用を検討してください。';
+
+  @override
+  String get highResourceUsage => '高いリソース使用量';
+
+  @override
+  String get onDeviceIntensive => 'On-Device transcription is computationally intensive.';
+
+  @override
+  String get batteryDrainIncrease => 'Battery drain will increase significantly.';
+
+  @override
+  String get deviceMayWarmUp => '長時間の使用中にデバイスが熱くなる可能性があります。';
+
+  @override
+  String get speedAccuracyLower => '速度と精度がクラウドモデルより低くなる可能性があります。';
+
+  @override
+  String get cloudProvider => 'クラウドプロバイダー';
+
+  @override
+  String get premiumMinutesInfo => '1,200 premium minutes/month. On-Device tab offers unlimited free transcription.';
+
+  @override
+  String get viewUsage => '使用状況を表示';
+
+  @override
+  String get localProcessingInfo => 'Audio is processed locally. Works offline, more private, but uses more battery.';
+
+  @override
+  String get model => 'Model';
+
+  @override
+  String get performanceWarning => 'パフォーマンス警告';
+
+  @override
+  String get largeModelWarning =>
+      'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
+
+  @override
+  String get usingNativeIosSpeech => 'iOSネイティブ音声認識を使用';
+
+  @override
+  String get noModelDownloadRequired => 'Your device\'s native speech engine will be used. No model download required.';
+
+  @override
+  String get modelReady => 'Model Ready';
+
+  @override
+  String get redownload => 'Re-download';
+
+  @override
+  String get doNotCloseApp => 'アプリを閉じないでください。';
+
+  @override
+  String get downloading => 'ダウンロード中...';
+
+  @override
+  String get downloadModel => 'モデルをダウンロード';
+
+  @override
+  String estimatedSize(String size) {
+    return 'Estimated Size: ~$size MB';
+  }
+
+  @override
+  String availableSpace(String space) {
+    return 'Available Space: $space';
+  }
+
+  @override
+  String get notEnoughSpace => '警告: 容量が不足しています！';
+
+  @override
+  String get download => 'ダウンロード';
+
+  @override
+  String downloadError(String error) {
+    return 'Download error: $error';
+  }
+
+  @override
+  String get cancelled => 'キャンセルされました';
+
+  @override
+  String get deviceNotCompatibleTitle => 'デバイスが対応していません';
+
+  @override
+  String get deviceNotMeetRequirements => 'お使いのデバイスはオンデバイス文字起こしの要件を満たしていません。';
+
+  @override
+  String get transcriptionSlowerOnDevice => 'このデバイスではオンデバイス文字起こしが遅くなる可能性があります。';
+
+  @override
+  String get computationallyIntensive => 'オンデバイス文字起こしは計算負荷が高いです。';
+
+  @override
+  String get batteryDrainSignificantly => 'バッテリー消費が大幅に増加します。';
+
+  @override
+  String get premiumMinutesMonth => '月間1,200プレミアム分。オンデバイスタブでは無制限の無料文字起こしを提供。';
+
+  @override
+  String get audioProcessedLocally => '音声はローカルで処理されます。オフラインで動作し、よりプライベートですが、バッテリー消費が増えます。';
+
+  @override
+  String get languageLabel => '言語';
+
+  @override
+  String get modelLabel => 'モデル';
+
+  @override
+  String get modelTooLargeWarning => 'このモデルは大きく、モバイルデバイスでアプリがクラッシュしたり非常に遅くなる可能性があります。\n\nsmallまたはbaseを推奨します。';
+
+  @override
+  String get nativeEngineNoDownload => 'デバイスのネイティブ音声エンジンが使用されます。モデルのダウンロードは不要です。';
+
+  @override
+  String modelReadyWithName(String model) {
+    return 'モデル準備完了 ($model)';
+  }
+
+  @override
+  String get reDownload => '再ダウンロード';
+
+  @override
+  String downloadingModelProgress(String model, String received, String total) {
+    return '$modelをダウンロード中: $received / $total MB';
+  }
+
+  @override
+  String preparingModel(String model) {
+    return '$modelを準備中...';
+  }
+
+  @override
+  String downloadErrorWithMessage(String error) {
+    return 'ダウンロードエラー: $error';
+  }
+
+  @override
+  String estimatedSizeWithValue(String size) {
+    return '推定サイズ: 約$size MB';
+  }
+
+  @override
+  String availableSpaceWithValue(String space) {
+    return '利用可能な容量: $space';
+  }
+
+  @override
+  String get omiTranscriptionOptimized => 'Omiの組み込みライブ文字起こしは、自動話者検出とダイアライゼーションによるリアルタイム会話に最適化されています。';
+
+  @override
+  String get reset => 'リセット';
+
+  @override
+  String get useTemplateFrom => 'テンプレートを使用';
+
+  @override
+  String get selectProviderTemplate => 'プロバイダーテンプレートを選択...';
+
+  @override
+  String get quicklyPopulateResponse => '既知のプロバイダー応答形式で素早く入力';
+
+  @override
+  String get quicklyPopulateRequest => '既知のプロバイダーリクエスト形式で素早く入力';
+
+  @override
+  String get invalidJsonError => '無効なJSON';
+
+  @override
+  String downloadModelWithName(String model) {
+    return 'モデルをダウンロード ($model)';
+  }
+
+  @override
+  String modelNameWithFile(String model) {
+    return 'モデル: $model';
+  }
+
+  @override
+  String get device => 'Device';
 }

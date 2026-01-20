@@ -1591,8 +1591,8 @@ class AppLocalizationsHu extends AppLocalizations {
   String get noLogsYet => 'Még nincsenek naplók. Kezdj el rögzíteni az egyéni STT aktivitás megtekintéséhez.';
 
   @override
-  String deviceUsesCodec(String deviceName, String codecReason) {
-    return '$deviceName használja: $codecReason. Az Omi-t fogjuk használni.';
+  String deviceUsesCodec(String device, String reason) {
+    return '$device $reason-t használ. Omi lesz használva.';
   }
 
   @override
@@ -5833,6 +5833,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get chatAppsTitle => 'Chat alkalmazások';
 
   @override
+  String get chatAssistantsTitle => 'Chat asszisztensek';
+
+  @override
   String get selectApp => 'Alkalmazás kiválasztása';
 
   @override
@@ -6058,4 +6061,234 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get sendSummary => 'Összefoglaló küldése';
+
+  @override
+  String get debugModeDetected => 'Hibakeresési mód észlelve';
+
+  @override
+  String get performanceReduced => 'A teljesítmény csökkenhet';
+
+  @override
+  String autoClosingInSeconds(int seconds) {
+    return 'Automatikus bezárás $seconds másodperc múlva';
+  }
+
+  @override
+  String get modelRequired => 'Modell szükséges';
+
+  @override
+  String get downloadWhisperModel => 'Tölts le egy whisper modellt az eszközön történő átírás használatához';
+
+  @override
+  String get deviceNotCompatible => 'Az eszközöd nem kompatibilis az eszközön történő átírással';
+
+  @override
+  String get deviceRequirements => 'Your device does not meet the requirements for On-Device transcription.';
+
+  @override
+  String get willLikelyCrash => 'Az engedélyezés valószínűleg az alkalmazás összeomlását vagy lefagyását okozza.';
+
+  @override
+  String get transcriptionSlowerLessAccurate => 'Az átírás jelentősen lassabb és kevésbé pontos lesz.';
+
+  @override
+  String get proceedAnyway => 'Folytatás mindenképp';
+
+  @override
+  String get olderDeviceDetected => 'Régebbi eszköz észlelve';
+
+  @override
+  String get onDeviceSlower => 'On-device transcription may be slower on this device.';
+
+  @override
+  String get batteryUsageHigher => 'Az akkumulátorhasználat magasabb lesz, mint a felhő átírás esetén.';
+
+  @override
+  String get considerOmiCloud => 'Fontold meg az Omi Cloud használatát a jobb teljesítmény érdekében.';
+
+  @override
+  String get highResourceUsage => 'Magas erőforrás-használat';
+
+  @override
+  String get onDeviceIntensive => 'On-Device transcription is computationally intensive.';
+
+  @override
+  String get batteryDrainIncrease => 'Battery drain will increase significantly.';
+
+  @override
+  String get deviceMayWarmUp => 'Az eszköz felmelegedhet hosszabb használat során.';
+
+  @override
+  String get speedAccuracyLower => 'A sebesség és pontosság alacsonyabb lehet, mint a felhőmodellekkel.';
+
+  @override
+  String get cloudProvider => 'Felhő szolgáltató';
+
+  @override
+  String get premiumMinutesInfo => '1,200 premium minutes/month. On-Device tab offers unlimited free transcription.';
+
+  @override
+  String get viewUsage => 'Használat megtekintése';
+
+  @override
+  String get localProcessingInfo => 'Audio is processed locally. Works offline, more private, but uses more battery.';
+
+  @override
+  String get model => 'Model';
+
+  @override
+  String get performanceWarning => 'Teljesítmény figyelmeztetés';
+
+  @override
+  String get largeModelWarning =>
+      'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
+
+  @override
+  String get usingNativeIosSpeech => 'Natív iOS beszédfelismerés használata';
+
+  @override
+  String get noModelDownloadRequired => 'Your device\'s native speech engine will be used. No model download required.';
+
+  @override
+  String get modelReady => 'Model Ready';
+
+  @override
+  String get redownload => 'Re-download';
+
+  @override
+  String get doNotCloseApp => 'Kérjük, ne zárd be az alkalmazást.';
+
+  @override
+  String get downloading => 'Letöltés...';
+
+  @override
+  String get downloadModel => 'Modell letöltése';
+
+  @override
+  String estimatedSize(String size) {
+    return 'Estimated Size: ~$size MB';
+  }
+
+  @override
+  String availableSpace(String space) {
+    return 'Available Space: $space';
+  }
+
+  @override
+  String get notEnoughSpace => 'Figyelmeztetés: Nincs elég hely!';
+
+  @override
+  String get download => 'Letöltés';
+
+  @override
+  String downloadError(String error) {
+    return 'Download error: $error';
+  }
+
+  @override
+  String get cancelled => 'Megszakítva';
+
+  @override
+  String get deviceNotCompatibleTitle => 'Eszköz nem kompatibilis';
+
+  @override
+  String get deviceNotMeetRequirements => 'Az eszközöd nem felel meg az eszközön történő átírás követelményeinek.';
+
+  @override
+  String get transcriptionSlowerOnDevice => 'Az eszközön történő átírás lassabb lehet ezen az eszközön.';
+
+  @override
+  String get computationallyIntensive => 'Az eszközön történő átírás számításigényes.';
+
+  @override
+  String get batteryDrainSignificantly => 'Az akkumulátor-lemerülés jelentősen növekedni fog.';
+
+  @override
+  String get premiumMinutesMonth => '1200 prémium perc/hónap. Az Eszközön fül korlátlan ingyenes átírást kínál. ';
+
+  @override
+  String get audioProcessedLocally =>
+      'A hang helyileg kerül feldolgozásra. Offline működik, privátabb, de több akkumulátort használ.';
+
+  @override
+  String get languageLabel => 'Nyelv';
+
+  @override
+  String get modelLabel => 'Modell';
+
+  @override
+  String get modelTooLargeWarning =>
+      'Ez a modell nagy, és az alkalmazás összeomlását vagy nagyon lassú működését okozhatja mobileszközökön.\n\nA small vagy base ajánlott.';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'Az eszközöd natív beszédmotorja lesz használva. Nem szükséges modell letöltése.';
+
+  @override
+  String modelReadyWithName(String model) {
+    return 'Modell kész ($model)';
+  }
+
+  @override
+  String get reDownload => 'Újra letöltés';
+
+  @override
+  String downloadingModelProgress(String model, String received, String total) {
+    return '$model letöltése: $received / $total MB';
+  }
+
+  @override
+  String preparingModel(String model) {
+    return '$model előkészítése...';
+  }
+
+  @override
+  String downloadErrorWithMessage(String error) {
+    return 'Letöltési hiba: $error';
+  }
+
+  @override
+  String estimatedSizeWithValue(String size) {
+    return 'Becsült méret: ~$size MB';
+  }
+
+  @override
+  String availableSpaceWithValue(String space) {
+    return 'Elérhető hely: $space';
+  }
+
+  @override
+  String get omiTranscriptionOptimized =>
+      'Az Omi beépített élő átírása valós idejű beszélgetésekre van optimalizálva automatikus beszélő-felismeréssel és diarizációval.';
+
+  @override
+  String get reset => 'Visszaállítás';
+
+  @override
+  String get useTemplateFrom => 'Sablon használata innen';
+
+  @override
+  String get selectProviderTemplate => 'Szolgáltató sablon kiválasztása...';
+
+  @override
+  String get quicklyPopulateResponse => 'Gyors kitöltés ismert szolgáltató válaszformátummal';
+
+  @override
+  String get quicklyPopulateRequest => 'Gyors kitöltés ismert szolgáltató kérésformátummal';
+
+  @override
+  String get invalidJsonError => 'Érvénytelen JSON';
+
+  @override
+  String downloadModelWithName(String model) {
+    return 'Modell letöltése ($model)';
+  }
+
+  @override
+  String modelNameWithFile(String model) {
+    return 'Modell: $model';
+  }
+
+  @override
+  String get device => 'Device';
 }

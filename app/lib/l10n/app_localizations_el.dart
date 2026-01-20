@@ -166,7 +166,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get askOmi => 'Ρώτησε το Omi';
 
   @override
-  String get done => 'Τέλος';
+  String get done => 'Ολοκληρώθηκε';
 
   @override
   String get disconnected => 'Αποσυνδεδεμένο';
@@ -1592,8 +1592,8 @@ class AppLocalizationsEl extends AppLocalizations {
       'Δεν υπάρχουν ακόμα αρχεία καταγραφής. Ξεκινήστε εγγραφή για να δείτε προσαρμοσμένη δραστηριότητα STT.';
 
   @override
-  String deviceUsesCodec(String deviceName, String codecReason) {
-    return 'Το $deviceName χρησιμοποιεί $codecReason. Θα χρησιμοποιηθεί το Omi.';
+  String deviceUsesCodec(String device, String reason) {
+    return '$device χρησιμοποιεί $reason. Θα χρησιμοποιηθεί το Omi.';
   }
 
   @override
@@ -1742,7 +1742,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get dontShowAgain => 'Να μην εμφανιστεί ξανά';
 
   @override
-  String get iUnderstand => 'Κατάλαβα';
+  String get iUnderstand => 'Κατανοώ';
 
   @override
   String get enableBluetooth => 'Ενεργοποίηση Bluetooth';
@@ -5847,6 +5847,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get chatAppsTitle => 'Εφαρμογές συνομιλίας';
 
   @override
+  String get chatAssistantsTitle => 'Βοηθοί συνομιλίας';
+
+  @override
   String get selectApp => 'Επιλογή εφαρμογής';
 
   @override
@@ -6072,4 +6075,235 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get sendSummary => 'Αποστολή σύνοψης';
+
+  @override
+  String get debugModeDetected => 'Ανιχνεύθηκε λειτουργία εντοπισμού σφαλμάτων';
+
+  @override
+  String get performanceReduced => 'Η απόδοση μπορεί να μειωθεί';
+
+  @override
+  String autoClosingInSeconds(int seconds) {
+    return 'Αυτόματο κλείσιμο σε $seconds δευτερόλεπτα';
+  }
+
+  @override
+  String get modelRequired => 'Απαιτείται μοντέλο';
+
+  @override
+  String get downloadWhisperModel => 'Κατεβάστε ένα μοντέλο whisper για να χρησιμοποιήσετε τη μεταγραφή στη συσκευή';
+
+  @override
+  String get deviceNotCompatible => 'Η συσκευή σας δεν είναι συμβατή με τη μεταγραφή στη συσκευή';
+
+  @override
+  String get deviceRequirements => 'Your device does not meet the requirements for On-Device transcription.';
+
+  @override
+  String get willLikelyCrash => 'Η ενεργοποίηση πιθανότατα θα προκαλέσει κατάρρευση ή πάγωμα της εφαρμογής.';
+
+  @override
+  String get transcriptionSlowerLessAccurate => 'Η μεταγραφή θα είναι σημαντικά πιο αργή και λιγότερο ακριβής.';
+
+  @override
+  String get proceedAnyway => 'Συνέχεια ούτως ή άλλως';
+
+  @override
+  String get olderDeviceDetected => 'Εντοπίστηκε παλαιότερη συσκευή';
+
+  @override
+  String get onDeviceSlower => 'On-device transcription may be slower on this device.';
+
+  @override
+  String get batteryUsageHigher => 'Η χρήση μπαταρίας θα είναι υψηλότερη από τη μεταγραφή στο cloud.';
+
+  @override
+  String get considerOmiCloud => 'Σκεφτείτε να χρησιμοποιήσετε το Omi Cloud για καλύτερη απόδοση.';
+
+  @override
+  String get highResourceUsage => 'Υψηλή χρήση πόρων';
+
+  @override
+  String get onDeviceIntensive => 'On-Device transcription is computationally intensive.';
+
+  @override
+  String get batteryDrainIncrease => 'Battery drain will increase significantly.';
+
+  @override
+  String get deviceMayWarmUp => 'Η συσκευή μπορεί να ζεσταθεί κατά την παρατεταμένη χρήση.';
+
+  @override
+  String get speedAccuracyLower => 'Η ταχύτητα και η ακρίβεια μπορεί να είναι χαμηλότερες από τα μοντέλα Cloud.';
+
+  @override
+  String get cloudProvider => 'Πάροχος Cloud';
+
+  @override
+  String get premiumMinutesInfo => '1,200 premium minutes/month. On-Device tab offers unlimited free transcription.';
+
+  @override
+  String get viewUsage => 'Προβολή χρήσης';
+
+  @override
+  String get localProcessingInfo => 'Audio is processed locally. Works offline, more private, but uses more battery.';
+
+  @override
+  String get model => 'Model';
+
+  @override
+  String get performanceWarning => 'Προειδοποίηση απόδοσης';
+
+  @override
+  String get largeModelWarning =>
+      'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
+
+  @override
+  String get usingNativeIosSpeech => 'Χρήση εγγενούς αναγνώρισης ομιλίας iOS';
+
+  @override
+  String get noModelDownloadRequired => 'Your device\'s native speech engine will be used. No model download required.';
+
+  @override
+  String get modelReady => 'Model Ready';
+
+  @override
+  String get redownload => 'Re-download';
+
+  @override
+  String get doNotCloseApp => 'Παρακαλώ μην κλείσετε την εφαρμογή.';
+
+  @override
+  String get downloading => 'Λήψη σε εξέλιξη...';
+
+  @override
+  String get downloadModel => 'Λήψη μοντέλου';
+
+  @override
+  String estimatedSize(String size) {
+    return 'Estimated Size: ~$size MB';
+  }
+
+  @override
+  String availableSpace(String space) {
+    return 'Available Space: $space';
+  }
+
+  @override
+  String get notEnoughSpace => 'Προειδοποίηση: Δεν υπάρχει αρκετός χώρος!';
+
+  @override
+  String get download => 'Λήψη';
+
+  @override
+  String downloadError(String error) {
+    return 'Download error: $error';
+  }
+
+  @override
+  String get cancelled => 'Ακυρώθηκε';
+
+  @override
+  String get deviceNotCompatibleTitle => 'Η συσκευή δεν είναι συμβατή';
+
+  @override
+  String get deviceNotMeetRequirements => 'Η συσκευή σας δεν πληροί τις απαιτήσεις για μεταγραφή στη συσκευή.';
+
+  @override
+  String get transcriptionSlowerOnDevice => 'Η μεταγραφή στη συσκευή μπορεί να είναι πιο αργή σε αυτήν τη συσκευή.';
+
+  @override
+  String get computationallyIntensive => 'Η μεταγραφή στη συσκευή είναι υπολογιστικά απαιτητική.';
+
+  @override
+  String get batteryDrainSignificantly => 'Η κατανάλωση μπαταρίας θα αυξηθεί σημαντικά.';
+
+  @override
+  String get premiumMinutesMonth =>
+      '1.200 premium λεπτά/μήνα. Η καρτέλα Στη συσκευή προσφέρει απεριόριστη δωρεάν μεταγραφή. ';
+
+  @override
+  String get audioProcessedLocally =>
+      'Ο ήχος επεξεργάζεται τοπικά. Λειτουργεί εκτός σύνδεσης, πιο ιδιωτικό, αλλά καταναλώνει περισσότερη μπαταρία.';
+
+  @override
+  String get languageLabel => 'Γλώσσα';
+
+  @override
+  String get modelLabel => 'Μοντέλο';
+
+  @override
+  String get modelTooLargeWarning =>
+      'Αυτό το μοντέλο είναι μεγάλο και μπορεί να προκαλέσει κατάρρευση της εφαρμογής ή πολύ αργή λειτουργία σε κινητές συσκευές.\n\nΣυνιστάται το small ή base.';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'Θα χρησιμοποιηθεί η εγγενής μηχανή ομιλίας της συσκευής σας. Δεν απαιτείται λήψη μοντέλου.';
+
+  @override
+  String modelReadyWithName(String model) {
+    return 'Μοντέλο έτοιμο ($model)';
+  }
+
+  @override
+  String get reDownload => 'Εκ νέου λήψη';
+
+  @override
+  String downloadingModelProgress(String model, String received, String total) {
+    return 'Λήψη $model: $received / $total MB';
+  }
+
+  @override
+  String preparingModel(String model) {
+    return 'Προετοιμασία $model...';
+  }
+
+  @override
+  String downloadErrorWithMessage(String error) {
+    return 'Σφάλμα λήψης: $error';
+  }
+
+  @override
+  String estimatedSizeWithValue(String size) {
+    return 'Εκτιμώμενο μέγεθος: ~$size MB';
+  }
+
+  @override
+  String availableSpaceWithValue(String space) {
+    return 'Διαθέσιμος χώρος: $space';
+  }
+
+  @override
+  String get omiTranscriptionOptimized =>
+      'Η ενσωματωμένη ζωντανή μεταγραφή του Omi είναι βελτιστοποιημένη για συνομιλίες σε πραγματικό χρόνο με αυτόματη ανίχνευση και διαχωρισμό ομιλητών.';
+
+  @override
+  String get reset => 'Επαναφορά';
+
+  @override
+  String get useTemplateFrom => 'Χρήση προτύπου από';
+
+  @override
+  String get selectProviderTemplate => 'Επιλέξτε πρότυπο παρόχου...';
+
+  @override
+  String get quicklyPopulateResponse => 'Γρήγορη συμπλήρωση με γνωστή μορφή απόκρισης παρόχου';
+
+  @override
+  String get quicklyPopulateRequest => 'Γρήγορη συμπλήρωση με γνωστή μορφή αιτήματος παρόχου';
+
+  @override
+  String get invalidJsonError => 'Μη έγκυρο JSON';
+
+  @override
+  String downloadModelWithName(String model) {
+    return 'Λήψη μοντέλου ($model)';
+  }
+
+  @override
+  String modelNameWithFile(String model) {
+    return 'Μοντέλο: $model';
+  }
+
+  @override
+  String get device => 'Device';
 }
