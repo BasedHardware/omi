@@ -10,10 +10,10 @@
 |--------|-------|
 | Total Files | 27 |
 | Total Strings | ~125 |
-| Completed | 4 |
+| Completed | 5 |
 | In Progress | 0 |
-| Pending | 23 |
-| Progress | 15% |
+| Pending | 22 |
+| Progress | 19% |
 
 ================================================================================
 ## PRIORITY 1: HIGH IMPACT - User-Facing Features (~65 strings)
@@ -55,11 +55,11 @@ Note: Added 3 new l10n keys to all 34 language ARB files and updated the Dart fi
 MyApp.navigatorKey.currentContext!.l10n pattern. Keys added: paymentFailedToFetchCountries,
 paymentFailedToSetDefault, paymentFailedToSavePaypal.
 
-### [ ] pages/payments/paypal_setup_page.dart (2 strings)
-Status: PENDING
-Strings:
-- [ ] Line 186: 'nik@example.com' (hintText placeholder)
-- [ ] Line 215: 'paypal.me/nik' (hintText placeholder)
+### [x] pages/payments/paypal_setup_page.dart (2 strings)
+Status: COMPLETED
+Note: Updated Dart file to use existing l10n keys (paypalEmailHint, paypalMeLinkHint) for placeholder
+hint texts. Removed const from InputDecoration to allow non-constant l10n values. Keys were already
+in ARB files from previous session.
 
 ### [ ] pages/payments/models/payment_method_config.dart (4 strings)
 Status: PENDING
@@ -209,6 +209,11 @@ Strings:
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-20] Localized paypal_setup_page.dart
+- Updated Dart file to use existing l10n keys: paypalEmailHint, paypalMeLinkHint
+- Removed const from InputDecoration to allow non-constant l10n values
+- Ran flutter gen-l10n and verified with test.sh
 
 [2026-01-20] Localized payment_method_provider.dart
 - Added 3 new l10n keys to all 34 language ARB files
