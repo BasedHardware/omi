@@ -2338,5 +2338,6 @@
   "onboardingTellUsAboutYourself": "Cuéntanos sobre ti",
   "onboardingChooseYourPreference": "Elige tu preferencia",
   "onboardingGrantRequiredAccess": "Conceder acceso requerido",
-  "onboardingYoureAllSet": "Ya estás listo"
+  "onboardingYoureAllSet": "Ya estás listo",
+  "searchTranscriptOrSummary": "Buscar en transcripción o resumen..."
 }

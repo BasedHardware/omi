@@ -7340,4 +7340,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get onboardingYoureAllSet => 'Viskas paruošta';
+
+  @override
+  String get searchTranscriptOrSummary => 'Ieškoti transkripcijoje ar santraukoje...';
 }

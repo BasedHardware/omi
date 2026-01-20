@@ -2337,5 +2337,6 @@
   "onboardingTellUsAboutYourself": "Räägi meile endast",
   "onboardingChooseYourPreference": "Vali oma eelistus",
   "onboardingGrantRequiredAccess": "Anna nõutav juurdepääs",
-  "onboardingYoureAllSet": "Kõik on valmis"
+  "onboardingYoureAllSet": "Kõik on valmis",
+  "searchTranscriptOrSummary": "Otsi transkriptsioonist või kokkuvõttest..."
 }

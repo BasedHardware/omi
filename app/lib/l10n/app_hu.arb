@@ -2337,5 +2337,6 @@
   "onboardingTellUsAboutYourself": "Mesélj magadról",
   "onboardingChooseYourPreference": "Válaszd ki a preferenciádat",
   "onboardingGrantRequiredAccess": "Szükséges hozzáférés megadása",
-  "onboardingYoureAllSet": "Készen állsz"
+  "onboardingYoureAllSet": "Készen állsz",
+  "searchTranscriptOrSummary": "Keresés az átiratban vagy összefoglalóban..."
 }

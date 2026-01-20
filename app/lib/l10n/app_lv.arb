@@ -2337,5 +2337,6 @@
   "onboardingTellUsAboutYourself": "Pastāstiet par sevi",
   "onboardingChooseYourPreference": "Izvēlieties savu preferenci",
   "onboardingGrantRequiredAccess": "Piešķirt nepieciešamo piekļuvi",
-  "onboardingYoureAllSet": "Viss ir gatavs"
+  "onboardingYoureAllSet": "Viss ir gatavs",
+  "searchTranscriptOrSummary": "Meklēt transkripcijā vai kopsavilkumā..."
 }

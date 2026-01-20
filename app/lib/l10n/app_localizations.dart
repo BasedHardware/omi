@@ -13784,6 +13784,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'You\'re all set'**
   String get onboardingYoureAllSet;
+
+  /// Placeholder text for search field in conversation detail page
+  ///
+  /// In en, this message translates to:
+  /// **'Search transcript or summary...'**
+  String get searchTranscriptOrSummary;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

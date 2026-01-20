@@ -2337,5 +2337,6 @@
   "onboardingTellUsAboutYourself": "Hãy cho chúng tôi biết về bạn",
   "onboardingChooseYourPreference": "Chọn tùy chọn của bạn",
   "onboardingGrantRequiredAccess": "Cấp quyền truy cập cần thiết",
-  "onboardingYoureAllSet": "Bạn đã sẵn sàng"
+  "onboardingYoureAllSet": "Bạn đã sẵn sàng",
+  "searchTranscriptOrSummary": "Tìm kiếm trong bản ghi hoặc tóm tắt..."
 }

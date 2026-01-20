@@ -7210,4 +7210,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get onboardingYoureAllSet => '您已准备就绪';
+
+  @override
+  String get searchTranscriptOrSummary => '搜索转录或摘要...';
 }

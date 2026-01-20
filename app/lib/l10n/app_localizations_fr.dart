@@ -7402,4 +7402,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get onboardingYoureAllSet => 'Vous êtes prêt';
+
+  @override
+  String get searchTranscriptOrSummary => 'Rechercher dans la transcription ou le résumé...';
 }

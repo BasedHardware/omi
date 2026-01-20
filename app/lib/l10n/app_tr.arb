@@ -2337,5 +2337,6 @@
   "onboardingTellUsAboutYourself": "Bize kendinizden bahsedin",
   "onboardingChooseYourPreference": "Tercihinizi seçin",
   "onboardingGrantRequiredAccess": "Gerekli erişimi verin",
-  "onboardingYoureAllSet": "Hazırsınız"
+  "onboardingYoureAllSet": "Hazırsınız",
+  "searchTranscriptOrSummary": "Transkript veya özette ara..."
 }

@@ -7331,4 +7331,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get onboardingYoureAllSet => 'Vše je připraveno';
+
+  @override
+  String get searchTranscriptOrSummary => 'Hledat v přepisu nebo shrnutí...';
 }

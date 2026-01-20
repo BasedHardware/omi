@@ -7356,4 +7356,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get onboardingYoureAllSet => 'Всё готово';
+
+  @override
+  String get searchTranscriptOrSummary => 'Поиск в транскрипции или резюме...';
 }

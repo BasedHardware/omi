@@ -2337,5 +2337,6 @@
   "onboardingTellUsAboutYourself": "Ceritakan tentang diri anda",
   "onboardingChooseYourPreference": "Pilih keutamaan anda",
   "onboardingGrantRequiredAccess": "Berikan akses yang diperlukan",
-  "onboardingYoureAllSet": "Anda sudah sedia"
+  "onboardingYoureAllSet": "Anda sudah sedia",
+  "searchTranscriptOrSummary": "Cari dalam transkrip atau ringkasan..."
 }

@@ -2319,5 +2319,6 @@
   "onboardingTellUsAboutYourself": "Erzähl uns von dir",
   "onboardingChooseYourPreference": "Wähle deine Präferenz",
   "onboardingGrantRequiredAccess": "Erforderlichen Zugriff gewähren",
-  "onboardingYoureAllSet": "Du bist startklar"
+  "onboardingYoureAllSet": "Du bist startklar",
+  "searchTranscriptOrSummary": "Transkript oder Zusammenfassung durchsuchen..."
 }

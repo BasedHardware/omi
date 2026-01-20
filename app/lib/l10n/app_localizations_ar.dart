@@ -7289,4 +7289,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get onboardingYoureAllSet => 'أنت جاهز';
+
+  @override
+  String get searchTranscriptOrSummary => 'ابحث في النص أو الملخص...';
 }

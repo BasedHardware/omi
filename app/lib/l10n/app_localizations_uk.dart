@@ -7346,4 +7346,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get onboardingYoureAllSet => 'Все готово';
+
+  @override
+  String get searchTranscriptOrSummary => 'Пошук у транскрипції або резюме...';
 }

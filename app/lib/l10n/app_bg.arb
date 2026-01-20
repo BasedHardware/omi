@@ -2320,5 +2320,6 @@
   "onboardingTellUsAboutYourself": "Разкажете ни за себе си",
   "onboardingChooseYourPreference": "Изберете предпочитанието си",
   "onboardingGrantRequiredAccess": "Дайте необходимия достъп",
-  "onboardingYoureAllSet": "Всичко е готово"
+  "onboardingYoureAllSet": "Всичко е готово",
+  "searchTranscriptOrSummary": "Търсене в транскрипция или резюме..."
 }

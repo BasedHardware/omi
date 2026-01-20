@@ -7339,4 +7339,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get onboardingYoureAllSet => 'Kõik on valmis';
+
+  @override
+  String get searchTranscriptOrSummary => 'Otsi transkriptsioonist või kokkuvõttest...';
 }

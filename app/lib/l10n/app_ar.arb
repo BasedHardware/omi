@@ -2318,5 +2318,6 @@
   "onboardingTellUsAboutYourself": "أخبرنا عن نفسك",
   "onboardingChooseYourPreference": "اختر تفضيلاتك",
   "onboardingGrantRequiredAccess": "منح الوصول المطلوب",
-  "onboardingYoureAllSet": "أنت جاهز"
+  "onboardingYoureAllSet": "أنت جاهز",
+  "searchTranscriptOrSummary": "ابحث في النص أو الملخص..."
 }

@@ -2338,5 +2338,6 @@
   "onboardingTellUsAboutYourself": "自己紹介してください",
   "onboardingChooseYourPreference": "お好みを選択してください",
   "onboardingGrantRequiredAccess": "必要なアクセスを許可",
-  "onboardingYoureAllSet": "準備完了です"
+  "onboardingYoureAllSet": "準備完了です",
+  "searchTranscriptOrSummary": "文字起こしまたは要約を検索..."
 }

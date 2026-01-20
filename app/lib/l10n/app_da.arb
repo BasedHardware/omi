@@ -2295,5 +2295,6 @@
   "onboardingTellUsAboutYourself": "Fortæl os om dig selv",
   "onboardingChooseYourPreference": "Vælg din præference",
   "onboardingGrantRequiredAccess": "Giv den nødvendige adgang",
-  "onboardingYoureAllSet": "Du er klar"
+  "onboardingYoureAllSet": "Du er klar",
+  "searchTranscriptOrSummary": "Søg i transskription eller resumé..."
 }

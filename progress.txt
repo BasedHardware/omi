@@ -10,10 +10,10 @@
 |--------|-------|
 | Total Files | 27 |
 | Total Strings | ~125 |
-| Completed | 21 |
+| Completed | 22 |
 | In Progress | 0 |
-| Pending | 6 |
-| Progress | 78% |
+| Pending | 5 |
+| Progress | 81% |
 
 **CRITICAL ISSUE**: ~162 pre-existing l10n keys in non-English ARB files still contain
 English text instead of proper translations. See PRIORITY 0 section below.
@@ -207,10 +207,11 @@ Ran flutter gen-l10n and verified with test.sh.
 ## PRIORITY 5: LOWER IMPACT (~5 strings)
 ================================================================================
 
-### [ ] pages/conversation_detail/page.dart (1 string)
-Status: PENDING
-Strings:
-- [ ] Line 991: 'Search transcript or summary...' (hintText)
+### [x] pages/conversation_detail/page.dart (1 string)
+Status: COMPLETED
+Note: Added 1 new l10n key to all 34 language ARB files and updated the Dart file to use
+context.l10n pattern. Key added: searchTranscriptOrSummary.
+Ran flutter gen-l10n and verified with test.sh.
 
 ### [ ] pages/conversations/widgets/goal_tracker_widget.dart (1 string)
 Status: PENDING
@@ -225,6 +226,12 @@ Strings:
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-20] Localized conversation_detail/page.dart
+- Added 1 new l10n key to all 34 language ARB files with proper translations
+- Key: searchTranscriptOrSummary
+- Updated Dart file to use context.l10n.searchTranscriptOrSummary
+- Ran flutter gen-l10n and verified with test.sh
 
 [2026-01-20] Localized desktop_name_speaker_dialog.dart
 - Reused 10 existing l10n keys (all were already in ARB files)

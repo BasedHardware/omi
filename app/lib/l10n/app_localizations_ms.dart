@@ -7360,4 +7360,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get onboardingYoureAllSet => 'Anda sudah sedia';
+
+  @override
+  String get searchTranscriptOrSummary => 'Cari dalam transkrip atau ringkasan...';
 }

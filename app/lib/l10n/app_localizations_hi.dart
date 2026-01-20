@@ -7317,4 +7317,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get onboardingYoureAllSet => 'आप तैयार हैं';
+
+  @override
+  String get searchTranscriptOrSummary => 'ट्रांसक्रिप्ट या सारांश में खोजें...';
 }

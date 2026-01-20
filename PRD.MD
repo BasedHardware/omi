@@ -79,7 +79,7 @@ The app uses Flutter's ARB-based localization system (`context.l10n.keyName`). W
 
 | File | Strings | Description |
 |------|---------|-------------|
-| `pages/conversation_detail/page.dart` | 1 | Search placeholder |
+| `pages/conversation_detail/page.dart` | 1 | Search placeholder - **DONE** |
 | `pages/conversations/widgets/goal_tracker_widget.dart` | 1 | Default goal title |
 | `main.dart` | 1 | Desktop window title |
 

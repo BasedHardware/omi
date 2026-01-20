@@ -7367,4 +7367,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get onboardingYoureAllSet => 'Всичко е готово';
+
+  @override
+  String get searchTranscriptOrSummary => 'Търсене в транскрипция или резюме...';
 }

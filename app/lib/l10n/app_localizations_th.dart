@@ -7303,4 +7303,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get onboardingYoureAllSet => 'คุณพร้อมแล้ว';
+
+  @override
+  String get searchTranscriptOrSummary => 'ค้นหาในข้อความถอดเสียงหรือสรุป...';
 }

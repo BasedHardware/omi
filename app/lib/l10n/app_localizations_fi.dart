@@ -7338,4 +7338,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get onboardingYoureAllSet => 'Olet valmis';
+
+  @override
+  String get searchTranscriptOrSummary => 'Hae transkriptiosta tai yhteenvedosta...';
 }

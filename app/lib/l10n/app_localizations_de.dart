@@ -7399,4 +7399,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get onboardingYoureAllSet => 'Du bist startklar';
+
+  @override
+  String get searchTranscriptOrSummary => 'Transkript oder Zusammenfassung durchsuchen...';
 }

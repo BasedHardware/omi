@@ -7348,4 +7348,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get onboardingYoureAllSet => 'Bạn đã sẵn sàng';
+
+  @override
+  String get searchTranscriptOrSummary => 'Tìm kiếm trong bản ghi hoặc tóm tắt...';
 }

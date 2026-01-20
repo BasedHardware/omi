@@ -7220,4 +7220,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get onboardingYoureAllSet => '準備完了です';
+
+  @override
+  String get searchTranscriptOrSummary => '文字起こしまたは要約を検索...';
 }

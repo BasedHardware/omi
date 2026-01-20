@@ -7371,4 +7371,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get onboardingYoureAllSet => 'Ești pregătit';
+
+  @override
+  String get searchTranscriptOrSummary => 'Căutare în transcriere sau rezumat...';
 }

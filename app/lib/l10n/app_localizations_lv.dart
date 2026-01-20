@@ -7351,4 +7351,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get onboardingYoureAllSet => 'Viss ir gatavs';
+
+  @override
+  String get searchTranscriptOrSummary => 'Meklēt transkripcijā vai kopsavilkumā...';
 }

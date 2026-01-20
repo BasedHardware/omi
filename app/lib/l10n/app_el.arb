@@ -2337,5 +2337,6 @@
   "onboardingTellUsAboutYourself": "Πες μας για σένα",
   "onboardingChooseYourPreference": "Επίλεξε την προτίμησή σου",
   "onboardingGrantRequiredAccess": "Παραχώρησε την απαιτούμενη πρόσβαση",
-  "onboardingYoureAllSet": "Είσαι έτοιμος"
+  "onboardingYoureAllSet": "Είσαι έτοιμος",
+  "searchTranscriptOrSummary": "Αναζήτηση σε απομαγνητοφώνηση ή περίληψη..."
 }

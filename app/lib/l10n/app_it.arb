@@ -2337,5 +2337,6 @@
   "onboardingTellUsAboutYourself": "Parlaci di te",
   "onboardingChooseYourPreference": "Scegli la tua preferenza",
   "onboardingGrantRequiredAccess": "Concedi l'accesso richiesto",
-  "onboardingYoureAllSet": "Sei pronto"
+  "onboardingYoureAllSet": "Sei pronto",
+  "searchTranscriptOrSummary": "Cerca nella trascrizione o nel riepilogo..."
 }

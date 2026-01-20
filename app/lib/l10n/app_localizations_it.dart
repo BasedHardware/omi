@@ -7379,4 +7379,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get onboardingYoureAllSet => 'Sei pronto';
+
+  @override
+  String get searchTranscriptOrSummary => 'Cerca nella trascrizione o nel riepilogo...';
 }

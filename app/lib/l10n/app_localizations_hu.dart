@@ -7372,4 +7372,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get onboardingYoureAllSet => 'Készen állsz';
+
+  @override
+  String get searchTranscriptOrSummary => 'Keresés az átiratban vagy összefoglalóban...';
 }

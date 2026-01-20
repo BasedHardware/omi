@@ -7337,4 +7337,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get onboardingYoureAllSet => 'You\'re all set';
+
+  @override
+  String get searchTranscriptOrSummary => 'Search transcript or summary...';
 }

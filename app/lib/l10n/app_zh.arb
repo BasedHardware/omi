@@ -2338,5 +2338,6 @@
   "onboardingTellUsAboutYourself": "介绍一下您自己",
   "onboardingChooseYourPreference": "选择您的偏好",
   "onboardingGrantRequiredAccess": "授予所需权限",
-  "onboardingYoureAllSet": "您已准备就绪"
+  "onboardingYoureAllSet": "您已准备就绪",
+  "searchTranscriptOrSummary": "搜索转录或摘要..."
 }

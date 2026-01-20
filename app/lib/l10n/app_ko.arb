@@ -2337,5 +2337,6 @@
   "onboardingTellUsAboutYourself": "자기소개를 해주세요",
   "onboardingChooseYourPreference": "선호 설정을 선택하세요",
   "onboardingGrantRequiredAccess": "필요한 권한을 허용하세요",
-  "onboardingYoureAllSet": "모든 준비가 완료되었습니다"
+  "onboardingYoureAllSet": "모든 준비가 완료되었습니다",
+  "searchTranscriptOrSummary": "대본 또는 요약 검색..."
 }

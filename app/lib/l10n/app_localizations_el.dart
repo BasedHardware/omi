@@ -7386,4 +7386,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get onboardingYoureAllSet => 'Είσαι έτοιμος';
+
+  @override
+  String get searchTranscriptOrSummary => 'Αναζήτηση σε απομαγνητοφώνηση ή περίληψη...';
 }

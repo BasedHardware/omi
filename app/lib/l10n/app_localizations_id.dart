@@ -7356,4 +7356,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get onboardingYoureAllSet => 'Anda siap';
+
+  @override
+  String get searchTranscriptOrSummary => 'Cari di transkrip atau ringkasan...';
 }

@@ -2337,5 +2337,6 @@
   "onboardingTellUsAboutYourself": "Povedzte nám o sebe",
   "onboardingChooseYourPreference": "Vyberte si preferencie",
   "onboardingGrantRequiredAccess": "Udeliť požadovaný prístup",
-  "onboardingYoureAllSet": "Všetko je pripravené"
+  "onboardingYoureAllSet": "Všetko je pripravené",
+  "searchTranscriptOrSummary": "Hľadať v prepise alebo zhrnutí..."
 }

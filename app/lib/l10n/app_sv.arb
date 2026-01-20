@@ -2337,5 +2337,6 @@
   "onboardingTellUsAboutYourself": "Berätta om dig själv",
   "onboardingChooseYourPreference": "Välj dina inställningar",
   "onboardingGrantRequiredAccess": "Bevilja nödvändig åtkomst",
-  "onboardingYoureAllSet": "Du är redo"
+  "onboardingYoureAllSet": "Du är redo",
+  "searchTranscriptOrSummary": "Sök i transkription eller sammanfattning..."
 }

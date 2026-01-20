@@ -2337,5 +2337,6 @@
   "onboardingTellUsAboutYourself": "Spune-ne despre tine",
   "onboardingChooseYourPreference": "Alege preferința ta",
   "onboardingGrantRequiredAccess": "Acordă accesul necesar",
-  "onboardingYoureAllSet": "Ești pregătit"
+  "onboardingYoureAllSet": "Ești pregătit",
+  "searchTranscriptOrSummary": "Căutare în transcriere sau rezumat..."
 }

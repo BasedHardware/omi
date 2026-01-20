@@ -7349,4 +7349,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get onboardingYoureAllSet => 'Hazırsınız';
+
+  @override
+  String get searchTranscriptOrSummary => 'Transkript veya özette ara...';
 }

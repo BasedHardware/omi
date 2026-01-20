@@ -7350,4 +7350,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get onboardingYoureAllSet => 'Wszystko gotowe';
+
+  @override
+  String get searchTranscriptOrSummary => 'Szukaj w transkrypcji lub podsumowaniu...';
 }

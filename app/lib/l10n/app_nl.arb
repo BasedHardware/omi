@@ -2337,5 +2337,6 @@
   "onboardingTellUsAboutYourself": "Vertel ons over jezelf",
   "onboardingChooseYourPreference": "Kies je voorkeur",
   "onboardingGrantRequiredAccess": "Verleen de vereiste toegang",
-  "onboardingYoureAllSet": "Je bent klaar"
+  "onboardingYoureAllSet": "Je bent klaar",
+  "searchTranscriptOrSummary": "Zoeken in transcript of samenvatting..."
 }

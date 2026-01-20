@@ -2337,5 +2337,6 @@
   "onboardingTellUsAboutYourself": "Розкажіть про себе",
   "onboardingChooseYourPreference": "Оберіть ваші налаштування",
   "onboardingGrantRequiredAccess": "Надати необхідний доступ",
-  "onboardingYoureAllSet": "Все готово"
+  "onboardingYoureAllSet": "Все готово",
+  "searchTranscriptOrSummary": "Пошук у транскрипції або резюме..."
 }

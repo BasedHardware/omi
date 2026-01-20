@@ -7345,4 +7345,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get onboardingYoureAllSet => 'Du er klar';
+
+  @override
+  String get searchTranscriptOrSummary => 'Søg i transskription eller resumé...';
 }

@@ -7222,4 +7222,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get onboardingYoureAllSet => '모든 준비가 완료되었습니다';
+
+  @override
+  String get searchTranscriptOrSummary => '대본 또는 요약 검색...';
 }

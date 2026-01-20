@@ -9096,5 +9096,9 @@
   "onboardingYoureAllSet": "You're all set",
   "@onboardingYoureAllSet": {
     "description": "Onboarding step description for completion"
+  },
+  "searchTranscriptOrSummary": "Search transcript or summary...",
+  "@searchTranscriptOrSummary": {
+    "description": "Placeholder text for search field in conversation detail page"
   }
 }

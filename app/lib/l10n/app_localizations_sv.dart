@@ -7342,4 +7342,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get onboardingYoureAllSet => 'Du är redo';
+
+  @override
+  String get searchTranscriptOrSummary => 'Sök i transkription eller sammanfattning...';
 }

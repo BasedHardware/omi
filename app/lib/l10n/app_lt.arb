@@ -2337,5 +2337,6 @@
   "onboardingTellUsAboutYourself": "Papasakokite apie save",
   "onboardingChooseYourPreference": "Pasirinkite savo nuostatą",
   "onboardingGrantRequiredAccess": "Suteikti reikiamą prieigą",
-  "onboardingYoureAllSet": "Viskas paruošta"
+  "onboardingYoureAllSet": "Viskas paruošta",
+  "searchTranscriptOrSummary": "Ieškoti transkripcijoje ar santraukoje..."
 }

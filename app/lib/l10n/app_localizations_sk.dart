@@ -7339,4 +7339,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get onboardingYoureAllSet => 'Všetko je pripravené';
+
+  @override
+  String get searchTranscriptOrSummary => 'Hľadať v prepise alebo zhrnutí...';
 }
