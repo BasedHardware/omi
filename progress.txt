@@ -10,10 +10,13 @@
 |--------|-------|
 | Total Files | 27 |
 | Total Strings | ~125 |
-| Completed | 13 |
+| Completed | 14 |
 | In Progress | 0 |
-| Pending | 14 |
-| Progress | 48% |
+| Pending | 13 |
+| Progress | 52% |
+
+**CRITICAL ISSUE**: ~162 pre-existing l10n keys in non-English ARB files still contain
+English text instead of proper translations. See PRIORITY 0 section below.
 
 ================================================================================
 ## PRIORITY 1: HIGH IMPACT - User-Facing Features (~65 strings)
@@ -127,10 +130,12 @@ context.l10n pattern. Keys added: importErrorOpeningFilePicker (with placeholder
 importErrorGeneric (with placeholder).
 Ran flutter gen-l10n and verified with test.sh.
 
-### [ ] pages/apps/app_detail/app_detail.dart (1 string)
-Status: PENDING
-Strings:
-- [ ] Line 227: 'Error: ...' (error with param)
+### [x] pages/apps/app_detail/app_detail.dart (1 string)
+Status: COMPLETED
+Note: Updated Dart file to use existing l10n key `errorWithMessage` with `{error}` placeholder.
+The key was already available in all 34 language ARB files, so no ARB updates were needed.
+Changed line 227 from hardcoded `'Error: ${e.toString()}'` to `context.l10n.errorWithMessage(e.toString())`.
+Ran flutter gen-l10n and verified with test.sh.
 
 ================================================================================
 ## PRIORITY 3: NOTIFICATIONS & SERVICES (~10 strings)
@@ -212,6 +217,12 @@ Strings:
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-20] Localized app_detail.dart
+- Reused existing l10n key `errorWithMessage` with `{error}` placeholder
+- No ARB file updates needed - key already existed in all 34 languages
+- Updated Dart file to use context.l10n.errorWithMessage(e.toString())
+- Ran flutter gen-l10n and verified with test.sh
 
 [2026-01-20] Localized import_history_page.dart
 - Added 2 new l10n keys to all 34 language ARB files
@@ -310,13 +321,50 @@ Strings:
 - Previous progress.txt was inaccurate (claimed 100% complete)
 
 ================================================================================
+## PRIORITY 0: CRITICAL - Pre-existing Untranslated Keys (~162 keys)
+================================================================================
+
+### [ ] Translate pre-existing English keys in all non-English ARB files
+Status: PENDING
+Note: An audit of app_ar.arb found ~162 keys that still contain English text instead of
+proper translations. These keys existed BEFORE this localization project started and were
+never properly translated. This task has HIGH PRIORITY as it affects all users of non-English
+languages.
+
+Sample of untranslated keys (showing English values that need translation):
+- couldNotLaunchUpgradePage: "Could not launch upgrade page. Please try again."
+- signOutConfirmation: "Are you sure you want to sign out?"
+- deleteRecording: "Delete Recording"
+- memoryCreationFailed: "Memory creation failed. It will be retried soon."
+- resetPreferencesDisclaimer: "Resetting preferences will not affect your memories..."
+- listeningFrom: "Listening from"
+- connectToFriend: "Connect to Friend"
+- speakingLanguage: "Speaking Language"
+- recordingLanguage: "Recording Language"
+- selectYourLanguage: "Select Your Language"
+- discoverNewApps: "Discover new apps"
+- tryOurLatestIntegrations: "Try our latest integrations"
+- speechProfileCompleted: "Speech Profile Completed"
+- actionItemsExtracted: "Action Items Extracted"
+- And ~148 more keys...
+
+This task requires:
+1. Extract all English keys from app_ar.arb (or any non-English ARB)
+2. Generate proper translations for all 33 non-English languages
+3. Update all ARB files with correct translations
+4. Run flutter gen-l10n and verify with test.sh
+
+================================================================================
 ## NOTES
 ================================================================================
 
+- **CRITICAL**: All l10n keys MUST be properly translated to each target language.
+  Do NOT copy English text to non-English ARB files. Each language file must contain
+  the actual translation in that language.
 - Use `jq` CLI to add keys to ARB files (never read full files)
 - Run `cd app && flutter gen-l10n` after ARB updates
 - Run `app/test.sh` to verify changes
-- Supported languages: 34
+- Supported languages: 34 (en + 33 translations)
 - Some notification strings may not have BuildContext access
 
 ================================================================================

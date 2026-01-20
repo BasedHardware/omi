@@ -224,7 +224,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: ${e.toString()}'),
+            content: Text(context.l10n.errorWithMessage(e.toString())),
             backgroundColor: Colors.red,
           ),
         );
@@ -1416,7 +1416,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                 true) {
                               await routeToPage(
                                 context,
-                                MarkdownViewer(title: context.l10n.setupInstructions, markdown: instructionsMarkdown ?? ''),
+                                MarkdownViewer(
+                                    title: context.l10n.setupInstructions, markdown: instructionsMarkdown ?? ''),
                               );
                             } else {
                               if (app.externalIntegration!.isInstructionsUrl == true) {
@@ -1430,7 +1431,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                 await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
                               } else {
                                 var m = app.externalIntegration!.setupInstructionsFilePath;
-                                routeToPage(context, MarkdownViewer(title: context.l10n.setupInstructions, markdown: m ?? ''));
+                                routeToPage(
+                                    context, MarkdownViewer(title: context.l10n.setupInstructions, markdown: m ?? ''));
                               }
                             }
                           }
@@ -1582,8 +1584,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
                 app.conversationPrompt != null
                     ? InfoCardWidget(
                         onTap: () {
-                          routeToPage(context,
-                              MarkdownViewer(title: context.l10n.summaryPrompt, markdown: app.conversationPrompt!.decodeString));
+                          routeToPage(
+                              context,
+                              MarkdownViewer(
+                                  title: context.l10n.summaryPrompt, markdown: app.conversationPrompt!.decodeString));
                         },
                         title: context.l10n.summaryPrompt,
                         description: app.conversationPrompt!,
@@ -1595,8 +1599,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
                 app.chatPrompt != null
                     ? InfoCardWidget(
                         onTap: () {
-                          routeToPage(context,
-                              MarkdownViewer(title: context.l10n.chatPersonality, markdown: app.chatPrompt!.decodeString));
+                          routeToPage(
+                              context,
+                              MarkdownViewer(
+                                  title: context.l10n.chatPersonality, markdown: app.chatPrompt!.decodeString));
                         },
                         title: context.l10n.chatPersonality,
                         description: app.chatPrompt!,
@@ -2081,8 +2087,9 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-                content: Text(
-                    widget.userReview == null ? context.l10n.reviewAddedSuccessfully : context.l10n.reviewUpdatedSuccessfully)),
+                content: Text(widget.userReview == null
+                    ? context.l10n.reviewAddedSuccessfully
+                    : context.l10n.reviewUpdatedSuccessfully)),
           );
           setState(() => isEditing = false);
           widget.onReviewUpdated?.call();
