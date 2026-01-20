@@ -10,10 +10,10 @@
 |--------|-------|
 | Total Files | 27 |
 | Total Strings | ~125 |
-| Completed | 3 |
+| Completed | 4 |
 | In Progress | 0 |
-| Pending | 24 |
-| Progress | 11% |
+| Pending | 23 |
+| Progress | 15% |
 
 ================================================================================
 ## PRIORITY 1: HIGH IMPACT - User-Facing Features (~65 strings)
@@ -49,12 +49,11 @@ personaConnectKnowledgeSource, personaUpdatedSuccessfully, personaFailedToUpdate
 personaFailedToCreateTryLater, personaFailedToCreateWithError (with placeholder), personaFailedToEnable,
 personaErrorEnablingWithError (with placeholder).
 
-### [ ] pages/payments/payment_method_provider.dart (3 strings)
-Status: PENDING
-Strings:
-- [ ] Line 64: 'Failed to fetch supported countries...' (error)
-- [ ] Line 88: 'Failed to set default payment method...' (error)
-- [ ] Line 167: 'Failed to save PayPal details...' (error)
+### [x] pages/payments/payment_method_provider.dart (3 strings)
+Status: COMPLETED
+Note: Added 3 new l10n keys to all 34 language ARB files and updated the Dart file to use
+MyApp.navigatorKey.currentContext!.l10n pattern. Keys added: paymentFailedToFetchCountries,
+paymentFailedToSetDefault, paymentFailedToSavePaypal.
 
 ### [ ] pages/payments/paypal_setup_page.dart (2 strings)
 Status: PENDING
@@ -210,6 +209,12 @@ Strings:
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-20] Localized payment_method_provider.dart
+- Added 3 new l10n keys to all 34 language ARB files
+- Updated Dart file to use MyApp.navigatorKey.currentContext!.l10n pattern
+- Keys: paymentFailedToFetchCountries, paymentFailedToSetDefault, paymentFailedToSavePaypal
+- Ran flutter gen-l10n and verified with test.sh
 
 [2026-01-20] Localized persona_provider.dart
 - Added 13 new l10n keys to all 34 language ARB files

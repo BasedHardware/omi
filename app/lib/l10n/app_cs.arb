@@ -2240,5 +2240,7 @@
   "personaErrorEnablingWithError": "Error enabling persona: {error}",
   "paymentFailedToFetchCountries": "Failed to fetch supported countries. Please try again later.",
   "paymentFailedToSetDefault": "Failed to set default payment method. Please try again later.",
-  "paymentFailedToSavePaypal": "Failed to save PayPal details. Please try again later."
+  "paymentFailedToSavePaypal": "Failed to save PayPal details. Please try again later.",
+  "paypalEmailHint": "nik@example.com",
+  "paypalMeLinkHint": "paypal.me/nik"
 }

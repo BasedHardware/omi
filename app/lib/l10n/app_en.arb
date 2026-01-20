@@ -8827,5 +8827,13 @@
   "paymentFailedToSavePaypal": "Failed to save PayPal details. Please try again later.",
   "@paymentFailedToSavePaypal": {
     "description": "Error message when saving PayPal details fails"
+  },
+  "paypalEmailHint": "nik@example.com",
+  "@paypalEmailHint": {
+    "description": "Placeholder example email for PayPal email input field"
+  },
+  "paypalMeLinkHint": "paypal.me/nik",
+  "@paypalMeLinkHint": {
+    "description": "Placeholder example PayPal.me link for input field"
   }
 }
