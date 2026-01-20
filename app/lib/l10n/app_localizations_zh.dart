@@ -7143,4 +7143,14 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get pricePlaceholder => '0.00';
+
+  @override
+  String importErrorOpeningFilePicker(String message) {
+    return '打开文件选择器时出错：$message';
+  }
+
+  @override
+  String importErrorGeneric(String error) {
+    return '错误：$error';
+  }
 }

@@ -7265,4 +7265,14 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get pricePlaceholder => '0.00';
+
+  @override
+  String importErrorOpeningFilePicker(String message) {
+    return 'Erro ao abrir o seletor de arquivos: $message';
+  }
+
+  @override
+  String importErrorGeneric(String error) {
+    return 'Erro: $error';
+  }
 }

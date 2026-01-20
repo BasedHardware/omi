@@ -7272,4 +7272,14 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get pricePlaceholder => '0.00';
+
+  @override
+  String importErrorOpeningFilePicker(String message) {
+    return 'Viga failivalija avamisel: $message';
+  }
+
+  @override
+  String importErrorGeneric(String error) {
+    return 'Viga: $error';
+  }
 }

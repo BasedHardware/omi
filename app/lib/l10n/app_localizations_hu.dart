@@ -7305,4 +7305,14 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get pricePlaceholder => '0.00';
+
+  @override
+  String importErrorOpeningFilePicker(String message) {
+    return 'Hiba a fájlválasztó megnyitásakor: $message';
+  }
+
+  @override
+  String importErrorGeneric(String error) {
+    return 'Hiba: $error';
+  }
 }

@@ -7271,4 +7271,14 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get pricePlaceholder => '0.00';
+
+  @override
+  String importErrorOpeningFilePicker(String message) {
+    return 'Virhe tiedostonvalitsimen avaamisessa: $message';
+  }
+
+  @override
+  String importErrorGeneric(String error) {
+    return 'Virhe: $error';
+  }
 }

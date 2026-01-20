@@ -7250,4 +7250,14 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get pricePlaceholder => '0.00';
+
+  @override
+  String importErrorOpeningFilePicker(String message) {
+    return 'फ़ाइल पिकर खोलने में त्रुटि: $message';
+  }
+
+  @override
+  String importErrorGeneric(String error) {
+    return 'त्रुटि: $error';
+  }
 }

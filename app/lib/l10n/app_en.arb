@@ -8990,5 +8990,25 @@
   "pricePlaceholder": "0.00",
   "@pricePlaceholder": {
     "description": "Placeholder text for the price input field showing a sample price format"
+  },
+  "importErrorOpeningFilePicker": "Error opening file picker: {message}",
+  "@importErrorOpeningFilePicker": {
+    "description": "Error message when file picker fails to open",
+    "placeholders": {
+      "message": {
+        "type": "String",
+        "example": "Permission denied"
+      }
+    }
+  },
+  "importErrorGeneric": "Error: {error}",
+  "@importErrorGeneric": {
+    "description": "Generic error message with error details",
+    "placeholders": {
+      "error": {
+        "type": "String",
+        "example": "Unknown error"
+      }
+    }
   }
 }

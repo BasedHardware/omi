@@ -182,7 +182,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
         setState(() => _isUploading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error opening file picker: ${e.message}'),
+            content: Text(context.l10n.importErrorOpeningFilePicker(e.message ?? '')),
             backgroundColor: Colors.red.shade700,
           ),
         );
@@ -194,7 +194,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
         setState(() => _isUploading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: $e'),
+            content: Text(context.l10n.importErrorGeneric(e.toString())),
             backgroundColor: Colors.red.shade700,
           ),
         );

@@ -7291,4 +7291,14 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get pricePlaceholder => '0.00';
+
+  @override
+  String importErrorOpeningFilePicker(String message) {
+    return 'Fout bij openen bestandskiezer: $message';
+  }
+
+  @override
+  String importErrorGeneric(String error) {
+    return 'Fout: $error';
+  }
 }

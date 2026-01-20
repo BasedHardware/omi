@@ -10,10 +10,10 @@
 |--------|-------|
 | Total Files | 27 |
 | Total Strings | ~125 |
-| Completed | 12 |
+| Completed | 13 |
 | In Progress | 0 |
-| Pending | 15 |
-| Progress | 44% |
+| Pending | 14 |
+| Progress | 48% |
 
 ================================================================================
 ## PRIORITY 1: HIGH IMPACT - User-Facing Features (~65 strings)
@@ -120,11 +120,12 @@ context.l10n pattern. Key added: pricePlaceholder.
 The value "0.00" is a numeric format placeholder and remains the same across all languages.
 Ran flutter gen-l10n and verified with test.sh.
 
-### [ ] pages/settings/import_history_page.dart (2 strings)
-Status: PENDING
-Strings:
-- [ ] Line 185: 'Error opening file picker: ...' (error with param)
-- [ ] Line 197: 'Error: $e' (error with param)
+### [x] pages/settings/import_history_page.dart (2 strings)
+Status: COMPLETED
+Note: Added 2 new l10n keys to all 34 language ARB files and updated the Dart file to use
+context.l10n pattern. Keys added: importErrorOpeningFilePicker (with placeholder),
+importErrorGeneric (with placeholder).
+Ran flutter gen-l10n and verified with test.sh.
 
 ### [ ] pages/apps/app_detail/app_detail.dart (1 string)
 Status: PENDING
@@ -211,6 +212,13 @@ Strings:
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-20] Localized import_history_page.dart
+- Added 2 new l10n keys to all 34 language ARB files
+- Updated Dart file to use context.l10n pattern
+- Keys: importErrorOpeningFilePicker (with placeholder), importErrorGeneric (with placeholder)
+- Both keys include {message}/{error} placeholders for error details
+- Ran flutter gen-l10n and verified with test.sh
 
 [2026-01-20] Localized ai_app_generator_page.dart
 - Added 1 new l10n key to all 34 language ARB files

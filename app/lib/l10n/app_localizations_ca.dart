@@ -7312,4 +7312,14 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get pricePlaceholder => '0.00';
+
+  @override
+  String importErrorOpeningFilePicker(String message) {
+    return 'Error en obrir el selector de fitxers: $message';
+  }
+
+  @override
+  String importErrorGeneric(String error) {
+    return 'Error: $error';
+  }
 }

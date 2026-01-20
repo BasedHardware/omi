@@ -7319,4 +7319,14 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get pricePlaceholder => '0.00';
+
+  @override
+  String importErrorOpeningFilePicker(String message) {
+    return 'Σφάλμα κατά το άνοιγμα του επιλογέα αρχείων: $message';
+  }
+
+  @override
+  String importErrorGeneric(String error) {
+    return 'Σφάλμα: $error';
+  }
 }

@@ -7304,4 +7304,14 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get pricePlaceholder => '0.00';
+
+  @override
+  String importErrorOpeningFilePicker(String message) {
+    return 'Eroare la deschiderea selectorului de fișiere: $message';
+  }
+
+  @override
+  String importErrorGeneric(String error) {
+    return 'Eroare: $error';
+  }
 }

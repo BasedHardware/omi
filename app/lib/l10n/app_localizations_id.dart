@@ -7289,4 +7289,14 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get pricePlaceholder => '0.00';
+
+  @override
+  String importErrorOpeningFilePicker(String message) {
+    return 'Kesalahan membuka pemilih file: $message';
+  }
+
+  @override
+  String importErrorGeneric(String error) {
+    return 'Kesalahan: $error';
+  }
 }

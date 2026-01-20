@@ -7282,4 +7282,14 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get pricePlaceholder => '0.00';
+
+  @override
+  String importErrorOpeningFilePicker(String message) {
+    return 'Dosya seçici açılırken hata: $message';
+  }
+
+  @override
+  String importErrorGeneric(String error) {
+    return 'Hata: $error';
+  }
 }

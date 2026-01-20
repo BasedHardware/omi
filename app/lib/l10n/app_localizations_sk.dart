@@ -7272,4 +7272,14 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get pricePlaceholder => '0.00';
+
+  @override
+  String importErrorOpeningFilePicker(String message) {
+    return 'Chyba pri otváraní výberu súborov: $message';
+  }
+
+  @override
+  String importErrorGeneric(String error) {
+    return 'Chyba: $error';
+  }
 }

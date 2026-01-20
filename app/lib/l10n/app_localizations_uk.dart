@@ -7279,4 +7279,14 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get pricePlaceholder => '0.00';
+
+  @override
+  String importErrorOpeningFilePicker(String message) {
+    return 'Помилка при відкритті вибору файлів: $message';
+  }
+
+  @override
+  String importErrorGeneric(String error) {
+    return 'Помилка: $error';
+  }
 }

@@ -7335,4 +7335,14 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get pricePlaceholder => '0.00';
+
+  @override
+  String importErrorOpeningFilePicker(String message) {
+    return 'Erreur lors de l\'ouverture du sélecteur de fichiers : $message';
+  }
+
+  @override
+  String importErrorGeneric(String error) {
+    return 'Erreur : $error';
+  }
 }

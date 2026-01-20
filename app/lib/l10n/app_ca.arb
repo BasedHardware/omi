@@ -2301,5 +2301,7 @@
   "couldNotLaunchUpgradePage": "Could not launch upgrade page. Please try again.",
   "transcriptionJsonPlaceholder": "Paste your JSON configuration here...",
   "transcriptionSourceOmi": "Omi",
-  "pricePlaceholder": "0.00"
+  "pricePlaceholder": "0.00",
+  "importErrorOpeningFilePicker": "Error en obrir el selector de fitxers: {message}",
+  "importErrorGeneric": "Error: {error}"
 }

@@ -7275,4 +7275,14 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get pricePlaceholder => '0.00';
+
+  @override
+  String importErrorOpeningFilePicker(String message) {
+    return 'Fel vid öppning av filväljare: $message';
+  }
+
+  @override
+  String importErrorGeneric(String error) {
+    return 'Fel: $error';
+  }
 }

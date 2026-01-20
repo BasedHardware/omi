@@ -13670,6 +13670,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'0.00'**
   String get pricePlaceholder;
+
+  /// Error message when file picker fails to open
+  ///
+  /// In en, this message translates to:
+  /// **'Error opening file picker: {message}'**
+  String importErrorOpeningFilePicker(String message);
+
+  /// Generic error message with error details
+  ///
+  /// In en, this message translates to:
+  /// **'Error: {error}'**
+  String importErrorGeneric(String error);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -7155,4 +7155,14 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get pricePlaceholder => '0.00';
+
+  @override
+  String importErrorOpeningFilePicker(String message) {
+    return '파일 선택기를 여는 중 오류 발생: $message';
+  }
+
+  @override
+  String importErrorGeneric(String error) {
+    return '오류: $error';
+  }
 }
