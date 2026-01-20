@@ -2327,5 +2327,15 @@
   "dailyReflectionNotificationBody": "Räägi mulle oma päevast",
   "actionItemReminderTitle": "Omi meeldetuletus",
   "deviceDisconnectedTitle": "{deviceName} ühendus katkestatud",
-  "deviceDisconnectedBody": "Palun ühenda uuesti, et jätkata oma {deviceName} kasutamist."
+  "deviceDisconnectedBody": "Palun ühenda uuesti, et jätkata oma {deviceName} kasutamist.",
+  "onboardingSignIn": "Logi sisse",
+  "onboardingYourName": "Sinu nimi",
+  "onboardingLanguage": "Keel",
+  "onboardingPermissions": "Õigused",
+  "onboardingComplete": "Valmis",
+  "onboardingWelcomeToOmi": "Tere tulemast Omi-sse",
+  "onboardingTellUsAboutYourself": "Räägi meile endast",
+  "onboardingChooseYourPreference": "Vali oma eelistus",
+  "onboardingGrantRequiredAccess": "Anna nõutav juurdepääs",
+  "onboardingYoureAllSet": "Kõik on valmis"
 }

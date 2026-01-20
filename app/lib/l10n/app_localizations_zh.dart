@@ -7180,4 +7180,34 @@ class AppLocalizationsZh extends AppLocalizations {
   String deviceDisconnectedBody(String deviceName) {
     return '请重新连接以继续使用您的 $deviceName。';
   }
+
+  @override
+  String get onboardingSignIn => '登录';
+
+  @override
+  String get onboardingYourName => '您的姓名';
+
+  @override
+  String get onboardingLanguage => '语言';
+
+  @override
+  String get onboardingPermissions => '权限';
+
+  @override
+  String get onboardingComplete => '完成';
+
+  @override
+  String get onboardingWelcomeToOmi => '欢迎使用 Omi';
+
+  @override
+  String get onboardingTellUsAboutYourself => '介绍一下您自己';
+
+  @override
+  String get onboardingChooseYourPreference => '选择您的偏好';
+
+  @override
+  String get onboardingGrantRequiredAccess => '授予所需权限';
+
+  @override
+  String get onboardingYoureAllSet => '您已准备就绪';
 }

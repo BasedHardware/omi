@@ -2327,5 +2327,15 @@
   "dailyReflectionNotificationBody": "Розкажи мені про свій день",
   "actionItemReminderTitle": "Нагадування Omi",
   "deviceDisconnectedTitle": "{deviceName} відключено",
-  "deviceDisconnectedBody": "Будь ласка, підключіться знову, щоб продовжити використання вашого {deviceName}."
+  "deviceDisconnectedBody": "Будь ласка, підключіться знову, щоб продовжити використання вашого {deviceName}.",
+  "onboardingSignIn": "Увійти",
+  "onboardingYourName": "Ваше ім'я",
+  "onboardingLanguage": "Мова",
+  "onboardingPermissions": "Дозволи",
+  "onboardingComplete": "Завершено",
+  "onboardingWelcomeToOmi": "Ласкаво просимо до Omi",
+  "onboardingTellUsAboutYourself": "Розкажіть про себе",
+  "onboardingChooseYourPreference": "Оберіть ваші налаштування",
+  "onboardingGrantRequiredAccess": "Надати необхідний доступ",
+  "onboardingYoureAllSet": "Все готово"
 }

@@ -2328,5 +2328,15 @@
   "dailyReflectionNotificationBody": "告诉我你今天过得怎么样",
   "actionItemReminderTitle": "Omi提醒",
   "deviceDisconnectedTitle": "{deviceName} 已断开连接",
-  "deviceDisconnectedBody": "请重新连接以继续使用您的 {deviceName}。"
+  "deviceDisconnectedBody": "请重新连接以继续使用您的 {deviceName}。",
+  "onboardingSignIn": "登录",
+  "onboardingYourName": "您的姓名",
+  "onboardingLanguage": "语言",
+  "onboardingPermissions": "权限",
+  "onboardingComplete": "完成",
+  "onboardingWelcomeToOmi": "欢迎使用 Omi",
+  "onboardingTellUsAboutYourself": "介绍一下您自己",
+  "onboardingChooseYourPreference": "选择您的偏好",
+  "onboardingGrantRequiredAccess": "授予所需权限",
+  "onboardingYoureAllSet": "您已准备就绪"
 }

@@ -7318,4 +7318,34 @@ class AppLocalizationsVi extends AppLocalizations {
   String deviceDisconnectedBody(String deviceName) {
     return 'Vui lòng kết nối lại để tiếp tục sử dụng $deviceName của bạn.';
   }
+
+  @override
+  String get onboardingSignIn => 'Đăng nhập';
+
+  @override
+  String get onboardingYourName => 'Tên của bạn';
+
+  @override
+  String get onboardingLanguage => 'Ngôn ngữ';
+
+  @override
+  String get onboardingPermissions => 'Quyền truy cập';
+
+  @override
+  String get onboardingComplete => 'Hoàn tất';
+
+  @override
+  String get onboardingWelcomeToOmi => 'Chào mừng đến với Omi';
+
+  @override
+  String get onboardingTellUsAboutYourself => 'Hãy cho chúng tôi biết về bạn';
+
+  @override
+  String get onboardingChooseYourPreference => 'Chọn tùy chọn của bạn';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Cấp quyền truy cập cần thiết';
+
+  @override
+  String get onboardingYoureAllSet => 'Bạn đã sẵn sàng';
 }

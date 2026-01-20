@@ -7308,4 +7308,34 @@ class AppLocalizationsFi extends AppLocalizations {
   String deviceDisconnectedBody(String deviceName) {
     return 'Yhdistä uudelleen jatkaaksesi $deviceName käyttöä.';
   }
+
+  @override
+  String get onboardingSignIn => 'Kirjaudu sisään';
+
+  @override
+  String get onboardingYourName => 'Nimesi';
+
+  @override
+  String get onboardingLanguage => 'Kieli';
+
+  @override
+  String get onboardingPermissions => 'Käyttöoikeudet';
+
+  @override
+  String get onboardingComplete => 'Valmis';
+
+  @override
+  String get onboardingWelcomeToOmi => 'Tervetuloa Omiin';
+
+  @override
+  String get onboardingTellUsAboutYourself => 'Kerro meille itsestäsi';
+
+  @override
+  String get onboardingChooseYourPreference => 'Valitse asetuksesi';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Myönnä tarvittava käyttöoikeus';
+
+  @override
+  String get onboardingYoureAllSet => 'Olet valmis';
 }

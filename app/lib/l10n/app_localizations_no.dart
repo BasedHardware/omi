@@ -7305,4 +7305,34 @@ class AppLocalizationsNo extends AppLocalizations {
   String deviceDisconnectedBody(String deviceName) {
     return 'Vennligst koble til igjen for å fortsette å bruke din $deviceName.';
   }
+
+  @override
+  String get onboardingSignIn => 'Logg inn';
+
+  @override
+  String get onboardingYourName => 'Ditt navn';
+
+  @override
+  String get onboardingLanguage => 'Språk';
+
+  @override
+  String get onboardingPermissions => 'Tillatelser';
+
+  @override
+  String get onboardingComplete => 'Fullført';
+
+  @override
+  String get onboardingWelcomeToOmi => 'Velkommen til Omi';
+
+  @override
+  String get onboardingTellUsAboutYourself => 'Fortell oss om deg selv';
+
+  @override
+  String get onboardingChooseYourPreference => 'Velg dine preferanser';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Gi nødvendig tilgang';
+
+  @override
+  String get onboardingYoureAllSet => 'Du er klar';
 }

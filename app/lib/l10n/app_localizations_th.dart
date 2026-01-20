@@ -7273,4 +7273,34 @@ class AppLocalizationsTh extends AppLocalizations {
   String deviceDisconnectedBody(String deviceName) {
     return 'กรุณาเชื่อมต่อใหม่เพื่อใช้งาน $deviceName ของคุณต่อไป';
   }
+
+  @override
+  String get onboardingSignIn => 'ลงชื่อเข้าใช้';
+
+  @override
+  String get onboardingYourName => 'ชื่อของคุณ';
+
+  @override
+  String get onboardingLanguage => 'ภาษา';
+
+  @override
+  String get onboardingPermissions => 'สิทธิ์การเข้าถึง';
+
+  @override
+  String get onboardingComplete => 'เสร็จสิ้น';
+
+  @override
+  String get onboardingWelcomeToOmi => 'ยินดีต้อนรับสู่ Omi';
+
+  @override
+  String get onboardingTellUsAboutYourself => 'เล่าเกี่ยวกับตัวคุณให้เราฟัง';
+
+  @override
+  String get onboardingChooseYourPreference => 'เลือกการตั้งค่าของคุณ';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'ให้สิทธิ์การเข้าถึงที่จำเป็น';
+
+  @override
+  String get onboardingYoureAllSet => 'คุณพร้อมแล้ว';
 }

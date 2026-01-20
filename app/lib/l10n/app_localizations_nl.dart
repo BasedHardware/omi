@@ -7328,4 +7328,34 @@ class AppLocalizationsNl extends AppLocalizations {
   String deviceDisconnectedBody(String deviceName) {
     return 'Maak opnieuw verbinding om uw $deviceName te blijven gebruiken.';
   }
+
+  @override
+  String get onboardingSignIn => 'Inloggen';
+
+  @override
+  String get onboardingYourName => 'Je naam';
+
+  @override
+  String get onboardingLanguage => 'Taal';
+
+  @override
+  String get onboardingPermissions => 'Machtigingen';
+
+  @override
+  String get onboardingComplete => 'Voltooid';
+
+  @override
+  String get onboardingWelcomeToOmi => 'Welkom bij Omi';
+
+  @override
+  String get onboardingTellUsAboutYourself => 'Vertel ons over jezelf';
+
+  @override
+  String get onboardingChooseYourPreference => 'Kies je voorkeur';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Verleen de vereiste toegang';
+
+  @override
+  String get onboardingYoureAllSet => 'Je bent klaar';
 }

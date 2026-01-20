@@ -2327,5 +2327,15 @@
   "dailyReflectionNotificationBody": "Pastāsti man par savu dienu",
   "actionItemReminderTitle": "Omi atgādinājums",
   "deviceDisconnectedTitle": "{deviceName} atvienots",
-  "deviceDisconnectedBody": "Lūdzu, pievienojieties atkārtoti, lai turpinātu izmantot savu {deviceName}."
+  "deviceDisconnectedBody": "Lūdzu, pievienojieties atkārtoti, lai turpinātu izmantot savu {deviceName}.",
+  "onboardingSignIn": "Pierakstīties",
+  "onboardingYourName": "Jūsu vārds",
+  "onboardingLanguage": "Valoda",
+  "onboardingPermissions": "Atļaujas",
+  "onboardingComplete": "Pabeigts",
+  "onboardingWelcomeToOmi": "Laipni lūdzam Omi",
+  "onboardingTellUsAboutYourself": "Pastāstiet par sevi",
+  "onboardingChooseYourPreference": "Izvēlieties savu preferenci",
+  "onboardingGrantRequiredAccess": "Piešķirt nepieciešamo piekļuvi",
+  "onboardingYoureAllSet": "Viss ir gatavs"
 }

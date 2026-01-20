@@ -2327,5 +2327,15 @@
   "dailyReflectionNotificationBody": "Fortell meg om dagen din",
   "actionItemReminderTitle": "Omi-påminnelse",
   "deviceDisconnectedTitle": "{deviceName} frakoblet",
-  "deviceDisconnectedBody": "Vennligst koble til igjen for å fortsette å bruke din {deviceName}."
+  "deviceDisconnectedBody": "Vennligst koble til igjen for å fortsette å bruke din {deviceName}.",
+  "onboardingSignIn": "Logg inn",
+  "onboardingYourName": "Ditt navn",
+  "onboardingLanguage": "Språk",
+  "onboardingPermissions": "Tillatelser",
+  "onboardingComplete": "Fullført",
+  "onboardingWelcomeToOmi": "Velkommen til Omi",
+  "onboardingTellUsAboutYourself": "Fortell oss om deg selv",
+  "onboardingChooseYourPreference": "Velg dine preferanser",
+  "onboardingGrantRequiredAccess": "Gi nødvendig tilgang",
+  "onboardingYoureAllSet": "Du er klar"
 }

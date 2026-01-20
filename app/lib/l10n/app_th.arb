@@ -2327,5 +2327,15 @@
   "dailyReflectionNotificationBody": "เล่าให้ฟังเกี่ยวกับวันของคุณ",
   "actionItemReminderTitle": "การแจ้งเตือน Omi",
   "deviceDisconnectedTitle": "{deviceName} ตัดการเชื่อมต่อ",
-  "deviceDisconnectedBody": "กรุณาเชื่อมต่อใหม่เพื่อใช้งาน {deviceName} ของคุณต่อไป"
+  "deviceDisconnectedBody": "กรุณาเชื่อมต่อใหม่เพื่อใช้งาน {deviceName} ของคุณต่อไป",
+  "onboardingSignIn": "ลงชื่อเข้าใช้",
+  "onboardingYourName": "ชื่อของคุณ",
+  "onboardingLanguage": "ภาษา",
+  "onboardingPermissions": "สิทธิ์การเข้าถึง",
+  "onboardingComplete": "เสร็จสิ้น",
+  "onboardingWelcomeToOmi": "ยินดีต้อนรับสู่ Omi",
+  "onboardingTellUsAboutYourself": "เล่าเกี่ยวกับตัวคุณให้เราฟัง",
+  "onboardingChooseYourPreference": "เลือกการตั้งค่าของคุณ",
+  "onboardingGrantRequiredAccess": "ให้สิทธิ์การเข้าถึงที่จำเป็น",
+  "onboardingYoureAllSet": "คุณพร้อมแล้ว"
 }

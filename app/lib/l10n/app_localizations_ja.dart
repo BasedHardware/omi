@@ -7190,4 +7190,34 @@ class AppLocalizationsJa extends AppLocalizations {
   String deviceDisconnectedBody(String deviceName) {
     return '$deviceNameを引き続きご使用いただくには、再接続してください。';
   }
+
+  @override
+  String get onboardingSignIn => 'サインイン';
+
+  @override
+  String get onboardingYourName => 'あなたの名前';
+
+  @override
+  String get onboardingLanguage => '言語';
+
+  @override
+  String get onboardingPermissions => '権限';
+
+  @override
+  String get onboardingComplete => '完了';
+
+  @override
+  String get onboardingWelcomeToOmi => 'Omiへようこそ';
+
+  @override
+  String get onboardingTellUsAboutYourself => '自己紹介してください';
+
+  @override
+  String get onboardingChooseYourPreference => 'お好みを選択してください';
+
+  @override
+  String get onboardingGrantRequiredAccess => '必要なアクセスを許可';
+
+  @override
+  String get onboardingYoureAllSet => '準備完了です';
 }

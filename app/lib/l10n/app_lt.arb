@@ -2327,5 +2327,15 @@
   "dailyReflectionNotificationBody": "Papasakok apie savo dieną",
   "actionItemReminderTitle": "Omi priminimas",
   "deviceDisconnectedTitle": "{deviceName} atjungtas",
-  "deviceDisconnectedBody": "Prašome prisijungti iš naujo, kad galėtumėte toliau naudoti savo {deviceName}."
+  "deviceDisconnectedBody": "Prašome prisijungti iš naujo, kad galėtumėte toliau naudoti savo {deviceName}.",
+  "onboardingSignIn": "Prisijungti",
+  "onboardingYourName": "Jūsų vardas",
+  "onboardingLanguage": "Kalba",
+  "onboardingPermissions": "Leidimai",
+  "onboardingComplete": "Baigta",
+  "onboardingWelcomeToOmi": "Sveiki atvykę į Omi",
+  "onboardingTellUsAboutYourself": "Papasakokite apie save",
+  "onboardingChooseYourPreference": "Pasirinkite savo nuostatą",
+  "onboardingGrantRequiredAccess": "Suteikti reikiamą prieigą",
+  "onboardingYoureAllSet": "Viskas paruošta"
 }

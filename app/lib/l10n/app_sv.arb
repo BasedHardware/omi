@@ -2327,5 +2327,15 @@
   "dailyReflectionNotificationBody": "Berätta om din dag",
   "actionItemReminderTitle": "Omi-påminnelse",
   "deviceDisconnectedTitle": "{deviceName} frånkopplad",
-  "deviceDisconnectedBody": "Anslut igen för att fortsätta använda din {deviceName}."
+  "deviceDisconnectedBody": "Anslut igen för att fortsätta använda din {deviceName}.",
+  "onboardingSignIn": "Logga in",
+  "onboardingYourName": "Ditt namn",
+  "onboardingLanguage": "Språk",
+  "onboardingPermissions": "Behörigheter",
+  "onboardingComplete": "Klart",
+  "onboardingWelcomeToOmi": "Välkommen till Omi",
+  "onboardingTellUsAboutYourself": "Berätta om dig själv",
+  "onboardingChooseYourPreference": "Välj dina inställningar",
+  "onboardingGrantRequiredAccess": "Bevilja nödvändig åtkomst",
+  "onboardingYoureAllSet": "Du är redo"
 }

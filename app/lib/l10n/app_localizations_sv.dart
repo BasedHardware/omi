@@ -7312,4 +7312,34 @@ class AppLocalizationsSv extends AppLocalizations {
   String deviceDisconnectedBody(String deviceName) {
     return 'Anslut igen för att fortsätta använda din $deviceName.';
   }
+
+  @override
+  String get onboardingSignIn => 'Logga in';
+
+  @override
+  String get onboardingYourName => 'Ditt namn';
+
+  @override
+  String get onboardingLanguage => 'Språk';
+
+  @override
+  String get onboardingPermissions => 'Behörigheter';
+
+  @override
+  String get onboardingComplete => 'Klart';
+
+  @override
+  String get onboardingWelcomeToOmi => 'Välkommen till Omi';
+
+  @override
+  String get onboardingTellUsAboutYourself => 'Berätta om dig själv';
+
+  @override
+  String get onboardingChooseYourPreference => 'Välj dina inställningar';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Bevilja nödvändig åtkomst';
+
+  @override
+  String get onboardingYoureAllSet => 'Du är redo';
 }

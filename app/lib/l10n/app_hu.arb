@@ -2327,5 +2327,15 @@
   "dailyReflectionNotificationBody": "Mesélj a napodról",
   "actionItemReminderTitle": "Omi emlékeztető",
   "deviceDisconnectedTitle": "{deviceName} lecsatlakoztatva",
-  "deviceDisconnectedBody": "Kérjük, csatlakozzon újra a {deviceName} további használatához."
+  "deviceDisconnectedBody": "Kérjük, csatlakozzon újra a {deviceName} további használatához.",
+  "onboardingSignIn": "Bejelentkezés",
+  "onboardingYourName": "A neved",
+  "onboardingLanguage": "Nyelv",
+  "onboardingPermissions": "Engedélyek",
+  "onboardingComplete": "Kész",
+  "onboardingWelcomeToOmi": "Üdvözöl az Omi",
+  "onboardingTellUsAboutYourself": "Mesélj magadról",
+  "onboardingChooseYourPreference": "Válaszd ki a preferenciádat",
+  "onboardingGrantRequiredAccess": "Szükséges hozzáférés megadása",
+  "onboardingYoureAllSet": "Készen állsz"
 }

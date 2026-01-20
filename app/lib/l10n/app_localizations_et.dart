@@ -7309,4 +7309,34 @@ class AppLocalizationsEt extends AppLocalizations {
   String deviceDisconnectedBody(String deviceName) {
     return 'Palun ühenda uuesti, et jätkata oma $deviceName kasutamist.';
   }
+
+  @override
+  String get onboardingSignIn => 'Logi sisse';
+
+  @override
+  String get onboardingYourName => 'Sinu nimi';
+
+  @override
+  String get onboardingLanguage => 'Keel';
+
+  @override
+  String get onboardingPermissions => 'Õigused';
+
+  @override
+  String get onboardingComplete => 'Valmis';
+
+  @override
+  String get onboardingWelcomeToOmi => 'Tere tulemast Omi-sse';
+
+  @override
+  String get onboardingTellUsAboutYourself => 'Räägi meile endast';
+
+  @override
+  String get onboardingChooseYourPreference => 'Vali oma eelistus';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Anna nõutav juurdepääs';
+
+  @override
+  String get onboardingYoureAllSet => 'Kõik on valmis';
 }

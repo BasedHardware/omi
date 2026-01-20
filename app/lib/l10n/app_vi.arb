@@ -2327,5 +2327,15 @@
   "dailyReflectionNotificationBody": "Kể cho tôi nghe về ngày của bạn",
   "actionItemReminderTitle": "Nhắc nhở Omi",
   "deviceDisconnectedTitle": "{deviceName} đã ngắt kết nối",
-  "deviceDisconnectedBody": "Vui lòng kết nối lại để tiếp tục sử dụng {deviceName} của bạn."
+  "deviceDisconnectedBody": "Vui lòng kết nối lại để tiếp tục sử dụng {deviceName} của bạn.",
+  "onboardingSignIn": "Đăng nhập",
+  "onboardingYourName": "Tên của bạn",
+  "onboardingLanguage": "Ngôn ngữ",
+  "onboardingPermissions": "Quyền truy cập",
+  "onboardingComplete": "Hoàn tất",
+  "onboardingWelcomeToOmi": "Chào mừng đến với Omi",
+  "onboardingTellUsAboutYourself": "Hãy cho chúng tôi biết về bạn",
+  "onboardingChooseYourPreference": "Chọn tùy chọn của bạn",
+  "onboardingGrantRequiredAccess": "Cấp quyền truy cập cần thiết",
+  "onboardingYoureAllSet": "Bạn đã sẵn sàng"
 }

@@ -7356,4 +7356,34 @@ class AppLocalizationsEl extends AppLocalizations {
   String deviceDisconnectedBody(String deviceName) {
     return 'Παρακαλώ επανασυνδεθείτε για να συνεχίσετε να χρησιμοποιείτε το $deviceName σας.';
   }
+
+  @override
+  String get onboardingSignIn => 'Σύνδεση';
+
+  @override
+  String get onboardingYourName => 'Το όνομά σου';
+
+  @override
+  String get onboardingLanguage => 'Γλώσσα';
+
+  @override
+  String get onboardingPermissions => 'Δικαιώματα';
+
+  @override
+  String get onboardingComplete => 'Ολοκληρώθηκε';
+
+  @override
+  String get onboardingWelcomeToOmi => 'Καλώς ήρθατε στο Omi';
+
+  @override
+  String get onboardingTellUsAboutYourself => 'Πες μας για σένα';
+
+  @override
+  String get onboardingChooseYourPreference => 'Επίλεξε την προτίμησή σου';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Παραχώρησε την απαιτούμενη πρόσβαση';
+
+  @override
+  String get onboardingYoureAllSet => 'Είσαι έτοιμος';
 }

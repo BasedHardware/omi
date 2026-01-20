@@ -2327,5 +2327,15 @@
   "dailyReflectionNotificationBody": "Ceritakan tentang hari anda",
   "actionItemReminderTitle": "Peringatan Omi",
   "deviceDisconnectedTitle": "{deviceName} terputus",
-  "deviceDisconnectedBody": "Sila sambung semula untuk terus menggunakan {deviceName} anda."
+  "deviceDisconnectedBody": "Sila sambung semula untuk terus menggunakan {deviceName} anda.",
+  "onboardingSignIn": "Log masuk",
+  "onboardingYourName": "Nama anda",
+  "onboardingLanguage": "Bahasa",
+  "onboardingPermissions": "Kebenaran",
+  "onboardingComplete": "Selesai",
+  "onboardingWelcomeToOmi": "Selamat datang ke Omi",
+  "onboardingTellUsAboutYourself": "Ceritakan tentang diri anda",
+  "onboardingChooseYourPreference": "Pilih keutamaan anda",
+  "onboardingGrantRequiredAccess": "Berikan akses yang diperlukan",
+  "onboardingYoureAllSet": "Anda sudah sedia"
 }

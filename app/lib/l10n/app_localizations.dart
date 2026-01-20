@@ -13724,6 +13724,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Please reconnect to continue using your {deviceName}.'**
   String deviceDisconnectedBody(String deviceName);
+
+  /// Onboarding step title for sign in
+  ///
+  /// In en, this message translates to:
+  /// **'Sign In'**
+  String get onboardingSignIn;
+
+  /// Onboarding step title for name entry
+  ///
+  /// In en, this message translates to:
+  /// **'Your Name'**
+  String get onboardingYourName;
+
+  /// Onboarding step title for language selection
+  ///
+  /// In en, this message translates to:
+  /// **'Language'**
+  String get onboardingLanguage;
+
+  /// Onboarding step title for permissions
+  ///
+  /// In en, this message translates to:
+  /// **'Permissions'**
+  String get onboardingPermissions;
+
+  /// Onboarding step title for completion
+  ///
+  /// In en, this message translates to:
+  /// **'Complete'**
+  String get onboardingComplete;
+
+  /// Onboarding step description for sign in
+  ///
+  /// In en, this message translates to:
+  /// **'Welcome to Omi'**
+  String get onboardingWelcomeToOmi;
+
+  /// Onboarding step description for name entry
+  ///
+  /// In en, this message translates to:
+  /// **'Tell us about yourself'**
+  String get onboardingTellUsAboutYourself;
+
+  /// Onboarding step description for language selection
+  ///
+  /// In en, this message translates to:
+  /// **'Choose your preference'**
+  String get onboardingChooseYourPreference;
+
+  /// Onboarding step description for permissions
+  ///
+  /// In en, this message translates to:
+  /// **'Grant required access'**
+  String get onboardingGrantRequiredAccess;
+
+  /// Onboarding step description for completion
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re all set'**
+  String get onboardingYoureAllSet;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

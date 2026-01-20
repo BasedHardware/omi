@@ -7326,4 +7326,34 @@ class AppLocalizationsId extends AppLocalizations {
   String deviceDisconnectedBody(String deviceName) {
     return 'Silakan hubungkan kembali untuk melanjutkan penggunaan $deviceName Anda.';
   }
+
+  @override
+  String get onboardingSignIn => 'Masuk';
+
+  @override
+  String get onboardingYourName => 'Nama Anda';
+
+  @override
+  String get onboardingLanguage => 'Bahasa';
+
+  @override
+  String get onboardingPermissions => 'Izin';
+
+  @override
+  String get onboardingComplete => 'Selesai';
+
+  @override
+  String get onboardingWelcomeToOmi => 'Selamat datang di Omi';
+
+  @override
+  String get onboardingTellUsAboutYourself => 'Ceritakan tentang diri Anda';
+
+  @override
+  String get onboardingChooseYourPreference => 'Pilih preferensi Anda';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Berikan akses yang diperlukan';
+
+  @override
+  String get onboardingYoureAllSet => 'Anda siap';
 }

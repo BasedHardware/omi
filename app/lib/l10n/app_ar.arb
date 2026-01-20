@@ -2308,5 +2308,15 @@
   "dailyReflectionNotificationBody": "أخبرني عن يومك",
   "actionItemReminderTitle": "تذكير Omi",
   "deviceDisconnectedTitle": "{deviceName} غير متصل",
-  "deviceDisconnectedBody": "يرجى إعادة الاتصال لمواصلة استخدام {deviceName} الخاص بك."
+  "deviceDisconnectedBody": "يرجى إعادة الاتصال لمواصلة استخدام {deviceName} الخاص بك.",
+  "onboardingSignIn": "تسجيل الدخول",
+  "onboardingYourName": "اسمك",
+  "onboardingLanguage": "اللغة",
+  "onboardingPermissions": "الأذونات",
+  "onboardingComplete": "اكتمل",
+  "onboardingWelcomeToOmi": "مرحبًا بك في Omi",
+  "onboardingTellUsAboutYourself": "أخبرنا عن نفسك",
+  "onboardingChooseYourPreference": "اختر تفضيلاتك",
+  "onboardingGrantRequiredAccess": "منح الوصول المطلوب",
+  "onboardingYoureAllSet": "أنت جاهز"
 }

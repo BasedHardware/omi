@@ -7307,4 +7307,34 @@ class AppLocalizationsEn extends AppLocalizations {
   String deviceDisconnectedBody(String deviceName) {
     return 'Please reconnect to continue using your $deviceName.';
   }
+
+  @override
+  String get onboardingSignIn => 'Sign In';
+
+  @override
+  String get onboardingYourName => 'Your Name';
+
+  @override
+  String get onboardingLanguage => 'Language';
+
+  @override
+  String get onboardingPermissions => 'Permissions';
+
+  @override
+  String get onboardingComplete => 'Complete';
+
+  @override
+  String get onboardingWelcomeToOmi => 'Welcome to Omi';
+
+  @override
+  String get onboardingTellUsAboutYourself => 'Tell us about yourself';
+
+  @override
+  String get onboardingChooseYourPreference => 'Choose your preference';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Grant required access';
+
+  @override
+  String get onboardingYoureAllSet => 'You\'re all set';
 }

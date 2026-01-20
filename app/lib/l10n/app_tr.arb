@@ -2327,5 +2327,15 @@
   "dailyReflectionNotificationBody": "Bana gününü anlat",
   "actionItemReminderTitle": "Omi Hatırlatıcı",
   "deviceDisconnectedTitle": "{deviceName} bağlantısı kesildi",
-  "deviceDisconnectedBody": "Lütfen {deviceName} cihazınızı kullanmaya devam etmek için yeniden bağlanın."
+  "deviceDisconnectedBody": "Lütfen {deviceName} cihazınızı kullanmaya devam etmek için yeniden bağlanın.",
+  "onboardingSignIn": "Giriş Yap",
+  "onboardingYourName": "Adınız",
+  "onboardingLanguage": "Dil",
+  "onboardingPermissions": "İzinler",
+  "onboardingComplete": "Tamamlandı",
+  "onboardingWelcomeToOmi": "Omi'ye Hoş Geldiniz",
+  "onboardingTellUsAboutYourself": "Bize kendinizden bahsedin",
+  "onboardingChooseYourPreference": "Tercihinizi seçin",
+  "onboardingGrantRequiredAccess": "Gerekli erişimi verin",
+  "onboardingYoureAllSet": "Hazırsınız"
 }

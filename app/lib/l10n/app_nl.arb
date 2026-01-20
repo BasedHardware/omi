@@ -2327,5 +2327,15 @@
   "dailyReflectionNotificationBody": "Vertel me over je dag",
   "actionItemReminderTitle": "Omi-herinnering",
   "deviceDisconnectedTitle": "{deviceName} losgekoppeld",
-  "deviceDisconnectedBody": "Maak opnieuw verbinding om uw {deviceName} te blijven gebruiken."
+  "deviceDisconnectedBody": "Maak opnieuw verbinding om uw {deviceName} te blijven gebruiken.",
+  "onboardingSignIn": "Inloggen",
+  "onboardingYourName": "Je naam",
+  "onboardingLanguage": "Taal",
+  "onboardingPermissions": "Machtigingen",
+  "onboardingComplete": "Voltooid",
+  "onboardingWelcomeToOmi": "Welkom bij Omi",
+  "onboardingTellUsAboutYourself": "Vertel ons over jezelf",
+  "onboardingChooseYourPreference": "Kies je voorkeur",
+  "onboardingGrantRequiredAccess": "Verleen de vereiste toegang",
+  "onboardingYoureAllSet": "Je bent klaar"
 }

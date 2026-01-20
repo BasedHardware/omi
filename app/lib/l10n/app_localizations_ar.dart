@@ -7259,4 +7259,34 @@ class AppLocalizationsAr extends AppLocalizations {
   String deviceDisconnectedBody(String deviceName) {
     return 'يرجى إعادة الاتصال لمواصلة استخدام $deviceName الخاص بك.';
   }
+
+  @override
+  String get onboardingSignIn => 'تسجيل الدخول';
+
+  @override
+  String get onboardingYourName => 'اسمك';
+
+  @override
+  String get onboardingLanguage => 'اللغة';
+
+  @override
+  String get onboardingPermissions => 'الأذونات';
+
+  @override
+  String get onboardingComplete => 'اكتمل';
+
+  @override
+  String get onboardingWelcomeToOmi => 'مرحبًا بك في Omi';
+
+  @override
+  String get onboardingTellUsAboutYourself => 'أخبرنا عن نفسك';
+
+  @override
+  String get onboardingChooseYourPreference => 'اختر تفضيلاتك';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'منح الوصول المطلوب';
+
+  @override
+  String get onboardingYoureAllSet => 'أنت جاهز';
 }

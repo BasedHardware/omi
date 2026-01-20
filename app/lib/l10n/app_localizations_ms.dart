@@ -7330,4 +7330,34 @@ class AppLocalizationsMs extends AppLocalizations {
   String deviceDisconnectedBody(String deviceName) {
     return 'Sila sambung semula untuk terus menggunakan $deviceName anda.';
   }
+
+  @override
+  String get onboardingSignIn => 'Log masuk';
+
+  @override
+  String get onboardingYourName => 'Nama anda';
+
+  @override
+  String get onboardingLanguage => 'Bahasa';
+
+  @override
+  String get onboardingPermissions => 'Kebenaran';
+
+  @override
+  String get onboardingComplete => 'Selesai';
+
+  @override
+  String get onboardingWelcomeToOmi => 'Selamat datang ke Omi';
+
+  @override
+  String get onboardingTellUsAboutYourself => 'Ceritakan tentang diri anda';
+
+  @override
+  String get onboardingChooseYourPreference => 'Pilih keutamaan anda';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Berikan akses yang diperlukan';
+
+  @override
+  String get onboardingYoureAllSet => 'Anda sudah sedia';
 }

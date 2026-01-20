@@ -7315,4 +7315,34 @@ class AppLocalizationsDa extends AppLocalizations {
   String deviceDisconnectedBody(String deviceName) {
     return 'Tilslut venligst igen for at fortsætte med at bruge din $deviceName.';
   }
+
+  @override
+  String get onboardingSignIn => 'Log ind';
+
+  @override
+  String get onboardingYourName => 'Dit navn';
+
+  @override
+  String get onboardingLanguage => 'Sprog';
+
+  @override
+  String get onboardingPermissions => 'Tilladelser';
+
+  @override
+  String get onboardingComplete => 'Færdig';
+
+  @override
+  String get onboardingWelcomeToOmi => 'Velkommen til Omi';
+
+  @override
+  String get onboardingTellUsAboutYourself => 'Fortæl os om dig selv';
+
+  @override
+  String get onboardingChooseYourPreference => 'Vælg din præference';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Giv den nødvendige adgang';
+
+  @override
+  String get onboardingYoureAllSet => 'Du er klar';
 }

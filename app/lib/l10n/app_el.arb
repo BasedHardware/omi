@@ -2327,5 +2327,15 @@
   "dailyReflectionNotificationBody": "Πες μου για την ημέρα σου",
   "actionItemReminderTitle": "Υπενθύμιση Omi",
   "deviceDisconnectedTitle": "{deviceName} αποσυνδέθηκε",
-  "deviceDisconnectedBody": "Παρακαλώ επανασυνδεθείτε για να συνεχίσετε να χρησιμοποιείτε το {deviceName} σας."
+  "deviceDisconnectedBody": "Παρακαλώ επανασυνδεθείτε για να συνεχίσετε να χρησιμοποιείτε το {deviceName} σας.",
+  "onboardingSignIn": "Σύνδεση",
+  "onboardingYourName": "Το όνομά σου",
+  "onboardingLanguage": "Γλώσσα",
+  "onboardingPermissions": "Δικαιώματα",
+  "onboardingComplete": "Ολοκληρώθηκε",
+  "onboardingWelcomeToOmi": "Καλώς ήρθατε στο Omi",
+  "onboardingTellUsAboutYourself": "Πες μας για σένα",
+  "onboardingChooseYourPreference": "Επίλεξε την προτίμησή σου",
+  "onboardingGrantRequiredAccess": "Παραχώρησε την απαιτούμενη πρόσβαση",
+  "onboardingYoureAllSet": "Είσαι έτοιμος"
 }

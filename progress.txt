@@ -10,10 +10,10 @@
 |--------|-------|
 | Total Files | 27 |
 | Total Strings | ~125 |
-| Completed | 19 |
+| Completed | 20 |
 | In Progress | 0 |
-| Pending | 8 |
-| Progress | 70% |
+| Pending | 7 |
+| Progress | 74% |
 
 **CRITICAL ISSUE**: ~162 pre-existing l10n keys in non-English ARB files still contain
 English text instead of proper translations. See PRIORITY 0 section below.
@@ -178,14 +178,15 @@ this does not require localization.
 ## PRIORITY 4: DESKTOP APP (~15 strings)
 ================================================================================
 
-### [ ] desktop/pages/onboarding/desktop_onboarding_wrapper.dart (5 strings)
-Status: PENDING
-Strings:
-- [ ] Line 37: 'Sign In' (step title)
-- [ ] Line 43: 'Your Name' (step title)
-- [ ] Line 49: 'Language' (step title)
-- [ ] Line 55: 'Permissions' (step title)
-- [ ] Line 61: 'Complete' (step title)
+### [x] desktop/pages/onboarding/desktop_onboarding_wrapper.dart (10 strings)
+Status: COMPLETED
+Note: Added 10 new l10n keys to all 34 language ARB files and updated the Dart file to use
+context.l10n pattern. Refactored _steps from a field to a method _getSteps(AppLocalizations l10n)
+to access localized strings. Keys added: onboardingSignIn, onboardingYourName, onboardingLanguage,
+onboardingPermissions, onboardingComplete (5 step titles), plus onboardingWelcomeToOmi,
+onboardingTellUsAboutYourself, onboardingChooseYourPreference, onboardingGrantRequiredAccess,
+onboardingYoureAllSet (5 step descriptions).
+Ran flutter gen-l10n and verified with test.sh.
 
 ### [ ] desktop/pages/settings/desktop_settings_modal.dart (2 strings)
 Status: PENDING
@@ -222,6 +223,13 @@ Strings:
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-20] Localized desktop_onboarding_wrapper.dart
+- Added 10 new l10n keys to all 34 language ARB files with proper translations
+- Keys: onboardingSignIn, onboardingYourName, onboardingLanguage, onboardingPermissions, onboardingComplete (titles)
+- Keys: onboardingWelcomeToOmi, onboardingTellUsAboutYourself, onboardingChooseYourPreference, onboardingGrantRequiredAccess, onboardingYoureAllSet (descriptions)
+- Refactored _steps from field to method _getSteps(AppLocalizations l10n) to access context.l10n
+- Ran flutter gen-l10n and verified with test.sh
 
 [2026-01-20] Marked models.dart as N/A (debug message)
 - The string at line 72 is a Logger.handle() debug/logging message for Crashlytics

@@ -7301,4 +7301,34 @@ class AppLocalizationsCs extends AppLocalizations {
   String deviceDisconnectedBody(String deviceName) {
     return 'Prosím, znovu se připojte, abyste mohli pokračovat v používání vašeho $deviceName.';
   }
+
+  @override
+  String get onboardingSignIn => 'Přihlásit se';
+
+  @override
+  String get onboardingYourName => 'Vaše jméno';
+
+  @override
+  String get onboardingLanguage => 'Jazyk';
+
+  @override
+  String get onboardingPermissions => 'Oprávnění';
+
+  @override
+  String get onboardingComplete => 'Hotovo';
+
+  @override
+  String get onboardingWelcomeToOmi => 'Vítejte v Omi';
+
+  @override
+  String get onboardingTellUsAboutYourself => 'Řekněte nám o sobě';
+
+  @override
+  String get onboardingChooseYourPreference => 'Vyberte si preference';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Udělit požadovaný přístup';
+
+  @override
+  String get onboardingYoureAllSet => 'Vše je připraveno';
 }

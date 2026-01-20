@@ -2309,5 +2309,15 @@
   "dailyReflectionNotificationBody": "Erzähl mir von deinem Tag",
   "actionItemReminderTitle": "Omi-Erinnerung",
   "deviceDisconnectedTitle": "{deviceName} getrennt",
-  "deviceDisconnectedBody": "Bitte erneut verbinden, um Ihr {deviceName} weiter zu verwenden."
+  "deviceDisconnectedBody": "Bitte erneut verbinden, um Ihr {deviceName} weiter zu verwenden.",
+  "onboardingSignIn": "Anmelden",
+  "onboardingYourName": "Dein Name",
+  "onboardingLanguage": "Sprache",
+  "onboardingPermissions": "Berechtigungen",
+  "onboardingComplete": "Fertig",
+  "onboardingWelcomeToOmi": "Willkommen bei Omi",
+  "onboardingTellUsAboutYourself": "Erzähl uns von dir",
+  "onboardingChooseYourPreference": "Wähle deine Präferenz",
+  "onboardingGrantRequiredAccess": "Erforderlichen Zugriff gewähren",
+  "onboardingYoureAllSet": "Du bist startklar"
 }

@@ -7337,4 +7337,34 @@ class AppLocalizationsBg extends AppLocalizations {
   String deviceDisconnectedBody(String deviceName) {
     return 'Моля, свържете се отново, за да продължите да използвате вашето $deviceName.';
   }
+
+  @override
+  String get onboardingSignIn => 'Вход';
+
+  @override
+  String get onboardingYourName => 'Вашето име';
+
+  @override
+  String get onboardingLanguage => 'Език';
+
+  @override
+  String get onboardingPermissions => 'Разрешения';
+
+  @override
+  String get onboardingComplete => 'Завършено';
+
+  @override
+  String get onboardingWelcomeToOmi => 'Добре дошли в Omi';
+
+  @override
+  String get onboardingTellUsAboutYourself => 'Разкажете ни за себе си';
+
+  @override
+  String get onboardingChooseYourPreference => 'Изберете предпочитанието си';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Дайте необходимия достъп';
+
+  @override
+  String get onboardingYoureAllSet => 'Всичко е готово';
 }

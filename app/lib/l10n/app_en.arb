@@ -9056,5 +9056,45 @@
         "example": "Omi"
       }
     }
+  },
+  "onboardingSignIn": "Sign In",
+  "@onboardingSignIn": {
+    "description": "Onboarding step title for sign in"
+  },
+  "onboardingYourName": "Your Name",
+  "@onboardingYourName": {
+    "description": "Onboarding step title for name entry"
+  },
+  "onboardingLanguage": "Language",
+  "@onboardingLanguage": {
+    "description": "Onboarding step title for language selection"
+  },
+  "onboardingPermissions": "Permissions",
+  "@onboardingPermissions": {
+    "description": "Onboarding step title for permissions"
+  },
+  "onboardingComplete": "Complete",
+  "@onboardingComplete": {
+    "description": "Onboarding step title for completion"
+  },
+  "onboardingWelcomeToOmi": "Welcome to Omi",
+  "@onboardingWelcomeToOmi": {
+    "description": "Onboarding step description for sign in"
+  },
+  "onboardingTellUsAboutYourself": "Tell us about yourself",
+  "@onboardingTellUsAboutYourself": {
+    "description": "Onboarding step description for name entry"
+  },
+  "onboardingChooseYourPreference": "Choose your preference",
+  "@onboardingChooseYourPreference": {
+    "description": "Onboarding step description for language selection"
+  },
+  "onboardingGrantRequiredAccess": "Grant required access",
+  "@onboardingGrantRequiredAccess": {
+    "description": "Onboarding step description for permissions"
+  },
+  "onboardingYoureAllSet": "You're all set",
+  "@onboardingYoureAllSet": {
+    "description": "Onboarding step description for completion"
   }
 }

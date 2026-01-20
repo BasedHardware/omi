@@ -2310,5 +2310,15 @@
   "dailyReflectionNotificationBody": "Explica'm el teu dia",
   "actionItemReminderTitle": "Recordatori d'Omi",
   "deviceDisconnectedTitle": "{deviceName} desconnectat",
-  "deviceDisconnectedBody": "Si us plau, torneu a connectar per continuar utilitzant el vostre {deviceName}."
+  "deviceDisconnectedBody": "Si us plau, torneu a connectar per continuar utilitzant el vostre {deviceName}.",
+  "onboardingSignIn": "Inicia sessió",
+  "onboardingYourName": "El teu nom",
+  "onboardingLanguage": "Idioma",
+  "onboardingPermissions": "Permisos",
+  "onboardingComplete": "Complet",
+  "onboardingWelcomeToOmi": "Benvingut a Omi",
+  "onboardingTellUsAboutYourself": "Explica'ns sobre tu",
+  "onboardingChooseYourPreference": "Tria la teva preferència",
+  "onboardingGrantRequiredAccess": "Concedeix l'accés requerit",
+  "onboardingYoureAllSet": "Ja estàs llest"
 }

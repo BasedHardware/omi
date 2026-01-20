@@ -2327,5 +2327,15 @@
   "dailyReflectionNotificationBody": "Povestește-mi despre ziua ta",
   "actionItemReminderTitle": "Memento Omi",
   "deviceDisconnectedTitle": "{deviceName} deconectat",
-  "deviceDisconnectedBody": "Vă rugăm să vă reconectați pentru a continua să utilizați {deviceName}."
+  "deviceDisconnectedBody": "Vă rugăm să vă reconectați pentru a continua să utilizați {deviceName}.",
+  "onboardingSignIn": "Conectare",
+  "onboardingYourName": "Numele tău",
+  "onboardingLanguage": "Limbă",
+  "onboardingPermissions": "Permisiuni",
+  "onboardingComplete": "Finalizat",
+  "onboardingWelcomeToOmi": "Bine ai venit la Omi",
+  "onboardingTellUsAboutYourself": "Spune-ne despre tine",
+  "onboardingChooseYourPreference": "Alege preferința ta",
+  "onboardingGrantRequiredAccess": "Acordă accesul necesar",
+  "onboardingYoureAllSet": "Ești pregătit"
 }

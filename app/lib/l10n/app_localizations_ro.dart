@@ -7341,4 +7341,34 @@ class AppLocalizationsRo extends AppLocalizations {
   String deviceDisconnectedBody(String deviceName) {
     return 'Vă rugăm să vă reconectați pentru a continua să utilizați $deviceName.';
   }
+
+  @override
+  String get onboardingSignIn => 'Conectare';
+
+  @override
+  String get onboardingYourName => 'Numele tău';
+
+  @override
+  String get onboardingLanguage => 'Limbă';
+
+  @override
+  String get onboardingPermissions => 'Permisiuni';
+
+  @override
+  String get onboardingComplete => 'Finalizat';
+
+  @override
+  String get onboardingWelcomeToOmi => 'Bine ai venit la Omi';
+
+  @override
+  String get onboardingTellUsAboutYourself => 'Spune-ne despre tine';
+
+  @override
+  String get onboardingChooseYourPreference => 'Alege preferința ta';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Acordă accesul necesar';
+
+  @override
+  String get onboardingYoureAllSet => 'Ești pregătit';
 }

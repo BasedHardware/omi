@@ -7320,4 +7320,34 @@ class AppLocalizationsPl extends AppLocalizations {
   String deviceDisconnectedBody(String deviceName) {
     return 'Połącz ponownie, aby kontynuować korzystanie z urządzenia $deviceName.';
   }
+
+  @override
+  String get onboardingSignIn => 'Zaloguj się';
+
+  @override
+  String get onboardingYourName => 'Twoje imię';
+
+  @override
+  String get onboardingLanguage => 'Język';
+
+  @override
+  String get onboardingPermissions => 'Uprawnienia';
+
+  @override
+  String get onboardingComplete => 'Gotowe';
+
+  @override
+  String get onboardingWelcomeToOmi => 'Witaj w Omi';
+
+  @override
+  String get onboardingTellUsAboutYourself => 'Opowiedz nam o sobie';
+
+  @override
+  String get onboardingChooseYourPreference => 'Wybierz swoje preferencje';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Przyznaj wymagany dostęp';
+
+  @override
+  String get onboardingYoureAllSet => 'Wszystko gotowe';
 }

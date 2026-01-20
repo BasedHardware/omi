@@ -2328,5 +2328,15 @@
   "dailyReflectionNotificationBody": "今日のことを教えてください",
   "actionItemReminderTitle": "Omiリマインダー",
   "deviceDisconnectedTitle": "{deviceName}が切断されました",
-  "deviceDisconnectedBody": "{deviceName}を引き続きご使用いただくには、再接続してください。"
+  "deviceDisconnectedBody": "{deviceName}を引き続きご使用いただくには、再接続してください。",
+  "onboardingSignIn": "サインイン",
+  "onboardingYourName": "あなたの名前",
+  "onboardingLanguage": "言語",
+  "onboardingPermissions": "権限",
+  "onboardingComplete": "完了",
+  "onboardingWelcomeToOmi": "Omiへようこそ",
+  "onboardingTellUsAboutYourself": "自己紹介してください",
+  "onboardingChooseYourPreference": "お好みを選択してください",
+  "onboardingGrantRequiredAccess": "必要なアクセスを許可",
+  "onboardingYoureAllSet": "準備完了です"
 }

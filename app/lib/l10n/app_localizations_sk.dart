@@ -7309,4 +7309,34 @@ class AppLocalizationsSk extends AppLocalizations {
   String deviceDisconnectedBody(String deviceName) {
     return 'Prosím, znova sa pripojte, aby ste mohli pokračovať v používaní vášho $deviceName.';
   }
+
+  @override
+  String get onboardingSignIn => 'Prihlásiť sa';
+
+  @override
+  String get onboardingYourName => 'Vaše meno';
+
+  @override
+  String get onboardingLanguage => 'Jazyk';
+
+  @override
+  String get onboardingPermissions => 'Povolenia';
+
+  @override
+  String get onboardingComplete => 'Hotovo';
+
+  @override
+  String get onboardingWelcomeToOmi => 'Vitajte v Omi';
+
+  @override
+  String get onboardingTellUsAboutYourself => 'Povedzte nám o sebe';
+
+  @override
+  String get onboardingChooseYourPreference => 'Vyberte si preferencie';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Udeliť požadovaný prístup';
+
+  @override
+  String get onboardingYoureAllSet => 'Všetko je pripravené';
 }

@@ -2328,5 +2328,15 @@
   "dailyReflectionNotificationBody": "Cuéntame sobre tu día",
   "actionItemReminderTitle": "Recordatorio de Omi",
   "deviceDisconnectedTitle": "{deviceName} desconectado",
-  "deviceDisconnectedBody": "Por favor, vuelve a conectar para continuar usando tu {deviceName}."
+  "deviceDisconnectedBody": "Por favor, vuelve a conectar para continuar usando tu {deviceName}.",
+  "onboardingSignIn": "Iniciar sesión",
+  "onboardingYourName": "Tu nombre",
+  "onboardingLanguage": "Idioma",
+  "onboardingPermissions": "Permisos",
+  "onboardingComplete": "Completo",
+  "onboardingWelcomeToOmi": "Bienvenido a Omi",
+  "onboardingTellUsAboutYourself": "Cuéntanos sobre ti",
+  "onboardingChooseYourPreference": "Elige tu preferencia",
+  "onboardingGrantRequiredAccess": "Conceder acceso requerido",
+  "onboardingYoureAllSet": "Ya estás listo"
 }

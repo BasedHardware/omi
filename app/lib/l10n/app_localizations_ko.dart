@@ -7192,4 +7192,34 @@ class AppLocalizationsKo extends AppLocalizations {
   String deviceDisconnectedBody(String deviceName) {
     return '$deviceName을(를) 계속 사용하려면 다시 연결하세요.';
   }
+
+  @override
+  String get onboardingSignIn => '로그인';
+
+  @override
+  String get onboardingYourName => '이름';
+
+  @override
+  String get onboardingLanguage => '언어';
+
+  @override
+  String get onboardingPermissions => '권한';
+
+  @override
+  String get onboardingComplete => '완료';
+
+  @override
+  String get onboardingWelcomeToOmi => 'Omi에 오신 것을 환영합니다';
+
+  @override
+  String get onboardingTellUsAboutYourself => '자기소개를 해주세요';
+
+  @override
+  String get onboardingChooseYourPreference => '선호 설정을 선택하세요';
+
+  @override
+  String get onboardingGrantRequiredAccess => '필요한 권한을 허용하세요';
+
+  @override
+  String get onboardingYoureAllSet => '모든 준비가 완료되었습니다';
 }

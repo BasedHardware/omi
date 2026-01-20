@@ -7287,4 +7287,34 @@ class AppLocalizationsHi extends AppLocalizations {
   String deviceDisconnectedBody(String deviceName) {
     return 'कृपया अपने $deviceName का उपयोग जारी रखने के लिए फिर से कनेक्ट करें।';
   }
+
+  @override
+  String get onboardingSignIn => 'साइन इन करें';
+
+  @override
+  String get onboardingYourName => 'आपका नाम';
+
+  @override
+  String get onboardingLanguage => 'भाषा';
+
+  @override
+  String get onboardingPermissions => 'अनुमतियाँ';
+
+  @override
+  String get onboardingComplete => 'पूर्ण';
+
+  @override
+  String get onboardingWelcomeToOmi => 'Omi में आपका स्वागत है';
+
+  @override
+  String get onboardingTellUsAboutYourself => 'हमें अपने बारे में बताएं';
+
+  @override
+  String get onboardingChooseYourPreference => 'अपनी पसंद चुनें';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'आवश्यक पहुँच प्रदान करें';
+
+  @override
+  String get onboardingYoureAllSet => 'आप तैयार हैं';
 }

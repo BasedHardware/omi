@@ -7349,4 +7349,34 @@ class AppLocalizationsCa extends AppLocalizations {
   String deviceDisconnectedBody(String deviceName) {
     return 'Si us plau, torneu a connectar per continuar utilitzant el vostre $deviceName.';
   }
+
+  @override
+  String get onboardingSignIn => 'Inicia sessió';
+
+  @override
+  String get onboardingYourName => 'El teu nom';
+
+  @override
+  String get onboardingLanguage => 'Idioma';
+
+  @override
+  String get onboardingPermissions => 'Permisos';
+
+  @override
+  String get onboardingComplete => 'Complet';
+
+  @override
+  String get onboardingWelcomeToOmi => 'Benvingut a Omi';
+
+  @override
+  String get onboardingTellUsAboutYourself => 'Explica\'ns sobre tu';
+
+  @override
+  String get onboardingChooseYourPreference => 'Tria la teva preferència';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Concedeix l\'accés requerit';
+
+  @override
+  String get onboardingYoureAllSet => 'Ja estàs llest';
 }

@@ -7319,4 +7319,34 @@ class AppLocalizationsTr extends AppLocalizations {
   String deviceDisconnectedBody(String deviceName) {
     return 'Lütfen $deviceName cihazınızı kullanmaya devam etmek için yeniden bağlanın.';
   }
+
+  @override
+  String get onboardingSignIn => 'Giriş Yap';
+
+  @override
+  String get onboardingYourName => 'Adınız';
+
+  @override
+  String get onboardingLanguage => 'Dil';
+
+  @override
+  String get onboardingPermissions => 'İzinler';
+
+  @override
+  String get onboardingComplete => 'Tamamlandı';
+
+  @override
+  String get onboardingWelcomeToOmi => 'Omi\'ye Hoş Geldiniz';
+
+  @override
+  String get onboardingTellUsAboutYourself => 'Bize kendinizden bahsedin';
+
+  @override
+  String get onboardingChooseYourPreference => 'Tercihinizi seçin';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Gerekli erişimi verin';
+
+  @override
+  String get onboardingYoureAllSet => 'Hazırsınız';
 }

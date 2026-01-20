@@ -7310,4 +7310,34 @@ class AppLocalizationsLt extends AppLocalizations {
   String deviceDisconnectedBody(String deviceName) {
     return 'Prašome prisijungti iš naujo, kad galėtumėte toliau naudoti savo $deviceName.';
   }
+
+  @override
+  String get onboardingSignIn => 'Prisijungti';
+
+  @override
+  String get onboardingYourName => 'Jūsų vardas';
+
+  @override
+  String get onboardingLanguage => 'Kalba';
+
+  @override
+  String get onboardingPermissions => 'Leidimai';
+
+  @override
+  String get onboardingComplete => 'Baigta';
+
+  @override
+  String get onboardingWelcomeToOmi => 'Sveiki atvykę į Omi';
+
+  @override
+  String get onboardingTellUsAboutYourself => 'Papasakokite apie save';
+
+  @override
+  String get onboardingChooseYourPreference => 'Pasirinkite savo nuostatą';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Suteikti reikiamą prieigą';
+
+  @override
+  String get onboardingYoureAllSet => 'Viskas paruošta';
 }

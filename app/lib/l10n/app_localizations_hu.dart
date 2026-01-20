@@ -7342,4 +7342,34 @@ class AppLocalizationsHu extends AppLocalizations {
   String deviceDisconnectedBody(String deviceName) {
     return 'Kérjük, csatlakozzon újra a $deviceName további használatához.';
   }
+
+  @override
+  String get onboardingSignIn => 'Bejelentkezés';
+
+  @override
+  String get onboardingYourName => 'A neved';
+
+  @override
+  String get onboardingLanguage => 'Nyelv';
+
+  @override
+  String get onboardingPermissions => 'Engedélyek';
+
+  @override
+  String get onboardingComplete => 'Kész';
+
+  @override
+  String get onboardingWelcomeToOmi => 'Üdvözöl az Omi';
+
+  @override
+  String get onboardingTellUsAboutYourself => 'Mesélj magadról';
+
+  @override
+  String get onboardingChooseYourPreference => 'Válaszd ki a preferenciádat';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Szükséges hozzáférés megadása';
+
+  @override
+  String get onboardingYoureAllSet => 'Készen állsz';
 }

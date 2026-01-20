@@ -2327,5 +2327,15 @@
   "dailyReflectionNotificationBody": "Povedz mi o svojom dni",
   "actionItemReminderTitle": "Pripomienka Omi",
   "deviceDisconnectedTitle": "{deviceName} odpojené",
-  "deviceDisconnectedBody": "Prosím, znova sa pripojte, aby ste mohli pokračovať v používaní vášho {deviceName}."
+  "deviceDisconnectedBody": "Prosím, znova sa pripojte, aby ste mohli pokračovať v používaní vášho {deviceName}.",
+  "onboardingSignIn": "Prihlásiť sa",
+  "onboardingYourName": "Vaše meno",
+  "onboardingLanguage": "Jazyk",
+  "onboardingPermissions": "Povolenia",
+  "onboardingComplete": "Hotovo",
+  "onboardingWelcomeToOmi": "Vitajte v Omi",
+  "onboardingTellUsAboutYourself": "Povedzte nám o sebe",
+  "onboardingChooseYourPreference": "Vyberte si preferencie",
+  "onboardingGrantRequiredAccess": "Udeliť požadovaný prístup",
+  "onboardingYoureAllSet": "Všetko je pripravené"
 }
