@@ -174,10 +174,23 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
         setToCache(key, result, result.length, result.length >= limit);
         await cacheMemories(result);
       } catch (err) {
-        // Only set error if we don't have any cached data to show
-        const hasAnyCachedData = cached || (await getCachedMemories());
+        // Check if we have any cached data to show
+        let hasAnyCachedData = !!cached;
         if (!hasAnyCachedData) {
-          setError(err instanceof Error ? err.message : 'Failed to load memories');
+          try {
+            const indexedDbMemories = await getCachedMemories();
+            hasAnyCachedData = !!indexedDbMemories;
+          } catch {
+            // If reading from IndexedDB fails, don't mask the original error
+          }
+        }
+
+        const baseMessage = err instanceof Error ? err.message : 'Failed to load memories';
+        if (hasAnyCachedData) {
+          // Show that refresh failed but cached data is available
+          setError(`${baseMessage} (showing cached data)`);
+        } else {
+          setError(baseMessage);
         }
       } finally {
         setLoading(false);

@@ -38,7 +38,7 @@ export function MemoriesPrefetcher() {
 
         console.log('[MemoriesPrefetcher] Starting background prefetch...');
 
-        // Fetch memories in the background (this will get all 5000 from backend)
+        // Fetch memories in the background (backend returns up to 5000 when offset=0)
         const memories = await getMemories({ limit: 25, offset: 0 });
 
         // Cache them in IndexedDB

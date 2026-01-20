@@ -73,7 +73,6 @@ export function MemoryList({
       });
     }
   }, [
-    virtualizer.getVirtualItems(),
     memories.length,
     hasMore,
     loading,

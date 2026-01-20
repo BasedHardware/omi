@@ -254,9 +254,9 @@ export function useInsightsDashboard(memories: Memory[]): UseInsightsDashboardRe
     }
     prevKeyRef.current = memoriesKey;
 
-    // OPTIMIZATION: Only compute insights on first 100 memories
-    // This reduces computation time from 150ms to ~30ms
-    // Still provides accurate insights as patterns emerge from recent data
+    // OPTIMIZATION: Only compute insights on first 100 (most recent) memories
+    // Combined with the Web Worker, this prevents blocking the main thread
+    // Note: May miss longer-term patterns for users with thousands of memories
     const memoriesToProcess = memories.slice(0, 100);
     memoriesLengthRef.current = memories.length;
 
@@ -295,7 +295,7 @@ export function useInsightsDashboard(memories: Memory[]): UseInsightsDashboardRe
       worker.terminate();
       workerRef.current = null;
     };
-  }, [memories, memoriesKey]);
+  }, [memoriesKey]);
 
   return {
     ...insights,

@@ -182,7 +182,7 @@ export function MemoriesPage() {
 
   // Filter and sort memories - optimized to avoid full copy when not needed
   const filteredMemories = useMemo(() => {
-    // If no filters and default sort, return original deferred array (no copy needed)
+    // If no filters and backend's default sort (score), return original deferred array (no copy needed)
     if (!searchQuery && !selectedTag && sortBy === 'score') {
       return deferredMemories;
     }
@@ -201,7 +201,7 @@ export function MemoriesPage() {
       result = result.filter((m) => m.tags && m.tags.includes(selectedTag));
     }
 
-    // Only sort if needed (non-default sort)
+    // Apply sorting (skip only for 'score' which is backend's default)
     if (sortBy !== 'score') {
       // Only create copy if we're still using original array reference
       const needsCopy = result === deferredMemories;
