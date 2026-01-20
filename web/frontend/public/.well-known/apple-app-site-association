@@ -14,6 +14,10 @@
               "comment":"Matches any URL with a path that starts with /apps/."
             },
             {
+              "/":"/unlimited",
+              "comment":"Matches any URL with a path that starts with /unlimited."
+            },
+            {
               "/":"/wrapped",
               "comment":"Matches any URL with a path that starts with /wrapped."
             }

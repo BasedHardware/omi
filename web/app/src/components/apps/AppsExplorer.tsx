@@ -563,7 +563,7 @@ export function AppsExplorer() {
             {/* Spacer + Create button */}
             <div className="flex-1" />
             <button
-              onClick={() => router.push('/apps/new')}
+              onClick={() => router.push('/my-apps/new')}
               className={cn(
                 'flex items-center gap-2 px-4 py-2 rounded-xl',
                 'bg-purple-primary text-white font-medium',

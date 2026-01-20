@@ -145,6 +145,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
       );
     }
 
+    if (!mounted) return;
     final appProvider = Provider.of<AppProvider>(context, listen: false);
     await appProvider.getApps();
 
@@ -210,10 +211,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
 
                   final loadingWidget = _isReloading
                       ? Container(
-                          decoration: BoxDecoration(
-                            color: ResponsiveHelper.backgroundPrimary.withValues(alpha: 0.8),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
+                          color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.85),
                           child: Center(
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
@@ -237,10 +235,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                   return Stack(
                     children: [
                       Container(
-                        decoration: BoxDecoration(
-                          color: ResponsiveHelper.backgroundPrimary.withValues(alpha: 0.8),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
+                        color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.85),
                         child: Column(
                           children: [
                             _buildHeader(responsive, appProvider),
@@ -268,10 +263,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                                   child: BackdropFilter(
                                     filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
                                     child: Container(
-                                      decoration: BoxDecoration(
-                                        color: ResponsiveHelper.backgroundPrimary.withValues(alpha: 0.2),
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
+                                      color: ResponsiveHelper.backgroundPrimary.withValues(alpha: 0.2),
                                     ),
                                   ),
                                 ),
@@ -306,10 +298,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
 
   Widget _buildLoadingState(ResponsiveHelper responsive) {
     return Container(
-      decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundPrimary.withValues(alpha: 0.8),
-        borderRadius: BorderRadius.circular(16),
-      ),
+      color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.85),
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -341,61 +330,28 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title row
-          Row(
-            children: [
-              // Title
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Apps',
-                      style: responsive.headlineLarge.copyWith(
-                        color: ResponsiveHelper.textPrimary,
-                        fontWeight: FontWeight.w600,
+          Consumer<ConnectivityProvider>(
+            builder: (context, connectivityProvider, _) {
+              if (!connectivityProvider.isConnected) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 16.0),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.wifi_off_rounded, color: ResponsiveHelper.errorColor, size: 16),
+                      const SizedBox(width: 8),
+                      Text(
+                        'No internet connection',
+                        style: responsive.bodyMedium.copyWith(
+                          color: ResponsiveHelper.errorColor,
+                        ),
                       ),
-                    ),
-                    SizedBox(height: responsive.spacing(baseSpacing: 4)),
-                    Consumer<ConnectivityProvider>(
-                      builder: (context, connectivityProvider, _) {
-                        if (!connectivityProvider.isConnected) {
-                          return Text(
-                            'No internet connection',
-                            style: responsive.bodyMedium.copyWith(
-                              color: ResponsiveHelper.errorColor,
-                            ),
-                          );
-                        }
-
-                        return Text(
-                          'Browse, install, and create apps',
-                          style: responsive.bodyMedium.copyWith(
-                            color: ResponsiveHelper.textTertiary,
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ),
-
-              // Create App button
-              OmiButton(
-                label: 'Create App',
-                icon: Icons.add_rounded,
-                onPressed: () {
-                  MixpanelManager().pageOpened('Submit App');
-                  _navigateToCreateApp(context);
-                },
-                type: OmiButtonType.primary,
-              ),
-            ],
+                    ],
+                  ),
+                );
+              }
+              return const SizedBox.shrink();
+            },
           ),
-
-          SizedBox(height: responsive.spacing(baseSpacing: 20)),
-
-          // Search and filter row - matching mobile style
           _buildSearchAndFiltersRow(responsive, appProvider),
         ],
       ),
@@ -464,6 +420,17 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
             appProvider.applyFilters();
             MixpanelManager().appsTypeFilter('Installed Apps', !wasSelected);
           },
+        ),
+
+        const SizedBox(width: 8),
+        OmiButton(
+          label: 'Create App',
+          icon: Icons.add_rounded,
+          onPressed: () {
+            MixpanelManager().pageOpened('Submit App');
+            _navigateToCreateApp(context);
+          },
+          type: OmiButtonType.primary,
         ),
       ],
     );

@@ -16,8 +16,14 @@ import { useChat as useChatContext } from '@/components/chat/ChatContext';
 
 type ViewMode = 'hub' | 'list';
 
+// Detect if device is mobile (< 1024px)
+const getDefaultViewMode = (): ViewMode => {
+  if (typeof window === 'undefined') return 'hub';
+  return window.innerWidth < 1024 ? 'list' : 'hub';
+};
+
 export function TaskHub() {
-  const [viewMode, setViewMode] = useState<ViewMode>('hub');
+  const [viewMode, setViewMode] = useState<ViewMode>(getDefaultViewMode);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());

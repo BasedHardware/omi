@@ -71,6 +71,8 @@ ingress:
           pathType: Prefix
         - path: /v1/embedding
           pathType: Prefix
+        - path: /v2/embedding
+          pathType: Prefix
 
   tls: []
   #  - secretName: chart-example-tls

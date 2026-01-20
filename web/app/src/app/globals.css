@@ -4,6 +4,30 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .animate-gradient-x {
+    animation: gradient-x 15s ease infinite;
+    background-size: 400% 400%;
+  }
+
+  .search-hidden {
+    display: none !important;
+  }
+
+  .font-system-ui {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  }
+}
+
 :root {
   /* Backgrounds */
   --bg-primary: #0F0F0F;
@@ -38,11 +62,13 @@
 
 html,
 body {
-  max-width: 100vw;
+  width: 100%;
+  max-width: 100%;
   overflow-x: hidden;
   background-color: var(--bg-primary);
   color: var(--text-primary);
   font-family: 'DM Sans', sans-serif;
+  position: relative;
 }
 
 /* Focus styles for accessibility */
@@ -111,4 +137,11 @@ body {
 .noise-overlay > * {
   position: relative;
   z-index: 1;
+}
+
+/* Safe area insets for mobile devices with notches */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
 }

@@ -10,6 +10,7 @@ import 'package:omi/pages/settings/clickup_settings_page.dart';
 import 'package:omi/pages/settings/google_tasks_settings_page.dart';
 import 'package:omi/pages/settings/todoist_settings_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
+import 'package:omi/services/apple_reminders_service.dart';
 import 'package:omi/services/asana_service.dart';
 import 'package:omi/services/clickup_service.dart';
 import 'package:omi/services/google_tasks_service.dart';
@@ -220,6 +221,36 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
   Future<void> _selectApp(TaskIntegrationApp app) async {
     if (!app.isAvailable) {
       _showComingSoonDialog(app);
+      return;
+    }
+
+    // Check if Apple Reminders requires permission
+    if (app == TaskIntegrationApp.appleReminders) {
+      final provider = context.read<TaskIntegrationProvider>();
+      final scaffoldMessenger = ScaffoldMessenger.of(context);
+      final remindersService = AppleRemindersService();
+      final hasPermission = await remindersService.hasPermission();
+      if (!hasPermission) {
+        final granted = await remindersService.requestPermission();
+        if (granted) {
+          // Update the provider's cached permission status with the granted result
+          await provider.updateAppleRemindersPermission(granted: true);
+          await provider.setSelectedApp(app);
+          Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key})');
+        } else {
+          if (mounted) {
+            scaffoldMessenger.showSnackBar(
+              const SnackBar(
+                content: Text('Please enable Reminders access in Settings to use Apple Reminders'),
+                backgroundColor: Colors.orange,
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
+        }
+        return;
+      }
+      await provider.setSelectedApp(app);
       return;
     }
 

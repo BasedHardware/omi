@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import { useRecaps } from '@/hooks/useRecaps';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { RecapDateGroup } from './RecapDateGroup';
-import { RecapDetailPanel, RecapDetailPanelSkeleton } from './RecapDetailPanel';
+import { RecapDetailPanel } from './RecapDetailPanel';
 import { RecapCardSkeleton } from './RecapCard';
 import { ResizeHandle } from '@/components/ui/ResizeHandle';
 import type { DailySummary } from '@/types/recap';
@@ -33,7 +33,6 @@ export function RecapSplitView() {
     hasMore,
     loadMore,
     refresh,
-    removeRecap,
     getRecapDetail,
   } = useRecaps();
 
@@ -59,13 +58,17 @@ export function RecapSplitView() {
     return () => setContext(null);
   }, [setContext]);
 
+  // Extract first recap's ID as a primitive for stable dependency
+  const firstRecap = recaps[0];
+  const firstRecapId = firstRecap?.id;
+
   // Auto-select first recap on load
   useEffect(() => {
-    if (!selectedId && !loading && recaps.length > 0) {
-      setSelectedId(recaps[0].id);
-      setSelectedRecap(recaps[0]);
+    if (!selectedId && !loading && firstRecap) {
+      setSelectedId(firstRecap.id);
+      setSelectedRecap(firstRecap);
     }
-  }, [recaps, loading, selectedId]);
+  }, [firstRecapId, loading, selectedId, firstRecap]);
 
   // Handle recap selection
   const handleRecapClick = async (recap: DailySummary) => {
@@ -76,23 +79,6 @@ export function RecapSplitView() {
     const fullRecap = await getRecapDetail(recap.id);
     if (fullRecap) {
       setSelectedRecap(fullRecap);
-    }
-  };
-
-  // Handle recap deletion
-  const handleDelete = async (id: string) => {
-    const success = await removeRecap(id);
-    if (success) {
-      // Select next recap or clear selection
-      const currentIndex = recaps.findIndex((r) => r.id === id);
-      const nextRecap = recaps[currentIndex + 1] || recaps[currentIndex - 1];
-      if (nextRecap) {
-        setSelectedId(nextRecap.id);
-        setSelectedRecap(nextRecap);
-      } else {
-        setSelectedId(null);
-        setSelectedRecap(null);
-      }
     }
   };
 

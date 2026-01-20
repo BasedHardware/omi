@@ -38,7 +38,7 @@ from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
 def add_model_result_segments(model: str, new_segments: List[Dict], result: Dict):
     segments = [TranscriptSegment(**s) for s in result[model]]
     new_segments = [TranscriptSegment(**s) for s in new_segments]
-    segments = TranscriptSegment.combine_segments(segments, new_segments)
+    segments, _, _ = TranscriptSegment.combine_segments(segments, new_segments)
     result[model] = [s.dict() for s in segments]
 
 

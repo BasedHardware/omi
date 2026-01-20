@@ -23,6 +23,11 @@ enum WalStorage {
   flashPage,
 }
 
+enum SyncMethod {
+  ble,
+  wifi,
+}
+
 class WalStats {
   final int totalFiles;
   final int phoneFiles;
@@ -85,6 +90,7 @@ class Wal {
   DateTime? syncStartedAt;
   int? syncEtaSeconds;
   double? syncSpeedKBps;
+  SyncMethod syncMethod = SyncMethod.ble;
 
   int frameSize = 160;
 

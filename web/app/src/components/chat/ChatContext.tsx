@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
 
 interface ChatContext {
   // Panel state
@@ -52,20 +52,24 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     setSelectedAppId(null);
   }, []);
 
+  // Memoize context value to prevent cascading re-renders of all consumers
+  const value = useMemo(
+    () => ({
+      isOpen,
+      openChat,
+      closeChat,
+      toggleChat,
+      currentContext,
+      setContext,
+      selectedAppId,
+      openChatWithApp,
+      clearAppContext,
+    }),
+    [isOpen, openChat, closeChat, toggleChat, currentContext, setContext, selectedAppId, openChatWithApp, clearAppContext]
+  );
+
   return (
-    <ChatContext.Provider
-      value={{
-        isOpen,
-        openChat,
-        closeChat,
-        toggleChat,
-        currentContext,
-        setContext,
-        selectedAppId,
-        openChatWithApp,
-        clearAppContext,
-      }}
-    >
+    <ChatContext.Provider value={value}>
       {children}
     </ChatContext.Provider>
   );

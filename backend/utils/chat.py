@@ -29,6 +29,9 @@ def transcribe_voice_message_segment(path: str):
     threading.Thread(target=delete_file).start()
 
     words = deepgram_prerecorded(url, diarize=False)
+    if not words:
+        print('no words')
+        return None
     transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
     if not transcript_segments:
         print('failed to get deepgram segments')

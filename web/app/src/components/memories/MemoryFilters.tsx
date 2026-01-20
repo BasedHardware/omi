@@ -84,10 +84,10 @@ export function MemoryFilters({ activeCategories, onCategoriesChange }: MemoryFi
       {isOpen && (
         <>
           <div
-            className="fixed inset-0 z-10"
+            className="fixed inset-0 z-40"
             onClick={() => setIsOpen(false)}
           />
-          <div className="absolute right-0 top-full mt-1 z-20 bg-bg-secondary border border-bg-tertiary rounded-lg shadow-lg py-1 min-w-[160px]">
+          <div className="absolute right-0 top-full mt-1 z-50 bg-bg-secondary border border-bg-tertiary rounded-lg shadow-lg py-1 min-w-[160px]">
             {filterOptions.map((option) => {
               const isActive =
                 option.category === 'all'

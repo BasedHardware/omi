@@ -26,6 +26,10 @@ abstract class IDeviceService {
   void unsubscribe(Object context);
 
   DateTime? getFirstConnectedAt();
+
+  // WiFi sync support - pause BLE reconnection during WiFi transfer
+  void setWifiSyncInProgress(bool value);
+  Future<void> disconnectDevice();
 }
 
 enum DeviceServiceStatus {
@@ -273,5 +277,23 @@ class DeviceService implements IDeviceService {
       Logger.debug('Error getting stored device: $e');
     }
     return null;
+  }
+
+  bool _isWifiSyncInProgress = false;
+  bool get isWifiSyncInProgress => _isWifiSyncInProgress;
+
+  @override
+  void setWifiSyncInProgress(bool value) {
+    _isWifiSyncInProgress = value;
+    Logger.debug("DeviceService: WiFi sync in progress: $value");
+  }
+
+  @override
+  Future<void> disconnectDevice() async {
+    if (_connection != null) {
+      Logger.debug("DeviceService: Disconnecting device...");
+      await _connection?.disconnect();
+      _connection = null;
+    }
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/task_integrations.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
+import 'package:omi/services/apple_reminders_service.dart';
 import 'package:omi/services/asana_service.dart';
 import 'package:omi/services/clickup_service.dart';
 import 'package:omi/services/google_tasks_service.dart';
@@ -15,6 +16,8 @@ class TaskIntegrationProvider extends ChangeNotifier {
   Map<String, dynamic> _connectionDetails = {};
   bool _isLoading = false;
   bool _hasLoaded = false;
+  bool _appleRemindersPermission = false;
+  bool _appleRemindersPermissionManuallySet = false;
 
   TaskIntegrationProvider()
       : _selectedApp = PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks;
@@ -46,6 +49,11 @@ class TaskIntegrationProvider extends ChangeNotifier {
             _connectionDetails['clickup']?['connected'] == true &&
                 _connectionDetails['clickup']?['access_token'] != null,
             userId: _connectionDetails['clickup']?['user_id']);
+
+        if (PlatformService.isApple && !_appleRemindersPermissionManuallySet) {
+          _appleRemindersPermission = await AppleRemindersService().hasPermission();
+        }
+        _appleRemindersPermissionManuallySet = false;
 
         if (response.defaultApp != null && response.defaultApp!.isNotEmpty) {
           _selectedApp = TaskIntegrationApp.values.firstWhere(
@@ -118,7 +126,7 @@ class TaskIntegrationProvider extends ChangeNotifier {
   bool isAppConnected(TaskIntegrationApp app) {
     switch (app) {
       case TaskIntegrationApp.appleReminders:
-        return true; // Always connected on Apple platforms
+        return _appleRemindersPermission;
       case TaskIntegrationApp.todoist:
         return TodoistService().isAuthenticated;
       case TaskIntegrationApp.asana:
@@ -129,6 +137,18 @@ class TaskIntegrationProvider extends ChangeNotifier {
         return ClickUpService().isAuthenticated && _connectionDetails.containsKey(app.key);
       default:
         return false;
+    }
+  }
+
+  Future<void> updateAppleRemindersPermission({bool? granted}) async {
+    if (PlatformService.isApple) {
+      if (granted != null) {
+        _appleRemindersPermission = granted;
+        _appleRemindersPermissionManuallySet = true;
+      } else {
+        _appleRemindersPermission = await AppleRemindersService().hasPermission();
+      }
+      notifyListeners();
     }
   }
 

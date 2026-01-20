@@ -190,10 +190,10 @@ def get_speech_sample_signed_urls(paths: List[str]) -> List[str]:
     """
     Generate signed URLs for speech samples given their GCS paths.
     Uses the paths stored in Firestore instead of listing GCS blobs.
-    
+
     Args:
         paths: List of GCS paths (e.g., '{uid}/people_profiles/{person_id}/{filename}')
-    
+
     Returns:
         List of signed URLs
     """
@@ -505,6 +505,9 @@ def download_audio_chunks_and_merge(
             if timestamp in chunk_results:
                 merged_data.extend(chunk_results[timestamp])
 
+    # Free memory from chunk results immediately after merging
+    chunk_results.clear()
+
     if not merged_data:
         raise FileNotFoundError(f"No chunks found for conversation {conversation_id}")
 
@@ -574,6 +577,7 @@ def get_or_create_merged_audio(
 
     # Convert to WAV
     wav_data = pcm_to_wav_func(pcm_data)
+    del pcm_data  # Free PCM data immediately after WAV conversion
 
     # Upload to cache in background thread with 3-day TTL
     def _upload_to_cache():

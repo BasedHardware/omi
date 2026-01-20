@@ -142,6 +142,7 @@ STEP 1 - Evaluate SILENTLY if ALL these conditions are met:
 If ANY condition is not met, respond with an empty string and nothing else.
 
 STEP 2 - Only if ALL conditions are met, provide feedback following these guidelines:
+- NEVER use markdown formatting (no code blocks, no backticks, no asterisks)
 - Speak DIRECTLY to {{{{user_name}}}} - no analysis or third-person commentary
 - Take a clear stance - no "however" or "on the other hand"
 - Keep it under 300 chars

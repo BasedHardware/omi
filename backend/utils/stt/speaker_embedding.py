@@ -32,7 +32,7 @@ def extract_embedding(audio_path: str) -> np.ndarray:
 
     with open(audio_path, 'rb') as f:
         files = {'file': (os.path.basename(audio_path), f, 'audio/wav')}
-        response = requests.post(f"{api_url}/v1/embedding", files=files)
+        response = requests.post(f"{api_url}/v1/embedding", files=files, timeout=300)
         response.raise_for_status()
 
     result = response.json()
@@ -64,7 +64,7 @@ def extract_embedding_from_bytes(audio_data: bytes, filename: str = "audio.wav")
     api_url = _get_api_url()
 
     files = {'file': (filename, audio_data, 'audio/wav')}
-    response = requests.post(f"{api_url}/v1/embedding", files=files)
+    response = requests.post(f"{api_url}/v1/embedding", files=files, timeout=300)
     response.raise_for_status()
 
     result = response.json()

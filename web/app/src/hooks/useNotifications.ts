@@ -179,8 +179,6 @@ export function useNotifications(): UseNotificationsReturn {
 
   // Handle foreground message (defined before useEffect that uses it)
   const handleForegroundMessage = useCallback((payload: MessagePayload) => {
-    console.log('Foreground message received:', payload);
-
     const notification = payloadToNotification(payload);
 
     setNotifications((prev) => {
@@ -239,15 +237,11 @@ export function useNotifications(): UseNotificationsReturn {
             // Register with backend if token changed or first time
             if (token !== storedToken) {
               try {
-                console.log('Registering FCM token with backend...');
                 await registerFCMToken(token);
                 storeFCMToken(token);
-                console.log('FCM token registered successfully');
               } catch (error) {
                 console.error('Failed to register FCM token:', error);
               }
-            } else {
-              console.log('FCM token unchanged, skipping registration');
             }
 
             // Subscribe to foreground messages
@@ -288,9 +282,7 @@ export function useNotifications(): UseNotificationsReturn {
         setPermission('granted');
 
         // Register token with backend
-        console.log('Registering new FCM token with backend...');
         await registerFCMToken(token);
-        console.log('FCM token registered successfully');
 
         // Subscribe to foreground messages
         const unsubscribe = await onForegroundMessage(handleForegroundMessage);
@@ -403,8 +395,6 @@ export function useNotifications(): UseNotificationsReturn {
         browserNotif.close();
       };
     }
-
-    console.log('Test notification sent:', testNotification);
   }, []);
 
   return {

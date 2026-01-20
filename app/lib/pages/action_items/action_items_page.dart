@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/services/app_review_service.dart';
@@ -49,6 +50,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    _loadCategoryOrder();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       MixpanelManager().actionItemsPageOpened();
@@ -57,6 +59,29 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         provider.fetchActionItems(showShimmer: true);
       }
     });
+  }
+
+  void _loadCategoryOrder() {
+    final savedOrder = SharedPreferencesUtil().taskCategoryOrder;
+    setState(() {
+      for (final entry in savedOrder.entries) {
+        try {
+          final category = TaskCategory.values.firstWhere(
+            (c) => c.name == entry.key,
+            orElse: () => TaskCategory.noDeadline,
+          );
+          _categoryOrder[category] = entry.value;
+        } catch (_) {}
+      }
+    });
+  }
+
+  void _saveCategoryOrder() {
+    final Map<String, List<String>> toSave = {};
+    for (final entry in _categoryOrder.entries) {
+      toSave[entry.key.name] = entry.value;
+    }
+    SharedPreferencesUtil().taskCategoryOrder = toSave;
   }
 
   @override
@@ -265,6 +290,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       // Clear hover state
       _hoveredItemId = null;
     });
+    _saveCategoryOrder();
     HapticFeedback.mediumImpact();
   }
 

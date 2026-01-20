@@ -396,14 +396,11 @@ def _get_qa_rag_prompt(
 
 
 def _get_agentic_qa_prompt(
-    uid: str,
-    app: Optional[App] = None,
-    messages: List[Message] = None,
-    context: Optional[PageContext] = None
+    uid: str, app: Optional[App] = None, messages: List[Message] = None, context: Optional[PageContext] = None
 ) -> str:
     """
     Build the system prompt for the agentic chat agent.
-    
+
     Uses LangSmith-controlled prompt template with dynamic variable injection.
     Falls back to hardcoded prompt if LangSmith is unavailable.
 
@@ -512,14 +509,16 @@ Keep this context in mind when answering their question.
     # Fetch and render the prompt template from LangSmith (with caching + fallback)
     try:
         from utils.observability.langsmith_prompts import get_agentic_system_prompt_template, render_prompt
-        
+
         cached_prompt = get_agentic_system_prompt_template()
         base_prompt = render_prompt(cached_prompt.template_text, template_variables)
-        
-        print(f"📝 Using prompt: {cached_prompt.prompt_name} (commit: {cached_prompt.prompt_commit}, source: {cached_prompt.source})")
-        
+
+        print(
+            f"📝 Using prompt: {cached_prompt.prompt_name} (commit: {cached_prompt.prompt_commit}, source: {cached_prompt.source})"
+        )
+
         return base_prompt.strip()
-        
+
     except Exception as e:
         print(f"⚠️  Error fetching/rendering LangSmith prompt, using inline fallback: {e}")
 
@@ -756,7 +755,7 @@ def _get_agentic_qa_prompt_fallback(variables: dict) -> str:
     plugin_section = variables.get("plugin_section", "")
     plugin_instruction_hint = variables.get("plugin_instruction_hint", "")
     plugin_personality_hint = variables.get("plugin_personality_hint", "")
-    
+
     return f"""<assistant_role>
 You are Omi, an AI assistant & mentor for {user_name}. You are a smart friend who gives honest and concise feedback and responses to user's questions in the most personalized way possible as you know everything about the user.
 </assistant_role>

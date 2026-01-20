@@ -498,7 +498,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                           ),
                           _buildNavItem(
                             icon: FontAwesomeIcons.squareCheck,
-                            label: 'Actions',
+                            label: 'Tasks',
                             index: 3,
                             isSelected: homeProvider.selectedIndex == 3,
                             onTap: () => _navigateToIndex(3, homeProvider),
@@ -791,7 +791,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
         child: InkWell(
           onTap: () {
             MixpanelManager()
-                .bottomNavigationTabClicked(['Conversations', 'Chat', 'Memories', 'Actions', 'Apps'][index]);
+                .bottomNavigationTabClicked(['Conversations', 'Chat', 'Memories', 'Tasks', 'Apps'][index]);
             onTap();
           },
           borderRadius: BorderRadius.circular(10),

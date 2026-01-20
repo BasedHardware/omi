@@ -165,7 +165,6 @@ const registerServiceWorker = async (): Promise<ServiceWorkerRegistration | null
 
   try {
     const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-    console.log('Service Worker registered:', registration);
 
     // Wait for the service worker to be active
     const installingWorker = registration.installing;
@@ -196,7 +195,6 @@ const registerServiceWorker = async (): Promise<ServiceWorkerRegistration | null
 
     // Also ensure the service worker is ready
     await navigator.serviceWorker.ready;
-    console.log('Service Worker is active and ready');
 
     return registration;
   } catch (error) {
@@ -231,7 +229,6 @@ export const requestNotificationPermission = async (): Promise<string | null> =>
   // Request permission
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') {
-    console.log('Notification permission denied');
     return null;
   }
 
@@ -247,10 +244,8 @@ export const requestNotificationPermission = async (): Promise<string | null> =>
     });
 
     if (token) {
-      console.log('FCM Token obtained');
       return token;
     } else {
-      console.warn('No FCM token available');
       return null;
     }
   } catch (error) {
@@ -307,13 +302,10 @@ export const onForegroundMessage = async (
 ): Promise<(() => void) | null> => {
   const messaging = await getMessagingInstance();
   if (!messaging) {
-    console.warn('[FCM] Cannot subscribe to foreground messages - messaging not available');
     return null;
   }
 
-  console.log('[FCM] Subscribing to foreground messages');
   return onMessage(messaging, (payload) => {
-    console.log('[FCM] Foreground message received:', payload);
     callback(payload);
   });
 };

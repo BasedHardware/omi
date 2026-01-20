@@ -8,6 +8,7 @@ import {
   deleteDailySummary,
   generateTestDailySummary,
 } from '@/lib/api';
+import { getCache, setCache, updateCache, CACHE_TTL } from '@/lib/cache';
 
 export interface UseRecapsOptions {
   limit?: number;
@@ -26,38 +27,29 @@ export interface UseRecapsReturn {
   getRecapDetail: (id: string) => Promise<DailySummary | null>;
 }
 
-// Module-level cache that persists across component mounts
-interface CacheEntry {
+// Cache key for recaps data - uses centralized cache system
+const RECAPS_CACHE_KEY = 'recaps:list';
+
+// Structure stored in centralized cache
+interface RecapsCacheData {
   recaps: DailySummary[];
   offset: number;
   hasMore: boolean;
-  timestamp: number;
 }
 
-let recapCache: CacheEntry | null = null;
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-
-function getFromCache(): CacheEntry | null {
-  return recapCache;
+function getFromCache(): { data: RecapsCacheData; isStale: boolean } | null {
+  return getCache<RecapsCacheData>(RECAPS_CACHE_KEY);
 }
 
 function setToCache(recaps: DailySummary[], offset: number, hasMore: boolean): void {
-  recapCache = {
-    recaps,
-    offset,
-    hasMore,
-    timestamp: Date.now(),
-  };
+  setCache<RecapsCacheData>(RECAPS_CACHE_KEY, { recaps, offset, hasMore }, CACHE_TTL.MEDIUM);
 }
 
 function updateCacheRecaps(updater: (recaps: DailySummary[]) => DailySummary[]): void {
-  if (recapCache) {
-    recapCache.recaps = updater(recapCache.recaps);
-  }
-}
-
-function isCacheStale(entry: CacheEntry): boolean {
-  return Date.now() - entry.timestamp > CACHE_TTL;
+  updateCache<RecapsCacheData>(RECAPS_CACHE_KEY, (data) => ({
+    ...data,
+    recaps: updater(data.recaps),
+  }));
 }
 
 // Parse YYYY-MM-DD as local date (not UTC)
@@ -112,13 +104,13 @@ export function useRecaps(options: UseRecapsOptions = {}): UseRecapsReturn {
   const cachedEntry = getFromCache();
 
   // Initialize state from cache if available
-  const [recaps, setRecaps] = useState<DailySummary[]>(cachedEntry?.recaps || []);
+  const [recaps, setRecaps] = useState<DailySummary[]>(cachedEntry?.data.recaps || []);
   const [loading, setLoading] = useState(!cachedEntry);
   const [error, setError] = useState<string | null>(null);
-  const [hasMore, setHasMore] = useState(cachedEntry?.hasMore ?? true);
+  const [hasMore, setHasMore] = useState(cachedEntry?.data.hasMore ?? true);
 
   // Use ref for offset to avoid dependency issues
-  const offsetRef = useRef(cachedEntry?.offset || 0);
+  const offsetRef = useRef(cachedEntry?.data.offset || 0);
   // Track if a fetch is in progress to prevent concurrent fetches
   const fetchingRef = useRef(false);
   // Track if initial fetch is done
@@ -144,19 +136,19 @@ export function useRecaps(options: UseRecapsOptions = {}): UseRecapsReturn {
     const cached = getFromCache();
 
     // If we have fresh cache, use it and skip fetch
-    if (cached && !isCacheStale(cached)) {
-      setRecaps(cached.recaps);
-      setHasMore(cached.hasMore);
-      offsetRef.current = cached.offset;
+    if (cached && !cached.isStale) {
+      setRecaps(cached.data.recaps);
+      setHasMore(cached.data.hasMore);
+      offsetRef.current = cached.data.offset;
       setLoading(false);
       return;
     }
 
     // If we have stale cache, show it but refresh in background
     if (cached) {
-      setRecaps(cached.recaps);
-      setHasMore(cached.hasMore);
-      offsetRef.current = cached.offset;
+      setRecaps(cached.data.recaps);
+      setHasMore(cached.data.hasMore);
+      offsetRef.current = cached.data.offset;
       setLoading(false);
     }
 

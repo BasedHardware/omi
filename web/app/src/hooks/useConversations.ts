@@ -219,15 +219,26 @@ export function useConversations(
     setHasProcessing(processing);
   }, [conversations]);
 
-  // Poll for updates while conversations are processing
+  // Poll for updates while conversations are processing with exponential backoff
   useEffect(() => {
     if (!hasProcessing) return;
 
-    const pollInterval = setInterval(() => {
-      fetchConversations(0, false, true); // Background refresh, skip cache
-    }, 5000); // Poll every 5 seconds
+    let pollCount = 0;
+    let timeoutId: NodeJS.Timeout;
 
-    return () => clearInterval(pollInterval);
+    const poll = () => {
+      fetchConversations(0, false, true); // Background refresh, skip cache
+      pollCount++;
+
+      // Exponential backoff: 5s, 10s, 20s, 30s (max)
+      const nextInterval = Math.min(5000 * Math.pow(2, Math.floor(pollCount / 3)), 30000);
+      timeoutId = setTimeout(poll, nextInterval);
+    };
+
+    // Start polling after initial 5s delay
+    timeoutId = setTimeout(poll, 5000);
+
+    return () => clearTimeout(timeoutId);
   }, [hasProcessing, fetchConversations]);
 
   // Load more conversations

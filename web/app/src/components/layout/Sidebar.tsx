@@ -82,8 +82,8 @@ const navItems: NavItem[] = [
     icon: <MessageCircle className="w-5 h-5" />,
   },
   {
-    label: 'Apps',
-    href: '/apps',
+    label: 'My Apps',
+    href: '/my-apps',
     icon: <LayoutGrid className="w-5 h-5" />,
   },
   {
@@ -172,13 +172,16 @@ export function Sidebar({
     setIsTemporaryExpand(false); // Manual toggle makes it permanent
   }, []);
 
-  const handleSignOut = async () => {
+  const handleSignOut = useCallback(async () => {
     await signOut();
     onClose();
-  };
+  }, [signOut, onClose]);
 
   // Collapsed width (icon only) vs expanded width
   const sidebarWidth = isExpanded ? 280 : 72;
+
+  // On mobile, sidebar should always show text (behave as expanded)
+  const showText = !isDesktop || isExpanded;
 
   return (
     <>
@@ -223,7 +226,7 @@ export function Sidebar({
           <div
             className={cn(
               'flex items-center pt-7 px-4 pb-4',
-              isExpanded ? 'justify-between' : 'justify-center'
+              showText ? 'justify-between' : 'justify-center'
             )}
           >
             <Link
@@ -233,8 +236,8 @@ export function Sidebar({
               <Image
                 src="/omi-white.webp"
                 alt="Omi"
-                width={isExpanded ? 60 : 32}
-                height={isExpanded ? 24 : 13}
+                width={showText ? 60 : 32}
+                height={showText ? 24 : 13}
                 className="object-contain"
               />
               <span className="text-[10px] bg-purple-primary/20 text-purple-primary px-1.5 py-0.5 rounded-full font-medium">
@@ -258,7 +261,7 @@ export function Sidebar({
             <div
               className={cn(
                 'px-4 pb-3',
-                isExpanded ? 'flex justify-end' : 'flex justify-center'
+                showText ? 'flex justify-end' : 'flex justify-center'
               )}
             >
               <button
@@ -283,7 +286,7 @@ export function Sidebar({
           <div
             className={cn(
               'px-4 pb-3',
-              isExpanded ? 'flex justify-start' : 'flex justify-center'
+              showText ? 'flex justify-start' : 'flex justify-center'
             )}
           >
             <button
@@ -291,7 +294,7 @@ export function Sidebar({
               className={cn(
                 'flex items-center rounded-lg transition-colors',
                 'text-text-tertiary hover:bg-bg-tertiary hover:text-text-secondary',
-                isExpanded ? 'px-2 py-2' : 'p-2'
+                showText ? 'px-2 py-2' : 'p-2'
               )}
               title="Notifications"
             >
@@ -311,7 +314,7 @@ export function Sidebar({
                   </span>
                 )}
               </div>
-              {isExpanded && (
+              {showText && (
                 <span className="ml-3 text-sm text-text-secondary">
                   Notifications
                 </span>
@@ -323,7 +326,7 @@ export function Sidebar({
         {/* Navigation */}
         <nav className={cn(
           'py-2 space-y-1',
-          isExpanded ? 'px-3' : 'px-2'
+          showText ? 'px-3' : 'px-2'
         )}>
           {navItems.map((item) => {
             const isActive =
@@ -340,11 +343,11 @@ export function Sidebar({
                 onClick={() => {
                   if (!isDesktop) onClose();
                 }}
-                title={!isExpanded ? (showComingSoon ? `${item.label} (Coming Soon)` : item.label) : undefined}
+                title={!showText ? (showComingSoon ? `${item.label} (Coming Soon)` : item.label) : undefined}
                 className={cn(
                   'flex items-center rounded-xl',
                   'transition-all duration-150',
-                  isExpanded ? 'gap-3 px-4 py-3' : 'justify-center p-3',
+                  showText ? 'gap-3 px-4 py-3' : 'justify-center p-3',
                   isActive
                     ? 'bg-purple-primary/10 text-purple-primary border-l-[3px] border-purple-primary'
                     : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary',
@@ -361,7 +364,7 @@ export function Sidebar({
                     </span>
                   )}
                 </span>
-                {isExpanded && (
+                {showText && (
                   <span className="font-medium flex items-center gap-2">
                     {item.label}
                     {showComingSoon && (
@@ -380,34 +383,34 @@ export function Sidebar({
         <div className="flex-1" />
 
         {/* Feedback & Discord links */}
-        <div className={cn('pb-2', isExpanded ? 'px-3' : 'px-2')}>
+        <div className={cn('pb-2', showText ? 'px-3' : 'px-2')}>
           <a
             href="https://feedback.omi.me"
             target="_blank"
             rel="noopener noreferrer"
-            title={!isExpanded ? 'Feedback' : undefined}
+            title={!showText ? 'Feedback' : undefined}
             className={cn(
               'flex items-center rounded-lg transition-colors',
               'text-text-tertiary hover:text-purple-primary hover:bg-bg-tertiary/50',
-              isExpanded ? 'gap-3 px-3 py-2' : 'justify-center p-2'
+              showText ? 'gap-3 px-3 py-2' : 'justify-center p-2'
             )}
           >
             <MessageSquare className="w-4 h-4 flex-shrink-0" />
-            {isExpanded && <span className="text-sm">Feedback</span>}
+            {showText && <span className="text-sm">Feedback</span>}
           </a>
           <a
             href="https://discord.gg/omidotme"
             target="_blank"
             rel="noopener noreferrer"
-            title={!isExpanded ? 'Discord' : undefined}
+            title={!showText ? 'Discord' : undefined}
             className={cn(
               'flex items-center rounded-lg transition-colors',
               'text-text-tertiary hover:text-purple-primary hover:bg-bg-tertiary/50',
-              isExpanded ? 'gap-3 px-3 py-2' : 'justify-center p-2'
+              showText ? 'gap-3 px-3 py-2' : 'justify-center p-2'
             )}
           >
             <DiscordIcon className="w-4 h-4 flex-shrink-0" />
-            {isExpanded && <span className="text-sm">Discord</span>}
+            {showText && <span className="text-sm">Discord</span>}
           </a>
         </div>
 
@@ -429,9 +432,9 @@ export function Sidebar({
                 className={cn(
                   'w-full flex items-center',
                   'hover:bg-bg-tertiary/50 transition-colors',
-                  isExpanded ? 'gap-3 p-4' : 'justify-center p-3'
+                  showText ? 'gap-3 p-4' : 'justify-center p-3'
                 )}
-                title={!isExpanded ? 'Settings' : undefined}
+                title={!showText ? 'Settings' : undefined}
               >
                 {/* Avatar */}
                 <div className="w-9 h-9 rounded-full overflow-hidden bg-bg-tertiary flex-shrink-0 ring-2 ring-bg-tertiary">
@@ -450,7 +453,7 @@ export function Sidebar({
                   )}
                 </div>
 
-                {isExpanded && (
+                {showText && (
                   <>
                     {/* Name & email */}
                     <div className="flex-1 min-w-0 text-left">
@@ -485,7 +488,7 @@ export function Sidebar({
 
               {/* User menu dropdown with settings */}
               <AnimatePresence>
-                {showUserMenu && isExpanded && (
+                {showUserMenu && showText && (
                   <motion.div
                     initial={{ opacity: 0, y: 8, scale: 0.96 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}

@@ -12,7 +12,7 @@ workflows:
     environment:
       ios_signing:
         provisioning_profiles:
-          - codemagic_v4
+          - codemagic_v5
           - codemagic_watchos_v4
         certificates:
           - codemagic_v4
@@ -349,7 +349,7 @@ workflows:
     environment:
       ios_signing:
         provisioning_profiles:
-          - codemagic_v4
+          - codemagic_v5
           - codemagic_watchos_v4
         certificates:
           - codemagic_v4
@@ -894,7 +894,7 @@ workflows:
     environment:
       ios_signing:
         provisioning_profiles:
-          - codemagic_v4
+          - codemagic_v5
           - codemagic_watchos_v4
         certificates:
           - codemagic_v4

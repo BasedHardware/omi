@@ -17,7 +17,6 @@ export default function EditAppPage() {
     async function loadApp() {
       if (!appId) return;
 
-      console.log('Loading app for edit, appId:', appId);
       try {
         const appData = await getApp(appId);
         setApp(appData);
@@ -44,7 +43,7 @@ export default function EditAppPage() {
       <div className="h-full flex items-center justify-center">
         <div className="text-center">
           <p className="text-red-400 mb-4">{error || 'App not found'}</p>
-          <a href="/apps" className="text-accent-primary hover:underline">
+          <a href="/my-apps" className="text-accent-primary hover:underline">
             Back to Apps
           </a>
         </div>

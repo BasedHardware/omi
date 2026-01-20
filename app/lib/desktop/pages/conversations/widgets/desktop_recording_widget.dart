@@ -4,14 +4,19 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:collection/collection.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/backend/schema/message_event.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'desktop_name_speaker_dialog.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
+import 'package:omi/providers/people_provider.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -527,7 +532,36 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
     }
   }
 
+  void _showSpeakerAssignmentDialog(BuildContext context, String segmentId, int speakerId) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
+        final suggestion = captureProvider.suggestionsBySegmentId.values
+            .firstWhere((s) => s.speakerId == speakerId, orElse: () => SpeakerLabelSuggestionEvent.empty());
+
+        return DesktopNameSpeakerDialog(
+          speakerId: speakerId,
+          segmentId: segmentId,
+          segments: captureProvider.segments,
+          suggestion: suggestion,
+          onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
+            MixpanelManager().taggedSegment(personId == 'user' ? 'User' : 'User Person');
+
+            await captureProvider.assignSpeakerToConversation(
+              speakerId,
+              personId,
+              personName,
+              segmentIds,
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildLiveTranscriptContent(List<TranscriptSegment> segments) {
+    final people = context.watch<PeopleProvider>().people;
     final displaySegments = segments;
 
     return Column(
@@ -537,21 +571,35 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
         final segment = entry.value;
         final isLatest = index == displaySegments.length - 1;
 
+        String speakerName = segment.isUser ? 'You' : 'Speaker ${segment.speakerId}';
+        if (segment.personId != null && !segment.isUser) {
+          final person = people.firstWhereOrNull((p) => p.id == segment.personId);
+          if (person != null) {
+            speakerName = person.name;
+          }
+        }
+
         return Container(
           margin: EdgeInsets.only(bottom: index == displaySegments.length - 1 ? 0 : 8),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Speaker indicator
-              Container(
-                margin: const EdgeInsets.only(top: 2),
-                width: 6,
-                height: 6,
-                decoration: BoxDecoration(
-                  color: segment.isUser
-                      ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.9)
-                      : ResponsiveHelper.textTertiary.withValues(alpha: 0.6),
-                  borderRadius: BorderRadius.circular(3),
+              MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  onTap: () => _showSpeakerAssignmentDialog(context, segment.id, segment.speakerId),
+                  child: Container(
+                    margin: const EdgeInsets.only(top: 2),
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: segment.isUser
+                          ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.9)
+                          : ResponsiveHelper.textTertiary.withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
                 ),
               ),
 
@@ -562,12 +610,18 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      segment.isUser ? 'You' : 'Speaker ${segment.speakerId}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        color: segment.isUser ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textTertiary,
+                    MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: GestureDetector(
+                        onTap: () => _showSpeakerAssignmentDialog(context, segment.id, segment.speakerId),
+                        child: Text(
+                          speakerName,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: segment.isUser ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textTertiary,
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 2),

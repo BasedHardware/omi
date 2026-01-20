@@ -401,10 +401,10 @@ export function AppForm({ mode, app }: AppFormProps) {
 
       if (mode === 'create') {
         const result = await createApp(data, logoFile || undefined);
-        router.push(`/apps/${result.app_id}`);
+        router.push(`/my-apps/${result.app_id}`);
       } else if (app) {
         await updateApp(app.id, data, logoFile || undefined);
-        router.push(`/apps/${app.id}`);
+        router.push(`/my-apps/${app.id}`);
       }
     } catch (err) {
       console.error('Failed to save app:', err);
@@ -427,7 +427,7 @@ export function AppForm({ mode, app }: AppFormProps) {
     setIsDeleting(true);
     try {
       await deleteApp(app.id);
-      router.push('/apps');
+      router.push('/my-apps');
     } catch (err) {
       console.error('Failed to delete app:', err);
       setError('Failed to delete app');

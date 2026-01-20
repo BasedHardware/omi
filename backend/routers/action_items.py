@@ -1,3 +1,6 @@
+import asyncio
+import threading
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional, List
 from datetime import datetime, timezone
@@ -9,6 +12,7 @@ from utils.notifications import (
     send_action_item_update_message,
     send_action_item_deletion_message,
 )
+from utils.task_sync import auto_sync_action_item
 from pydantic import BaseModel, Field
 
 router = APIRouter()
@@ -88,6 +92,11 @@ def create_action_item(request: CreateActionItemRequest, uid: str = Depends(auth
             description=request.description,
             due_at=request.due_at.isoformat(),
         )
+
+    def _run_auto_sync():
+        asyncio.run(auto_sync_action_item(uid, {"id": action_item_id, **action_item_data}))
+
+    threading.Thread(target=_run_auto_sync, daemon=True).start()
 
     return ActionItemResponse(**action_item)
 
