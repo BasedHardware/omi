@@ -2324,5 +2324,6 @@
   "mergeConversationsSuccessTitle": "Gesprekken succesvol samengevoegd",
   "mergeConversationsSuccessBody": "{count} gesprekken zijn succesvol samengevoegd",
   "dailyReflectionNotificationTitle": "Tijd voor dagelijkse reflectie",
-  "dailyReflectionNotificationBody": "Vertel me over je dag"
+  "dailyReflectionNotificationBody": "Vertel me over je dag",
+  "actionItemReminderTitle": "Omi-herinnering"
 }

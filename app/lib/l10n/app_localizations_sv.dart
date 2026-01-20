@@ -7299,4 +7299,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get dailyReflectionNotificationBody => 'Berätta om din dag';
+
+  @override
+  String get actionItemReminderTitle => 'Omi-påminnelse';
 }

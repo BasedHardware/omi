@@ -2307,5 +2307,6 @@
   "mergeConversationsSuccessTitle": "Converses fusionades amb èxit",
   "mergeConversationsSuccessBody": "{count} converses s'han fusionat amb èxit",
   "dailyReflectionNotificationTitle": "Hora de la reflexió diària",
-  "dailyReflectionNotificationBody": "Explica'm el teu dia"
+  "dailyReflectionNotificationBody": "Explica'm el teu dia",
+  "actionItemReminderTitle": "Recordatori d'Omi"
 }

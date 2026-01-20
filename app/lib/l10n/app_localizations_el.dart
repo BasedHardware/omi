@@ -7343,4 +7343,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get dailyReflectionNotificationBody => 'Πες μου για την ημέρα σου';
+
+  @override
+  String get actionItemReminderTitle => 'Υπενθύμιση Omi';
 }

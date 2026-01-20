@@ -7295,4 +7295,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get dailyReflectionNotificationBody => 'Kerro minulle päivästäsi';
+
+  @override
+  String get actionItemReminderTitle => 'Omi-muistutus';
 }

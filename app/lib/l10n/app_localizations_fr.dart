@@ -7359,4 +7359,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get dailyReflectionNotificationBody => 'Raconte-moi ta journée';
+
+  @override
+  String get actionItemReminderTitle => 'Rappel Omi';
 }

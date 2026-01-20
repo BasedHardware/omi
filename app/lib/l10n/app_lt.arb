@@ -2324,5 +2324,6 @@
   "mergeConversationsSuccessTitle": "Pokalbiai sėkmingai sujungti",
   "mergeConversationsSuccessBody": "{count} pokalbiai sėkmingai sujungti",
   "dailyReflectionNotificationTitle": "Laikas dienos refleksijai",
-  "dailyReflectionNotificationBody": "Papasakok apie savo dieną"
+  "dailyReflectionNotificationBody": "Papasakok apie savo dieną",
+  "actionItemReminderTitle": "Omi priminimas"
 }

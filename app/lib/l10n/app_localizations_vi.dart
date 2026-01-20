@@ -7305,4 +7305,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get dailyReflectionNotificationBody => 'Kể cho tôi nghe về ngày của bạn';
+
+  @override
+  String get actionItemReminderTitle => 'Nhắc nhở Omi';
 }

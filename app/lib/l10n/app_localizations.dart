@@ -13706,6 +13706,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Tell me about your day'**
   String get dailyReflectionNotificationBody;
+
+  /// Title for action item reminder notifications
+  ///
+  /// In en, this message translates to:
+  /// **'Omi Reminder'**
+  String get actionItemReminderTitle;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

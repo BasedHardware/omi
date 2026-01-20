@@ -2284,5 +2284,6 @@
   "mergeConversationsSuccessTitle": "Konverzace úspěšně sloučeny",
   "mergeConversationsSuccessBody": "{count} konverzací bylo úspěšně sloučeno",
   "dailyReflectionNotificationTitle": "Čas na denní reflexi",
-  "dailyReflectionNotificationBody": "Pověz mi o svém dni"
+  "dailyReflectionNotificationBody": "Pověz mi o svém dni",
+  "actionItemReminderTitle": "Připomínka Omi"
 }

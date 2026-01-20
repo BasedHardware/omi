@@ -7313,4 +7313,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get dailyReflectionNotificationBody => 'Ceritakan tentang harimu';
+
+  @override
+  String get actionItemReminderTitle => 'Pengingat Omi';
 }

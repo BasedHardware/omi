@@ -7179,4 +7179,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get dailyReflectionNotificationBody => '오늘 하루에 대해 말해주세요';
+
+  @override
+  String get actionItemReminderTitle => 'Omi 알림';
 }

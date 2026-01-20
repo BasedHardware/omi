@@ -2324,5 +2324,6 @@
   "mergeConversationsSuccessTitle": "Samtaler slått sammen",
   "mergeConversationsSuccessBody": "{count} samtaler er slått sammen",
   "dailyReflectionNotificationTitle": "Tid for daglig refleksjon",
-  "dailyReflectionNotificationBody": "Fortell meg om dagen din"
+  "dailyReflectionNotificationBody": "Fortell meg om dagen din",
+  "actionItemReminderTitle": "Omi-påminnelse"
 }

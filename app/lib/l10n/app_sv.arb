@@ -2324,5 +2324,6 @@
   "mergeConversationsSuccessTitle": "Konversationer sammanfogade",
   "mergeConversationsSuccessBody": "{count} konversationer har sammanfogats",
   "dailyReflectionNotificationTitle": "Dags för daglig reflektion",
-  "dailyReflectionNotificationBody": "Berätta om din dag"
+  "dailyReflectionNotificationBody": "Berätta om din dag",
+  "actionItemReminderTitle": "Omi-påminnelse"
 }

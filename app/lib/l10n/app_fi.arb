@@ -2324,5 +2324,6 @@
   "mergeConversationsSuccessTitle": "Keskustelut yhdistetty onnistuneesti",
   "mergeConversationsSuccessBody": "{count} keskustelua yhdistettiin onnistuneesti",
   "dailyReflectionNotificationTitle": "Aika päivittäiselle reflektiolle",
-  "dailyReflectionNotificationBody": "Kerro minulle päivästäsi"
+  "dailyReflectionNotificationBody": "Kerro minulle päivästäsi",
+  "actionItemReminderTitle": "Omi-muistutus"
 }

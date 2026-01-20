@@ -7303,4 +7303,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get dailyReflectionNotificationBody => 'Розкажи мені про свій день';
+
+  @override
+  String get actionItemReminderTitle => 'Нагадування Omi';
 }

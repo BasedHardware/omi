@@ -2324,5 +2324,6 @@
   "mergeConversationsSuccessTitle": "Sarunas veiksmīgi apvienotas",
   "mergeConversationsSuccessBody": "{count} sarunas veiksmīgi apvienotas",
   "dailyReflectionNotificationTitle": "Laiks ikdienas pārdomām",
-  "dailyReflectionNotificationBody": "Pastāsti man par savu dienu"
+  "dailyReflectionNotificationBody": "Pastāsti man par savu dienu",
+  "actionItemReminderTitle": "Omi atgādinājums"
 }

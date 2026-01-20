@@ -7288,4 +7288,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get dailyReflectionNotificationBody => 'Pověz mi o svém dni';
+
+  @override
+  String get actionItemReminderTitle => 'Připomínka Omi';
 }

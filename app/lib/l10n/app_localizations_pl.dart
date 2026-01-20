@@ -7307,4 +7307,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get dailyReflectionNotificationBody => 'Opowiedz mi o swoim dniu';
+
+  @override
+  String get actionItemReminderTitle => 'Przypomnienie Omi';
 }

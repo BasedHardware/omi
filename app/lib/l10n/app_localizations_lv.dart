@@ -7308,4 +7308,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get dailyReflectionNotificationBody => 'Pastāsti man par savu dienu';
+
+  @override
+  String get actionItemReminderTitle => 'Omi atgādinājums';
 }

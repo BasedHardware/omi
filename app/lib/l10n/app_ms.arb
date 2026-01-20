@@ -2324,5 +2324,6 @@
   "mergeConversationsSuccessTitle": "Perbualan berjaya digabungkan",
   "mergeConversationsSuccessBody": "{count} perbualan berjaya digabungkan",
   "dailyReflectionNotificationTitle": "Masa untuk Refleksi Harian",
-  "dailyReflectionNotificationBody": "Ceritakan tentang hari anda"
+  "dailyReflectionNotificationBody": "Ceritakan tentang hari anda",
+  "actionItemReminderTitle": "Peringatan Omi"
 }

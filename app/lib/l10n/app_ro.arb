@@ -2324,5 +2324,6 @@
   "mergeConversationsSuccessTitle": "Conversații îmbinate cu succes",
   "mergeConversationsSuccessBody": "{count} conversații au fost îmbinate cu succes",
   "dailyReflectionNotificationTitle": "E timpul pentru reflecție zilnică",
-  "dailyReflectionNotificationBody": "Povestește-mi despre ziua ta"
+  "dailyReflectionNotificationBody": "Povestește-mi despre ziua ta",
+  "actionItemReminderTitle": "Memento Omi"
 }

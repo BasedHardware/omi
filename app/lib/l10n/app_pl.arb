@@ -2324,5 +2324,6 @@
   "mergeConversationsSuccessTitle": "Rozmowy pomyślnie połączone",
   "mergeConversationsSuccessBody": "{count} rozmów zostało pomyślnie połączonych",
   "dailyReflectionNotificationTitle": "Czas na codzienną refleksję",
-  "dailyReflectionNotificationBody": "Opowiedz mi o swoim dniu"
+  "dailyReflectionNotificationBody": "Opowiedz mi o swoim dniu",
+  "actionItemReminderTitle": "Przypomnienie Omi"
 }

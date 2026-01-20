@@ -7328,4 +7328,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get dailyReflectionNotificationBody => 'Povestește-mi despre ziua ta';
+
+  @override
+  String get actionItemReminderTitle => 'Memento Omi';
 }

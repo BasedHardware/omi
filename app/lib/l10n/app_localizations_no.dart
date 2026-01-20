@@ -7292,4 +7292,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get dailyReflectionNotificationBody => 'Fortell meg om dagen din';
+
+  @override
+  String get actionItemReminderTitle => 'Omi-påminnelse';
 }

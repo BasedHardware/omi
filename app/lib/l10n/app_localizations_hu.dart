@@ -7329,4 +7329,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get dailyReflectionNotificationBody => 'Mesélj a napodról';
+
+  @override
+  String get actionItemReminderTitle => 'Omi emlékeztető';
 }

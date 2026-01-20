@@ -2324,5 +2324,6 @@
   "mergeConversationsSuccessTitle": "Vestlused ühendati edukalt",
   "mergeConversationsSuccessBody": "{count} vestlust ühendati edukalt",
   "dailyReflectionNotificationTitle": "Aeg igapäevaseks refleksiooniks",
-  "dailyReflectionNotificationBody": "Räägi mulle oma päevast"
+  "dailyReflectionNotificationBody": "Räägi mulle oma päevast",
+  "actionItemReminderTitle": "Omi meeldetuletus"
 }

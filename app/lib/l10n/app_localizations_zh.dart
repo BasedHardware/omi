@@ -7167,4 +7167,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get dailyReflectionNotificationBody => '告诉我你今天过得怎么样';
+
+  @override
+  String get actionItemReminderTitle => 'Omi提醒';
 }

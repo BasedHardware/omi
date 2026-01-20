@@ -2324,5 +2324,6 @@
   "mergeConversationsSuccessTitle": "Разговоры успешно объединены",
   "mergeConversationsSuccessBody": "{count} разговоров успешно объединено",
   "dailyReflectionNotificationTitle": "Время для ежедневной рефлексии",
-  "dailyReflectionNotificationBody": "Расскажи мне о своём дне"
+  "dailyReflectionNotificationBody": "Расскажи мне о своём дне",
+  "actionItemReminderTitle": "Напоминание Omi"
 }

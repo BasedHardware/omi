@@ -7260,4 +7260,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get dailyReflectionNotificationBody => 'เล่าให้ฟังเกี่ยวกับวันของคุณ';
+
+  @override
+  String get actionItemReminderTitle => 'การแจ้งเตือน Omi';
 }

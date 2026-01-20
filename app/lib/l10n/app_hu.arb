@@ -2324,5 +2324,6 @@
   "mergeConversationsSuccessTitle": "Beszélgetések sikeresen összevonva",
   "mergeConversationsSuccessBody": "{count} beszélgetés sikeresen összevonva",
   "dailyReflectionNotificationTitle": "Ideje a napi reflexiónak",
-  "dailyReflectionNotificationBody": "Mesélj a napodról"
+  "dailyReflectionNotificationBody": "Mesélj a napodról",
+  "actionItemReminderTitle": "Omi emlékeztető"
 }

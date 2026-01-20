@@ -7306,4 +7306,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get dailyReflectionNotificationBody => 'Bana gününü anlat';
+
+  @override
+  String get actionItemReminderTitle => 'Omi Hatırlatıcı';
 }

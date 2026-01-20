@@ -9032,5 +9032,9 @@
   "dailyReflectionNotificationBody": "Tell me about your day",
   "@dailyReflectionNotificationBody": {
     "description": "Body text for the daily reflection notification"
+  },
+  "actionItemReminderTitle": "Omi Reminder",
+  "@actionItemReminderTitle": {
+    "description": "Title for action item reminder notifications"
   }
 }

@@ -7289,4 +7289,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get dailyReflectionNotificationBody => 'Conte-me sobre o seu dia';
+
+  @override
+  String get actionItemReminderTitle => 'Lembrete do Omi';
 }

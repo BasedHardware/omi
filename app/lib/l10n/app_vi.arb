@@ -2324,5 +2324,6 @@
   "mergeConversationsSuccessTitle": "Hội thoại đã được hợp nhất thành công",
   "mergeConversationsSuccessBody": "{count} hội thoại đã được hợp nhất thành công",
   "dailyReflectionNotificationTitle": "Đến giờ suy ngẫm hàng ngày",
-  "dailyReflectionNotificationBody": "Kể cho tôi nghe về ngày của bạn"
+  "dailyReflectionNotificationBody": "Kể cho tôi nghe về ngày của bạn",
+  "actionItemReminderTitle": "Nhắc nhở Omi"
 }

@@ -7297,4 +7297,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get dailyReflectionNotificationBody => 'Papasakok apie savo dieną';
+
+  @override
+  String get actionItemReminderTitle => 'Omi priminimas';
 }

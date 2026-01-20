@@ -2325,5 +2325,6 @@
   "mergeConversationsSuccessTitle": "会話が正常にマージされました",
   "mergeConversationsSuccessBody": "{count}件の会話が正常にマージされました",
   "dailyReflectionNotificationTitle": "デイリー振り返りの時間です",
-  "dailyReflectionNotificationBody": "今日のことを教えてください"
+  "dailyReflectionNotificationBody": "今日のことを教えてください",
+  "actionItemReminderTitle": "Omiリマインダー"
 }

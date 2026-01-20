@@ -2324,5 +2324,6 @@
   "mergeConversationsSuccessTitle": "Οι συνομιλίες συγχωνεύθηκαν επιτυχώς",
   "mergeConversationsSuccessBody": "{count} συνομιλίες συγχωνεύθηκαν επιτυχώς",
   "dailyReflectionNotificationTitle": "Ώρα για ημερήσιο αναστοχασμό",
-  "dailyReflectionNotificationBody": "Πες μου για την ημέρα σου"
+  "dailyReflectionNotificationBody": "Πες μου για την ημέρα σου",
+  "actionItemReminderTitle": "Υπενθύμιση Omi"
 }

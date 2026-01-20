@@ -2325,5 +2325,6 @@
   "mergeConversationsSuccessTitle": "वार्तालाप सफलतापूर्वक मर्ज किए गए",
   "mergeConversationsSuccessBody": "{count} वार्तालाप सफलतापूर्वक मर्ज किए गए",
   "dailyReflectionNotificationTitle": "दैनिक चिंतन का समय",
-  "dailyReflectionNotificationBody": "मुझे अपने दिन के बारे में बताओ"
+  "dailyReflectionNotificationBody": "मुझे अपने दिन के बारे में बताओ",
+  "actionItemReminderTitle": "Omi अनुस्मारक"
 }

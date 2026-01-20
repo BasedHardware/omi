@@ -7324,4 +7324,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get dailyReflectionNotificationBody => 'Разкажи ми за деня си';
+
+  @override
+  String get actionItemReminderTitle => 'Напомняне от Omi';
 }

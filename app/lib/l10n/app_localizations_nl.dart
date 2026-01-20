@@ -7315,4 +7315,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get dailyReflectionNotificationBody => 'Vertel me over je dag';
+
+  @override
+  String get actionItemReminderTitle => 'Omi-herinnering';
 }
