@@ -2322,5 +2322,7 @@
   "importErrorOpeningFilePicker": "Klaida atidarant failų pasirinkiklį: {message}",
   "importErrorGeneric": "Klaida: {error}",
   "mergeConversationsSuccessTitle": "Pokalbiai sėkmingai sujungti",
-  "mergeConversationsSuccessBody": "{count} pokalbiai sėkmingai sujungti"
+  "mergeConversationsSuccessBody": "{count} pokalbiai sėkmingai sujungti",
+  "dailyReflectionNotificationTitle": "Laikas dienos refleksijai",
+  "dailyReflectionNotificationBody": "Papasakok apie savo dieną"
 }

@@ -7171,4 +7171,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String mergeConversationsSuccessBody(int count) {
     return '$count件の会話が正常にマージされました';
   }
+
+  @override
+  String get dailyReflectionNotificationTitle => 'デイリー振り返りの時間です';
+
+  @override
+  String get dailyReflectionNotificationBody => '今日のことを教えてください';
 }

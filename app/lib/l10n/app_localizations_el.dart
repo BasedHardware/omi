@@ -7337,4 +7337,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String mergeConversationsSuccessBody(int count) {
     return '$count συνομιλίες συγχωνεύθηκαν επιτυχώς';
   }
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Ώρα για ημερήσιο αναστοχασμό';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Πες μου για την ημέρα σου';
 }

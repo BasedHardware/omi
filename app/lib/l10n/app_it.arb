@@ -2322,5 +2322,7 @@
   "importErrorOpeningFilePicker": "Errore nell'apertura del selettore file: {message}",
   "importErrorGeneric": "Errore: {error}",
   "mergeConversationsSuccessTitle": "Conversazioni unite con successo",
-  "mergeConversationsSuccessBody": "{count} conversazioni sono state unite con successo"
+  "mergeConversationsSuccessBody": "{count} conversazioni sono state unite con successo",
+  "dailyReflectionNotificationTitle": "È ora della riflessione quotidiana",
+  "dailyReflectionNotificationBody": "Raccontami della tua giornata"
 }

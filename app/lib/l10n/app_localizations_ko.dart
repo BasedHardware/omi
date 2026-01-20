@@ -7173,4 +7173,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String mergeConversationsSuccessBody(int count) {
     return '$count개의 대화가 성공적으로 병합되었습니다';
   }
+
+  @override
+  String get dailyReflectionNotificationTitle => '일일 성찰 시간입니다';
+
+  @override
+  String get dailyReflectionNotificationBody => '오늘 하루에 대해 말해주세요';
 }

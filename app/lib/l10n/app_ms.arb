@@ -2322,5 +2322,7 @@
   "importErrorOpeningFilePicker": "Ralat membuka pemilih fail: {message}",
   "importErrorGeneric": "Ralat: {error}",
   "mergeConversationsSuccessTitle": "Perbualan berjaya digabungkan",
-  "mergeConversationsSuccessBody": "{count} perbualan berjaya digabungkan"
+  "mergeConversationsSuccessBody": "{count} perbualan berjaya digabungkan",
+  "dailyReflectionNotificationTitle": "Masa untuk Refleksi Harian",
+  "dailyReflectionNotificationBody": "Ceritakan tentang hari anda"
 }

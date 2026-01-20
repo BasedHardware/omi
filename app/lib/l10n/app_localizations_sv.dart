@@ -7293,4 +7293,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String mergeConversationsSuccessBody(int count) {
     return '$count konversationer har sammanfogats';
   }
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Dags för daglig reflektion';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Berätta om din dag';
 }

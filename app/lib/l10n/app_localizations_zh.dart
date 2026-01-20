@@ -7161,4 +7161,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String mergeConversationsSuccessBody(int count) {
     return '$count个会话已成功合并';
   }
+
+  @override
+  String get dailyReflectionNotificationTitle => '每日反思时间';
+
+  @override
+  String get dailyReflectionNotificationBody => '告诉我你今天过得怎么样';
 }

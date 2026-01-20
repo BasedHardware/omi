@@ -7296,4 +7296,10 @@ class AppLocalizationsDa extends AppLocalizations {
   String mergeConversationsSuccessBody(int count) {
     return '$count samtaler er blevet flettet';
   }
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Tid til daglig refleksion';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Fortæl mig om din dag';
 }

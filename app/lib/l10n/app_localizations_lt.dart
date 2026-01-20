@@ -7291,4 +7291,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String mergeConversationsSuccessBody(int count) {
     return '$count pokalbiai sėkmingai sujungti';
   }
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Laikas dienos refleksijai';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Papasakok apie savo dieną';
 }

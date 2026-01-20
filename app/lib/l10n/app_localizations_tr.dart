@@ -7300,4 +7300,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String mergeConversationsSuccessBody(int count) {
     return '$count konuşma başarıyla birleştirildi';
   }
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Günlük düşünce zamanı';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Bana gününü anlat';
 }

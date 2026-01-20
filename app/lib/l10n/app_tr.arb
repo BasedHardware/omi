@@ -2322,5 +2322,7 @@
   "importErrorOpeningFilePicker": "Dosya seçici açılırken hata: {message}",
   "importErrorGeneric": "Hata: {error}",
   "mergeConversationsSuccessTitle": "Konuşmalar başarıyla birleştirildi",
-  "mergeConversationsSuccessBody": "{count} konuşma başarıyla birleştirildi"
+  "mergeConversationsSuccessBody": "{count} konuşma başarıyla birleştirildi",
+  "dailyReflectionNotificationTitle": "Günlük düşünce zamanı",
+  "dailyReflectionNotificationBody": "Bana gününü anlat"
 }

@@ -7240,4 +7240,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String mergeConversationsSuccessBody(int count) {
     return 'تم دمج $count محادثات بنجاح';
   }
+
+  @override
+  String get dailyReflectionNotificationTitle => 'حان وقت التأمل اليومي';
+
+  @override
+  String get dailyReflectionNotificationBody => 'أخبرني عن يومك';
 }

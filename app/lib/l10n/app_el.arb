@@ -2322,5 +2322,7 @@
   "importErrorOpeningFilePicker": "Σφάλμα κατά το άνοιγμα του επιλογέα αρχείων: {message}",
   "importErrorGeneric": "Σφάλμα: {error}",
   "mergeConversationsSuccessTitle": "Οι συνομιλίες συγχωνεύθηκαν επιτυχώς",
-  "mergeConversationsSuccessBody": "{count} συνομιλίες συγχωνεύθηκαν επιτυχώς"
+  "mergeConversationsSuccessBody": "{count} συνομιλίες συγχωνεύθηκαν επιτυχώς",
+  "dailyReflectionNotificationTitle": "Ώρα για ημερήσιο αναστοχασμό",
+  "dailyReflectionNotificationBody": "Πες μου για την ημέρα σου"
 }

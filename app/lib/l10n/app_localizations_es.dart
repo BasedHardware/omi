@@ -7295,4 +7295,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String mergeConversationsSuccessBody(int count) {
     return '$count conversaciones se han fusionado con éxito';
   }
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Hora de la reflexión diaria';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Cuéntame sobre tu día';
 }

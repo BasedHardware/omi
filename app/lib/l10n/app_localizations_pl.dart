@@ -7301,4 +7301,10 @@ class AppLocalizationsPl extends AppLocalizations {
   String mergeConversationsSuccessBody(int count) {
     return '$count rozmów zostało pomyślnie połączonych';
   }
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Czas na codzienną refleksję';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Opowiedz mi o swoim dniu';
 }

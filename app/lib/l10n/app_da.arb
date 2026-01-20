@@ -2280,5 +2280,7 @@
   "importErrorOpeningFilePicker": "Fejl ved åbning af filvælger: {message}",
   "importErrorGeneric": "Fejl: {error}",
   "mergeConversationsSuccessTitle": "Samtaler flettet succesfuldt",
-  "mergeConversationsSuccessBody": "{count} samtaler er blevet flettet"
+  "mergeConversationsSuccessBody": "{count} samtaler er blevet flettet",
+  "dailyReflectionNotificationTitle": "Tid til daglig refleksion",
+  "dailyReflectionNotificationBody": "Fortæl mig om din dag"
 }

@@ -2322,5 +2322,7 @@
   "importErrorOpeningFilePicker": "Błąd podczas otwierania wyboru plików: {message}",
   "importErrorGeneric": "Błąd: {error}",
   "mergeConversationsSuccessTitle": "Rozmowy pomyślnie połączone",
-  "mergeConversationsSuccessBody": "{count} rozmów zostało pomyślnie połączonych"
+  "mergeConversationsSuccessBody": "{count} rozmów zostało pomyślnie połączonych",
+  "dailyReflectionNotificationTitle": "Czas na codzienną refleksję",
+  "dailyReflectionNotificationBody": "Opowiedz mi o swoim dniu"
 }

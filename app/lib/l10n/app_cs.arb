@@ -2282,5 +2282,7 @@
   "importErrorOpeningFilePicker": "Chyba při otevírání výběru souborů: {message}",
   "importErrorGeneric": "Chyba: {error}",
   "mergeConversationsSuccessTitle": "Konverzace úspěšně sloučeny",
-  "mergeConversationsSuccessBody": "{count} konverzací bylo úspěšně sloučeno"
+  "mergeConversationsSuccessBody": "{count} konverzací bylo úspěšně sloučeno",
+  "dailyReflectionNotificationTitle": "Čas na denní reflexi",
+  "dailyReflectionNotificationBody": "Pověz mi o svém dni"
 }

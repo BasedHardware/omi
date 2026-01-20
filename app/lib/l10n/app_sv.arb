@@ -2322,5 +2322,7 @@
   "importErrorOpeningFilePicker": "Fel vid öppning av filväljare: {message}",
   "importErrorGeneric": "Fel: {error}",
   "mergeConversationsSuccessTitle": "Konversationer sammanfogade",
-  "mergeConversationsSuccessBody": "{count} konversationer har sammanfogats"
+  "mergeConversationsSuccessBody": "{count} konversationer har sammanfogats",
+  "dailyReflectionNotificationTitle": "Dags för daglig reflektion",
+  "dailyReflectionNotificationBody": "Berätta om din dag"
 }

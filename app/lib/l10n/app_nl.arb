@@ -2322,5 +2322,7 @@
   "importErrorOpeningFilePicker": "Fout bij openen bestandskiezer: {message}",
   "importErrorGeneric": "Fout: {error}",
   "mergeConversationsSuccessTitle": "Gesprekken succesvol samengevoegd",
-  "mergeConversationsSuccessBody": "{count} gesprekken zijn succesvol samengevoegd"
+  "mergeConversationsSuccessBody": "{count} gesprekken zijn succesvol samengevoegd",
+  "dailyReflectionNotificationTitle": "Tijd voor dagelijkse reflectie",
+  "dailyReflectionNotificationBody": "Vertel me over je dag"
 }

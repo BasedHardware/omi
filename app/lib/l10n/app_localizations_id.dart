@@ -7307,4 +7307,10 @@ class AppLocalizationsId extends AppLocalizations {
   String mergeConversationsSuccessBody(int count) {
     return '$count percakapan berhasil digabungkan';
   }
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Waktunya Refleksi Harian';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Ceritakan tentang harimu';
 }

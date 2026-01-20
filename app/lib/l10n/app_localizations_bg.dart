@@ -7318,4 +7318,10 @@ class AppLocalizationsBg extends AppLocalizations {
   String mergeConversationsSuccessBody(int count) {
     return '$count разговора бяха обединени успешно';
   }
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Време за дневна рефлексия';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Разкажи ми за деня си';
 }

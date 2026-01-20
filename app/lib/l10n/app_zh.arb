@@ -2323,5 +2323,7 @@
   "importErrorOpeningFilePicker": "打开文件选择器时出错：{message}",
   "importErrorGeneric": "错误：{error}",
   "mergeConversationsSuccessTitle": "会话合并成功",
-  "mergeConversationsSuccessBody": "{count}个会话已成功合并"
+  "mergeConversationsSuccessBody": "{count}个会话已成功合并",
+  "dailyReflectionNotificationTitle": "每日反思时间",
+  "dailyReflectionNotificationBody": "告诉我你今天过得怎么样"
 }

@@ -9024,5 +9024,13 @@
         "example": "3"
       }
     }
+  },
+  "dailyReflectionNotificationTitle": "Time for Daily Reflection",
+  "@dailyReflectionNotificationTitle": {
+    "description": "Title for the daily reflection notification shown at 9 PM"
+  },
+  "dailyReflectionNotificationBody": "Tell me about your day",
+  "@dailyReflectionNotificationBody": {
+    "description": "Body text for the daily reflection notification"
   }
 }

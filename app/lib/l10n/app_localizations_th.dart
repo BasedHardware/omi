@@ -7254,4 +7254,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String mergeConversationsSuccessBody(int count) {
     return 'รวม $count การสนทนาสำเร็จแล้ว';
   }
+
+  @override
+  String get dailyReflectionNotificationTitle => 'ถึงเวลาทบทวนรายวัน';
+
+  @override
+  String get dailyReflectionNotificationBody => 'เล่าให้ฟังเกี่ยวกับวันของคุณ';
 }

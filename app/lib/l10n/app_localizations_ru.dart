@@ -7307,4 +7307,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String mergeConversationsSuccessBody(int count) {
     return '$count разговоров успешно объединено';
   }
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Время для ежедневной рефлексии';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Расскажи мне о своём дне';
 }

@@ -2322,5 +2322,7 @@
   "importErrorOpeningFilePicker": "Kesalahan membuka pemilih file: {message}",
   "importErrorGeneric": "Kesalahan: {error}",
   "mergeConversationsSuccessTitle": "Percakapan berhasil digabungkan",
-  "mergeConversationsSuccessBody": "{count} percakapan berhasil digabungkan"
+  "mergeConversationsSuccessBody": "{count} percakapan berhasil digabungkan",
+  "dailyReflectionNotificationTitle": "Waktunya Refleksi Harian",
+  "dailyReflectionNotificationBody": "Ceritakan tentang harimu"
 }

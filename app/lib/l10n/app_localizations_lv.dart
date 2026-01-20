@@ -7302,4 +7302,10 @@ class AppLocalizationsLv extends AppLocalizations {
   String mergeConversationsSuccessBody(int count) {
     return '$count sarunas veiksmīgi apvienotas';
   }
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Laiks ikdienas pārdomām';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Pastāsti man par savu dienu';
 }

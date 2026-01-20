@@ -2322,5 +2322,7 @@
   "importErrorOpeningFilePicker": "Virhe tiedostonvalitsimen avaamisessa: {message}",
   "importErrorGeneric": "Virhe: {error}",
   "mergeConversationsSuccessTitle": "Keskustelut yhdistetty onnistuneesti",
-  "mergeConversationsSuccessBody": "{count} keskustelua yhdistettiin onnistuneesti"
+  "mergeConversationsSuccessBody": "{count} keskustelua yhdistettiin onnistuneesti",
+  "dailyReflectionNotificationTitle": "Aika päivittäiselle reflektiolle",
+  "dailyReflectionNotificationBody": "Kerro minulle päivästäsi"
 }

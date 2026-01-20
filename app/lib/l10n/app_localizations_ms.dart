@@ -7311,4 +7311,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String mergeConversationsSuccessBody(int count) {
     return '$count perbualan berjaya digabungkan';
   }
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Masa untuk Refleksi Harian';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Ceritakan tentang hari anda';
 }

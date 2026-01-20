@@ -2322,5 +2322,7 @@
   "importErrorOpeningFilePicker": "Feil ved åpning av filvelger: {message}",
   "importErrorGeneric": "Feil: {error}",
   "mergeConversationsSuccessTitle": "Samtaler slått sammen",
-  "mergeConversationsSuccessBody": "{count} samtaler er slått sammen"
+  "mergeConversationsSuccessBody": "{count} samtaler er slått sammen",
+  "dailyReflectionNotificationTitle": "Tid for daglig refleksjon",
+  "dailyReflectionNotificationBody": "Fortell meg om dagen din"
 }

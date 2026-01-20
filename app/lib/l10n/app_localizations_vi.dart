@@ -7299,4 +7299,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String mergeConversationsSuccessBody(int count) {
     return '$count hội thoại đã được hợp nhất thành công';
   }
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Đến giờ suy ngẫm hàng ngày';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Kể cho tôi nghe về ngày của bạn';
 }

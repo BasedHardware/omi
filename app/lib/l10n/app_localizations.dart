@@ -13694,6 +13694,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count} conversations have been merged successfully'**
   String mergeConversationsSuccessBody(int count);
+
+  /// Title for the daily reflection notification shown at 9 PM
+  ///
+  /// In en, this message translates to:
+  /// **'Time for Daily Reflection'**
+  String get dailyReflectionNotificationTitle;
+
+  /// Body text for the daily reflection notification
+  ///
+  /// In en, this message translates to:
+  /// **'Tell me about your day'**
+  String get dailyReflectionNotificationBody;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

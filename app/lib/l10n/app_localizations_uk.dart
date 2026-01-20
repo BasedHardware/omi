@@ -7297,4 +7297,10 @@ class AppLocalizationsUk extends AppLocalizations {
   String mergeConversationsSuccessBody(int count) {
     return '$count розмов успішно об\'єднано';
   }
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Час для щоденної рефлексії';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Розкажи мені про свій день';
 }

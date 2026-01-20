@@ -7323,4 +7323,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String mergeConversationsSuccessBody(int count) {
     return '$count beszélgetés sikeresen összevonva';
   }
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Ideje a napi reflexiónak';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Mesélj a napodról';
 }

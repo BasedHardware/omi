@@ -7322,4 +7322,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String mergeConversationsSuccessBody(int count) {
     return '$count conversații au fost îmbinate cu succes';
   }
+
+  @override
+  String get dailyReflectionNotificationTitle => 'E timpul pentru reflecție zilnică';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Povestește-mi despre ziua ta';
 }

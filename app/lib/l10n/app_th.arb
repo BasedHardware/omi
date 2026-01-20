@@ -2322,5 +2322,7 @@
   "importErrorOpeningFilePicker": "เกิดข้อผิดพลาดในการเปิดตัวเลือกไฟล์: {message}",
   "importErrorGeneric": "ข้อผิดพลาด: {error}",
   "mergeConversationsSuccessTitle": "รวมการสนทนาสำเร็จแล้ว",
-  "mergeConversationsSuccessBody": "รวม {count} การสนทนาสำเร็จแล้ว"
+  "mergeConversationsSuccessBody": "รวม {count} การสนทนาสำเร็จแล้ว",
+  "dailyReflectionNotificationTitle": "ถึงเวลาทบทวนรายวัน",
+  "dailyReflectionNotificationBody": "เล่าให้ฟังเกี่ยวกับวันของคุณ"
 }

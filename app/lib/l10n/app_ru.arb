@@ -2322,5 +2322,7 @@
   "importErrorOpeningFilePicker": "Ошибка при открытии выбора файлов: {message}",
   "importErrorGeneric": "Ошибка: {error}",
   "mergeConversationsSuccessTitle": "Разговоры успешно объединены",
-  "mergeConversationsSuccessBody": "{count} разговоров успешно объединено"
+  "mergeConversationsSuccessBody": "{count} разговоров успешно объединено",
+  "dailyReflectionNotificationTitle": "Время для ежедневной рефлексии",
+  "dailyReflectionNotificationBody": "Расскажи мне о своём дне"
 }

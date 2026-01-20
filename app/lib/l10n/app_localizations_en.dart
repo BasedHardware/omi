@@ -7288,4 +7288,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String mergeConversationsSuccessBody(int count) {
     return '$count conversations have been merged successfully';
   }
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Time for Daily Reflection';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Tell me about your day';
 }

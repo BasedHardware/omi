@@ -7350,4 +7350,10 @@ class AppLocalizationsDe extends AppLocalizations {
   String mergeConversationsSuccessBody(int count) {
     return '$count Gespräche wurden erfolgreich zusammengeführt';
   }
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Zeit für tägliche Reflexion';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Erzähl mir von deinem Tag';
 }

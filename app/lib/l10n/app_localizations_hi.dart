@@ -7268,4 +7268,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String mergeConversationsSuccessBody(int count) {
     return '$count वार्तालाप सफलतापूर्वक मर्ज किए गए';
   }
+
+  @override
+  String get dailyReflectionNotificationTitle => 'दैनिक चिंतन का समय';
+
+  @override
+  String get dailyReflectionNotificationBody => 'मुझे अपने दिन के बारे में बताओ';
 }

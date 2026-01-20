@@ -7282,4 +7282,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String mergeConversationsSuccessBody(int count) {
     return '$count konverzací bylo úspěšně sloučeno';
   }
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Čas na denní reflexi';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Pověz mi o svém dni';
 }

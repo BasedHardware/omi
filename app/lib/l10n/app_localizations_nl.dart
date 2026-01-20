@@ -7309,4 +7309,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String mergeConversationsSuccessBody(int count) {
     return '$count gesprekken zijn succesvol samengevoegd';
   }
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Tijd voor dagelijkse reflectie';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Vertel me over je dag';
 }

@@ -2322,5 +2322,7 @@
   "importErrorOpeningFilePicker": "Kļūda atverot failu izvēlētāju: {message}",
   "importErrorGeneric": "Kļūda: {error}",
   "mergeConversationsSuccessTitle": "Sarunas veiksmīgi apvienotas",
-  "mergeConversationsSuccessBody": "{count} sarunas veiksmīgi apvienotas"
+  "mergeConversationsSuccessBody": "{count} sarunas veiksmīgi apvienotas",
+  "dailyReflectionNotificationTitle": "Laiks ikdienas pārdomām",
+  "dailyReflectionNotificationBody": "Pastāsti man par savu dienu"
 }

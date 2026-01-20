@@ -2322,5 +2322,7 @@
   "importErrorOpeningFilePicker": "Hiba a fájlválasztó megnyitásakor: {message}",
   "importErrorGeneric": "Hiba: {error}",
   "mergeConversationsSuccessTitle": "Beszélgetések sikeresen összevonva",
-  "mergeConversationsSuccessBody": "{count} beszélgetés sikeresen összevonva"
+  "mergeConversationsSuccessBody": "{count} beszélgetés sikeresen összevonva",
+  "dailyReflectionNotificationTitle": "Ideje a napi reflexiónak",
+  "dailyReflectionNotificationBody": "Mesélj a napodról"
 }

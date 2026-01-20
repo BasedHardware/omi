@@ -7290,4 +7290,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String mergeConversationsSuccessBody(int count) {
     return '$count vestlust ühendati edukalt';
   }
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Aeg igapäevaseks refleksiooniks';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Räägi mulle oma päevast';
 }

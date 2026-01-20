@@ -2303,5 +2303,7 @@
   "importErrorOpeningFilePicker": "خطأ في فتح منتقي الملفات: {message}",
   "importErrorGeneric": "خطأ: {error}",
   "mergeConversationsSuccessTitle": "تم دمج المحادثات بنجاح",
-  "mergeConversationsSuccessBody": "تم دمج {count} محادثات بنجاح"
+  "mergeConversationsSuccessBody": "تم دمج {count} محادثات بنجاح",
+  "dailyReflectionNotificationTitle": "حان وقت التأمل اليومي",
+  "dailyReflectionNotificationBody": "أخبرني عن يومك"
 }

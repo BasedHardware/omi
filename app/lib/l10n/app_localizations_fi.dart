@@ -7289,4 +7289,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String mergeConversationsSuccessBody(int count) {
     return '$count keskustelua yhdistettiin onnistuneesti';
   }
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Aika päivittäiselle reflektiolle';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Kerro minulle päivästäsi';
 }
