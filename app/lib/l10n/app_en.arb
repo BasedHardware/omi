@@ -8753,5 +8753,79 @@
   "addAppPersonaConflictWithCapabilities": "Persona cannot be selected with other capabilities",
   "@addAppPersonaConflictWithCapabilities": {
     "description": "Error when trying to select Persona alongside other capabilities"
+  },
+  "personaTwitterHandleNotFound": "Twitter handle not found",
+  "@personaTwitterHandleNotFound": {
+    "description": "Error shown when Twitter handle is not found"
+  },
+  "personaTwitterHandleSuspended": "Twitter handle is suspended",
+  "@personaTwitterHandleSuspended": {
+    "description": "Error shown when Twitter handle is suspended"
+  },
+  "personaFailedToVerifyTwitter": "Failed to verify Twitter handle",
+  "@personaFailedToVerifyTwitter": {
+    "description": "Error shown when Twitter handle verification fails"
+  },
+  "personaFailedToFetch": "Failed to fetch your persona",
+  "@personaFailedToFetch": {
+    "description": "Error shown when fetching persona fails"
+  },
+  "personaFailedToCreate": "Failed to create your persona",
+  "@personaFailedToCreate": {
+    "description": "Error shown when creating persona fails"
+  },
+  "personaConnectKnowledgeSource": "Please connect at least one knowledge data source (Omi or Twitter)",
+  "@personaConnectKnowledgeSource": {
+    "description": "Error shown when no knowledge source is connected"
+  },
+  "personaUpdatedSuccessfully": "Persona updated successfully",
+  "@personaUpdatedSuccessfully": {
+    "description": "Success message when persona is updated"
+  },
+  "personaFailedToUpdate": "Failed to update persona",
+  "@personaFailedToUpdate": {
+    "description": "Error shown when updating persona fails"
+  },
+  "personaPleaseSelectImage": "Please select an image",
+  "@personaPleaseSelectImage": {
+    "description": "Error shown when no image is selected for persona"
+  },
+  "personaFailedToCreateTryLater": "Failed to create your persona. Please try again later.",
+  "@personaFailedToCreateTryLater": {
+    "description": "Error shown when creating persona fails with retry suggestion"
+  },
+  "personaFailedToCreateWithError": "Failed to create persona: {error}",
+  "@personaFailedToCreateWithError": {
+    "description": "Error shown when creating persona fails with error details",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "personaFailedToEnable": "Failed to enable persona",
+  "@personaFailedToEnable": {
+    "description": "Error shown when enabling persona fails"
+  },
+  "personaErrorEnablingWithError": "Error enabling persona: {error}",
+  "@personaErrorEnablingWithError": {
+    "description": "Error shown when enabling persona fails with error details",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "paymentFailedToFetchCountries": "Failed to fetch supported countries. Please try again later.",
+  "@paymentFailedToFetchCountries": {
+    "description": "Error message when fetching supported countries fails"
+  },
+  "paymentFailedToSetDefault": "Failed to set default payment method. Please try again later.",
+  "@paymentFailedToSetDefault": {
+    "description": "Error message when setting default payment method fails"
+  },
+  "paymentFailedToSavePaypal": "Failed to save PayPal details. Please try again later.",
+  "@paymentFailedToSavePaypal": {
+    "description": "Error message when saving PayPal details fails"
   }
 }

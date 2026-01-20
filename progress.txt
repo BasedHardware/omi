@@ -10,10 +10,10 @@
 |--------|-------|
 | Total Files | 27 |
 | Total Strings | ~125 |
-| Completed | 2 |
+| Completed | 3 |
 | In Progress | 0 |
-| Pending | 25 |
-| Progress | 7% |
+| Pending | 24 |
+| Progress | 11% |
 
 ================================================================================
 ## PRIORITY 1: HIGH IMPACT - User-Facing Features (~65 strings)
@@ -40,25 +40,14 @@ addAppPhotosPermissionDenied, addAppErrorSelectingImageRetry, addAppErrorSelecti
 (with placeholder), addAppErrorSelectingThumbnailRetry, addAppCapabilityConflictWithPersona,
 addAppPersonaConflictWithCapabilities.
 
-### [ ] pages/persona/persona_provider.dart (~15 strings)
-Status: PENDING
-Strings:
-- [ ] Line 82: 'Twitter handle not found' (error)
-- [ ] Line 86: 'Twitter handle is suspended' (error)
-- [ ] Line 103: 'Failed to verify Twitter handle' (error)
-- [ ] Line 124: 'Failed to fetch your persona' (error)
-- [ ] Line 142: 'Failed to create your persona' (error)
-- [ ] Line 151: 'Failed to fetch your persona' (error)
-- [ ] Line 298: 'Please connect at least one knowledge data source...' (error)
-- [ ] Line 345: 'Persona updated successfully' (success)
-- [ ] Line 356: 'Failed to update persona' (error)
-- [ ] Line 362: 'Failed to update persona' (error)
-- [ ] Line 373: 'Please select an image' (error)
-- [ ] Line 379: 'Please connect at least one knowledge data source...' (error)
-- [ ] Line 420: 'Failed to create your persona. Please try again later.' (error)
-- [ ] Line 424: 'Failed to create persona: $e' (error with param)
-- [ ] Line 460: 'Failed to enable persona' (error)
-- [ ] Line 465: 'Error enabling persona: $e' (error with param)
+### [x] pages/persona/persona_provider.dart (~15 strings)
+Status: COMPLETED
+Note: Added 13 new l10n keys to all 34 language ARB files and updated the Dart file to use
+MyApp.navigatorKey.currentContext!.l10n pattern. Keys added: personaTwitterHandleNotFound,
+personaTwitterHandleSuspended, personaFailedToVerifyTwitter, personaFailedToFetch, personaFailedToCreate,
+personaConnectKnowledgeSource, personaUpdatedSuccessfully, personaFailedToUpdate, personaPleaseSelectImage,
+personaFailedToCreateTryLater, personaFailedToCreateWithError (with placeholder), personaFailedToEnable,
+personaErrorEnablingWithError (with placeholder).
 
 ### [ ] pages/payments/payment_method_provider.dart (3 strings)
 Status: PENDING
@@ -221,6 +210,13 @@ Strings:
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-20] Localized persona_provider.dart
+- Added 13 new l10n keys to all 34 language ARB files
+- Updated Dart file to use MyApp.navigatorKey.currentContext!.l10n pattern
+- Keys cover Twitter verification, persona CRUD operations, and error messages
+- Two keys with placeholders for error details: personaFailedToCreateWithError, personaErrorEnablingWithError
+- Ran flutter gen-l10n and verified with test.sh
 
 [2026-01-20] Localized add_app_provider.dart
 - Added 21 new l10n keys to all 34 language ARB files

@@ -7119,4 +7119,56 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get addAppPersonaConflictWithCapabilities => 'Persona cannot be selected with other capabilities';
+
+  @override
+  String get personaTwitterHandleNotFound => 'Twitter handle not found';
+
+  @override
+  String get personaTwitterHandleSuspended => 'Twitter handle is suspended';
+
+  @override
+  String get personaFailedToVerifyTwitter => 'Failed to verify Twitter handle';
+
+  @override
+  String get personaFailedToFetch => 'Failed to fetch your persona';
+
+  @override
+  String get personaFailedToCreate => 'Failed to create your persona';
+
+  @override
+  String get personaConnectKnowledgeSource => 'Please connect at least one knowledge data source (Omi or Twitter)';
+
+  @override
+  String get personaUpdatedSuccessfully => 'Persona updated successfully';
+
+  @override
+  String get personaFailedToUpdate => 'Failed to update persona';
+
+  @override
+  String get personaPleaseSelectImage => 'Please select an image';
+
+  @override
+  String get personaFailedToCreateTryLater => 'Failed to create your persona. Please try again later.';
+
+  @override
+  String personaFailedToCreateWithError(String error) {
+    return 'Failed to create persona: $error';
+  }
+
+  @override
+  String get personaFailedToEnable => 'Failed to enable persona';
+
+  @override
+  String personaErrorEnablingWithError(String error) {
+    return 'Error enabling persona: $error';
+  }
+
+  @override
+  String get paymentFailedToFetchCountries => 'Failed to fetch supported countries. Please try again later.';
+
+  @override
+  String get paymentFailedToSetDefault => 'Failed to set default payment method. Please try again later.';
+
+  @override
+  String get paymentFailedToSavePaypal => 'Failed to save PayPal details. Please try again later.';
 }

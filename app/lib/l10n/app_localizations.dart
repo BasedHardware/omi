@@ -13346,6 +13346,102 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Persona cannot be selected with other capabilities'**
   String get addAppPersonaConflictWithCapabilities;
+
+  /// Error shown when Twitter handle is not found
+  ///
+  /// In en, this message translates to:
+  /// **'Twitter handle not found'**
+  String get personaTwitterHandleNotFound;
+
+  /// Error shown when Twitter handle is suspended
+  ///
+  /// In en, this message translates to:
+  /// **'Twitter handle is suspended'**
+  String get personaTwitterHandleSuspended;
+
+  /// Error shown when Twitter handle verification fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to verify Twitter handle'**
+  String get personaFailedToVerifyTwitter;
+
+  /// Error shown when fetching persona fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to fetch your persona'**
+  String get personaFailedToFetch;
+
+  /// Error shown when creating persona fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to create your persona'**
+  String get personaFailedToCreate;
+
+  /// Error shown when no knowledge source is connected
+  ///
+  /// In en, this message translates to:
+  /// **'Please connect at least one knowledge data source (Omi or Twitter)'**
+  String get personaConnectKnowledgeSource;
+
+  /// Success message when persona is updated
+  ///
+  /// In en, this message translates to:
+  /// **'Persona updated successfully'**
+  String get personaUpdatedSuccessfully;
+
+  /// Error shown when updating persona fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to update persona'**
+  String get personaFailedToUpdate;
+
+  /// Error shown when no image is selected for persona
+  ///
+  /// In en, this message translates to:
+  /// **'Please select an image'**
+  String get personaPleaseSelectImage;
+
+  /// Error shown when creating persona fails with retry suggestion
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to create your persona. Please try again later.'**
+  String get personaFailedToCreateTryLater;
+
+  /// Error shown when creating persona fails with error details
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to create persona: {error}'**
+  String personaFailedToCreateWithError(String error);
+
+  /// Error shown when enabling persona fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to enable persona'**
+  String get personaFailedToEnable;
+
+  /// Error shown when enabling persona fails with error details
+  ///
+  /// In en, this message translates to:
+  /// **'Error enabling persona: {error}'**
+  String personaErrorEnablingWithError(String error);
+
+  /// Error message when fetching supported countries fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to fetch supported countries. Please try again later.'**
+  String get paymentFailedToFetchCountries;
+
+  /// Error message when setting default payment method fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to set default payment method. Please try again later.'**
+  String get paymentFailedToSetDefault;
+
+  /// Error message when saving PayPal details fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to save PayPal details. Please try again later.'**
+  String get paymentFailedToSavePaypal;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
