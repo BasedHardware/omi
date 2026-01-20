@@ -183,10 +183,10 @@ class AppListItem extends StatelessWidget {
                             showDialog(
                               context: context,
                               builder: (c) => getDialog(
-                                context,
-                                () => Navigator.pop(context),
+                                c,
+                                () => Navigator.pop(c),
                                 () async {
-                                  Navigator.pop(context);
+                                  Navigator.pop(c);
                                   appProvider.toggleApp(app.id.toString(), true, index);
                                 },
                                 'Authorize External App',
