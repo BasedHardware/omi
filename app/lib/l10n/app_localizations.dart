@@ -13454,6 +13454,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'paypal.me/nik'**
   String get paypalMeLinkHint;
+
+  /// Payment method name for Stripe
+  ///
+  /// In en, this message translates to:
+  /// **'Stripe'**
+  String get paymentMethodStripe;
+
+  /// Payment method name for PayPal
+  ///
+  /// In en, this message translates to:
+  /// **'PayPal'**
+  String get paymentMethodPayPal;
+
+  /// Status label when payment method is active
+  ///
+  /// In en, this message translates to:
+  /// **'Active'**
+  String get paymentStatusActive;
+
+  /// Status label when payment method is connected but not active
+  ///
+  /// In en, this message translates to:
+  /// **'Connected'**
+  String get paymentStatusConnected;
+
+  /// Status label when payment method is not connected
+  ///
+  /// In en, this message translates to:
+  /// **'Not Connected'**
+  String get paymentStatusNotConnected;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

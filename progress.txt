@@ -10,10 +10,10 @@
 |--------|-------|
 | Total Files | 27 |
 | Total Strings | ~125 |
-| Completed | 5 |
+| Completed | 6 |
 | In Progress | 0 |
-| Pending | 22 |
-| Progress | 19% |
+| Pending | 21 |
+| Progress | 22% |
 
 ================================================================================
 ## PRIORITY 1: HIGH IMPACT - User-Facing Features (~65 strings)
@@ -61,12 +61,13 @@ Note: Updated Dart file to use existing l10n keys (paypalEmailHint, paypalMeLink
 hint texts. Removed const from InputDecoration to allow non-constant l10n values. Keys were already
 in ARB files from previous session.
 
-### [ ] pages/payments/models/payment_method_config.dart (4 strings)
-Status: PENDING
-Strings:
-- [ ] Line 35: 'Stripe' (payment method title)
-- [ ] Line 56: 'PayPal' (payment method title)
-- [ ] Line 26: 'Active' / 'Connected' / 'Not Connected' (status labels)
+### [x] pages/payments/models/payment_method_config.dart (4 strings)
+Status: COMPLETED
+Note: Added 5 new l10n keys to all 34 language ARB files. Refactored PaymentMethodConfig class to
+accept localized title and subtitle as constructor parameters instead of hardcoding them. Updated
+payments_page.dart to pass localized strings using context.l10n pattern. Keys added:
+paymentMethodStripe, paymentMethodPayPal, paymentStatusActive, paymentStatusConnected,
+paymentStatusNotConnected.
 
 ================================================================================
 ## PRIORITY 2: MEDIUM IMPACT - Settings & Configuration (~30 strings)
@@ -209,6 +210,13 @@ Strings:
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-20] Localized payment_method_config.dart
+- Added 5 new l10n keys to all 34 language ARB files
+- Refactored PaymentMethodConfig class to accept localized title and subtitle parameters
+- Updated payments_page.dart to pass localized strings using context.l10n pattern
+- Keys: paymentMethodStripe, paymentMethodPayPal, paymentStatusActive, paymentStatusConnected, paymentStatusNotConnected
+- Ran flutter gen-l10n and verified with test.sh
 
 [2026-01-20] Localized paypal_setup_page.dart
 - Updated Dart file to use existing l10n keys: paypalEmailHint, paypalMeLinkHint

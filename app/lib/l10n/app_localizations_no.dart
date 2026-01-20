@@ -7154,4 +7154,19 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get paypalMeLinkHint => 'paypal.me/nik';
+
+  @override
+  String get paymentMethodStripe => 'Stripe';
+
+  @override
+  String get paymentMethodPayPal => 'PayPal';
+
+  @override
+  String get paymentStatusActive => 'Active';
+
+  @override
+  String get paymentStatusConnected => 'Connected';
+
+  @override
+  String get paymentStatusNotConnected => 'Not Connected';
 }

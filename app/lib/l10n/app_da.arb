@@ -2240,5 +2240,10 @@
   "paymentFailedToSetDefault": "Failed to set default payment method. Please try again later.",
   "paymentFailedToSavePaypal": "Failed to save PayPal details. Please try again later.",
   "paypalEmailHint": "nik@example.com",
-  "paypalMeLinkHint": "paypal.me/nik"
+  "paypalMeLinkHint": "paypal.me/nik",
+  "paymentMethodStripe": "Stripe",
+  "paymentMethodPayPal": "PayPal",
+  "paymentStatusActive": "Active",
+  "paymentStatusConnected": "Connected",
+  "paymentStatusNotConnected": "Not Connected"
 }

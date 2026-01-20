@@ -8835,5 +8835,25 @@
   "paypalMeLinkHint": "paypal.me/nik",
   "@paypalMeLinkHint": {
     "description": "Placeholder example PayPal.me link for input field"
+  },
+  "paymentMethodStripe": "Stripe",
+  "@paymentMethodStripe": {
+    "description": "Payment method name for Stripe"
+  },
+  "paymentMethodPayPal": "PayPal",
+  "@paymentMethodPayPal": {
+    "description": "Payment method name for PayPal"
+  },
+  "paymentStatusActive": "Active",
+  "@paymentStatusActive": {
+    "description": "Status label when payment method is active"
+  },
+  "paymentStatusConnected": "Connected",
+  "@paymentStatusConnected": {
+    "description": "Status label when payment method is connected but not active"
+  },
+  "paymentStatusNotConnected": "Not Connected",
+  "@paymentStatusNotConnected": {
+    "description": "Status label when payment method is not connected"
   }
 }
