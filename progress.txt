@@ -20,13 +20,14 @@
 ================================================================================
 
 ### [x] pages/conversation_detail/widgets/create_template_bottom_sheet.dart (~20 strings)
-Status: COMPLETED (was already localized)
-Note: File was found to be already fully localized using S.of(context) and S.current patterns.
-All 20 strings use existing l10n keys: createCustomTemplate, templateName, templateNameHint,
-pleaseEnterAppName, nameMustBeAtLeast3Characters, conversationPrompt, conversationPromptHint,
-pleaseEnterAppPrompt, promptMustBeAtLeast10Characters, makePublic, anyoneCanDiscoverTemplate,
-onlyYouCanUseTemplate, createApp, generatingDescription, creatingAppIcon, creatingYourApp,
-installingApp, appCreatedAndInstalled, appCreatedSuccessfully, failedToCreateApp
+Status: COMPLETED
+Note: Added 14 new l10n keys to all 34 language ARB files and updated the Dart file to use
+context.l10n pattern. Keys added: templateName, templateNameHint, nameMustBeAtLeast3Characters,
+conversationPromptHint, pleaseEnterAppPrompt, promptMustBeAtLeast10Characters,
+anyoneCanDiscoverTemplate, onlyYouCanUseTemplate, generatingDescription, creatingAppIcon,
+installingApp, appCreatedAndInstalled, appCreatedSuccessfully, failedToCreateApp.
+Reused existing keys: createCustomTemplate, conversationPrompt, pleaseEnterAppName, makePublic,
+createApp, creatingYourApp.
 
 ### [ ] pages/apps/providers/add_app_provider.dart (~20 strings)
 Status: PENDING
@@ -233,9 +234,10 @@ Strings:
 ## CHANGELOG
 ================================================================================
 
-[2026-01-20] Verified create_template_bottom_sheet.dart
-- File was already fully localized (no changes needed)
-- All 20 strings already use l10n via S.of(context) and S.current patterns
+[2026-01-20] Localized create_template_bottom_sheet.dart
+- Added 14 new l10n keys to all 34 language ARB files
+- Updated Dart file to use context.l10n pattern
+- Ran flutter gen-l10n and verified with test.sh
 
 [2026-01-20] Initial audit completed
 - Identified 27 files with hardcoded strings
