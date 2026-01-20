@@ -2211,5 +2211,20 @@
   "appDeleteFailed": "ऐप हटाने में विफल। कृपया बाद में पुन: प्रयास करें।",
   "appVisibilityChangedSuccessfully": "ऐप दृश्यता सफलतापूर्वक बदल दी गई। प्रतिबिंबित होने में कुछ मिनट लग सकते हैं।",
   "errorActivatingAppIntegration": "ऐप सक्रिय करने में त्रुटि। यदि यह एकीकरण ऐप है, तो सुनिश्चित करें कि सेटअप पूरा हो गया है।",
-  "errorUpdatingAppStatus": "ऐप स्थिति अपडेट करते समय एक त्रुटि हुई।"
+  "errorUpdatingAppStatus": "ऐप स्थिति अपडेट करते समय एक त्रुटि हुई।",
+  "calculatingETA": "Calculating...",
+  "aboutMinutesRemaining": "About {minutes} minutes remaining",
+  "aboutAMinuteRemaining": "About a minute remaining",
+  "almostDone": "Almost done...",
+  "omiSays": "omi says",
+  "analyzingYourData": "Analyzing your data...",
+  "migratingToProtection": "Migrating to {level} protection...",
+  "noDataToMigrateFinalizing": "No data to migrate. Finalizing...",
+  "migratingItemsProgress": "Migrating {itemType}... {percentage}%",
+  "allObjectsMigratedFinalizing": "All objects migrated. Finalizing...",
+  "migrationErrorOccurred": "An error occurred during migration. Please try again.",
+  "migrationComplete": "Migration complete!",
+  "dataProtectedWithSettings": "Your data is now protected with the new {level} settings.",
+  "chatsLowercase": "chats",
+  "dataLowercase": "data"
 }

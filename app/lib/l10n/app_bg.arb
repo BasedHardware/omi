@@ -2193,5 +2193,20 @@
   "appDeleteFailed": "Неуспешно изтриване на приложението. Моля, опитайте отново по-късно.",
   "appVisibilityChangedSuccessfully": "Видимостта на приложението е променена успешно. Може да отнеме няколко минути.",
   "errorActivatingAppIntegration": "Грешка при активиране на приложението. Ако е интеграционно приложение, уверете се, че настройката е завършена.",
-  "errorUpdatingAppStatus": "Възникна грешка при актуализиране на състоянието на приложението."
+  "errorUpdatingAppStatus": "Възникна грешка при актуализиране на състоянието на приложението.",
+  "calculatingETA": "Calculating...",
+  "aboutMinutesRemaining": "About {minutes} minutes remaining",
+  "aboutAMinuteRemaining": "About a minute remaining",
+  "almostDone": "Almost done...",
+  "omiSays": "omi says",
+  "analyzingYourData": "Analyzing your data...",
+  "migratingToProtection": "Migrating to {level} protection...",
+  "noDataToMigrateFinalizing": "No data to migrate. Finalizing...",
+  "migratingItemsProgress": "Migrating {itemType}... {percentage}%",
+  "allObjectsMigratedFinalizing": "All objects migrated. Finalizing...",
+  "migrationErrorOccurred": "An error occurred during migration. Please try again.",
+  "migrationComplete": "Migration complete!",
+  "dataProtectedWithSettings": "Your data is now protected with the new {level} settings.",
+  "chatsLowercase": "chats",
+  "dataLowercase": "data"
 }

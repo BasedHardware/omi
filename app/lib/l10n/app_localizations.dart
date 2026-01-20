@@ -13022,6 +13022,96 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'An error occurred while updating the app status.'**
   String get errorUpdatingAppStatus;
+
+  /// Migration ETA calculation in progress message
+  ///
+  /// In en, this message translates to:
+  /// **'Calculating...'**
+  String get calculatingETA;
+
+  /// Migration time remaining in minutes
+  ///
+  /// In en, this message translates to:
+  /// **'About {minutes} minutes remaining'**
+  String aboutMinutesRemaining(int minutes);
+
+  /// Migration time remaining is about a minute
+  ///
+  /// In en, this message translates to:
+  /// **'About a minute remaining'**
+  String get aboutAMinuteRemaining;
+
+  /// Migration is almost complete
+  ///
+  /// In en, this message translates to:
+  /// **'Almost done...'**
+  String get almostDone;
+
+  /// Notification title for omi app messages
+  ///
+  /// In en, this message translates to:
+  /// **'omi says'**
+  String get omiSays;
+
+  /// Migration start message when analyzing data
+  ///
+  /// In en, this message translates to:
+  /// **'Analyzing your data...'**
+  String get analyzingYourData;
+
+  /// Notification body when migration starts
+  ///
+  /// In en, this message translates to:
+  /// **'Migrating to {level} protection...'**
+  String migratingToProtection(String level);
+
+  /// Migration message when no data needs to be migrated
+  ///
+  /// In en, this message translates to:
+  /// **'No data to migrate. Finalizing...'**
+  String get noDataToMigrateFinalizing;
+
+  /// Migration progress message with item type and percentage
+  ///
+  /// In en, this message translates to:
+  /// **'Migrating {itemType}... {percentage}%'**
+  String migratingItemsProgress(String itemType, int percentage);
+
+  /// Migration message when all objects have been migrated
+  ///
+  /// In en, this message translates to:
+  /// **'All objects migrated. Finalizing...'**
+  String get allObjectsMigratedFinalizing;
+
+  /// Error message when data migration fails
+  ///
+  /// In en, this message translates to:
+  /// **'An error occurred during migration. Please try again.'**
+  String get migrationErrorOccurred;
+
+  /// Message shown when migration finishes successfully
+  ///
+  /// In en, this message translates to:
+  /// **'Migration complete!'**
+  String get migrationComplete;
+
+  /// Success notification after migration completes
+  ///
+  /// In en, this message translates to:
+  /// **'Your data is now protected with the new {level} settings.'**
+  String dataProtectedWithSettings(String level);
+
+  /// Lowercase plural of chat for migration item type
+  ///
+  /// In en, this message translates to:
+  /// **'chats'**
+  String get chatsLowercase;
+
+  /// Lowercase word for data in migration context
+  ///
+  /// In en, this message translates to:
+  /// **'data'**
+  String get dataLowercase;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

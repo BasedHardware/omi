@@ -2210,5 +2210,20 @@
   "appDeleteFailed": "앱 삭제에 실패했습니다. 나중에 다시 시도해 주세요.",
   "appVisibilityChangedSuccessfully": "앱 공개 설정이 성공적으로 변경되었습니다. 반영까지 몇 분 정도 걸릴 수 있습니다.",
   "errorActivatingAppIntegration": "앱 활성화 중 오류가 발생했습니다. 연동 앱인 경우 설정이 완료되었는지 확인하세요.",
-  "errorUpdatingAppStatus": "앱 상태 업데이트 중 오류가 발생했습니다."
+  "errorUpdatingAppStatus": "앱 상태 업데이트 중 오류가 발생했습니다.",
+  "calculatingETA": "Calculating...",
+  "aboutMinutesRemaining": "About {minutes} minutes remaining",
+  "aboutAMinuteRemaining": "About a minute remaining",
+  "almostDone": "Almost done...",
+  "omiSays": "omi says",
+  "analyzingYourData": "Analyzing your data...",
+  "migratingToProtection": "Migrating to {level} protection...",
+  "noDataToMigrateFinalizing": "No data to migrate. Finalizing...",
+  "migratingItemsProgress": "Migrating {itemType}... {percentage}%",
+  "allObjectsMigratedFinalizing": "All objects migrated. Finalizing...",
+  "migrationErrorOccurred": "An error occurred during migration. Please try again.",
+  "migrationComplete": "Migration complete!",
+  "dataProtectedWithSettings": "Your data is now protected with the new {level} settings.",
+  "chatsLowercase": "chats",
+  "dataLowercase": "data"
 }

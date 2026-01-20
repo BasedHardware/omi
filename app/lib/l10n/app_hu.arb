@@ -2210,5 +2210,20 @@
   "appDeleteFailed": "Nem sikerült törölni az alkalmazást. Kérjük, próbáld újra később.",
   "appVisibilityChangedSuccessfully": "Az alkalmazás láthatósága sikeresen megváltozott. Néhány percig eltarthat, amíg érvénybe lép.",
   "errorActivatingAppIntegration": "Hiba az alkalmazás aktiválásakor. Ha integrációs alkalmazásról van szó, győződj meg róla, hogy a beállítás befejeződött.",
-  "errorUpdatingAppStatus": "Hiba történt az alkalmazás állapotának frissítése közben."
+  "errorUpdatingAppStatus": "Hiba történt az alkalmazás állapotának frissítése közben.",
+  "calculatingETA": "Calculating...",
+  "aboutMinutesRemaining": "About {minutes} minutes remaining",
+  "aboutAMinuteRemaining": "About a minute remaining",
+  "almostDone": "Almost done...",
+  "omiSays": "omi says",
+  "analyzingYourData": "Analyzing your data...",
+  "migratingToProtection": "Migrating to {level} protection...",
+  "noDataToMigrateFinalizing": "No data to migrate. Finalizing...",
+  "migratingItemsProgress": "Migrating {itemType}... {percentage}%",
+  "allObjectsMigratedFinalizing": "All objects migrated. Finalizing...",
+  "migrationErrorOccurred": "An error occurred during migration. Please try again.",
+  "migrationComplete": "Migration complete!",
+  "dataProtectedWithSettings": "Your data is now protected with the new {level} settings.",
+  "chatsLowercase": "chats",
+  "dataLowercase": "data"
 }

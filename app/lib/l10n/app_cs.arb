@@ -2170,5 +2170,20 @@
   "appDeleteFailed": "Nepodařilo se smazat aplikaci. Zkuste to prosím později.",
   "appVisibilityChangedSuccessfully": "Viditelnost aplikace byla úspěšně změněna. Může to trvat několik minut.",
   "errorActivatingAppIntegration": "Chyba při aktivaci aplikace. Pokud jde o integrační aplikaci, ujistěte se, že je nastavení dokončeno.",
-  "errorUpdatingAppStatus": "Při aktualizaci stavu aplikace došlo k chybě."
+  "errorUpdatingAppStatus": "Při aktualizaci stavu aplikace došlo k chybě.",
+  "calculatingETA": "Calculating...",
+  "aboutMinutesRemaining": "About {minutes} minutes remaining",
+  "aboutAMinuteRemaining": "About a minute remaining",
+  "almostDone": "Almost done...",
+  "omiSays": "omi says",
+  "analyzingYourData": "Analyzing your data...",
+  "migratingToProtection": "Migrating to {level} protection...",
+  "noDataToMigrateFinalizing": "No data to migrate. Finalizing...",
+  "migratingItemsProgress": "Migrating {itemType}... {percentage}%",
+  "allObjectsMigratedFinalizing": "All objects migrated. Finalizing...",
+  "migrationErrorOccurred": "An error occurred during migration. Please try again.",
+  "migrationComplete": "Migration complete!",
+  "dataProtectedWithSettings": "Your data is now protected with the new {level} settings.",
+  "chatsLowercase": "chats",
+  "dataLowercase": "data"
 }

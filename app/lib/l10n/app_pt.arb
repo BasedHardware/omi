@@ -2211,5 +2211,20 @@
   "appDeleteFailed": "Falha ao excluir o app. Por favor, tente novamente mais tarde.",
   "appVisibilityChangedSuccessfully": "Visibilidade do app alterada com sucesso. Pode levar alguns minutos para refletir.",
   "errorActivatingAppIntegration": "Erro ao ativar o app. Se for um app de integração, certifique-se de que a configuração esteja concluída.",
-  "errorUpdatingAppStatus": "Ocorreu um erro ao atualizar o status do app."
+  "errorUpdatingAppStatus": "Ocorreu um erro ao atualizar o status do app.",
+  "calculatingETA": "Calculating...",
+  "aboutMinutesRemaining": "About {minutes} minutes remaining",
+  "aboutAMinuteRemaining": "About a minute remaining",
+  "almostDone": "Almost done...",
+  "omiSays": "omi says",
+  "analyzingYourData": "Analyzing your data...",
+  "migratingToProtection": "Migrating to {level} protection...",
+  "noDataToMigrateFinalizing": "No data to migrate. Finalizing...",
+  "migratingItemsProgress": "Migrating {itemType}... {percentage}%",
+  "allObjectsMigratedFinalizing": "All objects migrated. Finalizing...",
+  "migrationErrorOccurred": "An error occurred during migration. Please try again.",
+  "migrationComplete": "Migration complete!",
+  "dataProtectedWithSettings": "Your data is now protected with the new {level} settings.",
+  "chatsLowercase": "chats",
+  "dataLowercase": "data"
 }

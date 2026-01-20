@@ -2191,5 +2191,20 @@
   "appDeleteFailed": "فشل في حذف التطبيق. يرجى المحاولة مرة أخرى لاحقًا.",
   "appVisibilityChangedSuccessfully": "تم تغيير إعدادات الرؤية للتطبيق بنجاح. قد يستغرق الأمر بضع دقائق.",
   "errorActivatingAppIntegration": "حدث خطأ أثناء تفعيل التطبيق. إذا كان تطبيق تكامل، تأكد من اكتمال الإعداد.",
-  "errorUpdatingAppStatus": "حدث خطأ أثناء تحديث حالة التطبيق."
+  "errorUpdatingAppStatus": "حدث خطأ أثناء تحديث حالة التطبيق.",
+  "calculatingETA": "Calculating...",
+  "aboutMinutesRemaining": "About {minutes} minutes remaining",
+  "aboutAMinuteRemaining": "About a minute remaining",
+  "almostDone": "Almost done...",
+  "omiSays": "omi says",
+  "analyzingYourData": "Analyzing your data...",
+  "migratingToProtection": "Migrating to {level} protection...",
+  "noDataToMigrateFinalizing": "No data to migrate. Finalizing...",
+  "migratingItemsProgress": "Migrating {itemType}... {percentage}%",
+  "allObjectsMigratedFinalizing": "All objects migrated. Finalizing...",
+  "migrationErrorOccurred": "An error occurred during migration. Please try again.",
+  "migrationComplete": "Migration complete!",
+  "dataProtectedWithSettings": "Your data is now protected with the new {level} settings.",
+  "chatsLowercase": "chats",
+  "dataLowercase": "data"
 }

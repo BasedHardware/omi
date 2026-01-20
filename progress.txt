@@ -2,9 +2,9 @@
 
 ## Summary
 Total Files to Localize: 38
-Completed: 34
+Completed: 35
 In Progress: 0
-Pending: 4
+Pending: 3
 
 ## Progress by File
 
@@ -49,7 +49,7 @@ Pending: 4
 ### Service/Provider Files
 [x] providers/device_provider.dart (~5 strings) - DONE (7 new keys + 1 reused key)
 [x] providers/app_provider.dart (~4 strings) - DONE (5 new keys + 1 reused key)
-[ ] providers/user_provider.dart (~3 strings)
+[x] providers/user_provider.dart (~3 strings) - DONE (15 new keys + 2 reused keys)
 [ ] services/notifications.dart (~6 strings)
 [ ] services/notifications/important_conversation_notification_handler.dart (~4 strings)
 [ ] main.dart (~3 strings)
@@ -57,6 +57,14 @@ Pending: 4
 ## Changelog
 
 ### 2026-01-20
+- Localized providers/user_provider.dart with 15 l10n keys for 34 languages
+  - calculatingETA, aboutMinutesRemaining (parameterized with minutes), aboutAMinuteRemaining, almostDone (for migration ETA)
+  - omiSays (notification title)
+  - analyzingYourData, migratingToProtection (parameterized with level), noDataToMigrateFinalizing (for migration start messages)
+  - migratingItemsProgress (parameterized with itemType and percentage), allObjectsMigratedFinalizing (for migration progress)
+  - migrationErrorOccurred, migrationComplete, dataProtectedWithSettings (parameterized with level) (for migration completion/errors)
+  - chatsLowercase, dataLowercase (for migration item types)
+  - Reuses: conversations, memories
 - Localized providers/app_provider.dart with 5 l10n keys for 34 languages
   - appDeletedSuccessfully, appDeleteFailed (for delete app operations)
   - appVisibilityChangedSuccessfully (for visibility toggle)

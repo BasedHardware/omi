@@ -2210,5 +2210,20 @@
   "appDeleteFailed": "Nepodarilo sa odstrániť aplikáciu. Skúste to neskôr.",
   "appVisibilityChangedSuccessfully": "Viditeľnosť aplikácie bola úspešne zmenená. Môže to trvať niekoľko minút.",
   "errorActivatingAppIntegration": "Chyba pri aktivácii aplikácie. Ak ide o integračnú aplikáciu, uistite sa, že nastavenie je dokončené.",
-  "errorUpdatingAppStatus": "Pri aktualizácii stavu aplikácie došlo k chybe."
+  "errorUpdatingAppStatus": "Pri aktualizácii stavu aplikácie došlo k chybe.",
+  "calculatingETA": "Calculating...",
+  "aboutMinutesRemaining": "About {minutes} minutes remaining",
+  "aboutAMinuteRemaining": "About a minute remaining",
+  "almostDone": "Almost done...",
+  "omiSays": "omi says",
+  "analyzingYourData": "Analyzing your data...",
+  "migratingToProtection": "Migrating to {level} protection...",
+  "noDataToMigrateFinalizing": "No data to migrate. Finalizing...",
+  "migratingItemsProgress": "Migrating {itemType}... {percentage}%",
+  "allObjectsMigratedFinalizing": "All objects migrated. Finalizing...",
+  "migrationErrorOccurred": "An error occurred during migration. Please try again.",
+  "migrationComplete": "Migration complete!",
+  "dataProtectedWithSettings": "Your data is now protected with the new {level} settings.",
+  "chatsLowercase": "chats",
+  "dataLowercase": "data"
 }

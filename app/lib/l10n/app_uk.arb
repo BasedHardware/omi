@@ -2210,5 +2210,20 @@
   "appDeleteFailed": "Не вдалося видалити додаток. Спробуйте пізніше.",
   "appVisibilityChangedSuccessfully": "Видимість додатка успішно змінено. Зміни можуть відобразитися через кілька хвилин.",
   "errorActivatingAppIntegration": "Помилка при активації додатка. Якщо це інтеграційний додаток, переконайтеся, що налаштування завершено.",
-  "errorUpdatingAppStatus": "Виникла помилка під час оновлення статусу додатка."
+  "errorUpdatingAppStatus": "Виникла помилка під час оновлення статусу додатка.",
+  "calculatingETA": "Calculating...",
+  "aboutMinutesRemaining": "About {minutes} minutes remaining",
+  "aboutAMinuteRemaining": "About a minute remaining",
+  "almostDone": "Almost done...",
+  "omiSays": "omi says",
+  "analyzingYourData": "Analyzing your data...",
+  "migratingToProtection": "Migrating to {level} protection...",
+  "noDataToMigrateFinalizing": "No data to migrate. Finalizing...",
+  "migratingItemsProgress": "Migrating {itemType}... {percentage}%",
+  "allObjectsMigratedFinalizing": "All objects migrated. Finalizing...",
+  "migrationErrorOccurred": "An error occurred during migration. Please try again.",
+  "migrationComplete": "Migration complete!",
+  "dataProtectedWithSettings": "Your data is now protected with the new {level} settings.",
+  "chatsLowercase": "chats",
+  "dataLowercase": "data"
 }

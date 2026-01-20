@@ -2168,5 +2168,20 @@
   "appDeleteFailed": "Kunne ikke slette app. Prøv venligst igen senere.",
   "appVisibilityChangedSuccessfully": "App-synlighed ændret med succes. Det kan tage et par minutter at træde i kraft.",
   "errorActivatingAppIntegration": "Fejl ved aktivering af app. Hvis det er en integrationsapp, skal du sikre dig, at opsætningen er fuldført.",
-  "errorUpdatingAppStatus": "Der opstod en fejl under opdatering af app-status."
+  "errorUpdatingAppStatus": "Der opstod en fejl under opdatering af app-status.",
+  "calculatingETA": "Calculating...",
+  "aboutMinutesRemaining": "About {minutes} minutes remaining",
+  "aboutAMinuteRemaining": "About a minute remaining",
+  "almostDone": "Almost done...",
+  "omiSays": "omi says",
+  "analyzingYourData": "Analyzing your data...",
+  "migratingToProtection": "Migrating to {level} protection...",
+  "noDataToMigrateFinalizing": "No data to migrate. Finalizing...",
+  "migratingItemsProgress": "Migrating {itemType}... {percentage}%",
+  "allObjectsMigratedFinalizing": "All objects migrated. Finalizing...",
+  "migrationErrorOccurred": "An error occurred during migration. Please try again.",
+  "migrationComplete": "Migration complete!",
+  "dataProtectedWithSettings": "Your data is now protected with the new {level} settings.",
+  "chatsLowercase": "chats",
+  "dataLowercase": "data"
 }

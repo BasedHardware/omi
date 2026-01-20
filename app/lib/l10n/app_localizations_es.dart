@@ -6925,4 +6925,57 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get errorUpdatingAppStatus => 'Ocurrió un error al actualizar el estado de la app.';
+
+  @override
+  String get calculatingETA => 'Calculating...';
+
+  @override
+  String aboutMinutesRemaining(int minutes) {
+    return 'About $minutes minutes remaining';
+  }
+
+  @override
+  String get aboutAMinuteRemaining => 'About a minute remaining';
+
+  @override
+  String get almostDone => 'Almost done...';
+
+  @override
+  String get omiSays => 'omi says';
+
+  @override
+  String get analyzingYourData => 'Analyzing your data...';
+
+  @override
+  String migratingToProtection(String level) {
+    return 'Migrating to $level protection...';
+  }
+
+  @override
+  String get noDataToMigrateFinalizing => 'No data to migrate. Finalizing...';
+
+  @override
+  String migratingItemsProgress(String itemType, int percentage) {
+    return 'Migrating $itemType... $percentage%';
+  }
+
+  @override
+  String get allObjectsMigratedFinalizing => 'All objects migrated. Finalizing...';
+
+  @override
+  String get migrationErrorOccurred => 'An error occurred during migration. Please try again.';
+
+  @override
+  String get migrationComplete => 'Migration complete!';
+
+  @override
+  String dataProtectedWithSettings(String level) {
+    return 'Your data is now protected with the new $level settings.';
+  }
+
+  @override
+  String get chatsLowercase => 'chats';
+
+  @override
+  String get dataLowercase => 'data';
 }

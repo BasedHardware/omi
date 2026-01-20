@@ -2211,5 +2211,20 @@
   "appDeleteFailed": "アプリの削除に失敗しました。後でもう一度お試しください。",
   "appVisibilityChangedSuccessfully": "アプリの公開設定が正常に変更されました。反映まで数分かかる場合があります。",
   "errorActivatingAppIntegration": "アプリの有効化中にエラーが発生しました。連携アプリの場合は、設定が完了していることを確認してください。",
-  "errorUpdatingAppStatus": "アプリのステータス更新中にエラーが発生しました。"
+  "errorUpdatingAppStatus": "アプリのステータス更新中にエラーが発生しました。",
+  "calculatingETA": "Calculating...",
+  "aboutMinutesRemaining": "About {minutes} minutes remaining",
+  "aboutAMinuteRemaining": "About a minute remaining",
+  "almostDone": "Almost done...",
+  "omiSays": "omi says",
+  "analyzingYourData": "Analyzing your data...",
+  "migratingToProtection": "Migrating to {level} protection...",
+  "noDataToMigrateFinalizing": "No data to migrate. Finalizing...",
+  "migratingItemsProgress": "Migrating {itemType}... {percentage}%",
+  "allObjectsMigratedFinalizing": "All objects migrated. Finalizing...",
+  "migrationErrorOccurred": "An error occurred during migration. Please try again.",
+  "migrationComplete": "Migration complete!",
+  "dataProtectedWithSettings": "Your data is now protected with the new {level} settings.",
+  "chatsLowercase": "chats",
+  "dataLowercase": "data"
 }

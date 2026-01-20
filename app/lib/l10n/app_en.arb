@@ -8499,5 +8499,88 @@
   "errorUpdatingAppStatus": "An error occurred while updating the app status.",
   "@errorUpdatingAppStatus": {
     "description": "Error message when updating app status fails"
+  },
+  "calculatingETA": "Calculating...",
+  "@calculatingETA": {
+    "description": "Migration ETA calculation in progress message"
+  },
+  "aboutMinutesRemaining": "About {minutes} minutes remaining",
+  "@aboutMinutesRemaining": {
+    "description": "Migration time remaining in minutes",
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "aboutAMinuteRemaining": "About a minute remaining",
+  "@aboutAMinuteRemaining": {
+    "description": "Migration time remaining is about a minute"
+  },
+  "almostDone": "Almost done...",
+  "@almostDone": {
+    "description": "Migration is almost complete"
+  },
+  "omiSays": "omi says",
+  "@omiSays": {
+    "description": "Notification title for omi app messages"
+  },
+  "analyzingYourData": "Analyzing your data...",
+  "@analyzingYourData": {
+    "description": "Migration start message when analyzing data"
+  },
+  "migratingToProtection": "Migrating to {level} protection...",
+  "@migratingToProtection": {
+    "description": "Notification body when migration starts",
+    "placeholders": {
+      "level": {
+        "type": "String"
+      }
+    }
+  },
+  "noDataToMigrateFinalizing": "No data to migrate. Finalizing...",
+  "@noDataToMigrateFinalizing": {
+    "description": "Migration message when no data needs to be migrated"
+  },
+  "migratingItemsProgress": "Migrating {itemType}... {percentage}%",
+  "@migratingItemsProgress": {
+    "description": "Migration progress message with item type and percentage",
+    "placeholders": {
+      "itemType": {
+        "type": "String"
+      },
+      "percentage": {
+        "type": "int"
+      }
+    }
+  },
+  "allObjectsMigratedFinalizing": "All objects migrated. Finalizing...",
+  "@allObjectsMigratedFinalizing": {
+    "description": "Migration message when all objects have been migrated"
+  },
+  "migrationErrorOccurred": "An error occurred during migration. Please try again.",
+  "@migrationErrorOccurred": {
+    "description": "Error message when data migration fails"
+  },
+  "migrationComplete": "Migration complete!",
+  "@migrationComplete": {
+    "description": "Message shown when migration finishes successfully"
+  },
+  "dataProtectedWithSettings": "Your data is now protected with the new {level} settings.",
+  "@dataProtectedWithSettings": {
+    "description": "Success notification after migration completes",
+    "placeholders": {
+      "level": {
+        "type": "String"
+      }
+    }
+  },
+  "chatsLowercase": "chats",
+  "@chatsLowercase": {
+    "description": "Lowercase plural of chat for migration item type"
+  },
+  "dataLowercase": "data",
+  "@dataLowercase": {
+    "description": "Lowercase word for data in migration context"
   }
 }
