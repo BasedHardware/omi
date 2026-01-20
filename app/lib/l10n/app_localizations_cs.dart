@@ -6446,4 +6446,25 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get passwordLabel => 'Heslo';
+
+  @override
+  String get createAccountTitle => 'Vytvořit účet';
+
+  @override
+  String get nameLabel => 'Jméno';
+
+  @override
+  String get repeatPasswordLabel => 'Zopakujte heslo';
+
+  @override
+  String get signUpButton => 'Registrovat se';
+
+  @override
+  String get enterNameError => 'Zadejte prosím své jméno';
+
+  @override
+  String get passwordsDoNotMatch => 'Hesla se neshodují';
+
+  @override
+  String get signUpSuccess => 'Registrace úspěšná!';
 }

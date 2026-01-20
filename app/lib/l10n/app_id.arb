@@ -2009,5 +2009,12 @@
   "signInSuccess": "Berhasil masuk!",
   "alreadyHaveAccountLogin": "Sudah punya akun? Masuk",
   "emailLabel": "Email",
-  "passwordLabel": "Kata sandi"
+  "passwordLabel": "Kata sandi",
+  "createAccountTitle": "Buat Akun",
+  "nameLabel": "Nama",
+  "repeatPasswordLabel": "Ulangi Kata Sandi",
+  "signUpButton": "Daftar",
+  "enterNameError": "Masukkan nama Anda",
+  "passwordsDoNotMatch": "Kata sandi tidak cocok",
+  "signUpSuccess": "Pendaftaran berhasil!"
 }

@@ -6334,4 +6334,25 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get passwordLabel => '密码';
+
+  @override
+  String get createAccountTitle => '创建账户';
+
+  @override
+  String get nameLabel => '姓名';
+
+  @override
+  String get repeatPasswordLabel => '确认密码';
+
+  @override
+  String get signUpButton => '注册';
+
+  @override
+  String get enterNameError => '请输入您的姓名';
+
+  @override
+  String get passwordsDoNotMatch => '密码不匹配';
+
+  @override
+  String get signUpSuccess => '注册成功！';
 }

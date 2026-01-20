@@ -2009,5 +2009,12 @@
   "signInSuccess": "Prihlásenie úspešné!",
   "alreadyHaveAccountLogin": "Máte už účet? Prihláste sa",
   "emailLabel": "E-mail",
-  "passwordLabel": "Heslo"
+  "passwordLabel": "Heslo",
+  "createAccountTitle": "Vytvoriť účet",
+  "nameLabel": "Meno",
+  "repeatPasswordLabel": "Zopakujte heslo",
+  "signUpButton": "Zaregistrovať sa",
+  "enterNameError": "Zadajte svoje meno",
+  "passwordsDoNotMatch": "Heslá sa nezhodujú",
+  "signUpSuccess": "Registrácia úspešná!"
 }

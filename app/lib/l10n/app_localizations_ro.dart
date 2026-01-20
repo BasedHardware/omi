@@ -6485,4 +6485,25 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get passwordLabel => 'Parolă';
+
+  @override
+  String get createAccountTitle => 'Creează cont';
+
+  @override
+  String get nameLabel => 'Nume';
+
+  @override
+  String get repeatPasswordLabel => 'Repetă parola';
+
+  @override
+  String get signUpButton => 'Înregistrare';
+
+  @override
+  String get enterNameError => 'Introduceți numele dvs.';
+
+  @override
+  String get passwordsDoNotMatch => 'Parolele nu se potrivesc';
+
+  @override
+  String get signUpSuccess => 'Înregistrare reușită!';
 }

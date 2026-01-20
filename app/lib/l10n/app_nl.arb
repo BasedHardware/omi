@@ -2009,5 +2009,12 @@
   "signInSuccess": "Inloggen gelukt!",
   "alreadyHaveAccountLogin": "Heeft u al een account? Log in",
   "emailLabel": "E-mail",
-  "passwordLabel": "Wachtwoord"
+  "passwordLabel": "Wachtwoord",
+  "createAccountTitle": "Account aanmaken",
+  "nameLabel": "Naam",
+  "repeatPasswordLabel": "Wachtwoord herhalen",
+  "signUpButton": "Registreren",
+  "enterNameError": "Voer uw naam in",
+  "passwordsDoNotMatch": "Wachtwoorden komen niet overeen",
+  "signUpSuccess": "Registratie gelukt!"
 }

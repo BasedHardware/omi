@@ -2009,5 +2009,12 @@
   "signInSuccess": "Επιτυχής σύνδεση!",
   "alreadyHaveAccountLogin": "Έχετε ήδη λογαριασμό; Συνδεθείτε",
   "emailLabel": "Email",
-  "passwordLabel": "Κωδικός"
+  "passwordLabel": "Κωδικός",
+  "createAccountTitle": "Δημιουργία λογαριασμού",
+  "nameLabel": "Όνομα",
+  "repeatPasswordLabel": "Επανάληψη κωδικού",
+  "signUpButton": "Εγγραφή",
+  "enterNameError": "Εισάγετε το όνομά σας",
+  "passwordsDoNotMatch": "Οι κωδικοί δεν ταιριάζουν",
+  "signUpSuccess": "Επιτυχής εγγραφή!"
 }

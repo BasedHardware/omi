@@ -6408,4 +6408,25 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get passwordLabel => 'كلمة المرور';
+
+  @override
+  String get createAccountTitle => 'إنشاء حساب';
+
+  @override
+  String get nameLabel => 'الاسم';
+
+  @override
+  String get repeatPasswordLabel => 'تكرار كلمة المرور';
+
+  @override
+  String get signUpButton => 'إنشاء حساب';
+
+  @override
+  String get enterNameError => 'يرجى إدخال اسمك';
+
+  @override
+  String get passwordsDoNotMatch => 'كلمات المرور غير متطابقة';
+
+  @override
+  String get signUpSuccess => 'تم التسجيل بنجاح!';
 }

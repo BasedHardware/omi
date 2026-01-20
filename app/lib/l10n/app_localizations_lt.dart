@@ -6456,4 +6456,25 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get passwordLabel => 'Slaptažodis';
+
+  @override
+  String get createAccountTitle => 'Sukurti paskyrą';
+
+  @override
+  String get nameLabel => 'Vardas';
+
+  @override
+  String get repeatPasswordLabel => 'Pakartokite slaptažodį';
+
+  @override
+  String get signUpButton => 'Registruotis';
+
+  @override
+  String get enterNameError => 'Įveskite savo vardą';
+
+  @override
+  String get passwordsDoNotMatch => 'Slaptažodžiai nesutampa';
+
+  @override
+  String get signUpSuccess => 'Registracija sėkminga!';
 }

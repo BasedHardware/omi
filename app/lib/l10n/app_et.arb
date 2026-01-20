@@ -2009,5 +2009,12 @@
   "signInSuccess": "Sisselogimine õnnestus!",
   "alreadyHaveAccountLogin": "Kas teil on juba konto? Logige sisse",
   "emailLabel": "E-post",
-  "passwordLabel": "Parool"
+  "passwordLabel": "Parool",
+  "createAccountTitle": "Loo konto",
+  "nameLabel": "Nimi",
+  "repeatPasswordLabel": "Korda parooli",
+  "signUpButton": "Registreeru",
+  "enterNameError": "Palun sisestage oma nimi",
+  "passwordsDoNotMatch": "Paroolid ei kattu",
+  "signUpSuccess": "Registreerimine õnnestus!"
 }

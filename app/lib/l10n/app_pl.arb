@@ -2009,5 +2009,12 @@
   "signInSuccess": "Logowanie pomyślne!",
   "alreadyHaveAccountLogin": "Masz już konto? Zaloguj się",
   "emailLabel": "E-mail",
-  "passwordLabel": "Hasło"
+  "passwordLabel": "Hasło",
+  "createAccountTitle": "Utwórz konto",
+  "nameLabel": "Imię",
+  "repeatPasswordLabel": "Powtórz hasło",
+  "signUpButton": "Zarejestruj się",
+  "enterNameError": "Wprowadź swoje imię",
+  "passwordsDoNotMatch": "Hasła nie są zgodne",
+  "signUpSuccess": "Rejestracja pomyślna!"
 }

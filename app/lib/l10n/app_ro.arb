@@ -2009,5 +2009,12 @@
   "signInSuccess": "Autentificare reușită!",
   "alreadyHaveAccountLogin": "Aveți deja un cont? Conectați-vă",
   "emailLabel": "E-mail",
-  "passwordLabel": "Parolă"
+  "passwordLabel": "Parolă",
+  "createAccountTitle": "Creează cont",
+  "nameLabel": "Nume",
+  "repeatPasswordLabel": "Repetă parola",
+  "signUpButton": "Înregistrare",
+  "enterNameError": "Introduceți numele dvs.",
+  "passwordsDoNotMatch": "Parolele nu se potrivesc",
+  "signUpSuccess": "Înregistrare reușită!"
 }

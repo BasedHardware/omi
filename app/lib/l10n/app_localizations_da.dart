@@ -6463,4 +6463,25 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get passwordLabel => 'Adgangskode';
+
+  @override
+  String get createAccountTitle => 'Opret konto';
+
+  @override
+  String get nameLabel => 'Navn';
+
+  @override
+  String get repeatPasswordLabel => 'Gentag adgangskode';
+
+  @override
+  String get signUpButton => 'Tilmeld dig';
+
+  @override
+  String get enterNameError => 'Indtast venligst dit navn';
+
+  @override
+  String get passwordsDoNotMatch => 'Adgangskoderne stemmer ikke overens';
+
+  @override
+  String get signUpSuccess => 'Tilmelding gennemført!';
 }

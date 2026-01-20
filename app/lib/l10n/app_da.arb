@@ -1967,5 +1967,12 @@
   "signInSuccess": "Login lykkedes!",
   "alreadyHaveAccountLogin": "Har du allerede en konto? Log ind",
   "emailLabel": "E-mail",
-  "passwordLabel": "Adgangskode"
+  "passwordLabel": "Adgangskode",
+  "createAccountTitle": "Opret konto",
+  "nameLabel": "Navn",
+  "repeatPasswordLabel": "Gentag adgangskode",
+  "signUpButton": "Tilmeld dig",
+  "enterNameError": "Indtast venligst dit navn",
+  "passwordsDoNotMatch": "Adgangskoderne stemmer ikke overens",
+  "signUpSuccess": "Tilmelding gennemført!"
 }

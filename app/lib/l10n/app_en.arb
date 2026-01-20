@@ -7877,5 +7877,33 @@
   "passwordLabel": "Password",
   "@passwordLabel": {
     "description": "Label for password input field"
+  },
+  "createAccountTitle": "Create Account",
+  "@createAccountTitle": {
+    "description": "Title for create account page"
+  },
+  "nameLabel": "Name",
+  "@nameLabel": {
+    "description": "Label for name input field"
+  },
+  "repeatPasswordLabel": "Repeat Password",
+  "@repeatPasswordLabel": {
+    "description": "Label for repeat password input field"
+  },
+  "signUpButton": "Sign Up",
+  "@signUpButton": {
+    "description": "Sign up button text"
+  },
+  "enterNameError": "Please enter your name",
+  "@enterNameError": {
+    "description": "Error when name field is empty"
+  },
+  "passwordsDoNotMatch": "Passwords do not match",
+  "@passwordsDoNotMatch": {
+    "description": "Error when passwords do not match"
+  },
+  "signUpSuccess": "Signup Successful!",
+  "@signUpSuccess": {
+    "description": "Success message after signing up"
   }
 }

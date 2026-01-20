@@ -2009,5 +2009,12 @@
   "signInSuccess": "Pieteikšanās veiksmīga!",
   "alreadyHaveAccountLogin": "Jau ir konts? Piesakieties",
   "emailLabel": "E-pasts",
-  "passwordLabel": "Parole"
+  "passwordLabel": "Parole",
+  "createAccountTitle": "Izveidot kontu",
+  "nameLabel": "Vārds",
+  "repeatPasswordLabel": "Atkārtot paroli",
+  "signUpButton": "Reģistrēties",
+  "enterNameError": "Lūdzu, ievadiet savu vārdu",
+  "passwordsDoNotMatch": "Paroles nesakrīt",
+  "signUpSuccess": "Reģistrācija veiksmīga!"
 }

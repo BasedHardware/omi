@@ -2010,5 +2010,12 @@
   "signInSuccess": "登录成功！",
   "alreadyHaveAccountLogin": "已有账户？登录",
   "emailLabel": "电子邮件",
-  "passwordLabel": "密码"
+  "passwordLabel": "密码",
+  "createAccountTitle": "创建账户",
+  "nameLabel": "姓名",
+  "repeatPasswordLabel": "确认密码",
+  "signUpButton": "注册",
+  "enterNameError": "请输入您的姓名",
+  "passwordsDoNotMatch": "密码不匹配",
+  "signUpSuccess": "注册成功！"
 }

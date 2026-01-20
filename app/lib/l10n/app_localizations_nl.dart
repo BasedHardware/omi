@@ -6474,4 +6474,25 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get passwordLabel => 'Wachtwoord';
+
+  @override
+  String get createAccountTitle => 'Account aanmaken';
+
+  @override
+  String get nameLabel => 'Naam';
+
+  @override
+  String get repeatPasswordLabel => 'Wachtwoord herhalen';
+
+  @override
+  String get signUpButton => 'Registreren';
+
+  @override
+  String get enterNameError => 'Voer uw naam in';
+
+  @override
+  String get passwordsDoNotMatch => 'Wachtwoorden komen niet overeen';
+
+  @override
+  String get signUpSuccess => 'Registratie gelukt!';
 }

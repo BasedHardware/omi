@@ -6486,4 +6486,25 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get passwordLabel => 'Jelszó';
+
+  @override
+  String get createAccountTitle => 'Fiók létrehozása';
+
+  @override
+  String get nameLabel => 'Név';
+
+  @override
+  String get repeatPasswordLabel => 'Jelszó ismétlése';
+
+  @override
+  String get signUpButton => 'Regisztráció';
+
+  @override
+  String get enterNameError => 'Kérjük, adja meg nevét';
+
+  @override
+  String get passwordsDoNotMatch => 'A jelszavak nem egyeznek';
+
+  @override
+  String get signUpSuccess => 'Sikeres regisztráció!';
 }

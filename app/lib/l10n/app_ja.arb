@@ -2010,5 +2010,12 @@
   "signInSuccess": "サインイン成功！",
   "alreadyHaveAccountLogin": "アカウントをお持ちですか？ログイン",
   "emailLabel": "メール",
-  "passwordLabel": "パスワード"
+  "passwordLabel": "パスワード",
+  "createAccountTitle": "アカウント作成",
+  "nameLabel": "名前",
+  "repeatPasswordLabel": "パスワードを再入力",
+  "signUpButton": "登録",
+  "enterNameError": "名前を入力してください",
+  "passwordsDoNotMatch": "パスワードが一致しません",
+  "signUpSuccess": "登録成功！"
 }

@@ -6452,4 +6452,25 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get passwordLabel => 'Password';
+
+  @override
+  String get createAccountTitle => 'Create Account';
+
+  @override
+  String get nameLabel => 'Name';
+
+  @override
+  String get repeatPasswordLabel => 'Repeat Password';
+
+  @override
+  String get signUpButton => 'Sign Up';
+
+  @override
+  String get enterNameError => 'Please enter your name';
+
+  @override
+  String get passwordsDoNotMatch => 'Passwords do not match';
+
+  @override
+  String get signUpSuccess => 'Signup Successful!';
 }

@@ -2009,5 +2009,12 @@
   "signInSuccess": "Inloggning lyckades!",
   "alreadyHaveAccountLogin": "Har du redan ett konto? Logga in",
   "emailLabel": "E-post",
-  "passwordLabel": "Lösenord"
+  "passwordLabel": "Lösenord",
+  "createAccountTitle": "Skapa konto",
+  "nameLabel": "Namn",
+  "repeatPasswordLabel": "Upprepa lösenord",
+  "signUpButton": "Registrera",
+  "enterNameError": "Ange ditt namn",
+  "passwordsDoNotMatch": "Lösenorden matchar inte",
+  "signUpSuccess": "Registrering lyckades!"
 }

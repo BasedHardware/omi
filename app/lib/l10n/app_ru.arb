@@ -2009,5 +2009,12 @@
   "signInSuccess": "Вход выполнен успешно!",
   "alreadyHaveAccountLogin": "Уже есть аккаунт? Войдите",
   "emailLabel": "Email",
-  "passwordLabel": "Пароль"
+  "passwordLabel": "Пароль",
+  "createAccountTitle": "Создать аккаунт",
+  "nameLabel": "Имя",
+  "repeatPasswordLabel": "Повторите пароль",
+  "signUpButton": "Зарегистрироваться",
+  "enterNameError": "Введите ваше имя",
+  "passwordsDoNotMatch": "Пароли не совпадают",
+  "signUpSuccess": "Регистрация успешна!"
 }

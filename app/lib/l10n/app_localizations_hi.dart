@@ -6433,4 +6433,25 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get passwordLabel => 'पासवर्ड';
+
+  @override
+  String get createAccountTitle => 'खाता बनाएं';
+
+  @override
+  String get nameLabel => 'नाम';
+
+  @override
+  String get repeatPasswordLabel => 'पासवर्ड दोहराएं';
+
+  @override
+  String get signUpButton => 'साइन अप करें';
+
+  @override
+  String get enterNameError => 'कृपया अपना नाम दर्ज करें';
+
+  @override
+  String get passwordsDoNotMatch => 'पासवर्ड मेल नहीं खाते';
+
+  @override
+  String get signUpSuccess => 'साइन अप सफल!';
 }

@@ -2009,5 +2009,12 @@
   "signInSuccess": "로그인 성공!",
   "alreadyHaveAccountLogin": "이미 계정이 있으신가요? 로그인",
   "emailLabel": "이메일",
-  "passwordLabel": "비밀번호"
+  "passwordLabel": "비밀번호",
+  "createAccountTitle": "계정 만들기",
+  "nameLabel": "이름",
+  "repeatPasswordLabel": "비밀번호 확인",
+  "signUpButton": "가입하기",
+  "enterNameError": "이름을 입력하세요",
+  "passwordsDoNotMatch": "비밀번호가 일치하지 않습니다",
+  "signUpSuccess": "가입 성공!"
 }

@@ -2009,5 +2009,12 @@
   "signInSuccess": "Connexion réussie !",
   "alreadyHaveAccountLogin": "Vous avez déjà un compte ? Connectez-vous",
   "emailLabel": "E-mail",
-  "passwordLabel": "Mot de passe"
+  "passwordLabel": "Mot de passe",
+  "createAccountTitle": "Créer un compte",
+  "nameLabel": "Nom",
+  "repeatPasswordLabel": "Répéter le mot de passe",
+  "signUpButton": "S'inscrire",
+  "enterNameError": "Veuillez entrer votre nom",
+  "passwordsDoNotMatch": "Les mots de passe ne correspondent pas",
+  "signUpSuccess": "Inscription réussie !"
 }

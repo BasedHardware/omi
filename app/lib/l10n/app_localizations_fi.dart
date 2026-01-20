@@ -6455,4 +6455,25 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get passwordLabel => 'Salasana';
+
+  @override
+  String get createAccountTitle => 'Luo tili';
+
+  @override
+  String get nameLabel => 'Nimi';
+
+  @override
+  String get repeatPasswordLabel => 'Toista salasana';
+
+  @override
+  String get signUpButton => 'Rekisteröidy';
+
+  @override
+  String get enterNameError => 'Anna nimesi';
+
+  @override
+  String get passwordsDoNotMatch => 'Salasanat eivät täsmää';
+
+  @override
+  String get signUpSuccess => 'Rekisteröityminen onnistui!';
 }

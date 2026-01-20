@@ -2009,5 +2009,12 @@
   "signInSuccess": "Đăng nhập thành công!",
   "alreadyHaveAccountLogin": "Đã có tài khoản? Đăng nhập",
   "emailLabel": "Email",
-  "passwordLabel": "Mật khẩu"
+  "passwordLabel": "Mật khẩu",
+  "createAccountTitle": "Tạo tài khoản",
+  "nameLabel": "Tên",
+  "repeatPasswordLabel": "Nhập lại mật khẩu",
+  "signUpButton": "Đăng ký",
+  "enterNameError": "Vui lòng nhập tên của bạn",
+  "passwordsDoNotMatch": "Mật khẩu không khớp",
+  "signUpSuccess": "Đăng ký thành công!"
 }

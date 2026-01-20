@@ -1992,5 +1992,12 @@
   "signInSuccess": "Успешен вход!",
   "alreadyHaveAccountLogin": "Вече имате акаунт? Влезте",
   "emailLabel": "Имейл",
-  "passwordLabel": "Парола"
+  "passwordLabel": "Парола",
+  "createAccountTitle": "Създаване на акаунт",
+  "nameLabel": "Име",
+  "repeatPasswordLabel": "Повторете паролата",
+  "signUpButton": "Регистрация",
+  "enterNameError": "Моля, въведете името си",
+  "passwordsDoNotMatch": "Паролите не съвпадат",
+  "signUpSuccess": "Регистрацията е успешна!"
 }

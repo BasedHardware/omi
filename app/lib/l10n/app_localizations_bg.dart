@@ -6481,4 +6481,25 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get passwordLabel => 'Парола';
+
+  @override
+  String get createAccountTitle => 'Създаване на акаунт';
+
+  @override
+  String get nameLabel => 'Име';
+
+  @override
+  String get repeatPasswordLabel => 'Повторете паролата';
+
+  @override
+  String get signUpButton => 'Регистрация';
+
+  @override
+  String get enterNameError => 'Моля, въведете името си';
+
+  @override
+  String get passwordsDoNotMatch => 'Паролите не съвпадат';
+
+  @override
+  String get signUpSuccess => 'Регистрацията е успешна!';
 }

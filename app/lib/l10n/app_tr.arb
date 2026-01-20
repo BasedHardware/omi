@@ -2009,5 +2009,12 @@
   "signInSuccess": "Giriş başarılı!",
   "alreadyHaveAccountLogin": "Zaten hesabınız var mı? Giriş yapın",
   "emailLabel": "E-posta",
-  "passwordLabel": "Şifre"
+  "passwordLabel": "Şifre",
+  "createAccountTitle": "Hesap Oluştur",
+  "nameLabel": "Ad",
+  "repeatPasswordLabel": "Şifreyi Tekrarla",
+  "signUpButton": "Kaydol",
+  "enterNameError": "Lütfen adınızı girin",
+  "passwordsDoNotMatch": "Şifreler eşleşmiyor",
+  "signUpSuccess": "Kayıt başarılı!"
 }

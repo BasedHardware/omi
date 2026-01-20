@@ -6455,4 +6455,25 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get passwordLabel => 'Heslo';
+
+  @override
+  String get createAccountTitle => 'Vytvoriť účet';
+
+  @override
+  String get nameLabel => 'Meno';
+
+  @override
+  String get repeatPasswordLabel => 'Zopakujte heslo';
+
+  @override
+  String get signUpButton => 'Zaregistrovať sa';
+
+  @override
+  String get enterNameError => 'Zadajte svoje meno';
+
+  @override
+  String get passwordsDoNotMatch => 'Heslá sa nezhodujú';
+
+  @override
+  String get signUpSuccess => 'Registrácia úspešná!';
 }

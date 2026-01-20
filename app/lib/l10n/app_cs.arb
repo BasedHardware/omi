@@ -1969,5 +1969,12 @@
   "signInSuccess": "Přihlášení úspěšné!",
   "alreadyHaveAccountLogin": "Máte již účet? Přihlaste se",
   "emailLabel": "E-mail",
-  "passwordLabel": "Heslo"
+  "passwordLabel": "Heslo",
+  "createAccountTitle": "Vytvořit účet",
+  "nameLabel": "Jméno",
+  "repeatPasswordLabel": "Zopakujte heslo",
+  "signUpButton": "Registrovat se",
+  "enterNameError": "Zadejte prosím své jméno",
+  "passwordsDoNotMatch": "Hesla se neshodují",
+  "signUpSuccess": "Registrace úspěšná!"
 }

@@ -6501,4 +6501,25 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get passwordLabel => 'Κωδικός';
+
+  @override
+  String get createAccountTitle => 'Δημιουργία λογαριασμού';
+
+  @override
+  String get nameLabel => 'Όνομα';
+
+  @override
+  String get repeatPasswordLabel => 'Επανάληψη κωδικού';
+
+  @override
+  String get signUpButton => 'Εγγραφή';
+
+  @override
+  String get enterNameError => 'Εισάγετε το όνομά σας';
+
+  @override
+  String get passwordsDoNotMatch => 'Οι κωδικοί δεν ταιριάζουν';
+
+  @override
+  String get signUpSuccess => 'Επιτυχής εγγραφή!';
 }

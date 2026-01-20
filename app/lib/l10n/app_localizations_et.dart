@@ -6456,4 +6456,25 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get passwordLabel => 'Parool';
+
+  @override
+  String get createAccountTitle => 'Loo konto';
+
+  @override
+  String get nameLabel => 'Nimi';
+
+  @override
+  String get repeatPasswordLabel => 'Korda parooli';
+
+  @override
+  String get signUpButton => 'Registreeru';
+
+  @override
+  String get enterNameError => 'Palun sisestage oma nimi';
+
+  @override
+  String get passwordsDoNotMatch => 'Paroolid ei kattu';
+
+  @override
+  String get signUpSuccess => 'Registreerimine õnnestus!';
 }

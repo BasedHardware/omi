@@ -6453,4 +6453,25 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get passwordLabel => 'Passord';
+
+  @override
+  String get createAccountTitle => 'Opprett konto';
+
+  @override
+  String get nameLabel => 'Navn';
+
+  @override
+  String get repeatPasswordLabel => 'Gjenta passord';
+
+  @override
+  String get signUpButton => 'Registrer deg';
+
+  @override
+  String get enterNameError => 'Vennligst skriv inn navnet ditt';
+
+  @override
+  String get passwordsDoNotMatch => 'Passordene samsvarer ikke';
+
+  @override
+  String get signUpSuccess => 'Registrering vellykket!';
 }

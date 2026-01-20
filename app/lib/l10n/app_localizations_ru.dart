@@ -6471,4 +6471,25 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get passwordLabel => 'Пароль';
+
+  @override
+  String get createAccountTitle => 'Создать аккаунт';
+
+  @override
+  String get nameLabel => 'Имя';
+
+  @override
+  String get repeatPasswordLabel => 'Повторите пароль';
+
+  @override
+  String get signUpButton => 'Зарегистрироваться';
+
+  @override
+  String get enterNameError => 'Введите ваше имя';
+
+  @override
+  String get passwordsDoNotMatch => 'Пароли не совпадают';
+
+  @override
+  String get signUpSuccess => 'Регистрация успешна!';
 }

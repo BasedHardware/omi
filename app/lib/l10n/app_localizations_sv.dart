@@ -6459,4 +6459,25 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get passwordLabel => 'Lösenord';
+
+  @override
+  String get createAccountTitle => 'Skapa konto';
+
+  @override
+  String get nameLabel => 'Namn';
+
+  @override
+  String get repeatPasswordLabel => 'Upprepa lösenord';
+
+  @override
+  String get signUpButton => 'Registrera';
+
+  @override
+  String get enterNameError => 'Ange ditt namn';
+
+  @override
+  String get passwordsDoNotMatch => 'Lösenorden matchar inte';
+
+  @override
+  String get signUpSuccess => 'Registrering lyckades!';
 }

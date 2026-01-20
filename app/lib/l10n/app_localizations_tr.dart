@@ -6466,4 +6466,25 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get passwordLabel => 'Şifre';
+
+  @override
+  String get createAccountTitle => 'Hesap Oluştur';
+
+  @override
+  String get nameLabel => 'Ad';
+
+  @override
+  String get repeatPasswordLabel => 'Şifreyi Tekrarla';
+
+  @override
+  String get signUpButton => 'Kaydol';
+
+  @override
+  String get enterNameError => 'Lütfen adınızı girin';
+
+  @override
+  String get passwordsDoNotMatch => 'Şifreler eşleşmiyor';
+
+  @override
+  String get signUpSuccess => 'Kayıt başarılı!';
 }

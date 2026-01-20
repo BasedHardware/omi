@@ -6472,4 +6472,25 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get passwordLabel => 'Kata sandi';
+
+  @override
+  String get createAccountTitle => 'Buat Akun';
+
+  @override
+  String get nameLabel => 'Nama';
+
+  @override
+  String get repeatPasswordLabel => 'Ulangi Kata Sandi';
+
+  @override
+  String get signUpButton => 'Daftar';
+
+  @override
+  String get enterNameError => 'Masukkan nama Anda';
+
+  @override
+  String get passwordsDoNotMatch => 'Kata sandi tidak cocok';
+
+  @override
+  String get signUpSuccess => 'Pendaftaran berhasil!';
 }

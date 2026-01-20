@@ -6464,4 +6464,25 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get passwordLabel => 'Mật khẩu';
+
+  @override
+  String get createAccountTitle => 'Tạo tài khoản';
+
+  @override
+  String get nameLabel => 'Tên';
+
+  @override
+  String get repeatPasswordLabel => 'Nhập lại mật khẩu';
+
+  @override
+  String get signUpButton => 'Đăng ký';
+
+  @override
+  String get enterNameError => 'Vui lòng nhập tên của bạn';
+
+  @override
+  String get passwordsDoNotMatch => 'Mật khẩu không khớp';
+
+  @override
+  String get signUpSuccess => 'Đăng ký thành công!';
 }

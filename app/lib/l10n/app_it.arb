@@ -2009,5 +2009,12 @@
   "signInSuccess": "Accesso riuscito!",
   "alreadyHaveAccountLogin": "Hai già un account? Accedi",
   "emailLabel": "Email",
-  "passwordLabel": "Password"
+  "passwordLabel": "Password",
+  "createAccountTitle": "Crea account",
+  "nameLabel": "Nome",
+  "repeatPasswordLabel": "Ripeti password",
+  "signUpButton": "Registrati",
+  "enterNameError": "Inserisci il tuo nome",
+  "passwordsDoNotMatch": "Le password non corrispondono",
+  "signUpSuccess": "Registrazione riuscita!"
 }

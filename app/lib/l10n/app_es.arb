@@ -2010,5 +2010,12 @@
   "signInSuccess": "¡Inicio de sesión exitoso!",
   "alreadyHaveAccountLogin": "¿Ya tienes una cuenta? Inicia sesión",
   "emailLabel": "Correo electrónico",
-  "passwordLabel": "Contraseña"
+  "passwordLabel": "Contraseña",
+  "createAccountTitle": "Crear cuenta",
+  "nameLabel": "Nombre",
+  "repeatPasswordLabel": "Repetir contraseña",
+  "signUpButton": "Registrarse",
+  "enterNameError": "Por favor, introduce tu nombre",
+  "passwordsDoNotMatch": "Las contraseñas no coinciden",
+  "signUpSuccess": "¡Registro exitoso!"
 }

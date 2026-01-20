@@ -6476,4 +6476,25 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get passwordLabel => 'Kata laluan';
+
+  @override
+  String get createAccountTitle => 'Buat Akaun';
+
+  @override
+  String get nameLabel => 'Nama';
+
+  @override
+  String get repeatPasswordLabel => 'Ulang Kata Laluan';
+
+  @override
+  String get signUpButton => 'Daftar';
+
+  @override
+  String get enterNameError => 'Sila masukkan nama anda';
+
+  @override
+  String get passwordsDoNotMatch => 'Kata laluan tidak sepadan';
+
+  @override
+  String get signUpSuccess => 'Pendaftaran berjaya!';
 }

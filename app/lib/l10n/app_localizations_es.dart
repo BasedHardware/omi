@@ -6457,4 +6457,25 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get passwordLabel => 'Contraseña';
+
+  @override
+  String get createAccountTitle => 'Crear cuenta';
+
+  @override
+  String get nameLabel => 'Nombre';
+
+  @override
+  String get repeatPasswordLabel => 'Repetir contraseña';
+
+  @override
+  String get signUpButton => 'Registrarse';
+
+  @override
+  String get enterNameError => 'Por favor, introduce tu nombre';
+
+  @override
+  String get passwordsDoNotMatch => 'Las contraseñas no coinciden';
+
+  @override
+  String get signUpSuccess => '¡Registro exitoso!';
 }

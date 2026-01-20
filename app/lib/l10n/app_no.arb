@@ -2009,5 +2009,12 @@
   "signInSuccess": "Innlogging vellykket!",
   "alreadyHaveAccountLogin": "Har du allerede en konto? Logg inn",
   "emailLabel": "E-post",
-  "passwordLabel": "Passord"
+  "passwordLabel": "Passord",
+  "createAccountTitle": "Opprett konto",
+  "nameLabel": "Navn",
+  "repeatPasswordLabel": "Gjenta passord",
+  "signUpButton": "Registrer deg",
+  "enterNameError": "Vennligst skriv inn navnet ditt",
+  "passwordsDoNotMatch": "Passordene samsvarer ikke",
+  "signUpSuccess": "Registrering vellykket!"
 }

@@ -2010,5 +2010,12 @@
   "signInSuccess": "Login realizado com sucesso!",
   "alreadyHaveAccountLogin": "Já tem uma conta? Entre",
   "emailLabel": "E-mail",
-  "passwordLabel": "Senha"
+  "passwordLabel": "Senha",
+  "createAccountTitle": "Criar conta",
+  "nameLabel": "Nome",
+  "repeatPasswordLabel": "Repetir senha",
+  "signUpButton": "Cadastrar",
+  "enterNameError": "Por favor, insira seu nome",
+  "passwordsDoNotMatch": "As senhas não coincidem",
+  "signUpSuccess": "Cadastro realizado com sucesso!"
 }

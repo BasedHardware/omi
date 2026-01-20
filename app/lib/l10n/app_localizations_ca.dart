@@ -6493,4 +6493,25 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get passwordLabel => 'Contrasenya';
+
+  @override
+  String get createAccountTitle => 'Crear un compte';
+
+  @override
+  String get nameLabel => 'Nom';
+
+  @override
+  String get repeatPasswordLabel => 'Repeteix la contrasenya';
+
+  @override
+  String get signUpButton => 'Registrar-se';
+
+  @override
+  String get enterNameError => 'Introduïu el vostre nom';
+
+  @override
+  String get passwordsDoNotMatch => 'Les contrasenyes no coincideixen';
+
+  @override
+  String get signUpSuccess => 'Registre correcte!';
 }

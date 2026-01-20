@@ -2010,5 +2010,12 @@
   "signInSuccess": "साइन इन सफल!",
   "alreadyHaveAccountLogin": "पहले से खाता है? लॉग इन करें",
   "emailLabel": "ईमेल",
-  "passwordLabel": "पासवर्ड"
+  "passwordLabel": "पासवर्ड",
+  "createAccountTitle": "खाता बनाएं",
+  "nameLabel": "नाम",
+  "repeatPasswordLabel": "पासवर्ड दोहराएं",
+  "signUpButton": "साइन अप करें",
+  "enterNameError": "कृपया अपना नाम दर्ज करें",
+  "passwordsDoNotMatch": "पासवर्ड मेल नहीं खाते",
+  "signUpSuccess": "साइन अप सफल!"
 }

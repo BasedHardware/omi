@@ -2009,5 +2009,12 @@
   "signInSuccess": "Log masuk berjaya!",
   "alreadyHaveAccountLogin": "Sudah mempunyai akaun? Log masuk",
   "emailLabel": "E-mel",
-  "passwordLabel": "Kata laluan"
+  "passwordLabel": "Kata laluan",
+  "createAccountTitle": "Buat Akaun",
+  "nameLabel": "Nama",
+  "repeatPasswordLabel": "Ulang Kata Laluan",
+  "signUpButton": "Daftar",
+  "enterNameError": "Sila masukkan nama anda",
+  "passwordsDoNotMatch": "Kata laluan tidak sepadan",
+  "signUpSuccess": "Pendaftaran berjaya!"
 }

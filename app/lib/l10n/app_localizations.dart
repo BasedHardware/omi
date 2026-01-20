@@ -12044,6 +12044,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Password'**
   String get passwordLabel;
+
+  /// Title for create account page
+  ///
+  /// In en, this message translates to:
+  /// **'Create Account'**
+  String get createAccountTitle;
+
+  /// Label for name input field
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get nameLabel;
+
+  /// Label for repeat password input field
+  ///
+  /// In en, this message translates to:
+  /// **'Repeat Password'**
+  String get repeatPasswordLabel;
+
+  /// Sign up button text
+  ///
+  /// In en, this message translates to:
+  /// **'Sign Up'**
+  String get signUpButton;
+
+  /// Error when name field is empty
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter your name'**
+  String get enterNameError;
+
+  /// Error when passwords do not match
+  ///
+  /// In en, this message translates to:
+  /// **'Passwords do not match'**
+  String get passwordsDoNotMatch;
+
+  /// Success message after signing up
+  ///
+  /// In en, this message translates to:
+  /// **'Signup Successful!'**
+  String get signUpSuccess;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -1991,5 +1991,12 @@
   "signInSuccess": "Anmeldung erfolgreich!",
   "alreadyHaveAccountLogin": "Haben Sie bereits ein Konto? Anmelden",
   "emailLabel": "E-Mail",
-  "passwordLabel": "Passwort"
+  "passwordLabel": "Passwort",
+  "createAccountTitle": "Konto erstellen",
+  "nameLabel": "Name",
+  "repeatPasswordLabel": "Passwort wiederholen",
+  "signUpButton": "Registrieren",
+  "enterNameError": "Bitte geben Sie Ihren Namen ein",
+  "passwordsDoNotMatch": "Passwörter stimmen nicht überein",
+  "signUpSuccess": "Registrierung erfolgreich!"
 }

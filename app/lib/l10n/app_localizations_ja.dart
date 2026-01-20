@@ -6344,4 +6344,25 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get passwordLabel => 'パスワード';
+
+  @override
+  String get createAccountTitle => 'アカウント作成';
+
+  @override
+  String get nameLabel => '名前';
+
+  @override
+  String get repeatPasswordLabel => 'パスワードを再入力';
+
+  @override
+  String get signUpButton => '登録';
+
+  @override
+  String get enterNameError => '名前を入力してください';
+
+  @override
+  String get passwordsDoNotMatch => 'パスワードが一致しません';
+
+  @override
+  String get signUpSuccess => '登録成功！';
 }

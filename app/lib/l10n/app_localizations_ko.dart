@@ -6346,4 +6346,25 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get passwordLabel => '비밀번호';
+
+  @override
+  String get createAccountTitle => '계정 만들기';
+
+  @override
+  String get nameLabel => '이름';
+
+  @override
+  String get repeatPasswordLabel => '비밀번호 확인';
+
+  @override
+  String get signUpButton => '가입하기';
+
+  @override
+  String get enterNameError => '이름을 입력하세요';
+
+  @override
+  String get passwordsDoNotMatch => '비밀번호가 일치하지 않습니다';
+
+  @override
+  String get signUpSuccess => '가입 성공!';
 }

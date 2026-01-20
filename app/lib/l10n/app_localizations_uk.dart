@@ -6408,4 +6408,25 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get passwordLabel => 'Пароль';
+
+  @override
+  String get createAccountTitle => 'Створити обліковий запис';
+
+  @override
+  String get nameLabel => 'Ім'я';
+
+  @override
+  String get repeatPasswordLabel => 'Повторіть пароль';
+
+  @override
+  String get signUpButton => 'Зареєструватися';
+
+  @override
+  String get enterNameError => 'Будь ласка, введіть ваше ім'я';
+
+  @override
+  String get passwordsDoNotMatch => 'Паролі не співпадають';
+
+  @override
+  String get signUpSuccess => 'Реєстрація успішна!';
 }

@@ -2009,5 +2009,12 @@
   "signInSuccess": "เข้าสู่ระบบสำเร็จ!",
   "alreadyHaveAccountLogin": "มีบัญชีอยู่แล้ว? เข้าสู่ระบบ",
   "emailLabel": "อีเมล",
-  "passwordLabel": "รหัสผ่าน"
+  "passwordLabel": "รหัสผ่าน",
+  "createAccountTitle": "สร้างบัญชี",
+  "nameLabel": "ชื่อ",
+  "repeatPasswordLabel": "ยืนยันรหัสผ่าน",
+  "signUpButton": "สมัครสมาชิก",
+  "enterNameError": "กรุณากรอกชื่อของคุณ",
+  "passwordsDoNotMatch": "รหัสผ่านไม่ตรงกัน",
+  "signUpSuccess": "สมัครสมาชิกสำเร็จ!"
 }

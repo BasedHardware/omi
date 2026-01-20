@@ -1990,5 +1990,12 @@
   "signInSuccess": "تم تسجيل الدخول بنجاح!",
   "alreadyHaveAccountLogin": "لديك حساب بالفعل؟ سجل الدخول",
   "emailLabel": "البريد الإلكتروني",
-  "passwordLabel": "كلمة المرور"
+  "passwordLabel": "كلمة المرور",
+  "createAccountTitle": "إنشاء حساب",
+  "nameLabel": "الاسم",
+  "repeatPasswordLabel": "تكرار كلمة المرور",
+  "signUpButton": "إنشاء حساب",
+  "enterNameError": "يرجى إدخال اسمك",
+  "passwordsDoNotMatch": "كلمات المرور غير متطابقة",
+  "signUpSuccess": "تم التسجيل بنجاح!"
 }

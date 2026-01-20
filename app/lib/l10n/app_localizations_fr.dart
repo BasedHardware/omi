@@ -6510,4 +6510,25 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get passwordLabel => 'Mot de passe';
+
+  @override
+  String get createAccountTitle => 'Créer un compte';
+
+  @override
+  String get nameLabel => 'Nom';
+
+  @override
+  String get repeatPasswordLabel => 'Répéter le mot de passe';
+
+  @override
+  String get signUpButton => 'S'inscrire';
+
+  @override
+  String get enterNameError => 'Veuillez entrer votre nom';
+
+  @override
+  String get passwordsDoNotMatch => 'Les mots de passe ne correspondent pas';
+
+  @override
+  String get signUpSuccess => 'Inscription réussie !';
 }

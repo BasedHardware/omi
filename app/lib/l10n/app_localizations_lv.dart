@@ -6467,4 +6467,25 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get passwordLabel => 'Parole';
+
+  @override
+  String get createAccountTitle => 'Izveidot kontu';
+
+  @override
+  String get nameLabel => 'Vārds';
+
+  @override
+  String get repeatPasswordLabel => 'Atkārtot paroli';
+
+  @override
+  String get signUpButton => 'Reģistrēties';
+
+  @override
+  String get enterNameError => 'Lūdzu, ievadiet savu vārdu';
+
+  @override
+  String get passwordsDoNotMatch => 'Paroles nesakrīt';
+
+  @override
+  String get signUpSuccess => 'Reģistrācija veiksmīga!';
 }

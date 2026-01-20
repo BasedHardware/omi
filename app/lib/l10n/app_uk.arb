@@ -2009,5 +2009,12 @@
   "signInSuccess": "Вхід успішний!",
   "alreadyHaveAccountLogin": "Вже маєте обліковий запис? Увійдіть",
   "emailLabel": "Електронна пошта",
-  "passwordLabel": "Пароль"
+  "passwordLabel": "Пароль",
+  "createAccountTitle": "Створити обліковий запис",
+  "nameLabel": "Ім'я",
+  "repeatPasswordLabel": "Повторіть пароль",
+  "signUpButton": "Зареєструватися",
+  "enterNameError": "Будь ласка, введіть ваше ім'я",
+  "passwordsDoNotMatch": "Паролі не співпадають",
+  "signUpSuccess": "Реєстрація успішна!"
 }

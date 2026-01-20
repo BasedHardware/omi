@@ -2009,5 +2009,12 @@
   "signInSuccess": "Kirjautuminen onnistui!",
   "alreadyHaveAccountLogin": "Onko sinulla jo tili? Kirjaudu sisään",
   "emailLabel": "Sähköposti",
-  "passwordLabel": "Salasana"
+  "passwordLabel": "Salasana",
+  "createAccountTitle": "Luo tili",
+  "nameLabel": "Nimi",
+  "repeatPasswordLabel": "Toista salasana",
+  "signUpButton": "Rekisteröidy",
+  "enterNameError": "Anna nimesi",
+  "passwordsDoNotMatch": "Salasanat eivät täsmää",
+  "signUpSuccess": "Rekisteröityminen onnistui!"
 }

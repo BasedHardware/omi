@@ -6422,4 +6422,25 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get passwordLabel => 'รหัสผ่าน';
+
+  @override
+  String get createAccountTitle => 'สร้างบัญชี';
+
+  @override
+  String get nameLabel => 'ชื่อ';
+
+  @override
+  String get repeatPasswordLabel => 'ยืนยันรหัสผ่าน';
+
+  @override
+  String get signUpButton => 'สมัครสมาชิก';
+
+  @override
+  String get enterNameError => 'กรุณากรอกชื่อของคุณ';
+
+  @override
+  String get passwordsDoNotMatch => 'รหัสผ่านไม่ตรงกัน';
+
+  @override
+  String get signUpSuccess => 'สมัครสมาชิกสำเร็จ!';
 }

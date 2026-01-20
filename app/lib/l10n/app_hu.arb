@@ -2009,5 +2009,12 @@
   "signInSuccess": "Sikeres bejelentkezés!",
   "alreadyHaveAccountLogin": "Már van fiókja? Jelentkezzen be",
   "emailLabel": "E-mail",
-  "passwordLabel": "Jelszó"
+  "passwordLabel": "Jelszó",
+  "createAccountTitle": "Fiók létrehozása",
+  "nameLabel": "Név",
+  "repeatPasswordLabel": "Jelszó ismétlése",
+  "signUpButton": "Regisztráció",
+  "enterNameError": "Kérjük, adja meg nevét",
+  "passwordsDoNotMatch": "A jelszavak nem egyeznek",
+  "signUpSuccess": "Sikeres regisztráció!"
 }

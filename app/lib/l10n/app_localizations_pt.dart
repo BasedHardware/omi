@@ -6446,4 +6446,25 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get passwordLabel => 'Senha';
+
+  @override
+  String get createAccountTitle => 'Criar conta';
+
+  @override
+  String get nameLabel => 'Nome';
+
+  @override
+  String get repeatPasswordLabel => 'Repetir senha';
+
+  @override
+  String get signUpButton => 'Cadastrar';
+
+  @override
+  String get enterNameError => 'Por favor, insira seu nome';
+
+  @override
+  String get passwordsDoNotMatch => 'As senhas não coincidem';
+
+  @override
+  String get signUpSuccess => 'Cadastro realizado com sucesso!';
 }

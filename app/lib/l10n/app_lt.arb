@@ -2009,5 +2009,12 @@
   "signInSuccess": "Prisijungimas sėkmingas!",
   "alreadyHaveAccountLogin": "Jau turite paskyrą? Prisijunkite",
   "emailLabel": "El. paštas",
-  "passwordLabel": "Slaptažodis"
+  "passwordLabel": "Slaptažodis",
+  "createAccountTitle": "Sukurti paskyrą",
+  "nameLabel": "Vardas",
+  "repeatPasswordLabel": "Pakartokite slaptažodį",
+  "signUpButton": "Registruotis",
+  "enterNameError": "Įveskite savo vardą",
+  "passwordsDoNotMatch": "Slaptažodžiai nesutampa",
+  "signUpSuccess": "Registracija sėkminga!"
 }
