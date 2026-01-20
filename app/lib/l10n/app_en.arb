@@ -8979,7 +8979,7 @@
   "@couldNotLaunchUpgradePage": {
     "description": "Error when upgrade page cannot be launched"
   },
-  "transcriptionJsonPlaceholder": "{\n  \"provider\": \"deepgramLive\",\n  ...\n}",
+  "transcriptionJsonPlaceholder": "Paste your JSON configuration here...",
   "@transcriptionJsonPlaceholder": {
     "description": "JSON configuration placeholder hint text in transcription settings"
   },

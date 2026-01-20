@@ -13652,6 +13652,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not launch upgrade page. Please try again.'**
   String get couldNotLaunchUpgradePage;
+
+  /// JSON configuration placeholder hint text in transcription settings
+  ///
+  /// In en, this message translates to:
+  /// **'Paste your JSON configuration here...'**
+  String get transcriptionJsonPlaceholder;
+
+  /// Tab title for Omi transcription source option
+  ///
+  /// In en, this message translates to:
+  /// **'Omi'**
+  String get transcriptionSourceOmi;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

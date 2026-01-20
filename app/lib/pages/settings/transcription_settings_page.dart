@@ -659,7 +659,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                     fontSize: 12,
                   ),
                   decoration: InputDecoration(
-                    hintText: '{\n  "provider": "deepgramLive",\n  ...\n}',
+                    hintText: context.l10n.transcriptionJsonPlaceholder,
                     hintStyle: TextStyle(color: Colors.grey.shade700),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.all(12),
@@ -1076,7 +1076,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             Expanded(
               child: _buildTabOption(
                 isSelected: currentTab == 0,
-                title: 'Omi',
+                title: context.l10n.transcriptionSourceOmi,
                 onTap: () {
                   setState(() {
                     _useCustomStt = false;

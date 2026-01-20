@@ -10,10 +10,10 @@
 |--------|-------|
 | Total Files | 27 |
 | Total Strings | ~125 |
-| Completed | 10 |
+| Completed | 11 |
 | In Progress | 0 |
-| Pending | 17 |
-| Progress | 37% |
+| Pending | 16 |
+| Progress | 41% |
 
 ================================================================================
 ## PRIORITY 1: HIGH IMPACT - User-Facing Features (~65 strings)
@@ -105,11 +105,13 @@ Reused existing keys: confirmPlanChange, confirmAndProceed, cancel, anErrorOccur
 couldNotOpenPaymentSettings, managePaymentMethod.
 The original audit identified 3 strings but the file had 13+ hardcoded strings requiring localization.
 
-### [ ] pages/settings/transcription_settings_page.dart (2 strings)
-Status: PENDING
-Strings:
-- [ ] Line 662: JSON placeholder hintText
-- [ ] Line 1079: 'Omi' (title)
+### [x] pages/settings/transcription_settings_page.dart (2 strings)
+Status: COMPLETED
+Note: Added 2 new l10n keys to all 34 language ARB files and updated the Dart file to use
+context.l10n pattern. Keys added: transcriptionJsonPlaceholder, transcriptionSourceOmi.
+The JSON placeholder was changed from a literal JSON example to "Paste your JSON configuration here..."
+to avoid ICU message format conflicts with curly braces.
+Ran flutter gen-l10n and verified with test.sh.
 
 ### [ ] pages/settings/ai_app_generator_page.dart (1 string)
 Status: PENDING
@@ -207,6 +209,13 @@ Strings:
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-20] Localized transcription_settings_page.dart
+- Added 2 new l10n keys to all 34 language ARB files
+- Updated Dart file to use context.l10n pattern
+- Keys: transcriptionJsonPlaceholder, transcriptionSourceOmi
+- Changed JSON placeholder from literal example to user-friendly text to avoid ICU format conflicts
+- Ran flutter gen-l10n and verified with test.sh
 
 [2026-01-20] Localized plans_sheet.dart
 - Added 7 new l10n keys to all 34 language ARB files

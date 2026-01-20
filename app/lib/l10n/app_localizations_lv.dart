@@ -7275,4 +7275,10 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get couldNotLaunchUpgradePage => 'Could not launch upgrade page. Please try again.';
+
+  @override
+  String get transcriptionJsonPlaceholder => 'Paste your JSON configuration here...';
+
+  @override
+  String get transcriptionSourceOmi => 'Omi';
 }
