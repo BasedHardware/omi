@@ -2016,5 +2016,11 @@
   "signUpButton": "Înregistrare",
   "enterNameError": "Introduceți numele dvs.",
   "passwordsDoNotMatch": "Parolele nu se potrivesc",
-  "signUpSuccess": "Înregistrare reușită!"
+  "signUpSuccess": "Înregistrare reușită!",
+  "loadingKnowledgeGraph": "Se încarcă graficul cunoștințelor...",
+  "noKnowledgeGraphYet": "Niciun grafic de cunoștințe încă",
+  "buildingKnowledgeGraphFromMemories": "Se construiește graficul cunoștințelor din amintiri...",
+  "knowledgeGraphWillBuildAutomatically": "Graficul cunoștințelor va fi construit automat când creați amintiri noi.",
+  "buildGraphButton": "Construiește grafic",
+  "checkOutMyMemoryGraph": "Vezi graficul meu de memorie!"
 }

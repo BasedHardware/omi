@@ -2016,5 +2016,11 @@
   "signUpButton": "Зарегистрироваться",
   "enterNameError": "Введите ваше имя",
   "passwordsDoNotMatch": "Пароли не совпадают",
-  "signUpSuccess": "Регистрация успешна!"
+  "signUpSuccess": "Регистрация успешна!",
+  "loadingKnowledgeGraph": "Загрузка графа знаний...",
+  "noKnowledgeGraphYet": "Графа знаний пока нет",
+  "buildingKnowledgeGraphFromMemories": "Построение графа знаний из воспоминаний...",
+  "knowledgeGraphWillBuildAutomatically": "Ваш граф знаний будет построен автоматически при создании новых воспоминаний.",
+  "buildGraphButton": "Построить граф",
+  "checkOutMyMemoryGraph": "Посмотрите мой граф памяти!"
 }

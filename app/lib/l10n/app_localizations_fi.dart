@@ -6476,4 +6476,22 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get signUpSuccess => 'Rekisteröityminen onnistui!';
+
+  @override
+  String get loadingKnowledgeGraph => 'Ladataan tietograafia...';
+
+  @override
+  String get noKnowledgeGraphYet => 'Ei vielä tietograafia';
+
+  @override
+  String get buildingKnowledgeGraphFromMemories => 'Rakennetaan tietograafia muistoista...';
+
+  @override
+  String get knowledgeGraphWillBuildAutomatically => 'Tietograafisi rakennetaan automaattisesti, kun luot uusia muistoja.';
+
+  @override
+  String get buildGraphButton => 'Rakenna graafi';
+
+  @override
+  String get checkOutMyMemoryGraph => 'Katso muistigraafikani!';
 }

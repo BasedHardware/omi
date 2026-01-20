@@ -6477,4 +6477,22 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get signUpSuccess => 'Registreerimine õnnestus!';
+
+  @override
+  String get loadingKnowledgeGraph => 'Teadmisgraafiku laadimine...';
+
+  @override
+  String get noKnowledgeGraphYet => 'Teadmisgraafikut pole veel';
+
+  @override
+  String get buildingKnowledgeGraphFromMemories => 'Teadmisgraafiku loomine mälestustest...';
+
+  @override
+  String get knowledgeGraphWillBuildAutomatically => 'Teie teadmisgraafik luuakse automaatselt, kui loote uusi mälestusi.';
+
+  @override
+  String get buildGraphButton => 'Loo graafik';
+
+  @override
+  String get checkOutMyMemoryGraph => 'Vaata minu mälugraafikut!';
 }

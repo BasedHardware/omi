@@ -6522,4 +6522,22 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get signUpSuccess => 'Επιτυχής εγγραφή!';
+
+  @override
+  String get loadingKnowledgeGraph => 'Φόρτωση γραφήματος γνώσης...';
+
+  @override
+  String get noKnowledgeGraphYet => 'Δεν υπάρχει ακόμα γράφημα γνώσης';
+
+  @override
+  String get buildingKnowledgeGraphFromMemories => 'Δημιουργία γραφήματος γνώσης από αναμνήσεις...';
+
+  @override
+  String get knowledgeGraphWillBuildAutomatically => 'Το γράφημα γνώσης θα δημιουργηθεί αυτόματα καθώς δημιουργείτε νέες αναμνήσεις.';
+
+  @override
+  String get buildGraphButton => 'Δημιουργία γραφήματος';
+
+  @override
+  String get checkOutMyMemoryGraph => 'Δείτε το γράφημα μνήμης μου!';
 }

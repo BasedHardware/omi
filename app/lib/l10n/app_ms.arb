@@ -2016,5 +2016,11 @@
   "signUpButton": "Daftar",
   "enterNameError": "Sila masukkan nama anda",
   "passwordsDoNotMatch": "Kata laluan tidak sepadan",
-  "signUpSuccess": "Pendaftaran berjaya!"
+  "signUpSuccess": "Pendaftaran berjaya!",
+  "loadingKnowledgeGraph": "Memuatkan Graf Pengetahuan...",
+  "noKnowledgeGraphYet": "Tiada graf pengetahuan lagi",
+  "buildingKnowledgeGraphFromMemories": "Membina graf pengetahuan daripada kenangan...",
+  "knowledgeGraphWillBuildAutomatically": "Graf pengetahuan anda akan dibina secara automatik apabila anda mencipta kenangan baharu.",
+  "buildGraphButton": "Bina Graf",
+  "checkOutMyMemoryGraph": "Lihat graf memori saya!"
 }

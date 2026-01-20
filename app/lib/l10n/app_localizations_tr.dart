@@ -6487,4 +6487,22 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get signUpSuccess => 'Kayıt başarılı!';
+
+  @override
+  String get loadingKnowledgeGraph => 'Bilgi grafiği yükleniyor...';
+
+  @override
+  String get noKnowledgeGraphYet => 'Henüz bilgi grafiği yok';
+
+  @override
+  String get buildingKnowledgeGraphFromMemories => 'Anılardan bilgi grafiği oluşturuluyor...';
+
+  @override
+  String get knowledgeGraphWillBuildAutomatically => 'Yeni anılar oluşturdukça bilgi grafiğiniz otomatik olarak oluşturulacak.';
+
+  @override
+  String get buildGraphButton => 'Grafik Oluştur';
+
+  @override
+  String get checkOutMyMemoryGraph => 'Hafıza grafiğime göz atın!';
 }

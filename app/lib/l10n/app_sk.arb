@@ -2016,5 +2016,11 @@
   "signUpButton": "Zaregistrovať sa",
   "enterNameError": "Zadajte svoje meno",
   "passwordsDoNotMatch": "Heslá sa nezhodujú",
-  "signUpSuccess": "Registrácia úspešná!"
+  "signUpSuccess": "Registrácia úspešná!",
+  "loadingKnowledgeGraph": "Načítava sa znalostný graf...",
+  "noKnowledgeGraphYet": "Zatiaľ žiadny znalostný graf",
+  "buildingKnowledgeGraphFromMemories": "Vytvára sa znalostný graf zo spomienok...",
+  "knowledgeGraphWillBuildAutomatically": "Váš znalostný graf sa vytvorí automaticky, keď vytvoríte nové spomienky.",
+  "buildGraphButton": "Vytvoriť graf",
+  "checkOutMyMemoryGraph": "Pozrite sa na môj graf pamäte!"
 }

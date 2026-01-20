@@ -6367,4 +6367,22 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get signUpSuccess => '가입 성공!';
+
+  @override
+  String get loadingKnowledgeGraph => '지식 그래프 로딩 중...';
+
+  @override
+  String get noKnowledgeGraphYet => '아직 지식 그래프가 없습니다';
+
+  @override
+  String get buildingKnowledgeGraphFromMemories => '기억에서 지식 그래프를 구축 중...';
+
+  @override
+  String get knowledgeGraphWillBuildAutomatically => '새로운 기억을 만들면 지식 그래프가 자동으로 구축됩니다.';
+
+  @override
+  String get buildGraphButton => '그래프 구축';
+
+  @override
+  String get checkOutMyMemoryGraph => '내 메모리 그래프를 확인하세요!';
 }

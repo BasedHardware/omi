@@ -6476,4 +6476,22 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get signUpSuccess => 'Registrácia úspešná!';
+
+  @override
+  String get loadingKnowledgeGraph => 'Načítava sa znalostný graf...';
+
+  @override
+  String get noKnowledgeGraphYet => 'Zatiaľ žiadny znalostný graf';
+
+  @override
+  String get buildingKnowledgeGraphFromMemories => 'Vytvára sa znalostný graf zo spomienok...';
+
+  @override
+  String get knowledgeGraphWillBuildAutomatically => 'Váš znalostný graf sa vytvorí automaticky, keď vytvoríte nové spomienky.';
+
+  @override
+  String get buildGraphButton => 'Vytvoriť graf';
+
+  @override
+  String get checkOutMyMemoryGraph => 'Pozrite sa na môj graf pamäte!';
 }

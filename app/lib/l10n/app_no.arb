@@ -2016,5 +2016,11 @@
   "signUpButton": "Registrer deg",
   "enterNameError": "Vennligst skriv inn navnet ditt",
   "passwordsDoNotMatch": "Passordene samsvarer ikke",
-  "signUpSuccess": "Registrering vellykket!"
+  "signUpSuccess": "Registrering vellykket!",
+  "loadingKnowledgeGraph": "Laster kunnskapsgraf...",
+  "noKnowledgeGraphYet": "Ingen kunnskapsgraf ennå",
+  "buildingKnowledgeGraphFromMemories": "Bygger kunnskapsgraf fra minner...",
+  "knowledgeGraphWillBuildAutomatically": "Kunnskapsgrafen din vil bli bygget automatisk når du oppretter nye minner.",
+  "buildGraphButton": "Bygg graf",
+  "checkOutMyMemoryGraph": "Se på minnegrafen min!"
 }

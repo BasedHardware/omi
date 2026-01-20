@@ -2016,5 +2016,11 @@
   "signUpButton": "Daftar",
   "enterNameError": "Masukkan nama Anda",
   "passwordsDoNotMatch": "Kata sandi tidak cocok",
-  "signUpSuccess": "Pendaftaran berhasil!"
+  "signUpSuccess": "Pendaftaran berhasil!",
+  "loadingKnowledgeGraph": "Memuat Graf Pengetahuan...",
+  "noKnowledgeGraphYet": "Belum ada graf pengetahuan",
+  "buildingKnowledgeGraphFromMemories": "Membangun graf pengetahuan dari kenangan...",
+  "knowledgeGraphWillBuildAutomatically": "Graf pengetahuan Anda akan dibangun secara otomatis saat Anda membuat kenangan baru.",
+  "buildGraphButton": "Bangun Graf",
+  "checkOutMyMemoryGraph": "Lihat graf memori saya!"
 }

@@ -2016,5 +2016,11 @@
   "signUpButton": "Registrera",
   "enterNameError": "Ange ditt namn",
   "passwordsDoNotMatch": "Lösenorden matchar inte",
-  "signUpSuccess": "Registrering lyckades!"
+  "signUpSuccess": "Registrering lyckades!",
+  "loadingKnowledgeGraph": "Laddar kunskapsgraf...",
+  "noKnowledgeGraphYet": "Ingen kunskapsgraf ännu",
+  "buildingKnowledgeGraphFromMemories": "Bygger kunskapsgraf från minnen...",
+  "knowledgeGraphWillBuildAutomatically": "Din kunskapsgraf kommer att byggas automatiskt när du skapar nya minnen.",
+  "buildGraphButton": "Bygg graf",
+  "checkOutMyMemoryGraph": "Kolla in min minnesgraf!"
 }

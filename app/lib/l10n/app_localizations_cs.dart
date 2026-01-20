@@ -6467,4 +6467,22 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get signUpSuccess => 'Registrace úspěšná!';
+
+  @override
+  String get loadingKnowledgeGraph => 'Načítání znalostního grafu...';
+
+  @override
+  String get noKnowledgeGraphYet => 'Zatím žádný znalostní graf';
+
+  @override
+  String get buildingKnowledgeGraphFromMemories => 'Vytváření znalostního grafu ze vzpomínek...';
+
+  @override
+  String get knowledgeGraphWillBuildAutomatically => 'Váš znalostní graf se vytvoří automaticky, jakmile vytvoříte nové vzpomínky.';
+
+  @override
+  String get buildGraphButton => 'Vytvořit graf';
+
+  @override
+  String get checkOutMyMemoryGraph => 'Podívejte se na můj graf paměti!';
 }

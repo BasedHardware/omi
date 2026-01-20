@@ -6488,4 +6488,22 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get signUpSuccess => 'Rejestracja pomyślna!';
+
+  @override
+  String get loadingKnowledgeGraph => 'Ładowanie grafu wiedzy...';
+
+  @override
+  String get noKnowledgeGraphYet => 'Brak grafu wiedzy';
+
+  @override
+  String get buildingKnowledgeGraphFromMemories => 'Tworzenie grafu wiedzy ze wspomnień...';
+
+  @override
+  String get knowledgeGraphWillBuildAutomatically => 'Graf wiedzy zostanie utworzony automatycznie podczas tworzenia nowych wspomnień.';
+
+  @override
+  String get buildGraphButton => 'Utwórz graf';
+
+  @override
+  String get checkOutMyMemoryGraph => 'Zobacz mój graf pamięci!';
 }

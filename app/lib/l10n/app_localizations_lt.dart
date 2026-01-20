@@ -6477,4 +6477,22 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get signUpSuccess => 'Registracija sėkminga!';
+
+  @override
+  String get loadingKnowledgeGraph => 'Įkeliamas žinių grafas...';
+
+  @override
+  String get noKnowledgeGraphYet => 'Dar nėra žinių grafo';
+
+  @override
+  String get buildingKnowledgeGraphFromMemories => 'Kuriamas žinių grafas iš prisiminimų...';
+
+  @override
+  String get knowledgeGraphWillBuildAutomatically => 'Jūsų žinių grafas bus sukurtas automatiškai, kai sukursite naujų prisiminimų.';
+
+  @override
+  String get buildGraphButton => 'Sukurti grafą';
+
+  @override
+  String get checkOutMyMemoryGraph => 'Pažiūrėkite mano atminties grafą!';
 }

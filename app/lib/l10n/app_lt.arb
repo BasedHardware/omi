@@ -2016,5 +2016,11 @@
   "signUpButton": "Registruotis",
   "enterNameError": "Įveskite savo vardą",
   "passwordsDoNotMatch": "Slaptažodžiai nesutampa",
-  "signUpSuccess": "Registracija sėkminga!"
+  "signUpSuccess": "Registracija sėkminga!",
+  "loadingKnowledgeGraph": "Įkeliamas žinių grafas...",
+  "noKnowledgeGraphYet": "Dar nėra žinių grafo",
+  "buildingKnowledgeGraphFromMemories": "Kuriamas žinių grafas iš prisiminimų...",
+  "knowledgeGraphWillBuildAutomatically": "Jūsų žinių grafas bus sukurtas automatiškai, kai sukursite naujų prisiminimų.",
+  "buildGraphButton": "Sukurti grafą",
+  "checkOutMyMemoryGraph": "Pažiūrėkite mano atminties grafą!"
 }

@@ -1998,5 +1998,11 @@
   "signUpButton": "Registrieren",
   "enterNameError": "Bitte geben Sie Ihren Namen ein",
   "passwordsDoNotMatch": "Passwörter stimmen nicht überein",
-  "signUpSuccess": "Registrierung erfolgreich!"
+  "signUpSuccess": "Registrierung erfolgreich!",
+  "loadingKnowledgeGraph": "Wissensgraph wird geladen...",
+  "noKnowledgeGraphYet": "Noch kein Wissensgraph vorhanden",
+  "buildingKnowledgeGraphFromMemories": "Wissensgraph wird aus Erinnerungen erstellt...",
+  "knowledgeGraphWillBuildAutomatically": "Ihr Wissensgraph wird automatisch erstellt, wenn Sie neue Erinnerungen anlegen.",
+  "buildGraphButton": "Graph erstellen",
+  "checkOutMyMemoryGraph": "Schau dir meinen Erinnerungsgraphen an!"
 }

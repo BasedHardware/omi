@@ -6484,4 +6484,22 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get signUpSuccess => 'Tilmelding gennemført!';
+
+  @override
+  String get loadingKnowledgeGraph => 'Indlæser vidensgraf...';
+
+  @override
+  String get noKnowledgeGraphYet => 'Ingen vidensgraf endnu';
+
+  @override
+  String get buildingKnowledgeGraphFromMemories => 'Opbygger vidensgraf fra minder...';
+
+  @override
+  String get knowledgeGraphWillBuildAutomatically => 'Din vidensgraf vil blive opbygget automatisk, når du opretter nye minder.';
+
+  @override
+  String get buildGraphButton => 'Opbyg graf';
+
+  @override
+  String get checkOutMyMemoryGraph => 'Se min hukommelsesgraf!';
 }

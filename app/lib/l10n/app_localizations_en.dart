@@ -6473,4 +6473,22 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get signUpSuccess => 'Signup Successful!';
+
+  @override
+  String get loadingKnowledgeGraph => 'Loading Knowledge Graph...';
+
+  @override
+  String get noKnowledgeGraphYet => 'No knowledge graph yet';
+
+  @override
+  String get buildingKnowledgeGraphFromMemories => 'Building your knowledge graph from memories...';
+
+  @override
+  String get knowledgeGraphWillBuildAutomatically => 'Your knowledge graph will be built automatically as you create new memories.';
+
+  @override
+  String get buildGraphButton => 'Build Graph';
+
+  @override
+  String get checkOutMyMemoryGraph => 'Check out my memory graph!';
 }

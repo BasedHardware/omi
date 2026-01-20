@@ -6527,4 +6527,22 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get signUpSuccess => 'Registrierung erfolgreich!';
+
+  @override
+  String get loadingKnowledgeGraph => 'Wissensgraph wird geladen...';
+
+  @override
+  String get noKnowledgeGraphYet => 'Noch kein Wissensgraph vorhanden';
+
+  @override
+  String get buildingKnowledgeGraphFromMemories => 'Wissensgraph wird aus Erinnerungen erstellt...';
+
+  @override
+  String get knowledgeGraphWillBuildAutomatically => 'Ihr Wissensgraph wird automatisch erstellt, wenn Sie neue Erinnerungen anlegen.';
+
+  @override
+  String get buildGraphButton => 'Graph erstellen';
+
+  @override
+  String get checkOutMyMemoryGraph => 'Schau dir meinen Erinnerungsgraphen an!';
 }

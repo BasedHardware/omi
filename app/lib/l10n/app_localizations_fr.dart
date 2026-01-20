@@ -6531,4 +6531,22 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get signUpSuccess => 'Inscription réussie !';
+
+  @override
+  String get loadingKnowledgeGraph => 'Chargement du graphe de connaissances...';
+
+  @override
+  String get noKnowledgeGraphYet => 'Pas encore de graphe de connaissances';
+
+  @override
+  String get buildingKnowledgeGraphFromMemories => 'Construction du graphe de connaissances à partir des souvenirs...';
+
+  @override
+  String get knowledgeGraphWillBuildAutomatically => 'Votre graphe de connaissances sera construit automatiquement lorsque vous créerez de nouveaux souvenirs.';
+
+  @override
+  String get buildGraphButton => 'Construire le graphe';
+
+  @override
+  String get checkOutMyMemoryGraph => 'Découvrez mon graphe de mémoire !';
 }

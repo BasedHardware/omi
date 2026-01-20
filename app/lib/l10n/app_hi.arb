@@ -2017,5 +2017,11 @@
   "signUpButton": "साइन अप करें",
   "enterNameError": "कृपया अपना नाम दर्ज करें",
   "passwordsDoNotMatch": "पासवर्ड मेल नहीं खाते",
-  "signUpSuccess": "साइन अप सफल!"
+  "signUpSuccess": "साइन अप सफल!",
+  "loadingKnowledgeGraph": "ज्ञान ग्राफ़ लोड हो रहा है...",
+  "noKnowledgeGraphYet": "अभी तक कोई ज्ञान ग्राफ़ नहीं",
+  "buildingKnowledgeGraphFromMemories": "यादों से ज्ञान ग्राफ़ बनाया जा रहा है...",
+  "knowledgeGraphWillBuildAutomatically": "जब आप नई यादें बनाएंगे तो आपका ज्ञान ग्राफ़ स्वचालित रूप से बनेगा।",
+  "buildGraphButton": "ग्राफ़ बनाएं",
+  "checkOutMyMemoryGraph": "मेरा मेमोरी ग्राफ़ देखें!"
 }

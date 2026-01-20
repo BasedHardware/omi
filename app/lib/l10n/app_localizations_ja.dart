@@ -6365,4 +6365,22 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get signUpSuccess => '登録成功！';
+
+  @override
+  String get loadingKnowledgeGraph => 'ナレッジグラフを読み込み中...';
+
+  @override
+  String get noKnowledgeGraphYet => 'ナレッジグラフはまだありません';
+
+  @override
+  String get buildingKnowledgeGraphFromMemories => '思い出からナレッジグラフを構築中...';
+
+  @override
+  String get knowledgeGraphWillBuildAutomatically => '新しい思い出を作成すると、ナレッジグラフが自動的に構築されます。';
+
+  @override
+  String get buildGraphButton => 'グラフを構築';
+
+  @override
+  String get checkOutMyMemoryGraph => '私のメモリーグラフをご覧ください！';
 }

@@ -2017,5 +2017,11 @@
   "signUpButton": "登録",
   "enterNameError": "名前を入力してください",
   "passwordsDoNotMatch": "パスワードが一致しません",
-  "signUpSuccess": "登録成功！"
+  "signUpSuccess": "登録成功！",
+  "loadingKnowledgeGraph": "ナレッジグラフを読み込み中...",
+  "noKnowledgeGraphYet": "ナレッジグラフはまだありません",
+  "buildingKnowledgeGraphFromMemories": "思い出からナレッジグラフを構築中...",
+  "knowledgeGraphWillBuildAutomatically": "新しい思い出を作成すると、ナレッジグラフが自動的に構築されます。",
+  "buildGraphButton": "グラフを構築",
+  "checkOutMyMemoryGraph": "私のメモリーグラフをご覧ください！"
 }

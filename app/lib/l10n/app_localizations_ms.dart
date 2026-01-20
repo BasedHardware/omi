@@ -6497,4 +6497,22 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get signUpSuccess => 'Pendaftaran berjaya!';
+
+  @override
+  String get loadingKnowledgeGraph => 'Memuatkan Graf Pengetahuan...';
+
+  @override
+  String get noKnowledgeGraphYet => 'Tiada graf pengetahuan lagi';
+
+  @override
+  String get buildingKnowledgeGraphFromMemories => 'Membina graf pengetahuan daripada kenangan...';
+
+  @override
+  String get knowledgeGraphWillBuildAutomatically => 'Graf pengetahuan anda akan dibina secara automatik apabila anda mencipta kenangan baharu.';
+
+  @override
+  String get buildGraphButton => 'Bina Graf';
+
+  @override
+  String get checkOutMyMemoryGraph => 'Lihat graf memori saya!';
 }

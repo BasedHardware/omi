@@ -6506,4 +6506,22 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get signUpSuccess => 'Înregistrare reușită!';
+
+  @override
+  String get loadingKnowledgeGraph => 'Se încarcă graficul cunoștințelor...';
+
+  @override
+  String get noKnowledgeGraphYet => 'Niciun grafic de cunoștințe încă';
+
+  @override
+  String get buildingKnowledgeGraphFromMemories => 'Se construiește graficul cunoștințelor din amintiri...';
+
+  @override
+  String get knowledgeGraphWillBuildAutomatically => 'Graficul cunoștințelor va fi construit automat când creați amintiri noi.';
+
+  @override
+  String get buildGraphButton => 'Construiește grafic';
+
+  @override
+  String get checkOutMyMemoryGraph => 'Vezi graficul meu de memorie!';
 }

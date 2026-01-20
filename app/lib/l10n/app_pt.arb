@@ -2017,5 +2017,11 @@
   "signUpButton": "Cadastrar",
   "enterNameError": "Por favor, insira seu nome",
   "passwordsDoNotMatch": "As senhas não coincidem",
-  "signUpSuccess": "Cadastro realizado com sucesso!"
+  "signUpSuccess": "Cadastro realizado com sucesso!",
+  "loadingKnowledgeGraph": "Carregando grafo de conhecimento...",
+  "noKnowledgeGraphYet": "Ainda não há grafo de conhecimento",
+  "buildingKnowledgeGraphFromMemories": "Construindo grafo de conhecimento a partir de memórias...",
+  "knowledgeGraphWillBuildAutomatically": "Seu grafo de conhecimento será construído automaticamente quando você criar novas memórias.",
+  "buildGraphButton": "Construir grafo",
+  "checkOutMyMemoryGraph": "Confira meu grafo de memória!"
 }

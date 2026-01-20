@@ -1976,5 +1976,11 @@
   "signUpButton": "Registrovat se",
   "enterNameError": "Zadejte prosím své jméno",
   "passwordsDoNotMatch": "Hesla se neshodují",
-  "signUpSuccess": "Registrace úspěšná!"
+  "signUpSuccess": "Registrace úspěšná!",
+  "loadingKnowledgeGraph": "Načítání znalostního grafu...",
+  "noKnowledgeGraphYet": "Zatím žádný znalostní graf",
+  "buildingKnowledgeGraphFromMemories": "Vytváření znalostního grafu ze vzpomínek...",
+  "knowledgeGraphWillBuildAutomatically": "Váš znalostní graf se vytvoří automaticky, jakmile vytvoříte nové vzpomínky.",
+  "buildGraphButton": "Vytvořit graf",
+  "checkOutMyMemoryGraph": "Podívejte se na můj graf paměti!"
 }

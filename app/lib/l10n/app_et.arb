@@ -2016,5 +2016,11 @@
   "signUpButton": "Registreeru",
   "enterNameError": "Palun sisestage oma nimi",
   "passwordsDoNotMatch": "Paroolid ei kattu",
-  "signUpSuccess": "Registreerimine õnnestus!"
+  "signUpSuccess": "Registreerimine õnnestus!",
+  "loadingKnowledgeGraph": "Teadmisgraafiku laadimine...",
+  "noKnowledgeGraphYet": "Teadmisgraafikut pole veel",
+  "buildingKnowledgeGraphFromMemories": "Teadmisgraafiku loomine mälestustest...",
+  "knowledgeGraphWillBuildAutomatically": "Teie teadmisgraafik luuakse automaatselt, kui loote uusi mälestusi.",
+  "buildGraphButton": "Loo graafik",
+  "checkOutMyMemoryGraph": "Vaata minu mälugraafikut!"
 }

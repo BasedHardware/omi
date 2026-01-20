@@ -6480,4 +6480,22 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get signUpSuccess => 'Registrering lyckades!';
+
+  @override
+  String get loadingKnowledgeGraph => 'Laddar kunskapsgraf...';
+
+  @override
+  String get noKnowledgeGraphYet => 'Ingen kunskapsgraf ännu';
+
+  @override
+  String get buildingKnowledgeGraphFromMemories => 'Bygger kunskapsgraf från minnen...';
+
+  @override
+  String get knowledgeGraphWillBuildAutomatically => 'Din kunskapsgraf kommer att byggas automatiskt när du skapar nya minnen.';
+
+  @override
+  String get buildGraphButton => 'Bygg graf';
+
+  @override
+  String get checkOutMyMemoryGraph => 'Kolla in min minnesgraf!';
 }

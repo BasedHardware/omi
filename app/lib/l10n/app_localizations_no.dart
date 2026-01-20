@@ -6474,4 +6474,22 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get signUpSuccess => 'Registrering vellykket!';
+
+  @override
+  String get loadingKnowledgeGraph => 'Laster kunnskapsgraf...';
+
+  @override
+  String get noKnowledgeGraphYet => 'Ingen kunnskapsgraf ennå';
+
+  @override
+  String get buildingKnowledgeGraphFromMemories => 'Bygger kunnskapsgraf fra minner...';
+
+  @override
+  String get knowledgeGraphWillBuildAutomatically => 'Kunnskapsgrafen din vil bli bygget automatisk når du oppretter nye minner.';
+
+  @override
+  String get buildGraphButton => 'Bygg graf';
+
+  @override
+  String get checkOutMyMemoryGraph => 'Se på minnegrafen min!';
 }

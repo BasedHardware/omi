@@ -2016,5 +2016,11 @@
   "signUpButton": "สมัครสมาชิก",
   "enterNameError": "กรุณากรอกชื่อของคุณ",
   "passwordsDoNotMatch": "รหัสผ่านไม่ตรงกัน",
-  "signUpSuccess": "สมัครสมาชิกสำเร็จ!"
+  "signUpSuccess": "สมัครสมาชิกสำเร็จ!",
+  "loadingKnowledgeGraph": "กำลังโหลดกราฟความรู้...",
+  "noKnowledgeGraphYet": "ยังไม่มีกราฟความรู้",
+  "buildingKnowledgeGraphFromMemories": "กำลังสร้างกราฟความรู้จากความทรงจำ...",
+  "knowledgeGraphWillBuildAutomatically": "กราฟความรู้ของคุณจะถูกสร้างโดยอัตโนมัติเมื่อคุณสร้างความทรงจำใหม่",
+  "buildGraphButton": "สร้างกราฟ",
+  "checkOutMyMemoryGraph": "ดูกราฟความจำของฉัน!"
 }

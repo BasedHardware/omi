@@ -6454,4 +6454,22 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get signUpSuccess => 'साइन अप सफल!';
+
+  @override
+  String get loadingKnowledgeGraph => 'ज्ञान ग्राफ़ लोड हो रहा है...';
+
+  @override
+  String get noKnowledgeGraphYet => 'अभी तक कोई ज्ञान ग्राफ़ नहीं';
+
+  @override
+  String get buildingKnowledgeGraphFromMemories => 'यादों से ज्ञान ग्राफ़ बनाया जा रहा है...';
+
+  @override
+  String get knowledgeGraphWillBuildAutomatically => 'जब आप नई यादें बनाएंगे तो आपका ज्ञान ग्राफ़ स्वचालित रूप से बनेगा।';
+
+  @override
+  String get buildGraphButton => 'ग्राफ़ बनाएं';
+
+  @override
+  String get checkOutMyMemoryGraph => 'मेरा मेमोरी ग्राफ़ देखें!';
 }

@@ -2016,5 +2016,11 @@
   "signUpButton": "Reģistrēties",
   "enterNameError": "Lūdzu, ievadiet savu vārdu",
   "passwordsDoNotMatch": "Paroles nesakrīt",
-  "signUpSuccess": "Reģistrācija veiksmīga!"
+  "signUpSuccess": "Reģistrācija veiksmīga!",
+  "loadingKnowledgeGraph": "Ielādē zināšanu grafu...",
+  "noKnowledgeGraphYet": "Vēl nav zināšanu grafa",
+  "buildingKnowledgeGraphFromMemories": "Veido zināšanu grafu no atmiņām...",
+  "knowledgeGraphWillBuildAutomatically": "Jūsu zināšanu grafs tiks izveidots automātiski, kad veidosiet jaunas atmiņas.",
+  "buildGraphButton": "Izveidot grafu",
+  "checkOutMyMemoryGraph": "Apskatiet manu atmiņas grafu!"
 }

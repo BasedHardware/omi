@@ -2016,5 +2016,11 @@
   "signUpButton": "Rekisteröidy",
   "enterNameError": "Anna nimesi",
   "passwordsDoNotMatch": "Salasanat eivät täsmää",
-  "signUpSuccess": "Rekisteröityminen onnistui!"
+  "signUpSuccess": "Rekisteröityminen onnistui!",
+  "loadingKnowledgeGraph": "Ladataan tietograafia...",
+  "noKnowledgeGraphYet": "Ei vielä tietograafia",
+  "buildingKnowledgeGraphFromMemories": "Rakennetaan tietograafia muistoista...",
+  "knowledgeGraphWillBuildAutomatically": "Tietograafisi rakennetaan automaattisesti, kun luot uusia muistoja.",
+  "buildGraphButton": "Rakenna graafi",
+  "checkOutMyMemoryGraph": "Katso muistigraafikani!"
 }

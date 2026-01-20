@@ -6507,4 +6507,22 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get signUpSuccess => 'Sikeres regisztráció!';
+
+  @override
+  String get loadingKnowledgeGraph => 'Tudásgráf betöltése...';
+
+  @override
+  String get noKnowledgeGraphYet => 'Még nincs tudásgráf';
+
+  @override
+  String get buildingKnowledgeGraphFromMemories => 'Tudásgráf építése az emlékekből...';
+
+  @override
+  String get knowledgeGraphWillBuildAutomatically => 'A tudásgráfja automatikusan felépül, amikor új emlékeket hoz létre.';
+
+  @override
+  String get buildGraphButton => 'Gráf építése';
+
+  @override
+  String get checkOutMyMemoryGraph => 'Nézd meg a memória gráfomat!';
 }

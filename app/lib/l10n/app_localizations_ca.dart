@@ -6514,4 +6514,22 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get signUpSuccess => 'Registre correcte!';
+
+  @override
+  String get loadingKnowledgeGraph => 'Carregant el graf de coneixement...';
+
+  @override
+  String get noKnowledgeGraphYet => 'Encara no hi ha graf de coneixement';
+
+  @override
+  String get buildingKnowledgeGraphFromMemories => 'Construint el graf de coneixement a partir de records...';
+
+  @override
+  String get knowledgeGraphWillBuildAutomatically => 'El graf de coneixement es construirà automàticament quan creïs nous records.';
+
+  @override
+  String get buildGraphButton => 'Construir graf';
+
+  @override
+  String get checkOutMyMemoryGraph => 'Mira el meu graf de memòria!';
 }

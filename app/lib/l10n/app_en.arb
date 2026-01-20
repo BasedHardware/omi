@@ -7905,5 +7905,29 @@
   "signUpSuccess": "Signup Successful!",
   "@signUpSuccess": {
     "description": "Success message after signing up"
+  },
+  "loadingKnowledgeGraph": "Loading Knowledge Graph...",
+  "@loadingKnowledgeGraph": {
+    "description": "Loading text for knowledge graph"
+  },
+  "noKnowledgeGraphYet": "No knowledge graph yet",
+  "@noKnowledgeGraphYet": {
+    "description": "Title when knowledge graph is empty"
+  },
+  "buildingKnowledgeGraphFromMemories": "Building your knowledge graph from memories...",
+  "@buildingKnowledgeGraphFromMemories": {
+    "description": "Message while building knowledge graph"
+  },
+  "knowledgeGraphWillBuildAutomatically": "Your knowledge graph will be built automatically as you create new memories.",
+  "@knowledgeGraphWillBuildAutomatically": {
+    "description": "Info message about automatic graph building"
+  },
+  "buildGraphButton": "Build Graph",
+  "@buildGraphButton": {
+    "description": "Button to build knowledge graph"
+  },
+  "checkOutMyMemoryGraph": "Check out my memory graph!",
+  "@checkOutMyMemoryGraph": {
+    "description": "Share text for memory graph"
   }
 }

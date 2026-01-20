@@ -2016,5 +2016,11 @@
   "signUpButton": "Kaydol",
   "enterNameError": "Lütfen adınızı girin",
   "passwordsDoNotMatch": "Şifreler eşleşmiyor",
-  "signUpSuccess": "Kayıt başarılı!"
+  "signUpSuccess": "Kayıt başarılı!",
+  "loadingKnowledgeGraph": "Bilgi grafiği yükleniyor...",
+  "noKnowledgeGraphYet": "Henüz bilgi grafiği yok",
+  "buildingKnowledgeGraphFromMemories": "Anılardan bilgi grafiği oluşturuluyor...",
+  "knowledgeGraphWillBuildAutomatically": "Yeni anılar oluşturdukça bilgi grafiğiniz otomatik olarak oluşturulacak.",
+  "buildGraphButton": "Grafik Oluştur",
+  "checkOutMyMemoryGraph": "Hafıza grafiğime göz atın!"
 }

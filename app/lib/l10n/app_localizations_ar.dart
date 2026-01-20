@@ -6429,4 +6429,22 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get signUpSuccess => 'تم التسجيل بنجاح!';
+
+  @override
+  String get loadingKnowledgeGraph => 'جارٍ تحميل رسم المعرفة...';
+
+  @override
+  String get noKnowledgeGraphYet => 'لا يوجد رسم معرفة بعد';
+
+  @override
+  String get buildingKnowledgeGraphFromMemories => 'جارٍ بناء رسم المعرفة من الذكريات...';
+
+  @override
+  String get knowledgeGraphWillBuildAutomatically => 'سيتم بناء رسم المعرفة تلقائياً عند إنشاء ذكريات جديدة.';
+
+  @override
+  String get buildGraphButton => 'بناء الرسم';
+
+  @override
+  String get checkOutMyMemoryGraph => 'شاهد رسم الذاكرة الخاص بي!';
 }

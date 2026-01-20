@@ -6355,4 +6355,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get signUpSuccess => '注册成功！';
+
+  @override
+  String get loadingKnowledgeGraph => '正在加载知识图谱...';
+
+  @override
+  String get noKnowledgeGraphYet => '暂无知识图谱';
+
+  @override
+  String get buildingKnowledgeGraphFromMemories => '正在从记忆构建知识图谱...';
+
+  @override
+  String get knowledgeGraphWillBuildAutomatically => '当您创建新记忆时，知识图谱将自动构建。';
+
+  @override
+  String get buildGraphButton => '构建图谱';
+
+  @override
+  String get checkOutMyMemoryGraph => '看看我的记忆图谱！';
 }

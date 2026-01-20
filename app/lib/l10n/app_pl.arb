@@ -2016,5 +2016,11 @@
   "signUpButton": "Zarejestruj się",
   "enterNameError": "Wprowadź swoje imię",
   "passwordsDoNotMatch": "Hasła nie są zgodne",
-  "signUpSuccess": "Rejestracja pomyślna!"
+  "signUpSuccess": "Rejestracja pomyślna!",
+  "loadingKnowledgeGraph": "Ładowanie grafu wiedzy...",
+  "noKnowledgeGraphYet": "Brak grafu wiedzy",
+  "buildingKnowledgeGraphFromMemories": "Tworzenie grafu wiedzy ze wspomnień...",
+  "knowledgeGraphWillBuildAutomatically": "Graf wiedzy zostanie utworzony automatycznie podczas tworzenia nowych wspomnień.",
+  "buildGraphButton": "Utwórz graf",
+  "checkOutMyMemoryGraph": "Zobacz mój graf pamięci!"
 }

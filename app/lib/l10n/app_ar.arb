@@ -1997,5 +1997,11 @@
   "signUpButton": "إنشاء حساب",
   "enterNameError": "يرجى إدخال اسمك",
   "passwordsDoNotMatch": "كلمات المرور غير متطابقة",
-  "signUpSuccess": "تم التسجيل بنجاح!"
+  "signUpSuccess": "تم التسجيل بنجاح!",
+  "loadingKnowledgeGraph": "جارٍ تحميل رسم المعرفة...",
+  "noKnowledgeGraphYet": "لا يوجد رسم معرفة بعد",
+  "buildingKnowledgeGraphFromMemories": "جارٍ بناء رسم المعرفة من الذكريات...",
+  "knowledgeGraphWillBuildAutomatically": "سيتم بناء رسم المعرفة تلقائياً عند إنشاء ذكريات جديدة.",
+  "buildGraphButton": "بناء الرسم",
+  "checkOutMyMemoryGraph": "شاهد رسم الذاكرة الخاص بي!"
 }

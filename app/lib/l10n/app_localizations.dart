@@ -12086,6 +12086,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Signup Successful!'**
   String get signUpSuccess;
+
+  /// Loading text for knowledge graph
+  ///
+  /// In en, this message translates to:
+  /// **'Loading Knowledge Graph...'**
+  String get loadingKnowledgeGraph;
+
+  /// Title when knowledge graph is empty
+  ///
+  /// In en, this message translates to:
+  /// **'No knowledge graph yet'**
+  String get noKnowledgeGraphYet;
+
+  /// Message while building knowledge graph
+  ///
+  /// In en, this message translates to:
+  /// **'Building your knowledge graph from memories...'**
+  String get buildingKnowledgeGraphFromMemories;
+
+  /// Info message about automatic graph building
+  ///
+  /// In en, this message translates to:
+  /// **'Your knowledge graph will be built automatically as you create new memories.'**
+  String get knowledgeGraphWillBuildAutomatically;
+
+  /// Button to build knowledge graph
+  ///
+  /// In en, this message translates to:
+  /// **'Build Graph'**
+  String get buildGraphButton;
+
+  /// Share text for memory graph
+  ///
+  /// In en, this message translates to:
+  /// **'Check out my memory graph!'**
+  String get checkOutMyMemoryGraph;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

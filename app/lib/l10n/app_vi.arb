@@ -2016,5 +2016,11 @@
   "signUpButton": "Đăng ký",
   "enterNameError": "Vui lòng nhập tên của bạn",
   "passwordsDoNotMatch": "Mật khẩu không khớp",
-  "signUpSuccess": "Đăng ký thành công!"
+  "signUpSuccess": "Đăng ký thành công!",
+  "loadingKnowledgeGraph": "Đang tải Biểu đồ Tri thức...",
+  "noKnowledgeGraphYet": "Chưa có biểu đồ tri thức",
+  "buildingKnowledgeGraphFromMemories": "Đang xây dựng biểu đồ tri thức từ ký ức...",
+  "knowledgeGraphWillBuildAutomatically": "Biểu đồ tri thức của bạn sẽ được xây dựng tự động khi bạn tạo ký ức mới.",
+  "buildGraphButton": "Xây dựng biểu đồ",
+  "checkOutMyMemoryGraph": "Xem biểu đồ ký ức của tôi!"
 }

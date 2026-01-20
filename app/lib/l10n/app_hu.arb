@@ -2016,5 +2016,11 @@
   "signUpButton": "Regisztráció",
   "enterNameError": "Kérjük, adja meg nevét",
   "passwordsDoNotMatch": "A jelszavak nem egyeznek",
-  "signUpSuccess": "Sikeres regisztráció!"
+  "signUpSuccess": "Sikeres regisztráció!",
+  "loadingKnowledgeGraph": "Tudásgráf betöltése...",
+  "noKnowledgeGraphYet": "Még nincs tudásgráf",
+  "buildingKnowledgeGraphFromMemories": "Tudásgráf építése az emlékekből...",
+  "knowledgeGraphWillBuildAutomatically": "A tudásgráfja automatikusan felépül, amikor új emlékeket hoz létre.",
+  "buildGraphButton": "Gráf építése",
+  "checkOutMyMemoryGraph": "Nézd meg a memória gráfomat!"
 }

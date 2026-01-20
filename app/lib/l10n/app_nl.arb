@@ -2016,5 +2016,11 @@
   "signUpButton": "Registreren",
   "enterNameError": "Voer uw naam in",
   "passwordsDoNotMatch": "Wachtwoorden komen niet overeen",
-  "signUpSuccess": "Registratie gelukt!"
+  "signUpSuccess": "Registratie gelukt!",
+  "loadingKnowledgeGraph": "Kennisgrafiek laden...",
+  "noKnowledgeGraphYet": "Nog geen kennisgrafiek",
+  "buildingKnowledgeGraphFromMemories": "Kennisgrafiek opbouwen vanuit herinneringen...",
+  "knowledgeGraphWillBuildAutomatically": "Uw kennisgrafiek wordt automatisch opgebouwd wanneer u nieuwe herinneringen maakt.",
+  "buildGraphButton": "Grafiek bouwen",
+  "checkOutMyMemoryGraph": "Bekijk mijn geheugengrafiek!"
 }

@@ -1974,5 +1974,11 @@
   "signUpButton": "Tilmeld dig",
   "enterNameError": "Indtast venligst dit navn",
   "passwordsDoNotMatch": "Adgangskoderne stemmer ikke overens",
-  "signUpSuccess": "Tilmelding gennemført!"
+  "signUpSuccess": "Tilmelding gennemført!",
+  "loadingKnowledgeGraph": "Indlæser vidensgraf...",
+  "noKnowledgeGraphYet": "Ingen vidensgraf endnu",
+  "buildingKnowledgeGraphFromMemories": "Opbygger vidensgraf fra minder...",
+  "knowledgeGraphWillBuildAutomatically": "Din vidensgraf vil blive opbygget automatisk, når du opretter nye minder.",
+  "buildGraphButton": "Opbyg graf",
+  "checkOutMyMemoryGraph": "Se min hukommelsesgraf!"
 }

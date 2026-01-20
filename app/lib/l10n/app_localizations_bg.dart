@@ -6502,4 +6502,22 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get signUpSuccess => 'Регистрацията е успешна!';
+
+  @override
+  String get loadingKnowledgeGraph => 'Зареждане на графа на знанията...';
+
+  @override
+  String get noKnowledgeGraphYet => 'Все още няма граф на знанията';
+
+  @override
+  String get buildingKnowledgeGraphFromMemories => 'Изграждане на графа на знанията от спомени...';
+
+  @override
+  String get knowledgeGraphWillBuildAutomatically => 'Графът на знанията ще се изгради автоматично, когато създавате нови спомени.';
+
+  @override
+  String get buildGraphButton => 'Изграждане на граф';
+
+  @override
+  String get checkOutMyMemoryGraph => 'Вижте моя граф на паметта!';
 }

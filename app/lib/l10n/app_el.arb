@@ -2016,5 +2016,11 @@
   "signUpButton": "Εγγραφή",
   "enterNameError": "Εισάγετε το όνομά σας",
   "passwordsDoNotMatch": "Οι κωδικοί δεν ταιριάζουν",
-  "signUpSuccess": "Επιτυχής εγγραφή!"
+  "signUpSuccess": "Επιτυχής εγγραφή!",
+  "loadingKnowledgeGraph": "Φόρτωση γραφήματος γνώσης...",
+  "noKnowledgeGraphYet": "Δεν υπάρχει ακόμα γράφημα γνώσης",
+  "buildingKnowledgeGraphFromMemories": "Δημιουργία γραφήματος γνώσης από αναμνήσεις...",
+  "knowledgeGraphWillBuildAutomatically": "Το γράφημα γνώσης θα δημιουργηθεί αυτόματα καθώς δημιουργείτε νέες αναμνήσεις.",
+  "buildGraphButton": "Δημιουργία γραφήματος",
+  "checkOutMyMemoryGraph": "Δείτε το γράφημα μνήμης μου!"
 }

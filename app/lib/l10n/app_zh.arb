@@ -2017,5 +2017,11 @@
   "signUpButton": "注册",
   "enterNameError": "请输入您的姓名",
   "passwordsDoNotMatch": "密码不匹配",
-  "signUpSuccess": "注册成功！"
+  "signUpSuccess": "注册成功！",
+  "loadingKnowledgeGraph": "正在加载知识图谱...",
+  "noKnowledgeGraphYet": "暂无知识图谱",
+  "buildingKnowledgeGraphFromMemories": "正在从记忆构建知识图谱...",
+  "knowledgeGraphWillBuildAutomatically": "当您创建新记忆时，知识图谱将自动构建。",
+  "buildGraphButton": "构建图谱",
+  "checkOutMyMemoryGraph": "看看我的记忆图谱！"
 }

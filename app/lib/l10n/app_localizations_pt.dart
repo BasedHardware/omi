@@ -6467,4 +6467,22 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get signUpSuccess => 'Cadastro realizado com sucesso!';
+
+  @override
+  String get loadingKnowledgeGraph => 'Carregando grafo de conhecimento...';
+
+  @override
+  String get noKnowledgeGraphYet => 'Ainda não há grafo de conhecimento';
+
+  @override
+  String get buildingKnowledgeGraphFromMemories => 'Construindo grafo de conhecimento a partir de memórias...';
+
+  @override
+  String get knowledgeGraphWillBuildAutomatically => 'Seu grafo de conhecimento será construído automaticamente quando você criar novas memórias.';
+
+  @override
+  String get buildGraphButton => 'Construir grafo';
+
+  @override
+  String get checkOutMyMemoryGraph => 'Confira meu grafo de memória!';
 }

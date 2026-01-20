@@ -6429,4 +6429,22 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get signUpSuccess => 'Реєстрація успішна!';
+
+  @override
+  String get loadingKnowledgeGraph => 'Завантаження графа знань...';
+
+  @override
+  String get noKnowledgeGraphYet => 'Графа знань ще немає';
+
+  @override
+  String get buildingKnowledgeGraphFromMemories => 'Побудова графа знань зі спогадів...';
+
+  @override
+  String get knowledgeGraphWillBuildAutomatically => 'Ваш граф знань буде побудовано автоматично, коли ви створите нові спогади.';
+
+  @override
+  String get buildGraphButton => 'Побудувати граф';
+
+  @override
+  String get checkOutMyMemoryGraph => 'Подивіться мій граф пам'яті!';
 }

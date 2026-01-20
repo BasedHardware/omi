@@ -6443,4 +6443,22 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get signUpSuccess => 'สมัครสมาชิกสำเร็จ!';
+
+  @override
+  String get loadingKnowledgeGraph => 'กำลังโหลดกราฟความรู้...';
+
+  @override
+  String get noKnowledgeGraphYet => 'ยังไม่มีกราฟความรู้';
+
+  @override
+  String get buildingKnowledgeGraphFromMemories => 'กำลังสร้างกราฟความรู้จากความทรงจำ...';
+
+  @override
+  String get knowledgeGraphWillBuildAutomatically => 'กราฟความรู้ของคุณจะถูกสร้างโดยอัตโนมัติเมื่อคุณสร้างความทรงจำใหม่';
+
+  @override
+  String get buildGraphButton => 'สร้างกราฟ';
+
+  @override
+  String get checkOutMyMemoryGraph => 'ดูกราฟความจำของฉัน!';
 }

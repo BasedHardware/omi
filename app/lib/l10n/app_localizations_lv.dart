@@ -6488,4 +6488,22 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get signUpSuccess => 'Reģistrācija veiksmīga!';
+
+  @override
+  String get loadingKnowledgeGraph => 'Ielādē zināšanu grafu...';
+
+  @override
+  String get noKnowledgeGraphYet => 'Vēl nav zināšanu grafa';
+
+  @override
+  String get buildingKnowledgeGraphFromMemories => 'Veido zināšanu grafu no atmiņām...';
+
+  @override
+  String get knowledgeGraphWillBuildAutomatically => 'Jūsu zināšanu grafs tiks izveidots automātiski, kad veidosiet jaunas atmiņas.';
+
+  @override
+  String get buildGraphButton => 'Izveidot grafu';
+
+  @override
+  String get checkOutMyMemoryGraph => 'Apskatiet manu atmiņas grafu!';
 }

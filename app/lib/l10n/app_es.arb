@@ -2017,5 +2017,11 @@
   "signUpButton": "Registrarse",
   "enterNameError": "Por favor, introduce tu nombre",
   "passwordsDoNotMatch": "Las contraseñas no coinciden",
-  "signUpSuccess": "¡Registro exitoso!"
+  "signUpSuccess": "¡Registro exitoso!",
+  "loadingKnowledgeGraph": "Cargando gráfico de conocimiento...",
+  "noKnowledgeGraphYet": "Aún no hay gráfico de conocimiento",
+  "buildingKnowledgeGraphFromMemories": "Construyendo gráfico de conocimiento a partir de recuerdos...",
+  "knowledgeGraphWillBuildAutomatically": "Tu gráfico de conocimiento se construirá automáticamente cuando crees nuevos recuerdos.",
+  "buildGraphButton": "Construir gráfico",
+  "checkOutMyMemoryGraph": "¡Mira mi gráfico de memoria!"
 }

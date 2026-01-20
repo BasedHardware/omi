@@ -1999,5 +1999,11 @@
   "signUpButton": "Registrar-se",
   "enterNameError": "Introduïu el vostre nom",
   "passwordsDoNotMatch": "Les contrasenyes no coincideixen",
-  "signUpSuccess": "Registre correcte!"
+  "signUpSuccess": "Registre correcte!",
+  "loadingKnowledgeGraph": "Carregant el graf de coneixement...",
+  "noKnowledgeGraphYet": "Encara no hi ha graf de coneixement",
+  "buildingKnowledgeGraphFromMemories": "Construint el graf de coneixement a partir de records...",
+  "knowledgeGraphWillBuildAutomatically": "El graf de coneixement es construirà automàticament quan creïs nous records.",
+  "buildGraphButton": "Construir graf",
+  "checkOutMyMemoryGraph": "Mira el meu graf de memòria!"
 }

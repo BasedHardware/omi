@@ -1999,5 +1999,11 @@
   "signUpButton": "Регистрация",
   "enterNameError": "Моля, въведете името си",
   "passwordsDoNotMatch": "Паролите не съвпадат",
-  "signUpSuccess": "Регистрацията е успешна!"
+  "signUpSuccess": "Регистрацията е успешна!",
+  "loadingKnowledgeGraph": "Зареждане на графа на знанията...",
+  "noKnowledgeGraphYet": "Все още няма граф на знанията",
+  "buildingKnowledgeGraphFromMemories": "Изграждане на графа на знанията от спомени...",
+  "knowledgeGraphWillBuildAutomatically": "Графът на знанията ще се изгради автоматично, когато създавате нови спомени.",
+  "buildGraphButton": "Изграждане на граф",
+  "checkOutMyMemoryGraph": "Вижте моя граф на паметта!"
 }

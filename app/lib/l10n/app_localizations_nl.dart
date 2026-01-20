@@ -6495,4 +6495,22 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get signUpSuccess => 'Registratie gelukt!';
+
+  @override
+  String get loadingKnowledgeGraph => 'Kennisgrafiek laden...';
+
+  @override
+  String get noKnowledgeGraphYet => 'Nog geen kennisgrafiek';
+
+  @override
+  String get buildingKnowledgeGraphFromMemories => 'Kennisgrafiek opbouwen vanuit herinneringen...';
+
+  @override
+  String get knowledgeGraphWillBuildAutomatically => 'Uw kennisgrafiek wordt automatisch opgebouwd wanneer u nieuwe herinneringen maakt.';
+
+  @override
+  String get buildGraphButton => 'Grafiek bouwen';
+
+  @override
+  String get checkOutMyMemoryGraph => 'Bekijk mijn geheugengrafiek!';
 }

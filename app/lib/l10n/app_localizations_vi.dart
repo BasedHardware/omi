@@ -6485,4 +6485,22 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get signUpSuccess => 'Đăng ký thành công!';
+
+  @override
+  String get loadingKnowledgeGraph => 'Đang tải Biểu đồ Tri thức...';
+
+  @override
+  String get noKnowledgeGraphYet => 'Chưa có biểu đồ tri thức';
+
+  @override
+  String get buildingKnowledgeGraphFromMemories => 'Đang xây dựng biểu đồ tri thức từ ký ức...';
+
+  @override
+  String get knowledgeGraphWillBuildAutomatically => 'Biểu đồ tri thức của bạn sẽ được xây dựng tự động khi bạn tạo ký ức mới.';
+
+  @override
+  String get buildGraphButton => 'Xây dựng biểu đồ';
+
+  @override
+  String get checkOutMyMemoryGraph => 'Xem biểu đồ ký ức của tôi!';
 }

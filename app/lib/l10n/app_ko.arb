@@ -2016,5 +2016,11 @@
   "signUpButton": "가입하기",
   "enterNameError": "이름을 입력하세요",
   "passwordsDoNotMatch": "비밀번호가 일치하지 않습니다",
-  "signUpSuccess": "가입 성공!"
+  "signUpSuccess": "가입 성공!",
+  "loadingKnowledgeGraph": "지식 그래프 로딩 중...",
+  "noKnowledgeGraphYet": "아직 지식 그래프가 없습니다",
+  "buildingKnowledgeGraphFromMemories": "기억에서 지식 그래프를 구축 중...",
+  "knowledgeGraphWillBuildAutomatically": "새로운 기억을 만들면 지식 그래프가 자동으로 구축됩니다.",
+  "buildGraphButton": "그래프 구축",
+  "checkOutMyMemoryGraph": "내 메모리 그래프를 확인하세요!"
 }
