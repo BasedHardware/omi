@@ -7344,4 +7344,72 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get myGoal => 'Tavoitteeni';
+
+  @override
+  String get appNotAvailable => 'Hups! Etsimääsi sovellusta ei näytä olevan saatavilla.';
+
+  @override
+  String get failedToConnectTodoist => 'Yhteyden muodostaminen Todoistiin epäonnistui';
+
+  @override
+  String get failedToConnectAsana => 'Yhteyden muodostaminen Asanaan epäonnistui';
+
+  @override
+  String get failedToConnectGoogleTasks => 'Yhteyden muodostaminen Google Tasksiin epäonnistui';
+
+  @override
+  String get failedToConnectClickUp => 'Yhteyden muodostaminen ClickUpiin epäonnistui';
+
+  @override
+  String failedToConnectServiceWithError(String serviceName, String error) {
+    return 'Yhteyden muodostaminen palveluun $serviceName epäonnistui: $error';
+  }
+
+  @override
+  String get successfullyConnectedTodoist => 'Yhdistetty onnistuneesti Todoistiin!';
+
+  @override
+  String get failedToConnectTodoistRetry => 'Yhteyden muodostaminen Todoistiin epäonnistui. Yritä uudelleen.';
+
+  @override
+  String get successfullyConnectedAsana => 'Yhdistetty onnistuneesti Asanaan!';
+
+  @override
+  String get failedToConnectAsanaRetry => 'Yhteyden muodostaminen Asanaan epäonnistui. Yritä uudelleen.';
+
+  @override
+  String get successfullyConnectedGoogleTasks => 'Yhdistetty onnistuneesti Google Tasksiin!';
+
+  @override
+  String get failedToConnectGoogleTasksRetry => 'Yhteyden muodostaminen Google Tasksiin epäonnistui. Yritä uudelleen.';
+
+  @override
+  String get successfullyConnectedClickUp => 'Yhdistetty onnistuneesti ClickUpiin!';
+
+  @override
+  String get failedToConnectClickUpRetry => 'Yhteyden muodostaminen ClickUpiin epäonnistui. Yritä uudelleen.';
+
+  @override
+  String get successfullyConnectedNotion => 'Yhdistetty onnistuneesti Notioniin!';
+
+  @override
+  String get failedToRefreshNotionStatus => 'Notion-yhteyden tilan päivitys epäonnistui.';
+
+  @override
+  String get successfullyConnectedGoogle => 'Yhdistetty onnistuneesti Googleen!';
+
+  @override
+  String get failedToRefreshGoogleStatus => 'Google-yhteyden tilan päivitys epäonnistui.';
+
+  @override
+  String get successfullyConnectedWhoop => 'Yhdistetty onnistuneesti Whoopiin!';
+
+  @override
+  String get failedToRefreshWhoopStatus => 'Whoop-yhteyden tilan päivitys epäonnistui.';
+
+  @override
+  String get successfullyConnectedGitHub => 'Yhdistetty onnistuneesti GitHubiin!';
+
+  @override
+  String get failedToRefreshGitHubStatus => 'GitHub-yhteyden tilan päivitys epäonnistui.';
 }

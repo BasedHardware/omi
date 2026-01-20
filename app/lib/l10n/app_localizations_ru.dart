@@ -7362,4 +7362,72 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get myGoal => 'Моя цель';
+
+  @override
+  String get appNotAvailable => 'Упс! Похоже, что приложение, которое вы ищете, недоступно.';
+
+  @override
+  String get failedToConnectTodoist => 'Не удалось подключиться к Todoist';
+
+  @override
+  String get failedToConnectAsana => 'Не удалось подключиться к Asana';
+
+  @override
+  String get failedToConnectGoogleTasks => 'Не удалось подключиться к Google Tasks';
+
+  @override
+  String get failedToConnectClickUp => 'Не удалось подключиться к ClickUp';
+
+  @override
+  String failedToConnectServiceWithError(String serviceName, String error) {
+    return 'Не удалось подключиться к $serviceName: $error';
+  }
+
+  @override
+  String get successfullyConnectedTodoist => 'Успешно подключено к Todoist!';
+
+  @override
+  String get failedToConnectTodoistRetry => 'Не удалось подключиться к Todoist. Пожалуйста, попробуйте снова.';
+
+  @override
+  String get successfullyConnectedAsana => 'Успешно подключено к Asana!';
+
+  @override
+  String get failedToConnectAsanaRetry => 'Не удалось подключиться к Asana. Пожалуйста, попробуйте снова.';
+
+  @override
+  String get successfullyConnectedGoogleTasks => 'Успешно подключено к Google Tasks!';
+
+  @override
+  String get failedToConnectGoogleTasksRetry => 'Не удалось подключиться к Google Tasks. Пожалуйста, попробуйте снова.';
+
+  @override
+  String get successfullyConnectedClickUp => 'Успешно подключено к ClickUp!';
+
+  @override
+  String get failedToConnectClickUpRetry => 'Не удалось подключиться к ClickUp. Пожалуйста, попробуйте снова.';
+
+  @override
+  String get successfullyConnectedNotion => 'Успешно подключено к Notion!';
+
+  @override
+  String get failedToRefreshNotionStatus => 'Не удалось обновить статус подключения Notion.';
+
+  @override
+  String get successfullyConnectedGoogle => 'Успешно подключено к Google!';
+
+  @override
+  String get failedToRefreshGoogleStatus => 'Не удалось обновить статус подключения Google.';
+
+  @override
+  String get successfullyConnectedWhoop => 'Успешно подключено к Whoop!';
+
+  @override
+  String get failedToRefreshWhoopStatus => 'Не удалось обновить статус подключения Whoop.';
+
+  @override
+  String get successfullyConnectedGitHub => 'Успешно подключено к GitHub!';
+
+  @override
+  String get failedToRefreshGitHubStatus => 'Не удалось обновить статус подключения GitHub.';
 }

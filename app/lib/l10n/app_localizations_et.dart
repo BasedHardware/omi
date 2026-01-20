@@ -7345,4 +7345,72 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get myGoal => 'Minu eesmärk';
+
+  @override
+  String get appNotAvailable => 'Oih! Tundub, et otsitav rakendus pole saadaval.';
+
+  @override
+  String get failedToConnectTodoist => 'Todoistiga ühendamine ebaõnnestus';
+
+  @override
+  String get failedToConnectAsana => 'Asanaga ühendamine ebaõnnestus';
+
+  @override
+  String get failedToConnectGoogleTasks => 'Google Tasksiga ühendamine ebaõnnestus';
+
+  @override
+  String get failedToConnectClickUp => 'ClickUpiga ühendamine ebaõnnestus';
+
+  @override
+  String failedToConnectServiceWithError(String serviceName, String error) {
+    return '$serviceName ühendamine ebaõnnestus: $error';
+  }
+
+  @override
+  String get successfullyConnectedTodoist => 'Edukalt ühendatud Todoistiga!';
+
+  @override
+  String get failedToConnectTodoistRetry => 'Todoistiga ühendamine ebaõnnestus. Palun proovi uuesti.';
+
+  @override
+  String get successfullyConnectedAsana => 'Edukalt ühendatud Asanaga!';
+
+  @override
+  String get failedToConnectAsanaRetry => 'Asanaga ühendamine ebaõnnestus. Palun proovi uuesti.';
+
+  @override
+  String get successfullyConnectedGoogleTasks => 'Edukalt ühendatud Google Tasksiga!';
+
+  @override
+  String get failedToConnectGoogleTasksRetry => 'Google Tasksiga ühendamine ebaõnnestus. Palun proovi uuesti.';
+
+  @override
+  String get successfullyConnectedClickUp => 'Edukalt ühendatud ClickUpiga!';
+
+  @override
+  String get failedToConnectClickUpRetry => 'ClickUpiga ühendamine ebaõnnestus. Palun proovi uuesti.';
+
+  @override
+  String get successfullyConnectedNotion => 'Edukalt ühendatud Notioniga!';
+
+  @override
+  String get failedToRefreshNotionStatus => 'Notioni ühenduse oleku värskendamine ebaõnnestus.';
+
+  @override
+  String get successfullyConnectedGoogle => 'Edukalt ühendatud Google\'iga!';
+
+  @override
+  String get failedToRefreshGoogleStatus => 'Google\'i ühenduse oleku värskendamine ebaõnnestus.';
+
+  @override
+  String get successfullyConnectedWhoop => 'Edukalt ühendatud Whoopiga!';
+
+  @override
+  String get failedToRefreshWhoopStatus => 'Whoopi ühenduse oleku värskendamine ebaõnnestus.';
+
+  @override
+  String get successfullyConnectedGitHub => 'Edukalt ühendatud GitHubiga!';
+
+  @override
+  String get failedToRefreshGitHubStatus => 'GitHubi ühenduse oleku värskendamine ebaõnnestus.';
 }

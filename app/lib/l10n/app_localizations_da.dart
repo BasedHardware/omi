@@ -7351,4 +7351,72 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get myGoal => 'Mit mål';
+
+  @override
+  String get appNotAvailable => 'Ups! Det ser ud til, at den app, du leder efter, ikke er tilgængelig.';
+
+  @override
+  String get failedToConnectTodoist => 'Kunne ikke oprette forbindelse til Todoist';
+
+  @override
+  String get failedToConnectAsana => 'Kunne ikke oprette forbindelse til Asana';
+
+  @override
+  String get failedToConnectGoogleTasks => 'Kunne ikke oprette forbindelse til Google Tasks';
+
+  @override
+  String get failedToConnectClickUp => 'Kunne ikke oprette forbindelse til ClickUp';
+
+  @override
+  String failedToConnectServiceWithError(String serviceName, String error) {
+    return 'Kunne ikke oprette forbindelse til $serviceName: $error';
+  }
+
+  @override
+  String get successfullyConnectedTodoist => 'Forbundet til Todoist!';
+
+  @override
+  String get failedToConnectTodoistRetry => 'Kunne ikke oprette forbindelse til Todoist. Prøv venligst igen.';
+
+  @override
+  String get successfullyConnectedAsana => 'Forbundet til Asana!';
+
+  @override
+  String get failedToConnectAsanaRetry => 'Kunne ikke oprette forbindelse til Asana. Prøv venligst igen.';
+
+  @override
+  String get successfullyConnectedGoogleTasks => 'Forbundet til Google Tasks!';
+
+  @override
+  String get failedToConnectGoogleTasksRetry => 'Kunne ikke oprette forbindelse til Google Tasks. Prøv venligst igen.';
+
+  @override
+  String get successfullyConnectedClickUp => 'Forbundet til ClickUp!';
+
+  @override
+  String get failedToConnectClickUpRetry => 'Kunne ikke oprette forbindelse til ClickUp. Prøv venligst igen.';
+
+  @override
+  String get successfullyConnectedNotion => 'Forbundet til Notion!';
+
+  @override
+  String get failedToRefreshNotionStatus => 'Kunne ikke opdatere Notion-forbindelsesstatus.';
+
+  @override
+  String get successfullyConnectedGoogle => 'Forbundet til Google!';
+
+  @override
+  String get failedToRefreshGoogleStatus => 'Kunne ikke opdatere Google-forbindelsesstatus.';
+
+  @override
+  String get successfullyConnectedWhoop => 'Forbundet til Whoop!';
+
+  @override
+  String get failedToRefreshWhoopStatus => 'Kunne ikke opdatere Whoop-forbindelsesstatus.';
+
+  @override
+  String get successfullyConnectedGitHub => 'Forbundet til GitHub!';
+
+  @override
+  String get failedToRefreshGitHubStatus => 'Kunne ikke opdatere GitHub-forbindelsesstatus.';
 }

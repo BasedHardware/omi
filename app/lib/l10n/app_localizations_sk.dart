@@ -7345,4 +7345,72 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get myGoal => 'Môj cieľ';
+
+  @override
+  String get appNotAvailable => 'Ups! Zdá sa, že aplikácia, ktorú hľadáte, nie je k dispozícii.';
+
+  @override
+  String get failedToConnectTodoist => 'Pripojenie k Todoist zlyhalo';
+
+  @override
+  String get failedToConnectAsana => 'Pripojenie k Asana zlyhalo';
+
+  @override
+  String get failedToConnectGoogleTasks => 'Pripojenie k Google Tasks zlyhalo';
+
+  @override
+  String get failedToConnectClickUp => 'Pripojenie k ClickUp zlyhalo';
+
+  @override
+  String failedToConnectServiceWithError(String serviceName, String error) {
+    return 'Pripojenie k $serviceName zlyhalo: $error';
+  }
+
+  @override
+  String get successfullyConnectedTodoist => 'Úspešne pripojené k Todoist!';
+
+  @override
+  String get failedToConnectTodoistRetry => 'Pripojenie k Todoist zlyhalo. Skúste to znova.';
+
+  @override
+  String get successfullyConnectedAsana => 'Úspešne pripojené k Asana!';
+
+  @override
+  String get failedToConnectAsanaRetry => 'Pripojenie k Asana zlyhalo. Skúste to znova.';
+
+  @override
+  String get successfullyConnectedGoogleTasks => 'Úspešne pripojené k Google Tasks!';
+
+  @override
+  String get failedToConnectGoogleTasksRetry => 'Pripojenie k Google Tasks zlyhalo. Skúste to znova.';
+
+  @override
+  String get successfullyConnectedClickUp => 'Úspešne pripojené k ClickUp!';
+
+  @override
+  String get failedToConnectClickUpRetry => 'Pripojenie k ClickUp zlyhalo. Skúste to znova.';
+
+  @override
+  String get successfullyConnectedNotion => 'Úspešne pripojené k Notion!';
+
+  @override
+  String get failedToRefreshNotionStatus => 'Aktualizácia stavu pripojenia Notion zlyhala.';
+
+  @override
+  String get successfullyConnectedGoogle => 'Úspešne pripojené k Google!';
+
+  @override
+  String get failedToRefreshGoogleStatus => 'Aktualizácia stavu pripojenia Google zlyhala.';
+
+  @override
+  String get successfullyConnectedWhoop => 'Úspešne pripojené k Whoop!';
+
+  @override
+  String get failedToRefreshWhoopStatus => 'Aktualizácia stavu pripojenia Whoop zlyhala.';
+
+  @override
+  String get successfullyConnectedGitHub => 'Úspešne pripojené k GitHub!';
+
+  @override
+  String get failedToRefreshGitHubStatus => 'Aktualizácia stavu pripojenia GitHub zlyhala.';
 }

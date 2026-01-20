@@ -7373,4 +7373,72 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get myGoal => 'Моята цел';
+
+  @override
+  String get appNotAvailable => 'Опа! Изглежда, че приложението, което търсите, не е налично.';
+
+  @override
+  String get failedToConnectTodoist => 'Неуспешно свързване с Todoist';
+
+  @override
+  String get failedToConnectAsana => 'Неуспешно свързване с Asana';
+
+  @override
+  String get failedToConnectGoogleTasks => 'Неуспешно свързване с Google Tasks';
+
+  @override
+  String get failedToConnectClickUp => 'Неуспешно свързване с ClickUp';
+
+  @override
+  String failedToConnectServiceWithError(String serviceName, String error) {
+    return 'Неуспешно свързване с $serviceName: $error';
+  }
+
+  @override
+  String get successfullyConnectedTodoist => 'Успешно свързване с Todoist!';
+
+  @override
+  String get failedToConnectTodoistRetry => 'Неуспешно свързване с Todoist. Моля, опитайте отново.';
+
+  @override
+  String get successfullyConnectedAsana => 'Успешно свързване с Asana!';
+
+  @override
+  String get failedToConnectAsanaRetry => 'Неуспешно свързване с Asana. Моля, опитайте отново.';
+
+  @override
+  String get successfullyConnectedGoogleTasks => 'Успешно свързване с Google Tasks!';
+
+  @override
+  String get failedToConnectGoogleTasksRetry => 'Неуспешно свързване с Google Tasks. Моля, опитайте отново.';
+
+  @override
+  String get successfullyConnectedClickUp => 'Успешно свързване с ClickUp!';
+
+  @override
+  String get failedToConnectClickUpRetry => 'Неуспешно свързване с ClickUp. Моля, опитайте отново.';
+
+  @override
+  String get successfullyConnectedNotion => 'Успешно свързване с Notion!';
+
+  @override
+  String get failedToRefreshNotionStatus => 'Неуспешно обновяване на състоянието на връзката с Notion.';
+
+  @override
+  String get successfullyConnectedGoogle => 'Успешно свързване с Google!';
+
+  @override
+  String get failedToRefreshGoogleStatus => 'Неуспешно обновяване на състоянието на връзката с Google.';
+
+  @override
+  String get successfullyConnectedWhoop => 'Успешно свързване с Whoop!';
+
+  @override
+  String get failedToRefreshWhoopStatus => 'Неуспешно обновяване на състоянието на връзката с Whoop.';
+
+  @override
+  String get successfullyConnectedGitHub => 'Успешно свързване с GitHub!';
+
+  @override
+  String get failedToRefreshGitHubStatus => 'Неуспешно обновяване на състоянието на връзката с GitHub.';
 }

@@ -7355,4 +7355,72 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get myGoal => 'Hedefim';
+
+  @override
+  String get appNotAvailable => 'Hay aksi! Aradığınız uygulama mevcut değil görünüyor.';
+
+  @override
+  String get failedToConnectTodoist => 'Todoist\'a bağlanılamadı';
+
+  @override
+  String get failedToConnectAsana => 'Asana\'ya bağlanılamadı';
+
+  @override
+  String get failedToConnectGoogleTasks => 'Google Tasks\'a bağlanılamadı';
+
+  @override
+  String get failedToConnectClickUp => 'ClickUp\'a bağlanılamadı';
+
+  @override
+  String failedToConnectServiceWithError(String serviceName, String error) {
+    return '$serviceName hizmetine bağlanılamadı: $error';
+  }
+
+  @override
+  String get successfullyConnectedTodoist => 'Todoist\'a başarıyla bağlanıldı!';
+
+  @override
+  String get failedToConnectTodoistRetry => 'Todoist\'a bağlanılamadı. Lütfen tekrar deneyin.';
+
+  @override
+  String get successfullyConnectedAsana => 'Asana\'ya başarıyla bağlanıldı!';
+
+  @override
+  String get failedToConnectAsanaRetry => 'Asana\'ya bağlanılamadı. Lütfen tekrar deneyin.';
+
+  @override
+  String get successfullyConnectedGoogleTasks => 'Google Tasks\'a başarıyla bağlanıldı!';
+
+  @override
+  String get failedToConnectGoogleTasksRetry => 'Google Tasks\'a bağlanılamadı. Lütfen tekrar deneyin.';
+
+  @override
+  String get successfullyConnectedClickUp => 'ClickUp\'a başarıyla bağlanıldı!';
+
+  @override
+  String get failedToConnectClickUpRetry => 'ClickUp\'a bağlanılamadı. Lütfen tekrar deneyin.';
+
+  @override
+  String get successfullyConnectedNotion => 'Notion\'a başarıyla bağlanıldı!';
+
+  @override
+  String get failedToRefreshNotionStatus => 'Notion bağlantı durumu yenilenemedi.';
+
+  @override
+  String get successfullyConnectedGoogle => 'Google\'a başarıyla bağlanıldı!';
+
+  @override
+  String get failedToRefreshGoogleStatus => 'Google bağlantı durumu yenilenemedi.';
+
+  @override
+  String get successfullyConnectedWhoop => 'Whoop\'a başarıyla bağlanıldı!';
+
+  @override
+  String get failedToRefreshWhoopStatus => 'Whoop bağlantı durumu yenilenemedi.';
+
+  @override
+  String get successfullyConnectedGitHub => 'GitHub\'a başarıyla bağlanıldı!';
+
+  @override
+  String get failedToRefreshGitHubStatus => 'GitHub bağlantı durumu yenilenemedi.';
 }

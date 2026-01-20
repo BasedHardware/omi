@@ -13796,6 +13796,138 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'My goal'**
   String get myGoal;
+
+  /// Error message shown when a deep-linked app cannot be found
+  ///
+  /// In en, this message translates to:
+  /// **'Oops! Looks like the app you are looking for is not available.'**
+  String get appNotAvailable;
+
+  /// Error message when Todoist OAuth fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to connect to Todoist'**
+  String get failedToConnectTodoist;
+
+  /// Error message when Asana OAuth fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to connect to Asana'**
+  String get failedToConnectAsana;
+
+  /// Error message when Google Tasks OAuth fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to connect to Google Tasks'**
+  String get failedToConnectGoogleTasks;
+
+  /// Error message when ClickUp OAuth fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to connect to ClickUp'**
+  String get failedToConnectClickUp;
+
+  /// Error message when OAuth fails with specific error details
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to connect to {serviceName}: {error}'**
+  String failedToConnectServiceWithError(String serviceName, String error);
+
+  /// Success message when Todoist OAuth completes
+  ///
+  /// In en, this message translates to:
+  /// **'Successfully connected to Todoist!'**
+  String get successfullyConnectedTodoist;
+
+  /// Error message when Todoist authentication fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to connect to Todoist. Please try again.'**
+  String get failedToConnectTodoistRetry;
+
+  /// Success message when Asana OAuth completes
+  ///
+  /// In en, this message translates to:
+  /// **'Successfully connected to Asana!'**
+  String get successfullyConnectedAsana;
+
+  /// Error message when Asana authentication fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to connect to Asana. Please try again.'**
+  String get failedToConnectAsanaRetry;
+
+  /// Success message when Google Tasks OAuth completes
+  ///
+  /// In en, this message translates to:
+  /// **'Successfully connected to Google Tasks!'**
+  String get successfullyConnectedGoogleTasks;
+
+  /// Error message when Google Tasks authentication fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to connect to Google Tasks. Please try again.'**
+  String get failedToConnectGoogleTasksRetry;
+
+  /// Success message when ClickUp OAuth completes
+  ///
+  /// In en, this message translates to:
+  /// **'Successfully connected to ClickUp!'**
+  String get successfullyConnectedClickUp;
+
+  /// Error message when ClickUp authentication fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to connect to ClickUp. Please try again.'**
+  String get failedToConnectClickUpRetry;
+
+  /// Success message when Notion OAuth completes
+  ///
+  /// In en, this message translates to:
+  /// **'Successfully connected to Notion!'**
+  String get successfullyConnectedNotion;
+
+  /// Error message when Notion status refresh fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to refresh Notion connection status.'**
+  String get failedToRefreshNotionStatus;
+
+  /// Success message when Google Calendar OAuth completes
+  ///
+  /// In en, this message translates to:
+  /// **'Successfully connected to Google!'**
+  String get successfullyConnectedGoogle;
+
+  /// Error message when Google status refresh fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to refresh Google connection status.'**
+  String get failedToRefreshGoogleStatus;
+
+  /// Success message when Whoop OAuth completes
+  ///
+  /// In en, this message translates to:
+  /// **'Successfully connected to Whoop!'**
+  String get successfullyConnectedWhoop;
+
+  /// Error message when Whoop status refresh fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to refresh Whoop connection status.'**
+  String get failedToRefreshWhoopStatus;
+
+  /// Success message when GitHub OAuth completes
+  ///
+  /// In en, this message translates to:
+  /// **'Successfully connected to GitHub!'**
+  String get successfullyConnectedGitHub;
+
+  /// Error message when GitHub status refresh fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to refresh GitHub connection status.'**
+  String get failedToRefreshGitHubStatus;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

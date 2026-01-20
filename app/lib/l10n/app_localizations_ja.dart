@@ -7226,4 +7226,72 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get myGoal => '私の目標';
+
+  @override
+  String get appNotAvailable => 'おっと！お探しのアプリは利用できないようです。';
+
+  @override
+  String get failedToConnectTodoist => 'Todoistへの接続に失敗しました';
+
+  @override
+  String get failedToConnectAsana => 'Asanaへの接続に失敗しました';
+
+  @override
+  String get failedToConnectGoogleTasks => 'Google Tasksへの接続に失敗しました';
+
+  @override
+  String get failedToConnectClickUp => 'ClickUpへの接続に失敗しました';
+
+  @override
+  String failedToConnectServiceWithError(String serviceName, String error) {
+    return '$serviceNameへの接続に失敗しました: $error';
+  }
+
+  @override
+  String get successfullyConnectedTodoist => 'Todoistに正常に接続されました！';
+
+  @override
+  String get failedToConnectTodoistRetry => 'Todoistへの接続に失敗しました。もう一度お試しください。';
+
+  @override
+  String get successfullyConnectedAsana => 'Asanaに正常に接続されました！';
+
+  @override
+  String get failedToConnectAsanaRetry => 'Asanaへの接続に失敗しました。もう一度お試しください。';
+
+  @override
+  String get successfullyConnectedGoogleTasks => 'Google Tasksに正常に接続されました！';
+
+  @override
+  String get failedToConnectGoogleTasksRetry => 'Google Tasksへの接続に失敗しました。もう一度お試しください。';
+
+  @override
+  String get successfullyConnectedClickUp => 'ClickUpに正常に接続されました！';
+
+  @override
+  String get failedToConnectClickUpRetry => 'ClickUpへの接続に失敗しました。もう一度お試しください。';
+
+  @override
+  String get successfullyConnectedNotion => 'Notionに正常に接続されました！';
+
+  @override
+  String get failedToRefreshNotionStatus => 'Notionの接続状態の更新に失敗しました。';
+
+  @override
+  String get successfullyConnectedGoogle => 'Googleに正常に接続されました！';
+
+  @override
+  String get failedToRefreshGoogleStatus => 'Googleの接続状態の更新に失敗しました。';
+
+  @override
+  String get successfullyConnectedWhoop => 'Whoopに正常に接続されました！';
+
+  @override
+  String get failedToRefreshWhoopStatus => 'Whoopの接続状態の更新に失敗しました。';
+
+  @override
+  String get successfullyConnectedGitHub => 'GitHubに正常に接続されました！';
+
+  @override
+  String get failedToRefreshGitHubStatus => 'GitHubの接続状態の更新に失敗しました。';
 }

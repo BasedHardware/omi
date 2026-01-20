@@ -7362,4 +7362,72 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get myGoal => 'Tujuan saya';
+
+  @override
+  String get appNotAvailable => 'Ups! Sepertinya aplikasi yang Anda cari tidak tersedia.';
+
+  @override
+  String get failedToConnectTodoist => 'Gagal terhubung ke Todoist';
+
+  @override
+  String get failedToConnectAsana => 'Gagal terhubung ke Asana';
+
+  @override
+  String get failedToConnectGoogleTasks => 'Gagal terhubung ke Google Tasks';
+
+  @override
+  String get failedToConnectClickUp => 'Gagal terhubung ke ClickUp';
+
+  @override
+  String failedToConnectServiceWithError(String serviceName, String error) {
+    return 'Gagal terhubung ke $serviceName: $error';
+  }
+
+  @override
+  String get successfullyConnectedTodoist => 'Berhasil terhubung ke Todoist!';
+
+  @override
+  String get failedToConnectTodoistRetry => 'Gagal terhubung ke Todoist. Silakan coba lagi.';
+
+  @override
+  String get successfullyConnectedAsana => 'Berhasil terhubung ke Asana!';
+
+  @override
+  String get failedToConnectAsanaRetry => 'Gagal terhubung ke Asana. Silakan coba lagi.';
+
+  @override
+  String get successfullyConnectedGoogleTasks => 'Berhasil terhubung ke Google Tasks!';
+
+  @override
+  String get failedToConnectGoogleTasksRetry => 'Gagal terhubung ke Google Tasks. Silakan coba lagi.';
+
+  @override
+  String get successfullyConnectedClickUp => 'Berhasil terhubung ke ClickUp!';
+
+  @override
+  String get failedToConnectClickUpRetry => 'Gagal terhubung ke ClickUp. Silakan coba lagi.';
+
+  @override
+  String get successfullyConnectedNotion => 'Berhasil terhubung ke Notion!';
+
+  @override
+  String get failedToRefreshNotionStatus => 'Gagal memperbarui status koneksi Notion.';
+
+  @override
+  String get successfullyConnectedGoogle => 'Berhasil terhubung ke Google!';
+
+  @override
+  String get failedToRefreshGoogleStatus => 'Gagal memperbarui status koneksi Google.';
+
+  @override
+  String get successfullyConnectedWhoop => 'Berhasil terhubung ke Whoop!';
+
+  @override
+  String get failedToRefreshWhoopStatus => 'Gagal memperbarui status koneksi Whoop.';
+
+  @override
+  String get successfullyConnectedGitHub => 'Berhasil terhubung ke GitHub!';
+
+  @override
+  String get failedToRefreshGitHubStatus => 'Gagal memperbarui status koneksi GitHub.';
 }

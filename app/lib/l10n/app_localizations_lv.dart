@@ -7357,4 +7357,73 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get myGoal => 'Mans mērķis';
+
+  @override
+  String get appNotAvailable => 'Hmm! Izskatās, ka meklētā lietotne nav pieejama.';
+
+  @override
+  String get failedToConnectTodoist => 'Neizdevās izveidot savienojumu ar Todoist';
+
+  @override
+  String get failedToConnectAsana => 'Neizdevās izveidot savienojumu ar Asana';
+
+  @override
+  String get failedToConnectGoogleTasks => 'Neizdevās izveidot savienojumu ar Google Tasks';
+
+  @override
+  String get failedToConnectClickUp => 'Neizdevās izveidot savienojumu ar ClickUp';
+
+  @override
+  String failedToConnectServiceWithError(String serviceName, String error) {
+    return 'Neizdevās izveidot savienojumu ar $serviceName: $error';
+  }
+
+  @override
+  String get successfullyConnectedTodoist => 'Veiksmīgi savienots ar Todoist!';
+
+  @override
+  String get failedToConnectTodoistRetry => 'Neizdevās izveidot savienojumu ar Todoist. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get successfullyConnectedAsana => 'Veiksmīgi savienots ar Asana!';
+
+  @override
+  String get failedToConnectAsanaRetry => 'Neizdevās izveidot savienojumu ar Asana. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get successfullyConnectedGoogleTasks => 'Veiksmīgi savienots ar Google Tasks!';
+
+  @override
+  String get failedToConnectGoogleTasksRetry =>
+      'Neizdevās izveidot savienojumu ar Google Tasks. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get successfullyConnectedClickUp => 'Veiksmīgi savienots ar ClickUp!';
+
+  @override
+  String get failedToConnectClickUpRetry => 'Neizdevās izveidot savienojumu ar ClickUp. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get successfullyConnectedNotion => 'Veiksmīgi savienots ar Notion!';
+
+  @override
+  String get failedToRefreshNotionStatus => 'Neizdevās atjaunināt Notion savienojuma statusu.';
+
+  @override
+  String get successfullyConnectedGoogle => 'Veiksmīgi savienots ar Google!';
+
+  @override
+  String get failedToRefreshGoogleStatus => 'Neizdevās atjaunināt Google savienojuma statusu.';
+
+  @override
+  String get successfullyConnectedWhoop => 'Veiksmīgi savienots ar Whoop!';
+
+  @override
+  String get failedToRefreshWhoopStatus => 'Neizdevās atjaunināt Whoop savienojuma statusu.';
+
+  @override
+  String get successfullyConnectedGitHub => 'Veiksmīgi savienots ar GitHub!';
+
+  @override
+  String get failedToRefreshGitHubStatus => 'Neizdevās atjaunināt GitHub savienojuma statusu.';
 }

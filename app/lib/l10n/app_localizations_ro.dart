@@ -7377,4 +7377,72 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get myGoal => 'Obiectivul meu';
+
+  @override
+  String get appNotAvailable => 'Ups! Se pare că aplicația pe care o cauți nu este disponibilă.';
+
+  @override
+  String get failedToConnectTodoist => 'Conectarea la Todoist a eșuat';
+
+  @override
+  String get failedToConnectAsana => 'Conectarea la Asana a eșuat';
+
+  @override
+  String get failedToConnectGoogleTasks => 'Conectarea la Google Tasks a eșuat';
+
+  @override
+  String get failedToConnectClickUp => 'Conectarea la ClickUp a eșuat';
+
+  @override
+  String failedToConnectServiceWithError(String serviceName, String error) {
+    return 'Conectarea la $serviceName a eșuat: $error';
+  }
+
+  @override
+  String get successfullyConnectedTodoist => 'Conectat cu succes la Todoist!';
+
+  @override
+  String get failedToConnectTodoistRetry => 'Conectarea la Todoist a eșuat. Te rugăm să încerci din nou.';
+
+  @override
+  String get successfullyConnectedAsana => 'Conectat cu succes la Asana!';
+
+  @override
+  String get failedToConnectAsanaRetry => 'Conectarea la Asana a eșuat. Te rugăm să încerci din nou.';
+
+  @override
+  String get successfullyConnectedGoogleTasks => 'Conectat cu succes la Google Tasks!';
+
+  @override
+  String get failedToConnectGoogleTasksRetry => 'Conectarea la Google Tasks a eșuat. Te rugăm să încerci din nou.';
+
+  @override
+  String get successfullyConnectedClickUp => 'Conectat cu succes la ClickUp!';
+
+  @override
+  String get failedToConnectClickUpRetry => 'Conectarea la ClickUp a eșuat. Te rugăm să încerci din nou.';
+
+  @override
+  String get successfullyConnectedNotion => 'Conectat cu succes la Notion!';
+
+  @override
+  String get failedToRefreshNotionStatus => 'Actualizarea stării conexiunii Notion a eșuat.';
+
+  @override
+  String get successfullyConnectedGoogle => 'Conectat cu succes la Google!';
+
+  @override
+  String get failedToRefreshGoogleStatus => 'Actualizarea stării conexiunii Google a eșuat.';
+
+  @override
+  String get successfullyConnectedWhoop => 'Conectat cu succes la Whoop!';
+
+  @override
+  String get failedToRefreshWhoopStatus => 'Actualizarea stării conexiunii Whoop a eșuat.';
+
+  @override
+  String get successfullyConnectedGitHub => 'Conectat cu succes la GitHub!';
+
+  @override
+  String get failedToRefreshGitHubStatus => 'Actualizarea stării conexiunii GitHub a eșuat.';
 }

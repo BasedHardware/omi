@@ -7385,4 +7385,73 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get myGoal => 'El meu objectiu';
+
+  @override
+  String get appNotAvailable => 'Vaja! Sembla que l\'aplicació que busques no està disponible.';
+
+  @override
+  String get failedToConnectTodoist => 'No s\'ha pogut connectar a Todoist';
+
+  @override
+  String get failedToConnectAsana => 'No s\'ha pogut connectar a Asana';
+
+  @override
+  String get failedToConnectGoogleTasks => 'No s\'ha pogut connectar a Google Tasks';
+
+  @override
+  String get failedToConnectClickUp => 'No s\'ha pogut connectar a ClickUp';
+
+  @override
+  String failedToConnectServiceWithError(String serviceName, String error) {
+    return 'No s\'ha pogut connectar a $serviceName: $error';
+  }
+
+  @override
+  String get successfullyConnectedTodoist => 'Connectat correctament a Todoist!';
+
+  @override
+  String get failedToConnectTodoistRetry => 'No s\'ha pogut connectar a Todoist. Si us plau, torna-ho a provar.';
+
+  @override
+  String get successfullyConnectedAsana => 'Connectat correctament a Asana!';
+
+  @override
+  String get failedToConnectAsanaRetry => 'No s\'ha pogut connectar a Asana. Si us plau, torna-ho a provar.';
+
+  @override
+  String get successfullyConnectedGoogleTasks => 'Connectat correctament a Google Tasks!';
+
+  @override
+  String get failedToConnectGoogleTasksRetry =>
+      'No s\'ha pogut connectar a Google Tasks. Si us plau, torna-ho a provar.';
+
+  @override
+  String get successfullyConnectedClickUp => 'Connectat correctament a ClickUp!';
+
+  @override
+  String get failedToConnectClickUpRetry => 'No s\'ha pogut connectar a ClickUp. Si us plau, torna-ho a provar.';
+
+  @override
+  String get successfullyConnectedNotion => 'Connectat correctament a Notion!';
+
+  @override
+  String get failedToRefreshNotionStatus => 'No s\'ha pogut actualitzar l\'estat de connexió de Notion.';
+
+  @override
+  String get successfullyConnectedGoogle => 'Connectat correctament a Google!';
+
+  @override
+  String get failedToRefreshGoogleStatus => 'No s\'ha pogut actualitzar l\'estat de connexió de Google.';
+
+  @override
+  String get successfullyConnectedWhoop => 'Connectat correctament a Whoop!';
+
+  @override
+  String get failedToRefreshWhoopStatus => 'No s\'ha pogut actualitzar l\'estat de connexió de Whoop.';
+
+  @override
+  String get successfullyConnectedGitHub => 'Connectat correctament a GitHub!';
+
+  @override
+  String get failedToRefreshGitHubStatus => 'No s\'ha pogut actualitzar l\'estat de connexió de GitHub.';
 }

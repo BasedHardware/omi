@@ -9104,5 +9104,101 @@
   "myGoal": "My goal",
   "@myGoal": {
     "description": "Default title for a new goal in the goal tracker widget"
+  },
+  "appNotAvailable": "Oops! Looks like the app you are looking for is not available.",
+  "@appNotAvailable": {
+    "description": "Error message shown when a deep-linked app cannot be found"
+  },
+  "failedToConnectTodoist": "Failed to connect to Todoist",
+  "@failedToConnectTodoist": {
+    "description": "Error message when Todoist OAuth fails"
+  },
+  "failedToConnectAsana": "Failed to connect to Asana",
+  "@failedToConnectAsana": {
+    "description": "Error message when Asana OAuth fails"
+  },
+  "failedToConnectGoogleTasks": "Failed to connect to Google Tasks",
+  "@failedToConnectGoogleTasks": {
+    "description": "Error message when Google Tasks OAuth fails"
+  },
+  "failedToConnectClickUp": "Failed to connect to ClickUp",
+  "@failedToConnectClickUp": {
+    "description": "Error message when ClickUp OAuth fails"
+  },
+  "failedToConnectServiceWithError": "Failed to connect to {serviceName}: {error}",
+  "@failedToConnectServiceWithError": {
+    "description": "Error message when OAuth fails with specific error details",
+    "placeholders": {
+      "serviceName": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "successfullyConnectedTodoist": "Successfully connected to Todoist!",
+  "@successfullyConnectedTodoist": {
+    "description": "Success message when Todoist OAuth completes"
+  },
+  "failedToConnectTodoistRetry": "Failed to connect to Todoist. Please try again.",
+  "@failedToConnectTodoistRetry": {
+    "description": "Error message when Todoist authentication fails"
+  },
+  "successfullyConnectedAsana": "Successfully connected to Asana!",
+  "@successfullyConnectedAsana": {
+    "description": "Success message when Asana OAuth completes"
+  },
+  "failedToConnectAsanaRetry": "Failed to connect to Asana. Please try again.",
+  "@failedToConnectAsanaRetry": {
+    "description": "Error message when Asana authentication fails"
+  },
+  "successfullyConnectedGoogleTasks": "Successfully connected to Google Tasks!",
+  "@successfullyConnectedGoogleTasks": {
+    "description": "Success message when Google Tasks OAuth completes"
+  },
+  "failedToConnectGoogleTasksRetry": "Failed to connect to Google Tasks. Please try again.",
+  "@failedToConnectGoogleTasksRetry": {
+    "description": "Error message when Google Tasks authentication fails"
+  },
+  "successfullyConnectedClickUp": "Successfully connected to ClickUp!",
+  "@successfullyConnectedClickUp": {
+    "description": "Success message when ClickUp OAuth completes"
+  },
+  "failedToConnectClickUpRetry": "Failed to connect to ClickUp. Please try again.",
+  "@failedToConnectClickUpRetry": {
+    "description": "Error message when ClickUp authentication fails"
+  },
+  "successfullyConnectedNotion": "Successfully connected to Notion!",
+  "@successfullyConnectedNotion": {
+    "description": "Success message when Notion OAuth completes"
+  },
+  "failedToRefreshNotionStatus": "Failed to refresh Notion connection status.",
+  "@failedToRefreshNotionStatus": {
+    "description": "Error message when Notion status refresh fails"
+  },
+  "successfullyConnectedGoogle": "Successfully connected to Google!",
+  "@successfullyConnectedGoogle": {
+    "description": "Success message when Google Calendar OAuth completes"
+  },
+  "failedToRefreshGoogleStatus": "Failed to refresh Google connection status.",
+  "@failedToRefreshGoogleStatus": {
+    "description": "Error message when Google status refresh fails"
+  },
+  "successfullyConnectedWhoop": "Successfully connected to Whoop!",
+  "@successfullyConnectedWhoop": {
+    "description": "Success message when Whoop OAuth completes"
+  },
+  "failedToRefreshWhoopStatus": "Failed to refresh Whoop connection status.",
+  "@failedToRefreshWhoopStatus": {
+    "description": "Error message when Whoop status refresh fails"
+  },
+  "successfullyConnectedGitHub": "Successfully connected to GitHub!",
+  "@successfullyConnectedGitHub": {
+    "description": "Success message when GitHub OAuth completes"
+  },
+  "failedToRefreshGitHubStatus": "Failed to refresh GitHub connection status.",
+  "@failedToRefreshGitHubStatus": {
+    "description": "Error message when GitHub status refresh fails"
   }
 }

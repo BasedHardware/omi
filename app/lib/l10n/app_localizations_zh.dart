@@ -7216,4 +7216,72 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get myGoal => '我的目标';
+
+  @override
+  String get appNotAvailable => '糟糕！您正在寻找的应用似乎不可用。';
+
+  @override
+  String get failedToConnectTodoist => '连接Todoist失败';
+
+  @override
+  String get failedToConnectAsana => '连接Asana失败';
+
+  @override
+  String get failedToConnectGoogleTasks => '连接Google Tasks失败';
+
+  @override
+  String get failedToConnectClickUp => '连接ClickUp失败';
+
+  @override
+  String failedToConnectServiceWithError(String serviceName, String error) {
+    return '连接$serviceName失败：$error';
+  }
+
+  @override
+  String get successfullyConnectedTodoist => '已成功连接到Todoist！';
+
+  @override
+  String get failedToConnectTodoistRetry => '连接Todoist失败。请重试。';
+
+  @override
+  String get successfullyConnectedAsana => '已成功连接到Asana！';
+
+  @override
+  String get failedToConnectAsanaRetry => '连接Asana失败。请重试。';
+
+  @override
+  String get successfullyConnectedGoogleTasks => '已成功连接到Google Tasks！';
+
+  @override
+  String get failedToConnectGoogleTasksRetry => '连接Google Tasks失败。请重试。';
+
+  @override
+  String get successfullyConnectedClickUp => '已成功连接到ClickUp！';
+
+  @override
+  String get failedToConnectClickUpRetry => '连接ClickUp失败。请重试。';
+
+  @override
+  String get successfullyConnectedNotion => '已成功连接到Notion！';
+
+  @override
+  String get failedToRefreshNotionStatus => '刷新Notion连接状态失败。';
+
+  @override
+  String get successfullyConnectedGoogle => '已成功连接到Google！';
+
+  @override
+  String get failedToRefreshGoogleStatus => '刷新Google连接状态失败。';
+
+  @override
+  String get successfullyConnectedWhoop => '已成功连接到Whoop！';
+
+  @override
+  String get failedToRefreshWhoopStatus => '刷新Whoop连接状态失败。';
+
+  @override
+  String get successfullyConnectedGitHub => '已成功连接到GitHub！';
+
+  @override
+  String get failedToRefreshGitHubStatus => '刷新GitHub连接状态失败。';
 }

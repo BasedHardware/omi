@@ -7323,4 +7323,72 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get myGoal => 'मेरा लक्ष्य';
+
+  @override
+  String get appNotAvailable => 'उफ़! ऐसा लगता है कि आप जिस ऐप को खोज रहे हैं वह उपलब्ध नहीं है।';
+
+  @override
+  String get failedToConnectTodoist => 'Todoist से कनेक्ट करने में विफल';
+
+  @override
+  String get failedToConnectAsana => 'Asana से कनेक्ट करने में विफल';
+
+  @override
+  String get failedToConnectGoogleTasks => 'Google Tasks से कनेक्ट करने में विफल';
+
+  @override
+  String get failedToConnectClickUp => 'ClickUp से कनेक्ट करने में विफल';
+
+  @override
+  String failedToConnectServiceWithError(String serviceName, String error) {
+    return '$serviceName से कनेक्ट करने में विफल: $error';
+  }
+
+  @override
+  String get successfullyConnectedTodoist => 'Todoist से सफलतापूर्वक कनेक्ट हो गया!';
+
+  @override
+  String get failedToConnectTodoistRetry => 'Todoist से कनेक्ट करने में विफल। कृपया पुनः प्रयास करें।';
+
+  @override
+  String get successfullyConnectedAsana => 'Asana से सफलतापूर्वक कनेक्ट हो गया!';
+
+  @override
+  String get failedToConnectAsanaRetry => 'Asana से कनेक्ट करने में विफल। कृपया पुनः प्रयास करें।';
+
+  @override
+  String get successfullyConnectedGoogleTasks => 'Google Tasks से सफलतापूर्वक कनेक्ट हो गया!';
+
+  @override
+  String get failedToConnectGoogleTasksRetry => 'Google Tasks से कनेक्ट करने में विफल। कृपया पुनः प्रयास करें।';
+
+  @override
+  String get successfullyConnectedClickUp => 'ClickUp से सफलतापूर्वक कनेक्ट हो गया!';
+
+  @override
+  String get failedToConnectClickUpRetry => 'ClickUp से कनेक्ट करने में विफल। कृपया पुनः प्रयास करें।';
+
+  @override
+  String get successfullyConnectedNotion => 'Notion से सफलतापूर्वक कनेक्ट हो गया!';
+
+  @override
+  String get failedToRefreshNotionStatus => 'Notion कनेक्शन स्थिति रीफ़्रेश करने में विफल।';
+
+  @override
+  String get successfullyConnectedGoogle => 'Google से सफलतापूर्वक कनेक्ट हो गया!';
+
+  @override
+  String get failedToRefreshGoogleStatus => 'Google कनेक्शन स्थिति रीफ़्रेश करने में विफल।';
+
+  @override
+  String get successfullyConnectedWhoop => 'Whoop से सफलतापूर्वक कनेक्ट हो गया!';
+
+  @override
+  String get failedToRefreshWhoopStatus => 'Whoop कनेक्शन स्थिति रीफ़्रेश करने में विफल।';
+
+  @override
+  String get successfullyConnectedGitHub => 'GitHub से सफलतापूर्वक कनेक्ट हो गया!';
+
+  @override
+  String get failedToRefreshGitHubStatus => 'GitHub कनेक्शन स्थिति रीफ़्रेश करने में विफल।';
 }

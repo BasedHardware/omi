@@ -7385,4 +7385,72 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get myGoal => 'Il mio obiettivo';
+
+  @override
+  String get appNotAvailable => 'Ops! Sembra che l\'app che stai cercando non sia disponibile.';
+
+  @override
+  String get failedToConnectTodoist => 'Connessione a Todoist non riuscita';
+
+  @override
+  String get failedToConnectAsana => 'Connessione ad Asana non riuscita';
+
+  @override
+  String get failedToConnectGoogleTasks => 'Connessione a Google Tasks non riuscita';
+
+  @override
+  String get failedToConnectClickUp => 'Connessione a ClickUp non riuscita';
+
+  @override
+  String failedToConnectServiceWithError(String serviceName, String error) {
+    return 'Connessione a $serviceName non riuscita: $error';
+  }
+
+  @override
+  String get successfullyConnectedTodoist => 'Connesso con successo a Todoist!';
+
+  @override
+  String get failedToConnectTodoistRetry => 'Connessione a Todoist non riuscita. Riprova.';
+
+  @override
+  String get successfullyConnectedAsana => 'Connesso con successo ad Asana!';
+
+  @override
+  String get failedToConnectAsanaRetry => 'Connessione ad Asana non riuscita. Riprova.';
+
+  @override
+  String get successfullyConnectedGoogleTasks => 'Connesso con successo a Google Tasks!';
+
+  @override
+  String get failedToConnectGoogleTasksRetry => 'Connessione a Google Tasks non riuscita. Riprova.';
+
+  @override
+  String get successfullyConnectedClickUp => 'Connesso con successo a ClickUp!';
+
+  @override
+  String get failedToConnectClickUpRetry => 'Connessione a ClickUp non riuscita. Riprova.';
+
+  @override
+  String get successfullyConnectedNotion => 'Connesso con successo a Notion!';
+
+  @override
+  String get failedToRefreshNotionStatus => 'Impossibile aggiornare lo stato della connessione Notion.';
+
+  @override
+  String get successfullyConnectedGoogle => 'Connesso con successo a Google!';
+
+  @override
+  String get failedToRefreshGoogleStatus => 'Impossibile aggiornare lo stato della connessione Google.';
+
+  @override
+  String get successfullyConnectedWhoop => 'Connesso con successo a Whoop!';
+
+  @override
+  String get failedToRefreshWhoopStatus => 'Impossibile aggiornare lo stato della connessione Whoop.';
+
+  @override
+  String get successfullyConnectedGitHub => 'Connesso con successo a GitHub!';
+
+  @override
+  String get failedToRefreshGitHubStatus => 'Impossibile aggiornare lo stato della connessione GitHub.';
 }

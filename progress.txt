@@ -1,403 +1,23 @@
-# Localization Progress Tracker
+# Localization Progress Tracker v2
 
 **Project:** Omi Flutter App - Hardcoded String Localization
 **Created:** 2026-01-20
+**Version:** 2.0
 **Status:** IN PROGRESS
 
 ## Summary
 
 | Metric | Value |
 |--------|-------|
-| Total Files | 27 |
-| Total Strings | ~125 |
-| Completed | 25 |
+| Total Files | ~48 |
+| Total Strings | ~405 |
+| Completed Files | 26 |
 | In Progress | 0 |
-| Pending | 2 |
-| Progress | 93% |
+| Pending Files | ~22 |
+| Progress | ~65% |
 
 **CRITICAL ISSUE**: ~162 pre-existing l10n keys in non-English ARB files still contain
 English text instead of proper translations. See PRIORITY 0 section below.
-
-================================================================================
-## PRIORITY 1: HIGH IMPACT - User-Facing Features (~65 strings)
-================================================================================
-
-### [x] pages/conversation_detail/widgets/create_template_bottom_sheet.dart (~20 strings)
-Status: COMPLETED
-Note: Added 14 new l10n keys to all 34 language ARB files and updated the Dart file to use
-context.l10n pattern. Keys added: templateName, templateNameHint, nameMustBeAtLeast3Characters,
-conversationPromptHint, pleaseEnterAppPrompt, promptMustBeAtLeast10Characters,
-anyoneCanDiscoverTemplate, onlyYouCanUseTemplate, generatingDescription, creatingAppIcon,
-installingApp, appCreatedAndInstalled, appCreatedSuccessfully, failedToCreateApp.
-Reused existing keys: createCustomTemplate, conversationPrompt, pleaseEnterAppName, makePublic,
-createApp, creatingYourApp.
-
-### [x] pages/apps/providers/add_app_provider.dart (~20 strings)
-Status: COMPLETED
-Note: Added 21 new l10n keys to all 34 language ARB files. Keys added: addAppSelectCoreCapability,
-addAppSelectPaymentPlan, addAppSelectCapability, addAppSelectLogo, addAppEnterChatPrompt,
-addAppEnterConversationPrompt, addAppSelectTriggerEvent, addAppEnterWebhookUrl, addAppSelectCategory,
-addAppFillRequiredFields, addAppUpdatedSuccess, addAppUpdateFailed, addAppSubmittedSuccess,
-addAppErrorOpeningFilePicker (with placeholder), addAppErrorSelectingImage (with placeholder),
-addAppPhotosPermissionDenied, addAppErrorSelectingImageRetry, addAppErrorSelectingThumbnail
-(with placeholder), addAppErrorSelectingThumbnailRetry, addAppCapabilityConflictWithPersona,
-addAppPersonaConflictWithCapabilities.
-
-### [x] pages/persona/persona_provider.dart (~15 strings)
-Status: COMPLETED
-Note: Added 13 new l10n keys to all 34 language ARB files and updated the Dart file to use
-MyApp.navigatorKey.currentContext!.l10n pattern. Keys added: personaTwitterHandleNotFound,
-personaTwitterHandleSuspended, personaFailedToVerifyTwitter, personaFailedToFetch, personaFailedToCreate,
-personaConnectKnowledgeSource, personaUpdatedSuccessfully, personaFailedToUpdate, personaPleaseSelectImage,
-personaFailedToCreateTryLater, personaFailedToCreateWithError (with placeholder), personaFailedToEnable,
-personaErrorEnablingWithError (with placeholder).
-
-### [x] pages/payments/payment_method_provider.dart (3 strings)
-Status: COMPLETED
-Note: Added 3 new l10n keys to all 34 language ARB files and updated the Dart file to use
-MyApp.navigatorKey.currentContext!.l10n pattern. Keys added: paymentFailedToFetchCountries,
-paymentFailedToSetDefault, paymentFailedToSavePaypal.
-
-### [x] pages/payments/paypal_setup_page.dart (2 strings)
-Status: COMPLETED
-Note: Updated Dart file to use existing l10n keys (paypalEmailHint, paypalMeLinkHint) for placeholder
-hint texts. Removed const from InputDecoration to allow non-constant l10n values. Keys were already
-in ARB files from previous session.
-
-### [x] pages/payments/models/payment_method_config.dart (4 strings)
-Status: COMPLETED
-Note: Added 5 new l10n keys to all 34 language ARB files. Refactored PaymentMethodConfig class to
-accept localized title and subtitle as constructor parameters instead of hardcoding them. Updated
-payments_page.dart to pass localized strings using context.l10n pattern. Keys added:
-paymentMethodStripe, paymentMethodPayPal, paymentStatusActive, paymentStatusConnected,
-paymentStatusNotConnected.
-
-================================================================================
-## PRIORITY 2: MEDIUM IMPACT - Settings & Configuration (~30 strings)
-================================================================================
-
-### [x] pages/apps/widgets/payment_details_widget.dart (5 strings)
-Status: COMPLETED
-Note: Added 5 new l10n keys to all 34 language ARB files and updated the Dart file to use
-context.l10n pattern. Keys added: paymentAppCost, paymentEnterValidAmount,
-paymentEnterAmountGreaterThanZero, paymentPlan, paymentNoneSelected.
-The hintText '20' is a numeric placeholder example and doesn't require localization.
-
-### [x] pages/settings/ai_app_generator_provider.dart (9 strings)
-Status: COMPLETED
-Note: Added 9 new l10n keys to all 34 language ARB files and updated the Dart file to use
-MyApp.navigatorKey.currentContext!.l10n pattern. Keys added: aiGenPleaseEnterDescription,
-aiGenCreatingAppIcon, aiGenErrorOccurredWithDetails (with placeholder), aiGenAppCreatedSuccessfully,
-aiGenFailedToCreateApp, aiGenErrorWhileCreatingApp, aiGenFailedToGenerateApp, aiGenFailedToRegenerateIcon,
-aiGenPleaseGenerateAppFirst.
-
-### [x] pages/persona/twitter/social_profile.dart (7 strings)
-Status: COMPLETED
-Note: Added 7 new l10n keys to all 34 language ARB files and updated the Dart file to use
-context.l10n pattern. Keys added: xHandleTitle, xHandleDescription, xHandleHint,
-xHandlePleaseEnter, xHandlePleaseEnterValid, nextButton, connectOmiDevice.
-The original audit identified only 3 strings but 7 were actually found upon closer inspection.
-
-### [x] pages/settings/widgets/plans_sheet.dart (3 strings)
-Status: COMPLETED
-Note: Added 7 new l10n keys to all 34 language ARB files and updated the Dart file to use
-context.l10n pattern. Keys added: planSwitchingDescriptionWithTitle (with placeholder),
-planUpgradeScheduledMessage, couldNotSchedulePlanChange, subscriptionReactivatedDefault,
-subscriptionSuccessfulCharged, couldNotProcessSubscription, couldNotLaunchUpgradePage.
-Reused existing keys: confirmPlanChange, confirmAndProceed, cancel, anErrorOccurredTryAgain,
-couldNotOpenPaymentSettings, managePaymentMethod.
-The original audit identified 3 strings but the file had 13+ hardcoded strings requiring localization.
-
-### [x] pages/settings/transcription_settings_page.dart (2 strings)
-Status: COMPLETED
-Note: Added 2 new l10n keys to all 34 language ARB files and updated the Dart file to use
-context.l10n pattern. Keys added: transcriptionJsonPlaceholder, transcriptionSourceOmi.
-The JSON placeholder was changed from a literal JSON example to "Paste your JSON configuration here..."
-to avoid ICU message format conflicts with curly braces.
-Ran flutter gen-l10n and verified with test.sh.
-
-### [x] pages/settings/ai_app_generator_page.dart (1 string)
-Status: COMPLETED
-Note: Added 1 new l10n key to all 34 language ARB files and updated the Dart file to use
-context.l10n pattern. Key added: pricePlaceholder.
-The value "0.00" is a numeric format placeholder and remains the same across all languages.
-Ran flutter gen-l10n and verified with test.sh.
-
-### [x] pages/settings/import_history_page.dart (2 strings)
-Status: COMPLETED
-Note: Added 2 new l10n keys to all 34 language ARB files and updated the Dart file to use
-context.l10n pattern. Keys added: importErrorOpeningFilePicker (with placeholder),
-importErrorGeneric (with placeholder).
-Ran flutter gen-l10n and verified with test.sh.
-
-### [x] pages/apps/app_detail/app_detail.dart (1 string)
-Status: COMPLETED
-Note: Updated Dart file to use existing l10n key `errorWithMessage` with `{error}` placeholder.
-The key was already available in all 34 language ARB files, so no ARB updates were needed.
-Changed line 227 from hardcoded `'Error: ${e.toString()}'` to `context.l10n.errorWithMessage(e.toString())`.
-Ran flutter gen-l10n and verified with test.sh.
-
-================================================================================
-## PRIORITY 3: NOTIFICATIONS & SERVICES (~10 strings)
-================================================================================
-
-### [x] services/notifications/merge_notification_handler.dart (2 strings)
-Status: COMPLETED
-Note: Added 2 new l10n keys to all 34 language ARB files and updated the Dart file to use
-MyApp.navigatorKey.currentContext?.l10n pattern with fallback. Keys added: mergeConversationsSuccessTitle,
-mergeConversationsSuccessBody (with {count} placeholder for total merged conversations count).
-Ran flutter gen-l10n and verified with test.sh.
-
-### [x] services/notifications/daily_reflection_notification.dart (2 strings)
-Status: COMPLETED
-Note: Added 2 new l10n keys to all 34 language ARB files and updated the Dart file to use
-MyApp.navigatorKey.currentContext?.l10n pattern with fallback. Keys added: dailyReflectionNotificationTitle,
-dailyReflectionNotificationBody.
-Ran flutter gen-l10n and verified with test.sh.
-
-### [x] services/notifications/action_item_notification_handler.dart (1 string)
-Status: COMPLETED
-Note: Added 1 new l10n key to all 34 language ARB files and updated the Dart file to use
-MyApp.navigatorKey.currentContext?.l10n pattern with fallback. Key added: actionItemReminderTitle.
-Ran flutter gen-l10n and verified with test.sh.
-
-### [x] services/devices/device_connection.dart (2 strings)
-Status: COMPLETED
-Note: Added 2 new l10n keys to all 34 language ARB files and updated the Dart file to use
-MyApp.navigatorKey.currentContext?.l10n pattern with fallback. Keys added: deviceDisconnectedTitle
-(with {deviceName} placeholder), deviceDisconnectedBody (with {deviceName} placeholder).
-Ran flutter gen-l10n and verified with test.sh.
-
-### [x] services/devices/models.dart (1 string)
-Status: COMPLETED (N/A)
-Note: The string at line 72 is a Logger.handle() debug/logging message sent to Crashlytics for error
-tracking, not a user-facing string. Per PRD scope ("Out of Scope: Technical strings, debug messages"),
-this does not require localization.
-
-================================================================================
-## PRIORITY 4: DESKTOP APP (~15 strings)
-================================================================================
-
-### [x] desktop/pages/onboarding/desktop_onboarding_wrapper.dart (10 strings)
-Status: COMPLETED
-Note: Added 10 new l10n keys to all 34 language ARB files and updated the Dart file to use
-context.l10n pattern. Refactored _steps from a field to a method _getSteps(AppLocalizations l10n)
-to access localized strings. Keys added: onboardingSignIn, onboardingYourName, onboardingLanguage,
-onboardingPermissions, onboardingComplete (5 step titles), plus onboardingWelcomeToOmi,
-onboardingTellUsAboutYourself, onboardingChooseYourPreference, onboardingGrantRequiredAccess,
-onboardingYoureAllSet (5 step descriptions).
-Ran flutter gen-l10n and verified with test.sh.
-
-### [x] desktop/pages/settings/desktop_settings_modal.dart (2 strings)
-Status: COMPLETED (N/A)
-Note: Both strings are URLs/emails displayed as data (not labels). Per PRD Out of Scope:
-"URLs and emails displayed as data (not labels)" - these do not require localization.
-- Line 2286: 'https://omi.me' - URL displayed as subtitle
-- Line 2294: 'team@basedhardware.com' - Email displayed as subtitle
-
-### [x] desktop/pages/conversations/widgets/desktop_name_speaker_dialog.dart (3 strings)
-Status: COMPLETED
-Note: Updated Dart file to use existing l10n keys. All required keys were already present in ARB files.
-Keys reused: tagSpeaker (with {speakerId} placeholder), enterPersonsName, personNameAlreadyExists,
-selectYouFromList, cancel, addPerson, tagOtherSegmentsFromSpeaker (with {selected}/{total} placeholders),
-tagOtherSegments, managePeople, save.
-The original audit identified 3 strings but 10 hardcoded strings were actually found and localized.
-Ran flutter gen-l10n and verified with test.sh.
-
-================================================================================
-## PRIORITY 5: LOWER IMPACT (~5 strings)
-================================================================================
-
-### [x] pages/conversation_detail/page.dart (1 string)
-Status: COMPLETED
-Note: Added 1 new l10n key to all 34 language ARB files and updated the Dart file to use
-context.l10n pattern. Key added: searchTranscriptOrSummary.
-Ran flutter gen-l10n and verified with test.sh.
-
-### [x] pages/conversations/widgets/goal_tracker_widget.dart (1 string)
-Status: COMPLETED
-Note: Added 1 new l10n key to all 34 language ARB files and updated the Dart file to use
-context.l10n pattern. Key added: myGoal.
-Ran flutter gen-l10n and verified with test.sh.
-
-### [x] main.dart (1 string)
-Status: COMPLETED (N/A)
-Note: The desktop window title at line 209 is inside a `const WindowOptions` constructor
-which runs before the app is initialized and before any BuildContext is available.
-This is a technical constraint - Flutter's l10n system requires BuildContext which
-doesn't exist at this point in the app lifecycle. The brand name "Omi" remains hardcoded.
-
-================================================================================
-## CHANGELOG
-================================================================================
-
-[2026-01-20] Marked desktop_settings_modal.dart and main.dart as N/A
-- desktop_settings_modal.dart: URLs/emails displayed as data are out of scope per PRD
-- main.dart: Desktop window title is in const WindowOptions before app init (no BuildContext)
-- Both are technical/scope exclusions, not actual localization failures
-
-[2026-01-20] Localized goal_tracker_widget.dart
-- Added 1 new l10n key to all 34 language ARB files with proper translations
-- Key: myGoal
-- Updated Dart file to use context.l10n.myGoal for default goal title
-- Ran flutter gen-l10n and verified with test.sh
-
-[2026-01-20] Localized conversation_detail/page.dart
-- Added 1 new l10n key to all 34 language ARB files with proper translations
-- Key: searchTranscriptOrSummary
-- Updated Dart file to use context.l10n.searchTranscriptOrSummary
-- Ran flutter gen-l10n and verified with test.sh
-
-[2026-01-20] Localized desktop_name_speaker_dialog.dart
-- Reused 10 existing l10n keys (all were already in ARB files)
-- Keys: tagSpeaker, enterPersonsName, personNameAlreadyExists, selectYouFromList, cancel, addPerson, tagOtherSegmentsFromSpeaker, tagOtherSegments, managePeople, save
-- Original audit found 3 strings but 10 hardcoded strings were actually in the file
-- Ran flutter gen-l10n and verified with test.sh
-
-[2026-01-20] Localized desktop_onboarding_wrapper.dart
-- Added 10 new l10n keys to all 34 language ARB files with proper translations
-- Keys: onboardingSignIn, onboardingYourName, onboardingLanguage, onboardingPermissions, onboardingComplete (titles)
-- Keys: onboardingWelcomeToOmi, onboardingTellUsAboutYourself, onboardingChooseYourPreference, onboardingGrantRequiredAccess, onboardingYoureAllSet (descriptions)
-- Refactored _steps from field to method _getSteps(AppLocalizations l10n) to access context.l10n
-- Ran flutter gen-l10n and verified with test.sh
-
-[2026-01-20] Marked models.dart as N/A (debug message)
-- The string at line 72 is a Logger.handle() debug/logging message for Crashlytics
-- Not user-facing, falls under "Out of Scope: Technical strings, debug messages"
-- No code changes required
-
-[2026-01-20] Localized device_connection.dart
-- Added 2 new l10n keys to all 34 language ARB files
-- Updated Dart file to use MyApp.navigatorKey.currentContext?.l10n pattern with fallback
-- Keys: deviceDisconnectedTitle (with {deviceName} placeholder), deviceDisconnectedBody (with {deviceName} placeholder)
-- Ran flutter gen-l10n and verified with test.sh
-
-[2026-01-20] Localized action_item_notification_handler.dart
-- Added 1 new l10n key to all 34 language ARB files
-- Updated Dart file to use MyApp.navigatorKey.currentContext?.l10n pattern with fallback
-- Key: actionItemReminderTitle
-- Ran flutter gen-l10n and verified with test.sh
-
-[2026-01-20] Localized daily_reflection_notification.dart
-- Added 2 new l10n keys to all 34 language ARB files
-- Updated Dart file to use MyApp.navigatorKey.currentContext?.l10n pattern with fallback
-- Keys: dailyReflectionNotificationTitle, dailyReflectionNotificationBody
-- Ran flutter gen-l10n and verified with test.sh
-
-[2026-01-20] Localized merge_notification_handler.dart
-- Added 2 new l10n keys to all 34 language ARB files
-- Updated Dart file to use MyApp.navigatorKey.currentContext?.l10n pattern with fallback
-- Keys: mergeConversationsSuccessTitle, mergeConversationsSuccessBody (with {count} placeholder)
-- Ran flutter gen-l10n and verified with test.sh
-
-[2026-01-20] Localized app_detail.dart
-- Reused existing l10n key `errorWithMessage` with `{error}` placeholder
-- No ARB file updates needed - key already existed in all 34 languages
-- Updated Dart file to use context.l10n.errorWithMessage(e.toString())
-- Ran flutter gen-l10n and verified with test.sh
-
-[2026-01-20] Identified pre-existing untranslated keys
-- Audited app_ar.arb to find keys with English values in non-English ARB files
-- Found ~162 keys that were never properly translated
-- Added PRIORITY 0 task to translate these keys
-- Updated PRD.md to explicitly require proper translations (FR-3)
-- Added CRITICAL notice in progress.txt NOTES section
-
-[2026-01-20] Localized import_history_page.dart
-- Added 2 new l10n keys to all 34 language ARB files
-- Updated Dart file to use context.l10n pattern
-- Keys: importErrorOpeningFilePicker (with placeholder), importErrorGeneric (with placeholder)
-- Both keys include {message}/{error} placeholders for error details
-- Ran flutter gen-l10n and verified with test.sh
-
-[2026-01-20] Localized ai_app_generator_page.dart
-- Added 1 new l10n key to all 34 language ARB files
-- Updated Dart file to use context.l10n pattern
-- Key: pricePlaceholder
-- Value "0.00" is a numeric format placeholder, same across all languages
-- Ran flutter gen-l10n and verified with test.sh
-
-[2026-01-20] Localized transcription_settings_page.dart
-- Added 2 new l10n keys to all 34 language ARB files
-- Updated Dart file to use context.l10n pattern
-- Keys: transcriptionJsonPlaceholder, transcriptionSourceOmi
-- Changed JSON placeholder from literal example to user-friendly text to avoid ICU format conflicts
-- Ran flutter gen-l10n and verified with test.sh
-
-[2026-01-20] Localized plans_sheet.dart
-- Added 7 new l10n keys to all 34 language ARB files
-- Updated Dart file to use context.l10n pattern
-- Keys: planSwitchingDescriptionWithTitle (with placeholder), planUpgradeScheduledMessage,
-  couldNotSchedulePlanChange, subscriptionReactivatedDefault, subscriptionSuccessfulCharged,
-  couldNotProcessSubscription, couldNotLaunchUpgradePage
-- Reused 6 existing keys: confirmPlanChange, confirmAndProceed, cancel, anErrorOccurredTryAgain,
-  couldNotOpenPaymentSettings, managePaymentMethod
-- Fixed null safety issue with selectedPrice!.title
-- Ran flutter gen-l10n and verified with test.sh
-
-[2026-01-20] Localized social_profile.dart
-- Added 7 new l10n keys to all 34 language ARB files
-- Updated Dart file to use context.l10n pattern
-- Keys: xHandleTitle, xHandleDescription, xHandleHint, xHandlePleaseEnter, xHandlePleaseEnterValid,
-  nextButton, connectOmiDevice
-- Original audit found 3 strings, but 7 were actually in the file
-- Ran flutter gen-l10n and verified with test.sh
-
-[2026-01-20] Localized ai_app_generator_provider.dart
-- Added 9 new l10n keys to all 34 language ARB files
-- Updated Dart file to use MyApp.navigatorKey.currentContext!.l10n pattern
-- Keys: aiGenPleaseEnterDescription, aiGenCreatingAppIcon, aiGenErrorOccurredWithDetails (with placeholder),
-  aiGenAppCreatedSuccessfully, aiGenFailedToCreateApp, aiGenErrorWhileCreatingApp, aiGenFailedToGenerateApp,
-  aiGenFailedToRegenerateIcon, aiGenPleaseGenerateAppFirst
-- Ran flutter gen-l10n and verified with test.sh
-
-[2026-01-20] Localized payment_details_widget.dart
-- Added 5 new l10n keys to all 34 language ARB files
-- Updated Dart file to use context.l10n pattern
-- Keys: paymentAppCost, paymentEnterValidAmount, paymentEnterAmountGreaterThanZero, paymentPlan, paymentNoneSelected
-- Ran flutter gen-l10n and verified with test.sh
-
-[2026-01-20] Localized payment_method_config.dart
-- Added 5 new l10n keys to all 34 language ARB files
-- Refactored PaymentMethodConfig class to accept localized title and subtitle parameters
-- Updated payments_page.dart to pass localized strings using context.l10n pattern
-- Keys: paymentMethodStripe, paymentMethodPayPal, paymentStatusActive, paymentStatusConnected, paymentStatusNotConnected
-- Ran flutter gen-l10n and verified with test.sh
-
-[2026-01-20] Localized paypal_setup_page.dart
-- Updated Dart file to use existing l10n keys: paypalEmailHint, paypalMeLinkHint
-- Removed const from InputDecoration to allow non-constant l10n values
-- Ran flutter gen-l10n and verified with test.sh
-
-[2026-01-20] Localized payment_method_provider.dart
-- Added 3 new l10n keys to all 34 language ARB files
-- Updated Dart file to use MyApp.navigatorKey.currentContext!.l10n pattern
-- Keys: paymentFailedToFetchCountries, paymentFailedToSetDefault, paymentFailedToSavePaypal
-- Ran flutter gen-l10n and verified with test.sh
-
-[2026-01-20] Localized persona_provider.dart
-- Added 13 new l10n keys to all 34 language ARB files
-- Updated Dart file to use MyApp.navigatorKey.currentContext!.l10n pattern
-- Keys cover Twitter verification, persona CRUD operations, and error messages
-- Two keys with placeholders for error details: personaFailedToCreateWithError, personaErrorEnablingWithError
-- Ran flutter gen-l10n and verified with test.sh
-
-[2026-01-20] Localized add_app_provider.dart
-- Added 21 new l10n keys to all 34 language ARB files
-- Updated Dart file to use MyApp.navigatorKey.currentContext!.l10n pattern
-- Keys cover validation errors, success/error messages, and capability conflicts
-- Ran flutter gen-l10n and verified with test.sh
-
-[2026-01-20] Localized create_template_bottom_sheet.dart
-- Added 14 new l10n keys to all 34 language ARB files
-- Updated Dart file to use context.l10n pattern
-- Ran flutter gen-l10n and verified with test.sh
-
-[2026-01-20] Initial audit completed
-- Identified 27 files with hardcoded strings
-- Found ~125 strings needing localization
-- Created PRD.MD and progress.txt
-- Previous progress.txt was inaccurate (claimed 100% complete)
 
 ================================================================================
 ## PRIORITY 0: CRITICAL - Pre-existing Untranslated Keys (~162 keys)
@@ -405,10 +25,7 @@ doesn't exist at this point in the app lifecycle. The brand name "Omi" remains h
 
 ### [ ] Translate pre-existing English keys in all non-English ARB files
 Status: PENDING
-Note: An audit of app_ar.arb found ~162 keys that still contain English text instead of
-proper translations. These keys existed BEFORE this localization project started and were
-never properly translated. This task has HIGH PRIORITY as it affects all users of non-English
-languages.
+Priority: CRITICAL - Affects all non-English users
 
 Sample of untranslated keys (showing English values that need translation):
 - couldNotLaunchUpgradePage: "Could not launch upgrade page. Please try again."
@@ -422,29 +39,391 @@ Sample of untranslated keys (showing English values that need translation):
 - recordingLanguage: "Recording Language"
 - selectYourLanguage: "Select Your Language"
 - discoverNewApps: "Discover new apps"
-- tryOurLatestIntegrations: "Try our latest integrations"
-- speechProfileCompleted: "Speech Profile Completed"
-- actionItemsExtracted: "Action Items Extracted"
-- And ~148 more keys...
+- And ~150 more keys...
 
-This task requires:
-1. Extract all English keys from app_ar.arb (or any non-English ARB)
-2. Generate proper translations for all 33 non-English languages
-3. Update all ARB files with correct translations
-4. Run flutter gen-l10n and verify with test.sh
+================================================================================
+## PRIORITY 1-5: ORIGINAL PRD FILES (93% Complete)
+================================================================================
+
+### PRIORITY 1: HIGH IMPACT - User-Facing Features
+
+### [x] pages/conversation_detail/widgets/create_template_bottom_sheet.dart (~20 strings)
+Status: COMPLETED
+Keys: templateName, templateNameHint, nameMustBeAtLeast3Characters, conversationPromptHint,
+      pleaseEnterAppPrompt, promptMustBeAtLeast10Characters, anyoneCanDiscoverTemplate,
+      onlyYouCanUseTemplate, generatingDescription, creatingAppIcon, installingApp,
+      appCreatedAndInstalled, appCreatedSuccessfully, failedToCreateApp
+
+### [x] pages/apps/providers/add_app_provider.dart (~20 strings)
+Status: COMPLETED
+Keys: addAppSelectCoreCapability, addAppSelectPaymentPlan, addAppSelectCapability,
+      addAppSelectLogo, addAppEnterChatPrompt, addAppEnterConversationPrompt,
+      addAppSelectTriggerEvent, addAppEnterWebhookUrl, addAppSelectCategory,
+      addAppFillRequiredFields, addAppUpdatedSuccess, addAppUpdateFailed,
+      addAppSubmittedSuccess, addAppErrorOpeningFilePicker, addAppErrorSelectingImage,
+      addAppPhotosPermissionDenied, addAppErrorSelectingImageRetry,
+      addAppErrorSelectingThumbnail, addAppErrorSelectingThumbnailRetry,
+      addAppCapabilityConflictWithPersona, addAppPersonaConflictWithCapabilities
+
+### [x] pages/persona/persona_provider.dart (~15 strings)
+Status: COMPLETED
+Keys: personaTwitterHandleNotFound, personaTwitterHandleSuspended, personaFailedToVerifyTwitter,
+      personaFailedToFetch, personaFailedToCreate, personaConnectKnowledgeSource,
+      personaUpdatedSuccessfully, personaFailedToUpdate, personaPleaseSelectImage,
+      personaFailedToCreateTryLater, personaFailedToCreateWithError, personaFailedToEnable,
+      personaErrorEnablingWithError
+
+### [x] pages/payments/payment_method_provider.dart (3 strings)
+Status: COMPLETED
+Keys: paymentFailedToFetchCountries, paymentFailedToSetDefault, paymentFailedToSavePaypal
+
+### [x] pages/payments/paypal_setup_page.dart (2 strings)
+Status: COMPLETED
+Keys: paypalEmailHint, paypalMeLinkHint (reused existing)
+
+### [x] pages/payments/models/payment_method_config.dart (5 strings)
+Status: COMPLETED
+Keys: paymentMethodStripe, paymentMethodPayPal, paymentStatusActive,
+      paymentStatusConnected, paymentStatusNotConnected
+
+--------------------------------------------------------------------------------
+### PRIORITY 2: MEDIUM IMPACT - Settings & Configuration
+
+### [x] pages/apps/widgets/payment_details_widget.dart (5 strings)
+Status: COMPLETED
+Keys: paymentAppCost, paymentEnterValidAmount, paymentEnterAmountGreaterThanZero,
+      paymentPlan, paymentNoneSelected
+
+### [x] pages/settings/ai_app_generator_provider.dart (9 strings)
+Status: COMPLETED
+Keys: aiGenPleaseEnterDescription, aiGenCreatingAppIcon, aiGenErrorOccurredWithDetails,
+      aiGenAppCreatedSuccessfully, aiGenFailedToCreateApp, aiGenErrorWhileCreatingApp,
+      aiGenFailedToGenerateApp, aiGenFailedToRegenerateIcon, aiGenPleaseGenerateAppFirst
+
+### [x] pages/persona/twitter/social_profile.dart (7 strings)
+Status: COMPLETED
+Keys: xHandleTitle, xHandleDescription, xHandleHint, xHandlePleaseEnter,
+      xHandlePleaseEnterValid, nextButton, connectOmiDevice
+
+### [x] pages/settings/widgets/plans_sheet.dart (7 strings)
+Status: PARTIALLY COMPLETED
+Keys added: planSwitchingDescriptionWithTitle, planUpgradeScheduledMessage,
+            couldNotSchedulePlanChange, subscriptionReactivatedDefault,
+            subscriptionSuccessfulCharged, couldNotProcessSubscription, couldNotLaunchUpgradePage
+REMAINING: "Cancel Subscription", "Omi Training" (x2) - see Priority 6
+
+### [x] pages/settings/transcription_settings_page.dart (2 strings)
+Status: COMPLETED
+Keys: transcriptionJsonPlaceholder, transcriptionSourceOmi
+
+### [x] pages/settings/ai_app_generator_page.dart (1 string)
+Status: COMPLETED
+Keys: pricePlaceholder
+
+### [x] pages/settings/import_history_page.dart (2 strings)
+Status: COMPLETED
+Keys: importErrorOpeningFilePicker, importErrorGeneric
+
+### [x] pages/apps/app_detail/app_detail.dart (1 string)
+Status: COMPLETED
+Keys: errorWithMessage (reused existing)
+
+--------------------------------------------------------------------------------
+### PRIORITY 3: NOTIFICATIONS & SERVICES
+
+### [x] services/notifications/merge_notification_handler.dart (2 strings)
+Status: COMPLETED
+Keys: mergeConversationsSuccessTitle, mergeConversationsSuccessBody
+
+### [x] services/notifications/daily_reflection_notification.dart (2 strings)
+Status: COMPLETED
+Keys: dailyReflectionNotificationTitle, dailyReflectionNotificationBody
+
+### [x] services/notifications/action_item_notification_handler.dart (1 string)
+Status: COMPLETED
+Keys: actionItemReminderTitle
+
+### [x] services/devices/device_connection.dart (2 strings)
+Status: COMPLETED
+Keys: deviceDisconnectedTitle, deviceDisconnectedBody
+
+### [x] services/devices/models.dart (1 string)
+Status: N/A (debug log message, not user-facing)
+
+--------------------------------------------------------------------------------
+### PRIORITY 4: DESKTOP APP
+
+### [x] desktop/pages/onboarding/desktop_onboarding_wrapper.dart (10 strings)
+Status: COMPLETED
+Keys: onboardingSignIn, onboardingYourName, onboardingLanguage, onboardingPermissions,
+      onboardingComplete, onboardingWelcomeToOmi, onboardingTellUsAboutYourself,
+      onboardingChooseYourPreference, onboardingGrantRequiredAccess, onboardingYoureAllSet
+
+### [x] desktop/pages/settings/desktop_settings_modal.dart (2 strings)
+Status: N/A (URLs/emails displayed as data, not labels)
+
+### [x] desktop/pages/conversations/widgets/desktop_name_speaker_dialog.dart (10 strings)
+Status: COMPLETED
+Keys: tagSpeaker, enterPersonsName, personNameAlreadyExists, selectYouFromList,
+      cancel, addPerson, tagOtherSegmentsFromSpeaker, tagOtherSegments, managePeople, save
+
+--------------------------------------------------------------------------------
+### PRIORITY 5: LOWER IMPACT
+
+### [x] pages/conversation_detail/page.dart (1 string)
+Status: COMPLETED
+Keys: searchTranscriptOrSummary
+
+### [x] pages/conversations/widgets/goal_tracker_widget.dart (1 string)
+Status: COMPLETED
+Keys: myGoal
+
+### [x] main.dart (1 string)
+Status: N/A (const WindowOptions before app init, no BuildContext available)
+
+================================================================================
+## PRIORITY 6: NEWLY DISCOVERED FILES (~80 strings)
+================================================================================
+
+### 6.1 Core App Shell & Providers
+
+### [x] core/app_shell.dart (22 strings)
+Status: COMPLETED
+Description: Integration connection success/error messages
+Keys: appNotAvailable, failedToConnectTodoist, failedToConnectAsana, failedToConnectGoogleTasks,
+      failedToConnectClickUp, failedToConnectServiceWithError, successfullyConnectedTodoist,
+      failedToConnectTodoistRetry, successfullyConnectedAsana, failedToConnectAsanaRetry,
+      successfullyConnectedGoogleTasks, failedToConnectGoogleTasksRetry, successfullyConnectedClickUp,
+      failedToConnectClickUpRetry, successfullyConnectedNotion, failedToRefreshNotionStatus,
+      successfullyConnectedGoogle, failedToRefreshGoogleStatus, successfullyConnectedWhoop,
+      failedToRefreshWhoopStatus, successfullyConnectedGitHub, failedToRefreshGitHubStatus
+
+### [ ] providers/auth_provider.dart (~12 strings)
+Status: PENDING
+Description: Authentication error messages
+Strings found:
+- "Failed to sign in with Google, please try again."
+- "Authentication failed. Please try again."
+- "Failed to sign in with Apple, please try again."
+- "Failed to retrieve firebase token, please try again."
+- "Unexpected error signing in, Firebase error, please try again."
+- "Unexpected error signing in, please try again"
+- "Failed to link with Google, please try again."
+- "Failed to link with Apple, please try again."
+
+### [ ] providers/onboarding_provider.dart (~10 strings)
+Status: PENDING
+Description: Permission error messages
+Strings found:
+- "Bluetooth permission is required to connect to your device."
+- "Bluetooth permission denied. Please grant permission in System Preferences."
+- "Failed to check Bluetooth permission: $e"
+- "Failed to check Notification permission: $e"
+- "Microphone permission is required for recording."
+- "Failed to check Microphone permission: $e"
+- "Screen capture permission is required for system audio recording."
+- "Failed to check Screen Capture permission: $e"
+- "Accessibility permission is required for detecting browser meetings."
+- "Failed to check Accessibility permission: $e"
+
+### [ ] providers/message_provider.dart (~12 strings)
+Status: PENDING
+Description: Camera/photo/file picker error messages
+Strings found:
+- "Camera capture is not available on this platform"
+- "Camera permission denied. Please allow access to camera"
+- "Error accessing camera: ${e.message ?? e.code}"
+- "Error taking photo. Please try again."
+- "You can only select up to 4 images"
+- "Error opening file picker: ${e.message}"
+- "Error selecting images: $e"
+- "Photos permission denied. Please allow access to photos to select images"
+- "Error selecting images. Please try again."
+- "You can only select up to 4 files"
+- "Error selecting files: ${e.message ?? e.code}"
+- "Error selecting files. Please try again."
+- "Failed to upload file, please try again later"
+
+### [ ] providers/capture_provider.dart (~5 strings)
+Status: PENDING
+Description: Recording error messages
+Strings found:
+- "An error occurred during recording: $error"
+- "Microphone permission required"
+- "Grant microphone permission in System Preferences"
+- "Screen recording permission required"
+- "Display detection failed. Recording stopped."
+
+### [ ] providers/developer_mode_provider.dart (~5 strings)
+Status: PENDING
+Description: Webhook validation errors
+Strings found:
+- "Invalid audio bytes webhook URL"
+- "Invalid realtime transcript webhook URL"
+- "Invalid conversation created webhook URL"
+- "Invalid day summary webhook URL"
+- "Settings saved!"
+
+### [ ] providers/voice_recorder_provider.dart (1 string)
+Status: PENDING
+Strings found:
+- "Failed to transcribe audio"
+
+--------------------------------------------------------------------------------
+### 6.2 UI Components
+
+### [ ] pages/settings/widgets/plans_sheet.dart (3 remaining strings)
+Status: PENDING
+Strings found:
+- Line 1706: "Cancel Subscription"
+- Line 2108: "Omi Training"
+- Line 2197: "Omi Training"
+
+### [ ] pages/conversations/sync_widgets/location_permission_dialog.dart (3 strings)
+Status: PENDING
+Strings found:
+- "Location Permission Required"
+- "Cancel"
+- "Open Settings"
+
+### [ ] pages/conversations/widgets/merge_action_bar.dart (1 string)
+Status: PENDING
+Strings found:
+- Line 185: label: 'OK'
+
+--------------------------------------------------------------------------------
+### 6.3 PDF Export Strings
+
+### [ ] pages/conversation_detail/share.dart (~10 strings)
+Status: PENDING
+Description: PDF export labels (may be special case - pdf package)
+Strings found:
+- "Transcript Export"
+- "Conversation Export"
+- "Title: ${structured.title}"
+- "Overview"
+- "Action Items"
+- "Summary"
+
+--------------------------------------------------------------------------------
+### 6.4 Date/Time Locale Issues (~20 strings)
+
+### [ ] utils/other/time_utils.dart (~15 strings)
+Status: PENDING
+Priority: HIGH - Affects all date/time displays for non-English users
+Description: Time duration strings not using l10n
+Strings found:
+- Line 3: "secs"
+- Line 9: "min"
+- Line 11: "mins"
+- Line 13: "mins", "secs"
+- Line 19: "hour"
+- Line 21: "hours"
+- Line 24: "hours", "mins"
+- Line 30: "day"
+- Line 32: "days"
+- Line 35: "days", "hours"
+- Compact format: "s", "m", "h" (lines 44, 49, 52, 57, 60)
+
+### [ ] utils/other/temp.dart (1 string)
+Status: PENDING
+Description: Hardcoded "Yesterday" in formatChatTimestamp()
+Strings found:
+- Line 35: "Yesterday" (should use context.l10n.yesterday)
+
+### [ ] widgets/transcript.dart (1 string)
+Status: PENDING
+Description: Duplicate formatChatTimestamp() with hardcoded "Yesterday"
+Strings found:
+- Line 857: "Yesterday" (should use context.l10n.yesterday)
+
+### [ ] pages/conversations/widgets/conversation_list_item.dart (~12 strings)
+Status: PENDING
+Priority: HIGH - Core user-facing widget
+Description: Hardcoded strings in conversation list item
+Strings found:
+- Line 197: "Delete Conversation?" (dialog title)
+- Line 198: "Are you sure you want to delete this conversation? This action cannot be undone." (dialog body)
+- Line 199: "Confirm" (button text)
+- Line 208: "Unable to Delete Conversation" (dialog title)
+- Line 209: "Please check your internet connection and try again." (dialog body)
+- Line 211: "OK" (button text)
+- Line 300, 488: "New 🚀" (status indicator, x2)
+- Line 387: "${...} photos" (plural not localized)
+- Line 427: "Upgrade to unlimited" (locked overlay)
+- Line 629: "Merging..." (merging indicator)
+Also uses:
+- dateTimeFormat('h:mm a', ...) without locale (lines 316, 493)
+- secondsToCompactDuration() which has hardcoded English time units
+
+### [ ] pages/conversations/widgets/date_list_item.dart (1 issue)
+Status: PENDING
+Description: dateTimeFormat without locale
+Issue found:
+- Line 30: dateTimeFormat('MMM dd', date) - no locale passed
+Note: Correctly uses context.l10n.yesterday for "Yesterday"
+
+### [ ] Multiple files: DateFormat without locale parameter
+Status: PENDING
+Description: DateFormat calls not passing locale - dates display in English format regardless of user locale
+Files affected:
+- desktop/pages/settings/desktop_settings_modal.dart (lines 1641, 1646)
+- pages/settings/calendar_settings_page.dart (lines 539, 544)
+- pages/settings/usage_page.dart (lines 839, 845)
+- pages/conversations/widgets/score_widget.dart (line 704)
+- pages/apps/widgets/api_keys_widget.dart (line 335)
+- desktop/pages/conversations/desktop_conversations_page.dart (lines 597, 748, 785)
+- pages/conversations/widgets/conversation_list_item.dart (lines 316, 493)
+- pages/conversations/widgets/date_list_item.dart (line 30)
+- And ~20+ other files using dateTimeFormat() without locale
+
+Note: The dateTimeFormat() helper in temp.dart accepts optional locale but NO callers pass it.
+Fix requires either:
+1. Refactor dateTimeFormat() to require BuildContext and get locale from Localizations.localeOf(context)
+2. Or pass locale explicitly at all call sites
+
+================================================================================
+## CHANGELOG
+================================================================================
+
+[2026-01-20] Localized core/app_shell.dart with 22 l10n keys for 34 languages
+- Added 22 new localization keys for OAuth integration messages
+- Keys include success/error messages for Todoist, Asana, Google Tasks, ClickUp, Notion, Google, Whoop, GitHub
+- Updated Dart code to use context.l10n instead of hardcoded strings
+
+[2026-01-20] Added conversation_list_item.dart and date_list_item.dart to Priority 6.4
+- Found ~12 hardcoded strings in conversation_list_item.dart (delete dialogs, "New", "Merging...", etc.)
+- Found dateTimeFormat without locale in date_list_item.dart
+- Updated affected files list for DateFormat without locale issue
+
+[2026-01-20] Added Priority 6.4 - Date/Time Locale Issues
+- Identified ~20 hardcoded time unit strings in time_utils.dart
+- Found hardcoded "Yesterday" in temp.dart and transcript.dart
+- Found ~30+ DateFormat usages without locale parameter
+- This affects all date/time displays for non-English users
+
+[2026-01-20] Created PRD_v2.MD and progress_v2.txt
+- Comprehensive re-scan of all Dart files for hardcoded strings
+- Identified ~80 additional strings in 10+ new files
+- Added Priority 6 section for newly discovered files
+- Total scope increased from ~125 to ~367 strings
+- Key new areas: providers (auth, message, capture, onboarding), app_shell integrations
+
+[2026-01-20] Previous entries preserved from progress.txt
+- See original progress.txt for detailed changelog of P1-P5 completions
 
 ================================================================================
 ## NOTES
 ================================================================================
 
 - **CRITICAL**: All l10n keys MUST be properly translated to each target language.
-  Do NOT copy English text to non-English ARB files. Each language file must contain
-  the actual translation in that language.
+  Do NOT copy English text to non-English ARB files.
 - Use `jq` CLI to add keys to ARB files (never read full files)
 - Run `cd app && flutter gen-l10n` after ARB updates
 - Run `app/test.sh` to verify changes
 - Supported languages: 34 (en + 33 translations)
-- Some notification strings may not have BuildContext access
+- Provider strings use: MyApp.navigatorKey.currentContext?.l10n.keyName ?? 'Fallback'
+- PDF export strings (pw.Text) may need special handling
 
 ================================================================================
 Legend:

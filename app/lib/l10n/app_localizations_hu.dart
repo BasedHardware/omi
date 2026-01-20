@@ -7378,4 +7378,72 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get myGoal => 'Célom';
+
+  @override
+  String get appNotAvailable => 'Hoppá! Úgy tűnik, a keresett alkalmazás nem érhető el.';
+
+  @override
+  String get failedToConnectTodoist => 'Nem sikerült csatlakozni a Todoisthoz';
+
+  @override
+  String get failedToConnectAsana => 'Nem sikerült csatlakozni az Asanához';
+
+  @override
+  String get failedToConnectGoogleTasks => 'Nem sikerült csatlakozni a Google Taskshoz';
+
+  @override
+  String get failedToConnectClickUp => 'Nem sikerült csatlakozni a ClickUphoz';
+
+  @override
+  String failedToConnectServiceWithError(String serviceName, String error) {
+    return 'Nem sikerült csatlakozni a(z) $serviceName szolgáltatáshoz: $error';
+  }
+
+  @override
+  String get successfullyConnectedTodoist => 'Sikeresen csatlakozva a Todoisthoz!';
+
+  @override
+  String get failedToConnectTodoistRetry => 'Nem sikerült csatlakozni a Todoisthoz. Kérjük, próbálja újra.';
+
+  @override
+  String get successfullyConnectedAsana => 'Sikeresen csatlakozva az Asanához!';
+
+  @override
+  String get failedToConnectAsanaRetry => 'Nem sikerült csatlakozni az Asanához. Kérjük, próbálja újra.';
+
+  @override
+  String get successfullyConnectedGoogleTasks => 'Sikeresen csatlakozva a Google Taskshoz!';
+
+  @override
+  String get failedToConnectGoogleTasksRetry => 'Nem sikerült csatlakozni a Google Taskshoz. Kérjük, próbálja újra.';
+
+  @override
+  String get successfullyConnectedClickUp => 'Sikeresen csatlakozva a ClickUphoz!';
+
+  @override
+  String get failedToConnectClickUpRetry => 'Nem sikerült csatlakozni a ClickUphoz. Kérjük, próbálja újra.';
+
+  @override
+  String get successfullyConnectedNotion => 'Sikeresen csatlakozva a Notionhöz!';
+
+  @override
+  String get failedToRefreshNotionStatus => 'Nem sikerült frissíteni a Notion kapcsolat állapotát.';
+
+  @override
+  String get successfullyConnectedGoogle => 'Sikeresen csatlakozva a Google-höz!';
+
+  @override
+  String get failedToRefreshGoogleStatus => 'Nem sikerült frissíteni a Google kapcsolat állapotát.';
+
+  @override
+  String get successfullyConnectedWhoop => 'Sikeresen csatlakozva a Whoophoz!';
+
+  @override
+  String get failedToRefreshWhoopStatus => 'Nem sikerült frissíteni a Whoop kapcsolat állapotát.';
+
+  @override
+  String get successfullyConnectedGitHub => 'Sikeresen csatlakozva a GitHubhoz!';
+
+  @override
+  String get failedToRefreshGitHubStatus => 'Nem sikerült frissíteni a GitHub kapcsolat állapotát.';
 }

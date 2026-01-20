@@ -7364,4 +7364,72 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get myGoal => 'Mijn doel';
+
+  @override
+  String get appNotAvailable => 'Oeps! Het lijkt erop dat de app die je zoekt niet beschikbaar is.';
+
+  @override
+  String get failedToConnectTodoist => 'Verbinding met Todoist mislukt';
+
+  @override
+  String get failedToConnectAsana => 'Verbinding met Asana mislukt';
+
+  @override
+  String get failedToConnectGoogleTasks => 'Verbinding met Google Tasks mislukt';
+
+  @override
+  String get failedToConnectClickUp => 'Verbinding met ClickUp mislukt';
+
+  @override
+  String failedToConnectServiceWithError(String serviceName, String error) {
+    return 'Verbinding met $serviceName mislukt: $error';
+  }
+
+  @override
+  String get successfullyConnectedTodoist => 'Succesvol verbonden met Todoist!';
+
+  @override
+  String get failedToConnectTodoistRetry => 'Verbinding met Todoist mislukt. Probeer het opnieuw.';
+
+  @override
+  String get successfullyConnectedAsana => 'Succesvol verbonden met Asana!';
+
+  @override
+  String get failedToConnectAsanaRetry => 'Verbinding met Asana mislukt. Probeer het opnieuw.';
+
+  @override
+  String get successfullyConnectedGoogleTasks => 'Succesvol verbonden met Google Tasks!';
+
+  @override
+  String get failedToConnectGoogleTasksRetry => 'Verbinding met Google Tasks mislukt. Probeer het opnieuw.';
+
+  @override
+  String get successfullyConnectedClickUp => 'Succesvol verbonden met ClickUp!';
+
+  @override
+  String get failedToConnectClickUpRetry => 'Verbinding met ClickUp mislukt. Probeer het opnieuw.';
+
+  @override
+  String get successfullyConnectedNotion => 'Succesvol verbonden met Notion!';
+
+  @override
+  String get failedToRefreshNotionStatus => 'Kan de Notion-verbindingsstatus niet vernieuwen.';
+
+  @override
+  String get successfullyConnectedGoogle => 'Succesvol verbonden met Google!';
+
+  @override
+  String get failedToRefreshGoogleStatus => 'Kan de Google-verbindingsstatus niet vernieuwen.';
+
+  @override
+  String get successfullyConnectedWhoop => 'Succesvol verbonden met Whoop!';
+
+  @override
+  String get failedToRefreshWhoopStatus => 'Kan de Whoop-verbindingsstatus niet vernieuwen.';
+
+  @override
+  String get successfullyConnectedGitHub => 'Succesvol verbonden met GitHub!';
+
+  @override
+  String get failedToRefreshGitHubStatus => 'Kan de GitHub-verbindingsstatus niet vernieuwen.';
 }

@@ -7356,4 +7356,72 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get myGoal => 'Mój cel';
+
+  @override
+  String get appNotAvailable => 'Ups! Wygląda na to, że szukana aplikacja nie jest dostępna.';
+
+  @override
+  String get failedToConnectTodoist => 'Nie udało się połączyć z Todoist';
+
+  @override
+  String get failedToConnectAsana => 'Nie udało się połączyć z Asana';
+
+  @override
+  String get failedToConnectGoogleTasks => 'Nie udało się połączyć z Google Tasks';
+
+  @override
+  String get failedToConnectClickUp => 'Nie udało się połączyć z ClickUp';
+
+  @override
+  String failedToConnectServiceWithError(String serviceName, String error) {
+    return 'Nie udało się połączyć z $serviceName: $error';
+  }
+
+  @override
+  String get successfullyConnectedTodoist => 'Pomyślnie połączono z Todoist!';
+
+  @override
+  String get failedToConnectTodoistRetry => 'Nie udało się połączyć z Todoist. Spróbuj ponownie.';
+
+  @override
+  String get successfullyConnectedAsana => 'Pomyślnie połączono z Asana!';
+
+  @override
+  String get failedToConnectAsanaRetry => 'Nie udało się połączyć z Asana. Spróbuj ponownie.';
+
+  @override
+  String get successfullyConnectedGoogleTasks => 'Pomyślnie połączono z Google Tasks!';
+
+  @override
+  String get failedToConnectGoogleTasksRetry => 'Nie udało się połączyć z Google Tasks. Spróbuj ponownie.';
+
+  @override
+  String get successfullyConnectedClickUp => 'Pomyślnie połączono z ClickUp!';
+
+  @override
+  String get failedToConnectClickUpRetry => 'Nie udało się połączyć z ClickUp. Spróbuj ponownie.';
+
+  @override
+  String get successfullyConnectedNotion => 'Pomyślnie połączono z Notion!';
+
+  @override
+  String get failedToRefreshNotionStatus => 'Nie udało się odświeżyć statusu połączenia Notion.';
+
+  @override
+  String get successfullyConnectedGoogle => 'Pomyślnie połączono z Google!';
+
+  @override
+  String get failedToRefreshGoogleStatus => 'Nie udało się odświeżyć statusu połączenia Google.';
+
+  @override
+  String get successfullyConnectedWhoop => 'Pomyślnie połączono z Whoop!';
+
+  @override
+  String get failedToRefreshWhoopStatus => 'Nie udało się odświeżyć statusu połączenia Whoop.';
+
+  @override
+  String get successfullyConnectedGitHub => 'Pomyślnie połączono z GitHub!';
+
+  @override
+  String get failedToRefreshGitHubStatus => 'Nie udało się odświeżyć statusu połączenia GitHub.';
 }

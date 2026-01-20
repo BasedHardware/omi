@@ -7309,4 +7309,72 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get myGoal => 'เป้าหมายของฉัน';
+
+  @override
+  String get appNotAvailable => 'อุ๊ปส์! ดูเหมือนว่าแอปที่คุณกำลังมองหาไม่พร้อมใช้งาน';
+
+  @override
+  String get failedToConnectTodoist => 'ไม่สามารถเชื่อมต่อกับ Todoist ได้';
+
+  @override
+  String get failedToConnectAsana => 'ไม่สามารถเชื่อมต่อกับ Asana ได้';
+
+  @override
+  String get failedToConnectGoogleTasks => 'ไม่สามารถเชื่อมต่อกับ Google Tasks ได้';
+
+  @override
+  String get failedToConnectClickUp => 'ไม่สามารถเชื่อมต่อกับ ClickUp ได้';
+
+  @override
+  String failedToConnectServiceWithError(String serviceName, String error) {
+    return 'ไม่สามารถเชื่อมต่อกับ $serviceName ได้: $error';
+  }
+
+  @override
+  String get successfullyConnectedTodoist => 'เชื่อมต่อกับ Todoist สำเร็จ!';
+
+  @override
+  String get failedToConnectTodoistRetry => 'ไม่สามารถเชื่อมต่อกับ Todoist ได้ กรุณาลองอีกครั้ง';
+
+  @override
+  String get successfullyConnectedAsana => 'เชื่อมต่อกับ Asana สำเร็จ!';
+
+  @override
+  String get failedToConnectAsanaRetry => 'ไม่สามารถเชื่อมต่อกับ Asana ได้ กรุณาลองอีกครั้ง';
+
+  @override
+  String get successfullyConnectedGoogleTasks => 'เชื่อมต่อกับ Google Tasks สำเร็จ!';
+
+  @override
+  String get failedToConnectGoogleTasksRetry => 'ไม่สามารถเชื่อมต่อกับ Google Tasks ได้ กรุณาลองอีกครั้ง';
+
+  @override
+  String get successfullyConnectedClickUp => 'เชื่อมต่อกับ ClickUp สำเร็จ!';
+
+  @override
+  String get failedToConnectClickUpRetry => 'ไม่สามารถเชื่อมต่อกับ ClickUp ได้ กรุณาลองอีกครั้ง';
+
+  @override
+  String get successfullyConnectedNotion => 'เชื่อมต่อกับ Notion สำเร็จ!';
+
+  @override
+  String get failedToRefreshNotionStatus => 'ไม่สามารถรีเฟรชสถานะการเชื่อมต่อ Notion ได้';
+
+  @override
+  String get successfullyConnectedGoogle => 'เชื่อมต่อกับ Google สำเร็จ!';
+
+  @override
+  String get failedToRefreshGoogleStatus => 'ไม่สามารถรีเฟรชสถานะการเชื่อมต่อ Google ได้';
+
+  @override
+  String get successfullyConnectedWhoop => 'เชื่อมต่อกับ Whoop สำเร็จ!';
+
+  @override
+  String get failedToRefreshWhoopStatus => 'ไม่สามารถรีเฟรชสถานะการเชื่อมต่อ Whoop ได้';
+
+  @override
+  String get successfullyConnectedGitHub => 'เชื่อมต่อกับ GitHub สำเร็จ!';
+
+  @override
+  String get failedToRefreshGitHubStatus => 'ไม่สามารถรีเฟรชสถานะการเชื่อมต่อ GitHub ได้';
 }

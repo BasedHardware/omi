@@ -7228,4 +7228,72 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get myGoal => '내 목표';
+
+  @override
+  String get appNotAvailable => '이런! 찾고 계신 앱을 사용할 수 없는 것 같습니다.';
+
+  @override
+  String get failedToConnectTodoist => 'Todoist 연결에 실패했습니다';
+
+  @override
+  String get failedToConnectAsana => 'Asana 연결에 실패했습니다';
+
+  @override
+  String get failedToConnectGoogleTasks => 'Google Tasks 연결에 실패했습니다';
+
+  @override
+  String get failedToConnectClickUp => 'ClickUp 연결에 실패했습니다';
+
+  @override
+  String failedToConnectServiceWithError(String serviceName, String error) {
+    return '$serviceName 연결에 실패했습니다: $error';
+  }
+
+  @override
+  String get successfullyConnectedTodoist => 'Todoist에 성공적으로 연결되었습니다!';
+
+  @override
+  String get failedToConnectTodoistRetry => 'Todoist 연결에 실패했습니다. 다시 시도해 주세요.';
+
+  @override
+  String get successfullyConnectedAsana => 'Asana에 성공적으로 연결되었습니다!';
+
+  @override
+  String get failedToConnectAsanaRetry => 'Asana 연결에 실패했습니다. 다시 시도해 주세요.';
+
+  @override
+  String get successfullyConnectedGoogleTasks => 'Google Tasks에 성공적으로 연결되었습니다!';
+
+  @override
+  String get failedToConnectGoogleTasksRetry => 'Google Tasks 연결에 실패했습니다. 다시 시도해 주세요.';
+
+  @override
+  String get successfullyConnectedClickUp => 'ClickUp에 성공적으로 연결되었습니다!';
+
+  @override
+  String get failedToConnectClickUpRetry => 'ClickUp 연결에 실패했습니다. 다시 시도해 주세요.';
+
+  @override
+  String get successfullyConnectedNotion => 'Notion에 성공적으로 연결되었습니다!';
+
+  @override
+  String get failedToRefreshNotionStatus => 'Notion 연결 상태를 새로 고치지 못했습니다.';
+
+  @override
+  String get successfullyConnectedGoogle => 'Google에 성공적으로 연결되었습니다!';
+
+  @override
+  String get failedToRefreshGoogleStatus => 'Google 연결 상태를 새로 고치지 못했습니다.';
+
+  @override
+  String get successfullyConnectedWhoop => 'Whoop에 성공적으로 연결되었습니다!';
+
+  @override
+  String get failedToRefreshWhoopStatus => 'Whoop 연결 상태를 새로 고치지 못했습니다.';
+
+  @override
+  String get successfullyConnectedGitHub => 'GitHub에 성공적으로 연결되었습니다!';
+
+  @override
+  String get failedToRefreshGitHubStatus => 'GitHub 연결 상태를 새로 고치지 못했습니다.';
 }

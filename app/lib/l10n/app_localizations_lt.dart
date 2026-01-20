@@ -7346,4 +7346,72 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get myGoal => 'Mano tikslas';
+
+  @override
+  String get appNotAvailable => 'Oi! Atrodo, kad ieškoma programėlė nepasiekiama.';
+
+  @override
+  String get failedToConnectTodoist => 'Nepavyko prisijungti prie Todoist';
+
+  @override
+  String get failedToConnectAsana => 'Nepavyko prisijungti prie Asana';
+
+  @override
+  String get failedToConnectGoogleTasks => 'Nepavyko prisijungti prie Google Tasks';
+
+  @override
+  String get failedToConnectClickUp => 'Nepavyko prisijungti prie ClickUp';
+
+  @override
+  String failedToConnectServiceWithError(String serviceName, String error) {
+    return 'Nepavyko prisijungti prie $serviceName: $error';
+  }
+
+  @override
+  String get successfullyConnectedTodoist => 'Sėkmingai prisijungta prie Todoist!';
+
+  @override
+  String get failedToConnectTodoistRetry => 'Nepavyko prisijungti prie Todoist. Bandykite dar kartą.';
+
+  @override
+  String get successfullyConnectedAsana => 'Sėkmingai prisijungta prie Asana!';
+
+  @override
+  String get failedToConnectAsanaRetry => 'Nepavyko prisijungti prie Asana. Bandykite dar kartą.';
+
+  @override
+  String get successfullyConnectedGoogleTasks => 'Sėkmingai prisijungta prie Google Tasks!';
+
+  @override
+  String get failedToConnectGoogleTasksRetry => 'Nepavyko prisijungti prie Google Tasks. Bandykite dar kartą.';
+
+  @override
+  String get successfullyConnectedClickUp => 'Sėkmingai prisijungta prie ClickUp!';
+
+  @override
+  String get failedToConnectClickUpRetry => 'Nepavyko prisijungti prie ClickUp. Bandykite dar kartą.';
+
+  @override
+  String get successfullyConnectedNotion => 'Sėkmingai prisijungta prie Notion!';
+
+  @override
+  String get failedToRefreshNotionStatus => 'Nepavyko atnaujinti Notion ryšio būsenos.';
+
+  @override
+  String get successfullyConnectedGoogle => 'Sėkmingai prisijungta prie Google!';
+
+  @override
+  String get failedToRefreshGoogleStatus => 'Nepavyko atnaujinti Google ryšio būsenos.';
+
+  @override
+  String get successfullyConnectedWhoop => 'Sėkmingai prisijungta prie Whoop!';
+
+  @override
+  String get failedToRefreshWhoopStatus => 'Nepavyko atnaujinti Whoop ryšio būsenos.';
+
+  @override
+  String get successfullyConnectedGitHub => 'Sėkmingai prisijungta prie GitHub!';
+
+  @override
+  String get failedToRefreshGitHubStatus => 'Nepavyko atnaujinti GitHub ryšio būsenos.';
 }

@@ -7295,4 +7295,72 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get myGoal => 'هدفي';
+
+  @override
+  String get appNotAvailable => 'عفواً! يبدو أن التطبيق الذي تبحث عنه غير متوفر.';
+
+  @override
+  String get failedToConnectTodoist => 'فشل الاتصال بـ Todoist';
+
+  @override
+  String get failedToConnectAsana => 'فشل الاتصال بـ Asana';
+
+  @override
+  String get failedToConnectGoogleTasks => 'فشل الاتصال بـ Google Tasks';
+
+  @override
+  String get failedToConnectClickUp => 'فشل الاتصال بـ ClickUp';
+
+  @override
+  String failedToConnectServiceWithError(String serviceName, String error) {
+    return 'فشل الاتصال بـ $serviceName: $error';
+  }
+
+  @override
+  String get successfullyConnectedTodoist => 'تم الاتصال بـ Todoist بنجاح!';
+
+  @override
+  String get failedToConnectTodoistRetry => 'فشل الاتصال بـ Todoist. يرجى المحاولة مرة أخرى.';
+
+  @override
+  String get successfullyConnectedAsana => 'تم الاتصال بـ Asana بنجاح!';
+
+  @override
+  String get failedToConnectAsanaRetry => 'فشل الاتصال بـ Asana. يرجى المحاولة مرة أخرى.';
+
+  @override
+  String get successfullyConnectedGoogleTasks => 'تم الاتصال بـ Google Tasks بنجاح!';
+
+  @override
+  String get failedToConnectGoogleTasksRetry => 'فشل الاتصال بـ Google Tasks. يرجى المحاولة مرة أخرى.';
+
+  @override
+  String get successfullyConnectedClickUp => 'تم الاتصال بـ ClickUp بنجاح!';
+
+  @override
+  String get failedToConnectClickUpRetry => 'فشل الاتصال بـ ClickUp. يرجى المحاولة مرة أخرى.';
+
+  @override
+  String get successfullyConnectedNotion => 'تم الاتصال بـ Notion بنجاح!';
+
+  @override
+  String get failedToRefreshNotionStatus => 'فشل تحديث حالة اتصال Notion.';
+
+  @override
+  String get successfullyConnectedGoogle => 'تم الاتصال بـ Google بنجاح!';
+
+  @override
+  String get failedToRefreshGoogleStatus => 'فشل تحديث حالة اتصال Google.';
+
+  @override
+  String get successfullyConnectedWhoop => 'تم الاتصال بـ Whoop بنجاح!';
+
+  @override
+  String get failedToRefreshWhoopStatus => 'فشل تحديث حالة اتصال Whoop.';
+
+  @override
+  String get successfullyConnectedGitHub => 'تم الاتصال بـ GitHub بنجاح!';
+
+  @override
+  String get failedToRefreshGitHubStatus => 'فشل تحديث حالة اتصال GitHub.';
 }
