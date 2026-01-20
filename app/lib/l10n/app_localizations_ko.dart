@@ -7165,4 +7165,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String importErrorGeneric(String error) {
     return '오류: $error';
   }
+
+  @override
+  String get mergeConversationsSuccessTitle => '대화가 성공적으로 병합되었습니다';
+
+  @override
+  String mergeConversationsSuccessBody(int count) {
+    return '$count개의 대화가 성공적으로 병합되었습니다';
+  }
 }

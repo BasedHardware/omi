@@ -7301,4 +7301,12 @@ class AppLocalizationsNl extends AppLocalizations {
   String importErrorGeneric(String error) {
     return 'Fout: $error';
   }
+
+  @override
+  String get mergeConversationsSuccessTitle => 'Gesprekken succesvol samengevoegd';
+
+  @override
+  String mergeConversationsSuccessBody(int count) {
+    return '$count gesprekken zijn succesvol samengevoegd';
+  }
 }

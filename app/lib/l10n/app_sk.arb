@@ -2321,6 +2321,6 @@
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "Chyba pri otváraní výberu súborov: {message}",
   "importErrorGeneric": "Chyba: {error}",
-  "notificationMergeSuccessTitle": "Konverzácie úspešne zlúčené",
-  "notificationMergeSuccessBody": "{count} konverzácií bolo úspešne zlúčených"
+  "mergeConversationsSuccessTitle": "Konverzácie úspešne zlúčené",
+  "mergeConversationsSuccessBody": "{count} konverzácií bolo úspešne zlúčených"
 }

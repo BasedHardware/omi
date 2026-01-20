@@ -2321,6 +2321,6 @@
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "Kļūda atverot failu izvēlētāju: {message}",
   "importErrorGeneric": "Kļūda: {error}",
-  "notificationMergeSuccessTitle": "Sarunas veiksmīgi apvienotas",
-  "notificationMergeSuccessBody": "{count} sarunas ir veiksmīgi apvienotas"
+  "mergeConversationsSuccessTitle": "Sarunas veiksmīgi apvienotas",
+  "mergeConversationsSuccessBody": "{count} sarunas veiksmīgi apvienotas"
 }

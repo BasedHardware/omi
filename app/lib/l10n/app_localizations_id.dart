@@ -7299,4 +7299,12 @@ class AppLocalizationsId extends AppLocalizations {
   String importErrorGeneric(String error) {
     return 'Kesalahan: $error';
   }
+
+  @override
+  String get mergeConversationsSuccessTitle => 'Percakapan berhasil digabungkan';
+
+  @override
+  String mergeConversationsSuccessBody(int count) {
+    return '$count percakapan berhasil digabungkan';
+  }
 }

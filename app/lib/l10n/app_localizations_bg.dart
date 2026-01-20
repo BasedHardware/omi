@@ -7310,4 +7310,12 @@ class AppLocalizationsBg extends AppLocalizations {
   String importErrorGeneric(String error) {
     return 'Грешка: $error';
   }
+
+  @override
+  String get mergeConversationsSuccessTitle => 'Разговорите са обединени успешно';
+
+  @override
+  String mergeConversationsSuccessBody(int count) {
+    return '$count разговора бяха обединени успешно';
+  }
 }

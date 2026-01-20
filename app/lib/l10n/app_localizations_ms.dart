@@ -7303,4 +7303,12 @@ class AppLocalizationsMs extends AppLocalizations {
   String importErrorGeneric(String error) {
     return 'Ralat: $error';
   }
+
+  @override
+  String get mergeConversationsSuccessTitle => 'Perbualan berjaya digabungkan';
+
+  @override
+  String mergeConversationsSuccessBody(int count) {
+    return '$count perbualan berjaya digabungkan';
+  }
 }

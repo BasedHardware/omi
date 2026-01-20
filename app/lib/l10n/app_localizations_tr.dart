@@ -7292,4 +7292,12 @@ class AppLocalizationsTr extends AppLocalizations {
   String importErrorGeneric(String error) {
     return 'Hata: $error';
   }
+
+  @override
+  String get mergeConversationsSuccessTitle => 'Konuşmalar başarıyla birleştirildi';
+
+  @override
+  String mergeConversationsSuccessBody(int count) {
+    return '$count konuşma başarıyla birleştirildi';
+  }
 }

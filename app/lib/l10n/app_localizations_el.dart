@@ -7329,4 +7329,12 @@ class AppLocalizationsEl extends AppLocalizations {
   String importErrorGeneric(String error) {
     return 'Σφάλμα: $error';
   }
+
+  @override
+  String get mergeConversationsSuccessTitle => 'Οι συνομιλίες συγχωνεύθηκαν επιτυχώς';
+
+  @override
+  String mergeConversationsSuccessBody(int count) {
+    return '$count συνομιλίες συγχωνεύθηκαν επιτυχώς';
+  }
 }

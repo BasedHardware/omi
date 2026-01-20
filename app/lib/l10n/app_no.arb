@@ -2321,6 +2321,6 @@
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "Feil ved åpning av filvelger: {message}",
   "importErrorGeneric": "Feil: {error}",
-  "notificationMergeSuccessTitle": "Samtaler slått sammen",
-  "notificationMergeSuccessBody": "{count} samtaler har blitt slått sammen"
+  "mergeConversationsSuccessTitle": "Samtaler slått sammen",
+  "mergeConversationsSuccessBody": "{count} samtaler er slått sammen"
 }

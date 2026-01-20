@@ -7153,4 +7153,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String importErrorGeneric(String error) {
     return '错误：$error';
   }
+
+  @override
+  String get mergeConversationsSuccessTitle => '会话合并成功';
+
+  @override
+  String mergeConversationsSuccessBody(int count) {
+    return '$count个会话已成功合并';
+  }
 }

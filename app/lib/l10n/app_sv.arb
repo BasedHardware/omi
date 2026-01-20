@@ -2321,6 +2321,6 @@
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "Fel vid öppning av filväljare: {message}",
   "importErrorGeneric": "Fel: {error}",
-  "notificationMergeSuccessTitle": "Konversationer sammanslagna",
-  "notificationMergeSuccessBody": "{count} konversationer har slagits samman"
+  "mergeConversationsSuccessTitle": "Konversationer sammanfogade",
+  "mergeConversationsSuccessBody": "{count} konversationer har sammanfogats"
 }

@@ -7163,4 +7163,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String importErrorGeneric(String error) {
     return 'エラー: $error';
   }
+
+  @override
+  String get mergeConversationsSuccessTitle => '会話が正常にマージされました';
+
+  @override
+  String mergeConversationsSuccessBody(int count) {
+    return '$count件の会話が正常にマージされました';
+  }
 }

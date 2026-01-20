@@ -7260,4 +7260,12 @@ class AppLocalizationsHi extends AppLocalizations {
   String importErrorGeneric(String error) {
     return 'त्रुटि: $error';
   }
+
+  @override
+  String get mergeConversationsSuccessTitle => 'वार्तालाप सफलतापूर्वक मर्ज किए गए';
+
+  @override
+  String mergeConversationsSuccessBody(int count) {
+    return '$count वार्तालाप सफलतापूर्वक मर्ज किए गए';
+  }
 }

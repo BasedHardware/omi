@@ -2321,6 +2321,6 @@
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "Fout bij openen bestandskiezer: {message}",
   "importErrorGeneric": "Fout: {error}",
-  "notificationMergeSuccessTitle": "Gesprekken succesvol samengevoegd",
-  "notificationMergeSuccessBody": "{count} gesprekken zijn succesvol samengevoegd"
+  "mergeConversationsSuccessTitle": "Gesprekken succesvol samengevoegd",
+  "mergeConversationsSuccessBody": "{count} gesprekken zijn succesvol samengevoegd"
 }

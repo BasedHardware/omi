@@ -7289,4 +7289,12 @@ class AppLocalizationsUk extends AppLocalizations {
   String importErrorGeneric(String error) {
     return 'Помилка: $error';
   }
+
+  @override
+  String get mergeConversationsSuccessTitle => 'Розмови успішно об\'єднані';
+
+  @override
+  String mergeConversationsSuccessBody(int count) {
+    return '$count розмов успішно об\'єднано';
+  }
 }

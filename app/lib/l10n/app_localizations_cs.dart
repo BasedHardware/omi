@@ -7274,4 +7274,12 @@ class AppLocalizationsCs extends AppLocalizations {
   String importErrorGeneric(String error) {
     return 'Chyba: $error';
   }
+
+  @override
+  String get mergeConversationsSuccessTitle => 'Konverzace úspěšně sloučeny';
+
+  @override
+  String mergeConversationsSuccessBody(int count) {
+    return '$count konverzací bylo úspěšně sloučeno';
+  }
 }

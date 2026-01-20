@@ -2321,6 +2321,6 @@
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "Erreur lors de l'ouverture du sélecteur de fichiers : {message}",
   "importErrorGeneric": "Erreur : {error}",
-  "notificationMergeSuccessTitle": "Conversations fusionnées avec succès",
-  "notificationMergeSuccessBody": "{count} conversations ont été fusionnées avec succès"
+  "mergeConversationsSuccessTitle": "Conversations fusionnées avec succès",
+  "mergeConversationsSuccessBody": "{count} conversations ont été fusionnées avec succès"
 }

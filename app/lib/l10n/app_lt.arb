@@ -2321,6 +2321,6 @@
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "Klaida atidarant failų pasirinkiklį: {message}",
   "importErrorGeneric": "Klaida: {error}",
-  "notificationMergeSuccessTitle": "Pokalbiai sėkmingai sujungti",
-  "notificationMergeSuccessBody": "{count} pokalbiai sėkmingai sujungti"
+  "mergeConversationsSuccessTitle": "Pokalbiai sėkmingai sujungti",
+  "mergeConversationsSuccessBody": "{count} pokalbiai sėkmingai sujungti"
 }

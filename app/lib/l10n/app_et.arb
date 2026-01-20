@@ -2321,6 +2321,6 @@
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "Viga failivalija avamisel: {message}",
   "importErrorGeneric": "Viga: {error}",
-  "notificationMergeSuccessTitle": "Vestlused edukalt ühendatud",
-  "notificationMergeSuccessBody": "{count} vestlust on edukalt ühendatud"
+  "mergeConversationsSuccessTitle": "Vestlused ühendati edukalt",
+  "mergeConversationsSuccessBody": "{count} vestlust ühendati edukalt"
 }

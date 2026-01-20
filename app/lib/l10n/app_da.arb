@@ -2279,6 +2279,6 @@
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "Fejl ved åbning af filvælger: {message}",
   "importErrorGeneric": "Fejl: {error}",
-  "notificationMergeSuccessTitle": "Samtaler flettet sammen",
-  "notificationMergeSuccessBody": "{count} samtaler er blevet flettet sammen"
+  "mergeConversationsSuccessTitle": "Samtaler flettet succesfuldt",
+  "mergeConversationsSuccessBody": "{count} samtaler er blevet flettet"
 }

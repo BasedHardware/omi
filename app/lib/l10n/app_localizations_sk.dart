@@ -7282,4 +7282,12 @@ class AppLocalizationsSk extends AppLocalizations {
   String importErrorGeneric(String error) {
     return 'Chyba: $error';
   }
+
+  @override
+  String get mergeConversationsSuccessTitle => 'Konverzácie úspešne zlúčené';
+
+  @override
+  String mergeConversationsSuccessBody(int count) {
+    return '$count konverzácií bolo úspešne zlúčených';
+  }
 }

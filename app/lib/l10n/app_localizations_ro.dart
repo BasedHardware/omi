@@ -7314,4 +7314,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String importErrorGeneric(String error) {
     return 'Eroare: $error';
   }
+
+  @override
+  String get mergeConversationsSuccessTitle => 'Conversații îmbinate cu succes';
+
+  @override
+  String mergeConversationsSuccessBody(int count) {
+    return '$count conversații au fost îmbinate cu succes';
+  }
 }

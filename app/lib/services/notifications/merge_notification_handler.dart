@@ -79,15 +79,15 @@ class MergeNotificationHandler {
   }) async {
     try {
       final notificationId = mergedConversationId.hashCode;
+      final ctx = MyApp.navigatorKey.currentContext;
       final totalCount = removedCount + 1;
 
-      final ctx = MyApp.navigatorKey.currentContext;
       await _awesomeNotifications.createNotification(
         content: NotificationContent(
           id: notificationId,
           channelKey: channelKey,
-          title: ctx?.l10n.notificationMergeSuccessTitle ?? 'Conversations Merged Successfully',
-          body: ctx?.l10n.notificationMergeSuccessBody(totalCount) ??
+          title: '✅ ${ctx?.l10n.mergeConversationsSuccessTitle ?? 'Conversations Merged Successfully'}',
+          body: ctx?.l10n.mergeConversationsSuccessBody(totalCount) ??
               '$totalCount conversations have been merged successfully',
           payload: {
             'merged_conversation_id': mergedConversationId,

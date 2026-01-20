@@ -7288,4 +7288,12 @@ class AppLocalizationsDa extends AppLocalizations {
   String importErrorGeneric(String error) {
     return 'Fejl: $error';
   }
+
+  @override
+  String get mergeConversationsSuccessTitle => 'Samtaler flettet succesfuldt';
+
+  @override
+  String mergeConversationsSuccessBody(int count) {
+    return '$count samtaler er blevet flettet';
+  }
 }

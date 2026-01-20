@@ -2321,6 +2321,6 @@
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "Σφάλμα κατά το άνοιγμα του επιλογέα αρχείων: {message}",
   "importErrorGeneric": "Σφάλμα: {error}",
-  "notificationMergeSuccessTitle": "Οι συνομιλίες συγχωνεύτηκαν επιτυχώς",
-  "notificationMergeSuccessBody": "{count} συνομιλίες συγχωνεύτηκαν επιτυχώς"
+  "mergeConversationsSuccessTitle": "Οι συνομιλίες συγχωνεύθηκαν επιτυχώς",
+  "mergeConversationsSuccessBody": "{count} συνομιλίες συγχωνεύθηκαν επιτυχώς"
 }

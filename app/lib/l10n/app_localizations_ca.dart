@@ -7322,4 +7322,12 @@ class AppLocalizationsCa extends AppLocalizations {
   String importErrorGeneric(String error) {
     return 'Error: $error';
   }
+
+  @override
+  String get mergeConversationsSuccessTitle => 'Converses fusionades amb èxit';
+
+  @override
+  String mergeConversationsSuccessBody(int count) {
+    return '$count converses s\'han fusionat amb èxit';
+  }
 }

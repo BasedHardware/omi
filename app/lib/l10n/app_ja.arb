@@ -2322,6 +2322,6 @@
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "ファイルピッカーを開く際にエラーが発生しました: {message}",
   "importErrorGeneric": "エラー: {error}",
-  "notificationMergeSuccessTitle": "会話の統合が完了しました",
-  "notificationMergeSuccessBody": "{count}件の会話が正常に統合されました"
+  "mergeConversationsSuccessTitle": "会話が正常にマージされました",
+  "mergeConversationsSuccessBody": "{count}件の会話が正常にマージされました"
 }

@@ -7294,4 +7294,12 @@ class AppLocalizationsLv extends AppLocalizations {
   String importErrorGeneric(String error) {
     return 'Kļūda: $error';
   }
+
+  @override
+  String get mergeConversationsSuccessTitle => 'Sarunas veiksmīgi apvienotas';
+
+  @override
+  String mergeConversationsSuccessBody(int count) {
+    return '$count sarunas veiksmīgi apvienotas';
+  }
 }

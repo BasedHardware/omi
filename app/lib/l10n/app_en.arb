@@ -9011,13 +9011,13 @@
       }
     }
   },
-  "notificationMergeSuccessTitle": "Conversations Merged Successfully",
-  "@notificationMergeSuccessTitle": {
-    "description": "Notification title when conversations have been merged successfully"
+  "mergeConversationsSuccessTitle": "Conversations Merged Successfully",
+  "@mergeConversationsSuccessTitle": {
+    "description": "Notification title shown when conversations are merged successfully"
   },
-  "notificationMergeSuccessBody": "{count} conversations have been merged successfully",
-  "@notificationMergeSuccessBody": {
-    "description": "Notification body for merge success",
+  "mergeConversationsSuccessBody": "{count} conversations have been merged successfully",
+  "@mergeConversationsSuccessBody": {
+    "description": "Notification body shown when conversations are merged successfully",
     "placeholders": {
       "count": {
         "type": "int",

@@ -2321,6 +2321,6 @@
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "Помилка при відкритті вибору файлів: {message}",
   "importErrorGeneric": "Помилка: {error}",
-  "notificationMergeSuccessTitle": "Розмови успішно об'єднані",
-  "notificationMergeSuccessBody": "{count} розмов успішно об'єднано"
+  "mergeConversationsSuccessTitle": "Розмови успішно об'єднані",
+  "mergeConversationsSuccessBody": "{count} розмов успішно об'єднано"
 }

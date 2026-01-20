@@ -2303,6 +2303,6 @@
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "Fehler beim Öffnen der Dateiauswahl: {message}",
   "importErrorGeneric": "Fehler: {error}",
-  "notificationMergeSuccessTitle": "Gespräche erfolgreich zusammengeführt",
-  "notificationMergeSuccessBody": "{count} Gespräche wurden erfolgreich zusammengeführt"
+  "mergeConversationsSuccessTitle": "Gespräche erfolgreich zusammengeführt",
+  "mergeConversationsSuccessBody": "{count} Gespräche wurden erfolgreich zusammengeführt"
 }

@@ -2321,6 +2321,6 @@
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "Błąd podczas otwierania wyboru plików: {message}",
   "importErrorGeneric": "Błąd: {error}",
-  "notificationMergeSuccessTitle": "Rozmowy zostały pomyślnie połączone",
-  "notificationMergeSuccessBody": "{count} rozmów zostało pomyślnie połączonych"
+  "mergeConversationsSuccessTitle": "Rozmowy pomyślnie połączone",
+  "mergeConversationsSuccessBody": "{count} rozmów zostało pomyślnie połączonych"
 }

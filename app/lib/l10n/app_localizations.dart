@@ -13682,6 +13682,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Error: {error}'**
   String importErrorGeneric(String error);
+
+  /// Notification title shown when conversations are merged successfully
+  ///
+  /// In en, this message translates to:
+  /// **'Conversations Merged Successfully'**
+  String get mergeConversationsSuccessTitle;
+
+  /// Notification body shown when conversations are merged successfully
+  ///
+  /// In en, this message translates to:
+  /// **'{count} conversations have been merged successfully'**
+  String mergeConversationsSuccessBody(int count);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

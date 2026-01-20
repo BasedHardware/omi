@@ -7281,4 +7281,12 @@ class AppLocalizationsFi extends AppLocalizations {
   String importErrorGeneric(String error) {
     return 'Virhe: $error';
   }
+
+  @override
+  String get mergeConversationsSuccessTitle => 'Keskustelut yhdistetty onnistuneesti';
+
+  @override
+  String mergeConversationsSuccessBody(int count) {
+    return '$count keskustelua yhdistettiin onnistuneesti';
+  }
 }

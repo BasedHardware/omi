@@ -2321,6 +2321,6 @@
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "Dosya seçici açılırken hata: {message}",
   "importErrorGeneric": "Hata: {error}",
-  "notificationMergeSuccessTitle": "Konuşmalar başarıyla birleştirildi",
-  "notificationMergeSuccessBody": "{count} konuşma başarıyla birleştirildi"
+  "mergeConversationsSuccessTitle": "Konuşmalar başarıyla birleştirildi",
+  "mergeConversationsSuccessBody": "{count} konuşma başarıyla birleştirildi"
 }

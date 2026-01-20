@@ -144,9 +144,9 @@ Ran flutter gen-l10n and verified with test.sh.
 ### [x] services/notifications/merge_notification_handler.dart (2 strings)
 Status: COMPLETED
 Note: Added 2 new l10n keys to all 34 language ARB files and updated the Dart file to use
-MyApp.navigatorKey.currentContext?.l10n pattern with English fallback. Keys added:
-notificationMergeSuccessTitle, notificationMergeSuccessBody (with {count} placeholder).
-Uses the same pattern as important_conversation_notification_handler.dart for background notifications.
+MyApp.navigatorKey.currentContext?.l10n pattern with fallback. Keys added: mergeConversationsSuccessTitle,
+mergeConversationsSuccessBody (with {count} placeholder for total merged conversations count).
+Ran flutter gen-l10n and verified with test.sh.
 
 ### [ ] services/notifications/daily_reflection_notification.dart (2 strings)
 Status: PENDING
@@ -220,10 +220,10 @@ Strings:
 ================================================================================
 
 [2026-01-20] Localized merge_notification_handler.dart
-- Added 2 new l10n keys to all 34 language ARB files with proper translations
-- Keys: notificationMergeSuccessTitle, notificationMergeSuccessBody (with {count} placeholder)
-- Updated Dart file to use MyApp.navigatorKey.currentContext?.l10n pattern with English fallback
-- Pattern matches existing important_conversation_notification_handler.dart for consistency
+- Added 2 new l10n keys to all 34 language ARB files
+- Updated Dart file to use MyApp.navigatorKey.currentContext?.l10n pattern with fallback
+- Keys: mergeConversationsSuccessTitle, mergeConversationsSuccessBody (with {count} placeholder)
+- Ran flutter gen-l10n and verified with test.sh
 
 [2026-01-20] Localized app_detail.dart
 - Reused existing l10n key `errorWithMessage` with `{error}` placeholder

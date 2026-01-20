@@ -7285,4 +7285,12 @@ class AppLocalizationsSv extends AppLocalizations {
   String importErrorGeneric(String error) {
     return 'Fel: $error';
   }
+
+  @override
+  String get mergeConversationsSuccessTitle => 'Konversationer sammanfogade';
+
+  @override
+  String mergeConversationsSuccessBody(int count) {
+    return '$count konversationer har sammanfogats';
+  }
 }

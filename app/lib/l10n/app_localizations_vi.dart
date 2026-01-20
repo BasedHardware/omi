@@ -7291,4 +7291,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String importErrorGeneric(String error) {
     return 'Lỗi: $error';
   }
+
+  @override
+  String get mergeConversationsSuccessTitle => 'Hội thoại đã được hợp nhất thành công';
+
+  @override
+  String mergeConversationsSuccessBody(int count) {
+    return '$count hội thoại đã được hợp nhất thành công';
+  }
 }

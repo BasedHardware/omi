@@ -7299,4 +7299,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String importErrorGeneric(String error) {
     return 'Ошибка: $error';
   }
+
+  @override
+  String get mergeConversationsSuccessTitle => 'Разговоры успешно объединены';
+
+  @override
+  String mergeConversationsSuccessBody(int count) {
+    return '$count разговоров успешно объединено';
+  }
 }

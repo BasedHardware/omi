@@ -7282,4 +7282,12 @@ class AppLocalizationsEt extends AppLocalizations {
   String importErrorGeneric(String error) {
     return 'Viga: $error';
   }
+
+  @override
+  String get mergeConversationsSuccessTitle => 'Vestlused ühendati edukalt';
+
+  @override
+  String mergeConversationsSuccessBody(int count) {
+    return '$count vestlust ühendati edukalt';
+  }
 }

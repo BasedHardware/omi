@@ -7275,4 +7275,12 @@ class AppLocalizationsPt extends AppLocalizations {
   String importErrorGeneric(String error) {
     return 'Erro: $error';
   }
+
+  @override
+  String get mergeConversationsSuccessTitle => 'Conversas mescladas com sucesso';
+
+  @override
+  String mergeConversationsSuccessBody(int count) {
+    return '$count conversas foram mescladas com sucesso';
+  }
 }

@@ -7315,4 +7315,12 @@ class AppLocalizationsHu extends AppLocalizations {
   String importErrorGeneric(String error) {
     return 'Hiba: $error';
   }
+
+  @override
+  String get mergeConversationsSuccessTitle => 'Beszélgetések sikeresen összevonva';
+
+  @override
+  String mergeConversationsSuccessBody(int count) {
+    return '$count beszélgetés sikeresen összevonva';
+  }
 }

@@ -2321,6 +2321,6 @@
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "Hiba a fájlválasztó megnyitásakor: {message}",
   "importErrorGeneric": "Hiba: {error}",
-  "notificationMergeSuccessTitle": "Beszélgetések sikeresen egyesítve",
-  "notificationMergeSuccessBody": "{count} beszélgetés sikeresen egyesítve"
+  "mergeConversationsSuccessTitle": "Beszélgetések sikeresen összevonva",
+  "mergeConversationsSuccessBody": "{count} beszélgetés sikeresen összevonva"
 }

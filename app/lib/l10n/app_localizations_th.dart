@@ -7246,4 +7246,12 @@ class AppLocalizationsTh extends AppLocalizations {
   String importErrorGeneric(String error) {
     return 'ข้อผิดพลาด: $error';
   }
+
+  @override
+  String get mergeConversationsSuccessTitle => 'รวมการสนทนาสำเร็จแล้ว';
+
+  @override
+  String mergeConversationsSuccessBody(int count) {
+    return 'รวม $count การสนทนาสำเร็จแล้ว';
+  }
 }

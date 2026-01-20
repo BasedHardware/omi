@@ -2321,6 +2321,6 @@
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "เกิดข้อผิดพลาดในการเปิดตัวเลือกไฟล์: {message}",
   "importErrorGeneric": "ข้อผิดพลาด: {error}",
-  "notificationMergeSuccessTitle": "รวมการสนทนาสำเร็จ",
-  "notificationMergeSuccessBody": "รวม {count} การสนทนาสำเร็จแล้ว"
+  "mergeConversationsSuccessTitle": "รวมการสนทนาสำเร็จแล้ว",
+  "mergeConversationsSuccessBody": "รวม {count} การสนทนาสำเร็จแล้ว"
 }

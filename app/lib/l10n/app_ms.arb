@@ -2321,6 +2321,6 @@
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "Ralat membuka pemilih fail: {message}",
   "importErrorGeneric": "Ralat: {error}",
-  "notificationMergeSuccessTitle": "Perbualan Berjaya Digabungkan",
-  "notificationMergeSuccessBody": "{count} perbualan telah berjaya digabungkan"
+  "mergeConversationsSuccessTitle": "Perbualan berjaya digabungkan",
+  "mergeConversationsSuccessBody": "{count} perbualan berjaya digabungkan"
 }

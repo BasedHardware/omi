@@ -2321,6 +2321,6 @@
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "Kesalahan membuka pemilih file: {message}",
   "importErrorGeneric": "Kesalahan: {error}",
-  "notificationMergeSuccessTitle": "Percakapan Berhasil Digabungkan",
-  "notificationMergeSuccessBody": "{count} percakapan telah berhasil digabungkan"
+  "mergeConversationsSuccessTitle": "Percakapan berhasil digabungkan",
+  "mergeConversationsSuccessBody": "{count} percakapan berhasil digabungkan"
 }
