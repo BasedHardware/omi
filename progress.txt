@@ -2,9 +2,9 @@
 
 ## Summary
 Total Files to Localize: 38
-Completed: 37
+Completed: 38
 In Progress: 0
-Pending: 1
+Pending: 0
 
 ## Progress by File
 
@@ -52,11 +52,17 @@ Pending: 1
 [x] providers/user_provider.dart (~3 strings) - DONE (15 new keys + 2 reused keys)
 [x] services/notifications.dart (~6 strings) - DONE (2 new keys)
 [x] services/notifications/important_conversation_notification_handler.dart (~4 strings) - DONE (2 new keys)
-[ ] main.dart (~3 strings)
+[x] main.dart (~3 strings) - ALREADY LOCALIZED (UI strings localized, notification channel strings cannot use context.l10n in background isolate)
 
 ## Changelog
 
 ### 2026-01-20
+- Verified main.dart is already fully localized
+  - CustomErrorWidget UI uses existing l10n keys: somethingWentWrong, errorCopied, copyErrorMessage
+  - Notification channel strings ('Omi Notifications', 'Notification channel for Omi') cannot use context.l10n
+    because they run in a background isolate without BuildContext (system-level Android notification channel names)
+  - 'FlutterError' is a debug log category, not user-facing text
+- **ALL 38 FILES COMPLETE** - Localization project finished!
 - Localized services/notifications/important_conversation_notification_handler.dart with 2 l10n keys for 34 languages
   - importantConversationTitle, importantConversationBody (for important conversation completion notification)
 - Localized services/notifications.dart with 2 l10n keys for 34 languages
