@@ -2206,5 +2206,10 @@
   "deviceDisconnectedNotificationBody": "कृपया Omi का उपयोग जारी रखने के लिए पुनः कनेक्ट करें।",
   "firmwareUpdateAvailable": "फर्मवेयर अपडेट उपलब्ध",
   "firmwareUpdateAvailableDescription": "आपके Omi डिवाइस के लिए एक नया फर्मवेयर अपडेट ({version}) उपलब्ध है। क्या आप अभी अपडेट करना चाहते हैं?",
-  "later": "बाद में"
+  "later": "बाद में",
+  "appDeletedSuccessfully": "ऐप सफलतापूर्वक हटा दिया गया",
+  "appDeleteFailed": "ऐप हटाने में विफल। कृपया बाद में पुन: प्रयास करें।",
+  "appVisibilityChangedSuccessfully": "ऐप दृश्यता सफलतापूर्वक बदल दी गई। प्रतिबिंबित होने में कुछ मिनट लग सकते हैं।",
+  "errorActivatingAppIntegration": "ऐप सक्रिय करने में त्रुटि। यदि यह एकीकरण ऐप है, तो सुनिश्चित करें कि सेटअप पूरा हो गया है।",
+  "errorUpdatingAppStatus": "ऐप स्थिति अपडेट करते समय एक त्रुटि हुई।"
 }

@@ -2205,5 +2205,10 @@
   "deviceDisconnectedNotificationBody": "Anslut igen för att fortsätta använda Omi.",
   "firmwareUpdateAvailable": "Firmware-uppdatering tillgänglig",
   "firmwareUpdateAvailableDescription": "En ny firmware-uppdatering ({version}) finns tillgänglig för din Omi-enhet. Vill du uppdatera nu?",
-  "later": "Senare"
+  "later": "Senare",
+  "appDeletedSuccessfully": "Appen har tagits bort",
+  "appDeleteFailed": "Kunde inte ta bort appen. Försök igen senare.",
+  "appVisibilityChangedSuccessfully": "Appens synlighet har ändrats. Det kan ta några minuter innan ändringen syns.",
+  "errorActivatingAppIntegration": "Fel vid aktivering av appen. Om det är en integrationsapp, se till att konfigurationen är slutförd.",
+  "errorUpdatingAppStatus": "Ett fel uppstod vid uppdatering av appstatus."
 }

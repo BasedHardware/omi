@@ -2205,5 +2205,10 @@
   "deviceDisconnectedNotificationBody": "Sila sambung semula untuk terus menggunakan Omi.",
   "firmwareUpdateAvailable": "Kemas Kini Firmware Tersedia",
   "firmwareUpdateAvailableDescription": "Kemas kini firmware baharu ({version}) tersedia untuk peranti Omi anda. Adakah anda mahu mengemas kini sekarang?",
-  "later": "Nanti"
+  "later": "Nanti",
+  "appDeletedSuccessfully": "Apl berjaya dipadam",
+  "appDeleteFailed": "Gagal memadam apl. Sila cuba lagi kemudian.",
+  "appVisibilityChangedSuccessfully": "Keterlihatan apl berjaya ditukar. Ia mungkin mengambil masa beberapa minit untuk dikemas kini.",
+  "errorActivatingAppIntegration": "Ralat mengaktifkan apl. Jika ini adalah apl integrasi, pastikan persediaan telah selesai.",
+  "errorUpdatingAppStatus": "Ralat berlaku semasa mengemas kini status apl."
 }

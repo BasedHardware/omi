@@ -2163,5 +2163,10 @@
   "deviceDisconnectedNotificationBody": "Tilslut venligst igen for at fortsætte med at bruge din Omi.",
   "firmwareUpdateAvailable": "Firmwareopdatering tilgængelig",
   "firmwareUpdateAvailableDescription": "En ny firmwareopdatering ({version}) er tilgængelig til din Omi-enhed. Vil du opdatere nu?",
-  "later": "Senere"
+  "later": "Senere",
+  "appDeletedSuccessfully": "App slettet med succes",
+  "appDeleteFailed": "Kunne ikke slette app. Prøv venligst igen senere.",
+  "appVisibilityChangedSuccessfully": "App-synlighed ændret med succes. Det kan tage et par minutter at træde i kraft.",
+  "errorActivatingAppIntegration": "Fejl ved aktivering af app. Hvis det er en integrationsapp, skal du sikre dig, at opsætningen er fuldført.",
+  "errorUpdatingAppStatus": "Der opstod en fejl under opdatering af app-status."
 }

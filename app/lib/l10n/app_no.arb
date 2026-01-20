@@ -2205,5 +2205,10 @@
   "deviceDisconnectedNotificationBody": "Koble til igjen for å fortsette å bruke Omi.",
   "firmwareUpdateAvailable": "Fastvareoppdatering tilgjengelig",
   "firmwareUpdateAvailableDescription": "En ny fastvareoppdatering ({version}) er tilgjengelig for Omi-enheten din. Vil du oppdatere nå?",
-  "later": "Senere"
+  "later": "Senere",
+  "appDeletedSuccessfully": "Appen ble slettet",
+  "appDeleteFailed": "Kunne ikke slette appen. Prøv igjen senere.",
+  "appVisibilityChangedSuccessfully": "Appens synlighet ble endret. Det kan ta noen minutter før endringen vises.",
+  "errorActivatingAppIntegration": "Feil ved aktivering av appen. Hvis dette er en integrasjonsapp, sørg for at oppsettet er fullført.",
+  "errorUpdatingAppStatus": "Det oppstod en feil under oppdatering av app-statusen."
 }

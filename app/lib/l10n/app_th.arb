@@ -2205,5 +2205,10 @@
   "deviceDisconnectedNotificationBody": "กรุณาเชื่อมต่อใหม่เพื่อใช้งาน Omi ต่อไป",
   "firmwareUpdateAvailable": "มีการอัปเดตเฟิร์มแวร์",
   "firmwareUpdateAvailableDescription": "มีการอัปเดตเฟิร์มแวร์ใหม่ ({version}) สำหรับอุปกรณ์ Omi ของคุณ คุณต้องการอัปเดตตอนนี้หรือไม่?",
-  "later": "ภายหลัง"
+  "later": "ภายหลัง",
+  "appDeletedSuccessfully": "ลบแอปสำเร็จแล้ว",
+  "appDeleteFailed": "ไม่สามารถลบแอปได้ กรุณาลองใหม่ภายหลัง",
+  "appVisibilityChangedSuccessfully": "เปลี่ยนการมองเห็นแอปสำเร็จแล้ว อาจใช้เวลาสักครู่ในการอัปเดต",
+  "errorActivatingAppIntegration": "เกิดข้อผิดพลาดในการเปิดใช้งานแอป หากเป็นแอปการรวม โปรดตรวจสอบว่าการตั้งค่าเสร็จสมบูรณ์แล้ว",
+  "errorUpdatingAppStatus": "เกิดข้อผิดพลาดขณะอัปเดตสถานะแอป"
 }

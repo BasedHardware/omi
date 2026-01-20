@@ -2205,5 +2205,10 @@
   "deviceDisconnectedNotificationBody": "Palun ühendage uuesti, et jätkata Omi kasutamist.",
   "firmwareUpdateAvailable": "Püsivara värskendus saadaval",
   "firmwareUpdateAvailableDescription": "Teie Omi seadme jaoks on saadaval uus püsivara värskendus ({version}). Kas soovite kohe värskendada?",
-  "later": "Hiljem"
+  "later": "Hiljem",
+  "appDeletedSuccessfully": "Rakendus kustutati edukalt",
+  "appDeleteFailed": "Rakenduse kustutamine ebaõnnestus. Palun proovi hiljem uuesti.",
+  "appVisibilityChangedSuccessfully": "Rakenduse nähtavus muudeti edukalt. Muudatuse kajastumine võib võtta mõne minuti.",
+  "errorActivatingAppIntegration": "Viga rakenduse aktiveerimisel. Kui see on integratsioonirakendus, veendu, et seadistus on lõpule viidud.",
+  "errorUpdatingAppStatus": "Rakenduse oleku uuendamisel ilmnes viga."
 }

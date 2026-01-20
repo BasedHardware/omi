@@ -2205,5 +2205,10 @@
   "deviceDisconnectedNotificationBody": "Omi를 계속 사용하려면 다시 연결해 주세요.",
   "firmwareUpdateAvailable": "펌웨어 업데이트 사용 가능",
   "firmwareUpdateAvailableDescription": "Omi 기기에 새 펌웨어 업데이트({version})를 사용할 수 있습니다. 지금 업데이트하시겠습니까?",
-  "later": "나중에"
+  "later": "나중에",
+  "appDeletedSuccessfully": "앱이 성공적으로 삭제되었습니다",
+  "appDeleteFailed": "앱 삭제에 실패했습니다. 나중에 다시 시도해 주세요.",
+  "appVisibilityChangedSuccessfully": "앱 공개 설정이 성공적으로 변경되었습니다. 반영까지 몇 분 정도 걸릴 수 있습니다.",
+  "errorActivatingAppIntegration": "앱 활성화 중 오류가 발생했습니다. 연동 앱인 경우 설정이 완료되었는지 확인하세요.",
+  "errorUpdatingAppStatus": "앱 상태 업데이트 중 오류가 발생했습니다."
 }

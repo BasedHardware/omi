@@ -2205,5 +2205,10 @@
   "deviceDisconnectedNotificationBody": "Verbind opnieuw om Omi te blijven gebruiken.",
   "firmwareUpdateAvailable": "Firmware-update beschikbaar",
   "firmwareUpdateAvailableDescription": "Er is een nieuwe firmware-update ({version}) beschikbaar voor uw Omi-apparaat. Wilt u nu bijwerken?",
-  "later": "Later"
+  "later": "Later",
+  "appDeletedSuccessfully": "App succesvol verwijderd",
+  "appDeleteFailed": "Kan app niet verwijderen. Probeer het later opnieuw.",
+  "appVisibilityChangedSuccessfully": "Zichtbaarheid van app succesvol gewijzigd. Het kan enkele minuten duren voordat dit zichtbaar is.",
+  "errorActivatingAppIntegration": "Fout bij het activeren van de app. Als het een integratie-app is, zorg ervoor dat de installatie is voltooid.",
+  "errorUpdatingAppStatus": "Er is een fout opgetreden bij het bijwerken van de app-status."
 }

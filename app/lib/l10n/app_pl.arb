@@ -2205,5 +2205,10 @@
   "deviceDisconnectedNotificationBody": "Połącz się ponownie, aby kontynuować korzystanie z Omi.",
   "firmwareUpdateAvailable": "Dostępna aktualizacja oprogramowania",
   "firmwareUpdateAvailableDescription": "Dostępna jest nowa aktualizacja oprogramowania ({version}) dla Twojego urządzenia Omi. Czy chcesz zaktualizować teraz?",
-  "later": "Później"
+  "later": "Później",
+  "appDeletedSuccessfully": "Aplikacja została pomyślnie usunięta",
+  "appDeleteFailed": "Nie udało się usunąć aplikacji. Spróbuj ponownie później.",
+  "appVisibilityChangedSuccessfully": "Widoczność aplikacji została zmieniona pomyślnie. Może to potrwać kilka minut.",
+  "errorActivatingAppIntegration": "Błąd podczas aktywacji aplikacji. Jeśli to aplikacja integracyjna, upewnij się, że konfiguracja jest zakończona.",
+  "errorUpdatingAppStatus": "Wystąpił błąd podczas aktualizacji statusu aplikacji."
 }

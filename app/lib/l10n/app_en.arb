@@ -8479,5 +8479,25 @@
   "later": "Later",
   "@later": {
     "description": "Button text to postpone an action"
+  },
+  "appDeletedSuccessfully": "App deleted successfully",
+  "@appDeletedSuccessfully": {
+    "description": "Success message when an app is deleted"
+  },
+  "appDeleteFailed": "Failed to delete app. Please try again later.",
+  "@appDeleteFailed": {
+    "description": "Error message when app deletion fails"
+  },
+  "appVisibilityChangedSuccessfully": "App visibility changed successfully. It may take a few minutes to reflect.",
+  "@appVisibilityChangedSuccessfully": {
+    "description": "Success message when app visibility is changed"
+  },
+  "errorActivatingAppIntegration": "Error activating the app. If this is an integration app, make sure the setup is completed.",
+  "@errorActivatingAppIntegration": {
+    "description": "Error message when app activation fails, possibly due to incomplete integration setup"
+  },
+  "errorUpdatingAppStatus": "An error occurred while updating the app status.",
+  "@errorUpdatingAppStatus": {
+    "description": "Error message when updating app status fails"
   }
 }

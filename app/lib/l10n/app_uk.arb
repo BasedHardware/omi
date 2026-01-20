@@ -2205,5 +2205,10 @@
   "deviceDisconnectedNotificationBody": "Будь ласка, підключіться знову, щоб продовжити використання Omi.",
   "firmwareUpdateAvailable": "Доступне оновлення прошивки",
   "firmwareUpdateAvailableDescription": "Для вашого пристрою Omi доступне нове оновлення прошивки ({version}). Бажаєте оновити зараз?",
-  "later": "Пізніше"
+  "later": "Пізніше",
+  "appDeletedSuccessfully": "Додаток успішно видалено",
+  "appDeleteFailed": "Не вдалося видалити додаток. Спробуйте пізніше.",
+  "appVisibilityChangedSuccessfully": "Видимість додатка успішно змінено. Зміни можуть відобразитися через кілька хвилин.",
+  "errorActivatingAppIntegration": "Помилка при активації додатка. Якщо це інтеграційний додаток, переконайтеся, що налаштування завершено.",
+  "errorUpdatingAppStatus": "Виникла помилка під час оновлення статусу додатка."
 }

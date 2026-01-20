@@ -2205,5 +2205,10 @@
   "deviceDisconnectedNotificationBody": "Vă rugăm să vă reconectați pentru a continua să utilizați Omi.",
   "firmwareUpdateAvailable": "Actualizare firmware disponibilă",
   "firmwareUpdateAvailableDescription": "O nouă actualizare de firmware ({version}) este disponibilă pentru dispozitivul Omi. Doriți să actualizați acum?",
-  "later": "Mai târziu"
+  "later": "Mai târziu",
+  "appDeletedSuccessfully": "Aplicația a fost ștearsă cu succes",
+  "appDeleteFailed": "Nu s-a putut șterge aplicația. Vă rugăm să încercați din nou mai târziu.",
+  "appVisibilityChangedSuccessfully": "Vizibilitatea aplicației a fost schimbată cu succes. Poate dura câteva minute până se reflectă.",
+  "errorActivatingAppIntegration": "Eroare la activarea aplicației. Dacă este o aplicație de integrare, asigurați-vă că configurarea este completă.",
+  "errorUpdatingAppStatus": "A apărut o eroare la actualizarea stării aplicației."
 }

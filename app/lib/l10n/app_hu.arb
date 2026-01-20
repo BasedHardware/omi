@@ -2205,5 +2205,10 @@
   "deviceDisconnectedNotificationBody": "Kérjük, csatlakozzon újra az Omi használatának folytatásához.",
   "firmwareUpdateAvailable": "Firmware frissítés elérhető",
   "firmwareUpdateAvailableDescription": "Új firmware frissítés ({version}) érhető el az Omi eszközéhez. Szeretné most frissíteni?",
-  "later": "Később"
+  "later": "Később",
+  "appDeletedSuccessfully": "Az alkalmazás sikeresen törölve",
+  "appDeleteFailed": "Nem sikerült törölni az alkalmazást. Kérjük, próbáld újra később.",
+  "appVisibilityChangedSuccessfully": "Az alkalmazás láthatósága sikeresen megváltozott. Néhány percig eltarthat, amíg érvénybe lép.",
+  "errorActivatingAppIntegration": "Hiba az alkalmazás aktiválásakor. Ha integrációs alkalmazásról van szó, győződj meg róla, hogy a beállítás befejeződött.",
+  "errorUpdatingAppStatus": "Hiba történt az alkalmazás állapotának frissítése közben."
 }

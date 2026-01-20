@@ -2,9 +2,9 @@
 
 ## Summary
 Total Files to Localize: 38
-Completed: 33
+Completed: 34
 In Progress: 0
-Pending: 5
+Pending: 4
 
 ## Progress by File
 
@@ -48,7 +48,7 @@ Pending: 5
 
 ### Service/Provider Files
 [x] providers/device_provider.dart (~5 strings) - DONE (7 new keys + 1 reused key)
-[ ] providers/app_provider.dart (~4 strings)
+[x] providers/app_provider.dart (~4 strings) - DONE (5 new keys + 1 reused key)
 [ ] providers/user_provider.dart (~3 strings)
 [ ] services/notifications.dart (~6 strings)
 [ ] services/notifications/important_conversation_notification_handler.dart (~4 strings)
@@ -57,6 +57,11 @@ Pending: 5
 ## Changelog
 
 ### 2026-01-20
+- Localized providers/app_provider.dart with 5 l10n keys for 34 languages
+  - appDeletedSuccessfully, appDeleteFailed (for delete app operations)
+  - appVisibilityChangedSuccessfully (for visibility toggle)
+  - errorActivatingAppIntegration, errorUpdatingAppStatus (for app activation errors)
+  - Reuses: error
 - Localized providers/device_provider.dart with 7 l10n keys for 34 languages
   - lowBatteryAlertTitle, lowBatteryAlertBody (for low battery notification)
   - deviceDisconnectedNotificationTitle, deviceDisconnectedNotificationBody (for disconnect notification)

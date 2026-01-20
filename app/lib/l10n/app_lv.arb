@@ -2205,5 +2205,10 @@
   "deviceDisconnectedNotificationBody": "Lūdzu, pieslēdzieties atkārtoti, lai turpinātu lietot Omi.",
   "firmwareUpdateAvailable": "Pieejams programmaparatūras atjauninājums",
   "firmwareUpdateAvailableDescription": "Jūsu Omi ierīcei ir pieejams jauns programmaparatūras atjauninājums ({version}). Vai vēlaties atjaunināt tagad?",
-  "later": "Vēlāk"
+  "later": "Vēlāk",
+  "appDeletedSuccessfully": "Lietotne veiksmīgi izdzēsta",
+  "appDeleteFailed": "Neizdevās izdzēst lietotni. Lūdzu, mēģiniet vēlāk.",
+  "appVisibilityChangedSuccessfully": "Lietotnes redzamība veiksmīgi mainīta. Var paiet dažas minūtes, līdz izmaiņas stājas spēkā.",
+  "errorActivatingAppIntegration": "Kļūda, aktivizējot lietotni. Ja tā ir integrācijas lietotne, pārliecinieties, ka iestatīšana ir pabeigta.",
+  "errorUpdatingAppStatus": "Atjauninot lietotnes statusu, radās kļūda."
 }

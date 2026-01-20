@@ -2205,5 +2205,10 @@
   "deviceDisconnectedNotificationBody": "Vui lòng kết nối lại để tiếp tục sử dụng Omi.",
   "firmwareUpdateAvailable": "Có bản cập nhật firmware",
   "firmwareUpdateAvailableDescription": "Có bản cập nhật firmware mới ({version}) cho thiết bị Omi của bạn. Bạn có muốn cập nhật ngay không?",
-  "later": "Để sau"
+  "later": "Để sau",
+  "appDeletedSuccessfully": "Đã xóa ứng dụng thành công",
+  "appDeleteFailed": "Không thể xóa ứng dụng. Vui lòng thử lại sau.",
+  "appVisibilityChangedSuccessfully": "Đã thay đổi chế độ hiển thị ứng dụng thành công. Có thể mất vài phút để cập nhật.",
+  "errorActivatingAppIntegration": "Lỗi khi kích hoạt ứng dụng. Nếu đây là ứng dụng tích hợp, hãy đảm bảo rằng việc thiết lập đã hoàn tất.",
+  "errorUpdatingAppStatus": "Đã xảy ra lỗi khi cập nhật trạng thái ứng dụng."
 }

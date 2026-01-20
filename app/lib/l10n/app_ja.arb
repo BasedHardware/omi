@@ -2206,5 +2206,10 @@
   "deviceDisconnectedNotificationBody": "Omiを引き続き使用するには再接続してください。",
   "firmwareUpdateAvailable": "ファームウェアアップデートが利用可能",
   "firmwareUpdateAvailableDescription": "Omiデバイスの新しいファームウェアアップデート（{version}）が利用可能です。今すぐアップデートしますか？",
-  "later": "後で"
+  "later": "後で",
+  "appDeletedSuccessfully": "アプリが正常に削除されました",
+  "appDeleteFailed": "アプリの削除に失敗しました。後でもう一度お試しください。",
+  "appVisibilityChangedSuccessfully": "アプリの公開設定が正常に変更されました。反映まで数分かかる場合があります。",
+  "errorActivatingAppIntegration": "アプリの有効化中にエラーが発生しました。連携アプリの場合は、設定が完了していることを確認してください。",
+  "errorUpdatingAppStatus": "アプリのステータス更新中にエラーが発生しました。"
 }

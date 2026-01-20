@@ -2205,5 +2205,10 @@
   "deviceDisconnectedNotificationBody": "Prašome prisijungti iš naujo, kad galėtumėte toliau naudoti Omi.",
   "firmwareUpdateAvailable": "Yra programinės aparatinės įrangos atnaujinimas",
   "firmwareUpdateAvailableDescription": "Jūsų Omi įrenginiui yra naujas programinės aparatinės įrangos atnaujinimas ({version}). Ar norite atnaujinti dabar?",
-  "later": "Vėliau"
+  "later": "Vėliau",
+  "appDeletedSuccessfully": "Programa sėkmingai ištrinta",
+  "appDeleteFailed": "Nepavyko ištrinti programos. Bandykite vėliau.",
+  "appVisibilityChangedSuccessfully": "Programos matomumas sėkmingai pakeistas. Gali užtrukti kelias minutes.",
+  "errorActivatingAppIntegration": "Klaida aktyvuojant programą. Jei tai integracijos programa, įsitikinkite, kad sąranka užbaigta.",
+  "errorUpdatingAppStatus": "Atnaujinant programos būseną įvyko klaida."
 }

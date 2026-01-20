@@ -2165,5 +2165,10 @@
   "deviceDisconnectedNotificationBody": "Prosím, znovu se připojte, abyste mohli pokračovat v používání Omi.",
   "firmwareUpdateAvailable": "K dispozici je aktualizace firmwaru",
   "firmwareUpdateAvailableDescription": "Pro vaše zařízení Omi je k dispozici nová aktualizace firmwaru ({version}). Chcete aktualizovat nyní?",
-  "later": "Později"
+  "later": "Později",
+  "appDeletedSuccessfully": "Aplikace byla úspěšně smazána",
+  "appDeleteFailed": "Nepodařilo se smazat aplikaci. Zkuste to prosím později.",
+  "appVisibilityChangedSuccessfully": "Viditelnost aplikace byla úspěšně změněna. Může to trvat několik minut.",
+  "errorActivatingAppIntegration": "Chyba při aktivaci aplikace. Pokud jde o integrační aplikaci, ujistěte se, že je nastavení dokončeno.",
+  "errorUpdatingAppStatus": "Při aktualizaci stavu aplikace došlo k chybě."
 }

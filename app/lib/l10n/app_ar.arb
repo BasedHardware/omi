@@ -2186,5 +2186,10 @@
   "deviceDisconnectedNotificationBody": "يرجى إعادة الاتصال لمتابعة استخدام Omi.",
   "firmwareUpdateAvailable": "تحديث البرنامج الثابت متاح",
   "firmwareUpdateAvailableDescription": "تحديث جديد للبرنامج الثابت ({version}) متاح لجهاز Omi الخاص بك. هل تريد التحديث الآن؟",
-  "later": "لاحقاً"
+  "later": "لاحقاً",
+  "appDeletedSuccessfully": "تم حذف التطبيق بنجاح",
+  "appDeleteFailed": "فشل في حذف التطبيق. يرجى المحاولة مرة أخرى لاحقًا.",
+  "appVisibilityChangedSuccessfully": "تم تغيير إعدادات الرؤية للتطبيق بنجاح. قد يستغرق الأمر بضع دقائق.",
+  "errorActivatingAppIntegration": "حدث خطأ أثناء تفعيل التطبيق. إذا كان تطبيق تكامل، تأكد من اكتمال الإعداد.",
+  "errorUpdatingAppStatus": "حدث خطأ أثناء تحديث حالة التطبيق."
 }

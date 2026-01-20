@@ -2206,5 +2206,10 @@
   "deviceDisconnectedNotificationBody": "请重新连接以继续使用 Omi。",
   "firmwareUpdateAvailable": "固件更新可用",
   "firmwareUpdateAvailableDescription": "您的 Omi 设备有新的固件更新（{version}）可用。您想现在更新吗？",
-  "later": "稍后"
+  "later": "稍后",
+  "appDeletedSuccessfully": "应用删除成功",
+  "appDeleteFailed": "删除应用失败。请稍后重试。",
+  "appVisibilityChangedSuccessfully": "应用可见性更改成功。可能需要几分钟才能生效。",
+  "errorActivatingAppIntegration": "激活应用时出错。如果这是集成应用，请确保设置已完成。",
+  "errorUpdatingAppStatus": "更新应用状态时发生错误。"
 }

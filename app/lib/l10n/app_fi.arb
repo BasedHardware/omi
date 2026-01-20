@@ -2205,5 +2205,10 @@
   "deviceDisconnectedNotificationBody": "Yhdistä uudelleen jatkaaksesi Omin käyttöä.",
   "firmwareUpdateAvailable": "Laiteohjelmistopäivitys saatavilla",
   "firmwareUpdateAvailableDescription": "Uusi laiteohjelmistopäivitys ({version}) on saatavilla Omi-laitteellesi. Haluatko päivittää nyt?",
-  "later": "Myöhemmin"
+  "later": "Myöhemmin",
+  "appDeletedSuccessfully": "Sovellus poistettu onnistuneesti",
+  "appDeleteFailed": "Sovelluksen poistaminen epäonnistui. Yritä myöhemmin uudelleen.",
+  "appVisibilityChangedSuccessfully": "Sovelluksen näkyvyys muutettu onnistuneesti. Muutos voi näkyä muutaman minuutin kuluttua.",
+  "errorActivatingAppIntegration": "Virhe sovelluksen aktivoinnissa. Jos kyseessä on integrointisovellus, varmista, että asennus on valmis.",
+  "errorUpdatingAppStatus": "Sovelluksen tilan päivittämisessä tapahtui virhe."
 }

@@ -2187,5 +2187,10 @@
   "deviceDisconnectedNotificationBody": "Bitte verbinden Sie sich erneut, um Ihr Omi weiter zu nutzen.",
   "firmwareUpdateAvailable": "Firmware-Update verfügbar",
   "firmwareUpdateAvailableDescription": "Ein neues Firmware-Update ({version}) ist für Ihr Omi-Gerät verfügbar. Möchten Sie jetzt aktualisieren?",
-  "later": "Später"
+  "later": "Später",
+  "appDeletedSuccessfully": "App erfolgreich gelöscht",
+  "appDeleteFailed": "App konnte nicht gelöscht werden. Bitte versuche es später erneut.",
+  "appVisibilityChangedSuccessfully": "App-Sichtbarkeit erfolgreich geändert. Es kann einige Minuten dauern, bis die Änderung wirksam wird.",
+  "errorActivatingAppIntegration": "Fehler beim Aktivieren der App. Falls es sich um eine Integrations-App handelt, stelle sicher, dass die Einrichtung abgeschlossen ist.",
+  "errorUpdatingAppStatus": "Beim Aktualisieren des App-Status ist ein Fehler aufgetreten."
 }

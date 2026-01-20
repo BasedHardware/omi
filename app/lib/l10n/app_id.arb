@@ -2205,5 +2205,10 @@
   "deviceDisconnectedNotificationBody": "Silakan sambungkan kembali untuk terus menggunakan Omi.",
   "firmwareUpdateAvailable": "Pembaruan Firmware Tersedia",
   "firmwareUpdateAvailableDescription": "Pembaruan firmware baru ({version}) tersedia untuk perangkat Omi Anda. Apakah Anda ingin memperbarui sekarang?",
-  "later": "Nanti"
+  "later": "Nanti",
+  "appDeletedSuccessfully": "Aplikasi berhasil dihapus",
+  "appDeleteFailed": "Gagal menghapus aplikasi. Silakan coba lagi nanti.",
+  "appVisibilityChangedSuccessfully": "Visibilitas aplikasi berhasil diubah. Mungkin memerlukan beberapa menit untuk diterapkan.",
+  "errorActivatingAppIntegration": "Kesalahan saat mengaktifkan aplikasi. Jika ini adalah aplikasi integrasi, pastikan pengaturan sudah selesai.",
+  "errorUpdatingAppStatus": "Terjadi kesalahan saat memperbarui status aplikasi."
 }

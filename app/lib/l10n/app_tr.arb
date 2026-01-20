@@ -2205,5 +2205,10 @@
   "deviceDisconnectedNotificationBody": "Omi'yi kullanmaya devam etmek için lütfen yeniden bağlanın.",
   "firmwareUpdateAvailable": "Yazılım Güncellemesi Mevcut",
   "firmwareUpdateAvailableDescription": "Omi cihazınız için yeni bir yazılım güncellemesi ({version}) mevcut. Şimdi güncellemek ister misiniz?",
-  "later": "Daha sonra"
+  "later": "Daha sonra",
+  "appDeletedSuccessfully": "Uygulama başarıyla silindi",
+  "appDeleteFailed": "Uygulama silinemedi. Lütfen daha sonra tekrar deneyin.",
+  "appVisibilityChangedSuccessfully": "Uygulama görünürlüğü başarıyla değiştirildi. Yansıması birkaç dakika sürebilir.",
+  "errorActivatingAppIntegration": "Uygulama etkinleştirilirken hata oluştu. Bu bir entegrasyon uygulamasıysa, kurulumun tamamlandığından emin olun.",
+  "errorUpdatingAppStatus": "Uygulama durumu güncellenirken bir hata oluştu."
 }
