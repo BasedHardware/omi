@@ -2227,5 +2227,7 @@
   "chatsLowercase": "chats",
   "dataLowercase": "data",
   "fallNotificationTitle": "Ouch",
-  "fallNotificationBody": "Did you fall?"
+  "fallNotificationBody": "Did you fall?",
+  "importantConversationTitle": "Percakapan Penting",
+  "importantConversationBody": "Anda baru saja melakukan percakapan penting. Ketuk untuk membagikan ringkasan."
 }

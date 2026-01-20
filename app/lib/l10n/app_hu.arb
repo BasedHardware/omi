@@ -2227,5 +2227,7 @@
   "chatsLowercase": "chats",
   "dataLowercase": "data",
   "fallNotificationTitle": "Ouch",
-  "fallNotificationBody": "Did you fall?"
+  "fallNotificationBody": "Did you fall?",
+  "importantConversationTitle": "Fontos beszélgetés",
+  "importantConversationBody": "Most volt egy fontos beszélgetésed. Érintsd meg az összefoglaló megosztásához."
 }

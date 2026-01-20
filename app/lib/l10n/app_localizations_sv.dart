@@ -6984,4 +6984,10 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get fallNotificationBody => 'Did you fall?';
+
+  @override
+  String get importantConversationTitle => 'Viktigt samtal';
+
+  @override
+  String get importantConversationBody => 'Du hade precis ett viktigt samtal. Tryck för att dela sammanfattningen.';
 }

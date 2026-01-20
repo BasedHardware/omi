@@ -6853,4 +6853,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get fallNotificationBody => 'Did you fall?';
+
+  @override
+  String get importantConversationTitle => '重要对话';
+
+  @override
+  String get importantConversationBody => '您刚刚进行了一次重要对话。点击分享摘要。';
 }

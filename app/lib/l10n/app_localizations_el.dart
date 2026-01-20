@@ -7029,4 +7029,10 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get fallNotificationBody => 'Did you fall?';
+
+  @override
+  String get importantConversationTitle => 'Σημαντική συνομιλία';
+
+  @override
+  String get importantConversationBody => 'Μόλις είχατε μια σημαντική συνομιλία. Πατήστε για να μοιραστείτε τη σύνοψη.';
 }

@@ -7000,4 +7000,10 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get fallNotificationBody => 'Did you fall?';
+
+  @override
+  String get importantConversationTitle => 'Belangrijk gesprek';
+
+  @override
+  String get importantConversationBody => 'Je hebt net een belangrijk gesprek gehad. Tik om de samenvatting te delen.';
 }

@@ -6865,4 +6865,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get fallNotificationBody => 'Did you fall?';
+
+  @override
+  String get importantConversationTitle => '중요한 대화';
+
+  @override
+  String get importantConversationBody => '방금 중요한 대화를 나눴습니다. 탭하여 요약을 공유하세요.';
 }

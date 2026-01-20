@@ -6982,4 +6982,10 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get fallNotificationBody => 'Did you fall?';
+
+  @override
+  String get importantConversationTitle => 'Dôležitý rozhovor';
+
+  @override
+  String get importantConversationBody => 'Práve ste mali dôležitý rozhovor. Klepnutím zdieľajte zhrnutie.';
 }

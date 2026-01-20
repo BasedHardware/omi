@@ -6990,4 +6990,10 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get fallNotificationBody => 'Did you fall?';
+
+  @override
+  String get importantConversationTitle => 'Cuộc trò chuyện quan trọng';
+
+  @override
+  String get importantConversationBody => 'Bạn vừa có một cuộc trò chuyện quan trọng. Nhấn để chia sẻ bản tóm tắt.';
 }

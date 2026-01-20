@@ -6946,4 +6946,10 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get fallNotificationBody => 'Did you fall?';
+
+  @override
+  String get importantConversationTitle => 'การสนทนาสำคัญ';
+
+  @override
+  String get importantConversationBody => 'คุณเพิ่งมีการสนทนาสำคัญ แตะเพื่อแชร์สรุปกับผู้อื่น';
 }

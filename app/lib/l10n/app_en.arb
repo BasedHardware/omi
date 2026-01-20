@@ -8590,5 +8590,13 @@
   "fallNotificationBody": "Did you fall?",
   "@fallNotificationBody": {
     "description": "Body text for notification shown when device detects a fall"
+  },
+  "importantConversationTitle": "Important Conversation",
+  "@importantConversationTitle": {
+    "description": "Notification title for important conversation (>30 min) completion"
+  },
+  "importantConversationBody": "You just had an important convo. Tap to share the summary with others.",
+  "@importantConversationBody": {
+    "description": "Notification body prompting user to share conversation summary"
   }
 }

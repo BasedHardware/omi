@@ -2228,5 +2228,7 @@
   "chatsLowercase": "chats",
   "dataLowercase": "data",
   "fallNotificationTitle": "Ouch",
-  "fallNotificationBody": "Did you fall?"
+  "fallNotificationBody": "Did you fall?",
+  "importantConversationTitle": "重要な会話",
+  "importantConversationBody": "重要な会話がありました。タップして要約を共有しましょう。"
 }

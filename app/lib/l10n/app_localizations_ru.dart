@@ -6999,4 +6999,10 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get fallNotificationBody => 'Did you fall?';
+
+  @override
+  String get importantConversationTitle => 'Важный разговор';
+
+  @override
+  String get importantConversationBody => 'У вас только что был важный разговор. Нажмите, чтобы поделиться сводкой.';
 }

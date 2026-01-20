@@ -6960,4 +6960,10 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get fallNotificationBody => 'Did you fall?';
+
+  @override
+  String get importantConversationTitle => 'महत्वपूर्ण बातचीत';
+
+  @override
+  String get importantConversationBody => 'आपकी अभी एक महत्वपूर्ण बातचीत हुई। सारांश साझा करने के लिए टैप करें।';
 }

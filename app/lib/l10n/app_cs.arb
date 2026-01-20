@@ -2187,5 +2187,7 @@
   "chatsLowercase": "chats",
   "dataLowercase": "data",
   "fallNotificationTitle": "Ouch",
-  "fallNotificationBody": "Did you fall?"
+  "fallNotificationBody": "Did you fall?",
+  "importantConversationTitle": "Důležitá konverzace",
+  "importantConversationBody": "Právě jste měli důležitý rozhovor. Klepnutím sdílejte shrnutí s ostatními."
 }

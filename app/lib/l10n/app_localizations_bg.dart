@@ -7008,4 +7008,11 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get fallNotificationBody => 'Did you fall?';
+
+  @override
+  String get importantConversationTitle => 'Важен разговор';
+
+  @override
+  String get importantConversationBody =>
+      'Току-що проведохте важен разговор. Докоснете, за да споделите резюмето с други.';
 }

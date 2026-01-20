@@ -7033,4 +7033,11 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get fallNotificationBody => 'Did you fall?';
+
+  @override
+  String get importantConversationTitle => 'Wichtiges Gespräch';
+
+  @override
+  String get importantConversationBody =>
+      'Du hattest gerade ein wichtiges Gespräch. Tippe, um die Zusammenfassung zu teilen.';
 }

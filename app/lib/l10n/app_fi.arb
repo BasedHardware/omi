@@ -2227,5 +2227,7 @@
   "chatsLowercase": "chats",
   "dataLowercase": "data",
   "fallNotificationTitle": "Ouch",
-  "fallNotificationBody": "Did you fall?"
+  "fallNotificationBody": "Did you fall?",
+  "importantConversationTitle": "Tärkeä keskustelu",
+  "importantConversationBody": "Sinulla oli juuri tärkeä keskustelu. Napauta jakaaksesi yhteenvedon muille."
 }

@@ -7020,4 +7020,11 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get fallNotificationBody => 'Did you fall?';
+
+  @override
+  String get importantConversationTitle => 'Conversazione importante';
+
+  @override
+  String get importantConversationBody =>
+      'Hai appena avuto una conversazione importante. Tocca per condividere il riepilogo.';
 }

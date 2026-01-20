@@ -2228,5 +2228,7 @@
   "chatsLowercase": "chats",
   "dataLowercase": "data",
   "fallNotificationTitle": "Ouch",
-  "fallNotificationBody": "Did you fall?"
+  "fallNotificationBody": "Did you fall?",
+  "importantConversationTitle": "重要对话",
+  "importantConversationBody": "您刚刚进行了一次重要对话。点击分享摘要。"
 }

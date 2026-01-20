@@ -6993,4 +6993,10 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get fallNotificationBody => 'Did you fall?';
+
+  @override
+  String get importantConversationTitle => 'Svarīga saruna';
+
+  @override
+  String get importantConversationBody => 'Jums tikko bija svarīga saruna. Pieskarieties, lai kopīgotu kopsavilkumu.';
 }

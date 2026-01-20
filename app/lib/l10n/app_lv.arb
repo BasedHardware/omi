@@ -2227,5 +2227,7 @@
   "chatsLowercase": "chats",
   "dataLowercase": "data",
   "fallNotificationTitle": "Ouch",
-  "fallNotificationBody": "Did you fall?"
+  "fallNotificationBody": "Did you fall?",
+  "importantConversationTitle": "Svarīga saruna",
+  "importantConversationBody": "Jums tikko bija svarīga saruna. Pieskarieties, lai kopīgotu kopsavilkumu."
 }

@@ -6973,4 +6973,10 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get fallNotificationBody => 'Did you fall?';
+
+  @override
+  String get importantConversationTitle => 'Důležitá konverzace';
+
+  @override
+  String get importantConversationBody => 'Právě jste měli důležitý rozhovor. Klepnutím sdílejte shrnutí s ostatními.';
 }

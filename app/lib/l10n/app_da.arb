@@ -2185,5 +2185,7 @@
   "chatsLowercase": "chats",
   "dataLowercase": "data",
   "fallNotificationTitle": "Ouch",
-  "fallNotificationBody": "Did you fall?"
+  "fallNotificationBody": "Did you fall?",
+  "importantConversationTitle": "Vigtig samtale",
+  "importantConversationBody": "Du har lige haft en vigtig samtale. Tryk for at dele resuméet med andre."
 }

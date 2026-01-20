@@ -2228,5 +2228,7 @@
   "chatsLowercase": "chats",
   "dataLowercase": "data",
   "fallNotificationTitle": "Ouch",
-  "fallNotificationBody": "Did you fall?"
+  "fallNotificationBody": "Did you fall?",
+  "importantConversationTitle": "Conversa importante",
+  "importantConversationBody": "Você acabou de ter uma conversa importante. Toque para compartilhar o resumo."
 }

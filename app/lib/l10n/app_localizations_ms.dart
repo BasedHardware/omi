@@ -7001,4 +7001,11 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get fallNotificationBody => 'Did you fall?';
+
+  @override
+  String get importantConversationTitle => 'Perbualan Penting';
+
+  @override
+  String get importantConversationBody =>
+      'Anda baru sahaja melakukan perbualan penting. Ketik untuk berkongsi ringkasan.';
 }

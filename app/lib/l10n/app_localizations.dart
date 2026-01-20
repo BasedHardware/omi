@@ -13124,6 +13124,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Did you fall?'**
   String get fallNotificationBody;
+
+  /// Notification title for important conversation (>30 min) completion
+  ///
+  /// In en, this message translates to:
+  /// **'Important Conversation'**
+  String get importantConversationTitle;
+
+  /// Notification body prompting user to share conversation summary
+  ///
+  /// In en, this message translates to:
+  /// **'You just had an important convo. Tap to share the summary with others.'**
+  String get importantConversationBody;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

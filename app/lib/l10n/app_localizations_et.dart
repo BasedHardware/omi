@@ -6982,4 +6982,10 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get fallNotificationBody => 'Did you fall?';
+
+  @override
+  String get importantConversationTitle => 'Oluline vestlus';
+
+  @override
+  String get importantConversationBody => 'Teil oli just oluline vestlus. Puudutage kokkuvõtte jagamiseks.';
 }

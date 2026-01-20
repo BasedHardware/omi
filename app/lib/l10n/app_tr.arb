@@ -2227,5 +2227,7 @@
   "chatsLowercase": "chats",
   "dataLowercase": "data",
   "fallNotificationTitle": "Ouch",
-  "fallNotificationBody": "Did you fall?"
+  "fallNotificationBody": "Did you fall?",
+  "importantConversationTitle": "Önemli Konuşma",
+  "importantConversationBody": "Az önce önemli bir konuşma yaptınız. Özeti paylaşmak için dokunun."
 }

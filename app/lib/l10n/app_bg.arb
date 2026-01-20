@@ -2210,5 +2210,7 @@
   "chatsLowercase": "chats",
   "dataLowercase": "data",
   "fallNotificationTitle": "Ouch",
-  "fallNotificationBody": "Did you fall?"
+  "fallNotificationBody": "Did you fall?",
+  "importantConversationTitle": "Важен разговор",
+  "importantConversationBody": "Току-що проведохте важен разговор. Докоснете, за да споделите резюмето с други."
 }

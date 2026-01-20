@@ -2227,5 +2227,7 @@
   "chatsLowercase": "chats",
   "dataLowercase": "data",
   "fallNotificationTitle": "Ouch",
-  "fallNotificationBody": "Did you fall?"
+  "fallNotificationBody": "Did you fall?",
+  "importantConversationTitle": "Oluline vestlus",
+  "importantConversationBody": "Teil oli just oluline vestlus. Puudutage kokkuvõtte jagamiseks."
 }

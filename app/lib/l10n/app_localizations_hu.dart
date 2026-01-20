@@ -7013,4 +7013,11 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get fallNotificationBody => 'Did you fall?';
+
+  @override
+  String get importantConversationTitle => 'Fontos beszélgetés';
+
+  @override
+  String get importantConversationBody =>
+      'Most volt egy fontos beszélgetésed. Érintsd meg az összefoglaló megosztásához.';
 }

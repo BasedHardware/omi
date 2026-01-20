@@ -7013,4 +7013,10 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get fallNotificationBody => 'Did you fall?';
+
+  @override
+  String get importantConversationTitle => 'Conversație importantă';
+
+  @override
+  String get importantConversationBody => 'Tocmai ai avut o conversație importantă. Atinge pentru a partaja rezumatul.';
 }

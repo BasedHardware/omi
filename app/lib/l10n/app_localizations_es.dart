@@ -6984,4 +6984,11 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get fallNotificationBody => 'Did you fall?';
+
+  @override
+  String get importantConversationTitle => 'Conversación importante';
+
+  @override
+  String get importantConversationBody =>
+      'Acabas de tener una conversación importante. Toca para compartir el resumen.';
 }

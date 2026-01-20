@@ -2227,5 +2227,7 @@
   "chatsLowercase": "chats",
   "dataLowercase": "data",
   "fallNotificationTitle": "Ouch",
-  "fallNotificationBody": "Did you fall?"
+  "fallNotificationBody": "Did you fall?",
+  "importantConversationTitle": "Viktig samtale",
+  "importantConversationBody": "Du hadde nettopp en viktig samtale. Trykk for å dele sammendraget."
 }

@@ -6981,4 +6981,10 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get fallNotificationBody => 'Did you fall?';
+
+  @override
+  String get importantConversationTitle => 'Tärkeä keskustelu';
+
+  @override
+  String get importantConversationBody => 'Sinulla oli juuri tärkeä keskustelu. Napauta jakaaksesi yhteenvedon muille.';
 }
