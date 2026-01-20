@@ -7413,4 +7413,28 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get failedToRefreshGitHubStatus => 'GitHubi ühenduse oleku värskendamine ebaõnnestus.';
+
+  @override
+  String get authFailedToSignInWithGoogle => 'Google\'iga sisselogimine ebaõnnestus, palun proovige uuesti.';
+
+  @override
+  String get authenticationFailed => 'Autentimine ebaõnnestus. Palun proovige uuesti.';
+
+  @override
+  String get authFailedToSignInWithApple => 'Apple\'iga sisselogimine ebaõnnestus, palun proovige uuesti.';
+
+  @override
+  String get authFailedToRetrieveToken => 'Firebase tokeni hankimine ebaõnnestus, palun proovige uuesti.';
+
+  @override
+  String get authUnexpectedErrorFirebase => 'Ootamatu viga sisselogimisel, Firebase viga, palun proovige uuesti.';
+
+  @override
+  String get authUnexpectedError => 'Ootamatu viga sisselogimisel, palun proovige uuesti';
+
+  @override
+  String get authFailedToLinkGoogle => 'Google\'iga sidumine ebaõnnestus, palun proovige uuesti.';
+
+  @override
+  String get authFailedToLinkApple => 'Apple\'iga sidumine ebaõnnestus, palun proovige uuesti.';
 }

@@ -7426,4 +7426,29 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get failedToRefreshGitHubStatus => 'Neizdevās atjaunināt GitHub savienojuma statusu.';
+
+  @override
+  String get authFailedToSignInWithGoogle => 'Neizdevās pierakstīties ar Google, lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get authenticationFailed => 'Autentifikācija neizdevās. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get authFailedToSignInWithApple => 'Neizdevās pierakstīties ar Apple, lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get authFailedToRetrieveToken => 'Neizdevās iegūt Firebase marķieri, lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get authUnexpectedErrorFirebase =>
+      'Neparedzēta kļūda pierakstīšanās laikā, Firebase kļūda, lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get authUnexpectedError => 'Neparedzēta kļūda pierakstīšanās laikā, lūdzu, mēģiniet vēlreiz';
+
+  @override
+  String get authFailedToLinkGoogle => 'Neizdevās savienot ar Google, lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get authFailedToLinkApple => 'Neizdevās savienot ar Apple, lūdzu, mēģiniet vēlreiz.';
 }

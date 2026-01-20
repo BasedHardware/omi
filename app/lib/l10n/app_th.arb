@@ -2361,5 +2361,13 @@
   "successfullyConnectedWhoop": "เชื่อมต่อกับ Whoop สำเร็จ!",
   "failedToRefreshWhoopStatus": "ไม่สามารถรีเฟรชสถานะการเชื่อมต่อ Whoop ได้",
   "successfullyConnectedGitHub": "เชื่อมต่อกับ GitHub สำเร็จ!",
-  "failedToRefreshGitHubStatus": "ไม่สามารถรีเฟรชสถานะการเชื่อมต่อ GitHub ได้"
+  "failedToRefreshGitHubStatus": "ไม่สามารถรีเฟรชสถานะการเชื่อมต่อ GitHub ได้",
+  "authFailedToSignInWithGoogle": "ไม่สามารถเข้าสู่ระบบด้วย Google ได้ กรุณาลองอีกครั้ง",
+  "authenticationFailed": "การยืนยันตัวตนล้มเหลว กรุณาลองอีกครั้ง",
+  "authFailedToSignInWithApple": "ไม่สามารถเข้าสู่ระบบด้วย Apple ได้ กรุณาลองอีกครั้ง",
+  "authFailedToRetrieveToken": "ไม่สามารถดึงโทเคน Firebase ได้ กรุณาลองอีกครั้ง",
+  "authUnexpectedErrorFirebase": "เกิดข้อผิดพลาดที่ไม่คาดคิดขณะเข้าสู่ระบบ ข้อผิดพลาด Firebase กรุณาลองอีกครั้ง",
+  "authUnexpectedError": "เกิดข้อผิดพลาดที่ไม่คาดคิดขณะเข้าสู่ระบบ กรุณาลองอีกครั้ง",
+  "authFailedToLinkGoogle": "ไม่สามารถเชื่อมต่อกับ Google ได้ กรุณาลองอีกครั้ง",
+  "authFailedToLinkApple": "ไม่สามารถเชื่อมต่อกับ Apple ได้ กรุณาลองอีกครั้ง"
 }

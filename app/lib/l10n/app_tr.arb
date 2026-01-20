@@ -2361,5 +2361,13 @@
   "successfullyConnectedWhoop": "Whoop'a başarıyla bağlanıldı!",
   "failedToRefreshWhoopStatus": "Whoop bağlantı durumu yenilenemedi.",
   "successfullyConnectedGitHub": "GitHub'a başarıyla bağlanıldı!",
-  "failedToRefreshGitHubStatus": "GitHub bağlantı durumu yenilenemedi."
+  "failedToRefreshGitHubStatus": "GitHub bağlantı durumu yenilenemedi.",
+  "authFailedToSignInWithGoogle": "Google ile giriş yapılamadı, lütfen tekrar deneyin.",
+  "authenticationFailed": "Kimlik doğrulama başarısız. Lütfen tekrar deneyin.",
+  "authFailedToSignInWithApple": "Apple ile giriş yapılamadı, lütfen tekrar deneyin.",
+  "authFailedToRetrieveToken": "Firebase jetonu alınamadı, lütfen tekrar deneyin.",
+  "authUnexpectedErrorFirebase": "Giriş yaparken beklenmeyen hata, Firebase hatası, lütfen tekrar deneyin.",
+  "authUnexpectedError": "Giriş yaparken beklenmeyen hata, lütfen tekrar deneyin",
+  "authFailedToLinkGoogle": "Google ile bağlantı kurulamadı, lütfen tekrar deneyin.",
+  "authFailedToLinkApple": "Apple ile bağlantı kurulamadı, lütfen tekrar deneyin."
 }

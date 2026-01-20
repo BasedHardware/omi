@@ -7405,4 +7405,29 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get failedToRefreshGitHubStatus => 'Aktualizace stavu připojení GitHub se nezdařila.';
+
+  @override
+  String get authFailedToSignInWithGoogle => 'Přihlášení přes Google se nezdařilo, zkuste to prosím znovu.';
+
+  @override
+  String get authenticationFailed => 'Ověření se nezdařilo. Zkuste to prosím znovu.';
+
+  @override
+  String get authFailedToSignInWithApple => 'Přihlášení přes Apple se nezdařilo, zkuste to prosím znovu.';
+
+  @override
+  String get authFailedToRetrieveToken => 'Nepodařilo se získat Firebase token, zkuste to prosím znovu.';
+
+  @override
+  String get authUnexpectedErrorFirebase =>
+      'Neočekávaná chyba při přihlašování, chyba Firebase, zkuste to prosím znovu.';
+
+  @override
+  String get authUnexpectedError => 'Neočekávaná chyba při přihlašování, zkuste to prosím znovu';
+
+  @override
+  String get authFailedToLinkGoogle => 'Propojení s Google se nezdařilo, zkuste to prosím znovu.';
+
+  @override
+  String get authFailedToLinkApple => 'Propojení s Apple se nezdařilo, zkuste to prosím znovu.';
 }

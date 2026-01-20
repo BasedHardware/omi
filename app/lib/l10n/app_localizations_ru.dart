@@ -7430,4 +7430,29 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get failedToRefreshGitHubStatus => 'Не удалось обновить статус подключения GitHub.';
+
+  @override
+  String get authFailedToSignInWithGoogle => 'Не удалось войти через Google, пожалуйста, попробуйте снова.';
+
+  @override
+  String get authenticationFailed => 'Аутентификация не удалась. Пожалуйста, попробуйте снова.';
+
+  @override
+  String get authFailedToSignInWithApple => 'Не удалось войти через Apple, пожалуйста, попробуйте снова.';
+
+  @override
+  String get authFailedToRetrieveToken => 'Не удалось получить токен Firebase, пожалуйста, попробуйте снова.';
+
+  @override
+  String get authUnexpectedErrorFirebase =>
+      'Непредвиденная ошибка при входе, ошибка Firebase, пожалуйста, попробуйте снова.';
+
+  @override
+  String get authUnexpectedError => 'Непредвиденная ошибка при входе, пожалуйста, попробуйте снова';
+
+  @override
+  String get authFailedToLinkGoogle => 'Не удалось связать с Google, пожалуйста, попробуйте снова.';
+
+  @override
+  String get authFailedToLinkApple => 'Не удалось связать с Apple, пожалуйста, попробуйте снова.';
 }

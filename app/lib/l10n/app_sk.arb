@@ -2361,5 +2361,13 @@
   "successfullyConnectedWhoop": "Úspešne pripojené k Whoop!",
   "failedToRefreshWhoopStatus": "Aktualizácia stavu pripojenia Whoop zlyhala.",
   "successfullyConnectedGitHub": "Úspešne pripojené k GitHub!",
-  "failedToRefreshGitHubStatus": "Aktualizácia stavu pripojenia GitHub zlyhala."
+  "failedToRefreshGitHubStatus": "Aktualizácia stavu pripojenia GitHub zlyhala.",
+  "authFailedToSignInWithGoogle": "Prihlásenie cez Google zlyhalo, skúste to prosím znova.",
+  "authenticationFailed": "Overenie zlyhalo. Skúste to prosím znova.",
+  "authFailedToSignInWithApple": "Prihlásenie cez Apple zlyhalo, skúste to prosím znova.",
+  "authFailedToRetrieveToken": "Nepodarilo sa získať Firebase token, skúste to prosím znova.",
+  "authUnexpectedErrorFirebase": "Neočakávaná chyba pri prihlasovaní, chyba Firebase, skúste to prosím znova.",
+  "authUnexpectedError": "Neočakávaná chyba pri prihlasovaní, skúste to prosím znova",
+  "authFailedToLinkGoogle": "Prepojenie s Google zlyhalo, skúste to prosím znova.",
+  "authFailedToLinkApple": "Prepojenie s Apple zlyhalo, skúste to prosím znova."
 }

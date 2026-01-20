@@ -2361,5 +2361,13 @@
   "successfullyConnectedWhoop": "Connesso con successo a Whoop!",
   "failedToRefreshWhoopStatus": "Impossibile aggiornare lo stato della connessione Whoop.",
   "successfullyConnectedGitHub": "Connesso con successo a GitHub!",
-  "failedToRefreshGitHubStatus": "Impossibile aggiornare lo stato della connessione GitHub."
+  "failedToRefreshGitHubStatus": "Impossibile aggiornare lo stato della connessione GitHub.",
+  "authFailedToSignInWithGoogle": "Accesso con Google non riuscito, riprova.",
+  "authenticationFailed": "Autenticazione fallita. Riprova.",
+  "authFailedToSignInWithApple": "Accesso con Apple non riuscito, riprova.",
+  "authFailedToRetrieveToken": "Impossibile recuperare il token Firebase, riprova.",
+  "authUnexpectedErrorFirebase": "Errore imprevisto durante l'accesso, errore Firebase, riprova.",
+  "authUnexpectedError": "Errore imprevisto durante l'accesso, riprova",
+  "authFailedToLinkGoogle": "Collegamento con Google non riuscito, riprova.",
+  "authFailedToLinkApple": "Collegamento con Apple non riuscito, riprova."
 }

@@ -2361,5 +2361,13 @@
   "successfullyConnectedWhoop": "Sikeresen csatlakozva a Whoophoz!",
   "failedToRefreshWhoopStatus": "Nem sikerült frissíteni a Whoop kapcsolat állapotát.",
   "successfullyConnectedGitHub": "Sikeresen csatlakozva a GitHubhoz!",
-  "failedToRefreshGitHubStatus": "Nem sikerült frissíteni a GitHub kapcsolat állapotát."
+  "failedToRefreshGitHubStatus": "Nem sikerült frissíteni a GitHub kapcsolat állapotát.",
+  "authFailedToSignInWithGoogle": "Nem sikerült bejelentkezni a Google-lel, kérjük próbálja újra.",
+  "authenticationFailed": "A hitelesítés sikertelen. Kérjük, próbálja újra.",
+  "authFailedToSignInWithApple": "Nem sikerült bejelentkezni az Apple-lel, kérjük próbálja újra.",
+  "authFailedToRetrieveToken": "Nem sikerült lekérni a Firebase tokent, kérjük próbálja újra.",
+  "authUnexpectedErrorFirebase": "Váratlan hiba a bejelentkezés során, Firebase hiba, kérjük próbálja újra.",
+  "authUnexpectedError": "Váratlan hiba a bejelentkezés során, kérjük próbálja újra",
+  "authFailedToLinkGoogle": "Nem sikerült a Google-lel összekapcsolni, kérjük próbálja újra.",
+  "authFailedToLinkApple": "Nem sikerült az Apple-lel összekapcsolni, kérjük próbálja újra."
 }

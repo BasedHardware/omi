@@ -7446,4 +7446,28 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get failedToRefreshGitHubStatus => 'Nem sikerült frissíteni a GitHub kapcsolat állapotát.';
+
+  @override
+  String get authFailedToSignInWithGoogle => 'Nem sikerült bejelentkezni a Google-lel, kérjük próbálja újra.';
+
+  @override
+  String get authenticationFailed => 'A hitelesítés sikertelen. Kérjük, próbálja újra.';
+
+  @override
+  String get authFailedToSignInWithApple => 'Nem sikerült bejelentkezni az Apple-lel, kérjük próbálja újra.';
+
+  @override
+  String get authFailedToRetrieveToken => 'Nem sikerült lekérni a Firebase tokent, kérjük próbálja újra.';
+
+  @override
+  String get authUnexpectedErrorFirebase => 'Váratlan hiba a bejelentkezés során, Firebase hiba, kérjük próbálja újra.';
+
+  @override
+  String get authUnexpectedError => 'Váratlan hiba a bejelentkezés során, kérjük próbálja újra';
+
+  @override
+  String get authFailedToLinkGoogle => 'Nem sikerült a Google-lel összekapcsolni, kérjük próbálja újra.';
+
+  @override
+  String get authFailedToLinkApple => 'Nem sikerült az Apple-lel összekapcsolni, kérjük próbálja újra.';
 }

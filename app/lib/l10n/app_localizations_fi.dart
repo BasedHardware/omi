@@ -7412,4 +7412,28 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get failedToRefreshGitHubStatus => 'GitHub-yhteyden tilan päivitys epäonnistui.';
+
+  @override
+  String get authFailedToSignInWithGoogle => 'Kirjautuminen Googlella epäonnistui, yritä uudelleen.';
+
+  @override
+  String get authenticationFailed => 'Todennus epäonnistui. Yritä uudelleen.';
+
+  @override
+  String get authFailedToSignInWithApple => 'Kirjautuminen Applella epäonnistui, yritä uudelleen.';
+
+  @override
+  String get authFailedToRetrieveToken => 'Firebase-tunnuksen hakeminen epäonnistui, yritä uudelleen.';
+
+  @override
+  String get authUnexpectedErrorFirebase => 'Odottamaton virhe kirjautuessa, Firebase-virhe, yritä uudelleen.';
+
+  @override
+  String get authUnexpectedError => 'Odottamaton virhe kirjautuessa, yritä uudelleen';
+
+  @override
+  String get authFailedToLinkGoogle => 'Googleen linkittäminen epäonnistui, yritä uudelleen.';
+
+  @override
+  String get authFailedToLinkApple => 'Appleen linkittäminen epäonnistui, yritä uudelleen.';
 }

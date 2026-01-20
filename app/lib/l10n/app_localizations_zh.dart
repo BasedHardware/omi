@@ -7284,4 +7284,28 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get failedToRefreshGitHubStatus => '刷新GitHub连接状态失败。';
+
+  @override
+  String get authFailedToSignInWithGoogle => '使用Google登录失败，请重试。';
+
+  @override
+  String get authenticationFailed => '身份验证失败。请重试。';
+
+  @override
+  String get authFailedToSignInWithApple => '使用Apple登录失败，请重试。';
+
+  @override
+  String get authFailedToRetrieveToken => '获取Firebase令牌失败，请重试。';
+
+  @override
+  String get authUnexpectedErrorFirebase => '登录时发生意外错误，Firebase错误，请重试。';
+
+  @override
+  String get authUnexpectedError => '登录时发生意外错误，请重试';
+
+  @override
+  String get authFailedToLinkGoogle => '与Google关联失败，请重试。';
+
+  @override
+  String get authFailedToLinkApple => '与Apple关联失败，请重试。';
 }

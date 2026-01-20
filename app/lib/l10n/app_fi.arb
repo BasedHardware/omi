@@ -2361,5 +2361,13 @@
   "successfullyConnectedWhoop": "Yhdistetty onnistuneesti Whoopiin!",
   "failedToRefreshWhoopStatus": "Whoop-yhteyden tilan päivitys epäonnistui.",
   "successfullyConnectedGitHub": "Yhdistetty onnistuneesti GitHubiin!",
-  "failedToRefreshGitHubStatus": "GitHub-yhteyden tilan päivitys epäonnistui."
+  "failedToRefreshGitHubStatus": "GitHub-yhteyden tilan päivitys epäonnistui.",
+  "authFailedToSignInWithGoogle": "Kirjautuminen Googlella epäonnistui, yritä uudelleen.",
+  "authenticationFailed": "Todennus epäonnistui. Yritä uudelleen.",
+  "authFailedToSignInWithApple": "Kirjautuminen Applella epäonnistui, yritä uudelleen.",
+  "authFailedToRetrieveToken": "Firebase-tunnuksen hakeminen epäonnistui, yritä uudelleen.",
+  "authUnexpectedErrorFirebase": "Odottamaton virhe kirjautuessa, Firebase-virhe, yritä uudelleen.",
+  "authUnexpectedError": "Odottamaton virhe kirjautuessa, yritä uudelleen",
+  "authFailedToLinkGoogle": "Googleen linkittäminen epäonnistui, yritä uudelleen.",
+  "authFailedToLinkApple": "Appleen linkittäminen epäonnistui, yritä uudelleen."
 }

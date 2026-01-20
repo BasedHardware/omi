@@ -7422,4 +7422,28 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get failedToRefreshGitHubStatus => 'Không thể làm mới trạng thái kết nối GitHub.';
+
+  @override
+  String get authFailedToSignInWithGoogle => 'Đăng nhập bằng Google không thành công, vui lòng thử lại.';
+
+  @override
+  String get authenticationFailed => 'Xác thực không thành công. Vui lòng thử lại.';
+
+  @override
+  String get authFailedToSignInWithApple => 'Đăng nhập bằng Apple không thành công, vui lòng thử lại.';
+
+  @override
+  String get authFailedToRetrieveToken => 'Không thể lấy mã token Firebase, vui lòng thử lại.';
+
+  @override
+  String get authUnexpectedErrorFirebase => 'Lỗi không mong muốn khi đăng nhập, lỗi Firebase, vui lòng thử lại.';
+
+  @override
+  String get authUnexpectedError => 'Lỗi không mong muốn khi đăng nhập, vui lòng thử lại';
+
+  @override
+  String get authFailedToLinkGoogle => 'Liên kết với Google không thành công, vui lòng thử lại.';
+
+  @override
+  String get authFailedToLinkApple => 'Liên kết với Apple không thành công, vui lòng thử lại.';
 }

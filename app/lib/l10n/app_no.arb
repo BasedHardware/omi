@@ -2361,5 +2361,13 @@
   "successfullyConnectedWhoop": "Koblet til Whoop!",
   "failedToRefreshWhoopStatus": "Kunne ikke oppdatere Whoop-tilkoblingsstatus.",
   "successfullyConnectedGitHub": "Koblet til GitHub!",
-  "failedToRefreshGitHubStatus": "Kunne ikke oppdatere GitHub-tilkoblingsstatus."
+  "failedToRefreshGitHubStatus": "Kunne ikke oppdatere GitHub-tilkoblingsstatus.",
+  "authFailedToSignInWithGoogle": "Kunne ikke logge inn med Google, vennligst prøv igjen.",
+  "authenticationFailed": "Autentisering mislyktes. Vennligst prøv igjen.",
+  "authFailedToSignInWithApple": "Kunne ikke logge inn med Apple, vennligst prøv igjen.",
+  "authFailedToRetrieveToken": "Kunne ikke hente Firebase-token, vennligst prøv igjen.",
+  "authUnexpectedErrorFirebase": "Uventet feil under pålogging, Firebase-feil, vennligst prøv igjen.",
+  "authUnexpectedError": "Uventet feil under pålogging, vennligst prøv igjen",
+  "authFailedToLinkGoogle": "Kunne ikke koble til Google, vennligst prøv igjen.",
+  "authFailedToLinkApple": "Kunne ikke koble til Apple, vennligst prøv igjen."
 }

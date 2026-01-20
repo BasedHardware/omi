@@ -13928,6 +13928,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Failed to refresh GitHub connection status.'**
   String get failedToRefreshGitHubStatus;
+
+  /// Error message when Google sign-in fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to sign in with Google, please try again.'**
+  String get authFailedToSignInWithGoogle;
+
+  /// Error message when authentication fails
+  ///
+  /// In en, this message translates to:
+  /// **'Authentication failed. Please try again.'**
+  String get authenticationFailed;
+
+  /// Error message when Apple sign-in fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to sign in with Apple, please try again.'**
+  String get authFailedToSignInWithApple;
+
+  /// Error message when retrieving Firebase token fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to retrieve firebase token, please try again.'**
+  String get authFailedToRetrieveToken;
+
+  /// Error message for unexpected Firebase error during sign-in
+  ///
+  /// In en, this message translates to:
+  /// **'Unexpected error signing in, Firebase error, please try again.'**
+  String get authUnexpectedErrorFirebase;
+
+  /// Error message for unexpected error during sign-in
+  ///
+  /// In en, this message translates to:
+  /// **'Unexpected error signing in, please try again'**
+  String get authUnexpectedError;
+
+  /// Error message when linking Google account fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to link with Google, please try again.'**
+  String get authFailedToLinkGoogle;
+
+  /// Error message when linking Apple account fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to link with Apple, please try again.'**
+  String get authFailedToLinkApple;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

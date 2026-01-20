@@ -2361,5 +2361,13 @@
   "successfullyConnectedWhoop": "Veiksmīgi savienots ar Whoop!",
   "failedToRefreshWhoopStatus": "Neizdevās atjaunināt Whoop savienojuma statusu.",
   "successfullyConnectedGitHub": "Veiksmīgi savienots ar GitHub!",
-  "failedToRefreshGitHubStatus": "Neizdevās atjaunināt GitHub savienojuma statusu."
+  "failedToRefreshGitHubStatus": "Neizdevās atjaunināt GitHub savienojuma statusu.",
+  "authFailedToSignInWithGoogle": "Neizdevās pierakstīties ar Google, lūdzu, mēģiniet vēlreiz.",
+  "authenticationFailed": "Autentifikācija neizdevās. Lūdzu, mēģiniet vēlreiz.",
+  "authFailedToSignInWithApple": "Neizdevās pierakstīties ar Apple, lūdzu, mēģiniet vēlreiz.",
+  "authFailedToRetrieveToken": "Neizdevās iegūt Firebase marķieri, lūdzu, mēģiniet vēlreiz.",
+  "authUnexpectedErrorFirebase": "Neparedzēta kļūda pierakstīšanās laikā, Firebase kļūda, lūdzu, mēģiniet vēlreiz.",
+  "authUnexpectedError": "Neparedzēta kļūda pierakstīšanās laikā, lūdzu, mēģiniet vēlreiz",
+  "authFailedToLinkGoogle": "Neizdevās savienot ar Google, lūdzu, mēģiniet vēlreiz.",
+  "authFailedToLinkApple": "Neizdevās savienot ar Apple, lūdzu, mēģiniet vēlreiz."
 }

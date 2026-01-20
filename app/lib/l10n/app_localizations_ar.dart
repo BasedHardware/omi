@@ -7363,4 +7363,29 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get failedToRefreshGitHubStatus => 'فشل تحديث حالة اتصال GitHub.';
+
+  @override
+  String get authFailedToSignInWithGoogle => 'فشل تسجيل الدخول باستخدام Google، يرجى المحاولة مرة أخرى.';
+
+  @override
+  String get authenticationFailed => 'فشلت المصادقة. يرجى المحاولة مرة أخرى.';
+
+  @override
+  String get authFailedToSignInWithApple => 'فشل تسجيل الدخول باستخدام Apple، يرجى المحاولة مرة أخرى.';
+
+  @override
+  String get authFailedToRetrieveToken => 'فشل استرداد رمز Firebase، يرجى المحاولة مرة أخرى.';
+
+  @override
+  String get authUnexpectedErrorFirebase =>
+      'خطأ غير متوقع أثناء تسجيل الدخول، خطأ في Firebase، يرجى المحاولة مرة أخرى.';
+
+  @override
+  String get authUnexpectedError => 'خطأ غير متوقع أثناء تسجيل الدخول، يرجى المحاولة مرة أخرى';
+
+  @override
+  String get authFailedToLinkGoogle => 'فشل الربط بحساب Google، يرجى المحاولة مرة أخرى.';
+
+  @override
+  String get authFailedToLinkApple => 'فشل الربط بحساب Apple، يرجى المحاولة مرة أخرى.';
 }

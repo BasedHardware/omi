@@ -7460,4 +7460,29 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get failedToRefreshGitHubStatus => 'Αποτυχία ανανέωσης της κατάστασης σύνδεσης GitHub.';
+
+  @override
+  String get authFailedToSignInWithGoogle => 'Αποτυχία σύνδεσης με Google, παρακαλώ δοκιμάστε ξανά.';
+
+  @override
+  String get authenticationFailed => 'Η ταυτοποίηση απέτυχε. Παρακαλώ δοκιμάστε ξανά.';
+
+  @override
+  String get authFailedToSignInWithApple => 'Αποτυχία σύνδεσης με Apple, παρακαλώ δοκιμάστε ξανά.';
+
+  @override
+  String get authFailedToRetrieveToken => 'Αποτυχία ανάκτησης του Firebase token, παρακαλώ δοκιμάστε ξανά.';
+
+  @override
+  String get authUnexpectedErrorFirebase =>
+      'Απρόσμενο σφάλμα κατά τη σύνδεση, σφάλμα Firebase, παρακαλώ δοκιμάστε ξανά.';
+
+  @override
+  String get authUnexpectedError => 'Απρόσμενο σφάλμα κατά τη σύνδεση, παρακαλώ δοκιμάστε ξανά';
+
+  @override
+  String get authFailedToLinkGoogle => 'Αποτυχία σύνδεσης με Google, παρακαλώ δοκιμάστε ξανά.';
+
+  @override
+  String get authFailedToLinkApple => 'Αποτυχία σύνδεσης με Apple, παρακαλώ δοκιμάστε ξανά.';
 }

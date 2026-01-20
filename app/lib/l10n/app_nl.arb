@@ -2361,5 +2361,13 @@
   "successfullyConnectedWhoop": "Succesvol verbonden met Whoop!",
   "failedToRefreshWhoopStatus": "Kan de Whoop-verbindingsstatus niet vernieuwen.",
   "successfullyConnectedGitHub": "Succesvol verbonden met GitHub!",
-  "failedToRefreshGitHubStatus": "Kan de GitHub-verbindingsstatus niet vernieuwen."
+  "failedToRefreshGitHubStatus": "Kan de GitHub-verbindingsstatus niet vernieuwen.",
+  "authFailedToSignInWithGoogle": "Aanmelden met Google mislukt, probeer het opnieuw.",
+  "authenticationFailed": "Authenticatie mislukt. Probeer het opnieuw.",
+  "authFailedToSignInWithApple": "Aanmelden met Apple mislukt, probeer het opnieuw.",
+  "authFailedToRetrieveToken": "Kon Firebase-token niet ophalen, probeer het opnieuw.",
+  "authUnexpectedErrorFirebase": "Onverwachte fout bij aanmelden, Firebase-fout, probeer het opnieuw.",
+  "authUnexpectedError": "Onverwachte fout bij aanmelden, probeer het opnieuw",
+  "authFailedToLinkGoogle": "Koppelen met Google mislukt, probeer het opnieuw.",
+  "authFailedToLinkApple": "Koppelen met Apple mislukt, probeer het opnieuw."
 }

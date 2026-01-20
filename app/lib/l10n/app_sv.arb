@@ -2361,5 +2361,13 @@
   "successfullyConnectedWhoop": "Ansluten till Whoop!",
   "failedToRefreshWhoopStatus": "Det gick inte att uppdatera Whoop-anslutningsstatus.",
   "successfullyConnectedGitHub": "Ansluten till GitHub!",
-  "failedToRefreshGitHubStatus": "Det gick inte att uppdatera GitHub-anslutningsstatus."
+  "failedToRefreshGitHubStatus": "Det gick inte att uppdatera GitHub-anslutningsstatus.",
+  "authFailedToSignInWithGoogle": "Kunde inte logga in med Google, försök igen.",
+  "authenticationFailed": "Autentisering misslyckades. Försök igen.",
+  "authFailedToSignInWithApple": "Kunde inte logga in med Apple, försök igen.",
+  "authFailedToRetrieveToken": "Kunde inte hämta Firebase-token, försök igen.",
+  "authUnexpectedErrorFirebase": "Oväntat fel vid inloggning, Firebase-fel, försök igen.",
+  "authUnexpectedError": "Oväntat fel vid inloggning, försök igen",
+  "authFailedToLinkGoogle": "Kunde inte koppla till Google, försök igen.",
+  "authFailedToLinkApple": "Kunde inte koppla till Apple, försök igen."
 }

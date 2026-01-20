@@ -7296,4 +7296,28 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get failedToRefreshGitHubStatus => 'GitHub 연결 상태를 새로 고치지 못했습니다.';
+
+  @override
+  String get authFailedToSignInWithGoogle => 'Google로 로그인하지 못했습니다. 다시 시도해 주세요.';
+
+  @override
+  String get authenticationFailed => '인증에 실패했습니다. 다시 시도해 주세요.';
+
+  @override
+  String get authFailedToSignInWithApple => 'Apple로 로그인하지 못했습니다. 다시 시도해 주세요.';
+
+  @override
+  String get authFailedToRetrieveToken => 'Firebase 토큰을 가져오지 못했습니다. 다시 시도해 주세요.';
+
+  @override
+  String get authUnexpectedErrorFirebase => '로그인 중 예기치 않은 오류가 발생했습니다. Firebase 오류, 다시 시도해 주세요.';
+
+  @override
+  String get authUnexpectedError => '로그인 중 예기치 않은 오류가 발생했습니다. 다시 시도해 주세요';
+
+  @override
+  String get authFailedToLinkGoogle => 'Google 연결에 실패했습니다. 다시 시도해 주세요.';
+
+  @override
+  String get authFailedToLinkApple => 'Apple 연결에 실패했습니다. 다시 시도해 주세요.';
 }

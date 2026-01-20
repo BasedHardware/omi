@@ -7294,4 +7294,28 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get failedToRefreshGitHubStatus => 'GitHubの接続状態の更新に失敗しました。';
+
+  @override
+  String get authFailedToSignInWithGoogle => 'Googleでのサインインに失敗しました。もう一度お試しください。';
+
+  @override
+  String get authenticationFailed => '認証に失敗しました。もう一度お試しください。';
+
+  @override
+  String get authFailedToSignInWithApple => 'Appleでのサインインに失敗しました。もう一度お試しください。';
+
+  @override
+  String get authFailedToRetrieveToken => 'Firebaseトークンの取得に失敗しました。もう一度お試しください。';
+
+  @override
+  String get authUnexpectedErrorFirebase => 'サインイン中に予期しないエラーが発生しました。Firebaseエラー、もう一度お試しください。';
+
+  @override
+  String get authUnexpectedError => 'サインイン中に予期しないエラーが発生しました。もう一度お試しください';
+
+  @override
+  String get authFailedToLinkGoogle => 'Googleとの連携に失敗しました。もう一度お試しください。';
+
+  @override
+  String get authFailedToLinkApple => 'Appleとの連携に失敗しました。もう一度お試しください。';
 }

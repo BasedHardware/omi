@@ -9200,5 +9200,37 @@
   "failedToRefreshGitHubStatus": "Failed to refresh GitHub connection status.",
   "@failedToRefreshGitHubStatus": {
     "description": "Error message when GitHub status refresh fails"
+  },
+  "authFailedToSignInWithGoogle": "Failed to sign in with Google, please try again.",
+  "@authFailedToSignInWithGoogle": {
+    "description": "Error message when Google sign-in fails"
+  },
+  "authenticationFailed": "Authentication failed. Please try again.",
+  "@authenticationFailed": {
+    "description": "Error message when authentication fails"
+  },
+  "authFailedToSignInWithApple": "Failed to sign in with Apple, please try again.",
+  "@authFailedToSignInWithApple": {
+    "description": "Error message when Apple sign-in fails"
+  },
+  "authFailedToRetrieveToken": "Failed to retrieve firebase token, please try again.",
+  "@authFailedToRetrieveToken": {
+    "description": "Error message when retrieving Firebase token fails"
+  },
+  "authUnexpectedErrorFirebase": "Unexpected error signing in, Firebase error, please try again.",
+  "@authUnexpectedErrorFirebase": {
+    "description": "Error message for unexpected Firebase error during sign-in"
+  },
+  "authUnexpectedError": "Unexpected error signing in, please try again",
+  "@authUnexpectedError": {
+    "description": "Error message for unexpected error during sign-in"
+  },
+  "authFailedToLinkGoogle": "Failed to link with Google, please try again.",
+  "@authFailedToLinkGoogle": {
+    "description": "Error message when linking Google account fails"
+  },
+  "authFailedToLinkApple": "Failed to link with Apple, please try again.",
+  "@authFailedToLinkApple": {
+    "description": "Error message when linking Apple account fails"
   }
 }

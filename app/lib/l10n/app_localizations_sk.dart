@@ -7413,4 +7413,29 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get failedToRefreshGitHubStatus => 'Aktualizácia stavu pripojenia GitHub zlyhala.';
+
+  @override
+  String get authFailedToSignInWithGoogle => 'Prihlásenie cez Google zlyhalo, skúste to prosím znova.';
+
+  @override
+  String get authenticationFailed => 'Overenie zlyhalo. Skúste to prosím znova.';
+
+  @override
+  String get authFailedToSignInWithApple => 'Prihlásenie cez Apple zlyhalo, skúste to prosím znova.';
+
+  @override
+  String get authFailedToRetrieveToken => 'Nepodarilo sa získať Firebase token, skúste to prosím znova.';
+
+  @override
+  String get authUnexpectedErrorFirebase =>
+      'Neočakávaná chyba pri prihlasovaní, chyba Firebase, skúste to prosím znova.';
+
+  @override
+  String get authUnexpectedError => 'Neočakávaná chyba pri prihlasovaní, skúste to prosím znova';
+
+  @override
+  String get authFailedToLinkGoogle => 'Prepojenie s Google zlyhalo, skúste to prosím znova.';
+
+  @override
+  String get authFailedToLinkApple => 'Prepojenie s Apple zlyhalo, skúste to prosím znova.';
 }

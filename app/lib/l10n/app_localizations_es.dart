@@ -7418,4 +7418,29 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get failedToRefreshGitHubStatus => 'Error al actualizar el estado de conexión de GitHub.';
+
+  @override
+  String get authFailedToSignInWithGoogle => 'Error al iniciar sesión con Google, por favor inténtalo de nuevo.';
+
+  @override
+  String get authenticationFailed => 'La autenticación falló. Por favor, inténtalo de nuevo.';
+
+  @override
+  String get authFailedToSignInWithApple => 'Error al iniciar sesión con Apple, por favor inténtalo de nuevo.';
+
+  @override
+  String get authFailedToRetrieveToken => 'Error al recuperar el token de Firebase, por favor inténtalo de nuevo.';
+
+  @override
+  String get authUnexpectedErrorFirebase =>
+      'Error inesperado al iniciar sesión, error de Firebase, por favor inténtalo de nuevo.';
+
+  @override
+  String get authUnexpectedError => 'Error inesperado al iniciar sesión, por favor inténtalo de nuevo';
+
+  @override
+  String get authFailedToLinkGoogle => 'Error al vincular con Google, por favor inténtalo de nuevo.';
+
+  @override
+  String get authFailedToLinkApple => 'Error al vincular con Apple, por favor inténtalo de nuevo.';
 }

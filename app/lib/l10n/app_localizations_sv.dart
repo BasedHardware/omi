@@ -7416,4 +7416,28 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get failedToRefreshGitHubStatus => 'Det gick inte att uppdatera GitHub-anslutningsstatus.';
+
+  @override
+  String get authFailedToSignInWithGoogle => 'Kunde inte logga in med Google, försök igen.';
+
+  @override
+  String get authenticationFailed => 'Autentisering misslyckades. Försök igen.';
+
+  @override
+  String get authFailedToSignInWithApple => 'Kunde inte logga in med Apple, försök igen.';
+
+  @override
+  String get authFailedToRetrieveToken => 'Kunde inte hämta Firebase-token, försök igen.';
+
+  @override
+  String get authUnexpectedErrorFirebase => 'Oväntat fel vid inloggning, Firebase-fel, försök igen.';
+
+  @override
+  String get authUnexpectedError => 'Oväntat fel vid inloggning, försök igen';
+
+  @override
+  String get authFailedToLinkGoogle => 'Kunde inte koppla till Google, försök igen.';
+
+  @override
+  String get authFailedToLinkApple => 'Kunde inte koppla till Apple, försök igen.';
 }

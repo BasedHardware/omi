@@ -7430,4 +7430,28 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get failedToRefreshGitHubStatus => 'Gagal memperbarui status koneksi GitHub.';
+
+  @override
+  String get authFailedToSignInWithGoogle => 'Gagal masuk dengan Google, silakan coba lagi.';
+
+  @override
+  String get authenticationFailed => 'Autentikasi gagal. Silakan coba lagi.';
+
+  @override
+  String get authFailedToSignInWithApple => 'Gagal masuk dengan Apple, silakan coba lagi.';
+
+  @override
+  String get authFailedToRetrieveToken => 'Gagal mengambil token Firebase, silakan coba lagi.';
+
+  @override
+  String get authUnexpectedErrorFirebase => 'Kesalahan tak terduga saat masuk, kesalahan Firebase, silakan coba lagi.';
+
+  @override
+  String get authUnexpectedError => 'Kesalahan tak terduga saat masuk, silakan coba lagi';
+
+  @override
+  String get authFailedToLinkGoogle => 'Gagal menautkan dengan Google, silakan coba lagi.';
+
+  @override
+  String get authFailedToLinkApple => 'Gagal menautkan dengan Apple, silakan coba lagi.';
 }

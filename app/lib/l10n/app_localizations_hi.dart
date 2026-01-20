@@ -7391,4 +7391,29 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get failedToRefreshGitHubStatus => 'GitHub कनेक्शन स्थिति रीफ़्रेश करने में विफल।';
+
+  @override
+  String get authFailedToSignInWithGoogle => 'Google से साइन इन विफल, कृपया पुनः प्रयास करें।';
+
+  @override
+  String get authenticationFailed => 'प्रमाणीकरण विफल। कृपया पुनः प्रयास करें।';
+
+  @override
+  String get authFailedToSignInWithApple => 'Apple से साइन इन विफल, कृपया पुनः प्रयास करें।';
+
+  @override
+  String get authFailedToRetrieveToken => 'Firebase टोकन प्राप्त करने में विफल, कृपया पुनः प्रयास करें।';
+
+  @override
+  String get authUnexpectedErrorFirebase =>
+      'साइन इन करते समय अप्रत्याशित त्रुटि, Firebase त्रुटि, कृपया पुनः प्रयास करें।';
+
+  @override
+  String get authUnexpectedError => 'साइन इन करते समय अप्रत्याशित त्रुटि, कृपया पुनः प्रयास करें';
+
+  @override
+  String get authFailedToLinkGoogle => 'Google से लिंक करने में विफल, कृपया पुनः प्रयास करें।';
+
+  @override
+  String get authFailedToLinkApple => 'Apple से लिंक करने में विफल, कृपया पुनः प्रयास करें।';
 }

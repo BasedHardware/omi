@@ -7476,4 +7476,29 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get failedToRefreshGitHubStatus => 'Échec de l\'actualisation de l\'état de connexion GitHub.';
+
+  @override
+  String get authFailedToSignInWithGoogle => 'Échec de la connexion avec Google, veuillez réessayer.';
+
+  @override
+  String get authenticationFailed => 'Échec de l\'authentification. Veuillez réessayer.';
+
+  @override
+  String get authFailedToSignInWithApple => 'Échec de la connexion avec Apple, veuillez réessayer.';
+
+  @override
+  String get authFailedToRetrieveToken => 'Échec de la récupération du jeton Firebase, veuillez réessayer.';
+
+  @override
+  String get authUnexpectedErrorFirebase =>
+      'Erreur inattendue lors de la connexion, erreur Firebase, veuillez réessayer.';
+
+  @override
+  String get authUnexpectedError => 'Erreur inattendue lors de la connexion, veuillez réessayer';
+
+  @override
+  String get authFailedToLinkGoogle => 'Échec de la liaison avec Google, veuillez réessayer.';
+
+  @override
+  String get authFailedToLinkApple => 'Échec de la liaison avec Apple, veuillez réessayer.';
 }

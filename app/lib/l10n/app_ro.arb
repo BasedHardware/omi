@@ -2361,5 +2361,13 @@
   "successfullyConnectedWhoop": "Conectat cu succes la Whoop!",
   "failedToRefreshWhoopStatus": "Actualizarea stării conexiunii Whoop a eșuat.",
   "successfullyConnectedGitHub": "Conectat cu succes la GitHub!",
-  "failedToRefreshGitHubStatus": "Actualizarea stării conexiunii GitHub a eșuat."
+  "failedToRefreshGitHubStatus": "Actualizarea stării conexiunii GitHub a eșuat.",
+  "authFailedToSignInWithGoogle": "Autentificarea cu Google a eșuat, vă rugăm încercați din nou.",
+  "authenticationFailed": "Autentificarea a eșuat. Vă rugăm încercați din nou.",
+  "authFailedToSignInWithApple": "Autentificarea cu Apple a eșuat, vă rugăm încercați din nou.",
+  "authFailedToRetrieveToken": "Nu s-a putut obține tokenul Firebase, vă rugăm încercați din nou.",
+  "authUnexpectedErrorFirebase": "Eroare neașteptată la autentificare, eroare Firebase, vă rugăm încercați din nou.",
+  "authUnexpectedError": "Eroare neașteptată la autentificare, vă rugăm încercați din nou",
+  "authFailedToLinkGoogle": "Nu s-a putut conecta cu Google, vă rugăm încercați din nou.",
+  "authFailedToLinkApple": "Nu s-a putut conecta cu Apple, vă rugăm încercați din nou."
 }

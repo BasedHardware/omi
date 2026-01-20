@@ -7409,4 +7409,28 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get failedToRefreshGitHubStatus => 'Kunne ikke oppdatere GitHub-tilkoblingsstatus.';
+
+  @override
+  String get authFailedToSignInWithGoogle => 'Kunne ikke logge inn med Google, vennligst prøv igjen.';
+
+  @override
+  String get authenticationFailed => 'Autentisering mislyktes. Vennligst prøv igjen.';
+
+  @override
+  String get authFailedToSignInWithApple => 'Kunne ikke logge inn med Apple, vennligst prøv igjen.';
+
+  @override
+  String get authFailedToRetrieveToken => 'Kunne ikke hente Firebase-token, vennligst prøv igjen.';
+
+  @override
+  String get authUnexpectedErrorFirebase => 'Uventet feil under pålogging, Firebase-feil, vennligst prøv igjen.';
+
+  @override
+  String get authUnexpectedError => 'Uventet feil under pålogging, vennligst prøv igjen';
+
+  @override
+  String get authFailedToLinkGoogle => 'Kunne ikke koble til Google, vennligst prøv igjen.';
+
+  @override
+  String get authFailedToLinkApple => 'Kunne ikke koble til Apple, vennligst prøv igjen.';
 }

@@ -7474,4 +7474,30 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get failedToRefreshGitHubStatus => 'GitHub-Verbindungsstatus konnte nicht aktualisiert werden.';
+
+  @override
+  String get authFailedToSignInWithGoogle => 'Anmeldung mit Google fehlgeschlagen, bitte versuchen Sie es erneut.';
+
+  @override
+  String get authenticationFailed => 'Authentifizierung fehlgeschlagen. Bitte versuchen Sie es erneut.';
+
+  @override
+  String get authFailedToSignInWithApple => 'Anmeldung mit Apple fehlgeschlagen, bitte versuchen Sie es erneut.';
+
+  @override
+  String get authFailedToRetrieveToken =>
+      'Firebase-Token konnte nicht abgerufen werden, bitte versuchen Sie es erneut.';
+
+  @override
+  String get authUnexpectedErrorFirebase =>
+      'Unerwarteter Fehler bei der Anmeldung, Firebase-Fehler, bitte versuchen Sie es erneut.';
+
+  @override
+  String get authUnexpectedError => 'Unerwarteter Fehler bei der Anmeldung, bitte versuchen Sie es erneut';
+
+  @override
+  String get authFailedToLinkGoogle => 'Verknüpfung mit Google fehlgeschlagen, bitte versuchen Sie es erneut.';
+
+  @override
+  String get authFailedToLinkApple => 'Verknüpfung mit Apple fehlgeschlagen, bitte versuchen Sie es erneut.';
 }

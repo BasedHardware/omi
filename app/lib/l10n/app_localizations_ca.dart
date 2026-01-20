@@ -7454,4 +7454,30 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get failedToRefreshGitHubStatus => 'No s\'ha pogut actualitzar l\'estat de connexió de GitHub.';
+
+  @override
+  String get authFailedToSignInWithGoogle => 'No s\'ha pogut iniciar sessió amb Google, si us plau torneu-ho a provar.';
+
+  @override
+  String get authenticationFailed => 'L\'autenticació ha fallat. Si us plau, torneu-ho a provar.';
+
+  @override
+  String get authFailedToSignInWithApple => 'No s\'ha pogut iniciar sessió amb Apple, si us plau torneu-ho a provar.';
+
+  @override
+  String get authFailedToRetrieveToken =>
+      'No s\'ha pogut recuperar el token de Firebase, si us plau torneu-ho a provar.';
+
+  @override
+  String get authUnexpectedErrorFirebase =>
+      'Error inesperat en iniciar sessió, error de Firebase, si us plau torneu-ho a provar.';
+
+  @override
+  String get authUnexpectedError => 'Error inesperat en iniciar sessió, si us plau torneu-ho a provar';
+
+  @override
+  String get authFailedToLinkGoogle => 'No s\'ha pogut vincular amb Google, si us plau torneu-ho a provar.';
+
+  @override
+  String get authFailedToLinkApple => 'No s\'ha pogut vincular amb Apple, si us plau torneu-ho a provar.';
 }

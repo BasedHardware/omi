@@ -2361,5 +2361,13 @@
   "successfullyConnectedWhoop": "Sėkmingai prisijungta prie Whoop!",
   "failedToRefreshWhoopStatus": "Nepavyko atnaujinti Whoop ryšio būsenos.",
   "successfullyConnectedGitHub": "Sėkmingai prisijungta prie GitHub!",
-  "failedToRefreshGitHubStatus": "Nepavyko atnaujinti GitHub ryšio būsenos."
+  "failedToRefreshGitHubStatus": "Nepavyko atnaujinti GitHub ryšio būsenos.",
+  "authFailedToSignInWithGoogle": "Nepavyko prisijungti su Google, bandykite dar kartą.",
+  "authenticationFailed": "Autentifikacija nepavyko. Bandykite dar kartą.",
+  "authFailedToSignInWithApple": "Nepavyko prisijungti su Apple, bandykite dar kartą.",
+  "authFailedToRetrieveToken": "Nepavyko gauti Firebase žetono, bandykite dar kartą.",
+  "authUnexpectedErrorFirebase": "Netikėta klaida prisijungiant, Firebase klaida, bandykite dar kartą.",
+  "authUnexpectedError": "Netikėta klaida prisijungiant, bandykite dar kartą",
+  "authFailedToLinkGoogle": "Nepavyko susieti su Google, bandykite dar kartą.",
+  "authFailedToLinkApple": "Nepavyko susieti su Apple, bandykite dar kartą."
 }

@@ -7421,4 +7421,28 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get failedToRefreshGitHubStatus => 'Не вдалося оновити статус підключення GitHub.';
+
+  @override
+  String get authFailedToSignInWithGoogle => 'Не вдалося увійти через Google, спробуйте ще раз.';
+
+  @override
+  String get authenticationFailed => 'Помилка автентифікації. Будь ласка, спробуйте ще раз.';
+
+  @override
+  String get authFailedToSignInWithApple => 'Не вдалося увійти через Apple, спробуйте ще раз.';
+
+  @override
+  String get authFailedToRetrieveToken => 'Не вдалося отримати токен Firebase, спробуйте ще раз.';
+
+  @override
+  String get authUnexpectedErrorFirebase => 'Неочікувана помилка під час входу, помилка Firebase, спробуйте ще раз.';
+
+  @override
+  String get authUnexpectedError => 'Неочікувана помилка під час входу, спробуйте ще раз';
+
+  @override
+  String get authFailedToLinkGoogle => 'Не вдалося зв\'язати з Google, спробуйте ще раз.';
+
+  @override
+  String get authFailedToLinkApple => 'Не вдалося зв\'язати з Apple, спробуйте ще раз.';
 }

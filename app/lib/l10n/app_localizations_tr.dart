@@ -7423,4 +7423,28 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get failedToRefreshGitHubStatus => 'GitHub bağlantı durumu yenilenemedi.';
+
+  @override
+  String get authFailedToSignInWithGoogle => 'Google ile giriş yapılamadı, lütfen tekrar deneyin.';
+
+  @override
+  String get authenticationFailed => 'Kimlik doğrulama başarısız. Lütfen tekrar deneyin.';
+
+  @override
+  String get authFailedToSignInWithApple => 'Apple ile giriş yapılamadı, lütfen tekrar deneyin.';
+
+  @override
+  String get authFailedToRetrieveToken => 'Firebase jetonu alınamadı, lütfen tekrar deneyin.';
+
+  @override
+  String get authUnexpectedErrorFirebase => 'Giriş yaparken beklenmeyen hata, Firebase hatası, lütfen tekrar deneyin.';
+
+  @override
+  String get authUnexpectedError => 'Giriş yaparken beklenmeyen hata, lütfen tekrar deneyin';
+
+  @override
+  String get authFailedToLinkGoogle => 'Google ile bağlantı kurulamadı, lütfen tekrar deneyin.';
+
+  @override
+  String get authFailedToLinkApple => 'Apple ile bağlantı kurulamadı, lütfen tekrar deneyin.';
 }

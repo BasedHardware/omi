@@ -7434,4 +7434,28 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get failedToRefreshGitHubStatus => 'Gagal memuat semula status sambungan GitHub.';
+
+  @override
+  String get authFailedToSignInWithGoogle => 'Gagal log masuk dengan Google, sila cuba lagi.';
+
+  @override
+  String get authenticationFailed => 'Pengesahan gagal. Sila cuba lagi.';
+
+  @override
+  String get authFailedToSignInWithApple => 'Gagal log masuk dengan Apple, sila cuba lagi.';
+
+  @override
+  String get authFailedToRetrieveToken => 'Gagal mendapatkan token Firebase, sila cuba lagi.';
+
+  @override
+  String get authUnexpectedErrorFirebase => 'Ralat tidak dijangka semasa log masuk, ralat Firebase, sila cuba lagi.';
+
+  @override
+  String get authUnexpectedError => 'Ralat tidak dijangka semasa log masuk, sila cuba lagi';
+
+  @override
+  String get authFailedToLinkGoogle => 'Gagal memautkan dengan Google, sila cuba lagi.';
+
+  @override
+  String get authFailedToLinkApple => 'Gagal memautkan dengan Apple, sila cuba lagi.';
 }

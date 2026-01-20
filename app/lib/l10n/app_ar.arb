@@ -2342,5 +2342,13 @@
   "successfullyConnectedWhoop": "تم الاتصال بـ Whoop بنجاح!",
   "failedToRefreshWhoopStatus": "فشل تحديث حالة اتصال Whoop.",
   "successfullyConnectedGitHub": "تم الاتصال بـ GitHub بنجاح!",
-  "failedToRefreshGitHubStatus": "فشل تحديث حالة اتصال GitHub."
+  "failedToRefreshGitHubStatus": "فشل تحديث حالة اتصال GitHub.",
+  "authFailedToSignInWithGoogle": "فشل تسجيل الدخول باستخدام Google، يرجى المحاولة مرة أخرى.",
+  "authenticationFailed": "فشلت المصادقة. يرجى المحاولة مرة أخرى.",
+  "authFailedToSignInWithApple": "فشل تسجيل الدخول باستخدام Apple، يرجى المحاولة مرة أخرى.",
+  "authFailedToRetrieveToken": "فشل استرداد رمز Firebase، يرجى المحاولة مرة أخرى.",
+  "authUnexpectedErrorFirebase": "خطأ غير متوقع أثناء تسجيل الدخول، خطأ في Firebase، يرجى المحاولة مرة أخرى.",
+  "authUnexpectedError": "خطأ غير متوقع أثناء تسجيل الدخول، يرجى المحاولة مرة أخرى",
+  "authFailedToLinkGoogle": "فشل الربط بحساب Google، يرجى المحاولة مرة أخرى.",
+  "authFailedToLinkApple": "فشل الربط بحساب Apple، يرجى المحاولة مرة أخرى."
 }

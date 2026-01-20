@@ -7377,4 +7377,29 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get failedToRefreshGitHubStatus => 'ไม่สามารถรีเฟรชสถานะการเชื่อมต่อ GitHub ได้';
+
+  @override
+  String get authFailedToSignInWithGoogle => 'ไม่สามารถเข้าสู่ระบบด้วย Google ได้ กรุณาลองอีกครั้ง';
+
+  @override
+  String get authenticationFailed => 'การยืนยันตัวตนล้มเหลว กรุณาลองอีกครั้ง';
+
+  @override
+  String get authFailedToSignInWithApple => 'ไม่สามารถเข้าสู่ระบบด้วย Apple ได้ กรุณาลองอีกครั้ง';
+
+  @override
+  String get authFailedToRetrieveToken => 'ไม่สามารถดึงโทเคน Firebase ได้ กรุณาลองอีกครั้ง';
+
+  @override
+  String get authUnexpectedErrorFirebase =>
+      'เกิดข้อผิดพลาดที่ไม่คาดคิดขณะเข้าสู่ระบบ ข้อผิดพลาด Firebase กรุณาลองอีกครั้ง';
+
+  @override
+  String get authUnexpectedError => 'เกิดข้อผิดพลาดที่ไม่คาดคิดขณะเข้าสู่ระบบ กรุณาลองอีกครั้ง';
+
+  @override
+  String get authFailedToLinkGoogle => 'ไม่สามารถเชื่อมต่อกับ Google ได้ กรุณาลองอีกครั้ง';
+
+  @override
+  String get authFailedToLinkApple => 'ไม่สามารถเชื่อมต่อกับ Apple ได้ กรุณาลองอีกครั้ง';
 }

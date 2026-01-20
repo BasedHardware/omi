@@ -2361,5 +2361,13 @@
   "successfullyConnectedWhoop": "Επιτυχής σύνδεση στο Whoop!",
   "failedToRefreshWhoopStatus": "Αποτυχία ανανέωσης της κατάστασης σύνδεσης Whoop.",
   "successfullyConnectedGitHub": "Επιτυχής σύνδεση στο GitHub!",
-  "failedToRefreshGitHubStatus": "Αποτυχία ανανέωσης της κατάστασης σύνδεσης GitHub."
+  "failedToRefreshGitHubStatus": "Αποτυχία ανανέωσης της κατάστασης σύνδεσης GitHub.",
+  "authFailedToSignInWithGoogle": "Αποτυχία σύνδεσης με Google, παρακαλώ δοκιμάστε ξανά.",
+  "authenticationFailed": "Η ταυτοποίηση απέτυχε. Παρακαλώ δοκιμάστε ξανά.",
+  "authFailedToSignInWithApple": "Αποτυχία σύνδεσης με Apple, παρακαλώ δοκιμάστε ξανά.",
+  "authFailedToRetrieveToken": "Αποτυχία ανάκτησης του Firebase token, παρακαλώ δοκιμάστε ξανά.",
+  "authUnexpectedErrorFirebase": "Απρόσμενο σφάλμα κατά τη σύνδεση, σφάλμα Firebase, παρακαλώ δοκιμάστε ξανά.",
+  "authUnexpectedError": "Απρόσμενο σφάλμα κατά τη σύνδεση, παρακαλώ δοκιμάστε ξανά",
+  "authFailedToLinkGoogle": "Αποτυχία σύνδεσης με Google, παρακαλώ δοκιμάστε ξανά.",
+  "authFailedToLinkApple": "Αποτυχία σύνδεσης με Apple, παρακαλώ δοκιμάστε ξανά."
 }

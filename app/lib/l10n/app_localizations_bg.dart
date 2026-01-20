@@ -7441,4 +7441,28 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get failedToRefreshGitHubStatus => 'Неуспешно обновяване на състоянието на връзката с GitHub.';
+
+  @override
+  String get authFailedToSignInWithGoogle => 'Неуспешно влизане с Google, моля опитайте отново.';
+
+  @override
+  String get authenticationFailed => 'Удостоверяването е неуспешно. Моля, опитайте отново.';
+
+  @override
+  String get authFailedToSignInWithApple => 'Неуспешно влизане с Apple, моля опитайте отново.';
+
+  @override
+  String get authFailedToRetrieveToken => 'Неуспешно извличане на Firebase токен, моля опитайте отново.';
+
+  @override
+  String get authUnexpectedErrorFirebase => 'Неочаквана грешка при влизане, грешка на Firebase, моля опитайте отново.';
+
+  @override
+  String get authUnexpectedError => 'Неочаквана грешка при влизане, моля опитайте отново';
+
+  @override
+  String get authFailedToLinkGoogle => 'Неуспешно свързване с Google, моля опитайте отново.';
+
+  @override
+  String get authFailedToLinkApple => 'Неуспешно свързване с Apple, моля опитайте отново.';
 }

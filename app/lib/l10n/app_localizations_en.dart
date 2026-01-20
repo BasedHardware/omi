@@ -7411,4 +7411,28 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get failedToRefreshGitHubStatus => 'Failed to refresh GitHub connection status.';
+
+  @override
+  String get authFailedToSignInWithGoogle => 'Failed to sign in with Google, please try again.';
+
+  @override
+  String get authenticationFailed => 'Authentication failed. Please try again.';
+
+  @override
+  String get authFailedToSignInWithApple => 'Failed to sign in with Apple, please try again.';
+
+  @override
+  String get authFailedToRetrieveToken => 'Failed to retrieve firebase token, please try again.';
+
+  @override
+  String get authUnexpectedErrorFirebase => 'Unexpected error signing in, Firebase error, please try again.';
+
+  @override
+  String get authUnexpectedError => 'Unexpected error signing in, please try again';
+
+  @override
+  String get authFailedToLinkGoogle => 'Failed to link with Google, please try again.';
+
+  @override
+  String get authFailedToLinkApple => 'Failed to link with Apple, please try again.';
 }

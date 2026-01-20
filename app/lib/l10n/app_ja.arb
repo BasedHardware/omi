@@ -2362,5 +2362,13 @@
   "successfullyConnectedWhoop": "Whoopに正常に接続されました！",
   "failedToRefreshWhoopStatus": "Whoopの接続状態の更新に失敗しました。",
   "successfullyConnectedGitHub": "GitHubに正常に接続されました！",
-  "failedToRefreshGitHubStatus": "GitHubの接続状態の更新に失敗しました。"
+  "failedToRefreshGitHubStatus": "GitHubの接続状態の更新に失敗しました。",
+  "authFailedToSignInWithGoogle": "Googleでのサインインに失敗しました。もう一度お試しください。",
+  "authenticationFailed": "認証に失敗しました。もう一度お試しください。",
+  "authFailedToSignInWithApple": "Appleでのサインインに失敗しました。もう一度お試しください。",
+  "authFailedToRetrieveToken": "Firebaseトークンの取得に失敗しました。もう一度お試しください。",
+  "authUnexpectedErrorFirebase": "サインイン中に予期しないエラーが発生しました。Firebaseエラー、もう一度お試しください。",
+  "authUnexpectedError": "サインイン中に予期しないエラーが発生しました。もう一度お試しください",
+  "authFailedToLinkGoogle": "Googleとの連携に失敗しました。もう一度お試しください。",
+  "authFailedToLinkApple": "Appleとの連携に失敗しました。もう一度お試しください。"
 }

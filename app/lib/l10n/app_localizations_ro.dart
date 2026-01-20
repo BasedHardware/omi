@@ -7445,4 +7445,29 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get failedToRefreshGitHubStatus => 'Actualizarea stării conexiunii GitHub a eșuat.';
+
+  @override
+  String get authFailedToSignInWithGoogle => 'Autentificarea cu Google a eșuat, vă rugăm încercați din nou.';
+
+  @override
+  String get authenticationFailed => 'Autentificarea a eșuat. Vă rugăm încercați din nou.';
+
+  @override
+  String get authFailedToSignInWithApple => 'Autentificarea cu Apple a eșuat, vă rugăm încercați din nou.';
+
+  @override
+  String get authFailedToRetrieveToken => 'Nu s-a putut obține tokenul Firebase, vă rugăm încercați din nou.';
+
+  @override
+  String get authUnexpectedErrorFirebase =>
+      'Eroare neașteptată la autentificare, eroare Firebase, vă rugăm încercați din nou.';
+
+  @override
+  String get authUnexpectedError => 'Eroare neașteptată la autentificare, vă rugăm încercați din nou';
+
+  @override
+  String get authFailedToLinkGoogle => 'Nu s-a putut conecta cu Google, vă rugăm încercați din nou.';
+
+  @override
+  String get authFailedToLinkApple => 'Nu s-a putut conecta cu Apple, vă rugăm încercați din nou.';
 }

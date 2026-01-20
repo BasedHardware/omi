@@ -2361,5 +2361,13 @@
   "successfullyConnectedWhoop": "Đã kết nối thành công với Whoop!",
   "failedToRefreshWhoopStatus": "Không thể làm mới trạng thái kết nối Whoop.",
   "successfullyConnectedGitHub": "Đã kết nối thành công với GitHub!",
-  "failedToRefreshGitHubStatus": "Không thể làm mới trạng thái kết nối GitHub."
+  "failedToRefreshGitHubStatus": "Không thể làm mới trạng thái kết nối GitHub.",
+  "authFailedToSignInWithGoogle": "Đăng nhập bằng Google không thành công, vui lòng thử lại.",
+  "authenticationFailed": "Xác thực không thành công. Vui lòng thử lại.",
+  "authFailedToSignInWithApple": "Đăng nhập bằng Apple không thành công, vui lòng thử lại.",
+  "authFailedToRetrieveToken": "Không thể lấy mã token Firebase, vui lòng thử lại.",
+  "authUnexpectedErrorFirebase": "Lỗi không mong muốn khi đăng nhập, lỗi Firebase, vui lòng thử lại.",
+  "authUnexpectedError": "Lỗi không mong muốn khi đăng nhập, vui lòng thử lại",
+  "authFailedToLinkGoogle": "Liên kết với Google không thành công, vui lòng thử lại.",
+  "authFailedToLinkApple": "Liên kết với Apple không thành công, vui lòng thử lại."
 }

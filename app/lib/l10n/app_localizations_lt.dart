@@ -7414,4 +7414,28 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get failedToRefreshGitHubStatus => 'Nepavyko atnaujinti GitHub ryšio būsenos.';
+
+  @override
+  String get authFailedToSignInWithGoogle => 'Nepavyko prisijungti su Google, bandykite dar kartą.';
+
+  @override
+  String get authenticationFailed => 'Autentifikacija nepavyko. Bandykite dar kartą.';
+
+  @override
+  String get authFailedToSignInWithApple => 'Nepavyko prisijungti su Apple, bandykite dar kartą.';
+
+  @override
+  String get authFailedToRetrieveToken => 'Nepavyko gauti Firebase žetono, bandykite dar kartą.';
+
+  @override
+  String get authUnexpectedErrorFirebase => 'Netikėta klaida prisijungiant, Firebase klaida, bandykite dar kartą.';
+
+  @override
+  String get authUnexpectedError => 'Netikėta klaida prisijungiant, bandykite dar kartą';
+
+  @override
+  String get authFailedToLinkGoogle => 'Nepavyko susieti su Google, bandykite dar kartą.';
+
+  @override
+  String get authFailedToLinkApple => 'Nepavyko susieti su Apple, bandykite dar kartą.';
 }

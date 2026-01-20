@@ -2361,5 +2361,13 @@
   "successfullyConnectedWhoop": "Успешно подключено к Whoop!",
   "failedToRefreshWhoopStatus": "Не удалось обновить статус подключения Whoop.",
   "successfullyConnectedGitHub": "Успешно подключено к GitHub!",
-  "failedToRefreshGitHubStatus": "Не удалось обновить статус подключения GitHub."
+  "failedToRefreshGitHubStatus": "Не удалось обновить статус подключения GitHub.",
+  "authFailedToSignInWithGoogle": "Не удалось войти через Google, пожалуйста, попробуйте снова.",
+  "authenticationFailed": "Аутентификация не удалась. Пожалуйста, попробуйте снова.",
+  "authFailedToSignInWithApple": "Не удалось войти через Apple, пожалуйста, попробуйте снова.",
+  "authFailedToRetrieveToken": "Не удалось получить токен Firebase, пожалуйста, попробуйте снова.",
+  "authUnexpectedErrorFirebase": "Непредвиденная ошибка при входе, ошибка Firebase, пожалуйста, попробуйте снова.",
+  "authUnexpectedError": "Непредвиденная ошибка при входе, пожалуйста, попробуйте снова",
+  "authFailedToLinkGoogle": "Не удалось связать с Google, пожалуйста, попробуйте снова.",
+  "authFailedToLinkApple": "Не удалось связать с Apple, пожалуйста, попробуйте снова."
 }

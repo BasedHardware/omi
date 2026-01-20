@@ -2361,5 +2361,13 @@
   "successfullyConnectedWhoop": "Pomyślnie połączono z Whoop!",
   "failedToRefreshWhoopStatus": "Nie udało się odświeżyć statusu połączenia Whoop.",
   "successfullyConnectedGitHub": "Pomyślnie połączono z GitHub!",
-  "failedToRefreshGitHubStatus": "Nie udało się odświeżyć statusu połączenia GitHub."
+  "failedToRefreshGitHubStatus": "Nie udało się odświeżyć statusu połączenia GitHub.",
+  "authFailedToSignInWithGoogle": "Nie udało się zalogować przez Google, spróbuj ponownie.",
+  "authenticationFailed": "Uwierzytelnianie nie powiodło się. Spróbuj ponownie.",
+  "authFailedToSignInWithApple": "Nie udało się zalogować przez Apple, spróbuj ponownie.",
+  "authFailedToRetrieveToken": "Nie udało się pobrać tokenu Firebase, spróbuj ponownie.",
+  "authUnexpectedErrorFirebase": "Nieoczekiwany błąd podczas logowania, błąd Firebase, spróbuj ponownie.",
+  "authUnexpectedError": "Nieoczekiwany błąd podczas logowania, spróbuj ponownie",
+  "authFailedToLinkGoogle": "Nie udało się połączyć z Google, spróbuj ponownie.",
+  "authFailedToLinkApple": "Nie udało się połączyć z Apple, spróbuj ponownie."
 }

@@ -7406,4 +7406,28 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get failedToRefreshGitHubStatus => 'Falha ao atualizar o status de conexão do GitHub.';
+
+  @override
+  String get authFailedToSignInWithGoogle => 'Falha ao fazer login com o Google, tente novamente.';
+
+  @override
+  String get authenticationFailed => 'Autenticação falhou. Por favor, tente novamente.';
+
+  @override
+  String get authFailedToSignInWithApple => 'Falha ao fazer login com a Apple, tente novamente.';
+
+  @override
+  String get authFailedToRetrieveToken => 'Falha ao recuperar o token do Firebase, tente novamente.';
+
+  @override
+  String get authUnexpectedErrorFirebase => 'Erro inesperado ao fazer login, erro do Firebase, tente novamente.';
+
+  @override
+  String get authUnexpectedError => 'Erro inesperado ao fazer login, tente novamente';
+
+  @override
+  String get authFailedToLinkGoogle => 'Falha ao vincular com o Google, tente novamente.';
+
+  @override
+  String get authFailedToLinkApple => 'Falha ao vincular com a Apple, tente novamente.';
 }

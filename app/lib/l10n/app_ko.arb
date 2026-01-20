@@ -2361,5 +2361,13 @@
   "successfullyConnectedWhoop": "Whoop에 성공적으로 연결되었습니다!",
   "failedToRefreshWhoopStatus": "Whoop 연결 상태를 새로 고치지 못했습니다.",
   "successfullyConnectedGitHub": "GitHub에 성공적으로 연결되었습니다!",
-  "failedToRefreshGitHubStatus": "GitHub 연결 상태를 새로 고치지 못했습니다."
+  "failedToRefreshGitHubStatus": "GitHub 연결 상태를 새로 고치지 못했습니다.",
+  "authFailedToSignInWithGoogle": "Google로 로그인하지 못했습니다. 다시 시도해 주세요.",
+  "authenticationFailed": "인증에 실패했습니다. 다시 시도해 주세요.",
+  "authFailedToSignInWithApple": "Apple로 로그인하지 못했습니다. 다시 시도해 주세요.",
+  "authFailedToRetrieveToken": "Firebase 토큰을 가져오지 못했습니다. 다시 시도해 주세요.",
+  "authUnexpectedErrorFirebase": "로그인 중 예기치 않은 오류가 발생했습니다. Firebase 오류, 다시 시도해 주세요.",
+  "authUnexpectedError": "로그인 중 예기치 않은 오류가 발생했습니다. 다시 시도해 주세요",
+  "authFailedToLinkGoogle": "Google 연결에 실패했습니다. 다시 시도해 주세요.",
+  "authFailedToLinkApple": "Apple 연결에 실패했습니다. 다시 시도해 주세요."
 }

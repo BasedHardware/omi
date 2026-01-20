@@ -7432,4 +7432,28 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get failedToRefreshGitHubStatus => 'Kan de GitHub-verbindingsstatus niet vernieuwen.';
+
+  @override
+  String get authFailedToSignInWithGoogle => 'Aanmelden met Google mislukt, probeer het opnieuw.';
+
+  @override
+  String get authenticationFailed => 'Authenticatie mislukt. Probeer het opnieuw.';
+
+  @override
+  String get authFailedToSignInWithApple => 'Aanmelden met Apple mislukt, probeer het opnieuw.';
+
+  @override
+  String get authFailedToRetrieveToken => 'Kon Firebase-token niet ophalen, probeer het opnieuw.';
+
+  @override
+  String get authUnexpectedErrorFirebase => 'Onverwachte fout bij aanmelden, Firebase-fout, probeer het opnieuw.';
+
+  @override
+  String get authUnexpectedError => 'Onverwachte fout bij aanmelden, probeer het opnieuw';
+
+  @override
+  String get authFailedToLinkGoogle => 'Koppelen met Google mislukt, probeer het opnieuw.';
+
+  @override
+  String get authFailedToLinkApple => 'Koppelen met Apple mislukt, probeer het opnieuw.';
 }

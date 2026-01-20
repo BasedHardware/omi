@@ -2362,5 +2362,13 @@
   "successfullyConnectedWhoop": "Whoop से सफलतापूर्वक कनेक्ट हो गया!",
   "failedToRefreshWhoopStatus": "Whoop कनेक्शन स्थिति रीफ़्रेश करने में विफल।",
   "successfullyConnectedGitHub": "GitHub से सफलतापूर्वक कनेक्ट हो गया!",
-  "failedToRefreshGitHubStatus": "GitHub कनेक्शन स्थिति रीफ़्रेश करने में विफल।"
+  "failedToRefreshGitHubStatus": "GitHub कनेक्शन स्थिति रीफ़्रेश करने में विफल।",
+  "authFailedToSignInWithGoogle": "Google से साइन इन विफल, कृपया पुनः प्रयास करें।",
+  "authenticationFailed": "प्रमाणीकरण विफल। कृपया पुनः प्रयास करें।",
+  "authFailedToSignInWithApple": "Apple से साइन इन विफल, कृपया पुनः प्रयास करें।",
+  "authFailedToRetrieveToken": "Firebase टोकन प्राप्त करने में विफल, कृपया पुनः प्रयास करें।",
+  "authUnexpectedErrorFirebase": "साइन इन करते समय अप्रत्याशित त्रुटि, Firebase त्रुटि, कृपया पुनः प्रयास करें।",
+  "authUnexpectedError": "साइन इन करते समय अप्रत्याशित त्रुटि, कृपया पुनः प्रयास करें",
+  "authFailedToLinkGoogle": "Google से लिंक करने में विफल, कृपया पुनः प्रयास करें।",
+  "authFailedToLinkApple": "Apple से लिंक करने में विफल, कृपया पुनः प्रयास करें।"
 }

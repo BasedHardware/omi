@@ -2361,5 +2361,13 @@
   "successfullyConnectedWhoop": "Berjaya disambungkan ke Whoop!",
   "failedToRefreshWhoopStatus": "Gagal memuat semula status sambungan Whoop.",
   "successfullyConnectedGitHub": "Berjaya disambungkan ke GitHub!",
-  "failedToRefreshGitHubStatus": "Gagal memuat semula status sambungan GitHub."
+  "failedToRefreshGitHubStatus": "Gagal memuat semula status sambungan GitHub.",
+  "authFailedToSignInWithGoogle": "Gagal log masuk dengan Google, sila cuba lagi.",
+  "authenticationFailed": "Pengesahan gagal. Sila cuba lagi.",
+  "authFailedToSignInWithApple": "Gagal log masuk dengan Apple, sila cuba lagi.",
+  "authFailedToRetrieveToken": "Gagal mendapatkan token Firebase, sila cuba lagi.",
+  "authUnexpectedErrorFirebase": "Ralat tidak dijangka semasa log masuk, ralat Firebase, sila cuba lagi.",
+  "authUnexpectedError": "Ralat tidak dijangka semasa log masuk, sila cuba lagi",
+  "authFailedToLinkGoogle": "Gagal memautkan dengan Google, sila cuba lagi.",
+  "authFailedToLinkApple": "Gagal memautkan dengan Apple, sila cuba lagi."
 }

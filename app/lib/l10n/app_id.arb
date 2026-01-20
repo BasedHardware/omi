@@ -2361,5 +2361,13 @@
   "successfullyConnectedWhoop": "Berhasil terhubung ke Whoop!",
   "failedToRefreshWhoopStatus": "Gagal memperbarui status koneksi Whoop.",
   "successfullyConnectedGitHub": "Berhasil terhubung ke GitHub!",
-  "failedToRefreshGitHubStatus": "Gagal memperbarui status koneksi GitHub."
+  "failedToRefreshGitHubStatus": "Gagal memperbarui status koneksi GitHub.",
+  "authFailedToSignInWithGoogle": "Gagal masuk dengan Google, silakan coba lagi.",
+  "authenticationFailed": "Autentikasi gagal. Silakan coba lagi.",
+  "authFailedToSignInWithApple": "Gagal masuk dengan Apple, silakan coba lagi.",
+  "authFailedToRetrieveToken": "Gagal mengambil token Firebase, silakan coba lagi.",
+  "authUnexpectedErrorFirebase": "Kesalahan tak terduga saat masuk, kesalahan Firebase, silakan coba lagi.",
+  "authUnexpectedError": "Kesalahan tak terduga saat masuk, silakan coba lagi",
+  "authFailedToLinkGoogle": "Gagal menautkan dengan Google, silakan coba lagi.",
+  "authFailedToLinkApple": "Gagal menautkan dengan Apple, silakan coba lagi."
 }
