@@ -49,24 +49,25 @@ def upload_profile_audio(file_path: str, uid: str):
 def get_user_has_speech_profile(uid: str, max_age_days: int = None) -> bool:
     if not speech_profiles_bucket:
         return False
-    bucket = storage_client.bucket(speech_profiles_bucket)
-    blob = bucket.blob(f'{uid}/speech_profile.wav')
+
     try:
+        bucket = storage_client.bucket(speech_profiles_bucket)
+        blob = bucket.blob(f'{uid}/speech_profile.wav')
+
         if not blob.exists():
             return False
+
+        # Check age if max_age_days is specified
+        if max_age_days is not None:
+            blob.reload()
+            if blob.time_created:
+                age = datetime.datetime.now(datetime.timezone.utc) - blob.time_created
+                if age.days > max_age_days:
+                    return False
+
+        return True
     except Forbidden:
         return False
-
-
-    # Check age if max_age_days is specified
-    if max_age_days is not None:
-        blob.reload()
-        if blob.time_created:
-            age = datetime.datetime.now(datetime.timezone.utc) - blob.time_created
-            if age.days > max_age_days:
-                return False
-
-    return True
 
 
 def get_profile_audio_if_exists(uid: str, download: bool = True) -> str:
