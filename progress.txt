@@ -10,10 +10,10 @@
 |--------|-------|
 | Total Files | 27 |
 | Total Strings | ~125 |
-| Completed | 20 |
+| Completed | 21 |
 | In Progress | 0 |
-| Pending | 7 |
-| Progress | 74% |
+| Pending | 6 |
+| Progress | 78% |
 
 **CRITICAL ISSUE**: ~162 pre-existing l10n keys in non-English ARB files still contain
 English text instead of proper translations. See PRIORITY 0 section below.
@@ -194,12 +194,14 @@ Strings:
 - [ ] Line 2286: 'https://omi.me' (website - may be intentional)
 - [ ] Line 2294: 'team@basedhardware.com' (email - may be intentional)
 
-### [ ] desktop/pages/conversations/widgets/desktop_name_speaker_dialog.dart (3 strings)
-Status: PENDING
-Strings:
-- [ ] Line 251: 'Enter Person\'s Name' (hintText)
-- [ ] Line 272: 'Cancel' (button)
-- [ ] Line 476: 'Save' (button)
+### [x] desktop/pages/conversations/widgets/desktop_name_speaker_dialog.dart (3 strings)
+Status: COMPLETED
+Note: Updated Dart file to use existing l10n keys. All required keys were already present in ARB files.
+Keys reused: tagSpeaker (with {speakerId} placeholder), enterPersonsName, personNameAlreadyExists,
+selectYouFromList, cancel, addPerson, tagOtherSegmentsFromSpeaker (with {selected}/{total} placeholders),
+tagOtherSegments, managePeople, save.
+The original audit identified 3 strings but 10 hardcoded strings were actually found and localized.
+Ran flutter gen-l10n and verified with test.sh.
 
 ================================================================================
 ## PRIORITY 5: LOWER IMPACT (~5 strings)
@@ -223,6 +225,12 @@ Strings:
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-20] Localized desktop_name_speaker_dialog.dart
+- Reused 10 existing l10n keys (all were already in ARB files)
+- Keys: tagSpeaker, enterPersonsName, personNameAlreadyExists, selectYouFromList, cancel, addPerson, tagOtherSegmentsFromSpeaker, tagOtherSegments, managePeople, save
+- Original audit found 3 strings but 10 hardcoded strings were actually in the file
+- Ran flutter gen-l10n and verified with test.sh
 
 [2026-01-20] Localized desktop_onboarding_wrapper.dart
 - Added 10 new l10n keys to all 34 language ARB files with proper translations

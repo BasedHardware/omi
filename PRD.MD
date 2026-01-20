@@ -73,7 +73,7 @@ The app uses Flutter's ARB-based localization system (`context.l10n.keyName`). W
 |------|---------|-------------|
 | `desktop/pages/onboarding/desktop_onboarding_wrapper.dart` | 10 | Onboarding step titles and descriptions - **DONE** |
 | `desktop/pages/settings/desktop_settings_modal.dart` | 2 | About section |
-| `desktop/pages/conversations/widgets/desktop_name_speaker_dialog.dart` | 3 | Speaker dialog buttons |
+| `desktop/pages/conversations/widgets/desktop_name_speaker_dialog.dart` | 3 | Speaker dialog buttons - **DONE** |
 
 ### Priority 5: Lower Impact (3 files, ~5 strings)
 
