@@ -5732,7 +5732,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Fast Transfer';
+  String get fastTransfer => 'Transfer Cepat';
 
   @override
   String get syncingStatus => 'Syncing';
@@ -5746,7 +5746,7 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get transferMethod => 'Transfer Method';
+  String get transferMethod => 'Metode Transfer';
 
   @override
   String get fast => 'Fast';
@@ -6715,4 +6715,46 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get transferCancelled => 'Transfer cancelled';
+
+  @override
+  String get fastTransferEnabled => 'Transfer Cepat diaktifkan';
+
+  @override
+  String get bluetoothSyncEnabled => 'Sinkronisasi Bluetooth diaktifkan';
+
+  @override
+  String get enableFastTransfer => 'Aktifkan Transfer Cepat';
+
+  @override
+  String get fastTransferDescription => 'Transfer Cepat menggunakan WiFi untuk kecepatan ~5x lebih cepat. Ponsel Anda akan terhubung sementara ke jaringan WiFi perangkat Omi selama transfer.';
+
+  @override
+  String get internetAccessPausedDuringTransfer => 'Akses internet dijeda selama transfer';
+
+  @override
+  String get chooseTransferMethodDescription => 'Pilih cara rekaman ditransfer dari perangkat Omi ke ponsel Anda.';
+
+  @override
+  String get wifiSpeed => '~150 KB/s via WiFi';
+
+  @override
+  String get fiveTimesFaster => '5X LEBIH CEPAT';
+
+  @override
+  String get fastTransferMethodDescription => 'Membuat koneksi WiFi langsung ke perangkat Omi Anda. Ponsel Anda sementara terputus dari WiFi biasa selama transfer.';
+
+  @override
+  String get bluetooth => 'Bluetooth';
+
+  @override
+  String get bleSpeed => '~30 KB/s via BLE';
+
+  @override
+  String get bluetoothMethodDescription => 'Menggunakan koneksi Bluetooth Low Energy standar. Lebih lambat tetapi tidak mempengaruhi koneksi WiFi Anda.';
+
+  @override
+  String get selected => 'Dipilih';
+
+  @override
+  String get selectOption => 'Pilih';
 }

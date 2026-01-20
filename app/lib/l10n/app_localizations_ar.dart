@@ -5732,7 +5732,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Fast Transfer';
+  String get fastTransfer => 'النقل السريع';
 
   @override
   String get syncingStatus => 'Syncing';
@@ -5746,7 +5746,7 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get transferMethod => 'Transfer Method';
+  String get transferMethod => 'طريقة النقل';
 
   @override
   String get fast => 'Fast';
@@ -6715,4 +6715,46 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get transferCancelled => 'Transfer cancelled';
+
+  @override
+  String get fastTransferEnabled => 'تم تفعيل النقل السريع';
+
+  @override
+  String get bluetoothSyncEnabled => 'تم تفعيل مزامنة البلوتوث';
+
+  @override
+  String get enableFastTransfer => 'تفعيل النقل السريع';
+
+  @override
+  String get fastTransferDescription => 'يستخدم النقل السريع شبكة WiFi للحصول على سرعات أسرع بـ 5 مرات. سيتصل هاتفك مؤقتًا بشبكة WiFi الخاصة بجهاز Omi أثناء النقل.';
+
+  @override
+  String get internetAccessPausedDuringTransfer => 'يتم إيقاف الوصول إلى الإنترنت أثناء النقل';
+
+  @override
+  String get chooseTransferMethodDescription => 'اختر كيفية نقل التسجيلات من جهاز Omi إلى هاتفك.';
+
+  @override
+  String get wifiSpeed => '~150 كيلوبايت/ثانية عبر WiFi';
+
+  @override
+  String get fiveTimesFaster => 'أسرع 5 مرات';
+
+  @override
+  String get fastTransferMethodDescription => 'ينشئ اتصال WiFi مباشر بجهاز Omi. يتم فصل هاتفك مؤقتًا عن شبكة WiFi العادية أثناء النقل.';
+
+  @override
+  String get bluetooth => 'بلوتوث';
+
+  @override
+  String get bleSpeed => '~30 كيلوبايت/ثانية عبر BLE';
+
+  @override
+  String get bluetoothMethodDescription => 'يستخدم اتصال Bluetooth منخفض الطاقة القياسي. أبطأ لكنه لا يؤثر على اتصال WiFi.';
+
+  @override
+  String get selected => 'محدد';
+
+  @override
+  String get selectOption => 'اختر';
 }

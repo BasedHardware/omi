@@ -5732,7 +5732,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Fast Transfer';
+  String get fastTransfer => 'Truyền nhanh';
 
   @override
   String get syncingStatus => 'Syncing';
@@ -5746,7 +5746,7 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get transferMethod => 'Transfer Method';
+  String get transferMethod => 'Phương thức truyền';
 
   @override
   String get fast => 'Fast';
@@ -6715,4 +6715,46 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get transferCancelled => 'Transfer cancelled';
+
+  @override
+  String get fastTransferEnabled => 'Đã bật truyền nhanh';
+
+  @override
+  String get bluetoothSyncEnabled => 'Đã bật đồng bộ Bluetooth';
+
+  @override
+  String get enableFastTransfer => 'Bật truyền nhanh';
+
+  @override
+  String get fastTransferDescription => 'Truyền nhanh sử dụng WiFi để đạt tốc độ nhanh hơn ~5 lần. Điện thoại của bạn sẽ tạm thời kết nối với mạng WiFi của thiết bị Omi trong quá trình truyền.';
+
+  @override
+  String get internetAccessPausedDuringTransfer => 'Truy cập internet bị tạm dừng trong quá trình truyền';
+
+  @override
+  String get chooseTransferMethodDescription => 'Chọn cách truyền bản ghi từ thiết bị Omi sang điện thoại của bạn.';
+
+  @override
+  String get wifiSpeed => '~150 KB/s qua WiFi';
+
+  @override
+  String get fiveTimesFaster => 'NHANH HƠN 5 LẦN';
+
+  @override
+  String get fastTransferMethodDescription => 'Tạo kết nối WiFi trực tiếp đến thiết bị Omi. Điện thoại của bạn tạm thời ngắt kết nối WiFi thông thường trong quá trình truyền.';
+
+  @override
+  String get bluetooth => 'Bluetooth';
+
+  @override
+  String get bleSpeed => '~30 KB/s qua BLE';
+
+  @override
+  String get bluetoothMethodDescription => 'Sử dụng kết nối Bluetooth Low Energy tiêu chuẩn. Chậm hơn nhưng không ảnh hưởng đến kết nối WiFi của bạn.';
+
+  @override
+  String get selected => 'Đã chọn';
+
+  @override
+  String get selectOption => 'Chọn';
 }

@@ -5732,7 +5732,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Fast Transfer';
+  String get fastTransfer => 'Бърз трансфер';
 
   @override
   String get syncingStatus => 'Syncing';
@@ -5746,7 +5746,7 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
-  String get transferMethod => 'Transfer Method';
+  String get transferMethod => 'Метод на трансфер';
 
   @override
   String get fast => 'Fast';
@@ -6715,4 +6715,46 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get transferCancelled => 'Transfer cancelled';
+
+  @override
+  String get fastTransferEnabled => 'Бързият трансфер е активиран';
+
+  @override
+  String get bluetoothSyncEnabled => 'Bluetooth синхронизацията е активирана';
+
+  @override
+  String get enableFastTransfer => 'Активиране на бърз трансфер';
+
+  @override
+  String get fastTransferDescription => 'Бързият трансфер използва WiFi за ~5 пъти по-бързи скорости. Телефонът ви временно ще се свърже с WiFi мрежата на вашето Omi устройство по време на трансфер.';
+
+  @override
+  String get internetAccessPausedDuringTransfer => 'Достъпът до интернет е на пауза по време на трансфер';
+
+  @override
+  String get chooseTransferMethodDescription => 'Изберете как записите да се прехвърлят от вашето Omi устройство на телефона.';
+
+  @override
+  String get wifiSpeed => '~150 KB/s чрез WiFi';
+
+  @override
+  String get fiveTimesFaster => '5 ПЪТИ ПО-БЪРЗО';
+
+  @override
+  String get fastTransferMethodDescription => 'Създава директна WiFi връзка с вашето Omi устройство. Телефонът ви временно се изключва от обичайната WiFi мрежа по време на трансфер.';
+
+  @override
+  String get bluetooth => 'Bluetooth';
+
+  @override
+  String get bleSpeed => '~30 KB/s чрез BLE';
+
+  @override
+  String get bluetoothMethodDescription => 'Използва стандартна Bluetooth Low Energy връзка. По-бавно, но не засяга WiFi връзката ви.';
+
+  @override
+  String get selected => 'Избрано';
+
+  @override
+  String get selectOption => 'Избери';
 }

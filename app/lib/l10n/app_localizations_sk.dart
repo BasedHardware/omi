@@ -5732,7 +5732,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Fast Transfer';
+  String get fastTransfer => 'Rýchly prenos';
 
   @override
   String get syncingStatus => 'Syncing';
@@ -5746,7 +5746,7 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get transferMethod => 'Transfer Method';
+  String get transferMethod => 'Metóda prenosu';
 
   @override
   String get fast => 'Fast';
@@ -6715,4 +6715,46 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get transferCancelled => 'Transfer cancelled';
+
+  @override
+  String get fastTransferEnabled => 'Rýchly prenos povolený';
+
+  @override
+  String get bluetoothSyncEnabled => 'Synchronizácia Bluetooth povolená';
+
+  @override
+  String get enableFastTransfer => 'Povoliť rýchly prenos';
+
+  @override
+  String get fastTransferDescription => 'Rýchly prenos používa WiFi pre ~5x rýchlejšie prenosy. Váš telefón sa dočasne pripojí k WiFi sieti zariadenia Omi počas prenosu.';
+
+  @override
+  String get internetAccessPausedDuringTransfer => 'Prístup na internet je počas prenosu pozastavený';
+
+  @override
+  String get chooseTransferMethodDescription => 'Zvoľte, ako sa nahrávky prenášajú zo zariadenia Omi do telefónu.';
+
+  @override
+  String get wifiSpeed => '~150 KB/s cez WiFi';
+
+  @override
+  String get fiveTimesFaster => '5X RÝCHLEJŠÍ';
+
+  @override
+  String get fastTransferMethodDescription => 'Vytvorí priame WiFi pripojenie k zariadeniu Omi. Telefón sa dočasne odpojí od bežnej WiFi počas prenosu.';
+
+  @override
+  String get bluetooth => 'Bluetooth';
+
+  @override
+  String get bleSpeed => '~30 KB/s cez BLE';
+
+  @override
+  String get bluetoothMethodDescription => 'Používa štandardné Bluetooth Low Energy pripojenie. Pomalšie, ale neovplyvňuje WiFi pripojenie.';
+
+  @override
+  String get selected => 'Vybrané';
+
+  @override
+  String get selectOption => 'Vybrať';
 }

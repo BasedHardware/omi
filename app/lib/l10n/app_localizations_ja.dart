@@ -5726,7 +5726,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Fast Transfer';
+  String get fastTransfer => '高速転送';
 
   @override
   String get syncingStatus => 'Syncing';
@@ -5740,7 +5740,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get transferMethod => 'Transfer Method';
+  String get transferMethod => '転送方法';
 
   @override
   String get fast => 'Fast';
@@ -6709,4 +6709,46 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get transferCancelled => 'Transfer cancelled';
+
+  @override
+  String get fastTransferEnabled => '高速転送が有効になりました';
+
+  @override
+  String get bluetoothSyncEnabled => 'Bluetooth同期が有効になりました';
+
+  @override
+  String get enableFastTransfer => '高速転送を有効にする';
+
+  @override
+  String get fastTransferDescription => '高速転送はWiFiを使用して約5倍の速度を実現します。転送中、電話は一時的にOmiデバイスのWiFiネットワークに接続されます。';
+
+  @override
+  String get internetAccessPausedDuringTransfer => '転送中はインターネットアクセスが一時停止されます';
+
+  @override
+  String get chooseTransferMethodDescription => 'Omiデバイスから電話への録音の転送方法を選択してください。';
+
+  @override
+  String get wifiSpeed => 'WiFi経由で約150 KB/s';
+
+  @override
+  String get fiveTimesFaster => '5倍高速';
+
+  @override
+  String get fastTransferMethodDescription => 'Omiデバイスへの直接WiFi接続を作成します。転送中、電話は通常のWiFiから一時的に切断されます。';
+
+  @override
+  String get bluetooth => 'Bluetooth';
+
+  @override
+  String get bleSpeed => 'BLE経由で約30 KB/s';
+
+  @override
+  String get bluetoothMethodDescription => '標準のBluetooth Low Energy接続を使用します。遅いですがWiFi接続に影響しません。';
+
+  @override
+  String get selected => '選択済み';
+
+  @override
+  String get selectOption => '選択';
 }

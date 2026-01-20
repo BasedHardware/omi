@@ -5732,7 +5732,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Fast Transfer';
+  String get fastTransfer => 'Γρήγορη μεταφορά';
 
   @override
   String get syncingStatus => 'Syncing';
@@ -5746,7 +5746,7 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get transferMethod => 'Transfer Method';
+  String get transferMethod => 'Μέθοδος μεταφοράς';
 
   @override
   String get fast => 'Fast';
@@ -6715,4 +6715,46 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get transferCancelled => 'Transfer cancelled';
+
+  @override
+  String get fastTransferEnabled => 'Η γρήγορη μεταφορά ενεργοποιήθηκε';
+
+  @override
+  String get bluetoothSyncEnabled => 'Ο συγχρονισμός Bluetooth ενεργοποιήθηκε';
+
+  @override
+  String get enableFastTransfer => 'Ενεργοποίηση γρήγορης μεταφοράς';
+
+  @override
+  String get fastTransferDescription => 'Η γρήγορη μεταφορά χρησιμοποιεί WiFi για ~5x ταχύτερες ταχύτητες. Το τηλέφωνό σας θα συνδεθεί προσωρινά στο δίκτυο WiFi της συσκευής Omi κατά τη μεταφορά.';
+
+  @override
+  String get internetAccessPausedDuringTransfer => 'Η πρόσβαση στο διαδίκτυο διακόπτεται κατά τη μεταφορά';
+
+  @override
+  String get chooseTransferMethodDescription => 'Επιλέξτε πώς μεταφέρονται οι εγγραφές από τη συσκευή Omi στο τηλέφωνό σας.';
+
+  @override
+  String get wifiSpeed => '~150 KB/s μέσω WiFi';
+
+  @override
+  String get fiveTimesFaster => '5X ΓΡΗΓΟΡΟΤΕΡΟ';
+
+  @override
+  String get fastTransferMethodDescription => 'Δημιουργεί απευθείας σύνδεση WiFi με τη συσκευή Omi. Το τηλέφωνό σας αποσυνδέεται προσωρινά από το κανονικό WiFi κατά τη μεταφορά.';
+
+  @override
+  String get bluetooth => 'Bluetooth';
+
+  @override
+  String get bleSpeed => '~30 KB/s μέσω BLE';
+
+  @override
+  String get bluetoothMethodDescription => 'Χρησιμοποιεί τυπική σύνδεση Bluetooth Low Energy. Πιο αργό αλλά δεν επηρεάζει τη σύνδεση WiFi.';
+
+  @override
+  String get selected => 'Επιλεγμένο';
+
+  @override
+  String get selectOption => 'Επιλογή';
 }

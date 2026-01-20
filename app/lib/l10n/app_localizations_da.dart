@@ -5732,7 +5732,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Fast Transfer';
+  String get fastTransfer => 'Hurtig overførsel';
 
   @override
   String get syncingStatus => 'Syncing';
@@ -5746,7 +5746,7 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String get transferMethod => 'Transfer Method';
+  String get transferMethod => 'Overførselsmetode';
 
   @override
   String get fast => 'Fast';
@@ -6715,4 +6715,46 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get transferCancelled => 'Transfer cancelled';
+
+  @override
+  String get fastTransferEnabled => 'Hurtig overførsel aktiveret';
+
+  @override
+  String get bluetoothSyncEnabled => 'Bluetooth-synkronisering aktiveret';
+
+  @override
+  String get enableFastTransfer => 'Aktiver hurtig overførsel';
+
+  @override
+  String get fastTransferDescription => 'Hurtig overførsel bruger WiFi for ~5x hurtigere hastigheder. Din telefon vil midlertidigt forbinde til din Omi-enheds WiFi-netværk under overførsel.';
+
+  @override
+  String get internetAccessPausedDuringTransfer => 'Internetadgang er sat på pause under overførsel';
+
+  @override
+  String get chooseTransferMethodDescription => 'Vælg hvordan optagelser overføres fra din Omi-enhed til din telefon.';
+
+  @override
+  String get wifiSpeed => '~150 KB/s via WiFi';
+
+  @override
+  String get fiveTimesFaster => '5X HURTIGERE';
+
+  @override
+  String get fastTransferMethodDescription => 'Opretter en direkte WiFi-forbindelse til din Omi-enhed. Din telefon afbrydes midlertidigt fra dit normale WiFi under overførsel.';
+
+  @override
+  String get bluetooth => 'Bluetooth';
+
+  @override
+  String get bleSpeed => '~30 KB/s via BLE';
+
+  @override
+  String get bluetoothMethodDescription => 'Bruger standard Bluetooth Low Energy forbindelse. Langsommere men påvirker ikke din WiFi-forbindelse.';
+
+  @override
+  String get selected => 'Valgt';
+
+  @override
+  String get selectOption => 'Vælg';
 }

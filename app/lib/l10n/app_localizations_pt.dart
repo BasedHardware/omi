@@ -5726,7 +5726,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Fast Transfer';
+  String get fastTransfer => 'Transferência rápida';
 
   @override
   String get syncingStatus => 'Syncing';
@@ -5740,7 +5740,7 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String get transferMethod => 'Transfer Method';
+  String get transferMethod => 'Método de transferência';
 
   @override
   String get fast => 'Fast';
@@ -6709,4 +6709,46 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get transferCancelled => 'Transfer cancelled';
+
+  @override
+  String get fastTransferEnabled => 'Transferência rápida ativada';
+
+  @override
+  String get bluetoothSyncEnabled => 'Sincronização Bluetooth ativada';
+
+  @override
+  String get enableFastTransfer => 'Ativar transferência rápida';
+
+  @override
+  String get fastTransferDescription => 'A transferência rápida usa WiFi para velocidades ~5x mais rápidas. Seu telefone se conectará temporariamente à rede WiFi do dispositivo Omi durante a transferência.';
+
+  @override
+  String get internetAccessPausedDuringTransfer => 'O acesso à internet é pausado durante a transferência';
+
+  @override
+  String get chooseTransferMethodDescription => 'Escolha como as gravações são transferidas do dispositivo Omi para seu telefone.';
+
+  @override
+  String get wifiSpeed => '~150 KB/s via WiFi';
+
+  @override
+  String get fiveTimesFaster => '5X MAIS RÁPIDO';
+
+  @override
+  String get fastTransferMethodDescription => 'Cria uma conexão WiFi direta com seu dispositivo Omi. Seu telefone se desconecta temporariamente do WiFi normal durante a transferência.';
+
+  @override
+  String get bluetooth => 'Bluetooth';
+
+  @override
+  String get bleSpeed => '~30 KB/s via BLE';
+
+  @override
+  String get bluetoothMethodDescription => 'Usa conexão Bluetooth Low Energy padrão. Mais lento, mas não afeta sua conexão WiFi.';
+
+  @override
+  String get selected => 'Selecionado';
+
+  @override
+  String get selectOption => 'Selecionar';
 }

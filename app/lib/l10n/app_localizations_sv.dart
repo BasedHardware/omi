@@ -5732,7 +5732,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Fast Transfer';
+  String get fastTransfer => 'Snabb överföring';
 
   @override
   String get syncingStatus => 'Syncing';
@@ -5746,7 +5746,7 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get transferMethod => 'Transfer Method';
+  String get transferMethod => 'Överföringsmetod';
 
   @override
   String get fast => 'Fast';
@@ -6715,4 +6715,46 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get transferCancelled => 'Transfer cancelled';
+
+  @override
+  String get fastTransferEnabled => 'Snabb överföring aktiverad';
+
+  @override
+  String get bluetoothSyncEnabled => 'Bluetooth-synkronisering aktiverad';
+
+  @override
+  String get enableFastTransfer => 'Aktivera snabb överföring';
+
+  @override
+  String get fastTransferDescription => 'Snabb överföring använder WiFi för ~5x snabbare hastigheter. Din telefon ansluter tillfälligt till Omi-enhetens WiFi-nätverk under överföringen.';
+
+  @override
+  String get internetAccessPausedDuringTransfer => 'Internetåtkomst pausas under överföring';
+
+  @override
+  String get chooseTransferMethodDescription => 'Välj hur inspelningar överförs från Omi-enheten till din telefon.';
+
+  @override
+  String get wifiSpeed => '~150 KB/s via WiFi';
+
+  @override
+  String get fiveTimesFaster => '5X SNABBARE';
+
+  @override
+  String get fastTransferMethodDescription => 'Skapar en direkt WiFi-anslutning till din Omi-enhet. Din telefon kopplas tillfälligt från ditt vanliga WiFi under överföringen.';
+
+  @override
+  String get bluetooth => 'Bluetooth';
+
+  @override
+  String get bleSpeed => '~30 KB/s via BLE';
+
+  @override
+  String get bluetoothMethodDescription => 'Använder standard Bluetooth Low Energy-anslutning. Långsammare men påverkar inte din WiFi-anslutning.';
+
+  @override
+  String get selected => 'Vald';
+
+  @override
+  String get selectOption => 'Välj';
 }

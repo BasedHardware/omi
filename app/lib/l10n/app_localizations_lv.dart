@@ -5732,7 +5732,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Fast Transfer';
+  String get fastTransfer => 'Ātrā pārsūtīšana';
 
   @override
   String get syncingStatus => 'Syncing';
@@ -5746,7 +5746,7 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get transferMethod => 'Transfer Method';
+  String get transferMethod => 'Pārsūtīšanas metode';
 
   @override
   String get fast => 'Fast';
@@ -6715,4 +6715,46 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get transferCancelled => 'Transfer cancelled';
+
+  @override
+  String get fastTransferEnabled => 'Ātrā pārsūtīšana iespējota';
+
+  @override
+  String get bluetoothSyncEnabled => 'Bluetooth sinhronizācija iespējota';
+
+  @override
+  String get enableFastTransfer => 'Iespējot ātro pārsūtīšanu';
+
+  @override
+  String get fastTransferDescription => 'Ātrā pārsūtīšana izmanto WiFi ~5x ātrākam ātrumam. Pārsūtīšanas laikā tālrunis īslaicīgi pieslēgsies Omi ierīces WiFi tīklam.';
+
+  @override
+  String get internetAccessPausedDuringTransfer => 'Interneta piekļuve ir apturēta pārsūtīšanas laikā';
+
+  @override
+  String get chooseTransferMethodDescription => 'Izvēlieties, kā ieraksti tiek pārsūtīti no Omi ierīces uz tālruni.';
+
+  @override
+  String get wifiSpeed => '~150 KB/s caur WiFi';
+
+  @override
+  String get fiveTimesFaster => '5X ĀTRĀK';
+
+  @override
+  String get fastTransferMethodDescription => 'Izveido tiešu WiFi savienojumu ar Omi ierīci. Pārsūtīšanas laikā tālrunis īslaicīgi atvienojas no parastā WiFi.';
+
+  @override
+  String get bluetooth => 'Bluetooth';
+
+  @override
+  String get bleSpeed => '~30 KB/s caur BLE';
+
+  @override
+  String get bluetoothMethodDescription => 'Izmanto standarta Bluetooth Low Energy savienojumu. Lēnāk, bet neietekmē WiFi savienojumu.';
+
+  @override
+  String get selected => 'Atlasīts';
+
+  @override
+  String get selectOption => 'Atlasīt';
 }

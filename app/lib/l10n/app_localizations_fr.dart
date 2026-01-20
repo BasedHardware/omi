@@ -5732,7 +5732,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Fast Transfer';
+  String get fastTransfer => 'Transfert rapide';
 
   @override
   String get syncingStatus => 'Syncing';
@@ -5746,7 +5746,7 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String get transferMethod => 'Transfer Method';
+  String get transferMethod => 'Méthode de transfert';
 
   @override
   String get fast => 'Fast';
@@ -6715,4 +6715,46 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get transferCancelled => 'Transfer cancelled';
+
+  @override
+  String get fastTransferEnabled => 'Transfert rapide activé';
+
+  @override
+  String get bluetoothSyncEnabled => 'Synchronisation Bluetooth activée';
+
+  @override
+  String get enableFastTransfer => 'Activer le transfert rapide';
+
+  @override
+  String get fastTransferDescription => 'Le transfert rapide utilise le WiFi pour des vitesses ~5x plus rapides. Votre téléphone se connectera temporairement au réseau WiFi de votre appareil Omi pendant le transfert.';
+
+  @override
+  String get internetAccessPausedDuringTransfer => 'L\'accès Internet est suspendu pendant le transfert';
+
+  @override
+  String get chooseTransferMethodDescription => 'Choisissez comment les enregistrements sont transférés de votre appareil Omi vers votre téléphone.';
+
+  @override
+  String get wifiSpeed => '~150 Ko/s via WiFi';
+
+  @override
+  String get fiveTimesFaster => '5X PLUS RAPIDE';
+
+  @override
+  String get fastTransferMethodDescription => 'Crée une connexion WiFi directe à votre appareil Omi. Votre téléphone se déconnecte temporairement de votre WiFi habituel pendant le transfert.';
+
+  @override
+  String get bluetooth => 'Bluetooth';
+
+  @override
+  String get bleSpeed => '~30 Ko/s via BLE';
+
+  @override
+  String get bluetoothMethodDescription => 'Utilise une connexion Bluetooth Low Energy standard. Plus lent mais n\'affecte pas votre connexion WiFi.';
+
+  @override
+  String get selected => 'Sélectionné';
+
+  @override
+  String get selectOption => 'Sélectionner';
 }

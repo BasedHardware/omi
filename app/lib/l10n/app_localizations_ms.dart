@@ -5732,7 +5732,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Fast Transfer';
+  String get fastTransfer => 'Pemindahan Pantas';
 
   @override
   String get syncingStatus => 'Syncing';
@@ -5746,7 +5746,7 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String get transferMethod => 'Transfer Method';
+  String get transferMethod => 'Kaedah Pemindahan';
 
   @override
   String get fast => 'Fast';
@@ -6715,4 +6715,46 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get transferCancelled => 'Transfer cancelled';
+
+  @override
+  String get fastTransferEnabled => 'Pemindahan Pantas diaktifkan';
+
+  @override
+  String get bluetoothSyncEnabled => 'Penyegerakan Bluetooth diaktifkan';
+
+  @override
+  String get enableFastTransfer => 'Aktifkan Pemindahan Pantas';
+
+  @override
+  String get fastTransferDescription => 'Pemindahan Pantas menggunakan WiFi untuk kelajuan ~5x lebih pantas. Telefon anda akan bersambung sementara ke rangkaian WiFi peranti Omi semasa pemindahan.';
+
+  @override
+  String get internetAccessPausedDuringTransfer => 'Akses internet dijeda semasa pemindahan';
+
+  @override
+  String get chooseTransferMethodDescription => 'Pilih cara rakaman dipindahkan dari peranti Omi ke telefon anda.';
+
+  @override
+  String get wifiSpeed => '~150 KB/s melalui WiFi';
+
+  @override
+  String get fiveTimesFaster => '5X LEBIH PANTAS';
+
+  @override
+  String get fastTransferMethodDescription => 'Mencipta sambungan WiFi terus ke peranti Omi anda. Telefon anda terputus sementara dari WiFi biasa semasa pemindahan.';
+
+  @override
+  String get bluetooth => 'Bluetooth';
+
+  @override
+  String get bleSpeed => '~30 KB/s melalui BLE';
+
+  @override
+  String get bluetoothMethodDescription => 'Menggunakan sambungan Bluetooth Low Energy standard. Lebih perlahan tetapi tidak menjejaskan sambungan WiFi anda.';
+
+  @override
+  String get selected => 'Dipilih';
+
+  @override
+  String get selectOption => 'Pilih';
 }

@@ -5732,7 +5732,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Fast Transfer';
+  String get fastTransfer => 'Gyors átvitel';
 
   @override
   String get syncingStatus => 'Syncing';
@@ -5746,7 +5746,7 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get transferMethod => 'Transfer Method';
+  String get transferMethod => 'Átviteli módszer';
 
   @override
   String get fast => 'Fast';
@@ -6715,4 +6715,46 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get transferCancelled => 'Transfer cancelled';
+
+  @override
+  String get fastTransferEnabled => 'Gyors átvitel engedélyezve';
+
+  @override
+  String get bluetoothSyncEnabled => 'Bluetooth szinkronizálás engedélyezve';
+
+  @override
+  String get enableFastTransfer => 'Gyors átvitel engedélyezése';
+
+  @override
+  String get fastTransferDescription => 'A gyors átvitel WiFi-t használ ~5x gyorsabb sebességekhez. A telefonja ideiglenesen csatlakozik az Omi eszköz WiFi hálózatához az átvitel során.';
+
+  @override
+  String get internetAccessPausedDuringTransfer => 'Az internetelérés szünetel az átvitel alatt';
+
+  @override
+  String get chooseTransferMethodDescription => 'Válassza ki, hogyan kerüljenek át a felvételek az Omi eszközről a telefonjára.';
+
+  @override
+  String get wifiSpeed => '~150 KB/s WiFi-n keresztül';
+
+  @override
+  String get fiveTimesFaster => '5X GYORSABB';
+
+  @override
+  String get fastTransferMethodDescription => 'Közvetlen WiFi kapcsolatot hoz létre az Omi eszközével. A telefonja ideiglenesen lecsatlakozik a szokásos WiFi-ről az átvitel alatt.';
+
+  @override
+  String get bluetooth => 'Bluetooth';
+
+  @override
+  String get bleSpeed => '~30 KB/s BLE-n keresztül';
+
+  @override
+  String get bluetoothMethodDescription => 'Szabványos Bluetooth Low Energy kapcsolatot használ. Lassabb, de nem befolyásolja a WiFi kapcsolatot.';
+
+  @override
+  String get selected => 'Kiválasztva';
+
+  @override
+  String get selectOption => 'Kiválasztás';
 }

@@ -5732,7 +5732,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Fast Transfer';
+  String get fastTransfer => 'Snelle overdracht';
 
   @override
   String get syncingStatus => 'Syncing';
@@ -5746,7 +5746,7 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String get transferMethod => 'Transfer Method';
+  String get transferMethod => 'Overdrachtsmethode';
 
   @override
   String get fast => 'Fast';
@@ -6715,4 +6715,46 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get transferCancelled => 'Transfer cancelled';
+
+  @override
+  String get fastTransferEnabled => 'Snelle overdracht ingeschakeld';
+
+  @override
+  String get bluetoothSyncEnabled => 'Bluetooth-synchronisatie ingeschakeld';
+
+  @override
+  String get enableFastTransfer => 'Snelle overdracht inschakelen';
+
+  @override
+  String get fastTransferDescription => 'Snelle overdracht gebruikt WiFi voor ~5x snellere snelheden. Je telefoon maakt tijdens de overdracht tijdelijk verbinding met het WiFi-netwerk van je Omi-apparaat.';
+
+  @override
+  String get internetAccessPausedDuringTransfer => 'Internettoegang is onderbroken tijdens overdracht';
+
+  @override
+  String get chooseTransferMethodDescription => 'Kies hoe opnames worden overgedragen van je Omi-apparaat naar je telefoon.';
+
+  @override
+  String get wifiSpeed => '~150 KB/s via WiFi';
+
+  @override
+  String get fiveTimesFaster => '5X SNELLER';
+
+  @override
+  String get fastTransferMethodDescription => 'Maakt een directe WiFi-verbinding met je Omi-apparaat. Je telefoon wordt tijdens de overdracht tijdelijk losgekoppeld van je normale WiFi.';
+
+  @override
+  String get bluetooth => 'Bluetooth';
+
+  @override
+  String get bleSpeed => '~30 KB/s via BLE';
+
+  @override
+  String get bluetoothMethodDescription => 'Gebruikt standaard Bluetooth Low Energy-verbinding. Langzamer maar beïnvloedt je WiFi-verbinding niet.';
+
+  @override
+  String get selected => 'Geselecteerd';
+
+  @override
+  String get selectOption => 'Selecteren';
 }

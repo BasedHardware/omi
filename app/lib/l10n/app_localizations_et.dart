@@ -5732,7 +5732,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Fast Transfer';
+  String get fastTransfer => 'Kiire edastus';
 
   @override
   String get syncingStatus => 'Syncing';
@@ -5746,7 +5746,7 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get transferMethod => 'Transfer Method';
+  String get transferMethod => 'Edastusmeetod';
 
   @override
   String get fast => 'Fast';
@@ -6715,4 +6715,46 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get transferCancelled => 'Transfer cancelled';
+
+  @override
+  String get fastTransferEnabled => 'Kiire edastus lubatud';
+
+  @override
+  String get bluetoothSyncEnabled => 'Bluetoothi sünkroonimine lubatud';
+
+  @override
+  String get enableFastTransfer => 'Luba kiire edastus';
+
+  @override
+  String get fastTransferDescription => 'Kiire edastus kasutab WiFi-d ~5x kiiremate kiiruste jaoks. Teie telefon ühendub ajutiselt edastuse ajal Omi seadme WiFi-võrguga.';
+
+  @override
+  String get internetAccessPausedDuringTransfer => 'Interneti-juurdepääs on edastuse ajal peatatud';
+
+  @override
+  String get chooseTransferMethodDescription => 'Valige, kuidas salvestised edastatakse Omi seadmest telefoni.';
+
+  @override
+  String get wifiSpeed => '~150 KB/s WiFi kaudu';
+
+  @override
+  String get fiveTimesFaster => '5X KIIREM';
+
+  @override
+  String get fastTransferMethodDescription => 'Loob otseühenduse WiFi kaudu Omi seadmega. Teie telefon katkestab ajutiselt ühenduse tavalise WiFi-ga edastuse ajal.';
+
+  @override
+  String get bluetooth => 'Bluetooth';
+
+  @override
+  String get bleSpeed => '~30 KB/s BLE kaudu';
+
+  @override
+  String get bluetoothMethodDescription => 'Kasutab standardset Bluetooth Low Energy ühendust. Aeglasem, kuid ei mõjuta WiFi-ühendust.';
+
+  @override
+  String get selected => 'Valitud';
+
+  @override
+  String get selectOption => 'Vali';
 }

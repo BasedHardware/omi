@@ -5726,7 +5726,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Fast Transfer';
+  String get fastTransfer => 'फास्ट ट्रांसफर';
 
   @override
   String get syncingStatus => 'Syncing';
@@ -5740,7 +5740,7 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
-  String get transferMethod => 'Transfer Method';
+  String get transferMethod => 'ट्रांसफर विधि';
 
   @override
   String get fast => 'Fast';
@@ -6709,4 +6709,46 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get transferCancelled => 'Transfer cancelled';
+
+  @override
+  String get fastTransferEnabled => 'फास्ट ट्रांसफर सक्षम';
+
+  @override
+  String get bluetoothSyncEnabled => 'ब्लूटूथ सिंक सक्षम';
+
+  @override
+  String get enableFastTransfer => 'फास्ट ट्रांसफर सक्षम करें';
+
+  @override
+  String get fastTransferDescription => 'फास्ट ट्रांसफर ~5x तेज गति के लिए WiFi का उपयोग करता है। ट्रांसफर के दौरान आपका फोन अस्थायी रूप से आपके Omi डिवाइस के WiFi नेटवर्क से कनेक्ट होगा।';
+
+  @override
+  String get internetAccessPausedDuringTransfer => 'ट्रांसफर के दौरान इंटरनेट एक्सेस रुका हुआ है';
+
+  @override
+  String get chooseTransferMethodDescription => 'चुनें कि आपके Omi डिवाइस से आपके फोन में रिकॉर्डिंग कैसे ट्रांसफर की जाएं।';
+
+  @override
+  String get wifiSpeed => '~150 KB/s WiFi के माध्यम से';
+
+  @override
+  String get fiveTimesFaster => '5X तेज';
+
+  @override
+  String get fastTransferMethodDescription => 'आपके Omi डिवाइस से सीधा WiFi कनेक्शन बनाता है। ट्रांसफर के दौरान आपका फोन अस्थायी रूप से आपके सामान्य WiFi से डिस्कनेक्ट हो जाता है।';
+
+  @override
+  String get bluetooth => 'ब्लूटूथ';
+
+  @override
+  String get bleSpeed => '~30 KB/s BLE के माध्यम से';
+
+  @override
+  String get bluetoothMethodDescription => 'मानक ब्लूटूथ लो एनर्जी कनेक्शन का उपयोग करता है। धीमा लेकिन आपके WiFi कनेक्शन को प्रभावित नहीं करता।';
+
+  @override
+  String get selected => 'चयनित';
+
+  @override
+  String get selectOption => 'चुनें';
 }

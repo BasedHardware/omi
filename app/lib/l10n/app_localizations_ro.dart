@@ -5732,7 +5732,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Fast Transfer';
+  String get fastTransfer => 'Transfer rapid';
 
   @override
   String get syncingStatus => 'Syncing';
@@ -5746,7 +5746,7 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get transferMethod => 'Transfer Method';
+  String get transferMethod => 'Metodă de transfer';
 
   @override
   String get fast => 'Fast';
@@ -6715,4 +6715,46 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get transferCancelled => 'Transfer cancelled';
+
+  @override
+  String get fastTransferEnabled => 'Transfer rapid activat';
+
+  @override
+  String get bluetoothSyncEnabled => 'Sincronizare Bluetooth activată';
+
+  @override
+  String get enableFastTransfer => 'Activează transferul rapid';
+
+  @override
+  String get fastTransferDescription => 'Transferul rapid folosește WiFi pentru viteze de ~5x mai rapide. Telefonul se va conecta temporar la rețeaua WiFi a dispozitivului Omi în timpul transferului.';
+
+  @override
+  String get internetAccessPausedDuringTransfer => 'Accesul la internet este întrerupt în timpul transferului';
+
+  @override
+  String get chooseTransferMethodDescription => 'Alegeți cum sunt transferate înregistrările de pe dispozitivul Omi pe telefon.';
+
+  @override
+  String get wifiSpeed => '~150 KB/s prin WiFi';
+
+  @override
+  String get fiveTimesFaster => 'DE 5X MAI RAPID';
+
+  @override
+  String get fastTransferMethodDescription => 'Creează o conexiune WiFi directă la dispozitivul Omi. Telefonul se deconectează temporar de la WiFi-ul obișnuit în timpul transferului.';
+
+  @override
+  String get bluetooth => 'Bluetooth';
+
+  @override
+  String get bleSpeed => '~30 KB/s prin BLE';
+
+  @override
+  String get bluetoothMethodDescription => 'Folosește conexiunea Bluetooth Low Energy standard. Mai lent, dar nu afectează conexiunea WiFi.';
+
+  @override
+  String get selected => 'Selectat';
+
+  @override
+  String get selectOption => 'Selectează';
 }

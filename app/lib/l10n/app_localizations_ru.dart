@@ -5733,7 +5733,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Fast Transfer';
+  String get fastTransfer => 'Быстрая передача';
 
   @override
   String get syncingStatus => 'Syncing';
@@ -5747,7 +5747,7 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String get transferMethod => 'Transfer Method';
+  String get transferMethod => 'Метод передачи';
 
   @override
   String get fast => 'Fast';
@@ -6716,4 +6716,46 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get transferCancelled => 'Transfer cancelled';
+
+  @override
+  String get fastTransferEnabled => 'Быстрая передача включена';
+
+  @override
+  String get bluetoothSyncEnabled => 'Синхронизация Bluetooth включена';
+
+  @override
+  String get enableFastTransfer => 'Включить быструю передачу';
+
+  @override
+  String get fastTransferDescription => 'Быстрая передача использует WiFi для ~5x более быстрых скоростей. Ваш телефон временно подключится к WiFi-сети устройства Omi во время передачи.';
+
+  @override
+  String get internetAccessPausedDuringTransfer => 'Доступ в интернет приостановлен во время передачи';
+
+  @override
+  String get chooseTransferMethodDescription => 'Выберите, как записи передаются с устройства Omi на телефон.';
+
+  @override
+  String get wifiSpeed => '~150 КБ/с через WiFi';
+
+  @override
+  String get fiveTimesFaster => 'В 5 РАЗ БЫСТРЕЕ';
+
+  @override
+  String get fastTransferMethodDescription => 'Создаёт прямое WiFi-подключение к устройству Omi. Телефон временно отключается от обычного WiFi во время передачи.';
+
+  @override
+  String get bluetooth => 'Bluetooth';
+
+  @override
+  String get bleSpeed => '~30 КБ/с через BLE';
+
+  @override
+  String get bluetoothMethodDescription => 'Использует стандартное подключение Bluetooth Low Energy. Медленнее, но не влияет на WiFi-соединение.';
+
+  @override
+  String get selected => 'Выбрано';
+
+  @override
+  String get selectOption => 'Выбрать';
 }

@@ -7059,7 +7059,7 @@
   },
   "fastTransfer": "Fast Transfer",
   "@fastTransfer": {
-    "description": "Label for WiFi fast transfer mode"
+    "description": "Name of the fast transfer method"
   },
   "syncingStatus": "Syncing",
   "@syncingStatus": {
@@ -7080,7 +7080,7 @@
   },
   "transferMethod": "Transfer Method",
   "@transferMethod": {
-    "description": "Settings label for transfer method selection"
+    "description": "Page title for transfer method settings"
   },
   "fast": "Fast",
   "@fast": {
@@ -8389,5 +8389,61 @@
   "transferCancelled": "Transfer cancelled",
   "@transferCancelled": {
     "description": "Snackbar message when transfer is cancelled"
+  },
+  "fastTransferEnabled": "Fast Transfer enabled",
+  "@fastTransferEnabled": {
+    "description": "Snackbar message when fast transfer is enabled"
+  },
+  "bluetoothSyncEnabled": "Bluetooth sync enabled",
+  "@bluetoothSyncEnabled": {
+    "description": "Snackbar message when bluetooth sync is enabled"
+  },
+  "enableFastTransfer": "Enable Fast Transfer",
+  "@enableFastTransfer": {
+    "description": "Dialog title for enabling fast transfer"
+  },
+  "fastTransferDescription": "Fast Transfer uses WiFi for ~5x faster speeds. Your phone will temporarily connect to your Omi device's WiFi network during transfer.",
+  "@fastTransferDescription": {
+    "description": "Description of fast transfer feature in dialog"
+  },
+  "internetAccessPausedDuringTransfer": "Internet access is paused during transfer",
+  "@internetAccessPausedDuringTransfer": {
+    "description": "Warning that internet is paused during transfer"
+  },
+  "chooseTransferMethodDescription": "Choose how recordings are transferred from your Omi device to your phone.",
+  "@chooseTransferMethodDescription": {
+    "description": "Description text on transfer method page"
+  },
+  "wifiSpeed": "~150 KB/s via WiFi",
+  "@wifiSpeed": {
+    "description": "Speed description for WiFi transfer"
+  },
+  "fiveTimesFaster": "5X FASTER",
+  "@fiveTimesFaster": {
+    "description": "Badge label for faster transfer method"
+  },
+  "fastTransferMethodDescription": "Creates a direct WiFi connection to your Omi device. Your phone temporarily disconnects from your regular WiFi during transfer.",
+  "@fastTransferMethodDescription": {
+    "description": "Description of fast transfer method card"
+  },
+  "bluetooth": "Bluetooth",
+  "@bluetooth": {
+    "description": "Name of bluetooth transfer method"
+  },
+  "bleSpeed": "~30 KB/s via BLE",
+  "@bleSpeed": {
+    "description": "Speed description for BLE transfer"
+  },
+  "bluetoothMethodDescription": "Uses standard Bluetooth Low Energy connection. Slower but doesn't affect your WiFi connection.",
+  "@bluetoothMethodDescription": {
+    "description": "Description of bluetooth transfer method card"
+  },
+  "selected": "Selected",
+  "@selected": {
+    "description": "Label for selected option"
+  },
+  "selectOption": "Select",
+  "@selectOption": {
+    "description": "Label for selectable option"
   }
 }

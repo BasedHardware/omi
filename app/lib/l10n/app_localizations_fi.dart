@@ -5732,7 +5732,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Fast Transfer';
+  String get fastTransfer => 'Nopea siirto';
 
   @override
   String get syncingStatus => 'Syncing';
@@ -5746,7 +5746,7 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get transferMethod => 'Transfer Method';
+  String get transferMethod => 'Siirtotapa';
 
   @override
   String get fast => 'Fast';
@@ -6715,4 +6715,46 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get transferCancelled => 'Transfer cancelled';
+
+  @override
+  String get fastTransferEnabled => 'Nopea siirto käytössä';
+
+  @override
+  String get bluetoothSyncEnabled => 'Bluetooth-synkronointi käytössä';
+
+  @override
+  String get enableFastTransfer => 'Ota nopea siirto käyttöön';
+
+  @override
+  String get fastTransferDescription => 'Nopea siirto käyttää WiFiä ~5x nopeampiin nopeuksiin. Puhelimesi yhdistää tilapäisesti Omi-laitteesi WiFi-verkkoon siirron aikana.';
+
+  @override
+  String get internetAccessPausedDuringTransfer => 'Internetyhteys keskeytetään siirron ajaksi';
+
+  @override
+  String get chooseTransferMethodDescription => 'Valitse, miten tallenteet siirretään Omi-laitteesta puhelimeesi.';
+
+  @override
+  String get wifiSpeed => '~150 KB/s WiFin kautta';
+
+  @override
+  String get fiveTimesFaster => '5X NOPEAMPI';
+
+  @override
+  String get fastTransferMethodDescription => 'Luo suoran WiFi-yhteyden Omi-laitteeseesi. Puhelimesi katkeaa tilapäisesti tavallisesta WiFistä siirron aikana.';
+
+  @override
+  String get bluetooth => 'Bluetooth';
+
+  @override
+  String get bleSpeed => '~30 KB/s BLE:n kautta';
+
+  @override
+  String get bluetoothMethodDescription => 'Käyttää tavallista Bluetooth Low Energy -yhteyttä. Hitaampi, mutta ei vaikuta WiFi-yhteyteen.';
+
+  @override
+  String get selected => 'Valittu';
+
+  @override
+  String get selectOption => 'Valitse';
 }

@@ -5732,7 +5732,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Fast Transfer';
+  String get fastTransfer => 'Hızlı aktarım';
 
   @override
   String get syncingStatus => 'Syncing';
@@ -5746,7 +5746,7 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get transferMethod => 'Transfer Method';
+  String get transferMethod => 'Aktarım yöntemi';
 
   @override
   String get fast => 'Fast';
@@ -6715,4 +6715,46 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get transferCancelled => 'Transfer cancelled';
+
+  @override
+  String get fastTransferEnabled => 'Hızlı aktarım etkinleştirildi';
+
+  @override
+  String get bluetoothSyncEnabled => 'Bluetooth senkronizasyonu etkinleştirildi';
+
+  @override
+  String get enableFastTransfer => 'Hızlı aktarımı etkinleştir';
+
+  @override
+  String get fastTransferDescription => 'Hızlı aktarım, ~5 kat daha hızlı hızlar için WiFi kullanır. Telefonunuz aktarım sırasında geçici olarak Omi cihazınızın WiFi ağına bağlanacaktır.';
+
+  @override
+  String get internetAccessPausedDuringTransfer => 'Aktarım sırasında internet erişimi duraklatıldı';
+
+  @override
+  String get chooseTransferMethodDescription => 'Kayıtların Omi cihazından telefonunuza nasıl aktarılacağını seçin.';
+
+  @override
+  String get wifiSpeed => 'WiFi ile ~150 KB/s';
+
+  @override
+  String get fiveTimesFaster => '5 KAT DAHA HIZLI';
+
+  @override
+  String get fastTransferMethodDescription => 'Omi cihazınıza doğrudan WiFi bağlantısı oluşturur. Telefonunuz aktarım sırasında geçici olarak normal WiFi bağlantısını keser.';
+
+  @override
+  String get bluetooth => 'Bluetooth';
+
+  @override
+  String get bleSpeed => 'BLE ile ~30 KB/s';
+
+  @override
+  String get bluetoothMethodDescription => 'Standart Bluetooth Low Energy bağlantısı kullanır. Daha yavaş ama WiFi bağlantınızı etkilemez.';
+
+  @override
+  String get selected => 'Seçildi';
+
+  @override
+  String get selectOption => 'Seç';
 }

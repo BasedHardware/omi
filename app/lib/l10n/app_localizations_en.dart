@@ -6722,4 +6722,46 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get transferCancelled => 'Transfer cancelled';
+
+  @override
+  String get fastTransferEnabled => 'Fast Transfer enabled';
+
+  @override
+  String get bluetoothSyncEnabled => 'Bluetooth sync enabled';
+
+  @override
+  String get enableFastTransfer => 'Enable Fast Transfer';
+
+  @override
+  String get fastTransferDescription => 'Fast Transfer uses WiFi for ~5x faster speeds. Your phone will temporarily connect to your Omi device\'s WiFi network during transfer.';
+
+  @override
+  String get internetAccessPausedDuringTransfer => 'Internet access is paused during transfer';
+
+  @override
+  String get chooseTransferMethodDescription => 'Choose how recordings are transferred from your Omi device to your phone.';
+
+  @override
+  String get wifiSpeed => '~150 KB/s via WiFi';
+
+  @override
+  String get fiveTimesFaster => '5X FASTER';
+
+  @override
+  String get fastTransferMethodDescription => 'Creates a direct WiFi connection to your Omi device. Your phone temporarily disconnects from your regular WiFi during transfer.';
+
+  @override
+  String get bluetooth => 'Bluetooth';
+
+  @override
+  String get bleSpeed => '~30 KB/s via BLE';
+
+  @override
+  String get bluetoothMethodDescription => 'Uses standard Bluetooth Low Energy connection. Slower but doesn\'t affect your WiFi connection.';
+
+  @override
+  String get selected => 'Selected';
+
+  @override
+  String get selectOption => 'Select';
 }

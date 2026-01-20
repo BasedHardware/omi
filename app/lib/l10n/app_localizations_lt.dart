@@ -5732,7 +5732,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Fast Transfer';
+  String get fastTransfer => 'Greitas perdavimas';
 
   @override
   String get syncingStatus => 'Syncing';
@@ -5746,7 +5746,7 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get transferMethod => 'Transfer Method';
+  String get transferMethod => 'Perdavimo metodas';
 
   @override
   String get fast => 'Fast';
@@ -6715,4 +6715,46 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get transferCancelled => 'Transfer cancelled';
+
+  @override
+  String get fastTransferEnabled => 'Greitas perdavimas įjungtas';
+
+  @override
+  String get bluetoothSyncEnabled => 'Bluetooth sinchronizavimas įjungtas';
+
+  @override
+  String get enableFastTransfer => 'Įjungti greitą perdavimą';
+
+  @override
+  String get fastTransferDescription => 'Greitas perdavimas naudoja WiFi ~5x greitesniam greičiui. Perdavimo metu telefonas laikinai prisijungs prie Omi įrenginio WiFi tinklo.';
+
+  @override
+  String get internetAccessPausedDuringTransfer => 'Interneto prieiga pristabdyta perdavimo metu';
+
+  @override
+  String get chooseTransferMethodDescription => 'Pasirinkite, kaip įrašai perduodami iš Omi įrenginio į telefoną.';
+
+  @override
+  String get wifiSpeed => '~150 KB/s per WiFi';
+
+  @override
+  String get fiveTimesFaster => '5X GREIČIAU';
+
+  @override
+  String get fastTransferMethodDescription => 'Sukuria tiesioginį WiFi ryšį su Omi įrenginiu. Perdavimo metu telefonas laikinai atsijungia nuo įprasto WiFi.';
+
+  @override
+  String get bluetooth => 'Bluetooth';
+
+  @override
+  String get bleSpeed => '~30 KB/s per BLE';
+
+  @override
+  String get bluetoothMethodDescription => 'Naudoja standartinį Bluetooth Low Energy ryšį. Lėčiau, bet neturi įtakos WiFi ryšiui.';
+
+  @override
+  String get selected => 'Pasirinkta';
+
+  @override
+  String get selectOption => 'Pasirinkti';
 }

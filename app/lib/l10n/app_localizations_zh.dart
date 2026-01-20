@@ -5726,7 +5726,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Fast Transfer';
+  String get fastTransfer => '快速传输';
 
   @override
   String get syncingStatus => 'Syncing';
@@ -5740,7 +5740,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get transferMethod => 'Transfer Method';
+  String get transferMethod => '传输方式';
 
   @override
   String get fast => 'Fast';
@@ -6709,4 +6709,46 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get transferCancelled => 'Transfer cancelled';
+
+  @override
+  String get fastTransferEnabled => '快速传输已启用';
+
+  @override
+  String get bluetoothSyncEnabled => '蓝牙同步已启用';
+
+  @override
+  String get enableFastTransfer => '启用快速传输';
+
+  @override
+  String get fastTransferDescription => '快速传输使用WiFi实现约5倍的传输速度。传输期间，您的手机将临时连接到Omi设备的WiFi网络。';
+
+  @override
+  String get internetAccessPausedDuringTransfer => '传输期间互联网访问暂停';
+
+  @override
+  String get chooseTransferMethodDescription => '选择如何将录音从Omi设备传输到您的手机。';
+
+  @override
+  String get wifiSpeed => '通过WiFi约150 KB/s';
+
+  @override
+  String get fiveTimesFaster => '快5倍';
+
+  @override
+  String get fastTransferMethodDescription => '创建与Omi设备的直接WiFi连接。传输期间，您的手机将暂时断开常规WiFi连接。';
+
+  @override
+  String get bluetooth => '蓝牙';
+
+  @override
+  String get bleSpeed => '通过BLE约30 KB/s';
+
+  @override
+  String get bluetoothMethodDescription => '使用标准蓝牙低功耗连接。速度较慢，但不影响WiFi连接。';
+
+  @override
+  String get selected => '已选择';
+
+  @override
+  String get selectOption => '选择';
 }

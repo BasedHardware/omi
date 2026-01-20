@@ -11061,7 +11061,7 @@ abstract class AppLocalizations {
   /// **'Limitless'**
   String get limitless;
 
-  /// Label for WiFi fast transfer mode
+  /// Name of the fast transfer method
   ///
   /// In en, this message translates to:
   /// **'Fast Transfer'**
@@ -11085,7 +11085,7 @@ abstract class AppLocalizations {
   /// **'ETA: {time}'**
   String etaLabel(String time);
 
-  /// Settings label for transfer method selection
+  /// Page title for transfer method settings
   ///
   /// In en, this message translates to:
   /// **'Transfer Method'**
@@ -12866,6 +12866,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Transfer cancelled'**
   String get transferCancelled;
+
+  /// Snackbar message when fast transfer is enabled
+  ///
+  /// In en, this message translates to:
+  /// **'Fast Transfer enabled'**
+  String get fastTransferEnabled;
+
+  /// Snackbar message when bluetooth sync is enabled
+  ///
+  /// In en, this message translates to:
+  /// **'Bluetooth sync enabled'**
+  String get bluetoothSyncEnabled;
+
+  /// Dialog title for enabling fast transfer
+  ///
+  /// In en, this message translates to:
+  /// **'Enable Fast Transfer'**
+  String get enableFastTransfer;
+
+  /// Description of fast transfer feature in dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Fast Transfer uses WiFi for ~5x faster speeds. Your phone will temporarily connect to your Omi device\'s WiFi network during transfer.'**
+  String get fastTransferDescription;
+
+  /// Warning that internet is paused during transfer
+  ///
+  /// In en, this message translates to:
+  /// **'Internet access is paused during transfer'**
+  String get internetAccessPausedDuringTransfer;
+
+  /// Description text on transfer method page
+  ///
+  /// In en, this message translates to:
+  /// **'Choose how recordings are transferred from your Omi device to your phone.'**
+  String get chooseTransferMethodDescription;
+
+  /// Speed description for WiFi transfer
+  ///
+  /// In en, this message translates to:
+  /// **'~150 KB/s via WiFi'**
+  String get wifiSpeed;
+
+  /// Badge label for faster transfer method
+  ///
+  /// In en, this message translates to:
+  /// **'5X FASTER'**
+  String get fiveTimesFaster;
+
+  /// Description of fast transfer method card
+  ///
+  /// In en, this message translates to:
+  /// **'Creates a direct WiFi connection to your Omi device. Your phone temporarily disconnects from your regular WiFi during transfer.'**
+  String get fastTransferMethodDescription;
+
+  /// Name of bluetooth transfer method
+  ///
+  /// In en, this message translates to:
+  /// **'Bluetooth'**
+  String get bluetooth;
+
+  /// Speed description for BLE transfer
+  ///
+  /// In en, this message translates to:
+  /// **'~30 KB/s via BLE'**
+  String get bleSpeed;
+
+  /// Description of bluetooth transfer method card
+  ///
+  /// In en, this message translates to:
+  /// **'Uses standard Bluetooth Low Energy connection. Slower but doesn\'t affect your WiFi connection.'**
+  String get bluetoothMethodDescription;
+
+  /// Label for selected option
+  ///
+  /// In en, this message translates to:
+  /// **'Selected'**
+  String get selected;
+
+  /// Label for selectable option
+  ///
+  /// In en, this message translates to:
+  /// **'Select'**
+  String get selectOption;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

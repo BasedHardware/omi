@@ -2,9 +2,9 @@
 
 ## Summary
 Total Files to Localize: 38
-Completed: 31
+Completed: 32
 In Progress: 0
-Pending: 7
+Pending: 6
 
 ## Progress by File
 
@@ -44,7 +44,7 @@ Pending: 7
 [x] pages/settings/device_settings.dart (~8 strings) - DONE (1 key, reuses existing unpair key)
 [x] pages/conversations/sync_widgets/wifi_connection_sheet.dart (~6 strings) - DONE (reuses 5 existing keys)
 [x] pages/conversations/wal_item_detail/wal_item_detail_page.dart (~5 strings) - DONE (33 new keys + 2 reused keys)
-[ ] pages/conversations/fast_transfer_settings_page.dart (~6 strings)
+[x] pages/conversations/fast_transfer_settings_page.dart (~6 strings) - DONE (16 new keys + 2 reused keys)
 
 ### Service/Provider Files
 [ ] providers/device_provider.dart (~5 strings)
@@ -57,6 +57,12 @@ Pending: 7
 ## Changelog
 
 ### 2026-01-20
+- Localized pages/conversations/fast_transfer_settings_page.dart with 16 l10n keys for 34 languages
+  - fastTransferEnabled, bluetoothSyncEnabled, enableFastTransfer, fastTransferDescription
+  - internetAccessPausedDuringTransfer, transferMethod, chooseTransferMethodDescription
+  - fastTransfer, wifiSpeed, fiveTimesFaster, fastTransferMethodDescription
+  - bluetooth, bleSpeed, bluetoothMethodDescription, selected, selectOption
+  - Reuses: cancel, enable
 - Localized pages/conversations/wal_item_detail/wal_item_detail_page.dart with 33 l10n keys for 34 languages
   - recordingDetails, storageLocationSdCard, storageLocationLimitlessPendant, storageLocationPhone, storageLocationPhoneMemory
   - storedOnDevice (parameterized), transferring, transferRequired, downloadingAudioFromSdCard, transferRequiredDescription

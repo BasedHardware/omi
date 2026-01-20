@@ -5732,7 +5732,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Fast Transfer';
+  String get fastTransfer => 'Hurtig overføring';
 
   @override
   String get syncingStatus => 'Syncing';
@@ -5746,7 +5746,7 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String get transferMethod => 'Transfer Method';
+  String get transferMethod => 'Overføringsmetode';
 
   @override
   String get fast => 'Fast';
@@ -6715,4 +6715,46 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get transferCancelled => 'Transfer cancelled';
+
+  @override
+  String get fastTransferEnabled => 'Hurtig overføring aktivert';
+
+  @override
+  String get bluetoothSyncEnabled => 'Bluetooth-synkronisering aktivert';
+
+  @override
+  String get enableFastTransfer => 'Aktiver hurtig overføring';
+
+  @override
+  String get fastTransferDescription => 'Hurtig overføring bruker WiFi for ~5x raskere hastigheter. Telefonen din kobler seg midlertidig til Omi-enhetens WiFi-nettverk under overføring.';
+
+  @override
+  String get internetAccessPausedDuringTransfer => 'Internettilgang er satt på pause under overføring';
+
+  @override
+  String get chooseTransferMethodDescription => 'Velg hvordan opptak overføres fra Omi-enheten til telefonen din.';
+
+  @override
+  String get wifiSpeed => '~150 KB/s via WiFi';
+
+  @override
+  String get fiveTimesFaster => '5X RASKERE';
+
+  @override
+  String get fastTransferMethodDescription => 'Oppretter en direkte WiFi-tilkobling til Omi-enheten. Telefonen kobler seg midlertidig fra vanlig WiFi under overføring.';
+
+  @override
+  String get bluetooth => 'Bluetooth';
+
+  @override
+  String get bleSpeed => '~30 KB/s via BLE';
+
+  @override
+  String get bluetoothMethodDescription => 'Bruker standard Bluetooth Low Energy-tilkobling. Langsommere, men påvirker ikke WiFi-tilkoblingen.';
+
+  @override
+  String get selected => 'Valgt';
+
+  @override
+  String get selectOption => 'Velg';
 }

@@ -5732,7 +5732,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Fast Transfer';
+  String get fastTransfer => 'Schnelle Übertragung';
 
   @override
   String get syncingStatus => 'Syncing';
@@ -5746,7 +5746,7 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get transferMethod => 'Transfer Method';
+  String get transferMethod => 'Übertragungsmethode';
 
   @override
   String get fast => 'Fast';
@@ -6715,4 +6715,46 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get transferCancelled => 'Transfer cancelled';
+
+  @override
+  String get fastTransferEnabled => 'Schnelle Übertragung aktiviert';
+
+  @override
+  String get bluetoothSyncEnabled => 'Bluetooth-Synchronisierung aktiviert';
+
+  @override
+  String get enableFastTransfer => 'Schnelle Übertragung aktivieren';
+
+  @override
+  String get fastTransferDescription => 'Die schnelle Übertragung nutzt WLAN für ~5x schnellere Geschwindigkeiten. Ihr Telefon verbindet sich während der Übertragung vorübergehend mit dem WLAN-Netzwerk Ihres Omi-Geräts.';
+
+  @override
+  String get internetAccessPausedDuringTransfer => 'Der Internetzugang wird während der Übertragung unterbrochen';
+
+  @override
+  String get chooseTransferMethodDescription => 'Wählen Sie, wie Aufnahmen von Ihrem Omi-Gerät auf Ihr Telefon übertragen werden.';
+
+  @override
+  String get wifiSpeed => '~150 KB/s über WLAN';
+
+  @override
+  String get fiveTimesFaster => '5X SCHNELLER';
+
+  @override
+  String get fastTransferMethodDescription => 'Erstellt eine direkte WLAN-Verbindung zu Ihrem Omi-Gerät. Ihr Telefon trennt sich während der Übertragung vorübergehend von Ihrem normalen WLAN.';
+
+  @override
+  String get bluetooth => 'Bluetooth';
+
+  @override
+  String get bleSpeed => '~30 KB/s über BLE';
+
+  @override
+  String get bluetoothMethodDescription => 'Verwendet Standard-Bluetooth-Low-Energy-Verbindung. Langsamer, beeinträchtigt aber nicht Ihre WLAN-Verbindung.';
+
+  @override
+  String get selected => 'Ausgewählt';
+
+  @override
+  String get selectOption => 'Auswählen';
 }
