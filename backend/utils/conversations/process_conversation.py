@@ -599,11 +599,6 @@ def process_conversation(
 
             if user_folders and conversation.structured:
                 folder_id, confidence, reasoning = assign_conversation_to_folder(
-                    transcript=(
-                        conversation.get_transcript(False, people=people)
-                        if hasattr(conversation, 'get_transcript')
-                        else ''
-                    ),
                     title=conversation.structured.title or '',
                     overview=conversation.structured.overview or '',
                     category=conversation.structured.category.value if conversation.structured.category else 'other',
