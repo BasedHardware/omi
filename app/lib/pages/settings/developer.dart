@@ -770,6 +770,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
 
                   // Debug Logs Section
                   _buildSectionHeader('Debug & Diagnostics'),
+
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(

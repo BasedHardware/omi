@@ -49,6 +49,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   final Debouncer _disconnectDebouncer = Debouncer(delay: const Duration(milliseconds: 500));
   final Debouncer _connectDebouncer = Debouncer(delay: const Duration(milliseconds: 100));
 
+  void Function(BtDevice device)? onDeviceConnected;
+
   DeviceProvider() {
     ServiceManager.instance().device.subscribe(this, this);
   }
@@ -363,6 +365,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     // Check firmware updates
     _checkFirmwareUpdates();
+
+    onDeviceConnected?.call(device);
   }
 
   void _handleDeviceConnected(String deviceId) async {

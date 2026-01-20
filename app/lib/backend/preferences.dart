@@ -1,7 +1,5 @@
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
-
 import 'package:collection/collection.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -13,9 +11,7 @@ import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
-import 'package:omi/services/wals.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:omi/utils/platform/platform_service.dart';
 
 class SharedPreferencesUtil {
   static final SharedPreferencesUtil _instance = SharedPreferencesUtil._internal();
@@ -50,7 +46,7 @@ class SharedPreferencesUtil {
     }
   }
 
-  bool get hasPersonaCreated => getBool('hasPersonaCreated') ?? false;
+  bool get hasPersonaCreated => getBool('hasPersonaCreated');
 
   set hasPersonaCreated(bool value) => saveBool('hasPersonaCreated', value);
 
@@ -261,7 +257,7 @@ class SharedPreferencesUtil {
 
   setGptCompletionCache(String key, String value) => saveString('gptCompletionCache:$key', value);
 
-  bool get optInAnalytics => getBool('optInAnalytics') ?? (PlatformService.isDesktop ? false : true);
+  bool get optInAnalytics => getBool('optInAnalytics');
 
   set optInAnalytics(bool value) => saveBool('optInAnalytics', value);
 
@@ -498,7 +494,7 @@ class SharedPreferencesUtil {
   }
 
   ServerConversation? get modifiedConversationDetails {
-    final String conversation = getString('modifiedConversationDetails') ?? '';
+    final String conversation = getString('modifiedConversationDetails');
     if (conversation.isEmpty) return null;
     return ServerConversation.fromJson(jsonDecode(conversation));
   }
@@ -525,20 +521,20 @@ class SharedPreferencesUtil {
 
   set calendarIntegrationEnabled(bool value) => saveBool('calendarIntegrationEnabled', value);
 
-  bool get calendarIntegrationEnabled => getBool('calendarIntegrationEnabled') ?? false;
+  bool get calendarIntegrationEnabled => getBool('calendarIntegrationEnabled');
 
   // Calendar UI Settings
   set showEventsWithNoParticipants(bool value) => saveBool('showEventsWithNoParticipants', value);
 
-  bool get showEventsWithNoParticipants => getBool('showEventsWithNoParticipants') ?? false;
+  bool get showEventsWithNoParticipants => getBool('showEventsWithNoParticipants');
 
   set showMeetingsInMenuBar(bool value) => saveBool('showMeetingsInMenuBar', value);
 
-  bool get showMeetingsInMenuBar => getBool('showMeetingsInMenuBar') ?? true;
+  bool get showMeetingsInMenuBar => getBool('showMeetingsInMenuBar');
 
   set enabledCalendarIds(List<String> value) => saveStringList('enabledCalendarIds', value);
 
-  List<String> get enabledCalendarIds => getStringList('enabledCalendarIds') ?? [];
+  List<String> get enabledCalendarIds => getStringList('enabledCalendarIds');
 
   //--------------------------------- Auth ------------------------------------//
 
@@ -567,6 +563,32 @@ class SharedPreferencesUtil {
   set locationPermissionRequested(bool value) => saveBool('locationPermissionRequested', value);
 
   bool get locationPermissionRequested => getBool('locationPermissionRequested');
+
+  //--------------------------- Announcements ---------------------------------//
+
+  // Last known app version - used to detect app upgrades
+  // Empty string means fresh install
+  String get lastKnownAppVersion => getString('lastKnownAppVersion');
+
+  set lastKnownAppVersion(String value) => saveString('lastKnownAppVersion', value);
+
+  // Last known firmware version - used to detect firmware upgrades
+  String get lastKnownFirmwareVersion => getString('lastKnownFirmwareVersion');
+
+  set lastKnownFirmwareVersion(String value) => saveString('lastKnownFirmwareVersion', value);
+
+  // IDs of general announcements the user has seen
+  List<String> get seenAnnouncementIds => getStringList('seenAnnouncementIds');
+
+  set seenAnnouncementIds(List<String> value) => saveStringList('seenAnnouncementIds', value);
+
+  void addSeenAnnouncementId(String id) {
+    final List<String> ids = List<String>.from(seenAnnouncementIds);
+    if (!ids.contains(id)) {
+      ids.add(id);
+      seenAnnouncementIds = ids;
+    }
+  }
 
   //--------------------------- Setters & Getters -----------------------------//
 
