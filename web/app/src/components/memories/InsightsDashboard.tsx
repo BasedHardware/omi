@@ -11,26 +11,26 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
-  useInsightsDashboard,
   type LifeBalanceData,
   type TrendingTag,
   type ActivityDay,
+  type UseInsightsDashboardReturn,
 } from '@/hooks/useInsightsDashboard';
-import type { Memory } from '@/types/conversation';
 
 interface InsightsDashboardProps {
-  memories: Memory[];
+  insights: UseInsightsDashboardReturn;
   onTagSelect?: (tags: string[]) => void;
 }
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-export function InsightsDashboard({ memories, onTagSelect }: InsightsDashboardProps) {
+export function InsightsDashboard({ insights, onTagSelect }: InsightsDashboardProps) {
   const {
     summary,
     activityCalendar,
     allTags,
-  } = useInsightsDashboard(memories);
+    computing,
+  } = insights;
 
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -47,6 +47,31 @@ export function InsightsDashboard({ memories, onTagSelect }: InsightsDashboardPr
       onTagSelect([tag]);
     }
   };
+
+  // Loading state (computing insights in Web Worker)
+  if (computing) {
+    return (
+      <div className="h-full overflow-y-auto w-full max-w-full">
+        <div className="max-w-full lg:max-w-5xl mx-auto p-6 space-y-6 w-full">
+          {/* Skeleton for Activity Calendar */}
+          <div className="p-6 rounded-2xl bg-bg-secondary border border-bg-tertiary animate-pulse">
+            <div className="h-4 w-24 bg-bg-tertiary rounded mb-4"></div>
+            <div className="h-32 bg-bg-tertiary rounded"></div>
+          </div>
+
+          {/* Skeleton for Tags */}
+          <div className="p-6 rounded-2xl bg-bg-secondary border border-bg-tertiary animate-pulse">
+            <div className="h-4 w-32 bg-bg-tertiary rounded mb-4"></div>
+            <div className="grid grid-cols-2 gap-3">
+              {Array.from({ length: 12 }).map((_, i) => (
+                <div key={i} className="h-8 bg-bg-tertiary rounded"></div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Empty state
   if (!summary) {

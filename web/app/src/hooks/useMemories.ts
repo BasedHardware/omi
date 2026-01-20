@@ -19,6 +19,7 @@ import {
   CACHE_TTL,
   cacheKeys,
 } from '@/lib/cache';
+import { getCachedMemories, cacheMemories } from '@/lib/indexeddb';
 
 export interface UseMemoriesOptions {
   categories?: MemoryCategory[];
@@ -111,7 +112,7 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
     return result;
   }, [limit]);
 
-  // Initial load - check cache first
+  // Initial load - check cache first (memory → IndexedDB → network)
   useEffect(() => {
     if (initializedRef.current) return;
     initializedRef.current = true;
@@ -119,7 +120,7 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
     const key = getCacheKey(activeCategories);
     const cached = getFromCache(key);
 
-    // If we have fresh cache, use it and skip fetch
+    // If we have fresh in-memory cache, use it and skip fetch
     if (cached && !isCacheStale(key)) {
       setMemories(cached.memories);
       setHasMore(cached.hasMore);
@@ -128,7 +129,7 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
       return;
     }
 
-    // If we have stale cache, show it but refresh in background
+    // If we have stale in-memory cache, show it but refresh in background
     if (cached) {
       setMemories(cached.memories);
       setHasMore(cached.hasMore);
@@ -141,10 +142,27 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
       if (fetchingRef.current) return;
       fetchingRef.current = true;
 
-      // Only show loading spinner if no cached data
+      // Try IndexedDB first if no in-memory cache
       if (!cached) {
-        setLoading(true);
+        const indexedDBMemories = await getCachedMemories();
+        if (indexedDBMemories && indexedDBMemories.length > 0) {
+          console.log('[useMemories] Loaded from IndexedDB');
+          setMemories(indexedDBMemories);
+          offsetRef.current = indexedDBMemories.length;
+          setHasMore(indexedDBMemories.length >= limit);
+          // Also update in-memory cache
+          setToCache(key, indexedDBMemories, indexedDBMemories.length, indexedDBMemories.length >= limit);
+          setLoading(false);
+          // Continue to background refresh to get latest data
+        } else {
+          // No cache at all, show loading
+          setLoading(true);
+        }
+      } else {
+        // Already showing stale in-memory cache, don't show loading
+        setLoading(false);
       }
+
       setError(null);
 
       try {
@@ -152,11 +170,13 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
         setMemories(result);
         offsetRef.current = result.length;
         setHasMore(result.length >= limit);
-        // Update cache
+        // Update both caches
         setToCache(key, result, result.length, result.length >= limit);
+        await cacheMemories(result);
       } catch (err) {
-        // Only set error if we don't have cached data to show
-        if (!cached) {
+        // Only set error if we don't have any cached data to show
+        const hasAnyCachedData = cached || (await getCachedMemories());
+        if (!hasAnyCachedData) {
           setError(err instanceof Error ? err.message : 'Failed to load memories');
         }
       } finally {
