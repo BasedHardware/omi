@@ -123,6 +123,13 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     }
   }
 
+  void refreshOverviewController() {
+    final summarizedApp = getSummarizedApp();
+    if (summarizedApp != null && overviewController != null) {
+      overviewController!.text = summarizedApp.content;
+    }
+  }
+
   String? editingSegmentId;
 
   void enterSegmentEdit(String segmentId) {
@@ -444,6 +451,8 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       // Update the cached conversation to ensure we have the latest data
       _cachedConversation = updatedConversation;
 
+      refreshOverviewController();
+
       // Check if the summarized app is in the apps list
       AppResponse? summaryApp = getSummarizedApp();
       if (summaryApp != null && summaryApp.appId != null && appProvider != null) {
@@ -484,26 +493,16 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   /// Returns the first app result from the conversation if available
   /// This is typically the summary of the conversation
   AppResponse? getSummarizedApp() {
-    // If we have a structured overview (which might be user-edited), prefer it
-    if (conversation.structured.overview.trim().isNotEmpty) {
-      String? appId;
-      int id = 0;
-
-      // Attempt to preserve appId from existing appResults if available
-      if (conversation.appResults.isNotEmpty) {
-        appId = conversation.appResults[0].appId;
-        id = conversation.appResults[0].id;
-      }
-
-      return AppResponse(
-        conversation.structured.overview,
-        appId: appId,
-        id: id,
-      );
-    }
-
+    // First check appResults as this contains the properly formatted markdown summary
     if (conversation.appResults.isNotEmpty) {
       return conversation.appResults[0];
+    }
+    if (conversation.structured.overview.trim().isNotEmpty) {
+      return AppResponse(
+        conversation.structured.overview,
+        appId: null,
+        id: 0,
+      );
     }
     return null;
   }

@@ -404,8 +404,36 @@ def update_conversation_title(uid: str, conversation_id: str, title: str):
 
 
 def update_conversation_overview(uid: str, conversation_id: str, overview: str):
-    update_data = {'structured.overview': overview}
-    update_conversation(uid, conversation_id, update_data)
+    """
+    Update the conversation overview and also update the first apps_results content
+    """
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    
+    @firestore.transactional
+    def update_in_transaction(transaction):
+        doc_snapshot = conversation_ref.get(transaction=transaction)
+        if not doc_snapshot.exists:
+            return
+        
+        conversation_data = doc_snapshot.to_dict()
+        update_data = {'structured.overview': overview}
+        
+        # Update apps_results[0].content
+        apps_results = conversation_data.get('apps_results', [])
+        if apps_results and len(apps_results) > 0:
+            # Normalize apps_results if it's a dict
+            if isinstance(apps_results, dict):
+                apps_results = [apps_results[k] for k in sorted(apps_results.keys(), key=int)]
+            
+            if len(apps_results) > 0 and isinstance(apps_results[0], dict):
+                apps_results[0]['content'] = overview
+                update_data['apps_results'] = apps_results
+        
+        transaction.update(conversation_ref, update_data)
+    
+    transaction = db.transaction()
+    update_in_transaction(transaction)
 
 
 def update_conversation_segment_text(uid: str, conversation_id: str, segment_id: str, text: str):

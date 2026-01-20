@@ -510,12 +510,11 @@ class _EditableMarkdownFieldState extends State<_EditableMarkdownField> {
       );
     }
 
-    final markdownContent = widget.controller?.text ?? widget.content;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onDoubleTap: _handleDoubleTap,
       child: ConversationMarkdownWidget(
-        content: markdownContent,
+        content: widget.content,
         searchQuery: widget.searchQuery,
         currentResultIndex: widget.currentResultIndex,
       ),
