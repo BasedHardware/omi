@@ -6757,4 +6757,27 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get selectOption => 'Chọn';
+
+  @override
+  String get lowBatteryAlertTitle => 'Cảnh báo pin yếu';
+
+  @override
+  String get lowBatteryAlertBody => 'Pin thiết bị của bạn đang yếu. Đã đến lúc sạc! 🔋';
+
+  @override
+  String get deviceDisconnectedNotificationTitle => 'Thiết bị Omi của bạn đã ngắt kết nối';
+
+  @override
+  String get deviceDisconnectedNotificationBody => 'Vui lòng kết nối lại để tiếp tục sử dụng Omi.';
+
+  @override
+  String get firmwareUpdateAvailable => 'Có bản cập nhật firmware';
+
+  @override
+  String firmwareUpdateAvailableDescription(String version) {
+    return 'Có bản cập nhật firmware mới ($version) cho thiết bị Omi của bạn. Bạn có muốn cập nhật ngay không?';
+  }
+
+  @override
+  String get later => 'Để sau';
 }

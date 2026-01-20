@@ -6757,4 +6757,27 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get selectOption => 'Vybrat';
+
+  @override
+  String get lowBatteryAlertTitle => 'Upozornění na vybitou baterii';
+
+  @override
+  String get lowBatteryAlertBody => 'Baterie vašeho zařízení je vybitá. Je čas ji dobít! 🔋';
+
+  @override
+  String get deviceDisconnectedNotificationTitle => 'Vaše zařízení Omi bylo odpojeno';
+
+  @override
+  String get deviceDisconnectedNotificationBody => 'Prosím, znovu se připojte, abyste mohli pokračovat v používání Omi.';
+
+  @override
+  String get firmwareUpdateAvailable => 'K dispozici je aktualizace firmwaru';
+
+  @override
+  String firmwareUpdateAvailableDescription(String version) {
+    return 'Pro vaše zařízení Omi je k dispozici nová aktualizace firmwaru ($version). Chcete aktualizovat nyní?';
+  }
+
+  @override
+  String get later => 'Později';
 }

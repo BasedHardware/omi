@@ -2198,5 +2198,12 @@
   "bleSpeed": "~30 KB/s cez BLE",
   "bluetoothMethodDescription": "Používa štandardné Bluetooth Low Energy pripojenie. Pomalšie, ale neovplyvňuje WiFi pripojenie.",
   "selected": "Vybrané",
-  "selectOption": "Vybrať"
+  "selectOption": "Vybrať",
+  "lowBatteryAlertTitle": "Upozornenie na nízku batériu",
+  "lowBatteryAlertBody": "Batéria vášho zariadenia je vybitá. Je čas ju nabiť! 🔋",
+  "deviceDisconnectedNotificationTitle": "Vaše zariadenie Omi bolo odpojené",
+  "deviceDisconnectedNotificationBody": "Prosím, znova sa pripojte, aby ste mohli pokračovať v používaní Omi.",
+  "firmwareUpdateAvailable": "K dispozícii je aktualizácia firmvéru",
+  "firmwareUpdateAvailableDescription": "Pre vaše zariadenie Omi je k dispozícii nová aktualizácia firmvéru ({version}). Chcete aktualizovať teraz?",
+  "later": "Neskôr"
 }

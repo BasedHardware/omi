@@ -2198,5 +2198,12 @@
   "bleSpeed": "~30 KB/s BLE:n kautta",
   "bluetoothMethodDescription": "Käyttää tavallista Bluetooth Low Energy -yhteyttä. Hitaampi, mutta ei vaikuta WiFi-yhteyteen.",
   "selected": "Valittu",
-  "selectOption": "Valitse"
+  "selectOption": "Valitse",
+  "lowBatteryAlertTitle": "Alhaisen akun varoitus",
+  "lowBatteryAlertBody": "Laitteesi akku on alhainen. Aika ladata! 🔋",
+  "deviceDisconnectedNotificationTitle": "Omi-laitteesi yhteys katkesi",
+  "deviceDisconnectedNotificationBody": "Yhdistä uudelleen jatkaaksesi Omin käyttöä.",
+  "firmwareUpdateAvailable": "Laiteohjelmistopäivitys saatavilla",
+  "firmwareUpdateAvailableDescription": "Uusi laiteohjelmistopäivitys ({version}) on saatavilla Omi-laitteellesi. Haluatko päivittää nyt?",
+  "later": "Myöhemmin"
 }

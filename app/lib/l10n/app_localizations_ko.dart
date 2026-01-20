@@ -6751,4 +6751,27 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get selectOption => '선택';
+
+  @override
+  String get lowBatteryAlertTitle => '배터리 부족 알림';
+
+  @override
+  String get lowBatteryAlertBody => '기기의 배터리가 부족합니다. 충전할 시간입니다! 🔋';
+
+  @override
+  String get deviceDisconnectedNotificationTitle => 'Omi 기기가 연결 해제되었습니다';
+
+  @override
+  String get deviceDisconnectedNotificationBody => 'Omi를 계속 사용하려면 다시 연결해 주세요.';
+
+  @override
+  String get firmwareUpdateAvailable => '펌웨어 업데이트 사용 가능';
+
+  @override
+  String firmwareUpdateAvailableDescription(String version) {
+    return 'Omi 기기에 새 펌웨어 업데이트($version)를 사용할 수 있습니다. 지금 업데이트하시겠습니까?';
+  }
+
+  @override
+  String get later => '나중에';
 }

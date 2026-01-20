@@ -2199,5 +2199,12 @@
   "bleSpeed": "通过BLE约30 KB/s",
   "bluetoothMethodDescription": "使用标准蓝牙低功耗连接。速度较慢，但不影响WiFi连接。",
   "selected": "已选择",
-  "selectOption": "选择"
+  "selectOption": "选择",
+  "lowBatteryAlertTitle": "电池电量低警告",
+  "lowBatteryAlertBody": "您的设备电池电量低。是时候充电了！🔋",
+  "deviceDisconnectedNotificationTitle": "您的 Omi 设备已断开连接",
+  "deviceDisconnectedNotificationBody": "请重新连接以继续使用 Omi。",
+  "firmwareUpdateAvailable": "固件更新可用",
+  "firmwareUpdateAvailableDescription": "您的 Omi 设备有新的固件更新（{version}）可用。您想现在更新吗？",
+  "later": "稍后"
 }

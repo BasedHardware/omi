@@ -2199,5 +2199,12 @@
   "bleSpeed": "BLE経由で約30 KB/s",
   "bluetoothMethodDescription": "標準のBluetooth Low Energy接続を使用します。遅いですがWiFi接続に影響しません。",
   "selected": "選択済み",
-  "selectOption": "選択"
+  "selectOption": "選択",
+  "lowBatteryAlertTitle": "バッテリー残量低下アラート",
+  "lowBatteryAlertBody": "デバイスのバッテリーが少なくなっています。充電してください！🔋",
+  "deviceDisconnectedNotificationTitle": "Omiデバイスが切断されました",
+  "deviceDisconnectedNotificationBody": "Omiを引き続き使用するには再接続してください。",
+  "firmwareUpdateAvailable": "ファームウェアアップデートが利用可能",
+  "firmwareUpdateAvailableDescription": "Omiデバイスの新しいファームウェアアップデート（{version}）が利用可能です。今すぐアップデートしますか？",
+  "later": "後で"
 }

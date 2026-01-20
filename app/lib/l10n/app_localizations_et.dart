@@ -6757,4 +6757,27 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get selectOption => 'Vali';
+
+  @override
+  String get lowBatteryAlertTitle => 'Tühja aku hoiatus';
+
+  @override
+  String get lowBatteryAlertBody => 'Teie seadme aku on tühi. Aeg laadida! 🔋';
+
+  @override
+  String get deviceDisconnectedNotificationTitle => 'Teie Omi seade on lahti ühendatud';
+
+  @override
+  String get deviceDisconnectedNotificationBody => 'Palun ühendage uuesti, et jätkata Omi kasutamist.';
+
+  @override
+  String get firmwareUpdateAvailable => 'Püsivara värskendus saadaval';
+
+  @override
+  String firmwareUpdateAvailableDescription(String version) {
+    return 'Teie Omi seadme jaoks on saadaval uus püsivara värskendus ($version). Kas soovite kohe värskendada?';
+  }
+
+  @override
+  String get later => 'Hiljem';
 }

@@ -2198,5 +2198,12 @@
   "bleSpeed": "~30 KB/s BLE kaudu",
   "bluetoothMethodDescription": "Kasutab standardset Bluetooth Low Energy ühendust. Aeglasem, kuid ei mõjuta WiFi-ühendust.",
   "selected": "Valitud",
-  "selectOption": "Vali"
+  "selectOption": "Vali",
+  "lowBatteryAlertTitle": "Tühja aku hoiatus",
+  "lowBatteryAlertBody": "Teie seadme aku on tühi. Aeg laadida! 🔋",
+  "deviceDisconnectedNotificationTitle": "Teie Omi seade on lahti ühendatud",
+  "deviceDisconnectedNotificationBody": "Palun ühendage uuesti, et jätkata Omi kasutamist.",
+  "firmwareUpdateAvailable": "Püsivara värskendus saadaval",
+  "firmwareUpdateAvailableDescription": "Teie Omi seadme jaoks on saadaval uus püsivara värskendus ({version}). Kas soovite kohe värskendada?",
+  "later": "Hiljem"
 }

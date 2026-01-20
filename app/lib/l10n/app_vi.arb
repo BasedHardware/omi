@@ -2198,5 +2198,12 @@
   "bleSpeed": "~30 KB/s qua BLE",
   "bluetoothMethodDescription": "Sử dụng kết nối Bluetooth Low Energy tiêu chuẩn. Chậm hơn nhưng không ảnh hưởng đến kết nối WiFi của bạn.",
   "selected": "Đã chọn",
-  "selectOption": "Chọn"
+  "selectOption": "Chọn",
+  "lowBatteryAlertTitle": "Cảnh báo pin yếu",
+  "lowBatteryAlertBody": "Pin thiết bị của bạn đang yếu. Đã đến lúc sạc! 🔋",
+  "deviceDisconnectedNotificationTitle": "Thiết bị Omi của bạn đã ngắt kết nối",
+  "deviceDisconnectedNotificationBody": "Vui lòng kết nối lại để tiếp tục sử dụng Omi.",
+  "firmwareUpdateAvailable": "Có bản cập nhật firmware",
+  "firmwareUpdateAvailableDescription": "Có bản cập nhật firmware mới ({version}) cho thiết bị Omi của bạn. Bạn có muốn cập nhật ngay không?",
+  "later": "Để sau"
 }

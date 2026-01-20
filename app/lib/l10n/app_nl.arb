@@ -2198,5 +2198,12 @@
   "bleSpeed": "~30 KB/s via BLE",
   "bluetoothMethodDescription": "Gebruikt standaard Bluetooth Low Energy-verbinding. Langzamer maar beïnvloedt je WiFi-verbinding niet.",
   "selected": "Geselecteerd",
-  "selectOption": "Selecteren"
+  "selectOption": "Selecteren",
+  "lowBatteryAlertTitle": "Waarschuwing lage batterij",
+  "lowBatteryAlertBody": "De batterij van uw apparaat is bijna leeg. Tijd om op te laden! 🔋",
+  "deviceDisconnectedNotificationTitle": "Uw Omi-apparaat is losgekoppeld",
+  "deviceDisconnectedNotificationBody": "Verbind opnieuw om Omi te blijven gebruiken.",
+  "firmwareUpdateAvailable": "Firmware-update beschikbaar",
+  "firmwareUpdateAvailableDescription": "Er is een nieuwe firmware-update ({version}) beschikbaar voor uw Omi-apparaat. Wilt u nu bijwerken?",
+  "later": "Later"
 }

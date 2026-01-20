@@ -12950,6 +12950,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Select'**
   String get selectOption;
+
+  /// Title for low battery notification
+  ///
+  /// In en, this message translates to:
+  /// **'Low Battery Alert'**
+  String get lowBatteryAlertTitle;
+
+  /// Body text for low battery notification
+  ///
+  /// In en, this message translates to:
+  /// **'Your device is running low on battery. Time for a recharge! 🔋'**
+  String get lowBatteryAlertBody;
+
+  /// Title for device disconnected notification
+  ///
+  /// In en, this message translates to:
+  /// **'Your Omi Device Disconnected'**
+  String get deviceDisconnectedNotificationTitle;
+
+  /// Body text for device disconnected notification
+  ///
+  /// In en, this message translates to:
+  /// **'Please reconnect to continue using your Omi.'**
+  String get deviceDisconnectedNotificationBody;
+
+  /// Title for firmware update available dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Firmware Update Available'**
+  String get firmwareUpdateAvailable;
+
+  /// Description for firmware update dialog with version parameter
+  ///
+  /// In en, this message translates to:
+  /// **'A new firmware update ({version}) is available for your Omi device. Would you like to update now?'**
+  String firmwareUpdateAvailableDescription(String version);
+
+  /// Button text to postpone an action
+  ///
+  /// In en, this message translates to:
+  /// **'Later'**
+  String get later;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

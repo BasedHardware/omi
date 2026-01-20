@@ -2198,5 +2198,12 @@
   "bleSpeed": "~30 KB/s via BLE",
   "bluetoothMethodDescription": "Menggunakan koneksi Bluetooth Low Energy standar. Lebih lambat tetapi tidak mempengaruhi koneksi WiFi Anda.",
   "selected": "Dipilih",
-  "selectOption": "Pilih"
+  "selectOption": "Pilih",
+  "lowBatteryAlertTitle": "Peringatan Baterai Lemah",
+  "lowBatteryAlertBody": "Baterai perangkat Anda lemah. Saatnya mengisi ulang! 🔋",
+  "deviceDisconnectedNotificationTitle": "Perangkat Omi Anda Terputus",
+  "deviceDisconnectedNotificationBody": "Silakan sambungkan kembali untuk terus menggunakan Omi.",
+  "firmwareUpdateAvailable": "Pembaruan Firmware Tersedia",
+  "firmwareUpdateAvailableDescription": "Pembaruan firmware baru ({version}) tersedia untuk perangkat Omi Anda. Apakah Anda ingin memperbarui sekarang?",
+  "later": "Nanti"
 }

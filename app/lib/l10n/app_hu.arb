@@ -2198,5 +2198,12 @@
   "bleSpeed": "~30 KB/s BLE-n keresztül",
   "bluetoothMethodDescription": "Szabványos Bluetooth Low Energy kapcsolatot használ. Lassabb, de nem befolyásolja a WiFi kapcsolatot.",
   "selected": "Kiválasztva",
-  "selectOption": "Kiválasztás"
+  "selectOption": "Kiválasztás",
+  "lowBatteryAlertTitle": "Alacsony akkumulátor figyelmeztetés",
+  "lowBatteryAlertBody": "Az eszköz akkumulátora alacsony. Ideje feltölteni! 🔋",
+  "deviceDisconnectedNotificationTitle": "Az Omi eszköz lecsatlakozott",
+  "deviceDisconnectedNotificationBody": "Kérjük, csatlakozzon újra az Omi használatának folytatásához.",
+  "firmwareUpdateAvailable": "Firmware frissítés elérhető",
+  "firmwareUpdateAvailableDescription": "Új firmware frissítés ({version}) érhető el az Omi eszközéhez. Szeretné most frissíteni?",
+  "later": "Később"
 }

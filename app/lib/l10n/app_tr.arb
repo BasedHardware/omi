@@ -2198,5 +2198,12 @@
   "bleSpeed": "BLE ile ~30 KB/s",
   "bluetoothMethodDescription": "Standart Bluetooth Low Energy bağlantısı kullanır. Daha yavaş ama WiFi bağlantınızı etkilemez.",
   "selected": "Seçildi",
-  "selectOption": "Seç"
+  "selectOption": "Seç",
+  "lowBatteryAlertTitle": "Düşük Pil Uyarısı",
+  "lowBatteryAlertBody": "Cihazınızın pili azaldı. Şarj etme zamanı! 🔋",
+  "deviceDisconnectedNotificationTitle": "Omi Cihazınız Bağlantı Kesildi",
+  "deviceDisconnectedNotificationBody": "Omi'yi kullanmaya devam etmek için lütfen yeniden bağlanın.",
+  "firmwareUpdateAvailable": "Yazılım Güncellemesi Mevcut",
+  "firmwareUpdateAvailableDescription": "Omi cihazınız için yeni bir yazılım güncellemesi ({version}) mevcut. Şimdi güncellemek ister misiniz?",
+  "later": "Daha sonra"
 }

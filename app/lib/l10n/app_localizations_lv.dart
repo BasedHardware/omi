@@ -6757,4 +6757,27 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get selectOption => 'Atlasīt';
+
+  @override
+  String get lowBatteryAlertTitle => 'Zema akumulatora brīdinājums';
+
+  @override
+  String get lowBatteryAlertBody => 'Jūsu ierīces akumulators ir zems. Laiks uzlādēt! 🔋';
+
+  @override
+  String get deviceDisconnectedNotificationTitle => 'Jūsu Omi ierīce ir atvienota';
+
+  @override
+  String get deviceDisconnectedNotificationBody => 'Lūdzu, pieslēdzieties atkārtoti, lai turpinātu lietot Omi.';
+
+  @override
+  String get firmwareUpdateAvailable => 'Pieejams programmaparatūras atjauninājums';
+
+  @override
+  String firmwareUpdateAvailableDescription(String version) {
+    return 'Jūsu Omi ierīcei ir pieejams jauns programmaparatūras atjauninājums ($version). Vai vēlaties atjaunināt tagad?';
+  }
+
+  @override
+  String get later => 'Vēlāk';
 }

@@ -2181,5 +2181,12 @@
   "bleSpeed": "~30 KB/s via BLE",
   "bluetoothMethodDescription": "Utilitza connexió Bluetooth Low Energy estàndard. Més lent però no afecta la connexió WiFi.",
   "selected": "Seleccionat",
-  "selectOption": "Seleccionar"
+  "selectOption": "Seleccionar",
+  "lowBatteryAlertTitle": "Alerta de bateria baixa",
+  "lowBatteryAlertBody": "La bateria del teu dispositiu és baixa. És hora de carregar! 🔋",
+  "deviceDisconnectedNotificationTitle": "El teu dispositiu Omi s'ha desconnectat",
+  "deviceDisconnectedNotificationBody": "Si us plau, reconnecta per continuar utilitzant Omi.",
+  "firmwareUpdateAvailable": "Actualització de firmware disponible",
+  "firmwareUpdateAvailableDescription": "Hi ha una nova actualització de firmware ({version}) disponible per al teu dispositiu Omi. Vols actualitzar ara?",
+  "later": "Més tard"
 }

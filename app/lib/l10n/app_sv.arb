@@ -2198,5 +2198,12 @@
   "bleSpeed": "~30 KB/s via BLE",
   "bluetoothMethodDescription": "Använder standard Bluetooth Low Energy-anslutning. Långsammare men påverkar inte din WiFi-anslutning.",
   "selected": "Vald",
-  "selectOption": "Välj"
+  "selectOption": "Välj",
+  "lowBatteryAlertTitle": "Varning för lågt batteri",
+  "lowBatteryAlertBody": "Enhetens batteri är lågt. Dags att ladda! 🔋",
+  "deviceDisconnectedNotificationTitle": "Din Omi-enhet har kopplats från",
+  "deviceDisconnectedNotificationBody": "Anslut igen för att fortsätta använda Omi.",
+  "firmwareUpdateAvailable": "Firmware-uppdatering tillgänglig",
+  "firmwareUpdateAvailableDescription": "En ny firmware-uppdatering ({version}) finns tillgänglig för din Omi-enhet. Vill du uppdatera nu?",
+  "later": "Senare"
 }

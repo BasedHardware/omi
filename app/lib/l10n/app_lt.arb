@@ -2198,5 +2198,12 @@
   "bleSpeed": "~30 KB/s per BLE",
   "bluetoothMethodDescription": "Naudoja standartinį Bluetooth Low Energy ryšį. Lėčiau, bet neturi įtakos WiFi ryšiui.",
   "selected": "Pasirinkta",
-  "selectOption": "Pasirinkti"
+  "selectOption": "Pasirinkti",
+  "lowBatteryAlertTitle": "Įspėjimas apie senką bateriją",
+  "lowBatteryAlertBody": "Jūsų įrenginio baterija senka. Laikas įkrauti! 🔋",
+  "deviceDisconnectedNotificationTitle": "Jūsų Omi įrenginys atsijungė",
+  "deviceDisconnectedNotificationBody": "Prašome prisijungti iš naujo, kad galėtumėte toliau naudoti Omi.",
+  "firmwareUpdateAvailable": "Yra programinės aparatinės įrangos atnaujinimas",
+  "firmwareUpdateAvailableDescription": "Jūsų Omi įrenginiui yra naujas programinės aparatinės įrangos atnaujinimas ({version}). Ar norite atnaujinti dabar?",
+  "later": "Vėliau"
 }

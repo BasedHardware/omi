@@ -6757,4 +6757,27 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get selectOption => 'Pilih';
+
+  @override
+  String get lowBatteryAlertTitle => 'Peringatan Baterai Lemah';
+
+  @override
+  String get lowBatteryAlertBody => 'Baterai perangkat Anda lemah. Saatnya mengisi ulang! 🔋';
+
+  @override
+  String get deviceDisconnectedNotificationTitle => 'Perangkat Omi Anda Terputus';
+
+  @override
+  String get deviceDisconnectedNotificationBody => 'Silakan sambungkan kembali untuk terus menggunakan Omi.';
+
+  @override
+  String get firmwareUpdateAvailable => 'Pembaruan Firmware Tersedia';
+
+  @override
+  String firmwareUpdateAvailableDescription(String version) {
+    return 'Pembaruan firmware baru ($version) tersedia untuk perangkat Omi Anda. Apakah Anda ingin memperbarui sekarang?';
+  }
+
+  @override
+  String get later => 'Nanti';
 }

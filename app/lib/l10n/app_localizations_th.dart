@@ -6757,4 +6757,27 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get selectOption => 'เลือก';
+
+  @override
+  String get lowBatteryAlertTitle => 'การแจ้งเตือนแบตเตอรี่ต่ำ';
+
+  @override
+  String get lowBatteryAlertBody => 'แบตเตอรี่ของอุปกรณ์ของคุณต่ำ ถึงเวลาชาร์จแล้ว! 🔋';
+
+  @override
+  String get deviceDisconnectedNotificationTitle => 'อุปกรณ์ Omi ของคุณถูกตัดการเชื่อมต่อ';
+
+  @override
+  String get deviceDisconnectedNotificationBody => 'กรุณาเชื่อมต่อใหม่เพื่อใช้งาน Omi ต่อไป';
+
+  @override
+  String get firmwareUpdateAvailable => 'มีการอัปเดตเฟิร์มแวร์';
+
+  @override
+  String firmwareUpdateAvailableDescription(String version) {
+    return 'มีการอัปเดตเฟิร์มแวร์ใหม่ ($version) สำหรับอุปกรณ์ Omi ของคุณ คุณต้องการอัปเดตตอนนี้หรือไม่?';
+  }
+
+  @override
+  String get later => 'ภายหลัง';
 }

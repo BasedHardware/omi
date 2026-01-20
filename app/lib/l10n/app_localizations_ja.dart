@@ -6751,4 +6751,27 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get selectOption => '選択';
+
+  @override
+  String get lowBatteryAlertTitle => 'バッテリー残量低下アラート';
+
+  @override
+  String get lowBatteryAlertBody => 'デバイスのバッテリーが少なくなっています。充電してください！🔋';
+
+  @override
+  String get deviceDisconnectedNotificationTitle => 'Omiデバイスが切断されました';
+
+  @override
+  String get deviceDisconnectedNotificationBody => 'Omiを引き続き使用するには再接続してください。';
+
+  @override
+  String get firmwareUpdateAvailable => 'ファームウェアアップデートが利用可能';
+
+  @override
+  String firmwareUpdateAvailableDescription(String version) {
+    return 'Omiデバイスの新しいファームウェアアップデート（$version）が利用可能です。今すぐアップデートしますか？';
+  }
+
+  @override
+  String get later => '後で';
 }

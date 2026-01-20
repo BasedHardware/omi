@@ -6757,4 +6757,27 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get selectOption => 'Seç';
+
+  @override
+  String get lowBatteryAlertTitle => 'Düşük Pil Uyarısı';
+
+  @override
+  String get lowBatteryAlertBody => 'Cihazınızın pili azaldı. Şarj etme zamanı! 🔋';
+
+  @override
+  String get deviceDisconnectedNotificationTitle => 'Omi Cihazınız Bağlantı Kesildi';
+
+  @override
+  String get deviceDisconnectedNotificationBody => 'Omi\'yi kullanmaya devam etmek için lütfen yeniden bağlanın.';
+
+  @override
+  String get firmwareUpdateAvailable => 'Yazılım Güncellemesi Mevcut';
+
+  @override
+  String firmwareUpdateAvailableDescription(String version) {
+    return 'Omi cihazınız için yeni bir yazılım güncellemesi ($version) mevcut. Şimdi güncellemek ister misiniz?';
+  }
+
+  @override
+  String get later => 'Daha sonra';
 }

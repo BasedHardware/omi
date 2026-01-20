@@ -6757,4 +6757,27 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get selectOption => 'Seleziona';
+
+  @override
+  String get lowBatteryAlertTitle => 'Avviso batteria scarica';
+
+  @override
+  String get lowBatteryAlertBody => 'La batteria del dispositivo è scarica. È ora di ricaricare! 🔋';
+
+  @override
+  String get deviceDisconnectedNotificationTitle => 'Il tuo dispositivo Omi si è disconnesso';
+
+  @override
+  String get deviceDisconnectedNotificationBody => 'Riconnettiti per continuare a usare Omi.';
+
+  @override
+  String get firmwareUpdateAvailable => 'Aggiornamento firmware disponibile';
+
+  @override
+  String firmwareUpdateAvailableDescription(String version) {
+    return 'È disponibile un nuovo aggiornamento firmware ($version) per il tuo dispositivo Omi. Vuoi aggiornare ora?';
+  }
+
+  @override
+  String get later => 'Più tardi';
 }

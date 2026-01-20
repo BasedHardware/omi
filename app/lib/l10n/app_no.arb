@@ -2198,5 +2198,12 @@
   "bleSpeed": "~30 KB/s via BLE",
   "bluetoothMethodDescription": "Bruker standard Bluetooth Low Energy-tilkobling. Langsommere, men påvirker ikke WiFi-tilkoblingen.",
   "selected": "Valgt",
-  "selectOption": "Velg"
+  "selectOption": "Velg",
+  "lowBatteryAlertTitle": "Advarsel om lavt batteri",
+  "lowBatteryAlertBody": "Enhetens batteri er lavt. På tide å lade! 🔋",
+  "deviceDisconnectedNotificationTitle": "Omi-enheten din ble frakoblet",
+  "deviceDisconnectedNotificationBody": "Koble til igjen for å fortsette å bruke Omi.",
+  "firmwareUpdateAvailable": "Fastvareoppdatering tilgjengelig",
+  "firmwareUpdateAvailableDescription": "En ny fastvareoppdatering ({version}) er tilgjengelig for Omi-enheten din. Vil du oppdatere nå?",
+  "later": "Senere"
 }

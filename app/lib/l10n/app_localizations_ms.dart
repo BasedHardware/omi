@@ -6757,4 +6757,27 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get selectOption => 'Pilih';
+
+  @override
+  String get lowBatteryAlertTitle => 'Amaran Bateri Lemah';
+
+  @override
+  String get lowBatteryAlertBody => 'Bateri peranti anda lemah. Masa untuk mengecas semula! 🔋';
+
+  @override
+  String get deviceDisconnectedNotificationTitle => 'Peranti Omi Anda Terputus';
+
+  @override
+  String get deviceDisconnectedNotificationBody => 'Sila sambung semula untuk terus menggunakan Omi.';
+
+  @override
+  String get firmwareUpdateAvailable => 'Kemas Kini Firmware Tersedia';
+
+  @override
+  String firmwareUpdateAvailableDescription(String version) {
+    return 'Kemas kini firmware baharu ($version) tersedia untuk peranti Omi anda. Adakah anda mahu mengemas kini sekarang?';
+  }
+
+  @override
+  String get later => 'Nanti';
 }

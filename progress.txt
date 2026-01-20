@@ -2,9 +2,9 @@
 
 ## Summary
 Total Files to Localize: 38
-Completed: 32
+Completed: 33
 In Progress: 0
-Pending: 6
+Pending: 5
 
 ## Progress by File
 
@@ -47,7 +47,7 @@ Pending: 6
 [x] pages/conversations/fast_transfer_settings_page.dart (~6 strings) - DONE (16 new keys + 2 reused keys)
 
 ### Service/Provider Files
-[ ] providers/device_provider.dart (~5 strings)
+[x] providers/device_provider.dart (~5 strings) - DONE (7 new keys + 1 reused key)
 [ ] providers/app_provider.dart (~4 strings)
 [ ] providers/user_provider.dart (~3 strings)
 [ ] services/notifications.dart (~6 strings)
@@ -57,6 +57,11 @@ Pending: 6
 ## Changelog
 
 ### 2026-01-20
+- Localized providers/device_provider.dart with 7 l10n keys for 34 languages
+  - lowBatteryAlertTitle, lowBatteryAlertBody (for low battery notification)
+  - deviceDisconnectedNotificationTitle, deviceDisconnectedNotificationBody (for disconnect notification)
+  - firmwareUpdateAvailable, firmwareUpdateAvailableDescription (parameterized with version), later
+  - Reuses: update
 - Localized pages/conversations/fast_transfer_settings_page.dart with 16 l10n keys for 34 languages
   - fastTransferEnabled, bluetoothSyncEnabled, enableFastTransfer, fastTransferDescription
   - internetAccessPausedDuringTransfer, transferMethod, chooseTransferMethodDescription

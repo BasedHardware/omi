@@ -8445,5 +8445,39 @@
   "selectOption": "Select",
   "@selectOption": {
     "description": "Label for selectable option"
+  },
+  "lowBatteryAlertTitle": "Low Battery Alert",
+  "@lowBatteryAlertTitle": {
+    "description": "Title for low battery notification"
+  },
+  "lowBatteryAlertBody": "Your device is running low on battery. Time for a recharge! 🔋",
+  "@lowBatteryAlertBody": {
+    "description": "Body text for low battery notification"
+  },
+  "deviceDisconnectedNotificationTitle": "Your Omi Device Disconnected",
+  "@deviceDisconnectedNotificationTitle": {
+    "description": "Title for device disconnected notification"
+  },
+  "deviceDisconnectedNotificationBody": "Please reconnect to continue using your Omi.",
+  "@deviceDisconnectedNotificationBody": {
+    "description": "Body text for device disconnected notification"
+  },
+  "firmwareUpdateAvailable": "Firmware Update Available",
+  "@firmwareUpdateAvailable": {
+    "description": "Title for firmware update available dialog"
+  },
+  "firmwareUpdateAvailableDescription": "A new firmware update ({version}) is available for your Omi device. Would you like to update now?",
+  "@firmwareUpdateAvailableDescription": {
+    "description": "Description for firmware update dialog with version parameter",
+    "placeholders": {
+      "version": {
+        "type": "String",
+        "example": "1.0.5"
+      }
+    }
+  },
+  "later": "Later",
+  "@later": {
+    "description": "Button text to postpone an action"
   }
 }

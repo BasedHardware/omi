@@ -6757,4 +6757,27 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get selectOption => 'Selectează';
+
+  @override
+  String get lowBatteryAlertTitle => 'Alertă baterie descărcată';
+
+  @override
+  String get lowBatteryAlertBody => 'Bateria dispozitivului este descărcată. E timpul să reîncărcați! 🔋';
+
+  @override
+  String get deviceDisconnectedNotificationTitle => 'Dispozitivul Omi a fost deconectat';
+
+  @override
+  String get deviceDisconnectedNotificationBody => 'Vă rugăm să vă reconectați pentru a continua să utilizați Omi.';
+
+  @override
+  String get firmwareUpdateAvailable => 'Actualizare firmware disponibilă';
+
+  @override
+  String firmwareUpdateAvailableDescription(String version) {
+    return 'O nouă actualizare de firmware ($version) este disponibilă pentru dispozitivul Omi. Doriți să actualizați acum?';
+  }
+
+  @override
+  String get later => 'Mai târziu';
 }

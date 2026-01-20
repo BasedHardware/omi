@@ -6757,4 +6757,27 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get selectOption => 'Kiválasztás';
+
+  @override
+  String get lowBatteryAlertTitle => 'Alacsony akkumulátor figyelmeztetés';
+
+  @override
+  String get lowBatteryAlertBody => 'Az eszköz akkumulátora alacsony. Ideje feltölteni! 🔋';
+
+  @override
+  String get deviceDisconnectedNotificationTitle => 'Az Omi eszköz lecsatlakozott';
+
+  @override
+  String get deviceDisconnectedNotificationBody => 'Kérjük, csatlakozzon újra az Omi használatának folytatásához.';
+
+  @override
+  String get firmwareUpdateAvailable => 'Firmware frissítés elérhető';
+
+  @override
+  String firmwareUpdateAvailableDescription(String version) {
+    return 'Új firmware frissítés ($version) érhető el az Omi eszközéhez. Szeretné most frissíteni?';
+  }
+
+  @override
+  String get later => 'Később';
 }

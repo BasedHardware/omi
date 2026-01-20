@@ -6751,4 +6751,27 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get selectOption => '选择';
+
+  @override
+  String get lowBatteryAlertTitle => '电池电量低警告';
+
+  @override
+  String get lowBatteryAlertBody => '您的设备电池电量低。是时候充电了！🔋';
+
+  @override
+  String get deviceDisconnectedNotificationTitle => '您的 Omi 设备已断开连接';
+
+  @override
+  String get deviceDisconnectedNotificationBody => '请重新连接以继续使用 Omi。';
+
+  @override
+  String get firmwareUpdateAvailable => '固件更新可用';
+
+  @override
+  String firmwareUpdateAvailableDescription(String version) {
+    return '您的 Omi 设备有新的固件更新（$version）可用。您想现在更新吗？';
+  }
+
+  @override
+  String get later => '稍后';
 }

@@ -6757,4 +6757,27 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get selectOption => 'Valitse';
+
+  @override
+  String get lowBatteryAlertTitle => 'Alhaisen akun varoitus';
+
+  @override
+  String get lowBatteryAlertBody => 'Laitteesi akku on alhainen. Aika ladata! 🔋';
+
+  @override
+  String get deviceDisconnectedNotificationTitle => 'Omi-laitteesi yhteys katkesi';
+
+  @override
+  String get deviceDisconnectedNotificationBody => 'Yhdistä uudelleen jatkaaksesi Omin käyttöä.';
+
+  @override
+  String get firmwareUpdateAvailable => 'Laiteohjelmistopäivitys saatavilla';
+
+  @override
+  String firmwareUpdateAvailableDescription(String version) {
+    return 'Uusi laiteohjelmistopäivitys ($version) on saatavilla Omi-laitteellesi. Haluatko päivittää nyt?';
+  }
+
+  @override
+  String get later => 'Myöhemmin';
 }

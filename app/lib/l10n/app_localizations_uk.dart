@@ -6757,4 +6757,27 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get selectOption => 'Вибрати';
+
+  @override
+  String get lowBatteryAlertTitle => 'Попередження про низький заряд батареї';
+
+  @override
+  String get lowBatteryAlertBody => 'Батарея вашого пристрою розряджена. Час зарядити! 🔋';
+
+  @override
+  String get deviceDisconnectedNotificationTitle => 'Ваш пристрій Omi відключено';
+
+  @override
+  String get deviceDisconnectedNotificationBody => 'Будь ласка, підключіться знову, щоб продовжити використання Omi.';
+
+  @override
+  String get firmwareUpdateAvailable => 'Доступне оновлення прошивки';
+
+  @override
+  String firmwareUpdateAvailableDescription(String version) {
+    return 'Для вашого пристрою Omi доступне нове оновлення прошивки ($version). Бажаєте оновити зараз?';
+  }
+
+  @override
+  String get later => 'Пізніше';
 }
