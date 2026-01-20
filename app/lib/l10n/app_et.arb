@@ -357,7 +357,7 @@
   "permissionRevokedTitle": "Luba tühistatud",
   "permissionRevokedMessage": "Kas soovite, et me eemaldaksime ka kõik teie olemasolevad salvestised?",
   "yes": "Jah",
-  "editName": "Muuda nime",
+  "editName": "Edit Name",
   "howShouldOmiCallYou": "Kuidas peaks Omi teid kutsuma?",
   "enterYourName": "Sisestage oma nimi",
   "nameCannotBeEmpty": "Nimi ei saa olla tühi",
@@ -988,7 +988,7 @@
   "help": "Abi",
   "pro": "Pro",
   "upgradeToPro": "Uuenda Pro-le",
-  "getOmiDevice": "Hangi Omi seade",
+  "getOmiDevice": "Get Omi Device",
   "wearableAiCompanion": "Kantav AI kaaslane",
   "loadingMemories": "Mälestuste laadimine...",
   "allMemories": "Kõik mälestused",
@@ -1168,7 +1168,7 @@
   "selectTime": "Vali aeg",
   "accountGroup": "Konto",
   "signOutQuestion": "Logi välja?",
-  "signOutConfirmation": "Kas olete kindel, et soovite välja logida?",
+  "signOutConfirmation": "Are you sure you want to sign out?",
   "customVocabularyHeader": "KOHANDATUD SÕNAVARA",
   "addWordsDescription": "Lisage sõnad, mida Omi peaks transkribeerimisel ära tundma.",
   "enterWordsHint": "Sisestage sõnad (komaga eraldatud)",
@@ -2034,5 +2034,119 @@
   "cantRateWithoutInternet": "Ei saa rakendust hinnata ilma internetiühenduseta.",
   "appAnalytics": "Rakenduse analüütika",
   "learnMoreLink": "lisateave",
-  "moneyEarned": "Teenitud raha"
+  "moneyEarned": "Teenitud raha",
+  "starFilterLabel": "{count} tärn",
+  "@starFilterLabel": {
+    "description": "Filter chip label for star rating",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sharePublicLink": "Share Public Link",
+  "makePersonaPublic": "Make Persona Public",
+  "connectedKnowledgeData": "Connected Knowledge Data",
+  "enterName": "Enter name",
+  "disconnectTwitter": "Disconnect Twitter",
+  "disconnectTwitterConfirmation": "Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.",
+  "getOmiDeviceDescription": "Create a more accurate clone with your personal conversations",
+  "getOmi": "Get Omi",
+  "iHaveOmiDevice": "I have Omi device",
+  "goal": "EESMÄRK",
+  "tapToTrackThisGoal": "Puudutage selle eesmärgi jälgimiseks",
+  "tapToSetAGoal": "Puudutage eesmärgi seadmiseks",
+  "processedConversations": "Töödeldud vestlused",
+  "updatedConversations": "Uuendatud vestlused",
+  "newConversations": "Uued vestlused",
+  "summaryTemplate": "Kokkuvõtte mall",
+  "suggestedTemplates": "Soovitatud mallid",
+  "otherTemplates": "Muud mallid",
+  "availableTemplates": "Saadaolevad mallid",
+  "getCreative": "Ole loov",
+  "defaultLabel": "Vaikimisi",
+  "lastUsedLabel": "Viimati kasutatud",
+  "setDefaultApp": "Määra vaikerakendus",
+  "setDefaultAppContent": "Kas määrata {appName} vaikimisi kokkuvõtte rakenduseks?\\n\\nSeda rakendust kasutatakse automaatselt kõigi tulevaste vestluste kokkuvõtete jaoks.",
+  "@setDefaultAppContent": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "setDefaultButton": "Määra vaikimisi",
+  "setAsDefaultSuccess": "{appName} määratud vaikimisi kokkuvõtte rakenduseks",
+  "@setAsDefaultSuccess": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "createCustomTemplate": "Loo kohandatud mall",
+  "allTemplates": "Kõik mallid",
+  "failedToInstallApp": "{appName} installimine ebaõnnestus. Palun proovi uuesti.",
+  "@failedToInstallApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "errorInstallingApp": "Viga {appName} installimisel: {error}",
+  "@errorInstallingApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tagSpeaker": "Tag Speaker {speakerId}",
+  "@tagSpeaker": {
+    "placeholders": {
+      "speakerId": {
+        "type": "int"
+      }
+    }
+  },
+  "personNameAlreadyExists": "A person with this name already exists.",
+  "selectYouFromList": "To tag yourself, please select \"You\" from the list.",
+  "enterPersonsName": "Enter Person's Name",
+  "addPerson": "Add Person",
+  "tagOtherSegmentsFromSpeaker": "Tag other segments from this speaker ({selected}/{total})",
+  "@tagOtherSegmentsFromSpeaker": {
+    "placeholders": {
+      "selected": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "tagOtherSegments": "Tag other segments",
+  "managePeople": "Manage People",
+  "shareViaSms": "Jaga SMS-i kaudu",
+  "selectContactsToShareSummary": "Vali kontaktid vestluse kokkuvõtte jagamiseks",
+  "searchContactsHint": "Otsi kontakte...",
+  "contactsSelectedCount": "{count} valitud",
+  "clearAllSelection": "Tühista kõik",
+  "selectContactsToShare": "Vali kontaktid jagamiseks",
+  "shareWithContactCount": "Jaga {count} kontaktiga",
+  "shareWithContactsCount": "Jaga {count} kontaktiga",
+  "contactsPermissionRequired": "Nõutav kontaktide luba",
+  "contactsPermissionRequiredForSms": "SMS-i kaudu jagamiseks on vajalik kontaktide luba",
+  "grantContactsPermissionForSms": "SMS-i kaudu jagamiseks andke palun kontaktide luba",
+  "noContactsWithPhoneNumbers": "Telefoninumbritega kontakte ei leitud",
+  "noContactsMatchSearch": "Ükski kontakt ei vasta teie otsingule",
+  "failedToLoadContacts": "Kontaktide laadimine ebaõnnestus",
+  "failedToPrepareConversationForSharing": "Vestluse jagamiseks ettevalmistamine ebaõnnestus. Palun proovige uuesti.",
+  "couldNotOpenSmsApp": "SMS-i rakendust ei saanud avada. Palun proovige uuesti.",
+  "heresWhatWeDiscussed": "Siin on see, millest me just rääkisime: {link}",
+  "wifiSync": "WiFi sünkroonimine",
+  "itemCopiedToClipboard": "{item} kopeeritud lõikelauale"
 }

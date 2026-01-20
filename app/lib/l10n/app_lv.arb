@@ -357,7 +357,7 @@
   "permissionRevokedTitle": "Atļauja atsaukta",
   "permissionRevokedMessage": "Vai vēlaties, lai mēs noņemtu arī visus jūsu esošos ierakstus?",
   "yes": "Jā",
-  "editName": "Rediģēt vārdu",
+  "editName": "Edit Name",
   "howShouldOmiCallYou": "Kā Omi jums vajadzētu uzrunāt?",
   "enterYourName": "Ievadiet savu vārdu",
   "nameCannotBeEmpty": "Vārds nevar būt tukšs",
@@ -988,7 +988,7 @@
   "help": "Palīdzība",
   "pro": "Pro",
   "upgradeToPro": "Jaunināt uz Pro",
-  "getOmiDevice": "Iegūt Omi ierīci",
+  "getOmiDevice": "Get Omi Device",
   "wearableAiCompanion": "Valkājams AI palīgs",
   "loadingMemories": "Ielādē atmiņas...",
   "allMemories": "Visas atmiņas",
@@ -1168,7 +1168,7 @@
   "selectTime": "Izvēlēties laiku",
   "accountGroup": "Konts",
   "signOutQuestion": "Izrakstīties?",
-  "signOutConfirmation": "Vai tiešām vēlaties izrakstīties?",
+  "signOutConfirmation": "Are you sure you want to sign out?",
   "customVocabularyHeader": "PIELĀGOTS VĀRDNĪCA",
   "addWordsDescription": "Pievienojiet vārdus, kurus Omi vajadzētu atpazīt transkripcijas laikā.",
   "enterWordsHint": "Ievadiet vārdus (atdalīti ar komatu)",
@@ -2034,5 +2034,119 @@
   "cantRateWithoutInternet": "Nevar novērtēt lietotni bez interneta savienojuma.",
   "appAnalytics": "Lietotnes analītika",
   "learnMoreLink": "uzzināt vairāk",
-  "moneyEarned": "Nopelnītā nauda"
+  "moneyEarned": "Nopelnītā nauda",
+  "starFilterLabel": "{count} zvaigzne",
+  "@starFilterLabel": {
+    "description": "Filter chip label for star rating",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sharePublicLink": "Share Public Link",
+  "makePersonaPublic": "Make Persona Public",
+  "connectedKnowledgeData": "Connected Knowledge Data",
+  "enterName": "Enter name",
+  "disconnectTwitter": "Disconnect Twitter",
+  "disconnectTwitterConfirmation": "Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.",
+  "getOmiDeviceDescription": "Create a more accurate clone with your personal conversations",
+  "getOmi": "Get Omi",
+  "iHaveOmiDevice": "I have Omi device",
+  "goal": "MĒRĶIS",
+  "tapToTrackThisGoal": "Pieskarieties, lai izsekotu šim mērķim",
+  "tapToSetAGoal": "Pieskarieties, lai iestatītu mērķi",
+  "processedConversations": "Apstrādātas sarunas",
+  "updatedConversations": "Atjauninātas sarunas",
+  "newConversations": "Jaunas sarunas",
+  "summaryTemplate": "Kopsavilkuma veidne",
+  "suggestedTemplates": "Ieteiktās veidnes",
+  "otherTemplates": "Citas veidnes",
+  "availableTemplates": "Pieejamās veidnes",
+  "getCreative": "Esi radošs",
+  "defaultLabel": "Noklusējums",
+  "lastUsedLabel": "Pēdējais lietotais",
+  "setDefaultApp": "Iestatīt noklusējuma lietotni",
+  "setDefaultAppContent": "Vai iestatīt {appName} kā noklusējuma kopsavilkuma lietotni?\\n\\nŠī lietotne tiks automātiski izmantota visiem turpmākajiem sarunu kopsavilkumiem.",
+  "@setDefaultAppContent": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "setDefaultButton": "Iestatīt noklusējumu",
+  "setAsDefaultSuccess": "{appName} iestatīta kā noklusējuma kopsavilkuma lietotne",
+  "@setAsDefaultSuccess": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "createCustomTemplate": "Izveidot pielāgotu veidni",
+  "allTemplates": "Visas veidnes",
+  "failedToInstallApp": "Neizdevās instalēt {appName}. Lūdzu, mēģiniet vēlreiz.",
+  "@failedToInstallApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "errorInstallingApp": "Kļūda instalējot {appName}: {error}",
+  "@errorInstallingApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tagSpeaker": "Tag Speaker {speakerId}",
+  "@tagSpeaker": {
+    "placeholders": {
+      "speakerId": {
+        "type": "int"
+      }
+    }
+  },
+  "personNameAlreadyExists": "A person with this name already exists.",
+  "selectYouFromList": "To tag yourself, please select \"You\" from the list.",
+  "enterPersonsName": "Enter Person's Name",
+  "addPerson": "Add Person",
+  "tagOtherSegmentsFromSpeaker": "Tag other segments from this speaker ({selected}/{total})",
+  "@tagOtherSegmentsFromSpeaker": {
+    "placeholders": {
+      "selected": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "tagOtherSegments": "Tag other segments",
+  "managePeople": "Manage People",
+  "shareViaSms": "Dalīties ar SMS",
+  "selectContactsToShareSummary": "Izvēlieties kontaktus sarunas kopsavilkuma kopīgošanai",
+  "searchContactsHint": "Meklēt kontaktus...",
+  "contactsSelectedCount": "{count} izvēlēti",
+  "clearAllSelection": "Notīrīt visu",
+  "selectContactsToShare": "Izvēlieties kontaktus kopīgošanai",
+  "shareWithContactCount": "Dalīties ar {count} kontaktu",
+  "shareWithContactsCount": "Dalīties ar {count} kontaktiem",
+  "contactsPermissionRequired": "Nepieciešama kontaktu atļauja",
+  "contactsPermissionRequiredForSms": "Lai kopīgotu ar SMS, nepieciešama kontaktu atļauja",
+  "grantContactsPermissionForSms": "Lūdzu, piešķiriet kontaktu atļauju, lai kopīgotu ar SMS",
+  "noContactsWithPhoneNumbers": "Nav atrasti kontakti ar tālruņa numuriem",
+  "noContactsMatchSearch": "Nav kontaktu, kas atbilst jūsu meklējumam",
+  "failedToLoadContacts": "Neizdevās ielādēt kontaktus",
+  "failedToPrepareConversationForSharing": "Neizdevās sagatavot sarunu kopīgošanai. Lūdzu, mēģiniet vēlreiz.",
+  "couldNotOpenSmsApp": "Neizdevās atvērt SMS lietotni. Lūdzu, mēģiniet vēlreiz.",
+  "heresWhatWeDiscussed": "Lūk, par ko mēs tikko runājām: {link}",
+  "wifiSync": "WiFi sinhronizācija",
+  "itemCopiedToClipboard": "{item} nokopēts starpliktuvē"
 }

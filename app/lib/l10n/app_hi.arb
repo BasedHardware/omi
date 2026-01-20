@@ -357,7 +357,7 @@
   "permissionRevokedTitle": "अनुमति रद्द कर दी गई",
   "permissionRevokedMessage": "क्या आप चाहते हैं कि हम आपकी सभी मौजूदा रिकॉर्डिंग भी हटा दें?",
   "yes": "हाँ",
-  "editName": "नाम संपादित करें",
+  "editName": "Edit Name",
   "howShouldOmiCallYou": "Omi आपको क्या कहकर बुलाए?",
   "enterYourName": "अपना नाम दर्ज करें",
   "nameCannotBeEmpty": "नाम खाली नहीं हो सकता",
@@ -989,7 +989,7 @@
   "help": "सहायता",
   "pro": "Pro",
   "upgradeToPro": "Pro में अपग्रेड करें",
-  "getOmiDevice": "Omi डिवाइस प्राप्त करें",
+  "getOmiDevice": "Get Omi Device",
   "wearableAiCompanion": "पहनने योग्य AI साथी",
   "loadingMemories": "यादें लोड हो रही हैं...",
   "allMemories": "सभी यादें",
@@ -1169,7 +1169,7 @@
   "selectTime": "समय चुनें",
   "accountGroup": "खाता",
   "signOutQuestion": "साइन आउट करें?",
-  "signOutConfirmation": "क्या आप वाकई साइन आउट करना चाहते हैं?",
+  "signOutConfirmation": "Are you sure you want to sign out?",
   "customVocabularyHeader": "कस्टम शब्दावली",
   "addWordsDescription": "ऐसे शब्द जोड़ें जिन्हें Omi ट्रांसक्रिप्शन के दौरान पहचाननी चाहिए।",
   "enterWordsHint": "शब्द दर्ज करें (कॉमा से अलग)",
@@ -2035,5 +2035,119 @@
   "cantRateWithoutInternet": "इंटरनेट कनेक्शन के बिना ऐप को रेट नहीं कर सकते।",
   "appAnalytics": "ऐप एनालिटिक्स",
   "learnMoreLink": "अधिक जानें",
-  "moneyEarned": "कमाई"
+  "moneyEarned": "कमाई",
+  "starFilterLabel": "{count} सितारा",
+  "@starFilterLabel": {
+    "description": "Filter chip label for star rating",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sharePublicLink": "Share Public Link",
+  "makePersonaPublic": "Make Persona Public",
+  "connectedKnowledgeData": "Connected Knowledge Data",
+  "enterName": "Enter name",
+  "disconnectTwitter": "Disconnect Twitter",
+  "disconnectTwitterConfirmation": "Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.",
+  "getOmiDeviceDescription": "Create a more accurate clone with your personal conversations",
+  "getOmi": "Get Omi",
+  "iHaveOmiDevice": "I have Omi device",
+  "goal": "लक्ष्य",
+  "tapToTrackThisGoal": "इस लक्ष्य को ट्रैक करने के लिए टैप करें",
+  "tapToSetAGoal": "लक्ष्य सेट करने के लिए टैप करें",
+  "processedConversations": "संसाधित वार्तालाप",
+  "updatedConversations": "अपडेट की गई वार्तालाप",
+  "newConversations": "नई वार्तालाप",
+  "summaryTemplate": "सारांश टेम्पलेट",
+  "suggestedTemplates": "सुझाए गए टेम्पलेट",
+  "otherTemplates": "अन्य टेम्पलेट",
+  "availableTemplates": "उपलब्ध टेम्पलेट",
+  "getCreative": "रचनात्मक बनें",
+  "defaultLabel": "डिफ़ॉल्ट",
+  "lastUsedLabel": "अंतिम उपयोग",
+  "setDefaultApp": "डिफ़ॉल्ट ऐप सेट करें",
+  "setDefaultAppContent": "क्या {appName} को आपके डिफ़ॉल्ट सारांश ऐप के रूप में सेट करें?\\n\\nइस ऐप का उपयोग स्वचालित रूप से सभी भविष्य की बातचीत के सारांश के लिए किया जाएगा।",
+  "@setDefaultAppContent": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "setDefaultButton": "डिफ़ॉल्ट सेट करें",
+  "setAsDefaultSuccess": "{appName} को डिफ़ॉल्ट सारांश ऐप के रूप में सेट किया गया",
+  "@setAsDefaultSuccess": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "createCustomTemplate": "कस्टम टेम्पलेट बनाएं",
+  "allTemplates": "सभी टेम्पलेट",
+  "failedToInstallApp": "{appName} इंस्टॉल करने में विफल। कृपया पुनः प्रयास करें।",
+  "@failedToInstallApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "errorInstallingApp": "{appName} इंस्टॉल करने में त्रुटि: {error}",
+  "@errorInstallingApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tagSpeaker": "Tag Speaker {speakerId}",
+  "@tagSpeaker": {
+    "placeholders": {
+      "speakerId": {
+        "type": "int"
+      }
+    }
+  },
+  "personNameAlreadyExists": "A person with this name already exists.",
+  "selectYouFromList": "To tag yourself, please select \"You\" from the list.",
+  "enterPersonsName": "Enter Person's Name",
+  "addPerson": "Add Person",
+  "tagOtherSegmentsFromSpeaker": "Tag other segments from this speaker ({selected}/{total})",
+  "@tagOtherSegmentsFromSpeaker": {
+    "placeholders": {
+      "selected": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "tagOtherSegments": "Tag other segments",
+  "managePeople": "Manage People",
+  "shareViaSms": "SMS के माध्यम से साझा करें",
+  "selectContactsToShareSummary": "अपनी बातचीत का सारांश साझा करने के लिए संपर्क चुनें",
+  "searchContactsHint": "संपर्क खोजें...",
+  "contactsSelectedCount": "{count} चयनित",
+  "clearAllSelection": "सभी साफ करें",
+  "selectContactsToShare": "साझा करने के लिए संपर्क चुनें",
+  "shareWithContactCount": "{count} संपर्क के साथ साझा करें",
+  "shareWithContactsCount": "{count} संपर्कों के साथ साझा करें",
+  "contactsPermissionRequired": "संपर्क अनुमति आवश्यक है",
+  "contactsPermissionRequiredForSms": "SMS के माध्यम से साझा करने के लिए संपर्क अनुमति आवश्यक है",
+  "grantContactsPermissionForSms": "कृपया SMS के माध्यम से साझा करने के लिए संपर्क अनुमति दें",
+  "noContactsWithPhoneNumbers": "फ़ोन नंबर वाला कोई संपर्क नहीं मिला",
+  "noContactsMatchSearch": "कोई संपर्क आपकी खोज से मेल नहीं खाता",
+  "failedToLoadContacts": "संपर्क लोड करने में विफल",
+  "failedToPrepareConversationForSharing": "साझा करने के लिए बातचीत तैयार करने में विफल। कृपया पुनः प्रयास करें।",
+  "couldNotOpenSmsApp": "SMS ऐप नहीं खोला जा सका। कृपया पुनः प्रयास करें।",
+  "heresWhatWeDiscussed": "यहाँ हमने अभी जो चर्चा की वह है: {link}",
+  "wifiSync": "वाईफाई सिंक",
+  "itemCopiedToClipboard": "{item} क्लिपबोर्ड पर कॉपी किया गया"
 }

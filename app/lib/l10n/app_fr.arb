@@ -357,7 +357,7 @@
   "permissionRevokedTitle": "Permission révoquée",
   "permissionRevokedMessage": "Voulez-vous que nous supprimions également tous vos enregistrements existants ?",
   "yes": "Oui",
-  "editName": "Modifier le nom",
+  "editName": "Edit Name",
   "howShouldOmiCallYou": "Comment Omi devrait-il vous appeler ?",
   "enterYourName": "Entrez votre nom",
   "nameCannotBeEmpty": "Le nom ne peut pas être vide",
@@ -988,7 +988,7 @@
   "help": "Aide",
   "pro": "Pro",
   "upgradeToPro": "Passer à Pro",
-  "getOmiDevice": "Obtenir un appareil Omi",
+  "getOmiDevice": "Get Omi Device",
   "wearableAiCompanion": "Compagnon IA portable",
   "loadingMemories": "Chargement des souvenirs...",
   "allMemories": "Tous les souvenirs",
@@ -1168,7 +1168,7 @@
   "selectTime": "Sélectionner l'heure",
   "accountGroup": "Compte",
   "signOutQuestion": "Se déconnecter ?",
-  "signOutConfirmation": "Êtes-vous sûr de vouloir vous déconnecter ?",
+  "signOutConfirmation": "Are you sure you want to sign out?",
   "customVocabularyHeader": "VOCABULAIRE PERSONNALISÉ",
   "addWordsDescription": "Ajoutez des mots qu'Omi devrait reconnaître pendant la transcription.",
   "enterWordsHint": "Entrez des mots (séparés par des virgules)",
@@ -2034,5 +2034,119 @@
   "cantRateWithoutInternet": "Impossible d'évaluer l'app sans connexion Internet.",
   "appAnalytics": "Analytique de l'application",
   "learnMoreLink": "en savoir plus",
-  "moneyEarned": "Argent gagné"
+  "moneyEarned": "Argent gagné",
+  "starFilterLabel": "{count} étoile",
+  "@starFilterLabel": {
+    "description": "Filter chip label for star rating",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sharePublicLink": "Share Public Link",
+  "makePersonaPublic": "Make Persona Public",
+  "connectedKnowledgeData": "Connected Knowledge Data",
+  "enterName": "Enter name",
+  "disconnectTwitter": "Disconnect Twitter",
+  "disconnectTwitterConfirmation": "Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.",
+  "getOmiDeviceDescription": "Create a more accurate clone with your personal conversations",
+  "getOmi": "Get Omi",
+  "iHaveOmiDevice": "I have Omi device",
+  "goal": "OBJECTIF",
+  "tapToTrackThisGoal": "Appuyez pour suivre cet objectif",
+  "tapToSetAGoal": "Appuyez pour définir un objectif",
+  "processedConversations": "Conversations traitées",
+  "updatedConversations": "Conversations mises à jour",
+  "newConversations": "Nouvelles conversations",
+  "summaryTemplate": "Modèle de résumé",
+  "suggestedTemplates": "Modèles suggérés",
+  "otherTemplates": "Autres modèles",
+  "availableTemplates": "Modèles disponibles",
+  "getCreative": "Soyez créatif",
+  "defaultLabel": "Par défaut",
+  "lastUsedLabel": "Dernière utilisation",
+  "setDefaultApp": "Définir l'application par défaut",
+  "setDefaultAppContent": "Définir {appName} comme application de résumé par défaut ?\\n\\nCette application sera automatiquement utilisée pour tous les futurs résumés de conversations.",
+  "@setDefaultAppContent": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "setDefaultButton": "Définir par défaut",
+  "setAsDefaultSuccess": "{appName} définie comme application de résumé par défaut",
+  "@setAsDefaultSuccess": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "createCustomTemplate": "Créer un modèle personnalisé",
+  "allTemplates": "Tous les modèles",
+  "failedToInstallApp": "Échec de l'installation de {appName}. Veuillez réessayer.",
+  "@failedToInstallApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "errorInstallingApp": "Erreur lors de l'installation de {appName} : {error}",
+  "@errorInstallingApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tagSpeaker": "Tag Speaker {speakerId}",
+  "@tagSpeaker": {
+    "placeholders": {
+      "speakerId": {
+        "type": "int"
+      }
+    }
+  },
+  "personNameAlreadyExists": "A person with this name already exists.",
+  "selectYouFromList": "To tag yourself, please select \"You\" from the list.",
+  "enterPersonsName": "Enter Person's Name",
+  "addPerson": "Add Person",
+  "tagOtherSegmentsFromSpeaker": "Tag other segments from this speaker ({selected}/{total})",
+  "@tagOtherSegmentsFromSpeaker": {
+    "placeholders": {
+      "selected": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "tagOtherSegments": "Tag other segments",
+  "managePeople": "Manage People",
+  "shareViaSms": "Partager par SMS",
+  "selectContactsToShareSummary": "Sélectionnez des contacts pour partager le résumé de votre conversation",
+  "searchContactsHint": "Rechercher des contacts...",
+  "contactsSelectedCount": "{count} sélectionnés",
+  "clearAllSelection": "Tout effacer",
+  "selectContactsToShare": "Sélectionnez des contacts à partager",
+  "shareWithContactCount": "Partager avec {count} contact",
+  "shareWithContactsCount": "Partager avec {count} contacts",
+  "contactsPermissionRequired": "Autorisation des contacts requise",
+  "contactsPermissionRequiredForSms": "L'autorisation des contacts est requise pour partager par SMS",
+  "grantContactsPermissionForSms": "Veuillez accorder l'autorisation des contacts pour partager par SMS",
+  "noContactsWithPhoneNumbers": "Aucun contact avec numéro de téléphone trouvé",
+  "noContactsMatchSearch": "Aucun contact ne correspond à votre recherche",
+  "failedToLoadContacts": "Échec du chargement des contacts",
+  "failedToPrepareConversationForSharing": "Échec de la préparation de la conversation pour le partage. Veuillez réessayer.",
+  "couldNotOpenSmsApp": "Impossible d'ouvrir l'application SMS. Veuillez réessayer.",
+  "heresWhatWeDiscussed": "Voici ce dont nous venons de discuter : {link}",
+  "wifiSync": "Synchronisation WiFi",
+  "itemCopiedToClipboard": "{item} copié dans le presse-papiers"
 }

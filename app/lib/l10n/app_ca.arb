@@ -357,7 +357,7 @@
   "permissionRevokedTitle": "Permís revocat",
   "permissionRevokedMessage": "Voleu que eliminem també tots els vostres enregistraments existents?",
   "yes": "Sí",
-  "editName": "Editar nom",
+  "editName": "Edit Name",
   "howShouldOmiCallYou": "Com hauria d'anomenar-vos Omi?",
   "enterYourName": "Introduïu el vostre nom",
   "nameCannotBeEmpty": "El nom no pot estar buit",
@@ -1006,7 +1006,7 @@
   "help": "Ajuda",
   "pro": "Pro",
   "upgradeToPro": "Actualitza a Pro",
-  "getOmiDevice": "Aconsegueix el dispositiu Omi",
+  "getOmiDevice": "Get Omi Device",
   "wearableAiCompanion": "Company d'IA portàtil",
   "loadingMemories": "Carregant records...",
   "allMemories": "Tots els records",
@@ -1170,7 +1170,7 @@
   "selectTime": "Selecciona hora",
   "accountGroup": "Compte",
   "signOutQuestion": "Tancar sessió?",
-  "signOutConfirmation": "Estàs segur que vols tancar la sessió?",
+  "signOutConfirmation": "Are you sure you want to sign out?",
   "customVocabularyHeader": "VOCABULARI PERSONALITZAT",
   "addWordsDescription": "Afegeix paraules que Omi hauria de reconèixer durant la transcripció.",
   "enterWordsHint": "Introdueix paraules (separades per comes)",
@@ -2017,5 +2017,119 @@
   "cantRateWithoutInternet": "No es pot valorar l'aplicació sense connexió a Internet.",
   "appAnalytics": "Anàlisi de l'aplicació",
   "learnMoreLink": "més informació",
-  "moneyEarned": "Diners guanyats"
+  "moneyEarned": "Diners guanyats",
+  "starFilterLabel": "{count} estrella",
+  "@starFilterLabel": {
+    "description": "Filter chip label for star rating",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sharePublicLink": "Share Public Link",
+  "makePersonaPublic": "Make Persona Public",
+  "connectedKnowledgeData": "Connected Knowledge Data",
+  "enterName": "Enter name",
+  "disconnectTwitter": "Disconnect Twitter",
+  "disconnectTwitterConfirmation": "Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.",
+  "getOmiDeviceDescription": "Create a more accurate clone with your personal conversations",
+  "getOmi": "Get Omi",
+  "iHaveOmiDevice": "I have Omi device",
+  "goal": "OBJECTIU",
+  "tapToTrackThisGoal": "Toca per fer seguiment d'aquest objectiu",
+  "tapToSetAGoal": "Toca per establir un objectiu",
+  "processedConversations": "Converses processades",
+  "updatedConversations": "Converses actualitzades",
+  "newConversations": "Noves converses",
+  "summaryTemplate": "Plantilla de resum",
+  "suggestedTemplates": "Plantilles suggerides",
+  "otherTemplates": "Altres plantilles",
+  "availableTemplates": "Plantilles disponibles",
+  "getCreative": "Sigues creatiu",
+  "defaultLabel": "Predeterminada",
+  "lastUsedLabel": "Últim ús",
+  "setDefaultApp": "Establir aplicació predeterminada",
+  "setDefaultAppContent": "Establir {appName} com la teva aplicació de resum predeterminada?\\n\\nAquesta aplicació s'utilitzarà automàticament per a tots els resums de converses futures.",
+  "@setDefaultAppContent": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "setDefaultButton": "Establir predeterminada",
+  "setAsDefaultSuccess": "{appName} establerta com a aplicació de resum predeterminada",
+  "@setAsDefaultSuccess": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "createCustomTemplate": "Crear plantilla personalitzada",
+  "allTemplates": "Totes les plantilles",
+  "failedToInstallApp": "Error en instal·lar {appName}. Si us plau, torna-ho a provar.",
+  "@failedToInstallApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "errorInstallingApp": "Error en instal·lar {appName}: {error}",
+  "@errorInstallingApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tagSpeaker": "Tag Speaker {speakerId}",
+  "@tagSpeaker": {
+    "placeholders": {
+      "speakerId": {
+        "type": "int"
+      }
+    }
+  },
+  "personNameAlreadyExists": "A person with this name already exists.",
+  "selectYouFromList": "To tag yourself, please select \"You\" from the list.",
+  "enterPersonsName": "Enter Person's Name",
+  "addPerson": "Add Person",
+  "tagOtherSegmentsFromSpeaker": "Tag other segments from this speaker ({selected}/{total})",
+  "@tagOtherSegmentsFromSpeaker": {
+    "placeholders": {
+      "selected": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "tagOtherSegments": "Tag other segments",
+  "managePeople": "Manage People",
+  "shareViaSms": "Comparteix via SMS",
+  "selectContactsToShareSummary": "Selecciona contactes per compartir el resum de la conversa",
+  "searchContactsHint": "Cerca contactes...",
+  "contactsSelectedCount": "{count} seleccionats",
+  "clearAllSelection": "Esborra tot",
+  "selectContactsToShare": "Selecciona contactes per compartir",
+  "shareWithContactCount": "Comparteix amb {count} contacte",
+  "shareWithContactsCount": "Comparteix amb {count} contactes",
+  "contactsPermissionRequired": "Es requereix permís de contactes",
+  "contactsPermissionRequiredForSms": "Es requereix permís de contactes per compartir via SMS",
+  "grantContactsPermissionForSms": "Si us plau, concedeix permís de contactes per compartir via SMS",
+  "noContactsWithPhoneNumbers": "No s'han trobat contactes amb números de telèfon",
+  "noContactsMatchSearch": "Cap contacte coincideix amb la cerca",
+  "failedToLoadContacts": "Error en carregar els contactes",
+  "failedToPrepareConversationForSharing": "Error en preparar la conversa per compartir. Si us plau, torna-ho a provar.",
+  "couldNotOpenSmsApp": "No s'ha pogut obrir l'aplicació de SMS. Si us plau, torna-ho a provar.",
+  "heresWhatWeDiscussed": "Aquí tens el que hem parlat: {link}",
+  "wifiSync": "Sincronització WiFi",
+  "itemCopiedToClipboard": "{item} copiat al porta-retalls"
 }

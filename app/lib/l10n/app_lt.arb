@@ -357,7 +357,7 @@
   "permissionRevokedTitle": "Leidimas atšauktas",
   "permissionRevokedMessage": "Ar norite, kad ištrintume visus jūsų esamus įrašus?",
   "yes": "Taip",
-  "editName": "Redaguoti vardą",
+  "editName": "Edit Name",
   "howShouldOmiCallYou": "Kaip Omi turėtų jus vadinti?",
   "enterYourName": "Įveskite savo vardą",
   "nameCannotBeEmpty": "Vardas negali būti tuščias",
@@ -988,7 +988,7 @@
   "help": "Pagalba",
   "pro": "Pro",
   "upgradeToPro": "Atnaujinti į Pro",
-  "getOmiDevice": "Įsigyti Omi įrenginį",
+  "getOmiDevice": "Get Omi Device",
   "wearableAiCompanion": "Nešiojamas AI palydovas",
   "loadingMemories": "Įkeliami prisiminimai...",
   "allMemories": "Visi prisiminimai",
@@ -1168,7 +1168,7 @@
   "selectTime": "Pasirinkti laiką",
   "accountGroup": "Paskyra",
   "signOutQuestion": "Atsijungti?",
-  "signOutConfirmation": "Ar tikrai norite atsijungti?",
+  "signOutConfirmation": "Are you sure you want to sign out?",
   "customVocabularyHeader": "PASIRINKTINIS ŽODYNAS",
   "addWordsDescription": "Pridėkite žodžius, kuriuos Omi turėtų atpažinti transkribavimo metu.",
   "enterWordsHint": "Įveskite žodžius (atskirti kableliais)",
@@ -2034,5 +2034,119 @@
   "cantRateWithoutInternet": "Negalima įvertinti programėlės be interneto ryšio.",
   "appAnalytics": "Programėlės analitika",
   "learnMoreLink": "sužinoti daugiau",
-  "moneyEarned": "Uždirbti pinigai"
+  "moneyEarned": "Uždirbti pinigai",
+  "starFilterLabel": "{count} žvaigždė",
+  "@starFilterLabel": {
+    "description": "Filter chip label for star rating",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sharePublicLink": "Share Public Link",
+  "makePersonaPublic": "Make Persona Public",
+  "connectedKnowledgeData": "Connected Knowledge Data",
+  "enterName": "Enter name",
+  "disconnectTwitter": "Disconnect Twitter",
+  "disconnectTwitterConfirmation": "Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.",
+  "getOmiDeviceDescription": "Create a more accurate clone with your personal conversations",
+  "getOmi": "Get Omi",
+  "iHaveOmiDevice": "I have Omi device",
+  "goal": "TIKSLAS",
+  "tapToTrackThisGoal": "Bakstelėkite, kad sektumėte šį tikslą",
+  "tapToSetAGoal": "Bakstelėkite, kad nustatytumėte tikslą",
+  "processedConversations": "Apdoroti pokalbiai",
+  "updatedConversations": "Atnaujinti pokalbiai",
+  "newConversations": "Nauji pokalbiai",
+  "summaryTemplate": "Santraukos šablonas",
+  "suggestedTemplates": "Siūlomi šablonai",
+  "otherTemplates": "Kiti šablonai",
+  "availableTemplates": "Galimi šablonai",
+  "getCreative": "Būkite kūrybingi",
+  "defaultLabel": "Numatytasis",
+  "lastUsedLabel": "Paskutinis naudotas",
+  "setDefaultApp": "Nustatyti numatytąją programą",
+  "setDefaultAppContent": "Ar nustatyti {appName} kaip numatytąją santraukų programą?\\n\\nŠi programa bus automatiškai naudojama visoms būsimoms pokalbių santraukoms.",
+  "@setDefaultAppContent": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "setDefaultButton": "Nustatyti numatytąją",
+  "setAsDefaultSuccess": "{appName} nustatyta kaip numatytoji santraukų programa",
+  "@setAsDefaultSuccess": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "createCustomTemplate": "Sukurti pasirinktinį šabloną",
+  "allTemplates": "Visi šablonai",
+  "failedToInstallApp": "Nepavyko įdiegti {appName}. Bandykite dar kartą.",
+  "@failedToInstallApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "errorInstallingApp": "Klaida diegiant {appName}: {error}",
+  "@errorInstallingApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tagSpeaker": "Tag Speaker {speakerId}",
+  "@tagSpeaker": {
+    "placeholders": {
+      "speakerId": {
+        "type": "int"
+      }
+    }
+  },
+  "personNameAlreadyExists": "A person with this name already exists.",
+  "selectYouFromList": "To tag yourself, please select \"You\" from the list.",
+  "enterPersonsName": "Enter Person's Name",
+  "addPerson": "Add Person",
+  "tagOtherSegmentsFromSpeaker": "Tag other segments from this speaker ({selected}/{total})",
+  "@tagOtherSegmentsFromSpeaker": {
+    "placeholders": {
+      "selected": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "tagOtherSegments": "Tag other segments",
+  "managePeople": "Manage People",
+  "shareViaSms": "Bendrinti per SMS",
+  "selectContactsToShareSummary": "Pasirinkite kontaktus pokalbio santraukai bendrinti",
+  "searchContactsHint": "Ieškoti kontaktų...",
+  "contactsSelectedCount": "{count} pasirinkta",
+  "clearAllSelection": "Išvalyti viską",
+  "selectContactsToShare": "Pasirinkite kontaktus bendrinimui",
+  "shareWithContactCount": "Bendrinti su {count} kontaktu",
+  "shareWithContactsCount": "Bendrinti su {count} kontaktais",
+  "contactsPermissionRequired": "Reikalingas kontaktų leidimas",
+  "contactsPermissionRequiredForSms": "Norint bendrinti per SMS, reikalingas kontaktų leidimas",
+  "grantContactsPermissionForSms": "Suteikite kontaktų leidimą, kad galėtumėte bendrinti per SMS",
+  "noContactsWithPhoneNumbers": "Nerasta kontaktų su telefono numeriais",
+  "noContactsMatchSearch": "Nėra kontaktų, atitinkančių jūsų paiešką",
+  "failedToLoadContacts": "Nepavyko įkelti kontaktų",
+  "failedToPrepareConversationForSharing": "Nepavyko paruošti pokalbio bendrinimui. Bandykite dar kartą.",
+  "couldNotOpenSmsApp": "Nepavyko atidaryti SMS programos. Bandykite dar kartą.",
+  "heresWhatWeDiscussed": "Štai ką ką tik aptarėme: {link}",
+  "wifiSync": "WiFi sinchronizavimas",
+  "itemCopiedToClipboard": "{item} nukopijuota į iškarpinę"
 }

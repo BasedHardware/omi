@@ -1150,7 +1150,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get yes => 'Ya';
 
   @override
-  String get editName => 'Edit Nama';
+  String get editName => 'Edit Name';
 
   @override
   String get howShouldOmiCallYou => 'Apa yang Omi patut panggil anda?';
@@ -2911,9 +2911,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get connectNow => 'Sambung Sekarang';
 
   @override
-  String installsCount(String count) {
-    return '$count+ pemasangan';
-  }
+  String get installsCount => 'Pemasangan';
 
   @override
   String get uninstallApp => 'Nyahpasang Apl';
@@ -2956,13 +2954,13 @@ class AppLocalizationsMs extends AppLocalizations {
   String get preview => 'Pratonton';
 
   @override
-  String get aboutTheApp => 'Tentang Apl';
+  String get aboutTheApp => 'Tentang Aplikasi';
 
   @override
   String get aboutThePersona => 'Tentang Persona';
 
   @override
-  String get chatPersonality => 'Keperibadian Sembang';
+  String get chatPersonality => 'Personaliti Sembang';
 
   @override
   String get ratingsAndReviews => 'Penilaian & Ulasan';
@@ -3277,7 +3275,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get upgradeToPro => 'Naik taraf ke Pro';
 
   @override
-  String get getOmiDevice => 'Dapatkan Peranti Omi';
+  String get getOmiDevice => 'Get Omi Device';
 
   @override
   String get wearableAiCompanion => 'Teman AI boleh pakai';
@@ -3844,7 +3842,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get signOutQuestion => 'Log keluar?';
 
   @override
-  String get signOutConfirmation => 'Adakah anda pasti mahu log keluar?';
+  String get signOutConfirmation => 'Are you sure you want to sign out?';
 
   @override
   String get customVocabularyHeader => 'PERBENDAHARAAN KATA TERSUAI';
@@ -4089,7 +4087,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get invalidIntegrationUrl => 'URL integrasi tidak sah';
 
   @override
-  String get tapToComplete => 'Ketik untuk melengkapkan';
+  String get tapToComplete => 'Ketik untuk selesaikan';
 
   @override
   String get invalidSetupInstructionsUrl => 'URL arahan persediaan tidak sah';
@@ -5824,9 +5822,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get chatAppsTitle => 'Aplikasi Sembang';
 
   @override
-  String get chatAssistantsTitle => 'Pembantu Sembang';
-
-  @override
   String get selectApp => 'Pilih Aplikasi';
 
   @override
@@ -5834,150 +5829,6 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get disable => 'Nyahaktif';
-
-  @override
-  String get permissionReadConversations => 'Baca Perbualan';
-
-  @override
-  String get permissionReadMemories => 'Baca Kenangan';
-
-  @override
-  String get permissionReadTasks => 'Baca Tugas';
-
-  @override
-  String get permissionCreateConversations => 'Cipta Perbualan';
-
-  @override
-  String get permissionCreateMemories => 'Cipta Kenangan';
-
-  @override
-  String get permissionTypeAccess => 'Akses';
-
-  @override
-  String get permissionTypeCreate => 'Cipta';
-
-  @override
-  String get permissionTypeTrigger => 'Pencetus';
-
-  @override
-  String get permissionDescReadConversations => 'Aplikasi ini boleh mengakses perbualan anda.';
-
-  @override
-  String get permissionDescReadMemories => 'Aplikasi ini boleh mengakses kenangan anda.';
-
-  @override
-  String get permissionDescReadTasks => 'Aplikasi ini boleh mengakses tugas anda.';
-
-  @override
-  String get permissionDescCreateConversations => 'Aplikasi ini boleh mencipta perbualan baharu.';
-
-  @override
-  String get permissionDescCreateMemories => 'Aplikasi ini boleh mencipta kenangan baharu.';
-
-  @override
-  String get realtimeListening => 'Pendengaran Masa Nyata';
-
-  @override
-  String get invalidIntegrationUrl => 'URL integrasi tidak sah';
-
-  @override
-  String get invalidSetupInstructionsUrl => 'URL arahan persediaan tidak sah';
-
-  @override
-  String get setupCompleted => 'Selesai';
-
-  @override
-  String get tapToComplete => 'Ketik untuk selesaikan';
-
-  @override
-  String get setupInstructions => 'Arahan Persediaan';
-
-  @override
-  String get aboutTheApp => 'Tentang Aplikasi';
-
-  @override
-  String get aboutThePersona => 'Tentang Persona';
-
-  @override
-  String get pushToTalk => 'Tekan untuk Bercakap';
-
-  @override
-  String get summaryPrompt => 'Prompt Ringkasan';
-
-  @override
-  String get chatPersonality => 'Personaliti Sembang';
-
-  @override
-  String get ratingsAndReviews => 'Penilaian & Ulasan';
-
-  @override
-  String get pleaseSelectRating => 'Sila pilih penilaian';
-
-  @override
-  String get reviewAddedSuccessfully => 'Ulasan berjaya ditambah 🚀';
-
-  @override
-  String get reviewUpdatedSuccessfully => 'Ulasan berjaya dikemas kini 🚀';
-
-  @override
-  String get failedToSubmitReview => 'Gagal menghantar ulasan. Sila cuba lagi.';
-
-  @override
-  String get writeReviewOptional => 'Tulis ulasan (pilihan)';
-
-  @override
-  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
-
-  @override
-  String get setupQuestionProfession => '1. What do you do?';
-
-  @override
-  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
-
-  @override
-  String get setupQuestionAge => '3. What\'s your age range?';
-
-  @override
-  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
-
-  @override
-  String get continueButton => 'Teruskan';
-
-  @override
-  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
-
-  @override
-  String get professionEntrepreneur => 'Entrepreneur';
-
-  @override
-  String get professionSoftwareEngineer => 'Software Engineer';
-
-  @override
-  String get professionProductManager => 'Product Manager';
-
-  @override
-  String get professionExecutive => 'Executive';
-
-  @override
-  String get professionSales => 'Sales';
-
-  @override
-  String get professionStudent => 'Student';
-
-  @override
-  String get usageAtWork => 'At work';
-
-  @override
-  String get usageIrlEvents => 'IRL Events';
-
-  @override
-  String get usageOnline => 'Online';
-
-  @override
-  String get usageSocialSettings => 'In Social Settings';
-
-  @override
-  String get usageEverywhere => 'Everywhere';
 
   @override
   String get photoLibrary => 'Pustaka Foto';
@@ -6427,6 +6278,111 @@ class AppLocalizationsMs extends AppLocalizations {
   String get device => 'Device';
 
   @override
+  String get chatAssistantsTitle => 'Pembantu Sembang';
+
+  @override
+  String get permissionReadConversations => 'Baca Perbualan';
+
+  @override
+  String get permissionReadMemories => 'Baca Kenangan';
+
+  @override
+  String get permissionReadTasks => 'Baca Tugas';
+
+  @override
+  String get permissionCreateConversations => 'Cipta Perbualan';
+
+  @override
+  String get permissionCreateMemories => 'Cipta Kenangan';
+
+  @override
+  String get permissionTypeAccess => 'Akses';
+
+  @override
+  String get permissionTypeCreate => 'Cipta';
+
+  @override
+  String get permissionTypeTrigger => 'Pencetus';
+
+  @override
+  String get permissionDescReadConversations => 'Aplikasi ini boleh mengakses perbualan anda.';
+
+  @override
+  String get permissionDescReadMemories => 'Aplikasi ini boleh mengakses kenangan anda.';
+
+  @override
+  String get permissionDescReadTasks => 'Aplikasi ini boleh mengakses tugas anda.';
+
+  @override
+  String get permissionDescCreateConversations => 'Aplikasi ini boleh mencipta perbualan baharu.';
+
+  @override
+  String get permissionDescCreateMemories => 'Aplikasi ini boleh mencipta kenangan baharu.';
+
+  @override
+  String get realtimeListening => 'Pendengaran Masa Nyata';
+
+  @override
+  String get setupCompleted => 'Selesai';
+
+  @override
+  String get pleaseSelectRating => 'Sila pilih penilaian';
+
+  @override
+  String get writeReviewOptional => 'Tulis ulasan (pilihan)';
+
+  @override
+  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
+
+  @override
+  String get setupQuestionProfession => '1. What do you do?';
+
+  @override
+  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
+
+  @override
+  String get setupQuestionAge => '3. What\'s your age range?';
+
+  @override
+  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
+
+  @override
+  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
+
+  @override
+  String get professionEntrepreneur => 'Entrepreneur';
+
+  @override
+  String get professionSoftwareEngineer => 'Software Engineer';
+
+  @override
+  String get professionProductManager => 'Product Manager';
+
+  @override
+  String get professionExecutive => 'Executive';
+
+  @override
+  String get professionSales => 'Sales';
+
+  @override
+  String get professionStudent => 'Student';
+
+  @override
+  String get usageAtWork => 'At work';
+
+  @override
+  String get usageIrlEvents => 'IRL Events';
+
+  @override
+  String get usageOnline => 'Online';
+
+  @override
+  String get usageSocialSettings => 'In Social Settings';
+
+  @override
+  String get usageEverywhere => 'Everywhere';
+
+  @override
   String get customBackendUrlTitle => 'URL Backend Tersuai';
 
   @override
@@ -6439,7 +6395,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get enterBackendUrlError => 'Sila masukkan URL backend';
 
   @override
-  String get urlMustEndWithSlashError => 'URL mesti berakhir dengan "/"';
+  String get urlMustEndWithSlashError => 'URL mesti berakhir dengan \"/\"';
 
   @override
   String get invalidUrlError => 'Sila masukkan URL yang sah';
@@ -6508,7 +6464,8 @@ class AppLocalizationsMs extends AppLocalizations {
   String get buildingKnowledgeGraphFromMemories => 'Membina graf pengetahuan daripada kenangan...';
 
   @override
-  String get knowledgeGraphWillBuildAutomatically => 'Graf pengetahuan anda akan dibina secara automatik apabila anda mencipta kenangan baharu.';
+  String get knowledgeGraphWillBuildAutomatically =>
+      'Graf pengetahuan anda akan dibina secara automatik apabila anda mencipta kenangan baharu.';
 
   @override
   String get buildGraphButton => 'Bina Graf';
@@ -6528,13 +6485,13 @@ class AppLocalizationsMs extends AppLocalizations {
   String get writeSomething => 'Tulis sesuatu';
 
   @override
-  String get submitReply => 'Hantar balasan';
+  String get submitReply => 'Hantar Balasan';
 
   @override
-  String get editYourReply => 'Edit balasan anda';
+  String get editYourReply => 'Edit Balasan Anda';
 
   @override
-  String get replyToReview => 'Balas ulasan';
+  String get replyToReview => 'Balas Ulasan';
 
   @override
   String get rateAndReviewThisApp => 'Nilai dan ulas aplikasi ini';
@@ -6552,8 +6509,232 @@ class AppLocalizationsMs extends AppLocalizations {
   String get learnMoreLink => 'ketahui lebih lanjut';
 
   @override
-  String get installsCount => 'Pemasangan';
+  String get moneyEarned => 'Wang yang diperoleh';
 
   @override
-  String get moneyEarned => 'Wang yang diperoleh';
+  String get writeYourReply => 'Write your reply...';
+
+  @override
+  String get replySentSuccessfully => 'Reply sent successfully';
+
+  @override
+  String failedToSendReply(String error) {
+    return 'Failed to send reply: $error';
+  }
+
+  @override
+  String get send => 'Send';
+
+  @override
+  String starFilter(int count) {
+    return '$count Star';
+  }
+
+  @override
+  String get noReviewsFound => 'No Reviews Found';
+
+  @override
+  String get editReply => 'Edit Reply';
+
+  @override
+  String get reply => 'Reply';
+
+  @override
+  String starFilterLabel(int count) {
+    return '$count bintang';
+  }
+
+  @override
+  String get sharePublicLink => 'Share Public Link';
+
+  @override
+  String get makePersonaPublic => 'Make Persona Public';
+
+  @override
+  String get connectedKnowledgeData => 'Connected Knowledge Data';
+
+  @override
+  String get enterName => 'Enter name';
+
+  @override
+  String get disconnectTwitter => 'Disconnect Twitter';
+
+  @override
+  String get disconnectTwitterConfirmation =>
+      'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
+
+  @override
+  String get getOmiDeviceDescription => 'Create a more accurate clone with your personal conversations';
+
+  @override
+  String get getOmi => 'Get Omi';
+
+  @override
+  String get iHaveOmiDevice => 'I have Omi device';
+
+  @override
+  String get goal => 'MATLAMAT';
+
+  @override
+  String get tapToTrackThisGoal => 'Ketik untuk menjejaki matlamat ini';
+
+  @override
+  String get tapToSetAGoal => 'Ketik untuk menetapkan matlamat';
+
+  @override
+  String get processedConversations => 'Perbualan yang Diproses';
+
+  @override
+  String get updatedConversations => 'Perbualan yang Dikemas Kini';
+
+  @override
+  String get newConversations => 'Perbualan Baharu';
+
+  @override
+  String get summaryTemplate => 'Templat Ringkasan';
+
+  @override
+  String get suggestedTemplates => 'Templat Dicadangkan';
+
+  @override
+  String get otherTemplates => 'Templat Lain';
+
+  @override
+  String get availableTemplates => 'Templat Tersedia';
+
+  @override
+  String get getCreative => 'Jadilah Kreatif';
+
+  @override
+  String get defaultLabel => 'Lalai';
+
+  @override
+  String get lastUsedLabel => 'Terakhir Digunakan';
+
+  @override
+  String get setDefaultApp => 'Tetapkan Aplikasi Lalai';
+
+  @override
+  String setDefaultAppContent(String appName) {
+    return 'Tetapkan $appName sebagai aplikasi ringkasan lalai anda?\\n\\nAplikasi ini akan digunakan secara automatik untuk semua ringkasan perbualan pada masa hadapan.';
+  }
+
+  @override
+  String get setDefaultButton => 'Tetapkan Lalai';
+
+  @override
+  String setAsDefaultSuccess(String appName) {
+    return '$appName ditetapkan sebagai aplikasi ringkasan lalai';
+  }
+
+  @override
+  String get createCustomTemplate => 'Cipta Templat Tersuai';
+
+  @override
+  String get allTemplates => 'Semua Templat';
+
+  @override
+  String failedToInstallApp(String appName) {
+    return 'Gagal memasang $appName. Sila cuba lagi.';
+  }
+
+  @override
+  String errorInstallingApp(String appName, String error) {
+    return 'Ralat memasang $appName: $error';
+  }
+
+  @override
+  String tagSpeaker(int speakerId) {
+    return 'Tag Speaker $speakerId';
+  }
+
+  @override
+  String get personNameAlreadyExists => 'A person with this name already exists.';
+
+  @override
+  String get selectYouFromList => 'To tag yourself, please select \"You\" from the list.';
+
+  @override
+  String get enterPersonsName => 'Enter Person\'s Name';
+
+  @override
+  String get addPerson => 'Add Person';
+
+  @override
+  String tagOtherSegmentsFromSpeaker(int selected, int total) {
+    return 'Tag other segments from this speaker ($selected/$total)';
+  }
+
+  @override
+  String get tagOtherSegments => 'Tag other segments';
+
+  @override
+  String get managePeople => 'Manage People';
+
+  @override
+  String get shareViaSms => 'Kongsi melalui SMS';
+
+  @override
+  String get selectContactsToShareSummary => 'Pilih kenalan untuk berkongsi ringkasan perbualan anda';
+
+  @override
+  String get searchContactsHint => 'Cari kenalan...';
+
+  @override
+  String contactsSelectedCount(int count) {
+    return '$count dipilih';
+  }
+
+  @override
+  String get clearAllSelection => 'Kosongkan semua';
+
+  @override
+  String get selectContactsToShare => 'Pilih kenalan untuk dikongsi';
+
+  @override
+  String shareWithContactCount(int count) {
+    return 'Kongsi dengan $count kenalan';
+  }
+
+  @override
+  String shareWithContactsCount(int count) {
+    return 'Kongsi dengan $count kenalan';
+  }
+
+  @override
+  String get contactsPermissionRequired => 'Kebenaran kenalan diperlukan';
+
+  @override
+  String get contactsPermissionRequiredForSms => 'Kebenaran kenalan diperlukan untuk berkongsi melalui SMS';
+
+  @override
+  String get grantContactsPermissionForSms => 'Sila berikan kebenaran kenalan untuk berkongsi melalui SMS';
+
+  @override
+  String get noContactsWithPhoneNumbers => 'Tiada kenalan dengan nombor telefon ditemui';
+
+  @override
+  String get noContactsMatchSearch => 'Tiada kenalan yang sepadan dengan carian anda';
+
+  @override
+  String get failedToLoadContacts => 'Gagal memuatkan kenalan';
+
+  @override
+  String get failedToPrepareConversationForSharing => 'Gagal menyediakan perbualan untuk dikongsi. Sila cuba lagi.';
+
+  @override
+  String get couldNotOpenSmsApp => 'Tidak dapat membuka aplikasi SMS. Sila cuba lagi.';
+
+  @override
+  String heresWhatWeDiscussed(String link) {
+    return 'Inilah yang baru kita bincangkan: $link';
+  }
+
+  @override
+  String get wifiSync => 'Penyegerakan WiFi';
+
+  @override
+  String itemCopiedToClipboard(String item) {
+    return '$item disalin ke papan keratan';
+  }
 }

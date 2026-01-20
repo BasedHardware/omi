@@ -357,7 +357,7 @@
   "permissionRevokedTitle": "Разрешение отозвано",
   "permissionRevokedMessage": "Хотите, чтобы мы удалили все ваши существующие записи тоже?",
   "yes": "Да",
-  "editName": "Изменить имя",
+  "editName": "Edit Name",
   "howShouldOmiCallYou": "Как Omi должен вас называть?",
   "enterYourName": "Введите ваше имя",
   "nameCannotBeEmpty": "Имя не может быть пустым",
@@ -988,7 +988,7 @@
   "help": "Помощь",
   "pro": "Pro",
   "upgradeToPro": "Обновить до Pro",
-  "getOmiDevice": "Получить устройство Omi",
+  "getOmiDevice": "Get Omi Device",
   "wearableAiCompanion": "Носимый AI-компаньон",
   "loadingMemories": "Загрузка воспоминаний...",
   "allMemories": "Все воспоминания",
@@ -1168,7 +1168,7 @@
   "selectTime": "Выбрать время",
   "accountGroup": "Аккаунт",
   "signOutQuestion": "Выйти?",
-  "signOutConfirmation": "Вы уверены, что хотите выйти?",
+  "signOutConfirmation": "Are you sure you want to sign out?",
   "customVocabularyHeader": "ПОЛЬЗОВАТЕЛЬСКИЙ СЛОВАРЬ",
   "addWordsDescription": "Добавьте слова, которые Omi должен распознавать во время транскрипции.",
   "enterWordsHint": "Введите слова (через запятую)",
@@ -2034,5 +2034,119 @@
   "cantRateWithoutInternet": "Невозможно оценить приложение без подключения к интернету.",
   "appAnalytics": "Аналитика приложения",
   "learnMoreLink": "узнать больше",
-  "moneyEarned": "Заработано"
+  "moneyEarned": "Заработано",
+  "starFilterLabel": "{count} звезда",
+  "@starFilterLabel": {
+    "description": "Filter chip label for star rating",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sharePublicLink": "Share Public Link",
+  "makePersonaPublic": "Make Persona Public",
+  "connectedKnowledgeData": "Connected Knowledge Data",
+  "enterName": "Enter name",
+  "disconnectTwitter": "Disconnect Twitter",
+  "disconnectTwitterConfirmation": "Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.",
+  "getOmiDeviceDescription": "Create a more accurate clone with your personal conversations",
+  "getOmi": "Get Omi",
+  "iHaveOmiDevice": "I have Omi device",
+  "goal": "ЦЕЛЬ",
+  "tapToTrackThisGoal": "Нажмите, чтобы отслеживать эту цель",
+  "tapToSetAGoal": "Нажмите, чтобы установить цель",
+  "processedConversations": "Обработанные разговоры",
+  "updatedConversations": "Обновлённые разговоры",
+  "newConversations": "Новые разговоры",
+  "summaryTemplate": "Шаблон сводки",
+  "suggestedTemplates": "Рекомендуемые шаблоны",
+  "otherTemplates": "Другие шаблоны",
+  "availableTemplates": "Доступные шаблоны",
+  "getCreative": "Будьте креативны",
+  "defaultLabel": "По умолчанию",
+  "lastUsedLabel": "Последнее использование",
+  "setDefaultApp": "Установить приложение по умолчанию",
+  "setDefaultAppContent": "Установить {appName} как приложение для сводок по умолчанию?\\n\\nЭто приложение будет автоматически использоваться для всех будущих сводок разговоров.",
+  "@setDefaultAppContent": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "setDefaultButton": "Установить по умолчанию",
+  "setAsDefaultSuccess": "{appName} установлено как приложение для сводок по умолчанию",
+  "@setAsDefaultSuccess": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "createCustomTemplate": "Создать свой шаблон",
+  "allTemplates": "Все шаблоны",
+  "failedToInstallApp": "Не удалось установить {appName}. Пожалуйста, попробуйте снова.",
+  "@failedToInstallApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "errorInstallingApp": "Ошибка установки {appName}: {error}",
+  "@errorInstallingApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tagSpeaker": "Tag Speaker {speakerId}",
+  "@tagSpeaker": {
+    "placeholders": {
+      "speakerId": {
+        "type": "int"
+      }
+    }
+  },
+  "personNameAlreadyExists": "A person with this name already exists.",
+  "selectYouFromList": "To tag yourself, please select \"You\" from the list.",
+  "enterPersonsName": "Enter Person's Name",
+  "addPerson": "Add Person",
+  "tagOtherSegmentsFromSpeaker": "Tag other segments from this speaker ({selected}/{total})",
+  "@tagOtherSegmentsFromSpeaker": {
+    "placeholders": {
+      "selected": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "tagOtherSegments": "Tag other segments",
+  "managePeople": "Manage People",
+  "shareViaSms": "Поделиться по SMS",
+  "selectContactsToShareSummary": "Выберите контакты для отправки сводки разговора",
+  "searchContactsHint": "Поиск контактов...",
+  "contactsSelectedCount": "{count} выбрано",
+  "clearAllSelection": "Очистить все",
+  "selectContactsToShare": "Выберите контакты для отправки",
+  "shareWithContactCount": "Отправить {count} контакту",
+  "shareWithContactsCount": "Отправить {count} контактам",
+  "contactsPermissionRequired": "Требуется разрешение на доступ к контактам",
+  "contactsPermissionRequiredForSms": "Для отправки по SMS требуется разрешение на доступ к контактам",
+  "grantContactsPermissionForSms": "Пожалуйста, предоставьте разрешение на доступ к контактам для отправки по SMS",
+  "noContactsWithPhoneNumbers": "Контакты с номерами телефонов не найдены",
+  "noContactsMatchSearch": "Контакты по вашему запросу не найдены",
+  "failedToLoadContacts": "Не удалось загрузить контакты",
+  "failedToPrepareConversationForSharing": "Не удалось подготовить разговор для отправки. Пожалуйста, попробуйте снова.",
+  "couldNotOpenSmsApp": "Не удалось открыть приложение SMS. Пожалуйста, попробуйте снова.",
+  "heresWhatWeDiscussed": "Вот о чём мы только что говорили: {link}",
+  "wifiSync": "Синхронизация WiFi",
+  "itemCopiedToClipboard": "{item} скопировано в буфер обмена"
 }

@@ -2787,7 +2787,7 @@ abstract class AppLocalizations {
   /// **'You\'ll need to authorize Omi to create tasks in your {appName} account. This will open your browser for authentication.'**
   String authorizeOmiForTasks(String appName);
 
-  /// Generic continue button text
+  /// Continue button label
   ///
   /// In en, this message translates to:
   /// **'Continue'**
@@ -5583,11 +5583,11 @@ abstract class AppLocalizations {
   /// **'Connect Now'**
   String get connectNow;
 
-  /// Number of app installs shown in app detail header
+  /// Label for number of app installs
   ///
   /// In en, this message translates to:
-  /// **'{count}+ installs'**
-  String installsCount(String count);
+  /// **'Installs'**
+  String get installsCount;
 
   /// Button label to uninstall an installed app
   ///
@@ -5673,7 +5673,7 @@ abstract class AppLocalizations {
   /// **'About the Persona'**
   String get aboutThePersona;
 
-  /// Section title for chat personality prompt
+  /// Title for chat personality section
   ///
   /// In en, this message translates to:
   /// **'Chat Personality'**
@@ -7803,7 +7803,7 @@ abstract class AppLocalizations {
   /// **'Invalid integration URL'**
   String get invalidIntegrationUrl;
 
-  /// Text prompting user to tap to complete setup
+  /// Instruction to tap to complete setup
   ///
   /// In en, this message translates to:
   /// **'Tap to complete'**
@@ -7815,13 +7815,13 @@ abstract class AppLocalizations {
   /// **'Invalid setup instructions URL'**
   String get invalidSetupInstructionsUrl;
 
-  /// Feature name for push to talk
+  /// Capability label for push to talk feature
   ///
   /// In en, this message translates to:
   /// **'Push to Talk'**
   String get pushToTalk;
 
-  /// Label for summary prompt
+  /// Title for summary prompt section
   ///
   /// In en, this message translates to:
   /// **'Summary Prompt'**
@@ -10977,12 +10977,6 @@ abstract class AppLocalizations {
   /// **'Chat Apps'**
   String get chatAppsTitle;
 
-  /// Title for chat assistants capability page
-  ///
-  /// In en, this message translates to:
-  /// **'Chat Assistants'**
-  String get chatAssistantsTitle;
-
   /// Section header for selecting an app
   ///
   /// In en, this message translates to:
@@ -11000,150 +10994,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Disable'**
   String get disable;
-
-  /// Permission title for reading conversations
-  String get permissionReadConversations;
-
-  /// Permission title for reading memories
-  String get permissionReadMemories;
-
-  /// Permission title for reading tasks
-  String get permissionReadTasks;
-
-  /// Permission title for creating conversations
-  String get permissionCreateConversations;
-
-  /// Permission title for creating memories
-  String get permissionCreateMemories;
-
-  /// Permission type label for access permissions
-  String get permissionTypeAccess;
-
-  /// Permission type label for create permissions
-  String get permissionTypeCreate;
-
-  /// Permission type label for trigger permissions
-  String get permissionTypeTrigger;
-
-  /// Description for read conversations permission
-  String get permissionDescReadConversations;
-
-  /// Description for read memories permission
-  String get permissionDescReadMemories;
-
-  /// Description for read tasks permission
-  String get permissionDescReadTasks;
-
-  /// Description for create conversations permission
-  String get permissionDescCreateConversations;
-
-  /// Description for create memories permission
-  String get permissionDescCreateMemories;
-
-  /// Label for realtime listening trigger
-  String get realtimeListening;
-
-  /// Error message for invalid integration URL
-  String get invalidIntegrationUrl;
-
-  /// Error message for invalid setup instructions URL
-  String get invalidSetupInstructionsUrl;
-
-  /// Status text when setup is completed
-  String get setupCompleted;
-
-  /// Instruction to tap to complete setup
-  String get tapToComplete;
-
-  /// Title for setup instructions page
-  String get setupInstructions;
-
-  /// Section title for app description
-  String get aboutTheApp;
-
-  /// Section title for persona description
-  String get aboutThePersona;
-
-  /// Capability label for push to talk feature
-  String get pushToTalk;
-
-  /// Title for summary prompt section
-  String get summaryPrompt;
-
-  /// Title for chat personality section
-  String get chatPersonality;
-
-  /// Section title for ratings and reviews
-  String get ratingsAndReviews;
-
-  /// Validation message to select a rating
-  String get pleaseSelectRating;
-
-  /// Success message when review is added
-  String get reviewAddedSuccessfully;
-
-  /// Success message when review is updated
-  String get reviewUpdatedSuccessfully;
-
-  /// Error message when review submission fails
-  String get failedToSubmitReview;
-
-  /// Hint text for review input field
-  String get writeReviewOptional;
-
-  /// Intro text for setup questions page
-  String get setupQuestionsIntro;
-
-  /// Question about profession
-  String get setupQuestionProfession;
-
-  /// Question about Omi usage location
-  String get setupQuestionUsage;
-
-  /// Question about age range
-  String get setupQuestionAge;
-
-  /// Error message when not all questions are answered
-  String get setupAnswerAllQuestions;
-
-  /// Continue button label
-  String get continueButton;
-
-  /// Skip button text for setup questions
-  String get setupSkipHelp;
-
-  /// Profession option: Entrepreneur
-  String get professionEntrepreneur;
-
-  /// Profession option: Software Engineer
-  String get professionSoftwareEngineer;
-
-  /// Profession option: Product Manager
-  String get professionProductManager;
-
-  /// Profession option: Executive
-  String get professionExecutive;
-
-  /// Profession option: Sales
-  String get professionSales;
-
-  /// Profession option: Student
-  String get professionStudent;
-
-  /// Usage location option: At work
-  String get usageAtWork;
-
-  /// Usage location option: IRL Events
-  String get usageIrlEvents;
-
-  /// Usage location option: Online
-  String get usageOnline;
-
-  /// Usage location option: In Social Settings
-  String get usageSocialSettings;
-
-  /// Usage location option: Everywhere
-  String get usageEverywhere;
 
   /// Action sheet option to select from photo library
   ///
@@ -11943,6 +11793,216 @@ abstract class AppLocalizations {
   /// **'Device'**
   String get device;
 
+  /// Title for chat assistants capability page
+  ///
+  /// In en, this message translates to:
+  /// **'Chat Assistants'**
+  String get chatAssistantsTitle;
+
+  /// Permission title for reading conversations
+  ///
+  /// In en, this message translates to:
+  /// **'Read Conversations'**
+  String get permissionReadConversations;
+
+  /// Permission title for reading memories
+  ///
+  /// In en, this message translates to:
+  /// **'Read Memories'**
+  String get permissionReadMemories;
+
+  /// Permission title for reading tasks
+  ///
+  /// In en, this message translates to:
+  /// **'Read Tasks'**
+  String get permissionReadTasks;
+
+  /// Permission title for creating conversations
+  ///
+  /// In en, this message translates to:
+  /// **'Create Conversations'**
+  String get permissionCreateConversations;
+
+  /// Permission title for creating memories
+  ///
+  /// In en, this message translates to:
+  /// **'Create Memories'**
+  String get permissionCreateMemories;
+
+  /// Permission type label for access permissions
+  ///
+  /// In en, this message translates to:
+  /// **'Access'**
+  String get permissionTypeAccess;
+
+  /// Permission type label for create permissions
+  ///
+  /// In en, this message translates to:
+  /// **'Create'**
+  String get permissionTypeCreate;
+
+  /// Permission type label for trigger permissions
+  ///
+  /// In en, this message translates to:
+  /// **'Trigger'**
+  String get permissionTypeTrigger;
+
+  /// Description for read conversations permission
+  ///
+  /// In en, this message translates to:
+  /// **'This app can access your conversations.'**
+  String get permissionDescReadConversations;
+
+  /// Description for read memories permission
+  ///
+  /// In en, this message translates to:
+  /// **'This app can access your memories.'**
+  String get permissionDescReadMemories;
+
+  /// Description for read tasks permission
+  ///
+  /// In en, this message translates to:
+  /// **'This app can access your tasks.'**
+  String get permissionDescReadTasks;
+
+  /// Description for create conversations permission
+  ///
+  /// In en, this message translates to:
+  /// **'This app can create new conversations.'**
+  String get permissionDescCreateConversations;
+
+  /// Description for create memories permission
+  ///
+  /// In en, this message translates to:
+  /// **'This app can create new memories.'**
+  String get permissionDescCreateMemories;
+
+  /// Label for realtime listening trigger
+  ///
+  /// In en, this message translates to:
+  /// **'Realtime Listening'**
+  String get realtimeListening;
+
+  /// Status text when setup is completed
+  ///
+  /// In en, this message translates to:
+  /// **'Completed'**
+  String get setupCompleted;
+
+  /// Validation message to select a rating
+  ///
+  /// In en, this message translates to:
+  /// **'Please select a rating'**
+  String get pleaseSelectRating;
+
+  /// Hint text for review input field
+  ///
+  /// In en, this message translates to:
+  /// **'Write a review (optional)'**
+  String get writeReviewOptional;
+
+  /// Intro text for setup questions page
+  ///
+  /// In en, this message translates to:
+  /// **'Help us improve Omi by answering a few questions.  🫶 💜'**
+  String get setupQuestionsIntro;
+
+  /// Question about profession
+  ///
+  /// In en, this message translates to:
+  /// **'1. What do you do?'**
+  String get setupQuestionProfession;
+
+  /// Question about Omi usage location
+  ///
+  /// In en, this message translates to:
+  /// **'2. Where do you plan to use your Omi?'**
+  String get setupQuestionUsage;
+
+  /// Question about age range
+  ///
+  /// In en, this message translates to:
+  /// **'3. What\'s your age range?'**
+  String get setupQuestionAge;
+
+  /// Error message when not all questions are answered
+  ///
+  /// In en, this message translates to:
+  /// **'You haven\'t answered all the questions yet! 🥺'**
+  String get setupAnswerAllQuestions;
+
+  /// Skip button text for setup questions
+  ///
+  /// In en, this message translates to:
+  /// **'Skip, I don\'t want to help :C'**
+  String get setupSkipHelp;
+
+  /// Profession option: Entrepreneur
+  ///
+  /// In en, this message translates to:
+  /// **'Entrepreneur'**
+  String get professionEntrepreneur;
+
+  /// Profession option: Software Engineer
+  ///
+  /// In en, this message translates to:
+  /// **'Software Engineer'**
+  String get professionSoftwareEngineer;
+
+  /// Profession option: Product Manager
+  ///
+  /// In en, this message translates to:
+  /// **'Product Manager'**
+  String get professionProductManager;
+
+  /// Profession option: Executive
+  ///
+  /// In en, this message translates to:
+  /// **'Executive'**
+  String get professionExecutive;
+
+  /// Profession option: Sales
+  ///
+  /// In en, this message translates to:
+  /// **'Sales'**
+  String get professionSales;
+
+  /// Profession option: Student
+  ///
+  /// In en, this message translates to:
+  /// **'Student'**
+  String get professionStudent;
+
+  /// Usage location option: At work
+  ///
+  /// In en, this message translates to:
+  /// **'At work'**
+  String get usageAtWork;
+
+  /// Usage location option: IRL Events
+  ///
+  /// In en, this message translates to:
+  /// **'IRL Events'**
+  String get usageIrlEvents;
+
+  /// Usage location option: Online
+  ///
+  /// In en, this message translates to:
+  /// **'Online'**
+  String get usageOnline;
+
+  /// Usage location option: In Social Settings
+  ///
+  /// In en, this message translates to:
+  /// **'In Social Settings'**
+  String get usageSocialSettings;
+
+  /// Usage location option: Everywhere
+  ///
+  /// In en, this message translates to:
+  /// **'Everywhere'**
+  String get usageEverywhere;
+
   /// Title for custom backend URL page
   ///
   /// In en, this message translates to:
@@ -11970,7 +12030,7 @@ abstract class AppLocalizations {
   /// Error when URL does not end with slash
   ///
   /// In en, this message translates to:
-  /// **'URL must end with "/"'**
+  /// **'URL must end with \"/\"'**
   String get urlMustEndWithSlashError;
 
   /// Error when URL format is invalid
@@ -12174,7 +12234,7 @@ abstract class AppLocalizations {
   /// Error message when trying to rate without internet
   ///
   /// In en, this message translates to:
-  /// **'Can't rate app without internet connection.'**
+  /// **'Can\'t rate app without internet connection.'**
   String get cantRateWithoutInternet;
 
   /// Title for app analytics section
@@ -12189,17 +12249,407 @@ abstract class AppLocalizations {
   /// **'learn more'**
   String get learnMoreLink;
 
-  /// Label for number of app installs
-  ///
-  /// In en, this message translates to:
-  /// **'Installs'**
-  String get installsCount;
-
   /// Label for money earned from app
   ///
   /// In en, this message translates to:
   /// **'Money Earned'**
   String get moneyEarned;
+
+  /// Hint text for reply input field
+  ///
+  /// In en, this message translates to:
+  /// **'Write your reply...'**
+  String get writeYourReply;
+
+  /// Success message after sending a reply
+  ///
+  /// In en, this message translates to:
+  /// **'Reply sent successfully'**
+  String get replySentSuccessfully;
+
+  /// Error message when reply fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to send reply: {error}'**
+  String failedToSendReply(String error);
+
+  /// Button text to send a message or reply
+  ///
+  /// In en, this message translates to:
+  /// **'Send'**
+  String get send;
+
+  /// Filter chip for star rating
+  ///
+  /// In en, this message translates to:
+  /// **'{count} Star'**
+  String starFilter(int count);
+
+  /// Empty state message when no reviews match filter
+  ///
+  /// In en, this message translates to:
+  /// **'No Reviews Found'**
+  String get noReviewsFound;
+
+  /// Button text to edit an existing reply
+  ///
+  /// In en, this message translates to:
+  /// **'Edit Reply'**
+  String get editReply;
+
+  /// Button text to reply to something
+  ///
+  /// In en, this message translates to:
+  /// **'Reply'**
+  String get reply;
+
+  /// Filter chip label for star rating
+  ///
+  /// In en, this message translates to:
+  /// **'{count} Star'**
+  String starFilterLabel(int count);
+
+  /// No description provided for @sharePublicLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Share Public Link'**
+  String get sharePublicLink;
+
+  /// No description provided for @makePersonaPublic.
+  ///
+  /// In en, this message translates to:
+  /// **'Make Persona Public'**
+  String get makePersonaPublic;
+
+  /// No description provided for @connectedKnowledgeData.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected Knowledge Data'**
+  String get connectedKnowledgeData;
+
+  /// No description provided for @enterName.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter name'**
+  String get enterName;
+
+  /// No description provided for @disconnectTwitter.
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnect Twitter'**
+  String get disconnectTwitter;
+
+  /// No description provided for @disconnectTwitterConfirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.'**
+  String get disconnectTwitterConfirmation;
+
+  /// No description provided for @getOmiDeviceDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Create a more accurate clone with your personal conversations'**
+  String get getOmiDeviceDescription;
+
+  /// No description provided for @getOmi.
+  ///
+  /// In en, this message translates to:
+  /// **'Get Omi'**
+  String get getOmi;
+
+  /// No description provided for @iHaveOmiDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'I have Omi device'**
+  String get iHaveOmiDevice;
+
+  /// No description provided for @goal.
+  ///
+  /// In en, this message translates to:
+  /// **'GOAL'**
+  String get goal;
+
+  /// No description provided for @tapToTrackThisGoal.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to track this goal'**
+  String get tapToTrackThisGoal;
+
+  /// No description provided for @tapToSetAGoal.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to set a goal'**
+  String get tapToSetAGoal;
+
+  /// No description provided for @processedConversations.
+  ///
+  /// In en, this message translates to:
+  /// **'Processed Conversations'**
+  String get processedConversations;
+
+  /// No description provided for @updatedConversations.
+  ///
+  /// In en, this message translates to:
+  /// **'Updated Conversations'**
+  String get updatedConversations;
+
+  /// No description provided for @newConversations.
+  ///
+  /// In en, this message translates to:
+  /// **'New Conversations'**
+  String get newConversations;
+
+  /// No description provided for @summaryTemplate.
+  ///
+  /// In en, this message translates to:
+  /// **'Summary Template'**
+  String get summaryTemplate;
+
+  /// No description provided for @suggestedTemplates.
+  ///
+  /// In en, this message translates to:
+  /// **'Suggested Templates'**
+  String get suggestedTemplates;
+
+  /// No description provided for @otherTemplates.
+  ///
+  /// In en, this message translates to:
+  /// **'Other Templates'**
+  String get otherTemplates;
+
+  /// No description provided for @availableTemplates.
+  ///
+  /// In en, this message translates to:
+  /// **'Available Templates'**
+  String get availableTemplates;
+
+  /// No description provided for @getCreative.
+  ///
+  /// In en, this message translates to:
+  /// **'Get Creative'**
+  String get getCreative;
+
+  /// No description provided for @defaultLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Default'**
+  String get defaultLabel;
+
+  /// No description provided for @lastUsedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Last Used'**
+  String get lastUsedLabel;
+
+  /// No description provided for @setDefaultApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Set Default App'**
+  String get setDefaultApp;
+
+  /// No description provided for @setDefaultAppContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Set {appName} as your default summarization app?\\n\\nThis app will be automatically used for all future conversation summaries.'**
+  String setDefaultAppContent(String appName);
+
+  /// No description provided for @setDefaultButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Set Default'**
+  String get setDefaultButton;
+
+  /// No description provided for @setAsDefaultSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'{appName} set as default summarization app'**
+  String setAsDefaultSuccess(String appName);
+
+  /// No description provided for @createCustomTemplate.
+  ///
+  /// In en, this message translates to:
+  /// **'Create Custom Template'**
+  String get createCustomTemplate;
+
+  /// No description provided for @allTemplates.
+  ///
+  /// In en, this message translates to:
+  /// **'All Templates'**
+  String get allTemplates;
+
+  /// No description provided for @failedToInstallApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to install {appName}. Please try again.'**
+  String failedToInstallApp(String appName);
+
+  /// No description provided for @errorInstallingApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Error installing {appName}: {error}'**
+  String errorInstallingApp(String appName, String error);
+
+  /// No description provided for @tagSpeaker.
+  ///
+  /// In en, this message translates to:
+  /// **'Tag Speaker {speakerId}'**
+  String tagSpeaker(int speakerId);
+
+  /// No description provided for @personNameAlreadyExists.
+  ///
+  /// In en, this message translates to:
+  /// **'A person with this name already exists.'**
+  String get personNameAlreadyExists;
+
+  /// No description provided for @selectYouFromList.
+  ///
+  /// In en, this message translates to:
+  /// **'To tag yourself, please select \"You\" from the list.'**
+  String get selectYouFromList;
+
+  /// No description provided for @enterPersonsName.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter Person\'s Name'**
+  String get enterPersonsName;
+
+  /// No description provided for @addPerson.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Person'**
+  String get addPerson;
+
+  /// No description provided for @tagOtherSegmentsFromSpeaker.
+  ///
+  /// In en, this message translates to:
+  /// **'Tag other segments from this speaker ({selected}/{total})'**
+  String tagOtherSegmentsFromSpeaker(int selected, int total);
+
+  /// No description provided for @tagOtherSegments.
+  ///
+  /// In en, this message translates to:
+  /// **'Tag other segments'**
+  String get tagOtherSegments;
+
+  /// No description provided for @managePeople.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage People'**
+  String get managePeople;
+
+  /// Title for share to contacts sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Share via SMS'**
+  String get shareViaSms;
+
+  /// Subtitle for share to contacts sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Select contacts to share your conversation summary'**
+  String get selectContactsToShareSummary;
+
+  /// Hint text for contacts search field
+  ///
+  /// In en, this message translates to:
+  /// **'Search contacts...'**
+  String get searchContactsHint;
+
+  /// Shows count of selected contacts
+  ///
+  /// In en, this message translates to:
+  /// **'{count} selected'**
+  String contactsSelectedCount(int count);
+
+  /// Button to clear all selected contacts
+  ///
+  /// In en, this message translates to:
+  /// **'Clear all'**
+  String get clearAllSelection;
+
+  /// Button text when no contacts are selected
+  ///
+  /// In en, this message translates to:
+  /// **'Select contacts to share'**
+  String get selectContactsToShare;
+
+  /// Button text when 1 contact selected
+  ///
+  /// In en, this message translates to:
+  /// **'Share with {count} contact'**
+  String shareWithContactCount(int count);
+
+  /// Button text when multiple contacts selected
+  ///
+  /// In en, this message translates to:
+  /// **'Share with {count} contacts'**
+  String shareWithContactsCount(int count);
+
+  /// Title when contacts permission is denied
+  ///
+  /// In en, this message translates to:
+  /// **'Contacts permission required'**
+  String get contactsPermissionRequired;
+
+  /// Error message when contacts permission is denied
+  ///
+  /// In en, this message translates to:
+  /// **'Contacts permission is required to share via SMS'**
+  String get contactsPermissionRequiredForSms;
+
+  /// Message asking user to grant contacts permission
+  ///
+  /// In en, this message translates to:
+  /// **'Please grant contacts permission to share via SMS'**
+  String get grantContactsPermissionForSms;
+
+  /// Message when no contacts have phone numbers
+  ///
+  /// In en, this message translates to:
+  /// **'No contacts with phone numbers found'**
+  String get noContactsWithPhoneNumbers;
+
+  /// Message when search returns no results
+  ///
+  /// In en, this message translates to:
+  /// **'No contacts match your search'**
+  String get noContactsMatchSearch;
+
+  /// Error message when contacts fail to load
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to load contacts'**
+  String get failedToLoadContacts;
+
+  /// Error when sharing preparation fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to prepare conversation for sharing. Please try again.'**
+  String get failedToPrepareConversationForSharing;
+
+  /// Error when SMS app cannot be opened
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open SMS app. Please try again.'**
+  String get couldNotOpenSmsApp;
+
+  /// SMS message body with share link
+  ///
+  /// In en, this message translates to:
+  /// **'Here\'s what we just discussed: {link}'**
+  String heresWhatWeDiscussed(String link);
+
+  /// WiFi sync feature label
+  ///
+  /// In en, this message translates to:
+  /// **'WiFi Sync'**
+  String get wifiSync;
+
+  /// Message when item is copied to clipboard
+  ///
+  /// In en, this message translates to:
+  /// **'{item} copied to clipboard'**
+  String itemCopiedToClipboard(String item);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

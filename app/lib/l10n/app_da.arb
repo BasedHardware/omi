@@ -357,7 +357,7 @@
   "permissionRevokedTitle": "Tilladelse tilbagekaldt",
   "permissionRevokedMessage": "Vil du have os til også at fjerne alle dine eksisterende optagelser?",
   "yes": "Ja",
-  "editName": "Rediger navn",
+  "editName": "Edit Name",
   "howShouldOmiCallYou": "Hvad skal Omi kalde dig?",
   "enterYourName": "Indtast dit navn",
   "nameCannotBeEmpty": "Navn kan ikke være tomt",
@@ -988,7 +988,7 @@
   "help": "Hjælp",
   "pro": "Pro",
   "upgradeToPro": "Opgrader til Pro",
-  "getOmiDevice": "Få Omi-enhed",
+  "getOmiDevice": "Get Omi Device",
   "wearableAiCompanion": "Bærbar AI-ledsager",
   "loadingMemories": "Indlæser minder...",
   "allMemories": "Alle minder",
@@ -1168,7 +1168,7 @@
   "selectTime": "Vælg tid",
   "accountGroup": "Konto",
   "signOutQuestion": "Log ud?",
-  "signOutConfirmation": "Er du sikker på, at du vil logge ud?",
+  "signOutConfirmation": "Are you sure you want to sign out?",
   "customVocabularyHeader": "BRUGERDEFINERET ORDFORRÅD",
   "addWordsDescription": "Tilføj ord, som Omi skal genkende under transskription.",
   "enterWordsHint": "Indtast ord (kommasepareret)",
@@ -1992,5 +1992,119 @@
   "cantRateWithoutInternet": "Kan ikke bedømme app uden internetforbindelse.",
   "appAnalytics": "App-analyse",
   "learnMoreLink": "lær mere",
-  "moneyEarned": "Penge tjent"
+  "moneyEarned": "Penge tjent",
+  "starFilterLabel": "{count} stjerne",
+  "@starFilterLabel": {
+    "description": "Filter chip label for star rating",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sharePublicLink": "Share Public Link",
+  "makePersonaPublic": "Make Persona Public",
+  "connectedKnowledgeData": "Connected Knowledge Data",
+  "enterName": "Enter name",
+  "disconnectTwitter": "Disconnect Twitter",
+  "disconnectTwitterConfirmation": "Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.",
+  "getOmiDeviceDescription": "Create a more accurate clone with your personal conversations",
+  "getOmi": "Get Omi",
+  "iHaveOmiDevice": "I have Omi device",
+  "goal": "MÅL",
+  "tapToTrackThisGoal": "Tryk for at spore dette mål",
+  "tapToSetAGoal": "Tryk for at sætte et mål",
+  "processedConversations": "Behandlede samtaler",
+  "updatedConversations": "Opdaterede samtaler",
+  "newConversations": "Nye samtaler",
+  "summaryTemplate": "Resuméskabelon",
+  "suggestedTemplates": "Foreslåede skabeloner",
+  "otherTemplates": "Andre skabeloner",
+  "availableTemplates": "Tilgængelige skabeloner",
+  "getCreative": "Vær kreativ",
+  "defaultLabel": "Standard",
+  "lastUsedLabel": "Sidst brugt",
+  "setDefaultApp": "Angiv standardapp",
+  "setDefaultAppContent": "Angiv {appName} som din standardapp til resuméer?\\n\\nDenne app vil automatisk blive brugt til alle fremtidige samtaleresuméer.",
+  "@setDefaultAppContent": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "setDefaultButton": "Angiv standard",
+  "setAsDefaultSuccess": "{appName} angivet som standardapp til resuméer",
+  "@setAsDefaultSuccess": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "createCustomTemplate": "Opret brugerdefineret skabelon",
+  "allTemplates": "Alle skabeloner",
+  "failedToInstallApp": "Kunne ikke installere {appName}. Prøv igen.",
+  "@failedToInstallApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "errorInstallingApp": "Fejl ved installation af {appName}: {error}",
+  "@errorInstallingApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tagSpeaker": "Tag Speaker {speakerId}",
+  "@tagSpeaker": {
+    "placeholders": {
+      "speakerId": {
+        "type": "int"
+      }
+    }
+  },
+  "personNameAlreadyExists": "A person with this name already exists.",
+  "selectYouFromList": "To tag yourself, please select \"You\" from the list.",
+  "enterPersonsName": "Enter Person's Name",
+  "addPerson": "Add Person",
+  "tagOtherSegmentsFromSpeaker": "Tag other segments from this speaker ({selected}/{total})",
+  "@tagOtherSegmentsFromSpeaker": {
+    "placeholders": {
+      "selected": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "tagOtherSegments": "Tag other segments",
+  "managePeople": "Manage People",
+  "shareViaSms": "Del via SMS",
+  "selectContactsToShareSummary": "Vælg kontakter til at dele dit samtaleresumé",
+  "searchContactsHint": "Søg kontakter...",
+  "contactsSelectedCount": "{count} valgt",
+  "clearAllSelection": "Ryd alt",
+  "selectContactsToShare": "Vælg kontakter at dele med",
+  "shareWithContactCount": "Del med {count} kontakt",
+  "shareWithContactsCount": "Del med {count} kontakter",
+  "contactsPermissionRequired": "Kontakttilladelse påkrævet",
+  "contactsPermissionRequiredForSms": "Kontakttilladelse er påkrævet for at dele via SMS",
+  "grantContactsPermissionForSms": "Giv venligst kontakttilladelse for at dele via SMS",
+  "noContactsWithPhoneNumbers": "Ingen kontakter med telefonnumre fundet",
+  "noContactsMatchSearch": "Ingen kontakter matcher din søgning",
+  "failedToLoadContacts": "Kunne ikke indlæse kontakter",
+  "failedToPrepareConversationForSharing": "Kunne ikke forberede samtalen til deling. Prøv venligst igen.",
+  "couldNotOpenSmsApp": "Kunne ikke åbne SMS-appen. Prøv venligst igen.",
+  "heresWhatWeDiscussed": "Her er hvad vi lige har diskuteret: {link}",
+  "wifiSync": "WiFi-synkronisering",
+  "itemCopiedToClipboard": "{item} kopieret til udklipsholder"
 }

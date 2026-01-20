@@ -1130,7 +1130,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get yes => 'はい';
 
   @override
-  String get editName => '名前を編集';
+  String get editName => 'Edit Name';
 
   @override
   String get howShouldOmiCallYou => 'Omiはあなたをどう呼べばいいですか？';
@@ -2852,9 +2852,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get connectNow => '今すぐ接続';
 
   @override
-  String installsCount(String count) {
-    return '$count+インストール';
-  }
+  String get installsCount => 'インストール';
 
   @override
   String get uninstallApp => 'アプリをアンインストール';
@@ -3212,7 +3210,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get upgradeToPro => 'Proにアップグレード';
 
   @override
-  String get getOmiDevice => 'Omiデバイスを入手';
+  String get getOmiDevice => 'Get Omi Device';
 
   @override
   String get wearableAiCompanion => 'ウェアラブルAIコンパニオン';
@@ -3767,7 +3765,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get signOutQuestion => 'サインアウトしますか？';
 
   @override
-  String get signOutConfirmation => '本当にサインアウトしますか？';
+  String get signOutConfirmation => 'Are you sure you want to sign out?';
 
   @override
   String get customVocabularyHeader => 'カスタム語彙';
@@ -5697,9 +5695,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get chatAppsTitle => 'チャットアプリ';
 
   @override
-  String get chatAssistantsTitle => 'チャットアシスタント';
-
-  @override
   String get selectApp => 'アプリを選択';
 
   @override
@@ -5707,150 +5702,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get disable => '無効化';
-
-  @override
-  String get permissionReadConversations => '会話を読む';
-
-  @override
-  String get permissionReadMemories => 'メモリーを読む';
-
-  @override
-  String get permissionReadTasks => 'タスクを読む';
-
-  @override
-  String get permissionCreateConversations => '会話を作成';
-
-  @override
-  String get permissionCreateMemories => 'メモリーを作成';
-
-  @override
-  String get permissionTypeAccess => 'アクセス';
-
-  @override
-  String get permissionTypeCreate => '作成';
-
-  @override
-  String get permissionTypeTrigger => 'トリガー';
-
-  @override
-  String get permissionDescReadConversations => 'このアプリはあなたの会話にアクセスできます。';
-
-  @override
-  String get permissionDescReadMemories => 'このアプリはあなたのメモリーにアクセスできます。';
-
-  @override
-  String get permissionDescReadTasks => 'このアプリはあなたのタスクにアクセスできます。';
-
-  @override
-  String get permissionDescCreateConversations => 'このアプリは新しい会話を作成できます。';
-
-  @override
-  String get permissionDescCreateMemories => 'このアプリは新しいメモリーを作成できます。';
-
-  @override
-  String get realtimeListening => 'リアルタイムリスニング';
-
-  @override
-  String get invalidIntegrationUrl => '無効な統合URL';
-
-  @override
-  String get invalidSetupInstructionsUrl => '無効なセットアップ手順URL';
-
-  @override
-  String get setupCompleted => '完了';
-
-  @override
-  String get tapToComplete => 'タップして完了';
-
-  @override
-  String get setupInstructions => 'セットアップ手順';
-
-  @override
-  String get aboutTheApp => 'アプリについて';
-
-  @override
-  String get aboutThePersona => 'ペルソナについて';
-
-  @override
-  String get pushToTalk => 'プッシュトゥトーク';
-
-  @override
-  String get summaryPrompt => '要約プロンプト';
-
-  @override
-  String get chatPersonality => 'チャットパーソナリティ';
-
-  @override
-  String get ratingsAndReviews => '評価とレビュー';
-
-  @override
-  String get pleaseSelectRating => '評価を選択してください';
-
-  @override
-  String get reviewAddedSuccessfully => 'レビューが正常に追加されました 🚀';
-
-  @override
-  String get reviewUpdatedSuccessfully => 'レビューが正常に更新されました 🚀';
-
-  @override
-  String get failedToSubmitReview => 'レビューの送信に失敗しました。もう一度お試しください。';
-
-  @override
-  String get writeReviewOptional => 'レビューを書く（任意）';
-
-  @override
-  String get setupQuestionsIntro => 'いくつかの質問に答えて、Omiの改善にご協力ください。 🫶 💜';
-
-  @override
-  String get setupQuestionProfession => '1. お仕事は何をされていますか？';
-
-  @override
-  String get setupQuestionUsage => '2. Omiをどこで使う予定ですか？';
-
-  @override
-  String get setupQuestionAge => '3. 年齢層を教えてください';
-
-  @override
-  String get setupAnswerAllQuestions => 'まだすべての質問に答えていません！ 🥺';
-
-  @override
-  String get continueButton => '続ける';
-
-  @override
-  String get setupSkipHelp => 'スキップ、協力しません :C';
-
-  @override
-  String get professionEntrepreneur => '起業家';
-
-  @override
-  String get professionSoftwareEngineer => 'ソフトウェアエンジニア';
-
-  @override
-  String get professionProductManager => 'プロダクトマネージャー';
-
-  @override
-  String get professionExecutive => 'エグゼクティブ';
-
-  @override
-  String get professionSales => '営業';
-
-  @override
-  String get professionStudent => '学生';
-
-  @override
-  String get usageAtWork => '仕事で';
-
-  @override
-  String get usageIrlEvents => 'リアルイベントで';
-
-  @override
-  String get usageOnline => 'オンラインで';
-
-  @override
-  String get usageSocialSettings => '社交の場で';
-
-  @override
-  String get usageEverywhere => 'どこでも';
 
   @override
   String get photoLibrary => 'フォトライブラリ';
@@ -6295,6 +6146,111 @@ class AppLocalizationsJa extends AppLocalizations {
   String get device => 'Device';
 
   @override
+  String get chatAssistantsTitle => 'チャットアシスタント';
+
+  @override
+  String get permissionReadConversations => '会話を読む';
+
+  @override
+  String get permissionReadMemories => 'メモリーを読む';
+
+  @override
+  String get permissionReadTasks => 'タスクを読む';
+
+  @override
+  String get permissionCreateConversations => '会話を作成';
+
+  @override
+  String get permissionCreateMemories => 'メモリーを作成';
+
+  @override
+  String get permissionTypeAccess => 'アクセス';
+
+  @override
+  String get permissionTypeCreate => '作成';
+
+  @override
+  String get permissionTypeTrigger => 'トリガー';
+
+  @override
+  String get permissionDescReadConversations => 'このアプリはあなたの会話にアクセスできます。';
+
+  @override
+  String get permissionDescReadMemories => 'このアプリはあなたのメモリーにアクセスできます。';
+
+  @override
+  String get permissionDescReadTasks => 'このアプリはあなたのタスクにアクセスできます。';
+
+  @override
+  String get permissionDescCreateConversations => 'このアプリは新しい会話を作成できます。';
+
+  @override
+  String get permissionDescCreateMemories => 'このアプリは新しいメモリーを作成できます。';
+
+  @override
+  String get realtimeListening => 'リアルタイムリスニング';
+
+  @override
+  String get setupCompleted => '完了';
+
+  @override
+  String get pleaseSelectRating => '評価を選択してください';
+
+  @override
+  String get writeReviewOptional => 'レビューを書く（任意）';
+
+  @override
+  String get setupQuestionsIntro => 'いくつかの質問に答えて、Omiの改善にご協力ください。 🫶 💜';
+
+  @override
+  String get setupQuestionProfession => '1. お仕事は何をされていますか？';
+
+  @override
+  String get setupQuestionUsage => '2. Omiをどこで使う予定ですか？';
+
+  @override
+  String get setupQuestionAge => '3. 年齢層を教えてください';
+
+  @override
+  String get setupAnswerAllQuestions => 'まだすべての質問に答えていません！ 🥺';
+
+  @override
+  String get setupSkipHelp => 'スキップ、協力しません :C';
+
+  @override
+  String get professionEntrepreneur => '起業家';
+
+  @override
+  String get professionSoftwareEngineer => 'ソフトウェアエンジニア';
+
+  @override
+  String get professionProductManager => 'プロダクトマネージャー';
+
+  @override
+  String get professionExecutive => 'エグゼクティブ';
+
+  @override
+  String get professionSales => '営業';
+
+  @override
+  String get professionStudent => '学生';
+
+  @override
+  String get usageAtWork => '仕事で';
+
+  @override
+  String get usageIrlEvents => 'リアルイベントで';
+
+  @override
+  String get usageOnline => 'オンラインで';
+
+  @override
+  String get usageSocialSettings => '社交の場で';
+
+  @override
+  String get usageEverywhere => 'どこでも';
+
+  @override
   String get customBackendUrlTitle => 'カスタムバックエンドURL';
 
   @override
@@ -6420,8 +6376,232 @@ class AppLocalizationsJa extends AppLocalizations {
   String get learnMoreLink => '詳細';
 
   @override
-  String get installsCount => 'インストール';
+  String get moneyEarned => '収益';
 
   @override
-  String get moneyEarned => '収益';
+  String get writeYourReply => 'Write your reply...';
+
+  @override
+  String get replySentSuccessfully => 'Reply sent successfully';
+
+  @override
+  String failedToSendReply(String error) {
+    return 'Failed to send reply: $error';
+  }
+
+  @override
+  String get send => 'Send';
+
+  @override
+  String starFilter(int count) {
+    return '$count Star';
+  }
+
+  @override
+  String get noReviewsFound => 'No Reviews Found';
+
+  @override
+  String get editReply => 'Edit Reply';
+
+  @override
+  String get reply => 'Reply';
+
+  @override
+  String starFilterLabel(int count) {
+    return '$countつ星';
+  }
+
+  @override
+  String get sharePublicLink => 'Share Public Link';
+
+  @override
+  String get makePersonaPublic => 'Make Persona Public';
+
+  @override
+  String get connectedKnowledgeData => 'Connected Knowledge Data';
+
+  @override
+  String get enterName => 'Enter name';
+
+  @override
+  String get disconnectTwitter => 'Disconnect Twitter';
+
+  @override
+  String get disconnectTwitterConfirmation =>
+      'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
+
+  @override
+  String get getOmiDeviceDescription => 'Create a more accurate clone with your personal conversations';
+
+  @override
+  String get getOmi => 'Get Omi';
+
+  @override
+  String get iHaveOmiDevice => 'I have Omi device';
+
+  @override
+  String get goal => '目標';
+
+  @override
+  String get tapToTrackThisGoal => 'タップしてこの目標を追跡';
+
+  @override
+  String get tapToSetAGoal => 'タップして目標を設定';
+
+  @override
+  String get processedConversations => '処理済みの会話';
+
+  @override
+  String get updatedConversations => '更新された会話';
+
+  @override
+  String get newConversations => '新しい会話';
+
+  @override
+  String get summaryTemplate => '要約テンプレート';
+
+  @override
+  String get suggestedTemplates => 'おすすめのテンプレート';
+
+  @override
+  String get otherTemplates => 'その他のテンプレート';
+
+  @override
+  String get availableTemplates => '利用可能なテンプレート';
+
+  @override
+  String get getCreative => 'クリエイティブに';
+
+  @override
+  String get defaultLabel => 'デフォルト';
+
+  @override
+  String get lastUsedLabel => '最後に使用';
+
+  @override
+  String get setDefaultApp => 'デフォルトアプリを設定';
+
+  @override
+  String setDefaultAppContent(String appName) {
+    return '$appNameをデフォルトの要約アプリとして設定しますか？\\n\\nこのアプリは今後のすべての会話の要約に自動的に使用されます。';
+  }
+
+  @override
+  String get setDefaultButton => 'デフォルトに設定';
+
+  @override
+  String setAsDefaultSuccess(String appName) {
+    return '$appNameがデフォルトの要約アプリとして設定されました';
+  }
+
+  @override
+  String get createCustomTemplate => 'カスタムテンプレートを作成';
+
+  @override
+  String get allTemplates => 'すべてのテンプレート';
+
+  @override
+  String failedToInstallApp(String appName) {
+    return '$appNameのインストールに失敗しました。もう一度お試しください。';
+  }
+
+  @override
+  String errorInstallingApp(String appName, String error) {
+    return '$appNameのインストール中にエラーが発生: $error';
+  }
+
+  @override
+  String tagSpeaker(int speakerId) {
+    return 'Tag Speaker $speakerId';
+  }
+
+  @override
+  String get personNameAlreadyExists => 'A person with this name already exists.';
+
+  @override
+  String get selectYouFromList => 'To tag yourself, please select \"You\" from the list.';
+
+  @override
+  String get enterPersonsName => 'Enter Person\'s Name';
+
+  @override
+  String get addPerson => 'Add Person';
+
+  @override
+  String tagOtherSegmentsFromSpeaker(int selected, int total) {
+    return 'Tag other segments from this speaker ($selected/$total)';
+  }
+
+  @override
+  String get tagOtherSegments => 'Tag other segments';
+
+  @override
+  String get managePeople => 'Manage People';
+
+  @override
+  String get shareViaSms => 'SMSで共有';
+
+  @override
+  String get selectContactsToShareSummary => '会話の要約を共有する連絡先を選択';
+
+  @override
+  String get searchContactsHint => '連絡先を検索...';
+
+  @override
+  String contactsSelectedCount(int count) {
+    return '$count件選択中';
+  }
+
+  @override
+  String get clearAllSelection => 'すべて解除';
+
+  @override
+  String get selectContactsToShare => '共有する連絡先を選択';
+
+  @override
+  String shareWithContactCount(int count) {
+    return '$count件の連絡先と共有';
+  }
+
+  @override
+  String shareWithContactsCount(int count) {
+    return '$count件の連絡先と共有';
+  }
+
+  @override
+  String get contactsPermissionRequired => '連絡先へのアクセス許可が必要';
+
+  @override
+  String get contactsPermissionRequiredForSms => 'SMSで共有するには連絡先へのアクセス許可が必要です';
+
+  @override
+  String get grantContactsPermissionForSms => 'SMSで共有するには連絡先へのアクセスを許可してください';
+
+  @override
+  String get noContactsWithPhoneNumbers => '電話番号のある連絡先が見つかりません';
+
+  @override
+  String get noContactsMatchSearch => '検索に一致する連絡先がありません';
+
+  @override
+  String get failedToLoadContacts => '連絡先の読み込みに失敗しました';
+
+  @override
+  String get failedToPrepareConversationForSharing => '会話の共有準備に失敗しました。もう一度お試しください。';
+
+  @override
+  String get couldNotOpenSmsApp => 'SMSアプリを開けませんでした。もう一度お試しください。';
+
+  @override
+  String heresWhatWeDiscussed(String link) {
+    return '先ほど話した内容はこちらです: $link';
+  }
+
+  @override
+  String get wifiSync => 'WiFi同期';
+
+  @override
+  String itemCopiedToClipboard(String item) {
+    return '$itemがクリップボードにコピーされました';
+  }
 }

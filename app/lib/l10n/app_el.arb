@@ -357,7 +357,7 @@
   "permissionRevokedTitle": "Η Άδεια Ανακλήθηκε",
   "permissionRevokedMessage": "Θέλετε να αφαιρέσουμε επίσης όλες τις υπάρχουσες εγγραφές σας;",
   "yes": "Ναι",
-  "editName": "Επεξεργασία Ονόματος",
+  "editName": "Edit Name",
   "howShouldOmiCallYou": "Πώς θα πρέπει να σας αποκαλεί το Omi;",
   "enterYourName": "Εισάγετε το όνομά σας",
   "nameCannotBeEmpty": "Το όνομα δεν μπορεί να είναι κενό",
@@ -988,7 +988,7 @@
   "help": "Βοήθεια",
   "pro": "Pro",
   "upgradeToPro": "Αναβάθμιση σε Pro",
-  "getOmiDevice": "Αποκτήστε συσκευή Omi",
+  "getOmiDevice": "Get Omi Device",
   "wearableAiCompanion": "Φορετός σύντροφος AI",
   "loadingMemories": "Φόρτωση αναμνήσεων...",
   "allMemories": "Όλες οι αναμνήσεις",
@@ -1168,7 +1168,7 @@
   "selectTime": "Επιλογή ώρας",
   "accountGroup": "Λογαριασμός",
   "signOutQuestion": "Αποσύνδεση;",
-  "signOutConfirmation": "Είστε σίγουροι ότι θέλετε να αποσυνδεθείτε;",
+  "signOutConfirmation": "Are you sure you want to sign out?",
   "customVocabularyHeader": "ΠΡΟΣΑΡΜΟΣΜΕΝΟ ΛΕΞΙΛΟΓΙΟ",
   "addWordsDescription": "Προσθέστε λέξεις που θα πρέπει να αναγνωρίζει το Omi κατά τη μεταγραφή.",
   "enterWordsHint": "Εισαγάγετε λέξεις (χωρισμένες με κόμματα)",
@@ -2034,5 +2034,119 @@
   "cantRateWithoutInternet": "Δεν είναι δυνατή η βαθμολόγηση χωρίς σύνδεση στο διαδίκτυο.",
   "appAnalytics": "Αναλυτικά εφαρμογής",
   "learnMoreLink": "μάθετε περισσότερα",
-  "moneyEarned": "Κέρδη"
+  "moneyEarned": "Κέρδη",
+  "starFilterLabel": "{count} αστέρι",
+  "@starFilterLabel": {
+    "description": "Filter chip label for star rating",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sharePublicLink": "Share Public Link",
+  "makePersonaPublic": "Make Persona Public",
+  "connectedKnowledgeData": "Connected Knowledge Data",
+  "enterName": "Enter name",
+  "disconnectTwitter": "Disconnect Twitter",
+  "disconnectTwitterConfirmation": "Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.",
+  "getOmiDeviceDescription": "Create a more accurate clone with your personal conversations",
+  "getOmi": "Get Omi",
+  "iHaveOmiDevice": "I have Omi device",
+  "goal": "ΣΤΟΧΟΣ",
+  "tapToTrackThisGoal": "Πατήστε για παρακολούθηση αυτού του στόχου",
+  "tapToSetAGoal": "Πατήστε για να ορίσετε έναν στόχο",
+  "processedConversations": "Επεξεργασμένες συνομιλίες",
+  "updatedConversations": "Ενημερωμένες συνομιλίες",
+  "newConversations": "Νέες συνομιλίες",
+  "summaryTemplate": "Πρότυπο σύνοψης",
+  "suggestedTemplates": "Προτεινόμενα πρότυπα",
+  "otherTemplates": "Άλλα πρότυπα",
+  "availableTemplates": "Διαθέσιμα πρότυπα",
+  "getCreative": "Γίνε δημιουργικός",
+  "defaultLabel": "Προεπιλογή",
+  "lastUsedLabel": "Τελευταία χρήση",
+  "setDefaultApp": "Ορισμός προεπιλεγμένης εφαρμογής",
+  "setDefaultAppContent": "Να οριστεί το {appName} ως προεπιλεγμένη εφαρμογή σύνοψης;\\n\\nΑυτή η εφαρμογή θα χρησιμοποιείται αυτόματα για όλες τις μελλοντικές συνόψεις συνομιλιών.",
+  "@setDefaultAppContent": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "setDefaultButton": "Ορισμός προεπιλογής",
+  "setAsDefaultSuccess": "Το {appName} ορίστηκε ως προεπιλεγμένη εφαρμογή σύνοψης",
+  "@setAsDefaultSuccess": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "createCustomTemplate": "Δημιουργία προσαρμοσμένου προτύπου",
+  "allTemplates": "Όλα τα πρότυπα",
+  "failedToInstallApp": "Αποτυχία εγκατάστασης του {appName}. Παρακαλώ δοκιμάστε ξανά.",
+  "@failedToInstallApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "errorInstallingApp": "Σφάλμα εγκατάστασης του {appName}: {error}",
+  "@errorInstallingApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tagSpeaker": "Tag Speaker {speakerId}",
+  "@tagSpeaker": {
+    "placeholders": {
+      "speakerId": {
+        "type": "int"
+      }
+    }
+  },
+  "personNameAlreadyExists": "A person with this name already exists.",
+  "selectYouFromList": "To tag yourself, please select \"You\" from the list.",
+  "enterPersonsName": "Enter Person's Name",
+  "addPerson": "Add Person",
+  "tagOtherSegmentsFromSpeaker": "Tag other segments from this speaker ({selected}/{total})",
+  "@tagOtherSegmentsFromSpeaker": {
+    "placeholders": {
+      "selected": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "tagOtherSegments": "Tag other segments",
+  "managePeople": "Manage People",
+  "shareViaSms": "Κοινοποίηση μέσω SMS",
+  "selectContactsToShareSummary": "Επιλέξτε επαφές για κοινοποίηση της περίληψης συνομιλίας",
+  "searchContactsHint": "Αναζήτηση επαφών...",
+  "contactsSelectedCount": "{count} επιλεγμένα",
+  "clearAllSelection": "Εκκαθάριση όλων",
+  "selectContactsToShare": "Επιλέξτε επαφές για κοινοποίηση",
+  "shareWithContactCount": "Κοινοποίηση σε {count} επαφή",
+  "shareWithContactsCount": "Κοινοποίηση σε {count} επαφές",
+  "contactsPermissionRequired": "Απαιτείται άδεια επαφών",
+  "contactsPermissionRequiredForSms": "Απαιτείται άδεια επαφών για κοινοποίηση μέσω SMS",
+  "grantContactsPermissionForSms": "Παρακαλώ δώστε άδεια επαφών για κοινοποίηση μέσω SMS",
+  "noContactsWithPhoneNumbers": "Δεν βρέθηκαν επαφές με τηλεφωνικούς αριθμούς",
+  "noContactsMatchSearch": "Καμία επαφή δεν ταιριάζει με την αναζήτησή σας",
+  "failedToLoadContacts": "Αποτυχία φόρτωσης επαφών",
+  "failedToPrepareConversationForSharing": "Αποτυχία προετοιμασίας συνομιλίας για κοινοποίηση. Παρακαλώ δοκιμάστε ξανά.",
+  "couldNotOpenSmsApp": "Δεν ήταν δυνατό το άνοιγμα της εφαρμογής SMS. Παρακαλώ δοκιμάστε ξανά.",
+  "heresWhatWeDiscussed": "Εδώ είναι τι συζητήσαμε: {link}",
+  "wifiSync": "Συγχρονισμός WiFi",
+  "itemCopiedToClipboard": "{item} αντιγράφηκε στο πρόχειρο"
 }

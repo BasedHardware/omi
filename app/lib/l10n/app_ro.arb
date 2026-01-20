@@ -357,7 +357,7 @@
   "permissionRevokedTitle": "Permisiune revocată",
   "permissionRevokedMessage": "Vrei să ștergem toate înregistrările tale existente?",
   "yes": "Da",
-  "editName": "Editează numele",
+  "editName": "Edit Name",
   "howShouldOmiCallYou": "Cum ar trebui Omi să te numească?",
   "enterYourName": "Introduceți numele dvs.",
   "nameCannotBeEmpty": "Numele nu poate fi gol",
@@ -988,7 +988,7 @@
   "help": "Ajutor",
   "pro": "Pro",
   "upgradeToPro": "Actualizează la Pro",
-  "getOmiDevice": "Obține dispozitiv Omi",
+  "getOmiDevice": "Get Omi Device",
   "wearableAiCompanion": "Companion AI portabil",
   "loadingMemories": "Se încarcă amintirile...",
   "allMemories": "Toate amintirile",
@@ -1168,7 +1168,7 @@
   "selectTime": "Selectează ora",
   "accountGroup": "Cont",
   "signOutQuestion": "Deconectare?",
-  "signOutConfirmation": "Sigur doriți să vă deconectați?",
+  "signOutConfirmation": "Are you sure you want to sign out?",
   "customVocabularyHeader": "VOCABULAR PERSONALIZAT",
   "addWordsDescription": "Adăugați cuvinte pe care Omi ar trebui să le recunoască în timpul transcrierii.",
   "enterWordsHint": "Introduceți cuvinte (separate prin virgulă)",
@@ -2034,5 +2034,119 @@
   "cantRateWithoutInternet": "Nu puteți evalua aplicația fără conexiune la internet.",
   "appAnalytics": "Analiză aplicație",
   "learnMoreLink": "află mai multe",
-  "moneyEarned": "Bani câștigați"
+  "moneyEarned": "Bani câștigați",
+  "starFilterLabel": "{count} stea",
+  "@starFilterLabel": {
+    "description": "Filter chip label for star rating",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sharePublicLink": "Share Public Link",
+  "makePersonaPublic": "Make Persona Public",
+  "connectedKnowledgeData": "Connected Knowledge Data",
+  "enterName": "Enter name",
+  "disconnectTwitter": "Disconnect Twitter",
+  "disconnectTwitterConfirmation": "Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.",
+  "getOmiDeviceDescription": "Create a more accurate clone with your personal conversations",
+  "getOmi": "Get Omi",
+  "iHaveOmiDevice": "I have Omi device",
+  "goal": "OBIECTIV",
+  "tapToTrackThisGoal": "Atingeți pentru a urmări acest obiectiv",
+  "tapToSetAGoal": "Atingeți pentru a stabili un obiectiv",
+  "processedConversations": "Conversații procesate",
+  "updatedConversations": "Conversații actualizate",
+  "newConversations": "Conversații noi",
+  "summaryTemplate": "Șablon de rezumat",
+  "suggestedTemplates": "Șabloane sugerate",
+  "otherTemplates": "Alte șabloane",
+  "availableTemplates": "Șabloane disponibile",
+  "getCreative": "Fii creativ",
+  "defaultLabel": "Implicit",
+  "lastUsedLabel": "Ultima utilizare",
+  "setDefaultApp": "Setează aplicația implicită",
+  "setDefaultAppContent": "Setați {appName} ca aplicație implicită de rezumat?\\n\\nAceastă aplicație va fi utilizată automat pentru toate rezumatele conversațiilor viitoare.",
+  "@setDefaultAppContent": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "setDefaultButton": "Setează implicit",
+  "setAsDefaultSuccess": "{appName} setată ca aplicație implicită de rezumat",
+  "@setAsDefaultSuccess": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "createCustomTemplate": "Creează șablon personalizat",
+  "allTemplates": "Toate șabloanele",
+  "failedToInstallApp": "Instalarea {appName} a eșuat. Vă rugăm să încercați din nou.",
+  "@failedToInstallApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "errorInstallingApp": "Eroare la instalarea {appName}: {error}",
+  "@errorInstallingApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tagSpeaker": "Tag Speaker {speakerId}",
+  "@tagSpeaker": {
+    "placeholders": {
+      "speakerId": {
+        "type": "int"
+      }
+    }
+  },
+  "personNameAlreadyExists": "A person with this name already exists.",
+  "selectYouFromList": "To tag yourself, please select \"You\" from the list.",
+  "enterPersonsName": "Enter Person's Name",
+  "addPerson": "Add Person",
+  "tagOtherSegmentsFromSpeaker": "Tag other segments from this speaker ({selected}/{total})",
+  "@tagOtherSegmentsFromSpeaker": {
+    "placeholders": {
+      "selected": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "tagOtherSegments": "Tag other segments",
+  "managePeople": "Manage People",
+  "shareViaSms": "Partajare prin SMS",
+  "selectContactsToShareSummary": "Selectați contacte pentru a partaja rezumatul conversației",
+  "searchContactsHint": "Căutați contacte...",
+  "contactsSelectedCount": "{count} selectate",
+  "clearAllSelection": "Șterge tot",
+  "selectContactsToShare": "Selectați contacte pentru partajare",
+  "shareWithContactCount": "Partajare cu {count} contact",
+  "shareWithContactsCount": "Partajare cu {count} contacte",
+  "contactsPermissionRequired": "Permisiunea pentru contacte este necesară",
+  "contactsPermissionRequiredForSms": "Permisiunea pentru contacte este necesară pentru partajare prin SMS",
+  "grantContactsPermissionForSms": "Vă rugăm să acordați permisiunea pentru contacte pentru a partaja prin SMS",
+  "noContactsWithPhoneNumbers": "Nu s-au găsit contacte cu numere de telefon",
+  "noContactsMatchSearch": "Niciun contact nu corespunde căutării",
+  "failedToLoadContacts": "Nu s-au putut încărca contactele",
+  "failedToPrepareConversationForSharing": "Nu s-a putut pregăti conversația pentru partajare. Vă rugăm să încercați din nou.",
+  "couldNotOpenSmsApp": "Nu s-a putut deschide aplicația SMS. Vă rugăm să încercați din nou.",
+  "heresWhatWeDiscussed": "Iată despre ce tocmai am discutat: {link}",
+  "wifiSync": "Sincronizare WiFi",
+  "itemCopiedToClipboard": "{item} copiat în clipboard"
 }

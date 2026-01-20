@@ -2906,9 +2906,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get connectNow => 'Connect Now';
 
   @override
-  String installsCount(String count) {
-    return '$count+ installs';
-  }
+  String get installsCount => 'Installs';
 
   @override
   String get uninstallApp => 'Uninstall App';
@@ -5803,9 +5801,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatAppsTitle => 'Chat Apps';
 
   @override
-  String get chatAssistantsTitle => 'Chat Assistants';
-
-  @override
   String get selectApp => 'Select App';
 
   @override
@@ -5813,150 +5808,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get disable => 'Disable';
-
-  @override
-  String get permissionReadConversations => 'Read Conversations';
-
-  @override
-  String get permissionReadMemories => 'Read Memories';
-
-  @override
-  String get permissionReadTasks => 'Read Tasks';
-
-  @override
-  String get permissionCreateConversations => 'Create Conversations';
-
-  @override
-  String get permissionCreateMemories => 'Create Memories';
-
-  @override
-  String get permissionTypeAccess => 'Access';
-
-  @override
-  String get permissionTypeCreate => 'Create';
-
-  @override
-  String get permissionTypeTrigger => 'Trigger';
-
-  @override
-  String get permissionDescReadConversations => 'This app can access your conversations.';
-
-  @override
-  String get permissionDescReadMemories => 'This app can access your memories.';
-
-  @override
-  String get permissionDescReadTasks => 'This app can access your tasks.';
-
-  @override
-  String get permissionDescCreateConversations => 'This app can create new conversations.';
-
-  @override
-  String get permissionDescCreateMemories => 'This app can create new memories.';
-
-  @override
-  String get realtimeListening => 'Realtime Listening';
-
-  @override
-  String get invalidIntegrationUrl => 'Invalid integration URL';
-
-  @override
-  String get invalidSetupInstructionsUrl => 'Invalid setup instructions URL';
-
-  @override
-  String get setupCompleted => 'Completed';
-
-  @override
-  String get tapToComplete => 'Tap to complete';
-
-  @override
-  String get setupInstructions => 'Setup Instructions';
-
-  @override
-  String get aboutTheApp => 'About the App';
-
-  @override
-  String get aboutThePersona => 'About the Persona';
-
-  @override
-  String get pushToTalk => 'Push to Talk';
-
-  @override
-  String get summaryPrompt => 'Summary Prompt';
-
-  @override
-  String get chatPersonality => 'Chat Personality';
-
-  @override
-  String get ratingsAndReviews => 'Ratings & Reviews';
-
-  @override
-  String get pleaseSelectRating => 'Please select a rating';
-
-  @override
-  String get reviewAddedSuccessfully => 'Review added successfully 🚀';
-
-  @override
-  String get reviewUpdatedSuccessfully => 'Review updated successfully 🚀';
-
-  @override
-  String get failedToSubmitReview => 'Failed to submit review. Please try again.';
-
-  @override
-  String get writeReviewOptional => 'Write a review (optional)';
-
-  @override
-  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
-
-  @override
-  String get setupQuestionProfession => '1. What do you do?';
-
-  @override
-  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
-
-  @override
-  String get setupQuestionAge => '3. What\'s your age range?';
-
-  @override
-  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
-
-  @override
-  String get continueButton => 'Continue';
-
-  @override
-  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
-
-  @override
-  String get professionEntrepreneur => 'Entrepreneur';
-
-  @override
-  String get professionSoftwareEngineer => 'Software Engineer';
-
-  @override
-  String get professionProductManager => 'Product Manager';
-
-  @override
-  String get professionExecutive => 'Executive';
-
-  @override
-  String get professionSales => 'Sales';
-
-  @override
-  String get professionStudent => 'Student';
-
-  @override
-  String get usageAtWork => 'At work';
-
-  @override
-  String get usageIrlEvents => 'IRL Events';
-
-  @override
-  String get usageOnline => 'Online';
-
-  @override
-  String get usageSocialSettings => 'In Social Settings';
-
-  @override
-  String get usageEverywhere => 'Everywhere';
 
   @override
   String get photoLibrary => 'Photo Library';
@@ -6403,6 +6254,111 @@ class AppLocalizationsEn extends AppLocalizations {
   String get device => 'Device';
 
   @override
+  String get chatAssistantsTitle => 'Chat Assistants';
+
+  @override
+  String get permissionReadConversations => 'Read Conversations';
+
+  @override
+  String get permissionReadMemories => 'Read Memories';
+
+  @override
+  String get permissionReadTasks => 'Read Tasks';
+
+  @override
+  String get permissionCreateConversations => 'Create Conversations';
+
+  @override
+  String get permissionCreateMemories => 'Create Memories';
+
+  @override
+  String get permissionTypeAccess => 'Access';
+
+  @override
+  String get permissionTypeCreate => 'Create';
+
+  @override
+  String get permissionTypeTrigger => 'Trigger';
+
+  @override
+  String get permissionDescReadConversations => 'This app can access your conversations.';
+
+  @override
+  String get permissionDescReadMemories => 'This app can access your memories.';
+
+  @override
+  String get permissionDescReadTasks => 'This app can access your tasks.';
+
+  @override
+  String get permissionDescCreateConversations => 'This app can create new conversations.';
+
+  @override
+  String get permissionDescCreateMemories => 'This app can create new memories.';
+
+  @override
+  String get realtimeListening => 'Realtime Listening';
+
+  @override
+  String get setupCompleted => 'Completed';
+
+  @override
+  String get pleaseSelectRating => 'Please select a rating';
+
+  @override
+  String get writeReviewOptional => 'Write a review (optional)';
+
+  @override
+  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
+
+  @override
+  String get setupQuestionProfession => '1. What do you do?';
+
+  @override
+  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
+
+  @override
+  String get setupQuestionAge => '3. What\'s your age range?';
+
+  @override
+  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
+
+  @override
+  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
+
+  @override
+  String get professionEntrepreneur => 'Entrepreneur';
+
+  @override
+  String get professionSoftwareEngineer => 'Software Engineer';
+
+  @override
+  String get professionProductManager => 'Product Manager';
+
+  @override
+  String get professionExecutive => 'Executive';
+
+  @override
+  String get professionSales => 'Sales';
+
+  @override
+  String get professionStudent => 'Student';
+
+  @override
+  String get usageAtWork => 'At work';
+
+  @override
+  String get usageIrlEvents => 'IRL Events';
+
+  @override
+  String get usageOnline => 'Online';
+
+  @override
+  String get usageSocialSettings => 'In Social Settings';
+
+  @override
+  String get usageEverywhere => 'Everywhere';
+
+  @override
   String get customBackendUrlTitle => 'Custom Backend URL';
 
   @override
@@ -6415,7 +6371,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get enterBackendUrlError => 'Please enter the backend URL';
 
   @override
-  String get urlMustEndWithSlashError => 'URL must end with "/"';
+  String get urlMustEndWithSlashError => 'URL must end with \"/\"';
 
   @override
   String get invalidUrlError => 'Please enter a valid URL';
@@ -6484,7 +6440,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get buildingKnowledgeGraphFromMemories => 'Building your knowledge graph from memories...';
 
   @override
-  String get knowledgeGraphWillBuildAutomatically => 'Your knowledge graph will be built automatically as you create new memories.';
+  String get knowledgeGraphWillBuildAutomatically =>
+      'Your knowledge graph will be built automatically as you create new memories.';
 
   @override
   String get buildGraphButton => 'Build Graph';
@@ -6528,8 +6485,232 @@ class AppLocalizationsEn extends AppLocalizations {
   String get learnMoreLink => 'learn more';
 
   @override
-  String get installsCount => 'Installs';
+  String get moneyEarned => 'Money Earned';
 
   @override
-  String get moneyEarned => 'Money Earned';
+  String get writeYourReply => 'Write your reply...';
+
+  @override
+  String get replySentSuccessfully => 'Reply sent successfully';
+
+  @override
+  String failedToSendReply(String error) {
+    return 'Failed to send reply: $error';
+  }
+
+  @override
+  String get send => 'Send';
+
+  @override
+  String starFilter(int count) {
+    return '$count Star';
+  }
+
+  @override
+  String get noReviewsFound => 'No Reviews Found';
+
+  @override
+  String get editReply => 'Edit Reply';
+
+  @override
+  String get reply => 'Reply';
+
+  @override
+  String starFilterLabel(int count) {
+    return '$count Star';
+  }
+
+  @override
+  String get sharePublicLink => 'Share Public Link';
+
+  @override
+  String get makePersonaPublic => 'Make Persona Public';
+
+  @override
+  String get connectedKnowledgeData => 'Connected Knowledge Data';
+
+  @override
+  String get enterName => 'Enter name';
+
+  @override
+  String get disconnectTwitter => 'Disconnect Twitter';
+
+  @override
+  String get disconnectTwitterConfirmation =>
+      'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
+
+  @override
+  String get getOmiDeviceDescription => 'Create a more accurate clone with your personal conversations';
+
+  @override
+  String get getOmi => 'Get Omi';
+
+  @override
+  String get iHaveOmiDevice => 'I have Omi device';
+
+  @override
+  String get goal => 'GOAL';
+
+  @override
+  String get tapToTrackThisGoal => 'Tap to track this goal';
+
+  @override
+  String get tapToSetAGoal => 'Tap to set a goal';
+
+  @override
+  String get processedConversations => 'Processed Conversations';
+
+  @override
+  String get updatedConversations => 'Updated Conversations';
+
+  @override
+  String get newConversations => 'New Conversations';
+
+  @override
+  String get summaryTemplate => 'Summary Template';
+
+  @override
+  String get suggestedTemplates => 'Suggested Templates';
+
+  @override
+  String get otherTemplates => 'Other Templates';
+
+  @override
+  String get availableTemplates => 'Available Templates';
+
+  @override
+  String get getCreative => 'Get Creative';
+
+  @override
+  String get defaultLabel => 'Default';
+
+  @override
+  String get lastUsedLabel => 'Last Used';
+
+  @override
+  String get setDefaultApp => 'Set Default App';
+
+  @override
+  String setDefaultAppContent(String appName) {
+    return 'Set $appName as your default summarization app?\\n\\nThis app will be automatically used for all future conversation summaries.';
+  }
+
+  @override
+  String get setDefaultButton => 'Set Default';
+
+  @override
+  String setAsDefaultSuccess(String appName) {
+    return '$appName set as default summarization app';
+  }
+
+  @override
+  String get createCustomTemplate => 'Create Custom Template';
+
+  @override
+  String get allTemplates => 'All Templates';
+
+  @override
+  String failedToInstallApp(String appName) {
+    return 'Failed to install $appName. Please try again.';
+  }
+
+  @override
+  String errorInstallingApp(String appName, String error) {
+    return 'Error installing $appName: $error';
+  }
+
+  @override
+  String tagSpeaker(int speakerId) {
+    return 'Tag Speaker $speakerId';
+  }
+
+  @override
+  String get personNameAlreadyExists => 'A person with this name already exists.';
+
+  @override
+  String get selectYouFromList => 'To tag yourself, please select \"You\" from the list.';
+
+  @override
+  String get enterPersonsName => 'Enter Person\'s Name';
+
+  @override
+  String get addPerson => 'Add Person';
+
+  @override
+  String tagOtherSegmentsFromSpeaker(int selected, int total) {
+    return 'Tag other segments from this speaker ($selected/$total)';
+  }
+
+  @override
+  String get tagOtherSegments => 'Tag other segments';
+
+  @override
+  String get managePeople => 'Manage People';
+
+  @override
+  String get shareViaSms => 'Share via SMS';
+
+  @override
+  String get selectContactsToShareSummary => 'Select contacts to share your conversation summary';
+
+  @override
+  String get searchContactsHint => 'Search contacts...';
+
+  @override
+  String contactsSelectedCount(int count) {
+    return '$count selected';
+  }
+
+  @override
+  String get clearAllSelection => 'Clear all';
+
+  @override
+  String get selectContactsToShare => 'Select contacts to share';
+
+  @override
+  String shareWithContactCount(int count) {
+    return 'Share with $count contact';
+  }
+
+  @override
+  String shareWithContactsCount(int count) {
+    return 'Share with $count contacts';
+  }
+
+  @override
+  String get contactsPermissionRequired => 'Contacts permission required';
+
+  @override
+  String get contactsPermissionRequiredForSms => 'Contacts permission is required to share via SMS';
+
+  @override
+  String get grantContactsPermissionForSms => 'Please grant contacts permission to share via SMS';
+
+  @override
+  String get noContactsWithPhoneNumbers => 'No contacts with phone numbers found';
+
+  @override
+  String get noContactsMatchSearch => 'No contacts match your search';
+
+  @override
+  String get failedToLoadContacts => 'Failed to load contacts';
+
+  @override
+  String get failedToPrepareConversationForSharing => 'Failed to prepare conversation for sharing. Please try again.';
+
+  @override
+  String get couldNotOpenSmsApp => 'Could not open SMS app. Please try again.';
+
+  @override
+  String heresWhatWeDiscussed(String link) {
+    return 'Here\'s what we just discussed: $link';
+  }
+
+  @override
+  String get wifiSync => 'WiFi Sync';
+
+  @override
+  String itemCopiedToClipboard(String item) {
+    return '$item copied to clipboard';
+  }
 }

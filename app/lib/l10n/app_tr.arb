@@ -357,7 +357,7 @@
   "permissionRevokedTitle": "İzin Geri Alındı",
   "permissionRevokedMessage": "Mevcut tüm kayıtlarınızı da kaldırmamızı ister misiniz?",
   "yes": "Evet",
-  "editName": "İsmi Düzenle",
+  "editName": "Edit Name",
   "howShouldOmiCallYou": "Omi size nasıl hitap etmeli?",
   "enterYourName": "Adınızı girin",
   "nameCannotBeEmpty": "İsim boş olamaz",
@@ -988,7 +988,7 @@
   "help": "Yardım",
   "pro": "Pro",
   "upgradeToPro": "Pro'ya Yükselt",
-  "getOmiDevice": "Omi Cihazı Al",
+  "getOmiDevice": "Get Omi Device",
   "wearableAiCompanion": "Giyilebilir AI arkadaşı",
   "loadingMemories": "Anılar yükleniyor...",
   "allMemories": "Tüm anılar",
@@ -1168,7 +1168,7 @@
   "selectTime": "Saat Seç",
   "accountGroup": "Hesap",
   "signOutQuestion": "Çıkış yap?",
-  "signOutConfirmation": "Çıkış yapmak istediğinizden emin misiniz?",
+  "signOutConfirmation": "Are you sure you want to sign out?",
   "customVocabularyHeader": "ÖZEL KELIME DAĞARCIĞI",
   "addWordsDescription": "Omin transkripsiyon sırasında tanıması gereken kelimeleri ekleyin.",
   "enterWordsHint": "Kelimeleri girin (virgülle ayrılmış)",
@@ -2034,5 +2034,119 @@
   "cantRateWithoutInternet": "İnternet bağlantısı olmadan uygulama değerlendirilemez.",
   "appAnalytics": "Uygulama Analitiği",
   "learnMoreLink": "daha fazla bilgi",
-  "moneyEarned": "Kazanılan para"
+  "moneyEarned": "Kazanılan para",
+  "starFilterLabel": "{count} yıldız",
+  "@starFilterLabel": {
+    "description": "Filter chip label for star rating",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sharePublicLink": "Share Public Link",
+  "makePersonaPublic": "Make Persona Public",
+  "connectedKnowledgeData": "Connected Knowledge Data",
+  "enterName": "Enter name",
+  "disconnectTwitter": "Disconnect Twitter",
+  "disconnectTwitterConfirmation": "Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.",
+  "getOmiDeviceDescription": "Create a more accurate clone with your personal conversations",
+  "getOmi": "Get Omi",
+  "iHaveOmiDevice": "I have Omi device",
+  "goal": "HEDEF",
+  "tapToTrackThisGoal": "Bu hedefi takip etmek için dokun",
+  "tapToSetAGoal": "Bir hedef belirlemek için dokun",
+  "processedConversations": "İşlenmiş Konuşmalar",
+  "updatedConversations": "Güncellenen Konuşmalar",
+  "newConversations": "Yeni Konuşmalar",
+  "summaryTemplate": "Özet Şablonu",
+  "suggestedTemplates": "Önerilen Şablonlar",
+  "otherTemplates": "Diğer Şablonlar",
+  "availableTemplates": "Mevcut Şablonlar",
+  "getCreative": "Yaratıcı Ol",
+  "defaultLabel": "Varsayılan",
+  "lastUsedLabel": "Son Kullanılan",
+  "setDefaultApp": "Varsayılan Uygulamayı Ayarla",
+  "setDefaultAppContent": "{appName} varsayılan özet uygulamanız olarak ayarlansın mı?\\n\\nBu uygulama gelecekteki tüm konuşma özetleri için otomatik olarak kullanılacaktır.",
+  "@setDefaultAppContent": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "setDefaultButton": "Varsayılan Olarak Ayarla",
+  "setAsDefaultSuccess": "{appName} varsayılan özet uygulaması olarak ayarlandı",
+  "@setAsDefaultSuccess": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "createCustomTemplate": "Özel Şablon Oluştur",
+  "allTemplates": "Tüm Şablonlar",
+  "failedToInstallApp": "{appName} yüklenemedi. Lütfen tekrar deneyin.",
+  "@failedToInstallApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "errorInstallingApp": "{appName} yüklenirken hata oluştu: {error}",
+  "@errorInstallingApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tagSpeaker": "Tag Speaker {speakerId}",
+  "@tagSpeaker": {
+    "placeholders": {
+      "speakerId": {
+        "type": "int"
+      }
+    }
+  },
+  "personNameAlreadyExists": "A person with this name already exists.",
+  "selectYouFromList": "To tag yourself, please select \"You\" from the list.",
+  "enterPersonsName": "Enter Person's Name",
+  "addPerson": "Add Person",
+  "tagOtherSegmentsFromSpeaker": "Tag other segments from this speaker ({selected}/{total})",
+  "@tagOtherSegmentsFromSpeaker": {
+    "placeholders": {
+      "selected": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "tagOtherSegments": "Tag other segments",
+  "managePeople": "Manage People",
+  "shareViaSms": "SMS ile paylaş",
+  "selectContactsToShareSummary": "Konuşma özetinizi paylaşmak için kişileri seçin",
+  "searchContactsHint": "Kişileri ara...",
+  "contactsSelectedCount": "{count} seçildi",
+  "clearAllSelection": "Tümünü temizle",
+  "selectContactsToShare": "Paylaşılacak kişileri seçin",
+  "shareWithContactCount": "{count} kişiyle paylaş",
+  "shareWithContactsCount": "{count} kişiyle paylaş",
+  "contactsPermissionRequired": "Kişi izni gerekli",
+  "contactsPermissionRequiredForSms": "SMS ile paylaşmak için kişi izni gereklidir",
+  "grantContactsPermissionForSms": "SMS ile paylaşmak için lütfen kişi izni verin",
+  "noContactsWithPhoneNumbers": "Telefon numarası olan kişi bulunamadı",
+  "noContactsMatchSearch": "Aramanızla eşleşen kişi yok",
+  "failedToLoadContacts": "Kişiler yüklenemedi",
+  "failedToPrepareConversationForSharing": "Konuşma paylaşım için hazırlanamadı. Lütfen tekrar deneyin.",
+  "couldNotOpenSmsApp": "SMS uygulaması açılamadı. Lütfen tekrar deneyin.",
+  "heresWhatWeDiscussed": "Az önce konuştuklarımız: {link}",
+  "wifiSync": "WiFi Senkronizasyonu",
+  "itemCopiedToClipboard": "{item} panoya kopyalandı"
 }

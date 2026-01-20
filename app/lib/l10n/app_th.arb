@@ -357,7 +357,7 @@
   "permissionRevokedTitle": "เพิกถอนการอนุญาต",
   "permissionRevokedMessage": "คุณต้องการให้เราลบการบันทึกที่มีอยู่ทั้งหมดของคุณด้วยหรือไม่?",
   "yes": "ใช่",
-  "editName": "แก้ไขชื่อ",
+  "editName": "Edit Name",
   "howShouldOmiCallYou": "Omi ควรเรียกคุณว่าอะไร?",
   "enterYourName": "ใส่ชื่อของคุณ",
   "nameCannotBeEmpty": "ชื่อต้องไม่ว่างเปล่า",
@@ -988,7 +988,7 @@
   "help": "ความช่วยเหลือ",
   "pro": "Pro",
   "upgradeToPro": "อัปเกรดเป็น Pro",
-  "getOmiDevice": "รับอุปกรณ์ Omi",
+  "getOmiDevice": "Get Omi Device",
   "wearableAiCompanion": "เพื่อน AI สวมใส่ได้",
   "loadingMemories": "กำลังโหลดความทรงจำ...",
   "allMemories": "ความทรงจำทั้งหมด",
@@ -1168,7 +1168,7 @@
   "selectTime": "เลือกเวลา",
   "accountGroup": "บัญชี",
   "signOutQuestion": "ออกจากระบบ?",
-  "signOutConfirmation": "คุณแน่ใจหรือไม่ว่าต้องการออกจากระบบ?",
+  "signOutConfirmation": "Are you sure you want to sign out?",
   "customVocabularyHeader": "คำศัพท์ที่กำหนดเอง",
   "addWordsDescription": "เพิ่มคำที่ Omi ควรจดจำระหว่างการถอดเสียง",
   "enterWordsHint": "ป้อนคำ (คั่นด้วยเครื่องหมายจุลภาค)",
@@ -2034,5 +2034,119 @@
   "cantRateWithoutInternet": "ไม่สามารถให้คะแนนแอปได้โดยไม่มีการเชื่อมต่ออินเทอร์เน็ต",
   "appAnalytics": "การวิเคราะห์แอป",
   "learnMoreLink": "เรียนรู้เพิ่มเติม",
-  "moneyEarned": "เงินที่ได้รับ"
+  "moneyEarned": "เงินที่ได้รับ",
+  "starFilterLabel": "{count} ดาว",
+  "@starFilterLabel": {
+    "description": "Filter chip label for star rating",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sharePublicLink": "Share Public Link",
+  "makePersonaPublic": "Make Persona Public",
+  "connectedKnowledgeData": "Connected Knowledge Data",
+  "enterName": "Enter name",
+  "disconnectTwitter": "Disconnect Twitter",
+  "disconnectTwitterConfirmation": "Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.",
+  "getOmiDeviceDescription": "Create a more accurate clone with your personal conversations",
+  "getOmi": "Get Omi",
+  "iHaveOmiDevice": "I have Omi device",
+  "goal": "เป้าหมาย",
+  "tapToTrackThisGoal": "แตะเพื่อติดตามเป้าหมายนี้",
+  "tapToSetAGoal": "แตะเพื่อตั้งเป้าหมาย",
+  "processedConversations": "การสนทนาที่ประมวลผลแล้ว",
+  "updatedConversations": "การสนทนาที่อัปเดต",
+  "newConversations": "การสนทนาใหม่",
+  "summaryTemplate": "เทมเพลตสรุป",
+  "suggestedTemplates": "เทมเพลตที่แนะนำ",
+  "otherTemplates": "เทมเพลตอื่นๆ",
+  "availableTemplates": "เทมเพลตที่มีอยู่",
+  "getCreative": "สร้างสรรค์",
+  "defaultLabel": "ค่าเริ่มต้น",
+  "lastUsedLabel": "ใช้ล่าสุด",
+  "setDefaultApp": "ตั้งแอปเริ่มต้น",
+  "setDefaultAppContent": "ตั้ง {appName} เป็นแอปสรุปเริ่มต้นของคุณ?\\n\\nแอปนี้จะถูกใช้โดยอัตโนมัติสำหรับการสรุปการสนทนาทั้งหมดในอนาคต",
+  "@setDefaultAppContent": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "setDefaultButton": "ตั้งค่าเริ่มต้น",
+  "setAsDefaultSuccess": "ตั้ง {appName} เป็นแอปสรุปเริ่มต้นแล้ว",
+  "@setAsDefaultSuccess": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "createCustomTemplate": "สร้างเทมเพลตที่กำหนดเอง",
+  "allTemplates": "เทมเพลตทั้งหมด",
+  "failedToInstallApp": "ติดตั้ง {appName} ไม่สำเร็จ กรุณาลองอีกครั้ง",
+  "@failedToInstallApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "errorInstallingApp": "เกิดข้อผิดพลาดในการติดตั้ง {appName}: {error}",
+  "@errorInstallingApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tagSpeaker": "Tag Speaker {speakerId}",
+  "@tagSpeaker": {
+    "placeholders": {
+      "speakerId": {
+        "type": "int"
+      }
+    }
+  },
+  "personNameAlreadyExists": "A person with this name already exists.",
+  "selectYouFromList": "To tag yourself, please select \"You\" from the list.",
+  "enterPersonsName": "Enter Person's Name",
+  "addPerson": "Add Person",
+  "tagOtherSegmentsFromSpeaker": "Tag other segments from this speaker ({selected}/{total})",
+  "@tagOtherSegmentsFromSpeaker": {
+    "placeholders": {
+      "selected": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "tagOtherSegments": "Tag other segments",
+  "managePeople": "Manage People",
+  "shareViaSms": "แชร์ผ่าน SMS",
+  "selectContactsToShareSummary": "เลือกผู้ติดต่อเพื่อแชร์สรุปการสนทนาของคุณ",
+  "searchContactsHint": "ค้นหาผู้ติดต่อ...",
+  "contactsSelectedCount": "เลือก {count} รายการ",
+  "clearAllSelection": "ล้างทั้งหมด",
+  "selectContactsToShare": "เลือกผู้ติดต่อที่จะแชร์",
+  "shareWithContactCount": "แชร์กับ {count} ผู้ติดต่อ",
+  "shareWithContactsCount": "แชร์กับ {count} ผู้ติดต่อ",
+  "contactsPermissionRequired": "ต้องการสิทธิ์เข้าถึงรายชื่อ",
+  "contactsPermissionRequiredForSms": "ต้องการสิทธิ์เข้าถึงรายชื่อเพื่อแชร์ผ่าน SMS",
+  "grantContactsPermissionForSms": "โปรดให้สิทธิ์เข้าถึงรายชื่อเพื่อแชร์ผ่าน SMS",
+  "noContactsWithPhoneNumbers": "ไม่พบผู้ติดต่อที่มีหมายเลขโทรศัพท์",
+  "noContactsMatchSearch": "ไม่มีผู้ติดต่อที่ตรงกับการค้นหาของคุณ",
+  "failedToLoadContacts": "ไม่สามารถโหลดรายชื่อได้",
+  "failedToPrepareConversationForSharing": "ไม่สามารถเตรียมการสนทนาสำหรับการแชร์ได้ โปรดลองอีกครั้ง",
+  "couldNotOpenSmsApp": "ไม่สามารถเปิดแอป SMS ได้ โปรดลองอีกครั้ง",
+  "heresWhatWeDiscussed": "นี่คือสิ่งที่เราเพิ่งพูดคุยกัน: {link}",
+  "wifiSync": "การซิงค์ WiFi",
+  "itemCopiedToClipboard": "คัดลอก {item} ไปยังคลิปบอร์ดแล้ว"
 }

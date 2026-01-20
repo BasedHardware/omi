@@ -357,7 +357,7 @@
   "permissionRevokedTitle": "권한 취소됨",
   "permissionRevokedMessage": "기존 녹음도 모두 삭제하시겠습니까?",
   "yes": "예",
-  "editName": "이름 편집",
+  "editName": "Edit Name",
   "howShouldOmiCallYou": "Omi가 어떻게 불러드릴까요?",
   "enterYourName": "이름을 입력하세요",
   "nameCannotBeEmpty": "이름은 비워둘 수 없습니다",
@@ -988,7 +988,7 @@
   "help": "도움말",
   "pro": "Pro",
   "upgradeToPro": "Pro로 업그레이드",
-  "getOmiDevice": "Omi 기기 받기",
+  "getOmiDevice": "Get Omi Device",
   "wearableAiCompanion": "웨어러블 AI 컴패니언",
   "loadingMemories": "추억 로드 중...",
   "allMemories": "모든 추억",
@@ -1168,7 +1168,7 @@
   "selectTime": "시간 선택",
   "accountGroup": "계정",
   "signOutQuestion": "로그아웃하시겠습니까?",
-  "signOutConfirmation": "정말 로그아웃하시겠습니까?",
+  "signOutConfirmation": "Are you sure you want to sign out?",
   "customVocabularyHeader": "사용자 정의 어휘",
   "addWordsDescription": "전사 중에 Omi가 인식해야 하는 단어를 추가하세요.",
   "enterWordsHint": "단어 입력 (쉼표로 구분)",
@@ -2034,5 +2034,119 @@
   "cantRateWithoutInternet": "인터넷 연결 없이는 앱을 평가할 수 없습니다.",
   "appAnalytics": "앱 분석",
   "learnMoreLink": "자세히 알아보기",
-  "moneyEarned": "수익"
+  "moneyEarned": "수익",
+  "starFilterLabel": "{count}점",
+  "@starFilterLabel": {
+    "description": "Filter chip label for star rating",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sharePublicLink": "Share Public Link",
+  "makePersonaPublic": "Make Persona Public",
+  "connectedKnowledgeData": "Connected Knowledge Data",
+  "enterName": "Enter name",
+  "disconnectTwitter": "Disconnect Twitter",
+  "disconnectTwitterConfirmation": "Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.",
+  "getOmiDeviceDescription": "Create a more accurate clone with your personal conversations",
+  "getOmi": "Get Omi",
+  "iHaveOmiDevice": "I have Omi device",
+  "goal": "목표",
+  "tapToTrackThisGoal": "탭하여 이 목표 추적",
+  "tapToSetAGoal": "탭하여 목표 설정",
+  "processedConversations": "처리된 대화",
+  "updatedConversations": "업데이트된 대화",
+  "newConversations": "새 대화",
+  "summaryTemplate": "요약 템플릿",
+  "suggestedTemplates": "추천 템플릿",
+  "otherTemplates": "다른 템플릿",
+  "availableTemplates": "사용 가능한 템플릿",
+  "getCreative": "창의적으로",
+  "defaultLabel": "기본값",
+  "lastUsedLabel": "최근 사용",
+  "setDefaultApp": "기본 앱 설정",
+  "setDefaultAppContent": "{appName}을(를) 기본 요약 앱으로 설정하시겠습니까?\\n\\n이 앱은 향후 모든 대화 요약에 자동으로 사용됩니다.",
+  "@setDefaultAppContent": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "setDefaultButton": "기본값으로 설정",
+  "setAsDefaultSuccess": "{appName}이(가) 기본 요약 앱으로 설정됨",
+  "@setAsDefaultSuccess": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "createCustomTemplate": "사용자 정의 템플릿 만들기",
+  "allTemplates": "모든 템플릿",
+  "failedToInstallApp": "{appName} 설치 실패. 다시 시도해 주세요.",
+  "@failedToInstallApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "errorInstallingApp": "{appName} 설치 오류: {error}",
+  "@errorInstallingApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tagSpeaker": "Tag Speaker {speakerId}",
+  "@tagSpeaker": {
+    "placeholders": {
+      "speakerId": {
+        "type": "int"
+      }
+    }
+  },
+  "personNameAlreadyExists": "A person with this name already exists.",
+  "selectYouFromList": "To tag yourself, please select \"You\" from the list.",
+  "enterPersonsName": "Enter Person's Name",
+  "addPerson": "Add Person",
+  "tagOtherSegmentsFromSpeaker": "Tag other segments from this speaker ({selected}/{total})",
+  "@tagOtherSegmentsFromSpeaker": {
+    "placeholders": {
+      "selected": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "tagOtherSegments": "Tag other segments",
+  "managePeople": "Manage People",
+  "shareViaSms": "SMS로 공유",
+  "selectContactsToShareSummary": "대화 요약을 공유할 연락처 선택",
+  "searchContactsHint": "연락처 검색...",
+  "contactsSelectedCount": "{count}개 선택됨",
+  "clearAllSelection": "모두 지우기",
+  "selectContactsToShare": "공유할 연락처 선택",
+  "shareWithContactCount": "{count}명에게 공유",
+  "shareWithContactsCount": "{count}명에게 공유",
+  "contactsPermissionRequired": "연락처 권한 필요",
+  "contactsPermissionRequiredForSms": "SMS로 공유하려면 연락처 권한이 필요합니다",
+  "grantContactsPermissionForSms": "SMS로 공유하려면 연락처 권한을 허용해 주세요",
+  "noContactsWithPhoneNumbers": "전화번호가 있는 연락처를 찾을 수 없습니다",
+  "noContactsMatchSearch": "검색과 일치하는 연락처가 없습니다",
+  "failedToLoadContacts": "연락처를 불러오지 못했습니다",
+  "failedToPrepareConversationForSharing": "대화 공유 준비에 실패했습니다. 다시 시도해 주세요.",
+  "couldNotOpenSmsApp": "SMS 앱을 열 수 없습니다. 다시 시도해 주세요.",
+  "heresWhatWeDiscussed": "방금 이야기한 내용입니다: {link}",
+  "wifiSync": "WiFi 동기화",
+  "itemCopiedToClipboard": "{item}이(가) 클립보드에 복사됨"
 }

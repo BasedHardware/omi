@@ -1155,7 +1155,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get yes => 'Ναι';
 
   @override
-  String get editName => 'Επεξεργασία Ονόματος';
+  String get editName => 'Edit Name';
 
   @override
   String get howShouldOmiCallYou => 'Πώς θα πρέπει να σας αποκαλεί το Omi;';
@@ -2923,9 +2923,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get connectNow => 'Σύνδεση τώρα';
 
   @override
-  String installsCount(String count) {
-    return '$count+ εγκαταστάσεις';
-  }
+  String get installsCount => 'Εγκαταστάσεις';
 
   @override
   String get uninstallApp => 'Απεγκατάσταση εφαρμογής';
@@ -2959,7 +2957,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get setupSteps => 'Βήματα εγκατάστασης';
 
   @override
-  String get setupInstructions => 'Οδηγίες εγκατάστασης';
+  String get setupInstructions => 'Οδηγίες ρύθμισης';
 
   @override
   String get integrationInstructions => 'Οδηγίες ενσωμάτωσης';
@@ -2971,7 +2969,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get aboutTheApp => 'Σχετικά με την εφαρμογή';
 
   @override
-  String get aboutThePersona => 'Σχετικά με το πρόσωπο';
+  String get aboutThePersona => 'Σχετικά με την περσόνα';
 
   @override
   String get chatPersonality => 'Προσωπικότητα συνομιλίας';
@@ -3291,7 +3289,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get upgradeToPro => 'Αναβάθμιση σε Pro';
 
   @override
-  String get getOmiDevice => 'Αποκτήστε συσκευή Omi';
+  String get getOmiDevice => 'Get Omi Device';
 
   @override
   String get wearableAiCompanion => 'Φορετός σύντροφος AI';
@@ -3860,7 +3858,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get signOutQuestion => 'Αποσύνδεση;';
 
   @override
-  String get signOutConfirmation => 'Είστε σίγουροι ότι θέλετε να αποσυνδεθείτε;';
+  String get signOutConfirmation => 'Are you sure you want to sign out?';
 
   @override
   String get customVocabularyHeader => 'ΠΡΟΣΑΡΜΟΣΜΕΝΟ ΛΕΞΙΛΟΓΙΟ';
@@ -4104,13 +4102,13 @@ class AppLocalizationsEl extends AppLocalizations {
       'Η εφαρμογή σας απορρίφθηκε. Ενημερώστε τα στοιχεία και υποβάλετε ξανά για αξιολόγηση.';
 
   @override
-  String get invalidIntegrationUrl => 'Μη έγκυρο URL ενσωμάτωσης';
+  String get invalidIntegrationUrl => 'Μη έγκυρη διεύθυνση URL ενσωμάτωσης';
 
   @override
   String get tapToComplete => 'Πατήστε για ολοκλήρωση';
 
   @override
-  String get invalidSetupInstructionsUrl => 'Μη έγκυρο URL οδηγιών εγκατάστασης';
+  String get invalidSetupInstructionsUrl => 'Μη έγκυρη διεύθυνση URL οδηγιών ρύθμισης';
 
   @override
   String get pushToTalk => 'Πατήστε για ομιλία';
@@ -4128,7 +4126,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get reviewUpdatedSuccessfully => 'Η κριτική ενημερώθηκε επιτυχώς 🚀';
 
   @override
-  String get failedToSubmitReview => 'Αποτυχία υποβολής κριτικής. Παρακαλώ δοκιμάστε ξανά.';
+  String get failedToSubmitReview => 'Αποτυχία υποβολής κριτικής. Δοκιμάστε ξανά.';
 
   @override
   String get addYourReview => 'Προσθέστε την κριτική σας';
@@ -5847,9 +5845,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get chatAppsTitle => 'Εφαρμογές συνομιλίας';
 
   @override
-  String get chatAssistantsTitle => 'Βοηθοί συνομιλίας';
-
-  @override
   String get selectApp => 'Επιλογή εφαρμογής';
 
   @override
@@ -5858,150 +5853,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get disable => 'Απενεργοποίηση';
-
-  @override
-  String get permissionReadConversations => 'Ανάγνωση συνομιλιών';
-
-  @override
-  String get permissionReadMemories => 'Ανάγνωση αναμνήσεων';
-
-  @override
-  String get permissionReadTasks => 'Ανάγνωση εργασιών';
-
-  @override
-  String get permissionCreateConversations => 'Δημιουργία συνομιλιών';
-
-  @override
-  String get permissionCreateMemories => 'Δημιουργία αναμνήσεων';
-
-  @override
-  String get permissionTypeAccess => 'Πρόσβαση';
-
-  @override
-  String get permissionTypeCreate => 'Δημιουργία';
-
-  @override
-  String get permissionTypeTrigger => 'Ενεργοποιητής';
-
-  @override
-  String get permissionDescReadConversations => 'Αυτή η εφαρμογή μπορεί να έχει πρόσβαση στις συνομιλίες σας.';
-
-  @override
-  String get permissionDescReadMemories => 'Αυτή η εφαρμογή μπορεί να έχει πρόσβαση στις αναμνήσεις σας.';
-
-  @override
-  String get permissionDescReadTasks => 'Αυτή η εφαρμογή μπορεί να έχει πρόσβαση στις εργασίες σας.';
-
-  @override
-  String get permissionDescCreateConversations => 'Αυτή η εφαρμογή μπορεί να δημιουργεί νέες συνομιλίες.';
-
-  @override
-  String get permissionDescCreateMemories => 'Αυτή η εφαρμογή μπορεί να δημιουργεί νέες αναμνήσεις.';
-
-  @override
-  String get realtimeListening => 'Ακρόαση σε πραγματικό χρόνο';
-
-  @override
-  String get invalidIntegrationUrl => 'Μη έγκυρη διεύθυνση URL ενσωμάτωσης';
-
-  @override
-  String get invalidSetupInstructionsUrl => 'Μη έγκυρη διεύθυνση URL οδηγιών ρύθμισης';
-
-  @override
-  String get setupCompleted => 'Ολοκληρώθηκε';
-
-  @override
-  String get tapToComplete => 'Πατήστε για ολοκλήρωση';
-
-  @override
-  String get setupInstructions => 'Οδηγίες ρύθμισης';
-
-  @override
-  String get aboutTheApp => 'Σχετικά με την εφαρμογή';
-
-  @override
-  String get aboutThePersona => 'Σχετικά με την περσόνα';
-
-  @override
-  String get pushToTalk => 'Πατήστε για ομιλία';
-
-  @override
-  String get summaryPrompt => 'Προτροπή σύνοψης';
-
-  @override
-  String get chatPersonality => 'Προσωπικότητα συνομιλίας';
-
-  @override
-  String get ratingsAndReviews => 'Αξιολογήσεις και κριτικές';
-
-  @override
-  String get pleaseSelectRating => 'Παρακαλώ επιλέξτε αξιολόγηση';
-
-  @override
-  String get reviewAddedSuccessfully => 'Η κριτική προστέθηκε επιτυχώς 🚀';
-
-  @override
-  String get reviewUpdatedSuccessfully => 'Η κριτική ενημερώθηκε επιτυχώς 🚀';
-
-  @override
-  String get failedToSubmitReview => 'Αποτυχία υποβολής κριτικής. Δοκιμάστε ξανά.';
-
-  @override
-  String get writeReviewOptional => 'Γράψτε μια κριτική (προαιρετικό)';
-
-  @override
-  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
-
-  @override
-  String get setupQuestionProfession => '1. What do you do?';
-
-  @override
-  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
-
-  @override
-  String get setupQuestionAge => '3. What\'s your age range?';
-
-  @override
-  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
-
-  @override
-  String get continueButton => 'Συνέχεια';
-
-  @override
-  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
-
-  @override
-  String get professionEntrepreneur => 'Entrepreneur';
-
-  @override
-  String get professionSoftwareEngineer => 'Software Engineer';
-
-  @override
-  String get professionProductManager => 'Product Manager';
-
-  @override
-  String get professionExecutive => 'Executive';
-
-  @override
-  String get professionSales => 'Sales';
-
-  @override
-  String get professionStudent => 'Student';
-
-  @override
-  String get usageAtWork => 'At work';
-
-  @override
-  String get usageIrlEvents => 'IRL Events';
-
-  @override
-  String get usageOnline => 'Online';
-
-  @override
-  String get usageSocialSettings => 'In Social Settings';
-
-  @override
-  String get usageEverywhere => 'Everywhere';
 
   @override
   String get photoLibrary => 'Βιβλιοθήκη φωτογραφιών';
@@ -6452,6 +6303,111 @@ class AppLocalizationsEl extends AppLocalizations {
   String get device => 'Device';
 
   @override
+  String get chatAssistantsTitle => 'Βοηθοί συνομιλίας';
+
+  @override
+  String get permissionReadConversations => 'Ανάγνωση συνομιλιών';
+
+  @override
+  String get permissionReadMemories => 'Ανάγνωση αναμνήσεων';
+
+  @override
+  String get permissionReadTasks => 'Ανάγνωση εργασιών';
+
+  @override
+  String get permissionCreateConversations => 'Δημιουργία συνομιλιών';
+
+  @override
+  String get permissionCreateMemories => 'Δημιουργία αναμνήσεων';
+
+  @override
+  String get permissionTypeAccess => 'Πρόσβαση';
+
+  @override
+  String get permissionTypeCreate => 'Δημιουργία';
+
+  @override
+  String get permissionTypeTrigger => 'Ενεργοποιητής';
+
+  @override
+  String get permissionDescReadConversations => 'Αυτή η εφαρμογή μπορεί να έχει πρόσβαση στις συνομιλίες σας.';
+
+  @override
+  String get permissionDescReadMemories => 'Αυτή η εφαρμογή μπορεί να έχει πρόσβαση στις αναμνήσεις σας.';
+
+  @override
+  String get permissionDescReadTasks => 'Αυτή η εφαρμογή μπορεί να έχει πρόσβαση στις εργασίες σας.';
+
+  @override
+  String get permissionDescCreateConversations => 'Αυτή η εφαρμογή μπορεί να δημιουργεί νέες συνομιλίες.';
+
+  @override
+  String get permissionDescCreateMemories => 'Αυτή η εφαρμογή μπορεί να δημιουργεί νέες αναμνήσεις.';
+
+  @override
+  String get realtimeListening => 'Ακρόαση σε πραγματικό χρόνο';
+
+  @override
+  String get setupCompleted => 'Ολοκληρώθηκε';
+
+  @override
+  String get pleaseSelectRating => 'Παρακαλώ επιλέξτε αξιολόγηση';
+
+  @override
+  String get writeReviewOptional => 'Γράψτε μια κριτική (προαιρετικό)';
+
+  @override
+  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
+
+  @override
+  String get setupQuestionProfession => '1. What do you do?';
+
+  @override
+  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
+
+  @override
+  String get setupQuestionAge => '3. What\'s your age range?';
+
+  @override
+  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
+
+  @override
+  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
+
+  @override
+  String get professionEntrepreneur => 'Entrepreneur';
+
+  @override
+  String get professionSoftwareEngineer => 'Software Engineer';
+
+  @override
+  String get professionProductManager => 'Product Manager';
+
+  @override
+  String get professionExecutive => 'Executive';
+
+  @override
+  String get professionSales => 'Sales';
+
+  @override
+  String get professionStudent => 'Student';
+
+  @override
+  String get usageAtWork => 'At work';
+
+  @override
+  String get usageIrlEvents => 'IRL Events';
+
+  @override
+  String get usageOnline => 'Online';
+
+  @override
+  String get usageSocialSettings => 'In Social Settings';
+
+  @override
+  String get usageEverywhere => 'Everywhere';
+
+  @override
   String get customBackendUrlTitle => 'Προσαρμοσμένο URL διακομιστή';
 
   @override
@@ -6464,7 +6420,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get enterBackendUrlError => 'Εισάγετε το URL του διακομιστή';
 
   @override
-  String get urlMustEndWithSlashError => 'Το URL πρέπει να τελειώνει με "/"';
+  String get urlMustEndWithSlashError => 'Το URL πρέπει να τελειώνει με \"/\"';
 
   @override
   String get invalidUrlError => 'Εισάγετε ένα έγκυρο URL';
@@ -6533,7 +6489,8 @@ class AppLocalizationsEl extends AppLocalizations {
   String get buildingKnowledgeGraphFromMemories => 'Δημιουργία γραφήματος γνώσης από αναμνήσεις...';
 
   @override
-  String get knowledgeGraphWillBuildAutomatically => 'Το γράφημα γνώσης θα δημιουργηθεί αυτόματα καθώς δημιουργείτε νέες αναμνήσεις.';
+  String get knowledgeGraphWillBuildAutomatically =>
+      'Το γράφημα γνώσης θα δημιουργηθεί αυτόματα καθώς δημιουργείτε νέες αναμνήσεις.';
 
   @override
   String get buildGraphButton => 'Δημιουργία γραφήματος';
@@ -6550,7 +6507,7 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get writeSomething => 'Γράψε κάτι';
+  String get writeSomething => 'Γράψτε κάτι';
 
   @override
   String get submitReply => 'Υποβολή απάντησης';
@@ -6577,8 +6534,233 @@ class AppLocalizationsEl extends AppLocalizations {
   String get learnMoreLink => 'μάθετε περισσότερα';
 
   @override
-  String get installsCount => 'Εγκαταστάσεις';
+  String get moneyEarned => 'Κέρδη';
 
   @override
-  String get moneyEarned => 'Κέρδη';
+  String get writeYourReply => 'Write your reply...';
+
+  @override
+  String get replySentSuccessfully => 'Reply sent successfully';
+
+  @override
+  String failedToSendReply(String error) {
+    return 'Failed to send reply: $error';
+  }
+
+  @override
+  String get send => 'Send';
+
+  @override
+  String starFilter(int count) {
+    return '$count Star';
+  }
+
+  @override
+  String get noReviewsFound => 'No Reviews Found';
+
+  @override
+  String get editReply => 'Edit Reply';
+
+  @override
+  String get reply => 'Reply';
+
+  @override
+  String starFilterLabel(int count) {
+    return '$count αστέρι';
+  }
+
+  @override
+  String get sharePublicLink => 'Share Public Link';
+
+  @override
+  String get makePersonaPublic => 'Make Persona Public';
+
+  @override
+  String get connectedKnowledgeData => 'Connected Knowledge Data';
+
+  @override
+  String get enterName => 'Enter name';
+
+  @override
+  String get disconnectTwitter => 'Disconnect Twitter';
+
+  @override
+  String get disconnectTwitterConfirmation =>
+      'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
+
+  @override
+  String get getOmiDeviceDescription => 'Create a more accurate clone with your personal conversations';
+
+  @override
+  String get getOmi => 'Get Omi';
+
+  @override
+  String get iHaveOmiDevice => 'I have Omi device';
+
+  @override
+  String get goal => 'ΣΤΟΧΟΣ';
+
+  @override
+  String get tapToTrackThisGoal => 'Πατήστε για παρακολούθηση αυτού του στόχου';
+
+  @override
+  String get tapToSetAGoal => 'Πατήστε για να ορίσετε έναν στόχο';
+
+  @override
+  String get processedConversations => 'Επεξεργασμένες συνομιλίες';
+
+  @override
+  String get updatedConversations => 'Ενημερωμένες συνομιλίες';
+
+  @override
+  String get newConversations => 'Νέες συνομιλίες';
+
+  @override
+  String get summaryTemplate => 'Πρότυπο σύνοψης';
+
+  @override
+  String get suggestedTemplates => 'Προτεινόμενα πρότυπα';
+
+  @override
+  String get otherTemplates => 'Άλλα πρότυπα';
+
+  @override
+  String get availableTemplates => 'Διαθέσιμα πρότυπα';
+
+  @override
+  String get getCreative => 'Γίνε δημιουργικός';
+
+  @override
+  String get defaultLabel => 'Προεπιλογή';
+
+  @override
+  String get lastUsedLabel => 'Τελευταία χρήση';
+
+  @override
+  String get setDefaultApp => 'Ορισμός προεπιλεγμένης εφαρμογής';
+
+  @override
+  String setDefaultAppContent(String appName) {
+    return 'Να οριστεί το $appName ως προεπιλεγμένη εφαρμογή σύνοψης;\\n\\nΑυτή η εφαρμογή θα χρησιμοποιείται αυτόματα για όλες τις μελλοντικές συνόψεις συνομιλιών.';
+  }
+
+  @override
+  String get setDefaultButton => 'Ορισμός προεπιλογής';
+
+  @override
+  String setAsDefaultSuccess(String appName) {
+    return 'Το $appName ορίστηκε ως προεπιλεγμένη εφαρμογή σύνοψης';
+  }
+
+  @override
+  String get createCustomTemplate => 'Δημιουργία προσαρμοσμένου προτύπου';
+
+  @override
+  String get allTemplates => 'Όλα τα πρότυπα';
+
+  @override
+  String failedToInstallApp(String appName) {
+    return 'Αποτυχία εγκατάστασης του $appName. Παρακαλώ δοκιμάστε ξανά.';
+  }
+
+  @override
+  String errorInstallingApp(String appName, String error) {
+    return 'Σφάλμα εγκατάστασης του $appName: $error';
+  }
+
+  @override
+  String tagSpeaker(int speakerId) {
+    return 'Tag Speaker $speakerId';
+  }
+
+  @override
+  String get personNameAlreadyExists => 'A person with this name already exists.';
+
+  @override
+  String get selectYouFromList => 'To tag yourself, please select \"You\" from the list.';
+
+  @override
+  String get enterPersonsName => 'Enter Person\'s Name';
+
+  @override
+  String get addPerson => 'Add Person';
+
+  @override
+  String tagOtherSegmentsFromSpeaker(int selected, int total) {
+    return 'Tag other segments from this speaker ($selected/$total)';
+  }
+
+  @override
+  String get tagOtherSegments => 'Tag other segments';
+
+  @override
+  String get managePeople => 'Manage People';
+
+  @override
+  String get shareViaSms => 'Κοινοποίηση μέσω SMS';
+
+  @override
+  String get selectContactsToShareSummary => 'Επιλέξτε επαφές για κοινοποίηση της περίληψης συνομιλίας';
+
+  @override
+  String get searchContactsHint => 'Αναζήτηση επαφών...';
+
+  @override
+  String contactsSelectedCount(int count) {
+    return '$count επιλεγμένα';
+  }
+
+  @override
+  String get clearAllSelection => 'Εκκαθάριση όλων';
+
+  @override
+  String get selectContactsToShare => 'Επιλέξτε επαφές για κοινοποίηση';
+
+  @override
+  String shareWithContactCount(int count) {
+    return 'Κοινοποίηση σε $count επαφή';
+  }
+
+  @override
+  String shareWithContactsCount(int count) {
+    return 'Κοινοποίηση σε $count επαφές';
+  }
+
+  @override
+  String get contactsPermissionRequired => 'Απαιτείται άδεια επαφών';
+
+  @override
+  String get contactsPermissionRequiredForSms => 'Απαιτείται άδεια επαφών για κοινοποίηση μέσω SMS';
+
+  @override
+  String get grantContactsPermissionForSms => 'Παρακαλώ δώστε άδεια επαφών για κοινοποίηση μέσω SMS';
+
+  @override
+  String get noContactsWithPhoneNumbers => 'Δεν βρέθηκαν επαφές με τηλεφωνικούς αριθμούς';
+
+  @override
+  String get noContactsMatchSearch => 'Καμία επαφή δεν ταιριάζει με την αναζήτησή σας';
+
+  @override
+  String get failedToLoadContacts => 'Αποτυχία φόρτωσης επαφών';
+
+  @override
+  String get failedToPrepareConversationForSharing =>
+      'Αποτυχία προετοιμασίας συνομιλίας για κοινοποίηση. Παρακαλώ δοκιμάστε ξανά.';
+
+  @override
+  String get couldNotOpenSmsApp => 'Δεν ήταν δυνατό το άνοιγμα της εφαρμογής SMS. Παρακαλώ δοκιμάστε ξανά.';
+
+  @override
+  String heresWhatWeDiscussed(String link) {
+    return 'Εδώ είναι τι συζητήσαμε: $link';
+  }
+
+  @override
+  String get wifiSync => 'Συγχρονισμός WiFi';
+
+  @override
+  String itemCopiedToClipboard(String item) {
+    return '$item αντιγράφηκε στο πρόχειρο';
+  }
 }

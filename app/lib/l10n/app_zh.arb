@@ -357,7 +357,7 @@
   "permissionRevokedTitle": "权限已撤销",
   "permissionRevokedMessage": "您希望我们也删除您现有的所有录音吗？",
   "yes": "是",
-  "editName": "编辑姓名",
+  "editName": "Edit Name",
   "howShouldOmiCallYou": "Omi 应该怎么称呼您？",
   "enterYourName": "输入您的姓名",
   "nameCannotBeEmpty": "姓名不能为空",
@@ -989,7 +989,7 @@
   "help": "帮助",
   "pro": "Pro",
   "upgradeToPro": "升级至Pro",
-  "getOmiDevice": "获取Omi设备",
+  "getOmiDevice": "Get Omi Device",
   "wearableAiCompanion": "可穿戴AI伴侣",
   "loadingMemories": "加载回忆中...",
   "allMemories": "所有回忆",
@@ -1169,7 +1169,7 @@
   "selectTime": "选择时间",
   "accountGroup": "账户",
   "signOutQuestion": "退出登录？",
-  "signOutConfirmation": "您确定要退出登录吗？",
+  "signOutConfirmation": "Are you sure you want to sign out?",
   "customVocabularyHeader": "自定义词汇",
   "addWordsDescription": "添加 Omi 在转录期间应识别的词汇。",
   "enterWordsHint": "输入词汇（逗号分隔）",
@@ -2035,5 +2035,119 @@
   "cantRateWithoutInternet": "没有网络连接无法评价应用。",
   "appAnalytics": "应用分析",
   "learnMoreLink": "了解更多",
-  "moneyEarned": "收入"
+  "moneyEarned": "收入",
+  "starFilterLabel": "{count}星",
+  "@starFilterLabel": {
+    "description": "Filter chip label for star rating",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sharePublicLink": "Share Public Link",
+  "makePersonaPublic": "Make Persona Public",
+  "connectedKnowledgeData": "Connected Knowledge Data",
+  "enterName": "Enter name",
+  "disconnectTwitter": "Disconnect Twitter",
+  "disconnectTwitterConfirmation": "Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.",
+  "getOmiDeviceDescription": "Create a more accurate clone with your personal conversations",
+  "getOmi": "Get Omi",
+  "iHaveOmiDevice": "I have Omi device",
+  "goal": "目标",
+  "tapToTrackThisGoal": "点击追踪此目标",
+  "tapToSetAGoal": "点击设置目标",
+  "processedConversations": "已处理的对话",
+  "updatedConversations": "已更新的对话",
+  "newConversations": "新对话",
+  "summaryTemplate": "摘要模板",
+  "suggestedTemplates": "推荐模板",
+  "otherTemplates": "其他模板",
+  "availableTemplates": "可用模板",
+  "getCreative": "发挥创意",
+  "defaultLabel": "默认",
+  "lastUsedLabel": "上次使用",
+  "setDefaultApp": "设置默认应用",
+  "setDefaultAppContent": "将 {appName} 设为您的默认摘要应用？\\n\\n此应用将自动用于所有未来的对话摘要。",
+  "@setDefaultAppContent": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "setDefaultButton": "设为默认",
+  "setAsDefaultSuccess": "{appName} 已设为默认摘要应用",
+  "@setAsDefaultSuccess": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "createCustomTemplate": "创建自定义模板",
+  "allTemplates": "所有模板",
+  "failedToInstallApp": "安装 {appName} 失败。请重试。",
+  "@failedToInstallApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "errorInstallingApp": "安装 {appName} 时出错：{error}",
+  "@errorInstallingApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tagSpeaker": "Tag Speaker {speakerId}",
+  "@tagSpeaker": {
+    "placeholders": {
+      "speakerId": {
+        "type": "int"
+      }
+    }
+  },
+  "personNameAlreadyExists": "A person with this name already exists.",
+  "selectYouFromList": "To tag yourself, please select \"You\" from the list.",
+  "enterPersonsName": "Enter Person's Name",
+  "addPerson": "Add Person",
+  "tagOtherSegmentsFromSpeaker": "Tag other segments from this speaker ({selected}/{total})",
+  "@tagOtherSegmentsFromSpeaker": {
+    "placeholders": {
+      "selected": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "tagOtherSegments": "Tag other segments",
+  "managePeople": "Manage People",
+  "shareViaSms": "通过短信分享",
+  "selectContactsToShareSummary": "选择联系人分享对话摘要",
+  "searchContactsHint": "搜索联系人...",
+  "contactsSelectedCount": "已选择 {count} 个",
+  "clearAllSelection": "全部清除",
+  "selectContactsToShare": "选择要分享的联系人",
+  "shareWithContactCount": "分享给 {count} 个联系人",
+  "shareWithContactsCount": "分享给 {count} 个联系人",
+  "contactsPermissionRequired": "需要通讯录权限",
+  "contactsPermissionRequiredForSms": "需要通讯录权限才能通过短信分享",
+  "grantContactsPermissionForSms": "请授予通讯录权限以便通过短信分享",
+  "noContactsWithPhoneNumbers": "未找到有电话号码的联系人",
+  "noContactsMatchSearch": "没有联系人与您的搜索匹配",
+  "failedToLoadContacts": "无法加载联系人",
+  "failedToPrepareConversationForSharing": "无法准备对话进行分享。请重试。",
+  "couldNotOpenSmsApp": "无法打开短信应用。请重试。",
+  "heresWhatWeDiscussed": "这是我们刚才讨论的内容: {link}",
+  "wifiSync": "WiFi 同步",
+  "itemCopiedToClipboard": "{item} 已复制到剪贴板"
 }

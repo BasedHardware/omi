@@ -1150,7 +1150,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get yes => 'Có';
 
   @override
-  String get editName => 'Chỉnh sửa tên';
+  String get editName => 'Edit Name';
 
   @override
   String get howShouldOmiCallYou => 'Omi nên gọi bạn như thế nào?';
@@ -2906,9 +2906,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get connectNow => 'Kết nối Ngay';
 
   @override
-  String installsCount(String count) {
-    return '$count+ lượt cài đặt';
-  }
+  String get installsCount => 'Lượt cài đặt';
 
   @override
   String get uninstallApp => 'Gỡ cài đặt ứng dụng';
@@ -2942,7 +2940,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get setupSteps => 'Các bước thiết lập';
 
   @override
-  String get setupInstructions => 'Hướng dẫn thiết lập';
+  String get setupInstructions => 'Hướng dẫn cài đặt';
 
   @override
   String get integrationInstructions => 'Hướng dẫn tích hợp';
@@ -2954,13 +2952,13 @@ class AppLocalizationsVi extends AppLocalizations {
   String get aboutTheApp => 'Về ứng dụng';
 
   @override
-  String get aboutThePersona => 'Về nhân vật';
+  String get aboutThePersona => 'Về persona';
 
   @override
-  String get chatPersonality => 'Cá tính trò chuyện';
+  String get chatPersonality => 'Tính cách chat';
 
   @override
-  String get ratingsAndReviews => 'Đánh giá & Nhận xét';
+  String get ratingsAndReviews => 'Đánh giá và nhận xét';
 
   @override
   String get noRatings => 'không có đánh giá';
@@ -3272,7 +3270,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get upgradeToPro => 'Nâng cấp lên Pro';
 
   @override
-  String get getOmiDevice => 'Nhận thiết bị Omi';
+  String get getOmiDevice => 'Get Omi Device';
 
   @override
   String get wearableAiCompanion => 'Trợ lý AI đeo được';
@@ -3838,7 +3836,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get signOutQuestion => 'Đăng xuất?';
 
   @override
-  String get signOutConfirmation => 'Bạn có chắc chắn muốn đăng xuất?';
+  String get signOutConfirmation => 'Are you sure you want to sign out?';
 
   @override
   String get customVocabularyHeader => 'TỪ VỰNG TÙY CHỈNH';
@@ -4092,7 +4090,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get pushToTalk => 'Nhấn để nói';
 
   @override
-  String get summaryPrompt => 'Gợi ý tóm tắt';
+  String get summaryPrompt => 'Prompt tóm tắt';
 
   @override
   String get pleaseSelectARating => 'Vui lòng chọn đánh giá';
@@ -4104,7 +4102,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get reviewUpdatedSuccessfully => 'Đã cập nhật đánh giá thành công 🚀';
 
   @override
-  String get failedToSubmitReview => 'Không thể gửi đánh giá. Vui lòng thử lại.';
+  String get failedToSubmitReview => 'Gửi đánh giá thất bại. Vui lòng thử lại.';
 
   @override
   String get addYourReview => 'Thêm đánh giá của bạn';
@@ -5811,9 +5809,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get chatAppsTitle => 'Ứng dụng chat';
 
   @override
-  String get chatAssistantsTitle => 'Trợ lý trò chuyện';
-
-  @override
   String get selectApp => 'Chọn ứng dụng';
 
   @override
@@ -5821,150 +5816,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get disable => 'Vô hiệu hóa';
-
-  @override
-  String get permissionReadConversations => 'Đọc cuộc hội thoại';
-
-  @override
-  String get permissionReadMemories => 'Đọc ký ức';
-
-  @override
-  String get permissionReadTasks => 'Đọc nhiệm vụ';
-
-  @override
-  String get permissionCreateConversations => 'Tạo cuộc hội thoại';
-
-  @override
-  String get permissionCreateMemories => 'Tạo ký ức';
-
-  @override
-  String get permissionTypeAccess => 'Truy cập';
-
-  @override
-  String get permissionTypeCreate => 'Tạo';
-
-  @override
-  String get permissionTypeTrigger => 'Kích hoạt';
-
-  @override
-  String get permissionDescReadConversations => 'Ứng dụng này có thể truy cập các cuộc hội thoại của bạn.';
-
-  @override
-  String get permissionDescReadMemories => 'Ứng dụng này có thể truy cập ký ức của bạn.';
-
-  @override
-  String get permissionDescReadTasks => 'Ứng dụng này có thể truy cập nhiệm vụ của bạn.';
-
-  @override
-  String get permissionDescCreateConversations => 'Ứng dụng này có thể tạo cuộc hội thoại mới.';
-
-  @override
-  String get permissionDescCreateMemories => 'Ứng dụng này có thể tạo ký ức mới.';
-
-  @override
-  String get realtimeListening => 'Nghe theo thời gian thực';
-
-  @override
-  String get invalidIntegrationUrl => 'URL tích hợp không hợp lệ';
-
-  @override
-  String get invalidSetupInstructionsUrl => 'URL hướng dẫn cài đặt không hợp lệ';
-
-  @override
-  String get setupCompleted => 'Hoàn thành';
-
-  @override
-  String get tapToComplete => 'Nhấn để hoàn thành';
-
-  @override
-  String get setupInstructions => 'Hướng dẫn cài đặt';
-
-  @override
-  String get aboutTheApp => 'Về ứng dụng';
-
-  @override
-  String get aboutThePersona => 'Về persona';
-
-  @override
-  String get pushToTalk => 'Nhấn để nói';
-
-  @override
-  String get summaryPrompt => 'Prompt tóm tắt';
-
-  @override
-  String get chatPersonality => 'Tính cách chat';
-
-  @override
-  String get ratingsAndReviews => 'Đánh giá và nhận xét';
-
-  @override
-  String get pleaseSelectRating => 'Vui lòng chọn đánh giá';
-
-  @override
-  String get reviewAddedSuccessfully => 'Đã thêm đánh giá thành công 🚀';
-
-  @override
-  String get reviewUpdatedSuccessfully => 'Đã cập nhật đánh giá thành công 🚀';
-
-  @override
-  String get failedToSubmitReview => 'Gửi đánh giá thất bại. Vui lòng thử lại.';
-
-  @override
-  String get writeReviewOptional => 'Viết đánh giá (tùy chọn)';
-
-  @override
-  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
-
-  @override
-  String get setupQuestionProfession => '1. What do you do?';
-
-  @override
-  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
-
-  @override
-  String get setupQuestionAge => '3. What\'s your age range?';
-
-  @override
-  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
-
-  @override
-  String get continueButton => 'Tiếp tục';
-
-  @override
-  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
-
-  @override
-  String get professionEntrepreneur => 'Entrepreneur';
-
-  @override
-  String get professionSoftwareEngineer => 'Software Engineer';
-
-  @override
-  String get professionProductManager => 'Product Manager';
-
-  @override
-  String get professionExecutive => 'Executive';
-
-  @override
-  String get professionSales => 'Sales';
-
-  @override
-  String get professionStudent => 'Student';
-
-  @override
-  String get usageAtWork => 'At work';
-
-  @override
-  String get usageIrlEvents => 'IRL Events';
-
-  @override
-  String get usageOnline => 'Online';
-
-  @override
-  String get usageSocialSettings => 'In Social Settings';
-
-  @override
-  String get usageEverywhere => 'Everywhere';
 
   @override
   String get photoLibrary => 'Thư viện ảnh';
@@ -6415,6 +6266,111 @@ class AppLocalizationsVi extends AppLocalizations {
   String get device => 'Device';
 
   @override
+  String get chatAssistantsTitle => 'Trợ lý trò chuyện';
+
+  @override
+  String get permissionReadConversations => 'Đọc cuộc hội thoại';
+
+  @override
+  String get permissionReadMemories => 'Đọc ký ức';
+
+  @override
+  String get permissionReadTasks => 'Đọc nhiệm vụ';
+
+  @override
+  String get permissionCreateConversations => 'Tạo cuộc hội thoại';
+
+  @override
+  String get permissionCreateMemories => 'Tạo ký ức';
+
+  @override
+  String get permissionTypeAccess => 'Truy cập';
+
+  @override
+  String get permissionTypeCreate => 'Tạo';
+
+  @override
+  String get permissionTypeTrigger => 'Kích hoạt';
+
+  @override
+  String get permissionDescReadConversations => 'Ứng dụng này có thể truy cập các cuộc hội thoại của bạn.';
+
+  @override
+  String get permissionDescReadMemories => 'Ứng dụng này có thể truy cập ký ức của bạn.';
+
+  @override
+  String get permissionDescReadTasks => 'Ứng dụng này có thể truy cập nhiệm vụ của bạn.';
+
+  @override
+  String get permissionDescCreateConversations => 'Ứng dụng này có thể tạo cuộc hội thoại mới.';
+
+  @override
+  String get permissionDescCreateMemories => 'Ứng dụng này có thể tạo ký ức mới.';
+
+  @override
+  String get realtimeListening => 'Nghe theo thời gian thực';
+
+  @override
+  String get setupCompleted => 'Hoàn thành';
+
+  @override
+  String get pleaseSelectRating => 'Vui lòng chọn đánh giá';
+
+  @override
+  String get writeReviewOptional => 'Viết đánh giá (tùy chọn)';
+
+  @override
+  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
+
+  @override
+  String get setupQuestionProfession => '1. What do you do?';
+
+  @override
+  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
+
+  @override
+  String get setupQuestionAge => '3. What\'s your age range?';
+
+  @override
+  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
+
+  @override
+  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
+
+  @override
+  String get professionEntrepreneur => 'Entrepreneur';
+
+  @override
+  String get professionSoftwareEngineer => 'Software Engineer';
+
+  @override
+  String get professionProductManager => 'Product Manager';
+
+  @override
+  String get professionExecutive => 'Executive';
+
+  @override
+  String get professionSales => 'Sales';
+
+  @override
+  String get professionStudent => 'Student';
+
+  @override
+  String get usageAtWork => 'At work';
+
+  @override
+  String get usageIrlEvents => 'IRL Events';
+
+  @override
+  String get usageOnline => 'Online';
+
+  @override
+  String get usageSocialSettings => 'In Social Settings';
+
+  @override
+  String get usageEverywhere => 'Everywhere';
+
+  @override
   String get customBackendUrlTitle => 'URL máy chủ tùy chỉnh';
 
   @override
@@ -6427,7 +6383,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get enterBackendUrlError => 'Vui lòng nhập URL máy chủ';
 
   @override
-  String get urlMustEndWithSlashError => 'URL phải kết thúc bằng "/"';
+  String get urlMustEndWithSlashError => 'URL phải kết thúc bằng \"/\"';
 
   @override
   String get invalidUrlError => 'Vui lòng nhập URL hợp lệ';
@@ -6496,7 +6452,8 @@ class AppLocalizationsVi extends AppLocalizations {
   String get buildingKnowledgeGraphFromMemories => 'Đang xây dựng biểu đồ tri thức từ ký ức...';
 
   @override
-  String get knowledgeGraphWillBuildAutomatically => 'Biểu đồ tri thức của bạn sẽ được xây dựng tự động khi bạn tạo ký ức mới.';
+  String get knowledgeGraphWillBuildAutomatically =>
+      'Biểu đồ tri thức của bạn sẽ được xây dựng tự động khi bạn tạo ký ức mới.';
 
   @override
   String get buildGraphButton => 'Xây dựng biểu đồ';
@@ -6519,7 +6476,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get submitReply => 'Gửi phản hồi';
 
   @override
-  String get editYourReply => 'Chỉnh sửa phản hồi';
+  String get editYourReply => 'Sửa phản hồi';
 
   @override
   String get replyToReview => 'Trả lời đánh giá';
@@ -6540,8 +6497,233 @@ class AppLocalizationsVi extends AppLocalizations {
   String get learnMoreLink => 'tìm hiểu thêm';
 
   @override
-  String get installsCount => 'Lượt cài đặt';
+  String get moneyEarned => 'Tiền kiếm được';
 
   @override
-  String get moneyEarned => 'Tiền kiếm được';
+  String get writeYourReply => 'Write your reply...';
+
+  @override
+  String get replySentSuccessfully => 'Reply sent successfully';
+
+  @override
+  String failedToSendReply(String error) {
+    return 'Failed to send reply: $error';
+  }
+
+  @override
+  String get send => 'Send';
+
+  @override
+  String starFilter(int count) {
+    return '$count Star';
+  }
+
+  @override
+  String get noReviewsFound => 'No Reviews Found';
+
+  @override
+  String get editReply => 'Edit Reply';
+
+  @override
+  String get reply => 'Reply';
+
+  @override
+  String starFilterLabel(int count) {
+    return '$count sao';
+  }
+
+  @override
+  String get sharePublicLink => 'Share Public Link';
+
+  @override
+  String get makePersonaPublic => 'Make Persona Public';
+
+  @override
+  String get connectedKnowledgeData => 'Connected Knowledge Data';
+
+  @override
+  String get enterName => 'Enter name';
+
+  @override
+  String get disconnectTwitter => 'Disconnect Twitter';
+
+  @override
+  String get disconnectTwitterConfirmation =>
+      'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
+
+  @override
+  String get getOmiDeviceDescription => 'Create a more accurate clone with your personal conversations';
+
+  @override
+  String get getOmi => 'Get Omi';
+
+  @override
+  String get iHaveOmiDevice => 'I have Omi device';
+
+  @override
+  String get goal => 'MỤC TIÊU';
+
+  @override
+  String get tapToTrackThisGoal => 'Nhấn để theo dõi mục tiêu này';
+
+  @override
+  String get tapToSetAGoal => 'Nhấn để đặt mục tiêu';
+
+  @override
+  String get processedConversations => 'Cuộc trò chuyện đã xử lý';
+
+  @override
+  String get updatedConversations => 'Cuộc trò chuyện đã cập nhật';
+
+  @override
+  String get newConversations => 'Cuộc trò chuyện mới';
+
+  @override
+  String get summaryTemplate => 'Mẫu tóm tắt';
+
+  @override
+  String get suggestedTemplates => 'Mẫu được đề xuất';
+
+  @override
+  String get otherTemplates => 'Các mẫu khác';
+
+  @override
+  String get availableTemplates => 'Mẫu có sẵn';
+
+  @override
+  String get getCreative => 'Sáng tạo';
+
+  @override
+  String get defaultLabel => 'Mặc định';
+
+  @override
+  String get lastUsedLabel => 'Sử dụng gần đây';
+
+  @override
+  String get setDefaultApp => 'Đặt ứng dụng mặc định';
+
+  @override
+  String setDefaultAppContent(String appName) {
+    return 'Đặt $appName làm ứng dụng tóm tắt mặc định của bạn?\\n\\nỨng dụng này sẽ được tự động sử dụng cho tất cả các bản tóm tắt cuộc trò chuyện trong tương lai.';
+  }
+
+  @override
+  String get setDefaultButton => 'Đặt mặc định';
+
+  @override
+  String setAsDefaultSuccess(String appName) {
+    return '$appName đã được đặt làm ứng dụng tóm tắt mặc định';
+  }
+
+  @override
+  String get createCustomTemplate => 'Tạo mẫu tùy chỉnh';
+
+  @override
+  String get allTemplates => 'Tất cả mẫu';
+
+  @override
+  String failedToInstallApp(String appName) {
+    return 'Không thể cài đặt $appName. Vui lòng thử lại.';
+  }
+
+  @override
+  String errorInstallingApp(String appName, String error) {
+    return 'Lỗi khi cài đặt $appName: $error';
+  }
+
+  @override
+  String tagSpeaker(int speakerId) {
+    return 'Tag Speaker $speakerId';
+  }
+
+  @override
+  String get personNameAlreadyExists => 'A person with this name already exists.';
+
+  @override
+  String get selectYouFromList => 'To tag yourself, please select \"You\" from the list.';
+
+  @override
+  String get enterPersonsName => 'Enter Person\'s Name';
+
+  @override
+  String get addPerson => 'Add Person';
+
+  @override
+  String tagOtherSegmentsFromSpeaker(int selected, int total) {
+    return 'Tag other segments from this speaker ($selected/$total)';
+  }
+
+  @override
+  String get tagOtherSegments => 'Tag other segments';
+
+  @override
+  String get managePeople => 'Manage People';
+
+  @override
+  String get shareViaSms => 'Chia sẻ qua SMS';
+
+  @override
+  String get selectContactsToShareSummary => 'Chọn liên hệ để chia sẻ tóm tắt cuộc trò chuyện';
+
+  @override
+  String get searchContactsHint => 'Tìm kiếm liên hệ...';
+
+  @override
+  String contactsSelectedCount(int count) {
+    return 'Đã chọn $count';
+  }
+
+  @override
+  String get clearAllSelection => 'Xóa tất cả';
+
+  @override
+  String get selectContactsToShare => 'Chọn liên hệ để chia sẻ';
+
+  @override
+  String shareWithContactCount(int count) {
+    return 'Chia sẻ với $count liên hệ';
+  }
+
+  @override
+  String shareWithContactsCount(int count) {
+    return 'Chia sẻ với $count liên hệ';
+  }
+
+  @override
+  String get contactsPermissionRequired => 'Cần quyền truy cập danh bạ';
+
+  @override
+  String get contactsPermissionRequiredForSms => 'Cần quyền truy cập danh bạ để chia sẻ qua SMS';
+
+  @override
+  String get grantContactsPermissionForSms => 'Vui lòng cấp quyền truy cập danh bạ để chia sẻ qua SMS';
+
+  @override
+  String get noContactsWithPhoneNumbers => 'Không tìm thấy liên hệ có số điện thoại';
+
+  @override
+  String get noContactsMatchSearch => 'Không có liên hệ nào phù hợp với tìm kiếm của bạn';
+
+  @override
+  String get failedToLoadContacts => 'Không thể tải danh bạ';
+
+  @override
+  String get failedToPrepareConversationForSharing =>
+      'Không thể chuẩn bị cuộc trò chuyện để chia sẻ. Vui lòng thử lại.';
+
+  @override
+  String get couldNotOpenSmsApp => 'Không thể mở ứng dụng SMS. Vui lòng thử lại.';
+
+  @override
+  String heresWhatWeDiscussed(String link) {
+    return 'Đây là những gì chúng ta vừa thảo luận: $link';
+  }
+
+  @override
+  String get wifiSync => 'Đồng bộ WiFi';
+
+  @override
+  String itemCopiedToClipboard(String item) {
+    return 'Đã sao chép $item vào bộ nhớ tạm';
+  }
 }

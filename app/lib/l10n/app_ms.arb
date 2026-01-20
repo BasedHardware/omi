@@ -357,7 +357,7 @@
   "permissionRevokedTitle": "Kebenaran Dibatalkan",
   "permissionRevokedMessage": "Adakah anda mahu kami membuang semua rakaman sedia ada anda juga?",
   "yes": "Ya",
-  "editName": "Edit Nama",
+  "editName": "Edit Name",
   "howShouldOmiCallYou": "Apa yang Omi patut panggil anda?",
   "enterYourName": "Masukkan nama anda",
   "nameCannotBeEmpty": "Nama tidak boleh kosong",
@@ -988,7 +988,7 @@
   "help": "Bantuan",
   "pro": "Pro",
   "upgradeToPro": "Naik taraf ke Pro",
-  "getOmiDevice": "Dapatkan Peranti Omi",
+  "getOmiDevice": "Get Omi Device",
   "wearableAiCompanion": "Teman AI boleh pakai",
   "loadingMemories": "Memuatkan kenangan...",
   "allMemories": "Semua kenangan",
@@ -1168,7 +1168,7 @@
   "selectTime": "Pilih Masa",
   "accountGroup": "Akaun",
   "signOutQuestion": "Log keluar?",
-  "signOutConfirmation": "Adakah anda pasti mahu log keluar?",
+  "signOutConfirmation": "Are you sure you want to sign out?",
   "customVocabularyHeader": "PERBENDAHARAAN KATA TERSUAI",
   "addWordsDescription": "Tambah perkataan yang Omi harus kenali semasa transkripsi.",
   "enterWordsHint": "Masukkan perkataan (dipisahkan koma)",
@@ -2034,5 +2034,119 @@
   "cantRateWithoutInternet": "Tidak boleh menilai aplikasi tanpa sambungan internet.",
   "appAnalytics": "Analitik Aplikasi",
   "learnMoreLink": "ketahui lebih lanjut",
-  "moneyEarned": "Wang yang diperoleh"
+  "moneyEarned": "Wang yang diperoleh",
+  "starFilterLabel": "{count} bintang",
+  "@starFilterLabel": {
+    "description": "Filter chip label for star rating",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sharePublicLink": "Share Public Link",
+  "makePersonaPublic": "Make Persona Public",
+  "connectedKnowledgeData": "Connected Knowledge Data",
+  "enterName": "Enter name",
+  "disconnectTwitter": "Disconnect Twitter",
+  "disconnectTwitterConfirmation": "Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.",
+  "getOmiDeviceDescription": "Create a more accurate clone with your personal conversations",
+  "getOmi": "Get Omi",
+  "iHaveOmiDevice": "I have Omi device",
+  "goal": "MATLAMAT",
+  "tapToTrackThisGoal": "Ketik untuk menjejaki matlamat ini",
+  "tapToSetAGoal": "Ketik untuk menetapkan matlamat",
+  "processedConversations": "Perbualan yang Diproses",
+  "updatedConversations": "Perbualan yang Dikemas Kini",
+  "newConversations": "Perbualan Baharu",
+  "summaryTemplate": "Templat Ringkasan",
+  "suggestedTemplates": "Templat Dicadangkan",
+  "otherTemplates": "Templat Lain",
+  "availableTemplates": "Templat Tersedia",
+  "getCreative": "Jadilah Kreatif",
+  "defaultLabel": "Lalai",
+  "lastUsedLabel": "Terakhir Digunakan",
+  "setDefaultApp": "Tetapkan Aplikasi Lalai",
+  "setDefaultAppContent": "Tetapkan {appName} sebagai aplikasi ringkasan lalai anda?\\n\\nAplikasi ini akan digunakan secara automatik untuk semua ringkasan perbualan pada masa hadapan.",
+  "@setDefaultAppContent": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "setDefaultButton": "Tetapkan Lalai",
+  "setAsDefaultSuccess": "{appName} ditetapkan sebagai aplikasi ringkasan lalai",
+  "@setAsDefaultSuccess": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "createCustomTemplate": "Cipta Templat Tersuai",
+  "allTemplates": "Semua Templat",
+  "failedToInstallApp": "Gagal memasang {appName}. Sila cuba lagi.",
+  "@failedToInstallApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "errorInstallingApp": "Ralat memasang {appName}: {error}",
+  "@errorInstallingApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tagSpeaker": "Tag Speaker {speakerId}",
+  "@tagSpeaker": {
+    "placeholders": {
+      "speakerId": {
+        "type": "int"
+      }
+    }
+  },
+  "personNameAlreadyExists": "A person with this name already exists.",
+  "selectYouFromList": "To tag yourself, please select \"You\" from the list.",
+  "enterPersonsName": "Enter Person's Name",
+  "addPerson": "Add Person",
+  "tagOtherSegmentsFromSpeaker": "Tag other segments from this speaker ({selected}/{total})",
+  "@tagOtherSegmentsFromSpeaker": {
+    "placeholders": {
+      "selected": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "tagOtherSegments": "Tag other segments",
+  "managePeople": "Manage People",
+  "shareViaSms": "Kongsi melalui SMS",
+  "selectContactsToShareSummary": "Pilih kenalan untuk berkongsi ringkasan perbualan anda",
+  "searchContactsHint": "Cari kenalan...",
+  "contactsSelectedCount": "{count} dipilih",
+  "clearAllSelection": "Kosongkan semua",
+  "selectContactsToShare": "Pilih kenalan untuk dikongsi",
+  "shareWithContactCount": "Kongsi dengan {count} kenalan",
+  "shareWithContactsCount": "Kongsi dengan {count} kenalan",
+  "contactsPermissionRequired": "Kebenaran kenalan diperlukan",
+  "contactsPermissionRequiredForSms": "Kebenaran kenalan diperlukan untuk berkongsi melalui SMS",
+  "grantContactsPermissionForSms": "Sila berikan kebenaran kenalan untuk berkongsi melalui SMS",
+  "noContactsWithPhoneNumbers": "Tiada kenalan dengan nombor telefon ditemui",
+  "noContactsMatchSearch": "Tiada kenalan yang sepadan dengan carian anda",
+  "failedToLoadContacts": "Gagal memuatkan kenalan",
+  "failedToPrepareConversationForSharing": "Gagal menyediakan perbualan untuk dikongsi. Sila cuba lagi.",
+  "couldNotOpenSmsApp": "Tidak dapat membuka aplikasi SMS. Sila cuba lagi.",
+  "heresWhatWeDiscussed": "Inilah yang baru kita bincangkan: {link}",
+  "wifiSync": "Penyegerakan WiFi",
+  "itemCopiedToClipboard": "{item} disalin ke papan keratan"
 }

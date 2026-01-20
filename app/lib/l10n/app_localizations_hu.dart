@@ -1156,7 +1156,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get yes => 'Igen';
 
   @override
-  String get editName => 'Név szerkesztése';
+  String get editName => 'Edit Name';
 
   @override
   String get howShouldOmiCallYou => 'Hogyan szólítson az Omi?';
@@ -2919,9 +2919,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get connectNow => 'Csatlakoztatás most';
 
   @override
-  String installsCount(String count) {
-    return '$count+ telepítés';
-  }
+  String get installsCount => 'Telepítések';
 
   @override
   String get uninstallApp => 'Alkalmazás eltávolítása';
@@ -2955,7 +2953,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get setupSteps => 'Beállítási lépések';
 
   @override
-  String get setupInstructions => 'Beállítási utasítások';
+  String get setupInstructions => 'Beállítási útmutató';
 
   @override
   String get integrationInstructions => 'Integrációs utasítások';
@@ -2967,7 +2965,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get aboutTheApp => 'Az alkalmazásról';
 
   @override
-  String get aboutThePersona => 'A személyről';
+  String get aboutThePersona => 'A personáról';
 
   @override
   String get chatPersonality => 'Chat személyiség';
@@ -3286,7 +3284,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get upgradeToPro => 'Frissítés Pro-ra';
 
   @override
-  String get getOmiDevice => 'Szerezzen be Omi eszközt';
+  String get getOmiDevice => 'Get Omi Device';
 
   @override
   String get wearableAiCompanion => 'Hordható AI társ';
@@ -3852,7 +3850,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get signOutQuestion => 'Kijelentkezik?';
 
   @override
-  String get signOutConfirmation => 'Biztosan ki szeretne jelentkezni?';
+  String get signOutConfirmation => 'Are you sure you want to sign out?';
 
   @override
   String get customVocabularyHeader => 'EGYÉNI SZÓKINCS';
@@ -4098,13 +4096,13 @@ class AppLocalizationsHu extends AppLocalizations {
   String get invalidIntegrationUrl => 'Érvénytelen integrációs URL';
 
   @override
-  String get tapToComplete => 'Koppintson a befejezéshez';
+  String get tapToComplete => 'Koppints a befejezéshez';
 
   @override
   String get invalidSetupInstructionsUrl => 'Érvénytelen beállítási útmutató URL';
 
   @override
-  String get pushToTalk => 'Nyomja meg a beszédhez';
+  String get pushToTalk => 'Nyomd meg a beszédhez';
 
   @override
   String get summaryPrompt => 'Összefoglaló prompt';
@@ -4113,13 +4111,13 @@ class AppLocalizationsHu extends AppLocalizations {
   String get pleaseSelectARating => 'Kérjük, válasszon értékelést';
 
   @override
-  String get reviewAddedSuccessfully => 'Értékelés sikeresen hozzáadva 🚀';
+  String get reviewAddedSuccessfully => 'Vélemény sikeresen hozzáadva 🚀';
 
   @override
-  String get reviewUpdatedSuccessfully => 'Értékelés sikeresen frissítve 🚀';
+  String get reviewUpdatedSuccessfully => 'Vélemény sikeresen frissítve 🚀';
 
   @override
-  String get failedToSubmitReview => 'Az értékelés elküldése sikertelen. Kérjük, próbálja újra.';
+  String get failedToSubmitReview => 'Nem sikerült elküldeni a véleményt. Kérlek próbáld újra.';
 
   @override
   String get addYourReview => 'Értékelés hozzáadása';
@@ -5833,9 +5831,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get chatAppsTitle => 'Chat alkalmazások';
 
   @override
-  String get chatAssistantsTitle => 'Chat asszisztensek';
-
-  @override
   String get selectApp => 'Alkalmazás kiválasztása';
 
   @override
@@ -5844,150 +5839,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get disable => 'Letiltás';
-
-  @override
-  String get permissionReadConversations => 'Beszélgetések olvasása';
-
-  @override
-  String get permissionReadMemories => 'Emlékek olvasása';
-
-  @override
-  String get permissionReadTasks => 'Feladatok olvasása';
-
-  @override
-  String get permissionCreateConversations => 'Beszélgetések létrehozása';
-
-  @override
-  String get permissionCreateMemories => 'Emlékek létrehozása';
-
-  @override
-  String get permissionTypeAccess => 'Hozzáférés';
-
-  @override
-  String get permissionTypeCreate => 'Létrehozás';
-
-  @override
-  String get permissionTypeTrigger => 'Indító';
-
-  @override
-  String get permissionDescReadConversations => 'Ez az alkalmazás hozzáférhet a beszélgetéseidhez.';
-
-  @override
-  String get permissionDescReadMemories => 'Ez az alkalmazás hozzáférhet az emlékeidhez.';
-
-  @override
-  String get permissionDescReadTasks => 'Ez az alkalmazás hozzáférhet a feladataidhoz.';
-
-  @override
-  String get permissionDescCreateConversations => 'Ez az alkalmazás új beszélgetéseket hozhat létre.';
-
-  @override
-  String get permissionDescCreateMemories => 'Ez az alkalmazás új emlékeket hozhat létre.';
-
-  @override
-  String get realtimeListening => 'Valós idejű hallgatás';
-
-  @override
-  String get invalidIntegrationUrl => 'Érvénytelen integrációs URL';
-
-  @override
-  String get invalidSetupInstructionsUrl => 'Érvénytelen beállítási útmutató URL';
-
-  @override
-  String get setupCompleted => 'Befejezve';
-
-  @override
-  String get tapToComplete => 'Koppints a befejezéshez';
-
-  @override
-  String get setupInstructions => 'Beállítási útmutató';
-
-  @override
-  String get aboutTheApp => 'Az alkalmazásról';
-
-  @override
-  String get aboutThePersona => 'A personáról';
-
-  @override
-  String get pushToTalk => 'Nyomd meg a beszédhez';
-
-  @override
-  String get summaryPrompt => 'Összefoglaló prompt';
-
-  @override
-  String get chatPersonality => 'Chat személyiség';
-
-  @override
-  String get ratingsAndReviews => 'Értékelések és vélemények';
-
-  @override
-  String get pleaseSelectRating => 'Kérlek válassz értékelést';
-
-  @override
-  String get reviewAddedSuccessfully => 'Vélemény sikeresen hozzáadva 🚀';
-
-  @override
-  String get reviewUpdatedSuccessfully => 'Vélemény sikeresen frissítve 🚀';
-
-  @override
-  String get failedToSubmitReview => 'Nem sikerült elküldeni a véleményt. Kérlek próbáld újra.';
-
-  @override
-  String get writeReviewOptional => 'Írj véleményt (opcionális)';
-
-  @override
-  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
-
-  @override
-  String get setupQuestionProfession => '1. What do you do?';
-
-  @override
-  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
-
-  @override
-  String get setupQuestionAge => '3. What\'s your age range?';
-
-  @override
-  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
-
-  @override
-  String get continueButton => 'Folytatás';
-
-  @override
-  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
-
-  @override
-  String get professionEntrepreneur => 'Entrepreneur';
-
-  @override
-  String get professionSoftwareEngineer => 'Software Engineer';
-
-  @override
-  String get professionProductManager => 'Product Manager';
-
-  @override
-  String get professionExecutive => 'Executive';
-
-  @override
-  String get professionSales => 'Sales';
-
-  @override
-  String get professionStudent => 'Student';
-
-  @override
-  String get usageAtWork => 'At work';
-
-  @override
-  String get usageIrlEvents => 'IRL Events';
-
-  @override
-  String get usageOnline => 'Online';
-
-  @override
-  String get usageSocialSettings => 'In Social Settings';
-
-  @override
-  String get usageEverywhere => 'Everywhere';
 
   @override
   String get photoLibrary => 'Fotótár';
@@ -6437,6 +6288,111 @@ class AppLocalizationsHu extends AppLocalizations {
   String get device => 'Device';
 
   @override
+  String get chatAssistantsTitle => 'Chat asszisztensek';
+
+  @override
+  String get permissionReadConversations => 'Beszélgetések olvasása';
+
+  @override
+  String get permissionReadMemories => 'Emlékek olvasása';
+
+  @override
+  String get permissionReadTasks => 'Feladatok olvasása';
+
+  @override
+  String get permissionCreateConversations => 'Beszélgetések létrehozása';
+
+  @override
+  String get permissionCreateMemories => 'Emlékek létrehozása';
+
+  @override
+  String get permissionTypeAccess => 'Hozzáférés';
+
+  @override
+  String get permissionTypeCreate => 'Létrehozás';
+
+  @override
+  String get permissionTypeTrigger => 'Indító';
+
+  @override
+  String get permissionDescReadConversations => 'Ez az alkalmazás hozzáférhet a beszélgetéseidhez.';
+
+  @override
+  String get permissionDescReadMemories => 'Ez az alkalmazás hozzáférhet az emlékeidhez.';
+
+  @override
+  String get permissionDescReadTasks => 'Ez az alkalmazás hozzáférhet a feladataidhoz.';
+
+  @override
+  String get permissionDescCreateConversations => 'Ez az alkalmazás új beszélgetéseket hozhat létre.';
+
+  @override
+  String get permissionDescCreateMemories => 'Ez az alkalmazás új emlékeket hozhat létre.';
+
+  @override
+  String get realtimeListening => 'Valós idejű hallgatás';
+
+  @override
+  String get setupCompleted => 'Befejezve';
+
+  @override
+  String get pleaseSelectRating => 'Kérlek válassz értékelést';
+
+  @override
+  String get writeReviewOptional => 'Írj véleményt (opcionális)';
+
+  @override
+  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
+
+  @override
+  String get setupQuestionProfession => '1. What do you do?';
+
+  @override
+  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
+
+  @override
+  String get setupQuestionAge => '3. What\'s your age range?';
+
+  @override
+  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
+
+  @override
+  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
+
+  @override
+  String get professionEntrepreneur => 'Entrepreneur';
+
+  @override
+  String get professionSoftwareEngineer => 'Software Engineer';
+
+  @override
+  String get professionProductManager => 'Product Manager';
+
+  @override
+  String get professionExecutive => 'Executive';
+
+  @override
+  String get professionSales => 'Sales';
+
+  @override
+  String get professionStudent => 'Student';
+
+  @override
+  String get usageAtWork => 'At work';
+
+  @override
+  String get usageIrlEvents => 'IRL Events';
+
+  @override
+  String get usageOnline => 'Online';
+
+  @override
+  String get usageSocialSettings => 'In Social Settings';
+
+  @override
+  String get usageEverywhere => 'Everywhere';
+
+  @override
   String get customBackendUrlTitle => 'Egyéni háttérszerver URL';
 
   @override
@@ -6449,7 +6405,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get enterBackendUrlError => 'Kérjük, adja meg a háttérszerver URL-jét';
 
   @override
-  String get urlMustEndWithSlashError => 'Az URL-nek "/" karakterrel kell végződnie';
+  String get urlMustEndWithSlashError => 'Az URL-nek \"/\" karakterrel kell végződnie';
 
   @override
   String get invalidUrlError => 'Kérjük, adjon meg érvényes URL-t';
@@ -6518,7 +6474,8 @@ class AppLocalizationsHu extends AppLocalizations {
   String get buildingKnowledgeGraphFromMemories => 'Tudásgráf építése az emlékekből...';
 
   @override
-  String get knowledgeGraphWillBuildAutomatically => 'A tudásgráfja automatikusan felépül, amikor új emlékeket hoz létre.';
+  String get knowledgeGraphWillBuildAutomatically =>
+      'A tudásgráfja automatikusan felépül, amikor új emlékeket hoz létre.';
 
   @override
   String get buildGraphButton => 'Gráf építése';
@@ -6535,7 +6492,7 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get writeSomething => 'Írj valamit';
+  String get writeSomething => 'Írjon valamit';
 
   @override
   String get submitReply => 'Válasz küldése';
@@ -6562,8 +6519,233 @@ class AppLocalizationsHu extends AppLocalizations {
   String get learnMoreLink => 'tudj meg többet';
 
   @override
-  String get installsCount => 'Telepítések';
+  String get moneyEarned => 'Keresett pénz';
 
   @override
-  String get moneyEarned => 'Keresett pénz';
+  String get writeYourReply => 'Write your reply...';
+
+  @override
+  String get replySentSuccessfully => 'Reply sent successfully';
+
+  @override
+  String failedToSendReply(String error) {
+    return 'Failed to send reply: $error';
+  }
+
+  @override
+  String get send => 'Send';
+
+  @override
+  String starFilter(int count) {
+    return '$count Star';
+  }
+
+  @override
+  String get noReviewsFound => 'No Reviews Found';
+
+  @override
+  String get editReply => 'Edit Reply';
+
+  @override
+  String get reply => 'Reply';
+
+  @override
+  String starFilterLabel(int count) {
+    return '$count csillag';
+  }
+
+  @override
+  String get sharePublicLink => 'Share Public Link';
+
+  @override
+  String get makePersonaPublic => 'Make Persona Public';
+
+  @override
+  String get connectedKnowledgeData => 'Connected Knowledge Data';
+
+  @override
+  String get enterName => 'Enter name';
+
+  @override
+  String get disconnectTwitter => 'Disconnect Twitter';
+
+  @override
+  String get disconnectTwitterConfirmation =>
+      'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
+
+  @override
+  String get getOmiDeviceDescription => 'Create a more accurate clone with your personal conversations';
+
+  @override
+  String get getOmi => 'Get Omi';
+
+  @override
+  String get iHaveOmiDevice => 'I have Omi device';
+
+  @override
+  String get goal => 'CÉL';
+
+  @override
+  String get tapToTrackThisGoal => 'Érintse meg a cél követéséhez';
+
+  @override
+  String get tapToSetAGoal => 'Érintse meg egy cél beállításához';
+
+  @override
+  String get processedConversations => 'Feldolgozott beszélgetések';
+
+  @override
+  String get updatedConversations => 'Frissített beszélgetések';
+
+  @override
+  String get newConversations => 'Új beszélgetések';
+
+  @override
+  String get summaryTemplate => 'Összefoglaló sablon';
+
+  @override
+  String get suggestedTemplates => 'Javasolt sablonok';
+
+  @override
+  String get otherTemplates => 'Egyéb sablonok';
+
+  @override
+  String get availableTemplates => 'Elérhető sablonok';
+
+  @override
+  String get getCreative => 'Légy kreatív';
+
+  @override
+  String get defaultLabel => 'Alapértelmezett';
+
+  @override
+  String get lastUsedLabel => 'Utoljára használt';
+
+  @override
+  String get setDefaultApp => 'Alapértelmezett alkalmazás beállítása';
+
+  @override
+  String setDefaultAppContent(String appName) {
+    return 'Beállítja a(z) $appName alkalmazást alapértelmezett összefoglaló alkalmazásként?\\n\\nEz az alkalmazás automatikusan használva lesz minden jövőbeli beszélgetés összefoglalásához.';
+  }
+
+  @override
+  String get setDefaultButton => 'Beállítás alapértelmezettként';
+
+  @override
+  String setAsDefaultSuccess(String appName) {
+    return 'A(z) $appName beállítva alapértelmezett összefoglaló alkalmazásként';
+  }
+
+  @override
+  String get createCustomTemplate => 'Egyéni sablon létrehozása';
+
+  @override
+  String get allTemplates => 'Összes sablon';
+
+  @override
+  String failedToInstallApp(String appName) {
+    return 'A(z) $appName telepítése sikertelen. Kérjük, próbálja újra.';
+  }
+
+  @override
+  String errorInstallingApp(String appName, String error) {
+    return 'Hiba a(z) $appName telepítésekor: $error';
+  }
+
+  @override
+  String tagSpeaker(int speakerId) {
+    return 'Tag Speaker $speakerId';
+  }
+
+  @override
+  String get personNameAlreadyExists => 'A person with this name already exists.';
+
+  @override
+  String get selectYouFromList => 'To tag yourself, please select \"You\" from the list.';
+
+  @override
+  String get enterPersonsName => 'Enter Person\'s Name';
+
+  @override
+  String get addPerson => 'Add Person';
+
+  @override
+  String tagOtherSegmentsFromSpeaker(int selected, int total) {
+    return 'Tag other segments from this speaker ($selected/$total)';
+  }
+
+  @override
+  String get tagOtherSegments => 'Tag other segments';
+
+  @override
+  String get managePeople => 'Manage People';
+
+  @override
+  String get shareViaSms => 'Megosztás SMS-ben';
+
+  @override
+  String get selectContactsToShareSummary => 'Válasszon névjegyeket a beszélgetés összefoglalójának megosztásához';
+
+  @override
+  String get searchContactsHint => 'Névjegyek keresése...';
+
+  @override
+  String contactsSelectedCount(int count) {
+    return '$count kiválasztva';
+  }
+
+  @override
+  String get clearAllSelection => 'Összes törlése';
+
+  @override
+  String get selectContactsToShare => 'Válasszon névjegyeket a megosztáshoz';
+
+  @override
+  String shareWithContactCount(int count) {
+    return 'Megosztás $count névjeggyel';
+  }
+
+  @override
+  String shareWithContactsCount(int count) {
+    return 'Megosztás $count névjeggyel';
+  }
+
+  @override
+  String get contactsPermissionRequired => 'Névjegyengedély szükséges';
+
+  @override
+  String get contactsPermissionRequiredForSms => 'Az SMS-ben való megosztáshoz névjegyengedély szükséges';
+
+  @override
+  String get grantContactsPermissionForSms => 'Kérjük, adja meg a névjegyengedélyt az SMS-ben való megosztáshoz';
+
+  @override
+  String get noContactsWithPhoneNumbers => 'Nem találhatók telefonszámmal rendelkező névjegyek';
+
+  @override
+  String get noContactsMatchSearch => 'Nincs a keresésnek megfelelő névjegy';
+
+  @override
+  String get failedToLoadContacts => 'A névjegyek betöltése sikertelen';
+
+  @override
+  String get failedToPrepareConversationForSharing =>
+      'A beszélgetés előkészítése a megosztáshoz sikertelen. Kérjük, próbálja újra.';
+
+  @override
+  String get couldNotOpenSmsApp => 'Az SMS alkalmazás nem nyitható meg. Kérjük, próbálja újra.';
+
+  @override
+  String heresWhatWeDiscussed(String link) {
+    return 'Íme, amiről épp beszéltünk: $link';
+  }
+
+  @override
+  String get wifiSync => 'WiFi szinkronizálás';
+
+  @override
+  String itemCopiedToClipboard(String item) {
+    return '$item másolva a vágólapra';
+  }
 }

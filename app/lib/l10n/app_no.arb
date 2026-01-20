@@ -357,7 +357,7 @@
   "permissionRevokedTitle": "Tillatelse tilbakekalt",
   "permissionRevokedMessage": "Vil du at vi skal fjerne alle eksisterende opptak også?",
   "yes": "Ja",
-  "editName": "Rediger navn",
+  "editName": "Edit Name",
   "howShouldOmiCallYou": "Hva skal Omi kalle deg?",
   "enterYourName": "Skriv inn navnet ditt",
   "nameCannotBeEmpty": "Navn kan ikke være tomt",
@@ -988,7 +988,7 @@
   "help": "Hjelp",
   "pro": "Pro",
   "upgradeToPro": "Oppgrader til Pro",
-  "getOmiDevice": "Få Omi-enhet",
+  "getOmiDevice": "Get Omi Device",
   "wearableAiCompanion": "Bærbar AI-følgesvenn",
   "loadingMemories": "Laster minner...",
   "allMemories": "Alle minner",
@@ -1168,7 +1168,7 @@
   "selectTime": "Velg tid",
   "accountGroup": "Konto",
   "signOutQuestion": "Logg ut?",
-  "signOutConfirmation": "Er du sikker på at du vil logge ut?",
+  "signOutConfirmation": "Are you sure you want to sign out?",
   "customVocabularyHeader": "TILPASSET VOKABULAR",
   "addWordsDescription": "Legg til ord som Omi skal gjenkjenne under transkripsjon.",
   "enterWordsHint": "Skriv inn ord (kommaseparert)",
@@ -2034,5 +2034,119 @@
   "cantRateWithoutInternet": "Kan ikke vurdere appen uten internettforbindelse.",
   "appAnalytics": "App-analyse",
   "learnMoreLink": "lær mer",
-  "moneyEarned": "Penger tjent"
+  "moneyEarned": "Penger tjent",
+  "starFilterLabel": "{count} stjerne",
+  "@starFilterLabel": {
+    "description": "Filter chip label for star rating",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sharePublicLink": "Share Public Link",
+  "makePersonaPublic": "Make Persona Public",
+  "connectedKnowledgeData": "Connected Knowledge Data",
+  "enterName": "Enter name",
+  "disconnectTwitter": "Disconnect Twitter",
+  "disconnectTwitterConfirmation": "Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.",
+  "getOmiDeviceDescription": "Create a more accurate clone with your personal conversations",
+  "getOmi": "Get Omi",
+  "iHaveOmiDevice": "I have Omi device",
+  "goal": "MÅL",
+  "tapToTrackThisGoal": "Trykk for å spore dette målet",
+  "tapToSetAGoal": "Trykk for å sette et mål",
+  "processedConversations": "Behandlede samtaler",
+  "updatedConversations": "Oppdaterte samtaler",
+  "newConversations": "Nye samtaler",
+  "summaryTemplate": "Oppsummeringsmal",
+  "suggestedTemplates": "Foreslåtte maler",
+  "otherTemplates": "Andre maler",
+  "availableTemplates": "Tilgjengelige maler",
+  "getCreative": "Vær kreativ",
+  "defaultLabel": "Standard",
+  "lastUsedLabel": "Sist brukt",
+  "setDefaultApp": "Angi standardapp",
+  "setDefaultAppContent": "Angi {appName} som din standardapp for oppsummeringer?\\n\\nDenne appen vil automatisk bli brukt for alle fremtidige samtaleoppsummeringer.",
+  "@setDefaultAppContent": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "setDefaultButton": "Angi standard",
+  "setAsDefaultSuccess": "{appName} angitt som standardapp for oppsummeringer",
+  "@setAsDefaultSuccess": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "createCustomTemplate": "Opprett egendefinert mal",
+  "allTemplates": "Alle maler",
+  "failedToInstallApp": "Kunne ikke installere {appName}. Prøv igjen.",
+  "@failedToInstallApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "errorInstallingApp": "Feil ved installasjon av {appName}: {error}",
+  "@errorInstallingApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tagSpeaker": "Tag Speaker {speakerId}",
+  "@tagSpeaker": {
+    "placeholders": {
+      "speakerId": {
+        "type": "int"
+      }
+    }
+  },
+  "personNameAlreadyExists": "A person with this name already exists.",
+  "selectYouFromList": "To tag yourself, please select \"You\" from the list.",
+  "enterPersonsName": "Enter Person's Name",
+  "addPerson": "Add Person",
+  "tagOtherSegmentsFromSpeaker": "Tag other segments from this speaker ({selected}/{total})",
+  "@tagOtherSegmentsFromSpeaker": {
+    "placeholders": {
+      "selected": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "tagOtherSegments": "Tag other segments",
+  "managePeople": "Manage People",
+  "shareViaSms": "Del via SMS",
+  "selectContactsToShareSummary": "Velg kontakter for å dele samtalesammendraget",
+  "searchContactsHint": "Søk kontakter...",
+  "contactsSelectedCount": "{count} valgt",
+  "clearAllSelection": "Fjern alle",
+  "selectContactsToShare": "Velg kontakter å dele med",
+  "shareWithContactCount": "Del med {count} kontakt",
+  "shareWithContactsCount": "Del med {count} kontakter",
+  "contactsPermissionRequired": "Kontakttillatelse kreves",
+  "contactsPermissionRequiredForSms": "Kontakttillatelse kreves for å dele via SMS",
+  "grantContactsPermissionForSms": "Vennligst gi kontakttillatelse for å dele via SMS",
+  "noContactsWithPhoneNumbers": "Ingen kontakter med telefonnumre funnet",
+  "noContactsMatchSearch": "Ingen kontakter samsvarer med søket ditt",
+  "failedToLoadContacts": "Kunne ikke laste inn kontakter",
+  "failedToPrepareConversationForSharing": "Kunne ikke forberede samtalen for deling. Vennligst prøv igjen.",
+  "couldNotOpenSmsApp": "Kunne ikke åpne SMS-appen. Vennligst prøv igjen.",
+  "heresWhatWeDiscussed": "Her er det vi nettopp diskuterte: {link}",
+  "wifiSync": "WiFi-synkronisering",
+  "itemCopiedToClipboard": "{item} kopiert til utklippstavlen"
 }

@@ -357,7 +357,7 @@
   "permissionRevokedTitle": "Lupa peruttu",
   "permissionRevokedMessage": "Haluatko meidän poistavan myös kaikki olemassa olevat nauhoituksesi?",
   "yes": "Kyllä",
-  "editName": "Muokkaa nimeä",
+  "editName": "Edit Name",
   "howShouldOmiCallYou": "Miten Omin pitäisi kutsua sinua?",
   "enterYourName": "Syötä nimesi",
   "nameCannotBeEmpty": "Nimi ei voi olla tyhjä",
@@ -988,7 +988,7 @@
   "help": "Ohje",
   "pro": "Pro",
   "upgradeToPro": "Päivitä Pro-versioon",
-  "getOmiDevice": "Hanki Omi-laite",
+  "getOmiDevice": "Get Omi Device",
   "wearableAiCompanion": "Puettava AI-kumppani",
   "loadingMemories": "Ladataan muistoja...",
   "allMemories": "Kaikki muistot",
@@ -1168,7 +1168,7 @@
   "selectTime": "Valitse aika",
   "accountGroup": "Tili",
   "signOutQuestion": "Kirjaudu ulos?",
-  "signOutConfirmation": "Haluatko varmasti kirjautua ulos?",
+  "signOutConfirmation": "Are you sure you want to sign out?",
   "customVocabularyHeader": "MUKAUTETTU SANASTO",
   "addWordsDescription": "Lisää sanoja, jotka Omin tulisi tunnistaa transkription aikana.",
   "enterWordsHint": "Syötä sanat (pilkulla eroteltuina)",
@@ -2034,5 +2034,119 @@
   "cantRateWithoutInternet": "Sovellusta ei voi arvioida ilman internetyhteyttä.",
   "appAnalytics": "Sovellusanalytiikka",
   "learnMoreLink": "lue lisää",
-  "moneyEarned": "Ansaittu raha"
+  "moneyEarned": "Ansaittu raha",
+  "starFilterLabel": "{count} tähti",
+  "@starFilterLabel": {
+    "description": "Filter chip label for star rating",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sharePublicLink": "Share Public Link",
+  "makePersonaPublic": "Make Persona Public",
+  "connectedKnowledgeData": "Connected Knowledge Data",
+  "enterName": "Enter name",
+  "disconnectTwitter": "Disconnect Twitter",
+  "disconnectTwitterConfirmation": "Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.",
+  "getOmiDeviceDescription": "Create a more accurate clone with your personal conversations",
+  "getOmi": "Get Omi",
+  "iHaveOmiDevice": "I have Omi device",
+  "goal": "TAVOITE",
+  "tapToTrackThisGoal": "Napauta seurataksesi tätä tavoitetta",
+  "tapToSetAGoal": "Napauta asettaaksesi tavoitteen",
+  "processedConversations": "Käsitellyt keskustelut",
+  "updatedConversations": "Päivitetyt keskustelut",
+  "newConversations": "Uudet keskustelut",
+  "summaryTemplate": "Yhteenvetomalli",
+  "suggestedTemplates": "Ehdotetut mallit",
+  "otherTemplates": "Muut mallit",
+  "availableTemplates": "Saatavilla olevat mallit",
+  "getCreative": "Ole luova",
+  "defaultLabel": "Oletus",
+  "lastUsedLabel": "Viimeksi käytetty",
+  "setDefaultApp": "Aseta oletussovellus",
+  "setDefaultAppContent": "Asetetaanko {appName} oletusyhteenvetosovellukseksi?\\n\\nTätä sovellusta käytetään automaattisesti kaikkiin tuleviin keskusteluyhteenvetoihin.",
+  "@setDefaultAppContent": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "setDefaultButton": "Aseta oletukseksi",
+  "setAsDefaultSuccess": "{appName} asetettu oletusyhteenvetosovellukseksi",
+  "@setAsDefaultSuccess": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "createCustomTemplate": "Luo mukautettu malli",
+  "allTemplates": "Kaikki mallit",
+  "failedToInstallApp": "{appName} asennus epäonnistui. Yritä uudelleen.",
+  "@failedToInstallApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "errorInstallingApp": "Virhe asennettaessa {appName}: {error}",
+  "@errorInstallingApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tagSpeaker": "Tag Speaker {speakerId}",
+  "@tagSpeaker": {
+    "placeholders": {
+      "speakerId": {
+        "type": "int"
+      }
+    }
+  },
+  "personNameAlreadyExists": "A person with this name already exists.",
+  "selectYouFromList": "To tag yourself, please select \"You\" from the list.",
+  "enterPersonsName": "Enter Person's Name",
+  "addPerson": "Add Person",
+  "tagOtherSegmentsFromSpeaker": "Tag other segments from this speaker ({selected}/{total})",
+  "@tagOtherSegmentsFromSpeaker": {
+    "placeholders": {
+      "selected": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "tagOtherSegments": "Tag other segments",
+  "managePeople": "Manage People",
+  "shareViaSms": "Jaa tekstiviestillä",
+  "selectContactsToShareSummary": "Valitse yhteystiedot keskustelun yhteenvedon jakamiseksi",
+  "searchContactsHint": "Etsi yhteystietoja...",
+  "contactsSelectedCount": "{count} valittu",
+  "clearAllSelection": "Tyhjennä kaikki",
+  "selectContactsToShare": "Valitse yhteystiedot jakamista varten",
+  "shareWithContactCount": "Jaa {count} yhteystiedolle",
+  "shareWithContactsCount": "Jaa {count} yhteystiedolle",
+  "contactsPermissionRequired": "Yhteystietolupa vaaditaan",
+  "contactsPermissionRequiredForSms": "Yhteystietolupa vaaditaan jakamiseen tekstiviestillä",
+  "grantContactsPermissionForSms": "Anna yhteystietolupa jakamiseen tekstiviestillä",
+  "noContactsWithPhoneNumbers": "Puhelinnumerollisia yhteystietoja ei löytynyt",
+  "noContactsMatchSearch": "Yksikään yhteystieto ei vastaa hakuasi",
+  "failedToLoadContacts": "Yhteystietojen lataaminen epäonnistui",
+  "failedToPrepareConversationForSharing": "Keskustelun valmistelu jakamista varten epäonnistui. Yritä uudelleen.",
+  "couldNotOpenSmsApp": "SMS-sovellusta ei voitu avata. Yritä uudelleen.",
+  "heresWhatWeDiscussed": "Tässä mitä juuri keskustelimme: {link}",
+  "wifiSync": "WiFi-synkronointi",
+  "itemCopiedToClipboard": "{item} kopioitu leikepöydälle"
 }

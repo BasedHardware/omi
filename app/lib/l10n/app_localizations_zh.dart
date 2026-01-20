@@ -1128,7 +1128,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get yes => '是';
 
   @override
-  String get editName => '编辑姓名';
+  String get editName => 'Edit Name';
 
   @override
   String get howShouldOmiCallYou => 'Omi 应该怎么称呼您？';
@@ -2847,9 +2847,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get connectNow => '立即连接';
 
   @override
-  String installsCount(String count) {
-    return '$count+次安装';
-  }
+  String get installsCount => '安装量';
 
   @override
   String get uninstallApp => '卸载应用';
@@ -2891,7 +2889,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aboutTheApp => '关于应用';
 
   @override
-  String get aboutThePersona => '关于角色';
+  String get aboutThePersona => '关于人格';
 
   @override
   String get chatPersonality => '聊天个性';
@@ -3207,7 +3205,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get upgradeToPro => '升级至Pro';
 
   @override
-  String get getOmiDevice => '获取Omi设备';
+  String get getOmiDevice => 'Get Omi Device';
 
   @override
   String get wearableAiCompanion => '可穿戴AI伴侣';
@@ -3762,7 +3760,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get signOutQuestion => '退出登录？';
 
   @override
-  String get signOutConfirmation => '您确定要退出登录吗？';
+  String get signOutConfirmation => 'Are you sure you want to sign out?';
 
   @override
   String get customVocabularyHeader => '自定义词汇';
@@ -4005,7 +4003,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get invalidSetupInstructionsUrl => '无效的设置说明链接';
 
   @override
-  String get pushToTalk => '按住说话';
+  String get pushToTalk => '按键说话';
 
   @override
   String get summaryPrompt => '摘要提示';
@@ -5687,9 +5685,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chatAppsTitle => '聊天应用';
 
   @override
-  String get chatAssistantsTitle => '聊天助手';
-
-  @override
   String get selectApp => '选择应用';
 
   @override
@@ -5697,150 +5692,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get disable => '禁用';
-
-  @override
-  String get permissionReadConversations => '读取对话';
-
-  @override
-  String get permissionReadMemories => '读取记忆';
-
-  @override
-  String get permissionReadTasks => '读取任务';
-
-  @override
-  String get permissionCreateConversations => '创建对话';
-
-  @override
-  String get permissionCreateMemories => '创建记忆';
-
-  @override
-  String get permissionTypeAccess => '访问';
-
-  @override
-  String get permissionTypeCreate => '创建';
-
-  @override
-  String get permissionTypeTrigger => '触发器';
-
-  @override
-  String get permissionDescReadConversations => '此应用可以访问您的对话。';
-
-  @override
-  String get permissionDescReadMemories => '此应用可以访问您的记忆。';
-
-  @override
-  String get permissionDescReadTasks => '此应用可以访问您的任务。';
-
-  @override
-  String get permissionDescCreateConversations => '此应用可以创建新对话。';
-
-  @override
-  String get permissionDescCreateMemories => '此应用可以创建新记忆。';
-
-  @override
-  String get realtimeListening => '实时监听';
-
-  @override
-  String get invalidIntegrationUrl => '无效的集成链接';
-
-  @override
-  String get invalidSetupInstructionsUrl => '无效的设置说明链接';
-
-  @override
-  String get setupCompleted => '已完成';
-
-  @override
-  String get tapToComplete => '点击完成';
-
-  @override
-  String get setupInstructions => '设置说明';
-
-  @override
-  String get aboutTheApp => '关于应用';
-
-  @override
-  String get aboutThePersona => '关于人格';
-
-  @override
-  String get pushToTalk => '按键说话';
-
-  @override
-  String get summaryPrompt => '摘要提示';
-
-  @override
-  String get chatPersonality => '聊天个性';
-
-  @override
-  String get ratingsAndReviews => '评分和评论';
-
-  @override
-  String get pleaseSelectRating => '请选择评分';
-
-  @override
-  String get reviewAddedSuccessfully => '评论添加成功 🚀';
-
-  @override
-  String get reviewUpdatedSuccessfully => '评论更新成功 🚀';
-
-  @override
-  String get failedToSubmitReview => '提交评论失败。请重试。';
-
-  @override
-  String get writeReviewOptional => '撰写评论（可选）';
-
-  @override
-  String get setupQuestionsIntro => '回答几个问题帮助我们改进 Omi。 🫶 💜';
-
-  @override
-  String get setupQuestionProfession => '1. 你的职业是什么？';
-
-  @override
-  String get setupQuestionUsage => '2. 你计划在哪里使用 Omi？';
-
-  @override
-  String get setupQuestionAge => '3. 你的年龄段是？';
-
-  @override
-  String get setupAnswerAllQuestions => '你还没有回答所有问题！ 🥺';
-
-  @override
-  String get continueButton => '继续';
-
-  @override
-  String get setupSkipHelp => '跳过，我不想帮忙 :C';
-
-  @override
-  String get professionEntrepreneur => '创业者';
-
-  @override
-  String get professionSoftwareEngineer => '软件工程师';
-
-  @override
-  String get professionProductManager => '产品经理';
-
-  @override
-  String get professionExecutive => '高管';
-
-  @override
-  String get professionSales => '销售';
-
-  @override
-  String get professionStudent => '学生';
-
-  @override
-  String get usageAtWork => '工作中';
-
-  @override
-  String get usageIrlEvents => '线下活动';
-
-  @override
-  String get usageOnline => '在线';
-
-  @override
-  String get usageSocialSettings => '社交场合';
-
-  @override
-  String get usageEverywhere => '到处';
 
   @override
   String get photoLibrary => '照片库';
@@ -6285,6 +6136,111 @@ class AppLocalizationsZh extends AppLocalizations {
   String get device => 'Device';
 
   @override
+  String get chatAssistantsTitle => '聊天助手';
+
+  @override
+  String get permissionReadConversations => '读取对话';
+
+  @override
+  String get permissionReadMemories => '读取记忆';
+
+  @override
+  String get permissionReadTasks => '读取任务';
+
+  @override
+  String get permissionCreateConversations => '创建对话';
+
+  @override
+  String get permissionCreateMemories => '创建记忆';
+
+  @override
+  String get permissionTypeAccess => '访问';
+
+  @override
+  String get permissionTypeCreate => '创建';
+
+  @override
+  String get permissionTypeTrigger => '触发器';
+
+  @override
+  String get permissionDescReadConversations => '此应用可以访问您的对话。';
+
+  @override
+  String get permissionDescReadMemories => '此应用可以访问您的记忆。';
+
+  @override
+  String get permissionDescReadTasks => '此应用可以访问您的任务。';
+
+  @override
+  String get permissionDescCreateConversations => '此应用可以创建新对话。';
+
+  @override
+  String get permissionDescCreateMemories => '此应用可以创建新记忆。';
+
+  @override
+  String get realtimeListening => '实时监听';
+
+  @override
+  String get setupCompleted => '已完成';
+
+  @override
+  String get pleaseSelectRating => '请选择评分';
+
+  @override
+  String get writeReviewOptional => '撰写评论（可选）';
+
+  @override
+  String get setupQuestionsIntro => '回答几个问题帮助我们改进 Omi。 🫶 💜';
+
+  @override
+  String get setupQuestionProfession => '1. 你的职业是什么？';
+
+  @override
+  String get setupQuestionUsage => '2. 你计划在哪里使用 Omi？';
+
+  @override
+  String get setupQuestionAge => '3. 你的年龄段是？';
+
+  @override
+  String get setupAnswerAllQuestions => '你还没有回答所有问题！ 🥺';
+
+  @override
+  String get setupSkipHelp => '跳过，我不想帮忙 :C';
+
+  @override
+  String get professionEntrepreneur => '创业者';
+
+  @override
+  String get professionSoftwareEngineer => '软件工程师';
+
+  @override
+  String get professionProductManager => '产品经理';
+
+  @override
+  String get professionExecutive => '高管';
+
+  @override
+  String get professionSales => '销售';
+
+  @override
+  String get professionStudent => '学生';
+
+  @override
+  String get usageAtWork => '工作中';
+
+  @override
+  String get usageIrlEvents => '线下活动';
+
+  @override
+  String get usageOnline => '在线';
+
+  @override
+  String get usageSocialSettings => '社交场合';
+
+  @override
+  String get usageEverywhere => '到处';
+
+  @override
   String get customBackendUrlTitle => '自定义后端URL';
 
   @override
@@ -6297,7 +6253,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get enterBackendUrlError => '请输入后端URL';
 
   @override
-  String get urlMustEndWithSlashError => 'URL必须以"/"结尾';
+  String get urlMustEndWithSlashError => 'URL必须以\"/\"结尾';
 
   @override
   String get invalidUrlError => '请输入有效的URL';
@@ -6389,7 +6345,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get submitReply => '提交回复';
 
   @override
-  String get editYourReply => '编辑您的回复';
+  String get editYourReply => '编辑回复';
 
   @override
   String get replyToReview => '回复评价';
@@ -6410,8 +6366,232 @@ class AppLocalizationsZh extends AppLocalizations {
   String get learnMoreLink => '了解更多';
 
   @override
-  String get installsCount => '安装量';
+  String get moneyEarned => '收入';
 
   @override
-  String get moneyEarned => '收入';
+  String get writeYourReply => 'Write your reply...';
+
+  @override
+  String get replySentSuccessfully => 'Reply sent successfully';
+
+  @override
+  String failedToSendReply(String error) {
+    return 'Failed to send reply: $error';
+  }
+
+  @override
+  String get send => 'Send';
+
+  @override
+  String starFilter(int count) {
+    return '$count Star';
+  }
+
+  @override
+  String get noReviewsFound => 'No Reviews Found';
+
+  @override
+  String get editReply => 'Edit Reply';
+
+  @override
+  String get reply => 'Reply';
+
+  @override
+  String starFilterLabel(int count) {
+    return '$count星';
+  }
+
+  @override
+  String get sharePublicLink => 'Share Public Link';
+
+  @override
+  String get makePersonaPublic => 'Make Persona Public';
+
+  @override
+  String get connectedKnowledgeData => 'Connected Knowledge Data';
+
+  @override
+  String get enterName => 'Enter name';
+
+  @override
+  String get disconnectTwitter => 'Disconnect Twitter';
+
+  @override
+  String get disconnectTwitterConfirmation =>
+      'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
+
+  @override
+  String get getOmiDeviceDescription => 'Create a more accurate clone with your personal conversations';
+
+  @override
+  String get getOmi => 'Get Omi';
+
+  @override
+  String get iHaveOmiDevice => 'I have Omi device';
+
+  @override
+  String get goal => '目标';
+
+  @override
+  String get tapToTrackThisGoal => '点击追踪此目标';
+
+  @override
+  String get tapToSetAGoal => '点击设置目标';
+
+  @override
+  String get processedConversations => '已处理的对话';
+
+  @override
+  String get updatedConversations => '已更新的对话';
+
+  @override
+  String get newConversations => '新对话';
+
+  @override
+  String get summaryTemplate => '摘要模板';
+
+  @override
+  String get suggestedTemplates => '推荐模板';
+
+  @override
+  String get otherTemplates => '其他模板';
+
+  @override
+  String get availableTemplates => '可用模板';
+
+  @override
+  String get getCreative => '发挥创意';
+
+  @override
+  String get defaultLabel => '默认';
+
+  @override
+  String get lastUsedLabel => '上次使用';
+
+  @override
+  String get setDefaultApp => '设置默认应用';
+
+  @override
+  String setDefaultAppContent(String appName) {
+    return '将 $appName 设为您的默认摘要应用？\\n\\n此应用将自动用于所有未来的对话摘要。';
+  }
+
+  @override
+  String get setDefaultButton => '设为默认';
+
+  @override
+  String setAsDefaultSuccess(String appName) {
+    return '$appName 已设为默认摘要应用';
+  }
+
+  @override
+  String get createCustomTemplate => '创建自定义模板';
+
+  @override
+  String get allTemplates => '所有模板';
+
+  @override
+  String failedToInstallApp(String appName) {
+    return '安装 $appName 失败。请重试。';
+  }
+
+  @override
+  String errorInstallingApp(String appName, String error) {
+    return '安装 $appName 时出错：$error';
+  }
+
+  @override
+  String tagSpeaker(int speakerId) {
+    return 'Tag Speaker $speakerId';
+  }
+
+  @override
+  String get personNameAlreadyExists => 'A person with this name already exists.';
+
+  @override
+  String get selectYouFromList => 'To tag yourself, please select \"You\" from the list.';
+
+  @override
+  String get enterPersonsName => 'Enter Person\'s Name';
+
+  @override
+  String get addPerson => 'Add Person';
+
+  @override
+  String tagOtherSegmentsFromSpeaker(int selected, int total) {
+    return 'Tag other segments from this speaker ($selected/$total)';
+  }
+
+  @override
+  String get tagOtherSegments => 'Tag other segments';
+
+  @override
+  String get managePeople => 'Manage People';
+
+  @override
+  String get shareViaSms => '通过短信分享';
+
+  @override
+  String get selectContactsToShareSummary => '选择联系人分享对话摘要';
+
+  @override
+  String get searchContactsHint => '搜索联系人...';
+
+  @override
+  String contactsSelectedCount(int count) {
+    return '已选择 $count 个';
+  }
+
+  @override
+  String get clearAllSelection => '全部清除';
+
+  @override
+  String get selectContactsToShare => '选择要分享的联系人';
+
+  @override
+  String shareWithContactCount(int count) {
+    return '分享给 $count 个联系人';
+  }
+
+  @override
+  String shareWithContactsCount(int count) {
+    return '分享给 $count 个联系人';
+  }
+
+  @override
+  String get contactsPermissionRequired => '需要通讯录权限';
+
+  @override
+  String get contactsPermissionRequiredForSms => '需要通讯录权限才能通过短信分享';
+
+  @override
+  String get grantContactsPermissionForSms => '请授予通讯录权限以便通过短信分享';
+
+  @override
+  String get noContactsWithPhoneNumbers => '未找到有电话号码的联系人';
+
+  @override
+  String get noContactsMatchSearch => '没有联系人与您的搜索匹配';
+
+  @override
+  String get failedToLoadContacts => '无法加载联系人';
+
+  @override
+  String get failedToPrepareConversationForSharing => '无法准备对话进行分享。请重试。';
+
+  @override
+  String get couldNotOpenSmsApp => '无法打开短信应用。请重试。';
+
+  @override
+  String heresWhatWeDiscussed(String link) {
+    return '这是我们刚才讨论的内容: $link';
+  }
+
+  @override
+  String get wifiSync => 'WiFi 同步';
+
+  @override
+  String itemCopiedToClipboard(String item) {
+    return '$item 已复制到剪贴板';
+  }
 }

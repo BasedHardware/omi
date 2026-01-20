@@ -1130,7 +1130,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get yes => '예';
 
   @override
-  String get editName => '이름 편집';
+  String get editName => 'Edit Name';
 
   @override
   String get howShouldOmiCallYou => 'Omi가 어떻게 불러드릴까요?';
@@ -2852,9 +2852,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get connectNow => '지금 연결';
 
   @override
-  String installsCount(String count) {
-    return '$count+회 설치';
-  }
+  String get installsCount => '설치';
 
   @override
   String get uninstallApp => '앱 제거';
@@ -3212,7 +3210,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get upgradeToPro => 'Pro로 업그레이드';
 
   @override
-  String get getOmiDevice => 'Omi 기기 받기';
+  String get getOmiDevice => 'Get Omi Device';
 
   @override
   String get wearableAiCompanion => '웨어러블 AI 컴패니언';
@@ -3767,7 +3765,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get signOutQuestion => '로그아웃하시겠습니까?';
 
   @override
-  String get signOutConfirmation => '정말 로그아웃하시겠습니까?';
+  String get signOutConfirmation => 'Are you sure you want to sign out?';
 
   @override
   String get customVocabularyHeader => '사용자 정의 어휘';
@@ -4004,13 +4002,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get invalidIntegrationUrl => '잘못된 통합 URL';
 
   @override
-  String get tapToComplete => '탭하여 완료';
+  String get tapToComplete => '완료하려면 탭하세요';
 
   @override
-  String get invalidSetupInstructionsUrl => '잘못된 설정 안내 URL';
+  String get invalidSetupInstructionsUrl => '잘못된 설정 지침 URL';
 
   @override
-  String get pushToTalk => '말하려면 누르기';
+  String get pushToTalk => '눌러서 말하기';
 
   @override
   String get summaryPrompt => '요약 프롬프트';
@@ -5699,9 +5697,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get chatAppsTitle => '채팅 앱';
 
   @override
-  String get chatAssistantsTitle => '채팅 어시스턴트';
-
-  @override
   String get selectApp => '앱 선택';
 
   @override
@@ -5709,150 +5704,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get disable => '비활성화';
-
-  @override
-  String get permissionReadConversations => '대화 읽기';
-
-  @override
-  String get permissionReadMemories => '기억 읽기';
-
-  @override
-  String get permissionReadTasks => '작업 읽기';
-
-  @override
-  String get permissionCreateConversations => '대화 만들기';
-
-  @override
-  String get permissionCreateMemories => '기억 만들기';
-
-  @override
-  String get permissionTypeAccess => '접근';
-
-  @override
-  String get permissionTypeCreate => '만들기';
-
-  @override
-  String get permissionTypeTrigger => '트리거';
-
-  @override
-  String get permissionDescReadConversations => '이 앱은 대화에 접근할 수 있습니다.';
-
-  @override
-  String get permissionDescReadMemories => '이 앱은 기억에 접근할 수 있습니다.';
-
-  @override
-  String get permissionDescReadTasks => '이 앱은 작업에 접근할 수 있습니다.';
-
-  @override
-  String get permissionDescCreateConversations => '이 앱은 새 대화를 만들 수 있습니다.';
-
-  @override
-  String get permissionDescCreateMemories => '이 앱은 새 기억을 만들 수 있습니다.';
-
-  @override
-  String get realtimeListening => '실시간 듣기';
-
-  @override
-  String get invalidIntegrationUrl => '잘못된 통합 URL';
-
-  @override
-  String get invalidSetupInstructionsUrl => '잘못된 설정 지침 URL';
-
-  @override
-  String get setupCompleted => '완료됨';
-
-  @override
-  String get tapToComplete => '완료하려면 탭하세요';
-
-  @override
-  String get setupInstructions => '설정 지침';
-
-  @override
-  String get aboutTheApp => '앱 정보';
-
-  @override
-  String get aboutThePersona => '페르소나 정보';
-
-  @override
-  String get pushToTalk => '눌러서 말하기';
-
-  @override
-  String get summaryPrompt => '요약 프롬프트';
-
-  @override
-  String get chatPersonality => '채팅 성격';
-
-  @override
-  String get ratingsAndReviews => '평점 및 리뷰';
-
-  @override
-  String get pleaseSelectRating => '평점을 선택해 주세요';
-
-  @override
-  String get reviewAddedSuccessfully => '리뷰가 성공적으로 추가되었습니다 🚀';
-
-  @override
-  String get reviewUpdatedSuccessfully => '리뷰가 성공적으로 업데이트되었습니다 🚀';
-
-  @override
-  String get failedToSubmitReview => '리뷰 제출에 실패했습니다. 다시 시도해 주세요.';
-
-  @override
-  String get writeReviewOptional => '리뷰 작성 (선택사항)';
-
-  @override
-  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
-
-  @override
-  String get setupQuestionProfession => '1. What do you do?';
-
-  @override
-  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
-
-  @override
-  String get setupQuestionAge => '3. What\'s your age range?';
-
-  @override
-  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
-
-  @override
-  String get continueButton => '계속';
-
-  @override
-  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
-
-  @override
-  String get professionEntrepreneur => 'Entrepreneur';
-
-  @override
-  String get professionSoftwareEngineer => 'Software Engineer';
-
-  @override
-  String get professionProductManager => 'Product Manager';
-
-  @override
-  String get professionExecutive => 'Executive';
-
-  @override
-  String get professionSales => 'Sales';
-
-  @override
-  String get professionStudent => 'Student';
-
-  @override
-  String get usageAtWork => 'At work';
-
-  @override
-  String get usageIrlEvents => 'IRL Events';
-
-  @override
-  String get usageOnline => 'Online';
-
-  @override
-  String get usageSocialSettings => 'In Social Settings';
-
-  @override
-  String get usageEverywhere => 'Everywhere';
 
   @override
   String get photoLibrary => '사진 라이브러리';
@@ -6297,6 +6148,111 @@ class AppLocalizationsKo extends AppLocalizations {
   String get device => 'Device';
 
   @override
+  String get chatAssistantsTitle => '채팅 어시스턴트';
+
+  @override
+  String get permissionReadConversations => '대화 읽기';
+
+  @override
+  String get permissionReadMemories => '기억 읽기';
+
+  @override
+  String get permissionReadTasks => '작업 읽기';
+
+  @override
+  String get permissionCreateConversations => '대화 만들기';
+
+  @override
+  String get permissionCreateMemories => '기억 만들기';
+
+  @override
+  String get permissionTypeAccess => '접근';
+
+  @override
+  String get permissionTypeCreate => '만들기';
+
+  @override
+  String get permissionTypeTrigger => '트리거';
+
+  @override
+  String get permissionDescReadConversations => '이 앱은 대화에 접근할 수 있습니다.';
+
+  @override
+  String get permissionDescReadMemories => '이 앱은 기억에 접근할 수 있습니다.';
+
+  @override
+  String get permissionDescReadTasks => '이 앱은 작업에 접근할 수 있습니다.';
+
+  @override
+  String get permissionDescCreateConversations => '이 앱은 새 대화를 만들 수 있습니다.';
+
+  @override
+  String get permissionDescCreateMemories => '이 앱은 새 기억을 만들 수 있습니다.';
+
+  @override
+  String get realtimeListening => '실시간 듣기';
+
+  @override
+  String get setupCompleted => '완료됨';
+
+  @override
+  String get pleaseSelectRating => '평점을 선택해 주세요';
+
+  @override
+  String get writeReviewOptional => '리뷰 작성 (선택사항)';
+
+  @override
+  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
+
+  @override
+  String get setupQuestionProfession => '1. What do you do?';
+
+  @override
+  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
+
+  @override
+  String get setupQuestionAge => '3. What\'s your age range?';
+
+  @override
+  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
+
+  @override
+  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
+
+  @override
+  String get professionEntrepreneur => 'Entrepreneur';
+
+  @override
+  String get professionSoftwareEngineer => 'Software Engineer';
+
+  @override
+  String get professionProductManager => 'Product Manager';
+
+  @override
+  String get professionExecutive => 'Executive';
+
+  @override
+  String get professionSales => 'Sales';
+
+  @override
+  String get professionStudent => 'Student';
+
+  @override
+  String get usageAtWork => 'At work';
+
+  @override
+  String get usageIrlEvents => 'IRL Events';
+
+  @override
+  String get usageOnline => 'Online';
+
+  @override
+  String get usageSocialSettings => 'In Social Settings';
+
+  @override
+  String get usageEverywhere => 'Everywhere';
+
+  @override
   String get customBackendUrlTitle => '사용자 정의 백엔드 URL';
 
   @override
@@ -6309,7 +6265,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get enterBackendUrlError => '백엔드 URL을 입력하세요';
 
   @override
-  String get urlMustEndWithSlashError => 'URL은 "/"로 끝나야 합니다';
+  String get urlMustEndWithSlashError => 'URL은 \"/\"로 끝나야 합니다';
 
   @override
   String get invalidUrlError => '유효한 URL을 입력하세요';
@@ -6395,16 +6351,16 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get writeSomething => '무언가 작성하세요';
+  String get writeSomething => '내용을 입력하세요';
 
   @override
-  String get submitReply => '답변 제출';
+  String get submitReply => '답글 제출';
 
   @override
-  String get editYourReply => '답변 수정';
+  String get editYourReply => '답글 수정';
 
   @override
-  String get replyToReview => '리뷰에 답변';
+  String get replyToReview => '리뷰에 답글';
 
   @override
   String get rateAndReviewThisApp => '이 앱을 평가하고 리뷰하세요';
@@ -6422,8 +6378,232 @@ class AppLocalizationsKo extends AppLocalizations {
   String get learnMoreLink => '자세히 알아보기';
 
   @override
-  String get installsCount => '설치';
+  String get moneyEarned => '수익';
 
   @override
-  String get moneyEarned => '수익';
+  String get writeYourReply => 'Write your reply...';
+
+  @override
+  String get replySentSuccessfully => 'Reply sent successfully';
+
+  @override
+  String failedToSendReply(String error) {
+    return 'Failed to send reply: $error';
+  }
+
+  @override
+  String get send => 'Send';
+
+  @override
+  String starFilter(int count) {
+    return '$count Star';
+  }
+
+  @override
+  String get noReviewsFound => 'No Reviews Found';
+
+  @override
+  String get editReply => 'Edit Reply';
+
+  @override
+  String get reply => 'Reply';
+
+  @override
+  String starFilterLabel(int count) {
+    return '$count점';
+  }
+
+  @override
+  String get sharePublicLink => 'Share Public Link';
+
+  @override
+  String get makePersonaPublic => 'Make Persona Public';
+
+  @override
+  String get connectedKnowledgeData => 'Connected Knowledge Data';
+
+  @override
+  String get enterName => 'Enter name';
+
+  @override
+  String get disconnectTwitter => 'Disconnect Twitter';
+
+  @override
+  String get disconnectTwitterConfirmation =>
+      'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
+
+  @override
+  String get getOmiDeviceDescription => 'Create a more accurate clone with your personal conversations';
+
+  @override
+  String get getOmi => 'Get Omi';
+
+  @override
+  String get iHaveOmiDevice => 'I have Omi device';
+
+  @override
+  String get goal => '목표';
+
+  @override
+  String get tapToTrackThisGoal => '탭하여 이 목표 추적';
+
+  @override
+  String get tapToSetAGoal => '탭하여 목표 설정';
+
+  @override
+  String get processedConversations => '처리된 대화';
+
+  @override
+  String get updatedConversations => '업데이트된 대화';
+
+  @override
+  String get newConversations => '새 대화';
+
+  @override
+  String get summaryTemplate => '요약 템플릿';
+
+  @override
+  String get suggestedTemplates => '추천 템플릿';
+
+  @override
+  String get otherTemplates => '다른 템플릿';
+
+  @override
+  String get availableTemplates => '사용 가능한 템플릿';
+
+  @override
+  String get getCreative => '창의적으로';
+
+  @override
+  String get defaultLabel => '기본값';
+
+  @override
+  String get lastUsedLabel => '최근 사용';
+
+  @override
+  String get setDefaultApp => '기본 앱 설정';
+
+  @override
+  String setDefaultAppContent(String appName) {
+    return '$appName을(를) 기본 요약 앱으로 설정하시겠습니까?\\n\\n이 앱은 향후 모든 대화 요약에 자동으로 사용됩니다.';
+  }
+
+  @override
+  String get setDefaultButton => '기본값으로 설정';
+
+  @override
+  String setAsDefaultSuccess(String appName) {
+    return '$appName이(가) 기본 요약 앱으로 설정됨';
+  }
+
+  @override
+  String get createCustomTemplate => '사용자 정의 템플릿 만들기';
+
+  @override
+  String get allTemplates => '모든 템플릿';
+
+  @override
+  String failedToInstallApp(String appName) {
+    return '$appName 설치 실패. 다시 시도해 주세요.';
+  }
+
+  @override
+  String errorInstallingApp(String appName, String error) {
+    return '$appName 설치 오류: $error';
+  }
+
+  @override
+  String tagSpeaker(int speakerId) {
+    return 'Tag Speaker $speakerId';
+  }
+
+  @override
+  String get personNameAlreadyExists => 'A person with this name already exists.';
+
+  @override
+  String get selectYouFromList => 'To tag yourself, please select \"You\" from the list.';
+
+  @override
+  String get enterPersonsName => 'Enter Person\'s Name';
+
+  @override
+  String get addPerson => 'Add Person';
+
+  @override
+  String tagOtherSegmentsFromSpeaker(int selected, int total) {
+    return 'Tag other segments from this speaker ($selected/$total)';
+  }
+
+  @override
+  String get tagOtherSegments => 'Tag other segments';
+
+  @override
+  String get managePeople => 'Manage People';
+
+  @override
+  String get shareViaSms => 'SMS로 공유';
+
+  @override
+  String get selectContactsToShareSummary => '대화 요약을 공유할 연락처 선택';
+
+  @override
+  String get searchContactsHint => '연락처 검색...';
+
+  @override
+  String contactsSelectedCount(int count) {
+    return '$count개 선택됨';
+  }
+
+  @override
+  String get clearAllSelection => '모두 지우기';
+
+  @override
+  String get selectContactsToShare => '공유할 연락처 선택';
+
+  @override
+  String shareWithContactCount(int count) {
+    return '$count명에게 공유';
+  }
+
+  @override
+  String shareWithContactsCount(int count) {
+    return '$count명에게 공유';
+  }
+
+  @override
+  String get contactsPermissionRequired => '연락처 권한 필요';
+
+  @override
+  String get contactsPermissionRequiredForSms => 'SMS로 공유하려면 연락처 권한이 필요합니다';
+
+  @override
+  String get grantContactsPermissionForSms => 'SMS로 공유하려면 연락처 권한을 허용해 주세요';
+
+  @override
+  String get noContactsWithPhoneNumbers => '전화번호가 있는 연락처를 찾을 수 없습니다';
+
+  @override
+  String get noContactsMatchSearch => '검색과 일치하는 연락처가 없습니다';
+
+  @override
+  String get failedToLoadContacts => '연락처를 불러오지 못했습니다';
+
+  @override
+  String get failedToPrepareConversationForSharing => '대화 공유 준비에 실패했습니다. 다시 시도해 주세요.';
+
+  @override
+  String get couldNotOpenSmsApp => 'SMS 앱을 열 수 없습니다. 다시 시도해 주세요.';
+
+  @override
+  String heresWhatWeDiscussed(String link) {
+    return '방금 이야기한 내용입니다: $link';
+  }
+
+  @override
+  String get wifiSync => 'WiFi 동기화';
+
+  @override
+  String itemCopiedToClipboard(String item) {
+    return '$item이(가) 클립보드에 복사됨';
+  }
 }

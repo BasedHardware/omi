@@ -357,7 +357,7 @@
   "permissionRevokedTitle": "Đã thu hồi quyền",
   "permissionRevokedMessage": "Bạn có muốn chúng tôi xóa tất cả bản ghi âm hiện có của bạn không?",
   "yes": "Có",
-  "editName": "Chỉnh sửa tên",
+  "editName": "Edit Name",
   "howShouldOmiCallYou": "Omi nên gọi bạn như thế nào?",
   "enterYourName": "Nhập tên của bạn",
   "nameCannotBeEmpty": "Tên không được để trống",
@@ -988,7 +988,7 @@
   "help": "Trợ giúp",
   "pro": "Pro",
   "upgradeToPro": "Nâng cấp lên Pro",
-  "getOmiDevice": "Nhận thiết bị Omi",
+  "getOmiDevice": "Get Omi Device",
   "wearableAiCompanion": "Trợ lý AI đeo được",
   "loadingMemories": "Đang tải ký ức...",
   "allMemories": "Tất cả ký ức",
@@ -1168,7 +1168,7 @@
   "selectTime": "Chọn thời gian",
   "accountGroup": "Tài khoản",
   "signOutQuestion": "Đăng xuất?",
-  "signOutConfirmation": "Bạn có chắc chắn muốn đăng xuất?",
+  "signOutConfirmation": "Are you sure you want to sign out?",
   "customVocabularyHeader": "TỪ VỰNG TÙY CHỈNH",
   "addWordsDescription": "Thêm từ mà Omi nên nhận biết trong quá trình phiên âm.",
   "enterWordsHint": "Nhập từ (phân tách bằng dấu phẩy)",
@@ -2034,5 +2034,119 @@
   "cantRateWithoutInternet": "Không thể đánh giá ứng dụng khi không có kết nối internet.",
   "appAnalytics": "Phân tích ứng dụng",
   "learnMoreLink": "tìm hiểu thêm",
-  "moneyEarned": "Tiền kiếm được"
+  "moneyEarned": "Tiền kiếm được",
+  "starFilterLabel": "{count} sao",
+  "@starFilterLabel": {
+    "description": "Filter chip label for star rating",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sharePublicLink": "Share Public Link",
+  "makePersonaPublic": "Make Persona Public",
+  "connectedKnowledgeData": "Connected Knowledge Data",
+  "enterName": "Enter name",
+  "disconnectTwitter": "Disconnect Twitter",
+  "disconnectTwitterConfirmation": "Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.",
+  "getOmiDeviceDescription": "Create a more accurate clone with your personal conversations",
+  "getOmi": "Get Omi",
+  "iHaveOmiDevice": "I have Omi device",
+  "goal": "MỤC TIÊU",
+  "tapToTrackThisGoal": "Nhấn để theo dõi mục tiêu này",
+  "tapToSetAGoal": "Nhấn để đặt mục tiêu",
+  "processedConversations": "Cuộc trò chuyện đã xử lý",
+  "updatedConversations": "Cuộc trò chuyện đã cập nhật",
+  "newConversations": "Cuộc trò chuyện mới",
+  "summaryTemplate": "Mẫu tóm tắt",
+  "suggestedTemplates": "Mẫu được đề xuất",
+  "otherTemplates": "Các mẫu khác",
+  "availableTemplates": "Mẫu có sẵn",
+  "getCreative": "Sáng tạo",
+  "defaultLabel": "Mặc định",
+  "lastUsedLabel": "Sử dụng gần đây",
+  "setDefaultApp": "Đặt ứng dụng mặc định",
+  "setDefaultAppContent": "Đặt {appName} làm ứng dụng tóm tắt mặc định của bạn?\\n\\nỨng dụng này sẽ được tự động sử dụng cho tất cả các bản tóm tắt cuộc trò chuyện trong tương lai.",
+  "@setDefaultAppContent": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "setDefaultButton": "Đặt mặc định",
+  "setAsDefaultSuccess": "{appName} đã được đặt làm ứng dụng tóm tắt mặc định",
+  "@setAsDefaultSuccess": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "createCustomTemplate": "Tạo mẫu tùy chỉnh",
+  "allTemplates": "Tất cả mẫu",
+  "failedToInstallApp": "Không thể cài đặt {appName}. Vui lòng thử lại.",
+  "@failedToInstallApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "errorInstallingApp": "Lỗi khi cài đặt {appName}: {error}",
+  "@errorInstallingApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tagSpeaker": "Tag Speaker {speakerId}",
+  "@tagSpeaker": {
+    "placeholders": {
+      "speakerId": {
+        "type": "int"
+      }
+    }
+  },
+  "personNameAlreadyExists": "A person with this name already exists.",
+  "selectYouFromList": "To tag yourself, please select \"You\" from the list.",
+  "enterPersonsName": "Enter Person's Name",
+  "addPerson": "Add Person",
+  "tagOtherSegmentsFromSpeaker": "Tag other segments from this speaker ({selected}/{total})",
+  "@tagOtherSegmentsFromSpeaker": {
+    "placeholders": {
+      "selected": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "tagOtherSegments": "Tag other segments",
+  "managePeople": "Manage People",
+  "shareViaSms": "Chia sẻ qua SMS",
+  "selectContactsToShareSummary": "Chọn liên hệ để chia sẻ tóm tắt cuộc trò chuyện",
+  "searchContactsHint": "Tìm kiếm liên hệ...",
+  "contactsSelectedCount": "Đã chọn {count}",
+  "clearAllSelection": "Xóa tất cả",
+  "selectContactsToShare": "Chọn liên hệ để chia sẻ",
+  "shareWithContactCount": "Chia sẻ với {count} liên hệ",
+  "shareWithContactsCount": "Chia sẻ với {count} liên hệ",
+  "contactsPermissionRequired": "Cần quyền truy cập danh bạ",
+  "contactsPermissionRequiredForSms": "Cần quyền truy cập danh bạ để chia sẻ qua SMS",
+  "grantContactsPermissionForSms": "Vui lòng cấp quyền truy cập danh bạ để chia sẻ qua SMS",
+  "noContactsWithPhoneNumbers": "Không tìm thấy liên hệ có số điện thoại",
+  "noContactsMatchSearch": "Không có liên hệ nào phù hợp với tìm kiếm của bạn",
+  "failedToLoadContacts": "Không thể tải danh bạ",
+  "failedToPrepareConversationForSharing": "Không thể chuẩn bị cuộc trò chuyện để chia sẻ. Vui lòng thử lại.",
+  "couldNotOpenSmsApp": "Không thể mở ứng dụng SMS. Vui lòng thử lại.",
+  "heresWhatWeDiscussed": "Đây là những gì chúng ta vừa thảo luận: {link}",
+  "wifiSync": "Đồng bộ WiFi",
+  "itemCopiedToClipboard": "Đã sao chép {item} vào bộ nhớ tạm"
 }

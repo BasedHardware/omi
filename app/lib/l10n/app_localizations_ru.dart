@@ -1152,7 +1152,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get yes => 'Да';
 
   @override
-  String get editName => 'Изменить имя';
+  String get editName => 'Edit Name';
 
   @override
   String get howShouldOmiCallYou => 'Как Omi должен вас называть?';
@@ -2910,9 +2910,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get connectNow => 'Подключить сейчас';
 
   @override
-  String installsCount(String count) {
-    return '$count+ установок';
-  }
+  String get installsCount => 'Установки';
 
   @override
   String get uninstallApp => 'Удалить приложение';
@@ -3276,7 +3274,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get upgradeToPro => 'Обновить до Pro';
 
   @override
-  String get getOmiDevice => 'Получить устройство Omi';
+  String get getOmiDevice => 'Get Omi Device';
 
   @override
   String get wearableAiCompanion => 'Носимый AI-компаньон';
@@ -3841,7 +3839,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get signOutQuestion => 'Выйти?';
 
   @override
-  String get signOutConfirmation => 'Вы уверены, что хотите выйти?';
+  String get signOutConfirmation => 'Are you sure you want to sign out?';
 
   @override
   String get customVocabularyHeader => 'ПОЛЬЗОВАТЕЛЬСКИЙ СЛОВАРЬ';
@@ -4083,19 +4081,19 @@ class AppLocalizationsRu extends AppLocalizations {
   String get appRejectedMessage => 'Ваше приложение отклонено. Обновите данные и отправьте повторно на рассмотрение.';
 
   @override
-  String get invalidIntegrationUrl => 'Неверный URL интеграции';
+  String get invalidIntegrationUrl => 'Недействительный URL интеграции';
 
   @override
   String get tapToComplete => 'Нажмите для завершения';
 
   @override
-  String get invalidSetupInstructionsUrl => 'Неверный URL инструкций по настройке';
+  String get invalidSetupInstructionsUrl => 'Недействительный URL инструкций по настройке';
 
   @override
-  String get pushToTalk => 'Нажмите, чтобы говорить';
+  String get pushToTalk => 'Нажми и говори';
 
   @override
-  String get summaryPrompt => 'Промпт резюме';
+  String get summaryPrompt => 'Промпт для резюме';
 
   @override
   String get pleaseSelectARating => 'Пожалуйста, выберите оценку';
@@ -4104,7 +4102,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get reviewAddedSuccessfully => 'Отзыв успешно добавлен 🚀';
 
   @override
-  String get reviewUpdatedSuccessfully => 'Отзыв успешно обновлен 🚀';
+  String get reviewUpdatedSuccessfully => 'Отзыв успешно обновлён 🚀';
 
   @override
   String get failedToSubmitReview => 'Не удалось отправить отзыв. Пожалуйста, попробуйте снова.';
@@ -5816,9 +5814,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatAppsTitle => 'Чат-приложения';
 
   @override
-  String get chatAssistantsTitle => 'Чат-ассистенты';
-
-  @override
   String get selectApp => 'Выбрать приложение';
 
   @override
@@ -5826,150 +5821,6 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get disable => 'Отключить';
-
-  @override
-  String get permissionReadConversations => 'Читать разговоры';
-
-  @override
-  String get permissionReadMemories => 'Читать воспоминания';
-
-  @override
-  String get permissionReadTasks => 'Читать задачи';
-
-  @override
-  String get permissionCreateConversations => 'Создавать разговоры';
-
-  @override
-  String get permissionCreateMemories => 'Создавать воспоминания';
-
-  @override
-  String get permissionTypeAccess => 'Доступ';
-
-  @override
-  String get permissionTypeCreate => 'Создание';
-
-  @override
-  String get permissionTypeTrigger => 'Триггер';
-
-  @override
-  String get permissionDescReadConversations => 'Это приложение может получить доступ к вашим разговорам.';
-
-  @override
-  String get permissionDescReadMemories => 'Это приложение может получить доступ к вашим воспоминаниям.';
-
-  @override
-  String get permissionDescReadTasks => 'Это приложение может получить доступ к вашим задачам.';
-
-  @override
-  String get permissionDescCreateConversations => 'Это приложение может создавать новые разговоры.';
-
-  @override
-  String get permissionDescCreateMemories => 'Это приложение может создавать новые воспоминания.';
-
-  @override
-  String get realtimeListening => 'Прослушивание в реальном времени';
-
-  @override
-  String get invalidIntegrationUrl => 'Недействительный URL интеграции';
-
-  @override
-  String get invalidSetupInstructionsUrl => 'Недействительный URL инструкций по настройке';
-
-  @override
-  String get setupCompleted => 'Завершено';
-
-  @override
-  String get tapToComplete => 'Нажмите для завершения';
-
-  @override
-  String get setupInstructions => 'Инструкции по настройке';
-
-  @override
-  String get aboutTheApp => 'О приложении';
-
-  @override
-  String get aboutThePersona => 'О персоне';
-
-  @override
-  String get pushToTalk => 'Нажми и говори';
-
-  @override
-  String get summaryPrompt => 'Промпт для резюме';
-
-  @override
-  String get chatPersonality => 'Личность чата';
-
-  @override
-  String get ratingsAndReviews => 'Оценки и отзывы';
-
-  @override
-  String get pleaseSelectRating => 'Пожалуйста, выберите оценку';
-
-  @override
-  String get reviewAddedSuccessfully => 'Отзыв успешно добавлен 🚀';
-
-  @override
-  String get reviewUpdatedSuccessfully => 'Отзыв успешно обновлён 🚀';
-
-  @override
-  String get failedToSubmitReview => 'Не удалось отправить отзыв. Пожалуйста, попробуйте снова.';
-
-  @override
-  String get writeReviewOptional => 'Написать отзыв (необязательно)';
-
-  @override
-  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
-
-  @override
-  String get setupQuestionProfession => '1. What do you do?';
-
-  @override
-  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
-
-  @override
-  String get setupQuestionAge => '3. What\'s your age range?';
-
-  @override
-  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
-
-  @override
-  String get continueButton => 'Продолжить';
-
-  @override
-  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
-
-  @override
-  String get professionEntrepreneur => 'Entrepreneur';
-
-  @override
-  String get professionSoftwareEngineer => 'Software Engineer';
-
-  @override
-  String get professionProductManager => 'Product Manager';
-
-  @override
-  String get professionExecutive => 'Executive';
-
-  @override
-  String get professionSales => 'Sales';
-
-  @override
-  String get professionStudent => 'Student';
-
-  @override
-  String get usageAtWork => 'At work';
-
-  @override
-  String get usageIrlEvents => 'IRL Events';
-
-  @override
-  String get usageOnline => 'Online';
-
-  @override
-  String get usageSocialSettings => 'In Social Settings';
-
-  @override
-  String get usageEverywhere => 'Everywhere';
 
   @override
   String get photoLibrary => 'Фотогалерея';
@@ -6422,6 +6273,111 @@ class AppLocalizationsRu extends AppLocalizations {
   String get device => 'Device';
 
   @override
+  String get chatAssistantsTitle => 'Чат-ассистенты';
+
+  @override
+  String get permissionReadConversations => 'Читать разговоры';
+
+  @override
+  String get permissionReadMemories => 'Читать воспоминания';
+
+  @override
+  String get permissionReadTasks => 'Читать задачи';
+
+  @override
+  String get permissionCreateConversations => 'Создавать разговоры';
+
+  @override
+  String get permissionCreateMemories => 'Создавать воспоминания';
+
+  @override
+  String get permissionTypeAccess => 'Доступ';
+
+  @override
+  String get permissionTypeCreate => 'Создание';
+
+  @override
+  String get permissionTypeTrigger => 'Триггер';
+
+  @override
+  String get permissionDescReadConversations => 'Это приложение может получить доступ к вашим разговорам.';
+
+  @override
+  String get permissionDescReadMemories => 'Это приложение может получить доступ к вашим воспоминаниям.';
+
+  @override
+  String get permissionDescReadTasks => 'Это приложение может получить доступ к вашим задачам.';
+
+  @override
+  String get permissionDescCreateConversations => 'Это приложение может создавать новые разговоры.';
+
+  @override
+  String get permissionDescCreateMemories => 'Это приложение может создавать новые воспоминания.';
+
+  @override
+  String get realtimeListening => 'Прослушивание в реальном времени';
+
+  @override
+  String get setupCompleted => 'Завершено';
+
+  @override
+  String get pleaseSelectRating => 'Пожалуйста, выберите оценку';
+
+  @override
+  String get writeReviewOptional => 'Написать отзыв (необязательно)';
+
+  @override
+  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
+
+  @override
+  String get setupQuestionProfession => '1. What do you do?';
+
+  @override
+  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
+
+  @override
+  String get setupQuestionAge => '3. What\'s your age range?';
+
+  @override
+  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
+
+  @override
+  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
+
+  @override
+  String get professionEntrepreneur => 'Entrepreneur';
+
+  @override
+  String get professionSoftwareEngineer => 'Software Engineer';
+
+  @override
+  String get professionProductManager => 'Product Manager';
+
+  @override
+  String get professionExecutive => 'Executive';
+
+  @override
+  String get professionSales => 'Sales';
+
+  @override
+  String get professionStudent => 'Student';
+
+  @override
+  String get usageAtWork => 'At work';
+
+  @override
+  String get usageIrlEvents => 'IRL Events';
+
+  @override
+  String get usageOnline => 'Online';
+
+  @override
+  String get usageSocialSettings => 'In Social Settings';
+
+  @override
+  String get usageEverywhere => 'Everywhere';
+
+  @override
   String get customBackendUrlTitle => 'Пользовательский URL сервера';
 
   @override
@@ -6434,7 +6390,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get enterBackendUrlError => 'Введите URL сервера';
 
   @override
-  String get urlMustEndWithSlashError => 'URL должен заканчиваться на "/"';
+  String get urlMustEndWithSlashError => 'URL должен заканчиваться на \"/\"';
 
   @override
   String get invalidUrlError => 'Введите корректный URL';
@@ -6503,7 +6459,8 @@ class AppLocalizationsRu extends AppLocalizations {
   String get buildingKnowledgeGraphFromMemories => 'Построение графа знаний из воспоминаний...';
 
   @override
-  String get knowledgeGraphWillBuildAutomatically => 'Ваш граф знаний будет построен автоматически при создании новых воспоминаний.';
+  String get knowledgeGraphWillBuildAutomatically =>
+      'Ваш граф знаний будет построен автоматически при создании новых воспоминаний.';
 
   @override
   String get buildGraphButton => 'Построить граф';
@@ -6547,8 +6504,234 @@ class AppLocalizationsRu extends AppLocalizations {
   String get learnMoreLink => 'узнать больше';
 
   @override
-  String get installsCount => 'Установки';
+  String get moneyEarned => 'Заработано';
 
   @override
-  String get moneyEarned => 'Заработано';
+  String get writeYourReply => 'Write your reply...';
+
+  @override
+  String get replySentSuccessfully => 'Reply sent successfully';
+
+  @override
+  String failedToSendReply(String error) {
+    return 'Failed to send reply: $error';
+  }
+
+  @override
+  String get send => 'Send';
+
+  @override
+  String starFilter(int count) {
+    return '$count Star';
+  }
+
+  @override
+  String get noReviewsFound => 'No Reviews Found';
+
+  @override
+  String get editReply => 'Edit Reply';
+
+  @override
+  String get reply => 'Reply';
+
+  @override
+  String starFilterLabel(int count) {
+    return '$count звезда';
+  }
+
+  @override
+  String get sharePublicLink => 'Share Public Link';
+
+  @override
+  String get makePersonaPublic => 'Make Persona Public';
+
+  @override
+  String get connectedKnowledgeData => 'Connected Knowledge Data';
+
+  @override
+  String get enterName => 'Enter name';
+
+  @override
+  String get disconnectTwitter => 'Disconnect Twitter';
+
+  @override
+  String get disconnectTwitterConfirmation =>
+      'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
+
+  @override
+  String get getOmiDeviceDescription => 'Create a more accurate clone with your personal conversations';
+
+  @override
+  String get getOmi => 'Get Omi';
+
+  @override
+  String get iHaveOmiDevice => 'I have Omi device';
+
+  @override
+  String get goal => 'ЦЕЛЬ';
+
+  @override
+  String get tapToTrackThisGoal => 'Нажмите, чтобы отслеживать эту цель';
+
+  @override
+  String get tapToSetAGoal => 'Нажмите, чтобы установить цель';
+
+  @override
+  String get processedConversations => 'Обработанные разговоры';
+
+  @override
+  String get updatedConversations => 'Обновлённые разговоры';
+
+  @override
+  String get newConversations => 'Новые разговоры';
+
+  @override
+  String get summaryTemplate => 'Шаблон сводки';
+
+  @override
+  String get suggestedTemplates => 'Рекомендуемые шаблоны';
+
+  @override
+  String get otherTemplates => 'Другие шаблоны';
+
+  @override
+  String get availableTemplates => 'Доступные шаблоны';
+
+  @override
+  String get getCreative => 'Будьте креативны';
+
+  @override
+  String get defaultLabel => 'По умолчанию';
+
+  @override
+  String get lastUsedLabel => 'Последнее использование';
+
+  @override
+  String get setDefaultApp => 'Установить приложение по умолчанию';
+
+  @override
+  String setDefaultAppContent(String appName) {
+    return 'Установить $appName как приложение для сводок по умолчанию?\\n\\nЭто приложение будет автоматически использоваться для всех будущих сводок разговоров.';
+  }
+
+  @override
+  String get setDefaultButton => 'Установить по умолчанию';
+
+  @override
+  String setAsDefaultSuccess(String appName) {
+    return '$appName установлено как приложение для сводок по умолчанию';
+  }
+
+  @override
+  String get createCustomTemplate => 'Создать свой шаблон';
+
+  @override
+  String get allTemplates => 'Все шаблоны';
+
+  @override
+  String failedToInstallApp(String appName) {
+    return 'Не удалось установить $appName. Пожалуйста, попробуйте снова.';
+  }
+
+  @override
+  String errorInstallingApp(String appName, String error) {
+    return 'Ошибка установки $appName: $error';
+  }
+
+  @override
+  String tagSpeaker(int speakerId) {
+    return 'Tag Speaker $speakerId';
+  }
+
+  @override
+  String get personNameAlreadyExists => 'A person with this name already exists.';
+
+  @override
+  String get selectYouFromList => 'To tag yourself, please select \"You\" from the list.';
+
+  @override
+  String get enterPersonsName => 'Enter Person\'s Name';
+
+  @override
+  String get addPerson => 'Add Person';
+
+  @override
+  String tagOtherSegmentsFromSpeaker(int selected, int total) {
+    return 'Tag other segments from this speaker ($selected/$total)';
+  }
+
+  @override
+  String get tagOtherSegments => 'Tag other segments';
+
+  @override
+  String get managePeople => 'Manage People';
+
+  @override
+  String get shareViaSms => 'Поделиться по SMS';
+
+  @override
+  String get selectContactsToShareSummary => 'Выберите контакты для отправки сводки разговора';
+
+  @override
+  String get searchContactsHint => 'Поиск контактов...';
+
+  @override
+  String contactsSelectedCount(int count) {
+    return '$count выбрано';
+  }
+
+  @override
+  String get clearAllSelection => 'Очистить все';
+
+  @override
+  String get selectContactsToShare => 'Выберите контакты для отправки';
+
+  @override
+  String shareWithContactCount(int count) {
+    return 'Отправить $count контакту';
+  }
+
+  @override
+  String shareWithContactsCount(int count) {
+    return 'Отправить $count контактам';
+  }
+
+  @override
+  String get contactsPermissionRequired => 'Требуется разрешение на доступ к контактам';
+
+  @override
+  String get contactsPermissionRequiredForSms => 'Для отправки по SMS требуется разрешение на доступ к контактам';
+
+  @override
+  String get grantContactsPermissionForSms =>
+      'Пожалуйста, предоставьте разрешение на доступ к контактам для отправки по SMS';
+
+  @override
+  String get noContactsWithPhoneNumbers => 'Контакты с номерами телефонов не найдены';
+
+  @override
+  String get noContactsMatchSearch => 'Контакты по вашему запросу не найдены';
+
+  @override
+  String get failedToLoadContacts => 'Не удалось загрузить контакты';
+
+  @override
+  String get failedToPrepareConversationForSharing =>
+      'Не удалось подготовить разговор для отправки. Пожалуйста, попробуйте снова.';
+
+  @override
+  String get couldNotOpenSmsApp => 'Не удалось открыть приложение SMS. Пожалуйста, попробуйте снова.';
+
+  @override
+  String heresWhatWeDiscussed(String link) {
+    return 'Вот о чём мы только что говорили: $link';
+  }
+
+  @override
+  String get wifiSync => 'Синхронизация WiFi';
+
+  @override
+  String itemCopiedToClipboard(String item) {
+    return '$item скопировано в буфер обмена';
+  }
 }

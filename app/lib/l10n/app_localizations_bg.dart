@@ -1151,7 +1151,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get yes => 'Да';
 
   @override
-  String get editName => 'Редактирай име';
+  String get editName => 'Edit Name';
 
   @override
   String get howShouldOmiCallYou => 'Как Omi да ви нарича?';
@@ -2907,9 +2907,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get connectNow => 'Свържи сега';
 
   @override
-  String installsCount(String count) {
-    return '$count+ инсталации';
-  }
+  String get installsCount => 'Инсталации';
 
   @override
   String get uninstallApp => 'Деинсталиране на приложението';
@@ -2961,7 +2959,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get chatPersonality => 'Личност на чата';
 
   @override
-  String get ratingsAndReviews => 'Оценки и отзиви';
+  String get ratingsAndReviews => 'Рейтинги и отзиви';
 
   @override
   String get noRatings => 'няма оценки';
@@ -3273,7 +3271,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get upgradeToPro => 'Надграждане до Pro';
 
   @override
-  String get getOmiDevice => 'Получете устройство Omi';
+  String get getOmiDevice => 'Get Omi Device';
 
   @override
   String get wearableAiCompanion => 'Носим AI спътник';
@@ -3842,7 +3840,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get signOutQuestion => 'Изход?';
 
   @override
-  String get signOutConfirmation => 'Сигурни ли сте, че искате да излезете?';
+  String get signOutConfirmation => 'Are you sure you want to sign out?';
 
   @override
   String get customVocabularyHeader => 'ПЕРСОНАЛИЗИРАН РЕЧНИК';
@@ -4098,7 +4096,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get pushToTalk => 'Натисни за говорене';
 
   @override
-  String get summaryPrompt => 'Подкана за обобщение';
+  String get summaryPrompt => 'Подсказка за резюме';
 
   @override
   String get pleaseSelectARating => 'Моля, изберете оценка';
@@ -5822,9 +5820,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get chatAppsTitle => 'Чат приложения';
 
   @override
-  String get chatAssistantsTitle => 'Чат асистенти';
-
-  @override
   String get selectApp => 'Избери приложение';
 
   @override
@@ -5833,150 +5828,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get disable => 'Деактивирай';
-
-  @override
-  String get permissionReadConversations => 'Четене на разговори';
-
-  @override
-  String get permissionReadMemories => 'Четене на спомени';
-
-  @override
-  String get permissionReadTasks => 'Четене на задачи';
-
-  @override
-  String get permissionCreateConversations => 'Създаване на разговори';
-
-  @override
-  String get permissionCreateMemories => 'Създаване на спомени';
-
-  @override
-  String get permissionTypeAccess => 'Достъп';
-
-  @override
-  String get permissionTypeCreate => 'Създаване';
-
-  @override
-  String get permissionTypeTrigger => 'Тригер';
-
-  @override
-  String get permissionDescReadConversations => 'Това приложение може да достъпва вашите разговори.';
-
-  @override
-  String get permissionDescReadMemories => 'Това приложение може да достъпва вашите спомени.';
-
-  @override
-  String get permissionDescReadTasks => 'Това приложение може да достъпва вашите задачи.';
-
-  @override
-  String get permissionDescCreateConversations => 'Това приложение може да създава нови разговори.';
-
-  @override
-  String get permissionDescCreateMemories => 'Това приложение може да създава нови спомени.';
-
-  @override
-  String get realtimeListening => 'Слушане в реално време';
-
-  @override
-  String get invalidIntegrationUrl => 'Невалиден URL за интеграция';
-
-  @override
-  String get invalidSetupInstructionsUrl => 'Невалиден URL за инструкции за настройка';
-
-  @override
-  String get setupCompleted => 'Завършено';
-
-  @override
-  String get tapToComplete => 'Докоснете за завършване';
-
-  @override
-  String get setupInstructions => 'Инструкции за настройка';
-
-  @override
-  String get aboutTheApp => 'За приложението';
-
-  @override
-  String get aboutThePersona => 'За персоната';
-
-  @override
-  String get pushToTalk => 'Натисни за говорене';
-
-  @override
-  String get summaryPrompt => 'Подсказка за резюме';
-
-  @override
-  String get chatPersonality => 'Личност на чата';
-
-  @override
-  String get ratingsAndReviews => 'Рейтинги и отзиви';
-
-  @override
-  String get pleaseSelectRating => 'Моля, изберете рейтинг';
-
-  @override
-  String get reviewAddedSuccessfully => 'Отзивът е добавен успешно 🚀';
-
-  @override
-  String get reviewUpdatedSuccessfully => 'Отзивът е актуализиран успешно 🚀';
-
-  @override
-  String get failedToSubmitReview => 'Неуспешно изпращане на отзив. Моля, опитайте отново.';
-
-  @override
-  String get writeReviewOptional => 'Напишете отзив (по избор)';
-
-  @override
-  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
-
-  @override
-  String get setupQuestionProfession => '1. What do you do?';
-
-  @override
-  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
-
-  @override
-  String get setupQuestionAge => '3. What\'s your age range?';
-
-  @override
-  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
-
-  @override
-  String get continueButton => 'Продължи';
-
-  @override
-  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
-
-  @override
-  String get professionEntrepreneur => 'Entrepreneur';
-
-  @override
-  String get professionSoftwareEngineer => 'Software Engineer';
-
-  @override
-  String get professionProductManager => 'Product Manager';
-
-  @override
-  String get professionExecutive => 'Executive';
-
-  @override
-  String get professionSales => 'Sales';
-
-  @override
-  String get professionStudent => 'Student';
-
-  @override
-  String get usageAtWork => 'At work';
-
-  @override
-  String get usageIrlEvents => 'IRL Events';
-
-  @override
-  String get usageOnline => 'Online';
-
-  @override
-  String get usageSocialSettings => 'In Social Settings';
-
-  @override
-  String get usageEverywhere => 'Everywhere';
 
   @override
   String get photoLibrary => 'Фотогалерия';
@@ -6432,6 +6283,111 @@ class AppLocalizationsBg extends AppLocalizations {
   String get device => 'Device';
 
   @override
+  String get chatAssistantsTitle => 'Чат асистенти';
+
+  @override
+  String get permissionReadConversations => 'Четене на разговори';
+
+  @override
+  String get permissionReadMemories => 'Четене на спомени';
+
+  @override
+  String get permissionReadTasks => 'Четене на задачи';
+
+  @override
+  String get permissionCreateConversations => 'Създаване на разговори';
+
+  @override
+  String get permissionCreateMemories => 'Създаване на спомени';
+
+  @override
+  String get permissionTypeAccess => 'Достъп';
+
+  @override
+  String get permissionTypeCreate => 'Създаване';
+
+  @override
+  String get permissionTypeTrigger => 'Тригер';
+
+  @override
+  String get permissionDescReadConversations => 'Това приложение може да достъпва вашите разговори.';
+
+  @override
+  String get permissionDescReadMemories => 'Това приложение може да достъпва вашите спомени.';
+
+  @override
+  String get permissionDescReadTasks => 'Това приложение може да достъпва вашите задачи.';
+
+  @override
+  String get permissionDescCreateConversations => 'Това приложение може да създава нови разговори.';
+
+  @override
+  String get permissionDescCreateMemories => 'Това приложение може да създава нови спомени.';
+
+  @override
+  String get realtimeListening => 'Слушане в реално време';
+
+  @override
+  String get setupCompleted => 'Завършено';
+
+  @override
+  String get pleaseSelectRating => 'Моля, изберете рейтинг';
+
+  @override
+  String get writeReviewOptional => 'Напишете отзив (по избор)';
+
+  @override
+  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
+
+  @override
+  String get setupQuestionProfession => '1. What do you do?';
+
+  @override
+  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
+
+  @override
+  String get setupQuestionAge => '3. What\'s your age range?';
+
+  @override
+  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
+
+  @override
+  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
+
+  @override
+  String get professionEntrepreneur => 'Entrepreneur';
+
+  @override
+  String get professionSoftwareEngineer => 'Software Engineer';
+
+  @override
+  String get professionProductManager => 'Product Manager';
+
+  @override
+  String get professionExecutive => 'Executive';
+
+  @override
+  String get professionSales => 'Sales';
+
+  @override
+  String get professionStudent => 'Student';
+
+  @override
+  String get usageAtWork => 'At work';
+
+  @override
+  String get usageIrlEvents => 'IRL Events';
+
+  @override
+  String get usageOnline => 'Online';
+
+  @override
+  String get usageSocialSettings => 'In Social Settings';
+
+  @override
+  String get usageEverywhere => 'Everywhere';
+
+  @override
   String get customBackendUrlTitle => 'Персонализиран URL на сървъра';
 
   @override
@@ -6444,7 +6400,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get enterBackendUrlError => 'Моля, въведете URL на сървъра';
 
   @override
-  String get urlMustEndWithSlashError => 'URL трябва да завършва с "/"';
+  String get urlMustEndWithSlashError => 'URL трябва да завършва с \"/\"';
 
   @override
   String get invalidUrlError => 'Моля, въведете валиден URL';
@@ -6513,7 +6469,8 @@ class AppLocalizationsBg extends AppLocalizations {
   String get buildingKnowledgeGraphFromMemories => 'Изграждане на графа на знанията от спомени...';
 
   @override
-  String get knowledgeGraphWillBuildAutomatically => 'Графът на знанията ще се изгради автоматично, когато създавате нови спомени.';
+  String get knowledgeGraphWillBuildAutomatically =>
+      'Графът на знанията ще се изгради автоматично, когато създавате нови спомени.';
 
   @override
   String get buildGraphButton => 'Изграждане на граф';
@@ -6536,10 +6493,10 @@ class AppLocalizationsBg extends AppLocalizations {
   String get submitReply => 'Изпрати отговор';
 
   @override
-  String get editYourReply => 'Редактирай отговора си';
+  String get editYourReply => 'Редактирай отговора';
 
   @override
-  String get replyToReview => 'Отговори на отзива';
+  String get replyToReview => 'Отговори на ревюто';
 
   @override
   String get rateAndReviewThisApp => 'Оценете и рецензирайте това приложение';
@@ -6557,8 +6514,233 @@ class AppLocalizationsBg extends AppLocalizations {
   String get learnMoreLink => 'научете повече';
 
   @override
-  String get installsCount => 'Инсталации';
+  String get moneyEarned => 'Спечелени пари';
 
   @override
-  String get moneyEarned => 'Спечелени пари';
+  String get writeYourReply => 'Write your reply...';
+
+  @override
+  String get replySentSuccessfully => 'Reply sent successfully';
+
+  @override
+  String failedToSendReply(String error) {
+    return 'Failed to send reply: $error';
+  }
+
+  @override
+  String get send => 'Send';
+
+  @override
+  String starFilter(int count) {
+    return '$count Star';
+  }
+
+  @override
+  String get noReviewsFound => 'No Reviews Found';
+
+  @override
+  String get editReply => 'Edit Reply';
+
+  @override
+  String get reply => 'Reply';
+
+  @override
+  String starFilterLabel(int count) {
+    return '$count звезда';
+  }
+
+  @override
+  String get sharePublicLink => 'Share Public Link';
+
+  @override
+  String get makePersonaPublic => 'Make Persona Public';
+
+  @override
+  String get connectedKnowledgeData => 'Connected Knowledge Data';
+
+  @override
+  String get enterName => 'Enter name';
+
+  @override
+  String get disconnectTwitter => 'Disconnect Twitter';
+
+  @override
+  String get disconnectTwitterConfirmation =>
+      'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
+
+  @override
+  String get getOmiDeviceDescription => 'Create a more accurate clone with your personal conversations';
+
+  @override
+  String get getOmi => 'Get Omi';
+
+  @override
+  String get iHaveOmiDevice => 'I have Omi device';
+
+  @override
+  String get goal => 'ЦЕЛ';
+
+  @override
+  String get tapToTrackThisGoal => 'Докоснете, за да проследите тази цел';
+
+  @override
+  String get tapToSetAGoal => 'Докоснете, за да зададете цел';
+
+  @override
+  String get processedConversations => 'Обработени разговори';
+
+  @override
+  String get updatedConversations => 'Актуализирани разговори';
+
+  @override
+  String get newConversations => 'Нови разговори';
+
+  @override
+  String get summaryTemplate => 'Шаблон за резюме';
+
+  @override
+  String get suggestedTemplates => 'Предложени шаблони';
+
+  @override
+  String get otherTemplates => 'Други шаблони';
+
+  @override
+  String get availableTemplates => 'Налични шаблони';
+
+  @override
+  String get getCreative => 'Бъдете креативни';
+
+  @override
+  String get defaultLabel => 'По подразбиране';
+
+  @override
+  String get lastUsedLabel => 'Последно използван';
+
+  @override
+  String get setDefaultApp => 'Задаване на приложение по подразбиране';
+
+  @override
+  String setDefaultAppContent(String appName) {
+    return 'Да зададем $appName като ваше приложение за обобщаване по подразбиране?\\n\\nТова приложение ще се използва автоматично за всички бъдещи резюмета на разговори.';
+  }
+
+  @override
+  String get setDefaultButton => 'Задай по подразбиране';
+
+  @override
+  String setAsDefaultSuccess(String appName) {
+    return '$appName е зададено като приложение за обобщаване по подразбиране';
+  }
+
+  @override
+  String get createCustomTemplate => 'Създаване на персонализиран шаблон';
+
+  @override
+  String get allTemplates => 'Всички шаблони';
+
+  @override
+  String failedToInstallApp(String appName) {
+    return 'Неуспешно инсталиране на $appName. Моля, опитайте отново.';
+  }
+
+  @override
+  String errorInstallingApp(String appName, String error) {
+    return 'Грешка при инсталиране на $appName: $error';
+  }
+
+  @override
+  String tagSpeaker(int speakerId) {
+    return 'Tag Speaker $speakerId';
+  }
+
+  @override
+  String get personNameAlreadyExists => 'A person with this name already exists.';
+
+  @override
+  String get selectYouFromList => 'To tag yourself, please select \"You\" from the list.';
+
+  @override
+  String get enterPersonsName => 'Enter Person\'s Name';
+
+  @override
+  String get addPerson => 'Add Person';
+
+  @override
+  String tagOtherSegmentsFromSpeaker(int selected, int total) {
+    return 'Tag other segments from this speaker ($selected/$total)';
+  }
+
+  @override
+  String get tagOtherSegments => 'Tag other segments';
+
+  @override
+  String get managePeople => 'Manage People';
+
+  @override
+  String get shareViaSms => 'Споделяне чрез SMS';
+
+  @override
+  String get selectContactsToShareSummary => 'Изберете контакти за споделяне на обобщението на разговора';
+
+  @override
+  String get searchContactsHint => 'Търсене на контакти...';
+
+  @override
+  String contactsSelectedCount(int count) {
+    return '$count избрани';
+  }
+
+  @override
+  String get clearAllSelection => 'Изчисти всичко';
+
+  @override
+  String get selectContactsToShare => 'Изберете контакти за споделяне';
+
+  @override
+  String shareWithContactCount(int count) {
+    return 'Споделяне с $count контакт';
+  }
+
+  @override
+  String shareWithContactsCount(int count) {
+    return 'Споделяне с $count контакта';
+  }
+
+  @override
+  String get contactsPermissionRequired => 'Изисква се разрешение за контакти';
+
+  @override
+  String get contactsPermissionRequiredForSms => 'За споделяне чрез SMS е необходимо разрешение за контакти';
+
+  @override
+  String get grantContactsPermissionForSms => 'Моля, дайте разрешение за контакти за споделяне чрез SMS';
+
+  @override
+  String get noContactsWithPhoneNumbers => 'Не са намерени контакти с телефонни номера';
+
+  @override
+  String get noContactsMatchSearch => 'Няма контакти, съответстващи на търсенето';
+
+  @override
+  String get failedToLoadContacts => 'Неуспешно зареждане на контакти';
+
+  @override
+  String get failedToPrepareConversationForSharing =>
+      'Неуспешна подготовка на разговора за споделяне. Моля, опитайте отново.';
+
+  @override
+  String get couldNotOpenSmsApp => 'Не можа да се отвори SMS приложението. Моля, опитайте отново.';
+
+  @override
+  String heresWhatWeDiscussed(String link) {
+    return 'Ето какво обсъдихме: $link';
+  }
+
+  @override
+  String get wifiSync => 'WiFi синхронизация';
+
+  @override
+  String itemCopiedToClipboard(String item) {
+    return '$item копирано в клипборда';
+  }
 }

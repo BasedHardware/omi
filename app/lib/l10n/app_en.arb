@@ -7978,5 +7978,244 @@
   "moneyEarned": "Money Earned",
   "@moneyEarned": {
     "description": "Label for money earned from app"
+  },
+  "writeYourReply": "Write your reply...",
+  "@writeYourReply": {
+    "description": "Hint text for reply input field"
+  },
+  "replySentSuccessfully": "Reply sent successfully",
+  "@replySentSuccessfully": {
+    "description": "Success message after sending a reply"
+  },
+  "failedToSendReply": "Failed to send reply: {error}",
+  "@failedToSendReply": {
+    "description": "Error message when reply fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "send": "Send",
+  "@send": {
+    "description": "Button text to send a message or reply"
+  },
+  "starFilter": "{count} Star",
+  "@starFilter": {
+    "description": "Filter chip for star rating",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "noReviewsFound": "No Reviews Found",
+  "@noReviewsFound": {
+    "description": "Empty state message when no reviews match filter"
+  },
+  "editReply": "Edit Reply",
+  "@editReply": {
+    "description": "Button text to edit an existing reply"
+  },
+  "reply": "Reply",
+  "@reply": {
+    "description": "Button text to reply to something"
+  },
+  "starFilterLabel": "{count} Star",
+  "@starFilterLabel": {
+    "description": "Filter chip label for star rating",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sharePublicLink": "Share Public Link",
+  "makePersonaPublic": "Make Persona Public",
+  "connectedKnowledgeData": "Connected Knowledge Data",
+  "enterName": "Enter name",
+  "disconnectTwitter": "Disconnect Twitter",
+  "disconnectTwitterConfirmation": "Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.",
+  "getOmiDeviceDescription": "Create a more accurate clone with your personal conversations",
+  "getOmi": "Get Omi",
+  "iHaveOmiDevice": "I have Omi device",
+  "goal": "GOAL",
+  "tapToTrackThisGoal": "Tap to track this goal",
+  "tapToSetAGoal": "Tap to set a goal",
+  "processedConversations": "Processed Conversations",
+  "updatedConversations": "Updated Conversations",
+  "newConversations": "New Conversations",
+  "summaryTemplate": "Summary Template",
+  "suggestedTemplates": "Suggested Templates",
+  "otherTemplates": "Other Templates",
+  "availableTemplates": "Available Templates",
+  "getCreative": "Get Creative",
+  "defaultLabel": "Default",
+  "lastUsedLabel": "Last Used",
+  "setDefaultApp": "Set Default App",
+  "setDefaultAppContent": "Set {appName} as your default summarization app?\\n\\nThis app will be automatically used for all future conversation summaries.",
+  "@setDefaultAppContent": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "setDefaultButton": "Set Default",
+  "setAsDefaultSuccess": "{appName} set as default summarization app",
+  "@setAsDefaultSuccess": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "createCustomTemplate": "Create Custom Template",
+  "allTemplates": "All Templates",
+  "failedToInstallApp": "Failed to install {appName}. Please try again.",
+  "@failedToInstallApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "errorInstallingApp": "Error installing {appName}: {error}",
+  "@errorInstallingApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tagSpeaker": "Tag Speaker {speakerId}",
+  "@tagSpeaker": {
+    "placeholders": {
+      "speakerId": {
+        "type": "int"
+      }
+    }
+  },
+  "personNameAlreadyExists": "A person with this name already exists.",
+  "selectYouFromList": "To tag yourself, please select \"You\" from the list.",
+  "enterPersonsName": "Enter Person's Name",
+  "addPerson": "Add Person",
+  "tagOtherSegmentsFromSpeaker": "Tag other segments from this speaker ({selected}/{total})",
+  "@tagOtherSegmentsFromSpeaker": {
+    "placeholders": {
+      "selected": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "tagOtherSegments": "Tag other segments",
+  "managePeople": "Manage People",
+  "shareViaSms": "Share via SMS",
+  "@shareViaSms": {
+    "description": "Title for share to contacts sheet"
+  },
+  "selectContactsToShareSummary": "Select contacts to share your conversation summary",
+  "@selectContactsToShareSummary": {
+    "description": "Subtitle for share to contacts sheet"
+  },
+  "searchContactsHint": "Search contacts...",
+  "@searchContactsHint": {
+    "description": "Hint text for contacts search field"
+  },
+  "contactsSelectedCount": "{count} selected",
+  "@contactsSelectedCount": {
+    "description": "Shows count of selected contacts",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "clearAllSelection": "Clear all",
+  "@clearAllSelection": {
+    "description": "Button to clear all selected contacts"
+  },
+  "selectContactsToShare": "Select contacts to share",
+  "@selectContactsToShare": {
+    "description": "Button text when no contacts are selected"
+  },
+  "shareWithContactCount": "Share with {count} contact",
+  "@shareWithContactCount": {
+    "description": "Button text when 1 contact selected",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "shareWithContactsCount": "Share with {count} contacts",
+  "@shareWithContactsCount": {
+    "description": "Button text when multiple contacts selected",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "contactsPermissionRequired": "Contacts permission required",
+  "@contactsPermissionRequired": {
+    "description": "Title when contacts permission is denied"
+  },
+  "contactsPermissionRequiredForSms": "Contacts permission is required to share via SMS",
+  "@contactsPermissionRequiredForSms": {
+    "description": "Error message when contacts permission is denied"
+  },
+  "grantContactsPermissionForSms": "Please grant contacts permission to share via SMS",
+  "@grantContactsPermissionForSms": {
+    "description": "Message asking user to grant contacts permission"
+  },
+  "noContactsWithPhoneNumbers": "No contacts with phone numbers found",
+  "@noContactsWithPhoneNumbers": {
+    "description": "Message when no contacts have phone numbers"
+  },
+  "noContactsMatchSearch": "No contacts match your search",
+  "@noContactsMatchSearch": {
+    "description": "Message when search returns no results"
+  },
+  "failedToLoadContacts": "Failed to load contacts",
+  "@failedToLoadContacts": {
+    "description": "Error message when contacts fail to load"
+  },
+  "failedToPrepareConversationForSharing": "Failed to prepare conversation for sharing. Please try again.",
+  "@failedToPrepareConversationForSharing": {
+    "description": "Error when sharing preparation fails"
+  },
+  "couldNotOpenSmsApp": "Could not open SMS app. Please try again.",
+  "@couldNotOpenSmsApp": {
+    "description": "Error when SMS app cannot be opened"
+  },
+  "heresWhatWeDiscussed": "Here's what we just discussed: {link}",
+  "@heresWhatWeDiscussed": {
+    "description": "SMS message body with share link",
+    "placeholders": {
+      "link": {
+        "type": "String"
+      }
+    }
+  },
+  "wifiSync": "WiFi Sync",
+  "@wifiSync": {
+    "description": "WiFi sync feature label"
+  },
+  "itemCopiedToClipboard": "{item} copied to clipboard",
+  "@itemCopiedToClipboard": {
+    "description": "Message when item is copied to clipboard",
+    "placeholders": {
+      "item": {
+        "type": "String",
+        "example": "Device Name"
+      }
+    }
   }
 }

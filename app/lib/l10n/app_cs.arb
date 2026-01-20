@@ -357,7 +357,7 @@
   "permissionRevokedTitle": "Povolení zrušeno",
   "permissionRevokedMessage": "Chcete, abychom odstranili také všechny vaše existující nahrávky?",
   "yes": "Ano",
-  "editName": "Upravit jméno",
+  "editName": "Edit Name",
   "howShouldOmiCallYou": "Jak vás má Omi oslovovat?",
   "enterYourName": "Zadejte své jméno",
   "nameCannotBeEmpty": "Jméno nemůže být prázdné",
@@ -1006,7 +1006,7 @@
   "help": "Nápověda",
   "pro": "Pro",
   "upgradeToPro": "Upgrade na Pro",
-  "getOmiDevice": "Získat zařízení Omi",
+  "getOmiDevice": "Get Omi Device",
   "wearableAiCompanion": "Nositelný AI společník",
   "loadingMemories": "Načítání vzpomínek...",
   "allMemories": "Všechny vzpomínky",
@@ -1170,7 +1170,7 @@
   "selectTime": "Vybrat čas",
   "accountGroup": "Účet",
   "signOutQuestion": "Odhlásit se?",
-  "signOutConfirmation": "Opravdu se chcete odhlásit?",
+  "signOutConfirmation": "Are you sure you want to sign out?",
   "customVocabularyHeader": "VLASTNÍ SLOVNÍK",
   "addWordsDescription": "Přidejte slova, která má Omi rozpoznávat během přepisu.",
   "enterWordsHint": "Zadejte slova (oddělená čárkami)",
@@ -1994,5 +1994,119 @@
   "cantRateWithoutInternet": "Nelze hodnotit aplikaci bez připojení k internetu.",
   "appAnalytics": "Analytika aplikace",
   "learnMoreLink": "zjistit více",
-  "moneyEarned": "Vyděláno"
+  "moneyEarned": "Vyděláno",
+  "starFilterLabel": "{count} hvězda",
+  "@starFilterLabel": {
+    "description": "Filter chip label for star rating",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sharePublicLink": "Share Public Link",
+  "makePersonaPublic": "Make Persona Public",
+  "connectedKnowledgeData": "Connected Knowledge Data",
+  "enterName": "Enter name",
+  "disconnectTwitter": "Disconnect Twitter",
+  "disconnectTwitterConfirmation": "Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.",
+  "getOmiDeviceDescription": "Create a more accurate clone with your personal conversations",
+  "getOmi": "Get Omi",
+  "iHaveOmiDevice": "I have Omi device",
+  "goal": "CÍL",
+  "tapToTrackThisGoal": "Klepnutím začnete sledovat tento cíl",
+  "tapToSetAGoal": "Klepnutím nastavte cíl",
+  "processedConversations": "Zpracované konverzace",
+  "updatedConversations": "Aktualizované konverzace",
+  "newConversations": "Nové konverzace",
+  "summaryTemplate": "Šablona souhrnu",
+  "suggestedTemplates": "Navrhované šablony",
+  "otherTemplates": "Ostatní šablony",
+  "availableTemplates": "Dostupné šablony",
+  "getCreative": "Buďte kreativní",
+  "defaultLabel": "Výchozí",
+  "lastUsedLabel": "Naposledy použito",
+  "setDefaultApp": "Nastavit výchozí aplikaci",
+  "setDefaultAppContent": "Nastavit {appName} jako výchozí aplikaci pro shrnutí?\\n\\nTato aplikace bude automaticky použita pro všechna budoucí shrnutí konverzací.",
+  "@setDefaultAppContent": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "setDefaultButton": "Nastavit výchozí",
+  "setAsDefaultSuccess": "{appName} nastavena jako výchozí aplikace pro shrnutí",
+  "@setAsDefaultSuccess": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "createCustomTemplate": "Vytvořit vlastní šablonu",
+  "allTemplates": "Všechny šablony",
+  "failedToInstallApp": "Nepodařilo se nainstalovat {appName}. Zkuste to prosím znovu.",
+  "@failedToInstallApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "errorInstallingApp": "Chyba při instalaci {appName}: {error}",
+  "@errorInstallingApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tagSpeaker": "Tag Speaker {speakerId}",
+  "@tagSpeaker": {
+    "placeholders": {
+      "speakerId": {
+        "type": "int"
+      }
+    }
+  },
+  "personNameAlreadyExists": "A person with this name already exists.",
+  "selectYouFromList": "To tag yourself, please select \"You\" from the list.",
+  "enterPersonsName": "Enter Person's Name",
+  "addPerson": "Add Person",
+  "tagOtherSegmentsFromSpeaker": "Tag other segments from this speaker ({selected}/{total})",
+  "@tagOtherSegmentsFromSpeaker": {
+    "placeholders": {
+      "selected": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "tagOtherSegments": "Tag other segments",
+  "managePeople": "Manage People",
+  "shareViaSms": "Sdílet přes SMS",
+  "selectContactsToShareSummary": "Vyberte kontakty pro sdílení shrnutí konverzace",
+  "searchContactsHint": "Hledat kontakty...",
+  "contactsSelectedCount": "{count} vybráno",
+  "clearAllSelection": "Vymazat vše",
+  "selectContactsToShare": "Vyberte kontakty ke sdílení",
+  "shareWithContactCount": "Sdílet s {count} kontaktem",
+  "shareWithContactsCount": "Sdílet s {count} kontakty",
+  "contactsPermissionRequired": "Vyžadováno oprávnění ke kontaktům",
+  "contactsPermissionRequiredForSms": "Pro sdílení přes SMS je vyžadováno oprávnění ke kontaktům",
+  "grantContactsPermissionForSms": "Pro sdílení přes SMS prosím udělte oprávnění ke kontaktům",
+  "noContactsWithPhoneNumbers": "Nebyly nalezeny kontakty s telefonními čísly",
+  "noContactsMatchSearch": "Žádné kontakty neodpovídají vašemu hledání",
+  "failedToLoadContacts": "Nepodařilo se načíst kontakty",
+  "failedToPrepareConversationForSharing": "Nepodařilo se připravit konverzaci ke sdílení. Zkuste to prosím znovu.",
+  "couldNotOpenSmsApp": "Nepodařilo se otevřít aplikaci SMS. Zkuste to prosím znovu.",
+  "heresWhatWeDiscussed": "Tady je to, o čem jsme mluvili: {link}",
+  "wifiSync": "Synchronizace WiFi",
+  "itemCopiedToClipboard": "{item} zkopírováno do schránky"
 }

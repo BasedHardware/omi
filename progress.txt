@@ -2,9 +2,9 @@
 
 ## Summary
 Total Files to Localize: 38
-Completed: 6
+Completed: 28
 In Progress: 0
-Pending: 32
+Pending: 10
 
 ## Progress by File
 
@@ -13,34 +13,34 @@ Pending: 32
 [x] pages/conversations/sync_page.dart (~45 strings) - DONE
 [x] pages/conversation_detail/widgets.dart (~25 strings) - DONE (22 strings localized)
 [x] pages/onboarding/speech_profile_widget.dart (~10 strings) - ALREADY LOCALIZED
-[ ] pages/settings/transcription_settings_page.dart (~15 strings)
+[x] pages/settings/transcription_settings_page.dart (~15 strings) - DONE (50+ strings localized)
 
 ### Medium Priority
 [x] pages/settings/task_integrations_page.dart (~10 strings) - DONE (1 string localized)
 [x] pages/settings/import_history_page.dart (~10 strings) - DONE (6 strings localized)
-[ ] pages/chat/page.dart (~8 strings)
-[ ] pages/conversation_detail/share.dart (~8 strings)
-[ ] pages/apps/app_detail/app_detail.dart (~12 strings)
-[ ] pages/settings/about.dart (~10 strings)
-[ ] pages/home/page.dart (~8 strings)
-[ ] pages/onboarding/setup/setup_questions.dart (~10 strings)
-[ ] pages/onboarding/custom_auth/backend_url.dart (~8 strings)
-[ ] pages/onboarding/custom_auth/signin.dart (~8 strings)
-[ ] pages/onboarding/custom_auth/signup.dart (~8 strings)
-[ ] pages/memories/widgets/memory_graph_page.dart (~6 strings)
-[ ] pages/apps/widgets/popular_apps_section.dart (~5 strings)
-[ ] pages/apps/app_detail/widgets/app_owner_review_card.dart (~5 strings)
-[ ] pages/apps/app_detail/widgets/add_review_widget.dart (~6 strings)
-[ ] pages/apps/app_detail/widgets/app_analytics_widget.dart (~8 strings)
-[ ] pages/apps/app_detail/reviews_list_page.dart (~5 strings)
-[ ] pages/persona/persona_profile.dart (~10 strings)
+[x] pages/chat/page.dart (~8 strings) - DONE (1 string localized, rest already done)
+[x] pages/conversation_detail/share.dart (~8 strings) - ALREADY LOCALIZED (UI strings done, export content is non-UI)
+[x] pages/apps/app_detail/app_detail.dart (~12 strings) - DONE (30 strings localized)
+[x] pages/settings/about.dart (~10 strings) - ALREADY LOCALIZED
+[x] pages/home/page.dart (~8 strings) - ALREADY LOCALIZED
+[x] pages/onboarding/setup/setup_questions.dart (~10 strings) - DONE (18 strings localized)
+[x] pages/onboarding/custom_auth/backend_url.dart (~8 strings) - DONE (7 strings localized)
+[x] pages/onboarding/custom_auth/signin.dart (~8 strings) - DONE (10 strings localized)
+[x] pages/onboarding/custom_auth/signup.dart (~8 strings) - DONE (7 new + 6 reused keys)
+[x] pages/memories/widgets/memory_graph_page.dart (~6 strings) - DONE (6 keys + reuses retry)
+[x] pages/apps/widgets/popular_apps_section.dart (~5 strings) - DONE (2 new + 2 reused keys)
+[x] pages/apps/app_detail/widgets/app_owner_review_card.dart (~5 strings) - DONE (4 keys + reuses cancel)
+[x] pages/apps/app_detail/widgets/add_review_widget.dart (~6 strings) - DONE (3 new + 5 reused keys)
+[x] pages/apps/app_detail/widgets/app_analytics_widget.dart (~8 strings) - DONE (4 keys)
+[x] pages/apps/app_detail/reviews_list_page.dart (~5 strings) - DONE (1 new + 12 reused keys)
+[x] pages/persona/persona_profile.dart (~10 strings) - DONE (12 new + 7 reused keys)
 
 ### Lower Priority
-[ ] pages/conversations/widgets/goal_tracker_widget.dart (~5 strings)
-[ ] pages/conversations/synced_conversations_page.dart (~6 strings)
-[ ] pages/conversation_detail/widgets/summarized_apps_sheet.dart (~4 strings)
-[ ] pages/conversation_detail/widgets/name_speaker_sheet.dart (~4 strings)
-[ ] pages/conversation_detail/widgets/share_to_contacts_sheet.dart (~4 strings)
+[x] pages/conversations/widgets/goal_tracker_widget.dart (~5 strings) - DONE (3 new + 4 reused keys)
+[x] pages/conversations/synced_conversations_page.dart (~6 strings) - DONE (3 new keys)
+[x] pages/conversation_detail/widgets/summarized_apps_sheet.dart (~4 strings) - DONE (15 new keys)
+[x] pages/conversation_detail/widgets/name_speaker_sheet.dart (~4 strings) - DONE (8 new keys)
+[x] pages/conversation_detail/widgets/share_to_contacts_sheet.dart (~4 strings) - DONE (16 new keys + 2 reused keys)
 [ ] pages/settings/device_settings.dart (~8 strings)
 [ ] pages/conversations/sync_widgets/wifi_connection_sheet.dart (~6 strings)
 [ ] pages/conversations/wal_item_detail/wal_item_detail_page.dart (~5 strings)
@@ -57,10 +57,69 @@ Pending: 32
 ## Changelog
 
 ### 2026-01-20
+- Localized pages/conversation_detail/widgets/share_to_contacts_sheet.dart with 16 l10n keys for 34 languages
+  - shareViaSms, selectContactsToShareSummary, searchContactsHint, contactsSelectedCount (parameterized)
+  - clearAllSelection, selectContactsToShare, shareWithContactCount, shareWithContactsCount (both parameterized)
+  - contactsPermissionRequired, contactsPermissionRequiredForSms, grantContactsPermissionForSms
+  - noContactsWithPhoneNumbers, noContactsMatchSearch, failedToLoadContacts, failedToPrepareConversationForSharing
+  - couldNotOpenSmsApp, heresWhatWeDiscussed (parameterized with link)
+  - Reuses: openSettings, error
+- Localized pages/conversation_detail/widgets/name_speaker_sheet.dart with 8 l10n keys for 34 languages
+  - tagSpeaker (parameterized with speakerId), personNameAlreadyExists, selectYouFromList, enterPersonsName
+  - addPerson, tagOtherSegmentsFromSpeaker (parameterized with selected/total), tagOtherSegments, managePeople
+  - Reuses: cancel, save
+- Localized pages/conversation_detail/widgets/summarized_apps_sheet.dart with 15 l10n keys for 34 languages
+  - summaryTemplate, suggestedTemplates, otherTemplates, availableTemplates, getCreative
+  - defaultLabel, lastUsedLabel, setDefaultApp, setDefaultAppContent, setDefaultButton
+  - setAsDefaultSuccess, createCustomTemplate, allTemplates, failedToInstallApp, errorInstallingApp
+  - Reuses: cancel, summary
+- Localized pages/conversations/synced_conversations_page.dart with 3 l10n keys for 34 languages
+  - processedConversations, updatedConversations, newConversations
+- Localized pages/conversations/widgets/goal_tracker_widget.dart with 3 l10n keys for 34 languages
+  - goal, tapToTrackThisGoal, tapToSetAGoal
+  - Reuses: current, target, save, cancel
+- Localized pages/persona/persona_profile.dart with 12 l10n keys for 34 languages
+  - sharePublicLink, makePersonaPublic, connectedKnowledgeData, editName, enterName
+  - disconnectTwitter, disconnectTwitterConfirmation, signOutConfirmation
+  - getOmiDevice, getOmiDeviceDescription, getOmi, iHaveOmiDevice
+  - Reuses: persona, cancel, save, signOut, disconnect, connect, connected, comingSoon
+- Localized pages/apps/app_detail/reviews_list_page.dart with 1 l10n key for 34 languages
+  - starFilterLabel (parameterized with count)
+  - Reuses: replyToReview, writeYourReply, cancel, replySentSuccessfully, failedToSendReply, send, ratingsAndReviews, all, noReviewsFound, anonymousUser, editReply, reply
+- Localized pages/apps/app_detail/widgets/app_analytics_widget.dart with 4 l10n keys for 34 languages
+  - appAnalytics, learnMoreLink, installsCount, moneyEarned
+- Localized pages/apps/app_detail/widgets/add_review_widget.dart with 3 l10n keys for 34 languages
+  - rateAndReviewThisApp, noChangesInReview, cantRateWithoutInternet
+  - Reuses: yourReview, submitReview, updateReview, writeReviewOptional, reviewAddedSuccessfully, failedToSubmitReview
+- Localized pages/apps/app_detail/widgets/app_owner_review_card.dart with 4 l10n keys for 34 languages
+  - writeSomething, submitReply, editYourReply, replyToReview (reuses cancel)
+- Localized pages/apps/widgets/popular_apps_section.dart with 2 l10n keys for 34 languages
+  - getButton, openingApp (parameterized), reuses popularApps and open
+- Localized pages/memories/widgets/memory_graph_page.dart with 6 l10n keys for 34 languages
+  - Loading text, empty state title/messages, build graph button, share text
+- Localized pages/onboarding/custom_auth/signup.dart with 7 l10n keys for 34 languages
+  - Create Account title, name/repeat password labels, Sign Up button
+  - Reuses 6 keys from signin.dart for email/password validation
+- Localized pages/onboarding/custom_auth/signin.dart with 10 l10n keys for 34 languages
+  - Sign In title, button, email/password labels, validation errors, success message
+- Localized pages/onboarding/custom_auth/backend_url.dart with 7 l10n keys for 34 languages
+  - Custom Backend URL title, Backend URL label, Save URL button
+  - Validation error messages, success message
+- Localized pages/onboarding/setup/setup_questions.dart with 18 l10n keys for 34 languages
+  - Setup questions, profession and usage options, buttons
+- Verified pages/settings/about.dart and pages/home/page.dart are already localized
+- Localized pages/apps/app_detail/app_detail.dart with 30 l10n keys for 34 languages
+  - Permissions, setup instructions, review messages, section titles
+- Verified pages/conversation_detail/share.dart is already fully localized (UI strings)
+- Localized pages/chat/page.dart with 1 l10n key (chatAssistantsTitle) for 34 languages
+  - File was mostly already localized, only "Chat Assistants" string remained
 - Localized pages/conversation_detail/widgets.dart with 22 l10n keys for 34 languages
 - Localized pages/settings/task_integrations_page.dart with 1 l10n key for 34 languages
 - Localized pages/settings/import_history_page.dart with 6 l10n keys for 34 languages
 - Verified pages/onboarding/speech_profile_widget.dart is already fully localized
+- Localized pages/settings/transcription_settings_page.dart with 50+ l10n keys for 34 languages
+  - Source selector descriptions, download dialogs, iOS native speech, model ready status
+  - Template selector, error messages, Save/Reset buttons, etc.
 
 ### 2026-01-19
 - Initial assessment completed

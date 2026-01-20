@@ -1150,7 +1150,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get yes => 'Так';
 
   @override
-  String get editName => 'Редагувати ім\'я';
+  String get editName => 'Edit Name';
 
   @override
   String get howShouldOmiCallYou => 'Як Omi має до вас звертатися?';
@@ -2907,9 +2907,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get connectNow => 'Підключити зараз';
 
   @override
-  String installsCount(String count) {
-    return '$count+ встановлень';
-  }
+  String get installsCount => 'Встановлення';
 
   @override
   String get uninstallApp => 'Видалити додаток';
@@ -3272,7 +3270,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get upgradeToPro => 'Оновити до Pro';
 
   @override
-  String get getOmiDevice => 'Отримати пристрій Omi';
+  String get getOmiDevice => 'Get Omi Device';
 
   @override
   String get wearableAiCompanion => 'Носимий AI-компаньйон';
@@ -3836,7 +3834,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get signOutQuestion => 'Вийти?';
 
   @override
-  String get signOutConfirmation => 'Ви впевнені, що хочете вийти?';
+  String get signOutConfirmation => 'Are you sure you want to sign out?';
 
   @override
   String get customVocabularyHeader => 'КОРИСТУВАЦЬКИЙ СЛОВНИК';
@@ -4075,19 +4073,19 @@ class AppLocalizationsUk extends AppLocalizations {
   String get appRejectedMessage => 'Ваш додаток відхилено. Оновіть дані та надішліть повторно на розгляд.';
 
   @override
-  String get invalidIntegrationUrl => 'Недійсний URL інтеграції';
+  String get invalidIntegrationUrl => 'Недійсна URL інтеграції';
 
   @override
-  String get tapToComplete => 'Торкніться для завершення';
+  String get tapToComplete => 'Натисніть для завершення';
 
   @override
-  String get invalidSetupInstructionsUrl => 'Недійсний URL інструкцій з налаштування';
+  String get invalidSetupInstructionsUrl => 'Недійсна URL інструкцій з налаштування';
 
   @override
-  String get pushToTalk => 'Натисніть, щоб говорити';
+  String get pushToTalk => 'Натисни і говори';
 
   @override
-  String get summaryPrompt => 'Промпт резюме';
+  String get summaryPrompt => 'Промпт для резюме';
 
   @override
   String get pleaseSelectARating => 'Будь ласка, виберіть оцінку';
@@ -5808,9 +5806,6 @@ class AppLocalizationsUk extends AppLocalizations {
   String get chatAppsTitle => 'Чат-застосунки';
 
   @override
-  String get chatAssistantsTitle => 'Чат-асистенти';
-
-  @override
   String get selectApp => 'Обрати застосунок';
 
   @override
@@ -5818,96 +5813,6 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get disable => 'Вимкнути';
-
-  @override
-  String get permissionReadConversations => 'Читати розмови';
-
-  @override
-  String get permissionReadMemories => 'Читати спогади';
-
-  @override
-  String get permissionReadTasks => 'Читати завдання';
-
-  @override
-  String get permissionCreateConversations => 'Створювати розмови';
-
-  @override
-  String get permissionCreateMemories => 'Створювати спогади';
-
-  @override
-  String get permissionTypeAccess => 'Доступ';
-
-  @override
-  String get permissionTypeCreate => 'Створення';
-
-  @override
-  String get permissionTypeTrigger => 'Тригер';
-
-  @override
-  String get permissionDescReadConversations => 'Цей додаток може отримати доступ до ваших розмов.';
-
-  @override
-  String get permissionDescReadMemories => 'Цей додаток може отримати доступ до ваших спогадів.';
-
-  @override
-  String get permissionDescReadTasks => 'Цей додаток може отримати доступ до ваших завдань.';
-
-  @override
-  String get permissionDescCreateConversations => 'Цей додаток може створювати нові розмови.';
-
-  @override
-  String get permissionDescCreateMemories => 'Цей додаток може створювати нові спогади.';
-
-  @override
-  String get realtimeListening => 'Прослуховування в реальному часі';
-
-  @override
-  String get invalidIntegrationUrl => 'Недійсна URL інтеграції';
-
-  @override
-  String get invalidSetupInstructionsUrl => 'Недійсна URL інструкцій з налаштування';
-
-  @override
-  String get setupCompleted => 'Завершено';
-
-  @override
-  String get tapToComplete => 'Натисніть для завершення';
-
-  @override
-  String get setupInstructions => 'Інструкції з налаштування';
-
-  @override
-  String get aboutTheApp => 'Про додаток';
-
-  @override
-  String get aboutThePersona => 'Про персону';
-
-  @override
-  String get pushToTalk => 'Натисни і говори';
-
-  @override
-  String get summaryPrompt => 'Промпт для резюме';
-
-  @override
-  String get chatPersonality => 'Особистість чату';
-
-  @override
-  String get ratingsAndReviews => 'Оцінки та відгуки';
-
-  @override
-  String get pleaseSelectRating => 'Будь ласка, виберіть оцінку';
-
-  @override
-  String get reviewAddedSuccessfully => 'Відгук успішно додано 🚀';
-
-  @override
-  String get reviewUpdatedSuccessfully => 'Відгук успішно оновлено 🚀';
-
-  @override
-  String get failedToSubmitReview => 'Не вдалося надіслати відгук. Будь ласка, спробуйте ще раз.';
-
-  @override
-  String get writeReviewOptional => 'Написати відгук (необов\'язково)';
 
   @override
   String get photoLibrary => 'Бібліотека фото';
@@ -6359,6 +6264,111 @@ class AppLocalizationsUk extends AppLocalizations {
   String get device => 'Device';
 
   @override
+  String get chatAssistantsTitle => 'Чат-асистенти';
+
+  @override
+  String get permissionReadConversations => 'Читати розмови';
+
+  @override
+  String get permissionReadMemories => 'Читати спогади';
+
+  @override
+  String get permissionReadTasks => 'Читати завдання';
+
+  @override
+  String get permissionCreateConversations => 'Створювати розмови';
+
+  @override
+  String get permissionCreateMemories => 'Створювати спогади';
+
+  @override
+  String get permissionTypeAccess => 'Доступ';
+
+  @override
+  String get permissionTypeCreate => 'Створення';
+
+  @override
+  String get permissionTypeTrigger => 'Тригер';
+
+  @override
+  String get permissionDescReadConversations => 'Цей додаток може отримати доступ до ваших розмов.';
+
+  @override
+  String get permissionDescReadMemories => 'Цей додаток може отримати доступ до ваших спогадів.';
+
+  @override
+  String get permissionDescReadTasks => 'Цей додаток може отримати доступ до ваших завдань.';
+
+  @override
+  String get permissionDescCreateConversations => 'Цей додаток може створювати нові розмови.';
+
+  @override
+  String get permissionDescCreateMemories => 'Цей додаток може створювати нові спогади.';
+
+  @override
+  String get realtimeListening => 'Прослуховування в реальному часі';
+
+  @override
+  String get setupCompleted => 'Завершено';
+
+  @override
+  String get pleaseSelectRating => 'Будь ласка, виберіть оцінку';
+
+  @override
+  String get writeReviewOptional => 'Написати відгук (необов\'язково)';
+
+  @override
+  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
+
+  @override
+  String get setupQuestionProfession => '1. What do you do?';
+
+  @override
+  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
+
+  @override
+  String get setupQuestionAge => '3. What\'s your age range?';
+
+  @override
+  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
+
+  @override
+  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
+
+  @override
+  String get professionEntrepreneur => 'Entrepreneur';
+
+  @override
+  String get professionSoftwareEngineer => 'Software Engineer';
+
+  @override
+  String get professionProductManager => 'Product Manager';
+
+  @override
+  String get professionExecutive => 'Executive';
+
+  @override
+  String get professionSales => 'Sales';
+
+  @override
+  String get professionStudent => 'Student';
+
+  @override
+  String get usageAtWork => 'At work';
+
+  @override
+  String get usageIrlEvents => 'IRL Events';
+
+  @override
+  String get usageOnline => 'Online';
+
+  @override
+  String get usageSocialSettings => 'In Social Settings';
+
+  @override
+  String get usageEverywhere => 'Everywhere';
+
+  @override
   String get customBackendUrlTitle => 'Користувацька URL сервера';
 
   @override
@@ -6371,7 +6381,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get enterBackendUrlError => 'Введіть URL сервера';
 
   @override
-  String get urlMustEndWithSlashError => 'URL повинен закінчуватися на "/"';
+  String get urlMustEndWithSlashError => 'URL повинен закінчуватися на \"/\"';
 
   @override
   String get invalidUrlError => 'Введіть дійсну URL';
@@ -6413,7 +6423,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get createAccountTitle => 'Створити обліковий запис';
 
   @override
-  String get nameLabel => 'Ім'я';
+  String get nameLabel => 'Ім\'я';
 
   @override
   String get repeatPasswordLabel => 'Повторіть пароль';
@@ -6422,7 +6432,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get signUpButton => 'Зареєструватися';
 
   @override
-  String get enterNameError => 'Будь ласка, введіть ваше ім'я';
+  String get enterNameError => 'Будь ласка, введіть ваше ім\'я';
 
   @override
   String get passwordsDoNotMatch => 'Паролі не співпадають';
@@ -6440,13 +6450,22 @@ class AppLocalizationsUk extends AppLocalizations {
   String get buildingKnowledgeGraphFromMemories => 'Побудова графа знань зі спогадів...';
 
   @override
-  String get knowledgeGraphWillBuildAutomatically => 'Ваш граф знань буде побудовано автоматично, коли ви створите нові спогади.';
+  String get knowledgeGraphWillBuildAutomatically =>
+      'Ваш граф знань буде побудовано автоматично, коли ви створите нові спогади.';
 
   @override
   String get buildGraphButton => 'Побудувати граф';
 
   @override
   String get checkOutMyMemoryGraph => 'Подивіться мій граф пам\'яті!';
+
+  @override
+  String get getButton => 'Отримати';
+
+  @override
+  String openingApp(String appName) {
+    return 'Відкриваємо $appName...';
+  }
 
   @override
   String get writeSomething => 'Напишіть щось';
@@ -6476,8 +6495,234 @@ class AppLocalizationsUk extends AppLocalizations {
   String get learnMoreLink => 'дізнатися більше';
 
   @override
-  String get installsCount => 'Встановлення';
+  String get moneyEarned => 'Зароблено';
 
   @override
-  String get moneyEarned => 'Зароблено';
+  String get writeYourReply => 'Write your reply...';
+
+  @override
+  String get replySentSuccessfully => 'Reply sent successfully';
+
+  @override
+  String failedToSendReply(String error) {
+    return 'Failed to send reply: $error';
+  }
+
+  @override
+  String get send => 'Send';
+
+  @override
+  String starFilter(int count) {
+    return '$count Star';
+  }
+
+  @override
+  String get noReviewsFound => 'No Reviews Found';
+
+  @override
+  String get editReply => 'Edit Reply';
+
+  @override
+  String get reply => 'Reply';
+
+  @override
+  String starFilterLabel(int count) {
+    return '$count зірка';
+  }
+
+  @override
+  String get sharePublicLink => 'Share Public Link';
+
+  @override
+  String get makePersonaPublic => 'Make Persona Public';
+
+  @override
+  String get connectedKnowledgeData => 'Connected Knowledge Data';
+
+  @override
+  String get enterName => 'Enter name';
+
+  @override
+  String get disconnectTwitter => 'Disconnect Twitter';
+
+  @override
+  String get disconnectTwitterConfirmation =>
+      'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
+
+  @override
+  String get getOmiDeviceDescription => 'Create a more accurate clone with your personal conversations';
+
+  @override
+  String get getOmi => 'Get Omi';
+
+  @override
+  String get iHaveOmiDevice => 'I have Omi device';
+
+  @override
+  String get goal => 'ЦІЛЬ';
+
+  @override
+  String get tapToTrackThisGoal => 'Торкніться, щоб відстежувати цю ціль';
+
+  @override
+  String get tapToSetAGoal => 'Торкніться, щоб встановити ціль';
+
+  @override
+  String get processedConversations => 'Оброблені розмови';
+
+  @override
+  String get updatedConversations => 'Оновлені розмови';
+
+  @override
+  String get newConversations => 'Нові розмови';
+
+  @override
+  String get summaryTemplate => 'Шаблон підсумку';
+
+  @override
+  String get suggestedTemplates => 'Рекомендовані шаблони';
+
+  @override
+  String get otherTemplates => 'Інші шаблони';
+
+  @override
+  String get availableTemplates => 'Доступні шаблони';
+
+  @override
+  String get getCreative => 'Будьте креативні';
+
+  @override
+  String get defaultLabel => 'За замовчуванням';
+
+  @override
+  String get lastUsedLabel => 'Останнє використання';
+
+  @override
+  String get setDefaultApp => 'Встановити додаток за замовчуванням';
+
+  @override
+  String setDefaultAppContent(String appName) {
+    return 'Встановити $appName як додаток для підсумків за замовчуванням?\\n\\nЦей додаток буде автоматично використовуватися для всіх майбутніх підсумків розмов.';
+  }
+
+  @override
+  String get setDefaultButton => 'Встановити за замовчуванням';
+
+  @override
+  String setAsDefaultSuccess(String appName) {
+    return '$appName встановлено як додаток для підсумків за замовчуванням';
+  }
+
+  @override
+  String get createCustomTemplate => 'Створити власний шаблон';
+
+  @override
+  String get allTemplates => 'Усі шаблони';
+
+  @override
+  String failedToInstallApp(String appName) {
+    return 'Не вдалося встановити $appName. Будь ласка, спробуйте ще раз.';
+  }
+
+  @override
+  String errorInstallingApp(String appName, String error) {
+    return 'Помилка встановлення $appName: $error';
+  }
+
+  @override
+  String tagSpeaker(int speakerId) {
+    return 'Tag Speaker $speakerId';
+  }
+
+  @override
+  String get personNameAlreadyExists => 'A person with this name already exists.';
+
+  @override
+  String get selectYouFromList => 'To tag yourself, please select \"You\" from the list.';
+
+  @override
+  String get enterPersonsName => 'Enter Person\'s Name';
+
+  @override
+  String get addPerson => 'Add Person';
+
+  @override
+  String tagOtherSegmentsFromSpeaker(int selected, int total) {
+    return 'Tag other segments from this speaker ($selected/$total)';
+  }
+
+  @override
+  String get tagOtherSegments => 'Tag other segments';
+
+  @override
+  String get managePeople => 'Manage People';
+
+  @override
+  String get shareViaSms => 'Поділитися через SMS';
+
+  @override
+  String get selectContactsToShareSummary => 'Виберіть контакти для надсилання підсумку розмови';
+
+  @override
+  String get searchContactsHint => 'Пошук контактів...';
+
+  @override
+  String contactsSelectedCount(int count) {
+    return '$count вибрано';
+  }
+
+  @override
+  String get clearAllSelection => 'Очистити все';
+
+  @override
+  String get selectContactsToShare => 'Виберіть контакти для надсилання';
+
+  @override
+  String shareWithContactCount(int count) {
+    return 'Надіслати $count контакту';
+  }
+
+  @override
+  String shareWithContactsCount(int count) {
+    return 'Надіслати $count контактам';
+  }
+
+  @override
+  String get contactsPermissionRequired => 'Потрібен дозвіл на доступ до контактів';
+
+  @override
+  String get contactsPermissionRequiredForSms => 'Для надсилання через SMS потрібен дозвіл на доступ до контактів';
+
+  @override
+  String get grantContactsPermissionForSms =>
+      'Будь ласка, надайте дозвіл на доступ до контактів для надсилання через SMS';
+
+  @override
+  String get noContactsWithPhoneNumbers => 'Не знайдено контактів з номерами телефонів';
+
+  @override
+  String get noContactsMatchSearch => 'Контакти за вашим запитом не знайдено';
+
+  @override
+  String get failedToLoadContacts => 'Не вдалося завантажити контакти';
+
+  @override
+  String get failedToPrepareConversationForSharing =>
+      'Не вдалося підготувати розмову для надсилання. Будь ласка, спробуйте знову.';
+
+  @override
+  String get couldNotOpenSmsApp => 'Не вдалося відкрити додаток SMS. Будь ласка, спробуйте знову.';
+
+  @override
+  String heresWhatWeDiscussed(String link) {
+    return 'Ось про що ми щойно говорили: $link';
+  }
+
+  @override
+  String get wifiSync => 'Синхронізація WiFi';
+
+  @override
+  String itemCopiedToClipboard(String item) {
+    return '$item скопійовано в буфер обміну';
+  }
 }

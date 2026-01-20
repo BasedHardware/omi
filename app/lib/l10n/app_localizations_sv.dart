@@ -1149,7 +1149,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get yes => 'Ja';
 
   @override
-  String get editName => 'Redigera namn';
+  String get editName => 'Edit Name';
 
   @override
   String get howShouldOmiCallYou => 'Vad ska Omi kalla dig?';
@@ -2905,9 +2905,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get connectNow => 'Anslut nu';
 
   @override
-  String installsCount(String count) {
-    return '$count+ installationer';
-  }
+  String get installsCount => 'Installationer';
 
   @override
   String get uninstallApp => 'Avinstallera app';
@@ -3270,7 +3268,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get upgradeToPro => 'Uppgradera till Pro';
 
   @override
-  String get getOmiDevice => 'Skaffa Omi-enhet';
+  String get getOmiDevice => 'Get Omi Device';
 
   @override
   String get wearableAiCompanion => 'Bärbar AI-följeslagare';
@@ -3837,7 +3835,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get signOutQuestion => 'Logga ut?';
 
   @override
-  String get signOutConfirmation => 'Är du säker på att du vill logga ut?';
+  String get signOutConfirmation => 'Are you sure you want to sign out?';
 
   @override
   String get customVocabularyHeader => 'ANPASSAT ORDFÖRRÅD';
@@ -4103,7 +4101,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get reviewUpdatedSuccessfully => 'Recension uppdaterad 🚀';
 
   @override
-  String get failedToSubmitReview => 'Det gick inte att skicka recensionen. Försök igen.';
+  String get failedToSubmitReview => 'Kunde inte skicka recension. Försök igen.';
 
   @override
   String get addYourReview => 'Lägg till din recension';
@@ -5806,9 +5804,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get chatAppsTitle => 'Chattappar';
 
   @override
-  String get chatAssistantsTitle => 'Chattassistenter';
-
-  @override
   String get selectApp => 'Välj app';
 
   @override
@@ -5816,150 +5811,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get disable => 'Inaktivera';
-
-  @override
-  String get permissionReadConversations => 'Läs konversationer';
-
-  @override
-  String get permissionReadMemories => 'Läs minnen';
-
-  @override
-  String get permissionReadTasks => 'Läs uppgifter';
-
-  @override
-  String get permissionCreateConversations => 'Skapa konversationer';
-
-  @override
-  String get permissionCreateMemories => 'Skapa minnen';
-
-  @override
-  String get permissionTypeAccess => 'Åtkomst';
-
-  @override
-  String get permissionTypeCreate => 'Skapa';
-
-  @override
-  String get permissionTypeTrigger => 'Utlösare';
-
-  @override
-  String get permissionDescReadConversations => 'Denna app kan komma åt dina konversationer.';
-
-  @override
-  String get permissionDescReadMemories => 'Denna app kan komma åt dina minnen.';
-
-  @override
-  String get permissionDescReadTasks => 'Denna app kan komma åt dina uppgifter.';
-
-  @override
-  String get permissionDescCreateConversations => 'Denna app kan skapa nya konversationer.';
-
-  @override
-  String get permissionDescCreateMemories => 'Denna app kan skapa nya minnen.';
-
-  @override
-  String get realtimeListening => 'Realtidslyssning';
-
-  @override
-  String get invalidIntegrationUrl => 'Ogiltig integrations-URL';
-
-  @override
-  String get invalidSetupInstructionsUrl => 'Ogiltig URL för installationsinstruktioner';
-
-  @override
-  String get setupCompleted => 'Slutfört';
-
-  @override
-  String get tapToComplete => 'Tryck för att slutföra';
-
-  @override
-  String get setupInstructions => 'Installationsinstruktioner';
-
-  @override
-  String get aboutTheApp => 'Om appen';
-
-  @override
-  String get aboutThePersona => 'Om personan';
-
-  @override
-  String get pushToTalk => 'Tryck för att prata';
-
-  @override
-  String get summaryPrompt => 'Sammanfattningsprompt';
-
-  @override
-  String get chatPersonality => 'Chattpersonlighet';
-
-  @override
-  String get ratingsAndReviews => 'Betyg och recensioner';
-
-  @override
-  String get pleaseSelectRating => 'Välj ett betyg';
-
-  @override
-  String get reviewAddedSuccessfully => 'Recension tillagd 🚀';
-
-  @override
-  String get reviewUpdatedSuccessfully => 'Recension uppdaterad 🚀';
-
-  @override
-  String get failedToSubmitReview => 'Kunde inte skicka recension. Försök igen.';
-
-  @override
-  String get writeReviewOptional => 'Skriv en recension (valfritt)';
-
-  @override
-  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
-
-  @override
-  String get setupQuestionProfession => '1. What do you do?';
-
-  @override
-  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
-
-  @override
-  String get setupQuestionAge => '3. What\'s your age range?';
-
-  @override
-  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
-
-  @override
-  String get continueButton => 'Fortsätt';
-
-  @override
-  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
-
-  @override
-  String get professionEntrepreneur => 'Entrepreneur';
-
-  @override
-  String get professionSoftwareEngineer => 'Software Engineer';
-
-  @override
-  String get professionProductManager => 'Product Manager';
-
-  @override
-  String get professionExecutive => 'Executive';
-
-  @override
-  String get professionSales => 'Sales';
-
-  @override
-  String get professionStudent => 'Student';
-
-  @override
-  String get usageAtWork => 'At work';
-
-  @override
-  String get usageIrlEvents => 'IRL Events';
-
-  @override
-  String get usageOnline => 'Online';
-
-  @override
-  String get usageSocialSettings => 'In Social Settings';
-
-  @override
-  String get usageEverywhere => 'Everywhere';
 
   @override
   String get photoLibrary => 'Bildbibliotek';
@@ -6410,6 +6261,111 @@ class AppLocalizationsSv extends AppLocalizations {
   String get device => 'Device';
 
   @override
+  String get chatAssistantsTitle => 'Chattassistenter';
+
+  @override
+  String get permissionReadConversations => 'Läs konversationer';
+
+  @override
+  String get permissionReadMemories => 'Läs minnen';
+
+  @override
+  String get permissionReadTasks => 'Läs uppgifter';
+
+  @override
+  String get permissionCreateConversations => 'Skapa konversationer';
+
+  @override
+  String get permissionCreateMemories => 'Skapa minnen';
+
+  @override
+  String get permissionTypeAccess => 'Åtkomst';
+
+  @override
+  String get permissionTypeCreate => 'Skapa';
+
+  @override
+  String get permissionTypeTrigger => 'Utlösare';
+
+  @override
+  String get permissionDescReadConversations => 'Denna app kan komma åt dina konversationer.';
+
+  @override
+  String get permissionDescReadMemories => 'Denna app kan komma åt dina minnen.';
+
+  @override
+  String get permissionDescReadTasks => 'Denna app kan komma åt dina uppgifter.';
+
+  @override
+  String get permissionDescCreateConversations => 'Denna app kan skapa nya konversationer.';
+
+  @override
+  String get permissionDescCreateMemories => 'Denna app kan skapa nya minnen.';
+
+  @override
+  String get realtimeListening => 'Realtidslyssning';
+
+  @override
+  String get setupCompleted => 'Slutfört';
+
+  @override
+  String get pleaseSelectRating => 'Välj ett betyg';
+
+  @override
+  String get writeReviewOptional => 'Skriv en recension (valfritt)';
+
+  @override
+  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
+
+  @override
+  String get setupQuestionProfession => '1. What do you do?';
+
+  @override
+  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
+
+  @override
+  String get setupQuestionAge => '3. What\'s your age range?';
+
+  @override
+  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
+
+  @override
+  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
+
+  @override
+  String get professionEntrepreneur => 'Entrepreneur';
+
+  @override
+  String get professionSoftwareEngineer => 'Software Engineer';
+
+  @override
+  String get professionProductManager => 'Product Manager';
+
+  @override
+  String get professionExecutive => 'Executive';
+
+  @override
+  String get professionSales => 'Sales';
+
+  @override
+  String get professionStudent => 'Student';
+
+  @override
+  String get usageAtWork => 'At work';
+
+  @override
+  String get usageIrlEvents => 'IRL Events';
+
+  @override
+  String get usageOnline => 'Online';
+
+  @override
+  String get usageSocialSettings => 'In Social Settings';
+
+  @override
+  String get usageEverywhere => 'Everywhere';
+
+  @override
   String get customBackendUrlTitle => 'Anpassad server-URL';
 
   @override
@@ -6422,7 +6378,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get enterBackendUrlError => 'Ange server-URL';
 
   @override
-  String get urlMustEndWithSlashError => 'URL måste sluta med "/"';
+  String get urlMustEndWithSlashError => 'URL måste sluta med \"/\"';
 
   @override
   String get invalidUrlError => 'Ange en giltig URL';
@@ -6491,7 +6447,8 @@ class AppLocalizationsSv extends AppLocalizations {
   String get buildingKnowledgeGraphFromMemories => 'Bygger kunskapsgraf från minnen...';
 
   @override
-  String get knowledgeGraphWillBuildAutomatically => 'Din kunskapsgraf kommer att byggas automatiskt när du skapar nya minnen.';
+  String get knowledgeGraphWillBuildAutomatically =>
+      'Din kunskapsgraf kommer att byggas automatiskt när du skapar nya minnen.';
 
   @override
   String get buildGraphButton => 'Bygg graf';
@@ -6535,8 +6492,232 @@ class AppLocalizationsSv extends AppLocalizations {
   String get learnMoreLink => 'läs mer';
 
   @override
-  String get installsCount => 'Installationer';
+  String get moneyEarned => 'Intjänade pengar';
 
   @override
-  String get moneyEarned => 'Intjänade pengar';
+  String get writeYourReply => 'Write your reply...';
+
+  @override
+  String get replySentSuccessfully => 'Reply sent successfully';
+
+  @override
+  String failedToSendReply(String error) {
+    return 'Failed to send reply: $error';
+  }
+
+  @override
+  String get send => 'Send';
+
+  @override
+  String starFilter(int count) {
+    return '$count Star';
+  }
+
+  @override
+  String get noReviewsFound => 'No Reviews Found';
+
+  @override
+  String get editReply => 'Edit Reply';
+
+  @override
+  String get reply => 'Reply';
+
+  @override
+  String starFilterLabel(int count) {
+    return '$count stjärna';
+  }
+
+  @override
+  String get sharePublicLink => 'Share Public Link';
+
+  @override
+  String get makePersonaPublic => 'Make Persona Public';
+
+  @override
+  String get connectedKnowledgeData => 'Connected Knowledge Data';
+
+  @override
+  String get enterName => 'Enter name';
+
+  @override
+  String get disconnectTwitter => 'Disconnect Twitter';
+
+  @override
+  String get disconnectTwitterConfirmation =>
+      'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
+
+  @override
+  String get getOmiDeviceDescription => 'Create a more accurate clone with your personal conversations';
+
+  @override
+  String get getOmi => 'Get Omi';
+
+  @override
+  String get iHaveOmiDevice => 'I have Omi device';
+
+  @override
+  String get goal => 'MÅL';
+
+  @override
+  String get tapToTrackThisGoal => 'Tryck för att spåra detta mål';
+
+  @override
+  String get tapToSetAGoal => 'Tryck för att sätta ett mål';
+
+  @override
+  String get processedConversations => 'Bearbetade samtal';
+
+  @override
+  String get updatedConversations => 'Uppdaterade samtal';
+
+  @override
+  String get newConversations => 'Nya samtal';
+
+  @override
+  String get summaryTemplate => 'Sammanfattningsmall';
+
+  @override
+  String get suggestedTemplates => 'Föreslagna mallar';
+
+  @override
+  String get otherTemplates => 'Andra mallar';
+
+  @override
+  String get availableTemplates => 'Tillgängliga mallar';
+
+  @override
+  String get getCreative => 'Var kreativ';
+
+  @override
+  String get defaultLabel => 'Standard';
+
+  @override
+  String get lastUsedLabel => 'Senast använd';
+
+  @override
+  String get setDefaultApp => 'Ange standardapp';
+
+  @override
+  String setDefaultAppContent(String appName) {
+    return 'Ange $appName som din standardapp för sammanfattningar?\\n\\nDenna app kommer automatiskt att användas för alla framtida konversationssammanfattningar.';
+  }
+
+  @override
+  String get setDefaultButton => 'Ange standard';
+
+  @override
+  String setAsDefaultSuccess(String appName) {
+    return '$appName angiven som standardapp för sammanfattningar';
+  }
+
+  @override
+  String get createCustomTemplate => 'Skapa anpassad mall';
+
+  @override
+  String get allTemplates => 'Alla mallar';
+
+  @override
+  String failedToInstallApp(String appName) {
+    return 'Kunde inte installera $appName. Försök igen.';
+  }
+
+  @override
+  String errorInstallingApp(String appName, String error) {
+    return 'Fel vid installation av $appName: $error';
+  }
+
+  @override
+  String tagSpeaker(int speakerId) {
+    return 'Tag Speaker $speakerId';
+  }
+
+  @override
+  String get personNameAlreadyExists => 'A person with this name already exists.';
+
+  @override
+  String get selectYouFromList => 'To tag yourself, please select \"You\" from the list.';
+
+  @override
+  String get enterPersonsName => 'Enter Person\'s Name';
+
+  @override
+  String get addPerson => 'Add Person';
+
+  @override
+  String tagOtherSegmentsFromSpeaker(int selected, int total) {
+    return 'Tag other segments from this speaker ($selected/$total)';
+  }
+
+  @override
+  String get tagOtherSegments => 'Tag other segments';
+
+  @override
+  String get managePeople => 'Manage People';
+
+  @override
+  String get shareViaSms => 'Dela via SMS';
+
+  @override
+  String get selectContactsToShareSummary => 'Välj kontakter för att dela din samtalssammanfattning';
+
+  @override
+  String get searchContactsHint => 'Sök kontakter...';
+
+  @override
+  String contactsSelectedCount(int count) {
+    return '$count valda';
+  }
+
+  @override
+  String get clearAllSelection => 'Rensa allt';
+
+  @override
+  String get selectContactsToShare => 'Välj kontakter att dela med';
+
+  @override
+  String shareWithContactCount(int count) {
+    return 'Dela med $count kontakt';
+  }
+
+  @override
+  String shareWithContactsCount(int count) {
+    return 'Dela med $count kontakter';
+  }
+
+  @override
+  String get contactsPermissionRequired => 'Kontaktbehörighet krävs';
+
+  @override
+  String get contactsPermissionRequiredForSms => 'Kontaktbehörighet krävs för att dela via SMS';
+
+  @override
+  String get grantContactsPermissionForSms => 'Ge kontaktbehörighet för att dela via SMS';
+
+  @override
+  String get noContactsWithPhoneNumbers => 'Inga kontakter med telefonnummer hittades';
+
+  @override
+  String get noContactsMatchSearch => 'Inga kontakter matchar din sökning';
+
+  @override
+  String get failedToLoadContacts => 'Kunde inte ladda kontakter';
+
+  @override
+  String get failedToPrepareConversationForSharing => 'Kunde inte förbereda samtalet för delning. Försök igen.';
+
+  @override
+  String get couldNotOpenSmsApp => 'Kunde inte öppna SMS-appen. Försök igen.';
+
+  @override
+  String heresWhatWeDiscussed(String link) {
+    return 'Här är vad vi just diskuterade: $link';
+  }
+
+  @override
+  String get wifiSync => 'WiFi-synkronisering';
+
+  @override
+  String itemCopiedToClipboard(String item) {
+    return '$item kopierat till urklipp';
+  }
 }

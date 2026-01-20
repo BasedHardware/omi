@@ -1149,7 +1149,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get yes => 'Jā';
 
   @override
-  String get editName => 'Rediģēt vārdu';
+  String get editName => 'Edit Name';
 
   @override
   String get howShouldOmiCallYou => 'Kā Omi jums vajadzētu uzrunāt?';
@@ -2906,9 +2906,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get connectNow => 'Savienot tagad';
 
   @override
-  String installsCount(String count) {
-    return '$count+ instalācijas';
-  }
+  String get installsCount => 'Instalācijas';
 
   @override
   String get uninstallApp => 'Atinstalēt lietotni';
@@ -3272,7 +3270,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get upgradeToPro => 'Jaunināt uz Pro';
 
   @override
-  String get getOmiDevice => 'Iegūt Omi ierīci';
+  String get getOmiDevice => 'Get Omi Device';
 
   @override
   String get wearableAiCompanion => 'Valkājams AI palīgs';
@@ -3837,7 +3835,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get signOutQuestion => 'Izrakstīties?';
 
   @override
-  String get signOutConfirmation => 'Vai tiešām vēlaties izrakstīties?';
+  String get signOutConfirmation => 'Are you sure you want to sign out?';
 
   @override
   String get customVocabularyHeader => 'PIELĀGOTS VĀRDNĪCA';
@@ -4088,7 +4086,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get invalidSetupInstructionsUrl => 'Nederīgs iestatīšanas instrukciju URL';
 
   @override
-  String get pushToTalk => 'Spiediet, lai runātu';
+  String get pushToTalk => 'Nospiediet, lai runātu';
 
   @override
   String get summaryPrompt => 'Kopsavilkuma uzvedne';
@@ -5812,9 +5810,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get chatAppsTitle => 'Tērzēšanas lietotnes';
 
   @override
-  String get chatAssistantsTitle => 'Čata asistenti';
-
-  @override
   String get selectApp => 'Izvēlēties lietotni';
 
   @override
@@ -5823,150 +5818,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get disable => 'Atspējot';
-
-  @override
-  String get permissionReadConversations => 'Lasīt sarunas';
-
-  @override
-  String get permissionReadMemories => 'Lasīt atmiņas';
-
-  @override
-  String get permissionReadTasks => 'Lasīt uzdevumus';
-
-  @override
-  String get permissionCreateConversations => 'Izveidot sarunas';
-
-  @override
-  String get permissionCreateMemories => 'Izveidot atmiņas';
-
-  @override
-  String get permissionTypeAccess => 'Piekļuve';
-
-  @override
-  String get permissionTypeCreate => 'Izveidot';
-
-  @override
-  String get permissionTypeTrigger => 'Trigeri';
-
-  @override
-  String get permissionDescReadConversations => 'Šī lietotne var piekļūt jūsu sarunām.';
-
-  @override
-  String get permissionDescReadMemories => 'Šī lietotne var piekļūt jūsu atmiņām.';
-
-  @override
-  String get permissionDescReadTasks => 'Šī lietotne var piekļūt jūsu uzdevumiem.';
-
-  @override
-  String get permissionDescCreateConversations => 'Šī lietotne var izveidot jaunas sarunas.';
-
-  @override
-  String get permissionDescCreateMemories => 'Šī lietotne var izveidot jaunas atmiņas.';
-
-  @override
-  String get realtimeListening => 'Reāllaika klausīšanās';
-
-  @override
-  String get invalidIntegrationUrl => 'Nederīgs integrācijas URL';
-
-  @override
-  String get invalidSetupInstructionsUrl => 'Nederīgs iestatīšanas instrukciju URL';
-
-  @override
-  String get setupCompleted => 'Pabeigts';
-
-  @override
-  String get tapToComplete => 'Pieskarieties, lai pabeigtu';
-
-  @override
-  String get setupInstructions => 'Iestatīšanas instrukcijas';
-
-  @override
-  String get aboutTheApp => 'Par lietotni';
-
-  @override
-  String get aboutThePersona => 'Par personu';
-
-  @override
-  String get pushToTalk => 'Nospiediet, lai runātu';
-
-  @override
-  String get summaryPrompt => 'Kopsavilkuma uzvedne';
-
-  @override
-  String get chatPersonality => 'Tērzēšanas personība';
-
-  @override
-  String get ratingsAndReviews => 'Vērtējumi un atsauksmes';
-
-  @override
-  String get pleaseSelectRating => 'Lūdzu, izvēlieties vērtējumu';
-
-  @override
-  String get reviewAddedSuccessfully => 'Atsauksme veiksmīgi pievienota 🚀';
-
-  @override
-  String get reviewUpdatedSuccessfully => 'Atsauksme veiksmīgi atjaunināta 🚀';
-
-  @override
-  String get failedToSubmitReview => 'Neizdevās iesniegt atsauksmi. Lūdzu, mēģiniet vēlreiz.';
-
-  @override
-  String get writeReviewOptional => 'Rakstīt atsauksmi (neobligāti)';
-
-  @override
-  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
-
-  @override
-  String get setupQuestionProfession => '1. What do you do?';
-
-  @override
-  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
-
-  @override
-  String get setupQuestionAge => '3. What\'s your age range?';
-
-  @override
-  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
-
-  @override
-  String get continueButton => 'Turpināt';
-
-  @override
-  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
-
-  @override
-  String get professionEntrepreneur => 'Entrepreneur';
-
-  @override
-  String get professionSoftwareEngineer => 'Software Engineer';
-
-  @override
-  String get professionProductManager => 'Product Manager';
-
-  @override
-  String get professionExecutive => 'Executive';
-
-  @override
-  String get professionSales => 'Sales';
-
-  @override
-  String get professionStudent => 'Student';
-
-  @override
-  String get usageAtWork => 'At work';
-
-  @override
-  String get usageIrlEvents => 'IRL Events';
-
-  @override
-  String get usageOnline => 'Online';
-
-  @override
-  String get usageSocialSettings => 'In Social Settings';
-
-  @override
-  String get usageEverywhere => 'Everywhere';
 
   @override
   String get photoLibrary => 'Fotoattēlu bibliotēka';
@@ -6418,6 +6269,111 @@ class AppLocalizationsLv extends AppLocalizations {
   String get device => 'Device';
 
   @override
+  String get chatAssistantsTitle => 'Čata asistenti';
+
+  @override
+  String get permissionReadConversations => 'Lasīt sarunas';
+
+  @override
+  String get permissionReadMemories => 'Lasīt atmiņas';
+
+  @override
+  String get permissionReadTasks => 'Lasīt uzdevumus';
+
+  @override
+  String get permissionCreateConversations => 'Izveidot sarunas';
+
+  @override
+  String get permissionCreateMemories => 'Izveidot atmiņas';
+
+  @override
+  String get permissionTypeAccess => 'Piekļuve';
+
+  @override
+  String get permissionTypeCreate => 'Izveidot';
+
+  @override
+  String get permissionTypeTrigger => 'Trigeri';
+
+  @override
+  String get permissionDescReadConversations => 'Šī lietotne var piekļūt jūsu sarunām.';
+
+  @override
+  String get permissionDescReadMemories => 'Šī lietotne var piekļūt jūsu atmiņām.';
+
+  @override
+  String get permissionDescReadTasks => 'Šī lietotne var piekļūt jūsu uzdevumiem.';
+
+  @override
+  String get permissionDescCreateConversations => 'Šī lietotne var izveidot jaunas sarunas.';
+
+  @override
+  String get permissionDescCreateMemories => 'Šī lietotne var izveidot jaunas atmiņas.';
+
+  @override
+  String get realtimeListening => 'Reāllaika klausīšanās';
+
+  @override
+  String get setupCompleted => 'Pabeigts';
+
+  @override
+  String get pleaseSelectRating => 'Lūdzu, izvēlieties vērtējumu';
+
+  @override
+  String get writeReviewOptional => 'Rakstīt atsauksmi (neobligāti)';
+
+  @override
+  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
+
+  @override
+  String get setupQuestionProfession => '1. What do you do?';
+
+  @override
+  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
+
+  @override
+  String get setupQuestionAge => '3. What\'s your age range?';
+
+  @override
+  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
+
+  @override
+  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
+
+  @override
+  String get professionEntrepreneur => 'Entrepreneur';
+
+  @override
+  String get professionSoftwareEngineer => 'Software Engineer';
+
+  @override
+  String get professionProductManager => 'Product Manager';
+
+  @override
+  String get professionExecutive => 'Executive';
+
+  @override
+  String get professionSales => 'Sales';
+
+  @override
+  String get professionStudent => 'Student';
+
+  @override
+  String get usageAtWork => 'At work';
+
+  @override
+  String get usageIrlEvents => 'IRL Events';
+
+  @override
+  String get usageOnline => 'Online';
+
+  @override
+  String get usageSocialSettings => 'In Social Settings';
+
+  @override
+  String get usageEverywhere => 'Everywhere';
+
+  @override
   String get customBackendUrlTitle => 'Pielāgots servera URL';
 
   @override
@@ -6430,7 +6386,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get enterBackendUrlError => 'Lūdzu, ievadiet servera URL';
 
   @override
-  String get urlMustEndWithSlashError => 'URL jābeidzas ar "/"';
+  String get urlMustEndWithSlashError => 'URL jābeidzas ar \"/\"';
 
   @override
   String get invalidUrlError => 'Lūdzu, ievadiet derīgu URL';
@@ -6499,7 +6455,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get buildingKnowledgeGraphFromMemories => 'Veido zināšanu grafu no atmiņām...';
 
   @override
-  String get knowledgeGraphWillBuildAutomatically => 'Jūsu zināšanu grafs tiks izveidots automātiski, kad veidosiet jaunas atmiņas.';
+  String get knowledgeGraphWillBuildAutomatically =>
+      'Jūsu zināšanu grafs tiks izveidots automātiski, kad veidosiet jaunas atmiņas.';
 
   @override
   String get buildGraphButton => 'Izveidot grafu';
@@ -6543,8 +6500,233 @@ class AppLocalizationsLv extends AppLocalizations {
   String get learnMoreLink => 'uzzināt vairāk';
 
   @override
-  String get installsCount => 'Instalācijas';
+  String get moneyEarned => 'Nopelnītā nauda';
 
   @override
-  String get moneyEarned => 'Nopelnītā nauda';
+  String get writeYourReply => 'Write your reply...';
+
+  @override
+  String get replySentSuccessfully => 'Reply sent successfully';
+
+  @override
+  String failedToSendReply(String error) {
+    return 'Failed to send reply: $error';
+  }
+
+  @override
+  String get send => 'Send';
+
+  @override
+  String starFilter(int count) {
+    return '$count Star';
+  }
+
+  @override
+  String get noReviewsFound => 'No Reviews Found';
+
+  @override
+  String get editReply => 'Edit Reply';
+
+  @override
+  String get reply => 'Reply';
+
+  @override
+  String starFilterLabel(int count) {
+    return '$count zvaigzne';
+  }
+
+  @override
+  String get sharePublicLink => 'Share Public Link';
+
+  @override
+  String get makePersonaPublic => 'Make Persona Public';
+
+  @override
+  String get connectedKnowledgeData => 'Connected Knowledge Data';
+
+  @override
+  String get enterName => 'Enter name';
+
+  @override
+  String get disconnectTwitter => 'Disconnect Twitter';
+
+  @override
+  String get disconnectTwitterConfirmation =>
+      'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
+
+  @override
+  String get getOmiDeviceDescription => 'Create a more accurate clone with your personal conversations';
+
+  @override
+  String get getOmi => 'Get Omi';
+
+  @override
+  String get iHaveOmiDevice => 'I have Omi device';
+
+  @override
+  String get goal => 'MĒRĶIS';
+
+  @override
+  String get tapToTrackThisGoal => 'Pieskarieties, lai izsekotu šim mērķim';
+
+  @override
+  String get tapToSetAGoal => 'Pieskarieties, lai iestatītu mērķi';
+
+  @override
+  String get processedConversations => 'Apstrādātas sarunas';
+
+  @override
+  String get updatedConversations => 'Atjauninātas sarunas';
+
+  @override
+  String get newConversations => 'Jaunas sarunas';
+
+  @override
+  String get summaryTemplate => 'Kopsavilkuma veidne';
+
+  @override
+  String get suggestedTemplates => 'Ieteiktās veidnes';
+
+  @override
+  String get otherTemplates => 'Citas veidnes';
+
+  @override
+  String get availableTemplates => 'Pieejamās veidnes';
+
+  @override
+  String get getCreative => 'Esi radošs';
+
+  @override
+  String get defaultLabel => 'Noklusējums';
+
+  @override
+  String get lastUsedLabel => 'Pēdējais lietotais';
+
+  @override
+  String get setDefaultApp => 'Iestatīt noklusējuma lietotni';
+
+  @override
+  String setDefaultAppContent(String appName) {
+    return 'Vai iestatīt $appName kā noklusējuma kopsavilkuma lietotni?\\n\\nŠī lietotne tiks automātiski izmantota visiem turpmākajiem sarunu kopsavilkumiem.';
+  }
+
+  @override
+  String get setDefaultButton => 'Iestatīt noklusējumu';
+
+  @override
+  String setAsDefaultSuccess(String appName) {
+    return '$appName iestatīta kā noklusējuma kopsavilkuma lietotne';
+  }
+
+  @override
+  String get createCustomTemplate => 'Izveidot pielāgotu veidni';
+
+  @override
+  String get allTemplates => 'Visas veidnes';
+
+  @override
+  String failedToInstallApp(String appName) {
+    return 'Neizdevās instalēt $appName. Lūdzu, mēģiniet vēlreiz.';
+  }
+
+  @override
+  String errorInstallingApp(String appName, String error) {
+    return 'Kļūda instalējot $appName: $error';
+  }
+
+  @override
+  String tagSpeaker(int speakerId) {
+    return 'Tag Speaker $speakerId';
+  }
+
+  @override
+  String get personNameAlreadyExists => 'A person with this name already exists.';
+
+  @override
+  String get selectYouFromList => 'To tag yourself, please select \"You\" from the list.';
+
+  @override
+  String get enterPersonsName => 'Enter Person\'s Name';
+
+  @override
+  String get addPerson => 'Add Person';
+
+  @override
+  String tagOtherSegmentsFromSpeaker(int selected, int total) {
+    return 'Tag other segments from this speaker ($selected/$total)';
+  }
+
+  @override
+  String get tagOtherSegments => 'Tag other segments';
+
+  @override
+  String get managePeople => 'Manage People';
+
+  @override
+  String get shareViaSms => 'Dalīties ar SMS';
+
+  @override
+  String get selectContactsToShareSummary => 'Izvēlieties kontaktus sarunas kopsavilkuma kopīgošanai';
+
+  @override
+  String get searchContactsHint => 'Meklēt kontaktus...';
+
+  @override
+  String contactsSelectedCount(int count) {
+    return '$count izvēlēti';
+  }
+
+  @override
+  String get clearAllSelection => 'Notīrīt visu';
+
+  @override
+  String get selectContactsToShare => 'Izvēlieties kontaktus kopīgošanai';
+
+  @override
+  String shareWithContactCount(int count) {
+    return 'Dalīties ar $count kontaktu';
+  }
+
+  @override
+  String shareWithContactsCount(int count) {
+    return 'Dalīties ar $count kontaktiem';
+  }
+
+  @override
+  String get contactsPermissionRequired => 'Nepieciešama kontaktu atļauja';
+
+  @override
+  String get contactsPermissionRequiredForSms => 'Lai kopīgotu ar SMS, nepieciešama kontaktu atļauja';
+
+  @override
+  String get grantContactsPermissionForSms => 'Lūdzu, piešķiriet kontaktu atļauju, lai kopīgotu ar SMS';
+
+  @override
+  String get noContactsWithPhoneNumbers => 'Nav atrasti kontakti ar tālruņa numuriem';
+
+  @override
+  String get noContactsMatchSearch => 'Nav kontaktu, kas atbilst jūsu meklējumam';
+
+  @override
+  String get failedToLoadContacts => 'Neizdevās ielādēt kontaktus';
+
+  @override
+  String get failedToPrepareConversationForSharing =>
+      'Neizdevās sagatavot sarunu kopīgošanai. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get couldNotOpenSmsApp => 'Neizdevās atvērt SMS lietotni. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String heresWhatWeDiscussed(String link) {
+    return 'Lūk, par ko mēs tikko runājām: $link';
+  }
+
+  @override
+  String get wifiSync => 'WiFi sinhronizācija';
+
+  @override
+  String itemCopiedToClipboard(String item) {
+    return '$item nokopēts starpliktuvē';
+  }
 }

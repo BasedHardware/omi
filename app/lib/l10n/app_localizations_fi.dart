@@ -1145,7 +1145,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get yes => 'Kyllä';
 
   @override
-  String get editName => 'Muokkaa nimeä';
+  String get editName => 'Edit Name';
 
   @override
   String get howShouldOmiCallYou => 'Miten Omin pitäisi kutsua sinua?';
@@ -2898,9 +2898,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get connectNow => 'Yhdistä nyt';
 
   @override
-  String installsCount(String count) {
-    return '$count+ asennusta';
-  }
+  String get installsCount => 'Asennukset';
 
   @override
   String get uninstallApp => 'Poista sovellus';
@@ -2934,7 +2932,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get setupSteps => 'Asennusvaiheet';
 
   @override
-  String get setupInstructions => 'Asennusohjeet';
+  String get setupInstructions => 'Asetusohjeet';
 
   @override
   String get integrationInstructions => 'Integrointiohjeet';
@@ -2949,7 +2947,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get aboutThePersona => 'Tietoja persoonasta';
 
   @override
-  String get chatPersonality => 'Chatin persoonallisuus';
+  String get chatPersonality => 'Chat-persoonallisuus';
 
   @override
   String get ratingsAndReviews => 'Arviot ja arvostelut';
@@ -3264,7 +3262,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get upgradeToPro => 'Päivitä Pro-versioon';
 
   @override
-  String get getOmiDevice => 'Hanki Omi-laite';
+  String get getOmiDevice => 'Get Omi Device';
 
   @override
   String get wearableAiCompanion => 'Puettava AI-kumppani';
@@ -3830,7 +3828,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get signOutQuestion => 'Kirjaudu ulos?';
 
   @override
-  String get signOutConfirmation => 'Haluatko varmasti kirjautua ulos?';
+  String get signOutConfirmation => 'Are you sure you want to sign out?';
 
   @override
   String get customVocabularyHeader => 'MUKAUTETTU SANASTO';
@@ -4078,7 +4076,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get tapToComplete => 'Napauta viimeistelläksesi';
 
   @override
-  String get invalidSetupInstructionsUrl => 'Virheellinen asennusohjeiden URL';
+  String get invalidSetupInstructionsUrl => 'Virheellinen asetusohjeiden URL';
 
   @override
   String get pushToTalk => 'Paina puhuaksesi';
@@ -5803,9 +5801,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get chatAppsTitle => 'Chat-sovellukset';
 
   @override
-  String get chatAssistantsTitle => 'Chat-avustajat';
-
-  @override
   String get selectApp => 'Valitse sovellus';
 
   @override
@@ -5813,150 +5808,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get disable => 'Poista käytöstä';
-
-  @override
-  String get permissionReadConversations => 'Lue keskusteluja';
-
-  @override
-  String get permissionReadMemories => 'Lue muistoja';
-
-  @override
-  String get permissionReadTasks => 'Lue tehtäviä';
-
-  @override
-  String get permissionCreateConversations => 'Luo keskusteluja';
-
-  @override
-  String get permissionCreateMemories => 'Luo muistoja';
-
-  @override
-  String get permissionTypeAccess => 'Pääsy';
-
-  @override
-  String get permissionTypeCreate => 'Luo';
-
-  @override
-  String get permissionTypeTrigger => 'Laukaisin';
-
-  @override
-  String get permissionDescReadConversations => 'Tämä sovellus voi käyttää keskustelujasi.';
-
-  @override
-  String get permissionDescReadMemories => 'Tämä sovellus voi käyttää muistojasi.';
-
-  @override
-  String get permissionDescReadTasks => 'Tämä sovellus voi käyttää tehtäviäsi.';
-
-  @override
-  String get permissionDescCreateConversations => 'Tämä sovellus voi luoda uusia keskusteluja.';
-
-  @override
-  String get permissionDescCreateMemories => 'Tämä sovellus voi luoda uusia muistoja.';
-
-  @override
-  String get realtimeListening => 'Reaaliaikainen kuuntelu';
-
-  @override
-  String get invalidIntegrationUrl => 'Virheellinen integraatio-URL';
-
-  @override
-  String get invalidSetupInstructionsUrl => 'Virheellinen asetusohjeiden URL';
-
-  @override
-  String get setupCompleted => 'Valmis';
-
-  @override
-  String get tapToComplete => 'Napauta viimeistelläksesi';
-
-  @override
-  String get setupInstructions => 'Asetusohjeet';
-
-  @override
-  String get aboutTheApp => 'Tietoja sovelluksesta';
-
-  @override
-  String get aboutThePersona => 'Tietoja persoonasta';
-
-  @override
-  String get pushToTalk => 'Paina puhuaksesi';
-
-  @override
-  String get summaryPrompt => 'Yhteenvetokehote';
-
-  @override
-  String get chatPersonality => 'Chat-persoonallisuus';
-
-  @override
-  String get ratingsAndReviews => 'Arviot ja arvostelut';
-
-  @override
-  String get pleaseSelectRating => 'Valitse arvio';
-
-  @override
-  String get reviewAddedSuccessfully => 'Arvostelu lisätty onnistuneesti 🚀';
-
-  @override
-  String get reviewUpdatedSuccessfully => 'Arvostelu päivitetty onnistuneesti 🚀';
-
-  @override
-  String get failedToSubmitReview => 'Arvostelun lähettäminen epäonnistui. Yritä uudelleen.';
-
-  @override
-  String get writeReviewOptional => 'Kirjoita arvostelu (valinnainen)';
-
-  @override
-  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
-
-  @override
-  String get setupQuestionProfession => '1. What do you do?';
-
-  @override
-  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
-
-  @override
-  String get setupQuestionAge => '3. What\'s your age range?';
-
-  @override
-  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
-
-  @override
-  String get continueButton => 'Jatka';
-
-  @override
-  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
-
-  @override
-  String get professionEntrepreneur => 'Entrepreneur';
-
-  @override
-  String get professionSoftwareEngineer => 'Software Engineer';
-
-  @override
-  String get professionProductManager => 'Product Manager';
-
-  @override
-  String get professionExecutive => 'Executive';
-
-  @override
-  String get professionSales => 'Sales';
-
-  @override
-  String get professionStudent => 'Student';
-
-  @override
-  String get usageAtWork => 'At work';
-
-  @override
-  String get usageIrlEvents => 'IRL Events';
-
-  @override
-  String get usageOnline => 'Online';
-
-  @override
-  String get usageSocialSettings => 'In Social Settings';
-
-  @override
-  String get usageEverywhere => 'Everywhere';
 
   @override
   String get photoLibrary => 'Kuvakirjasto';
@@ -6406,6 +6257,111 @@ class AppLocalizationsFi extends AppLocalizations {
   String get device => 'Device';
 
   @override
+  String get chatAssistantsTitle => 'Chat-avustajat';
+
+  @override
+  String get permissionReadConversations => 'Lue keskusteluja';
+
+  @override
+  String get permissionReadMemories => 'Lue muistoja';
+
+  @override
+  String get permissionReadTasks => 'Lue tehtäviä';
+
+  @override
+  String get permissionCreateConversations => 'Luo keskusteluja';
+
+  @override
+  String get permissionCreateMemories => 'Luo muistoja';
+
+  @override
+  String get permissionTypeAccess => 'Pääsy';
+
+  @override
+  String get permissionTypeCreate => 'Luo';
+
+  @override
+  String get permissionTypeTrigger => 'Laukaisin';
+
+  @override
+  String get permissionDescReadConversations => 'Tämä sovellus voi käyttää keskustelujasi.';
+
+  @override
+  String get permissionDescReadMemories => 'Tämä sovellus voi käyttää muistojasi.';
+
+  @override
+  String get permissionDescReadTasks => 'Tämä sovellus voi käyttää tehtäviäsi.';
+
+  @override
+  String get permissionDescCreateConversations => 'Tämä sovellus voi luoda uusia keskusteluja.';
+
+  @override
+  String get permissionDescCreateMemories => 'Tämä sovellus voi luoda uusia muistoja.';
+
+  @override
+  String get realtimeListening => 'Reaaliaikainen kuuntelu';
+
+  @override
+  String get setupCompleted => 'Valmis';
+
+  @override
+  String get pleaseSelectRating => 'Valitse arvio';
+
+  @override
+  String get writeReviewOptional => 'Kirjoita arvostelu (valinnainen)';
+
+  @override
+  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
+
+  @override
+  String get setupQuestionProfession => '1. What do you do?';
+
+  @override
+  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
+
+  @override
+  String get setupQuestionAge => '3. What\'s your age range?';
+
+  @override
+  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
+
+  @override
+  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
+
+  @override
+  String get professionEntrepreneur => 'Entrepreneur';
+
+  @override
+  String get professionSoftwareEngineer => 'Software Engineer';
+
+  @override
+  String get professionProductManager => 'Product Manager';
+
+  @override
+  String get professionExecutive => 'Executive';
+
+  @override
+  String get professionSales => 'Sales';
+
+  @override
+  String get professionStudent => 'Student';
+
+  @override
+  String get usageAtWork => 'At work';
+
+  @override
+  String get usageIrlEvents => 'IRL Events';
+
+  @override
+  String get usageOnline => 'Online';
+
+  @override
+  String get usageSocialSettings => 'In Social Settings';
+
+  @override
+  String get usageEverywhere => 'Everywhere';
+
+  @override
   String get customBackendUrlTitle => 'Mukautettu palvelimen URL';
 
   @override
@@ -6418,7 +6374,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get enterBackendUrlError => 'Anna palvelimen URL';
 
   @override
-  String get urlMustEndWithSlashError => 'URL:n on päätyttävä "/"';
+  String get urlMustEndWithSlashError => 'URL:n on päätyttävä \"/\"';
 
   @override
   String get invalidUrlError => 'Anna kelvollinen URL';
@@ -6487,7 +6443,8 @@ class AppLocalizationsFi extends AppLocalizations {
   String get buildingKnowledgeGraphFromMemories => 'Rakennetaan tietograafia muistoista...';
 
   @override
-  String get knowledgeGraphWillBuildAutomatically => 'Tietograafisi rakennetaan automaattisesti, kun luot uusia muistoja.';
+  String get knowledgeGraphWillBuildAutomatically =>
+      'Tietograafisi rakennetaan automaattisesti, kun luot uusia muistoja.';
 
   @override
   String get buildGraphButton => 'Rakenna graafi';
@@ -6531,8 +6488,233 @@ class AppLocalizationsFi extends AppLocalizations {
   String get learnMoreLink => 'lue lisää';
 
   @override
-  String get installsCount => 'Asennukset';
+  String get moneyEarned => 'Ansaittu raha';
 
   @override
-  String get moneyEarned => 'Ansaittu raha';
+  String get writeYourReply => 'Write your reply...';
+
+  @override
+  String get replySentSuccessfully => 'Reply sent successfully';
+
+  @override
+  String failedToSendReply(String error) {
+    return 'Failed to send reply: $error';
+  }
+
+  @override
+  String get send => 'Send';
+
+  @override
+  String starFilter(int count) {
+    return '$count Star';
+  }
+
+  @override
+  String get noReviewsFound => 'No Reviews Found';
+
+  @override
+  String get editReply => 'Edit Reply';
+
+  @override
+  String get reply => 'Reply';
+
+  @override
+  String starFilterLabel(int count) {
+    return '$count tähti';
+  }
+
+  @override
+  String get sharePublicLink => 'Share Public Link';
+
+  @override
+  String get makePersonaPublic => 'Make Persona Public';
+
+  @override
+  String get connectedKnowledgeData => 'Connected Knowledge Data';
+
+  @override
+  String get enterName => 'Enter name';
+
+  @override
+  String get disconnectTwitter => 'Disconnect Twitter';
+
+  @override
+  String get disconnectTwitterConfirmation =>
+      'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
+
+  @override
+  String get getOmiDeviceDescription => 'Create a more accurate clone with your personal conversations';
+
+  @override
+  String get getOmi => 'Get Omi';
+
+  @override
+  String get iHaveOmiDevice => 'I have Omi device';
+
+  @override
+  String get goal => 'TAVOITE';
+
+  @override
+  String get tapToTrackThisGoal => 'Napauta seurataksesi tätä tavoitetta';
+
+  @override
+  String get tapToSetAGoal => 'Napauta asettaaksesi tavoitteen';
+
+  @override
+  String get processedConversations => 'Käsitellyt keskustelut';
+
+  @override
+  String get updatedConversations => 'Päivitetyt keskustelut';
+
+  @override
+  String get newConversations => 'Uudet keskustelut';
+
+  @override
+  String get summaryTemplate => 'Yhteenvetomalli';
+
+  @override
+  String get suggestedTemplates => 'Ehdotetut mallit';
+
+  @override
+  String get otherTemplates => 'Muut mallit';
+
+  @override
+  String get availableTemplates => 'Saatavilla olevat mallit';
+
+  @override
+  String get getCreative => 'Ole luova';
+
+  @override
+  String get defaultLabel => 'Oletus';
+
+  @override
+  String get lastUsedLabel => 'Viimeksi käytetty';
+
+  @override
+  String get setDefaultApp => 'Aseta oletussovellus';
+
+  @override
+  String setDefaultAppContent(String appName) {
+    return 'Asetetaanko $appName oletusyhteenvetosovellukseksi?\\n\\nTätä sovellusta käytetään automaattisesti kaikkiin tuleviin keskusteluyhteenvetoihin.';
+  }
+
+  @override
+  String get setDefaultButton => 'Aseta oletukseksi';
+
+  @override
+  String setAsDefaultSuccess(String appName) {
+    return '$appName asetettu oletusyhteenvetosovellukseksi';
+  }
+
+  @override
+  String get createCustomTemplate => 'Luo mukautettu malli';
+
+  @override
+  String get allTemplates => 'Kaikki mallit';
+
+  @override
+  String failedToInstallApp(String appName) {
+    return '$appName asennus epäonnistui. Yritä uudelleen.';
+  }
+
+  @override
+  String errorInstallingApp(String appName, String error) {
+    return 'Virhe asennettaessa $appName: $error';
+  }
+
+  @override
+  String tagSpeaker(int speakerId) {
+    return 'Tag Speaker $speakerId';
+  }
+
+  @override
+  String get personNameAlreadyExists => 'A person with this name already exists.';
+
+  @override
+  String get selectYouFromList => 'To tag yourself, please select \"You\" from the list.';
+
+  @override
+  String get enterPersonsName => 'Enter Person\'s Name';
+
+  @override
+  String get addPerson => 'Add Person';
+
+  @override
+  String tagOtherSegmentsFromSpeaker(int selected, int total) {
+    return 'Tag other segments from this speaker ($selected/$total)';
+  }
+
+  @override
+  String get tagOtherSegments => 'Tag other segments';
+
+  @override
+  String get managePeople => 'Manage People';
+
+  @override
+  String get shareViaSms => 'Jaa tekstiviestillä';
+
+  @override
+  String get selectContactsToShareSummary => 'Valitse yhteystiedot keskustelun yhteenvedon jakamiseksi';
+
+  @override
+  String get searchContactsHint => 'Etsi yhteystietoja...';
+
+  @override
+  String contactsSelectedCount(int count) {
+    return '$count valittu';
+  }
+
+  @override
+  String get clearAllSelection => 'Tyhjennä kaikki';
+
+  @override
+  String get selectContactsToShare => 'Valitse yhteystiedot jakamista varten';
+
+  @override
+  String shareWithContactCount(int count) {
+    return 'Jaa $count yhteystiedolle';
+  }
+
+  @override
+  String shareWithContactsCount(int count) {
+    return 'Jaa $count yhteystiedolle';
+  }
+
+  @override
+  String get contactsPermissionRequired => 'Yhteystietolupa vaaditaan';
+
+  @override
+  String get contactsPermissionRequiredForSms => 'Yhteystietolupa vaaditaan jakamiseen tekstiviestillä';
+
+  @override
+  String get grantContactsPermissionForSms => 'Anna yhteystietolupa jakamiseen tekstiviestillä';
+
+  @override
+  String get noContactsWithPhoneNumbers => 'Puhelinnumerollisia yhteystietoja ei löytynyt';
+
+  @override
+  String get noContactsMatchSearch => 'Yksikään yhteystieto ei vastaa hakuasi';
+
+  @override
+  String get failedToLoadContacts => 'Yhteystietojen lataaminen epäonnistui';
+
+  @override
+  String get failedToPrepareConversationForSharing =>
+      'Keskustelun valmistelu jakamista varten epäonnistui. Yritä uudelleen.';
+
+  @override
+  String get couldNotOpenSmsApp => 'SMS-sovellusta ei voitu avata. Yritä uudelleen.';
+
+  @override
+  String heresWhatWeDiscussed(String link) {
+    return 'Tässä mitä juuri keskustelimme: $link';
+  }
+
+  @override
+  String get wifiSync => 'WiFi-synkronointi';
+
+  @override
+  String itemCopiedToClipboard(String item) {
+    return '$item kopioitu leikepöydälle';
+  }
 }

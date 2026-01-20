@@ -246,7 +246,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
         onTap: () {
           Clipboard.setData(ClipboardData(text: copyValue));
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('$title copied to clipboard')),
+            SnackBar(content: Text(context.l10n.itemCopiedToClipboard(title))),
           );
         },
         child: content,
@@ -801,8 +801,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             const Divider(height: 1, color: Color(0xFF3C3C43)),
             _buildProfileStyleItem(
               icon: FontAwesomeIcons.wifi,
-              title: 'WiFi Sync',
-              chipValue: 'Available',
+              title: context.l10n.wifiSync,
+              chipValue: context.l10n.available,
               showChevron: false,
             ),
           ],

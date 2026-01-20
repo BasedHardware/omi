@@ -357,7 +357,7 @@
   "permissionRevokedTitle": "Дозвіл відкликано",
   "permissionRevokedMessage": "Чи хочете ви також видалити всі ваші існуючі записи?",
   "yes": "Так",
-  "editName": "Редагувати ім'я",
+  "editName": "Edit Name",
   "howShouldOmiCallYou": "Як Omi має до вас звертатися?",
   "enterYourName": "Введіть ваше ім'я",
   "nameCannotBeEmpty": "Ім'я не може бути порожнім",
@@ -988,7 +988,7 @@
   "help": "Допомога",
   "pro": "Pro",
   "upgradeToPro": "Оновити до Pro",
-  "getOmiDevice": "Отримати пристрій Omi",
+  "getOmiDevice": "Get Omi Device",
   "wearableAiCompanion": "Носимий AI-компаньйон",
   "loadingMemories": "Завантаження спогадів...",
   "allMemories": "Всі спогади",
@@ -1168,7 +1168,7 @@
   "selectTime": "Вибрати час",
   "accountGroup": "Обліковий запис",
   "signOutQuestion": "Вийти?",
-  "signOutConfirmation": "Ви впевнені, що хочете вийти?",
+  "signOutConfirmation": "Are you sure you want to sign out?",
   "customVocabularyHeader": "КОРИСТУВАЦЬКИЙ СЛОВНИК",
   "addWordsDescription": "Додайте слова, які Omi має розпізнавати під час транскрипції.",
   "enterWordsHint": "Введіть слова (через кому)",
@@ -2034,5 +2034,119 @@
   "cantRateWithoutInternet": "Неможливо оцінити додаток без підключення до інтернету.",
   "appAnalytics": "Аналітика додатку",
   "learnMoreLink": "дізнатися більше",
-  "moneyEarned": "Зароблено"
+  "moneyEarned": "Зароблено",
+  "starFilterLabel": "{count} зірка",
+  "@starFilterLabel": {
+    "description": "Filter chip label for star rating",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sharePublicLink": "Share Public Link",
+  "makePersonaPublic": "Make Persona Public",
+  "connectedKnowledgeData": "Connected Knowledge Data",
+  "enterName": "Enter name",
+  "disconnectTwitter": "Disconnect Twitter",
+  "disconnectTwitterConfirmation": "Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.",
+  "getOmiDeviceDescription": "Create a more accurate clone with your personal conversations",
+  "getOmi": "Get Omi",
+  "iHaveOmiDevice": "I have Omi device",
+  "goal": "ЦІЛЬ",
+  "tapToTrackThisGoal": "Торкніться, щоб відстежувати цю ціль",
+  "tapToSetAGoal": "Торкніться, щоб встановити ціль",
+  "processedConversations": "Оброблені розмови",
+  "updatedConversations": "Оновлені розмови",
+  "newConversations": "Нові розмови",
+  "summaryTemplate": "Шаблон підсумку",
+  "suggestedTemplates": "Рекомендовані шаблони",
+  "otherTemplates": "Інші шаблони",
+  "availableTemplates": "Доступні шаблони",
+  "getCreative": "Будьте креативні",
+  "defaultLabel": "За замовчуванням",
+  "lastUsedLabel": "Останнє використання",
+  "setDefaultApp": "Встановити додаток за замовчуванням",
+  "setDefaultAppContent": "Встановити {appName} як додаток для підсумків за замовчуванням?\\n\\nЦей додаток буде автоматично використовуватися для всіх майбутніх підсумків розмов.",
+  "@setDefaultAppContent": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "setDefaultButton": "Встановити за замовчуванням",
+  "setAsDefaultSuccess": "{appName} встановлено як додаток для підсумків за замовчуванням",
+  "@setAsDefaultSuccess": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "createCustomTemplate": "Створити власний шаблон",
+  "allTemplates": "Усі шаблони",
+  "failedToInstallApp": "Не вдалося встановити {appName}. Будь ласка, спробуйте ще раз.",
+  "@failedToInstallApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "errorInstallingApp": "Помилка встановлення {appName}: {error}",
+  "@errorInstallingApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tagSpeaker": "Tag Speaker {speakerId}",
+  "@tagSpeaker": {
+    "placeholders": {
+      "speakerId": {
+        "type": "int"
+      }
+    }
+  },
+  "personNameAlreadyExists": "A person with this name already exists.",
+  "selectYouFromList": "To tag yourself, please select \"You\" from the list.",
+  "enterPersonsName": "Enter Person's Name",
+  "addPerson": "Add Person",
+  "tagOtherSegmentsFromSpeaker": "Tag other segments from this speaker ({selected}/{total})",
+  "@tagOtherSegmentsFromSpeaker": {
+    "placeholders": {
+      "selected": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "tagOtherSegments": "Tag other segments",
+  "managePeople": "Manage People",
+  "shareViaSms": "Поділитися через SMS",
+  "selectContactsToShareSummary": "Виберіть контакти для надсилання підсумку розмови",
+  "searchContactsHint": "Пошук контактів...",
+  "contactsSelectedCount": "{count} вибрано",
+  "clearAllSelection": "Очистити все",
+  "selectContactsToShare": "Виберіть контакти для надсилання",
+  "shareWithContactCount": "Надіслати {count} контакту",
+  "shareWithContactsCount": "Надіслати {count} контактам",
+  "contactsPermissionRequired": "Потрібен дозвіл на доступ до контактів",
+  "contactsPermissionRequiredForSms": "Для надсилання через SMS потрібен дозвіл на доступ до контактів",
+  "grantContactsPermissionForSms": "Будь ласка, надайте дозвіл на доступ до контактів для надсилання через SMS",
+  "noContactsWithPhoneNumbers": "Не знайдено контактів з номерами телефонів",
+  "noContactsMatchSearch": "Контакти за вашим запитом не знайдено",
+  "failedToLoadContacts": "Не вдалося завантажити контакти",
+  "failedToPrepareConversationForSharing": "Не вдалося підготувати розмову для надсилання. Будь ласка, спробуйте знову.",
+  "couldNotOpenSmsApp": "Не вдалося відкрити додаток SMS. Будь ласка, спробуйте знову.",
+  "heresWhatWeDiscussed": "Ось про що ми щойно говорили: {link}",
+  "wifiSync": "Синхронізація WiFi",
+  "itemCopiedToClipboard": "{item} скопійовано в буфер обміну"
 }

@@ -357,7 +357,7 @@
   "permissionRevokedTitle": "Tillstånd återkallat",
   "permissionRevokedMessage": "Vill du att vi tar bort alla dina befintliga inspelningar också?",
   "yes": "Ja",
-  "editName": "Redigera namn",
+  "editName": "Edit Name",
   "howShouldOmiCallYou": "Vad ska Omi kalla dig?",
   "enterYourName": "Ange ditt namn",
   "nameCannotBeEmpty": "Namnet kan inte vara tomt",
@@ -988,7 +988,7 @@
   "help": "Hjälp",
   "pro": "Pro",
   "upgradeToPro": "Uppgradera till Pro",
-  "getOmiDevice": "Skaffa Omi-enhet",
+  "getOmiDevice": "Get Omi Device",
   "wearableAiCompanion": "Bärbar AI-följeslagare",
   "loadingMemories": "Laddar minnen...",
   "allMemories": "Alla minnen",
@@ -1168,7 +1168,7 @@
   "selectTime": "Välj tid",
   "accountGroup": "Konto",
   "signOutQuestion": "Logga ut?",
-  "signOutConfirmation": "Är du säker på att du vill logga ut?",
+  "signOutConfirmation": "Are you sure you want to sign out?",
   "customVocabularyHeader": "ANPASSAT ORDFÖRRÅD",
   "addWordsDescription": "Lägg till ord som Omi ska känna igen under transkription.",
   "enterWordsHint": "Ange ord (kommaseparerade)",
@@ -2034,5 +2034,119 @@
   "cantRateWithoutInternet": "Kan inte betygsätta appen utan internetanslutning.",
   "appAnalytics": "App-analys",
   "learnMoreLink": "läs mer",
-  "moneyEarned": "Intjänade pengar"
+  "moneyEarned": "Intjänade pengar",
+  "starFilterLabel": "{count} stjärna",
+  "@starFilterLabel": {
+    "description": "Filter chip label for star rating",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sharePublicLink": "Share Public Link",
+  "makePersonaPublic": "Make Persona Public",
+  "connectedKnowledgeData": "Connected Knowledge Data",
+  "enterName": "Enter name",
+  "disconnectTwitter": "Disconnect Twitter",
+  "disconnectTwitterConfirmation": "Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.",
+  "getOmiDeviceDescription": "Create a more accurate clone with your personal conversations",
+  "getOmi": "Get Omi",
+  "iHaveOmiDevice": "I have Omi device",
+  "goal": "MÅL",
+  "tapToTrackThisGoal": "Tryck för att spåra detta mål",
+  "tapToSetAGoal": "Tryck för att sätta ett mål",
+  "processedConversations": "Bearbetade samtal",
+  "updatedConversations": "Uppdaterade samtal",
+  "newConversations": "Nya samtal",
+  "summaryTemplate": "Sammanfattningsmall",
+  "suggestedTemplates": "Föreslagna mallar",
+  "otherTemplates": "Andra mallar",
+  "availableTemplates": "Tillgängliga mallar",
+  "getCreative": "Var kreativ",
+  "defaultLabel": "Standard",
+  "lastUsedLabel": "Senast använd",
+  "setDefaultApp": "Ange standardapp",
+  "setDefaultAppContent": "Ange {appName} som din standardapp för sammanfattningar?\\n\\nDenna app kommer automatiskt att användas för alla framtida konversationssammanfattningar.",
+  "@setDefaultAppContent": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "setDefaultButton": "Ange standard",
+  "setAsDefaultSuccess": "{appName} angiven som standardapp för sammanfattningar",
+  "@setAsDefaultSuccess": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "createCustomTemplate": "Skapa anpassad mall",
+  "allTemplates": "Alla mallar",
+  "failedToInstallApp": "Kunde inte installera {appName}. Försök igen.",
+  "@failedToInstallApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "errorInstallingApp": "Fel vid installation av {appName}: {error}",
+  "@errorInstallingApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tagSpeaker": "Tag Speaker {speakerId}",
+  "@tagSpeaker": {
+    "placeholders": {
+      "speakerId": {
+        "type": "int"
+      }
+    }
+  },
+  "personNameAlreadyExists": "A person with this name already exists.",
+  "selectYouFromList": "To tag yourself, please select \"You\" from the list.",
+  "enterPersonsName": "Enter Person's Name",
+  "addPerson": "Add Person",
+  "tagOtherSegmentsFromSpeaker": "Tag other segments from this speaker ({selected}/{total})",
+  "@tagOtherSegmentsFromSpeaker": {
+    "placeholders": {
+      "selected": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "tagOtherSegments": "Tag other segments",
+  "managePeople": "Manage People",
+  "shareViaSms": "Dela via SMS",
+  "selectContactsToShareSummary": "Välj kontakter för att dela din samtalssammanfattning",
+  "searchContactsHint": "Sök kontakter...",
+  "contactsSelectedCount": "{count} valda",
+  "clearAllSelection": "Rensa allt",
+  "selectContactsToShare": "Välj kontakter att dela med",
+  "shareWithContactCount": "Dela med {count} kontakt",
+  "shareWithContactsCount": "Dela med {count} kontakter",
+  "contactsPermissionRequired": "Kontaktbehörighet krävs",
+  "contactsPermissionRequiredForSms": "Kontaktbehörighet krävs för att dela via SMS",
+  "grantContactsPermissionForSms": "Ge kontaktbehörighet för att dela via SMS",
+  "noContactsWithPhoneNumbers": "Inga kontakter med telefonnummer hittades",
+  "noContactsMatchSearch": "Inga kontakter matchar din sökning",
+  "failedToLoadContacts": "Kunde inte ladda kontakter",
+  "failedToPrepareConversationForSharing": "Kunde inte förbereda samtalet för delning. Försök igen.",
+  "couldNotOpenSmsApp": "Kunde inte öppna SMS-appen. Försök igen.",
+  "heresWhatWeDiscussed": "Här är vad vi just diskuterade: {link}",
+  "wifiSync": "WiFi-synkronisering",
+  "itemCopiedToClipboard": "{item} kopierat till urklipp"
 }

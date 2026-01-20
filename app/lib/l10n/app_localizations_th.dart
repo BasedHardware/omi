@@ -1140,7 +1140,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get yes => 'ใช่';
 
   @override
-  String get editName => 'แก้ไขชื่อ';
+  String get editName => 'Edit Name';
 
   @override
   String get howShouldOmiCallYou => 'Omi ควรเรียกคุณว่าอะไร?';
@@ -2884,9 +2884,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get connectNow => 'เชื่อมต่อตอนนี้';
 
   @override
-  String installsCount(String count) {
-    return '$count+ การติดตั้ง';
-  }
+  String get installsCount => 'การติดตั้ง';
 
   @override
   String get uninstallApp => 'ถอนการติดตั้งแอป';
@@ -2931,10 +2929,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String get aboutTheApp => 'เกี่ยวกับแอป';
 
   @override
-  String get aboutThePersona => 'เกี่ยวกับบุคลิก';
+  String get aboutThePersona => 'เกี่ยวกับเพอร์โซน่า';
 
   @override
-  String get chatPersonality => 'บุคลิกการแชท';
+  String get chatPersonality => 'บุคลิกแชท';
 
   @override
   String get ratingsAndReviews => 'คะแนนและรีวิว';
@@ -3249,7 +3247,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get upgradeToPro => 'อัปเกรดเป็น Pro';
 
   @override
-  String get getOmiDevice => 'รับอุปกรณ์ Omi';
+  String get getOmiDevice => 'Get Omi Device';
 
   @override
   String get wearableAiCompanion => 'เพื่อน AI สวมใส่ได้';
@@ -3810,7 +3808,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get signOutQuestion => 'ออกจากระบบ?';
 
   @override
-  String get signOutConfirmation => 'คุณแน่ใจหรือไม่ว่าต้องการออกจากระบบ?';
+  String get signOutConfirmation => 'Are you sure you want to sign out?';
 
   @override
   String get customVocabularyHeader => 'คำศัพท์ที่กำหนดเอง';
@@ -4049,7 +4047,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get appRejectedMessage => 'แอปของคุณถูกปฏิเสธ กรุณาอัปเดตรายละเอียดและส่งใหม่เพื่อตรวจสอบ';
 
   @override
-  String get invalidIntegrationUrl => 'URL การรวมระบบไม่ถูกต้อง';
+  String get invalidIntegrationUrl => 'URL การผสานรวมไม่ถูกต้อง';
 
   @override
   String get tapToComplete => 'แตะเพื่อเสร็จสิ้น';
@@ -4073,7 +4071,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get reviewUpdatedSuccessfully => 'อัปเดตรีวิวสำเร็จ 🚀';
 
   @override
-  String get failedToSubmitReview => 'ไม่สามารถส่งรีวิวได้ กรุณาลองอีกครั้ง';
+  String get failedToSubmitReview => 'ส่งรีวิวไม่สำเร็จ กรุณาลองใหม่';
 
   @override
   String get addYourReview => 'เพิ่มรีวิวของคุณ';
@@ -5772,9 +5770,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get chatAppsTitle => 'แอปแชท';
 
   @override
-  String get chatAssistantsTitle => 'ผู้ช่วยแชท';
-
-  @override
   String get selectApp => 'เลือกแอป';
 
   @override
@@ -5782,150 +5777,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get disable => 'ปิดใช้งาน';
-
-  @override
-  String get permissionReadConversations => 'อ่านการสนทนา';
-
-  @override
-  String get permissionReadMemories => 'อ่านความทรงจำ';
-
-  @override
-  String get permissionReadTasks => 'อ่านงาน';
-
-  @override
-  String get permissionCreateConversations => 'สร้างการสนทนา';
-
-  @override
-  String get permissionCreateMemories => 'สร้างความทรงจำ';
-
-  @override
-  String get permissionTypeAccess => 'การเข้าถึง';
-
-  @override
-  String get permissionTypeCreate => 'สร้าง';
-
-  @override
-  String get permissionTypeTrigger => 'ทริกเกอร์';
-
-  @override
-  String get permissionDescReadConversations => 'แอปนี้สามารถเข้าถึงการสนทนาของคุณได้';
-
-  @override
-  String get permissionDescReadMemories => 'แอปนี้สามารถเข้าถึงความทรงจำของคุณได้';
-
-  @override
-  String get permissionDescReadTasks => 'แอปนี้สามารถเข้าถึงงานของคุณได้';
-
-  @override
-  String get permissionDescCreateConversations => 'แอปนี้สามารถสร้างการสนทนาใหม่ได้';
-
-  @override
-  String get permissionDescCreateMemories => 'แอปนี้สามารถสร้างความทรงจำใหม่ได้';
-
-  @override
-  String get realtimeListening => 'การฟังแบบเรียลไทม์';
-
-  @override
-  String get invalidIntegrationUrl => 'URL การผสานรวมไม่ถูกต้อง';
-
-  @override
-  String get invalidSetupInstructionsUrl => 'URL คำแนะนำการตั้งค่าไม่ถูกต้อง';
-
-  @override
-  String get setupCompleted => 'เสร็จสิ้น';
-
-  @override
-  String get tapToComplete => 'แตะเพื่อเสร็จสิ้น';
-
-  @override
-  String get setupInstructions => 'คำแนะนำการตั้งค่า';
-
-  @override
-  String get aboutTheApp => 'เกี่ยวกับแอป';
-
-  @override
-  String get aboutThePersona => 'เกี่ยวกับเพอร์โซน่า';
-
-  @override
-  String get pushToTalk => 'กดเพื่อพูด';
-
-  @override
-  String get summaryPrompt => 'พรอมต์สรุป';
-
-  @override
-  String get chatPersonality => 'บุคลิกแชท';
-
-  @override
-  String get ratingsAndReviews => 'คะแนนและรีวิว';
-
-  @override
-  String get pleaseSelectRating => 'กรุณาเลือกคะแนน';
-
-  @override
-  String get reviewAddedSuccessfully => 'เพิ่มรีวิวสำเร็จ 🚀';
-
-  @override
-  String get reviewUpdatedSuccessfully => 'อัปเดตรีวิวสำเร็จ 🚀';
-
-  @override
-  String get failedToSubmitReview => 'ส่งรีวิวไม่สำเร็จ กรุณาลองใหม่';
-
-  @override
-  String get writeReviewOptional => 'เขียนรีวิว (ไม่บังคับ)';
-
-  @override
-  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
-
-  @override
-  String get setupQuestionProfession => '1. What do you do?';
-
-  @override
-  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
-
-  @override
-  String get setupQuestionAge => '3. What\'s your age range?';
-
-  @override
-  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
-
-  @override
-  String get continueButton => 'ดำเนินการต่อ';
-
-  @override
-  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
-
-  @override
-  String get professionEntrepreneur => 'Entrepreneur';
-
-  @override
-  String get professionSoftwareEngineer => 'Software Engineer';
-
-  @override
-  String get professionProductManager => 'Product Manager';
-
-  @override
-  String get professionExecutive => 'Executive';
-
-  @override
-  String get professionSales => 'Sales';
-
-  @override
-  String get professionStudent => 'Student';
-
-  @override
-  String get usageAtWork => 'At work';
-
-  @override
-  String get usageIrlEvents => 'IRL Events';
-
-  @override
-  String get usageOnline => 'Online';
-
-  @override
-  String get usageSocialSettings => 'In Social Settings';
-
-  @override
-  String get usageEverywhere => 'Everywhere';
 
   @override
   String get photoLibrary => 'คลังภาพ';
@@ -6373,6 +6224,111 @@ class AppLocalizationsTh extends AppLocalizations {
   String get device => 'Device';
 
   @override
+  String get chatAssistantsTitle => 'ผู้ช่วยแชท';
+
+  @override
+  String get permissionReadConversations => 'อ่านการสนทนา';
+
+  @override
+  String get permissionReadMemories => 'อ่านความทรงจำ';
+
+  @override
+  String get permissionReadTasks => 'อ่านงาน';
+
+  @override
+  String get permissionCreateConversations => 'สร้างการสนทนา';
+
+  @override
+  String get permissionCreateMemories => 'สร้างความทรงจำ';
+
+  @override
+  String get permissionTypeAccess => 'การเข้าถึง';
+
+  @override
+  String get permissionTypeCreate => 'สร้าง';
+
+  @override
+  String get permissionTypeTrigger => 'ทริกเกอร์';
+
+  @override
+  String get permissionDescReadConversations => 'แอปนี้สามารถเข้าถึงการสนทนาของคุณได้';
+
+  @override
+  String get permissionDescReadMemories => 'แอปนี้สามารถเข้าถึงความทรงจำของคุณได้';
+
+  @override
+  String get permissionDescReadTasks => 'แอปนี้สามารถเข้าถึงงานของคุณได้';
+
+  @override
+  String get permissionDescCreateConversations => 'แอปนี้สามารถสร้างการสนทนาใหม่ได้';
+
+  @override
+  String get permissionDescCreateMemories => 'แอปนี้สามารถสร้างความทรงจำใหม่ได้';
+
+  @override
+  String get realtimeListening => 'การฟังแบบเรียลไทม์';
+
+  @override
+  String get setupCompleted => 'เสร็จสิ้น';
+
+  @override
+  String get pleaseSelectRating => 'กรุณาเลือกคะแนน';
+
+  @override
+  String get writeReviewOptional => 'เขียนรีวิว (ไม่บังคับ)';
+
+  @override
+  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
+
+  @override
+  String get setupQuestionProfession => '1. What do you do?';
+
+  @override
+  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
+
+  @override
+  String get setupQuestionAge => '3. What\'s your age range?';
+
+  @override
+  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
+
+  @override
+  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
+
+  @override
+  String get professionEntrepreneur => 'Entrepreneur';
+
+  @override
+  String get professionSoftwareEngineer => 'Software Engineer';
+
+  @override
+  String get professionProductManager => 'Product Manager';
+
+  @override
+  String get professionExecutive => 'Executive';
+
+  @override
+  String get professionSales => 'Sales';
+
+  @override
+  String get professionStudent => 'Student';
+
+  @override
+  String get usageAtWork => 'At work';
+
+  @override
+  String get usageIrlEvents => 'IRL Events';
+
+  @override
+  String get usageOnline => 'Online';
+
+  @override
+  String get usageSocialSettings => 'In Social Settings';
+
+  @override
+  String get usageEverywhere => 'Everywhere';
+
+  @override
   String get customBackendUrlTitle => 'URL เซิร์ฟเวอร์ที่กำหนดเอง';
 
   @override
@@ -6385,7 +6341,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get enterBackendUrlError => 'กรุณาป้อน URL เซิร์ฟเวอร์';
 
   @override
-  String get urlMustEndWithSlashError => 'URL ต้องลงท้ายด้วย "/"';
+  String get urlMustEndWithSlashError => 'URL ต้องลงท้ายด้วย \"/\"';
 
   @override
   String get invalidUrlError => 'กรุณาป้อน URL ที่ถูกต้อง';
@@ -6454,7 +6410,8 @@ class AppLocalizationsTh extends AppLocalizations {
   String get buildingKnowledgeGraphFromMemories => 'กำลังสร้างกราฟความรู้จากความทรงจำ...';
 
   @override
-  String get knowledgeGraphWillBuildAutomatically => 'กราฟความรู้ของคุณจะถูกสร้างโดยอัตโนมัติเมื่อคุณสร้างความทรงจำใหม่';
+  String get knowledgeGraphWillBuildAutomatically =>
+      'กราฟความรู้ของคุณจะถูกสร้างโดยอัตโนมัติเมื่อคุณสร้างความทรงจำใหม่';
 
   @override
   String get buildGraphButton => 'สร้างกราฟ';
@@ -6477,7 +6434,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get submitReply => 'ส่งคำตอบ';
 
   @override
-  String get editYourReply => 'แก้ไขคำตอบของคุณ';
+  String get editYourReply => 'แก้ไขคำตอบ';
 
   @override
   String get replyToReview => 'ตอบกลับรีวิว';
@@ -6498,8 +6455,232 @@ class AppLocalizationsTh extends AppLocalizations {
   String get learnMoreLink => 'เรียนรู้เพิ่มเติม';
 
   @override
-  String get installsCount => 'การติดตั้ง';
+  String get moneyEarned => 'เงินที่ได้รับ';
 
   @override
-  String get moneyEarned => 'เงินที่ได้รับ';
+  String get writeYourReply => 'Write your reply...';
+
+  @override
+  String get replySentSuccessfully => 'Reply sent successfully';
+
+  @override
+  String failedToSendReply(String error) {
+    return 'Failed to send reply: $error';
+  }
+
+  @override
+  String get send => 'Send';
+
+  @override
+  String starFilter(int count) {
+    return '$count Star';
+  }
+
+  @override
+  String get noReviewsFound => 'No Reviews Found';
+
+  @override
+  String get editReply => 'Edit Reply';
+
+  @override
+  String get reply => 'Reply';
+
+  @override
+  String starFilterLabel(int count) {
+    return '$count ดาว';
+  }
+
+  @override
+  String get sharePublicLink => 'Share Public Link';
+
+  @override
+  String get makePersonaPublic => 'Make Persona Public';
+
+  @override
+  String get connectedKnowledgeData => 'Connected Knowledge Data';
+
+  @override
+  String get enterName => 'Enter name';
+
+  @override
+  String get disconnectTwitter => 'Disconnect Twitter';
+
+  @override
+  String get disconnectTwitterConfirmation =>
+      'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
+
+  @override
+  String get getOmiDeviceDescription => 'Create a more accurate clone with your personal conversations';
+
+  @override
+  String get getOmi => 'Get Omi';
+
+  @override
+  String get iHaveOmiDevice => 'I have Omi device';
+
+  @override
+  String get goal => 'เป้าหมาย';
+
+  @override
+  String get tapToTrackThisGoal => 'แตะเพื่อติดตามเป้าหมายนี้';
+
+  @override
+  String get tapToSetAGoal => 'แตะเพื่อตั้งเป้าหมาย';
+
+  @override
+  String get processedConversations => 'การสนทนาที่ประมวลผลแล้ว';
+
+  @override
+  String get updatedConversations => 'การสนทนาที่อัปเดต';
+
+  @override
+  String get newConversations => 'การสนทนาใหม่';
+
+  @override
+  String get summaryTemplate => 'เทมเพลตสรุป';
+
+  @override
+  String get suggestedTemplates => 'เทมเพลตที่แนะนำ';
+
+  @override
+  String get otherTemplates => 'เทมเพลตอื่นๆ';
+
+  @override
+  String get availableTemplates => 'เทมเพลตที่มีอยู่';
+
+  @override
+  String get getCreative => 'สร้างสรรค์';
+
+  @override
+  String get defaultLabel => 'ค่าเริ่มต้น';
+
+  @override
+  String get lastUsedLabel => 'ใช้ล่าสุด';
+
+  @override
+  String get setDefaultApp => 'ตั้งแอปเริ่มต้น';
+
+  @override
+  String setDefaultAppContent(String appName) {
+    return 'ตั้ง $appName เป็นแอปสรุปเริ่มต้นของคุณ?\\n\\nแอปนี้จะถูกใช้โดยอัตโนมัติสำหรับการสรุปการสนทนาทั้งหมดในอนาคต';
+  }
+
+  @override
+  String get setDefaultButton => 'ตั้งค่าเริ่มต้น';
+
+  @override
+  String setAsDefaultSuccess(String appName) {
+    return 'ตั้ง $appName เป็นแอปสรุปเริ่มต้นแล้ว';
+  }
+
+  @override
+  String get createCustomTemplate => 'สร้างเทมเพลตที่กำหนดเอง';
+
+  @override
+  String get allTemplates => 'เทมเพลตทั้งหมด';
+
+  @override
+  String failedToInstallApp(String appName) {
+    return 'ติดตั้ง $appName ไม่สำเร็จ กรุณาลองอีกครั้ง';
+  }
+
+  @override
+  String errorInstallingApp(String appName, String error) {
+    return 'เกิดข้อผิดพลาดในการติดตั้ง $appName: $error';
+  }
+
+  @override
+  String tagSpeaker(int speakerId) {
+    return 'Tag Speaker $speakerId';
+  }
+
+  @override
+  String get personNameAlreadyExists => 'A person with this name already exists.';
+
+  @override
+  String get selectYouFromList => 'To tag yourself, please select \"You\" from the list.';
+
+  @override
+  String get enterPersonsName => 'Enter Person\'s Name';
+
+  @override
+  String get addPerson => 'Add Person';
+
+  @override
+  String tagOtherSegmentsFromSpeaker(int selected, int total) {
+    return 'Tag other segments from this speaker ($selected/$total)';
+  }
+
+  @override
+  String get tagOtherSegments => 'Tag other segments';
+
+  @override
+  String get managePeople => 'Manage People';
+
+  @override
+  String get shareViaSms => 'แชร์ผ่าน SMS';
+
+  @override
+  String get selectContactsToShareSummary => 'เลือกผู้ติดต่อเพื่อแชร์สรุปการสนทนาของคุณ';
+
+  @override
+  String get searchContactsHint => 'ค้นหาผู้ติดต่อ...';
+
+  @override
+  String contactsSelectedCount(int count) {
+    return 'เลือก $count รายการ';
+  }
+
+  @override
+  String get clearAllSelection => 'ล้างทั้งหมด';
+
+  @override
+  String get selectContactsToShare => 'เลือกผู้ติดต่อที่จะแชร์';
+
+  @override
+  String shareWithContactCount(int count) {
+    return 'แชร์กับ $count ผู้ติดต่อ';
+  }
+
+  @override
+  String shareWithContactsCount(int count) {
+    return 'แชร์กับ $count ผู้ติดต่อ';
+  }
+
+  @override
+  String get contactsPermissionRequired => 'ต้องการสิทธิ์เข้าถึงรายชื่อ';
+
+  @override
+  String get contactsPermissionRequiredForSms => 'ต้องการสิทธิ์เข้าถึงรายชื่อเพื่อแชร์ผ่าน SMS';
+
+  @override
+  String get grantContactsPermissionForSms => 'โปรดให้สิทธิ์เข้าถึงรายชื่อเพื่อแชร์ผ่าน SMS';
+
+  @override
+  String get noContactsWithPhoneNumbers => 'ไม่พบผู้ติดต่อที่มีหมายเลขโทรศัพท์';
+
+  @override
+  String get noContactsMatchSearch => 'ไม่มีผู้ติดต่อที่ตรงกับการค้นหาของคุณ';
+
+  @override
+  String get failedToLoadContacts => 'ไม่สามารถโหลดรายชื่อได้';
+
+  @override
+  String get failedToPrepareConversationForSharing => 'ไม่สามารถเตรียมการสนทนาสำหรับการแชร์ได้ โปรดลองอีกครั้ง';
+
+  @override
+  String get couldNotOpenSmsApp => 'ไม่สามารถเปิดแอป SMS ได้ โปรดลองอีกครั้ง';
+
+  @override
+  String heresWhatWeDiscussed(String link) {
+    return 'นี่คือสิ่งที่เราเพิ่งพูดคุยกัน: $link';
+  }
+
+  @override
+  String get wifiSync => 'การซิงค์ WiFi';
+
+  @override
+  String itemCopiedToClipboard(String item) {
+    return 'คัดลอก $item ไปยังคลิปบอร์ดแล้ว';
+  }
 }

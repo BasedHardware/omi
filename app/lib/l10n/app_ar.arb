@@ -357,7 +357,7 @@
   "permissionRevokedTitle": "تم إلغاء الإذن",
   "permissionRevokedMessage": "هل تريد منا حذف جميع تسجيلاتك الحالية أيضاً؟",
   "yes": "نعم",
-  "editName": "تعديل الاسم",
+  "editName": "Edit Name",
   "howShouldOmiCallYou": "كيف يجب على Omi أن يناديك؟",
   "enterYourName": "أدخل اسمك",
   "nameCannotBeEmpty": "لا يمكن أن يكون الاسم فارغاً",
@@ -1020,7 +1020,7 @@
   "help": "المساعدة",
   "pro": "Pro",
   "upgradeToPro": "الترقية إلى Pro",
-  "getOmiDevice": "احصل على جهاز Omi",
+  "getOmiDevice": "Get Omi Device",
   "wearableAiCompanion": "رفيق ذكاء اصطناعي يمكن ارتداؤه",
   "loadingMemories": "تحميل الذكريات...",
   "allMemories": "جميع الذكريات",
@@ -1198,7 +1198,7 @@
   "selectTime": "اختر الوقت",
   "accountGroup": "الحساب",
   "signOutQuestion": "تسجيل الخروج؟",
-  "signOutConfirmation": "هل أنت متأكد من رغبتك في تسجيل الخروج؟",
+  "signOutConfirmation": "Are you sure you want to sign out?",
   "customVocabularyHeader": "المفردات المخصصة",
   "addWordsDescription": "أضف كلمات يجب أن يتعرف عليها Omi أثناء النسخ.",
   "enterWordsHint": "أدخل الكلمات (مفصولة بفواصل)",
@@ -2015,5 +2015,119 @@
   "cantRateWithoutInternet": "لا يمكن تقييم التطبيق بدون اتصال بالإنترنت.",
   "appAnalytics": "تحليلات التطبيق",
   "learnMoreLink": "اعرف المزيد",
-  "moneyEarned": "الأرباح"
+  "moneyEarned": "الأرباح",
+  "starFilterLabel": "{count} نجمة",
+  "@starFilterLabel": {
+    "description": "Filter chip label for star rating",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sharePublicLink": "Share Public Link",
+  "makePersonaPublic": "Make Persona Public",
+  "connectedKnowledgeData": "Connected Knowledge Data",
+  "enterName": "Enter name",
+  "disconnectTwitter": "Disconnect Twitter",
+  "disconnectTwitterConfirmation": "Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.",
+  "getOmiDeviceDescription": "Create a more accurate clone with your personal conversations",
+  "getOmi": "Get Omi",
+  "iHaveOmiDevice": "I have Omi device",
+  "goal": "هدف",
+  "tapToTrackThisGoal": "انقر لتتبع هذا الهدف",
+  "tapToSetAGoal": "انقر لتعيين هدف",
+  "processedConversations": "المحادثات المعالجة",
+  "updatedConversations": "المحادثات المحدثة",
+  "newConversations": "محادثات جديدة",
+  "summaryTemplate": "قالب الملخص",
+  "suggestedTemplates": "القوالب المقترحة",
+  "otherTemplates": "قوالب أخرى",
+  "availableTemplates": "القوالب المتاحة",
+  "getCreative": "كن مبدعًا",
+  "defaultLabel": "افتراضي",
+  "lastUsedLabel": "آخر استخدام",
+  "setDefaultApp": "تعيين التطبيق الافتراضي",
+  "setDefaultAppContent": "هل تريد تعيين {appName} كتطبيق تلخيص افتراضي؟\\n\\nسيتم استخدام هذا التطبيق تلقائيًا لجميع ملخصات المحادثات المستقبلية.",
+  "@setDefaultAppContent": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "setDefaultButton": "تعيين كافتراضي",
+  "setAsDefaultSuccess": "تم تعيين {appName} كتطبيق تلخيص افتراضي",
+  "@setAsDefaultSuccess": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "createCustomTemplate": "إنشاء قالب مخصص",
+  "allTemplates": "جميع القوالب",
+  "failedToInstallApp": "فشل في تثبيت {appName}. يرجى المحاولة مرة أخرى.",
+  "@failedToInstallApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "errorInstallingApp": "خطأ في تثبيت {appName}: {error}",
+  "@errorInstallingApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tagSpeaker": "Tag Speaker {speakerId}",
+  "@tagSpeaker": {
+    "placeholders": {
+      "speakerId": {
+        "type": "int"
+      }
+    }
+  },
+  "personNameAlreadyExists": "A person with this name already exists.",
+  "selectYouFromList": "To tag yourself, please select \"You\" from the list.",
+  "enterPersonsName": "Enter Person's Name",
+  "addPerson": "Add Person",
+  "tagOtherSegmentsFromSpeaker": "Tag other segments from this speaker ({selected}/{total})",
+  "@tagOtherSegmentsFromSpeaker": {
+    "placeholders": {
+      "selected": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "tagOtherSegments": "Tag other segments",
+  "managePeople": "Manage People",
+  "shareViaSms": "مشاركة عبر الرسائل القصيرة",
+  "selectContactsToShareSummary": "اختر جهات الاتصال لمشاركة ملخص محادثتك",
+  "searchContactsHint": "بحث في جهات الاتصال...",
+  "contactsSelectedCount": "{count} محدد",
+  "clearAllSelection": "مسح الكل",
+  "selectContactsToShare": "اختر جهات اتصال للمشاركة",
+  "shareWithContactCount": "مشاركة مع {count} جهة اتصال",
+  "shareWithContactsCount": "مشاركة مع {count} جهات اتصال",
+  "contactsPermissionRequired": "إذن الوصول لجهات الاتصال مطلوب",
+  "contactsPermissionRequiredForSms": "إذن الوصول لجهات الاتصال مطلوب للمشاركة عبر الرسائل القصيرة",
+  "grantContactsPermissionForSms": "يرجى منح إذن الوصول لجهات الاتصال للمشاركة عبر الرسائل القصيرة",
+  "noContactsWithPhoneNumbers": "لم يتم العثور على جهات اتصال بأرقام هواتف",
+  "noContactsMatchSearch": "لا توجد جهات اتصال تطابق بحثك",
+  "failedToLoadContacts": "فشل تحميل جهات الاتصال",
+  "failedToPrepareConversationForSharing": "فشل تحضير المحادثة للمشاركة. يرجى المحاولة مرة أخرى.",
+  "couldNotOpenSmsApp": "تعذر فتح تطبيق الرسائل القصيرة. يرجى المحاولة مرة أخرى.",
+  "heresWhatWeDiscussed": "إليك ما ناقشناه للتو: {link}",
+  "wifiSync": "مزامنة الواي فاي",
+  "itemCopiedToClipboard": "{item} تم نسخه إلى الحافظة"
 }

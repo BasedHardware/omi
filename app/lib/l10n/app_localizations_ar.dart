@@ -1136,7 +1136,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get yes => 'نعم';
 
   @override
-  String get editName => 'تعديل الاسم';
+  String get editName => 'Edit Name';
 
   @override
   String get howShouldOmiCallYou => 'كيف يجب على Omi أن يناديك؟';
@@ -2878,9 +2878,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get connectNow => 'الاتصال الآن';
 
   @override
-  String installsCount(String count) {
-    return '$count+ عملية تثبيت';
-  }
+  String get installsCount => 'التثبيتات';
 
   @override
   String get uninstallApp => 'إلغاء تثبيت التطبيق';
@@ -2927,7 +2925,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get aboutThePersona => 'حول الشخصية';
 
   @override
-  String get chatPersonality => 'شخصية الدردشة';
+  String get chatPersonality => 'شخصية المحادثة';
 
   @override
   String get ratingsAndReviews => 'التقييمات والمراجعات';
@@ -3241,7 +3239,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get upgradeToPro => 'الترقية إلى Pro';
 
   @override
-  String get getOmiDevice => 'احصل على جهاز Omi';
+  String get getOmiDevice => 'Get Omi Device';
 
   @override
   String get wearableAiCompanion => 'رفيق ذكاء اصطناعي يمكن ارتداؤه';
@@ -3802,7 +3800,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get signOutQuestion => 'تسجيل الخروج؟';
 
   @override
-  String get signOutConfirmation => 'هل أنت متأكد من رغبتك في تسجيل الخروج؟';
+  String get signOutConfirmation => 'Are you sure you want to sign out?';
 
   @override
   String get customVocabularyHeader => 'المفردات المخصصة';
@@ -5758,9 +5756,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get chatAppsTitle => 'تطبيقات الدردشة';
 
   @override
-  String get chatAssistantsTitle => 'مساعدو الدردشة';
-
-  @override
   String get selectApp => 'اختر التطبيق';
 
   @override
@@ -5768,150 +5763,6 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get disable => 'تعطيل';
-
-  @override
-  String get permissionReadConversations => 'قراءة المحادثات';
-
-  @override
-  String get permissionReadMemories => 'قراءة الذكريات';
-
-  @override
-  String get permissionReadTasks => 'قراءة المهام';
-
-  @override
-  String get permissionCreateConversations => 'إنشاء المحادثات';
-
-  @override
-  String get permissionCreateMemories => 'إنشاء الذكريات';
-
-  @override
-  String get permissionTypeAccess => 'الوصول';
-
-  @override
-  String get permissionTypeCreate => 'إنشاء';
-
-  @override
-  String get permissionTypeTrigger => 'مشغّل';
-
-  @override
-  String get permissionDescReadConversations => 'يمكن لهذا التطبيق الوصول إلى محادثاتك.';
-
-  @override
-  String get permissionDescReadMemories => 'يمكن لهذا التطبيق الوصول إلى ذكرياتك.';
-
-  @override
-  String get permissionDescReadTasks => 'يمكن لهذا التطبيق الوصول إلى مهامك.';
-
-  @override
-  String get permissionDescCreateConversations => 'يمكن لهذا التطبيق إنشاء محادثات جديدة.';
-
-  @override
-  String get permissionDescCreateMemories => 'يمكن لهذا التطبيق إنشاء ذكريات جديدة.';
-
-  @override
-  String get realtimeListening => 'الاستماع في الوقت الفعلي';
-
-  @override
-  String get invalidIntegrationUrl => 'رابط التكامل غير صالح';
-
-  @override
-  String get invalidSetupInstructionsUrl => 'رابط تعليمات الإعداد غير صالح';
-
-  @override
-  String get setupCompleted => 'مكتمل';
-
-  @override
-  String get tapToComplete => 'انقر للإكمال';
-
-  @override
-  String get setupInstructions => 'تعليمات الإعداد';
-
-  @override
-  String get aboutTheApp => 'حول التطبيق';
-
-  @override
-  String get aboutThePersona => 'حول الشخصية';
-
-  @override
-  String get pushToTalk => 'اضغط للتحدث';
-
-  @override
-  String get summaryPrompt => 'موجه الملخص';
-
-  @override
-  String get chatPersonality => 'شخصية المحادثة';
-
-  @override
-  String get ratingsAndReviews => 'التقييمات والمراجعات';
-
-  @override
-  String get pleaseSelectRating => 'يرجى تحديد تقييم';
-
-  @override
-  String get reviewAddedSuccessfully => 'تمت إضافة المراجعة بنجاح 🚀';
-
-  @override
-  String get reviewUpdatedSuccessfully => 'تم تحديث المراجعة بنجاح 🚀';
-
-  @override
-  String get failedToSubmitReview => 'فشل إرسال المراجعة. يرجى المحاولة مرة أخرى.';
-
-  @override
-  String get writeReviewOptional => 'اكتب مراجعة (اختياري)';
-
-  @override
-  String get setupQuestionsIntro => 'ساعدنا في تحسين Omi بالإجابة على بعض الأسئلة. 🫶 💜';
-
-  @override
-  String get setupQuestionProfession => '1. ما هو عملك؟';
-
-  @override
-  String get setupQuestionUsage => '2. أين تخطط لاستخدام Omi؟';
-
-  @override
-  String get setupQuestionAge => '3. ما هو نطاق عمرك؟';
-
-  @override
-  String get setupAnswerAllQuestions => 'لم تجب على جميع الأسئلة بعد! 🥺';
-
-  @override
-  String get continueButton => 'متابعة';
-
-  @override
-  String get setupSkipHelp => 'تخطي، لا أريد المساعدة :C';
-
-  @override
-  String get professionEntrepreneur => 'رائد أعمال';
-
-  @override
-  String get professionSoftwareEngineer => 'مهندس برمجيات';
-
-  @override
-  String get professionProductManager => 'مدير منتج';
-
-  @override
-  String get professionExecutive => 'تنفيذي';
-
-  @override
-  String get professionSales => 'مبيعات';
-
-  @override
-  String get professionStudent => 'طالب';
-
-  @override
-  String get usageAtWork => 'في العمل';
-
-  @override
-  String get usageIrlEvents => 'أحداث واقعية';
-
-  @override
-  String get usageOnline => 'عبر الإنترنت';
-
-  @override
-  String get usageSocialSettings => 'في المناسبات الاجتماعية';
-
-  @override
-  String get usageEverywhere => 'في كل مكان';
 
   @override
   String get photoLibrary => 'مكتبة الصور';
@@ -6359,6 +6210,111 @@ class AppLocalizationsAr extends AppLocalizations {
   String get device => 'Device';
 
   @override
+  String get chatAssistantsTitle => 'مساعدو الدردشة';
+
+  @override
+  String get permissionReadConversations => 'قراءة المحادثات';
+
+  @override
+  String get permissionReadMemories => 'قراءة الذكريات';
+
+  @override
+  String get permissionReadTasks => 'قراءة المهام';
+
+  @override
+  String get permissionCreateConversations => 'إنشاء المحادثات';
+
+  @override
+  String get permissionCreateMemories => 'إنشاء الذكريات';
+
+  @override
+  String get permissionTypeAccess => 'الوصول';
+
+  @override
+  String get permissionTypeCreate => 'إنشاء';
+
+  @override
+  String get permissionTypeTrigger => 'مشغّل';
+
+  @override
+  String get permissionDescReadConversations => 'يمكن لهذا التطبيق الوصول إلى محادثاتك.';
+
+  @override
+  String get permissionDescReadMemories => 'يمكن لهذا التطبيق الوصول إلى ذكرياتك.';
+
+  @override
+  String get permissionDescReadTasks => 'يمكن لهذا التطبيق الوصول إلى مهامك.';
+
+  @override
+  String get permissionDescCreateConversations => 'يمكن لهذا التطبيق إنشاء محادثات جديدة.';
+
+  @override
+  String get permissionDescCreateMemories => 'يمكن لهذا التطبيق إنشاء ذكريات جديدة.';
+
+  @override
+  String get realtimeListening => 'الاستماع في الوقت الفعلي';
+
+  @override
+  String get setupCompleted => 'مكتمل';
+
+  @override
+  String get pleaseSelectRating => 'يرجى تحديد تقييم';
+
+  @override
+  String get writeReviewOptional => 'اكتب مراجعة (اختياري)';
+
+  @override
+  String get setupQuestionsIntro => 'ساعدنا في تحسين Omi بالإجابة على بعض الأسئلة. 🫶 💜';
+
+  @override
+  String get setupQuestionProfession => '1. ما هو عملك؟';
+
+  @override
+  String get setupQuestionUsage => '2. أين تخطط لاستخدام Omi؟';
+
+  @override
+  String get setupQuestionAge => '3. ما هو نطاق عمرك؟';
+
+  @override
+  String get setupAnswerAllQuestions => 'لم تجب على جميع الأسئلة بعد! 🥺';
+
+  @override
+  String get setupSkipHelp => 'تخطي، لا أريد المساعدة :C';
+
+  @override
+  String get professionEntrepreneur => 'رائد أعمال';
+
+  @override
+  String get professionSoftwareEngineer => 'مهندس برمجيات';
+
+  @override
+  String get professionProductManager => 'مدير منتج';
+
+  @override
+  String get professionExecutive => 'تنفيذي';
+
+  @override
+  String get professionSales => 'مبيعات';
+
+  @override
+  String get professionStudent => 'طالب';
+
+  @override
+  String get usageAtWork => 'في العمل';
+
+  @override
+  String get usageIrlEvents => 'أحداث واقعية';
+
+  @override
+  String get usageOnline => 'عبر الإنترنت';
+
+  @override
+  String get usageSocialSettings => 'في المناسبات الاجتماعية';
+
+  @override
+  String get usageEverywhere => 'في كل مكان';
+
+  @override
   String get customBackendUrlTitle => 'عنوان URL للخادم المخصص';
 
   @override
@@ -6371,7 +6327,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get enterBackendUrlError => 'يرجى إدخال عنوان URL للخادم';
 
   @override
-  String get urlMustEndWithSlashError => 'يجب أن ينتهي URL بـ "/"';
+  String get urlMustEndWithSlashError => 'يجب أن ينتهي URL بـ \"/\"';
 
   @override
   String get invalidUrlError => 'يرجى إدخال عنوان URL صالح';
@@ -6466,7 +6422,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get editYourReply => 'تعديل ردك';
 
   @override
-  String get replyToReview => 'الرد على المراجعة';
+  String get replyToReview => 'الرد على التقييم';
 
   @override
   String get rateAndReviewThisApp => 'قيم وراجع هذا التطبيق';
@@ -6484,8 +6440,232 @@ class AppLocalizationsAr extends AppLocalizations {
   String get learnMoreLink => 'اعرف المزيد';
 
   @override
-  String get installsCount => 'التثبيتات';
+  String get moneyEarned => 'الأرباح';
 
   @override
-  String get moneyEarned => 'الأرباح';
+  String get writeYourReply => 'Write your reply...';
+
+  @override
+  String get replySentSuccessfully => 'Reply sent successfully';
+
+  @override
+  String failedToSendReply(String error) {
+    return 'Failed to send reply: $error';
+  }
+
+  @override
+  String get send => 'Send';
+
+  @override
+  String starFilter(int count) {
+    return '$count Star';
+  }
+
+  @override
+  String get noReviewsFound => 'No Reviews Found';
+
+  @override
+  String get editReply => 'Edit Reply';
+
+  @override
+  String get reply => 'Reply';
+
+  @override
+  String starFilterLabel(int count) {
+    return '$count نجمة';
+  }
+
+  @override
+  String get sharePublicLink => 'Share Public Link';
+
+  @override
+  String get makePersonaPublic => 'Make Persona Public';
+
+  @override
+  String get connectedKnowledgeData => 'Connected Knowledge Data';
+
+  @override
+  String get enterName => 'Enter name';
+
+  @override
+  String get disconnectTwitter => 'Disconnect Twitter';
+
+  @override
+  String get disconnectTwitterConfirmation =>
+      'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
+
+  @override
+  String get getOmiDeviceDescription => 'Create a more accurate clone with your personal conversations';
+
+  @override
+  String get getOmi => 'Get Omi';
+
+  @override
+  String get iHaveOmiDevice => 'I have Omi device';
+
+  @override
+  String get goal => 'هدف';
+
+  @override
+  String get tapToTrackThisGoal => 'انقر لتتبع هذا الهدف';
+
+  @override
+  String get tapToSetAGoal => 'انقر لتعيين هدف';
+
+  @override
+  String get processedConversations => 'المحادثات المعالجة';
+
+  @override
+  String get updatedConversations => 'المحادثات المحدثة';
+
+  @override
+  String get newConversations => 'محادثات جديدة';
+
+  @override
+  String get summaryTemplate => 'قالب الملخص';
+
+  @override
+  String get suggestedTemplates => 'القوالب المقترحة';
+
+  @override
+  String get otherTemplates => 'قوالب أخرى';
+
+  @override
+  String get availableTemplates => 'القوالب المتاحة';
+
+  @override
+  String get getCreative => 'كن مبدعًا';
+
+  @override
+  String get defaultLabel => 'افتراضي';
+
+  @override
+  String get lastUsedLabel => 'آخر استخدام';
+
+  @override
+  String get setDefaultApp => 'تعيين التطبيق الافتراضي';
+
+  @override
+  String setDefaultAppContent(String appName) {
+    return 'هل تريد تعيين $appName كتطبيق تلخيص افتراضي؟\\n\\nسيتم استخدام هذا التطبيق تلقائيًا لجميع ملخصات المحادثات المستقبلية.';
+  }
+
+  @override
+  String get setDefaultButton => 'تعيين كافتراضي';
+
+  @override
+  String setAsDefaultSuccess(String appName) {
+    return 'تم تعيين $appName كتطبيق تلخيص افتراضي';
+  }
+
+  @override
+  String get createCustomTemplate => 'إنشاء قالب مخصص';
+
+  @override
+  String get allTemplates => 'جميع القوالب';
+
+  @override
+  String failedToInstallApp(String appName) {
+    return 'فشل في تثبيت $appName. يرجى المحاولة مرة أخرى.';
+  }
+
+  @override
+  String errorInstallingApp(String appName, String error) {
+    return 'خطأ في تثبيت $appName: $error';
+  }
+
+  @override
+  String tagSpeaker(int speakerId) {
+    return 'Tag Speaker $speakerId';
+  }
+
+  @override
+  String get personNameAlreadyExists => 'A person with this name already exists.';
+
+  @override
+  String get selectYouFromList => 'To tag yourself, please select \"You\" from the list.';
+
+  @override
+  String get enterPersonsName => 'Enter Person\'s Name';
+
+  @override
+  String get addPerson => 'Add Person';
+
+  @override
+  String tagOtherSegmentsFromSpeaker(int selected, int total) {
+    return 'Tag other segments from this speaker ($selected/$total)';
+  }
+
+  @override
+  String get tagOtherSegments => 'Tag other segments';
+
+  @override
+  String get managePeople => 'Manage People';
+
+  @override
+  String get shareViaSms => 'مشاركة عبر الرسائل القصيرة';
+
+  @override
+  String get selectContactsToShareSummary => 'اختر جهات الاتصال لمشاركة ملخص محادثتك';
+
+  @override
+  String get searchContactsHint => 'بحث في جهات الاتصال...';
+
+  @override
+  String contactsSelectedCount(int count) {
+    return '$count محدد';
+  }
+
+  @override
+  String get clearAllSelection => 'مسح الكل';
+
+  @override
+  String get selectContactsToShare => 'اختر جهات اتصال للمشاركة';
+
+  @override
+  String shareWithContactCount(int count) {
+    return 'مشاركة مع $count جهة اتصال';
+  }
+
+  @override
+  String shareWithContactsCount(int count) {
+    return 'مشاركة مع $count جهات اتصال';
+  }
+
+  @override
+  String get contactsPermissionRequired => 'إذن الوصول لجهات الاتصال مطلوب';
+
+  @override
+  String get contactsPermissionRequiredForSms => 'إذن الوصول لجهات الاتصال مطلوب للمشاركة عبر الرسائل القصيرة';
+
+  @override
+  String get grantContactsPermissionForSms => 'يرجى منح إذن الوصول لجهات الاتصال للمشاركة عبر الرسائل القصيرة';
+
+  @override
+  String get noContactsWithPhoneNumbers => 'لم يتم العثور على جهات اتصال بأرقام هواتف';
+
+  @override
+  String get noContactsMatchSearch => 'لا توجد جهات اتصال تطابق بحثك';
+
+  @override
+  String get failedToLoadContacts => 'فشل تحميل جهات الاتصال';
+
+  @override
+  String get failedToPrepareConversationForSharing => 'فشل تحضير المحادثة للمشاركة. يرجى المحاولة مرة أخرى.';
+
+  @override
+  String get couldNotOpenSmsApp => 'تعذر فتح تطبيق الرسائل القصيرة. يرجى المحاولة مرة أخرى.';
+
+  @override
+  String heresWhatWeDiscussed(String link) {
+    return 'إليك ما ناقشناه للتو: $link';
+  }
+
+  @override
+  String get wifiSync => 'مزامنة الواي فاي';
+
+  @override
+  String itemCopiedToClipboard(String item) {
+    return '$item تم نسخه إلى الحافظة';
+  }
 }

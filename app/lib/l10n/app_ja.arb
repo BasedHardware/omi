@@ -357,7 +357,7 @@
   "permissionRevokedTitle": "許可が取り消されました",
   "permissionRevokedMessage": "既存の録音もすべて削除しますか？",
   "yes": "はい",
-  "editName": "名前を編集",
+  "editName": "Edit Name",
   "howShouldOmiCallYou": "Omiはあなたをどう呼べばいいですか？",
   "enterYourName": "お名前を入力",
   "nameCannotBeEmpty": "名前を空にすることはできません",
@@ -989,7 +989,7 @@
   "help": "ヘルプ",
   "pro": "Pro",
   "upgradeToPro": "Proにアップグレード",
-  "getOmiDevice": "Omiデバイスを入手",
+  "getOmiDevice": "Get Omi Device",
   "wearableAiCompanion": "ウェアラブルAIコンパニオン",
   "loadingMemories": "思い出を読み込んでいます...",
   "allMemories": "すべての思い出",
@@ -1169,7 +1169,7 @@
   "selectTime": "時間を選択",
   "accountGroup": "アカウント",
   "signOutQuestion": "サインアウトしますか？",
-  "signOutConfirmation": "本当にサインアウトしますか？",
+  "signOutConfirmation": "Are you sure you want to sign out?",
   "customVocabularyHeader": "カスタム語彙",
   "addWordsDescription": "文字起こし中にOmiが認識すべき単語を追加します。",
   "enterWordsHint": "単語を入力（カンマ区切り）",
@@ -2035,5 +2035,119 @@
   "cantRateWithoutInternet": "インターネット接続なしではアプリを評価できません。",
   "appAnalytics": "アプリ分析",
   "learnMoreLink": "詳細",
-  "moneyEarned": "収益"
+  "moneyEarned": "収益",
+  "starFilterLabel": "{count}つ星",
+  "@starFilterLabel": {
+    "description": "Filter chip label for star rating",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sharePublicLink": "Share Public Link",
+  "makePersonaPublic": "Make Persona Public",
+  "connectedKnowledgeData": "Connected Knowledge Data",
+  "enterName": "Enter name",
+  "disconnectTwitter": "Disconnect Twitter",
+  "disconnectTwitterConfirmation": "Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.",
+  "getOmiDeviceDescription": "Create a more accurate clone with your personal conversations",
+  "getOmi": "Get Omi",
+  "iHaveOmiDevice": "I have Omi device",
+  "goal": "目標",
+  "tapToTrackThisGoal": "タップしてこの目標を追跡",
+  "tapToSetAGoal": "タップして目標を設定",
+  "processedConversations": "処理済みの会話",
+  "updatedConversations": "更新された会話",
+  "newConversations": "新しい会話",
+  "summaryTemplate": "要約テンプレート",
+  "suggestedTemplates": "おすすめのテンプレート",
+  "otherTemplates": "その他のテンプレート",
+  "availableTemplates": "利用可能なテンプレート",
+  "getCreative": "クリエイティブに",
+  "defaultLabel": "デフォルト",
+  "lastUsedLabel": "最後に使用",
+  "setDefaultApp": "デフォルトアプリを設定",
+  "setDefaultAppContent": "{appName}をデフォルトの要約アプリとして設定しますか？\\n\\nこのアプリは今後のすべての会話の要約に自動的に使用されます。",
+  "@setDefaultAppContent": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "setDefaultButton": "デフォルトに設定",
+  "setAsDefaultSuccess": "{appName}がデフォルトの要約アプリとして設定されました",
+  "@setAsDefaultSuccess": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "createCustomTemplate": "カスタムテンプレートを作成",
+  "allTemplates": "すべてのテンプレート",
+  "failedToInstallApp": "{appName}のインストールに失敗しました。もう一度お試しください。",
+  "@failedToInstallApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "errorInstallingApp": "{appName}のインストール中にエラーが発生: {error}",
+  "@errorInstallingApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tagSpeaker": "Tag Speaker {speakerId}",
+  "@tagSpeaker": {
+    "placeholders": {
+      "speakerId": {
+        "type": "int"
+      }
+    }
+  },
+  "personNameAlreadyExists": "A person with this name already exists.",
+  "selectYouFromList": "To tag yourself, please select \"You\" from the list.",
+  "enterPersonsName": "Enter Person's Name",
+  "addPerson": "Add Person",
+  "tagOtherSegmentsFromSpeaker": "Tag other segments from this speaker ({selected}/{total})",
+  "@tagOtherSegmentsFromSpeaker": {
+    "placeholders": {
+      "selected": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "tagOtherSegments": "Tag other segments",
+  "managePeople": "Manage People",
+  "shareViaSms": "SMSで共有",
+  "selectContactsToShareSummary": "会話の要約を共有する連絡先を選択",
+  "searchContactsHint": "連絡先を検索...",
+  "contactsSelectedCount": "{count}件選択中",
+  "clearAllSelection": "すべて解除",
+  "selectContactsToShare": "共有する連絡先を選択",
+  "shareWithContactCount": "{count}件の連絡先と共有",
+  "shareWithContactsCount": "{count}件の連絡先と共有",
+  "contactsPermissionRequired": "連絡先へのアクセス許可が必要",
+  "contactsPermissionRequiredForSms": "SMSで共有するには連絡先へのアクセス許可が必要です",
+  "grantContactsPermissionForSms": "SMSで共有するには連絡先へのアクセスを許可してください",
+  "noContactsWithPhoneNumbers": "電話番号のある連絡先が見つかりません",
+  "noContactsMatchSearch": "検索に一致する連絡先がありません",
+  "failedToLoadContacts": "連絡先の読み込みに失敗しました",
+  "failedToPrepareConversationForSharing": "会話の共有準備に失敗しました。もう一度お試しください。",
+  "couldNotOpenSmsApp": "SMSアプリを開けませんでした。もう一度お試しください。",
+  "heresWhatWeDiscussed": "先ほど話した内容はこちらです: {link}",
+  "wifiSync": "WiFi同期",
+  "itemCopiedToClipboard": "{item}がクリップボードにコピーされました"
 }

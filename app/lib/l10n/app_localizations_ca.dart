@@ -1154,7 +1154,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get yes => 'Sí';
 
   @override
-  String get editName => 'Editar nom';
+  String get editName => 'Edit Name';
 
   @override
   String get howShouldOmiCallYou => 'Com hauria d\'anomenar-vos Omi?';
@@ -2916,9 +2916,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get connectNow => 'Connecta ara';
 
   @override
-  String installsCount(String count) {
-    return '$count+ instal·lacions';
-  }
+  String get installsCount => 'Instal·lacions';
 
   @override
   String get uninstallApp => 'Desinstal·la l\'aplicació';
@@ -2961,7 +2959,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get preview => 'Previsualització';
 
   @override
-  String get aboutTheApp => 'Sobre l\'aplicació';
+  String get aboutTheApp => 'Sobre l\'app';
 
   @override
   String get aboutThePersona => 'Sobre la persona';
@@ -3283,7 +3281,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get upgradeToPro => 'Actualitza a Pro';
 
   @override
-  String get getOmiDevice => 'Aconsegueix el dispositiu Omi';
+  String get getOmiDevice => 'Get Omi Device';
 
   @override
   String get wearableAiCompanion => 'Company d\'IA portàtil';
@@ -3852,7 +3850,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get signOutQuestion => 'Tancar sessió?';
 
   @override
-  String get signOutConfirmation => 'Estàs segur que vols tancar la sessió?';
+  String get signOutConfirmation => 'Are you sure you want to sign out?';
 
   @override
   String get customVocabularyHeader => 'VOCABULARI PERSONALITZAT';
@@ -4095,19 +4093,19 @@ class AppLocalizationsCa extends AppLocalizations {
       'La teva aplicació ha estat rebutjada. Actualitza els detalls i torna a enviar-la per a revisió.';
 
   @override
-  String get invalidIntegrationUrl => 'URL d\'integració no vàlid';
+  String get invalidIntegrationUrl => 'URL d\'integració no vàlida';
 
   @override
   String get tapToComplete => 'Toca per completar';
 
   @override
-  String get invalidSetupInstructionsUrl => 'URL d\'instruccions de configuració no vàlid';
+  String get invalidSetupInstructionsUrl => 'URL d\'instruccions de configuració no vàlida';
 
   @override
   String get pushToTalk => 'Prem per parlar';
 
   @override
-  String get summaryPrompt => 'Indicació de resum';
+  String get summaryPrompt => 'Prompt de resum';
 
   @override
   String get pleaseSelectARating => 'Si us plau, selecciona una valoració';
@@ -4119,7 +4117,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get reviewUpdatedSuccessfully => 'Ressenya actualitzada amb èxit 🚀';
 
   @override
-  String get failedToSubmitReview => 'No s\'ha pogut enviar la ressenya. Torna-ho a provar.';
+  String get failedToSubmitReview => 'Error en enviar la ressenya. Si us plau, torna-ho a provar.';
 
   @override
   String get addYourReview => 'Afegeix la teva ressenya';
@@ -5836,9 +5834,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get chatAppsTitle => 'Aplicacions de xat';
 
   @override
-  String get chatAssistantsTitle => 'Assistents de xat';
-
-  @override
   String get selectApp => 'Selecciona aplicació';
 
   @override
@@ -5846,150 +5841,6 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get disable => 'Desactivar';
-
-  @override
-  String get permissionReadConversations => 'Llegir converses';
-
-  @override
-  String get permissionReadMemories => 'Llegir records';
-
-  @override
-  String get permissionReadTasks => 'Llegir tasques';
-
-  @override
-  String get permissionCreateConversations => 'Crear converses';
-
-  @override
-  String get permissionCreateMemories => 'Crear records';
-
-  @override
-  String get permissionTypeAccess => 'Accés';
-
-  @override
-  String get permissionTypeCreate => 'Crear';
-
-  @override
-  String get permissionTypeTrigger => 'Disparador';
-
-  @override
-  String get permissionDescReadConversations => 'Aquesta app pot accedir a les teves converses.';
-
-  @override
-  String get permissionDescReadMemories => 'Aquesta app pot accedir als teus records.';
-
-  @override
-  String get permissionDescReadTasks => 'Aquesta app pot accedir a les teves tasques.';
-
-  @override
-  String get permissionDescCreateConversations => 'Aquesta app pot crear noves converses.';
-
-  @override
-  String get permissionDescCreateMemories => 'Aquesta app pot crear nous records.';
-
-  @override
-  String get realtimeListening => 'Escolta en temps real';
-
-  @override
-  String get invalidIntegrationUrl => 'URL d\'integració no vàlida';
-
-  @override
-  String get invalidSetupInstructionsUrl => 'URL d\'instruccions de configuració no vàlida';
-
-  @override
-  String get setupCompleted => 'Completat';
-
-  @override
-  String get tapToComplete => 'Toca per completar';
-
-  @override
-  String get setupInstructions => 'Instruccions de configuració';
-
-  @override
-  String get aboutTheApp => 'Sobre l\'app';
-
-  @override
-  String get aboutThePersona => 'Sobre la persona';
-
-  @override
-  String get pushToTalk => 'Prem per parlar';
-
-  @override
-  String get summaryPrompt => 'Prompt de resum';
-
-  @override
-  String get chatPersonality => 'Personalitat del xat';
-
-  @override
-  String get ratingsAndReviews => 'Valoracions i ressenyes';
-
-  @override
-  String get pleaseSelectRating => 'Si us plau, selecciona una valoració';
-
-  @override
-  String get reviewAddedSuccessfully => 'Ressenya afegida amb èxit 🚀';
-
-  @override
-  String get reviewUpdatedSuccessfully => 'Ressenya actualitzada amb èxit 🚀';
-
-  @override
-  String get failedToSubmitReview => 'Error en enviar la ressenya. Si us plau, torna-ho a provar.';
-
-  @override
-  String get writeReviewOptional => 'Escriu una ressenya (opcional)';
-
-  @override
-  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
-
-  @override
-  String get setupQuestionProfession => '1. What do you do?';
-
-  @override
-  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
-
-  @override
-  String get setupQuestionAge => '3. What\'s your age range?';
-
-  @override
-  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
-
-  @override
-  String get continueButton => 'Continuar';
-
-  @override
-  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
-
-  @override
-  String get professionEntrepreneur => 'Entrepreneur';
-
-  @override
-  String get professionSoftwareEngineer => 'Software Engineer';
-
-  @override
-  String get professionProductManager => 'Product Manager';
-
-  @override
-  String get professionExecutive => 'Executive';
-
-  @override
-  String get professionSales => 'Sales';
-
-  @override
-  String get professionStudent => 'Student';
-
-  @override
-  String get usageAtWork => 'At work';
-
-  @override
-  String get usageIrlEvents => 'IRL Events';
-
-  @override
-  String get usageOnline => 'Online';
-
-  @override
-  String get usageSocialSettings => 'In Social Settings';
-
-  @override
-  String get usageEverywhere => 'Everywhere';
 
   @override
   String get photoLibrary => 'Biblioteca de fotos';
@@ -6444,6 +6295,111 @@ class AppLocalizationsCa extends AppLocalizations {
   String get device => 'Device';
 
   @override
+  String get chatAssistantsTitle => 'Assistents de xat';
+
+  @override
+  String get permissionReadConversations => 'Llegir converses';
+
+  @override
+  String get permissionReadMemories => 'Llegir records';
+
+  @override
+  String get permissionReadTasks => 'Llegir tasques';
+
+  @override
+  String get permissionCreateConversations => 'Crear converses';
+
+  @override
+  String get permissionCreateMemories => 'Crear records';
+
+  @override
+  String get permissionTypeAccess => 'Accés';
+
+  @override
+  String get permissionTypeCreate => 'Crear';
+
+  @override
+  String get permissionTypeTrigger => 'Disparador';
+
+  @override
+  String get permissionDescReadConversations => 'Aquesta app pot accedir a les teves converses.';
+
+  @override
+  String get permissionDescReadMemories => 'Aquesta app pot accedir als teus records.';
+
+  @override
+  String get permissionDescReadTasks => 'Aquesta app pot accedir a les teves tasques.';
+
+  @override
+  String get permissionDescCreateConversations => 'Aquesta app pot crear noves converses.';
+
+  @override
+  String get permissionDescCreateMemories => 'Aquesta app pot crear nous records.';
+
+  @override
+  String get realtimeListening => 'Escolta en temps real';
+
+  @override
+  String get setupCompleted => 'Completat';
+
+  @override
+  String get pleaseSelectRating => 'Si us plau, selecciona una valoració';
+
+  @override
+  String get writeReviewOptional => 'Escriu una ressenya (opcional)';
+
+  @override
+  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
+
+  @override
+  String get setupQuestionProfession => '1. What do you do?';
+
+  @override
+  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
+
+  @override
+  String get setupQuestionAge => '3. What\'s your age range?';
+
+  @override
+  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
+
+  @override
+  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
+
+  @override
+  String get professionEntrepreneur => 'Entrepreneur';
+
+  @override
+  String get professionSoftwareEngineer => 'Software Engineer';
+
+  @override
+  String get professionProductManager => 'Product Manager';
+
+  @override
+  String get professionExecutive => 'Executive';
+
+  @override
+  String get professionSales => 'Sales';
+
+  @override
+  String get professionStudent => 'Student';
+
+  @override
+  String get usageAtWork => 'At work';
+
+  @override
+  String get usageIrlEvents => 'IRL Events';
+
+  @override
+  String get usageOnline => 'Online';
+
+  @override
+  String get usageSocialSettings => 'In Social Settings';
+
+  @override
+  String get usageEverywhere => 'Everywhere';
+
+  @override
   String get customBackendUrlTitle => 'URL del servidor personalitzat';
 
   @override
@@ -6453,10 +6409,10 @@ class AppLocalizationsCa extends AppLocalizations {
   String get saveUrlButton => 'Desar URL';
 
   @override
-  String get enterBackendUrlError => 'Introduïu l'URL del servidor';
+  String get enterBackendUrlError => 'Introduïu l\'URL del servidor';
 
   @override
-  String get urlMustEndWithSlashError => 'L'URL ha d'acabar amb "/"';
+  String get urlMustEndWithSlashError => 'L\'URL ha d\'acabar amb \"/\"';
 
   @override
   String get invalidUrlError => 'Introduïu un URL vàlid';
@@ -6525,7 +6481,8 @@ class AppLocalizationsCa extends AppLocalizations {
   String get buildingKnowledgeGraphFromMemories => 'Construint el graf de coneixement a partir de records...';
 
   @override
-  String get knowledgeGraphWillBuildAutomatically => 'El graf de coneixement es construirà automàticament quan creïs nous records.';
+  String get knowledgeGraphWillBuildAutomatically =>
+      'El graf de coneixement es construirà automàticament quan creïs nous records.';
 
   @override
   String get buildGraphButton => 'Construir graf';
@@ -6548,7 +6505,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get submitReply => 'Enviar resposta';
 
   @override
-  String get editYourReply => 'Editar la teva resposta';
+  String get editYourReply => 'Editar resposta';
 
   @override
   String get replyToReview => 'Respondre a la ressenya';
@@ -6569,8 +6526,233 @@ class AppLocalizationsCa extends AppLocalizations {
   String get learnMoreLink => 'més informació';
 
   @override
-  String get installsCount => 'Instal·lacions';
+  String get moneyEarned => 'Diners guanyats';
 
   @override
-  String get moneyEarned => 'Diners guanyats';
+  String get writeYourReply => 'Write your reply...';
+
+  @override
+  String get replySentSuccessfully => 'Reply sent successfully';
+
+  @override
+  String failedToSendReply(String error) {
+    return 'Failed to send reply: $error';
+  }
+
+  @override
+  String get send => 'Send';
+
+  @override
+  String starFilter(int count) {
+    return '$count Star';
+  }
+
+  @override
+  String get noReviewsFound => 'No Reviews Found';
+
+  @override
+  String get editReply => 'Edit Reply';
+
+  @override
+  String get reply => 'Reply';
+
+  @override
+  String starFilterLabel(int count) {
+    return '$count estrella';
+  }
+
+  @override
+  String get sharePublicLink => 'Share Public Link';
+
+  @override
+  String get makePersonaPublic => 'Make Persona Public';
+
+  @override
+  String get connectedKnowledgeData => 'Connected Knowledge Data';
+
+  @override
+  String get enterName => 'Enter name';
+
+  @override
+  String get disconnectTwitter => 'Disconnect Twitter';
+
+  @override
+  String get disconnectTwitterConfirmation =>
+      'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
+
+  @override
+  String get getOmiDeviceDescription => 'Create a more accurate clone with your personal conversations';
+
+  @override
+  String get getOmi => 'Get Omi';
+
+  @override
+  String get iHaveOmiDevice => 'I have Omi device';
+
+  @override
+  String get goal => 'OBJECTIU';
+
+  @override
+  String get tapToTrackThisGoal => 'Toca per fer seguiment d\'aquest objectiu';
+
+  @override
+  String get tapToSetAGoal => 'Toca per establir un objectiu';
+
+  @override
+  String get processedConversations => 'Converses processades';
+
+  @override
+  String get updatedConversations => 'Converses actualitzades';
+
+  @override
+  String get newConversations => 'Noves converses';
+
+  @override
+  String get summaryTemplate => 'Plantilla de resum';
+
+  @override
+  String get suggestedTemplates => 'Plantilles suggerides';
+
+  @override
+  String get otherTemplates => 'Altres plantilles';
+
+  @override
+  String get availableTemplates => 'Plantilles disponibles';
+
+  @override
+  String get getCreative => 'Sigues creatiu';
+
+  @override
+  String get defaultLabel => 'Predeterminada';
+
+  @override
+  String get lastUsedLabel => 'Últim ús';
+
+  @override
+  String get setDefaultApp => 'Establir aplicació predeterminada';
+
+  @override
+  String setDefaultAppContent(String appName) {
+    return 'Establir $appName com la teva aplicació de resum predeterminada?\\n\\nAquesta aplicació s\'utilitzarà automàticament per a tots els resums de converses futures.';
+  }
+
+  @override
+  String get setDefaultButton => 'Establir predeterminada';
+
+  @override
+  String setAsDefaultSuccess(String appName) {
+    return '$appName establerta com a aplicació de resum predeterminada';
+  }
+
+  @override
+  String get createCustomTemplate => 'Crear plantilla personalitzada';
+
+  @override
+  String get allTemplates => 'Totes les plantilles';
+
+  @override
+  String failedToInstallApp(String appName) {
+    return 'Error en instal·lar $appName. Si us plau, torna-ho a provar.';
+  }
+
+  @override
+  String errorInstallingApp(String appName, String error) {
+    return 'Error en instal·lar $appName: $error';
+  }
+
+  @override
+  String tagSpeaker(int speakerId) {
+    return 'Tag Speaker $speakerId';
+  }
+
+  @override
+  String get personNameAlreadyExists => 'A person with this name already exists.';
+
+  @override
+  String get selectYouFromList => 'To tag yourself, please select \"You\" from the list.';
+
+  @override
+  String get enterPersonsName => 'Enter Person\'s Name';
+
+  @override
+  String get addPerson => 'Add Person';
+
+  @override
+  String tagOtherSegmentsFromSpeaker(int selected, int total) {
+    return 'Tag other segments from this speaker ($selected/$total)';
+  }
+
+  @override
+  String get tagOtherSegments => 'Tag other segments';
+
+  @override
+  String get managePeople => 'Manage People';
+
+  @override
+  String get shareViaSms => 'Comparteix via SMS';
+
+  @override
+  String get selectContactsToShareSummary => 'Selecciona contactes per compartir el resum de la conversa';
+
+  @override
+  String get searchContactsHint => 'Cerca contactes...';
+
+  @override
+  String contactsSelectedCount(int count) {
+    return '$count seleccionats';
+  }
+
+  @override
+  String get clearAllSelection => 'Esborra tot';
+
+  @override
+  String get selectContactsToShare => 'Selecciona contactes per compartir';
+
+  @override
+  String shareWithContactCount(int count) {
+    return 'Comparteix amb $count contacte';
+  }
+
+  @override
+  String shareWithContactsCount(int count) {
+    return 'Comparteix amb $count contactes';
+  }
+
+  @override
+  String get contactsPermissionRequired => 'Es requereix permís de contactes';
+
+  @override
+  String get contactsPermissionRequiredForSms => 'Es requereix permís de contactes per compartir via SMS';
+
+  @override
+  String get grantContactsPermissionForSms => 'Si us plau, concedeix permís de contactes per compartir via SMS';
+
+  @override
+  String get noContactsWithPhoneNumbers => 'No s\'han trobat contactes amb números de telèfon';
+
+  @override
+  String get noContactsMatchSearch => 'Cap contacte coincideix amb la cerca';
+
+  @override
+  String get failedToLoadContacts => 'Error en carregar els contactes';
+
+  @override
+  String get failedToPrepareConversationForSharing =>
+      'Error en preparar la conversa per compartir. Si us plau, torna-ho a provar.';
+
+  @override
+  String get couldNotOpenSmsApp => 'No s\'ha pogut obrir l\'aplicació de SMS. Si us plau, torna-ho a provar.';
+
+  @override
+  String heresWhatWeDiscussed(String link) {
+    return 'Aquí tens el que hem parlat: $link';
+  }
+
+  @override
+  String get wifiSync => 'Sincronització WiFi';
+
+  @override
+  String itemCopiedToClipboard(String item) {
+    return '$item copiat al porta-retalls';
+  }
 }

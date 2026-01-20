@@ -357,7 +357,7 @@
   "permissionRevokedTitle": "Engedély visszavonva",
   "permissionRevokedMessage": "Szeretnéd, hogy az összes meglévő felvételedet is töröljük?",
   "yes": "Igen",
-  "editName": "Név szerkesztése",
+  "editName": "Edit Name",
   "howShouldOmiCallYou": "Hogyan szólítson az Omi?",
   "enterYourName": "Adja meg a nevét",
   "nameCannotBeEmpty": "A név nem lehet üres",
@@ -988,7 +988,7 @@
   "help": "Súgó",
   "pro": "Pro",
   "upgradeToPro": "Frissítés Pro-ra",
-  "getOmiDevice": "Szerezzen be Omi eszközt",
+  "getOmiDevice": "Get Omi Device",
   "wearableAiCompanion": "Hordható AI társ",
   "loadingMemories": "Emlékek betöltése...",
   "allMemories": "Összes emlék",
@@ -1168,7 +1168,7 @@
   "selectTime": "Időpont választása",
   "accountGroup": "Fiók",
   "signOutQuestion": "Kijelentkezik?",
-  "signOutConfirmation": "Biztosan ki szeretne jelentkezni?",
+  "signOutConfirmation": "Are you sure you want to sign out?",
   "customVocabularyHeader": "EGYÉNI SZÓKINCS",
   "addWordsDescription": "Adjon hozzá szavakat, amelyeket az Ominek fel kell ismernie az átírás során.",
   "enterWordsHint": "Adjon meg szavakat (vesszővel elválasztva)",
@@ -2034,5 +2034,119 @@
   "cantRateWithoutInternet": "Nem lehet értékelni internetkapcsolat nélkül.",
   "appAnalytics": "Alkalmazás elemzés",
   "learnMoreLink": "tudj meg többet",
-  "moneyEarned": "Keresett pénz"
+  "moneyEarned": "Keresett pénz",
+  "starFilterLabel": "{count} csillag",
+  "@starFilterLabel": {
+    "description": "Filter chip label for star rating",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sharePublicLink": "Share Public Link",
+  "makePersonaPublic": "Make Persona Public",
+  "connectedKnowledgeData": "Connected Knowledge Data",
+  "enterName": "Enter name",
+  "disconnectTwitter": "Disconnect Twitter",
+  "disconnectTwitterConfirmation": "Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.",
+  "getOmiDeviceDescription": "Create a more accurate clone with your personal conversations",
+  "getOmi": "Get Omi",
+  "iHaveOmiDevice": "I have Omi device",
+  "goal": "CÉL",
+  "tapToTrackThisGoal": "Érintse meg a cél követéséhez",
+  "tapToSetAGoal": "Érintse meg egy cél beállításához",
+  "processedConversations": "Feldolgozott beszélgetések",
+  "updatedConversations": "Frissített beszélgetések",
+  "newConversations": "Új beszélgetések",
+  "summaryTemplate": "Összefoglaló sablon",
+  "suggestedTemplates": "Javasolt sablonok",
+  "otherTemplates": "Egyéb sablonok",
+  "availableTemplates": "Elérhető sablonok",
+  "getCreative": "Légy kreatív",
+  "defaultLabel": "Alapértelmezett",
+  "lastUsedLabel": "Utoljára használt",
+  "setDefaultApp": "Alapértelmezett alkalmazás beállítása",
+  "setDefaultAppContent": "Beállítja a(z) {appName} alkalmazást alapértelmezett összefoglaló alkalmazásként?\\n\\nEz az alkalmazás automatikusan használva lesz minden jövőbeli beszélgetés összefoglalásához.",
+  "@setDefaultAppContent": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "setDefaultButton": "Beállítás alapértelmezettként",
+  "setAsDefaultSuccess": "A(z) {appName} beállítva alapértelmezett összefoglaló alkalmazásként",
+  "@setAsDefaultSuccess": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "createCustomTemplate": "Egyéni sablon létrehozása",
+  "allTemplates": "Összes sablon",
+  "failedToInstallApp": "A(z) {appName} telepítése sikertelen. Kérjük, próbálja újra.",
+  "@failedToInstallApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "errorInstallingApp": "Hiba a(z) {appName} telepítésekor: {error}",
+  "@errorInstallingApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tagSpeaker": "Tag Speaker {speakerId}",
+  "@tagSpeaker": {
+    "placeholders": {
+      "speakerId": {
+        "type": "int"
+      }
+    }
+  },
+  "personNameAlreadyExists": "A person with this name already exists.",
+  "selectYouFromList": "To tag yourself, please select \"You\" from the list.",
+  "enterPersonsName": "Enter Person's Name",
+  "addPerson": "Add Person",
+  "tagOtherSegmentsFromSpeaker": "Tag other segments from this speaker ({selected}/{total})",
+  "@tagOtherSegmentsFromSpeaker": {
+    "placeholders": {
+      "selected": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "tagOtherSegments": "Tag other segments",
+  "managePeople": "Manage People",
+  "shareViaSms": "Megosztás SMS-ben",
+  "selectContactsToShareSummary": "Válasszon névjegyeket a beszélgetés összefoglalójának megosztásához",
+  "searchContactsHint": "Névjegyek keresése...",
+  "contactsSelectedCount": "{count} kiválasztva",
+  "clearAllSelection": "Összes törlése",
+  "selectContactsToShare": "Válasszon névjegyeket a megosztáshoz",
+  "shareWithContactCount": "Megosztás {count} névjeggyel",
+  "shareWithContactsCount": "Megosztás {count} névjeggyel",
+  "contactsPermissionRequired": "Névjegyengedély szükséges",
+  "contactsPermissionRequiredForSms": "Az SMS-ben való megosztáshoz névjegyengedély szükséges",
+  "grantContactsPermissionForSms": "Kérjük, adja meg a névjegyengedélyt az SMS-ben való megosztáshoz",
+  "noContactsWithPhoneNumbers": "Nem találhatók telefonszámmal rendelkező névjegyek",
+  "noContactsMatchSearch": "Nincs a keresésnek megfelelő névjegy",
+  "failedToLoadContacts": "A névjegyek betöltése sikertelen",
+  "failedToPrepareConversationForSharing": "A beszélgetés előkészítése a megosztáshoz sikertelen. Kérjük, próbálja újra.",
+  "couldNotOpenSmsApp": "Az SMS alkalmazás nem nyitható meg. Kérjük, próbálja újra.",
+  "heresWhatWeDiscussed": "Íme, amiről épp beszéltünk: {link}",
+  "wifiSync": "WiFi szinkronizálás",
+  "itemCopiedToClipboard": "{item} másolva a vágólapra"
 }

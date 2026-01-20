@@ -357,7 +357,7 @@
   "permissionRevokedTitle": "Разрешението е оттеглено",
   "permissionRevokedMessage": "Искате ли да премахнем и всички ваши съществуващи записи?",
   "yes": "Да",
-  "editName": "Редактирай име",
+  "editName": "Edit Name",
   "howShouldOmiCallYou": "Как Omi да ви нарича?",
   "enterYourName": "Въведете вашето име",
   "nameCannotBeEmpty": "Името не може да бъде празно",
@@ -1006,7 +1006,7 @@
   "help": "Помощ",
   "pro": "Pro",
   "upgradeToPro": "Надграждане до Pro",
-  "getOmiDevice": "Получете устройство Omi",
+  "getOmiDevice": "Get Omi Device",
   "wearableAiCompanion": "Носим AI спътник",
   "loadingMemories": "Зареждане на спомени...",
   "allMemories": "Всички спомени",
@@ -1170,7 +1170,7 @@
   "selectTime": "Изберете час",
   "accountGroup": "Акаунт",
   "signOutQuestion": "Изход?",
-  "signOutConfirmation": "Сигурни ли сте, че искате да излезете?",
+  "signOutConfirmation": "Are you sure you want to sign out?",
   "customVocabularyHeader": "ПЕРСОНАЛИЗИРАН РЕЧНИК",
   "addWordsDescription": "Добавете думи, които Omi трябва да разпознава по време на транскрипция.",
   "enterWordsHint": "Въведете думи (разделени със запетая)",
@@ -2017,5 +2017,119 @@
   "cantRateWithoutInternet": "Не може да оценявате приложението без интернет връзка.",
   "appAnalytics": "Анализ на приложението",
   "learnMoreLink": "научете повече",
-  "moneyEarned": "Спечелени пари"
+  "moneyEarned": "Спечелени пари",
+  "starFilterLabel": "{count} звезда",
+  "@starFilterLabel": {
+    "description": "Filter chip label for star rating",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sharePublicLink": "Share Public Link",
+  "makePersonaPublic": "Make Persona Public",
+  "connectedKnowledgeData": "Connected Knowledge Data",
+  "enterName": "Enter name",
+  "disconnectTwitter": "Disconnect Twitter",
+  "disconnectTwitterConfirmation": "Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.",
+  "getOmiDeviceDescription": "Create a more accurate clone with your personal conversations",
+  "getOmi": "Get Omi",
+  "iHaveOmiDevice": "I have Omi device",
+  "goal": "ЦЕЛ",
+  "tapToTrackThisGoal": "Докоснете, за да проследите тази цел",
+  "tapToSetAGoal": "Докоснете, за да зададете цел",
+  "processedConversations": "Обработени разговори",
+  "updatedConversations": "Актуализирани разговори",
+  "newConversations": "Нови разговори",
+  "summaryTemplate": "Шаблон за резюме",
+  "suggestedTemplates": "Предложени шаблони",
+  "otherTemplates": "Други шаблони",
+  "availableTemplates": "Налични шаблони",
+  "getCreative": "Бъдете креативни",
+  "defaultLabel": "По подразбиране",
+  "lastUsedLabel": "Последно използван",
+  "setDefaultApp": "Задаване на приложение по подразбиране",
+  "setDefaultAppContent": "Да зададем {appName} като ваше приложение за обобщаване по подразбиране?\\n\\nТова приложение ще се използва автоматично за всички бъдещи резюмета на разговори.",
+  "@setDefaultAppContent": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "setDefaultButton": "Задай по подразбиране",
+  "setAsDefaultSuccess": "{appName} е зададено като приложение за обобщаване по подразбиране",
+  "@setAsDefaultSuccess": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "createCustomTemplate": "Създаване на персонализиран шаблон",
+  "allTemplates": "Всички шаблони",
+  "failedToInstallApp": "Неуспешно инсталиране на {appName}. Моля, опитайте отново.",
+  "@failedToInstallApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "errorInstallingApp": "Грешка при инсталиране на {appName}: {error}",
+  "@errorInstallingApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tagSpeaker": "Tag Speaker {speakerId}",
+  "@tagSpeaker": {
+    "placeholders": {
+      "speakerId": {
+        "type": "int"
+      }
+    }
+  },
+  "personNameAlreadyExists": "A person with this name already exists.",
+  "selectYouFromList": "To tag yourself, please select \"You\" from the list.",
+  "enterPersonsName": "Enter Person's Name",
+  "addPerson": "Add Person",
+  "tagOtherSegmentsFromSpeaker": "Tag other segments from this speaker ({selected}/{total})",
+  "@tagOtherSegmentsFromSpeaker": {
+    "placeholders": {
+      "selected": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "tagOtherSegments": "Tag other segments",
+  "managePeople": "Manage People",
+  "shareViaSms": "Споделяне чрез SMS",
+  "selectContactsToShareSummary": "Изберете контакти за споделяне на обобщението на разговора",
+  "searchContactsHint": "Търсене на контакти...",
+  "contactsSelectedCount": "{count} избрани",
+  "clearAllSelection": "Изчисти всичко",
+  "selectContactsToShare": "Изберете контакти за споделяне",
+  "shareWithContactCount": "Споделяне с {count} контакт",
+  "shareWithContactsCount": "Споделяне с {count} контакта",
+  "contactsPermissionRequired": "Изисква се разрешение за контакти",
+  "contactsPermissionRequiredForSms": "За споделяне чрез SMS е необходимо разрешение за контакти",
+  "grantContactsPermissionForSms": "Моля, дайте разрешение за контакти за споделяне чрез SMS",
+  "noContactsWithPhoneNumbers": "Не са намерени контакти с телефонни номера",
+  "noContactsMatchSearch": "Няма контакти, съответстващи на търсенето",
+  "failedToLoadContacts": "Неуспешно зареждане на контакти",
+  "failedToPrepareConversationForSharing": "Неуспешна подготовка на разговора за споделяне. Моля, опитайте отново.",
+  "couldNotOpenSmsApp": "Не можа да се отвори SMS приложението. Моля, опитайте отново.",
+  "heresWhatWeDiscussed": "Ето какво обсъдихме: {link}",
+  "wifiSync": "WiFi синхронизация",
+  "itemCopiedToClipboard": "{item} копирано в клипборда"
 }

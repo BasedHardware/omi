@@ -357,7 +357,7 @@
   "permissionRevokedTitle": "Toestemming ingetrokken",
   "permissionRevokedMessage": "Wil je dat we ook al je bestaande opnames verwijderen?",
   "yes": "Ja",
-  "editName": "Naam bewerken",
+  "editName": "Edit Name",
   "howShouldOmiCallYou": "Hoe moet Omi je noemen?",
   "enterYourName": "Voer uw naam in",
   "nameCannotBeEmpty": "Naam mag niet leeg zijn",
@@ -988,7 +988,7 @@
   "help": "Hulp",
   "pro": "Pro",
   "upgradeToPro": "Upgraden naar Pro",
-  "getOmiDevice": "Ontvang Omi-apparaat",
+  "getOmiDevice": "Get Omi Device",
   "wearableAiCompanion": "Draagbare AI-metgezel",
   "loadingMemories": "Herinneringen laden...",
   "allMemories": "Alle herinneringen",
@@ -1168,7 +1168,7 @@
   "selectTime": "Tijd selecteren",
   "accountGroup": "Account",
   "signOutQuestion": "Uitloggen?",
-  "signOutConfirmation": "Weet je zeker dat je wilt uitloggen?",
+  "signOutConfirmation": "Are you sure you want to sign out?",
   "customVocabularyHeader": "AANGEPASTE WOORDENSCHAT",
   "addWordsDescription": "Voeg woorden toe die Omi moet herkennen tijdens transcriptie.",
   "enterWordsHint": "Voer woorden in (kommagescheiden)",
@@ -2034,5 +2034,119 @@
   "cantRateWithoutInternet": "Kan app niet beoordelen zonder internetverbinding.",
   "appAnalytics": "App-analyse",
   "learnMoreLink": "meer informatie",
-  "moneyEarned": "Verdiend geld"
+  "moneyEarned": "Verdiend geld",
+  "starFilterLabel": "{count} ster",
+  "@starFilterLabel": {
+    "description": "Filter chip label for star rating",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sharePublicLink": "Share Public Link",
+  "makePersonaPublic": "Make Persona Public",
+  "connectedKnowledgeData": "Connected Knowledge Data",
+  "enterName": "Enter name",
+  "disconnectTwitter": "Disconnect Twitter",
+  "disconnectTwitterConfirmation": "Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.",
+  "getOmiDeviceDescription": "Create a more accurate clone with your personal conversations",
+  "getOmi": "Get Omi",
+  "iHaveOmiDevice": "I have Omi device",
+  "goal": "DOEL",
+  "tapToTrackThisGoal": "Tik om dit doel te volgen",
+  "tapToSetAGoal": "Tik om een doel in te stellen",
+  "processedConversations": "Verwerkte gesprekken",
+  "updatedConversations": "Bijgewerkte gesprekken",
+  "newConversations": "Nieuwe gesprekken",
+  "summaryTemplate": "Samenvattingssjabloon",
+  "suggestedTemplates": "Voorgestelde sjablonen",
+  "otherTemplates": "Andere sjablonen",
+  "availableTemplates": "Beschikbare sjablonen",
+  "getCreative": "Wees creatief",
+  "defaultLabel": "Standaard",
+  "lastUsedLabel": "Laatst gebruikt",
+  "setDefaultApp": "Standaardapp instellen",
+  "setDefaultAppContent": "{appName} instellen als je standaard samenvattingsapp?\\n\\nDeze app wordt automatisch gebruikt voor alle toekomstige gesprekssamenvattingen.",
+  "@setDefaultAppContent": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "setDefaultButton": "Als standaard instellen",
+  "setAsDefaultSuccess": "{appName} ingesteld als standaard samenvattingsapp",
+  "@setAsDefaultSuccess": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "createCustomTemplate": "Aangepast sjabloon maken",
+  "allTemplates": "Alle sjablonen",
+  "failedToInstallApp": "Installatie van {appName} mislukt. Probeer het opnieuw.",
+  "@failedToInstallApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "errorInstallingApp": "Fout bij installeren van {appName}: {error}",
+  "@errorInstallingApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tagSpeaker": "Tag Speaker {speakerId}",
+  "@tagSpeaker": {
+    "placeholders": {
+      "speakerId": {
+        "type": "int"
+      }
+    }
+  },
+  "personNameAlreadyExists": "A person with this name already exists.",
+  "selectYouFromList": "To tag yourself, please select \"You\" from the list.",
+  "enterPersonsName": "Enter Person's Name",
+  "addPerson": "Add Person",
+  "tagOtherSegmentsFromSpeaker": "Tag other segments from this speaker ({selected}/{total})",
+  "@tagOtherSegmentsFromSpeaker": {
+    "placeholders": {
+      "selected": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "tagOtherSegments": "Tag other segments",
+  "managePeople": "Manage People",
+  "shareViaSms": "Delen via SMS",
+  "selectContactsToShareSummary": "Selecteer contacten om je gesprekssamenvatting te delen",
+  "searchContactsHint": "Contacten zoeken...",
+  "contactsSelectedCount": "{count} geselecteerd",
+  "clearAllSelection": "Alles wissen",
+  "selectContactsToShare": "Selecteer contacten om te delen",
+  "shareWithContactCount": "Delen met {count} contact",
+  "shareWithContactsCount": "Delen met {count} contacten",
+  "contactsPermissionRequired": "Contactentoestemming vereist",
+  "contactsPermissionRequiredForSms": "Contactentoestemming is vereist om via SMS te delen",
+  "grantContactsPermissionForSms": "Geef contactentoestemming om via SMS te delen",
+  "noContactsWithPhoneNumbers": "Geen contacten met telefoonnummers gevonden",
+  "noContactsMatchSearch": "Geen contacten komen overeen met uw zoekopdracht",
+  "failedToLoadContacts": "Kan contacten niet laden",
+  "failedToPrepareConversationForSharing": "Kan gesprek niet voorbereiden om te delen. Probeer het opnieuw.",
+  "couldNotOpenSmsApp": "Kan SMS-app niet openen. Probeer het opnieuw.",
+  "heresWhatWeDiscussed": "Hier is waar we net over spraken: {link}",
+  "wifiSync": "WiFi-synchronisatie",
+  "itemCopiedToClipboard": "{item} gekopieerd naar klembord"
 }
