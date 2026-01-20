@@ -2321,5 +2321,7 @@
   "transcriptionSourceOmi": "Omi",
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "फ़ाइल पिकर खोलने में त्रुटि: {message}",
-  "importErrorGeneric": "त्रुटि: {error}"
+  "importErrorGeneric": "त्रुटि: {error}",
+  "notificationMergeSuccessTitle": "बातचीत सफलतापूर्वक मर्ज हो गई",
+  "notificationMergeSuccessBody": "{count} बातचीत सफलतापूर्वक मर्ज हो गई हैं"
 }

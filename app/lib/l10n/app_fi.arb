@@ -2320,5 +2320,7 @@
   "transcriptionSourceOmi": "Omi",
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "Virhe tiedostonvalitsimen avaamisessa: {message}",
-  "importErrorGeneric": "Virhe: {error}"
+  "importErrorGeneric": "Virhe: {error}",
+  "notificationMergeSuccessTitle": "Keskustelut yhdistetty onnistuneesti",
+  "notificationMergeSuccessBody": "{count} keskustelua on yhdistetty onnistuneesti"
 }

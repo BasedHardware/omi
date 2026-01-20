@@ -9010,5 +9010,19 @@
         "example": "Unknown error"
       }
     }
+  },
+  "notificationMergeSuccessTitle": "Conversations Merged Successfully",
+  "@notificationMergeSuccessTitle": {
+    "description": "Notification title when conversations have been merged successfully"
+  },
+  "notificationMergeSuccessBody": "{count} conversations have been merged successfully",
+  "@notificationMergeSuccessBody": {
+    "description": "Notification body for merge success",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
   }
 }

@@ -2321,5 +2321,7 @@
   "transcriptionSourceOmi": "Omi",
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "Error al abrir el selector de archivos: {message}",
-  "importErrorGeneric": "Error: {error}"
+  "importErrorGeneric": "Error: {error}",
+  "notificationMergeSuccessTitle": "Conversaciones fusionadas exitosamente",
+  "notificationMergeSuccessBody": "{count} conversaciones han sido fusionadas exitosamente"
 }

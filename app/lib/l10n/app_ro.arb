@@ -2320,5 +2320,7 @@
   "transcriptionSourceOmi": "Omi",
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "Eroare la deschiderea selectorului de fișiere: {message}",
-  "importErrorGeneric": "Eroare: {error}"
+  "importErrorGeneric": "Eroare: {error}",
+  "notificationMergeSuccessTitle": "Conversațiile au fost unite cu succes",
+  "notificationMergeSuccessBody": "{count} conversații au fost unite cu succes"
 }

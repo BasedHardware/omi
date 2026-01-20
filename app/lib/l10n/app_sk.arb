@@ -2320,5 +2320,7 @@
   "transcriptionSourceOmi": "Omi",
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "Chyba pri otváraní výberu súborov: {message}",
-  "importErrorGeneric": "Chyba: {error}"
+  "importErrorGeneric": "Chyba: {error}",
+  "notificationMergeSuccessTitle": "Konverzácie úspešne zlúčené",
+  "notificationMergeSuccessBody": "{count} konverzácií bolo úspešne zlúčených"
 }

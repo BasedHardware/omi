@@ -10,10 +10,10 @@
 |--------|-------|
 | Total Files | 27 |
 | Total Strings | ~125 |
-| Completed | 14 |
+| Completed | 15 |
 | In Progress | 0 |
-| Pending | 13 |
-| Progress | 52% |
+| Pending | 12 |
+| Progress | 56% |
 
 **CRITICAL ISSUE**: ~162 pre-existing l10n keys in non-English ARB files still contain
 English text instead of proper translations. See PRIORITY 0 section below.
@@ -141,11 +141,12 @@ Ran flutter gen-l10n and verified with test.sh.
 ## PRIORITY 3: NOTIFICATIONS & SERVICES (~10 strings)
 ================================================================================
 
-### [ ] services/notifications/merge_notification_handler.dart (2 strings)
-Status: PENDING
-Strings:
-- [ ] Line 85: 'Conversations Merged Successfully' (notification title)
-- [ ] Line 86: '... conversations have been merged successfully' (notification body with param)
+### [x] services/notifications/merge_notification_handler.dart (2 strings)
+Status: COMPLETED
+Note: Added 2 new l10n keys to all 34 language ARB files and updated the Dart file to use
+MyApp.navigatorKey.currentContext?.l10n pattern with English fallback. Keys added:
+notificationMergeSuccessTitle, notificationMergeSuccessBody (with {count} placeholder).
+Uses the same pattern as important_conversation_notification_handler.dart for background notifications.
 
 ### [ ] services/notifications/daily_reflection_notification.dart (2 strings)
 Status: PENDING
@@ -217,6 +218,12 @@ Strings:
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-20] Localized merge_notification_handler.dart
+- Added 2 new l10n keys to all 34 language ARB files with proper translations
+- Keys: notificationMergeSuccessTitle, notificationMergeSuccessBody (with {count} placeholder)
+- Updated Dart file to use MyApp.navigatorKey.currentContext?.l10n pattern with English fallback
+- Pattern matches existing important_conversation_notification_handler.dart for consistency
 
 [2026-01-20] Localized app_detail.dart
 - Reused existing l10n key `errorWithMessage` with `{error}` placeholder

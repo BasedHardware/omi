@@ -2320,5 +2320,7 @@
   "transcriptionSourceOmi": "Omi",
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "Lỗi khi mở trình chọn tệp: {message}",
-  "importErrorGeneric": "Lỗi: {error}"
+  "importErrorGeneric": "Lỗi: {error}",
+  "notificationMergeSuccessTitle": "Hợp nhất cuộc trò chuyện thành công",
+  "notificationMergeSuccessBody": "{count} cuộc trò chuyện đã được hợp nhất thành công"
 }

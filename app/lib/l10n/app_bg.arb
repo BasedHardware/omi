@@ -2303,5 +2303,7 @@
   "transcriptionSourceOmi": "Omi",
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "Грешка при отваряне на избирача на файлове: {message}",
-  "importErrorGeneric": "Грешка: {error}"
+  "importErrorGeneric": "Грешка: {error}",
+  "notificationMergeSuccessTitle": "Разговорите са обединени успешно",
+  "notificationMergeSuccessBody": "{count} разговора са обединени успешно"
 }

@@ -2302,5 +2302,7 @@
   "transcriptionSourceOmi": "Omi",
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "Fehler beim Öffnen der Dateiauswahl: {message}",
-  "importErrorGeneric": "Fehler: {error}"
+  "importErrorGeneric": "Fehler: {error}",
+  "notificationMergeSuccessTitle": "Gespräche erfolgreich zusammengeführt",
+  "notificationMergeSuccessBody": "{count} Gespräche wurden erfolgreich zusammengeführt"
 }

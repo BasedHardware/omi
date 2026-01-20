@@ -61,7 +61,7 @@ The app uses Flutter's ARB-based localization system (`context.l10n.keyName`). W
 
 | File | Strings | Description |
 |------|---------|-------------|
-| `services/notifications/merge_notification_handler.dart` | 2 | Merge notification |
+| `services/notifications/merge_notification_handler.dart` | 2 | Merge notification - **DONE** |
 | `services/notifications/daily_reflection_notification.dart` | 2 | Daily reflection notification |
 | `services/notifications/action_item_notification_handler.dart` | 1 | Reminder notification |
 | `services/devices/device_connection.dart` | 2 | Device disconnect notification |

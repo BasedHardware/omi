@@ -2320,5 +2320,7 @@
   "transcriptionSourceOmi": "Omi",
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "Feil ved åpning av filvelger: {message}",
-  "importErrorGeneric": "Feil: {error}"
+  "importErrorGeneric": "Feil: {error}",
+  "notificationMergeSuccessTitle": "Samtaler slått sammen",
+  "notificationMergeSuccessBody": "{count} samtaler har blitt slått sammen"
 }

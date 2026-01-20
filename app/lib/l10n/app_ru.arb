@@ -2320,5 +2320,7 @@
   "transcriptionSourceOmi": "Omi",
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "Ошибка при открытии выбора файлов: {message}",
-  "importErrorGeneric": "Ошибка: {error}"
+  "importErrorGeneric": "Ошибка: {error}",
+  "notificationMergeSuccessTitle": "Разговоры успешно объединены",
+  "notificationMergeSuccessBody": "{count} разговоров успешно объединены"
 }

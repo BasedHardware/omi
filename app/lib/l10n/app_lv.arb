@@ -2320,5 +2320,7 @@
   "transcriptionSourceOmi": "Omi",
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "Kļūda atverot failu izvēlētāju: {message}",
-  "importErrorGeneric": "Kļūda: {error}"
+  "importErrorGeneric": "Kļūda: {error}",
+  "notificationMergeSuccessTitle": "Sarunas veiksmīgi apvienotas",
+  "notificationMergeSuccessBody": "{count} sarunas ir veiksmīgi apvienotas"
 }

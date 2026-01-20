@@ -2320,5 +2320,7 @@
   "transcriptionSourceOmi": "Omi",
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "Fout bij openen bestandskiezer: {message}",
-  "importErrorGeneric": "Fout: {error}"
+  "importErrorGeneric": "Fout: {error}",
+  "notificationMergeSuccessTitle": "Gesprekken succesvol samengevoegd",
+  "notificationMergeSuccessBody": "{count} gesprekken zijn succesvol samengevoegd"
 }

@@ -2280,5 +2280,7 @@
   "transcriptionSourceOmi": "Omi",
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "Chyba při otevírání výběru souborů: {message}",
-  "importErrorGeneric": "Chyba: {error}"
+  "importErrorGeneric": "Chyba: {error}",
+  "notificationMergeSuccessTitle": "Konverzace úspěšně sloučeny",
+  "notificationMergeSuccessBody": "{count} konverzací bylo úspěšně sloučeno"
 }

@@ -2321,5 +2321,7 @@
   "transcriptionSourceOmi": "Omi",
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "打开文件选择器时出错：{message}",
-  "importErrorGeneric": "错误：{error}"
+  "importErrorGeneric": "错误：{error}",
+  "notificationMergeSuccessTitle": "对话合并成功",
+  "notificationMergeSuccessBody": "{count} 个对话已成功合并"
 }

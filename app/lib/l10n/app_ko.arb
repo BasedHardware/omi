@@ -2320,5 +2320,7 @@
   "transcriptionSourceOmi": "Omi",
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "파일 선택기를 여는 중 오류 발생: {message}",
-  "importErrorGeneric": "오류: {error}"
+  "importErrorGeneric": "오류: {error}",
+  "notificationMergeSuccessTitle": "대화가 성공적으로 병합되었습니다",
+  "notificationMergeSuccessBody": "{count}개의 대화가 성공적으로 병합되었습니다"
 }

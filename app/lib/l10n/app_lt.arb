@@ -2320,5 +2320,7 @@
   "transcriptionSourceOmi": "Omi",
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "Klaida atidarant failų pasirinkiklį: {message}",
-  "importErrorGeneric": "Klaida: {error}"
+  "importErrorGeneric": "Klaida: {error}",
+  "notificationMergeSuccessTitle": "Pokalbiai sėkmingai sujungti",
+  "notificationMergeSuccessBody": "{count} pokalbiai sėkmingai sujungti"
 }

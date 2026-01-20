@@ -2301,5 +2301,7 @@
   "transcriptionSourceOmi": "Omi",
   "pricePlaceholder": "0.00",
   "importErrorOpeningFilePicker": "خطأ في فتح منتقي الملفات: {message}",
-  "importErrorGeneric": "خطأ: {error}"
+  "importErrorGeneric": "خطأ: {error}",
+  "notificationMergeSuccessTitle": "تم دمج المحادثات بنجاح",
+  "notificationMergeSuccessBody": "تم دمج {count} محادثات بنجاح"
 }
