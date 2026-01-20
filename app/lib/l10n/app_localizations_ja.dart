@@ -6403,4 +6403,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get replyToReview => 'レビューに返信';
+
+  @override
+  String get rateAndReviewThisApp => 'このアプリを評価してレビューする';
+
+  @override
+  String get noChangesInReview => '更新するレビューの変更はありません。';
+
+  @override
+  String get cantRateWithoutInternet => 'インターネット接続なしではアプリを評価できません。';
 }

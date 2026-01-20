@@ -6459,4 +6459,13 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get replyToReview => 'Відповісти на відгук';
+
+  @override
+  String get rateAndReviewThisApp => 'Оцініть і залиште відгук про цей додаток';
+
+  @override
+  String get noChangesInReview => 'Немає змін у відгуку для оновлення.';
+
+  @override
+  String get cantRateWithoutInternet => 'Неможливо оцінити додаток без підключення до інтернету.';
 }

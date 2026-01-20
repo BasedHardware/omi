@@ -6514,4 +6514,13 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get replyToReview => 'Vastaa arvosteluun';
+
+  @override
+  String get rateAndReviewThisApp => 'Arvioi ja arvostele tämä sovellus';
+
+  @override
+  String get noChangesInReview => 'Ei muutoksia arvostelussa päivitettäväksi.';
+
+  @override
+  String get cantRateWithoutInternet => 'Sovellusta ei voi arvioida ilman internetyhteyttä.';
 }

@@ -6531,4 +6531,13 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get replyToReview => 'Balas ulasan';
+
+  @override
+  String get rateAndReviewThisApp => 'Beri peringkat dan ulasan aplikasi ini';
+
+  @override
+  String get noChangesInReview => 'Tidak ada perubahan pada ulasan untuk diperbarui.';
+
+  @override
+  String get cantRateWithoutInternet => 'Tidak dapat menilai aplikasi tanpa koneksi internet.';
 }

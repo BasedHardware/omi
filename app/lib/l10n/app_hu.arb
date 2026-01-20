@@ -2028,5 +2028,8 @@
   "writeSomething": "Írjon valamit",
   "submitReply": "Válasz küldése",
   "editYourReply": "Válasz szerkesztése",
-  "replyToReview": "Válasz az értékelésre"
+  "replyToReview": "Válasz az értékelésre",
+  "rateAndReviewThisApp": "Értékeld és írd meg véleményed erről az alkalmazásról",
+  "noChangesInReview": "Nincs változás az értékelésben a frissítéshez.",
+  "cantRateWithoutInternet": "Nem lehet értékelni internetkapcsolat nélkül."
 }

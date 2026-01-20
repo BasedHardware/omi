@@ -2028,5 +2028,8 @@
   "writeSomething": "Uzrakstiet kaut ko",
   "submitReply": "Iesniegt atbildi",
   "editYourReply": "Rediģēt atbildi",
-  "replyToReview": "Atbildēt uz atsauksmi"
+  "replyToReview": "Atbildēt uz atsauksmi",
+  "rateAndReviewThisApp": "Novērtējiet un atsauciet šo lietotni",
+  "noChangesInReview": "Nav atsauksmes izmaiņu atjaunināšanai.",
+  "cantRateWithoutInternet": "Nevar novērtēt lietotni bez interneta savienojuma."
 }

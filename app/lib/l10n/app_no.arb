@@ -2028,5 +2028,8 @@
   "writeSomething": "Skriv noe",
   "submitReply": "Send svar",
   "editYourReply": "Rediger svaret ditt",
-  "replyToReview": "Svar på anmeldelse"
+  "replyToReview": "Svar på anmeldelse",
+  "rateAndReviewThisApp": "Vurder og anmeld denne appen",
+  "noChangesInReview": "Ingen endringer i anmeldelsen å oppdatere.",
+  "cantRateWithoutInternet": "Kan ikke vurdere appen uten internettforbindelse."
 }

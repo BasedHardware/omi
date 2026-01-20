@@ -2028,5 +2028,8 @@
   "writeSomething": "Γράψτε κάτι",
   "submitReply": "Υποβολή απάντησης",
   "editYourReply": "Επεξεργασία απάντησης",
-  "replyToReview": "Απάντηση στην κριτική"
+  "replyToReview": "Απάντηση στην κριτική",
+  "rateAndReviewThisApp": "Βαθμολογήστε και αξιολογήστε αυτή την εφαρμογή",
+  "noChangesInReview": "Δεν υπάρχουν αλλαγές στην κριτική για ενημέρωση.",
+  "cantRateWithoutInternet": "Δεν είναι δυνατή η βαθμολόγηση χωρίς σύνδεση στο διαδίκτυο."
 }

@@ -2028,5 +2028,8 @@
   "writeSomething": "Bir şeyler yazın",
   "submitReply": "Yanıt Gönder",
   "editYourReply": "Yanıtını Düzenle",
-  "replyToReview": "Yoruma Yanıt Ver"
+  "replyToReview": "Yoruma Yanıt Ver",
+  "rateAndReviewThisApp": "Bu uygulamayı değerlendirin ve yorum yazın",
+  "noChangesInReview": "Güncellenecek yorum değişikliği yok.",
+  "cantRateWithoutInternet": "İnternet bağlantısı olmadan uygulama değerlendirilemez."
 }

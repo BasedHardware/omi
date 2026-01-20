@@ -2028,5 +2028,8 @@
   "writeSomething": "เขียนบางอย่าง",
   "submitReply": "ส่งคำตอบ",
   "editYourReply": "แก้ไขคำตอบ",
-  "replyToReview": "ตอบกลับรีวิว"
+  "replyToReview": "ตอบกลับรีวิว",
+  "rateAndReviewThisApp": "ให้คะแนนและรีวิวแอปนี้",
+  "noChangesInReview": "ไม่มีการเปลี่ยนแปลงในรีวิวที่จะอัปเดต",
+  "cantRateWithoutInternet": "ไม่สามารถให้คะแนนแอปได้โดยไม่มีการเชื่อมต่ออินเทอร์เน็ต"
 }

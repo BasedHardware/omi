@@ -2028,5 +2028,8 @@
   "writeSomething": "내용을 입력하세요",
   "submitReply": "답글 제출",
   "editYourReply": "답글 수정",
-  "replyToReview": "리뷰에 답글"
+  "replyToReview": "리뷰에 답글",
+  "rateAndReviewThisApp": "이 앱을 평가하고 리뷰하세요",
+  "noChangesInReview": "업데이트할 리뷰 변경사항이 없습니다.",
+  "cantRateWithoutInternet": "인터넷 연결 없이는 앱을 평가할 수 없습니다."
 }

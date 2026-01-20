@@ -6526,4 +6526,13 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get replyToReview => 'Atbildēt uz atsauksmi';
+
+  @override
+  String get rateAndReviewThisApp => 'Novērtējiet un atsauciet šo lietotni';
+
+  @override
+  String get noChangesInReview => 'Nav atsauksmes izmaiņu atjaunināšanai.';
+
+  @override
+  String get cantRateWithoutInternet => 'Nevar novērtēt lietotni bez interneta savienojuma.';
 }

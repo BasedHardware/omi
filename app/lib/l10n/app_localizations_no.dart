@@ -6512,4 +6512,13 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get replyToReview => 'Svar på anmeldelse';
+
+  @override
+  String get rateAndReviewThisApp => 'Vurder og anmeld denne appen';
+
+  @override
+  String get noChangesInReview => 'Ingen endringer i anmeldelsen å oppdatere.';
+
+  @override
+  String get cantRateWithoutInternet => 'Kan ikke vurdere appen uten internettforbindelse.';
 }

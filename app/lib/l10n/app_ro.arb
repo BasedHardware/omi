@@ -2028,5 +2028,8 @@
   "writeSomething": "Scrie ceva",
   "submitReply": "Trimite răspuns",
   "editYourReply": "Editează răspunsul",
-  "replyToReview": "Răspunde la recenzie"
+  "replyToReview": "Răspunde la recenzie",
+  "rateAndReviewThisApp": "Evaluează și recenzează această aplicație",
+  "noChangesInReview": "Nu există modificări în recenzie de actualizat.",
+  "cantRateWithoutInternet": "Nu puteți evalua aplicația fără conexiune la internet."
 }

@@ -6393,4 +6393,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get replyToReview => '回复评价';
+
+  @override
+  String get rateAndReviewThisApp => '评分并评价此应用';
+
+  @override
+  String get noChangesInReview => '评论没有更改需要更新。';
+
+  @override
+  String get cantRateWithoutInternet => '没有网络连接无法评价应用。';
 }

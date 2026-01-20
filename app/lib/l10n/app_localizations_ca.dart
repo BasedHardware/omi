@@ -6552,4 +6552,13 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get replyToReview => 'Respondre a la ressenya';
+
+  @override
+  String get rateAndReviewThisApp => 'Valora i ressenya aquesta aplicació';
+
+  @override
+  String get noChangesInReview => 'No hi ha canvis a la ressenya per actualitzar.';
+
+  @override
+  String get cantRateWithoutInternet => 'No es pot valorar l\'aplicació sense connexió a Internet.';
 }

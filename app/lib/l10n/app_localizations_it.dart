@@ -6552,4 +6552,13 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get replyToReview => 'Rispondi alla recensione';
+
+  @override
+  String get rateAndReviewThisApp => 'Valuta e recensisci questa app';
+
+  @override
+  String get noChangesInReview => 'Nessuna modifica nella recensione da aggiornare.';
+
+  @override
+  String get cantRateWithoutInternet => 'Impossibile valutare l\'app senza connessione Internet.';
 }

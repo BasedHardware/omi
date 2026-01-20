@@ -2028,5 +2028,8 @@
   "writeSomething": "Skriv något",
   "submitReply": "Skicka svar",
   "editYourReply": "Redigera ditt svar",
-  "replyToReview": "Svara på recension"
+  "replyToReview": "Svara på recension",
+  "rateAndReviewThisApp": "Betygsätt och recensera den här appen",
+  "noChangesInReview": "Inga ändringar i recensionen att uppdatera.",
+  "cantRateWithoutInternet": "Kan inte betygsätta appen utan internetanslutning."
 }

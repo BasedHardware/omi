@@ -2028,5 +2028,8 @@
   "writeSomething": "Parašykite ką nors",
   "submitReply": "Siųsti atsakymą",
   "editYourReply": "Redaguoti atsakymą",
-  "replyToReview": "Atsakyti į atsiliepimą"
+  "replyToReview": "Atsakyti į atsiliepimą",
+  "rateAndReviewThisApp": "Įvertinkite ir peržiūrėkite šią programėlę",
+  "noChangesInReview": "Nėra atsiliepimo pakeitimų atnaujinti.",
+  "cantRateWithoutInternet": "Negalima įvertinti programėlės be interneto ryšio."
 }

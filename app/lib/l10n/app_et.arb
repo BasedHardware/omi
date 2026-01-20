@@ -2028,5 +2028,8 @@
   "writeSomething": "Kirjuta midagi",
   "submitReply": "Saada vastus",
   "editYourReply": "Muuda vastust",
-  "replyToReview": "Vasta arvustusele"
+  "replyToReview": "Vasta arvustusele",
+  "rateAndReviewThisApp": "Hinda ja arvusta seda rakendust",
+  "noChangesInReview": "Arvustuses pole muudatusi uuendamiseks.",
+  "cantRateWithoutInternet": "Ei saa rakendust hinnata ilma internetiühenduseta."
 }

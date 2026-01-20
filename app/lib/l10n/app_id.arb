@@ -2028,5 +2028,8 @@
   "writeSomething": "Tulis sesuatu",
   "submitReply": "Kirim Balasan",
   "editYourReply": "Edit Balasan Anda",
-  "replyToReview": "Balas Ulasan"
+  "replyToReview": "Balas Ulasan",
+  "rateAndReviewThisApp": "Beri peringkat dan ulasan aplikasi ini",
+  "noChangesInReview": "Tidak ada perubahan pada ulasan untuk diperbarui.",
+  "cantRateWithoutInternet": "Tidak dapat menilai aplikasi tanpa koneksi internet."
 }

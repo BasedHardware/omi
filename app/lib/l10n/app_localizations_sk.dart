@@ -6514,4 +6514,13 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get replyToReview => 'Odpovedať na recenziu';
+
+  @override
+  String get rateAndReviewThisApp => 'Ohodnoťte a recenzujte túto aplikáciu';
+
+  @override
+  String get noChangesInReview => 'Žiadne zmeny v recenzii na aktualizáciu.';
+
+  @override
+  String get cantRateWithoutInternet => 'Nemožno hodnotiť aplikáciu bez pripojenia na internet.';
 }

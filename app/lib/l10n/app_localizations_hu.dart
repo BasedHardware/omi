@@ -6545,4 +6545,13 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get replyToReview => 'Válasz az értékelésre';
+
+  @override
+  String get rateAndReviewThisApp => 'Értékeld és írd meg véleményed erről az alkalmazásról';
+
+  @override
+  String get noChangesInReview => 'Nincs változás az értékelésben a frissítéshez.';
+
+  @override
+  String get cantRateWithoutInternet => 'Nem lehet értékelni internetkapcsolat nélkül.';
 }

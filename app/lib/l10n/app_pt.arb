@@ -2029,5 +2029,8 @@
   "writeSomething": "Escreva algo",
   "submitReply": "Enviar resposta",
   "editYourReply": "Editar sua resposta",
-  "replyToReview": "Responder à avaliação"
+  "replyToReview": "Responder à avaliação",
+  "rateAndReviewThisApp": "Avalie e comente esta aplicação",
+  "noChangesInReview": "Sem alterações na avaliação para atualizar.",
+  "cantRateWithoutInternet": "Não é possível avaliar o app sem conexão com a Internet."
 }

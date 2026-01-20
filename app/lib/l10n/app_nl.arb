@@ -2028,5 +2028,8 @@
   "writeSomething": "Schrijf iets",
   "submitReply": "Antwoord verzenden",
   "editYourReply": "Antwoord bewerken",
-  "replyToReview": "Reageer op review"
+  "replyToReview": "Reageer op review",
+  "rateAndReviewThisApp": "Beoordeel en recenseer deze app",
+  "noChangesInReview": "Geen wijzigingen in de recensie om bij te werken.",
+  "cantRateWithoutInternet": "Kan app niet beoordelen zonder internetverbinding."
 }

@@ -7959,5 +7959,17 @@
   "replyToReview": "Reply To Review",
   "@replyToReview": {
     "description": "Button text to reply to a review"
+  },
+  "rateAndReviewThisApp": "Rate and Review this App",
+  "@rateAndReviewThisApp": {
+    "description": "Title prompting user to rate and review an app"
+  },
+  "noChangesInReview": "No changes in review to update.",
+  "@noChangesInReview": {
+    "description": "Message when user tries to submit an unchanged review"
+  },
+  "cantRateWithoutInternet": "Can't rate app without internet connection.",
+  "@cantRateWithoutInternet": {
+    "description": "Error message when trying to rate without internet"
   }
 }

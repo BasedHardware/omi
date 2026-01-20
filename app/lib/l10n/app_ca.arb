@@ -2011,5 +2011,8 @@
   "writeSomething": "Escriu alguna cosa",
   "submitReply": "Enviar resposta",
   "editYourReply": "Editar resposta",
-  "replyToReview": "Respondre a la ressenya"
+  "replyToReview": "Respondre a la ressenya",
+  "rateAndReviewThisApp": "Valora i ressenya aquesta aplicació",
+  "noChangesInReview": "No hi ha canvis a la ressenya per actualitzar.",
+  "cantRateWithoutInternet": "No es pot valorar l'aplicació sense connexió a Internet."
 }

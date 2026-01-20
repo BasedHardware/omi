@@ -6522,4 +6522,13 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get replyToReview => 'Svar på anmeldelse';
+
+  @override
+  String get rateAndReviewThisApp => 'Bedøm og anmeld denne app';
+
+  @override
+  String get noChangesInReview => 'Ingen ændringer i anmeldelsen at opdatere.';
+
+  @override
+  String get cantRateWithoutInternet => 'Kan ikke bedømme app uden internetforbindelse.';
 }

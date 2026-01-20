@@ -2028,5 +2028,8 @@
   "writeSomething": "Napíšte niečo",
   "submitReply": "Odoslať odpoveď",
   "editYourReply": "Upraviť odpoveď",
-  "replyToReview": "Odpovedať na recenziu"
+  "replyToReview": "Odpovedať na recenziu",
+  "rateAndReviewThisApp": "Ohodnoťte a recenzujte túto aplikáciu",
+  "noChangesInReview": "Žiadne zmeny v recenzii na aktualizáciu.",
+  "cantRateWithoutInternet": "Nemožno hodnotiť aplikáciu bez pripojenia na internet."
 }

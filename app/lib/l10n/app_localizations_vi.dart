@@ -6523,4 +6523,13 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get replyToReview => 'Trả lời đánh giá';
+
+  @override
+  String get rateAndReviewThisApp => 'Đánh giá và viết nhận xét ứng dụng này';
+
+  @override
+  String get noChangesInReview => 'Không có thay đổi trong đánh giá để cập nhật.';
+
+  @override
+  String get cantRateWithoutInternet => 'Không thể đánh giá ứng dụng khi không có kết nối internet.';
 }

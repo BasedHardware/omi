@@ -6481,4 +6481,13 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get replyToReview => 'ตอบกลับรีวิว';
+
+  @override
+  String get rateAndReviewThisApp => 'ให้คะแนนและรีวิวแอปนี้';
+
+  @override
+  String get noChangesInReview => 'ไม่มีการเปลี่ยนแปลงในรีวิวที่จะอัปเดต';
+
+  @override
+  String get cantRateWithoutInternet => 'ไม่สามารถให้คะแนนแอปได้โดยไม่มีการเชื่อมต่ออินเทอร์เน็ต';
 }

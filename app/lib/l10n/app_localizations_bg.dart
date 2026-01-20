@@ -6540,4 +6540,13 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get replyToReview => 'Отговори на отзива';
+
+  @override
+  String get rateAndReviewThisApp => 'Оценете и рецензирайте това приложение';
+
+  @override
+  String get noChangesInReview => 'Няма промени в отзива за актуализиране.';
+
+  @override
+  String get cantRateWithoutInternet => 'Не може да оценявате приложението без интернет връзка.';
 }

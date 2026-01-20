@@ -1988,5 +1988,8 @@
   "writeSomething": "Napište něco",
   "submitReply": "Odeslat odpověď",
   "editYourReply": "Upravit odpověď",
-  "replyToReview": "Odpovědět na recenzi"
+  "replyToReview": "Odpovědět na recenzi",
+  "rateAndReviewThisApp": "Ohodnoťte a recenzujte tuto aplikaci",
+  "noChangesInReview": "Žádné změny v recenzi k aktualizaci.",
+  "cantRateWithoutInternet": "Nelze hodnotit aplikaci bez připojení k internetu."
 }

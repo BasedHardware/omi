@@ -2009,5 +2009,8 @@
   "writeSomething": "اكتب شيئاً",
   "submitReply": "إرسال الرد",
   "editYourReply": "تعديل ردك",
-  "replyToReview": "الرد على التقييم"
+  "replyToReview": "الرد على التقييم",
+  "rateAndReviewThisApp": "قيم وراجع هذا التطبيق",
+  "noChangesInReview": "لا توجد تغييرات في المراجعة للتحديث.",
+  "cantRateWithoutInternet": "لا يمكن تقييم التطبيق بدون اتصال بالإنترنت."
 }

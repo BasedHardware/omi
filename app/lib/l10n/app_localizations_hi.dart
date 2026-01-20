@@ -6492,4 +6492,13 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get replyToReview => 'समीक्षा का उत्तर दें';
+
+  @override
+  String get rateAndReviewThisApp => 'इस ऐप को रेट और समीक्षा करें';
+
+  @override
+  String get noChangesInReview => 'समीक्षा में अपडेट करने के लिए कोई बदलाव नहीं।';
+
+  @override
+  String get cantRateWithoutInternet => 'इंटरनेट कनेक्शन के बिना ऐप को रेट नहीं कर सकते।';
 }

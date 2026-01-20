@@ -2028,5 +2028,8 @@
   "writeSomething": "Напишіть щось",
   "submitReply": "Надіслати відповідь",
   "editYourReply": "Редагувати відповідь",
-  "replyToReview": "Відповісти на відгук"
+  "replyToReview": "Відповісти на відгук",
+  "rateAndReviewThisApp": "Оцініть і залиште відгук про цей додаток",
+  "noChangesInReview": "Немає змін у відгуку для оновлення.",
+  "cantRateWithoutInternet": "Неможливо оцінити додаток без підключення до інтернету."
 }

@@ -2028,5 +2028,8 @@
   "writeSomething": "Kirjoita jotain",
   "submitReply": "Lähetä vastaus",
   "editYourReply": "Muokkaa vastaustasi",
-  "replyToReview": "Vastaa arvosteluun"
+  "replyToReview": "Vastaa arvosteluun",
+  "rateAndReviewThisApp": "Arvioi ja arvostele tämä sovellus",
+  "noChangesInReview": "Ei muutoksia arvostelussa päivitettäväksi.",
+  "cantRateWithoutInternet": "Sovellusta ei voi arvioida ilman internetyhteyttä."
 }

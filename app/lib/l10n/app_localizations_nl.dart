@@ -6533,4 +6533,13 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get replyToReview => 'Reageer op recensie';
+
+  @override
+  String get rateAndReviewThisApp => 'Beoordeel en recenseer deze app';
+
+  @override
+  String get noChangesInReview => 'Geen wijzigingen in de recensie om bij te werken.';
+
+  @override
+  String get cantRateWithoutInternet => 'Kan app niet beoordelen zonder internetverbinding.';
 }

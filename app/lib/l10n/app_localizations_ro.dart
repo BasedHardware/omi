@@ -6544,4 +6544,13 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get replyToReview => 'Răspunde la recenzie';
+
+  @override
+  String get rateAndReviewThisApp => 'Evaluează și recenzează această aplicație';
+
+  @override
+  String get noChangesInReview => 'Nu există modificări în recenzie de actualizat.';
+
+  @override
+  String get cantRateWithoutInternet => 'Nu puteți evalua aplicația fără conexiune la internet.';
 }

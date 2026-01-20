@@ -2028,5 +2028,8 @@
   "writeSomething": "Viết gì đó",
   "submitReply": "Gửi phản hồi",
   "editYourReply": "Sửa phản hồi",
-  "replyToReview": "Trả lời đánh giá"
+  "replyToReview": "Trả lời đánh giá",
+  "rateAndReviewThisApp": "Đánh giá và viết nhận xét ứng dụng này",
+  "noChangesInReview": "Không có thay đổi trong đánh giá để cập nhật.",
+  "cantRateWithoutInternet": "Không thể đánh giá ứng dụng khi không có kết nối internet."
 }

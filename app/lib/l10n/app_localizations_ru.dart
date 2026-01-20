@@ -6530,4 +6530,13 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get replyToReview => 'Ответить на отзыв';
+
+  @override
+  String get rateAndReviewThisApp => 'Оцените и напишите отзыв об этом приложении';
+
+  @override
+  String get noChangesInReview => 'Нет изменений в отзыве для обновления.';
+
+  @override
+  String get cantRateWithoutInternet => 'Невозможно оценить приложение без подключения к интернету.';
 }

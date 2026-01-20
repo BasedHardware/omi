@@ -6515,4 +6515,13 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get replyToReview => 'Vasta arvustusele';
+
+  @override
+  String get rateAndReviewThisApp => 'Hinda ja arvusta seda rakendust';
+
+  @override
+  String get noChangesInReview => 'Arvustuses pole muudatusi uuendamiseks.';
+
+  @override
+  String get cantRateWithoutInternet => 'Ei saa rakendust hinnata ilma internetiühenduseta.';
 }

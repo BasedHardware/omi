@@ -6505,4 +6505,13 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get replyToReview => 'Odpovědět na recenzi';
+
+  @override
+  String get rateAndReviewThisApp => 'Ohodnoťte a recenzujte tuto aplikaci';
+
+  @override
+  String get noChangesInReview => 'Žádné změny v recenzi k aktualizaci.';
+
+  @override
+  String get cantRateWithoutInternet => 'Nelze hodnotit aplikaci bez připojení k internetu.';
 }

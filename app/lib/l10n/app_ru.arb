@@ -2028,5 +2028,8 @@
   "writeSomething": "Напишите что-нибудь",
   "submitReply": "Отправить ответ",
   "editYourReply": "Редактировать ответ",
-  "replyToReview": "Ответить на отзыв"
+  "replyToReview": "Ответить на отзыв",
+  "rateAndReviewThisApp": "Оцените и напишите отзыв об этом приложении",
+  "noChangesInReview": "Нет изменений в отзыве для обновления.",
+  "cantRateWithoutInternet": "Невозможно оценить приложение без подключения к интернету."
 }

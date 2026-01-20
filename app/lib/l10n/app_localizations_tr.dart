@@ -6525,4 +6525,13 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get replyToReview => 'Yoruma yanıt ver';
+
+  @override
+  String get rateAndReviewThisApp => 'Bu uygulamayı değerlendirin ve yorum yazın';
+
+  @override
+  String get noChangesInReview => 'Güncellenecek yorum değişikliği yok.';
+
+  @override
+  String get cantRateWithoutInternet => 'İnternet bağlantısı olmadan uygulama değerlendirilemez.';
 }

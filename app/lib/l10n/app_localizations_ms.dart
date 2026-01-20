@@ -6535,4 +6535,13 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get replyToReview => 'Balas ulasan';
+
+  @override
+  String get rateAndReviewThisApp => 'Nilai dan ulas aplikasi ini';
+
+  @override
+  String get noChangesInReview => 'Tiada perubahan dalam ulasan untuk dikemas kini.';
+
+  @override
+  String get cantRateWithoutInternet => 'Tidak boleh menilai aplikasi tanpa sambungan internet.';
 }

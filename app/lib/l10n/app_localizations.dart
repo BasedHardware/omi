@@ -12158,6 +12158,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Reply To Review'**
   String get replyToReview;
+
+  /// Title prompting user to rate and review an app
+  ///
+  /// In en, this message translates to:
+  /// **'Rate and Review this App'**
+  String get rateAndReviewThisApp;
+
+  /// Message when user tries to submit an unchanged review
+  ///
+  /// In en, this message translates to:
+  /// **'No changes in review to update.'**
+  String get noChangesInReview;
+
+  /// Error message when trying to rate without internet
+  ///
+  /// In en, this message translates to:
+  /// **'Can't rate app without internet connection.'**
+  String get cantRateWithoutInternet;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

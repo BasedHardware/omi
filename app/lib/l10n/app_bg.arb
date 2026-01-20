@@ -2011,5 +2011,8 @@
   "writeSomething": "Напишете нещо",
   "submitReply": "Изпрати отговор",
   "editYourReply": "Редактирай отговора",
-  "replyToReview": "Отговори на ревюто"
+  "replyToReview": "Отговори на ревюто",
+  "rateAndReviewThisApp": "Оценете и рецензирайте това приложение",
+  "noChangesInReview": "Няма промени в отзива за актуализиране.",
+  "cantRateWithoutInternet": "Не може да оценявате приложението без интернет връзка."
 }

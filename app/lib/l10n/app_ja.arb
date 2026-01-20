@@ -2029,5 +2029,8 @@
   "writeSomething": "何か書いてください",
   "submitReply": "返信を送信",
   "editYourReply": "返信を編集",
-  "replyToReview": "レビューに返信"
+  "replyToReview": "レビューに返信",
+  "rateAndReviewThisApp": "このアプリを評価してレビューする",
+  "noChangesInReview": "更新するレビューの変更はありません。",
+  "cantRateWithoutInternet": "インターネット接続なしではアプリを評価できません。"
 }

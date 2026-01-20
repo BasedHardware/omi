@@ -6515,4 +6515,13 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get replyToReview => 'Atsakyti į atsiliepimą';
+
+  @override
+  String get rateAndReviewThisApp => 'Įvertinkite ir peržiūrėkite šią programėlę';
+
+  @override
+  String get noChangesInReview => 'Nėra atsiliepimo pakeitimų atnaujinti.';
+
+  @override
+  String get cantRateWithoutInternet => 'Negalima įvertinti programėlės be interneto ryšio.';
 }

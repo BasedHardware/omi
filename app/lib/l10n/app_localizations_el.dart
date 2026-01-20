@@ -6560,4 +6560,13 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get replyToReview => 'Απάντηση στην κριτική';
+
+  @override
+  String get rateAndReviewThisApp => 'Βαθμολογήστε και αξιολογήστε αυτή την εφαρμογή';
+
+  @override
+  String get noChangesInReview => 'Δεν υπάρχουν αλλαγές στην κριτική για ενημέρωση.';
+
+  @override
+  String get cantRateWithoutInternet => 'Δεν είναι δυνατή η βαθμολόγηση χωρίς σύνδεση στο διαδίκτυο.';
 }

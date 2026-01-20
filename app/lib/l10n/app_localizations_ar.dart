@@ -6467,4 +6467,13 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get replyToReview => 'الرد على المراجعة';
+
+  @override
+  String get rateAndReviewThisApp => 'قيم وراجع هذا التطبيق';
+
+  @override
+  String get noChangesInReview => 'لا توجد تغييرات في المراجعة للتحديث.';
+
+  @override
+  String get cantRateWithoutInternet => 'لا يمكن تقييم التطبيق بدون اتصال بالإنترنت.';
 }

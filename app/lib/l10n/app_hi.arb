@@ -2029,5 +2029,8 @@
   "writeSomething": "कुछ लिखें",
   "submitReply": "जवाब भेजें",
   "editYourReply": "अपना जवाब संपादित करें",
-  "replyToReview": "समीक्षा का जवाब दें"
+  "replyToReview": "समीक्षा का जवाब दें",
+  "rateAndReviewThisApp": "इस ऐप को रेट और समीक्षा करें",
+  "noChangesInReview": "समीक्षा में अपडेट करने के लिए कोई बदलाव नहीं।",
+  "cantRateWithoutInternet": "इंटरनेट कनेक्शन के बिना ऐप को रेट नहीं कर सकते।"
 }

@@ -2010,5 +2010,8 @@
   "writeSomething": "Schreiben Sie etwas",
   "submitReply": "Antwort senden",
   "editYourReply": "Antwort bearbeiten",
-  "replyToReview": "Auf Bewertung antworten"
+  "replyToReview": "Auf Bewertung antworten",
+  "rateAndReviewThisApp": "Bewerte und rezensiere diese App",
+  "noChangesInReview": "Keine Änderungen in der Bewertung zu aktualisieren.",
+  "cantRateWithoutInternet": "Kann App ohne Internetverbindung nicht bewerten."
 }
