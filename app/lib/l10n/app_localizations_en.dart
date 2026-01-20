@@ -6520,4 +6520,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get cantRateWithoutInternet => 'Can\'t rate app without internet connection.';
+
+  @override
+  String get appAnalytics => 'App Analytics';
+
+  @override
+  String get learnMoreLink => 'learn more';
+
+  @override
+  String get installsCount => 'Installs';
+
+  @override
+  String get moneyEarned => 'Money Earned';
 }

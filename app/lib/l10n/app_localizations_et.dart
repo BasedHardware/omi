@@ -6524,4 +6524,16 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get cantRateWithoutInternet => 'Ei saa rakendust hinnata ilma internetiühenduseta.';
+
+  @override
+  String get appAnalytics => 'Rakenduse analüütika';
+
+  @override
+  String get learnMoreLink => 'lisateave';
+
+  @override
+  String get installsCount => 'Paigaldused';
+
+  @override
+  String get moneyEarned => 'Teenitud raha';
 }

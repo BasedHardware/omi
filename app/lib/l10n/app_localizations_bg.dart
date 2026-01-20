@@ -6549,4 +6549,16 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get cantRateWithoutInternet => 'Не може да оценявате приложението без интернет връзка.';
+
+  @override
+  String get appAnalytics => 'Анализ на приложението';
+
+  @override
+  String get learnMoreLink => 'научете повече';
+
+  @override
+  String get installsCount => 'Инсталации';
+
+  @override
+  String get moneyEarned => 'Спечелени пари';
 }

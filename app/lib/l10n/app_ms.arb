@@ -872,7 +872,7 @@
   "startEarning": "Mula Memperoleh! 💰",
   "connectStripeOrPayPal": "Sambungkan Stripe atau PayPal untuk menerima pembayaran untuk aplikasi anda.",
   "connectNow": "Sambung Sekarang",
-  "installsCount": "{count}+ pemasangan",
+  "installsCount": "Pemasangan",
   "uninstallApp": "Nyahpasang Apl",
   "subscribe": "Langgan",
   "dataAccessNotice": "Notis Akses Data",
@@ -2031,5 +2031,8 @@
   "replyToReview": "Balas Ulasan",
   "rateAndReviewThisApp": "Nilai dan ulas aplikasi ini",
   "noChangesInReview": "Tiada perubahan dalam ulasan untuk dikemas kini.",
-  "cantRateWithoutInternet": "Tidak boleh menilai aplikasi tanpa sambungan internet."
+  "cantRateWithoutInternet": "Tidak boleh menilai aplikasi tanpa sambungan internet.",
+  "appAnalytics": "Analitik Aplikasi",
+  "learnMoreLink": "ketahui lebih lanjut",
+  "moneyEarned": "Wang yang diperoleh"
 }

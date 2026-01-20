@@ -6534,4 +6534,16 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get cantRateWithoutInternet => 'İnternet bağlantısı olmadan uygulama değerlendirilemez.';
+
+  @override
+  String get appAnalytics => 'Uygulama Analitiği';
+
+  @override
+  String get learnMoreLink => 'daha fazla bilgi';
+
+  @override
+  String get installsCount => 'Yüklemeler';
+
+  @override
+  String get moneyEarned => 'Kazanılan para';
 }

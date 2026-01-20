@@ -6523,4 +6523,16 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get cantRateWithoutInternet => 'Sovellusta ei voi arvioida ilman internetyhteyttä.';
+
+  @override
+  String get appAnalytics => 'Sovellusanalytiikka';
+
+  @override
+  String get learnMoreLink => 'lue lisää';
+
+  @override
+  String get installsCount => 'Asennukset';
+
+  @override
+  String get moneyEarned => 'Ansaittu raha';
 }

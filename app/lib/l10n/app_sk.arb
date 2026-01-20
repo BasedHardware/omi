@@ -872,7 +872,7 @@
   "startEarning": "Začnite zarábať! 💰",
   "connectStripeOrPayPal": "Pripojte Stripe alebo PayPal, aby ste mohli prijímať platby za svoju aplikáciu.",
   "connectNow": "Pripojiť teraz",
-  "installsCount": "{count}+ inštalácií",
+  "installsCount": "Inštalácie",
   "uninstallApp": "Odinštalovať aplikáciu",
   "subscribe": "Prihlásiť sa na odber",
   "dataAccessNotice": "Upozornenie na prístup k údajom",
@@ -2031,5 +2031,8 @@
   "replyToReview": "Odpovedať na recenziu",
   "rateAndReviewThisApp": "Ohodnoťte a recenzujte túto aplikáciu",
   "noChangesInReview": "Žiadne zmeny v recenzii na aktualizáciu.",
-  "cantRateWithoutInternet": "Nemožno hodnotiť aplikáciu bez pripojenia na internet."
+  "cantRateWithoutInternet": "Nemožno hodnotiť aplikáciu bez pripojenia na internet.",
+  "appAnalytics": "Analytika aplikácie",
+  "learnMoreLink": "zistiť viac",
+  "moneyEarned": "Zarobené peniaze"
 }

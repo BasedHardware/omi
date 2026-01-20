@@ -6468,4 +6468,16 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get cantRateWithoutInternet => 'Неможливо оцінити додаток без підключення до інтернету.';
+
+  @override
+  String get appAnalytics => 'Аналітика додатку';
+
+  @override
+  String get learnMoreLink => 'дізнатися більше';
+
+  @override
+  String get installsCount => 'Встановлення';
+
+  @override
+  String get moneyEarned => 'Зароблено';
 }

@@ -872,7 +872,7 @@
   "startEarning": "Aloita ansaitseminen! 💰",
   "connectStripeOrPayPal": "Yhdistä Stripe tai PayPal vastaanottaaksesi maksuja sovelluksestasi.",
   "connectNow": "Yhdistä nyt",
-  "installsCount": "{count}+ asennusta",
+  "installsCount": "Asennukset",
   "uninstallApp": "Poista sovellus",
   "subscribe": "Tilaa",
   "dataAccessNotice": "Tietojen käyttöilmoitus",
@@ -2031,5 +2031,8 @@
   "replyToReview": "Vastaa arvosteluun",
   "rateAndReviewThisApp": "Arvioi ja arvostele tämä sovellus",
   "noChangesInReview": "Ei muutoksia arvostelussa päivitettäväksi.",
-  "cantRateWithoutInternet": "Sovellusta ei voi arvioida ilman internetyhteyttä."
+  "cantRateWithoutInternet": "Sovellusta ei voi arvioida ilman internetyhteyttä.",
+  "appAnalytics": "Sovellusanalytiikka",
+  "learnMoreLink": "lue lisää",
+  "moneyEarned": "Ansaittu raha"
 }

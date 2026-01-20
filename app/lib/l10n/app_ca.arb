@@ -890,7 +890,7 @@
   "startEarning": "Comença a guanyar! 💰",
   "connectStripeOrPayPal": "Connecta Stripe o PayPal per rebre pagaments per la teva aplicació.",
   "connectNow": "Connecta ara",
-  "installsCount": "{count}+ instal·lacions",
+  "installsCount": "Instal·lacions",
   "uninstallApp": "Desinstal·la l'aplicació",
   "subscribe": "Subscriu-te",
   "dataAccessNotice": "Avís d'accés a dades",
@@ -2014,5 +2014,8 @@
   "replyToReview": "Respondre a la ressenya",
   "rateAndReviewThisApp": "Valora i ressenya aquesta aplicació",
   "noChangesInReview": "No hi ha canvis a la ressenya per actualitzar.",
-  "cantRateWithoutInternet": "No es pot valorar l'aplicació sense connexió a Internet."
+  "cantRateWithoutInternet": "No es pot valorar l'aplicació sense connexió a Internet.",
+  "appAnalytics": "Anàlisi de l'aplicació",
+  "learnMoreLink": "més informació",
+  "moneyEarned": "Diners guanyats"
 }

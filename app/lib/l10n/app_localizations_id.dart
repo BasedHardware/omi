@@ -6540,4 +6540,16 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get cantRateWithoutInternet => 'Tidak dapat menilai aplikasi tanpa koneksi internet.';
+
+  @override
+  String get appAnalytics => 'Analitik Aplikasi';
+
+  @override
+  String get learnMoreLink => 'pelajari lebih lanjut';
+
+  @override
+  String get installsCount => 'Instalasi';
+
+  @override
+  String get moneyEarned => 'Uang yang diperoleh';
 }

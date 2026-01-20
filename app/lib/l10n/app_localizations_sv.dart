@@ -6527,4 +6527,16 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get cantRateWithoutInternet => 'Kan inte betygsätta appen utan internetanslutning.';
+
+  @override
+  String get appAnalytics => 'App-analys';
+
+  @override
+  String get learnMoreLink => 'läs mer';
+
+  @override
+  String get installsCount => 'Installationer';
+
+  @override
+  String get moneyEarned => 'Intjänade pengar';
 }

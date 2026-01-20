@@ -872,7 +872,7 @@
   "startEarning": "Sāciet pelnīt! 💰",
   "connectStripeOrPayPal": "Savienojiet Stripe vai PayPal, lai saņemtu maksājumus par savu lietotni.",
   "connectNow": "Savienot tagad",
-  "installsCount": "{count}+ instalācijas",
+  "installsCount": "Instalācijas",
   "uninstallApp": "Atinstalēt lietotni",
   "subscribe": "Abonēt",
   "dataAccessNotice": "Datu piekļuves paziņojums",
@@ -2031,5 +2031,8 @@
   "replyToReview": "Atbildēt uz atsauksmi",
   "rateAndReviewThisApp": "Novērtējiet un atsauciet šo lietotni",
   "noChangesInReview": "Nav atsauksmes izmaiņu atjaunināšanai.",
-  "cantRateWithoutInternet": "Nevar novērtēt lietotni bez interneta savienojuma."
+  "cantRateWithoutInternet": "Nevar novērtēt lietotni bez interneta savienojuma.",
+  "appAnalytics": "Lietotnes analītika",
+  "learnMoreLink": "uzzināt vairāk",
+  "moneyEarned": "Nopelnītā nauda"
 }

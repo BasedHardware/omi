@@ -6553,4 +6553,16 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get cantRateWithoutInternet => 'Nu puteți evalua aplicația fără conexiune la internet.';
+
+  @override
+  String get appAnalytics => 'Analiză aplicație';
+
+  @override
+  String get learnMoreLink => 'află mai multe';
+
+  @override
+  String get installsCount => 'Instalări';
+
+  @override
+  String get moneyEarned => 'Bani câștigați';
 }

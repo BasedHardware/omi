@@ -872,7 +872,7 @@
   "startEarning": "Ξεκινήστε να κερδίζετε! 💰",
   "connectStripeOrPayPal": "Συνδέστε το Stripe ή το PayPal για να λαμβάνετε πληρωμές για την εφαρμογή σας.",
   "connectNow": "Σύνδεση τώρα",
-  "installsCount": "{count}+ εγκαταστάσεις",
+  "installsCount": "Εγκαταστάσεις",
   "uninstallApp": "Απεγκατάσταση εφαρμογής",
   "subscribe": "Εγγραφή",
   "dataAccessNotice": "Ειδοποίηση πρόσβασης δεδομένων",
@@ -2031,5 +2031,8 @@
   "replyToReview": "Απάντηση στην κριτική",
   "rateAndReviewThisApp": "Βαθμολογήστε και αξιολογήστε αυτή την εφαρμογή",
   "noChangesInReview": "Δεν υπάρχουν αλλαγές στην κριτική για ενημέρωση.",
-  "cantRateWithoutInternet": "Δεν είναι δυνατή η βαθμολόγηση χωρίς σύνδεση στο διαδίκτυο."
+  "cantRateWithoutInternet": "Δεν είναι δυνατή η βαθμολόγηση χωρίς σύνδεση στο διαδίκτυο.",
+  "appAnalytics": "Αναλυτικά εφαρμογής",
+  "learnMoreLink": "μάθετε περισσότερα",
+  "moneyEarned": "Κέρδη"
 }

@@ -872,7 +872,7 @@
   "startEarning": "Kazanmaya Başlayın! 💰",
   "connectStripeOrPayPal": "Uygulamanız için ödeme almak üzere Stripe veya PayPal'ı bağlayın.",
   "connectNow": "Şimdi Bağlan",
-  "installsCount": "{count}+ yükleme",
+  "installsCount": "Yüklemeler",
   "uninstallApp": "Uygulamayı kaldır",
   "subscribe": "Abone ol",
   "dataAccessNotice": "Veri Erişim Bildirimi",
@@ -2031,5 +2031,8 @@
   "replyToReview": "Yoruma Yanıt Ver",
   "rateAndReviewThisApp": "Bu uygulamayı değerlendirin ve yorum yazın",
   "noChangesInReview": "Güncellenecek yorum değişikliği yok.",
-  "cantRateWithoutInternet": "İnternet bağlantısı olmadan uygulama değerlendirilemez."
+  "cantRateWithoutInternet": "İnternet bağlantısı olmadan uygulama değerlendirilemez.",
+  "appAnalytics": "Uygulama Analitiği",
+  "learnMoreLink": "daha fazla bilgi",
+  "moneyEarned": "Kazanılan para"
 }

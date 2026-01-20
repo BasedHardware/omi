@@ -872,7 +872,7 @@
   "startEarning": "Börja tjäna! 💰",
   "connectStripeOrPayPal": "Anslut Stripe eller PayPal för att ta emot betalningar för din app.",
   "connectNow": "Anslut nu",
-  "installsCount": "{count}+ installationer",
+  "installsCount": "Installationer",
   "uninstallApp": "Avinstallera app",
   "subscribe": "Prenumerera",
   "dataAccessNotice": "Meddelande om dataåtkomst",
@@ -2031,5 +2031,8 @@
   "replyToReview": "Svara på recension",
   "rateAndReviewThisApp": "Betygsätt och recensera den här appen",
   "noChangesInReview": "Inga ändringar i recensionen att uppdatera.",
-  "cantRateWithoutInternet": "Kan inte betygsätta appen utan internetanslutning."
+  "cantRateWithoutInternet": "Kan inte betygsätta appen utan internetanslutning.",
+  "appAnalytics": "App-analys",
+  "learnMoreLink": "läs mer",
+  "moneyEarned": "Intjänade pengar"
 }

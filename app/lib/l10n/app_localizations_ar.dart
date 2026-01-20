@@ -6476,4 +6476,16 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get cantRateWithoutInternet => 'لا يمكن تقييم التطبيق بدون اتصال بالإنترنت.';
+
+  @override
+  String get appAnalytics => 'تحليلات التطبيق';
+
+  @override
+  String get learnMoreLink => 'اعرف المزيد';
+
+  @override
+  String get installsCount => 'التثبيتات';
+
+  @override
+  String get moneyEarned => 'الأرباح';
 }

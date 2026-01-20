@@ -873,7 +873,7 @@
   "startEarning": "収益を開始！💰",
   "connectStripeOrPayPal": "StripeまたはPayPalを接続して、アプリの支払いを受け取ります。",
   "connectNow": "今すぐ接続",
-  "installsCount": "{count}+インストール",
+  "installsCount": "インストール",
   "uninstallApp": "アプリをアンインストール",
   "subscribe": "サブスクライブ",
   "dataAccessNotice": "データアクセス通知",
@@ -2032,5 +2032,8 @@
   "replyToReview": "レビューに返信",
   "rateAndReviewThisApp": "このアプリを評価してレビューする",
   "noChangesInReview": "更新するレビューの変更はありません。",
-  "cantRateWithoutInternet": "インターネット接続なしではアプリを評価できません。"
+  "cantRateWithoutInternet": "インターネット接続なしではアプリを評価できません。",
+  "appAnalytics": "アプリ分析",
+  "learnMoreLink": "詳細",
+  "moneyEarned": "収益"
 }

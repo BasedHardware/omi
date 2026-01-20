@@ -6535,4 +6535,16 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get cantRateWithoutInternet => 'Nevar novērtēt lietotni bez interneta savienojuma.';
+
+  @override
+  String get appAnalytics => 'Lietotnes analītika';
+
+  @override
+  String get learnMoreLink => 'uzzināt vairāk';
+
+  @override
+  String get installsCount => 'Instalācijas';
+
+  @override
+  String get moneyEarned => 'Nopelnītā nauda';
 }

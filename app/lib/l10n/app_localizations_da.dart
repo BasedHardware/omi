@@ -6531,4 +6531,16 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get cantRateWithoutInternet => 'Kan ikke bedømme app uden internetforbindelse.';
+
+  @override
+  String get appAnalytics => 'App-analyse';
+
+  @override
+  String get learnMoreLink => 'lær mere';
+
+  @override
+  String get installsCount => 'Installationer';
+
+  @override
+  String get moneyEarned => 'Penge tjent';
 }

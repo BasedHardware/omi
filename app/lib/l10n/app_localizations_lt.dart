@@ -6524,4 +6524,16 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get cantRateWithoutInternet => 'Negalima įvertinti programėlės be interneto ryšio.';
+
+  @override
+  String get appAnalytics => 'Programėlės analitika';
+
+  @override
+  String get learnMoreLink => 'sužinoti daugiau';
+
+  @override
+  String get installsCount => 'Diegimai';
+
+  @override
+  String get moneyEarned => 'Uždirbti pinigai';
 }

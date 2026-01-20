@@ -6535,4 +6535,16 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get cantRateWithoutInternet => 'Nie można ocenić aplikacji bez połączenia z internetem.';
+
+  @override
+  String get appAnalytics => 'Analityka aplikacji';
+
+  @override
+  String get learnMoreLink => 'dowiedz się więcej';
+
+  @override
+  String get installsCount => 'Instalacje';
+
+  @override
+  String get moneyEarned => 'Zarobione pieniądze';
 }

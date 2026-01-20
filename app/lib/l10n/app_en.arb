@@ -3325,14 +3325,9 @@
   "@connectNow": {
     "description": "Button text to connect payment method"
   },
-  "installsCount": "{count}+ installs",
+  "installsCount": "Installs",
   "@installsCount": {
-    "description": "Number of app installs shown in app detail header",
-    "placeholders": {
-      "count": {
-        "type": "String"
-      }
-    }
+    "description": "Label for number of app installs"
   },
   "uninstallApp": "Uninstall App",
   "@uninstallApp": {
@@ -7971,5 +7966,17 @@
   "cantRateWithoutInternet": "Can't rate app without internet connection.",
   "@cantRateWithoutInternet": {
     "description": "Error message when trying to rate without internet"
+  },
+  "appAnalytics": "App Analytics",
+  "@appAnalytics": {
+    "description": "Title for app analytics section"
+  },
+  "learnMoreLink": "learn more",
+  "@learnMoreLink": {
+    "description": "Link text to learn more (lowercase)"
+  },
+  "moneyEarned": "Money Earned",
+  "@moneyEarned": {
+    "description": "Label for money earned from app"
   }
 }

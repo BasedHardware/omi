@@ -6501,4 +6501,16 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get cantRateWithoutInternet => 'इंटरनेट कनेक्शन के बिना ऐप को रेट नहीं कर सकते।';
+
+  @override
+  String get appAnalytics => 'ऐप एनालिटिक्स';
+
+  @override
+  String get learnMoreLink => 'अधिक जानें';
+
+  @override
+  String get installsCount => 'इंस्टॉल';
+
+  @override
+  String get moneyEarned => 'कमाई';
 }

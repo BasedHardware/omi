@@ -872,7 +872,7 @@
   "startEarning": "Begynn å tjene! 💰",
   "connectStripeOrPayPal": "Koble til Stripe eller PayPal for å motta betalinger for appen din.",
   "connectNow": "Koble til nå",
-  "installsCount": "{count}+ installasjoner",
+  "installsCount": "Installasjoner",
   "uninstallApp": "Avinstaller app",
   "subscribe": "Abonner",
   "dataAccessNotice": "Datatilgangsvarsel",
@@ -2031,5 +2031,8 @@
   "replyToReview": "Svar på anmeldelse",
   "rateAndReviewThisApp": "Vurder og anmeld denne appen",
   "noChangesInReview": "Ingen endringer i anmeldelsen å oppdatere.",
-  "cantRateWithoutInternet": "Kan ikke vurdere appen uten internettforbindelse."
+  "cantRateWithoutInternet": "Kan ikke vurdere appen uten internettforbindelse.",
+  "appAnalytics": "App-analyse",
+  "learnMoreLink": "lær mer",
+  "moneyEarned": "Penger tjent"
 }

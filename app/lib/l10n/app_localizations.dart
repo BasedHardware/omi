@@ -12176,6 +12176,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Can't rate app without internet connection.'**
   String get cantRateWithoutInternet;
+
+  /// Title for app analytics section
+  ///
+  /// In en, this message translates to:
+  /// **'App Analytics'**
+  String get appAnalytics;
+
+  /// Link text to learn more (lowercase)
+  ///
+  /// In en, this message translates to:
+  /// **'learn more'**
+  String get learnMoreLink;
+
+  /// Label for number of app installs
+  ///
+  /// In en, this message translates to:
+  /// **'Installs'**
+  String get installsCount;
+
+  /// Label for money earned from app
+  ///
+  /// In en, this message translates to:
+  /// **'Money Earned'**
+  String get moneyEarned;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

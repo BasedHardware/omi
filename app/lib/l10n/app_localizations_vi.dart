@@ -6532,4 +6532,16 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get cantRateWithoutInternet => 'Không thể đánh giá ứng dụng khi không có kết nối internet.';
+
+  @override
+  String get appAnalytics => 'Phân tích ứng dụng';
+
+  @override
+  String get learnMoreLink => 'tìm hiểu thêm';
+
+  @override
+  String get installsCount => 'Lượt cài đặt';
+
+  @override
+  String get moneyEarned => 'Tiền kiếm được';
 }

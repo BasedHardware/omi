@@ -6414,4 +6414,16 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get cantRateWithoutInternet => '인터넷 연결 없이는 앱을 평가할 수 없습니다.';
+
+  @override
+  String get appAnalytics => '앱 분석';
+
+  @override
+  String get learnMoreLink => '자세히 알아보기';
+
+  @override
+  String get installsCount => '설치';
+
+  @override
+  String get moneyEarned => '수익';
 }

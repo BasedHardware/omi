@@ -6554,4 +6554,16 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get cantRateWithoutInternet => 'Nem lehet értékelni internetkapcsolat nélkül.';
+
+  @override
+  String get appAnalytics => 'Alkalmazás elemzés';
+
+  @override
+  String get learnMoreLink => 'tudj meg többet';
+
+  @override
+  String get installsCount => 'Telepítések';
+
+  @override
+  String get moneyEarned => 'Keresett pénz';
 }

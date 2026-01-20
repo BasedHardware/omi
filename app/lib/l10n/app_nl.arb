@@ -872,7 +872,7 @@
   "startEarning": "Begin met verdienen! 💰",
   "connectStripeOrPayPal": "Verbind Stripe of PayPal om betalingen voor je app te ontvangen.",
   "connectNow": "Nu verbinden",
-  "installsCount": "{count}+ installaties",
+  "installsCount": "Installaties",
   "uninstallApp": "App verwijderen",
   "subscribe": "Abonneren",
   "dataAccessNotice": "Melding gegevenstoegang",
@@ -2031,5 +2031,8 @@
   "replyToReview": "Reageer op review",
   "rateAndReviewThisApp": "Beoordeel en recenseer deze app",
   "noChangesInReview": "Geen wijzigingen in de recensie om bij te werken.",
-  "cantRateWithoutInternet": "Kan app niet beoordelen zonder internetverbinding."
+  "cantRateWithoutInternet": "Kan app niet beoordelen zonder internetverbinding.",
+  "appAnalytics": "App-analyse",
+  "learnMoreLink": "meer informatie",
+  "moneyEarned": "Verdiend geld"
 }

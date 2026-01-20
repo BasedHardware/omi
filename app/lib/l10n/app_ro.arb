@@ -872,7 +872,7 @@
   "startEarning": "Începe să Câștigi! 💰",
   "connectStripeOrPayPal": "Conectează Stripe sau PayPal pentru a primi plăți pentru aplicația ta.",
   "connectNow": "Conectează Acum",
-  "installsCount": "{count}+ instalări",
+  "installsCount": "Instalări",
   "uninstallApp": "Dezinstalează aplicația",
   "subscribe": "Abonează-te",
   "dataAccessNotice": "Notificare acces la date",
@@ -2031,5 +2031,8 @@
   "replyToReview": "Răspunde la recenzie",
   "rateAndReviewThisApp": "Evaluează și recenzează această aplicație",
   "noChangesInReview": "Nu există modificări în recenzie de actualizat.",
-  "cantRateWithoutInternet": "Nu puteți evalua aplicația fără conexiune la internet."
+  "cantRateWithoutInternet": "Nu puteți evalua aplicația fără conexiune la internet.",
+  "appAnalytics": "Analiză aplicație",
+  "learnMoreLink": "află mai multe",
+  "moneyEarned": "Bani câștigați"
 }

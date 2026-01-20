@@ -872,7 +872,7 @@
   "startEarning": "Pradėkite uždirbti! 💰",
   "connectStripeOrPayPal": "Prijunkite Stripe arba PayPal, kad gautumėte mokėjimus už savo programėlę.",
   "connectNow": "Prijungti dabar",
-  "installsCount": "{count}+ diegimų",
+  "installsCount": "Diegimai",
   "uninstallApp": "Pašalinti programą",
   "subscribe": "Prenumeruoti",
   "dataAccessNotice": "Duomenų prieigos pranešimas",
@@ -2031,5 +2031,8 @@
   "replyToReview": "Atsakyti į atsiliepimą",
   "rateAndReviewThisApp": "Įvertinkite ir peržiūrėkite šią programėlę",
   "noChangesInReview": "Nėra atsiliepimo pakeitimų atnaujinti.",
-  "cantRateWithoutInternet": "Negalima įvertinti programėlės be interneto ryšio."
+  "cantRateWithoutInternet": "Negalima įvertinti programėlės be interneto ryšio.",
+  "appAnalytics": "Programėlės analitika",
+  "learnMoreLink": "sužinoti daugiau",
+  "moneyEarned": "Uždirbti pinigai"
 }

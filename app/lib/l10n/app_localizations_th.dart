@@ -6490,4 +6490,16 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get cantRateWithoutInternet => 'ไม่สามารถให้คะแนนแอปได้โดยไม่มีการเชื่อมต่ออินเทอร์เน็ต';
+
+  @override
+  String get appAnalytics => 'การวิเคราะห์แอป';
+
+  @override
+  String get learnMoreLink => 'เรียนรู้เพิ่มเติม';
+
+  @override
+  String get installsCount => 'การติดตั้ง';
+
+  @override
+  String get moneyEarned => 'เงินที่ได้รับ';
 }

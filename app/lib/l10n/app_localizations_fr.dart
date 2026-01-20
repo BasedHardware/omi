@@ -6578,4 +6578,16 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get cantRateWithoutInternet => 'Impossible d\'évaluer l\'app sans connexion Internet.';
+
+  @override
+  String get appAnalytics => 'Analytique de l\'application';
+
+  @override
+  String get learnMoreLink => 'en savoir plus';
+
+  @override
+  String get installsCount => 'Installations';
+
+  @override
+  String get moneyEarned => 'Argent gagné';
 }

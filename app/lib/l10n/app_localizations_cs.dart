@@ -6514,4 +6514,16 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get cantRateWithoutInternet => 'Nelze hodnotit aplikaci bez připojení k internetu.';
+
+  @override
+  String get appAnalytics => 'Analytika aplikace';
+
+  @override
+  String get learnMoreLink => 'zjistit více';
+
+  @override
+  String get installsCount => 'Instalace';
+
+  @override
+  String get moneyEarned => 'Vyděláno';
 }

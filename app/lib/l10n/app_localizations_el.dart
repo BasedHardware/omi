@@ -6569,4 +6569,16 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get cantRateWithoutInternet => 'Δεν είναι δυνατή η βαθμολόγηση χωρίς σύνδεση στο διαδίκτυο.';
+
+  @override
+  String get appAnalytics => 'Αναλυτικά εφαρμογής';
+
+  @override
+  String get learnMoreLink => 'μάθετε περισσότερα';
+
+  @override
+  String get installsCount => 'Εγκαταστάσεις';
+
+  @override
+  String get moneyEarned => 'Κέρδη';
 }

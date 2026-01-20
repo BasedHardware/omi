@@ -6412,4 +6412,16 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get cantRateWithoutInternet => 'インターネット接続なしではアプリを評価できません。';
+
+  @override
+  String get appAnalytics => 'アプリ分析';
+
+  @override
+  String get learnMoreLink => '詳細';
+
+  @override
+  String get installsCount => 'インストール';
+
+  @override
+  String get moneyEarned => '収益';
 }

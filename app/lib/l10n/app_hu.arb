@@ -872,7 +872,7 @@
   "startEarning": "Kezdj el keresni! 💰",
   "connectStripeOrPayPal": "Csatlakoztasd a Stripe-ot vagy PayPalt, hogy fizetéseket fogadhass az alkalmazásodért.",
   "connectNow": "Csatlakoztatás most",
-  "installsCount": "{count}+ telepítés",
+  "installsCount": "Telepítések",
   "uninstallApp": "Alkalmazás eltávolítása",
   "subscribe": "Feliratkozás",
   "dataAccessNotice": "Adathozzáférési értesítés",
@@ -2031,5 +2031,8 @@
   "replyToReview": "Válasz az értékelésre",
   "rateAndReviewThisApp": "Értékeld és írd meg véleményed erről az alkalmazásról",
   "noChangesInReview": "Nincs változás az értékelésben a frissítéshez.",
-  "cantRateWithoutInternet": "Nem lehet értékelni internetkapcsolat nélkül."
+  "cantRateWithoutInternet": "Nem lehet értékelni internetkapcsolat nélkül.",
+  "appAnalytics": "Alkalmazás elemzés",
+  "learnMoreLink": "tudj meg többet",
+  "moneyEarned": "Keresett pénz"
 }

@@ -872,7 +872,7 @@
   "startEarning": "Bắt đầu Kiếm tiền! 💰",
   "connectStripeOrPayPal": "Kết nối Stripe hoặc PayPal để nhận thanh toán cho ứng dụng của bạn.",
   "connectNow": "Kết nối Ngay",
-  "installsCount": "{count}+ lượt cài đặt",
+  "installsCount": "Lượt cài đặt",
   "uninstallApp": "Gỡ cài đặt ứng dụng",
   "subscribe": "Đăng ký",
   "dataAccessNotice": "Thông báo truy cập dữ liệu",
@@ -2031,5 +2031,8 @@
   "replyToReview": "Trả lời đánh giá",
   "rateAndReviewThisApp": "Đánh giá và viết nhận xét ứng dụng này",
   "noChangesInReview": "Không có thay đổi trong đánh giá để cập nhật.",
-  "cantRateWithoutInternet": "Không thể đánh giá ứng dụng khi không có kết nối internet."
+  "cantRateWithoutInternet": "Không thể đánh giá ứng dụng khi không có kết nối internet.",
+  "appAnalytics": "Phân tích ứng dụng",
+  "learnMoreLink": "tìm hiểu thêm",
+  "moneyEarned": "Tiền kiếm được"
 }

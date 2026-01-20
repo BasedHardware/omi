@@ -6523,4 +6523,16 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get cantRateWithoutInternet => 'Nemožno hodnotiť aplikáciu bez pripojenia na internet.';
+
+  @override
+  String get appAnalytics => 'Analytika aplikácie';
+
+  @override
+  String get learnMoreLink => 'zistiť viac';
+
+  @override
+  String get installsCount => 'Inštalácie';
+
+  @override
+  String get moneyEarned => 'Zarobené peniaze';
 }

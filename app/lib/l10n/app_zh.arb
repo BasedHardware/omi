@@ -873,7 +873,7 @@
   "startEarning": "开始赚钱！💰",
   "connectStripeOrPayPal": "连接 Stripe 或 PayPal 以接收您的应用付款。",
   "connectNow": "立即连接",
-  "installsCount": "{count}+次安装",
+  "installsCount": "安装量",
   "uninstallApp": "卸载应用",
   "subscribe": "订阅",
   "dataAccessNotice": "数据访问通知",
@@ -2032,5 +2032,8 @@
   "replyToReview": "回复评价",
   "rateAndReviewThisApp": "评分并评价此应用",
   "noChangesInReview": "评论没有更改需要更新。",
-  "cantRateWithoutInternet": "没有网络连接无法评价应用。"
+  "cantRateWithoutInternet": "没有网络连接无法评价应用。",
+  "appAnalytics": "应用分析",
+  "learnMoreLink": "了解更多",
+  "moneyEarned": "收入"
 }

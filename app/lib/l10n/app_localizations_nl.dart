@@ -6542,4 +6542,16 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get cantRateWithoutInternet => 'Kan app niet beoordelen zonder internetverbinding.';
+
+  @override
+  String get appAnalytics => 'App-analyse';
+
+  @override
+  String get learnMoreLink => 'meer informatie';
+
+  @override
+  String get installsCount => 'Installaties';
+
+  @override
+  String get moneyEarned => 'Verdiend geld';
 }

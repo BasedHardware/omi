@@ -872,7 +872,7 @@
   "startEarning": "Alusta teenimist! 💰",
   "connectStripeOrPayPal": "Ühenda Stripe või PayPal, et saada rakenduse eest makseid.",
   "connectNow": "Ühenda kohe",
-  "installsCount": "{count}+ paigaldust",
+  "installsCount": "Paigaldused",
   "uninstallApp": "Desinstalli rakendus",
   "subscribe": "Telli",
   "dataAccessNotice": "Andmetele juurdepääsu teatis",
@@ -2031,5 +2031,8 @@
   "replyToReview": "Vasta arvustusele",
   "rateAndReviewThisApp": "Hinda ja arvusta seda rakendust",
   "noChangesInReview": "Arvustuses pole muudatusi uuendamiseks.",
-  "cantRateWithoutInternet": "Ei saa rakendust hinnata ilma internetiühenduseta."
+  "cantRateWithoutInternet": "Ei saa rakendust hinnata ilma internetiühenduseta.",
+  "appAnalytics": "Rakenduse analüütika",
+  "learnMoreLink": "lisateave",
+  "moneyEarned": "Teenitud raha"
 }

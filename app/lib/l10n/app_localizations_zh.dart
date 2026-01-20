@@ -6402,4 +6402,16 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get cantRateWithoutInternet => '没有网络连接无法评价应用。';
+
+  @override
+  String get appAnalytics => '应用分析';
+
+  @override
+  String get learnMoreLink => '了解更多';
+
+  @override
+  String get installsCount => '安装量';
+
+  @override
+  String get moneyEarned => '收入';
 }

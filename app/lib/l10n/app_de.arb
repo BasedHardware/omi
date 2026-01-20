@@ -873,7 +873,7 @@
   "startEarning": "Beginnen Sie zu verdienen! 💰",
   "connectStripeOrPayPal": "Verbinden Sie Stripe oder PayPal, um Zahlungen für Ihre App zu erhalten.",
   "connectNow": "Jetzt verbinden",
-  "installsCount": "{count}+ Installationen",
+  "installsCount": "Installationen",
   "uninstallApp": "App deinstallieren",
   "subscribe": "Abonnieren",
   "dataAccessNotice": "Datenzugriffshinweis",
@@ -2013,5 +2013,8 @@
   "replyToReview": "Auf Bewertung antworten",
   "rateAndReviewThisApp": "Bewerte und rezensiere diese App",
   "noChangesInReview": "Keine Änderungen in der Bewertung zu aktualisieren.",
-  "cantRateWithoutInternet": "Kann App ohne Internetverbindung nicht bewerten."
+  "cantRateWithoutInternet": "Kann App ohne Internetverbindung nicht bewerten.",
+  "appAnalytics": "App-Analytik",
+  "learnMoreLink": "mehr erfahren",
+  "moneyEarned": "Verdient"
 }

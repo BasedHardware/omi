@@ -872,7 +872,7 @@
   "startEarning": "수익 시작! 💰",
   "connectStripeOrPayPal": "Stripe 또는 PayPal을 연결하여 앱에 대한 결제를 받으세요.",
   "connectNow": "지금 연결",
-  "installsCount": "{count}+회 설치",
+  "installsCount": "설치",
   "uninstallApp": "앱 제거",
   "subscribe": "구독",
   "dataAccessNotice": "데이터 접근 알림",
@@ -2031,5 +2031,8 @@
   "replyToReview": "리뷰에 답글",
   "rateAndReviewThisApp": "이 앱을 평가하고 리뷰하세요",
   "noChangesInReview": "업데이트할 리뷰 변경사항이 없습니다.",
-  "cantRateWithoutInternet": "인터넷 연결 없이는 앱을 평가할 수 없습니다."
+  "cantRateWithoutInternet": "인터넷 연결 없이는 앱을 평가할 수 없습니다.",
+  "appAnalytics": "앱 분석",
+  "learnMoreLink": "자세히 알아보기",
+  "moneyEarned": "수익"
 }

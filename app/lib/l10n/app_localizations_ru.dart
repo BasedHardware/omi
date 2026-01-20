@@ -6539,4 +6539,16 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get cantRateWithoutInternet => 'Невозможно оценить приложение без подключения к интернету.';
+
+  @override
+  String get appAnalytics => 'Аналитика приложения';
+
+  @override
+  String get learnMoreLink => 'узнать больше';
+
+  @override
+  String get installsCount => 'Установки';
+
+  @override
+  String get moneyEarned => 'Заработано';
 }
