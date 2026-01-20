@@ -1976,5 +1976,22 @@
   "realtimeListening": "实时监听",
   "setupCompleted": "已完成",
   "pleaseSelectRating": "请选择评分",
-  "writeReviewOptional": "撰写评论（可选）"
+  "writeReviewOptional": "撰写评论（可选）",
+  "setupQuestionsIntro": "回答几个问题帮助我们改进 Omi。 🫶 💜",
+  "setupQuestionProfession": "1. 你的职业是什么？",
+  "setupQuestionUsage": "2. 你计划在哪里使用 Omi？",
+  "setupQuestionAge": "3. 你的年龄段是？",
+  "setupAnswerAllQuestions": "你还没有回答所有问题！ 🥺",
+  "setupSkipHelp": "跳过，我不想帮忙 :C",
+  "professionEntrepreneur": "创业者",
+  "professionSoftwareEngineer": "软件工程师",
+  "professionProductManager": "产品经理",
+  "professionExecutive": "高管",
+  "professionSales": "销售",
+  "professionStudent": "学生",
+  "usageAtWork": "工作中",
+  "usageIrlEvents": "线下活动",
+  "usageOnline": "在线",
+  "usageSocialSettings": "社交场合",
+  "usageEverywhere": "到处"
 }

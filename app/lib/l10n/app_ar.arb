@@ -1956,5 +1956,22 @@
   "realtimeListening": "الاستماع في الوقت الفعلي",
   "setupCompleted": "مكتمل",
   "pleaseSelectRating": "يرجى تحديد تقييم",
-  "writeReviewOptional": "اكتب مراجعة (اختياري)"
+  "writeReviewOptional": "اكتب مراجعة (اختياري)",
+  "setupQuestionsIntro": "ساعدنا في تحسين Omi بالإجابة على بعض الأسئلة. 🫶 💜",
+  "setupQuestionProfession": "1. ما هو عملك؟",
+  "setupQuestionUsage": "2. أين تخطط لاستخدام Omi؟",
+  "setupQuestionAge": "3. ما هو نطاق عمرك؟",
+  "setupAnswerAllQuestions": "لم تجب على جميع الأسئلة بعد! 🥺",
+  "setupSkipHelp": "تخطي، لا أريد المساعدة :C",
+  "professionEntrepreneur": "رائد أعمال",
+  "professionSoftwareEngineer": "مهندس برمجيات",
+  "professionProductManager": "مدير منتج",
+  "professionExecutive": "تنفيذي",
+  "professionSales": "مبيعات",
+  "professionStudent": "طالب",
+  "usageAtWork": "في العمل",
+  "usageIrlEvents": "أحداث واقعية",
+  "usageOnline": "عبر الإنترنت",
+  "usageSocialSettings": "في المناسبات الاجتماعية",
+  "usageEverywhere": "في كل مكان"
 }

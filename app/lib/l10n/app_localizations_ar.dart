@@ -5860,6 +5860,60 @@ class AppLocalizationsAr extends AppLocalizations {
   String get writeReviewOptional => 'اكتب مراجعة (اختياري)';
 
   @override
+  String get setupQuestionsIntro => 'ساعدنا في تحسين Omi بالإجابة على بعض الأسئلة. 🫶 💜';
+
+  @override
+  String get setupQuestionProfession => '1. ما هو عملك؟';
+
+  @override
+  String get setupQuestionUsage => '2. أين تخطط لاستخدام Omi؟';
+
+  @override
+  String get setupQuestionAge => '3. ما هو نطاق عمرك؟';
+
+  @override
+  String get setupAnswerAllQuestions => 'لم تجب على جميع الأسئلة بعد! 🥺';
+
+  @override
+  String get continueButton => 'متابعة';
+
+  @override
+  String get setupSkipHelp => 'تخطي، لا أريد المساعدة :C';
+
+  @override
+  String get professionEntrepreneur => 'رائد أعمال';
+
+  @override
+  String get professionSoftwareEngineer => 'مهندس برمجيات';
+
+  @override
+  String get professionProductManager => 'مدير منتج';
+
+  @override
+  String get professionExecutive => 'تنفيذي';
+
+  @override
+  String get professionSales => 'مبيعات';
+
+  @override
+  String get professionStudent => 'طالب';
+
+  @override
+  String get usageAtWork => 'في العمل';
+
+  @override
+  String get usageIrlEvents => 'أحداث واقعية';
+
+  @override
+  String get usageOnline => 'عبر الإنترنت';
+
+  @override
+  String get usageSocialSettings => 'في المناسبات الاجتماعية';
+
+  @override
+  String get usageEverywhere => 'في كل مكان';
+
+  @override
   String get photoLibrary => 'مكتبة الصور';
 
   @override

@@ -1976,5 +1976,22 @@
   "realtimeListening": "リアルタイムリスニング",
   "setupCompleted": "完了",
   "pleaseSelectRating": "評価を選択してください",
-  "writeReviewOptional": "レビューを書く（任意）"
+  "writeReviewOptional": "レビューを書く（任意）",
+  "setupQuestionsIntro": "いくつかの質問に答えて、Omiの改善にご協力ください。 🫶 💜",
+  "setupQuestionProfession": "1. お仕事は何をされていますか？",
+  "setupQuestionUsage": "2. Omiをどこで使う予定ですか？",
+  "setupQuestionAge": "3. 年齢層を教えてください",
+  "setupAnswerAllQuestions": "まだすべての質問に答えていません！ 🥺",
+  "setupSkipHelp": "スキップ、協力しません :C",
+  "professionEntrepreneur": "起業家",
+  "professionSoftwareEngineer": "ソフトウェアエンジニア",
+  "professionProductManager": "プロダクトマネージャー",
+  "professionExecutive": "エグゼクティブ",
+  "professionSales": "営業",
+  "professionStudent": "学生",
+  "usageAtWork": "仕事で",
+  "usageIrlEvents": "リアルイベントで",
+  "usageOnline": "オンラインで",
+  "usageSocialSettings": "社交の場で",
+  "usageEverywhere": "どこでも"
 }

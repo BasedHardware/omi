@@ -5789,6 +5789,60 @@ class AppLocalizationsZh extends AppLocalizations {
   String get writeReviewOptional => '撰写评论（可选）';
 
   @override
+  String get setupQuestionsIntro => '回答几个问题帮助我们改进 Omi。 🫶 💜';
+
+  @override
+  String get setupQuestionProfession => '1. 你的职业是什么？';
+
+  @override
+  String get setupQuestionUsage => '2. 你计划在哪里使用 Omi？';
+
+  @override
+  String get setupQuestionAge => '3. 你的年龄段是？';
+
+  @override
+  String get setupAnswerAllQuestions => '你还没有回答所有问题！ 🥺';
+
+  @override
+  String get continueButton => '继续';
+
+  @override
+  String get setupSkipHelp => '跳过，我不想帮忙 :C';
+
+  @override
+  String get professionEntrepreneur => '创业者';
+
+  @override
+  String get professionSoftwareEngineer => '软件工程师';
+
+  @override
+  String get professionProductManager => '产品经理';
+
+  @override
+  String get professionExecutive => '高管';
+
+  @override
+  String get professionSales => '销售';
+
+  @override
+  String get professionStudent => '学生';
+
+  @override
+  String get usageAtWork => '工作中';
+
+  @override
+  String get usageIrlEvents => '线下活动';
+
+  @override
+  String get usageOnline => '在线';
+
+  @override
+  String get usageSocialSettings => '社交场合';
+
+  @override
+  String get usageEverywhere => '到处';
+
+  @override
   String get photoLibrary => '照片库';
 
   @override

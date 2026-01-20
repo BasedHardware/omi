@@ -1975,5 +1975,22 @@
   "realtimeListening": "Écoute en temps réel",
   "setupCompleted": "Terminé",
   "pleaseSelectRating": "Veuillez sélectionner une note",
-  "writeReviewOptional": "Écrire un avis (optionnel)"
+  "writeReviewOptional": "Écrire un avis (optionnel)",
+  "setupQuestionsIntro": "Aidez-nous à améliorer Omi en répondant à quelques questions. 🫶 💜",
+  "setupQuestionProfession": "1. Que faites-vous ?",
+  "setupQuestionUsage": "2. Où prévoyez-vous d'utiliser votre Omi ?",
+  "setupQuestionAge": "3. Quelle est votre tranche d'âge ?",
+  "setupAnswerAllQuestions": "Vous n'avez pas encore répondu à toutes les questions ! 🥺",
+  "setupSkipHelp": "Passer, je ne veux pas aider :C",
+  "professionEntrepreneur": "Entrepreneur",
+  "professionSoftwareEngineer": "Ingénieur logiciel",
+  "professionProductManager": "Chef de produit",
+  "professionExecutive": "Cadre dirigeant",
+  "professionSales": "Ventes",
+  "professionStudent": "Étudiant",
+  "usageAtWork": "Au travail",
+  "usageIrlEvents": "Événements IRL",
+  "usageOnline": "En ligne",
+  "usageSocialSettings": "Dans des contextes sociaux",
+  "usageEverywhere": "Partout"
 }

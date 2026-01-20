@@ -5904,6 +5904,60 @@ class AppLocalizationsEs extends AppLocalizations {
   String get writeReviewOptional => 'Escribe una reseña (opcional)';
 
   @override
+  String get setupQuestionsIntro => 'Ayúdanos a mejorar Omi respondiendo algunas preguntas. 🫶 💜';
+
+  @override
+  String get setupQuestionProfession => '1. ¿A qué te dedicas?';
+
+  @override
+  String get setupQuestionUsage => '2. ¿Dónde planeas usar tu Omi?';
+
+  @override
+  String get setupQuestionAge => '3. ¿Cuál es tu rango de edad?';
+
+  @override
+  String get setupAnswerAllQuestions => '¡Aún no has respondido todas las preguntas! 🥺';
+
+  @override
+  String get continueButton => 'Continuar';
+
+  @override
+  String get setupSkipHelp => 'Omitir, no quiero ayudar :C';
+
+  @override
+  String get professionEntrepreneur => 'Emprendedor';
+
+  @override
+  String get professionSoftwareEngineer => 'Ingeniero de Software';
+
+  @override
+  String get professionProductManager => 'Gerente de Producto';
+
+  @override
+  String get professionExecutive => 'Ejecutivo';
+
+  @override
+  String get professionSales => 'Ventas';
+
+  @override
+  String get professionStudent => 'Estudiante';
+
+  @override
+  String get usageAtWork => 'En el trabajo';
+
+  @override
+  String get usageIrlEvents => 'Eventos presenciales';
+
+  @override
+  String get usageOnline => 'En línea';
+
+  @override
+  String get usageSocialSettings => 'En entornos sociales';
+
+  @override
+  String get usageEverywhere => 'En todas partes';
+
+  @override
   String get photoLibrary => 'Biblioteca de fotos';
 
   @override

@@ -1687,7 +1687,7 @@
     "description": "Description for notifications permission"
   },
   "@continueButton": {
-    "description": "Generic continue button text"
+    "description": "Continue button label"
   },
   "locationServiceDisabled": "Location Service Disabled",
   "@locationServiceDisabled": {
@@ -7741,5 +7741,73 @@
   "writeReviewOptional": "Write a review (optional)",
   "@writeReviewOptional": {
     "description": "Hint text for review input field"
+  },
+  "setupQuestionsIntro": "Help us improve Omi by answering a few questions.  🫶 💜",
+  "@setupQuestionsIntro": {
+    "description": "Intro text for setup questions page"
+  },
+  "setupQuestionProfession": "1. What do you do?",
+  "@setupQuestionProfession": {
+    "description": "Question about profession"
+  },
+  "setupQuestionUsage": "2. Where do you plan to use your Omi?",
+  "@setupQuestionUsage": {
+    "description": "Question about Omi usage location"
+  },
+  "setupQuestionAge": "3. What's your age range?",
+  "@setupQuestionAge": {
+    "description": "Question about age range"
+  },
+  "setupAnswerAllQuestions": "You haven't answered all the questions yet! 🥺",
+  "@setupAnswerAllQuestions": {
+    "description": "Error message when not all questions are answered"
+  },
+  "setupSkipHelp": "Skip, I don't want to help :C",
+  "@setupSkipHelp": {
+    "description": "Skip button text for setup questions"
+  },
+  "professionEntrepreneur": "Entrepreneur",
+  "@professionEntrepreneur": {
+    "description": "Profession option: Entrepreneur"
+  },
+  "professionSoftwareEngineer": "Software Engineer",
+  "@professionSoftwareEngineer": {
+    "description": "Profession option: Software Engineer"
+  },
+  "professionProductManager": "Product Manager",
+  "@professionProductManager": {
+    "description": "Profession option: Product Manager"
+  },
+  "professionExecutive": "Executive",
+  "@professionExecutive": {
+    "description": "Profession option: Executive"
+  },
+  "professionSales": "Sales",
+  "@professionSales": {
+    "description": "Profession option: Sales"
+  },
+  "professionStudent": "Student",
+  "@professionStudent": {
+    "description": "Profession option: Student"
+  },
+  "usageAtWork": "At work",
+  "@usageAtWork": {
+    "description": "Usage location option: At work"
+  },
+  "usageIrlEvents": "IRL Events",
+  "@usageIrlEvents": {
+    "description": "Usage location option: IRL Events"
+  },
+  "usageOnline": "Online",
+  "@usageOnline": {
+    "description": "Usage location option: Online"
+  },
+  "usageSocialSettings": "In Social Settings",
+  "@usageSocialSettings": {
+    "description": "Usage location option: In Social Settings"
+  },
+  "usageEverywhere": "Everywhere",
+  "@usageEverywhere": {
+    "description": "Usage location option: Everywhere"
   }
 }

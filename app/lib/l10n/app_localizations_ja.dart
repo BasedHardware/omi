@@ -5799,6 +5799,60 @@ class AppLocalizationsJa extends AppLocalizations {
   String get writeReviewOptional => 'レビューを書く（任意）';
 
   @override
+  String get setupQuestionsIntro => 'いくつかの質問に答えて、Omiの改善にご協力ください。 🫶 💜';
+
+  @override
+  String get setupQuestionProfession => '1. お仕事は何をされていますか？';
+
+  @override
+  String get setupQuestionUsage => '2. Omiをどこで使う予定ですか？';
+
+  @override
+  String get setupQuestionAge => '3. 年齢層を教えてください';
+
+  @override
+  String get setupAnswerAllQuestions => 'まだすべての質問に答えていません！ 🥺';
+
+  @override
+  String get continueButton => '続ける';
+
+  @override
+  String get setupSkipHelp => 'スキップ、協力しません :C';
+
+  @override
+  String get professionEntrepreneur => '起業家';
+
+  @override
+  String get professionSoftwareEngineer => 'ソフトウェアエンジニア';
+
+  @override
+  String get professionProductManager => 'プロダクトマネージャー';
+
+  @override
+  String get professionExecutive => 'エグゼクティブ';
+
+  @override
+  String get professionSales => '営業';
+
+  @override
+  String get professionStudent => '学生';
+
+  @override
+  String get usageAtWork => '仕事で';
+
+  @override
+  String get usageIrlEvents => 'リアルイベントで';
+
+  @override
+  String get usageOnline => 'オンラインで';
+
+  @override
+  String get usageSocialSettings => '社交の場で';
+
+  @override
+  String get usageEverywhere => 'どこでも';
+
+  @override
   String get photoLibrary => 'フォトライブラリ';
 
   @override

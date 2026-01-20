@@ -5915,6 +5915,60 @@ class AppLocalizationsTr extends AppLocalizations {
   String get writeReviewOptional => 'Yorum yaz (isteğe bağlı)';
 
   @override
+  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
+
+  @override
+  String get setupQuestionProfession => '1. What do you do?';
+
+  @override
+  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
+
+  @override
+  String get setupQuestionAge => '3. What\'s your age range?';
+
+  @override
+  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
+
+  @override
+  String get continueButton => 'Devam et';
+
+  @override
+  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
+
+  @override
+  String get professionEntrepreneur => 'Entrepreneur';
+
+  @override
+  String get professionSoftwareEngineer => 'Software Engineer';
+
+  @override
+  String get professionProductManager => 'Product Manager';
+
+  @override
+  String get professionExecutive => 'Executive';
+
+  @override
+  String get professionSales => 'Sales';
+
+  @override
+  String get professionStudent => 'Student';
+
+  @override
+  String get usageAtWork => 'At work';
+
+  @override
+  String get usageIrlEvents => 'IRL Events';
+
+  @override
+  String get usageOnline => 'Online';
+
+  @override
+  String get usageSocialSettings => 'In Social Settings';
+
+  @override
+  String get usageEverywhere => 'Everywhere';
+
+  @override
   String get photoLibrary => 'Fotoğraf Kütüphanesi';
 
   @override

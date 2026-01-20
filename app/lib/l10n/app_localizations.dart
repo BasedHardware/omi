@@ -11091,6 +11091,60 @@ abstract class AppLocalizations {
   /// Hint text for review input field
   String get writeReviewOptional;
 
+  /// Intro text for setup questions page
+  String get setupQuestionsIntro;
+
+  /// Question about profession
+  String get setupQuestionProfession;
+
+  /// Question about Omi usage location
+  String get setupQuestionUsage;
+
+  /// Question about age range
+  String get setupQuestionAge;
+
+  /// Error message when not all questions are answered
+  String get setupAnswerAllQuestions;
+
+  /// Continue button label
+  String get continueButton;
+
+  /// Skip button text for setup questions
+  String get setupSkipHelp;
+
+  /// Profession option: Entrepreneur
+  String get professionEntrepreneur;
+
+  /// Profession option: Software Engineer
+  String get professionSoftwareEngineer;
+
+  /// Profession option: Product Manager
+  String get professionProductManager;
+
+  /// Profession option: Executive
+  String get professionExecutive;
+
+  /// Profession option: Sales
+  String get professionSales;
+
+  /// Profession option: Student
+  String get professionStudent;
+
+  /// Usage location option: At work
+  String get usageAtWork;
+
+  /// Usage location option: IRL Events
+  String get usageIrlEvents;
+
+  /// Usage location option: Online
+  String get usageOnline;
+
+  /// Usage location option: In Social Settings
+  String get usageSocialSettings;
+
+  /// Usage location option: Everywhere
+  String get usageEverywhere;
+
   /// Action sheet option to select from photo library
   ///
   /// In en, this message translates to:

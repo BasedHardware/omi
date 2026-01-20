@@ -1975,5 +1975,22 @@
   "realtimeListening": "Mendengarkan Realtime",
   "setupCompleted": "Selesai",
   "pleaseSelectRating": "Silakan pilih peringkat",
-  "writeReviewOptional": "Tulis ulasan (opsional)"
+  "writeReviewOptional": "Tulis ulasan (opsional)",
+  "setupQuestionsIntro": "Help us improve Omi by answering a few questions.  🫶 💜",
+  "setupQuestionProfession": "1. What do you do?",
+  "setupQuestionUsage": "2. Where do you plan to use your Omi?",
+  "setupQuestionAge": "3. What's your age range?",
+  "setupAnswerAllQuestions": "You haven't answered all the questions yet! 🥺",
+  "setupSkipHelp": "Skip, I don't want to help :C",
+  "professionEntrepreneur": "Entrepreneur",
+  "professionSoftwareEngineer": "Software Engineer",
+  "professionProductManager": "Product Manager",
+  "professionExecutive": "Executive",
+  "professionSales": "Sales",
+  "professionStudent": "Student",
+  "usageAtWork": "At work",
+  "usageIrlEvents": "IRL Events",
+  "usageOnline": "Online",
+  "usageSocialSettings": "In Social Settings",
+  "usageEverywhere": "Everywhere"
 }
