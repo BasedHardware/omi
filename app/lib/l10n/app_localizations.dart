@@ -13220,6 +13220,132 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Failed to create app. Please try again.'**
   String get failedToCreateApp;
+
+  /// Validation error when only proactive notification capability is selected
+  ///
+  /// In en, this message translates to:
+  /// **'Please select one more core capability for your app to proceed'**
+  String get addAppSelectCoreCapability;
+
+  /// Validation error when paid app has no payment plan or price
+  ///
+  /// In en, this message translates to:
+  /// **'Please select a payment plan and enter a price for your app'**
+  String get addAppSelectPaymentPlan;
+
+  /// Validation error when no capability is selected
+  ///
+  /// In en, this message translates to:
+  /// **'Please select at least one capability for your app'**
+  String get addAppSelectCapability;
+
+  /// Validation error when no app logo is selected
+  ///
+  /// In en, this message translates to:
+  /// **'Please select a logo for your app'**
+  String get addAppSelectLogo;
+
+  /// Validation error when chat capability selected but no prompt entered
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a chat prompt for your app'**
+  String get addAppEnterChatPrompt;
+
+  /// Validation error when memories capability selected but no prompt entered
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a conversation prompt for your app'**
+  String get addAppEnterConversationPrompt;
+
+  /// Validation error when external integration selected but no trigger event
+  ///
+  /// In en, this message translates to:
+  /// **'Please select a trigger event for your app'**
+  String get addAppSelectTriggerEvent;
+
+  /// Validation error when external integration selected but no webhook URL
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a webhook URL for your app'**
+  String get addAppEnterWebhookUrl;
+
+  /// Validation error when no app category selected
+  ///
+  /// In en, this message translates to:
+  /// **'Please select a category for your app'**
+  String get addAppSelectCategory;
+
+  /// Generic validation error for incomplete form
+  ///
+  /// In en, this message translates to:
+  /// **'Please fill in all the required fields correctly'**
+  String get addAppFillRequiredFields;
+
+  /// Success message after app update
+  ///
+  /// In en, this message translates to:
+  /// **'App updated successfully 🚀'**
+  String get addAppUpdatedSuccess;
+
+  /// Error message when app update fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to update app. Please try again later'**
+  String get addAppUpdateFailed;
+
+  /// Success message after app submission
+  ///
+  /// In en, this message translates to:
+  /// **'App submitted successfully 🚀'**
+  String get addAppSubmittedSuccess;
+
+  /// Error when file picker fails to open
+  ///
+  /// In en, this message translates to:
+  /// **'Error opening file picker: {message}'**
+  String addAppErrorOpeningFilePicker(String message);
+
+  /// Error when image selection fails
+  ///
+  /// In en, this message translates to:
+  /// **'Error selecting image: {error}'**
+  String addAppErrorSelectingImage(String error);
+
+  /// Error when photos permission is denied
+  ///
+  /// In en, this message translates to:
+  /// **'Photos permission denied. Please allow access to photos to select an image'**
+  String get addAppPhotosPermissionDenied;
+
+  /// Generic error when image selection fails
+  ///
+  /// In en, this message translates to:
+  /// **'Error selecting image. Please try again.'**
+  String get addAppErrorSelectingImageRetry;
+
+  /// Error when thumbnail selection fails
+  ///
+  /// In en, this message translates to:
+  /// **'Error selecting thumbnail: {error}'**
+  String addAppErrorSelectingThumbnail(String error);
+
+  /// Generic error when thumbnail selection fails
+  ///
+  /// In en, this message translates to:
+  /// **'Error selecting thumbnail. Please try again.'**
+  String get addAppErrorSelectingThumbnailRetry;
+
+  /// Error when trying to select capabilities alongside Persona
+  ///
+  /// In en, this message translates to:
+  /// **'Other capabilities cannot be selected with Persona'**
+  String get addAppCapabilityConflictWithPersona;
+
+  /// Error when trying to select Persona alongside other capabilities
+  ///
+  /// In en, this message translates to:
+  /// **'Persona cannot be selected with other capabilities'**
+  String get addAppPersonaConflictWithCapabilities;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

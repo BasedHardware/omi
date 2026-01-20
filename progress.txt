@@ -10,10 +10,10 @@
 |--------|-------|
 | Total Files | 27 |
 | Total Strings | ~125 |
-| Completed | 1 |
+| Completed | 2 |
 | In Progress | 0 |
-| Pending | 26 |
-| Progress | 4% |
+| Pending | 25 |
+| Progress | 7% |
 
 ================================================================================
 ## PRIORITY 1: HIGH IMPACT - User-Facing Features (~65 strings)
@@ -29,28 +29,16 @@ installingApp, appCreatedAndInstalled, appCreatedSuccessfully, failedToCreateApp
 Reused existing keys: createCustomTemplate, conversationPrompt, pleaseEnterAppName, makePublic,
 createApp, creatingYourApp.
 
-### [ ] pages/apps/providers/add_app_provider.dart (~20 strings)
-Status: PENDING
-Strings:
-- [ ] Line 451: 'Please select one more core capability...' (validation)
-- [ ] Line 456: 'Please select a payment plan and enter a price...' (validation)
-- [ ] Line 460: 'Please select at least one capability...' (validation)
-- [ ] Line 464: 'Please select a logo for your app' (validation)
-- [ ] Line 470: 'Please enter a chat prompt...' (validation)
-- [ ] Line 476: 'Please enter a conversation prompt...' (validation)
-- [ ] Line 482: 'Please select a trigger event...' (validation)
-- [ ] Line 486: 'Please enter a webhook URL...' (validation)
-- [ ] Line 493: 'Please select a category...' (validation)
-- [ ] Line 498: 'Please fill in all the required fields correctly' (validation)
-- [ ] Line 564: 'App updated successfully' (success)
-- [ ] Line 568: 'Failed to update app...' (error)
-- [ ] Line 633: 'App submitted successfully' (success)
-- [ ] Line 671/733: 'Error opening file picker: ...' (error)
-- [ ] Line 674/737: 'Error selecting image: ...' (error)
-- [ ] Line 693/772/833: 'Photos permission denied...' (error)
-- [ ] Line 695/774: 'Error selecting image: ...' (error)
-- [ ] Line 699/779: 'Error selecting image/thumbnail. Please try again.' (error)
-- [ ] Line 719: 'Select a thumbnail image' (dialog title)
+### [x] pages/apps/providers/add_app_provider.dart (~20 strings)
+Status: COMPLETED
+Note: Added 21 new l10n keys to all 34 language ARB files. Keys added: addAppSelectCoreCapability,
+addAppSelectPaymentPlan, addAppSelectCapability, addAppSelectLogo, addAppEnterChatPrompt,
+addAppEnterConversationPrompt, addAppSelectTriggerEvent, addAppEnterWebhookUrl, addAppSelectCategory,
+addAppFillRequiredFields, addAppUpdatedSuccess, addAppUpdateFailed, addAppSubmittedSuccess,
+addAppErrorOpeningFilePicker (with placeholder), addAppErrorSelectingImage (with placeholder),
+addAppPhotosPermissionDenied, addAppErrorSelectingImageRetry, addAppErrorSelectingThumbnail
+(with placeholder), addAppErrorSelectingThumbnailRetry, addAppCapabilityConflictWithPersona,
+addAppPersonaConflictWithCapabilities.
 
 ### [ ] pages/persona/persona_provider.dart (~15 strings)
 Status: PENDING
@@ -233,6 +221,12 @@ Strings:
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-20] Localized add_app_provider.dart
+- Added 21 new l10n keys to all 34 language ARB files
+- Updated Dart file to use MyApp.navigatorKey.currentContext!.l10n pattern
+- Keys cover validation errors, success/error messages, and capability conflicts
+- Ran flutter gen-l10n and verified with test.sh
 
 [2026-01-20] Localized create_template_bottom_sheet.dart
 - Added 14 new l10n keys to all 34 language ARB files

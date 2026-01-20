@@ -7063,4 +7063,74 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get failedToCreateApp => 'Nem sikerült létrehozni az alkalmazást. Kérjük, próbálja újra.';
+
+  @override
+  String get addAppSelectCoreCapability => 'Please select one more core capability for your app to proceed';
+
+  @override
+  String get addAppSelectPaymentPlan => 'Please select a payment plan and enter a price for your app';
+
+  @override
+  String get addAppSelectCapability => 'Please select at least one capability for your app';
+
+  @override
+  String get addAppSelectLogo => 'Please select a logo for your app';
+
+  @override
+  String get addAppEnterChatPrompt => 'Please enter a chat prompt for your app';
+
+  @override
+  String get addAppEnterConversationPrompt => 'Please enter a conversation prompt for your app';
+
+  @override
+  String get addAppSelectTriggerEvent => 'Please select a trigger event for your app';
+
+  @override
+  String get addAppEnterWebhookUrl => 'Please enter a webhook URL for your app';
+
+  @override
+  String get addAppSelectCategory => 'Please select a category for your app';
+
+  @override
+  String get addAppFillRequiredFields => 'Please fill in all the required fields correctly';
+
+  @override
+  String get addAppUpdatedSuccess => 'App updated successfully 🚀';
+
+  @override
+  String get addAppUpdateFailed => 'Failed to update app. Please try again later';
+
+  @override
+  String get addAppSubmittedSuccess => 'App submitted successfully 🚀';
+
+  @override
+  String addAppErrorOpeningFilePicker(String message) {
+    return 'Error opening file picker: $message';
+  }
+
+  @override
+  String addAppErrorSelectingImage(String error) {
+    return 'Error selecting image: $error';
+  }
+
+  @override
+  String get addAppPhotosPermissionDenied =>
+      'Photos permission denied. Please allow access to photos to select an image';
+
+  @override
+  String get addAppErrorSelectingImageRetry => 'Error selecting image. Please try again.';
+
+  @override
+  String addAppErrorSelectingThumbnail(String error) {
+    return 'Error selecting thumbnail: $error';
+  }
+
+  @override
+  String get addAppErrorSelectingThumbnailRetry => 'Error selecting thumbnail. Please try again.';
+
+  @override
+  String get addAppCapabilityConflictWithPersona => 'Other capabilities cannot be selected with Persona';
+
+  @override
+  String get addAppPersonaConflictWithCapabilities => 'Persona cannot be selected with other capabilities';
 }
