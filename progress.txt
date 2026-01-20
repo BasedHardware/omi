@@ -10,10 +10,10 @@
 |--------|-------|
 | Total Files | 27 |
 | Total Strings | ~125 |
-| Completed | 6 |
+| Completed | 7 |
 | In Progress | 0 |
-| Pending | 21 |
-| Progress | 22% |
+| Pending | 20 |
+| Progress | 26% |
 
 ================================================================================
 ## PRIORITY 1: HIGH IMPACT - User-Facing Features (~65 strings)
@@ -73,16 +73,12 @@ paymentStatusNotConnected.
 ## PRIORITY 2: MEDIUM IMPACT - Settings & Configuration (~30 strings)
 ================================================================================
 
-### [ ] pages/apps/widgets/payment_details_widget.dart (8 strings)
-Status: PENDING
-Strings:
-- [ ] Line 33: 'App Cost' (label)
-- [ ] Line 50: 'Please enter a valid amount' (validation)
-- [ ] Line 53: 'Please enter an amount greater than 0' (validation)
-- [ ] Line 76: '20' (hintText placeholder)
-- [ ] Line 86: 'Payment Plan' (label)
-- [ ] Line 112: 'Payment Plan' (modal title)
-- [ ] Line 184: 'None Selected' (placeholder text)
+### [x] pages/apps/widgets/payment_details_widget.dart (5 strings)
+Status: COMPLETED
+Note: Added 5 new l10n keys to all 34 language ARB files and updated the Dart file to use
+context.l10n pattern. Keys added: paymentAppCost, paymentEnterValidAmount,
+paymentEnterAmountGreaterThanZero, paymentPlan, paymentNoneSelected.
+The hintText '20' is a numeric placeholder example and doesn't require localization.
 
 ### [ ] pages/settings/ai_app_generator_provider.dart (6 strings)
 Status: PENDING
@@ -210,6 +206,12 @@ Strings:
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-20] Localized payment_details_widget.dart
+- Added 5 new l10n keys to all 34 language ARB files
+- Updated Dart file to use context.l10n pattern
+- Keys: paymentAppCost, paymentEnterValidAmount, paymentEnterAmountGreaterThanZero, paymentPlan, paymentNoneSelected
+- Ran flutter gen-l10n and verified with test.sh
 
 [2026-01-20] Localized payment_method_config.dart
 - Added 5 new l10n keys to all 34 language ARB files

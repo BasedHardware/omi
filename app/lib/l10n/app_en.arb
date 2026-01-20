@@ -8855,5 +8855,25 @@
   "paymentStatusNotConnected": "Not Connected",
   "@paymentStatusNotConnected": {
     "description": "Status label when payment method is not connected"
+  },
+  "paymentAppCost": "App Cost",
+  "@paymentAppCost": {
+    "description": "Label for app cost input field"
+  },
+  "paymentEnterValidAmount": "Please enter a valid amount",
+  "@paymentEnterValidAmount": {
+    "description": "Validation error when amount is not a valid number"
+  },
+  "paymentEnterAmountGreaterThanZero": "Please enter an amount greater than 0",
+  "@paymentEnterAmountGreaterThanZero": {
+    "description": "Validation error when app cost is less than 1"
+  },
+  "paymentPlan": "Payment Plan",
+  "@paymentPlan": {
+    "description": "Label for payment plan selection"
+  },
+  "paymentNoneSelected": "None Selected",
+  "@paymentNoneSelected": {
+    "description": "Placeholder when no payment plan is selected"
   }
 }

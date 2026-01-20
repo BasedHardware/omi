@@ -13484,6 +13484,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Not Connected'**
   String get paymentStatusNotConnected;
+
+  /// Label for app cost input field
+  ///
+  /// In en, this message translates to:
+  /// **'App Cost'**
+  String get paymentAppCost;
+
+  /// Validation error when amount is not a valid number
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a valid amount'**
+  String get paymentEnterValidAmount;
+
+  /// Validation error when app cost is less than 1
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter an amount greater than 0'**
+  String get paymentEnterAmountGreaterThanZero;
+
+  /// Label for payment plan selection
+  ///
+  /// In en, this message translates to:
+  /// **'Payment Plan'**
+  String get paymentPlan;
+
+  /// Placeholder when no payment plan is selected
+  ///
+  /// In en, this message translates to:
+  /// **'None Selected'**
+  String get paymentNoneSelected;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

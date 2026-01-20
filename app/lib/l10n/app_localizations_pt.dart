@@ -7166,4 +7166,19 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get paymentStatusNotConnected => 'Not Connected';
+
+  @override
+  String get paymentAppCost => 'App Cost';
+
+  @override
+  String get paymentEnterValidAmount => 'Please enter a valid amount';
+
+  @override
+  String get paymentEnterAmountGreaterThanZero => 'Please enter an amount greater than 0';
+
+  @override
+  String get paymentPlan => 'Payment Plan';
+
+  @override
+  String get paymentNoneSelected => 'None Selected';
 }

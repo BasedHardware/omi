@@ -2247,5 +2247,10 @@
   "paymentMethodPayPal": "PayPal",
   "paymentStatusActive": "Active",
   "paymentStatusConnected": "Connected",
-  "paymentStatusNotConnected": "Not Connected"
+  "paymentStatusNotConnected": "Not Connected",
+  "paymentAppCost": "App Cost",
+  "paymentEnterValidAmount": "Please enter a valid amount",
+  "paymentEnterAmountGreaterThanZero": "Please enter an amount greater than 0",
+  "paymentPlan": "Payment Plan",
+  "paymentNoneSelected": "None Selected"
 }
