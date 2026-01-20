@@ -5699,6 +5699,96 @@ class AppLocalizationsZh extends AppLocalizations {
   String get disable => '禁用';
 
   @override
+  String get permissionReadConversations => '读取对话';
+
+  @override
+  String get permissionReadMemories => '读取记忆';
+
+  @override
+  String get permissionReadTasks => '读取任务';
+
+  @override
+  String get permissionCreateConversations => '创建对话';
+
+  @override
+  String get permissionCreateMemories => '创建记忆';
+
+  @override
+  String get permissionTypeAccess => '访问';
+
+  @override
+  String get permissionTypeCreate => '创建';
+
+  @override
+  String get permissionTypeTrigger => '触发器';
+
+  @override
+  String get permissionDescReadConversations => '此应用可以访问您的对话。';
+
+  @override
+  String get permissionDescReadMemories => '此应用可以访问您的记忆。';
+
+  @override
+  String get permissionDescReadTasks => '此应用可以访问您的任务。';
+
+  @override
+  String get permissionDescCreateConversations => '此应用可以创建新对话。';
+
+  @override
+  String get permissionDescCreateMemories => '此应用可以创建新记忆。';
+
+  @override
+  String get realtimeListening => '实时监听';
+
+  @override
+  String get invalidIntegrationUrl => '无效的集成链接';
+
+  @override
+  String get invalidSetupInstructionsUrl => '无效的设置说明链接';
+
+  @override
+  String get setupCompleted => '已完成';
+
+  @override
+  String get tapToComplete => '点击完成';
+
+  @override
+  String get setupInstructions => '设置说明';
+
+  @override
+  String get aboutTheApp => '关于应用';
+
+  @override
+  String get aboutThePersona => '关于人格';
+
+  @override
+  String get pushToTalk => '按键说话';
+
+  @override
+  String get summaryPrompt => '摘要提示';
+
+  @override
+  String get chatPersonality => '聊天个性';
+
+  @override
+  String get ratingsAndReviews => '评分和评论';
+
+  @override
+  String get pleaseSelectRating => '请选择评分';
+
+  @override
+  String get reviewAddedSuccessfully => '评论添加成功 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => '评论更新成功 🚀';
+
+  @override
+  String get failedToSubmitReview => '提交评论失败。请重试。';
+
+  @override
+  String get writeReviewOptional => '撰写评论（可选）';
+
+  @override
   String get photoLibrary => '照片库';
 
   @override

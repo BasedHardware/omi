@@ -5848,6 +5848,96 @@ class AppLocalizationsCa extends AppLocalizations {
   String get disable => 'Desactivar';
 
   @override
+  String get permissionReadConversations => 'Llegir converses';
+
+  @override
+  String get permissionReadMemories => 'Llegir records';
+
+  @override
+  String get permissionReadTasks => 'Llegir tasques';
+
+  @override
+  String get permissionCreateConversations => 'Crear converses';
+
+  @override
+  String get permissionCreateMemories => 'Crear records';
+
+  @override
+  String get permissionTypeAccess => 'Accés';
+
+  @override
+  String get permissionTypeCreate => 'Crear';
+
+  @override
+  String get permissionTypeTrigger => 'Disparador';
+
+  @override
+  String get permissionDescReadConversations => 'Aquesta app pot accedir a les teves converses.';
+
+  @override
+  String get permissionDescReadMemories => 'Aquesta app pot accedir als teus records.';
+
+  @override
+  String get permissionDescReadTasks => 'Aquesta app pot accedir a les teves tasques.';
+
+  @override
+  String get permissionDescCreateConversations => 'Aquesta app pot crear noves converses.';
+
+  @override
+  String get permissionDescCreateMemories => 'Aquesta app pot crear nous records.';
+
+  @override
+  String get realtimeListening => 'Escolta en temps real';
+
+  @override
+  String get invalidIntegrationUrl => 'URL d\'integració no vàlida';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'URL d\'instruccions de configuració no vàlida';
+
+  @override
+  String get setupCompleted => 'Completat';
+
+  @override
+  String get tapToComplete => 'Toca per completar';
+
+  @override
+  String get setupInstructions => 'Instruccions de configuració';
+
+  @override
+  String get aboutTheApp => 'Sobre l\'app';
+
+  @override
+  String get aboutThePersona => 'Sobre la persona';
+
+  @override
+  String get pushToTalk => 'Prem per parlar';
+
+  @override
+  String get summaryPrompt => 'Prompt de resum';
+
+  @override
+  String get chatPersonality => 'Personalitat del xat';
+
+  @override
+  String get ratingsAndReviews => 'Valoracions i ressenyes';
+
+  @override
+  String get pleaseSelectRating => 'Si us plau, selecciona una valoració';
+
+  @override
+  String get reviewAddedSuccessfully => 'Ressenya afegida amb èxit 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Ressenya actualitzada amb èxit 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Error en enviar la ressenya. Si us plau, torna-ho a provar.';
+
+  @override
+  String get writeReviewOptional => 'Escriu una ressenya (opcional)';
+
+  @override
   String get photoLibrary => 'Biblioteca de fotos';
 
   @override

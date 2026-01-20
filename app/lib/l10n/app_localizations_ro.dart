@@ -5843,6 +5843,96 @@ class AppLocalizationsRo extends AppLocalizations {
   String get disable => 'Dezactivează';
 
   @override
+  String get permissionReadConversations => 'Citește conversații';
+
+  @override
+  String get permissionReadMemories => 'Citește amintiri';
+
+  @override
+  String get permissionReadTasks => 'Citește sarcini';
+
+  @override
+  String get permissionCreateConversations => 'Creează conversații';
+
+  @override
+  String get permissionCreateMemories => 'Creează amintiri';
+
+  @override
+  String get permissionTypeAccess => 'Acces';
+
+  @override
+  String get permissionTypeCreate => 'Creare';
+
+  @override
+  String get permissionTypeTrigger => 'Declanșator';
+
+  @override
+  String get permissionDescReadConversations => 'Această aplicație poate accesa conversațiile tale.';
+
+  @override
+  String get permissionDescReadMemories => 'Această aplicație poate accesa amintirile tale.';
+
+  @override
+  String get permissionDescReadTasks => 'Această aplicație poate accesa sarcinile tale.';
+
+  @override
+  String get permissionDescCreateConversations => 'Această aplicație poate crea conversații noi.';
+
+  @override
+  String get permissionDescCreateMemories => 'Această aplicație poate crea amintiri noi.';
+
+  @override
+  String get realtimeListening => 'Ascultare în timp real';
+
+  @override
+  String get invalidIntegrationUrl => 'URL de integrare invalid';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'URL instrucțiuni de configurare invalid';
+
+  @override
+  String get setupCompleted => 'Finalizat';
+
+  @override
+  String get tapToComplete => 'Atinge pentru a finaliza';
+
+  @override
+  String get setupInstructions => 'Instrucțiuni de configurare';
+
+  @override
+  String get aboutTheApp => 'Despre aplicație';
+
+  @override
+  String get aboutThePersona => 'Despre persona';
+
+  @override
+  String get pushToTalk => 'Apasă pentru a vorbi';
+
+  @override
+  String get summaryPrompt => 'Prompt rezumat';
+
+  @override
+  String get chatPersonality => 'Personalitate chat';
+
+  @override
+  String get ratingsAndReviews => 'Evaluări și recenzii';
+
+  @override
+  String get pleaseSelectRating => 'Te rugăm să selectezi o evaluare';
+
+  @override
+  String get reviewAddedSuccessfully => 'Recenzie adăugată cu succes 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Recenzie actualizată cu succes 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Nu s-a putut trimite recenzia. Te rugăm să încerci din nou.';
+
+  @override
+  String get writeReviewOptional => 'Scrie o recenzie (opțional)';
+
+  @override
   String get photoLibrary => 'Bibliotecă foto';
 
   @override

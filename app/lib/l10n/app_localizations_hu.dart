@@ -5846,6 +5846,96 @@ class AppLocalizationsHu extends AppLocalizations {
   String get disable => 'Letiltás';
 
   @override
+  String get permissionReadConversations => 'Beszélgetések olvasása';
+
+  @override
+  String get permissionReadMemories => 'Emlékek olvasása';
+
+  @override
+  String get permissionReadTasks => 'Feladatok olvasása';
+
+  @override
+  String get permissionCreateConversations => 'Beszélgetések létrehozása';
+
+  @override
+  String get permissionCreateMemories => 'Emlékek létrehozása';
+
+  @override
+  String get permissionTypeAccess => 'Hozzáférés';
+
+  @override
+  String get permissionTypeCreate => 'Létrehozás';
+
+  @override
+  String get permissionTypeTrigger => 'Indító';
+
+  @override
+  String get permissionDescReadConversations => 'Ez az alkalmazás hozzáférhet a beszélgetéseidhez.';
+
+  @override
+  String get permissionDescReadMemories => 'Ez az alkalmazás hozzáférhet az emlékeidhez.';
+
+  @override
+  String get permissionDescReadTasks => 'Ez az alkalmazás hozzáférhet a feladataidhoz.';
+
+  @override
+  String get permissionDescCreateConversations => 'Ez az alkalmazás új beszélgetéseket hozhat létre.';
+
+  @override
+  String get permissionDescCreateMemories => 'Ez az alkalmazás új emlékeket hozhat létre.';
+
+  @override
+  String get realtimeListening => 'Valós idejű hallgatás';
+
+  @override
+  String get invalidIntegrationUrl => 'Érvénytelen integrációs URL';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Érvénytelen beállítási útmutató URL';
+
+  @override
+  String get setupCompleted => 'Befejezve';
+
+  @override
+  String get tapToComplete => 'Koppints a befejezéshez';
+
+  @override
+  String get setupInstructions => 'Beállítási útmutató';
+
+  @override
+  String get aboutTheApp => 'Az alkalmazásról';
+
+  @override
+  String get aboutThePersona => 'A personáról';
+
+  @override
+  String get pushToTalk => 'Nyomd meg a beszédhez';
+
+  @override
+  String get summaryPrompt => 'Összefoglaló prompt';
+
+  @override
+  String get chatPersonality => 'Chat személyiség';
+
+  @override
+  String get ratingsAndReviews => 'Értékelések és vélemények';
+
+  @override
+  String get pleaseSelectRating => 'Kérlek válassz értékelést';
+
+  @override
+  String get reviewAddedSuccessfully => 'Vélemény sikeresen hozzáadva 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Vélemény sikeresen frissítve 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Nem sikerült elküldeni a véleményt. Kérlek próbáld újra.';
+
+  @override
+  String get writeReviewOptional => 'Írj véleményt (opcionális)';
+
+  @override
   String get photoLibrary => 'Fotótár';
 
   @override

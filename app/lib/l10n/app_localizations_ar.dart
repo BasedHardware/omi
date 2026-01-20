@@ -5770,6 +5770,96 @@ class AppLocalizationsAr extends AppLocalizations {
   String get disable => 'تعطيل';
 
   @override
+  String get permissionReadConversations => 'قراءة المحادثات';
+
+  @override
+  String get permissionReadMemories => 'قراءة الذكريات';
+
+  @override
+  String get permissionReadTasks => 'قراءة المهام';
+
+  @override
+  String get permissionCreateConversations => 'إنشاء المحادثات';
+
+  @override
+  String get permissionCreateMemories => 'إنشاء الذكريات';
+
+  @override
+  String get permissionTypeAccess => 'الوصول';
+
+  @override
+  String get permissionTypeCreate => 'إنشاء';
+
+  @override
+  String get permissionTypeTrigger => 'مشغّل';
+
+  @override
+  String get permissionDescReadConversations => 'يمكن لهذا التطبيق الوصول إلى محادثاتك.';
+
+  @override
+  String get permissionDescReadMemories => 'يمكن لهذا التطبيق الوصول إلى ذكرياتك.';
+
+  @override
+  String get permissionDescReadTasks => 'يمكن لهذا التطبيق الوصول إلى مهامك.';
+
+  @override
+  String get permissionDescCreateConversations => 'يمكن لهذا التطبيق إنشاء محادثات جديدة.';
+
+  @override
+  String get permissionDescCreateMemories => 'يمكن لهذا التطبيق إنشاء ذكريات جديدة.';
+
+  @override
+  String get realtimeListening => 'الاستماع في الوقت الفعلي';
+
+  @override
+  String get invalidIntegrationUrl => 'رابط التكامل غير صالح';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'رابط تعليمات الإعداد غير صالح';
+
+  @override
+  String get setupCompleted => 'مكتمل';
+
+  @override
+  String get tapToComplete => 'انقر للإكمال';
+
+  @override
+  String get setupInstructions => 'تعليمات الإعداد';
+
+  @override
+  String get aboutTheApp => 'حول التطبيق';
+
+  @override
+  String get aboutThePersona => 'حول الشخصية';
+
+  @override
+  String get pushToTalk => 'اضغط للتحدث';
+
+  @override
+  String get summaryPrompt => 'موجه الملخص';
+
+  @override
+  String get chatPersonality => 'شخصية المحادثة';
+
+  @override
+  String get ratingsAndReviews => 'التقييمات والمراجعات';
+
+  @override
+  String get pleaseSelectRating => 'يرجى تحديد تقييم';
+
+  @override
+  String get reviewAddedSuccessfully => 'تمت إضافة المراجعة بنجاح 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'تم تحديث المراجعة بنجاح 🚀';
+
+  @override
+  String get failedToSubmitReview => 'فشل إرسال المراجعة. يرجى المحاولة مرة أخرى.';
+
+  @override
+  String get writeReviewOptional => 'اكتب مراجعة (اختياري)';
+
+  @override
   String get photoLibrary => 'مكتبة الصور';
 
   @override

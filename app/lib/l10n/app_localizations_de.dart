@@ -5860,6 +5860,96 @@ class AppLocalizationsDe extends AppLocalizations {
   String get disable => 'Deaktivieren';
 
   @override
+  String get permissionReadConversations => 'Gespräche lesen';
+
+  @override
+  String get permissionReadMemories => 'Erinnerungen lesen';
+
+  @override
+  String get permissionReadTasks => 'Aufgaben lesen';
+
+  @override
+  String get permissionCreateConversations => 'Gespräche erstellen';
+
+  @override
+  String get permissionCreateMemories => 'Erinnerungen erstellen';
+
+  @override
+  String get permissionTypeAccess => 'Zugriff';
+
+  @override
+  String get permissionTypeCreate => 'Erstellen';
+
+  @override
+  String get permissionTypeTrigger => 'Auslöser';
+
+  @override
+  String get permissionDescReadConversations => 'Diese App kann auf deine Gespräche zugreifen.';
+
+  @override
+  String get permissionDescReadMemories => 'Diese App kann auf deine Erinnerungen zugreifen.';
+
+  @override
+  String get permissionDescReadTasks => 'Diese App kann auf deine Aufgaben zugreifen.';
+
+  @override
+  String get permissionDescCreateConversations => 'Diese App kann neue Gespräche erstellen.';
+
+  @override
+  String get permissionDescCreateMemories => 'Diese App kann neue Erinnerungen erstellen.';
+
+  @override
+  String get realtimeListening => 'Echtzeit-Hören';
+
+  @override
+  String get invalidIntegrationUrl => 'Ungültige Integrations-URL';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Ungültige URL für Einrichtungsanweisungen';
+
+  @override
+  String get setupCompleted => 'Abgeschlossen';
+
+  @override
+  String get tapToComplete => 'Tippen zum Abschließen';
+
+  @override
+  String get setupInstructions => 'Einrichtungsanweisungen';
+
+  @override
+  String get aboutTheApp => 'Über die App';
+
+  @override
+  String get aboutThePersona => 'Über die Persona';
+
+  @override
+  String get pushToTalk => 'Push-to-Talk';
+
+  @override
+  String get summaryPrompt => 'Zusammenfassungs-Prompt';
+
+  @override
+  String get chatPersonality => 'Chat-Persönlichkeit';
+
+  @override
+  String get ratingsAndReviews => 'Bewertungen & Rezensionen';
+
+  @override
+  String get pleaseSelectRating => 'Bitte wähle eine Bewertung';
+
+  @override
+  String get reviewAddedSuccessfully => 'Bewertung erfolgreich hinzugefügt 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Bewertung erfolgreich aktualisiert 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Bewertung konnte nicht gesendet werden. Bitte versuche es erneut.';
+
+  @override
+  String get writeReviewOptional => 'Bewertung schreiben (optional)';
+
+  @override
   String get photoLibrary => 'Fotomediathek';
 
   @override

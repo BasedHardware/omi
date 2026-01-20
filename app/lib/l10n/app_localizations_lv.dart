@@ -5825,6 +5825,96 @@ class AppLocalizationsLv extends AppLocalizations {
   String get disable => 'Atspējot';
 
   @override
+  String get permissionReadConversations => 'Lasīt sarunas';
+
+  @override
+  String get permissionReadMemories => 'Lasīt atmiņas';
+
+  @override
+  String get permissionReadTasks => 'Lasīt uzdevumus';
+
+  @override
+  String get permissionCreateConversations => 'Izveidot sarunas';
+
+  @override
+  String get permissionCreateMemories => 'Izveidot atmiņas';
+
+  @override
+  String get permissionTypeAccess => 'Piekļuve';
+
+  @override
+  String get permissionTypeCreate => 'Izveidot';
+
+  @override
+  String get permissionTypeTrigger => 'Trigeri';
+
+  @override
+  String get permissionDescReadConversations => 'Šī lietotne var piekļūt jūsu sarunām.';
+
+  @override
+  String get permissionDescReadMemories => 'Šī lietotne var piekļūt jūsu atmiņām.';
+
+  @override
+  String get permissionDescReadTasks => 'Šī lietotne var piekļūt jūsu uzdevumiem.';
+
+  @override
+  String get permissionDescCreateConversations => 'Šī lietotne var izveidot jaunas sarunas.';
+
+  @override
+  String get permissionDescCreateMemories => 'Šī lietotne var izveidot jaunas atmiņas.';
+
+  @override
+  String get realtimeListening => 'Reāllaika klausīšanās';
+
+  @override
+  String get invalidIntegrationUrl => 'Nederīgs integrācijas URL';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Nederīgs iestatīšanas instrukciju URL';
+
+  @override
+  String get setupCompleted => 'Pabeigts';
+
+  @override
+  String get tapToComplete => 'Pieskarieties, lai pabeigtu';
+
+  @override
+  String get setupInstructions => 'Iestatīšanas instrukcijas';
+
+  @override
+  String get aboutTheApp => 'Par lietotni';
+
+  @override
+  String get aboutThePersona => 'Par personu';
+
+  @override
+  String get pushToTalk => 'Nospiediet, lai runātu';
+
+  @override
+  String get summaryPrompt => 'Kopsavilkuma uzvedne';
+
+  @override
+  String get chatPersonality => 'Tērzēšanas personība';
+
+  @override
+  String get ratingsAndReviews => 'Vērtējumi un atsauksmes';
+
+  @override
+  String get pleaseSelectRating => 'Lūdzu, izvēlieties vērtējumu';
+
+  @override
+  String get reviewAddedSuccessfully => 'Atsauksme veiksmīgi pievienota 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Atsauksme veiksmīgi atjaunināta 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Neizdevās iesniegt atsauksmi. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get writeReviewOptional => 'Rakstīt atsauksmi (neobligāti)';
+
+  @override
   String get photoLibrary => 'Fotoattēlu bibliotēka';
 
   @override

@@ -5820,6 +5820,96 @@ class AppLocalizationsUk extends AppLocalizations {
   String get disable => 'Вимкнути';
 
   @override
+  String get permissionReadConversations => 'Читати розмови';
+
+  @override
+  String get permissionReadMemories => 'Читати спогади';
+
+  @override
+  String get permissionReadTasks => 'Читати завдання';
+
+  @override
+  String get permissionCreateConversations => 'Створювати розмови';
+
+  @override
+  String get permissionCreateMemories => 'Створювати спогади';
+
+  @override
+  String get permissionTypeAccess => 'Доступ';
+
+  @override
+  String get permissionTypeCreate => 'Створення';
+
+  @override
+  String get permissionTypeTrigger => 'Тригер';
+
+  @override
+  String get permissionDescReadConversations => 'Цей додаток може отримати доступ до ваших розмов.';
+
+  @override
+  String get permissionDescReadMemories => 'Цей додаток може отримати доступ до ваших спогадів.';
+
+  @override
+  String get permissionDescReadTasks => 'Цей додаток може отримати доступ до ваших завдань.';
+
+  @override
+  String get permissionDescCreateConversations => 'Цей додаток може створювати нові розмови.';
+
+  @override
+  String get permissionDescCreateMemories => 'Цей додаток може створювати нові спогади.';
+
+  @override
+  String get realtimeListening => 'Прослуховування в реальному часі';
+
+  @override
+  String get invalidIntegrationUrl => 'Недійсна URL інтеграції';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Недійсна URL інструкцій з налаштування';
+
+  @override
+  String get setupCompleted => 'Завершено';
+
+  @override
+  String get tapToComplete => 'Натисніть для завершення';
+
+  @override
+  String get setupInstructions => 'Інструкції з налаштування';
+
+  @override
+  String get aboutTheApp => 'Про додаток';
+
+  @override
+  String get aboutThePersona => 'Про персону';
+
+  @override
+  String get pushToTalk => 'Натисни і говори';
+
+  @override
+  String get summaryPrompt => 'Промпт для резюме';
+
+  @override
+  String get chatPersonality => 'Особистість чату';
+
+  @override
+  String get ratingsAndReviews => 'Оцінки та відгуки';
+
+  @override
+  String get pleaseSelectRating => 'Будь ласка, виберіть оцінку';
+
+  @override
+  String get reviewAddedSuccessfully => 'Відгук успішно додано 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Відгук успішно оновлено 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Не вдалося надіслати відгук. Будь ласка, спробуйте ще раз.';
+
+  @override
+  String get writeReviewOptional => 'Написати відгук (необов\'язково)';
+
+  @override
   String get photoLibrary => 'Бібліотека фото';
 
   @override

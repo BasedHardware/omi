@@ -1959,5 +1959,22 @@
   "downloadModelWithName": "モデルをダウンロード ({model})",
   "modelNameWithFile": "モデル: {model}",
   "device": "Device",
-  "chatAssistantsTitle": "チャットアシスタント"
+  "chatAssistantsTitle": "チャットアシスタント",
+  "permissionReadConversations": "会話を読む",
+  "permissionReadMemories": "メモリーを読む",
+  "permissionReadTasks": "タスクを読む",
+  "permissionCreateConversations": "会話を作成",
+  "permissionCreateMemories": "メモリーを作成",
+  "permissionTypeAccess": "アクセス",
+  "permissionTypeCreate": "作成",
+  "permissionTypeTrigger": "トリガー",
+  "permissionDescReadConversations": "このアプリはあなたの会話にアクセスできます。",
+  "permissionDescReadMemories": "このアプリはあなたのメモリーにアクセスできます。",
+  "permissionDescReadTasks": "このアプリはあなたのタスクにアクセスできます。",
+  "permissionDescCreateConversations": "このアプリは新しい会話を作成できます。",
+  "permissionDescCreateMemories": "このアプリは新しいメモリーを作成できます。",
+  "realtimeListening": "リアルタイムリスニング",
+  "setupCompleted": "完了",
+  "pleaseSelectRating": "評価を選択してください",
+  "writeReviewOptional": "レビューを書く（任意）"
 }

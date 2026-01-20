@@ -5836,6 +5836,96 @@ class AppLocalizationsMs extends AppLocalizations {
   String get disable => 'Nyahaktif';
 
   @override
+  String get permissionReadConversations => 'Baca Perbualan';
+
+  @override
+  String get permissionReadMemories => 'Baca Kenangan';
+
+  @override
+  String get permissionReadTasks => 'Baca Tugas';
+
+  @override
+  String get permissionCreateConversations => 'Cipta Perbualan';
+
+  @override
+  String get permissionCreateMemories => 'Cipta Kenangan';
+
+  @override
+  String get permissionTypeAccess => 'Akses';
+
+  @override
+  String get permissionTypeCreate => 'Cipta';
+
+  @override
+  String get permissionTypeTrigger => 'Pencetus';
+
+  @override
+  String get permissionDescReadConversations => 'Aplikasi ini boleh mengakses perbualan anda.';
+
+  @override
+  String get permissionDescReadMemories => 'Aplikasi ini boleh mengakses kenangan anda.';
+
+  @override
+  String get permissionDescReadTasks => 'Aplikasi ini boleh mengakses tugas anda.';
+
+  @override
+  String get permissionDescCreateConversations => 'Aplikasi ini boleh mencipta perbualan baharu.';
+
+  @override
+  String get permissionDescCreateMemories => 'Aplikasi ini boleh mencipta kenangan baharu.';
+
+  @override
+  String get realtimeListening => 'Pendengaran Masa Nyata';
+
+  @override
+  String get invalidIntegrationUrl => 'URL integrasi tidak sah';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'URL arahan persediaan tidak sah';
+
+  @override
+  String get setupCompleted => 'Selesai';
+
+  @override
+  String get tapToComplete => 'Ketik untuk selesaikan';
+
+  @override
+  String get setupInstructions => 'Arahan Persediaan';
+
+  @override
+  String get aboutTheApp => 'Tentang Aplikasi';
+
+  @override
+  String get aboutThePersona => 'Tentang Persona';
+
+  @override
+  String get pushToTalk => 'Tekan untuk Bercakap';
+
+  @override
+  String get summaryPrompt => 'Prompt Ringkasan';
+
+  @override
+  String get chatPersonality => 'Personaliti Sembang';
+
+  @override
+  String get ratingsAndReviews => 'Penilaian & Ulasan';
+
+  @override
+  String get pleaseSelectRating => 'Sila pilih penilaian';
+
+  @override
+  String get reviewAddedSuccessfully => 'Ulasan berjaya ditambah 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Ulasan berjaya dikemas kini 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Gagal menghantar ulasan. Sila cuba lagi.';
+
+  @override
+  String get writeReviewOptional => 'Tulis ulasan (pilihan)';
+
+  @override
   String get photoLibrary => 'Pustaka Foto';
 
   @override

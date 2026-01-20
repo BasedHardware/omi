@@ -3392,7 +3392,7 @@
   },
   "chatPersonality": "Chat Personality",
   "@chatPersonality": {
-    "description": "Section title for chat personality prompt"
+    "description": "Title for chat personality section"
   },
   "ratingsAndReviews": "Ratings & Reviews",
   "@ratingsAndReviews": {
@@ -4611,7 +4611,7 @@
   },
   "tapToComplete": "Tap to complete",
   "@tapToComplete": {
-    "description": "Text prompting user to tap to complete setup"
+    "description": "Instruction to tap to complete setup"
   },
   "invalidSetupInstructionsUrl": "Invalid setup instructions URL",
   "@invalidSetupInstructionsUrl": {
@@ -4619,11 +4619,11 @@
   },
   "pushToTalk": "Push to Talk",
   "@pushToTalk": {
-    "description": "Feature name for push to talk"
+    "description": "Capability label for push to talk feature"
   },
   "summaryPrompt": "Summary Prompt",
   "@summaryPrompt": {
-    "description": "Label for summary prompt"
+    "description": "Title for summary prompt section"
   },
   "pleaseSelectARating": "Please select a rating",
   "@pleaseSelectARating": {
@@ -7673,5 +7673,73 @@
   "chatAssistantsTitle": "Chat Assistants",
   "@chatAssistantsTitle": {
     "description": "Title for chat assistants capability page"
+  },
+  "permissionReadConversations": "Read Conversations",
+  "@permissionReadConversations": {
+    "description": "Permission title for reading conversations"
+  },
+  "permissionReadMemories": "Read Memories",
+  "@permissionReadMemories": {
+    "description": "Permission title for reading memories"
+  },
+  "permissionReadTasks": "Read Tasks",
+  "@permissionReadTasks": {
+    "description": "Permission title for reading tasks"
+  },
+  "permissionCreateConversations": "Create Conversations",
+  "@permissionCreateConversations": {
+    "description": "Permission title for creating conversations"
+  },
+  "permissionCreateMemories": "Create Memories",
+  "@permissionCreateMemories": {
+    "description": "Permission title for creating memories"
+  },
+  "permissionTypeAccess": "Access",
+  "@permissionTypeAccess": {
+    "description": "Permission type label for access permissions"
+  },
+  "permissionTypeCreate": "Create",
+  "@permissionTypeCreate": {
+    "description": "Permission type label for create permissions"
+  },
+  "permissionTypeTrigger": "Trigger",
+  "@permissionTypeTrigger": {
+    "description": "Permission type label for trigger permissions"
+  },
+  "permissionDescReadConversations": "This app can access your conversations.",
+  "@permissionDescReadConversations": {
+    "description": "Description for read conversations permission"
+  },
+  "permissionDescReadMemories": "This app can access your memories.",
+  "@permissionDescReadMemories": {
+    "description": "Description for read memories permission"
+  },
+  "permissionDescReadTasks": "This app can access your tasks.",
+  "@permissionDescReadTasks": {
+    "description": "Description for read tasks permission"
+  },
+  "permissionDescCreateConversations": "This app can create new conversations.",
+  "@permissionDescCreateConversations": {
+    "description": "Description for create conversations permission"
+  },
+  "permissionDescCreateMemories": "This app can create new memories.",
+  "@permissionDescCreateMemories": {
+    "description": "Description for create memories permission"
+  },
+  "realtimeListening": "Realtime Listening",
+  "@realtimeListening": {
+    "description": "Label for realtime listening trigger"
+  },
+  "setupCompleted": "Completed",
+  "@setupCompleted": {
+    "description": "Status text when setup is completed"
+  },
+  "pleaseSelectRating": "Please select a rating",
+  "@pleaseSelectRating": {
+    "description": "Validation message to select a rating"
+  },
+  "writeReviewOptional": "Write a review (optional)",
+  "@writeReviewOptional": {
+    "description": "Hint text for review input field"
   }
 }

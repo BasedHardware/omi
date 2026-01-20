@@ -5814,6 +5814,96 @@ class AppLocalizationsEs extends AppLocalizations {
   String get disable => 'Deshabilitar';
 
   @override
+  String get permissionReadConversations => 'Leer conversaciones';
+
+  @override
+  String get permissionReadMemories => 'Leer recuerdos';
+
+  @override
+  String get permissionReadTasks => 'Leer tareas';
+
+  @override
+  String get permissionCreateConversations => 'Crear conversaciones';
+
+  @override
+  String get permissionCreateMemories => 'Crear recuerdos';
+
+  @override
+  String get permissionTypeAccess => 'Acceso';
+
+  @override
+  String get permissionTypeCreate => 'Crear';
+
+  @override
+  String get permissionTypeTrigger => 'Disparador';
+
+  @override
+  String get permissionDescReadConversations => 'Esta app puede acceder a tus conversaciones.';
+
+  @override
+  String get permissionDescReadMemories => 'Esta app puede acceder a tus recuerdos.';
+
+  @override
+  String get permissionDescReadTasks => 'Esta app puede acceder a tus tareas.';
+
+  @override
+  String get permissionDescCreateConversations => 'Esta app puede crear nuevas conversaciones.';
+
+  @override
+  String get permissionDescCreateMemories => 'Esta app puede crear nuevos recuerdos.';
+
+  @override
+  String get realtimeListening => 'Escucha en tiempo real';
+
+  @override
+  String get invalidIntegrationUrl => 'URL de integración no válida';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'URL de instrucciones de configuración no válida';
+
+  @override
+  String get setupCompleted => 'Completado';
+
+  @override
+  String get tapToComplete => 'Toca para completar';
+
+  @override
+  String get setupInstructions => 'Instrucciones de configuración';
+
+  @override
+  String get aboutTheApp => 'Acerca de la app';
+
+  @override
+  String get aboutThePersona => 'Acerca de la persona';
+
+  @override
+  String get pushToTalk => 'Pulsar para hablar';
+
+  @override
+  String get summaryPrompt => 'Prompt de resumen';
+
+  @override
+  String get chatPersonality => 'Personalidad del chat';
+
+  @override
+  String get ratingsAndReviews => 'Valoraciones y reseñas';
+
+  @override
+  String get pleaseSelectRating => 'Por favor selecciona una valoración';
+
+  @override
+  String get reviewAddedSuccessfully => 'Reseña añadida con éxito 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Reseña actualizada con éxito 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Error al enviar la reseña. Por favor, inténtalo de nuevo.';
+
+  @override
+  String get writeReviewOptional => 'Escribe una reseña (opcional)';
+
+  @override
   String get photoLibrary => 'Biblioteca de fotos';
 
   @override

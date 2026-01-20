@@ -5709,6 +5709,96 @@ class AppLocalizationsJa extends AppLocalizations {
   String get disable => '無効化';
 
   @override
+  String get permissionReadConversations => '会話を読む';
+
+  @override
+  String get permissionReadMemories => 'メモリーを読む';
+
+  @override
+  String get permissionReadTasks => 'タスクを読む';
+
+  @override
+  String get permissionCreateConversations => '会話を作成';
+
+  @override
+  String get permissionCreateMemories => 'メモリーを作成';
+
+  @override
+  String get permissionTypeAccess => 'アクセス';
+
+  @override
+  String get permissionTypeCreate => '作成';
+
+  @override
+  String get permissionTypeTrigger => 'トリガー';
+
+  @override
+  String get permissionDescReadConversations => 'このアプリはあなたの会話にアクセスできます。';
+
+  @override
+  String get permissionDescReadMemories => 'このアプリはあなたのメモリーにアクセスできます。';
+
+  @override
+  String get permissionDescReadTasks => 'このアプリはあなたのタスクにアクセスできます。';
+
+  @override
+  String get permissionDescCreateConversations => 'このアプリは新しい会話を作成できます。';
+
+  @override
+  String get permissionDescCreateMemories => 'このアプリは新しいメモリーを作成できます。';
+
+  @override
+  String get realtimeListening => 'リアルタイムリスニング';
+
+  @override
+  String get invalidIntegrationUrl => '無効な統合URL';
+
+  @override
+  String get invalidSetupInstructionsUrl => '無効なセットアップ手順URL';
+
+  @override
+  String get setupCompleted => '完了';
+
+  @override
+  String get tapToComplete => 'タップして完了';
+
+  @override
+  String get setupInstructions => 'セットアップ手順';
+
+  @override
+  String get aboutTheApp => 'アプリについて';
+
+  @override
+  String get aboutThePersona => 'ペルソナについて';
+
+  @override
+  String get pushToTalk => 'プッシュトゥトーク';
+
+  @override
+  String get summaryPrompt => '要約プロンプト';
+
+  @override
+  String get chatPersonality => 'チャットパーソナリティ';
+
+  @override
+  String get ratingsAndReviews => '評価とレビュー';
+
+  @override
+  String get pleaseSelectRating => '評価を選択してください';
+
+  @override
+  String get reviewAddedSuccessfully => 'レビューが正常に追加されました 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'レビューが正常に更新されました 🚀';
+
+  @override
+  String get failedToSubmitReview => 'レビューの送信に失敗しました。もう一度お試しください。';
+
+  @override
+  String get writeReviewOptional => 'レビューを書く（任意）';
+
+  @override
   String get photoLibrary => 'フォトライブラリ';
 
   @override

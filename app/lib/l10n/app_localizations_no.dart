@@ -5814,6 +5814,96 @@ class AppLocalizationsNo extends AppLocalizations {
   String get disable => 'Deaktiver';
 
   @override
+  String get permissionReadConversations => 'Les samtaler';
+
+  @override
+  String get permissionReadMemories => 'Les minner';
+
+  @override
+  String get permissionReadTasks => 'Les oppgaver';
+
+  @override
+  String get permissionCreateConversations => 'Opprett samtaler';
+
+  @override
+  String get permissionCreateMemories => 'Opprett minner';
+
+  @override
+  String get permissionTypeAccess => 'Tilgang';
+
+  @override
+  String get permissionTypeCreate => 'Opprett';
+
+  @override
+  String get permissionTypeTrigger => 'Utløser';
+
+  @override
+  String get permissionDescReadConversations => 'Denne appen kan få tilgang til samtalene dine.';
+
+  @override
+  String get permissionDescReadMemories => 'Denne appen kan få tilgang til minnene dine.';
+
+  @override
+  String get permissionDescReadTasks => 'Denne appen kan få tilgang til oppgavene dine.';
+
+  @override
+  String get permissionDescCreateConversations => 'Denne appen kan opprette nye samtaler.';
+
+  @override
+  String get permissionDescCreateMemories => 'Denne appen kan opprette nye minner.';
+
+  @override
+  String get realtimeListening => 'Sanntidslytting';
+
+  @override
+  String get invalidIntegrationUrl => 'Ugyldig integrasjons-URL';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Ugyldig URL for oppsettsinstruksjoner';
+
+  @override
+  String get setupCompleted => 'Fullført';
+
+  @override
+  String get tapToComplete => 'Trykk for å fullføre';
+
+  @override
+  String get setupInstructions => 'Oppsettsinstruksjoner';
+
+  @override
+  String get aboutTheApp => 'Om appen';
+
+  @override
+  String get aboutThePersona => 'Om personaen';
+
+  @override
+  String get pushToTalk => 'Trykk for å snakke';
+
+  @override
+  String get summaryPrompt => 'Sammendragsprompt';
+
+  @override
+  String get chatPersonality => 'Chat-personlighet';
+
+  @override
+  String get ratingsAndReviews => 'Vurderinger og anmeldelser';
+
+  @override
+  String get pleaseSelectRating => 'Vennligst velg en vurdering';
+
+  @override
+  String get reviewAddedSuccessfully => 'Anmeldelse lagt til 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Anmeldelse oppdatert 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Kunne ikke sende anmeldelse. Prøv igjen.';
+
+  @override
+  String get writeReviewOptional => 'Skriv en anmeldelse (valgfritt)';
+
+  @override
   String get photoLibrary => 'Bildebibliotek';
 
   @override

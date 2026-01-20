@@ -5815,6 +5815,96 @@ class AppLocalizationsLt extends AppLocalizations {
   String get disable => 'Išjungti';
 
   @override
+  String get permissionReadConversations => 'Skaityti pokalbius';
+
+  @override
+  String get permissionReadMemories => 'Skaityti prisiminimus';
+
+  @override
+  String get permissionReadTasks => 'Skaityti užduotis';
+
+  @override
+  String get permissionCreateConversations => 'Kurti pokalbius';
+
+  @override
+  String get permissionCreateMemories => 'Kurti prisiminimus';
+
+  @override
+  String get permissionTypeAccess => 'Prieiga';
+
+  @override
+  String get permissionTypeCreate => 'Kurti';
+
+  @override
+  String get permissionTypeTrigger => 'Aktyviklis';
+
+  @override
+  String get permissionDescReadConversations => 'Ši programa gali pasiekti jūsų pokalbius.';
+
+  @override
+  String get permissionDescReadMemories => 'Ši programa gali pasiekti jūsų prisiminimus.';
+
+  @override
+  String get permissionDescReadTasks => 'Ši programa gali pasiekti jūsų užduotis.';
+
+  @override
+  String get permissionDescCreateConversations => 'Ši programa gali kurti naujus pokalbius.';
+
+  @override
+  String get permissionDescCreateMemories => 'Ši programa gali kurti naujus prisiminimus.';
+
+  @override
+  String get realtimeListening => 'Klausymasis realiu laiku';
+
+  @override
+  String get invalidIntegrationUrl => 'Neteisingas integracijos URL';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Neteisingas sąrankos instrukcijų URL';
+
+  @override
+  String get setupCompleted => 'Baigta';
+
+  @override
+  String get tapToComplete => 'Bakstelėkite, kad užbaigtumėte';
+
+  @override
+  String get setupInstructions => 'Sąrankos instrukcijos';
+
+  @override
+  String get aboutTheApp => 'Apie programą';
+
+  @override
+  String get aboutThePersona => 'Apie asmenybę';
+
+  @override
+  String get pushToTalk => 'Paspauskite kalbėti';
+
+  @override
+  String get summaryPrompt => 'Santraukos užuomina';
+
+  @override
+  String get chatPersonality => 'Pokalbio asmenybė';
+
+  @override
+  String get ratingsAndReviews => 'Įvertinimai ir atsiliepimai';
+
+  @override
+  String get pleaseSelectRating => 'Pasirinkite įvertinimą';
+
+  @override
+  String get reviewAddedSuccessfully => 'Atsiliepimas sėkmingai pridėtas 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Atsiliepimas sėkmingai atnaujintas 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Nepavyko pateikti atsiliepimo. Bandykite dar kartą.';
+
+  @override
+  String get writeReviewOptional => 'Parašykite atsiliepimą (neprivaloma)';
+
+  @override
   String get photoLibrary => 'Nuotraukų biblioteka';
 
   @override

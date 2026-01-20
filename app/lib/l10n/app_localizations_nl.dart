@@ -5832,6 +5832,96 @@ class AppLocalizationsNl extends AppLocalizations {
   String get disable => 'Uitschakelen';
 
   @override
+  String get permissionReadConversations => 'Gesprekken lezen';
+
+  @override
+  String get permissionReadMemories => 'Herinneringen lezen';
+
+  @override
+  String get permissionReadTasks => 'Taken lezen';
+
+  @override
+  String get permissionCreateConversations => 'Gesprekken maken';
+
+  @override
+  String get permissionCreateMemories => 'Herinneringen maken';
+
+  @override
+  String get permissionTypeAccess => 'Toegang';
+
+  @override
+  String get permissionTypeCreate => 'Maken';
+
+  @override
+  String get permissionTypeTrigger => 'Trigger';
+
+  @override
+  String get permissionDescReadConversations => 'Deze app heeft toegang tot je gesprekken.';
+
+  @override
+  String get permissionDescReadMemories => 'Deze app heeft toegang tot je herinneringen.';
+
+  @override
+  String get permissionDescReadTasks => 'Deze app heeft toegang tot je taken.';
+
+  @override
+  String get permissionDescCreateConversations => 'Deze app kan nieuwe gesprekken maken.';
+
+  @override
+  String get permissionDescCreateMemories => 'Deze app kan nieuwe herinneringen maken.';
+
+  @override
+  String get realtimeListening => 'Realtime luisteren';
+
+  @override
+  String get invalidIntegrationUrl => 'Ongeldige integratie-URL';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Ongeldige URL voor installatie-instructies';
+
+  @override
+  String get setupCompleted => 'Voltooid';
+
+  @override
+  String get tapToComplete => 'Tik om te voltooien';
+
+  @override
+  String get setupInstructions => 'Installatie-instructies';
+
+  @override
+  String get aboutTheApp => 'Over de app';
+
+  @override
+  String get aboutThePersona => 'Over de persona';
+
+  @override
+  String get pushToTalk => 'Druk om te praten';
+
+  @override
+  String get summaryPrompt => 'Samenvattingsprompt';
+
+  @override
+  String get chatPersonality => 'Chatpersoonlijkheid';
+
+  @override
+  String get ratingsAndReviews => 'Beoordelingen en recensies';
+
+  @override
+  String get pleaseSelectRating => 'Selecteer een beoordeling';
+
+  @override
+  String get reviewAddedSuccessfully => 'Recensie succesvol toegevoegd 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Recensie succesvol bijgewerkt 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Verzenden van recensie mislukt. Probeer het opnieuw.';
+
+  @override
+  String get writeReviewOptional => 'Schrijf een recensie (optioneel)';
+
+  @override
   String get photoLibrary => 'Fotobibliotheek';
 
   @override

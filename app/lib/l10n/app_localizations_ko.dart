@@ -5711,6 +5711,96 @@ class AppLocalizationsKo extends AppLocalizations {
   String get disable => '비활성화';
 
   @override
+  String get permissionReadConversations => '대화 읽기';
+
+  @override
+  String get permissionReadMemories => '기억 읽기';
+
+  @override
+  String get permissionReadTasks => '작업 읽기';
+
+  @override
+  String get permissionCreateConversations => '대화 만들기';
+
+  @override
+  String get permissionCreateMemories => '기억 만들기';
+
+  @override
+  String get permissionTypeAccess => '접근';
+
+  @override
+  String get permissionTypeCreate => '만들기';
+
+  @override
+  String get permissionTypeTrigger => '트리거';
+
+  @override
+  String get permissionDescReadConversations => '이 앱은 대화에 접근할 수 있습니다.';
+
+  @override
+  String get permissionDescReadMemories => '이 앱은 기억에 접근할 수 있습니다.';
+
+  @override
+  String get permissionDescReadTasks => '이 앱은 작업에 접근할 수 있습니다.';
+
+  @override
+  String get permissionDescCreateConversations => '이 앱은 새 대화를 만들 수 있습니다.';
+
+  @override
+  String get permissionDescCreateMemories => '이 앱은 새 기억을 만들 수 있습니다.';
+
+  @override
+  String get realtimeListening => '실시간 듣기';
+
+  @override
+  String get invalidIntegrationUrl => '잘못된 통합 URL';
+
+  @override
+  String get invalidSetupInstructionsUrl => '잘못된 설정 지침 URL';
+
+  @override
+  String get setupCompleted => '완료됨';
+
+  @override
+  String get tapToComplete => '완료하려면 탭하세요';
+
+  @override
+  String get setupInstructions => '설정 지침';
+
+  @override
+  String get aboutTheApp => '앱 정보';
+
+  @override
+  String get aboutThePersona => '페르소나 정보';
+
+  @override
+  String get pushToTalk => '눌러서 말하기';
+
+  @override
+  String get summaryPrompt => '요약 프롬프트';
+
+  @override
+  String get chatPersonality => '채팅 성격';
+
+  @override
+  String get ratingsAndReviews => '평점 및 리뷰';
+
+  @override
+  String get pleaseSelectRating => '평점을 선택해 주세요';
+
+  @override
+  String get reviewAddedSuccessfully => '리뷰가 성공적으로 추가되었습니다 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => '리뷰가 성공적으로 업데이트되었습니다 🚀';
+
+  @override
+  String get failedToSubmitReview => '리뷰 제출에 실패했습니다. 다시 시도해 주세요.';
+
+  @override
+  String get writeReviewOptional => '리뷰 작성 (선택사항)';
+
+  @override
   String get photoLibrary => '사진 라이브러리';
 
   @override

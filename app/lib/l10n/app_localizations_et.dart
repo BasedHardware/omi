@@ -5816,6 +5816,96 @@ class AppLocalizationsEt extends AppLocalizations {
   String get disable => 'Keela';
 
   @override
+  String get permissionReadConversations => 'Loe vestlusi';
+
+  @override
+  String get permissionReadMemories => 'Loe mälestusi';
+
+  @override
+  String get permissionReadTasks => 'Loe ülesandeid';
+
+  @override
+  String get permissionCreateConversations => 'Loo vestlusi';
+
+  @override
+  String get permissionCreateMemories => 'Loo mälestusi';
+
+  @override
+  String get permissionTypeAccess => 'Juurdepääs';
+
+  @override
+  String get permissionTypeCreate => 'Loo';
+
+  @override
+  String get permissionTypeTrigger => 'Päästik';
+
+  @override
+  String get permissionDescReadConversations => 'See rakendus pääseb ligi sinu vestlustele.';
+
+  @override
+  String get permissionDescReadMemories => 'See rakendus pääseb ligi sinu mälestustele.';
+
+  @override
+  String get permissionDescReadTasks => 'See rakendus pääseb ligi sinu ülesannetele.';
+
+  @override
+  String get permissionDescCreateConversations => 'See rakendus saab luua uusi vestlusi.';
+
+  @override
+  String get permissionDescCreateMemories => 'See rakendus saab luua uusi mälestusi.';
+
+  @override
+  String get realtimeListening => 'Reaalajas kuulamine';
+
+  @override
+  String get invalidIntegrationUrl => 'Vigane integratsiooni URL';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Vigane seadistusjuhiste URL';
+
+  @override
+  String get setupCompleted => 'Lõpetatud';
+
+  @override
+  String get tapToComplete => 'Puuduta lõpetamiseks';
+
+  @override
+  String get setupInstructions => 'Seadistusjuhised';
+
+  @override
+  String get aboutTheApp => 'Rakendusest';
+
+  @override
+  String get aboutThePersona => 'Persoonast';
+
+  @override
+  String get pushToTalk => 'Vajuta rääkimiseks';
+
+  @override
+  String get summaryPrompt => 'Kokkuvõtte viip';
+
+  @override
+  String get chatPersonality => 'Vestluse isiksus';
+
+  @override
+  String get ratingsAndReviews => 'Hinnangud ja arvustused';
+
+  @override
+  String get pleaseSelectRating => 'Palun vali hinnang';
+
+  @override
+  String get reviewAddedSuccessfully => 'Arvustus edukalt lisatud 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Arvustus edukalt uuendatud 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Arvustuse esitamine ebaõnnestus. Palun proovi uuesti.';
+
+  @override
+  String get writeReviewOptional => 'Kirjuta arvustus (valikuline)';
+
+  @override
   String get photoLibrary => 'Fotokogu';
 
   @override

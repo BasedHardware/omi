@@ -5822,6 +5822,96 @@ class AppLocalizationsDa extends AppLocalizations {
   String get disable => 'Deaktiver';
 
   @override
+  String get permissionReadConversations => 'Læs samtaler';
+
+  @override
+  String get permissionReadMemories => 'Læs minder';
+
+  @override
+  String get permissionReadTasks => 'Læs opgaver';
+
+  @override
+  String get permissionCreateConversations => 'Opret samtaler';
+
+  @override
+  String get permissionCreateMemories => 'Opret minder';
+
+  @override
+  String get permissionTypeAccess => 'Adgang';
+
+  @override
+  String get permissionTypeCreate => 'Opret';
+
+  @override
+  String get permissionTypeTrigger => 'Udløser';
+
+  @override
+  String get permissionDescReadConversations => 'Denne app kan få adgang til dine samtaler.';
+
+  @override
+  String get permissionDescReadMemories => 'Denne app kan få adgang til dine minder.';
+
+  @override
+  String get permissionDescReadTasks => 'Denne app kan få adgang til dine opgaver.';
+
+  @override
+  String get permissionDescCreateConversations => 'Denne app kan oprette nye samtaler.';
+
+  @override
+  String get permissionDescCreateMemories => 'Denne app kan oprette nye minder.';
+
+  @override
+  String get realtimeListening => 'Realtidslytning';
+
+  @override
+  String get invalidIntegrationUrl => 'Ugyldig integrations-URL';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Ugyldig URL til opsætningsinstruktioner';
+
+  @override
+  String get setupCompleted => 'Fuldført';
+
+  @override
+  String get tapToComplete => 'Tryk for at fuldføre';
+
+  @override
+  String get setupInstructions => 'Opsætningsinstruktioner';
+
+  @override
+  String get aboutTheApp => 'Om appen';
+
+  @override
+  String get aboutThePersona => 'Om personaen';
+
+  @override
+  String get pushToTalk => 'Tryk for at tale';
+
+  @override
+  String get summaryPrompt => 'Resuméprompt';
+
+  @override
+  String get chatPersonality => 'Chat-personlighed';
+
+  @override
+  String get ratingsAndReviews => 'Bedømmelser og anmeldelser';
+
+  @override
+  String get pleaseSelectRating => 'Vælg venligst en bedømmelse';
+
+  @override
+  String get reviewAddedSuccessfully => 'Anmeldelse tilføjet 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Anmeldelse opdateret 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Kunne ikke indsende anmeldelse. Prøv igen.';
+
+  @override
+  String get writeReviewOptional => 'Skriv en anmeldelse (valgfrit)';
+
+  @override
   String get photoLibrary => 'Billedbibliotek';
 
   @override

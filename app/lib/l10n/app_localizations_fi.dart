@@ -5815,6 +5815,96 @@ class AppLocalizationsFi extends AppLocalizations {
   String get disable => 'Poista käytöstä';
 
   @override
+  String get permissionReadConversations => 'Lue keskusteluja';
+
+  @override
+  String get permissionReadMemories => 'Lue muistoja';
+
+  @override
+  String get permissionReadTasks => 'Lue tehtäviä';
+
+  @override
+  String get permissionCreateConversations => 'Luo keskusteluja';
+
+  @override
+  String get permissionCreateMemories => 'Luo muistoja';
+
+  @override
+  String get permissionTypeAccess => 'Pääsy';
+
+  @override
+  String get permissionTypeCreate => 'Luo';
+
+  @override
+  String get permissionTypeTrigger => 'Laukaisin';
+
+  @override
+  String get permissionDescReadConversations => 'Tämä sovellus voi käyttää keskustelujasi.';
+
+  @override
+  String get permissionDescReadMemories => 'Tämä sovellus voi käyttää muistojasi.';
+
+  @override
+  String get permissionDescReadTasks => 'Tämä sovellus voi käyttää tehtäviäsi.';
+
+  @override
+  String get permissionDescCreateConversations => 'Tämä sovellus voi luoda uusia keskusteluja.';
+
+  @override
+  String get permissionDescCreateMemories => 'Tämä sovellus voi luoda uusia muistoja.';
+
+  @override
+  String get realtimeListening => 'Reaaliaikainen kuuntelu';
+
+  @override
+  String get invalidIntegrationUrl => 'Virheellinen integraatio-URL';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Virheellinen asetusohjeiden URL';
+
+  @override
+  String get setupCompleted => 'Valmis';
+
+  @override
+  String get tapToComplete => 'Napauta viimeistelläksesi';
+
+  @override
+  String get setupInstructions => 'Asetusohjeet';
+
+  @override
+  String get aboutTheApp => 'Tietoja sovelluksesta';
+
+  @override
+  String get aboutThePersona => 'Tietoja persoonasta';
+
+  @override
+  String get pushToTalk => 'Paina puhuaksesi';
+
+  @override
+  String get summaryPrompt => 'Yhteenvetokehote';
+
+  @override
+  String get chatPersonality => 'Chat-persoonallisuus';
+
+  @override
+  String get ratingsAndReviews => 'Arviot ja arvostelut';
+
+  @override
+  String get pleaseSelectRating => 'Valitse arvio';
+
+  @override
+  String get reviewAddedSuccessfully => 'Arvostelu lisätty onnistuneesti 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Arvostelu päivitetty onnistuneesti 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Arvostelun lähettäminen epäonnistui. Yritä uudelleen.';
+
+  @override
+  String get writeReviewOptional => 'Kirjoita arvostelu (valinnainen)';
+
+  @override
   String get photoLibrary => 'Kuvakirjasto';
 
   @override

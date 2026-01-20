@@ -5860,6 +5860,96 @@ class AppLocalizationsEl extends AppLocalizations {
   String get disable => 'Απενεργοποίηση';
 
   @override
+  String get permissionReadConversations => 'Ανάγνωση συνομιλιών';
+
+  @override
+  String get permissionReadMemories => 'Ανάγνωση αναμνήσεων';
+
+  @override
+  String get permissionReadTasks => 'Ανάγνωση εργασιών';
+
+  @override
+  String get permissionCreateConversations => 'Δημιουργία συνομιλιών';
+
+  @override
+  String get permissionCreateMemories => 'Δημιουργία αναμνήσεων';
+
+  @override
+  String get permissionTypeAccess => 'Πρόσβαση';
+
+  @override
+  String get permissionTypeCreate => 'Δημιουργία';
+
+  @override
+  String get permissionTypeTrigger => 'Ενεργοποιητής';
+
+  @override
+  String get permissionDescReadConversations => 'Αυτή η εφαρμογή μπορεί να έχει πρόσβαση στις συνομιλίες σας.';
+
+  @override
+  String get permissionDescReadMemories => 'Αυτή η εφαρμογή μπορεί να έχει πρόσβαση στις αναμνήσεις σας.';
+
+  @override
+  String get permissionDescReadTasks => 'Αυτή η εφαρμογή μπορεί να έχει πρόσβαση στις εργασίες σας.';
+
+  @override
+  String get permissionDescCreateConversations => 'Αυτή η εφαρμογή μπορεί να δημιουργεί νέες συνομιλίες.';
+
+  @override
+  String get permissionDescCreateMemories => 'Αυτή η εφαρμογή μπορεί να δημιουργεί νέες αναμνήσεις.';
+
+  @override
+  String get realtimeListening => 'Ακρόαση σε πραγματικό χρόνο';
+
+  @override
+  String get invalidIntegrationUrl => 'Μη έγκυρη διεύθυνση URL ενσωμάτωσης';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Μη έγκυρη διεύθυνση URL οδηγιών ρύθμισης';
+
+  @override
+  String get setupCompleted => 'Ολοκληρώθηκε';
+
+  @override
+  String get tapToComplete => 'Πατήστε για ολοκλήρωση';
+
+  @override
+  String get setupInstructions => 'Οδηγίες ρύθμισης';
+
+  @override
+  String get aboutTheApp => 'Σχετικά με την εφαρμογή';
+
+  @override
+  String get aboutThePersona => 'Σχετικά με την περσόνα';
+
+  @override
+  String get pushToTalk => 'Πατήστε για ομιλία';
+
+  @override
+  String get summaryPrompt => 'Προτροπή σύνοψης';
+
+  @override
+  String get chatPersonality => 'Προσωπικότητα συνομιλίας';
+
+  @override
+  String get ratingsAndReviews => 'Αξιολογήσεις και κριτικές';
+
+  @override
+  String get pleaseSelectRating => 'Παρακαλώ επιλέξτε αξιολόγηση';
+
+  @override
+  String get reviewAddedSuccessfully => 'Η κριτική προστέθηκε επιτυχώς 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Η κριτική ενημερώθηκε επιτυχώς 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Αποτυχία υποβολής κριτικής. Δοκιμάστε ξανά.';
+
+  @override
+  String get writeReviewOptional => 'Γράψτε μια κριτική (προαιρετικό)';
+
+  @override
   String get photoLibrary => 'Βιβλιοθήκη φωτογραφιών';
 
   @override

@@ -5825,6 +5825,96 @@ class AppLocalizationsTr extends AppLocalizations {
   String get disable => 'Devre Dışı Bırak';
 
   @override
+  String get permissionReadConversations => 'Konuşmaları Oku';
+
+  @override
+  String get permissionReadMemories => 'Anıları Oku';
+
+  @override
+  String get permissionReadTasks => 'Görevleri Oku';
+
+  @override
+  String get permissionCreateConversations => 'Konuşma Oluştur';
+
+  @override
+  String get permissionCreateMemories => 'Anı Oluştur';
+
+  @override
+  String get permissionTypeAccess => 'Erişim';
+
+  @override
+  String get permissionTypeCreate => 'Oluştur';
+
+  @override
+  String get permissionTypeTrigger => 'Tetikleyici';
+
+  @override
+  String get permissionDescReadConversations => 'Bu uygulama konuşmalarınıza erişebilir.';
+
+  @override
+  String get permissionDescReadMemories => 'Bu uygulama anılarınıza erişebilir.';
+
+  @override
+  String get permissionDescReadTasks => 'Bu uygulama görevlerinize erişebilir.';
+
+  @override
+  String get permissionDescCreateConversations => 'Bu uygulama yeni konuşmalar oluşturabilir.';
+
+  @override
+  String get permissionDescCreateMemories => 'Bu uygulama yeni anılar oluşturabilir.';
+
+  @override
+  String get realtimeListening => 'Gerçek Zamanlı Dinleme';
+
+  @override
+  String get invalidIntegrationUrl => 'Geçersiz entegrasyon URL';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Geçersiz kurulum talimatları URL';
+
+  @override
+  String get setupCompleted => 'Tamamlandı';
+
+  @override
+  String get tapToComplete => 'Tamamlamak için dokun';
+
+  @override
+  String get setupInstructions => 'Kurulum Talimatları';
+
+  @override
+  String get aboutTheApp => 'Uygulama Hakkında';
+
+  @override
+  String get aboutThePersona => 'Persona Hakkında';
+
+  @override
+  String get pushToTalk => 'Konuşmak için Bas';
+
+  @override
+  String get summaryPrompt => 'Özet Promptu';
+
+  @override
+  String get chatPersonality => 'Sohbet Kişiliği';
+
+  @override
+  String get ratingsAndReviews => 'Puanlar ve Yorumlar';
+
+  @override
+  String get pleaseSelectRating => 'Lütfen bir puan seçin';
+
+  @override
+  String get reviewAddedSuccessfully => 'Yorum başarıyla eklendi 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Yorum başarıyla güncellendi 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Yorum gönderilemedi. Lütfen tekrar deneyin.';
+
+  @override
+  String get writeReviewOptional => 'Yorum yaz (isteğe bağlı)';
+
+  @override
   String get photoLibrary => 'Fotoğraf Kütüphanesi';
 
   @override

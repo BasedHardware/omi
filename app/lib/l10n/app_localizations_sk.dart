@@ -5815,6 +5815,96 @@ class AppLocalizationsSk extends AppLocalizations {
   String get disable => 'Zakázať';
 
   @override
+  String get permissionReadConversations => 'Čítať konverzácie';
+
+  @override
+  String get permissionReadMemories => 'Čítať spomienky';
+
+  @override
+  String get permissionReadTasks => 'Čítať úlohy';
+
+  @override
+  String get permissionCreateConversations => 'Vytvárať konverzácie';
+
+  @override
+  String get permissionCreateMemories => 'Vytvárať spomienky';
+
+  @override
+  String get permissionTypeAccess => 'Prístup';
+
+  @override
+  String get permissionTypeCreate => 'Vytvoriť';
+
+  @override
+  String get permissionTypeTrigger => 'Spúšťač';
+
+  @override
+  String get permissionDescReadConversations => 'Táto aplikácia môže pristupovať k vašim konverzáciám.';
+
+  @override
+  String get permissionDescReadMemories => 'Táto aplikácia môže pristupovať k vašim spomienkam.';
+
+  @override
+  String get permissionDescReadTasks => 'Táto aplikácia môže pristupovať k vašim úlohám.';
+
+  @override
+  String get permissionDescCreateConversations => 'Táto aplikácia môže vytvárať nové konverzácie.';
+
+  @override
+  String get permissionDescCreateMemories => 'Táto aplikácia môže vytvárať nové spomienky.';
+
+  @override
+  String get realtimeListening => 'Počúvanie v reálnom čase';
+
+  @override
+  String get invalidIntegrationUrl => 'Neplatná URL integrácie';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Neplatná URL pokynov na nastavenie';
+
+  @override
+  String get setupCompleted => 'Dokončené';
+
+  @override
+  String get tapToComplete => 'Klepnite pre dokončenie';
+
+  @override
+  String get setupInstructions => 'Pokyny na nastavenie';
+
+  @override
+  String get aboutTheApp => 'O aplikácii';
+
+  @override
+  String get aboutThePersona => 'O persóne';
+
+  @override
+  String get pushToTalk => 'Stlačte pre hovor';
+
+  @override
+  String get summaryPrompt => 'Výzva na zhrnutie';
+
+  @override
+  String get chatPersonality => 'Osobnosť chatu';
+
+  @override
+  String get ratingsAndReviews => 'Hodnotenia a recenzie';
+
+  @override
+  String get pleaseSelectRating => 'Prosím vyberte hodnotenie';
+
+  @override
+  String get reviewAddedSuccessfully => 'Recenzia úspešne pridaná 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Recenzia úspešne aktualizovaná 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Nepodarilo sa odoslať recenziu. Skúste to znova.';
+
+  @override
+  String get writeReviewOptional => 'Napíšte recenziu (voliteľné)';
+
+  @override
   String get photoLibrary => 'Knižnica fotografií';
 
   @override

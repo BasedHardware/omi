@@ -5784,6 +5784,96 @@ class AppLocalizationsTh extends AppLocalizations {
   String get disable => 'ปิดใช้งาน';
 
   @override
+  String get permissionReadConversations => 'อ่านการสนทนา';
+
+  @override
+  String get permissionReadMemories => 'อ่านความทรงจำ';
+
+  @override
+  String get permissionReadTasks => 'อ่านงาน';
+
+  @override
+  String get permissionCreateConversations => 'สร้างการสนทนา';
+
+  @override
+  String get permissionCreateMemories => 'สร้างความทรงจำ';
+
+  @override
+  String get permissionTypeAccess => 'การเข้าถึง';
+
+  @override
+  String get permissionTypeCreate => 'สร้าง';
+
+  @override
+  String get permissionTypeTrigger => 'ทริกเกอร์';
+
+  @override
+  String get permissionDescReadConversations => 'แอปนี้สามารถเข้าถึงการสนทนาของคุณได้';
+
+  @override
+  String get permissionDescReadMemories => 'แอปนี้สามารถเข้าถึงความทรงจำของคุณได้';
+
+  @override
+  String get permissionDescReadTasks => 'แอปนี้สามารถเข้าถึงงานของคุณได้';
+
+  @override
+  String get permissionDescCreateConversations => 'แอปนี้สามารถสร้างการสนทนาใหม่ได้';
+
+  @override
+  String get permissionDescCreateMemories => 'แอปนี้สามารถสร้างความทรงจำใหม่ได้';
+
+  @override
+  String get realtimeListening => 'การฟังแบบเรียลไทม์';
+
+  @override
+  String get invalidIntegrationUrl => 'URL การผสานรวมไม่ถูกต้อง';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'URL คำแนะนำการตั้งค่าไม่ถูกต้อง';
+
+  @override
+  String get setupCompleted => 'เสร็จสิ้น';
+
+  @override
+  String get tapToComplete => 'แตะเพื่อเสร็จสิ้น';
+
+  @override
+  String get setupInstructions => 'คำแนะนำการตั้งค่า';
+
+  @override
+  String get aboutTheApp => 'เกี่ยวกับแอป';
+
+  @override
+  String get aboutThePersona => 'เกี่ยวกับเพอร์โซน่า';
+
+  @override
+  String get pushToTalk => 'กดเพื่อพูด';
+
+  @override
+  String get summaryPrompt => 'พรอมต์สรุป';
+
+  @override
+  String get chatPersonality => 'บุคลิกแชท';
+
+  @override
+  String get ratingsAndReviews => 'คะแนนและรีวิว';
+
+  @override
+  String get pleaseSelectRating => 'กรุณาเลือกคะแนน';
+
+  @override
+  String get reviewAddedSuccessfully => 'เพิ่มรีวิวสำเร็จ 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'อัปเดตรีวิวสำเร็จ 🚀';
+
+  @override
+  String get failedToSubmitReview => 'ส่งรีวิวไม่สำเร็จ กรุณาลองใหม่';
+
+  @override
+  String get writeReviewOptional => 'เขียนรีวิว (ไม่บังคับ)';
+
+  @override
   String get photoLibrary => 'คลังภาพ';
 
   @override

@@ -5815,6 +5815,96 @@ class AppLocalizationsEn extends AppLocalizations {
   String get disable => 'Disable';
 
   @override
+  String get permissionReadConversations => 'Read Conversations';
+
+  @override
+  String get permissionReadMemories => 'Read Memories';
+
+  @override
+  String get permissionReadTasks => 'Read Tasks';
+
+  @override
+  String get permissionCreateConversations => 'Create Conversations';
+
+  @override
+  String get permissionCreateMemories => 'Create Memories';
+
+  @override
+  String get permissionTypeAccess => 'Access';
+
+  @override
+  String get permissionTypeCreate => 'Create';
+
+  @override
+  String get permissionTypeTrigger => 'Trigger';
+
+  @override
+  String get permissionDescReadConversations => 'This app can access your conversations.';
+
+  @override
+  String get permissionDescReadMemories => 'This app can access your memories.';
+
+  @override
+  String get permissionDescReadTasks => 'This app can access your tasks.';
+
+  @override
+  String get permissionDescCreateConversations => 'This app can create new conversations.';
+
+  @override
+  String get permissionDescCreateMemories => 'This app can create new memories.';
+
+  @override
+  String get realtimeListening => 'Realtime Listening';
+
+  @override
+  String get invalidIntegrationUrl => 'Invalid integration URL';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Invalid setup instructions URL';
+
+  @override
+  String get setupCompleted => 'Completed';
+
+  @override
+  String get tapToComplete => 'Tap to complete';
+
+  @override
+  String get setupInstructions => 'Setup Instructions';
+
+  @override
+  String get aboutTheApp => 'About the App';
+
+  @override
+  String get aboutThePersona => 'About the Persona';
+
+  @override
+  String get pushToTalk => 'Push to Talk';
+
+  @override
+  String get summaryPrompt => 'Summary Prompt';
+
+  @override
+  String get chatPersonality => 'Chat Personality';
+
+  @override
+  String get ratingsAndReviews => 'Ratings & Reviews';
+
+  @override
+  String get pleaseSelectRating => 'Please select a rating';
+
+  @override
+  String get reviewAddedSuccessfully => 'Review added successfully 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Review updated successfully 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Failed to submit review. Please try again.';
+
+  @override
+  String get writeReviewOptional => 'Write a review (optional)';
+
+  @override
   String get photoLibrary => 'Photo Library';
 
   @override

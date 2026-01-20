@@ -5818,6 +5818,96 @@ class AppLocalizationsSv extends AppLocalizations {
   String get disable => 'Inaktivera';
 
   @override
+  String get permissionReadConversations => 'Läs konversationer';
+
+  @override
+  String get permissionReadMemories => 'Läs minnen';
+
+  @override
+  String get permissionReadTasks => 'Läs uppgifter';
+
+  @override
+  String get permissionCreateConversations => 'Skapa konversationer';
+
+  @override
+  String get permissionCreateMemories => 'Skapa minnen';
+
+  @override
+  String get permissionTypeAccess => 'Åtkomst';
+
+  @override
+  String get permissionTypeCreate => 'Skapa';
+
+  @override
+  String get permissionTypeTrigger => 'Utlösare';
+
+  @override
+  String get permissionDescReadConversations => 'Denna app kan komma åt dina konversationer.';
+
+  @override
+  String get permissionDescReadMemories => 'Denna app kan komma åt dina minnen.';
+
+  @override
+  String get permissionDescReadTasks => 'Denna app kan komma åt dina uppgifter.';
+
+  @override
+  String get permissionDescCreateConversations => 'Denna app kan skapa nya konversationer.';
+
+  @override
+  String get permissionDescCreateMemories => 'Denna app kan skapa nya minnen.';
+
+  @override
+  String get realtimeListening => 'Realtidslyssning';
+
+  @override
+  String get invalidIntegrationUrl => 'Ogiltig integrations-URL';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Ogiltig URL för installationsinstruktioner';
+
+  @override
+  String get setupCompleted => 'Slutfört';
+
+  @override
+  String get tapToComplete => 'Tryck för att slutföra';
+
+  @override
+  String get setupInstructions => 'Installationsinstruktioner';
+
+  @override
+  String get aboutTheApp => 'Om appen';
+
+  @override
+  String get aboutThePersona => 'Om personan';
+
+  @override
+  String get pushToTalk => 'Tryck för att prata';
+
+  @override
+  String get summaryPrompt => 'Sammanfattningsprompt';
+
+  @override
+  String get chatPersonality => 'Chattpersonlighet';
+
+  @override
+  String get ratingsAndReviews => 'Betyg och recensioner';
+
+  @override
+  String get pleaseSelectRating => 'Välj ett betyg';
+
+  @override
+  String get reviewAddedSuccessfully => 'Recension tillagd 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Recension uppdaterad 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Kunde inte skicka recension. Försök igen.';
+
+  @override
+  String get writeReviewOptional => 'Skriv en recension (valfritt)';
+
+  @override
   String get photoLibrary => 'Bildbibliotek';
 
   @override

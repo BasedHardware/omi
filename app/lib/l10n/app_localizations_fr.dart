@@ -5868,6 +5868,96 @@ class AppLocalizationsFr extends AppLocalizations {
   String get disable => 'Désactiver';
 
   @override
+  String get permissionReadConversations => 'Lire les conversations';
+
+  @override
+  String get permissionReadMemories => 'Lire les souvenirs';
+
+  @override
+  String get permissionReadTasks => 'Lire les tâches';
+
+  @override
+  String get permissionCreateConversations => 'Créer des conversations';
+
+  @override
+  String get permissionCreateMemories => 'Créer des souvenirs';
+
+  @override
+  String get permissionTypeAccess => 'Accès';
+
+  @override
+  String get permissionTypeCreate => 'Créer';
+
+  @override
+  String get permissionTypeTrigger => 'Déclencheur';
+
+  @override
+  String get permissionDescReadConversations => 'Cette app peut accéder à vos conversations.';
+
+  @override
+  String get permissionDescReadMemories => 'Cette app peut accéder à vos souvenirs.';
+
+  @override
+  String get permissionDescReadTasks => 'Cette app peut accéder à vos tâches.';
+
+  @override
+  String get permissionDescCreateConversations => 'Cette app peut créer de nouvelles conversations.';
+
+  @override
+  String get permissionDescCreateMemories => 'Cette app peut créer de nouveaux souvenirs.';
+
+  @override
+  String get realtimeListening => 'Écoute en temps réel';
+
+  @override
+  String get invalidIntegrationUrl => 'URL d\'intégration invalide';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'URL des instructions de configuration invalide';
+
+  @override
+  String get setupCompleted => 'Terminé';
+
+  @override
+  String get tapToComplete => 'Appuyez pour terminer';
+
+  @override
+  String get setupInstructions => 'Instructions de configuration';
+
+  @override
+  String get aboutTheApp => 'À propos de l\'app';
+
+  @override
+  String get aboutThePersona => 'À propos du persona';
+
+  @override
+  String get pushToTalk => 'Appuyer pour parler';
+
+  @override
+  String get summaryPrompt => 'Prompt de résumé';
+
+  @override
+  String get chatPersonality => 'Personnalité du chat';
+
+  @override
+  String get ratingsAndReviews => 'Notes et avis';
+
+  @override
+  String get pleaseSelectRating => 'Veuillez sélectionner une note';
+
+  @override
+  String get reviewAddedSuccessfully => 'Avis ajouté avec succès 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Avis mis à jour avec succès 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Échec de l\'envoi de l\'avis. Veuillez réessayer.';
+
+  @override
+  String get writeReviewOptional => 'Écrire un avis (optionnel)';
+
+  @override
   String get photoLibrary => 'Photothèque';
 
   @override

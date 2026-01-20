@@ -5823,6 +5823,96 @@ class AppLocalizationsVi extends AppLocalizations {
   String get disable => 'Vô hiệu hóa';
 
   @override
+  String get permissionReadConversations => 'Đọc cuộc hội thoại';
+
+  @override
+  String get permissionReadMemories => 'Đọc ký ức';
+
+  @override
+  String get permissionReadTasks => 'Đọc nhiệm vụ';
+
+  @override
+  String get permissionCreateConversations => 'Tạo cuộc hội thoại';
+
+  @override
+  String get permissionCreateMemories => 'Tạo ký ức';
+
+  @override
+  String get permissionTypeAccess => 'Truy cập';
+
+  @override
+  String get permissionTypeCreate => 'Tạo';
+
+  @override
+  String get permissionTypeTrigger => 'Kích hoạt';
+
+  @override
+  String get permissionDescReadConversations => 'Ứng dụng này có thể truy cập các cuộc hội thoại của bạn.';
+
+  @override
+  String get permissionDescReadMemories => 'Ứng dụng này có thể truy cập ký ức của bạn.';
+
+  @override
+  String get permissionDescReadTasks => 'Ứng dụng này có thể truy cập nhiệm vụ của bạn.';
+
+  @override
+  String get permissionDescCreateConversations => 'Ứng dụng này có thể tạo cuộc hội thoại mới.';
+
+  @override
+  String get permissionDescCreateMemories => 'Ứng dụng này có thể tạo ký ức mới.';
+
+  @override
+  String get realtimeListening => 'Nghe theo thời gian thực';
+
+  @override
+  String get invalidIntegrationUrl => 'URL tích hợp không hợp lệ';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'URL hướng dẫn cài đặt không hợp lệ';
+
+  @override
+  String get setupCompleted => 'Hoàn thành';
+
+  @override
+  String get tapToComplete => 'Nhấn để hoàn thành';
+
+  @override
+  String get setupInstructions => 'Hướng dẫn cài đặt';
+
+  @override
+  String get aboutTheApp => 'Về ứng dụng';
+
+  @override
+  String get aboutThePersona => 'Về persona';
+
+  @override
+  String get pushToTalk => 'Nhấn để nói';
+
+  @override
+  String get summaryPrompt => 'Prompt tóm tắt';
+
+  @override
+  String get chatPersonality => 'Tính cách chat';
+
+  @override
+  String get ratingsAndReviews => 'Đánh giá và nhận xét';
+
+  @override
+  String get pleaseSelectRating => 'Vui lòng chọn đánh giá';
+
+  @override
+  String get reviewAddedSuccessfully => 'Đã thêm đánh giá thành công 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Đã cập nhật đánh giá thành công 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Gửi đánh giá thất bại. Vui lòng thử lại.';
+
+  @override
+  String get writeReviewOptional => 'Viết đánh giá (tùy chọn)';
+
+  @override
   String get photoLibrary => 'Thư viện ảnh';
 
   @override

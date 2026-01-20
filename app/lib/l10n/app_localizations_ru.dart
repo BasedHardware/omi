@@ -5828,6 +5828,96 @@ class AppLocalizationsRu extends AppLocalizations {
   String get disable => 'Отключить';
 
   @override
+  String get permissionReadConversations => 'Читать разговоры';
+
+  @override
+  String get permissionReadMemories => 'Читать воспоминания';
+
+  @override
+  String get permissionReadTasks => 'Читать задачи';
+
+  @override
+  String get permissionCreateConversations => 'Создавать разговоры';
+
+  @override
+  String get permissionCreateMemories => 'Создавать воспоминания';
+
+  @override
+  String get permissionTypeAccess => 'Доступ';
+
+  @override
+  String get permissionTypeCreate => 'Создание';
+
+  @override
+  String get permissionTypeTrigger => 'Триггер';
+
+  @override
+  String get permissionDescReadConversations => 'Это приложение может получить доступ к вашим разговорам.';
+
+  @override
+  String get permissionDescReadMemories => 'Это приложение может получить доступ к вашим воспоминаниям.';
+
+  @override
+  String get permissionDescReadTasks => 'Это приложение может получить доступ к вашим задачам.';
+
+  @override
+  String get permissionDescCreateConversations => 'Это приложение может создавать новые разговоры.';
+
+  @override
+  String get permissionDescCreateMemories => 'Это приложение может создавать новые воспоминания.';
+
+  @override
+  String get realtimeListening => 'Прослушивание в реальном времени';
+
+  @override
+  String get invalidIntegrationUrl => 'Недействительный URL интеграции';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Недействительный URL инструкций по настройке';
+
+  @override
+  String get setupCompleted => 'Завершено';
+
+  @override
+  String get tapToComplete => 'Нажмите для завершения';
+
+  @override
+  String get setupInstructions => 'Инструкции по настройке';
+
+  @override
+  String get aboutTheApp => 'О приложении';
+
+  @override
+  String get aboutThePersona => 'О персоне';
+
+  @override
+  String get pushToTalk => 'Нажми и говори';
+
+  @override
+  String get summaryPrompt => 'Промпт для резюме';
+
+  @override
+  String get chatPersonality => 'Личность чата';
+
+  @override
+  String get ratingsAndReviews => 'Оценки и отзывы';
+
+  @override
+  String get pleaseSelectRating => 'Пожалуйста, выберите оценку';
+
+  @override
+  String get reviewAddedSuccessfully => 'Отзыв успешно добавлен 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Отзыв успешно обновлён 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Не удалось отправить отзыв. Пожалуйста, попробуйте снова.';
+
+  @override
+  String get writeReviewOptional => 'Написать отзыв (необязательно)';
+
+  @override
   String get photoLibrary => 'Фотогалерея';
 
   @override

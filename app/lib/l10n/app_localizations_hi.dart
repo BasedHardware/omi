@@ -5792,6 +5792,96 @@ class AppLocalizationsHi extends AppLocalizations {
   String get disable => 'अक्षम करें';
 
   @override
+  String get permissionReadConversations => 'बातचीत पढ़ें';
+
+  @override
+  String get permissionReadMemories => 'यादें पढ़ें';
+
+  @override
+  String get permissionReadTasks => 'कार्य पढ़ें';
+
+  @override
+  String get permissionCreateConversations => 'बातचीत बनाएं';
+
+  @override
+  String get permissionCreateMemories => 'यादें बनाएं';
+
+  @override
+  String get permissionTypeAccess => 'पहुंच';
+
+  @override
+  String get permissionTypeCreate => 'बनाएं';
+
+  @override
+  String get permissionTypeTrigger => 'ट्रिगर';
+
+  @override
+  String get permissionDescReadConversations => 'यह ऐप आपकी बातचीत तक पहुंच सकता है।';
+
+  @override
+  String get permissionDescReadMemories => 'यह ऐप आपकी यादों तक पहुंच सकता है।';
+
+  @override
+  String get permissionDescReadTasks => 'यह ऐप आपके कार्यों तक पहुंच सकता है।';
+
+  @override
+  String get permissionDescCreateConversations => 'यह ऐप नई बातचीत बना सकता है।';
+
+  @override
+  String get permissionDescCreateMemories => 'यह ऐप नई यादें बना सकता है।';
+
+  @override
+  String get realtimeListening => 'रीयलटाइम सुनना';
+
+  @override
+  String get invalidIntegrationUrl => 'अमान्य इंटीग्रेशन URL';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'अमान्य सेटअप निर्देश URL';
+
+  @override
+  String get setupCompleted => 'पूर्ण';
+
+  @override
+  String get tapToComplete => 'पूरा करने के लिए टैप करें';
+
+  @override
+  String get setupInstructions => 'सेटअप निर्देश';
+
+  @override
+  String get aboutTheApp => 'ऐप के बारे में';
+
+  @override
+  String get aboutThePersona => 'पर्सोना के बारे में';
+
+  @override
+  String get pushToTalk => 'बोलने के लिए दबाएं';
+
+  @override
+  String get summaryPrompt => 'सारांश प्रॉम्प्ट';
+
+  @override
+  String get chatPersonality => 'चैट व्यक्तित्व';
+
+  @override
+  String get ratingsAndReviews => 'रेटिंग और समीक्षाएं';
+
+  @override
+  String get pleaseSelectRating => 'कृपया रेटिंग चुनें';
+
+  @override
+  String get reviewAddedSuccessfully => 'समीक्षा सफलतापूर्वक जोड़ी गई 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'समीक्षा सफलतापूर्वक अपडेट की गई 🚀';
+
+  @override
+  String get failedToSubmitReview => 'समीक्षा सबमिट करने में विफल। कृपया पुनः प्रयास करें।';
+
+  @override
+  String get writeReviewOptional => 'समीक्षा लिखें (वैकल्पिक)';
+
+  @override
   String get photoLibrary => 'फोटो लाइब्रेरी';
 
   @override

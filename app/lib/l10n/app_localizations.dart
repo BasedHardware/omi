@@ -11001,6 +11001,96 @@ abstract class AppLocalizations {
   /// **'Disable'**
   String get disable;
 
+  /// Permission title for reading conversations
+  String get permissionReadConversations;
+
+  /// Permission title for reading memories
+  String get permissionReadMemories;
+
+  /// Permission title for reading tasks
+  String get permissionReadTasks;
+
+  /// Permission title for creating conversations
+  String get permissionCreateConversations;
+
+  /// Permission title for creating memories
+  String get permissionCreateMemories;
+
+  /// Permission type label for access permissions
+  String get permissionTypeAccess;
+
+  /// Permission type label for create permissions
+  String get permissionTypeCreate;
+
+  /// Permission type label for trigger permissions
+  String get permissionTypeTrigger;
+
+  /// Description for read conversations permission
+  String get permissionDescReadConversations;
+
+  /// Description for read memories permission
+  String get permissionDescReadMemories;
+
+  /// Description for read tasks permission
+  String get permissionDescReadTasks;
+
+  /// Description for create conversations permission
+  String get permissionDescCreateConversations;
+
+  /// Description for create memories permission
+  String get permissionDescCreateMemories;
+
+  /// Label for realtime listening trigger
+  String get realtimeListening;
+
+  /// Error message for invalid integration URL
+  String get invalidIntegrationUrl;
+
+  /// Error message for invalid setup instructions URL
+  String get invalidSetupInstructionsUrl;
+
+  /// Status text when setup is completed
+  String get setupCompleted;
+
+  /// Instruction to tap to complete setup
+  String get tapToComplete;
+
+  /// Title for setup instructions page
+  String get setupInstructions;
+
+  /// Section title for app description
+  String get aboutTheApp;
+
+  /// Section title for persona description
+  String get aboutThePersona;
+
+  /// Capability label for push to talk feature
+  String get pushToTalk;
+
+  /// Title for summary prompt section
+  String get summaryPrompt;
+
+  /// Title for chat personality section
+  String get chatPersonality;
+
+  /// Section title for ratings and reviews
+  String get ratingsAndReviews;
+
+  /// Validation message to select a rating
+  String get pleaseSelectRating;
+
+  /// Success message when review is added
+  String get reviewAddedSuccessfully;
+
+  /// Success message when review is updated
+  String get reviewUpdatedSuccessfully;
+
+  /// Error message when review submission fails
+  String get failedToSubmitReview;
+
+  /// Hint text for review input field
+  String get writeReviewOptional;
+
   /// Action sheet option to select from photo library
   ///
   /// In en, this message translates to:
