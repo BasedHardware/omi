@@ -2300,5 +2300,6 @@
   "couldNotProcessSubscription": "Could not process subscription. Please try again.",
   "couldNotLaunchUpgradePage": "Could not launch upgrade page. Please try again.",
   "transcriptionJsonPlaceholder": "Paste your JSON configuration here...",
-  "transcriptionSourceOmi": "Omi"
+  "transcriptionSourceOmi": "Omi",
+  "pricePlaceholder": "0.00"
 }

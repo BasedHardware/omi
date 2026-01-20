@@ -7279,4 +7279,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get transcriptionSourceOmi => 'Omi';
+
+  @override
+  String get pricePlaceholder => '0.00';
 }

@@ -13664,6 +13664,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Omi'**
   String get transcriptionSourceOmi;
+
+  /// Placeholder text for the price input field showing a sample price format
+  ///
+  /// In en, this message translates to:
+  /// **'0.00'**
+  String get pricePlaceholder;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

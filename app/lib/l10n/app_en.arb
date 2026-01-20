@@ -8986,5 +8986,9 @@
   "transcriptionSourceOmi": "Omi",
   "@transcriptionSourceOmi": {
     "description": "Tab title for Omi transcription source option"
+  },
+  "pricePlaceholder": "0.00",
+  "@pricePlaceholder": {
+    "description": "Placeholder text for the price input field showing a sample price format"
   }
 }

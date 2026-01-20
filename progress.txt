@@ -10,10 +10,10 @@
 |--------|-------|
 | Total Files | 27 |
 | Total Strings | ~125 |
-| Completed | 11 |
+| Completed | 12 |
 | In Progress | 0 |
-| Pending | 16 |
-| Progress | 41% |
+| Pending | 15 |
+| Progress | 44% |
 
 ================================================================================
 ## PRIORITY 1: HIGH IMPACT - User-Facing Features (~65 strings)
@@ -113,10 +113,12 @@ The JSON placeholder was changed from a literal JSON example to "Paste your JSON
 to avoid ICU message format conflicts with curly braces.
 Ran flutter gen-l10n and verified with test.sh.
 
-### [ ] pages/settings/ai_app_generator_page.dart (1 string)
-Status: PENDING
-Strings:
-- [ ] Line 1171: '0.00' (hintText placeholder)
+### [x] pages/settings/ai_app_generator_page.dart (1 string)
+Status: COMPLETED
+Note: Added 1 new l10n key to all 34 language ARB files and updated the Dart file to use
+context.l10n pattern. Key added: pricePlaceholder.
+The value "0.00" is a numeric format placeholder and remains the same across all languages.
+Ran flutter gen-l10n and verified with test.sh.
 
 ### [ ] pages/settings/import_history_page.dart (2 strings)
 Status: PENDING
@@ -209,6 +211,13 @@ Strings:
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-20] Localized ai_app_generator_page.dart
+- Added 1 new l10n key to all 34 language ARB files
+- Updated Dart file to use context.l10n pattern
+- Key: pricePlaceholder
+- Value "0.00" is a numeric format placeholder, same across all languages
+- Ran flutter gen-l10n and verified with test.sh
 
 [2026-01-20] Localized transcription_settings_page.dart
 - Added 2 new l10n keys to all 34 language ARB files
