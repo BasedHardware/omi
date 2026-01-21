@@ -60,7 +60,9 @@ The app uses Flutter's ARB-based localization system (`context.l10n.keyName`). W
 | Polish (pl) | COMPLETED - 150 keys translated |
 | Turkish (tr) | COMPLETED - 162 keys translated |
 | Dutch (nl) | COMPLETED - 156 keys translated |
-| Other languages (20) | PENDING |
+| Bulgarian (bg) | COMPLETED - 160 keys translated |
+| Catalan (ca) | COMPLETED - 160 keys translated |
+| Other languages (18) | PENDING |
 
 ---
 
