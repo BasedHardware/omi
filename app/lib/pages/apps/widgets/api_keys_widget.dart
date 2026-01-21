@@ -332,7 +332,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             subtitle: Text(
-              '${DateFormat('MMM d, yyyy HH:mm').format(key.createdAt)}',
+              '${DateFormat('MMM d, yyyy HH:mm', Localizations.localeOf(context).languageCode).format(key.createdAt)}',
               style: Theme.of(context).textTheme.labelMedium,
             ),
             trailing: SizedBox(

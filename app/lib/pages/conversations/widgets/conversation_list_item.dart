@@ -316,6 +316,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                                   dateTimeFormat(
                                     'h:mm a',
                                     widget.conversation.startedAt ?? widget.conversation.createdAt,
+                                    locale: Localizations.localeOf(context).languageCode,
                                   ),
                                   style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
                                   maxLines: 1,
@@ -493,6 +494,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                         dateTimeFormat(
                           'h:mm a',
                           widget.conversation.startedAt ?? widget.conversation.createdAt,
+                          locale: Localizations.localeOf(context).languageCode,
                         ),
                         style: const TextStyle(color: Color(0xFF6A6B71), fontSize: 14),
                         maxLines: 1,

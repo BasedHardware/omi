@@ -594,7 +594,9 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
               ),
               const SizedBox(width: 8),
               Text(
-                hasDateFilter ? DateFormat('MMM d').format(selectedDate) : context.l10n.date,
+                hasDateFilter
+                    ? DateFormat('MMM d', Localizations.localeOf(context).languageCode).format(selectedDate)
+                    : context.l10n.date,
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
@@ -745,7 +747,8 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
           ),
           const SizedBox(height: 16),
           Text(
-            context.l10n.noConversationsOnDate(DateFormat('MMM d, yyyy').format(convoProvider.selectedDate!)),
+            context.l10n.noConversationsOnDate(DateFormat('MMM d, yyyy', Localizations.localeOf(context).languageCode)
+                .format(convoProvider.selectedDate!)),
             style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
@@ -782,7 +785,7 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
           Padding(
             padding: const EdgeInsets.only(left: 12, bottom: 8),
             child: Text(
-              DateFormat('EEE, MMM d').format(date),
+              DateFormat('EEE, MMM d', Localizations.localeOf(context).languageCode).format(date),
               style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w500,

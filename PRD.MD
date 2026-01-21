@@ -142,6 +142,18 @@ The app uses Flutter's ARB-based localization system (`context.l10n.keyName`). W
 | `utils/other/time_utils.dart` | ~16 | COMPLETED - Time duration strings (secs, mins, hours, days) for human-readable and compact formats |
 | `pages/conversations/widgets/date_list_item.dart` | 1 | COMPLETED - Pass locale to dateTimeFormat() for proper date formatting |
 
+#### 6.5 DateFormat Locale Fixes
+
+| File | Lines Fixed | Description |
+|------|-------------|-------------|
+| `desktop/pages/settings/desktop_settings_modal.dart` | 2 | COMPLETED - DateFormat('EEEE, MMMM d'), DateFormat('h:mm a') |
+| `pages/settings/calendar_settings_page.dart` | 2 | COMPLETED - DateFormat('EEEE, MMMM d'), DateFormat('h:mm a') |
+| `pages/settings/usage_page.dart` | 4 | COMPLETED - DateFormat.Hm(), DateFormat('d'), DateFormat('MMM'), DateFormat.y() |
+| `pages/conversations/widgets/score_widget.dart` | 1 | COMPLETED - DateFormat('E') |
+| `pages/apps/widgets/api_keys_widget.dart` | 1 | COMPLETED - DateFormat('MMM d, yyyy HH:mm') |
+| `desktop/pages/conversations/desktop_conversations_page.dart` | 3 | COMPLETED - DateFormat('MMM d'), DateFormat('MMM d, yyyy'), DateFormat('EEE, MMM d') |
+| `pages/conversations/widgets/conversation_list_item.dart` | 2 | COMPLETED - dateTimeFormat('h:mm a') x2 |
+
 ---
 
 ## Requirements
