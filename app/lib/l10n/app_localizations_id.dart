@@ -31,10 +31,10 @@ class AppLocalizationsId extends AppLocalizations {
   String get confirm => 'Konfirmasi';
 
   @override
-  String get cancel => 'Cancel';
+  String get cancel => 'Batal';
 
   @override
-  String get ok => 'Ok';
+  String get ok => 'Oke';
 
   @override
   String get delete => 'Hapus';
@@ -585,7 +585,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get starOngoing => 'Beri Bintang Percakapan yang Sedang Berlangsung';
 
   @override
-  String get off => 'Off';
+  String get off => 'Nonaktif';
 
   @override
   String get max => 'Maksimal';
@@ -3274,7 +3274,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get upgradeToPro => 'Tingkatkan ke Pro';
 
   @override
-  String get getOmiDevice => 'Get Omi Device';
+  String get getOmiDevice => 'Dapatkan Perangkat Omi';
 
   @override
   String get wearableAiCompanion => 'Pendamping AI yang dapat dikenakan';
@@ -3840,7 +3840,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get signOutQuestion => 'Keluar?';
 
   @override
-  String get signOutConfirmation => 'Are you sure you want to sign out?';
+  String get signOutConfirmation => 'Apakah Anda yakin ingin keluar?';
 
   @override
   String get customVocabularyHeader => 'KOSAKATA KUSTOM';
@@ -4909,10 +4909,10 @@ class AppLocalizationsId extends AppLocalizations {
   String get enable => 'Aktifkan';
 
   @override
-  String get storeAudioOnPhone => 'Store Audio on Phone';
+  String get storeAudioOnPhone => 'Simpan Audio di Ponsel';
 
   @override
-  String get on => 'On';
+  String get on => 'Aktif';
 
   @override
   String get storeAudioDescription =>
@@ -4931,7 +4931,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get enableCloudStorage => 'Aktifkan Penyimpanan Cloud';
 
   @override
-  String get storeAudioOnCloud => 'Store Audio on Cloud';
+  String get storeAudioOnCloud => 'Simpan Audio di Cloud';
 
   @override
   String get cloudStorageDialogMessage =>
@@ -5833,25 +5833,25 @@ class AppLocalizationsId extends AppLocalizations {
   String get chooseFile => 'Pilih File';
 
   @override
-  String get configureAiPersona => 'Configure your AI persona';
+  String get configureAiPersona => 'Konfigurasikan persona AI Anda';
 
   @override
-  String get connectAiAssistantsToYourData => 'Connect AI assistants to your data';
+  String get connectAiAssistantsToYourData => 'Hubungkan asisten AI ke data Anda';
 
   @override
   String get oAuth => 'OAuth';
 
   @override
-  String get trackYourGoalsOnHomepage => 'Track your personal goals on homepage';
+  String get trackYourGoalsOnHomepage => 'Lacak tujuan pribadi Anda di beranda';
 
   @override
-  String get deleteRecording => 'Delete Recording';
+  String get deleteRecording => 'Hapus Rekaman';
 
   @override
-  String get thisCannotBeUndone => 'This cannot be undone.';
+  String get thisCannotBeUndone => 'Tindakan ini tidak dapat dibatalkan.';
 
   @override
-  String get sdCard => 'SD Card';
+  String get sdCard => 'Kartu SD';
 
   @override
   String get fromSd => 'From SD';
@@ -5863,10 +5863,10 @@ class AppLocalizationsId extends AppLocalizations {
   String get fastTransfer => 'Transfer Cepat';
 
   @override
-  String get syncingStatus => 'Syncing';
+  String get syncingStatus => 'Menyinkronkan';
 
   @override
-  String get failedStatus => 'Failed';
+  String get failedStatus => 'Gagal';
 
   @override
   String etaLabel(String time) {
@@ -5886,64 +5886,65 @@ class AppLocalizationsId extends AppLocalizations {
   String get phone => 'Phone';
 
   @override
-  String get cancelSync => 'Cancel Sync';
+  String get cancelSync => 'Batalkan Sinkronisasi';
 
   @override
-  String get cancelSyncMessage => 'Data already downloaded will be saved. You can resume later.';
+  String get cancelSyncMessage =>
+      'Apakah Anda yakin ingin membatalkan sinkronisasi? Ini akan menghentikan transfer data yang sedang berlangsung.';
 
   @override
   String get syncCancelled => 'Sync cancelled';
 
   @override
-  String get deleteProcessedFiles => 'Delete Processed Files';
+  String get deleteProcessedFiles => 'Hapus File yang Diproses';
 
   @override
   String get processedFilesDeleted => 'Processed files deleted';
 
   @override
-  String get wifiEnableFailed => 'Failed to enable WiFi on device. Please try again.';
+  String get wifiEnableFailed => 'Gagal mengaktifkan WiFi pada perangkat. Silakan coba lagi.';
 
   @override
-  String get deviceNoFastTransfer => 'Your device does not support Fast Transfer. Use Bluetooth instead.';
+  String get deviceNoFastTransfer => 'Perangkat tidak mendukung Transfer Cepat';
 
   @override
-  String get enableHotspotMessage => 'Please enable your phone\'s hotspot and try again.';
+  String get enableHotspotMessage => 'Silakan aktifkan hotspot ponsel Anda dan coba lagi.';
 
   @override
-  String get transferStartFailed => 'Failed to start transfer. Please try again.';
+  String get transferStartFailed => 'Gagal memulai transfer. Silakan coba lagi.';
 
   @override
-  String get deviceNotResponding => 'Device did not respond. Please try again.';
+  String get deviceNotResponding => 'Perangkat tidak merespons. Silakan coba lagi.';
 
   @override
-  String get invalidWifiCredentials => 'Invalid WiFi credentials. Check your hotspot settings.';
+  String get invalidWifiCredentials => 'Kredensial WiFi tidak valid. Periksa pengaturan hotspot Anda.';
 
   @override
-  String get wifiConnectionFailed => 'WiFi connection failed. Please try again.';
+  String get wifiConnectionFailed => 'Koneksi WiFi gagal. Silakan coba lagi.';
 
   @override
-  String get sdCardProcessing => 'SD Card Processing';
+  String get sdCardProcessing => 'Memproses Kartu SD';
 
   @override
   String sdCardProcessingMessage(int count) {
-    return 'Processing $count recording(s). Files will be removed from SD card after.';
+    return 'Memproses $count rekaman. File akan dihapus dari kartu SD setelahnya.';
   }
 
   @override
   String get process => 'Process';
 
   @override
-  String get wifiSyncFailed => 'WiFi Sync Failed';
+  String get wifiSyncFailed => 'Sinkronisasi WiFi Gagal';
 
   @override
-  String get processingFailed => 'Processing Failed';
+  String get processingFailed => 'Pemrosesan Gagal';
 
   @override
-  String get downloadingFromSdCard => 'Downloading from SD Card';
+  String get downloadingFromSdCard => 'Mengunduh dari Kartu SD';
 
   @override
   String processingProgress(int current, int total) {
-    return 'Processing $current/$total';
+    return 'Memproses $current/$total';
   }
 
   @override
@@ -5952,7 +5953,7 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get internetRequired => 'Internet required';
+  String get internetRequired => 'Diperlukan internet';
 
   @override
   String get processAudio => 'Process Audio';
@@ -5964,16 +5965,16 @@ class AppLocalizationsId extends AppLocalizations {
   String get noRecordings => 'No Recordings';
 
   @override
-  String get audioFromOmiWillAppearHere => 'Audio from your Omi device will appear here';
+  String get audioFromOmiWillAppearHere => 'Audio dari perangkat Omi Anda akan muncul di sini';
 
   @override
-  String get deleteProcessed => 'Delete Processed';
+  String get deleteProcessed => 'Hapus yang Diproses';
 
   @override
   String get tryDifferentFilter => 'Try a different filter';
 
   @override
-  String get recordings => 'Recordings';
+  String get recordings => 'Rekaman';
 
   @override
   String get enableRemindersAccess => 'Aktifkan akses Pengingat di Pengaturan untuk menggunakan Pengingat Apple';
@@ -6271,7 +6272,7 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get device => 'Device';
+  String get device => 'Perangkat';
 
   @override
   String get chatAssistantsTitle => 'Asisten Obrolan';
@@ -6328,7 +6329,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get writeReviewOptional => 'Tulis ulasan (opsional)';
 
   @override
-  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
+  String get setupQuestionsIntro => 'Beberapa pertanyaan singkat untuk membantu kami mempersonalisasi pengalaman Anda';
 
   @override
   String get setupQuestionProfession => '1. What do you do?';
@@ -6346,13 +6347,13 @@ class AppLocalizationsId extends AppLocalizations {
   String get setupSkipHelp => 'Skip, I don\'t want to help :C';
 
   @override
-  String get professionEntrepreneur => 'Entrepreneur';
+  String get professionEntrepreneur => 'Pengusaha';
 
   @override
-  String get professionSoftwareEngineer => 'Software Engineer';
+  String get professionSoftwareEngineer => 'Insinyur Perangkat Lunak';
 
   @override
-  String get professionProductManager => 'Product Manager';
+  String get professionProductManager => 'Manajer Produk';
 
   @override
   String get professionExecutive => 'Executive';
@@ -6364,10 +6365,10 @@ class AppLocalizationsId extends AppLocalizations {
   String get professionStudent => 'Student';
 
   @override
-  String get usageAtWork => 'At work';
+  String get usageAtWork => 'Di tempat kerja';
 
   @override
-  String get usageIrlEvents => 'IRL Events';
+  String get usageIrlEvents => 'Acara IRL';
 
   @override
   String get usageOnline => 'Online';
@@ -6550,20 +6551,20 @@ class AppLocalizationsId extends AppLocalizations {
   String get connectedKnowledgeData => 'Connected Knowledge Data';
 
   @override
-  String get enterName => 'Enter name';
+  String get enterName => 'Masukkan nama';
 
   @override
   String get disconnectTwitter => 'Disconnect Twitter';
 
   @override
   String get disconnectTwitterConfirmation =>
-      'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
+      'Apakah Anda yakin ingin memutuskan akun Twitter Anda? Persona Anda tidak akan lagi memiliki akses ke data Twitter Anda.';
 
   @override
   String get getOmiDeviceDescription => 'Create a more accurate clone with your personal conversations';
 
   @override
-  String get getOmi => 'Get Omi';
+  String get getOmi => 'Dapatkan Omi';
 
   @override
   String get iHaveOmiDevice => 'I have Omi device';
@@ -6641,31 +6642,31 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String tagSpeaker(int speakerId) {
-    return 'Tag Speaker $speakerId';
+    return 'Tandai Pembicara $speakerId';
   }
 
   @override
   String get personNameAlreadyExists => 'A person with this name already exists.';
 
   @override
-  String get selectYouFromList => 'To tag yourself, please select \"You\" from the list.';
+  String get selectYouFromList => 'Pilih Anda dari daftar';
 
   @override
-  String get enterPersonsName => 'Enter Person\'s Name';
+  String get enterPersonsName => 'Masukkan Nama Orang';
 
   @override
-  String get addPerson => 'Add Person';
+  String get addPerson => 'Tambah Orang';
 
   @override
   String tagOtherSegmentsFromSpeaker(int selected, int total) {
-    return 'Tag other segments from this speaker ($selected/$total)';
+    return 'Tandai segmen lain dari pembicara ini ($selected/$total)';
   }
 
   @override
-  String get tagOtherSegments => 'Tag other segments';
+  String get tagOtherSegments => 'Tandai segmen lain';
 
   @override
-  String get managePeople => 'Manage People';
+  String get managePeople => 'Kelola Orang';
 
   @override
   String get shareViaSms => 'Bagikan via SMS';
@@ -6744,25 +6745,25 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String enableDeviceWifi(String deviceName) {
-    return 'Enable $deviceName\'s WiFi';
+    return 'Aktifkan WiFi $deviceName';
   }
 
   @override
   String connectToDeviceName(String deviceName) {
-    return 'Connect to $deviceName';
+    return 'Hubungkan ke $deviceName';
   }
 
   @override
-  String get recordingDetails => 'Recording Details';
+  String get recordingDetails => 'Detail Rekaman';
 
   @override
-  String get storageLocationSdCard => 'SD Card';
+  String get storageLocationSdCard => 'Kartu SD';
 
   @override
   String get storageLocationLimitlessPendant => 'Limitless Pendant';
 
   @override
-  String get storageLocationPhone => 'Phone';
+  String get storageLocationPhone => 'Ponsel';
 
   @override
   String get storageLocationPhoneMemory => 'Phone (Memory)';
@@ -6773,42 +6774,41 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get transferring => 'Transferring...';
+  String get transferring => 'Mentransfer...';
 
   @override
-  String get transferRequired => 'Transfer Required';
+  String get transferRequired => 'Transfer Diperlukan';
 
   @override
-  String get downloadingAudioFromSdCard => 'Downloading audio from your device\'s SD card';
+  String get downloadingAudioFromSdCard => 'Mengunduh audio dari kartu SD perangkat Anda';
 
   @override
-  String get transferRequiredDescription =>
-      'This recording is stored on your device\'s SD card. Transfer it to your phone to play or share.';
+  String get transferRequiredDescription => 'Rekaman ini perlu ditransfer ke ponsel Anda sebelum dapat diputar.';
 
   @override
-  String get cancelTransfer => 'Cancel Transfer';
+  String get cancelTransfer => 'Batalkan Transfer';
 
   @override
-  String get transferToPhone => 'Transfer to Phone';
+  String get transferToPhone => 'Transfer ke Ponsel';
 
   @override
   String get privateAndSecureOnDevice => 'Private & secure on your device';
 
   @override
-  String get recordingInfo => 'Recording Info';
+  String get recordingInfo => 'Info Rekaman';
 
   @override
-  String get transferInProgress => 'Transfer in progress...';
+  String get transferInProgress => 'Transfer sedang berlangsung...';
 
   @override
   String get shareRecording => 'Share Recording';
 
   @override
   String get deleteRecordingConfirmation =>
-      'Are you sure you want to permanently delete this recording? This can\'t be undone.';
+      'Apakah Anda yakin ingin menghapus rekaman ini secara permanen? Tindakan ini tidak dapat dibatalkan.';
 
   @override
-  String get recordingIdLabel => 'Recording ID';
+  String get recordingIdLabel => 'ID Rekaman';
 
   @override
   String get dateTimeLabel => 'Date & Time';
@@ -6817,19 +6817,19 @@ class AppLocalizationsId extends AppLocalizations {
   String get durationLabel => 'Duration';
 
   @override
-  String get audioFormatLabel => 'Audio Format';
+  String get audioFormatLabel => 'Format Audio';
 
   @override
-  String get storageLocationLabel => 'Storage Location';
+  String get storageLocationLabel => 'Lokasi Penyimpanan';
 
   @override
   String get estimatedSizeLabel => 'Estimated Size';
 
   @override
-  String get deviceModelLabel => 'Device Model';
+  String get deviceModelLabel => 'Model Perangkat';
 
   @override
-  String get deviceIdLabel => 'Device ID';
+  String get deviceIdLabel => 'ID Perangkat';
 
   @override
   String get statusLabel => 'Status';
@@ -6841,18 +6841,18 @@ class AppLocalizationsId extends AppLocalizations {
   String get statusUnprocessed => 'Unprocessed';
 
   @override
-  String get switchedToFastTransfer => 'Switched to Fast Transfer';
+  String get switchedToFastTransfer => 'Beralih ke Transfer Cepat';
 
   @override
-  String get transferCompleteMessage => 'Transfer complete! You can now play this recording.';
+  String get transferCompleteMessage => 'Transfer selesai. Anda sekarang dapat memutar rekaman ini.';
 
   @override
   String transferFailedMessage(String error) {
-    return 'Transfer failed: $error';
+    return 'Transfer gagal: $error';
   }
 
   @override
-  String get transferCancelled => 'Transfer cancelled';
+  String get transferCancelled => 'Transfer dibatalkan';
 
   @override
   String get fastTransferEnabled => 'Transfer Cepat diaktifkan';
@@ -6976,10 +6976,10 @@ class AppLocalizationsId extends AppLocalizations {
   String get allObjectsMigratedFinalizing => 'All objects migrated. Finalizing...';
 
   @override
-  String get migrationErrorOccurred => 'An error occurred during migration. Please try again.';
+  String get migrationErrorOccurred => 'Terjadi kesalahan selama migrasi. Silakan coba lagi.';
 
   @override
-  String get migrationComplete => 'Migration complete!';
+  String get migrationComplete => 'Migrasi selesai.';
 
   @override
   String dataProtectedWithSettings(String level) {
@@ -7009,29 +7009,28 @@ class AppLocalizationsId extends AppLocalizations {
   String get templateName => 'Nama Template';
 
   @override
-  String get templateNameHint => 'mis. Pengekstrak Item Tindakan Rapat';
+  String get templateNameHint => 'Masukkan nama untuk template Anda';
 
   @override
   String get nameMustBeAtLeast3Characters => 'Nama harus minimal 3 karakter';
 
   @override
-  String get conversationPromptHint =>
-      'mis., Ekstrak item tindakan, keputusan yang diambil, dan poin-poin penting dari percakapan yang diberikan.';
+  String get conversationPromptHint => 'Masukkan prompt percakapan';
 
   @override
-  String get pleaseEnterAppPrompt => 'Silakan masukkan prompt untuk aplikasi Anda';
+  String get pleaseEnterAppPrompt => 'Silakan masukkan prompt aplikasi';
 
   @override
   String get promptMustBeAtLeast10Characters => 'Prompt harus minimal 10 karakter';
 
   @override
-  String get anyoneCanDiscoverTemplate => 'Siapa pun dapat menemukan template Anda';
+  String get anyoneCanDiscoverTemplate => 'Siapa saja dapat menemukan template';
 
   @override
-  String get onlyYouCanUseTemplate => 'Hanya Anda yang dapat menggunakan template ini';
+  String get onlyYouCanUseTemplate => 'Hanya Anda yang dapat menggunakan template';
 
   @override
-  String get generatingDescription => 'Membuat deskripsi...';
+  String get generatingDescription => 'Menghasilkan deskripsi...';
 
   @override
   String get creatingAppIcon => 'Membuat ikon aplikasi...';
@@ -7040,100 +7039,100 @@ class AppLocalizationsId extends AppLocalizations {
   String get installingApp => 'Menginstal aplikasi...';
 
   @override
-  String get appCreatedAndInstalled => 'Aplikasi dibuat dan diinstal!';
+  String get appCreatedAndInstalled => 'Aplikasi dibuat dan diinstal';
 
   @override
-  String get appCreatedSuccessfully => 'Aplikasi berhasil dibuat!';
+  String get appCreatedSuccessfully => 'Aplikasi berhasil dibuat';
 
   @override
-  String get failedToCreateApp => 'Gagal membuat aplikasi. Silakan coba lagi.';
+  String get failedToCreateApp => 'Gagal membuat aplikasi';
 
   @override
-  String get addAppSelectCoreCapability => 'Pilih satu kemampuan inti lagi untuk aplikasi Anda';
+  String get addAppSelectCoreCapability => 'Pilih kemampuan inti';
 
   @override
-  String get addAppSelectPaymentPlan => 'Pilih rencana pembayaran dan masukkan harga untuk aplikasi Anda';
+  String get addAppSelectPaymentPlan => 'Pilih paket pembayaran';
 
   @override
-  String get addAppSelectCapability => 'Pilih setidaknya satu kemampuan untuk aplikasi Anda';
+  String get addAppSelectCapability => 'Pilih kemampuan';
 
   @override
-  String get addAppSelectLogo => 'Pilih logo untuk aplikasi Anda';
+  String get addAppSelectLogo => 'Pilih logo';
 
   @override
-  String get addAppEnterChatPrompt => 'Masukkan prompt chat untuk aplikasi Anda';
+  String get addAppEnterChatPrompt => 'Masukkan prompt chat';
 
   @override
-  String get addAppEnterConversationPrompt => 'Masukkan prompt percakapan untuk aplikasi Anda';
+  String get addAppEnterConversationPrompt => 'Masukkan prompt percakapan';
 
   @override
-  String get addAppSelectTriggerEvent => 'Pilih event pemicu untuk aplikasi Anda';
+  String get addAppSelectTriggerEvent => 'Pilih event pemicu';
 
   @override
-  String get addAppEnterWebhookUrl => 'Masukkan URL webhook untuk aplikasi Anda';
+  String get addAppEnterWebhookUrl => 'Masukkan URL webhook';
 
   @override
-  String get addAppSelectCategory => 'Pilih kategori untuk aplikasi Anda';
+  String get addAppSelectCategory => 'Pilih kategori';
 
   @override
-  String get addAppFillRequiredFields => 'Isi semua field yang diperlukan dengan benar';
+  String get addAppFillRequiredFields => 'Harap isi semua bidang yang diperlukan';
 
   @override
-  String get addAppUpdatedSuccess => 'Aplikasi berhasil diperbarui 🚀';
+  String get addAppUpdatedSuccess => 'Aplikasi berhasil diperbarui';
 
   @override
-  String get addAppUpdateFailed => 'Pembaruan gagal. Coba lagi nanti';
+  String get addAppUpdateFailed => 'Gagal memperbarui aplikasi';
 
   @override
-  String get addAppSubmittedSuccess => 'Aplikasi berhasil dikirim 🚀';
+  String get addAppSubmittedSuccess => 'Aplikasi berhasil dikirim';
 
   @override
   String addAppErrorOpeningFilePicker(String message) {
-    return 'Error membuka pemilih file: $message';
+    return 'Kesalahan membuka pemilih file';
   }
 
   @override
   String addAppErrorSelectingImage(String error) {
-    return 'Error memilih gambar: $error';
+    return 'Kesalahan memilih gambar';
   }
 
   @override
-  String get addAppPhotosPermissionDenied => 'Izin foto ditolak. Izinkan akses ke foto';
+  String get addAppPhotosPermissionDenied => 'Izin foto ditolak';
 
   @override
-  String get addAppErrorSelectingImageRetry => 'Error memilih gambar. Coba lagi.';
+  String get addAppErrorSelectingImageRetry => 'Kesalahan memilih gambar. Silakan coba lagi.';
 
   @override
   String addAppErrorSelectingThumbnail(String error) {
-    return 'Error memilih thumbnail: $error';
+    return 'Kesalahan memilih thumbnail';
   }
 
   @override
-  String get addAppErrorSelectingThumbnailRetry => 'Error memilih thumbnail. Coba lagi.';
+  String get addAppErrorSelectingThumbnailRetry => 'Kesalahan memilih thumbnail. Silakan coba lagi.';
 
   @override
-  String get addAppCapabilityConflictWithPersona => 'Kemampuan lain tidak dapat dipilih dengan Persona';
+  String get addAppCapabilityConflictWithPersona => 'Kemampuan ini berkonflik dengan persona';
 
   @override
-  String get addAppPersonaConflictWithCapabilities => 'Persona tidak dapat dipilih dengan kemampuan lain';
+  String get addAppPersonaConflictWithCapabilities => 'Persona berkonflik dengan kemampuan yang dipilih';
 
   @override
-  String get personaTwitterHandleNotFound => 'Akun Twitter tidak ditemukan';
+  String get personaTwitterHandleNotFound => 'Username Twitter tidak ditemukan';
 
   @override
-  String get personaTwitterHandleSuspended => 'Akun Twitter ditangguhkan';
+  String get personaTwitterHandleSuspended => 'Username Twitter ditangguhkan';
 
   @override
-  String get personaFailedToVerifyTwitter => 'Gagal memverifikasi akun Twitter';
+  String get personaFailedToVerifyTwitter => 'Gagal memverifikasi Twitter';
 
   @override
-  String get personaFailedToFetch => 'Gagal mengambil persona Anda';
+  String get personaFailedToFetch => 'Gagal mengambil persona';
 
   @override
   String get personaFailedToCreate => 'Gagal membuat persona';
 
   @override
-  String get personaConnectKnowledgeSource => 'Hubungkan setidaknya satu sumber data (Omi atau Twitter)';
+  String get personaConnectKnowledgeSource => 'Hubungkan sumber pengetahuan';
 
   @override
   String get personaUpdatedSuccessfully => 'Persona berhasil diperbarui';
@@ -7142,10 +7141,10 @@ class AppLocalizationsId extends AppLocalizations {
   String get personaFailedToUpdate => 'Gagal memperbarui persona';
 
   @override
-  String get personaPleaseSelectImage => 'Pilih gambar';
+  String get personaPleaseSelectImage => 'Silakan pilih gambar';
 
   @override
-  String get personaFailedToCreateTryLater => 'Gagal membuat persona. Coba lagi nanti.';
+  String get personaFailedToCreateTryLater => 'Gagal membuat persona. Silakan coba lagi nanti.';
 
   @override
   String personaFailedToCreateWithError(String error) {
@@ -7157,23 +7156,23 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String personaErrorEnablingWithError(String error) {
-    return 'Error mengaktifkan persona: $error';
+    return 'Kesalahan mengaktifkan persona: $error';
   }
 
   @override
-  String get paymentFailedToFetchCountries => 'Gagal mengambil negara yang didukung. Coba lagi nanti.';
+  String get paymentFailedToFetchCountries => 'Gagal mengambil daftar negara';
 
   @override
-  String get paymentFailedToSetDefault => 'Gagal mengatur metode pembayaran default. Coba lagi nanti.';
+  String get paymentFailedToSetDefault => 'Gagal mengatur metode pembayaran default';
 
   @override
-  String get paymentFailedToSavePaypal => 'Gagal menyimpan detail PayPal. Coba lagi nanti.';
+  String get paymentFailedToSavePaypal => 'Gagal menyimpan PayPal';
 
   @override
-  String get paypalEmailHint => 'nik@example.com';
+  String get paypalEmailHint => 'Email PayPal';
 
   @override
-  String get paypalMeLinkHint => 'paypal.me/nik';
+  String get paypalMeLinkHint => 'Link PayPal.me';
 
   @override
   String get paymentMethodStripe => 'Stripe';
@@ -7197,16 +7196,16 @@ class AppLocalizationsId extends AppLocalizations {
   String get paymentEnterValidAmount => 'Masukkan jumlah yang valid';
 
   @override
-  String get paymentEnterAmountGreaterThanZero => 'Masukkan jumlah lebih dari 0';
+  String get paymentEnterAmountGreaterThanZero => 'Masukkan jumlah lebih dari nol';
 
   @override
-  String get paymentPlan => 'Rencana Pembayaran';
+  String get paymentPlan => 'Paket Pembayaran';
 
   @override
-  String get paymentNoneSelected => 'Tidak Ada yang Dipilih';
+  String get paymentNoneSelected => 'Tidak ada yang dipilih';
 
   @override
-  String get aiGenPleaseEnterDescription => 'Silakan masukkan deskripsi untuk aplikasi Anda';
+  String get aiGenPleaseEnterDescription => 'Silakan masukkan deskripsi';
 
   @override
   String get aiGenCreatingAppIcon => 'Membuat ikon aplikasi...';
@@ -7217,114 +7216,111 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get aiGenAppCreatedSuccessfully => 'Aplikasi berhasil dibuat!';
+  String get aiGenAppCreatedSuccessfully => 'Aplikasi berhasil dibuat';
 
   @override
   String get aiGenFailedToCreateApp => 'Gagal membuat aplikasi';
 
   @override
-  String get aiGenErrorWhileCreatingApp => 'Terjadi kesalahan saat membuat aplikasi';
+  String get aiGenErrorWhileCreatingApp => 'Kesalahan saat membuat aplikasi';
 
   @override
-  String get aiGenFailedToGenerateApp => 'Gagal membuat aplikasi. Silakan coba lagi.';
+  String get aiGenFailedToGenerateApp => 'Gagal menghasilkan aplikasi';
 
   @override
-  String get aiGenFailedToRegenerateIcon => 'Gagal membuat ulang ikon';
+  String get aiGenFailedToRegenerateIcon => 'Gagal menghasilkan ulang ikon';
 
   @override
   String get aiGenPleaseGenerateAppFirst => 'Silakan buat aplikasi terlebih dahulu';
 
   @override
-  String get xHandleTitle => 'What\'s your X handle?';
+  String get xHandleTitle => 'Apa username X Anda?';
 
   @override
-  String get xHandleDescription => 'We will pre-train your Omi clone\nbased on your account\'s activity';
+  String get xHandleDescription => 'Masukkan username X (Twitter) Anda untuk menghubungkan profil sosial Anda';
 
   @override
   String get xHandleHint => '@nikshevchenko';
 
   @override
-  String get xHandlePleaseEnter => 'Please enter your X handle';
+  String get xHandlePleaseEnter => 'Silakan masukkan username X Anda';
 
   @override
-  String get xHandlePleaseEnterValid => 'Please enter a valid X handle';
+  String get xHandlePleaseEnterValid => 'Silakan masukkan username X yang valid';
 
   @override
-  String get nextButton => 'Next';
+  String get nextButton => 'Selanjutnya';
 
   @override
-  String get connectOmiDevice => 'Connect Omi Device';
+  String get connectOmiDevice => 'Hubungkan Perangkat Omi';
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'You\'re switching your Unlimited Plan to the $title. Are you sure you want to proceed?';
+    return 'Anda dijadwalkan untuk beralih ke paket $title pada periode penagihan berikutnya.';
   }
 
   @override
-  String get planUpgradeScheduledMessage =>
-      'Upgrade scheduled! Your monthly plan continues until the end of your billing period, then automatically switches to annual.';
+  String get planUpgradeScheduledMessage => 'Upgrade paket Anda dijadwalkan untuk periode penagihan berikutnya.';
 
   @override
-  String get couldNotSchedulePlanChange => 'Could not schedule plan change. Please try again.';
+  String get couldNotSchedulePlanChange => 'Tidak dapat menjadwalkan perubahan paket. Silakan coba lagi.';
 
   @override
-  String get subscriptionReactivatedDefault =>
-      'Your subscription has been reactivated! No charge now - you\'ll be billed at the end of your current period.';
+  String get subscriptionReactivatedDefault => 'Langganan Anda telah diaktifkan kembali.';
 
   @override
-  String get subscriptionSuccessfulCharged =>
-      'Subscription successful! You\'ve been charged for the new billing period.';
+  String get subscriptionSuccessfulCharged => 'Langganan berhasil diproses.';
 
   @override
-  String get couldNotProcessSubscription => 'Could not process subscription. Please try again.';
+  String get couldNotProcessSubscription => 'Tidak dapat memproses langganan. Silakan coba lagi.';
 
   @override
-  String get couldNotLaunchUpgradePage => 'Could not launch upgrade page. Please try again.';
+  String get couldNotLaunchUpgradePage => 'Tidak dapat membuka halaman upgrade. Silakan coba lagi.';
 
   @override
-  String get transcriptionJsonPlaceholder => 'Paste your JSON configuration here...';
+  String get transcriptionJsonPlaceholder => 'Placeholder JSON transkripsi';
 
   @override
-  String get transcriptionSourceOmi => 'Omi';
+  String get transcriptionSourceOmi => 'Sumber Transkripsi: Omi';
 
   @override
-  String get pricePlaceholder => '0.00';
+  String get pricePlaceholder => 'Harga';
 
   @override
   String importErrorOpeningFilePicker(String message) {
-    return 'Kesalahan membuka pemilih file: $message';
+    return 'Kesalahan membuka pemilih file';
   }
 
   @override
   String importErrorGeneric(String error) {
-    return 'Kesalahan: $error';
+    return 'Kesalahan mengimpor file';
   }
 
   @override
-  String get mergeConversationsSuccessTitle => 'Percakapan berhasil digabungkan';
+  String get mergeConversationsSuccessTitle => 'Percakapan Digabungkan';
 
   @override
   String mergeConversationsSuccessBody(int count) {
-    return '$count percakapan berhasil digabungkan';
+    return 'Percakapan Anda telah berhasil digabungkan';
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'Waktunya Refleksi Harian';
+  String get dailyReflectionNotificationTitle => 'Refleksi Harian';
 
   @override
-  String get dailyReflectionNotificationBody => 'Ceritakan tentang harimu';
+  String get dailyReflectionNotificationBody => 'Saatnya untuk refleksi harian Anda';
 
   @override
-  String get actionItemReminderTitle => 'Pengingat Omi';
+  String get actionItemReminderTitle => 'Pengingat Item Tindakan';
 
   @override
   String deviceDisconnectedTitle(String deviceName) {
-    return '$deviceName terputus';
+    return 'Perangkat Terputus';
   }
 
   @override
   String deviceDisconnectedBody(String deviceName) {
-    return 'Silakan hubungkan kembali untuk melanjutkan penggunaan $deviceName Anda.';
+    return 'Perangkat Omi Anda telah terputus';
   }
 
   @override
@@ -7358,13 +7354,13 @@ class AppLocalizationsId extends AppLocalizations {
   String get onboardingYoureAllSet => 'Anda siap';
 
   @override
-  String get searchTranscriptOrSummary => 'Cari di transkrip atau ringkasan...';
+  String get searchTranscriptOrSummary => 'Cari transkrip atau ringkasan...';
 
   @override
-  String get myGoal => 'Tujuan saya';
+  String get myGoal => 'Tujuan Saya';
 
   @override
-  String get appNotAvailable => 'Ups! Sepertinya aplikasi yang Anda cari tidak tersedia.';
+  String get appNotAvailable => 'Aplikasi tidak tersedia';
 
   @override
   String get failedToConnectTodoist => 'Gagal terhubung ke Todoist';
@@ -7380,187 +7376,183 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String failedToConnectServiceWithError(String serviceName, String error) {
-    return 'Gagal terhubung ke $serviceName: $error';
+    return 'Gagal terhubung ke layanan: $error';
   }
 
   @override
-  String get successfullyConnectedTodoist => 'Berhasil terhubung ke Todoist!';
+  String get successfullyConnectedTodoist => 'Berhasil terhubung ke Todoist';
 
   @override
   String get failedToConnectTodoistRetry => 'Gagal terhubung ke Todoist. Silakan coba lagi.';
 
   @override
-  String get successfullyConnectedAsana => 'Berhasil terhubung ke Asana!';
+  String get successfullyConnectedAsana => 'Berhasil terhubung ke Asana';
 
   @override
   String get failedToConnectAsanaRetry => 'Gagal terhubung ke Asana. Silakan coba lagi.';
 
   @override
-  String get successfullyConnectedGoogleTasks => 'Berhasil terhubung ke Google Tasks!';
+  String get successfullyConnectedGoogleTasks => 'Berhasil terhubung ke Google Tasks';
 
   @override
   String get failedToConnectGoogleTasksRetry => 'Gagal terhubung ke Google Tasks. Silakan coba lagi.';
 
   @override
-  String get successfullyConnectedClickUp => 'Berhasil terhubung ke ClickUp!';
+  String get successfullyConnectedClickUp => 'Berhasil terhubung ke ClickUp';
 
   @override
   String get failedToConnectClickUpRetry => 'Gagal terhubung ke ClickUp. Silakan coba lagi.';
 
   @override
-  String get successfullyConnectedNotion => 'Berhasil terhubung ke Notion!';
+  String get successfullyConnectedNotion => 'Berhasil terhubung ke Notion';
 
   @override
-  String get failedToRefreshNotionStatus => 'Gagal memperbarui status koneksi Notion.';
+  String get failedToRefreshNotionStatus => 'Gagal memperbarui status Notion';
 
   @override
-  String get successfullyConnectedGoogle => 'Berhasil terhubung ke Google!';
+  String get successfullyConnectedGoogle => 'Berhasil terhubung ke Google';
 
   @override
-  String get failedToRefreshGoogleStatus => 'Gagal memperbarui status koneksi Google.';
+  String get failedToRefreshGoogleStatus => 'Gagal memperbarui status Google';
 
   @override
-  String get successfullyConnectedWhoop => 'Berhasil terhubung ke Whoop!';
+  String get successfullyConnectedWhoop => 'Berhasil terhubung ke Whoop';
 
   @override
-  String get failedToRefreshWhoopStatus => 'Gagal memperbarui status koneksi Whoop.';
+  String get failedToRefreshWhoopStatus => 'Gagal memperbarui status Whoop';
 
   @override
-  String get successfullyConnectedGitHub => 'Berhasil terhubung ke GitHub!';
+  String get successfullyConnectedGitHub => 'Berhasil terhubung ke GitHub';
 
   @override
-  String get failedToRefreshGitHubStatus => 'Gagal memperbarui status koneksi GitHub.';
+  String get failedToRefreshGitHubStatus => 'Gagal memperbarui status GitHub';
 
   @override
-  String get authFailedToSignInWithGoogle => 'Gagal masuk dengan Google, silakan coba lagi.';
+  String get authFailedToSignInWithGoogle => 'Gagal masuk dengan Google. Silakan coba lagi.';
 
   @override
   String get authenticationFailed => 'Autentikasi gagal. Silakan coba lagi.';
 
   @override
-  String get authFailedToSignInWithApple => 'Gagal masuk dengan Apple, silakan coba lagi.';
+  String get authFailedToSignInWithApple => 'Gagal masuk dengan Apple. Silakan coba lagi.';
 
   @override
-  String get authFailedToRetrieveToken => 'Gagal mengambil token Firebase, silakan coba lagi.';
+  String get authFailedToRetrieveToken => 'Gagal mengambil token. Silakan coba lagi.';
 
   @override
-  String get authUnexpectedErrorFirebase => 'Kesalahan tak terduga saat masuk, kesalahan Firebase, silakan coba lagi.';
+  String get authUnexpectedErrorFirebase =>
+      'Terjadi kesalahan tak terduga saat masuk dengan Firebase. Silakan coba lagi.';
 
   @override
-  String get authUnexpectedError => 'Kesalahan tak terduga saat masuk, silakan coba lagi';
+  String get authUnexpectedError => 'Terjadi kesalahan tak terduga saat masuk. Silakan coba lagi.';
 
   @override
-  String get authFailedToLinkGoogle => 'Gagal menautkan dengan Google, silakan coba lagi.';
+  String get authFailedToLinkGoogle => 'Gagal menautkan akun Google. Silakan coba lagi.';
 
   @override
-  String get authFailedToLinkApple => 'Gagal menautkan dengan Apple, silakan coba lagi.';
+  String get authFailedToLinkApple => 'Gagal menautkan akun Apple. Silakan coba lagi.';
 
   @override
-  String get onboardingBluetoothRequired => 'Izin Bluetooth diperlukan untuk menghubungkan ke perangkat Anda.';
+  String get onboardingBluetoothRequired => 'Bluetooth diperlukan untuk menghubungkan perangkat Omi Anda';
 
   @override
-  String get onboardingBluetoothDeniedSystemPrefs =>
-      'Izin Bluetooth ditolak. Silakan berikan izin di Preferensi Sistem.';
+  String get onboardingBluetoothDeniedSystemPrefs => 'Izin Bluetooth ditolak. Harap aktifkan di Preferensi Sistem.';
 
   @override
   String onboardingBluetoothStatusCheckPrefs(String status) {
-    return 'Status izin Bluetooth: $status. Silakan periksa Preferensi Sistem.';
+    return 'Status Bluetooth: $status. Harap periksa Preferensi Sistem.';
   }
 
   @override
   String onboardingFailedCheckBluetooth(String error) {
-    return 'Gagal memeriksa izin Bluetooth: $error';
+    return 'Gagal memeriksa status Bluetooth: $error';
   }
 
   @override
-  String get onboardingNotificationDeniedSystemPrefs =>
-      'Izin notifikasi ditolak. Silakan berikan izin di Preferensi Sistem.';
+  String get onboardingNotificationDeniedSystemPrefs => 'Izin notifikasi ditolak. Harap aktifkan di Preferensi Sistem.';
 
   @override
   String get onboardingNotificationDeniedNotifications =>
-      'Izin notifikasi ditolak. Silakan berikan izin di Preferensi Sistem > Notifikasi.';
+      'Izin notifikasi ditolak. Harap aktifkan di pengaturan Notifikasi.';
 
   @override
   String onboardingNotificationStatusCheckPrefs(String status) {
-    return 'Status izin notifikasi: $status. Silakan periksa Preferensi Sistem.';
+    return 'Status notifikasi: $status. Harap periksa Preferensi Sistem.';
   }
 
   @override
   String onboardingFailedCheckNotification(String error) {
-    return 'Gagal memeriksa izin notifikasi: $error';
+    return 'Gagal memeriksa status notifikasi: $error';
   }
 
   @override
-  String get onboardingLocationGrantInSettings =>
-      'Silakan berikan izin lokasi di Pengaturan > Privasi & Keamanan > Layanan Lokasi';
+  String get onboardingLocationGrantInSettings => 'Harap berikan izin lokasi di pengaturan untuk melanjutkan.';
 
   @override
-  String get onboardingMicrophoneRequired => 'Izin mikrofon diperlukan untuk merekam.';
+  String get onboardingMicrophoneRequired => 'Mikrofon diperlukan untuk merekam audio';
 
   @override
-  String get onboardingMicrophoneDenied =>
-      'Izin mikrofon ditolak. Silakan berikan izin di Preferensi Sistem > Privasi & Keamanan > Mikrofon.';
+  String get onboardingMicrophoneDenied => 'Izin mikrofon ditolak. Harap aktifkan di Preferensi Sistem.';
 
   @override
   String onboardingMicrophoneStatusCheckPrefs(String status) {
-    return 'Status izin mikrofon: $status. Silakan periksa Preferensi Sistem.';
+    return 'Status mikrofon: $status. Harap periksa Preferensi Sistem.';
   }
 
   @override
   String onboardingFailedCheckMicrophone(String error) {
-    return 'Gagal memeriksa izin mikrofon: $error';
+    return 'Gagal memeriksa status mikrofon: $error';
   }
 
   @override
-  String get onboardingScreenCaptureRequired => 'Izin tangkapan layar diperlukan untuk merekam audio sistem.';
+  String get onboardingScreenCaptureRequired => 'Perekaman layar diperlukan untuk merekam layar';
 
   @override
-  String get onboardingScreenCaptureDenied =>
-      'Izin tangkapan layar ditolak. Silakan berikan izin di Preferensi Sistem > Privasi & Keamanan > Perekaman Layar.';
+  String get onboardingScreenCaptureDenied => 'Izin perekaman layar ditolak. Harap aktifkan di Preferensi Sistem.';
 
   @override
   String onboardingScreenCaptureStatusCheckPrefs(String status) {
-    return 'Status izin tangkapan layar: $status. Silakan periksa Preferensi Sistem.';
+    return 'Status perekaman layar: $status. Harap periksa Preferensi Sistem.';
   }
 
   @override
   String onboardingFailedCheckScreenCapture(String error) {
-    return 'Gagal memeriksa izin tangkapan layar: $error';
+    return 'Gagal memeriksa status perekaman layar: $error';
   }
 
   @override
-  String get onboardingAccessibilityRequired => 'Izin aksesibilitas diperlukan untuk mendeteksi rapat browser.';
+  String get onboardingAccessibilityRequired => 'Aksesibilitas diperlukan untuk fitur lanjutan';
 
   @override
   String onboardingAccessibilityStatusCheckPrefs(String status) {
-    return 'Status izin aksesibilitas: $status. Silakan periksa Preferensi Sistem.';
+    return 'Status aksesibilitas: $status. Harap periksa Preferensi Sistem.';
   }
 
   @override
   String onboardingFailedCheckAccessibility(String error) {
-    return 'Gagal memeriksa izin aksesibilitas: $error';
+    return 'Gagal memeriksa status aksesibilitas: $error';
   }
 
   @override
-  String get msgCameraNotAvailable => 'Pengambilan gambar kamera tidak tersedia di platform ini';
+  String get msgCameraNotAvailable => 'Kamera tidak tersedia';
 
   @override
-  String get msgCameraPermissionDenied => 'Izin kamera ditolak. Harap izinkan akses ke kamera';
+  String get msgCameraPermissionDenied => 'Izin kamera ditolak';
 
   @override
   String msgCameraAccessError(String error) {
-    return 'Kesalahan mengakses kamera: $error';
+    return 'Kesalahan akses kamera: $error';
   }
 
   @override
-  String get msgPhotoError => 'Kesalahan mengambil foto. Silakan coba lagi.';
+  String get msgPhotoError => 'Kesalahan mengambil foto';
 
   @override
-  String get msgMaxImagesLimit => 'Anda hanya dapat memilih hingga 4 gambar';
+  String get msgMaxImagesLimit => 'Maksimal 4 gambar dapat dipilih';
 
   @override
   String msgFilePickerError(String error) {
-    return 'Kesalahan membuka pemilih file: $error';
+    return 'Kesalahan pemilih file: $error';
   }
 
   @override
@@ -7569,13 +7561,13 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get msgPhotosPermissionDenied => 'Izin foto ditolak. Harap izinkan akses ke foto untuk memilih gambar';
+  String get msgPhotosPermissionDenied => 'Izin foto ditolak';
 
   @override
-  String get msgSelectImagesGenericError => 'Kesalahan memilih gambar. Silakan coba lagi.';
+  String get msgSelectImagesGenericError => 'Kesalahan memilih gambar';
 
   @override
-  String get msgMaxFilesLimit => 'Anda hanya dapat memilih hingga 4 file';
+  String get msgMaxFilesLimit => 'Maksimal 4 file dapat dipilih';
 
   @override
   String msgSelectFilesError(String error) {
@@ -7583,44 +7575,44 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get msgSelectFilesGenericError => 'Kesalahan memilih file. Silakan coba lagi.';
+  String get msgSelectFilesGenericError => 'Kesalahan memilih file';
 
   @override
-  String get msgUploadFileFailed => 'Gagal mengunggah file, silakan coba lagi nanti';
+  String get msgUploadFileFailed => 'Gagal mengunggah file';
 
   @override
-  String get msgReadingMemories => 'Membaca kenangan Anda...';
+  String get msgReadingMemories => 'Membaca memori...';
 
   @override
-  String get msgLearningMemories => 'Belajar dari kenangan Anda...';
+  String get msgLearningMemories => 'Mempelajari memori...';
 
   @override
-  String get msgUploadAttachedFileFailed => 'Gagal mengunggah file terlampir.';
+  String get msgUploadAttachedFileFailed => 'Gagal mengunggah file terlampir';
 
   @override
   String captureRecordingError(String error) {
-    return 'Terjadi kesalahan saat merekam: $error';
+    return 'Kesalahan perekaman: $error';
   }
 
   @override
   String captureRecordingStoppedDisplayIssue(String reason) {
-    return 'Perekaman dihentikan: $reason. Anda mungkin perlu menyambungkan kembali layar eksternal atau memulai ulang perekaman.';
+    return 'Perekaman dihentikan: $reason. Anda mungkin perlu menghubungkan ulang layar eksternal atau memulai ulang perekaman.';
   }
 
   @override
-  String get captureMicrophonePermissionRequired => 'Izin mikrofon diperlukan';
+  String get captureMicrophonePermissionRequired => 'Izin mikrofon diperlukan untuk merekam';
 
   @override
-  String get captureMicrophonePermissionInSystemPreferences => 'Berikan izin mikrofon di Preferensi Sistem';
+  String get captureMicrophonePermissionInSystemPreferences => 'Izin mikrofon dapat diatur di Preferensi Sistem';
 
   @override
   String get captureScreenRecordingPermissionRequired => 'Izin perekaman layar diperlukan';
 
   @override
-  String get captureDisplayDetectionFailed => 'Deteksi layar gagal. Perekaman dihentikan.';
+  String get captureDisplayDetectionFailed => 'Deteksi tampilan gagal';
 
   @override
-  String get devModeInvalidAudioBytesWebhookUrl => 'URL webhook byte audio tidak valid';
+  String get devModeInvalidAudioBytesWebhookUrl => 'URL webhook audio bytes tidak valid';
 
   @override
   String get devModeInvalidRealtimeTranscriptWebhookUrl => 'URL webhook transkrip realtime tidak valid';
@@ -7632,13 +7624,13 @@ class AppLocalizationsId extends AppLocalizations {
   String get devModeInvalidDaySummaryWebhookUrl => 'URL webhook ringkasan harian tidak valid';
 
   @override
-  String get devModeSettingsSaved => 'Pengaturan disimpan!';
+  String get devModeSettingsSaved => 'Pengaturan disimpan';
 
   @override
-  String get voiceFailedToTranscribe => 'Gagal mentranskripsikan audio';
+  String get voiceFailedToTranscribe => 'Gagal mentranskripsi audio';
 
   @override
-  String get locationPermissionRequired => 'Izin lokasi diperlukan';
+  String get locationPermissionRequired => 'Izin Lokasi Diperlukan';
 
   @override
   String get locationPermissionContent =>
@@ -7656,7 +7648,7 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get conversationNewIndicator => 'Baru 🚀';
+  String get conversationNewIndicator => 'Baru';
 
   @override
   String conversationPhotosCount(int count) {
@@ -7668,27 +7660,27 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String timeSecsSingular(int count) {
-    return '$count dtk';
+    return '$count detik';
   }
 
   @override
   String timeSecsPlural(int count) {
-    return '$count dtk';
+    return '$count detik';
   }
 
   @override
   String timeMinSingular(int count) {
-    return '$count mnt';
+    return '$count menit';
   }
 
   @override
   String timeMinsPlural(int count) {
-    return '$count mnt';
+    return '$count menit';
   }
 
   @override
   String timeMinsAndSecs(int mins, int secs) {
-    return '$mins mnt $secs dtk';
+    return '$mins menit $secs detik';
   }
 
   @override
@@ -7703,7 +7695,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String timeHoursAndMins(int hours, int mins) {
-    return '$hours jam $mins mnt';
+    return '$hours jam $mins menit';
   }
 
   @override
