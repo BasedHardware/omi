@@ -1,259 +1,185 @@
-# PRD v2: Localization of Hardcoded Strings in Omi Flutter App
-
-**Status:** COMPLETED
-**Created:** 2026-01-20
-**Last Updated:** 2026-01-21
-**Version:** 2.0
+# Localization PRD v3 - Missing Translations & Hardcoded Strings
 
 ## Overview
 
-This document outlines the requirements for localizing hardcoded user-facing strings found in the Omi Flutter app. A comprehensive audit identified **~200+ hardcoded strings** across **~45 files** that need to be migrated to Flutter's l10n system.
+This document tracks the third phase of localization work for the Omi Flutter app. It covers:
+1. Missing translation keys in existing ARB files (keys present in English but missing in other languages)
+2. Hardcoded strings in Dart code that need localization
 
-This is an updated version of the original PRD, incorporating newly discovered files and the PRIORITY 0 task for translating pre-existing untranslated keys.
-
-## Background
-
-The app uses Flutter's ARB-based localization system (`context.l10n.keyName`). While much of the app is localized, an audit revealed significant gaps in newer features, providers, and some overlooked areas.
-
-## Scope
-
-### In Scope
-- User-facing text (labels, titles, messages, buttons)
-- Error messages and validation messages
-- Success/status messages
-- Notification titles and bodies
-- Dialog content and titles
-- Text field placeholders (hintText)
-- Onboarding step titles
-- SnackBar messages
-- AppSnackbar messages in providers
-
-### Out of Scope
-- Technical strings (API keys, log tags, debug messages)
-- Generated files (`.g.dart`, `.gen.dart`)
-- l10n/ folder contents
-- Emoji-only strings
-- Single characters/punctuation
-- URLs and emails displayed as data (not labels)
-- Commented-out code
-
-## Files Requiring Localization
-
-### PRIORITY 0: Pre-existing Untranslated Keys (~89 keys × 33 languages)
-**Status: COMPLETED**
-
-~89 keys in non-English ARB files contain English text instead of proper translations. This affects all non-English users.
-
-**Progress:**
-| Language | Status |
-|----------|--------|
-| Spanish (es) | COMPLETED - 89 keys translated |
-| French (fr) | COMPLETED - 89 keys translated |
-| German (de) | COMPLETED - 110 keys translated |
-| Italian (it) | COMPLETED - 49 keys translated |
-| Arabic (ar) | COMPLETED - 139 keys translated |
-| Portuguese (pt) | COMPLETED - 196 keys translated |
-| Japanese (ja) | COMPLETED - 140 keys translated |
-| Korean (ko) | COMPLETED - 153 keys translated |
-| Chinese (zh) | COMPLETED - 146 keys translated |
-| Russian (ru) | COMPLETED - 153 keys translated |
-| Polish (pl) | COMPLETED - 150 keys translated |
-| Turkish (tr) | COMPLETED - 162 keys translated |
-| Dutch (nl) | COMPLETED - 156 keys translated |
-| Bulgarian (bg) | COMPLETED - 160 keys translated |
-| Catalan (ca) | COMPLETED - 160 keys translated |
-| Czech (cs) | COMPLETED - 155 keys translated |
-| Danish (da) | COMPLETED - 160 keys translated |
-| Greek (el) | COMPLETED - 154 keys translated |
-| Estonian (et) | COMPLETED - 156 keys translated |
-| Finnish (fi) | COMPLETED - 102 keys translated |
-| Hindi (hi) | COMPLETED - 165 keys translated |
-| Hungarian (hu) | COMPLETED - 100 keys translated |
-| Indonesian (id) | COMPLETED - 150 keys translated |
-| Lithuanian (lt) | COMPLETED - 147 keys translated |
-| Latvian (lv) | COMPLETED - 186 keys translated |
-| Norwegian (no) | COMPLETED - 129 keys translated |
-| Malay (ms) | COMPLETED - 159 keys translated |
-| Romanian (ro) | COMPLETED - 275 keys translated |
-| Slovak (sk) | COMPLETED - 220 keys translated |
-| Swedish (sv) | COMPLETED - 198 keys translated |
-| Thai (th) | COMPLETED - 150 keys translated |
-| Ukrainian (uk) | COMPLETED - 183 keys translated |
-| Vietnamese (vi) | COMPLETED - 174 keys translated |
+## Status: IN PROGRESS
 
 ---
 
-### PRIORITY 1: High Impact - Completed Files (From Original PRD)
+## Part 1: Missing ARB Translation Keys
 
-| File | Strings | Status |
-|------|---------|--------|
-| `pages/conversation_detail/widgets/create_template_bottom_sheet.dart` | ~20 | COMPLETED |
-| `pages/apps/providers/add_app_provider.dart` | ~20 | COMPLETED |
-| `pages/persona/persona_provider.dart` | ~15 | COMPLETED |
-| `pages/payments/payment_method_provider.dart` | 3 | COMPLETED |
-| `pages/payments/paypal_setup_page.dart` | 2 | COMPLETED |
-| `pages/payments/models/payment_method_config.dart` | 5 | COMPLETED |
+### Summary
 
----
+Total languages with missing translations: **31**
 
-### PRIORITY 2: Medium Impact - Completed Files
+| Language | Code | Missing Keys | Priority |
+|----------|------|--------------|----------|
+| Czech | cs | 31 | HIGH |
+| Danish | da | 31 | HIGH |
+| Arabic | ar | 8 | MEDIUM |
+| Bulgarian | bg | 8 | MEDIUM |
+| Catalan | ca | 8 | MEDIUM |
+| German | de | 8 | MEDIUM |
+| Greek | el | 22 | HIGH |
+| Spanish | es | 22 | HIGH |
+| Estonian | et | 22 | HIGH |
+| Finnish | fi | 22 | HIGH |
+| French | fr | 22 | HIGH |
+| Hindi | hi | 22 | HIGH |
+| Hungarian | hu | 22 | HIGH |
+| Indonesian | id | 22 | HIGH |
+| Italian | it | 22 | HIGH |
+| Japanese | ja | 22 | HIGH |
+| Korean | ko | 22 | HIGH |
+| Lithuanian | lt | 22 | HIGH |
+| Latvian | lv | 22 | HIGH |
+| Malay | ms | 22 | HIGH |
+| Dutch | nl | 22 | HIGH |
+| Norwegian | no | 22 | HIGH |
+| Polish | pl | 22 | HIGH |
+| Portuguese | pt | 22 | HIGH |
+| Romanian | ro | 22 | HIGH |
+| Russian | ru | 22 | HIGH |
+| Slovak | sk | 22 | HIGH |
+| Swedish | sv | 22 | HIGH |
+| Thai | th | 22 | HIGH |
+| Turkish | tr | 22 | HIGH |
+| Chinese | zh | 22 | HIGH |
 
-| File | Strings | Status |
-|------|---------|--------|
-| `pages/settings/widgets/plans_sheet.dart` | 7 | COMPLETED |
-| `pages/settings/ai_app_generator_provider.dart` | 9 | COMPLETED |
-| `pages/settings/ai_app_generator_page.dart` | 1 | COMPLETED |
-| `pages/settings/transcription_settings_page.dart` | 2 | COMPLETED |
-| `pages/settings/import_history_page.dart` | 2 | COMPLETED |
-| `pages/apps/app_detail/app_detail.dart` | 1 | COMPLETED |
-| `pages/persona/twitter/social_profile.dart` | 7 | COMPLETED |
-| `pages/apps/widgets/payment_details_widget.dart` | 5 | COMPLETED |
+### Missing Keys Breakdown
 
----
-
-### PRIORITY 3: Notifications & Services - Completed
-
-| File | Strings | Status |
-|------|---------|--------|
-| `services/notifications/merge_notification_handler.dart` | 2 | COMPLETED |
-| `services/notifications/daily_reflection_notification.dart` | 2 | COMPLETED |
-| `services/notifications/action_item_notification_handler.dart` | 1 | COMPLETED |
-| `services/devices/device_connection.dart` | 2 | COMPLETED |
-| `services/devices/models.dart` | 1 | N/A (debug log) |
-
----
-
-### PRIORITY 4: Desktop - Completed
-
-| File | Strings | Status |
-|------|---------|--------|
-| `desktop/pages/onboarding/desktop_onboarding_wrapper.dart` | 10 | COMPLETED |
-| `desktop/pages/settings/desktop_settings_modal.dart` | 2 | N/A (URLs/emails) |
-| `desktop/pages/conversations/widgets/desktop_name_speaker_dialog.dart` | 10 | COMPLETED |
-
----
-
-### PRIORITY 5: Lower Impact - Completed
-
-| File | Strings | Status |
-|------|---------|--------|
-| `pages/conversation_detail/page.dart` | 1 | COMPLETED |
-| `pages/conversations/widgets/goal_tracker_widget.dart` | 1 | COMPLETED |
-| `main.dart` | 1 | N/A (const before init) |
-
----
-
-### NEW - PRIORITY 6: Newly Discovered Files (~80 strings)
-
-#### 6.1 Core App Shell & Providers (~50 strings)
-
-| File | Est. Strings | Description |
-|------|--------------|-------------|
-| `core/app_shell.dart` | ~25 | COMPLETED - Integration connection success/error messages |
-| `providers/auth_provider.dart` | ~8 | COMPLETED - Authentication error messages (Google, Apple, Firebase) |
-| `providers/onboarding_provider.dart` | ~10 | COMPLETED - Permission error messages (Bluetooth, Microphone, Screen Capture, Accessibility, Notification) |
-| `providers/message_provider.dart` | ~12 | COMPLETED - Camera/photo/file picker error messages |
-| `providers/capture_provider.dart` | ~5 | COMPLETED - Recording error messages |
-| `providers/developer_mode_provider.dart` | ~5 | COMPLETED - Webhook validation errors |
-| `providers/voice_recorder_provider.dart` | 1 | COMPLETED - Transcription error |
-
-#### 6.2 UI Components (~25 strings)
-
-| File | Est. Strings | Description |
-|------|--------------|-------------|
-| `pages/settings/widgets/plans_sheet.dart` | 3 | COMPLETED - Cancel Subscription, Omi Training localized |
-| `pages/conversations/sync_widgets/location_permission_dialog.dart` | 4 | COMPLETED - Location permission dialog text |
-| `pages/conversations/widgets/merge_action_bar.dart` | 1 | COMPLETED - Reused existing `ok` key |
-| `pages/conversations/widgets/conversation_list_item.dart` | ~12 | COMPLETED - Delete dialogs, New indicator, photos count, upgrade overlay, merging status |
-
-#### 6.3 PDF Export Strings (~10 strings)
-
-| File | Est. Strings | Description |
-|------|--------------|-------------|
-| `pages/conversation_detail/share.dart` | ~10 | COMPLETED - PDF export labels (Transcript Export, Conversation Export, Title, Overview, Action Items, Summary) |
-
-#### 6.4 Date/Time Utility Strings (~16 strings)
-
-| File | Est. Strings | Description |
-|------|--------------|-------------|
-| `utils/other/time_utils.dart` | ~16 | COMPLETED - Time duration strings (secs, mins, hours, days) for human-readable and compact formats |
-| `pages/conversations/widgets/date_list_item.dart` | 1 | COMPLETED - Pass locale to dateTimeFormat() for proper date formatting |
-
-#### 6.5 DateFormat Locale Fixes
-
-| File | Lines Fixed | Description |
-|------|-------------|-------------|
-| `desktop/pages/settings/desktop_settings_modal.dart` | 2 | COMPLETED - DateFormat('EEEE, MMMM d'), DateFormat('h:mm a') |
-| `pages/settings/calendar_settings_page.dart` | 2 | COMPLETED - DateFormat('EEEE, MMMM d'), DateFormat('h:mm a') |
-| `pages/settings/usage_page.dart` | 4 | COMPLETED - DateFormat.Hm(), DateFormat('d'), DateFormat('MMM'), DateFormat.y() |
-| `pages/conversations/widgets/score_widget.dart` | 1 | COMPLETED - DateFormat('E') |
-| `pages/apps/widgets/api_keys_widget.dart` | 1 | COMPLETED - DateFormat('MMM d, yyyy HH:mm') |
-| `desktop/pages/conversations/desktop_conversations_page.dart` | 3 | COMPLETED - DateFormat('MMM d'), DateFormat('MMM d, yyyy'), DateFormat('EEE, MMM d') |
-| `pages/conversations/widgets/conversation_list_item.dart` | 2 | COMPLETED - dateTimeFormat('h:mm a') x2 |
-
----
-
-## Requirements
-
-### Functional Requirements
-
-1. **FR-1**: All hardcoded user-facing strings must be replaced with `context.l10n.keyName` pattern
-2. **FR-2**: New localization keys must be added to all 34 supported language ARB files
-3. **FR-3**: **CRITICAL - Translation Requirement**: All new l10n keys MUST be properly translated to each target language. Do NOT copy English text to non-English ARB files.
-4. **FR-4**: Translations must be culturally appropriate for each language
-5. **FR-5**: After ARB file updates, run `flutter gen-l10n` to regenerate localization files
-6. **FR-6**: Parameterized strings must use proper ICU message format with placeholders
-
-### Non-Functional Requirements
-
-1. **NFR-1**: Use `jq` CLI to add keys to ARB files (never read full ARB files)
-2. **NFR-2**: Key names should be descriptive and follow camelCase convention
-3. **NFR-3**: Maintain consistency with existing localization patterns
-4. **NFR-4**: Run `app/test.sh` after changes to verify no regressions
-
-## Estimated Scope Summary
-
-| Priority | Files | Strings | Status |
-|----------|-------|---------|--------|
-| P0 - Pre-existing keys | All ARBs | ~162 | COMPLETED |
-| P1-P5 - Original PRD | 27 | ~125 | 93% COMPLETE |
-| P6 - New discoveries | ~10 | ~80 | COMPLETED |
-| **Total** | **~40** | **~367** | - |
-
-## Success Criteria
-
-- [x] All ~367 hardcoded strings replaced with l10n keys
-- [x] All 34 language ARB files updated with proper translations
-- [x] Pre-existing ~162 untranslated keys properly translated
-- [x] `flutter gen-l10n` runs without errors
-- [x] App builds successfully
-- [x] Tests pass (`app/test.sh`)
-- [x] No regression in existing localized strings
-
-## Dependencies
-
-- `add-a-new-localization-key-l10n-arb` skill for adding keys to ARB files
-- Access to all language ARB files in `app/lib/l10n/`
-- `jq` CLI tool for ARB file manipulation
-
-## Technical Notes
-
-### Provider Strings
-Providers often don't have BuildContext. Use pattern:
-```dart
-MyApp.navigatorKey.currentContext?.l10n.keyName ?? 'Fallback'
+#### Group A: 31 missing keys (cs, da)
+```
+autoClosingInSeconds
+availableSpace
+batteryDrainIncrease
+debugModeDetected
+deviceNotCompatible
+deviceRequirements
+download
+downloadError
+downloadModel
+downloadWhisperModel
+downloading
+editReply
+estimatedSize
+failedToSendReply
+largeModelWarning
+localProcessingInfo
+model
+modelReady
+modelRequired
+noModelDownloadRequired
+noReviewsFound
+onDeviceIntensive
+onDeviceSlower
+performanceReduced
+premiumMinutesInfo
+redownload
+reply
+replySentSuccessfully
+send
+starFilter
+writeYourReply
 ```
 
-### Parameterized Strings
-Strings with variables need ICU message format:
-```json
-"errorWithMessage": "Error: {message}",
-"@errorWithMessage": {
-  "placeholders": {
-    "message": {"type": "String"}
-  }
-}
+#### Group B: 22 missing keys (el, es, et, fi, fr, hi, hu, id, it, ja, ko, lt, lv, ms, nl, no, pl, pt, ro, ru, sk, sv, th, tr, zh)
+```
+availableSpace
+batteryDrainIncrease
+deviceRequirements
+downloadError
+editReply
+estimatedSize
+failedToSendReply
+largeModelWarning
+localProcessingInfo
+model
+modelReady
+noModelDownloadRequired
+noReviewsFound
+onDeviceIntensive
+onDeviceSlower
+premiumMinutesInfo
+redownload
+reply
+replySentSuccessfully
+send
+starFilter
+writeYourReply
 ```
 
-### PDF Export Strings
-PDF export uses `pw.Text` (from `pdf` package). These may require a different approach or remain as-is if not user-facing in the traditional sense.
+#### Group C: 8 missing keys (ar, bg, ca, de)
+```
+editReply
+failedToSendReply
+noReviewsFound
+reply
+replySentSuccessfully
+send
+starFilter
+writeYourReply
+```
+
+---
+
+## Part 2: Hardcoded Strings in Dart Code
+
+### Files Requiring Localization
+
+#### 1. fast_transfer_suggestion_dialog.dart
+**Path:** `app/lib/pages/conversations/sync_widgets/fast_transfer_suggestion_dialog.dart`
+
+| Line | Hardcoded String | Suggested Key |
+|------|------------------|---------------|
+| 19 | `'Choose Transfer Method'` | `chooseTransferMethod` |
+| 50 | `'Fast Transfer'` | `fastTransfer` |
+| 55 | `'~150 KB/s via WiFi'` | `fastTransferSpeed` |
+| 92 | `'Bluetooth'` | `bluetooth` |
+| 97 | `'~30 KB/s via BLE'` | `bluetoothSpeed` |
+
+#### 2. merge_confirmation_dialog.dart
+**Path:** `app/lib/pages/conversations/widgets/merge_confirmation_dialog.dart`
+
+| Line | Hardcoded String | Suggested Key |
+|------|------------------|---------------|
+| 165 | `'Large time gap detected (${gaps.first})'` | `largeTimeGapDetected` |
+| 167 | `'Large time gaps detected (${gaps.join(", ")})'` | `largeTimeGapsDetected` |
+
+---
+
+## Implementation Plan
+
+### Phase 1: Add Missing Keys to ARB Files
+1. Add 31 keys to cs, da
+2. Add 22 keys to el, es, et, fi, fr, hi, hu, id, it, ja, ko, lt, lv, ms, nl, no, pl, pt, ro, ru, sk, sv, th, tr, zh
+3. Add 8 keys to ar, bg, ca, de
+
+### Phase 2: Localize Hardcoded Strings
+1. Add 7 new keys to app_en.arb
+2. Update Dart files to use context.l10n
+3. Add translations to all 33 language ARB files
+
+### Phase 3: Verification
+1. Run `flutter gen-l10n` to regenerate localization files
+2. Run `app/test.sh` to verify no issues
+3. Test app in different locales
+
+---
+
+## Completion Criteria
+
+- [ ] All 31 languages have complete translations matching English keys
+- [ ] All hardcoded strings in Dart code replaced with context.l10n calls
+- [ ] flutter gen-l10n runs without errors
+- [ ] app/test.sh passes
+
+---
+
+## Created
+Date: 2026-01-21
+Version: 3.0
