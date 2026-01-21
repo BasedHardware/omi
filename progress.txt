@@ -1082,3 +1082,41 @@ Legend:
 - flutter gen-l10n completed successfully
 - All tests passed
 - Remaining: 3 other languages still need the same keys translated (th, uk, vi)
+
+[2026-01-21] Translated 150 pre-existing English keys to Thai (app_th.arb)
+- PRIORITY 0 task: Translate pre-existing untranslated keys in non-English ARB files
+- Translated 150 keys to proper Thai translations in app_th.arb
+- Keys include: cancel, ok, on, off, retry, start, phone, device, recordings, offline,
+  editName, offlineSync, storeAudioOnPhone, storeAudioOnCloud, configureAiPersona,
+  connectAiAssistantsToYourData, trackYourGoalsOnHomepage, deleteRecording, fromSd,
+  syncingStatus, failedStatus, fast, cancelSync, syncCancelled, deleteProcessedFiles,
+  processedFilesDeleted, process, processingFailed, downloadingFromSdCard, internetRequired,
+  processAudio, noRecordings, audioFromOmiWillAppearHere, deleteProcessed, tryDifferentFilter,
+  getOmi, getOmiDevice, getOmiDeviceDescription, addPerson, managePeople, tagOtherSegments,
+  enterName, disconnectTwitter, sharePublicLink, makePersonaPublic, connectedKnowledgeData,
+  wifiConnectionFailedTitle, recordingDetails, storageLocationPhone, transferRequired,
+  cancelTransfer, transferToPhone, recordingInfo, shareRecording, recordingIdLabel,
+  durationLabel, audioFormatLabel, storageLocationLabel, estimatedSizeLabel, deviceModelLabel,
+  deviceIdLabel, statusLabel, statusProcessed, statusUnprocessed, switchedToFastTransfer,
+  transferCancelled, aboutAMinuteRemaining, xHandlePleaseEnter, xHandlePleaseEnterValid,
+  nextButton, connectOmiDevice, professionEntrepreneur, professionSoftwareEngineer,
+  professionProductManager, professionExecutive, professionSales, professionStudent,
+  usageAtWork, usageOnline, usageSocialSettings, usageEverywhere, signOutConfirmation,
+  deleteRecordingConfirmation, disconnectTwitterConfirmation, thisCannotBeUndone,
+  cancelSyncMessage, wifiEnableFailed, deviceNotResponding, transferring, transferInProgress,
+  transferFailedMessage, transferStartFailed, deviceNoFastTransfer, invalidWifiCredentials,
+  wifiConnectionFailed, wifiSyncFailed, enableHotspotMessage, transferCompleteMessage,
+  planSwitchingDescriptionWithTitle, planUpgradeScheduledMessage, couldNotSchedulePlanChange,
+  subscriptionReactivatedDefault, subscriptionSuccessfulCharged, couldNotProcessSubscription,
+  couldNotLaunchUpgradePage, setupQuestionsIntro, setupQuestionProfession, setupQuestionUsage,
+  setupQuestionAge, setupAnswerAllQuestions, personNameAlreadyExists, selectYouFromList,
+  tagOtherSegmentsFromSpeaker, iHaveOmiDevice, dataAccessNoticeDescription, migrationComplete,
+  migrationErrorOccurred, dataProtectedWithSettings, analyzingYourData, aboutMinutesRemaining,
+  allObjectsMigratedFinalizing, migratingToProtection, xHandleTitle, xHandleDescription,
+  tagSpeaker, enterPersonsName, fallNotificationBody, transcriptionJsonPlaceholder,
+  storageLocationPhoneMemory, sdCardProcessing, sdCardProcessingMessage, and more
+- Translations preserve ICU message format placeholders ({deviceName}, {count}, {error}, {minutes}, {level}, {title}, etc.)
+- Brand names kept in English where appropriate (Omi, WiFi, Bluetooth, Twitter, SD, PayPal, Stripe, Claude Desktop)
+- flutter gen-l10n completed successfully
+- All tests passed
+- Remaining: 2 other languages still need the same keys translated (uk, vi)
