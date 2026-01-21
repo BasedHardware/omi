@@ -2456,5 +2456,62 @@
   "timeCompactMins": "{count}m",
   "timeCompactMinsAndSecs": "{mins}m {secs}s",
   "timeCompactHours": "{count}h",
-  "timeCompactHoursAndMins": "{hours}h {mins}m"
+  "timeCompactHoursAndMins": "{hours}h {mins}m",
+  "availableSpace": "Espaço Disponível: {space}",
+  "@availableSpace": {
+    "placeholders": {
+      "space": {
+        "type": "String"
+      }
+    }
+  },
+  "batteryDrainIncrease": "O consumo da bateria aumentará significativamente.",
+  "deviceRequirements": "O seu dispositivo não atende aos requisitos para transcrição no dispositivo.",
+  "downloadError": "Erro de download: {error}",
+  "@downloadError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "editReply": "Editar Resposta",
+  "estimatedSize": "Tamanho Estimado: ~{size} MB",
+  "@estimatedSize": {
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToSendReply": "Falha ao enviar resposta: {error}",
+  "@failedToSendReply": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "largeModelWarning": "Este modelo é grande e pode travar o aplicativo ou funcionar muito lentamente em dispositivos móveis.\n\n\"small\" ou \"base\" é recomendado.",
+  "localProcessingInfo": "O áudio é processado localmente. Funciona offline, mais privado, mas usa mais bateria.",
+  "model": "Modelo",
+  "modelReady": "Modelo Pronto",
+  "noModelDownloadRequired": "O mecanismo de fala nativo do seu dispositivo será usado. Nenhum download de modelo necessário.",
+  "noReviewsFound": "Nenhuma Avaliação Encontrada",
+  "onDeviceIntensive": "A transcrição no dispositivo é computacionalmente intensiva.",
+  "onDeviceSlower": "A transcrição no dispositivo pode ser mais lenta neste dispositivo.",
+  "premiumMinutesInfo": "1.200 minutos premium/mês. A aba No Dispositivo oferece transcrição gratuita ilimitada.",
+  "redownload": "Baixar Novamente",
+  "reply": "Responder",
+  "replySentSuccessfully": "Resposta enviada com sucesso",
+  "send": "Enviar",
+  "starFilter": "{count} Estrela",
+  "@starFilter": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "writeYourReply": "Escreva sua resposta..."
 }

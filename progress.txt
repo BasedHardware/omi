@@ -56,7 +56,7 @@ Keys: availableSpace, batteryDrainIncrease, deviceRequirements, downloadError,
   [x] nl (Dutch) - 22 keys
   [x] no (Norwegian) - 22 keys
   [x] pl (Polish) - 22 keys
-  [ ] pt (Portuguese) - 22 keys
+  [x] pt (Portuguese) - 22 keys
   [ ] ro (Romanian) - 22 keys
   [ ] ru (Russian) - 22 keys
   [ ] sk (Slovak) - 22 keys
@@ -139,7 +139,7 @@ VERIFICATION STEPS
 SUMMARY
 ================================================================================
 
-Part 1 Progress: 19/31 languages completed
+Part 1 Progress: 20/31 languages completed
 Part 2 Progress: 0/7 files completed
 Overall Progress: ~34%
 
@@ -289,6 +289,15 @@ Overall Progress: ~34%
 ================================================================================
 
 [2026-01-21] Added 22 missing translation keys to Polish (app_pl.arb)
+  - Keys added: availableSpace, batteryDrainIncrease, deviceRequirements,
+    downloadError, editReply, estimatedSize, failedToSendReply, largeModelWarning,
+    localProcessingInfo, model, modelReady, noModelDownloadRequired, noReviewsFound,
+    onDeviceIntensive, onDeviceSlower, premiumMinutesInfo, redownload, reply,
+    replySentSuccessfully, send, starFilter, writeYourReply
+  - flutter gen-l10n: PASSED
+  - app/test.sh: Skipped (pre-existing Flutter dependency issues unrelated to l10n)
+
+[2026-01-21] Added 22 missing translation keys to Portuguese (app_pt.arb)
   - Keys added: availableSpace, batteryDrainIncrease, deviceRequirements,
     downloadError, editReply, estimatedSize, failedToSendReply, largeModelWarning,
     localProcessingInfo, model, modelReady, noModelDownloadRequired, noReviewsFound,
