@@ -6047,7 +6047,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deviceNotCompatible => 'Laitteesi ei ole yhteensopiva laitteella tapahtuvan transkription kanssa';
 
   @override
-  String get deviceRequirements => 'Your device does not meet the requirements for On-Device transcription.';
+  String get deviceRequirements => 'Laitteesi ei täytä laitteella tapahtuvan puheentunnistuksen vaatimuksia.';
 
   @override
   String get willLikelyCrash => 'Tämän käyttöönotto aiheuttaa todennäköisesti sovelluksen kaatumisen tai jäätymisen.';
@@ -6062,7 +6062,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get olderDeviceDetected => 'Vanhempi laite havaittu';
 
   @override
-  String get onDeviceSlower => 'On-device transcription may be slower on this device.';
+  String get onDeviceSlower => 'Laitteella tapahtuva puheentunnistus voi olla hitaampaa tällä laitteella.';
 
   @override
   String get batteryUsageHigher => 'Akunkäyttö on korkeampi kuin pilvitranskriptiossa.';
@@ -6074,10 +6074,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get highResourceUsage => 'Korkea resurssien käyttö';
 
   @override
-  String get onDeviceIntensive => 'On-Device transcription is computationally intensive.';
+  String get onDeviceIntensive => 'Laitteella tapahtuva puheentunnistus on laskennallisesti vaativaa.';
 
   @override
-  String get batteryDrainIncrease => 'Battery drain will increase significantly.';
+  String get batteryDrainIncrease => 'Akun kulutus kasvaa merkittävästi.';
 
   @override
   String get deviceMayWarmUp => 'Laite voi lämmetä pitkäaikaisessa käytössä.';
@@ -6089,35 +6089,38 @@ class AppLocalizationsFi extends AppLocalizations {
   String get cloudProvider => 'Pilvipalveluntarjoaja';
 
   @override
-  String get premiumMinutesInfo => '1,200 premium minutes/month. On-Device tab offers unlimited free transcription.';
+  String get premiumMinutesInfo =>
+      '1 200 premium-minuuttia/kk. Laitteella-välilehti tarjoaa rajattoman ilmaisen puheentunnistuksen.';
 
   @override
   String get viewUsage => 'Näytä käyttö';
 
   @override
-  String get localProcessingInfo => 'Audio is processed locally. Works offline, more private, but uses more battery.';
+  String get localProcessingInfo =>
+      'Ääni käsitellään paikallisesti. Toimii offline-tilassa, yksityisempi, mutta kuluttaa enemmän akkua.';
 
   @override
-  String get model => 'Model';
+  String get model => 'Malli';
 
   @override
   String get performanceWarning => 'Suorituskykyvaroitus';
 
   @override
   String get largeModelWarning =>
-      'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
+      'Tämä malli on suuri ja saattaa kaataa sovelluksen tai toimia erittäin hitaasti mobiililaitteilla.\n\n\"small\" tai \"base\" on suositeltu.';
 
   @override
   String get usingNativeIosSpeech => 'Käytetään iOS:n natiivia puheentunnistusta';
 
   @override
-  String get noModelDownloadRequired => 'Your device\'s native speech engine will be used. No model download required.';
+  String get noModelDownloadRequired =>
+      'Laitteesi natiivi puheentunnistusmoottori on käytössä. Mallin lataus ei ole tarpeen.';
 
   @override
-  String get modelReady => 'Model Ready';
+  String get modelReady => 'Malli valmis';
 
   @override
-  String get redownload => 'Re-download';
+  String get redownload => 'Lataa uudelleen';
 
   @override
   String get doNotCloseApp => 'Älä sulje sovellusta.';
@@ -6130,12 +6133,12 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String estimatedSize(String size) {
-    return 'Estimated Size: ~$size MB';
+    return 'Arvioitu koko: ~$size Mt';
   }
 
   @override
   String availableSpace(String space) {
-    return 'Available Space: $space';
+    return 'Käytettävissä oleva tila: $space';
   }
 
   @override
@@ -6146,7 +6149,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String downloadError(String error) {
-    return 'Download error: $error';
+    return 'Latausvirhe: $error';
   }
 
   @override
@@ -6491,32 +6494,32 @@ class AppLocalizationsFi extends AppLocalizations {
   String get moneyEarned => 'Ansaittu raha';
 
   @override
-  String get writeYourReply => 'Write your reply...';
+  String get writeYourReply => 'Kirjoita vastauksesi...';
 
   @override
-  String get replySentSuccessfully => 'Reply sent successfully';
+  String get replySentSuccessfully => 'Vastaus lähetetty onnistuneesti';
 
   @override
   String failedToSendReply(String error) {
-    return 'Failed to send reply: $error';
+    return 'Vastauksen lähettäminen epäonnistui: $error';
   }
 
   @override
-  String get send => 'Send';
+  String get send => 'Lähetä';
 
   @override
   String starFilter(int count) {
-    return '$count Star';
+    return '$count tähteä';
   }
 
   @override
-  String get noReviewsFound => 'No Reviews Found';
+  String get noReviewsFound => 'Arvosteluja ei löytynyt';
 
   @override
-  String get editReply => 'Edit Reply';
+  String get editReply => 'Muokkaa vastausta';
 
   @override
-  String get reply => 'Reply';
+  String get reply => 'Vastaa';
 
   @override
   String starFilterLabel(int count) {
