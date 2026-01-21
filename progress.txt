@@ -43,7 +43,7 @@ Keys: availableSpace, batteryDrainIncrease, deviceRequirements, downloadError,
   [x] es (Spanish) - 22 keys
   [x] et (Estonian) - 22 keys
   [x] fi (Finnish) - 22 keys
-  [ ] fr (French) - 22 keys
+  [x] fr (French) - 22 keys
   [ ] hi (Hindi) - 22 keys
   [ ] hu (Hungarian) - 22 keys
   [ ] id (Indonesian) - 22 keys
@@ -139,7 +139,7 @@ VERIFICATION STEPS
 SUMMARY
 ================================================================================
 
-Part 1 Progress: 6/31 languages completed
+Part 1 Progress: 7/31 languages completed
 Part 2 Progress: 0/7 files completed
 Overall Progress: ~16%
 
@@ -188,6 +188,15 @@ Overall Progress: ~16%
   - app/test.sh: PASSED (All tests passed!)
 
 [2026-01-21] Added 22 missing translation keys to Finnish (app_fi.arb)
+  - Keys added: availableSpace, batteryDrainIncrease, deviceRequirements,
+    downloadError, editReply, estimatedSize, failedToSendReply, largeModelWarning,
+    localProcessingInfo, model, modelReady, noModelDownloadRequired, noReviewsFound,
+    onDeviceIntensive, onDeviceSlower, premiumMinutesInfo, redownload, reply,
+    replySentSuccessfully, send, starFilter, writeYourReply
+  - flutter gen-l10n: PASSED
+  - app/test.sh: PASSED (All tests passed!)
+
+[2026-01-21] Added 22 missing translation keys to French (app_fr.arb)
   - Keys added: availableSpace, batteryDrainIncrease, deviceRequirements,
     downloadError, editReply, estimatedSize, failedToSendReply, largeModelWarning,
     localProcessingInfo, model, modelReady, noModelDownloadRequired, noReviewsFound,

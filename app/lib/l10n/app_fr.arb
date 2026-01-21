@@ -2455,5 +2455,62 @@
   "timeCompactMins": "{count}m",
   "timeCompactMinsAndSecs": "{mins}m {secs}s",
   "timeCompactHours": "{count}h",
-  "timeCompactHoursAndMins": "{hours}h {mins}m"
+  "timeCompactHoursAndMins": "{hours}h {mins}m",
+  "availableSpace": "Espace disponible : {space}",
+  "@availableSpace": {
+    "placeholders": {
+      "space": {
+        "type": "String"
+      }
+    }
+  },
+  "batteryDrainIncrease": "La consommation de batterie augmentera considérablement.",
+  "deviceRequirements": "Votre appareil ne répond pas aux exigences pour la transcription sur l'appareil.",
+  "downloadError": "Erreur de téléchargement : {error}",
+  "@downloadError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "editReply": "Modifier la réponse",
+  "estimatedSize": "Taille estimée : ~{size} Mo",
+  "@estimatedSize": {
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToSendReply": "Échec de l'envoi de la réponse : {error}",
+  "@failedToSendReply": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "largeModelWarning": "Ce modèle est volumineux et peut faire planter l'application ou fonctionner très lentement sur les appareils mobiles.\n\n« small » ou « base » est recommandé.",
+  "localProcessingInfo": "L'audio est traité localement. Fonctionne hors ligne, plus privé, mais consomme plus de batterie.",
+  "model": "Modèle",
+  "modelReady": "Modèle prêt",
+  "noModelDownloadRequired": "Le moteur de reconnaissance vocale natif de votre appareil sera utilisé. Aucun téléchargement de modèle requis.",
+  "noReviewsFound": "Aucun avis trouvé",
+  "onDeviceIntensive": "La transcription sur l'appareil est gourmande en ressources.",
+  "onDeviceSlower": "La transcription sur l'appareil peut être plus lente sur cet appareil.",
+  "premiumMinutesInfo": "1 200 minutes premium/mois. L'onglet Sur l'appareil offre une transcription gratuite illimitée.",
+  "redownload": "Retélécharger",
+  "reply": "Répondre",
+  "replySentSuccessfully": "Réponse envoyée avec succès",
+  "send": "Envoyer",
+  "starFilter": "{count} étoile(s)",
+  "@starFilter": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "writeYourReply": "Écrivez votre réponse..."
 }
