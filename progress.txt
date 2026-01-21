@@ -17,14 +17,14 @@
 | Progress | ~90% |
 
 **PRIORITY 0 STATUS**: 110 pre-existing l10n keys in non-English ARB files contain
-English text instead of proper translations. Spanish (es), French (fr), German (de), Italian (it), Arabic (ar), Portuguese (pt), Japanese (ja), Korean (ko), Chinese (zh), Russian (ru), Polish (pl), and Turkish (tr) completed, 21 languages remaining.
+English text instead of proper translations. Spanish (es), French (fr), German (de), Italian (it), Arabic (ar), Portuguese (pt), Japanese (ja), Korean (ko), Chinese (zh), Russian (ru), Polish (pl), Turkish (tr), and Dutch (nl) completed, 20 languages remaining.
 
 ================================================================================
 ## PRIORITY 0: CRITICAL - Pre-existing Untranslated Keys (110 keys × 33 languages)
 ================================================================================
 
 ### [~] Translate pre-existing English keys in all non-English ARB files
-Status: IN PROGRESS (Spanish, French, German, Italian, Arabic, Portuguese, Japanese, Korean, Chinese, Russian, Polish, Turkish completed, 21 languages remaining)
+Status: IN PROGRESS (Spanish, French, German, Italian, Arabic, Portuguese, Japanese, Korean, Chinese, Russian, Polish, Turkish, Dutch completed, 20 languages remaining)
 Priority: CRITICAL - Affects all non-English users
 
 Sample of untranslated keys (showing English values that need translation):
@@ -337,6 +337,22 @@ Note: date_list_item.dart was fixed - see [x] entry above
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-21] Translated 156 pre-existing English keys to Dutch (app_nl.arb)
+- PRIORITY 0 task: Translate pre-existing untranslated keys in non-English ARB files
+- Translated 156 keys to proper Dutch translations in app_nl.arb
+- Keys include: cancel, signOutConfirmation, deleteRecording, thisCannotBeUndone,
+  storeAudioOnPhone, storeAudioOnCloud, configureAiPersona, trackYourGoalsOnHomepage,
+  cancelSync, cancelSyncMessage, wifiEnableFailed, deviceNotResponding, transferring,
+  transferRequired, downloadingAudioFromSdCard, recordingDetails, storageLocationLabel,
+  setupQuestionsIntro, professionEntrepreneur, usageAtWork, xHandleTitle, planSwitchingDescriptionWithTitle,
+  subscriptionReactivatedDefault, couldNotLaunchUpgradePage, migrationComplete, tagSpeaker,
+  managePeople, disconnectTwitterConfirmation, transferCompleteMessage, and 125+ more
+- Translations preserve ICU message format placeholders ({deviceName}, {count}, {error}, {time}, {level}, etc.)
+- Brand names kept in English where appropriate (Omi, Pro, TXT, PDF, BLE, Limitless, MCP, OAuth, Bluetooth, Stripe, PayPal)
+- flutter gen-l10n completed successfully
+- All tests passed
+- Remaining: 20 other languages still need the same keys translated
 
 [2026-01-21] Translated 162 pre-existing English keys to Turkish (app_tr.arb)
 - PRIORITY 0 task: Translate pre-existing untranslated keys in non-English ARB files
