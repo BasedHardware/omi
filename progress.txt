@@ -11,10 +11,10 @@
 |--------|-------|
 | Total Files | ~48 |
 | Total Strings | ~405 |
-| Completed Files | 35 |
+| Completed Files | 37 |
 | In Progress | 0 |
-| Pending Files | ~13 |
-| Progress | ~81% |
+| Pending Files | ~11 |
+| Progress | ~83% |
 
 **CRITICAL ISSUE**: ~162 pre-existing l10n keys in non-English ARB files still contain
 English text instead of proper translations. See PRIORITY 0 section below.
@@ -294,17 +294,17 @@ Strings found:
 - Line 35: "days", "hours"
 - Compact format: "s", "m", "h" (lines 44, 49, 52, 57, 60)
 
-### [ ] utils/other/temp.dart (1 string)
-Status: PENDING
+### [x] utils/other/temp.dart (1 string)
+Status: COMPLETED
 Description: Hardcoded "Yesterday" in formatChatTimestamp()
-Strings found:
-- Line 35: "Yesterday" (should use context.l10n.yesterday)
+Solution: Added optional BuildContext parameter to formatChatTimestamp() and use context.l10n.yesterdayAtTime(time) when context is provided
+Keys reused: yesterdayAtTime (already exists in all 34 ARB files)
 
-### [ ] widgets/transcript.dart (1 string)
-Status: PENDING
+### [x] widgets/transcript.dart (1 string)
+Status: COMPLETED
 Description: Duplicate formatChatTimestamp() with hardcoded "Yesterday"
-Strings found:
-- Line 857: "Yesterday" (should use context.l10n.yesterday)
+Solution: Added optional BuildContext parameter to formatChatTimestamp() and use context.l10n.yesterdayAtTime(time) when context is provided
+Keys reused: yesterdayAtTime (already exists in all 34 ARB files)
 
 ### [ ] pages/conversations/widgets/conversation_list_item.dart (~12 strings)
 Status: PENDING
@@ -354,6 +354,14 @@ Fix requires either:
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-21] Localized formatChatTimestamp() "Yesterday" string in temp.dart and transcript.dart
+- Added optional BuildContext parameter to formatChatTimestamp() in both files
+- Uses context.l10n.yesterdayAtTime(time) when context is provided
+- Reused existing yesterdayAtTime key - already translated in all 34 ARB files
+- Updated desktop_chat_page.dart to pass context to formatChatTimestamp()
+- No new ARB keys needed - all translations already exist
+- All tests passed
 
 [2026-01-21] Localized share.dart PDF/Markdown export with 3 l10n keys for 34 languages
 - Added 3 new localization keys: pdfTranscriptExport, pdfConversationExport, pdfTitleLabel (with placeholder)

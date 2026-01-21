@@ -785,7 +785,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                   Container(
                     margin: const EdgeInsets.only(left: 50, top: 6),
                     child: Text(
-                      formatChatTimestamp(message.createdAt),
+                      formatChatTimestamp(message.createdAt, context: context),
                       style: TextStyle(
                         color: ResponsiveHelper.textTertiary.withValues(alpha: 0.5),
                         fontSize: 11,
