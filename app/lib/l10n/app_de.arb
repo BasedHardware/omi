@@ -2418,5 +2418,8 @@
   "locationPermissionContent": "Schnelltransfer benötigt die Standortberechtigung, um die WLAN-Verbindung zu überprüfen. Bitte erteilen Sie die Standortberechtigung, um fortzufahren.",
   "pdfTranscriptExport": "Transkript-Export",
   "pdfConversationExport": "Gesprächs-Export",
-  "pdfTitleLabel": "Titel: {title}"
+  "pdfTitleLabel": "Titel: {title}",
+  "conversationNewIndicator": "Neu 🚀",
+  "conversationPhotosCount": "{count} Fotos",
+  "mergingStatus": "Zusammenführen..."
 }

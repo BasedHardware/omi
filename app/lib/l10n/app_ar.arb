@@ -2417,5 +2417,8 @@
   "locationPermissionContent": "يتطلب النقل السريع إذن الموقع للتحقق من اتصال WiFi. يرجى منح إذن الموقع للمتابعة.",
   "pdfTranscriptExport": "تصدير النص",
   "pdfConversationExport": "تصدير المحادثة",
-  "pdfTitleLabel": "العنوان: {title}"
+  "pdfTitleLabel": "العنوان: {title}",
+  "conversationNewIndicator": "جديد 🚀",
+  "conversationPhotosCount": "{count} صور",
+  "mergingStatus": "جارٍ الدمج..."
 }

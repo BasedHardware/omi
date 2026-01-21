@@ -9516,5 +9516,22 @@
         "example": "Meeting Notes"
       }
     }
+  },
+  "conversationNewIndicator": "New 🚀",
+  "@conversationNewIndicator": {
+    "description": "Indicator shown when a conversation is newly created"
+  },
+  "conversationPhotosCount": "{count} photos",
+  "@conversationPhotosCount": {
+    "description": "Count of photos in a conversation",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mergingStatus": "Merging...",
+  "@mergingStatus": {
+    "description": "Status indicator shown when conversations are being merged"
   }
 }

@@ -7501,4 +7501,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String pdfTitleLabel(String title) {
     return '标题：$title';
   }
+
+  @override
+  String get conversationNewIndicator => '新的 🚀';
+
+  @override
+  String conversationPhotosCount(int count) {
+    return '$count 张照片';
+  }
+
+  @override
+  String get mergingStatus => '合并中...';
 }

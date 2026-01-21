@@ -7649,4 +7649,15 @@ class AppLocalizationsTr extends AppLocalizations {
   String pdfTitleLabel(String title) {
     return 'Başlık: $title';
   }
+
+  @override
+  String get conversationNewIndicator => 'Yeni 🚀';
+
+  @override
+  String conversationPhotosCount(int count) {
+    return '$count fotoğraf';
+  }
+
+  @override
+  String get mergingStatus => 'Birleştiriliyor...';
 }

@@ -7511,4 +7511,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String pdfTitleLabel(String title) {
     return 'タイトル: $title';
   }
+
+  @override
+  String get conversationNewIndicator => '新規 🚀';
+
+  @override
+  String conversationPhotosCount(int count) {
+    return '$count枚の写真';
+  }
+
+  @override
+  String get mergingStatus => '統合中...';
 }

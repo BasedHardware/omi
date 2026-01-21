@@ -2436,5 +2436,8 @@
   "locationPermissionContent": "Snabb överföring kräver platstillstånd för att verifiera WiFi-anslutningen. Vänligen ge platstillstånd för att fortsätta.",
   "pdfTranscriptExport": "Transkriptionsexport",
   "pdfConversationExport": "Samtalsexport",
-  "pdfTitleLabel": "Titel: {title}"
+  "pdfTitleLabel": "Titel: {title}",
+  "conversationNewIndicator": "Ny 🚀",
+  "conversationPhotosCount": "{count} foton",
+  "mergingStatus": "Sammanfogar..."
 }

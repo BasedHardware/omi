@@ -11,10 +11,10 @@
 |--------|-------|
 | Total Files | ~48 |
 | Total Strings | ~405 |
-| Completed Files | 37 |
+| Completed Files | 38 |
 | In Progress | 0 |
-| Pending Files | ~11 |
-| Progress | ~83% |
+| Pending Files | ~10 |
+| Progress | ~85% |
 
 **CRITICAL ISSUE**: ~162 pre-existing l10n keys in non-English ARB files still contain
 English text instead of proper translations. See PRIORITY 0 section below.
@@ -306,24 +306,15 @@ Description: Duplicate formatChatTimestamp() with hardcoded "Yesterday"
 Solution: Added optional BuildContext parameter to formatChatTimestamp() and use context.l10n.yesterdayAtTime(time) when context is provided
 Keys reused: yesterdayAtTime (already exists in all 34 ARB files)
 
-### [ ] pages/conversations/widgets/conversation_list_item.dart (~12 strings)
-Status: PENDING
+### [x] pages/conversations/widgets/conversation_list_item.dart (~12 strings)
+Status: COMPLETED
 Priority: HIGH - Core user-facing widget
 Description: Hardcoded strings in conversation list item
-Strings found:
-- Line 197: "Delete Conversation?" (dialog title)
-- Line 198: "Are you sure you want to delete this conversation? This action cannot be undone." (dialog body)
-- Line 199: "Confirm" (button text)
-- Line 208: "Unable to Delete Conversation" (dialog title)
-- Line 209: "Please check your internet connection and try again." (dialog body)
-- Line 211: "OK" (button text)
-- Line 300, 488: "New 🚀" (status indicator, x2)
-- Line 387: "${...} photos" (plural not localized)
-- Line 427: "Upgrade to unlimited" (locked overlay)
-- Line 629: "Merging..." (merging indicator)
-Also uses:
-- dateTimeFormat('h:mm a', ...) without locale (lines 316, 493)
-- secondsToCompactDuration() which has hardcoded English time units
+Keys added: conversationNewIndicator, conversationPhotosCount (with placeholder), mergingStatus
+Keys reused: deleteConversationTitle, deleteConversationMessage, confirm, unableToDeleteConversation,
+            pleaseCheckInternetConnectionAndTryAgain, ok, upgradeToUnlimited
+All 34 language ARB files updated with proper translations
+Note: dateTimeFormat and secondsToCompactDuration still use hardcoded locale - tracked separately in Priority 6.4
 
 ### [ ] pages/conversations/widgets/date_list_item.dart (1 issue)
 Status: PENDING
@@ -354,6 +345,14 @@ Fix requires either:
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-21] Localized conversation_list_item.dart with 3 new l10n keys for 34 languages
+- Added 3 new localization keys: conversationNewIndicator, conversationPhotosCount (with count placeholder), mergingStatus
+- Reused 7 existing keys: deleteConversationTitle, deleteConversationMessage, confirm, unableToDeleteConversation,
+  pleaseCheckInternetConnectionAndTryAgain, ok, upgradeToUnlimited
+- Replaced 10 hardcoded strings in delete dialogs, new indicator, photo count, upgrade overlay, merging indicator
+- All 34 language ARB files updated with proper translations
+- All tests passed
 
 [2026-01-21] Localized formatChatTimestamp() "Yesterday" string in temp.dart and transcript.dart
 - Added optional BuildContext parameter to formatChatTimestamp() in both files

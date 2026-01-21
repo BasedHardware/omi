@@ -7673,4 +7673,15 @@ class AppLocalizationsHu extends AppLocalizations {
   String pdfTitleLabel(String title) {
     return 'Cím: $title';
   }
+
+  @override
+  String get conversationNewIndicator => 'Új 🚀';
+
+  @override
+  String conversationPhotosCount(int count) {
+    return '$count fotó';
+  }
+
+  @override
+  String get mergingStatus => 'Egyesítés...';
 }

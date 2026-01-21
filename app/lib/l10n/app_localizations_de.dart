@@ -7706,4 +7706,15 @@ class AppLocalizationsDe extends AppLocalizations {
   String pdfTitleLabel(String title) {
     return 'Titel: $title';
   }
+
+  @override
+  String get conversationNewIndicator => 'Neu 🚀';
+
+  @override
+  String conversationPhotosCount(int count) {
+    return '$count Fotos';
+  }
+
+  @override
+  String get mergingStatus => 'Zusammenführen...';
 }

@@ -2436,5 +2436,8 @@
   "locationPermissionContent": "Transfer Cepat memerlukan izin lokasi untuk memverifikasi koneksi WiFi. Harap berikan izin lokasi untuk melanjutkan.",
   "pdfTranscriptExport": "Ekspor Transkrip",
   "pdfConversationExport": "Ekspor Percakapan",
-  "pdfTitleLabel": "Judul: {title}"
+  "pdfTitleLabel": "Judul: {title}",
+  "conversationNewIndicator": "Baru 🚀",
+  "conversationPhotosCount": "{count} foto",
+  "mergingStatus": "Menggabungkan..."
 }

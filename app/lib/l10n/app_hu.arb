@@ -2436,5 +2436,8 @@
   "locationPermissionContent": "A gyors átvitelhez helymeghatározási engedély szükséges a WiFi-kapcsolat ellenőrzéséhez. Kérjük, adja meg a helymeghatározási engedélyt a folytatáshoz.",
   "pdfTranscriptExport": "Átirat exportálása",
   "pdfConversationExport": "Beszélgetés exportálása",
-  "pdfTitleLabel": "Cím: {title}"
+  "pdfTitleLabel": "Cím: {title}",
+  "conversationNewIndicator": "Új 🚀",
+  "conversationPhotosCount": "{count} fotó",
+  "mergingStatus": "Egyesítés..."
 }

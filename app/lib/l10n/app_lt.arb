@@ -2436,5 +2436,8 @@
   "locationPermissionContent": "Greitam perdavimui reikia vietos leidimo, kad būtų galima patikrinti WiFi ryšį. Suteikite vietos leidimą, kad galėtumėte tęsti.",
   "pdfTranscriptExport": "Transkripcijos eksportas",
   "pdfConversationExport": "Pokalbio eksportas",
-  "pdfTitleLabel": "Pavadinimas: {title}"
+  "pdfTitleLabel": "Pavadinimas: {title}",
+  "conversationNewIndicator": "Naujas 🚀",
+  "conversationPhotosCount": "{count} nuotraukos",
+  "mergingStatus": "Sujungiama..."
 }

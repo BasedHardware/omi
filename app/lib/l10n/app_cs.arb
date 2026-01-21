@@ -2396,5 +2396,8 @@
   "locationPermissionContent": "Rychlý přenos vyžaduje oprávnění k poloze pro ověření WiFi připojení. Prosím, udělte oprávnění k poloze pro pokračování.",
   "pdfTranscriptExport": "Export přepisu",
   "pdfConversationExport": "Export konverzace",
-  "pdfTitleLabel": "Název: {title}"
+  "pdfTitleLabel": "Název: {title}",
+  "conversationNewIndicator": "Nové 🚀",
+  "conversationPhotosCount": "{count} fotek",
+  "mergingStatus": "Slučování..."
 }

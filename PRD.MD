@@ -120,13 +120,14 @@ The app uses Flutter's ARB-based localization system (`context.l10n.keyName`). W
 | `providers/developer_mode_provider.dart` | ~5 | COMPLETED - Webhook validation errors |
 | `providers/voice_recorder_provider.dart` | 1 | COMPLETED - Transcription error |
 
-#### 6.2 UI Components (~15 strings)
+#### 6.2 UI Components (~25 strings)
 
 | File | Est. Strings | Description |
 |------|--------------|-------------|
 | `pages/settings/widgets/plans_sheet.dart` | 3 | COMPLETED - Cancel Subscription, Omi Training localized |
 | `pages/conversations/sync_widgets/location_permission_dialog.dart` | 4 | COMPLETED - Location permission dialog text |
 | `pages/conversations/widgets/merge_action_bar.dart` | 1 | COMPLETED - Reused existing `ok` key |
+| `pages/conversations/widgets/conversation_list_item.dart` | ~12 | COMPLETED - Delete dialogs, New indicator, photos count, upgrade overlay, merging status |
 
 #### 6.3 PDF Export Strings (~10 strings)
 

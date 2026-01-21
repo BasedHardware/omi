@@ -2436,5 +2436,8 @@
   "locationPermissionContent": "Hızlı Transfer, WiFi bağlantısını doğrulamak için konum izni gerektirir. Devam etmek için lütfen konum izni verin.",
   "pdfTranscriptExport": "Döküm Dışa Aktar",
   "pdfConversationExport": "Sohbet Dışa Aktar",
-  "pdfTitleLabel": "Başlık: {title}"
+  "pdfTitleLabel": "Başlık: {title}",
+  "conversationNewIndicator": "Yeni 🚀",
+  "conversationPhotosCount": "{count} fotoğraf",
+  "mergingStatus": "Birleştiriliyor..."
 }

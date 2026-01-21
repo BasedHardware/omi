@@ -7636,4 +7636,15 @@ class AppLocalizationsEt extends AppLocalizations {
   String pdfTitleLabel(String title) {
     return 'Pealkiri: $title';
   }
+
+  @override
+  String get conversationNewIndicator => 'Uus 🚀';
+
+  @override
+  String conversationPhotosCount(int count) {
+    return '$count fotot';
+  }
+
+  @override
+  String get mergingStatus => 'Ühendamine...';
 }

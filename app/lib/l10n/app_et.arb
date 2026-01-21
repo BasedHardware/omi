@@ -2436,5 +2436,8 @@
   "locationPermissionContent": "Kiire edastus vajab asukoha luba WiFi-ühenduse kontrollimiseks. Jätkamiseks andke palun asukoha luba.",
   "pdfTranscriptExport": "Transkriptsiooni eksport",
   "pdfConversationExport": "Vestluse eksport",
-  "pdfTitleLabel": "Pealkiri: {title}"
+  "pdfTitleLabel": "Pealkiri: {title}",
+  "conversationNewIndicator": "Uus 🚀",
+  "conversationPhotosCount": "{count} fotot",
+  "mergingStatus": "Ühendamine..."
 }

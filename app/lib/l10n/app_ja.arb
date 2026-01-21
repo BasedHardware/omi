@@ -2437,5 +2437,8 @@
   "locationPermissionContent": "高速転送にはWiFi接続を確認するために位置情報の許可が必要です。続行するには位置情報の許可を付与してください。",
   "pdfTranscriptExport": "文字起こしエクスポート",
   "pdfConversationExport": "会話エクスポート",
-  "pdfTitleLabel": "タイトル: {title}"
+  "pdfTitleLabel": "タイトル: {title}",
+  "conversationNewIndicator": "新規 🚀",
+  "conversationPhotosCount": "{count}枚の写真",
+  "mergingStatus": "統合中..."
 }

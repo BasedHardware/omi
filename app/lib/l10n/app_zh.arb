@@ -2437,5 +2437,8 @@
   "locationPermissionContent": "快速传输需要位置权限来验证WiFi连接。请授予位置权限以继续。",
   "pdfTranscriptExport": "导出文字记录",
   "pdfConversationExport": "导出对话",
-  "pdfTitleLabel": "标题：{title}"
+  "pdfTitleLabel": "标题：{title}",
+  "conversationNewIndicator": "新的 🚀",
+  "conversationPhotosCount": "{count} 张照片",
+  "mergingStatus": "合并中..."
 }

@@ -2436,5 +2436,8 @@
   "locationPermissionContent": "Szybki transfer wymaga uprawnienia do lokalizacji, aby zweryfikować połączenie WiFi. Proszę przyznać uprawnienie do lokalizacji, aby kontynuować.",
   "pdfTranscriptExport": "Eksport transkrypcji",
   "pdfConversationExport": "Eksport rozmowy",
-  "pdfTitleLabel": "Tytuł: {title}"
+  "pdfTitleLabel": "Tytuł: {title}",
+  "conversationNewIndicator": "Nowe 🚀",
+  "conversationPhotosCount": "{count} zdjęć",
+  "mergingStatus": "Łączenie..."
 }

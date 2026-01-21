@@ -14294,6 +14294,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Title: {title}'**
   String pdfTitleLabel(String title);
+
+  /// Indicator shown when a conversation is newly created
+  ///
+  /// In en, this message translates to:
+  /// **'New 🚀'**
+  String get conversationNewIndicator;
+
+  /// Count of photos in a conversation
+  ///
+  /// In en, this message translates to:
+  /// **'{count} photos'**
+  String conversationPhotosCount(int count);
+
+  /// Status indicator shown when conversations are being merged
+  ///
+  /// In en, this message translates to:
+  /// **'Merging...'**
+  String get mergingStatus;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

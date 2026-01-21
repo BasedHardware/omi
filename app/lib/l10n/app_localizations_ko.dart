@@ -7513,4 +7513,15 @@ class AppLocalizationsKo extends AppLocalizations {
   String pdfTitleLabel(String title) {
     return '제목: $title';
   }
+
+  @override
+  String get conversationNewIndicator => '새로운 🚀';
+
+  @override
+  String conversationPhotosCount(int count) {
+    return '$count장의 사진';
+  }
+
+  @override
+  String get mergingStatus => '병합 중...';
 }

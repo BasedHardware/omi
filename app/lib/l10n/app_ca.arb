@@ -2419,5 +2419,8 @@
   "locationPermissionContent": "La transferència ràpida requereix permís d'ubicació per verificar la connexió WiFi. Si us plau, concediu el permís d'ubicació per continuar.",
   "pdfTranscriptExport": "Exportació de transcripció",
   "pdfConversationExport": "Exportació de conversa",
-  "pdfTitleLabel": "Títol: {title}"
+  "pdfTitleLabel": "Títol: {title}",
+  "conversationNewIndicator": "Nou 🚀",
+  "conversationPhotosCount": "{count} fotos",
+  "mergingStatus": "Fusionant..."
 }

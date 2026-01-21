@@ -2436,5 +2436,8 @@
   "locationPermissionContent": "Hurtig overføring krever plasseringstillatelse for å verifisere WiFi-tilkobling. Gi plasseringstillatelse for å fortsette.",
   "pdfTranscriptExport": "Eksporter transkripsjon",
   "pdfConversationExport": "Eksporter samtale",
-  "pdfTitleLabel": "Tittel: {title}"
+  "pdfTitleLabel": "Tittel: {title}",
+  "conversationNewIndicator": "Ny 🚀",
+  "conversationPhotosCount": "{count} bilder",
+  "mergingStatus": "Slår sammen..."
 }

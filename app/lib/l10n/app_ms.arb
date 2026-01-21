@@ -2436,5 +2436,8 @@
   "locationPermissionContent": "Pemindahan Pantas memerlukan kebenaran lokasi untuk mengesahkan sambungan WiFi. Sila berikan kebenaran lokasi untuk meneruskan.",
   "pdfTranscriptExport": "Eksport Transkrip",
   "pdfConversationExport": "Eksport Perbualan",
-  "pdfTitleLabel": "Tajuk: {title}"
+  "pdfTitleLabel": "Tajuk: {title}",
+  "conversationNewIndicator": "Baharu 🚀",
+  "conversationPhotosCount": "{count} foto",
+  "mergingStatus": "Menggabungkan..."
 }

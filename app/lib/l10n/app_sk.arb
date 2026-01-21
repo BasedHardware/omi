@@ -2436,5 +2436,8 @@
   "locationPermissionContent": "Rýchly prenos vyžaduje povolenie polohy na overenie WiFi pripojenia. Prosím, udeľte povolenie polohy pre pokračovanie.",
   "pdfTranscriptExport": "Export prepisu",
   "pdfConversationExport": "Export konverzácie",
-  "pdfTitleLabel": "Názov: {title}"
+  "pdfTitleLabel": "Názov: {title}",
+  "conversationNewIndicator": "Nové 🚀",
+  "conversationPhotosCount": "{count} fotiek",
+  "mergingStatus": "Zlučovanie..."
 }

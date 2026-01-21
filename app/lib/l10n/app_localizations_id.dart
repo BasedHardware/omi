@@ -7654,4 +7654,15 @@ class AppLocalizationsId extends AppLocalizations {
   String pdfTitleLabel(String title) {
     return 'Judul: $title';
   }
+
+  @override
+  String get conversationNewIndicator => 'Baru 🚀';
+
+  @override
+  String conversationPhotosCount(int count) {
+    return '$count foto';
+  }
+
+  @override
+  String get mergingStatus => 'Menggabungkan...';
 }

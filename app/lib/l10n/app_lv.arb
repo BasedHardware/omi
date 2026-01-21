@@ -2436,5 +2436,8 @@
   "locationPermissionContent": "Ātrai pārsūtīšanai nepieciešama atrašanās vietas atļauja, lai pārbaudītu WiFi savienojumu. Lūdzu, piešķiriet atrašanās vietas atļauju, lai turpinātu.",
   "pdfTranscriptExport": "Transkripcijas eksports",
   "pdfConversationExport": "Sarunas eksports",
-  "pdfTitleLabel": "Nosaukums: {title}"
+  "pdfTitleLabel": "Nosaukums: {title}",
+  "conversationNewIndicator": "Jauns 🚀",
+  "conversationPhotosCount": "{count} fotoattēli",
+  "mergingStatus": "Apvienošana..."
 }

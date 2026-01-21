@@ -2436,5 +2436,8 @@
   "locationPermissionContent": "Nopea siirto vaatii sijaintiluvan WiFi-yhteyden tarkistamiseksi. Myönnä sijaintilupa jatkaaksesi.",
   "pdfTranscriptExport": "Litteraation vienti",
   "pdfConversationExport": "Keskustelun vienti",
-  "pdfTitleLabel": "Otsikko: {title}"
+  "pdfTitleLabel": "Otsikko: {title}",
+  "conversationNewIndicator": "Uusi 🚀",
+  "conversationPhotosCount": "{count} kuvaa",
+  "mergingStatus": "Yhdistetään..."
 }

@@ -194,9 +194,9 @@ class _ConversationListItemState extends State<ConversationListItem> {
                               context,
                               () => Navigator.of(context).pop(false),
                               () => Navigator.of(context).pop(true),
-                              'Delete Conversation?',
-                              'Are you sure you want to delete this conversation? This action cannot be undone.',
-                              okButtonText: 'Confirm',
+                              context.l10n.deleteConversationTitle,
+                              context.l10n.deleteConversationMessage,
+                              okButtonText: context.l10n.confirm,
                             ),
                           );
                         } else {
@@ -205,10 +205,10 @@ class _ConversationListItemState extends State<ConversationListItem> {
                                 context,
                                 () => Navigator.pop(context),
                                 () => Navigator.pop(context),
-                                'Unable to Delete Conversation',
-                                'Please check your internet connection and try again.',
+                                context.l10n.unableToDeleteConversation,
+                                context.l10n.pleaseCheckInternetConnectionAndTryAgain,
                                 singleButton: true,
-                                okButtonText: 'OK'),
+                                okButtonText: context.l10n.ok),
                             context: context,
                           );
                         }
@@ -297,7 +297,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                       isNew
                           ? Row(
                               children: [
-                                const ConversationNewStatusIndicator(text: "New 🚀"),
+                                ConversationNewStatusIndicator(text: context.l10n.conversationNewIndicator),
                                 const Spacer(),
                                 if (widget.conversation.starred)
                                   const Padding(
@@ -384,7 +384,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   ),
                   const SizedBox(width: 12),
                   Text(
-                    "${widget.conversation.photos.length} photos",
+                    context.l10n.conversationPhotosCount(widget.conversation.photos.length),
                     style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
                   )
                 ]),
@@ -423,9 +423,9 @@ class _ConversationListItemState extends State<ConversationListItem> {
               color: Colors.black.withValues(alpha: 0.01),
               borderRadius: const BorderRadius.all(Radius.circular(8)),
             ),
-            child: const Text(
-              'Upgrade to unlimited',
-              style: TextStyle(
+            child: Text(
+              context.l10n.upgradeToUnlimited,
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
@@ -485,7 +485,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
           FittedBox(
             fit: BoxFit.scaleDown,
             child: isNew
-                ? const ConversationNewStatusIndicator(text: "New 🚀")
+                ? ConversationNewStatusIndicator(text: context.l10n.conversationNewIndicator)
                 : Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -611,18 +611,18 @@ class _MergingIndicatorState extends State<MergingIndicator> with SingleTickerPr
   Widget build(BuildContext context) {
     return FadeTransition(
       opacity: _opacityAnim,
-      child: const Row(
+      child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
+          const Icon(
             Icons.merge_rounded,
             color: Colors.white,
             size: 18,
           ),
-          SizedBox(width: 8),
+          const SizedBox(width: 8),
           Text(
-            'Merging...',
-            style: TextStyle(
+            context.l10n.mergingStatus,
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 14,
               fontWeight: FontWeight.w600,

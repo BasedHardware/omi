@@ -7647,4 +7647,15 @@ class AppLocalizationsVi extends AppLocalizations {
   String pdfTitleLabel(String title) {
     return 'Tiêu đề: $title';
   }
+
+  @override
+  String get conversationNewIndicator => 'Mới 🚀';
+
+  @override
+  String conversationPhotosCount(int count) {
+    return '$count ảnh';
+  }
+
+  @override
+  String get mergingStatus => 'Đang hợp nhất...';
 }

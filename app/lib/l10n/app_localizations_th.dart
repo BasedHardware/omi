@@ -7600,4 +7600,15 @@ class AppLocalizationsTh extends AppLocalizations {
   String pdfTitleLabel(String title) {
     return 'ชื่อเรื่อง: $title';
   }
+
+  @override
+  String get conversationNewIndicator => 'ใหม่ 🚀';
+
+  @override
+  String conversationPhotosCount(int count) {
+    return '$count รูปภาพ';
+  }
+
+  @override
+  String get mergingStatus => 'กำลังรวม...';
 }

@@ -2437,5 +2437,8 @@
   "locationPermissionContent": "A Transferência Rápida requer permissão de localização para verificar a conexão WiFi. Por favor, conceda a permissão de localização para continuar.",
   "pdfTranscriptExport": "Exportar transcrição",
   "pdfConversationExport": "Exportar conversa",
-  "pdfTitleLabel": "Título: {title}"
+  "pdfTitleLabel": "Título: {title}",
+  "conversationNewIndicator": "Novo 🚀",
+  "conversationPhotosCount": "{count} fotos",
+  "mergingStatus": "Mesclando..."
 }

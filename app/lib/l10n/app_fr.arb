@@ -2436,5 +2436,8 @@
   "locationPermissionContent": "Le transfert rapide nécessite l'autorisation de localisation pour vérifier la connexion WiFi. Veuillez accorder l'autorisation de localisation pour continuer.",
   "pdfTranscriptExport": "Export de transcription",
   "pdfConversationExport": "Export de conversation",
-  "pdfTitleLabel": "Titre : {title}"
+  "pdfTitleLabel": "Titre : {title}",
+  "conversationNewIndicator": "Nouveau 🚀",
+  "conversationPhotosCount": "{count} photos",
+  "mergingStatus": "Fusion en cours..."
 }

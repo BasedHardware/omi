@@ -7585,4 +7585,15 @@ class AppLocalizationsAr extends AppLocalizations {
   String pdfTitleLabel(String title) {
     return 'العنوان: $title';
   }
+
+  @override
+  String get conversationNewIndicator => 'جديد 🚀';
+
+  @override
+  String conversationPhotosCount(int count) {
+    return '$count صور';
+  }
+
+  @override
+  String get mergingStatus => 'جارٍ الدمج...';
 }

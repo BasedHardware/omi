@@ -7640,4 +7640,15 @@ class AppLocalizationsSk extends AppLocalizations {
   String pdfTitleLabel(String title) {
     return 'Názov: $title';
   }
+
+  @override
+  String get conversationNewIndicator => 'Nové 🚀';
+
+  @override
+  String conversationPhotosCount(int count) {
+    return '$count fotiek';
+  }
+
+  @override
+  String get mergingStatus => 'Zlučovanie...';
 }

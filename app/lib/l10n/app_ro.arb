@@ -2436,5 +2436,8 @@
   "locationPermissionContent": "Transferul rapid necesită permisiune de locație pentru a verifica conexiunea WiFi. Vă rugăm să acordați permisiunea de locație pentru a continua.",
   "pdfTranscriptExport": "Export transcriere",
   "pdfConversationExport": "Export conversație",
-  "pdfTitleLabel": "Titlu: {title}"
+  "pdfTitleLabel": "Titlu: {title}",
+  "conversationNewIndicator": "Nou 🚀",
+  "conversationPhotosCount": "{count} fotografii",
+  "mergingStatus": "Se îmbină..."
 }
