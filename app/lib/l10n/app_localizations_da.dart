@@ -6012,27 +6012,27 @@ class AppLocalizationsDa extends AppLocalizations {
   String get sendSummary => 'Send opsummering';
 
   @override
-  String get debugModeDetected => 'Debug Mode Detected';
+  String get debugModeDetected => 'Fejlretningstilstand registreret';
 
   @override
-  String get performanceReduced => 'Performance reduced 5-10x. Use Release mode.';
+  String get performanceReduced => 'Ydeevne reduceret 5-10x. Brug Release-tilstand.';
 
   @override
   String autoClosingInSeconds(int seconds) {
-    return 'Auto-closing in ${seconds}s';
+    return 'Lukker automatisk om ${seconds}s';
   }
 
   @override
-  String get modelRequired => 'Model Required';
+  String get modelRequired => 'Model påkrævet';
 
   @override
-  String get downloadWhisperModel => 'Please download a Whisper model before saving.';
+  String get downloadWhisperModel => 'Download venligst en Whisper-model før du gemmer.';
 
   @override
-  String get deviceNotCompatible => 'Device Not Compatible';
+  String get deviceNotCompatible => 'Enhed ikke kompatibel';
 
   @override
-  String get deviceRequirements => 'Your device does not meet the requirements for On-Device transcription.';
+  String get deviceRequirements => 'Din enhed opfylder ikke kravene til lokal transskription.';
 
   @override
   String get willLikelyCrash => 'Aktivering vil sandsynligvis få appen til at gå ned eller fryse.';
@@ -6047,7 +6047,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get olderDeviceDetected => 'Ældre enhed registreret';
 
   @override
-  String get onDeviceSlower => 'On-device transcription may be slower on this device.';
+  String get onDeviceSlower => 'Lokal transskription kan være langsommere på denne enhed.';
 
   @override
   String get batteryUsageHigher => 'Batteriforbrug vil være højere end cloud-transskription.';
@@ -6059,10 +6059,10 @@ class AppLocalizationsDa extends AppLocalizations {
   String get highResourceUsage => 'Højt ressourceforbrug';
 
   @override
-  String get onDeviceIntensive => 'On-Device transcription is computationally intensive.';
+  String get onDeviceIntensive => 'Lokal transskription er beregningskrævende.';
 
   @override
-  String get batteryDrainIncrease => 'Battery drain will increase significantly.';
+  String get batteryDrainIncrease => 'Batteriforbrug vil stige betydeligt.';
 
   @override
   String get deviceMayWarmUp => 'Enheden kan blive varm ved længere brug.';
@@ -6074,13 +6074,14 @@ class AppLocalizationsDa extends AppLocalizations {
   String get cloudProvider => 'Cloud-udbyder';
 
   @override
-  String get premiumMinutesInfo => '1,200 premium minutes/month. On-Device tab offers unlimited free transcription.';
+  String get premiumMinutesInfo =>
+      '1.200 premium minutter/måned. Lokal-fanen tilbyder ubegrænset gratis transskription.';
 
   @override
   String get viewUsage => 'Se forbrug';
 
   @override
-  String get localProcessingInfo => 'Audio is processed locally. Works offline, more private, but uses more battery.';
+  String get localProcessingInfo => 'Lyd behandles lokalt. Fungerer offline, mere privat, men bruger mere batteri.';
 
   @override
   String get model => 'Model';
@@ -6090,37 +6091,38 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get largeModelWarning =>
-      'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
+      'Denne model er stor og kan få appen til at gå ned eller køre meget langsomt på mobile enheder.\n\n\"small\" eller \"base\" anbefales.';
 
   @override
   String get usingNativeIosSpeech => 'Bruger indbygget iOS-talegenkendelse';
 
   @override
-  String get noModelDownloadRequired => 'Your device\'s native speech engine will be used. No model download required.';
+  String get noModelDownloadRequired =>
+      'Din enheds indbyggede talegenkendelse vil blive brugt. Ingen model-download påkrævet.';
 
   @override
-  String get modelReady => 'Model Ready';
+  String get modelReady => 'Model klar';
 
   @override
-  String get redownload => 'Re-download';
+  String get redownload => 'Download igen';
 
   @override
   String get doNotCloseApp => 'Luk venligst ikke appen.';
 
   @override
-  String get downloading => 'Downloading...';
+  String get downloading => 'Downloader...';
 
   @override
-  String get downloadModel => 'Download Model';
+  String get downloadModel => 'Download model';
 
   @override
   String estimatedSize(String size) {
-    return 'Estimated Size: ~$size MB';
+    return 'Anslået størrelse: ~$size MB';
   }
 
   @override
   String availableSpace(String space) {
-    return 'Available Space: $space';
+    return 'Tilgængelig plads: $space';
   }
 
   @override
@@ -6131,7 +6133,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String downloadError(String error) {
-    return 'Download error: $error';
+    return 'Downloadfejl: $error';
   }
 
   @override
@@ -6476,14 +6478,14 @@ class AppLocalizationsDa extends AppLocalizations {
   String get moneyEarned => 'Penge tjent';
 
   @override
-  String get writeYourReply => 'Write your reply...';
+  String get writeYourReply => 'Skriv dit svar...';
 
   @override
-  String get replySentSuccessfully => 'Reply sent successfully';
+  String get replySentSuccessfully => 'Svar sendt';
 
   @override
   String failedToSendReply(String error) {
-    return 'Failed to send reply: $error';
+    return 'Kunne ikke sende svar: $error';
   }
 
   @override
@@ -6491,17 +6493,17 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String starFilter(int count) {
-    return '$count Star';
+    return '$count stjerne';
   }
 
   @override
-  String get noReviewsFound => 'No Reviews Found';
+  String get noReviewsFound => 'Ingen anmeldelser fundet';
 
   @override
-  String get editReply => 'Edit Reply';
+  String get editReply => 'Rediger svar';
 
   @override
-  String get reply => 'Reply';
+  String get reply => 'Svar';
 
   @override
   String starFilterLabel(int count) {

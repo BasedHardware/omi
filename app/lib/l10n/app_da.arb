@@ -2413,5 +2413,78 @@
   "timeCompactMins": "{count}m",
   "timeCompactMinsAndSecs": "{mins}m {secs}s",
   "timeCompactHours": "{count}t",
-  "timeCompactHoursAndMins": "{hours}t {mins}m"
+  "timeCompactHoursAndMins": "{hours}t {mins}m",
+  "autoClosingInSeconds": "Lukker automatisk om {seconds}s",
+  "@autoClosingInSeconds": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "availableSpace": "Tilgængelig plads: {space}",
+  "@availableSpace": {
+    "placeholders": {
+      "space": {
+        "type": "String"
+      }
+    }
+  },
+  "batteryDrainIncrease": "Batteriforbrug vil stige betydeligt.",
+  "debugModeDetected": "Fejlretningstilstand registreret",
+  "deviceNotCompatible": "Enhed ikke kompatibel",
+  "deviceRequirements": "Din enhed opfylder ikke kravene til lokal transskription.",
+  "download": "Download",
+  "downloadError": "Downloadfejl: {error}",
+  "@downloadError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "downloadModel": "Download model",
+  "downloadWhisperModel": "Download venligst en Whisper-model før du gemmer.",
+  "downloading": "Downloader...",
+  "editReply": "Rediger svar",
+  "estimatedSize": "Anslået størrelse: ~{size} MB",
+  "@estimatedSize": {
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToSendReply": "Kunne ikke sende svar: {error}",
+  "@failedToSendReply": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "largeModelWarning": "Denne model er stor og kan få appen til at gå ned eller køre meget langsomt på mobile enheder.\n\n\"small\" eller \"base\" anbefales.",
+  "localProcessingInfo": "Lyd behandles lokalt. Fungerer offline, mere privat, men bruger mere batteri.",
+  "model": "Model",
+  "modelReady": "Model klar",
+  "modelRequired": "Model påkrævet",
+  "noModelDownloadRequired": "Din enheds indbyggede talegenkendelse vil blive brugt. Ingen model-download påkrævet.",
+  "noReviewsFound": "Ingen anmeldelser fundet",
+  "onDeviceIntensive": "Lokal transskription er beregningskrævende.",
+  "onDeviceSlower": "Lokal transskription kan være langsommere på denne enhed.",
+  "performanceReduced": "Ydeevne reduceret 5-10x. Brug Release-tilstand.",
+  "premiumMinutesInfo": "1.200 premium minutter/måned. Lokal-fanen tilbyder ubegrænset gratis transskription.",
+  "redownload": "Download igen",
+  "reply": "Svar",
+  "replySentSuccessfully": "Svar sendt",
+  "send": "Send",
+  "starFilter": "{count} stjerne",
+  "@starFilter": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "writeYourReply": "Skriv dit svar..."
 }

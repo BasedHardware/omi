@@ -19,7 +19,7 @@ Total languages with missing translations: **31**
 | Language | Code | Missing Keys | Priority |
 |----------|------|--------------|----------|
 | Czech | cs | 0 | ✅ DONE |
-| Danish | da | 31 | HIGH |
+| Danish | da | 0 | ✅ DONE |
 | Arabic | ar | 8 | MEDIUM |
 | Bulgarian | bg | 8 | MEDIUM |
 | Catalan | ca | 8 | MEDIUM |
