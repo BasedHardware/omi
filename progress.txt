@@ -327,7 +327,7 @@ Description: DateFormat calls not passing locale - dates display in English form
 Files affected:
 - desktop/pages/settings/desktop_settings_modal.dart (lines 1641, 1646) - COMPLETED
 - pages/settings/calendar_settings_page.dart (lines 539, 544) - COMPLETED
-- pages/settings/usage_page.dart (lines 839, 845)
+- pages/settings/usage_page.dart (lines 832, 840, 846, 849) - COMPLETED
 - pages/conversations/widgets/score_widget.dart (line 704)
 - pages/apps/widgets/api_keys_widget.dart (line 335)
 - desktop/pages/conversations/desktop_conversations_page.dart (lines 597, 748, 785)
@@ -343,6 +343,16 @@ Fix requires either:
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-21] Fixed usage_page.dart DateFormat calls to pass locale
+- Fixed 4 DateFormat calls that were missing locale parameter
+- Line 833: DateFormat.Hm() now passes locale for hourly time format
+- Line 840: DateFormat('d') now passes locale for day number format
+- Line 846: DateFormat('MMM') now passes locale for month name format
+- Line 849: DateFormat.y() now passes locale for year format
+- Usage chart date/time labels now display in the user's language format instead of always English
+- No new ARB keys needed - just fixed existing code to use locale
+- All tests passed
 
 [2026-01-21] Fixed calendar_settings_page.dart DateFormat calls to pass locale
 - Fixed 2 DateFormat calls that were missing locale parameter

@@ -818,6 +818,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
               if (index >= processedHistory.length) return const SizedBox();
               final point = processedHistory[index];
               final dateTime = DateTime.parse(point.date).toLocal();
+              final locale = Localizations.localeOf(context).languageCode;
               String text;
 
               switch (period) {
@@ -829,23 +830,23 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                     interval = 2;
                   }
                   if (index % interval == 0) {
-                    text = DateFormat.Hm().format(dateTime);
+                    text = DateFormat.Hm(locale).format(dateTime);
                   } else {
                     return const SizedBox();
                   }
                   break;
                 case 'monthly':
                   if (index % 7 == 0) {
-                    text = DateFormat('d').format(dateTime);
+                    text = DateFormat('d', locale).format(dateTime);
                   } else {
                     return const SizedBox();
                   }
                   break;
                 case 'yearly':
-                  text = DateFormat('MMM').format(dateTime);
+                  text = DateFormat('MMM', locale).format(dateTime);
                   break;
                 case 'all_time':
-                  text = DateFormat.y().format(dateTime).substring(2);
+                  text = DateFormat.y(locale).format(dateTime).substring(2);
                   break;
                 default:
                   return const SizedBox();
