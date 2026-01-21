@@ -7633,4 +7633,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get resumeRecording => 'Resume Recording';
+
+  @override
+  String get noDailyRecapsYet => 'No daily recaps yet';
+
+  @override
+  String get dailyRecapsDescription => 'Your daily recaps will appear here once generated';
 }

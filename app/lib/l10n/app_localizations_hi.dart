@@ -7620,4 +7620,10 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get resumeRecording => 'रिकॉर्डिंग फिर से शुरू करें';
+
+  @override
+  String get noDailyRecapsYet => 'अभी तक कोई दैनिक सारांश नहीं';
+
+  @override
+  String get dailyRecapsDescription => 'आपके दैनिक सारांश यहाँ दिखाई देंगे जब वे बन जाएंगे';
 }

@@ -2524,5 +2524,7 @@
   "continueRecording": "Продолжить запись",
   "initialisingRecorder": "Инициализация диктофона",
   "pauseRecording": "Приостановить запись",
-  "resumeRecording": "Возобновить запись"
+  "resumeRecording": "Возобновить запись",
+  "noDailyRecapsYet": "Пока нет ежедневных сводок",
+  "dailyRecapsDescription": "Ваши ежедневные сводки появятся здесь после создания"
 }

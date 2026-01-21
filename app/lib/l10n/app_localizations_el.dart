@@ -7626,4 +7626,10 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get resumeRecording => 'Συνέχιση εγγραφής';
+
+  @override
+  String get noDailyRecapsYet => 'Δεν υπάρχουν ακόμη καθημερινές ανακεφαλαιώσεις';
+
+  @override
+  String get dailyRecapsDescription => 'Οι καθημερινές ανακεφαλαιώσεις σας θα εμφανιστούν εδώ μόλις δημιουργηθούν';
 }

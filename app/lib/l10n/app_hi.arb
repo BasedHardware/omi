@@ -2490,5 +2490,7 @@
   "continueRecording": "रिकॉर्डिंग जारी रखें",
   "initialisingRecorder": "रिकॉर्डर प्रारंभ हो रहा है",
   "pauseRecording": "रिकॉर्डिंग रोकें",
-  "resumeRecording": "रिकॉर्डिंग फिर से शुरू करें"
+  "resumeRecording": "रिकॉर्डिंग फिर से शुरू करें",
+  "noDailyRecapsYet": "अभी तक कोई दैनिक सारांश नहीं",
+  "dailyRecapsDescription": "आपके दैनिक सारांश यहाँ दिखाई देंगे जब वे बन जाएंगे"
 }

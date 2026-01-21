@@ -2531,5 +2531,7 @@
   "continueRecording": "Lanjutkan Perekaman",
   "initialisingRecorder": "Menginisialisasi Perekam",
   "pauseRecording": "Jeda Perekaman",
-  "resumeRecording": "Lanjutkan Perekaman"
+  "resumeRecording": "Lanjutkan Perekaman",
+  "noDailyRecapsYet": "Belum ada ringkasan harian",
+  "dailyRecapsDescription": "Ringkasan harian Anda akan muncul di sini setelah dibuat"
 }

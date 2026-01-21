@@ -7627,4 +7627,10 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get resumeRecording => 'Возобновить запись';
+
+  @override
+  String get noDailyRecapsYet => 'Пока нет ежедневных сводок';
+
+  @override
+  String get dailyRecapsDescription => 'Ваши ежедневные сводки появятся здесь после создания';
 }

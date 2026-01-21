@@ -7626,4 +7626,10 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get resumeRecording => 'Riprendi registrazione';
+
+  @override
+  String get noDailyRecapsYet => 'Nessun riepilogo giornaliero ancora';
+
+  @override
+  String get dailyRecapsDescription => 'I tuoi riepiloghi giornalieri appariranno qui una volta generati';
 }

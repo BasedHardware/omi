@@ -7626,4 +7626,10 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get resumeRecording => 'Tęsti įrašymą';
+
+  @override
+  String get noDailyRecapsYet => 'Dar nėra dienos santraukų';
+
+  @override
+  String get dailyRecapsDescription => 'Jūsų dienos santraukos bus rodomos čia, kai bus sukurtos';
 }

@@ -2458,5 +2458,7 @@
   "continueRecording": "Pokračovat v nahrávání",
   "initialisingRecorder": "Inicializace záznamníku",
   "pauseRecording": "Pozastavit nahrávání",
-  "resumeRecording": "Obnovit nahrávání"
+  "resumeRecording": "Obnovit nahrávání",
+  "noDailyRecapsYet": "Zatím žádné denní přehledy",
+  "dailyRecapsDescription": "Vaše denní přehledy se zde zobrazí po vygenerování"
 }

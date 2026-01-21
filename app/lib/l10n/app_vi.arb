@@ -2494,5 +2494,7 @@
   "continueRecording": "Tiếp tục ghi âm",
   "initialisingRecorder": "Đang khởi tạo máy ghi âm",
   "pauseRecording": "Tạm dừng ghi âm",
-  "resumeRecording": "Tiếp tục ghi âm"
+  "resumeRecording": "Tiếp tục ghi âm",
+  "noDailyRecapsYet": "Chưa có bản tóm tắt hàng ngày",
+  "dailyRecapsDescription": "Bản tóm tắt hàng ngày của bạn sẽ xuất hiện ở đây khi được tạo"
 }

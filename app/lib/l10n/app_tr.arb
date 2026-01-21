@@ -2524,5 +2524,7 @@
   "continueRecording": "Kayda Devam Et",
   "initialisingRecorder": "Kayıt Cihazı Başlatılıyor",
   "pauseRecording": "Kaydı Duraklat",
-  "resumeRecording": "Kaydı Sürdür"
+  "resumeRecording": "Kaydı Sürdür",
+  "noDailyRecapsYet": "Henüz günlük özet yok",
+  "dailyRecapsDescription": "Günlük özetleriniz oluşturulduktan sonra burada görünecek"
 }

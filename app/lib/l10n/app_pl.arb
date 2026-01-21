@@ -2524,5 +2524,7 @@
   "continueRecording": "Kontynuuj nagrywanie",
   "initialisingRecorder": "Inicjalizacja rejestratora",
   "pauseRecording": "Wstrzymaj nagrywanie",
-  "resumeRecording": "Wznów nagrywanie"
+  "resumeRecording": "Wznów nagrywanie",
+  "noDailyRecapsYet": "Brak jeszcze dziennych podsumowań",
+  "dailyRecapsDescription": "Twoje dzienne podsumowania pojawią się tutaj po wygenerowaniu"
 }

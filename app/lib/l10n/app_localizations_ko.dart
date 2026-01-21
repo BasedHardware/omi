@@ -7620,4 +7620,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get resumeRecording => '녹음 재개';
+
+  @override
+  String get noDailyRecapsYet => '아직 일일 요약이 없습니다';
+
+  @override
+  String get dailyRecapsDescription => '일일 요약이 생성되면 여기에 표시됩니다';
 }

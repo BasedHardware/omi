@@ -14480,6 +14480,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Resume Recording'**
   String get resumeRecording;
+
+  /// No description provided for @noDailyRecapsYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No daily recaps yet'**
+  String get noDailyRecapsYet;
+
+  /// No description provided for @dailyRecapsDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Your daily recaps will appear here once generated'**
+  String get dailyRecapsDescription;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

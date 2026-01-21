@@ -2489,5 +2489,7 @@
   "continueRecording": "Continua registrazione",
   "initialisingRecorder": "Inizializzazione registratore",
   "pauseRecording": "Metti in pausa registrazione",
-  "resumeRecording": "Riprendi registrazione"
+  "resumeRecording": "Riprendi registrazione",
+  "noDailyRecapsYet": "Nessun riepilogo giornaliero ancora",
+  "dailyRecapsDescription": "I tuoi riepiloghi giornalieri appariranno qui una volta generati"
 }

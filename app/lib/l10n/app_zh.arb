@@ -2511,5 +2511,7 @@
   "continueRecording": "继续录音",
   "initialisingRecorder": "正在初始化录音器",
   "pauseRecording": "暂停录音",
-  "resumeRecording": "继续录音"
+  "resumeRecording": "继续录音",
+  "noDailyRecapsYet": "还没有每日总结",
+  "dailyRecapsDescription": "您的每日总结生成后将显示在这里"
 }

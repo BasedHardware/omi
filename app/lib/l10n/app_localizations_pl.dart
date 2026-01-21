@@ -7627,4 +7627,10 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get resumeRecording => 'Wznów nagrywanie';
+
+  @override
+  String get noDailyRecapsYet => 'Brak jeszcze dziennych podsumowań';
+
+  @override
+  String get dailyRecapsDescription => 'Twoje dzienne podsumowania pojawią się tutaj po wygenerowaniu';
 }

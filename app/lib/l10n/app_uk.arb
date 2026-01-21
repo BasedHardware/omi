@@ -2489,5 +2489,7 @@
   "continueRecording": "Продовжити запис",
   "initialisingRecorder": "Ініціалізація диктофона",
   "pauseRecording": "Призупинити запис",
-  "resumeRecording": "Відновити запис"
+  "resumeRecording": "Відновити запис",
+  "noDailyRecapsYet": "Podsumowania dzienne jeszcze niedostępne",
+  "dailyRecapsDescription": "Twoje podsumowania dzienne pojawią się tutaj po wygenerowaniu"
 }

@@ -7626,4 +7626,10 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get resumeRecording => 'Felvétel folytatása';
+
+  @override
+  String get noDailyRecapsYet => 'Még nincsenek napi összefoglalók';
+
+  @override
+  String get dailyRecapsDescription => 'A napi összefoglalói itt jelennek meg, amint elkészülnek';
 }

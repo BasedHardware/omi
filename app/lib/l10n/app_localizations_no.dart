@@ -7626,4 +7626,10 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get resumeRecording => 'Gjenoppta opptak';
+
+  @override
+  String get noDailyRecapsYet => 'Ingen daglige oppsummeringer ennå';
+
+  @override
+  String get dailyRecapsDescription => 'Dine daglige oppsummeringer vil vises her når de er generert';
 }

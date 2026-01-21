@@ -112,7 +112,7 @@ Total Strings: ~30
       - 'Resume Recording'
       - 'Processing'
 
-  [ ] daily_summaries_list.dart (2 strings)
+  [x] daily_summaries_list.dart (2 strings)
       - 'No daily recaps yet'
       - 'Your daily recaps will appear here once generated'
 
@@ -140,8 +140,8 @@ SUMMARY
 ================================================================================
 
 Part 1 Progress: 31/31 languages completed
-Part 2 Progress: 4/7 files completed
-Overall Progress: ~70%
+Part 2 Progress: 5/7 files completed
+Overall Progress: ~80%
 
 ================================================================================
 
@@ -439,6 +439,15 @@ Overall Progress: ~70%
   - Replaced hardcoded 'Initialising Recorder' with context.l10n.initialisingRecorder
   - Replaced hardcoded 'Pause Recording' with context.l10n.pauseRecording
   - Replaced hardcoded 'Resume Recording' with context.l10n.resumeRecording
+  - Added import for utils/l10n_extensions.dart
+  - flutter gen-l10n: PASSED (formatting step has pre-existing environment issue)
+  - app/test.sh: Skipped (pre-existing Flutter dependency issues unrelated to l10n)
+
+[2026-01-21] Localized hardcoded strings in daily_summaries_list.dart
+  - Added new keys to app_en.arb: noDailyRecapsYet, dailyRecapsDescription
+  - Added translations to all 34 language ARB files
+  - Replaced hardcoded 'No daily recaps yet' with context.l10n.noDailyRecapsYet
+  - Replaced hardcoded 'Your daily recaps will appear here once generated' with context.l10n.dailyRecapsDescription
   - Added import for utils/l10n_extensions.dart
   - flutter gen-l10n: PASSED (formatting step has pre-existing environment issue)
   - app/test.sh: Skipped (pre-existing Flutter dependency issues unrelated to l10n)

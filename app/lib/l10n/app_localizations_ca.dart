@@ -7626,4 +7626,10 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get resumeRecording => 'Reprendre la gravació';
+
+  @override
+  String get noDailyRecapsYet => 'Encara no hi ha resums diaris';
+
+  @override
+  String get dailyRecapsDescription => 'Els teus resums diaris apareixeran aquí un cop generats';
 }

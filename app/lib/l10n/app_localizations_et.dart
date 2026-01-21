@@ -7626,4 +7626,10 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get resumeRecording => 'Jätka salvestamist';
+
+  @override
+  String get noDailyRecapsYet => 'Päevaseid kokkuvõtteid veel pole';
+
+  @override
+  String get dailyRecapsDescription => 'Teie päevased kokkuvõtted ilmuvad siia pärast nende loomist';
 }

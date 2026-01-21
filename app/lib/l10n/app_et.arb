@@ -2489,5 +2489,7 @@
   "continueRecording": "Jätka salvestamist",
   "initialisingRecorder": "Salvestaja initsialiseerimine",
   "pauseRecording": "Peata salvestus",
-  "resumeRecording": "Jätka salvestamist"
+  "resumeRecording": "Jätka salvestamist",
+  "noDailyRecapsYet": "Päevaseid kokkuvõtteid veel pole",
+  "dailyRecapsDescription": "Teie päevased kokkuvõtted ilmuvad siia pärast nende loomist"
 }

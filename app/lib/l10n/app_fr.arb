@@ -2524,5 +2524,7 @@
   "continueRecording": "Continuer l'enregistrement",
   "initialisingRecorder": "Initialisation de l'enregistreur",
   "pauseRecording": "Mettre en pause l'enregistrement",
-  "resumeRecording": "Reprendre l'enregistrement"
+  "resumeRecording": "Reprendre l'enregistrement",
+  "noDailyRecapsYet": "Pas encore de récapitulatifs quotidiens",
+  "dailyRecapsDescription": "Vos récapitulatifs quotidiens apparaîtront ici une fois générés"
 }

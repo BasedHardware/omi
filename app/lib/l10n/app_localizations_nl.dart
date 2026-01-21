@@ -7626,4 +7626,10 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get resumeRecording => 'Opname hervatten';
+
+  @override
+  String get noDailyRecapsYet => 'Nog geen dagelijkse samenvattingen';
+
+  @override
+  String get dailyRecapsDescription => 'Uw dagelijkse samenvattingen verschijnen hier zodra ze zijn gegenereerd';
 }

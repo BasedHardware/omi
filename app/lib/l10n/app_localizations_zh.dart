@@ -7620,4 +7620,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get resumeRecording => '继续录音';
+
+  @override
+  String get noDailyRecapsYet => '还没有每日总结';
+
+  @override
+  String get dailyRecapsDescription => '您的每日总结生成后将显示在这里';
 }

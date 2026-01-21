@@ -2489,5 +2489,7 @@
   "continueRecording": "Συνέχιση εγγραφής",
   "initialisingRecorder": "Αρχικοποίηση συσκευής εγγραφής",
   "pauseRecording": "Παύση εγγραφής",
-  "resumeRecording": "Συνέχιση εγγραφής"
+  "resumeRecording": "Συνέχιση εγγραφής",
+  "noDailyRecapsYet": "Δεν υπάρχουν ακόμη καθημερινές ανακεφαλαιώσεις",
+  "dailyRecapsDescription": "Οι καθημερινές ανακεφαλαιώσεις σας θα εμφανιστούν εδώ μόλις δημιουργηθούν"
 }

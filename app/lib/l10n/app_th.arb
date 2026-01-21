@@ -2489,5 +2489,7 @@
   "continueRecording": "บันทึกต่อ",
   "initialisingRecorder": "กำลังเริ่มต้นเครื่องบันทึก",
   "pauseRecording": "หยุดชั่วคราว",
-  "resumeRecording": "บันทึกต่อ"
+  "resumeRecording": "บันทึกต่อ",
+  "noDailyRecapsYet": "ยังไม่มีสรุปรายวัน",
+  "dailyRecapsDescription": "สรุปรายวันของคุณจะปรากฏที่นี่เมื่อสร้างเสร็จ"
 }

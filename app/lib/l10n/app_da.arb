@@ -2498,5 +2498,7 @@
   "continueRecording": "Fortsæt optagelse",
   "initialisingRecorder": "Initialiserer optager",
   "pauseRecording": "Pause optagelse",
-  "resumeRecording": "Genoptag optagelse"
+  "resumeRecording": "Genoptag optagelse",
+  "noDailyRecapsYet": "Ingen daglige opsamlinger endnu",
+  "dailyRecapsDescription": "Dine daglige opsamlinger vises her, når de er genereret"
 }

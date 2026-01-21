@@ -7626,4 +7626,10 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get resumeRecording => 'บันทึกต่อ';
+
+  @override
+  String get noDailyRecapsYet => 'ยังไม่มีสรุปรายวัน';
+
+  @override
+  String get dailyRecapsDescription => 'สรุปรายวันของคุณจะปรากฏที่นี่เมื่อสร้างเสร็จ';
 }

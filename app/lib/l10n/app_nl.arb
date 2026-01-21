@@ -2489,5 +2489,7 @@
   "continueRecording": "Opname voortzetten",
   "initialisingRecorder": "Recorder initialiseren",
   "pauseRecording": "Opname pauzeren",
-  "resumeRecording": "Opname hervatten"
+  "resumeRecording": "Opname hervatten",
+  "noDailyRecapsYet": "Nog geen dagelijkse samenvattingen",
+  "dailyRecapsDescription": "Uw dagelijkse samenvattingen verschijnen hier zodra ze zijn gegenereerd"
 }

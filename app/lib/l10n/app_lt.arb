@@ -2489,5 +2489,7 @@
   "continueRecording": "Tęsti įrašymą",
   "initialisingRecorder": "Inicijuojamas diktofonas",
   "pauseRecording": "Pristabdyti įrašymą",
-  "resumeRecording": "Tęsti įrašymą"
+  "resumeRecording": "Tęsti įrašymą",
+  "noDailyRecapsYet": "Dar nėra dienos santraukų",
+  "dailyRecapsDescription": "Jūsų dienos santraukos bus rodomos čia, kai bus sukurtos"
 }

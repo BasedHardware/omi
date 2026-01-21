@@ -7620,4 +7620,10 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get resumeRecording => 'Retomar gravação';
+
+  @override
+  String get noDailyRecapsYet => 'Ainda não há resumos diários';
+
+  @override
+  String get dailyRecapsDescription => 'Seus resumos diários aparecerão aqui quando forem gerados';
 }

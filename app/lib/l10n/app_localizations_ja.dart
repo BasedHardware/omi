@@ -7620,4 +7620,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get resumeRecording => '録音を再開';
+
+  @override
+  String get noDailyRecapsYet => 'まだ日次サマリーはありません';
+
+  @override
+  String get dailyRecapsDescription => '日次サマリーは生成されるとここに表示されます';
 }

@@ -7626,4 +7626,10 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get resumeRecording => 'Obnovit nahrávání';
+
+  @override
+  String get noDailyRecapsYet => 'Zatím žádné denní přehledy';
+
+  @override
+  String get dailyRecapsDescription => 'Vaše denní přehledy se zde zobrazí po vygenerování';
 }

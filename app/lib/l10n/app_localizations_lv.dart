@@ -7626,4 +7626,10 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get resumeRecording => 'Atsākt ierakstu';
+
+  @override
+  String get noDailyRecapsYet => 'Vēl nav ikdienas apkopojumu';
+
+  @override
+  String get dailyRecapsDescription => 'Jūsu ikdienas apkopojumi parādīsies šeit, kad tie būs izveidoti';
 }

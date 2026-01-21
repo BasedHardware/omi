@@ -2525,5 +2525,7 @@
   "continueRecording": "Continuar gravação",
   "initialisingRecorder": "Inicializando gravador",
   "pauseRecording": "Pausar gravação",
-  "resumeRecording": "Retomar gravação"
+  "resumeRecording": "Retomar gravação",
+  "noDailyRecapsYet": "Ainda não há resumos diários",
+  "dailyRecapsDescription": "Seus resumos diários aparecerão aqui quando forem gerados"
 }

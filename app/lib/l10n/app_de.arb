@@ -2457,5 +2457,7 @@
   "continueRecording": "Aufnahme fortsetzen",
   "initialisingRecorder": "Initialisiere Aufnahmegerät",
   "pauseRecording": "Aufnahme pausieren",
-  "resumeRecording": "Aufnahme fortsetzen"
+  "resumeRecording": "Aufnahme fortsetzen",
+  "noDailyRecapsYet": "Noch keine täglichen Zusammenfassungen",
+  "dailyRecapsDescription": "Ihre täglichen Zusammenfassungen erscheinen hier, sobald sie erstellt wurden"
 }

@@ -7626,4 +7626,10 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get resumeRecording => 'Sambung Rakaman';
+
+  @override
+  String get noDailyRecapsYet => 'Belum ada ringkasan harian';
+
+  @override
+  String get dailyRecapsDescription => 'Ringkasan harian anda akan muncul di sini setelah dijana';
 }

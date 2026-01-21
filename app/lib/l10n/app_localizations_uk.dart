@@ -7626,4 +7626,10 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get resumeRecording => 'Відновити запис';
+
+  @override
+  String get noDailyRecapsYet => 'Podsumowania dzienne jeszcze niedostępne';
+
+  @override
+  String get dailyRecapsDescription => 'Twoje podsumowania dzienne pojawią się tutaj po wygenerowaniu';
 }

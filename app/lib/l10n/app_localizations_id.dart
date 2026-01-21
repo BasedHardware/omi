@@ -7626,4 +7626,10 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get resumeRecording => 'Lanjutkan Perekaman';
+
+  @override
+  String get noDailyRecapsYet => 'Belum ada ringkasan harian';
+
+  @override
+  String get dailyRecapsDescription => 'Ringkasan harian Anda akan muncul di sini setelah dibuat';
 }

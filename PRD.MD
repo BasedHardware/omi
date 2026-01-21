@@ -161,31 +161,31 @@ Total Hardcoded Strings: **~30**
 | 262 | `'Icon'` | `icon` | YES | ✅ |
 | 264 | `'Color'` | `color` | YES (added) | ✅ |
 
-#### 4. processing_capture.dart
+#### 4. processing_capture.dart ✅ DONE
 **Path:** `app/lib/pages/conversations/widgets/processing_capture.dart`
 
-| Line | Hardcoded String | Suggested Key | Exists in EN? |
-|------|------------------|---------------|---------------|
-| 201 | `'Waiting for device...'` | `waitingForDevice` | CHECK |
-| 221 | `'In progress...'` | `inProgress` | CHECK |
-| 221 | `'Say something...'` | `saySomething` | CHECK |
-| 236 | `'Paused'` | `paused` | CHECK |
-| 326 | `'Listening'` | `listening` | CHECK |
-| 364 | `'Initialising System Audio'` | `initialisingSystemAudio` | CHECK |
-| 543 | `'Stop Recording'` | `stopRecording` | CHECK |
-| 556 | `'Continue Recording'` | `continueRecording` | CHECK |
-| 572 | `'Initialising Recorder'` | `initialisingRecorder` | CHECK |
-| 586 | `'Pause Recording'` | `pauseRecording` | CHECK |
-| 600 | `'Resume Recording'` | `resumeRecording` | CHECK |
-| 703 | `'Processing'` | `processing` | CHECK |
+| Line | Hardcoded String | Suggested Key | Exists in EN? | Status |
+|------|------------------|---------------|---------------|--------|
+| 201 | `'Waiting for device...'` | `waitingForDevice` | YES (added) | ✅ |
+| 221 | `'In progress...'` | `inProgress` | YES | ✅ |
+| 221 | `'Say something...'` | `saySomething` | YES (added) | ✅ |
+| 236 | `'Paused'` | `paused` | YES | ✅ |
+| 326 | `'Listening'` | `listening` | YES | ✅ |
+| 364 | `'Initialising System Audio'` | `initialisingSystemAudio` | YES (added) | ✅ |
+| 543 | `'Stop Recording'` | `stopRecording` | YES (added) | ✅ |
+| 556 | `'Continue Recording'` | `continueRecording` | YES (added) | ✅ |
+| 572 | `'Initialising Recorder'` | `initialisingRecorder` | YES (added) | ✅ |
+| 586 | `'Pause Recording'` | `pauseRecording` | YES (added) | ✅ |
+| 600 | `'Resume Recording'` | `resumeRecording` | YES (added) | ✅ |
+| 703 | `'Processing'` | `processing` | YES | ✅ |
 
-#### 5. daily_summaries_list.dart
+#### 5. daily_summaries_list.dart ✅ DONE
 **Path:** `app/lib/pages/conversations/widgets/daily_summaries_list.dart`
 
-| Line | Hardcoded String | Suggested Key | Exists in EN? |
-|------|------------------|---------------|---------------|
-| 164 | `'No daily recaps yet'` | `noDailyRecapsYet` | CHECK |
-| 173 | `'Your daily recaps will appear here once generated'` | `dailyRecapsDescription` | CHECK |
+| Line | Hardcoded String | Suggested Key | Exists in EN? | Status |
+|------|------------------|---------------|---------------|--------|
+| 164 | `'No daily recaps yet'` | `noDailyRecapsYet` | YES (added) | ✅ |
+| 173 | `'Your daily recaps will appear here once generated'` | `dailyRecapsDescription` | YES (added) | ✅ |
 
 #### 6. fast_transfer_suggestion_dialog.dart
 **Path:** `app/lib/pages/conversations/sync_widgets/fast_transfer_suggestion_dialog.dart`

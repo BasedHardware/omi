@@ -9734,5 +9734,7 @@
   "resumeRecording": "Resume Recording",
   "@resumeRecording": {
     "description": "Button label to resume recording"
-  }
+  },
+  "noDailyRecapsYet": "No daily recaps yet",
+  "dailyRecapsDescription": "Your daily recaps will appear here once generated"
 }

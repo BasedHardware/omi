@@ -2489,5 +2489,7 @@
   "continueRecording": "Fortsätt inspelning",
   "initialisingRecorder": "Initierar inspelaren",
   "pauseRecording": "Pausa inspelning",
-  "resumeRecording": "Återuppta inspelning"
+  "resumeRecording": "Återuppta inspelning",
+  "noDailyRecapsYet": "Inga dagliga sammanfattningar ännu",
+  "dailyRecapsDescription": "Dina dagliga sammanfattningar visas här när de har skapats"
 }

@@ -7626,4 +7626,10 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get resumeRecording => 'Kaydı Sürdür';
+
+  @override
+  String get noDailyRecapsYet => 'Henüz günlük özet yok';
+
+  @override
+  String get dailyRecapsDescription => 'Günlük özetleriniz oluşturulduktan sonra burada görünecek';
 }

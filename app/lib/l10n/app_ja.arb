@@ -2490,5 +2490,7 @@
   "continueRecording": "録音を続ける",
   "initialisingRecorder": "レコーダーを初期化中",
   "pauseRecording": "録音を一時停止",
-  "resumeRecording": "録音を再開"
+  "resumeRecording": "録音を再開",
+  "noDailyRecapsYet": "まだ日次サマリーはありません",
+  "dailyRecapsDescription": "日次サマリーは生成されるとここに表示されます"
 }

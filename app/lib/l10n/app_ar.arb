@@ -2456,5 +2456,7 @@
   "continueRecording": "متابعة التسجيل",
   "initialisingRecorder": "جارٍ تهيئة المسجل",
   "pauseRecording": "إيقاف التسجيل مؤقتاً",
-  "resumeRecording": "استئناف التسجيل"
+  "resumeRecording": "استئناف التسجيل",
+  "noDailyRecapsYet": "لا توجد ملخصات يومية بعد",
+  "dailyRecapsDescription": "ستظهر ملخصاتك اليومية هنا بمجرد إنشائها"
 }

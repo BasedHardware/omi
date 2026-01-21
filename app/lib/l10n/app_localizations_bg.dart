@@ -7626,4 +7626,10 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get resumeRecording => 'Възобновяване на записа';
+
+  @override
+  String get noDailyRecapsYet => 'Все още няма дневни обобщения';
+
+  @override
+  String get dailyRecapsDescription => 'Вашите дневни обобщения ще се появят тук, след като бъдат генерирани';
 }

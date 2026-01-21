@@ -2489,5 +2489,7 @@
   "continueRecording": "Jatka nauhoitusta",
   "initialisingRecorder": "Alustetaan tallenninta",
   "pauseRecording": "Keskeytä nauhoitus",
-  "resumeRecording": "Jatka nauhoitusta"
+  "resumeRecording": "Jatka nauhoitusta",
+  "noDailyRecapsYet": "Ei vielä päivittäisiä yhteenvetoja",
+  "dailyRecapsDescription": "Päivittäiset yhteenvetosi näkyvät täällä, kun ne on luotu"
 }

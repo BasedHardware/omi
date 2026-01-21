@@ -7626,4 +7626,10 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get resumeRecording => 'Jatka nauhoitusta';
+
+  @override
+  String get noDailyRecapsYet => 'Ei vielä päivittäisiä yhteenvetoja';
+
+  @override
+  String get dailyRecapsDescription => 'Päivittäiset yhteenvetosi näkyvät täällä, kun ne on luotu';
 }

@@ -2489,5 +2489,7 @@
   "continueRecording": "Fortsett opptak",
   "initialisingRecorder": "Initialiserer opptaker",
   "pauseRecording": "Pause opptak",
-  "resumeRecording": "Gjenoppta opptak"
+  "resumeRecording": "Gjenoppta opptak",
+  "noDailyRecapsYet": "Ingen daglige oppsummeringer ennå",
+  "dailyRecapsDescription": "Dine daglige oppsummeringer vil vises her når de er generert"
 }

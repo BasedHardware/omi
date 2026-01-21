@@ -2494,5 +2494,7 @@
   "continueRecording": "Pokračovať v nahrávaní",
   "initialisingRecorder": "Inicializácia nahrávača",
   "pauseRecording": "Pozastaviť nahrávanie",
-  "resumeRecording": "Obnoviť nahrávanie"
+  "resumeRecording": "Obnoviť nahrávanie",
+  "noDailyRecapsYet": "Zatiaľ žiadne denné súhrny",
+  "dailyRecapsDescription": "Vaše denné súhrny sa tu zobrazia po vygenerovaní"
 }

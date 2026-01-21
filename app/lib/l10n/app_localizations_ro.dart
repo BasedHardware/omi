@@ -7626,4 +7626,10 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get resumeRecording => 'Reia înregistrarea';
+
+  @override
+  String get noDailyRecapsYet => 'Încă nu există rezumate zilnice';
+
+  @override
+  String get dailyRecapsDescription => 'Rezumatele zilnice vor apărea aici odată generate';
 }

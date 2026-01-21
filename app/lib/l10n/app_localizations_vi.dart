@@ -7626,4 +7626,10 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get resumeRecording => 'Tiếp tục ghi âm';
+
+  @override
+  String get noDailyRecapsYet => 'Chưa có bản tóm tắt hàng ngày';
+
+  @override
+  String get dailyRecapsDescription => 'Bản tóm tắt hàng ngày của bạn sẽ xuất hiện ở đây khi được tạo';
 }

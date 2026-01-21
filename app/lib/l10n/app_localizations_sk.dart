@@ -7626,4 +7626,10 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get resumeRecording => 'Obnoviť nahrávanie';
+
+  @override
+  String get noDailyRecapsYet => 'Zatiaľ žiadne denné súhrny';
+
+  @override
+  String get dailyRecapsDescription => 'Vaše denné súhrny sa tu zobrazia po vygenerovaní';
 }

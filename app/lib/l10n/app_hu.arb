@@ -2585,5 +2585,7 @@
   "continueRecording": "Felvétel folytatása",
   "initialisingRecorder": "Felvevő inicializálása",
   "pauseRecording": "Felvétel szüneteltetése",
-  "resumeRecording": "Felvétel folytatása"
+  "resumeRecording": "Felvétel folytatása",
+  "noDailyRecapsYet": "Még nincsenek napi összefoglalók",
+  "dailyRecapsDescription": "A napi összefoglalói itt jelennek meg, amint elkészülnek"
 }

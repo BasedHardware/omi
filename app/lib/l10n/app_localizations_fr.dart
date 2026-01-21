@@ -7626,4 +7626,10 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get resumeRecording => 'Reprendre l\'enregistrement';
+
+  @override
+  String get noDailyRecapsYet => 'Pas encore de récapitulatifs quotidiens';
+
+  @override
+  String get dailyRecapsDescription => 'Vos récapitulatifs quotidiens apparaîtront ici une fois générés';
 }

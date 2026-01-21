@@ -7626,4 +7626,10 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get resumeRecording => 'استئناف التسجيل';
+
+  @override
+  String get noDailyRecapsYet => 'لا توجد ملخصات يومية بعد';
+
+  @override
+  String get dailyRecapsDescription => 'ستظهر ملخصاتك اليومية هنا بمجرد إنشائها';
 }

@@ -2489,5 +2489,7 @@
   "continueRecording": "녹음 계속",
   "initialisingRecorder": "녹음기 초기화 중",
   "pauseRecording": "녹음 일시정지",
-  "resumeRecording": "녹음 재개"
+  "resumeRecording": "녹음 재개",
+  "noDailyRecapsYet": "아직 일일 요약이 없습니다",
+  "dailyRecapsDescription": "일일 요약이 생성되면 여기에 표시됩니다"
 }

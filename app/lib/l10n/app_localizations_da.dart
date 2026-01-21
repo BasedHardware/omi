@@ -7620,4 +7620,10 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get resumeRecording => 'Genoptag optagelse';
+
+  @override
+  String get noDailyRecapsYet => 'Ingen daglige opsamlinger endnu';
+
+  @override
+  String get dailyRecapsDescription => 'Dine daglige opsamlinger vises her, når de er genereret';
 }

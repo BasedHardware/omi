@@ -7626,4 +7626,10 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get resumeRecording => 'Återuppta inspelning';
+
+  @override
+  String get noDailyRecapsYet => 'Inga dagliga sammanfattningar ännu';
+
+  @override
+  String get dailyRecapsDescription => 'Dina dagliga sammanfattningar visas här när de har skapats';
 }
