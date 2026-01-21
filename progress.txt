@@ -13,10 +13,10 @@ Branch: speech-sample-transcripts (based on e8w2h_speaker_identification)
       - [x] download_sample_audio() helper
       - [x] delete_sample_from_storage() helper
 
-- [ ] 2. Update backend models
+- [x] 2. Update backend models
       File: backend/models/other.py
-      - [ ] Add speech_sample_transcripts: Optional[List[str]] = None
-      - [ ] Add speech_samples_version: int = 1
+      - [x] Add speech_sample_transcripts: Optional[List[str]] = None
+      - [x] Add speech_samples_version: int = 1
 
 - [ ] 3. Update database functions
       File: backend/database/users.py
