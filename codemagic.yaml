@@ -113,6 +113,18 @@ workflows:
         script: |
           cd ios && pod install --repo-update
 
+      - name: Build watchOS app
+        script: |
+          xcode-project use-profiles
+          cd ios
+          # Build watch app to the same location flutter uses
+          xcodebuild build \
+            -workspace Runner.xcworkspace \
+            -scheme omiWatchApp \
+            -configuration Release-prod \
+            -sdk watchos \
+            SYMROOT="$(pwd)/../build/ios"
+
       - name: Flutter build ipa
         script: |
           xcode-project use-profiles
@@ -449,6 +461,18 @@ workflows:
       - name: Installs pod
         script: |
           cd ios && pod install --repo-update
+
+      - name: Build watchOS app
+        script: |
+          xcode-project use-profiles
+          cd ios
+          # Build watch app to the same location flutter uses
+          xcodebuild build \
+            -workspace Runner.xcworkspace \
+            -scheme omiWatchApp \
+            -configuration Release-prod \
+            -sdk watchos \
+            SYMROOT="$(pwd)/../build/ios"
 
       - name: Flutter build ipa
         script: |
