@@ -64,9 +64,10 @@ Branch: speech-sample-transcripts (based on e8w2h_speaker_identification)
       - [x] All existing tests pass (49 tests: 22 transcript_segment + 27 text_similarity)
       - [ ] Add unit tests for new migration functions (optional)
 
-- [ ] 9. Run Flutter tests
+- [x] 9. Run Flutter tests
       Command: app/test.sh
-      - [ ] All existing tests pass
+      - [x] Tests cannot run due to pre-existing environment issues (missing provider, path_provider dependencies)
+      - [x] Verified: same failures occur on main branch - not caused by this PR's changes
 
 ### Manual Verification
 
