@@ -30,7 +30,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get confirm => '확인';
 
   @override
-  String get cancel => 'Cancel';
+  String get cancel => '취소';
 
   @override
   String get ok => '확인';
@@ -413,7 +413,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get planAndUsage => '플랜 및 사용량';
 
   @override
-  String get offlineSync => 'Offline Sync';
+  String get offlineSync => '오프라인 동기화';
 
   @override
   String get deviceSettings => '기기 설정';
@@ -572,7 +572,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get starOngoing => '진행 중인 대화 즐겨찾기';
 
   @override
-  String get off => 'Off';
+  String get off => '꺼짐';
 
   @override
   String get max => '최대';
@@ -1130,7 +1130,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get yes => '예';
 
   @override
-  String get editName => 'Edit Name';
+  String get editName => '이름 편집';
 
   @override
   String get howShouldOmiCallYou => 'Omi가 어떻게 불러드릴까요?';
@@ -2103,7 +2103,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get saveMemory => '기억 저장';
 
   @override
-  String get retry => 'Retry';
+  String get retry => '재시도';
 
   @override
   String get createActionItem => '작업 항목 생성';
@@ -2352,7 +2352,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get unpairAndForgetDevice => '페어링 해제 및 기기 삭제';
 
   @override
-  String get unknownDevice => 'Unknown';
+  String get unknownDevice => '알 수 없음';
 
   @override
   String get unknown => '알 수 없음';
@@ -2750,7 +2750,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get browseInstallCreateApps => '앱 탐색, 설치 및 생성';
 
   @override
-  String get all => 'All';
+  String get all => '전체';
 
   @override
   String get open => '열기';
@@ -3210,7 +3210,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get upgradeToPro => 'Pro로 업그레이드';
 
   @override
-  String get getOmiDevice => 'Get Omi Device';
+  String get getOmiDevice => 'Omi 장치 받기';
 
   @override
   String get wearableAiCompanion => '웨어러블 AI 컴패니언';
@@ -3765,7 +3765,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get signOutQuestion => '로그아웃하시겠습니까?';
 
   @override
-  String get signOutConfirmation => 'Are you sure you want to sign out?';
+  String get signOutConfirmation => '로그아웃하시겠습니까?';
 
   @override
   String get customVocabularyHeader => '사용자 정의 어휘';
@@ -4807,7 +4807,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get enable => '활성화';
 
   @override
-  String get storeAudioOnPhone => 'Store Audio on Phone';
+  String get storeAudioOnPhone => '휴대폰에 오디오 저장';
 
   @override
   String get on => 'On';
@@ -4828,7 +4828,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get enableCloudStorage => '클라우드 저장소 활성화';
 
   @override
-  String get storeAudioOnCloud => 'Store Audio on Cloud';
+  String get storeAudioOnCloud => '클라우드에 오디오 저장';
 
   @override
   String get cloudStorageDialogMessage => '실시간 녹음이 말하는 동안 개인 클라우드 저장소에 저장됩니다.';
@@ -5712,28 +5712,28 @@ class AppLocalizationsKo extends AppLocalizations {
   String get chooseFile => '파일 선택';
 
   @override
-  String get configureAiPersona => 'Configure your AI persona';
+  String get configureAiPersona => 'AI 페르소나 구성하기';
 
   @override
-  String get connectAiAssistantsToYourData => 'Connect AI assistants to your data';
+  String get connectAiAssistantsToYourData => 'AI 어시스턴트를 데이터에 연결하기';
 
   @override
   String get oAuth => 'OAuth';
 
   @override
-  String get trackYourGoalsOnHomepage => 'Track your personal goals on homepage';
+  String get trackYourGoalsOnHomepage => '홈페이지에서 개인 목표 추적';
 
   @override
-  String get deleteRecording => 'Delete Recording';
+  String get deleteRecording => '녹음 삭제';
 
   @override
-  String get thisCannotBeUndone => 'This cannot be undone.';
+  String get thisCannotBeUndone => '이 작업은 취소할 수 없습니다.';
 
   @override
-  String get sdCard => 'SD Card';
+  String get sdCard => 'SD 카드';
 
   @override
-  String get fromSd => 'From SD';
+  String get fromSd => 'SD에서';
 
   @override
   String get limitless => 'Limitless';
@@ -5742,117 +5742,117 @@ class AppLocalizationsKo extends AppLocalizations {
   String get fastTransfer => '빠른 전송';
 
   @override
-  String get syncingStatus => 'Syncing';
+  String get syncingStatus => '동기화 중';
 
   @override
-  String get failedStatus => 'Failed';
+  String get failedStatus => '실패';
 
   @override
   String etaLabel(String time) {
-    return 'ETA: $time';
+    return '예상 시간: $time';
   }
 
   @override
   String get transferMethod => '전송 방법';
 
   @override
-  String get fast => 'Fast';
+  String get fast => '빠름';
 
   @override
   String get ble => 'BLE';
 
   @override
-  String get phone => 'Phone';
+  String get phone => '휴대폰';
 
   @override
-  String get cancelSync => 'Cancel Sync';
+  String get cancelSync => '동기화 취소';
 
   @override
-  String get cancelSyncMessage => 'Data already downloaded will be saved. You can resume later.';
+  String get cancelSyncMessage => '이미 다운로드된 데이터는 저장됩니다. 나중에 다시 시작할 수 있습니다.';
 
   @override
-  String get syncCancelled => 'Sync cancelled';
+  String get syncCancelled => '동기화 취소됨';
 
   @override
-  String get deleteProcessedFiles => 'Delete Processed Files';
+  String get deleteProcessedFiles => '처리된 파일 삭제';
 
   @override
-  String get processedFilesDeleted => 'Processed files deleted';
+  String get processedFilesDeleted => '처리된 파일이 삭제되었습니다';
 
   @override
-  String get wifiEnableFailed => 'Failed to enable WiFi on device. Please try again.';
+  String get wifiEnableFailed => '장치에서 WiFi를 활성화하지 못했습니다. 다시 시도해 주세요.';
 
   @override
-  String get deviceNoFastTransfer => 'Your device does not support Fast Transfer. Use Bluetooth instead.';
+  String get deviceNoFastTransfer => '이 장치는 빠른 전송을 지원하지 않습니다. 대신 Bluetooth를 사용하세요.';
 
   @override
-  String get enableHotspotMessage => 'Please enable your phone\'s hotspot and try again.';
+  String get enableHotspotMessage => '휴대폰의 핫스팟을 활성화한 후 다시 시도해 주세요.';
 
   @override
-  String get transferStartFailed => 'Failed to start transfer. Please try again.';
+  String get transferStartFailed => '전송을 시작하지 못했습니다. 다시 시도해 주세요.';
 
   @override
-  String get deviceNotResponding => 'Device did not respond. Please try again.';
+  String get deviceNotResponding => '장치가 응답하지 않습니다. 다시 시도해 주세요.';
 
   @override
-  String get invalidWifiCredentials => 'Invalid WiFi credentials. Check your hotspot settings.';
+  String get invalidWifiCredentials => '잘못된 WiFi 자격 증명입니다. 핫스팟 설정을 확인하세요.';
 
   @override
-  String get wifiConnectionFailed => 'WiFi connection failed. Please try again.';
+  String get wifiConnectionFailed => 'WiFi 연결에 실패했습니다. 다시 시도해 주세요.';
 
   @override
-  String get sdCardProcessing => 'SD Card Processing';
+  String get sdCardProcessing => 'SD 카드 처리 중';
 
   @override
   String sdCardProcessingMessage(int count) {
-    return 'Processing $count recording(s). Files will be removed from SD card after.';
+    return '$count개의 녹음을 처리 중입니다. 처리 후 파일이 SD 카드에서 삭제됩니다.';
   }
 
   @override
-  String get process => 'Process';
+  String get process => '처리';
 
   @override
-  String get wifiSyncFailed => 'WiFi Sync Failed';
+  String get wifiSyncFailed => 'WiFi 동기화 실패';
 
   @override
-  String get processingFailed => 'Processing Failed';
+  String get processingFailed => '처리 실패';
 
   @override
-  String get downloadingFromSdCard => 'Downloading from SD Card';
+  String get downloadingFromSdCard => 'SD 카드에서 다운로드 중';
 
   @override
   String processingProgress(int current, int total) {
-    return 'Processing $current/$total';
+    return '처리 중 $current/$total';
   }
 
   @override
   String conversationsCreated(int count) {
-    return '$count conversations created';
+    return '$count개의 대화가 생성됨';
   }
 
   @override
-  String get internetRequired => 'Internet required';
+  String get internetRequired => '인터넷 연결 필요';
 
   @override
-  String get processAudio => 'Process Audio';
+  String get processAudio => '오디오 처리';
 
   @override
-  String get start => 'Start';
+  String get start => '시작';
 
   @override
-  String get noRecordings => 'No Recordings';
+  String get noRecordings => '녹음 없음';
 
   @override
-  String get audioFromOmiWillAppearHere => 'Audio from your Omi device will appear here';
+  String get audioFromOmiWillAppearHere => 'Omi 장치의 오디오가 여기에 표시됩니다';
 
   @override
-  String get deleteProcessed => 'Delete Processed';
+  String get deleteProcessed => '처리된 항목 삭제';
 
   @override
-  String get tryDifferentFilter => 'Try a different filter';
+  String get tryDifferentFilter => '다른 필터를 시도해 보세요';
 
   @override
-  String get recordings => 'Recordings';
+  String get recordings => '녹음';
 
   @override
   String get enableRemindersAccess => 'Apple 미리 알림을 사용하려면 설정에서 미리 알림 접근을 허용해 주세요';
@@ -6145,7 +6145,7 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get device => 'Device';
+  String get device => '장치';
 
   @override
   String get chatAssistantsTitle => '채팅 어시스턴트';
@@ -6202,55 +6202,55 @@ class AppLocalizationsKo extends AppLocalizations {
   String get writeReviewOptional => '리뷰 작성 (선택사항)';
 
   @override
-  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
+  String get setupQuestionsIntro => '몇 가지 질문에 답변하여 Omi 개선을 도와주세요. 🫶 💜';
 
   @override
-  String get setupQuestionProfession => '1. What do you do?';
+  String get setupQuestionProfession => '1. 직업이 무엇인가요?';
 
   @override
-  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
+  String get setupQuestionUsage => '2. Omi를 어디서 사용할 계획인가요?';
 
   @override
-  String get setupQuestionAge => '3. What\'s your age range?';
+  String get setupQuestionAge => '3. 나이대가 어떻게 되시나요?';
 
   @override
-  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
+  String get setupAnswerAllQuestions => '아직 모든 질문에 답변하지 않으셨습니다! 🥺';
 
   @override
-  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
+  String get setupSkipHelp => '건너뛰기, 도움주기 싫어요 :C';
 
   @override
-  String get professionEntrepreneur => 'Entrepreneur';
+  String get professionEntrepreneur => '기업가';
 
   @override
-  String get professionSoftwareEngineer => 'Software Engineer';
+  String get professionSoftwareEngineer => '소프트웨어 엔지니어';
 
   @override
-  String get professionProductManager => 'Product Manager';
+  String get professionProductManager => '제품 관리자';
 
   @override
-  String get professionExecutive => 'Executive';
+  String get professionExecutive => '임원';
 
   @override
-  String get professionSales => 'Sales';
+  String get professionSales => '영업';
 
   @override
-  String get professionStudent => 'Student';
+  String get professionStudent => '학생';
 
   @override
-  String get usageAtWork => 'At work';
+  String get usageAtWork => '직장에서';
 
   @override
-  String get usageIrlEvents => 'IRL Events';
+  String get usageIrlEvents => '오프라인 이벤트';
 
   @override
-  String get usageOnline => 'Online';
+  String get usageOnline => '온라인';
 
   @override
-  String get usageSocialSettings => 'In Social Settings';
+  String get usageSocialSettings => '사교 모임에서';
 
   @override
-  String get usageEverywhere => 'Everywhere';
+  String get usageEverywhere => '어디서나';
 
   @override
   String get customBackendUrlTitle => '사용자 정의 백엔드 URL';
@@ -6414,32 +6414,31 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get sharePublicLink => 'Share Public Link';
+  String get sharePublicLink => '공개 링크 공유';
 
   @override
-  String get makePersonaPublic => 'Make Persona Public';
+  String get makePersonaPublic => '페르소나 공개하기';
 
   @override
-  String get connectedKnowledgeData => 'Connected Knowledge Data';
+  String get connectedKnowledgeData => '연결된 지식 데이터';
 
   @override
-  String get enterName => 'Enter name';
+  String get enterName => '이름 입력';
 
   @override
-  String get disconnectTwitter => 'Disconnect Twitter';
+  String get disconnectTwitter => 'Twitter 연결 해제';
 
   @override
-  String get disconnectTwitterConfirmation =>
-      'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
+  String get disconnectTwitterConfirmation => 'Twitter 계정 연결을 해제하시겠습니까? 페르소나가 더 이상 Twitter 데이터에 액세스할 수 없게 됩니다.';
 
   @override
-  String get getOmiDeviceDescription => 'Create a more accurate clone with your personal conversations';
+  String get getOmiDeviceDescription => '개인 대화로 더 정확한 클론을 생성하세요';
 
   @override
-  String get getOmi => 'Get Omi';
+  String get getOmi => 'Omi 받기';
 
   @override
-  String get iHaveOmiDevice => 'I have Omi device';
+  String get iHaveOmiDevice => 'Omi 장치가 있습니다';
 
   @override
   String get goal => '목표';
@@ -6514,31 +6513,31 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String tagSpeaker(int speakerId) {
-    return 'Tag Speaker $speakerId';
+    return '화자 $speakerId 태그';
   }
 
   @override
-  String get personNameAlreadyExists => 'A person with this name already exists.';
+  String get personNameAlreadyExists => '이 이름을 가진 사람이 이미 존재합니다.';
 
   @override
-  String get selectYouFromList => 'To tag yourself, please select \"You\" from the list.';
+  String get selectYouFromList => '자신을 태그하려면 목록에서 \"You\"를 선택하세요.';
 
   @override
-  String get enterPersonsName => 'Enter Person\'s Name';
+  String get enterPersonsName => '사람 이름 입력';
 
   @override
-  String get addPerson => 'Add Person';
+  String get addPerson => '사람 추가';
 
   @override
   String tagOtherSegmentsFromSpeaker(int selected, int total) {
-    return 'Tag other segments from this speaker ($selected/$total)';
+    return '이 화자의 다른 세그먼트 태그 ($selected/$total)';
   }
 
   @override
-  String get tagOtherSegments => 'Tag other segments';
+  String get tagOtherSegments => '다른 세그먼트 태그';
 
   @override
-  String get managePeople => 'Manage People';
+  String get managePeople => '사람 관리';
 
   @override
   String get shareViaSms => 'SMS로 공유';
@@ -6608,124 +6607,122 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'Connection Failed';
+  String get wifiConnectionFailedTitle => '연결 실패';
 
   @override
   String connectingToDeviceName(String deviceName) {
-    return 'Connecting to $deviceName';
+    return '$deviceName에 연결 중';
   }
 
   @override
   String enableDeviceWifi(String deviceName) {
-    return 'Enable $deviceName\'s WiFi';
+    return '$deviceName의 WiFi 활성화';
   }
 
   @override
   String connectToDeviceName(String deviceName) {
-    return 'Connect to $deviceName';
+    return '$deviceName에 연결';
   }
 
   @override
-  String get recordingDetails => 'Recording Details';
+  String get recordingDetails => '녹음 세부 정보';
 
   @override
-  String get storageLocationSdCard => 'SD Card';
+  String get storageLocationSdCard => 'SD 카드';
 
   @override
-  String get storageLocationLimitlessPendant => 'Limitless Pendant';
+  String get storageLocationLimitlessPendant => 'Limitless 펜던트';
 
   @override
-  String get storageLocationPhone => 'Phone';
+  String get storageLocationPhone => '휴대폰';
 
   @override
-  String get storageLocationPhoneMemory => 'Phone (Memory)';
+  String get storageLocationPhoneMemory => '휴대폰 (메모리)';
 
   @override
   String storedOnDevice(String deviceName) {
-    return 'Stored on $deviceName';
+    return '$deviceName에 저장됨';
   }
 
   @override
-  String get transferring => 'Transferring...';
+  String get transferring => '전송 중...';
 
   @override
-  String get transferRequired => 'Transfer Required';
+  String get transferRequired => '전송 필요';
 
   @override
-  String get downloadingAudioFromSdCard => 'Downloading audio from your device\'s SD card';
+  String get downloadingAudioFromSdCard => '장치의 SD 카드에서 오디오를 다운로드하는 중';
 
   @override
-  String get transferRequiredDescription =>
-      'This recording is stored on your device\'s SD card. Transfer it to your phone to play or share.';
+  String get transferRequiredDescription => '이 녹음은 장치의 SD 카드에 저장되어 있습니다. 재생하려면 휴대폰으로 전송하세요.';
 
   @override
-  String get cancelTransfer => 'Cancel Transfer';
+  String get cancelTransfer => '전송 취소';
 
   @override
-  String get transferToPhone => 'Transfer to Phone';
+  String get transferToPhone => '휴대폰으로 전송';
 
   @override
-  String get privateAndSecureOnDevice => 'Private & secure on your device';
+  String get privateAndSecureOnDevice => '장치에서 비공개 및 보안 유지';
 
   @override
-  String get recordingInfo => 'Recording Info';
+  String get recordingInfo => '녹음 정보';
 
   @override
-  String get transferInProgress => 'Transfer in progress...';
+  String get transferInProgress => '전송 중...';
 
   @override
-  String get shareRecording => 'Share Recording';
+  String get shareRecording => '녹음 공유';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'Are you sure you want to permanently delete this recording? This can\'t be undone.';
+  String get deleteRecordingConfirmation => '이 녹음을 영구적으로 삭제하시겠습니까? 이 작업은 취소할 수 없습니다.';
 
   @override
-  String get recordingIdLabel => 'Recording ID';
+  String get recordingIdLabel => '녹음 ID';
 
   @override
-  String get dateTimeLabel => 'Date & Time';
+  String get dateTimeLabel => '날짜 및 시간';
 
   @override
-  String get durationLabel => 'Duration';
+  String get durationLabel => '재생 시간';
 
   @override
-  String get audioFormatLabel => 'Audio Format';
+  String get audioFormatLabel => '오디오 형식';
 
   @override
-  String get storageLocationLabel => 'Storage Location';
+  String get storageLocationLabel => '저장 위치';
 
   @override
-  String get estimatedSizeLabel => 'Estimated Size';
+  String get estimatedSizeLabel => '예상 크기';
 
   @override
-  String get deviceModelLabel => 'Device Model';
+  String get deviceModelLabel => '장치 모델';
 
   @override
-  String get deviceIdLabel => 'Device ID';
+  String get deviceIdLabel => '장치 ID';
 
   @override
-  String get statusLabel => 'Status';
+  String get statusLabel => '상태';
 
   @override
-  String get statusProcessed => 'Processed';
+  String get statusProcessed => '처리됨';
 
   @override
-  String get statusUnprocessed => 'Unprocessed';
+  String get statusUnprocessed => '미처리';
 
   @override
-  String get switchedToFastTransfer => 'Switched to Fast Transfer';
+  String get switchedToFastTransfer => '빠른 전송으로 전환됨';
 
   @override
-  String get transferCompleteMessage => 'Transfer complete! You can now play this recording.';
+  String get transferCompleteMessage => '전송 완료! 이제 이 녹음을 재생할 수 있습니다.';
 
   @override
   String transferFailedMessage(String error) {
-    return 'Transfer failed: $error';
+    return '전송 실패: $error';
   }
 
   @override
-  String get transferCancelled => 'Transfer cancelled';
+  String get transferCancelled => '전송 취소됨';
 
   @override
   String get fastTransferEnabled => '빠른 전송 활성화됨';
@@ -6808,63 +6805,63 @@ class AppLocalizationsKo extends AppLocalizations {
   String get errorUpdatingAppStatus => '앱 상태 업데이트 중 오류가 발생했습니다.';
 
   @override
-  String get calculatingETA => 'Calculating...';
+  String get calculatingETA => '계산 중...';
 
   @override
   String aboutMinutesRemaining(int minutes) {
-    return 'About $minutes minutes remaining';
+    return '약 $minutes분 남음';
   }
 
   @override
-  String get aboutAMinuteRemaining => 'About a minute remaining';
+  String get aboutAMinuteRemaining => '약 1분 남음';
 
   @override
-  String get almostDone => 'Almost done...';
+  String get almostDone => '거의 완료되었습니다...';
 
   @override
-  String get omiSays => 'omi says';
+  String get omiSays => 'omi가 말합니다';
 
   @override
-  String get analyzingYourData => 'Analyzing your data...';
+  String get analyzingYourData => '데이터 분석 중...';
 
   @override
   String migratingToProtection(String level) {
-    return 'Migrating to $level protection...';
+    return '$level 보호로 마이그레이션 중...';
   }
 
   @override
-  String get noDataToMigrateFinalizing => 'No data to migrate. Finalizing...';
+  String get noDataToMigrateFinalizing => '마이그레이션할 데이터가 없습니다. 마무리 중...';
 
   @override
   String migratingItemsProgress(String itemType, int percentage) {
-    return 'Migrating $itemType... $percentage%';
+    return '$itemType 마이그레이션 중... $percentage%';
   }
 
   @override
-  String get allObjectsMigratedFinalizing => 'All objects migrated. Finalizing...';
+  String get allObjectsMigratedFinalizing => '모든 객체가 마이그레이션되었습니다. 마무리 중...';
 
   @override
-  String get migrationErrorOccurred => 'An error occurred during migration. Please try again.';
+  String get migrationErrorOccurred => '마이그레이션 중 오류가 발생했습니다. 다시 시도해 주세요.';
 
   @override
-  String get migrationComplete => 'Migration complete!';
+  String get migrationComplete => '마이그레이션 완료!';
 
   @override
   String dataProtectedWithSettings(String level) {
-    return 'Your data is now protected with the new $level settings.';
+    return '데이터가 새로운 $level 설정으로 보호되었습니다.';
   }
 
   @override
-  String get chatsLowercase => 'chats';
+  String get chatsLowercase => '채팅';
 
   @override
-  String get dataLowercase => 'data';
+  String get dataLowercase => '데이터';
 
   @override
-  String get fallNotificationTitle => 'Ouch';
+  String get fallNotificationTitle => '아야';
 
   @override
-  String get fallNotificationBody => 'Did you fall?';
+  String get fallNotificationBody => '넘어지셨나요?';
 
   @override
   String get importantConversationTitle => '중요한 대화';
@@ -7101,54 +7098,51 @@ class AppLocalizationsKo extends AppLocalizations {
   String get aiGenPleaseGenerateAppFirst => '먼저 앱을 생성해 주세요';
 
   @override
-  String get xHandleTitle => 'What\'s your X handle?';
+  String get xHandleTitle => 'X 핸들이 무엇인가요?';
 
   @override
-  String get xHandleDescription => 'We will pre-train your Omi clone\nbased on your account\'s activity';
+  String get xHandleDescription => '계정 활동을 기반으로\nOmi 클론을 사전 학습합니다';
 
   @override
   String get xHandleHint => '@nikshevchenko';
 
   @override
-  String get xHandlePleaseEnter => 'Please enter your X handle';
+  String get xHandlePleaseEnter => 'X 핸들을 입력해 주세요';
 
   @override
-  String get xHandlePleaseEnterValid => 'Please enter a valid X handle';
+  String get xHandlePleaseEnterValid => '유효한 X 핸들을 입력해 주세요';
 
   @override
-  String get nextButton => 'Next';
+  String get nextButton => '다음';
 
   @override
-  String get connectOmiDevice => 'Connect Omi Device';
+  String get connectOmiDevice => 'Omi 장치 연결';
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'You\'re switching your Unlimited Plan to the $title. Are you sure you want to proceed?';
+    return 'Unlimited 플랜을 $title(으)로 변경하려고 합니다. 계속하시겠습니까?';
   }
 
   @override
-  String get planUpgradeScheduledMessage =>
-      'Upgrade scheduled! Your monthly plan continues until the end of your billing period, then automatically switches to annual.';
+  String get planUpgradeScheduledMessage => '업그레이드가 예약되었습니다! 월간 플랜은 청구 기간이 끝날 때까지 계속되며, 이후 자동으로 연간 플랜으로 전환됩니다.';
 
   @override
-  String get couldNotSchedulePlanChange => 'Could not schedule plan change. Please try again.';
+  String get couldNotSchedulePlanChange => '플랜 변경을 예약할 수 없습니다. 다시 시도해 주세요.';
 
   @override
-  String get subscriptionReactivatedDefault =>
-      'Your subscription has been reactivated! No charge now - you\'ll be billed at the end of your current period.';
+  String get subscriptionReactivatedDefault => '구독이 다시 활성화되었습니다! 지금은 요금이 청구되지 않으며, 현재 기간이 끝나면 청구됩니다.';
 
   @override
-  String get subscriptionSuccessfulCharged =>
-      'Subscription successful! You\'ve been charged for the new billing period.';
+  String get subscriptionSuccessfulCharged => '구독 성공! 새 청구 기간에 대한 요금이 청구되었습니다.';
 
   @override
-  String get couldNotProcessSubscription => 'Could not process subscription. Please try again.';
+  String get couldNotProcessSubscription => '구독을 처리할 수 없습니다. 다시 시도해 주세요.';
 
   @override
-  String get couldNotLaunchUpgradePage => 'Could not launch upgrade page. Please try again.';
+  String get couldNotLaunchUpgradePage => '업그레이드 페이지를 열 수 없습니다. 다시 시도해 주세요.';
 
   @override
-  String get transcriptionJsonPlaceholder => 'Paste your JSON configuration here...';
+  String get transcriptionJsonPlaceholder => 'JSON 구성을 여기에 붙여넣으세요...';
 
   @override
   String get transcriptionSourceOmi => 'Omi';
