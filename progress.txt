@@ -11,10 +11,10 @@
 |--------|-------|
 | Total Files | ~48 |
 | Total Strings | ~405 |
-| Completed Files | 32 |
+| Completed Files | 33 |
 | In Progress | 0 |
-| Pending Files | ~16 |
-| Progress | ~75% |
+| Pending Files | ~15 |
+| Progress | ~77% |
 
 **CRITICAL ISSUE**: ~162 pre-existing l10n keys in non-English ARB files still contain
 English text instead of proper translations. See PRIORITY 0 section below.
@@ -261,10 +261,9 @@ Status: COMPLETED
 Keys added: locationPermissionRequired, locationPermissionContent (reused cancel, openSettings)
 All 34 language ARB files updated with proper translations
 
-### [ ] pages/conversations/widgets/merge_action_bar.dart (1 string)
-Status: PENDING
-Strings found:
-- Line 185: label: 'OK'
+### [x] pages/conversations/widgets/merge_action_bar.dart (1 string)
+Status: COMPLETED
+Keys: Reused existing 'ok' key
 
 --------------------------------------------------------------------------------
 ### 6.3 PDF Export Strings
@@ -360,6 +359,11 @@ Fix requires either:
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-21] Localized merge_action_bar.dart with 1 l10n key (reused)
+- Replaced hardcoded 'OK' with context.l10n.ok
+- Reused existing 'ok' key - no ARB changes needed
+- All tests passed
 
 [2026-01-21] Localized location_permission_dialog.dart with 2 new l10n keys for 34 languages
 - Added 2 new localization keys for location permission dialog
