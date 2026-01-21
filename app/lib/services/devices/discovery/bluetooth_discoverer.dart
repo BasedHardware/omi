@@ -1,7 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
-
 import 'package:collection/collection.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
@@ -50,7 +48,7 @@ class BluetoothDeviceDiscoverer extends DeviceDiscoverer {
 
       await Future.delayed(const Duration(seconds: 2));
 
-      await FlutterBluePlus.startScan(
+      await BluetoothAdapter.startScan(
         timeout: Duration(seconds: timeout),
       );
 
