@@ -2436,5 +2436,13 @@
   "timeCompactMins": "{count}د",
   "timeCompactMinsAndSecs": "{mins}د {secs}ث",
   "timeCompactHours": "{count}س",
-  "timeCompactHoursAndMins": "{hours}س {mins}د"
+  "timeCompactHoursAndMins": "{hours}س {mins}د",
+  "editReply": "تعديل الرد",
+  "failedToSendReply": "فشل في إرسال الرد: {error}",
+  "noReviewsFound": "لا توجد مراجعات",
+  "reply": "رد",
+  "replySentSuccessfully": "تم إرسال الرد بنجاح",
+  "send": "إرسال",
+  "starFilter": "{count} نجمة",
+  "writeYourReply": "اكتب ردك..."
 }

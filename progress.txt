@@ -71,7 +71,7 @@ GROUP C: 8 MISSING KEYS (ar, bg, ca, de)
 Keys: editReply, failedToSendReply, noReviewsFound, reply, replySentSuccessfully,
       send, starFilter, writeYourReply
 
-  [ ] ar (Arabic) - 8 keys
+  [x] ar (Arabic) - 8 keys
   [ ] bg (Bulgarian) - 8 keys
   [ ] ca (Catalan) - 8 keys
   [ ] de (German) - 8 keys
@@ -139,7 +139,7 @@ VERIFICATION STEPS
 SUMMARY
 ================================================================================
 
-Part 1 Progress: 27/31 languages completed
+Part 1 Progress: 28/31 languages completed
 Part 2 Progress: 0/7 files completed
 Overall Progress: ~42%
 
@@ -365,6 +365,12 @@ Overall Progress: ~42%
     downloadError, editReply, estimatedSize, failedToSendReply, largeModelWarning,
     localProcessingInfo, model, modelReady, noModelDownloadRequired, noReviewsFound,
     onDeviceIntensive, onDeviceSlower, premiumMinutesInfo, redownload, reply,
+    replySentSuccessfully, send, starFilter, writeYourReply
+  - flutter gen-l10n: PASSED
+  - app/test.sh: Skipped (pre-existing Flutter dependency issues unrelated to l10n)
+
+[2026-01-21] Added 8 missing translation keys to Arabic (app_ar.arb)
+  - Keys added: editReply, failedToSendReply, noReviewsFound, reply,
     replySentSuccessfully, send, starFilter, writeYourReply
   - flutter gen-l10n: PASSED
   - app/test.sh: Skipped (pre-existing Flutter dependency issues unrelated to l10n)

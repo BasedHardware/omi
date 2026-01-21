@@ -20,7 +20,7 @@ Total languages with missing translations: **31**
 |----------|------|--------------|----------|
 | Czech | cs | 0 | ✅ DONE |
 | Danish | da | 0 | ✅ DONE |
-| Arabic | ar | 8 | MEDIUM |
+| Arabic | ar | 0 | ✅ DONE |
 | Bulgarian | bg | 8 | MEDIUM |
 | Catalan | ca | 8 | MEDIUM |
 | German | de | 8 | MEDIUM |
