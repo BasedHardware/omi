@@ -30,10 +30,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get confirm => 'Potvrdit';
 
   @override
-  String get cancel => 'Cancel';
+  String get cancel => 'Zrušit';
 
   @override
-  String get ok => 'Ok';
+  String get ok => 'OK';
 
   @override
   String get delete => 'Smazat';
@@ -419,7 +419,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get planAndUsage => 'Plán a využití';
 
   @override
-  String get offlineSync => 'Offline Sync';
+  String get offlineSync => 'Offline synchronizace';
 
   @override
   String get deviceSettings => 'Nastavení zařízení';
@@ -584,7 +584,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get starOngoing => 'Označit probíhající konverzaci hvězdičkou';
 
   @override
-  String get off => 'Off';
+  String get off => 'Vyp';
 
   @override
   String get max => 'Maximum';
@@ -1148,7 +1148,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get yes => 'Ano';
 
   @override
-  String get editName => 'Edit Name';
+  String get editName => 'Upravit jméno';
 
   @override
   String get howShouldOmiCallYou => 'Jak vás má Omi oslovovat?';
@@ -1547,7 +1547,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get storedLocallyNeverShared => 'Uloženo lokálně, nikdy nesdíleno';
 
   @override
-  String get host => 'Host';
+  String get host => 'Hostitel';
 
   @override
   String get port => 'Port';
@@ -2144,7 +2144,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get saveMemory => 'Uložit vzpomínku';
 
   @override
-  String get retry => 'Retry';
+  String get retry => 'Opakovat';
 
   @override
   String get createActionItem => 'Vytvořit úkol';
@@ -2395,7 +2395,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get unpairAndForgetDevice => 'Zrušit párování a zapomenout zařízení';
 
   @override
-  String get unknownDevice => 'Unknown';
+  String get unknownDevice => 'Neznámé';
 
   @override
   String get unknown => 'Neznámé';
@@ -2756,10 +2756,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get monthDec => 'Pro';
 
   @override
-  String get timePM => 'PM';
+  String get timePM => 'odp.';
 
   @override
-  String get timeAM => 'AM';
+  String get timeAM => 'dop.';
 
   @override
   String get actionItemUpdatedSuccessfully => 'Úkol byl úspěšně aktualizován';
@@ -2795,7 +2795,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get browseInstallCreateApps => 'Procházejte, instalujte a vytvářejte aplikace';
 
   @override
-  String get all => 'All';
+  String get all => 'Vše';
 
   @override
   String get open => 'Otevřít';
@@ -3265,7 +3265,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get upgradeToPro => 'Upgrade na Pro';
 
   @override
-  String get getOmiDevice => 'Get Omi Device';
+  String get getOmiDevice => 'Získat zařízení Omi';
 
   @override
   String get wearableAiCompanion => 'Nositelný AI společník';
@@ -3827,7 +3827,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get signOutQuestion => 'Odhlásit se?';
 
   @override
-  String get signOutConfirmation => 'Are you sure you want to sign out?';
+  String get signOutConfirmation => 'Opravdu se chcete odhlásit?';
 
   @override
   String get customVocabularyHeader => 'VLASTNÍ SLOVNÍK';
@@ -4119,7 +4119,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get dataAccessNoticeDescription =>
-      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
+      'Tato aplikace bude mít přístup k vašim datům. Omi AI nenese odpovědnost za to, jak jsou vaše data používána třetími stranami.';
 
   @override
   String get copyUrl => 'Kopírovat URL';
@@ -4888,10 +4888,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get enable => 'Povolit';
 
   @override
-  String get storeAudioOnPhone => 'Store Audio on Phone';
+  String get storeAudioOnPhone => 'Ukládat zvuk v telefonu';
 
   @override
-  String get on => 'On';
+  String get on => 'Zap';
 
   @override
   String get storeAudioDescription =>
@@ -4910,7 +4910,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get enableCloudStorage => 'Povolit cloudové úložiště';
 
   @override
-  String get storeAudioOnCloud => 'Store Audio on Cloud';
+  String get storeAudioOnCloud => 'Ukládat zvuk do cloudu';
 
   @override
   String get cloudStorageDialogMessage =>
@@ -5808,28 +5808,28 @@ class AppLocalizationsCs extends AppLocalizations {
   String get chooseFile => 'Vybrat soubor';
 
   @override
-  String get configureAiPersona => 'Configure your AI persona';
+  String get configureAiPersona => 'Nakonfigurujte svou AI personu';
 
   @override
-  String get connectAiAssistantsToYourData => 'Connect AI assistants to your data';
+  String get connectAiAssistantsToYourData => 'Připojte AI asistenty k vašim datům';
 
   @override
   String get oAuth => 'OAuth';
 
   @override
-  String get trackYourGoalsOnHomepage => 'Track your personal goals on homepage';
+  String get trackYourGoalsOnHomepage => 'Sledujte své osobní cíle na domovské stránce';
 
   @override
-  String get deleteRecording => 'Delete Recording';
+  String get deleteRecording => 'Smazat nahrávku';
 
   @override
-  String get thisCannotBeUndone => 'This cannot be undone.';
+  String get thisCannotBeUndone => 'Tuto akci nelze vrátit zpět.';
 
   @override
-  String get sdCard => 'SD Card';
+  String get sdCard => 'SD karta';
 
   @override
-  String get fromSd => 'From SD';
+  String get fromSd => 'Z SD';
 
   @override
   String get limitless => 'Limitless';
@@ -5838,117 +5838,117 @@ class AppLocalizationsCs extends AppLocalizations {
   String get fastTransfer => 'Rychlý přenos';
 
   @override
-  String get syncingStatus => 'Syncing';
+  String get syncingStatus => 'Synchronizace';
 
   @override
-  String get failedStatus => 'Failed';
+  String get failedStatus => 'Selhalo';
 
   @override
   String etaLabel(String time) {
-    return 'ETA: $time';
+    return 'Odhadovaný čas: $time';
   }
 
   @override
   String get transferMethod => 'Metoda přenosu';
 
   @override
-  String get fast => 'Fast';
+  String get fast => 'Rychle';
 
   @override
   String get ble => 'BLE';
 
   @override
-  String get phone => 'Phone';
+  String get phone => 'Telefon';
 
   @override
-  String get cancelSync => 'Cancel Sync';
+  String get cancelSync => 'Zrušit synchronizaci';
 
   @override
-  String get cancelSyncMessage => 'Data already downloaded will be saved. You can resume later.';
+  String get cancelSyncMessage => 'Již stažená data budou uložena. Můžete pokračovat později.';
 
   @override
-  String get syncCancelled => 'Sync cancelled';
+  String get syncCancelled => 'Synchronizace zrušena';
 
   @override
-  String get deleteProcessedFiles => 'Delete Processed Files';
+  String get deleteProcessedFiles => 'Smazat zpracované soubory';
 
   @override
-  String get processedFilesDeleted => 'Processed files deleted';
+  String get processedFilesDeleted => 'Zpracované soubory smazány';
 
   @override
-  String get wifiEnableFailed => 'Failed to enable WiFi on device. Please try again.';
+  String get wifiEnableFailed => 'Nepodařilo se povolit WiFi na zařízení. Zkuste to prosím znovu.';
 
   @override
-  String get deviceNoFastTransfer => 'Your device does not support Fast Transfer. Use Bluetooth instead.';
+  String get deviceNoFastTransfer => 'Vaše zařízení nepodporuje rychlý přenos. Použijte místo toho Bluetooth.';
 
   @override
-  String get enableHotspotMessage => 'Please enable your phone\'s hotspot and try again.';
+  String get enableHotspotMessage => 'Povolte prosím hotspot telefonu a zkuste to znovu.';
 
   @override
-  String get transferStartFailed => 'Failed to start transfer. Please try again.';
+  String get transferStartFailed => 'Nepodařilo se spustit přenos. Zkuste to prosím znovu.';
 
   @override
-  String get deviceNotResponding => 'Device did not respond. Please try again.';
+  String get deviceNotResponding => 'Zařízení neodpovídá. Zkuste to prosím znovu.';
 
   @override
-  String get invalidWifiCredentials => 'Invalid WiFi credentials. Check your hotspot settings.';
+  String get invalidWifiCredentials => 'Neplatné přihlašovací údaje WiFi. Zkontrolujte nastavení hotspotu.';
 
   @override
-  String get wifiConnectionFailed => 'WiFi connection failed. Please try again.';
+  String get wifiConnectionFailed => 'Připojení WiFi selhalo. Zkuste to prosím znovu.';
 
   @override
-  String get sdCardProcessing => 'SD Card Processing';
+  String get sdCardProcessing => 'Zpracování SD karty';
 
   @override
   String sdCardProcessingMessage(int count) {
-    return 'Processing $count recording(s). Files will be removed from SD card after.';
+    return 'Zpracovávání $count nahrávek. Soubory budou poté odstraněny z SD karty.';
   }
 
   @override
-  String get process => 'Process';
+  String get process => 'Zpracovat';
 
   @override
-  String get wifiSyncFailed => 'WiFi Sync Failed';
+  String get wifiSyncFailed => 'WiFi synchronizace selhala';
 
   @override
-  String get processingFailed => 'Processing Failed';
+  String get processingFailed => 'Zpracování selhalo';
 
   @override
-  String get downloadingFromSdCard => 'Downloading from SD Card';
+  String get downloadingFromSdCard => 'Stahování z SD karty';
 
   @override
   String processingProgress(int current, int total) {
-    return 'Processing $current/$total';
+    return 'Zpracovávání $current/$total';
   }
 
   @override
   String conversationsCreated(int count) {
-    return '$count conversations created';
+    return 'Vytvořeno $count konverzací';
   }
 
   @override
-  String get internetRequired => 'Internet required';
+  String get internetRequired => 'Vyžadováno připojení k internetu';
 
   @override
-  String get processAudio => 'Process Audio';
+  String get processAudio => 'Zpracovat zvuk';
 
   @override
   String get start => 'Start';
 
   @override
-  String get noRecordings => 'No Recordings';
+  String get noRecordings => 'Žádné nahrávky';
 
   @override
-  String get audioFromOmiWillAppearHere => 'Audio from your Omi device will appear here';
+  String get audioFromOmiWillAppearHere => 'Zvuk z vašeho zařízení Omi se zobrazí zde';
 
   @override
-  String get deleteProcessed => 'Delete Processed';
+  String get deleteProcessed => 'Smazat zpracované';
 
   @override
-  String get tryDifferentFilter => 'Try a different filter';
+  String get tryDifferentFilter => 'Zkuste jiný filtr';
 
   @override
-  String get recordings => 'Recordings';
+  String get recordings => 'Nahrávky';
 
   @override
   String get enableRemindersAccess => 'Pro použití Apple Připomínek povolte přístup k Připomínkám v Nastavení';
@@ -6245,7 +6245,7 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get device => 'Device';
+  String get device => 'Zařízení';
 
   @override
   String get chatAssistantsTitle => 'Chat asistenti';
@@ -6302,55 +6302,55 @@ class AppLocalizationsCs extends AppLocalizations {
   String get writeReviewOptional => 'Napsat recenzi (volitelné)';
 
   @override
-  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
+  String get setupQuestionsIntro => 'Pomozte nám vylepšit Omi odpověďmi na pár otázek. 🫶 💜';
 
   @override
-  String get setupQuestionProfession => '1. What do you do?';
+  String get setupQuestionProfession => '1. Čím se zabýváte?';
 
   @override
-  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
+  String get setupQuestionUsage => '2. Kde plánujete Omi používat?';
 
   @override
-  String get setupQuestionAge => '3. What\'s your age range?';
+  String get setupQuestionAge => '3. Jaká je vaše věková kategorie?';
 
   @override
-  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
+  String get setupAnswerAllQuestions => 'Ještě jste neodpověděli na všechny otázky! 🥺';
 
   @override
-  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
+  String get setupSkipHelp => 'Přeskočit, nechci pomáhat :C';
 
   @override
-  String get professionEntrepreneur => 'Entrepreneur';
+  String get professionEntrepreneur => 'Podnikatel';
 
   @override
-  String get professionSoftwareEngineer => 'Software Engineer';
+  String get professionSoftwareEngineer => 'Softwarový inženýr';
 
   @override
-  String get professionProductManager => 'Product Manager';
+  String get professionProductManager => 'Produktový manažer';
 
   @override
-  String get professionExecutive => 'Executive';
+  String get professionExecutive => 'Manažer';
 
   @override
-  String get professionSales => 'Sales';
+  String get professionSales => 'Obchod';
 
   @override
   String get professionStudent => 'Student';
 
   @override
-  String get usageAtWork => 'At work';
+  String get usageAtWork => 'V práci';
 
   @override
-  String get usageIrlEvents => 'IRL Events';
+  String get usageIrlEvents => 'Na akcích';
 
   @override
   String get usageOnline => 'Online';
 
   @override
-  String get usageSocialSettings => 'In Social Settings';
+  String get usageSocialSettings => 'Ve společnosti';
 
   @override
-  String get usageEverywhere => 'Everywhere';
+  String get usageEverywhere => 'Všude';
 
   @override
   String get customBackendUrlTitle => 'Vlastní URL serveru';
@@ -6515,32 +6515,32 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get sharePublicLink => 'Share Public Link';
+  String get sharePublicLink => 'Sdílet veřejný odkaz';
 
   @override
-  String get makePersonaPublic => 'Make Persona Public';
+  String get makePersonaPublic => 'Zveřejnit personu';
 
   @override
-  String get connectedKnowledgeData => 'Connected Knowledge Data';
+  String get connectedKnowledgeData => 'Připojená znalostní data';
 
   @override
-  String get enterName => 'Enter name';
+  String get enterName => 'Zadejte jméno';
 
   @override
-  String get disconnectTwitter => 'Disconnect Twitter';
+  String get disconnectTwitter => 'Odpojit Twitter';
 
   @override
   String get disconnectTwitterConfirmation =>
-      'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
+      'Opravdu chcete odpojit svůj účet Twitter? Vaše persona již nebude mít přístup k vašim datům z Twitteru.';
 
   @override
-  String get getOmiDeviceDescription => 'Create a more accurate clone with your personal conversations';
+  String get getOmiDeviceDescription => 'Vytvořte přesnější klon s vašimi osobními konverzacemi';
 
   @override
-  String get getOmi => 'Get Omi';
+  String get getOmi => 'Získat Omi';
 
   @override
-  String get iHaveOmiDevice => 'I have Omi device';
+  String get iHaveOmiDevice => 'Mám zařízení Omi';
 
   @override
   String get goal => 'CÍL';
@@ -6615,31 +6615,31 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String tagSpeaker(int speakerId) {
-    return 'Tag Speaker $speakerId';
+    return 'Označit mluvčího $speakerId';
   }
 
   @override
-  String get personNameAlreadyExists => 'A person with this name already exists.';
+  String get personNameAlreadyExists => 'Osoba s tímto jménem již existuje.';
 
   @override
-  String get selectYouFromList => 'To tag yourself, please select \"You\" from the list.';
+  String get selectYouFromList => 'Pro označení sebe vyberte prosím \"Vy\" ze seznamu.';
 
   @override
-  String get enterPersonsName => 'Enter Person\'s Name';
+  String get enterPersonsName => 'Zadejte jméno osoby';
 
   @override
-  String get addPerson => 'Add Person';
+  String get addPerson => 'Přidat osobu';
 
   @override
   String tagOtherSegmentsFromSpeaker(int selected, int total) {
-    return 'Tag other segments from this speaker ($selected/$total)';
+    return 'Označit ostatní segmenty od tohoto mluvčího ($selected/$total)';
   }
 
   @override
-  String get tagOtherSegments => 'Tag other segments';
+  String get tagOtherSegments => 'Označit ostatní segmenty';
 
   @override
-  String get managePeople => 'Manage People';
+  String get managePeople => 'Správa osob';
 
   @override
   String get shareViaSms => 'Sdílet přes SMS';
@@ -6710,124 +6710,123 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'Connection Failed';
+  String get wifiConnectionFailedTitle => 'Připojení selhalo';
 
   @override
   String connectingToDeviceName(String deviceName) {
-    return 'Connecting to $deviceName';
+    return 'Připojování k $deviceName';
   }
 
   @override
   String enableDeviceWifi(String deviceName) {
-    return 'Enable $deviceName\'s WiFi';
+    return 'Povolit WiFi na $deviceName';
   }
 
   @override
   String connectToDeviceName(String deviceName) {
-    return 'Connect to $deviceName';
+    return 'Připojit k $deviceName';
   }
 
   @override
-  String get recordingDetails => 'Recording Details';
+  String get recordingDetails => 'Podrobnosti nahrávky';
 
   @override
-  String get storageLocationSdCard => 'SD Card';
+  String get storageLocationSdCard => 'SD karta';
 
   @override
   String get storageLocationLimitlessPendant => 'Limitless Pendant';
 
   @override
-  String get storageLocationPhone => 'Phone';
+  String get storageLocationPhone => 'Telefon';
 
   @override
-  String get storageLocationPhoneMemory => 'Phone (Memory)';
+  String get storageLocationPhoneMemory => 'Telefon (paměť)';
 
   @override
   String storedOnDevice(String deviceName) {
-    return 'Stored on $deviceName';
+    return 'Uloženo na $deviceName';
   }
 
   @override
-  String get transferring => 'Transferring...';
+  String get transferring => 'Přenášení...';
 
   @override
-  String get transferRequired => 'Transfer Required';
+  String get transferRequired => 'Vyžadován přenos';
 
   @override
-  String get downloadingAudioFromSdCard => 'Downloading audio from your device\'s SD card';
+  String get downloadingAudioFromSdCard => 'Stahování zvuku z SD karty vašeho zařízení';
 
   @override
   String get transferRequiredDescription =>
-      'This recording is stored on your device\'s SD card. Transfer it to your phone to play or share.';
+      'Tato nahrávka je uložena na SD kartě vašeho zařízení. Přeneste ji do telefonu pro přehrání.';
 
   @override
-  String get cancelTransfer => 'Cancel Transfer';
+  String get cancelTransfer => 'Zrušit přenos';
 
   @override
-  String get transferToPhone => 'Transfer to Phone';
+  String get transferToPhone => 'Přenést do telefonu';
 
   @override
-  String get privateAndSecureOnDevice => 'Private & secure on your device';
+  String get privateAndSecureOnDevice => 'Soukromé a bezpečné na vašem zařízení';
 
   @override
-  String get recordingInfo => 'Recording Info';
+  String get recordingInfo => 'Informace o nahrávce';
 
   @override
-  String get transferInProgress => 'Transfer in progress...';
+  String get transferInProgress => 'Probíhá přenos...';
 
   @override
-  String get shareRecording => 'Share Recording';
+  String get shareRecording => 'Sdílet nahrávku';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'Are you sure you want to permanently delete this recording? This can\'t be undone.';
+  String get deleteRecordingConfirmation => 'Opravdu chcete trvale smazat tuto nahrávku? Tuto akci nelze vrátit zpět.';
 
   @override
-  String get recordingIdLabel => 'Recording ID';
+  String get recordingIdLabel => 'ID nahrávky';
 
   @override
-  String get dateTimeLabel => 'Date & Time';
+  String get dateTimeLabel => 'Datum a čas';
 
   @override
-  String get durationLabel => 'Duration';
+  String get durationLabel => 'Délka';
 
   @override
-  String get audioFormatLabel => 'Audio Format';
+  String get audioFormatLabel => 'Formát zvuku';
 
   @override
-  String get storageLocationLabel => 'Storage Location';
+  String get storageLocationLabel => 'Umístění úložiště';
 
   @override
-  String get estimatedSizeLabel => 'Estimated Size';
+  String get estimatedSizeLabel => 'Odhadovaná velikost';
 
   @override
-  String get deviceModelLabel => 'Device Model';
+  String get deviceModelLabel => 'Model zařízení';
 
   @override
-  String get deviceIdLabel => 'Device ID';
+  String get deviceIdLabel => 'ID zařízení';
 
   @override
-  String get statusLabel => 'Status';
+  String get statusLabel => 'Stav';
 
   @override
-  String get statusProcessed => 'Processed';
+  String get statusProcessed => 'Zpracováno';
 
   @override
-  String get statusUnprocessed => 'Unprocessed';
+  String get statusUnprocessed => 'Nezpracováno';
 
   @override
-  String get switchedToFastTransfer => 'Switched to Fast Transfer';
+  String get switchedToFastTransfer => 'Přepnuto na rychlý přenos';
 
   @override
-  String get transferCompleteMessage => 'Transfer complete! You can now play this recording.';
+  String get transferCompleteMessage => 'Přenos dokončen! Nyní můžete tuto nahrávku přehrát.';
 
   @override
   String transferFailedMessage(String error) {
-    return 'Transfer failed: $error';
+    return 'Přenos selhal: $error';
   }
 
   @override
-  String get transferCancelled => 'Transfer cancelled';
+  String get transferCancelled => 'Přenos zrušen';
 
   @override
   String get fastTransferEnabled => 'Rychlý přenos povolen';
@@ -6916,63 +6915,63 @@ class AppLocalizationsCs extends AppLocalizations {
   String get errorUpdatingAppStatus => 'Při aktualizaci stavu aplikace došlo k chybě.';
 
   @override
-  String get calculatingETA => 'Calculating...';
+  String get calculatingETA => 'Vypočítávám...';
 
   @override
   String aboutMinutesRemaining(int minutes) {
-    return 'About $minutes minutes remaining';
+    return 'Zbývá přibližně $minutes minut';
   }
 
   @override
-  String get aboutAMinuteRemaining => 'About a minute remaining';
+  String get aboutAMinuteRemaining => 'Zbývá přibližně minuta';
 
   @override
-  String get almostDone => 'Almost done...';
+  String get almostDone => 'Téměř hotovo...';
 
   @override
-  String get omiSays => 'omi says';
+  String get omiSays => 'Omi říká';
 
   @override
-  String get analyzingYourData => 'Analyzing your data...';
+  String get analyzingYourData => 'Analyzuji vaše data...';
 
   @override
   String migratingToProtection(String level) {
-    return 'Migrating to $level protection...';
+    return 'Přecházení na ochranu $level...';
   }
 
   @override
-  String get noDataToMigrateFinalizing => 'No data to migrate. Finalizing...';
+  String get noDataToMigrateFinalizing => 'Žádná data k přenosu. Dokončování...';
 
   @override
   String migratingItemsProgress(String itemType, int percentage) {
-    return 'Migrating $itemType... $percentage%';
+    return 'Přenášení $itemType... $percentage %';
   }
 
   @override
-  String get allObjectsMigratedFinalizing => 'All objects migrated. Finalizing...';
+  String get allObjectsMigratedFinalizing => 'Všechny objekty přeneseny. Dokončování...';
 
   @override
-  String get migrationErrorOccurred => 'An error occurred during migration. Please try again.';
+  String get migrationErrorOccurred => 'Během přenosu došlo k chybě. Zkuste to prosím znovu.';
 
   @override
-  String get migrationComplete => 'Migration complete!';
+  String get migrationComplete => 'Přenos dokončen!';
 
   @override
   String dataProtectedWithSettings(String level) {
-    return 'Your data is now protected with the new $level settings.';
+    return 'Vaše data jsou nyní chráněna novým nastavením $level.';
   }
 
   @override
-  String get chatsLowercase => 'chats';
+  String get chatsLowercase => 'chaty';
 
   @override
   String get dataLowercase => 'data';
 
   @override
-  String get fallNotificationTitle => 'Ouch';
+  String get fallNotificationTitle => 'Au';
 
   @override
-  String get fallNotificationBody => 'Did you fall?';
+  String get fallNotificationBody => 'Upadli jste?';
 
   @override
   String get importantConversationTitle => 'Důležitá konverzace';
@@ -7210,60 +7209,59 @@ class AppLocalizationsCs extends AppLocalizations {
   String get aiGenPleaseGenerateAppFirst => 'Nejprve prosím vygenerujte aplikaci';
 
   @override
-  String get xHandleTitle => 'What\'s your X handle?';
+  String get xHandleTitle => 'Jaký je váš X handle?';
 
   @override
-  String get xHandleDescription => 'We will pre-train your Omi clone\nbased on your account\'s activity';
+  String get xHandleDescription => 'Předtrénujeme váš Omi klon\nna základě aktivity vašeho účtu';
 
   @override
   String get xHandleHint => '@nikshevchenko';
 
   @override
-  String get xHandlePleaseEnter => 'Please enter your X handle';
+  String get xHandlePleaseEnter => 'Zadejte prosím svůj X handle';
 
   @override
-  String get xHandlePleaseEnterValid => 'Please enter a valid X handle';
+  String get xHandlePleaseEnterValid => 'Zadejte prosím platný X handle';
 
   @override
-  String get nextButton => 'Next';
+  String get nextButton => 'Další';
 
   @override
-  String get connectOmiDevice => 'Connect Omi Device';
+  String get connectOmiDevice => 'Připojit zařízení Omi';
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'You\'re switching your Unlimited Plan to the $title. Are you sure you want to proceed?';
+    return 'Měníte svůj plán Unlimited na $title. Opravdu chcete pokračovat?';
   }
 
   @override
   String get planUpgradeScheduledMessage =>
-      'Upgrade scheduled! Your monthly plan continues until the end of your billing period, then automatically switches to annual.';
+      'Upgrade naplánován! Váš měsíční plán pokračuje do konce fakturačního období.';
 
   @override
-  String get couldNotSchedulePlanChange => 'Could not schedule plan change. Please try again.';
+  String get couldNotSchedulePlanChange => 'Nepodařilo se naplánovat změnu plánu. Zkuste to prosím znovu.';
 
   @override
   String get subscriptionReactivatedDefault =>
-      'Your subscription has been reactivated! No charge now - you\'ll be billed at the end of your current period.';
+      'Vaše předplatné bylo obnoveno! Nyní nebude účtován žádný poplatek - fakturováno bude na konci fakturačního období.';
 
   @override
-  String get subscriptionSuccessfulCharged =>
-      'Subscription successful! You\'ve been charged for the new billing period.';
+  String get subscriptionSuccessfulCharged => 'Předplatné úspěšné! Byli jste účtováni za nové fakturační období.';
 
   @override
-  String get couldNotProcessSubscription => 'Could not process subscription. Please try again.';
+  String get couldNotProcessSubscription => 'Nepodařilo se zpracovat předplatné. Zkuste to prosím znovu.';
 
   @override
-  String get couldNotLaunchUpgradePage => 'Could not launch upgrade page. Please try again.';
+  String get couldNotLaunchUpgradePage => 'Nepodařilo se otevřít stránku upgradu. Zkuste to prosím znovu.';
 
   @override
-  String get transcriptionJsonPlaceholder => 'Paste your JSON configuration here...';
+  String get transcriptionJsonPlaceholder => 'Vložte sem svou JSON konfiguraci...';
 
   @override
   String get transcriptionSourceOmi => 'Omi';
 
   @override
-  String get pricePlaceholder => '0.00';
+  String get pricePlaceholder => '0,00';
 
   @override
   String importErrorOpeningFilePicker(String message) {
