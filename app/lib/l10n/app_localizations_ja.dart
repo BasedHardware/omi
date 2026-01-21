@@ -7491,4 +7491,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get devModeSettingsSaved => '設定を保存しました！';
+
+  @override
+  String get voiceFailedToTranscribe => '音声の文字起こしに失敗しました';
 }

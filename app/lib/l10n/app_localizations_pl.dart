@@ -7632,4 +7632,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get devModeSettingsSaved => 'Ustawienia zapisane!';
+
+  @override
+  String get voiceFailedToTranscribe => 'Nie udało się transkrybować dźwięku';
 }

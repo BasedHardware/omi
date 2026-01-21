@@ -2431,5 +2431,6 @@
   "devModeInvalidRealtimeTranscriptWebhookUrl": "无效的实时转录 webhook URL",
   "devModeInvalidConversationCreatedWebhookUrl": "无效的对话创建 webhook URL",
   "devModeInvalidDaySummaryWebhookUrl": "无效的每日摘要 webhook URL",
-  "devModeSettingsSaved": "设置已保存！"
+  "devModeSettingsSaved": "设置已保存！",
+  "voiceFailedToTranscribe": "音频转录失败"
 }

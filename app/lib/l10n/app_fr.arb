@@ -2430,5 +2430,6 @@
   "devModeInvalidRealtimeTranscriptWebhookUrl": "URL du webhook de transcription en temps réel invalide",
   "devModeInvalidConversationCreatedWebhookUrl": "URL du webhook de conversation créée invalide",
   "devModeInvalidDaySummaryWebhookUrl": "URL du webhook du résumé quotidien invalide",
-  "devModeSettingsSaved": "Paramètres enregistrés !"
+  "devModeSettingsSaved": "Paramètres enregistrés !",
+  "voiceFailedToTranscribe": "Échec de la transcription audio"
 }

@@ -2431,5 +2431,6 @@
   "devModeInvalidRealtimeTranscriptWebhookUrl": "अमान्य रीयलटाइम ट्रांसक्रिप्ट वेबहुक URL",
   "devModeInvalidConversationCreatedWebhookUrl": "अमान्य वार्तालाप निर्मित वेबहुक URL",
   "devModeInvalidDaySummaryWebhookUrl": "अमान्य दैनिक सारांश वेबहुक URL",
-  "devModeSettingsSaved": "सेटिंग्स सहेजी गईं!"
+  "devModeSettingsSaved": "सेटिंग्स सहेजी गईं!",
+  "voiceFailedToTranscribe": "ऑडियो ट्रांसक्राइब करने में विफल"
 }

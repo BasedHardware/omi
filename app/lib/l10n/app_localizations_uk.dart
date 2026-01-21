@@ -7625,4 +7625,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get devModeSettingsSaved => 'Налаштування збережено!';
+
+  @override
+  String get voiceFailedToTranscribe => 'Не вдалося транскрибувати аудіо';
 }

@@ -2430,5 +2430,6 @@
   "devModeInvalidRealtimeTranscriptWebhookUrl": "Ogiltig webhook-URL för realtidstranskription",
   "devModeInvalidConversationCreatedWebhookUrl": "Ogiltig webhook-URL för skapad konversation",
   "devModeInvalidDaySummaryWebhookUrl": "Ogiltig webhook-URL för daglig sammanfattning",
-  "devModeSettingsSaved": "Inställningar sparade!"
+  "devModeSettingsSaved": "Inställningar sparade!",
+  "voiceFailedToTranscribe": "Kunde inte transkribera ljud"
 }

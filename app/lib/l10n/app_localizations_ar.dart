@@ -7564,4 +7564,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get devModeSettingsSaved => 'تم حفظ الإعدادات!';
+
+  @override
+  String get voiceFailedToTranscribe => 'فشل في نسخ الصوت';
 }

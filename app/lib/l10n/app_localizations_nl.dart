@@ -7637,4 +7637,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get devModeSettingsSaved => 'Instellingen opgeslagen!';
+
+  @override
+  String get voiceFailedToTranscribe => 'Audiotranscriptie mislukt';
 }

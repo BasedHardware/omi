@@ -11,10 +11,10 @@
 |--------|-------|
 | Total Files | ~48 |
 | Total Strings | ~405 |
-| Completed Files | 30 |
+| Completed Files | 31 |
 | In Progress | 0 |
-| Pending Files | ~18 |
-| Progress | ~73% |
+| Pending Files | ~17 |
+| Progress | ~74% |
 
 **CRITICAL ISSUE**: ~162 pre-existing l10n keys in non-English ARB files still contain
 English text instead of proper translations. See PRIORITY 0 section below.
@@ -241,10 +241,10 @@ Keys added: devModeInvalidAudioBytesWebhookUrl, devModeInvalidRealtimeTranscript
             devModeSettingsSaved
 Updated Dart code to use MyApp.navigatorKey.currentContext?.l10n pattern with fallbacks
 
-### [ ] providers/voice_recorder_provider.dart (1 string)
-Status: PENDING
-Strings found:
-- "Failed to transcribe audio"
+### [x] providers/voice_recorder_provider.dart (1 string)
+Status: COMPLETED
+Keys added: voiceFailedToTranscribe
+Updated Dart code to use MyApp.navigatorKey.currentContext?.l10n pattern with fallback
 
 --------------------------------------------------------------------------------
 ### 6.2 UI Components
@@ -362,6 +362,12 @@ Fix requires either:
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-21] Localized providers/voice_recorder_provider.dart with 1 l10n key for 34 languages
+- Added 1 new localization key for voice transcription error message
+- Keys added: voiceFailedToTranscribe
+- Updated Dart code to use MyApp.navigatorKey.currentContext?.l10n pattern with fallback
+- All 34 language ARB files updated with proper translations
 
 [2026-01-21] Localized providers/developer_mode_provider.dart with 5 l10n keys for 34 languages
 - Added 5 new localization keys for webhook validation error and success messages

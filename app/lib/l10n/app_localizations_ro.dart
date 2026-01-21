@@ -7652,4 +7652,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get devModeSettingsSaved => 'Setări salvate!';
+
+  @override
+  String get voiceFailedToTranscribe => 'Nu s-a reușit transcrierea audio';
 }

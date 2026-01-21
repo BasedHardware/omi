@@ -7633,4 +7633,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get devModeSettingsSaved => 'Pengaturan disimpan!';
+
+  @override
+  String get voiceFailedToTranscribe => 'Gagal mentranskripsikan audio';
 }

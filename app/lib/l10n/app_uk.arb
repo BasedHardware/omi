@@ -2430,5 +2430,6 @@
   "devModeInvalidRealtimeTranscriptWebhookUrl": "Недійсний URL вебхука транскрипції в реальному часі",
   "devModeInvalidConversationCreatedWebhookUrl": "Недійсний URL вебхука створеної бесіди",
   "devModeInvalidDaySummaryWebhookUrl": "Недійсний URL вебхука денного звіту",
-  "devModeSettingsSaved": "Налаштування збережено!"
+  "devModeSettingsSaved": "Налаштування збережено!",
+  "voiceFailedToTranscribe": "Не вдалося транскрибувати аудіо"
 }

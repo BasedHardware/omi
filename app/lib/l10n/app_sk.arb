@@ -2430,5 +2430,6 @@
   "devModeInvalidRealtimeTranscriptWebhookUrl": "Neplatná URL adresa webhooku pre prepis v reálnom čase",
   "devModeInvalidConversationCreatedWebhookUrl": "Neplatná URL adresa webhooku pre vytvorený rozhovor",
   "devModeInvalidDaySummaryWebhookUrl": "Neplatná URL adresa webhooku pre denný súhrn",
-  "devModeSettingsSaved": "Nastavenia uložené!"
+  "devModeSettingsSaved": "Nastavenia uložené!",
+  "voiceFailedToTranscribe": "Nepodarilo sa prepísať zvuk"
 }

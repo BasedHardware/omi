@@ -9486,5 +9486,9 @@
   "devModeSettingsSaved": "Settings saved!",
   "@devModeSettingsSaved": {
     "description": "Success message shown when developer mode settings are saved"
+  },
+  "voiceFailedToTranscribe": "Failed to transcribe audio",
+  "@voiceFailedToTranscribe": {
+    "description": "Error message when voice transcription fails"
   }
 }

@@ -2430,5 +2430,6 @@
   "devModeInvalidRealtimeTranscriptWebhookUrl": "Μη έγκυρη διεύθυνση URL webhook για μεταγραφή σε πραγματικό χρόνο",
   "devModeInvalidConversationCreatedWebhookUrl": "Μη έγκυρη διεύθυνση URL webhook για δημιουργημένη συνομιλία",
   "devModeInvalidDaySummaryWebhookUrl": "Μη έγκυρη διεύθυνση URL webhook για ημερήσια σύνοψη",
-  "devModeSettingsSaved": "Οι ρυθμίσεις αποθηκεύτηκαν!"
+  "devModeSettingsSaved": "Οι ρυθμίσεις αποθηκεύτηκαν!",
+  "voiceFailedToTranscribe": "Αποτυχία μεταγραφής ήχου"
 }

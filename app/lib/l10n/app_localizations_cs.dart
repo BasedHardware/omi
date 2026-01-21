@@ -7612,4 +7612,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get devModeSettingsSaved => 'Nastavení uloženo!';
+
+  @override
+  String get voiceFailedToTranscribe => 'Nepodařilo se přepsat zvuk';
 }

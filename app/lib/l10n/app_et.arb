@@ -2430,5 +2430,6 @@
   "devModeInvalidRealtimeTranscriptWebhookUrl": "Kehtetu reaalajas transkriptsiooni veebihaagi URL",
   "devModeInvalidConversationCreatedWebhookUrl": "Kehtetu loodud vestluse veebihaagi URL",
   "devModeInvalidDaySummaryWebhookUrl": "Kehtetu päeva kokkuvõtte veebihaagi URL",
-  "devModeSettingsSaved": "Seaded salvestatud!"
+  "devModeSettingsSaved": "Seaded salvestatud!",
+  "voiceFailedToTranscribe": "Heli transkribeerimine ebaõnnestus"
 }

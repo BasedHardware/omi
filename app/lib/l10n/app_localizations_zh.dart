@@ -7481,4 +7481,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get devModeSettingsSaved => '设置已保存！';
+
+  @override
+  String get voiceFailedToTranscribe => '音频转录失败';
 }

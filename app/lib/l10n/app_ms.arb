@@ -2430,5 +2430,6 @@
   "devModeInvalidRealtimeTranscriptWebhookUrl": "URL webhook transkripsi masa nyata tidak sah",
   "devModeInvalidConversationCreatedWebhookUrl": "URL webhook perbualan dicipta tidak sah",
   "devModeInvalidDaySummaryWebhookUrl": "URL webhook ringkasan harian tidak sah",
-  "devModeSettingsSaved": "Tetapan disimpan!"
+  "devModeSettingsSaved": "Tetapan disimpan!",
+  "voiceFailedToTranscribe": "Gagal mentranskrip audio"
 }

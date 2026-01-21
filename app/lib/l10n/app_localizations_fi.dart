@@ -7613,4 +7613,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get devModeSettingsSaved => 'Asetukset tallennettu!';
+
+  @override
+  String get voiceFailedToTranscribe => 'Äänen litterointi epäonnistui';
 }

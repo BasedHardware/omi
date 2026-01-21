@@ -7638,4 +7638,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get devModeSettingsSaved => 'Настройки сохранены!';
+
+  @override
+  String get voiceFailedToTranscribe => 'Не удалось транскрибировать аудио';
 }

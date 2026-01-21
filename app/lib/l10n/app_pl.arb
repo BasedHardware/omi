@@ -2430,5 +2430,6 @@
   "devModeInvalidRealtimeTranscriptWebhookUrl": "Nieprawidłowy URL webhooka transkrypcji w czasie rzeczywistym",
   "devModeInvalidConversationCreatedWebhookUrl": "Nieprawidłowy URL webhooka utworzonej konwersacji",
   "devModeInvalidDaySummaryWebhookUrl": "Nieprawidłowy URL webhooka dziennego podsumowania",
-  "devModeSettingsSaved": "Ustawienia zapisane!"
+  "devModeSettingsSaved": "Ustawienia zapisane!",
+  "voiceFailedToTranscribe": "Nie udało się transkrybować dźwięku"
 }

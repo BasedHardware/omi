@@ -2430,5 +2430,6 @@
   "devModeInvalidRealtimeTranscriptWebhookUrl": "Érvénytelen valós idejű átírat webhook URL",
   "devModeInvalidConversationCreatedWebhookUrl": "Érvénytelen létrehozott beszélgetés webhook URL",
   "devModeInvalidDaySummaryWebhookUrl": "Érvénytelen napi összefoglaló webhook URL",
-  "devModeSettingsSaved": "Beállítások mentve!"
+  "devModeSettingsSaved": "Beállítások mentve!",
+  "voiceFailedToTranscribe": "Nem sikerült átírni a hangot"
 }

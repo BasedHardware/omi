@@ -7624,4 +7624,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get devModeSettingsSaved => 'Indstillinger gemt!';
+
+  @override
+  String get voiceFailedToTranscribe => 'Kunne ikke transskribere lyd';
 }

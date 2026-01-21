@@ -7611,4 +7611,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get devModeSettingsSaved => 'Innstillinger lagret!';
+
+  @override
+  String get voiceFailedToTranscribe => 'Kunne ikke transkribere lyd';
 }

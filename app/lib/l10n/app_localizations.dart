@@ -14258,6 +14258,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Settings saved!'**
   String get devModeSettingsSaved;
+
+  /// Error message when voice transcription fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to transcribe audio'**
+  String get voiceFailedToTranscribe;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

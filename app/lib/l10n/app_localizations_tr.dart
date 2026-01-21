@@ -7628,4 +7628,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get devModeSettingsSaved => 'Ayarlar kaydedildi!';
+
+  @override
+  String get voiceFailedToTranscribe => 'Ses metne dönüştürülemedi';
 }

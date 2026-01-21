@@ -7632,4 +7632,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get devModeSettingsSaved => 'Iestatījumi saglabāti!';
+
+  @override
+  String get voiceFailedToTranscribe => 'Neizdevās transkribēt audio';
 }

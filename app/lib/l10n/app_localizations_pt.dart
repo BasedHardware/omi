@@ -7613,4 +7613,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get devModeSettingsSaved => 'Configurações salvas!';
+
+  @override
+  String get voiceFailedToTranscribe => 'Falha ao transcrever o áudio';
 }

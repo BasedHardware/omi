@@ -7652,4 +7652,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get devModeSettingsSaved => 'Beállítások mentve!';
+
+  @override
+  String get voiceFailedToTranscribe => 'Nem sikerült átírni a hangot';
 }

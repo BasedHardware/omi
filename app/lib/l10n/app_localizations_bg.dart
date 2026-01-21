@@ -7648,4 +7648,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get devModeSettingsSaved => 'Настройките са запазени!';
+
+  @override
+  String get voiceFailedToTranscribe => 'Неуспешно транскрибиране на аудио';
 }

@@ -7668,4 +7668,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get devModeSettingsSaved => 'Οι ρυθμίσεις αποθηκεύτηκαν!';
+
+  @override
+  String get voiceFailedToTranscribe => 'Αποτυχία μεταγραφής ήχου';
 }

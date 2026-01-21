@@ -2411,5 +2411,6 @@
   "devModeInvalidRealtimeTranscriptWebhookUrl": "عنوان URL للويب هوك للنص الفوري غير صالح",
   "devModeInvalidConversationCreatedWebhookUrl": "عنوان URL للويب هوك لإنشاء المحادثة غير صالح",
   "devModeInvalidDaySummaryWebhookUrl": "عنوان URL للويب هوك لملخص اليوم غير صالح",
-  "devModeSettingsSaved": "تم حفظ الإعدادات!"
+  "devModeSettingsSaved": "تم حفظ الإعدادات!",
+  "voiceFailedToTranscribe": "فشل في نسخ الصوت"
 }

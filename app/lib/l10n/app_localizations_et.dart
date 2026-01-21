@@ -7615,4 +7615,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get devModeSettingsSaved => 'Seaded salvestatud!';
+
+  @override
+  String get voiceFailedToTranscribe => 'Heli transkribeerimine ebaõnnestus';
 }

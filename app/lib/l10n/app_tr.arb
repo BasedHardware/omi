@@ -2430,5 +2430,6 @@
   "devModeInvalidRealtimeTranscriptWebhookUrl": "Geçersiz gerçek zamanlı transkript webhook URL'si",
   "devModeInvalidConversationCreatedWebhookUrl": "Geçersiz oluşturulan konuşma webhook URL'si",
   "devModeInvalidDaySummaryWebhookUrl": "Geçersiz günlük özet webhook URL'si",
-  "devModeSettingsSaved": "Ayarlar kaydedildi!"
+  "devModeSettingsSaved": "Ayarlar kaydedildi!",
+  "voiceFailedToTranscribe": "Ses metne dönüştürülemedi"
 }

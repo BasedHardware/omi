@@ -2430,5 +2430,6 @@
   "devModeInvalidRealtimeTranscriptWebhookUrl": "Недействительный URL вебхука транскрипции в реальном времени",
   "devModeInvalidConversationCreatedWebhookUrl": "Недействительный URL вебхука созданной беседы",
   "devModeInvalidDaySummaryWebhookUrl": "Недействительный URL вебхука дневного отчёта",
-  "devModeSettingsSaved": "Настройки сохранены!"
+  "devModeSettingsSaved": "Настройки сохранены!",
+  "voiceFailedToTranscribe": "Не удалось транскрибировать аудио"
 }

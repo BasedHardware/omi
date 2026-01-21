@@ -7637,4 +7637,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get devModeSettingsSaved => 'Tetapan disimpan!';
+
+  @override
+  String get voiceFailedToTranscribe => 'Gagal mentranskrip audio';
 }

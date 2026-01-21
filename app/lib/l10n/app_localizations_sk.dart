@@ -7619,4 +7619,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get devModeSettingsSaved => 'Nastavenia uložené!';
+
+  @override
+  String get voiceFailedToTranscribe => 'Nepodarilo sa prepísať zvuk';
 }

@@ -7620,4 +7620,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get devModeSettingsSaved => 'Inställningar sparade!';
+
+  @override
+  String get voiceFailedToTranscribe => 'Kunde inte transkribera ljud';
 }

@@ -7626,4 +7626,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get devModeSettingsSaved => 'Đã lưu cài đặt!';
+
+  @override
+  String get voiceFailedToTranscribe => 'Không thể chuyển đổi giọng nói thành văn bản';
 }

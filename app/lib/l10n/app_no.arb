@@ -2430,5 +2430,6 @@
   "devModeInvalidRealtimeTranscriptWebhookUrl": "Ugyldig webhook-URL for sanntidstranskripsjon",
   "devModeInvalidConversationCreatedWebhookUrl": "Ugyldig webhook-URL for opprettet samtale",
   "devModeInvalidDaySummaryWebhookUrl": "Ugyldig webhook-URL for daglig oppsummering",
-  "devModeSettingsSaved": "Innstillinger lagret!"
+  "devModeSettingsSaved": "Innstillinger lagret!",
+  "voiceFailedToTranscribe": "Kunne ikke transkribere lyd"
 }

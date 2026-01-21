@@ -7493,4 +7493,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get devModeSettingsSaved => '설정이 저장되었습니다!';
+
+  @override
+  String get voiceFailedToTranscribe => '오디오 텍스트 변환 실패';
 }

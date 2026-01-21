@@ -7626,4 +7626,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get devModeSettingsSaved => '¡Configuración guardada!';
+
+  @override
+  String get voiceFailedToTranscribe => 'Error al transcribir el audio';
 }

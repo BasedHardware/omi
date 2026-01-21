@@ -7579,4 +7579,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get devModeSettingsSaved => 'บันทึกการตั้งค่าแล้ว!';
+
+  @override
+  String get voiceFailedToTranscribe => 'ไม่สามารถถอดเสียงได้';
 }

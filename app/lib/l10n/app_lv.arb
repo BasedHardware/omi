@@ -2430,5 +2430,6 @@
   "devModeInvalidRealtimeTranscriptWebhookUrl": "Nederīgs reāllaika transkripcijas webhook URL",
   "devModeInvalidConversationCreatedWebhookUrl": "Nederīgs izveidotās sarunas webhook URL",
   "devModeInvalidDaySummaryWebhookUrl": "Nederīgs dienas kopsavilkuma webhook URL",
-  "devModeSettingsSaved": "Iestatījumi saglabāti!"
+  "devModeSettingsSaved": "Iestatījumi saglabāti!",
+  "voiceFailedToTranscribe": "Neizdevās transkribēt audio"
 }

@@ -7663,4 +7663,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get devModeSettingsSaved => 'Configuració desada!';
+
+  @override
+  String get voiceFailedToTranscribe => 'No s\'ha pogut transcriure l\'àudio';
 }

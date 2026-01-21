@@ -2430,5 +2430,6 @@
   "devModeInvalidRealtimeTranscriptWebhookUrl": "URL webhook pentru transcriere în timp real invalidă",
   "devModeInvalidConversationCreatedWebhookUrl": "URL webhook pentru conversație creată invalidă",
   "devModeInvalidDaySummaryWebhookUrl": "URL webhook pentru rezumatul zilnic invalidă",
-  "devModeSettingsSaved": "Setări salvate!"
+  "devModeSettingsSaved": "Setări salvate!",
+  "voiceFailedToTranscribe": "Nu s-a reușit transcrierea audio"
 }

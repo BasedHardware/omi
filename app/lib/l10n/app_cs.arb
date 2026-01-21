@@ -2390,5 +2390,6 @@
   "devModeInvalidRealtimeTranscriptWebhookUrl": "Neplatná URL adresa webhooku pro přepis v reálném čase",
   "devModeInvalidConversationCreatedWebhookUrl": "Neplatná URL adresa webhooku pro vytvořenou konverzaci",
   "devModeInvalidDaySummaryWebhookUrl": "Neplatná URL adresa webhooku pro denní shrnutí",
-  "devModeSettingsSaved": "Nastavení uloženo!"
+  "devModeSettingsSaved": "Nastavení uloženo!",
+  "voiceFailedToTranscribe": "Nepodařilo se přepsat zvuk"
 }

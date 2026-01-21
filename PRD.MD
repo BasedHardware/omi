@@ -118,7 +118,7 @@ The app uses Flutter's ARB-based localization system (`context.l10n.keyName`). W
 | `providers/message_provider.dart` | ~12 | COMPLETED - Camera/photo/file picker error messages |
 | `providers/capture_provider.dart` | ~5 | COMPLETED - Recording error messages |
 | `providers/developer_mode_provider.dart` | ~5 | COMPLETED - Webhook validation errors |
-| `providers/voice_recorder_provider.dart` | 1 | Transcription error |
+| `providers/voice_recorder_provider.dart` | 1 | COMPLETED - Transcription error |
 
 #### 6.2 UI Components (~15 strings)
 

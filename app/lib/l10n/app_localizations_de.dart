@@ -7685,4 +7685,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get devModeSettingsSaved => 'Einstellungen gespeichert!';
+
+  @override
+  String get voiceFailedToTranscribe => 'Audiotranskription fehlgeschlagen';
 }

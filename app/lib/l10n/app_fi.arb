@@ -2430,5 +2430,6 @@
   "devModeInvalidRealtimeTranscriptWebhookUrl": "Virheellinen reaaliaikaisen transkription webhook-URL",
   "devModeInvalidConversationCreatedWebhookUrl": "Virheellinen luodun keskustelun webhook-URL",
   "devModeInvalidDaySummaryWebhookUrl": "Virheellinen päiväyhteenvedon webhook-URL",
-  "devModeSettingsSaved": "Asetukset tallennettu!"
+  "devModeSettingsSaved": "Asetukset tallennettu!",
+  "voiceFailedToTranscribe": "Äänen litterointi epäonnistui"
 }

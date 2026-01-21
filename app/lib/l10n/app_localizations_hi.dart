@@ -7596,4 +7596,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get devModeSettingsSaved => 'सेटिंग्स सहेजी गईं!';
+
+  @override
+  String get voiceFailedToTranscribe => 'ऑडियो ट्रांसक्राइब करने में विफल';
 }
