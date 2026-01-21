@@ -17,14 +17,14 @@
 | Progress | ~90% |
 
 **PRIORITY 0 STATUS**: 110 pre-existing l10n keys in non-English ARB files contain
-English text instead of proper translations. Spanish (es), French (fr), and German (de) completed, 30 languages remaining.
+English text instead of proper translations. Spanish (es), French (fr), German (de), and Italian (it) completed, 29 languages remaining.
 
 ================================================================================
 ## PRIORITY 0: CRITICAL - Pre-existing Untranslated Keys (110 keys × 33 languages)
 ================================================================================
 
 ### [~] Translate pre-existing English keys in all non-English ARB files
-Status: IN PROGRESS (Spanish, French, German completed, 30 languages remaining)
+Status: IN PROGRESS (Spanish, French, German, Italian completed, 29 languages remaining)
 Priority: CRITICAL - Affects all non-English users
 
 Sample of untranslated keys (showing English values that need translation):
@@ -337,6 +337,24 @@ Note: date_list_item.dart was fixed - see [x] entry above
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-21] Translated 49 pre-existing English keys to Italian (app_it.arb)
+- PRIORITY 0 task: Translate pre-existing untranslated keys in non-English ARB files
+- Translated 49 keys to proper Italian translations in app_it.arb
+- Keys include: signOutConfirmation, deleteRecording, transferCompleteMessage, planSwitchingDescriptionWithTitle,
+  couldNotSchedulePlanChange, couldNotProcessSubscription, couldNotLaunchUpgradePage, storageLocationLabel,
+  sdCardProcessingMessage, deleteProcessedFiles, wifiEnableFailed, deviceNoFastTransfer, transferStartFailed,
+  deviceNotResponding, invalidWifiCredentials, wifiConnectionFailed, disconnectTwitterConfirmation, connectToDeviceName,
+  transferring, transferRequired, downloadingAudioFromSdCard, transferRequiredDescription, cancelTransfer,
+  transferToPhone, transferInProgress, deleteRecordingConfirmation, switchedToFastTransfer, transferFailedMessage,
+  transferCancelled, migrationErrorOccurred, downloadingFromSdCard, deleteProcessed, thisCannotBeUndone,
+  cancelSyncMessage, enableHotspotMessage, internetRequired, planUpgradeScheduledMessage, subscriptionReactivatedDefault,
+  subscriptionSuccessfulCharged, xHandleTitle, xHandleDescription, xHandlePleaseEnter, xHandlePleaseEnterValid,
+  selectYouFromList, wifiSyncFailed, cancelSync, sdCardProcessing, processingFailed, processingProgress
+- Translations preserve ICU message format placeholders ({title}, {count}, {deviceName}, {error}, {current}, {total})
+- flutter gen-l10n completed successfully
+- All tests passed
+- Remaining: 29 other languages still need the same keys translated
 
 [2026-01-21] Translated 110 pre-existing English keys to German (app_de.arb)
 - PRIORITY 0 task: Translate pre-existing untranslated keys in non-English ARB files
