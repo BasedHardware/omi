@@ -6025,7 +6025,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get deviceNotCompatible => 'आपका डिवाइस ऑन-डिवाइस ट्रांसक्रिप्शन के साथ संगत नहीं है';
 
   @override
-  String get deviceRequirements => 'Your device does not meet the requirements for On-Device transcription.';
+  String get deviceRequirements => 'आपका डिवाइस ऑन-डिवाइस ट्रांसक्रिप्शन की आवश्यकताओं को पूरा नहीं करता।';
 
   @override
   String get willLikelyCrash => 'इसे सक्षम करने से ऐप क्रैश या फ्रीज हो सकता है।';
@@ -6040,7 +6040,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get olderDeviceDetected => 'पुराना डिवाइस पाया गया';
 
   @override
-  String get onDeviceSlower => 'On-device transcription may be slower on this device.';
+  String get onDeviceSlower => 'इस डिवाइस पर ऑन-डिवाइस ट्रांसक्रिप्शन धीमा हो सकता है।';
 
   @override
   String get batteryUsageHigher => 'बैटरी उपयोग क्लाउड ट्रांसक्रिप्शन से अधिक होगा।';
@@ -6052,10 +6052,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String get highResourceUsage => 'उच्च संसाधन उपयोग';
 
   @override
-  String get onDeviceIntensive => 'On-Device transcription is computationally intensive.';
+  String get onDeviceIntensive => 'ऑन-डिवाइस ट्रांसक्रिप्शन कम्प्यूटेशनल रूप से गहन है।';
 
   @override
-  String get batteryDrainIncrease => 'Battery drain will increase significantly.';
+  String get batteryDrainIncrease => 'बैटरी की खपत काफी बढ़ जाएगी।';
 
   @override
   String get deviceMayWarmUp => 'लंबे समय तक उपयोग के दौरान डिवाइस गर्म हो सकता है।';
@@ -6067,35 +6067,37 @@ class AppLocalizationsHi extends AppLocalizations {
   String get cloudProvider => 'क्लाउड प्रदाता';
 
   @override
-  String get premiumMinutesInfo => '1,200 premium minutes/month. On-Device tab offers unlimited free transcription.';
+  String get premiumMinutesInfo => '1,200 प्रीमियम मिनट/माह। ऑन-डिवाइस टैब असीमित मुफ्त ट्रांसक्रिप्शन प्रदान करता है।';
 
   @override
   String get viewUsage => 'उपयोग देखें';
 
   @override
-  String get localProcessingInfo => 'Audio is processed locally. Works offline, more private, but uses more battery.';
+  String get localProcessingInfo =>
+      'ऑडियो स्थानीय रूप से प्रोसेस होता है। ऑफलाइन काम करता है, अधिक निजी है, लेकिन अधिक बैटरी का उपयोग करता है।';
 
   @override
-  String get model => 'Model';
+  String get model => 'मॉडल';
 
   @override
   String get performanceWarning => 'प्रदर्शन चेतावनी';
 
   @override
   String get largeModelWarning =>
-      'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
+      'यह मॉडल बड़ा है और मोबाइल डिवाइस पर ऐप क्रैश हो सकता है या बहुत धीमे चल सकता है।\n\n\"small\" या \"base\" की सिफारिश की जाती है।';
 
   @override
   String get usingNativeIosSpeech => 'मूल iOS स्पीच रिकग्निशन का उपयोग';
 
   @override
-  String get noModelDownloadRequired => 'Your device\'s native speech engine will be used. No model download required.';
+  String get noModelDownloadRequired =>
+      'आपके डिवाइस का नेटिव स्पीच इंजन उपयोग किया जाएगा। कोई मॉडल डाउनलोड आवश्यक नहीं।';
 
   @override
-  String get modelReady => 'Model Ready';
+  String get modelReady => 'मॉडल तैयार';
 
   @override
-  String get redownload => 'Re-download';
+  String get redownload => 'पुनः डाउनलोड करें';
 
   @override
   String get doNotCloseApp => 'कृपया ऐप बंद न करें।';
@@ -6108,12 +6110,12 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String estimatedSize(String size) {
-    return 'Estimated Size: ~$size MB';
+    return 'अनुमानित आकार: ~$size MB';
   }
 
   @override
   String availableSpace(String space) {
-    return 'Available Space: $space';
+    return 'उपलब्ध स्थान: $space';
   }
 
   @override
@@ -6124,7 +6126,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String downloadError(String error) {
-    return 'Download error: $error';
+    return 'डाउनलोड त्रुटि: $error';
   }
 
   @override
@@ -6469,32 +6471,32 @@ class AppLocalizationsHi extends AppLocalizations {
   String get moneyEarned => 'कमाई';
 
   @override
-  String get writeYourReply => 'Write your reply...';
+  String get writeYourReply => 'अपना जवाब लिखें...';
 
   @override
-  String get replySentSuccessfully => 'Reply sent successfully';
+  String get replySentSuccessfully => 'जवाब सफलतापूर्वक भेजा गया';
 
   @override
   String failedToSendReply(String error) {
-    return 'Failed to send reply: $error';
+    return 'जवाब भेजने में विफल: $error';
   }
 
   @override
-  String get send => 'Send';
+  String get send => 'भेजें';
 
   @override
   String starFilter(int count) {
-    return '$count Star';
+    return '$count स्टार';
   }
 
   @override
-  String get noReviewsFound => 'No Reviews Found';
+  String get noReviewsFound => 'कोई समीक्षा नहीं मिली';
 
   @override
-  String get editReply => 'Edit Reply';
+  String get editReply => 'जवाब संपादित करें';
 
   @override
-  String get reply => 'Reply';
+  String get reply => 'जवाब';
 
   @override
   String starFilterLabel(int count) {
