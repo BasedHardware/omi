@@ -33,13 +33,13 @@ Branch: speech-sample-transcripts (based on e8w2h_speaker_identification)
       - [x] Replace inline _verify_sample_quality with centralized function
       - [x] Pass transcript to add_person_speech_sample()
 
-- [ ] 5. Update API routes
+- [x] 5. Update API routes
       File: backend/routers/users.py
-      - [ ] Import migrate_person_samples_v1_to_v2
-      - [ ] Make get_all_people() async
-      - [ ] Add lazy migration call in get_all_people()
-      - [ ] Make get_single_person() async
-      - [ ] Add lazy migration call in get_single_person()
+      - [x] Import migrate_person_samples_v1_to_v2
+      - [x] Make get_all_people() async
+      - [x] Add lazy migration call in get_all_people()
+      - [x] Make get_single_person() async
+      - [x] Add lazy migration call in get_single_person()
 
 ### Frontend (Flutter)
 
