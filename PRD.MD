@@ -34,9 +34,9 @@ Total languages with missing translations: **31**
 | Indonesian | id | 0 | ✅ DONE |
 | Italian | it | 0 | ✅ DONE |
 | Japanese | ja | 0 | ✅ DONE |
-| Korean | ko | 22 | HIGH |
+| Korean | ko | 0 | ✅ DONE |
 | Lithuanian | lt | 0 | ✅ DONE |
-| Latvian | lv | 22 | HIGH |
+| Latvian | lv | 0 | ✅ DONE |
 | Malay | ms | 22 | HIGH |
 | Dutch | nl | 22 | HIGH |
 | Norwegian | no | 22 | HIGH |
