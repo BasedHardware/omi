@@ -31,7 +31,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get confirm => 'Megerősítés';
 
   @override
-  String get cancel => 'Cancel';
+  String get cancel => 'Mégse';
 
   @override
   String get ok => 'OK';
@@ -588,7 +588,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get starOngoing => 'Folyamatban lévő beszélgetés csillagozása';
 
   @override
-  String get off => 'Off';
+  String get off => 'Ki';
 
   @override
   String get max => 'Maximum';
@@ -3284,7 +3284,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get upgradeToPro => 'Frissítés Pro-ra';
 
   @override
-  String get getOmiDevice => 'Get Omi Device';
+  String get getOmiDevice => 'Omi eszköz beszerzése';
 
   @override
   String get wearableAiCompanion => 'Hordható AI társ';
@@ -3850,7 +3850,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get signOutQuestion => 'Kijelentkezik?';
 
   @override
-  String get signOutConfirmation => 'Are you sure you want to sign out?';
+  String get signOutConfirmation => 'Biztosan ki szeretnél jelentkezni?';
 
   @override
   String get customVocabularyHeader => 'EGYÉNI SZÓKINCS';
@@ -4145,7 +4145,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get dataAccessNoticeDescription =>
-      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
+      'Ez az alkalmazás hozzá fog férni az adataidhoz. Az Omi AI nem felelős azért, hogy ez az alkalmazás hogyan használja, módosítja vagy törli az adataidat';
 
   @override
   String get copyUrl => 'URL másolása';
@@ -4918,10 +4918,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get enable => 'Engedélyezés';
 
   @override
-  String get storeAudioOnPhone => 'Store Audio on Phone';
+  String get storeAudioOnPhone => 'Hanganyag tárolása telefonon';
 
   @override
-  String get on => 'On';
+  String get on => 'Be';
 
   @override
   String get storeAudioDescription =>
@@ -4940,7 +4940,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get enableCloudStorage => 'Felhőtárhely engedélyezése';
 
   @override
-  String get storeAudioOnCloud => 'Store Audio on Cloud';
+  String get storeAudioOnCloud => 'Hanganyag tárolása felhőben';
 
   @override
   String get cloudStorageDialogMessage =>
@@ -5847,22 +5847,22 @@ class AppLocalizationsHu extends AppLocalizations {
   String get chooseFile => 'Fájl kiválasztása';
 
   @override
-  String get configureAiPersona => 'Configure your AI persona';
+  String get configureAiPersona => 'AI személyiséged konfigurálása';
 
   @override
-  String get connectAiAssistantsToYourData => 'Connect AI assistants to your data';
+  String get connectAiAssistantsToYourData => 'AI asszisztensek csatlakoztatása az adataidhoz';
 
   @override
   String get oAuth => 'OAuth';
 
   @override
-  String get trackYourGoalsOnHomepage => 'Track your personal goals on homepage';
+  String get trackYourGoalsOnHomepage => 'Személyes célok követése a kezdőlapon';
 
   @override
-  String get deleteRecording => 'Delete Recording';
+  String get deleteRecording => 'Felvétel törlése';
 
   @override
-  String get thisCannotBeUndone => 'This cannot be undone.';
+  String get thisCannotBeUndone => 'Ez nem vonható vissza.';
 
   @override
   String get sdCard => 'SD Card';
@@ -5877,10 +5877,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get fastTransfer => 'Gyors átvitel';
 
   @override
-  String get syncingStatus => 'Syncing';
+  String get syncingStatus => 'Szinkronizálás';
 
   @override
-  String get failedStatus => 'Failed';
+  String get failedStatus => 'Sikertelen';
 
   @override
   String etaLabel(String time) {
@@ -5900,64 +5900,64 @@ class AppLocalizationsHu extends AppLocalizations {
   String get phone => 'Phone';
 
   @override
-  String get cancelSync => 'Cancel Sync';
+  String get cancelSync => 'Szinkronizálás megszakítása';
 
   @override
-  String get cancelSyncMessage => 'Data already downloaded will be saved. You can resume later.';
+  String get cancelSyncMessage => 'A már letöltött adatok mentésre kerülnek. Később folytathatod.';
 
   @override
-  String get syncCancelled => 'Sync cancelled';
+  String get syncCancelled => 'Szinkronizálás megszakítva';
 
   @override
-  String get deleteProcessedFiles => 'Delete Processed Files';
+  String get deleteProcessedFiles => 'Feldolgozott fájlok törlése';
 
   @override
   String get processedFilesDeleted => 'Processed files deleted';
 
   @override
-  String get wifiEnableFailed => 'Failed to enable WiFi on device. Please try again.';
+  String get wifiEnableFailed => 'A WiFi engedélyezése sikertelen az eszközön. Kérlek, próbáld újra.';
 
   @override
-  String get deviceNoFastTransfer => 'Your device does not support Fast Transfer. Use Bluetooth instead.';
+  String get deviceNoFastTransfer => 'Az eszközöd nem támogatja a gyors átvitelt. Használd inkább a Bluetooth-t.';
 
   @override
-  String get enableHotspotMessage => 'Please enable your phone\'s hotspot and try again.';
+  String get enableHotspotMessage => 'Kérlek, engedélyezd a telefonod hotspotját, és próbáld újra.';
 
   @override
-  String get transferStartFailed => 'Failed to start transfer. Please try again.';
+  String get transferStartFailed => 'Az átvitel indítása sikertelen. Kérlek, próbáld újra.';
 
   @override
-  String get deviceNotResponding => 'Device did not respond. Please try again.';
+  String get deviceNotResponding => 'Az eszköz nem válaszol. Kérlek, próbáld újra.';
 
   @override
-  String get invalidWifiCredentials => 'Invalid WiFi credentials. Check your hotspot settings.';
+  String get invalidWifiCredentials => 'Érvénytelen WiFi hitelesítő adatok. Ellenőrizd a hotspot beállításokat.';
 
   @override
-  String get wifiConnectionFailed => 'WiFi connection failed. Please try again.';
+  String get wifiConnectionFailed => 'WiFi kapcsolódás sikertelen. Kérlek, próbáld újra.';
 
   @override
   String get sdCardProcessing => 'SD Card Processing';
 
   @override
   String sdCardProcessingMessage(int count) {
-    return 'Processing $count recording(s). Files will be removed from SD card after.';
+    return '$count felvétel feldolgozása. A fájlok törlésre kerülnek az SD kártyáról utána.';
   }
 
   @override
   String get process => 'Process';
 
   @override
-  String get wifiSyncFailed => 'WiFi Sync Failed';
+  String get wifiSyncFailed => 'WiFi szinkronizálás sikertelen';
 
   @override
-  String get processingFailed => 'Processing Failed';
+  String get processingFailed => 'Feldolgozás sikertelen';
 
   @override
-  String get downloadingFromSdCard => 'Downloading from SD Card';
+  String get downloadingFromSdCard => 'Letöltés az SD kártyáról';
 
   @override
   String processingProgress(int current, int total) {
-    return 'Processing $current/$total';
+    return 'Feldolgozás $current/$total';
   }
 
   @override
@@ -5975,19 +5975,19 @@ class AppLocalizationsHu extends AppLocalizations {
   String get start => 'Start';
 
   @override
-  String get noRecordings => 'No Recordings';
+  String get noRecordings => 'Nincsenek felvételek';
 
   @override
-  String get audioFromOmiWillAppearHere => 'Audio from your Omi device will appear here';
+  String get audioFromOmiWillAppearHere => 'Az Omi eszközödről származó hanganyag itt fog megjelenni';
 
   @override
-  String get deleteProcessed => 'Delete Processed';
+  String get deleteProcessed => 'Feldolgozottak törlése';
 
   @override
   String get tryDifferentFilter => 'Try a different filter';
 
   @override
-  String get recordings => 'Recordings';
+  String get recordings => 'Felvételek';
 
   @override
   String get enableRemindersAccess =>
@@ -6285,7 +6285,7 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get device => 'Device';
+  String get device => 'Eszköz';
 
   @override
   String get chatAssistantsTitle => 'Chat asszisztensek';
@@ -6342,7 +6342,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get writeReviewOptional => 'Írj véleményt (opcionális)';
 
   @override
-  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
+  String get setupQuestionsIntro => 'Segíts nekünk fejleszteni az Omit néhány kérdés megválaszolásával.  🫶 💜';
 
   @override
   String get setupQuestionProfession => '1. What do you do?';
@@ -6360,25 +6360,25 @@ class AppLocalizationsHu extends AppLocalizations {
   String get setupSkipHelp => 'Skip, I don\'t want to help :C';
 
   @override
-  String get professionEntrepreneur => 'Entrepreneur';
+  String get professionEntrepreneur => 'Vállalkozó';
 
   @override
-  String get professionSoftwareEngineer => 'Software Engineer';
+  String get professionSoftwareEngineer => 'Szoftverfejlesztő';
 
   @override
-  String get professionProductManager => 'Product Manager';
+  String get professionProductManager => 'Termékmenedzser';
 
   @override
-  String get professionExecutive => 'Executive';
+  String get professionExecutive => 'Vezető';
 
   @override
-  String get professionSales => 'Sales';
+  String get professionSales => 'Értékesítő';
 
   @override
-  String get professionStudent => 'Student';
+  String get professionStudent => 'Diák';
 
   @override
-  String get usageAtWork => 'At work';
+  String get usageAtWork => 'Munkahelyen';
 
   @override
   String get usageIrlEvents => 'IRL Events';
@@ -6561,23 +6561,23 @@ class AppLocalizationsHu extends AppLocalizations {
   String get makePersonaPublic => 'Make Persona Public';
 
   @override
-  String get connectedKnowledgeData => 'Connected Knowledge Data';
+  String get connectedKnowledgeData => 'Csatlakoztatott tudásadatok';
 
   @override
-  String get enterName => 'Enter name';
+  String get enterName => 'Név megadása';
 
   @override
-  String get disconnectTwitter => 'Disconnect Twitter';
+  String get disconnectTwitter => 'Twitter leválasztása';
 
   @override
   String get disconnectTwitterConfirmation =>
-      'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
+      'Biztosan le szeretnéd választani a Twitter fiókodat? A személyiséged többé nem fér hozzá a Twitter adataidhoz.';
 
   @override
-  String get getOmiDeviceDescription => 'Create a more accurate clone with your personal conversations';
+  String get getOmiDeviceDescription => 'Hozz létre pontosabb klónt a személyes beszélgetéseiddel';
 
   @override
-  String get getOmi => 'Get Omi';
+  String get getOmi => 'Omi beszerzése';
 
   @override
   String get iHaveOmiDevice => 'I have Omi device';
@@ -6655,7 +6655,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String tagSpeaker(int speakerId) {
-    return 'Tag Speaker $speakerId';
+    return 'Beszélő címkézése $speakerId';
   }
 
   @override
@@ -6665,21 +6665,21 @@ class AppLocalizationsHu extends AppLocalizations {
   String get selectYouFromList => 'To tag yourself, please select \"You\" from the list.';
 
   @override
-  String get enterPersonsName => 'Enter Person\'s Name';
+  String get enterPersonsName => 'Személy nevének megadása';
 
   @override
   String get addPerson => 'Add Person';
 
   @override
   String tagOtherSegmentsFromSpeaker(int selected, int total) {
-    return 'Tag other segments from this speaker ($selected/$total)';
+    return 'Más szegmensek címkézése ettől a beszélőtől ($selected/$total)';
   }
 
   @override
-  String get tagOtherSegments => 'Tag other segments';
+  String get tagOtherSegments => 'Más szegmensek címkézése';
 
   @override
-  String get managePeople => 'Manage People';
+  String get managePeople => 'Személyek kezelése';
 
   @override
   String get shareViaSms => 'Megosztás SMS-ben';
@@ -6750,25 +6750,25 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'Connection Failed';
+  String get wifiConnectionFailedTitle => 'Kapcsolódás sikertelen';
 
   @override
   String connectingToDeviceName(String deviceName) {
-    return 'Connecting to $deviceName';
+    return 'Csatlakozás a következőhöz: $deviceName';
   }
 
   @override
   String enableDeviceWifi(String deviceName) {
-    return 'Enable $deviceName\'s WiFi';
+    return '$deviceName WiFi engedélyezése';
   }
 
   @override
   String connectToDeviceName(String deviceName) {
-    return 'Connect to $deviceName';
+    return 'Csatlakozás a következőhöz: $deviceName';
   }
 
   @override
-  String get recordingDetails => 'Recording Details';
+  String get recordingDetails => 'Felvétel részletei';
 
   @override
   String get storageLocationSdCard => 'SD Card';
@@ -6784,46 +6784,46 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String storedOnDevice(String deviceName) {
-    return 'Stored on $deviceName';
+    return 'Tárolva: $deviceName';
   }
 
   @override
-  String get transferring => 'Transferring...';
+  String get transferring => 'Átvitel folyamatban...';
 
   @override
-  String get transferRequired => 'Transfer Required';
+  String get transferRequired => 'Átvitel szükséges';
 
   @override
-  String get downloadingAudioFromSdCard => 'Downloading audio from your device\'s SD card';
+  String get downloadingAudioFromSdCard => 'Hanganyag letöltése az eszközöd SD kártyájáról';
 
   @override
   String get transferRequiredDescription =>
-      'This recording is stored on your device\'s SD card. Transfer it to your phone to play or share.';
+      'Ez a felvétel az eszközöd SD kártyáján van tárolva. Vidd át a telefonodra a lejátszáshoz vagy megosztáshoz.';
 
   @override
-  String get cancelTransfer => 'Cancel Transfer';
+  String get cancelTransfer => 'Átvitel megszakítása';
 
   @override
-  String get transferToPhone => 'Transfer to Phone';
+  String get transferToPhone => 'Átvitel telefonra';
 
   @override
-  String get privateAndSecureOnDevice => 'Private & secure on your device';
+  String get privateAndSecureOnDevice => 'Privát és biztonságos az eszközödön';
 
   @override
-  String get recordingInfo => 'Recording Info';
+  String get recordingInfo => 'Felvétel információ';
 
   @override
-  String get transferInProgress => 'Transfer in progress...';
+  String get transferInProgress => 'Átvitel folyamatban...';
 
   @override
   String get shareRecording => 'Share Recording';
 
   @override
   String get deleteRecordingConfirmation =>
-      'Are you sure you want to permanently delete this recording? This can\'t be undone.';
+      'Biztosan véglegesen törölni szeretnéd ezt a felvételt? Ez nem vonható vissza.';
 
   @override
-  String get recordingIdLabel => 'Recording ID';
+  String get recordingIdLabel => 'Felvétel azonosító';
 
   @override
   String get dateTimeLabel => 'Date & Time';
@@ -6832,19 +6832,19 @@ class AppLocalizationsHu extends AppLocalizations {
   String get durationLabel => 'Duration';
 
   @override
-  String get audioFormatLabel => 'Audio Format';
+  String get audioFormatLabel => 'Hangformátum';
 
   @override
-  String get storageLocationLabel => 'Storage Location';
+  String get storageLocationLabel => 'Tárolási hely';
 
   @override
   String get estimatedSizeLabel => 'Estimated Size';
 
   @override
-  String get deviceModelLabel => 'Device Model';
+  String get deviceModelLabel => 'Eszköz modell';
 
   @override
-  String get deviceIdLabel => 'Device ID';
+  String get deviceIdLabel => 'Eszköz azonosító';
 
   @override
   String get statusLabel => 'Status';
@@ -6856,18 +6856,18 @@ class AppLocalizationsHu extends AppLocalizations {
   String get statusUnprocessed => 'Unprocessed';
 
   @override
-  String get switchedToFastTransfer => 'Switched to Fast Transfer';
+  String get switchedToFastTransfer => 'Átváltás gyors átvitelre';
 
   @override
-  String get transferCompleteMessage => 'Transfer complete! You can now play this recording.';
+  String get transferCompleteMessage => 'Átvitel befejezve! Most már lejátszhatod ezt a felvételt.';
 
   @override
   String transferFailedMessage(String error) {
-    return 'Transfer failed: $error';
+    return 'Átvitel sikertelen: $error';
   }
 
   @override
-  String get transferCancelled => 'Transfer cancelled';
+  String get transferCancelled => 'Átvitel megszakítva';
 
   @override
   String get fastTransferEnabled => 'Gyors átvitel engedélyezve';
@@ -6973,7 +6973,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get omiSays => 'omi says';
 
   @override
-  String get analyzingYourData => 'Analyzing your data...';
+  String get analyzingYourData => 'Adataid elemzése...';
 
   @override
   String migratingToProtection(String level) {
@@ -6981,7 +6981,7 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get noDataToMigrateFinalizing => 'No data to migrate. Finalizing...';
+  String get noDataToMigrateFinalizing => 'Nincs áttelepítendő adat. Befejezés...';
 
   @override
   String migratingItemsProgress(String itemType, int percentage) {
@@ -6992,14 +6992,14 @@ class AppLocalizationsHu extends AppLocalizations {
   String get allObjectsMigratedFinalizing => 'All objects migrated. Finalizing...';
 
   @override
-  String get migrationErrorOccurred => 'An error occurred during migration. Please try again.';
+  String get migrationErrorOccurred => 'Hiba történt az áttelepítés során. Kérlek, próbáld újra.';
 
   @override
-  String get migrationComplete => 'Migration complete!';
+  String get migrationComplete => 'Áttelepítés befejezve!';
 
   @override
   String dataProtectedWithSettings(String level) {
-    return 'Your data is now protected with the new $level settings.';
+    return 'Az adataid mostantól védettek az új $level beállításokkal.';
   }
 
   @override
@@ -7251,25 +7251,25 @@ class AppLocalizationsHu extends AppLocalizations {
   String get aiGenPleaseGenerateAppFirst => 'Kérjük, először generálj egy alkalmazást';
 
   @override
-  String get xHandleTitle => 'What\'s your X handle?';
+  String get xHandleTitle => 'Mi az X felhasználóneved?';
 
   @override
-  String get xHandleDescription => 'We will pre-train your Omi clone\nbased on your account\'s activity';
+  String get xHandleDescription => 'Előzetesen betanítjuk az Omi klónodat\na fiókod tevékenysége alapján';
 
   @override
   String get xHandleHint => '@nikshevchenko';
 
   @override
-  String get xHandlePleaseEnter => 'Please enter your X handle';
+  String get xHandlePleaseEnter => 'Kérlek, add meg az X felhasználóneved';
 
   @override
-  String get xHandlePleaseEnterValid => 'Please enter a valid X handle';
+  String get xHandlePleaseEnterValid => 'Kérlek, adj meg érvényes X felhasználónevet';
 
   @override
   String get nextButton => 'Next';
 
   @override
-  String get connectOmiDevice => 'Connect Omi Device';
+  String get connectOmiDevice => 'Omi eszköz csatlakoztatása';
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
@@ -7278,27 +7278,26 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get planUpgradeScheduledMessage =>
-      'Upgrade scheduled! Your monthly plan continues until the end of your billing period, then automatically switches to annual.';
+      'Frissítés ütemezve! A havi csomagod a számlázási időszak végéig folytatódik, majd automatikusan átvált évesre.';
 
   @override
-  String get couldNotSchedulePlanChange => 'Could not schedule plan change. Please try again.';
+  String get couldNotSchedulePlanChange => 'A csomagváltás ütemezése sikertelen. Kérlek, próbáld újra.';
 
   @override
   String get subscriptionReactivatedDefault =>
-      'Your subscription has been reactivated! No charge now - you\'ll be billed at the end of your current period.';
+      'Az előfizetésed újra aktiválva! Most nincs díj - a jelenlegi időszak végén leszel számlázva.';
 
   @override
-  String get subscriptionSuccessfulCharged =>
-      'Subscription successful! You\'ve been charged for the new billing period.';
+  String get subscriptionSuccessfulCharged => 'Sikeres előfizetés! A számlázás megtörtént az új számlázási időszakra.';
 
   @override
-  String get couldNotProcessSubscription => 'Could not process subscription. Please try again.';
+  String get couldNotProcessSubscription => 'Az előfizetés feldolgozása sikertelen. Kérlek, próbáld újra.';
 
   @override
-  String get couldNotLaunchUpgradePage => 'Could not launch upgrade page. Please try again.';
+  String get couldNotLaunchUpgradePage => 'A frissítési oldal megnyitása sikertelen. Kérlek, próbáld újra.';
 
   @override
-  String get transcriptionJsonPlaceholder => 'Paste your JSON configuration here...';
+  String get transcriptionJsonPlaceholder => 'Illeszd be a JSON konfigurációdat ide...';
 
   @override
   String get transcriptionSourceOmi => 'Omi';

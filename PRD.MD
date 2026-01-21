@@ -65,7 +65,11 @@ The app uses Flutter's ARB-based localization system (`context.l10n.keyName`). W
 | Czech (cs) | COMPLETED - 155 keys translated |
 | Danish (da) | COMPLETED - 160 keys translated |
 | Greek (el) | COMPLETED - 154 keys translated |
-| Other languages (15) | PENDING |
+| Estonian (et) | COMPLETED - 156 keys translated |
+| Finnish (fi) | COMPLETED - 102 keys translated |
+| Hindi (hi) | COMPLETED - 165 keys translated |
+| Hungarian (hu) | COMPLETED - 100 keys translated |
+| Other languages (11) | PENDING |
 
 ---
 

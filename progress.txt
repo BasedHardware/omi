@@ -17,14 +17,14 @@
 | Progress | ~90% |
 
 **PRIORITY 0 STATUS**: 110 pre-existing l10n keys in non-English ARB files contain
-English text instead of proper translations. Spanish (es), French (fr), German (de), Italian (it), Arabic (ar), Portuguese (pt), Japanese (ja), Korean (ko), Chinese (zh), Russian (ru), Polish (pl), Turkish (tr), Dutch (nl), Bulgarian (bg), Catalan (ca), Czech (cs), Danish (da), Greek (el), Estonian (et), Finnish (fi), and Hindi (hi) completed, 12 languages remaining.
+English text instead of proper translations. Spanish (es), French (fr), German (de), Italian (it), Arabic (ar), Portuguese (pt), Japanese (ja), Korean (ko), Chinese (zh), Russian (ru), Polish (pl), Turkish (tr), Dutch (nl), Bulgarian (bg), Catalan (ca), Czech (cs), Danish (da), Greek (el), Estonian (et), Finnish (fi), Hindi (hi), and Hungarian (hu) completed, 11 languages remaining.
 
 ================================================================================
 ## PRIORITY 0: CRITICAL - Pre-existing Untranslated Keys (110 keys × 33 languages)
 ================================================================================
 
 ### [~] Translate pre-existing English keys in all non-English ARB files
-Status: IN PROGRESS (Spanish, French, German, Italian, Arabic, Portuguese, Japanese, Korean, Chinese, Russian, Polish, Turkish, Dutch, Bulgarian, Catalan, Czech, Danish, Greek, Estonian, Finnish, Hindi completed, 12 languages remaining)
+Status: IN PROGRESS (Spanish, French, German, Italian, Arabic, Portuguese, Japanese, Korean, Chinese, Russian, Polish, Turkish, Dutch, Bulgarian, Catalan, Czech, Danish, Greek, Estonian, Finnish, Hindi, Hungarian completed, 11 languages remaining)
 Priority: CRITICAL - Affects all non-English users
 
 Sample of untranslated keys (showing English values that need translation):
@@ -337,6 +337,23 @@ Note: date_list_item.dart was fixed - see [x] entry above
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-21] Translated 100 pre-existing English keys to Hungarian (app_hu.arb)
+- PRIORITY 0 task: Translate pre-existing untranslated keys in non-English ARB files
+- Translated 100 keys to proper Hungarian translations in app_hu.arb
+- Keys include: cancel, ok, on, off, device, recordings, getOmi, getOmiDevice,
+  signOutConfirmation, deleteRecording, thisCannotBeUndone, syncingStatus, failedStatus,
+  cancelSync, cancelSyncMessage, wifiEnableFailed, deviceNotResponding, transferring,
+  transferRequired, downloadingAudioFromSdCard, recordingDetails, storageLocationLabel,
+  setupQuestionsIntro, professionEntrepreneur, usageAtWork, xHandleTitle, planUpgradeScheduledMessage,
+  subscriptionReactivatedDefault, couldNotLaunchUpgradePage, migrationComplete, tagSpeaker,
+  managePeople, disconnectTwitterConfirmation, transferCompleteMessage, configureAiPersona,
+  connectAiAssistantsToYourData, trackYourGoalsOnHomepage, storeAudioOnPhone, storeAudioOnCloud, and 60+ more
+- Translations preserve ICU message format placeholders ({deviceName}, {count}, {error}, {level}, {speakerId}, etc.)
+- Brand names kept in English where appropriate (Omi, WiFi, Bluetooth, Twitter, Limitless, JSON)
+- flutter gen-l10n completed successfully
+- All tests passed
+- Remaining: 11 other languages still need the same keys translated
 
 [2026-01-21] Translated 165 pre-existing English keys to Hindi (app_hi.arb)
 - PRIORITY 0 task: Translate pre-existing untranslated keys in non-English ARB files
